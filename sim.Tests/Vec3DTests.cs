@@ -10,4 +10,9 @@ public class Vec3DTests {
     [Fact] public void DotOfOrthogonalIsZero() {
         Assert.Equal(0.0, new Vec3D(1,0,0).Dot(new Vec3D(0,5,0)), 12);
     }
+    [Fact] public void PhysicalCrossProductsUseReversedOperandsInThisBasis() {
+        var east = new Vec3D(1, 0, 0); var up = new Vec3D(0, 1, 0); var north = new Vec3D(0, 0, 1);
+        Assert.Equal(east, up.Cross(north));       // physical: north x up = east
+        Assert.Equal(new Vec3D(0, 0, 1), east.Cross(up)); // determinant formula gives +Z here; PHYSICAL east x up = south = -Z, hence the reversed-operand rule above
+    }
 }
