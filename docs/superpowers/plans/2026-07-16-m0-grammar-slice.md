@@ -619,10 +619,12 @@ public static class Geometry {
         if (e.Length < 1e-6) return own.Bank;             // dead ahead: keep current bank
         var eHat = e.Normalized();
         var up = new Vec3D(0, 1, 0);
-        var right0 = vhat.Cross(up);                      // level-right basis
+        // World basis (east, up, north) is LEFT-handed: physical direction products
+        // take reversed operand order vs the standard determinant Cross (see Vec3D docs).
+        var right0 = up.Cross(vhat);                      // level-right basis (physical vhat x up)
         if (right0.Length < 1e-6) return own.Bank;        // vertical path: bank undefined, hold
         right0 = right0.Normalized();
-        var upPerp0 = right0.Cross(vhat).Normalized();    // "wings-level lift" direction
+        var upPerp0 = vhat.Cross(right0).Normalized();    // "wings-level lift" direction
         return System.Math.Atan2(eHat.Dot(right0), eHat.Dot(upPerp0));
     }
 }
