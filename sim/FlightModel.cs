@@ -1,43 +1,73 @@
 namespace GunsOnly.Sim;
 
 public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN,
-    double CD0, double InducedK, double CLMax, double RollRateMaxRad, double BankTau);
+    double CD0, double InducedK, double CLMax, double CLMin, double RollRateMaxRad, double BankTau);
 
-public readonly record struct StateDeriv(Vec3D DPos, double DSpeed, double DGamma, double DChi, double DBank);
+/// Internal integration state: velocity is a Cartesian world vector, so vertical
+/// flight is not singular (no division by cos gamma anywhere).
+public readonly record struct RawState(Vec3D Pos, Vec3D Vel, double Bank, double Mass);
+
+public readonly record struct StateDeriv(Vec3D DPos, Vec3D DVel, double DBank);
 
 public static class FlightModel {
     public const double G0 = 9.80665;
     // PLACEHOLDER Sabre-shaped numbers. M1 replaces with table-driven 6DOF. Shape > fidelity here.
     public static readonly AircraftParams Sabre = new(
         MassKg: 6900, WingAreaM2: 26.8, ThrustMaxN: 26300,
-        CD0: 0.0180, InducedK: 0.083, CLMax: 1.10,
+        CD0: 0.0180, InducedK: 0.083, CLMax: 1.10, CLMin: -0.65,
         RollRateMaxRad: 2.1, BankTau: 0.18);
 
     public static double NzAeroMax(in AircraftState s, in AircraftParams p) {
         double q = 0.5 * Atmosphere.Density(s.Position.Y) * s.Speed * s.Speed;
         return q * p.WingAreaM2 * p.CLMax / (s.Mass * G0);
     }
+    /// Negative-G aerodynamic bound (a negative number).
+    public static double NzAeroMin(in AircraftState s, in AircraftParams p) {
+        double q = 0.5 * Atmosphere.Density(s.Position.Y) * s.Speed * s.Speed;
+        return q * p.WingAreaM2 * p.CLMin / (s.Mass * G0);
+    }
+
     static double MachDragFactor(double mach) =>              // PLACEHOLDER transonic drag rise
         mach < 0.85 ? 1.0 : 1.0 + 8.0 * (mach - 0.85) * (mach - 0.85);
-    static double ThrustLapse(double altM) => Atmosphere.Density(altM) / 1.225;
 
-    public static StateDeriv Derivatives(in AircraftState s, in PilotCommand c, in AircraftParams p) {
-        double rho = Atmosphere.Density(s.Position.Y);
-        double q = 0.5 * rho * s.Speed * s.Speed;
-        double nzAvail = q * p.WingAreaM2 * p.CLMax / (s.Mass * G0);
-        double nz = System.Math.Clamp(c.GDemand, -1.5, System.Math.Min(nzAvail, 7.33));
-        double cl = nz * s.Mass * G0 / System.Math.Max(q * p.WingAreaM2, 1e-6);
-        double mach = s.Speed / Atmosphere.SpeedOfSound(s.Position.Y);
-        double cd = p.CD0 * MachDragFactor(mach) + p.InducedK * cl * cl;
-        double drag = q * p.WingAreaM2 * cd + System.Math.Abs(c.Rudder) * 0.15 * q * p.WingAreaM2 * p.CD0;
-        double thrust = System.Math.Clamp(c.Throttle, 0, 1) * p.ThrustMaxN * ThrustLapse(s.Position.Y);
+    internal static double BankRate(double bank, double target, in AircraftParams p) =>
+        System.Math.Clamp((target - bank) / p.BankTau, -p.RollRateMaxRad, p.RollRateMaxRad);
 
-        double dSpeed = (thrust - drag) / s.Mass - G0 * System.Math.Sin(s.Gamma);
-        double dGamma = (G0 / System.Math.Max(s.Speed, 20)) * (nz * System.Math.Cos(s.Bank) - System.Math.Cos(s.Gamma));
-        double dChi = G0 * nz * System.Math.Sin(s.Bank) / (System.Math.Max(s.Speed, 20) * System.Math.Cos(s.Gamma))
-                      + c.Rudder * 0.06; // PLACEHOLDER rudder yaw-jink authority
-        double bankErr = c.BankTarget - s.Bank;
-        double dBank = System.Math.Clamp(bankErr / p.BankTau, -p.RollRateMaxRad, p.RollRateMaxRad);
-        return new StateDeriv(s.VelocityVector(), dSpeed, dGamma, dChi, dBank);
+    internal static StateDeriv Derivatives(in RawState r, in PilotCommand c, in AircraftParams p) {
+        double speed = System.Math.Max(r.Vel.Length, 20.0);
+        var vhat = r.Vel.Length < 1e-9 ? new Vec3D(0, 0, 1) : r.Vel.Normalized();
+        var up = new Vec3D(0, 1, 0);
+        // Physical right of the flight path. World basis (east, up, north) is LEFT-handed,
+        // so physical products take reversed operand order (see Vec3D.Cross docs).
+        var right0 = up.Cross(vhat);
+        var rightHat = right0.Length < 1e-6 ? new Vec3D(1, 0, 0) : right0.Normalized(); // pure-vertical fallback
+        var upPerp = vhat.Cross(rightHat).Normalized();
+        var liftDir = upPerp * System.Math.Cos(r.Bank) + rightHat * System.Math.Sin(r.Bank); // +bank tilts lift right => right turn
+
+        double rho = Atmosphere.Density(r.Pos.Y);
+        double q = 0.5 * rho * speed * speed;
+        double nzMax = System.Math.Min(q * p.WingAreaM2 * p.CLMax / (r.Mass * G0), 7.33);
+        double nzMin = System.Math.Max(q * p.WingAreaM2 * p.CLMin / (r.Mass * G0), -1.5);
+        double nz = System.Math.Clamp(c.GDemand, nzMin, nzMax);
+        double cl = nz * r.Mass * G0 / System.Math.Max(q * p.WingAreaM2, 1e-6);
+        double mach = speed / Atmosphere.SpeedOfSound(r.Pos.Y);
+        double cd = p.CD0 * MachDragFactor(mach) + p.InducedK * cl * cl
+                    + System.Math.Abs(c.Rudder) * 0.15 * p.CD0;
+        double drag = q * p.WingAreaM2 * cd;
+        double thrust = System.Math.Clamp(c.Throttle, 0, 1) * p.ThrustMaxN * (rho / 1.225);
+
+        var accel = vhat * ((thrust - drag) / r.Mass)
+                  + liftDir * (nz * G0)
+                  - up * G0
+                  + rightHat * (c.Rudder * 0.06 * speed); // PLACEHOLDER rudder yaw-jink authority
+        return new StateDeriv(r.Vel, accel, BankRate(r.Bank, c.BankTarget, p));
+    }
+
+    /// Directional nz clamp shared by Step's reporting (same bounds as Derivatives).
+    internal static (double nz, double nzMax, double nzMin) ClampNz(in AircraftState s, in PilotCommand c, in AircraftParams p) {
+        double q = 0.5 * Atmosphere.Density(s.Position.Y) * s.Speed * s.Speed;
+        double nzMax = System.Math.Min(q * p.WingAreaM2 * p.CLMax / (s.Mass * G0), 7.33);
+        double nzMin = System.Math.Max(q * p.WingAreaM2 * p.CLMin / (s.Mass * G0), -1.5);
+        return (System.Math.Clamp(c.GDemand, nzMin, nzMax), nzMax, nzMin);
     }
 }
