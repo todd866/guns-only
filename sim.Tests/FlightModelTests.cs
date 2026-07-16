@@ -83,6 +83,6 @@ public class FlightModelTests {
         var sim = new AircraftSim(slow, FlightModel.Sabre);
         sim.Step(new PilotCommand(-1.0, 0.0, 0.5, 0.0), 1.0/AircraftSim.TickHz);
         Assert.True(sim.LastNz > -1.0, $"nz {sim.LastNz:F3} should be aero-limited above -1G at 60 m/s");
-        Assert.True(sim.LastNz >= FlightModel.NzAeroMin(slow, FlightModel.Sabre) - 1e-9);
+        Assert.True(sim.LastNz >= FlightModel.NzAeroMin(sim.State, FlightModel.Sabre) - 1e-9); // bound at the state LastNz was computed from
     }
 }
