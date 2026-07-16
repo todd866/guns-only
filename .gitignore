@@ -1,0 +1,8 @@
+.superpowers/
+.godot/
+.DS_Store
+bin/obj-*
+**/obj/
+**/bin/Debug/
+**/bin/Release/
+*.tsbuildinfo
