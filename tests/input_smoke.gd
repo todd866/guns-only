@@ -30,7 +30,7 @@ func _initialize() -> void:
 		return
 	hud_root = hud_node
 	t0_ms = Time.get_ticks_msec()
-	_send_key(KEY_UP, true)
+	_send_key(KEY_DOWN, true)  # DOWN = pull (stick back)
 
 func _send_key(keycode: int, pressed: bool) -> void:
 	var ev := InputEventKey.new()
@@ -57,13 +57,13 @@ func _process(_delta: float) -> bool:
 				return _fail("HUD draw_count is %s (expected >= 30), possible hidden HUD or _draw() error" % draw_count)
 	if phase == 0:
 		if hud["g_cmd"] > 1.5:
-			print("PASS (a): holding UP raised g_cmd to %.2f in %.2fs" % [hud["g_cmd"], elapsed])
-			_send_key(KEY_UP, false)
+			print("PASS (a): holding DOWN (pull) raised g_cmd to %.2f in %.2fs" % [hud["g_cmd"], elapsed])
+			_send_key(KEY_DOWN, false)
 			_send_key(KEY_2, true)
 			_send_key(KEY_2, false)
 			phase = 1
 		elif elapsed > 2.0:
-			return _fail("holding UP should raise g_cmd above 1.5 within 2s, got %f at %.2fs" % [hud["g_cmd"], elapsed])
+			return _fail("holding DOWN (pull) should raise g_cmd above 1.5 within 2s, got %f at %.2fs" % [hud["g_cmd"], elapsed])
 	elif phase == 1:
 		if hud["beat"] == "Break defense":
 			print("PASS (b): key 2 switched beat to '%s'" % hud["beat"])

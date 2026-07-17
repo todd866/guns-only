@@ -1,7 +1,7 @@
 extends Control
 @onready var bridge = get_node("/root/Main/SimBridge")
 const TIER_COLORS := [Color(0.7,0.7,0.7), Color(0.3,0.9,0.4), Color(0.3,0.9,0.4), Color(1.0,0.7,0.2)]
-const PROMPTS := ["", "PULL ↑", "EASE ↓", "UNLOAD ↓", "◀ ROLL", "ROLL ▶"]
+const PROMPTS := ["", "PULL ↓", "EASE ↑", "UNLOAD ↑", "◀ ROLL", "ROLL ▶"]
 var draw_count := 0
 
 func _process(_d): queue_redraw()

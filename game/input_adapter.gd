@@ -2,8 +2,10 @@ extends Node
 # Maps physical keys to GKey ints (must match sim/KeyGrammar.cs GKey order):
 # PullUp=0 PushDown=1 RollLeft=2 RollRight=3 RudderLeft=4 RudderRight=5
 # ThrottleUp=6 ThrottleDown=7 Trigger=8 Padlock=9 KnockItOff=10 Restart=11
+# Pitch is stick-convention: DOWN arrow = stick back = PULL (positive G, nose up);
+# UP arrow = stick forward = PUSH/unload. GKey.PullUp means "pull the nose up", not "up key".
 const MAP := {
-	KEY_UP: 0, KEY_DOWN: 1, KEY_LEFT: 2, KEY_RIGHT: 3,
+	KEY_DOWN: 0, KEY_UP: 1, KEY_LEFT: 2, KEY_RIGHT: 3,
 	KEY_A: 4, KEY_D: 5, KEY_W: 6, KEY_S: 7,
 	KEY_F: 8, KEY_SPACE: 9, KEY_K: 10, KEY_R: 11,
 }
