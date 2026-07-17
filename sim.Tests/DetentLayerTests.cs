@@ -26,7 +26,7 @@ public class DetentLayerTests {
         Run(d, g, 0, 1500, Fast);
         Assert.Equal(Protection.MaxPerformG(Fast, FlightModel.Sabre), d.Command.GDemand, 1);
     }
-    [Fact] public void StickyTapRaisesHeldG() {
+    [Fact] public void EaseTapWhilePullingReducesHeldG() {
         var d = new DetentLayer { Variant = ValleyVariant.DoctrineDeep }; var g = new KeyGrammar();
         g.Feed(GKey.PullUp, true, 0);
         Run(d, g, 0, 1000, Fast);
@@ -67,5 +67,36 @@ public class DetentLayerTests {
         g.Feed(GKey.ThrottleUp, true, 0); g.Feed(GKey.ThrottleUp, false, 80);
         Run(d, g, 80, 500, Fast); // tap commits after the 250 ms double window
         Assert.Equal(1.0, d.Throttle, 6);
+    }
+    [Fact] public void IdleTapsHaveNoEffect() {
+        var d = new DetentLayer { Variant = ValleyVariant.DoctrineDeep }; var g = new KeyGrammar();
+        g.Feed(GKey.PullUp, true, 0); g.Feed(GKey.PullUp, false, 100);   // tap while idle
+        Run(d, g, 100, 1500, Fast);                                       // well past commit window
+        Assert.Equal(1.0, d.Command.GDemand, 1);
+        Assert.Equal(0.0, d.StickyOffsetG, 6);
+        Assert.Equal(DemandTier.Baseline, d.Tier);
+    }
+    [Fact] public void BatchedReleaseRepressStillClearsSticky() {
+        var d = new DetentLayer { Variant = ValleyVariant.DoctrineDeep }; var g = new KeyGrammar();
+        g.Feed(GKey.PullUp, true, 0);
+        Run(d, g, 0, 1000, Fast);
+        g.Feed(GKey.PushDown, true, 1000); g.Feed(GKey.PushDown, false, 1080); // ease tap
+        Run(d, g, 1080, 2500, Fast);
+        Assert.Equal(-0.5, d.StickyOffsetG, 6);
+        g.Feed(GKey.PullUp, false, 2500); g.Feed(GKey.PullUp, true, 2502);      // release+re-press inside one tick gap
+        Run(d, g, 2502, 4000, Fast);
+        Assert.Equal(0.0, d.StickyOffsetG, 6);
+        Assert.Equal(4.2, d.Command.GDemand, 1);                                 // back to the un-eased valley
+    }
+    [Fact] public void ContinuousRollHoldPassesInvertedWithoutPinning() {
+        var d = new DetentLayer(); var g = new KeyGrammar();
+        g.Feed(GKey.RollRight, true, 0);
+        bool wentNegative = false;
+        for (double t = 0; t < 3500; t += 1000.0/AircraftSim.TickHz) {
+            d.Tick(g, t, Fast, FlightModel.Sabre, Advice, 1.0/AircraftSim.TickHz);
+            if (d.Command.BankTarget < -0.5) wentNegative = true;
+        }
+        Assert.True(wentNegative, "bank target should wrap past +pi into negative (through inverted), not pin");
+        Assert.InRange(d.Command.BankTarget, -System.Math.PI - 1e-9, System.Math.PI + 1e-9);
     }
 }

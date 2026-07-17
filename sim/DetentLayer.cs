@@ -13,6 +13,7 @@ public sealed class DetentLayer {
 
     static readonly double[] ThrottleDetents = { 0.0, 0.55, 0.85, 1.0 };
     int _throttleIdx = 2;
+    int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
     const double Tau = 0.22, StickyStepG = 0.5, RollHoldRate = 1.6; // rad/s while roll key held
 
@@ -24,14 +25,19 @@ public sealed class DetentLayer {
 
         var pull = keys.PhaseAt(GKey.PullUp, nowMs);
         var push = keys.PhaseAt(GKey.PushDown, nowMs);
-        int pullTaps = keys.TakeTaps(GKey.PullUp, nowMs), pushTaps = keys.TakeTaps(GKey.PushDown, nowMs);
+        // Sticky clears on actual pull-release EVENTS, not sampled Idle — a release+re-press
+        // batched between ticks must still reset (reviewer finding).
+        int pr = keys.ReleaseCount(GKey.PullUp);
+        if (pr != _pullReleases) { StickyOffsetG = 0; _pullReleases = pr; }
+        keys.TakeTaps(GKey.PullUp, nowMs);                    // drained: a held key cannot be tapped; idle taps are no-ops
+        int pushTaps = keys.TakeTaps(GKey.PushDown, nowMs);
 
         double target; DemandTier tier;
-        if (pull == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; StickyOffsetG += (pullTaps - pushTaps) * StickyStepG; target = System.Math.Clamp(hardMax + StickyOffsetG, System.Math.Min(1.0, hardMax), hardMax); }
-        else if (pull != KeyPhase.Idle)  { tier = DemandTier.Valley;     StickyOffsetG += (pullTaps - pushTaps) * StickyStepG; target = System.Math.Clamp(ValleyG + StickyOffsetG, System.Math.Min(1.0, maxPerform), maxPerform); }
+        if (pull == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; StickyOffsetG -= pushTaps * StickyStepG; target = System.Math.Clamp(hardMax + StickyOffsetG, System.Math.Min(1.0, hardMax), hardMax); }
+        else if (pull != KeyPhase.Idle)  { tier = DemandTier.Valley;     StickyOffsetG -= pushTaps * StickyStepG; target = System.Math.Clamp(ValleyG + StickyOffsetG, System.Math.Min(1.0, maxPerform), maxPerform); }
         else if (push == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; target = -1.0; }
         else if (push != KeyPhase.Idle)  { tier = DemandTier.Valley;     target = 0.0; }
-        else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; if (pullTaps > 0) target = System.Math.Min(1.0 + pullTaps * StickyStepG, maxPerform); }
+        else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; }
         Tier = tier;
         _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
 
@@ -40,7 +46,7 @@ public sealed class DetentLayer {
         if (rTaps > 0 || lTaps > 0) _bankTarget = ValleyBank;
         if (keys.PhaseAt(GKey.RollRight, nowMs) != KeyPhase.Idle) _bankTarget += RollHoldRate * dt;
         if (keys.PhaseAt(GKey.RollLeft, nowMs) != KeyPhase.Idle)  _bankTarget -= RollHoldRate * dt;
-        _bankTarget = System.Math.Clamp(_bankTarget, -System.Math.PI, System.Math.PI);
+        _bankTarget = System.Math.IEEERemainder(_bankTarget, 2 * System.Math.PI); // circular: continuous roll through inverted
 
         int thUp = keys.TakeTaps(GKey.ThrottleUp, nowMs), thDn = keys.TakeTaps(GKey.ThrottleDown, nowMs);
         _throttleIdx = System.Math.Clamp(_throttleIdx + thUp - thDn, 0, ThrottleDetents.Length - 1);

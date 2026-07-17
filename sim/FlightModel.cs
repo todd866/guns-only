@@ -30,8 +30,10 @@ public static class FlightModel {
     static double MachDragFactor(double mach) =>              // PLACEHOLDER transonic drag rise
         mach < 0.85 ? 1.0 : 1.0 + 8.0 * (mach - 0.85) * (mach - 0.85);
 
-    internal static double BankRate(double bank, double target, in AircraftParams p) =>
-        System.Math.Clamp((target - bank) / p.BankTau, -p.RollRateMaxRad, p.RollRateMaxRad);
+    internal static double BankRate(double bank, double target, in AircraftParams p) {
+        double err = System.Math.IEEERemainder(target - bank, 2 * System.Math.PI); // shortest-way signed error
+        return System.Math.Clamp(err / p.BankTau, -p.RollRateMaxRad, p.RollRateMaxRad);
+    }
 
     internal static StateDeriv Derivatives(in RawState r, in PilotCommand c, in AircraftParams p, in Vec3D liftRef) {
         double speed = System.Math.Max(r.Vel.Length, 20.0);

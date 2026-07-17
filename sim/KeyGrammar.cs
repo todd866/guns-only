@@ -15,6 +15,7 @@ public sealed class KeyGrammar {
         public double PressT = double.NegativeInfinity, ReleaseT = double.NegativeInfinity;
         public double? PendingTapT;   // release time of an uncommitted tap (double-arm candidate)
         public int Committed;
+        public int Releases;
     }
     readonly Dictionary<GKey, KS> _k = new();
     KS S(GKey k) => _k.TryGetValue(k, out var s) ? s : _k[k] = new KS();
@@ -32,6 +33,7 @@ public sealed class KeyGrammar {
             s.Down = true; s.PressT = timeMs;
         } else if (!pressed && s.Down) {
             s.Down = false; s.ReleaseT = timeMs;
+            s.Releases++;
             bool shortPress = (timeMs - s.PressT) <= TapMaxMs;
             if (s.IsDouble) {
                 if (shortPress) {             // double aborted into tap-tap: restore + re-arm
@@ -61,4 +63,7 @@ public sealed class KeyGrammar {
         CommitExpired(s, nowMs);
         int n = s.Committed; s.Committed = 0; return n;
     }
+    /// Cumulative release events for a key — lets consumers detect releases that happen
+    /// entirely between their polls (release + re-press inside one tick).
+    public int ReleaseCount(GKey key) => S(key).Releases;
 }

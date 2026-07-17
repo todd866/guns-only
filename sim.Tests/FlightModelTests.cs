@@ -138,4 +138,13 @@ public class FlightModelTests {
         // — comfortably under the chatter bound, and stable rather than a wide range of outcomes.
         Assert.Equal(5, signChanges);
     }
+    [Fact] public void BankErrorWrapsShortestWay() {
+        // From +3.10 rad toward advice -3.10 rad: shortest way is CONTINUING right through pi
+        // (wrapped error +0.083 rad), not a near-full left roll.
+        double rate = 0.0;
+        var mi = typeof(FlightModel).GetMethod("BankRate", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        object[] args = { 3.10, -3.10, FlightModel.Sabre };
+        rate = (double)mi!.Invoke(null, args)!;
+        Assert.True(rate > 0, $"expected positive (rightward) rate, got {rate:F4}");
+    }
 }
