@@ -4,16 +4,25 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     List<(double T, PilotCommand Cmd)> BanditTimeline);
 
 public sealed class RailBandit {
-    readonly AircraftSim _sim; readonly List<(double T, PilotCommand Cmd)> _tl;
+    readonly AircraftSim _sim;
+    readonly System.Collections.Generic.List<(double T, PilotCommand Cmd)> _tl;
+    int _active;
     public double T { get; private set; }
     public AircraftState State => _sim.State;
-    public RailBandit(AircraftState initial, AircraftParams p, List<(double, PilotCommand)> timeline) {
-        _sim = new AircraftSim(initial, p); _tl = timeline;
+    public RailBandit(AircraftState initial, AircraftParams p, System.Collections.Generic.List<(double, PilotCommand)> timeline) {
+        if (timeline is null || timeline.Count == 0) throw new System.ArgumentException("timeline must be non-empty");
+        if (timeline[0].Item1 != 0.0) throw new System.ArgumentException("timeline must start at T=0");
+        for (int i = 1; i < timeline.Count; i++)
+            if (timeline[i].Item1 <= timeline[i - 1].Item1) throw new System.ArgumentException("timeline must be strictly ascending");
+        _sim = new AircraftSim(initial, p);
+        _tl = new(timeline.Count);
+        foreach (var e in timeline) _tl.Add(e);
     }
     public void Step(double dt) {
-        var cmd = _tl[0].Cmd;
-        for (int i = _tl.Count - 1; i >= 0; i--) if (T >= _tl[i].T) { cmd = _tl[i].Cmd; break; }
-        _sim.Step(cmd, dt); T += dt;
+        // Half-tick epsilon: float accumulation of T must not delay a scheduled switch by a tick.
+        while (_active + 1 < _tl.Count && _tl[_active + 1].T <= T + dt * 0.5) _active++;
+        _sim.Step(_tl[_active].Cmd, dt);
+        T += dt;
     }
 }
 
@@ -37,9 +46,9 @@ public static class Beats {
         Bandit: S(80, Alt + 120, -700, 0, 230),           // high six, closing
         Law: new BreakLaw(+1),
         BanditTimeline: new() {
-            (0.0, new PilotCommand(2.0, 0.35, 1.0, 0)),    // gentle lag curve toward player
-            (8.0, new PilotCommand(4.5, 0.9, 1.0, 0)),
-            (20.0, new PilotCommand(1.0, 0.0, 0.7, 0)),
+            (0.0, new PilotCommand(0.9, -0.20, 1.0, 0)),   // slight left + gentle descent: converge on the player
+            (8.0, new PilotCommand(2.5, -0.60, 1.0, 0)),   // press the attack
+            (20.0, new PilotCommand(1.0, 0.0, 0.7, 0)),    // knock it off
         });
 
     public static BeatSetup Saddle() => new("Saddle + shot",
