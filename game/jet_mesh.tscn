@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
+albedo_color = Color(0.784314, 0.8, 0.815686, 1)
+
+[node name="Jet" type="Node3D"]
+
+[node name="Fuselage" type="CSGBox3D" parent="."]
+size = Vector3(1, 1, 8)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="Wing" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.5)
+size = Vector3(8, 0.15, 1.8)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="Tail" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -3.4)
+size = Vector3(3, 0.15, 1)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="Fin" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -3.4)
+size = Vector3(0.15, 1.2, 1)
+material = SubResource("StandardMaterial3D_body")
