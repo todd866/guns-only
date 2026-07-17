@@ -10,16 +10,16 @@ size = Vector3(1, 1, 8)
 material = SubResource("StandardMaterial3D_body")
 
 [node name="Wing" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.5)
 size = Vector3(8, 0.15, 1.8)
 material = SubResource("StandardMaterial3D_body")
 
 [node name="Tail" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -3.4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3.4)
 size = Vector3(3, 0.15, 1)
 material = SubResource("StandardMaterial3D_body")
 
 [node name="Fin" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -3.4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 3.4)
 size = Vector3(0.15, 1.2, 1)
 material = SubResource("StandardMaterial3D_body")
