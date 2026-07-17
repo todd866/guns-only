@@ -17,6 +17,7 @@ public partial class SimBridge : Node {
     PromptCue _cue;
     DoctrineAdvice _advice = new(1.0, 0.0, "free");
     double _acc, _simTimeMs;
+    double _lastRange, _closureKts, _closureSmooth;
     const double Dt = 1.0 / AircraftSim.TickHz;
     int _shotsInWindow, _shotsTotal;
     bool _triggerDown;
@@ -35,6 +36,7 @@ public partial class SimBridge : Node {
         _cue = PromptCue.None;
         _triggerDown = false;
         _acc = 0; _shotsInWindow = 0; _shotsTotal = 0;
+        _lastRange = Geometry.Range(_player.State, _bandit.State); _closureKts = 0; _closureSmooth = 0;
         // _simTimeMs deliberately NOT reset: one monotonic clock for grammar timestamps across beats.
 
         RotateSegment(index, GetVariant());
@@ -59,6 +61,10 @@ public partial class SimBridge : Node {
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             _player.Step(_detents.Command, Dt);
             _bandit.Step(Dt);
+            double rng = Geometry.Range(_player.State, _bandit.State);
+            _closureKts = (_lastRange - rng) / Dt * 1.94384; // +ve = closing; smoothed a touch below
+            _closureKts = _closureSmooth = _closureSmooth * 0.9 + _closureKts * 0.1;
+            _lastRange = rng;
             _simTimeMs += Dt * 1000.0; _acc -= Dt;
 
             if (_sessionDir != null) {
@@ -98,6 +104,10 @@ public partial class SimBridge : Node {
             {"context", _advice.Context},
             {"angle_off_deg", Geometry.AngleOff(s, _bandit.State) * 57.2958},
             {"range_m", Geometry.Range(s, _bandit.State)},
+            {"closure_kts", _closureKts},
+            {"pitch_deg", s.Gamma * 57.2958},
+            {"bank_deg", s.Bank * 57.2958},
+            {"heading_deg", ((s.Chi * 57.2958) % 360 + 360) % 360},
             {"gun_window", CameraSolver.GunWindow(s, _bandit.State)},
             {"beat", _beat.Name},
             {"shots_total", _shotsTotal}, {"shots_in_window", _shotsInWindow},
