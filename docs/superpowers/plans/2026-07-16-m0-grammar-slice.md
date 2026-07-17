@@ -829,7 +829,7 @@ public sealed class DetentLayer {
 
 **Interfaces:**
 - Consumes: Tasks 1–6.
-- Produces: `record BeatSetup(string Name, AircraftState Player, AircraftState Bandit, IExecutionLaw Law, System.Collections.Generic.List<(double T, PilotCommand Cmd)> BanditTimeline)`; `static class Beats` with `BeatSetup Perch()`, `BeatSetup BreakDefense()`, `BeatSetup Saddle()` (initial geometries per spec §14 M0: offensive perch 500 m back / 300 m above; defensive threat at 700 m six o'clock; saddle 250 m dead six of a weaving bandit); `class RailBandit { RailBandit(AircraftState initial, AircraftParams p, List<(double,PilotCommand)> timeline); void Step(double dt); AircraftState State {get;} double T {get;} }`; `enum PromptCue { None, Pull, Ease, Unload, RollLeft, RollRight }`; `static PromptLogic.Cue(DoctrineAdvice advice, in PilotCommand actual, DemandTier tier)`.
+- Produces: `record BeatSetup(string Name, AircraftState Player, AircraftState Bandit, IExecutionLaw Law, System.Collections.Generic.List<(double T, PilotCommand Cmd)> BanditTimeline)`; `static class Beats` with `BeatSetup Perch()`, `BeatSetup BreakDefense()`, `BeatSetup Saddle()` (initial geometries per spec §14 M0: offensive perch 500 m back / 300 m above; defensive threat at 700 m six o'clock; saddle 250 m dead six of a weaving bandit); `class RailBandit { RailBandit(AircraftState initial, AircraftParams p, List<(double,PilotCommand)> timeline); void Step(double dt); AircraftState State {get;} double T {get;} }`; `enum PromptCue { None, Pull, Ease, Unload, RollLeft, RollRight }`; `class PromptTracker` with `PromptCue Cue(DoctrineAdvice advice, in PilotCommand actual, DemandTier tier)` (stateful hysteresis: enter/exit thresholds latch cues).
 
 - [ ] **Step 1: Failing tests** — `sim.Tests/BeatsTests.cs`:
 ```csharp
@@ -1057,6 +1057,8 @@ public partial class SimBridge : Node {
     BeatSetup _beat = null!;
     readonly KeyGrammar _keys = new();
     readonly DetentLayer _detents = new();
+    readonly PromptTracker _prompts = new();
+    PromptCue _cue;
     DoctrineAdvice _advice = new(1.0, 0.0, "free");
     double _acc, _simTimeMs;
     const double Dt = 1.0 / AircraftSim.TickHz;
@@ -1084,6 +1086,7 @@ public partial class SimBridge : Node {
         while (_acc >= Dt) {
             _advice = _beat.Law.Advise(_player.State, _bandit.State, FlightModel.Sabre);
             _detents.Tick(_keys, _simTimeMs, _player.State, FlightModel.Sabre, _advice, Dt);
+            _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             _player.Step(_detents.Command, Dt);
             _bandit.Step(Dt);
             _simTimeMs += Dt * 1000.0; _acc -= Dt;
@@ -1110,7 +1113,7 @@ public partial class SimBridge : Node {
             {"g_hardmax", Protection.HardMaxG(s, FlightModel.Sabre)},
             {"sticky", _detents.StickyOffsetG}, {"tier", (int)_detents.Tier},
             {"variant", GetVariant()}, {"buffet", _player.Buffet},
-            {"prompt", (int)PromptLogic.Cue(_advice, _detents.Command, _detents.Tier)},
+            {"prompt", (int)_cue},
             {"context", _advice.Context},
             {"angle_off_deg", Geometry.AngleOff(s, _bandit.State) * 57.2958},
             {"range_m", Geometry.Range(s, _bandit.State)},
