@@ -42,4 +42,14 @@ public class DoctrineTests {
         Assert.True(guns.RecommendedBank > pure.RecommendedBank - 0.35, "lead should bank toward the crossing side at least as much");
         Assert.NotEqual(pure.RecommendedBank, guns.RecommendedBank, 3);
     }
+    [Fact] public void PursuitLawsDoNotThrowWhenEnergyDepleted() {
+        var slow = At(Vec3D.Zero, 0, 60); // MaxPerformG < 1 here
+        var bandit = At(new Vec3D(500, 100, 800), 0.4);
+        var mp = Protection.MaxPerformG(slow, FlightModel.Sabre);
+        Assert.True(mp < 1.0);
+        var pure = new PurePursuitLaw().Advise(slow, bandit, FlightModel.Sabre);
+        var guns = new GunsSaddleLaw().Advise(slow, bandit, FlightModel.Sabre);
+        Assert.Equal(mp, pure.RecommendedG, 9);
+        Assert.Equal(mp, guns.RecommendedG, 9);
+    }
 }
