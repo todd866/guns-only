@@ -1,4 +1,11 @@
 extends Node
+
+# Reverse of InputAdapter.MAP — scenarios speak GKey ordinals, humans press keys. Keep in sync.
+const GKEY_TO_KEYCODE := {
+	0: KEY_DOWN, 1: KEY_UP, 2: KEY_LEFT, 3: KEY_RIGHT,
+	4: KEY_A, 5: KEY_D, 6: KEY_W, 7: KEY_S,
+	8: KEY_F, 9: KEY_V, 10: KEY_K, 11: KEY_R, 12: KEY_SPACE,
+}
 # Flight-test rig: lets the controller SEE and MEASURE the game without a human.
 #
 # Entirely inert unless GUNS_RIG_SCENARIO is set in the environment. When set, it
@@ -96,9 +103,21 @@ func _physics_process(delta: float) -> void:
 		var e: Dictionary = _events[_event_idx]
 		var key := int(e["key"])
 		var pressed := bool(e["pressed"])
-		_bridge.FeedKey(key, pressed)
-		if key == 8:  # GKey.Trigger
-			_bridge.Trigger(pressed)
+		# Route through the REAL input path (synthesise a key event) rather than calling
+		# FeedKey directly. Padlock/restart/KIO/beat-select all work via signals that only
+		# InputAdapter._unhandled_input emits — feeding the bridge directly meant no scenario
+		# could ever exercise them, and padlock silently did nothing under test while looking
+		# implemented. Fall back to the direct call for any GKey with no physical binding.
+		var code: int = GKEY_TO_KEYCODE.get(key, 0)
+		if code != 0:
+			var ev := InputEventKey.new()
+			ev.keycode = code
+			ev.pressed = pressed
+			Input.parse_input_event(ev)
+		else:
+			_bridge.FeedKey(key, pressed)
+			if key == 8:
+				_bridge.Trigger(pressed)
 		_event_idx += 1
 
 	var hud: Dictionary = _bridge.GetHud()

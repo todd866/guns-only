@@ -1,0 +1,59 @@
+{
+ "name": "padlock_check",
+ "beat": 1,
+ "variant": 0,
+ "duration_s": 16,
+ "events": [
+  {
+   "t": 1.0,
+   "key": 9,
+   "pressed": true
+  },
+  {
+   "t": 1.1,
+   "key": 9,
+   "pressed": false
+  },
+  {
+   "t": 2.0,
+   "key": 0,
+   "pressed": true
+  },
+  {
+   "t": 2.5,
+   "key": 3,
+   "pressed": true
+  },
+  {
+   "t": 2.6,
+   "key": 3,
+   "pressed": false
+  },
+  {
+   "t": 6.0,
+   "key": 3,
+   "pressed": true
+  },
+  {
+   "t": 6.1,
+   "key": 3,
+   "pressed": false
+  },
+  {
+   "t": 9.5,
+   "key": 3,
+   "pressed": true
+  },
+  {
+   "t": 9.6,
+   "key": 3,
+   "pressed": false
+  },
+  {
+   "t": 14.0,
+   "key": 0,
+   "pressed": false
+  }
+ ],
+ "notes": "Padlock (V) has NEVER been exercised by anyone. Toggle it on at t=1 and fly: the bandit must stay centred in the sensor as the fight develops."
+}
