@@ -2,6 +2,7 @@ extends Control
 @onready var bridge = get_node("/root/Main/SimBridge")
 const TIER_COLORS := [Color(0.7,0.7,0.7), Color(0.3,0.9,0.4), Color(0.3,0.9,0.4), Color(1.0,0.7,0.2)]
 const PROMPTS := ["", "PULL ↑", "EASE ↓", "UNLOAD ↓", "◀ ROLL", "ROLL ▶"]
+var draw_count := 0
 
 func _process(_d): queue_redraw()
 
@@ -26,7 +27,7 @@ func _draw() -> void:
 	draw_string(f, Vector2(x+24, gy.call(hud["g_cmd"])+5), "%.1fG %+0.1f" % [hud["g_cmd"], hud["sticky"]], HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
 	draw_string(f, Vector2(20, 40), "%d kt   %d ft" % [hud["speed_kts"], hud["alt_ft"]], HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
 	draw_string(f, Vector2(20, 64), "%s   [variant %s]   %s" % [hud["beat"], "A" if hud["variant"]==0 else "B", hud["context"]], HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-	if hud["buffet"]:
+	if hud["buffet"] and fmod(Time.get_ticks_msec() / 250.0, 2.0) < 1.0:
 		draw_string(f, Vector2(sz.x/2-40, sz.y*0.2), "BUFFET", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1.0,0.6,0.1))
 	# --- prompt ---
 	var p: int = hud["prompt"]
@@ -37,3 +38,4 @@ func _draw() -> void:
 		draw_line(c+Vector2(-12,0), c+Vector2(12,0), Color(1,0.9,0.2), 2.0)
 		draw_line(c+Vector2(0,-12), c+Vector2(0,12), Color(1,0.9,0.2), 2.0)
 	draw_string(f, Vector2(sz.x-220, 40), "range %dm  off %d°  hits %d/%d" % [hud["range_m"], hud["angle_off_deg"], hud["shots_in_window"], hud["shots_total"]], HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+	draw_count += 1

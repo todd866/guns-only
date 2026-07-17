@@ -46,11 +46,14 @@ func _process(_delta: float) -> bool:
 	var hud: Dictionary = bridge.GetHud()
 	var elapsed := (Time.get_ticks_msec() - t0_ms) / 1000.0
 	if not hud_checked:
-		hud_root.queue_redraw()
 		hud_frames += 1
 		if hud_frames >= 60:
-			print("PASS (d): HUD Control node present, queue_redraw ran %d frames with no errors" % hud_frames)
-			hud_checked = true
+			var draw_count = hud_root.get("draw_count")
+			if draw_count != null and draw_count >= 30:
+				print("PASS (d): HUD Control node present, draw_count completed %d frames with no errors" % draw_count)
+				hud_checked = true
+			else:
+				return _fail("HUD draw_count is %s (expected >= 30), possible hidden HUD or _draw() error" % draw_count)
 	if phase == 0:
 		if hud["g_cmd"] > 1.5:
 			print("PASS (a): holding UP raised g_cmd to %.2f in %.2fs" % [hud["g_cmd"], elapsed])
