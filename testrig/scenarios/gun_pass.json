@@ -1,0 +1,149 @@
+{
+ "name": "gun_pass",
+ "beat": 3,
+ "variant": 0,
+ "duration_s": 30,
+ "events": [
+  {
+   "t": 1.0,
+   "key": 0,
+   "pressed": true
+  },
+  {
+   "t": 1.5,
+   "key": 3,
+   "pressed": true
+  },
+  {
+   "t": 1.6,
+   "key": 3,
+   "pressed": false
+  },
+  {
+   "t": 2.0,
+   "key": 8,
+   "pressed": true
+  },
+  {
+   "t": 2.3,
+   "key": 8,
+   "pressed": false
+  },
+  {
+   "t": 3.0,
+   "key": 8,
+   "pressed": true
+  },
+  {
+   "t": 3.3,
+   "key": 8,
+   "pressed": false
+  },
+  {
+   "t": 4.0,
+   "key": 3,
+   "pressed": true
+  },
+  {
+   "t": 4.0,
+   "key": 8,
+   "pressed": true
+  },
+  {
+   "t": 4.1,
+   "key": 3,
+   "pressed": false
+  },
+  {
+   "t": 4.3,
+   "key": 8,
+   "pressed": false
+  },
+  {
+   "t": 5.0,
+   "key": 8,
+   "pressed": true
+  },
+  {
+   "t": 5.3,
+   "key": 8,
+   "pressed": false
+  },
+  {
+   "t": 6.0,
+   "key": 8,
+   "pressed": true
+  },
+  {
+   "t": 6.3,
+   "key": 8,
+   "pressed": false
+  },
+  {
+   "t": 7.0,
+   "key": 3,
+   "pressed": true
+  },
+  {
+   "t": 7.1,
+   "key": 3,
+   "pressed": false
+  },
+  {
+   "t": 8.0,
+   "key": 8,
+   "pressed": true
+  },
+  {
+   "t": 8.3,
+   "key": 8,
+   "pressed": false
+  },
+  {
+   "t": 10.0,
+   "key": 3,
+   "pressed": true
+  },
+  {
+   "t": 10.0,
+   "key": 8,
+   "pressed": true
+  },
+  {
+   "t": 10.1,
+   "key": 3,
+   "pressed": false
+  },
+  {
+   "t": 10.3,
+   "key": 8,
+   "pressed": false
+  },
+  {
+   "t": 13.0,
+   "key": 3,
+   "pressed": true
+  },
+  {
+   "t": 13.1,
+   "key": 3,
+   "pressed": false
+  },
+  {
+   "t": 16.0,
+   "key": 3,
+   "pressed": true
+  },
+  {
+   "t": 16.1,
+   "key": 3,
+   "pressed": false
+  },
+  {
+   "t": 20.0,
+   "key": 0,
+   "pressed": false
+  }
+ ],
+ "notes": "Full engagement chain incl. trigger: pull + roll cadence into the saddle, gun bursts through the window."
+}

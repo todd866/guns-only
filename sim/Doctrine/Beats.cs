@@ -62,12 +62,21 @@ public static class Beats {
     /// 30k, huge and slow and blind to you (no plume, no intake return). You have ONE pass —
     /// after that you're a falling wing. This is the game's energy lesson, made inescapable.
     public static BeatSetup BalloonStrike() {
-        const double DropAlt = 21336;   // 70,000 ft — a 140 kg glider on a 20 m H2 balloon tops 81k;
-                                        // 70k is a conservative operational release, not the ceiling.
+        // TERMINAL PHASE. The 70k balloon release is the briefing, not the beat: at L/D 28 a
+        // 12 km height surplus is ~340 km of glide energy for an 8 km problem, so a dive
+        // arrives at 426 kt with a 2 km turn radius and screams past at 3 km / 64 deg off —
+        // verified by flying it (bin/mission). Gunning it requires arriving SLOW, i.e. an
+        // energy-DISPOSAL approach. That is the real mission and it is hard; it belongs in
+        // M2 content, not an M0 grammar test. So the beat starts where the gun pass starts:
+        // you have already glided in from the balloon and are converting the last of it.
+        const double DropAlt = 10058;   // 33,000 ft — 3k above the target, low overtake, flyable
         const double AwacsAlt = 9144;   // 30,000 ft
         return new BeatSetup("Balloon strike — KJ-500",
             // Cut loose slow (a balloon gives you height, not speed) 20 km south, nose down.
-            Player: new AircraftState(new Vec3D(0, DropAlt, -20000), 65, -0.30, 0, 0, FlightModel.GliderStrike.MassKg),
+            // 8 km lateral vs 12 km of height to lose: the glider must DIVE onto it (~57 deg),
+            // not glide. At 20 km it simply sailed — L/D 28 buys 336 km from that height, so
+            // the approach has to be steep or there is no intercept at all (found by flying it).
+            Player: new AircraftState(new Vec3D(0, DropAlt, -3500), 100, -0.06, 0, 0, FlightModel.GliderStrike.MassKg),
             Bandit: new AircraftState(new Vec3D(0, AwacsAlt, 0), 130, 0, 0, 0, FlightModel.AwacsTarget.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() {
