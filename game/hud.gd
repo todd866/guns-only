@@ -469,12 +469,35 @@ func _draw() -> void:
 
 	var hud: Dictionary = bridge.GetHud()
 	var sz := size
-	var c := sz * 0.5
+	var screen_c := sz * 0.5
 
-	_draw_pitch_ladder(hud, sz, c)
-	_draw_fpm(c)
-	_draw_td_box(hud, sz, c)
-	_draw_gun_reticle(hud, c)
+	# THE HUD DOES NOT FOLLOW THE VIEW.
+	# Flight symbology (ladder, FPM, boresight, gun reticle) belongs to the AIRFRAME, not to
+	# wherever the sensor gimbal happens to be pointing. Anchoring it at screen centre meant
+	# that slewing the sensor 70 deg off boresight redrew the ladder around the VIEW — so it
+	# reported the attitude of where you were looking rather than where the jet was pointing.
+	# That's the F-35-sim failure mode: meaningless and disorienting. Project the real nose;
+	# when the gimbal slews, the flight symbology slides off with the airframe and a locator
+	# tells you where the nose went.
+	# Screen-fixed by design (data, not geometry — and losing your airspeed because you glanced
+	# over your shoulder would be its own bad UX): speed/alt/heading tapes, G tape, warnings.
+	# World-anchored already: the TD box (it follows the bandit, which is correct).
+	var c := screen_c
+	var nose_ahead := true
+	if cam != null and player_node != null:
+		var fwd: Vector3 = -player_node.global_transform.basis.z
+		var ahead: Vector3 = player_node.global_position + fwd * 3000.0
+		if cam.is_position_behind(ahead):
+			nose_ahead = false
+		else:
+			c = cam.unproject_position(ahead)
+
+	if nose_ahead:
+		_draw_pitch_ladder(hud, sz, c)
+		_draw_fpm(c)
+		_draw_gun_reticle(hud, c)
+	_draw_boresight_cue(screen_c, sz, c, nose_ahead)
+	_draw_td_box(hud, sz, screen_c)
 	_draw_tapes(hud, sz)
 	_draw_heading_tape(hud, sz)
 	_draw_g_tape(hud, sz)
@@ -482,3 +505,30 @@ func _draw() -> void:
 	_draw_footer(hud, sz)
 
 	draw_count += 1
+
+
+# Where is the nose? The descendant of Falcon 4's SA bar: once the gimbal is slewed far enough
+# that the flight symbology has left the frame, you still need to know where the airframe is
+# pointing relative to your line of sight. Silent while looking straight ahead.
+func _draw_boresight_cue(screen_c: Vector2, sz: Vector2, nose_c: Vector2, nose_ahead: bool) -> void:
+	var slew_deg := 0.0
+	if cam != null and cam.get("head_yaw") != null:
+		slew_deg = rad_to_deg(sqrt(pow(cam.head_yaw, 2.0) + pow(cam.head_pitch, 2.0)))
+	if slew_deg < 4.0:
+		return   # looking down the nose: no cue needed, the symbology IS the cue
+
+	var rect := Rect2(28, 28, sz.x - 56, sz.y - 56)
+	var on_screen := nose_ahead and rect.has_point(nose_c)
+	if not on_screen:
+		# Point at the nose. Behind the sensor -> invert the direction so the arrow means
+		# "the airframe is that way", not "a point 3km ahead projects there".
+		var dir := (nose_c - screen_c)
+		if not nose_ahead:
+			dir = -dir
+		if dir.length() < 1.0:
+			dir = Vector2(0, 1)
+		dir = dir.normalized()
+		var tip := _clamp_to_rect(screen_c, dir, rect)
+		_draw_arrow(tip, dir, 16.0, COL_GREEN_DIM)
+		_draw_centered(tip - dir * 30.0, "NOSE", 13, COL_GREEN_DIM)
+	_draw_centered(Vector2(screen_c.x, sz.y * 0.94), "LOOK %d° OFF BORESIGHT" % int(round(slew_deg)), 14, COL_GREEN_DIM)
