@@ -72,6 +72,7 @@ public partial class SimBridge : Node {
     public Godot.Collections.Dictionary GetHud() {
         var s = _player.State;
         return new Godot.Collections.Dictionary {
+            {"t_ms", _simTimeMs},
             {"speed_kts", s.Speed * 1.94384}, {"alt_ft", s.Position.Y * 3.28084},
             {"g_actual", _player.LastNz}, {"g_cmd", _detents.Command.GDemand},
             {"g_valley", _detents.ValleyG},
