@@ -441,7 +441,7 @@ public static class Protection {
 
 **Interfaces:**
 - Consumes: nothing (pure).
-- Produces: `enum GKey { PullUp, PushDown, RollLeft, RollRight, RudderLeft, RudderRight, ThrottleUp, ThrottleDown, Trigger, Padlock, KnockItOff, Restart }`; `enum KeyPhase { Idle, Held, DoubleHeld }`; `class KeyGrammar` with `void Feed(GKey key, bool pressed, double timeMs)` (callers must pre-filter OS echo repeats), `KeyPhase Phase(GKey key)`, `int TakeTaps(GKey key)` (count of completed taps since last call), and tunables `TapMaxMs = 180`, `DoubleGapMs = 250`.
+- Produces: `enum GKey { PullUp, PushDown, RollLeft, RollRight, RudderLeft, RudderRight, ThrottleUp, ThrottleDown, Trigger, Padlock, KnockItOff, Restart }`; `enum KeyPhase { Idle, Held, DoubleHeld }`; `class KeyGrammar` with `void Feed(GKey key, bool pressed, double timeMs)` (callers must pre-filter OS echo repeats), `KeyPhase Phase(GKey key)`, `int TakeTaps(GKey key, double nowMs)` (completed taps whose double-window expired; deterministic in nowMs), and tunables `TapMaxMs = 180`, `DoubleGapMs = 250`.
 
 Semantics (spec §7): press→release within `TapMaxMs` = one **tap**; press held past `TapMaxMs` = **Held**; press, release, re-press within `DoubleGapMs` and held = **DoubleHeld** (past-protection demand); release always returns to Idle.
 
@@ -750,7 +750,7 @@ public class DetentLayerTests {
         var d = new DetentLayer(); var g = new KeyGrammar();
         Assert.Equal(0.85, d.Throttle, 6); // default cruise... spec detents idle/cruise/mil
         g.Feed(GKey.ThrottleUp, true, 0); g.Feed(GKey.ThrottleUp, false, 80);
-        Run(d, g, 80, 300, Fast);
+        Run(d, g, 80, 500, Fast); // tap commits after the 250 ms double window
         Assert.Equal(1.0, d.Throttle, 6);
     }
 }
@@ -784,7 +784,7 @@ public sealed class DetentLayer {
 
         var pull = keys.PhaseAt(GKey.PullUp, nowMs);
         var push = keys.PhaseAt(GKey.PushDown, nowMs);
-        int pullTaps = keys.TakeTaps(GKey.PullUp), pushTaps = keys.TakeTaps(GKey.PushDown);
+        int pullTaps = keys.TakeTaps(GKey.PullUp, nowMs), pushTaps = keys.TakeTaps(GKey.PushDown, nowMs);
 
         double target; DemandTier tier;
         if (pull == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; StickyOffsetG += (pullTaps - pushTaps) * StickyStepG; target = System.Math.Clamp(hardMax + StickyOffsetG, System.Math.Min(1.0, hardMax), hardMax); }
@@ -796,13 +796,13 @@ public sealed class DetentLayer {
         _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
 
         // Roll: taps adopt the advice bank (quantized intent); holds slew continuously.
-        int rTaps = keys.TakeTaps(GKey.RollRight), lTaps = keys.TakeTaps(GKey.RollLeft);
+        int rTaps = keys.TakeTaps(GKey.RollRight, nowMs), lTaps = keys.TakeTaps(GKey.RollLeft, nowMs);
         if (rTaps > 0 || lTaps > 0) _bankTarget = ValleyBank;
         if (keys.PhaseAt(GKey.RollRight, nowMs) != KeyPhase.Idle) _bankTarget += RollHoldRate * dt;
         if (keys.PhaseAt(GKey.RollLeft, nowMs) != KeyPhase.Idle)  _bankTarget -= RollHoldRate * dt;
         _bankTarget = System.Math.Clamp(_bankTarget, -System.Math.PI, System.Math.PI);
 
-        int thUp = keys.TakeTaps(GKey.ThrottleUp), thDn = keys.TakeTaps(GKey.ThrottleDown);
+        int thUp = keys.TakeTaps(GKey.ThrottleUp, nowMs), thDn = keys.TakeTaps(GKey.ThrottleDown, nowMs);
         _throttleIdx = System.Math.Clamp(_throttleIdx + thUp - thDn, 0, ThrottleDetents.Length - 1);
         Throttle = ThrottleDetents[_throttleIdx];
 
