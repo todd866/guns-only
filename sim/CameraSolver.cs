@@ -21,7 +21,7 @@ public static class CameraSolver {
         if (mode == CameraMode.Gun) {
             var fwd = own.ForwardDir();
             var upG = SafeUp(fwd);
-            var pos = own.Position - fwd * 7 + upG * 2.0;
+            var pos = own.Position - fwd * 8.5 + upG * 2.6; // eye above the spine: airframe below the sightline, pipper unobstructed
             var lookAt = own.Position + fwd * 200;
             return new CameraPose(pos, lookAt, SafeUp((lookAt - pos).Normalized()));
         }
