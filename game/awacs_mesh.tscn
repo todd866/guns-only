@@ -1,0 +1,64 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
+albedo_color = Color(0.42, 0.46, 0.4, 1)
+metallic = 0.15
+roughness = 0.65
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dome"]
+albedo_color = Color(0.56, 0.58, 0.56, 1)
+metallic = 0.15
+roughness = 0.5
+
+[node name="Awacs" type="Node3D"]
+
+[node name="Fuselage" type="CSGBox3D" parent="."]
+size = Vector3(3.4, 3.4, 34.0)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="Wing" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, -3.0)
+size = Vector3(38.0, 0.5, 5.0)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="EngineL1" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5, -0.3, -3.0)
+size = Vector3(1.0, 1.0, 3.4)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="EngineL2" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13.5, -0.3, -3.0)
+size = Vector3(1.0, 1.0, 3.4)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="EngineR1" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, -0.3, -3.0)
+size = Vector3(1.0, 1.0, 3.4)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="EngineR2" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13.5, -0.3, -3.0)
+size = Vector3(1.0, 1.0, 3.4)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="HorizStab" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 15.5)
+size = Vector3(11.0, 0.35, 3.0)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="Fin" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 15.5)
+size = Vector3(0.35, 4.5, 4.0)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="Pylon" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, -3.0)
+size = Vector3(1.2, 3.0, 1.2)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="Rotodome" type="CSGCylinder3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.2, -3.0)
+radius = 5.5
+height = 1.1
+sides = 28
+material = SubResource("StandardMaterial3D_dome")

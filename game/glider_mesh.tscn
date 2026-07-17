@@ -1,0 +1,43 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
+albedo_color = Color(0.8, 0.81, 0.82, 1)
+metallic = 0.1
+roughness = 0.55
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sensor"]
+albedo_color = Color(0.05, 0.05, 0.06, 1)
+metallic = 0.15
+roughness = 0.1
+
+[node name="Glider" type="Node3D"]
+
+[node name="Pod" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.1)
+size = Vector3(0.38, 0.42, 2.1)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="EOBall" type="CSGSphere3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, -1.15)
+radius = 0.16
+material = SubResource("StandardMaterial3D_sensor")
+
+[node name="Wing" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, -0.1)
+size = Vector3(5.8, 0.05, 0.448)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="TailBoom" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.75)
+size = Vector3(0.06, 0.06, 1.5)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="Stabilizer" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2.5)
+size = Vector3(1.1, 0.04, 0.32)
+material = SubResource("StandardMaterial3D_body")
+
+[node name="Fin" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.23, 2.5)
+size = Vector3(0.04, 0.42, 0.32)
+material = SubResource("StandardMaterial3D_body")
