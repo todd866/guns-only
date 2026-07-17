@@ -1,8 +1,15 @@
 namespace GunsOnly.Sim;
 
+/// SpoolUpTau/SpoolDownTau: first-order engine lag, in seconds. Thrust is NOT instantaneous.
+/// This is the difference between a toy and a sim on the back side of the power curve, where
+/// you hold the glidepath with power and the engine answers late -- and it is exactly why
+/// early-jet carrier recovery was lethal: a waveoff asks for thrust the engine cannot give
+/// you for several seconds. Spool-DOWN is faster than spool-up (a compressor sheds RPM more
+/// readily than it gains it), hence two constants, not one.
 public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN,
     double CD0, double InducedK, double CLMax, double CLMin, double RollRateMaxRad, double BankTau,
-    double MCrit = 0.85, double WaveDragK = 8.0);
+    double MCrit = 0.85, double WaveDragK = 8.0,
+    double SpoolUpTau = 2.5, double SpoolDownTau = 1.4);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -89,6 +96,9 @@ public static class FlightModel {
         double cd = p.CD0 * MachDragFactor(mach, p) + p.InducedK * cl * cl
                     + System.Math.Abs(c.Rudder) * 0.15 * p.CD0;
         double drag = q * p.WingAreaM2 * cd;
+        // c.Throttle here is the engine's ACTUAL spool fraction, not the lever position:
+        // AircraftSim lags the lever through SpoolUpTau/SpoolDownTau before calling us. The
+        // model is memoryless, so the state that makes thrust lag has to live in the sim.
         double thrust = System.Math.Clamp(c.Throttle, 0, 1) * p.ThrustMaxN * (rho / 1.225);
 
         var accel = vhat * ((thrust - drag) / r.Mass)

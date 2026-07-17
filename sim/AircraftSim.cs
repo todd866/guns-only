@@ -22,6 +22,11 @@ public sealed class AircraftSim {
     double _bank;            // roll about the velocity axis, relative to _liftRef
     double _reportedBank;    // horizon-referenced bank for State (held when horizon-undefined)
     bool _init;
+    bool _spoolInit;
+    double _thrustFrac;      // engine's actual spool state, 0..1 — lags the throttle lever
+    /// What the ENGINE is actually delivering, 0..1, as opposed to where the lever is. The gap
+    /// between the two is the whole difficulty of flying the back side of the power curve.
+    public double ThrustFraction => _thrustFrac;
     const double HorizonValidY = 0.94; // |vhat.Y| below this (~|gamma| < 70 deg): horizon bank well-defined
 
     public AircraftSim(AircraftState initial, AircraftParams p) { State = initial; _p = p; }
@@ -40,11 +45,26 @@ public sealed class AircraftSim {
         var vhat0 = vel0.Length < 1e-9 ? new Vec3D(0, 0, 1) : vel0.Normalized();
         if (!_init) InitFrame(vhat0);
 
+        // Engine spool. First aircraft ever built by this sim is trimmed, not spooling up from
+        // idle: snap to the opening lever position, then lag every CHANGE after that. (Starting
+        // at zero would quietly re-tune every beat by decelerating each aircraft off the line.)
+        double lever = System.Math.Clamp(cmd.Throttle, 0, 1);
+        if (!_spoolInit) { _thrustFrac = lever; _spoolInit = true; }
+        double tau = lever > _thrustFrac ? _p.SpoolUpTau : _p.SpoolDownTau;
+        if (tau > 1e-6) {
+            // Exact solution of dx/dt = (target-x)/tau over dt: unconditionally stable, and it
+            // cannot overshoot the lever no matter how coarse dt gets.
+            _thrustFrac += (lever - _thrustFrac) * (1.0 - System.Math.Exp(-dt / tau));
+        } else {
+            _thrustFrac = lever;
+        }
+        var spooled = cmd with { Throttle = _thrustFrac };
+
         var r = new RawState(s.Position, vel0, _bank, s.Mass);
-        var k1 = FlightModel.Derivatives(r, cmd, _p, _liftRef);
-        var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), cmd, _p, _liftRef);
-        var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), cmd, _p, _liftRef);
-        var k4 = FlightModel.Derivatives(Apply(r, k3, dt), cmd, _p, _liftRef);
+        var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef);
+        var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), spooled, _p, _liftRef);
+        var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), spooled, _p, _liftRef);
+        var k4 = FlightModel.Derivatives(Apply(r, k3, dt), spooled, _p, _liftRef);
         var pos = r.Pos + (k1.DPos + (k2.DPos + k3.DPos) * 2 + k4.DPos) * (dt / 6);
         var vel = r.Vel + (k1.DVel + (k2.DVel + k3.DVel) * 2 + k4.DVel) * (dt / 6);
         _bank = WrapPi(r.Bank + (k1.DBank + 2 * (k2.DBank + k3.DBank) + k4.DBank) * (dt / 6));
