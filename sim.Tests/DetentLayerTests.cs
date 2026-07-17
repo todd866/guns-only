@@ -99,4 +99,22 @@ public class DetentLayerTests {
         Assert.True(wentNegative, "bank target should wrap past +pi into negative (through inverted), not pin");
         Assert.InRange(d.Command.BankTarget, -System.Math.PI - 1e-9, System.Math.PI + 1e-9);
     }
+    [Fact] public void EaseTapDoesNotSurvivePullRecommit() {
+        var d = new DetentLayer { Variant = ValleyVariant.DoctrineDeep }; var g = new KeyGrammar();
+        g.Feed(GKey.PullUp, true, 0);
+        Run(d, g, 0, 1000, Fast);
+        g.Feed(GKey.PushDown, true, 1000); g.Feed(GKey.PushDown, false, 1080); // ease tap, commits ~1330
+        g.Feed(GKey.PullUp, false, 1200); g.Feed(GKey.PullUp, true, 1202);     // recommit BEFORE the tap commits
+        Run(d, g, 1202, 3000, Fast);
+        Assert.Equal(0.0, d.StickyOffsetG, 6);   // stale ease must not leak into the new hold
+        Assert.Equal(4.2, d.Command.GDemand, 1);
+    }
+    [Fact] public void IdlePushTapBeforePullDoesNotEase() {
+        var d = new DetentLayer { Variant = ValleyVariant.DoctrineDeep }; var g = new KeyGrammar();
+        g.Feed(GKey.PushDown, true, 0); g.Feed(GKey.PushDown, false, 80);  // tap while everything idle
+        g.Feed(GKey.PullUp, true, 150);                                     // hold starts after the tap's release
+        Run(d, g, 150, 2000, Fast);
+        Assert.Equal(0.0, d.StickyOffsetG, 6);
+        Assert.Equal(4.2, d.Command.GDemand, 1);
+    }
 }

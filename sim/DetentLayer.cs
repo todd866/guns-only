@@ -30,7 +30,14 @@ public sealed class DetentLayer {
         int pr = keys.ReleaseCount(GKey.PullUp);
         if (pr != _pullReleases) { StickyOffsetG = 0; _pullReleases = pr; }
         keys.TakeTaps(GKey.PullUp, nowMs);                    // drained: a held key cannot be tapped; idle taps are no-ops
-        int pushTaps = keys.TakeTaps(GKey.PushDown, nowMs);
+        int pushTaps;
+        if (pull != KeyPhase.Idle) {                           // ease taps must belong to THIS hold (reviewer finding:
+            double holdStart = keys.PressTime(GKey.PullUp);    //  a deferred tap can straddle a release/re-press)
+            pushTaps = keys.TakeTapsSince(GKey.PushDown, holdStart, nowMs);
+        } else {
+            keys.TakeTapsSince(GKey.PushDown, double.MaxValue, nowMs); // drain stale ease taps
+            pushTaps = 0;
+        }
 
         double target; DemandTier tier;
         if (pull == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; StickyOffsetG -= pushTaps * StickyStepG; target = System.Math.Clamp(hardMax + StickyOffsetG, System.Math.Min(1.0, hardMax), hardMax); }

@@ -14,7 +14,8 @@ public sealed class KeyGrammar {
         public bool Down, IsDouble;
         public double PressT = double.NegativeInfinity, ReleaseT = double.NegativeInfinity;
         public double? PendingTapT;   // release time of an uncommitted tap (double-arm candidate)
-        public int Committed;
+        public readonly System.Collections.Generic.List<double> CommittedT = new();
+        public double? ConsumedArmT;
         public int Releases;
     }
     readonly Dictionary<GKey, KS> _k = new();
@@ -25,6 +26,7 @@ public sealed class KeyGrammar {
         if (pressed && !s.Down) {
             if (s.PendingTapT is double armT && timeMs - armT <= DoubleGapMs) {
                 s.IsDouble = true;            // arming tap provisionally consumed
+                s.ConsumedArmT = armT;
                 s.PendingTapT = null;
             } else {
                 CommitExpired(s, timeMs);
@@ -37,8 +39,10 @@ public sealed class KeyGrammar {
             bool shortPress = (timeMs - s.PressT) <= TapMaxMs;
             if (s.IsDouble) {
                 if (shortPress) {             // double aborted into tap-tap: restore + re-arm
-                    s.Committed++;            // the restored first tap
+                    s.CommittedT.Add(s.ConsumedArmT ?? s.PressT); // the restored first tap
                     s.PendingTapT = timeMs;   // second tap pending
+                } else {
+                    s.ConsumedArmT = null;
                 }
                 // else: completed DoubleHeld — arming tap consumed for good
                 s.IsDouble = false;
@@ -48,7 +52,7 @@ public sealed class KeyGrammar {
         }
     }
     static void CommitExpiredImpl(KS s, double nowMs, double gapMs) {
-        if (s.PendingTapT is double t && nowMs - t > gapMs) { s.Committed++; s.PendingTapT = null; }
+        if (s.PendingTapT is double t && nowMs - t > gapMs) { s.CommittedT.Add(t); s.PendingTapT = null; }
     }
     void CommitExpired(KS s, double nowMs) => CommitExpiredImpl(s, nowMs, DoubleGapMs);
 
@@ -59,10 +63,16 @@ public sealed class KeyGrammar {
     public KeyPhase Phase(GKey key) => PhaseAt(key, 0);
     /// Completed taps whose double window has expired as of nowMs.
     public int TakeTaps(GKey key, double nowMs) {
-        var s = S(key);
-        CommitExpired(s, nowMs);
-        int n = s.Committed; s.Committed = 0; return n;
+        var s = S(key); CommitExpired(s, nowMs);
+        int n = s.CommittedT.Count; s.CommittedT.Clear(); return n;
     }
+    /// Taps RELEASED after sinceMs; older committed taps are discarded as stale.
+    public int TakeTapsSince(GKey key, double sinceMs, double nowMs) {
+        var s = S(key); CommitExpired(s, nowMs);
+        int n = 0; foreach (var t in s.CommittedT) if (t > sinceMs) n++;
+        s.CommittedT.Clear(); return n;
+    }
+    public double PressTime(GKey key) => S(key).PressT;
     /// Cumulative release events for a key — lets consumers detect releases that happen
     /// entirely between their polls (release + re-press inside one tick).
     public int ReleaseCount(GKey key) => S(key).Releases;
