@@ -787,8 +787,8 @@ public sealed class DetentLayer {
         int pullTaps = keys.TakeTaps(GKey.PullUp), pushTaps = keys.TakeTaps(GKey.PushDown);
 
         double target; DemandTier tier;
-        if (pull == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; StickyOffsetG += (pullTaps - pushTaps) * StickyStepG; target = System.Math.Clamp(hardMax + StickyOffsetG, 1.0, hardMax); }
-        else if (pull != KeyPhase.Idle)  { tier = DemandTier.Valley;     StickyOffsetG += (pullTaps - pushTaps) * StickyStepG; target = System.Math.Clamp(ValleyG + StickyOffsetG, 1.0, maxPerform); }
+        if (pull == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; StickyOffsetG += (pullTaps - pushTaps) * StickyStepG; target = System.Math.Clamp(hardMax + StickyOffsetG, System.Math.Min(1.0, hardMax), hardMax); }
+        else if (pull != KeyPhase.Idle)  { tier = DemandTier.Valley;     StickyOffsetG += (pullTaps - pushTaps) * StickyStepG; target = System.Math.Clamp(ValleyG + StickyOffsetG, System.Math.Min(1.0, maxPerform), maxPerform); }
         else if (push == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; target = -1.0; }
         else if (push != KeyPhase.Idle)  { tier = DemandTier.Valley;     target = 0.0; }
         else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; if (pullTaps > 0) target = System.Math.Min(1.0 + pullTaps * StickyStepG, maxPerform); }
