@@ -1,10 +1,11 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="PackedScene" path="res://game/jet_mesh.tscn" id="1_jetmesh"]
 [ext_resource type="Script" path="res://game/main.gd" id="2_maingd"]
 [ext_resource type="Script" path="res://bridge/SimBridge.cs" id="3_simbridge"]
 [ext_resource type="Script" path="res://game/camera_rig.gd" id="4_camerarig"]
 [ext_resource type="Script" path="res://game/input_adapter.gd" id="5_inputadapter"]
+[ext_resource type="Script" path="res://game/hud.gd" id="6_hud"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sea"]
 albedo_color = Color(0.105882, 0.227451, 0.290196, 1)
@@ -66,3 +67,14 @@ script = ExtResource("4_camerarig")
 
 [node name="InputAdapter" type="Node" parent="."]
 script = ExtResource("5_inputadapter")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Root" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("6_hud")

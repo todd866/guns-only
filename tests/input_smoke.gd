@@ -10,15 +10,24 @@ extends SceneTree
 # explicit push_error + quit(1) for failures, not assert(), or a failing check will
 # silently re-fire every frame forever instead of failing the test.
 var bridge
+var hud_root: Control
 var t0_ms := 0
-var phase := 0          # 0 = hold pull-up, 1 = beat switch (key 2), 2 = variant toggle (F1)
+var phase := 0          # 0 = hold pull-up, 1 = beat switch (key 2), 2 = variant toggle (F1), 3 = HUD redraw settle
 var variant_before := -1
+var hud_frames := 0
+var hud_checked := false
 
 func _initialize() -> void:
 	var packed: PackedScene = load("res://game/main.tscn")
 	var scene: Node = packed.instantiate()
 	root.add_child(scene)
 	bridge = scene.get_node("SimBridge")
+	var hud_node: Node = scene.get_node_or_null("HUD/Root")
+	if hud_node == null or not (hud_node is Control):
+		push_error("FAIL: HUD Control node not found at HUD/Root")
+		quit(1)
+		return
+	hud_root = hud_node
 	t0_ms = Time.get_ticks_msec()
 	_send_key(KEY_UP, true)
 
@@ -36,6 +45,12 @@ func _fail(msg: String) -> bool:
 func _process(_delta: float) -> bool:
 	var hud: Dictionary = bridge.GetHud()
 	var elapsed := (Time.get_ticks_msec() - t0_ms) / 1000.0
+	if not hud_checked:
+		hud_root.queue_redraw()
+		hud_frames += 1
+		if hud_frames >= 60:
+			print("PASS (d): HUD Control node present, queue_redraw ran %d frames with no errors" % hud_frames)
+			hud_checked = true
 	if phase == 0:
 		if hud["g_cmd"] > 1.5:
 			print("PASS (a): holding UP raised g_cmd to %.2f in %.2fs" % [hud["g_cmd"], elapsed])
@@ -57,9 +72,14 @@ func _process(_delta: float) -> bool:
 	elif phase == 2:
 		if hud["variant"] != variant_before:
 			print("PASS (c): F1 toggled variant %d -> %d" % [variant_before, hud["variant"]])
+			phase = 3
+		elif elapsed > 6.0:
+			return _fail("F1 should toggle variant away from %d, still %d" % [variant_before, hud["variant"]])
+	elif phase == 3:
+		if hud_checked:
 			print("INPUT SMOKE OK")
 			quit(0)
 			return true
-		elif elapsed > 6.0:
-			return _fail("F1 should toggle variant away from %d, still %d" % [variant_before, hud["variant"]])
+		elif elapsed > 8.0:
+			return _fail("HUD queue_redraw did not complete 60 clean frames within 8s")
 	return false
