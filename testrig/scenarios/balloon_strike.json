@@ -1,0 +1,3 @@
+{"name":"balloon_strike","beat":4,"variant":0,"duration_s":70,
+ "events":[{"t":2.0,"key":0,"pressed":true},{"t":4.0,"key":0,"pressed":false}],
+ "notes":"balloon drop at 60k, glider dives on the KJ-500 at 30k. Energy conversion, one pass."}

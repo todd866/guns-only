@@ -26,9 +26,9 @@ public partial class SimBridge : Node {
 
     public void StartBeat(int index) {
         var variant = _detents?.Variant ?? ValleyVariant.DoctrineDeep;
-        _beat = index switch { 2 => Beats.BreakDefense(), 3 => Beats.Saddle(), _ => Beats.Perch() };
-        _player = new AircraftSim(_beat.Player, FlightModel.Sabre);
-        _bandit = new RailBandit(_beat.Bandit, FlightModel.Sabre, _beat.BanditTimeline);
+        _beat = index switch { 2 => Beats.BreakDefense(), 3 => Beats.Saddle(), 4 => Beats.BalloonStrike(), _ => Beats.Perch() };
+        _player = new AircraftSim(_beat.Player, _beat.PlayerAir);
+        _bandit = new RailBandit(_beat.Bandit, _beat.BanditAir, _beat.BanditTimeline);
         _keys = new KeyGrammar();
         _detents = new DetentLayer { Variant = variant };
         _prompts = new PromptTracker();
@@ -56,8 +56,8 @@ public partial class SimBridge : Node {
     public override void _PhysicsProcess(double delta) {
         _acc = System.Math.Min(_acc + delta, 0.25); // cap catch-up: a suspended app must not replay minutes of sim
         while (_acc >= Dt) {
-            _advice = _beat.Law.Advise(_player.State, _bandit.State, FlightModel.Sabre);
-            _detents.Tick(_keys, _simTimeMs, _player.State, FlightModel.Sabre, _advice, Dt);
+            _advice = _beat.Law.Advise(_player.State, _bandit.State, _beat.PlayerAir);
+            _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir, _advice, Dt);
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             _player.Step(_detents.Command, Dt);
             _bandit.Step(Dt);
@@ -96,8 +96,8 @@ public partial class SimBridge : Node {
             {"speed_kts", s.Speed * 1.94384}, {"alt_ft", s.Position.Y * 3.28084},
             {"g_actual", _player.LastNz}, {"g_cmd", _detents.Command.GDemand},
             {"g_valley", _detents.ValleyG},
-            {"g_maxperform", Protection.MaxPerformG(s, FlightModel.Sabre)},
-            {"g_hardmax", Protection.HardMaxG(s, FlightModel.Sabre)},
+            {"g_maxperform", Protection.MaxPerformG(s, _beat.PlayerAir)},
+            {"g_hardmax", Protection.HardMaxG(s, _beat.PlayerAir)},
             {"sticky", _detents.StickyOffsetG}, {"tier", (int)_detents.Tier},
             {"variant", GetVariant()}, {"buffet", _player.Buffet},
             {"prompt", (int)_cue},

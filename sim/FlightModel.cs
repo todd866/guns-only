@@ -1,7 +1,8 @@
 namespace GunsOnly.Sim;
 
 public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN,
-    double CD0, double InducedK, double CLMax, double CLMin, double RollRateMaxRad, double BankTau);
+    double CD0, double InducedK, double CLMax, double CLMin, double RollRateMaxRad, double BankTau,
+    double MCrit = 0.85, double WaveDragK = 8.0);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -17,6 +18,26 @@ public static class FlightModel {
         CD0: 0.0180, InducedK: 0.083, CLMax: 1.10, CLMin: -0.65,
         RollRateMaxRad: 2.1, BankTau: 0.18);
 
+    /// TAIWAN DEFENCE — balloon-lofted glider strike drone. NO ENGINE: thrust = 0, so every
+    /// turn is a withdrawal from an altitude account you can never pay back into. That is what
+    /// makes it the game's purest energy teacher. Silent, no IR plume, no intake return — which
+    /// is precisely why it can reach an AWACS. High-AR wing (~14) for the glide; k = 1/(pi*AR*e).
+    /// PLACEHOLDER numbers, derived to the mission not to a real aircraft.
+    public static readonly AircraftParams GliderStrike = new(
+        MassKg: 1100, WingAreaM2: 16.0, ThrustMaxN: 0,
+        CD0: 0.0105, InducedK: 0.0284, CLMax: 1.35, CLMin: -0.55,
+        RollRateMaxRad: 1.4, BankTau: 0.30,
+        MCrit: 0.68, WaveDragK: 190.0);   // straight AR-13 wing: it simply cannot go fast
+
+    /// The KJ-500-class AEW&C: how the PLA sees and coordinates. Enormous, slow, turboprop,
+    /// structurally ~2.5G and it cannot dodge. Killing it blinds a strike package worth 100x
+    /// the drone that got it — which is the entire cost-exchange thesis in one target.
+    public static readonly AircraftParams AwacsTarget = new(
+        MassKg: 55000, WingAreaM2: 120.0, ThrustMaxN: 90000,
+        CD0: 0.0260, InducedK: 0.045, CLMax: 1.60, CLMin: -0.40,
+        RollRateMaxRad: 0.35, BankTau: 2.0,
+        MCrit: 0.60, WaveDragK: 90.0);
+
     public static double NzAeroMax(in AircraftState s, in AircraftParams p) {
         double q = 0.5 * Atmosphere.Density(s.Position.Y) * s.Speed * s.Speed;
         return q * p.WingAreaM2 * p.CLMax / (s.Mass * G0);
@@ -27,8 +48,12 @@ public static class FlightModel {
         return q * p.WingAreaM2 * p.CLMin / (s.Mass * G0);
     }
 
-    static double MachDragFactor(double mach) =>              // PLACEHOLDER transonic drag rise
-        mach < 0.85 ? 1.0 : 1.0 + 8.0 * (mach - 0.85) * (mach - 0.85);
+    /// Drag divergence, per airframe. A straight high-AR wing (the glider's, AR~13) diverges
+    /// near M0.65-0.70 and HARD — that wing physically cannot go fast, which is why a steep
+    /// dive from a 60k balloon drop must be managed rather than pointed. A swept fighter wing
+    /// holds to ~M0.85 with a gentler rise. Was a single global 0.85/8.0 every airframe inherited.
+    static double MachDragFactor(double mach, in AircraftParams p) =>
+        mach < p.MCrit ? 1.0 : 1.0 + p.WaveDragK * (mach - p.MCrit) * (mach - p.MCrit);
 
     internal static double BankRate(double bank, double target, in AircraftParams p) {
         double err = System.Math.IEEERemainder(target - bank, 2 * System.Math.PI); // shortest-way signed error
@@ -53,7 +78,7 @@ public static class FlightModel {
         double nz = System.Math.Clamp(c.GDemand, nzMin, nzMax);
         double cl = nz * r.Mass * G0 / System.Math.Max(q * p.WingAreaM2, 1e-6);
         double mach = speed / Atmosphere.SpeedOfSound(r.Pos.Y);
-        double cd = p.CD0 * MachDragFactor(mach) + p.InducedK * cl * cl
+        double cd = p.CD0 * MachDragFactor(mach, p) + p.InducedK * cl * cl
                     + System.Math.Abs(c.Rudder) * 0.15 * p.CD0;
         double drag = q * p.WingAreaM2 * cd;
         double thrust = System.Math.Clamp(c.Throttle, 0, 1) * p.ThrustMaxN * (rho / 1.225);

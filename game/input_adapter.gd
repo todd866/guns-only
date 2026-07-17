@@ -25,7 +25,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var code: int = key_event.keycode
 	var pressed: bool = key_event.pressed
 	if code == KEY_F1 and pressed: variant_toggled.emit(); return
-	if code in [KEY_1, KEY_2, KEY_3] and pressed:
+	if code in [KEY_1, KEY_2, KEY_3, KEY_4] and pressed:
 		beat_selected.emit(code - KEY_1 + 1); return
 	if MAP.has(code):
 		var g: int = MAP[code]

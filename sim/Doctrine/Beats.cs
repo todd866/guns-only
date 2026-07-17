@@ -1,7 +1,11 @@
 using System.Collections.Generic;
 namespace GunsOnly.Sim.Doctrine;
 public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit, IExecutionLaw Law,
-    List<(double T, PilotCommand Cmd)> BanditTimeline);
+    List<(double T, PilotCommand Cmd)> BanditTimeline,
+    AircraftParams? PlayerParams = null, AircraftParams? BanditParams = null) {
+    public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
+    public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
+}
 
 public sealed class RailBandit {
     readonly AircraftSim _sim;
@@ -51,6 +55,27 @@ public static class Beats {
             (8.0, new PilotCommand(2.5, -0.60, 1.0, 0)),   // press the attack
             (20.0, new PilotCommand(1.0, 0.0, 0.7, 0)),    // knock it off
         });
+
+    /// TAIWAN DEFENCE — Tier 0.5: balloon-lofted glider strike on a PLA AEW&C.
+    /// You were carried to 60,000 ft under a balloon and cut loose. No engine: every turn is a
+    /// withdrawal from an altitude account you can never pay back into. The KJ-500 orbits at
+    /// 30k, huge and slow and blind to you (no plume, no intake return). You have ONE pass —
+    /// after that you're a falling wing. This is the game's energy lesson, made inescapable.
+    public static BeatSetup BalloonStrike() {
+        const double DropAlt = 18288;   // 60,000 ft — the stratosphere the atmosphere model now models
+        const double AwacsAlt = 9144;   // 30,000 ft
+        return new BeatSetup("Balloon strike — KJ-500",
+            // Cut loose slow (a balloon gives you height, not speed) 20 km south, nose down.
+            Player: new AircraftState(new Vec3D(0, DropAlt, -20000), 65, -0.30, 0, 0, FlightModel.GliderStrike.MassKg),
+            Bandit: new AircraftState(new Vec3D(0, AwacsAlt, 0), 130, 0, 0, 0, FlightModel.AwacsTarget.MassKg),
+            Law: new PurePursuitLaw(),
+            BanditTimeline: new() {
+                (0.0, new PilotCommand(1.0, 0.10, 0.55, 0)),   // lazy racetrack orbit, oblivious
+                (45.0, new PilotCommand(1.0, 0.10, 0.55, 0)),
+            },
+            PlayerParams: FlightModel.GliderStrike,
+            BanditParams: FlightModel.AwacsTarget);
+    }
 
     public static BeatSetup Saddle() => new("Saddle + shot",
         Player: S(0, Alt, -250, 0, 185),

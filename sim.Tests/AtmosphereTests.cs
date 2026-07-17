@@ -11,6 +11,23 @@ public class AtmosphereTests {
         var e = s with { Chi = System.Math.PI/2 };
         Assert.Equal(100, e.VelocityVector().X, 9);
     }
+    [Fact] public void StratosphereIsIsothermalAtBalloonAltitude() {
+        // 60k ft = 18288 m: real ISA is 216.65 K / 0.1153 kg/m^3 / a=295.1 m/s. The old
+        // troposphere-only model said 169 K and a=261 (13% Mach error) — balloon drops live here.
+        Assert.Equal(216.65, Atmosphere.Temperature(18288), 2);
+        Assert.Equal(0.1153, Atmosphere.Density(18288), 3);
+        Assert.Equal(295.1, Atmosphere.SpeedOfSound(18288), 1);
+        // and it must not keep lapsing above the tropopause
+        Assert.Equal(Atmosphere.Temperature(12000), Atmosphere.Temperature(19000), 6);
+    }
+    [Fact] public void AtmosphereIsContinuousAcrossTheTropopause() {
+        // Relative tolerance: across a 2 m gap density genuinely changes ~3e-4 relative
+        // (scale height ~6.3 km). A real discontinuity would be orders of magnitude larger.
+        double below = Atmosphere.Density(10999), above = Atmosphere.Density(11001);
+        Assert.True(System.Math.Abs(below - above) / below < 1e-3, $"density jumps at the tropopause: {below} vs {above}");
+        double tBelow = Atmosphere.Temperature(10999.9), tAbove = Atmosphere.Temperature(11000.1);
+        Assert.True(System.Math.Abs(tBelow - tAbove) < 0.01, $"temperature jumps: {tBelow} vs {tAbove}");
+    }
     [Fact] public void ISAReferenceValuesAt6000m() {
         Assert.Equal(0.6597, Atmosphere.Density(6000), 2);
         Assert.Equal(316.4, Atmosphere.SpeedOfSound(6000), 1);
