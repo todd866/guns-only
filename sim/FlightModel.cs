@@ -48,7 +48,7 @@ public static class FlightModel {
 
         double rho = Atmosphere.Density(r.Pos.Y);
         double q = 0.5 * rho * speed * speed;
-        double nzMax = System.Math.Min(q * p.WingAreaM2 * p.CLMax / (r.Mass * G0), 7.33);
+        double nzMax = System.Math.Min(q * p.WingAreaM2 * p.CLMax / (r.Mass * G0), 12.0);
         double nzMin = System.Math.Max(q * p.WingAreaM2 * p.CLMin / (r.Mass * G0), -1.5);
         double nz = System.Math.Clamp(c.GDemand, nzMin, nzMax);
         double cl = nz * r.Mass * G0 / System.Math.Max(q * p.WingAreaM2, 1e-6);
@@ -68,7 +68,7 @@ public static class FlightModel {
     /// Directional nz clamp shared by Step's reporting (same bounds as Derivatives).
     internal static (double nz, double nzMax, double nzMin) ClampNz(in AircraftState s, in PilotCommand c, in AircraftParams p) {
         double q = 0.5 * Atmosphere.Density(s.Position.Y) * s.Speed * s.Speed;
-        double nzMax = System.Math.Min(q * p.WingAreaM2 * p.CLMax / (s.Mass * G0), 7.33);
+        double nzMax = System.Math.Min(q * p.WingAreaM2 * p.CLMax / (s.Mass * G0), 12.0);
         double nzMin = System.Math.Max(q * p.WingAreaM2 * p.CLMin / (s.Mass * G0), -1.5);
         return (System.Math.Clamp(c.GDemand, nzMin, nzMax), nzMax, nzMin);
     }

@@ -73,7 +73,9 @@ public class DetentLayerTests {
         // Settles back into the protected band (asymptotic decay leaves a tiny epsilon; the point
         // is it's well below hard max, not that it hits max-perform to the ULP).
         Assert.True(d.Command.GDemand <= Protection.MaxPerformG(Fast, FlightModel.Sabre) + 0.02);
-        Assert.True(d.Command.GDemand < Protection.HardMaxG(Fast, FlightModel.Sabre) - 1.0);
+        // NB: with the pilot's 6G cap gone, protection (0.92x aero) and hard max (aero) are only
+        // ~8% apart, so "well below hard max" is no longer a meaningful margin — tier + the
+        // protection bound are the real assertions. See the override-teeth note in the spec.
     }
     [Fact] public void RollTapAdoptsAdviceBank() {
         var d = new DetentLayer(); var g = new KeyGrammar();
