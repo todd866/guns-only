@@ -7,8 +7,10 @@ extends Node
 const MAP := {
 	KEY_DOWN: 0, KEY_UP: 1, KEY_LEFT: 2, KEY_RIGHT: 3,
 	KEY_A: 4, KEY_D: 5, KEY_W: 6, KEY_S: 7,
-	KEY_F: 8, KEY_SPACE: 9, KEY_K: 10, KEY_R: 11,
+	KEY_F: 8, KEY_V: 9, KEY_K: 10, KEY_R: 11, KEY_SPACE: 12,
 }
+# SPACE = overpull override (hold to pull past the protection limiter into the buffet,
+# at your own risk). Padlock/freelook moved to V.
 @onready var bridge = get_parent().get_node("SimBridge")
 signal padlock_toggled
 signal restart_requested

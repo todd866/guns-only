@@ -46,14 +46,34 @@ public class DetentLayerTests {
         Assert.Equal(1.0, d.Command.GDemand, 1);
         Assert.Equal(0.0, d.StickyOffsetG, 6);
     }
-    [Fact] public void DoubleTapHoldGoesPastProtection() {
+    [Fact] public void BareArrowsNeverExceedProtection() {
+        // No override: even a long hard pull-hold stays at/below the max-perform boundary.
+        var d = new DetentLayer { Variant = ValleyVariant.PhysicsOnly }; var g = new KeyGrammar();
+        g.Feed(GKey.PullUp, true, 0);
+        Run(d, g, 0, 3000, Fast);
+        Assert.Equal(DemandTier.Valley, d.Tier);
+        Assert.True(d.Command.GDemand <= Protection.MaxPerformG(Fast, FlightModel.Sabre) + 1e-6);
+    }
+    [Fact] public void OverrideKeyPullsPastProtectionIntoTheBuffet() {
         var d = new DetentLayer { Variant = ValleyVariant.DoctrineDeep }; var g = new KeyGrammar();
-        g.Feed(GKey.PullUp, true, 0); g.Feed(GKey.PullUp, false, 100);   // tap
-        g.Feed(GKey.PullUp, true, 250);                                   // double-held
-        Run(d, g, 250, 2250, Fast);
+        g.Feed(GKey.PullUp, true, 0);
+        g.Feed(GKey.Override, true, 0);   // hold spacebar: override the protection ceiling
+        Run(d, g, 0, 2000, Fast);
         Assert.Equal(DemandTier.OverDemand, d.Tier);
         Assert.True(d.Command.GDemand > Protection.MaxPerformG(Fast, FlightModel.Sabre) + 0.4);
         Assert.True(d.Command.GDemand <= Protection.HardMaxG(Fast, FlightModel.Sabre) + 1e-6);
+    }
+    [Fact] public void ReleasingOverrideReturnsToProtectedPull() {
+        var d = new DetentLayer { Variant = ValleyVariant.PhysicsOnly }; var g = new KeyGrammar();
+        g.Feed(GKey.PullUp, true, 0); g.Feed(GKey.Override, true, 0);
+        Run(d, g, 0, 1500, Fast);
+        g.Feed(GKey.Override, false, 1500);
+        Run(d, g, 1500, 3500, Fast);
+        Assert.Equal(DemandTier.Valley, d.Tier);
+        // Settles back into the protected band (asymptotic decay leaves a tiny epsilon; the point
+        // is it's well below hard max, not that it hits max-perform to the ULP).
+        Assert.True(d.Command.GDemand <= Protection.MaxPerformG(Fast, FlightModel.Sabre) + 0.02);
+        Assert.True(d.Command.GDemand < Protection.HardMaxG(Fast, FlightModel.Sabre) - 1.0);
     }
     [Fact] public void RollTapAdoptsAdviceBank() {
         var d = new DetentLayer(); var g = new KeyGrammar();

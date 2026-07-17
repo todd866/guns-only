@@ -39,11 +39,22 @@ public sealed class DetentLayer {
             pushTaps = 0;
         }
 
+        // Override (spacebar): the ONLY way past the protection boundary. Bare arrows are
+        // always envelope-protected and can never depart; holding Override raises the ceiling
+        // to the aero/structural hard max, so a pull rides into the buffet (and, with a real
+        // M1 aero model, can depart) — deliberate, at your own risk. Replaces the old
+        // double-tap-hold vocabulary entirely (arrows no longer reach OverDemand).
+        bool over = keys.PhaseAt(GKey.Override, nowMs) != KeyPhase.Idle;
+        double cap = over ? hardMax : maxPerform;
+
         double target; DemandTier tier;
-        if (pull == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; StickyOffsetG -= pushTaps * StickyStepG; target = System.Math.Clamp(hardMax + StickyOffsetG, System.Math.Min(1.0, hardMax), hardMax); }
-        else if (pull != KeyPhase.Idle)  { tier = DemandTier.Valley;     StickyOffsetG -= pushTaps * StickyStepG; target = System.Math.Clamp(ValleyG + StickyOffsetG, System.Math.Min(1.0, maxPerform), maxPerform); }
-        else if (push == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; target = -1.0; }
-        else if (push != KeyPhase.Idle)  { tier = DemandTier.Valley;     target = 0.0; }
+        if (pull != KeyPhase.Idle) {
+            tier = over ? DemandTier.OverDemand : DemandTier.Valley;
+            StickyOffsetG -= pushTaps * StickyStepG;                       // ease taps (<=0)
+            double baseG = over ? cap : ValleyG;                          // override => pull to the limit
+            target = System.Math.Clamp(baseG + StickyOffsetG, System.Math.Min(1.0, cap), cap);
+        }
+        else if (push != KeyPhase.Idle) { tier = DemandTier.Valley; target = 0.0; } // unload
         else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; }
         Tier = tier;
         _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);

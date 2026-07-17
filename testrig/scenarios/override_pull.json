@@ -1,0 +1,5 @@
+{"name":"override_pull","beat":1,"variant":1,"duration_s":10,
+ "events":[{"t":1.0,"key":0,"pressed":true},
+           {"t":4.0,"key":12,"pressed":true},
+           {"t":8.0,"key":12,"pressed":false}],
+ "notes":"hold pull (protected ~maxperform), then hold Override(space) at t=4 -> past protection into buffet, release t=8"}
