@@ -2,6 +2,7 @@
 # bin/rig <scenario-name> [--resolution WxH]
 #
 # Flight-test rig runner: drives testrig/rig.gd (the "Rig" autoload) through a
+dotnet build GunsOnly.csproj --nologo -v q || { echo "C# build failed"; exit 1; }  # CLI godot never rebuilds C# — stale assemblies show old behavior silently
 # scripted scenario under Godot movie-mode frame capture, then prints a compact
 # report of what happened -- frame count, a handful of sample frames, the last
 # telemetry line, and the done.json summary. No human needed at the controls.
