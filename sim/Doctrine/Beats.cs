@@ -62,7 +62,8 @@ public static class Beats {
     /// 30k, huge and slow and blind to you (no plume, no intake return). You have ONE pass —
     /// after that you're a falling wing. This is the game's energy lesson, made inescapable.
     public static BeatSetup BalloonStrike() {
-        const double DropAlt = 18288;   // 60,000 ft — the stratosphere the atmosphere model now models
+        const double DropAlt = 21336;   // 70,000 ft — a 140 kg glider on a 20 m H2 balloon tops 81k;
+                                        // 70k is a conservative operational release, not the ceiling.
         const double AwacsAlt = 9144;   // 30,000 ft
         return new BeatSetup("Balloon strike — KJ-500",
             // Cut loose slow (a balloon gives you height, not speed) 20 km south, nose down.

@@ -18,15 +18,23 @@ public static class FlightModel {
         CD0: 0.0180, InducedK: 0.083, CLMax: 1.10, CLMin: -0.65,
         RollRateMaxRad: 2.1, BankTau: 0.18);
 
-    /// TAIWAN DEFENCE — balloon-lofted glider strike drone. NO ENGINE: thrust = 0, so every
-    /// turn is a withdrawal from an altitude account you can never pay back into. That is what
-    /// makes it the game's purest energy teacher. Silent, no IR plume, no intake return — which
-    /// is precisely why it can reach an AWACS. High-AR wing (~14) for the glide; k = 1/(pi*AR*e).
+    /// TAIWAN DEFENCE — balloon-lofted glider strike drone. A BALLOON DRONE, a different
+    /// lineage from the powered jet drones: it is a one-way sniper against soft high-value
+    /// targets, and it never dogfights anything. NO ENGINE (thrust = 0), so every turn is a
+    /// withdrawal from an altitude account you can never pay back into — the game's purest
+    /// energy teacher. Silent: no plume, no intake return, which is WHY it reaches an AWACS.
+    ///
+    /// Sized for MISSION-KILL, not destruction: breaking a rotodome, holing a pressure hull
+    /// (forcing descent), or hurting one engine takes a handful of 12.7mm — not a cannon.
+    /// That collapses the mass budget (gun 38kg + 50 rds 5kg + wing/pod ~85kg + EO 12kg ≈ 140kg),
+    /// and mass is BRUTALLY levered by the balloon: on one 20 m hydrogen balloon, 140kg reaches
+    /// 81,000 ft where 1100kg reached only 41,000 ft. 7x lighter bought 40,000 ft and 369 nm of
+    /// glide. Recoil stays affordable too: 12.7mm on 140kg = 7 kt/s (a 20mm rotary would be 33).
     /// PLACEHOLDER numbers, derived to the mission not to a real aircraft.
     public static readonly AircraftParams GliderStrike = new(
-        MassKg: 1100, WingAreaM2: 16.0, ThrustMaxN: 0,
-        CD0: 0.0105, InducedK: 0.0284, CLMax: 1.35, CLMin: -0.55,
-        RollRateMaxRad: 1.4, BankTau: 0.30,
+        MassKg: 140, WingAreaM2: 2.6, ThrustMaxN: 0,
+        CD0: 0.0115, InducedK: 0.0284, CLMax: 1.30, CLMin: -0.50,
+        RollRateMaxRad: 1.6, BankTau: 0.28,
         MCrit: 0.68, WaveDragK: 190.0);   // straight AR-13 wing: it simply cannot go fast
 
     /// The KJ-500-class AEW&C: how the PLA sees and coordinates. Enormous, slow, turboprop,
