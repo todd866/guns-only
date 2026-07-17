@@ -497,6 +497,7 @@ func _draw() -> void:
 		_draw_fpm(c)
 		_draw_gun_reticle(hud, c)
 	_draw_boresight_cue(screen_c, sz, c, nose_ahead)
+	_draw_sa_bar(hud, sz)
 	_draw_td_box(hud, sz, screen_c)
 	_draw_tapes(hud, sz)
 	_draw_heading_tape(hud, sz)
@@ -510,6 +511,80 @@ func _draw() -> void:
 # Where is the nose? The descendant of Falcon 4's SA bar: once the gimbal is slewed far enough
 # that the flight symbology has left the frame, you still need to know where the airframe is
 # pointing relative to your line of sight. Silent while looking straight ahead.
+# ---------------------------------------------------------------------------
+# SA BAR — descendant of Falcon 4.0's, which is the thing the author named in the very first
+# conversation ("padlock view and the SA panel"). Falcon's answer to the flat-screen problem:
+# a cockpit view is a soda straw, so give the pilot ONE abstract strip that says where the nose
+# is, where the head is looking, and where the bandit is, all in relative bearing.
+#
+# Ours reads the same way, adapted for a gimbaled sensor rather than a neck:
+#   horizontal axis = relative bearing, centre = the NOSE (12 o'clock), wrapping to 6 at both
+#   edges. Caret = where the sensor is looking. Diamond = the bandit, raised/lowered off the
+#   strip by its elevation, so it's a 2D picture at a glance, not just an azimuth.
+# This is aircraft-referenced by construction (everything is relative to the nose), which is
+# exactly why it stays legible while the flight symbology has slewed out of frame.
+func _bandit_relative_deg() -> Vector2:
+	# (azimuth, elevation) of the bandit in the AIRFRAME's frame. Same convention as the
+	# camera rig's padlock solve: +az right, +el up, 0 = straight off the nose.
+	if player_node == null or bandit_node == null:
+		return Vector2.ZERO
+	var b: Basis = player_node.global_transform.basis
+	var local: Vector3 = b.inverse() * (bandit_node.global_position - player_node.global_position)
+	if local.length() < 0.01:
+		return Vector2.ZERO
+	var horiz := sqrt(local.x * local.x + local.z * local.z)
+	return Vector2(rad_to_deg(atan2(local.x, -local.z)), rad_to_deg(atan2(local.y, horiz)))
+
+
+func _sa_x(cx: float, half_w: float, az_deg: float) -> float:
+	return cx + (wrapf(az_deg, -180.0, 180.0) / 180.0) * half_w
+
+
+func _draw_sa_bar(hud: Dictionary, sz: Vector2) -> void:
+	var cx := sz.x * 0.5
+	var y := sz.y * 0.87
+	var half_w := sz.x * 0.30
+	var el_span := 46.0   # px of vertical travel for +/-90 deg of elevation. 26 was unreadable:
+	                      # a bandit 71 deg overhead lifted only 20 px and the whole picture bunched.
+
+	# strip + ticks every 30 deg
+	draw_line(Vector2(cx - half_w, y), Vector2(cx + half_w, y), COL_GREEN_DIM, 1.5)
+	var a := -180
+	while a <= 180:
+		var x := _sa_x(cx, half_w, float(a))
+		var major: bool = (a % 90 == 0)
+		draw_line(Vector2(x, y - (5.0 if major else 3.0)), Vector2(x, y + (5.0 if major else 3.0)), COL_GREEN_DIM, 1.0)
+		if major:
+			var lbl: String = {0: "12", 90: "3", -90: "9", 180: "6", -180: "6"}.get(a, "")  # Dictionary.get -> Variant; 4.7 treats inference from Variant as a PARSE ERROR
+			_draw_centered(Vector2(x, y + 19), lbl, 12, COL_GREEN_DIM)
+		a += 30
+
+	# NOSE: fixed at centre by definition — the strip is relative bearing.
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(cx, y - 8), Vector2(cx - 5, y - 16), Vector2(cx + 5, y - 16)]), COL_GREEN)
+
+	# LOOK: where the sensor gimbal is pointing.
+	if cam != null and cam.get("head_yaw") != null:
+		var lx := _sa_x(cx, half_w, rad_to_deg(cam.head_yaw))
+		var ly := y - clampf(rad_to_deg(cam.head_pitch) / 90.0, -1.0, 1.0) * el_span
+		# Drawn as an open V. Under padlock the sensor sits ON the bandit, so this deliberately
+		# reads as a bracket cradling the diamond rather than a mark hidden beneath it.
+		draw_line(Vector2(lx - 8, ly + 9), Vector2(lx, ly), COL_GREEN, 2.0)
+		draw_line(Vector2(lx, ly), Vector2(lx + 8, ly + 9), COL_GREEN, 2.0)
+
+	# BANDIT: diamond at its relative bearing, lifted/dropped by elevation.
+	var rel := _bandit_relative_deg()
+	var bx := _sa_x(cx, half_w, rel.x)
+	var by := y - clampf(rel.y / 90.0, -1.0, 1.0) * el_span
+	var d := 5.0
+	var col: Color = COL_AMBER if hud["gun_window"] else COL_AMBER
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(bx, by - d), Vector2(bx + d, by), Vector2(bx, by + d), Vector2(bx - d, by)]), col)
+	# tie it to the strip so the elevation offset reads as an offset, not a floating dot
+	draw_line(Vector2(bx, y), Vector2(bx, by), Color(col.r, col.g, col.b, 0.45), 1.0)
+	_draw_centered(Vector2(bx, by - 11), "%d" % int(round(rel.y)), 11, col)
+
+
 func _draw_boresight_cue(screen_c: Vector2, sz: Vector2, nose_c: Vector2, nose_ahead: bool) -> void:
 	var slew_deg := 0.0
 	if cam != null and cam.get("head_yaw") != null:
