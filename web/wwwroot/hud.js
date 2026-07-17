@@ -1,12 +1,11 @@
 import * as THREE from "./vendor/three.module.js";
 
 const GREEN = "#4dff88";
-const GREEN_DIM = "rgba(77, 255, 136, 0.48)";
-const GREEN_FAINT = "rgba(77, 255, 136, 0.16)";
+const GREEN_DIM = "rgba(77, 255, 136, 0.56)";
+const GREEN_FAINT = "rgba(77, 255, 136, 0.14)";
 const AMBER = "#ffb020";
-const AMBER_DIM = "rgba(255, 176, 32, 0.5)";
 const RED = "#ff465d";
-const GLASS = "rgba(3, 13, 20, 0.58)";
+const GLASS = "rgba(2, 10, 16, 0.72)";
 const DEG = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
 
@@ -130,58 +129,106 @@ class CombatHud {
     for (let y = 0; y < this.height; y += 4) ctx.fillRect(0, y, this.width, 1);
   }
 
+  getLayout() {
+    const tapeInset = clamp(this.width * 0.055, 48, 78);
+    const tapeHalfWidth = 35;
+    const safePadding = 20;
+    return {
+      tapeInset,
+      targetSafe: {
+        left: tapeInset + tapeHalfWidth + safePadding,
+        right: this.width - tapeInset - tapeHalfWidth - safePadding,
+        top: 151,
+        bottom: this.height - 112,
+      },
+      ladderSafe: {
+        left: tapeInset + tapeHalfWidth + 10,
+        right: this.width - tapeInset - tapeHalfWidth - 10,
+        top: 144,
+        bottom: this.height - 106,
+      },
+    };
+  }
+
   drawPitchLadder(anchor, state) {
     if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
 
     const ctx = this.ctx;
-    const bank = Number(state.bank_deg) || 0;
+    const bank = -(Number(state.bank_deg) || 0) * DEG;
     const pitch = Number(state.pitch_deg) || 0;
-    const radius = clamp(Math.min(this.width, this.height) * 0.245, 150, 245);
-    const pixelsPerDegree = clamp(this.height / 205, 3.35, 5.1);
+    const radius = Math.max(120, this.height * 0.42);
+    const pixelsPerDegree = clamp(this.height / 66, 7.2, 12.5);
+    const cosBank = Math.cos(bank);
+    const sinBank = Math.sin(bank);
+    const layout = this.getLayout();
+    const safe = layout.ladderSafe;
+    const screenCenterX = this.width * 0.5;
+    const screenCenterY = this.height * 0.5;
+    const rotatePoint = (x, y) => ({
+      x: anchor.x + x * cosBank - y * sinBank,
+      y: anchor.y + x * sinBank + y * cosBank,
+    });
+    const segment = (x1, y1, x2, y2) => {
+      const a = rotatePoint(x1, y1);
+      const b = rotatePoint(x2, y2);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    };
 
     ctx.save();
-    ctx.translate(anchor.x, anchor.y);
-    ctx.rotate(-bank * DEG);
-
-    // The disc is established in the already-rolled ladder coordinate system. Clipping the
-    // unrotated rungs first makes their long baselines sweep across the frame at high bank.
+    // Clip in screen space around the projected airframe nose. Rung centres and endpoints are
+    // rotated first below, so a high-bank rung cannot be admitted by its pre-roll vertical offset.
     ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.arc(anchor.x, anchor.y, radius, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.beginPath();
+    ctx.rect(safe.left, safe.top, Math.max(0, safe.right - safe.left), Math.max(0, safe.bottom - safe.top));
     ctx.clip();
 
-    ctx.font = "500 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = "500 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.lineWidth = 1.25;
+    const firstRung = Math.max(-90, Math.ceil((pitch - 25) / 5) * 5);
+    const lastRung = Math.min(90, Math.floor((pitch + 25) / 5) * 5);
 
-    for (let rung = -90; rung <= 90; rung += 5) {
-      const y = (pitch - rung) * pixelsPerDegree;
-      if (Math.abs(y) > radius + 8) continue;
+    for (let rung = firstRung; rung <= lastRung; rung += 5) {
+      const localY = (pitch - rung) * pixelsPerDegree;
+      const rungCenter = rotatePoint(0, localY);
+      const rotatedDistance = Math.hypot(rungCenter.x - anchor.x, rungCenter.y - anchor.y);
+      if (rotatedDistance > radius + 1) continue;
 
       const major = rung % 10 === 0;
-      const halfWidth = rung === 0 ? 92 : major ? 54 : 34;
-      const centerGap = rung === 0 ? 26 : 18;
-      ctx.strokeStyle = rung === 0 ? AMBER_DIM : GREEN_DIM;
-      ctx.fillStyle = GREEN_DIM;
-      ctx.setLineDash(rung < 0 ? [6, 4] : []);
+      const halfWidth = rung === 0 ? 106 : major ? 67 : 43;
+      const centerGap = rung === 0 ? 29 : 20;
+      ctx.strokeStyle = rung === 0 ? GREEN : GREEN_DIM;
+      ctx.fillStyle = rung === 0 ? GREEN : GREEN_DIM;
+      ctx.lineWidth = rung === 0 ? 1.65 : 1.05;
+      ctx.setLineDash(rung < 0 ? [5, 5] : []);
       ctx.beginPath();
-      ctx.moveTo(-halfWidth, y);
-      ctx.lineTo(-centerGap, y);
-      ctx.moveTo(centerGap, y);
-      ctx.lineTo(halfWidth, y);
+      segment(-halfWidth, localY, -centerGap, localY);
+      segment(centerGap, localY, halfWidth, localY);
       if (major && rung !== 0) {
         const tooth = rung > 0 ? 6 : -6;
-        ctx.moveTo(-halfWidth, y);
-        ctx.lineTo(-halfWidth, y + tooth);
-        ctx.moveTo(halfWidth, y);
-        ctx.lineTo(halfWidth, y + tooth);
+        segment(-halfWidth, localY, -halfWidth, localY + tooth);
+        segment(halfWidth, localY, halfWidth, localY + tooth);
+      } else if (rung === 0) {
+        segment(-centerGap, localY, -centerGap + 7, localY - 5);
+        segment(centerGap, localY, centerGap - 7, localY - 5);
       }
       ctx.stroke();
 
-      if (major && rung !== 0) {
+      if (major) {
         ctx.setLineDash([]);
-        ctx.fillText(String(Math.abs(rung)), -halfWidth - 16, y + 1);
-        ctx.fillText(String(Math.abs(rung)), halfWidth + 16, y + 1);
+        const leftLabel = rotatePoint(-halfWidth - 14, localY);
+        const rightLabel = rotatePoint(halfWidth + 14, localY);
+        const leftDistance = Math.hypot(leftLabel.x - screenCenterX, leftLabel.y - screenCenterY);
+        const rightDistance = Math.hypot(rightLabel.x - screenCenterX, rightLabel.y - screenCenterY);
+        const label = leftDistance <= rightDistance ? leftLabel : rightLabel;
+        ctx.save();
+        ctx.translate(label.x, label.y);
+        ctx.rotate(bank);
+        ctx.fillText(String(Math.abs(rung)), 0, 0.5);
+        ctx.restore();
       }
     }
     ctx.setLineDash([]);
@@ -192,80 +239,69 @@ class CombatHud {
     if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
     const ctx = this.ctx;
     const bank = (Number(state.bank_deg) || 0) * DEG;
-    const color = state.gun_window ? AMBER : GREEN;
 
     ctx.save();
     ctx.translate(anchor.x, anchor.y);
     ctx.rotate(-bank);
-    this.setLine(GREEN, 1.5);
-    ctx.shadowColor = "rgba(77, 255, 136, 0.4)";
-    ctx.shadowBlur = 5;
+    this.setLine(GREEN, 1.15);
+    ctx.shadowColor = "rgba(77, 255, 136, 0.3)";
+    ctx.shadowBlur = 3;
 
-    // Flight-path marker. The kernel exposes a single physical forward/velocity vector, so
-    // its small pipper and the airframe boresight intentionally share the same projected axis.
+    // The kernel exposes a single physical forward/velocity vector, so the compact FPM and
+    // boresight share one projected axis without inventing a second world-up-derived vector.
     ctx.beginPath();
-    ctx.arc(0, 0, 7, 0, Math.PI * 2);
-    ctx.moveTo(-28, 0);
-    ctx.lineTo(-7, 0);
-    ctx.moveTo(7, 0);
-    ctx.lineTo(28, 0);
-    ctx.moveTo(0, -7);
-    ctx.lineTo(0, -17);
+    ctx.arc(0, 0, 5, 0, Math.PI * 2);
+    ctx.moveTo(-16, 0);
+    ctx.lineTo(-5, 0);
+    ctx.moveTo(5, 0);
+    ctx.lineTo(16, 0);
+    ctx.moveTo(0, -5);
+    ctx.lineTo(0, -11);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(-9, -25);
-    ctx.lineTo(0, -31);
-    ctx.lineTo(9, -25);
+    ctx.moveTo(-6, -18);
+    ctx.lineTo(0, -22);
+    ctx.lineTo(6, -18);
+    ctx.moveTo(-8, -22);
+    ctx.lineTo(-3, -22);
+    ctx.moveTo(3, -22);
+    ctx.lineTo(8, -22);
     ctx.stroke();
 
-    ctx.strokeStyle = color;
-    ctx.shadowColor = state.gun_window ? "rgba(255, 176, 32, 0.52)" : "rgba(77, 255, 136, 0.32)";
-    ctx.setLineDash([4, 7]);
-    ctx.beginPath();
-    ctx.arc(0, 0, 48, -Math.PI * 0.82, Math.PI * 0.82);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    for (let i = 0; i < 8; i++) {
-      const angle = i * Math.PI / 4;
-      const inner = 42;
-      const outer = i % 2 === 0 ? 54 : 49;
+    if (state.gun_window) {
+      ctx.strokeStyle = AMBER;
+      ctx.shadowColor = "rgba(255, 176, 32, 0.48)";
+      ctx.shadowBlur = 4;
+      ctx.lineWidth = 1.25;
       ctx.beginPath();
-      ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
-      ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+      ctx.arc(0, 0, 18, 0, Math.PI * 2);
+      for (let i = 0; i < 4; i++) {
+        const angle = i * Math.PI / 2;
+        ctx.moveTo(Math.cos(angle) * 21, Math.sin(angle) * 21);
+        ctx.lineTo(Math.cos(angle) * 26, Math.sin(angle) * 26);
+      }
       ctx.stroke();
+      ctx.shadowBlur = 0;
     }
-
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = color;
-    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "left";
-    ctx.fillText(
-      state.gun_window ? "IN RNG" : `AOFF ${Math.round(Number(state.angle_off_deg) || 0)}°`,
-      60,
-      -2,
-    );
-    ctx.fillStyle = GREEN_DIM;
-    ctx.fillText(`${state.shots_in_window ?? 0}/${state.shots_total ?? 0}`, 60, 11);
     ctx.restore();
   }
 
   drawBandit(frame) {
     const { state, camera, banditPosition } = frame;
     const projection = this.project(banditPosition, camera);
-    const margin = 48;
-    const inside = !projection.behind
-      && projection.x >= margin
-      && projection.x <= this.width - margin
-      && projection.y >= margin
-      && projection.y <= this.height - margin;
+    const safe = this.getLayout().targetSafe;
     const color = state.gun_window ? AMBER : GREEN;
     const ctx = this.ctx;
+    const size = state.gun_window ? 32 : 27;
+    const inside = !projection.behind
+      && projection.x >= safe.left + size
+      && projection.x <= safe.right - size
+      && projection.y >= safe.top + size
+      && projection.y <= safe.bottom - size;
 
     if (inside) {
-      const size = state.gun_window ? 42 : 34;
-      const corner = 10;
+      const corner = 8;
       this.setLine(color, state.gun_window ? 1.8 : 1.35);
       ctx.shadowColor = state.gun_window ? "rgba(255, 176, 32, 0.46)" : "rgba(77, 255, 136, 0.34)";
       ctx.shadowBlur = 5;
@@ -285,13 +321,27 @@ class CombatHud {
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      const lines = [
+        formatRange(state.range_m),
+        `C ${formatSigned(state.closure_kts)} KT`,
+        `AOFF ${Math.round(Number(state.angle_off_deg) || 0)}°`,
+      ];
+      ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      const textWidth = Math.max(...lines.map((line) => ctx.measureText(line).width));
+      const textHeight = 35;
+      const rightX = projection.x + size + 8;
+      const useRight = rightX + textWidth + 8 <= safe.right;
+      const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
+      const textY = clamp(projection.y - 17, safe.top, safe.bottom - textHeight);
+      ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
+      ctx.fillRect(textX - 4, textY - 2, textWidth + 8, textHeight + 2);
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
       ctx.fillStyle = color;
-      ctx.fillText(formatRange(state.range_m), projection.x + size + 8, projection.y - 13);
+      ctx.fillText(lines[0], textX, textY);
       ctx.fillStyle = GREEN_DIM;
-      ctx.fillText(`C ${formatSigned(state.closure_kts)} KT`, projection.x + size + 8, projection.y + 2);
+      ctx.fillText(lines[1], textX, textY + 12);
+      ctx.fillText(lines[2], textX, textY + 24);
       return;
     }
 
@@ -306,14 +356,16 @@ class CombatHud {
       if (Math.abs(dx) + Math.abs(dy) < 0.001) dy = this.height;
     }
 
-    const halfWidth = this.width / 2 - margin;
-    const halfHeight = this.height / 2 - margin;
+    const safeCenterX = (safe.left + safe.right) * 0.5;
+    const safeCenterY = (safe.top + safe.bottom) * 0.5;
+    const halfWidth = (safe.right - safe.left) * 0.5;
+    const halfHeight = (safe.bottom - safe.top) * 0.5;
     const scale = Math.min(
       halfWidth / Math.max(Math.abs(dx), 0.0001),
       halfHeight / Math.max(Math.abs(dy), 0.0001),
     );
-    const x = this.width / 2 + dx * scale;
-    const y = this.height / 2 + dy * scale;
+    const x = safeCenterX + dx * scale;
+    const y = safeCenterY + dy * scale;
     const angle = Math.atan2(dy, dx);
 
     ctx.save();
@@ -332,13 +384,17 @@ class CombatHud {
     ctx.restore();
 
     const length = Math.hypot(dx, dy) || 1;
-    const labelX = x - (dx / length) * 26;
-    const labelY = y - (dy / length) * 26;
+    const labelText = `${formatRange(state.range_m)}  C ${formatSigned(state.closure_kts)}  AOFF ${Math.round(Number(state.angle_off_deg) || 0)}°`;
+    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const labelWidth = ctx.measureText(labelText).width;
+    const labelX = clamp(x - (dx / length) * 34, safe.left + labelWidth * 0.5 + 5, safe.right - labelWidth * 0.5 - 5);
+    const labelY = clamp(y - (dy / length) * 30, safe.top + 8, safe.bottom - 8);
+    ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
+    ctx.fillRect(labelX - labelWidth * 0.5 - 4, labelY - 7, labelWidth + 8, 14);
     ctx.fillStyle = AMBER;
-    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`${formatRange(state.range_m)}  C ${formatSigned(state.closure_kts)}`, labelX, labelY);
+    ctx.fillText(labelText, labelX, labelY);
   }
 
   banditAngles(frame) {
@@ -358,17 +414,22 @@ class CombatHud {
     const width = Math.min(760, Math.max(280, this.width - 180));
     const x0 = (this.width - width) / 2;
     const centerX = this.width / 2;
-    const y = 48;
+    const y = 47;
     const half = width / 2;
 
-    this.glassPanel(x0 - 12, y - 24, width + 24, 66, "rgba(77, 255, 136, 0.19)");
+    const wash = ctx.createLinearGradient(0, y - 25, 0, y + 34);
+    wash.addColorStop(0, "rgba(1, 9, 14, 0)");
+    wash.addColorStop(0.36, "rgba(1, 9, 14, 0.48)");
+    wash.addColorStop(1, "rgba(1, 9, 14, 0)");
+    ctx.fillStyle = wash;
+    ctx.fillRect(x0 - 12, y - 25, width + 24, 62);
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText("SA / REL BEARING", x0, y - 13);
 
-    this.setLine(GREEN_DIM, 1);
+    this.setLine("rgba(77, 255, 136, 0.68)", 1);
     ctx.beginPath();
     ctx.moveTo(x0, y);
     ctx.lineTo(x0 + width, y);
@@ -433,10 +494,10 @@ class CombatHud {
     const heading = Number(state.heading_deg) || 0;
     const width = Math.min(440, this.width * 0.42);
     const x0 = (this.width - width) / 2;
-    const y = 116;
+    const y = 113;
     const pixelsPerDegree = width / 100;
 
-    ctx.fillStyle = "rgba(3, 13, 20, 0.36)";
+    ctx.fillStyle = "rgba(2, 10, 16, 0.3)";
     ctx.fillRect(x0 - 8, y - 14, width + 16, 34);
     ctx.save();
     ctx.beginPath();
@@ -481,7 +542,10 @@ class CombatHud {
     ctx.fillText(String(Math.round(wrap360(heading))).padStart(3, "0"), this.width / 2, y - 1);
   }
 
-  drawVerticalTape({ value, x, label, step, decimals = 0, suffix = "" }) {
+  // `floor` omits rungs below a physical limit. Without it the label was clamped with
+  // Math.max(0, mark) while the rung still drew, so sub-sea-level altitudes rendered as a
+  // stack of identical "0"s — a tape that reads plausible while saying nothing.
+  drawVerticalTape({ value, x, label, step, decimals = 0, suffix = "", floor = null }) {
     const ctx = this.ctx;
     const centerY = this.height * 0.51;
     const tapeHeight = Math.min(310, this.height * 0.43);
@@ -489,12 +553,29 @@ class CombatHud {
     const pixelsPerStep = 34;
     const rightSide = x > this.width / 2;
 
-    this.glassPanel(x - 34, centerY - halfHeight - 22, 68, tapeHeight + 44, "rgba(77, 255, 136, 0.12)");
+    const wash = ctx.createLinearGradient(x - 34, 0, x + 34, 0);
+    if (rightSide) {
+      wash.addColorStop(0, "rgba(1, 9, 14, 0)");
+      wash.addColorStop(1, "rgba(1, 9, 14, 0.58)");
+    } else {
+      wash.addColorStop(0, "rgba(1, 9, 14, 0.58)");
+      wash.addColorStop(1, "rgba(1, 9, 14, 0)");
+    }
+    ctx.fillStyle = wash;
+    ctx.fillRect(x - 34, centerY - halfHeight - 22, 68, tapeHeight + 44);
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, x, centerY - halfHeight - 10);
+
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.24)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const spineX = rightSide ? x - 32 : x + 32;
+    ctx.moveTo(spineX, centerY - halfHeight);
+    ctx.lineTo(spineX, centerY + halfHeight);
+    ctx.stroke();
 
     ctx.save();
     ctx.beginPath();
@@ -503,6 +584,7 @@ class CombatHud {
     const base = Math.floor(value / step) * step;
     for (let i = -7; i <= 7; i++) {
       const mark = base + i * step;
+      if (floor !== null && mark < floor) continue;
       const y = centerY - ((mark - value) / step) * pixelsPerStep;
       this.setLine(GREEN_DIM, 1);
       ctx.beginPath();
@@ -517,7 +599,7 @@ class CombatHud {
       ctx.fillStyle = GREEN_DIM;
       ctx.font = "500 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = rightSide ? "right" : "left";
-      ctx.fillText(Math.max(0, mark).toFixed(decimals), rightSide ? x + 24 : x - 24, y);
+      ctx.fillText(mark.toFixed(decimals), rightSide ? x + 24 : x - 24, y);
     }
     ctx.restore();
 
@@ -549,23 +631,27 @@ class CombatHud {
 
   drawGTape(state) {
     const ctx = this.ctx;
-    const x = 34;
-    const y = this.height - 92;
-    const width = Math.min(265, this.width * 0.28);
+    const x = 28;
+    const y = this.height - 88;
+    const width = Math.min(258, this.width * 0.27);
     const maxG = Math.max(10, Number(state.g_hardmax) || 10);
     const mapG = (g) => x + clamp((Number(g) || 0) / maxG, 0, 1) * width;
     const tierColor = state.tier === 3 ? AMBER : GREEN;
 
-    ctx.fillStyle = GLASS;
-    ctx.fillRect(x - 8, y - 24, width + 16, 50);
+    const wash = ctx.createLinearGradient(x - 8, 0, x + width + 8, 0);
+    wash.addColorStop(0, "rgba(1, 9, 14, 0.62)");
+    wash.addColorStop(0.78, "rgba(1, 9, 14, 0.36)");
+    wash.addColorStop(1, "rgba(1, 9, 14, 0)");
+    ctx.fillStyle = wash;
+    ctx.fillRect(x - 8, y - 31, width + 16, 58);
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText("G LOAD", x, y - 14);
+    ctx.fillText("G LOAD", x, y - 20);
     ctx.textAlign = "right";
     ctx.fillStyle = tierColor;
-    ctx.fillText(`${(Number(state.g_actual) || 0).toFixed(1)} G`, x + width, y - 14);
+    ctx.fillText(`${(Number(state.g_actual) || 0).toFixed(1)} G`, x + width, y - 20);
 
     ctx.strokeStyle = GREEN_DIM;
     ctx.lineWidth = 2;
@@ -579,20 +665,36 @@ class CombatHud {
       [state.g_valley, "V", GREEN],
       [state.g_maxperform, "M", AMBER],
       [state.g_hardmax, "H", RED],
-    ];
+    ].map(([g, label, color]) => ({ x: mapG(g), label, color }))
+      .sort((a, b) => a.x - b.x);
+    const minLabelGap = 17;
+    const labelPositions = markers.map((marker) => marker.x);
+    for (let i = 1; i < labelPositions.length; i++) {
+      labelPositions[i] = Math.max(labelPositions[i], labelPositions[i - 1] + minLabelGap);
+    }
+    const lastLabelPosition = labelPositions[labelPositions.length - 1];
+    if (lastLabelPosition > x + width) {
+      const overflow = lastLabelPosition - (x + width);
+      for (let i = 0; i < labelPositions.length; i++) labelPositions[i] -= overflow;
+      for (let i = labelPositions.length - 2; i >= 0; i--) {
+        labelPositions[i] = Math.min(labelPositions[i], labelPositions[i + 1] - minLabelGap);
+      }
+    }
     ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
-    for (const [g, label, color] of markers) {
-      const mx = mapG(g);
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
+    markers.forEach((marker, index) => {
+      const labelX = clamp(labelPositions[index], x, x + width);
+      ctx.strokeStyle = marker.color;
+      ctx.fillStyle = marker.color;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(mx, y - 6);
-      ctx.lineTo(mx, y + 6);
+      ctx.moveTo(marker.x, y - 6);
+      ctx.lineTo(marker.x, y + 6);
+      ctx.moveTo(marker.x, y + 7);
+      ctx.lineTo(labelX, y + 13);
       ctx.stroke();
-      ctx.fillText(label, mx, y + 15);
-    }
+      ctx.fillText(marker.label, labelX, y + 20);
+    });
 
     const actualX = mapG(state.g_actual);
     ctx.fillStyle = tierColor;
@@ -608,7 +710,18 @@ class CombatHud {
     const { state, now, padlock } = frame;
     const ctx = this.ctx;
 
-    this.glassPanel(18, 18, 118, 25, padlock ? "rgba(255, 176, 32, 0.44)" : "rgba(77, 255, 136, 0.12)");
+    ctx.fillStyle = "rgba(1, 9, 14, 0.44)";
+    ctx.fillRect(18, 20, 118, 22);
+    ctx.strokeStyle = padlock ? "rgba(255, 176, 32, 0.6)" : "rgba(77, 255, 136, 0.22)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(18, 20);
+    ctx.lineTo(18, 42);
+    ctx.lineTo(26, 42);
+    ctx.moveTo(128, 20);
+    ctx.lineTo(136, 20);
+    ctx.lineTo(136, 42);
+    ctx.stroke();
     ctx.fillStyle = padlock ? AMBER : "rgba(77, 255, 136, 0.36)";
     ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
@@ -634,6 +747,66 @@ class CombatHud {
         ctx.fillText("BUFFET", this.width / 2, 187);
       }
     }
+  }
+
+  // A fight ending, and the low-altitude caution that precedes one. Nothing drew these before:
+  // the sim had no ground, so a hard pull could fly the aircraft to -10,679 ft and keep going
+  // with the world rendered black and the HUD still cheerfully reading out closure.
+  drawEnding(frame) {
+    const { state, now } = frame;
+    const ctx = this.ctx;
+    const alt = Number(state.alt_ft) || 0;
+
+    // Deck caution: amber and quiet until it isn't. Silent above the deck so it means something.
+    if (!state.frozen && state.below_deck) {
+      const urgent = alt < 2000;
+      if (!urgent || Math.sin(now * Math.PI * 5) > -0.2) {
+        ctx.fillStyle = urgent ? RED : AMBER;
+        ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(urgent ? "PULL UP" : "DECK", this.width / 2, this.height - 104);
+      }
+    }
+
+    if (!state.frozen) return;
+
+    const impact = state.below_ground;
+    const accent = impact ? RED : AMBER;
+    ctx.save();
+    ctx.fillStyle = impact ? "rgba(28, 2, 6, 0.58)" : "rgba(1, 9, 14, 0.5)";
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    const w = 360;
+    const h = 92;
+    const x = (this.width - w) / 2;
+    const y = this.height / 2 - h / 2;
+    ctx.fillStyle = GLASS;
+    roundedRect(ctx, x, y, w, h, 6);
+    ctx.fill();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = accent;
+    ctx.font = "800 22px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText(impact ? "IMPACT" : "KNOCK IT OFF", this.width / 2, y + 30);
+
+    ctx.fillStyle = GREEN_DIM;
+    ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText(
+      impact
+        ? `${Math.round(Number(state.speed_kts) || 0)} KTS · ${Math.round(Number(state.g_actual) || 0)} G · ${Math.round(Number(state.pitch_deg) || 0)}° NOSE LOW`
+        : "FIGHT TERMINATED",
+      this.width / 2,
+      y + 55
+    );
+    ctx.fillStyle = GREEN;
+    ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText("R  RESTART", this.width / 2, y + 76);
+    ctx.restore();
   }
 
   drawPrompt(state) {
@@ -688,8 +861,8 @@ class CombatHud {
     ctx.fillText(`VARIANT ${state.variant === 1 ? "B" : "A"}`, this.width - 18, y);
   }
 
-  drawLegend() {
-    if (!this.legendVisible) return;
+  drawLegend(frozen = false) {
+    if (!this.legendVisible || frozen) return;
     const ctx = this.ctx;
     const panelWidth = Math.min(930, this.width - 34);
     const compact = this.width < 760;
@@ -747,11 +920,12 @@ class CombatHud {
     this.drawSaBar(frame);
     this.drawHeadingTape(frame.state);
 
-    const tapeInset = clamp(this.width * 0.055, 48, 78);
+    const tapeInset = this.getLayout().tapeInset;
     this.drawVerticalTape({
       value: Number(frame.state.speed_kts) || 0,
       x: tapeInset,
       label: "KTS",
+      floor: 0,
       step: 20,
       decimals: 0,
     });
@@ -759,6 +933,7 @@ class CombatHud {
       value: Number(frame.state.alt_ft) || 0,
       x: this.width - tapeInset,
       label: "ALT FT",
+      floor: 0,
       step: frame.state.alt_ft > 10000 ? 1000 : 500,
       decimals: 0,
     });
@@ -766,7 +941,8 @@ class CombatHud {
     this.drawWarnings(frame);
     this.drawPrompt(frame.state);
     this.drawFooter(frame.state);
-    this.drawLegend();
+    this.drawLegend(Boolean(frame.state.frozen));
+    this.drawEnding(frame);
   }
 }
 

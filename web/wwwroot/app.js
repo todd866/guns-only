@@ -241,21 +241,24 @@ function createSky() {
       void main() {
         vec3 d = normalize(vDirection);
         float h = d.y;
-        float altitudeMix = smoothstep(2400.0, 21000.0, uAltitude);
+        float altitudeMix = smoothstep(2800.0, 21000.0, uAltitude);
 
-        float lowSkyCurve = pow(max(h, 0.0), 0.46);
-        vec3 lowHorizon = vec3(0.47, 0.69, 0.86);
-        vec3 lowZenith = vec3(0.018, 0.115, 0.30);
+        float lowSkyCurve = pow(clamp(max(h, 0.0), 0.0, 1.0), 0.42);
+        vec3 lowHorizon = vec3(0.50, 0.72, 0.91);
+        vec3 lowZenith = vec3(0.018, 0.14, 0.38);
         vec3 lowSky = mix(lowHorizon, lowZenith, lowSkyCurve);
-        lowSky = mix(vec3(0.13, 0.26, 0.36), lowSky, smoothstep(-0.18, 0.035, h));
+        lowSky = mix(vec3(0.055, 0.16, 0.24), lowSky, smoothstep(-0.12, 0.028, h));
 
-        // At stratospheric altitude the remaining atmosphere is a narrow optical limb.
-        // Its exponential tightens with altitude instead of smearing blue to the zenith.
-        float limbSharpness = mix(8.0, 105.0, altitudeMix);
-        float limb = exp(-abs(h) * limbSharpness);
-        vec3 space = vec3(0.0012, 0.0022, 0.012);
-        vec3 highSky = space + vec3(0.11, 0.29, 0.58) * limb;
-        highSky += vec3(0.006, 0.011, 0.034) * pow(max(h, 0.0), 0.35);
+        // The optical depth collapses with altitude. Raising both the scale and exponent is
+        // important: a fixed falloff leaves a blue wash across the whole frame at 70,000 ft.
+        float limbScale = mix(7.0, 150.0, pow(altitudeMix, 1.25));
+        float limbExponent = mix(1.05, 2.75, altitudeMix);
+        float limb = exp(-pow(abs(h) * limbScale, limbExponent));
+        float brightCore = exp(-pow(abs(h) * mix(22.0, 430.0, altitudeMix), 1.42));
+        vec3 space = vec3(0.00035, 0.00055, 0.0055);
+        vec3 highSky = space + vec3(0.0018, 0.0028, 0.019) * pow(max(h, 0.0), 0.32);
+        highSky += vec3(0.10, 0.38, 0.92) * limb;
+        highSky += vec3(0.82, 1.18, 1.48) * brightCore * altitudeMix;
 
         vec3 color = mix(lowSky, highSky, altitudeMix);
 
@@ -264,15 +267,15 @@ function createSky() {
         vec2 starCell = floor(starGrid);
         vec2 starUv = fract(starGrid) - 0.5;
         float seed = hash21(starCell);
-        float starCore = 1.0 - smoothstep(0.018, 0.08, length(starUv));
-        float star = smoothstep(0.992, 0.9995, seed) * starCore;
-        star *= pow(altitudeMix, 1.7) * smoothstep(-0.025, 0.13, h);
-        color += vec3(0.58, 0.69, 0.84) * star;
+        float starCore = 1.0 - smoothstep(0.016, 0.065, length(starUv));
+        float star = smoothstep(0.9925, 0.9998, seed) * starCore;
+        star *= pow(altitudeMix, 1.8) * smoothstep(0.018, 0.15, h);
+        color += vec3(0.46, 0.57, 0.78) * star;
 
         float sunDot = dot(d, normalize(uSunDirection));
         float sunDisc = smoothstep(0.99986, 0.99994, sunDot);
         float sunHalo = pow(max(sunDot, 0.0), mix(340.0, 900.0, altitudeMix));
-        color += vec3(1.0, 0.78, 0.42) * (sunDisc * 2.0 + sunHalo * 0.2);
+        color += vec3(1.0, 0.78, 0.42) * (sunDisc * 2.4 + sunHalo * 0.22);
 
         gl_FragColor = vec4(color, 1.0);
       }
@@ -302,10 +305,10 @@ function createSea() {
       void main() {
         vec3 displaced = position;
         vec3 worldBase = (modelMatrix * vec4(position, 1.0)).xyz;
-        float detail = exp(-max(uAltitude, 0.0) / 6200.0);
-        float wave = sin(worldBase.x * 0.011 + uTime * 0.72) * 0.46;
-        wave += sin(worldBase.z * 0.016 - uTime * 0.57) * 0.31;
-        wave += sin((worldBase.x + worldBase.z) * 0.0042 + uTime * 0.29) * 0.68;
+        float detail = exp(-max(uAltitude, 0.0) / 9000.0);
+        float wave = sin(worldBase.x * 0.00072 + uTime * 0.34) * 2.2;
+        wave += sin(worldBase.z * 0.00116 - uTime * 0.42) * 1.25;
+        wave += sin((worldBase.x + worldBase.z) * 0.00034 + uTime * 0.17) * 3.6;
         displaced.y += wave * detail;
         vec4 world = modelMatrix * vec4(displaced, 1.0);
         vWorldPosition = world.xyz;
@@ -319,30 +322,59 @@ function createSea() {
       uniform vec3 uSunDirection;
       varying vec3 vWorldPosition;
 
+      float hash21(vec2 p) {
+        p = fract(p * vec2(123.34, 345.45));
+        p += dot(p, p + 34.345);
+        return fract(p.x * p.y);
+      }
+
       void main() {
         vec3 dx = dFdx(vWorldPosition);
         vec3 dy = dFdy(vWorldPosition);
-        vec3 normal = normalize(cross(dy, dx));
-        if (normal.y < 0.0) normal = -normal;
+        vec3 geometryNormal = normalize(cross(dy, dx));
+        if (geometryNormal.y < 0.0) geometryNormal = -geometryNormal;
+
+        float nearDetail = exp(-max(uAltitude, 0.0) / 7200.0);
+        float slopeX = cos(vWorldPosition.x * 0.0105 + uTime * 0.91) * 0.105;
+        slopeX += cos((vWorldPosition.x + vWorldPosition.z) * 0.0047 - uTime * 0.63) * 0.066;
+        float slopeZ = cos(vWorldPosition.z * 0.0138 - uTime * 0.78) * 0.115;
+        slopeZ += cos((vWorldPosition.x - vWorldPosition.z) * 0.0062 + uTime * 0.54) * 0.058;
+        vec3 detailNormal = normalize(vec3(-slopeX, 1.0, -slopeZ));
+        vec3 normal = normalize(mix(geometryNormal, detailNormal, nearDetail * 0.88));
 
         vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
         vec3 halfDirection = normalize(viewDirection + normalize(uSunDirection));
         float altitudeMix = smoothstep(2200.0, 21000.0, uAltitude);
-        float fresnel = pow(1.0 - max(dot(normal, viewDirection), 0.0), 4.0);
-        float glint = pow(max(dot(normal, halfDirection), 0.0), mix(620.0, 1150.0, altitudeMix));
+        float fresnel = pow(1.0 - max(dot(normal, viewDirection), 0.0), 4.6);
+        float glint = pow(max(dot(normal, halfDirection), 0.0), mix(360.0, 920.0, altitudeMix));
 
-        float broadSwell = sin(vWorldPosition.x * 0.0014 + vWorldPosition.z * 0.0011 + uTime * 0.18);
-        vec3 nearColor = vec3(0.015, 0.105, 0.15) + broadSwell * vec3(0.004, 0.008, 0.01);
-        vec3 highSheet = vec3(0.11, 0.20, 0.28);
-        vec3 color = mix(nearColor, highSheet, altitudeMix * 0.86);
-        color += fresnel * mix(vec3(0.035, 0.13, 0.20), vec3(0.08, 0.15, 0.23), altitudeMix);
-        color += vec3(1.0, 0.67, 0.28) * glint * mix(1.8, 0.72, altitudeMix);
+        float broadSwell = sin(vWorldPosition.x * 0.0011 + vWorldPosition.z * 0.00082 + uTime * 0.24);
+        float crossSwell = sin(vWorldPosition.x * 0.0027 - vWorldPosition.z * 0.0021 - uTime * 0.38);
+        vec3 deepWater = vec3(0.004, 0.040, 0.072);
+        vec3 litWater = vec3(0.012, 0.105, 0.155);
+        vec3 color = mix(deepWater, litWater, 0.34 + broadSwell * 0.08 + crossSwell * 0.035);
+        color = mix(color, vec3(0.025, 0.058, 0.096), altitudeMix * 0.78);
+        color += fresnel * mix(vec3(0.025, 0.15, 0.25), vec3(0.04, 0.07, 0.13), altitudeMix);
+
+        // A long, broken specular corridor runs from the viewer toward the projected sun.
+        // This remains readable when individual sub-pixel wave highlights average out.
+        vec2 sunHorizontal = normalize(uSunDirection.xz + vec2(0.00001));
+        vec2 fromCamera = vWorldPosition.xz - cameraPosition.xz;
+        float alongSun = dot(fromCamera, sunHorizontal);
+        float acrossSun = abs(dot(fromCamera, vec2(-sunHorizontal.y, sunHorizontal.x)));
+        float pathWidth = 170.0 + max(alongSun, 0.0) * 0.045;
+        float sunPath = exp(-pow(acrossSun / max(pathWidth, 1.0), 1.32));
+        sunPath *= smoothstep(-300.0, 3200.0, alongSun);
+        float glitterBreakup = 0.46 + 0.54 * hash21(floor(vWorldPosition.xz * 0.009 + uTime * 1.7));
+        float pathLight = sunPath * glitterBreakup * (0.055 + glint * 2.8) * (1.0 - altitudeMix * 0.52);
+        color += vec3(1.0, 0.61, 0.24) * (glint * 1.15 + pathLight);
 
         float radialDistance = length(vWorldPosition.xz - cameraPosition.xz);
-        float hazeStart = mix(82000.0, 43000.0, altitudeMix);
-        float haze = smoothstep(hazeStart, 238000.0, radialDistance);
-        vec3 horizonSheet = mix(vec3(0.24, 0.40, 0.51), vec3(0.13, 0.22, 0.32), altitudeMix);
-        color = mix(color, horizonSheet, haze * 0.94);
+        float hazeStart = mix(52000.0, 178000.0, altitudeMix);
+        float hazeEnd = mix(205000.0, 246000.0, altitudeMix);
+        float haze = smoothstep(hazeStart, hazeEnd, radialDistance);
+        vec3 horizonSheet = mix(vec3(0.24, 0.43, 0.57), vec3(0.055, 0.09, 0.15), altitudeMix);
+        color = mix(color, horizonSheet, haze * mix(0.82, 0.2, altitudeMix));
 
         gl_FragColor = vec4(color, 1.0);
       }
@@ -350,7 +382,7 @@ function createSea() {
   });
 
   // The plane follows the aircraft laterally, making its full 500 km useful in every mission.
-  const geometry = new THREE.PlaneGeometry(500000, 500000, 128, 128);
+  const geometry = new THREE.PlaneGeometry(500000, 500000, 192, 192);
   geometry.rotateX(-Math.PI / 2);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = -10;
@@ -642,6 +674,13 @@ async function boot() {
       previous = now;
       bridge.Advance(dt);
       const state = JSON.parse(bridge.GetState());
+      // Debug/QA hook. Two jobs: (1) let an automated browser verify things a screenshot can't
+      // (roll direction under live input — the mirrored-roll bug the desktop shipped and only
+      // flying caught), and (2) make the desktop-vs-web CONFORMANCE diff possible: both shells
+      // drive the identical compiled kernel, so the same scenario must produce the same
+      // telemetry. Cheap, harmless, and the only way to prove the web build is the same game.
+      globalThis.__gunsState = state;
+      globalThis.__gunsBridge = bridge;
       view.update(state, dt, now / 1000);
       if (firstFrame) {
         firstFrame = false;

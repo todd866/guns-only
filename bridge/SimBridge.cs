@@ -21,6 +21,12 @@ public partial class SimBridge : Node {
     const double Dt = 1.0 / AircraftSim.TickHz;
     int _shotsInWindow, _shotsTotal;
     bool _triggerDown;
+    bool _knockedOff;
+    /// The fight is over: impacted the sea, or the player called knock-it-off. Mirrors
+    /// web/WebBridge.cs exactly -- the two shells must not diverge on a fight ending, or the
+    /// telemetry conformance diff between them is meaningless.
+    public bool Frozen => _knockedOff || (_player?.BelowGround ?? false);
+    public void KnockItOff() => _knockedOff = true;
 
     public override void _Ready() => StartBeat(1);
 
@@ -35,6 +41,7 @@ public partial class SimBridge : Node {
         _advice = new DoctrineAdvice(1.0, 0.0, "setup");
         _cue = PromptCue.None;
         _triggerDown = false;
+        _knockedOff = false;
         _acc = 0; _shotsInWindow = 0; _shotsTotal = 0;
         _lastRange = Geometry.Range(_player.State, _bandit.State); _closureKts = 0; _closureSmooth = 0;
         // _simTimeMs deliberately NOT reset: one monotonic clock for grammar timestamps across beats.
@@ -54,6 +61,7 @@ public partial class SimBridge : Node {
     }
 
     public override void _PhysicsProcess(double delta) {
+        if (Frozen) { _acc = 0; return; }   // nothing ever checked: a hard pull flew THROUGH the sea
         _acc = System.Math.Min(_acc + delta, 0.25); // cap catch-up: a suspended app must not replay minutes of sim
         while (_acc >= Dt) {
             _advice = _beat.Law.Advise(_player.State, _bandit.State, _beat.PlayerAir);
@@ -109,6 +117,8 @@ public partial class SimBridge : Node {
             {"bank_deg", s.Bank * 57.2958},
             {"heading_deg", ((s.Chi * 57.2958) % 360 + 360) % 360},
             {"gun_window", CameraSolver.GunWindow(s, _bandit.State)},
+            {"below_ground", _player.BelowGround}, {"below_deck", _player.BelowHardDeck},
+            {"knocked_off", _knockedOff}, {"frozen", Frozen},
             {"beat", _beat.Name},
             {"shots_total", _shotsTotal}, {"shots_in_window", _shotsInWindow},
         };

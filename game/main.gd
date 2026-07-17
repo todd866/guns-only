@@ -35,7 +35,9 @@ func _ready() -> void:
 	inp.padlock_toggled.connect(rig.toggle_padlock)
 	inp.restart_requested.connect(func(): bridge.StartBeat(current_beat))
 	inp.beat_selected.connect(func(i): current_beat = i; bridge.StartBeat(i); _set_beat_visuals(i))
-	inp.kio_requested.connect(func(): bridge.StartBeat(current_beat))
+	# Knock-it-off ENDS the fight (the HUD then offers R). It used to call StartBeat, which just
+	# silently restarted the beat -- the call had no meaning and the web shell disagreed with it.
+	inp.kio_requested.connect(func(): bridge.KnockItOff())
 	inp.variant_toggled.connect(func(): bridge.SetVariant(1 - bridge.GetVariant()))
 	var hud_root := get_node_or_null("HUD/Root")
 	if hud_root != null:

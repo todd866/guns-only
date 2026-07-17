@@ -138,6 +138,21 @@ public class FlightModelTests {
         // — comfortably under the chatter bound, and stable rather than a wide range of outcomes.
         Assert.Equal(5, signChanges);
     }
+    [Fact] public void FlyingIntoTheSeaIsDetected() {
+        // Nobody had ever flown into the ground: a 12G pull from inverted took the web build to
+        // -10,679 ft with the world rendering black. The kernel now reports the fact.
+        var sim = new AircraftSim(new AircraftState(new Vec3D(0, 800, 0), 200, -1.2, 0, 0, FlightModel.Sabre.MassKg), FlightModel.Sabre);
+        Assert.False(sim.BelowGround);
+        for (int i = 0; i < 1200 && !sim.BelowGround; i++) sim.Step(new PilotCommand(1.0, 0, 0.85, 0), 1.0/AircraftSim.TickHz);
+        Assert.True(sim.BelowGround, "a sustained dive from 800 m must reach the sea");
+        Assert.True(sim.BelowHardDeck, "below ground implies below the 5,000 ft hard deck");
+    }
+    [Fact] public void HardDeckTripsBeforeTheGroundDoes() {
+        var high = new AircraftState(new Vec3D(0, 3000, 0), 200, 0, 0, 0, FlightModel.Sabre.MassKg);
+        var sim = new AircraftSim(high, FlightModel.Sabre);
+        Assert.False(sim.BelowHardDeck);   // 3000 m is above the 1524 m deck
+        Assert.False(sim.BelowGround);
+    }
     [Fact] public void LiftDirTracksBank() {
         var sim = new AircraftSim(Level(), FlightModel.Sabre);
         var roll = new PilotCommand(1.0, 0.7854, 0.85, 0.0);

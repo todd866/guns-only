@@ -5,6 +5,14 @@ public sealed class AircraftSim {
     public AircraftState State { get; private set; }
     public double LastNz { get; private set; } = 1.0;
     public bool Buffet { get; private set; }
+    /// Below sea level. The sim has no terrain and never policed this: a 12G pull from inverted
+    /// flew the aircraft THROUGH the sea to -10,679 ft with the world rendering black, found by
+    /// flying the web build. The review flagged "fight endings have no owner" and the spec wrote
+    /// a hard deck that was never built. The kernel reports the fact; shells decide the rule.
+    public bool BelowGround => State.Position.Y <= 0.0;
+    /// Briefed training floor (spec §3): busting it ends the fight as a loss annotation.
+    public const double HardDeckM = 1524.0;   // 5,000 ft
+    public bool BelowHardDeck => State.Position.Y <= HardDeckM;
     /// The physical lift direction (canopy direction): the transported zero-bank reference
     /// rotated by body roll. Render-true through verticals — use this for attitude
     /// reconstruction instead of world-up (which snaps 180 degrees at loop apex).

@@ -26,10 +26,18 @@ public static partial class WebBridge {
     static double _acc, _simTimeMs, _lastRange, _closureKts, _closureSmooth;
     static int _shotsTotal, _shotsInWindow;
     static bool _triggerDown;
+    static int _beatIndex = 1;
+    static bool _knockedOff;
+    /// The fight is over: impacted the sea, or the player called knock-it-off. The sim stops
+    /// stepping. Before this, a 12G pull from inverted flew THROUGH the sea to -10,679 ft and
+    /// kept integrating, because nothing ever checked.
+    static bool Frozen => _knockedOff || (_player?.BelowGround ?? false);
 
     [JSExport]
     public static void StartBeat(int index) {
         var variant = _detents?.Variant ?? ValleyVariant.DoctrineDeep;
+        _beatIndex = index;
+        _knockedOff = false;
         _beat = index switch { 2 => Beats.BreakDefense(), 3 => Beats.Saddle(), 4 => Beats.BalloonStrike(), _ => Beats.Perch() };
         _player = new AircraftSim(_beat.Player, _beat.PlayerAir);
         _bandit = new RailBandit(_beat.Bandit, _beat.BanditAir, _beat.BanditTimeline);
@@ -47,7 +55,12 @@ public static partial class WebBridge {
 
     [JSExport] public static void FeedKey(int gkey, bool pressed) {
         _keys.Feed((GKey)gkey, pressed, _simTimeMs);
-        if (gkey == 8) Trigger(pressed);
+        if (gkey == (int)GKey.Trigger) Trigger(pressed);
+        if (!pressed) return;
+        // The Godot shell routes these through InputAdapter signals; the web shell had no
+        // equivalent, so both keys were inert while the legend claimed otherwise.
+        if (gkey == (int)GKey.Restart) StartBeat(_beatIndex);
+        else if (gkey == (int)GKey.KnockItOff) _knockedOff = true;
     }
 
     static void Trigger(bool down) {
@@ -66,6 +79,7 @@ public static partial class WebBridge {
     /// replay minutes of sim on return.
     [JSExport]
     public static void Advance(double deltaSeconds) {
+        if (Frozen) { _acc = 0; return; }
         _acc = Math.Min(_acc + deltaSeconds, 0.25);
         while (_acc >= Dt) {
             _advice = _beat.Law.Advise(_player.State, _bandit.State, _beat.PlayerAir);
@@ -114,6 +128,10 @@ public static partial class WebBridge {
             + $"\"angle_off_deg\":{Geometry.AngleOff(s, b) * 57.2958:F2},"
             + $"\"range_m\":{Geometry.Range(s, b):F1},\"closure_kts\":{_closureKts:F1},"
             + $"\"gun_window\":{(CameraSolver.GunWindow(s, b) ? "true" : "false")},"
+            + $"\"below_ground\":{(_player.BelowGround ? "true" : "false")},"
+            + $"\"knocked_off\":{(_knockedOff ? "true" : "false")},"
+            + $"\"frozen\":{(Frozen ? "true" : "false")},"
+            + $"\"below_deck\":{(_player.BelowHardDeck ? "true" : "false")},"
             + $"\"shots_total\":{_shotsTotal},\"shots_in_window\":{_shotsInWindow},"
             + $"\"context\":\"{_advice.Context}\",\"beat\":\"{_beat.Name}\""
             + "}";

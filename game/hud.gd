@@ -502,7 +502,7 @@ func _draw() -> void:
 	_draw_boresight_cue(screen_c, sz, c, nose_ahead)
 	_draw_sa_bar(hud, sz)
 	_draw_mode_flags(sz)
-	if show_legend:
+	if show_legend and not bool(hud["frozen"]):
 		_draw_legend(sz)
 	_draw_td_box(hud, sz, screen_c)
 	_draw_tapes(hud, sz)
@@ -510,6 +510,7 @@ func _draw() -> void:
 	_draw_g_tape(hud, sz)
 	_draw_warnings(hud, sz)
 	_draw_footer(hud, sz)
+	_draw_ending(hud, sz)   # last: a fight ending outranks everything else on the glass
 
 	draw_count += 1
 
@@ -524,6 +525,36 @@ func toggle_legend() -> void:
 # Persistent state flags: modes you can be IN must be visible, or you cannot tell whether the
 # key you pressed did anything. PADLOCK was fully implemented, bound to V, and invisible —
 # so it read as "needs a padlock mode".
+# Fight endings, mirroring web/wwwroot/hud.js. Until this existed neither shell had a ground:
+# a 12G pull from inverted flew THROUGH the sea to -10,679 ft, world rendered black, HUD still
+# reading out closure. Godot 4.7 note: Dictionary.get() returns an untyped Variant and inferring
+# from it is a hard PARSE error that silently kills this whole script -- so every read is typed.
+func _draw_ending(hud: Dictionary, sz: Vector2) -> void:
+	var frozen: bool = hud["frozen"]
+	var below_deck: bool = hud["below_deck"]
+	var impact: bool = hud["below_ground"]
+	var alt_ft: float = hud["alt_ft"]
+
+	if not frozen and below_deck:
+		var urgent := alt_ft < 2000.0
+		if not urgent or sin(float(Time.get_ticks_msec()) / 1000.0 * PI * 5.0) > -0.2:
+			_draw_centered(Vector2(sz.x * 0.5, sz.y - 104.0), "PULL UP" if urgent else "DECK",
+				13, COL_RED if urgent else COL_AMBER)
+	if not frozen:
+		return
+
+	var accent := COL_RED if impact else COL_AMBER
+	draw_rect(Rect2(Vector2.ZERO, sz), Color(0.11, 0.01, 0.02, 0.55) if impact else Color(0.0, 0.04, 0.06, 0.5))
+	var box := Rect2(Vector2(sz.x * 0.5 - 180.0, sz.y * 0.5 - 46.0), Vector2(360.0, 92.0))
+	draw_rect(box, Color(0.01, 0.04, 0.06, 0.72))
+	draw_rect(box, accent, false, 1.4)
+	_draw_centered(Vector2(sz.x * 0.5, sz.y * 0.5 - 16.0), "IMPACT" if impact else "KNOCK IT OFF", 22, accent)
+	var sub := "FIGHT TERMINATED"
+	if impact:
+		sub = "%d KTS  %d G  %d DEG NOSE LOW" % [int(hud["speed_kts"]), int(hud["g_actual"]), int(hud["pitch_deg"])]
+	_draw_centered(Vector2(sz.x * 0.5, sz.y * 0.5 + 9.0), sub, 11, COL_GREEN_DIM)
+	_draw_centered(Vector2(sz.x * 0.5, sz.y * 0.5 + 30.0), "R  RESTART", 12, COL_GREEN)
+
 func _draw_mode_flags(sz: Vector2) -> void:
 	var x := 30.0
 	var y := sz.y * 0.12

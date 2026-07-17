@@ -15,5 +15,10 @@
     <Compile Remove="sim/**/*.cs" />
     <Compile Remove="sim.Tests/**/*.cs" />
     <Compile Remove=".godot/**/*.cs" />
+    <!-- web/ is the WebAssembly shell: it owns its own csproj, and its WebBridge.cs needs
+         [JSExport]/AllowUnsafeBlocks that this project neither has nor wants. Swept in here it
+         broke the desktop build outright (SYSLIB1075 + duplicate assembly attributes from
+         web/obj/). Both shells share sim/ by ProjectReference, never by source glob. -->
+    <Compile Remove="web/**/*.cs" />
   </ItemGroup>
 </Project>
