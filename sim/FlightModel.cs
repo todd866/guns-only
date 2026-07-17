@@ -33,16 +33,16 @@ public static class FlightModel {
     internal static double BankRate(double bank, double target, in AircraftParams p) =>
         System.Math.Clamp((target - bank) / p.BankTau, -p.RollRateMaxRad, p.RollRateMaxRad);
 
-    internal static StateDeriv Derivatives(in RawState r, in PilotCommand c, in AircraftParams p) {
+    internal static StateDeriv Derivatives(in RawState r, in PilotCommand c, in AircraftParams p, in Vec3D liftRef) {
         double speed = System.Math.Max(r.Vel.Length, 20.0);
         var vhat = r.Vel.Length < 1e-9 ? new Vec3D(0, 0, 1) : r.Vel.Normalized();
         var up = new Vec3D(0, 1, 0);
-        // Physical right of the flight path. World basis (east, up, north) is LEFT-handed,
-        // so physical products take reversed operand order (see Vec3D.Cross docs).
-        var right0 = up.Cross(vhat);
-        var rightHat = right0.Length < 1e-6 ? new Vec3D(1, 0, 0) : right0.Normalized(); // pure-vertical fallback
-        var upPerp = vhat.Cross(rightHat).Normalized();
-        var liftDir = upPerp * System.Math.Cos(r.Bank) + rightHat * System.Math.Sin(r.Bank); // +bank tilts lift right => right turn
+        // Persistent lift reference (parallel-transported by AircraftSim), re-orthogonalized per stage.
+        var lr0 = liftRef - vhat * liftRef.Dot(vhat);
+        var refDir = lr0.Length < 1e-6 ? new Vec3D(1, 0, 0) : lr0.Normalized();
+        var rightRef = refDir.Cross(vhat); // physical right of path (left-handed basis: reversed operands)
+        var rightHat = rightRef.Length < 1e-6 ? new Vec3D(1, 0, 0) : rightRef.Normalized();
+        var liftDir = refDir * System.Math.Cos(r.Bank) + rightHat * System.Math.Sin(r.Bank); // +bank tilts lift right
 
         double rho = Atmosphere.Density(r.Pos.Y);
         double q = 0.5 * rho * speed * speed;

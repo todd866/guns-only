@@ -85,4 +85,57 @@ public class FlightModelTests {
         Assert.True(sim.LastNz > -1.0, $"nz {sim.LastNz:F3} should be aero-limited above -1G at 60 m/s");
         Assert.True(sim.LastNz >= FlightModel.NzAeroMin(sim.State, FlightModel.Sabre) - 1e-9); // bound at the state LastNz was computed from
     }
+    [Fact] public void LoopAttemptPassesVerticalRegionSmoothly() {
+        // Regression pin for the parallel-transported lift frame (sim/AircraftSim.cs _liftRef):
+        // before that fix, deriving lift direction per-tick from world-up x velocity flipped the
+        // frame whenever the flight path crossed vertical, so lift reversed and gamma chattered
+        // at the pole instead of pulling through.
+        //
+        // Observed 2026-07-17: a sustained 5.5G pull from Level(250, 3500) takes the jet over the
+        // top — gamma climbs smoothly to ~1.5706 rad (essentially vertical, pi/2 = 1.5708) with chi
+        // flipping ~0 -> ~pi exactly at the crossing (expected azimuth-pole wraparound for this
+        // gamma/chi parameterization, not chatter). The pull bleeds enough energy that the jet falls
+        // through two more partial "falling-leaf" loops before diving and recovering by t=30s.
+        var sim = new AircraftSim(Level(250, 3500), FlightModel.Sabre);
+        var pull = new PilotCommand(5.5, 0.0, 1.0, 0.0);
+        var recover = new PilotCommand(1.0, 0.0, 1.0, 0.0);
+        var gammas = new double[3600];
+        double maxGamma = double.NegativeInfinity;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        for (int i = 0; i < 3600; i++) {
+            sim.Step(i < 1800 ? pull : recover, 1.0 / AircraftSim.TickHz);
+            var st = sim.State;
+            Assert.True(double.IsFinite(st.Gamma) && double.IsFinite(st.Chi) && double.IsFinite(st.Speed)
+                        && double.IsFinite(st.Position.X) && double.IsFinite(st.Position.Y) && double.IsFinite(st.Position.Z),
+                        $"non-finite state at tick {i}");
+            gammas[i] = st.Gamma;
+            maxGamma = System.Math.Max(maxGamma, st.Gamma);
+        }
+        sw.Stop();
+
+        Assert.True(maxGamma > 1.35, $"max gamma only {maxGamma:F3} rad — did not pass near vertical");
+        Assert.True(sw.ElapsedMilliseconds < 2000, $"3600 ticks took {sw.ElapsedMilliseconds} ms");
+
+        int signChanges = 0;
+        int? prevSign = null;
+        for (int k = 60; k < gammas.Length; k++) {
+            double d = gammas[k] - gammas[k - 60];
+            int sign = d > 0 ? 1 : d < 0 ? -1 : 0;
+            if (sign == 0) continue;
+            if (prevSign.HasValue && sign != prevSign.Value) signChanges++;
+            prevSign = sign;
+        }
+        Assert.True(signChanges < 6, $"{signChanges} sign changes in the gamma trend — looks like chatter, not a clean loop");
+
+        Assert.True(sim.State.Speed >= 40, $"speed {sim.State.Speed:F1} below floor after recovery");
+        Assert.True(System.Math.Abs(sim.State.Gamma) < 0.9, $"gamma {sim.State.Gamma:F3} not recovered to sane flight");
+
+        // Characterization (observed 2026-07-17): the pull reaches essentially vertical rather than
+        // stalling out early — max gamma lands just under pi/2 (1.5708).
+        Assert.InRange(maxGamma, 1.55, 1.5708 + 1e-3);
+        // Characterization (observed 2026-07-17): the gamma trend changes sign exactly 5 times over
+        // the run (initial climb, over-the-top fall, two more falling-leaf partial loops, final dive)
+        // — comfortably under the chatter bound, and stable rather than a wide range of outcomes.
+        Assert.Equal(5, signChanges);
+    }
 }
