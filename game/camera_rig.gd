@@ -9,13 +9,9 @@ extends Camera3D
 #      world-UP chase cam rolls while the real horizon stays flat. The ladder was right;
 #      the camera was wrong. Attitude-rigid makes ladder and world agree by construction.
 #
-# FREE mode (external orbit) is kept as a debug escape hatch; no key binds to it.
-enum Mode { FREE, FIRST_PERSON }
-var mode: int = Mode.FIRST_PERSON
-
-# --- FREE mode (external orbit, debug only) ---
-var free_yaw := 0.0
-var free_pitch := -0.2
+# FPV ALWAYS (author directive, 2026-07-17). There is no external view and no mode enum:
+# the external orbit is deleted, not disabled, so it cannot be reached by accident or quietly
+# re-enabled. You are the drone; the only camera is its nose sensor.
 
 # --- Sensor gimbal (head-look) ---
 # Yaw/pitch offset (radians) applied on top of airframe attitude, in the airframe's own
@@ -38,19 +34,14 @@ const HEAD_EASE_RATE := 3.0                 # rad/s slew toward target
 
 
 func _ready() -> void:
-	# You ARE the drone: the nose camera sits inside your own fuselage mesh.
-	player.visible = mode == Mode.FREE
+	player.visible = false   # you ARE the drone; the nose camera sits inside your own mesh
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventPanGesture:
-		if mode == Mode.FREE:
-			free_yaw -= event.delta.x * 0.01
-			free_pitch = clampf(free_pitch - event.delta.y * 0.01, -1.2, 1.2)
-		else:
-			head_yaw_target = clampf(head_yaw_target - event.delta.x * 0.01, -HEAD_YAW_LIMIT, HEAD_YAW_LIMIT)
-			head_pitch_target = clampf(head_pitch_target - event.delta.y * 0.01, -HEAD_PITCH_LIMIT, HEAD_PITCH_LIMIT)
-			_manual_hold_s = 0.3
+		head_yaw_target = clampf(head_yaw_target - event.delta.x * 0.01, -HEAD_YAW_LIMIT, HEAD_YAW_LIMIT)
+		head_pitch_target = clampf(head_pitch_target - event.delta.y * 0.01, -HEAD_PITCH_LIMIT, HEAD_PITCH_LIMIT)
+		_manual_hold_s = 0.3
 
 
 func toggle_padlock() -> void:
@@ -59,14 +50,6 @@ func toggle_padlock() -> void:
 
 
 func _process(delta: float) -> void:
-	player.visible = mode == Mode.FREE
-	if mode == Mode.FREE:
-		var d := 32.0
-		var off := Vector3(sin(free_yaw) * cos(free_pitch), -sin(free_pitch), cos(free_yaw) * cos(free_pitch)) * d
-		var ppos: Vector3 = player.global_position
-		global_position = global_position.lerp(ppos + off, 1.0 - exp(-8.0 * delta))
-		look_at(ppos, Vector3.UP)
-		return
 	_process_first_person(delta)
 
 
