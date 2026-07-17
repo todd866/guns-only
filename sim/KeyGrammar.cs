@@ -51,8 +51,10 @@ public sealed class KeyGrammar {
             }
         }
     }
+    const int MaxBufferedTaps = 64; // bound: keys nobody drains (rudder etc.) must not grow forever
     static void CommitExpiredImpl(KS s, double nowMs, double gapMs) {
         if (s.PendingTapT is double t && nowMs - t > gapMs) { s.CommittedT.Add(t); s.PendingTapT = null; }
+        if (s.CommittedT.Count > MaxBufferedTaps) s.CommittedT.RemoveRange(0, s.CommittedT.Count - MaxBufferedTaps);
     }
     void CommitExpired(KS s, double nowMs) => CommitExpiredImpl(s, nowMs, DoubleGapMs);
 

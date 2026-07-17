@@ -72,6 +72,11 @@ public class KeyGrammarTests {
         g.Feed(GKey.RollLeft, true, 400); g.Feed(GKey.RollLeft, false, 480);
         Assert.Equal(2, g.TakeTaps(GKey.RollLeft, 731));
     }
+    [Fact] public void UndrainedTapsAreBounded() {
+        var g = new KeyGrammar();
+        for (int i = 0; i < 1000; i++) { g.Feed(GKey.RudderLeft, true, i * 600.0); g.Feed(GKey.RudderLeft, false, i * 600.0 + 80); }
+        Assert.True(g.TakeTaps(GKey.RudderLeft, 700000) <= 64);
+    }
     [Fact] public void KeysAreIndependent() {
         var g = new KeyGrammar();
         g.Feed(GKey.PullUp, true, 0);
