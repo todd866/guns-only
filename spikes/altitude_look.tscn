@@ -1,0 +1,60 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://spikes/altitude_look.gd" id="1_fly"]
+[ext_resource type="Shader" path="res://spikes/altitude_terrain.gdshader" id="2_terrain_shader"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_terrain"]
+seed = 4
+frequency = 0.0015
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_terrain"]
+width = 512
+height = 512
+seamless = true
+noise = SubResource("FastNoiseLite_terrain")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_terrain"]
+shader = ExtResource("2_terrain_shader")
+shader_parameter/noise_tex = SubResource("NoiseTexture2D_terrain")
+shader_parameter/height_scale = 800.0
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_terrain"]
+material = SubResource("ShaderMaterial_terrain")
+size = Vector2(100000, 100000)
+subdivide_width = 200
+subdivide_depth = 200
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+sky_top_color = Color(0.227451, 0.431373, 0.647059, 1)
+sky_horizon_color = Color(0.721569, 0.776471, 0.8, 1)
+
+[sub_resource type="Sky" id="Sky_env"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 2
+sky = SubResource("Sky_env")
+fog_enabled = true
+fog_density = 0.00012
+fog_aerial_perspective = 0.6
+
+[node name="AltitudeLook" type="Node3D"]
+
+[node name="Terrain" type="MeshInstance3D" parent="."]
+mesh = SubResource("PlaneMesh_terrain")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.610865, 0.698132, 0)
+light_energy = 1.2
+shadow_enabled = true
+
+[node name="Env" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_world")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+position = Vector3(0, 6000, 0)
+rotation_degrees = Vector3(-15, 0, 0)
+fov = 63
+far = 80000.0
+current = true
+script = ExtResource("1_fly")
