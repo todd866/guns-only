@@ -37,6 +37,9 @@ func _ready() -> void:
 	inp.beat_selected.connect(func(i): current_beat = i; bridge.StartBeat(i); _set_beat_visuals(i))
 	inp.kio_requested.connect(func(): bridge.StartBeat(current_beat))
 	inp.variant_toggled.connect(func(): bridge.SetVariant(1 - bridge.GetVariant()))
+	var hud_root := get_node_or_null("HUD/Root")
+	if hud_root != null:
+		inp.legend_toggled.connect(hud_root.toggle_legend)
 
 	_sky_mat = env_node.environment.sky.sky_material as ShaderMaterial
 	_sea_mat = sea.mesh.material as ShaderMaterial

@@ -25,6 +25,9 @@ const TIER_COLORS := [COL_GREY, COL_GREEN, COL_GREEN, COL_AMBER]
 const PROMPTS := ["", "PULL ↓", "EASE ↑", "UNLOAD ↑", "◀ ROLL", "ROLL ▶"]
 
 var draw_count := 0
+# Shown BY DEFAULT: the game was undiscoverable — you could not find padlock, the guns, the
+# override or the mission select without being told, and being told is not a UX. H dismisses it.
+var show_legend := true
 var f: Font
 
 
@@ -498,6 +501,9 @@ func _draw() -> void:
 		_draw_gun_reticle(hud, c)
 	_draw_boresight_cue(screen_c, sz, c, nose_ahead)
 	_draw_sa_bar(hud, sz)
+	_draw_mode_flags(sz)
+	if show_legend:
+		_draw_legend(sz)
 	_draw_td_box(hud, sz, screen_c)
 	_draw_tapes(hud, sz)
 	_draw_heading_tape(hud, sz)
@@ -511,6 +517,65 @@ func _draw() -> void:
 # Where is the nose? The descendant of Falcon 4's SA bar: once the gimbal is slewed far enough
 # that the flight symbology has left the frame, you still need to know where the airframe is
 # pointing relative to your line of sight. Silent while looking straight ahead.
+func toggle_legend() -> void:
+	show_legend = not show_legend
+
+
+# Persistent state flags: modes you can be IN must be visible, or you cannot tell whether the
+# key you pressed did anything. PADLOCK was fully implemented, bound to V, and invisible —
+# so it read as "needs a padlock mode".
+func _draw_mode_flags(sz: Vector2) -> void:
+	var x := 30.0
+	var y := sz.y * 0.12
+	var on: bool = cam != null and cam.get("padlock_on") == true
+	var txt := "PADLOCK" if on else "padlock  V"
+	draw_string(f, Vector2(x, y), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, COL_AMBER if on else COL_GREEN_DIM)
+	draw_string(f, Vector2(x, y + 18), "H  controls", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, COL_GREEN_DIM)
+
+
+func _draw_legend(sz: Vector2) -> void:
+	var rows := [
+		["FLY", ""],
+		["  DOWN / UP", "pull  /  push"],
+		["  LEFT / RIGHT", "roll"],
+		["  A / D", "rudder"],
+		["  W / S", "throttle"],
+		["  SPACE", "override — max G, can depart"],
+		["FIGHT", ""],
+		["  F", "guns"],
+		["  V", "padlock sensor on bandit"],
+		["  drag", "look around (trackpad)"],
+		["MISSION", ""],
+		["  1 2 3 4", "perch / break / saddle / balloon strike"],
+		["  R", "restart    K  knock it off"],
+		["  F1", "A / B valley variant"],
+		["", ""],
+		["  H", "hide this"],
+	]
+	var pad := 16.0
+	var lh := 17.0
+	var w := 340.0
+	var h := rows.size() * lh + pad * 2 + 10.0
+	# CENTRED overlay with a dimmed backdrop, not a corner panel: at x=24 it sat straight on
+	# top of the speed tape (x=0.155*w). A help card you have to read THROUGH the HUD is not help.
+	var x := sz.x * 0.5 - w * 0.5
+	var y := sz.y * 0.5 - h * 0.5
+	draw_rect(Rect2(0, 0, sz.x, sz.y), Color(0, 0, 0, 0.55), true)
+	draw_rect(Rect2(x, y, w, h), Color(0, 0, 0, 0.75), true)
+	draw_rect(Rect2(x, y, w, h), COL_GREEN_DIM, false, 1.0)
+	_draw_centered(Vector2(sz.x * 0.5, y + pad + 4.0), "GUNS ONLY — CONTROLS", 14, COL_AMBER)
+	var ty := y + pad + 26.0
+	for r in rows:
+		var key: String = r[0]
+		var desc: String = r[1]
+		if desc == "" and key != "":
+			draw_string(f, Vector2(x + pad, ty), key, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, COL_AMBER)
+		else:
+			draw_string(f, Vector2(x + pad, ty), key, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, COL_GREEN)
+			draw_string(f, Vector2(x + pad + 110.0, ty), desc, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, COL_GREEN_DIM)
+		ty += lh
+
+
 # ---------------------------------------------------------------------------
 # SA BAR — descendant of Falcon 4.0's, which is the thing the author named in the very first
 # conversation ("padlock view and the SA panel"). Falcon's answer to the flat-screen problem:

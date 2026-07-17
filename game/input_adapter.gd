@@ -17,6 +17,7 @@ signal restart_requested
 signal beat_selected(index: int)
 signal variant_toggled
 signal kio_requested
+signal legend_toggled
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey): return
@@ -25,6 +26,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var code: int = key_event.keycode
 	var pressed: bool = key_event.pressed
 	if code == KEY_F1 and pressed: variant_toggled.emit(); return
+	if code == KEY_H and pressed: legend_toggled.emit(); return
 	if code in [KEY_1, KEY_2, KEY_3, KEY_4] and pressed:
 		beat_selected.emit(code - KEY_1 + 1); return
 	if MAP.has(code):
