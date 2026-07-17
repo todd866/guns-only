@@ -1277,9 +1277,15 @@ func _process(delta: float) -> void:
     var gun: Array = bridge.GetCameraPose(2)
     var pos: Vector3 = (man[0] as Vector3).lerp(gun[0], gun_blend)
     var tgt: Vector3 = (man[1] as Vector3).lerp(gun[1], gun_blend)
-    var up: Vector3 = ((man[2] as Vector3).lerp(gun[2], gun_blend)).normalized()
     global_position = global_position.lerp(pos, 0.12)
-    look_at(tgt, up)
+    # Blended up vectors can oppose near vertical (review finding): re-project the blend
+    # against the ACTUAL post-smoothing view direction, north fallback if degenerate.
+    var view := (tgt - global_position).normalized()
+    var up_raw: Vector3 = (man[2] as Vector3).lerp(gun[2], gun_blend)
+    var up := up_raw - view * up_raw.dot(view)
+    if up.length() < 0.05:
+        up = Vector3(0, 0, -1) - view * view.dot(Vector3(0, 0, -1))
+    look_at(tgt, up.normalized())
 ```
 - [ ] **Step 3: Wire in main** — replace ChaseCam node with `CameraRig (Camera3D)` using `camera_rig.gd`; add `InputAdapter (Node)`; update `main.gd`:
 ```gdscript
