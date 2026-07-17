@@ -1,0 +1,17 @@
+{
+  "name": "perch_pull",
+  "beat": 1,
+  "variant": 0,
+  "duration_s": 20.0,
+  "events": [
+    {"t": 1.0, "key": 3, "pressed": true},
+    {"t": 1.1, "key": 3, "pressed": false},
+    {"t": 1.5, "key": 0, "pressed": true},
+    {"t": 12.0, "key": 0, "pressed": false},
+    {"t": 13.0, "key": 2, "pressed": true},
+    {"t": 13.1, "key": 2, "pressed": false},
+    {"t": 14.0, "key": 2, "pressed": true},
+    {"t": 14.1, "key": 2, "pressed": false}
+  ],
+  "notes": "Perch attack: a single RollRight tap at t=1 (adopt the advice bank), then a long PullUp hold from t=1.5 to t=12 -- g_cmd should climb well above 1.0 for the duration of the hold -- followed by two quick RollLeft correction taps at t=13/t=14."
+}

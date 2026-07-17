@@ -1,0 +1,13 @@
+{
+  "name": "overdemand",
+  "beat": 1,
+  "variant": 0,
+  "duration_s": 12.0,
+  "events": [
+    {"t": 1.0, "key": 0, "pressed": true},
+    {"t": 1.12, "key": 0, "pressed": false},
+    {"t": 1.30, "key": 0, "pressed": true},
+    {"t": 8.0, "key": 0, "pressed": false}
+  ],
+  "notes": "Double-tap-hold: PullUp pressed at t=1.0, released at t=1.12 (120ms), re-pressed at t=1.30 (well within a 200ms re-press window) and held to t=8.0. Exercises the overdemand/buffet detent path -- a deliberate demand, not an accidental tap."
+}

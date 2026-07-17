@@ -16,3 +16,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	player.global_transform = bridge.GetPlayerTransform()
 	bandit.global_transform = bridge.GetBanditTransform()
+	# Smart scaling (spec §8): render the distant bandit larger-than-life so tally
+	# distances match human eyes rather than pixels. 1:1 inside 250 m, up to 6x far out.
+	var rng: float = bridge.GetHud()["range_m"]
+	bandit.scale = Vector3.ONE * clampf(rng / 250.0, 1.0, 6.0)

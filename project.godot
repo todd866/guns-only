@@ -6,6 +6,9 @@ config/name="Guns Only"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 run/main_scene="res://game/main.tscn"
 
+[autoload]
+Rig="*res://testrig/rig.gd"
+
 [dotnet]
 project/assembly_name="GunsOnly"
 

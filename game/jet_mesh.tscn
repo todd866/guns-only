@@ -1,25 +1,37 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
-albedo_color = Color(0.784314, 0.8, 0.815686, 1)
+albedo_color = Color(0.78, 0.79, 0.82, 1)
+metallic = 0.55
+roughness = 0.35
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_canopy"]
+albedo_color = Color(0.08, 0.1, 0.12, 1)
+metallic = 0.3
+roughness = 0.15
 
 [node name="Jet" type="Node3D"]
 
 [node name="Fuselage" type="CSGBox3D" parent="."]
-size = Vector3(1, 1, 8)
+size = Vector3(1.3, 1.3, 11)
 material = SubResource("StandardMaterial3D_body")
 
+[node name="Canopy" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, -2.2)
+size = Vector3(0.9, 0.55, 2.2)
+material = SubResource("StandardMaterial3D_canopy")
+
 [node name="Wing" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.5)
-size = Vector3(8, 0.15, 1.8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.4)
+size = Vector3(11.3, 0.18, 2.4)
 material = SubResource("StandardMaterial3D_body")
 
 [node name="Tail" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3.4)
-size = Vector3(3, 0.15, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4.6)
+size = Vector3(4.2, 0.16, 1.3)
 material = SubResource("StandardMaterial3D_body")
 
 [node name="Fin" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 3.4)
-size = Vector3(0.15, 1.2, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 4.6)
+size = Vector3(0.16, 1.7, 1.4)
 material = SubResource("StandardMaterial3D_body")

@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="PackedScene" path="res://game/jet_mesh.tscn" id="1_jetmesh"]
 [ext_resource type="Script" path="res://game/main.gd" id="2_maingd"]
@@ -6,22 +6,43 @@
 [ext_resource type="Script" path="res://game/camera_rig.gd" id="4_camerarig"]
 [ext_resource type="Script" path="res://game/input_adapter.gd" id="5_inputadapter"]
 [ext_resource type="Script" path="res://game/hud.gd" id="6_hud"]
+[ext_resource type="Shader" path="res://game/sea.gdshader" id="7_seashader"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sea"]
-albedo_color = Color(0.105882, 0.227451, 0.290196, 1)
-metallic = 0.1
-roughness = 0.35
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_sea"]
+noise_type = 3
+frequency = 0.008
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_sea"]
+width = 512
+height = 512
+seamless = true
+noise = SubResource("FastNoiseLite_sea")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_sea"]
+shader = ExtResource("7_seashader")
+shader_parameter/noise_tex = SubResource("NoiseTexture2D_sea")
+shader_parameter/deep_color = Color(0.035, 0.115, 0.185, 1)
+shader_parameter/lite_color = Color(0.1, 0.28, 0.36, 1)
+shader_parameter/foam_color = Color(0.58, 0.65, 0.68, 1)
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_sea"]
-material = SubResource("StandardMaterial3D_sea")
+material = SubResource("ShaderMaterial_sea")
 size = Vector2(60000, 60000)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bandit"]
-albedo_color = Color(0.478431, 0.12549, 0.12549, 1)
+albedo_color = Color(0.72, 0.13, 0.1, 1)
+metallic = 0.35
+roughness = 0.4
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
-sky_top_color = Color(0.227451, 0.431373, 0.647059, 1)
-sky_horizon_color = Color(0.721569, 0.776471, 0.8, 1)
+sky_top_color = Color(0.13, 0.3, 0.56, 1)
+sky_horizon_color = Color(0.82, 0.86, 0.88, 1)
+sky_curve = 0.12
+ground_bottom_color = Color(0.05, 0.13, 0.2, 1)
+ground_horizon_color = Color(0.78, 0.83, 0.85, 1)
+sun_angle_max = 30.0
+sun_curve = 0.08
 
 [sub_resource type="Sky" id="Sky_env"]
 sky_material = SubResource("ProceduralSkyMaterial_sky")
@@ -29,9 +50,11 @@ sky_material = SubResource("ProceduralSkyMaterial_sky")
 [sub_resource type="Environment" id="Environment_world"]
 background_mode = 2
 sky = SubResource("Sky_env")
+tonemap_mode = 2
 fog_enabled = true
-fog_density = 0.00012
-fog_aerial_perspective = 0.6
+fog_density = 2e-05
+fog_aerial_perspective = 0.25
+fog_sky_affect = 0.1
 
 [node name="Main" type="Node3D"]
 script = ExtResource("2_maingd")
@@ -43,8 +66,8 @@ script = ExtResource("3_simbridge")
 mesh = SubResource("PlaneMesh_sea")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
-rotation = Vector3(-0.610865, 0.698132, 0)
-light_energy = 1.2
+rotation = Vector3(-0.42, 0.785, 0)
+light_energy = 1.45
 shadow_enabled = true
 
 [node name="Env" type="WorldEnvironment" parent="."]
@@ -57,6 +80,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3300, 500)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3000, 0)
 
 [node name="Fuselage" parent="BanditJet" index="0"]
+material = SubResource("StandardMaterial3D_bandit")
+
+[node name="Wing" parent="BanditJet" index="2"]
 material = SubResource("StandardMaterial3D_bandit")
 
 [node name="CameraRig" type="Camera3D" parent="."]

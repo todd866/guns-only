@@ -1,0 +1,21 @@
+{
+  "name": "beat3_saddle",
+  "beat": 3,
+  "variant": 0,
+  "duration_s": 25.0,
+  "events": [
+    {"t": 1.0, "key": 0, "pressed": true},
+    {"t": 6.0, "key": 8, "pressed": true},
+    {"t": 6.2, "key": 8, "pressed": false},
+    {"t": 7.2, "key": 8, "pressed": true},
+    {"t": 7.4, "key": 8, "pressed": false},
+    {"t": 8.4, "key": 8, "pressed": true},
+    {"t": 8.6, "key": 8, "pressed": false},
+    {"t": 9.6, "key": 8, "pressed": true},
+    {"t": 9.8, "key": 8, "pressed": false},
+    {"t": 10.8, "key": 8, "pressed": true},
+    {"t": 11.0, "key": 8, "pressed": false},
+    {"t": 15.0, "key": 0, "pressed": false}
+  ],
+  "notes": "Saddle + shot: PullUp held from t=1.0 to close the saddle, five Trigger taps between t=6.0 and t=11.0 to exercise the dry-fire shots_total/shots_in_window tally, pull released at t=15.0."
+}

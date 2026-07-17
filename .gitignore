@@ -6,3 +6,4 @@ bin/obj-*
 **/bin/Debug/
 **/bin/Release/
 *.tsbuildinfo
+testrig/out/

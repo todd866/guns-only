@@ -21,31 +21,41 @@ public static class CameraSolver {
         if (mode == CameraMode.Gun) {
             var fwd = own.ForwardDir();
             var upG = SafeUp(fwd);
-            var pos = own.Position - fwd * 9 + upG * 2.5;
+            var pos = own.Position - fwd * 7 + upG * 2.0;
             var lookAt = own.Position + fwd * 200;
             return new CameraPose(pos, lookAt, SafeUp((lookAt - pos).Normalized()));
         }
-        // Maneuver: behind own ship, biased opposite the bandit; aim along the BISECTOR of the
-        // camera->own and camera->bandit rays; back the camera out until both fit the cone.
+        // Maneuver: camera sits close behind own ship, nearly ON the own->bandit line
+        // (opposite the bandit), so both targets are near-collinear and framing is trivial
+        // at chase distance — own ship anchors the frame, the bandit sits beyond it.
+        // A slight up-bias keeps the horizon in frame for attitude context. The back-out
+        // loop remains only as a last-resort safety for degenerate geometry.
         var los = bandit.Position - own.Position;
         var losDir = los.Length < 1e-6 ? own.ForwardDir() : los.Normalized();
-        var back = own.ForwardDir() * 0.35 + losDir * 0.65;
+        var back = own.ForwardDir() * 0.15 + losDir * 0.85;
         var backDir = back.Length < 1e-6 ? own.ForwardDir() : back.Normalized();
-        double dist = 26;
+        // Flatten: keep the camera near the player's horizon plane instead of climbing a
+        // steep LOS (a camera on a steep LOS looks straight DOWN through the jet: top-down
+        // plan view, bandit occluded, no horizon — rig finding).
+        var flat = new Vec3D(backDir.X, backDir.Y * 0.35, backDir.Z);
+        if (flat.Length > 1e-6) backDir = flat.Normalized();
+        double dist = 18;  // close chase: an 11 m jet should command the frame
         for (int i = 0; i < 6; i++) {
-            var camPos = own.Position - backDir * dist + new Vec3D(0, 1, 0) * (dist * 0.27);
+            var camPos = own.Position - backDir * dist + new Vec3D(0, 1, 0) * (dist * 0.20);
             var toOwn = (own.Position - camPos).Normalized();
             var toBandit = (bandit.Position - camPos).Normalized();
             double sep = System.Math.Acos(System.Math.Clamp(toOwn.Dot(toBandit), -1, 1));
             if (sep <= 1.02) {                                   // both fit 0.55 rad half-cone with margin
                 var aim = toOwn + toBandit;
                 var aimDir = aim.Length < 1e-6 ? toOwn : aim.Normalized();
+                double slack = 1.02 - sep;                        // spend spare cone on horizon context
+                aimDir = (aimDir + new Vec3D(0, 1, 0) * System.Math.Min(0.12, slack * 0.25)).Normalized();
                 var lookAt = camPos + aimDir * System.Math.Max(los.Length, 50);
                 return new CameraPose(camPos, lookAt, SafeUp(aimDir));
             }
             dist *= 1.6;                                         // back out and retry
         }
-        var camPosF = own.Position - backDir * dist + new Vec3D(0, 1, 0) * (dist * 0.27);
+        var camPosF = own.Position - backDir * dist + new Vec3D(0, 1, 0) * (dist * 0.20);
         var aimF = (own.Position - camPosF).Normalized() + (bandit.Position - camPosF).Normalized();
         var aimDirF = aimF.Length < 1e-6 ? (own.Position - camPosF).Normalized() : aimF.Normalized();
         return new CameraPose(camPosF, camPosF + aimDirF * 100, SafeUp(aimDirF));
