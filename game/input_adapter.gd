@@ -12,6 +12,7 @@ signal padlock_toggled
 signal restart_requested
 signal beat_selected(index: int)
 signal variant_toggled
+signal kio_requested
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey): return
@@ -27,4 +28,5 @@ func _unhandled_input(event: InputEvent) -> void:
 		bridge.FeedKey(g, pressed)  # bridge stamps sim time: one monotonic clock for all grammar events
 		if g == 8: bridge.Trigger(pressed)
 		if g == 9 and pressed: padlock_toggled.emit()
+		if g == 10 and pressed: kio_requested.emit()
 		if g == 11 and pressed: restart_requested.emit()

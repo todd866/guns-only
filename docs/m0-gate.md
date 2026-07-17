@@ -8,6 +8,7 @@ Fly each beat (1 Perch, 2 Break, 3 Saddle) in BOTH variants (F1). Answer honestl
 - [ ] Double-tap-hold into buffet feels like a deliberate demand, not an accident. False-trigger rate acceptable?
 - [ ] Quantized roll taps put the lift vector where your eyes already were.
 - [ ] Release-to-settle never fights an input you meant to keep.
+- [ ] Variant B shows a standing EASE cue while you deliberately ride max-perform (doctrine coaching by design) — does it read as helpful coaching or as nagging? Note the answer; it feeds the A/B call.
 - [ ] Verdict: variant A / variant B / a hybrid / redesign (spec §15.1 fallbacks).
 
 ## Camera & views

@@ -8,10 +8,19 @@ func _initialize() -> void:
     for i in range(600):          # ~10 s of physics at 60 Hz callbacks
         bridge._PhysicsProcess(1.0 / 60.0)
     var hud = bridge.GetHud()
-    assert(hud["g_cmd"] > 1.5, "pull hold should raise commanded G")
-    assert(hud["speed_kts"] > 100.0, "aircraft should still be flying")
+    if not (hud["g_cmd"] > 1.5):
+        push_error("pull hold should raise commanded G")
+        quit(1)
+        return
+    if not (hud["speed_kts"] > 100.0):
+        push_error("aircraft should still be flying")
+        quit(1)
+        return
     var t: Transform3D = bridge.GetPlayerTransform()
-    assert(t.origin.length() > 100.0, "aircraft should have moved")
+    if not (t.origin.length() > 100.0):
+        push_error("aircraft should have moved")
+        quit(1)
+        return
     print("SMOKE OK  gcmd=%.2f speed=%.0f" % [hud["g_cmd"], hud["speed_kts"]])
 
     # Roll direction: hold roll-right, northbound jet's right wing must drop (basis.x.y < 0)
@@ -21,13 +30,19 @@ func _initialize() -> void:
     for i in range(36):
         bridge._PhysicsProcess(1.0 / 60.0)
     var rt: Transform3D = bridge.GetPlayerTransform()
-    assert(rt.basis.x.y < -0.2, "positive bank must render as RIGHT roll (right wing down), got basis.x.y=%f" % rt.basis.x.y)
+    if not (rt.basis.x.y < -0.2):
+        push_error("positive bank must render as RIGHT roll (right wing down), got basis.x.y=%f" % rt.basis.x.y)
+        quit(1)
+        return
     bridge.FeedKey(3, false)
     # Clean restart epoch: no stale input influences the new beat
     bridge.StartBeat(1)
     for i in range(240):
         bridge._PhysicsProcess(1.0 / 60.0)
     var hud2 = bridge.GetHud()
-    assert(abs(hud2["g_cmd"] - 1.0) < 0.3, "fresh beat must fly baseline, got g_cmd=%f" % hud2["g_cmd"])
+    if not (abs(hud2["g_cmd"] - 1.0) < 0.3):
+        push_error("fresh beat must fly baseline, got g_cmd=%f" % hud2["g_cmd"])
+        quit(1)
+        return
     print("SMOKE OK 2: roll direction + clean epoch")
     quit(0)

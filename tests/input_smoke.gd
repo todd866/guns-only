@@ -12,10 +12,11 @@ extends SceneTree
 var bridge
 var hud_root: Control
 var t0_ms := 0
-var phase := 0          # 0 = hold pull-up, 1 = beat switch (key 2), 2 = variant toggle (F1), 3 = HUD redraw settle
+var phase := 0          # 0 = hold pull-up, 1 = beat switch (key 2), 2 = R-retry beat (beat 2 should persist), 3 = variant toggle (F1), 4 = HUD redraw settle
 var variant_before := -1
 var hud_frames := 0
 var hud_checked := false
+var r_restart_sent := false
 
 func _initialize() -> void:
 	var packed: PackedScene = load("res://game/main.tscn")
@@ -66,23 +67,34 @@ func _process(_delta: float) -> bool:
 	elif phase == 1:
 		if hud["beat"] == "Break defense":
 			print("PASS (b): key 2 switched beat to '%s'" % hud["beat"])
-			variant_before = hud["variant"]
-			_send_key(KEY_F1, true)
-			_send_key(KEY_F1, false)
 			phase = 2
 		elif elapsed > 4.0:
 			return _fail("key 2 should switch beat to 'Break defense', got '%s'" % hud["beat"])
 	elif phase == 2:
+		if not r_restart_sent and elapsed > 5.0:
+			_send_key(KEY_R, true)
+			_send_key(KEY_R, false)
+			r_restart_sent = true
+		elif r_restart_sent and elapsed > 6.0:
+			if hud["beat"] == "Break defense":
+				print("PASS (b2): R restarted current beat 2, beat still '%s'" % hud["beat"])
+				variant_before = hud["variant"]
+				_send_key(KEY_F1, true)
+				_send_key(KEY_F1, false)
+				phase = 3
+			else:
+				return _fail("R should restart beat 2, got beat '%s'" % hud["beat"])
+	elif phase == 3:
 		if hud["variant"] != variant_before:
 			print("PASS (c): F1 toggled variant %d -> %d" % [variant_before, hud["variant"]])
-			phase = 3
-		elif elapsed > 6.0:
+			phase = 4
+		elif elapsed > 8.0:
 			return _fail("F1 should toggle variant away from %d, still %d" % [variant_before, hud["variant"]])
-	elif phase == 3:
+	elif phase == 4:
 		if hud_checked:
 			print("INPUT SMOKE OK")
 			quit(0)
 			return true
-		elif elapsed > 8.0:
-			return _fail("HUD queue_redraw did not complete 60 clean frames within 8s")
+		elif elapsed > 10.0:
+			return _fail("HUD queue_redraw did not complete 60 clean frames within 10s")
 	return false
