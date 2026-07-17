@@ -5,6 +5,10 @@ public sealed class AircraftSim {
     public AircraftState State { get; private set; }
     public double LastNz { get; private set; } = 1.0;
     public bool Buffet { get; private set; }
+    /// The physical lift direction (canopy direction): the transported zero-bank reference
+    /// rotated by body roll. Render-true through verticals — use this for attitude
+    /// reconstruction instead of world-up (which snaps 180 degrees at loop apex).
+    public Vec3D LiftDir { get; private set; } = new(0, 1, 0);
     readonly AircraftParams _p;
     Vec3D _liftRef;          // zero-bank lift reference, kept perpendicular to velocity, transported through verticals
     double _bank;            // roll about the velocity axis, relative to _liftRef
@@ -19,6 +23,7 @@ public sealed class AircraftSim {
         var refH = up - vhat * up.Dot(vhat);
         _liftRef = refH.Length < 1e-6 ? new Vec3D(0, 0, -1) : refH.Normalized();
         _bank = State.Bank; _reportedBank = State.Bank; _init = true;
+        LiftDir = ComputeLiftDir(vhat);
     }
 
     public void Step(in PilotCommand cmd, double dt) {
@@ -66,6 +71,13 @@ public sealed class AircraftSim {
         var (nz, nzMax, nzMin) = FlightModel.ClampNz(State, cmd, _p);
         LastNz = nz;
         Buffet = cmd.GDemand > 0.85 * nzMax || cmd.GDemand < 0.85 * nzMin;
+        LiftDir = ComputeLiftDir(vhat);
+    }
+
+    Vec3D ComputeLiftDir(in Vec3D vhat) {
+        var rightRef = _liftRef.Cross(vhat);
+        var right = rightRef.Length < 1e-6 ? new Vec3D(1, 0, 0) : rightRef.Normalized();
+        return (_liftRef * System.Math.Cos(_bank) + right * System.Math.Sin(_bank)).Normalized();
     }
 
     static Vec3D FallbackRef(in Vec3D vhat) {

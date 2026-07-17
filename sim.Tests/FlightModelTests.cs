@@ -138,6 +138,14 @@ public class FlightModelTests {
         // — comfortably under the chatter bound, and stable rather than a wide range of outcomes.
         Assert.Equal(5, signChanges);
     }
+    [Fact] public void LiftDirTracksBank() {
+        var sim = new AircraftSim(Level(), FlightModel.Sabre);
+        var roll = new PilotCommand(1.0, 0.7854, 0.85, 0.0);
+        for (int i = 0; i < 360; i++) sim.Step(roll, 1.0/AircraftSim.TickHz);
+        Assert.True(sim.LiftDir.X > 0.5, $"northbound right bank must tilt lift east (X>0), got {sim.LiftDir.X:F2}");
+        Assert.True(sim.LiftDir.Y > 0.5);
+        Assert.Equal(0.0, sim.LiftDir.Dot(sim.State.VelocityVector().Normalized()), 6);
+    }
     [Fact] public void BankErrorWrapsShortestWay() {
         // From +3.10 rad toward advice -3.10 rad: shortest way is CONTINUING right through pi
         // (wrapped error +0.083 rad), not a near-full left roll.

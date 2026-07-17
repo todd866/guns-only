@@ -9,6 +9,7 @@ public sealed class RailBandit {
     int _active;
     public double T { get; private set; }
     public AircraftState State => _sim.State;
+    public Vec3D LiftDir => _sim.LiftDir;
     public RailBandit(AircraftState initial, AircraftParams p, System.Collections.Generic.List<(double, PilotCommand)> timeline) {
         if (timeline is null || timeline.Count == 0) throw new System.ArgumentException("timeline must be non-empty");
         if (timeline[0].Item1 != 0.0) throw new System.ArgumentException("timeline must start at T=0");

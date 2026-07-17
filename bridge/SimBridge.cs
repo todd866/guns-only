@@ -8,9 +8,9 @@ public partial class SimBridge : Node {
     AircraftSim _player = null!;
     RailBandit _bandit = null!;
     BeatSetup _beat = null!;
-    readonly KeyGrammar _keys = new();
-    readonly DetentLayer _detents = new();
-    readonly PromptTracker _prompts = new();
+    KeyGrammar _keys = null!;
+    DetentLayer _detents = null!;
+    PromptTracker _prompts = null!;
     PromptCue _cue;
     DoctrineAdvice _advice = new(1.0, 0.0, "free");
     double _acc, _simTimeMs;
@@ -21,12 +21,20 @@ public partial class SimBridge : Node {
     public override void _Ready() => StartBeat(1);
 
     public void StartBeat(int index) {
+        var variant = _detents?.Variant ?? ValleyVariant.DoctrineDeep;
         _beat = index switch { 2 => Beats.BreakDefense(), 3 => Beats.Saddle(), _ => Beats.Perch() };
         _player = new AircraftSim(_beat.Player, FlightModel.Sabre);
         _bandit = new RailBandit(_beat.Bandit, FlightModel.Sabre, _beat.BanditTimeline);
-        _simTimeMs = 0; _acc = 0; _shotsInWindow = 0; _shotsTotal = 0;
+        _keys = new KeyGrammar();
+        _detents = new DetentLayer { Variant = variant };
+        _prompts = new PromptTracker();
+        _advice = new DoctrineAdvice(1.0, 0.0, "setup");
+        _cue = PromptCue.None;
+        _triggerDown = false;
+        _acc = 0; _shotsInWindow = 0; _shotsTotal = 0;
+        // _simTimeMs deliberately NOT reset: one monotonic clock for grammar timestamps across beats.
     }
-    public void FeedKey(int gkey, bool pressed, double timeMs) => _keys.Feed((GKey)gkey, pressed, _simTimeMs);
+    public void FeedKey(int gkey, bool pressed) => _keys.Feed((GKey)gkey, pressed, _simTimeMs);
     public void SetVariant(int v) => _detents.Variant = v == 1 ? ValleyVariant.PhysicsOnly : ValleyVariant.DoctrineDeep;
     public int GetVariant() => _detents.Variant == ValleyVariant.PhysicsOnly ? 1 : 0;
     public void Trigger(bool down) {
@@ -35,7 +43,7 @@ public partial class SimBridge : Node {
     }
 
     public override void _PhysicsProcess(double delta) {
-        _acc += delta;
+        _acc = System.Math.Min(_acc + delta, 0.25); // cap catch-up: a suspended app must not replay minutes of sim
         while (_acc >= Dt) {
             _advice = _beat.Law.Advise(_player.State, _bandit.State, FlightModel.Sabre);
             _detents.Tick(_keys, _simTimeMs, _player.State, FlightModel.Sabre, _advice, Dt);
@@ -46,15 +54,20 @@ public partial class SimBridge : Node {
         }
     }
 
-    static Transform3D ToGodot(in AircraftState s) {
+    static Transform3D ToGodot(in AircraftState s, in GunsOnly.Sim.Vec3D liftDir) {
         var origin = new Vector3((float)s.Position.X, (float)s.Position.Y, (float)(-s.Position.Z));
         var fwdSim = s.ForwardDir();
-        var fwd = new Vector3((float)fwdSim.X, (float)fwdSim.Y, (float)(-fwdSim.Z));
-        var basis = Basis.LookingAt(fwd, Vector3.Up).Rotated(fwd, (float)(-s.Bank));
-        return new Transform3D(basis, origin);
+        var fwd = new Vector3((float)fwdSim.X, (float)fwdSim.Y, (float)(-fwdSim.Z)).Normalized();
+        var up = new Vector3((float)liftDir.X, (float)liftDir.Y, (float)(-liftDir.Z)).Normalized();
+        // Basis built directly from the kernel's frame: no world-up reconstruction, no bank
+        // rotation, no sign conventions to mirror (review finding: the old path rendered
+        // every roll backwards and snapped 180 deg at loop apex).
+        var zAxis = -fwd;                          // Godot forward = -Z
+        var xAxis = up.Cross(zAxis).Normalized();  // right-handed: x = y cross z
+        return new Transform3D(new Basis(xAxis, up, zAxis), origin);
     }
-    public Transform3D GetPlayerTransform() => ToGodot(_player.State);
-    public Transform3D GetBanditTransform() => ToGodot(_bandit.State);
+    public Transform3D GetPlayerTransform() => ToGodot(_player.State, _player.LiftDir);
+    public Transform3D GetBanditTransform() => ToGodot(_bandit.State, _bandit.LiftDir);
 
     public Godot.Collections.Dictionary GetHud() {
         var s = _player.State;
