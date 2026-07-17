@@ -1041,7 +1041,7 @@ public static class CameraSolver {
 
 **Interfaces:**
 - Consumes: everything in `sim/`.
-- Produces (called from GDScript): Godot `Node` class `SimBridge` with: `void StartBeat(int index)` (1=Perch, 2=BreakDefense, 3=Saddle); `void FeedKey(int gkey, bool pressed, double timeMs)`; `void SetVariant(int v)` (0 doctrine-deep / 1 physics-only); `int GetVariant()`; `Transform3D GetPlayerTransform()`, `Transform3D GetBanditTransform()` (sim→Godot frame: `(x, y, -z)`, orientation from γ/χ/φ); `Godot.Collections.Dictionary GetHud()` with keys: `speed_kts, alt_ft, g_actual, g_cmd, g_valley, g_maxperform, g_hardmax, sticky, tier (int), variant (int), buffet (bool), prompt (int), context (String), angle_off_deg, range_m, gun_window (bool), beat (String)`; `void Trigger(bool down)` (dry — logs shot events with in-window flag); fixed 120 Hz stepping accumulated in `_PhysicsProcess`.
+- Produces (called from GDScript): Godot `Node` class `SimBridge` with: `void StartBeat(int index)` (1=Perch, 2=BreakDefense, 3=Saddle); `void FeedKey(int gkey, bool pressed)` (bridge stamps sim time — mixing wall clocks with the grammar's sim-time epoch was a review finding); `void SetVariant(int v)` (0 doctrine-deep / 1 physics-only); `int GetVariant()`; `Transform3D GetPlayerTransform()`, `Transform3D GetBanditTransform()` (sim→Godot frame: `(x, y, -z)`, orientation from γ/χ/φ); `Godot.Collections.Dictionary GetHud()` with keys: `speed_kts, alt_ft, g_actual, g_cmd, g_valley, g_maxperform, g_hardmax, sticky, tier (int), variant (int), buffet (bool), prompt (int), context (String), angle_off_deg, range_m, gun_window (bool), beat (String)`; `void Trigger(bool down)` (dry — logs shot events with in-window flag); fixed 120 Hz stepping accumulated in `_PhysicsProcess`.
 
 - [ ] **Step 1: Implement** — `bridge/SimBridge.cs`:
 ```csharp
@@ -1239,7 +1239,7 @@ func _unhandled_input(event: InputEvent) -> void:
             beat_selected.emit(code - KEY_1 + 1); return
         if MAP.has(code):
             var g: int = MAP[code]
-            bridge.FeedKey(g, event.pressed, Time.get_ticks_msec())
+            bridge.FeedKey(g, event.pressed)  # bridge stamps sim time: one monotonic clock for all grammar events
             if g == 8: bridge.Trigger(event.pressed)
             if g == 9 and event.pressed: padlock_toggled.emit()
             if g == 11 and event.pressed: restart_requested.emit()
