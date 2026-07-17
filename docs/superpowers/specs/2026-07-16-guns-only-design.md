@@ -117,7 +117,7 @@ The component that knows *the textbook move*. Review exposed two missing pieces 
 
 | Input | Function | Grammar |
 |---|---|---|
-| **↑** | **Pull** | hold = valley G · **taps move a sticky demand offset** (sustained legal off-valley G is first-class: tap up twice and hold = hold that higher G) · hold at max-perform rides the protection boundary · **double-tap-hold = demand past protection** (buffet → departure if you insist) · release = settle back to valley |
+| **↑** | **Pull** | hold = valley G · **while holding, ↓-taps ease in −0.5G sticky steps** (release-and-recommit to undo) · **double-tap-hold = demand past protection** (buffet → departure if you insist) · release = settle back to baseline. *Positive off-valley modulation is deliberately absent in variant A — review-proven impossible on one key, since tap-tap-hold is already the over-demand gesture; variant B covers the upward range by riding max-perform and easing down. This asymmetry is itself an A/B feel-gate question.* |
 | **↓** | **Unload** | hold = ~0G · double-tap-hold = push negative (guns-defense jink) |
 | **← / →** | **Roll** | tap = intent-quantized roll (lift vector on / deliberately past the bandit; at a surfaced fork, roll direction = fork commitment) · hold = continuous |
 | **A / D** | Rudder | coordination reflex untouched; manual for guns defense, scissors, spin recovery |
