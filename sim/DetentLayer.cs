@@ -1,0 +1,55 @@
+using GunsOnly.Sim.Doctrine;
+namespace GunsOnly.Sim;
+public enum ValleyVariant { DoctrineDeep, PhysicsOnly }
+
+public sealed class DetentLayer {
+    public ValleyVariant Variant = ValleyVariant.DoctrineDeep;
+    public PilotCommand Command { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
+    public double StickyOffsetG { get; private set; }
+    public DemandTier Tier { get; private set; } = DemandTier.Baseline;
+    public double ValleyG { get; private set; } = 1.0;
+    public double ValleyBank { get; private set; }
+    public double Throttle { get; private set; } = 0.85;
+
+    static readonly double[] ThrottleDetents = { 0.0, 0.55, 0.85, 1.0 };
+    int _throttleIdx = 2;
+    double _gCmd = 1.0, _bankTarget;
+    const double Tau = 0.22, StickyStepG = 0.5, RollHoldRate = 1.6; // rad/s while roll key held
+
+    public void Tick(KeyGrammar keys, double nowMs, in AircraftState s, in AircraftParams p, DoctrineAdvice advice, double dt) {
+        double maxPerform = Protection.MaxPerformG(s, p);
+        double hardMax = Protection.HardMaxG(s, p);
+        ValleyG = Variant == ValleyVariant.DoctrineDeep ? System.Math.Min(advice.RecommendedG, maxPerform) : maxPerform;
+        ValleyBank = advice.RecommendedBank;
+
+        var pull = keys.PhaseAt(GKey.PullUp, nowMs);
+        var push = keys.PhaseAt(GKey.PushDown, nowMs);
+        int pullTaps = keys.TakeTaps(GKey.PullUp, nowMs), pushTaps = keys.TakeTaps(GKey.PushDown, nowMs);
+
+        double target; DemandTier tier;
+        if (pull == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; StickyOffsetG += (pullTaps - pushTaps) * StickyStepG; target = System.Math.Clamp(hardMax + StickyOffsetG, System.Math.Min(1.0, hardMax), hardMax); }
+        else if (pull != KeyPhase.Idle)  { tier = DemandTier.Valley;     StickyOffsetG += (pullTaps - pushTaps) * StickyStepG; target = System.Math.Clamp(ValleyG + StickyOffsetG, System.Math.Min(1.0, maxPerform), maxPerform); }
+        else if (push == KeyPhase.DoubleHeld) { tier = DemandTier.OverDemand; target = -1.0; }
+        else if (push != KeyPhase.Idle)  { tier = DemandTier.Valley;     target = 0.0; }
+        else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; if (pullTaps > 0) target = System.Math.Min(1.0 + pullTaps * StickyStepG, maxPerform); }
+        Tier = tier;
+        _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
+
+        // Roll: taps adopt the advice bank (quantized intent); holds slew continuously.
+        int rTaps = keys.TakeTaps(GKey.RollRight, nowMs), lTaps = keys.TakeTaps(GKey.RollLeft, nowMs);
+        if (rTaps > 0 || lTaps > 0) _bankTarget = ValleyBank;
+        if (keys.PhaseAt(GKey.RollRight, nowMs) != KeyPhase.Idle) _bankTarget += RollHoldRate * dt;
+        if (keys.PhaseAt(GKey.RollLeft, nowMs) != KeyPhase.Idle)  _bankTarget -= RollHoldRate * dt;
+        _bankTarget = System.Math.Clamp(_bankTarget, -System.Math.PI, System.Math.PI);
+
+        int thUp = keys.TakeTaps(GKey.ThrottleUp, nowMs), thDn = keys.TakeTaps(GKey.ThrottleDown, nowMs);
+        _throttleIdx = System.Math.Clamp(_throttleIdx + thUp - thDn, 0, ThrottleDetents.Length - 1);
+        Throttle = ThrottleDetents[_throttleIdx];
+
+        double rudder = 0;
+        if (keys.PhaseAt(GKey.RudderRight, nowMs) != KeyPhase.Idle) rudder += 0.6;
+        if (keys.PhaseAt(GKey.RudderLeft, nowMs) != KeyPhase.Idle)  rudder -= 0.6;
+
+        Command = new PilotCommand(_gCmd, _bankTarget, Throttle, rudder);
+    }
+}
