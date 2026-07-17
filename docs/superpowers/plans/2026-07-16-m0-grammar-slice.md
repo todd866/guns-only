@@ -1122,12 +1122,15 @@ public partial class SimBridge : Node {
             {"shots_total", _shotsTotal}, {"shots_in_window", _shotsInWindow},
         };
     }
-    // Camera access for the rig (GDScript): returns [pos, lookat] as Vector3 pair for the given mode.
+    // Camera access for the rig (GDScript): returns [pos, lookat, up] for the given mode.
+    // The pose carries its own up vector — Godot look_at forbids view||up, which a fixed
+    // Vector3.UP hits at vertical geometries (review finding).
     public Godot.Collections.Array GetCameraPose(int mode) {
         var pose = CameraSolver.Solve((CameraMode)mode, _player.State, _bandit.State);
         return new Godot.Collections.Array {
             new Vector3((float)pose.Position.X, (float)pose.Position.Y, (float)(-pose.Position.Z)),
             new Vector3((float)pose.LookAt.X, (float)pose.LookAt.Y, (float)(-pose.LookAt.Z)),
+            new Vector3((float)pose.Up.X, (float)pose.Up.Y, (float)(-pose.Up.Z)),
         };
     }
 }
@@ -1274,8 +1277,9 @@ func _process(delta: float) -> void:
     var gun: Array = bridge.GetCameraPose(2)
     var pos: Vector3 = (man[0] as Vector3).lerp(gun[0], gun_blend)
     var tgt: Vector3 = (man[1] as Vector3).lerp(gun[1], gun_blend)
+    var up: Vector3 = ((man[2] as Vector3).lerp(gun[2], gun_blend)).normalized()
     global_position = global_position.lerp(pos, 0.12)
-    look_at(tgt, Vector3.UP)
+    look_at(tgt, up)
 ```
 - [ ] **Step 3: Wire in main** — replace ChaseCam node with `CameraRig (Camera3D)` using `camera_rig.gd`; add `InputAdapter (Node)`; update `main.gd`:
 ```gdscript
