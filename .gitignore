@@ -7,3 +7,4 @@ bin/obj-*
 **/bin/Release/
 *.tsbuildinfo
 testrig/out/
+testrig/scenarios/_replay.json

@@ -1,0 +1,100 @@
+#!/bin/sh
+# bin/replay list                    -- show recent recorded sessions/segments
+# bin/replay <segment.json|filename>  -- re-render one through the rig
+#
+# The live-session black-box recorder (bridge/SimBridge.cs) always records
+# every real session -- rig-driven or human -- as it plays, one JSON file per
+# "segment" (a fight between restarts/beat-changes) written in the exact
+# scenario schema testrig/rig.gd already consumes, plus a telemetry.jsonl
+# alongside each. This script finds those recordings on disk and hands one to
+# the existing scripted rig (bin/rig) unchanged, so an unscripted human flight
+# re-renders frame-by-frame exactly like a scripted scenario.
+#
+# macOS only, like bin/godot (which is already arm64/macOS-specific): resolves
+# the Godot user:// mount Godot actually writes sessions to from this
+# project's name (project.godot's config/name).
+set -eu
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+
+PROJECT_NAME=$(sed -n 's/^config\/name="\(.*\)"$/\1/p' "$ROOT_DIR/project.godot" | head -1)
+if [ -z "$PROJECT_NAME" ]; then
+    echo "bin/replay: could not resolve config/name from $ROOT_DIR/project.godot" >&2
+    exit 1
+fi
+
+SESSIONS_DIR="$HOME/Library/Application Support/Godot/app_userdata/$PROJECT_NAME/sessions"
+
+usage() {
+    echo "usage: bin/replay list" >&2
+    echo "       bin/replay <path/to/segN-beatB.json>" >&2
+    echo "       bin/replay <segN-beatB.json>            (searched across all recorded sessions)" >&2
+    exit 1
+}
+
+[ $# -ge 1 ] || usage
+
+if [ "$1" = "list" ]; then
+    echo "sessions dir: $SESSIONS_DIR"
+    if [ ! -d "$SESSIONS_DIR" ]; then
+        echo "(none recorded yet -- play the game, or run bin/rig, then try again)"
+        exit 0
+    fi
+    HAVE_PY=0
+    command -v python3 >/dev/null 2>&1 && HAVE_PY=1
+
+    # newest session first: session dir names are wall-clock-sortable
+    # ("sess-YYYY-MM-DD_HH-MM-SS-<pid>"), so a plain reverse sort works.
+    for sess in $(ls -1 "$SESSIONS_DIR" 2>/dev/null | sort -r); do
+        SESS_PATH="$SESSIONS_DIR/$sess"
+        [ -d "$SESS_PATH" ] || continue
+        SEGS=$(ls -1 "$SESS_PATH"/seg*.json 2>/dev/null | sort -t g -k2 -n || true)
+        [ -n "$SEGS" ] || continue
+        echo
+        echo "== $sess =="
+        printf '%s\n' "$SEGS" | while read -r seg; do
+            if [ "$HAVE_PY" = 1 ]; then
+                python3 - "$seg" <<'PYEOF'
+import json, sys
+p = sys.argv[1]
+try:
+    d = json.load(open(p))
+    print("  %s  (beat=%s variant=%s duration_s=%.1f events=%d)" % (
+        p, d.get("beat"), d.get("variant"), float(d.get("duration_s", 0)), len(d.get("events", []))))
+except Exception as e:
+    print("  %s  (unreadable: %s)" % (p, e))
+PYEOF
+            else
+                echo "  $seg"
+            fi
+        done
+    done
+    exit 0
+fi
+
+SEGMENT="$1"
+if [ ! -f "$SEGMENT" ] && [ -f "$SESSIONS_DIR/$SEGMENT" ]; then
+    SEGMENT="$SESSIONS_DIR/$SEGMENT"
+fi
+if [ ! -f "$SEGMENT" ]; then
+    MATCHES=$(find "$SESSIONS_DIR" -name "$(basename "$SEGMENT")" 2>/dev/null | sort || true)
+    COUNT=$(printf '%s\n' "$MATCHES" | grep -c . || true)
+    if [ "$COUNT" -eq 0 ]; then
+        echo "bin/replay: no such segment, and no match for '$SEGMENT' under $SESSIONS_DIR" >&2
+        echo "run 'bin/replay list' to see what's recorded" >&2
+        exit 1
+    elif [ "$COUNT" -gt 1 ]; then
+        echo "bin/replay: '$SEGMENT' is ambiguous -- multiple recorded segments share that name:" >&2
+        printf '%s\n' "$MATCHES" >&2
+        echo "pass a full path to pick one" >&2
+        exit 1
+    fi
+    SEGMENT=$(printf '%s\n' "$MATCHES")
+fi
+
+mkdir -p "$ROOT_DIR/testrig/scenarios"
+cp "$SEGMENT" "$ROOT_DIR/testrig/scenarios/_replay.json"
+echo "bin/replay: replaying $SEGMENT -> testrig/scenarios/_replay.json"
+
+exec "$ROOT_DIR/bin/rig" _replay
