@@ -28,4 +28,24 @@ public class CameraSolverTests {
         Assert.False(CameraSolver.GunWindow(own, At(new Vec3D(20, 3010, 1500), 0)));   // too far
         Assert.False(CameraSolver.GunWindow(own, At(new Vec3D(600, 3010, 300), 0)));   // too wide
     }
+    [Fact] public void BanditDirectlyAboveKeepsBothFramed() {
+        var own = At(new Vec3D(0, 3000, 0), 0);
+        var bandit = At(new Vec3D(0, 3400, 0), 0);
+        var pose = CameraSolver.Solve(CameraMode.Maneuver, own, bandit);
+        Assert.True(AngleFrom(pose, own.Position) < 0.55, "own ship out of frame with bandit above");
+        Assert.True(AngleFrom(pose, bandit.Position) < 0.55, "bandit out of frame when directly above");
+    }
+    [Fact] public void PosesAlwaysCarryUsableUp() {
+        var casesOwn = new[] {
+            At(new Vec3D(0, 3000, 0), 0),
+            new AircraftState(new Vec3D(0, 3000, 0), 180, 1.5707, 0, 0, 6900), // straight up
+        };
+        var bandit = At(new Vec3D(0, 3400, 0), 0);
+        foreach (var own in casesOwn) foreach (var mode in new[] { CameraMode.Maneuver, CameraMode.Gun }) {
+            var pose = CameraSolver.Solve(mode, own, bandit);
+            var view = (pose.LookAt - pose.Position).Normalized();
+            Assert.Equal(1.0, pose.Up.Length, 6);
+            Assert.True(System.Math.Abs(pose.Up.Dot(view)) < 0.99, $"up parallel to view in {mode}");
+        }
+    }
 }
