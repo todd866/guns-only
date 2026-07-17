@@ -1,0 +1,3 @@
+{"name":"roll_check","beat":1,"variant":0,"duration_s":8,
+ "events":[{"t":1.0,"key":3,"pressed":true},{"t":2.2,"key":3,"pressed":false}],
+ "notes":"level, roll right ~45deg and hold attitude: HUD ladder must align with the REAL sea horizon"}
