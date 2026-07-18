@@ -17,7 +17,7 @@ public static partial class WebBridge {
     const double Dt = 1.0 / AircraftSim.TickHz;
 
     static AircraftSim _player = null!;
-    static RailBandit _bandit = null!;
+    static IBandit _bandit = null!;
     static BeatSetup _beat = null!;
     static KeyGrammar _keys = null!;
     static DetentLayer _detents = null!;
@@ -103,7 +103,7 @@ public static partial class WebBridge {
                       sinkMps: _difficulty.BurbleSinkMps)
                 : new TurbulenceField(intensityMps: 1.2, outerScaleM: 130.0, intermittency: 0.5, seed: 0xB0A7)
         };
-        _bandit = new RailBandit(_beat.Bandit, _beat.BanditAir, _beat.BanditTimeline);
+        _bandit = _beat.CreateBandit();
         _gunKill = new GunKill();
         _fuel = new FuelModel();
         _keys = new KeyGrammar();
@@ -204,7 +204,7 @@ public static partial class WebBridge {
             if (_gunKill.Outcome == FightOutcome.Splash) break;     // freeze at the real impact
             _player.Step(_detents.Command, Dt);
             _fuel.Step(Dt, _detents.Throttle, _player.ThrustFraction);
-            if (_gunKill.BanditAlive) _bandit.Step(Dt);
+            if (_gunKill.BanditAlive) _bandit.Step(_player.State, Dt);
             if (_carrier is not null) {
                 _carrier.Step(Dt);
                 Carrier.Recovery contact = _carrier.Classify(_player.State, _difficulty);

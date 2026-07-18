@@ -3,12 +3,15 @@ namespace GunsOnly.Sim.Doctrine;
 public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit, IExecutionLaw Law,
     List<(double T, PilotCommand Cmd)> BanditTimeline,
     AircraftParams? PlayerParams = null, AircraftParams? BanditParams = null,
-    GunsOnly.Sim.Carrier? Carrier = null) {
+    GunsOnly.Sim.Carrier? Carrier = null, bool UsesReactiveBandit = false) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
+    public IBandit CreateBandit() => UsesReactiveBandit
+        ? new ReactiveBandit(Bandit, BanditAir)
+        : new RailBandit(Bandit, BanditAir, BanditTimeline);
 }
 
-public sealed class RailBandit {
+public sealed class RailBandit : IBandit {
     readonly AircraftSim _sim;
     readonly System.Collections.Generic.List<(double T, PilotCommand Cmd)> _tl;
     int _active;
@@ -30,6 +33,7 @@ public sealed class RailBandit {
         _sim.Step(_tl[_active].Cmd, dt);
         T += dt;
     }
+    public void Step(in AircraftState player, double dt) => Step(dt);
 }
 
 public static class Beats {
@@ -104,9 +108,8 @@ public static class Beats {
         return new BeatSetup("Carrier approach",
         Player: new AircraftState(start, 70, -0.06, carrier.LandingHeadingRad, 0, FlightModel.Sabre.MassKg),
         // A Sabre-class bogey ~3.1 km from the finals spawn, displaced right and above the egress.
-        // At ~204 kt it remains real moving prey, but a firewalled wave-off has decisive overtake.
-        // Its straight rail also makes a long-TOF .50-cal lead solution learnable instead of being
-        // invalidated by an arbitrary scripted jink while rounds are already in flight.
+        // It now owns a reactive AircraftSim: it points into the merge, breaks a gun threat, jinks,
+        // unloads for energy, and returns toward this fight volume instead of flying a straight rail.
         Bandit: new AircraftState(new Vec3D(450, 650, 1500), 105, 0, 0.0, 0, FlightModel.Sabre.MassKg),
         Law: new ApproachLaw(),
         BanditTimeline: new() {
@@ -115,7 +118,8 @@ public static class Beats {
         BanditParams: FlightModel.Sabre,
         // The real target: a ~250 m × 30 m carrier, 20 m freeboard, steaming north into the wind.
         // Kinematic — it does not fly, it steams.
-        Carrier: carrier);
+        Carrier: carrier,
+        UsesReactiveBandit: true);
     }
 
     public static BeatSetup Saddle() => new("Saddle + shot",

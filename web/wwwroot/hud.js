@@ -1673,7 +1673,7 @@ class CombatHud {
     ctx.fillStyle = "rgba(77, 255, 136, 0.35)";
     ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left"; ctx.textBaseline = "top";
-    ctx.fillText("BUILD 28", this.safeInsets.left + 8, this.safeInsets.top + 8);
+    ctx.fillText("BUILD 29", this.safeInsets.left + 8, this.safeInsets.top + 8);
     ctx.restore();
     this.drawEnding(frame);
   }

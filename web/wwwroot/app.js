@@ -61,7 +61,7 @@ const heldKeys = new Set();
 // state each frame from a REAL playthrough and POSTs it to /telemetry (same origin, so the dev
 // server writes it to disk for analysis). Fire-and-forget — a failed POST must never disturb the
 // sim. Sampled at ~30 Hz to keep sessions a few MB.
-const BUILD = "28";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
+const BUILD = "29";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
 const recorder = {
   session: `web-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
   build: BUILD,
@@ -361,6 +361,22 @@ function box(group, size, position, material, rotation = null) {
   if (rotation) mesh.rotation.set(rotation.x, rotation.y, rotation.z);
   group.add(mesh);
   return mesh;
+}
+
+function deckOverlayBox(group, size, position, material) {
+  // Glitch fix: thin deck overlays casting onto the deck produced crawling, decal-shaped shadows.
+  const mesh = box(group, size, position, material);
+  mesh.userData.noShadow = true;
+  mesh.renderOrder = 1;
+  return mesh;
+}
+
+function depthBiasDeckMaterial(material) {
+  // Glitch fix: near-coplanar deck layers lost depth precision and shimmered on approach.
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = -1;
+  material.polygonOffsetUnits = -1;
+  return material;
 }
 
 function beveledBox(group, size, position, material, radius = 0.16) {
@@ -784,6 +800,7 @@ function addCarrierContactShadows(group) {
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
   });
   const patches = [
     [10.7, -28, 5.8, 18],
@@ -837,6 +854,8 @@ function createCarrierSpray() {
       uniform float uPixelRatio;
       varying float vSprayAlpha;
       varying vec3 vSprayWorld;
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
       void main() {
         float age = fract(uTime * (0.18 + aSeed * 0.045) + aSeed);
         float side = sign(position.x);
@@ -851,6 +870,8 @@ function createCarrierSpray() {
         gl_PointSize = clamp((3.0 + aSeed * 3.0) * 170.0 / max(-view.z, 1.0), 1.0, 8.0)
           * uPixelRatio;
         gl_Position = projectionMatrix * view;
+        // Glitch fix: conventional point depth did not compare correctly with the logarithmic sea.
+        #include <logdepthbuf_vertex>
       }
     `,
     fragmentShader: /* glsl */ `
@@ -859,6 +880,7 @@ function createCarrierSpray() {
       uniform float uFogDensity;
       varying float vSprayAlpha;
       varying vec3 vSprayWorld;
+      #include <logdepthbuf_pars_fragment>
       void main() {
         vec2 point = gl_PointCoord - 0.5;
         float soft = 1.0 - smoothstep(0.16, 0.5, length(point));
@@ -866,6 +888,7 @@ function createCarrierSpray() {
           * dot(vSprayWorld - cameraPosition, vSprayWorld - cameraPosition));
         vec3 color = mix(vec3(0.78, 0.88, 0.87), uFogColor, fog);
         gl_FragColor = vec4(color, soft * vSprayAlpha * 0.66 * (1.0 - fog));
+        #include <logdepthbuf_fragment>
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -882,7 +905,10 @@ function createBarrier(material, netMaterial) {
   box(barrier, { x: 0.3, y: 4.6, z: 0.3 }, new THREE.Vector3(-13.2, 2.3, 0), material);
   box(barrier, { x: 0.3, y: 4.6, z: 0.3 }, new THREE.Vector3(13.2, 2.3, 0), material);
   box(barrier, { x: 26.2, y: 0.18, z: 0.24 }, new THREE.Vector3(0, 4.3, 0), material);
-  box(barrier, { x: 25.8, y: 3.3, z: 0.08 }, new THREE.Vector3(0, 2.35, 0), netMaterial);
+  const net = box(barrier, { x: 25.8, y: 3.3, z: 0.08 }, new THREE.Vector3(0, 2.35, 0), netMaterial);
+  // Glitch fix: a translucent net was casting as an opaque rectangular shadow slab.
+  net.userData.noShadow = true;
+  net.renderOrder = 3;
   barrier.position.z = -43;
   return barrier;
 }
@@ -908,13 +934,22 @@ function createCarrier() {
     { grain: 0.09, grainScale: 1.7 });
   const glass = makeMaterial(0x0e2833, 0.13, 0.03, 0x02090c,
     { grain: 0, clearcoat: 1, clearcoatRoughness: 0.1, specularIntensity: 1, envMapIntensity: 1.25 });
-  const paint = makeMaterial(0xdad8c7, 0.68, 0.01, 0x000000, { grain: 0.06 });
-  const yellowPaint = makeMaterial(0xc7a94f, 0.7, 0.01, 0x000000, { grain: 0.08 });
-  const seamMat = makeMaterial(0x111719, 0.96, 0.02);
-  const skidMat = makeMaterial(0x0b0f10, 1.0, 0.01);
-  const laneMat = makeMaterial(0x303739, 0.95, 0.04);
+  const paint = depthBiasDeckMaterial(
+    makeMaterial(0xdad8c7, 0.68, 0.01, 0x000000, { grain: 0.06 }),
+  );
+  const yellowPaint = depthBiasDeckMaterial(
+    makeMaterial(0xc7a94f, 0.7, 0.01, 0x000000, { grain: 0.08 }),
+  );
+  const seamMat = depthBiasDeckMaterial(makeMaterial(0x111719, 0.96, 0.02));
+  const skidMat = depthBiasDeckMaterial(makeMaterial(0x0b0f10, 1.0, 0.01));
+  const laneMat = depthBiasDeckMaterial(makeMaterial(0x303739, 0.95, 0.04));
+  const deckPatchMat = depthBiasDeckMaterial(makeMaterial(0x202b31, 0.78, 0.05, 0x000101,
+    { grain: 0.11 }));
   const catwalkMat = makeMaterial(0x27343a, 0.86, 0.18);
-  const railMat = new THREE.LineBasicMaterial({ color: 0x718087, transparent: true, opacity: 0.72 });
+  // Glitch fix: translucent rails wrote depth and intermittently punched holes in later effects.
+  const railMat = new THREE.LineBasicMaterial({
+    color: 0x718087, transparent: true, opacity: 0.72, depthWrite: false,
+  });
   const barrierNet = makeMaterial(0x9aa6a5, 0.86, 0.03, 0x000000, { grain: 0.04 });
   barrierNet.transparent = true;
   barrierNet.opacity = 0.28;
@@ -922,9 +957,14 @@ function createCarrier() {
   const deckLampMat = makeMaterial(0xb6d6cf, 0.32, 0.25, 0x315e58);
 
   const hull = new THREE.Mesh(createHullGeometry(), hullMat);
+  // Glitch fix: large ship surfaces must not disappear from child-mesh bounds at screen edges.
+  hull.frustumCulled = false;
   structure.add(hull);
-  box(structure, { x: 30, y: 1.8, z: 250 }, new THREE.Vector3(0, -0.9, 0), deckMat);
-  structure.add(new THREE.Mesh(createRoundDownGeometry(), deckMat));
+  const flightDeck = box(structure, { x: 30, y: 1.8, z: 250 }, new THREE.Vector3(0, -0.9, 0), deckMat);
+  flightDeck.frustumCulled = false;
+  const roundDown = new THREE.Mesh(createRoundDownGeometry(), deckMat);
+  roundDown.frustumCulled = false;
+  structure.add(roundDown);
   addDeckSeams(structure, seamMat);
   addDeckTieDowns(structure, seamMat);
   addDeckEdgeDetail(structure, catwalkMat, railMat);
@@ -936,19 +976,19 @@ function createCarrier() {
   // It is anchored at wire three; local -Z is rollout/bolter direction.
   const landingArea = new THREE.Group();
   structure.add(landingArea);
-  box(landingArea, { x: 25.2, y: 0.065, z: 208 }, new THREE.Vector3(0, 0.065, -44), laneMat);
+  deckOverlayBox(landingArea, { x: 25.2, y: 0.065, z: 208 }, new THREE.Vector3(0, 0.065, -44), laneMat);
   addDeckWear(landingArea, skidMat);
-  box(landingArea, { x: 0.62, y: 0.09, z: 202 }, new THREE.Vector3(0, 0.12, -43), paint);
-  box(landingArea, { x: 0.26, y: 0.085, z: 204 }, new THREE.Vector3(-11.9, 0.115, -43), paint);
-  box(landingArea, { x: 0.26, y: 0.085, z: 204 }, new THREE.Vector3(11.9, 0.115, -43), paint);
-  box(structure, { x: 8.0, y: 0.08, z: 0.32 }, new THREE.Vector3(-7.7, 0.09, -37), yellowPaint);
-  box(structure, { x: 8.0, y: 0.08, z: 0.32 }, new THREE.Vector3(7.7, 0.09, -37), yellowPaint);
-  box(structure, { x: 10.5, y: 0.07, z: 20 }, new THREE.Vector3(-7.4, 0.075, -15), hullDark);
-  box(structure, { x: 11.0, y: 0.07, z: 20 }, new THREE.Vector3(7.2, 0.075, 24), hullDark);
+  deckOverlayBox(landingArea, { x: 0.62, y: 0.09, z: 202 }, new THREE.Vector3(0, 0.12, -43), paint);
+  deckOverlayBox(landingArea, { x: 0.26, y: 0.085, z: 204 }, new THREE.Vector3(-11.9, 0.115, -43), paint);
+  deckOverlayBox(landingArea, { x: 0.26, y: 0.085, z: 204 }, new THREE.Vector3(11.9, 0.115, -43), paint);
+  deckOverlayBox(structure, { x: 8.0, y: 0.08, z: 0.32 }, new THREE.Vector3(-7.7, 0.09, -37), yellowPaint);
+  deckOverlayBox(structure, { x: 8.0, y: 0.08, z: 0.32 }, new THREE.Vector3(7.7, 0.09, -37), yellowPaint);
+  deckOverlayBox(structure, { x: 10.5, y: 0.07, z: 20 }, new THREE.Vector3(-7.4, 0.075, -15), deckPatchMat);
+  deckOverlayBox(structure, { x: 11.0, y: 0.07, z: 20 }, new THREE.Vector3(7.2, 0.075, 24), deckPatchMat);
 
-  box(landingArea, { x: 25, y: 0.10, z: 1.7 }, new THREE.Vector3(0, 0.14, 0), paint);
-  box(landingArea, { x: 0.42, y: 0.11, z: 30 }, new THREE.Vector3(-5.5, 0.15, 1), yellowPaint);
-  box(landingArea, { x: 0.42, y: 0.11, z: 30 }, new THREE.Vector3(5.5, 0.15, 1), yellowPaint);
+  deckOverlayBox(landingArea, { x: 25, y: 0.10, z: 1.7 }, new THREE.Vector3(0, 0.14, 0), paint);
+  deckOverlayBox(landingArea, { x: 0.42, y: 0.11, z: 30 }, new THREE.Vector3(-5.5, 0.15, 1), yellowPaint);
+  deckOverlayBox(landingArea, { x: 0.42, y: 0.11, z: 30 }, new THREE.Vector3(5.5, 0.15, 1), yellowPaint);
   const wires = [];
   for (let wire = 1; wire <= 4; wire++) {
     const wireMaterial = makeMaterial(0xc9b47a, 0.38, 0.72, 0x000000,
@@ -1001,9 +1041,12 @@ function createCarrier() {
 
   const wake = createWakeMaterial();
   const wakeMesh = new THREE.Mesh(createWakeGeometry(), wake.material);
+  // Glitch fix: shader-displaced wake vertices exceeded static bounds and popped at frustum edges.
+  wakeMesh.frustumCulled = false;
   wakeMesh.renderOrder = -2;
   const bowWake = createWakeMaterial(true);
   const bowWakeMesh = new THREE.Mesh(createWakeGeometry(-131, 118, 13.5, 28), bowWake.material);
+  bowWakeMesh.frustumCulled = false;
   bowWakeMesh.renderOrder = -1;
   const spray = createCarrierSpray();
   group.add(wakeMesh, bowWakeMesh, spray.points);
@@ -1032,17 +1075,19 @@ function updateCarrierVisual(carrier, state, nowSeconds, fogColor, fogDensity) {
   const deckAltitude = Number.isFinite(state.deck_alt) ? Math.max(8, state.deck_alt) : 20;
   const scaleX = deckWidth / 30;
   const scaleZ = deckLength / 250;
+  // Glitch fix: deck heave moved the wake through the sea; cancel parent Y and keep a fixed lift.
+  const seaLocalY = -carrier.position.y;
   carrier.userData.structure.scale.set(scaleX, 1, scaleZ);
   carrier.userData.hull.scale.y = deckAltitude / 20;
   for (let i = 0; i < carrier.userData.wakes.length; i++) {
     carrier.userData.wakes[i].scale.set(scaleX, 1, scaleZ);
-    carrier.userData.wakes[i].position.y = -deckAltitude + 0.18;
+    carrier.userData.wakes[i].position.y = seaLocalY + 0.18;
     carrier.userData.wakeUniforms[i].uTime.value = nowSeconds;
     carrier.userData.wakeUniforms[i].uFogColor.value.copy(fogColor);
     carrier.userData.wakeUniforms[i].uFogDensity.value = fogDensity;
   }
   carrier.userData.spray.scale.set(scaleX, 1, scaleZ);
-  carrier.userData.spray.position.y = -deckAltitude;
+  carrier.userData.spray.position.y = seaLocalY;
   carrier.userData.sprayUniforms.uTime.value = nowSeconds;
   carrier.userData.sprayUniforms.uFogColor.value.copy(fogColor);
   carrier.userData.sprayUniforms.uFogDensity.value = fogDensity;
@@ -1152,16 +1197,19 @@ function addFighterPanelLines(group, material) {
     add(side * 1.7, 0.218, 0.72, side * 4.66, 0.218, 0.82);
     add(side * 0.72, 0.22, 3.05, side * 2.75, 0.22, 4.28);
   }
-  const ringStations = [0.25, 1.75, 3.15];
+  // Glitch fix: the former ring radii were inside the fuselage, so the lines popped through it.
+  const rings = [
+    [0.25, 0.82, 0.76, 0.1],
+    [1.75, 0.77, 0.71, 0.1],
+    [3.15, 0.67, 0.61, 0.1],
+  ];
   const ringSegments = 14;
-  for (const z of ringStations) {
-    const radiusX = 0.71 - z * 0.045;
-    const radiusY = 0.63 - z * 0.038;
+  for (const [z, radiusX, radiusY, centreY] of rings) {
     for (let i = 0; i < ringSegments; i++) {
       const a = i / ringSegments * Math.PI * 2;
       const b = (i + 1) / ringSegments * Math.PI * 2;
-      add(Math.cos(a) * radiusX, 0.1 + Math.sin(a) * radiusY, z,
-        Math.cos(b) * radiusX, 0.1 + Math.sin(b) * radiusY, z);
+      add(Math.cos(a) * radiusX, centreY + Math.sin(a) * radiusY, z,
+        Math.cos(b) * radiusX, centreY + Math.sin(b) * radiusY, z);
     }
   }
   const lines = new THREE.LineSegments(
@@ -1241,9 +1289,17 @@ function createDrone() {
 
     const exhaustFace = new THREE.Mesh(
       new THREE.CircleGeometry(0.35, 18),
-      new THREE.MeshBasicMaterial({ color: 0xdf6f28, transparent: true, opacity: 0.56 }),
+      // Glitch fix: translucent exhaust discs wrote opaque depth and popped against the nacelles.
+      new THREE.MeshBasicMaterial({
+        color: 0xdf6f28,
+        transparent: true,
+        opacity: 0.56,
+        depthWrite: false,
+      }),
     );
     exhaustFace.position.set(side * 1.08, 0.0, 4.67);
+    exhaustFace.userData.noShadow = true;
+    exhaustFace.renderOrder = 1;
     group.add(exhaustFace);
     const exhaustRing = new THREE.Mesh(new THREE.TorusGeometry(0.39, 0.065, 7, 18), edge);
     exhaustRing.position.copy(exhaustFace.position);
@@ -1268,7 +1324,8 @@ function createDrone() {
   }
 
   addFighterPanelLines(group, new THREE.LineBasicMaterial({
-    color: 0x1b2529, transparent: true, opacity: 0.46,
+    // Glitch fix: transparent linework must not occlude later transparent combat effects.
+    color: 0x1b2529, transparent: true, opacity: 0.46, depthWrite: false,
   }));
 
   const leftLight = new THREE.Mesh(
@@ -1276,15 +1333,17 @@ function createDrone() {
     new THREE.MeshBasicMaterial({ color: 0xff4b58, toneMapped: false }),
   );
   leftLight.position.set(-5.28, 0.21, 0.55);
+  leftLight.userData.noShadow = true;
   group.add(leftLight);
   const rightLight = leftLight.clone();
   rightLight.material = new THREE.MeshBasicMaterial({ color: 0x62ffc0, toneMapped: false });
   rightLight.position.x = 5.28;
+  rightLight.userData.noShadow = true;
   group.add(rightLight);
 
   group.traverse((object) => {
     if (!object.isMesh) return;
-    object.castShadow = true;
+    object.castShadow = object.userData.noShadow !== true;
     object.receiveShadow = true;
   });
   return group;
@@ -1305,6 +1364,8 @@ function createFireballMaterial(coreColor, edgeColor) {
       varying vec3 vFirePosition;
       varying vec3 vFireNormal;
       varying vec3 vFireView;
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
       void main() {
         vec4 world = modelMatrix * vec4(position, 1.0);
         vFirePosition = position;
@@ -1312,6 +1373,8 @@ function createFireballMaterial(coreColor, edgeColor) {
         vec4 view = viewMatrix * world;
         vFireView = -view.xyz;
         gl_Position = projectionMatrix * view;
+        // Glitch fix: conventional effect depth caused occlusion pops in a logarithmic-depth scene.
+        #include <logdepthbuf_vertex>
       }
     `,
     fragmentShader: /* glsl */ `
@@ -1323,6 +1386,7 @@ function createFireballMaterial(coreColor, edgeColor) {
       varying vec3 vFirePosition;
       varying vec3 vFireNormal;
       varying vec3 vFireView;
+      #include <logdepthbuf_pars_fragment>
       void main() {
         vec3 p = normalize(vFirePosition);
         float billow = sin(p.x * 11.0 + p.y * 7.0 - uAge * 8.0);
@@ -1334,6 +1398,7 @@ function createFireballMaterial(coreColor, edgeColor) {
         float hot = smoothstep(0.34, 0.78, billow + facing * 0.24);
         vec3 color = mix(uEdgeColor, uCoreColor, hot);
         gl_FragColor = vec4(color, uAlpha * softEdge * (0.66 + billow * 0.45));
+        #include <logdepthbuf_fragment>
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -1354,12 +1419,16 @@ function createSmokePuffMaterial(color) {
       varying vec3 vSmokePosition;
       varying vec3 vSmokeNormal;
       varying vec3 vSmokeView;
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
       void main() {
         vSmokePosition = position;
         vSmokeNormal = normalize(normalMatrix * normal);
         vec4 view = modelViewMatrix * vec4(position, 1.0);
         vSmokeView = -view.xyz;
         gl_Position = projectionMatrix * view;
+        // Glitch fix: smoke used linear depth against logarithmic world geometry and flickered out.
+        #include <logdepthbuf_vertex>
       }
     `,
     fragmentShader: /* glsl */ `
@@ -1370,6 +1439,7 @@ function createSmokePuffMaterial(color) {
       varying vec3 vSmokePosition;
       varying vec3 vSmokeNormal;
       varying vec3 vSmokeView;
+      #include <logdepthbuf_pars_fragment>
       void main() {
         vec3 p = normalize(vSmokePosition);
         float detail = sin(p.x * 9.0 + p.y * 13.0 + uAge * 0.7);
@@ -1378,6 +1448,7 @@ function createSmokePuffMaterial(color) {
         float softEdge = smoothstep(0.02, 0.52 + detail * 0.055, facing);
         vec3 smokeColor = uColor * (0.84 + detail * 0.045 + facing * 0.11);
         gl_FragColor = vec4(smokeColor, uAlpha * softEdge);
+        #include <logdepthbuf_fragment>
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -1644,7 +1715,8 @@ function createSky() {
     uSunDirection: { value: SUN_DIRECTION.clone() },
   };
   const material = new THREE.ShaderMaterial({
-    side: THREE.BackSide,
+    // Glitch fix: disabling sky-shell culling prevents transient missing wedges at sphere seams.
+    side: THREE.DoubleSide,
     depthWrite: false,
     depthTest: false,
     uniforms,
@@ -1730,7 +1802,8 @@ function createSky() {
         cumulus *= smoothstep(0.012, 0.075, h) * (1.0 - smoothstep(0.27, 0.52, h));
         cumulus *= (1.0 - altitudeMix) * 0.72;
         float sunSample = cloudFbm((cloudUv + normalize(uSunDirection.xz) * 0.15) * 0.72 + wind);
-        float cloudLight = clamp(0.48 + (sunSample - cloudBase) * 3.2, 0.0, 1.0);
+        // Glitch fix: a zero-light procedural sample formed coherent near-black angular patches.
+        float cloudLight = clamp(0.48 + (sunSample - cloudBase) * 3.2, 0.12, 1.0);
         float cloudCore = smoothstep(0.61, 0.79, cloudField);
         vec3 cloudShade = mix(vec3(0.36, 0.45, 0.47), vec3(0.87, 0.91, 0.88), cloudLight);
         cloudShade += vec3(0.13, 0.085, 0.035) * cloudLight * (1.0 - altitudeMix);
@@ -1767,7 +1840,8 @@ function createSky() {
     `,
   });
 
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(690000, 48, 28), material);
+  // Glitch fix: the former 690 km shell amplified float error; depth is disabled, so keep it local.
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(4096, 48, 28), material);
   mesh.frustumCulled = false;
   mesh.renderOrder = -100;
   return { mesh, uniforms };
@@ -2003,7 +2077,8 @@ class FlightView {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    this.camera = new THREE.PerspectiveCamera(66, 1, 0.12, 720000);
+    // Glitch fix: the 0.12 m / 720 km clip range wasted depth precision on sub-cockpit distances.
+    this.camera = new THREE.PerspectiveCamera(66, 1, 0.5, 680000);
     this.camera.rotation.order = "YXZ";
 
     this.scene = new THREE.Scene();

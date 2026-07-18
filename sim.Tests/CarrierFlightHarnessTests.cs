@@ -22,7 +22,7 @@ public class CarrierFlightHarnessTests {
     /// The rig IS the web bridge's inner loop, headless.
     sealed class CarrierRig {
         public readonly AircraftSim Player;
-        public readonly RailBandit Bandit;
+        public readonly IBandit Bandit;
         public readonly Carrier Ship;
         public readonly GunKill Fight = new();
         public readonly ArrestmentModel Arrestment = new();
@@ -50,7 +50,7 @@ public class CarrierFlightHarnessTests {
                     new TurbulenceField(intensityMps: 3.0, outerScaleM: 80.0, intermittency: 0.6, seed: 0xB0A7),
                     sinkMps: 1.8)
             };
-            Bandit = new RailBandit(beat.Bandit, beat.BanditAir, beat.BanditTimeline);
+            Bandit = beat.CreateBandit();
         }
 
         public void Key(GKey k, bool down) {
@@ -106,7 +106,7 @@ public class CarrierFlightHarnessTests {
                 return;
             }
             Player.Step(_d.Command, Dt);
-            if (Fight.BanditAlive) Bandit.Step(Dt);
+            if (Fight.BanditAlive) Bandit.Step(Player.State, Dt);
             Ship.Step(Dt);
             Recovery = Ship.Classify(Player.State);
             if (Recovery == Carrier.Recovery.Trap)
@@ -293,8 +293,9 @@ public class CarrierFlightHarnessTests {
             $"egress must build fighting energy: {finalsSpeed:F0}→{rig.S.Speed:F0} m/s");
         Assert.True(Finite(rig.S) && rig.S.Speed > 60.0, "the pilot must stay finite and flying");
         Assert.True(Math.Abs(rig.S.Bank) < 0.15, "the egress must be cleaned up wings-level before the intercept");
-        Assert.True((rig.B.Position - banditStart).Length > 1200.0 && rig.B.Speed > 90.0,
-            "the bogey must fly its rail at fighter speed, not wait as a parked token");
+        double banditTravel = (rig.B.Position - banditStart).Length;
+        Assert.True(banditTravel > 800.0 && rig.B.Speed > 85.0 && Math.Abs(rig.B.Chi) > 0.5,
+            $"the reactive bogey must maneuver at fighter speed: travel={banditTravel:F0} m speed={rig.B.Speed:F0} m/s chi={rig.B.Chi:F2}");
         Assert.True(rig.Fight.BanditAlive);
 
         bool achievedLead = false;
@@ -305,15 +306,22 @@ public class CarrierFlightHarnessTests {
         // still requires the BUILD 25 intercept to splash before 75 s.
         while (rig.TimeSeconds < 100.0 && rig.Recovery == Carrier.Recovery.Flying
                && rig.Fight.Outcome == FightOutcome.Flying) {
-            // Don't charge through the snapshot at max afterburner. A competent intercept pilot
-            // unloads the throttle inside the gun envelope so the lead solution remains flyable.
-            bool insideGunEnvelope = rig.RangeM < 2500.0;
-            rig.Key(GKey.ThrottleUp, !insideGunEnvelope);
-            rig.Key(GKey.ThrottleDown, insideGunEnvelope);
+            // Manage closure instead of idling merely because range is below 2.5 km. Against a
+            // maneuvering fighter that old rule bled the pursuer below 50 m/s before it ever got
+            // around the first turn. Preserve fighting speed, and pull power only for a real
+            // high-closure overshoot inside snapshot range.
+            var lineOfSight = (rig.B.Position - rig.S.Position).Normalized();
+            double closureMps = (rig.S.VelocityVector() - rig.B.VelocityVector()).Dot(lineOfSight);
+            bool brakeForOvershoot = rig.RangeM < 650.0 && closureMps > 45.0 && rig.S.Speed > 155.0;
+            bool needCombatPower = !brakeForOvershoot
+                && (rig.S.Speed < 150.0 || rig.RangeM > 1000.0 || closureMps < 15.0);
+            rig.Key(GKey.ThrottleUp, needCombatPower);
+            rig.Key(GKey.ThrottleDown, brakeForOvershoot);
             // Outside ballistic range, close in pure pursuit. Once a finite solution appears,
             // fly the actual lead point: this is the same pipper solution emitted to the HUD.
             Vec3D aimPoint = rig.Fight.HasLeadSolution ? rig.Fight.LeadPipper : rig.B.Position;
-            double wantBank = Geometry.BankToPlaceLiftVectorOn(rig.S, aimPoint);
+            bool deckRecovery = rig.S.Position.Y < 330.0;
+            double wantBank = deckRecovery ? 0.0 : Geometry.BankToPlaceLiftVectorOn(rig.S, aimPoint);
             double bankError = Math.IEEERemainder(wantBank - rig.S.Bank, 2.0 * Math.PI);
             rig.Key(GKey.RollRight, bankError > 0.035);
             rig.Key(GKey.RollLeft, bankError < -0.035);
@@ -321,8 +329,14 @@ public class CarrierFlightHarnessTests {
             double aimError = Math.Acos(Math.Clamp(rig.Player.BodyForward.Dot(aimDirection), -1.0, 1.0));
             double verticalError = rig.Player.BodyUp.Dot(aimDirection);
             bool liftPlaneSet = Math.Abs(bankError) < 0.30;
-            rig.Key(GKey.PullUp, liftPlaneSet && verticalError > 0.0018 && aimError > 0.0025);
-            rig.Key(GKey.PushDown, liftPlaneSet && verticalError < -0.0018 && aimError > 0.0025);
+            bool energyLow = rig.S.Speed < 115.0;
+            bool pullForDeck = deckRecovery && liftPlaneSet && rig.S.Gamma < 0.08;
+            // At low energy, unload and let max power rebuild speed instead of holding the
+            // max-performance pull. The target can earn separation, but not an easy pilot stall.
+            rig.Key(GKey.PullUp, pullForDeck || (!energyLow && !deckRecovery
+                && liftPlaneSet && verticalError > 0.0018 && aimError > 0.0025));
+            rig.Key(GKey.PushDown, !energyLow && !deckRecovery
+                && liftPlaneSet && verticalError < -0.0018 && aimError > 0.0025);
 
             // The sight ring is a flyable two-degree capture cue; it authorizes a burst, but the
             // gun awards nothing unless individual trajectories actually cross the target sphere.
