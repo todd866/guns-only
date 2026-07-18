@@ -32,6 +32,13 @@ public static partial class WebBridge {
     static int _beatIndex = 1;
     static bool _knockedOff;
     static Carrier? _carrier;
+    // Meta progression intentionally survives StartBeat/restart. The kernel object owns only the
+    // deterministic policy; this static shell field owns the pilot's session-long clean-trap count.
+    static readonly RecoveryProgress _recoveryProgress = new();
+    static RecoveryDifficulty _difficulty = DifficultyModel.ForLevel(0);
+    static bool _recoveryAttemptActive;
+    static bool _attemptHadSetback;
+    static bool _attemptCleanRecorded;
     static Carrier.Recovery _recovery = Carrier.Recovery.Flying;
     static readonly ArrestmentModel _arrestment = new();
     static Carrier.DeckConfiguration _deckConfiguration = Carrier.DeckConfiguration.Axial;
@@ -46,8 +53,24 @@ public static partial class WebBridge {
             && _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped)
         || _gunKill?.Outcome == FightOutcome.Splash;
 
+    static void FinishPreviousRecoveryAttempt() {
+        if (!_recoveryAttemptActive) return;
+        // A stopped trap wins the attempt even if the pilot waved off earlier. Otherwise a bolter
+        // or wave-off is retained as one setback and eases the next approach.
+        if (!_attemptCleanRecorded && _attemptHadSetback)
+            _recoveryProgress.RecordSetback();
+        _recoveryAttemptActive = false;
+    }
+
+    static void RecordStoppedTrap() {
+        if (!_recoveryAttemptActive || _attemptCleanRecorded) return;
+        _attemptCleanRecorded = true;
+        _recoveryProgress.RecordCleanTrap();
+    }
+
     [JSExport]
     public static void StartBeat(int index) {
+        FinishPreviousRecoveryAttempt();
         var variant = _detents?.Variant ?? ValleyVariant.DoctrineDeep;
         _beatIndex = index;
         _knockedOff = false;
@@ -55,6 +78,14 @@ public static partial class WebBridge {
             2 => Beats.BreakDefense(), 3 => Beats.Saddle(), 4 => Beats.BalloonStrike(),
             5 => Beats.CarrierApproach(_deckConfiguration), _ => Beats.Perch() };
         _carrier = _beat.Carrier;
+        _difficulty = DifficultyModel.ForLevel(0);
+        _recoveryAttemptActive = _carrier is not null;
+        _attemptHadSetback = false;
+        _attemptCleanRecorded = false;
+        if (_carrier is not null) {
+            _difficulty = _recoveryProgress.BeginAttempt();
+            _carrier.ApplyDifficulty(_difficulty);
+        }
         _recovery = Carrier.Recovery.Flying;
         _arrestment.Reset();
         _waveOffArmed = _carrier is not null;
@@ -67,8 +98,9 @@ public static partial class WebBridge {
                 // The wake is a CHALLENGE, not a cliff: enough chop + sink to make you work the last
                 // 10 s, not enough to kill a low approach outright (it "died the VV and crashed").
                 ? new BurbleField(_beat.Carrier,
-                      new TurbulenceField(intensityMps: 3.0, outerScaleM: 80.0, intermittency: 0.6, seed: 0xB0A7),
-                      sinkMps: 1.8)
+                      new TurbulenceField(intensityMps: _difficulty.BurbleIntensityMps,
+                          outerScaleM: 80.0, intermittency: 0.6, seed: _difficulty.TurbulenceSeed),
+                      sinkMps: _difficulty.BurbleSinkMps)
                 : new TurbulenceField(intensityMps: 1.2, outerScaleM: 130.0, intermittency: 0.5, seed: 0xB0A7)
         };
         _bandit = new RailBandit(_beat.Bandit, _beat.BanditAir, _beat.BanditTimeline);
@@ -112,6 +144,7 @@ public static partial class WebBridge {
 
     [JSExport] public static void SetVariant(int v) => _detents.Variant = v == 1 ? ValleyVariant.PhysicsOnly : ValleyVariant.DoctrineDeep;
     [JSExport] public static int GetVariant() => _detents.Variant == ValleyVariant.PhysicsOnly ? 1 : 0;
+    [JSExport] public static int GetCleanTrapCount() => _recoveryProgress.CleanTrapCount;
     [JSExport] public static int GetDeckConfiguration() =>
         _deckConfiguration == Carrier.DeckConfiguration.Angled ? 1 : 0;
     [JSExport] public static void SetDeckConfiguration(int value) {
@@ -139,7 +172,10 @@ public static partial class WebBridge {
                 _arrestment.Step(_carrier, Dt);
                 _simTimeMs += Dt * 1000.0;
                 _acc -= Dt;
-                if (_arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped) break;
+                if (_arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped) {
+                    RecordStoppedTrap();
+                    break;
+                }
                 continue;
             }
             // Approach law engages ONLY in the slot AND when you haven't firewalled to go around;
@@ -159,6 +195,7 @@ public static partial class WebBridge {
             if (_waveOffArmed && _detents.Throttle >= 0.95) {
                 _waveOffUntilMs = _simTimeMs + 5000.0;
                 _waveOffArmed = false;
+                if (_recoveryAttemptActive) _attemptHadSetback = true;
             }
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             // GunKill samples both aircraft at the beginning of the fixed tick. Its continuous
@@ -170,10 +207,23 @@ public static partial class WebBridge {
             if (_gunKill.BanditAlive) _bandit.Step(Dt);
             if (_carrier is not null) {
                 _carrier.Step(Dt);
-                _recovery = _carrier.Classify(_player.State);
+                Carrier.Recovery contact = _carrier.Classify(_player.State, _difficulty);
+                if (contact == Carrier.Recovery.Bolter) {
+                    _attemptHadSetback = true;
+                    _recovery = Carrier.Recovery.Bolter;
+                } else if (_recovery == Carrier.Recovery.Bolter) {
+                    // A rejected contact stays a bolter for the rest of the pass; it cannot become
+                    // a trap on a later physics tick. Still allow a subsequent impact to terminate.
+                    if (contact is Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater)
+                        _recovery = contact;
+                } else {
+                    _recovery = contact;
+                }
                 if (_recovery == Carrier.Recovery.Trap) {
                     _arrestment.Engage(_carrier, _player.State, _player.BodyPitchRad);
                     _detents.ApproachMode = false;
+                    if (_arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped)
+                        RecordStoppedTrap();
                 }
             }
             double rng = Geometry.Range(_player.State, _bandit.State);
@@ -332,6 +382,12 @@ public static partial class WebBridge {
             // LandingFrame h=0 is the recovery contact plane; put the aim diamond there too.
             + $"\"tx\":{c.TouchdownPoint.X:F2},\"ty\":{c.TouchdownPoint.Y:F2},\"tz\":{c.TouchdownPoint.Z:F2},"
             + $"\"deck_along\":{along:F1},\"deck_cross\":{cross:F1},\"deck_height\":{height:F1},"
+            + $"\"difficulty_level\":{_difficulty.Level},\"difficulty_baseline\":{_difficulty.SkillBaselineLevel},"
+            + $"\"difficulty_floor\":{_difficulty.FloorLevel},\"difficulty_attempt\":{_difficulty.AttemptIndex + 1},"
+            + $"\"difficulty_variation\":{_difficulty.Variation},\"difficulty_label\":\"{_difficulty.Label}\","
+            + $"\"difficulty_eased\":{(_difficulty.IsEased ? "true" : "false")},"
+            + $"\"difficulty_spike\":{(_difficulty.IsSpike ? "true" : "false")},\"clean_traps\":{_recoveryProgress.CleanTrapCount},"
+            + $"\"deck_pitch_deg\":{c.DeckPitchRad * 57.2958:F3},\"deck_heave_m\":{c.DeckHeaveM:F3},"
             + $"\"recovery\":\"{_recovery}\",\"wire\":{_arrestment.CaughtWire},"
             + $"\"arrest_phase\":\"{arrestPhase}\",\"arrest_speed_kts\":{_arrestment.RelativeSpeedMps * 1.94384:F2},"
             + $"\"arrest_time_s\":{_arrestment.ElapsedSeconds:F3},\"arrest_distance_m\":{_arrestment.DistanceM:F2},";

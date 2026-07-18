@@ -33,7 +33,9 @@ const VISUAL_QUALITY = Object.freeze({
   pixelRatioCap: mobileControls ? 1.4 : ((navigator.deviceMemory || 8) <= 4 ? 1.6 : 2),
   oceanRadialSegments: mobileControls ? 112 : 145,
   oceanAngularSegments: mobileControls ? 144 : 192,
-  shadowMapSize: mobileControls ? 512 : 1024,
+  shadowMapSize: mobileControls ? 512 : ((navigator.deviceMemory || 8) <= 4 ? 1024 : 2048),
+  cloudOctaves: mobileControls ? 2 : 3,
+  carrierSprayCount: mobileControls ? 28 : 44,
 });
 
 const keyMap = new Map([
@@ -59,7 +61,7 @@ const heldKeys = new Set();
 // state each frame from a REAL playthrough and POSTs it to /telemetry (same origin, so the dev
 // server writes it to disk for analysis). Fire-and-forget — a failed POST must never disturb the
 // sim. Sampled at ~30 Hz to keep sessions a few MB.
-const BUILD = "27";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
+const BUILD = "28";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
 const recorder = {
   session: `web-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
   build: BUILD,
@@ -224,14 +226,166 @@ function gameSafeInsets() {
   };
 }
 
-function makeMaterial(color, roughness = 0.72, metalness = 0.16, emissive = 0x000000) {
-  return new THREE.MeshStandardMaterial({ color, roughness, metalness, emissive });
+function applyProceduralFinish(material, options = {}) {
+  const grain = options.grain ?? 0.08;
+  const grainScale = options.grainScale ?? 1.2;
+  const panels = options.panels ?? 0;
+  const panelScale = options.panelScale ?? 0.5;
+  const hullBands = options.hullBands === true;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uFinishGrain = { value: grain };
+    shader.uniforms.uFinishScale = { value: grainScale };
+    shader.uniforms.uPanelStrength = { value: panels };
+    shader.uniforms.uPanelScale = { value: panelScale };
+    shader.vertexShader = shader.vertexShader
+      .replace("varying vec3 vViewPosition;", `
+        varying vec3 vViewPosition;
+        varying vec3 vFinishPosition;
+      `)
+      .replace("#include <begin_vertex>", `
+        #include <begin_vertex>
+        vFinishPosition = position;
+      `);
+    shader.fragmentShader = shader.fragmentShader
+      .replace("varying vec3 vViewPosition;", `
+        varying vec3 vViewPosition;
+        varying vec3 vFinishPosition;
+        uniform float uFinishGrain;
+        uniform float uFinishScale;
+        uniform float uPanelStrength;
+        uniform float uPanelScale;
+
+        float finishNoise(vec3 p) {
+          float a = sin(dot(p, vec3(1.73, 3.17, 2.11)));
+          float b = sin(dot(p, vec3(-4.13, 1.37, 3.71)) + a * 1.31);
+          float c = sin(dot(p, vec3(7.07, -2.43, 1.19)) + b * 0.83);
+          return 0.5 + 0.25 * b + 0.25 * c;
+        }
+
+        float finishPanel(vec3 p) {
+          vec3 cell = abs(fract(p) - 0.5);
+          float edge = max(max(cell.x, cell.y), cell.z);
+          return smoothstep(0.472, 0.497, edge);
+        }
+      `)
+      .replace("vec4 diffuseColor = vec4( diffuse, opacity );", `
+        vec4 diffuseColor = vec4( diffuse, opacity );
+        float finishValue = finishNoise(vFinishPosition * uFinishScale);
+        float panelValue = finishPanel(vFinishPosition * uPanelScale);
+      `)
+      .replace("#include <color_fragment>", `
+        #include <color_fragment>
+        diffuseColor.rgb *= 1.0 + (finishValue - 0.5) * uFinishGrain * 0.32;
+        diffuseColor.rgb *= 1.0 - panelValue * uPanelStrength;
+        ${hullBands ? `
+          float antiFouling = 1.0 - smoothstep(-18.6, -17.7, vFinishPosition.y);
+          float bootTop = smoothstep(-18.6, -18.15, vFinishPosition.y)
+            * (1.0 - smoothstep(-17.75, -17.3, vFinishPosition.y));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.115, 0.057, 0.052), antiFouling * 0.82);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.012, 0.018, 0.020), bootTop * 0.96);
+        ` : ""}
+      `)
+      .replace("#include <roughnessmap_fragment>", `
+        #include <roughnessmap_fragment>
+        roughnessFactor = clamp(roughnessFactor
+          + (finishValue - 0.5) * uFinishGrain
+          + panelValue * uPanelStrength * 0.7, 0.075, 1.0);
+      `);
+  };
+  material.customProgramCacheKey = () => `procedural-finish-${hullBands ? 1 : 0}`;
+  return material;
+}
+
+function makeMaterial(color, roughness = 0.72, metalness = 0.08, emissive = 0x000000,
+  options = {}) {
+  // Painted military aluminium is primarily a rough dielectric. MeshPhysicalMaterial supplies a
+  // calibrated Fresnel response; the tiny analytic grain breaks up broad highlights without maps.
+  const material = new THREE.MeshPhysicalMaterial({
+    color,
+    roughness,
+    metalness,
+    emissive,
+    ior: options.ior ?? 1.48,
+    specularIntensity: options.specularIntensity ?? 0.62,
+    specularColor: options.specularColor ?? 0xd9e2e3,
+    clearcoat: options.clearcoat ?? 0,
+    clearcoatRoughness: options.clearcoatRoughness ?? 0.48,
+    envMapIntensity: options.envMapIntensity ?? 0.74,
+  });
+  return applyProceduralFinish(material, options);
+}
+
+function createLitEnvironment(renderer) {
+  // A compact procedural PMREM gives every physical material something coherent to reflect. It is
+  // generated once at boot and contains no fetched texture or per-frame capture cost.
+  const environmentScene = new THREE.Scene();
+  const environmentMaterial = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    vertexShader: /* glsl */ `
+      varying vec3 vEnvironmentDirection;
+      void main() {
+        vEnvironmentDirection = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision highp float;
+      varying vec3 vEnvironmentDirection;
+      void main() {
+        vec3 d = normalize(vEnvironmentDirection);
+        float skyMix = pow(clamp(d.y * 0.5 + 0.5, 0.0, 1.0), 0.55);
+        vec3 lower = vec3(0.018, 0.052, 0.060);
+        vec3 horizon = vec3(0.36, 0.49, 0.51);
+        vec3 zenith = vec3(0.025, 0.145, 0.34);
+        vec3 color = d.y < 0.0 ? mix(lower, horizon * 0.44, smoothstep(-0.5, 0.0, d.y))
+          : mix(horizon, zenith, skyMix);
+        float sun = pow(max(dot(d, normalize(vec3(0.32, 0.78, -0.53))), 0.0), 720.0);
+        color += vec3(1.0, 0.72, 0.39) * sun * 12.0;
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+  });
+  environmentScene.add(new THREE.Mesh(new THREE.SphereGeometry(40, 32, 18), environmentMaterial));
+  const generator = new THREE.PMREMGenerator(renderer);
+  generator.compileCubemapShader();
+  const target = generator.fromScene(environmentScene, 0.035, 0.1, 80);
+  generator.dispose();
+  environmentMaterial.dispose();
+  environmentScene.children[0].geometry.dispose();
+  return target;
 }
 
 function box(group, size, position, material, rotation = null) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material);
   mesh.position.copy(position);
   if (rotation) mesh.rotation.set(rotation.x, rotation.y, rotation.z);
+  group.add(mesh);
+  return mesh;
+}
+
+function beveledBox(group, size, position, material, radius = 0.16) {
+  const bevel = Math.min(radius, size.x * 0.18, size.y * 0.18, size.z * 0.18);
+  const width = Math.max(0.02, size.x - bevel * 2);
+  const height = Math.max(0.02, size.y - bevel * 2);
+  const shape = new THREE.Shape();
+  shape.moveTo(-width * 0.5, -height * 0.5);
+  shape.lineTo(width * 0.5, -height * 0.5);
+  shape.lineTo(width * 0.5, height * 0.5);
+  shape.lineTo(-width * 0.5, height * 0.5);
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: Math.max(0.02, size.z - bevel * 2),
+    steps: 1,
+    bevelEnabled: true,
+    bevelSegments: 1,
+    bevelSize: bevel,
+    bevelThickness: bevel,
+    curveSegments: 1,
+  });
+  geometry.center();
+  geometry.computeVertexNormals();
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.copy(position);
   group.add(mesh);
   return mesh;
 }
@@ -259,41 +413,59 @@ function verticalCylinder(group, radius, length, position, material, radialSegme
 }
 
 function createHullGeometry() {
-  // Four stations are enough to produce the long, flared bow and narrower waterline that read as
-  // a ship rather than a box. Local -Z is the bow; the carrier update applies the sim->three frame.
+  // Closely spaced bow and stern stations keep highlights flowing down the shell instead of
+  // breaking into the large flat facets that made the ship look low-poly. Local -Z is the bow.
   const stations = [
-    { z: -125, top: 0.2, keel: 0.0, bottom: -8.0 },
-    { z: -108, top: 12.8, keel: 5.8, bottom: -22.0 },
-    { z: 92, top: 13.0, keel: 6.6, bottom: -24.0 },
-    { z: 122, top: 10.6, keel: 6.0, bottom: -20.0 },
+    { z: -128, beam: 0.35, bottom: -7.0 },
+    { z: -121, beam: 5.3, bottom: -15.5 },
+    { z: -110, beam: 11.8, bottom: -21.8 },
+    { z: -82, beam: 13.2, bottom: -23.5 },
+    { z: -25, beam: 13.5, bottom: -24.0 },
+    { z: 45, beam: 13.35, bottom: -23.8 },
+    { z: 92, beam: 12.85, bottom: -23.0 },
+    { z: 116, beam: 11.35, bottom: -20.8 },
+    { z: 126, beam: 8.4, bottom: -17.5 },
   ];
   const positions = [];
   const indices = [];
+  const crossSegments = 12;
   for (const station of stations) {
-    positions.push(
-      -station.top, -1.7, station.z,
-      station.top, -1.7, station.z,
-      -station.keel, station.bottom, station.z,
-      station.keel, station.bottom, station.z,
-    );
+    for (let segment = 0; segment <= crossSegments; segment++) {
+      const theta = Math.PI - segment / crossSegments * Math.PI;
+      const depth = Math.sin(theta);
+      const flare = 1 - depth * 0.38;
+      positions.push(
+        Math.cos(theta) * station.beam * flare,
+        -1.7 - depth * (-1.7 - station.bottom),
+        station.z,
+      );
+    }
   }
   for (let i = 0; i < stations.length - 1; i++) {
-    const a = i * 4;
-    const b = a + 4;
-    indices.push(
-      a, b, a + 1, b, b + 1, a + 1,             // hangar-deck shoulder
-      a + 2, a + 3, b + 2, b + 2, a + 3, b + 3, // keel
-      a, a + 2, b, b, a + 2, b + 2,             // port shell plating
-      a + 1, b + 1, a + 3, b + 1, b + 3, a + 3, // starboard shell plating
-    );
+    const a = i * (crossSegments + 1);
+    const b = a + crossSegments + 1;
+    for (let segment = 0; segment < crossSegments; segment++) {
+      indices.push(a + segment, a + segment + 1, b + segment);
+      indices.push(a + segment + 1, b + segment + 1, b + segment);
+    }
   }
-  const last = (stations.length - 1) * 4;
-  indices.push(0, 1, 2, 1, 3, 2, last, last + 2, last + 1, last + 1, last + 2, last + 3);
+  const ringSize = crossSegments + 1;
+  const bowCentre = positions.length / 3;
+  positions.push(0, (stations[0].bottom - 1.7) * 0.5, stations[0].z);
+  const sternCentre = positions.length / 3;
+  const stern = stations[stations.length - 1];
+  positions.push(0, (stern.bottom - 1.7) * 0.5, stern.z);
+  const sternStart = (stations.length - 1) * ringSize;
+  for (let segment = 0; segment < ringSize; segment++) {
+    const next = (segment + 1) % ringSize;
+    indices.push(bowCentre, next, segment);
+    indices.push(sternCentre, sternStart + segment, sternStart + next);
+  }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
-  return geometry.toNonIndexed();
+  return geometry;
 }
 
 function createWakeMaterial(bowWave = false) {
@@ -433,25 +605,45 @@ function addParkedAircraft(group, material, canopyMaterial) {
     { x: 8.4, z: -104, yaw: -0.025 },
   ];
   const temp = new THREE.Object3D();
-  const fuselages = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), material, places.length);
-  const wings = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), material, places.length);
+  const parkedFuselage = createLoftGeometry([
+    { z: -4.2, rx: 0.04, ry: 0.04, y: 0 },
+    { z: -3.35, rx: 0.34, ry: 0.3, y: 0.05 },
+    { z: -1.5, rx: 0.48, ry: 0.43, y: 0.08 },
+    { z: 1.65, rx: 0.43, ry: 0.38, y: 0.07 },
+    { z: 3.7, rx: 0.09, ry: 0.08, y: 0.06 },
+  ], 12);
+  const parkedWing = createPlanformGeometry([
+    [0, -2.45], [-0.58, -2.1], [-3.15, 0.15], [-2.88, 0.72], [-0.85, 0.46],
+    [-0.6, 2.52], [0, 2.76], [0.6, 2.52], [0.85, 0.46], [2.88, 0.72],
+    [3.15, 0.15], [0.58, -2.1],
+  ], 0.11, 0.028);
+  const parkedTail = createPlanformGeometry([
+    [0, 1.85], [-0.42, 1.92], [-1.65, 2.8], [-0.5, 2.62],
+    [0, 2.85], [0.5, 2.62], [1.65, 2.8], [0.42, 1.92],
+  ], 0.09, 0.02);
+  const fuselages = new THREE.InstancedMesh(parkedFuselage, material, places.length);
+  const wings = new THREE.InstancedMesh(parkedWing, material, places.length);
+  const tails = new THREE.InstancedMesh(parkedTail, material, places.length);
   const canopies = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 8, 5), canopyMaterial, places.length);
   places.forEach((place, index) => {
-    temp.position.set(place.x, 0.78, place.z);
+    temp.position.set(place.x, 0.84, place.z);
     temp.rotation.set(0, place.yaw, 0);
-    temp.scale.set(0.82, 0.72, 8.2);
+    temp.scale.set(1, 1, 1);
     temp.updateMatrix();
     fuselages.setMatrixAt(index, temp.matrix);
-    temp.position.set(place.x, 0.82, place.z + 0.1);
-    temp.scale.set(6.4, 0.18, 2.3);
+    temp.position.set(place.x, 0.82, place.z);
+    temp.scale.set(1, 1, 1);
     temp.updateMatrix();
     wings.setMatrixAt(index, temp.matrix);
-    temp.position.set(place.x, 1.18, place.z - 1.35);
-    temp.scale.set(1.0, 0.62, 1.7);
+    temp.position.set(place.x, 0.96, place.z);
+    temp.updateMatrix();
+    tails.setMatrixAt(index, temp.matrix);
+    temp.position.set(place.x, 1.28, place.z - 1.65);
+    temp.scale.set(0.82, 0.58, 1.58);
     temp.updateMatrix();
     canopies.setMatrixAt(index, temp.matrix);
   });
-  group.add(fuselages, wings, canopies);
+  group.add(fuselages, wings, tails, canopies);
 }
 
 function createRoundDownGeometry() {
@@ -560,6 +752,131 @@ function addDeckEdgeLights(group, material) {
   group.add(lamps);
 }
 
+function addDeckTieDowns(group, material) {
+  // Recessed six-point tie-down cups are a strong close-range scale cue. One instanced draw keeps
+  // the full deck grid cheaper than a texture lookup and the slight lift avoids coplanar flicker.
+  const columns = [-12.4, -8.3, -4.15, 0, 4.15, 8.3, 12.4];
+  const rows = 27;
+  const mesh = new THREE.InstancedMesh(
+    new THREE.CircleGeometry(0.085, 6), material, columns.length * rows,
+  );
+  const temp = new THREE.Object3D();
+  let index = 0;
+  for (let row = 0; row < rows; row++) {
+    const z = -108 + row * (216 / (rows - 1));
+    for (const x of columns) {
+      temp.position.set(x, 0.116, z);
+      temp.rotation.set(-Math.PI / 2, 0, (row & 1) * Math.PI / 6);
+      temp.updateMatrix();
+      mesh.setMatrixAt(index++, temp.matrix);
+    }
+  }
+  mesh.receiveShadow = true;
+  mesh.userData.noShadow = true;
+  group.add(mesh);
+}
+
+function addCarrierContactShadows(group) {
+  const material = new THREE.MeshBasicMaterial({
+    color: 0x050708,
+    transparent: true,
+    opacity: 0.22,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+  });
+  const patches = [
+    [10.7, -28, 5.8, 18],
+    [-9.2, -70, 1.55, 8.5],
+    [-9.0, -91, 1.55, 8.5],
+    [8.4, -104, 1.55, 8.5],
+  ];
+  const mesh = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 18), material, patches.length);
+  const temp = new THREE.Object3D();
+  for (let i = 0; i < patches.length; i++) {
+    temp.position.set(patches[i][0], 0.125, patches[i][1]);
+    temp.rotation.set(-Math.PI / 2, 0, 0);
+    temp.scale.set(patches[i][2], patches[i][3], 1);
+    temp.updateMatrix();
+    mesh.setMatrixAt(i, temp.matrix);
+  }
+  mesh.userData.noShadow = true;
+  mesh.renderOrder = 2;
+  group.add(mesh);
+}
+
+function createCarrierSpray() {
+  const count = VISUAL_QUALITY.carrierSprayCount;
+  const positions = new Float32Array(count * 3);
+  const seeds = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const seed = ((i * 37) % count) / count;
+    const side = i & 1 ? 1 : -1;
+    positions[i * 3] = side * (0.9 + seed * 4.8);
+    positions[i * 3 + 1] = 0.15 + ((i * 13) % 9) * 0.055;
+    positions[i * 3 + 2] = -127 + seed * 8.5;
+    seeds[i] = seed + (i & 1) * 0.013;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
+  const uniforms = {
+    uTime: { value: 0 },
+    uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, VISUAL_QUALITY.pixelRatioCap) },
+    uFogColor: { value: new THREE.Color(0x7898a0) },
+    uFogDensity: { value: 0.000055 },
+  };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+    vertexShader: /* glsl */ `
+      attribute float aSeed;
+      uniform float uTime;
+      uniform float uPixelRatio;
+      varying float vSprayAlpha;
+      varying vec3 vSprayWorld;
+      void main() {
+        float age = fract(uTime * (0.18 + aSeed * 0.045) + aSeed);
+        float side = sign(position.x);
+        vec3 animated = position;
+        animated.x += side * age * (6.0 + aSeed * 8.0);
+        animated.y += sin(age * 3.14159265) * (2.0 + aSeed * 2.8) - age * age * 1.2;
+        animated.z += age * (15.0 + aSeed * 21.0);
+        vec4 world = modelMatrix * vec4(animated, 1.0);
+        vec4 view = viewMatrix * world;
+        vSprayWorld = world.xyz;
+        vSprayAlpha = smoothstep(0.0, 0.12, age) * (1.0 - smoothstep(0.58, 1.0, age));
+        gl_PointSize = clamp((3.0 + aSeed * 3.0) * 170.0 / max(-view.z, 1.0), 1.0, 8.0)
+          * uPixelRatio;
+        gl_Position = projectionMatrix * view;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision highp float;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
+      varying float vSprayAlpha;
+      varying vec3 vSprayWorld;
+      void main() {
+        vec2 point = gl_PointCoord - 0.5;
+        float soft = 1.0 - smoothstep(0.16, 0.5, length(point));
+        float fog = 1.0 - exp(-uFogDensity * uFogDensity
+          * dot(vSprayWorld - cameraPosition, vSprayWorld - cameraPosition));
+        vec3 color = mix(vec3(0.78, 0.88, 0.87), uFogColor, fog);
+        gl_FragColor = vec4(color, soft * vSprayAlpha * 0.66 * (1.0 - fog));
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.frustumCulled = false;
+  points.renderOrder = 1;
+  return { points, uniforms };
+}
+
 function createBarrier(material, netMaterial) {
   const barrier = new THREE.Group();
   box(barrier, { x: 0.3, y: 4.6, z: 0.3 }, new THREE.Vector3(-13.2, 2.3, 0), material);
@@ -578,25 +895,30 @@ function createCarrier() {
   const structure = new THREE.Group();
   group.add(structure);
 
-  const hullMat = makeMaterial(0x354149, 0.76, 0.22, 0x020506);
-  const hullDark = makeMaterial(0x202b31, 0.88, 0.12);
-  const bootStripe = makeMaterial(0x11181b, 0.78, 0.24);
-  const antifouling = makeMaterial(0x3b2929, 0.84, 0.16);
-  const deckMat = makeMaterial(0x252b2d, 0.94, 0.05, 0x020303);
-  const islandMat = makeMaterial(0x536068, 0.72, 0.2, 0x020506);
-  const islandLight = makeMaterial(0x68747a, 0.68, 0.18);
-  const aircraftMat = makeMaterial(0x6c7778, 0.72, 0.22);
-  const glass = makeMaterial(0x152d38, 0.24, 0.55, 0x041016);
-  const paint = new THREE.MeshStandardMaterial({ color: 0xe4e1cc, roughness: 0.78, metalness: 0.02 });
-  const yellowPaint = new THREE.MeshStandardMaterial({ color: 0xe0bd58, roughness: 0.78, metalness: 0.02 });
+  const hullMat = makeMaterial(0x3c4950, 0.66, 0.06, 0x010203,
+    { grain: 0.13, grainScale: 0.19, hullBands: true, envMapIntensity: 0.62 });
+  const hullDark = makeMaterial(0x202b31, 0.78, 0.05, 0x000101, { grain: 0.11 });
+  const deckMat = makeMaterial(0x292f30, 0.77, 0.04, 0x010202,
+    { grain: 0.18, grainScale: 0.34, specularIntensity: 0.5 });
+  const islandMat = makeMaterial(0x59666c, 0.61, 0.05, 0x010202,
+    { grain: 0.1, grainScale: 0.8 });
+  const islandLight = makeMaterial(0x6b777b, 0.58, 0.045, 0x010202,
+    { grain: 0.08, grainScale: 0.9 });
+  const aircraftMat = makeMaterial(0x687577, 0.54, 0.07, 0x000101,
+    { grain: 0.09, grainScale: 1.7 });
+  const glass = makeMaterial(0x0e2833, 0.13, 0.03, 0x02090c,
+    { grain: 0, clearcoat: 1, clearcoatRoughness: 0.1, specularIntensity: 1, envMapIntensity: 1.25 });
+  const paint = makeMaterial(0xdad8c7, 0.68, 0.01, 0x000000, { grain: 0.06 });
+  const yellowPaint = makeMaterial(0xc7a94f, 0.7, 0.01, 0x000000, { grain: 0.08 });
   const seamMat = makeMaterial(0x111719, 0.96, 0.02);
   const skidMat = makeMaterial(0x0b0f10, 1.0, 0.01);
   const laneMat = makeMaterial(0x303739, 0.95, 0.04);
   const catwalkMat = makeMaterial(0x27343a, 0.86, 0.18);
   const railMat = new THREE.LineBasicMaterial({ color: 0x718087, transparent: true, opacity: 0.72 });
-  const barrierNet = new THREE.MeshStandardMaterial({
-    color: 0x9aa6a5, roughness: 0.92, metalness: 0.08, transparent: true, opacity: 0.28,
-  });
+  const barrierNet = makeMaterial(0x9aa6a5, 0.86, 0.03, 0x000000, { grain: 0.04 });
+  barrierNet.transparent = true;
+  barrierNet.opacity = 0.28;
+  barrierNet.depthWrite = false;
   const deckLampMat = makeMaterial(0xb6d6cf, 0.32, 0.25, 0x315e58);
 
   const hull = new THREE.Mesh(createHullGeometry(), hullMat);
@@ -604,14 +926,11 @@ function createCarrier() {
   box(structure, { x: 30, y: 1.8, z: 250 }, new THREE.Vector3(0, -0.9, 0), deckMat);
   structure.add(new THREE.Mesh(createRoundDownGeometry(), deckMat));
   addDeckSeams(structure, seamMat);
+  addDeckTieDowns(structure, seamMat);
   addDeckEdgeDetail(structure, catwalkMat, railMat);
   addDeckEdgeLights(structure, deckLampMat);
   box(structure, { x: 27.5, y: 3.0, z: 226 }, new THREE.Vector3(0, -3.05, 2), hullDark);
   box(structure, { x: 31.2, y: 0.32, z: 218 }, new THREE.Vector3(0, -2.0, 2), islandMat);
-  for (const side of [-1, 1]) {
-    box(structure, { x: 0.34, y: 1.05, z: 194 }, new THREE.Vector3(side * 7.7, -18.35, 4), bootStripe);
-    box(structure, { x: 0.26, y: 2.3, z: 154 }, new THREE.Vector3(side * 6.85, -20.0, 6), antifouling);
-  }
 
   // The landing-area group rotates independently of the ship for the nine-degree angled deck.
   // It is anchored at wire three; local -Z is rollout/bolter direction.
@@ -632,9 +951,8 @@ function createCarrier() {
   box(landingArea, { x: 0.42, y: 0.11, z: 30 }, new THREE.Vector3(5.5, 0.15, 1), yellowPaint);
   const wires = [];
   for (let wire = 1; wire <= 4; wire++) {
-    const wireMaterial = new THREE.MeshStandardMaterial({
-      color: 0xc9b47a, roughness: 0.54, metalness: 0.52, emissive: 0x000000,
-    });
+    const wireMaterial = makeMaterial(0xc9b47a, 0.38, 0.72, 0x000000,
+      { grain: 0.035, grainScale: 8, specularIntensity: 0.9, envMapIntensity: 1.0 });
     const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 23.5, 10), wireMaterial);
     mesh.rotation.z = Math.PI / 2;
     mesh.position.set(0, 0.24, (3 - wire) * 5.2);
@@ -647,9 +965,9 @@ function createCarrier() {
   structure.add(barrier);
 
   // Starboard island: stepped bridge, dark glazing, funnel, lattice mast and a simple radar yard.
-  box(structure, { x: 7.2, y: 4.8, z: 27 }, new THREE.Vector3(10.8, 2.35, -25), islandMat);
-  box(structure, { x: 6.5, y: 5.6, z: 18 }, new THREE.Vector3(10.7, 7.45, -29), islandLight);
-  box(structure, { x: 7.6, y: 3.8, z: 13 }, new THREE.Vector3(10.4, 12.0, -33), islandMat);
+  beveledBox(structure, { x: 7.2, y: 4.8, z: 27 }, new THREE.Vector3(10.8, 2.35, -25), islandMat, 0.32);
+  beveledBox(structure, { x: 6.5, y: 5.6, z: 18 }, new THREE.Vector3(10.7, 7.45, -29), islandLight, 0.28);
+  beveledBox(structure, { x: 7.6, y: 3.8, z: 13 }, new THREE.Vector3(10.4, 12.0, -33), islandMat, 0.24);
   box(structure, { x: 6.6, y: 0.9, z: 10.5 }, new THREE.Vector3(10.3, 12.7, -39.7), glass);
   box(structure, { x: 0.3, y: 0.9, z: 10.0 }, new THREE.Vector3(6.45, 12.7, -33), glass);
   verticalCylinder(structure, 2.0, 8.4, new THREE.Vector3(11.2, 17.0, -20), hullDark, 12);
@@ -679,6 +997,7 @@ function createCarrier() {
     }
   }
   addParkedAircraft(structure, aircraftMat, glass);
+  addCarrierContactShadows(structure);
 
   const wake = createWakeMaterial();
   const wakeMesh = new THREE.Mesh(createWakeGeometry(), wake.material);
@@ -686,7 +1005,8 @@ function createCarrier() {
   const bowWake = createWakeMaterial(true);
   const bowWakeMesh = new THREE.Mesh(createWakeGeometry(-131, 118, 13.5, 28), bowWake.material);
   bowWakeMesh.renderOrder = -1;
-  group.add(wakeMesh, bowWakeMesh);
+  const spray = createCarrierSpray();
+  group.add(wakeMesh, bowWakeMesh, spray.points);
 
   structure.traverse((object) => {
     if (!object.isMesh) return;
@@ -701,6 +1021,8 @@ function createCarrier() {
   group.userData.highlightedWire = 0;
   group.userData.wakes = [wakeMesh, bowWakeMesh];
   group.userData.wakeUniforms = [wake.uniforms, bowWake.uniforms];
+  group.userData.spray = spray.points;
+  group.userData.sprayUniforms = spray.uniforms;
   return group;
 }
 
@@ -719,6 +1041,11 @@ function updateCarrierVisual(carrier, state, nowSeconds, fogColor, fogDensity) {
     carrier.userData.wakeUniforms[i].uFogColor.value.copy(fogColor);
     carrier.userData.wakeUniforms[i].uFogDensity.value = fogDensity;
   }
+  carrier.userData.spray.scale.set(scaleX, 1, scaleZ);
+  carrier.userData.spray.position.y = -deckAltitude;
+  carrier.userData.sprayUniforms.uTime.value = nowSeconds;
+  carrier.userData.sprayUniforms.uFogColor.value.copy(fogColor);
+  carrier.userData.sprayUniforms.uFogDensity.value = fogDensity;
 
   // Resolve the kernel touchdown point into the established carrier-local frame. This keeps the
   // painted wire zone coincident with tx/tz even when heading or deck dimensions vary.
@@ -748,86 +1075,211 @@ function updateCarrierVisual(carrier, state, nowSeconds, fogColor, fogDensity) {
   }
 }
 
+function createLoftGeometry(stations, radialSegments = 18) {
+  const positions = [];
+  const indices = [];
+  for (const station of stations) {
+    for (let segment = 0; segment < radialSegments; segment++) {
+      const theta = segment / radialSegments * Math.PI * 2;
+      positions.push(
+        Math.cos(theta) * station.rx,
+        station.y + Math.sin(theta) * station.ry,
+        station.z,
+      );
+    }
+  }
+  for (let station = 0; station < stations.length - 1; station++) {
+    const a = station * radialSegments;
+    const b = a + radialSegments;
+    for (let segment = 0; segment < radialSegments; segment++) {
+      const next = (segment + 1) % radialSegments;
+      indices.push(a + segment, a + next, b + segment);
+      indices.push(a + next, b + next, b + segment);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createPlanformGeometry(points, thickness = 0.16, bevel = 0.045) {
+  const shape = new THREE.Shape();
+  shape.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) shape.lineTo(points[i][0], points[i][1]);
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: Math.max(0.02, thickness - bevel * 2),
+    steps: 1,
+    bevelEnabled: true,
+    bevelSegments: 1,
+    bevelSize: bevel,
+    bevelThickness: bevel,
+    curveSegments: 1,
+  });
+  geometry.rotateX(Math.PI / 2);
+  geometry.translate(0, thickness * 0.5, 0);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createFinGeometry(points, thickness = 0.12) {
+  const shape = new THREE.Shape();
+  shape.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) shape.lineTo(points[i][0], points[i][1]);
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: thickness * 0.55,
+    bevelEnabled: true,
+    bevelSegments: 1,
+    bevelSize: thickness * 0.22,
+    bevelThickness: thickness * 0.22,
+    steps: 1,
+  });
+  geometry.rotateY(-Math.PI / 2);
+  geometry.translate(thickness * 0.5, 0, 0);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function addFighterPanelLines(group, material) {
+  const positions = [];
+  const add = (ax, ay, az, bx, by, bz) => positions.push(ax, ay, az, bx, by, bz);
+  for (const side of [-1, 1]) {
+    add(side * 0.9, 0.215, -2.78, side * 4.82, 0.215, 0.42);
+    add(side * 1.35, 0.218, -1.58, side * 4.18, 0.218, 0.77);
+    add(side * 1.7, 0.218, 0.72, side * 4.66, 0.218, 0.82);
+    add(side * 0.72, 0.22, 3.05, side * 2.75, 0.22, 4.28);
+  }
+  const ringStations = [0.25, 1.75, 3.15];
+  const ringSegments = 14;
+  for (const z of ringStations) {
+    const radiusX = 0.71 - z * 0.045;
+    const radiusY = 0.63 - z * 0.038;
+    for (let i = 0; i < ringSegments; i++) {
+      const a = i / ringSegments * Math.PI * 2;
+      const b = (i + 1) / ringSegments * Math.PI * 2;
+      add(Math.cos(a) * radiusX, 0.1 + Math.sin(a) * radiusY, z,
+        Math.cos(b) * radiusX, 0.1 + Math.sin(b) * radiusY, z);
+    }
+  }
+  const lines = new THREE.LineSegments(
+    new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(positions, 3)),
+    material,
+  );
+  lines.renderOrder = 2;
+  group.add(lines);
+}
+
 function createDrone() {
   const group = new THREE.Group();
-  const skin = makeMaterial(0x526069, 0.58, 0.34, 0x020506);
-  skin.side = THREE.DoubleSide;
-  const underside = makeMaterial(0x202a31, 0.76, 0.24);
-  const edge = makeMaterial(0x11191e, 0.82, 0.22);
-  const sensor = makeMaterial(0x101a21, 0.23, 0.62, 0x07141a);
-  const canopy = makeMaterial(0x183844, 0.18, 0.58, 0x06151b);
+  const skin = makeMaterial(0x667276, 0.48, 0.075, 0x010202,
+    { grain: 0.12, grainScale: 2.3, panels: 0.025, panelScale: 0.52, envMapIntensity: 0.92 });
+  const skinDark = makeMaterial(0x465157, 0.56, 0.055, 0x010202,
+    { grain: 0.1, grainScale: 2.7, envMapIntensity: 0.78 });
+  const underside = makeMaterial(0x303a3f, 0.62, 0.045, 0x000101,
+    { grain: 0.11, grainScale: 2.1, envMapIntensity: 0.65 });
+  const edge = makeMaterial(0x171f23, 0.64, 0.05, 0x000000, { grain: 0.06 });
+  const intake = makeMaterial(0x080d0f, 0.38, 0.12, 0x000000,
+    { grain: 0.03, envMapIntensity: 0.3 });
+  const canopy = makeMaterial(0x102e3a, 0.095, 0.02, 0x02090d,
+    { grain: 0, clearcoat: 1, clearcoatRoughness: 0.065, specularIntensity: 1, envMapIntensity: 1.35 });
 
-  // A single triangulated cranked-delta planform reads cleanly at combat range and avoids the
-  // toy-like stack of boxes the original target used. Local -Z remains aircraft-forward.
-  const planform = new THREE.Shape();
-  planform.moveTo(0, -4.85);
-  planform.lineTo(-0.72, -3.25);
-  planform.lineTo(-4.35, 0.05);
-  planform.lineTo(-4.05, 1.08);
-  planform.lineTo(-1.35, 0.62);
-  planform.lineTo(-0.82, 3.0);
-  planform.lineTo(0, 3.32);
-  planform.lineTo(0.82, 3.0);
-  planform.lineTo(1.35, 0.62);
-  planform.lineTo(4.05, 1.08);
-  planform.lineTo(4.35, 0.05);
-  planform.lineTo(0.72, -3.25);
-  const wingGeometry = new THREE.ShapeGeometry(planform);
-  wingGeometry.rotateX(Math.PI / 2);
-  const wing = new THREE.Mesh(wingGeometry, skin);
-  wing.position.y = 0.04;
+  // The primary wing is a shallow beveled solid, so it catches a narrow leading-edge highlight
+  // instead of disappearing as a two-sided card. Aircraft local -Z remains forward throughout.
+  const wingPoints = [
+    [0, -3.72], [-0.74, -3.36], [-2.05, -2.26], [-5.42, 0.18], [-5.18, 0.98],
+    [-2.05, 0.72], [-1.52, 3.48], [0, 3.88], [1.52, 3.48], [2.05, 0.72],
+    [5.18, 0.98], [5.42, 0.18], [2.05, -2.26], [0.74, -3.36],
+  ];
+  const wing = new THREE.Mesh(createPlanformGeometry(wingPoints, 0.18, 0.052), [skin, skinDark]);
+  wing.position.y = 0.03;
   group.add(wing);
 
-  cylinder(group, 0.48, 5.8, new THREE.Vector3(0, 0.12, -0.35), skin, 14);
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.48, 2.05, 12), skin);
-  nose.rotation.x = -Math.PI / 2;
-  nose.position.set(0, 0.12, -4.25);
-  group.add(nose);
+  const tailPoints = [
+    [0, 2.62], [-0.7, 2.72], [-3.0, 4.04], [-2.86, 4.62], [-0.72, 4.23],
+    [0, 4.52], [0.72, 4.23], [2.86, 4.62], [3.0, 4.04], [0.7, 2.72],
+  ];
+  const tailplane = new THREE.Mesh(createPlanformGeometry(tailPoints, 0.14, 0.038), [skin, edge]);
+  tailplane.position.y = 0.17;
+  group.add(tailplane);
 
-  const canopyMesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 7), canopy);
-  canopyMesh.scale.set(0.72, 0.54, 1.55);
-  canopyMesh.position.set(0, 0.46, -2.15);
+  const fuselage = new THREE.Mesh(createLoftGeometry([
+    { z: -6.65, rx: 0.025, ry: 0.025, y: 0.02 },
+    { z: -5.65, rx: 0.34, ry: 0.30, y: 0.04 },
+    { z: -4.35, rx: 0.62, ry: 0.54, y: 0.08 },
+    { z: -2.6, rx: 0.78, ry: 0.72, y: 0.11 },
+    { z: -0.2, rx: 0.82, ry: 0.76, y: 0.10 },
+    { z: 2.55, rx: 0.70, ry: 0.64, y: 0.09 },
+    { z: 4.65, rx: 0.48, ry: 0.43, y: 0.1 },
+    { z: 5.65, rx: 0.18, ry: 0.17, y: 0.1 },
+  ]), skin);
+  group.add(fuselage);
+
+  // Separate shoulder nacelles, recessed intake faces and hot-metal exhaust rings make the target
+  // read as a powered fighter from front and rear quarters, where most padlock views live.
+  for (const side of [-1, 1]) {
+    const nacelle = new THREE.Mesh(createLoftGeometry([
+      { z: -2.75, rx: 0.48, ry: 0.38, y: -0.12 },
+      { z: -1.8, rx: 0.62, ry: 0.48, y: -0.08 },
+      { z: 2.9, rx: 0.58, ry: 0.45, y: -0.04 },
+      { z: 4.65, rx: 0.43, ry: 0.36, y: 0.0 },
+    ], 14), underside);
+    nacelle.position.x = side * 1.08;
+    group.add(nacelle);
+
+    const intakeFace = new THREE.Mesh(new THREE.CircleGeometry(0.43, 18), intake);
+    intakeFace.scale.y = 0.76;
+    intakeFace.position.set(side * 1.08, -0.12, -2.765);
+    intakeFace.rotation.y = Math.PI;
+    group.add(intakeFace);
+    const intakeLip = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.055, 6, 18), skinDark);
+    intakeLip.scale.y = 0.76;
+    intakeLip.position.copy(intakeFace.position);
+    group.add(intakeLip);
+
+    const exhaustFace = new THREE.Mesh(
+      new THREE.CircleGeometry(0.35, 18),
+      new THREE.MeshBasicMaterial({ color: 0xdf6f28, transparent: true, opacity: 0.56 }),
+    );
+    exhaustFace.position.set(side * 1.08, 0.0, 4.67);
+    group.add(exhaustFace);
+    const exhaustRing = new THREE.Mesh(new THREE.TorusGeometry(0.39, 0.065, 7, 18), edge);
+    exhaustRing.position.copy(exhaustFace.position);
+    group.add(exhaustRing);
+  }
+
+  const canopyMesh = new THREE.Mesh(new THREE.SphereGeometry(0.62, 20, 12), canopy);
+  canopyMesh.scale.set(0.88, 0.72, 2.25);
+  canopyMesh.position.set(0, 0.72, -2.55);
   group.add(canopyMesh);
+  box(group, new THREE.Vector3(0.075, 0.055, 2.45), new THREE.Vector3(0, 1.11, -2.35), edge);
+  box(group, new THREE.Vector3(1.02, 0.055, 0.075), new THREE.Vector3(0, 1.08, -1.55), edge);
 
-  // Twin canted fins, elevons and a dark underside restore attitude cues through a hard turn.
-  box(group, new THREE.Vector3(0.12, 1.42, 1.55), new THREE.Vector3(-0.86, 0.61, 1.55), edge,
-    new THREE.Vector3(0, 0, -0.34));
-  box(group, new THREE.Vector3(0.12, 1.42, 1.55), new THREE.Vector3(0.86, 0.61, 1.55), edge,
-    new THREE.Vector3(0, 0, 0.34));
-  box(group, new THREE.Vector3(2.5, 0.08, 0.42), new THREE.Vector3(-2.42, -0.02, 0.72), edge,
-    new THREE.Vector3(0, 0.04, 0));
-  box(group, new THREE.Vector3(2.5, 0.08, 0.42), new THREE.Vector3(2.42, -0.02, 0.72), edge,
-    new THREE.Vector3(0, -0.04, 0));
-  box(group, new THREE.Vector3(1.36, 0.16, 3.45), new THREE.Vector3(0, -0.12, 0.2), underside);
+  const finGeometry = createFinGeometry([
+    [1.72, 0.0], [4.62, 0.0], [4.1, 2.55], [3.38, 3.04], [2.45, 0.3],
+  ]);
+  for (const side of [-1, 1]) {
+    const fin = new THREE.Mesh(finGeometry, [skinDark, edge]);
+    fin.position.set(side * 1.04, 0.24, 0);
+    fin.rotation.z = side * -0.2;
+    group.add(fin);
+  }
 
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8), sensor);
-  ball.position.set(0, -0.37, -3.08);
-  group.add(ball);
-
-  const aperture = new THREE.Mesh(
-    new THREE.CircleGeometry(0.14, 12),
-    new THREE.MeshBasicMaterial({ color: 0x76d8e8, transparent: true, opacity: 0.75, side: THREE.DoubleSide }),
-  );
-  aperture.rotation.y = Math.PI;
-  aperture.position.set(0, -0.37, -3.415);
-  group.add(aperture);
-
-  const exhaust = new THREE.Mesh(
-    new THREE.CircleGeometry(0.33, 14),
-    new THREE.MeshBasicMaterial({ color: 0xff8c35, transparent: true, opacity: 0.72, side: THREE.DoubleSide }),
-  );
-  exhaust.position.set(0, 0.12, 2.58);
-  group.add(exhaust);
+  addFighterPanelLines(group, new THREE.LineBasicMaterial({
+    color: 0x1b2529, transparent: true, opacity: 0.46,
+  }));
 
   const leftLight = new THREE.Mesh(
-    new THREE.SphereGeometry(0.08, 8, 6),
-    new THREE.MeshBasicMaterial({ color: 0xff4b58 }),
+    new THREE.SphereGeometry(0.09, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xff4b58, toneMapped: false }),
   );
-  leftLight.position.set(-4.18, 0.08, 0.16);
+  leftLight.position.set(-5.28, 0.21, 0.55);
   group.add(leftLight);
   const rightLight = leftLight.clone();
-  rightLight.material = new THREE.MeshBasicMaterial({ color: 0x62ffc0 });
-  rightLight.position.x = 4.18;
+  rightLight.material = new THREE.MeshBasicMaterial({ color: 0x62ffc0, toneMapped: false });
+  rightLight.position.x = 5.28;
   group.add(rightLight);
 
   group.traverse((object) => {
@@ -835,29 +1287,111 @@ function createDrone() {
     object.castShadow = true;
     object.receiveShadow = true;
   });
-
   return group;
 }
 
+function createFireballMaterial(coreColor, edgeColor) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uAlpha: { value: 0 },
+      uAge: { value: 0 },
+      uCoreColor: { value: new THREE.Color(coreColor) },
+      uEdgeColor: { value: new THREE.Color(edgeColor) },
+    },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */ `
+      varying vec3 vFirePosition;
+      varying vec3 vFireNormal;
+      varying vec3 vFireView;
+      void main() {
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vFirePosition = position;
+        vFireNormal = normalize(normalMatrix * normal);
+        vec4 view = viewMatrix * world;
+        vFireView = -view.xyz;
+        gl_Position = projectionMatrix * view;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision highp float;
+      uniform float uAlpha;
+      uniform float uAge;
+      uniform vec3 uCoreColor;
+      uniform vec3 uEdgeColor;
+      varying vec3 vFirePosition;
+      varying vec3 vFireNormal;
+      varying vec3 vFireView;
+      void main() {
+        vec3 p = normalize(vFirePosition);
+        float billow = sin(p.x * 11.0 + p.y * 7.0 - uAge * 8.0);
+        billow += sin(p.z * 17.0 - p.x * 5.0 + uAge * 5.3) * 0.55;
+        billow += sin((p.x + p.y - p.z) * 25.0 - uAge * 11.0) * 0.23;
+        billow = billow * 0.22 + 0.55;
+        float facing = max(dot(normalize(vFireNormal), normalize(vFireView)), 0.0);
+        float softEdge = smoothstep(0.0, 0.42, facing);
+        float hot = smoothstep(0.34, 0.78, billow + facing * 0.24);
+        vec3 color = mix(uEdgeColor, uCoreColor, hot);
+        gl_FragColor = vec4(color, uAlpha * softEdge * (0.66 + billow * 0.45));
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+}
+
+function createSmokePuffMaterial(color) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uAlpha: { value: 0 },
+      uAge: { value: 0 },
+      uColor: { value: new THREE.Color(color) },
+    },
+    transparent: true,
+    depthWrite: false,
+    vertexShader: /* glsl */ `
+      varying vec3 vSmokePosition;
+      varying vec3 vSmokeNormal;
+      varying vec3 vSmokeView;
+      void main() {
+        vSmokePosition = position;
+        vSmokeNormal = normalize(normalMatrix * normal);
+        vec4 view = modelViewMatrix * vec4(position, 1.0);
+        vSmokeView = -view.xyz;
+        gl_Position = projectionMatrix * view;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision highp float;
+      uniform float uAlpha;
+      uniform float uAge;
+      uniform vec3 uColor;
+      varying vec3 vSmokePosition;
+      varying vec3 vSmokeNormal;
+      varying vec3 vSmokeView;
+      void main() {
+        vec3 p = normalize(vSmokePosition);
+        float detail = sin(p.x * 9.0 + p.y * 13.0 + uAge * 0.7);
+        detail += sin(p.z * 16.0 - p.x * 7.0 - uAge * 0.43) * 0.45;
+        float facing = max(dot(normalize(vSmokeNormal), normalize(vSmokeView)), 0.0);
+        float softEdge = smoothstep(0.02, 0.52 + detail * 0.055, facing);
+        vec3 smokeColor = uColor * (0.84 + detail * 0.045 + facing * 0.11);
+        gl_FragColor = vec4(smokeColor, uAlpha * softEdge);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+}
+
 function createBanditDestruction() {
-  // Built once, then animated by transforms/material opacity only. The kernel freezes on Splash,
+  // Built once, then animated by transforms and pre-existing shader uniforms only. The kernel freezes on Splash,
   // so this render-clock effect supplies the visible payoff without asking the sim to keep moving.
   const group = new THREE.Group();
   const sphere = new THREE.SphereGeometry(1, 14, 10);
-  const outerMaterial = new THREE.MeshBasicMaterial({
-    color: 0xff5b18,
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  const innerMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffd36a,
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
+  const outerMaterial = createFireballMaterial(0xffb13b, 0xe8380c);
+  const innerMaterial = createFireballMaterial(0xfff0a0, 0xff731c);
   const outer = new THREE.Mesh(sphere, outerMaterial);
   const inner = new THREE.Mesh(sphere, innerMaterial);
   outer.renderOrder = 12;
@@ -906,12 +1440,7 @@ function createBanditDestruction() {
   ];
   const smoke = [];
   for (let i = 0; i < smokeDirections.length; i++) {
-    const material = new THREE.MeshBasicMaterial({
-      color: i < 2 ? 0x3b3530 : 0x252a2c,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-    });
+    const material = createSmokePuffMaterial(i < 2 ? 0x3b3530 : 0x252a2c);
     const puff = new THREE.Mesh(sphere, material);
     puff.userData.direction = new THREE.Vector3(
       smokeDirections[i][0], smokeDirections[i][1], smokeDirections[i][2],
@@ -1119,6 +1648,7 @@ function createSky() {
     depthWrite: false,
     depthTest: false,
     uniforms,
+    defines: { CLOUD_OCTAVES: VISUAL_QUALITY.cloudOctaves },
     vertexShader: /* glsl */ `
       varying vec3 vDirection;
 
@@ -1138,6 +1668,29 @@ function createSky() {
         p = fract(p * vec2(123.34, 456.21));
         p += dot(p, p + 45.32);
         return fract(p.x * p.y);
+      }
+
+      float noise21(vec2 p) {
+        vec2 cell = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash21(cell);
+        float b = hash21(cell + vec2(1.0, 0.0));
+        float c = hash21(cell + vec2(0.0, 1.0));
+        float e = hash21(cell + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, e, f.x), f.y);
+      }
+
+      float cloudFbm(vec2 p) {
+        float value = 0.0;
+        float amplitude = 0.54;
+        mat2 rotation = mat2(0.84, -0.54, 0.54, 0.84);
+        for (int octave = 0; octave < CLOUD_OCTAVES; octave++) {
+          value += noise21(p) * amplitude;
+          p = rotation * p * 2.03 + vec2(7.1, -3.7);
+          amplitude *= 0.49;
+        }
+        return value;
       }
 
       void main() {
@@ -1166,15 +1719,30 @@ function createSky() {
 
         vec3 color = mix(lowSky, highSky, altitudeMix);
 
-        // Sparse deterministic cirrus gives the upper sky scale without texture lookups. It moves
-        // slowly enough to be atmospheric rather than distracting during lineup corrections.
-        vec2 cloudUv = d.xz / max(d.y + 0.24, 0.16);
-        float cloudField = sin(cloudUv.x * 7.3 + cloudUv.y * 3.1 + uTime * 0.007);
-        cloudField += 0.62 * sin(cloudUv.x * -11.7 + cloudUv.y * 8.6 - uTime * 0.005);
-        cloudField += 0.34 * sin(cloudUv.x * 23.0 + cloudUv.y * 13.0);
-        float cirrus = smoothstep(1.12, 1.68, cloudField);
-        cirrus *= smoothstep(0.08, 0.32, h) * (1.0 - altitudeMix) * 0.22;
-        color = mix(color, vec3(0.79, 0.86, 0.88), cirrus);
+        // Two analytic cloud layers share the atmospheric light: darker optical depth beneath,
+        // warm sun-facing shoulders above, and a high streak layer. No texture fetches or sprites.
+        vec2 wind = vec2(uTime * 0.0017, -uTime * 0.0009);
+        vec2 cloudUv = d.xz / max(h + 0.105, 0.072);
+        float cloudBase = cloudFbm(cloudUv * 0.72 + wind);
+        float cloudDetail = cloudFbm(cloudUv * 1.77 - wind * 0.37 + 9.4);
+        float cloudField = cloudBase * 0.78 + cloudDetail * 0.22;
+        float cumulus = smoothstep(0.535, 0.70, cloudField);
+        cumulus *= smoothstep(0.012, 0.075, h) * (1.0 - smoothstep(0.27, 0.52, h));
+        cumulus *= (1.0 - altitudeMix) * 0.72;
+        float sunSample = cloudFbm((cloudUv + normalize(uSunDirection.xz) * 0.15) * 0.72 + wind);
+        float cloudLight = clamp(0.48 + (sunSample - cloudBase) * 3.2, 0.0, 1.0);
+        float cloudCore = smoothstep(0.61, 0.79, cloudField);
+        vec3 cloudShade = mix(vec3(0.36, 0.45, 0.47), vec3(0.87, 0.91, 0.88), cloudLight);
+        cloudShade += vec3(0.13, 0.085, 0.035) * cloudLight * (1.0 - altitudeMix);
+        color = mix(color, cloudShade, cumulus * (0.56 + cloudCore * 0.34));
+
+        vec2 cirrusUv = d.xz / max(h + 0.28, 0.19);
+        float cirrusField = sin(cirrusUv.x * 8.3 + cirrusUv.y * 3.1 + uTime * 0.006);
+        cirrusField += 0.57 * sin(cirrusUv.x * -13.7 + cirrusUv.y * 9.6 - uTime * 0.004);
+        cirrusField += 0.29 * sin(cirrusUv.x * 25.0 + cirrusUv.y * 14.0);
+        float cirrus = smoothstep(1.16, 1.7, cirrusField);
+        cirrus *= smoothstep(0.12, 0.38, h) * (1.0 - altitudeMix) * 0.16;
+        color = mix(color, vec3(0.76, 0.83, 0.85), cirrus);
 
         vec2 spherical = vec2(atan(d.z, d.x), asin(clamp(d.y, -1.0, 1.0)));
         vec2 starGrid = spherical * vec2(760.0, 430.0);
@@ -1190,7 +1758,7 @@ function createSky() {
         float sunDisc = smoothstep(0.99991, 0.999975, sunDot);
         float sunHalo = pow(max(sunDot, 0.0), mix(210.0, 700.0, altitudeMix));
         float sunAura = pow(max(sunDot, 0.0), 18.0) * (1.0 - altitudeMix * 0.7);
-        color += vec3(1.0, 0.72, 0.35) * (sunDisc * 3.0 + sunHalo * 0.35 + sunAura * 0.035);
+        color += vec3(1.0, 0.80, 0.48) * (sunDisc * 3.25 + sunHalo * 0.4 + sunAura * 0.042);
 
         gl_FragColor = vec4(color, 1.0);
         #include <tonemapping_fragment>
@@ -1342,6 +1910,7 @@ function createSea() {
         vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
         vec3 sunDirection = normalize(uSunDirection);
         vec3 halfDirection = normalize(viewDirection + sunDirection);
+        vec3 reflectionDirection = reflect(-viewDirection, normal);
         float noV = max(dot(normal, viewDirection), 0.0);
         float noH = max(dot(normal, halfDirection), 0.0);
         float fresnel = 0.02 + 0.98 * pow(1.0 - noV, 5.0);
@@ -1357,9 +1926,17 @@ function createSea() {
         vec3 color = mix(mix(nearWater, middleWater, 1.0 - noV), farWater, distanceTone);
         color *= 0.88 + broadSwell * 0.055 + crossSwell * 0.032;
         color = mix(color, vec3(0.012, 0.034, 0.064), altitudeMix * 0.62);
-        vec3 reflectedSky = mix(vec3(0.055, 0.16, 0.24), vec3(0.38, 0.54, 0.58),
-          pow(1.0 - noV, 0.72));
-        color = mix(color, reflectedSky, fresnel * 0.82);
+        // Use the actual reflected elevation rather than a generic edge tint: steep facets pick up
+        // the blue zenith while grazing facets catch the bright atmospheric horizon.
+        float reflectedElevation = clamp(reflectionDirection.y, 0.0, 1.0);
+        vec3 reflectedHorizon = vec3(0.34, 0.49, 0.53);
+        vec3 reflectedZenith = vec3(0.018, 0.115, 0.29);
+        vec3 reflectedSky = mix(reflectedHorizon, reflectedZenith,
+          pow(reflectedElevation, 0.42));
+        float reflectedSun = pow(max(dot(reflectionDirection, sunDirection), 0.0),
+          mix(190.0, 520.0, altitudeMix));
+        reflectedSky += vec3(1.0, 0.74, 0.4) * reflectedSun * 2.2;
+        color = mix(color, reflectedSky, fresnel * 0.86);
 
         // Soft forward-scatter through the lifted face gives the large waves volume without
         // falsely lighting their backs like matte terrain.
@@ -1430,6 +2007,8 @@ class FlightView {
     this.camera.rotation.order = "YXZ";
 
     this.scene = new THREE.Scene();
+    this.environmentTarget = createLitEnvironment(this.renderer);
+    this.scene.environment = this.environmentTarget.texture;
     this.fogLow = new THREE.Color(0x7898a0);
     this.fogHigh = new THREE.Color(0x1c2a43);
     this.fogColor = this.fogLow.clone();
@@ -1438,7 +2017,7 @@ class FlightView {
     this.sea = createSea();
     this.scene.add(this.sky.mesh, this.sea.mesh);
 
-    this.scene.add(new THREE.HemisphereLight(0xa9c7d2, 0x10242d, 1.02));
+    this.scene.add(new THREE.HemisphereLight(0xb5cad0, 0x102229, 0.78));
     this.sun = new THREE.DirectionalLight(0xffe2b4, 2.65);
     this.sunTarget = new THREE.Object3D();
     this.scene.add(this.sun, this.sunTarget);
@@ -1456,7 +2035,8 @@ class FlightView {
 
     this.drone = createDrone();
     this.awacs = createAwacs();
-    this.hiddenDrone = createDrone();
+    // Keep the chase/reference airframe available without duplicating its heavier geometry.
+    this.hiddenDrone = this.drone.clone(true);
     this.hiddenGlider = createGlider();
     this.hiddenDrone.visible = false;
     this.hiddenGlider.visible = false;
@@ -1528,6 +2108,9 @@ class FlightView {
     document.documentElement.style.setProperty("--game-height", `${height}px`);
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
+    if (this.carrier?.userData.sprayUniforms) {
+      this.carrier.userData.sprayUniforms.uPixelRatio.value = pixelRatio;
+    }
     this.camera.aspect = width / Math.max(height, 1);
     this.camera.updateProjectionMatrix();
     this.hud.resize(width, height, pixelRatio, gameSafeInsets());
@@ -1608,8 +2191,10 @@ class FlightView {
     const burst = clamp(age / 0.72, 0, 1);
     data.outer.scale.setScalar(1.5 + burst * 12.5);
     data.inner.scale.setScalar(0.9 + burst * 7.0);
-    data.outer.material.opacity = Math.max(0, 0.92 * (1 - age / 1.15));
-    data.inner.material.opacity = Math.max(0, 1 - age / 0.72);
+    data.outer.material.uniforms.uAlpha.value = Math.max(0, 0.92 * (1 - age / 1.15));
+    data.inner.material.uniforms.uAlpha.value = Math.max(0, 1 - age / 0.72);
+    data.outer.material.uniforms.uAge.value = age;
+    data.inner.material.uniforms.uAge.value = age;
     data.flash.intensity = Math.max(0, 68 * (1 - age / 0.48));
 
     const shockActive = age < 1.05;
@@ -1648,7 +2233,10 @@ class FlightView {
       puff.position.copy(puff.userData.direction).multiplyScalar(puffAge * (4.8 + i * 0.45));
       puff.position.y += puffAge * 4.6;
       puff.scale.setScalar(2.2 + puffAge * (3.3 + i * 0.12));
-      puff.material.opacity = Math.max(0, Math.min(0.58, puffAge * 1.4) * (1 - age / 4.8));
+      puff.material.uniforms.uAge.value = puffAge;
+      puff.material.uniforms.uAlpha.value = Math.max(
+        0, Math.min(0.58, puffAge * 1.4) * (1 - age / 4.8),
+      );
     }
   }
 

@@ -80,7 +80,8 @@ public sealed class Carrier {
 
         Position += Fwd * (SpeedMps * dt);
         _motionTimeSeconds += dt;
-        // PLACEHOLDER sea-state motion: two smooth deterministic sinusoids, never Random/wall time.
+        // PLACEHOLDER / TUNABLE sea-state motion: smooth deterministic sinusoids, never
+        // Random/wall time. The applied per-attempt difficulty supplies amplitude and period.
         double heave = _difficulty.DeckHeaveAmplitudeM * System.Math.Sin(
             2.0 * System.Math.PI * _motionTimeSeconds / _difficulty.DeckHeavePeriodSeconds);
         Position = new Vec3D(Position.X, _meanDeckCentreY + heave, Position.Z);

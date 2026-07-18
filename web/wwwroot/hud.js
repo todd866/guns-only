@@ -126,6 +126,8 @@ class CombatHud {
     this._gunAudioFiring = false;
     this._lastHudHits = 0;
     this._hitFlashUntil = -1;
+    this._difficultySignature = null;
+    this._difficultyCueUntil = -1;
   }
 
   resize(width, height, pixelRatio, safeInsets = null) {
@@ -910,6 +912,42 @@ class CombatHud {
     ctx.restore();
   }
 
+  // One compact conditions line. It stays glanceable for the pass, while a restart that selects
+  // different deterministic weather briefly calls attention to the shift without adding a new
+  // persistent instrument or modal briefing.
+  drawDifficulty(state) {
+    if (state.carrier !== true) return;
+    const level = Math.max(0, Math.round(Number(state.difficulty_level) || 0));
+    const attempt = Math.max(1, Math.round(Number(state.difficulty_attempt) || 1));
+    const label = String(state.difficulty_label || "CALM");
+    const signature = `${attempt}:${level}:${label}`;
+    const simTime = Number(state.t) || 0;
+    if (signature !== this._difficultySignature) {
+      if (this._difficultySignature !== null) this._difficultyCueUntil = simTime + 2.4;
+      this._difficultySignature = signature;
+    }
+
+    const shifted = simTime < this._difficultyCueUntil;
+    const status = state.difficulty_eased === true ? "EASED"
+      : state.difficulty_spike === true ? "CHALLENGE"
+      : "";
+    const text = `${shifted ? "CONDITIONS SHIFT · " : ""}L${level} · ${label}${status ? ` · ${status}` : ""}`;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const width = Math.min(this.width - 34, Math.max(112, ctx.measureText(text).width + 24));
+    const height = 21;
+    const x = (this.width - width) / 2;
+    const y = Math.max(179, this.safeInsets.top + 174);
+    const accent = shifted || state.difficulty_spike === true ? AMBER : GREEN_DIM;
+    this.glassPanel(x, y, width, height, accent);
+    ctx.fillStyle = accent;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, this.width / 2, y + height / 2 + 0.5);
+    ctx.restore();
+  }
+
   drawAoAIndexer(state) {
     if (state.carrier !== true || !isApproachMode(state)) return;
     const aoa = Number(state.aoa_deg);
@@ -1629,12 +1667,13 @@ class CombatHud {
     this.drawFooter(frame.state);
     this.drawLegend(Boolean(frame.state.frozen));
     this.drawMode(frame.state);
+    this.drawDifficulty(frame.state);
     // Build stamp (top-left): so a stale cached tab is instantly obvious. Bump on each publish.
     ctx.save();
     ctx.fillStyle = "rgba(77, 255, 136, 0.35)";
     ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left"; ctx.textBaseline = "top";
-    ctx.fillText("BUILD 27", this.safeInsets.left + 8, this.safeInsets.top + 8);
+    ctx.fillText("BUILD 28", this.safeInsets.left + 8, this.safeInsets.top + 8);
     ctx.restore();
     this.drawEnding(frame);
   }
