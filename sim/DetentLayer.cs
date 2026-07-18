@@ -16,7 +16,9 @@ public sealed class DetentLayer {
     int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
     const double Tau = 0.22, StickyStepG = 0.5, RollHoldRate = 1.6; // rad/s while roll key held
-    const double RollReturnRate = 0.9; // rad/s — reflex return toward the doctrine bank when roll is un-commanded
+    const double RollReturnRate = 0.6; // rad/s — reflex return toward wings-level when roll is un-commanded
+    const double RollLevelDelayMs = 1500; // wait this long after the last roll input before settling to level
+    double _rollIdleMs;
 
     public void Tick(KeyGrammar keys, double nowMs, in AircraftState s, in AircraftParams p, DoctrineAdvice advice, double dt) {
         double maxPerform = Protection.MaxPerformG(s, p);
@@ -68,18 +70,25 @@ public sealed class DetentLayer {
         _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
 
         // Roll: taps adopt the advice bank (quantized intent); holds slew continuously; and when
-        // NEITHER is commanded the reflex returns the bank toward the doctrine bank (ValleyBank —
-        // wings-level when there's no tactical turn) at a gentle rate. This is the "wing-drop
-        // pickup" the pilot asked for: you no longer sit at a bank you didn't ask for (got to 45°
-        // AoB unintentionally). TODO difficulty ladder: scale RollReturnRate → 0 at max difficulty.
+        // NEITHER is commanded the reflex returns the bank toward WINGS-LEVEL at a gentle rate.
+        // This is the "wing-drop pickup" the pilot asked for: release the roll and the wings settle
+        // level, so you don't sit at a bank you didn't ask for. (First attempt returned toward the
+        // DOCTRINE bank — but that's a hard turn toward the bandit, so the aircraft parked itself
+        // at ~60° and fought the pilot; the telemetry showed it stuck there for 25 s. Wings-level
+        // is what "pick up the wing" means. To SUSTAIN a bank, hold the roll key.)
+        // TODO difficulty ladder: scale RollReturnRate → 0 at max difficulty (you fly the wings).
         int rTaps = keys.TakeTaps(GKey.RollRight, nowMs), lTaps = keys.TakeTaps(GKey.RollLeft, nowMs);
         bool rollRight = keys.PhaseAt(GKey.RollRight, nowMs) != KeyPhase.Idle;
         bool rollLeft = keys.PhaseAt(GKey.RollLeft, nowMs) != KeyPhase.Idle;
+        bool rollInput = rollRight || rollLeft || rTaps > 0 || lTaps > 0;
+        _rollIdleMs = rollInput ? 0.0 : _rollIdleMs + dt * 1000.0;
         if (rTaps > 0 || lTaps > 0) _bankTarget = ValleyBank;
         if (rollRight) _bankTarget += RollHoldRate * dt;
         if (rollLeft) _bankTarget -= RollHoldRate * dt;
-        if (!rollRight && !rollLeft && rTaps == 0 && lTaps == 0) {
-            double err = System.Math.IEEERemainder(ValleyBank - _bankTarget, 2 * System.Math.PI);
+        // Settle to level only AFTER a hold-off: a fresh tap/hold sets a bank that persists, and
+        // only a bank you've walked away from (no roll input for RollLevelDelayMs) washes out.
+        if (!rollInput && _rollIdleMs > RollLevelDelayMs) {
+            double err = System.Math.IEEERemainder(0.0 - _bankTarget, 2 * System.Math.PI); // toward wings-level
             _bankTarget += System.Math.Clamp(err, -RollReturnRate * dt, RollReturnRate * dt);
         }
         _bankTarget = System.Math.IEEERemainder(_bankTarget, 2 * System.Math.PI); // circular: continuous roll through inverted
