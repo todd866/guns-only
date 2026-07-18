@@ -29,21 +29,27 @@ public static partial class WebBridge {
     static bool _triggerDown;
     static int _beatIndex = 1;
     static bool _knockedOff;
+    static Carrier? _carrier;
+    static Carrier.Recovery _recovery = Carrier.Recovery.Flying;
     /// The fight is over: impacted the sea, or the player called knock-it-off. The sim stops
     /// stepping. Before this, a 12G pull from inverted flew THROUGH the sea to -10,679 ft and
     /// kept integrating, because nothing ever checked.
-    static bool Frozen => _knockedOff || (_player?.BelowGround ?? false);
+    static bool Frozen => _knockedOff || (_player?.BelowGround ?? false) || _recovery != Carrier.Recovery.Flying;
 
     [JSExport]
     public static void StartBeat(int index) {
         var variant = _detents?.Variant ?? ValleyVariant.DoctrineDeep;
         _beatIndex = index;
         _knockedOff = false;
-        _beat = index switch { 2 => Beats.BreakDefense(), 3 => Beats.Saddle(), 4 => Beats.BalloonStrike(), _ => Beats.Perch() };
+        _beat = index switch {
+            2 => Beats.BreakDefense(), 3 => Beats.Saddle(), 4 => Beats.BalloonStrike(),
+            5 => Beats.CarrierApproach(), _ => Beats.Perch() };
+        _carrier = _beat.Carrier;
+        _recovery = Carrier.Recovery.Flying;
         _player = new AircraftSim(_beat.Player, _beat.PlayerAir) {
-            // Moderate turbulence, fixed seed = the same "day" each run. Homogeneous for now; the
-            // ship-shaped burble (texture × placement) comes with the carrier beat. Tunable by feel.
-            Wind = new TurbulenceField(intensityMps: 3.0, outerScaleM: 60.0, intermittency: 0.5, seed: 0xB0A7)
+            // De-twitched turbulence: lighter, larger eddies, gentler shudder (the raw field was
+            // "way too twitchy"). The aircraft also gust-alleviates internally now. Tunable by feel.
+            Wind = new TurbulenceField(intensityMps: 1.8, outerScaleM: 130.0, intermittency: 0.5, seed: 0xB0A7)
         };
         _bandit = new RailBandit(_beat.Bandit, _beat.BanditAir, _beat.BanditTimeline);
         _keys = new KeyGrammar();
@@ -92,6 +98,11 @@ public static partial class WebBridge {
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             _player.Step(_detents.Command, Dt);
             _bandit.Step(Dt);
+            if (_carrier is not null) {
+                _carrier.Step(Dt);
+                _recovery = _carrier.Classify(_player.State);
+                if (_recovery != Carrier.Recovery.Flying) break;   // fight over: freeze at the deck
+            }
             double rng = Geometry.Range(_player.State, _bandit.State);
             _closureKts = (_lastRange - rng) / Dt * 1.94384;
             _closureKts = _closureSmooth = _closureSmooth * 0.9 + _closureKts * 0.1;
@@ -141,7 +152,22 @@ public static partial class WebBridge {
             + $"\"frozen\":{(Frozen ? "true" : "false")},"
             + $"\"below_deck\":{(_player.BelowHardDeck ? "true" : "false")},"
             + $"\"shots_total\":{_shotsTotal},\"shots_in_window\":{_shotsInWindow},"
+            + $"\"throttle\":{_detents.Throttle:F2},"
+            + CarrierJson()
             + $"\"context\":\"{_advice.Context}\",\"beat\":\"{_beat.Name}\""
             + "}";
+    }
+
+    // Carrier fields for the web to render the deck + resolve the aircraft against it + show the
+    // trap/miss banner. Empty when the beat has no carrier.
+    static string CarrierJson() {
+        if (_carrier is null) return "";
+        var c = _carrier;
+        var (along, cross, height) = c.DeckFrame(_player.State.Position);
+        return $"\"carrier\":true,"
+            + $"\"cx\":{c.Position.X:F2},\"cy\":{c.Position.Y:F2},\"cz\":{c.Position.Z:F2},"
+            + $"\"cheading\":{c.HeadingRad:F5},\"deck_len\":{c.DeckLengthM:F1},\"deck_w\":{c.DeckHalfWidthM * 2:F1},\"deck_alt\":{c.DeckAltM:F1},"
+            + $"\"deck_along\":{along:F1},\"deck_cross\":{cross:F1},\"deck_height\":{height:F1},"
+            + $"\"recovery\":\"{_recovery}\",";
     }
 }

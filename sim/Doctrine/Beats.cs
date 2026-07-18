@@ -2,7 +2,8 @@ using System.Collections.Generic;
 namespace GunsOnly.Sim.Doctrine;
 public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit, IExecutionLaw Law,
     List<(double T, PilotCommand Cmd)> BanditTimeline,
-    AircraftParams? PlayerParams = null, AircraftParams? BanditParams = null) {
+    AircraftParams? PlayerParams = null, AircraftParams? BanditParams = null,
+    GunsOnly.Sim.Carrier? Carrier = null) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
 }
@@ -86,6 +87,30 @@ public static class Beats {
             PlayerParams: FlightModel.GliderStrike,
             BanditParams: FlightModel.AwacsTarget);
     }
+
+    /// KOREAN-WAR STRAIGHT-DECK CARRIER RECOVERY (first cut). You start in the groove: low, slow,
+    /// astern of the boat on a shallow glideslope. The carrier is the "target" — a slow ship
+    /// steaming into the wind. This is the "put me behind the boat ready to land" start; wire
+    /// capture, the paddles LSO, deck motion and wind-over-deck are the next build (task 15).
+    public static BeatSetup CarrierApproach() => new("Carrier approach",
+        // ~1.5 km astern, lined up on the ship's heading (north, chi=0), on-speed (~136 kt) on a
+        // −3.4° slope from 110 m toward the ~20 m deck. This lives on the back side of the power
+        // curve — held on power, which is exactly the point of the carrier beat.
+        Player: new AircraftState(new Vec3D(0, 110, -1500), 70, -0.06, 0, 0, FlightModel.Sabre.MassKg),
+        // The beat structure requires a bandit; there is no dogfight here. Park a token far away
+        // and high, flying off — the web hides it for the carrier beat and renders the DECK instead.
+        Bandit: new AircraftState(new Vec3D(9000, 6000, 9000), 200, 0, 0.8, 0, FlightModel.AwacsTarget.MassKg),
+        Law: new ApproachLaw(),
+        BanditTimeline: new() {
+            (0.0, new PilotCommand(1.0, 0.0, 0.6, 0)),
+            (180.0, new PilotCommand(1.0, 0.0, 0.6, 0)),
+        },
+        BanditParams: FlightModel.AwacsTarget,
+        // The real target: a straight-deck carrier (~250 m × 30 m deck, 20 m freeboard) steaming
+        // slowly north into the wind. Kinematic — it does not fly, it steams.
+        Carrier: new GunsOnly.Sim.Carrier(
+            deckCentre: new Vec3D(0, 20, 0), headingRad: 0, speedMps: 5,
+            deckAltM: 20, deckLengthM: 250, deckWidthM: 30));
 
     public static BeatSetup Saddle() => new("Saddle + shot",
         Player: S(0, Alt, -250, 0, 185),

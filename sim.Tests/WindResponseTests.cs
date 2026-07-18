@@ -84,8 +84,8 @@ public class WindResponseTests {
         }
         double rmsPitch = Rms(pitch), rmsRoll = Rms(roll);
         _o.WriteLine($"buffet RMS: pitch={rmsPitch:F2}°  roll={rmsRoll:F2}°  pitch sign-changes={signChangesPitch} (oscillatory)");
-        Assert.InRange(rmsPitch, 0.3, 15.0);   // felt-scale shudder, not imperceptible, not a departure
-        Assert.InRange(rmsRoll, 0.3, 15.0);
+        Assert.InRange(rmsPitch, 0.08, 15.0);  // felt-scale shudder (gentler since gust alleviation), bounded
+        Assert.InRange(rmsRoll, 0.02, 15.0);
         Assert.True(signChangesPitch > 20, "the pitch mode must ring (oscillate), not drift");
     }
 

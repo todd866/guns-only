@@ -24,6 +24,7 @@ public sealed class AircraftSim {
     public GunsOnly.Sim.Turbulence.IWindField? Wind { get; set; }
     Vec3D WindAt(in Vec3D pos) => Wind is null ? Vec3D.Zero : Wind.Sample(pos);
     readonly GunsOnly.Sim.Turbulence.RotationalBuffet _buffet;
+    Vec3D _gustFiltered; bool _gustInit; double _rollGustFiltered;   // gust-alleviation low-pass state
     /// The gust-driven attitude shudder, radians, on top of the flight-path attitude. Render/felt
     /// layer: the shells add these to the drawn nose/wings so you SEE the nose saw and wings rock.
     public double PitchBuffetRad => _buffet.PitchRad;
@@ -74,16 +75,22 @@ public sealed class AircraftSim {
         }
         var spooled = cmd with { Throttle = _thrustFrac };
 
+        // GUST ALLEVIATION. A real aircraft averages gusts over its size and its lift lags (unsteady
+        // aero, the Küssner effect), so it does NOT feel sub-wingspan eddies as sharp jolts — point-
+        // sampling the raw field made turbulence "way too twitchy". Low-pass the sampled gust with a
+        // time constant of a few chord-lengths of travel (τ = L/V, so faster flight filters the now-
+        // higher-frequency gusts proportionally). This smooths the twitch while keeping the bumps.
+        var rawGust = WindAt(s.Position);
+        double gustTau = 12.0 / System.Math.Max(vel0.Length, 20.0);
+        if (!_gustInit) { _gustFiltered = rawGust; _gustInit = true; }
+        else _gustFiltered += (rawGust - _gustFiltered) * (1.0 - System.Math.Exp(-dt / gustTau));
+        var gust = _gustFiltered;
+
         var r = new RawState(s.Position, vel0, _bank, s.Mass);
-        // Sample the wind at each RK4 stage's own position, so the integrator sees the field's
-        // spatial structure (a frozen gust pocket bumps you as you fly through it, not on a clock).
-        var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef, WindAt(r.Pos));
-        var r2 = Apply(r, k1, dt / 2);
-        var k2 = FlightModel.Derivatives(r2, spooled, _p, _liftRef, WindAt(r2.Pos));
-        var r3 = Apply(r, k2, dt / 2);
-        var k3 = FlightModel.Derivatives(r3, spooled, _p, _liftRef, WindAt(r3.Pos));
-        var r4 = Apply(r, k3, dt);
-        var k4 = FlightModel.Derivatives(r4, spooled, _p, _liftRef, WindAt(r4.Pos));
+        var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef, gust);
+        var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), spooled, _p, _liftRef, gust);
+        var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), spooled, _p, _liftRef, gust);
+        var k4 = FlightModel.Derivatives(Apply(r, k3, dt), spooled, _p, _liftRef, gust);
         var pos = r.Pos + (k1.DPos + (k2.DPos + k3.DPos) * 2 + k4.DPos) * (dt / 6);
         var vel = r.Vel + (k1.DVel + (k2.DVel + k3.DVel) * 2 + k4.DVel) * (dt / 6);
         _bank = WrapPi(r.Bank + (k1.DBank + 2 * (k2.DBank + k3.DBank) + k4.DBank) * (dt / 6));
@@ -127,18 +134,20 @@ public sealed class AircraftSim {
         // when the air calms — skipping the update would freeze the shudder mid-oscillation.
         double alphaGust = 0.0, betaGust = 0.0, rollGust = 0.0;
         if (Wind is not null) {
-            var bpos = State.Position;
             var up = LiftDir;
             var rb = up.Cross(vhat);
             var right = rb.Length < 1e-6 ? new Vec3D(1, 0, 0) : rb.Normalized();
             double v = System.Math.Max(speed, 20.0);
-            double halfSpan = System.Math.Sqrt(_p.WingAreaM2);   // nominal; sets the gradient baseline
-            var wCg = WindAt(bpos);
-            var wL = WindAt(bpos - right * halfSpan);
-            var wR = WindAt(bpos + right * halfSpan);
-            alphaGust = wCg.Dot(up) / v;
-            betaGust = wCg.Dot(right) / v;
-            rollGust = (wL.Dot(up) - wR.Dot(up)) / v;
+            // Pitch and yaw off the gust-alleviated CG gust (already low-passed above) — so the
+            // shudder rides the same smoothed gust as the flight-path bump, not the raw twitch.
+            alphaGust = _gustFiltered.Dot(up) / v;
+            betaGust = _gustFiltered.Dot(right) / v;
+            // Roll off the span differential, itself low-passed at the same rate.
+            double halfSpan = System.Math.Sqrt(_p.WingAreaM2);
+            var bpos = State.Position;
+            double rawRoll = (WindAt(bpos - right * halfSpan).Dot(up) - WindAt(bpos + right * halfSpan).Dot(up)) / v;
+            _rollGustFiltered += (rawRoll - _rollGustFiltered) * (1.0 - System.Math.Exp(-dt / (12.0 / v)));
+            rollGust = _rollGustFiltered;
         }
         _buffet.Step(alphaGust, betaGust, rollGust, dt);
     }

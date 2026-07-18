@@ -771,10 +771,18 @@ class CombatHud {
 
     if (!state.frozen) return;
 
-    const impact = state.below_ground;
-    const accent = impact ? RED : AMBER;
+    // Carrier recovery outcome takes precedence over the generic impact banner.
+    const rec = state.recovery;
+    let title = state.below_ground ? "IMPACT" : "KNOCK IT OFF";
+    let good = false;
+    if (rec === "Trap") { title = "TRAP"; good = true; }
+    else if (rec === "RampStrike") title = "RAMP STRIKE";
+    else if (rec === "InTheWater") title = "IN THE WATER";
+
+    const impact = state.below_ground || rec === "RampStrike" || rec === "InTheWater";
+    const accent = good ? GREEN : (impact ? RED : AMBER);
     ctx.save();
-    ctx.fillStyle = impact ? "rgba(28, 2, 6, 0.58)" : "rgba(1, 9, 14, 0.5)";
+    ctx.fillStyle = good ? "rgba(2, 20, 10, 0.5)" : (impact ? "rgba(28, 2, 6, 0.58)" : "rgba(1, 9, 14, 0.5)");
     ctx.fillRect(0, 0, this.width, this.height);
 
     const w = 360;
@@ -792,7 +800,7 @@ class CombatHud {
     ctx.textBaseline = "middle";
     ctx.fillStyle = accent;
     ctx.font = "800 22px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(impact ? "IMPACT" : "KNOCK IT OFF", this.width / 2, y + 30);
+    ctx.fillText(title, this.width / 2, y + 30);
 
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";

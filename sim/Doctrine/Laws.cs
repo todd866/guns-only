@@ -34,3 +34,11 @@ public sealed class GunsSaddleLaw : IExecutionLaw {
         return new DoctrineAdvice(g, bank, "guns solution");
     }
 }
+
+/// Carrier-approach placeholder advice: fly the groove — wings level, ~1 G, so the detent valley
+/// and the wing-drop reflex settle to a stable approach rather than chasing a bandit. The real
+/// Magic-Carpet glideslope-hold law (holds the flight path; pitch moves the aimpoint) replaces it.
+public sealed class ApproachLaw : IExecutionLaw {
+    public DoctrineAdvice Advise(in AircraftState own, in AircraftState bandit, in AircraftParams p)
+        => new(1.0, 0.0, "on the ball");
+}

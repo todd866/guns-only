@@ -20,7 +20,7 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     double PitchModeFreq = 3.0, double PitchModeDamp = 0.4,
     double YawModeFreq = 1.5, double YawModeDamp = 0.15,
     double RollModeFreq = 4.0, double RollModeDamp = 0.7,
-    double BuffetGain = 2.0);
+    double BuffetGain = 1.1);   // gentler shudder — the raw 2.0 read as "way too twitchy" (plus gust alleviation)
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).

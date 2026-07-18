@@ -153,6 +153,23 @@ function cylinder(group, radius, length, position, material, radialSegments = 12
   return mesh;
 }
 
+function createCarrier() {
+  // A rough straight-deck carrier — graphics deliberately crude, it just has to be a landable
+  // surface. Deck 250 m long (Z, the ship's fore-aft axis) × 30 m wide (X), top at local y=0,
+  // group placed at the deck-height origin. Centreline stripe + a touchdown bar for lineup.
+  const group = new THREE.Group();
+  const hullMat = makeMaterial(0x3b4147, 0.9, 0.15, 0x050708);
+  const deckMat = makeMaterial(0x23282c, 0.95, 0.08, 0x040606);
+  const islandMat = makeMaterial(0x2c3237, 0.85, 0.2, 0x060a0c);
+  const paint = new THREE.MeshBasicMaterial({ color: 0xf2f2f2 });
+  box(group, { x: 30, y: 2, z: 250 }, new THREE.Vector3(0, -1, 0), deckMat);       // deck
+  box(group, { x: 26, y: 18, z: 244 }, new THREE.Vector3(0, -11, 0), hullMat);     // hull to the sea
+  box(group, { x: 7, y: 14, z: 26 }, new THREE.Vector3(11, 7, -40), islandMat);    // island, starboard aft
+  box(group, { x: 1.2, y: 0.3, z: 240 }, new THREE.Vector3(0, 0.2, 0), paint);     // centreline
+  box(group, { x: 22, y: 0.3, z: 2 }, new THREE.Vector3(0, 0.2, 25), paint);       // touchdown bar
+  return group;
+}
+
 function createDrone() {
   const group = new THREE.Group();
   const skin = makeMaterial(0x3f4b52, 0.68, 0.38, 0x030708);
@@ -471,7 +488,9 @@ class FlightView {
     this.hiddenDrone.visible = false;
     this.hiddenGlider.visible = false;
     this.awacs.visible = false;
-    this.scene.add(this.drone, this.awacs, this.hiddenDrone, this.hiddenGlider);
+    this.carrier = createCarrier();
+    this.carrier.visible = false;
+    this.scene.add(this.drone, this.awacs, this.hiddenDrone, this.hiddenGlider, this.carrier);
 
     this.playerPosition = new THREE.Vector3();
     this.playerForward = new THREE.Vector3(0, 0, -1);
@@ -565,11 +584,18 @@ class FlightView {
     this.camera.quaternion.copy(this.playerQuaternion).multiply(this.localGimbalQuaternion);
     this.camera.updateMatrixWorld(true);
 
+    const isCarrier = state.carrier === true;
     const balloonStrike = /balloon|kj-500/i.test(state.beat ?? "");
-    this.drone.visible = !balloonStrike;
-    this.awacs.visible = balloonStrike;
+    this.drone.visible = !balloonStrike && !isCarrier;
+    this.awacs.visible = balloonStrike && !isCarrier;
     this.hiddenDrone.visible = false;
     this.hiddenGlider.visible = false;
+    this.carrier.visible = isCarrier;
+    if (isCarrier) {
+      // Sim frame X=east, Y=up, Z=north; render flips Z. Deck-centre origin at deck height.
+      this.carrier.position.set(state.cx, state.cy, -state.cz);
+      this.carrier.rotation.y = -(state.cheading ?? 0);
+    }
 
     const target = balloonStrike ? this.awacs : this.drone;
     target.position.copy(this.banditPosition);
@@ -614,7 +640,7 @@ function installInput(view) {
     }
     if (event.repeat || !bridge) return;
 
-    if (/^Digit[1-4]$/.test(event.code)) {
+    if (/^Digit[1-5]$/.test(event.code)) {
       bridge.StartBeat(Number(event.code.slice(-1)));
       return;
     }
@@ -709,7 +735,7 @@ async function boot() {
   await getConfig();
   const assemblyExports = await getAssemblyExports("GunsOnly.Web");
   bridge = assemblyExports.GunsOnly.Web.WebBridge;
-  bridge.StartBeat(1);
+  bridge.StartBeat(5);   // start behind the boat, ready to land
 
   setBootStatus("CALIBRATING SENSOR…");
   const view = new FlightView();
