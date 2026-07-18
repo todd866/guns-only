@@ -872,39 +872,45 @@ class CombatHud {
     if (!Number.isFinite(thr)) return;
     const ctx = this.ctx;
     const maxT = 1.3;                              // top of scale = full afterburner
-    const w = 16, h = 150;
-    const x = 34, y = this.height - 250;
+    // Big vertical bar immediately left of the speed tape, same height, so throttle reads as a
+    // primary instrument next to airspeed.
+    const centerY = this.height * 0.51;
+    const h = Math.min(310, this.height * 0.43);
+    const w = 22;
+    const x = this.getLayout().tapeInset - 52;
+    const y = centerY - h / 2;
     const yOf = (f) => y + h - (clamp(f, 0, maxT) / maxT) * h;
 
-    ctx.fillStyle = "rgba(1, 9, 14, 0.55)"; ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = "rgba(77, 255, 136, 0.3)"; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = "rgba(1, 9, 14, 0.6)"; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.35)"; ctx.lineWidth = 1.2; ctx.strokeRect(x, y, w, h);
     // afterburner zone (above MIL) shaded amber
-    ctx.fillStyle = "rgba(255, 176, 32, 0.14)"; ctx.fillRect(x, yOf(maxT), w, yOf(1.0) - yOf(maxT));
-    // ENGINE fill = actual output; the gap to the lever caret is the spool lag you feel
+    ctx.fillStyle = "rgba(255, 176, 32, 0.16)"; ctx.fillRect(x, yOf(maxT), w, yOf(1.0) - yOf(maxT));
+    // ENGINE fill = actual output; the GAP up to the lever caret is the spool lag you feel
     const ey = yOf(eng);
     ctx.fillStyle = eng > 1.005 ? AMBER : GREEN;
-    ctx.fillRect(x + 1, ey, w - 2, y + h - ey);
-    // detent lines
-    ctx.strokeStyle = "rgba(77, 255, 136, 0.4)";
+    ctx.fillRect(x + 1.5, ey, w - 3, y + h - ey);
+    // detent lines + MIL/AB labels inside
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.45)"; ctx.lineWidth = 1;
     for (const f of [0.55, 0.85, 1.0]) { const t = yOf(f); ctx.beginPath(); ctx.moveTo(x, t); ctx.lineTo(x + w, t); ctx.stroke(); }
-    // commanded LEVER caret on the right edge
+    // commanded LEVER caret: a bold triangle on the right edge showing where you set it
     const ly = yOf(thr);
     ctx.fillStyle = thr > 1.005 ? AMBER : GREEN;
-    ctx.beginPath(); ctx.moveTo(x + w + 1, ly); ctx.lineTo(x + w + 8, ly - 4); ctx.lineTo(x + w + 8, ly + 4); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x + w + 1, ly); ctx.lineTo(x + w + 11, ly - 6); ctx.lineTo(x + w + 11, ly + 6); ctx.closePath(); ctx.fill();
 
-    ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = GREEN_DIM; ctx.textAlign = "left";
-    ctx.fillText("THR", x, y - 9);
-    ctx.fillText("MIL", x + w + 11, yOf(1.0));
-    ctx.fillStyle = AMBER; ctx.fillText("A/B", x + w + 11, yOf(maxT) + 6);
-    // readout + mode: AUTO on the approach until you touch W/S, then manual (the wave-off).
+    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillStyle = GREEN_DIM; ctx.textAlign = "center";
+    ctx.fillText("THR", x + w / 2, y - 11);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "rgba(77,255,136,0.7)"; ctx.fillText("MIL", x - 4, yOf(1.0));
+    ctx.fillStyle = AMBER; ctx.fillText("A/B", x - 4, yOf(maxT) + 7);
+    // big readout below: % and mode (AUTO on the approach until you touch W/S = the wave-off)
     const label = thr <= 0.01 ? "IDLE" : thr > 1.005 ? "A/B" : thr >= 0.995 ? "MIL" : `${Math.round(thr * 100)}%`;
-    const mode = state.carrier === true ? "AUTO" : "W/S";
-    ctx.fillStyle = eng > 1.005 ? AMBER : GREEN; ctx.textAlign = "left";
-    ctx.fillText(`${label}`, x, y + h + 9);
-    ctx.fillStyle = GREEN_DIM;
-    ctx.fillText(mode, x, y + h + 19);
+    ctx.textAlign = "center";
+    ctx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillStyle = eng > 1.005 ? AMBER : GREEN; ctx.fillText(label, x + w / 2, y + h + 12);
+    ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillStyle = GREEN_DIM; ctx.fillText(state.carrier === true ? "AUTO" : "W/S", x + w / 2, y + h + 24);
   }
 
   drawFooter(state) {
