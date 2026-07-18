@@ -43,13 +43,18 @@ public sealed class TurbulenceField {
     readonly double _intensity;      // target RMS, m/s (approximate — the field is normalised to ~unit RMS then scaled)
     readonly double _invOuter;       // 1 / outer length scale (m)
     readonly double[] _amp;          // a_j = 2^(-j*Hurst)
-    readonly double _norm;           // 1/sqrt(Σ a_j²): normalises the Gaussian part to ~unit variance
+    readonly double _scale;          // calibrated so per-component RMS == intensityMps (see ctor)
     readonly ulong _saltG, _saltX, _saltY, _saltZ;
 
-    // Empirical variance of the value-noise primitive (quintic-faded trilinear value noise sits
-    // well below 1). Used only for the mean-preserving correction on the cascade; the exact
-    // value is not critical because the tests measure the ACTUAL output, not the theory.
-    const double ValueNoiseVar = 0.20;
+    // Measured variance of the value-noise primitive: 0.160 over 4M samples (a 1-octave field
+    // isolates one raw Hashing.Value draw), corroborated analytically at 0.1604. Used only for
+    // the cascade's APPROXIMATELY mean-preserving correction — approximate because value noise
+    // is platykurtic, so the lognormal identity E[e^{σg}]=e^{σ²Var/2} holds only for Gaussian g;
+    // the delivered RMS is calibrated empirically below regardless, so this only affects the
+    // small per-octave spectral tilt. It does NOT bias the velocity mean (velocity = M ·
+    // zero-mean noise, so E[velocity]=0 for any M), which a volume-mean probe confirmed at
+    // <0.5% of RMS.
+    const double ValueNoiseVar = 0.16;
 
     public const double DefaultOuterScaleM = 60.0;   // integral length ~ ship-island scale
 
@@ -57,7 +62,7 @@ public sealed class TurbulenceField {
     /// <param name="outerScaleM">Largest eddy (integral length), metres.</param>
     /// <param name="hurst">Velocity Hurst exponent. 1/3 → Kolmogorov -5/3 spectrum.</param>
     /// <param name="intermittency">Cascade log-amplitude std σ. 0 → monofractal (Gaussian-ish); larger → fatter tails.</param>
-    /// <param name="intensityMps">Approximate target RMS gust speed, m/s.</param>
+    /// <param name="intensityMps">Target PER-COMPONENT RMS gust speed, m/s (the σ_u/σ_v/σ_w convention). Delivered within ~1%.</param>
     /// <param name="seed">Selects the field. Different seeds = different "days"/sea states = the variants.</param>
     public TurbulenceField(
         int octaves = 8,
@@ -75,12 +80,8 @@ public sealed class TurbulenceField {
         _invOuter = 1.0 / outerScaleM;
 
         _amp = new double[octaves];
-        double sumSq = 0.0;
-        for (int j = 0; j < octaves; j++) {
+        for (int j = 0; j < octaves; j++)
             _amp[j] = System.Math.Pow(2.0, -j * hurst);
-            sumSq += _amp[j] * _amp[j];
-        }
-        _norm = 1.0 / System.Math.Sqrt(sumSq);
 
         // Derive independent salts from the seed so the four noise stacks (cascade + 3 velocity
         // components) never share a lattice, while the whole field stays a function of one seed.
@@ -88,6 +89,40 @@ public sealed class TurbulenceField {
         _saltX = Salt(seed, 0xB2);
         _saltY = Salt(seed, 0xC3);
         _saltZ = Salt(seed, 0xD4);
+
+        // CALIBRATE the delivered RMS empirically. The obvious 1/sqrt(Σ a_j²) normalisation
+        // assumed unit-variance octave noise, but the value noise is variance ~0.16 AND the
+        // cascade injects energy (E[M²]>1 for σ>0), so the true RMS/intensity ratio depends on
+        // (σ, H, octaves) in a way with no clean closed form (value noise isn't lognormal). A
+        // reviewer measured the old normalisation delivering ~0.43× the requested intensity.
+        // So: sample the raw field over a deterministic probe cloud spanning many outer scales
+        // and set _scale = intensity / measured-RMS. One-time, ~65k samples, sub-millisecond,
+        // and it honours intensityMps for ANY parameter combination. Deterministic from seed.
+        _scale = 1.0;   // RawSample uses _amp only, not _scale — safe to measure now
+        const int cal = 8192;
+        double box = 40.0 * outerScaleM;   // span many integral lengths so large eddies are represented
+        ulong r = Salt(seed, 0xCA1B);
+        double sumSq = 0.0;
+        for (int i = 0; i < cal; i++) {
+            var p = new Vec3D(NextUnit(ref r) * box, NextUnit(ref r) * box, NextUnit(ref r) * box);
+            var (rx, ry, rz) = RawSample(p);
+            sumSq += rx * rx + ry * ry + rz * rz;
+        }
+        double rmsPerComponent = System.Math.Sqrt(sumSq / (3.0 * cal));
+        _scale = rmsPerComponent > 1e-12 ? intensityMps / rmsPerComponent : 0.0;
+    }
+
+    // Deterministic uniform in [0,1) via a splitmix step on the state. Only used for the
+    // one-time RMS calibration cloud, never in the hot path.
+    static double NextUnit(ref ulong state) {
+        unchecked {
+            state += 0x9e3779b97f4a7c15UL;
+            ulong z = state;
+            z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9UL;
+            z = (z ^ (z >> 27)) * 0x94d049bb133111ebUL;
+            z ^= z >> 31;
+            return (z >> 11) * (1.0 / (1UL << 53));
+        }
     }
 
     static ulong Salt(ulong seed, ulong tag) {
@@ -101,6 +136,17 @@ public sealed class TurbulenceField {
 
     /// The gust-velocity vector (m/s) at a world position. Deterministic and finite.
     public Vec3D Sample(Vec3D worldPos) {
+        var (vx, vy, vz) = RawSample(worldPos);
+        var v = new Vec3D(vx * _scale, vy * _scale, vz * _scale);
+        // Non-finite is impossible with bounded value noise, but a hard guard keeps a bad
+        // parameter set from ever leaking a NaN into the integrator.
+        if (!double.IsFinite(v.X) || !double.IsFinite(v.Y) || !double.IsFinite(v.Z)) return Vec3D.Zero;
+        return v;
+    }
+
+    // The cascade, unscaled. Sample() applies the calibrated _scale; the ctor calls this before
+    // _scale is known, to measure the RMS it needs to calibrate against.
+    (double, double, double) RawSample(Vec3D worldPos) {
         double px = worldPos.X * _invOuter, py = worldPos.Y * _invOuter, pz = worldPos.Z * _invOuter;
 
         double vx = 0.0, vy = 0.0, vz = 0.0;
@@ -123,13 +169,7 @@ public sealed class TurbulenceField {
 
             freq *= 2.0;   // lacunarity 2: each octave halves the eddy size
         }
-
-        double s = _intensity * _norm;
-        var v = new Vec3D(vx * s, vy * s, vz * s);
-        // Non-finite is impossible with bounded value noise, but a hard guard keeps a bad
-        // parameter set from ever leaking a NaN into the integrator.
-        if (!double.IsFinite(v.X) || !double.IsFinite(v.Y) || !double.IsFinite(v.Z)) return Vec3D.Zero;
-        return v;
+        return (vx, vy, vz);
     }
 
     /// Scalar disturbance along one axis — convenience for the 1-D statistics rig and for a

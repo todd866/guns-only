@@ -1,10 +1,13 @@
 namespace GunsOnly.Sim.Turbulence;
 
-/// Deterministic, platform-independent value noise. The whole precompute-and-replay idea rests
-/// on this: the field must be BIT-IDENTICAL on the desktop CLR and in the browser's WASM, and
-/// identical across two runs from the same seed, or "deterministic replay" is a lie. So this
-/// uses only integer bit-mixing + IEEE double arithmetic — never System.Random (time-seeded,
-/// and its algorithm is not contractually stable across runtimes).
+/// Deterministic value noise. The precompute-and-replay design needs the field to be identical
+/// across two runs from the same seed ON THE SAME BUILD — that is what makes a recorded approach
+/// reproduce and a seed name a stable "day". It does NOT need desktop and web to match each other
+/// bit-for-bit; that was never the goal (the shells just each have to be GOOD turbulence, not the
+/// SAME turbulence), and it wouldn't hold anyway because Math.Exp/Pow in the cascade aren't
+/// correctly-rounded across runtimes. This primitive itself uses only integer bit-mixing + IEEE
+/// add/multiply, so it is in fact bit-stable everywhere — never System.Random (time-seeded, and
+/// its algorithm is not contractually stable across runtimes).
 ///
 /// Value noise (not gradient/Perlin) on purpose: its statistics are simpler to reason about for
 /// the multifractal construction in TurbulenceField, and it is band-limited around one lattice

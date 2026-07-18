@@ -52,8 +52,9 @@ public class TurbulenceTests {
 
     [Fact]
     public void DeterministicFromSeed_BitIdentical() {
-        // The entire replay premise. Two independently constructed fields, same seed, must agree
-        // to the last bit at every probe — including desktop vs (eventually) WASM.
+        // The replay premise: two fields from the same seed on THIS build must agree to the last
+        // bit, so a recorded approach reproduces. (Desktop-vs-web bit-identity is NOT required —
+        // each shell just has to be good turbulence — so this only checks within-build.)
         var a = new TurbulenceField(seed: 0xABCDEF01UL);
         var b = new TurbulenceField(seed: 0xABCDEF01UL);
         var c = new TurbulenceField(seed: 0xABCDEF02UL);   // different seed → different field
@@ -71,14 +72,28 @@ public class TurbulenceTests {
     }
 
     [Fact]
-    public void FiniteAndRoughlyZeroMeanAndSaneRms() {
+    public void DeliversTheRequestedRms() {
+        // A designer dialing "3 m/s" must GET ~3 m/s per component. The old 1/sqrt(Σa²)
+        // normalisation delivered ~0.43× (a reviewer's catch), hidden by a 3×-wide tolerance;
+        // the ctor now calibrates the scale empirically, so this asserts within 12%.
         var f = new TurbulenceField(intensityMps: 3.0);
         var t = Transect(f, 1 << 15, 0.5);
         double mean = Mean(t), rms = Math.Sqrt(Var(t));
-        _o.WriteLine($"mean={mean:F4}  rms={rms:F3} m/s (target intensity 3.0)");
+        _o.WriteLine($"mean={mean:F4}  rms={rms:F3} m/s (target 3.0)");
         foreach (var x in t) Assert.True(double.IsFinite(x));
         Assert.True(Math.Abs(mean) < 0.3, $"mean should be ~0, was {mean:F3}");
-        Assert.InRange(rms, 1.0, 9.0);   // within 3x of target — normalisation is approximate by design
+        Assert.InRange(rms, 2.64, 3.36);   // 3.0 ± 12% — a real calibration check, not a rubber stamp
+    }
+
+    [Fact]
+    public void DeliversRequestedRmsAcrossSeedsAndIntensities() {
+        // The calibration must hold for every seed (field) and every requested level.
+        foreach (var seed in new ulong[] { 1, 2, 3, 99, 12345 })
+            foreach (var target in new[] { 1.0, 4.0, 12.0 }) {
+                var f = new TurbulenceField(intensityMps: target, seed: seed);
+                double rms = Math.Sqrt(Var(Transect(f, 1 << 14, 0.5)));
+                Assert.InRange(rms / target, 0.80, 1.20);
+            }
     }
 
     [Fact]
@@ -87,10 +102,10 @@ public class TurbulenceTests {
         // increments GROWS as the scale shrinks. Gaussian turbulence has kurtosis 3 at every
         // scale — that is exactly what makes it feel like a stationary hum.
         var f = new TurbulenceField(intermittency: 0.5);
-        var t = Transect(f, 1 << 16, 0.5);          // dx 0.5 m: lags below sit in the inertial range
-        double kCoarse = Kurtosis(Increments(t, 64));    // τ = 32 m (near outer scale)
-        double kFine = Kurtosis(Increments(t, 2));       // τ = 1 m  (well above finest eddy 0.47 m)
-        _o.WriteLine($"increment kurtosis: coarse(512)={kCoarse:F2}  fine(4)={kFine:F2}  (Gaussian=3)");
+        var t = Transect(f, 1 << 16, 0.25);         // dx 0.25 m: samples the finest eddy (0.47 m) ~2x
+        double kCoarse = Kurtosis(Increments(t, 128));   // τ = 32 m (near outer scale)
+        double kFine = Kurtosis(Increments(t, 8));       // τ = 2 m  (cleanly above finest eddy 0.47 m)
+        _o.WriteLine($"increment kurtosis: coarse(τ=32m)={kCoarse:F2}  fine(τ=2m)={kFine:F2}  (Gaussian=3)");
         Assert.True(kFine > kCoarse + 0.5, $"kurtosis must rise toward fine scales: fine={kFine:F2} coarse={kCoarse:F2}");
         Assert.True(kFine > 3.3, $"fine-scale increments must be leptokurtic (fat-tailed), was {kFine:F2}");
     }
@@ -101,9 +116,9 @@ public class TurbulenceTests {
         // constant. Multifractal: ζ(q) is CONCAVE, so ζ(q)/q strictly decreases in q. That
         // concavity IS intermittency, and it cannot come from any linear (Gaussian) model.
         var f = new TurbulenceField(intermittency: 0.5);
-        double dx = 0.5;
+        double dx = 0.25;
         var t = Transect(f, 1 << 16, dx);
-        int[] lags = { 2, 4, 8, 16, 32, 64 };   // τ = 1..32 m, inside the inertial range
+        int[] lags = { 8, 16, 32, 64, 128 };   // τ = 2..32 m, cleanly inside the inertial range
         double z1 = Zeta(t, dx, 1.0, lags);
         double z2 = Zeta(t, dx, 2.0, lags);
         double z3 = Zeta(t, dx, 3.0, lags);
@@ -121,9 +136,9 @@ public class TurbulenceTests {
         // the Kolmogorov -5/3 energy spectrum. Intermittency shaves ζ(2) slightly below 2H, so
         // accept a band around it rather than a point.
         var f = new TurbulenceField(hurst: 1.0 / 3.0, intermittency: 0.5);
-        double dx = 0.5;
+        double dx = 0.25;
         var t = Transect(f, 1 << 16, dx);
-        double z2 = Zeta(t, dx, 2.0, new[] { 2, 4, 8, 16, 32, 64 });
+        double z2 = Zeta(t, dx, 2.0, new[] { 8, 16, 32, 64, 128 });
         _o.WriteLine($"ζ(2)={z2:F3}  (Kolmogorov 2H = 0.667; intermittency pulls it slightly below)");
         Assert.InRange(z2, 0.45, 0.85);
     }
@@ -134,9 +149,9 @@ public class TurbulenceTests {
         // otherwise the multifractal test is measuring an artefact of the construction rather
         // than the cascade. ζ(q)/q should be ~flat here.
         var f = new TurbulenceField(intermittency: 0.0);
-        double dx = 0.5;
+        double dx = 0.25;
         var t = Transect(f, 1 << 16, dx);
-        int[] lags = { 2, 4, 8, 16, 32, 64 };
+        int[] lags = { 8, 16, 32, 64, 128 };
         double spread = Zeta(t, dx, 1.0, lags) - Zeta(t, dx, 4.0, lags) / 4.0;
         double f5 = new TurbulenceField(intermittency: 0.5) is var mf
             ? Zeta(Transect(mf, 1 << 16, dx), dx, 1.0, lags) - Zeta(Transect(mf, 1 << 16, dx), dx, 4.0, lags) / 4.0
