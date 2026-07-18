@@ -16,6 +16,7 @@ public sealed class DetentLayer {
     int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
     const double Tau = 0.22, StickyStepG = 0.5, RollHoldRate = 1.6; // rad/s while roll key held
+    const double RollReturnRate = 0.9; // rad/s — reflex return toward the doctrine bank when roll is un-commanded
 
     public void Tick(KeyGrammar keys, double nowMs, in AircraftState s, in AircraftParams p, DoctrineAdvice advice, double dt) {
         double maxPerform = Protection.MaxPerformG(s, p);
@@ -54,16 +55,33 @@ public sealed class DetentLayer {
             double baseG = over ? cap : ValleyG;                          // override => pull to the limit
             target = System.Math.Clamp(baseG + StickyOffsetG, System.Math.Min(1.0, cap), cap);
         }
-        else if (push != KeyPhase.Idle) { tier = DemandTier.Valley; target = 0.0; } // unload
+        else if (push != KeyPhase.Idle) {
+            // Push should BUNT — command negative G so the nose actively drops — not merely unload
+            // to 0 G, which just floats (the "pushing does very little" feel). Held push goes to a
+            // moderate negative; Override pushes to the aero/structural negative limit.
+            tier = over ? DemandTier.OverDemand : DemandTier.Valley;
+            double pushFloor = System.Math.Max(FlightModel.NzAeroMin(s, p), -1.5);
+            target = over ? pushFloor : System.Math.Max(pushFloor, -1.0);
+        }
         else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; }
         Tier = tier;
         _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
 
-        // Roll: taps adopt the advice bank (quantized intent); holds slew continuously.
+        // Roll: taps adopt the advice bank (quantized intent); holds slew continuously; and when
+        // NEITHER is commanded the reflex returns the bank toward the doctrine bank (ValleyBank —
+        // wings-level when there's no tactical turn) at a gentle rate. This is the "wing-drop
+        // pickup" the pilot asked for: you no longer sit at a bank you didn't ask for (got to 45°
+        // AoB unintentionally). TODO difficulty ladder: scale RollReturnRate → 0 at max difficulty.
         int rTaps = keys.TakeTaps(GKey.RollRight, nowMs), lTaps = keys.TakeTaps(GKey.RollLeft, nowMs);
+        bool rollRight = keys.PhaseAt(GKey.RollRight, nowMs) != KeyPhase.Idle;
+        bool rollLeft = keys.PhaseAt(GKey.RollLeft, nowMs) != KeyPhase.Idle;
         if (rTaps > 0 || lTaps > 0) _bankTarget = ValleyBank;
-        if (keys.PhaseAt(GKey.RollRight, nowMs) != KeyPhase.Idle) _bankTarget += RollHoldRate * dt;
-        if (keys.PhaseAt(GKey.RollLeft, nowMs) != KeyPhase.Idle)  _bankTarget -= RollHoldRate * dt;
+        if (rollRight) _bankTarget += RollHoldRate * dt;
+        if (rollLeft) _bankTarget -= RollHoldRate * dt;
+        if (!rollRight && !rollLeft && rTaps == 0 && lTaps == 0) {
+            double err = System.Math.IEEERemainder(ValleyBank - _bankTarget, 2 * System.Math.PI);
+            _bankTarget += System.Math.Clamp(err, -RollReturnRate * dt, RollReturnRate * dt);
+        }
         _bankTarget = System.Math.IEEERemainder(_bankTarget, 2 * System.Math.PI); // circular: continuous roll through inverted
 
         int thUp = keys.TakeTaps(GKey.ThrottleUp, nowMs), thDn = keys.TakeTaps(GKey.ThrottleDown, nowMs);

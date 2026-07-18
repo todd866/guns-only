@@ -30,6 +30,54 @@ const keyMap = new Map([
 ]);
 
 const heldKeys = new Set();
+
+// --- Telemetry recorder ----------------------------------------------------------------------
+// Tuning feel by guesswork is a waste of time; this captures every input event AND the full sim
+// state each frame from a REAL playthrough and POSTs it to /telemetry (same origin, so the dev
+// server writes it to disk for analysis). Fire-and-forget — a failed POST must never disturb the
+// sim. Sampled at ~30 Hz to keep sessions a few MB.
+const recorder = {
+  session: `web-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+  buf: [],
+  frame: 0,
+  lastPost: 0,
+  samples: 0,
+  flushes: 0,
+  errors: 0,
+  lastError: null,
+  // Every method is fully guarded: telemetry must NEVER be able to crash the flight loop (an
+  // earlier version did — an oversized keepalive-fetch body throws, and it killed the sim).
+  event(type, code) {
+    try { this.buf.push({ k: "in", t: Math.round(performance.now()), type, code, held: [...heldKeys] }); }
+    catch (e) { this.errors++; this.lastError = String(e); }
+  },
+  sample(state) {
+    try {
+      this.samples++;
+      if (++this.frame % 2 !== 0) return;               // ~30 Hz
+      this.buf.push({ k: "st", t: Math.round(performance.now()), held: [...heldKeys], s: state });
+      if (this.buf.length > 4000) this.buf.splice(0, this.buf.length - 4000);   // hard cap: never grow unbounded
+      if (performance.now() - this.lastPost > 1000) this.flush();
+    } catch (e) { this.errors++; this.lastError = String(e); }
+  },
+  flush() {
+    try {
+      if (!this.buf.length) return;
+      const rows = this.buf;
+      this.buf = [];
+      this.lastPost = performance.now();
+      this.flushes++;
+      // NO keepalive: its 64 KB body cap is what threw before. Plain fetch, failure ignored.
+      fetch("/telemetry", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session: this.session, rows }) })
+        .catch((e) => { this.errors++; this.lastError = "fetch:" + String(e); });
+    } catch (e) { this.errors++; this.lastError = String(e); }
+  },
+};
+globalThis.__rec = recorder;   // inspectable: __rec.samples / .flushes / .errors / .lastError
+window.addEventListener("beforeunload", () => recorder.flush());
+document.addEventListener("visibilitychange", () => { if (document.hidden) recorder.flush(); });
+
 let bridge = null;
 let padlock = false;
 let dragging = false;
@@ -586,6 +634,7 @@ function installInput(view) {
     if (event.code === "KeyV") padlock = !padlock;
     heldKeys.add(event.code);
     bridge.FeedKey(gkey, true);
+    recorder.event("down", event.code);
   }, { passive: false });
 
   window.addEventListener("keyup", (event) => {
@@ -596,6 +645,7 @@ function installInput(view) {
     heldKeys.delete(event.code);
     const gkey = keyMap.get(event.code);
     if (gkey !== undefined) bridge.FeedKey(gkey, false);
+    recorder.event("up", event.code);
   }, { passive: false });
 
   window.addEventListener("blur", () => {
@@ -681,6 +731,7 @@ async function boot() {
       // telemetry. Cheap, harmless, and the only way to prove the web build is the same game.
       globalThis.__gunsState = state;
       globalThis.__gunsBridge = bridge;
+      recorder.sample(state);
       view.update(state, dt, now / 1000);
       if (firstFrame) {
         firstFrame = false;
