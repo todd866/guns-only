@@ -28,7 +28,9 @@ public class ReactiveBanditTests {
 
         Assert.Equal(BanditTactic.Acquire, bandit.Tactic);
         Assert.True(bandit.State.Chi > 0.20, $"bandit did not turn right toward the contact: chi={bandit.State.Chi:F3}");
-        Assert.True(Geometry.AngleOff(bandit.State, player) < initialAngle * 0.72,
+        // The direct load-factor law now pins the commanded ~2 G instead of the old attitude
+        // augmentation over-pulling it. The moderate AI still has to close the angle materially.
+        Assert.True(Geometry.AngleOff(bandit.State, player) < initialAngle * 0.88,
             $"acquisition did not reduce angle: {initialAngle:F3} -> {Geometry.AngleOff(bandit.State, player):F3}");
     }
 

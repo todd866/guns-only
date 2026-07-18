@@ -19,6 +19,10 @@ function wrap360(value) {
   return ((value % 360) + 360) % 360;
 }
 
+function wrapPi(value) {
+  return Math.atan2(Math.sin(value), Math.cos(value));
+}
+
 function roundedRect(ctx, x, y, width, height, radius) {
   const r = Math.min(radius, width / 2, height / 2);
   ctx.beginPath();
@@ -592,7 +596,8 @@ class CombatHud {
     if (!isFightHudActive(state)) return;
     const angles = this.banditAngles(frame);
     const projection = this.project(banditPosition, camera);
-    const safe = this.getLayout().targetSafe;
+    const layout = this.getLayout();
+    const safe = layout.targetSafe;
     const solution = hasGunSolution(state);
     const color = solution ? AMBER : GREEN;
     const ctx = this.ctx;
@@ -628,18 +633,20 @@ class CombatHud {
       ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
-      ctx.fillText(solution ? "SHOOT" : "BOGEY", projection.x, projection.y - size - 5);
+      ctx.fillText(solution ? "SHOOT" : frame.padlock ? "TALLY" : "BOGEY", projection.x, projection.y - size - 5);
 
       const rangeLine = formatRange(state.range_m);
-      const closureLine = `C ${formatSigned(state.closure_kts)} KT`;
-      const angleLine = `AOFF ${Math.round(Number(state.angle_off_deg) || 0)}°`;
       ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      const textWidth = Math.max(
-        ctx.measureText(rangeLine).width,
-        ctx.measureText(closureLine).width,
-        ctx.measureText(angleLine).width,
-      );
-      const textHeight = 35;
+      const closureLine = frame.padlock ? "" : `C ${formatSigned(state.closure_kts)} KT`;
+      const angleLine = frame.padlock ? "" : `AOFF ${Math.round(Number(state.angle_off_deg) || 0)}°`;
+      const textWidth = frame.padlock
+        ? ctx.measureText(rangeLine).width
+        : Math.max(
+          ctx.measureText(rangeLine).width,
+          ctx.measureText(closureLine).width,
+          ctx.measureText(angleLine).width,
+        );
+      const textHeight = frame.padlock ? 13 : 35;
       const rightX = projection.x + size + 8;
       const useRight = rightX + textWidth + 8 <= safe.right;
       const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
@@ -650,9 +657,11 @@ class CombatHud {
       ctx.textBaseline = "top";
       ctx.fillStyle = color;
       ctx.fillText(rangeLine, textX, textY);
-      ctx.fillStyle = GREEN_DIM;
-      ctx.fillText(closureLine, textX, textY + 12);
-      ctx.fillText(angleLine, textX, textY + 24);
+      if (!frame.padlock) {
+        ctx.fillStyle = GREEN_DIM;
+        ctx.fillText(closureLine, textX, textY + 12);
+        ctx.fillText(angleLine, textX, textY + 24);
+      }
 
       const progress = clamp(Number(state.kill_progress) || 0, 0, 1);
       if (progress > 0) {
@@ -675,15 +684,32 @@ class CombatHud {
       dx = projection.x - this.width / 2;
       dy = projection.y - this.height / 2;
     } else {
-      dx = projection.cameraX;
-      dy = -projection.cameraY;
-      if (Math.abs(dx) + Math.abs(dy) < 0.001) dy = this.height;
+      // Camera-space X/Y collapse to zero for a target exactly behind the pilot. Resolve that
+      // singular case from own-ship-relative bearing and current head angle so the locator always
+      // points along the shortest pan back to the bandit instead of arbitrarily pointing down.
+      const yawError = wrapPi(angles.azimuth - (Number(frame.sensorYaw) || 0));
+      const pitchError = clamp(
+        angles.elevation - (Number(frame.sensorPitch) || 0),
+        -Math.PI / 2,
+        Math.PI / 2,
+      );
+      dx = Math.sin(yawError);
+      dy = -Math.sin(pitchError);
+      if (Math.abs(dx) + Math.abs(dy) < 0.02) {
+        dx = yawError < 0 || (yawError === 0 && angles.azimuth < 0) ? -1 : 1;
+      }
     }
 
-    const safeCenterX = (safe.left + safe.right) * 0.5;
-    const safeCenterY = (safe.top + safe.bottom) * 0.5;
-    const halfWidth = (safe.right - safe.left) * 0.5;
-    const halfHeight = (safe.bottom - safe.top) * 0.5;
+    // Padlock locators live at the actual display edge; normal HUD locators retain the protected
+    // tape area. Keep these as scalars so the hot draw path creates no extra layout object.
+    const locatorLeft = frame.padlock ? this.safeInsets.left + 26 : safe.left;
+    const locatorRight = frame.padlock ? this.width - this.safeInsets.right - 26 : safe.right;
+    const locatorTop = frame.padlock ? this.safeInsets.top + 62 : safe.top;
+    const locatorBottom = frame.padlock ? this.height - this.safeInsets.bottom - 58 : safe.bottom;
+    const safeCenterX = (locatorLeft + locatorRight) * 0.5;
+    const safeCenterY = (locatorTop + locatorBottom) * 0.5;
+    const halfWidth = (locatorRight - locatorLeft) * 0.5;
+    const halfHeight = (locatorBottom - locatorTop) * 0.5;
     const scale = Math.min(
       halfWidth / Math.max(Math.abs(dx), 0.0001),
       halfHeight / Math.max(Math.abs(dy), 0.0001),
@@ -695,8 +721,10 @@ class CombatHud {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
-    this.setLine(AMBER, 1.6);
-    ctx.fillStyle = "rgba(255, 176, 32, 0.16)";
+    this.setLine(AMBER, frame.padlock ? 2.25 : 1.6);
+    ctx.fillStyle = frame.padlock ? "rgba(255, 176, 32, 0.28)" : "rgba(255, 176, 32, 0.16)";
+    ctx.shadowColor = frame.padlock ? "rgba(255, 176, 32, 0.68)" : "transparent";
+    ctx.shadowBlur = frame.padlock ? 8 : 0;
     ctx.beginPath();
     ctx.moveTo(12, 0);
     ctx.lineTo(-8, -8);
@@ -705,16 +733,19 @@ class CombatHud {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.restore();
 
     const length = Math.hypot(dx, dy) || 1;
     const azimuth = angles.azimuth * RAD_TO_DEG;
-    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${formatRange(state.range_m)} · C ${formatSigned(state.closure_kts)} · AO ${Math.round(Number(state.angle_off_deg) || 0)}°`;
+    const fullLabel = frame.padlock
+      ? `${Math.abs(azimuth) > 150 ? "6 · " : ""}BANDIT · ${formatRange(state.range_m)}`
+      : `${Math.abs(azimuth) > 150 ? "6 · " : ""}${formatRange(state.range_m)} · C ${formatSigned(state.closure_kts)} · AO ${Math.round(Number(state.angle_off_deg) || 0)}°`;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const labelText = this.fitText(fullLabel, Math.max(60, safe.right - safe.left - 12));
+    const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
-    const labelX = clamp(x - (dx / length) * 34, safe.left + labelWidth * 0.5 + 5, safe.right - labelWidth * 0.5 - 5);
-    const labelY = clamp(y - (dy / length) * 30, safe.top + 8, safe.bottom - 8);
+    const labelX = clamp(x - (dx / length) * 34, locatorLeft + labelWidth * 0.5 + 5, locatorRight - labelWidth * 0.5 - 5);
+    const labelY = clamp(y - (dy / length) * 30, locatorTop + 8, locatorBottom - 8);
     ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
     ctx.fillRect(labelX - labelWidth * 0.5 - 4, labelY - 7, labelWidth + 8, 14);
     ctx.fillStyle = AMBER;
@@ -731,6 +762,11 @@ class CombatHud {
     this.banditAnglesValue.azimuth = Math.atan2(right, forward);
     this.banditAnglesValue.elevation = Math.atan2(up, Math.hypot(right, forward));
     return this.banditAnglesValue;
+  }
+
+  banditAspect(frame) {
+    this.relative.copy(frame.banditPosition).sub(frame.playerPosition).normalize();
+    return Math.acos(clamp(frame.banditForward.dot(this.relative), -1, 1)) * RAD_TO_DEG;
   }
 
   drawSaBar(frame) {
@@ -1457,6 +1493,21 @@ class CombatHud {
     const dataLeft = x + 108;
     const dataWidth = width - 118;
     const targetLeft = dataLeft + dataWidth * 0.53;
+    const aspect = this.banditAspect(frame);
+    const angleOff = Math.max(0, Number(state.angle_off_deg) || 0);
+    const range = Math.max(0, Number(state.range_m) || 0);
+    const closure = Number(state.closure_kts) || 0;
+    const approachingGuns = closure > 0 && range <= 2000 && angleOff <= 35;
+    const gunCue = hasGunSolution(state)
+      ? "GUNS · SHOOT"
+      : state.gun_window === true
+      ? "GUNS · WINDOW"
+      : approachingGuns
+      ? "GUNS · CLOSING"
+      : "GUNS · NO SHOT";
+    const gunColor = hasGunSolution(state) || state.gun_window === true
+      ? AMBER
+      : approachingGuns ? GREEN : GREEN_DIM;
     const ownFuel = Math.max(0, Number(state.fuel_lb) || 0);
     const bingoThreshold = bingoFuelLb(state);
     const ownFuelLow = state.fuel_bingo === true || ownFuel <= bingoThreshold;
@@ -1474,6 +1525,8 @@ class CombatHud {
     ctx.rotate(-bank);
     ctx.fillStyle = "rgba(77, 255, 136, 0.055)";
     ctx.fillRect(-attitudeRadius * 2, -attitudeRadius * 2, attitudeRadius * 4, horizonY + attitudeRadius * 2);
+    ctx.fillStyle = "rgba(255, 176, 32, 0.045)";
+    ctx.fillRect(-attitudeRadius * 2, horizonY, attitudeRadius * 4, attitudeRadius * 2 - horizonY);
     ctx.strokeStyle = GREEN;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -1486,6 +1539,13 @@ class CombatHud {
     ctx.moveTo(0, horizonY - 13);
     ctx.lineTo(4, horizonY - 7);
     ctx.stroke();
+    ctx.fillStyle = GREEN;
+    ctx.beginPath();
+    ctx.moveTo(0, -attitudeRadius + 4);
+    ctx.lineTo(-4, -attitudeRadius + 11);
+    ctx.lineTo(4, -attitudeRadius + 11);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
 
     ctx.strokeStyle = GREEN_DIM;
@@ -1528,7 +1588,7 @@ class CombatHud {
     ctx.fillStyle = GREEN_DIM;
     ctx.fillText("OWN", dataLeft, y + 15);
     ctx.fillStyle = AMBER;
-    ctx.fillText("TGT", targetLeft, y + 15);
+    ctx.fillText("BANDIT", targetLeft, y + 15);
 
     ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillStyle = GREEN;
@@ -1537,7 +1597,7 @@ class CombatHud {
     ctx.fillText(`G ${(Number(state.g_actual) || 0).toFixed(1)} · α ${(Number(state.aoa_deg) || 0).toFixed(1)}°`, dataLeft, y + 73);
     ctx.fillStyle = ownFuelLow ? (ownFuel <= bingoThreshold * 0.5 ? RED : AMBER) : GREEN;
     ctx.fillText(
-      `${ownFuelLow ? "BINGO " : "F "}${Math.round(ownFuel)} · FF ${Math.round(Number(state.fuel_burn_lb_min) || 0)}`,
+      `${ownFuelLow ? "BINGO" : "FUEL"} ${Math.round(ownFuel)} LB`,
       dataLeft,
       y + 92,
     );
@@ -1545,7 +1605,9 @@ class CombatHud {
     ctx.fillStyle = AMBER;
     ctx.fillText(`R ${formatRange(state.range_m)}`, targetLeft, y + 35);
     ctx.fillText(`C ${formatSigned(state.closure_kts)} KT`, targetLeft, y + 54);
-    ctx.fillText(`AO ${Math.round(Number(state.angle_off_deg) || 0)}°`, targetLeft, y + 73);
+    ctx.fillText(`ASP ${Math.round(aspect)}° · AO ${Math.round(angleOff)}°`, targetLeft, y + 73);
+    ctx.fillStyle = gunColor;
+    ctx.fillText(gunCue, targetLeft, y + 92);
     ctx.restore();
   }
 
@@ -1620,7 +1682,7 @@ class CombatHud {
     this.worldPoint.copy(frame.playerPosition).addScaledVector(frame.playerForward, 10000);
     const noseAnchor = this.project(this.worldPoint, frame.camera, this.noseProjection);
 
-    this.drawPitchLadder(noseAnchor, frame.state);
+    if (!frame.padlock) this.drawPitchLadder(noseAnchor, frame.state);
     this.drawAirframeSymbols(noseAnchor, frame.state);
     this.drawGunSight(frame, noseAnchor);
     this.drawAimPoint(frame, noseAnchor);
@@ -1637,29 +1699,29 @@ class CombatHud {
     this._prevSpeed = spd;
     const speedTrend = clamp(this._speedRate * 6, -60, 60);    // project 6 s, cap for tape sanity
 
-    const tapeInset = this.getLayout().tapeInset;
-    this.drawVerticalTape({
-      value: spd,
-      x: tapeInset,
-      label: "KTS",
-      floor: 0,
-      step: 20,
-      decimals: 0,
-      trend: speedTrend,
-    });
-    this.drawVerticalTape({
-      value: Number(frame.state.alt_ft) || 0,
-      x: this.width - tapeInset,
-      label: "ALT FT",
-      floor: 0,
-      step: frame.state.alt_ft > 10000 ? 1000 : 500,
-      decimals: 0,
-    });
-    this.drawGTape(frame.state);
-    this.drawThrottle(frame.state);
-    // On very short padlock viewports the own-ship brick carries fuel/flow; avoid stacking the
-    // full gauge underneath it. Normal and larger padlock layouts retain the trend tape.
-    if (!frame.padlock || this.height >= 520) this.drawFuel(frame.state);
+    if (!frame.padlock) {
+      const tapeInset = this.getLayout().tapeInset;
+      this.drawVerticalTape({
+        value: spd,
+        x: tapeInset,
+        label: "KTS",
+        floor: 0,
+        step: 20,
+        decimals: 0,
+        trend: speedTrend,
+      });
+      this.drawVerticalTape({
+        value: Number(frame.state.alt_ft) || 0,
+        x: this.width - tapeInset,
+        label: "ALT FT",
+        floor: 0,
+        step: frame.state.alt_ft > 10000 ? 1000 : 500,
+        decimals: 0,
+      });
+      this.drawGTape(frame.state);
+      this.drawThrottle(frame.state);
+      this.drawFuel(frame.state);
+    }
     this.drawWarnings(frame);
     this.drawAoAIndexer(frame.state);
     this.drawPadlockSa(frame);
@@ -1673,7 +1735,7 @@ class CombatHud {
     ctx.fillStyle = "rgba(77, 255, 136, 0.35)";
     ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left"; ctx.textBaseline = "top";
-    ctx.fillText("BUILD 29", this.safeInsets.left + 8, this.safeInsets.top + 8);
+    ctx.fillText("BUILD 30", this.safeInsets.left + 8, this.safeInsets.top + 8);
     ctx.restore();
     this.drawEnding(frame);
   }

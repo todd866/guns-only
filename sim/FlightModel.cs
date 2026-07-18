@@ -32,6 +32,9 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     // Manual pitch-rate command and legacy State.Bank compatibility. Body attitude is authoritative;
     // the compatibility pair keeps old telemetry/RK4 behavior separate from the flown roll tuning.
     double ManualPitchRateMaxRad = 0.60, double ManualPitchAngleTau = 0.60,
+    // Optional flown-axis roll authority. RollRateMaxRad remains the generic/compatibility value;
+    // a fighter can expose its real manual rate without changing compatibility command-bank tuning.
+    double FightRollRateMaxRad = -1.0,
     double CompatibilityRollRateMaxRad = -1.0, double CompatibilityBankTau = -1.0,
     // Stability augmentation. YawBetaStiffness centers the ball independently of the attitude
     // tracker; RollHoldDamping is blended in only near a captured roll target, never while the
@@ -52,12 +55,16 @@ internal readonly record struct AeroResult(Vec3D Accel, Vec3D LiftDir, Vec3D Air
 
 public static class FlightModel {
     public const double G0 = 9.80665;
-    // PLACEHOLDER Sabre-shaped numbers. Shape > fidelity until table-driven aero replaces them.
+    // F-86 fight tuning anchors (NACA/operational scale): ~7 G instantaneous near 375 kt,
+    // ~5 G sustained near 350 kt as energy bleeds, ~20 deg/s at corner, and ~140 deg/s roll.
+    // The lift curve/CLmax set the aero G boundary; the rate servos get the jet there cleanly.
     public static readonly AircraftParams Sabre = new(
         MassKg: 6900, WingAreaM2: 26.8, ThrustMaxN: 26300,
         CD0: 0.0180, InducedK: 0.083, CLMax: 1.10, CLMin: -0.65,
         RollRateMaxRad: 0.65, BankTau: 0.52,
-        RollDampingNms: 70000, RollMomentMaxNm: 48000,
+        RollDampingNms: 70000, RollMomentMaxNm: 180000,
+        PitchMomentMaxNm: 200000,
+        FightRollRateMaxRad: 2.40,                 // 137.5 deg/s, near the observed ~140 deg/s
         CompatibilityRollRateMaxRad: 2.1, CompatibilityBankTau: 0.18);
 
     /// TAIWAN DEFENCE — balloon-lofted glider strike drone. A BALLOON DRONE, a different
@@ -111,6 +118,9 @@ public static class FlightModel {
         double rateMax = p.CompatibilityRollRateMaxRad > 0.0 ? p.CompatibilityRollRateMaxRad : p.RollRateMaxRad;
         return System.Math.Clamp(err / tau, -rateMax, rateMax);
     }
+
+    internal static double FightRollRate(in AircraftParams p) =>
+        p.FightRollRateMaxRad > 0.0 ? p.FightRollRateMaxRad : p.RollRateMaxRad;
 
     internal static StateDeriv Derivatives(in RawState r, in PilotCommand c, in AircraftParams p, in Vec3D liftRef, in Vec3D wind) {
         // Aerodynamics acts on the AIR, and the air may be moving: true airspeed = ground
@@ -178,31 +188,50 @@ public static class FlightModel {
         var rates = r.BodyRates;
         bool directPitch = double.IsFinite(c.CommandedPitchRad);
         double qCommand = 0.0;
+        double alpha = 0.0, alphaTarget = 0.0;
         if (!directPitch) {
             var targetUp = target.Rotate(new Vec3D(0, 1, 0));
             var liftPlane = targetUp - vhat * targetUp.Dot(vhat);
             var targetLift = liftPlane.Length < 1e-9 ? targetUp : liftPlane.Normalized();
             double nz = TargetNz(r, c, p, dynamicPressure);
-            // Feed forward the rate needed to follow the commanded curved flight path. Damping
-            // about zero rate held a steady turn several degrees below its commanded AoA. The old
-            // 1x term was only ~0.28 rad/s in a representative 180 m/s max-perform pull; doubling
-            // it gives the fallback G law the same healthy authority as the direct manual path.
-            qCommand = System.Math.Clamp(2.0 * (nz - targetLift.Y) * G0 / speed,
+            double cl = nz * r.Mass * G0 / System.Math.Max(dynamicPressure * p.WingAreaM2, 1e-6);
+            alphaTarget = System.Math.Clamp(cl / p.CLAlpha,
+                p.CLMin / p.CLAlpha, p.CLMax / p.CLAlpha);
+            var bodyUp = attitude.Rotate(new Vec3D(0, 1, 0));
+            var bodyForward = attitude.Rotate(new Vec3D(0, 0, 1));
+            alpha = System.Math.Atan2(-vhat.Dot(bodyUp), vhat.Dot(bodyForward));
+            // Exact normal-plane curvature feed-forward. At 90 deg AOB targetLift.Y is zero,
+            // so a 7 G pull commands about 20 deg/s at 375 kt in the CURRENT bank plane. There is
+            // no doctrine attitude or wings-level term in this pitch law.
+            qCommand = System.Math.Clamp((nz - targetLift.Y) * G0 / speed,
                 -p.ManualPitchRateMaxRad, p.ManualPitchRateMaxRad);
         }
         double pitchStiffness = directPitch ? p.ApproachPitchStiffnessNmRad : p.PitchStiffnessNmRad;
         double pitchMomentMax = directPitch ? p.ApproachPitchMomentMaxNm : p.PitchMomentMaxNm;
-        // DetentLayer's active roll-rate command holds the target a fixed lead (~0.34 rad for the
-        // Sabre) ahead of the body. Near zero error the pilot has released/captured the roll axis:
+        // DetentLayer's active roll-rate command holds the target a fixed lead ahead of the body.
+        // Near zero error the pilot has released/captured the roll axis:
         // blend in extra p damping there so a gust or residual pitch/yaw coupling dies promptly.
         // Outside this small capture region the extra hold is exactly zero, preserving commanded
         // roll authority from the control-authority pass.
         double rollHoldBlend = 1.0 - System.Math.Clamp(System.Math.Abs(errP)
             / System.Math.Max(p.RollHoldErrorRad, 1e-6), 0.0, 1.0);
         double rollDamping = p.RollDampingNms + p.RollHoldDampingNms * rollHoldBlend;
-        double rollMoment = System.Math.Clamp(p.RollStiffnessNmRad * errP - rollDamping * rates.P,
+        // Rate-limit the attitude error before applying the moment. A distant target therefore
+        // cannot create a 2-3x rate spike, while DetentLayer's moving lead still commands the full
+        // 2.4 rad/s Sabre roll rate and a tap remains a small, placeable attitude correction.
+        double rollRateMax = FightRollRate(p);
+        double rollRateCommand = System.Math.Clamp(p.RollStiffnessNmRad * errP / rollDamping,
+            -rollRateMax, rollRateMax);
+        double rollMoment = System.Math.Clamp(rollDamping * (rollRateCommand - rates.P),
             -p.RollMomentMaxNm, p.RollMomentMaxNm);
-        double pitchMoment = System.Math.Clamp(pitchStiffness * errQ - p.PitchDampingNms * (rates.Q - qCommand),
+        // FREE/FIGHT is direct normal-load control: G maps to a CL-limited alpha target and the
+        // moment loop tracks that measured alpha plus the required turn rate. This both builds G
+        // promptly and makes the CL bounds an active AoA barrier instead of letting attitude-command
+        // wind-up carry the jet to the reported -50 deg departure. Carrier approach keeps its
+        // separate finite-pitch attitude tracker unchanged.
+        double pitchError = directPitch ? errQ : alphaTarget - alpha;
+        double pitchMoment = System.Math.Clamp(pitchStiffness * pitchError
+            - p.PitchDampingNms * (rates.Q - qCommand),
             -pitchMomentMax, pitchMomentMax);
         var bodyRight = attitude.Rotate(new Vec3D(1, 0, 0));
         double beta = System.Math.Asin(System.Math.Clamp(vhat.Dot(bodyRight), -1.0, 1.0));

@@ -18,13 +18,12 @@ public sealed class DetentLayer {
     const double ThrottleRate = 0.7;   // per second while W/S held — a real throttle, not tap-detents
     int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
+    bool _bankTargetInitialized;
     const double Tau = 0.07, StickyStepG = 0.5;
     const double RollReturnRate = 0.6; // rad/s — reflex return toward wings-level when roll is un-commanded
     const double RollLevelDelayMs = 1500; // wait this long after the last roll input before settling to level
     double _rollIdleMs;
-    int _fightPitchDirection, _rollDirection;
-    double _fightPitchTarget, _fightPitchIdleSeconds;
-    bool _fightPitchEngaged;
+    int _rollDirection;
     bool _rollRightSampled, _rollLeftSampled, _rollRightWasDown, _rollLeftWasDown;
 
     // MAGIC CARPET (approach mode). The G-command grammar is wrong for a landing: with the valley
@@ -150,41 +149,11 @@ public sealed class DetentLayer {
         Tier = tier;
         _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
 
-        // In the fight, the arrows command PITCH RATE directly. The target is only a short lead
-        // ahead of the actual nose; it never accumulates while the airframe catches up. Available
-        // AoA is still the boundary, but it only tapers the rate inside the finite-moment stopping
-        // distance, so protection does not make the rest of the pull feel weak. On release, capture
-        // the current nose for a brief arrest/hold before returning to the ordinary 1 G trim law.
-        int pitchDirection = (pull != KeyPhase.Idle ? 1 : 0) - (push != KeyPhase.Idle ? 1 : 0);
-        if (HasBodyAttitude(s) && System.Math.Abs(s.Gamma) < 1.15) {
-            double bodyPitch = BodyPitch(s);
-            if (pitchDirection != 0) {
-                _fightPitchEngaged = true;
-                _fightPitchIdleSeconds = 0.0;
-                double q = 0.5 * Atmosphere.Density(s.Position.Y) * s.Speed * s.Speed;
-                double clPerG = s.Mass * FlightModel.G0 / System.Math.Max(q * p.WingAreaM2, 1e-6);
-                double alpha = bodyPitch - s.Gamma;
-                double pushFloor = System.Math.Max(FlightModel.NzAeroMin(s, p), over ? -1.5 : -1.0);
-                double alphaLimit = pitchDirection > 0
-                    ? System.Math.Clamp(cap * clPerG / p.CLAlpha, p.CLMin / p.CLAlpha, p.CLMax / p.CLAlpha)
-                    : System.Math.Clamp(pushFloor * clPerG / p.CLAlpha, p.CLMin / p.CLAlpha, p.CLMax / p.CLAlpha);
-                double remaining = System.Math.Max(0.0,
-                    pitchDirection > 0 ? alphaLimit - alpha : alpha - alphaLimit);
-                double angularAccel = p.ApproachPitchMomentMaxNm / p.IyyKgM2;
-                double rateForBoundary = System.Math.Sqrt(2.0 * angularAccel * remaining);
-                double pitchRate = pitchDirection * System.Math.Min(p.ManualPitchRateMaxRad, rateForBoundary);
-                _fightPitchTarget = bodyPitch + pitchRate * p.ManualPitchAngleTau;
-            } else if (_fightPitchEngaged) {
-                if (_fightPitchDirection != 0) _fightPitchTarget = bodyPitch; // release: arrest here
-                _fightPitchIdleSeconds += dt;
-                if (_fightPitchIdleSeconds >= 0.8) _fightPitchEngaged = false;
-            }
-        } else {
-            // Absolute pitch is singular at the vertical. Fall back to the strengthened G law there;
-            // the 6DOF target-attitude construction carries the aircraft cleanly through the pole.
-            _fightPitchEngaged = false;
-        }
-        _fightPitchDirection = pitchDirection;
+        // FREE/FIGHT pitch stays a load-factor command. Do not turn it into a horizon-referenced
+        // nose-attitude target here: at 90 degrees of bank that target is on the wrong axis and it
+        // bypasses GDemand in FlightModel, which was the BUILD 29 zero-G full-pull bug. The finite
+        // CommandedPitchRad path is reserved for the carrier groove below; NaN selects the direct
+        // aero-limited G/AoA law, with bank defining the turn plane.
         }
 
         // Roll is also a rate command. The target stays a fixed lead ahead of the actual bank while
@@ -200,14 +169,22 @@ public sealed class DetentLayer {
         if (rollLeft) _rollLeftSampled = true;
         bool rollInput = rollRight || rollLeft || rTaps > 0 || lTaps > 0;
         _rollIdleMs = rollInput ? 0.0 : _rollIdleMs + dt * 1000.0;
-        // Approach mode retains fine ~20°/s lineup authority. Fight roll is cut from 92°/s to a
-        // placeable 37°/s and is now limited by the body-rate controller as well as this command.
-        double rollRate = ApproachMode ? 0.35 : p.RollRateMaxRad;     // ~20°/s vs ~37°/s
+        // Approach mode retains fine ~20°/s lineup authority. FREE/FIGHT gets the Sabre's measured
+        // scale (~2.4 rad/s, 137.5°/s), but as a moving rate lead: a tap is still a small correction,
+        // not a snap to a stored distant attitude.
+        double rollRate = ApproachMode ? 0.35 : FlightModel.FightRollRate(p); // ~20°/s vs ~140°/s
         double levelDelay = ApproachMode ? 0.0 : RollLevelDelayMs;
         double returnRate = ApproachMode ? 1.4 : RollReturnRate;  // firm, so it settles level and stays
         int rollDirection = (rollRight ? 1 : 0) - (rollLeft ? 1 : 0);
         if (HasBodyAttitude(s)) {
             double bodyBank = BodyBank(s);
+            // Capture the aircraft's ACTUAL bank on entry to the fight. _bankTarget used to start at
+            // zero, so an already-banked aircraft was silently commanded wings-level on the first
+            // tick even with no roll input — the other half of the reported "dragging me" behavior.
+            if (!_bankTargetInitialized) {
+                _bankTarget = bodyBank;
+                _bankTargetInitialized = true;
+            }
             if (rollDirection != 0) {
                 _bankTarget = bodyBank + rollDirection * rollRate * p.BankTau;
             } else if (_rollDirection != 0) {
@@ -276,16 +253,11 @@ public sealed class DetentLayer {
         if (keys.PhaseAt(GKey.RudderLeft, nowMs) != KeyPhase.Idle)  rudder -= 0.6;
 
         Command = new PilotCommand(_gCmd, _bankTarget, Throttle, rudder,
-            ApproachMode ? _cmdPitch : _fightPitchEngaged ? _fightPitchTarget : double.NaN);
+            ApproachMode ? _cmdPitch : double.NaN);
     }
 
     static bool HasBodyAttitude(in AircraftState s) =>
         s.BodyAttitude.IsFinite && s.BodyAttitude.LengthSquared >= 1e-12;
-
-    static double BodyPitch(in AircraftState s) {
-        var forward = s.BodyAttitude.Rotate(new Vec3D(0, 0, 1));
-        return System.Math.Asin(System.Math.Clamp(forward.Y, -1.0, 1.0));
-    }
 
     static double BodyBank(in AircraftState s) {
         var forward = s.BodyAttitude.Rotate(new Vec3D(0, 0, 1));

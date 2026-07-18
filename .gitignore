@@ -15,3 +15,5 @@ testrig/scenarios/_replay.json
 .env
 .env.*
 *.env.local
+.accuracy-runner/
+.test-runner/

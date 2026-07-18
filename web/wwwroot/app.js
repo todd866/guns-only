@@ -4,6 +4,9 @@ import { createHud } from "./hud.js";
 const DEG = Math.PI / 180;
 const MAX_GIMBAL_YAW = 150 * DEG;
 const MAX_GIMBAL_PITCH = 90 * DEG;
+const PADLOCK_MAX_YAW = 165 * DEG;
+const PADLOCK_MAX_PITCH = 88 * DEG;
+const PADLOCK_FRAME_FRACTION = 0.88;
 const MAX_TRACERS = 48;
 const SUN_DIRECTION = new THREE.Vector3(0.32, 0.78, -0.53).normalize();
 
@@ -61,7 +64,7 @@ const heldKeys = new Set();
 // state each frame from a REAL playthrough and POSTs it to /telemetry (same origin, so the dev
 // server writes it to disk for analysis). Fire-and-forget — a failed POST must never disturb the
 // sim. Sampled at ~30 Hz to keep sessions a few MB.
-const BUILD = "29";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
+const BUILD = "30";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
 const recorder = {
   session: `web-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
   build: BUILD,
@@ -200,6 +203,13 @@ function clamp(value, min, max) {
 
 function expStep(rate, dt) {
   return 1 - Math.exp(-rate * dt);
+}
+
+function angleNearestReference(angle, reference) {
+  const delta = angle - reference;
+  if (delta > Math.PI) return angle - Math.PI * 2;
+  if (delta < -Math.PI) return angle + Math.PI * 2;
+  return angle;
 }
 
 function smoothstep(edge0, edge1, value) {
@@ -2164,6 +2174,7 @@ class FlightView {
       playerUp: this.playerUp,
       playerRight: this.playerRight,
       banditPosition: this.banditPosition,
+      banditForward: this.banditFrame.forward,
       leadPipper: this.leadPipper,
       aimPoint: null,
       sensorYaw: 0,
@@ -2221,13 +2232,38 @@ class FlightView {
       this.localTarget.copy(this.banditPosition).sub(this.playerPosition).normalize();
       this.inversePlayerQuaternion.copy(this.playerQuaternion).invert();
       this.localTarget.applyQuaternion(this.inversePlayerQuaternion);
-      const desiredYaw = clamp(Math.atan2(this.localTarget.x, -this.localTarget.z), -MAX_GIMBAL_YAW, MAX_GIMBAL_YAW);
-      const desiredPitch = clamp(
-        Math.atan2(this.localTarget.y, Math.hypot(this.localTarget.x, this.localTarget.z)),
-        -MAX_GIMBAL_PITCH,
-        MAX_GIMBAL_PITCH,
+
+      // Follow the target through the six on the same side of the canopy. Raw atan2 jumps from
+      // +180 to -180 there; resolving it beside the current head angle prevents a 330-degree
+      // whip across the nose in the middle of a break turn.
+      const targetHorizontal = Math.hypot(this.localTarget.x, this.localTarget.z);
+      const rawTargetYaw = targetHorizontal < 0.02
+        ? sensorYaw
+        : Math.atan2(this.localTarget.x, -this.localTarget.z);
+      const targetYaw = angleNearestReference(rawTargetYaw, sensorYaw);
+      const targetPitch = Math.atan2(
+        this.localTarget.y,
+        targetHorizontal,
       );
-      const follow = expStep(10, dt);
+
+      // Keep a little nose-side framing instead of cancelling every bit of own-ship motion with
+      // a dead-centre target lock. The residual 12% makes pitch/roll readable while leaving the
+      // bandit comfortably inside the 66-degree view through normal dogfight geometry.
+      const desiredYaw = clamp(
+        targetYaw * PADLOCK_FRAME_FRACTION,
+        -PADLOCK_MAX_YAW,
+        PADLOCK_MAX_YAW,
+      );
+      const desiredPitch = clamp(
+        targetPitch * PADLOCK_FRAME_FRACTION,
+        -PADLOCK_MAX_PITCH,
+        PADLOCK_MAX_PITCH,
+      );
+      const trackingError = Math.max(
+        Math.abs(targetYaw - sensorYaw),
+        Math.abs(targetPitch - sensorPitch),
+      );
+      const follow = expStep(trackingError > 28 * DEG ? 18 : 12, dt);
       sensorYaw += (desiredYaw - sensorYaw) * follow;
       sensorPitch += (desiredPitch - sensorPitch) * follow;
     } else if (!dragging && performance.now() - lastLookTime > 900) {
