@@ -110,14 +110,18 @@ public sealed class DetentLayer {
         bool rollLeft = keys.PhaseAt(GKey.RollLeft, nowMs) != KeyPhase.Idle;
         bool rollInput = rollRight || rollLeft || rTaps > 0 || lTaps > 0;
         _rollIdleMs = rollInput ? 0.0 : _rollIdleMs + dt * 1000.0;
-        if (rTaps > 0 || lTaps > 0) _bankTarget = ValleyBank;
-        if (rollRight) _bankTarget += RollHoldRate * dt;
-        if (rollLeft) _bankTarget -= RollHoldRate * dt;
-        // Settle to level only AFTER a hold-off: a fresh tap/hold sets a bank that persists, and
-        // only a bank you've walked away from (no roll input for RollLevelDelayMs) washes out.
-        if (!rollInput && _rollIdleMs > RollLevelDelayMs) {
+        // Approach mode = FINE lineup control: a much slower roll rate (92°/s is wild for lineup),
+        // and the wings self-level promptly with no hold-off, so the reflex HOLDS the attitude for
+        // you (the "can't hold an attitude" fix). In BFM the roll stays quick and the bank holds.
+        double rollRate = ApproachMode ? 0.35 : RollHoldRate;     // ~20°/s vs ~92°/s
+        double levelDelay = ApproachMode ? 0.0 : RollLevelDelayMs;
+        double returnRate = ApproachMode ? 1.4 : RollReturnRate;  // firm, so it settles level and stays
+        if (rTaps > 0 || lTaps > 0) _bankTarget = ApproachMode ? _bankTarget : ValleyBank;
+        if (rollRight) _bankTarget += rollRate * dt;
+        if (rollLeft) _bankTarget -= rollRate * dt;
+        if (!rollInput && _rollIdleMs > levelDelay) {
             double err = System.Math.IEEERemainder(0.0 - _bankTarget, 2 * System.Math.PI); // toward wings-level
-            _bankTarget += System.Math.Clamp(err, -RollReturnRate * dt, RollReturnRate * dt);
+            _bankTarget += System.Math.Clamp(err, -returnRate * dt, returnRate * dt);
         }
         _bankTarget = System.Math.IEEERemainder(_bankTarget, 2 * System.Math.PI); // circular: continuous roll through inverted
 

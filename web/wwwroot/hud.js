@@ -889,7 +889,10 @@ class CombatHud {
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     const label = thr <= 0.01 ? "IDLE" : thr >= 0.99 ? "MIL" : `${Math.round(thr * 100)}%`;
-    ctx.fillText(`THROTTLE  ${label}   ·  W / S`, x, y - 8);
+    // On the approach the throttle is automatic (Magic Carpet holds on-speed), so say so — W/S
+    // doing nothing there is exactly why it read as opaque.
+    const hint = state.carrier === true ? "AUTO — holding on-speed" : "W / S";
+    ctx.fillText(`THROTTLE  ${label}   ·  ${hint}`, x, y - 8);
   }
 
   drawFooter(state) {
