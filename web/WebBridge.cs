@@ -53,7 +53,7 @@ public static partial class WebBridge {
         };
         _bandit = new RailBandit(_beat.Bandit, _beat.BanditAir, _beat.BanditTimeline);
         _keys = new KeyGrammar();
-        _detents = new DetentLayer { Variant = variant };
+        _detents = new DetentLayer { Variant = variant, ApproachMode = _beat.Carrier is not null };
         _prompts = new PromptTracker();
         _advice = new DoctrineAdvice(1.0, 0.0, "setup");
         _cue = PromptCue.None;

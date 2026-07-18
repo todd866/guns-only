@@ -109,7 +109,7 @@ public static class Beats {
         // The real target: a straight-deck carrier (~250 m × 30 m deck, 20 m freeboard) steaming
         // slowly north into the wind. Kinematic — it does not fly, it steams.
         Carrier: new GunsOnly.Sim.Carrier(
-            deckCentre: new Vec3D(0, 20, 0), headingRad: 0, speedMps: 5,
+            deckCentre: new Vec3D(0, 20, 0), headingRad: 0, speedMps: 3,
             deckAltM: 20, deckLengthM: 250, deckWidthM: 30));
 
     public static BeatSetup Saddle() => new("Saddle + shot",

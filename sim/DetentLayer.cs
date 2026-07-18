@@ -20,6 +20,19 @@ public sealed class DetentLayer {
     const double RollLevelDelayMs = 1500; // wait this long after the last roll input before settling to level
     double _rollIdleMs;
 
+    // MAGIC CARPET (approach mode). The G-command grammar is wrong for a landing: with the valley
+    // pinned at 1 G the pull has no authority, so the aircraft just sinks (the "uncontrollable"
+    // approach the telemetry showed — g_cmd stuck at 1.0 while pulling). In approach mode pitch
+    // commands the FLIGHT PATH: hold the glideslope, pull raises the aimpoint (shallower/climb),
+    // push lowers it, and auto-throttle holds on-speed. This is what a competent pilot flies.
+    public bool ApproachMode;
+    double _targetGamma; bool _approachInit;
+    const double ApproachGlideslope = -0.061;  // −3.5°
+    const double ApproachSpeedMps = 70.0;      // ~136 kt on-speed
+    const double GammaMoveRate = 0.11;         // rad/s the aimpoint slews while pull/push held (fine ball control)
+    const double GammaHoldGain = 1.4;
+    const double GammaLo = -0.11, GammaHi = 0.035;  // approach band: steepen a bit, or shallow to a slight float
+
     public void Tick(KeyGrammar keys, double nowMs, in AircraftState s, in AircraftParams p, DoctrineAdvice advice, double dt) {
         double maxPerform = Protection.MaxPerformG(s, p);
         double hardMax = Protection.HardMaxG(s, p);
@@ -50,6 +63,20 @@ public sealed class DetentLayer {
         bool over = keys.PhaseAt(GKey.Override, nowMs) != KeyPhase.Idle;
         double cap = over ? hardMax : maxPerform;
 
+        if (ApproachMode) {
+            if (!_approachInit) { _targetGamma = ApproachGlideslope; _approachInit = true; }
+            if (pull != KeyPhase.Idle) _targetGamma += GammaMoveRate * dt;   // pull → aimpoint up
+            if (push != KeyPhase.Idle) _targetGamma -= GammaMoveRate * dt;   // push → aimpoint down
+            _targetGamma = System.Math.Clamp(_targetGamma, GammaLo, GammaHi);
+            // Command the G that drives the actual flight-path angle toward the target and holds it:
+            // trim n = cos γ / cos φ, plus a proportional term. This is the Magic-Carpet hold loop.
+            double gamma = s.Gamma, bank = s.Bank, V = System.Math.Max(s.Speed, 30.0);
+            double trimN = System.Math.Cos(gamma) / System.Math.Max(0.3, System.Math.Cos(bank));
+            double nCmd = trimN + (V / FlightModel.G0) * GammaHoldGain * (_targetGamma - gamma);
+            double lo = System.Math.Max(FlightModel.NzAeroMin(s, p), -0.5);
+            _gCmd = System.Math.Clamp(nCmd, lo, maxPerform);   // direct hold — no lag on the path loop
+            Tier = DemandTier.Valley; ValleyG = trimN; ValleyBank = 0.0;
+        } else {
         double target; DemandTier tier;
         if (pull != KeyPhase.Idle) {
             tier = over ? DemandTier.OverDemand : DemandTier.Valley;
@@ -68,6 +95,7 @@ public sealed class DetentLayer {
         else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; }
         Tier = tier;
         _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
+        }
 
         // Roll: taps adopt the advice bank (quantized intent); holds slew continuously; and when
         // NEITHER is commanded the reflex returns the bank toward WINGS-LEVEL at a gentle rate.
@@ -95,7 +123,14 @@ public sealed class DetentLayer {
 
         int thUp = keys.TakeTaps(GKey.ThrottleUp, nowMs), thDn = keys.TakeTaps(GKey.ThrottleDown, nowMs);
         _throttleIdx = System.Math.Clamp(_throttleIdx + thUp - thDn, 0, ThrottleDetents.Length - 1);
-        Throttle = ThrottleDetents[_throttleIdx];
+        if (ApproachMode) {
+            // Auto-throttle holds on-speed: this is why the aircraft was running away to 224 kt.
+            // On a −3.5° glideslope the trim throttle is nearly idle (gravity does most of the work),
+            // so the base is low and the gain firm — cut to idle when fast, spool up when slow.
+            Throttle = System.Math.Clamp(0.16 + 0.026 * (ApproachSpeedMps - s.Speed), 0.0, 1.0);
+        } else {
+            Throttle = ThrottleDetents[_throttleIdx];
+        }
 
         double rudder = 0;
         if (keys.PhaseAt(GKey.RudderRight, nowMs) != KeyPhase.Idle) rudder += 0.6;
