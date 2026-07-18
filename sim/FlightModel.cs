@@ -9,7 +9,10 @@ namespace GunsOnly.Sim;
 public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN,
     double CD0, double InducedK, double CLMax, double CLMin, double RollRateMaxRad, double BankTau,
     double MCrit = 0.85, double WaveDragK = 8.0,
-    double SpoolUpTau = 2.5, double SpoolDownTau = 1.4);
+    double SpoolUpTau = 2.5, double SpoolDownTau = 1.4,
+    // Lift-curve slope, per radian. Governs how hard a gust bumps you: a vertical gust changes
+    // the effective AoA by (gust/V) and lift by q·S·CLα·Δα. ~2π·AR/(AR+2): Sabre AR≈4.5 → ~4.5.
+    double CLAlpha = 4.5);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -75,9 +78,16 @@ public static class FlightModel {
         return System.Math.Clamp(err / p.BankTau, -p.RollRateMaxRad, p.RollRateMaxRad);
     }
 
-    internal static StateDeriv Derivatives(in RawState r, in PilotCommand c, in AircraftParams p, in Vec3D liftRef) {
-        double speed = System.Math.Max(r.Vel.Length, 20.0);
-        var vhat = r.Vel.Length < 1e-9 ? new Vec3D(0, 0, 1) : r.Vel.Normalized();
+    internal static StateDeriv Derivatives(in RawState r, in PilotCommand c, in AircraftParams p, in Vec3D liftRef, in Vec3D wind) {
+        // Aerodynamics acts on the AIR, and the air may be moving: true airspeed = ground
+        // velocity − wind. Everything aero (dynamic pressure, the lift/drag/thrust frame) is
+        // built from vAir; position still integrates GROUND velocity (Newton in the inertial
+        // frame — see DPos below). So a gust rotates and scales vAir, the whole force vector
+        // rotates and scales with it, and the flight path bumps — turbulence as a disturbance
+        // IN the loop, not a shake on top. wind = Zero reproduces still-air flight exactly.
+        var vAir = r.Vel - wind;
+        double speed = System.Math.Max(vAir.Length, 20.0);
+        var vhat = vAir.Length < 1e-9 ? new Vec3D(0, 0, 1) : vAir.Normalized();
         var up = new Vec3D(0, 1, 0);
         // Persistent lift reference (parallel-transported by AircraftSim), re-orthogonalized per stage.
         var lr0 = liftRef - vhat * liftRef.Dot(vhat);
@@ -101,8 +111,18 @@ public static class FlightModel {
         // model is memoryless, so the state that makes thrust lag has to live in the sim.
         double thrust = System.Math.Clamp(c.Throttle, 0, 1) * p.ThrustMaxN * (rho / 1.225);
 
+        // Gust-induced lift — the dominant felt bump, and the reason a G-command model needs it
+        // spelled out. Lift here is slaved to commanded nz, so a gust would otherwise only rotate
+        // the lift VECTOR (~0.005 G). The real bump is the lift MAGNITUDE change: the gust adds an
+        // AoA perturbation Δα = (wind·liftDir)/V (an updraft = +liftDir raises AoA → more lift →
+        // pushed up), so ΔL = q·S·CLα·Δα acts along liftDir. ~0.5 G for a 4 m/s gust. Zero wind →
+        // zero term → still-air flight is bit-identical. (A violent gust could push CL past CLMax
+        // into stall/buffet; unclamped here — fine for the gust magnitudes flown, revisit at the deck.)
+        double gustAlpha = wind.Dot(liftDir) / speed;
+        double gustLift = q * p.WingAreaM2 * p.CLAlpha * gustAlpha / r.Mass;
+
         var accel = vhat * ((thrust - drag) / r.Mass)
-                  + liftDir * (nz * G0)
+                  + liftDir * (nz * G0 + gustLift)
                   - up * G0
                   + rightHat * (c.Rudder * 0.06 * speed); // PLACEHOLDER rudder yaw-jink authority
         return new StateDeriv(r.Vel, accel, BankRate(r.Bank, c.BankTarget, p));

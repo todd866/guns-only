@@ -18,6 +18,11 @@ public sealed class AircraftSim {
     /// reconstruction instead of world-up (which snaps 180 degrees at loop apex).
     public Vec3D LiftDir { get; private set; } = new(0, 1, 0);
     readonly AircraftParams _p;
+    /// Optional wind/gust field. Null = still air (the aircraft flies exactly as before — the
+    /// regression guard). Sampled per RK4 stage at that stage's position, so the integrator sees
+    /// the field's spatial structure and a frozen gust pocket bumps you as you fly THROUGH it.
+    public GunsOnly.Sim.Turbulence.IWindField? Wind { get; set; }
+    Vec3D WindAt(in Vec3D pos) => Wind is null ? Vec3D.Zero : Wind.Sample(pos);
     Vec3D _liftRef;          // zero-bank lift reference, kept perpendicular to velocity, transported through verticals
     double _bank;            // roll about the velocity axis, relative to _liftRef
     double _reportedBank;    // horizon-referenced bank for State (held when horizon-undefined)
@@ -61,10 +66,15 @@ public sealed class AircraftSim {
         var spooled = cmd with { Throttle = _thrustFrac };
 
         var r = new RawState(s.Position, vel0, _bank, s.Mass);
-        var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef);
-        var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), spooled, _p, _liftRef);
-        var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), spooled, _p, _liftRef);
-        var k4 = FlightModel.Derivatives(Apply(r, k3, dt), spooled, _p, _liftRef);
+        // Sample the wind at each RK4 stage's own position, so the integrator sees the field's
+        // spatial structure (a frozen gust pocket bumps you as you fly through it, not on a clock).
+        var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef, WindAt(r.Pos));
+        var r2 = Apply(r, k1, dt / 2);
+        var k2 = FlightModel.Derivatives(r2, spooled, _p, _liftRef, WindAt(r2.Pos));
+        var r3 = Apply(r, k2, dt / 2);
+        var k3 = FlightModel.Derivatives(r3, spooled, _p, _liftRef, WindAt(r3.Pos));
+        var r4 = Apply(r, k3, dt);
+        var k4 = FlightModel.Derivatives(r4, spooled, _p, _liftRef, WindAt(r4.Pos));
         var pos = r.Pos + (k1.DPos + (k2.DPos + k3.DPos) * 2 + k4.DPos) * (dt / 6);
         var vel = r.Vel + (k1.DVel + (k2.DVel + k3.DVel) * 2 + k4.DVel) * (dt / 6);
         _bank = WrapPi(r.Bank + (k1.DBank + 2 * (k2.DBank + k3.DBank) + k4.DBank) * (dt / 6));

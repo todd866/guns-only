@@ -36,7 +36,7 @@ namespace GunsOnly.Sim.Turbulence;
 /// this field's output. Texture here; placement there. (See guns-only-carrier-pivot memory.)
 ///
 /// Pure kernel: no Godot/three.js, float64, allocation-free per sample, WASM-safe.
-public sealed class TurbulenceField {
+public sealed class TurbulenceField : IWindField {
     readonly int _octaves;
     readonly double _hurst;
     readonly double _sigma;          // intermittency
