@@ -545,13 +545,14 @@ class CombatHud {
   // `floor` omits rungs below a physical limit. Without it the label was clamped with
   // Math.max(0, mark) while the rung still drew, so sub-sea-level altitudes rendered as a
   // stack of identical "0"s — a tape that reads plausible while saying nothing.
-  drawVerticalTape({ value, x, label, step, decimals = 0, suffix = "", floor = null }) {
+  drawVerticalTape({ value, x, label, step, decimals = 0, suffix = "", floor = null, trend = 0 }) {
     const ctx = this.ctx;
     const centerY = this.height * 0.51;
     const tapeHeight = Math.min(310, this.height * 0.43);
     const halfHeight = tapeHeight / 2;
     const pixelsPerStep = 34;
     const rightSide = x > this.width / 2;
+    const pxPerUnit = pixelsPerStep / step;
 
     const wash = ctx.createLinearGradient(x - 34, 0, x + 34, 0);
     if (rightSide) {
@@ -627,6 +628,28 @@ class CombatHud {
     ctx.font = "700 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.fillText(`${value.toFixed(decimals)}${suffix}`, x, centerY + 0.5);
+
+    // Trend caret: a vertical line from the current value to where the value is heading (value +
+    // trend over the lookahead), clamped to the tape. Amber, so accel/decel reads at a glance.
+    if (Math.abs(trend) > 0.5) {
+      const spineX = rightSide ? x - 32 : x + 32;
+      const trendY = clamp(centerY - trend * pxPerUnit, centerY - halfHeight, centerY + halfHeight);
+      ctx.strokeStyle = AMBER;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(spineX, centerY);
+      ctx.lineTo(spineX, trendY);
+      ctx.stroke();
+      // arrowhead
+      const dir = trend > 0 ? -1 : 1;
+      ctx.beginPath();
+      ctx.moveTo(spineX, trendY);
+      ctx.lineTo(spineX - 3, trendY - dir * 4);
+      ctx.lineTo(spineX + 3, trendY - dir * 4);
+      ctx.closePath();
+      ctx.fillStyle = AMBER;
+      ctx.fill();
+    }
   }
 
   drawGTape(state) {
@@ -843,6 +866,32 @@ class CombatHud {
     return `${value}…`;
   }
 
+  drawThrottle(state) {
+    const thr = Number(state.throttle);
+    if (!Number.isFinite(thr)) return;
+    const ctx = this.ctx;
+    const w = 130, h = 12;
+    const x = 30, y = this.height - 132;
+    ctx.fillStyle = "rgba(1, 9, 14, 0.5)";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.3)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = thr >= 0.99 ? AMBER : GREEN;
+    ctx.fillRect(x + 1, y + 1, (w - 2) * clamp(thr, 0, 1), h - 2);
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.4)";
+    for (const d of [0.55, 0.85]) {
+      const tx = x + w * d;
+      ctx.beginPath(); ctx.moveTo(tx, y); ctx.lineTo(tx, y + h); ctx.stroke();
+    }
+    ctx.fillStyle = GREEN_DIM;
+    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    const label = thr <= 0.01 ? "IDLE" : thr >= 0.99 ? "MIL" : `${Math.round(thr * 100)}%`;
+    ctx.fillText(`THROTTLE  ${label}   ·  W / S`, x, y - 8);
+  }
+
   drawFooter(state) {
     const ctx = this.ctx;
     const y = this.height - 18;
@@ -928,14 +977,24 @@ class CombatHud {
     this.drawSaBar(frame);
     this.drawHeadingTape(frame.state);
 
+    // Speed trend: smoothed dV/dt, projected ~6 s ahead (the classic acceleration caret).
+    const spd = Number(frame.state.speed_kts) || 0;
+    const dt = Math.max(1e-3, Number(frame.dt) || 1 / 60);
+    if (this._prevSpeed === undefined) this._prevSpeed = spd;
+    const inst = (spd - this._prevSpeed) / dt;                 // kts/s
+    this._speedRate = (this._speedRate || 0) * 0.92 + inst * 0.08;
+    this._prevSpeed = spd;
+    const speedTrend = clamp(this._speedRate * 6, -60, 60);    // project 6 s, cap for tape sanity
+
     const tapeInset = this.getLayout().tapeInset;
     this.drawVerticalTape({
-      value: Number(frame.state.speed_kts) || 0,
+      value: spd,
       x: tapeInset,
       label: "KTS",
       floor: 0,
       step: 20,
       decimals: 0,
+      trend: speedTrend,
     });
     this.drawVerticalTape({
       value: Number(frame.state.alt_ft) || 0,
@@ -946,6 +1005,7 @@ class CombatHud {
       decimals: 0,
     });
     this.drawGTape(frame.state);
+    this.drawThrottle(frame.state);
     this.drawWarnings(frame);
     this.drawPrompt(frame.state);
     this.drawFooter(frame.state);
