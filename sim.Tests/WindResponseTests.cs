@@ -54,6 +54,63 @@ public class WindResponseTests {
         Assert.True(climb > 10.0, $"an updraft must make it climb, was {climb:F1} m");
     }
 
+    const double RadToDeg = 57.29578;
+
+    [Fact]
+    public void StillAirLeavesTheAirframeSteady_NoBuffet() {
+        // No shudder without wind: the modes have zero forcing and never leave rest.
+        var sim = new AircraftSim(Trimmed(), FlightModel.Sabre);   // Wind = null
+        for (int i = 0; i < 2400; i++) sim.Step(Cruise, Dt);
+        Assert.Equal(0.0, sim.PitchBuffetRad);
+        Assert.Equal(0.0, sim.YawBuffetRad);
+        Assert.Equal(0.0, sim.RollBuffetRad);
+    }
+
+    [Fact]
+    public void TurbulenceShakesTheAirframeWithinBounds() {
+        // Turbulence excites the rotational modes — a felt-scale shudder (a few degrees RMS),
+        // bounded (never a departure into absurd attitudes), and oscillatory (it rings, not drifts).
+        var field = new TurbulenceField(intensityMps: 4.0, outerScaleM: 60.0, intermittency: 0.5, seed: 7);
+        var sim = new AircraftSim(Trimmed(), FlightModel.Sabre) { Wind = field };
+        var pitch = new List<double>(); var roll = new List<double>();
+        int signChangesPitch = 0; double prevPitch = 0;
+        for (int i = 0; i < 6000; i++) {   // 50 s
+            sim.Step(Cruise, Dt);
+            double p = sim.PitchBuffetRad, r = sim.RollBuffetRad;
+            pitch.Add(p * RadToDeg); roll.Add(r * RadToDeg);
+            if (i > 0 && System.Math.Sign(p) != System.Math.Sign(prevPitch) && p != 0) signChangesPitch++;
+            prevPitch = p;
+            Assert.InRange(p * RadToDeg, -45.0, 45.0);   // bounded — no runaway
+        }
+        double rmsPitch = Rms(pitch), rmsRoll = Rms(roll);
+        _o.WriteLine($"buffet RMS: pitch={rmsPitch:F2}°  roll={rmsRoll:F2}°  pitch sign-changes={signChangesPitch} (oscillatory)");
+        Assert.InRange(rmsPitch, 0.3, 15.0);   // felt-scale shudder, not imperceptible, not a departure
+        Assert.InRange(rmsRoll, 0.3, 15.0);
+        Assert.True(signChangesPitch > 20, "the pitch mode must ring (oscillate), not drift");
+    }
+
+    [Fact]
+    public void BuffetDecaysWhenTheAirCalms() {
+        // The modes are damped: excite with turbulence, then remove the wind, and the shudder
+        // rings down toward rest rather than persisting or growing.
+        var field = new TurbulenceField(intensityMps: 5.0, seed: 3);
+        var sim = new AircraftSim(Trimmed(), FlightModel.Sabre) { Wind = field };
+        for (int i = 0; i < 1200; i++) sim.Step(Cruise, Dt);
+        double excited = Math.Abs(sim.PitchBuffetRad) + Math.Abs(sim.RollBuffetRad) + Math.Abs(sim.YawBuffetRad);
+        sim.Wind = null;   // air calms
+        for (int i = 0; i < 1200; i++) sim.Step(Cruise, Dt);   // 10 s to ring down
+        double calmed = Math.Abs(sim.PitchBuffetRad) + Math.Abs(sim.RollBuffetRad) + Math.Abs(sim.YawBuffetRad);
+        _o.WriteLine($"buffet magnitude: excited={excited * RadToDeg:F2}°  after 10 s calm={calmed * RadToDeg:F3}°");
+        Assert.True(excited > 0.01, "turbulence must have excited the modes");
+        Assert.True(calmed < 0.1 * excited, "damped modes must ring down when the air calms");
+    }
+
+    static double Rms(List<double> a) {
+        double m = 0; foreach (var x in a) m += x; m /= a.Count;
+        double v = 0; foreach (var x in a) v += (x - m) * (x - m);
+        return Math.Sqrt(v / a.Count);
+    }
+
     static double Kurtosis(List<double> a) {
         double m = 0; foreach (var x in a) m += x; m /= a.Count;
         double v = 0, k = 0;

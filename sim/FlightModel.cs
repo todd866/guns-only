@@ -12,7 +12,15 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     double SpoolUpTau = 2.5, double SpoolDownTau = 1.4,
     // Lift-curve slope, per radian. Governs how hard a gust bumps you: a vertical gust changes
     // the effective AoA by (gust/V) and lift by q·S·CLα·Δα. ~2π·AR/(AR+2): Sabre AR≈4.5 → ~4.5.
-    double CLAlpha = 4.5);
+    double CLAlpha = 4.5,
+    // Rotational-buffet modes (the gust-driven shudder), as damped 2nd-order oscillators: ω is
+    // the natural frequency (rad/s), ζ the damping ratio. Short-period pitch (fast, moderate
+    // damping); dutch-roll yaw (lightly damped, which is why it's felt); roll (fast, well damped).
+    // BuffetGain is the DC buffet-angle / gust-angle ratio. Placeholder values pending airframe data.
+    double PitchModeFreq = 3.0, double PitchModeDamp = 0.4,
+    double YawModeFreq = 1.5, double YawModeDamp = 0.15,
+    double RollModeFreq = 4.0, double RollModeDamp = 0.7,
+    double BuffetGain = 2.0);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).

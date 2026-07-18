@@ -23,6 +23,12 @@ public sealed class AircraftSim {
     /// the field's spatial structure and a frozen gust pocket bumps you as you fly THROUGH it.
     public GunsOnly.Sim.Turbulence.IWindField? Wind { get; set; }
     Vec3D WindAt(in Vec3D pos) => Wind is null ? Vec3D.Zero : Wind.Sample(pos);
+    readonly GunsOnly.Sim.Turbulence.RotationalBuffet _buffet;
+    /// The gust-driven attitude shudder, radians, on top of the flight-path attitude. Render/felt
+    /// layer: the shells add these to the drawn nose/wings so you SEE the nose saw and wings rock.
+    public double PitchBuffetRad => _buffet.PitchRad;
+    public double YawBuffetRad => _buffet.YawRad;
+    public double RollBuffetRad => _buffet.RollRad;
     Vec3D _liftRef;          // zero-bank lift reference, kept perpendicular to velocity, transported through verticals
     double _bank;            // roll about the velocity axis, relative to _liftRef
     double _reportedBank;    // horizon-referenced bank for State (held when horizon-undefined)
@@ -34,7 +40,10 @@ public sealed class AircraftSim {
     public double ThrustFraction => _thrustFrac;
     const double HorizonValidY = 0.94; // |vhat.Y| below this (~|gamma| < 70 deg): horizon bank well-defined
 
-    public AircraftSim(AircraftState initial, AircraftParams p) { State = initial; _p = p; }
+    public AircraftSim(AircraftState initial, AircraftParams p) {
+        State = initial; _p = p;
+        _buffet = new GunsOnly.Sim.Turbulence.RotationalBuffet(p);
+    }
 
     void InitFrame(in Vec3D vhat) {
         var up = new Vec3D(0, 1, 0);
@@ -110,6 +119,28 @@ public sealed class AircraftSim {
         LastNz = nz;
         Buffet = cmd.GDemand > 0.85 * nzMax || cmd.GDemand < 0.85 * nzMin;
         LiftDir = ComputeLiftDir(vhat);
+
+        // Drive the rotational buffet from the gust and its gradient across the airframe. Pitch is
+        // forced by the vertical-gust AoA at the CG, yaw by the lateral-gust sideslip, roll by the
+        // vertical-gust DIFFERENCE across the span (right wing sees more updraft → rolls left). The
+        // modes are integrated EVERY step (not only when there's wind) so they ring DOWN to rest
+        // when the air calms — skipping the update would freeze the shudder mid-oscillation.
+        double alphaGust = 0.0, betaGust = 0.0, rollGust = 0.0;
+        if (Wind is not null) {
+            var bpos = State.Position;
+            var up = LiftDir;
+            var rb = up.Cross(vhat);
+            var right = rb.Length < 1e-6 ? new Vec3D(1, 0, 0) : rb.Normalized();
+            double v = System.Math.Max(speed, 20.0);
+            double halfSpan = System.Math.Sqrt(_p.WingAreaM2);   // nominal; sets the gradient baseline
+            var wCg = WindAt(bpos);
+            var wL = WindAt(bpos - right * halfSpan);
+            var wR = WindAt(bpos + right * halfSpan);
+            alphaGust = wCg.Dot(up) / v;
+            betaGust = wCg.Dot(right) / v;
+            rollGust = (wL.Dot(up) - wR.Dot(up)) / v;
+        }
+        _buffet.Step(alphaGust, betaGust, rollGust, dt);
     }
 
     Vec3D ComputeLiftDir(in Vec3D vhat) {
