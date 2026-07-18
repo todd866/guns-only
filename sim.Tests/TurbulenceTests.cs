@@ -111,23 +111,32 @@ public class TurbulenceTests {
     }
 
     [Fact]
-    public void IsMultifractal_ZetaIsConcave() {
-        // The rigorous test. Monofractal/Gaussian: ζ(q) = q·H, a straight line, so ζ(q)/q is
-        // constant. Multifractal: ζ(q) is CONCAVE, so ζ(q)/q strictly decreases in q. That
-        // concavity IS intermittency, and it cannot come from any linear (Gaussian) model.
-        var f = new TurbulenceField(intermittency: 0.5);
+    public void IsMultifractal_ConcavityExceedsTheNullByAWideMargin() {
+        // Monofractal/Gaussian: ζ(q)=q·H, so ζ(q)/q is constant. Multifractal: ζ(q) is CONCAVE,
+        // ζ(q)/q strictly decreasing. But the bare strict chain on ONE seed is weak — a σ=0 null
+        // passes it ~22% of the time from finite-sample noise (measured over 60 seeds; Codex
+        // flagged this, though its 62% figure was ~3× high). So the decisive test is the concavity
+        // MAGNITUDE, averaged over several seeds, clearing a threshold the null (≈0) cannot reach.
+        // WHAT THIS PROVES: intermittency with concave scaling over the fitted range — NOT that
+        // the process is specifically a multiplicative cascade vs another matched-spectrum
+        // intermittent process. For the game the felt intermittency is the goal; MonofractalControl
+        // is the falsification guard that the concavity is σ-driven.
         double dx = 0.25;
-        var t = Transect(f, 1 << 16, dx);
-        int[] lags = { 8, 16, 32, 64, 128 };   // τ = 2..32 m, cleanly inside the inertial range
-        double z1 = Zeta(t, dx, 1.0, lags);
-        double z2 = Zeta(t, dx, 2.0, lags);
-        double z3 = Zeta(t, dx, 3.0, lags);
-        double z4 = Zeta(t, dx, 4.0, lags);
-        _o.WriteLine($"ζ(1)={z1:F3} ζ(2)={z2:F3} ζ(3)={z3:F3} ζ(4)={z4:F3}");
-        _o.WriteLine($"ζ(q)/q: {z1:F3} {z2 / 2:F3} {z3 / 3:F3} {z4 / 4:F3}  (must strictly DECREASE for multifractality)");
-        Assert.True(z1 > z2 / 2, "ζ(1) > ζ(2)/2");
-        Assert.True(z2 / 2 > z3 / 3, "ζ(2)/2 > ζ(3)/3");
-        Assert.True(z3 / 3 > z4 / 4, "ζ(3)/3 > ζ(4)/4 — concavity all the way out");
+        int[] lags = { 8, 16, 32, 64, 128 };   // τ = 2..32 m
+        double z1s = 0, z2s = 0, z3s = 0, z4s = 0, concavity = 0;
+        const int seeds = 5;
+        for (ulong s = 1; s <= seeds; s++) {
+            var t = Transect(new TurbulenceField(intermittency: 0.5, seed: s), 1 << 16, dx);
+            double z1 = Zeta(t, dx, 1.0, lags), z2 = Zeta(t, dx, 2.0, lags), z3 = Zeta(t, dx, 3.0, lags), z4 = Zeta(t, dx, 4.0, lags);
+            z1s += z1; z2s += z2; z3s += z3; z4s += z4;
+            concavity += z1 - z4 / 4.0;
+        }
+        z1s /= seeds; z2s /= seeds; z3s /= seeds; z4s /= seeds; concavity /= seeds;
+        _o.WriteLine($"mean ζ(q)/q over {seeds} seeds: {z1s:F3} {z2s / 2:F3} {z3s / 3:F3} {z4s / 4:F3}");
+        _o.WriteLine($"mean concavity ζ(1)-ζ(4)/4 = {concavity:F4}  (σ=0 null ≈ 0; threshold 0.03)");
+        // Averaged over seeds the chain is robust (the null averages to ≈0, nowhere near this):
+        Assert.True(z1s > z2s / 2 && z2s / 2 > z3s / 3 && z3s / 3 > z4s / 4, "ζ(q)/q strictly decreasing on the seed-averaged exponents");
+        Assert.True(concavity > 0.03, $"concavity {concavity:F4} must clear the σ=0 null (≈0) by a wide margin");
     }
 
     [Fact]

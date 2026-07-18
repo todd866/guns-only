@@ -58,7 +58,7 @@ public sealed class TurbulenceField {
 
     public const double DefaultOuterScaleM = 60.0;   // integral length ~ ship-island scale
 
-    /// <param name="octaves">Number of cascade scales. 8 spans ~3 decades — enough inertial range to be multifractal.</param>
+    /// <param name="octaves">Number of cascade scales. 8 octaves span a factor of 128 (~2.1 decades) — a finite but real inertial range.</param>
     /// <param name="outerScaleM">Largest eddy (integral length), metres.</param>
     /// <param name="hurst">Velocity Hurst exponent. 1/3 → Kolmogorov -5/3 spectrum.</param>
     /// <param name="intermittency">Cascade log-amplitude std σ. 0 → monofractal (Gaussian-ish); larger → fatter tails.</param>
@@ -72,7 +72,16 @@ public sealed class TurbulenceField {
         double intensityMps = 1.0,
         ulong seed = 0x5715_C0FF_EE15_600DUL)
     {
-        if (octaves < 1) octaves = 1;
+        // Validate rather than let a bad parameter turn numerical failure into silent calm air
+        // (a reviewer's point: the finite-output guard would mask it). Reject non-finite inputs;
+        // clamp octaves (freq is 2^j — beyond ~20 the lattice loses precision) and intermittency
+        // (exp of the cascade sum must not blow up).
+        if (!double.IsFinite(outerScaleM) || outerScaleM <= 0.0)
+            throw new System.ArgumentOutOfRangeException(nameof(outerScaleM), "outer scale must be finite and positive");
+        if (!double.IsFinite(hurst) || !double.IsFinite(intermittency) || !double.IsFinite(intensityMps))
+            throw new System.ArgumentException("hurst, intermittency and intensity must be finite");
+        octaves = System.Math.Clamp(octaves, 1, 20);
+        intermittency = System.Math.Clamp(intermittency, 0.0, 2.0);   // σ≤2 keeps exp(logM) bounded across 20 octaves
         _octaves = octaves;
         _hurst = hurst;
         _sigma = intermittency;
