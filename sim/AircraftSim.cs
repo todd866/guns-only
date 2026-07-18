@@ -13,9 +13,7 @@ public sealed class AircraftSim {
     /// Briefed training floor (spec §3): busting it ends the fight as a loss annotation.
     public const double HardDeckM = 1524.0;   // 5,000 ft
     public bool BelowHardDeck => State.Position.Y <= HardDeckM;
-    /// The physical lift direction (canopy direction): the transported zero-bank reference
-    /// rotated by body roll. Render-true through verticals — use this for attitude
-    /// reconstruction instead of world-up (which snaps 180 degrees at loop apex).
+    /// The physical lift direction: body up projected perpendicular to the relative wind.
     public Vec3D LiftDir { get; private set; } = new(0, 1, 0);
     readonly AircraftParams _p;
     /// Optional wind/gust field. Null = still air (the aircraft flies exactly as before — the
@@ -25,25 +23,67 @@ public sealed class AircraftSim {
     Vec3D WindAt(in Vec3D pos) => Wind is null ? Vec3D.Zero : Wind.Sample(pos);
     readonly GunsOnly.Sim.Turbulence.RotationalBuffet _buffet;
     Vec3D _gustFiltered; bool _gustInit; double _rollGustFiltered;   // gust-alleviation low-pass state
-    /// The gust-driven attitude shudder, radians, on top of the flight-path attitude. Render/felt
-    /// layer: the shells add these to the drawn nose/wings so you SEE the nose saw and wings rock.
+    Vec3D _airVelocity;
+    /// Legacy gust-mode diagnostics used by BuffetedFrame. BodyFrame stays the real rigid attitude.
     public double PitchBuffetRad => _buffet.PitchRad;
     public double YawBuffetRad => _buffet.YawRad;
     public double RollBuffetRad => _buffet.RollRad;
     Vec3D _liftRef;          // zero-bank lift reference, kept perpendicular to velocity, transported through verticals
-    double _bank;            // roll about the velocity axis, relative to _liftRef
-    double _reportedBank;    // horizon-referenced bank for State (held when horizon-undefined)
+    double _bank;            // compatibility command-bank state; forces/render use BodyAttitude
+    double _reportedBank;    // horizon-referenced compatibility value for State.Bank
     bool _init;
     bool _spoolInit;
     double _thrustFrac;      // engine's actual spool state, 0..1 — lags the throttle lever
     /// What the ENGINE is actually delivering, 0..1, as opposed to where the lever is. The gap
     /// between the two is the whole difficulty of flying the back side of the power curve.
     public double ThrustFraction => _thrustFrac;
+    public Vec3D BodyRight => State.BodyAttitude.Rotate(new Vec3D(1, 0, 0));
+    public Vec3D BodyUp => State.BodyAttitude.Rotate(new Vec3D(0, 1, 0));
+    public Vec3D BodyForward => State.BodyAttitude.Rotate(new Vec3D(0, 0, 1));
+    public double BodyPitchRad => System.Math.Asin(System.Math.Clamp(BodyForward.Y, -1.0, 1.0));
+    public double BodyYawRad => System.Math.Atan2(BodyForward.X, BodyForward.Z);
+    public double BodyRollRad {
+        get {
+            var f = BodyForward;
+            var up0 = new Vec3D(0, 1, 0) - f * f.Y;
+            if (up0.Length < 1e-6) return State.Bank;
+            up0 = up0.Normalized();
+            var right0 = up0.Cross(f).Normalized();
+            return System.Math.Atan2(BodyUp.Dot(right0), BodyUp.Dot(up0));
+        }
+    }
+    /// Aerodynamic incidence from the real body attitude and relative wind.
+    public double AngleOfAttackRad {
+        get {
+            var vhat = _airVelocity.Length < 1e-9 ? State.ForwardDir() : _airVelocity.Normalized();
+            return System.Math.Atan2(-vhat.Dot(BodyUp), vhat.Dot(BodyForward));
+        }
+    }
+    public double SideslipRad {
+        get {
+            var vhat = _airVelocity.Length < 1e-9 ? State.ForwardDir() : _airVelocity.Normalized();
+            return System.Math.Asin(System.Math.Clamp(vhat.Dot(BodyRight), -1.0, 1.0));
+        }
+    }
     const double HorizonValidY = 0.94; // |vhat.Y| below this (~|gamma| < 70 deg): horizon bank well-defined
 
     public AircraftSim(AircraftState initial, AircraftParams p) {
         State = initial; _p = p;
+        _airVelocity = initial.VelocityVector();
         _buffet = new GunsOnly.Sim.Turbulence.RotationalBuffet(p);
+        InitFrame(initial.ForwardDir());
+        if (!initial.BodyAttitude.IsFinite || initial.BodyAttitude.LengthSquared < 1e-12) {
+            double q = 0.5 * Atmosphere.Density(initial.Position.Y) * initial.Speed * initial.Speed;
+            double cl = initial.Mass * FlightModel.G0 / System.Math.Max(q * p.WingAreaM2, 1e-6);
+            double alpha = System.Math.Clamp(cl / p.CLAlpha, p.CLMin / p.CLAlpha, p.CLMax / p.CLAlpha);
+            var f = initial.ForwardDir();
+            var u = LiftDir;
+            var bf = (f * System.Math.Cos(alpha) + u * System.Math.Sin(alpha)).Normalized();
+            var bu = (u * System.Math.Cos(alpha) - f * System.Math.Sin(alpha)).Normalized();
+            State = initial with { BodyAttitude = QuaternionD.FromFrame(bu.Cross(bf).Normalized(), bu, bf) };
+        } else {
+            State = initial with { BodyAttitude = initial.BodyAttitude.Normalized() };
+        }
     }
 
     void InitFrame(in Vec3D vhat) {
@@ -86,7 +126,7 @@ public sealed class AircraftSim {
         else _gustFiltered += (rawGust - _gustFiltered) * (1.0 - System.Math.Exp(-dt / gustTau));
         var gust = _gustFiltered;
 
-        var r = new RawState(s.Position, vel0, _bank, s.Mass);
+        var r = new RawState(s.Position, vel0, _bank, s.Mass, s.BodyAttitude, s.BodyRates);
         var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef, gust);
         var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), spooled, _p, _liftRef, gust);
         var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), spooled, _p, _liftRef, gust);
@@ -94,9 +134,21 @@ public sealed class AircraftSim {
         var pos = r.Pos + (k1.DPos + (k2.DPos + k3.DPos) * 2 + k4.DPos) * (dt / 6);
         var vel = r.Vel + (k1.DVel + (k2.DVel + k3.DVel) * 2 + k4.DVel) * (dt / 6);
         _bank = WrapPi(r.Bank + (k1.DBank + 2 * (k2.DBank + k3.DBank) + k4.DBank) * (dt / 6));
+        var attitude = (r.Attitude + (k1.DAttitude + (k2.DAttitude + k3.DAttitude) * 2 + k4.DAttitude) * (dt / 6)).Normalized();
+        var bodyRates = r.BodyRates + (k1.DBodyRates + (k2.DBodyRates + k3.DBodyRates) * 2 + k4.DBodyRates) * (dt / 6);
 
         double speed = vel.Length;
-        if (speed < 40) { vel = (speed < 1e-9 ? new Vec3D(0, 0, 40) : vel.Normalized() * 40); speed = 40; } // PLACEHOLDER mush floor
+        if (speed < 40) {
+            // The floor may sustain a mush, but must not feed a stalled zoom back uphill.
+            if (vel.Y > 0) {
+                var horizontal = new Vec3D(vel.X, 0, vel.Z);
+                var along = horizontal.Length < 1e-9
+                    ? new Vec3D(System.Math.Sin(s.Chi), 0, System.Math.Cos(s.Chi))
+                    : horizontal.Normalized();
+                vel = along * System.Math.Sqrt(40 * 40 - 20 * 20) + new Vec3D(0, -20, 0);
+            } else vel = speed < 1e-9 ? new Vec3D(0, -40, 0) : vel.Normalized() * 40;
+            speed = 40;
+        }
         var vhat = vel.Normalized();
 
         // Parallel-transport the lift reference perpendicular to the new velocity.
@@ -118,14 +170,17 @@ public sealed class AircraftSim {
 
         double gamma = System.Math.Asin(System.Math.Clamp(vhat.Y, -1, 1));
         double chi = System.Math.Atan2(vhat.X, vhat.Z); // 0 = north(+Z), positive toward east(+X)
-        if (!IsFinite(pos) || !double.IsFinite(speed) || !double.IsFinite(_bank))
+        if (!IsFinite(pos) || !double.IsFinite(speed) || !double.IsFinite(_bank) || !attitude.IsFinite || !bodyRates.IsFinite)
             throw new System.InvalidOperationException("non-finite sim state");
-        State = new AircraftState(pos, speed, gamma, chi, _reportedBank, s.Mass);
+        State = new AircraftState(pos, speed, gamma, chi, _reportedBank, s.Mass, attitude, bodyRates);
 
-        var (nz, nzMax, nzMin) = FlightModel.ClampNz(State, cmd, _p);
-        LastNz = nz;
+        var finalRaw = new RawState(pos, vel, _bank, s.Mass, attitude, bodyRates);
+        var aero = FlightModel.Aerodynamics(finalRaw, spooled, _p, gust);
+        _airVelocity = aero.AirVelocity;
+        LastNz = aero.Nz;
+        LiftDir = aero.LiftDir;
+        var (_, nzMax, nzMin) = FlightModel.ClampNz(State, cmd, _p);
         Buffet = cmd.GDemand > 0.85 * nzMax || cmd.GDemand < 0.85 * nzMin;
-        LiftDir = ComputeLiftDir(vhat);
 
         // Drive the rotational buffet from the gust and its gradient across the airframe. Pitch is
         // forced by the vertical-gust AoA at the CG, yaw by the lateral-gust sideslip, roll by the
@@ -157,10 +212,19 @@ public sealed class AircraftSim {
     /// shudder. In still air (buffet ≈ 0) it equals the clean flight-path attitude exactly. Small
     /// exact rotations: roll about the flight axis, then pitch about the right axis, then yaw
     /// about the up axis, re-orthogonalising between each so the result stays a clean basis.
-    public void BuffetedFrame(out Vec3D fwd, out Vec3D up) {
+    public void BuffetedFrame(out Vec3D fwd, out Vec3D up) => RenderFrame(0.0, out fwd, out up);
+
+    /// The integrated rigid-body attitude. Nose is the body forward axis; no flight-path/AoA synthesis.
+    public void BodyFrame(out Vec3D fwd, out Vec3D up) { fwd = BodyForward; up = BodyUp; }
+
+    /// Compatibility overload: attitude commands now enter the moment controller, never the renderer.
+    public void BodyFrame(double _, out Vec3D fwd, out Vec3D up) => BodyFrame(out fwd, out up);
+
+    void RenderFrame(double extraPitch, out Vec3D fwd, out Vec3D up) {
         var f = State.ForwardDir();
-        var u = LiftDir;
-        double pitch = _buffet.PitchRad, yaw = _buffet.YawRad, roll = _buffet.RollRad;
+        var u0 = LiftDir - f * LiftDir.Dot(f);
+        var u = u0.Length < 1e-9 ? FallbackRef(f) : u0.Normalized();
+        double pitch = _buffet.PitchRad + extraPitch, yaw = _buffet.YawRad, roll = _buffet.RollRad;
 
         var right = SafeRight(u, f);                       // physical right (left-handed: up × fwd)
         u = (u * System.Math.Cos(roll) + right * System.Math.Sin(roll)).Normalized();   // right-wing-down → canopy tilts right
@@ -173,7 +237,9 @@ public sealed class AircraftSim {
         right = SafeRight(u, f);
         f = (f * System.Math.Cos(yaw) + right * System.Math.Sin(yaw)).Normalized();     // nose-right
 
-        fwd = f; up = u;
+        fwd = f;
+        var cleanUp = u - fwd * u.Dot(fwd);
+        up = cleanUp.Length < 1e-9 ? FallbackRef(fwd) : cleanUp.Normalized();
     }
     static Vec3D SafeRight(in Vec3D up, in Vec3D fwd) {
         var r = up.Cross(fwd);
@@ -192,7 +258,8 @@ public sealed class AircraftSim {
         return lr.Length < 1e-6 ? new Vec3D(1, 0, 0) : lr.Normalized();
     }
     static RawState Apply(in RawState r, in StateDeriv d, double h) =>
-        new(r.Pos + d.DPos * h, r.Vel + d.DVel * h, r.Bank + d.DBank * h, r.Mass);
+        new(r.Pos + d.DPos * h, r.Vel + d.DVel * h, r.Bank + d.DBank * h, r.Mass,
+            r.Attitude + d.DAttitude * h, r.BodyRates + d.DBodyRates * h);
     static double WrapPi(double a) => System.Math.IEEERemainder(a, 2 * System.Math.PI); // O(1)
     static bool IsFinite(in Vec3D v) => double.IsFinite(v.X) && double.IsFinite(v.Y) && double.IsFinite(v.Z);
 }

@@ -18,23 +18,47 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     // damping); dutch-roll yaw (lightly damped, which is why it's felt); roll (fast, well damped).
     // BuffetGain is the DC buffet-angle / gust-angle ratio. Placeholder values pending airframe data.
     double PitchModeFreq = 3.0, double PitchModeDamp = 0.4,
-    double YawModeFreq = 1.5, double YawModeDamp = 0.15,
+    double YawModeFreq = 1.5, double YawModeDamp = 0.18,
     double RollModeFreq = 4.0, double RollModeDamp = 0.7,
-    double BuffetGain = 0.5);   // subtle shudder — the aircraft is stable, so a big camera buffet just reads as "out of control"
+    double BuffetGain = 0.5,   // subtle shudder — the aircraft is stable, so a big camera buffet just reads as "out of control"
+    // PLACEHOLDER Sabre-ish principal inertias and control/aero-damping moments pending airframe data.
+    double IxxKgM2 = 9000, double IyyKgM2 = 45000, double IzzKgM2 = 52000,
+    double RollStiffnessNmRad = 135000, double PitchStiffnessNmRad = 540000, double YawStiffnessNmRad = 120000,
+    double RollDampingNms = 60000, double PitchDampingNms = 220000, double YawDampingNms = 120000,
+    double RollMomentMaxNm = 50000, double PitchMomentMaxNm = 140000, double YawMomentMaxNm = 65000,
+    // PLACEHOLDER gentler direct-attitude hold for fine approach corrections.
+    double ApproachPitchStiffnessNmRad = 360000, double ApproachPitchMomentMaxNm = 110000,
+    double CYBeta = 0.65,
+    // Manual pitch-rate command and legacy State.Bank compatibility. Body attitude is authoritative;
+    // the compatibility pair keeps old telemetry/RK4 behavior separate from the flown roll tuning.
+    double ManualPitchRateMaxRad = 0.60, double ManualPitchAngleTau = 0.60,
+    double CompatibilityRollRateMaxRad = -1.0, double CompatibilityBankTau = -1.0,
+    // Stability augmentation. YawBetaStiffness centers the ball independently of the attitude
+    // tracker; RollHoldDamping is blended in only near a captured roll target, never while the
+    // pilot's rate-command lead is asking for a roll.
+    double YawBetaStiffnessNmRad = 180000, double RollHoldDampingNms = 50000,
+    double RollHoldErrorRad = 0.10);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
-public readonly record struct RawState(Vec3D Pos, Vec3D Vel, double Bank, double Mass);
+public readonly record struct RawState(Vec3D Pos, Vec3D Vel, double Bank, double Mass,
+    QuaternionD Attitude, BodyRates BodyRates);
 
-public readonly record struct StateDeriv(Vec3D DPos, Vec3D DVel, double DBank);
+public readonly record struct StateDeriv(Vec3D DPos, Vec3D DVel, double DBank,
+    QuaternionD DAttitude, BodyRates DBodyRates);
+
+internal readonly record struct AeroResult(Vec3D Accel, Vec3D LiftDir, Vec3D AirVelocity,
+    double Alpha, double Beta, double Nz, double DynamicPressure);
 
 public static class FlightModel {
     public const double G0 = 9.80665;
-    // PLACEHOLDER Sabre-shaped numbers. M1 replaces with table-driven 6DOF. Shape > fidelity here.
+    // PLACEHOLDER Sabre-shaped numbers. Shape > fidelity until table-driven aero replaces them.
     public static readonly AircraftParams Sabre = new(
         MassKg: 6900, WingAreaM2: 26.8, ThrustMaxN: 26300,
         CD0: 0.0180, InducedK: 0.083, CLMax: 1.10, CLMin: -0.65,
-        RollRateMaxRad: 2.1, BankTau: 0.18);
+        RollRateMaxRad: 0.65, BankTau: 0.52,
+        RollDampingNms: 70000, RollMomentMaxNm: 48000,
+        CompatibilityRollRateMaxRad: 2.1, CompatibilityBankTau: 0.18);
 
     /// TAIWAN DEFENCE — balloon-lofted glider strike drone. A BALLOON DRONE, a different
     /// lineage from the powered jet drones: it is a one-way sniper against soft high-value
@@ -83,7 +107,9 @@ public static class FlightModel {
 
     internal static double BankRate(double bank, double target, in AircraftParams p) {
         double err = System.Math.IEEERemainder(target - bank, 2 * System.Math.PI); // shortest-way signed error
-        return System.Math.Clamp(err / p.BankTau, -p.RollRateMaxRad, p.RollRateMaxRad);
+        double tau = p.CompatibilityBankTau > 0.0 ? p.CompatibilityBankTau : p.BankTau;
+        double rateMax = p.CompatibilityRollRateMaxRad > 0.0 ? p.CompatibilityRollRateMaxRad : p.RollRateMaxRad;
+        return System.Math.Clamp(err / tau, -rateMax, rateMax);
     }
 
     internal static StateDeriv Derivatives(in RawState r, in PilotCommand c, in AircraftParams p, in Vec3D liftRef, in Vec3D wind) {
@@ -95,45 +121,137 @@ public static class FlightModel {
         // IN the loop, not a shake on top. wind = Zero reproduces still-air flight exactly.
         var vAir = r.Vel - wind;
         double speed = System.Math.Max(vAir.Length, 20.0);
+        var controlVhat = vAir.Length < 1e-9 ? new Vec3D(0, 0, 1) : vAir.Normalized();
+        double rho = Atmosphere.Density(r.Pos.Y);
+        double q = 0.5 * rho * speed * speed;
+        var aero = Aerodynamics(r, c, p, wind);
+        var (dAttitude, dRates) = RotationalDerivatives(r, c, p, liftRef, controlVhat, q,
+            speed);
+        return new StateDeriv(r.Vel, aero.Accel, BankRate(r.Bank, c.BankTarget, p), dAttitude, dRates);
+    }
+
+    internal static AeroResult Aerodynamics(in RawState r, in PilotCommand c, in AircraftParams p, in Vec3D wind) {
+        var vAir = r.Vel - wind;
+        double speed = System.Math.Max(vAir.Length, 20.0);
         var vhat = vAir.Length < 1e-9 ? new Vec3D(0, 0, 1) : vAir.Normalized();
-        var up = new Vec3D(0, 1, 0);
-        // Persistent lift reference (parallel-transported by AircraftSim), re-orthogonalized per stage.
-        var lr0 = liftRef - vhat * liftRef.Dot(vhat);
-        var refDir = lr0.Length < 1e-6 ? new Vec3D(1, 0, 0) : lr0.Normalized();
-        var rightRef = refDir.Cross(vhat); // physical right of path (left-handed basis: reversed operands)
-        var rightHat = rightRef.Length < 1e-6 ? new Vec3D(1, 0, 0) : rightRef.Normalized();
-        var liftDir = refDir * System.Math.Cos(r.Bank) + rightHat * System.Math.Sin(r.Bank); // +bank tilts lift right
+        var attitude = r.Attitude.Normalized();
+        var bodyRight = attitude.Rotate(new Vec3D(1, 0, 0));
+        var bodyUp = attitude.Rotate(new Vec3D(0, 1, 0));
+        var bodyForward = attitude.Rotate(new Vec3D(0, 0, 1));
+        double alpha = System.Math.Atan2(-vhat.Dot(bodyUp), vhat.Dot(bodyForward));
+        double beta = System.Math.Asin(System.Math.Clamp(vhat.Dot(bodyRight), -1.0, 1.0));
 
         double rho = Atmosphere.Density(r.Pos.Y);
         double q = 0.5 * rho * speed * speed;
-        double nzMax = System.Math.Min(q * p.WingAreaM2 * p.CLMax / (r.Mass * G0), 12.0);
-        double nzMin = System.Math.Max(q * p.WingAreaM2 * p.CLMin / (r.Mass * G0), -1.5);
-        double nz = System.Math.Clamp(c.GDemand, nzMin, nzMax);
-        double cl = nz * r.Mass * G0 / System.Math.Max(q * p.WingAreaM2, 1e-6);
+        double cl = System.Math.Clamp(p.CLAlpha * alpha, p.CLMin, p.CLMax);
         double mach = speed / Atmosphere.SpeedOfSound(r.Pos.Y);
         double cd = p.CD0 * MachDragFactor(mach, p) + p.InducedK * cl * cl
-                    + System.Math.Abs(c.Rudder) * 0.15 * p.CD0;
-        double drag = q * p.WingAreaM2 * cd;
-        // c.Throttle here is the engine's ACTUAL spool fraction, not the lever position:
-        // AircraftSim lags the lever through SpoolUpTau/SpoolDownTau before calling us. The
-        // model is memoryless, so the state that makes thrust lag has to live in the sim.
-        double thrust = System.Math.Clamp(c.Throttle, 0, 1.35) * p.ThrustMaxN * (rho / 1.225);  // >1 = afterburner
+                    + System.Math.Abs(c.Rudder) * 0.15 * p.CD0 + beta * beta * 0.08;
+        double liftAccel = q * p.WingAreaM2 * cl / r.Mass;
+        double dragAccel = q * p.WingAreaM2 * cd / r.Mass;
+        double thrustAccel = System.Math.Clamp(c.Throttle, 0, 1.35) * p.ThrustMaxN * (rho / 1.225) / r.Mass;
 
-        // Gust-induced lift — the dominant felt bump, and the reason a G-command model needs it
-        // spelled out. Lift here is slaved to commanded nz, so a gust would otherwise only rotate
-        // the lift VECTOR (~0.005 G). The real bump is the lift MAGNITUDE change: the gust adds an
-        // AoA perturbation Δα = (wind·liftDir)/V (an updraft = +liftDir raises AoA → more lift →
-        // pushed up), so ΔL = q·S·CLα·Δα acts along liftDir. ~0.5 G for a 4 m/s gust. Zero wind →
-        // zero term → still-air flight is bit-identical. (A violent gust could push CL past CLMax
-        // into stall/buffet; unclamped here — fine for the gust magnitudes flown, revisit at the deck.)
-        double gustAlpha = wind.Dot(liftDir) / speed;
-        double gustLift = q * p.WingAreaM2 * p.CLAlpha * gustAlpha / r.Mass;
+        // Aerodynamic lift and side force stay perpendicular to the relative wind while their
+        // orientation comes from the real body axes. Rudder authority retains the tuned jink term.
+        var liftPlane = bodyUp - vhat * bodyUp.Dot(vhat);
+        var liftDir = liftPlane.Length < 1e-9 ? bodyUp : liftPlane.Normalized();
+        var sidePlane = bodyRight - vhat * bodyRight.Dot(vhat);
+        var sideDir = sidePlane.Length < 1e-9 ? bodyRight : sidePlane.Normalized();
+        double sideAccel = c.Rudder * 0.06 * speed - q * p.WingAreaM2 * p.CYBeta * beta / r.Mass;
+        var accel = bodyForward * thrustAccel - vhat * dragAccel + liftDir * liftAccel
+                  + sideDir * sideAccel - new Vec3D(0, G0, 0);
+        return new AeroResult(accel, liftDir, vAir, alpha, beta, liftAccel / G0, q);
+    }
 
-        var accel = vhat * ((thrust - drag) / r.Mass)
-                  + liftDir * (nz * G0 + gustLift)
-                  - up * G0
-                  + rightHat * (c.Rudder * 0.06 * speed); // PLACEHOLDER rudder yaw-jink authority
-        return new StateDeriv(r.Vel, accel, BankRate(r.Bank, c.BankTarget, p));
+    static (QuaternionD dAttitude, BodyRates dRates) RotationalDerivatives(in RawState r,
+        in PilotCommand c, in AircraftParams p, in Vec3D liftRef, in Vec3D vhat,
+        double dynamicPressure, double speed) {
+        var attitude = r.Attitude.Normalized();
+        var target = TargetAttitude(r, c, p, liftRef, vhat, dynamicPressure);
+        var error = attitude.Conjugate() * target;
+        if (error.W < 0) error = -error;   // shortest rotation
+        double vn = System.Math.Sqrt(error.X * error.X + error.Y * error.Y + error.Z * error.Z);
+        double scale = vn < 1e-10 ? 2.0 : 2.0 * System.Math.Atan2(vn, error.W) / vn;
+        // Quaternion local axes are right/up/forward. Positive aircraft q and p rotate about
+        // -right and -forward respectively; positive r rotates about up.
+        double errP = -error.Z * scale, errQ = -error.X * scale, errR = error.Y * scale;
+        var rates = r.BodyRates;
+        bool directPitch = double.IsFinite(c.CommandedPitchRad);
+        double qCommand = 0.0;
+        if (!directPitch) {
+            var targetUp = target.Rotate(new Vec3D(0, 1, 0));
+            var liftPlane = targetUp - vhat * targetUp.Dot(vhat);
+            var targetLift = liftPlane.Length < 1e-9 ? targetUp : liftPlane.Normalized();
+            double nz = TargetNz(r, c, p, dynamicPressure);
+            // Feed forward the rate needed to follow the commanded curved flight path. Damping
+            // about zero rate held a steady turn several degrees below its commanded AoA. The old
+            // 1x term was only ~0.28 rad/s in a representative 180 m/s max-perform pull; doubling
+            // it gives the fallback G law the same healthy authority as the direct manual path.
+            qCommand = System.Math.Clamp(2.0 * (nz - targetLift.Y) * G0 / speed,
+                -p.ManualPitchRateMaxRad, p.ManualPitchRateMaxRad);
+        }
+        double pitchStiffness = directPitch ? p.ApproachPitchStiffnessNmRad : p.PitchStiffnessNmRad;
+        double pitchMomentMax = directPitch ? p.ApproachPitchMomentMaxNm : p.PitchMomentMaxNm;
+        // DetentLayer's active roll-rate command holds the target a fixed lead (~0.34 rad for the
+        // Sabre) ahead of the body. Near zero error the pilot has released/captured the roll axis:
+        // blend in extra p damping there so a gust or residual pitch/yaw coupling dies promptly.
+        // Outside this small capture region the extra hold is exactly zero, preserving commanded
+        // roll authority from the control-authority pass.
+        double rollHoldBlend = 1.0 - System.Math.Clamp(System.Math.Abs(errP)
+            / System.Math.Max(p.RollHoldErrorRad, 1e-6), 0.0, 1.0);
+        double rollDamping = p.RollDampingNms + p.RollHoldDampingNms * rollHoldBlend;
+        double rollMoment = System.Math.Clamp(p.RollStiffnessNmRad * errP - rollDamping * rates.P,
+            -p.RollMomentMaxNm, p.RollMomentMaxNm);
+        double pitchMoment = System.Math.Clamp(pitchStiffness * errQ - p.PitchDampingNms * (rates.Q - qCommand),
+            -pitchMomentMax, pitchMomentMax);
+        var bodyRight = attitude.Rotate(new Vec3D(1, 0, 0));
+        double beta = System.Math.Asin(System.Math.Clamp(vhat.Dot(bodyRight), -1.0, 1.0));
+        // Positive beta in this body basis means the velocity vector is to the right of the nose,
+        // so a positive yaw moment aligns the nose with it and drives beta toward zero. Fade the
+        // coordinator out under full manual rudder: intermediate rudder adds to it, full rudder
+        // owns the axis, and hands-off maneuvering keeps the ball centered.
+        double coordinatorMoment = p.YawBetaStiffnessNmRad * beta
+            * (1.0 - System.Math.Clamp(System.Math.Abs(c.Rudder), 0.0, 1.0));
+        double yawMoment = System.Math.Clamp(p.YawStiffnessNmRad * errR - p.YawDampingNms * rates.R
+            + coordinatorMoment + c.Rudder * p.YawMomentMaxNm,
+            -p.YawMomentMaxNm, p.YawMomentMaxNm);
+
+        double pDot = (rollMoment + (p.IyyKgM2 - p.IzzKgM2) * rates.Q * rates.R) / p.IxxKgM2;
+        double qDot = (pitchMoment + (p.IzzKgM2 - p.IxxKgM2) * rates.R * rates.P) / p.IyyKgM2;
+        double rDot = (yawMoment + (p.IxxKgM2 - p.IyyKgM2) * rates.P * rates.Q) / p.IzzKgM2;
+        var omega = new QuaternionD(0, -rates.Q, rates.R, -rates.P);
+        return ((attitude * omega) * 0.5, new BodyRates(pDot, qDot, rDot));
+    }
+
+    static QuaternionD TargetAttitude(in RawState r, in PilotCommand c, in AircraftParams p,
+        in Vec3D liftRef, in Vec3D vhat, double dynamicPressure) {
+        if (double.IsFinite(c.CommandedPitchRad)) {
+            double chi = System.Math.Atan2(vhat.X, vhat.Z);
+            double cp = System.Math.Cos(c.CommandedPitchRad);
+            var forwardCmd = new Vec3D(System.Math.Sin(chi) * cp, System.Math.Sin(c.CommandedPitchRad), System.Math.Cos(chi) * cp);
+            var up0 = new Vec3D(0, 1, 0) - forwardCmd * forwardCmd.Y;
+            up0 = up0.Length < 1e-6 ? liftRef : up0.Normalized();
+            var right0 = up0.Cross(forwardCmd).Normalized();
+            var upCmd = (up0 * System.Math.Cos(c.BankTarget) + right0 * System.Math.Sin(c.BankTarget)).Normalized();
+            return QuaternionD.FromFrame(upCmd.Cross(forwardCmd).Normalized(), upCmd, forwardCmd);
+        }
+
+        var lr0 = liftRef - vhat * liftRef.Dot(vhat);
+        var upRef = lr0.Length < 1e-6 ? new Vec3D(0, 1, 0) : lr0.Normalized();
+        var rightRef = upRef.Cross(vhat).Normalized();
+        var lift = (upRef * System.Math.Cos(c.BankTarget) + rightRef * System.Math.Sin(c.BankTarget)).Normalized();
+        double nz = TargetNz(r, c, p, dynamicPressure);
+        double cl = nz * r.Mass * G0 / System.Math.Max(dynamicPressure * p.WingAreaM2, 1e-6);
+        double alpha = System.Math.Clamp(cl / p.CLAlpha, p.CLMin / p.CLAlpha, p.CLMax / p.CLAlpha);
+        var forward = (vhat * System.Math.Cos(alpha) + lift * System.Math.Sin(alpha)).Normalized();
+        var up = (lift * System.Math.Cos(alpha) - vhat * System.Math.Sin(alpha)).Normalized();
+        return QuaternionD.FromFrame(up.Cross(forward).Normalized(), up, forward);
+    }
+
+    static double TargetNz(in RawState r, in PilotCommand c, in AircraftParams p, double dynamicPressure) {
+        double nzMax = System.Math.Min(dynamicPressure * p.WingAreaM2 * p.CLMax / (r.Mass * G0), 12.0);
+        double nzMin = System.Math.Max(dynamicPressure * p.WingAreaM2 * p.CLMin / (r.Mass * G0), -1.5);
+        return System.Math.Clamp(c.GDemand, nzMin, nzMax);
     }
 
     /// Directional nz clamp shared by Step's reporting (same bounds as Derivatives).

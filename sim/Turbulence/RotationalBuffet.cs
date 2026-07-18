@@ -4,11 +4,8 @@ namespace GunsOnly.Sim.Turbulence;
 /// top of the flight-path bump. Three damped second-order modes excited by the gust: short-period
 /// PITCH, dutch-roll YAW (lightly damped, which is exactly why it's felt), and ROLL.
 ///
-/// This is a MODAL OVERLAY on the flight-path model, deliberately NOT a 6-DOF rigid body with
-/// control-surface aerodynamics. The control grammar commands flight path (G and bank), and the
-/// modes ring AROUND that commanded path. Decomposition: the CG follows the point-mass path (the
-/// CLα gust-lift term moves that — where you GO), and the body attitude oscillates about it (this
-/// — how you're SHAKEN). Same gust, two channels; not double-counting, different observables.
+/// This legacy modal response remains for BuffetedFrame diagnostics and tuning. AircraftSim's
+/// BodyAttitude is the authoritative rigid body and does not apply this as a render overlay.
 ///
 /// Each mode is x'' + 2ζω x' + ω²x = ω²·(k·gustAngle), so the DC response is k·gustAngle (k =
 /// BuffetGain is the buffet-angle / gust-angle ratio) and the transient rings at ω with damping ζ.

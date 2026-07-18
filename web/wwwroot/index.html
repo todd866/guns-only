@@ -2,13 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#030913">
   <title>Guns Only — Air Combat Lab</title>
   <base href="/">
   <link rel="icon" type="image/png" href="./favicon.png">
   <style>
     :root {
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-right: env(safe-area-inset-right, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left: env(safe-area-inset-left, 0px);
       color-scheme: dark;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #030913;
@@ -23,11 +27,16 @@
       overflow: hidden;
       overscroll-behavior: none;
       background: linear-gradient(#071b38 0%, #183f5d 52%, #03121d 53%, #01070c 100%);
+      touch-action: none;
     }
 
     body {
+      position: fixed;
+      inset: 0;
       user-select: none;
       -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
     #scene,
@@ -52,6 +61,251 @@
       z-index: 2;
       pointer-events: none;
       image-rendering: auto;
+    }
+
+    #touch-controls {
+      position: fixed;
+      z-index: 10;
+      inset: 0;
+      display: none;
+      overflow: hidden;
+      pointer-events: none;
+      touch-action: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .touch-mode #touch-controls { display: block; }
+
+    .touch-control,
+    .touch-choice {
+      appearance: none;
+      border: 1px solid rgba(77, 255, 136, .48);
+      color: #d9ffe5;
+      background: rgba(2, 12, 18, .72);
+      box-shadow: inset 0 0 18px rgba(77, 255, 136, .045), 0 4px 18px rgba(0, 0, 0, .25);
+      pointer-events: auto;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .touch-control {
+      min-width: 52px;
+      min-height: 48px;
+      padding: 7px 9px;
+      border-radius: 7px;
+      font: 750 10px/1.05 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+
+    .touch-control.active {
+      color: #07140c;
+      border-color: #a3ffc2;
+      background: rgba(77, 255, 136, .88);
+      box-shadow: 0 0 22px rgba(77, 255, 136, .34);
+      transform: scale(.96);
+    }
+
+    .touch-left,
+    .touch-right {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    .touch-left { left: calc(env(safe-area-inset-left, 0px) + 10px); }
+    .touch-right { right: calc(env(safe-area-inset-right, 0px) + 10px); }
+
+    .touch-stack,
+    .touch-actions,
+    .touch-utils {
+      display: flex;
+      gap: 7px;
+    }
+
+    .touch-stack { flex-direction: column; }
+    .touch-actions { align-items: flex-end; }
+    .touch-utils { flex-direction: column; }
+
+    .touch-label {
+      color: rgba(217, 255, 229, .58);
+      font-size: 8px;
+      letter-spacing: .14em;
+      text-align: center;
+      text-transform: uppercase;
+      text-shadow: 0 1px 3px #000;
+    }
+
+    .touch-fire {
+      width: 76px;
+      height: 76px;
+      border-color: rgba(255, 70, 93, .68);
+      border-radius: 50%;
+      color: #fff0f2;
+      background: rgba(54, 5, 13, .72);
+      font-size: 13px;
+    }
+
+    .touch-fire.active {
+      color: white;
+      border-color: #ff9cab;
+      background: rgba(255, 70, 93, .88);
+      box-shadow: 0 0 24px rgba(255, 70, 93, .42);
+    }
+
+    .touch-wave {
+      min-width: 72px;
+      height: 56px;
+      border-color: rgba(255, 176, 32, .64);
+      color: #ffe2aa;
+      background: rgba(45, 27, 2, .76);
+    }
+
+    .touch-wave.active {
+      color: #1b1102;
+      border-color: #ffd27e;
+      background: rgba(255, 176, 32, .92);
+      box-shadow: 0 0 22px rgba(255, 176, 32, .38);
+    }
+
+    .touch-utility {
+      min-width: 58px;
+      min-height: 34px;
+      padding: 5px 7px;
+      color: rgba(217, 255, 229, .78);
+      font-size: 8px;
+    }
+
+    #fallback-stick {
+      position: absolute;
+      left: 50%;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+      display: none;
+      gap: 6px;
+      transform: translateX(-50%);
+    }
+
+    .tilt-fallback #fallback-stick { display: flex; }
+
+    #fallback-stick .touch-control {
+      min-width: 48px;
+      width: 48px;
+      height: 48px;
+      padding: 4px;
+      font-size: 8px;
+    }
+
+    #tilt-prompt {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: min(360px, calc(100vw - 40px));
+      padding: 18px 20px;
+      border: 1px solid rgba(77, 255, 136, .34);
+      border-radius: 8px;
+      color: #dfffe9;
+      background: rgba(2, 10, 16, .9);
+      box-shadow: 0 16px 60px rgba(0, 0, 0, .58);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: auto;
+      text-align: center;
+      transform: translate(-50%, -50%);
+      transition: opacity .2s ease, visibility .2s ease;
+    }
+
+    .tilt-pending #tilt-prompt {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    #tilt-prompt strong {
+      display: block;
+      margin-bottom: 7px;
+      color: #4dff88;
+      font-size: 14px;
+      letter-spacing: .12em;
+    }
+
+    #tilt-prompt p {
+      margin: 0 0 14px;
+      color: rgba(217, 255, 229, .67);
+      font-size: 9px;
+      line-height: 1.55;
+      letter-spacing: .05em;
+    }
+
+    .touch-choice {
+      min-height: 40px;
+      margin: 3px;
+      padding: 8px 13px;
+      border-radius: 5px;
+      font: 750 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .09em;
+    }
+
+    .touch-choice.secondary {
+      border-color: rgba(217, 255, 229, .2);
+      color: rgba(217, 255, 229, .65);
+      background: rgba(8, 18, 23, .78);
+    }
+
+    #tilt-status {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 9px);
+      right: calc(env(safe-area-inset-right, 0px) + 11px);
+      color: rgba(77, 255, 136, .64);
+      font-size: 8px;
+      letter-spacing: .11em;
+      pointer-events: none;
+      text-shadow: 0 1px 4px #000;
+    }
+
+    #rotate-hint {
+      position: absolute;
+      z-index: 2;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 30px;
+      color: #dfffe9;
+      background: rgba(2, 9, 15, .93);
+      pointer-events: auto;
+      text-align: center;
+      font-size: 12px;
+      line-height: 1.6;
+      letter-spacing: .12em;
+    }
+
+    @media (orientation: portrait) {
+      .touch-mode #rotate-hint { display: grid; }
+    }
+
+    @media (max-height: 430px) {
+      .touch-left, .touch-right { gap: 6px; }
+      .touch-control { min-height: 43px; }
+      .touch-stack {
+        display: grid;
+        grid-template-columns: repeat(2, 52px);
+        gap: 6px;
+      }
+      .touch-stack .touch-label { grid-column: 1 / -1; }
+      .touch-fire { width: 68px; height: 68px; }
+      .touch-wave { min-width: 67px; height: 50px; }
+      .touch-utility { min-height: 30px; }
+    }
+
+    @media (max-width: 700px) and (orientation: landscape) {
+      .touch-left, .touch-right { transform: scale(.9); }
+      .touch-left { transform-origin: bottom left; }
+      .touch-right { transform-origin: bottom right; }
+      #fallback-stick { gap: 4px; }
+      #fallback-stick .touch-control { min-width: 44px; width: 44px; height: 44px; }
     }
 
     #boot {
@@ -230,6 +484,46 @@
   <canvas id="scene" tabindex="0" aria-label="First-person air combat view"></canvas>
   <canvas id="hud" aria-hidden="true"></canvas>
 
+  <div id="touch-controls" aria-label="Mobile flight controls">
+    <div id="tilt-status" aria-live="polite">TILT OFF</div>
+
+    <div class="touch-left">
+      <div class="touch-stack">
+        <div class="touch-label">Throttle</div>
+        <button class="touch-control" type="button" data-hold-key="KeyW" aria-label="Increase throttle">POWER<br>+</button>
+        <button class="touch-control" type="button" data-hold-key="KeyS" aria-label="Decrease throttle">POWER<br>−</button>
+      </div>
+      <button class="touch-control touch-wave" type="button" data-hold-key="KeyW" aria-label="Firewall throttle and wave off">WAVE<br>OFF</button>
+    </div>
+
+    <div class="touch-right">
+      <div class="touch-utils">
+        <button class="touch-control touch-utility" type="button" data-mobile-action="recenter">CENTER</button>
+        <button class="touch-control touch-utility" type="button" data-hold-key="KeyR">RESTART</button>
+      </div>
+      <div class="touch-actions">
+        <button class="touch-control" type="button" data-hold-key="Space" aria-label="Maximum G override">MAX<br>G</button>
+        <button class="touch-control touch-fire" type="button" data-hold-key="KeyF">FIRE</button>
+      </div>
+    </div>
+
+    <div id="fallback-stick" aria-label="Button flight stick">
+      <button class="touch-control" type="button" data-hold-key="ArrowLeft">ROLL<br>◀</button>
+      <button class="touch-control" type="button" data-hold-key="ArrowRight">ROLL<br>▶</button>
+      <button class="touch-control" type="button" data-hold-key="ArrowDown">PULL<br>▼</button>
+      <button class="touch-control" type="button" data-hold-key="ArrowUp">PUSH<br>▲</button>
+    </div>
+
+    <div id="tilt-prompt" role="dialog" aria-modal="true" aria-labelledby="tilt-title">
+      <strong id="tilt-title">TAP TO ENABLE TILT</strong>
+      <p>Hold your comfortable flying angle; this becomes centre. Then tilt forward to push, back to pull, and left/right to roll.</p>
+      <button class="touch-choice" type="button" data-mobile-action="enable-tilt">ENABLE TILT</button>
+      <button class="touch-choice secondary" type="button" data-mobile-action="buttons-only">BUTTONS ONLY</button>
+    </div>
+
+    <div id="rotate-hint">ROTATE TO LANDSCAPE<br><small>Tilt steering is designed for a wide screen.</small></div>
+  </div>
+
   <div id="boot" role="status" aria-live="polite">
     <div class="boot-card">
       <div class="boot-kicker">Air Combat Lab</div>
@@ -248,7 +542,7 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=2"></script>
+  <script type="module" src="./app.js?v=11"></script>
   <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
 </body>
 </html>

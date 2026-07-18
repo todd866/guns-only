@@ -97,9 +97,10 @@ public partial class SimBridge : Node {
         var xAxis = up.Cross(zAxis).Normalized();  // right-handed: x = y cross z
         return new Transform3D(new Basis(xAxis, up, zAxis), origin);
     }
-    // The player renders from the BUFFETED frame so the gust shudder is seen; the bandit is clean.
+    // The player renders from the integrated rigid-body attitude; the bandit stays on its clean rail frame.
     public Transform3D GetPlayerTransform() {
-        _player.BuffetedFrame(out var fwd, out var up);
+        GunsOnly.Sim.Vec3D fwd, up;
+        _player.BodyFrame(out fwd, out up);
         return ToGodot(_player.State.Position, fwd, up);
     }
     public Transform3D GetBanditTransform() => ToGodot(_bandit.State, _bandit.LiftDir);
@@ -120,9 +121,15 @@ public partial class SimBridge : Node {
             {"angle_off_deg", Geometry.AngleOff(s, _bandit.State) * 57.2958},
             {"range_m", Geometry.Range(s, _bandit.State)},
             {"closure_kts", _closureKts},
-            {"pitch_deg", s.Gamma * 57.2958},
-            {"bank_deg", s.Bank * 57.2958},
-            {"heading_deg", ((s.Chi * 57.2958) % 360 + 360) % 360},
+            {"pitch_deg", _player.BodyPitchRad * 57.2958},
+            {"aoa_deg", _player.AngleOfAttackRad * 57.2958},
+            {"beta_deg", _player.SideslipRad * 57.2958},
+            {"gamma_deg", s.Gamma * 57.2958},
+            {"bank_deg", _player.BodyRollRad * 57.2958},
+            {"heading_deg", ((_player.BodyYawRad * 57.2958) % 360 + 360) % 360},
+            {"roll_rate_dps", s.BodyRates.P * 57.2958},
+            {"pitch_rate_dps", s.BodyRates.Q * 57.2958},
+            {"yaw_rate_dps", s.BodyRates.R * 57.2958},
             {"gun_window", CameraSolver.GunWindow(s, _bandit.State)},
             {"below_ground", _player.BelowGround}, {"below_deck", _player.BelowHardDeck},
             {"knocked_off", _knockedOff}, {"frozen", Frozen},
