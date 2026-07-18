@@ -11,10 +11,10 @@ public sealed class DetentLayer {
     public double ValleyBank { get; private set; }
     public double Throttle { get; private set; } = 0.85;
 
-    static readonly double[] ThrottleDetents = { 0.0, 0.55, 0.85, 1.0, 1.3 };  // last = afterburner
-    int _throttleIdx = 2;
+    double _throttleLever = 0.85;   // continuous, 0..1.3 (>1 = afterburner)
     bool _manualThrottle;   // on the approach, the pilot touching W/S stands the auto-throttle down
     bool _waveOff;          // pilot firewalled the throttle on the approach → go around, climb away
+    const double ThrottleRate = 0.7;   // per second while W/S held — a real throttle, not tap-detents
     int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
     const double Tau = 0.22, StickyStepG = 0.5, RollHoldRate = 1.6; // rad/s while roll key held
@@ -133,20 +133,26 @@ public sealed class DetentLayer {
         }
         _bankTarget = System.Math.IEEERemainder(_bankTarget, 2 * System.Math.PI); // circular: continuous roll through inverted
 
+        // Continuous throttle: HOLD W to spool up (through MIL into A/B), HOLD S to bring it back —
+        // that's what "mash W" means. Tap-only detents did nothing on a hold, which is why it felt
+        // dead. Taps still nudge it for fine sets.
+        bool wHeld = keys.PhaseAt(GKey.ThrottleUp, nowMs) != KeyPhase.Idle;
+        bool sHeld = keys.PhaseAt(GKey.ThrottleDown, nowMs) != KeyPhase.Idle;
         int thUp = keys.TakeTaps(GKey.ThrottleUp, nowMs), thDn = keys.TakeTaps(GKey.ThrottleDown, nowMs);
-        if (thUp > 0 || thDn > 0) _manualThrottle = true;   // pilot took the throttle → auto stands down
-        _throttleIdx = System.Math.Clamp(_throttleIdx + thUp - thDn, 0, ThrottleDetents.Length - 1);
-        // Firewalled to MIL/AB on the approach = wave-off (the G block pitches up next tick); pulling
-        // the throttle back below MIL re-commits to the approach.
-        if (ApproachMode && _manualThrottle) _waveOff = _throttleIdx >= 3;
+        if (wHeld || sHeld || thUp > 0 || thDn > 0) _manualThrottle = true;   // pilot took the throttle
+        double autoThr = System.Math.Clamp(0.16 + 0.026 * (ApproachSpeedMps - s.Speed), 0.0, 1.0);
         if (ApproachMode && !_manualThrottle) {
-            // Auto-throttle holds on-speed until the pilot touches it. On a −3.5° glideslope the trim
-            // throttle is nearly idle (gravity does most of the work), so the base is low and the gain
-            // firm — cut to idle when fast, spool up when slow. Mash W to firewall it and go around.
-            Throttle = System.Math.Clamp(0.16 + 0.026 * (ApproachSpeedMps - s.Speed), 0.0, 1.0);
+            _throttleLever = autoThr;   // auto-throttle holds on-speed AND tracks the lever, so takeover is smooth
         } else {
-            Throttle = ThrottleDetents[_throttleIdx];
+            if (wHeld) _throttleLever += ThrottleRate * dt;
+            if (sHeld) _throttleLever -= ThrottleRate * dt;
+            _throttleLever += (thUp - thDn) * 0.15;
+            _throttleLever = System.Math.Clamp(_throttleLever, 0.0, 1.3);
         }
+        Throttle = _throttleLever;
+        // Firewalled to MIL/AB on the approach = wave-off (the G block pitches up next tick); pull it
+        // back below MIL to re-commit to the approach.
+        if (ApproachMode && _manualThrottle) _waveOff = _throttleLever >= 0.99;
 
         double rudder = 0;
         if (keys.PhaseAt(GKey.RudderRight, nowMs) != KeyPhase.Idle) rudder += 0.6;

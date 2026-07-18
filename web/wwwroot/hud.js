@@ -1031,6 +1031,13 @@ class CombatHud {
     this.drawPrompt(frame.state);
     this.drawFooter(frame.state);
     this.drawLegend(Boolean(frame.state.frozen));
+    // Build stamp (top-left): so a stale cached tab is instantly obvious. Bump on each publish.
+    ctx.save();
+    ctx.fillStyle = "rgba(77, 255, 136, 0.35)";
+    ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "left"; ctx.textBaseline = "top";
+    ctx.fillText("BUILD 12", 8, 8);
+    ctx.restore();
     this.drawEnding(frame);
   }
 }
