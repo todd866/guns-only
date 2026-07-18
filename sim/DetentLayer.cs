@@ -11,8 +11,10 @@ public sealed class DetentLayer {
     public double ValleyBank { get; private set; }
     public double Throttle { get; private set; } = 0.85;
 
-    static readonly double[] ThrottleDetents = { 0.0, 0.55, 0.85, 1.0 };
+    static readonly double[] ThrottleDetents = { 0.0, 0.55, 0.85, 1.0, 1.3 };  // last = afterburner
     int _throttleIdx = 2;
+    bool _manualThrottle;   // on the approach, the pilot touching W/S stands the auto-throttle down
+    bool _waveOff;          // pilot firewalled the throttle on the approach → go around, climb away
     int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
     const double Tau = 0.22, StickyStepG = 0.5, RollHoldRate = 1.6; // rad/s while roll key held
@@ -65,9 +67,15 @@ public sealed class DetentLayer {
 
         if (ApproachMode) {
             if (!_approachInit) { _targetGamma = ApproachGlideslope; _approachInit = true; }
-            if (pull != KeyPhase.Idle) _targetGamma += GammaMoveRate * dt;   // pull → aimpoint up
-            if (push != KeyPhase.Idle) _targetGamma -= GammaMoveRate * dt;   // push → aimpoint down
-            _targetGamma = System.Math.Clamp(_targetGamma, GammaLo, GammaHi);
+            if (_waveOff) {
+                // Firewalled → GO AROUND: pitch up into a climb and fly up and away on the power.
+                _targetGamma += GammaMoveRate * 2.5 * dt;
+                _targetGamma = System.Math.Clamp(_targetGamma, GammaLo, 0.16);   // allow a real climb
+            } else {
+                if (pull != KeyPhase.Idle) _targetGamma += GammaMoveRate * dt;   // pull → aimpoint up
+                if (push != KeyPhase.Idle) _targetGamma -= GammaMoveRate * dt;   // push → aimpoint down
+                _targetGamma = System.Math.Clamp(_targetGamma, GammaLo, GammaHi);
+            }
             // Command the G that drives the actual flight-path angle toward the target and holds it:
             // trim n = cos γ / cos φ, plus a proportional term. This is the Magic-Carpet hold loop.
             double gamma = s.Gamma, bank = s.Bank, V = System.Math.Max(s.Speed, 30.0);
@@ -126,11 +134,15 @@ public sealed class DetentLayer {
         _bankTarget = System.Math.IEEERemainder(_bankTarget, 2 * System.Math.PI); // circular: continuous roll through inverted
 
         int thUp = keys.TakeTaps(GKey.ThrottleUp, nowMs), thDn = keys.TakeTaps(GKey.ThrottleDown, nowMs);
+        if (thUp > 0 || thDn > 0) _manualThrottle = true;   // pilot took the throttle → auto stands down
         _throttleIdx = System.Math.Clamp(_throttleIdx + thUp - thDn, 0, ThrottleDetents.Length - 1);
-        if (ApproachMode) {
-            // Auto-throttle holds on-speed: this is why the aircraft was running away to 224 kt.
-            // On a −3.5° glideslope the trim throttle is nearly idle (gravity does most of the work),
-            // so the base is low and the gain firm — cut to idle when fast, spool up when slow.
+        // Firewalled to MIL/AB on the approach = wave-off (the G block pitches up next tick); pulling
+        // the throttle back below MIL re-commits to the approach.
+        if (ApproachMode && _manualThrottle) _waveOff = _throttleIdx >= 3;
+        if (ApproachMode && !_manualThrottle) {
+            // Auto-throttle holds on-speed until the pilot touches it. On a −3.5° glideslope the trim
+            // throttle is nearly idle (gravity does most of the work), so the base is low and the gain
+            // firm — cut to idle when fast, spool up when slow. Mash W to firewall it and go around.
             Throttle = System.Math.Clamp(0.16 + 0.026 * (ApproachSpeedMps - s.Speed), 0.0, 1.0);
         } else {
             Throttle = ThrottleDetents[_throttleIdx];

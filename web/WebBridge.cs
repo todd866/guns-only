@@ -152,7 +152,7 @@ public static partial class WebBridge {
             + $"\"frozen\":{(Frozen ? "true" : "false")},"
             + $"\"below_deck\":{(_player.BelowHardDeck ? "true" : "false")},"
             + $"\"shots_total\":{_shotsTotal},\"shots_in_window\":{_shotsInWindow},"
-            + $"\"throttle\":{_detents.Throttle:F2},"
+            + $"\"throttle\":{_detents.Throttle:F3},\"engine\":{_player.ThrustFraction:F3},"
             + CarrierJson()
             + $"\"context\":\"{_advice.Context}\",\"beat\":\"{_beat.Name}\""
             + "}";

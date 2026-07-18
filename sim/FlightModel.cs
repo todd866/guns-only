@@ -117,7 +117,7 @@ public static class FlightModel {
         // c.Throttle here is the engine's ACTUAL spool fraction, not the lever position:
         // AircraftSim lags the lever through SpoolUpTau/SpoolDownTau before calling us. The
         // model is memoryless, so the state that makes thrust lag has to live in the sim.
-        double thrust = System.Math.Clamp(c.Throttle, 0, 1) * p.ThrustMaxN * (rho / 1.225);
+        double thrust = System.Math.Clamp(c.Throttle, 0, 1.35) * p.ThrustMaxN * (rho / 1.225);  // >1 = afterburner
 
         // Gust-induced lift — the dominant felt bump, and the reason a G-command model needs it
         // spelled out. Lift here is slaved to commanded nz, so a gust would otherwise only rotate

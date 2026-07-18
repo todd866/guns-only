@@ -867,32 +867,44 @@ class CombatHud {
   }
 
   drawThrottle(state) {
-    const thr = Number(state.throttle);
+    const thr = Number(state.throttle);           // commanded lever, 0..1.3
+    const eng = Number(state.engine);             // actual engine output (spooled, LAGS the lever)
     if (!Number.isFinite(thr)) return;
     const ctx = this.ctx;
-    const w = 130, h = 12;
-    const x = 30, y = this.height - 132;
-    ctx.fillStyle = "rgba(1, 9, 14, 0.5)";
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = "rgba(77, 255, 136, 0.3)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, w, h);
-    ctx.fillStyle = thr >= 0.99 ? AMBER : GREEN;
-    ctx.fillRect(x + 1, y + 1, (w - 2) * clamp(thr, 0, 1), h - 2);
+    const maxT = 1.3;                              // top of scale = full afterburner
+    const w = 16, h = 150;
+    const x = 34, y = this.height - 250;
+    const yOf = (f) => y + h - (clamp(f, 0, maxT) / maxT) * h;
+
+    ctx.fillStyle = "rgba(1, 9, 14, 0.55)"; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.3)"; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
+    // afterburner zone (above MIL) shaded amber
+    ctx.fillStyle = "rgba(255, 176, 32, 0.14)"; ctx.fillRect(x, yOf(maxT), w, yOf(1.0) - yOf(maxT));
+    // ENGINE fill = actual output; the gap to the lever caret is the spool lag you feel
+    const ey = yOf(eng);
+    ctx.fillStyle = eng > 1.005 ? AMBER : GREEN;
+    ctx.fillRect(x + 1, ey, w - 2, y + h - ey);
+    // detent lines
     ctx.strokeStyle = "rgba(77, 255, 136, 0.4)";
-    for (const d of [0.55, 0.85]) {
-      const tx = x + w * d;
-      ctx.beginPath(); ctx.moveTo(tx, y); ctx.lineTo(tx, y + h); ctx.stroke();
-    }
-    ctx.fillStyle = GREEN_DIM;
-    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "left";
+    for (const f of [0.55, 0.85, 1.0]) { const t = yOf(f); ctx.beginPath(); ctx.moveTo(x, t); ctx.lineTo(x + w, t); ctx.stroke(); }
+    // commanded LEVER caret on the right edge
+    const ly = yOf(thr);
+    ctx.fillStyle = thr > 1.005 ? AMBER : GREEN;
+    ctx.beginPath(); ctx.moveTo(x + w + 1, ly); ctx.lineTo(x + w + 8, ly - 4); ctx.lineTo(x + w + 8, ly + 4); ctx.closePath(); ctx.fill();
+
+    ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textBaseline = "middle";
-    const label = thr <= 0.01 ? "IDLE" : thr >= 0.99 ? "MIL" : `${Math.round(thr * 100)}%`;
-    // On the approach the throttle is automatic (Magic Carpet holds on-speed), so say so — W/S
-    // doing nothing there is exactly why it read as opaque.
-    const hint = state.carrier === true ? "AUTO — holding on-speed" : "W / S";
-    ctx.fillText(`THROTTLE  ${label}   ·  ${hint}`, x, y - 8);
+    ctx.fillStyle = GREEN_DIM; ctx.textAlign = "left";
+    ctx.fillText("THR", x, y - 9);
+    ctx.fillText("MIL", x + w + 11, yOf(1.0));
+    ctx.fillStyle = AMBER; ctx.fillText("A/B", x + w + 11, yOf(maxT) + 6);
+    // readout + mode: AUTO on the approach until you touch W/S, then manual (the wave-off).
+    const label = thr <= 0.01 ? "IDLE" : thr > 1.005 ? "A/B" : thr >= 0.995 ? "MIL" : `${Math.round(thr * 100)}%`;
+    const mode = state.carrier === true ? "AUTO" : "W/S";
+    ctx.fillStyle = eng > 1.005 ? AMBER : GREEN; ctx.textAlign = "left";
+    ctx.fillText(`${label}`, x, y + h + 9);
+    ctx.fillStyle = GREEN_DIM;
+    ctx.fillText(mode, x, y + h + 19);
   }
 
   drawFooter(state) {

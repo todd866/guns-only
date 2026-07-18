@@ -63,7 +63,7 @@ public sealed class AircraftSim {
         // Engine spool. First aircraft ever built by this sim is trimmed, not spooling up from
         // idle: snap to the opening lever position, then lag every CHANGE after that. (Starting
         // at zero would quietly re-tune every beat by decelerating each aircraft off the line.)
-        double lever = System.Math.Clamp(cmd.Throttle, 0, 1);
+        double lever = System.Math.Clamp(cmd.Throttle, 0, 1.35);   // >1 = afterburner
         if (!_spoolInit) { _thrustFrac = lever; _spoolInit = true; }
         double tau = lever > _thrustFrac ? _p.SpoolUpTau : _p.SpoolDownTau;
         if (tau > 1e-6) {
