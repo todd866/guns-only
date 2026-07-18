@@ -33,7 +33,9 @@ public partial class SimBridge : Node {
     public void StartBeat(int index) {
         var variant = _detents?.Variant ?? ValleyVariant.DoctrineDeep;
         _beat = index switch { 2 => Beats.BreakDefense(), 3 => Beats.Saddle(), 4 => Beats.BalloonStrike(), _ => Beats.Perch() };
-        _player = new AircraftSim(_beat.Player, _beat.PlayerAir);
+        _player = new AircraftSim(_beat.Player, _beat.PlayerAir) {
+            Wind = new GunsOnly.Sim.Turbulence.TurbulenceField(intensityMps: 3.0, outerScaleM: 60.0, intermittency: 0.5, seed: 0xB0A7)
+        };
         _bandit = new RailBandit(_beat.Bandit, _beat.BanditAir, _beat.BanditTimeline);
         _keys = new KeyGrammar();
         _detents = new DetentLayer { Variant = variant };
@@ -82,11 +84,12 @@ public partial class SimBridge : Node {
         }
     }
 
-    static Transform3D ToGodot(in AircraftState s, in GunsOnly.Sim.Vec3D liftDir) {
-        var origin = new Vector3((float)s.Position.X, (float)s.Position.Y, (float)(-s.Position.Z));
-        var fwdSim = s.ForwardDir();
+    static Transform3D ToGodot(in AircraftState s, in GunsOnly.Sim.Vec3D liftDir) =>
+        ToGodot(s.Position, s.ForwardDir(), liftDir);
+    static Transform3D ToGodot(in GunsOnly.Sim.Vec3D posSim, in GunsOnly.Sim.Vec3D fwdSim, in GunsOnly.Sim.Vec3D upSim) {
+        var origin = new Vector3((float)posSim.X, (float)posSim.Y, (float)(-posSim.Z));
         var fwd = new Vector3((float)fwdSim.X, (float)fwdSim.Y, (float)(-fwdSim.Z)).Normalized();
-        var up = new Vector3((float)liftDir.X, (float)liftDir.Y, (float)(-liftDir.Z)).Normalized();
+        var up = new Vector3((float)upSim.X, (float)upSim.Y, (float)(-upSim.Z)).Normalized();
         // Basis built directly from the kernel's frame: no world-up reconstruction, no bank
         // rotation, no sign conventions to mirror (review finding: the old path rendered
         // every roll backwards and snapped 180 deg at loop apex).
@@ -94,7 +97,11 @@ public partial class SimBridge : Node {
         var xAxis = up.Cross(zAxis).Normalized();  // right-handed: x = y cross z
         return new Transform3D(new Basis(xAxis, up, zAxis), origin);
     }
-    public Transform3D GetPlayerTransform() => ToGodot(_player.State, _player.LiftDir);
+    // The player renders from the BUFFETED frame so the gust shudder is seen; the bandit is clean.
+    public Transform3D GetPlayerTransform() {
+        _player.BuffetedFrame(out var fwd, out var up);
+        return ToGodot(_player.State.Position, fwd, up);
+    }
     public Transform3D GetBanditTransform() => ToGodot(_bandit.State, _bandit.LiftDir);
 
     public Godot.Collections.Dictionary GetHud() {

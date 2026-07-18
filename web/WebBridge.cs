@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices.JavaScript;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Turbulence;
 
 namespace GunsOnly.Web;
 
@@ -39,7 +40,11 @@ public static partial class WebBridge {
         _beatIndex = index;
         _knockedOff = false;
         _beat = index switch { 2 => Beats.BreakDefense(), 3 => Beats.Saddle(), 4 => Beats.BalloonStrike(), _ => Beats.Perch() };
-        _player = new AircraftSim(_beat.Player, _beat.PlayerAir);
+        _player = new AircraftSim(_beat.Player, _beat.PlayerAir) {
+            // Moderate turbulence, fixed seed = the same "day" each run. Homogeneous for now; the
+            // ship-shaped burble (texture × placement) comes with the carrier beat. Tunable by feel.
+            Wind = new TurbulenceField(intensityMps: 3.0, outerScaleM: 60.0, intermittency: 0.5, seed: 0xB0A7)
+        };
         _bandit = new RailBandit(_beat.Bandit, _beat.BanditAir, _beat.BanditTimeline);
         _keys = new KeyGrammar();
         _detents = new DetentLayer { Variant = variant };
@@ -103,8 +108,10 @@ public static partial class WebBridge {
     public static string GetState() {
         var s = _player.State;
         var b = _bandit.State;
-        var pl = _player.LiftDir; var bl = _bandit.LiftDir;
-        var pf = s.ForwardDir(); var bf = b.ForwardDir();
+        var bl = _bandit.LiftDir; var bf = b.ForwardDir();
+        // Render the PLAYER from the buffeted frame so the gust-driven shudder is seen; the
+        // (scripted) bandit stays on its clean frame.
+        _player.BuffetedFrame(out var pf, out var pl);
         // hand-built JSON: no serializer, no reflection, trim-safe, allocation-cheap.
         return "{"
             + $"\"t\":{_simTimeMs / 1000.0:F4},"
@@ -114,6 +121,7 @@ public static partial class WebBridge {
             + $"\"bx\":{b.Position.X:F3},\"by\":{b.Position.Y:F3},\"bz\":{b.Position.Z:F3},"
             + $"\"bfx\":{bf.X:F5},\"bfy\":{bf.Y:F5},\"bfz\":{bf.Z:F5},"
             + $"\"blx\":{bl.X:F5},\"bly\":{bl.Y:F5},\"blz\":{bl.Z:F5},"
+            + $"\"buffet_pitch_deg\":{_player.PitchBuffetRad * 57.2958:F3},\"buffet_roll_deg\":{_player.RollBuffetRad * 57.2958:F3},\"buffet_yaw_deg\":{_player.YawBuffetRad * 57.2958:F3},"
             + $"\"speed_kts\":{s.Speed * 1.94384:F2},\"alt_ft\":{s.Position.Y * 3.28084:F1},"
             + $"\"g_actual\":{_player.LastNz:F3},\"g_cmd\":{_detents.Command.GDemand:F3},"
             + $"\"g_valley\":{_detents.ValleyG:F3},"

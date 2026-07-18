@@ -105,6 +105,32 @@ public class WindResponseTests {
         Assert.True(calmed < 0.1 * excited, "damped modes must ring down when the air calms");
     }
 
+    [Fact]
+    public void BuffetedFrameIsCleanInStillAirAndPerturbedInTurbulence() {
+        // Still air: the render frame equals the clean flight-path attitude exactly (buffet = 0).
+        var calm = new AircraftSim(Trimmed(), FlightModel.Sabre);
+        for (int i = 0; i < 600; i++) calm.Step(Cruise, Dt);
+        calm.BuffetedFrame(out var cf, out var cu);
+        var cleanF = calm.State.ForwardDir();
+        Assert.Equal(cleanF.X, cf.X, 9); Assert.Equal(cleanF.Y, cf.Y, 9); Assert.Equal(cleanF.Z, cf.Z, 9);
+        Assert.Equal(calm.LiftDir.X, cu.X, 9);
+
+        // Turbulence: the frame is perturbed off the clean attitude, but stays a clean basis
+        // (unit vectors, forward ⟂ up) — no degeneracy from the small-rotation composition.
+        var windy = new AircraftSim(Trimmed(), FlightModel.Sabre) { Wind = new TurbulenceField(intensityMps: 5.0, seed: 9) };
+        double maxTilt = 0;
+        for (int i = 0; i < 3000; i++) {
+            windy.Step(Cruise, Dt);
+            windy.BuffetedFrame(out var f, out var u);
+            Assert.InRange(f.Length, 0.999, 1.001);
+            Assert.InRange(u.Length, 0.999, 1.001);
+            Assert.True(Math.Abs(f.Dot(u)) < 0.02, "forward and up must stay ~perpendicular");
+            maxTilt = Math.Max(maxTilt, Math.Acos(Math.Clamp(f.Dot(windy.State.ForwardDir()), -1, 1)) * RadToDeg);
+        }
+        _o.WriteLine($"max nose deflection from clean flight path under turbulence: {maxTilt:F2}°");
+        Assert.True(maxTilt > 0.5, "the buffet must actually deflect the rendered nose");
+    }
+
     static double Rms(List<double> a) {
         double m = 0; foreach (var x in a) m += x; m /= a.Count;
         double v = 0; foreach (var x in a) v += (x - m) * (x - m);

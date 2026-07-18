@@ -143,6 +143,34 @@ public sealed class AircraftSim {
         _buffet.Step(alphaGust, betaGust, rollGust, dt);
     }
 
+    /// The render attitude WITH the buffet shudder applied: forward and up (canopy) vectors that
+    /// include the gust-driven nose saw / wing rock, so a shell that renders from these SEES the
+    /// shudder. In still air (buffet ≈ 0) it equals the clean flight-path attitude exactly. Small
+    /// exact rotations: roll about the flight axis, then pitch about the right axis, then yaw
+    /// about the up axis, re-orthogonalising between each so the result stays a clean basis.
+    public void BuffetedFrame(out Vec3D fwd, out Vec3D up) {
+        var f = State.ForwardDir();
+        var u = LiftDir;
+        double pitch = _buffet.PitchRad, yaw = _buffet.YawRad, roll = _buffet.RollRad;
+
+        var right = SafeRight(u, f);                       // physical right (left-handed: up × fwd)
+        u = (u * System.Math.Cos(roll) + right * System.Math.Sin(roll)).Normalized();   // right-wing-down → canopy tilts right
+
+        right = SafeRight(u, f);
+        var fPitched = (f * System.Math.Cos(pitch) + u * System.Math.Sin(pitch)).Normalized();  // nose-up
+        u = (u * System.Math.Cos(pitch) - f * System.Math.Sin(pitch)).Normalized();
+        f = fPitched;
+
+        right = SafeRight(u, f);
+        f = (f * System.Math.Cos(yaw) + right * System.Math.Sin(yaw)).Normalized();     // nose-right
+
+        fwd = f; up = u;
+    }
+    static Vec3D SafeRight(in Vec3D up, in Vec3D fwd) {
+        var r = up.Cross(fwd);
+        return r.Length < 1e-9 ? new Vec3D(1, 0, 0) : r.Normalized();
+    }
+
     Vec3D ComputeLiftDir(in Vec3D vhat) {
         var rightRef = _liftRef.Cross(vhat);
         var right = rightRef.Length < 1e-6 ? new Vec3D(1, 0, 0) : rightRef.Normalized();
