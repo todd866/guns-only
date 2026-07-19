@@ -819,6 +819,7 @@ public class CarrierFlightHarnessTests {
             Vec3D aimDirection = (aimPoint - rig.S.Position).Normalized();
             double aimError = Math.Acos(Math.Clamp(
                 rig.Player.BodyForward.Dot(aimDirection), -1.0, 1.0));
+            double lateralError = rig.Player.BodyRight.Dot(aimDirection);
             double verticalError = rig.Player.BodyUp.Dot(aimDirection);
             bool liftPlaneSet = Math.Abs(bankError) < 0.30;
             bool energyLow = rig.S.Speed < 115.0;
@@ -829,6 +830,13 @@ public class CarrierFlightHarnessTests {
                 && liftPlaneSet && verticalError < -0.0018 && aimError > 0.0025);
 
             bool onPipper = kill.HasLeadSolution && aimError < 0.035;
+            // Bank and G fly the pursuit geometry; once inside the sight ring, fine pedal input
+            // supplies the small lateral correction a fixed-gun pilot needs to settle the pipper.
+            // The 0.2-degree deadband is deliberately inside the target's 8 m angular radius at
+            // normal firing range, instead of accepting a platform-sensitive lateral limit cycle.
+            const double lateralCapture = 0.0035;
+            rig.Key(GKey.RudderRight, onPipper && lateralError > lateralCapture);
+            rig.Key(GKey.RudderLeft, onPipper && lateralError < -lateralCapture);
             if (kill.HasLeadSolution) {
                 if (!double.IsFinite(leadAvailableAt)) leadAvailableAt = rig.TimeSeconds;
                 minAimErrorDeg = Math.Min(minAimErrorDeg, rig.GunAimErrorDeg(kill));
@@ -848,6 +856,8 @@ public class CarrierFlightHarnessTests {
                 splashPlayerPosition = beforeStep;
             }
         }
+        rig.Key(GKey.RudderRight, false);
+        rig.Key(GKey.RudderLeft, false);
 
         _o.WriteLine($"FULL SORTIE: free={freeAt:F1}s "
             + $"egress={egressAt:F1}s/{egressSpeedKt:F0}kt/{egressAltitude:F0}m "
