@@ -1,17 +1,15 @@
 namespace GunsOnly.Sim;
 public enum DemandTier { Baseline, Valley, MaxPerform, OverDemand }
 public static class Protection {
-    /// The protection boundary the bare arrows ride. UNMANNED: there is no pilot, so the old
-    /// 6G cap (a physiological legacy) is gone — protection is 92% of what the WING can make,
-    /// bounded by structure. At fighting speeds the wing binds long before the spar does
-    /// (7.9G @ 389kt, 11.4G @ 467kt; 20G would need 618kt), so removing the pilot buys
-    /// duration, not peak: you can ride the aero limit indefinitely and pay only in energy.
+    /// The protection boundary the bare arrows ride: an airframe-selected fraction of what the
+    /// wing can make, bounded by that airframe's structure. The player F-86 uses 100%, making full
+    /// backstick the documented +7 G limit; unmanned aircraft retain the default 92% margin.
     public static double MaxPerformG(in AircraftState s, in AircraftParams p) {
-        double baseG = System.Math.Max(1.2, 0.92 * FlightModel.NzAeroMax(s, p));
+        double baseG = System.Math.Max(1.2, p.MaxPerformFraction * FlightModel.NzAeroMax(s, p));
         return System.Math.Min(baseG, HardMaxG(s, p)); // invariant: MaxPerformG <= HardMaxG always
     }
     public static double HardMaxG(in AircraftState s, in AircraftParams p) =>
-        System.Math.Min(FlightModel.NzAeroMax(s, p), StructuralLimitG);
+        System.Math.Min(FlightModel.NzAeroMax(s, p), p.PositiveStructuralLimitG);
     /// The energy-NEUTRAL turn: the G at which thrust exactly balances drag, so you can hold
     /// it forever without scrubbing a knot. This is what the drone's flight AI flies for a
     /// routine tactical turn — the player spends energy deliberately (override) rather than
@@ -32,7 +30,6 @@ public static class Protection {
         return System.Math.Clamp(n, System.Math.Min(1.0, mp), mp);
     }
 
-    /// Unmanned structural limit. Above ~12G you'd need to be transonic to reach it anyway,
-    /// and spar mass scales with design-G — on an attritable that's mass you can't use.
+    /// Default unmanned structural limit retained for airframes that do not override the parameter.
     public const double StructuralLimitG = 12.0;
 }

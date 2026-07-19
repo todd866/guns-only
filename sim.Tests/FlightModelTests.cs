@@ -11,23 +11,22 @@ public class FlightModelTests {
         for (int i = 0; i < 1200; i++) sim.Step(Cruise, 1.0/AircraftSim.TickHz); // 10 s
         Assert.InRange(sim.State.Position.Y, 2900, 3100);
     }
-    [Fact] public void SustainedMaxGBleedsSpeed() { // energy honesty: induced drag beats thrust at high G
-        var sim = new AircraftSim(Level(220), FlightModel.Sabre);
-        var pull = new PilotCommand(6.0, 1.2, 1.0, 0.0);
-        double v0 = sim.State.Speed;
-        double nzSum = 0, clSum = 0; int samples = 0;
-        for (int i = 0; i < 960; i++) {
-            sim.Step(pull, 1.0/AircraftSim.TickHz); // 8 s
-            if (i >= 240) {
-                nzSum += sim.LastNz;
-                clSum += System.Math.Clamp(FlightModel.Sabre.CLAlpha * sim.AngleOfAttackRad,
-                    FlightModel.Sabre.CLMin, FlightModel.Sabre.CLMax);
-                samples++;
-            }
+    [Fact] public void MaxGTurnBleedsAtDocumentedF86Rate() {
+        // NACA RM L52C19 time histories put a hard F-86 turn near 12 kt/s (coarse, +/-50%).
+        // Use the accuracy report's 375 kt / 10,000 ft / 90-deg-bank measurement window.
+        const double mpsPerKnot = 0.514444;
+        var sim = new AircraftSim(Level(375 * mpsPerKnot, 3048), FlightModel.Sabre);
+        var pull = new PilotCommand(12.0, System.Math.PI / 2.0, 1.0, 0.0);
+        for (int i = 0; i < 90; i++) sim.Step(pull, 1.0 / AircraftSim.TickHz); // settle 0.75 s
+        double speed0 = sim.State.Speed, nzSum = 0.0;
+        for (int i = 0; i < 480; i++) {
+            sim.Step(pull, 1.0 / AircraftSim.TickHz); // sample 4 s
+            nzSum += sim.LastNz;
         }
-        double meanNz = nzSum / samples, meanCl = clSum / samples;
-        Assert.True(meanNz > 5.0 && meanCl > 0.65, $"hard pull only achieved nz={meanNz:F2}, CL={meanCl:F2}");
-        Assert.True(sim.State.Speed < v0 - 25, $"speed only fell {v0 - sim.State.Speed:F1} m/s");
+        double bleedKtS = (speed0 - sim.State.Speed) / 4.0 / mpsPerKnot;
+        double meanNz = nzSum / 480.0;
+        Assert.InRange(bleedKtS, 10.5, 13.5); // calibrated report value: ~12.0 kt/s
+        Assert.InRange(meanNz, 6.0, 7.1);     // starts on +7 G, then unloads as speed bleeds
     }
     [Fact] public void UnloadedDiveGainsSpeed() {
         var start = Level(160) with { Gamma = -0.20 };

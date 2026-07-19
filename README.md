@@ -1,104 +1,62 @@
 # Guns Only
 
-A flat-screen, laptop-native, guns-only 1v1 jet-drone dogfight — flown on a full aerodynamic
-model through a novel doctrine-detent keyboard control scheme, presented first-person through
-the drone's sensor feed, and debriefed like a real sortie. No joystick, no switchology, no
-missiles of your own.
+A browser flight sim about the two hardest things a fighter pilot does: **win a turning gunfight**, and
+**land the jet back on the carrier**.
 
-## The thesis
+**▶ Play: [guns-only.vercel.app](https://guns-only.vercel.app)** — desktop or mobile, nothing to install.
 
-Near-future Taiwan Strait. Taiwan can't afford $100M interceptors against $50k attack drones —
-the cost-exchange math loses the war even while winning every engagement — so the answer is
-cheap, attritable jet drones with guns instead of missiles. That argument (cost-exchange,
-magazine depth, kill-the-enablers, delivery-as-escalation-axis) *is* the game's thesis, not a
-skin painted over a generic dogfight game: this project exists to show what the *next* war
-looks like, rather than build another high-fidelity museum piece of the last one. The strategy
-layer's job is to be **true**; the dogfight's job is to be **fun**; the dogfight is the gateway
-drug to the argument. Full design reasoning, derivations, and honesty flags on what's a design
-choice vs. what's load-bearing physics: [`docs/superpowers/specs/2026-07-16-guns-only-design.md`](docs/superpowers/specs/2026-07-16-guns-only-design.md) (v4).
+You fly a Korean-War-era swept-wing fighter — the F-86 Sabre and its carrier-going cousin, the **FJ-2
+Fury** — off a straight-deck carrier: get airborne, turn and burn with a bandit, then bring it back
+aboard and catch a wire. The flight model is tuned to the **real Sabre's energy envelope**, so the fight
+is a genuine energy fight and the approach is a genuine back-side-of-the-power-curve carrier approach.
 
-## Current state (2026-07-17)
+## What makes it different
 
-**M0 — the grammar slice — is built. The feel gate has not yet been flown.** 90 unit tests pass,
-but code gates are not gameplay gates: the real defects in this build so far (invisible pull,
-a pitch ladder that rolled against the horizon, the edge of the world visible at 70,000 ft, a
-kinematically impossible mission) were all found by rendering and looking, or by flying — never
-by the test suite. Known gaps right now:
+**It's a decision-making sim, not a switchology sim.** The augmentation is your reflexes — it flies the
+jet's motor skills — so your attention goes to the *decisions*: where to point, when to shoot, when to
+break, when you're bingo fuel and have to come home. Situational awareness is the whole game; the HUD's
+job is to give it to you, not bury you in text.
 
-- 2 of the 3 core BFM beats never converge to a firing solution — the canned M0 execution laws
-  fly toward the bandit but don't close to a tracking window. That's not a bug, it's the M3
-  doctrine engine's job.
-- The gun is **dry** — trigger, tracking geometry, and "shot taken" telemetry all work, but
-  there's no ballistics, no damage, no kill yet. That's M4.
-- Beat 4 (the balloon-glider strike on a PLA airborne early-warning aircraft) needs its
-  geometry redesigned around a diving slashing pass; the original tail-chase version is
-  physically impossible for an engineless glider against a 250+ kt target.
+- **Real energy model** — corner speed, sustained-G, turn rate, climb, ceiling, and energy bleed are
+  tuned to documented F-86 figures, so a turning fight reads like real BFM instead of an arcade spiral.
+- **A gun that's actually a gun** — .50-cal ballistics with time-of-flight and a computed lead pipper.
+  You have to lead the target, and you can miss.
+- **A reactive adversary** — the bandit turns into the fight, breaks when you're gunning it, jinks, and
+  manages its own energy.
+- **The carrier recovery** — a paddles LSO and the ball, the burble behind the boat, and a real
+  arrestment: catch a wire and roll to a stop. Axial or angled deck (press **C**).
+- **Variable difficulty** — clean traps make the sea rougher and start the deck moving; a bolter eases
+  off. It varies like weather, around a rising skill baseline.
+- **Every flight recorded** — the sim captures each sortie, which is how the flight model gets tuned
+  against what people actually fly instead of guesswork.
 
-## Running it
+## Controls
+
+| Action | Desktop | |
+|---|---|---|
+| Pitch | **↓** pull / **↑** push | back-stick = nose up |
+| Roll | **← →** | |
+| Throttle | **W / S** | past MIL = afterburner |
+| Guns | **F** | |
+| Padlock the bandit | **V** | keep tally through a turn |
+| Restart · beats | **R** · **1–5** | |
+
+On mobile: on-screen throttle, tilt-to-roll, and a fire button.
+
+## How it's built
+
+A single deterministic **C# 6DOF flight kernel** (float64, RK4 at 120 Hz) compiled to WebAssembly via
+Blazor, rendered with **three.js** and a canvas-2D glass HUD. The exact same kernel runs headless under
+an **outcome-level test harness** that flies the real carrier beat end-to-end — finals → firewall →
+intercept → guns → recover — because code gates aren't gameplay gates; the bugs that matter get caught
+by flying it, not by unit tests alone.
 
 ```
-bin/fly
+web/          Blazor WASM shell — three.js render, canvas HUD, JS input
+sim/          the deterministic kernel (aero, 6DOF, gun, carrier, doctrine)
+sim.Tests/    the outcome-level flight harness + physics/accuracy tests
 ```
 
-Builds the C# kernel and launches the game through the CLI Godot binary. Equivalently, open
-the project in Godot 4.7 (.NET/mono edition) — the Desktop app — and press Play.
+## Status
 
-### Keys (as flown, not as originally drafted — see the spec's §7 for why)
-
-| Key | Does |
-|---|---|
-| **DOWN** | Pull (stick-back convention: back = positive G = nose up) |
-| **UP** | Push / unload |
-| **SPACE** (hold) | Override — pull past envelope protection into the buffet, at your own risk |
-| **LEFT / RIGHT** | Roll |
-| **A / D** | Rudder |
-| **W / S** | Throttle (detented) |
-| **F** | Guns (currently dry) |
-| **V** | Padlock toggle / reacquire |
-| **X** | Cage/uncage sight |
-| **K** | Knock it off |
-| **R** | Restart current beat |
-| **1–4** | Select scenario beat |
-| **F1** | Toggle doctrine-valley variant (A/B feel-gate test) |
-| Trackpad drag | Freelook / sensor gimbal slew |
-| Two-finger scroll | View zoom |
-
-Bare arrows can never depart the aircraft — that's the whole point of the detent grammar.
-Holding SPACE is the only way past protection.
-
-## Testing it
-
-Three tools, three different questions:
-
-- **`bin/mission <scenario>`** — fast, headless, no rendering. Runs a scenario through the real
-  sim and prints a mission-level verdict (min range, whether a gun window opened, shots inside
-  it). ~60× faster than rendering; use this for "did the intercept work" questions, which are
-  pure physics.
-- **`bin/rig <scenario>`** — runs the same scenario through Godot movie-mode frame capture.
-  Use this for "does it *look* right" questions telemetry can't answer.
-- **`bin/replay [list | <segment>]`** — re-renders a real recorded session (human or
-  rig-driven) through `bin/rig` unchanged. The black-box recorder in `bridge/SimBridge.cs` is
-  always on, so any human flight becomes a re-renderable scenario for free.
-- **`dotnet test`** — 90 unit tests over the pure C# sim kernel.
-
-Scenario files live in `testrig/scenarios/*.json`; output lands in `testrig/out/`.
-
-## Repo layout
-
-| Path | What |
-|---|---|
-| `sim/` | Pure C# sim kernel — flight dynamics, doctrine engine, detent/key grammar, camera solver. No Godot dependency; headless-runnable. |
-| `sim.Tests/` | Unit tests for the kernel (`dotnet test`). |
-| `bridge/` | `SimBridge` — the Godot node that steps the kernel at 120 Hz, exposes HUD state, and always-on records sessions for replay. |
-| `game/` | Godot scene, input adapter, camera rig, HUD, shaders — the playable shell. |
-| `testrig/` | Scripted scenarios (`scenarios/*.json`), the `Rig` autoload, frame/telemetry output. |
-| `spikes/` | M0 hardware/feasibility spikes (chord ghosting, gesture momentum, altitude look, render ULP). |
-| `docs/` | Design spec, prior-art survey, airframe-derivation brief, M0 gate checklist. |
-| `bin/` | `fly`, `mission`, `rig`, `replay`, `godot` — the harness. |
-
-## Design doc
-
-The authoritative design spec, including the full derivation of the airframe family, the
-threat ladder, the doctrine engine, and an honest accounting of what's proven vs. what's still
-a design choice, lives at
-[`docs/superpowers/specs/2026-07-16-guns-only-design.md`](docs/superpowers/specs/2026-07-16-guns-only-design.md).
+Playable prototype, under active development. Rough edges expected — it's being flown and fixed daily.

@@ -40,7 +40,14 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     // tracker; RollHoldDamping is blended in only near a captured roll target, never while the
     // pilot's rate-command lead is asking for a roll.
     double YawBetaStiffnessNmRad = 180000, double RollHoldDampingNms = 50000,
-    double RollHoldErrorRad = 0.10);
+    double RollHoldErrorRad = 0.10,
+    // Airframe envelope limits. Defaults preserve the existing unmanned/afterburning aircraft;
+    // the F-86 overrides these with its piloted structural limit and dry-thrust-only J47.
+    double PositiveStructuralLimitG = 12.0, double MaxPerformFraction = 0.92,
+    double MaxThrustFraction = 1.35,
+    // Extra drag from buffet/separation as the wing approaches CLmax. The quadratic polar remains
+    // authoritative below OnsetFraction; this smooth term only closes the hard-turn energy bill.
+    double HighLiftDragOnsetFraction = 1.0, double HighLiftDragK = 0.0);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -55,17 +62,27 @@ internal readonly record struct AeroResult(Vec3D Accel, Vec3D LiftDir, Vec3D Air
 
 public static class FlightModel {
     public const double G0 = 9.80665;
-    // F-86 fight tuning anchors (NACA/operational scale): ~7 G instantaneous near 375 kt,
-    // ~5 G sustained near 350 kt as energy bleeds, ~20 deg/s at corner, and ~140 deg/s roll.
-    // The lift curve/CLmax set the aero G boundary; the rate servos get the jet there cleanly.
+    // F-86F-30/J47-GE-27 clean combat envelope. Each number is tied to the report's documented
+    // target; effective drag coefficients include whole-aircraft losses represented by this kernel.
     public static readonly AircraftParams Sabre = new(
-        MassKg: 6900, WingAreaM2: 26.8, ThrustMaxN: 26300,
-        CD0: 0.0180, InducedK: 0.083, CLMax: 1.10, CLMin: -0.65,
+        MassKg: 6900,                         // ~15,200 lb representative clean combat weight
+        WingAreaM2: 26.8,                     // F-86F wing area: 288 sq ft
+        ThrustMaxN: 26300,                    // J47-GE-27 military thrust: ~5,910 lbf
+        CD0: 0.0166,                          // fits 595 kt SL / 525 kt at 35,000 ft in MIL
+        InducedK: 0.0450,                     // fits ~5 G sustained at 350 kt / 10,000 ft
+        CLMax: 1.10,                          // fits +7 G corner near 375 kt TAS / 10,000 ft
+        CLMin: -0.65,                         // symmetric-airfoil negative-lift authority
         RollRateMaxRad: 0.65, BankTau: 0.52,
         RollDampingNms: 70000, RollMomentMaxNm: 180000,
         PitchMomentMaxNm: 200000,
-        FightRollRateMaxRad: 2.40,                 // 137.5 deg/s, near the observed ~140 deg/s
-        CompatibilityRollRateMaxRad: 2.1, CompatibilityBankTau: 0.18);
+        FightRollRateMaxRad: 2.40,            // NACA operational peak: ~138–140 deg/s
+        CompatibilityRollRateMaxRad: 2.1, CompatibilityBankTau: 0.18,
+        MCrit: 0.89, WaveDragK: 500.0,        // rapid swept-wing drag rise around M0.86–0.89
+        PositiveStructuralLimitG: 7.0,        // T.O. 1F-86F-1 maneuver limit: +7 G
+        MaxPerformFraction: 1.0,              // full backstick reaches that +7 G boundary
+        MaxThrustFraction: 1.0,               // J47-GE-27: military power, no afterburner
+        HighLiftDragOnsetFraction: 0.90,       // buffet/separation rise only in the last 10% of CL
+        HighLiftDragK: 12.7);                 // fits ~12 kt/s bleed in a +7 G, 375 kt turn
 
     /// TAIWAN DEFENCE — balloon-lofted glider strike drone. A BALLOON DRONE, a different
     /// lineage from the powered jet drones: it is a one-way sniper against soft high-value
@@ -155,11 +172,15 @@ public static class FlightModel {
         double q = 0.5 * rho * speed * speed;
         double cl = System.Math.Clamp(p.CLAlpha * alpha, p.CLMin, p.CLMax);
         double mach = speed / Atmosphere.SpeedOfSound(r.Pos.Y);
+        double highLiftFraction = System.Math.Abs(cl) / System.Math.Max(System.Math.Abs(p.CLMax), 1e-6);
+        double highLiftExcess = System.Math.Max(0.0, highLiftFraction - p.HighLiftDragOnsetFraction);
         double cd = p.CD0 * MachDragFactor(mach, p) + p.InducedK * cl * cl
+                    + p.HighLiftDragK * highLiftExcess * highLiftExcess
                     + System.Math.Abs(c.Rudder) * 0.15 * p.CD0 + beta * beta * 0.08;
         double liftAccel = q * p.WingAreaM2 * cl / r.Mass;
         double dragAccel = q * p.WingAreaM2 * cd / r.Mass;
-        double thrustAccel = System.Math.Clamp(c.Throttle, 0, 1.35) * p.ThrustMaxN * (rho / 1.225) / r.Mass;
+        double thrustAccel = System.Math.Clamp(c.Throttle, 0, p.MaxThrustFraction)
+                           * p.ThrustMaxN * (rho / 1.225) / r.Mass;
 
         // Aerodynamic lift and side force stay perpendicular to the relative wind while their
         // orientation comes from the real body axes. Rudder authority retains the tuned jink term.
@@ -278,7 +299,8 @@ public static class FlightModel {
     }
 
     static double TargetNz(in RawState r, in PilotCommand c, in AircraftParams p, double dynamicPressure) {
-        double nzMax = System.Math.Min(dynamicPressure * p.WingAreaM2 * p.CLMax / (r.Mass * G0), 12.0);
+        double nzMax = System.Math.Min(dynamicPressure * p.WingAreaM2 * p.CLMax / (r.Mass * G0),
+            p.PositiveStructuralLimitG);
         double nzMin = System.Math.Max(dynamicPressure * p.WingAreaM2 * p.CLMin / (r.Mass * G0), -1.5);
         return System.Math.Clamp(c.GDemand, nzMin, nzMax);
     }
@@ -286,7 +308,8 @@ public static class FlightModel {
     /// Directional nz clamp shared by Step's reporting (same bounds as Derivatives).
     internal static (double nz, double nzMax, double nzMin) ClampNz(in AircraftState s, in PilotCommand c, in AircraftParams p) {
         double q = 0.5 * Atmosphere.Density(s.Position.Y) * s.Speed * s.Speed;
-        double nzMax = System.Math.Min(q * p.WingAreaM2 * p.CLMax / (s.Mass * G0), 12.0);
+        double nzMax = System.Math.Min(q * p.WingAreaM2 * p.CLMax / (s.Mass * G0),
+            p.PositiveStructuralLimitG);
         double nzMin = System.Math.Max(q * p.WingAreaM2 * p.CLMin / (s.Mass * G0), -1.5);
         return (System.Math.Clamp(c.GDemand, nzMin, nzMax), nzMax, nzMin);
     }

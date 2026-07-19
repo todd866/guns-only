@@ -81,11 +81,19 @@ function lsoToken(call) {
     case "ON THE BALL": return "BALL";
     case "YOU'RE LOW": return "LOW";
     case "YOU'RE HIGH": return "HIGH";
-    case "COME LEFT": return "LEFT";
-    case "COME RIGHT": return "RIGHT";
+    case "FAST": return "FAST";
+    case "SLOW": return "SLOW";
+    case "POWER": return "POWER";
     case "WAVE OFF, WAVE OFF": return "WAVE OFF";
-    default: return call;
+    default: return "";
   }
+}
+
+function gunCue(state, hitFlash) {
+  if (hitFlash) return "HITS";
+  if ((Number(state.ammo) || 0) <= 0) return "EMPTY";
+  if (hasGunSolution(state)) return "SHOOT";
+  return state.gun_window === true ? "IN RANGE" : "";
 }
 
 function isApproachMode(state) {
@@ -113,7 +121,7 @@ class CombatHud {
     this.width = 1;
     this.height = 1;
     this.pixelRatio = 1;
-    this.legendVisible = true;
+    this.legendVisible = false;
     this.touchMode = false;
     this.safeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -130,8 +138,6 @@ class CombatHud {
     this._gunAudioFiring = false;
     this._lastHudHits = 0;
     this._hitFlashUntil = -1;
-    this._difficultySignature = null;
-    this._difficultyCueUntil = -1;
   }
 
   resize(width, height, pixelRatio, safeInsets = null) {
@@ -421,18 +427,18 @@ class CombatHud {
   }
 
   drawGunSight(frame, anchor) {
-    if (!isFightHudActive(frame.state)
-      || !anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
+    if (!isFightHudActive(frame.state)) return;
 
     const { state, triggerHeld, camera, leadPipper, now } = frame;
-    const leadValid = state.lead_valid === true && leadPipper;
-    const solution = hasGunSolution(state);
     const hits = Number(state.hits) || 0;
     if (hits < this._lastHudHits) this._lastHudHits = hits;
     if (hits > this._lastHudHits) this._hitFlashUntil = now + 0.34;
     this._lastHudHits = hits;
     const hitFlash = now < this._hitFlashUntil;
-    const progress = clamp(Number(state.kill_progress) || 0, 0, 1);
+    if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
+
+    const leadValid = state.lead_valid === true && leadPipper;
+    const solution = hasGunSolution(state);
     const ctx = this.ctx;
 
     // Fixed boresight: the barrels point here. This never chases the target or changes meaning.
@@ -493,52 +499,29 @@ class CombatHud {
       ctx.arc(0, 0, 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
-      ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(hitFlash ? "HIT" : solution ? "SHOOT" : "LEAD", 0, -28);
       ctx.restore();
     }
 
     const ammo = Math.max(0, Number(state.ammo) || 0);
-    const cue = hitFlash ? `HIT ${hits}`
-      : ammo === 0 ? "GUN EMPTY"
-      : !leadValid ? "NO LEAD"
-      : triggerHeld && !solution ? "CHECK FIRE"
-      : solution ? "SHOOT" : "LEAD";
+    const cue = gunCue(state, hitFlash);
     const cueColor = hitFlash || solution ? GREEN
       : ammo === 0 || (triggerHeld && !solution) ? RED : AMBER;
     ctx.save();
     ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const cueWidth = Math.max(132, ctx.measureText(cue).width + 20);
+    const cueWidth = 96;
     const cueX = this.width / 2 - cueWidth / 2;
     const cueY = Math.max(204, this.safeInsets.top + 202);
     ctx.fillStyle = "rgba(1, 8, 12, 0.76)";
-    ctx.fillRect(cueX, cueY, cueWidth, progress > 0 ? 43 : 29);
+    ctx.fillRect(cueX, cueY, cueWidth, 27);
     ctx.strokeStyle = "rgba(255, 176, 32, 0.34)";
-    ctx.strokeRect(cueX, cueY, cueWidth, progress > 0 ? 43 : 29);
+    ctx.strokeRect(cueX, cueY, cueWidth, 27);
     ctx.fillStyle = cueColor;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(cue, this.width / 2, cueY + 10);
+    if (cue) ctx.fillText(cue, this.width / 2, cueY + 8);
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(
-      `GUN ${String(ammo).padStart(3, "0")} · H ${hits}`,
-      this.width / 2,
-      cueY + 21,
-    );
-    if (progress > 0) {
-      const barWidth = cueWidth - 18;
-      const barX = cueX + 9;
-      const barY = cueY + 34;
-      ctx.fillStyle = "rgba(1, 8, 12, 0.78)";
-      ctx.fillRect(barX, barY, barWidth, 4);
-      ctx.fillStyle = "rgba(77, 255, 136, 0.16)";
-      ctx.fillRect(barX, barY, barWidth, 4);
-      ctx.fillStyle = GREEN;
-      ctx.fillRect(barX, barY, barWidth * progress, 4);
-    }
+    ctx.fillText(`G ${String(ammo).padStart(3, "0")}`, this.width / 2, cueY + 19);
     ctx.restore();
   }
 
@@ -629,38 +612,24 @@ class CombatHud {
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      ctx.fillStyle = color;
-      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(solution ? "SHOOT" : frame.padlock ? "TALLY" : "BOGEY", projection.x, projection.y - size - 5);
-
-      const rangeLine = formatRange(state.range_m);
-      ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      const closureLine = frame.padlock ? "" : `C ${formatSigned(state.closure_kts)} KT`;
-      const angleLine = frame.padlock ? "" : `AOFF ${Math.round(Number(state.angle_off_deg) || 0)}°`;
-      const textWidth = frame.padlock
-        ? ctx.measureText(rangeLine).width
-        : Math.max(
-          ctx.measureText(rangeLine).width,
-          ctx.measureText(closureLine).width,
-          ctx.measureText(angleLine).width,
-        );
-      const textHeight = frame.padlock ? 13 : 35;
-      const rightX = projection.x + size + 8;
-      const useRight = rightX + textWidth + 8 <= safe.right;
-      const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
-      const textY = clamp(projection.y - 17, safe.top, safe.bottom - textHeight);
-      ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
-      ctx.fillRect(textX - 4, textY - 2, textWidth + 8, textHeight + 2);
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillStyle = color;
-      ctx.fillText(rangeLine, textX, textY);
       if (!frame.padlock) {
+        const rangeLine = formatRange(state.range_m);
+        const closureLine = `C${formatSigned(state.closure_kts)}`;
+        ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        const textWidth = Math.max(ctx.measureText(rangeLine).width, ctx.measureText(closureLine).width);
+        const textHeight = 23;
+        const rightX = projection.x + size + 8;
+        const useRight = rightX + textWidth + 8 <= safe.right;
+        const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
+        const textY = clamp(projection.y - 11, safe.top, safe.bottom - textHeight);
+        ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
+        ctx.fillRect(textX - 4, textY - 2, textWidth + 8, textHeight + 2);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.fillStyle = color;
+        ctx.fillText(rangeLine, textX, textY);
         ctx.fillStyle = GREEN_DIM;
         ctx.fillText(closureLine, textX, textY + 12);
-        ctx.fillText(angleLine, textX, textY + 24);
       }
 
       const progress = clamp(Number(state.kill_progress) || 0, 0, 1);
@@ -736,11 +705,11 @@ class CombatHud {
     ctx.shadowBlur = 0;
     ctx.restore();
 
+    if (frame.padlock) return;
+
     const length = Math.hypot(dx, dy) || 1;
     const azimuth = angles.azimuth * RAD_TO_DEG;
-    const fullLabel = frame.padlock
-      ? `${Math.abs(azimuth) > 150 ? "6 · " : ""}BANDIT · ${formatRange(state.range_m)}`
-      : `${Math.abs(azimuth) > 150 ? "6 · " : ""}${formatRange(state.range_m)} · C ${formatSigned(state.closure_kts)} · AO ${Math.round(Number(state.angle_off_deg) || 0)}°`;
+    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${formatRange(state.range_m)} · C${formatSigned(state.closure_kts)}`;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
@@ -764,11 +733,6 @@ class CombatHud {
     return this.banditAnglesValue;
   }
 
-  banditAspect(frame) {
-    this.relative.copy(frame.banditPosition).sub(frame.playerPosition).normalize();
-    return Math.acos(clamp(frame.banditForward.dot(this.relative), -1, 1)) * RAD_TO_DEG;
-  }
-
   drawSaBar(frame) {
     if (!isFightHudActive(frame.state)) return;
     const ctx = this.ctx;
@@ -779,25 +743,12 @@ class CombatHud {
     const y = 47;
     const half = width / 2;
 
-    const wash = ctx.createLinearGradient(0, y - 25, 0, y + 34);
+    const wash = ctx.createLinearGradient(0, y - 12, 0, y + 34);
     wash.addColorStop(0, "rgba(1, 9, 14, 0)");
     wash.addColorStop(0.36, "rgba(1, 9, 14, 0.48)");
     wash.addColorStop(1, "rgba(1, 9, 14, 0)");
     ctx.fillStyle = wash;
-    ctx.fillRect(x0 - 12, y - 25, width + 24, 62);
-    ctx.fillStyle = GREEN_DIM;
-    ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    const azimuthDeg = Math.round(angles.azimuth * RAD_TO_DEG);
-    const relativeBearing = Math.abs(azimuthDeg) < 2
-      ? "RB 0°"
-      : `RB ${azimuthDeg < 0 ? "L" : "R"}${Math.abs(azimuthDeg)}°`;
-    ctx.fillText(
-      this.fitText(`BOGEY · ${relativeBearing} · E ${formatSigned(Math.round(angles.elevation * RAD_TO_DEG))}°`, width),
-      x0,
-      y - 13,
-    );
+    ctx.fillRect(x0 - 12, y - 12, width + 24, 49);
 
     this.setLine("rgba(77, 255, 136, 0.68)", 1);
     ctx.beginPath();
@@ -919,15 +870,15 @@ class CombatHud {
     const approach = mode === "APPROACH";
     const rolling = state.arrest_phase === "ARRESTED";
     const stopped = state.arrest_phase === "STOPPED";
-    const carrierFight = state.carrier === true && (mode === "FREE" || waveOff) && banditIsAlive(state);
-    const title = rolling
-      ? `TRAP · WIRE ${Number(state.wire) || "—"}`
-      : stopped ? "TRAP · STOP" : waveOff
-      ? "WAVE OFF"
-      : approach ? "APPROACH" : carrierFight ? "FIGHT" : "FREE";
-    const accent = waveOff ? RED : rolling ? AMBER : approach || stopped ? GREEN : carrierFight ? AMBER : "rgba(77, 255, 136, 0.46)";
-    const width = Math.min(250, this.width - 34);
-    const height = 31;
+    const trapped = rolling || stopped;
+    const splash = state.fight === "Splash" || state.bandit_alive === false;
+    const title = splash ? "SPLASH"
+      : trapped ? "TRAPPED"
+      : waveOff ? "WAVE-OFF"
+      : approach ? "APPROACH" : "FIGHT";
+    const accent = waveOff ? RED : trapped ? (stopped ? GREEN : AMBER) : approach || splash ? GREEN : AMBER;
+    const width = Math.min(136, this.width - 34);
+    const height = 27;
     const x = (this.width - width) / 2;
     const y = Math.max(143, this.safeInsets.top + 138);
 
@@ -948,34 +899,22 @@ class CombatHud {
     ctx.restore();
   }
 
-  // One compact conditions line. It stays glanceable for the pass, while a restart that selects
-  // different deterministic weather briefly calls attention to the shift without adding a new
-  // persistent instrument or modal briefing.
   drawDifficulty(state) {
     if (state.carrier !== true) return;
-    const level = Math.max(0, Math.round(Number(state.difficulty_level) || 0));
-    const attempt = Math.max(1, Math.round(Number(state.difficulty_attempt) || 1));
-    const label = String(state.difficulty_label || "CALM");
-    const signature = `${attempt}:${level}:${label}`;
-    const simTime = Number(state.t) || 0;
-    if (signature !== this._difficultySignature) {
-      if (this._difficultySignature !== null) this._difficultyCueUntil = simTime + 2.4;
-      this._difficultySignature = signature;
-    }
-
-    const shifted = simTime < this._difficultyCueUntil;
-    const status = state.difficulty_eased === true ? "EASED"
-      : state.difficulty_spike === true ? "CHALLENGE"
-      : "";
-    const text = `${shifted ? "CONDITIONS SHIFT · " : ""}L${level} · ${label}${status ? ` · ${status}` : ""}`;
+    const level = clamp(Math.round(Number(state.difficulty_level) || 0), 0, 5);
+    const text = level === 0 ? "L0 CALM"
+      : level === 1 ? "L1 MOD"
+      : level === 2 ? "L2 MOD"
+      : level === 3 ? "L3 ROUGH"
+      : level === 4 ? "L4 ROUGH" : "L5 ROUGH";
     const ctx = this.ctx;
     ctx.save();
     ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const width = Math.min(this.width - 34, Math.max(112, ctx.measureText(text).width + 24));
+    const width = Math.min(this.width - 34, 86);
     const height = 21;
     const x = (this.width - width) / 2;
     const y = Math.max(179, this.safeInsets.top + 174);
-    const accent = shifted || state.difficulty_spike === true ? AMBER : GREEN_DIM;
+    const accent = state.difficulty_spike === true ? AMBER : GREEN_DIM;
     this.glassPanel(x, y, width, height, accent);
     ctx.fillStyle = accent;
     ctx.textAlign = "center";
@@ -1146,10 +1085,10 @@ class CombatHud {
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText("G LOAD", x, y - 20);
+    ctx.fillText("G", x, y - 20);
     ctx.textAlign = "right";
     ctx.fillStyle = tierColor;
-    ctx.fillText(`${(Number(state.g_actual) || 0).toFixed(1)} G`, x + width, y - 20);
+    ctx.fillText((Number(state.g_actual) || 0).toFixed(1), x + width, y - 20);
 
     ctx.strokeStyle = GREEN_DIM;
     ctx.lineWidth = 2;
@@ -1205,24 +1144,8 @@ class CombatHud {
   }
 
   drawWarnings(frame) {
-    const { state, now, padlock } = frame;
+    const { state, now } = frame;
     const ctx = this.ctx;
-    const padlockLabel = "◆ PADLOCK";
-    const padlockWidth = 94;
-    const padlockX = this.safeInsets.left + 18;
-
-    if (padlock) {
-      ctx.fillStyle = "rgba(1, 9, 14, 0.44)";
-      ctx.fillRect(padlockX, 20, padlockWidth, 22);
-      ctx.strokeStyle = "rgba(255, 176, 32, 0.6)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(padlockX, 20, padlockWidth, 22);
-      ctx.fillStyle = AMBER;
-      ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(padlockLabel, padlockX + padlockWidth / 2, 31);
-    }
 
     if (state.tier === 3) {
       const warningY = state.mode ? 220 : 166;
@@ -1326,24 +1249,6 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawPrompt(state) {
-    const cues = ["", "PULL ↓", "EASE ↑", "UNLOAD ↑", "◀ ROLL", "ROLL ▶"];
-    const cue = cues[state.prompt] ?? "";
-    if (!cue) return;
-    const ctx = this.ctx;
-    const y = this.height - this.safeInsets.bottom - 74;
-    ctx.font = "800 18px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const width = ctx.measureText(cue).width + 34;
-    this.glassPanel((this.width - width) / 2, y - 18, width, 34, "rgba(255, 176, 32, 0.38)");
-    ctx.fillStyle = AMBER;
-    ctx.shadowColor = "rgba(255, 176, 32, 0.42)";
-    ctx.shadowBlur = 7;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(cue, this.width / 2, y);
-    ctx.shadowBlur = 0;
-  }
-
   fitText(text, maxWidth) {
     const ctx = this.ctx;
     if (ctx.measureText(text).width <= maxWidth) return text;
@@ -1410,11 +1315,11 @@ class CombatHud {
     const accent = critical ? RED : bingo ? AMBER : GREEN;
     const ctx = this.ctx;
     const width = Math.min(218, this.width - this.safeInsets.left - this.safeInsets.right - 36);
-    const height = 63;
+    const height = 54;
     const x = this.width - this.safeInsets.right - width - 18;
-    const y = this.height - this.safeInsets.bottom - 101;
+    const y = this.height - this.safeInsets.bottom - 92;
     const barX = x + 10;
-    const barY = y + 49;
+    const barY = y + 37;
     const barWidth = width - 20;
     const fuelRatio = clamp(fuel / capacity, 0, 1);
     const currentX = barX + barWidth * fuelRatio;
@@ -1425,23 +1330,14 @@ class CombatHud {
     ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillStyle = GREEN_DIM;
-    ctx.fillText("FUEL · T5", x + 10, y + 10);
-    if (bingo) {
-      ctx.textAlign = "right";
-      ctx.fillStyle = accent;
-      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText(critical ? "FUEL LOW" : "BINGO", x + width - 10, y + 10);
-    }
-
     ctx.fillStyle = accent;
-    ctx.font = "800 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
-    ctx.fillText(`${String(Math.round(fuel)).padStart(4, "0")} LB`, x + 10, y + 29);
+    ctx.fillText(`${String(Math.round(fuel)).padStart(4, "0")} LB`, x + 10, y + 13);
     ctx.fillStyle = bingo ? accent : GREEN_DIM;
-    ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "right";
-    ctx.fillText(`FF ${Math.round(burn)} LB/M`, x + width - 10, y + 29);
+    ctx.fillText(`${Math.round(burn)} LB/MIN`, x + width - 10, y + 13);
 
     ctx.fillStyle = "rgba(77, 255, 136, 0.12)";
     ctx.fillRect(barX, barY, barWidth, 5);
@@ -1472,6 +1368,12 @@ class CombatHud {
       ctx.closePath();
       ctx.fill();
     }
+    if (bingo) {
+      ctx.fillStyle = accent;
+      ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(critical ? "LOW" : "BINGO", x + width / 2, y + 49);
+    }
     ctx.restore();
   }
 
@@ -1493,22 +1395,13 @@ class CombatHud {
     const dataLeft = x + 108;
     const dataWidth = width - 118;
     const targetLeft = dataLeft + dataWidth * 0.53;
-    const aspect = this.banditAspect(frame);
-    const angleOff = Math.max(0, Number(state.angle_off_deg) || 0);
-    const range = Math.max(0, Number(state.range_m) || 0);
-    const closure = Number(state.closure_kts) || 0;
-    const approachingGuns = closure > 0 && range <= 2000 && angleOff <= 35;
-    const gunCue = hasGunSolution(state)
-      ? "GUNS · SHOOT"
-      : state.gun_window === true
-      ? "GUNS · WINDOW"
-      : approachingGuns
-      ? "GUNS · CLOSING"
-      : "GUNS · NO SHOT";
-    const gunColor = hasGunSolution(state) || state.gun_window === true
-      ? AMBER
-      : approachingGuns ? GREEN : GREEN_DIM;
+    const ammo = Math.max(0, Number(state.ammo) || 0);
+    const cue = gunCue(state, frame.now < this._hitFlashUntil);
+    const gunColor = cue === "EMPTY" ? RED
+      : cue === "SHOOT" || cue === "HITS" ? GREEN
+      : cue === "IN RANGE" ? AMBER : GREEN_DIM;
     const ownFuel = Math.max(0, Number(state.fuel_lb) || 0);
+    const fuelBurn = Math.max(0, Number(state.fuel_burn_lb_min) || 0);
     const bingoThreshold = bingoFuelLb(state);
     const ownFuelLow = state.fuel_bingo === true || ownFuel <= bingoThreshold;
 
@@ -1583,46 +1476,39 @@ class CombatHud {
     ctx.lineTo(targetLeft - 9, y + height - 12);
     ctx.stroke();
 
-    ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
-    ctx.fillStyle = GREEN_DIM;
-    ctx.fillText("OWN", dataLeft, y + 15);
-    ctx.fillStyle = AMBER;
-    ctx.fillText("BANDIT", targetLeft, y + 15);
+    ctx.fillStyle = GREEN;
+    ctx.fillText(`${Math.round(Number(state.speed_kts) || 0)} KT`, dataLeft, y + 21);
+    ctx.fillText(`${Math.round(Number(state.alt_ft) || 0)} FT`, dataLeft, y + 42);
+    ctx.fillText(`G ${(Number(state.g_actual) || 0).toFixed(1)} · α ${(Number(state.aoa_deg) || 0).toFixed(1)}°`, dataLeft, y + 63);
+    ctx.fillStyle = ownFuelLow ? (ownFuel <= bingoThreshold * 0.5 ? RED : AMBER) : GREEN;
+    ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText(`${Math.round(ownFuel)}LB ${Math.round(fuelBurn)}LB/MIN`, dataLeft, y + 84);
 
     ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillStyle = GREEN;
-    ctx.fillText(`IAS ${Math.round(Number(state.speed_kts) || 0)} KT`, dataLeft, y + 35);
-    ctx.fillText(`ALT ${Math.round(Number(state.alt_ft) || 0)} FT`, dataLeft, y + 54);
-    ctx.fillText(`G ${(Number(state.g_actual) || 0).toFixed(1)} · α ${(Number(state.aoa_deg) || 0).toFixed(1)}°`, dataLeft, y + 73);
-    ctx.fillStyle = ownFuelLow ? (ownFuel <= bingoThreshold * 0.5 ? RED : AMBER) : GREEN;
-    ctx.fillText(
-      `${ownFuelLow ? "BINGO" : "FUEL"} ${Math.round(ownFuel)} LB`,
-      dataLeft,
-      y + 92,
-    );
-
     ctx.fillStyle = AMBER;
-    ctx.fillText(`R ${formatRange(state.range_m)}`, targetLeft, y + 35);
-    ctx.fillText(`C ${formatSigned(state.closure_kts)} KT`, targetLeft, y + 54);
-    ctx.fillText(`ASP ${Math.round(aspect)}° · AO ${Math.round(angleOff)}°`, targetLeft, y + 73);
+    ctx.fillText(formatRange(state.range_m), targetLeft, y + 21);
+    ctx.fillText(`C${formatSigned(state.closure_kts)}`, targetLeft, y + 42);
+    ctx.fillText(`G ${String(ammo).padStart(3, "0")}`, targetLeft, y + 63);
     ctx.fillStyle = gunColor;
-    ctx.fillText(gunCue, targetLeft, y + 92);
+    if (cue) ctx.fillText(cue, targetLeft, y + 84);
     ctx.restore();
   }
 
   drawFooter(state) {
     const mode = hudMode(state);
-    if (state.carrier !== true || mode !== "APPROACH") return;
+    if (state.carrier !== true || (mode !== "APPROACH" && mode !== "WAVE-OFF")) return;
     const call = lsoToken(String(state.lso ?? state.context ?? ""));
     if (!call) return;
 
     const ctx = this.ctx;
+    const accent = call === "WAVE OFF" ? RED : state.lso_severity === "CORRECTING" ? AMBER : GREEN;
     const y = this.height - this.safeInsets.bottom - 21;
     ctx.font = "800 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const width = Math.max(72, ctx.measureText(call).width + 28);
-    this.glassPanel((this.width - width) / 2, y - 14, width, 28, "rgba(77, 255, 136, 0.34)");
-    ctx.fillStyle = state.lso_severity === "CORRECTING" ? AMBER : GREEN;
+    this.glassPanel((this.width - width) / 2, y - 14, width, 28, accent);
+    ctx.fillStyle = accent;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(call, this.width / 2, y);
@@ -1713,7 +1599,7 @@ class CombatHud {
       this.drawVerticalTape({
         value: Number(frame.state.alt_ft) || 0,
         x: this.width - tapeInset,
-        label: "ALT FT",
+        label: "FT",
         floor: 0,
         step: frame.state.alt_ft > 10000 ? 1000 : 500,
         decimals: 0,
@@ -1725,18 +1611,10 @@ class CombatHud {
     this.drawWarnings(frame);
     this.drawAoAIndexer(frame.state);
     this.drawPadlockSa(frame);
-    this.drawPrompt(frame.state);
     this.drawFooter(frame.state);
     this.drawLegend(Boolean(frame.state.frozen));
     this.drawMode(frame.state);
     this.drawDifficulty(frame.state);
-    // Build stamp (top-left): so a stale cached tab is instantly obvious. Bump on each publish.
-    ctx.save();
-    ctx.fillStyle = "rgba(77, 255, 136, 0.35)";
-    ctx.font = "600 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "left"; ctx.textBaseline = "top";
-    ctx.fillText("BUILD 30", this.safeInsets.left + 8, this.safeInsets.top + 8);
-    ctx.restore();
     this.drawEnding(frame);
   }
 }

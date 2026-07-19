@@ -32,11 +32,12 @@ public class FightControlTests {
     }
 
     [Fact]
-    public void FullBackstickAtNinetyDegreesBankProducesAeroLimitG() {
+    public void FullBackstickAtNinetyDegreesBankProducesStructuralLimitG() {
         // Regression for BUILD 29: finite CommandedPitchRad bypassed GDemand, while the uninitialised
         // bank target simultaneously dragged an already-banked jet toward wings level.
         var rig = new FightRig(375, 90);
-        double initialAeroLimit = FlightModel.NzAeroMax(rig.Sim.State, FlightModel.Sabre);
+        double initialLimit = System.Math.Min(FlightModel.NzAeroMax(rig.Sim.State, FlightModel.Sabre),
+            FlightModel.Sabre.PositiveStructuralLimitG);
         rig.Set(GKey.PullUp, true);
         double maxNz = 0.0;
 
@@ -45,9 +46,9 @@ public class FightControlTests {
             maxNz = System.Math.Max(maxNz, rig.Sim.LastNz);
         }
 
-        Assert.True(maxNz >= 0.90 * initialAeroLimit,
-            $"90-deg-bank full pull only made {maxNz:F2} G of {initialAeroLimit:F2} available");
-        Assert.True(rig.Sim.LastNz > 6.4, $"G meter still reads only {rig.Sim.LastNz:F2} G");
+        Assert.True(maxNz >= 0.98 * initialLimit,
+            $"90-deg-bank full pull only made {maxNz:F2} G of {initialLimit:F2} allowed");
+        Assert.True(rig.Sim.LastNz > 6.4, $"G meter no longer holds near +7 G: {rig.Sim.LastNz:F2} G");
         Assert.True(System.Math.Abs(rig.Sim.BodyRollRad) * Deg > 80.0,
             $"fight augmentation dragged bank to {rig.Sim.BodyRollRad * Deg:F1} deg");
     }
@@ -68,8 +69,8 @@ public class FightControlTests {
         sustained.Set(GKey.PullUp, true);
         for (int i = 0; i < 240; i++) sustained.Step();
 
-        Assert.InRange(cornerPeak, 6.5, 7.3);
-        Assert.InRange(sustained.Sim.LastNz, 4.9, 5.8);
+        Assert.InRange(cornerPeak, 6.8, 7.2);              // report: 7.06 G at 375 kt
+        Assert.InRange(sustained.Sim.LastNz, 4.9, 5.5);   // real F-86 target: ~5 G
     }
 
     [Fact]

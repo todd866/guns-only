@@ -227,7 +227,10 @@ public class CarrierFlightHarnessTests {
             // Fly the VV at the active wire zone. Once it catches, the same loop continues through
             // the deterministic arrestment so Trap is terminal success only after a dead stop.
             if (rig.Recovery == Carrier.Recovery.Flying) {
-                var toTd = rig.Ship.TouchdownPoint - rig.S.Position;
+                // The lower accurate induced drag makes the flight path respond more slowly to the
+                // last pitch correction. Aim through the wire zone so that lag still reaches deck.
+                var aimPoint = rig.Ship.TouchdownPoint + rig.Ship.LandingFwd * 80.0;
+                var toTd = aimPoint - rig.S.Position;
                 double wantGamma = Math.Asin(Math.Clamp(toTd.Y / Math.Max(toTd.Length, 1), -1, 1));
                 double err = rig.S.Gamma - wantGamma;                   // <0 = below the line, need up
                 rig.Key(GKey.PullUp, err < -0.006);
@@ -251,7 +254,7 @@ public class CarrierFlightHarnessTests {
         Assert.InRange(rig.Arrestment.ElapsedSeconds, 2.0, 3.0);
     }
 
-    // ---- FULL SORTIE: finals → max A/B → clean egress → lead pursuit → real ballistic gun kill. ----
+    // ---- FULL SORTIE: finals → firewalled J47 → clean egress → real ballistic gun kill. ----
     [Fact]
     public void PilotStartsOnFinalsFirewallsEgressesAndKills() {
         var rig = new CarrierRig();
@@ -262,7 +265,7 @@ public class CarrierFlightHarnessTests {
 
         // The sortie brief says firewall on spawn; hold W before the first auto-throttle tick, just
         // as a player can while the beat comes alive.
-        rig.Key(GKey.ThrottleUp, true);                         // firewall through max A/B
+        rig.Key(GKey.ThrottleUp, true);                         // firewall; F-86 thrust caps at MIL
         bool leftApproachLaw = false;
         double freeAt = double.NaN;
         while (rig.TimeSeconds < 6.0 && rig.Recovery == Carrier.Recovery.Flying) {
@@ -275,9 +278,9 @@ public class CarrierFlightHarnessTests {
         Assert.True(double.IsFinite(freeAt), "the five-second wave-off must settle into FREE flight");
         Assert.InRange(freeAt, 0.0, 5.5);
 
-        // Establish a shallow combat climb, then unload and let max A/B build fighting energy.
-        while (rig.TimeSeconds < 40.0 && rig.Recovery == Carrier.Recovery.Flying
-               && (rig.S.Position.Y < finalsAlt + 450.0 || rig.S.Speed < 130.0)) {
+        // Establish a shallow combat climb, then unload and let firewalled dry thrust build energy.
+        while (rig.TimeSeconds < 20.0 && rig.Recovery == Carrier.Recovery.Flying
+               && (rig.S.Position.Y < finalsAlt + 100.0 || rig.S.Speed < 100.0)) {
             rig.Key(GKey.PullUp, rig.S.Gamma < 0.09);
             rig.Key(GKey.PushDown, rig.S.Gamma > 0.18);
             rig.Step();
@@ -286,10 +289,11 @@ public class CarrierFlightHarnessTests {
         rig.Key(GKey.PushDown, false);
         double egressAt = rig.TimeSeconds, egressAlt = rig.S.Position.Y, egressSpeedKt = rig.SpeedKt;
         Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
-        Assert.True(rig.Throttle > 1.25, $"firewall must reach max A/B; lever={rig.Throttle:F2}");
-        Assert.True(rig.S.Position.Y > finalsAlt + 400.0,
+        Assert.True(rig.Throttle > 1.25, $"generic command lever must reach its stop; lever={rig.Throttle:F2}");
+        Assert.Equal(1.0, FlightModel.Sabre.MaxThrustFraction); // J47-GE-27 has no afterburner
+        Assert.True(rig.S.Position.Y > finalsAlt + 150.0,
             $"egress must gain useful altitude: {finalsAlt:F0}→{rig.S.Position.Y:F0} m");
-        Assert.True(rig.S.Speed > Math.Max(125.0, finalsSpeed + 50.0),
+        Assert.True(rig.S.Speed > Math.Max(95.0, finalsSpeed + 20.0),
             $"egress must build fighting energy: {finalsSpeed:F0}→{rig.S.Speed:F0} m/s");
         Assert.True(Finite(rig.S) && rig.S.Speed > 60.0, "the pilot must stay finite and flying");
         Assert.True(Math.Abs(rig.S.Bank) < 0.15, "the egress must be cleaned up wings-level before the intercept");
@@ -301,6 +305,7 @@ public class CarrierFlightHarnessTests {
         bool achievedLead = false;
         double leadAt = double.NaN, leadAvailableAt = double.NaN, firstHitAt = double.NaN;
         double minAimErrorDeg = double.PositiveInfinity, minRangeM = double.PositiveInfinity;
+        Vec3D previousBanditVelocity = rig.B.VelocityVector();
         // Keep integrating past the 75 s performance gate so a late outcome produces a useful
         // assertion instead of being indistinguishable from a loop cutoff; the assertion below
         // still requires the BUILD 25 intercept to splash before 75 s.
@@ -318,8 +323,18 @@ public class CarrierFlightHarnessTests {
             rig.Key(GKey.ThrottleUp, needCombatPower);
             rig.Key(GKey.ThrottleDown, brakeForOvershoot);
             // Outside ballistic range, close in pure pursuit. Once a finite solution appears,
-            // fly the actual lead point: this is the same pipper solution emitted to the HUD.
-            Vec3D aimPoint = rig.Fight.HasLeadSolution ? rig.Fight.LeadPipper : rig.B.Position;
+            // refine the HUD's constant-velocity pipper with observed target acceleration.
+            Vec3D banditVelocity = rig.B.VelocityVector();
+            Vec3D banditAcceleration = (banditVelocity - previousBanditVelocity) * 120.0;
+            previousBanditVelocity = banditVelocity;
+            double acceleration = banditAcceleration.Length;
+            if (acceleration > 30.0) banditAcceleration *= 30.0 / acceleration;
+            // The production pipper solves constant-velocity ballistics. A competent pilot against
+            // this continuously maneuvering bogey adds the observed acceleration over bullet TOF.
+            Vec3D aimPoint = rig.Fight.HasLeadSolution
+                ? rig.Fight.LeadPipper + banditAcceleration
+                    * (0.5 * rig.Fight.LeadTimeOfFlight * rig.Fight.LeadTimeOfFlight)
+                : rig.B.Position;
             bool deckRecovery = rig.S.Position.Y < 330.0;
             double wantBank = deckRecovery ? 0.0 : Geometry.BankToPlaceLiftVectorOn(rig.S, aimPoint);
             double bankError = Math.IEEERemainder(wantBank - rig.S.Bank, 2.0 * Math.PI);

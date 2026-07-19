@@ -54,14 +54,14 @@ public class DetentLayerTests {
         Assert.Equal(DemandTier.Valley, d.Tier);
         Assert.True(d.Command.GDemand <= Protection.MaxPerformG(Fast, FlightModel.Sabre) + 1e-6);
     }
-    [Fact] public void OverrideKeyPullsPastProtectionIntoTheBuffet() {
+    [Fact] public void OverrideCannotPullPastSabreStructuralLimit() {
         var d = new DetentLayer { Variant = ValleyVariant.DoctrineDeep }; var g = new KeyGrammar();
         g.Feed(GKey.PullUp, true, 0);
         g.Feed(GKey.Override, true, 0);   // hold spacebar: override the protection ceiling
         Run(d, g, 0, 2000, Fast);
         Assert.Equal(DemandTier.OverDemand, d.Tier);
-        Assert.True(d.Command.GDemand > Protection.MaxPerformG(Fast, FlightModel.Sabre) + 0.4);
-        Assert.True(d.Command.GDemand <= Protection.HardMaxG(Fast, FlightModel.Sabre) + 1e-6);
+        // The F-86 maps ordinary full backstick to +7 G, so override has no extra positive-G spar.
+        Assert.Equal(Protection.HardMaxG(Fast, FlightModel.Sabre), d.Command.GDemand, 6);
     }
     [Fact] public void ReleasingOverrideReturnsToProtectedPull() {
         var d = new DetentLayer { Variant = ValleyVariant.PhysicsOnly }; var g = new KeyGrammar();
