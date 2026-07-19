@@ -14,9 +14,13 @@ public class DifficultyTests {
 
     static AircraftState Contact(
         Carrier ship, double speedMps = 70.0, double gammaRad = -0.061,
-        double crossM = 0.0) =>
-        new(ship.LandingPoint(ship.WireAlongM(3), crossM), speedMps, gammaRad,
-            ship.LandingHeadingRad, Bank: 0.0, Mass: FlightModel.Sabre.MassKg);
+        double crossM = 0.0) {
+        var airState = new AircraftState(
+            ship.LandingPoint(ship.WireAlongM(3) + Carrier.HookToMainGearM, crossM),
+            speedMps, gammaRad, ship.LandingHeadingRad,
+            Bank: 0.0, Mass: FlightModel.Sabre.MassKg);
+        return ship.ToWorldStateFromAir(airState, DetentLayer.OnSpeedAoARad);
+    }
 
     [Fact]
     public void LevelZeroIsExactBaselineAndStillTraps() {
@@ -39,12 +43,12 @@ public class DifficultyTests {
         Assert.Equal(0.0, difficultyPath.DeckPitchRad);
         Assert.Equal(0.0, difficultyPath.DeckHeaveM);
 
-        // Deliberately outside every earned-level quality window while still physically on deck:
-        // baseline must retain the historical physical-contact trap result.
+        // The carrier-physics window now applies even on the calm first pass: merely crossing the
+        // contact plane is not a trap. Difficulty still layers its narrower earned window on top.
         var poorButPhysicalContact = Contact(difficultyPath,
             speedMps: 110.0, gammaRad: -0.18, crossM: 14.0);
-        Assert.Equal(Carrier.Recovery.Trap, difficultyPath.Classify(poorButPhysicalContact));
-        Assert.Equal(Carrier.Recovery.Trap,
+        Assert.NotEqual(Carrier.Recovery.Trap, difficultyPath.Classify(poorButPhysicalContact));
+        Assert.NotEqual(Carrier.Recovery.Trap,
             difficultyPath.Classify(poorButPhysicalContact, baseline));
     }
 
@@ -138,7 +142,7 @@ public class DifficultyTests {
 
         Assert.Equal(Carrier.Recovery.Trap,
             ship.Classify(Contact(ship), rough));
-        Assert.Equal(Carrier.Recovery.Bolter,
+        Assert.Equal(Carrier.Recovery.HardLanding,
             ship.Classify(Contact(ship, gammaRad: -0.15), rough));
         Assert.Equal(Carrier.Recovery.Bolter,
             ship.Classify(Contact(ship, crossM: 10.0), rough));

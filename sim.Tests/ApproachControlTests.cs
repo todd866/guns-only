@@ -28,6 +28,7 @@ public class ApproachControlTests {
     static AircraftState Approach() =>
         new(new Vec3D(0, 110, -1500), 70.0, GsRef, 0.0, 0.0, FlightModel.Sabre.MassKg);
     static readonly DoctrineAdvice Ball = new(1.0, 0.0, "on the ball");
+    sealed class ZeroWind : IWindField { public Vec3D Sample(Vec3D _) => Vec3D.Zero; }
 
     static (AircraftSim sim, DetentLayer d, KeyGrammar g) Rig(IWindField? wind) => (
         new AircraftSim(Approach(), FlightModel.Sabre) { Wind = wind },
@@ -139,12 +140,36 @@ public class ApproachControlTests {
         var burble = new BurbleField(ship, new TurbulenceField(intensityMps: 4.0, outerScaleM: 80.0, intermittency: 0.6, seed: 0xB0A7));
         double MagAt(double astern) {
             double h = 20 + Math.Abs(astern) * Math.Tan(3.5 * Math.PI / 180.0);   // glideslope height
-            return burble.Sample(new Vec3D(0, h, astern)).Length;                 // sim z astern (ship heads +z)
+            return (burble.Sample(new Vec3D(0, h, astern))
+                - ship.SteadyWindWorld).Length;                                  // disturbance above steady WOD
         }
         double far = MagAt(-900), wake = MagAt(-150);
         _o.WriteLine($"BURBLE: |wind| at 900 m astern={far:F2} m/s (should be ~calm), in the wake (150 m)={wake:F2} m/s");
         Assert.True(far < 0.3, $"air must be near-smooth far from the ship; was {far:F2} m/s");
         Assert.True(wake > far + 1.0, $"the wake must be rougher than clear air; wake {wake:F2} vs far {far:F2}");
+    }
+
+    [Fact]
+    public void InCloseBurbleCreatesAPowerCorrectableSettleBeforeTheRamp() {
+        var ship = new Carrier(new Vec3D(0, 20, 0), 0, 3, 20, 250, 30);
+        var burble = new BurbleField(ship, new ZeroWind(), sinkMps: 1.8);
+        Vec3D OnSlope(double along) {
+            double height = Math.Max(0.0, ship.TouchdownAlongM - along)
+                * Carrier.GlideslopeSlope;
+            return ship.LandingPoint(along, height: height);
+        }
+
+        var far = OnSlope(-600.0);
+        var inClose = OnSlope(-185.0);
+        double farSink = -(burble.Sample(far) - ship.SteadyWindWorld).Y;
+        double closeSink = -(burble.Sample(inClose) - ship.SteadyWindWorld).Y;
+
+        Assert.Equal(0.0, burble.InCloseStrength(far), 12);
+        Assert.InRange(burble.InCloseStrength(inClose), 0.80, 1.0);
+        Assert.InRange(farSink, -1e-12, 1e-12);
+        Assert.InRange(closeSink, 1.9, 2.4);
+        Assert.True(closeSink < Carrier.MinTrapSinkMps,
+            "the burble adds a correction demand, not an unrecoverable vertical cliff by itself");
     }
 
     // ---- 4. GLIDEPATH HOLD: hands-off, power holds the slope (no runaway sink into the ramp). ----

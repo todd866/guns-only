@@ -24,6 +24,7 @@ public class CarrierFlightHarnessTests {
         public readonly AircraftSim Player;
         public readonly IBandit Bandit;
         public readonly Carrier Ship;
+        public readonly BurbleField Burble;
         public readonly GunKill Fight = new();
         public readonly ArrestmentModel Arrestment = new();
         readonly DetentLayer _d = new() { Variant = ValleyVariant.PhysicsOnly };   // parity with the carrier beat
@@ -36,8 +37,10 @@ public class CarrierFlightHarnessTests {
         double _waveOffUntil = double.NegativeInfinity;
         const double Dt = 1.0 / 120.0;
         public Carrier.Recovery Recovery = Carrier.Recovery.Flying;
+        public Carrier.TouchdownResult LastTouchdown = Carrier.TouchdownResult.Flying;
         public bool ApproachMode { get; private set; }
-        public bool Terminal => Recovery is Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater
+        public bool Terminal => Recovery is Carrier.Recovery.HardLanding
+            or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater
             || (Recovery == Carrier.Recovery.Trap
                 && Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped)
             || Fight.Outcome == FightOutcome.Splash;
@@ -45,11 +48,12 @@ public class CarrierFlightHarnessTests {
         public CarrierRig(Carrier.DeckConfiguration configuration = Carrier.DeckConfiguration.Axial) {
             var beat = Beats.CarrierApproach(configuration);
             Ship = beat.Carrier!;
-            Player = new AircraftSim(beat.Player, beat.PlayerAir) {
-                Wind = new BurbleField(Ship,
-                    new TurbulenceField(intensityMps: 3.0, outerScaleM: 80.0, intermittency: 0.6, seed: 0xB0A7),
-                    sinkMps: 1.8)
-            };
+            var windResolvedPlayer = Ship.ToWorldStateFromAir(
+                beat.Player, DetentLayer.OnSpeedAoARad);
+            Burble = new BurbleField(Ship,
+                new TurbulenceField(intensityMps: 3.0, outerScaleM: 80.0, intermittency: 0.6, seed: 0xB0A7),
+                sinkMps: 1.8);
+            Player = new AircraftSim(windResolvedPlayer, beat.PlayerAir) { Wind = Burble };
             Bandit = beat.CreateBandit();
         }
 
@@ -61,8 +65,11 @@ public class CarrierFlightHarnessTests {
         public AircraftState B => Bandit.State;
         public double TimeSeconds => _t / 1000.0;
         public double SpeedKt => S.Speed * 1.94384;
+        public double AirspeedMps => Ship.AirspeedMps(S);
+        public double DeckClosureMps => Ship.DeckClosureMps(S);
         public double GammaDeg => S.Gamma * 57.29578;
         public double Throttle => _d.Throttle;
+        public double CommandedPitchRad => _d.CommandedPitchRad;
         public string Mode => _t < _waveOffUntil ? "WAVE-OFF" : ApproachMode ? "APPROACH" : "FREE";
         public LsoAdvice? LsoCall => Lso.AdviseForMode(Ship, S, Player.AngleOfAttackRad,
             DetentLayer.OnSpeedAoARad, Mode == "APPROACH", Mode == "WAVE-OFF");
@@ -77,7 +84,8 @@ public class CarrierFlightHarnessTests {
         public double GlideslopeErrorM {
             get {
                 var (along, _, height) = Deck;
-                double lineH = Math.Max(0.0, -Ship.DeckLengthM * 0.2 - along) * 0.06116;
+                double lineH = Math.Max(0.0, -Ship.DeckLengthM * 0.2 - along)
+                    * Carrier.GlideslopeSlope;
                 return lineH - height;
             }
         }
@@ -95,6 +103,8 @@ public class CarrierFlightHarnessTests {
             if (ApproachMode) _waveOffArmed = true;
             else if (!inSlot && _d.Throttle < 0.95) _waveOffArmed = false;
             _d.GlideslopeErrorM = GlideslopeErrorM;   // spatial error to the wire-zone contact plane
+            _d.ApproachAirspeedMps = Ship.AirspeedMps(Player.State);
+            _d.DeckClosureMps = Ship.DeckClosureMps(Player.State);
             _d.Tick(_keys, _t, Player.State, _air, _advice, Dt);
             if (_waveOffArmed && _d.Throttle >= 0.95) {
                 _waveOffUntil = _t + 5000.0;
@@ -108,9 +118,22 @@ public class CarrierFlightHarnessTests {
             Player.Step(_d.Command, Dt);
             if (Fight.BanditAlive) Bandit.Step(Player.State, Dt);
             Ship.Step(Dt);
-            Recovery = Ship.Classify(Player.State);
+            var touchdown = Ship.EvaluateRecovery(Player.State, Player.AngleOfAttackRad,
+                DifficultyModel.ForLevel(0));
+            if (LastTouchdown.Recovery == Carrier.Recovery.Flying
+                && touchdown.Recovery != Carrier.Recovery.Flying)
+                LastTouchdown = touchdown;
+            if (touchdown.Recovery == Carrier.Recovery.Bolter) {
+                Recovery = Carrier.Recovery.Bolter;
+            } else if (Recovery == Carrier.Recovery.Bolter) {
+                if (touchdown.Recovery is Carrier.Recovery.HardLanding
+                    or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater)
+                    Recovery = touchdown.Recovery;
+            } else {
+                Recovery = touchdown.Recovery;
+            }
             if (Recovery == Carrier.Recovery.Trap)
-                Arrestment.Engage(Ship, Player.State, Player.BodyPitchRad);
+                Arrestment.Engage(Ship, Player.State, Player.BodyPitchRad, touchdown.Wire);
             _t += Dt * 1000.0;
             if (!double.IsFinite(S.Position.Y) || !double.IsFinite(S.Speed))
                 throw new InvalidOperationException($"non-finite state at t={_t / 1000:F1}s");
@@ -227,31 +250,39 @@ public class CarrierFlightHarnessTests {
             // Fly the VV at the active wire zone. Once it catches, the same loop continues through
             // the deterministic arrestment so Trap is terminal success only after a dead stop.
             if (rig.Recovery == Carrier.Recovery.Flying) {
-                // The lower accurate induced drag makes the flight path respond more slowly to the
-                // last pitch correction. Aim through the wire zone so that lag still reaches deck.
-                var aimPoint = rig.Ship.TouchdownPoint + rig.Ship.LandingFwd * 80.0;
-                var toTd = aimPoint - rig.S.Position;
-                double wantGamma = Math.Asin(Math.Clamp(toTd.Y / Math.Max(toTd.Length, 1), -1, 1));
-                double err = rig.S.Gamma - wantGamma;                   // <0 = below the line, need up
-                rig.Key(GKey.PullUp, err < -0.006);
-                rig.Key(GKey.PushDown, err > 0.006);
+                // Fly 70 m/s AIRSPEED, add power for spatial low-ball error, and anticipate the
+                // measured in-close sink so the J47 has time to spool. That last term is the
+                // scripted equivalent of the classic in-close "POWER" correction; it is not a flare.
+                double burble = rig.Burble.InCloseStrength(rig.S.Position);
+                var deck = rig.Deck;
+                double responseLead = rig.Ship.Configuration == Carrier.DeckConfiguration.Angled
+                    ? 35.0 : 60.0;
+                double targetAlong = rig.Ship.TouchdownAlongM + responseLead;
+                double wantDeckGamma = Math.Atan2(-deck.height,
+                    Math.Max(1.0, targetAlong - deck.along));
+                double desiredPitch = wantDeckGamma + DetentLayer.OnSpeedAoARad;
+                double pitchError = desiredPitch - rig.CommandedPitchRad;
+                rig.Key(GKey.PullUp, pitchError > 0.0025);
+                rig.Key(GKey.PushDown, pitchError < -0.0025);
 
-                double wantPower = Math.Clamp(0.16 + 0.010 * rig.GlideslopeErrorM
-                                                   + 0.026 * (70.0 - rig.S.Speed), 0.02, 0.90);
-                rig.Key(GKey.ThrottleUp, rig.Throttle < wantPower - 0.015);
-                rig.Key(GKey.ThrottleDown, rig.Throttle > wantPower + 0.015);
+                double wantPower = Math.Clamp(0.16 + 0.025 * rig.GlideslopeErrorM
+                    + 0.035 * (70.0 - rig.AirspeedMps) + 0.15 * burble, 0.02, 0.90);
+                if (rig.Deck.along > -500.0) {
+                    rig.Key(GKey.ThrottleUp, rig.Throttle < wantPower - 0.015);
+                    rig.Key(GKey.ThrottleDown, rig.Throttle > wantPower + 0.015);
+                }
             }
             rig.Step();
         }
         var (along, cross, h) = rig.Deck;
-        _o.WriteLine($"WINNABLE {configuration}: recovery={rig.Recovery}/{rig.Arrestment.Phase} wire={rig.Arrestment.CaughtWire} after {steps} steps  along={along:F0} cross={cross:F0} h={h:F1}  stop={rig.Arrestment.DistanceM:F1}m/{rig.Arrestment.ElapsedSeconds:F2}s");
+        _o.WriteLine($"WINNABLE {configuration}: recovery={rig.Recovery}/{rig.Arrestment.Phase} wire={rig.Arrestment.CaughtWire} after {steps} steps  along={along:F0} cross={cross:F0} h={h:F1}  sink={rig.LastTouchdown.SinkRateMps:F2}m/s air={rig.LastTouchdown.AirspeedMps:F1} closure={rig.LastTouchdown.ClosureMps:F1} aoa={rig.Player.AngleOfAttackRad * 57.2958:F1}deg hook={rig.LastTouchdown.Hook} quality={rig.LastTouchdown.Quality} stop={rig.Arrestment.DistanceM:F1}m/{rig.Arrestment.ElapsedSeconds:F2}s");
         Assert.NotEqual(Carrier.Recovery.InTheWater, rig.Recovery);
         Assert.Equal(Carrier.Recovery.Trap, rig.Recovery);   // flying the VV at the wires must TRAP
         Assert.Equal(ArrestmentModel.ArrestmentPhase.Stopped, rig.Arrestment.Phase);
         Assert.InRange(rig.Arrestment.CaughtWire, 1, 4);
         Assert.Equal(0.0, rig.Arrestment.RelativeSpeedMps, 10);
-        Assert.InRange(rig.Arrestment.DistanceM, 65.0, 90.0);
-        Assert.InRange(rig.Arrestment.ElapsedSeconds, 2.0, 3.0);
+        Assert.InRange(rig.Arrestment.DistanceM, 90.0, 100.0);
+        Assert.InRange(rig.Arrestment.ElapsedSeconds, 3.0, 5.5);
     }
 
     // ---- FULL SORTIE: finals → firewalled J47 → clean egress → real ballistic gun kill. ----

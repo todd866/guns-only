@@ -29,6 +29,104 @@ const smallViewport = Math.min(
 const mobileControls = coarsePointer || (touchCapable && smallViewport);
 document.documentElement.classList.toggle("touch-mode", mobileControls);
 
+// Keep the phone controls in two shallow, thumb-sized edge groups. The page owns the base visual
+// treatment; this mobile-only override owns the live control geometry so the HUD can reserve a
+// matching clear strip without changing the desktop layout.
+if (mobileControls) {
+  const mobileLayout = document.createElement("style");
+  mobileLayout.id = "mobile-flight-layout";
+  mobileLayout.textContent = `
+    .touch-mode .touch-left,
+    .touch-mode .touch-right {
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+      gap: 5px;
+      transform: none;
+    }
+
+    .touch-mode .touch-left {
+      left: calc(env(safe-area-inset-left, 0px) + 8px);
+    }
+
+    .touch-mode .touch-right {
+      right: calc(env(safe-area-inset-right, 0px) + 8px);
+    }
+
+    .touch-mode .touch-control {
+      min-width: 46px;
+      min-height: 44px;
+      padding: 5px 7px;
+      font-size: 9px;
+      letter-spacing: .045em;
+    }
+
+    .touch-mode .touch-stack {
+      display: grid;
+      grid-template-columns: repeat(2, 46px);
+      gap: 4px;
+    }
+
+    .touch-mode .touch-stack .touch-label {
+      grid-column: 1 / -1;
+      font-size: 7px;
+      line-height: 1;
+    }
+
+    .touch-mode .touch-wave {
+      min-width: 58px;
+      height: 48px;
+    }
+
+    .touch-mode .touch-utils {
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .touch-mode .touch-utility {
+      min-width: 50px;
+      min-height: 27px;
+      padding: 4px 5px;
+      font-size: 7.5px;
+    }
+
+    .touch-mode .touch-actions {
+      gap: 5px;
+    }
+
+    .touch-mode .touch-fire {
+      width: 60px;
+      min-width: 60px;
+      height: 60px;
+      min-height: 60px;
+      font-size: 11px;
+    }
+
+    .touch-mode #fallback-stick {
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+      gap: 4px;
+    }
+
+    .touch-mode #fallback-stick .touch-control {
+      min-width: 42px;
+      width: 42px;
+      height: 42px;
+      min-height: 42px;
+      padding: 3px;
+      font-size: 7px;
+    }
+
+    .touch-mode.run-frozen .touch-left,
+    .touch-mode.run-frozen .touch-right,
+    .touch-mode.run-frozen #fallback-stick,
+    .touch-mode.run-frozen #tilt-status,
+    .touch-mode.run-frozen #tilt-prompt,
+    .touch-mode.run-frozen #rotate-hint {
+      display: none;
+      pointer-events: none;
+    }
+  `;
+  document.head.append(mobileLayout);
+}
+
 // Centralised, deliberately conservative quality knobs. The shader work stays identical across
 // tiers; mobile saves fill-rate and vertex cost while desktop keeps the silhouette and deck edges
 // crisp. These are evaluated once and never branch inside the render loop.
@@ -36,6 +134,7 @@ const VISUAL_QUALITY = Object.freeze({
   pixelRatioCap: mobileControls ? 1.4 : ((navigator.deviceMemory || 8) <= 4 ? 1.6 : 2),
   oceanRadialSegments: mobileControls ? 112 : 145,
   oceanAngularSegments: mobileControls ? 144 : 192,
+  oceanDetailOctaves: mobileControls ? 4 : ((navigator.deviceMemory || 8) <= 4 ? 5 : 7),
   shadowMapSize: mobileControls ? 512 : ((navigator.deviceMemory || 8) <= 4 ? 1024 : 2048),
   cloudOctaves: mobileControls ? 2 : 3,
   carrierSprayCount: mobileControls ? 28 : 44,
@@ -64,7 +163,7 @@ const heldKeys = new Set();
 // state each frame from a REAL playthrough and POSTs it to /telemetry (same origin, so the dev
 // server writes it to disk for analysis). Fire-and-forget — a failed POST must never disturb the
 // sim. Sampled at ~30 Hz to keep sessions a few MB.
-const BUILD = "31";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
+const BUILD = "32";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
 const recorder = {
   session: `web-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
   build: BUILD,
@@ -129,6 +228,7 @@ let lastLookTime = performance.now();
 let sensorYaw = 0;
 let sensorPitch = 0;
 let resetMobileInput = () => {};
+let setMobileFrozen = () => {};
 
 function pressMappedKey(code, source) {
   const gkey = keyMap.get(code);
@@ -515,18 +615,21 @@ function createWakeMaterial(bowWave = false) {
 
       float oceanHeight(vec2 point) {
         float wave = 0.0;
-        vec2 d0 = normalize(vec2(0.92, 0.38));
-        vec2 d1 = normalize(vec2(-0.34, 0.94));
-        vec2 d2 = normalize(vec2(0.66, -0.75));
-        vec2 d3 = normalize(vec2(-0.88, -0.47));
-        float k0 = 6.28318530718 / 148.0;
-        float k1 = 6.28318530718 / 73.0;
-        float k2 = 6.28318530718 / 31.0;
-        float k3 = 6.28318530718 / 14.0;
-        wave += 1.55 * sin(k0 * dot(d0, point) - sqrt(9.81 * k0) * uTime * 0.92 + 0.4);
-        wave += 0.92 * sin(k1 * dot(d1, point) - sqrt(9.81 * k1) * uTime * 1.04 + 2.1);
-        wave += 0.52 * sin(k2 * dot(d2, point) - sqrt(9.81 * k2) * uTime * 1.12 + 4.3);
-        wave += 0.24 * sin(k3 * dot(d3, point) - sqrt(9.81 * k3) * uTime * 1.2 + 1.2);
+        vec2 d0 = normalize(vec2(0.94, 0.34));
+        vec2 d1 = normalize(vec2(-0.26, 0.97));
+        vec2 d2 = normalize(vec2(0.74, -0.67));
+        vec2 d3 = normalize(vec2(-0.86, -0.51));
+        vec2 d4 = normalize(vec2(0.44, 0.90));
+        float k0 = 6.28318530718 / 176.0;
+        float k1 = 6.28318530718 / 91.0;
+        float k2 = 6.28318530718 / 47.0;
+        float k3 = 6.28318530718 / 25.0;
+        float k4 = 6.28318530718 / 13.0;
+        wave += 1.35 * sin(k0 * dot(d0, point) - sqrt(9.81 * k0) * uTime * 0.94 + 0.4);
+        wave += 0.82 * sin(k1 * dot(d1, point) - sqrt(9.81 * k1) * uTime * 1.02 + 2.1);
+        wave += 0.48 * sin(k2 * dot(d2, point) - sqrt(9.81 * k2) * uTime * 1.08 + 4.3);
+        wave += 0.27 * sin(k3 * dot(d3, point) - sqrt(9.81 * k3) * uTime * 1.14 + 1.2);
+        wave += 0.13 * sin(k4 * dot(d4, point) - sqrt(9.81 * k4) * uTime * 1.20 + 3.7);
         return wave;
       }
 
@@ -1904,52 +2007,78 @@ function createSea() {
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
-    extensions: { derivatives: true },
+    defines: { OCEAN_DETAIL_OCTAVES: VISUAL_QUALITY.oceanDetailOctaves },
     vertexShader: /* glsl */ `
       uniform float uTime;
       uniform float uAltitude;
       varying vec3 vWorldPosition;
       varying float vWaveCrest;
       varying vec3 vWaveNormal;
+      varying float vWaveCompression;
       #include <common>
       #include <logdepthbuf_pars_vertex>
 
-      void addWave(inout vec3 displacement, inout vec2 slope, inout float crest,
+      // Exact Gerstner tangents keep the normal coherent with both vertical displacement and
+      // horizontal crest compression. No screen-space/finite-difference normal reconstruction.
+      void addWave(inout vec3 displacement, inout vec3 tangentX, inout vec3 tangentZ,
+                   inout float crest, inout float compression,
                    vec2 point, vec2 direction, float wavelength, float amplitude,
-                   float speed, float phaseOffset, float steepness) {
+                   float speed, float phaseOffset, float choppiness) {
         float k = 6.28318530718 / wavelength;
         float phase = k * dot(direction, point) - sqrt(9.81 * k) * uTime * speed + phaseOffset;
         float waveSin = sin(phase);
         float waveCos = cos(phase);
-        displacement.xz += direction * (amplitude * steepness * waveCos);
+        float horizontal = amplitude * choppiness;
+        displacement.xz += direction * (horizontal * waveCos);
         displacement.y += amplitude * waveSin;
-        slope += direction * (amplitude * k * waveCos);
+        tangentX += vec3(
+          -horizontal * k * direction.x * direction.x * waveSin,
+          amplitude * k * direction.x * waveCos,
+          -horizontal * k * direction.x * direction.y * waveSin
+        );
+        tangentZ += vec3(
+          -horizontal * k * direction.x * direction.y * waveSin,
+          amplitude * k * direction.y * waveCos,
+          -horizontal * k * direction.y * direction.y * waveSin
+        );
         crest += amplitude * waveSin;
+        compression += max(waveSin, 0.0) * horizontal * k;
       }
 
       void main() {
         vec3 worldBase = (modelMatrix * vec4(position, 1.0)).xyz;
         vec3 displacement = vec3(0.0);
-        vec2 slope = vec2(0.0);
+        vec3 tangentX = vec3(1.0, 0.0, 0.0);
+        vec3 tangentZ = vec3(0.0, 0.0, 1.0);
         float crest = 0.0;
-        addWave(displacement, slope, crest, worldBase.xz, normalize(vec2(0.92, 0.38)),
-          148.0, 1.55, 0.92, 0.4, 0.48);
-        addWave(displacement, slope, crest, worldBase.xz, normalize(vec2(-0.34, 0.94)),
-          73.0, 0.92, 1.04, 2.1, 0.40);
-        addWave(displacement, slope, crest, worldBase.xz, normalize(vec2(0.66, -0.75)),
-          31.0, 0.52, 1.12, 4.3, 0.31);
-        addWave(displacement, slope, crest, worldBase.xz, normalize(vec2(-0.88, -0.47)),
-          14.0, 0.24, 1.2, 1.2, 0.24);
+        float compression = 0.0;
+        addWave(displacement, tangentX, tangentZ, crest, compression, worldBase.xz,
+          normalize(vec2(0.94, 0.34)), 176.0, 1.35, 0.94, 0.4, 1.08);
+        addWave(displacement, tangentX, tangentZ, crest, compression, worldBase.xz,
+          normalize(vec2(-0.26, 0.97)), 91.0, 0.82, 1.02, 2.1, 1.02);
+        addWave(displacement, tangentX, tangentZ, crest, compression, worldBase.xz,
+          normalize(vec2(0.74, -0.67)), 47.0, 0.48, 1.08, 4.3, 0.94);
+        addWave(displacement, tangentX, tangentZ, crest, compression, worldBase.xz,
+          normalize(vec2(-0.86, -0.51)), 25.0, 0.27, 1.14, 1.2, 0.84);
+        addWave(displacement, tangentX, tangentZ, crest, compression, worldBase.xz,
+          normalize(vec2(0.44, 0.90)), 13.0, 0.13, 1.20, 3.7, 0.72);
         float radial = length(position.xz);
-        float geometryDetail = 1.0 - smoothstep(22000.0, 115000.0, radial);
+        float geometryDetail = 1.0 - smoothstep(18000.0, 95000.0, radial);
         worldBase += displacement * geometryDetail;
+        tangentX = mix(vec3(1.0, 0.0, 0.0), tangentX, geometryDetail);
+        tangentZ = mix(vec3(0.0, 0.0, 1.0), tangentZ, geometryDetail);
         // Curvature begins beyond the local tactical bubble, so flat-world sim objects still sit
         // in the water nearby while the ocean meets a believable horizon at altitude.
         float horizonRadial = max(radial - 12000.0, 0.0);
         worldBase.y -= horizonRadial * horizonRadial / 12742000.0;
-        vWaveCrest = crest;
-        vWaveNormal = normalize(vec3(-slope.x * geometryDetail, 1.0,
-          -slope.y * geometryDetail));
+        if (radial > 12000.0) {
+          vec2 curveSlope = -position.xz * (horizonRadial / max(radial, 1.0)) / 6371000.0;
+          tangentX.y += curveSlope.x;
+          tangentZ.y += curveSlope.y;
+        }
+        vWaveCrest = crest * geometryDetail;
+        vWaveCompression = compression * geometryDetail;
+        vWaveNormal = normalize(cross(tangentZ, tangentX));
         vWorldPosition = worldBase;
         gl_Position = projectionMatrix * viewMatrix * vec4(worldBase, 1.0);
         #include <logdepthbuf_vertex>
@@ -1965,94 +2094,181 @@ function createSea() {
       varying vec3 vWorldPosition;
       varying float vWaveCrest;
       varying vec3 vWaveNormal;
+      varying float vWaveCompression;
       #include <common>
       #include <logdepthbuf_pars_fragment>
 
-      float waveField(vec2 point, vec2 direction, float frequency, float speed, float phase) {
-        return sin(dot(point, direction) * frequency - uTime * speed + phase);
+      void addDetailWave(inout vec2 slope, inout float crest, inout float compression,
+                         vec2 point, vec2 direction, float wavelength, float amplitude,
+                         float speed, float phaseOffset, float lod) {
+        float k = 6.28318530718 / wavelength;
+        float phase = k * dot(direction, point) - sqrt(9.81 * k) * uTime * speed + phaseOffset;
+        float waveSin = sin(phase);
+        float waveCos = cos(phase);
+        slope += direction * (amplitude * k * waveCos * lod);
+        crest += amplitude * waveSin * lod;
+        compression += max(waveSin, 0.0) * amplitude * k * lod;
+      }
+
+      vec3 atmosphereColor(vec3 direction, float altitudeMix) {
+        vec3 d = normalize(direction);
+        float h = d.y;
+        float lowSkyCurve = pow(clamp(max(h, 0.0), 0.0, 1.0), 0.38);
+        vec3 lowHorizon = vec3(0.34, 0.50, 0.56);
+        vec3 lowZenith = vec3(0.016, 0.13, 0.36);
+        vec3 lowSky = mix(lowHorizon, lowZenith, lowSkyCurve);
+        lowSky += vec3(0.075, 0.07, 0.042) * exp(-abs(h) * 18.0);
+        lowSky = mix(vec3(0.035, 0.11, 0.16), lowSky, smoothstep(-0.12, 0.018, h));
+
+        float limbScale = mix(7.0, 150.0, pow(altitudeMix, 1.25));
+        float limbExponent = mix(1.05, 2.75, altitudeMix);
+        float limb = exp(-pow(abs(h) * limbScale, limbExponent));
+        float brightCore = exp(-pow(abs(h) * mix(22.0, 430.0, altitudeMix), 1.42));
+        vec3 highSky = vec3(0.00035, 0.00055, 0.0055)
+          + vec3(0.0018, 0.0028, 0.019) * pow(max(h, 0.0), 0.32);
+        highSky += vec3(0.10, 0.38, 0.92) * limb;
+        highSky += vec3(0.82, 1.18, 1.48) * brightCore * altitudeMix;
+        vec3 color = mix(lowSky, highSky, altitudeMix);
+
+        float sunDot = dot(d, normalize(uSunDirection));
+        float sunDisc = smoothstep(0.99991, 0.999975, sunDot);
+        float sunHalo = pow(max(sunDot, 0.0), mix(210.0, 700.0, altitudeMix));
+        float sunAura = pow(max(sunDot, 0.0), 18.0) * (1.0 - altitudeMix * 0.7);
+        color += vec3(1.0, 0.80, 0.48) * (sunDisc * 3.25 + sunHalo * 0.4 + sunAura * 0.042);
+        return color;
       }
 
       void main() {
         vec2 fromCamera = vWorldPosition.xz - cameraPosition.xz;
         float radialDistance = length(fromCamera);
         float altitudeMix = smoothstep(2200.0, 21000.0, uAltitude);
-        float detailFade = exp(-radialDistance / 7200.0) * exp(-max(uAltitude, 0.0) / 9000.0);
+        float altitudeDetail = 1.0 - smoothstep(3800.0, 15000.0, max(uAltitude, 0.0));
 
-        // Continuous directional ripples travel with the swell. Unlike a time-shifted cell hash,
-        // this cannot pop or vibrate as a cell boundary crosses the camera.
-        vec2 microDirA = vec2(0.94, 0.34);
-        vec2 microDirB = vec2(-0.31, 0.95);
-        vec2 microDirC = vec2(0.63, -0.78);
-        float microA = waveField(vWorldPosition.xz, microDirA, 0.72, 1.18, 0.2);
-        float microB = waveField(vWorldPosition.xz, microDirB, 0.39, 0.74, 2.4);
-        float microC = waveField(vWorldPosition.xz, microDirC, 0.19, 0.48, 4.7);
-        vec2 rippleSlope = microDirA * microA * 0.112
-          + microDirB * microB * 0.078 + microDirC * microC * 0.052;
-        vec3 normal = normalize(vWaveNormal
-          + vec3(-rippleSlope.x, 0.0, -rippleSlope.y) * detailFade);
+        // Seven shorter gravity/capillary bands continue the vertex swell down to 20 cm. Each
+        // octave has a smooth distance cutoff so close water stays sharp without far-field shimmer.
+        vec2 rippleSlope = vec2(0.0);
+        float rippleCrest = 0.0;
+        float rippleCompression = 0.0;
+        float lod0 = (1.0 - smoothstep(2600.0, 10500.0, radialDistance)) * altitudeDetail;
+        if (lod0 > 0.0) {
+          addDetailWave(rippleSlope, rippleCrest, rippleCompression, vWorldPosition.xz,
+            normalize(vec2(0.97, 0.24)), 8.4, 0.072, 1.23, 0.6, lod0);
+        }
+        float lod1 = (1.0 - smoothstep(1500.0, 6200.0, radialDistance)) * altitudeDetail;
+        if (lod1 > 0.0) {
+          addDetailWave(rippleSlope, rippleCrest, rippleCompression, vWorldPosition.xz,
+            normalize(vec2(0.69, 0.72)), 4.5, 0.034, 1.30, 2.7, lod1);
+        }
+        float lod2 = (1.0 - smoothstep(820.0, 3400.0, radialDistance)) * altitudeDetail;
+        if (lod2 > 0.0) {
+          addDetailWave(rippleSlope, rippleCrest, rippleCompression, vWorldPosition.xz,
+            normalize(vec2(-0.18, 0.98)), 2.4, 0.017, 1.38, 4.1, lod2);
+        }
+        float lod3 = (1.0 - smoothstep(430.0, 1750.0, radialDistance)) * altitudeDetail;
+        if (lod3 > 0.0) {
+          addDetailWave(rippleSlope, rippleCrest, rippleCompression, vWorldPosition.xz,
+            normalize(vec2(0.83, -0.56)), 1.3, 0.0082, 1.47, 1.5, lod3);
+        }
+        #if OCEAN_DETAIL_OCTAVES >= 5
+          float lod4 = (1.0 - smoothstep(220.0, 920.0, radialDistance)) * altitudeDetail;
+          if (lod4 > 0.0) {
+            addDetailWave(rippleSlope, rippleCrest, rippleCompression, vWorldPosition.xz,
+              normalize(vec2(-0.72, -0.69)), 0.70, 0.0038, 1.58, 5.3, lod4);
+          }
+        #endif
+        #if OCEAN_DETAIL_OCTAVES >= 6
+          float lod5 = (1.0 - smoothstep(105.0, 480.0, radialDistance)) * altitudeDetail;
+          if (lod5 > 0.0) {
+            addDetailWave(rippleSlope, rippleCrest, rippleCompression, vWorldPosition.xz,
+              normalize(vec2(0.38, 0.92)), 0.38, 0.0017, 1.70, 3.4, lod5);
+          }
+        #endif
+        #if OCEAN_DETAIL_OCTAVES >= 7
+          float lod6 = (1.0 - smoothstep(48.0, 240.0, radialDistance)) * altitudeDetail;
+          if (lod6 > 0.0) {
+            addDetailWave(rippleSlope, rippleCrest, rippleCompression, vWorldPosition.xz,
+              normalize(vec2(-0.96, 0.29)), 0.20, 0.00075, 1.84, 0.9, lod6);
+          }
+        #endif
+        vec3 normal = normalize(vWaveNormal + vec3(-rippleSlope.x, 0.0, -rippleSlope.y));
 
         vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
         vec3 sunDirection = normalize(uSunDirection);
         vec3 halfDirection = normalize(viewDirection + sunDirection);
         vec3 reflectionDirection = reflect(-viewDirection, normal);
-        float noV = max(dot(normal, viewDirection), 0.0);
+        float noV = clamp(dot(normal, viewDirection), 0.001, 1.0);
         float noH = max(dot(normal, halfDirection), 0.0);
-        float fresnel = 0.02 + 0.98 * pow(1.0 - noV, 5.0);
-        float tightGlint = pow(noH, mix(260.0, 620.0, altitudeMix));
-        float broadGlint = pow(noH, 72.0) * 0.14;
+        float fresnel = 0.0204 + 0.9796 * pow(1.0 - noV, 5.0);
+        float tightGlint = pow(noH, mix(340.0, 760.0, altitudeMix));
+        float broadGlint = pow(noH, 58.0) * 0.12;
 
-        float broadSwell = sin(vWorldPosition.x * 0.041 + vWorldPosition.z * 0.017 - uTime * 0.68);
-        float crossSwell = sin(vWorldPosition.x * -0.025 + vWorldPosition.z * 0.078 + uTime * 0.96);
-        float distanceTone = smoothstep(450.0, 18000.0, radialDistance);
-        vec3 nearWater = vec3(0.008, 0.072, 0.092);
-        vec3 middleWater = vec3(0.010, 0.097, 0.126);
-        vec3 farWater = vec3(0.010, 0.044, 0.074);
-        vec3 color = mix(mix(nearWater, middleWater, 1.0 - noV), farWater, distanceTone);
-        color *= 0.88 + broadSwell * 0.055 + crossSwell * 0.032;
-        color = mix(color, vec3(0.012, 0.034, 0.064), altitudeMix * 0.62);
-        // Use the actual reflected elevation rather than a generic edge tint: steep facets pick up
-        // the blue zenith while grazing facets catch the bright atmospheric horizon.
-        float reflectedElevation = clamp(reflectionDirection.y, 0.0, 1.0);
-        vec3 reflectedHorizon = vec3(0.34, 0.49, 0.53);
-        vec3 reflectedZenith = vec3(0.018, 0.115, 0.29);
-        vec3 reflectedSky = mix(reflectedHorizon, reflectedZenith,
-          pow(reflectedElevation, 0.42));
-        float reflectedSun = pow(max(dot(reflectionDirection, sunDirection), 0.0),
-          mix(190.0, 520.0, altitudeMix));
-        reflectedSky += vec3(1.0, 0.74, 0.4) * reflectedSun * 2.2;
-        color = mix(color, reflectedSky, fresnel * 0.86);
+        // The transmitted lobe darkens with optical path and in troughs; thin lifted crests retain
+        // turquoise scatter. This supplies depth instead of treating the sea as an opaque blue mat.
+        float crest = vWaveCrest + rippleCrest;
+        float crestShape = clamp(crest / 1.85, -1.0, 1.0);
+        float troughDepth = 1.0 - smoothstep(-0.72, 0.18, crestShape);
+        float crestThinness = smoothstep(0.16, 0.92, crestShape);
+        float opticalPath = clamp(1.0 / max(noV, 0.16), 1.0, 6.25);
+        vec3 deepWater = mix(vec3(0.004, 0.035, 0.052), vec3(0.003, 0.020, 0.043),
+          clamp((opticalPath - 1.0) * 0.14 + troughDepth * 0.48, 0.0, 1.0));
+        vec3 bodyScatter = mix(vec3(0.010, 0.108, 0.132), vec3(0.015, 0.153, 0.151), crestThinness);
+        float bodyAmount = 0.23 + crestThinness * 0.34 - troughDepth * 0.12;
+        vec3 color = mix(deepWater, bodyScatter, clamp(bodyAmount, 0.08, 0.62));
+        color = mix(color, vec3(0.004, 0.026, 0.058), altitudeMix * 0.58);
 
-        // Soft forward-scatter through the lifted face gives the large waves volume without
-        // falsely lighting their backs like matte terrain.
-        float facingSun = max(dot(normal, sunDirection), 0.0);
-        color += vec3(0.025, 0.075, 0.078) * facingSun * (0.35 + max(vWaveCrest, 0.0) * 0.12);
+        // Sample the same atmospheric gradient and sun used by the sky shell in the true reflected
+        // direction. Banking now reveals moving horizon/zenith reflections rather than a rim tint.
+        vec3 reflectedSky = atmosphereColor(reflectionDirection, altitudeMix);
+        color = mix(color, reflectedSky, fresnel * 0.94);
 
-        float capPattern = vWaveCrest + broadSwell * 0.38 + crossSwell * 0.24;
-        float foamBreakup = smoothstep(-0.44, 0.72,
-          broadSwell * 0.68 + crossSwell * 0.54 + microC * 0.18);
-        float whiteCap = smoothstep(1.52, 2.22, capPattern) * (0.48 + foamBreakup * 0.52);
-        whiteCap *= detailFade * (1.0 - smoothstep(6500.0, 19000.0, radialDistance));
-        vec3 foamColor = mix(vec3(0.44, 0.62, 0.64), vec3(0.82, 0.88, 0.82), foamBreakup);
-        color = mix(color, foamColor, whiteCap * 0.68);
+        float sunFacing = max(dot(normal, sunDirection), 0.0);
+        float backlit = pow(max(dot(viewDirection, -sunDirection), 0.0), 3.0)
+          * smoothstep(0.015, 0.20, 1.0 - normal.y) * crestThinness;
+        color += vec3(0.018, 0.105, 0.096) * (sunFacing * crestThinness * 0.34 + backlit * 1.55);
+
+        // Gerstner compression identifies genuinely steep crest fronts. Elongated moving bands
+        // then turn only those crests into wind-streaked whitecaps instead of static speckle.
+        vec2 windDirection = normalize(vec2(0.94, 0.34));
+        vec2 windCross = vec2(-windDirection.y, windDirection.x);
+        float alongWind = dot(vWorldPosition.xz, windDirection);
+        float acrossWind = dot(vWorldPosition.xz, windCross);
+        float foamFibres = 0.0;
+        if (radialDistance < 15500.0) {
+          foamFibres = sin(acrossWind * 0.34 + alongWind * 0.035 - uTime * 0.74);
+          foamFibres += 0.58 * sin(acrossWind * 0.71 - alongWind * 0.022 - uTime * 1.06 + 2.3);
+          foamFibres += 0.27 * sin(acrossWind * 1.47 + alongWind * 0.061 - uTime * 1.43 + 4.7);
+          foamFibres = smoothstep(0.10, 1.32, foamFibres);
+        }
+        float totalCompression = vWaveCompression + rippleCompression * 0.72;
+        float breakingCrest = smoothstep(0.17, 0.32, totalCompression)
+          * smoothstep(0.16, 0.82, crestShape + rippleCompression * 1.8);
+        float whiteCap = breakingCrest * (0.25 + foamFibres * 0.75);
+        whiteCap *= 1.0 - smoothstep(4200.0, 15500.0, radialDistance);
+        whiteCap *= 1.0 - altitudeMix * 0.58;
+        vec3 foamColor = mix(vec3(0.47, 0.67, 0.68), vec3(0.92, 0.96, 0.91), foamFibres);
+        color = mix(color, foamColor, whiteCap * 0.82);
 
         // A long, broken specular corridor runs from the viewer toward the projected sun.
-        // This remains readable when individual sub-pixel wave highlights average out.
+        // It is constructed in the projected sun frame, so it stays anchored during banks/turns.
         vec2 sunHorizontal = normalize(uSunDirection.xz + vec2(0.00001));
         float alongSun = dot(fromCamera, sunHorizontal);
         float acrossSun = abs(dot(fromCamera, vec2(-sunHorizontal.y, sunHorizontal.x)));
-        float pathWidth = 120.0 + max(alongSun, 0.0) * 0.046;
-        float sunPath = exp(-pow(acrossSun / max(pathWidth, 1.0), 1.38));
-        sunPath *= smoothstep(-180.0, 2600.0, alongSun);
-        float glitterBreakup = 0.30 + 0.70 * smoothstep(-0.34, 0.86,
-          microA + microB * 0.55 + microC * 0.22);
-        float pathLight = sunPath * glitterBreakup * (0.038 + tightGlint * 3.0 + broadGlint);
+        float pathWidth = 85.0 + max(alongSun, 0.0) * 0.052;
+        float sunPath = exp(-pow(acrossSun / max(pathWidth, 1.0), 1.34));
+        sunPath *= smoothstep(-120.0, 2100.0, alongSun);
+        float glitterBreakup = 0.22 + 0.78 * smoothstep(-0.03, 0.19,
+          rippleCompression + rippleCrest * 0.42 + (foamFibres - 0.5) * 0.08);
+        float pathLight = sunPath * glitterBreakup * (0.025 + tightGlint * 4.2 + broadGlint * 1.4);
         pathLight *= 1.0 - altitudeMix * 0.42;
-        color += vec3(1.0, 0.76, 0.46) * (tightGlint * 0.86 + broadGlint + pathLight);
+        color += vec3(1.0, 0.78, 0.49) * (tightGlint * 1.12 + broadGlint + pathLight);
 
         float fog = 1.0 - exp(-uFogDensity * uFogDensity * radialDistance * radialDistance);
-        float horizonHaze = smoothstep(12000.0, 90000.0, radialDistance) * (1.0 - altitudeMix * 0.62);
-        fog = max(fog, horizonHaze * 0.88);
-        color = mix(color, uFogColor, fog);
+        float horizonHaze = smoothstep(10500.0, 105000.0, radialDistance) * (1.0 - altitudeMix * 0.58);
+        fog = max(fog, horizonHaze * 0.90);
+        // This is the h=0.012 slice of the shared atmosphere, simplified because it has no
+        // per-pixel directional variation. The full atmosphere sampler above remains the reflection.
+        vec3 atmosphericHaze = mix(vec3(0.39, 0.54, 0.58), vec3(0.13, 0.37, 0.69), altitudeMix);
+        color = mix(color, mix(uFogColor, atmosphericHaze, 0.64), fog);
 
         gl_FragColor = vec4(color, 1.0);
         #include <logdepthbuf_fragment>
@@ -2554,6 +2770,8 @@ function installMobileInput(view) {
   let filteredPitch = 0;
   let filteredRoll = 0;
   let suspended = false;
+  let frozen = false;
+  let frozenRestartSent = false;
 
   function status(message) {
     if (tiltStatus) tiltStatus.textContent = message;
@@ -2735,6 +2953,24 @@ function installMobileInput(view) {
     setControlActive(control.button);
   }
 
+  function restartFrozenRun(event) {
+    if (!frozen || frozenRestartSent) return;
+    frozenRestartSent = true;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    resetMobileInput();
+    const source = "touch:frozen-restart";
+    if (!pressMappedKey("KeyR", source)) {
+      frozenRestartSent = false;
+      return;
+    }
+    releaseMappedKey("KeyR", source);
+  }
+
+  // Capture before either canvas-look or a control can claim the pointer. Once an outcome freezes
+  // the run, the entire dimmed HUD is one restart target, including the visible result banner.
+  window.addEventListener("pointerdown", restartFrozenRun, { capture: true, passive: false });
+
   touchControls.querySelectorAll("[data-hold-key]").forEach((button, index) => {
     button.addEventListener("pointerdown", (event) => {
       if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -2800,6 +3036,15 @@ function installMobileInput(view) {
     releaseTiltAxes();
     filteredPitch = 0;
     filteredRoll = 0;
+  };
+
+  setMobileFrozen = (nextFrozen) => {
+    const next = nextFrozen === true;
+    if (next === frozen) return;
+    frozen = next;
+    frozenRestartSent = false;
+    document.documentElement.classList.toggle("run-frozen", frozen);
+    if (frozen) resetMobileInput();
   };
 
   if (orientationSupported) {
@@ -2955,6 +3200,7 @@ async function boot() {
       // telemetry. Cheap, harmless, and the only way to prove the web build is the same game.
       globalThis.__gunsState = state;
       globalThis.__gunsBridge = bridge;
+      setMobileFrozen(state.frozen);
       recorder.sample(state);
       view.update(state, dt, now / 1000);
       if (firstFrame) {

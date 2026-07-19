@@ -33,7 +33,7 @@ public sealed class DetentLayer {
     // push lowers it, and auto-throttle holds on-speed. This is what a competent pilot flies.
     public bool ApproachMode;
     const double ApproachGlideslope = -0.061;  // −3.5° reference glideslope (the "ball")
-    const double ApproachSpeedMps = 70.0;      // ~136 kt on-speed
+    const double ApproachSpeedMps = 70.0;      // ~136 kt AIRSPEED on-speed; WOD makes closure ~106 kt
     // DIRECT flight-path-rate authority: a held pull/push commands this much flight-path rate at
     // once (no aimpoint to slew, no chase loop), so a gust bounce can be nulled in a couple hundred
     // ms. Measured: the old "slew a target, PD chases it" took 1.07 s to move gamma 2° — dead by the
@@ -67,6 +67,8 @@ public sealed class DetentLayer {
     double _approachClimbDemand;               // AoA above on-speed (rad) → power nudge
     public double CommandedPitchRad => _cmdPitch;  // the render draws the (stable) nose at this attitude
     public double GlideslopeErrorM;            // metres BELOW the glideslope line to the wires (bridge sets it; + = low)
+    public double ApproachAirspeedMps = double.NaN; // bridge supplies |ground velocity - steady WOD|
+    public double DeckClosureMps = double.NaN;      // positive toward the moving landing area
 
     public void Tick(KeyGrammar keys, double nowMs, in AircraftState s, in AircraftParams p, DoctrineAdvice advice, double dt) {
         double maxPerform = Protection.MaxPerformG(s, p);
@@ -101,7 +103,9 @@ public sealed class DetentLayer {
         if (ApproachMode) {
             // Stick commands the NOSE ATTITUDE (θ) directly and it HOLDS there — stable, like a real
             // jet. The nose is what you fly; the flight path emerges under it and lags.
-            double V = System.Math.Max(s.Speed, 30.0);
+            double measuredAirspeed = double.IsFinite(ApproachAirspeedMps)
+                ? ApproachAirspeedMps : s.Speed;
+            double V = System.Math.Max(measuredAirspeed, 30.0);
             double gamma = s.Gamma;
             if (!_approachInit) { _cmdPitch = gamma + OnSpeedAoARad; _approachInit = true; }
             if (_waveOff) _cmdPitch += PitchCmdRate * dt;                      // go-around: rotate up, climb away
@@ -221,7 +225,9 @@ public sealed class DetentLayer {
         // pitch couldn't safely give is delivered here as power, so a pull actually CLIMBS (on energy,
         // through the spool lag) instead of mushing at CLmax. Capped short of a firewall so the auto
         // path can't trip the wave-off. Pilot's W/S still stands the whole thing down (below).
-        double autoThr = 0.16 + 0.026 * (ApproachSpeedMps - s.Speed);   // speed-hold
+        double speedForApproach = double.IsFinite(ApproachAirspeedMps)
+            ? ApproachAirspeedMps : s.Speed;
+        double autoThr = 0.16 + 0.026 * (ApproachSpeedMps - speedForApproach); // AIRspeed hold
         if (ApproachMode) {
             // BACK-SIDE RULE: power flies the glidepath. Below the glideslope LINE (spatial height
             // error, set by the bridge) → add power to climb back onto it — this recaptures the path

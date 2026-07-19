@@ -40,7 +40,9 @@ public static partial class WebBridge {
     static bool _attemptHadSetback;
     static bool _attemptCleanRecorded;
     static Carrier.Recovery _recovery = Carrier.Recovery.Flying;
+    static Carrier.TouchdownResult _touchdown = Carrier.TouchdownResult.Flying;
     static readonly ArrestmentModel _arrestment = new();
+    static BurbleField? _burble;
     static Carrier.DeckConfiguration _deckConfiguration = Carrier.DeckConfiguration.Axial;
     static bool _waveOffArmed;
     static double _waveOffUntilMs;
@@ -48,7 +50,8 @@ public static partial class WebBridge {
     /// stepping. Before this, a 12G pull from inverted flew THROUGH the sea to -10,679 ft and
     /// kept integrating, because nothing ever checked.
     static bool Frozen => _knockedOff || (_player?.BelowGround ?? false)
-        || _recovery is Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater
+        || _recovery is Carrier.Recovery.HardLanding
+            or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater
         || (_recovery == Carrier.Recovery.Trap
             && _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped)
         || _gunKill?.Outcome == FightOutcome.Splash;
@@ -85,11 +88,22 @@ public static partial class WebBridge {
         if (_carrier is not null) {
             _difficulty = _recoveryProgress.BeginAttempt();
             _carrier.ApplyDifficulty(_difficulty);
+            // Beats stores the briefed AIR-relative final. Resolve the wind triangle before the
+            // rigid-body sim is constructed so the jet starts at 70 m/s TAS but only ~55 m/s of
+            // deck closure in 30 kt WOD, with a correctly trimmed initial body attitude.
+            _beat = _beat with {
+                Player = _carrier.ToWorldStateFromAir(_beat.Player, DetentLayer.OnSpeedAoARad)
+            };
         }
         _recovery = Carrier.Recovery.Flying;
+        _touchdown = Carrier.TouchdownResult.Flying;
         _arrestment.Reset();
         _waveOffArmed = _carrier is not null;
         _waveOffUntilMs = double.NegativeInfinity;
+        _burble = _carrier is null ? null : new BurbleField(_carrier,
+            new TurbulenceField(intensityMps: _difficulty.BurbleIntensityMps,
+                outerScaleM: 80.0, intermittency: 0.6, seed: _difficulty.TurbulenceSeed),
+            sinkMps: _difficulty.BurbleSinkMps);
         _player = new AircraftSim(_beat.Player, _beat.PlayerAir) {
             // Carrier: SMOOTH air, with the burble ONLY in the ship's wake (the last ~15 s) — the
             // whole sky was "the shittiest bumpiest day possible"; the wake is the tail generator,
@@ -97,10 +111,7 @@ public static partial class WebBridge {
             Wind = _beat.Carrier is not null
                 // The wake is a CHALLENGE, not a cliff: enough chop + sink to make you work the last
                 // 10 s, not enough to kill a low approach outright (it "died the VV and crashed").
-                ? new BurbleField(_beat.Carrier,
-                      new TurbulenceField(intensityMps: _difficulty.BurbleIntensityMps,
-                          outerScaleM: 80.0, intermittency: 0.6, seed: _difficulty.TurbulenceSeed),
-                      sinkMps: _difficulty.BurbleSinkMps)
+                ? _burble
                 : new TurbulenceField(intensityMps: 1.2, outerScaleM: 130.0, intermittency: 0.5, seed: 0xB0A7)
         };
         _bandit = _beat.CreateBandit();
@@ -187,8 +198,11 @@ public static partial class WebBridge {
                 if (_detents.ApproachMode) _waveOffArmed = true;
                 else if (!inSlot && _detents.Throttle < 0.95) _waveOffArmed = false;
                 var (gsAlong, _, gsHeight) = _carrier.LandingFrame(_player.State.Position);
-                double gsLineH = Math.Max(0.0, -_carrier.DeckLengthM * 0.2 - gsAlong) * 0.06116;   // tan 3.5°
+                double gsLineH = Math.Max(0.0, -_carrier.DeckLengthM * 0.2 - gsAlong)
+                    * Carrier.GlideslopeSlope;
                 _detents.GlideslopeErrorM = gsLineH - gsHeight;
+                _detents.ApproachAirspeedMps = _carrier.AirspeedMps(_player.State);
+                _detents.DeckClosureMps = _carrier.DeckClosureMps(_player.State);
             }
             _advice = _beat.Law.Advise(_player.State, _bandit.State, _beat.PlayerAir);
             _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir, _advice, Dt);
@@ -207,20 +221,29 @@ public static partial class WebBridge {
             if (_gunKill.BanditAlive) _bandit.Step(_player.State, Dt);
             if (_carrier is not null) {
                 _carrier.Step(Dt);
-                Carrier.Recovery contact = _carrier.Classify(_player.State, _difficulty);
+                Carrier.TouchdownResult touchdown = _carrier.EvaluateRecovery(
+                    _player.State, _player.AngleOfAttackRad, _difficulty);
+                Carrier.Recovery contact = touchdown.Recovery;
+                if (_touchdown.Recovery == Carrier.Recovery.Flying
+                    && contact != Carrier.Recovery.Flying)
+                    _touchdown = touchdown;
                 if (contact == Carrier.Recovery.Bolter) {
                     _attemptHadSetback = true;
                     _recovery = Carrier.Recovery.Bolter;
+                } else if (contact == Carrier.Recovery.HardLanding) {
+                    _attemptHadSetback = true;
+                    _recovery = Carrier.Recovery.HardLanding;
                 } else if (_recovery == Carrier.Recovery.Bolter) {
                     // A rejected contact stays a bolter for the rest of the pass; it cannot become
                     // a trap on a later physics tick. Still allow a subsequent impact to terminate.
-                    if (contact is Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater)
+                    if (contact is Carrier.Recovery.HardLanding
+                        or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater)
                         _recovery = contact;
                 } else {
                     _recovery = contact;
                 }
                 if (_recovery == Carrier.Recovery.Trap) {
-                    _arrestment.Engage(_carrier, _player.State, _player.BodyPitchRad);
+                    _arrestment.Engage(_carrier, _player.State, _player.BodyPitchRad, touchdown.Wire);
                     _detents.ApproachMode = false;
                     if (_arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped)
                         RecordStoppedTrap();
@@ -232,7 +255,8 @@ public static partial class WebBridge {
             _lastRange = rng;
             _simTimeMs += Dt * 1000.0;
             _acc -= Dt;
-            if (_recovery is Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater) break;
+            if (_recovery is Carrier.Recovery.HardLanding
+                or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater) break;
         }
     }
 
@@ -248,7 +272,9 @@ public static partial class WebBridge {
         Vec3D playerPosition = simulationPosition;
         double displayedSpeedMps = arrested ? _arrestment.RelativeSpeedMps : s.Speed;
         bool waveOff = _carrier is not null && _simTimeMs < _waveOffUntilMs;
-        string mode = _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Arrested ? "ARRESTED"
+        string mode = _recovery == Carrier.Recovery.HardLanding ? "HARD-LANDING"
+            : _recovery == Carrier.Recovery.Bolter ? "BOLTER"
+            : _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Arrested ? "ARRESTED"
             : _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped ? "STOPPED"
             : waveOff ? "WAVE-OFF" : _detents.ApproachMode ? "APPROACH" : "FREE";
         string context = _advice.Context;
@@ -287,6 +313,12 @@ public static partial class WebBridge {
             context = _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped
                 ? "TRAPPED — STOPPED"
                 : $"TRAP · WIRE {_arrestment.CaughtWire}";
+        } else if (_recovery == Carrier.Recovery.HardLanding) {
+            context = "BLOWN LANDING — EXCESSIVE SINK";
+        } else if (_recovery == Carrier.Recovery.Bolter) {
+            context = _touchdown.Hook == Carrier.HookOutcome.InFlightEngagement
+                ? "BOLTER — IN-FLIGHT ENGAGEMENT"
+                : "BOLTER — GO AROUND";
         }
         // hand-built JSON: no serializer, no reflection, trim-safe, allocation-cheap.
         return "{"
@@ -375,6 +407,15 @@ public static partial class WebBridge {
             ArrestmentModel.ArrestmentPhase.Stopped => "STOPPED",
             _ => "NONE"
         };
+        bool contacted = _touchdown.Recovery != Carrier.Recovery.Flying;
+        double airspeed = contacted ? _touchdown.AirspeedMps : c.AirspeedMps(_player.State);
+        double closure = _arrestment.IsActive ? _arrestment.RelativeSpeedMps
+            : contacted ? _touchdown.ClosureMps : c.DeckClosureMps(_player.State);
+        double sink = contacted ? _touchdown.SinkRateMps : c.DeckSinkRateMps(_player.State);
+        double inClose = _burble?.InCloseStrength(_player.State.Position) ?? 0.0;
+        int wire = _arrestment.CaughtWire != 0 ? _arrestment.CaughtWire : _touchdown.Wire;
+        string quality = _touchdown.Quality.ToString().ToUpperInvariant();
+        string hook = _touchdown.Hook.ToString().ToUpperInvariant();
         return $"\"carrier\":true,"
             + $"\"cx\":{c.Position.X:F2},\"cy\":{c.Position.Y:F2},\"cz\":{c.Position.Z:F2},"
             + $"\"cheading\":{c.HeadingRad:F5},\"deck_len\":{c.DeckLengthM:F1},\"deck_w\":{c.DeckHalfWidthM * 2:F1},\"deck_alt\":{c.DeckAltM:F1},"
@@ -388,8 +429,18 @@ public static partial class WebBridge {
             + $"\"difficulty_eased\":{(_difficulty.IsEased ? "true" : "false")},"
             + $"\"difficulty_spike\":{(_difficulty.IsSpike ? "true" : "false")},\"clean_traps\":{_recoveryProgress.CleanTrapCount},"
             + $"\"deck_pitch_deg\":{c.DeckPitchRad * 57.2958:F3},\"deck_heave_m\":{c.DeckHeaveM:F3},"
-            + $"\"recovery\":\"{_recovery}\",\"wire\":{_arrestment.CaughtWire},"
+            + $"\"wod_kts\":{Carrier.WindOverDeckKts:F1},\"groundspeed_kts\":{_player.State.Speed * 1.94384:F2},"
+            + $"\"approach_airspeed_kts\":{airspeed * 1.94384:F2},\"deck_closure_kts\":{closure * 1.94384:F2},"
+            + $"\"sink_rate_mps\":{sink:F3},\"sink_rate_fpm\":{sink * 196.8504:F1},"
+            + $"\"in_close_burble\":{inClose:F3},\"in_close\":{(inClose > 0.20 ? "true" : "false")},"
+            + $"\"recovery\":\"{_recovery}\",\"bolter\":{(_recovery == Carrier.Recovery.Bolter ? "true" : "false")},"
+            + $"\"wire\":{wire},\"touchdown_quality\":\"{quality}\",\"hook_outcome\":\"{hook}\","
+            + $"\"soft_trap\":{(_touchdown.Quality == Carrier.TouchdownQuality.Soft && _recovery == Carrier.Recovery.Trap ? "true" : "false")},"
+            + $"\"hard_trap\":{(_touchdown.Quality == Carrier.TouchdownQuality.Hard && _recovery == Carrier.Recovery.Trap ? "true" : "false")},"
             + $"\"arrest_phase\":\"{arrestPhase}\",\"arrest_speed_kts\":{_arrestment.RelativeSpeedMps * 1.94384:F2},"
-            + $"\"arrest_time_s\":{_arrestment.ElapsedSeconds:F3},\"arrest_distance_m\":{_arrestment.DistanceM:F2},";
+            + $"\"arrest_time_s\":{_arrestment.ElapsedSeconds:F3},\"arrest_distance_m\":{_arrestment.DistanceM:F2},"
+            + $"\"arrest_runout_target_m\":{_arrestment.RunoutTargetM:F1},\"wire_stretch_m\":{_arrestment.WireStretchM:F3},"
+            + $"\"wire_tension_kn\":{_arrestment.TensionN / 1000.0:F2},\"arrest_decel_g\":{_arrestment.DecelerationMps2 / FlightModel.G0:F3},"
+            + $"\"arrest_peak_decel_g\":{_arrestment.PeakDecelerationMps2 / FlightModel.G0:F3},";
     }
 }
