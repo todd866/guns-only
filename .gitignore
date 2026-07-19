@@ -12,6 +12,8 @@ testrig/scenarios/_replay.json
 # secrets / deploy artifacts (never commit)
 .vercel/
 **/.vercel/
+.wrangler/
+**/.wrangler/
 .env
 .env.*
 *.env.local

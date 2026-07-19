@@ -3,10 +3,19 @@
 // This intentionally talks to Vercel Blob over HTTP instead of importing
 // @vercel/blob: wwwroot is deployed as-is and has no npm build step.
 
+const { createHash } = require("crypto");
+const { promisify } = require("util");
+const { gzip } = require("zlib");
+
 const BLOB_API = "https://blob.vercel-storage.com";
-const BLOB_API_VERSION = "12";
 const STORAGE_DEADLINE_MS = 8_000;
-const MAX_APPEND_ATTEMPTS = 4;
+const MAX_WRITE_ATTEMPTS = 4;
+const MAX_ROWS_PER_CHUNK = 1_500;
+const MAX_JSONL_BYTES = 2 * 1024 * 1024;
+// Allow a little JSON-envelope overhead beyond the validated JSONL ceiling, while preventing an
+// originless or oversized stream from being accumulated in Function memory without a bound.
+const MAX_REQUEST_BYTES = MAX_JSONL_BYTES + 64 * 1024;
+const gzipAsync = promisify(gzip);
 
 class BlobHttpError extends Error {
   constructor(status, detail) {
@@ -16,11 +25,11 @@ class BlobHttpError extends Error {
   }
 }
 
+class RequestBodyTooLargeError extends Error {}
+class InvalidTelemetryPayloadError extends Error {}
+class TelemetryPayloadTooLargeError extends Error {}
+
 function setResponseHeaders(response) {
-  response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  response.setHeader("Access-Control-Max-Age", "86400");
   response.setHeader("Cache-Control", "no-store");
 }
 
@@ -41,8 +50,14 @@ async function readJsonBody(request) {
   }
 
   const chunks = [];
+  let totalBytes = 0;
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.byteLength;
+    if (totalBytes > MAX_REQUEST_BYTES) {
+      throw new RequestBodyTooLargeError(`telemetry request exceeds ${MAX_REQUEST_BYTES} bytes`);
+    }
+    chunks.push(buffer);
   }
   if (!chunks.length) return null;
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -55,66 +70,59 @@ function safeSessionName(value) {
     .slice(0, 180);
 }
 
-function blobHeaders(token) {
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    "x-api-version": BLOB_API_VERSION,
-  };
-
-  // Recent Blob API versions accept the store id explicitly. Read-write
-  // tokens have the form vercel_blob_rw_<store-id>_<secret>.
-  const storeId = token.split("_")[3];
-  if (storeId) headers["x-vercel-blob-store-id"] = storeId;
-  return headers;
+function safeBatchId(value) {
+  if (typeof value !== "string" || value.length < 16 || value.length > 128) return null;
+  return /^[A-Za-z0-9._-]+$/.test(value) ? value : null;
 }
 
-async function blobMetadata(pathname, token, signal) {
-  const url = `${BLOB_API}?url=${encodeURIComponent(pathname)}`;
-  const response = await fetch(url, {
-    method: "GET",
-    headers: blobHeaders(token),
-    cache: "no-store",
-    signal,
-  });
-
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new BlobHttpError(response.status, (await response.text()).slice(0, 300));
-  }
-
-  const metadata = await response.json();
-  if (!metadata || typeof metadata.url !== "string") {
-    throw new Error("Vercel Blob metadata response did not include a URL");
-  }
-  return metadata;
+function firstHeader(request, name) {
+  const headers = request.headers;
+  if (!headers) return undefined;
+  const lowerName = name.toLowerCase();
+  const direct = headers[lowerName] ?? headers[name];
+  const value = direct !== undefined
+    ? direct
+    : Object.entries(headers).find(([key]) => key.toLowerCase() === lowerName)?.[1];
+  return Array.isArray(value) ? value[0] : value;
 }
 
-async function readCurrentBlob(pathname, token, signal) {
-  const metadata = await blobMetadata(pathname, token, signal);
-  if (!metadata) return null;
+function isHostedVercelEnvironment() {
+  return typeof process.env.VERCEL_ENV === "string" && process.env.VERCEL_ENV.length > 0;
+}
 
-  const url = new URL(metadata.url);
-  // Private Blob reads can bypass the CDN after an overwrite. This matters
-  // here because a stale read followed by another overwrite could lose rows.
-  url.searchParams.set("cache", "0");
+function isSameOriginRequest(request) {
+  const origin = firstHeader(request, "origin");
+  // Browser fetches always carry Origin for this POST. Permit only true local originless probes;
+  // no hosted Vercel target should expose the Blob writer to scripts with no provenance.
+  if (!origin) return !isHostedVercelEnvironment();
+  const host = firstHeader(request, "x-forwarded-host") || firstHeader(request, "host");
+  if (!host) return false;
+  try {
+    const originUrl = new URL(origin);
+    const expectedHost = String(host).split(",")[0].trim().toLowerCase();
+    if (originUrl.host.toLowerCase() !== expectedHost) return false;
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-    signal,
-  });
-  if (response.status === 404) {
-    throw new BlobHttpError(409, "blob changed while it was being read");
+    const forwardedProtocol = firstHeader(request, "x-forwarded-proto");
+    const expectedProtocol = forwardedProtocol
+      ? `${String(forwardedProtocol).split(",")[0].trim().replace(/:$/, "")}:`
+      : (isHostedVercelEnvironment() ? "https:" : null);
+    return expectedProtocol === null || originUrl.protocol.toLowerCase() === expectedProtocol.toLowerCase();
+  } catch {
+    return false;
   }
-  if (!response.ok) {
-    throw new BlobHttpError(response.status, (await response.text()).slice(0, 300));
-  }
+}
 
-  return {
-    text: await response.text(),
-    etag: metadata.etag || response.headers.get("etag"),
-  };
+function hasJsonContentType(request) {
+  const contentType = firstHeader(request, "content-type");
+  if (typeof contentType !== "string") return false;
+  return contentType.split(";", 1)[0].trim().toLowerCase() === "application/json";
+}
+
+function declaredBodyIsTooLarge(request) {
+  const rawLength = firstHeader(request, "content-length");
+  if (rawLength === undefined) return false;
+  const length = Number(rawLength);
+  return Number.isFinite(length) && length > MAX_REQUEST_BYTES;
 }
 
 function uploadUrl(pathname) {
@@ -122,21 +130,16 @@ function uploadUrl(pathname) {
   return `${BLOB_API}/${encodedPath}`;
 }
 
-async function overwriteBlob(pathname, contents, current, token, signal) {
-  // The write PUT must send ONLY these headers. Adding x-api-version or
-  // x-vercel-blob-store-id (which blobHeaders injects for the read/list paths)
-  // makes the versioned upload API reject a path-in-URL PUT with 400
-  // "Invalid pathname" — verified against the live private store. Likewise a
-  // bare `access` header (vs x-vercel-blob-access) is rejected. So the write
-  // uses the legacy, path-in-URL upload with only the private-access header;
-  // reads and list keep the versioned headers via blobHeaders.
+async function writeBlob(pathname, contents, token, signal) {
+  // The path-in-URL upload API rejects versioned read/list headers here.
+  // Likewise a bare `access` header is rejected; use x-vercel-blob-access.
   const headers = {
     Authorization: `Bearer ${token}`,
-    "Content-Type": "application/x-ndjson; charset=utf-8",
-    "x-content-type": "application/x-ndjson; charset=utf-8",
+    "Content-Type": "application/gzip",
+    "x-content-type": "application/gzip",
     "x-content-length": String(Buffer.byteLength(contents)),
     "x-add-random-suffix": "0",
-    "x-allow-overwrite": current ? "1" : "0",
+    "x-allow-overwrite": "0",
     "x-cache-control-max-age": "60",
     "x-vercel-blob-access": "private",
   };
@@ -150,14 +153,14 @@ async function overwriteBlob(pathname, contents, current, token, signal) {
   if (response.ok) return;
 
   const detail = (await response.text()).slice(0, 300);
-  // A simultaneous first write is sometimes reported as 400 rather than
-  // 409. Treat both that and an ETag precondition failure as retryable.
+  // A retry can arrive after Blob committed the immutable object but before the Function response
+  // reached the browser. The deterministic batch path makes already-exists an acknowledgement of
+  // that same operation, not a reason to create a second billable object under another name.
   if (
     response.status === 409 ||
-    response.status === 412 ||
     (response.status === 400 && /already exists|precondition/i.test(detail))
   ) {
-    throw new BlobHttpError(409, detail);
+    return;
   }
   throw new BlobHttpError(response.status, detail);
 }
@@ -190,29 +193,55 @@ function delay(milliseconds, signal) {
   });
 }
 
-async function appendRows(session, rows, token) {
-  const pathname = `telemetry/${session}.jsonl`;
-  const added = `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`;
+async function appendRows(session, batchId, rows, token) {
+  if (rows.length > MAX_ROWS_PER_CHUNK) {
+    throw new TelemetryPayloadTooLargeError(`telemetry payload exceeds ${MAX_ROWS_PER_CHUNK} rows`);
+  }
+  if (rows.some((row) => !row || typeof row !== "object" || Array.isArray(row))) {
+    throw new InvalidTelemetryPayloadError("telemetry rows must be JSON objects");
+  }
+
+  let serializedRows;
+  try {
+    serializedRows = rows.map((row) => {
+      const serialized = JSON.stringify(row);
+      if (typeof serialized !== "string" || !serialized.startsWith("{")) {
+        throw new InvalidTelemetryPayloadError("telemetry rows must serialize as JSON objects");
+      }
+      return serialized;
+    });
+  } catch (error) {
+    if (error instanceof InvalidTelemetryPayloadError) throw error;
+    throw new InvalidTelemetryPayloadError("telemetry rows must be valid JSON objects");
+  }
+  const jsonl = Buffer.from(`${serializedRows.join("\n")}\n`, "utf8");
+  if (jsonl.byteLength > MAX_JSONL_BYTES) {
+    throw new TelemetryPayloadTooLargeError(
+      `telemetry payload exceeds ${MAX_JSONL_BYTES} uncompressed bytes`,
+    );
+  }
+  // Old tabs from the pre-batchId release remain accepted. Their exact JSONL content hashes to a
+  // stable legacy path, so a lost response is still idempotent. New clients supply a random batch
+  // ID once and retain the exact body across retries.
+  const effectiveBatchId = batchId || `legacy-${createHash("sha256").update(jsonl).digest("hex")}`;
+  const pathname = `telemetry/${session}/${effectiveBatchId}.jsonl.gz`;
+  const compressed = await gzipAsync(jsonl, { level: 6 });
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), STORAGE_DEADLINE_MS);
   let lastError;
 
   try {
-    for (let attempt = 0; attempt < MAX_APPEND_ATTEMPTS; attempt += 1) {
+    for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {
       try {
-        const current = await readCurrentBlob(pathname, token, controller.signal);
-        let contents = current ? current.text : "";
-        if (contents && !contents.endsWith("\n")) contents += "\n";
-        contents += added;
-        await overwriteBlob(pathname, contents, current, token, controller.signal);
+        await writeBlob(pathname, compressed, token, controller.signal);
         return;
       } catch (error) {
         lastError = error;
-        if (!isRetryable(error) || attempt === MAX_APPEND_ATTEMPTS - 1) throw error;
+        if (!isRetryable(error) || attempt === MAX_WRITE_ATTEMPTS - 1) throw error;
         await delay(40 * 2 ** attempt, controller.signal);
       }
     }
-    throw lastError || new Error("Vercel Blob append failed");
+    throw lastError || new Error("Vercel Blob telemetry write failed");
   } finally {
     clearTimeout(deadline);
   }
@@ -222,7 +251,9 @@ module.exports = async function telemetry(request, response) {
   setResponseHeaders(response);
 
   if (request.method === "OPTIONS") {
-    finish(response, 204);
+    // The recorder is same-origin. Deliberately omit CORS headers so another website cannot use a
+    // visitor's browser to turn this public function into an unmetered Blob write proxy.
+    finish(response, 403, "Cross-origin telemetry is not allowed");
     return;
   }
   if (request.method !== "POST") {
@@ -230,23 +261,56 @@ module.exports = async function telemetry(request, response) {
     finish(response, 405, "Method Not Allowed");
     return;
   }
+  if (!isSameOriginRequest(request)) {
+    finish(response, 403, "Cross-origin telemetry is not allowed");
+    return;
+  }
+  if (!hasJsonContentType(request)) {
+    finish(response, 415, "Content-Type must be application/json");
+    return;
+  }
+  if (declaredBodyIsTooLarge(request)) {
+    finish(response, 413, "Telemetry request is too large");
+    return;
+  }
 
   try {
     const payload = await readJsonBody(request);
     const session = safeSessionName(payload && payload.session);
+    const suppliedBatchId = payload && payload.batchId;
     const rows = payload && payload.rows;
     const token = process.env.BLOB_READ_WRITE_TOKEN;
 
     if (!session || !Array.isArray(rows) || rows.length === 0) {
-      throw new Error("telemetry payload must contain a session and non-empty rows array");
+      throw new InvalidTelemetryPayloadError(
+        "telemetry payload must contain a session and non-empty rows array",
+      );
+    }
+    const batchId = suppliedBatchId === undefined ? null : safeBatchId(suppliedBatchId);
+    if (suppliedBatchId !== undefined && !batchId) {
+      throw new InvalidTelemetryPayloadError(
+        "telemetry batchId must be 16-128 URL-safe characters",
+      );
     }
     if (!token) throw new Error("BLOB_READ_WRITE_TOKEN is not configured");
 
-    await appendRows(session, rows, token);
+    await appendRows(session, batchId, rows, token);
   } catch (error) {
-    // Recorder POSTs are deliberately fire-and-forget. Keep gameplay isolated
-    // from malformed data, missing configuration, and storage outages.
+    if (error instanceof RequestBodyTooLargeError
+      || error instanceof TelemetryPayloadTooLargeError) {
+      finish(response, 413, "Telemetry request is too large");
+      return;
+    }
+    if (error instanceof InvalidTelemetryPayloadError || error instanceof SyntaxError) {
+      finish(response, 400, "Telemetry payload is invalid");
+      return;
+    }
+    // A persistence outage must be distinguishable from an accepted write. The browser recorder
+    // remains isolated from gameplay, but retains this exact batch ID/body and backs off.
     console.error("telemetry persistence failed:", error instanceof Error ? error.message : String(error));
+    response.setHeader("Retry-After", "30");
+    finish(response, 503, "Telemetry persistence is unavailable");
+    return;
   }
 
   finish(response, 204);

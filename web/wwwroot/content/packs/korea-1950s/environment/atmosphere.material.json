@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0.0",
+  "materialId": "material.atmosphere.korea-haze.v1",
+  "type": "layered-atmosphere",
+  "textures": {
+    "cloudShape": {
+      "uri": "textures/cloud-shape.png",
+      "colorSpace": "linear",
+      "repeat": [3.2, 1.6]
+    }
+  },
+  "sky": {
+    "zenithColor": "#315D82",
+    "upperColor": "#7198AF",
+    "horizonColor": "#B9CED2",
+    "groundHazeColor": "#A8BEC4",
+    "sunColor": "#FFE1AD",
+    "sunAngularRadiusDegrees": 0.42,
+    "sunGlowDegrees": 7.5,
+    "sunIntensity": 3.2,
+    "horizonHaze": 0.58
+  },
+  "cloudLayers": [
+    {
+      "id": "scattered-cumulus",
+      "altitude": 1450,
+      "thickness": 620,
+      "coverage": 0.38,
+      "density": 0.78,
+      "scale": 0.00019,
+      "wind": [7.5, -1.8],
+      "lightColor": "#F5F1E8",
+      "shadowColor": "#758995"
+    },
+    {
+      "id": "high-broken",
+      "altitude": 4200,
+      "thickness": 350,
+      "coverage": 0.19,
+      "density": 0.42,
+      "scale": 0.000085,
+      "wind": [16, 3.5],
+      "lightColor": "#FAF5EA",
+      "shadowColor": "#9AA9AE"
+    }
+  ],
+  "geometry": {
+    "skyRadius": 47000,
+    "cloudRadius": 36000,
+    "tiers": {
+      "mobile": { "cloudLayers": 1, "radialSegments": 64 },
+      "balanced": { "cloudLayers": 2, "radialSegments": 96 },
+      "desktop": { "cloudLayers": 2, "radialSegments": 128 }
+    }
+  }
+}

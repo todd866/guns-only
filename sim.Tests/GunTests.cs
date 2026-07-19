@@ -168,4 +168,65 @@ public class GunTests {
             bandit = bandit with { Position = bandit.Position + bandit.VelocityVector() * Dt };
         }
     }
+
+    [Fact]
+    public void NextTargetPreservesWeaponStateButResetsTargetState() {
+        var gun = new GunKill(ammo: 20, hitsToKill: 1, hitRadiusM: 1.0);
+        var own = State(Vec3D.Zero);
+        var bandit = State(new Vec3D(0.0, 0.0, 200.0));
+
+        for (int i = 0; i < 120 && gun.Outcome == FightOutcome.Flying; i++)
+            gun.Step(true, own, bandit, Dt);
+
+        Assert.Equal(FightOutcome.Splash, gun.Outcome);
+        Assert.NotEmpty(gun.RoundsInFlight);
+        var next = gun.CreateForNextTarget();
+
+        Assert.NotSame(gun, next);
+        Assert.Equal(gun.AmmoRemaining, next.AmmoRemaining);
+        Assert.Equal(gun.RoundsFired, next.RoundsFired);
+        Assert.Equal(gun.RoundsInFlight, next.RoundsInFlight);
+        Assert.Equal(0, next.HitCount);
+        Assert.Equal(0, next.HitsThisStep);
+        Assert.Equal(0.0, next.KillProgress, 12);
+        Assert.Equal(1.0, next.BanditHealth, 12);
+        Assert.True(next.BanditAlive);
+        Assert.Equal(FightOutcome.Flying, next.Outcome);
+        Assert.False(next.HasLeadSolution);
+        Assert.False(next.GunSolution);
+    }
+
+    [Fact]
+    public void NextTargetRejectsAStillFlyingEngagement() {
+        var gun = new GunKill();
+
+        var error = Assert.Throws<InvalidOperationException>(() => gun.CreateForNextTarget());
+
+        Assert.Contains("only after", error.Message);
+    }
+
+    [Fact]
+    public void NextTargetCanFireAtCadenceBoundaryWherePreviousTargetSplashes() {
+        double interval = 1.0 / GunKill.RoundsPerSecond;
+        var gun = new GunKill(ammo: 4, hitsToKill: 1, hitRadiusM: 0.05);
+        var own = State(Vec3D.Zero);
+        var boundaryTarget = State(new Vec3D(
+            0.0,
+            -0.5 * GunKill.GravityMps2 * interval * interval,
+            4.0 + GunKill.MuzzleVelocityMps * interval));
+
+        gun.Step(true, own, boundaryTarget, 0.0);
+        Assert.Equal(1, gun.RoundsFired);
+        Assert.Equal(FightOutcome.Splash, gun.Step(true, own, boundaryTarget, interval));
+
+        var next = gun.CreateForNextTarget();
+        var offAxisTarget = State(new Vec3D(300.0, 0.0, 0.0));
+        next.Step(true, own, offAxisTarget, 0.0);
+
+        Assert.Equal(2, next.RoundsFired);
+        Assert.Equal(2, next.RoundsInFlight[^1].Id);
+        Assert.Equal(2, next.AmmoRemaining);
+        Assert.Equal(0, next.HitCount);
+        Assert.Equal(FightOutcome.Flying, next.Outcome);
+    }
 }

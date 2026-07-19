@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Guns Only · Effects Lab</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="brand">Guns Only</span><h1>Effects Lab</h1></div>
+    <p id="status" aria-live="polite"><span></span>Loading gun effects…</p>
+  </header>
+  <main>
+    <aside aria-label="Effects controls">
+      <section>
+        <span class="eyebrow">Rendering</span>
+        <h2>Quality profile</h2>
+        <label>Quality tier
+          <select id="quality">
+            <option value="mobile">Mobile</option>
+            <option value="balanced" selected>Balanced</option>
+            <option value="desktop">Desktop</option>
+          </select>
+        </label>
+        <label>Playback speed <output id="speed-value">0.18×</output>
+          <input id="speed" type="range" min="0" max="1" value="0.18" step="0.01">
+        </label>
+        <label class="toggle"><input id="loop" type="checkbox" checked><span>Loop showcase</span></label>
+      </section>
+      <section>
+        <span class="eyebrow">Events</span>
+        <h2>Emit presentation event</h2>
+        <div class="button-grid">
+          <button id="gun-fire" type="button">Gun burst</button>
+          <button id="impact" type="button">Impact</button>
+          <button id="destroyed" type="button">Destruction</button>
+          <button id="wake" type="button">Ship wake</button>
+        </div>
+        <button id="showcase" class="primary" type="button">Run full showcase</button>
+      </section>
+      <section class="instructions">
+        <span class="eyebrow">Inspection</span>
+        <h2>Presentation-only runtime</h2>
+        <p>Drag to orbit and wheel to change range. Event seeds stay fixed so screenshots and replay presentation remain reproducible.</p>
+        <button id="reset" type="button">Reset camera</button>
+      </section>
+    </aside>
+    <section class="viewport" aria-label="Gun, impact, destruction and wake preview">
+      <canvas id="scene"></canvas>
+      <div class="legend" aria-hidden="true">
+        <span><i class="muzzle"></i> muzzle / tracer</span>
+        <span><i class="impact"></i> impact</span>
+        <span><i class="destroyed"></i> destruction</span>
+        <span><i class="wake"></i> wake</span>
+      </div>
+      <div class="readout" aria-label="Effects metrics">
+        <span><b id="active">0</b> active items</span>
+        <span><b id="draws">0</b> effect draws</span>
+        <span><b id="lights">0</b> dynamic lights</span>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

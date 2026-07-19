@@ -1,8 +1,8 @@
 using System.Runtime.InteropServices.JavaScript;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
-// The .NET runtime is used ONLY as a wasm host for the sim kernel — no Blazor UI, no razor.
-// Rendering, input and HUD are plain JS/three.js. The kernel that runs here is the SAME
-// compiled C# that runs on the desktop and passes the 90 tests: not a port, a recompile.
+// The .NET runtime is used only as a WASM host for the sim kernel—there is no Blazor UI or Razor.
+// Rendering, input and HUD are plain JS/three.js. This is the same pure C# kernel exercised by the
+// headless production-session test suite, compiled for the browser rather than ported.
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 await builder.Build().RunAsync();

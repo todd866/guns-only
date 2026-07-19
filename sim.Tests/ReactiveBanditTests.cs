@@ -72,6 +72,18 @@ public class ReactiveBanditTests {
     }
 
     [Fact]
+    public void EnergyTacticCannotStoreImaginaryAfterburnerSpool() {
+        var player = State(1200.0, 1000.0, 1800.0, 160.0);
+        var bandit = new ReactiveBandit(State(0.0, 1000.0, 0.0, 100.0), FlightModel.Sabre);
+
+        bandit.Step(player, Dt);
+
+        Assert.Equal(BanditTactic.Energy, bandit.Tactic);
+        Assert.True(bandit.LastCommand.Throttle > FlightModel.Sabre.MaxThrustFraction);
+        Assert.Equal(FlightModel.Sabre.MaxThrustFraction, bandit.ThrustFraction, 12);
+    }
+
+    [Fact]
     public void PlayerOnSixTriggersARepeatableBreakAndJink() {
         var playerSim = new AircraftSim(State(0.0, 1000.0, -650.0, 205.0), FlightModel.Sabre);
         var initialBandit = State(0.0, 1000.0, 0.0, 165.0);

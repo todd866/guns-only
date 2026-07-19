@@ -1,5 +1,8 @@
 # M0 Feel Gate — the project's go/no-go
 
+> **HISTORICAL M0 RECORD:** this gate documents the original Godot prototype. The browser is now
+> canonical; see `docs/platform-architecture.md` for the active architecture.
+
 Fly each beat (1 Perch, 2 Break, 3 Saddle) in BOTH variants (F1). Answer honestly.
 
 ## Grammar

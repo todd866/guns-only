@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "guns-only-world",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-19",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "GUNS_ALLOWED_ORIGINS": "https://guns-only.vercel.app,http://127.0.0.1:8877,http://localhost:8877,http://[::1]:8877"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GLOBAL_WORLD",
+        "class_name": "GlobalWorld"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GlobalWorld"]
+    }
+  ]
+}

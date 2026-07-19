@@ -1,0 +1,58 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "guns-only-test-fixture"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0, 1, 2, 3]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "FIGHTER_ROOT",
+      "mesh": 0
+    },
+    {
+      "name": "SOCKET_CAMERA_COCKPIT"
+    },
+    {
+      "name": "SOCKET_MUZZLE_LEFT"
+    },
+    {
+      "name": "SOCKET_MUZZLE_RIGHT"
+    }
+  ],
+  "meshes": [
+    {
+      "name": "TEST_TRIANGLE",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 1,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "accessors": [
+    {
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3"
+    },
+    {
+      "componentType": 5123,
+      "count": 3,
+      "type": "SCALAR"
+    }
+  ],
+  "materials": [
+    {
+      "name": "MAT_TEST"
+    }
+  ]
+}

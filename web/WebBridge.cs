@@ -1,403 +1,186 @@
 using System.Runtime.InteropServices.JavaScript;
+using System.Runtime.Versioning;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Turbulence;
 
 namespace GunsOnly.Web;
 
-/// The JS-facing facade. Deliberately a mirror of bridge/SimBridge.cs (the Godot one): same
-/// 120 Hz fixed step, same detent/doctrine wiring, same HUD field names — because the whole
-/// point is that BOTH shells drive the identical kernel, so the same scenario run through
-/// either must produce the same telemetry. The harness (bin/mission) already emits exactly
-/// that artifact, which makes it a conformance suite between desktop and web for free.
-///
-/// Only rendering, input and HUD are new on this side. The physics is not a port: it is the
-/// same compiled C# that passes the desktop suite, running in WebAssembly.
+/// <summary>
+/// Thin JavaScript facade over the presentation-independent SimulationSession. This type owns no
+/// gameplay state or tick logic: it translates JS calls and projects the current session as the
+/// stable, flat JSON contract consumed by the renderer and HUD.
+/// </summary>
+[SupportedOSPlatform("browser")]
 public static partial class WebBridge {
-    const double Dt = 1.0 / AircraftSim.TickHz;
-
-    static AircraftSim _player = null!;
-    static IBandit _bandit = null!;
-    static BeatSetup _beat = null!;
-    static KeyGrammar _keys = null!;
-    static DetentLayer _detents = null!;
-    static GunKill _gunKill = null!;
-    static FuelModel _fuel = null!;
-    static PromptTracker _prompts = null!;
-    static PromptCue _cue;
-    static DoctrineAdvice _advice = new(1.0, 0.0, "setup");
-    static double _acc, _simTimeMs, _lastRange, _closureKts, _closureSmooth;
-    static double _splashCueUntilMs = double.NegativeInfinity;
-    static string _transitionCue = "";
-    static double _transitionCueUntilMs = double.NegativeInfinity;
-    static int _shotsTotal, _shotsInWindow, _killCount;
-    static bool _triggerDown;
-    static int _beatIndex = 1;
-    static Carrier? _carrier;
-    // Meta progression intentionally survives StartBeat/restart. The kernel object owns only the
-    // deterministic policy; this static shell field owns the pilot's session-long clean-trap count.
-    static readonly RecoveryProgress _recoveryProgress = new();
-    static RecoveryDifficulty _difficulty = DifficultyModel.ForLevel(0);
-    static bool _recoveryAttemptActive;
-    static bool _attemptHadSetback;
-    static bool _attemptCleanRecorded;
-    static Carrier.Recovery _recovery = Carrier.Recovery.Flying;
-    static Carrier.TouchdownResult _touchdown = Carrier.TouchdownResult.Flying;
-    static readonly ArrestmentModel _arrestment = new();
-    static readonly CatapultLaunchModel _catapult = new();
-    static BurbleField? _burble;
+    static readonly SimulationSession Session = new(5, Carrier.DeckConfiguration.Axial);
     static Carrier.DeckConfiguration _deckConfiguration = Carrier.DeckConfiguration.Axial;
-    static bool _waveOffArmed;
-    static double _waveOffUntilMs;
 
-    static void ContinueFightAfterSplash(in AircraftState playerState) {
-        _killCount++;
-        _splashCueUntilMs = _simTimeMs + 2200.0;
-        _bandit = _beat.CreateNextBandit(playerState, _killCount);
-        _gunKill = new GunKill();
-        _lastRange = Geometry.Range(playerState, _bandit.State);
-        _closureKts = 0.0;
-        _closureSmooth = 0.0;
-    }
+    // Stable presentation IDs are copied from the staged Korea pack contract. The bridge projects
+    // semantic bindings only; the renderer/AssetRegistry resolves them to authored or procedural
+    // assets. Beat 4 predates that pack and therefore advertises an explicit, unstaged compatibility
+    // contract instead of pretending its balloon glider and AEW&C belong to 1950s Korea.
+    const string KoreaPackId = "korea-1950s";
+    const string KoreaPackVersion = "0.2.1";
+    const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
+    const string SnapshotSchemaVersion = "1.2.0";
+    const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
+    const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
+    const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
+    const string KoreaAssetManifestId = "manifest.korea-1950s.default.v1";
+    const string FixedWingCameraProfileId = "camera.fixed-wing.padlock.v1";
+    const string FixedWingHudProfileId = "hud.fixed-wing.guns.v1";
+    const string FixedWingInputProfileId = "input.fixed-wing.unified.v1";
+    const string FixedWingAudioProfileId = "audio.fixed-wing.jet.v1";
+    const string FixedWingEffectsProfileId = "effects.fixed-wing.guns.v1";
+    const string PlayerPresentationId = "presentation.vehicle.player.v1";
+    const string PlayerCockpitPresentationId = "presentation.cockpit.player.v1";
+    const string BanditPresentationId = "presentation.vehicle.bandit.v1";
+    const string CarrierPresentationId = "presentation.platform.carrier.v1";
 
-    static void FinishPreviousRecoveryAttempt() {
-        if (!_recoveryAttemptActive) return;
-        // A stopped trap wins the attempt even if the pilot waved off earlier. Otherwise a bolter
-        // or wave-off is retained as one setback and eases the next approach.
-        if (!_attemptCleanRecorded && _attemptHadSetback)
-            _recoveryProgress.RecordSetback();
-        _recoveryAttemptActive = false;
-    }
-
-    static void RecordStoppedTrap() {
-        if (!_recoveryAttemptActive || _attemptCleanRecorded) return;
-        _attemptCleanRecorded = true;
-        _recoveryProgress.RecordCleanTrap();
-    }
-
-    static AircraftSim CreatePlayer(in AircraftState state) => new(state, _beat.PlayerAir) {
-        Wind = _carrier is not null
-            ? _burble
-            : new TurbulenceField(intensityMps: 1.2, outerScaleM: 130.0,
-                intermittency: 0.5, seed: 0xB0A7)
-    };
-
-    static void ResetFlightControls(bool approachMode) {
-        var variant = _detents?.Variant ?? ValleyVariant.DoctrineDeep;
-        _detents = new DetentLayer {
-            Variant = _carrier is not null ? ValleyVariant.PhysicsOnly : variant,
-            ApproachMode = approachMode
-        };
-        _waveOffArmed = approachMode;
-        _waveOffUntilMs = double.NegativeInfinity;
-    }
-
-    static void ShowTransition(string cue, double milliseconds = 2200.0) {
-        _transitionCue = cue;
-        _transitionCueUntilMs = _simTimeMs + milliseconds;
-    }
-
-    static void BeginRelaunch() {
-        if (_carrier is null || _catapult.IsActive) return;
-        RecordStoppedTrap();
-        FinishPreviousRecoveryAttempt();
-        _catapult.Begin(_carrier, _player.State.Mass);
-        _detents.ApproachMode = false;
-        _triggerDown = false;
-        ShowTransition("TRAPPED - LAUNCHING", 4000.0);
-    }
-
-    static void CompleteRelaunch() {
-        AircraftState launchState = _catapult.State;
-        _player = CreatePlayer(launchState);
-        _catapult.Reset();
-        _arrestment.Reset();
-        _recovery = Carrier.Recovery.Flying;
-        _touchdown = Carrier.TouchdownResult.Flying;
-        _fuel = new FuelModel();
-        _gunKill = new GunKill();
-        ResetFlightControls(approachMode: false);
-        _recoveryAttemptActive = _carrier is not null;
-        _attemptHadSetback = false;
-        _attemptCleanRecorded = false;
-        _lastRange = Geometry.Range(_player.State, _bandit.State);
-        _closureKts = _closureSmooth = 0.0;
-        ShowTransition("TRAPPED - LAUNCHING", 1400.0);
-    }
-
-    static AircraftState AirborneRespawnState() {
-        AircraftState action = _bandit.State;
-        double heading = double.IsFinite(_player.State.Chi) ? _player.State.Chi : _beat.Player.Chi;
-        var forward = new Vec3D(Math.Sin(heading), 0.0, Math.Cos(heading));
-        var right = new Vec3D(Math.Cos(heading), 0.0, -Math.Sin(heading));
-        var position = action.Position - forward * 1500.0 + right * 450.0;
-        position = position with { Y = Math.Max(650.0, action.Position.Y + 180.0) };
-        var towardAction = action.Position - position;
-        double chi = Math.Atan2(towardAction.X, towardAction.Z);
-        return new AircraftState(position, 180.0, 0.035, chi, 0.0,
-            _beat.PlayerAir.MassKg);
-    }
-
-    static void RespawnAfterCrash() {
-        if (_recoveryAttemptActive) _attemptHadSetback = true;
-        AircraftState spawn = AirborneRespawnState();
-        _player = CreatePlayer(spawn);
-        _arrestment.Reset();
-        _catapult.Reset();
-        _recovery = Carrier.Recovery.Flying;
-        _touchdown = Carrier.TouchdownResult.Flying;
-        _gunKill = new GunKill();
-        _fuel = new FuelModel();
-        _triggerDown = false;
-        ResetFlightControls(approachMode: false);
-        _lastRange = Geometry.Range(_player.State, _bandit.State);
-        _closureKts = _closureSmooth = 0.0;
-        ShowTransition("SPLASHED - RESPAWN");
-    }
+    const string BalloonPackId = "korea-2030s-prototype";
+    const string BalloonPackVersion = "0.0.0-prototype";
+    const string BalloonPresentationProfileId = "presentation.korea-2030s.balloon.prototype.v1";
+    const string BalloonVisualProfileId = "visual.korea-2030s.balloon.prototype.v1";
+    const string GliderPresentationId = "presentation.vehicle.glider-strike.v1";
+    const string AwacsPresentationId = "presentation.vehicle.awacs-target.v1";
 
     [JSExport]
-    public static void StartBeat(int index) {
-        FinishPreviousRecoveryAttempt();
-        var variant = _detents?.Variant ?? ValleyVariant.DoctrineDeep;
-        _beatIndex = index;
-        _beat = index switch {
-            2 => Beats.BreakDefense(), 3 => Beats.Saddle(), 4 => Beats.BalloonStrike(),
-            5 => Beats.CarrierApproach(_deckConfiguration), _ => Beats.Perch() };
-        _carrier = _beat.Carrier;
-        _difficulty = DifficultyModel.ForLevel(0);
-        _recoveryAttemptActive = _carrier is not null;
-        _attemptHadSetback = false;
-        _attemptCleanRecorded = false;
-        if (_carrier is not null) {
-            _difficulty = _recoveryProgress.BeginAttempt();
-            _carrier.ApplyDifficulty(_difficulty);
-            // Beats stores the briefed AIR-relative final. Resolve the wind triangle before the
-            // rigid-body sim is constructed so the jet starts at 70 m/s TAS but only ~55 m/s of
-            // deck closure in 30 kt WOD, with a correctly trimmed initial body attitude.
-            _beat = _beat with {
-                Player = _carrier.ToWorldStateFromAir(_beat.Player, DetentLayer.OnSpeedAoARad)
-            };
-        }
-        _recovery = Carrier.Recovery.Flying;
-        _touchdown = Carrier.TouchdownResult.Flying;
-        _arrestment.Reset();
-        _catapult.Reset();
-        _waveOffArmed = _carrier is not null;
-        _waveOffUntilMs = double.NegativeInfinity;
-        _burble = _carrier is null ? null : new BurbleField(_carrier,
-            new TurbulenceField(intensityMps: _difficulty.BurbleIntensityMps,
-                outerScaleM: 80.0, intermittency: 0.6, seed: _difficulty.TurbulenceSeed),
-            sinkMps: _difficulty.BurbleSinkMps);
-        _player = CreatePlayer(_beat.Player);
-        _bandit = _beat.CreateBandit();
-        _gunKill = new GunKill();
-        _fuel = new FuelModel();
-        _keys = new KeyGrammar();
-        // On the carrier beat, OUT of the slot is free flight — the pull must reach the aero limit,
-        // not the ApproachLaw's 1 G doctrine valley (which strangled fight-logic pitch: firewall+pull
-        // dove into the sea). PhysicsOnly = pull to max-perform. In the slot, ApproachMode overrides.
-        _detents = new DetentLayer {
-            Variant = _beat.Carrier is not null ? ValleyVariant.PhysicsOnly : variant,
-            ApproachMode = _beat.Carrier is not null
-        };
-        _prompts = new PromptTracker();
-        _advice = new DoctrineAdvice(1.0, 0.0, "setup");
-        _cue = PromptCue.None;
-        _triggerDown = false;
-        _acc = 0; _shotsTotal = 0; _shotsInWindow = 0; _killCount = 0;
-        _splashCueUntilMs = double.NegativeInfinity;
-        _transitionCue = "";
-        _transitionCueUntilMs = double.NegativeInfinity;
-        _lastRange = Geometry.Range(_player.State, _bandit.State);
-        _closureKts = 0; _closureSmooth = 0;
-        // _simTimeMs deliberately NOT reset: one monotonic clock for grammar timestamps.
-    }
+    public static void StartBeat(int index) => Session.StartBeat(index, _deckConfiguration);
 
-    [JSExport] public static void FeedKey(int gkey, bool pressed) {
-        _keys.Feed((GKey)gkey, pressed, _simTimeMs);
-        if (gkey == (int)GKey.Trigger) Trigger(pressed);
-        if (!pressed) return;
-        if (gkey == (int)GKey.Restart) StartBeat(_beatIndex);
-    }
+    [JSExport]
+    public static void Begin() => Session.Begin();
 
-    static void Trigger(bool down) {
-        if (down && !_triggerDown) {
-            _shotsTotal++;
-            if (CameraSolver.GunWindow(_player.State, _bandit.State)) _shotsInWindow++;
-        }
-        _triggerDown = down;
-    }
+    [JSExport]
+    public static void SetPaused(bool paused) => Session.SetPaused(paused);
 
-    [JSExport] public static void SetVariant(int v) => _detents.Variant = v == 1 ? ValleyVariant.PhysicsOnly : ValleyVariant.DoctrineDeep;
-    [JSExport] public static int GetVariant() => _detents.Variant == ValleyVariant.PhysicsOnly ? 1 : 0;
-    [JSExport] public static int GetCleanTrapCount() => _recoveryProgress.CleanTrapCount;
-    [JSExport] public static int GetDeckConfiguration() =>
+    [JSExport]
+    public static void FeedKey(int gkey, bool pressed) => Session.FeedKey((GKey)gkey, pressed);
+
+    [JSExport]
+    public static void SetVariant(int value) => Session.SetVariant(
+        value == 1 ? ValleyVariant.PhysicsOnly : ValleyVariant.DoctrineDeep);
+
+    [JSExport]
+    public static int GetVariant() => Session.Variant == ValleyVariant.PhysicsOnly ? 1 : 0;
+
+    [JSExport]
+    public static int GetCleanTrapCount() => Session.RecoveryProgress.CleanTrapCount;
+
+    [JSExport]
+    public static int GetDeckConfiguration() =>
         _deckConfiguration == Carrier.DeckConfiguration.Angled ? 1 : 0;
-    [JSExport] public static void SetDeckConfiguration(int value) {
+
+    [JSExport]
+    public static void SetDeckConfiguration(int value) {
         _deckConfiguration = value == 1
             ? Carrier.DeckConfiguration.Angled
             : Carrier.DeckConfiguration.Axial;
-        if (_beatIndex == 5) StartBeat(5);
+        if (Session.BeatIndex is 5 or 6)
+            Session.StartBeat(Session.BeatIndex, _deckConfiguration);
     }
-    [JSExport] public static void ToggleDeckConfiguration() =>
+
+    [JSExport]
+    public static void ToggleDeckConfiguration() =>
         SetDeckConfiguration(GetDeckConfiguration() == 0 ? 1 : 0);
 
-    /// Advance by real elapsed seconds; the kernel is stepped at a fixed 120 Hz internally.
-    /// Catch-up is capped exactly as the Godot bridge caps it — a backgrounded tab must not
-    /// replay minutes of sim on return.
     [JSExport]
-    public static void Advance(double deltaSeconds) {
-        _acc = Math.Min(_acc + deltaSeconds, 0.25);
-        while (_acc >= Dt) {
-            // Catapult and arrestment are real fixed-step phases, not terminal screens. The ship,
-            // bandit and monotonic simulation clock all keep moving while ownship is deck-bound.
-            if (_carrier is not null && _catapult.IsActive) {
-                AircraftState catapultState = _catapult.State;
-                _gunKill.Step(false, catapultState, _bandit.State, Dt);
-                if (_gunKill.Outcome == FightOutcome.Splash)
-                    ContinueFightAfterSplash(catapultState);
-                _bandit.Step(catapultState, Dt);
-                _carrier.Step(Dt);
-                _catapult.Step(_carrier, Dt);
-                _simTimeMs += Dt * 1000.0;
-                _acc -= Dt;
-                if (_catapult.Phase == CatapultLaunchModel.LaunchPhase.Airborne)
-                    CompleteRelaunch();
-                continue;
-            }
+    public static void Advance(double deltaSeconds) => Session.Advance(deltaSeconds);
 
-            // Once the hook is in a wire, flight physics is finished. Keep translating the ship and
-            // advance only the deterministic, deck-relative arrestment until it reaches zero speed.
-            if (_carrier is not null
-                && _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Arrested) {
-                _gunKill.Step(false, _player.State, _bandit.State, Dt);
-                if (_gunKill.Outcome == FightOutcome.Splash)
-                    ContinueFightAfterSplash(_player.State);
-                _bandit.Step(_player.State, Dt);
-                _carrier.Step(Dt);
-                _arrestment.Step(_carrier, Dt);
-                _simTimeMs += Dt * 1000.0;
-                _acc -= Dt;
-                if (_arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped)
-                    BeginRelaunch();
-                continue;
-            }
-            // Approach law engages ONLY in the slot AND when you haven't firewalled to go around;
-            // leave the groove or slam the throttle and the detent snaps to fight logic. Also feed the
-            // SPATIAL glideslope height error (below the line to the wires) so power recaptures the path.
-            if (_carrier is not null) {
-                bool inSlot = _carrier.InApproachSlot(_player.State);
-                _detents.ApproachMode = inSlot && _detents.Throttle < 0.95;
-                if (_detents.ApproachMode) _waveOffArmed = true;
-                else if (!inSlot && _detents.Throttle < 0.95) _waveOffArmed = false;
-                var (gsAlong, _, gsHeight) = _carrier.LandingFrame(_player.State.Position);
-                double gsLineH = Math.Max(0.0, -_carrier.DeckLengthM * 0.2 - gsAlong)
-                    * Carrier.GlideslopeSlope;
-                _detents.GlideslopeErrorM = gsLineH - gsHeight;
-                _detents.ApproachAirspeedMps = _carrier.AirspeedMps(_player.State);
-                _detents.DeckClosureMps = _carrier.DeckClosureMps(_player.State);
-            }
-            _advice = _beat.Law.Advise(_player.State, _bandit.State, _beat.PlayerAir);
-            _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir, _advice, Dt);
-            if (_waveOffArmed && _detents.Throttle >= 0.95) {
-                _waveOffUntilMs = _simTimeMs + 5000.0;
-                _waveOffArmed = false;
-                if (_recoveryAttemptActive) _attemptHadSetback = true;
-            }
-            _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
-            // GunKill samples both aircraft at the beginning of the fixed tick. Its continuous
-            // round/target intersection then covers this exact dt before either aircraft advances.
-            _gunKill.Step(_triggerDown, _player.State, _bandit.State, Dt);
-            if (_gunKill.Outcome == FightOutcome.Splash)
-                ContinueFightAfterSplash(_player.State);
-            AircraftState previousPlayerState = _player.State;
-            _player.Step(_detents.Command, Dt);
-            _fuel.Step(Dt, _detents.Throttle, _player.ThrustFraction);
-            _bandit.Step(_player.State, Dt);
-            bool respawned = false;
-            if (_carrier is not null) {
-                _carrier.Step(Dt);
-                Carrier.TouchdownResult touchdown = _carrier.EvaluateRecovery(
-                    _player.State, _player.AngleOfAttackRad, _difficulty);
-                Carrier.Recovery contact = touchdown.Recovery;
-                var previousDeck = _carrier.DeckFrame(previousPlayerState.Position);
-                var currentDeck = _carrier.DeckFrame(_player.State.Position);
-                bool topDeckContact = contact is Carrier.Recovery.Trap
-                        or Carrier.Recovery.Bolter or Carrier.Recovery.HardLanding
-                    && previousDeck.height >= -0.05 && currentDeck.height <= 0.05
-                    && _carrier.DeckSinkRateMps(_player.State) > 0.0;
-                Carrier.SolidCollision solid = _carrier.SweptSolidCollision(
-                    previousPlayerState.Position, _player.State.Position);
-
-                if (_touchdown.Recovery == Carrier.Recovery.Flying
-                    && contact != Carrier.Recovery.Flying)
-                    _touchdown = touchdown;
-
-                bool validRecoveryContact = solid == Carrier.SolidCollision.FlightDeck
-                    && topDeckContact;
-                if (solid != Carrier.SolidCollision.None && !validRecoveryContact) {
-                    _attemptHadSetback = true;
-                    RespawnAfterCrash();
-                    respawned = true;
-                } else if (contact is Carrier.Recovery.HardLanding
-                    or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater) {
-                    _attemptHadSetback = true;
-                    RespawnAfterCrash();
-                    respawned = true;
-                } else if (contact == Carrier.Recovery.Bolter) {
-                    _attemptHadSetback = true;
-                    if (_recovery != Carrier.Recovery.Bolter) {
-                        _player = CreatePlayer(_carrier.BolterFlyawayState(_player.State));
-                        ShowTransition("BOLTER");
-                    }
-                    _recovery = Carrier.Recovery.Bolter;
-                } else if (_recovery == Carrier.Recovery.Bolter) {
-                    // Keep the rejection sticky only while crossing the landing area. Once clear,
-                    // the same continuously-flying aircraft can come around for another pass.
-                    var (along, cross, height) = _carrier.DeckFrame(_player.State.Position);
-                    if (height > 8.0 || along > _carrier.DeckLengthM * 0.5 + 5.0
-                        || Math.Abs(cross) > _carrier.DeckHalfWidthM + 10.0) {
-                        _recovery = Carrier.Recovery.Flying;
-                        _touchdown = Carrier.TouchdownResult.Flying;
-                    }
-                } else {
-                    _recovery = contact;
-                }
-                if (!respawned && _recovery == Carrier.Recovery.Trap) {
-                    _arrestment.Engage(_carrier, _player.State, _player.BodyPitchRad, touchdown.Wire);
-                    _detents.ApproachMode = false;
-                    if (_arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped)
-                        BeginRelaunch();
-                }
-            }
-
-            if (!respawned && _player.BelowGround) {
-                RespawnAfterCrash();
-                respawned = true;
-            }
-            double rng = Geometry.Range(_player.State, _bandit.State);
-            _closureKts = (_lastRange - rng) / Dt * 1.94384;
-            _closureKts = _closureSmooth = _closureSmooth * 0.9 + _closureKts * 0.1;
-            _lastRange = rng;
-            _simTimeMs += Dt * 1000.0;
-            _acc -= Dt;
-        }
+    /// <summary>
+    /// Pull the frozen carrier-incident clip exactly once. GetState advertises only its small ID;
+    /// the browser caches this bounded payload for automatic playback and Replay Again.
+    /// </summary>
+    [JSExport]
+    public static string ConsumeIncidentReplay(int clipId) {
+        if (!Session.IncidentReplay.TryConsume(clipId, out IncidentReplayClip clip))
+            return "{}";
+        return IncidentReplayProjection.ToJson(clip);
     }
 
     /// One flat state blob per frame. Sim frame is X=east, Y=up, Z=north; the JS side flips Z
-    /// for three.js exactly as the Godot bridge does (Godot forward = -Z), so both shells put
-    /// the world in the same handedness and a roll reads the same way in both.
+    /// for three.js. All aliases below are read-only projection handles from SimulationSession.
     [JSExport]
     public static string GetState() {
+        AircraftSim _player = Session.Player;
+        IBandit _bandit = Session.Bandit;
+        BeatSetup _beat = Session.Beat;
+        DetentLayer _detents = Session.Controls;
+        GunKill _gunKill = Session.PlayerGun;
+        GunKill _opponentGun = Session.OpponentGun;
+        FuelModel _fuel = Session.PlayerFuel;
+        AirframeSystems _systems = Session.PlayerSystems;
+        Carrier? _carrier = Session.Carrier;
+        Carrier.Recovery _recovery = Session.Recovery;
+        Carrier.TouchdownResult _touchdown = Session.Touchdown;
+        ArrestmentModel _arrestment = Session.Arrestment;
+        CatapultLaunchModel _catapult = Session.Catapult;
+        DoctrineAdvice _advice = Session.Advice;
+        PromptCue _cue = Session.Cue;
+        double _simTimeMs = Session.TimeMilliseconds;
+        double _closureKts = Session.ClosureKts;
+        bool ready = Session.Lifecycle == SimulationSession.LifecycleState.Ready;
+        bool paused = Session.Lifecycle == SimulationSession.LifecycleState.Paused;
+        bool finished = Session.Lifecycle == SimulationSession.LifecycleState.Finished;
+        string sessionPhase = Session.Lifecycle switch {
+            SimulationSession.LifecycleState.Ready => "READY",
+            SimulationSession.LifecycleState.Paused => "PAUSED",
+            SimulationSession.LifecycleState.Finished => "FINISHED",
+            _ => "ACTIVE"
+        };
+
         bool catapulting = _catapult.IsActive;
-        var s = catapulting ? _catapult.State : _player.State;
-        var b = _bandit.State;
+        AircraftState s = catapulting ? _catapult.State : _player.State;
+        AircraftState b = _bandit.State;
         bool arrested = _arrestment.IsActive && !catapulting;
         Vec3D simulationPosition = arrested ? _arrestment.Position : s.Position;
         Vec3D playerPosition = simulationPosition;
-        double displayedSpeedMps = arrested ? _arrestment.RelativeSpeedMps : s.Speed;
-        bool waveOff = _carrier is not null && _simTimeMs < _waveOffUntilMs;
-        string mode = catapulting ? "CATAPULT"
+        // Keep all simulation/protection calculations on authoritative local TAS. The bridge
+        // derives pilot-facing ideal IAS/CAS from pitot impact pressure; EAS remains a separate
+        // aerodynamic diagnostic and earth groundspeed remains explicitly secondary.
+        Vec3D groundVelocity;
+        Vec3D airVelocity;
+        if (catapulting) {
+            groundVelocity = s.VelocityVector();
+            airVelocity = _carrier is null
+                ? groundVelocity
+                : groundVelocity - _carrier.SteadyWindWorld;
+        } else if (arrested && _carrier is not null) {
+            groundVelocity = _carrier.DeckVelocityWorld
+                + _carrier.LandingFwd * _arrestment.RelativeSpeedMps
+                + new Vec3D(0.0, _carrier.DeckVerticalVelocityMps, 0.0);
+            airVelocity = groundVelocity - _carrier.SteadyWindWorld;
+        } else {
+            groundVelocity = s.VelocityVector();
+            airVelocity = _player.AirVelocity;
+        }
+        double trueAirspeedMps = airVelocity.Length;
+        IAtmosphereModel atmosphere = _player.AtmosphereModel;
+        AtmosphericState atmosphericState = atmosphere.Sample(playerPosition.Y);
+        double indicatedAirspeedMps = AirData.IndicatedAirspeedMps(
+            trueAirspeedMps, playerPosition.Y, atmosphere);
+        double equivalentAirspeedMps = AirData.EquivalentAirspeedMps(
+            trueAirspeedMps, playerPosition.Y, atmosphere);
+        double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
+        Vec3D localWindVelocity = groundVelocity - airVelocity;
+        double groundSpeedMps = Math.Sqrt(
+            groundVelocity.X * groundVelocity.X + groundVelocity.Z * groundVelocity.Z);
+        double positiveLoadFactor = Math.Max(1.0,
+            Math.Max(_player.LastNz, _detents.Command.GDemand));
+        double configuredLiftIncrement = _systems.AerodynamicState.LiftCoefficientIncrement;
+        double stallSpeedKias = AirData.StallSpeedKiasAtAltitude(
+            s.Mass, _beat.PlayerAir, playerPosition.Y, 1.0, configuredLiftIncrement,
+            atmosphere);
+        double acceleratedStallSpeedKias = AirData.StallSpeedKiasAtAltitude(
+            s.Mass, _beat.PlayerAir, playerPosition.Y, positiveLoadFactor,
+            configuredLiftIncrement, atmosphere);
+        double cornerSpeedKias = AirData.PositiveCornerSpeedKiasAtAltitude(
+            s.Mass, _beat.PlayerAir, playerPosition.Y, configuredLiftIncrement, atmosphere);
+        bool waveOff = Session.WaveOffActive;
+        string mode = _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Failed
+            ? "ARRESTMENT FAILED"
+            : Session.TerminalPhaseActive ? "TERMINAL"
+            : catapulting ? "CATAPULT"
             : _recovery == Carrier.Recovery.Bolter ? "BOLTER"
             : _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Arrested ? "ARRESTED"
             : _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped ? "STOPPED"
@@ -405,8 +188,8 @@ public static partial class WebBridge {
         string context = _advice.Context;
         string lsoJson = "";
         if (_carrier is not null && !arrested && !catapulting) {
-            var lso = Lso.AdviseForMode(_carrier, s, _player.AngleOfAttackRad,
-                DetentLayer.OnSpeedAoARad, mode == "APPROACH", waveOff);
+            LsoAdvice? lso = Lso.AdviseForMode(_carrier, s, _player.AngleOfAttackRad,
+                _carrier.ApproachDirectorPitchOffsetRad, mode == "APPROACH", waveOff);
             context = lso?.Call ?? Lso.FreeFlightCall;
             if (lso is { } paddles) {
                 string severity = paddles.Severity switch {
@@ -417,16 +200,18 @@ public static partial class WebBridge {
                 lsoJson = $"\"lso\":\"{paddles.Call}\",\"lso_severity\":\"{severity}\",";
             }
         }
-        var bl = _bandit.LiftDir; var bf = b.ForwardDir();
-        // Render the player from the integrated rigid-body attitude. The velocity vector remains
-        // separate (aoa_deg/beta_deg below), so waterline-to-FPM separation is now physical.
-        Vec3D pf, pl;
+
+        Vec3D bl = _bandit.LiftDir;
+        Vec3D bf = b.ForwardDir();
+        Vec3D pf;
+        Vec3D pl;
         if (catapulting) {
             pf = s.BodyAttitude.Rotate(new Vec3D(0.0, 0.0, 1.0));
             pl = s.BodyAttitude.Rotate(new Vec3D(0.0, 1.0, 0.0));
         } else {
             _player.BodyFrame(out pf, out pl);
         }
+
         double displayPitchRad = Math.Asin(Math.Clamp(pf.Y, -1.0, 1.0));
         double displayBankRad = catapulting ? 0.0 : _player.BodyRollRad;
         double displayHeadingRad = Math.Atan2(pf.X, pf.Z);
@@ -445,25 +230,45 @@ public static partial class WebBridge {
                 : $"TRAP · WIRE {_arrestment.CaughtWire}";
         } else if (catapulting) {
             context = "TRAPPED - LAUNCHING";
+        } else if (_arrestment.Phase == ArrestmentModel.ArrestmentPhase.Failed) {
+            context = $"ARRESTMENT FAILED — {ArrestmentFailureToken(_arrestment.FailureReason).Replace('_', ' ')}";
         } else if (_recovery == Carrier.Recovery.Bolter) {
             context = _touchdown.Hook == Carrier.HookOutcome.InFlightEngagement
                 ? "BOLTER — IN-FLIGHT ENGAGEMENT"
                 : "BOLTER — GO AROUND";
         }
+
         RtbGuidance rtb = _carrier is null
             ? default
             : _fuel.GuidanceTo(simulationPosition, displayHeadingRad, _carrier.Position);
-        bool splashCue = _simTimeMs < _splashCueUntilMs;
-        bool transitionActive = catapulting || _simTimeMs < _transitionCueUntilMs;
-        string transitionCue = transitionActive ? _transitionCue : "";
+        // Finished freezes simulation time. Timed in-flight cues would otherwise remain active
+        // forever, so terminal presentation comes from the durable outcome and ordered events.
+        bool splashCue = !finished && Session.SplashCueActive;
+        string transitionCue = finished ? "" : Session.TransitionCue;
         double surfaceAltitudeM = 0.0;
         if (_carrier is not null && _carrier.WithinDeckFootprint(playerPosition))
             surfaceAltitudeM = playerPosition.Y - _carrier.DeckFrame(playerPosition).height;
         double radarAltitudeM = Math.Max(0.0, playerPosition.Y - surfaceAltitudeM);
         double verticalSpeedMps = arrested ? 0.0 : s.VelocityVector().Y;
-        // hand-built JSON: no serializer, no reflection, trim-safe, allocation-cheap.
+        var engine = _player.LastEngineOperatingPoint;
+
+        // Hand-built JSON: no serializer, no reflection, trim-safe, allocation-cheap.
         return "{"
+            + PresentationContractJson(_carrier is not null)
             + $"\"t\":{_simTimeMs / 1000.0:F4},"
+            + $"\"tick\":{Session.Tick},"
+            + $"\"ready\":{(ready ? "true" : "false")},\"paused\":{(paused ? "true" : "false")},"
+            + $"\"finished\":{(finished ? "true" : "false")},\"session_phase\":\"{sessionPhase}\","
+            + $"\"sortie_outcome\":\"{SortieOutcomeToken(Session.Outcome)}\","
+            + $"\"pending_sortie_outcome\":\"{SortieOutcomeToken(Session.PendingOutcome)}\","
+            + $"\"terminal_phase_active\":{(Session.TerminalPhaseActive ? "true" : "false")},"
+            + $"\"player_terminal_state\":\"{TerminalStateToken(Session.PlayerTerminalState)}\","
+            + $"\"opponent_terminal_state\":\"{TerminalStateToken(Session.OpponentTerminalState)}\","
+            + $"\"player_impact_surface\":\"{ImpactSurfaceToken(Session.PlayerImpactSurface)}\","
+            + $"\"opponent_impact_surface\":\"{ImpactSurfaceToken(Session.OpponentImpactSurface)}\","
+            + $"\"incident_replay_id\":{Session.IncidentReplay.ClipId},"
+            + $"\"incident_replay_available\":{(Session.IncidentReplay.ExportAvailable ? "true" : "false")},"
+            + $"\"opponent_body_present\":{(Session.OpponentTerminalState == AircraftTerminalState.Settled ? "false" : "true")},"
             + $"\"px\":{playerPosition.X:F3},\"py\":{playerPosition.Y:F3},\"pz\":{playerPosition.Z:F3},"
             + $"\"pfx\":{pf.X:F5},\"pfy\":{pf.Y:F5},\"pfz\":{pf.Z:F5},"
             + $"\"plx\":{pl.X:F5},\"ply\":{pl.Y:F5},\"plz\":{pl.Z:F5},"
@@ -471,13 +276,27 @@ public static partial class WebBridge {
             + $"\"bfx\":{bf.X:F5},\"bfy\":{bf.Y:F5},\"bfz\":{bf.Z:F5},"
             + $"\"blx\":{bl.X:F5},\"bly\":{bl.Y:F5},\"blz\":{bl.Z:F5},"
             + $"\"buffet_pitch_deg\":{_player.PitchBuffetRad * 57.2958:F3},\"buffet_roll_deg\":{_player.RollBuffetRad * 57.2958:F3},\"buffet_yaw_deg\":{_player.YawBuffetRad * 57.2958:F3},"
-            + $"\"speed_kts\":{displayedSpeedMps * 1.94384:F2},\"alt_ft\":{playerPosition.Y * 3.28084:F1},"
+            + $"\"indicated_airspeed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
+            + $"\"equivalent_airspeed_kts\":{equivalentAirspeedMps * AirData.MpsToKnots:F2},"
+            + $"\"true_airspeed_kts\":{trueAirspeedMps * AirData.MpsToKnots:F2},"
+            + $"\"ground_speed_kts\":{groundSpeedMps * AirData.MpsToKnots:F2},"
+            + $"\"mach\":{mach:F4},"
+            + $"\"static_temperature_c\":{atmosphericState.TemperatureK - 273.15:F2},"
+            + $"\"static_pressure_hpa\":{atmosphericState.PressurePa / 100.0:F2},"
+            + $"\"air_density_kg_m3\":{atmosphericState.DensityKgM3:F6},"
+            + $"\"wind_x_mps\":{localWindVelocity.X:F3},\"wind_y_mps\":{localWindVelocity.Y:F3},\"wind_z_mps\":{localWindVelocity.Z:F3},"
+            // Compatibility consumers keep receiving speed_kts, but it now means the primary KIAS.
+            + $"\"speed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
+            + $"\"stall_speed_kias\":{stallSpeedKias:F2},"
+            + $"\"accelerated_stall_speed_kias\":{acceleratedStallSpeedKias:F2},"
+            + $"\"corner_speed_kias\":{cornerSpeedKias:F2},"
+            + $"\"stall_load_factor\":{positiveLoadFactor:F3},\"alt_ft\":{playerPosition.Y * 3.28084:F1},"
             + $"\"radar_alt_ft\":{radarAltitudeM * 3.28084:F1},\"vertical_speed_fpm\":{verticalSpeedMps * 196.8504:F1},"
             + $"\"g_actual\":{_player.LastNz:F3},\"g_cmd\":{_detents.Command.GDemand:F3},"
             + $"\"g_valley\":{_detents.ValleyG:F3},"
-            + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir):F3},"
-            + $"\"g_hardmax\":{Protection.HardMaxG(s, _beat.PlayerAir):F3},"
-            + $"\"sustained\":{Protection.SustainedG(s, _beat.PlayerAir):F3},"
+            + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
+            + $"\"g_hardmax\":{Protection.HardMaxG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
+            + $"\"sustained\":{Protection.SustainedG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
             + $"\"sticky\":{_detents.StickyOffsetG:F2},\"tier\":{(int)_detents.Tier},"
             + $"\"variant\":{GetVariant()},\"buffet\":{(_player.Buffet ? "true" : "false")},"
             + $"\"prompt\":{(int)_cue},"
@@ -494,22 +313,52 @@ public static partial class WebBridge {
             + $"\"lead_tof\":{_gunKill.LeadTimeOfFlight:F4},\"ammo\":{_gunKill.AmmoRemaining},"
             + $"\"rounds_fired\":{_gunKill.RoundsFired},\"hits\":{_gunKill.HitCount},"
             + $"\"hit\":{(_gunKill.HitThisStep ? "true" : "false")},"
-            + $"\"gun_firing\":{(_triggerDown && _gunKill.AmmoRemaining > 0 && _gunKill.BanditAlive ? "true" : "false")},"
-            + TracerJson()
-            + $"\"kill_progress\":{_gunKill.KillProgress:F3},\"bandit_health\":{_gunKill.BanditHealth:F3},"
+            + $"\"gun_firing\":{(Session.TriggerDown && _gunKill.AmmoRemaining > 0 && _gunKill.BanditAlive ? "true" : "false")},"
+            + TracerJson("tracers", _gunKill.RoundsInFlight)
+            + $"\"kill_progress\":{_gunKill.KillProgress:F3},"
+            + $"\"opponent_health\":{_gunKill.TargetHealth:F3},\"opponent_alive\":{(_gunKill.TargetAlive ? "true" : "false")},"
+            + $"\"bandit_health\":{_gunKill.BanditHealth:F3},"
             + $"\"fight\":\"{_gunKill.Outcome}\",\"bandit_alive\":{(_gunKill.BanditAlive ? "true" : "false")},"
-            + $"\"kill_count\":{_killCount},\"splash_cue\":{(splashCue ? "true" : "false")},"
+            + $"\"player_health\":{_opponentGun.TargetHealth:F3},\"player_alive\":{(_opponentGun.TargetAlive ? "true" : "false")},"
+            + $"\"opponent_ammo\":{_opponentGun.AmmoRemaining},"
+            + $"\"opponent_rounds_fired\":{_opponentGun.RoundsFired},\"opponent_hits\":{_opponentGun.HitCount},"
+            + $"\"opponent_trigger_down\":{(Session.OpponentTriggerDown ? "true" : "false")},"
+            + $"\"opponent_gun_firing\":{(Session.OpponentTriggerDown && _opponentGun.AmmoRemaining > 0 && _opponentGun.TargetAlive ? "true" : "false")},"
+            + TracerJson("opponent_tracers", _opponentGun.RoundsInFlight)
+            + CombatEventsJson()
+            + $"\"kill_count\":{Session.KillCount},\"splash_cue\":{(splashCue ? "true" : "false")},"
             + $"\"transition_cue\":\"{transitionCue}\","
+            // Legacy frozen drives a mobile CSS interlock; Ready/Paused use their dedicated fields.
             + $"\"below_ground\":{(s.Position.Y <= 0.0 ? "true" : "false")},\"frozen\":false,"
-            + $"\"shots_total\":{_shotsTotal},\"shots_in_window\":{_shotsInWindow},"
+            + $"\"shots_total\":{Session.ShotsTotal},\"shots_in_window\":{Session.ShotsInWindow},"
             + $"\"throttle\":{_detents.Throttle:F3},\"engine\":{_player.ThrustFraction:F3},"
-            + $"\"fuel_lb\":{_fuel.FuelLb:F2},\"fuel_burn_lb_min\":{_fuel.BurnLbPerMinute:F2},"
+            + $"\"engine_rpm_pct\":{engine.RpmPercent:F2},\"engine_thrust_lbf\":{engine.NetThrustLbf:F1},"
+            + $"\"engine_running\":{(engine.Running ? "true" : "false")},"
+            + $"\"fuel_lb\":{_fuel.FuelLb:F2},\"fuel_flow_lb_min\":{_fuel.SmoothedBurnLbPerMinute:F2},"
             + $"\"fuel_trend_lb_min\":{_fuel.FuelTrendLbPerMinute:F2},"
-            + $"\"fuel_capacity_lb\":{FuelModel.DefaultFuelLb:F1},\"fuel_bingo_lb\":{FuelModel.BingoFuelLb:F1},"
+            + $"\"fuel_minutes_to_bingo\":{NullableNumberJson(_fuel.MinutesToBingo)},"
+            + $"\"fuel_endurance_minutes\":{NullableNumberJson(_fuel.EnduranceMinutes)},"
+            + $"\"fuel_capacity_lb\":{_fuel.CapacityLb:F1},\"fuel_bingo_lb\":{_fuel.BingoThresholdLb:F1},"
+            + $"\"fuel_consumes\":{(_fuel.ConsumesFuel ? "true" : "false")},"
             + $"\"fuel_bingo\":{(_fuel.IsBingo ? "true" : "false")},"
             + $"\"rtb\":{(_fuel.RtbAdvisory ? "true" : "false")},\"rtb_steer\":{(rtb.Active ? "true" : "false")},"
             + $"\"rtb_bearing_deg\":{rtb.BearingRad * 57.29577951308232:F2},\"rtb_turn_deg\":{rtb.TurnRad * 57.29577951308232:F2},"
             + $"\"rtb_range_nm\":{rtb.RangeM / 1852.0:F2},"
+            + $"\"gear_handle\":\"{GearHandleToken(_systems.GearHandle)}\","
+            + $"\"gear_nose\":{_systems.NoseGearPosition:F4},\"gear_left\":{_systems.LeftMainGearPosition:F4},\"gear_right\":{_systems.RightMainGearPosition:F4},"
+            + $"\"gear_nose_indication\":\"{GearIndicationToken(_systems.NoseGearIndication)}\","
+            + $"\"gear_left_indication\":\"{GearIndicationToken(_systems.LeftMainGearIndication)}\","
+            + $"\"gear_right_indication\":\"{GearIndicationToken(_systems.RightMainGearIndication)}\","
+            + $"\"gear_unsafe\":{(_systems.GearUnsafeLight ? "true" : "false")},"
+            + $"\"gear_warning_horn\":{(_systems.GearWarningHorn ? "true" : "false")},"
+            + $"\"gear_limit_exceeded\":{(_systems.GearLimitExceeded ? "true" : "false")},"
+            + $"\"flap_lever\":\"{FlapLeverToken(_systems.FlapLever)}\","
+            + $"\"flap_left_deg\":{_systems.LeftFlapDegrees:F2},\"flap_right_deg\":{_systems.RightFlapDegrees:F2},"
+            + $"\"flap_split\":{(_systems.FlapSplit ? "true" : "false")},"
+            + $"\"flap_limit_exceeded\":{(_systems.FlapLimitExceeded ? "true" : "false")},"
+            + $"\"primary_bus_powered\":{(_systems.PrimaryBusPowered ? "true" : "false")},"
+            + $"\"utility_hydraulic_pressure_psi\":{_systems.UtilityHydraulicPressurePsi:F1},"
+            + MaintenanceScenarioJson()
             + $"\"approach\":{(_detents.ApproachMode ? "true" : "false")},"
             + $"\"mode\":\"{mode}\",\"wave_off\":{(waveOff ? "true" : "false")},"
             + lsoJson
@@ -518,18 +367,117 @@ public static partial class WebBridge {
             + "}";
     }
 
-    // Flat numeric arrays keep the web side's hot path compact: [x,y,z,vx,vy,vz]. The gun's
-    // lifetime/cadence naturally caps this below 40, but the explicit cap protects the render
-    // contract if either tuning value changes later.
-    static string TracerJson() {
+    static string NullableNumberJson(double? value) => value is { } number
+        && double.IsFinite(number)
+            ? number.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
+
+    static string GearHandleToken(LandingGearHandle handle) => handle switch {
+        LandingGearHandle.Down => "DOWN",
+        _ => "UP"
+    };
+
+    static string FlapLeverToken(WingFlapLever lever) => lever switch {
+        WingFlapLever.Up => "UP",
+        WingFlapLever.Down => "DOWN",
+        _ => "HOLD"
+    };
+
+    static string GearIndicationToken(LandingGearIndication indication) => indication switch {
+        LandingGearIndication.UpLocked => "UP_LOCKED",
+        LandingGearIndication.DownLocked => "DOWN_LOCKED",
+        _ => "STRIPED"
+    };
+
+    static string MaintenanceScenarioJson() {
+        F86EmergencyGearRecoveryScenario? scenario = Session.MaintenanceScenario;
+        if (scenario is null)
+            return "\"maintenance_scenario\":false,";
+
+        string state = scenario.State switch {
+            F86EmergencyGearRecoveryState.AwaitingStart => "AWAITING_START",
+            F86EmergencyGearRecoveryState.NormalCheck => "NORMAL_CHECK",
+            F86EmergencyGearRecoveryState.ObserveNormalExtension => "OBSERVE_NORMAL_EXTENSION",
+            F86EmergencyGearRecoveryState.ConfigureForEmergencyExtension => "CONFIGURE",
+            F86EmergencyGearRecoveryState.EmergencyExtend => "EMERGENCY_EXTEND",
+            F86EmergencyGearRecoveryState.VerifyDownlocks => "VERIFY_DOWNLOCKS",
+            F86EmergencyGearRecoveryState.Recover => "RECOVER",
+            F86EmergencyGearRecoveryState.Recovered => "RECOVERED",
+            _ => "AIRCRAFT_LOST"
+        };
+        return "\"maintenance_scenario\":true,"
+            + $"\"maintenance_state\":\"{state}\","
+            + $"\"maintenance_instruction\":\"{scenario.PilotInstruction}\","
+            + $"\"maintenance_score\":{scenario.Score},"
+            + $"\"maintenance_max_score\":{scenario.MaximumScore},"
+            + $"\"maintenance_demerits\":{scenario.DemeritCount},"
+            + $"\"maintenance_procedure_complete\":{(scenario.ProcedurallyComplete ? "true" : "false")},"
+            + $"\"maintenance_recovered\":{(scenario.Recovered ? "true" : "false")},";
+    }
+
+    /// Stable pack/profile identity and entity-to-presentation bindings for the current snapshot.
+    /// Session-owned spawn sequences yield a fresh entity ID on the exact snapshot where a logical
+    /// vehicle replaces the prior one, including restart and crash respawn. This keeps render-
+    /// instance lifetime out of display names, coordinates, and resettable mission counters.
+    static string PresentationContractJson(bool hasCarrier) {
+        bool balloonPrototype = Session.BeatIndex == 4;
+        string packId = balloonPrototype ? BalloonPackId : KoreaPackId;
+        string packVersion = balloonPrototype ? BalloonPackVersion : KoreaPackVersion;
+        string packUriJson = balloonPrototype ? "null" : $"\"{KoreaPackUri}\"";
+        string presentationProfileId = balloonPrototype
+            ? BalloonPresentationProfileId : KoreaPresentationProfileId;
+        string visualProfileId = balloonPrototype ? BalloonVisualProfileId : KoreaVisualProfileId;
+        string assetProfileJson = balloonPrototype ? "null" : $"\"{KoreaAssetProfileId}\"";
+        string assetManifestJson = balloonPrototype ? "null" : $"\"{KoreaAssetManifestId}\"";
+        string audioProfileJson = balloonPrototype ? "null" : $"\"{FixedWingAudioProfileId}\"";
+        string playerPresentationId = balloonPrototype ? GliderPresentationId : PlayerPresentationId;
+        string cockpitPresentationJson = balloonPrototype
+            ? "null" : $"\"{PlayerCockpitPresentationId}\"";
+        string banditPresentationId = balloonPrototype && Session.KillCount == 0
+            ? AwacsPresentationId : BanditPresentationId;
+        string missionDefinitionId = Session.BeatIndex switch {
+            2 => "mission.break-defense.v1",
+            3 => "mission.saddle-tracking.v1",
+            4 => "mission.korea-2030s.balloon-strike.prototype.v1",
+            5 => "mission.carrier-qualification.v1",
+            6 => "mission.f86f.degraded-gear-recovery.v1",
+            _ => "mission.perch-attack.v1"
+        };
+        string carrierEntityJson = hasCarrier
+            ? $"\"entity.carrier.{Session.CarrierSpawnSequence}\"" : "null";
+        string carrierPresentationJson = hasCarrier ? $"\"{CarrierPresentationId}\"" : "null";
+
+        return $"\"snapshot_schema_version\":\"{SnapshotSchemaVersion}\","
+            + $"\"pack_id\":\"{packId}\",\"pack_version\":\"{packVersion}\","
+            + $"\"content_pack_uri\":{packUriJson},"
+            + $"\"mission_definition_id\":\"{missionDefinitionId}\","
+            + $"\"presentation_profile_id\":\"{presentationProfileId}\","
+            + $"\"visual_profile_id\":\"{visualProfileId}\","
+            + $"\"asset_profile_id\":{assetProfileJson},\"asset_manifest_id\":{assetManifestJson},"
+            + $"\"camera_profile_id\":\"{FixedWingCameraProfileId}\","
+            + $"\"hud_profile_id\":\"{FixedWingHudProfileId}\","
+            + $"\"input_profile_id\":\"{FixedWingInputProfileId}\","
+            + $"\"audio_profile_id\":{audioProfileJson},"
+            + $"\"effects_profile_id\":\"{FixedWingEffectsProfileId}\","
+            + $"\"player_entity_id\":\"entity.player.{Session.PlayerSpawnSequence}\","
+            + $"\"player_presentation_id\":\"{playerPresentationId}\","
+            + $"\"cockpit_presentation_id\":{cockpitPresentationJson},"
+            + $"\"bandit_entity_id\":\"entity.bandit.{Session.BanditSpawnSequence}\","
+            + $"\"bandit_presentation_id\":\"{banditPresentationId}\","
+            + $"\"carrier_entity_id\":{carrierEntityJson},"
+            + $"\"carrier_presentation_id\":{carrierPresentationJson},";
+    }
+
+    // Flat numeric arrays keep the web hot path compact: [x,y,z,vx,vy,vz].
+    static string TracerJson(string propertyName, IReadOnlyList<GunRound> rounds) {
         const int MaxRenderedTracers = 48;
-        var rounds = _gunKill.RoundsInFlight;
         int first = Math.Max(0, rounds.Count - MaxRenderedTracers);
-        var json = new System.Text.StringBuilder(32 + (rounds.Count - first) * 72);
-        json.Append("\"tracers\":[");
+        var json = new System.Text.StringBuilder(propertyName.Length + 8
+            + (rounds.Count - first) * 72);
+        json.Append('"').Append(propertyName).Append("\":[");
         for (int i = first; i < rounds.Count; i++) {
             if (i != first) json.Append(',');
-            var round = rounds[i];
+            GunRound round = rounds[i];
             json.AppendFormat(System.Globalization.CultureInfo.InvariantCulture,
                 "[{0:F3},{1:F3},{2:F3},{3:F3},{4:F3},{5:F3}]",
                 round.Position.X, round.Position.Y, round.Position.Z,
@@ -539,53 +487,170 @@ public static partial class WebBridge {
         return json.ToString();
     }
 
-    // Carrier fields for the web to render the deck + resolve the aircraft against it + show the
-    // trap/miss banner. Empty when the beat has no carrier.
+    static string SortieOutcomeToken(SortieOutcome outcome) => outcome switch {
+        SortieOutcome.Victory => "VICTORY",
+        SortieOutcome.Defeat => "DEFEAT",
+        SortieOutcome.Draw => "DRAW",
+        _ => "NONE"
+    };
+
+    static string EventTypeToken(SessionEventType type) => type switch {
+        SessionEventType.Hit => "HIT",
+        SessionEventType.Destroyed => "DESTROYED",
+        SessionEventType.Impact => "IMPACT",
+        SessionEventType.Settled => "SETTLED",
+        SessionEventType.TerminalLimitReached => "TERMINAL_LIMIT_REACHED",
+        SessionEventType.SortieFinished => "SORTIE_FINISHED",
+        SessionEventType.ArrestmentFailed => "ARRESTMENT_FAILED",
+        _ => "UNKNOWN"
+    };
+
+    static string ArrestmentFailureToken(
+        ArrestmentModel.ArrestmentFailureReason reason) => reason switch {
+        ArrestmentModel.ArrestmentFailureReason.EnergyCapacityExceeded =>
+            "ENERGY_CAPACITY_EXCEEDED",
+        ArrestmentModel.ArrestmentFailureReason.RunoutExhausted =>
+            "RUNOUT_EXHAUSTED",
+        ArrestmentModel.ArrestmentFailureReason.LineLoadExceeded =>
+            "LINE_LOAD_EXCEEDED",
+        _ => "NONE"
+    };
+
+    static string TerminalStateToken(AircraftTerminalState state) => state switch {
+        AircraftTerminalState.DestroyedAirborne => "DESTROYED_AIRBORNE",
+        AircraftTerminalState.Impacted => "IMPACTED",
+        AircraftTerminalState.Settled => "SETTLED",
+        AircraftTerminalState.SimulationBounded => "SIMULATION_BOUNDED",
+        _ => "FLYING"
+    };
+
+    static string ImpactSurfaceToken(ImpactSurface surface) => surface switch {
+        ImpactSurface.Water => "WATER",
+        ImpactSurface.FlightDeck => "FLIGHT_DECK",
+        ImpactSurface.CarrierStructure => "CARRIER_STRUCTURE",
+        ImpactSurface.SimulationBoundary => "SIMULATION_BOUNDARY",
+        _ => "NONE"
+    };
+
+    static string CombatRoleToken(CombatRole role) => role switch {
+        CombatRole.Player => "PLAYER",
+        CombatRole.Opponent => "OPPONENT",
+        _ => "NONE"
+    };
+
+    static string CombatEventsJson() {
+        IReadOnlyList<SessionEvent> events = Session.RecentEvents;
+        var json = new System.Text.StringBuilder(24 + events.Count * 128);
+        json.Append("\"recent_events\":[");
+        for (int i = 0; i < events.Count; i++) {
+            if (i != 0) json.Append(',');
+            SessionEvent e = events[i];
+            json.Append("{\"sequence\":").Append(e.Sequence)
+                .Append(",\"tick\":").Append(e.Tick)
+                .Append(",\"type\":\"").Append(EventTypeToken(e.Type))
+                .Append("\",\"source\":\"").Append(CombatRoleToken(e.Source))
+                .Append("\",\"target\":\"").Append(CombatRoleToken(e.Target))
+                .Append("\",\"count\":").Append(e.Count)
+                .Append(",\"outcome\":\"").Append(SortieOutcomeToken(e.Outcome))
+                .Append("\",\"surface\":\"").Append(ImpactSurfaceToken(e.Surface))
+                .Append("\"}");
+        }
+        json.Append("],");
+        return json.ToString();
+    }
+
+    // Empty for non-carrier beats; otherwise supplies the carrier render and recovery contract.
     static string CarrierJson(in Vec3D playerPosition) {
-        if (_carrier is null) return "";
-        var c = _carrier;
+        Carrier? carrier = Session.Carrier;
+        if (carrier is null) return "";
+        Carrier c = carrier;
+        AircraftSim player = Session.Player;
+        Carrier.TouchdownResult touchdown = Session.Touchdown;
+        Carrier.Recovery recovery = Session.Recovery;
+        ArrestmentModel arrestment = Session.Arrestment;
+        CatapultLaunchModel catapult = Session.Catapult;
+        RecoveryDifficulty difficulty = Session.Difficulty;
+        BurbleField? burble = Session.Burble;
+
         var (along, cross, height) = c.LandingFrame(playerPosition);
         string config = c.Configuration == Carrier.DeckConfiguration.Angled ? "ANGLED" : "AXIAL";
-        string arrestPhase = _arrestment.Phase switch {
+        string arrestPhase = arrestment.Phase switch {
             ArrestmentModel.ArrestmentPhase.Arrested => "ARRESTED",
             ArrestmentModel.ArrestmentPhase.Stopped => "STOPPED",
+            ArrestmentModel.ArrestmentPhase.Failed => "FAILED",
             _ => "NONE"
         };
-        bool contacted = _touchdown.Recovery != Carrier.Recovery.Flying;
-        double airspeed = contacted ? _touchdown.AirspeedMps : c.AirspeedMps(_player.State);
-        double closure = _catapult.IsActive ? _catapult.RelativeSpeedMps
-            : _arrestment.IsActive ? _arrestment.RelativeSpeedMps
-            : contacted ? _touchdown.ClosureMps : c.DeckClosureMps(_player.State);
-        double sink = contacted ? _touchdown.SinkRateMps : c.DeckSinkRateMps(_player.State);
-        double inClose = _burble?.InCloseStrength(_player.State.Position) ?? 0.0;
-        int wire = _arrestment.CaughtWire != 0 ? _arrestment.CaughtWire : _touchdown.Wire;
-        string quality = _touchdown.Quality.ToString().ToUpperInvariant();
-        string hook = _touchdown.Hook.ToString().ToUpperInvariant();
+        bool contacted = touchdown.Recovery != Carrier.Recovery.Flying;
+        double airspeed = contacted
+            ? touchdown.IndicatedAirspeedMps
+            : player.IndicatedAirspeedMps;
+        double closure = catapult.IsActive ? catapult.RelativeSpeedMps
+            : arrestment.IsActive ? arrestment.RelativeSpeedMps
+            : contacted ? touchdown.ClosureMps : c.DeckClosureMps(player.State);
+        double sink = contacted ? touchdown.SinkRateMps : c.DeckSinkRateMps(player.State);
+        Vec3D deckVelocity = c.DeckRelativeVelocity(player.State);
+        double inClose = burble?.InCloseStrength(player.State.Position) ?? 0.0;
+        int wire = arrestment.CaughtWire != 0 ? arrestment.CaughtWire : touchdown.Wire;
+        string quality = touchdown.Quality.ToString().ToUpperInvariant();
+        string hook = touchdown.Hook.ToString().ToUpperInvariant();
+        string grade = touchdown.Grade switch {
+            Carrier.TouchdownGrade.NoGrade => "NO GRADE",
+            _ => touchdown.Grade.ToString().ToUpperInvariant()
+        };
+        string deviations = touchdown.Deviations.ToString().ToUpperInvariant()
+            .Replace(", ", "|");
+        string correction = touchdown.PrimaryCorrection switch {
+            Carrier.TouchdownCorrection.WaveOffEarlier => "WAVE OFF EARLIER",
+            Carrier.TouchdownCorrection.AddPowerEarlier => "ADD POWER EARLIER",
+            Carrier.TouchdownCorrection.StabilizeIas => "STABILIZE IAS",
+            Carrier.TouchdownCorrection.EstablishLineupEarlier => "ESTABLISH LINEUP EARLIER",
+            Carrier.TouchdownCorrection.FlyOnSpeedAoa => "FLY ON-SPEED AOA",
+            Carrier.TouchdownCorrection.FlyThroughNoFlare => "FLY THROUGH — DO NOT FLARE",
+            Carrier.TouchdownCorrection.MeetAdaptiveTarget => "MEET TRAINING TARGET",
+            _ => "NONE"
+        };
         return $"\"carrier\":true,"
             + $"\"cx\":{c.Position.X:F2},\"cy\":{c.Position.Y:F2},\"cz\":{c.Position.Z:F2},"
             + $"\"cheading\":{c.HeadingRad:F5},\"deck_len\":{c.DeckLengthM:F1},\"deck_w\":{c.DeckHalfWidthM * 2:F1},\"deck_alt\":{c.DeckAltM:F1},"
             + $"\"landing_heading\":{c.LandingHeadingRad:F5},\"deck_config\":\"{config}\","
-            // LandingFrame h=0 is the recovery contact plane; put the aim diamond there too.
             + $"\"tx\":{c.TouchdownPoint.X:F2},\"ty\":{c.TouchdownPoint.Y:F2},\"tz\":{c.TouchdownPoint.Z:F2},"
+            + $"\"ax\":{c.ApproachCuePoint.X:F2},\"ay\":{c.ApproachCuePoint.Y:F2},\"az\":{c.ApproachCuePoint.Z:F2},"
+            + $"\"approach_cue_lead_m\":{c.ApproachCueLeadM:F1},"
+            + $"\"approach_director_pitch_deg\":{c.ApproachDirectorPitchOffsetRad * 57.29577951308232:F3},"
+            + $"\"deck_vx\":{deckVelocity.X:F3},\"deck_vy\":{deckVelocity.Y:F3},\"deck_vz\":{deckVelocity.Z:F3},"
             + $"\"deck_along\":{along:F1},\"deck_cross\":{cross:F1},\"deck_height\":{height:F1},"
-            + $"\"difficulty_level\":{_difficulty.Level},\"difficulty_baseline\":{_difficulty.SkillBaselineLevel},"
-            + $"\"difficulty_floor\":{_difficulty.FloorLevel},\"difficulty_attempt\":{_difficulty.AttemptIndex + 1},"
-            + $"\"difficulty_variation\":{_difficulty.Variation},\"difficulty_label\":\"{_difficulty.Label}\","
-            + $"\"difficulty_eased\":{(_difficulty.IsEased ? "true" : "false")},"
-            + $"\"difficulty_spike\":{(_difficulty.IsSpike ? "true" : "false")},\"clean_traps\":{_recoveryProgress.CleanTrapCount},"
+            + $"\"difficulty_level\":{difficulty.Level},\"difficulty_baseline\":{difficulty.SkillBaselineLevel},"
+            + $"\"difficulty_floor\":{difficulty.FloorLevel},\"difficulty_attempt\":{difficulty.AttemptIndex + 1},"
+            + $"\"difficulty_variation\":{difficulty.Variation},\"difficulty_label\":\"{difficulty.Label}\","
+            + $"\"difficulty_eased\":{(difficulty.IsEased ? "true" : "false")},"
+            + $"\"difficulty_spike\":{(difficulty.IsSpike ? "true" : "false")},\"clean_traps\":{Session.RecoveryProgress.CleanTrapCount},"
             + $"\"deck_pitch_deg\":{c.DeckPitchRad * 57.2958:F3},\"deck_heave_m\":{c.DeckHeaveM:F3},"
-            + $"\"wod_kts\":{Carrier.WindOverDeckKts:F1},\"groundspeed_kts\":{_player.State.Speed * 1.94384:F2},"
+            + $"\"wod_kts\":{Carrier.WindOverDeckKts:F1},"
             + $"\"approach_airspeed_kts\":{airspeed * 1.94384:F2},\"deck_closure_kts\":{closure * 1.94384:F2},"
             + $"\"sink_rate_mps\":{sink:F3},\"sink_rate_fpm\":{sink * 196.8504:F1},"
             + $"\"in_close_burble\":{inClose:F3},\"in_close\":{(inClose > 0.20 ? "true" : "false")},"
-            + $"\"recovery\":\"{_recovery}\",\"bolter\":{(_recovery == Carrier.Recovery.Bolter ? "true" : "false")},"
+            + $"\"recovery\":\"{recovery}\",\"bolter\":{(recovery == Carrier.Recovery.Bolter ? "true" : "false")},"
             + $"\"wire\":{wire},\"touchdown_quality\":\"{quality}\",\"hook_outcome\":\"{hook}\","
-            + $"\"soft_trap\":{(_touchdown.Quality == Carrier.TouchdownQuality.Soft && _recovery == Carrier.Recovery.Trap ? "true" : "false")},"
-            + $"\"hard_trap\":{(_touchdown.Quality == Carrier.TouchdownQuality.Hard && _recovery == Carrier.Recovery.Trap ? "true" : "false")},"
-            + $"\"arrest_phase\":\"{arrestPhase}\",\"arrest_speed_kts\":{_arrestment.RelativeSpeedMps * 1.94384:F2},"
-            + $"\"arrest_time_s\":{_arrestment.ElapsedSeconds:F3},\"arrest_distance_m\":{_arrestment.DistanceM:F2},"
-            + $"\"arrest_runout_target_m\":{_arrestment.RunoutTargetM:F1},\"wire_stretch_m\":{_arrestment.WireStretchM:F3},"
-            + $"\"wire_tension_kn\":{_arrestment.TensionN / 1000.0:F2},\"arrest_decel_g\":{_arrestment.DecelerationMps2 / FlightModel.G0:F3},"
-            + $"\"arrest_peak_decel_g\":{_arrestment.PeakDecelerationMps2 / FlightModel.G0:F3},";
+            + $"\"touchdown_grade\":\"{grade}\",\"touchdown_deviations\":\"{deviations}\","
+            + $"\"touchdown_primary_correction\":\"{correction}\","
+            + $"\"soft_trap\":{(touchdown.Quality == Carrier.TouchdownQuality.Soft && recovery == Carrier.Recovery.Trap ? "true" : "false")},"
+            + $"\"hard_trap\":{(touchdown.Quality == Carrier.TouchdownQuality.Hard && recovery == Carrier.Recovery.Trap ? "true" : "false")},"
+            + $"\"arrest_phase\":\"{arrestPhase}\",\"arrest_speed_kts\":{arrestment.RelativeSpeedMps * 1.94384:F2},"
+            + $"\"arrest_time_s\":{arrestment.ElapsedSeconds:F3},\"arrest_distance_m\":{arrestment.DistanceM:F2},"
+            + $"\"arrest_runout_target_m\":{arrestment.RunoutTargetM:F1},\"wire_stretch_m\":{arrestment.WireStretchM:F3},"
+            + $"\"wire_tension_kn\":{arrestment.TensionN / 1000.0:F2},\"arrest_decel_g\":{arrestment.DecelerationMps2 / FlightModel.G0:F3},"
+            + $"\"arrest_peak_decel_g\":{arrestment.PeakDecelerationMps2 / FlightModel.G0:F3},"
+            + $"\"arrest_profile\":\"{arrestment.Capability.Id}\","
+            + $"\"arrest_failure_reason\":\"{ArrestmentFailureToken(arrestment.FailureReason)}\","
+            + $"\"arrest_initial_energy_mj\":{arrestment.InitialEnergyJ / 1_000_000.0:F4},"
+            + $"\"arrest_absorbed_energy_mj\":{arrestment.AbsorbedEnergyJ / 1_000_000.0:F4},"
+            + $"\"arrest_remaining_energy_mj\":{arrestment.RemainingEnergyJ / 1_000_000.0:F4},"
+            + $"\"arrest_rated_energy_mj\":{arrestment.Capability.RatedEnergyJ / 1_000_000.0:F4},"
+            + $"\"arrest_force_curve_work_mj\":{arrestment.Capability.ForceCurveWorkJ / 1_000_000.0:F4},"
+            + $"\"arrest_effective_energy_mj\":{arrestment.Capability.EffectiveEnergyCapacityJ / 1_000_000.0:F4},"
+            + $"\"arrest_max_line_load_kn\":{arrestment.Capability.MaximumLineLoadN / 1000.0:F2},"
+            + $"\"arrest_peak_load_kn\":{arrestment.PeakLoadN / 1000.0:F2},"
+            + $"\"arrest_residual_speed_kts\":{arrestment.ResidualSpeedMps * AirData.MpsToKnots:F2},"
+            + $"\"arrest_initial_closure_kts\":{arrestment.InitialRelativeSpeedMps * AirData.MpsToKnots:F2},";
     }
 }

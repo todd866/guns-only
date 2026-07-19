@@ -53,8 +53,8 @@ public class TurbulenceTests {
     [Fact]
     public void DeterministicFromSeed_BitIdentical() {
         // The replay premise: two fields from the same seed on THIS build must agree to the last
-        // bit, so a recorded approach reproduces. (Desktop-vs-web bit-identity is NOT required —
-        // each shell just has to be good turbulence — so this only checks within-build.)
+        // bit, so a recorded approach reproduces. Cross-runtime bit identity is not required, so
+        // this intentionally checks only within one build/runtime.
         var a = new TurbulenceField(seed: 0xABCDEF01UL);
         var b = new TurbulenceField(seed: 0xABCDEF01UL);
         var c = new TurbulenceField(seed: 0xABCDEF02UL);   // different seed → different field

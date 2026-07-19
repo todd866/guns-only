@@ -34,6 +34,15 @@ public class DoctrineTests {
         Assert.Equal(Protection.MaxPerformG(own, FlightModel.Sabre), adv.RecommendedG, 3);
         Assert.InRange(adv.RecommendedBank, 1.2, 1.6); // hard right bank
     }
+    [Fact] public void DoctrineProtectionUsesSuppliedAirspeed() {
+        var own = At(Vec3D.Zero, 0, 55);
+        var bandit = At(new Vec3D(0, 100, -900), 0);
+        var adv = new BreakLaw(+1).Advise(own, bandit, FlightModel.Sabre,
+            airspeedMps: 70.0);
+        Assert.Equal(Protection.MaxPerformG(own, FlightModel.Sabre, 70.0),
+            adv.RecommendedG, 9);
+        Assert.True(adv.RecommendedG > Protection.MaxPerformG(own, FlightModel.Sabre));
+    }
     [Fact] public void GunsLawAimsAheadOfCrossingTarget() {
         var own = At(Vec3D.Zero, 0, 220);
         var bandit = At(new Vec3D(0, 0, 600), System.Math.PI/2, 170); // 600 m ahead, crossing right

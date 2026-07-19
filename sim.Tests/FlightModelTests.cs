@@ -137,16 +137,52 @@ public class FlightModelTests {
             if (prevSign.HasValue && sign != prevSign.Value) signChanges++;
             prevSign = sign;
         }
-        // Gravity-compatible floor recovery adds one clean reversal; six trends remain far from pole chatter.
+        // The real low-speed fall-through adds a clean reversal; six trends remain far from pole chatter.
         Assert.True(signChanges <= 6, $"{signChanges} sign changes in the gamma trend — looks like chatter, not a clean loop");
 
-        Assert.True(minSpeed >= 40, $"speed {minSpeed:F1} fell below the 40 m/s floor");
+        Assert.True(minSpeed < 40.0,
+            $"loop never exercised the removed velocity-floor region: minimum {minSpeed:F1} m/s");
+        Assert.True(minSpeed > 0.0 && double.IsFinite(minSpeed),
+            $"low-speed integration produced an invalid speed {minSpeed}");
         Assert.True(System.Math.Abs(sim.State.Gamma) < 0.9, $"gamma {sim.State.Gamma:F3} not recovered to sane flight");
 
         // Body-attitude lag changes the exact apex; the invariant is a genuine near-pole passage.
         Assert.InRange(maxGamma, 1.50, 1.5708 + 1e-3);
-        // The gravity-compatible floor adds one fall-through reversal; single digits still reject chatter.
+        // The physical fall-through adds one reversal; single digits still reject chatter.
         Assert.InRange(signChanges, 1, 6);
+    }
+    [Fact] public void ZeroAirspeedUsesZeroDynamicPressureAndGravityOnly() {
+        var raw = new RawState(new Vec3D(0.0, 3000.0, 0.0), Vec3D.Zero, 0.0,
+            FlightModel.Sabre.MassKg, QuaternionD.Identity, default);
+        var aero = FlightModel.Aerodynamics(raw,
+            new PilotCommand(7.0, 0.0, 0.0, 0.0),
+            FlightModel.Sabre, Vec3D.Zero, netThrustN: 0.0,
+            AirframeAerodynamicState.Clean);
+
+        Assert.Equal(0.0, aero.DynamicPressure);
+        Assert.Equal(0.0, aero.Accel.X);
+        Assert.Equal(-FlightModel.G0, aero.Accel.Y);
+        Assert.Equal(0.0, aero.Accel.Z);
+    }
+    [Fact] public void ZeroSpeedFallsNaturallyWithoutAMinimumVelocityRewrite() {
+        var initial = new AircraftState(new Vec3D(0.0, 3000.0, 0.0),
+            0.0, 0.0, 0.0, 0.0, FlightModel.GliderStrike.MassKg);
+        var sim = new AircraftSim(initial, FlightModel.GliderStrike);
+        var neutral = new PilotCommand(0.0, 0.0, 0.0, 0.0);
+
+        sim.Step(neutral, 1.0 / AircraftSim.TickHz);
+        Assert.InRange(sim.State.Speed, 0.01, 1.0);
+        Assert.True(sim.State.Gamma < -1.4,
+            $"gravity did not establish a downward velocity: gamma={sim.State.Gamma:F3}");
+
+        for (int i = 1; i < AircraftSim.TickHz; i++)
+            sim.Step(neutral, 1.0 / AircraftSim.TickHz);
+
+        Assert.InRange(sim.State.Speed, 5.0, 20.0);
+        Assert.True(sim.State.Position.Y < 2998.0,
+            $"zero-speed state did not fall: altitude={sim.State.Position.Y:F2} m");
+        Assert.True(double.IsFinite(sim.State.Speed)
+            && sim.State.BodyAttitude.IsFinite && sim.State.BodyRates.IsFinite);
     }
     [Fact] public void FlyingIntoTheSeaIsDetected() {
         // Nobody had ever flown into the ground: a 12G pull from inverted took the web build to

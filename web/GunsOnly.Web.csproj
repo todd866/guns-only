@@ -8,10 +8,19 @@
     <PublishTrimmed>true</PublishTrimmed>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.*" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.*" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.29" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.29" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../sim/GunsOnly.Sim.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Keep source-only QA and the unused Blazor-template Bootstrap tree out of the static
+         deployment. Vercel treats every published api/*.js file as a function, and shipping the
+         renderer's Node tests plus 8 MB of unreferenced template assets only adds deploy/transfer
+         surface. -->
+    <Content Update="wwwroot/api/telemetry.test.js" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/render/**/tests/**" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/lib/**" CopyToPublishDirectory="Never" />
   </ItemGroup>
 </Project>

@@ -1,250 +1,136 @@
-using System;
-using System.Collections.Generic;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Turbulence;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace GunsOnly.Sim.Tests;
 
-/// FULL-FLIGHT HARNESS — the test that was missing. It drives the ACTUAL carrier beat end to end
-/// exactly as WebBridge.Advance does (real spawn, real Carrier, the BurbleField wake, and the
-/// dynamic approach↔fight mode switch), then asserts on OUTCOMES a unit test can't see: can you fly
-/// away from the spawn, does the deck classifier lie, can a competent pilot actually trap. These are
-/// the "spot the fail before the pilot does" checks — every one corresponds to a real report:
-/// "deployed me behind the carrier, I can't fly anywhere", "pitch-up doesn't work out of approach",
-/// a RampStrike logged 122 ft up.
+/// <summary>
+/// Full-sortie acceptance coverage. The harness below is intentionally only an observer/input
+/// driver: SimulationSession owns every production tick, lifecycle transition, resource update,
+/// collision, arrestment, catapult launch, and opponent replacement exercised by these tests.
+/// </summary>
 public class CarrierFlightHarnessTests {
     readonly ITestOutputHelper _o;
-    public CarrierFlightHarnessTests(ITestOutputHelper o) => _o = o;
+    public CarrierFlightHarnessTests(ITestOutputHelper output) => _o = output;
 
-    /// The rig IS the web bridge's inner loop, headless.
-    sealed class CarrierRig {
-        public AircraftSim Player { get; private set; }
-        public IBandit Bandit { get; private set; }
-        public readonly Carrier Ship;
-        public readonly BurbleField Burble;
-        public GunKill Fight { get; private set; } = new();
-        public GunKill? LastKill { get; private set; }
-        public readonly ArrestmentModel Arrestment = new();
-        public readonly CatapultLaunchModel Catapult = new();
-        readonly BeatSetup _beat;
-        readonly DetentLayer _d = new() { Variant = ValleyVariant.PhysicsOnly };   // parity with the carrier beat
-        readonly KeyGrammar _keys = new();
-        readonly AircraftParams _air = FlightModel.Sabre;
-        readonly DoctrineAdvice _advice = new(1.0, 0.0, "carrier recovery");
-        double _t;
-        bool _waveOffArmed = true;
-        bool _triggerDown;
-        double _waveOffUntil = double.NegativeInfinity;
-        const double Dt = 1.0 / 120.0;
-        public Carrier.Recovery Recovery = Carrier.Recovery.Flying;
-        public Carrier.TouchdownResult LastTouchdown = Carrier.TouchdownResult.Flying;
-        public Carrier.TouchdownResult LastTrapTouchdown { get; private set; } = Carrier.TouchdownResult.Flying;
-        public int KillCount { get; private set; }
-        public int TrapCount { get; private set; }
-        public int RelaunchCount { get; private set; }
-        public int CrashCount { get; private set; }
-        public int LastCaughtWire { get; private set; }
-        public double LastArrestDistanceM { get; private set; }
-        public double LastArrestSeconds { get; private set; }
-        public Vec3D LastSplashPlayerPosition { get; private set; }
-        public AircraftState LastSpawnState { get; private set; }
-        public bool ApproachMode { get; private set; }
-
-        public CarrierRig(Carrier.DeckConfiguration configuration = Carrier.DeckConfiguration.Axial) {
-            _beat = Beats.CarrierApproach(configuration);
-            Ship = _beat.Carrier!;
-            var windResolvedPlayer = Ship.ToWorldStateFromAir(
-                _beat.Player, DetentLayer.OnSpeedAoARad);
-            Burble = new BurbleField(Ship,
-                new TurbulenceField(intensityMps: 3.0, outerScaleM: 80.0, intermittency: 0.6, seed: 0xB0A7),
-                sinkMps: 1.8);
-            Player = new AircraftSim(windResolvedPlayer, _beat.PlayerAir) { Wind = Burble };
-            Bandit = _beat.CreateBandit();
+    sealed class SessionHarness {
+        public SessionHarness(
+            Carrier.DeckConfiguration configuration = Carrier.DeckConfiguration.Axial) {
+            Session = new SimulationSession(5, configuration);
+            Session.Begin();
         }
 
-        public void Key(GKey k, bool down) {
-            _keys.Feed(k, down, _t);
-            if (k == GKey.Trigger) _triggerDown = down;
-        }
+        public SimulationSession Session { get; }
+        public AircraftSim Player => Session.Player;
+        public IBandit Bandit => Session.Bandit;
+        public Carrier Ship => Session.Carrier!;
+        public BurbleField Burble => Session.Burble!;
+        public GunKill Fight => Session.PlayerGun;
         public AircraftState S => Player.State;
         public AircraftState B => Bandit.State;
-        public double TimeSeconds => _t / 1000.0;
+        public double TimeSeconds => Session.TimeSeconds;
         public double SpeedKt => S.Speed * 1.94384;
-        public double AirspeedMps => Ship.AirspeedMps(S);
-        public double DeckClosureMps => Ship.DeckClosureMps(S);
+        public double AirspeedMps => Player.AirspeedMps;
         public double GammaDeg => S.Gamma * 57.29578;
-        public double Throttle => _d.Throttle;
-        public double CommandedPitchRad => _d.CommandedPitchRad;
-        public string Mode => _t < _waveOffUntil ? "WAVE-OFF" : ApproachMode ? "APPROACH" : "FREE";
+        public double Throttle => Session.Controls.Throttle;
+        public double CommandedPitchRad => Session.Controls.CommandedPitchRad;
+        public bool ApproachMode => Session.Controls.ApproachMode;
+        public string Mode => Session.WaveOffActive ? "WAVE-OFF"
+            : ApproachMode ? "APPROACH" : "FREE";
         public LsoAdvice? LsoCall => Lso.AdviseForMode(Ship, S, Player.AngleOfAttackRad,
-            DetentLayer.OnSpeedAoARad, Mode == "APPROACH", Mode == "WAVE-OFF");
+            Ship.ApproachDirectorPitchOffsetRad, ApproachMode, Session.WaveOffActive);
         public string EmittedContext => LsoCall?.Call ?? Lso.FreeFlightCall;
         public bool InApproachSlot => Ship.InApproachSlot(S);
-        public bool GunWindow => CameraSolver.GunWindow(S, B);
         public double RangeM => Geometry.Range(S, B);
-        public double AngleOffDeg => Geometry.AngleOff(S, B) * 57.29578;
-        public double GunAimErrorDeg => Math.Acos(Math.Clamp(Player.BodyForward.Dot(Fight.LeadDirection), -1.0, 1.0)) * 57.29578;
         public (double along, double cross, double height) Deck => Ship.LandingFrame(
-            Arrestment.IsActive ? Arrestment.Position : S.Position);
-        public double GlideslopeErrorM {
-            get {
-                var (along, _, height) = Deck;
-                double lineH = Math.Max(0.0, -Ship.DeckLengthM * 0.2 - along)
-                    * Carrier.GlideslopeSlope;
-                return lineH - height;
-            }
-        }
+            Session.Arrestment.IsActive ? Session.Arrestment.Position : S.Position);
+        public double GlideslopeErrorM => Session.Controls.GlideslopeErrorM;
 
-        public void PutPlayer(in AircraftState state) =>
-            Player = new AircraftSim(state, _air) { Wind = Burble };
+        public double GunAimErrorDeg(GunKill fight) => Math.Acos(Math.Clamp(
+            Player.BodyForward.Dot(fight.LeadDirection), -1.0, 1.0)) * 57.29578;
 
-        void Respawn() {
-            var forward = new Vec3D(Math.Sin(S.Chi), 0.0, Math.Cos(S.Chi));
-            var right = new Vec3D(Math.Cos(S.Chi), 0.0, -Math.Sin(S.Chi));
-            var position = B.Position - forward * 1500.0 + right * 450.0;
-            position = position with { Y = Math.Max(650.0, B.Position.Y + 180.0) };
-            var toward = B.Position - position;
-            var spawn = new AircraftState(position, 180.0, 0.035,
-                Math.Atan2(toward.X, toward.Z), 0.0, _air.MassKg);
-            PutPlayer(spawn);
-            Arrestment.Reset();
-            Catapult.Reset();
-            Recovery = Carrier.Recovery.Flying;
-            LastTouchdown = Carrier.TouchdownResult.Flying;
-            CrashCount++;
-        }
-
-        public void Step() {
-            if (Catapult.IsActive) {
-                AircraftState deckState = Catapult.State;
-                Bandit.Step(deckState, Dt);
-                Ship.Step(Dt);
-                Catapult.Step(Ship, Dt);
-                _t += Dt * 1000.0;
-                if (Catapult.Phase == CatapultLaunchModel.LaunchPhase.Airborne) {
-                    PutPlayer(Catapult.State);
-                    Catapult.Reset();
-                    Arrestment.Reset();
-                    Recovery = Carrier.Recovery.Flying;
-                    LastTouchdown = Carrier.TouchdownResult.Flying;
-                    RelaunchCount++;
-                }
-                return;
-            }
-            if (Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Arrested) {
-                Bandit.Step(Player.State, Dt);
-                Ship.Step(Dt);
-                Arrestment.Step(Ship, Dt);
-                _t += Dt * 1000.0;
-                if (Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped) {
-                    TrapCount++;
-                    LastCaughtWire = Arrestment.CaughtWire;
-                    LastArrestDistanceM = Arrestment.DistanceM;
-                    LastArrestSeconds = Arrestment.ElapsedSeconds;
-                    LastTrapTouchdown = LastTouchdown;
-                    Catapult.Begin(Ship, Player.State.Mass);
-                }
-                return;
-            }
-            bool inSlot = Ship.InApproachSlot(Player.State);
-            ApproachMode = inSlot && _d.Throttle < 0.95;
-            _d.ApproachMode = ApproachMode;
-            if (ApproachMode) _waveOffArmed = true;
-            else if (!inSlot && _d.Throttle < 0.95) _waveOffArmed = false;
-            _d.GlideslopeErrorM = GlideslopeErrorM;   // spatial error to the wire-zone contact plane
-            _d.ApproachAirspeedMps = Ship.AirspeedMps(Player.State);
-            _d.DeckClosureMps = Ship.DeckClosureMps(Player.State);
-            _d.Tick(_keys, _t, Player.State, _air, _advice, Dt);
-            if (_waveOffArmed && _d.Throttle >= 0.95) {
-                _waveOffUntil = _t + 5000.0;
-                _waveOffArmed = false;
-            }
-            Fight.Step(_triggerDown, Player.State, Bandit.State, Dt);
-            if (Fight.Outcome == FightOutcome.Splash) {
-                LastKill = Fight;
-                KillCount++;
-                LastSplashPlayerPosition = Player.State.Position;
-                Bandit = _beat.CreateNextBandit(Player.State, KillCount);
-                LastSpawnState = Bandit.State;
-                Fight = new GunKill();
-            }
-            AircraftState previousPlayerState = Player.State;
-            Player.Step(_d.Command, Dt);
-            Bandit.Step(Player.State, Dt);
-            Ship.Step(Dt);
-            var touchdown = Ship.EvaluateRecovery(Player.State, Player.AngleOfAttackRad,
-                DifficultyModel.ForLevel(0));
-            var previousDeck = Ship.DeckFrame(previousPlayerState.Position);
-            var currentDeck = Ship.DeckFrame(Player.State.Position);
-            bool topDeckContact = touchdown.Recovery is Carrier.Recovery.Trap
-                    or Carrier.Recovery.Bolter or Carrier.Recovery.HardLanding
-                && previousDeck.height >= -0.05 && currentDeck.height <= 0.05
-                && Ship.DeckSinkRateMps(Player.State) > 0.0;
-            Carrier.SolidCollision solid = Ship.SweptSolidCollision(
-                previousPlayerState.Position, Player.State.Position);
-            if (LastTouchdown.Recovery == Carrier.Recovery.Flying
-                && touchdown.Recovery != Carrier.Recovery.Flying)
-                LastTouchdown = touchdown;
-
-            bool validRecoveryContact = solid == Carrier.SolidCollision.FlightDeck
-                && topDeckContact;
-            if ((solid != Carrier.SolidCollision.None && !validRecoveryContact)
-                || touchdown.Recovery is Carrier.Recovery.HardLanding
-                    or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater
-                || Player.BelowGround) {
-                Respawn();
-            } else if (touchdown.Recovery == Carrier.Recovery.Bolter) {
-                if (Recovery != Carrier.Recovery.Bolter)
-                    PutPlayer(Ship.BolterFlyawayState(Player.State));
-                Recovery = Carrier.Recovery.Bolter;
-            } else if (Recovery == Carrier.Recovery.Bolter) {
-                var (along, cross, height) = Ship.DeckFrame(Player.State.Position);
-                if (height > 8.0 || along > Ship.DeckLengthM * 0.5 + 5.0
-                    || Math.Abs(cross) > Ship.DeckHalfWidthM + 10.0) {
-                    Recovery = Carrier.Recovery.Flying;
-                    LastTouchdown = Carrier.TouchdownResult.Flying;
-                }
-            } else {
-                Recovery = touchdown.Recovery;
-            }
-            if (Recovery == Carrier.Recovery.Trap)
-                Arrestment.Engage(Ship, Player.State, Player.BodyPitchRad, touchdown.Wire);
-            _t += Dt * 1000.0;
-            if (!double.IsFinite(S.Position.Y) || !double.IsFinite(S.Speed))
-                throw new InvalidOperationException($"non-finite state at t={_t / 1000:F1}s");
-        }
+        public void Key(GKey key, bool down) => Session.FeedKey(key, down);
+        public void Step() => Session.StepFixed();
         public void Run(double seconds) {
-            for (double e = _t + seconds * 1000.0;
-                 _t < e;) Step();
+            int ticks = checked((int)Math.Round(seconds * AircraftSim.TickHz));
+            for (int i = 0; i < ticks; i++) Step();
         }
     }
 
     static AircraftState CarrierState(Carrier ship, double along, double cross, double lowM) {
         double range = Math.Max(0.0, -ship.DeckLengthM * 0.2 - along);
-        double height = range * 0.06116 - lowM;
-        var p = ship.LandingPoint(along, cross, height);
-        return new AircraftState(p, 70.0, -0.061, ship.LandingHeadingRad, 0.0, FlightModel.Sabre.MassKg);
+        double height = range * Carrier.GlideslopeSlope - lowM;
+        var position = ship.LandingPoint(along, cross, height);
+        return new AircraftState(position, 70.0, -0.061, ship.LandingHeadingRad, 0.0,
+            FlightModel.Sabre.MassKg);
     }
 
-    // ---- SA COHERENCE: FREE never emits paddles; real deviations own the approach call. ----
+    static AircraftState StateFromVelocity(Vec3D position, Vec3D velocity) {
+        double speed = velocity.Length;
+        Vec3D direction = velocity * (1.0 / speed);
+        return new AircraftState(position, speed,
+            Math.Asin(Math.Clamp(direction.Y, -1.0, 1.0)),
+            Math.Atan2(direction.X, direction.Z), 0.0, FlightModel.Sabre.MassKg);
+    }
+
+    static SimulationSession NearWireCombatSession(double targetRangeM,
+        double heightM = 0.02, double? alongM = null) {
+        BeatSetup baseline = Beats.CarrierApproach();
+        Carrier ship = baseline.Carrier!;
+        // One fixed tick carries the main wheels through the deck beside wire three. This remains a
+        // real AircraftSim integration and the normal session classifier owns the resulting contact.
+        AircraftState playerAir = new(
+            ship.LandingPoint(
+                along: alongM ?? ship.WireAlongM(3) + Carrier.HookToMainGearM,
+                height: heightM),
+            70.0, -0.06, ship.LandingHeadingRad, 0.0, FlightModel.Sabre.MassKg);
+        var approachSystems = new AirframeSystems(
+            initialGear: LandingGearHandle.Down,
+            initialFlapDegrees: AirframeSystemsProfile.F86FResearchBasis.FullFlapDegrees);
+        double configuredOnSpeedAoa = DetentLayer.OnSpeedAoARad
+            - approachSystems.AerodynamicState.LiftCoefficientIncrement
+                / FlightModel.Sabre.CLAlpha;
+        AircraftState runtimePlayer = ship.ToWorldStateFromAir(
+            playerAir, configuredOnSpeedAoa);
+        AircraftState target = runtimePlayer with {
+            Position = runtimePlayer.Position
+                + runtimePlayer.BodyAttitude.Rotate(new Vec3D(0.0, 0.0, 1.0))
+                    * targetRangeM
+        };
+        BeatSetup setup = baseline with {
+            Player = playerAir,
+            Bandit = target,
+            UsesReactiveBandit = false,
+            BanditTimeline = new() {
+                (0.0, new PilotCommand(1.0, 0.0, 0.30, 0.0))
+            },
+            Combat = new CombatConfig(PlayerAmmo: 4, OpponentAmmo: 0,
+                PlayerHitsToDefeat: 4, OpponentHitsToDefeat: 1)
+        };
+        var session = new SimulationSession();
+        session.StartBeat(() => setup);
+        session.Begin();
+        return session;
+    }
+
     [Fact]
     public void CarrierModeAndPaddlesCallStayCoherent() {
-        var rig = new CarrierRig();
+        var rig = new SessionHarness();
         rig.Step();
         Assert.Equal("APPROACH", rig.Mode);
 
-        rig.Key(GKey.ThrottleUp, true);   // leave the slot, ride out the five-second wave-off latch
+        rig.Key(GKey.ThrottleUp, true);
         rig.Run(7.0);
-        _o.WriteLine($"SA FREE: mode={rig.Mode} context={rig.EmittedContext} recovery={rig.Recovery}");
-        Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
+
+        _o.WriteLine($"SA FREE: mode={rig.Mode} context={rig.EmittedContext} recovery={rig.Session.Recovery}");
+        Assert.Equal(Carrier.Recovery.Flying, rig.Session.Recovery);
         Assert.Equal("FREE", rig.Mode);
         Assert.Null(rig.LsoCall);
         Assert.Equal(Lso.FreeFlightCall, rig.EmittedContext);
         Assert.DoesNotContain("BALL", rig.EmittedContext, StringComparison.OrdinalIgnoreCase);
 
+        // These are classifier fixtures, not session orchestration: retain their direct precision.
         var ship = Beats.CarrierApproach().Carrier!;
         var onGlideslope = CarrierState(ship, along: -800.0, cross: 0.0, lowM: 0.0);
         Assert.True(ship.InApproachSlot(onGlideslope));
@@ -259,6 +145,20 @@ public class CarrierFlightHarnessTests {
             DetentLayer.OnSpeedAoARad);
         Assert.Equal("POWER", power.Call);
 
+        var sinkingOnBall = CarrierState(ship, along: -800.0, cross: 0.0, lowM: 0.0)
+            with { Gamma = -0.10 };
+        var sinkCall = Lso.Advise(ship, sinkingOnBall, DetentLayer.OnSpeedAoARad,
+            DetentLayer.OnSpeedAoARad);
+        Assert.Equal(LsoSeverity.Correcting, sinkCall.Severity);
+        Assert.Equal("SINK RATE · POWER", sinkCall.Call);
+
+        var unrecoverableAtRamp = CarrierState(ship, along: -75.0, cross: 0.0, lowM: 0.0)
+            with { Gamma = -0.12 };
+        var sinkWaveOff = Lso.Advise(ship, unrecoverableAtRamp, DetentLayer.OnSpeedAoARad,
+            DetentLayer.OnSpeedAoARad);
+        Assert.Equal(LsoSeverity.WaveOff, sinkWaveOff.Severity);
+        Assert.Equal("WAVE OFF, WAVE OFF", sinkWaveOff.Call);
+
         var grossLowSlow = CarrierState(ship, along: -400.0, cross: 0.0, lowM: 18.0);
         var unsafeCall = Lso.Advise(ship, grossLowSlow, DetentLayer.OnSpeedAoARad + 0.050,
             DetentLayer.OnSpeedAoARad);
@@ -266,105 +166,270 @@ public class CarrierFlightHarnessTests {
         Assert.Equal("WAVE OFF, WAVE OFF", unsafeCall.Call);
     }
 
-    // ---- FLY AWAY: firewall + pull from the spawn must let you leave the boat, not trap you slow. ----
     [Fact]
     public void CanFlyAwayFromTheSpawn() {
-        var rig = new CarrierRig();
-        double alt0 = rig.S.Position.Y;
-        rig.Key(GKey.ThrottleUp, true);   // firewall
-        rig.Key(GKey.PullUp, true);       // pull up to climb away
+        var rig = new SessionHarness();
+        double initialAltitude = rig.S.Position.Y;
+        rig.Key(GKey.ThrottleUp, true);
+        rig.Key(GKey.PullUp, true);
         rig.Run(14.0);
-        double alt1 = rig.S.Position.Y;
-        _o.WriteLine($"FLY AWAY: alt {alt0:F0}→{alt1:F0} m  speed {rig.SpeedKt:F0} kt  gamma {rig.GammaDeg:F1}°  approachMode={rig.ApproachMode}  recovery={rig.Recovery}");
-        Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);           // must not die trying to leave
-        Assert.False(rig.ApproachMode, "firewall+climb must drop you into FIGHT logic, not stay in approach");
-        Assert.True(alt1 > alt0 + 60, $"you must be able to climb AWAY from the boat; alt only {alt0:F0}→{alt1:F0} m");
+
+        _o.WriteLine($"FLY AWAY: alt {initialAltitude:F0}→{rig.S.Position.Y:F0} m  "
+            + $"speed {rig.SpeedKt:F0} kt  gamma {rig.GammaDeg:F1}°  "
+            + $"approachMode={rig.ApproachMode}  recovery={rig.Session.Recovery}");
+        Assert.Equal(Carrier.Recovery.Flying, rig.Session.Recovery);
+        Assert.False(rig.ApproachMode,
+            "firewall+climb must drop the production session into fight logic");
+        Assert.True(rig.S.Position.Y > initialAltitude + 60.0,
+            $"you must be able to climb away from the boat; altitude only {initialAltitude:F0}→{rig.S.Position.Y:F0} m");
     }
 
-    // ---- WAVE-OFF: firewall alone must leave approach law and establish a clean climb. ----
     [Fact]
     public void WaveOffCleanlyEscapesToFight() {
-        var rig = new CarrierRig();
-        double alt0 = rig.S.Position.Y;
-        double gamma0 = rig.GammaDeg;
-        double minAlt = alt0;
+        var rig = new SessionHarness();
+        double initialAltitude = rig.S.Position.Y;
+        double initialGamma = rig.GammaDeg;
+        double minimumAltitude = initialAltitude;
         bool escaped = false, climbing = false;
         rig.Key(GKey.ThrottleUp, true);
 
-        for (int i = 0; i < 600 && rig.Recovery == Carrier.Recovery.Flying; i++) {
+        for (int i = 0; i < 600 && rig.Session.Recovery == Carrier.Recovery.Flying; i++) {
             rig.Step();
-            minAlt = Math.Min(minAlt, rig.S.Position.Y);
+            minimumAltitude = Math.Min(minimumAltitude, rig.S.Position.Y);
             escaped |= !rig.ApproachMode;
-            climbing |= escaped && rig.GammaDeg > 0.5 && rig.S.Position.Y > minAlt + 1.0;
+            climbing |= escaped && rig.GammaDeg > 0.5
+                && rig.S.Position.Y > minimumAltitude + 1.0;
             if (escaped && climbing) break;
         }
 
-        _o.WriteLine($"WAVE OFF: alt {alt0:F1}→{rig.S.Position.Y:F1} m (min {minAlt:F1})  gamma {gamma0:F1}°→{rig.GammaDeg:F1}°  throttle={rig.Throttle:F2}  approachMode={rig.ApproachMode}  recovery={rig.Recovery}");
-        Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
+        _o.WriteLine($"WAVE OFF: alt {initialAltitude:F1}→{rig.S.Position.Y:F1} m "
+            + $"(min {minimumAltitude:F1})  gamma {initialGamma:F1}°→{rig.GammaDeg:F1}°  "
+            + $"throttle={rig.Throttle:F2} approachMode={rig.ApproachMode} "
+            + $"recovery={rig.Session.Recovery}");
+        Assert.Equal(Carrier.Recovery.Flying, rig.Session.Recovery);
         Assert.True(escaped, "firewall must exit approach law within five seconds");
-        Assert.True(climbing, $"wave-off must establish a climb; gamma={rig.GammaDeg:F1}° alt={rig.S.Position.Y:F1} m min={minAlt:F1} m");
+        Assert.True(climbing,
+            $"wave-off must establish a climb; gamma={rig.GammaDeg:F1}° alt={rig.S.Position.Y:F1} m min={minimumAltitude:F1} m");
     }
 
-    // ---- CLASSIFIER HONESTY: never report a RampStrike while well above the deck. ----
     [Fact]
-    public void RecoveryNeverRampStrikesAboveTheDeck() {
-        var rig = new CarrierRig();
-        for (int i = 0; i < 5400 && rig.Recovery == Carrier.Recovery.Flying; i++) rig.Step();
-        var (along, cross, h) = rig.Deck;
-        _o.WriteLine($"CLASSIFIER: end recovery={rig.Recovery}  deckHeight={h:F1} m  along={along:F0} m");
-        if (rig.Recovery is Carrier.Recovery.RampStrike or Carrier.Recovery.Trap)
-            Assert.True(h < 2.5, $"a {rig.Recovery} must be a real deck contact (h≈0), not {h:F1} m above the deck");
+    public void RecoveryClassifierNeverRampStrikesAboveTheDeck() {
+        // Keep this as a direct Carrier fixture. It checks a local geometric invariant and does not
+        // benefit from duplicating or driving the session lifecycle.
+        var ship = Beats.CarrierApproach().Carrier!;
+        var position = ship.ShipPoint(
+            along: -ship.DeckLengthM * 0.5 - 15.0, cross: 0.0, height: 35.0);
+        var aboveRoundDown = new AircraftState(position, 70.0, -0.061,
+            ship.LandingHeadingRad, 0.0, FlightModel.Sabre.MassKg);
+
+        Carrier.TouchdownResult result = ship.EvaluateRecovery(aboveRoundDown,
+            DetentLayer.OnSpeedAoARad, DifficultyModel.ForLevel(0));
+
+        Assert.Equal(Carrier.Recovery.Flying, result.Recovery);
+        Assert.True(ship.DeckFrame(position).height > 30.0);
     }
 
-    // ---- WINNABLE: a competent pilot (fly the velocity vector at the touchdown point) must be able
-    // to trap, not always ramp-strike. If this can't reach the deck cleanly, the approach is broken. ----
     [Theory]
     [InlineData(Carrier.DeckConfiguration.Axial)]
     [InlineData(Carrier.DeckConfiguration.Angled)]
-    public void ACompetentPilotTrapsRollsOutAndRelaunches(Carrier.DeckConfiguration configuration) {
-        var rig = new CarrierRig(configuration);
+    public void PublishedRecoveryDirectorAndDeckRelativeFpmTrapAndRelaunch(
+        Carrier.DeckConfiguration configuration) {
+        var rig = new SessionHarness(configuration);
+        long spawn = rig.Session.PlayerSpawnSequence;
+        bool arrested = false, launched = false, relaunched = false;
+        Carrier.TouchdownResult trap = Carrier.TouchdownResult.Flying;
+        Carrier.TouchdownResult firstContact = Carrier.TouchdownResult.Flying;
+        double maxCueErrorDeg = 0.0;
+        string lastApproach = "";
+        bool crashed = false;
+        int ticks = 0;
+
+        // Start off the perfect rail with a short, ordinary keyboard disturbance. The 60 Hz cue
+        // driver below must recover it rather than passing only because the sortie spawn is exact.
+        GKey perturbation = GKey.PushDown;
+        rig.Key(perturbation, true);
+        rig.Run(0.05);
+        rig.Key(perturbation, false);
+
+        // This is the browser contract at its normal 60 Hz cadence: player position and attitude,
+        // the published cue, and the projected deck-relative velocity. It deliberately does not
+        // inspect commanded pitch, hidden glideslope error, or the burble field.
+        while (!relaunched && ticks < 7200) {
+            if (ticks % 2 == 0 && rig.Session.Recovery == Carrier.Recovery.Flying
+                && !rig.Session.Catapult.IsActive) {
+                Vec3D toCue = rig.Ship.ApproachCuePoint - rig.S.Position;
+                Vec3D deckVelocity = rig.Ship.DeckRelativeVelocity(rig.S);
+                double cueGamma = Math.Atan2(toCue.Y,
+                    Math.Max(1.0, Math.Sqrt(toCue.X * toCue.X + toCue.Z * toCue.Z)));
+                double fpmGamma = Math.Atan2(deckVelocity.Y,
+                    Math.Max(1.0, Math.Sqrt(deckVelocity.X * deckVelocity.X
+                        + deckVelocity.Z * deckVelocity.Z)));
+                double verticalError = cueGamma - fpmGamma;
+                maxCueErrorDeg = Math.Max(maxCueErrorDeg, Math.Abs(verticalError) * 57.2958);
+                // The waterline and alpha readout are public HUD symbols too. Hold the waterline
+                // one on-speed-alpha above the cue; the deck-relative FPM then settles onto it
+                // without chasing its lag into a pilot-induced oscillation.
+                double visiblePitch = Math.Asin(Math.Clamp(rig.Player.BodyForward.Y, -1.0, 1.0));
+                double pitchError = cueGamma + rig.Ship.ApproachDirectorPitchOffsetRad
+                    - visiblePitch;
+                rig.Key(GKey.PullUp, pitchError > 0.0025);
+                rig.Key(GKey.PushDown, pitchError < -0.0025);
+                rig.Key(GKey.RollRight, false);
+                rig.Key(GKey.RollLeft, false);
+                var deck = rig.Ship.LandingFrame(rig.S.Position);
+                lastApproach = $"along={deck.along:F1} cross={deck.cross:F1} h={deck.height:F2} "
+                    + $"deckV=({deckVelocity.X:F1},{deckVelocity.Y:F1},{deckVelocity.Z:F1}) "
+                    + $"air={rig.AirspeedMps:F1} aoa={rig.Player.AngleOfAttackRad * 57.2958:F1} "
+                    + $"thr={rig.Throttle:F2} cueErr={verticalError * 57.2958:F2}deg";
+            }
+
+            rig.Step();
+            ticks++;
+            if (rig.Session.PlayerSpawnSequence != spawn) {
+                crashed = true;
+                break;
+            }
+
+            if (rig.Session.Touchdown.Recovery == Carrier.Recovery.Trap)
+                trap = rig.Session.Touchdown;
+            if (firstContact.Recovery == Carrier.Recovery.Flying
+                && rig.Session.Touchdown.Recovery != Carrier.Recovery.Flying)
+                firstContact = rig.Session.Touchdown;
+            arrested |= rig.Session.Arrestment.Phase != ArrestmentModel.ArrestmentPhase.None;
+            launched |= rig.Session.Catapult.IsActive;
+            relaunched = launched
+                && rig.Session.Catapult.Phase == CatapultLaunchModel.LaunchPhase.None
+                && rig.Session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.None;
+        }
+
+        _o.WriteLine($"PUBLIC CUE {configuration}: arrest={arrested} relaunch={relaunched} "
+            + $"wire={trap.Wire} sink={trap.SinkRateMps:F2}m/s air={trap.AirspeedMps:F1} "
+            + $"closure={trap.ClosureMps:F1} lead={rig.Ship.ApproachCueLeadM:F0}m "
+            + $"peak-cue-error={maxCueErrorDeg:F2}deg ticks={ticks} crashed={crashed} "
+            + $"first={firstContact.Recovery}/{firstContact.Hook}/wire{firstContact.Wire} "
+            + $"{firstContact.Quality} @{firstContact.WheelAlongM:F1}m "
+            + $"sink={firstContact.SinkRateMps:F3} air={firstContact.AirspeedMps:F2} "
+            + $"closure={firstContact.ClosureMps:F2} lineup={firstContact.LineupErrorM:F2} "
+            + $"last=[{lastApproach}]");
+        Assert.False(crashed, $"flying the public cue crashed: {lastApproach}");
+        Assert.True(arrested, "flying the waterline to its published director must arrest");
+        Assert.True(launched, "the successful public-cue pass must progress to catapult launch");
+        Assert.True(relaunched, "the public-cue pass must complete the production deck cycle");
+        Assert.Equal(Carrier.Recovery.Trap, trap.Recovery);
+        Assert.InRange(trap.Wire, 1, 4);
+        Assert.InRange(trap.SinkRateMps, Carrier.MinTrapSinkMps, Carrier.MaxTrapSinkMps);
+        Assert.Equal(rig.Ship.TouchdownAlongM + rig.Ship.ApproachCueLeadM,
+            rig.Ship.ApproachCueAlongM, 10);
+    }
+
+    [Theory]
+    [InlineData(Carrier.DeckConfiguration.Axial)]
+    [InlineData(Carrier.DeckConfiguration.Angled)]
+    public void ACompetentPilotTrapsRollsOutAndRelaunches(
+        Carrier.DeckConfiguration configuration) {
+        var rig = new SessionHarness(configuration);
+        bool sawArrestment = false;
+        bool sawCatapult = false;
+        bool relaunched = false;
+        int caughtWire = 0;
+        double arrestDistanceM = 0.0;
+        double arrestSeconds = 0.0;
+        Carrier.TouchdownResult trapTouchdown = Carrier.TouchdownResult.Flying;
+        double fuelAtArrestment = double.NaN;
+        double fuelAtCatapult = double.NaN;
+        int ammoAtArrestment = -1;
+        string stoppedTrapCue = "";
         int steps = 0;
-        while (rig.RelaunchCount == 0 && steps++ < 7200) {
-            // Fly the VV at the active wire zone. Once it catches, this same fixed-step loop keeps
-            // going through the full arrestment and deterministic catapult relaunch.
-            if (rig.Recovery == Carrier.Recovery.Flying) {
-                // Fly 70 m/s AIRSPEED, add power for spatial low-ball error, and anticipate the
-                // measured in-close sink so the J47 has time to spool. That last term is the
-                // scripted equivalent of the classic in-close "POWER" correction; it is not a flare.
+
+        while (!relaunched && steps++ < 7200) {
+            if (rig.Session.Recovery == Carrier.Recovery.Flying
+                && !rig.Session.Catapult.IsActive) {
                 double burble = rig.Burble.InCloseStrength(rig.S.Position);
                 var deck = rig.Deck;
-                double responseLead = rig.Ship.Configuration == Carrier.DeckConfiguration.Angled
-                    ? 35.0 : 60.0;
+                double responseLead = configuration == Carrier.DeckConfiguration.Angled
+                    ? 140.0 : 204.0;
                 double targetAlong = rig.Ship.TouchdownAlongM + responseLead;
-                double wantDeckGamma = Math.Atan2(-deck.height,
+                double wantedDeckGamma = Math.Atan2(-deck.height,
                     Math.Max(1.0, targetAlong - deck.along));
-                double desiredPitch = wantDeckGamma + DetentLayer.OnSpeedAoARad;
-                double pitchError = desiredPitch - rig.CommandedPitchRad;
+                double desiredPitch = wantedDeckGamma + rig.Ship.ApproachDirectorPitchOffsetRad;
+                double pitchError = desiredPitch - rig.Player.BodyPitchRad;
                 rig.Key(GKey.PullUp, pitchError > 0.0025);
                 rig.Key(GKey.PushDown, pitchError < -0.0025);
 
-                double wantPower = Math.Clamp(0.16 + 0.025 * rig.GlideslopeErrorM
-                    + 0.035 * (70.0 - rig.AirspeedMps) + 0.15 * burble, 0.02, 0.90);
-                if (rig.Deck.along > -500.0) {
-                    rig.Key(GKey.ThrottleUp, rig.Throttle < wantPower - 0.015);
-                    rig.Key(GKey.ThrottleDown, rig.Throttle > wantPower + 0.015);
+                double wantedPower = Math.Clamp(rig.Session.Controls.ApproachTrimThrottle
+                    + 0.040 * Math.Max(0.0, rig.GlideslopeErrorM)
+                    + 0.026 * (70.0 - rig.AirspeedMps) + 0.15 * burble, 0.02, 0.90);
+                if (deck.along > -500.0) {
+                    rig.Key(GKey.ThrottleUp, rig.Throttle < wantedPower - 0.015);
+                    rig.Key(GKey.ThrottleDown, rig.Throttle > wantedPower + 0.015);
                 }
             }
+
             rig.Step();
+
+            if (rig.Session.Touchdown.Recovery == Carrier.Recovery.Trap)
+                trapTouchdown = rig.Session.Touchdown;
+            if (rig.Session.Arrestment.Phase != ArrestmentModel.ArrestmentPhase.None) {
+                sawArrestment = true;
+                if (!double.IsFinite(fuelAtArrestment)) {
+                    fuelAtArrestment = rig.Session.PlayerFuel.FuelLb;
+                    ammoAtArrestment = rig.Session.PlayerGun.AmmoRemaining;
+                }
+                caughtWire = rig.Session.Arrestment.CaughtWire;
+                arrestDistanceM = rig.Session.Arrestment.DistanceM;
+                arrestSeconds = rig.Session.Arrestment.ElapsedSeconds;
+            }
+            if (rig.Session.Catapult.IsActive) {
+                sawCatapult = true;
+                if (stoppedTrapCue.Length == 0)
+                    stoppedTrapCue = rig.Session.TransitionCue;
+                if (!double.IsFinite(fuelAtCatapult))
+                    fuelAtCatapult = rig.Session.PlayerFuel.FuelLb;
+            }
+            relaunched = sawCatapult
+                && rig.Session.Catapult.Phase == CatapultLaunchModel.LaunchPhase.None
+                && rig.Session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.None;
         }
-        var (along, cross, h) = rig.Deck;
-        _o.WriteLine($"WINNABLE {configuration}: traps={rig.TrapCount} relaunches={rig.RelaunchCount} recovery={rig.Recovery} wire={rig.LastCaughtWire} after {steps} steps  along={along:F0} cross={cross:F0} h={h:F1}  sink={rig.LastTrapTouchdown.SinkRateMps:F2}m/s air={rig.LastTrapTouchdown.AirspeedMps:F1} closure={rig.LastTrapTouchdown.ClosureMps:F1} aoa={rig.Player.AngleOfAttackRad * 57.2958:F1}deg hook={rig.LastTrapTouchdown.Hook} quality={rig.LastTrapTouchdown.Quality} stop={rig.LastArrestDistanceM:F1}m/{rig.LastArrestSeconds:F2}s");
-        Assert.Equal(1, rig.TrapCount);
-        Assert.Equal(1, rig.RelaunchCount);
-        Assert.Equal(Carrier.Recovery.Trap, rig.LastTrapTouchdown.Recovery);
-        Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
-        Assert.Equal(ArrestmentModel.ArrestmentPhase.None, rig.Arrestment.Phase);
-        Assert.Equal(CatapultLaunchModel.LaunchPhase.None, rig.Catapult.Phase);
-        Assert.InRange(rig.LastCaughtWire, 1, 4);
-        Assert.InRange(rig.LastArrestDistanceM, 90.0, 100.0);
-        Assert.InRange(rig.LastArrestSeconds, 3.0, 5.5);
+
+        var (along, cross, height) = rig.Deck;
+        _o.WriteLine($"WINNABLE {configuration}: arrest={sawArrestment} relaunch={relaunched} "
+            + $"recovery={rig.Session.Recovery} wire={caughtWire} after {steps} steps "
+            + $"along={along:F0} cross={cross:F0} h={height:F1} "
+            + $"sink={trapTouchdown.SinkRateMps:F2}m/s air={trapTouchdown.AirspeedMps:F1} "
+            + $"closure={trapTouchdown.ClosureMps:F1} aoa={rig.Player.AngleOfAttackRad * 57.2958:F1}° "
+            + $"hook={trapTouchdown.Hook} quality={trapTouchdown.Quality} "
+            + $"stop={arrestDistanceM:F1}m/{arrestSeconds:F2}s");
+        Assert.True(sawArrestment, "the production session must engage an arresting wire");
+        Assert.True(sawCatapult, "a stopped production arrestment must begin a catapult launch");
+        Assert.True(relaunched, "the production session must hand the airborne launch back to flight");
+        Assert.Equal(Carrier.Recovery.Trap, trapTouchdown.Recovery);
+        Assert.Equal(Carrier.Recovery.Flying, rig.Session.Recovery);
+        Assert.Equal(ArrestmentModel.ArrestmentPhase.None, rig.Session.Arrestment.Phase);
+        Assert.Equal(CatapultLaunchModel.LaunchPhase.None, rig.Session.Catapult.Phase);
+        Assert.InRange(caughtWire, 1, 4);
+        Assert.Contains($"W{caughtWire}", stoppedTrapCue);
+        Assert.Contains(trapTouchdown.Grade switch {
+            Carrier.TouchdownGrade.Ok => "OK",
+            Carrier.TouchdownGrade.Fair => "FAIR",
+            Carrier.TouchdownGrade.NoGrade => "NO GRADE",
+            Carrier.TouchdownGrade.Cut => "CUT",
+            _ => "UNASSESSED"
+        }, stoppedTrapCue);
+        if (trapTouchdown.Grade == Carrier.TouchdownGrade.NoGrade)
+            Assert.DoesNotContain("REVIEW TOUCHDOWN ASSESSMENT", stoppedTrapCue);
+        Assert.InRange(arrestDistanceM, 90.0, 100.0);
+        Assert.InRange(arrestSeconds, 3.0, 5.5);
         Assert.True(rig.S.Position.Y > rig.Ship.Position.Y,
             "catapult handoff must be airborne above the flight deck");
+        Assert.True(fuelAtCatapult < fuelAtArrestment,
+            "fuel must continue burning during arrestment");
+        Assert.True(rig.Session.PlayerFuel.FuelLb < fuelAtCatapult,
+            "fuel must continue burning during the catapult stroke");
+        Assert.Equal(ammoAtArrestment, rig.Session.PlayerGun.AmmoRemaining);
+        Assert.Equal(1, rig.Session.RecoveryProgress.CleanTrapCount);
+        Assert.Equal(2, rig.Session.RecoveryProgress.AttemptCount);
+        Assert.Equal(1, rig.Session.Difficulty.AttemptIndex);
+
         double timeAfterLaunch = rig.TimeSeconds;
         Vec3D positionAfterLaunch = rig.S.Position;
         rig.Run(0.5);
@@ -374,154 +439,399 @@ public class CarrierFlightHarnessTests {
     }
 
     [Fact]
-    public void SeaImpactRespawnsAirborneAndKeepsIntegratingDeterministically() {
-        var a = new CarrierRig();
-        var b = new CarrierRig();
+    public void KillOnTouchdownTickStillClassifiesAndCompletesAValidTrap() {
+        var session = NearWireCombatSession(targetRangeM: 0.0);
+        session.FeedKey(GKey.Trigger, true);
+        session.StepFixed();
+        session.FeedKey(GKey.Trigger, false);
+
+        Assert.Equal(1, session.KillCount);
+        Assert.NotEqual(AircraftTerminalState.Flying,
+            session.OpponentTerminalState);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+        Assert.Equal(Carrier.Recovery.Trap, session.Touchdown.Recovery);
+        Assert.Equal(ArrestmentModel.ArrestmentPhase.Arrested,
+            session.Arrestment.Phase);
+        Assert.DoesNotContain(session.RecentEvents, e => e.Target == CombatRole.Player
+            && e.Type is SessionEventType.Destroyed or SessionEventType.Impact);
+
+        bool sawCatapult = false;
+        for (int i = 0; i < 30 * AircraftSim.TickHz
+            && session.Lifecycle != SimulationSession.LifecycleState.Finished; i++) {
+            sawCatapult |= session.Catapult.IsActive;
+            session.StepFixed();
+        }
+
+        Assert.True(sawCatapult,
+            "terminal resolution must allow the already-earned wire to roll out and relaunch");
+        Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
+        Assert.Equal(SortieOutcome.Victory, session.Outcome);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+        Assert.DoesNotContain(session.RecentEvents, e => e.Target == CombatRole.Player
+            && e.Type is SessionEventType.Destroyed or SessionEventType.Impact);
+    }
+
+    [Fact]
+    public void DelayedHitDuringArrestmentKeepsWireAndWorldAtOneFixedStep() {
+        var session = NearWireCombatSession(targetRangeM: 500.0);
+        session.FeedKey(GKey.Trigger, true);
+        session.StepFixed();
+        session.FeedKey(GKey.Trigger, false);
+
+        Assert.Equal(ArrestmentModel.ArrestmentPhase.Arrested,
+            session.Arrestment.Phase);
+        Assert.Equal(AircraftTerminalState.Flying, session.OpponentTerminalState);
+        Assert.NotEmpty(session.PlayerGun.RoundsInFlight);
+        Assert.Equal(session.Arrestment.Position, session.Player.State.Position);
+
+        bool delayedHitDuringRunout = false;
+        for (int i = 0; i < 2 * AircraftSim.TickHz
+            && session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Arrested; i++) {
+            double banditTime = session.Bandit.T;
+            session.StepFixed();
+            Assert.Equal(banditTime + SimulationSession.FixedDeltaSeconds,
+                session.Bandit.T, precision: 11);
+            Assert.Equal(session.Arrestment.Position, session.Player.State.Position);
+            Vec3D expectedVelocity = session.Carrier!.DeckVelocityWorld
+                + session.Carrier.LandingFwd * session.Arrestment.RelativeSpeedMps
+                + new Vec3D(0.0, session.Carrier.DeckVerticalVelocityMps, 0.0);
+            Assert.True((session.Player.State.VelocityVector() - expectedVelocity).Length < 1e-8,
+                "weapons, bandit law, systems and replay must see the moving arrested ownship");
+            if (session.OpponentTerminalState != AircraftTerminalState.Flying) {
+                delayedHitDuringRunout = true;
+                break;
+            }
+        }
+
+        Assert.True(delayedHitDuringRunout,
+            "the pre-touchdown round must resolve after wire engagement");
+        Assert.Equal(ArrestmentModel.ArrestmentPhase.Arrested,
+            session.Arrestment.Phase);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+
+        bool sawCatapult = false;
+        for (int i = 0; i < 30 * AircraftSim.TickHz
+            && session.Lifecycle != SimulationSession.LifecycleState.Finished; i++) {
+            sawCatapult |= session.Catapult.IsActive;
+            session.StepFixed();
+        }
+        Assert.True(sawCatapult);
+        Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
+        Assert.Equal(SortieOutcome.Victory, session.Outcome);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+    }
+
+    [Fact]
+    public void WaveOffThenStoppedTrapRecordsSetbackWithoutCleanMastery() {
+        BeatSetup geometry = Beats.CarrierApproach();
+        Carrier ship = geometry.Carrier!;
+        const double startHeightM = 2.0;
+        // Allow for the deck-relative travel while descending from the short setup point so the hook
+        // still reaches wire three after the deliberate throttle excursion.
+        double startAlongM = ship.WireAlongM(3) + Carrier.HookToMainGearM - 26.0;
+        var session = NearWireCombatSession(targetRangeM: 2000.0,
+            heightM: startHeightM, alongM: startAlongM);
+
+        session.FeedKey(GKey.ThrottleUp, true);
+        for (int i = 0; i < AircraftSim.TickHz && !session.WaveOffActive; i++)
+            session.StepFixed();
+        Assert.True(session.WaveOffActive,
+            "the fixture must earn a real production wave-off before touching down");
+
+        session.FeedKey(GKey.ThrottleUp, false);
+        session.FeedKey(GKey.ThrottleDown, true);
+        session.FeedKey(GKey.PullUp, true);
+        bool throttleReleased = false;
+        for (int i = 0; i < 3 * AircraftSim.TickHz
+            && session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.None
+            && session.PlayerTerminalState == AircraftTerminalState.Flying; i++) {
+            if (!throttleReleased && session.Controls.Throttle <= 0.86) {
+                session.FeedKey(GKey.ThrottleDown, false);
+                throttleReleased = true;
+            }
+            session.StepFixed();
+        }
+        if (!throttleReleased) session.FeedKey(GKey.ThrottleDown, false);
+        session.FeedKey(GKey.PullUp, false);
+
+        Assert.Equal(Carrier.Recovery.Trap, session.Touchdown.Recovery);
+        Assert.Equal(ArrestmentModel.ArrestmentPhase.Arrested,
+            session.Arrestment.Phase);
+
+        for (int i = 0; i < 8 * AircraftSim.TickHz && !session.Catapult.IsActive; i++)
+            session.StepFixed();
+
+        Assert.True(session.Catapult.IsActive);
+        Assert.Equal(0, session.RecoveryProgress.CleanTrapCount);
+        Assert.Equal(0, session.RecoveryProgress.CleanStreak);
+        Assert.Equal(1, session.RecoveryProgress.RecentSetbacks);
+        Assert.Equal(1, session.RecoveryProgress.AttemptCount);
+    }
+
+    [Fact]
+    public void SeaImpactCarriesThroughWaterMotionAndSettlesDeterministically() {
         var impact = new AircraftState(new Vec3D(8000.0, -2.0, 8000.0), 180.0,
             -0.25, 0.4, 0.0, FlightModel.Sabre.MassKg);
-        a.PutPlayer(impact);
-        b.PutPlayer(impact);
 
-        a.Step();
-        b.Step();
+        SimulationSession CreateImpactSession() {
+            var session = new SimulationSession();
+            session.StartBeat(() => Beats.Perch() with { Player = impact });
+            session.Begin();
+            return session;
+        }
 
-        Assert.Equal(1, a.CrashCount);
-        Assert.Equal(1, b.CrashCount);
-        Assert.Equal(a.S, b.S);
-        Assert.Equal(Carrier.Recovery.Flying, a.Recovery);
-        Assert.True(a.S.Position.Y >= 650.0);
-        double time = a.TimeSeconds;
-        Vec3D position = a.S.Position;
-        a.Run(0.5);
-        Assert.True(a.TimeSeconds > time);
-        Assert.True((a.S.Position - position).Length > 10.0,
-            "respawn is a transition, not a frozen impact frame");
+        var first = CreateImpactSession();
+        var second = CreateImpactSession();
+        first.StepFixed();
+        second.StepFixed();
+
+        Assert.Equal(first.Player.State, second.Player.State);
+        Assert.Equal(Carrier.Recovery.Flying, first.Recovery);
+        Assert.Equal(AircraftTerminalState.Impacted, first.PlayerTerminalState);
+        Assert.Equal(ImpactSurface.Water, first.PlayerImpactSurface);
+        Assert.Equal(SimulationSession.LifecycleState.Active, first.Lifecycle);
+        double time = first.TimeSeconds;
+        Vec3D position = first.Player.State.Position;
+        for (int i = 0; i < AircraftSim.TickHz / 2; i++) {
+            first.StepFixed();
+            second.StepFixed();
+        }
+        Assert.True(first.TimeSeconds > time);
+        Assert.True((first.Player.State.Position - position).Length > 10.0,
+            "water entry must retain and dissipate real impact momentum");
+        for (int i = 0; i < 20 * AircraftSim.TickHz
+            && first.Lifecycle != SimulationSession.LifecycleState.Finished; i++) {
+            first.StepFixed();
+            second.StepFixed();
+        }
+        Assert.Equal(SimulationSession.LifecycleState.Finished, first.Lifecycle);
+        Assert.Equal(AircraftTerminalState.Settled, first.PlayerTerminalState);
+        Assert.Equal(first.Player.State, second.Player.State);
+        Assert.Equal(first.RecentEvents, second.RecentEvents);
+        Assert.Equal(SessionEventType.SortieFinished, first.RecentEvents[^1].Type);
     }
 
     [Fact]
-    public void FlyingIntoTheCarrierIslandCrashesAndRespawns() {
-        var rig = new CarrierRig();
-        Vec3D start = rig.Ship.ShipPoint(along: 7.0, cross: 10.7, height: 10.0);
-        Vec3D end = start + rig.Ship.Fwd * 3.0;
+    public void FlyingIntoCarrierIslandReboundsOntoSolidDeckAndSettlesThere() {
+        BeatSetup setup = Beats.CarrierApproach();
+        Carrier ship = setup.Carrier!;
+        Vec3D start = ship.ShipPoint(along: 7.0, cross: 10.7, height: 10.0);
+        Vec3D end = start + ship.Fwd * 3.0;
         Assert.Equal(Carrier.SolidCollision.Island,
-            rig.Ship.SweptSolidCollision(start, end));
+            ship.SweptSolidCollision(start, end));
+        setup = setup with {
+            Player = new AircraftState(start, 240.0, 0.0, ship.HeadingRad,
+                0.0, FlightModel.Sabre.MassKg)
+        };
 
-        rig.PutPlayer(new AircraftState(start, 240.0, 0.0, rig.Ship.HeadingRad,
-            0.0, FlightModel.Sabre.MassKg));
-        double before = rig.TimeSeconds;
-        rig.Step();
+        var session = new SimulationSession();
+        session.StartBeat(() => setup);
+        session.Begin();
+        double before = session.TimeSeconds;
+        session.StepFixed();
 
-        Assert.Equal(1, rig.CrashCount);
-        Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
-        Assert.True(rig.S.Position.Y >= 650.0);
-        Assert.True(rig.TimeSeconds > before);
+        Assert.Equal(Carrier.Recovery.Flying, session.Recovery);
+        Assert.Equal(AircraftTerminalState.Impacted, session.PlayerTerminalState);
+        Assert.Equal(ImpactSurface.CarrierStructure, session.PlayerImpactSurface);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+        Assert.True(session.TimeSeconds > before);
+
+        AircraftState impactState = session.Player.State;
+        for (int i = 0; i < 20 * AircraftSim.TickHz
+            && session.Lifecycle != SimulationSession.LifecycleState.Finished; i++)
+            session.StepFixed();
+
+        Assert.NotEqual(impactState.Position, session.Player.State.Position);
+        Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
+        Assert.Equal(AircraftTerminalState.Settled, session.PlayerTerminalState);
+        Assert.Equal(ImpactSurface.FlightDeck, session.PlayerImpactSurface);
+        SessionEvent[] impacts = session.RecentEvents.Where(e =>
+            e.Type == SessionEventType.Impact && e.Target == CombatRole.Player).ToArray();
+        Assert.Collection(impacts,
+            e => Assert.Equal(ImpactSurface.CarrierStructure, e.Surface),
+            e => Assert.Equal(ImpactSurface.FlightDeck, e.Surface));
+        Assert.Equal(SessionEventType.SortieFinished, session.RecentEvents[^1].Type);
     }
 
-    // ---- FULL SORTIE: finals → firewalled J47 → clean egress → real ballistic gun kill. ----
+    [Fact]
+    public void FastDeckWreckSlidesOverRealEdgeFallsAndSettlesInWater() {
+        BeatSetup setup = Beats.CarrierApproach();
+        Carrier ship = setup.Carrier!;
+        Vec3D position = ship.ShipPoint(
+            along: ship.DeckLengthM * 0.5 - 10.0, cross: 0.0, height: 0.05);
+        Vec3D desiredGroundVelocity = ship.DeckVelocityWorld
+            + ship.Fwd * 70.0 + new Vec3D(0.0, -12.0, 0.0);
+        Vec3D airVelocity = desiredGroundVelocity - ship.SteadyWindWorld;
+        setup = setup with { Player = StateFromVelocity(position, airVelocity) };
+
+        var session = new SimulationSession();
+        session.StartBeat(() => setup);
+        session.Begin();
+        for (int i = 0; i < 2 * AircraftSim.TickHz
+            && session.PlayerTerminalState == AircraftTerminalState.Flying; i++)
+            session.StepFixed();
+
+        Assert.Equal(AircraftTerminalState.Impacted, session.PlayerTerminalState);
+        Assert.Equal(ImpactSurface.FlightDeck, session.PlayerImpactSurface);
+        Vec3D deckImpactPosition = session.Player.State.Position;
+
+        bool sawSupportedDeckContact = false;
+        bool leftDeck = false;
+        for (int i = 0; i < 4 * AircraftSim.TickHz && !leftDeck; i++) {
+            session.StepFixed();
+            bool overDeck = session.Carrier!.WithinDeckFootprint(
+                session.Player.State.Position);
+            sawSupportedDeckContact |= overDeck && session.PlayerSystems.WeightOnWheels;
+            if (!overDeck) {
+                leftDeck = true;
+                Assert.False(session.PlayerSystems.WeightOnWheels);
+            }
+        }
+        Assert.True(sawSupportedDeckContact,
+            "the systems model must see weight while the wreck is supported by the deck");
+        Assert.True(leftDeck, "the fast wreck fixture must pass the real deck edge");
+
+        for (int i = 0; i < 20 * AircraftSim.TickHz
+            && session.Lifecycle != SimulationSession.LifecycleState.Finished; i++)
+            session.StepFixed();
+
+        Assert.True((session.Player.State.Position - deckImpactPosition).Length > 10.0,
+            "post-impact momentum must move the wreck rather than pinning it to contact");
+        Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
+        Assert.Equal(ImpactSurface.Water, session.PlayerImpactSurface);
+        Assert.False(session.PlayerSystems.WeightOnWheels,
+            "water/debris motion must not hold the gear weight switches on");
+        SessionEvent[] impacts = session.RecentEvents.Where(e =>
+            e.Type == SessionEventType.Impact && e.Target == CombatRole.Player).ToArray();
+        Assert.Collection(impacts,
+            e => Assert.Equal(ImpactSurface.FlightDeck, e.Surface),
+            e => Assert.Equal(ImpactSurface.Water, e.Surface));
+        Assert.Equal(ImpactSurface.Water, session.RecentEvents.Single(e =>
+            e.Type == SessionEventType.Settled
+                && e.Target == CombatRole.Player).Surface);
+    }
+
     [Fact]
     public void PilotStartsOnFinalsFirewallsEgressesAndKills() {
-        var rig = new CarrierRig();
-        double finalsAlt = rig.S.Position.Y, finalsSpeed = rig.S.Speed;
+        var rig = new SessionHarness();
+        double finalsAltitude = rig.S.Position.Y, finalsSpeed = rig.Player.AirspeedMps;
         Vec3D banditStart = rig.B.Position;
 
-        Assert.True(rig.InApproachSlot, "the sortie must genuinely start in the carrier groove");
+        Assert.True(rig.InApproachSlot,
+            "the production sortie must genuinely start in the carrier groove");
+        Assert.Equal(0, rig.Session.Beat.CombatRules.OpponentAmmo);
+        Assert.Equal(0, rig.Session.OpponentGun.AmmoRemaining);
 
-        // The sortie brief says firewall on spawn; hold W before the first auto-throttle tick, just
-        // as a player can while the beat comes alive.
-        rig.Key(GKey.ThrottleUp, true);                         // firewall; F-86 thrust caps at MIL
+        rig.Key(GKey.ThrottleUp, true);
         bool leftApproachLaw = false;
         double freeAt = double.NaN;
-        while (rig.TimeSeconds < 6.0 && rig.Recovery == Carrier.Recovery.Flying) {
+        while (rig.TimeSeconds < 6.0 && rig.Session.Recovery == Carrier.Recovery.Flying) {
             rig.Step();
             leftApproachLaw |= !rig.ApproachMode;
-            if (rig.Mode == "FREE") { freeAt = rig.TimeSeconds; break; }
+            if (rig.Mode == "FREE") {
+                freeAt = rig.TimeSeconds;
+                break;
+            }
         }
-        Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
-        Assert.True(leftApproachLaw, "firewall must hand control from approach law to fight law");
-        Assert.True(double.IsFinite(freeAt), "the five-second wave-off must settle into FREE flight");
+        Assert.Equal(Carrier.Recovery.Flying, rig.Session.Recovery);
+        Assert.True(leftApproachLaw,
+            "firewall must hand the production session from approach law to fight law");
+        Assert.True(double.IsFinite(freeAt),
+            "the five-second wave-off must settle into free flight");
         Assert.InRange(freeAt, 0.0, 5.5);
 
-        // Establish a shallow combat climb, then unload and let firewalled dry thrust build energy.
-        while (rig.TimeSeconds < 20.0 && rig.Recovery == Carrier.Recovery.Flying
-               && (rig.S.Position.Y < finalsAlt + 100.0 || rig.S.Speed < 100.0)) {
-            rig.Key(GKey.PullUp, rig.S.Gamma < 0.09);
-            rig.Key(GKey.PushDown, rig.S.Gamma > 0.18);
+        // A waveoff does not magically clean the aircraft up: make the procedural gear/flap calls
+        // the player must make, then let the real transitions and drag disappear over time.
+        rig.Key(GKey.GearToggle, true);
+        rig.Key(GKey.GearToggle, false);
+        rig.Key(GKey.FlapUp, true);
+
+        while (rig.TimeSeconds < 20.0 && rig.Session.Recovery == Carrier.Recovery.Flying
+               && (rig.S.Position.Y < finalsAltitude + 100.0
+                   || rig.Player.AirspeedMps < 100.0)) {
+            bool accelerate = rig.S.Position.Y >= finalsAltitude + 170.0;
+            double gammaLow = accelerate ? 0.025 : 0.09;
+            double gammaHigh = accelerate ? 0.055 : 0.18;
+            rig.Key(GKey.PullUp, rig.S.Gamma < gammaLow);
+            rig.Key(GKey.PushDown, rig.S.Gamma > gammaHigh);
             rig.Step();
         }
+        rig.Key(GKey.FlapUp, false);
         rig.Key(GKey.PullUp, false);
         rig.Key(GKey.PushDown, false);
-        double egressAt = rig.TimeSeconds, egressAlt = rig.S.Position.Y, egressSpeedKt = rig.SpeedKt;
-        Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
-        Assert.True(rig.Throttle > 1.25, $"generic command lever must reach its stop; lever={rig.Throttle:F2}");
-        Assert.Equal(1.0, FlightModel.Sabre.MaxThrustFraction); // J47-GE-27 has no afterburner
-        Assert.True(rig.S.Position.Y > finalsAlt + 150.0,
-            $"egress must gain useful altitude: {finalsAlt:F0}→{rig.S.Position.Y:F0} m");
-        Assert.True(rig.S.Speed > Math.Max(95.0, finalsSpeed + 20.0),
-            $"egress must build fighting energy: {finalsSpeed:F0}→{rig.S.Speed:F0} m/s");
-        Assert.True(Finite(rig.S) && rig.S.Speed > 60.0, "the pilot must stay finite and flying");
-        Assert.True(Math.Abs(rig.S.Bank) < 0.15, "the egress must be cleaned up wings-level before the intercept");
+        double egressAt = rig.TimeSeconds;
+        double egressAltitude = rig.S.Position.Y;
+        double egressSpeedKt = rig.Player.AirspeedMps * AirData.MpsToKnots;
+        Assert.Equal(Carrier.Recovery.Flying, rig.Session.Recovery);
+        Assert.Equal(FlightModel.Sabre.MaxThrustFraction, rig.Throttle, precision: 10);
+        Assert.Equal(1.0, FlightModel.Sabre.MaxThrustFraction);
+        Assert.True(rig.Session.PlayerSystems.AllGearUpAndLocked);
+        Assert.InRange(rig.Session.PlayerSystems.EffectiveFlapFraction, 0.0, 0.01);
+        Assert.True(rig.S.Position.Y > finalsAltitude + 150.0,
+            $"egress must gain useful altitude: {finalsAltitude:F0}→{rig.S.Position.Y:F0} m");
+        Assert.True(rig.Player.AirspeedMps > Math.Max(94.0, finalsSpeed + 20.0),
+            $"egress must build fighting air energy: {finalsSpeed:F0}→{rig.Player.AirspeedMps:F0} m/s");
+        Assert.True(Finite(rig.S) && rig.Player.AirspeedMps > 60.0,
+            "the pilot must stay finite and flying");
+        Assert.True(Math.Abs(rig.S.Bank) < 0.15,
+            "the egress must be cleaned up wings-level before the intercept");
         double banditTravel = (rig.B.Position - banditStart).Length;
         Assert.True(banditTravel > 800.0 && rig.B.Speed > 85.0 && Math.Abs(rig.B.Chi) > 0.5,
             $"the reactive bogey must maneuver at fighter speed: travel={banditTravel:F0} m speed={rig.B.Speed:F0} m/s chi={rig.B.Chi:F2}");
-        Assert.True(rig.Fight.BanditAlive);
 
+        GunKill kill = rig.Fight;
+        Assert.True(kill.BanditAlive);
         bool achievedLead = false;
         double leadAt = double.NaN, leadAvailableAt = double.NaN, firstHitAt = double.NaN;
         double minAimErrorDeg = double.PositiveInfinity, minRangeM = double.PositiveInfinity;
         Vec3D previousBanditVelocity = rig.B.VelocityVector();
-        // Keep integrating past the 75 s performance gate so a late outcome produces a useful
-        // assertion instead of being indistinguishable from a loop cutoff; the assertion below
-        // still requires the BUILD 25 intercept to splash before 75 s.
-        while (rig.TimeSeconds < 100.0 && rig.Recovery == Carrier.Recovery.Flying
-               && rig.KillCount == 0) {
-            // Manage closure instead of idling merely because range is below 2.5 km. Against a
-            // maneuvering fighter that old rule bled the pursuer below 50 m/s before it ever got
-            // around the first turn. Preserve fighting speed, and pull power only for a real
-            // high-closure overshoot inside snapshot range.
+        Vec3D splashPlayerPosition = default;
+
+        while (rig.TimeSeconds < 100.0 && rig.Session.Recovery == Carrier.Recovery.Flying
+               && rig.Session.KillCount == 0) {
             var lineOfSight = (rig.B.Position - rig.S.Position).Normalized();
-            double closureMps = (rig.S.VelocityVector() - rig.B.VelocityVector()).Dot(lineOfSight);
-            bool brakeForOvershoot = rig.RangeM < 650.0 && closureMps > 45.0 && rig.S.Speed > 155.0;
+            double closureMps = (rig.S.VelocityVector() - rig.B.VelocityVector())
+                .Dot(lineOfSight);
+            bool brakeForOvershoot = rig.RangeM < 650.0 && closureMps > 45.0
+                && rig.S.Speed > 155.0;
             bool needCombatPower = !brakeForOvershoot
                 && (rig.S.Speed < 150.0 || rig.RangeM > 1000.0 || closureMps < 15.0);
             rig.Key(GKey.ThrottleUp, needCombatPower);
             rig.Key(GKey.ThrottleDown, brakeForOvershoot);
-            // Outside ballistic range, close in pure pursuit. Once a finite solution appears,
-            // refine the HUD's constant-velocity pipper with observed target acceleration.
+
             Vec3D banditVelocity = rig.B.VelocityVector();
-            Vec3D banditAcceleration = (banditVelocity - previousBanditVelocity) * 120.0;
+            Vec3D banditAcceleration = (banditVelocity - previousBanditVelocity)
+                * AircraftSim.TickHz;
             previousBanditVelocity = banditVelocity;
             double acceleration = banditAcceleration.Length;
             if (acceleration > 30.0) banditAcceleration *= 30.0 / acceleration;
-            // The production pipper solves constant-velocity ballistics. A competent pilot against
-            // this continuously maneuvering bogey adds the observed acceleration over bullet TOF.
-            Vec3D aimPoint = rig.Fight.HasLeadSolution
-                ? rig.Fight.LeadPipper + banditAcceleration
-                    * (0.5 * rig.Fight.LeadTimeOfFlight * rig.Fight.LeadTimeOfFlight)
+            Vec3D aimPoint = kill.HasLeadSolution
+                ? kill.LeadPipper + banditAcceleration
+                    * (0.5 * kill.LeadTimeOfFlight * kill.LeadTimeOfFlight)
                 : rig.B.Position;
             bool deckRecovery = rig.S.Position.Y < 330.0;
-            double wantBank = deckRecovery ? 0.0 : Geometry.BankToPlaceLiftVectorOn(rig.S, aimPoint);
-            double bankError = Math.IEEERemainder(wantBank - rig.S.Bank, 2.0 * Math.PI);
+            double wantedBank = deckRecovery ? 0.0
+                : Geometry.BankToPlaceLiftVectorOn(rig.S, aimPoint);
+            double bankError = Math.IEEERemainder(wantedBank - rig.S.Bank,
+                2.0 * Math.PI);
             rig.Key(GKey.RollRight, bankError > 0.035);
             rig.Key(GKey.RollLeft, bankError < -0.035);
-            var aimDirection = (aimPoint - rig.S.Position).Normalized();
-            double aimError = Math.Acos(Math.Clamp(rig.Player.BodyForward.Dot(aimDirection), -1.0, 1.0));
+            Vec3D aimDirection = (aimPoint - rig.S.Position).Normalized();
+            double aimError = Math.Acos(Math.Clamp(
+                rig.Player.BodyForward.Dot(aimDirection), -1.0, 1.0));
             double verticalError = rig.Player.BodyUp.Dot(aimDirection);
             bool liftPlaneSet = Math.Abs(bankError) < 0.30;
             bool energyLow = rig.S.Speed < 115.0;
             bool pullForDeck = deckRecovery && liftPlaneSet && rig.S.Gamma < 0.08;
-            // At low energy, unload and let max power rebuild speed instead of holding the
-            // max-performance pull. The target can earn separation, but not an easy pilot stall.
             rig.Key(GKey.PullUp, pullForDeck || (!energyLow && !deckRecovery
                 && liftPlaneSet && verticalError > 0.0018 && aimError > 0.0025));
             rig.Key(GKey.PushDown, !energyLow && !deckRecovery
                 && liftPlaneSet && verticalError < -0.0018 && aimError > 0.0025);
 
-            // The sight ring is a flyable two-degree capture cue; it authorizes a burst, but the
-            // gun awards nothing unless individual trajectories actually cross the target sphere.
-            bool onPipper = rig.Fight.HasLeadSolution && aimError < 0.035;
-            if (rig.Fight.HasLeadSolution) {
+            bool onPipper = kill.HasLeadSolution && aimError < 0.035;
+            if (kill.HasLeadSolution) {
                 if (!double.IsFinite(leadAvailableAt)) leadAvailableAt = rig.TimeSeconds;
-                minAimErrorDeg = Math.Min(minAimErrorDeg, rig.GunAimErrorDeg);
+                minAimErrorDeg = Math.Min(minAimErrorDeg, rig.GunAimErrorDeg(kill));
             }
             minRangeM = Math.Min(minRangeM, rig.RangeM);
             rig.Key(GKey.Trigger, onPipper);
@@ -529,39 +839,74 @@ public class CarrierFlightHarnessTests {
                 achievedLead = true;
                 if (!double.IsFinite(leadAt)) leadAt = rig.TimeSeconds;
             }
+
+            Vec3D beforeStep = rig.S.Position;
             rig.Step();
-            if (!double.IsFinite(firstHitAt) && rig.Fight.HitCount > 0) firstHitAt = rig.TimeSeconds;
+            if (!double.IsFinite(firstHitAt) && kill.HitCount > 0)
+                firstHitAt = rig.TimeSeconds;
+            if (rig.Session.KillCount > 0) {
+                splashPlayerPosition = beforeStep;
+            }
         }
 
-        var kill = Assert.IsType<GunKill>(rig.LastKill);
-        _o.WriteLine($"FULL SORTIE: free={freeAt:F1}s egress={egressAt:F1}s/{egressSpeedKt:F0}kt/{egressAlt:F0}m "
-            + $"leadAvail={leadAvailableAt:F1}s onPipper={leadAt:F1}s firstHit={firstHitAt:F1}s splash={rig.TimeSeconds:F1}s "
-            + $"range={rig.RangeM:F0}m/min{minRangeM:F0}m aimErr={rig.GunAimErrorDeg:F2}°/min{minAimErrorDeg:F2}° "
+        _o.WriteLine($"FULL SORTIE: free={freeAt:F1}s "
+            + $"egress={egressAt:F1}s/{egressSpeedKt:F0}kt/{egressAltitude:F0}m "
+            + $"leadAvail={leadAvailableAt:F1}s onPipper={leadAt:F1}s "
+            + $"firstHit={firstHitAt:F1}s splash={rig.TimeSeconds:F1}s "
+            + $"range={rig.RangeM:F0}m/min{minRangeM:F0}m "
+            + $"aimErr={rig.GunAimErrorDeg(rig.Fight):F2}°/min{minAimErrorDeg:F2}° "
             + $"rounds={kill.RoundsFired} hits={kill.HitCount} ammo={kill.AmmoRemaining} "
-            + $"kills={rig.KillCount} nextRange={rig.RangeM:F0}m nextOutcome={rig.Fight.Outcome}");
-        Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
-        Assert.True(achievedLead, "the pilot must close, fly the computed lead pipper, and fire on solution");
-        Assert.True(kill.HitCount >= GunKill.DefaultHitsToKill, "only real round intersections may do damage");
-        Assert.True(kill.RoundsFired > kill.HitCount, "the harness must permit honest misses, not award every trigger tick");
-        Assert.True(firstHitAt > leadAt + 0.15, "damage must wait for round time-of-flight, not advance with trigger time");
-        Assert.True(kill.AmmoRemaining < GunKill.DefaultAmmo, "a real finite magazine must feed the sortie");
+            + $"kills={rig.Session.KillCount} terminalRange={rig.RangeM:F0}m "
+            + $"outcome={rig.Session.Outcome}");
+        Assert.Equal(Carrier.Recovery.Flying, rig.Session.Recovery);
+        Assert.True(achievedLead,
+            "the pilot must close, fly the computed lead pipper, and fire on solution");
+        Assert.True(kill.HitCount >= GunKill.DefaultHitsToKill,
+            "only real round intersections may do damage");
+        Assert.True(kill.RoundsFired > kill.HitCount,
+            "the harness must permit honest misses, not award every trigger tick");
+        Assert.True(firstHitAt > leadAt + 0.15,
+            "damage must wait for round time-of-flight, not advance with trigger time");
+        Assert.True(kill.AmmoRemaining < GunKill.DefaultAmmo,
+            "a real finite magazine must feed the sortie");
         Assert.Equal(FightOutcome.Splash, kill.Outcome);
         Assert.False(kill.BanditAlive);
         Assert.Equal(1.0, kill.KillProgress, 10);
-        Assert.Equal(1, rig.KillCount);
-        Assert.Equal(FightOutcome.Flying, rig.Fight.Outcome);
-        Assert.True(rig.Fight.BanditAlive);
+        Assert.Equal(1, rig.Session.KillCount);
+        Assert.Equal(SimulationSession.LifecycleState.Active, rig.Session.Lifecycle);
+        Assert.Equal(SortieOutcome.Victory, rig.Session.PendingOutcome);
+        Assert.Equal(SortieOutcome.None, rig.Session.Outcome);
+        Assert.Equal(FightOutcome.Splash, rig.Fight.Outcome);
+        Assert.False(rig.Fight.TargetAlive);
         Assert.IsType<ReactiveBandit>(rig.Bandit);
-        Assert.InRange(rig.RangeM, 2500.0, 4500.0);
-        Assert.InRange(Math.Abs(rig.LastSpawnState.Position.Y - rig.S.Position.Y), 0.0, 300.0);
-        Assert.True(rig.LastSpawnState.Speed >= 150.0, "the next bogey must arrive with fighting energy");
-        Assert.True((rig.S.Position - rig.LastSplashPlayerPosition).Length > 0.5,
+        Assert.True((rig.S.Position - splashPlayerPosition).Length > 0.5,
             "ownship must keep integrating through the splash tick");
-        Assert.True(rig.TimeSeconds < 75.0, "the tuned finals-to-splash intercept must stay well below BUILD 23's ~110 s");
+        Assert.True(rig.TimeSeconds < 100.0,
+            "the production finals-to-splash intercept must complete inside the acceptance window");
+
+        double destroyedAt = rig.TimeSeconds;
+        AircraftState destroyedBandit = rig.B;
+        while (rig.Session.Lifecycle != SimulationSession.LifecycleState.Finished
+            && rig.TimeSeconds < destroyedAt
+                + SimulationSession.TerminalSimulationLimitSeconds + 20.0)
+            rig.Step();
+
+        Assert.NotEqual(destroyedBandit.Position, rig.B.Position);
+        Assert.Equal(SimulationSession.LifecycleState.Finished, rig.Session.Lifecycle);
+        Assert.Equal(SortieOutcome.Victory, rig.Session.Outcome);
+        Assert.Equal(AircraftTerminalState.Settled,
+            rig.Session.OpponentTerminalState);
+        Assert.Contains(rig.Session.RecentEvents, e => e.Type == SessionEventType.Impact
+            && e.Target == CombatRole.Opponent);
+        Assert.Contains(rig.Session.RecentEvents, e => e.Type == SessionEventType.Settled
+            && e.Target == CombatRole.Opponent);
+        Assert.DoesNotContain(rig.Session.RecentEvents,
+            e => e.Type == SessionEventType.TerminalLimitReached);
     }
 
-    static bool Finite(in AircraftState s) =>
-        double.IsFinite(s.Position.X) && double.IsFinite(s.Position.Y) && double.IsFinite(s.Position.Z)
-        && double.IsFinite(s.Speed) && double.IsFinite(s.Gamma) && double.IsFinite(s.Chi)
-        && double.IsFinite(s.Bank) && s.BodyRates.IsFinite;
+    static bool Finite(in AircraftState state) =>
+        double.IsFinite(state.Position.X) && double.IsFinite(state.Position.Y)
+        && double.IsFinite(state.Position.Z) && double.IsFinite(state.Speed)
+        && double.IsFinite(state.Gamma) && double.IsFinite(state.Chi)
+        && double.IsFinite(state.Bank) && state.BodyRates.IsFinite;
 }

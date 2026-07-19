@@ -40,6 +40,38 @@ public class WindResponseTests {
     }
 
     [Fact]
+    public void AirDataIsWindRelativeBeforeTheFirstTick() {
+        var state = Trimmed(kts: 250);
+        var headwind = new Vec3D(0.0, 0.0, -15.0);
+        var sim = new AircraftSim(state, FlightModel.Sabre) {
+            Wind = new ConstantWind(headwind)
+        };
+
+        Assert.Equal(state.Speed + 15.0, sim.AirspeedMps, precision: 10);
+        Assert.Equal(state.VelocityVector() - headwind, sim.AirVelocity);
+
+        sim.Wind = null;
+        Assert.Equal(state.Speed, sim.AirspeedMps, precision: 10);
+    }
+
+    [Fact]
+    public void ReplacingWindDoesNotCarryThePreviousGustFilterIntoTheNewField() {
+        var sim = new AircraftSim(Trimmed(), FlightModel.Sabre) {
+            Wind = new ConstantWind(new Vec3D(0.0, 20.0, 0.0))
+        };
+        sim.Step(Cruise, Dt);
+        double beforeSwitchVy = sim.State.VelocityVector().Y;
+
+        sim.Wind = new ConstantWind(new Vec3D(0.0, -20.0, 0.0));
+        sim.Step(Cruise, Dt);
+        double afterSwitchVy = sim.State.VelocityVector().Y;
+
+        Assert.True(afterSwitchVy < beforeSwitchVy,
+            $"the first tick in the replacement downdraft retained the old updraft: " +
+            $"vertical speed {beforeSwitchVy:F4} -> {afterSwitchVy:F4} m/s");
+    }
+
+    [Fact]
     public void SteadyUpdraftMakesTheAircraftClimb() {
         // A clean, sign-checkable test of the gust-lift coupling: a sustained updraft raises the
         // effective AoA, so lift exceeds weight and the aircraft climbs relative to still air.

@@ -1,0 +1,108 @@
+{
+  "$schema": "../../schemas/content-pack.schema.json",
+  "schemaVersion": "1.0.0",
+  "packId": "korea-1950s",
+  "packVersion": "0.2.1",
+  "displayName": "Korea 1950s: Carrier Jets",
+  "summary": "Early swept-wing guns-only fighter combat and straight-deck carrier operations using the current simulation definitions and replaceable renderer profiles.",
+  "status": "experimental",
+  "era": {
+    "id": "early-jet-age",
+    "displayName": "Early Jet Age",
+    "startYear": 1950,
+    "endYear": 1956,
+    "notes": "Technology and presentation scope, not a runtime branch condition."
+  },
+  "theatre": {
+    "id": "korean-peninsula",
+    "displayName": "Korean Peninsula and adjacent seas",
+    "region": "Northeast Asia",
+    "referenceOrigin": {
+      "latitude": 37.5,
+      "longitude": 127.5
+    }
+  },
+  "tags": [
+    "carrier-aviation",
+    "early-jets",
+    "guns-only",
+    "training"
+  ],
+  "compatibility": {
+    "minimumPlatformVersion": "0.1.0",
+    "snapshotSchemaVersion": "1.2.0",
+    "supportedShells": [
+      "web"
+    ]
+  },
+  "content": {
+    "vehicleDefinitions": [
+      {
+        "id": "vehicle.sabre-fury-class.v1",
+        "uri": "builtin://vehicle/sabre-fury-class"
+      },
+      {
+        "id": "vehicle.reactive-bandit.v1",
+        "uri": "builtin://vehicle/reactive-bandit"
+      }
+    ],
+    "missionDefinitions": [
+      {
+        "id": "mission.perch-attack.v1",
+        "uri": "builtin://mission/perch-attack"
+      },
+      {
+        "id": "mission.break-defense.v1",
+        "uri": "builtin://mission/break-defense"
+      },
+      {
+        "id": "mission.saddle-tracking.v1",
+        "uri": "builtin://mission/saddle-tracking"
+      },
+      {
+        "id": "mission.carrier-qualification.v1",
+        "uri": "builtin://mission/carrier-qualification"
+      }
+    ],
+    "rulesets": [
+      {
+        "id": "ruleset.training-drill.v1",
+        "mode": "training_drill",
+        "displayName": "Training Drill",
+        "description": "Repeatable short-form setup with immediate reset."
+      },
+      {
+        "id": "ruleset.discrete-sortie.v1",
+        "mode": "discrete_sortie",
+        "displayName": "Discrete Sortie",
+        "description": "One launch-to-recovery combat sortie with an explicit outcome."
+      }
+    ],
+    "defaultMissionDefinitionId": "mission.perch-attack.v1"
+  },
+  "presentation": {
+    "defaultPresentationProfileId": "presentation.korea-1950s.fixed-wing.v1",
+    "profiles": [
+      {
+        "id": "presentation.korea-1950s.fixed-wing.v1",
+        "visualProfile": {
+          "id": "visual.korea-1950s.default.v1",
+          "uri": "visual-profile.json"
+        },
+        "assetProfileId": "asset.korea-1950s.default.v1",
+        "cameraProfileId": "camera.fixed-wing.padlock.v1",
+        "hudProfileId": "hud.fixed-wing.guns.v1",
+        "inputProfileId": "input.fixed-wing.unified.v1",
+        "audioProfileId": "audio.fixed-wing.jet.v1",
+        "effectsProfileId": "effects.fixed-wing.guns.v1"
+      }
+    ]
+  },
+  "licensing": {
+    "licenseSet": {
+      "id": "licenses.guns-only.project.v1",
+      "uri": "licenses.json"
+    },
+    "requireExplicitAssetLicense": true
+  }
+}

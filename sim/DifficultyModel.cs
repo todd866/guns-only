@@ -94,18 +94,24 @@ public readonly struct RecoveryDifficulty {
         MaxTrapSpeedMps = maxTrapSpeedMps;
     }
 
-    /// A physical deck contact becomes a trap only when its sink, centreline error, and approach
-    /// speed are inside this pass's window. Level zero returns before doing any new work, preserving
-    /// the historical "any physical deck contact traps" behavior exactly.
-    public bool AcceptsTrap(Carrier carrier, in AircraftState state) {
+    /// Compare a touchdown with the current adaptive training target. This is proficiency feedback,
+    /// never hook or arresting-gear physics: weather/difficulty may make the task harder, but it may
+    /// not make an intercepted pendant disappear. Callers should supply ideal IAS/CAS.
+    public bool MeetsAdaptiveTarget(Carrier carrier, in AircraftState state,
+        double indicatedAirspeedMps = double.NaN) {
         if (Level <= 0) return true;
 
         var (_, cross, _) = carrier.LandingFrame(state.Position);
-        double sinkMps = System.Math.Max(0.0, -state.VelocityVector().Y);
+        double sinkMps = carrier.DeckSinkRateMps(state);
+        double measuredIasMps = double.IsFinite(indicatedAirspeedMps)
+            && indicatedAirspeedMps >= 0.0
+            ? indicatedAirspeedMps
+            : AirData.IndicatedAirspeedMps(
+                carrier.AirspeedMps(state), state.Position.Y);
         return sinkMps <= MaxTrapSinkMps
             && System.Math.Abs(cross) <= MaxTrapLineupErrorM
-            && state.Speed >= MinTrapSpeedMps
-            && state.Speed <= MaxTrapSpeedMps;
+            && measuredIasMps >= MinTrapSpeedMps
+            && measuredIasMps <= MaxTrapSpeedMps;
     }
 }
 
@@ -117,9 +123,13 @@ public sealed class RecoveryProgress {
     public int RecentSetbacks { get; private set; }
     public int AttemptCount { get; private set; }
 
+    /// Inspect the conditions for the next pass without consuming it. Mission staging and Ready
+    /// screens use this so rebuilding a briefing cannot advance weather or adaptation state.
+    public RecoveryDifficulty PreviewNextAttempt() => DifficultyModel.ForAttempt(
+        CleanTrapCount, CleanStreak, RecentSetbacks, AttemptCount);
+
     public RecoveryDifficulty BeginAttempt() {
-        var difficulty = DifficultyModel.ForAttempt(
-            CleanTrapCount, CleanStreak, RecentSetbacks, AttemptCount);
+        var difficulty = PreviewNextAttempt();
         AttemptCount++;
         // Ease is recovery support, not a permanent lower mode. One retained setback ages out each
         // time it helps a pass; back-to-back misses can therefore soften at most the next two.
@@ -132,6 +142,17 @@ public sealed class RecoveryProgress {
         CleanStreak++;
         // A success lets an old setback age out; this avoids pinning a recovering pilot on EASY.
         RecentSetbacks = System.Math.Max(0, RecentSetbacks - 1);
+    }
+
+    /// A stopped aircraft is a physical recovery, not automatically evidence of a clean pass.
+    /// OK/FAIR touchdown grades advance mastery; NO GRADE remains a safe recovery without inflating
+    /// the proficiency curve. CUT cannot normally reach the stopped phase, but is handled safely.
+    public void RecordRecoveredTrap(Carrier.TouchdownGrade grade) {
+        if (grade is Carrier.TouchdownGrade.Ok or Carrier.TouchdownGrade.Fair) {
+            RecordCleanTrap();
+            return;
+        }
+        CleanStreak = 0;
     }
 
     public void RecordSetback() {
@@ -224,7 +245,7 @@ public static class DifficultyModel {
             tuned.MaxTrapSinkMps, tuned.MaxTrapLineupErrorM,
             tuned.MinTrapSpeedMps, tuned.MaxTrapSpeedMps);
 
-    // SplitMix-style integer avalanche: stable in WASM/desktop and dependent only on progress.
+    // SplitMix-style integer avalanche: stable in WASM/native .NET and dependent only on progress.
     static ulong WeatherSeed(int attemptIndex, int cleanTrapCount) {
         unchecked {
             ulong z = BaselineSeed

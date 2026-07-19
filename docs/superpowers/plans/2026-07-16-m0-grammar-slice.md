@@ -2,6 +2,9 @@
 
 > **HISTORICAL DOCUMENT (post-execution note, 2026-07-17):** all 14 tasks executed and individually review-gated; ~20 findings fixed along the way. THE REPO IS TRUTH — several code snippets below encode superseded semantics (immediate taps, positive sticky, world-up attitude, hardcoded beat-1 restart) that were corrected during review. Do not transcribe from this plan.
 
+> The Godot shell and its rigs were retired on 2026-07-19. The browser is canonical; see
+> `docs/platform-architecture.md` for the active session and multi-era design.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A playable slice — fly a placeholder-but-energy-honest jet over a flat sea against a scripted bandit through the full doctrine-detent keyboard grammar (both valley-depth variants), with padlock/gun view states, stick indicator, and suggestion prompts — plus the four hardware spikes, ending at the M0 feel gate.

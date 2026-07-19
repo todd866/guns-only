@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guns-only.invalid/schemas/v1/asset-license-set.schema.json",
+  "title": "Guns Only asset license set",
+  "description": "Records provenance, rights, attribution, and redistribution conditions for assets and procedural factories.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "licenseSetId",
+    "entries"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "licenseSetId": {
+      "$ref": "#/$defs/versionedId"
+    },
+    "template": {
+      "type": "boolean",
+      "default": false
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/licenseEntry"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "versionedId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*\\.v[1-9][0-9]*$"
+    },
+    "licenseEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "licenseId",
+        "appliesTo",
+        "spdxExpression",
+        "copyright",
+        "authors",
+        "sourceUri",
+        "redistribution",
+        "attributionText",
+        "evidence"
+      ],
+      "properties": {
+        "licenseId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "appliesTo": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "spdxExpression": {
+          "type": "string",
+          "minLength": 1
+        },
+        "copyright": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authors": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "sourceUri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceAccessedOn": {
+          "type": "string",
+          "format": "date"
+        },
+        "redistribution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "allowed",
+            "commercialUseAllowed",
+            "modificationAllowed",
+            "shareAlikeRequired",
+            "notices"
+          ],
+          "properties": {
+            "allowed": {
+              "type": "boolean"
+            },
+            "commercialUseAllowed": {
+              "type": "boolean"
+            },
+            "modificationAllowed": {
+              "type": "boolean"
+            },
+            "shareAlikeRequired": {
+              "type": "boolean"
+            },
+            "notices": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "attributionText": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "uri"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "license_file",
+                  "source_page",
+                  "receipt",
+                  "permission",
+                  "author_statement"
+                ]
+              },
+              "uri": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

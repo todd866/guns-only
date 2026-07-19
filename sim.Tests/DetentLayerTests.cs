@@ -53,6 +53,7 @@ public class DetentLayerTests {
         Run(d, g, 0, 3000, Fast);
         Assert.Equal(DemandTier.Valley, d.Tier);
         Assert.True(d.Command.GDemand <= Protection.MaxPerformG(Fast, FlightModel.Sabre) + 1e-6);
+        Assert.False(double.IsFinite(d.Command.CommandedAlphaRad));
     }
     [Fact] public void OverrideCannotPullPastSabreStructuralLimit() {
         var d = new DetentLayer { Variant = ValleyVariant.DoctrineDeep }; var g = new KeyGrammar();
@@ -62,6 +63,8 @@ public class DetentLayerTests {
         Assert.Equal(DemandTier.OverDemand, d.Tier);
         // The F-86 maps ordinary full backstick to +7 G, so override has no extra positive-G spar.
         Assert.Equal(Protection.HardMaxG(Fast, FlightModel.Sabre), d.Command.GDemand, 6);
+        Assert.Equal(FlightModel.Sabre.PostStallAlphaCommandRad,
+            d.Command.CommandedAlphaRad, 10);
     }
     [Fact] public void ReleasingOverrideReturnsToProtectedPull() {
         var d = new DetentLayer { Variant = ValleyVariant.PhysicsOnly }; var g = new KeyGrammar();
@@ -89,6 +92,38 @@ public class DetentLayerTests {
         g.Feed(GKey.ThrottleUp, true, 0); g.Feed(GKey.ThrottleUp, false, 80);
         Run(d, g, 80, 500, Fast); // tap commits after the 250 ms double window
         Assert.Equal(1.0, d.Throttle, 6);
+    }
+    [Fact] public void SabreThrottleStopsAtMilitaryPower() {
+        var d = new DetentLayer(); var g = new KeyGrammar();
+        g.Feed(GKey.ThrottleUp, true, 0);
+        Run(d, g, 0, 3000, Fast);
+        Assert.Equal(1.0, FlightModel.Sabre.MaxThrustFraction, 10);
+        Assert.Equal(1.0, d.Throttle, 10);
+    }
+    [Fact] public void ConfigureForClampsStagedThrottleAndCommandToAirframeStop() {
+        var d = new DetentLayer();
+
+        d.ConfigureFor(FlightModel.GliderStrike);
+        d.ConfigureFor(FlightModel.GliderStrike); // repeated staging must be idempotent
+
+        Assert.Equal(0.0, FlightModel.GliderStrike.MaxThrustFraction, 10);
+        Assert.Equal(0.0, d.Throttle, 10);
+        Assert.Equal(0.0, d.Command.Throttle, 10);
+
+        var glider = Fast with { Mass = FlightModel.GliderStrike.MassKg };
+        d.Tick(new KeyGrammar(), 0.0, glider, FlightModel.GliderStrike, Advice,
+            1.0 / AircraftSim.TickHz);
+        Assert.Equal(0.0, d.Throttle, 10);
+        Assert.Equal(0.0, d.Command.Throttle, 10);
+    }
+    [Fact] public void ProtectionUsesSuppliedAirspeed() {
+        var d = new DetentLayer { Variant = ValleyVariant.PhysicsOnly, AirspeedMps = 70.0 };
+        var g = new KeyGrammar();
+        var lowGroundSpeed = Fast with { Speed = 55.0 };
+        g.Feed(GKey.PullUp, true, 0);
+        Run(d, g, 0, 1500, lowGroundSpeed);
+        Assert.Equal(Protection.MaxPerformG(lowGroundSpeed, FlightModel.Sabre, 70.0),
+            d.Command.GDemand, 6);
     }
     [Fact] public void IdleTapsHaveNoEffect() {
         var d = new DetentLayer { Variant = ValleyVariant.DoctrineDeep }; var g = new KeyGrammar();

@@ -63,6 +63,37 @@
       image-rendering: auto;
     }
 
+    #multiplayer-status {
+      position: fixed;
+      z-index: 8;
+      top: calc(var(--safe-top) + 10px);
+      left: calc(var(--safe-left) + 11px);
+      padding: 5px 7px;
+      border: 1px solid rgba(77, 255, 136, .24);
+      border-radius: 4px;
+      color: rgba(217, 255, 229, .74);
+      background: rgba(2, 12, 18, .58);
+      font: 650 8px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .11em;
+      pointer-events: none;
+      text-transform: uppercase;
+      text-shadow: 0 1px 4px #000;
+    }
+
+    #multiplayer-status[data-phase="online"] {
+      border-color: rgba(77, 255, 136, .52);
+      color: #b8ffcf;
+      box-shadow: 0 0 16px rgba(77, 255, 136, .08);
+    }
+
+    #multiplayer-status[data-phase="connecting"],
+    #multiplayer-status[data-phase="reconnecting"] {
+      border-color: rgba(255, 176, 32, .44);
+      color: #ffe2aa;
+    }
+
+    #multiplayer-status[data-phase="off"] { opacity: .48; }
+
     #touch-controls {
       position: fixed;
       z-index: 10;
@@ -423,6 +454,667 @@
       letter-spacing: .08em;
     }
 
+    #ready-screen {
+      position: fixed;
+      z-index: 12;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding:
+        calc(var(--safe-top) + 20px)
+        calc(var(--safe-right) + 20px)
+        calc(var(--safe-bottom) + 20px)
+        calc(var(--safe-left) + 20px);
+      color: #dfffe9;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(22, 67, 79, .34), transparent 42%),
+        rgba(1, 7, 12, .53);
+      backdrop-filter: blur(5px) saturate(.9);
+      -webkit-backdrop-filter: blur(5px) saturate(.9);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .22s ease, visibility .22s ease;
+    }
+
+    #ready-screen.visible {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    .touch-mode #ready-screen { z-index: 9; }
+
+    #test-flight-console {
+      position: fixed;
+      z-index: 11;
+      top: calc(var(--safe-top) + 10px);
+      right: calc(var(--safe-right) + 10px);
+      width: min(340px, calc(100vw - var(--safe-left) - var(--safe-right) - 20px));
+      overflow: hidden;
+      border: 1px solid rgba(128, 225, 218, .36);
+      border-radius: 7px;
+      color: #dbf5ef;
+      background: rgba(5, 16, 21, .92);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, .4), inset 0 0 24px rgba(105, 227, 213, .025);
+      font: 650 9px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .055em;
+      pointer-events: auto;
+      touch-action: manipulation;
+    }
+
+    #test-flight-console > summary {
+      display: flex;
+      min-height: 39px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 11px;
+      color: rgba(219, 245, 239, .73);
+      background: linear-gradient(90deg, rgba(74, 173, 164, .1), rgba(4, 13, 18, .5));
+      cursor: pointer;
+      list-style: none;
+    }
+
+    #test-flight-console > summary::-webkit-details-marker { display: none; }
+
+    #test-flight-console > summary:focus-visible {
+      outline: 2px solid #8ef5e7;
+      outline-offset: -2px;
+    }
+
+    .tf-title {
+      color: #8ef5e7;
+      font-weight: 850;
+      letter-spacing: .18em;
+    }
+
+    .tf-title::after {
+      content: "ACTION CONSOLE";
+      display: block;
+      margin-top: 2px;
+      color: rgba(219, 245, 239, .34);
+      font-size: 6px;
+      font-weight: 650;
+      letter-spacing: .14em;
+    }
+
+    .tf-collapse-cue {
+      color: rgba(219, 245, 239, .45);
+      font-size: 8px;
+    }
+
+    #test-flight-console[open] .tf-collapse-cue::before { content: "CLOSE ▲"; }
+    #test-flight-console:not([open]) .tf-collapse-cue::before { content: "OPEN ▼"; }
+
+    .tf-body {
+      max-height: calc(100vh - var(--safe-top) - var(--safe-bottom) - 62px);
+      overflow: auto;
+      padding: 9px;
+      border-top: 1px solid rgba(128, 225, 218, .14);
+    }
+
+    .tf-indications {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 5px;
+    }
+
+    .tf-indication {
+      min-width: 0;
+      padding: 7px 8px;
+      border: 1px solid rgba(219, 245, 239, .09);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .tf-indication.wide { grid-column: span 2; }
+    .tf-indication.full { grid-column: 1 / -1; }
+
+    .tf-label {
+      display: block;
+      margin-bottom: 3px;
+      color: rgba(219, 245, 239, .38);
+      font-size: 6.5px;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+
+    .tf-value {
+      color: rgba(231, 255, 250, .9);
+      font-size: 9px;
+      white-space: nowrap;
+    }
+
+    .tf-separator {
+      color: rgba(219, 245, 239, .25);
+    }
+
+    .tf-value[data-state="nominal"],
+    .tf-gear-leg[data-state="down"] { color: #76f7a6; }
+    .tf-value[data-state="caution"],
+    .tf-gear-leg[data-state="striped"] { color: #ffc15d; }
+    .tf-value[data-state="warning"] { color: #ff7282; }
+    .tf-value[data-state="unknown"],
+    .tf-gear-leg[data-state="unknown"] { color: rgba(219, 245, 239, .35); }
+
+    .tf-gear {
+      display: grid;
+      grid-template-columns: 1.35fr repeat(3, 1fr);
+      gap: 5px;
+      margin-top: 5px;
+    }
+
+    .tf-gear > div,
+    .tf-flaps > div {
+      min-width: 0;
+      padding: 6px 7px;
+      border: 1px solid rgba(219, 245, 239, .09);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, .018);
+      text-align: center;
+    }
+
+    .tf-gear .tf-label,
+    .tf-flaps .tf-label { margin-bottom: 2px; }
+
+    .tf-gear-leg {
+      font-size: 8px;
+      white-space: nowrap;
+    }
+
+    .tf-flaps {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr 1fr;
+      gap: 5px;
+      margin-top: 5px;
+    }
+
+    #tf-warning-line {
+      min-height: 25px;
+      margin: 6px 0;
+      padding: 7px 8px 6px;
+      border-left: 2px solid rgba(118, 247, 166, .65);
+      color: rgba(118, 247, 166, .8);
+      background: rgba(118, 247, 166, .035);
+      font-size: 7.5px;
+      letter-spacing: .08em;
+    }
+
+    #tf-warning-line[data-state="caution"] {
+      border-left-color: #ffc15d;
+      color: #ffd28b;
+      background: rgba(255, 193, 93, .055);
+    }
+
+    #tf-warning-line[data-state="warning"] {
+      border-left-color: #ff6174;
+      color: #ff9eaa;
+      background: rgba(255, 97, 116, .065);
+    }
+
+    .tf-procedure {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 5px;
+      padding: 6px 7px;
+      border: 1px solid rgba(255, 193, 93, .24);
+      color: rgba(255, 219, 155, .86);
+      background: rgba(104, 72, 18, .12);
+      font: 700 7px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .045em;
+    }
+
+    #tf-procedure-line[data-state="nominal"],
+    #tf-procedure-score[data-state="nominal"] { color: #76f7a6; }
+
+    #tf-procedure-line[data-state="inactive"] { color: rgba(219, 245, 239, .3); }
+
+    .tf-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 5px;
+    }
+
+    .tf-action {
+      appearance: none;
+      min-width: 0;
+      min-height: 44px;
+      padding: 7px 8px;
+      border: 1px solid rgba(142, 245, 231, .35);
+      border-radius: 4px;
+      color: rgba(230, 255, 250, .82);
+      background: rgba(49, 123, 117, .12);
+      cursor: pointer;
+      font: 750 7.5px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .tf-action:hover,
+    .tf-action:focus-visible {
+      outline: none;
+      border-color: rgba(142, 245, 231, .8);
+      background: rgba(74, 173, 164, .22);
+    }
+
+    .tf-action[data-active="true"] {
+      color: #05130f;
+      border-color: #b8fff1;
+      background: #8ef5e7;
+      box-shadow: 0 0 16px rgba(142, 245, 231, .24);
+      transform: translateY(1px);
+    }
+
+    .tf-action.emergency {
+      grid-column: 1 / -1;
+      border-color: rgba(255, 114, 130, .55);
+      color: #ffc2c9;
+      background: rgba(105, 18, 29, .26);
+    }
+
+    .tf-action.emergency[data-active="true"] {
+      color: #27040a;
+      border-color: #ffd0d6;
+      background: #ff7282;
+      box-shadow: 0 0 18px rgba(255, 114, 130, .32);
+    }
+
+    .tf-action:disabled {
+      opacity: .32;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .tf-note {
+      margin: 7px 1px 0;
+      color: rgba(219, 245, 239, .32);
+      font-size: 6.5px;
+      line-height: 1.45;
+      letter-spacing: .055em;
+    }
+
+    @media (max-height: 560px) {
+      #test-flight-console { width: min(310px, calc(100vw - 20px)); }
+      .tf-body { padding: 7px; }
+      .tf-indication { padding-block: 5px; }
+      .tf-note { display: none; }
+    }
+
+    @media (max-width: 620px) {
+      #test-flight-console { width: min(292px, calc(100vw - 16px)); top: calc(var(--safe-top) + 8px); right: calc(var(--safe-right) + 8px); }
+      #test-flight-console > summary { min-height: 36px; padding-block: 7px; }
+    }
+
+    .ready-card {
+      position: relative;
+      width: min(520px, 100%);
+      max-height: 100%;
+      overflow: auto;
+      padding: clamp(24px, 5vw, 36px);
+      border: 1px solid rgba(77, 255, 136, .25);
+      border-radius: 10px;
+      background:
+        linear-gradient(145deg, rgba(5, 20, 27, .96), rgba(2, 10, 16, .92));
+      box-shadow:
+        inset 0 0 0 1px rgba(204, 255, 221, .025),
+        0 24px 90px rgba(0, 0, 0, .58),
+        0 0 50px rgba(77, 255, 136, .035);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .ready-card::before {
+      content: "";
+      position: absolute;
+      top: -1px;
+      left: 30px;
+      width: 86px;
+      height: 2px;
+      background: #4dff88;
+      box-shadow: 0 0 12px rgba(77, 255, 136, .58);
+    }
+
+    #ready-kicker {
+      margin-bottom: 10px;
+      color: #4dff88;
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .21em;
+      text-transform: uppercase;
+    }
+
+    #ready-title {
+      margin: 0;
+      color: #f2fff6;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      font-size: clamp(25px, 6vw, 36px);
+      font-weight: 640;
+      letter-spacing: .025em;
+    }
+
+    #ready-brief {
+      max-width: 46ch;
+      margin: 12px 0 20px;
+      color: rgba(217, 255, 229, .7);
+      font-size: 11px;
+      line-height: 1.65;
+    }
+
+    .ready-facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin: 0 0 21px;
+      border-block: 1px solid rgba(77, 255, 136, .12);
+    }
+
+    .ready-fact {
+      min-width: 0;
+      padding: 12px 4px;
+    }
+
+    .ready-fact + .ready-fact {
+      padding-left: 15px;
+      border-left: 1px solid rgba(77, 255, 136, .12);
+    }
+
+    .ready-fact small {
+      display: block;
+      margin-bottom: 4px;
+      color: rgba(217, 255, 229, .38);
+      font-size: 7px;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    .ready-fact span {
+      display: block;
+      overflow: hidden;
+      color: rgba(217, 255, 229, .82);
+      font-size: 9px;
+      letter-spacing: .07em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ready-controls {
+      margin: 0 0 22px;
+      color: rgba(217, 255, 229, .48);
+      font-size: 8px;
+      line-height: 1.75;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    #ready-start {
+      appearance: none;
+      width: 100%;
+      min-height: 50px;
+      border: 1px solid rgba(77, 255, 136, .76);
+      border-radius: 6px;
+      color: #06130b;
+      background: #4dff88;
+      box-shadow: 0 0 28px rgba(77, 255, 136, .15);
+      cursor: pointer;
+      font: 850 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      transition: background .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+
+    #ready-start:hover,
+    #ready-start:focus-visible {
+      outline: none;
+      background: #8dffb3;
+      box-shadow: 0 0 34px rgba(77, 255, 136, .28);
+    }
+
+    #ready-start:active { transform: scale(.985); }
+
+    #ready-start:disabled {
+      color: rgba(217, 255, 229, .42);
+      border-color: rgba(217, 255, 229, .18);
+      background: rgba(217, 255, 229, .06);
+      box-shadow: none;
+      cursor: wait;
+    }
+
+    #ready-replay {
+      appearance: none;
+      width: 100%;
+      min-height: 42px;
+      margin-top: 9px;
+      border: 1px solid rgba(142, 245, 231, .58);
+      border-radius: 6px;
+      color: #cffff6;
+      background: rgba(40, 112, 108, .18);
+      cursor: pointer;
+      font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    #ready-replay:hover,
+    #ready-replay:focus-visible {
+      outline: none;
+      border-color: #8ef5e7;
+      background: rgba(74, 173, 164, .3);
+    }
+
+    #ready-replay[hidden] { display: none; }
+
+    #ready-hint {
+      min-height: 12px;
+      margin-top: 10px;
+      color: rgba(217, 255, 229, .36);
+      font-size: 7px;
+      letter-spacing: .12em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    @media (max-height: 500px) and (orientation: landscape) {
+      .ready-card { padding: 18px 25px; }
+      #ready-title { font-size: 24px; }
+      #ready-brief { margin: 7px 0 11px; line-height: 1.45; }
+      .ready-facts { margin-bottom: 11px; }
+      .ready-fact { padding-block: 8px; }
+      .ready-controls { margin-bottom: 11px; line-height: 1.45; }
+      #ready-start { min-height: 42px; }
+    }
+
+    #incident-replay-overlay {
+      position: fixed;
+      z-index: 10;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding:
+        calc(var(--safe-top) + 14px)
+        calc(var(--safe-right) + 16px)
+        calc(var(--safe-bottom) + 16px)
+        calc(var(--safe-left) + 16px);
+      color: #eafff5;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-shadow: 0 2px 5px #000;
+      transition: opacity .16s ease, visibility .16s ease;
+    }
+
+    #incident-replay-overlay.visible {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .incident-replay #hud,
+    .incident-replay #touch-controls,
+    .incident-replay #test-flight-console,
+    .incident-replay #multiplayer-status { display: none !important; }
+
+    .replay-head,
+    .replay-review {
+      width: min(820px, calc(100vw - var(--safe-left) - var(--safe-right) - 32px));
+      padding: 10px 12px;
+      border: 1px solid rgba(142, 245, 231, .3);
+      border-left: 3px solid #8ef5e7;
+      background: rgba(1, 10, 15, .78);
+      box-shadow: 0 8px 26px rgba(0, 0, 0, .34);
+      backdrop-filter: blur(3px);
+    }
+
+    .replay-title-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .replay-title {
+      color: #8ef5e7;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .2em;
+    }
+
+    #incident-replay-time {
+      color: rgba(234, 255, 245, .72);
+      font-size: 9px;
+      letter-spacing: .1em;
+    }
+
+    .replay-authority {
+      margin-top: 4px;
+      color: rgba(234, 255, 245, .48);
+      font-size: 7px;
+      letter-spacing: .13em;
+    }
+
+    #incident-replay-metrics {
+      margin-top: 8px;
+      color: rgba(234, 255, 245, .9);
+      font-size: 8px;
+      line-height: 1.55;
+      letter-spacing: .04em;
+    }
+
+    #incident-replay-event {
+      margin-top: 5px;
+      color: #ffd38b;
+      font-size: 8px;
+      letter-spacing: .08em;
+    }
+
+    .replay-review { align-self: flex-start; }
+
+    .replay-review-label {
+      margin-top: 8px;
+      color: rgba(142, 245, 231, .7);
+      font-size: 7px;
+      letter-spacing: .14em;
+    }
+
+    #incident-replay-outcome {
+      margin-top: 5px;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    #incident-replay-grade {
+      margin-top: 5px;
+      color: #8ef5e7;
+      font-size: 8px;
+      line-height: 1.4;
+      letter-spacing: .04em;
+    }
+
+    #incident-replay-cause {
+      margin-top: 5px;
+      color: #ffd38b;
+      font-size: 9px;
+      line-height: 1.4;
+    }
+
+    #incident-replay-correction {
+      margin-top: 6px;
+      color: #a9ffd0;
+      font-size: 8px;
+      line-height: 1.45;
+    }
+
+    .replay-timeline {
+      position: relative;
+      height: 3px;
+      margin-top: 10px;
+      background: rgba(234, 255, 245, .18);
+    }
+
+    #incident-replay-progress {
+      width: 0;
+      height: 100%;
+      background: #8ef5e7;
+      box-shadow: 0 0 8px rgba(142, 245, 231, .5);
+    }
+
+    #incident-replay-decision {
+      position: absolute;
+      top: -4px;
+      width: 2px;
+      height: 11px;
+      background: #ffb020;
+      box-shadow: 0 0 9px rgba(255, 176, 32, .8);
+    }
+
+    #incident-replay-decision::after {
+      content: "DECISION";
+      position: absolute;
+      right: 5px;
+      bottom: 8px;
+      color: rgba(255, 211, 139, .7);
+      font-size: 6px;
+      letter-spacing: .1em;
+    }
+
+    #incident-replay-decision[data-reached="true"] { background: #ffdf9c; }
+
+    #incident-replay-skip {
+      margin-top: 10px;
+      padding: 7px 10px;
+      border: 1px solid rgba(234, 255, 245, .34);
+      border-radius: 4px;
+      color: rgba(234, 255, 245, .75);
+      background: rgba(4, 18, 24, .78);
+      cursor: pointer;
+      pointer-events: auto;
+      font: 750 7px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    #incident-replay-skip:hover,
+    #incident-replay-skip:focus-visible {
+      outline: none;
+      border-color: #8ef5e7;
+      color: #fff;
+    }
+
+    @media (max-width: 620px), (max-height: 500px) {
+      #incident-replay-overlay { padding: 9px; }
+      .replay-head, .replay-review { width: min(620px, calc(100vw - 18px)); padding: 7px 9px; }
+      #incident-replay-metrics { font-size: 6.8px; line-height: 1.4; }
+      #incident-replay-outcome { font-size: 8px; }
+      #incident-replay-grade { font-size: 7px; }
+      #incident-replay-cause, #incident-replay-correction { font-size: 7px; }
+    }
+
     #fatal {
       position: fixed;
       z-index: 30;
@@ -481,8 +1173,88 @@
   </style>
 </head>
 <body>
-  <canvas id="scene" tabindex="0" aria-label="First-person air combat view"></canvas>
+  <canvas id="scene" tabindex="0" aria-label="Air combat simulation view"></canvas>
   <canvas id="hud" aria-hidden="true"></canvas>
+  <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off">SOLO · ROOM NOT CONFIGURED</div>
+
+  <section id="incident-replay-overlay" aria-hidden="true" aria-label="Authoritative carrier incident replay">
+    <div class="replay-head">
+      <div class="replay-title-row">
+        <strong class="replay-title">REPLAY · EXTERNAL</strong>
+        <output id="incident-replay-time">−0.0 s · 1.0×</output>
+      </div>
+      <div class="replay-authority">AUTHORITATIVE RECORDED SIMULATION STATES · NO CINEMATIC RE-SIMULATION</div>
+      <div id="incident-replay-metrics"></div>
+      <div id="incident-replay-event"></div>
+    </div>
+    <div class="replay-review">
+      <div id="incident-replay-outcome"></div>
+      <div id="incident-replay-grade"></div>
+      <div class="replay-review-label">AUTOMATED CAUSAL REVIEW · NOT AN LSO GRADE</div>
+      <div id="incident-replay-cause"></div>
+      <div id="incident-replay-correction"></div>
+      <div class="replay-timeline" aria-hidden="true">
+        <div id="incident-replay-progress"></div>
+        <div id="incident-replay-decision" data-reached="false"></div>
+      </div>
+      <button id="incident-replay-skip" type="button">Skip to debrief · Esc</button>
+    </div>
+  </section>
+
+  <details id="test-flight-console" open>
+    <summary role="button" aria-expanded="true" aria-label="Toggle test-flight action console">
+      <span class="tf-title">TEST FLIGHT</span>
+      <span class="tf-collapse-cue" aria-hidden="true"></span>
+    </summary>
+    <div class="tf-body">
+      <div class="tf-indications" aria-label="Power and utility systems">
+        <div class="tf-indication wide">
+          <span class="tf-label">Engine</span>
+          <output id="tf-engine-rpm" class="tf-value" data-state="unknown">--</output>
+          <span class="tf-separator" aria-hidden="true"> · </span>
+          <output id="tf-engine-running" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Primary bus</span>
+          <output id="tf-primary-bus" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication wide full">
+          <span class="tf-label">Utility hydraulic</span>
+          <output id="tf-hydraulic-pressure" class="tf-value" data-state="unknown">--</output>
+        </div>
+      </div>
+
+      <div class="tf-gear" aria-label="Landing gear indications">
+        <div><span class="tf-label">Handle</span><output id="tf-gear-handle" class="tf-gear-leg">--</output></div>
+        <div><span class="tf-label">Nose</span><output id="tf-gear-nose" class="tf-gear-leg" data-state="unknown">--</output></div>
+        <div><span class="tf-label">Left</span><output id="tf-gear-left" class="tf-gear-leg" data-state="unknown">--</output></div>
+        <div><span class="tf-label">Right</span><output id="tf-gear-right" class="tf-gear-leg" data-state="unknown">--</output></div>
+      </div>
+
+      <div class="tf-flaps" aria-label="Wing-flap indications">
+        <div><span class="tf-label">Flap lever</span><output id="tf-flap-lever" class="tf-value">--</output></div>
+        <div><span class="tf-label">Left</span><output id="tf-flap-left" class="tf-value">--</output></div>
+        <div><span class="tf-label">Right</span><output id="tf-flap-right" class="tf-value">--</output></div>
+      </div>
+
+      <div id="tf-warning-line" role="status" aria-live="polite" data-state="nominal">INDICATIONS NORMAL</div>
+      <div class="tf-procedure" aria-live="polite">
+        <output id="tf-procedure-line" data-state="inactive">NO ACTIVE PROCEDURE</output>
+        <output id="tf-procedure-score" data-state="caution">--</output>
+      </div>
+
+      <div class="tf-actions" aria-label="Pilot system actions">
+        <button class="tf-action" type="button" data-test-action="gearToggle">Gear handle<br>toggle</button>
+        <button class="tf-action" type="button" data-test-action="gearHornCutout">Gear horn<br>cutout</button>
+        <button class="tf-action" type="button" data-test-action="confirmGearFailure" data-maintenance-only="true">N · Confirm failed<br>extension</button>
+        <button class="tf-action" type="button" data-test-action="inspectGearDownlocks" data-maintenance-only="true">I · Inspect three<br>downlocks</button>
+        <button class="tf-action" type="button" data-test-action="flapUp">Hold flaps<br>up</button>
+        <button class="tf-action" type="button" data-test-action="flapDown">Hold flaps<br>down</button>
+        <button class="tf-action emergency" type="button" data-test-action="emergencyGearRelease">E · Hold emergency<br>gear release</button>
+      </div>
+      <p class="tf-note">TEST INSTRUMENTATION · COMMANDS MOVE CONTROLS; INDICATIONS REPORT RESULTS. RELEASE OR POINTER LOSS RETURNS SPRING-LOADED CONTROLS SAFE. HOLD E + PRESS I TO VERIFY DOWNLOCKS.</p>
+    </div>
+  </details>
 
   <div id="touch-controls" aria-label="Mobile flight controls">
     <div id="tilt-status" aria-live="polite">TILT OFF</div>
@@ -499,7 +1271,7 @@
     <div class="touch-right">
       <div class="touch-utils">
         <button class="touch-control touch-utility" type="button" data-mobile-action="recenter">CENTER</button>
-        <button class="touch-control touch-utility" type="button" data-hold-key="KeyR">RESTART</button>
+        <button class="touch-control touch-utility" type="button" data-mobile-action="restart">RESTART</button>
       </div>
       <div class="touch-actions">
         <button class="touch-control" type="button" data-hold-key="Space" aria-label="Maximum G override">MAX<br>G</button>
@@ -524,6 +1296,22 @@
     <div id="rotate-hint">ROTATE TO LANDSCAPE<br><small>Tilt steering is designed for a wide screen.</small></div>
   </div>
 
+  <div id="ready-screen" role="dialog" aria-labelledby="ready-title" aria-describedby="ready-brief" aria-hidden="true">
+    <div class="ready-card">
+      <div id="ready-kicker">Mission ready</div>
+      <h2 id="ready-title">Final Approach</h2>
+      <p id="ready-brief">Fly the ball to a clean trap, then take the catapult back into the fight.</p>
+      <div class="ready-facts" aria-label="Mission details">
+        <div class="ready-fact"><small>Sortie</small><span id="ready-sortie">Carrier qualification</span></div>
+        <div class="ready-fact"><small>Configuration</small><span id="ready-config">Guns hot · axial deck</span></div>
+      </div>
+      <p class="ready-controls">Arrows fly · W/S power · G gear · [ / ] flaps (release to hold)<br>F guns · V padlock · H controls · 1–6 missions · R restart</p>
+      <button id="ready-start" type="button">Fly mission</button>
+      <button id="ready-replay" type="button" hidden>Replay incident again</button>
+      <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
+    </div>
+  </div>
+
   <div id="boot" role="status" aria-live="polite">
     <div class="boot-card">
       <div class="boot-kicker">Air Combat Lab</div>
@@ -542,7 +1330,8 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=11"></script>
+  <script src="./multiplayer-config.js"></script>
+  <script type="module" src="./app.js?v=45"></script>
   <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
 </body>
 </html>

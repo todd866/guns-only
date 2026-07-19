@@ -1,4 +1,0 @@
-#!/bin/sh
-cd "$(dirname "$0")/.." || exit 1
-dotnet build GunsOnly.csproj -v q --nologo || exit 1
-exec bin/godot --path .

@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "generator": "guns-only-aircraft-assets/2.0.0",
+  "exporter": "Three GLTFExporter",
+  "threeRevision": "160",
+  "coordinateSystem": {
+    "units": "metres",
+    "up": "+Y",
+    "forward": "-Z",
+    "handedness": "right"
+  },
+  "assets": [
+    {
+      "assetId": "vehicle.player.sabre-fury.v1",
+      "output": "models/player-swept-jet/lod0.glb",
+      "level": 0,
+      "minProjectedPixels": 180,
+      "bytes": 506504,
+      "sha256": "e7bd8250d259ecb4af8f1c0097d28bf3e6fd8f80ae401d8f75c6a293afa7a1a2",
+      "triangles": 8400,
+      "drawCalls": 23,
+      "materials": 8,
+      "textures": 4,
+      "uv0Primitives": 23,
+      "tangentPrimitives": 23,
+      "pbrTextureMaterials": 3,
+      "boundsMetres": [11.3, 3.92, 12.02],
+      "sockets": [
+        "SOCKET_CAMERA_COCKPIT",
+        "SOCKET_GEAR_LEFT",
+        "SOCKET_GEAR_NOSE",
+        "SOCKET_GEAR_RIGHT",
+        "SOCKET_MUZZLE_LEFT",
+        "SOCKET_MUZZLE_RIGHT"
+      ]
+    },
+    {
+      "assetId": "vehicle.player.sabre-fury.v1",
+      "output": "models/player-swept-jet/lod1.glb",
+      "level": 1,
+      "minProjectedPixels": 48,
+      "bytes": 204396,
+      "sha256": "4d0b697cf268ab9ff76ef17521f9707d7fd86cc6cc3202d0eec8cac008f51204",
+      "triangles": 3332,
+      "drawCalls": 16,
+      "materials": 6,
+      "textures": 4,
+      "uv0Primitives": 16,
+      "tangentPrimitives": 16,
+      "pbrTextureMaterials": 3,
+      "boundsMetres": [11.16, 3.92, 11.731],
+      "sockets": [
+        "SOCKET_CAMERA_COCKPIT",
+        "SOCKET_GEAR_LEFT",
+        "SOCKET_GEAR_NOSE",
+        "SOCKET_GEAR_RIGHT",
+        "SOCKET_MUZZLE_LEFT",
+        "SOCKET_MUZZLE_RIGHT"
+      ]
+    },
+    {
+      "assetId": "vehicle.player.sabre-fury.v1",
+      "output": "models/player-swept-jet/lod2.glb",
+      "level": 2,
+      "minProjectedPixels": 0,
+      "bytes": 50180,
+      "sha256": "b6ebf77ed210ac26944cbf136b8e6fe7ded1f924ffe002166bc8fac2a93a5c08",
+      "triangles": 918,
+      "drawCalls": 9,
+      "materials": 4,
+      "textures": 0,
+      "uv0Primitives": 9,
+      "tangentPrimitives": 9,
+      "pbrTextureMaterials": 0,
+      "boundsMetres": [11.16, 3.899, 11.735],
+      "sockets": [
+        "SOCKET_CAMERA_COCKPIT",
+        "SOCKET_GEAR_LEFT",
+        "SOCKET_GEAR_NOSE",
+        "SOCKET_GEAR_RIGHT",
+        "SOCKET_MUZZLE_LEFT",
+        "SOCKET_MUZZLE_RIGHT"
+      ]
+    },
+    {
+      "assetId": "vehicle.bandit.swept-wing.v1",
+      "output": "models/bandit-swept-jet/lod0.glb",
+      "level": 0,
+      "minProjectedPixels": 180,
+      "bytes": 415708,
+      "sha256": "90922a4745b5f524a8d8acf0e5014d6bb2923b6b1a0b13092b27bdc88c54c905",
+      "triangles": 6094,
+      "drawCalls": 18,
+      "materials": 5,
+      "textures": 3,
+      "uv0Primitives": 18,
+      "tangentPrimitives": 18,
+      "pbrTextureMaterials": 1,
+      "boundsMetres": [10.04, 3.75, 10.61],
+      "sockets": [
+        "SOCKET_CAMERA_COCKPIT",
+        "SOCKET_DAMAGE_CENTER",
+        "SOCKET_MUZZLE_LEFT",
+        "SOCKET_MUZZLE_RIGHT"
+      ]
+    },
+    {
+      "assetId": "vehicle.bandit.swept-wing.v1",
+      "output": "models/bandit-swept-jet/lod1.glb",
+      "level": 1,
+      "minProjectedPixels": 48,
+      "bytes": 168452,
+      "sha256": "ea2a59b62f68f2d0191f1e44e7e644cf8811076520dbe10cff89d3e61029b625",
+      "triangles": 2334,
+      "drawCalls": 15,
+      "materials": 5,
+      "textures": 3,
+      "uv0Primitives": 15,
+      "tangentPrimitives": 15,
+      "pbrTextureMaterials": 1,
+      "boundsMetres": [10.04, 3.744, 10.315],
+      "sockets": [
+        "SOCKET_CAMERA_COCKPIT",
+        "SOCKET_DAMAGE_CENTER",
+        "SOCKET_MUZZLE_LEFT",
+        "SOCKET_MUZZLE_RIGHT"
+      ]
+    },
+    {
+      "assetId": "vehicle.bandit.swept-wing.v1",
+      "output": "models/bandit-swept-jet/lod2.glb",
+      "level": 2,
+      "minProjectedPixels": 0,
+      "bytes": 47540,
+      "sha256": "0d41729bd928a4e1760100fab1c4a889d8a9adeadec0f6c8bc1ef878fb73e129",
+      "triangles": 870,
+      "drawCalls": 9,
+      "materials": 4,
+      "textures": 0,
+      "uv0Primitives": 9,
+      "tangentPrimitives": 9,
+      "pbrTextureMaterials": 0,
+      "boundsMetres": [10.04, 3.729, 10.315],
+      "sockets": [
+        "SOCKET_CAMERA_COCKPIT",
+        "SOCKET_DAMAGE_CENTER",
+        "SOCKET_MUZZLE_LEFT",
+        "SOCKET_MUZZLE_RIGHT"
+      ]
+    },
+    {
+      "assetId": "cockpit.player.sabre-fury.v1",
+      "output": "models/player-cockpit/lod0.glb",
+      "level": 0,
+      "minProjectedPixels": 0,
+      "bytes": 456628,
+      "sha256": "28838bc496f80e5ecd28bbcc64e476ef2e6d7d31a136b4f09f407c58a27d115d",
+      "triangles": 3230,
+      "drawCalls": 16,
+      "materials": 11,
+      "textures": 4,
+      "uv0Primitives": 16,
+      "tangentPrimitives": 16,
+      "pbrTextureMaterials": 5,
+      "boundsMetres": [1.483, 1.694, 3.082],
+      "sockets": [
+        "SOCKET_CAMERA_COCKPIT",
+        "SOCKET_CANOPY_HINGE",
+        "SOCKET_CONTROL_STICK",
+        "SOCKET_CONTROL_THROTTLE",
+        "SOCKET_GUNSIGHT_ORIGIN",
+        "SOCKET_INSTRUMENT_PANEL_ORIGIN",
+        "SOCKET_MUZZLE_LEFT",
+        "SOCKET_MUZZLE_RIGHT"
+      ]
+    }
+  ]
+}

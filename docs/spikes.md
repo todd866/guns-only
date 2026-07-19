@@ -1,5 +1,8 @@
 # Hardware spikes — results log
 
+> **HISTORICAL GODOT-ERA RECORD:** the referenced scenes and runners were retired with the desktop
+> shell on 2026-07-19. Results remain here as provenance, not as runnable instructions.
+
 Four spikes, per spec Task 13. Each has a scene/script under `spikes/`. The ULP
 check is headless-runnable and its numbers below were captured directly from a
 run in this environment. The other three need a display and human hands/eyes —

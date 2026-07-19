@@ -1,3 +1,5 @@
+using GunsOnly.Sim.Propulsion;
+
 namespace GunsOnly.Sim;
 
 public sealed class AircraftSim {
@@ -11,14 +13,54 @@ public sealed class AircraftSim {
     /// The physical lift direction: body up projected perpendicular to the relative wind.
     public Vec3D LiftDir { get; private set; } = new(0, 1, 0);
     readonly AircraftParams _p;
+    IAtmosphereModel _atmosphereModel = StandardAtmosphere1976.Instance;
+    /// <summary>
+    /// Scenario-owned thermodynamic column. It is an instance dependency rather than global
+    /// mutable weather, so two aircraft or two sessions can fly different test conditions in the
+    /// same process. Replacing it changes subsequent force/engine evaluations without teleporting
+    /// the aircraft or rewriting its physical attitude.
+    /// </summary>
+    public IAtmosphereModel AtmosphereModel {
+        get => _atmosphereModel;
+        set {
+            ArgumentNullException.ThrowIfNull(value);
+            _atmosphereModel = value;
+            if (_spoolInit) EvaluateEngineOperatingPoint();
+        }
+    }
+    public AtmosphericState AtmosphericState => AtmosphereModel.Sample(State.Position.Y);
     /// Optional wind/gust field. Null = still air (the aircraft flies exactly as before — the
     /// regression guard). Sampled per RK4 stage at that stage's position, so the integrator sees
     /// the field's spatial structure and a frozen gust pocket bumps you as you fly THROUGH it.
-    public GunsOnly.Sim.Turbulence.IWindField? Wind { get; set; }
-    Vec3D WindAt(in Vec3D pos) => Wind is null ? Vec3D.Zero : Wind.Sample(pos);
+    GunsOnly.Sim.Turbulence.IWindField? _wind;
+    public GunsOnly.Sim.Turbulence.IWindField? Wind {
+        get => _wind;
+        set {
+            _wind = value;
+            // A different field is a discontinuous environment boundary, not another sample from
+            // the previous gust history. Seed the alleviation filters from the replacement field on
+            // the next tick instead of blending obsolete carrier burble/turbulence into it.
+            _gustFiltered = Vec3D.Zero;
+            _gustInit = false;
+            _rollGustFiltered = 0.0;
+            // Object initializers attach the wind field after construction. Refresh air data at
+            // that boundary so a staged/paused aircraft already reports the same relative flow
+            // the first integration tick will use.
+            _airVelocity = State.VelocityVector() - WindAt(State.Position);
+        }
+    }
+    Vec3D WindAt(in Vec3D pos) => _wind is null ? Vec3D.Zero : _wind.Sample(pos);
     readonly GunsOnly.Sim.Turbulence.RotationalBuffet _buffet;
     Vec3D _gustFiltered; bool _gustInit; double _rollGustFiltered;   // gust-alleviation low-pass state
     Vec3D _airVelocity;
+    /// Authoritative velocity relative to the local air mass. Position continues to integrate the
+    /// inertial/ground velocity stored by AircraftState.
+    public Vec3D AirVelocity => _airVelocity;
+    public double AirspeedMps => _airVelocity.Length;
+    /// Ideal indicated airspeed (CAS until an airframe-specific instrument/position-error card is
+    /// available). Physics continues to consume TAS; pilot-facing recovery standards consume IAS.
+    public double IndicatedAirspeedMps => AirData.IndicatedAirspeedMps(
+        AirspeedMps, State.Position.Y, AtmosphereModel);
     /// Legacy gust-mode diagnostics used by BuffetedFrame. BodyFrame stays the real rigid attitude.
     public double PitchBuffetRad => _buffet.PitchRad;
     public double YawBuffetRad => _buffet.YawRad;
@@ -32,6 +74,15 @@ public sealed class AircraftSim {
     /// What the ENGINE is actually delivering, 0..1, as opposed to where the lever is. The gap
     /// between the two is the whole difficulty of flying the back side of the power curve.
     public double ThrustFraction => _thrustFrac;
+    /// <summary>The physical engine point used by every RK stage in the most recent fixed tick.</summary>
+    public EngineOperatingPoint LastEngineOperatingPoint { get; private set; } =
+        EngineOperatingPoint.Stopped;
+    /// <summary>Fuel-system and failure models may remove combustion without rewriting controls.</summary>
+    public bool EngineFuelAvailable { get; set; } = true;
+    public bool EngineCombustionAvailable { get; set; } = true;
+    /// <summary>Actual gear/flap/damage configuration consumed by the continuous force model.</summary>
+    public AirframeAerodynamicState AerodynamicConfiguration { get; set; } =
+        AirframeAerodynamicState.Clean;
     public Vec3D BodyRight => State.BodyAttitude.Rotate(new Vec3D(1, 0, 0));
     public Vec3D BodyUp => State.BodyAttitude.Rotate(new Vec3D(0, 1, 0));
     public Vec3D BodyForward => State.BodyAttitude.Rotate(new Vec3D(0, 0, 1));
@@ -62,13 +113,16 @@ public sealed class AircraftSim {
     }
     internal const double HorizonValidY = 0.94; // |vhat.Y| below this (~|gamma| < 70 deg): horizon bank well-defined
 
-    public AircraftSim(AircraftState initial, AircraftParams p) {
+    public AircraftSim(AircraftState initial, AircraftParams p,
+        IAtmosphereModel? atmosphere = null) {
         State = initial; _p = p;
+        _atmosphereModel = atmosphere ?? StandardAtmosphere1976.Instance;
         _airVelocity = initial.VelocityVector();
         _buffet = new GunsOnly.Sim.Turbulence.RotationalBuffet(p);
         InitFrame(initial.ForwardDir());
         if (!initial.BodyAttitude.IsFinite || initial.BodyAttitude.LengthSquared < 1e-12) {
-            double q = 0.5 * Atmosphere.Density(initial.Position.Y) * initial.Speed * initial.Speed;
+            double q = 0.5 * AtmosphereModel.Sample(initial.Position.Y).DensityKgM3
+                * initial.Speed * initial.Speed;
             double cl = initial.Mass * FlightModel.G0 / System.Math.Max(q * p.WingAreaM2, 1e-6);
             double alpha = System.Math.Clamp(cl / p.CLAlpha, p.CLMin / p.CLAlpha, p.CLMax / p.CLAlpha);
             var f = initial.ForwardDir();
@@ -79,9 +133,60 @@ public sealed class AircraftSim {
         } else {
             State = initial with { BodyAttitude = initial.BodyAttitude.Normalized() };
         }
-        var constrained = FlightModel.EnforceAlphaEnvelope(State.BodyAttitude,
-            State.BodyRates, initial.ForwardDir(), p);
-        State = State with { BodyAttitude = constrained.attitude, BodyRates = constrained.rates };
+    }
+
+    /// <summary>Update gross mass without disturbing position, velocity, attitude, or engine state.</summary>
+    public void SetMassKg(double massKg) {
+        if (!double.IsFinite(massKg) || massKg <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(massKg));
+        State = State with { Mass = massKg };
+    }
+
+    /// <summary>
+    /// Accept kinematics from an authoritative external physical phase (arrestment/catapult-style
+    /// contact integration). This is internal so presentation cannot move an aircraft. Air data and
+    /// body-frame compatibility state are refreshed from the supplied world state.
+    /// </summary>
+    internal void AdoptExternalKinematics(in AircraftState state) {
+        if (!IsFinite(state.Position) || !double.IsFinite(state.Speed)
+            || state.Speed < 0.0 || !state.BodyAttitude.IsFinite
+            || !state.BodyRates.IsFinite)
+            throw new ArgumentOutOfRangeException(nameof(state));
+        State = state with { BodyAttitude = state.BodyAttitude.Normalized() };
+        _airVelocity = State.VelocityVector() - WindAt(State.Position);
+        _bank = _reportedBank = State.Bank;
+        Vec3D vhat = _airVelocity.Length < 1e-9 ? State.ForwardDir() : _airVelocity.Normalized();
+        Vec3D bodyUp = State.BodyAttitude.Rotate(new Vec3D(0.0, 1.0, 0.0));
+        Vec3D liftPlane = bodyUp - vhat * bodyUp.Dot(vhat);
+        LiftDir = liftPlane.Length < 1e-9 ? bodyUp : liftPlane.Normalized();
+        LastNz = 0.0;
+        Buffet = false;
+    }
+
+    /// <summary>
+    /// Preserve spool state across a presentation/entity boundary such as a bolter or catapult
+    /// handoff. It does not start a failed or fuel-starved engine.
+    /// </summary>
+    public void SeedEnginePowerFraction(double powerFraction) {
+        if (!double.IsFinite(powerFraction))
+            throw new ArgumentOutOfRangeException(nameof(powerFraction));
+        _thrustFrac = System.Math.Clamp(powerFraction, 0.0,
+            System.Math.Clamp(_p.MaxThrustFraction, 0.0, 1.35));
+        _spoolInit = true;
+        EvaluateEngineOperatingPoint();
+    }
+
+    /// <summary>
+    /// Advance engine spool during non-flight phases (arrestment and catapult) where another model
+    /// owns the aircraft's translation. Fuel flow and systems RPM therefore keep evolving instead of
+    /// freezing until the flight integrator resumes.
+    /// </summary>
+    public void AdvanceEngineOnly(double throttle, double dt) {
+        if (!double.IsFinite(throttle))
+            throw new ArgumentOutOfRangeException(nameof(throttle));
+        if (!double.IsFinite(dt) || dt < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(dt));
+        AdvanceEngine(throttle, dt);
     }
 
     void InitFrame(in Vec3D vhat) {
@@ -95,22 +200,10 @@ public sealed class AircraftSim {
     public void Step(in PilotCommand cmd, double dt) {
         var s = State;
         var vel0 = s.VelocityVector();
-        var vhat0 = vel0.Length < 1e-9 ? new Vec3D(0, 0, 1) : vel0.Normalized();
+        var vhat0 = vel0.Length < 1e-9 ? s.ForwardDir() : vel0.Normalized();
         if (!_init) InitFrame(vhat0);
 
-        // Engine spool. First aircraft ever built by this sim is trimmed, not spooling up from
-        // idle: snap to the opening lever position, then lag every CHANGE after that. (Starting
-        // at zero would quietly re-tune every beat by decelerating each aircraft off the line.)
-        double lever = System.Math.Clamp(cmd.Throttle, 0, 1.35);   // >1 = afterburner
-        if (!_spoolInit) { _thrustFrac = lever; _spoolInit = true; }
-        double tau = lever > _thrustFrac ? _p.SpoolUpTau : _p.SpoolDownTau;
-        if (tau > 1e-6) {
-            // Exact solution of dx/dt = (target-x)/tau over dt: unconditionally stable, and it
-            // cannot overshoot the lever no matter how coarse dt gets.
-            _thrustFrac += (lever - _thrustFrac) * (1.0 - System.Math.Exp(-dt / tau));
-        } else {
-            _thrustFrac = lever;
-        }
+        AdvanceEngine(cmd.Throttle, dt);
         var spooled = cmd with { Throttle = _thrustFrac };
 
         // GUST ALLEVIATION. A real aircraft averages gusts over its size and its lift lags (unsteady
@@ -125,10 +218,16 @@ public sealed class AircraftSim {
         var gust = _gustFiltered;
 
         var r = new RawState(s.Position, vel0, _bank, s.Mass, s.BodyAttitude, s.BodyRates);
-        var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef, gust);
-        var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), spooled, _p, _liftRef, gust);
-        var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), spooled, _p, _liftRef, gust);
-        var k4 = FlightModel.Derivatives(Apply(r, k3, dt), spooled, _p, _liftRef, gust);
+        double thrustN = LastEngineOperatingPoint.NetThrustN;
+        var configuration = AerodynamicConfiguration;
+        var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef, gust, thrustN,
+            configuration, AtmosphereModel);
+        var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), spooled, _p, _liftRef, gust,
+            thrustN, configuration, AtmosphereModel);
+        var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), spooled, _p, _liftRef, gust,
+            thrustN, configuration, AtmosphereModel);
+        var k4 = FlightModel.Derivatives(Apply(r, k3, dt), spooled, _p, _liftRef, gust,
+            thrustN, configuration, AtmosphereModel);
         var pos = r.Pos + (k1.DPos + (k2.DPos + k3.DPos) * 2 + k4.DPos) * (dt / 6);
         var vel = r.Vel + (k1.DVel + (k2.DVel + k3.DVel) * 2 + k4.DVel) * (dt / 6);
         _bank = WrapPi(r.Bank + (k1.DBank + 2 * (k2.DBank + k3.DBank) + k4.DBank) * (dt / 6));
@@ -136,27 +235,10 @@ public sealed class AircraftSim {
         var bodyRates = r.BodyRates + (k1.DBodyRates + (k2.DBodyRates + k3.DBodyRates) * 2 + k4.DBodyRates) * (dt / 6);
 
         double speed = vel.Length;
-        if (speed < 40) {
-            // The floor may sustain a mush, but must not feed a stalled zoom back uphill.
-            if (vel.Y > 0) {
-                var horizontal = new Vec3D(vel.X, 0, vel.Z);
-                var along = horizontal.Length < 1e-9
-                    ? new Vec3D(System.Math.Sin(s.Chi), 0, System.Math.Cos(s.Chi))
-                    : horizontal.Normalized();
-                vel = along * System.Math.Sqrt(40 * 40 - 20 * 20) + new Vec3D(0, -20, 0);
-            } else vel = speed < 1e-9 ? new Vec3D(0, -40, 0) : vel.Normalized() * 40;
-            speed = 40;
-        }
-        var vhat = vel.Normalized();
-
-        // CL saturation limits force but cannot, by itself, stop pitch inertia from rotating the
-        // body through the relative wind. Keep the actual rigid attitude on the same alpha bounds
-        // used by the G/CL command law before publishing state or carrying it into the next tick.
-        var airForEnvelope = vel - gust;
-        var alphaVhat = airForEnvelope.Length < 1e-9 ? vhat : airForEnvelope.Normalized();
-        var constrained = FlightModel.EnforceAlphaEnvelope(attitude, bodyRates, alphaVhat, _p);
-        attitude = constrained.attitude;
-        bodyRates = constrained.rates;
+        // Translational state is never rewritten to a minimum flying speed. At the exact zero-vector
+        // crossing only its coordinate direction is undefined, so retain the previous direction while
+        // gravity/thrust produce the next real velocity. Force magnitudes use actual airspeed.
+        var vhat = speed < 1e-9 ? vhat0 : vel * (1.0 / speed);
 
         // Parallel-transport the lift reference perpendicular to the new velocity.
         var lr = _liftRef - vhat * _liftRef.Dot(vhat);
@@ -194,11 +276,13 @@ public sealed class AircraftSim {
         State = new AircraftState(pos, speed, gamma, chi, _reportedBank, s.Mass, attitude, bodyRates);
 
         var finalRaw = new RawState(pos, vel, _bank, s.Mass, attitude, bodyRates);
-        var aero = FlightModel.Aerodynamics(finalRaw, spooled, _p, gust);
+        var aero = FlightModel.Aerodynamics(finalRaw, spooled, _p, gust, thrustN,
+            configuration, AtmosphereModel);
         _airVelocity = aero.AirVelocity;
         LastNz = aero.Nz;
         LiftDir = aero.LiftDir;
-        var (_, nzMax, nzMin) = FlightModel.ClampNz(State, cmd, _p);
+        var (_, nzMax, nzMin) = FlightModel.ClampNz(State, cmd, _p, AirspeedMps,
+            configuration, AtmosphereModel);
         Buffet = cmd.GDemand > 0.85 * nzMax || cmd.GDemand < 0.85 * nzMin;
 
         // Drive the rotational buffet from the gust and its gradient across the airframe. Pitch is
@@ -224,6 +308,54 @@ public sealed class AircraftSim {
             rollGust = _rollGustFiltered;
         }
         _buffet.Step(alphaGust, betaGust, rollGust, dt);
+    }
+
+    void AdvanceEngine(double throttle, double dt) {
+        // First aircraft ever built by this sim is trimmed, not spooling up from idle: snap to the
+        // opening lever position, then lag every change after that. A failed/starved engine has a
+        // zero target; combustion thrust and fuel flow disappear immediately while a future engine
+        // dynamics layer can replace the present stopped-RPM approximation with windmilling RPM.
+        double leverStop = System.Math.Clamp(_p.MaxThrustFraction, 0.0, 1.35);
+        bool canRun = EngineFuelAvailable && EngineCombustionAvailable && _p.ThrustMaxN > 0.0;
+        double lever = canRun ? System.Math.Clamp(throttle, 0.0, leverStop) : 0.0;
+        if (!_spoolInit) { _thrustFrac = lever; _spoolInit = true; }
+        double tau = lever > _thrustFrac ? _p.SpoolUpTau : _p.SpoolDownTau;
+        if (tau > 1e-6) {
+            _thrustFrac += (lever - _thrustFrac) * (1.0 - System.Math.Exp(-dt / tau));
+        } else {
+            _thrustFrac = lever;
+        }
+        EvaluateEngineOperatingPoint();
+    }
+
+    void EvaluateEngineOperatingPoint() {
+        bool running = EngineFuelAvailable && EngineCombustionAvailable && _p.ThrustMaxN > 0.0;
+        if (!running) {
+            LastEngineOperatingPoint = EngineOperatingPoint.Stopped;
+            return;
+        }
+
+        AtmosphericState atmosphericState = AtmosphereModel.Sample(State.Position.Y);
+        double mach = AirspeedMps / System.Math.Max(atmosphericState.SpeedOfSoundMps, 1e-6);
+        if (_p.PropulsionModel == PropulsionModelKind.J47Ge27) {
+            // The checked-in J47 map is explicitly a standard-day altitude surface. Local
+            // temperature still supplies the physically correct Mach input, but applying an
+            // invented non-standard-day thrust correction would imply data the source does not
+            // contain. A future engine deck can consume pressure/temperature through its API.
+            LastEngineOperatingPoint = J47PerformanceMap.Evaluate(_thrustFrac,
+                State.Position.Y, mach, running: true);
+            return;
+        }
+
+        double thrustN = _thrustFrac * _p.ThrustMaxN
+            * (atmosphericState.DensityKgM3 / AirData.SeaLevelDensityKgM3);
+        LastEngineOperatingPoint = new EngineOperatingPoint(
+            Rpm: 100.0 * _thrustFrac,
+            RpmPercent: 100.0 * _thrustFrac,
+            NetThrustN: thrustN,
+            NetThrustLbf: thrustN / J47PerformanceMap.NewtonsPerPoundForce,
+            FuelFlowLbPerMinute: 0.0,
+            Running: true);
     }
 
     /// The render attitude WITH the buffet shudder applied: forward and up (canopy) vectors that

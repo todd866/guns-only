@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0.0",
+  "effectsProfileId": "effects.korea-1950s.guns.v1",
+  "events": {
+    "event.weapon.gun-fire.v1": {
+      "muzzleFlash": {
+        "color": "#FFD08A",
+        "coreColor": "#FFF4D4",
+        "lengthMetres": 1.8,
+        "radiusMetres": 0.18,
+        "lifetimeSeconds": 0.052,
+        "lightIntensity": 6.5,
+        "lightRangeMetres": 18
+      },
+      "tracer": {
+        "color": "#FFB45C",
+        "coreColor": "#FFF1B7",
+        "lengthMetres": 4.8,
+        "radiusMetres": 0.035,
+        "speedMetresPerSecond": 820,
+        "lifetimeSeconds": 0.72,
+        "everyRounds": 4
+      }
+    },
+    "event.weapon.gun-impact.v1": {
+      "spark": {
+        "color": "#FFC16B",
+        "count": 14,
+        "speedMetresPerSecond": [18, 58],
+        "lifetimeSeconds": [0.22, 0.58],
+        "gravityMetresPerSecondSquared": 9.81
+      },
+      "flash": {
+        "color": "#FFF0C2",
+        "radiusMetres": 0.38,
+        "lifetimeSeconds": 0.09
+      },
+      "debris": {
+        "color": "#353B3E",
+        "count": 5,
+        "lifetimeSeconds": 1.1
+      }
+    },
+    "event.vehicle.destroyed.v1": {
+      "fireball": {
+        "innerColor": "#FFF1B0",
+        "outerColor": "#EF5C27",
+        "startRadiusMetres": 0.7,
+        "endRadiusMetres": 8.5,
+        "lifetimeSeconds": 0.8
+      },
+      "smoke": {
+        "color": "#24292A",
+        "count": 12,
+        "startRadiusMetres": 1.8,
+        "endRadiusMetres": 9.2,
+        "lifetimeSeconds": [3.5, 6.8],
+        "riseMetresPerSecond": 5.5
+      },
+      "debris": {
+        "color": "#4A5052",
+        "count": 18,
+        "speedMetresPerSecond": [12, 64],
+        "lifetimeSeconds": [2.2, 5.0]
+      }
+    },
+    "event.platform.wake.v1": {
+      "color": "#DCE8E4",
+      "widthMetres": 7.5,
+      "lengthMetres": 180,
+      "lifetimeSeconds": 12,
+      "opacity": 0.56
+    }
+  },
+  "qualityTiers": {
+    "mobile": { "particleMultiplier": 0.55, "dynamicLights": false },
+    "balanced": { "particleMultiplier": 0.8, "dynamicLights": true },
+    "desktop": { "particleMultiplier": 1.0, "dynamicLights": true }
+  }
+}

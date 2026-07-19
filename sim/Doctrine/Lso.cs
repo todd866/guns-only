@@ -23,6 +23,7 @@ public static class Lso {
         double range = System.Math.Max(0.0, -carrier.DeckLengthM * 0.2 - along);
         double glideslopeError = range * GlideslopeSlope - height;
         double aoaError = angleOfAttackRad - onSpeedAoARad;
+        double sinkRateMps = carrier.DeckSinkRateMps(aircraft);
 
         double glideslopeTolerance = System.Math.Max(1.5, range * 0.004);
         double lineupTolerance = System.Math.Max(2.5, range * 0.006);
@@ -34,7 +35,15 @@ public static class Lso {
             || -glideslopeError > System.Math.Max(15.0, range * 0.035)
             || System.Math.Abs(cross) > System.Math.Max(15.0, range * 0.025)
             || aoaError > 0.070 || aoaError < -0.080;
-        if (waveOff || gross) return new("WAVE OFF, WAVE OFF", LsoSeverity.WaveOff);
+        // A geometric ball call is actively dangerous when the velocity vector is driving through
+        // the deck. Close aboard there is no remaining flight path in which to arrest a blown sink;
+        // farther out, call the energy error explicitly so the pilot adds power before it becomes a
+        // wave-off. This is deck-relative sink, so ship heave cannot manufacture a reassuring call.
+        bool unrecoverableSink = sinkRateMps > Carrier.MaxTrapSinkMps && range < 220.0;
+        if (waveOff || gross || unrecoverableSink)
+            return new("WAVE OFF, WAVE OFF", LsoSeverity.WaveOff);
+        if (sinkRateMps > Carrier.HardTrapSinkMps)
+            return new("SINK RATE · POWER", LsoSeverity.Correcting);
 
         bool low = glideslopeError > glideslopeTolerance;
         bool slow = aoaError > AoaTolerance;

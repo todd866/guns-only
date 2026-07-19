@@ -49,6 +49,70 @@ public class CarrierRecoveryPhysicsTests {
     }
 
     [Fact]
+    public void ExplicitIasOwnsApproachSlotGateWhileFallbackRetainsSteadyWod() {
+        var ship = Ship();
+        var airState = new AircraftState(ship.LandingPoint(-800.0, height: 46.0),
+            70.0, -0.061, ship.LandingHeadingRad, 0.0, FlightModel.Sabre.MassKg);
+        AircraftState worldState = ship.ToWorldStateFromAir(
+            airState, DetentLayer.OnSpeedAoARad);
+
+        Assert.True(ship.InApproachSlot(worldState));
+        Assert.True(ship.InApproachSlot(worldState, indicatedAirspeedMps: 70.0));
+        Assert.False(ship.InApproachSlot(worldState, indicatedAirspeedMps: 96.0));
+        Assert.Equal(ship.InApproachSlot(worldState),
+            ship.InApproachSlot(worldState, indicatedAirspeedMps: double.NaN));
+    }
+
+    [Fact]
+    public void ExplicitIasOwnsTouchdownGradeButCannotEraseHookCapture() {
+        var ship = Ship();
+        var calm = DifficultyModel.ForLevel(0);
+        AircraftState touchdown = Touchdown(ship, sinkMps: 3.6, airspeedMps: 70.0);
+
+        Carrier.TouchdownResult fallback = ship.EvaluateRecovery(touchdown,
+            DetentLayer.OnSpeedAoARad, calm);
+        Carrier.TouchdownResult onSpeed = ship.EvaluateRecovery(touchdown,
+            DetentLayer.OnSpeedAoARad, calm, indicatedAirspeedMps: 70.0);
+        Carrier.TouchdownResult fast = ship.EvaluateRecovery(touchdown,
+            DetentLayer.OnSpeedAoARad, calm, indicatedAirspeedMps: 84.0);
+
+        Assert.Equal(AirData.IndicatedAirspeedMps(
+            ship.AirspeedMps(touchdown), touchdown.Position.Y),
+            fallback.IndicatedAirspeedMps, 10);
+        Assert.Equal(70.0, onSpeed.IndicatedAirspeedMps, 10);
+        Assert.Equal(Carrier.Recovery.Trap, onSpeed.Recovery);
+        Assert.Equal(Carrier.TouchdownGrade.Ok, onSpeed.Grade);
+        Assert.Equal(84.0, fast.IndicatedAirspeedMps, 10);
+        Assert.Equal(Carrier.Recovery.Trap, fast.Recovery);
+        Assert.Equal(Carrier.HookOutcome.Engaged, fast.Hook);
+        Assert.Equal(Carrier.TouchdownGrade.NoGrade, fast.Grade);
+        Assert.True(fast.Deviations.HasFlag(Carrier.TouchdownDeviation.Fast));
+    }
+
+    [Fact]
+    public void AdaptiveTargetUsesIasNotGroundSpeedAndDoesNotGateCapture() {
+        var ship = Ship();
+        RecoveryDifficulty moderate = DifficultyModel.ForLevel(1);
+        AircraftState touchdown = Touchdown(ship, sinkMps: 4.0, airspeedMps: 70.0);
+
+        Assert.True(touchdown.Speed < moderate.MinTrapSpeedMps,
+            "the carrier headwind must make this fixture's groundspeed fall below the airspeed gate");
+        Assert.True(moderate.MeetsAdaptiveTarget(ship, touchdown),
+            "fallback must reconstruct IAS from steady wind over deck");
+        Assert.True(moderate.MeetsAdaptiveTarget(ship, touchdown,
+            indicatedAirspeedMps: 70.0));
+        Assert.False(moderate.MeetsAdaptiveTarget(ship, touchdown,
+            indicatedAirspeedMps: 90.0));
+
+        var outsideTarget = ship.EvaluateRecovery(touchdown,
+            DetentLayer.OnSpeedAoARad, moderate, indicatedAirspeedMps: 90.0);
+        Assert.Equal(Carrier.Recovery.Trap, outsideTarget.Recovery);
+        Assert.Equal(Carrier.HookOutcome.Engaged, outsideTarget.Hook);
+        Assert.True(outsideTarget.Deviations.HasFlag(
+            Carrier.TouchdownDeviation.OutsideAdaptiveTarget));
+    }
+
+    [Fact]
     public void NoFlareSinkWindowDistinguishesSoftNominalHardAndBlownArrivals() {
         var ship = Ship();
         var calm = DifficultyModel.ForLevel(0);
@@ -64,21 +128,49 @@ public class CarrierRecoveryPhysicsTests {
         var blown = ship.EvaluateRecovery(Touchdown(ship, sinkMps: 7.2),
             DetentLayer.OnSpeedAoARad, calm);
 
-        Assert.Equal(Carrier.Recovery.Bolter, flare.Recovery);
-        Assert.Equal(Carrier.HookOutcome.HookSkip, flare.Hook);
+        Assert.Equal(Carrier.Recovery.Trap, flare.Recovery);
+        Assert.Equal(Carrier.HookOutcome.Engaged, flare.Hook);
         Assert.Equal(Carrier.TouchdownQuality.Soft, flare.Quality);
+        Assert.Equal(Carrier.TouchdownGrade.NoGrade, flare.Grade);
         Assert.Equal(Carrier.Recovery.Trap, soft.Recovery);
         Assert.Equal(Carrier.TouchdownQuality.Soft, soft.Quality);
+        Assert.Equal(Carrier.TouchdownGrade.Fair, soft.Grade);
         Assert.Equal(Carrier.Recovery.Trap, nominal.Recovery);
         Assert.Equal(Carrier.TouchdownQuality.Nominal, nominal.Quality);
+        Assert.Equal(Carrier.TouchdownGrade.Ok, nominal.Grade);
         Assert.Equal(Carrier.Recovery.Trap, hard.Recovery);
         Assert.Equal(Carrier.TouchdownQuality.Hard, hard.Quality);
+        Assert.Equal(Carrier.TouchdownGrade.NoGrade, hard.Grade);
         Assert.Equal(Carrier.Recovery.HardLanding, blown.Recovery);
         Assert.Equal(Carrier.TouchdownQuality.Blown, blown.Quality);
+        Assert.Equal(Carrier.TouchdownGrade.Cut, blown.Grade);
+        Assert.Equal(Carrier.HookOutcome.Engaged, blown.Hook);
+        Assert.Equal(3, blown.Wire);
     }
 
     [Fact]
-    public void LongOrFastTouchdownSkipsTheHookAndBolters() {
+    public void DebriefSelectsTheEarliestSafetyCriticalCorrection() {
+        var ship = Ship();
+        var calm = DifficultyModel.ForLevel(0);
+
+        Carrier.TouchdownResult overloaded = ship.EvaluateRecovery(
+            Touchdown(ship, sinkMps: 7.2, airspeedMps: 90.0, crossM: 10.0),
+            DetentLayer.OnSpeedAoARad + 0.08, calm, indicatedAirspeedMps: 90.0);
+        Carrier.TouchdownResult hard = ship.EvaluateRecovery(
+            Touchdown(ship, sinkMps: 5.8), DetentLayer.OnSpeedAoARad, calm);
+        Carrier.TouchdownResult flare = ship.EvaluateRecovery(
+            Touchdown(ship, sinkMps: 1.2), DetentLayer.OnSpeedAoARad, calm);
+
+        Assert.Equal(Carrier.TouchdownCorrection.WaveOffEarlier,
+            overloaded.PrimaryCorrection);
+        Assert.Equal(Carrier.TouchdownCorrection.AddPowerEarlier,
+            hard.PrimaryCorrection);
+        Assert.Equal(Carrier.TouchdownCorrection.FlyThroughNoFlare,
+            flare.PrimaryCorrection);
+    }
+
+    [Fact]
+    public void WireGeometryOwnsBolterWhilePoorGradeRemainsIndependent() {
         var ship = Ship(Carrier.DeckConfiguration.Angled);
         var calm = DifficultyModel.ForLevel(0);
         double inFlightWheelAlong = ship.WireAlongM(4) + Carrier.HookToMainGearM + 0.8;
@@ -95,9 +187,10 @@ public class CarrierRecoveryPhysicsTests {
         Assert.Equal(Carrier.HookOutcome.InFlightEngagement, inFlight.Hook);
         Assert.Equal(Carrier.Recovery.Bolter, longMiss.Recovery);
         Assert.Equal(Carrier.HookOutcome.MissedWires, longMiss.Hook);
-        Assert.Equal(Carrier.Recovery.Bolter, fast.Recovery);
-        Assert.Equal(Carrier.HookOutcome.HookSkip, fast.Hook);
-        Assert.Equal(0, fast.Wire);
+        Assert.Equal(Carrier.Recovery.Trap, fast.Recovery);
+        Assert.Equal(Carrier.HookOutcome.Engaged, fast.Hook);
+        Assert.Equal(Carrier.TouchdownGrade.NoGrade, fast.Grade);
+        Assert.True(fast.Wire > 0);
     }
 
     [Fact]

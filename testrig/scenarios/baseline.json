@@ -1,8 +1,0 @@
-{
-  "name": "baseline",
-  "beat": 1,
-  "variant": 0,
-  "duration_s": 10.0,
-  "events": [],
-  "notes": "Frozen hands-off launch: zero input for the full run. Reference for what the sim/HUD/telemetry look like with no pilot input at all -- g_cmd should sit near 1.0, speed should not do anything dramatic."
-}

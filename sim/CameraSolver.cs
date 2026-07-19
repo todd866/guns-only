@@ -8,7 +8,7 @@ public static class CameraSolver {
         Geometry.Range(own, bandit) < 800 && Geometry.AngleOff(own, bandit) < 0.2094; // 12 deg
 
     /// Orthogonalized up for a view direction: world-up projected off the view axis,
-    /// falling back to world-north when the view is near-vertical (Godot look_at forbids view||up).
+    /// falling back to world-north near vertical so the view basis never degenerates.
     static Vec3D SafeUp(in Vec3D viewDir) {
         var up = new Vec3D(0, 1, 0);
         var u = up - viewDir * up.Dot(viewDir);

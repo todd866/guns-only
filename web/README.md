@@ -1,36 +1,83 @@
-# Guns Only — web build
+# Guns Only — canonical web shell
 
-The **same compiled C# sim kernel** as the desktop game, running in the browser via WebAssembly.
-Not a port: `sim/GunsOnly.Sim.csproj` has zero Godot references (that was enforced in review for
-testability — it turned out to be what makes a web build possible at all), so it compiles to wasm
-unmodified. Only the shell is new: three.js rendering, canvas-2D HUD, JS input.
+The browser is the supported Guns Only presentation and distribution target. The pure C# kernel
+in `sim/GunsOnly.Sim.csproj` compiles to WebAssembly unchanged; JavaScript owns rendering, input,
+audio, device adaptation, and the canvas HUD.
 
-That means **both shells drive identical physics**, so `bin/mission <scenario>` is a conformance
-suite: run a scenario through desktop and web and the telemetry should match to the digit.
+The production boundary is `SimulationSession` in the simulation project. It owns deterministic
+fixed-step time and sortie lifecycle. `WebBridge.cs` is a temporary flat transport projection for
+the JavaScript shell, including the versioned pack/profile identity, stable entity-to-presentation
+bindings, and a bounded ordered-event window used by the renderer. It should eventually become a
+typed `PresentationSnapshot` and event contract without growing a second implementation of
+mission, combat, resource, or recovery rules.
 
-## Run it
+## Build and run
+
+From the repository root, run the complete verification gate:
+
+```sh
+./bin/check
 ```
-cd web
-dotnet publish -c Release -o /tmp/gunsweb
-cd /tmp/gunsweb/wwwroot && python3 -m http.server 8877
-# open http://localhost:8877/
+
+To publish and serve the application manually:
+
+```sh
+dotnet publish web/GunsOnly.Web.csproj -c Release -o /tmp/guns-only-web
+cd /tmp/guns-only-web/wwwroot
+python3 -m http.server 8877
 ```
+
+Open `http://localhost:8877/`.
 
 ## Layout
-- `WebBridge.cs` — the JS-facing facade. A deliberate mirror of `bridge/SimBridge.cs`: same
-  120 Hz fixed step, same capped catch-up, same HUD field names.
-- `wwwroot/app.js` — three.js FPV shell (attitude-rigid nose camera, gimbal/padlock, sky, sea).
-- `wwwroot/hud.js` — canvas-2D glass HUD (aircraft-referenced symbology, SA bar, TD box).
-- `wwwroot/vendor/three.module.js` — vendored, no CDN.
 
-## Frame convention (the #1 hazard)
-Sim world is X=east, Y=up, Z=north — a LEFT-handed physical basis. three.js is right-handed with
--Z forward. Convert by negating Z, and build the aircraft basis FROM the kernel's own frame
-(`zAxis = -fwd; xAxis = up × zAxis; basis(xAxis, up, zAxis)`). Do NOT reconstruct orientation
-from world-up or bank angle — that rendered every roll backwards and snapped 180° at loop apex
-on the desktop, and no code review caught it; flying it did.
+- `WebBridge.cs` — temporary JavaScript-facing projection over the production simulation session.
+- `wwwroot/app.js` — three.js renderer, pack-aware presentation lifecycle, camera, input, and telemetry.
+- `wwwroot/hud.js` — canvas-2D flight, targeting, carrier, and coaching symbology.
+- `wwwroot/render/assets/` — versioned asset registry, projected-pixel LODs, loaders, and disposal.
+- `wwwroot/render/presence/` — global-room WebSocket client, validation, reconnect, and pose cadence.
+- `wwwroot/content/` — deterministic staged copy of validated runtime content.
+- `wwwroot/asset-lab/`, `wwwroot/environment-lab/`, and `wwwroot/effects-lab/` — standalone graphics inspection surfaces.
+- `wwwroot/render/visual/` — profile-driven HDR/post, adaptive-resolution, and stabilized-shadow runtime.
+- `wwwroot/render/presentation/` — cockpit motion, period sight, distant contact, and escort adapters.
+- `wwwroot/vendor/three.module.js` — vendored renderer dependency; no CDN is required.
+- `wwwroot/api/telemetry.js` — production Vercel telemetry endpoint.
 
-## Known rough edges (2026-07-17, first working build)
-It boots and flies, but it is not tuned. Payload is ~2.8 MB (mostly the .NET runtime; would
-shrink with the `wasm-tools` AOT workload, which needs sudo to install). Not yet verified:
-telemetry conformance against desktop, roll direction under a real roll input, beat 4 at 70k.
+## Frame convention
+
+The simulation world is `X = east`, `Y = up`, `Z = north`. three.js is right-handed with `-Z`
+forward. Convert by negating world Z and build the rendered aircraft basis from the kernel frame:
+
+```text
+zAxis = -forward
+xAxis = up × zAxis
+basis = (xAxis, up, zAxis)
+```
+
+Do not reconstruct attitude from world-up or a scalar bank angle. That fails around vertical
+flight and can reverse the apparent roll direction.
+
+## Browser responsibilities
+
+The shell may interpolate and smooth presentation, but it must not advance authoritative physics,
+resolve hits, select AI tactics, grant contacts, or decide mission outcomes. Those decisions belong
+to `SimulationSession`, allowing headless tests to exercise the game players actually receive.
+
+The browser must also keep overlays lifecycle-aware. Briefing, help, and calibration surfaces hold
+the session in Ready or Paused; a Finished outcome holds the authoritative terminal tick until the
+pilot explicitly restages. Input focus changes must release held controls atomically.
+
+Presentation objects are keyed by stable entity and presentation IDs from the snapshot. Pack
+changes and entity replacement release old registry instances before attaching authored glTF or a
+declared procedural fallback. The read-only `__gunsAssets` diagnostic surface exposes the resolved
+pack, profile, asset, LOD, fallback, cache, and error state for browser verification.
+
+The presence client publishes active local pose at 20 Hz, reduces inactive lifecycle heartbeats to
+1 Hz, and interpolates arbitrary remote pilots in a renderer-owned entity map. These aircraft are
+visual-only and do not feed the simulation, HUD, padlock, collision, or weapon code.
+`__gunsMultiplayer.diagnostics()` exposes connection and room state for browser verification. The
+checked-in `wwwroot/multiplayer-config.js` points both published and locally served shells at the
+production room; use `?server=ws://localhost:5080/room` to exercise the local parity server, or
+`?server=off` for isolated QA.
+
+Production telemetry setup is documented in `wwwroot/SETUP.md`.

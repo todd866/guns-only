@@ -54,6 +54,18 @@ public class EngineSpoolTests {
     }
 
     [Fact]
+    public void EngineSpoolCannotExceedTheAirframeThrottleStop() {
+        var dryJet = LevelAt(400, FlightModel.Sabre);
+        var glider = LevelAt(180, FlightModel.GliderStrike, altM: 3000);
+
+        dryJet.Step(new PilotCommand(1.0, 0.0, 1.28, 0.0), 1.0 / AircraftSim.TickHz);
+        glider.Step(new PilotCommand(1.0, 0.0, 1.28, 0.0), 1.0 / AircraftSim.TickHz);
+
+        Assert.Equal(FlightModel.Sabre.MaxThrustFraction, dryJet.ThrustFraction, 12);
+        Assert.Equal(0.0, glider.ThrustFraction, 12);
+    }
+
+    [Fact]
     public void WaveoffCostsRealDistance() {
         // The handling consequence, and the reason this matters. Two identical aircraft slam the
         // throttle open at the same instant; one has an instant engine, one a real one. The gap

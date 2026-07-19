@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Guns Only · Environment Lab</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="brand">Guns Only</span><h1>Environment Lab</h1></div>
+    <p id="status" aria-live="polite"><span></span>Loading Korea atmosphere…</p>
+  </header>
+  <main>
+    <aside aria-label="Environment controls">
+      <section>
+        <span class="eyebrow">Rendering</span>
+        <h2>Quality profile</h2>
+        <label>Quality tier
+          <select id="quality">
+            <option value="mobile">Mobile</option>
+            <option value="balanced" selected>Balanced</option>
+            <option value="desktop">Desktop</option>
+          </select>
+        </label>
+        <label>Camera altitude <output id="altitude-value">180 m</output>
+          <input id="altitude" type="range" min="8" max="9000" value="180" step="1">
+        </label>
+      </section>
+      <section>
+        <span class="eyebrow">Lighting</span>
+        <h2>Sun and motion</h2>
+        <label>Sun elevation <output id="elevation-value">32°</output>
+          <input id="elevation" type="range" min="2" max="78" value="32" step="1">
+        </label>
+        <label>Sun bearing <output id="bearing-value">145°</output>
+          <input id="bearing" type="range" min="0" max="359" value="145" step="1">
+        </label>
+        <label>Time scale <output id="speed-value">1.0×</output>
+          <input id="speed" type="range" min="0" max="4" value="1" step="0.1">
+        </label>
+        <label class="toggle"><input id="clouds" type="checkbox" checked><span>Cloud layers</span></label>
+      </section>
+      <section class="instructions">
+        <span class="eyebrow">Camera</span>
+        <h2>Inspection</h2>
+        <p>Drag to orbit, wheel to change range, right-drag to pan. The ocean and sky follow horizontal camera movement.</p>
+        <button id="reset" type="button">Reset horizon view</button>
+      </section>
+    </aside>
+    <section class="viewport" aria-label="Ocean, sky and cloud preview">
+      <canvas id="scene"></canvas>
+      <div class="readout" aria-label="Renderer metrics">
+        <span><b id="triangles">—</b> triangles</span>
+        <span><b id="layers">—</b> cloud layers</span>
+        <span><b id="draws">—</b> draw calls</span>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

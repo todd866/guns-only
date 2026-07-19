@@ -1,0 +1,38 @@
+{
+  "$schema": "../schemas/asset-license-set.schema.json",
+  "schemaVersion": "1.0.0",
+  "licenseSetId": "licenses.replace-me.v1",
+  "template": true,
+  "entries": [
+    {
+      "licenseId": "license.replace-me.v1",
+      "appliesTo": [
+        "asset.replace-me.v1"
+      ],
+      "spdxExpression": "NOASSERTION",
+      "copyright": "Copyright (c) YYYY Rights holder",
+      "authors": [
+        "Rights holder"
+      ],
+      "sourceUri": "https://example.invalid/original-asset-page",
+      "sourceAccessedOn": "2000-01-01",
+      "redistribution": {
+        "allowed": false,
+        "commercialUseAllowed": false,
+        "modificationAllowed": false,
+        "shareAlikeRequired": false,
+        "notices": [
+          "Replace every placeholder and verify the source terms before adding the asset to a manifest."
+        ]
+      },
+      "attributionText": "Replace with the exact attribution required by the rights holder.",
+      "evidence": [
+        {
+          "type": "source_page",
+          "uri": "https://example.invalid/original-asset-page"
+        }
+      ],
+      "notes": "Template values are intentionally non-permissive until provenance and rights are verified."
+    }
+  ]
+}

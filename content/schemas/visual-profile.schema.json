@@ -1,0 +1,482 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guns-only.invalid/schemas/v1/visual-profile.schema.json",
+  "title": "Guns Only visual profile",
+  "description": "Resolves a presentation profile to renderer-facing assets, effects, environment, quality tiers, and readability constraints.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "profileId",
+    "profileVersion",
+    "packId",
+    "displayName",
+    "presentationProfileId",
+    "assetProfile",
+    "effectsProfile",
+    "linkedProfiles",
+    "environment",
+    "qualityTiers",
+    "fallbackPolicy",
+    "readability"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "profileId": {
+      "$ref": "#/$defs/versionedId"
+    },
+    "profileVersion": {
+      "$ref": "#/$defs/semver"
+    },
+    "packId": {
+      "$ref": "#/$defs/id"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "presentationProfileId": {
+      "$ref": "#/$defs/versionedId"
+    },
+    "assetProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "manifest",
+        "bindings"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "manifest": {
+          "$ref": "#/$defs/packFileRef"
+        },
+        "bindings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "presentationId",
+              "assetId"
+            ],
+            "properties": {
+              "presentationId": {
+                "$ref": "#/$defs/versionedId"
+              },
+              "assetId": {
+                "$ref": "#/$defs/versionedId"
+              },
+              "variantId": {
+                "$ref": "#/$defs/id"
+              },
+              "visibleByDefault": {
+                "type": "boolean",
+                "default": true
+              },
+              "requiredAnchors": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "effectsProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "bindings"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "bindings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "eventId",
+              "assetId"
+            ],
+            "properties": {
+              "eventId": {
+                "$ref": "#/$defs/versionedId"
+              },
+              "assetId": {
+                "$ref": "#/$defs/versionedId"
+              },
+              "scale": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "default": 1
+              },
+              "settings": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "linkedProfiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cameraProfileId",
+        "hudProfileId",
+        "inputProfileId",
+        "audioProfileId"
+      ],
+      "properties": {
+        "cameraProfileId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "hudProfileId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "inputProfileId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "audioProfileId": {
+          "$ref": "#/$defs/versionedId"
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skyAssetId",
+        "surfaceAssetId",
+        "toneMapping",
+        "exposure",
+        "fog"
+      ],
+      "properties": {
+        "skyAssetId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "surfaceAssetId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "platformAssetIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/versionedId"
+          }
+        },
+        "toneMapping": {
+          "type": "string",
+          "enum": [
+            "none",
+            "linear",
+            "reinhard",
+            "cineon",
+            "aces_filmic",
+            "agx",
+            "neutral",
+            "custom"
+          ]
+        },
+        "exposure": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 8
+        },
+        "fog": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "color"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "none",
+                "linear",
+                "exponential"
+              ]
+            },
+            "color": {
+              "$ref": "#/$defs/color"
+            },
+            "nearMetres": {
+              "type": "number",
+              "minimum": 0
+            },
+            "farMetres": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "density": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "lighting": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ambientIntensity": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sunIntensity": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sunColor": {
+              "$ref": "#/$defs/color"
+            },
+            "shadowDistanceMetres": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "qualityTiers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "displayName",
+          "order",
+          "settings"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settings": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pixelRatioCap",
+              "shadowMapSize",
+              "textureMaxSize",
+              "anisotropy",
+              "lodBias",
+              "particleMultiplier",
+              "dynamicLights"
+            ],
+            "properties": {
+              "pixelRatioCap": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 4
+              },
+              "shadowMapSize": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8192
+              },
+              "textureMaxSize": {
+                "type": "integer",
+                "minimum": 256,
+                "maximum": 16384
+              },
+              "anisotropy": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16
+              },
+              "lodBias": {
+                "type": "number",
+                "minimum": -4,
+                "maximum": 4
+              },
+              "particleMultiplier": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 4
+              },
+              "dynamicLights": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 64
+              },
+              "oceanRadialSegments": {
+                "type": "integer",
+                "minimum": 16
+              },
+              "oceanAngularSegments": {
+                "type": "integer",
+                "minimum": 32
+              }
+            }
+          }
+        }
+      }
+    },
+    "fallbackPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowProcedural",
+        "onMissing",
+        "emitDiagnostics"
+      ],
+      "properties": {
+        "allowProcedural": {
+          "type": "boolean"
+        },
+        "onMissing": {
+          "type": "string",
+          "enum": [
+            "error",
+            "procedural",
+            "placeholder",
+            "hidden"
+          ]
+        },
+        "emitDiagnostics": {
+          "type": "boolean"
+        }
+      }
+    },
+    "readability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimumTargetPixels",
+        "worldScale",
+        "distantRepresentation",
+        "minimumHudContrastRatio"
+      ],
+      "properties": {
+        "minimumTargetPixels": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "worldScale": {
+          "const": 1,
+          "description": "Physical vehicle geometry remains at true world scale; distant readability is presentation-only."
+        },
+        "distantRepresentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "transitionStartPixels",
+            "fullyImpostorPixels",
+            "hysteresisPixels"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "mesh_only",
+                "silhouette_impostor"
+              ]
+            },
+            "transitionStartPixels": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 128
+            },
+            "fullyImpostorPixels": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 128
+            },
+            "hysteresisPixels": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 32
+            }
+          }
+        },
+        "minimumHudContrastRatio": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 21
+        },
+        "targetSilhouetteColor": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "versionedId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*\\.v[1-9][0-9]*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?$"
+    },
+    "packFileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "uri"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "uri": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "relativePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\/$)(?![A-Za-z][A-Za-z0-9+.-]*:)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)(?!.*//)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    }
+  }
+}

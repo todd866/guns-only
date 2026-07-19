@@ -1,0 +1,53 @@
+{
+  "$schema": "../../schemas/asset-license-set.schema.json",
+  "schemaVersion": "1.0.0",
+  "licenseSetId": "licenses.guns-only.project.v1",
+  "template": false,
+  "entries": [
+    {
+      "licenseId": "license.project-code.v1",
+      "appliesTo": [
+        "cockpit.player.sabre-fury.v1",
+        "environment.ocean.deep.v1",
+        "environment.sky.haze.v1",
+        "platform.carrier.straight-deck.v1",
+        "platform.escort.gun-destroyer.v1",
+        "procedural://carrier/current",
+        "procedural://effects/destruction/current",
+        "procedural://effects/gun/current",
+        "procedural://environment/ocean/current",
+        "procedural://environment/sky/current",
+        "procedural://fighter/current",
+        "vehicle.bandit.swept-wing.v1",
+        "vehicle.player.sabre-fury.v1",
+        "vfx.gun.fire.v1",
+        "vfx.gun.impact.v1",
+        "vfx.platform.wake.v1",
+        "vfx.vehicle.destroyed.v1"
+      ],
+      "spdxExpression": "MIT",
+      "copyright": "Copyright (c) 2026 Ian Todd",
+      "authors": [
+        "Ian Todd"
+      ],
+      "sourceUri": "repo://tools/assets/generators/",
+      "redistribution": {
+        "allowed": true,
+        "commercialUseAllowed": true,
+        "modificationAllowed": true,
+        "shareAlikeRequired": false,
+        "notices": [
+          "Include the repository MIT copyright and permission notice in copies or substantial portions."
+        ]
+      },
+      "attributionText": "Guns Only project-authored renderer assets, Copyright (c) 2026 Ian Todd, licensed under MIT.",
+      "evidence": [
+        {
+          "type": "license_file",
+          "uri": "repo://LICENSE"
+        }
+      ],
+      "notes": "Covers project-authored generated geometry, material profiles, textures, shaders, and procedural factories. Imported models, textures, fonts, and audio require their own entries before merge."
+    }
+  ]
+}

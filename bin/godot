@@ -1,4 +1,0 @@
-#!/bin/sh
-# Force the arm64 slice: Godot_mono is universal but the installed .NET is arm64-only,
-# so the x86_64 slice fails with "Failed to load .NET runtime / incompatible architecture".
-exec arch -arm64 /Applications/Godot_mono.app/Contents/MacOS/Godot "$@"

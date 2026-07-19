@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 
 namespace GunsOnly.Sim.Tests;
 
-/// The APPROACH FEEL harness — closed-loop (detent + real sim + keys, as WebBridge.Advance drives
+/// The APPROACH FEEL harness — closed-loop (detent + real sim + keys, as SimulationSession drives
 /// it). After several wrong turns the pilot cut to the bone: "it's really simple, down arrow should
 /// give me visible pitch-up, up arrow pitch down, w/s throttle." A 1 s pull was moving the nose 0.2°
 /// (a hidden CLmax cap strangled it). So the model is now DIRECT: the stick commands the NOSE (AoA),
@@ -40,9 +40,11 @@ public class ApproachControlTests {
         sim.Step(d.Command, Dt);
         return t + Dt * 1000.0;
     }
-    // Rendered nose = the COMMANDED ATTITUDE (θ) — a stable, directly-flown value.
-    static double NoseDeg(AircraftSim s, DetentLayer d) => d.CommandedPitchRad * RadToDeg;
-    static double AoaDeg(AircraftSim s, DetentLayer d) => (d.CommandedPitchRad - s.State.Gamma) * RadToDeg;
+    // The flown/rendered nose is the integrated rigid-body attitude. CommandedPitchRad is only the
+    // pilot/controller demand; treating it as the nose allowed a disconnected attitude loop to
+    // satisfy the old acceptance test without moving the aircraft.
+    static double NoseDeg(AircraftSim s, DetentLayer d) => s.BodyPitchRad * RadToDeg;
+    static double AoaDeg(AircraftSim s, DetentLayer d) => s.AngleOfAttackRad * RadToDeg;
     static double StallAoaDeg => FlightModel.Sabre.CLMax / FlightModel.Sabre.CLAlpha * RadToDeg;   // ~14°
 
     // ---- 1. VISIBLE PITCH: down arrow raises the nose, up arrow lowers it — clearly. ----
@@ -60,8 +62,83 @@ public class ApproachControlTests {
         for (double e = t + 1600; t < e; ) t = Step(sim, d, g, t);  // hold push 1.6 s
         double noseDn = NoseDeg(sim, d);
         _o.WriteLine($"VISIBLE PITCH: nose {nose0:F1}° --pull--> {noseUp:F1}° (+{noseUp - nose0:F1}°) --push--> {noseDn:F1}° ({noseDn - noseUp:F1}°)");
-        Assert.True(noseUp - nose0 > 5.0, $"down arrow must VISIBLY raise the nose; only +{noseUp - nose0:F1}°");
-        Assert.True(noseDn - noseUp < -5.0, $"up arrow must VISIBLY lower the nose; only {noseDn - noseUp:F1}°");
+        Assert.True(noseUp - nose0 > 2.5, $"down arrow must VISIBLY raise the nose; only +{noseUp - nose0:F1}°");
+        Assert.True(noseDn - noseUp < -3.0, $"up arrow must VISIBLY lower the nose; only {noseDn - noseUp:F1}°");
+    }
+
+    [Fact]
+    public void IntegratedBodyPitchTracksTheConfiguredApproachCommand() {
+        var configuration = new AirframeAerodynamicState(
+            LiftCoefficientIncrement: 0.30,
+            DragCoefficientIncrement: 0.125,
+            PitchMomentCoefficientIncrement: 0.0,
+            LateralLiftCoefficientDifference: 0.0);
+        var sim = new AircraftSim(Approach(), FlightModel.Sabre) {
+            AerodynamicConfiguration = configuration
+        };
+        var d = new DetentLayer {
+            ApproachMode = true,
+            AerodynamicConfiguration = configuration
+        };
+        var g = new KeyGrammar();
+        double t = 0.0;
+        for (; t < 4000.0;) t = Step(sim, d, g, t);
+
+        double nose0 = sim.BodyPitchRad;
+        g.Feed(GKey.PullUp, true, t);
+        for (double end = t + 900.0; t < end;) t = Step(sim, d, g, t);
+        g.Feed(GKey.PullUp, false, t);
+        double movingErrorDeg = Math.Abs(sim.BodyPitchRad - d.CommandedPitchRad) * RadToDeg;
+        double movedDeg = (sim.BodyPitchRad - nose0) * RadToDeg;
+
+        for (double end = t + 4000.0; t < end;) t = Step(sim, d, g, t);
+        double settledErrorDeg = Math.Abs(sim.BodyPitchRad - d.CommandedPitchRad) * RadToDeg;
+        _o.WriteLine($"BODY TRACKING: moved={movedDeg:F1}° moving-error={movingErrorDeg:F1}° "
+            + $"settled-error={settledErrorDeg:F1}°");
+
+        Assert.True(movedDeg > 2.5,
+            $"the integrated body, not just its command, must pitch up; moved {movedDeg:F1}°");
+        Assert.True(movingErrorDeg < 5.0,
+            $"the approach command must not outrun the rigid body; error {movingErrorDeg:F1}°");
+        Assert.True(settledErrorDeg < 2.0,
+            $"the rigid body must settle onto the approach command; error {settledErrorDeg:F1}°");
+    }
+
+    [Fact]
+    public void ApproachTrimPowerRisesFromTheActualLandingConfiguration() {
+        AircraftState state = Approach();
+        var gearOnly = new AirframeAerodynamicState(
+            LiftCoefficientIncrement: 0.0,
+            DragCoefficientIncrement: 0.040,
+            PitchMomentCoefficientIncrement: 0.0,
+            LateralLiftCoefficientDifference: 0.0);
+        var gearAndFullFlap = new AirframeAerodynamicState(
+            LiftCoefficientIncrement: 0.30,
+            DragCoefficientIncrement: 0.125,
+            PitchMomentCoefficientIncrement: 0.0,
+            LateralLiftCoefficientDifference: 0.0);
+
+        double Trim(in AirframeAerodynamicState configuration) {
+            var detents = new DetentLayer {
+                ApproachMode = true,
+                AirspeedMps = 70.0,
+                ApproachAirspeedMps = 70.0,
+                AerodynamicConfiguration = configuration
+            };
+            detents.Tick(new KeyGrammar(), 0.0, state, FlightModel.Sabre, Ball, Dt);
+            return detents.ApproachTrimThrottle;
+        }
+        double clean = Trim(AirframeAerodynamicState.Clean);
+        double gear = Trim(gearOnly);
+        double configured = Trim(gearAndFullFlap);
+        _o.WriteLine($"APPROACH TRIM: clean={clean:F3} gear={gear:F3} "
+            + $"gear+38° flap={configured:F3}");
+
+        Assert.True(gear > clean,
+            "gear drag must increase steady approach power rather than waiting for speed error");
+        Assert.True(configured > gear,
+            "the full landing configuration must produce its additional drag feed-forward");
+        Assert.InRange(configured, 0.28, 0.38);
     }
 
     // ---- 2. SPRINGS ON-SPEED: hands-off the nose returns to on-speed AoA, never sits at the stall. ----

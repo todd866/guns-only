@@ -1,4 +1,5 @@
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Propulsion;
 namespace GunsOnly.Sim;
 public enum ValleyVariant { DoctrineDeep, PhysicsOnly }
 
@@ -49,7 +50,7 @@ public sealed class DetentLayer {
     public const double OnSpeedAoARad = 0.185; // ~10.6° — the AoA that TRIMS ~1 G at on-speed (70 m/s), so the
                                                // approach starts balanced instead of phugoiding down to find its
                                                // trim speed (9.7° gave only 0.9 G at 70 m/s → it dived itself low)
-    const double PitchCmdRate = 0.14;          // rad/s (~8°/s) the stick moves the nose ATTITUDE — smooth, stable
+    const double PitchCmdRate = 0.14;          // rad/s (~8°/s), with rigid-body lag covered by acceptance below
     const double AoASpring = 0.35;             // 1/s gentle auto-trim toward on-speed — the nose HOLDS where you
                                                // put it (stable, no bounce) with a light return to on-speed, so the
                                                // approach is FLYABLE on pitch+power without being on-rails
@@ -59,20 +60,55 @@ public sealed class DetentLayer {
     // you. At 6.0 it nailed the slope hands-off (the pilot flew a perfect approach touching nothing
     // = "too on-rails"). At 2.5 it merely arrests a gross sink; YOU fly the velocity vector onto the
     // touchdown diamond to hold the glidepath. (The difficulty ladder, task 17, will scale this.)
-    const double GlidePowerPerM = 0.035;       // throttle-lever per METRE below the glideslope LINE. SPATIAL, not
+    const double GlidePowerPerM = 0.040;       // throttle-lever per METRE below the glideslope LINE. SPATIAL, not
                                                // angular: holding the −3.5° ANGLE from a low start flies you parallel-
                                                // but-low into the ramp (the harness proved it). Power on the height error
                                                // recaptures the actual line. (Difficulty ladder scales this.)
     double _cmdPitch; bool _approachInit;      // the pilot's commanded NOSE attitude (θ), integrated from the stick
     double _approachClimbDemand;               // AoA above on-speed (rad) → power nudge
     public double CommandedPitchRad => _cmdPitch;  // the render draws the (stable) nose at this attitude
-    public double GlideslopeErrorM;            // metres BELOW the glideslope line to the wires (bridge sets it; + = low)
-    public double ApproachAirspeedMps = double.NaN; // bridge supplies |ground velocity - steady WOD|
+    public double GlideslopeErrorM;            // metres BELOW the glideslope line to the wires (session sets it; + = low)
+    public double AirspeedMps = double.NaN;     // authoritative |ground velocity - wind| for protection in every mode
+    public double ApproachAirspeedMps = double.NaN; // session supplies filtered local-air speed
     public double DeckClosureMps = double.NaN;      // positive toward the moving landing area
+    public AirframeAerodynamicState AerodynamicConfiguration =
+        AirframeAerodynamicState.Clean;
+    /// <summary>
+    /// The same scenario atmosphere used by AircraftSim. Protection and approach feed-forward
+    /// must not quietly revert to standard-day density when the aircraft flies a hot/cold profile.
+    /// </summary>
+    public IAtmosphereModel AtmosphereModel { get; set; } = StandardAtmosphere1976.Instance;
+    /// <summary>
+    /// Open-loop lever position required to balance the configured aircraft on the reference
+    /// glideslope at the measured airspeed. Speed, glidepath, and pilot corrections are layered on
+    /// top; exposing the term also lets a flown harness use the same physical trim rather than a
+    /// second hard-coded throttle datum.
+    /// </summary>
+    public double ApproachTrimThrottle { get; private set; }
+
+    /// <summary>
+    /// The clean datum remains the period/HUD reference. Actual flap camber reduces the body angle
+    /// required to make the same on-speed lift; exposing it keeps the waterline, LSO gate, and
+    /// approach controller on one configuration-aware datum.
+    /// </summary>
+    public double EffectiveOnSpeedAoARad(in AircraftParams parameters) =>
+        OnSpeedAoARad - AerodynamicConfiguration.LiftCoefficientIncrement
+            / System.Math.Max(parameters.CLAlpha, 1e-6);
+
+    /// Clamp the staged lever and its public command projection to this airframe's physical stop.
+    /// Calling this again is intentionally non-destructive: it never raises a lever the pilot or an
+    /// earlier configuration already brought below that stop.
+    public void ConfigureFor(AircraftParams parameters) {
+        ArgumentNullException.ThrowIfNull(parameters);
+        double leverStop = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.35);
+        _throttleLever = System.Math.Clamp(_throttleLever, 0.0, leverStop);
+        Throttle = _throttleLever;
+        Command = Command with { Throttle = Throttle };
+    }
 
     public void Tick(KeyGrammar keys, double nowMs, in AircraftState s, in AircraftParams p, DoctrineAdvice advice, double dt) {
-        double maxPerform = Protection.MaxPerformG(s, p);
-        double hardMax = Protection.HardMaxG(s, p);
+        double maxPerform = Protection.MaxPerformG(s, p, AirspeedMps, AtmosphereModel);
+        double hardMax = Protection.HardMaxG(s, p, AirspeedMps, AtmosphereModel);
         ValleyG = Variant == ValleyVariant.DoctrineDeep ? System.Math.Min(advice.RecommendedG, maxPerform) : maxPerform;
         ValleyBank = advice.RecommendedBank;
 
@@ -94,35 +130,42 @@ public sealed class DetentLayer {
 
         // Override (spacebar): the ONLY way past the protection boundary. Bare arrows are
         // always envelope-protected and can never depart; holding Override raises the ceiling
-        // to the aero/structural hard max, so a pull rides into the buffet (and, with a real
-        // M1 aero model, can depart) — deliberate, at your own risk. Replaces the old
+        // and publishes an explicit post-break incidence demand below. The flight model sees that
+        // ordinary actuator target, never the keyboard/override flag itself. Replaces the old
         // double-tap-hold vocabulary entirely (arrows no longer reach OverDemand).
         bool over = keys.PhaseAt(GKey.Override, nowMs) != KeyPhase.Idle;
         double cap = over ? hardMax : maxPerform;
 
         if (ApproachMode) {
+            double onSpeedAoaRad = EffectiveOnSpeedAoARad(p);
             // Stick commands the NOSE ATTITUDE (θ) directly and it HOLDS there — stable, like a real
             // jet. The nose is what you fly; the flight path emerges under it and lags.
             double measuredAirspeed = double.IsFinite(ApproachAirspeedMps)
-                ? ApproachAirspeedMps : s.Speed;
+                ? ApproachAirspeedMps
+                : double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed;
             double V = System.Math.Max(measuredAirspeed, 30.0);
             double gamma = s.Gamma;
-            if (!_approachInit) { _cmdPitch = gamma + OnSpeedAoARad; _approachInit = true; }
+            if (!_approachInit) { _cmdPitch = gamma + onSpeedAoaRad; _approachInit = true; }
             if (_waveOff) _cmdPitch += PitchCmdRate * dt;                      // go-around: rotate up, climb away
             else if (pull != KeyPhase.Idle) _cmdPitch += PitchCmdRate * dt;   // nose up
             else if (push != KeyPhase.Idle) _cmdPitch -= PitchCmdRate * dt;   // nose down
-            else _cmdPitch += ((gamma + OnSpeedAoARad) - _cmdPitch) * System.Math.Min(1.0, AoASpring * dt);  // gentle trim to on-speed
+            else _cmdPitch += ((gamma + onSpeedAoaRad) - _cmdPitch) * System.Math.Min(1.0, AoASpring * dt);  // gentle trim to on-speed
             _cmdPitch = System.Math.Clamp(_cmdPitch, gamma + AoALo, gamma + AoAHi);   // keep the AoA (θ−γ) sane
 
             // AoA EMERGES from attitude minus flight path (self-damping). Lift from it, capped at
             // CLmax — over-rotate and the nose stays high while lift saturates: honest stall/mush.
             double aoa = _cmdPitch - gamma;
-            double q = 0.5 * Atmosphere.Density(s.Position.Y) * V * V;
-            double clCmd = System.Math.Clamp(p.CLAlpha * aoa, p.CLMin, p.CLMax);
+            double q = 0.5 * AtmosphereModel.Sample(s.Position.Y).DensityKgM3 * V * V;
+            double clCmd = System.Math.Clamp(
+                p.CLAlpha * aoa + AerodynamicConfiguration.LiftCoefficientIncrement,
+                p.CLMin + AerodynamicConfiguration.LiftCoefficientIncrement,
+                p.CLMax + AerodynamicConfiguration.LiftCoefficientIncrement);
             double nCmd = clCmd * q * p.WingAreaM2 / (s.Mass * FlightModel.G0);
-            _gCmd = System.Math.Clamp(nCmd, System.Math.Max(FlightModel.NzAeroMin(s, p), -0.5), maxPerform);
+            _gCmd = System.Math.Clamp(nCmd,
+                System.Math.Max(FlightModel.NzAeroMin(s, p, V, AtmosphereModel), -0.5),
+                maxPerform);
             // AoA above on-speed (nose above the on-speed attitude) → power nudge for the climb.
-            _approachClimbDemand = System.Math.Max(0.0, aoa - OnSpeedAoARad);
+            _approachClimbDemand = System.Math.Max(0.0, aoa - onSpeedAoaRad);
             Tier = DemandTier.Valley; ValleyG = 1.0; ValleyBank = 0.0;
         } else {
         _approachInit = false;   // out of the slot → fight logic; re-trim the approach attitude on re-entry
@@ -142,7 +185,8 @@ public sealed class DetentLayer {
             // to 0 G, which just floats (the "pushing does very little" feel). Held push goes to a
             // moderate negative; Override pushes to the aero/structural negative limit.
             tier = over ? DemandTier.OverDemand : DemandTier.Valley;
-            double pushFloor = System.Math.Max(FlightModel.NzAeroMin(s, p), -1.5);
+            double pushFloor = System.Math.Max(
+                FlightModel.NzAeroMin(s, p, AirspeedMps, AtmosphereModel), -1.5);
             target = over ? pushFloor : System.Math.Max(pushFloor, -1.0);
         }
         else if (_waveOff) {
@@ -214,9 +258,9 @@ public sealed class DetentLayer {
         _rollRightWasDown = rollRight;
         _rollLeftWasDown = rollLeft;
 
-        // Continuous throttle: HOLD W to spool up (through MIL into A/B), HOLD S to bring it back —
-        // that's what "mash W" means. Tap-only detents did nothing on a hold, which is why it felt
-        // dead. Taps still nudge it for fine sets.
+        // Continuous throttle: HOLD W to spool up (through MIL into A/B where the airframe has it),
+        // HOLD S to bring it back. Tap-only detents did nothing on a hold, which is why it felt dead.
+        // Taps still nudge it for fine sets.
         bool wHeld = keys.PhaseAt(GKey.ThrottleUp, nowMs) != KeyPhase.Idle;
         bool sHeld = keys.PhaseAt(GKey.ThrottleDown, nowMs) != KeyPhase.Idle;
         int thUp = keys.TakeTaps(GKey.ThrottleUp, nowMs), thDn = keys.TakeTaps(GKey.ThrottleDown, nowMs);
@@ -226,27 +270,36 @@ public sealed class DetentLayer {
         // through the spool lag) instead of mushing at CLmax. Capped short of a firewall so the auto
         // path can't trip the wave-off. Pilot's W/S still stands the whole thing down (below).
         double speedForApproach = double.IsFinite(ApproachAirspeedMps)
-            ? ApproachAirspeedMps : s.Speed;
-        double autoThr = 0.16 + 0.026 * (ApproachSpeedMps - speedForApproach); // AIRspeed hold
+            ? ApproachAirspeedMps
+            : double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed;
+        ApproachTrimThrottle = ApproachMode
+            ? ApproachPowerFeedForward(s, p, speedForApproach,
+                AerodynamicConfiguration, AtmosphereModel)
+            : 0.0;
+        double autoThr = ApproachTrimThrottle
+            + 0.026 * (ApproachSpeedMps - speedForApproach); // AIRspeed hold
         if (ApproachMode) {
             // BACK-SIDE RULE: power flies the glidepath. Below the glideslope LINE (spatial height
-            // error, set by the bridge) → add power to climb back onto it — this recaptures the path
+            // error, set by the session) → add power to climb back onto it — this recaptures the path
             // instead of just holding the angle low, so flying the velocity vector at the wires
             // actually traps. Plus the pilot's active up-command (AoA above on-speed) spools too.
             autoThr += GlidePowerPerM * System.Math.Max(0.0, GlideslopeErrorM)
                      + ClimbAoaPower * _approachClimbDemand;
         }
         autoThr = System.Math.Clamp(autoThr, 0.0, 0.95);
+        // The lever stop is an airframe capability. A dry-thrust Sabre stops at MIL (1.0),
+        // while an afterburning definition may expose the full staged range to 1.35.
+        double leverStop = System.Math.Clamp(p.MaxThrustFraction, 0.0, 1.35);
         if (ApproachMode && !_manualThrottle) {
-            _throttleLever = autoThr;   // auto-throttle holds on-speed AND tracks the lever, so takeover is smooth
+            _throttleLever = System.Math.Min(autoThr, leverStop); // track the real lever for smooth takeover
         } else {
             if (wHeld) _throttleLever += ThrottleRate * dt;
             if (sHeld) _throttleLever -= ThrottleRate * dt;
             _throttleLever += (thUp - thDn) * 0.15;
-            _throttleLever = System.Math.Clamp(_throttleLever, 0.0, 1.3);
+            _throttleLever = System.Math.Clamp(_throttleLever, 0.0, leverStop);
         }
         Throttle = _throttleLever;
-        // Firewalled on the approach = wave-off. Match the bridge's mode threshold so the climb
+        // Firewalled on the approach = wave-off. Match the session's mode threshold so the climb
         // command survives the approach→fight handoff instead of becoming unreachable at 0.99.
         if (ApproachMode && _manualThrottle && _throttleLever >= 0.95) {
             _waveOff = true;
@@ -258,8 +311,102 @@ public sealed class DetentLayer {
         if (keys.PhaseAt(GKey.RudderRight, nowMs) != KeyPhase.Idle) rudder += 0.6;
         if (keys.PhaseAt(GKey.RudderLeft, nowMs) != KeyPhase.Idle)  rudder -= 0.6;
 
+        double commandedAlpha = !ApproachMode && over && pull != KeyPhase.Idle
+            ? p.PostStallAlphaCommandRad
+            : !ApproachMode && over && push != KeyPhase.Idle
+                ? -0.70 * p.PostStallAlphaCommandRad
+                : double.NaN;
         Command = new PilotCommand(_gCmd, _bankTarget, Throttle, rudder,
-            ApproachMode ? _cmdPitch : double.NaN);
+            ApproachMode ? _cmdPitch : double.NaN,
+            EnvelopeOverride: !ApproachMode && over && (pull != KeyPhase.Idle || push != KeyPhase.Idle),
+            RollControl: rollDirection,
+            CommandedAlphaRad: commandedAlpha);
+    }
+
+    /// <summary>
+    /// Resolve the steady thrust required by the actual landing configuration. The reference
+    /// flight path is intentional: using a momentary sink angle here would remove power during a
+    /// low-energy settle because gravity happens to be supplying more along-path acceleration.
+    /// </summary>
+    internal static double ApproachPowerFeedForward(in AircraftState state,
+        in AircraftParams parameters, double trueAirspeedMps,
+        in AirframeAerodynamicState configuration) {
+        return ApproachPowerFeedForward(state, parameters, trueAirspeedMps, configuration,
+            StandardAtmosphere1976.Instance);
+    }
+
+    internal static double ApproachPowerFeedForward(in AircraftState state,
+        in AircraftParams parameters, double trueAirspeedMps,
+        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) {
+        ArgumentNullException.ThrowIfNull(atmosphere);
+        if (!double.IsFinite(trueAirspeedMps) || trueAirspeedMps <= 0.0
+            || parameters.ThrustMaxN <= 0.0)
+            return 0.0;
+
+        double speed = System.Math.Max(trueAirspeedMps, 20.0);
+        AtmosphericState atmosphericState = atmosphere.Sample(state.Position.Y);
+        double rho = atmosphericState.DensityKgM3;
+        double qS = 0.5 * rho * speed * speed * parameters.WingAreaM2;
+        if (qS <= 1e-9) return 0.0;
+
+        // Lift normal to the reference path balances the corresponding weight component. Flap
+        // camber supplies part of that CL; only the remaining clean-wing CL drives induced drag in
+        // the kernel's current additive-configuration polar.
+        double totalCl = state.Mass * FlightModel.G0
+            * System.Math.Cos(ApproachGlideslope) / qS;
+        double cleanCl = System.Math.Clamp(
+            totalCl - configuration.LiftCoefficientIncrement,
+            parameters.CLMin, parameters.CLMax);
+        double mach = speed / System.Math.Max(atmosphericState.SpeedOfSoundMps, 1e-6);
+        double machDragFactor = mach < parameters.MCrit ? 1.0
+            : 1.0 + parameters.WaveDragK
+                * (mach - parameters.MCrit) * (mach - parameters.MCrit);
+        double highLiftFraction = System.Math.Abs(cleanCl)
+            / System.Math.Max(System.Math.Abs(parameters.CLMax), 1e-6);
+        double highLiftExcess = System.Math.Max(0.0,
+            highLiftFraction - parameters.HighLiftDragOnsetFraction);
+        double cd = parameters.CD0 * machDragFactor
+            + parameters.InducedK * cleanCl * cleanCl
+            + parameters.HighLiftDragK * highLiftExcess * highLiftExcess
+            + System.Math.Max(0.0, configuration.DragCoefficientIncrement);
+        double dragN = qS * cd;
+        double requiredThrustN = System.Math.Max(0.0,
+            dragN + state.Mass * FlightModel.G0 * System.Math.Sin(ApproachGlideslope));
+
+        return System.Math.Clamp(ThrottleForRequiredThrust(requiredThrustN,
+            state.Position.Y, mach, parameters, atmosphere), 0.0,
+            System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.35));
+    }
+
+    static double ThrottleForRequiredThrust(double requiredThrustN, double altitudeM,
+        double mach, in AircraftParams parameters, IAtmosphereModel atmosphere) {
+        if (requiredThrustN <= 0.0 || parameters.ThrustMaxN <= 0.0) return 0.0;
+        double stop = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.35);
+        if (stop <= 0.0) return 0.0;
+
+        if (parameters.PropulsionModel != PropulsionModelKind.J47Ge27) {
+            double availableN = parameters.ThrustMaxN
+                * atmosphere.Sample(altitudeM).DensityKgM3 / AirData.SeaLevelDensityKgM3;
+            return availableN <= 1e-9 ? stop
+                : System.Math.Clamp(requiredThrustN / availableN, 0.0, stop);
+        }
+
+        // The J47 API deliberately maps lever power to a nonlinear RPM/thrust point. Invert that
+        // same surface instead of pretending normalized RPM or sea-level rated thrust is the
+        // installed thrust available at this altitude and Mach.
+        if (J47PerformanceMap.Evaluate(stop, altitudeM, mach).NetThrustN
+            <= requiredThrustN)
+            return stop;
+        double lo = 0.0, hi = stop;
+        for (int i = 0; i < 12; i++) {
+            double mid = (lo + hi) * 0.5;
+            if (J47PerformanceMap.Evaluate(mid, altitudeM, mach).NetThrustN
+                < requiredThrustN)
+                lo = mid;
+            else
+                hi = mid;
+        }
+        return (lo + hi) * 0.5;
     }
 
     static bool HasBodyAttitude(in AircraftState s) =>

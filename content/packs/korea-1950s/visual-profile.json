@@ -1,0 +1,196 @@
+{
+  "$schema": "../../schemas/visual-profile.schema.json",
+  "schemaVersion": "1.0.0",
+  "profileId": "visual.korea-1950s.default.v1",
+  "profileVersion": "0.1.0",
+  "packId": "korea-1950s",
+  "displayName": "Korea 1950s Default Visuals",
+  "presentationProfileId": "presentation.korea-1950s.fixed-wing.v1",
+  "assetProfile": {
+    "id": "asset.korea-1950s.default.v1",
+    "manifest": {
+      "id": "manifest.korea-1950s.default.v1",
+      "uri": "asset-manifest.json"
+    },
+    "bindings": [
+      {
+        "presentationId": "presentation.vehicle.player.v1",
+        "assetId": "vehicle.player.sabre-fury.v1",
+        "visibleByDefault": false,
+        "requiredAnchors": [
+          "camera.cockpit",
+          "muzzle.left",
+          "muzzle.right"
+        ]
+      },
+      {
+        "presentationId": "presentation.cockpit.player.v1",
+        "assetId": "cockpit.player.sabre-fury.v1",
+        "visibleByDefault": false,
+        "requiredAnchors": [
+          "camera.cockpit",
+          "control.stick",
+          "control.throttle",
+          "gunsight.origin",
+          "instrument-panel.origin"
+        ]
+      },
+      {
+        "presentationId": "presentation.vehicle.bandit.v1",
+        "assetId": "vehicle.bandit.swept-wing.v1",
+        "visibleByDefault": true
+      },
+      {
+        "presentationId": "presentation.platform.carrier.v1",
+        "assetId": "platform.carrier.straight-deck.v1",
+        "visibleByDefault": true,
+        "requiredAnchors": [
+          "bow.reference",
+          "deck.origin",
+          "recovery.threshold",
+          "wake.origin"
+        ]
+      },
+      {
+        "presentationId": "presentation.platform.escort.v1",
+        "assetId": "platform.escort.gun-destroyer.v1",
+        "visibleByDefault": true,
+        "requiredAnchors": [
+          "bow.reference",
+          "deck.origin",
+          "formation.origin",
+          "wake.origin"
+        ]
+      }
+    ]
+  },
+  "effectsProfile": {
+    "id": "effects.fixed-wing.guns.v1",
+    "bindings": [
+      {
+        "eventId": "event.weapon.gun-fire.v1",
+        "assetId": "vfx.gun.fire.v1",
+        "settings": {
+          "muzzleFlashLifetimeSeconds": 0.045,
+          "tracerEveryRounds": 4
+        }
+      },
+      {
+        "eventId": "event.weapon.gun-impact.v1",
+        "assetId": "vfx.gun.impact.v1",
+        "settings": {
+          "debrisLifetimeSeconds": 0.8
+        }
+      },
+      {
+        "eventId": "event.vehicle.destroyed.v1",
+        "assetId": "vfx.vehicle.destroyed.v1",
+        "settings": {
+          "smokeLifetimeSeconds": 4.5
+        }
+      },
+      {
+        "eventId": "event.platform.wake.v1",
+        "assetId": "vfx.platform.wake.v1",
+        "settings": {
+          "lifetimeSeconds": 12
+        }
+      }
+    ]
+  },
+  "linkedProfiles": {
+    "cameraProfileId": "camera.fixed-wing.padlock.v1",
+    "hudProfileId": "hud.fixed-wing.guns.v1",
+    "inputProfileId": "input.fixed-wing.unified.v1",
+    "audioProfileId": "audio.fixed-wing.jet.v1"
+  },
+  "environment": {
+    "skyAssetId": "environment.sky.haze.v1",
+    "surfaceAssetId": "environment.ocean.deep.v1",
+    "platformAssetIds": [
+      "platform.carrier.straight-deck.v1",
+      "platform.escort.gun-destroyer.v1"
+    ],
+    "toneMapping": "aces_filmic",
+    "exposure": 1.02,
+    "fog": {
+      "mode": "linear",
+      "color": "#A8C1CC",
+      "nearMetres": 9000,
+      "farMetres": 56000
+    },
+    "lighting": {
+      "ambientIntensity": 1.35,
+      "sunIntensity": 2.4,
+      "sunColor": "#FFE3B7",
+      "shadowDistanceMetres": 6000
+    }
+  },
+  "qualityTiers": [
+    {
+      "id": "mobile",
+      "displayName": "Mobile",
+      "order": 0,
+      "settings": {
+        "pixelRatioCap": 1.4,
+        "shadowMapSize": 512,
+        "textureMaxSize": 1024,
+        "anisotropy": 2,
+        "lodBias": 1,
+        "particleMultiplier": 0.65,
+        "dynamicLights": 2,
+        "oceanRadialSegments": 112,
+        "oceanAngularSegments": 144
+      }
+    },
+    {
+      "id": "balanced",
+      "displayName": "Balanced",
+      "order": 1,
+      "settings": {
+        "pixelRatioCap": 1.6,
+        "shadowMapSize": 1024,
+        "textureMaxSize": 2048,
+        "anisotropy": 4,
+        "lodBias": 0,
+        "particleMultiplier": 0.85,
+        "dynamicLights": 4,
+        "oceanRadialSegments": 128,
+        "oceanAngularSegments": 168
+      }
+    },
+    {
+      "id": "desktop",
+      "displayName": "Desktop",
+      "order": 2,
+      "settings": {
+        "pixelRatioCap": 2,
+        "shadowMapSize": 2048,
+        "textureMaxSize": 4096,
+        "anisotropy": 8,
+        "lodBias": -0.25,
+        "particleMultiplier": 1,
+        "dynamicLights": 8,
+        "oceanRadialSegments": 145,
+        "oceanAngularSegments": 192
+      }
+    }
+  ],
+  "fallbackPolicy": {
+    "allowProcedural": true,
+    "onMissing": "procedural",
+    "emitDiagnostics": true
+  },
+  "readability": {
+    "minimumTargetPixels": 8,
+    "worldScale": 1,
+    "distantRepresentation": {
+      "mode": "silhouette_impostor",
+      "transitionStartPixels": 14,
+      "fullyImpostorPixels": 8,
+      "hysteresisPixels": 2
+    },
+    "minimumHudContrastRatio": 4.5,
+    "targetSilhouetteColor": "#D7E7EC"
+  }
+}

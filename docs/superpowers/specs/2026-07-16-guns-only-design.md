@@ -1,5 +1,9 @@
 # Guns Only — Design Spec
 
+> **HISTORICAL DESIGN RECORD:** the current project is a browser-canonical, multi-era platform.
+> Godot and single-era assumptions below were retired on 2026-07-19. See
+> `docs/platform-architecture.md` for the active architecture.
+
 *2026-07-17 · working title "Guns Only" (rename at will) · v4 — Taiwan Strait canon. Strips the Korean-War/human-pilot residue that survived v3's jet-drone reframe (the aircraft, sights, damage model and milestones were still written as a Korean-War human-pilot game underneath a drone-fiction skin), downgrades several "derived" claims that were actually design choices, fixes one factual error (AWACS escorts), and folds in what flying the M0 slice found. Supersedes v3 (2026-07-16), which reframed to jet drones after live feel-testing but never finished carrying that reframe through the rest of the document · v2 was adversarially reviewed (4 Claude lenses + Codex) and those hardenings are preserved · status: in build (M0); the feel gate itself has not yet been flown.*
 
 ## 1. Vision

@@ -1,5 +1,71 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "source": "/content/packs/(.*)\\.glb",
+      "has": [
+        {
+          "type": "query",
+          "key": "sha256",
+          "value": "^[0-9a-f]{64}$"
+        }
+      ],
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/content/packs/(.*)\\.ktx2",
+      "has": [
+        {
+          "type": "query",
+          "key": "sha256",
+          "value": "^[0-9a-f]{64}$"
+        }
+      ],
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/content/packs/(.*)\\.png",
+      "has": [
+        {
+          "type": "query",
+          "key": "sha256",
+          "value": "^[0-9a-f]{64}$"
+        }
+      ],
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/content/packs/(.*)\\.webp",
+      "has": [
+        {
+          "type": "query",
+          "key": "sha256",
+          "value": "^[0-9a-f]{64}$"
+        }
+      ],
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/telemetry",
@@ -7,4 +73,3 @@
     }
   ]
 }
-

@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\sim\GunsOnly.Sim.csproj" />
+    <Compile Include="..\web\IncidentReplayProjection.cs" Link="IncidentReplayProjection.cs" />
   </ItemGroup>
 
 </Project>

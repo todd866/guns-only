@@ -1,4 +1,0 @@
-{"name":"split_s_impact","beat":1,"variant":0,"duration_s":40,
- "events":[{"t":1.0,"key":1,"pressed":true},
-           {"t":1.0,"key":12,"pressed":true}],
- "notes":"Hold Push(1) + Override(12) from t=1: bunt the nose down and fly it into the sea. Regression for the fight-ending the sim never had -- a hard pull used to fly THROUGH the sea to -10,679 ft and keep integrating, world rendered black, HUD still reading out closure. Expect alt to bottom at ~0 (never negative thousands), frozen=true, and the IMPACT banner drawn."}

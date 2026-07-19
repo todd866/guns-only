@@ -1,5 +1,49 @@
 import * as THREE from "./vendor/three.module.js";
 import { createHud } from "./hud.js";
+import {
+  boundingSphereDiameterFromSize,
+  disposeSceneResources,
+  estimateProjectedPixelHeight,
+  maximumAxisScale,
+} from "./render/assets/index.js?runtime=2";
+import { createThreeR160AssetRegistry } from "./render/assets/three_r160_loader.js?runtime=2";
+import { applyCarrierRootPose } from "./render/carrier/carrier_motion.js";
+import { sortieResultCopy } from "./render/debrief/sortie_result.js";
+import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
+import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
+import { consumeRecentEvents } from "./render/events/session_event_cursor.js";
+import {
+  applyEscortFormationPose,
+  createCockpitHeadPresentation,
+  createDistantAircraftImpostor,
+  createPeriodGunsight,
+} from "./render/presentation/index.js";
+import {
+  advanceIncidentReplay,
+  IncidentReplayController,
+  incidentReplayLabels,
+} from "./render/replay/incident_replay.js";
+import {
+  createPilotActionController,
+  projectTestFlightState,
+  TEST_FLIGHT_ACTIONS,
+} from "./render/systems/test_flight_console.js";
+import {
+  GlobalRoomClient,
+  resolveGlobalRoomUrl,
+} from "./render/presence/global_room_client.js";
+import {
+  presenceStatusPresentation,
+  presenceTelemetryContext,
+  projectRemoteContact,
+  remoteContactVisible,
+  shouldResetRemoteInterpolation,
+} from "./render/presence/presence_presentation.js";
+import {
+  buildTelemetryBatch,
+  retainNewestTelemetryRows,
+} from "./render/telemetry/telemetry_batch.js";
+import { createVisualRuntime } from "./render/visual/index.js";
 
 const DEG = Math.PI / 180;
 const MAX_GIMBAL_YAW = 150 * DEG;
@@ -16,9 +60,48 @@ const bootScreen = document.querySelector("#boot");
 const bootStatus = document.querySelector("#boot-status");
 const fatalScreen = document.querySelector("#fatal");
 const fatalMessage = document.querySelector("#fatal-message");
+const multiplayerStatus = document.querySelector("#multiplayer-status");
 const touchControls = document.querySelector("#touch-controls");
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
+const readyScreen = document.querySelector("#ready-screen");
+const readyKicker = document.querySelector("#ready-kicker");
+const readyTitle = document.querySelector("#ready-title");
+const readyBrief = document.querySelector("#ready-brief");
+const readySortie = document.querySelector("#ready-sortie");
+const readyConfig = document.querySelector("#ready-config");
+const readyStart = document.querySelector("#ready-start");
+const readyReplay = document.querySelector("#ready-replay");
+const readyHint = document.querySelector("#ready-hint");
+const incidentReplayOverlay = document.querySelector("#incident-replay-overlay");
+const incidentReplayTime = document.querySelector("#incident-replay-time");
+const incidentReplayMetrics = document.querySelector("#incident-replay-metrics");
+const incidentReplayEvent = document.querySelector("#incident-replay-event");
+const incidentReplayOutcome = document.querySelector("#incident-replay-outcome");
+const incidentReplayGrade = document.querySelector("#incident-replay-grade");
+const incidentReplayCause = document.querySelector("#incident-replay-cause");
+const incidentReplayCorrection = document.querySelector("#incident-replay-correction");
+const incidentReplayProgress = document.querySelector("#incident-replay-progress");
+const incidentReplayDecision = document.querySelector("#incident-replay-decision");
+const incidentReplaySkip = document.querySelector("#incident-replay-skip");
+const testFlightConsole = document.querySelector("#test-flight-console");
+const testFlightUi = testFlightConsole ? Object.freeze({
+  engineRpm: document.querySelector("#tf-engine-rpm"),
+  engineRunning: document.querySelector("#tf-engine-running"),
+  primaryBus: document.querySelector("#tf-primary-bus"),
+  hydraulicPressure: document.querySelector("#tf-hydraulic-pressure"),
+  gearHandle: document.querySelector("#tf-gear-handle"),
+  gearNose: document.querySelector("#tf-gear-nose"),
+  gearLeft: document.querySelector("#tf-gear-left"),
+  gearRight: document.querySelector("#tf-gear-right"),
+  flapLever: document.querySelector("#tf-flap-lever"),
+  flapLeft: document.querySelector("#tf-flap-left"),
+  flapRight: document.querySelector("#tf-flap-right"),
+  warningLine: document.querySelector("#tf-warning-line"),
+  procedureLine: document.querySelector("#tf-procedure-line"),
+  procedureScore: document.querySelector("#tf-procedure-score"),
+  buttons: [...testFlightConsole.querySelectorAll("[data-test-action]")],
+}) : null;
 
 const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches === true;
 const touchCapable = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
@@ -117,6 +200,10 @@ if (mobileControls) {
     .touch-mode.run-frozen .touch-left,
     .touch-mode.run-frozen .touch-right,
     .touch-mode.run-frozen #fallback-stick,
+    .touch-mode.run-paused .touch-left,
+    .touch-mode.run-paused .touch-right,
+    .touch-mode.run-paused #fallback-stick,
+    .touch-mode.run-paused #tilt-status,
     .touch-mode.run-frozen #tilt-status,
     .touch-mode.run-frozen #tilt-prompt,
     .touch-mode.run-frozen #rotate-hint {
@@ -131,6 +218,7 @@ if (mobileControls) {
 // tiers; mobile saves fill-rate and vertex cost while desktop keeps the silhouette and deck edges
 // crisp. These are evaluated once and never branch inside the render loop.
 const VISUAL_QUALITY = Object.freeze({
+  tier: mobileControls ? "mobile" : ((navigator.deviceMemory || 8) <= 4 ? "balanced" : "desktop"),
   pixelRatioCap: mobileControls ? 1.4 : ((navigator.deviceMemory || 8) <= 4 ? 1.6 : 2),
   oceanRadialSegments: mobileControls ? 112 : 145,
   oceanAngularSegments: mobileControls ? 144 : 192,
@@ -155,67 +243,183 @@ const keyMap = new Map([
   ["KeyR", 11],
   ["Space", 12],
 ]);
+for (const action of Object.values(TEST_FLIGHT_ACTIONS)) keyMap.set(action.code, action.gkey);
 
 const heldKeys = new Set();
 
 // --- Telemetry recorder ----------------------------------------------------------------------
-// Tuning feel by guesswork is a waste of time; this captures every input event AND the full sim
-// state each frame from a REAL playthrough and POSTs it to /telemetry (same origin, so the dev
-// server writes it to disk for analysis). Fire-and-forget — a failed POST must never disturb the
-// sim. Sampled at ~30 Hz to keep sessions a few MB.
-const BUILD = "33";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
+// Tuning feel by guesswork is a waste of time; this captures every input event and a 20 Hz state
+// trace from a real playthrough, then POSTs immutable batches to /telemetry (same origin, so the dev
+// server writes them to disk for analysis). A failed POST must never disturb the simulation.
+// The entrypoint query is the cache-busting build identity served by index.html. Deriving the
+// telemetry stamp from import.meta.url makes it impossible for those two versions to drift.
+const BUILD = new URL(import.meta.url).searchParams.get("v") || "dev";
+const TELEMETRY_TICK_STRIDE = 6; // 120 Hz authority -> 20 Hz diagnostic trace.
+// Preserve the 20 Hz reconstruction trace, but amortize Function and Blob-object overhead into
+// 30-second immutable chunks. The bounded buffer still holds more than a full interval.
+const TELEMETRY_FLUSH_INTERVAL_MS = 30_000;
+const TELEMETRY_MAX_BACKOFF_MS = 5 * 60_000;
+const TELEMETRY_BUFFER_LIMIT = 1_500;
+
+function newTelemetryBatchId() {
+  const unique = globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now()}-${Math.floor(Math.random() * 1e12)}`;
+  return `batch-${unique}`.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 128);
+}
+
 const recorder = {
   session: `web-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
   build: BUILD,
   buf: [],
-  frame: 0,
-  lastT: -1,          // last recorded sim-time; dedupe so a fast render loop doesn't write each state 27×
-  lastPost: 0,
+  lastSampleKey: null,
+  lastPost: performance.now(),
   samples: 0,
   flushes: 0,
   errors: 0,
+  droppedRows: 0,
   lastError: null,
+  lastPayloadBytes: 0,
   _headerSent: false,
+  _sending: null,
+  _pendingBatch: null,
+  _retryDelay: TELEMETRY_FLUSH_INTERVAL_MS,
+  _nextPost: performance.now() + TELEMETRY_FLUSH_INTERVAL_MS,
+  _lastContext: new Map(),
+  enqueue(row) {
+    this.buf.push(row);
+    this.buf = retainNewestTelemetryRows(this.buf, TELEMETRY_BUFFER_LIMIT);
+  },
+  ensureHeader() {
+    if (this._headerSent) return;
+    this.enqueue({
+      k: "hdr",
+      build: this.build,
+      session: this.session,
+      ua: navigator.userAgent,
+      t0: Date.now(),
+    });
+    this._headerSent = true;
+  },
   // Every method is fully guarded: telemetry must NEVER be able to crash the flight loop (an
   // earlier version did — an oversized keepalive-fetch body throws, and it killed the sim).
   event(type, code) {
-    try { this.buf.push({ k: "in", t: Math.round(performance.now()), type, code, held: [...heldKeys] }); }
+    try {
+      this.ensureHeader();
+      this.enqueue({ k: "in", t: Math.round(performance.now()), type, code, held: [...heldKeys] });
+    }
     catch (e) { this.errors++; this.lastError = String(e); }
+  },
+  context(type, value) {
+    try {
+      const key = JSON.stringify(value);
+      if (this._lastContext.get(type) === key) return;
+      this._lastContext.set(type, key);
+      this.ensureHeader();
+      this.enqueue({ k: "ctx", t: Math.round(performance.now()), type, value });
+      if (performance.now() >= this._nextPost) this.flush();
+    } catch (e) { this.errors++; this.lastError = String(e); }
   },
   sample(state) {
     try {
       this.samples++;
-      // Dedupe by SIM time: the render loop can run far faster than the sim (which caps catch-up),
-      // so without this every sim state was written ~27× (a 28 s session = 22 k rows / 27 MB). Only
-      // record when the sim actually advanced.
-      if (state && state.t === this.lastT) return;
-      this.lastT = state ? state.t : this.lastT;
-      if (!this._headerSent) {   // first row: the build + session context, so a stale build is unmistakable
-        this.buf.push({ k: "hdr", build: this.build, session: this.session, ua: navigator.userAgent, t0: Date.now() });
-        this._headerSent = true;
-      }
-      this.buf.push({ k: "st", t: Math.round(performance.now()), build: this.build, held: [...heldKeys], s: state });
-      if (this.buf.length > 4000) this.buf.splice(0, this.buf.length - 4000);   // hard cap: never grow unbounded
-      if (performance.now() - this.lastPost > 1000) this.flush();
+      // The renderer can run far faster than the authority. Record an initial state and then one
+      // diagnostic sample per six fixed ticks (20 Hz), which is ample for flight reconstruction
+      // without persisting the same broad snapshot at the full 120 Hz simulation rate.
+      const tick = Number(state?.tick);
+      const hasTick = Number.isSafeInteger(tick) && tick >= 0;
+      const sampleKey = hasTick ? `tick:${tick}` : `time:${state?.t}`;
+      if (!state || sampleKey === this.lastSampleKey) return;
+      this.lastSampleKey = sampleKey;
+      if (this._headerSent && hasTick && tick % TELEMETRY_TICK_STRIDE !== 0) return;
+      // The header always precedes state or multiplayer context, so downloaded chunks retain an
+      // unambiguous build/session identity even when the room connects before the first sim tick.
+      this.ensureHeader();
+      this.enqueue({ k: "st", t: Math.round(performance.now()), build: this.build, held: [...heldKeys], s: state });
+      if (performance.now() >= this._nextPost) this.flush();
     } catch (e) { this.errors++; this.lastError = String(e); }
   },
-  flush() {
+  flush({ force = false } = {}) {
     try {
-      if (!this.buf.length) return;
-      const rows = this.buf;
-      this.buf = [];
-      this.lastPost = performance.now();
+      const now = performance.now();
+      if ((!this.buf.length && !this._pendingBatch)
+        || this._sending || (!force && now < this._nextPost)) return;
+      let batch = this._pendingBatch;
+      if (!batch) {
+        batch = buildTelemetryBatch({
+          session: this.session,
+          batchId: newTelemetryBatchId(),
+          rows: this.buf,
+        });
+        this.buf = batch.remainingRows;
+        this.droppedRows += batch.droppedRows;
+        if (!batch.payload) {
+          this._nextPost = performance.now() + TELEMETRY_FLUSH_INTERVAL_MS;
+          return;
+        }
+        this._pendingBatch = batch;
+      }
+      this.lastPost = now;
+      this.lastPayloadBytes = batch.requestBytes;
+      this._nextPost = Number.POSITIVE_INFINITY;
       this.flushes++;
-      // NO keepalive: its 64 KB body cap is what threw before. Plain fetch, failure ignored.
-      fetch("/telemetry", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session: this.session, rows }) })
-        .catch((e) => { this.errors++; this.lastError = "fetch:" + String(e); });
+      // NO keepalive: its 64 KB body cap is what threw before. A single in-flight request owns this
+      // exact batch ID and body across retries; samples collected while it runs remain buffered for
+      // the next immutable chunk. The server's deterministic Blob path makes an acknowledged retry
+      // idempotent even if the first response was lost after storage succeeded.
+      let drainAfterSuccess = false;
+      this._sending = Promise.resolve().then(() => fetch("/telemetry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: batch.payload,
+      }))
+        .then((response) => {
+          if (!response.ok) {
+            const error = new Error(`HTTP ${response.status}`);
+            error.status = response.status;
+            throw error;
+          }
+          this._pendingBatch = null;
+          this._retryDelay = TELEMETRY_FLUSH_INTERVAL_MS;
+          drainAfterSuccess = this.buf.length > 0;
+          this._nextPost = performance.now()
+            + (drainAfterSuccess ? 0 : TELEMETRY_FLUSH_INTERVAL_MS);
+        })
+        .catch((e) => {
+          this.errors++;
+          this.lastError = "fetch:" + String(e);
+          if (e?.status === 400 || e?.status === 413 || e?.status === 422) {
+            // A receiver rejection is permanent for this exact idempotent body. Drop only that
+            // bounded batch and continue with newer trace data instead of retrying poison forever.
+            this.droppedRows += batch.rows.length;
+            this._pendingBatch = null;
+            drainAfterSuccess = this.buf.length > 0;
+            this._nextPost = performance.now()
+              + (drainAfterSuccess ? 0 : TELEMETRY_FLUSH_INTERVAL_MS);
+            return;
+          }
+          // Transport/storage failures retain the exact pending body and back off. Newer rows stay
+          // independently bounded, so a prolonged outage cannot grow browser memory without limit.
+          this._retryDelay = Math.min(TELEMETRY_MAX_BACKOFF_MS, this._retryDelay * 2);
+          this._nextPost = performance.now() + this._retryDelay;
+        })
+        .finally(() => {
+          this._sending = null;
+          if (drainAfterSuccess && this.buf.length > 0) {
+            queueMicrotask(() => this.flush({ force: true }));
+          }
+        });
     } catch (e) { this.errors++; this.lastError = String(e); }
   },
 };
 globalThis.__rec = recorder;   // inspectable: __rec.samples / .flushes / .errors / .lastError
-window.addEventListener("beforeunload", () => recorder.flush());
-document.addEventListener("visibilitychange", () => { if (document.hidden) recorder.flush(); });
+// Ordinary fetch has no guaranteed unload delivery, but forcing the current tail as soon as the
+// page becomes hidden gives it the best available head start without reintroducing keepalive's
+// 64 KB cap. The single-flight guard makes duplicate lifecycle events harmless.
+window.addEventListener("pagehide", () => recorder.flush({ force: true }));
+window.addEventListener("beforeunload", () => recorder.flush({ force: true }));
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) recorder.flush({ force: true });
+});
 
 let bridge = null;
 const keyOwners = new Map();
@@ -229,10 +433,73 @@ let sensorYaw = 0;
 let sensorPitch = 0;
 let resetMobileInput = () => {};
 let setMobileFrozen = () => {};
+let activeView = null;
+let latestState = null;
+let selectedBeat = 5;
+let resetFrameClock = () => {};
+let bridgePauseApplied = null;
+let testFlightActionController = null;
+let multiplayer = null;
+let incidentReplay = null;
+const pauseReasons = new Set(["ready"]);
+
+function renderMultiplayerStatus(status) {
+  if (!multiplayerStatus || !status) return;
+  const presentation = presenceStatusPresentation(status);
+  multiplayerStatus.dataset.phase = status.phase;
+  multiplayerStatus.dataset.playerId = status.playerId || "";
+  multiplayerStatus.dataset.worldEpoch = status.worldEpoch || "";
+  multiplayerStatus.dataset.worldOrigin = Array.isArray(status.spawnOrigin)
+    ? status.spawnOrigin.join(",") : "";
+  multiplayerStatus.dataset.callsign = presentation.callsign;
+  multiplayerStatus.dataset.bogeys = String(presentation.bogeys);
+  multiplayerStatus.textContent = presentation.text;
+  multiplayerStatus.title = presentation.title;
+  recorder.context("multiplayer", presenceTelemetryContext(status));
+}
+
+const MISSION_BRIEFS = Object.freeze({
+  1: {
+    kicker: "BFM drill · mission 01",
+    title: "Perch Attack",
+    sortie: "Offensive conversion",
+    brief: "Convert altitude and position into a controlled gun solution. Stay in plane, manage closure, and do not trade the perch for an overshoot.",
+  },
+  2: {
+    kicker: "BFM drill · mission 02",
+    title: "Break Defense",
+    sortie: "Defensive reaction",
+    brief: "Survive the opening break, preserve energy, and reverse the geometry when the attacker spends too much nose authority.",
+  },
+  3: {
+    kicker: "BFM drill · mission 03",
+    title: "Saddle + Shot",
+    sortie: "Gunnery setup",
+    brief: "Settle behind the target, control angle-off and closure, then fire only when the lead solution stabilises inside the gun envelope.",
+  },
+  4: {
+    kicker: "Intercept · mission 04",
+    title: "Balloon Strike",
+    sortie: "High-altitude intercept",
+    brief: "Climb into thin air, protect your energy state, and solve the high-altitude firing pass before the target slips outside reach.",
+  },
+  5: {
+    kicker: "Carrier cycle · mission 05",
+    title: "Final Approach",
+    sortie: "Recovery + relaunch",
+    brief: "Fly the ball to a clean trap. The deck cycle continues through arrestment and catapult, returning you to an armed combat patrol.",
+  },
+  6: {
+    kicker: "Maintenance test flight · mission 06",
+    title: "Degraded Recovery",
+    sortie: "Utility-hydraulic failure · emergency gear · RTB",
+    brief: "Diagnose the failed normal extension from indications and elapsed time. Emergency-extend below the limit, verify every downlock, then recover aboard.",
+  },
+});
 
 function pressMappedKey(code, source) {
   const gkey = keyMap.get(code);
-  if (!bridge || gkey === undefined) return false;
+  if (!bridge || gkey === undefined || pauseReasons.size > 0) return false;
   let owners = keyOwners.get(code);
   if (!owners) {
     owners = new Set();
@@ -268,6 +535,438 @@ function releaseAllMappedKeys() {
   keyOwners.clear();
   heldKeys.clear();
 }
+
+function setTestFlightValue(node, text, state = null) {
+  if (!node) return;
+  if (node.textContent !== text) node.textContent = text;
+  if (state !== null && node.dataset.state !== state) node.dataset.state = state;
+}
+
+function renderTestFlightConsole(state) {
+  if (!testFlightUi) return;
+  const projected = projectTestFlightState(state);
+
+  setTestFlightValue(testFlightUi.engineRpm, projected.engine.rpmText, projected.engine.state);
+  setTestFlightValue(testFlightUi.engineRunning,
+    projected.engine.runningText, projected.engine.state);
+  setTestFlightValue(testFlightUi.primaryBus,
+    projected.electrical.primaryBusText, projected.electrical.state);
+  setTestFlightValue(testFlightUi.hydraulicPressure,
+    projected.hydraulic.pressureText, projected.hydraulic.state);
+  setTestFlightValue(testFlightUi.gearHandle, projected.gear.handleText);
+  setTestFlightValue(testFlightUi.gearNose,
+    projected.gear.nose.text, projected.gear.nose.state);
+  setTestFlightValue(testFlightUi.gearLeft,
+    projected.gear.left.text, projected.gear.left.state);
+  setTestFlightValue(testFlightUi.gearRight,
+    projected.gear.right.text, projected.gear.right.state);
+  setTestFlightValue(testFlightUi.flapLever, projected.flaps.leverText,
+    projected.flaps.overspeed ? "warning" : "nominal");
+  const flapState = projected.flaps.overspeed || projected.flaps.split ? "warning" : "nominal";
+  setTestFlightValue(testFlightUi.flapLeft, projected.flaps.leftText, flapState);
+  setTestFlightValue(testFlightUi.flapRight, projected.flaps.rightText, flapState);
+  setTestFlightValue(testFlightUi.warningLine,
+    projected.warningText, projected.warningLevel);
+  setTestFlightValue(testFlightUi.procedureLine, projected.maintenance.instructionText,
+    projected.maintenance.complete ? "nominal" : projected.maintenance.active ? "caution" : "inactive");
+  setTestFlightValue(testFlightUi.procedureScore, projected.maintenance.scoreText,
+    projected.maintenance.recovered ? "nominal" : "caution");
+
+  const disabled = !bridge || pauseReasons.size > 0;
+  if (disabled && testFlightActionController?.activeOwnerCount) {
+    testFlightActionController.releaseAll();
+  }
+  for (const button of testFlightUi.buttons) {
+    const maintenanceOnly = button.dataset.maintenanceOnly === "true";
+    button.disabled = disabled || (maintenanceOnly && !projected.maintenance.active);
+  }
+}
+
+function installTestFlightConsole() {
+  if (!testFlightConsole || !testFlightUi) return;
+  const buttonsByAction = new Map(testFlightUi.buttons
+    .map((button) => [button.dataset.testAction, button]));
+  const suppressClickUntil = new WeakMap();
+  let assistiveSequence = 0;
+
+  testFlightActionController = createPilotActionController({
+    press: (code, owner) => pressMappedKey(code, `test-flight:${owner}`),
+    release: (code, owner) => releaseMappedKey(code, `test-flight:${owner}`),
+    onChange: ({ actionId, active }) => {
+      const button = buttonsByAction.get(actionId);
+      if (!button) return;
+      button.dataset.active = String(active);
+      button.setAttribute("aria-pressed", String(active));
+    },
+  });
+
+  function pointerOwner(event) {
+    return `pointer:${event.pointerId}`;
+  }
+
+  function finishPointer(event) {
+    testFlightActionController.releaseOwner(pointerOwner(event));
+  }
+
+  for (const button of testFlightUi.buttons) {
+    const actionId = button.dataset.testAction;
+    button.dataset.active = "false";
+    button.setAttribute("aria-pressed", "false");
+
+    button.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      suppressClickUntil.set(button, performance.now() + 1200);
+      const owner = pointerOwner(event);
+      if (!testFlightActionController.begin(actionId, owner)) return;
+      try { button.setPointerCapture(event.pointerId); } catch { /* pointer already ended */ }
+    }, { passive: false });
+    button.addEventListener("pointerup", finishPointer);
+    button.addEventListener("pointercancel", finishPointer);
+    button.addEventListener("lostpointercapture", finishPointer);
+
+    button.addEventListener("keydown", (event) => {
+      if (event.code !== "Space" && event.code !== "Enter" && event.code !== "NumpadEnter") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.repeat) return;
+      suppressClickUntil.set(button, performance.now() + 1200);
+      testFlightActionController.begin(actionId, `keyboard:${actionId}:${event.code}`);
+    }, { passive: false });
+    button.addEventListener("keyup", (event) => {
+      if (event.code !== "Space" && event.code !== "Enter" && event.code !== "NumpadEnter") return;
+      event.preventDefault();
+      event.stopPropagation();
+      testFlightActionController.releaseOwner(`keyboard:${actionId}:${event.code}`);
+    }, { passive: false });
+    button.addEventListener("blur", () => {
+      testFlightActionController.releaseOwner(`keyboard:${actionId}:Space`);
+      testFlightActionController.releaseOwner(`keyboard:${actionId}:Enter`);
+      testFlightActionController.releaseOwner(`keyboard:${actionId}:NumpadEnter`);
+    });
+
+    // Assistive technology may synthesize click without pointer or key events. Give that path a
+    // safe down/up pulse; real pointer and keyboard clicks are suppressed because their lifecycle
+    // was already handled above.
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if ((suppressClickUntil.get(button) || 0) >= performance.now()) return;
+      const owner = `assistive:${++assistiveSequence}`;
+      if (testFlightActionController.begin(actionId, owner)) {
+        queueMicrotask(() => testFlightActionController?.releaseOwner(owner));
+      }
+    });
+    button.addEventListener("contextmenu", (event) => event.preventDefault());
+  }
+
+  const releaseConsoleActions = () => testFlightActionController?.releaseAll();
+  const consoleSummary = testFlightConsole.querySelector("summary");
+  const syncConsoleDisclosure = () => {
+    consoleSummary?.setAttribute("aria-expanded", String(testFlightConsole.open));
+    if (!testFlightConsole.open) releaseConsoleActions();
+  };
+  consoleSummary?.addEventListener("click", (event) => {
+    event.preventDefault();
+    // Some engines apply the native <details> toggle before click listeners run. The mirrored
+    // accessibility state records the pre-activation intent, so it is the stable source here.
+    testFlightConsole.open = consoleSummary.getAttribute("aria-expanded") !== "true";
+    syncConsoleDisclosure();
+  });
+  window.addEventListener("pointerup", finishPointer);
+  window.addEventListener("pointercancel", finishPointer);
+  window.addEventListener("blur", releaseConsoleActions);
+  window.addEventListener("pagehide", releaseConsoleActions);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) releaseConsoleActions();
+  });
+  testFlightConsole.addEventListener("toggle", syncConsoleDisclosure);
+
+  // Preserve scarce phone screen area until the pilot explicitly opens test instrumentation.
+  if (mobileControls || window.innerWidth <= 620 || window.innerHeight <= 430) {
+    testFlightConsole.open = false;
+  }
+  syncConsoleDisclosure();
+}
+
+function clearFlightInput() {
+  resetMobileInput();
+  releaseAllMappedKeys();
+  dragging = false;
+  activePointer = null;
+  sceneCanvas.classList.remove("dragging");
+}
+
+function resetMissionPresentation() {
+  clearFlightInput();
+  incidentReplay?.stop();
+  renderIncidentReplay(null);
+  padlock = false;
+  sensorYaw = 0;
+  sensorPitch = 0;
+  lastLookTime = performance.now();
+  activeView?.hud.setLegendVisible?.(false);
+}
+
+function missionBrief() {
+  return MISSION_BRIEFS[selectedBeat] || MISSION_BRIEFS[1];
+}
+
+function healthPercent(value) {
+  const health = Number(value);
+  return Math.round(clamp(Number.isFinite(health) ? health : 1, 0, 1) * 100);
+}
+
+function signedReplayTime(seconds) {
+  const value = Number(seconds) || 0;
+  return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(1)} s`;
+}
+
+function renderIncidentReplay(frame) {
+  const clip = incidentReplay?.clip;
+  const active = Boolean(frame && clip);
+  document.documentElement.classList.toggle("incident-replay", active);
+  incidentReplayOverlay?.classList.toggle("visible", active);
+  incidentReplayOverlay?.setAttribute("aria-hidden", String(!active));
+  if (!active) return;
+
+  const analysis = clip.analysis;
+  incidentReplayTime.textContent = `${signedReplayTime(frame.t)} · 1.0×`;
+  incidentReplayMetrics.textContent = [
+    `${Math.round(frame.kias)} KIAS`,
+    `G/S ${Math.round(frame.gsKts)} KT`,
+    `SINK ${Math.round(frame.sinkFpm)} FPM`,
+    `AOA ${frame.aoaDeg.toFixed(1)}°`,
+    `PWR ${Math.round(frame.throttleCommand * 100)}% / ENG ${Math.round(frame.enginePower * 100)}%`,
+    `γ ${frame.gammaDeg.toFixed(1)}° · ${frame.nz.toFixed(1)} G`,
+    `CLOSURE ${Math.round(frame.closureKts)} KT`,
+    `X ${frame.deckCrossM.toFixed(1)} M · H ${frame.deckHeightM.toFixed(1)} M`,
+    `CTRL ${frame.gDemand.toFixed(1)} G · BANK ${frame.bankTargetDeg.toFixed(0)}° · RUD ${frame.rudder.toFixed(1)}`,
+    `GEAR N/L/R ${Math.round(frame.gearNose * 100)}/${Math.round(frame.gearLeft * 100)}/${Math.round(frame.gearRight * 100)}% · ${incidentReplayLabels.gearIndication(frame.gearNoseIndication)}/${incidentReplayLabels.gearIndication(frame.gearLeftIndication)}/${incidentReplayLabels.gearIndication(frame.gearRightIndication)}`,
+    `FLAP L/R ${frame.flapLeftDeg.toFixed(0)}°/${frame.flapRightDeg.toFixed(0)}° ${incidentReplayLabels.flapLever(frame.flapLever)}`,
+    `HOOK ${incidentReplayLabels.hook(frame.hook)}${frame.wire > 0 ? ` · WIRE ${Math.round(frame.wire)}` : ""}`,
+    frame.arrestFailureReason > 0
+      ? `ARREST ${incidentReplayLabels.arrestmentFailure(frame.arrestFailureReason)} · ${frame.arrestAbsorbedEnergyMj.toFixed(2)}/${frame.arrestInitialEnergyMj.toFixed(2)} MJ · REM ${frame.arrestRemainingEnergyMj.toFixed(2)} MJ · LOAD ${frame.arrestPeakLoadKn.toFixed(0)}/${frame.arrestMaxLineLoadKn.toFixed(0)} KN`
+      : null,
+  ].filter(Boolean).join("  ·  ");
+  const eventSurface = frame.eventSurface || frame.surface;
+  const carrierSolid = incidentReplayLabels.carrierSolid(frame.carrierSolid);
+  incidentReplayEvent.textContent = frame.eventSequence > 0
+    ? `${incidentReplayLabels.event(frame.eventType)} · ${incidentReplayLabels.surface(eventSurface)}${carrierSolid !== "NONE" ? ` · LAST CARRIER CONTACT ${carrierSolid}` : ""} · ${incidentReplayLabels.terminal(frame.terminal)}`
+    : "RECORDED APPROACH · NO TERMINAL EVENT YET";
+  const touchdown = analysis.touchdownAssessment;
+  const grade = touchdown.grade === "NONE" ? "NO TOUCHDOWN GRADE" : touchdown.grade;
+  const deviations = touchdown.deviations.length > 0
+    ? touchdown.deviations.join(" | ") : "NO RECORDED DEVIATIONS";
+  incidentReplayOutcome.textContent = `PHYSICAL OUTCOME · ${analysis.physicalOutcome}`;
+  incidentReplayGrade.textContent = `AUTHORITATIVE SIM TOUCHDOWN ASSESSMENT · ${grade} · ${deviations} · PRIMARY ${touchdown.primaryCorrection} · ${touchdown.profile} v${touchdown.version}`;
+  incidentReplayCause.textContent = `CAUSAL CHAIN · ${analysis.causalChain.slice(0, 2).join(" → ")}`;
+  incidentReplayCorrection.textContent = `MARKED DECISION · ${analysis.correction}`;
+  const progress = clamp((frame.t - clip.startTime) / Math.max(clip.duration, 1e-9), 0, 1);
+  const decision = clamp((analysis.decisionTime - clip.startTime)
+    / Math.max(clip.duration, 1e-9), 0, 1);
+  incidentReplayProgress.style.width = `${progress * 100}%`;
+  incidentReplayDecision.style.left = `${decision * 100}%`;
+  incidentReplayDecision.dataset.reached = String(frame.t >= analysis.decisionTime);
+}
+
+function renderPauseUi(state = latestState) {
+  const ready = pauseReasons.has("ready");
+  const finished = pauseReasons.has("finished");
+  const help = pauseReasons.has("help");
+  const calibrating = pauseReasons.has("calibration");
+  const background = pauseReasons.has("background");
+  const sessionPaused = pauseReasons.has("session");
+  const showScreen = !help && !calibrating && (ready || finished || background || sessionPaused);
+  const brief = missionBrief();
+
+  document.documentElement.classList.toggle("run-paused", pauseReasons.size > 0);
+  readyScreen.classList.toggle("visible", showScreen);
+  readyScreen.setAttribute("aria-hidden", String(!showScreen));
+
+  if (finished) {
+    const result = sortieResultCopy(state);
+    const replayAnalysis = incidentReplay?.clip?.analysis;
+    readyKicker.textContent = result.kicker;
+    readyTitle.textContent = result.title;
+    readyBrief.textContent = replayAnalysis
+      ? `${result.brief} ${replayAnalysis.physicalOutcome}. Next pass: ${replayAnalysis.correction}`
+      : result.brief;
+    readySortie.textContent = `${brief.title} · ${String(state?.sortie_outcome || "complete").toLowerCase()}`;
+    readyConfig.textContent = state?.maintenance_scenario === true
+      ? `Procedure ${Math.round(Number(state?.maintenance_score) || 0)}/${Math.round(Number(state?.maintenance_max_score) || 100)} · ${Math.round(Number(state?.maintenance_demerits) || 0)} demerits`
+      : replayAnalysis
+        ? `Sim touchdown ${replayAnalysis.touchdownAssessment.grade === "NONE" ? "not graded" : replayAnalysis.touchdownAssessment.grade} · ${replayAnalysis.touchdownAssessment.profile} v${replayAnalysis.touchdownAssessment.version} · replay cached · causal review is not an LSO grade`
+        : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
+    readyReplay.hidden = !incidentReplay?.clip;
+    readyStart.textContent = "Restage sortie";
+    readyHint.textContent = background
+      ? "Return to the game to restage"
+      : "Press Enter to return to briefing · R restarts";
+  } else if (ready) {
+    readyReplay.hidden = true;
+    readyKicker.textContent = brief.kicker;
+    readyTitle.textContent = brief.title;
+    readyBrief.textContent = brief.brief;
+    readySortie.textContent = brief.sortie;
+    const deck = String(state?.deck_config || ([5, 6].includes(selectedBeat) ? "AXIAL" : "")).toLowerCase();
+    readyConfig.textContent = selectedBeat === 5
+      ? `Guns hot · ${deck || "axial"} deck`
+      : selectedBeat === 6
+        ? `Maintenance profile · ${deck || "axial"} deck`
+        : "Guns hot · air start";
+    readyStart.textContent = "Fly mission";
+    readyHint.textContent = background ? "Return to the game to fly" : "Press Enter to fly";
+  } else {
+    readyReplay.hidden = true;
+    readyKicker.textContent = "Simulation paused";
+    readyTitle.textContent = "Hold Position";
+    readyBrief.textContent = "The deterministic flight clock is stopped. No aircraft, weapons, fuel, or carrier state advances while the sortie is paused.";
+    readySortie.textContent = brief.title;
+    readyConfig.textContent = "Inputs neutralised";
+    readyStart.textContent = "Resume flight";
+    readyHint.textContent = "Press Enter to resume";
+  }
+
+  // Ready cannot be dismissed while another safety interlock is still active. The relevant
+  // prompt (controls or tilt calibration) owns the screen until its own reason clears.
+  const blockers = [...pauseReasons].filter((reason) =>
+    reason !== "ready" && reason !== "finished"
+      && reason !== "background" && reason !== "session");
+  readyStart.disabled = blockers.length > 0 || ((ready || finished) && background);
+}
+
+function applyBridgePause() {
+  const shouldPause = pauseReasons.size > 0;
+  if (!bridge || bridgePauseApplied === shouldPause) return;
+  bridge.SetPaused(shouldPause);
+  bridgePauseApplied = shouldPause;
+}
+
+function setPauseReason(reason, active) {
+  const wasPaused = pauseReasons.size > 0;
+  if (active) pauseReasons.add(reason);
+  else pauseReasons.delete(reason);
+  const paused = pauseReasons.size > 0;
+  if (active) clearFlightInput();
+  applyBridgePause();
+  renderPauseUi();
+  if (wasPaused && !paused) resetFrameClock();
+}
+
+function enterReady({ resetBridge = true } = {}) {
+  const preserveCalibration = pauseReasons.has("calibration");
+  const preserveBackground = pauseReasons.has("background");
+  resetMissionPresentation();
+  pauseReasons.clear();
+  pauseReasons.add("ready");
+  if (preserveCalibration) pauseReasons.add("calibration");
+  if (preserveBackground) pauseReasons.add("background");
+  if (resetBridge) bridge?.StartBeat(selectedBeat);
+  bridgePauseApplied = true; // StartBeat is an authoritative transition to Ready.
+  renderPauseUi();
+  resetFrameClock();
+}
+
+function selectMission(index) {
+  selectedBeat = clamp(Math.round(Number(index) || 1), 1, 6);
+  enterReady();
+}
+
+function restartMission() {
+  enterReady();
+}
+
+function toggleDeckAndReady() {
+  resetMissionPresentation();
+  bridge.ToggleDeckConfiguration();
+  // The bridge restarts beat 5 when its deck changes. Other beats do not contain a carrier, so
+  // restart them explicitly to keep C's lifecycle semantics consistent everywhere.
+  enterReady({ resetBridge: selectedBeat !== 5 });
+}
+
+function beginFlight() {
+  if (!bridge || !pauseReasons.has("ready")) return false;
+  const blockers = [...pauseReasons].filter((reason) => reason !== "ready");
+  if (blockers.length) return false;
+  clearFlightInput();
+  bridge.Begin();
+  pauseReasons.delete("ready");
+  bridgePauseApplied = false;
+  renderPauseUi();
+  resetFrameClock();
+  sceneCanvas.focus({ preventScroll: true });
+  return true;
+}
+
+function activateReadyAction() {
+  if (pauseReasons.has("finished")) {
+    restartMission();
+    return true;
+  }
+  if (pauseReasons.has("ready")) return beginFlight();
+  if (pauseReasons.has("session")) {
+    setPauseReason("session", false);
+    return true;
+  }
+  if (pauseReasons.has("background")) {
+    setPauseReason("background", false);
+    return true;
+  }
+  return false;
+}
+
+function reconcileBridgeLifecycle(state) {
+  // Finished is durable simulation state, not a timer or renderer inference. It owns an explicit
+  // interlock until the pilot stages a fresh Ready sortie.
+  if (state?.finished === true) {
+    if (!pauseReasons.has("finished")) {
+      pauseReasons.delete("session");
+      setPauseReason("finished", true);
+    }
+    return;
+  }
+
+  // Restart can also originate inside the bridge (for example a future outcome action). Always
+  // reflect that authoritative Ready phase instead of leaving the player at an invisible freeze.
+  if (state?.ready === true) {
+    if (!pauseReasons.has("ready")) enterReady({ resetBridge: false });
+    return;
+  }
+
+  // Local pause reasons already drove this bridge into Paused. A Paused state with no such reason
+  // came from the authoritative session itself, so surface a resumable hold instead of accepting
+  // controls against a clock which is silently stopped.
+  if (state?.paused === true && pauseReasons.size === 0) {
+    setPauseReason("session", true);
+  } else if (state?.paused === false && pauseReasons.has("session")) {
+    setPauseReason("session", false);
+  }
+}
+
+readyStart.addEventListener("click", () => {
+  activeView?.hud.armAudio();
+  activateReadyAction();
+});
+
+readyReplay?.addEventListener("click", () => {
+  if (!incidentReplay?.start(performance.now())) return;
+  clearFlightInput();
+  pauseReasons.delete("finished");
+  applyBridgePause();
+  renderPauseUi();
+  resetFrameClock();
+});
+
+function skipIncidentReplay() {
+  if (!incidentReplay?.active) return false;
+  incidentReplay.stop();
+  renderIncidentReplay(null);
+  return true;
+}
+
+incidentReplaySkip?.addEventListener("click", skipIncidentReplay);
 
 function setBootStatus(message) {
   bootStatus.textContent = message;
@@ -471,6 +1170,26 @@ function box(group, size, position, material, rotation = null) {
   if (rotation) mesh.rotation.set(rotation.x, rotation.y, rotation.z);
   group.add(mesh);
   return mesh;
+}
+
+function addSemanticSocket(parent, name, x, y, z) {
+  const socket = new THREE.Object3D();
+  socket.name = name;
+  socket.position.set(x, y, z);
+  socket.userData.semanticSocket = name;
+  parent.add(socket);
+  return socket;
+}
+
+function annotateProceduralFallback(object, context = {}) {
+  const parameters = context?.parameters && typeof context.parameters === "object"
+    ? Object.freeze({ ...context.parameters })
+    : Object.freeze({});
+  object.userData.proceduralFallback = Object.freeze({
+    assetId: typeof context?.assetId === "string" ? context.assetId : null,
+    requested: typeof context?.requested === "string" ? context.requested : null,
+    parameters,
+  });
 }
 
 function deckOverlayBox(group, size, position, material) {
@@ -1026,7 +1745,132 @@ function createBarrier(material, netMaterial) {
   return barrier;
 }
 
-function createCarrier() {
+function createCarrierRecoveryMaterials(barrierMaterial = null) {
+  const paint = depthBiasDeckMaterial(
+    makeMaterial(0xdad8c7, 0.68, 0.01, 0x000000, { grain: 0.06 }),
+  );
+  const yellowPaint = depthBiasDeckMaterial(
+    makeMaterial(0xc7a94f, 0.7, 0.01, 0x000000, { grain: 0.08 }),
+  );
+  const skidMat = depthBiasDeckMaterial(makeMaterial(0x0b0f10, 1.0, 0.01));
+  const laneMat = depthBiasDeckMaterial(makeMaterial(0x303739, 0.95, 0.04));
+  const barrierNet = makeMaterial(0x9aa6a5, 0.86, 0.03, 0x000000, { grain: 0.04 });
+  barrierNet.transparent = true;
+  barrierNet.opacity = 0.28;
+  barrierNet.depthWrite = false;
+  return {
+    paint,
+    yellowPaint,
+    skidMat,
+    laneMat,
+    barrierMaterial: barrierMaterial ?? makeMaterial(0x6b777b, 0.58, 0.045, 0x010202,
+      { grain: 0.08, grainScale: 0.9 }),
+    barrierNet,
+  };
+}
+
+function createOpticalLandingSystem() {
+  const group = new THREE.Group();
+  group.name = "CarrierOpticalLandingSystem";
+  // Wire-three-relative placement at the port quarter. Points retain a minimum raster footprint
+  // at approach range, which models the visual salience of real high-intensity lamps better than
+  // sub-pixel geometry while remaining occluded by the ship through normal depth testing.
+  group.position.set(-15.2, 0.86, 81.5);
+
+  const points = (name, positions, color, size) => {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const material = new THREE.PointsMaterial({
+      color,
+      size,
+      sizeAttenuation: false,
+      transparent: true,
+      opacity: 0.96,
+      depthWrite: false,
+      toneMapped: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const result = new THREE.Points(geometry, material);
+    result.name = name;
+    result.frustumCulled = false;
+    result.renderOrder = 18;
+    result.userData.noShadow = true;
+    group.add(result);
+    return result;
+  };
+
+  const datum = points("OLS_DATUM_LIGHTS", [
+    -1.2, 0, 0, -0.82, 0, 0, -0.44, 0, 0,
+    0.44, 0, 0, 0.82, 0, 0, 1.2, 0, 0,
+  ], 0x72ff8f, 3.5);
+  const ball = points("OLS_MEATBALL", [0, 0, 0], 0xffc343, 6.2);
+  const waveOff = points("OLS_WAVEOFF_LIGHTS", [
+    -1.48, 0.74, 0, 1.48, 0.74, 0,
+    -1.48, -0.74, 0, 1.48, -0.74, 0,
+  ], 0xff351f, 5.2);
+  waveOff.visible = false;
+  return { group, datum, ball, waveOff };
+}
+
+function createCarrierRecoveryOverlay(materials) {
+  // The recovery overlay is deliberately independent of the hull. Authored ships keep their GLB
+  // silhouette while this small layer rotates to the kernel landing heading and highlights wires.
+  const group = new THREE.Group();
+  group.name = "CarrierRecoveryOverlay";
+  const landingArea = new THREE.Group();
+  landingArea.name = "CarrierLandingArea";
+  group.add(landingArea);
+  deckOverlayBox(landingArea, { x: 25.2, y: 0.065, z: 208 }, new THREE.Vector3(0, 0.065, -44), materials.laneMat);
+  addDeckWear(landingArea, materials.skidMat);
+  deckOverlayBox(landingArea, { x: 0.62, y: 0.09, z: 202 }, new THREE.Vector3(0, 0.12, -43), materials.paint);
+  deckOverlayBox(landingArea, { x: 0.26, y: 0.085, z: 204 }, new THREE.Vector3(-11.9, 0.115, -43), materials.paint);
+  deckOverlayBox(landingArea, { x: 0.26, y: 0.085, z: 204 }, new THREE.Vector3(11.9, 0.115, -43), materials.paint);
+  deckOverlayBox(landingArea, { x: 25, y: 0.10, z: 1.7 }, new THREE.Vector3(0, 0.14, 0), materials.paint);
+  deckOverlayBox(landingArea, { x: 0.42, y: 0.11, z: 30 }, new THREE.Vector3(-5.5, 0.15, 1), materials.yellowPaint);
+  deckOverlayBox(landingArea, { x: 0.42, y: 0.11, z: 30 }, new THREE.Vector3(5.5, 0.15, 1), materials.yellowPaint);
+
+  const wires = [];
+  for (let wire = 1; wire <= 4; wire++) {
+    const wireMaterial = makeMaterial(0xc9b47a, 0.38, 0.72, 0x000000,
+      { grain: 0.035, grainScale: 8, specularIntensity: 0.9, envMapIntensity: 1.0 });
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 23.5, 10), wireMaterial);
+    mesh.rotation.z = Math.PI / 2;
+    mesh.position.set(0, 0.24, (3 - wire) * 5.2);
+    mesh.castShadow = true;
+    landingArea.add(mesh);
+    wires.push(mesh);
+  }
+
+  const barrier = createBarrier(materials.barrierMaterial, materials.barrierNet);
+  const ols = createOpticalLandingSystem();
+  landingArea.add(ols.group);
+  group.add(barrier);
+  return { group, landingArea, wires, barrier, ols, highlightedWire: 0 };
+}
+
+function createCarrierWaterPresentation() {
+  const group = new THREE.Group();
+  group.name = "CarrierWaterEffects";
+  const wake = createWakeMaterial();
+  const wakeMesh = new THREE.Mesh(createWakeGeometry(), wake.material);
+  wakeMesh.frustumCulled = false;
+  wakeMesh.renderOrder = -2;
+  const bowWake = createWakeMaterial(true);
+  const bowWakeMesh = new THREE.Mesh(createWakeGeometry(-131, 118, 13.5, 28), bowWake.material);
+  bowWakeMesh.frustumCulled = false;
+  bowWakeMesh.renderOrder = -1;
+  const spray = createCarrierSpray();
+  group.add(wakeMesh, bowWakeMesh, spray.points);
+  return {
+    group,
+    wakes: [wakeMesh, bowWakeMesh],
+    wakeUniforms: [wake.uniforms, bowWake.uniforms],
+    spray: spray.points,
+    sprayUniforms: spray.uniforms,
+  };
+}
+
+function createCarrier(context = {}) {
   // Essex-like straight deck authored in the same local frame the old deck used: local -Z is the
   // bow, +X is starboard, and y=0 is the landing surface. updateCarrierVisual() scales it from the
   // kernel deck fields and app.js applies the established (x, y, -z), rotation.y=-heading transform.
@@ -1047,15 +1891,9 @@ function createCarrier() {
     { grain: 0.09, grainScale: 1.7 });
   const glass = makeMaterial(0x0e2833, 0.13, 0.03, 0x02090c,
     { grain: 0, clearcoat: 1, clearcoatRoughness: 0.1, specularIntensity: 1, envMapIntensity: 1.25 });
-  const paint = depthBiasDeckMaterial(
-    makeMaterial(0xdad8c7, 0.68, 0.01, 0x000000, { grain: 0.06 }),
-  );
-  const yellowPaint = depthBiasDeckMaterial(
-    makeMaterial(0xc7a94f, 0.7, 0.01, 0x000000, { grain: 0.08 }),
-  );
+  const recoveryMaterials = createCarrierRecoveryMaterials(islandLight);
+  const { yellowPaint } = recoveryMaterials;
   const seamMat = depthBiasDeckMaterial(makeMaterial(0x111719, 0.96, 0.02));
-  const skidMat = depthBiasDeckMaterial(makeMaterial(0x0b0f10, 1.0, 0.01));
-  const laneMat = depthBiasDeckMaterial(makeMaterial(0x303739, 0.95, 0.04));
   const deckPatchMat = depthBiasDeckMaterial(makeMaterial(0x202b31, 0.78, 0.05, 0x000101,
     { grain: 0.11 }));
   const catwalkMat = makeMaterial(0x27343a, 0.86, 0.18);
@@ -1063,10 +1901,6 @@ function createCarrier() {
   const railMat = new THREE.LineBasicMaterial({
     color: 0x718087, transparent: true, opacity: 0.72, depthWrite: false,
   });
-  const barrierNet = makeMaterial(0x9aa6a5, 0.86, 0.03, 0x000000, { grain: 0.04 });
-  barrierNet.transparent = true;
-  barrierNet.opacity = 0.28;
-  barrierNet.depthWrite = false;
   const deckLampMat = makeMaterial(0xb6d6cf, 0.32, 0.25, 0x315e58);
 
   const hull = new THREE.Mesh(createHullGeometry(), hullMat);
@@ -1087,35 +1921,12 @@ function createCarrier() {
 
   // The landing-area group rotates independently of the ship for the nine-degree angled deck.
   // It is anchored at wire three; local -Z is rollout/bolter direction.
-  const landingArea = new THREE.Group();
-  structure.add(landingArea);
-  deckOverlayBox(landingArea, { x: 25.2, y: 0.065, z: 208 }, new THREE.Vector3(0, 0.065, -44), laneMat);
-  addDeckWear(landingArea, skidMat);
-  deckOverlayBox(landingArea, { x: 0.62, y: 0.09, z: 202 }, new THREE.Vector3(0, 0.12, -43), paint);
-  deckOverlayBox(landingArea, { x: 0.26, y: 0.085, z: 204 }, new THREE.Vector3(-11.9, 0.115, -43), paint);
-  deckOverlayBox(landingArea, { x: 0.26, y: 0.085, z: 204 }, new THREE.Vector3(11.9, 0.115, -43), paint);
+  const recovery = createCarrierRecoveryOverlay(recoveryMaterials);
+  structure.add(recovery.group);
   deckOverlayBox(structure, { x: 8.0, y: 0.08, z: 0.32 }, new THREE.Vector3(-7.7, 0.09, -37), yellowPaint);
   deckOverlayBox(structure, { x: 8.0, y: 0.08, z: 0.32 }, new THREE.Vector3(7.7, 0.09, -37), yellowPaint);
   deckOverlayBox(structure, { x: 10.5, y: 0.07, z: 20 }, new THREE.Vector3(-7.4, 0.075, -15), deckPatchMat);
   deckOverlayBox(structure, { x: 11.0, y: 0.07, z: 20 }, new THREE.Vector3(7.2, 0.075, 24), deckPatchMat);
-
-  deckOverlayBox(landingArea, { x: 25, y: 0.10, z: 1.7 }, new THREE.Vector3(0, 0.14, 0), paint);
-  deckOverlayBox(landingArea, { x: 0.42, y: 0.11, z: 30 }, new THREE.Vector3(-5.5, 0.15, 1), yellowPaint);
-  deckOverlayBox(landingArea, { x: 0.42, y: 0.11, z: 30 }, new THREE.Vector3(5.5, 0.15, 1), yellowPaint);
-  const wires = [];
-  for (let wire = 1; wire <= 4; wire++) {
-    const wireMaterial = makeMaterial(0xc9b47a, 0.38, 0.72, 0x000000,
-      { grain: 0.035, grainScale: 8, specularIntensity: 0.9, envMapIntensity: 1.0 });
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 23.5, 10), wireMaterial);
-    mesh.rotation.z = Math.PI / 2;
-    mesh.position.set(0, 0.24, (3 - wire) * 5.2);
-    mesh.castShadow = true;
-    landingArea.add(mesh);
-    wires.push(mesh);
-  }
-
-  const barrier = createBarrier(islandLight, barrierNet);
-  structure.add(barrier);
 
   // Starboard island: stepped bridge, dark glazing, funnel, lattice mast and a simple radar yard.
   beveledBox(structure, { x: 7.2, y: 4.8, z: 27 }, new THREE.Vector3(10.8, 2.35, -25), islandMat, 0.32);
@@ -1132,15 +1943,8 @@ function createCarrier() {
   // Port-quarter LSO platform and lens: a small but distinctive recovery cue on short final.
   box(structure, { x: 3.4, y: 0.34, z: 4.8 }, new THREE.Vector3(-16.4, -0.35, 82), catwalkMat);
   box(structure, { x: 0.18, y: 1.35, z: 2.9 }, new THREE.Vector3(-17.65, 0.34, 82), islandLight);
-  const lens = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 8, 5), deckLampMat, 5);
-  const lensTransform = new THREE.Object3D();
-  for (let i = 0; i < 5; i++) {
-    lensTransform.position.set(-17.65 + (i - 2) * 0.31, 0.72, 84.46);
-    lensTransform.updateMatrix();
-    lens.setMatrixAt(i, lensTransform.matrix);
-  }
-  lens.userData.noShadow = true;
-  structure.add(lens);
+  // The recovery overlay owns the actual datum/ball/wave-off lamps so authored and procedural
+  // hulls receive identical live glideslope behaviour.
 
   // Side sponsons and compact gun tubs strengthen the period silhouette without cluttering final.
   for (const x of [-15.1, 15.1]) {
@@ -1152,17 +1956,15 @@ function createCarrier() {
   addParkedAircraft(structure, aircraftMat, glass);
   addCarrierContactShadows(structure);
 
-  const wake = createWakeMaterial();
-  const wakeMesh = new THREE.Mesh(createWakeGeometry(), wake.material);
-  // Glitch fix: shader-displaced wake vertices exceeded static bounds and popped at frustum edges.
-  wakeMesh.frustumCulled = false;
-  wakeMesh.renderOrder = -2;
-  const bowWake = createWakeMaterial(true);
-  const bowWakeMesh = new THREE.Mesh(createWakeGeometry(-131, 118, 13.5, 28), bowWake.material);
-  bowWakeMesh.frustumCulled = false;
-  bowWakeMesh.renderOrder = -1;
-  const spray = createCarrierSpray();
-  group.add(wakeMesh, bowWakeMesh, spray.points);
+  const water = createCarrierWaterPresentation();
+  group.add(water.group);
+
+  const sockets = Object.freeze({
+    deckOrigin: addSemanticSocket(structure, "SOCKET_DECK_ORIGIN", 0, 0, 0),
+    recoveryThreshold: addSemanticSocket(structure, "SOCKET_RECOVERY_THRESHOLD", 0, 0.2, 112),
+    bowReference: addSemanticSocket(structure, "SOCKET_BOW_REFERENCE", 0, -1.7, -128),
+    wakeOrigin: addSemanticSocket(structure, "SOCKET_WAKE_ORIGIN", 0, 0, 116),
+  });
 
   structure.traverse((object) => {
     if (!object.isMesh) return;
@@ -1171,39 +1973,45 @@ function createCarrier() {
   });
   group.userData.structure = structure;
   group.userData.hull = hull;
-  group.userData.landingArea = landingArea;
-  group.userData.wires = wires;
-  group.userData.barrier = barrier;
-  group.userData.highlightedWire = 0;
-  group.userData.wakes = [wakeMesh, bowWakeMesh];
-  group.userData.wakeUniforms = [wake.uniforms, bowWake.uniforms];
-  group.userData.spray = spray.points;
-  group.userData.sprayUniforms = spray.uniforms;
+  group.userData.landingArea = recovery.landingArea;
+  group.userData.wires = recovery.wires;
+  group.userData.barrier = recovery.barrier;
+  group.userData.recoveryPresentation = recovery;
+  group.userData.wakes = water.wakes;
+  group.userData.wakeUniforms = water.wakeUniforms;
+  group.userData.spray = water.spray;
+  group.userData.sprayUniforms = water.sprayUniforms;
+  group.userData.sockets = sockets;
+  annotateProceduralFallback(group, context);
   return group;
 }
 
-function updateCarrierVisual(carrier, state, nowSeconds, fogColor, fogDensity) {
+function carrierPresentationScale(state) {
   const deckLength = Number.isFinite(state.deck_len) ? Math.max(100, state.deck_len) : 250;
   const deckWidth = Number.isFinite(state.deck_w) ? Math.max(18, state.deck_w) : 30;
-  const deckAltitude = Number.isFinite(state.deck_alt) ? Math.max(8, state.deck_alt) : 20;
-  const scaleX = deckWidth / 30;
-  const scaleZ = deckLength / 250;
-  // Glitch fix: deck heave moved the wake through the sea; cancel parent Y and keep a fixed lift.
-  const seaLocalY = -carrier.position.y;
-  carrier.userData.structure.scale.set(scaleX, 1, scaleZ);
-  carrier.userData.hull.scale.y = deckAltitude / 20;
-  for (let i = 0; i < carrier.userData.wakes.length; i++) {
-    carrier.userData.wakes[i].scale.set(scaleX, 1, scaleZ);
-    carrier.userData.wakes[i].position.y = seaLocalY + 0.18;
-    carrier.userData.wakeUniforms[i].uTime.value = nowSeconds;
-    carrier.userData.wakeUniforms[i].uFogColor.value.copy(fogColor);
-    carrier.userData.wakeUniforms[i].uFogDensity.value = fogDensity;
+  return { scaleX: deckWidth / 30, scaleZ: deckLength / 250 };
+}
+
+function updateCarrierWaterPresentation(presentation, state, nowSeconds, fogColor, fogDensity,
+  seaLocalY = 0) {
+  const { scaleX, scaleZ } = carrierPresentationScale(state);
+  for (let i = 0; i < presentation.wakes.length; i++) {
+    presentation.wakes[i].scale.set(scaleX, 1, scaleZ);
+    presentation.wakes[i].position.y = seaLocalY + 0.18;
+    presentation.wakeUniforms[i].uTime.value = nowSeconds;
+    presentation.wakeUniforms[i].uFogColor.value.copy(fogColor);
+    presentation.wakeUniforms[i].uFogDensity.value = fogDensity;
   }
-  carrier.userData.spray.scale.set(scaleX, 1, scaleZ);
-  carrier.userData.spray.position.y = seaLocalY;
-  carrier.userData.sprayUniforms.uTime.value = nowSeconds;
-  carrier.userData.sprayUniforms.uFogColor.value.copy(fogColor);
-  carrier.userData.sprayUniforms.uFogDensity.value = fogDensity;
+  presentation.spray.scale.set(scaleX, 1, scaleZ);
+  presentation.spray.position.y = seaLocalY;
+  presentation.sprayUniforms.uTime.value = nowSeconds;
+  presentation.sprayUniforms.uFogColor.value.copy(fogColor);
+  presentation.sprayUniforms.uFogDensity.value = fogDensity;
+}
+
+function updateCarrierRecoveryOverlay(presentation, state, scaleGroup = true) {
+  const { scaleX, scaleZ } = carrierPresentationScale(state);
+  if (scaleGroup) presentation.group.scale.set(scaleX, 1, scaleZ);
 
   // Resolve the kernel touchdown point into the established carrier-local frame. This keeps the
   // painted wire zone coincident with tx/tz even when heading or deck dimensions vary.
@@ -1213,24 +2021,106 @@ function updateCarrierVisual(carrier, state, nowSeconds, fogColor, fogDensity) {
     const dz = state.cz - state.tz; // sim Z was negated for the render world
     const c = Math.cos(heading);
     const s = Math.sin(heading);
-    carrier.userData.landingArea.position.x = (c * dx + s * dz) / scaleX;
-    carrier.userData.landingArea.position.z = (-s * dx + c * dz) / scaleZ;
+    presentation.landingArea.position.x = (c * dx + s * dz) / scaleX;
+    presentation.landingArea.position.z = (-s * dx + c * dz) / scaleZ;
     const landingHeading = Number.isFinite(state.landing_heading) ? state.landing_heading : heading;
-    carrier.userData.landingArea.rotation.y = -(landingHeading - heading);
+    presentation.landingArea.rotation.y = -(landingHeading - heading);
   }
 
   const axial = state.deck_config !== "ANGLED";
-  carrier.userData.barrier.visible = axial;
+  presentation.barrier.visible = axial;
+  if (presentation.ols) {
+    const along = Number(state.deck_along);
+    const height = Number(state.deck_height);
+    const deckLength = Number.isFinite(state.deck_len) ? state.deck_len : 250;
+    const range = Number.isFinite(along) ? Math.max(0, -deckLength * 0.2 - along) : 0;
+    const error = Number.isFinite(height) ? range * 0.06116 - height : 0;
+    const tolerance = Math.max(1.5, range * 0.004);
+    // Positive error means low, so the meatball moves below the green datum row.
+    presentation.ols.ball.position.y = clamp(-error / tolerance, -1.35, 1.35) * 0.56;
+    presentation.ols.group.visible = range < 6500 || state.approach === true;
+    presentation.ols.waveOff.visible = state.wave_off === true
+      || state.lso_severity === "WAVE_OFF";
+    presentation.ols.ball.visible = !presentation.ols.waveOff.visible;
+  }
   const caughtWire = state.arrest_phase === "ARRESTED" || state.arrest_phase === "STOPPED"
     ? Math.max(0, Math.min(4, Number(state.wire) || 0)) : 0;
-  if (caughtWire !== carrier.userData.highlightedWire) {
-    carrier.userData.highlightedWire = caughtWire;
-    for (let i = 0; i < carrier.userData.wires.length; i++) {
+  if (caughtWire !== presentation.highlightedWire) {
+    presentation.highlightedWire = caughtWire;
+    for (let i = 0; i < presentation.wires.length; i++) {
       const caught = i + 1 === caughtWire;
-      carrier.userData.wires[i].material.color.setHex(caught ? 0xffd060 : 0xc9b47a);
-      carrier.userData.wires[i].material.emissive.setHex(caught ? 0x5a2b00 : 0x000000);
+      presentation.wires[i].material.color.setHex(caught ? 0xffd060 : 0xc9b47a);
+      presentation.wires[i].material.emissive.setHex(caught ? 0x5a2b00 : 0x000000);
     }
   }
+}
+
+function updateCarrierVisual(carrier, state, nowSeconds, fogColor, fogDensity, worldY = carrier.position.y) {
+  const { scaleX, scaleZ } = carrierPresentationScale(state);
+  const deckAltitude = Number.isFinite(state.deck_alt) ? Math.max(8, state.deck_alt) : 20;
+  carrier.userData.structure.scale.set(scaleX, 1, scaleZ);
+  carrier.userData.hull.scale.y = deckAltitude / 20;
+  updateCarrierWaterPresentation(carrier.userData, state, nowSeconds, fogColor, fogDensity, -worldY);
+  updateCarrierRecoveryOverlay(carrier.userData.recoveryPresentation, state, false);
+}
+
+const AUTHORED_CARRIER_RECOVERY_NODES = /^(?:LANDING_CENTRE_(?:LINE|DASHES)|RECOVERY_THRESHOLD_BAR|ARRESTING_WIRE_[1-4]|BARRIER_|LSO_DATUM_LIGHTS)/;
+
+function hideAuthoredCarrierRecoveryNodes(carrier) {
+  if (!carrier || carrier.userData.runtimeRecoveryNodesHidden === true) return;
+  carrier.traverse((object) => {
+    if (AUTHORED_CARRIER_RECOVERY_NODES.test(object.name)) object.visible = false;
+  });
+  carrier.userData.runtimeRecoveryNodesHidden = true;
+}
+
+function createCarrierRuntimePresentation() {
+  const recovery = createCarrierRecoveryOverlay(createCarrierRecoveryMaterials());
+  const water = createCarrierWaterPresentation();
+  recovery.group.visible = false;
+  water.group.visible = false;
+  return {
+    recovery,
+    water,
+    poseScratch: {
+      yawQuaternion: new THREE.Quaternion(),
+      pitchQuaternion: new THREE.Quaternion(),
+      xAxis: new THREE.Vector3(1, 0, 0),
+      yAxis: new THREE.Vector3(0, 1, 0),
+    },
+  };
+}
+
+function updateCarrierRuntimePresentation(runtime, carrier, state, nowSeconds, fogColor, fogDensity) {
+  if (!state.carrier) {
+    runtime.recovery.group.visible = false;
+    runtime.water.group.visible = false;
+    return;
+  }
+
+  // The water rig is scene-owned and persists across compatibility/GLB swaps. It shares only XZ
+  // position and heading, so simulated deck pitch and heave can never tip or lift the ocean foam.
+  runtime.water.group.visible = true;
+  applyCarrierRootPose(THREE, runtime.water.group, state, {
+    seaLevel: true,
+    scratch: runtime.poseScratch,
+  });
+  updateCarrierWaterPresentation(runtime.water, state, nowSeconds, fogColor, fogDensity);
+
+  // Procedural compatibility carriers already own this exact recovery layer. Authored GLBs retain
+  // their hull/island and trade only their fixed wire/centreline nodes for the live kernel overlay.
+  const embeddedRecovery = carrier?.userData?.landingArea && carrier?.userData?.barrier;
+  for (const wake of carrier?.userData?.wakes ?? []) wake.visible = false;
+  if (carrier?.userData?.spray) carrier.userData.spray.visible = false;
+  runtime.recovery.group.visible = !embeddedRecovery;
+  if (embeddedRecovery) return;
+
+  hideAuthoredCarrierRecoveryNodes(carrier);
+  applyCarrierRootPose(THREE, runtime.recovery.group, state, {
+    followPitch: true,
+    scratch: runtime.poseScratch,
+  });
+  updateCarrierRecoveryOverlay(runtime.recovery, state);
 }
 
 function createLoftGeometry(stations, radialSegments = 18) {
@@ -1333,11 +2223,13 @@ function addFighterPanelLines(group, material) {
   group.add(lines);
 }
 
-function createDrone() {
+function createDrone(context = {}) {
   const group = new THREE.Group();
-  const skin = makeMaterial(0x667276, 0.48, 0.075, 0x010202,
+  const livery = context?.parameters?.livery;
+  const navyLivery = livery === "navy-blue";
+  const skin = makeMaterial(navyLivery ? 0x405a68 : 0x667276, 0.48, 0.075, 0x010202,
     { grain: 0.12, grainScale: 2.3, panels: 0.025, panelScale: 0.52, envMapIntensity: 0.92 });
-  const skinDark = makeMaterial(0x465157, 0.56, 0.055, 0x010202,
+  const skinDark = makeMaterial(navyLivery ? 0x263c4b : 0x465157, 0.56, 0.055, 0x010202,
     { grain: 0.1, grainScale: 2.7, envMapIntensity: 0.78 });
   const underside = makeMaterial(0x303a3f, 0.62, 0.045, 0x000101,
     { grain: 0.11, grainScale: 2.1, envMapIntensity: 0.65 });
@@ -1454,11 +2346,19 @@ function createDrone() {
   rightLight.userData.noShadow = true;
   group.add(rightLight);
 
+  const sockets = Object.freeze({
+    cockpitCamera: addSemanticSocket(group, "SOCKET_CAMERA_COCKPIT", 0, 0.86, -2.48),
+    muzzleLeft: addSemanticSocket(group, "SOCKET_MUZZLE_LEFT", -0.48, -0.08, -5.45),
+    muzzleRight: addSemanticSocket(group, "SOCKET_MUZZLE_RIGHT", 0.48, -0.08, -5.45),
+  });
+
   group.traverse((object) => {
     if (!object.isMesh) return;
     object.castShadow = object.userData.noShadow !== true;
     object.receiveShadow = true;
   });
+  group.userData.sockets = sockets;
+  annotateProceduralFallback(group, context);
   return group;
 }
 
@@ -1469,6 +2369,8 @@ function createFireballMaterial(coreColor, edgeColor) {
       uAge: { value: 0 },
       uCoreColor: { value: new THREE.Color(coreColor) },
       uEdgeColor: { value: new THREE.Color(edgeColor) },
+      uFogColor: { value: new THREE.Color(0x7898a0) },
+      uFogDensity: { value: 0.000055 },
     },
     transparent: true,
     depthWrite: false,
@@ -1477,11 +2379,13 @@ function createFireballMaterial(coreColor, edgeColor) {
       varying vec3 vFirePosition;
       varying vec3 vFireNormal;
       varying vec3 vFireView;
+      varying vec3 vFireWorld;
       #include <common>
       #include <logdepthbuf_pars_vertex>
       void main() {
         vec4 world = modelMatrix * vec4(position, 1.0);
         vFirePosition = position;
+        vFireWorld = world.xyz;
         vFireNormal = normalize(normalMatrix * normal);
         vec4 view = viewMatrix * world;
         vFireView = -view.xyz;
@@ -1496,9 +2400,12 @@ function createFireballMaterial(coreColor, edgeColor) {
       uniform float uAge;
       uniform vec3 uCoreColor;
       uniform vec3 uEdgeColor;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
       varying vec3 vFirePosition;
       varying vec3 vFireNormal;
       varying vec3 vFireView;
+      varying vec3 vFireWorld;
       #include <logdepthbuf_pars_fragment>
       void main() {
         vec3 p = normalize(vFirePosition);
@@ -1510,7 +2417,11 @@ function createFireballMaterial(coreColor, edgeColor) {
         float softEdge = smoothstep(0.0, 0.42, facing);
         float hot = smoothstep(0.34, 0.78, billow + facing * 0.24);
         vec3 color = mix(uEdgeColor, uCoreColor, hot);
-        gl_FragColor = vec4(color, uAlpha * softEdge * (0.66 + billow * 0.45));
+        float fog = 1.0 - exp(-uFogDensity * uFogDensity
+          * dot(vFireWorld - cameraPosition, vFireWorld - cameraPosition));
+        color = mix(color, uFogColor, fog);
+        gl_FragColor = vec4(color, uAlpha * softEdge * (0.66 + billow * 0.45)
+          * (1.0 - fog * 0.88));
         #include <logdepthbuf_fragment>
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -1525,6 +2436,8 @@ function createSmokePuffMaterial(color) {
       uAlpha: { value: 0 },
       uAge: { value: 0 },
       uColor: { value: new THREE.Color(color) },
+      uFogColor: { value: new THREE.Color(0x7898a0) },
+      uFogDensity: { value: 0.000055 },
     },
     transparent: true,
     depthWrite: false,
@@ -1532,10 +2445,12 @@ function createSmokePuffMaterial(color) {
       varying vec3 vSmokePosition;
       varying vec3 vSmokeNormal;
       varying vec3 vSmokeView;
+      varying vec3 vSmokeWorld;
       #include <common>
       #include <logdepthbuf_pars_vertex>
       void main() {
         vSmokePosition = position;
+        vSmokeWorld = (modelMatrix * vec4(position, 1.0)).xyz;
         vSmokeNormal = normalize(normalMatrix * normal);
         vec4 view = modelViewMatrix * vec4(position, 1.0);
         vSmokeView = -view.xyz;
@@ -1549,9 +2464,12 @@ function createSmokePuffMaterial(color) {
       uniform float uAlpha;
       uniform float uAge;
       uniform vec3 uColor;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
       varying vec3 vSmokePosition;
       varying vec3 vSmokeNormal;
       varying vec3 vSmokeView;
+      varying vec3 vSmokeWorld;
       #include <logdepthbuf_pars_fragment>
       void main() {
         vec3 p = normalize(vSmokePosition);
@@ -1560,7 +2478,10 @@ function createSmokePuffMaterial(color) {
         float facing = max(dot(normalize(vSmokeNormal), normalize(vSmokeView)), 0.0);
         float softEdge = smoothstep(0.02, 0.52 + detail * 0.055, facing);
         vec3 smokeColor = uColor * (0.84 + detail * 0.045 + facing * 0.11);
-        gl_FragColor = vec4(smokeColor, uAlpha * softEdge);
+        float fog = 1.0 - exp(-uFogDensity * uFogDensity
+          * dot(vSmokeWorld - cameraPosition, vSmokeWorld - cameraPosition));
+        smokeColor = mix(smokeColor, uFogColor, fog);
+        gl_FragColor = vec4(smokeColor, uAlpha * softEdge * (1.0 - fog * 0.72));
         #include <logdepthbuf_fragment>
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -1570,8 +2491,8 @@ function createSmokePuffMaterial(color) {
 }
 
 function createBanditDestruction() {
-  // Built once, then animated by transforms and pre-existing shader uniforms only. The kernel freezes on Splash,
-  // so this render-clock effect supplies the visible payoff without asking the sim to keep moving.
+  // Built once, then animated by transforms and pre-existing shader uniforms. The authoritative
+  // damaged aircraft continues moving through impact/settling while this marks event edges.
   const group = new THREE.Group();
   const sphere = new THREE.SphereGeometry(1, 14, 10);
   const outerMaterial = createFireballMaterial(0xffb13b, 0xe8380c);
@@ -1649,18 +2570,16 @@ function createBanditDestruction() {
   return group;
 }
 
-function createGunEffects() {
-  // Every GPU object and backing array is allocated once. The flight loop only overwrites these
-  // buffers, so a long burst cannot create a garbage-collector hitch at the moment of payoff.
-  const tracerPositions = new Float32Array(MAX_TRACERS * 2 * 3);
+function createTracerChannel(lineColor, glowColor, headColor) {
+  const positions = new Float32Array(MAX_TRACERS * 2 * 3);
   const tracerGeometry = new THREE.BufferGeometry();
   tracerGeometry.setAttribute("position",
-    new THREE.BufferAttribute(tracerPositions, 3).setUsage(THREE.DynamicDrawUsage));
+    new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
   tracerGeometry.setDrawRange(0, 0);
   const tracers = new THREE.LineSegments(
     tracerGeometry,
     new THREE.LineBasicMaterial({
-      color: 0xffd36a,
+      color: lineColor,
       transparent: true,
       opacity: 0.92,
       depthWrite: false,
@@ -1672,7 +2591,7 @@ function createGunEffects() {
   const tracerGlow = new THREE.LineSegments(
     tracerGeometry,
     new THREE.LineBasicMaterial({
-      color: 0xff731d,
+      color: glowColor,
       transparent: true,
       opacity: 0.44,
       depthWrite: false,
@@ -1682,15 +2601,15 @@ function createGunEffects() {
   tracerGlow.frustumCulled = false;
   tracerGlow.renderOrder = 19;
 
-  const tracerHeadPositions = new Float32Array(MAX_TRACERS * 3);
+  const headPositions = new Float32Array(MAX_TRACERS * 3);
   const tracerHeadGeometry = new THREE.BufferGeometry();
   tracerHeadGeometry.setAttribute("position",
-    new THREE.BufferAttribute(tracerHeadPositions, 3).setUsage(THREE.DynamicDrawUsage));
+    new THREE.BufferAttribute(headPositions, 3).setUsage(THREE.DynamicDrawUsage));
   tracerHeadGeometry.setDrawRange(0, 0);
   const tracerHeads = new THREE.Points(
     tracerHeadGeometry,
     new THREE.PointsMaterial({
-      color: 0xfff0b0,
+      color: headColor,
       size: 2.25,
       sizeAttenuation: false,
       transparent: true,
@@ -1702,22 +2621,94 @@ function createGunEffects() {
   tracerHeads.frustumCulled = false;
   tracerHeads.renderOrder = 21;
 
+  return { tracers, glow: tracerGlow, heads: tracerHeads, positions, headPositions };
+}
+
+function createMuzzleChannel(color, lightColor) {
   const muzzleMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffd45c,
+    color,
     transparent: true,
     opacity: 0,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), muzzleMaterial);
-  muzzle.visible = false;
-  muzzle.renderOrder = 22;
-  const muzzleConeGeometry = new THREE.ConeGeometry(0.46, 3.6, 8);
-  muzzleConeGeometry.rotateX(-Math.PI / 2);
-  const muzzleCone = new THREE.Mesh(muzzleConeGeometry, muzzleMaterial.clone());
-  muzzleCone.visible = false;
-  muzzleCone.renderOrder = 22;
-  const muzzleLight = new THREE.PointLight(0xffa42c, 0, 38, 2);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), muzzleMaterial);
+  flash.visible = false;
+  flash.renderOrder = 22;
+  const coneGeometry = new THREE.ConeGeometry(0.46, 3.6, 8);
+  coneGeometry.rotateX(-Math.PI / 2);
+  const cone = new THREE.Mesh(coneGeometry, muzzleMaterial.clone());
+  cone.visible = false;
+  cone.renderOrder = 22;
+  const light = new THREE.PointLight(lightColor, 0, 38, 2);
+  return { flash, cone, light };
+}
+
+function updateTracerChannel(channel, rounds) {
+  const count = Math.min(Array.isArray(rounds) ? rounds.length : 0, MAX_TRACERS);
+  for (let i = 0; i < count; i++) {
+    const round = rounds[i];
+    const offset = i * 6;
+    const x = Number(round?.[0]) || 0;
+    const y = Number(round?.[1]) || 0;
+    const z = -(Number(round?.[2]) || 0);
+    const vx = Number(round?.[3]) || 0;
+    const vy = Number(round?.[4]) || 0;
+    const vz = -(Number(round?.[5]) || 0);
+    const speed = Math.max(1, Math.hypot(vx, vy, vz));
+    const streak = clamp(speed * 0.014, 9, 20);
+    channel.positions[offset] = x - vx / speed * streak;
+    channel.positions[offset + 1] = y - vy / speed * streak;
+    channel.positions[offset + 2] = z - vz / speed * streak;
+    channel.positions[offset + 3] = x;
+    channel.positions[offset + 4] = y;
+    channel.positions[offset + 5] = z;
+    const headOffset = i * 3;
+    channel.headPositions[headOffset] = x;
+    channel.headPositions[headOffset + 1] = y;
+    channel.headPositions[headOffset + 2] = z;
+  }
+  channel.tracers.geometry.setDrawRange(0, count * 2);
+  channel.tracers.geometry.attributes.position.needsUpdate = count > 0;
+  channel.tracers.visible = count > 0;
+  channel.glow.visible = count > 0;
+  channel.heads.geometry.setDrawRange(0, count);
+  channel.heads.geometry.attributes.position.needsUpdate = count > 0;
+  channel.heads.visible = count > 0;
+}
+
+function updateMuzzleChannel(channel, active, origin, forward, quaternion, roundsFired,
+  flashOffset, coneOffset, intensity) {
+  channel.flash.visible = active;
+  channel.cone.visible = active;
+  channel.flash.position.copy(origin).addScaledVector(forward, flashOffset);
+  channel.flash.quaternion.copy(quaternion);
+  channel.cone.position.copy(origin).addScaledVector(forward, coneOffset);
+  channel.cone.quaternion.copy(quaternion);
+  channel.light.position.copy(channel.flash.position);
+  if (active) {
+    const pulse = 0.82 + 0.18 * Math.sin(roundsFired * 2.17);
+    channel.flash.scale.set(1.45 * pulse, 0.72 * pulse, 2.7 * pulse);
+    channel.cone.scale.set(0.9 * pulse, 0.9 * pulse, 1.45 * pulse);
+    channel.flash.material.opacity = 0.84;
+    channel.cone.material.opacity = 0.72;
+    channel.light.intensity = intensity;
+  } else {
+    channel.flash.material.opacity = 0;
+    channel.cone.material.opacity = 0;
+    channel.light.intensity = 0;
+  }
+}
+
+function createGunEffects() {
+  // Every GPU object and backing array is allocated once. The flight loop only overwrites these
+  // buffers, so two simultaneous bursts cannot create a garbage-collector hitch at payoff.
+  const outgoingTracers = createTracerChannel(0xffd36a, 0xff731d, 0xfff0b0);
+  const incomingTracers = createTracerChannel(0xff8b68, 0xff2d1d, 0xffe2c4);
+  const playerMuzzle = createMuzzleChannel(0xffd45c, 0xffa42c);
+  const playerMuzzleRight = createMuzzleChannel(0xffd45c, 0xffa42c);
+  const opponentMuzzle = createMuzzleChannel(0xff8b52, 0xff5128);
+  const opponentMuzzleRight = createMuzzleChannel(0xff8b52, 0xff5128);
 
   const sparkDirections = new Float32Array([
     -0.88, 0.22, 0.42,  0.84, 0.36, -0.40, -0.48, 0.78, -0.39,
@@ -1745,15 +2736,21 @@ function createGunEffects() {
   const hitLight = new THREE.PointLight(0xff8b27, 0, 42, 2);
 
   const group = new THREE.Group();
-  group.add(tracerGlow, tracers, tracerHeads, muzzle, muzzleCone, muzzleLight, sparks, hitLight);
-  group.userData.tracers = tracers;
-  group.userData.tracerGlow = tracerGlow;
-  group.userData.tracerPositions = tracerPositions;
-  group.userData.tracerHeads = tracerHeads;
-  group.userData.tracerHeadPositions = tracerHeadPositions;
-  group.userData.muzzle = muzzle;
-  group.userData.muzzleCone = muzzleCone;
-  group.userData.muzzleLight = muzzleLight;
+  group.add(
+    outgoingTracers.glow, outgoingTracers.tracers, outgoingTracers.heads,
+    incomingTracers.glow, incomingTracers.tracers, incomingTracers.heads,
+    playerMuzzle.flash, playerMuzzle.cone, playerMuzzle.light,
+    playerMuzzleRight.flash, playerMuzzleRight.cone, playerMuzzleRight.light,
+    opponentMuzzle.flash, opponentMuzzle.cone, opponentMuzzle.light,
+    opponentMuzzleRight.flash, opponentMuzzleRight.cone, opponentMuzzleRight.light,
+    sparks, hitLight,
+  );
+  group.userData.outgoingTracers = outgoingTracers;
+  group.userData.incomingTracers = incomingTracers;
+  group.userData.playerMuzzle = playerMuzzle;
+  group.userData.playerMuzzleRight = playerMuzzleRight;
+  group.userData.opponentMuzzle = opponentMuzzle;
+  group.userData.opponentMuzzleRight = opponentMuzzleRight;
   group.userData.sparks = sparks;
   group.userData.sparkPositions = sparkPositions;
   group.userData.sparkDirections = sparkDirections;
@@ -2288,6 +3285,753 @@ function createSea() {
   return { mesh, uniforms };
 }
 
+// Production presentation boundary. The simulation projects stable presentation IDs; this manager
+// resolves them through the staged content pack and owns every registry instance it attaches. The
+// current procedural meshes remain first-class compatibility fallbacks, so a missing/unbuilt pack
+// can never turn a playable mission into a blank scene.
+const STAGED_PACK_URLS = Object.freeze({
+  "korea-1950s": "./content/packs/korea-1950s/pack.json",
+});
+const DEFAULT_PLAYER_PRESENTATION_ID = "presentation.vehicle.player.v1";
+const DEFAULT_TARGET_PRESENTATION_ID = "presentation.vehicle.bandit.v1";
+const DEFAULT_COCKPIT_PRESENTATION_ID = "presentation.cockpit.player.v1";
+const DEFAULT_CARRIER_PRESENTATION_ID = "presentation.platform.carrier.v1";
+const DEFAULT_ESCORT_PRESENTATION_ID = "presentation.platform.escort.v1";
+
+function createHiddenPresentation() {
+  const group = new THREE.Group();
+  group.name = "HiddenPresentationFallback";
+  return group;
+}
+
+const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
+  ["presentation.vehicle.bandit.v1", createDrone],
+  ["presentation.vehicle.awacs-target.v1", createAwacs],
+  ["presentation.vehicle.player.v1", createDrone],
+  ["presentation.vehicle.glider-strike.v1", createGlider],
+  ["presentation.vehicle.player.glider.v1", createGlider],
+  ["presentation.vehicle.player.glider-strike.v1", createGlider],
+  [DEFAULT_COCKPIT_PRESENTATION_ID, createHiddenPresentation],
+  ["presentation.platform.carrier.v1", createCarrier],
+  [DEFAULT_ESCORT_PRESENTATION_ID, createHiddenPresentation],
+]);
+
+function projectedId(value, fallback = "") {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function assetErrorText(error) {
+  if (!error) return null;
+  const code = error.code ? `[${error.code}] ` : "";
+  return `${code}${error.message ?? String(error)}`;
+}
+
+class PresentationAssetManager {
+  constructor(renderer, scene, camera) {
+    this.renderer = renderer;
+    this.scene = scene;
+    this.camera = camera;
+    this.activePack = null;
+    this.activePackKey = "";
+    this.requestedPackKey = "";
+    this.loadedPacks = new Map();
+    this.packEpoch = 0;
+    this.lastError = null;
+    this.lastState = null;
+    this.requested = {
+      snapshotSchemaVersion: "",
+      packId: "",
+      packVersion: "",
+      packUri: "",
+      presentationProfileId: "",
+      visualProfileId: "",
+      assetProfileId: "",
+      assetManifestId: "",
+      playerEntityId: "",
+      playerPresentationId: "",
+      cockpitPresentationId: "",
+      banditEntityId: "",
+      banditPresentationId: DEFAULT_TARGET_PRESENTATION_ID,
+      supportPresentationId: "",
+      carrierEntityId: "",
+      carrierPresentationId: DEFAULT_CARRIER_PRESENTATION_ID,
+      escortEntityId: "",
+      escortPresentationId: DEFAULT_ESCORT_PRESENTATION_ID,
+    };
+
+    this.cockpitSlot = this.createSlot("cockpit", DEFAULT_COCKPIT_PRESENTATION_ID,
+      createHiddenPresentation);
+    this.playerExteriorSlot = this.createSlot("player-exterior", DEFAULT_PLAYER_PRESENTATION_ID,
+      createDrone);
+    this.targetSlot = this.createSlot("target", DEFAULT_TARGET_PRESENTATION_ID, createDrone);
+    this.carrierSlot = this.createSlot("carrier", DEFAULT_CARRIER_PRESENTATION_ID, createCarrier);
+    this.escortSlot = this.createSlot("escort", DEFAULT_ESCORT_PRESENTATION_ID,
+      createHiddenPresentation);
+    this.cockpitSlot.root.visible = false;
+    this.playerExteriorSlot.root.visible = false;
+    this.targetSlot.root.visible = false;
+    this.carrierSlot.root.visible = false;
+    this.escortSlot.root.visible = false;
+
+    this.runtime = null;
+    try {
+      this.runtime = createThreeR160AssetRegistry({
+        renderer,
+        baseUrl: document.baseURI,
+        fallbackFactories: new Map([
+          ["procedural://fighter/current", (context) => createDrone(context)],
+          ["procedural://cockpit/current", () => createHiddenPresentation()],
+          ["procedural://carrier/current", (context) => createCarrier(context)],
+          ["procedural://platform/escort/current", () => createHiddenPresentation()],
+        ]),
+        registryOptions: { logger: console },
+      });
+    } catch (error) {
+      this.lastError = assetErrorText(error);
+      console.warn("Graphics asset runtime unavailable; procedural presentation remains active.", error);
+    }
+  }
+
+  createSlot(name, presentationId, fallbackFactory) {
+    const root = new THREE.Group();
+    root.name = `Presentation_${name}`;
+    this.scene.add(root);
+    const slot = {
+      name,
+      root,
+      entityId: "",
+      presentationId,
+      fallbackFactory,
+      object: null,
+      instance: null,
+      activeKey: "",
+      pendingKey: "",
+      failedKey: "",
+      epoch: 0,
+      error: null,
+      semanticAnchorNodes: new Map(),
+      boundingSphereDiameterMetres: null,
+      lodWorldScale: new THREE.Vector3(1, 1, 1),
+    };
+    this.showCompatibility(slot);
+    return slot;
+  }
+
+  compatibilityFactory(slot) {
+    return COMPATIBILITY_PRESENTATION_FACTORIES.get(slot.presentationId) ?? slot.fallbackFactory;
+  }
+
+  prepareObject(object) {
+    object.traverse?.((child) => {
+      if (!child.isMesh) return;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      const transparent = materials.some((material) => material
+        && (material.transparent === true || Number(material.opacity) < 0.999));
+      child.castShadow = child.userData?.noShadow !== true && !transparent;
+      child.receiveShadow = true;
+    });
+    return object;
+  }
+
+  releaseDetached(instance, object) {
+    try {
+      if (instance) {
+        void Promise.resolve(instance.release()).catch((error) => {
+          console.warn("Graphics asset instance release failed.", error);
+        });
+      } else if (object) {
+        disposeSceneResources(object);
+      }
+    } catch (error) {
+      console.warn("Graphics asset cleanup failed.", error);
+    }
+  }
+
+  swap(slot, object, metadata) {
+    const previousInstance = slot.instance;
+    const previousObject = slot.object;
+    slot.root.clear();
+    slot.object = this.prepareObject(object);
+    const localBounds = new THREE.Box3().setFromObject(slot.object);
+    const localSize = new THREE.Vector3();
+    localBounds.getSize(localSize);
+    const localDiameter = localBounds.isEmpty()
+      ? 0
+      : boundingSphereDiameterFromSize(localSize);
+    slot.boundingSphereDiameterMetres = Number.isFinite(localDiameter) && localDiameter > 0
+      ? localDiameter
+      : null;
+    slot.semanticAnchorNodes = new Map(
+      (Array.isArray(metadata.descriptor?.anchors) ? metadata.descriptor.anchors : [])
+        .filter((anchor) => typeof anchor?.id === "string" && typeof anchor?.node === "string")
+        .map((anchor) => [anchor.id, anchor.node]),
+    );
+    slot.instance = metadata.instance ?? null;
+    slot.activeKey = metadata.key;
+    slot.pendingKey = "";
+    slot.failedKey = "";
+    slot.error = null;
+    slot.root.add(slot.object);
+    if (previousObject !== slot.object) this.releaseDetached(previousInstance, previousObject);
+  }
+
+  showCompatibility(slot) {
+    const key = `compatibility:${slot.presentationId}:${slot.entityId || "unprojected"}`;
+    if (slot.activeKey === key && slot.object) return;
+    const factory = this.compatibilityFactory(slot);
+    try {
+      this.swap(slot, factory(), { key, instance: null });
+    } catch (error) {
+      slot.error = assetErrorText(error);
+      this.lastError = slot.error;
+      console.warn(`Compatibility visual failed for ${slot.presentationId}.`, error);
+    }
+  }
+
+  setPresentation(slot, presentationId, entityId) {
+    if (slot.presentationId === presentationId && slot.entityId === entityId) return;
+    slot.presentationId = presentationId;
+    slot.entityId = entityId;
+    slot.epoch += 1;
+    slot.pendingKey = "";
+    slot.failedKey = "";
+    this.showCompatibility(slot);
+  }
+
+  packRequest(state) {
+    const packId = projectedId(state.pack_id, projectedId(state.content_pack_id));
+    const packVersion = projectedId(state.pack_version);
+    const explicitUri = projectedId(state.content_pack_uri);
+    const relativeUri = explicitUri || STAGED_PACK_URLS[packId] || "";
+    let packUri = relativeUri ? new URL(relativeUri, document.baseURI).href : "";
+    if (packUri && packVersion) {
+      const packUrl = new URL(packUri);
+      if (packUrl.origin === window.location.origin) {
+        packUrl.searchParams.set("packVersion", packVersion);
+        packUri = packUrl.href;
+      }
+    }
+    const snapshotSchemaVersion = projectedId(state.snapshot_schema_version);
+    const presentationProfileId = projectedId(state.presentation_profile_id);
+    const visualProfileId = projectedId(state.visual_profile_id);
+    const assetProfileId = projectedId(state.asset_profile_id);
+    const assetManifestId = projectedId(state.asset_manifest_id);
+    return {
+      snapshotSchemaVersion,
+      packId,
+      packVersion,
+      packUri,
+      presentationProfileId,
+      visualProfileId,
+      assetProfileId,
+      assetManifestId,
+      key: packUri ? [
+        snapshotSchemaVersion,
+        packId,
+        packVersion,
+        presentationProfileId,
+        visualProfileId,
+        assetProfileId,
+        assetManifestId,
+        packUri,
+      ].join("|") : "",
+    };
+  }
+
+  invalidatePackInstances() {
+    for (const slot of [
+      this.cockpitSlot,
+      this.playerExteriorSlot,
+      this.targetSlot,
+      this.carrierSlot,
+      this.escortSlot,
+    ]) {
+      slot.epoch += 1;
+      slot.pendingKey = "";
+      slot.failedKey = "";
+      this.showCompatibility(slot);
+    }
+  }
+
+  requestPack(state) {
+    const request = this.packRequest(state);
+    this.requested.snapshotSchemaVersion = request.snapshotSchemaVersion;
+    this.requested.packId = request.packId;
+    this.requested.packVersion = request.packVersion;
+    this.requested.packUri = request.packUri;
+    this.requested.presentationProfileId = request.presentationProfileId;
+    this.requested.visualProfileId = request.visualProfileId;
+    this.requested.assetProfileId = request.assetProfileId;
+    this.requested.assetManifestId = request.assetManifestId;
+    if (request.key === this.requestedPackKey) return;
+
+    this.requestedPackKey = request.key;
+    this.activePack = null;
+    this.activePackKey = "";
+    this.invalidatePackInstances();
+    const epoch = ++this.packEpoch;
+    if (!request.key || !this.runtime) return;
+
+    const cached = this.loadedPacks.get(request.key);
+    if (cached) {
+      this.activatePack(cached, request, epoch);
+      return;
+    }
+
+    void this.runtime.registry.loadPack(request.packUri, {
+      activate: false,
+      profileId: request.presentationProfileId || undefined,
+    })
+      .then((pack) => {
+        if (epoch !== this.packEpoch) return;
+        this.loadedPacks.set(request.key, pack);
+        this.activatePack(pack, request, epoch);
+      })
+      .catch((error) => {
+        if (epoch !== this.packEpoch) return;
+        this.lastError = assetErrorText(error);
+        console.warn(`Content pack ${request.packId || request.packUri} could not be loaded; using procedural presentation.`, error);
+      });
+  }
+
+  activatePack(pack, request, epoch) {
+    if (epoch !== this.packEpoch || request.key !== this.requestedPackKey) return;
+    const identities = [
+      ["snapshot schema", request.snapshotSchemaVersion, pack.compatibility?.snapshotSchemaVersion],
+      ["pack", request.packId, pack.id],
+      ["pack version", request.packVersion, pack.packVersion],
+      ["presentation profile", request.presentationProfileId, pack.profile?.presentationProfileId],
+      ["visual profile", request.visualProfileId, pack.profile?.id],
+      ["asset profile", request.assetProfileId, pack.profile?.assetProfile?.id],
+      ["asset manifest", request.assetManifestId, pack.manifest?.id],
+    ];
+    for (const [label, expected, actual] of identities) {
+      if (expected && actual !== expected) {
+        this.lastError = `Loaded ${label} ${actual ?? "(none)"} does not match projected ${label} ${expected}.`;
+        return;
+      }
+    }
+    this.runtime.registry.activatePack(pack);
+    this.activePack = pack;
+    this.activePackKey = request.key;
+    this.lastError = null;
+    this.resolveVisibleSlots();
+  }
+
+  projectedPixels(slot, descriptor) {
+    const state = this.lastState;
+    if (!state) return Number.POSITIVE_INFINITY;
+    let distance = Number.POSITIVE_INFINITY;
+    const extensionBounds = descriptor?.extensions?.boundsMetres;
+    const declaredDiameter = Array.isArray(extensionBounds)
+      && extensionBounds.length >= 3
+      && extensionBounds.slice(0, 3).every((value) => Number.isFinite(Number(value)) && Number(value) >= 0)
+      ? boundingSphereDiameterFromSize(extensionBounds)
+      : null;
+    let localDiameter = Number(slot.boundingSphereDiameterMetres ?? declaredDiameter);
+    if (!Number.isFinite(localDiameter) || localDiameter <= 0) {
+      localDiameter = slot.name === "carrier" ? 255 : 16;
+    }
+    slot.root.updateWorldMatrix(true, false);
+    const rootWorldScale = slot.root.getWorldScale(slot.lodWorldScale);
+    const worldDiameter = localDiameter * maximumAxisScale(rootWorldScale);
+    if (slot.name === "target") {
+      distance = Number(state.range_m);
+    } else if (slot.name === "carrier" && [state.px, state.py, state.pz, state.cx, state.cy, state.cz]
+      .every(Number.isFinite)) {
+      distance = Math.hypot(state.cx - state.px, state.cy - state.py, state.cz - state.pz);
+    }
+    if (!Number.isFinite(distance) || distance < 0) return Number.POSITIVE_INFINITY;
+    return estimateProjectedPixelHeight({
+      worldHeight: worldDiameter,
+      distance,
+      verticalFovRadians: THREE.MathUtils.degToRad(this.camera.fov),
+      viewportHeight: Math.max(1, this.renderer.domElement.clientHeight || window.innerHeight),
+    });
+  }
+
+  resolveSlot(slot) {
+    if (!this.activePack || !this.runtime || !slot.root.visible) return;
+    const registry = this.runtime.registry;
+    let descriptor;
+    try {
+      descriptor = registry.getAssetDescriptor(slot.presentationId, { pack: this.activePack });
+    } catch (error) {
+      const message = assetErrorText(error);
+      this.showCompatibility(slot);
+      slot.error = message;
+      this.lastError = message;
+      return;
+    }
+
+    const projectedPixelHeight = this.projectedPixels(slot, descriptor);
+    let lod = null;
+    if (descriptor.kind === "gltf") {
+      try {
+        lod = registry.selectLod(slot.presentationId, projectedPixelHeight, {
+          pack: this.activePack,
+          currentLod: slot.instance?.lod ?? null,
+        });
+      } catch (error) {
+        const message = assetErrorText(error);
+        this.showCompatibility(slot);
+        slot.error = message;
+        this.lastError = message;
+        return;
+      }
+    }
+    const key = `registry:${this.activePack.id}:${this.activePack.profile.id}:${slot.presentationId}:${slot.entityId || "unprojected"}:${lod?.uri ?? descriptor.fallback ?? descriptor.id}`;
+    if (slot.activeKey === key) {
+      if (slot.pendingKey && slot.pendingKey !== key) {
+        slot.epoch += 1;
+        slot.pendingKey = "";
+      }
+      return;
+    }
+    if (slot.pendingKey === key || slot.failedKey === key) return;
+    const epoch = ++slot.epoch;
+    slot.pendingKey = key;
+    slot.error = null;
+    void registry.instantiate(slot.presentationId, {
+      pack: this.activePack,
+      projectedPixelHeight,
+      currentLod: lod,
+    }).then((instance) => {
+      if (epoch !== slot.epoch || this.activePackKey !== this.requestedPackKey) {
+        return Promise.resolve(instance.release());
+      }
+      this.swap(slot, instance.scene, { key, instance, descriptor });
+      return undefined;
+    }).catch((error) => {
+      if (epoch !== slot.epoch) return;
+      const message = assetErrorText(error);
+      console.warn(`Asset resolution failed for ${slot.presentationId}; compatibility visual retained.`, error);
+      this.showCompatibility(slot);
+      slot.pendingKey = "";
+      slot.failedKey = key;
+      slot.error = message;
+      this.lastError = message;
+    });
+  }
+
+  resolveVisibleSlots() {
+    this.resolveSlot(this.playerExteriorSlot);
+    this.resolveSlot(this.cockpitSlot);
+    this.resolveSlot(this.targetSlot);
+    this.resolveSlot(this.carrierSlot);
+    this.resolveSlot(this.escortSlot);
+  }
+
+  semanticAnchor(slot, semanticId) {
+    if (!slot?.object) return null;
+    const nodeName = slot.semanticAnchorNodes?.get(semanticId);
+    return typeof nodeName === "string" && nodeName.length > 0
+      ? slot.object.getObjectByName(nodeName)
+      : null;
+  }
+
+  sync(state) {
+    this.lastState = state;
+    this.requested.playerEntityId = projectedId(state.player_entity_id);
+    this.requested.playerPresentationId = projectedId(state.player_presentation_id);
+    this.requested.cockpitPresentationId = projectedId(state.cockpit_presentation_id);
+    this.requested.banditEntityId = projectedId(state.bandit_entity_id);
+    this.requested.banditPresentationId = projectedId(
+      state.bandit_presentation_id,
+      DEFAULT_TARGET_PRESENTATION_ID,
+    );
+    this.requested.supportPresentationId = projectedId(state.support_presentation_id);
+    this.requested.carrierEntityId = projectedId(state.carrier_entity_id);
+    this.requested.carrierPresentationId = projectedId(
+      state.carrier_presentation_id,
+      DEFAULT_CARRIER_PRESENTATION_ID,
+    );
+    this.requested.escortEntityId = state.carrier === true
+      ? `${this.requested.carrierEntityId || "entity.carrier"}.escort.1`
+      : "";
+    this.requested.escortPresentationId = DEFAULT_ESCORT_PRESENTATION_ID;
+    this.setPresentation(
+      this.cockpitSlot,
+      this.requested.cockpitPresentationId || DEFAULT_COCKPIT_PRESENTATION_ID,
+      this.requested.playerEntityId,
+    );
+    this.setPresentation(
+      this.playerExteriorSlot,
+      this.requested.playerPresentationId || DEFAULT_PLAYER_PRESENTATION_ID,
+      this.requested.playerEntityId,
+    );
+    this.setPresentation(
+      this.targetSlot,
+      this.requested.banditPresentationId,
+      this.requested.banditEntityId,
+    );
+    this.setPresentation(
+      this.carrierSlot,
+      this.requested.carrierPresentationId,
+      this.requested.carrierEntityId,
+    );
+    this.setPresentation(
+      this.escortSlot,
+      this.requested.escortPresentationId,
+      this.requested.escortEntityId,
+    );
+    const replayExternal = state.replay_external === true;
+    this.cockpitSlot.root.visible = !replayExternal && this.requested.cockpitPresentationId !== "";
+    this.playerExteriorSlot.root.visible = replayExternal;
+    this.targetSlot.root.visible = state.opponent_body_present !== false;
+    this.carrierSlot.root.visible = state.carrier === true;
+    this.escortSlot.root.visible = state.carrier === true;
+    this.requestPack(state);
+    this.resolveVisibleSlots();
+  }
+
+  slotDiagnostics(slot) {
+    const instance = slot.instance;
+    return Object.freeze({
+      entityId: slot.entityId || null,
+      presentationId: slot.presentationId,
+      assetId: instance?.assetId ?? null,
+      source: instance ? "registry" : "compatibility",
+      fallback: instance?.fallback ?? true,
+      fallbackKey: instance?.fallbackKey ?? (slot.object ? `compatibility:${slot.presentationId}` : null),
+      lod: instance?.lod?.id ?? null,
+      boundingSphereDiameterMetres: slot.boundingSphereDiameterMetres,
+      pending: slot.pendingKey !== "",
+      error: slot.error,
+    });
+  }
+
+  diagnostics() {
+    const cache = this.runtime?.registry.cacheStats() ?? null;
+    return Object.freeze({
+      requested: Object.freeze({ ...this.requested }),
+      loadedPackId: this.activePack?.id ?? null,
+      loadedPackVersion: this.activePack?.packVersion ?? null,
+      loadedPresentationProfileId: this.activePack?.profile?.presentationProfileId ?? null,
+      loadedProfileId: this.activePack?.profile?.id ?? null,
+      loadedAssetProfileId: this.activePack?.profile?.assetProfile?.id ?? null,
+      loadedManifestId: this.activePack?.manifest?.id ?? null,
+      player: Object.freeze({
+        entityId: this.requested.playerEntityId || null,
+        presentationId: this.requested.playerPresentationId || null,
+        cockpit: this.slotDiagnostics(this.cockpitSlot),
+        exterior: this.slotDiagnostics(this.playerExteriorSlot),
+      }),
+      target: this.slotDiagnostics(this.targetSlot),
+      carrier: this.slotDiagnostics(this.carrierSlot),
+      escort: this.slotDiagnostics(this.escortSlot),
+      supportPresentationId: this.requested.supportPresentationId || null,
+      cache: cache ? Object.freeze({ ...cache }) : null,
+      error: this.lastError,
+    });
+  }
+
+  async dispose() {
+    this.packEpoch += 1;
+    for (const slot of [
+      this.cockpitSlot,
+      this.playerExteriorSlot,
+      this.targetSlot,
+      this.carrierSlot,
+      this.escortSlot,
+    ]) {
+      slot.epoch += 1;
+      slot.root.removeFromParent();
+      const instance = slot.instance;
+      const object = slot.object;
+      slot.instance = null;
+      slot.object = null;
+      if (instance) await Promise.resolve(instance.release()).catch(() => undefined);
+      else if (object) disposeSceneResources(object);
+    }
+    const runtime = this.runtime;
+    this.runtime = null;
+    if (runtime) await runtime.dispose();
+  }
+}
+
+function createRemoteCallsignSprite(callsign, hostile = false) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 48;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "rgba(2, 12, 18, .72)";
+  context.fillRect(0, 4, canvas.width, 40);
+  context.strokeStyle = hostile ? "rgba(255, 92, 72, .82)" : "rgba(77, 255, 136, .68)";
+  context.lineWidth = 2;
+  context.strokeRect(1, 5, canvas.width - 2, 38);
+  context.fillStyle = hostile ? "#ffe1db" : "#d9ffe5";
+  context.font = "700 23px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(callsign, canvas.width / 2, canvas.height / 2 + 1, canvas.width - 14);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    opacity: 0.86,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.position.set(0, 8.5, 0);
+  sprite.scale.set(22, 4.125, 1);
+  sprite.userData.disposeRemoteLabel = () => {
+    texture.dispose();
+    material.dispose();
+  };
+  return sprite;
+}
+
+class RemoteAircraftManager {
+  constructor(scene) {
+    this.scene = scene;
+    this.aircraft = new Map();
+    this.templates = {
+      player: createDrone({ parameters: { livery: "navy-blue" } }),
+      bogey: createDrone(),
+    };
+    this.forward = new THREE.Vector3();
+    this.up = new THREE.Vector3();
+    this.right = new THREE.Vector3();
+    this.zAxis = new THREE.Vector3();
+    this.matrix = new THREE.Matrix4();
+  }
+
+  create(contact, kind) {
+    const contactId = kind === "bogey" ? contact.bogeyId : contact.playerId;
+    const root = new THREE.Group();
+    root.name = `${kind === "bogey" ? "WorldBogey" : "RemoteAircraft"}_${contactId}`;
+    const visual = this.templates[kind].clone(true);
+    const label = createRemoteCallsignSprite(contact.callsign, kind === "bogey");
+    root.add(visual, label);
+    this.scene.add(root);
+    const entry = {
+      root,
+      visual,
+      label,
+      contactId,
+      kind,
+      callsign: contact.callsign,
+      sequence: -1,
+      targetPosition: new THREE.Vector3(),
+      targetQuaternion: new THREE.Quaternion(),
+      initialised: false,
+      alive: true,
+      bodyPresent: true,
+      terminalState: "FLYING",
+      impactSurface: "NONE",
+      phase: "ACTIVE",
+      missionId: "mission.unknown",
+      entityId: null,
+      streamId: null,
+      continuityKey: null,
+    };
+    this.aircraft.set(contactId, entry);
+    return entry;
+  }
+
+  setTarget(entry, contact) {
+    const projection = projectRemoteContact(contact);
+    const resetInterpolation = shouldResetRemoteInterpolation(entry.continuityKey, projection);
+    entry.targetPosition.set(contact.position[0], contact.position[1], -contact.position[2]);
+    this.forward.set(contact.forward[0], contact.forward[1], -contact.forward[2]).normalize();
+    this.up.set(contact.up[0], contact.up[1], -contact.up[2]).normalize();
+    this.zAxis.copy(this.forward).negate();
+    this.right.copy(this.up).cross(this.zAxis).normalize();
+    this.matrix.makeBasis(this.right, this.up, this.zAxis);
+    entry.targetQuaternion.setFromRotationMatrix(this.matrix).normalize();
+    entry.sequence = contact.sequence;
+    entry.alive = projection.alive;
+    entry.bodyPresent = projection.bodyPresent;
+    entry.terminalState = projection.terminalState;
+    entry.impactSurface = projection.impactSurface;
+    entry.phase = projection.phase;
+    entry.missionId = projection.missionId;
+    entry.entityId = projection.entityId;
+    entry.streamId = projection.streamId;
+    entry.continuityKey = projection.continuityKey;
+    entry.root.visible = remoteContactVisible(projection);
+    if (!entry.initialised || resetInterpolation) {
+      entry.root.position.copy(entry.targetPosition);
+      entry.root.quaternion.copy(entry.targetQuaternion);
+      entry.initialised = true;
+    }
+  }
+
+  sync(snapshot, ownPlayerId) {
+    const seen = new Set();
+    const contacts = [
+      ...(snapshot?.players ?? [])
+        .filter((player) => player?.playerId !== ownPlayerId)
+        .map((contact) => ({ contact, kind: "player", id: contact.playerId })),
+      ...(snapshot?.bogeys ?? [])
+        .map((contact) => ({ contact, kind: "bogey", id: contact.bogeyId })),
+    ];
+    for (const { contact, kind, id } of contacts) {
+      if (!contact || !id) continue;
+      seen.add(id);
+      const entry = this.aircraft.get(id) ?? this.create(contact, kind);
+      const continuity = projectRemoteContact(contact).continuityKey;
+      if (continuity !== entry.continuityKey || contact.sequence > entry.sequence)
+        this.setTarget(entry, contact);
+    }
+    for (const [playerId, entry] of this.aircraft) {
+      if (seen.has(playerId)) continue;
+      entry.root.removeFromParent();
+      entry.label.userData.disposeRemoteLabel?.();
+      this.aircraft.delete(playerId);
+    }
+  }
+
+  update(dt, cameraPosition, { historicalReplay = false } = {}) {
+    const blend = 1 - Math.exp(-Math.max(0, dt) * 12);
+    for (const entry of this.aircraft.values()) {
+      entry.root.visible = remoteContactVisible(entry, { historicalReplay });
+      if (!entry.initialised || !entry.bodyPresent) continue;
+      // Keep following current room truth while hidden during replay. When the review ends, live
+      // contacts reappear at their current smoothed pose instead of where replay began.
+      entry.root.position.lerp(entry.targetPosition, blend);
+      entry.root.quaternion.slerp(entry.targetQuaternion, blend);
+      const distance = entry.root.position.distanceTo(cameraPosition);
+      const assistScale = 1 + 3 * smoothstep(500, 12000, distance);
+      entry.visual.scale.setScalar(assistScale);
+    }
+  }
+
+  diagnostics() {
+    return Object.freeze({
+      rendered: this.aircraft.size,
+      pilots: Object.freeze([...this.aircraft.entries()].map(([playerId, entry]) => Object.freeze({
+        playerId,
+        kind: entry.kind,
+        callsign: entry.callsign,
+        sequence: entry.sequence,
+        alive: entry.alive,
+        bodyPresent: entry.bodyPresent,
+        terminalState: entry.terminalState,
+        impactSurface: entry.impactSurface,
+        phase: entry.phase,
+        missionId: entry.missionId,
+        entityId: entry.entityId,
+        streamId: entry.streamId,
+      }))),
+    });
+  }
+
+  dispose() {
+    for (const entry of this.aircraft.values()) {
+      entry.root.removeFromParent();
+      entry.label.userData.disposeRemoteLabel?.();
+    }
+    this.aircraft.clear();
+    disposeSceneResources(this.templates.player);
+    disposeSceneResources(this.templates.bogey);
+  }
+}
+
 class FlightView {
   constructor() {
     this.renderer = new THREE.WebGLRenderer({
@@ -2304,7 +4048,9 @@ class FlightView {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // Glitch fix: the 0.12 m / 720 km clip range wasted depth precision on sub-cockpit distances.
-    this.camera = new THREE.PerspectiveCamera(66, 1, 0.5, 680000);
+    // The authored eye point sits inside a 1.5 m-wide cockpit; the old 0.5 m near plane clipped
+    // canopy rails and the instrument coaming. Logarithmic depth keeps the ocean horizon stable.
+    this.camera = new THREE.PerspectiveCamera(66, 1, 0.06, 680000);
     this.camera.rotation.order = "YXZ";
 
     this.scene = new THREE.Scene();
@@ -2316,9 +4062,14 @@ class FlightView {
     this.scene.fog = new THREE.FogExp2(this.fogColor, 0.000055);
     this.sky = createSky();
     this.sea = createSea();
-    this.scene.add(this.sky.mesh, this.sea.mesh);
+    this.tacticalClouds = createTacticalCloudField(THREE, {
+      qualityTier: VISUAL_QUALITY.tier,
+    });
+    this.scene.add(this.sky.mesh, this.sea.mesh, this.tacticalClouds.group);
+    this.cloudFogColor = new THREE.Color(0xb8c6c8);
 
-    this.scene.add(new THREE.HemisphereLight(0xb5cad0, 0x102229, 0.78));
+    this.ambient = new THREE.HemisphereLight(0xb5cad0, 0x102229, 0.78);
+    this.scene.add(this.ambient);
     this.sun = new THREE.DirectionalLight(0xffe2b4, 2.65);
     this.sunTarget = new THREE.Object3D();
     this.scene.add(this.sun, this.sunTarget);
@@ -2334,45 +4085,70 @@ class FlightView {
     this.sun.shadow.bias = -0.00018;
     this.sun.shadow.normalBias = 0.16;
 
-    this.drone = createDrone();
-    this.awacs = createAwacs();
-    // Keep the chase/reference airframe available without duplicating its heavier geometry.
-    this.hiddenDrone = this.drone.clone(true);
-    this.hiddenGlider = createGlider();
-    this.hiddenDrone.visible = false;
-    this.hiddenGlider.visible = false;
-    this.awacs.visible = false;
-    this.carrier = createCarrier();
-    this.carrier.visible = false;
+    this.presentationAssets = new PresentationAssetManager(this.renderer, this.scene, this.camera);
+    this.cockpitHead = createCockpitHeadPresentation(THREE);
+    this.periodGunsight = createPeriodGunsight(THREE);
+    this.banditContact = createDistantAircraftImpostor(THREE);
+    this.scene.add(this.periodGunsight.object3d, this.banditContact.object3d);
+    this.visualRuntime = null;
+    this.visualRuntimeRequestedKey = "";
+    this.visualRuntimeEpoch = 0;
+    this.visualRuntimeError = null;
+    this.remoteAircraft = new RemoteAircraftManager(this.scene);
+    this.carrierRuntime = createCarrierRuntimePresentation();
+    this.scene.add(this.carrierRuntime.recovery.group, this.carrierRuntime.water.group);
     this.banditDestruction = createBanditDestruction();
     this.gunEffects = createGunEffects();
+    this.playerDamageSmoke = createDamageSmokeTrail(THREE, {
+      name: "PLAYER_DAMAGE_SMOKE",
+      capacity: VISUAL_QUALITY.tier === "mobile" ? 32 : 56,
+      pixelRatio: Math.min(window.devicePixelRatio || 1, VISUAL_QUALITY.pixelRatioCap),
+    });
+    this.banditDamageSmoke = createDamageSmokeTrail(THREE, {
+      name: "BANDIT_DAMAGE_SMOKE",
+      capacity: VISUAL_QUALITY.tier === "mobile" ? 32 : 56,
+      pixelRatio: Math.min(window.devicePixelRatio || 1, VISUAL_QUALITY.pixelRatioCap),
+    });
     this.scene.add(
-      this.drone,
-      this.awacs,
-      this.hiddenDrone,
-      this.hiddenGlider,
-      this.carrier,
       this.banditDestruction,
       this.gunEffects,
+      this.playerDamageSmoke.points,
+      this.banditDamageSmoke.points,
     );
 
     this.playerPosition = new THREE.Vector3();
     this.playerForward = new THREE.Vector3(0, 0, -1);
     this.playerUp = new THREE.Vector3(0, 1, 0);
     this.playerRight = new THREE.Vector3(1, 0, 0);
+    this.playerMuzzleLeftPosition = new THREE.Vector3();
+    this.playerMuzzleRightPosition = new THREE.Vector3();
+    this.opponentMuzzleLeftPosition = new THREE.Vector3();
+    this.opponentMuzzleRightPosition = new THREE.Vector3();
     this.playerQuaternion = new THREE.Quaternion();
     this.banditPosition = new THREE.Vector3();
+    this.playerDamagePosition = new THREE.Vector3();
+    this.banditDamagePosition = new THREE.Vector3();
     this.leadPipper = new THREE.Vector3();
     this.banditQuaternion = new THREE.Quaternion();
     this.playerFrame = this.createAttitudeFrame();
     this.banditFrame = this.createAttitudeFrame();
+    this.banditEntityId = "";
+    this.playerEntityId = "";
     this.banditWasAlive = true;
     this.banditSplashTime = -1;
+    this.banditDestructionForcedUntil = -1;
     this.lastRoundsFired = 0;
+    this.lastOpponentRoundsFired = 0;
     this.lastHitCount = 0;
     this.muzzleFlashUntil = -1;
+    this.opponentMuzzleFlashUntil = -1;
     this.hitSparkTime = -1;
-    this.aimPoint = new THREE.Vector3();   // carrier touchdown point (fly the velocity vector onto it)
+    this.lastCombatEventSequence = 0;
+    this.aimPoint = new THREE.Vector3();   // published forward recovery cue, distinct from wire three
+    this.approachDirectorPoint = new THREE.Vector3();
+    this.approachCueDirection = new THREE.Vector3();
+    this.deckFlightPathPoint = new THREE.Vector3();
+    this.deckRelativeVelocity = new THREE.Vector3();
     this.localTarget = new THREE.Vector3();
     this.localYawQuaternion = new THREE.Quaternion();
     this.localPitchQuaternion = new THREE.Quaternion();
@@ -2380,6 +4156,9 @@ class FlightView {
     this.inversePlayerQuaternion = new THREE.Quaternion();
     this.xAxis = new THREE.Vector3(1, 0, 0);
     this.yAxis = new THREE.Vector3(0, 1, 0);
+    this.shadowTargetPosition = new THREE.Vector3();
+    this.shadowRight = new THREE.Vector3();
+    this.shadowUp = new THREE.Vector3();
 
     this.hud = createHud(hudCanvas);
     this.hudFrame = {
@@ -2393,9 +4172,12 @@ class FlightView {
       banditForward: this.banditFrame.forward,
       leadPipper: this.leadPipper,
       aimPoint: null,
+      directorPoint: null,
+      flightPathPoint: null,
       sensorYaw: 0,
       sensorPitch: 0,
       padlock: false,
+      periodGunsightVisible: false,
       triggerHeld: false,
       dt: 0,
       now: 0,
@@ -2410,12 +4192,72 @@ class FlightView {
     document.documentElement.style.setProperty("--game-height", `${height}px`);
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
-    if (this.carrier?.userData.sprayUniforms) {
-      this.carrier.userData.sprayUniforms.uPixelRatio.value = pixelRatio;
+    const carrierVisual = this.presentationAssets.carrierSlot.object;
+    if (carrierVisual?.userData.sprayUniforms) {
+      carrierVisual.userData.sprayUniforms.uPixelRatio.value = pixelRatio;
     }
+    this.carrierRuntime.water.sprayUniforms.uPixelRatio.value = pixelRatio;
     this.camera.aspect = width / Math.max(height, 1);
     this.camera.updateProjectionMatrix();
     this.hud.resize(width, height, pixelRatio, gameSafeInsets());
+    this.visualRuntime?.resize(width, height, window.devicePixelRatio || 1);
+  }
+
+  ensureVisualRuntime() {
+    const pack = this.presentationAssets.activePack;
+    const key = this.presentationAssets.activePackKey;
+    if (!pack?.profile || !key || key === this.visualRuntimeRequestedKey) return;
+
+    this.visualRuntimeRequestedKey = key;
+    const epoch = ++this.visualRuntimeEpoch;
+    const previous = this.visualRuntime;
+    this.visualRuntime = null;
+    this.visualRuntimeError = null;
+    const profileUrl = new URL("visual-profile.json", this.presentationAssets.requested.packUri).href;
+
+    void Promise.resolve(previous?.dispose())
+      .catch((error) => console.warn("Previous visual runtime cleanup failed.", error))
+      .then(() => createVisualRuntime({
+        renderer: this.renderer,
+        scene: this.scene,
+        camera: this.camera,
+        profile: pack.profile,
+        profileUrl,
+        tierId: VISUAL_QUALITY.tier,
+        mode: "combat",
+        lights: { ambient: this.ambient, sun: this.sun },
+        manageFog: false,
+        manageRendererSize: false,
+        restoreStateOnDispose: false,
+        shadowModes: mobileControls ? ["carrier"] : ["combat", "carrier", "replay"],
+        shadowHalfExtents: { combat: 44, carrier: 190, replay: 160 },
+        onResolutionChange: (pixelRatio) => {
+          const carrierVisual = this.presentationAssets.carrierSlot.object;
+          if (carrierVisual?.userData.sprayUniforms) {
+            carrierVisual.userData.sprayUniforms.uPixelRatio.value = pixelRatio;
+          }
+          this.carrierRuntime.water.sprayUniforms.uPixelRatio.value = pixelRatio;
+        },
+        onDiagnostic: (diagnostic) => console.debug("Visual runtime", diagnostic),
+      }))
+      .then((runtime) => {
+        if (epoch !== this.visualRuntimeEpoch || key !== this.presentationAssets.activePackKey) {
+          return runtime.dispose();
+        }
+        this.visualRuntime = runtime;
+        this.banditContact.setColors(
+          pack.profile.readability?.targetSilhouetteColor ?? 0xd7e7ec,
+          0xd6c59b,
+        );
+        const { width, height } = gameViewport();
+        runtime.resize(width, height, window.devicePixelRatio || 1);
+        return undefined;
+      })
+      .catch((error) => {
+        if (epoch !== this.visualRuntimeEpoch) return;
+        this.visualRuntimeError = String(error?.message ?? error);
+        console.warn("Pack visual runtime unavailable; direct renderer retained.", error);
+      });
   }
 
   createAttitudeFrame() {
@@ -2441,6 +4283,38 @@ class FlightView {
     frame.matrix.makeBasis(frame.right, frame.up, frame.zAxis);
     frame.quaternion.setFromRotationMatrix(frame.matrix).normalize();
     return frame;
+  }
+
+  updateSunAndShadows(isCarrier, carrierRoot) {
+    const extent = isCarrier ? 190 : 44;
+    const target = isCarrier ? carrierRoot.position : this.playerPosition;
+    const texelSize = extent * 2 / Math.max(1, VISUAL_QUALITY.shadowMapSize);
+
+    // Snap the tracked volume in the sun's light-space plane. This keeps fine cockpit rails and
+    // deck markings from crawling as the world translates under a fixed-resolution shadow map.
+    this.shadowRight.crossVectors(SUN_DIRECTION, this.yAxis).normalize();
+    this.shadowUp.crossVectors(this.shadowRight, SUN_DIRECTION).normalize();
+    this.shadowTargetPosition.copy(target);
+    const lightX = this.shadowTargetPosition.dot(this.shadowRight);
+    const lightY = this.shadowTargetPosition.dot(this.shadowUp);
+    this.shadowTargetPosition
+      .addScaledVector(this.shadowRight, Math.round(lightX / texelSize) * texelSize - lightX)
+      .addScaledVector(this.shadowUp, Math.round(lightY / texelSize) * texelSize - lightY);
+
+    if (this.shadowExtent !== extent) {
+      this.shadowExtent = extent;
+      this.sun.shadow.camera.left = -extent;
+      this.sun.shadow.camera.right = extent;
+      this.sun.shadow.camera.top = extent;
+      this.sun.shadow.camera.bottom = -extent;
+      this.sun.shadow.camera.updateProjectionMatrix();
+    }
+    // Desktop dogfights receive cockpit/airframe self-shadow; mobile retains the carrier-only
+    // path because fill-rate, not shadow-map resolution, is its dominant cost.
+    this.sun.castShadow = isCarrier || !mobileControls;
+    this.sunTarget.position.copy(this.shadowTargetPosition);
+    this.sun.position.copy(this.shadowTargetPosition).addScaledVector(SUN_DIRECTION, 1600);
+    this.sunTarget.updateMatrixWorld();
   }
 
   updateGimbal(dt) {
@@ -2491,25 +4365,43 @@ class FlightView {
     }
   }
 
-  updateBanditDestruction(alive, nowSeconds) {
+  updateBanditDestruction(alive, nowSeconds, forceSplash = false) {
     const effect = this.banditDestruction;
     const data = effect.userData;
-    if (alive) {
+    const fogDensity = Number(this.scene.fog?.density) || 0;
+    for (const material of [data.outer.material, data.inner.material,
+      ...data.smoke.map((puff) => puff.material)]) {
+      material.uniforms.uFogColor.value.copy(this.fogColor);
+      material.uniforms.uFogDensity.value = fogDensity;
+    }
+    if (forceSplash) {
+      this.banditSplashTime = nowSeconds;
+      this.banditDestructionForcedUntil = nowSeconds + 4.8;
+      this.banditWasAlive = true;
+      effect.position.copy(this.banditPosition);
+      effect.visible = true;
+    }
+
+    const forced = nowSeconds < this.banditDestructionForcedUntil;
+    if (alive && !forced) {
       this.banditWasAlive = true;
       this.banditSplashTime = -1;
+      this.banditDestructionForcedUntil = -1;
       effect.visible = false;
       return;
     }
 
-    if (this.banditWasAlive || this.banditSplashTime < 0) {
+    if (!forced && (this.banditWasAlive || this.banditSplashTime < 0)) {
       this.banditSplashTime = nowSeconds;
       effect.position.copy(this.banditPosition);
       effect.visible = true;
     }
-    this.banditWasAlive = false;
+    if (forced && !forceSplash) this.banditWasAlive = alive;
+    else if (!forced) this.banditWasAlive = false;
 
     const age = nowSeconds - this.banditSplashTime;
     if (age >= 4.8) {
+      this.banditDestructionForcedUntil = -1;
       effect.visible = false;
       return;
     }
@@ -2567,70 +4459,119 @@ class FlightView {
     }
   }
 
+  muzzleWorldPosition(slot, semanticId, fallbackPosition, forward, right,
+    fallbackForwardOffset, fallbackLateralOffset, out) {
+    const anchor = this.presentationAssets.semanticAnchor(slot, semanticId);
+    if (anchor) {
+      anchor.getWorldPosition(out);
+      return out;
+    }
+    return out.copy(fallbackPosition)
+      .addScaledVector(forward, fallbackForwardOffset)
+      .addScaledVector(right, fallbackLateralOffset);
+  }
+
   updateGunEffects(state, nowSeconds) {
     const data = this.gunEffects.userData;
-    const positions = data.tracerPositions;
-    const tracerHeadPositions = data.tracerHeadPositions;
-    const rounds = Array.isArray(state.tracers) ? state.tracers : null;
-    const count = Math.min(rounds?.length || 0, MAX_TRACERS);
-    for (let i = 0; i < count; i++) {
-      const round = rounds[i];
-      const offset = i * 6;
-      const x = Number(round[0]) || 0;
-      const y = Number(round[1]) || 0;
-      const z = -(Number(round[2]) || 0);
-      const vx = Number(round[3]) || 0;
-      const vy = Number(round[4]) || 0;
-      const vz = -(Number(round[5]) || 0);
-      const speed = Math.max(1, Math.hypot(vx, vy, vz));
-      const streak = clamp(speed * 0.014, 9, 20);
-      positions[offset] = x - vx / speed * streak;
-      positions[offset + 1] = y - vy / speed * streak;
-      positions[offset + 2] = z - vz / speed * streak;
-      positions[offset + 3] = x;
-      positions[offset + 4] = y;
-      positions[offset + 5] = z;
-      const headOffset = i * 3;
-      tracerHeadPositions[headOffset] = x;
-      tracerHeadPositions[headOffset + 1] = y;
-      tracerHeadPositions[headOffset + 2] = z;
-    }
-    data.tracers.geometry.setDrawRange(0, count * 2);
-    data.tracers.geometry.attributes.position.needsUpdate = count > 0;
-    data.tracers.visible = count > 0;
-    data.tracerGlow.visible = count > 0;
-    data.tracerHeads.geometry.setDrawRange(0, count);
-    data.tracerHeads.geometry.attributes.position.needsUpdate = count > 0;
-    data.tracerHeads.visible = count > 0;
+    updateTracerChannel(data.outgoingTracers, state.tracers);
+    updateTracerChannel(data.incomingTracers, state.opponent_tracers);
 
     const roundsFired = Number(state.rounds_fired) || 0;
     if (roundsFired < this.lastRoundsFired) this.lastRoundsFired = roundsFired;
     if (roundsFired > this.lastRoundsFired) this.muzzleFlashUntil = nowSeconds + 0.048;
     this.lastRoundsFired = roundsFired;
-    const muzzleActive = nowSeconds < this.muzzleFlashUntil;
-    data.muzzle.visible = muzzleActive;
-    data.muzzleCone.visible = muzzleActive;
-    data.muzzle.position.copy(this.playerPosition).addScaledVector(this.playerForward, 6.4);
-    data.muzzle.quaternion.copy(this.playerQuaternion);
-    data.muzzleCone.position.copy(this.playerPosition).addScaledVector(this.playerForward, 7.4);
-    data.muzzleCone.quaternion.copy(this.playerQuaternion);
-    data.muzzleLight.position.copy(data.muzzle.position);
-    if (muzzleActive) {
-      const pulse = 0.82 + 0.18 * Math.sin(roundsFired * 2.17);
-      data.muzzle.scale.set(1.45 * pulse, 0.72 * pulse, 2.7 * pulse);
-      data.muzzleCone.scale.set(0.9 * pulse, 0.9 * pulse, 1.45 * pulse);
-      data.muzzle.material.opacity = 0.84;
-      data.muzzleCone.material.opacity = 0.72;
-      data.muzzleLight.intensity = 22;
-    } else {
-      data.muzzle.material.opacity = 0;
-      data.muzzleCone.material.opacity = 0;
-      data.muzzleLight.intensity = 0;
+    const playerWeaponSlot = this.presentationAssets.cockpitSlot.root.visible
+      ? this.presentationAssets.cockpitSlot
+      : this.presentationAssets.playerExteriorSlot;
+    this.muzzleWorldPosition(
+      playerWeaponSlot, "muzzle.left", this.playerPosition, this.playerForward, this.playerRight,
+      6.25, -0.42, this.playerMuzzleLeftPosition,
+    );
+    this.muzzleWorldPosition(
+      playerWeaponSlot, "muzzle.right", this.playerPosition, this.playerForward, this.playerRight,
+      6.25, 0.42, this.playerMuzzleRightPosition,
+    );
+    updateMuzzleChannel(
+      data.playerMuzzle,
+      nowSeconds < this.muzzleFlashUntil,
+      this.playerMuzzleLeftPosition,
+      this.playerForward,
+      this.playerQuaternion,
+      roundsFired,
+      0.12,
+      0.85,
+      22,
+    );
+    updateMuzzleChannel(
+      data.playerMuzzleRight,
+      nowSeconds < this.muzzleFlashUntil,
+      this.playerMuzzleRightPosition,
+      this.playerForward,
+      this.playerQuaternion,
+      roundsFired + 1,
+      0.12,
+      0.85,
+      22,
+    );
+
+    const opponentRoundsFired = Number(state.opponent_rounds_fired) || 0;
+    if (opponentRoundsFired < this.lastOpponentRoundsFired) {
+      this.lastOpponentRoundsFired = opponentRoundsFired;
     }
+    if (opponentRoundsFired > this.lastOpponentRoundsFired) {
+      this.opponentMuzzleFlashUntil = nowSeconds + 0.048;
+    }
+    this.lastOpponentRoundsFired = opponentRoundsFired;
+    this.muzzleWorldPosition(
+      this.presentationAssets.targetSlot,
+      "muzzle.left",
+      this.banditPosition,
+      this.banditFrame.forward,
+      this.banditFrame.right,
+      3.9,
+      -0.4,
+      this.opponentMuzzleLeftPosition,
+    );
+    this.muzzleWorldPosition(
+      this.presentationAssets.targetSlot,
+      "muzzle.right",
+      this.banditPosition,
+      this.banditFrame.forward,
+      this.banditFrame.right,
+      3.9,
+      0.4,
+      this.opponentMuzzleRightPosition,
+    );
+    updateMuzzleChannel(
+      data.opponentMuzzle,
+      nowSeconds < this.opponentMuzzleFlashUntil,
+      this.opponentMuzzleLeftPosition,
+      this.banditFrame.forward,
+      this.banditQuaternion,
+      opponentRoundsFired,
+      0.12,
+      0.8,
+      16,
+    );
+    updateMuzzleChannel(
+      data.opponentMuzzleRight,
+      nowSeconds < this.opponentMuzzleFlashUntil,
+      this.opponentMuzzleRightPosition,
+      this.banditFrame.forward,
+      this.banditQuaternion,
+      opponentRoundsFired + 1,
+      0.12,
+      0.8,
+      16,
+    );
 
     const hits = Number(state.hits) || 0;
     if (hits < this.lastHitCount) this.lastHitCount = hits;
-    if (hits > this.lastHitCount) this.hitSparkTime = nowSeconds;
+    // v1.1 uses ordered events so a splash inside a multi-tick Advance cannot erase the edge.
+    // Retain the cumulative counter only as compatibility for an older snapshot.
+    if (!Array.isArray(state.recent_events) && hits > this.lastHitCount) {
+      this.hitSparkTime = nowSeconds;
+    }
     this.lastHitCount = hits;
     const sparkAge = nowSeconds - this.hitSparkTime;
     const sparksActive = sparkAge >= 0 && sparkAge < 0.34;
@@ -2655,9 +4596,61 @@ class FlightView {
     }
   }
 
+  updateDamageSmoke(state, nowSeconds, fogDensity) {
+    const banditHealth = Number(state.bandit_health ?? state.opponent_health);
+    const playerHealth = Number(state.player_health);
+    const banditAlive = state.bandit_alive !== false && state.opponent_alive !== false;
+    const playerAlive = state.player_alive !== false;
+    const damageAnchor = this.presentationAssets.semanticAnchor(
+      this.presentationAssets.targetSlot,
+      "damage.center",
+    );
+    if (damageAnchor) damageAnchor.getWorldPosition(this.banditDamagePosition);
+    else this.banditDamagePosition.copy(this.banditPosition);
+
+    if (banditAlive && Number.isFinite(banditHealth) && banditHealth < 0.999) {
+      this.banditDamageSmoke.emit(this.banditDamagePosition, nowSeconds);
+    }
+    if (playerAlive && Number.isFinite(playerHealth) && playerHealth < 0.999) {
+      this.playerDamagePosition.copy(this.playerPosition).addScaledVector(this.playerForward, -3.8);
+      this.playerDamageSmoke.emit(this.playerDamagePosition, nowSeconds);
+    }
+    const pixelRatio = this.renderer.getPixelRatio();
+    this.banditDamageSmoke.update(nowSeconds, this.fogColor, fogDensity, pixelRatio);
+    this.playerDamageSmoke.update(nowSeconds, this.fogColor, fogDensity, pixelRatio);
+  }
+
+  consumeCombatEvents(state, nowSeconds) {
+    this.lastCombatEventSequence = consumeRecentEvents(
+      state.recent_events,
+      this.lastCombatEventSequence,
+      (event) => {
+        this.hud.noteCombatEvent?.(event, nowSeconds);
+        if (event.type === "HIT" && event.target === "OPPONENT") {
+          this.hitSparkTime = nowSeconds;
+        } else if ((event.type === "DESTROYED" || event.type === "IMPACT")
+          && event.target === "OPPONENT") {
+          this.updateBanditDestruction(true, nowSeconds, true);
+        }
+      },
+    );
+  }
+
   update(state, dt, nowSeconds) {
     const playerFrame = this.frameFromState(state, "p", this.playerFrame);
     const banditFrame = this.frameFromState(state, "b", this.banditFrame);
+    const nextBanditEntityId = projectedId(state.bandit_entity_id);
+    const nextPlayerEntityId = projectedId(state.player_entity_id);
+    if (this.banditEntityId && nextBanditEntityId !== this.banditEntityId) {
+      this.banditDamageSmoke.clear();
+      this.banditContact.reset();
+    }
+    if (this.playerEntityId && nextPlayerEntityId !== this.playerEntityId) {
+      this.playerDamageSmoke.clear();
+      this.cockpitHead.reset(state);
+    }
+    this.banditEntityId = nextBanditEntityId;
+    this.playerEntityId = nextPlayerEntityId;
 
     this.playerPosition.set(state.px, state.py, -state.pz);
     this.playerForward.copy(playerFrame.forward);
@@ -2670,55 +4663,179 @@ class FlightView {
       && Number.isFinite(state.lead_y) && Number.isFinite(state.lead_z)) {
       this.leadPipper.set(state.lead_x, state.lead_y, -state.lead_z);
     }
+    this.consumeCombatEvents(state, nowSeconds);
 
-    this.updateGimbal(dt);
+    this.presentationAssets.sync(state);
+    this.ensureVisualRuntime();
+    const cockpitRoot = this.presentationAssets.cockpitSlot.root;
+    const playerExteriorRoot = this.presentationAssets.playerExteriorSlot.root;
+    cockpitRoot.position.copy(this.playerPosition);
+    cockpitRoot.quaternion.copy(this.playerQuaternion);
+    cockpitRoot.scale.setScalar(1);
+    cockpitRoot.updateMatrixWorld(true);
+    playerExteriorRoot.position.copy(this.playerPosition);
+    playerExteriorRoot.quaternion.copy(this.playerQuaternion);
+    playerExteriorRoot.scale.setScalar(1);
+    playerExteriorRoot.updateMatrixWorld(true);
 
-    this.camera.position.copy(this.playerPosition)
-      .addScaledVector(this.playerUp, 0.6)
-      .addScaledVector(this.playerForward, 4.0);
-    // Positive sensor yaw means look right. In three.js local +Y rotation turns -Z left,
-    // hence the deliberate negative sign here.
-    this.localYawQuaternion.setFromAxisAngle(this.yAxis, -sensorYaw);
-    this.localPitchQuaternion.setFromAxisAngle(this.xAxis, sensorPitch);
-    this.localGimbalQuaternion.copy(this.localYawQuaternion).multiply(this.localPitchQuaternion);
-    this.camera.quaternion.copy(this.playerQuaternion).multiply(this.localGimbalQuaternion);
+    const gunsightAnchor = this.presentationAssets.semanticAnchor(
+      this.presentationAssets.cockpitSlot,
+      "gunsight.origin",
+    );
+    if (gunsightAnchor !== this.periodGunsight.anchor) {
+      if (gunsightAnchor) this.periodGunsight.attach(gunsightAnchor);
+      else this.periodGunsight.detach();
+    }
+
+    const replayExternal = state.replay_external === true;
+    if (replayExternal) {
+      // Recorded aircraft and carrier motion own the scene. The camera is presentation-only and
+      // tracks an offset in the recorded aircraft frame so deck-relative errors remain readable.
+      this.camera.position.copy(this.playerPosition)
+        .addScaledVector(this.playerForward, -28)
+        .addScaledVector(this.playerUp, 10)
+        .addScaledVector(this.playerRight, 16);
+      this.localTarget.copy(this.playerPosition)
+        .addScaledVector(this.playerForward, 5)
+        .addScaledVector(this.playerUp, 1.5);
+      this.camera.up.set(0, 1, 0);
+      this.camera.lookAt(this.localTarget);
+    } else {
+      this.updateGimbal(dt);
+      const cockpitCamera = cockpitRoot.visible
+        ? this.presentationAssets.semanticAnchor(
+          this.presentationAssets.cockpitSlot,
+          "camera.cockpit",
+        )
+        : null;
+      if (cockpitCamera) {
+        cockpitCamera.getWorldPosition(this.camera.position);
+      } else {
+        // Pack-neutral compatibility eye point. Authored cockpits own their precise camera
+        // placement through the camera.cockpit semantic anchor above.
+        this.camera.position.copy(this.playerPosition)
+          .addScaledVector(this.playerUp, 0.6)
+          .addScaledVector(this.playerForward, 4.0);
+      }
+      // Positive sensor yaw means look right. In three.js local +Y rotation turns -Z left,
+      // hence the deliberate negative sign here.
+      this.localYawQuaternion.setFromAxisAngle(this.yAxis, -sensorYaw);
+      this.localPitchQuaternion.setFromAxisAngle(this.xAxis, sensorPitch);
+      this.localGimbalQuaternion.copy(this.localYawQuaternion).multiply(this.localPitchQuaternion);
+      this.camera.quaternion.copy(this.playerQuaternion).multiply(this.localGimbalQuaternion);
+    }
+    if (replayExternal) this.cockpitHead.reset(state);
+    else this.cockpitHead.update(this.camera, state, dt);
     this.camera.updateMatrixWorld(true);
+    const gunsightPresentation = this.periodGunsight.update(this.camera, state, dt);
 
     const cameraAltitude = Math.max(0, this.camera.position.y);
     const atmosphereMix = smoothstep(1800, 14000, cameraAltitude);
-    const fogDensity = 0.000055 + (0.000009 - 0.000055) * atmosphereMix;
+    const baseFogDensity = 0.000055 + (0.000009 - 0.000055) * atmosphereMix;
     this.fogColor.copy(this.fogLow).lerp(this.fogHigh, atmosphereMix);
+    const cloudExtinction = this.tacticalClouds.update(
+      this.camera.position,
+      nowSeconds,
+      this.fogColor,
+      baseFogDensity,
+    );
+    const fogDensity = baseFogDensity + cloudExtinction * 0.0011;
+    if (cloudExtinction > 0) {
+      this.fogColor.lerp(this.cloudFogColor, Math.min(0.82, cloudExtinction * 0.78));
+      this.tacticalClouds.update(this.camera.position, nowSeconds, this.fogColor, fogDensity);
+    }
     this.scene.fog.color.copy(this.fogColor);
     this.scene.fog.density = fogDensity;
 
     const isCarrier = state.carrier === true;
-    const balloonStrike = /balloon|kj-500/i.test(state.beat ?? "");
     const banditAlive = state.bandit_alive !== false && state.fight !== "Splash";
-    // The carrier and the fighter now coexist. Keep using the established bandit mesh, physical
-    // bx/by/-bz placement, forward/lift attitude, and range scale assist from every other beat.
-    this.drone.visible = !balloonStrike && banditAlive;
-    this.awacs.visible = balloonStrike && banditAlive;
-    this.hiddenDrone.visible = false;
-    this.hiddenGlider.visible = false;
-    this.carrier.visible = isCarrier;
+    const banditBodyPresent = state.opponent_body_present !== false;
+    const targetRoot = this.presentationAssets.targetSlot.root;
+    const carrierRoot = this.presentationAssets.carrierSlot.root;
+    const escortRoot = this.presentationAssets.escortSlot.root;
+    targetRoot.visible = banditBodyPresent;
+    carrierRoot.visible = isCarrier;
+    escortRoot.visible = isCarrier;
     if (isCarrier) {
       // Sim frame X=east, Y=up, Z=north; render flips Z. Deck-centre origin at deck height.
-      this.carrier.position.set(state.cx, state.cy, -state.cz);
-      this.carrier.rotation.y = -(state.cheading ?? 0);
-      updateCarrierVisual(this.carrier, state, nowSeconds, this.fogColor, fogDensity);
-      if (Number.isFinite(state.tx)) this.aimPoint.set(state.tx, state.ty, -state.tz);
+      // The hull follows the moving deck's bow-up pitch; water effects use a separate level root.
+      applyCarrierRootPose(THREE, carrierRoot, state, {
+        followPitch: true,
+        scratch: this.carrierRuntime.poseScratch,
+      });
+      // Presentation formation is derived only from the projected carrier frame. The model origin
+      // sits five metres above its waterline socket; formation truth remains outside the renderer.
+      applyEscortFormationPose(THREE, escortRoot, state, {
+        station: "starboard-quarter",
+        alongMetres: -760,
+        crossMetres: 460,
+        waterlineY: 5,
+      });
+      const carrierVisual = this.presentationAssets.carrierSlot.object;
+      if (carrierVisual?.userData.structure) {
+        updateCarrierVisual(
+          carrierVisual,
+          state,
+          nowSeconds,
+          this.fogColor,
+          fogDensity,
+          carrierRoot.position.y,
+        );
+      }
+      if (Number.isFinite(state.ax)) this.aimPoint.set(state.ax, state.ay, -state.az);
+      else if (Number.isFinite(state.tx)) this.aimPoint.set(state.tx, state.ty, -state.tz);
+      this.approachCueDirection.copy(this.aimPoint).sub(this.playerPosition);
+      const cueHorizontal = Math.hypot(
+        this.approachCueDirection.x,
+        this.approachCueDirection.z,
+      );
+      const directorOffset = Number(state.approach_director_pitch_deg) * DEG;
+      if (cueHorizontal > 1e-6 && Number.isFinite(directorOffset)) {
+        const directorPitch = Math.atan2(this.approachCueDirection.y, cueHorizontal)
+          + directorOffset;
+        const directorHorizontal = Math.cos(directorPitch);
+        this.approachDirectorPoint.set(
+          this.approachCueDirection.x / cueHorizontal * directorHorizontal,
+          Math.sin(directorPitch),
+          this.approachCueDirection.z / cueHorizontal * directorHorizontal,
+        ).multiplyScalar(10000).add(this.playerPosition);
+      }
+      this.deckRelativeVelocity.set(state.deck_vx, state.deck_vy, -state.deck_vz);
+      if (this.deckRelativeVelocity.lengthSq() > 1e-6) {
+        this.deckFlightPathPoint.copy(this.playerPosition)
+          .addScaledVector(this.deckRelativeVelocity.normalize(), 10000);
+      }
     }
+    updateCarrierRuntimePresentation(
+      this.carrierRuntime,
+      this.presentationAssets.carrierSlot.object,
+      state,
+      nowSeconds,
+      this.fogColor,
+      fogDensity,
+    );
 
-    const target = balloonStrike ? this.awacs : this.drone;
-    target.position.copy(this.banditPosition);
-    target.quaternion.copy(this.banditQuaternion);
-    // True scale is retained in the merge; the visual assist ramps only after 250 m.
-    const range = Number.isFinite(state.range_m) ? state.range_m : this.banditPosition.distanceTo(this.playerPosition);
-    const scale = 1 + 5 * smoothstep(250, 18000, range);
-    target.scale.setScalar(scale);
-    if (this.awacs.userData.rotodome) this.awacs.userData.rotodome.rotation.y = nowSeconds * 0.42;
+    targetRoot.position.copy(this.banditPosition);
+    targetRoot.quaternion.copy(this.banditQuaternion);
+    // Keep authored geometry at physical scale. A separate depth-tested contact owns the exact
+    // 8–14 px readability floor and fades with hysteresis at the mesh hand-off.
+    targetRoot.scale.setScalar(1);
+    targetRoot.updateMatrixWorld(true);
+    const contact = this.banditContact.update({
+      camera: this.camera,
+      renderer: this.renderer,
+      target: targetRoot,
+      targetDiameterMetres: this.presentationAssets.targetSlot.boundingSphereDiameterMetres ?? 12,
+      visible: banditBodyPresent && banditAlive,
+      deltaSeconds: dt,
+    });
+    targetRoot.visible = banditBodyPresent && (!banditAlive || contact.modelVisible);
+    const targetVisual = this.presentationAssets.targetSlot.object;
+    if (targetVisual?.userData.rotodome) targetVisual.userData.rotodome.rotation.y = nowSeconds * 0.42;
     this.updateBanditDestruction(banditAlive, nowSeconds);
     this.updateGunEffects(state, nowSeconds);
+    this.updateDamageSmoke(state, nowSeconds, fogDensity);
+    this.remoteAircraft.update(dt, this.camera.position, { historicalReplay: replayExternal });
 
     this.sky.mesh.position.copy(this.camera.position);
     this.sky.uniforms.uTime.value = nowSeconds;
@@ -2729,22 +4846,69 @@ class FlightView {
     this.sea.uniforms.uFogColor.value.copy(this.fogColor);
     this.sea.uniforms.uFogDensity.value = fogDensity;
 
-    this.sun.castShadow = isCarrier;
-    this.sunTarget.position.copy(isCarrier ? this.carrier.position : this.camera.position);
-    this.sun.position.copy(this.sunTarget.position).addScaledVector(SUN_DIRECTION, 1600);
-    this.sunTarget.updateMatrixWorld();
-
-    this.renderer.render(this.scene, this.camera);
+    const shadowFocus = isCarrier ? carrierRoot.position : this.playerPosition;
+    if (this.visualRuntime?.initialized) {
+      // Establish the authored sun direction first; the shared runtime then owns shadow-map
+      // bounds, texel snapping, adaptive resolution, post-processing and the final color transform.
+      this.sunTarget.position.copy(shadowFocus);
+      this.sun.position.copy(shadowFocus).addScaledVector(SUN_DIRECTION, 1600);
+      this.visualRuntime.update({
+        deltaSeconds: dt,
+        elapsedSeconds: nowSeconds,
+        frameTimeMs: dt * 1000,
+        mode: replayExternal ? "replay" : isCarrier ? "carrier" : "combat",
+        shadowFocus,
+      });
+      this.visualRuntime.render(dt);
+    } else {
+      this.updateSunAndShadows(isCarrier, carrierRoot);
+      this.renderer.render(this.scene, this.camera);
+    }
     const hudFrame = this.hudFrame;
     hudFrame.state = state;
     hudFrame.aimPoint = isCarrier ? this.aimPoint : null; // HUD gates approach-only symbology from mode
+    hudFrame.directorPoint = isCarrier ? this.approachDirectorPoint : null;
+    hudFrame.flightPathPoint = isCarrier ? this.deckFlightPathPoint : null;
     hudFrame.sensorYaw = sensorYaw;
     hudFrame.sensorPitch = sensorPitch;
     hudFrame.padlock = padlock;
+    hudFrame.periodGunsightVisible = gunsightPresentation.visible;
     hudFrame.triggerHeld = heldKeys.has("KeyF");
     hudFrame.dt = dt;
     hudFrame.now = nowSeconds;
     this.hud.draw(hudFrame);
+  }
+
+  presentationDiagnostics() {
+    return Object.freeze({
+      ...this.presentationAssets.diagnostics(),
+      visualRuntime: this.visualRuntime?.diagnostics() ?? null,
+      visualRuntimeError: this.visualRuntimeError,
+      multiplayer: this.remoteAircraft.diagnostics(),
+    });
+  }
+
+  syncRemotePlayers(snapshot, ownPlayerId) {
+    this.remoteAircraft.sync(snapshot, ownPlayerId);
+    return this.remoteAircraft.aircraft.size;
+  }
+
+  async dispose() {
+    const visualRuntime = this.visualRuntime;
+    this.visualRuntime = null;
+    this.visualRuntimeEpoch += 1;
+    if (visualRuntime) await visualRuntime.dispose().catch(() => undefined);
+    this.periodGunsight.dispose();
+    this.banditContact.dispose();
+    this.remoteAircraft.dispose();
+    this.tacticalClouds.dispose();
+    this.playerDamageSmoke.dispose();
+    this.banditDamageSmoke.dispose();
+    this.carrierRuntime.recovery.group.removeFromParent();
+    this.carrierRuntime.water.group.removeFromParent();
+    disposeSceneResources(this.carrierRuntime.recovery.group);
+    disposeSceneResources(this.carrierRuntime.water.group);
+    await this.presentationAssets.dispose();
   }
 }
 
@@ -2825,15 +4989,21 @@ function installMobileInput(view) {
     filteredPitch = 0;
     filteredRoll = 0;
     releaseTiltAxes();
+    document.documentElement.classList.remove("tilt-pending");
     status(message);
+    setPauseReason("calibration", false);
   }
 
   function awaitFreshCentre() {
+    setPauseReason("calibration", true);
     calibration = null;
     calibrationAngle = null;
     filteredPitch = 0;
     filteredRoll = 0;
     releaseTiltAxes();
+    if (tiltTitle) tiltTitle.textContent = "HOLD LEVEL — RECENTRING";
+    if (tiltCopy) tiltCopy.textContent = "Hold your flying angle while the controls find a fresh centre.";
+    document.documentElement.classList.add("tilt-pending");
     status("TILT RECENTRING…");
   }
 
@@ -2851,6 +5021,7 @@ function installMobileInput(view) {
     document.documentElement.classList.remove("tilt-pending", "tilt-enabled");
     document.documentElement.classList.add("tilt-fallback");
     status(message || "BUTTON STICK");
+    setPauseReason("calibration", false);
   }
 
   function handleOrientation(event) {
@@ -2882,6 +5053,7 @@ function installMobileInput(view) {
   }
 
   function startOrientationListener() {
+    setPauseReason("calibration", true);
     if (!orientationListening) {
       window.addEventListener("deviceorientation", handleOrientation, { passive: true });
       orientationListening = true;
@@ -2904,6 +5076,7 @@ function installMobileInput(view) {
       return;
     }
 
+    setPauseReason("calibration", true);
     tiltState = "requesting";
     status("REQUESTING TILT…");
     try {
@@ -2923,6 +5096,7 @@ function installMobileInput(view) {
   }
 
   function recenterTilt() {
+    setPauseReason("calibration", true);
     if (tiltState === "enabled" && latestOrientation) {
       captureCentre(latestOrientation);
       return;
@@ -2995,6 +5169,7 @@ function installMobileInput(view) {
     useButtonStick("BUTTON STICK");
   });
   touchControls.querySelector('[data-mobile-action="recenter"]')?.addEventListener("click", recenterTilt);
+  touchControls.querySelector('[data-mobile-action="restart"]')?.addEventListener("click", restartMission);
   touchControls.addEventListener("contextmenu", (event) => event.preventDefault());
   window.addEventListener("pointerup", endControl);
   window.addEventListener("pointercancel", endControl);
@@ -3048,6 +5223,7 @@ function installMobileInput(view) {
   };
 
   if (orientationSupported) {
+    setPauseReason("calibration", true);
     document.documentElement.classList.add("tilt-pending");
     status("TILT OFF");
   } else {
@@ -3064,13 +5240,21 @@ function installMobileInput(view) {
 
 function installInput(view) {
   window.addEventListener("keydown", (event) => {
-    if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Space", "F1"].includes(event.code)) {
+    if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Space", "BracketLeft", "BracketRight", "F1", "Enter", "NumpadEnter", "Escape"].includes(event.code)) {
       event.preventDefault();
     }
     if (event.repeat || !bridge) return;
 
-    if (/^Digit[1-5]$/.test(event.code)) {
-      bridge.StartBeat(Number(event.code.slice(-1)));
+    if (event.code === "Escape" && skipIncidentReplay()) return;
+
+    if (event.code === "Enter" || event.code === "NumpadEnter") {
+      view.hud.armAudio();
+      activateReadyAction();
+      return;
+    }
+
+    if (/^Digit[1-6]$/.test(event.code)) {
+      selectMission(Number(event.code.slice(-1)));
       return;
     }
 
@@ -3080,17 +5264,23 @@ function installInput(view) {
     }
 
     if (event.code === "KeyC") {
-      bridge.ToggleDeckConfiguration();
+      toggleDeckAndReady();
       return;
     }
 
     if (event.code === "KeyH") {
-      view.hud.toggleLegend();
+      const visible = view.hud.toggleLegend();
+      setPauseReason("help", visible);
       return;
     }
 
     if (event.code === "KeyM") {
       view.hud.toggleAudio();
+      return;
+    }
+
+    if (event.code === "KeyR") {
+      restartMission();
       return;
     }
 
@@ -3102,7 +5292,7 @@ function installInput(view) {
   }, { passive: false });
 
   window.addEventListener("keyup", (event) => {
-    if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) {
+    if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Space", "BracketLeft", "BracketRight"].includes(event.code)) {
       event.preventDefault();
     }
     if (!bridge) return;
@@ -3110,11 +5300,14 @@ function installInput(view) {
   }, { passive: false });
 
   window.addEventListener("blur", () => {
-    resetMobileInput();
-    releaseAllMappedKeys();
-    dragging = false;
-    activePointer = null;
-    sceneCanvas.classList.remove("dragging");
+    setPauseReason("background", true);
+  });
+
+  window.addEventListener("focus", () => {
+    if (!document.hidden) setPauseReason("background", false);
+  });
+  document.addEventListener("visibilitychange", () => {
+    setPauseReason("background", document.hidden || !document.hasFocus());
   });
 
   sceneCanvas.addEventListener("pointerdown", (event) => {
@@ -3178,31 +5371,92 @@ async function boot() {
   await getConfig();
   const assemblyExports = await getAssemblyExports("GunsOnly.Web");
   bridge = assemblyExports.GunsOnly.Web.WebBridge;
-  bridge.StartBeat(5);   // start behind the boat, ready to land
+  incidentReplay = new IncidentReplayController((clipId) => bridge.ConsumeIncidentReplay(clipId));
+  bridge.StartBeat(selectedBeat);   // initialise the sortie; Begin is the explicit clock release
+  bridgePauseApplied = true;
 
   setBootStatus("CALIBRATING SENSOR…");
   const view = new FlightView();
-  installInput(view);
+  activeView = view;
+  multiplayer = new GlobalRoomClient({
+    url: resolveGlobalRoomUrl(),
+    onSnapshot: (snapshot, ownPlayerId) => {
+      const rendered = view.syncRemotePlayers(snapshot, ownPlayerId);
+      if (multiplayerStatus) {
+        multiplayerStatus.dataset.rendered = String(rendered);
+        multiplayerStatus.dataset.snapshotTime = String(snapshot.serverTimeMs || 0);
+        multiplayerStatus.dataset.bogeySequence = String(snapshot.bogeys?.[0]?.sequence ?? -1);
+        multiplayerStatus.dataset.bogeyPosition = snapshot.bogeys?.[0]?.position?.join(",") || "";
+      }
+    },
+    onStatus: renderMultiplayerStatus,
+  });
+  multiplayer.start();
 
   let previous = performance.now();
+  resetFrameClock = () => { previous = performance.now(); };
+  installInput(view);
+  installTestFlightConsole();
+  renderPauseUi();
   let firstFrame = true;
+
+  globalThis.__gunsLifecycle = {
+    get reasons() { return [...pauseReasons]; },
+    get selectedBeat() { return selectedBeat; },
+    begin: beginFlight,
+    restart: restartMission,
+  };
+  const assetDiagnostics = {};
+  Object.defineProperties(assetDiagnostics, {
+    snapshot: {
+      enumerable: true,
+      get: () => view.presentationDiagnostics(),
+    },
+    diagnostics: {
+      enumerable: true,
+      value: () => view.presentationDiagnostics(),
+    },
+  });
+  Object.defineProperty(globalThis, "__gunsAssets", {
+    configurable: true,
+    value: Object.freeze(assetDiagnostics),
+  });
+  Object.defineProperty(globalThis, "__gunsMultiplayer", {
+    configurable: true,
+    value: Object.freeze({
+      diagnostics: () => multiplayer?.diagnostics() ?? null,
+      get snapshot() { return multiplayer?.diagnostics() ?? null; },
+    }),
+  });
+  window.addEventListener("pagehide", () => {
+    multiplayer?.stop();
+    void view.dispose();
+  }, { once: true });
 
   function tick(now) {
     try {
       const dt = clamp((now - previous) / 1000, 0, 0.25);
       previous = now;
-      bridge.Advance(dt);
+      if (pauseReasons.size === 0) bridge.Advance(dt);
       const state = JSON.parse(bridge.GetState());
-      // Debug/QA hook. Two jobs: (1) let an automated browser verify things a screenshot can't
-      // (roll direction under live input — the mirrored-roll bug the desktop shipped and only
-      // flying caught), and (2) make the desktop-vs-web CONFORMANCE diff possible: both shells
-      // drive the identical compiled kernel, so the same scenario must produce the same
-      // telemetry. Cheap, harmless, and the only way to prove the web build is the same game.
+      latestState = state;
+      const replayPresentation = advanceIncidentReplay(incidentReplay, state, now);
+      const replayFrame = replayPresentation.frame;
+      const replayActive = replayPresentation.active;
+      if (!replayActive) reconcileBridgeLifecycle(state);
+      multiplayer?.publish(state);
+      // Debug/QA hook: lets browser automation inspect live control response, session lifecycle,
+      // and state that a screenshot cannot establish. Keep this projection read-only; production
+      // gameplay authority remains in SimulationSession.
       globalThis.__gunsState = state;
       globalThis.__gunsBridge = bridge;
-      setMobileFrozen(state.frozen);
+      setMobileFrozen(state.frozen || replayActive);
       recorder.sample(state);
-      view.update(state, dt, now / 1000);
+      renderTestFlightConsole(state);
+      const presentedState = replayPresentation.presentedState;
+      view.update(presentedState, replayActive ? dt : pauseReasons.size > 0 ? 0 : dt, now / 1000);
+      renderIncidentReplay(replayFrame);
+      renderPauseUi(state);
       if (firstFrame) {
         firstFrame = false;
         bootScreen.classList.add("ready");

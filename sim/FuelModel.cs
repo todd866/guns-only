@@ -1,35 +1,109 @@
 namespace GunsOnly.Sim;
 
 /// <summary>
-/// Deterministic internal-fuel bookkeeping for the player aircraft. Fuel does not yet affect
-/// engine output at zero quantity; flameout belongs to a later integration task.
+/// Deterministic internal-fuel tank bookkeeping. Propulsion owns the engine map and supplies the
+/// physical flow it requested this tick; this class integrates quantity, drives the deliberately
+/// damped cockpit indication, and exposes bingo/endurance decisions.
 /// </summary>
 public sealed class FuelModel {
-    // Placeholder Sabre internal load until the project selects a specific F-86 variant/tank fit.
-    public const double DefaultFuelLb = 3000.0;
+    // T.O. 1F-86F-1, fuel-capacity table: 2,826 lb usable internal JP-4 for the F-86F.
+    public const double DefaultFuelLb = 2826.0;
     public const double BingoFuelLb = 800.0;
+    public const double FlowSmoothingTimeSeconds = 10.0;
 
+    bool _flowInitialized;
+
+    public double CapacityLb { get; }
+    public double BingoThresholdLb { get; }
+    public bool ConsumesFuel { get; }
     public double FuelLb { get; private set; }
+    /// <summary>The instantaneous flow used for this tick's real fuel decrement.</summary>
     public double BurnLbPerMinute { get; private set; }
-    public double FuelTrendLbPerMinute => FuelLb > 0.0 ? -BurnLbPerMinute : 0.0;
-    public bool IsBingo => FuelLb <= BingoFuelLb;
+    /// <summary>A deterministic cockpit indication; it never feeds the quantity integrator.</summary>
+    public double SmoothedBurnLbPerMinute { get; private set; }
+    public double FuelTrendLbPerMinute => ConsumesFuel && FuelLb > 0.0
+        ? -SmoothedBurnLbPerMinute
+        : 0.0;
+    public double? MinutesToBingo => ConsumesFuel && FuelLb > BingoThresholdLb
+        && SmoothedBurnLbPerMinute > 1e-9
+            ? (FuelLb - BingoThresholdLb) / SmoothedBurnLbPerMinute
+            : null;
+    public double? EnduranceMinutes => ConsumesFuel && SmoothedBurnLbPerMinute > 1e-9
+        ? FuelLb / SmoothedBurnLbPerMinute
+        : null;
+    public bool HasFuel => !ConsumesFuel || FuelLb > 0.0;
+    public bool IsBingo => ConsumesFuel && FuelLb <= BingoThresholdLb;
     public bool RtbAdvisory { get; private set; }
 
-    public FuelModel(double initialFuelLb = DefaultFuelLb) {
+    public FuelModel(double initialFuelLb = DefaultFuelLb,
+        double capacityLb = DefaultFuelLb,
+        double bingoThresholdLb = BingoFuelLb,
+        bool consumesFuel = true) {
         if (!double.IsFinite(initialFuelLb) || initialFuelLb < 0.0)
             throw new ArgumentOutOfRangeException(nameof(initialFuelLb));
+        if (!double.IsFinite(capacityLb) || capacityLb < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(capacityLb));
+        if (initialFuelLb > capacityLb)
+            throw new ArgumentOutOfRangeException(nameof(initialFuelLb),
+                "initial fuel must not exceed capacity");
+        if (!double.IsFinite(bingoThresholdLb) || bingoThresholdLb < 0.0
+            || bingoThresholdLb > capacityLb)
+            throw new ArgumentOutOfRangeException(nameof(bingoThresholdLb));
+
+        CapacityLb = capacityLb;
+        BingoThresholdLb = bingoThresholdLb;
+        ConsumesFuel = consumesFuel;
         FuelLb = initialFuelLb;
         RtbAdvisory = IsBingo;
     }
 
-    /// <summary>Advance fuel using seconds, commanded lever position, and spooled thrust.</summary>
-    public void Step(double dtSeconds, double throttle, double thrustFraction) {
+    /// <summary>
+    /// Consume the engine map's requested flow. The returned fraction is one for a fully supplied
+    /// tick and falls below one only on the final, partially supplied tick.
+    /// </summary>
+    public double Step(double dtSeconds, double requestedFlowLbPerMinute) {
         if (!double.IsFinite(dtSeconds) || dtSeconds < 0.0)
             throw new ArgumentOutOfRangeException(nameof(dtSeconds));
+        if (!double.IsFinite(requestedFlowLbPerMinute) || requestedFlowLbPerMinute < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(requestedFlowLbPerMinute));
 
-        BurnLbPerMinute = BurnRateLbPerMinute(throttle, thrustFraction);
-        FuelLb = Math.Max(0.0, FuelLb - BurnLbPerMinute * dtSeconds / 60.0);
+        if (!ConsumesFuel) {
+            BurnLbPerMinute = 0.0;
+            SmoothedBurnLbPerMinute = 0.0;
+            _flowInitialized = false;
+            return 0.0;
+        }
+
+        double requestedBurnLb = requestedFlowLbPerMinute * dtSeconds / 60.0;
+        double suppliedBurnLb = Math.Min(FuelLb, requestedBurnLb);
+        double suppliedFraction = requestedBurnLb > 1e-12
+            ? suppliedBurnLb / requestedBurnLb
+            : FuelLb > 0.0 ? 1.0 : 0.0;
+        BurnLbPerMinute = dtSeconds > 0.0
+            ? suppliedBurnLb * 60.0 / dtSeconds
+            : FuelLb > 0.0 ? requestedFlowLbPerMinute : 0.0;
+        if (!_flowInitialized) {
+            // Seed from the first physical sample. Starting at zero would manufacture a ten-second
+            // period of implausibly optimistic endurance every time a sortie begins.
+            SmoothedBurnLbPerMinute = BurnLbPerMinute;
+            _flowInitialized = true;
+        } else if (dtSeconds > 0.0) {
+            double blend = 1.0 - Math.Exp(-dtSeconds / FlowSmoothingTimeSeconds);
+            SmoothedBurnLbPerMinute += blend
+                * (BurnLbPerMinute - SmoothedBurnLbPerMinute);
+        }
+        // Quantity remains the integral of supplied physical flow. The cockpit filter is strictly
+        // presentation-only and cannot create or erase fuel during throttle changes.
+        FuelLb = Math.Max(0.0, FuelLb - suppliedBurnLb);
+        if (FuelLb <= 0.0) {
+            // Flameout is an event, not a slowly decaying gauge fiction. The engine/session drops
+            // combustion thrust on the following 120 Hz tick and the flow indication goes dark now.
+            BurnLbPerMinute = 0.0;
+            SmoothedBurnLbPerMinute = 0.0;
+            _flowInitialized = false;
+        }
         if (IsBingo) RtbAdvisory = true;
+        return suppliedFraction;
     }
 
     /// <summary>
@@ -51,27 +125,6 @@ public sealed class FuelModel {
         return new RtbGuidance(RtbAdvisory, bearingRad, turnRad, rangeM);
     }
 
-    /// <summary>
-    /// Simple dry-thrust curve with a staged afterburner penalty. At the nominal operating points
-    /// it yields 18 lb/min idle, 45 cruise, 90 military, and 240 maximum afterburner.
-    /// </summary>
-    public static double BurnRateLbPerMinute(double throttle, double thrustFraction) {
-        if (!double.IsFinite(throttle) || !double.IsFinite(thrustFraction))
-            throw new ArgumentOutOfRangeException(!double.IsFinite(throttle)
-                ? nameof(throttle) : nameof(thrustFraction));
-
-        double lever = Math.Clamp(throttle, 0.0, 1.35);
-        double dryThrust = Math.Clamp(thrustFraction, 0.0, 1.0);
-        double dryBurn = dryThrust <= 0.85
-            ? 18.0 + 27.0 * Math.Pow(dryThrust / 0.85, 1.5)
-            : 45.0 + 45.0 * ((dryThrust - 0.85) / 0.15);
-
-        if (lever <= 1.0) return dryBurn;
-
-        // Crossing the AB gate lights a fuel-hungry first stage; deeper lever travel adds flow.
-        double afterburnerCommand = (lever - 1.0) / 0.35;
-        return dryBurn + 90.0 + 60.0 * afterburnerCommand;
-    }
 }
 
 public readonly record struct RtbGuidance(

@@ -52,8 +52,12 @@ public sealed class GunKill {
     public int HitsThisStep { get; private set; }
     public bool HitThisStep => HitsThisStep != 0;
     public double KillProgress => System.Math.Clamp((double)HitCount / _hitsToKill, 0.0, 1.0);
-    public double BanditHealth => 1.0 - KillProgress;
-    public bool BanditAlive => Outcome == FightOutcome.Flying;
+    public double TargetHealth => 1.0 - KillProgress;
+    public bool TargetAlive => Outcome == FightOutcome.Flying;
+    // Compatibility aliases for the current flat web projection. The kernel itself now uses the
+    // generic target names because the same physical gun model can be owned by either combatant.
+    public double BanditHealth => TargetHealth;
+    public bool BanditAlive => TargetAlive;
     public FightOutcome Outcome { get; private set; } = FightOutcome.Flying;
 
     /// True when a finite ballistic intercept exists inside the round lifetime.
@@ -64,6 +68,23 @@ public sealed class GunKill {
     public Vec3D LeadPipper { get; private set; }
     public Vec3D LeadDirection { get; private set; }
     public double LeadTimeOfFlight { get; private set; }
+
+    /// Continue this physical gun against a fresh target. Magazine state, rounds already in
+    /// flight, shot identity, and held-trigger cadence carry forward; damage and lead solution
+    /// state belong to the previous target and start clean.
+    public GunKill CreateForNextTarget() {
+        if (Outcome != FightOutcome.Splash)
+            throw new System.InvalidOperationException(
+                "A gun can move to the next target only after the current target is splashed.");
+        var next = new GunKill(AmmoRemaining, _hitsToKill, _hitRadiusM) {
+            RoundsFired = RoundsFired,
+            _triggerWasHeld = _triggerWasHeld,
+            _secondsToNextShot = _secondsToNextShot,
+            _nextRoundId = _nextRoundId,
+        };
+        next._rounds.AddRange(_rounds);
+        return next;
+    }
 
     /// Advance rounds and fire at exact deterministic cadence. Ownship and bandit are sampled at
     /// the beginning of dt; their velocities linearly carry both firing points and target motion
@@ -93,7 +114,7 @@ public sealed class GunKill {
             double remaining = dt - elapsed;
             if (untilShot > remaining + 1e-12) {
                 AdvanceRounds(remaining, bandit.Position + banditVelocity * elapsed, banditVelocity);
-                _secondsToNextShot -= remaining;
+                _secondsToNextShot = System.Math.Max(0.0, _secondsToNextShot - remaining);
                 elapsed = dt;
                 break;
             }
@@ -101,6 +122,10 @@ public sealed class GunKill {
             if (untilShot > 0.0) {
                 AdvanceRounds(untilShot, bandit.Position + banditVelocity * elapsed, banditVelocity);
                 elapsed += untilShot;
+                // The cadence boundary has elapsed even when an in-flight round splashes the
+                // current target at that boundary. A successor target may therefore take the
+                // shot scheduled at the shared instant without losing a full firing interval.
+                _secondsToNextShot = System.Math.Max(0.0, _secondsToNextShot - untilShot);
                 if (Outcome != FightOutcome.Flying) break;
             }
 
@@ -116,7 +141,7 @@ public sealed class GunKill {
         if (elapsed < dt && Outcome == FightOutcome.Flying) {
             double remaining = dt - elapsed;
             AdvanceRounds(remaining, bandit.Position + banditVelocity * elapsed, banditVelocity);
-            _secondsToNextShot -= remaining;
+            _secondsToNextShot = System.Math.Max(0.0, _secondsToNextShot - remaining);
         }
         _triggerWasHeld = true;
         return Outcome;

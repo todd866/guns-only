@@ -50,4 +50,12 @@ public class ProtectionTests {
         Assert.True(Protection.HardMaxG(s, FlightModel.Sabre) < 1.0);
         Assert.True(Protection.MaxPerformG(s, FlightModel.Sabre) <= Protection.HardMaxG(s, FlightModel.Sabre));
     }
+    [Fact] public void ExplicitAirspeedDrivesProtectionInsteadOfGroundspeed() {
+        var s = At(55);
+        double groundLimited = Protection.MaxPerformG(s, FlightModel.Sabre);
+        double airLimited = Protection.MaxPerformG(s, FlightModel.Sabre, airspeedMps: 70.0);
+        Assert.True(airLimited > groundLimited * 1.5,
+            $"70 m/s airflow should provide materially more authority than 55 m/s groundspeed: {groundLimited:F2} -> {airLimited:F2} G");
+        Assert.Equal(FlightModel.NzAeroMax(s, FlightModel.Sabre, 70.0), airLimited, 10);
+    }
 }

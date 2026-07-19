@@ -1,0 +1,429 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guns-only.invalid/schemas/v1/asset-manifest.schema.json",
+  "title": "Guns Only asset manifest",
+  "description": "Maps stable asset IDs to authored sources and ordered procedural fallbacks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "manifestId",
+    "manifestVersion",
+    "packId",
+    "coordinateSystem",
+    "defaultLicenseSet",
+    "assets"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "manifestId": {
+      "$ref": "#/$defs/versionedId"
+    },
+    "manifestVersion": {
+      "$ref": "#/$defs/semver"
+    },
+    "packId": {
+      "$ref": "#/$defs/id"
+    },
+    "coordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "units",
+        "upAxis",
+        "forwardAxis",
+        "handedness"
+      ],
+      "properties": {
+        "units": {
+          "type": "string",
+          "enum": [
+            "metres",
+            "centimetres"
+          ]
+        },
+        "upAxis": {
+          "type": "string",
+          "enum": [
+            "+y",
+            "+z"
+          ]
+        },
+        "forwardAxis": {
+          "type": "string",
+          "enum": [
+            "+x",
+            "-x",
+            "+z",
+            "-z"
+          ]
+        },
+        "handedness": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right"
+          ]
+        }
+      }
+    },
+    "defaultLicenseSet": {
+      "$ref": "#/$defs/packFileRef"
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/asset"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "versionedId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*\\.v[1-9][0-9]*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "role",
+        "status",
+        "licenseRef",
+        "sources",
+        "fallbacks"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "model",
+            "texture",
+            "material",
+            "shader",
+            "font",
+            "audio",
+            "vfx",
+            "icon",
+            "environment",
+            "ui"
+          ]
+        },
+        "role": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "fallback_only",
+            "placeholder",
+            "production",
+            "deprecated"
+          ]
+        },
+        "licenseRef": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "sources": {
+          "type": "array",
+          "description": "Authored sources for non-model assets. Authored model geometry should be declared in lods instead.",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "lods": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Authored model LODs ordered from highest to lowest detail. Tooling must enforce sequential levels, strictly descending minProjectedPixels, and a final threshold of 0.",
+          "items": {
+            "$ref": "#/$defs/modelLod"
+          }
+        },
+        "fallbacks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fallback"
+          }
+        },
+        "budgets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "triangles": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "materials": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "drawCalls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "textureMemoryMiB": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maxTextureDimension": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "audioSeconds": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "anchors": {
+          "type": "array",
+          "uniqueItems": true,
+          "description": "Maps semantic socket IDs to concrete glTF node names. Tooling validates node existence for authored model LODs and skips that check for fallback-only assets.",
+          "items": {
+            "$ref": "#/$defs/anchor"
+          }
+        },
+        "notes": {
+          "type": "string"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "sources": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "fallbacks": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "lods": {
+              "minItems": 1
+            }
+          },
+          "required": [
+            "lods"
+          ]
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "model"
+              },
+              "sources": {
+                "minItems": 1
+              }
+            },
+            "required": [
+              "kind",
+              "sources"
+            ]
+          },
+          "then": {
+            "required": [
+              "lods"
+            ]
+          }
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uri",
+        "format"
+      ],
+      "properties": {
+        "uri": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "format": {
+          "$ref": "#/$defs/id"
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selector": {
+          "type": "string"
+        }
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "node"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "node": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]*$"
+        }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "uri"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "procedural_factory",
+            "generated_shader",
+            "solid_color",
+            "hidden"
+          ]
+        },
+        "uri": {
+          "type": "string",
+          "pattern": "^procedural://[a-zA-Z0-9._/-]+$"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "modelLod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level",
+        "minProjectedPixels",
+        "source",
+        "budgets"
+      ],
+      "properties": {
+        "level": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minProjectedPixels": {
+          "type": "number",
+          "minimum": 0
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "budgets": {
+          "$ref": "#/$defs/modelBudgets"
+        }
+      }
+    },
+    "modelBudgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "triangles",
+        "drawCalls",
+        "materials",
+        "textureMemoryMiB",
+        "maxTextureDimension"
+      ],
+      "properties": {
+        "triangles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "drawCalls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "materials": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "textureMemoryMiB": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maxTextureDimension": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "packFileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "uri"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "uri": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "relativePath": {
+      "type": "string",
+      "description": "A path rooted at the staged pack directory. Absolute paths, URLs, traversal, backslashes, and empty segments are rejected.",
+      "pattern": "^(?!/)(?!.*\\/$)(?![A-Za-z][A-Za-z0-9+.-]*:)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)(?!.*//)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    }
+  }
+}

@@ -10,6 +10,33 @@ public sealed class Carrier {
     public enum DeckConfiguration { Axial, Angled }
 
     public enum TouchdownQuality { None, Soft, Nominal, Hard, Blown }
+    public enum TouchdownGrade { None, Ok, Fair, NoGrade, Cut }
+    public enum TouchdownCorrection {
+        None,
+        WaveOffEarlier,
+        AddPowerEarlier,
+        StabilizeIas,
+        EstablishLineupEarlier,
+        FlyOnSpeedAoa,
+        FlyThroughNoFlare,
+        MeetAdaptiveTarget
+    }
+
+    [System.Flags]
+    public enum TouchdownDeviation {
+        None = 0,
+        LowSinkRate = 1 << 0,
+        HardSinkRate = 1 << 1,
+        UnsafeSinkRate = 1 << 2,
+        Lineup = 1 << 3,
+        Slow = 1 << 4,
+        Fast = 1 << 5,
+        ExcessiveClosure = 1 << 6,
+        HighAoa = 1 << 7,
+        LowAoa = 1 << 8,
+        OutsideAdaptiveTarget = 1 << 9
+    }
+
     public enum HookOutcome { None, Engaged, HookSkip, InFlightEngagement, MissedWires }
     public enum SolidCollision { None, FlightDeck, Hull, Island }
 
@@ -17,16 +44,23 @@ public sealed class Carrier {
         Recovery Recovery,
         TouchdownQuality Quality,
         HookOutcome Hook,
+        TouchdownGrade Grade,
+        TouchdownDeviation Deviations,
+        TouchdownCorrection PrimaryCorrection,
         int Wire,
         double SinkRateMps,
-        double AirspeedMps,
+        double IndicatedAirspeedMps,
         double ClosureMps,
         double LineupErrorM,
         double WheelAlongM,
         double HookAlongM) {
         public static TouchdownResult Flying => new(
-            Recovery.Flying, TouchdownQuality.None, HookOutcome.None, 0,
+            Recovery.Flying, TouchdownQuality.None, HookOutcome.None,
+            TouchdownGrade.None, TouchdownDeviation.None, TouchdownCorrection.None, 0,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+
+        // Source compatibility for diagnostics written before the IAS contract was explicit.
+        public double AirspeedMps => IndicatedAirspeedMps;
     }
 
     public const double AngledDeckOffsetRad = -9.0 * System.Math.PI / 180.0;
@@ -44,16 +78,24 @@ public sealed class Carrier {
     const double InFlightWireWindowM = 1.25;
 
     // A 3.5-degree, 70 m/s approach in 30 kt WOD closes at ~54.6 m/s and sinks at ~3.3 m/s.
-    // Below 2.35 m/s is a flare/float; 5.2..6.8 m/s is a hard but arrestable arrival; above that
+    // Below 2.35 m/s is a flare/float; 5.2..7.0 m/s is a hard but arrestable arrival; above that
     // is a blown landing. These are deliberately broad enough for a flown pass, not a grading rail.
     public const double MinTrapSinkMps = 2.35;     // 463 ft/min
     public const double HardTrapSinkMps = 5.20;    // 1,024 ft/min
-    public const double MaxTrapSinkMps = 6.80;     // 1,339 ft/min
+    public const double MaxTrapSinkMps = 7.00;     // 1,378 ft/min
     public const double MaxTrapLineupM = 8.0;
-    public const double MinTrapAirspeedMps = 62.0;
-    public const double MaxTrapAirspeedMps = 78.0;
+    // These are stable touchdown-grade references, never hook or arresting-gear gates. Adaptive
+    // training targets may ask for a narrower band, but cannot make an intercepted wire disappear.
+    public const double MinTrapAirspeedMps = 58.0;
+    public const double MaxTrapAirspeedMps = 82.0;
     public const double MaxTrapClosureMps = 65.0;
     public const double MaxOnSpeedAoaErrorRad = 0.045; // 2.6 deg either side of the datum
+    // Versioned identity for the provisional touchdown assessment above. Replays export this
+    // identity and the actual limits used by the simulation so presentation never grows a second,
+    // silently-divergent grading table.
+    public const string TouchdownAssessmentProfileId =
+        "PROVISIONAL_EARLY_JET_TOUCHDOWN_V1";
+    public const int TouchdownAssessmentProfileVersion = 1;
 
     // The collision proxy follows the rendered Essex-like carrier closely enough to make the
     // physical promise unambiguous: the flight deck, hull and starboard island are solid. The
@@ -95,7 +137,7 @@ public sealed class Carrier {
         _meanDeckCentreY = deckCentre.Y;
     }
 
-    /// Apply the earned level to this attempt. WebBridge calls this on the freshly-created carrier;
+    /// Apply the earned level to this attempt. SimulationSession calls this on a fresh carrier;
     /// resetting phase to zero makes restarts replay-identical for the same level.
     public void ApplyDifficulty(in RecoveryDifficulty difficulty) {
         _difficulty = difficulty;
@@ -104,14 +146,23 @@ public sealed class Carrier {
         Position = new Vec3D(Position.X, _meanDeckCentreY, Position.Z);
     }
 
-    /// The touchdown target (the wire zone): a world point ~20% of the deck aft of centre, on the
-    /// deck surface. Fly the VELOCITY VECTOR onto this and you arrive on the wires — it is the
-    /// reference the pilot otherwise lacks (the nose points long on the on-speed attitude while the
-    /// flight path goes short; without an aim point you can't see which is which until the ramp).
+    /// The physical touchdown target (wire three): a world point ~20% of the deck aft of centre.
+    /// This remains separate from ApproachCuePoint because the flown jet has pitch/flight-path lag:
+    /// commanding the current velocity vector at the wire itself all the way in steepens the last
+    /// seconds of the pass and produces a ramp strike or a blown touchdown.
     public double TouchdownAlongM => -DeckLengthM * 0.2;
     public Vec3D TouchdownPoint => _difficulty.Level <= 0
         ? Position + Fwd * TouchdownAlongM
         : DeckPoint(Fwd * TouchdownAlongM);
+
+    /// Player-facing velocity-vector reference. The lead is part of the published recovery
+    /// geometry, not private autopilot knowledge: it accounts for the approach law's response while
+    /// leaving wire and collision geometry at the physical TouchdownPoint. The shorter angled-deck
+    /// lead preserves clearance where the landing line crosses the port edge of the axial deck.
+    public double ApproachCueLeadM => Configuration == DeckConfiguration.Angled ? 140.0 : 204.0;
+    public double ApproachCueAlongM => TouchdownAlongM + ApproachCueLeadM;
+    public Vec3D ApproachCuePoint => LandingPoint(ApproachCueAlongM);
+    public double ApproachDirectorPitchOffsetRad { get; set; } = DetentLayer.OnSpeedAoARad;
 
     /// Ship-axis unit vectors. The hull and its three-knot translation always use these, even when
     /// the landing area is angled.
@@ -335,11 +386,15 @@ public sealed class Carrier {
     /// control law engages ONLY here; the moment you leave the slot (pull up into a climb, accelerate,
     /// slide off line, or pass the deck) the detent hands you full FIGHT-logic authority, so a
     /// wave-off / break-away "cleans up into fight logic" instead of fighting the limited approach law.
-    public bool InApproachSlot(in AircraftState s) {
+    /// Determine whether the aircraft is in the groove. Callers which own a richer wind field may
+    /// supply its authoritative airspeed; omitted/non-finite values preserve the steady-WOD
+    /// calculation used by standalone carrier fixtures.
+    public bool InApproachSlot(in AircraftState s,
+        double indicatedAirspeedMps = double.NaN) {
         var (along, cross, height) = LandingFrame(s.Position);
         if (along > 30.0 || along < -3000.0) return false;         // past the deck, or too far out
         if (System.Math.Abs(cross) > 220.0) return false;          // not lined up on the centreline
-        if (AirspeedMps(s) > 95.0) return false;                   // ~185 kt airspeed: maneuvering, not on-speed
+        if (ResolveIndicatedAirspeedMps(s, indicatedAirspeedMps) > 95.0) return false; // ~185 KIAS: maneuvering, not on-speed
         double closure = DeckClosureMps(s);
         if (closure < 20.0 || closure > 85.0) return false;        // not closing the moving landing area
         if (s.Gamma > 0.026) return false;                         // climbing >1.5°: pulling away → snap to fight logic
@@ -348,7 +403,15 @@ public sealed class Carrier {
         return true;
     }
 
-    public enum Recovery { Flying, Trap, Bolter, HardLanding, RampStrike, InTheWater }
+    public enum Recovery {
+        Flying,
+        Trap,
+        Bolter,
+        HardLanding,
+        RampStrike,
+        InTheWater,
+        ArrestmentFailed
+    }
 
     /// Classify the aircraft against the deck this instant. Trap = touched the deck within its
     /// footprint and hands the contact state to ArrestmentModel. RampStrike = came down onto the
@@ -373,25 +436,31 @@ public sealed class Carrier {
         return Recovery.Flying;
     }
 
-    /// Resolve the no-flare touchdown, hook geometry and trap window in one deterministic result.
-    /// A good wheel contact does not magically catch the nearest wire: the hook trails the main gear,
-    /// then sweeps only a short distance before the next pendant. Passing the last wire produces an
-    /// in-flight engagement/skip or a clean missed-wires bolter.
+    /// Resolve three deliberately separate questions in one deterministic result: where the hook
+    /// crossed the pendants, whether touchdown sink produced structural loss, and how the measured
+    /// touchdown compared with the published proficiency window. A grade can never make a
+    /// geometrically intercepted wire disappear. Conversely, a captured wire does not erase an
+    /// unsafe structural arrival.
+    ///
+    /// IAS is the grading/crew-display speed. Closure remains deck-relative kinematics. Standalone
+    /// fixtures may omit IAS and use a standard-atmosphere conversion of the steady-WOD TAS.
     public TouchdownResult EvaluateRecovery(in AircraftState s, double angleOfAttackRad,
-        in RecoveryDifficulty difficulty) {
+        in RecoveryDifficulty difficulty, double indicatedAirspeedMps = double.NaN,
+        double onSpeedAoaRad = DetentLayer.OnSpeedAoARad) {
+        double measuredIasMps = ResolveIndicatedAirspeedMps(s, indicatedAirspeedMps);
         Recovery physical = ClassifyPhysical(s);
         if (physical != Recovery.Trap) {
-            return new TouchdownResult(physical, TouchdownQuality.None, HookOutcome.None, 0,
-                DeckSinkRateMps(s), AirspeedMps(s), DeckClosureMps(s),
+            return new TouchdownResult(physical, TouchdownQuality.None, HookOutcome.None,
+                TouchdownGrade.None, TouchdownDeviation.None, TouchdownCorrection.None, 0,
+                DeckSinkRateMps(s), measuredIasMps, DeckClosureMps(s),
                 LandingFrame(s.Position).cross, 0.0, 0.0);
         }
 
         var (wheelAlong, cross, _) = LandingFrame(s.Position);
         double hookAlong = wheelAlong - HookToMainGearM;
         double sink = DeckSinkRateMps(s);
-        double airspeed = AirspeedMps(s);
         double closure = DeckClosureMps(s);
-        double aoaError = angleOfAttackRad - DetentLayer.OnSpeedAoARad;
+        double aoaError = angleOfAttackRad - onSpeedAoaRad;
         TouchdownQuality quality = sink > MaxTrapSinkMps ? TouchdownQuality.Blown
             : sink > HardTrapSinkMps ? TouchdownQuality.Hard
             : sink < 3.15 ? TouchdownQuality.Soft
@@ -407,49 +476,112 @@ public sealed class Carrier {
             }
         }
 
-        if (quality == TouchdownQuality.Blown) {
-            return new TouchdownResult(Recovery.HardLanding, quality, HookOutcome.HookSkip, 0,
-                sink, airspeed, closure, cross, wheelAlong, hookAlong);
-        }
+        TouchdownDeviation deviations = AssessDeviations(sink, cross, measuredIasMps,
+            closure, aoaError, difficulty);
+        TouchdownGrade grade = GradeTouchdown(quality, deviations);
+        TouchdownCorrection correction = PrimaryCorrection(deviations);
 
-        bool poorApproach = sink < MinTrapSinkMps
-            || System.Math.Abs(cross) > MaxTrapLineupM
-            || airspeed < MinTrapAirspeedMps || airspeed > MaxTrapAirspeedMps
-            || closure > MaxTrapClosureMps
-            || System.Math.Abs(aoaError) > MaxOnSpeedAoaErrorRad;
-        if (difficulty.Level > 0) {
-            poorApproach |= sink > difficulty.MaxTrapSinkMps
-                || System.Math.Abs(cross) > difficulty.MaxTrapLineupErrorM
-                || airspeed < difficulty.MinTrapSpeedMps
-                || airspeed > difficulty.MaxTrapSpeedMps;
-        }
-
-        if (wire != 0 && sweep <= MaxHookSweepAfterTouchdownM) {
-            HookOutcome hook = poorApproach ? HookOutcome.HookSkip : HookOutcome.Engaged;
-            return new TouchdownResult(poorApproach ? Recovery.Bolter : Recovery.Trap,
-                quality, hook, poorApproach ? 0 : wire,
-                sink, airspeed, closure, cross, wheelAlong, hookAlong);
-        }
-
+        bool captured = wire != 0 && sweep <= MaxHookSweepAfterTouchdownM;
         double lastWireBehind = hookAlong - WireAlongM(4);
-        HookOutcome miss = lastWireBehind >= 0.0 && lastWireBehind <= InFlightWireWindowM
-            ? HookOutcome.InFlightEngagement
-            : HookOutcome.MissedWires;
-        return new TouchdownResult(Recovery.Bolter, quality, miss, 0,
-            sink, airspeed, closure, cross, wheelAlong, hookAlong);
+        HookOutcome hook = captured ? HookOutcome.Engaged
+            : lastWireBehind >= 0.0 && lastWireBehind <= InFlightWireWindowM
+                ? HookOutcome.InFlightEngagement
+                : HookOutcome.MissedWires;
+        int capturedWire = captured ? wire : 0;
+
+        // Structural response owns the recovery result. Retain the independently-computed hook
+        // geometry so the eventual wreck/gear model can distinguish an unarrested impact from an
+        // engage-then-fail event instead of rewriting both as a fictional hook skip.
+        if (quality == TouchdownQuality.Blown) {
+            return new TouchdownResult(Recovery.HardLanding, quality, hook,
+                TouchdownGrade.Cut, deviations, correction, capturedWire,
+                sink, measuredIasMps, closure, cross, wheelAlong, hookAlong);
+        }
+
+        return new TouchdownResult(captured ? Recovery.Trap : Recovery.Bolter,
+            quality, hook, grade, deviations, correction, capturedWire,
+            sink, measuredIasMps, closure, cross, wheelAlong, hookAlong);
     }
 
     public Recovery Classify(in AircraftState s) =>
         EvaluateRecovery(s, DetentLayer.OnSpeedAoARad, DifficultyModel.ForLevel(0)).Recovery;
 
-    /// The physical no-flare/hook gate applies at every level. Earned levels then narrow its sink,
-    /// lineup and on-speed airspeed windows without changing the underlying contact geometry.
+    /// Compatibility classifier for callers that need only the physical recovery outcome. Detailed
+    /// proficiency feedback remains in EvaluateRecovery and never changes contact geometry.
     public Recovery Classify(in AircraftState s, in RecoveryDifficulty difficulty) {
         return EvaluateRecovery(s, DetentLayer.OnSpeedAoARad, difficulty).Recovery;
     }
 
     public Recovery Classify(in AircraftState s, double angleOfAttackRad,
         in RecoveryDifficulty difficulty) => EvaluateRecovery(s, angleOfAttackRad, difficulty).Recovery;
+
+    static TouchdownDeviation AssessDeviations(double sinkMps, double crossM,
+        double indicatedAirspeedMps, double closureMps, double aoaErrorRad,
+        in RecoveryDifficulty difficulty) {
+        TouchdownDeviation deviations = TouchdownDeviation.None;
+        if (sinkMps > MaxTrapSinkMps) deviations |= TouchdownDeviation.UnsafeSinkRate;
+        else if (sinkMps > HardTrapSinkMps) deviations |= TouchdownDeviation.HardSinkRate;
+        else if (sinkMps < MinTrapSinkMps) deviations |= TouchdownDeviation.LowSinkRate;
+        if (System.Math.Abs(crossM) > MaxTrapLineupM)
+            deviations |= TouchdownDeviation.Lineup;
+        if (indicatedAirspeedMps < MinTrapAirspeedMps)
+            deviations |= TouchdownDeviation.Slow;
+        else if (indicatedAirspeedMps > MaxTrapAirspeedMps)
+            deviations |= TouchdownDeviation.Fast;
+        if (closureMps > MaxTrapClosureMps)
+            deviations |= TouchdownDeviation.ExcessiveClosure;
+        if (aoaErrorRad > MaxOnSpeedAoaErrorRad)
+            deviations |= TouchdownDeviation.HighAoa;
+        else if (aoaErrorRad < -MaxOnSpeedAoaErrorRad)
+            deviations |= TouchdownDeviation.LowAoa;
+
+        if (difficulty.Level > 0 && (sinkMps > difficulty.MaxTrapSinkMps
+            || System.Math.Abs(crossM) > difficulty.MaxTrapLineupErrorM
+            || indicatedAirspeedMps < difficulty.MinTrapSpeedMps
+            || indicatedAirspeedMps > difficulty.MaxTrapSpeedMps))
+            deviations |= TouchdownDeviation.OutsideAdaptiveTarget;
+        return deviations;
+    }
+
+    static TouchdownGrade GradeTouchdown(TouchdownQuality quality,
+        TouchdownDeviation deviations) {
+        if (quality == TouchdownQuality.Blown) return TouchdownGrade.Cut;
+        const TouchdownDeviation noGrade = TouchdownDeviation.LowSinkRate
+            | TouchdownDeviation.HardSinkRate | TouchdownDeviation.Lineup
+            | TouchdownDeviation.Slow | TouchdownDeviation.Fast
+            | TouchdownDeviation.ExcessiveClosure | TouchdownDeviation.HighAoa
+            | TouchdownDeviation.LowAoa;
+        if ((deviations & noGrade) != 0) return TouchdownGrade.NoGrade;
+        return quality == TouchdownQuality.Nominal
+            ? TouchdownGrade.Ok : TouchdownGrade.Fair;
+    }
+
+    /// Debrief one thing at a time. The ordering is safety first, then the earliest upstream
+    /// correction most likely to prevent several downstream deviations on the next pass.
+    static TouchdownCorrection PrimaryCorrection(TouchdownDeviation deviations) {
+        if (deviations.HasFlag(TouchdownDeviation.UnsafeSinkRate))
+            return TouchdownCorrection.WaveOffEarlier;
+        if (deviations.HasFlag(TouchdownDeviation.HardSinkRate))
+            return TouchdownCorrection.AddPowerEarlier;
+        if ((deviations & (TouchdownDeviation.Slow | TouchdownDeviation.Fast
+            | TouchdownDeviation.ExcessiveClosure)) != 0)
+            return TouchdownCorrection.StabilizeIas;
+        if (deviations.HasFlag(TouchdownDeviation.Lineup))
+            return TouchdownCorrection.EstablishLineupEarlier;
+        if ((deviations & (TouchdownDeviation.HighAoa | TouchdownDeviation.LowAoa)) != 0)
+            return TouchdownCorrection.FlyOnSpeedAoa;
+        if (deviations.HasFlag(TouchdownDeviation.LowSinkRate))
+            return TouchdownCorrection.FlyThroughNoFlare;
+        if (deviations.HasFlag(TouchdownDeviation.OutsideAdaptiveTarget))
+            return TouchdownCorrection.MeetAdaptiveTarget;
+        return TouchdownCorrection.None;
+    }
+
+    double ResolveIndicatedAirspeedMps(in AircraftState state,
+        double explicitIndicatedAirspeedMps) =>
+        double.IsFinite(explicitIndicatedAirspeedMps) && explicitIndicatedAirspeedMps >= 0.0
+            ? explicitIndicatedAirspeedMps
+            : AirData.IndicatedAirspeedMps(AirspeedMps(state), state.Position.Y);
 }
 
 /// Deterministic deck-relative catapult stroke used after a completed arrestment. The carrier

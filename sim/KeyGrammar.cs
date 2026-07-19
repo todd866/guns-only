@@ -1,6 +1,11 @@
 using System.Collections.Generic;
 namespace GunsOnly.Sim;
-public enum GKey { PullUp, PushDown, RollLeft, RollRight, RudderLeft, RudderRight, ThrottleUp, ThrottleDown, Trigger, Padlock, KnockItOff, Restart, Override }
+public enum GKey {
+    PullUp, PushDown, RollLeft, RollRight, RudderLeft, RudderRight,
+    ThrottleUp, ThrottleDown, Trigger, Padlock, KnockItOff, Restart, Override,
+    GearToggle, FlapUp, FlapDown, EmergencyGearRelease, GearHornCutout,
+    ConfirmGearExtensionFailure, InspectGearDownlocks
+}
 public enum KeyPhase { Idle, Held, DoubleHeld }
 
 /// Tap/hold/double-tap-hold classifier. Taps are DEFERRED: a completed tap becomes

@@ -161,7 +161,7 @@ public class FightControlTests {
     }
 
     [Fact]
-    public void HardPullAndPushStayInsideBothAeroAoaLimits() {
+    public void ProtectedPullStaysNearTheBreakWhileOverridePushCanCrossIt() {
         var pull = new FightRig(375, gammaDeg: 85.0);
         var push = new FightRig(180, gammaDeg: -85.0);
         pull.Set(GKey.PullUp, true);
@@ -181,14 +181,16 @@ public class FightControlTests {
 
         double alphaMax = FlightModel.Sabre.CLMax / FlightModel.Sabre.CLAlpha;
         double alphaMin = FlightModel.Sabre.CLMin / FlightModel.Sabre.CLAlpha;
-        Assert.True(maxAlpha <= alphaMax + 1e-10,
-            $"hard pull exceeded +aero alpha: {maxAlpha * Deg:F2} > {alphaMax * Deg:F2} deg");
-        Assert.True(minAlpha >= alphaMin - 1e-10,
-            $"hard push exceeded -aero alpha: {minAlpha * Deg:F2} < {alphaMin * Deg:F2} deg");
+        Assert.True(maxAlpha <= alphaMax + 0.03,
+            $"protected pull wandered beyond the break: {maxAlpha * Deg:F2} deg");
+        Assert.True(minAlpha < alphaMin - 0.03,
+            $"override push was still projected onto the negative break: {minAlpha * Deg:F2} deg");
+        Assert.True(minAlpha > -0.9,
+            $"override push diverged instead of following separated flow: {minAlpha * Deg:F2} deg");
         Assert.True(maxAlpha >= alphaMax - 0.01,
             $"hard pull lost authority: only {maxAlpha * Deg:F2} of {alphaMax * Deg:F2} deg alpha");
         Assert.True(minAlpha <= alphaMin + 0.01,
-            $"hard push did not reach the negative aero boundary: {minAlpha * Deg:F2} deg");
+            $"override push did not reach the negative aero boundary: {minAlpha * Deg:F2} deg");
         Assert.True(maxNz > 6.5, $"bounded pull no longer reaches the Sabre limit: {maxNz:F2} G");
     }
 }

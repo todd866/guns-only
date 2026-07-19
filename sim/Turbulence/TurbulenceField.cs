@@ -35,7 +35,7 @@ namespace GunsOnly.Sim.Turbulence;
 /// schedule of intensity down the groove — is a separate spatial-envelope layer that multiplies
 /// this field's output. Texture here; placement there. (See guns-only-carrier-pivot memory.)
 ///
-/// Pure kernel: no Godot/three.js, float64, allocation-free per sample, WASM-safe.
+/// Pure kernel: no engine or renderer dependencies, float64, allocation-free per sample, WASM-safe.
 public sealed class TurbulenceField : IWindField {
     readonly int _octaves;
     readonly double _hurst;

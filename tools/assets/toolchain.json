@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "node": "20.19.6",
+  "blender": "5.0.0",
+  "gltfTransform": "4.4.1",
+  "ktxSoftware": "4.4.2"
+}

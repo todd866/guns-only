@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "1.0.0",
+  "materialId": "material.ocean.korea-deep.v1",
+  "type": "gerstner-ocean",
+  "units": "metres",
+  "textures": {
+    "normal": {
+      "uri": "textures/ocean-normal.png",
+      "colorSpace": "linear",
+      "repeat": [42, 42]
+    },
+    "foam": {
+      "uri": "textures/foam-noise.png",
+      "colorSpace": "linear",
+      "repeat": [18, 18]
+    }
+  },
+  "colors": {
+    "deep": "#07283A",
+    "mid": "#15556D",
+    "shallow": "#4B929E",
+    "foam": "#DCE8E4",
+    "sunGlint": "#FFE4B5"
+  },
+  "waves": [
+    { "direction": [0.94, 0.34], "amplitude": 1.1, "wavelength": 115, "speed": 8.2, "steepness": 0.52 },
+    { "direction": [0.38, -0.92], "amplitude": 0.42, "wavelength": 38, "speed": 5.1, "steepness": 0.38 },
+    { "direction": [-0.72, -0.69], "amplitude": 0.16, "wavelength": 13, "speed": 3.0, "steepness": 0.22 }
+  ],
+  "optics": {
+    "roughness": 0.24,
+    "fresnelPower": 5,
+    "normalStrength": 0.72,
+    "foamThreshold": 0.74,
+    "foamSoftness": 0.16,
+    "sunGlintPower": 180,
+    "sunGlintStrength": 1.45
+  },
+  "geometry": {
+    "diameter": 90000,
+    "followCamera": true,
+    "tiers": {
+      "mobile": { "segments": 112 },
+      "balanced": { "segments": 160 },
+      "desktop": { "segments": 224 }
+    }
+  }
+}

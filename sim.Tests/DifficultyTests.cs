@@ -43,13 +43,16 @@ public class DifficultyTests {
         Assert.Equal(0.0, difficultyPath.DeckPitchRad);
         Assert.Equal(0.0, difficultyPath.DeckHeaveM);
 
-        // The carrier-physics window now applies even on the calm first pass: merely crossing the
-        // contact plane is not a trap. Difficulty still layers its narrower earned window on top.
+        // A safely-intercepted wire remains physical truth even when the pass is outside the
+        // proficiency window. The grade, not a fictional hook skip, owns that distinction.
         var poorButPhysicalContact = Contact(difficultyPath,
-            speedMps: 110.0, gammaRad: -0.18, crossM: 14.0);
-        Assert.NotEqual(Carrier.Recovery.Trap, difficultyPath.Classify(poorButPhysicalContact));
-        Assert.NotEqual(Carrier.Recovery.Trap,
-            difficultyPath.Classify(poorButPhysicalContact, baseline));
+            speedMps: 90.0, gammaRad: -0.05, crossM: 10.0);
+        Carrier.TouchdownResult assessed = difficultyPath.EvaluateRecovery(
+            poorButPhysicalContact, DetentLayer.OnSpeedAoARad, baseline,
+            indicatedAirspeedMps: 90.0);
+        Assert.Equal(Carrier.Recovery.Trap, assessed.Recovery);
+        Assert.Equal(Carrier.HookOutcome.Engaged, assessed.Hook);
+        Assert.Equal(Carrier.TouchdownGrade.NoGrade, assessed.Grade);
     }
 
     [Fact]
@@ -58,8 +61,8 @@ public class DifficultyTests {
         var first = progress.BeginAttempt();
         Assert.Equal(0, first.Level);
 
-        // WebBridge invokes this once, and only once, on the ARRESTED -> STOPPED transition.
-        progress.RecordCleanTrap();
+        // SimulationSession invokes this once, and only once, on ARRESTED -> STOPPED.
+        progress.RecordRecoveredTrap(Carrier.TouchdownGrade.Fair);
         Assert.Equal(1, progress.CleanTrapCount);
         Assert.Equal(1, progress.CleanStreak);
 
@@ -68,6 +71,18 @@ public class DifficultyTests {
         Assert.Equal(1, progress.CleanStreak);
         Assert.Equal(1, restarted.SkillBaselineLevel);
         Assert.Equal(1, restarted.AttemptIndex);
+    }
+
+    [Fact]
+    public void SafeNoGradeRecoveryDoesNotInflateMastery() {
+        var progress = new RecoveryProgress();
+        progress.BeginAttempt();
+
+        progress.RecordRecoveredTrap(Carrier.TouchdownGrade.NoGrade);
+
+        Assert.Equal(0, progress.CleanTrapCount);
+        Assert.Equal(0, progress.CleanStreak);
+        Assert.Equal(0, progress.PreviewNextAttempt().SkillBaselineLevel);
     }
 
     [Fact]
@@ -135,19 +150,25 @@ public class DifficultyTests {
     }
 
     [Fact]
-    public void EarnedTrapGateUsesSinkLineupAndOnSpeedWindows() {
+    public void AdaptiveTargetGradesPerformanceButCannotRewritePhysics() {
         var ship = Ship();
         var rough = DifficultyModel.ForLevel(DifficultyModel.MaxLevel);
         ship.ApplyDifficulty(rough);
 
-        Assert.Equal(Carrier.Recovery.Trap,
-            ship.Classify(Contact(ship), rough));
+        AircraftState nominal = Contact(ship);
+        Assert.Equal(Carrier.Recovery.Trap, ship.Classify(nominal, rough));
+        Assert.True(rough.MeetsAdaptiveTarget(ship, nominal,
+            indicatedAirspeedMps: 70.0));
         Assert.Equal(Carrier.Recovery.HardLanding,
             ship.Classify(Contact(ship, gammaRad: -0.15), rough));
-        Assert.Equal(Carrier.Recovery.Bolter,
-            ship.Classify(Contact(ship, crossM: 10.0), rough));
-        Assert.Equal(Carrier.Recovery.Bolter,
-            ship.Classify(Contact(ship, speedMps: 60.0), rough));
+        AircraftState wide = Contact(ship, crossM: 10.0);
+        Assert.Equal(Carrier.Recovery.Trap, ship.Classify(wide, rough));
+        Assert.False(rough.MeetsAdaptiveTarget(ship, wide,
+            indicatedAirspeedMps: 70.0));
+        AircraftState slow = Contact(ship, speedMps: 60.0);
+        Assert.Equal(Carrier.Recovery.Trap, ship.Classify(slow, rough));
+        Assert.False(rough.MeetsAdaptiveTarget(ship, slow,
+            indicatedAirspeedMps: 60.0));
     }
 
     [Fact]

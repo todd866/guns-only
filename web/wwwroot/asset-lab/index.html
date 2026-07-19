@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Guns Only — Asset Lab</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-block">
+      <span class="eyebrow">Guns Only</span>
+      <h1>Asset Lab</h1>
+    </div>
+    <div class="runtime-status" id="runtimeStatus" data-tone="idle" aria-live="polite">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="runtimeStatusText">Waiting for a pack</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="panel controls-panel" aria-label="Asset controls">
+      <section class="panel-section">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">Source</span>
+            <h2>Load content</h2>
+          </div>
+        </div>
+
+        <form id="packForm" class="stack" autocomplete="off">
+          <label class="field-label" for="packUrl">Staged pack URL</label>
+          <div class="input-action-row">
+            <input id="packUrl" name="packUrl" type="text" spellcheck="false"
+              value="../content/packs/korea-1950s/pack.json"
+              aria-describedby="packUrlHint">
+            <button class="primary-button" id="loadPackButton" type="submit">Load</button>
+          </div>
+          <p class="field-hint" id="packUrlHint">Expected under <code>content/packs/&lt;pack-id&gt;/</code>.</p>
+        </form>
+
+        <div class="divider"><span>or inspect a local build</span></div>
+
+        <button class="drop-button" id="chooseGlbButton" type="button">
+          <span class="drop-icon" aria-hidden="true">GLB</span>
+          <span>
+            <strong>Choose a self-contained .glb</strong>
+            <small>Embedded buffers and textures only</small>
+          </span>
+        </button>
+        <input id="glbInput" type="file" accept=".glb,model/gltf-binary" hidden>
+      </section>
+
+      <section class="panel-section">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">Selection</span>
+            <h2>Profile binding</h2>
+          </div>
+          <span class="count-badge" id="bindingCount">0</span>
+        </div>
+
+        <div class="stack">
+          <label class="field-label" for="bindingSelect">Asset-profile binding</label>
+          <select id="bindingSelect" disabled>
+            <option value="">Load a pack first</option>
+          </select>
+
+          <div class="field-label-row">
+            <label class="field-label" for="pixelHeightRange">Projected height</label>
+            <div class="number-with-unit">
+              <input id="pixelHeightNumber" type="number" min="0" max="8192" step="1" value="120"
+                aria-label="Projected height in pixels" disabled>
+              <span>px</span>
+            </div>
+          </div>
+          <input id="pixelHeightRange" class="range-input" type="range" min="0" max="1024" step="1" value="120" disabled>
+          <div class="range-scale" aria-hidden="true"><span>0</span><span>512</span><span>1024</span></div>
+
+          <div class="selection-readout">
+            <span>Selected LOD</span>
+            <strong id="selectedLod">—</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-section view-section">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">View</span>
+            <h2>Turntable</h2>
+          </div>
+          <button class="quiet-button" id="frameButton" type="button" disabled>Frame object</button>
+        </div>
+
+        <div class="toggle-grid">
+          <label class="toggle-row">
+            <span>Autorotate</span>
+            <input id="autorotateToggle" type="checkbox" checked>
+          </label>
+          <label class="toggle-row">
+            <span>Wireframe</span>
+            <input id="wireframeToggle" type="checkbox">
+          </label>
+          <label class="toggle-row">
+            <span>Socket helpers</span>
+            <input id="socketToggle" type="checkbox" checked>
+          </label>
+          <label class="toggle-row">
+            <span>Grid + axes</span>
+            <input id="gridToggle" type="checkbox" checked>
+          </label>
+        </div>
+      </section>
+
+      <div class="message-box" id="messageBox" role="alert" hidden>
+        <strong id="messageTitle">Unable to load asset</strong>
+        <span id="messageText"></span>
+      </div>
+    </aside>
+
+    <section class="stage" id="stage" aria-label="3D asset preview">
+      <div class="viewport" id="viewport"></div>
+      <div class="stage-empty" id="stageEmpty">
+        <div class="empty-mark" aria-hidden="true"></div>
+        <strong>Load a staged pack or drop a GLB</strong>
+        <span>The lab uses the production asset registry and Three r160 loader.</span>
+      </div>
+      <div class="stage-loading" id="stageLoading" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="stageLoadingText">Loading asset…</span>
+      </div>
+      <div class="drop-overlay" id="dropOverlay" hidden>
+        <div>
+          <strong>Drop self-contained GLB</strong>
+          <span>External sidecar files are rejected</span>
+        </div>
+      </div>
+      <div class="stage-hint" aria-hidden="true">Drag to orbit · Wheel to zoom · Right-drag to pan</div>
+    </section>
+
+    <aside class="panel inspector-panel" aria-label="Asset diagnostics">
+      <section class="panel-section identity-section">
+        <span class="section-kicker">Active selection</span>
+        <h2 id="assetTitle">No asset selected</h2>
+        <dl class="identity-list">
+          <div><dt>Pack</dt><dd id="packIdentity">—</dd></div>
+          <div><dt>Profile</dt><dd id="profileIdentity">—</dd></div>
+          <div><dt>Binding</dt><dd id="bindingIdentity">—</dd></div>
+          <div><dt>Asset</dt><dd id="assetIdentity">—</dd></div>
+        </dl>
+      </section>
+
+      <section class="panel-section">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">Scene census</span>
+            <h2>Geometry</h2>
+          </div>
+        </div>
+        <div class="metrics-grid">
+          <div class="metric"><span>Nodes</span><strong id="metricNodes">—</strong></div>
+          <div class="metric"><span>Meshes</span><strong id="metricMeshes">—</strong></div>
+          <div class="metric"><span>Draw calls</span><strong id="metricDrawCalls">—</strong></div>
+          <div class="metric"><span>Triangles</span><strong id="metricTriangles">—</strong></div>
+          <div class="metric"><span>Materials</span><strong id="metricMaterials">—</strong></div>
+          <div class="metric"><span>Textures</span><strong id="metricTextures">—</strong></div>
+        </div>
+      </section>
+
+      <section class="panel-section detail-section">
+        <div class="detail-block">
+          <h3>Bounds</h3>
+          <pre id="boundsValue">—</pre>
+        </div>
+        <div class="detail-block">
+          <h3>Selected source / fallback</h3>
+          <p class="mono-wrap" id="sourceValue">—</p>
+        </div>
+        <div class="detail-block">
+          <h3>LOD table</h3>
+          <ul class="diagnostic-list lod-list" id="lodList"><li class="muted-item">—</li></ul>
+        </div>
+        <div class="detail-block">
+          <h3>Socket names</h3>
+          <ul class="diagnostic-list" id="socketList"><li class="muted-item">—</li></ul>
+        </div>
+        <details class="node-details">
+          <summary>Named scene nodes <span id="namedNodeCount">0</span></summary>
+          <ul class="diagnostic-list node-list" id="nodeList"><li class="muted-item">—</li></ul>
+        </details>
+      </section>
+    </aside>
+  </main>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

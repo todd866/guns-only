@@ -5,8 +5,51 @@ namespace GunsOnly.Sim.Doctrine;
 public interface IBandit {
     AircraftState State { get; }
     Vec3D LiftDir { get; }
+    GunsOnly.Sim.Turbulence.IWindField? Wind { get; set; }
+    IAtmosphereModel Atmosphere { get; set; }
     double T { get; }
+    bool CatastrophicallyDamaged { get; }
+    bool WreckSettled { get; }
+    ImpactSurface WreckSurface { get; }
+    bool WreckSurfaceChangedThisStep { get; }
+    /// Tactical trigger intent only. The session owns ammunition, cadence, projectiles, damage,
+    /// and outcomes; an opponent controller cannot manufacture a hit.
+    bool WantsToFire(in AircraftState player);
+    /// Irreversible combat-damage boundary. Subsequent Step calls still integrate the same entity,
+    /// but through its failed engine and damaged aerodynamic state rather than its tactical law.
+    void ApplyCatastrophicDamage(int handedness);
+    void ApplySurfaceImpact(ImpactSurface surface, in Vec3D surfaceVelocity,
+        double surfaceHeightM, Carrier? carrier = null);
     void Step(in AircraftState player, double dt);
+}
+
+/// Deterministic, intentionally conservative gun employment shared by scripted and reactive
+/// opponents. It decides only whether the pilot holds the trigger; GunKill still resolves the
+/// physical body-axis shot and swept target intersection.
+public static class BanditFireControl {
+    public const double MinimumRangeM = 120.0;
+    public const double MaximumRangeM = 900.0;
+    public const double MaximumNoseErrorRad = 3.0 * System.Math.PI / 180.0;
+    public const double BurstSeconds = 0.35;
+    public const double BurstCycleSeconds = 1.25;
+
+    public static bool WantsToFire(in AircraftState own, in AircraftState player,
+        double engagementSeconds) {
+        if (!double.IsFinite(engagementSeconds) || engagementSeconds < 0.0) return false;
+        var line = player.Position - own.Position;
+        double range = line.Length;
+        if (!double.IsFinite(range) || range < MinimumRangeM || range > MaximumRangeM)
+            return false;
+
+        var bodyForward = own.BodyAttitude.IsFinite && own.BodyAttitude.LengthSquared >= 1e-12
+            ? own.BodyAttitude.Rotate(new Vec3D(0.0, 0.0, 1.0)).Normalized()
+            : own.ForwardDir();
+        if (bodyForward.Dot(line * (1.0 / range)) < System.Math.Cos(MaximumNoseErrorRad))
+            return false;
+
+        double burstPhase = engagementSeconds % BurstCycleSeconds;
+        return burstPhase < BurstSeconds;
+    }
 }
 
 public enum BanditTactic { Acquire, Defend, Energy, Return }
@@ -37,6 +80,8 @@ public sealed class ReactiveBandit : IBandit {
     double _nextJinkAt = double.PositiveInfinity;
     int _jinkIndex;
     int _breakSign = 1;
+    int _damageHandedness = 1;
+    WreckContactMotion? _wreckMotion;
 
     public ReactiveBandit(AircraftState initial, AircraftParams parameters) {
         _sim = new AircraftSim(initial, parameters);
@@ -79,13 +124,65 @@ public sealed class ReactiveBandit : IBandit {
 
     public AircraftState State => _sim.State;
     public Vec3D LiftDir => _sim.LiftDir;
+    public GunsOnly.Sim.Turbulence.IWindField? Wind {
+        get => _sim.Wind;
+        set => _sim.Wind = value;
+    }
+    public IAtmosphereModel Atmosphere {
+        get => _sim.AtmosphereModel;
+        set => _sim.AtmosphereModel = value;
+    }
     public double T { get; private set; }
+    public bool CatastrophicallyDamaged { get; private set; }
+    public bool WreckSettled => _wreckMotion?.Settled ?? false;
+    public ImpactSurface WreckSurface => _wreckMotion?.Surface ?? ImpactSurface.None;
+    public bool WreckSurfaceChangedThisStep =>
+        _wreckMotion?.SurfaceChangedThisStep ?? false;
+    public double ThrustFraction => _sim.ThrustFraction;
     public BanditTactic Tactic { get; private set; } = BanditTactic.Acquire;
     public PilotCommand LastCommand { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
+
+    public bool WantsToFire(in AircraftState player) => !CatastrophicallyDamaged
+        && Tactic == BanditTactic.Acquire
+        && BanditFireControl.WantsToFire(State, player, T);
+
+    public void ApplyCatastrophicDamage(int handedness) {
+        if (CatastrophicallyDamaged) return;
+        CatastrophicallyDamaged = true;
+        _damageHandedness = handedness < 0 ? -1 : 1;
+        _sim.EngineCombustionAvailable = false;
+        _sim.AerodynamicConfiguration = TerminalFlightDynamics.Configuration(
+            AirframeAerodynamicState.Clean, _damageHandedness);
+    }
+
+    public void ApplySurfaceImpact(ImpactSurface surface, in Vec3D surfaceVelocity,
+        double surfaceHeightM, Carrier? carrier = null) {
+        if (_wreckMotion is not null) return;
+        ApplyCatastrophicDamage(_damageHandedness);
+        _wreckMotion = new WreckContactMotion(_sim.State, surface,
+            surfaceVelocity, surfaceHeightM, carrier);
+        _sim.AdoptExternalKinematics(_wreckMotion.State);
+    }
 
     public void Step(in AircraftState player, double dt) {
         if (!double.IsFinite(dt) || dt <= 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(dt));
+
+        if (_wreckMotion is not null) {
+            _sim.AdvanceEngineOnly(0.0, dt);
+            _wreckMotion.Step(dt);
+            _sim.AdoptExternalKinematics(_wreckMotion.State);
+            T += dt;
+            return;
+        }
+
+        if (CatastrophicallyDamaged) {
+            LastCommand = TerminalFlightDynamics.UncontrolledCommand(_sim.State);
+            TerminalFlightDynamics.Step(_sim, AirframeAerodynamicState.Clean,
+                _damageHandedness, dt);
+            T += dt;
+            return;
+        }
 
         SelectTactic(player);
         LastCommand = Tactic switch {

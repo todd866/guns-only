@@ -1,0 +1,564 @@
+{
+  "$schema": "../../schemas/asset-manifest.schema.json",
+  "schemaVersion": "1.0.0",
+  "manifestId": "manifest.korea-1950s.default.v1",
+  "manifestVersion": "0.3.0",
+  "packId": "korea-1950s",
+  "coordinateSystem": {
+    "units": "metres",
+    "upAxis": "+y",
+    "forwardAxis": "-z",
+    "handedness": "right"
+  },
+  "defaultLicenseSet": {
+    "id": "licenses.guns-only.project.v1",
+    "uri": "licenses.json"
+  },
+  "assets": [
+    {
+      "id": "vehicle.player.sabre-fury.v1",
+      "kind": "model",
+      "role": "vehicle.player-exterior",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [],
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 180,
+          "source": {
+            "uri": "models/player-swept-jet/lod0.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "e7bd8250d259ecb4af8f1c0097d28bf3e6fd8f80ae401d8f75c6a293afa7a1a2",
+            "sizeBytes": 506504
+          },
+          "budgets": {
+            "triangles": 12000,
+            "drawCalls": 24,
+            "materials": 8,
+            "textureMemoryMiB": 2,
+            "maxTextureDimension": 256
+          }
+        },
+        {
+          "level": 1,
+          "minProjectedPixels": 48,
+          "source": {
+            "uri": "models/player-swept-jet/lod1.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "4d0b697cf268ab9ff76ef17521f9707d7fd86cc6cc3202d0eec8cac008f51204",
+            "sizeBytes": 204396
+          },
+          "budgets": {
+            "triangles": 5000,
+            "drawCalls": 16,
+            "materials": 6,
+            "textureMemoryMiB": 1,
+            "maxTextureDimension": 128
+          }
+        },
+        {
+          "level": 2,
+          "minProjectedPixels": 0,
+          "source": {
+            "uri": "models/player-swept-jet/lod2.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "b6ebf77ed210ac26944cbf136b8e6fe7ded1f924ffe002166bc8fac2a93a5c08",
+            "sizeBytes": 50180
+          },
+          "budgets": {
+            "triangles": 1200,
+            "drawCalls": 12,
+            "materials": 4,
+            "textureMemoryMiB": 0,
+            "maxTextureDimension": 1
+          }
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://fighter/current",
+          "parameters": {
+            "livery": "navy-blue",
+            "playerExterior": true
+          },
+          "notes": "Temporary external-view stand-in until an authored Sabre/Fury-class GLB is licensed and validated."
+        }
+      ],
+      "budgets": {
+        "triangles": 90000,
+        "materials": 8,
+        "textureMemoryMiB": 64
+      },
+      "anchors": [
+        {
+          "id": "camera.cockpit",
+          "node": "SOCKET_CAMERA_COCKPIT"
+        },
+        {
+          "id": "muzzle.left",
+          "node": "SOCKET_MUZZLE_LEFT"
+        },
+        {
+          "id": "muzzle.right",
+          "node": "SOCKET_MUZZLE_RIGHT"
+        },
+        {
+          "id": "gear.left",
+          "node": "SOCKET_GEAR_LEFT"
+        },
+        {
+          "id": "gear.nose",
+          "node": "SOCKET_GEAR_NOSE"
+        },
+        {
+          "id": "gear.right",
+          "node": "SOCKET_GEAR_RIGHT"
+        }
+      ]
+    },
+    {
+      "id": "vehicle.bandit.swept-wing.v1",
+      "kind": "model",
+      "role": "vehicle.bandit-exterior",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [],
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 180,
+          "source": {
+            "uri": "models/bandit-swept-jet/lod0.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "90922a4745b5f524a8d8acf0e5014d6bb2923b6b1a0b13092b27bdc88c54c905",
+            "sizeBytes": 415708
+          },
+          "budgets": {
+            "triangles": 7500,
+            "drawCalls": 24,
+            "materials": 5,
+            "textureMemoryMiB": 2,
+            "maxTextureDimension": 256
+          }
+        },
+        {
+          "level": 1,
+          "minProjectedPixels": 48,
+          "source": {
+            "uri": "models/bandit-swept-jet/lod1.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "ea2a59b62f68f2d0191f1e44e7e644cf8811076520dbe10cff89d3e61029b625",
+            "sizeBytes": 168452
+          },
+          "budgets": {
+            "triangles": 3000,
+            "drawCalls": 16,
+            "materials": 5,
+            "textureMemoryMiB": 1,
+            "maxTextureDimension": 128
+          }
+        },
+        {
+          "level": 2,
+          "minProjectedPixels": 0,
+          "source": {
+            "uri": "models/bandit-swept-jet/lod2.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "0d41729bd928a4e1760100fab1c4a889d8a9adeadec0f6c8bc1ef878fb73e129",
+            "sizeBytes": 47540
+          },
+          "budgets": {
+            "triangles": 1100,
+            "drawCalls": 12,
+            "materials": 4,
+            "textureMemoryMiB": 0,
+            "maxTextureDimension": 1
+          }
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://fighter/current",
+          "parameters": {
+            "livery": "hostile-silver",
+            "playerExterior": false
+          },
+          "notes": "Current procedural swept-wing target factory."
+        }
+      ],
+      "budgets": {
+        "triangles": 70000,
+        "materials": 7,
+        "textureMemoryMiB": 48
+      },
+      "anchors": [
+        {
+          "id": "camera.cockpit",
+          "node": "SOCKET_CAMERA_COCKPIT"
+        },
+        {
+          "id": "damage.center",
+          "node": "SOCKET_DAMAGE_CENTER"
+        },
+        {
+          "id": "muzzle.left",
+          "node": "SOCKET_MUZZLE_LEFT"
+        },
+        {
+          "id": "muzzle.right",
+          "node": "SOCKET_MUZZLE_RIGHT"
+        }
+      ]
+    },
+    {
+      "id": "cockpit.player.sabre-fury.v1",
+      "kind": "model",
+      "role": "vehicle.player-cockpit",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [],
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": {
+            "uri": "models/player-cockpit/lod0.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "28838bc496f80e5ecd28bbcc64e476ef2e6d7d31a136b4f09f407c58a27d115d",
+            "sizeBytes": 456628
+          },
+          "budgets": {
+            "triangles": 4500,
+            "drawCalls": 20,
+            "materials": 11,
+            "textureMemoryMiB": 2,
+            "maxTextureDimension": 256
+          }
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "hidden",
+          "uri": "procedural://cockpit/current",
+          "notes": "Hide the cockpit if its authored view model cannot be loaded."
+        }
+      ],
+      "budgets": {
+        "triangles": 4500,
+        "drawCalls": 20,
+        "materials": 11,
+        "textureMemoryMiB": 2
+      },
+      "anchors": [
+        { "id": "camera.cockpit", "node": "SOCKET_CAMERA_COCKPIT" },
+        { "id": "canopy.hinge", "node": "SOCKET_CANOPY_HINGE" },
+        { "id": "gunsight.origin", "node": "SOCKET_GUNSIGHT_ORIGIN" },
+        { "id": "instrument-panel.origin", "node": "SOCKET_INSTRUMENT_PANEL_ORIGIN" },
+        { "id": "muzzle.left", "node": "SOCKET_MUZZLE_LEFT" },
+        { "id": "muzzle.right", "node": "SOCKET_MUZZLE_RIGHT" },
+        { "id": "control.stick", "node": "SOCKET_CONTROL_STICK" },
+        { "id": "control.throttle", "node": "SOCKET_CONTROL_THROTTLE" }
+      ]
+    },
+    {
+      "id": "platform.carrier.straight-deck.v1",
+      "kind": "model",
+      "role": "platform.carrier",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [],
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": {
+            "uri": "models/naval/straight-deck-carrier.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "606fe2eeafbb284859ef0deb6a8585c1d1e1dc3e7c7b996584ea5162aa4a3980",
+            "sizeBytes": 466324
+          },
+          "budgets": {
+            "triangles": 12000,
+            "drawCalls": 24,
+            "materials": 8,
+            "textureMemoryMiB": 4,
+            "maxTextureDimension": 256
+          }
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://carrier/current",
+          "notes": "Current straight-deck carrier silhouette factory."
+        }
+      ],
+      "budgets": {
+        "triangles": 140000,
+        "materials": 12,
+        "textureMemoryMiB": 96
+      },
+      "anchors": [
+        {
+          "id": "deck.origin",
+          "node": "SOCKET_DECK_ORIGIN"
+        },
+        {
+          "id": "recovery.threshold",
+          "node": "SOCKET_RECOVERY_THRESHOLD"
+        },
+        {
+          "id": "bow.reference",
+          "node": "SOCKET_BOW_REFERENCE"
+        },
+        {
+          "id": "wake.origin",
+          "node": "SOCKET_WAKE_ORIGIN"
+        }
+      ]
+    },
+    {
+      "id": "platform.escort.gun-destroyer.v1",
+      "kind": "model",
+      "role": "platform.escort",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [],
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": {
+            "uri": "models/naval/gun-destroyer-escort.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "c16e13082f9567daf50fef077f8de5eadb672b1f9f8c0aa3e03101e8eab0de3f",
+            "sizeBytes": 460908
+          },
+          "budgets": {
+            "triangles": 6500,
+            "drawCalls": 24,
+            "materials": 7,
+            "textureMemoryMiB": 4,
+            "maxTextureDimension": 256
+          }
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "hidden",
+          "uri": "procedural://platform/escort/current",
+          "notes": "Hide optional escort geometry if its authored model cannot be loaded."
+        }
+      ],
+      "budgets": {
+        "triangles": 6500,
+        "materials": 7,
+        "drawCalls": 24,
+        "textureMemoryMiB": 4
+      },
+      "anchors": [
+        {
+          "id": "deck.origin",
+          "node": "SOCKET_DECK_ORIGIN"
+        },
+        {
+          "id": "formation.origin",
+          "node": "SOCKET_FORMATION_ORIGIN"
+        },
+        {
+          "id": "bow.reference",
+          "node": "SOCKET_BOW_REFERENCE"
+        },
+        {
+          "id": "wake.origin",
+          "node": "SOCKET_WAKE_ORIGIN"
+        }
+      ]
+    },
+    {
+      "id": "environment.sky.haze.v1",
+      "kind": "environment",
+      "role": "environment.sky",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [
+        {
+          "uri": "environment/atmosphere.material.json",
+          "format": "three-material-profile",
+          "mediaType": "application/json",
+          "sha256": "39e665c08c712863c4860abbcf1424cc5d0ea84298782895d58d1a4cde8aeef4",
+          "sizeBytes": 1340
+        },
+        {
+          "uri": "environment/textures/cloud-shape.png",
+          "format": "png",
+          "mediaType": "image/png",
+          "sha256": "929dac4ee90d88d917973634149d9659cca286a17ece94142124f8328686edfe",
+          "sizeBytes": 238993
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://environment/sky/current",
+          "parameters": {
+            "weather": "high-haze"
+          }
+        }
+      ]
+    },
+    {
+      "id": "environment.ocean.deep.v1",
+      "kind": "environment",
+      "role": "environment.surface",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [
+        {
+          "uri": "environment/ocean.material.json",
+          "format": "three-material-profile",
+          "mediaType": "application/json",
+          "sha256": "2553a1909fa1b459cb58841d03c1aac2f2a9327c08a6ee39aa882ba29ef3e0fd",
+          "sizeBytes": 1263
+        },
+        {
+          "uri": "environment/textures/ocean-normal.png",
+          "format": "png",
+          "mediaType": "image/png",
+          "sha256": "3cf7c02a980095c806846e3906a51cfe65106e68f9cde797ae17bb2aee707974",
+          "sizeBytes": 191223
+        },
+        {
+          "uri": "environment/textures/foam-noise.png",
+          "format": "png",
+          "mediaType": "image/png",
+          "sha256": "3623e916031a9f18922b1b5ec20c1b44dae10ebf8dc3f40276f4dfb15c2a72d3",
+          "sizeBytes": 29713
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://environment/ocean/current",
+          "parameters": {
+            "seaState": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "vfx.gun.fire.v1",
+      "kind": "vfx",
+      "role": "effects.gun-fire",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [
+        {
+          "uri": "effects/guns.effects.json",
+          "format": "effects-profile",
+          "mediaType": "application/json",
+          "sha256": "dfcb067f7ba40d4090a0b69ce16027c3b4cfa6f58d0f4abe029784ff4495a391",
+          "sizeBytes": 2106,
+          "selector": "event.weapon.gun-fire.v1"
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://effects/gun/current",
+          "parameters": {
+            "effect": "muzzle-and-tracer"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vfx.gun.impact.v1",
+      "kind": "vfx",
+      "role": "effects.gun-impact",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [
+        {
+          "uri": "effects/guns.effects.json",
+          "format": "effects-profile",
+          "mediaType": "application/json",
+          "sha256": "dfcb067f7ba40d4090a0b69ce16027c3b4cfa6f58d0f4abe029784ff4495a391",
+          "sizeBytes": 2106,
+          "selector": "event.weapon.gun-impact.v1"
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://effects/gun/current",
+          "parameters": {
+            "effect": "impact"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vfx.vehicle.destroyed.v1",
+      "kind": "vfx",
+      "role": "effects.vehicle-destroyed",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [
+        {
+          "uri": "effects/guns.effects.json",
+          "format": "effects-profile",
+          "mediaType": "application/json",
+          "sha256": "dfcb067f7ba40d4090a0b69ce16027c3b4cfa6f58d0f4abe029784ff4495a391",
+          "sizeBytes": 2106,
+          "selector": "event.vehicle.destroyed.v1"
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://effects/destruction/current",
+          "parameters": {
+            "effect": "fighter-kill"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vfx.platform.wake.v1",
+      "kind": "vfx",
+      "role": "effects.platform-wake",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [
+        {
+          "uri": "effects/guns.effects.json",
+          "format": "effects-profile",
+          "mediaType": "application/json",
+          "sha256": "dfcb067f7ba40d4090a0b69ce16027c3b4cfa6f58d0f4abe029784ff4495a391",
+          "sizeBytes": 2106,
+          "selector": "event.platform.wake.v1"
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "hidden",
+          "uri": "procedural://effects/wake/current",
+          "notes": "Hide the optional wake if its presentation module is unavailable."
+        }
+      ]
+    }
+  ]
+}

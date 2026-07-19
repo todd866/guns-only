@@ -2,9 +2,9 @@ namespace GunsOnly.Sim.Turbulence;
 
 /// Deterministic value noise. The precompute-and-replay design needs the field to be identical
 /// across two runs from the same seed ON THE SAME BUILD — that is what makes a recorded approach
-/// reproduce and a seed name a stable "day". It does NOT need desktop and web to match each other
-/// bit-for-bit; that was never the goal (the shells just each have to be GOOD turbulence, not the
-/// SAME turbulence), and it wouldn't hold anyway because Math.Exp/Pow in the cascade aren't
+/// reproduce and a seed name a stable "day". It does NOT need native .NET and WASM to match each
+/// other bit-for-bit; only same-build replay is required, and cross-runtime identity would not hold
+/// anyway because Math.Exp/Pow in the cascade aren't
 /// correctly-rounded across runtimes. This primitive itself uses only integer bit-mixing + IEEE
 /// add/multiply, so it is in fact bit-stable everywhere — never System.Random (time-seeded, and
 /// its algorithm is not contractually stable across runtimes).

@@ -1,3 +1,0 @@
-{"name":"awacs_closeup","beat":4,"variant":0,"duration_s":210,
- "events":[{"t":2.0,"key":0,"pressed":true},{"t":4.0,"key":0,"pressed":false}],
- "notes":"Same setup as balloon_strike, extended duration only -- a supplementary visual-QA capture to get the glider close enough to actually see the KJ-500 AWACS mesh on screen, since the mandated 70s balloon_strike capture never closes past ~17.5km range. Not a replacement for balloon_strike."}
