@@ -114,4 +114,62 @@ public class CarrierRecoveryPhysicsTests {
 
         Assert.Equal(ra, rb);
     }
+
+    [Fact]
+    public void HullDeckAndIslandAreSweptSolidVolumes() {
+        var ship = Ship();
+
+        Assert.Equal(Carrier.SolidCollision.FlightDeck,
+            ship.SweptSolidCollision(ship.ShipPoint(-40.0, 0.0, 3.0),
+                ship.ShipPoint(-40.0, 0.0, -0.5)));
+        Assert.Equal(Carrier.SolidCollision.Hull,
+            ship.SweptSolidCollision(ship.ShipPoint(0.0, 0.0, -10.0),
+                ship.ShipPoint(40.0, 0.0, -10.0)));
+        Assert.Equal(Carrier.SolidCollision.Island,
+            ship.SweptSolidCollision(ship.ShipPoint(5.0, 10.7, 10.0),
+                ship.ShipPoint(55.0, 10.7, 10.0)));
+        Assert.Equal(Carrier.SolidCollision.None,
+            ship.SweptSolidCollision(ship.ShipPoint(-80.0, 0.0, 12.0),
+                ship.ShipPoint(80.0, 0.0, 12.0)));
+    }
+
+    [Fact]
+    public void BolterFlyawayIsAboveDeckClimbingAndStillFast() {
+        var ship = Ship();
+        AircraftState contact = Touchdown(ship, sinkMps: 1.2);
+        AircraftState flyaway = ship.BolterFlyawayState(contact);
+        var (_, _, height) = ship.LandingFrame(flyaway.Position);
+
+        Assert.Equal(1.5, height, 10);
+        Assert.True(flyaway.Gamma > 0.0);
+        Assert.InRange(ship.DeckClosureMps(flyaway), 54.99, 80.0);
+        Assert.Equal(Carrier.Recovery.Flying, ship.Classify(flyaway));
+    }
+
+    [Fact]
+    public void CatapultStrokeIsDeterministicAndHandsOffAirborne() {
+        var shipA = Ship();
+        var shipB = Ship();
+        var a = new CatapultLaunchModel();
+        var b = new CatapultLaunchModel();
+        a.Begin(shipA, FlightModel.Sabre.MassKg);
+        b.Begin(shipB, FlightModel.Sabre.MassKg);
+
+        const double dt = 1.0 / AircraftSim.TickHz;
+        int steps = 0;
+        while (a.Phase == CatapultLaunchModel.LaunchPhase.Stroke && steps++ < 1000) {
+            shipA.Step(dt);
+            shipB.Step(dt);
+            a.Step(shipA, dt);
+            b.Step(shipB, dt);
+            Assert.Equal(a.State, b.State);
+        }
+
+        Assert.Equal(CatapultLaunchModel.LaunchPhase.Airborne, a.Phase);
+        Assert.Equal(a.State, b.State);
+        Assert.Equal(CatapultLaunchModel.StrokeDistanceM, a.DistanceM, 10);
+        Assert.True(a.State.Position.Y > shipA.Position.Y);
+        Assert.True(a.State.Gamma > 0.0);
+        Assert.True(shipA.AirspeedMps(a.State) > 75.0);
+    }
 }

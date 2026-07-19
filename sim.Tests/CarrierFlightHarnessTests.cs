@@ -21,13 +21,14 @@ public class CarrierFlightHarnessTests {
 
     /// The rig IS the web bridge's inner loop, headless.
     sealed class CarrierRig {
-        public readonly AircraftSim Player;
+        public AircraftSim Player { get; private set; }
         public IBandit Bandit { get; private set; }
         public readonly Carrier Ship;
         public readonly BurbleField Burble;
         public GunKill Fight { get; private set; } = new();
         public GunKill? LastKill { get; private set; }
         public readonly ArrestmentModel Arrestment = new();
+        public readonly CatapultLaunchModel Catapult = new();
         readonly BeatSetup _beat;
         readonly DetentLayer _d = new() { Variant = ValleyVariant.PhysicsOnly };   // parity with the carrier beat
         readonly KeyGrammar _keys = new();
@@ -40,14 +41,17 @@ public class CarrierFlightHarnessTests {
         const double Dt = 1.0 / 120.0;
         public Carrier.Recovery Recovery = Carrier.Recovery.Flying;
         public Carrier.TouchdownResult LastTouchdown = Carrier.TouchdownResult.Flying;
+        public Carrier.TouchdownResult LastTrapTouchdown { get; private set; } = Carrier.TouchdownResult.Flying;
         public int KillCount { get; private set; }
+        public int TrapCount { get; private set; }
+        public int RelaunchCount { get; private set; }
+        public int CrashCount { get; private set; }
+        public int LastCaughtWire { get; private set; }
+        public double LastArrestDistanceM { get; private set; }
+        public double LastArrestSeconds { get; private set; }
         public Vec3D LastSplashPlayerPosition { get; private set; }
         public AircraftState LastSpawnState { get; private set; }
         public bool ApproachMode { get; private set; }
-        public bool Terminal => Recovery is Carrier.Recovery.HardLanding
-            or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater
-            || (Recovery == Carrier.Recovery.Trap
-                && Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped);
 
         public CarrierRig(Carrier.DeckConfiguration configuration = Carrier.DeckConfiguration.Axial) {
             _beat = Beats.CarrierApproach(configuration);
@@ -94,11 +98,55 @@ public class CarrierFlightHarnessTests {
             }
         }
 
+        public void PutPlayer(in AircraftState state) =>
+            Player = new AircraftSim(state, _air) { Wind = Burble };
+
+        void Respawn() {
+            var forward = new Vec3D(Math.Sin(S.Chi), 0.0, Math.Cos(S.Chi));
+            var right = new Vec3D(Math.Cos(S.Chi), 0.0, -Math.Sin(S.Chi));
+            var position = B.Position - forward * 1500.0 + right * 450.0;
+            position = position with { Y = Math.Max(650.0, B.Position.Y + 180.0) };
+            var toward = B.Position - position;
+            var spawn = new AircraftState(position, 180.0, 0.035,
+                Math.Atan2(toward.X, toward.Z), 0.0, _air.MassKg);
+            PutPlayer(spawn);
+            Arrestment.Reset();
+            Catapult.Reset();
+            Recovery = Carrier.Recovery.Flying;
+            LastTouchdown = Carrier.TouchdownResult.Flying;
+            CrashCount++;
+        }
+
         public void Step() {
+            if (Catapult.IsActive) {
+                AircraftState deckState = Catapult.State;
+                Bandit.Step(deckState, Dt);
+                Ship.Step(Dt);
+                Catapult.Step(Ship, Dt);
+                _t += Dt * 1000.0;
+                if (Catapult.Phase == CatapultLaunchModel.LaunchPhase.Airborne) {
+                    PutPlayer(Catapult.State);
+                    Catapult.Reset();
+                    Arrestment.Reset();
+                    Recovery = Carrier.Recovery.Flying;
+                    LastTouchdown = Carrier.TouchdownResult.Flying;
+                    RelaunchCount++;
+                }
+                return;
+            }
             if (Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Arrested) {
+                Bandit.Step(Player.State, Dt);
                 Ship.Step(Dt);
                 Arrestment.Step(Ship, Dt);
                 _t += Dt * 1000.0;
+                if (Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped) {
+                    TrapCount++;
+                    LastCaughtWire = Arrestment.CaughtWire;
+                    LastArrestDistanceM = Arrestment.DistanceM;
+                    LastArrestSeconds = Arrestment.ElapsedSeconds;
+                    LastTrapTouchdown = LastTouchdown;
+                    Catapult.Begin(Ship, Player.State.Mass);
+                }
                 return;
             }
             bool inSlot = Ship.InApproachSlot(Player.State);
@@ -123,20 +171,42 @@ public class CarrierFlightHarnessTests {
                 LastSpawnState = Bandit.State;
                 Fight = new GunKill();
             }
+            AircraftState previousPlayerState = Player.State;
             Player.Step(_d.Command, Dt);
             Bandit.Step(Player.State, Dt);
             Ship.Step(Dt);
             var touchdown = Ship.EvaluateRecovery(Player.State, Player.AngleOfAttackRad,
                 DifficultyModel.ForLevel(0));
+            var previousDeck = Ship.DeckFrame(previousPlayerState.Position);
+            var currentDeck = Ship.DeckFrame(Player.State.Position);
+            bool topDeckContact = touchdown.Recovery is Carrier.Recovery.Trap
+                    or Carrier.Recovery.Bolter or Carrier.Recovery.HardLanding
+                && previousDeck.height >= -0.05 && currentDeck.height <= 0.05
+                && Ship.DeckSinkRateMps(Player.State) > 0.0;
+            Carrier.SolidCollision solid = Ship.SweptSolidCollision(
+                previousPlayerState.Position, Player.State.Position);
             if (LastTouchdown.Recovery == Carrier.Recovery.Flying
                 && touchdown.Recovery != Carrier.Recovery.Flying)
                 LastTouchdown = touchdown;
-            if (touchdown.Recovery == Carrier.Recovery.Bolter) {
+
+            bool validRecoveryContact = solid == Carrier.SolidCollision.FlightDeck
+                && topDeckContact;
+            if ((solid != Carrier.SolidCollision.None && !validRecoveryContact)
+                || touchdown.Recovery is Carrier.Recovery.HardLanding
+                    or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater
+                || Player.BelowGround) {
+                Respawn();
+            } else if (touchdown.Recovery == Carrier.Recovery.Bolter) {
+                if (Recovery != Carrier.Recovery.Bolter)
+                    PutPlayer(Ship.BolterFlyawayState(Player.State));
                 Recovery = Carrier.Recovery.Bolter;
             } else if (Recovery == Carrier.Recovery.Bolter) {
-                if (touchdown.Recovery is Carrier.Recovery.HardLanding
-                    or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater)
-                    Recovery = touchdown.Recovery;
+                var (along, cross, height) = Ship.DeckFrame(Player.State.Position);
+                if (height > 8.0 || along > Ship.DeckLengthM * 0.5 + 5.0
+                    || Math.Abs(cross) > Ship.DeckHalfWidthM + 10.0) {
+                    Recovery = Carrier.Recovery.Flying;
+                    LastTouchdown = Carrier.TouchdownResult.Flying;
+                }
             } else {
                 Recovery = touchdown.Recovery;
             }
@@ -148,7 +218,7 @@ public class CarrierFlightHarnessTests {
         }
         public void Run(double seconds) {
             for (double e = _t + seconds * 1000.0;
-                 _t < e && !Terminal;) Step();
+                 _t < e;) Step();
         }
     }
 
@@ -251,12 +321,12 @@ public class CarrierFlightHarnessTests {
     [Theory]
     [InlineData(Carrier.DeckConfiguration.Axial)]
     [InlineData(Carrier.DeckConfiguration.Angled)]
-    public void ACompetentPilotCanReachTheDeckAndStop(Carrier.DeckConfiguration configuration) {
+    public void ACompetentPilotTrapsRollsOutAndRelaunches(Carrier.DeckConfiguration configuration) {
         var rig = new CarrierRig(configuration);
         int steps = 0;
-        while (!rig.Terminal && steps++ < 6500) {
-            // Fly the VV at the active wire zone. Once it catches, the same loop continues through
-            // the deterministic arrestment so Trap is terminal success only after a dead stop.
+        while (rig.RelaunchCount == 0 && steps++ < 7200) {
+            // Fly the VV at the active wire zone. Once it catches, this same fixed-step loop keeps
+            // going through the full arrestment and deterministic catapult relaunch.
             if (rig.Recovery == Carrier.Recovery.Flying) {
                 // Fly 70 m/s AIRSPEED, add power for spatial low-ball error, and anticipate the
                 // measured in-close sink so the J47 has time to spool. That last term is the
@@ -283,14 +353,68 @@ public class CarrierFlightHarnessTests {
             rig.Step();
         }
         var (along, cross, h) = rig.Deck;
-        _o.WriteLine($"WINNABLE {configuration}: recovery={rig.Recovery}/{rig.Arrestment.Phase} wire={rig.Arrestment.CaughtWire} after {steps} steps  along={along:F0} cross={cross:F0} h={h:F1}  sink={rig.LastTouchdown.SinkRateMps:F2}m/s air={rig.LastTouchdown.AirspeedMps:F1} closure={rig.LastTouchdown.ClosureMps:F1} aoa={rig.Player.AngleOfAttackRad * 57.2958:F1}deg hook={rig.LastTouchdown.Hook} quality={rig.LastTouchdown.Quality} stop={rig.Arrestment.DistanceM:F1}m/{rig.Arrestment.ElapsedSeconds:F2}s");
-        Assert.NotEqual(Carrier.Recovery.InTheWater, rig.Recovery);
-        Assert.Equal(Carrier.Recovery.Trap, rig.Recovery);   // flying the VV at the wires must TRAP
-        Assert.Equal(ArrestmentModel.ArrestmentPhase.Stopped, rig.Arrestment.Phase);
-        Assert.InRange(rig.Arrestment.CaughtWire, 1, 4);
-        Assert.Equal(0.0, rig.Arrestment.RelativeSpeedMps, 10);
-        Assert.InRange(rig.Arrestment.DistanceM, 90.0, 100.0);
-        Assert.InRange(rig.Arrestment.ElapsedSeconds, 3.0, 5.5);
+        _o.WriteLine($"WINNABLE {configuration}: traps={rig.TrapCount} relaunches={rig.RelaunchCount} recovery={rig.Recovery} wire={rig.LastCaughtWire} after {steps} steps  along={along:F0} cross={cross:F0} h={h:F1}  sink={rig.LastTrapTouchdown.SinkRateMps:F2}m/s air={rig.LastTrapTouchdown.AirspeedMps:F1} closure={rig.LastTrapTouchdown.ClosureMps:F1} aoa={rig.Player.AngleOfAttackRad * 57.2958:F1}deg hook={rig.LastTrapTouchdown.Hook} quality={rig.LastTrapTouchdown.Quality} stop={rig.LastArrestDistanceM:F1}m/{rig.LastArrestSeconds:F2}s");
+        Assert.Equal(1, rig.TrapCount);
+        Assert.Equal(1, rig.RelaunchCount);
+        Assert.Equal(Carrier.Recovery.Trap, rig.LastTrapTouchdown.Recovery);
+        Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
+        Assert.Equal(ArrestmentModel.ArrestmentPhase.None, rig.Arrestment.Phase);
+        Assert.Equal(CatapultLaunchModel.LaunchPhase.None, rig.Catapult.Phase);
+        Assert.InRange(rig.LastCaughtWire, 1, 4);
+        Assert.InRange(rig.LastArrestDistanceM, 90.0, 100.0);
+        Assert.InRange(rig.LastArrestSeconds, 3.0, 5.5);
+        Assert.True(rig.S.Position.Y > rig.Ship.Position.Y,
+            "catapult handoff must be airborne above the flight deck");
+        double timeAfterLaunch = rig.TimeSeconds;
+        Vec3D positionAfterLaunch = rig.S.Position;
+        rig.Run(0.5);
+        Assert.True(rig.TimeSeconds > timeAfterLaunch);
+        Assert.True((rig.S.Position - positionAfterLaunch).Length > 10.0,
+            "the relaunched aircraft must keep integrating without a stopped frame");
+    }
+
+    [Fact]
+    public void SeaImpactRespawnsAirborneAndKeepsIntegratingDeterministically() {
+        var a = new CarrierRig();
+        var b = new CarrierRig();
+        var impact = new AircraftState(new Vec3D(8000.0, -2.0, 8000.0), 180.0,
+            -0.25, 0.4, 0.0, FlightModel.Sabre.MassKg);
+        a.PutPlayer(impact);
+        b.PutPlayer(impact);
+
+        a.Step();
+        b.Step();
+
+        Assert.Equal(1, a.CrashCount);
+        Assert.Equal(1, b.CrashCount);
+        Assert.Equal(a.S, b.S);
+        Assert.Equal(Carrier.Recovery.Flying, a.Recovery);
+        Assert.True(a.S.Position.Y >= 650.0);
+        double time = a.TimeSeconds;
+        Vec3D position = a.S.Position;
+        a.Run(0.5);
+        Assert.True(a.TimeSeconds > time);
+        Assert.True((a.S.Position - position).Length > 10.0,
+            "respawn is a transition, not a frozen impact frame");
+    }
+
+    [Fact]
+    public void FlyingIntoTheCarrierIslandCrashesAndRespawns() {
+        var rig = new CarrierRig();
+        Vec3D start = rig.Ship.ShipPoint(along: 7.0, cross: 10.7, height: 10.0);
+        Vec3D end = start + rig.Ship.Fwd * 3.0;
+        Assert.Equal(Carrier.SolidCollision.Island,
+            rig.Ship.SweptSolidCollision(start, end));
+
+        rig.PutPlayer(new AircraftState(start, 240.0, 0.0, rig.Ship.HeadingRad,
+            0.0, FlightModel.Sabre.MassKg));
+        double before = rig.TimeSeconds;
+        rig.Step();
+
+        Assert.Equal(1, rig.CrashCount);
+        Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
+        Assert.True(rig.S.Position.Y >= 650.0);
+        Assert.True(rig.TimeSeconds > before);
     }
 
     // ---- FULL SORTIE: finals → firewalled J47 → clean egress → real ballistic gun kill. ----

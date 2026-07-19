@@ -11,6 +11,7 @@ public sealed class Carrier {
 
     public enum TouchdownQuality { None, Soft, Nominal, Hard, Blown }
     public enum HookOutcome { None, Engaged, HookSkip, InFlightEngagement, MissedWires }
+    public enum SolidCollision { None, FlightDeck, Hull, Island }
 
     public readonly record struct TouchdownResult(
         Recovery Recovery,
@@ -53,6 +54,17 @@ public sealed class Carrier {
     public const double MaxTrapAirspeedMps = 78.0;
     public const double MaxTrapClosureMps = 65.0;
     public const double MaxOnSpeedAoaErrorRad = 0.045; // 2.6 deg either side of the datum
+
+    // The collision proxy follows the rendered Essex-like carrier closely enough to make the
+    // physical promise unambiguous: the flight deck, hull and starboard island are solid. The
+    // aircraft remains a point at its integrated reference position; swept tests prevent that
+    // point tunnelling through a box between fixed 120 Hz samples.
+    const double FlightDeckThicknessM = 1.8;
+    const double IslandMinAlongM = 8.0;
+    const double IslandMaxAlongM = 48.0;
+    const double IslandMinCrossM = 6.0;
+    const double IslandMaxCrossM = 15.0;
+    const double IslandHeightM = 31.0;
 
     public Vec3D Position { get; private set; }   // deck-centre reference at deck height
     public double HeadingRad { get; }
@@ -214,6 +226,10 @@ public sealed class Carrier {
         return DeckPoint(horizontalOffset) + new Vec3D(0, height, 0);
     }
 
+    /// A point in the ship-axis frame rather than the potentially angled landing-area frame.
+    public Vec3D ShipPoint(double along, double cross = 0.0, double height = 0.0) =>
+        DeckPoint(Fwd * along + Right * cross) + new Vec3D(0, height, 0);
+
     Vec3D DeckPoint(in Vec3D horizontalOffset) => Position + horizontalOffset
         + new Vec3D(0, horizontalOffset.Dot(Fwd) * System.Math.Tan(DeckPitchRad), 0);
 
@@ -239,6 +255,79 @@ public sealed class Carrier {
         var (along, cross, _) = DeckFrame(p);
         return System.Math.Abs(cross) <= DeckHalfWidthM
             && along >= -DeckLengthM * 0.5 && along <= DeckLengthM * 0.5;
+    }
+
+    /// Swept point collision against the rendered ship's solid volumes. A caller must explicitly
+    /// exempt a recovery-classified top-deck contact (trap/bolter); every other intersection is an
+    /// impact. Coordinates are resolved in the ship frame, so this works for both landing layouts.
+    public SolidCollision SweptSolidCollision(in Vec3D previous, in Vec3D current) {
+        var a = DeckFrame(previous);
+        var b = DeckFrame(current);
+
+        if (SegmentIntersectsBox(a.along, a.cross, a.height, b.along, b.cross, b.height,
+            IslandMinAlongM, IslandMaxAlongM, IslandMinCrossM, IslandMaxCrossM,
+            0.0, IslandHeightM))
+            return SolidCollision.Island;
+
+        double halfLength = DeckLengthM * 0.5;
+        if (SegmentIntersectsBox(a.along, a.cross, a.height, b.along, b.cross, b.height,
+            -halfLength, halfLength, -DeckHalfWidthM, DeckHalfWidthM,
+            -FlightDeckThicknessM, 0.0))
+            return SolidCollision.FlightDeck;
+
+        // The hull sides taper visually, but the full deck-width prism is intentionally the
+        // conservative solid proxy: clipping a sponson or deck edge is still hitting the ship.
+        if (SegmentIntersectsBox(a.along, a.cross, a.height, b.along, b.cross, b.height,
+            -halfLength, halfLength, -DeckHalfWidthM, DeckHalfWidthM,
+            -DeckAltM, -FlightDeckThicknessM))
+            return SolidCollision.Hull;
+
+        return SolidCollision.None;
+    }
+
+    static bool SegmentIntersectsBox(double aAlong, double aCross, double aHeight,
+        double bAlong, double bCross, double bHeight,
+        double minAlong, double maxAlong, double minCross, double maxCross,
+        double minHeight, double maxHeight) {
+        double enter = 0.0, exit = 1.0;
+        return ClipAxis(aAlong, bAlong - aAlong, minAlong, maxAlong, ref enter, ref exit)
+            && ClipAxis(aCross, bCross - aCross, minCross, maxCross, ref enter, ref exit)
+            && ClipAxis(aHeight, bHeight - aHeight, minHeight, maxHeight, ref enter, ref exit);
+    }
+
+    static bool ClipAxis(double start, double delta, double min, double max,
+        ref double enter, ref double exit) {
+        if (System.Math.Abs(delta) < 1e-12) return start >= min && start <= max;
+        double t0 = (min - start) / delta;
+        double t1 = (max - start) / delta;
+        if (t0 > t1) (t0, t1) = (t1, t0);
+        enter = System.Math.Max(enter, t0);
+        exit = System.Math.Min(exit, t1);
+        return enter <= exit;
+    }
+
+    /// Put a wheel-contact bolter back above the landing surface with its deck-relative forward
+    /// energy intact and a small positive flight path. This stands in for the short gear roll and
+    /// rotation that the airborne rigid-body model cannot integrate while resting on a deck.
+    public AircraftState BolterFlyawayState(in AircraftState contact) {
+        var (along, cross, _) = LandingFrame(contact.Position);
+        var relative = DeckRelativeVelocity(contact);
+        double forwardMps = System.Math.Max(55.0, relative.Dot(LandingFwd));
+        double lateralMps = System.Math.Clamp(relative.Dot(LandingRight), -8.0, 8.0);
+        double climbMps = System.Math.Max(5.0, relative.Y);
+        var velocity = DeckVelocityWorld + LandingFwd * forwardMps
+            + LandingRight * lateralMps + new Vec3D(0.0, climbMps, 0.0);
+        return StateFromVelocity(LandingPoint(along, cross, height: 1.5), velocity,
+            contact.Mass);
+    }
+
+    internal static AircraftState StateFromVelocity(in Vec3D position, in Vec3D velocity,
+        double mass, QuaternionD attitude = default) {
+        double speed = velocity.Length;
+        var direction = speed < 1e-12 ? new Vec3D(0.0, 0.0, 1.0) : velocity * (1.0 / speed);
+        return new AircraftState(position, speed,
+            System.Math.Asin(System.Math.Clamp(direction.Y, -1.0, 1.0)),
+            System.Math.Atan2(direction.X, direction.Z), 0.0, mass, attitude);
     }
 
     /// Is the aircraft in the approach SLOT (the groove) — astern of the deck, lined up on the
@@ -361,4 +450,91 @@ public sealed class Carrier {
 
     public Recovery Classify(in AircraftState s, double angleOfAttackRad,
         in RecoveryDifficulty difficulty) => EvaluateRecovery(s, angleOfAttackRad, difficulty).Recovery;
+}
+
+/// Deterministic deck-relative catapult stroke used after a completed arrestment. The carrier
+/// translates beneath the aircraft throughout; at the end of the stroke the state is already
+/// above the bow with positive climb and enough airspeed for AircraftSim to take over immediately.
+public sealed class CatapultLaunchModel {
+    public enum LaunchPhase { None, Stroke, Airborne }
+
+    public const double StrokeDistanceM = 75.0;
+    public const double EndDeckRelativeSpeedMps = 62.0;
+    public const double StartAlongM = 20.0;
+    public const double CatapultCrossM = -7.0;
+    public const double AirborneHeightM = 4.0;
+    public const double LaunchClimbMps = 6.0;
+    const double ParkedNosePitchRad = 0.8 * System.Math.PI / 180.0;
+    const double LaunchNosePitchRad = 9.0 * System.Math.PI / 180.0;
+    const double AccelerationMps2 = EndDeckRelativeSpeedMps * EndDeckRelativeSpeedMps
+        / (2.0 * StrokeDistanceM);
+
+    double _massKg;
+    double _distanceM;
+
+    public LaunchPhase Phase { get; private set; }
+    public AircraftState State { get; private set; }
+    public double DistanceM => _distanceM;
+    public double RelativeSpeedMps { get; private set; }
+    public double ElapsedSeconds { get; private set; }
+    public bool IsActive => Phase == LaunchPhase.Stroke;
+
+    public void Begin(Carrier carrier, double massKg) {
+        if (massKg <= 0.0 || !double.IsFinite(massKg))
+            throw new System.ArgumentOutOfRangeException(nameof(massKg));
+        _massKg = massKg;
+        _distanceM = 0.0;
+        RelativeSpeedMps = 0.0;
+        ElapsedSeconds = 0.0;
+        Phase = LaunchPhase.Stroke;
+        State = StrokeState(carrier, ParkedNosePitchRad);
+    }
+
+    /// Call after Carrier.Step(dt), matching ArrestmentModel's moving-deck convention.
+    public void Step(Carrier carrier, double dt) {
+        if (Phase != LaunchPhase.Stroke || dt <= 0.0) return;
+
+        double nextSpeed = System.Math.Min(EndDeckRelativeSpeedMps,
+            RelativeSpeedMps + AccelerationMps2 * dt);
+        _distanceM += 0.5 * (RelativeSpeedMps + nextSpeed) * dt;
+        RelativeSpeedMps = nextSpeed;
+        ElapsedSeconds += dt;
+
+        if (_distanceM + 1e-12 < StrokeDistanceM) {
+            State = StrokeState(carrier, ParkedNosePitchRad);
+            return;
+        }
+
+        _distanceM = StrokeDistanceM;
+        RelativeSpeedMps = EndDeckRelativeSpeedMps;
+        var velocity = carrier.DeckVelocityWorld
+            + carrier.Fwd * EndDeckRelativeSpeedMps
+            + new Vec3D(0.0, LaunchClimbMps, 0.0);
+        State = Carrier.StateFromVelocity(
+            carrier.ShipPoint(StartAlongM + StrokeDistanceM, CatapultCrossM, AirborneHeightM),
+            velocity, _massKg, Attitude(carrier, LaunchNosePitchRad));
+        Phase = LaunchPhase.Airborne;
+    }
+
+    public void Reset() {
+        Phase = LaunchPhase.None;
+        State = default;
+        _massKg = _distanceM = RelativeSpeedMps = ElapsedSeconds = 0.0;
+    }
+
+    AircraftState StrokeState(Carrier carrier, double pitchRad) {
+        var velocity = carrier.DeckVelocityWorld + carrier.Fwd * RelativeSpeedMps;
+        return Carrier.StateFromVelocity(
+            carrier.ShipPoint(StartAlongM + _distanceM, CatapultCrossM),
+            velocity, _massKg, Attitude(carrier, pitchRad));
+    }
+
+    static QuaternionD Attitude(Carrier carrier, double pitchRad) {
+        var up = new Vec3D(0.0, 1.0, 0.0);
+        var forward = carrier.Fwd * System.Math.Cos(pitchRad)
+            + up * System.Math.Sin(pitchRad);
+        var bodyUp = up * System.Math.Cos(pitchRad)
+            - carrier.Fwd * System.Math.Sin(pitchRad);
+        return QuaternionD.FromFrame(bodyUp.Cross(forward).Normalized(), bodyUp, forward);
+    }
 }

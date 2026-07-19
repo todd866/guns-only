@@ -155,13 +155,13 @@ public class FlightModelTests {
         Assert.False(sim.BelowGround);
         for (int i = 0; i < 1200 && !sim.BelowGround; i++) sim.Step(new PilotCommand(1.0, 0, 0.85, 0), 1.0/AircraftSim.TickHz);
         Assert.True(sim.BelowGround, "a sustained dive from 800 m must reach the sea");
-        Assert.True(sim.BelowHardDeck, "below ground implies below the 5,000 ft hard deck");
     }
-    [Fact] public void HardDeckTripsBeforeTheGroundDoes() {
-        var high = new AircraftState(new Vec3D(0, 3000, 0), 200, 0, 0, 0, FlightModel.Sabre.MassKg);
-        var sim = new AircraftSim(high, FlightModel.Sabre);
-        Assert.False(sim.BelowHardDeck);   // 3000 m is above the 1524 m deck
+    [Fact] public void LowFlightAboveTheActualSeaIsNotAnOutcome() {
+        var low = new AircraftState(new Vec3D(0, 100, 0), 200, 0, 0, 0, FlightModel.Sabre.MassKg);
+        var sim = new AircraftSim(low, FlightModel.Sabre);
         Assert.False(sim.BelowGround);
+        Assert.Null(typeof(AircraftSim).GetProperty("BelowHardDeck"));
+        Assert.Null(typeof(AircraftSim).GetField("HardDeckM"));
     }
     [Fact] public void LiftDirTracksBank() {
         var sim = new AircraftSim(Level(), FlightModel.Sabre);

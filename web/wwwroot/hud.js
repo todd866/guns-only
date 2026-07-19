@@ -95,7 +95,7 @@ function gunCue(state, hitFlash) {
   if (hitFlash) return "HITS";
   if ((Number(state.ammo) || 0) <= 0) return "EMPTY";
   if (hasGunSolution(state)) return "SHOOT";
-  return state.gun_window === true ? "IN RANGE" : "";
+  return "";
 }
 
 function isApproachMode(state) {
@@ -143,6 +143,8 @@ class CombatHud {
     this._lastMode = null;
     this._modeCue = null;
     this._modeCueStartedAt = -Infinity;
+    this._lastDifficulty = null;
+    this._difficultyCueStartedAt = -Infinity;
   }
 
   resize(width, height, pixelRatio, safeInsets = null) {
@@ -212,7 +214,7 @@ class CombatHud {
 
   updateGunAudio(frame) {
     const firing = this.audioEnabled && frame.triggerHeld && frame.state.gun_firing === true
-      && !frame.state.frozen && (Number(frame.state.ammo) || 0) > 0;
+      && (Number(frame.state.ammo) || 0) > 0;
     if (firing && !this._audioCtx) this.armAudio();
     if (!this._gunAudioGain || !this._audioCtx) return;
     if (firing === this._gunAudioFiring) return;
@@ -533,24 +535,23 @@ class CombatHud {
 
     const ammo = Math.max(0, Number(state.ammo) || 0);
     const cue = gunCue(state, hitFlash);
-    const cueColor = hitFlash || solution ? GREEN
-      : ammo === 0 || (triggerHeld && !solution) ? RED : AMBER;
+    const cueColor = hitFlash || solution ? GREEN : RED;
     ctx.save();
-    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const cueWidth = 96;
-    const cueX = this.width / 2 - cueWidth / 2;
-    const cueY = Math.max(204, this.safeInsets.top + 202);
-    ctx.fillStyle = "rgba(1, 8, 12, 0.76)";
-    ctx.fillRect(cueX, cueY, cueWidth, 27);
-    ctx.strokeStyle = "rgba(255, 176, 32, 0.34)";
-    ctx.strokeRect(cueX, cueY, cueWidth, 27);
-    ctx.fillStyle = cueColor;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    if (cue) ctx.fillText(cue, this.width / 2, cueY + 8);
-    ctx.fillStyle = GREEN_DIM;
     ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(`G ${String(ammo).padStart(3, "0")}`, this.width / 2, cueY + 19);
+    ctx.fillStyle = GREEN_DIM;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      `G${String(ammo).padStart(3, "0")}`,
+      this.width - this.safeInsets.right - 18,
+      this.safeInsets.top + 20,
+    );
+    if (cue) {
+      ctx.fillStyle = cueColor;
+      ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(cue, this.width / 2, Math.max(212, this.safeInsets.top + 210));
+    }
     ctx.restore();
   }
 
@@ -642,29 +643,20 @@ class CombatHud {
       ctx.shadowBlur = 0;
 
       if (!frame.padlock) {
-        const rangeLine = formatRange(state.range_m);
-        const closureLine = `C ${formatSigned(state.closure_kts)} KT`;
-        const angleLine = `AO ${Math.round(Math.abs(Number(state.angle_off_deg) || 0))}°`;
+        const dataLine = `${formatRange(state.range_m).replace(" ", "")} C${formatSigned(state.closure_kts)}`;
         ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-        const textWidth = Math.max(
-          ctx.measureText(rangeLine).width,
-          ctx.measureText(closureLine).width,
-          ctx.measureText(angleLine).width,
-        );
-        const textHeight = 35;
+        const textWidth = ctx.measureText(dataLine).width;
+        const textHeight = 14;
         const rightX = projection.x + size + 8;
         const useRight = rightX + textWidth + 8 <= safe.right;
         const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
-        const textY = clamp(projection.y - 11, safe.top, safe.bottom - textHeight);
+        const textY = clamp(projection.y - textHeight / 2, safe.top, safe.bottom - textHeight);
         ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
-        ctx.fillRect(textX - 4, textY - 2, textWidth + 8, textHeight + 2);
+        ctx.fillRect(textX - 4, textY, textWidth + 8, textHeight);
         ctx.textAlign = "left";
-        ctx.textBaseline = "top";
+        ctx.textBaseline = "middle";
         ctx.fillStyle = color;
-        ctx.fillText(rangeLine, textX, textY);
-        ctx.fillStyle = GREEN_DIM;
-        ctx.fillText(closureLine, textX, textY + 12);
-        ctx.fillText(angleLine, textX, textY + 24);
+        ctx.fillText(dataLine, textX, textY + textHeight / 2);
       }
 
       const progress = clamp(Number(state.kill_progress) || 0, 0, 1);
@@ -744,7 +736,7 @@ class CombatHud {
 
     const length = Math.hypot(dx, dy) || 1;
     const azimuth = angles.azimuth * RAD_TO_DEG;
-    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${formatRange(state.range_m)} · C ${formatSigned(state.closure_kts)} · AO ${Math.round(Math.abs(Number(state.angle_off_deg) || 0))}°`;
+    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${formatRange(state.range_m).replace(" ", "")} · C${formatSigned(state.closure_kts)}`;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
@@ -766,83 +758,6 @@ class CombatHud {
     this.banditAnglesValue.azimuth = Math.atan2(right, forward);
     this.banditAnglesValue.elevation = Math.atan2(up, Math.hypot(right, forward));
     return this.banditAnglesValue;
-  }
-
-  drawSaBar(frame) {
-    if (!isFightHudActive(frame.state)) return;
-    const ctx = this.ctx;
-    const angles = this.banditAngles(frame);
-    const width = Math.min(760, Math.max(280, this.width - 180));
-    const x0 = (this.width - width) / 2;
-    const centerX = this.width / 2;
-    const y = 47;
-    const half = width / 2;
-
-    const wash = ctx.createLinearGradient(0, y - 12, 0, y + 34);
-    wash.addColorStop(0, "rgba(1, 9, 14, 0)");
-    wash.addColorStop(0.36, "rgba(1, 9, 14, 0.48)");
-    wash.addColorStop(1, "rgba(1, 9, 14, 0)");
-    ctx.fillStyle = wash;
-    ctx.fillRect(x0 - 12, y - 12, width + 24, 49);
-
-    this.setLine("rgba(77, 255, 136, 0.68)", 1);
-    ctx.beginPath();
-    ctx.moveTo(x0, y);
-    ctx.lineTo(x0 + width, y);
-    ctx.stroke();
-
-    for (let degrees = -180; degrees <= 180; degrees += 30) {
-      const x = centerX + (degrees / 180) * half;
-      const cardinal = degrees % 90 === 0;
-      ctx.strokeStyle = cardinal ? GREEN : GREEN_DIM;
-      ctx.beginPath();
-      ctx.moveTo(x, y - (cardinal ? 6 : 3));
-      ctx.lineTo(x, y + (cardinal ? 8 : 5));
-      ctx.stroke();
-    }
-
-    const labels = [
-      [-180, "6"],
-      [-90, "9"],
-      [0, "12"],
-      [90, "3"],
-      [180, "6"],
-    ];
-    ctx.fillStyle = GREEN;
-    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "center";
-    for (const [degrees, label] of labels) {
-      const x = centerX + (degrees / 180) * half;
-      ctx.fillText(label, x, y + 22);
-    }
-
-    const sensorX = centerX + clamp(frame.sensorYaw / Math.PI, -1, 1) * half;
-    ctx.fillStyle = AMBER;
-    ctx.strokeStyle = AMBER;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(sensorX - 6, y - 12);
-    ctx.lineTo(sensorX, y - 5);
-    ctx.lineTo(sensorX + 6, y - 12);
-    ctx.stroke();
-
-    const banditX = centerX + clamp(angles.azimuth / Math.PI, -1, 1) * half;
-    const banditY = y - clamp(angles.elevation * RAD_TO_DEG, -45, 45) * 0.82;
-    ctx.strokeStyle = hasGunSolution(frame.state) ? AMBER : GREEN;
-    ctx.fillStyle = "rgba(3, 13, 20, 0.75)";
-    ctx.lineWidth = 1.35;
-    ctx.setLineDash([2, 3]);
-    ctx.beginPath();
-    ctx.moveTo(banditX, y);
-    ctx.lineTo(banditX, banditY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.save();
-    ctx.translate(banditX, banditY);
-    ctx.rotate(Math.PI / 4);
-    ctx.fillRect(-5, -5, 10, 10);
-    ctx.strokeRect(-5, -5, 10, 10);
-    ctx.restore();
   }
 
   drawHeadingTape(state) {
@@ -920,18 +835,20 @@ class CombatHud {
     const { state } = frame;
     const ctx = this.ctx;
     const kills = Math.max(0, Math.floor(Number(state.kill_count) || 0));
-    const x = this.safeInsets.left + 18;
-    const y = this.safeInsets.top + 17;
 
     ctx.save();
-    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const tally = `KILLS ${String(kills).padStart(2, "0")}`;
-    const tallyWidth = ctx.measureText(tally).width + 18;
-    this.glassPanel(x, y, tallyWidth, 23, kills > 0 ? GREEN : GREEN_DIM);
-    ctx.fillStyle = kills > 0 ? GREEN : GREEN_DIM;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(tally, x + tallyWidth / 2, y + 12);
+    if (kills > 0) {
+      const x = this.safeInsets.left + 18;
+      const y = this.safeInsets.top + 17;
+      ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      const tally = `KILLS ${String(kills).padStart(2, "0")}`;
+      const tallyWidth = ctx.measureText(tally).width + 18;
+      this.glassPanel(x, y, tallyWidth, 23, GREEN);
+      ctx.fillStyle = GREEN;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(tally, x + tallyWidth / 2, y + 12);
+    }
 
     if (state.splash_cue === true) {
       const width = Math.min(310, this.width - 34);
@@ -1003,7 +920,7 @@ class CombatHud {
     }
 
     const age = now - this._modeCueStartedAt;
-    if (state.frozen || !this._modeCue || age < 0 || age >= MODE_CUE_SECONDS) return;
+    if (!this._modeCue || age < 0 || age >= MODE_CUE_SECONDS) return;
 
     const waveOff = this._modeCue === "WAVE-OFF";
     const accent = waveOff ? RED : this._modeCue === "APPROACH" ? GREEN : AMBER;
@@ -1031,23 +948,32 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawDifficulty(state) {
+  drawDifficulty(frame) {
+    const { state, now } = frame;
     if (state.carrier !== true) return;
     const level = clamp(Math.round(Number(state.difficulty_level) || 0), 0, 5);
+    if (this._lastDifficulty === null) {
+      this._lastDifficulty = level;
+      return;
+    }
+    if (level !== this._lastDifficulty) {
+      this._lastDifficulty = level;
+      this._difficultyCueStartedAt = now;
+    }
+    const age = now - this._difficultyCueStartedAt;
+    if (age < 0 || age >= MODE_CUE_SECONDS) return;
+
     const text = `L${level}`;
     const ctx = this.ctx;
     ctx.save();
-    ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const width = Math.min(this.width - 34, 42);
-    const height = 21;
-    const x = (this.width - width) / 2;
-    const y = Math.max(179, this.safeInsets.top + 174);
+    ctx.globalAlpha = clamp((MODE_CUE_SECONDS - age) / 0.45, 0, 1);
+    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const y = Math.max(184, this.safeInsets.top + 179);
     const accent = state.difficulty_spike === true ? AMBER : GREEN_DIM;
-    this.glassPanel(x, y, width, height, accent);
     ctx.fillStyle = accent;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(text, this.width / 2, y + height / 2 + 0.5);
+    ctx.fillText(text, this.width / 2, y);
     ctx.restore();
   }
 
@@ -1087,7 +1013,7 @@ class CombatHud {
   // `floor` omits rungs below a physical limit. Without it the label was clamped with
   // Math.max(0, mark) while the rung still drew, so sub-sea-level altitudes rendered as a
   // stack of identical "0"s — a tape that reads plausible while saying nothing.
-  drawVerticalTape({ value, x, label, step, decimals = 0, suffix = "", floor = null, trend = 0 }) {
+  drawVerticalTape({ value, x, step, decimals = 0, suffix = "", floor = null, trend = 0 }) {
     const ctx = this.ctx;
     const centerY = this.getInstrumentCenterY();
     const tapeHeight = Math.min(310, this.height * (this.touchMode ? 0.36 : 0.43));
@@ -1106,12 +1032,6 @@ class CombatHud {
     }
     ctx.fillStyle = wash;
     ctx.fillRect(x - 34, centerY - halfHeight - 22, 68, tapeHeight + 44);
-    ctx.fillStyle = GREEN_DIM;
-    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, x, centerY - halfHeight - 10);
-
     ctx.strokeStyle = "rgba(77, 255, 136, 0.24)";
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1297,16 +1217,18 @@ class CombatHud {
     }
   }
 
-  // A fight ending, and the low-altitude caution that precedes one. Nothing drew these before:
-  // the sim had no ground, so a hard pull could fly the aircraft to -10,679 ft and keep going
-  // with the world rendered black and the HUD still cheerfully reading out closure.
-  drawEnding(frame) {
+  // Physical proximity warning plus brief, non-blocking outcome transitions. Neither path owns
+  // simulation time: the aircraft, carrier and opponent continue moving behind every cue.
+  drawOutcomeCues(frame) {
     const { state, now } = frame;
     const ctx = this.ctx;
-    const alt = Number(state.alt_ft) || 0;
+    const radarAltFt = Number(state.radar_alt_ft);
+    const verticalSpeedFpm = Number(state.vertical_speed_fpm);
 
-    // Keep the urgent terrain warning, but do not turn deck configuration into a persistent label.
-    if (!state.frozen && state.below_deck && alt < 2000) {
+    // Actual surface proximity only: no training floor. A normal carrier approach (~650 fpm) is
+    // quiet; a fast sink close to sea/deck level gets the urgent warning.
+    if (Number.isFinite(radarAltFt) && Number.isFinite(verticalSpeedFpm)
+        && radarAltFt < 500 && verticalSpeedFpm < -1000) {
       if (Math.sin(now * Math.PI * 5) > -0.2) {
         ctx.fillStyle = RED;
         ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -1316,63 +1238,26 @@ class CombatHud {
       }
     }
 
-    if (!state.frozen) return;
-
-    // A gun kill is the sortie payoff; carrier recovery still retains its established outcome path.
-    const rec = state.recovery;
-    const splash = state.fight === "Splash" || state.bandit_alive === false;
-    const stoppedTrap = rec === "Trap" && state.arrest_phase === "STOPPED";
-    let title = splash ? "SPLASH!" : state.below_ground ? "IMPACT" : "KNOCK IT OFF";
-    let good = splash || stoppedTrap;
-    if (!splash && stoppedTrap) title = "TRAPPED — STOPPED";
-    else if (!splash && rec === "Trap") { title = "TRAP"; good = true; }
-    else if (rec === "RampStrike") title = "RAMP STRIKE";
-    else if (rec === "InTheWater") title = "IN THE WATER";
-
-    const impact = !splash && (state.below_ground || rec === "RampStrike" || rec === "InTheWater");
-    const accent = good ? GREEN : (impact ? RED : AMBER);
+    const title = typeof state.transition_cue === "string" ? state.transition_cue : "";
+    if (!title) return;
+    const respawn = title.includes("RESPAWN");
+    const trapped = title.includes("TRAPPED");
+    const accent = respawn ? RED : trapped ? GREEN : AMBER;
     ctx.save();
-    ctx.fillStyle = splash
-      ? "rgba(1, 16, 9, 0.42)"
-      : good ? "rgba(2, 20, 10, 0.5)" : (impact ? "rgba(28, 2, 6, 0.58)" : "rgba(1, 9, 14, 0.5)");
-    ctx.fillRect(0, 0, this.width, this.height);
-
-    const w = Math.min(splash || stoppedTrap ? 430 : 360, this.width - 34);
-    const h = splash || stoppedTrap ? 112 : 92;
+    const w = Math.min(360, this.width - 34);
+    const h = 48;
     const x = (this.width - w) / 2;
-    const y = this.height / 2 - h / 2;
-    ctx.fillStyle = GLASS;
-    roundedRect(ctx, x, y, w, h, 6);
-    ctx.fill();
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 1.4;
-    ctx.stroke();
+    const y = Math.max(this.safeInsets.top + 188, this.height * 0.24);
+    this.glassPanel(x, y, w, h, accent);
 
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = accent;
-    ctx.shadowColor = splash ? "rgba(77, 255, 136, 0.62)" : "transparent";
-    ctx.shadowBlur = splash ? 12 : 0;
-    ctx.font = `800 ${splash ? 31 : stoppedTrap ? 26 : 22}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    ctx.fillText(title, this.width / 2, y + (splash || stoppedTrap ? 34 : 30));
+    ctx.shadowColor = trapped ? "rgba(77, 255, 136, 0.50)" : "transparent";
+    ctx.shadowBlur = trapped ? 9 : 0;
+    ctx.font = "800 18px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText(title, this.width / 2, y + h / 2);
     ctx.shadowBlur = 0;
-
-    ctx.fillStyle = GREEN_DIM;
-    ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(
-      splash
-        ? "KILL CONFIRMED"
-        : stoppedTrap
-        ? `WIRE ${Number(state.wire) || "—"} · 0 KTS · ${(Number(state.arrest_distance_m) || 0).toFixed(0)} M PULL-OUT`
-        : impact
-        ? `${Math.round(Number(state.speed_kts) || 0)} KTS · ${Math.round(Number(state.g_actual) || 0)} G · ${Math.round(Number(state.pitch_deg) || 0)}° NOSE LOW`
-        : "TERMINATED",
-      this.width / 2,
-      y + (splash || stoppedTrap ? 68 : 55)
-    );
-    ctx.fillStyle = GREEN;
-    ctx.font = `${this.touchMode ? 600 : 700} ${this.touchMode ? 9 : 12}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    ctx.fillText(this.touchMode ? "TAP TO RE-FLY" : "R  RESTART", this.width / 2, y + (splash || stoppedTrap ? 94 : 76));
     ctx.restore();
   }
 
@@ -1407,7 +1292,7 @@ class CombatHud {
     const ey = yOf(eng);
     ctx.fillStyle = eng > 1.005 ? AMBER : GREEN;
     ctx.fillRect(x + 1.5, ey, w - 3, y + h - ey);
-    // detent lines + MIL/AB labels inside
+    // Detent lines remain legible without standing labels.
     ctx.strokeStyle = "rgba(77, 255, 136, 0.45)"; ctx.lineWidth = 1;
     for (const f of [0.55, 0.85, 1.0]) { const t = yOf(f); ctx.beginPath(); ctx.moveTo(x, t); ctx.lineTo(x + w, t); ctx.stroke(); }
     // commanded LEVER caret: a bold triangle on the right edge showing where you set it
@@ -1415,18 +1300,13 @@ class CombatHud {
     ctx.fillStyle = thr > 1.005 ? AMBER : GREEN;
     ctx.beginPath(); ctx.moveTo(x + w + 1, ly); ctx.lineTo(x + w + 11, ly - 6); ctx.lineTo(x + w + 11, ly + 6); ctx.closePath(); ctx.fill();
 
-    ctx.textBaseline = "middle";
-    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillStyle = GREEN_DIM; ctx.textAlign = "center";
-    ctx.fillText("THR", x + w / 2, y - 11);
-    ctx.textAlign = "right";
-    ctx.fillStyle = "rgba(77,255,136,0.7)"; ctx.fillText("MIL", x - 4, yOf(1.0));
-    ctx.fillStyle = AMBER; ctx.fillText("A/B", x - 4, yOf(maxT) + 7);
-    // Big lever readout below the scale.
-    const label = thr <= 0.01 ? "IDLE" : thr > 1.005 ? "A/B" : thr >= 0.995 ? "MIL" : `${Math.round(thr * 100)}%`;
-    ctx.textAlign = "center";
-    ctx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillStyle = eng > 1.005 ? AMBER : GREEN; ctx.fillText(label, x + w / 2, y + h + 12);
+    if (eng > 1.005) {
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "center";
+      ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = AMBER;
+      ctx.fillText("A/B", x + w / 2, y + h + 11);
+    }
   }
 
   drawFuel(state) {
@@ -1646,8 +1526,8 @@ class CombatHud {
     ctx.fillText(call, this.width / 2, y);
   }
 
-  drawLegend(frozen = false) {
-    if (!this.legendVisible || frozen || this.touchMode || document.documentElement.classList.contains("touch-mode")) return;
+  drawLegend() {
+    if (!this.legendVisible || this.touchMode || document.documentElement.classList.contains("touch-mode")) return;
     const ctx = this.ctx;
     const panelWidth = Math.min(930, this.width - 34);
     const compact = this.width < 760;
@@ -1673,14 +1553,14 @@ class CombatHud {
     const wideLines = [
       "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL   ·   A / D  RUDDER   ·   W / S  THROTTLE",
       "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   F  GUNS   ·   V  PADLOCK   ·   M  SOUND   ·   DRAG  LOOK",
-      "1–5  MISSION   ·   C  AXIAL / ANGLED DECK   ·   R  RESTART   ·   K  KNOCK-IT-OFF   ·   F1  VARIANT   ·   H  HIDE",
+      "1–5  MISSION   ·   C  AXIAL / ANGLED DECK   ·   R  RESTART   ·   F1  VARIANT   ·   H  HIDE",
     ];
     const compactLines = [
       "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL",
       "A / D  RUDDER   ·   W / S  THROTTLE",
       "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   F  GUNS   ·   M  SOUND",
       "V  PADLOCK   ·   DRAG  LOOK   ·   1–5  MISSION",
-      "C  AXIAL / ANGLED DECK   ·   R  RESTART   ·   K  KNOCK-IT-OFF   ·   F1  VARIANT   ·   H  HIDE",
+      "C  AXIAL / ANGLED DECK   ·   R  RESTART   ·   F1  VARIANT   ·   H  HIDE",
     ];
     const lines = compact ? compactLines : wideLines;
     const lineHeight = compact ? 27 : 31;
@@ -1697,13 +1577,6 @@ class CombatHud {
     this.drawFrameWash();
     this.updateGunAudio(frame);
 
-    // The phone outcome screen is intentionally just the result card. Besides removing duplicate
-    // SPLASH/TRAPPED labels, this leaves one unmistakable full-screen tap target for re-flight.
-    if (this.touchMode && frame.state.frozen) {
-      this.drawEnding(frame);
-      return;
-    }
-
     this.worldPoint.copy(frame.playerPosition).addScaledVector(frame.playerForward, 10000);
     const noseAnchor = this.project(this.worldPoint, frame.camera, this.noseProjection);
 
@@ -1712,7 +1585,6 @@ class CombatHud {
     this.drawGunSight(frame, noseAnchor);
     this.drawAimPoint(frame, noseAnchor);
     this.drawBandit(frame);
-    this.drawSaBar(frame);
     this.drawHeadingTape(frame.state);
     this.drawSortieStatus(frame);
     this.drawRtbCue(frame.state);
@@ -1731,7 +1603,6 @@ class CombatHud {
       this.drawVerticalTape({
         value: spd,
         x: tapeInset,
-        label: "KTS",
         floor: 0,
         step: 20,
         decimals: 0,
@@ -1740,7 +1611,6 @@ class CombatHud {
       this.drawVerticalTape({
         value: Number(frame.state.alt_ft) || 0,
         x: this.width - tapeInset,
-        label: "FT",
         floor: 0,
         step: frame.state.alt_ft > 10000 ? 1000 : 500,
         decimals: 0,
@@ -1753,10 +1623,10 @@ class CombatHud {
     this.drawAoAIndexer(frame.state);
     this.drawPadlockSa(frame);
     this.drawFooter(frame.state);
-    this.drawLegend(Boolean(frame.state.frozen));
+    this.drawLegend();
     this.drawModeCue(frame);
-    this.drawDifficulty(frame.state);
-    this.drawEnding(frame);
+    this.drawDifficulty(frame);
+    this.drawOutcomeCues(frame);
   }
 }
 
