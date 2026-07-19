@@ -500,7 +500,7 @@ public sealed class SimulationSession {
         int count = 0, SortieOutcome outcome = SortieOutcome.None,
         ImpactSurface surface = ImpactSurface.None) {
         if (_recentEvents.Count == RecentEventCapacity) _recentEvents.RemoveAt(0);
-        _recentEvents.Add(new SessionEvent(
+        var sessionEvent = new SessionEvent(
             ++_eventSequence,
             _tick + 1,
             type,
@@ -508,7 +508,20 @@ public sealed class SimulationSession {
             target,
             count,
             outcome,
-            surface));
+            surface);
+        _recentEvents.Add(sessionEvent);
+
+        // The carrier incident recorder receives the event at the authoritative emission boundary,
+        // before an impact can hand the aircraft to WreckContactMotion. This preserves exact
+        // pre-impulse pose/velocity and keeps replay effects independent of a later live snapshot.
+        if (_carrier is not null && target == CombatRole.Player) {
+            AircraftState eventState = _player.State;
+            _incidentReplay.ObserveEvent(new IncidentReplayEvent(
+                sessionEvent,
+                TimeSeconds + FixedDeltaSeconds,
+                eventState.Position,
+                eventState.VelocityVector()));
+        }
     }
 
     void StepWeapons(in AircraftState playerState, in AircraftState opponentState,

@@ -144,7 +144,27 @@ export function normaliseImpactSurface(value, terminalState = "FLYING") {
   return VALID_IMPACT_SURFACES.has(candidate) ? candidate : fallback;
 }
 
-export function validatePose(message, previousSequence = -1) {
+const PLAYER_PRESENTATION_IDS = new Set([
+  "presentation.vehicle.player.v1",
+  "presentation.vehicle.glider-strike.v1",
+]);
+
+function normalisePlayerPresentationId(value) {
+  const candidate = cleanToken(value, 128, "presentation.vehicle.player.v1");
+  return PLAYER_PRESENTATION_IDS.has(candidate)
+    ? candidate
+    : "presentation.vehicle.player.v1";
+}
+
+function presentationForConnection(requestedPresentationId, previousPose) {
+  const requested = normalisePlayerPresentationId(requestedPresentationId);
+  if (!previousPose) return requested;
+  // entityId is also client-reported, so changing it cannot authorize a model allocation. Keep
+  // one presentation for the validated socket lifetime; a reconnect is the current trusted edge.
+  return normalisePlayerPresentationId(previousPose.presentationId);
+}
+
+export function validatePose(message, previousSequence = -1, previousPose = null) {
   if (!message || message.type !== "pose" || message.protocol !== PROTOCOL_VERSION
     || !Number.isSafeInteger(message.sequence) || message.sequence <= previousSequence
     || !Number.isSafeInteger(message.tick) || message.tick < 0
@@ -157,12 +177,13 @@ export function validatePose(message, previousSequence = -1) {
     (sum, component, index) => sum + component * up[index], 0,
   ));
   if (!Number.isFinite(cosine) || cosine >= 0.98) return null;
-  const alive = message.alive !== false;
   const terminalCandidate = cleanToken(message.terminalState, 32, "").toUpperCase();
   const hasTerminalState = VALID_TERMINAL_STATES.has(terminalCandidate);
+  const alive = hasTerminalState ? terminalCandidate === "FLYING" : message.alive !== false;
   const bodyPresent = hasTerminalState
     ? terminalCandidate !== "SETTLED"
     : typeof message.bodyPresent === "boolean" ? message.bodyPresent : alive;
+  const entityId = cleanToken(message.entityId, 128, "") || null;
   const terminalState = normaliseTerminalState(
     message.terminalState, { alive, bodyPresent },
   );
@@ -170,12 +191,10 @@ export function validatePose(message, previousSequence = -1) {
     sequence: message.sequence,
     tick: message.tick,
     missionId: cleanToken(message.missionId, 96, "mission.unknown"),
-    presentationId: cleanToken(
-      message.presentationId, 128, "presentation.vehicle.player.v1",
-    ),
+    presentationId: presentationForConnection(message.presentationId, previousPose),
     phase: normalisePresencePhase(message.phase),
     alive,
-    entityId: cleanToken(message.entityId, 128, "") || null,
+    entityId,
     bodyPresent,
     terminalState,
     impactSurface: normaliseImpactSurface(message.impactSurface, terminalState),

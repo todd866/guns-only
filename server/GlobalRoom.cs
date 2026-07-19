@@ -238,7 +238,8 @@ public sealed class GlobalRoom(ILogger<GlobalRoom> logger) {
         public bool TryUpdatePose(PoseMessage message) {
             lock (_poseLock) {
                 long previous = _pose?.Sequence ?? -1;
-                if (!PresenceProtocol.TryValidatePose(message, previous, out ValidatedPose pose))
+                if (!PresenceProtocol.TryValidatePose(
+                    message, previous, _pose, out ValidatedPose pose))
                     return false;
                 _pose = pose;
                 _lastValidMessageAt = DateTimeOffset.UtcNow;

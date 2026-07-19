@@ -299,6 +299,13 @@ export class VisualRuntime {
       viewport: { ...this.viewport },
       post: this.postStack?.diagnostics?.() ?? null,
       resolution: this.adaptiveResolution?.status?.() ?? null,
+      adapters: Object.freeze({
+        environment: this.adapters.environment?.diagnostics?.()
+          ?? (this.adapters.environment?.sourceId
+            ? { sourceId: this.adapters.environment.sourceId } : null),
+        effects: this.adapters.effects?.diagnostics?.()
+          ?? (this.adapters.effects?.sourceId ? { sourceId: this.adapters.effects.sourceId } : null),
+      }),
       disposed: this.disposed,
     };
   }

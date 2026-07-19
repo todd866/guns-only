@@ -114,14 +114,28 @@ public class IncidentReplayProjectionTests {
         TouchdownAdaptiveMaximumIndicatedAirspeedMps:
             DifficultyModel.ForLevel(3).MaxTrapSpeedMps);
 
+    static IncidentReplayEvent ReplayEvent(long tick, double time,
+        SessionEventType type, long sequence, ImpactSurface surface,
+        Vec3D? position = null, Vec3D? velocity = null) => new(
+        new SessionEvent(sequence, tick, type, CombatRole.None, CombatRole.Player,
+            0, SortieOutcome.None, surface),
+        time,
+        position ?? new Vec3D(time * 10.0, 20.0, time * 2.0),
+        velocity ?? new Vec3D(70.0, -2.0, 4.0));
+
     [Fact]
     public void CompactProjectionHasStableSchemaFieldCountAndOneShotSource() {
         var recorder = new IncidentReplayRecorder();
         recorder.Observe(Sample(0, 0.0, AircraftTerminalState.Flying,
             ImpactSurface.None, SessionEventType.Hit, 0));
+        recorder.ObserveEvent(ReplayEvent(120, 1.0, SessionEventType.Impact, 1,
+            ImpactSurface.FlightDeck, new Vec3D(10.0, 20.0, 2.0),
+            new Vec3D(70.0, -3.0, 4.0)));
         recorder.Observe(Sample(120, 1.0, AircraftTerminalState.Impacted,
             ImpactSurface.FlightDeck, SessionEventType.Impact, 1,
             ArrestmentModel.ArrestmentFailureReason.RunoutExhausted));
+        recorder.ObserveEvent(ReplayEvent(240, 2.0, SessionEventType.Settled, 2,
+            ImpactSurface.FlightDeck));
         recorder.Observe(Sample(240, 2.0, AircraftTerminalState.Settled,
             ImpactSurface.FlightDeck, SessionEventType.Settled, 2));
         int id = recorder.ClipId;
@@ -149,6 +163,20 @@ public class IncidentReplayProjectionTests {
             assessment.GetProperty("adaptive_target").GetProperty("level").GetInt32());
         Assert.Equal(IncidentReplayProjection.FieldCount,
             root.GetProperty("fields").GetArrayLength());
+        Assert.Equal(IncidentReplayProjection.EventFieldCount,
+            root.GetProperty("event_fields").GetArrayLength());
+        JsonElement events = root.GetProperty("events");
+        Assert.Equal(2, events.GetArrayLength());
+        foreach (JsonElement replayEvent in events.EnumerateArray())
+            Assert.Equal(IncidentReplayProjection.EventFieldCount,
+                replayEvent.GetArrayLength());
+        Assert.Equal(0.0, events[0][0].GetDouble(), 4);
+        Assert.Equal(120, events[0][1].GetInt64());
+        Assert.Equal(1, events[0][2].GetInt64());
+        Assert.Equal((int)SessionEventType.Impact, events[0][3].GetInt32());
+        Assert.Equal((int)CombatRole.Player, events[0][5].GetInt32());
+        Assert.Equal(10.0, events[0][9].GetDouble(), 3);
+        Assert.Equal(-3.0, events[0][13].GetDouble(), 3);
         JsonElement rows = root.GetProperty("samples");
         Assert.Equal(3, rows.GetArrayLength());
         foreach (JsonElement row in rows.EnumerateArray())
@@ -183,8 +211,16 @@ public class IncidentReplayProjectionTests {
                 index == 0 ? SessionEventType.Impact : SessionEventType.Destroyed,
                 index + 1))
             .ToArray();
+        IncidentReplayEvent[] events = Enumerable.Range(0,
+                IncidentReplayRecorder.MaximumEvents)
+            .Select(index => ReplayEvent(index + 1,
+                index / IncidentReplayRecorder.NominalSampleRateHz,
+                index == 0 ? SessionEventType.Impact : SessionEventType.Hit,
+                index + 1,
+                index == 0 ? ImpactSurface.FlightDeck : ImpactSurface.None))
+            .ToArray();
         var clip = new IncidentReplayClip(42,
-            IncidentReplayRecorder.NominalSampleRateHz, 0, samples);
+            IncidentReplayRecorder.NominalSampleRateHz, 0, samples, events);
 
         int utf8Bytes = Encoding.UTF8.GetByteCount(
             IncidentReplayProjection.ToJson(clip));

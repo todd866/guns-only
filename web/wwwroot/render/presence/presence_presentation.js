@@ -34,6 +34,11 @@ export function projectRemoteContact(contact) {
   const entityId = cleanLabel(contact?.entityId, 128);
   const streamId = cleanLabel(contact?.streamId, 80);
   const missionId = cleanLabel(contact?.missionId, 96, "mission.unknown");
+  const presentationId = cleanLabel(
+    contact?.presentationId,
+    128,
+    contact?.bogeyId ? "presentation.vehicle.bandit.v1" : "presentation.vehicle.player.v1",
+  );
   const phaseCandidate = cleanLabel(contact?.phase, 24, "ACTIVE").toUpperCase();
   const phase = PHASES.has(phaseCandidate) ? phaseCandidate : "ACTIVE";
   const terminalFallback = alive ? "FLYING" : bodyPresent ? "DESTROYED_AIRBORNE" : "SETTLED";
@@ -50,6 +55,7 @@ export function projectRemoteContact(contact) {
     impactSurface: IMPACT_SURFACES.has(impactCandidate) ? impactCandidate : impactFallback,
     phase,
     missionId,
+    presentationId,
     entityId: entityId || null,
     streamId: streamId || null,
     // A new per-sortie entity is a discontinuity even when the browser pilot identity and mission

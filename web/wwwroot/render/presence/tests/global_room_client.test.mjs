@@ -23,6 +23,41 @@ class FakeSocket {
   close(code, reason) { this.readyState = 3; this.closedWith = { code, reason }; }
 }
 
+const welcome = (socket, {
+  playerId = "pilot-own",
+  callsign = "PILOT-OWN",
+  worldEpoch = "world-test",
+  sectorIndex = 0,
+  spawnOrigin = [0, 0, 0],
+  serverTimeMs = 1,
+} = {}) => socket.emit("message", { data: JSON.stringify({
+  type: "welcome",
+  protocol: 2,
+  playerId,
+  callsign,
+  worldEpoch,
+  sectorIndex,
+  spawnOrigin,
+  serverTimeMs,
+}) });
+
+const flyingState = ({
+  presentationId = "presentation.vehicle.player.v1",
+  entityId = "entity.player.1",
+  missionId = "mission.perch-attack.v1",
+} = {}) => ({
+  tick: 1,
+  px: 0, py: 1_000, pz: 0,
+  pfx: 0, pfy: 0, pfz: 1,
+  plx: 0, ply: 1, plz: 0,
+  mission_definition_id: missionId,
+  player_presentation_id: presentationId,
+  player_entity_id: entityId,
+  player_terminal_state: "FLYING",
+  player_alive: true,
+  session_phase: "ACTIVE",
+});
+
 test("global-room URL defaults locally and stays opt-in in production", () => {
   assert.equal(resolveGlobalRoomUrl({
     location: { hostname: "localhost", protocol: "http:", origin: "http://localhost:8877", search: "" },
@@ -183,6 +218,79 @@ test("client accepts identity, publishes bounded poses, and filters its send rat
   assert.equal(snapshots.at(-1).snapshot.players.length, 0);
 });
 
+test("a fresh Beat 4 connection publishes the actual glider presentation contract", () => {
+  const sockets = [];
+  const client = new GlobalRoomClient({
+    url: "ws://localhost:5080/room",
+    WebSocketImpl: class extends FakeSocket {
+      constructor(url) { super(url); sockets.push(this); }
+    },
+    pilotKey: "browser-1234567890",
+  });
+  client.start();
+  const socket = sockets[0];
+  socket.readyState = 1;
+  socket.emit("open");
+  welcome(socket, { sectorIndex: 4, spawnOrigin: [80_000, 0, 0] });
+  assert.equal(client.publish(flyingState({
+    presentationId: "presentation.vehicle.glider-strike.v1",
+    entityId: "entity.player.4",
+    missionId: "mission.korea-2030s.balloon-strike.prototype.v1",
+  })), true);
+  assert.equal(sockets.length, 1);
+  assert.equal(
+    JSON.parse(socket.sent.at(-1)).presentationId,
+    "presentation.vehicle.glider-strike.v1",
+  );
+  client.stop();
+});
+
+test("player-to-Beat-4 restage reconnects with the stable pilot identity and sector", () => {
+  const sockets = [];
+  const client = new GlobalRoomClient({
+    url: "ws://localhost:5080/room",
+    WebSocketImpl: class extends FakeSocket {
+      constructor(url) { super(url); sockets.push(this); }
+    },
+    pilotKey: "browser-1234567890",
+  });
+  client.start();
+  const sabreSocket = sockets[0];
+  sabreSocket.readyState = 1;
+  sabreSocket.emit("open");
+  welcome(sabreSocket, { sectorIndex: 4, spawnOrigin: [80_000, 0, 0] });
+  assert.equal(client.publish(flyingState()), true);
+
+  const beat4State = flyingState({
+    presentationId: "presentation.vehicle.glider-strike.v1",
+    entityId: "entity.player.4",
+    missionId: "mission.korea-2030s.balloon-strike.prototype.v1",
+  });
+  assert.equal(client.publish(beat4State), false);
+  assert.equal(sabreSocket.closedWith.code, 4002);
+  assert.equal(sabreSocket.closedWith.reason, "Presentation contract changed");
+  assert.equal(sockets.length, 2);
+
+  const gliderSocket = sockets[1];
+  gliderSocket.readyState = 1;
+  gliderSocket.emit("open");
+  assert.equal(JSON.parse(gliderSocket.sent[0]).pilotKey, "browser-1234567890");
+  assert.equal(client.publish(beat4State), false,
+    "the Beat 4 pose must not race ahead of the reconnect hello/welcome handshake");
+  assert.equal(gliderSocket.sent.length, 1);
+  welcome(gliderSocket, { sectorIndex: 4, spawnOrigin: [80_000, 0, 0], serverTimeMs: 2 });
+  assert.equal(client.diagnostics().sectorIndex, 4);
+  assert.deepEqual(client.diagnostics().spawnOrigin, [80_000, 0, 0]);
+  assert.equal(client.publish(beat4State), true);
+  assert.equal(
+    JSON.parse(gliderSocket.sent.at(-1)).presentationId,
+    "presentation.vehicle.glider-strike.v1",
+  );
+  assert.equal(client.diagnostics().socketPresentationId,
+    "presentation.vehicle.glider-strike.v1");
+  client.stop();
+});
+
 test("idle publication is one hertz while lifecycle transitions and terminal motion bypass it", () => {
   let clock = 0;
   let socket;
@@ -238,7 +346,10 @@ test("idle publication is one hertz while lifecycle transitions and terminal mot
     player_terminal_state: "SETTLED",
     terminal_phase_active: true,
   }), true);
-  assert.equal(JSON.parse(socket.sent.at(-1)).bodyPresent, false);
+  const undamagedCrash = JSON.parse(socket.sent.at(-1));
+  assert.equal(undamagedCrash.alive, false);
+  assert.equal(undamagedCrash.bodyPresent, false);
+  assert.equal(undamagedCrash.terminalState, "SETTLED");
   assert.equal(client.diagnostics().cadence, "1Hz");
   clock = 1_023;
   assert.equal(client.publish({

@@ -6,8 +6,9 @@ namespace GunsOnly.Web;
 
 /// <summary>Trim-safe compact JSON projection for a one-shot authoritative incident clip.</summary>
 public static class IncidentReplayProjection {
-    public const string Schema = "carrier-incident-replay.v3";
+    public const string Schema = "carrier-incident-replay.v4";
     public const int FieldCount = 76;
+    public const int EventFieldCount = 15;
 
     public static string ToJson(IncidentReplayClip clip) {
         ArgumentNullException.ThrowIfNull(clip);
@@ -15,7 +16,7 @@ public static class IncidentReplayProjection {
         if (samples.Count == 0) return "{}";
         IncidentReplaySample incident = samples[Math.Clamp(
             clip.IncidentSampleIndex, 0, samples.Count - 1)];
-        var json = new StringBuilder(512 + samples.Count * 420);
+        var json = new StringBuilder(768 + samples.Count * 420 + clip.Events.Count * 180);
         json.Append("{\"schema\":\"").Append(Schema)
             .Append("\",\"authoritative\":true")
             .Append(",\"id\":").Append(clip.Id)
@@ -57,7 +58,26 @@ public static class IncidentReplayProjection {
         } else {
             json.Append("null");
         }
-        json.Append("},\"fields\":[\"t\",\"tick\",\"px\",\"py\",\"pz\",\"pfx\",\"pfy\",\"pfz\",\"plx\",\"ply\",\"plz\",\"kias\",\"gs_kts\",\"sink_fpm\",\"aoa_deg\",\"closure_kts\",\"deck_along_m\",\"deck_cross_m\",\"deck_height_m\",\"cx\",\"cy\",\"cz\",\"carrier_heading_rad\",\"deck_pitch_deg\",\"deck_len_m\",\"deck_width_m\",\"gear_handle\",\"gear_fraction\",\"gear_locked\",\"flap_lever\",\"flap_deg\",\"recovery\",\"hook\",\"wire\",\"terminal\",\"surface\",\"event_sequence\",\"event_type\",\"event_surface\",\"throttle_command\",\"engine_power\",\"gamma_deg\",\"vertical_speed_fpm\",\"nz\",\"tx\",\"ty\",\"tz\",\"ax\",\"ay\",\"az\",\"g_demand\",\"bank_target_deg\",\"rudder\",\"roll_control\",\"has_pitch_command\",\"pitch_command_deg\",\"gear_nose\",\"gear_left\",\"gear_right\",\"gear_nose_indication\",\"gear_left_indication\",\"gear_right_indication\",\"flap_left_deg\",\"flap_right_deg\",\"arrest_failure_reason\",\"arrest_initial_energy_mj\",\"arrest_absorbed_energy_mj\",\"arrest_remaining_energy_mj\",\"arrest_effective_capacity_mj\",\"arrest_peak_load_kn\",\"arrest_max_line_load_kn\",\"arrest_initial_closure_kts\",\"carrier_solid\",\"touchdown_grade\",\"touchdown_deviations\",\"touchdown_primary_correction\"],\"samples\":[");
+        json.Append("},\"event_fields\":[\"t\",\"tick\",\"sequence\",\"type\",\"source\",\"target\",\"count\",\"outcome\",\"surface\",\"px\",\"py\",\"pz\",\"vx\",\"vy\",\"vz\"],\"events\":[");
+        for (int i = 0; i < clip.Events.Count; i++) {
+            if (i != 0) json.Append(',');
+            IncidentReplayEvent replayEvent = clip.Events[i];
+            SessionEvent sessionEvent = replayEvent.Event;
+            json.AppendFormat(CultureInfo.InvariantCulture,
+                "[{0:F4},{1},{2},{3},{4},{5},{6},{7},{8},{9:F3},{10:F3},{11:F3},{12:F3},{13:F3},{14:F3}]",
+                replayEvent.TimeSeconds - incident.TimeSeconds,
+                sessionEvent.Tick,
+                sessionEvent.Sequence,
+                (int)sessionEvent.Type,
+                (int)sessionEvent.Source,
+                (int)sessionEvent.Target,
+                sessionEvent.Count,
+                (int)sessionEvent.Outcome,
+                (int)sessionEvent.Surface,
+                replayEvent.Position.X, replayEvent.Position.Y, replayEvent.Position.Z,
+                replayEvent.Velocity.X, replayEvent.Velocity.Y, replayEvent.Velocity.Z);
+        }
+        json.Append("],\"fields\":[\"t\",\"tick\",\"px\",\"py\",\"pz\",\"pfx\",\"pfy\",\"pfz\",\"plx\",\"ply\",\"plz\",\"kias\",\"gs_kts\",\"sink_fpm\",\"aoa_deg\",\"closure_kts\",\"deck_along_m\",\"deck_cross_m\",\"deck_height_m\",\"cx\",\"cy\",\"cz\",\"carrier_heading_rad\",\"deck_pitch_deg\",\"deck_len_m\",\"deck_width_m\",\"gear_handle\",\"gear_fraction\",\"gear_locked\",\"flap_lever\",\"flap_deg\",\"recovery\",\"hook\",\"wire\",\"terminal\",\"surface\",\"event_sequence\",\"event_type\",\"event_surface\",\"throttle_command\",\"engine_power\",\"gamma_deg\",\"vertical_speed_fpm\",\"nz\",\"tx\",\"ty\",\"tz\",\"ax\",\"ay\",\"az\",\"g_demand\",\"bank_target_deg\",\"rudder\",\"roll_control\",\"has_pitch_command\",\"pitch_command_deg\",\"gear_nose\",\"gear_left\",\"gear_right\",\"gear_nose_indication\",\"gear_left_indication\",\"gear_right_indication\",\"flap_left_deg\",\"flap_right_deg\",\"arrest_failure_reason\",\"arrest_initial_energy_mj\",\"arrest_absorbed_energy_mj\",\"arrest_remaining_energy_mj\",\"arrest_effective_capacity_mj\",\"arrest_peak_load_kn\",\"arrest_max_line_load_kn\",\"arrest_initial_closure_kts\",\"carrier_solid\",\"touchdown_grade\",\"touchdown_deviations\",\"touchdown_primary_correction\"],\"samples\":[");
         for (int i = 0; i < samples.Count; i++) {
             if (i != 0) json.Append(',');
             IncidentReplaySample sample = samples[i];

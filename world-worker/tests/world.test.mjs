@@ -87,12 +87,141 @@ test("physical presence and lifecycle tokens are bounded without breaking legacy
   const settledWithGunHealth = validatePose({
     ...base, alive: true, bodyPresent: true, terminalState: "SETTLED",
   });
+  assert.equal(settledWithGunHealth.alive, false);
   assert.equal(settledWithGunHealth.bodyPresent, false);
+  const undamagedImpact = validatePose({
+    ...base, alive: true, bodyPresent: false, terminalState: "IMPACTED",
+    impactSurface: "FLIGHT_DECK",
+  });
+  assert.equal(undamagedImpact.alive, false);
+  assert.equal(undamagedImpact.bodyPresent, true);
+  assert.equal(undamagedImpact.terminalState, "IMPACTED");
   const bounded = validatePose({
     ...base, alive: false, bodyPresent: true, terminalState: "SIMULATION_BOUNDED",
     impactSurface: "made-up",
   });
   assert.equal(bounded.impactSurface, "SIMULATION_BOUNDARY");
+});
+
+test("a fresh Beat 4 pose keeps the actual server-known glider contract", () => {
+  const base = {
+    type: "pose",
+    protocol: 2,
+    sequence: 1,
+    tick: 1,
+    missionId: "mission.korea-2030s.balloon-strike.prototype.v1",
+    entityId: "entity.player.4",
+    position: [0, 1000, 0],
+    forward: [0, 0, 1],
+    up: [0, 1, 0],
+  };
+  assert.equal(
+    validatePose({ ...base, presentationId: "presentation.vehicle.glider-strike.v1" })
+      .presentationId,
+    "presentation.vehicle.glider-strike.v1",
+  );
+  assert.equal(
+    validatePose({ ...base, presentationId: "presentation.attacker.allocate-every-frame" })
+      .presentationId,
+    "presentation.vehicle.player.v1",
+  );
+});
+
+test("a socket keeps one allowed presentation despite presentation and entity oscillation", () => {
+  const base = {
+    type: "pose",
+    protocol: PROTOCOL_VERSION,
+    tick: 1,
+    missionId: "mission.presentation-pin",
+    entityId: "entity.sortie.1",
+    position: [0, 1000, 0],
+    forward: [0, 0, 1],
+    up: [0, 1, 0],
+  };
+  let previous = validatePose({
+    ...base,
+    sequence: 1,
+    presentationId: "presentation.vehicle.player.v1",
+  });
+  for (let sequence = 2; sequence <= 40; sequence += 1) {
+    const requested = sequence % 2 === 0
+      ? "presentation.vehicle.glider-strike.v1"
+      : "presentation.vehicle.player.v1";
+    const next = validatePose(
+      { ...base, sequence, entityId: `entity.attacker.${sequence}`, presentationId: requested },
+      previous.sequence,
+      previous,
+    );
+    assert.equal(next.presentationId, "presentation.vehicle.player.v1");
+    previous = next;
+  }
+  const reconnected = validatePose({
+    ...base,
+    sequence: 41,
+    entityId: "entity.sortie.2",
+    presentationId: "presentation.vehicle.glider-strike.v1",
+  });
+  assert.equal(reconnected.presentationId, "presentation.vehicle.glider-strike.v1");
+});
+
+test("the production socket handler applies the presentation pin before storing presence", async () => {
+  let attachment = {
+    phase: "online",
+    identity: {
+      playerId: "pilot-test",
+      callsign: "PILOT-TEST",
+      sectorIndex: 0,
+      spawnOrigin: [0, 0, 0],
+    },
+    streamId: "stream-test",
+    pose: null,
+    invalidMessages: 0,
+    rateBudget: null,
+  };
+  const socket = {
+    deserializeAttachment: () => attachment,
+    serializeAttachment: (next) => { attachment = next; },
+    close: () => assert.fail("valid bounded poses must not close the socket"),
+  };
+  const world = Object.create(GlobalWorld.prototype);
+  world.lastBroadcastAt = 0;
+  world.broadcast = async () => {};
+  const base = {
+    type: "pose",
+    protocol: PROTOCOL_VERSION,
+    tick: 1,
+    missionId: "mission.socket-pin",
+    position: [0, 1000, 0],
+    forward: [0, 0, 1],
+    up: [0, 1, 0],
+  };
+  for (let sequence = 1; sequence <= 30; sequence += 1) {
+    const presentationId = sequence % 2 === 0
+      ? "presentation.vehicle.glider-strike.v1"
+      : "presentation.vehicle.player.v1";
+    await world.webSocketMessage(socket, JSON.stringify({
+      ...base,
+      sequence,
+      entityId: `entity.attacker.${sequence}`,
+      presentationId,
+    }));
+    assert.equal(attachment.pose.presentationId, "presentation.vehicle.player.v1");
+  }
+  attachment = {
+    ...attachment,
+    streamId: "stream-beat-4",
+    pose: null,
+    rateBudget: null,
+  };
+  await world.webSocketMessage(socket, JSON.stringify({
+    ...base,
+    sequence: 31,
+    missionId: "mission.korea-2030s.balloon-strike.prototype.v1",
+    entityId: "entity.player.4",
+    presentationId: "presentation.vehicle.glider-strike.v1",
+  }));
+  assert.equal(attachment.identity.sectorIndex, 0);
+  assert.equal(attachment.pose.presentationId, "presentation.vehicle.glider-strike.v1");
 });
 
 test("origin policy accepts only configured complete origins", () => {
@@ -145,7 +274,7 @@ test("a newer socket deterministically replaces the older stable identity connec
   assert.deepEqual(closed, [{ code: 4001, reason: "Replaced by newer connection" }]);
 });
 
-test("concurrent hellos for one browser allocate one persistent identity and sector", async () => {
+test("concurrent and reconnecting hellos preserve one browser identity and sector", async () => {
   const values = new Map();
   const world = Object.create(GlobalWorld.prototype);
   world.world = {
@@ -164,7 +293,11 @@ test("concurrent hellos for one browser allocate one persistent identity and sec
     world.allocateIdentity("browser-1234567890"),
     world.allocateIdentity("browser-1234567890"),
   ]);
+  const reconnected = await world.allocateIdentity("browser-1234567890");
   assert.deepEqual(second, first);
+  assert.deepEqual(reconnected, first);
+  assert.equal(reconnected.sectorIndex, first.sectorIndex);
+  assert.deepEqual(reconnected.spawnOrigin, first.spawnOrigin);
   assert.equal(world.world.identityCount, 1);
   assert.equal(world.world.nextSector, 1);
 });

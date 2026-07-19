@@ -277,7 +277,7 @@ export class GlobalWorld {
     }
 
     const previousSequence = attachment.pose?.sequence ?? -1;
-    const pose = validatePose(message, previousSequence);
+    const pose = validatePose(message, previousSequence, attachment.pose);
     if (!pose) {
       this.rejectInvalid(socket, attachment);
       return;

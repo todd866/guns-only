@@ -844,8 +844,8 @@ test("production renderer preserves LOD hysteresis and rejects stale async swaps
   const appSource = await readFile(new URL("web/wwwroot/app.js", REPOSITORY_ROOT), "utf8");
 
   assert.match(appSource,
-    /registry\.selectLod\(slot\.presentationId, projectedPixelHeight, \{\s*pack: this\.activePack,\s*currentLod: slot\.instance\?\.lod \?\? null,/s,
-    "the production renderer must carry the active LOD into registry selection");
+    /registry\.selectLod\(slot\.presentationId, lodPixelHeight, \{\s*pack: this\.activePack,\s*currentLod: slot\.instance\?\.lod \?\? null,/s,
+    "the production renderer must carry the active LOD into quality-biased registry selection");
   assert.match(appSource,
     /if \(slot\.activeKey === key\) \{\s*if \(slot\.pendingKey && slot\.pendingKey !== key\) \{\s*slot\.epoch \+= 1;\s*slot\.pendingKey = "";/s,
     "returning to the active LOD must invalidate any obsolete pending load");

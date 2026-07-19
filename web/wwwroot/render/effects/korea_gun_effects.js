@@ -89,6 +89,11 @@ export class KoreaGunEffects {
     }
   }
 
+  clear() {
+    if (this.disposed) return;
+    while (this.items.length) this.#remove(this.items.length - 1);
+  }
+
   dispose() {
     if (this.disposed) return;
     this.disposed = true;

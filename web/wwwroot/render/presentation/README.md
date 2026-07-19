@@ -124,6 +124,15 @@ Cockpit motion owns no GPU resources.
 `cx`, `cz`, and `cheading`. It deliberately supplies no ship physics; simulation truth should
 replace it if escorts later become interactive.
 
+## Multiplayer contacts
+
+Remote pilots and server-world bogeys retain their projected `presentationId` and resolve through
+the active pack's shared registry and projected-pixel LOD policy. Each instance remains at physical
+scale. A separate depth-tested 8–14 pixel impostor provides the distant readability floor for live
+aircraft; destroyed bodies keep their physical model throughout terminal motion. Dynamic instances,
+impostors, labels, and pending registry loads are released when contacts leave or the view shuts
+down. Historical replay hides live room traffic without freezing its incoming pose stream.
+
 ## Tests
 
 ```sh

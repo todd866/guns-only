@@ -52,6 +52,17 @@ public class IncidentReplaySimulationTests {
             e.Type == SessionEventType.Impact && e.Target == CombatRole.Player
                 && e.Surface == ImpactSurface.FlightDeck);
         Assert.Equal(impactEvent.Tick, incident.Tick);
+        IncidentReplayEvent recordedImpact = Assert.Single(clip.Events,
+            replayEvent => replayEvent.Event.Sequence == impactEvent.Sequence);
+        Assert.Equal(incident.Player.Position, recordedImpact.Position);
+        Assert.Equal(incident.Player.VelocityVector(), recordedImpact.Velocity);
+        IncidentReplayEvent collisionDestruction = Assert.Single(clip.Events,
+            replayEvent => replayEvent.Event.Type == SessionEventType.Destroyed
+                && replayEvent.Event.Target == CombatRole.Player
+                && replayEvent.Event.Tick == impactEvent.Tick);
+        Assert.True(collisionDestruction.Event.Sequence > recordedImpact.Event.Sequence);
+        Assert.Equal(recordedImpact.Position, collisionDestruction.Position);
+        Assert.Equal(recordedImpact.Velocity, collisionDestruction.Velocity);
         Assert.Equal(incident.Tick * SimulationSession.FixedDeltaSeconds,
             incident.TimeSeconds, 10);
         Assert.Equal(AircraftTerminalState.Flying, incident.TerminalState);

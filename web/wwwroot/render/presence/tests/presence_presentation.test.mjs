@@ -63,6 +63,16 @@ test("a new server pose stream resets interpolation even when sequence restarts"
   assert.equal(shouldResetRemoteInterpolation(beforeReload.continuityKey, afterReload), true);
 });
 
+test("remote contacts retain a bounded pack presentation binding", () => {
+  const pilot = projectRemoteContact({
+    playerId: "pilot-2",
+    presentationId: "  presentation.vehicle.player.v1\u0000ROOT  ",
+  });
+  const bogey = projectRemoteContact({ bogeyId: "bogey-2" });
+  assert.equal(pilot.presentationId, "presentation.vehicle.player.v1ROOT");
+  assert.equal(bogey.presentationId, "presentation.vehicle.bandit.v1");
+});
+
 test("untrusted lifecycle labels fall back to bounded teaching states", () => {
   const contact = projectRemoteContact({
     playerId: "pilot-2", alive: false, bodyPresent: true,

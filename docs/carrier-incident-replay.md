@@ -9,10 +9,11 @@ integrated `SimulationBounded` state without inventing physical rest.
 
 ## Bounded transport
 
-- The recorder retains at most 30 seconds / 368 samples, including up to ten seconds of pre-roll.
+- The recorder retains at most 30 seconds / 368 samples and 128 ordered events, including up to
+  ten seconds of pre-roll.
 - The normal per-frame snapshot contains only `incident_replay_id` and an availability flag.
 - `WebBridge.ConsumeIncidentReplay(id)` exports the versioned
-  `carrier-incident-replay.v3` compact field-table payload once. The browser
+  `carrier-incident-replay.v4` compact state/event field-table payload once. The browser
   caches it for automatic playback and **Replay incident again**.
 - No replay request touches Vercel, telemetry, Blob storage, or another network endpoint; the
   transfer is local WebAssembly-to-JavaScript interop.
@@ -23,7 +24,11 @@ The clip includes player position and attitude, moving carrier pose and recovery
 groundspeed, deck-relative sink and closure, lineup/height, angle of attack, flight-path angle,
 vertical speed, actual normal load, power-lever command, engine response, post-detent G/bank/rudder/
 roll/pitch commands, per-leg gear travel and indications, left/right flap travel, hook/wire result,
-recovery state, terminal state, surface, and ordered terminal event.
+recovery state, terminal state, surface, and a bounded ordered event stream. Every replay event
+retains its authoritative sequence, completed tick, type/source/target/count/outcome/surface, plus
+the target's exact position and velocity at emission. This separate stream preserves a same-tick
+impact followed by collision-caused destruction even though the sampled-state policy correctly
+keeps only the pre-impulse contact sample for that tick.
 
 Touchdown evidence comes from the same authoritative assessment which owns the live carrier
 result: grade, deviation bitmask, primary correction, versioned provisional profile, baseline
@@ -39,6 +44,9 @@ thresholds reconstructed in the browser.
 
 The external camera and interpolation are presentation-only. They cannot feed back into physics.
 The opponent is hidden because its historical trajectory is not part of a player carrier clip.
+Each playback generation receives a distinct presentation event-stream ID. Historical frames
+replace the live rolling event window and neutralise unrecorded projectile, counter, and damage
+transients, so live-final effects cannot leak into pre-impact replay or Replay Again.
 
 ## Teaching contract
 

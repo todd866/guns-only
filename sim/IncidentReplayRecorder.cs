@@ -87,12 +87,24 @@ public readonly record struct IncidentReplaySample(
     double TouchdownAdaptiveMinimumIndicatedAirspeedMps = 0.0,
     double TouchdownAdaptiveMaximumIndicatedAirspeedMps = 0.0);
 
+/// <summary>
+/// One authoritative discrete event retained beside the sampled replay states. The event keeps
+/// its exact target pose at the completed simulation tick so a presentation can place a one-shot
+/// effect without borrowing a later live snapshot or re-running collision physics.
+/// </summary>
+public readonly record struct IncidentReplayEvent(
+    SessionEvent Event,
+    double TimeSeconds,
+    Vec3D Position,
+    Vec3D Velocity);
+
 /// <summary>A frozen, bounded carrier-incident flight-recorder clip.</summary>
 public sealed record IncidentReplayClip(
     int Id,
     double NominalSampleRateHz,
     int IncidentSampleIndex,
-    IReadOnlyList<IncidentReplaySample> Samples);
+    IReadOnlyList<IncidentReplaySample> Samples,
+    IReadOnlyList<IncidentReplayEvent> Events);
 
 /// <summary>
 /// Bounded deterministic flight recorder for player carrier impacts. It retains a rolling pre-roll
@@ -107,8 +119,10 @@ public sealed class IncidentReplayRecorder {
     public const double PreIncidentSeconds = 10.0;
     public const double MaximumClipSeconds = 30.0;
     public const int MaximumSamples = (int)(NominalSampleRateHz * MaximumClipSeconds) + 8;
+    public const int MaximumEvents = 128;
 
     readonly List<IncidentReplaySample> _rolling = new(MaximumSamples);
+    readonly List<IncidentReplayEvent> _rollingEvents = new(MaximumEvents);
     IncidentReplayClip? _clip;
     long _lastStoredTick = long.MinValue;
     long _lastObservedEventSequence;
@@ -127,10 +141,12 @@ public sealed class IncidentReplayRecorder {
     public bool ExportAvailable => _clip is not null && !_exported;
     public IncidentReplayClip? FrozenClip => _clip;
     public int BufferedSampleCount => _rolling.Count;
+    public int BufferedEventCount => _rollingEvents.Count;
 
     /// <summary>Clear flight-local evidence while retaining monotonic clip identity.</summary>
     public void Reset() {
         _rolling.Clear();
+        _rollingEvents.Clear();
         _clip = null;
         _lastStoredTick = long.MinValue;
         _lastObservedEventSequence = 0;
@@ -143,6 +159,36 @@ public sealed class IncidentReplayRecorder {
         _capturingIncident = false;
         _forcePostImpactSample = false;
         _exported = false;
+    }
+
+    /// <summary>
+    /// Retain a bounded ordered event stream for a possible carrier incident. SimulationSession
+    /// calls this at its central event boundary before any subsequent wreck-contact impulse can
+    /// change the target pose. Only player-target facts can belong to the player incident clip.
+    /// </summary>
+    public void ObserveEvent(in IncidentReplayEvent replayEvent) {
+        if (_clip is not null) return;
+        SessionEvent sessionEvent = replayEvent.Event;
+        if (sessionEvent.Target != CombatRole.Player
+            || sessionEvent.Type is not (SessionEventType.Hit
+                or SessionEventType.Destroyed
+                or SessionEventType.Impact
+                or SessionEventType.Settled
+                or SessionEventType.TerminalLimitReached
+                or SessionEventType.ArrestmentFailed))
+            return;
+        if (sessionEvent.Sequence <= 0 || sessionEvent.Tick < 0
+            || !double.IsFinite(replayEvent.TimeSeconds)
+            || !IsFinite(replayEvent.Position)
+            || !IsFinite(replayEvent.Velocity))
+            throw new ArgumentOutOfRangeException(nameof(replayEvent));
+        if (_rollingEvents.Count > 0
+            && sessionEvent.Sequence <= _rollingEvents[^1].Event.Sequence)
+            throw new ArgumentOutOfRangeException(nameof(replayEvent),
+                "Replay events must arrive in strictly increasing sequence order.");
+
+        _rollingEvents.Add(replayEvent);
+        if (_rollingEvents.Count > MaximumEvents) _rollingEvents.RemoveAt(0);
     }
 
     public void Observe(in IncidentReplaySample sample) {
@@ -202,6 +248,9 @@ public sealed class IncidentReplayRecorder {
     static bool IsCarrierSurface(ImpactSurface surface) =>
         surface is ImpactSurface.FlightDeck or ImpactSurface.CarrierStructure;
 
+    static bool IsFinite(in Vec3D value) => double.IsFinite(value.X)
+        && double.IsFinite(value.Y) && double.IsFinite(value.Z);
+
     bool Store(in IncidentReplaySample sample) {
         // The pre-impulse contact evidence and WreckContactMotion handoff share a completed tick.
         // Preserve the former and force the next tick's post-impact state rather than pretending
@@ -230,8 +279,15 @@ public sealed class IncidentReplayRecorder {
         while (incidentIndex + 1 < selected.Length
             && selected[incidentIndex].TimeSeconds < _incidentTimeSeconds)
             incidentIndex++;
+        double selectedStartTime = selected[0].TimeSeconds;
+        double selectedEndTime = selected[^1].TimeSeconds;
+        IncidentReplayEvent[] selectedEvents = _rollingEvents
+            .Where(replayEvent => replayEvent.TimeSeconds >= selectedStartTime
+                && replayEvent.TimeSeconds <= selectedEndTime)
+            .TakeLast(MaximumEvents)
+            .ToArray();
         _clip = new IncidentReplayClip(_nextClipId++, NominalSampleRateHz,
-            incidentIndex, selected);
+            incidentIndex, selected, selectedEvents);
         _exported = false;
     }
 }

@@ -54,8 +54,49 @@ public sealed class PresenceProtocolTests {
         Assert.True(PresenceProtocol.TryValidatePose(message, 0, out ValidatedPose pose));
         Assert.DoesNotContain('<', pose.MissionId);
         Assert.DoesNotContain(' ', pose.Phase);
-        Assert.Equal(128, pose.PresentationId.Length);
+        Assert.Equal("presentation.vehicle.player.v1", pose.PresentationId);
         Assert.Equal("ACTIVE", pose.Phase);
+    }
+
+    [Fact]
+    public void FreshBeat4UsesTheActualGliderPresentationContract() {
+        PoseMessage beat4 = ValidPose() with {
+            MissionId = "mission.korea-2030s.balloon-strike.prototype.v1",
+            EntityId = "entity.player.4",
+            PresentationId = "presentation.vehicle.glider-strike.v1"
+        };
+        Assert.True(PresenceProtocol.TryValidatePose(
+            beat4, 0, previousPose: null, out ValidatedPose pose));
+        Assert.Equal("presentation.vehicle.glider-strike.v1", pose.PresentationId);
+    }
+
+    [Fact]
+    public void PresentationContractIsAllowlistedAndPinnedForTheConnectionLifetime() {
+        PoseMessage initial = ValidPose(1) with { EntityId = "entity.sortie.1" };
+        Assert.True(PresenceProtocol.TryValidatePose(
+            initial, 0, previousPose: null, out ValidatedPose previous));
+
+        for (long sequence = 2; sequence <= 40; sequence++) {
+            string requested = sequence % 2 == 0
+                ? "presentation.vehicle.glider-strike.v1"
+                : "presentation.vehicle.player.v1";
+            PoseMessage alternating = ValidPose(sequence) with {
+                EntityId = $"entity.attacker.{sequence}",
+                PresentationId = requested
+            };
+            Assert.True(PresenceProtocol.TryValidatePose(
+                alternating, previous.Sequence, previous, out ValidatedPose next));
+            Assert.Equal("presentation.vehicle.player.v1", next.PresentationId);
+            previous = next;
+        }
+
+        PoseMessage reconnected = ValidPose(41) with {
+            EntityId = "entity.sortie.2",
+            PresentationId = "presentation.vehicle.glider-strike.v1"
+        };
+        Assert.True(PresenceProtocol.TryValidatePose(
+            reconnected, 0, previousPose: null, out ValidatedPose changed));
+        Assert.Equal("presentation.vehicle.glider-strike.v1", changed.PresentationId);
     }
 
     [Fact]
@@ -93,7 +134,20 @@ public sealed class PresenceProtocolTests {
         };
         Assert.True(PresenceProtocol.TryValidatePose(
             settledWithGunHealth, 0, out ValidatedPose settled));
+        Assert.False(settled.Alive);
         Assert.False(settled.BodyPresent);
+
+        PoseMessage undamagedImpact = ValidPose() with {
+            Alive = true,
+            BodyPresent = false,
+            TerminalState = "IMPACTED",
+            ImpactSurface = "FLIGHT_DECK"
+        };
+        Assert.True(PresenceProtocol.TryValidatePose(
+            undamagedImpact, 0, out ValidatedPose impacted));
+        Assert.False(impacted.Alive);
+        Assert.True(impacted.BodyPresent);
+        Assert.Equal("IMPACTED", impacted.TerminalState);
 
         PoseMessage legacyLoss = ValidPose() with { Alive = false };
         Assert.True(PresenceProtocol.TryValidatePose(legacyLoss, 0, out ValidatedPose legacy));

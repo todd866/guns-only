@@ -25,10 +25,19 @@ The defaults require no schema change. Optional future tuning can live under
 ## Production integration
 
 `FlightView` initializes this runtime from `PresentationAssetManager.activePack.profile`, keyed by
-the epoch-guarded active pack identity. It passes `manageFog: false` because the live altitude and
-in-cloud extinction path owns `FogExp2`; the runtime owns renderer exposure/color, post-processing,
-adaptive pixel ratio, profile light levels, and stabilized shadow maps. Until the selected pack has
-loaded, the flight view safely uses its direct-render compatibility path.
+the epoch-guarded active pack identity. Korea's production runtime injects the pack-local ocean,
+atmosphere, and gun-effects adapters with pack-versioned URLs, the selected quality tier, and the
+profile fog contract. It passes `manageFog: false` because the live altitude and in-cloud extinction
+path owns `FogExp2`; the runtime owns renderer exposure/color, post-processing, adaptive pixel
+ratio, profile light levels, and stabilized shadow maps. Until the selected pack has loaded, the
+flight view safely uses its direct-render compatibility path. Pack invalidation retires the prior
+runtime rather than leaking its lighting or post state into a different era.
+
+Projectile positions remain simulation-authoritative. The Korea effects profile supplies tracer
+color, core color, and rendered streak length, while the existing state-driven buffers render the
+kernel's actual projectile positions. The moving carrier wake likewise remains attached to the
+authoritative ship pose; the pack's current one-shot showcase wake is not used in production until
+that effect contract can follow a moving platform without leaving stationary foam behind.
 
 Create the runtime after the renderer, scene, active camera, and existing
 ambient/sun lights. The current authored environment and effects modules can be

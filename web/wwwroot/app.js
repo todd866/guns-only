@@ -11,7 +11,11 @@ import { applyCarrierRootPose } from "./render/carrier/carrier_motion.js";
 import { sortieResultCopy } from "./render/debrief/sortie_result.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
-import { consumeRecentEvents } from "./render/events/session_event_cursor.js";
+import {
+  PresentationEventStreams,
+  presentationVector,
+  terminalVisualEvents,
+} from "./render/events/presentation_event_stream.js";
 import {
   applyEscortFormationPose,
   createCockpitHeadPresentation,
@@ -39,11 +43,17 @@ import {
   remoteContactVisible,
   shouldResetRemoteInterpolation,
 } from "./render/presence/presence_presentation.js";
+import { RemoteAssetResolutionPolicy } from "./render/presence/remote_asset_policy.js";
 import {
   buildTelemetryBatch,
   retainNewestTelemetryRows,
 } from "./render/telemetry/telemetry_batch.js";
 import { createVisualRuntime } from "./render/visual/index.js";
+import {
+  createKoreaEffectsFactory,
+  createKoreaEnvironmentFactory,
+} from "./render/visual/korea_pack_adapters.js";
+import { AsyncTransitionQueue } from "./render/visual/async_transition_queue.js";
 
 const DEG = Math.PI / 180;
 const MAX_GIMBAL_YAW = 150 * DEG;
@@ -2644,7 +2654,7 @@ function createMuzzleChannel(color, lightColor) {
   return { flash, cone, light };
 }
 
-function updateTracerChannel(channel, rounds) {
+function updateTracerChannel(channel, rounds, authoredLengthMetres = null) {
   const count = Math.min(Array.isArray(rounds) ? rounds.length : 0, MAX_TRACERS);
   for (let i = 0; i < count; i++) {
     const round = rounds[i];
@@ -2656,7 +2666,12 @@ function updateTracerChannel(channel, rounds) {
     const vy = Number(round?.[4]) || 0;
     const vz = -(Number(round?.[5]) || 0);
     const speed = Math.max(1, Math.hypot(vx, vy, vz));
-    const streak = clamp(speed * 0.014, 9, 20);
+    // Round positions remain simulation truth. Once a pack is active, only the rendered streak
+    // length comes from its effect profile; no duplicate presentation tracer integrates its own
+    // trajectory beside the authoritative projectile.
+    const streak = Number.isFinite(authoredLengthMetres)
+      ? Math.max(0.1, authoredLengthMetres)
+      : clamp(speed * 0.014, 9, 20);
     channel.positions[offset] = x - vx / speed * streak;
     channel.positions[offset + 1] = y - vy / speed * streak;
     channel.positions[offset + 2] = z - vz / speed * streak;
@@ -3309,8 +3324,6 @@ const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
   ["presentation.vehicle.awacs-target.v1", createAwacs],
   ["presentation.vehicle.player.v1", createDrone],
   ["presentation.vehicle.glider-strike.v1", createGlider],
-  ["presentation.vehicle.player.glider.v1", createGlider],
-  ["presentation.vehicle.player.glider-strike.v1", createGlider],
   [DEFAULT_COCKPIT_PRESENTATION_ID, createHiddenPresentation],
   ["presentation.platform.carrier.v1", createCarrier],
   [DEFAULT_ESCORT_PRESENTATION_ID, createHiddenPresentation],
@@ -3318,6 +3331,12 @@ const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
 
 function projectedId(value, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function aircraftAlive(state, terminalField, fallback) {
+  const terminal = state?.[terminalField];
+  if (typeof terminal === "string" && terminal.length > 0) return terminal === "FLYING";
+  return fallback;
 }
 
 function assetErrorText(error) {
@@ -3335,6 +3354,7 @@ class PresentationAssetManager {
     this.activePackKey = "";
     this.requestedPackKey = "";
     this.loadedPacks = new Map();
+    this.dynamicSlots = new Set();
     this.packEpoch = 0;
     this.lastError = null;
     this.lastState = null;
@@ -3392,10 +3412,10 @@ class PresentationAssetManager {
     }
   }
 
-  createSlot(name, presentationId, fallbackFactory) {
+  createSlot(name, presentationId, fallbackFactory, parent = this.scene) {
     const root = new THREE.Group();
     root.name = `Presentation_${name}`;
-    this.scene.add(root);
+    parent.add(root);
     const slot = {
       name,
       root,
@@ -3417,16 +3437,86 @@ class PresentationAssetManager {
     return slot;
   }
 
+  createDynamicSlot(name, presentationId, entityId, fallbackFactory, parent = this.scene) {
+    const remoteAssetPolicy = new RemoteAssetResolutionPolicy(presentationId, entityId);
+    const slot = this.createSlot(name, remoteAssetPolicy.presentationId, fallbackFactory, parent);
+    slot.dynamic = true;
+    slot.remoteAssetPolicy = remoteAssetPolicy;
+    slot.root.visible = true;
+    this.dynamicSlots.add(slot);
+    this.setPresentation(slot, remoteAssetPolicy.presentationId, remoteAssetPolicy.entityId);
+    return slot;
+  }
+
+  updateDynamicSlot(slot, presentationId, entityId, projectedPixelHeight) {
+    if (!this.dynamicSlots.has(slot)) return false;
+    // Entity identity is continuity/diagnostic truth, not an asset-cache key. A remote peer may
+    // legitimately begin another sortie (and is not trusted enough to make that an allocation
+    // primitive), so only a presentation change replaces the visual instance.
+    const policyUpdate = slot.remoteAssetPolicy.update(presentationId, entityId);
+    if (policyUpdate.presentationChanged) {
+      this.setPresentation(slot, policyUpdate.presentationId, policyUpdate.entityId);
+    } else {
+      slot.entityId = policyUpdate.entityId;
+    }
+    slot.projectedPixelHeight = Number.isFinite(projectedPixelHeight)
+      ? Math.max(0, projectedPixelHeight)
+      : Number.POSITIVE_INFINITY;
+    // A newly received contact has no camera range until its first presentation update. Keep the
+    // cheap procedural fallback for that one frame instead of treating an unknown range as
+    // Infinity and needlessly requesting the hero LOD.
+    if (!Number.isFinite(projectedPixelHeight)) return true;
+    this.resolveSlot(slot, { preload: true });
+    return true;
+  }
+
+  async releaseDynamicSlot(slot) {
+    if (!this.dynamicSlots.delete(slot)) return;
+    slot.epoch += 1;
+    slot.root.removeFromParent();
+    const instance = slot.instance;
+    const object = slot.object;
+    slot.instance = null;
+    slot.object = null;
+    if (instance) await Promise.resolve(instance.release()).catch(() => undefined);
+    else if (object) disposeSceneResources(object);
+  }
+
   compatibilityFactory(slot) {
     return COMPATIBILITY_PRESENTATION_FACTORIES.get(slot.presentationId) ?? slot.fallbackFactory;
   }
 
+  qualitySettings() {
+    const tiers = this.activePack?.profile?.qualityTiers;
+    return Array.isArray(tiers)
+      ? tiers.find((tier) => tier?.id === VISUAL_QUALITY.tier)?.settings ?? {}
+      : {};
+  }
+
   prepareObject(object) {
+    const settings = this.qualitySettings();
+    const anisotropy = Math.min(
+      Math.max(1, Number(settings.anisotropy) || 1),
+      Math.max(1, Number(this.renderer.capabilities?.getMaxAnisotropy?.()) || 1),
+    );
     object.traverse?.((child) => {
       if (!child.isMesh) return;
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       const transparent = materials.some((material) => material
         && (material.transparent === true || Number(material.opacity) < 0.999));
+      for (const material of materials) {
+        if (!material) continue;
+        for (const property of [
+          "map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap",
+          "alphaMap",
+        ]) {
+          const texture = material[property];
+          if (texture?.isTexture && texture.anisotropy !== anisotropy) {
+            texture.anisotropy = anisotropy;
+            texture.needsUpdate = true;
+          }
+        }
+      }
       child.castShadow = child.userData?.noShadow !== true && !transparent;
       child.receiveShadow = true;
     });
@@ -3476,7 +3566,8 @@ class PresentationAssetManager {
   }
 
   showCompatibility(slot) {
-    const key = `compatibility:${slot.presentationId}:${slot.entityId || "unprojected"}`;
+    const identity = slot.dynamic ? "shared-presentation" : slot.entityId || "unprojected";
+    const key = `compatibility:${slot.presentationId}:${identity}`;
     if (slot.activeKey === key && slot.object) return;
     const factory = this.compatibilityFactory(slot);
     try {
@@ -3545,10 +3636,12 @@ class PresentationAssetManager {
       this.targetSlot,
       this.carrierSlot,
       this.escortSlot,
+      ...this.dynamicSlots,
     ]) {
       slot.epoch += 1;
       slot.pendingKey = "";
       slot.failedKey = "";
+      slot.remoteAssetPolicy?.resetDescriptorFailure();
       this.showCompatibility(slot);
     }
   }
@@ -3619,6 +3712,9 @@ class PresentationAssetManager {
   }
 
   projectedPixels(slot, descriptor) {
+    if (slot.dynamic && Number.isFinite(slot.projectedPixelHeight)) {
+      return slot.projectedPixelHeight;
+    }
     const state = this.lastState;
     if (!state) return Number.POSITIVE_INFINITY;
     let distance = Number.POSITIVE_INFINITY;
@@ -3650,25 +3746,49 @@ class PresentationAssetManager {
     });
   }
 
-  resolveSlot(slot) {
-    if (!this.activePack || !this.runtime || !slot.root.visible) return;
+  lodSelectionPixels(projectedPixelHeight) {
+    if (!Number.isFinite(projectedPixelHeight)) return projectedPixelHeight;
+    const bias = Number(this.qualitySettings().lodBias) || 0;
+    return projectedPixelHeight * (2 ** -bias);
+  }
+
+  resolveSlot(slot, { preload = false } = {}) {
+    if (!this.activePack || !this.runtime || (!slot.root.visible && !preload)) return;
     const registry = this.runtime.registry;
+    const descriptorScope = {
+      packId: this.activePack.id,
+      profileId: this.activePack.profile.id,
+    };
+    const descriptorFailureKey = [
+      "descriptor",
+      descriptorScope.packId,
+      descriptorScope.profileId,
+      slot.presentationId,
+    ].join(":");
+    if (slot.remoteAssetPolicy
+      ? !slot.remoteAssetPolicy.shouldAttemptDescriptor(descriptorScope)
+      : slot.failedKey === descriptorFailureKey) return;
     let descriptor;
     try {
       descriptor = registry.getAssetDescriptor(slot.presentationId, { pack: this.activePack });
     } catch (error) {
       const message = assetErrorText(error);
       this.showCompatibility(slot);
+      // Unknown/unbound presentation IDs remain on their compatibility visual without throwing
+      // again every render frame. Pack invalidation or a presentation change clears failedKey.
+      slot.remoteAssetPolicy?.rememberDescriptorFailure(descriptorScope);
+      slot.failedKey = descriptorFailureKey;
       slot.error = message;
       this.lastError = message;
       return;
     }
 
     const projectedPixelHeight = this.projectedPixels(slot, descriptor);
+    const lodPixelHeight = this.lodSelectionPixels(projectedPixelHeight);
     let lod = null;
     if (descriptor.kind === "gltf") {
       try {
-        lod = registry.selectLod(slot.presentationId, projectedPixelHeight, {
+        lod = registry.selectLod(slot.presentationId, lodPixelHeight, {
           pack: this.activePack,
           currentLod: slot.instance?.lod ?? null,
         });
@@ -3680,7 +3800,11 @@ class PresentationAssetManager {
         return;
       }
     }
-    const key = `registry:${this.activePack.id}:${this.activePack.profile.id}:${slot.presentationId}:${slot.entityId || "unprojected"}:${lod?.uri ?? descriptor.fallback ?? descriptor.id}`;
+    const assetIdentity = lod?.uri ?? descriptor.fallback ?? descriptor.id;
+    const instanceIdentity = slot.entityId || "unprojected";
+    const key = slot.remoteAssetPolicy
+      ? slot.remoteAssetPolicy.registryInstanceKey(descriptorScope, assetIdentity)
+      : `registry:${this.activePack.id}:${this.activePack.profile.id}:${slot.presentationId}:${instanceIdentity}:${assetIdentity}`;
     if (slot.activeKey === key) {
       if (slot.pendingKey && slot.pendingKey !== key) {
         slot.epoch += 1;
@@ -3694,7 +3818,7 @@ class PresentationAssetManager {
     slot.error = null;
     void registry.instantiate(slot.presentationId, {
       pack: this.activePack,
-      projectedPixelHeight,
+      projectedPixelHeight: lodPixelHeight,
       currentLod: lod,
     }).then((instance) => {
       if (epoch !== slot.epoch || this.activePackKey !== this.requestedPackKey) {
@@ -3715,11 +3839,17 @@ class PresentationAssetManager {
   }
 
   resolveVisibleSlots() {
-    this.resolveSlot(this.playerExteriorSlot);
+    // The exterior is hidden in the cockpit, but must be ready before the first incident replay.
+    // Loading it here prevents a replay from beginning on the compatibility mesh and swapping
+    // models halfway through the recorded lesson.
+    this.resolveSlot(this.playerExteriorSlot, { preload: true });
     this.resolveSlot(this.cockpitSlot);
     this.resolveSlot(this.targetSlot);
     this.resolveSlot(this.carrierSlot);
     this.resolveSlot(this.escortSlot);
+    for (const slot of this.dynamicSlots) {
+      if (Number.isFinite(slot.projectedPixelHeight)) this.resolveSlot(slot, { preload: true });
+    }
   }
 
   semanticAnchor(slot, semanticId) {
@@ -3834,6 +3964,7 @@ class PresentationAssetManager {
       this.targetSlot,
       this.carrierSlot,
       this.escortSlot,
+      ...this.dynamicSlots,
     ]) {
       slot.epoch += 1;
       slot.root.removeFromParent();
@@ -3844,6 +3975,7 @@ class PresentationAssetManager {
       if (instance) await Promise.resolve(instance.release()).catch(() => undefined);
       else if (object) disposeSceneResources(object);
     }
+    this.dynamicSlots.clear();
     const runtime = this.runtime;
     this.runtime = null;
     if (runtime) await runtime.dispose();
@@ -3886,13 +4018,12 @@ function createRemoteCallsignSprite(callsign, hostile = false) {
 }
 
 class RemoteAircraftManager {
-  constructor(scene) {
+  constructor(scene, presentationAssets, renderer, camera) {
     this.scene = scene;
+    this.presentationAssets = presentationAssets;
+    this.renderer = renderer;
+    this.camera = camera;
     this.aircraft = new Map();
-    this.templates = {
-      player: createDrone({ parameters: { livery: "navy-blue" } }),
-      bogey: createDrone(),
-    };
     this.forward = new THREE.Vector3();
     this.up = new THREE.Vector3();
     this.right = new THREE.Vector3();
@@ -3902,16 +4033,29 @@ class RemoteAircraftManager {
 
   create(contact, kind) {
     const contactId = kind === "bogey" ? contact.bogeyId : contact.playerId;
+    const projection = projectRemoteContact(contact);
     const root = new THREE.Group();
     root.name = `${kind === "bogey" ? "WorldBogey" : "RemoteAircraft"}_${contactId}`;
-    const visual = this.templates[kind].clone(true);
     const label = createRemoteCallsignSprite(contact.callsign, kind === "bogey");
-    root.add(visual, label);
+    root.add(label);
     this.scene.add(root);
+    const slot = this.presentationAssets.createDynamicSlot(
+      `remote-${kind}-${contactId}`,
+      projection.presentationId,
+      projection.entityId ?? contactId,
+      () => createDrone(kind === "player" ? { parameters: { livery: "navy-blue" } } : undefined),
+      root,
+    );
+    const distantContact = createDistantAircraftImpostor(THREE, {
+      coreColor: kind === "bogey" ? 0x170706 : 0x06140b,
+      edgeColor: kind === "bogey" ? 0xff5c48 : 0x4dff88,
+    });
+    this.scene.add(distantContact.object3d);
     const entry = {
       root,
-      visual,
+      slot,
       label,
+      distantContact,
       contactId,
       kind,
       callsign: contact.callsign,
@@ -3925,6 +4069,7 @@ class RemoteAircraftManager {
       impactSurface: "NONE",
       phase: "ACTIVE",
       missionId: "mission.unknown",
+      presentationId: projection.presentationId,
       entityId: null,
       streamId: null,
       continuityKey: null,
@@ -3950,15 +4095,30 @@ class RemoteAircraftManager {
     entry.impactSurface = projection.impactSurface;
     entry.phase = projection.phase;
     entry.missionId = projection.missionId;
+    entry.presentationId = projection.presentationId;
     entry.entityId = projection.entityId;
     entry.streamId = projection.streamId;
     entry.continuityKey = projection.continuityKey;
     entry.root.visible = remoteContactVisible(projection);
+    this.presentationAssets.updateDynamicSlot(
+      entry.slot,
+      projection.presentationId,
+      projection.entityId ?? entry.contactId,
+      entry.slot.projectedPixelHeight,
+    );
     if (!entry.initialised || resetInterpolation) {
       entry.root.position.copy(entry.targetPosition);
       entry.root.quaternion.copy(entry.targetQuaternion);
       entry.initialised = true;
+      entry.distantContact.reset();
     }
+  }
+
+  releaseEntry(entry) {
+    entry.root.removeFromParent();
+    entry.label.userData.disposeRemoteLabel?.();
+    entry.distantContact.dispose();
+    return this.presentationAssets.releaseDynamicSlot(entry.slot);
   }
 
   sync(snapshot, ownPlayerId) {
@@ -3980,9 +4140,8 @@ class RemoteAircraftManager {
     }
     for (const [playerId, entry] of this.aircraft) {
       if (seen.has(playerId)) continue;
-      entry.root.removeFromParent();
-      entry.label.userData.disposeRemoteLabel?.();
       this.aircraft.delete(playerId);
+      void this.releaseEntry(entry);
     }
   }
 
@@ -3990,14 +4149,49 @@ class RemoteAircraftManager {
     const blend = 1 - Math.exp(-Math.max(0, dt) * 12);
     for (const entry of this.aircraft.values()) {
       entry.root.visible = remoteContactVisible(entry, { historicalReplay });
-      if (!entry.initialised || !entry.bodyPresent) continue;
+      if (!entry.initialised || !entry.bodyPresent) {
+        entry.slot.root.visible = false;
+        entry.label.visible = false;
+        entry.distantContact.reset();
+        continue;
+      }
       // Keep following current room truth while hidden during replay. When the review ends, live
       // contacts reappear at their current smoothed pose instead of where replay began.
       entry.root.position.lerp(entry.targetPosition, blend);
       entry.root.quaternion.slerp(entry.targetQuaternion, blend);
       const distance = entry.root.position.distanceTo(cameraPosition);
-      const assistScale = 1 + 3 * smoothstep(500, 12000, distance);
-      entry.visual.scale.setScalar(assistScale);
+      const diameter = entry.slot.boundingSphereDiameterMetres ?? 12;
+      const projectedPixelHeight = estimateProjectedPixelHeight({
+        worldHeight: diameter,
+        distance,
+        verticalFovRadians: THREE.MathUtils.degToRad(this.camera.fov),
+        viewportHeight: Math.max(1, this.renderer.domElement.clientHeight || window.innerHeight),
+      });
+      this.presentationAssets.updateDynamicSlot(
+        entry.slot,
+        entry.presentationId,
+        entry.entityId ?? entry.contactId,
+        projectedPixelHeight,
+      );
+      entry.slot.root.scale.setScalar(1);
+      entry.slot.root.updateWorldMatrix(true, false);
+      if (!entry.root.visible) {
+        entry.slot.root.visible = false;
+        entry.label.visible = false;
+        entry.distantContact.reset();
+        continue;
+      }
+      const contactPresentation = entry.distantContact.update({
+        camera: this.camera,
+        renderer: this.renderer,
+        target: entry.slot.root,
+        targetDiameterMetres: diameter,
+        projectedPixels: projectedPixelHeight,
+        visible: entry.alive,
+        deltaSeconds: dt,
+      });
+      entry.slot.root.visible = !entry.alive || contactPresentation.modelVisible;
+      entry.label.visible = entry.root.visible;
     }
   }
 
@@ -4015,20 +4209,19 @@ class RemoteAircraftManager {
         impactSurface: entry.impactSurface,
         phase: entry.phase,
         missionId: entry.missionId,
+        presentationId: entry.presentationId,
         entityId: entry.entityId,
         streamId: entry.streamId,
+        visual: this.presentationAssets.slotDiagnostics(entry.slot),
+        distantContact: Object.freeze({ ...entry.distantContact.state }),
       }))),
     });
   }
 
-  dispose() {
-    for (const entry of this.aircraft.values()) {
-      entry.root.removeFromParent();
-      entry.label.userData.disposeRemoteLabel?.();
-    }
+  async dispose() {
+    const releases = [...this.aircraft.values()].map((entry) => this.releaseEntry(entry));
     this.aircraft.clear();
-    disposeSceneResources(this.templates.player);
-    disposeSceneResources(this.templates.bogey);
+    await Promise.allSettled(releases);
   }
 }
 
@@ -4094,7 +4287,16 @@ class FlightView {
     this.visualRuntimeRequestedKey = "";
     this.visualRuntimeEpoch = 0;
     this.visualRuntimeError = null;
-    this.remoteAircraft = new RemoteAircraftManager(this.scene);
+    this.visualRuntimeTransitions = new AsyncTransitionQueue();
+    this.packEnvironmentAdapter = null;
+    this.packEffectsAdapter = null;
+    this.disposed = false;
+    this.remoteAircraft = new RemoteAircraftManager(
+      this.scene,
+      this.presentationAssets,
+      this.renderer,
+      this.camera,
+    );
     this.carrierRuntime = createCarrierRuntimePresentation();
     this.scene.add(this.carrierRuntime.recovery.group, this.carrierRuntime.water.group);
     this.banditDestruction = createBanditDestruction();
@@ -4128,6 +4330,7 @@ class FlightView {
     this.banditPosition = new THREE.Vector3();
     this.playerDamagePosition = new THREE.Vector3();
     this.banditDamagePosition = new THREE.Vector3();
+    this.effectNormal = new THREE.Vector3(0, 1, 0);
     this.leadPipper = new THREE.Vector3();
     this.banditQuaternion = new THREE.Quaternion();
     this.playerFrame = this.createAttitudeFrame();
@@ -4144,6 +4347,9 @@ class FlightView {
     this.opponentMuzzleFlashUntil = -1;
     this.hitSparkTime = -1;
     this.lastCombatEventSequence = 0;
+    this.combatEventStreams = new PresentationEventStreams();
+    this.combatEventPosition = new THREE.Vector3();
+    this.combatEventVelocity = new THREE.Vector3();
     this.aimPoint = new THREE.Vector3();   // published forward recovery cue, distinct from wire three
     this.approachDirectorPoint = new THREE.Vector3();
     this.approachCueDirection = new THREE.Vector3();
@@ -4203,61 +4409,140 @@ class FlightView {
     this.visualRuntime?.resize(width, height, window.devicePixelRatio || 1);
   }
 
+  queueVisualRuntimeTransition(operation) {
+    const task = this.visualRuntimeTransitions.enqueue(operation);
+    void task.catch((error) => {
+      if (!this.disposed) console.warn("Pack visual runtime transition failed.", error);
+    });
+    return task;
+  }
+
   ensureVisualRuntime() {
     const pack = this.presentationAssets.activePack;
     const key = this.presentationAssets.activePackKey;
-    if (!pack?.profile || !key || key === this.visualRuntimeRequestedKey) return;
+    if (!pack?.profile || !key) {
+      if (!this.visualRuntimeRequestedKey && !this.visualRuntime) return;
+      this.visualRuntimeRequestedKey = "";
+      const epoch = ++this.visualRuntimeEpoch;
+      this.visualRuntimeError = null;
+      void this.queueVisualRuntimeTransition(async () => {
+        if (epoch !== this.visualRuntimeEpoch || this.disposed) return;
+        const previous = this.visualRuntime;
+        this.visualRuntime = null;
+        await Promise.resolve(previous?.dispose()).catch((error) => {
+          console.warn("Pack visual runtime cleanup failed.", error);
+        });
+      });
+      return;
+    }
+    if (key === this.visualRuntimeRequestedKey) return;
 
     this.visualRuntimeRequestedKey = key;
     const epoch = ++this.visualRuntimeEpoch;
-    const previous = this.visualRuntime;
-    this.visualRuntime = null;
     this.visualRuntimeError = null;
     const profileUrl = new URL("visual-profile.json", this.presentationAssets.requested.packUri).href;
-
-    void Promise.resolve(previous?.dispose())
-      .catch((error) => console.warn("Previous visual runtime cleanup failed.", error))
-      .then(() => createVisualRuntime({
-        renderer: this.renderer,
-        scene: this.scene,
-        camera: this.camera,
-        profile: pack.profile,
+    const isKoreaPack = pack.id === "korea-1950s";
+    const environmentFactory = isKoreaPack
+      ? createKoreaEnvironmentFactory(THREE, {
         profileUrl,
-        tierId: VISUAL_QUALITY.tier,
-        mode: "combat",
-        lights: { ambient: this.ambient, sun: this.sun },
-        manageFog: false,
-        manageRendererSize: false,
-        restoreStateOnDispose: false,
-        shadowModes: mobileControls ? ["carrier"] : ["combat", "carrier", "replay"],
-        shadowHalfExtents: { combat: 44, carrier: 190, replay: 160 },
-        onResolutionChange: (pixelRatio) => {
-          const carrierVisual = this.presentationAssets.carrierSlot.object;
-          if (carrierVisual?.userData.sprayUniforms) {
-            carrierVisual.userData.sprayUniforms.uPixelRatio.value = pixelRatio;
-          }
-          this.carrierRuntime.water.sprayUniforms.uPixelRatio.value = pixelRatio;
+        packVersion: pack.packVersion,
+        sunDirection: SUN_DIRECTION,
+        onActivated: (adapter) => {
+          if (epoch !== this.visualRuntimeEpoch || key !== this.presentationAssets.activePackKey
+            || this.disposed) return;
+          this.packEnvironmentAdapter = adapter;
+          this.sky.mesh.visible = false;
+          this.sea.mesh.visible = false;
+          this.tacticalClouds.group.visible = false;
         },
-        onDiagnostic: (diagnostic) => console.debug("Visual runtime", diagnostic),
-      }))
-      .then((runtime) => {
-        if (epoch !== this.visualRuntimeEpoch || key !== this.presentationAssets.activePackKey) {
-          return runtime.dispose();
-        }
-        this.visualRuntime = runtime;
-        this.banditContact.setColors(
-          pack.profile.readability?.targetSilhouetteColor ?? 0xd7e7ec,
-          0xd6c59b,
-        );
-        const { width, height } = gameViewport();
-        runtime.resize(width, height, window.devicePixelRatio || 1);
-        return undefined;
+        onDeactivated: (adapter) => {
+          if (this.packEnvironmentAdapter !== adapter) return;
+          this.packEnvironmentAdapter = null;
+          if (!this.disposed) {
+            this.sky.mesh.visible = true;
+            this.sea.mesh.visible = true;
+            this.tacticalClouds.group.visible = true;
+            this.scene.fog = new THREE.FogExp2(this.fogColor, 0.000055);
+          }
+        },
       })
-      .catch((error) => {
-        if (epoch !== this.visualRuntimeEpoch) return;
+      : undefined;
+    const effectsFactory = isKoreaPack
+      ? createKoreaEffectsFactory(THREE, {
+        profileUrl,
+        packVersion: pack.packVersion,
+        onActivated: (adapter) => {
+          if (epoch !== this.visualRuntimeEpoch || key !== this.presentationAssets.activePackKey
+            || this.disposed) return;
+          this.packEffectsAdapter = adapter;
+          this.applyPackGunStyle(adapter);
+        },
+        onDeactivated: (adapter) => {
+          if (this.packEffectsAdapter !== adapter) return;
+          this.packEffectsAdapter = null;
+          this.applyPackGunStyle();
+        },
+      })
+      : undefined;
+
+    void this.queueVisualRuntimeTransition(async () => {
+      if (epoch !== this.visualRuntimeEpoch || key !== this.presentationAssets.activePackKey
+        || this.disposed) return;
+      const previous = this.visualRuntime;
+      this.visualRuntime = null;
+      await Promise.resolve(previous?.dispose())
+        .catch((error) => console.warn("Previous visual runtime cleanup failed.", error));
+      if (epoch !== this.visualRuntimeEpoch || key !== this.presentationAssets.activePackKey
+        || this.disposed) return;
+
+      let runtime;
+      try {
+        runtime = await createVisualRuntime({
+          renderer: this.renderer,
+          scene: this.scene,
+          camera: this.camera,
+          profile: pack.profile,
+          profileUrl,
+          tierId: VISUAL_QUALITY.tier,
+          mode: "combat",
+          lights: { ambient: this.ambient, sun: this.sun },
+          environmentFactory,
+          effectsFactory,
+          manageFog: true,
+          manageRendererSize: false,
+          shadowModes: mobileControls ? ["carrier"] : ["combat", "carrier", "replay"],
+          shadowHalfExtents: { combat: 44, carrier: 190, replay: 160 },
+          onResolutionChange: (pixelRatio) => {
+            const carrierVisual = this.presentationAssets.carrierSlot.object;
+            if (carrierVisual?.userData.sprayUniforms) {
+              carrierVisual.userData.sprayUniforms.uPixelRatio.value = pixelRatio;
+            }
+            this.carrierRuntime.water.sprayUniforms.uPixelRatio.value = pixelRatio;
+          },
+          onDiagnostic: (diagnostic) => console.debug("Visual runtime", diagnostic),
+        });
+      } catch (error) {
+        if (epoch !== this.visualRuntimeEpoch || this.disposed) return;
         this.visualRuntimeError = String(error?.message ?? error);
+        if (!this.packEnvironmentAdapter) {
+          this.scene.fog = new THREE.FogExp2(this.fogColor, 0.000055);
+        }
         console.warn("Pack visual runtime unavailable; direct renderer retained.", error);
-      });
+        return;
+      }
+      if (epoch !== this.visualRuntimeEpoch || key !== this.presentationAssets.activePackKey
+        || this.disposed) {
+        await runtime.dispose();
+        return;
+      }
+      this.visualRuntime = runtime;
+      this.banditContact.setColors(
+        pack.profile.readability?.targetSilhouetteColor ?? 0xd7e7ec,
+        0xd6c59b,
+      );
+      const { width, height } = gameViewport();
+      runtime.resize(width, height, window.devicePixelRatio || 1);
+    });
   }
 
   createAttitudeFrame() {
@@ -4365,8 +4650,50 @@ class FlightView {
     }
   }
 
+  packEffectsActive() {
+    return this.packEffectsAdapter !== null
+      && this.visualRuntime?.adapters?.effects === this.packEffectsAdapter;
+  }
+
+  packEnvironmentActive() {
+    return this.packEnvironmentAdapter !== null
+      && this.visualRuntime?.adapters?.environment === this.packEnvironmentAdapter;
+  }
+
+  emitPackEffect(eventId, payload) {
+    return this.packEffectsActive()
+      && this.visualRuntime.dispatchEffect(eventId, payload) === true;
+  }
+
+  applyPackGunStyle(adapter = null) {
+    const tracer = adapter?.effects?.profile?.events?.["event.weapon.gun-fire.v1"]?.tracer;
+    const data = this.gunEffects.userData;
+    const channels = [data.outgoingTracers, data.incomingTracers];
+    if (tracer) {
+      for (const channel of channels) {
+        channel.tracers.material.color.set(tracer.color);
+        channel.glow.material.color.set(tracer.coreColor ?? tracer.color);
+        channel.heads.material.color.set(tracer.coreColor ?? tracer.color);
+      }
+      return;
+    }
+    data.outgoingTracers.tracers.material.color.set(0xffd36a);
+    data.outgoingTracers.glow.material.color.set(0xff731d);
+    data.outgoingTracers.heads.material.color.set(0xfff0b0);
+    data.incomingTracers.tracers.material.color.set(0xff8b68);
+    data.incomingTracers.glow.material.color.set(0xff2d1d);
+    data.incomingTracers.heads.material.color.set(0xffe2c4);
+  }
+
   updateBanditDestruction(alive, nowSeconds, forceSplash = false) {
     const effect = this.banditDestruction;
+    if (this.packEffectsActive()) {
+      // Authored one-shots belong to ordered simulation events. Health/alive edges are retained
+      // only for legacy fallback state and must not create a second, causally unseeded explosion.
+      this.banditWasAlive = alive;
+      effect.visible = false;
+      return;
+    }
     const data = effect.userData;
     const fogDensity = Number(this.scene.fog?.density) || 0;
     for (const material of [data.outer.material, data.inner.material,
@@ -4473,12 +4800,18 @@ class FlightView {
 
   updateGunEffects(state, nowSeconds) {
     const data = this.gunEffects.userData;
-    updateTracerChannel(data.outgoingTracers, state.tracers);
-    updateTracerChannel(data.incomingTracers, state.opponent_tracers);
+    const packEffectsActive = this.packEffectsActive();
+    const authoredTracerLength = packEffectsActive
+      ? this.packEffectsAdapter.effects.profile.events?.["event.weapon.gun-fire.v1"]
+        ?.tracer?.lengthMetres
+      : null;
+    updateTracerChannel(data.outgoingTracers, state.tracers, authoredTracerLength);
+    updateTracerChannel(data.incomingTracers, state.opponent_tracers, authoredTracerLength);
 
     const roundsFired = Number(state.rounds_fired) || 0;
     if (roundsFired < this.lastRoundsFired) this.lastRoundsFired = roundsFired;
-    if (roundsFired > this.lastRoundsFired) this.muzzleFlashUntil = nowSeconds + 0.048;
+    const playerFired = roundsFired > this.lastRoundsFired;
+    if (playerFired) this.muzzleFlashUntil = nowSeconds + 0.048;
     this.lastRoundsFired = roundsFired;
     const playerWeaponSlot = this.presentationAssets.cockpitSlot.root.visible
       ? this.presentationAssets.cockpitSlot
@@ -4491,9 +4824,21 @@ class FlightView {
       playerWeaponSlot, "muzzle.right", this.playerPosition, this.playerForward, this.playerRight,
       6.25, 0.42, this.playerMuzzleRightPosition,
     );
+    if (playerFired && packEffectsActive) {
+      this.emitPackEffect("event.weapon.gun-fire.v1", {
+        position: this.playerMuzzleLeftPosition,
+        direction: this.playerForward,
+        tracer: false,
+      });
+      this.emitPackEffect("event.weapon.gun-fire.v1", {
+        position: this.playerMuzzleRightPosition,
+        direction: this.playerForward,
+        tracer: false,
+      });
+    }
     updateMuzzleChannel(
       data.playerMuzzle,
-      nowSeconds < this.muzzleFlashUntil,
+      !packEffectsActive && nowSeconds < this.muzzleFlashUntil,
       this.playerMuzzleLeftPosition,
       this.playerForward,
       this.playerQuaternion,
@@ -4504,7 +4849,7 @@ class FlightView {
     );
     updateMuzzleChannel(
       data.playerMuzzleRight,
-      nowSeconds < this.muzzleFlashUntil,
+      !packEffectsActive && nowSeconds < this.muzzleFlashUntil,
       this.playerMuzzleRightPosition,
       this.playerForward,
       this.playerQuaternion,
@@ -4518,7 +4863,8 @@ class FlightView {
     if (opponentRoundsFired < this.lastOpponentRoundsFired) {
       this.lastOpponentRoundsFired = opponentRoundsFired;
     }
-    if (opponentRoundsFired > this.lastOpponentRoundsFired) {
+    const opponentFired = opponentRoundsFired > this.lastOpponentRoundsFired;
+    if (opponentFired) {
       this.opponentMuzzleFlashUntil = nowSeconds + 0.048;
     }
     this.lastOpponentRoundsFired = opponentRoundsFired;
@@ -4542,9 +4888,21 @@ class FlightView {
       0.4,
       this.opponentMuzzleRightPosition,
     );
+    if (opponentFired && packEffectsActive) {
+      this.emitPackEffect("event.weapon.gun-fire.v1", {
+        position: this.opponentMuzzleLeftPosition,
+        direction: this.banditFrame.forward,
+        tracer: false,
+      });
+      this.emitPackEffect("event.weapon.gun-fire.v1", {
+        position: this.opponentMuzzleRightPosition,
+        direction: this.banditFrame.forward,
+        tracer: false,
+      });
+    }
     updateMuzzleChannel(
       data.opponentMuzzle,
-      nowSeconds < this.opponentMuzzleFlashUntil,
+      !packEffectsActive && nowSeconds < this.opponentMuzzleFlashUntil,
       this.opponentMuzzleLeftPosition,
       this.banditFrame.forward,
       this.banditQuaternion,
@@ -4555,7 +4913,7 @@ class FlightView {
     );
     updateMuzzleChannel(
       data.opponentMuzzleRight,
-      nowSeconds < this.opponentMuzzleFlashUntil,
+      !packEffectsActive && nowSeconds < this.opponentMuzzleFlashUntil,
       this.opponentMuzzleRightPosition,
       this.banditFrame.forward,
       this.banditQuaternion,
@@ -4574,7 +4932,7 @@ class FlightView {
     }
     this.lastHitCount = hits;
     const sparkAge = nowSeconds - this.hitSparkTime;
-    const sparksActive = sparkAge >= 0 && sparkAge < 0.34;
+    const sparksActive = !packEffectsActive && sparkAge >= 0 && sparkAge < 0.34;
     data.sparks.visible = sparksActive;
     if (sparksActive) {
       const sparkPositions = data.sparkPositions;
@@ -4599,8 +4957,9 @@ class FlightView {
   updateDamageSmoke(state, nowSeconds, fogDensity) {
     const banditHealth = Number(state.bandit_health ?? state.opponent_health);
     const playerHealth = Number(state.player_health);
-    const banditAlive = state.bandit_alive !== false && state.opponent_alive !== false;
-    const playerAlive = state.player_alive !== false;
+    const banditAlive = aircraftAlive(state, "opponent_terminal_state",
+      state.bandit_alive !== false && state.opponent_alive !== false);
+    const playerAlive = aircraftAlive(state, "player_terminal_state", state.player_alive !== false);
     const damageAnchor = this.presentationAssets.semanticAnchor(
       this.presentationAssets.targetSlot,
       "damage.center",
@@ -4621,19 +4980,70 @@ class FlightView {
   }
 
   consumeCombatEvents(state, nowSeconds) {
-    this.lastCombatEventSequence = consumeRecentEvents(
+    const consumption = this.combatEventStreams.consume(
+      state.event_stream_id,
       state.recent_events,
-      this.lastCombatEventSequence,
-      (event) => {
-        this.hud.noteCombatEvent?.(event, nowSeconds);
-        if (event.type === "HIT" && event.target === "OPPONENT") {
-          this.hitSparkTime = nowSeconds;
-        } else if ((event.type === "DESTROYED" || event.type === "IMPACT")
-          && event.target === "OPPONENT") {
-          this.updateBanditDestruction(true, nowSeconds, true);
-        }
-      },
     );
+    if (consumption.streamChanged) {
+      this.packEffectsAdapter?.clear?.();
+      this.playerDamageSmoke.clear();
+      this.banditDamageSmoke.clear();
+      this.hitSparkTime = -1;
+      this.muzzleFlashUntil = -1;
+      this.opponentMuzzleFlashUntil = -1;
+      this.lastRoundsFired = Number(state.rounds_fired) || 0;
+      this.lastOpponentRoundsFired = Number(state.opponent_rounds_fired) || 0;
+      this.lastHitCount = Number(state.hits) || 0;
+      this.banditSplashTime = -1;
+      this.banditDestructionForcedUntil = -1;
+      this.banditDestruction.visible = false;
+    }
+    this.lastCombatEventSequence = consumption.cursor;
+
+    for (const event of consumption.events) {
+      this.hud.noteCombatEvent?.(event, nowSeconds);
+      const recordedPosition = presentationVector(event.position);
+      const position = recordedPosition
+        ? this.combatEventPosition.set(...recordedPosition)
+        : event.target === "PLAYER" ? this.playerPosition : this.banditPosition;
+      if (event.type === "HIT" && event.target === "OPPONENT") {
+        this.hitSparkTime = nowSeconds;
+        this.effectNormal.copy(this.banditPosition).sub(this.playerPosition).normalize();
+        this.emitPackEffect("event.weapon.gun-impact.v1", {
+          position,
+          normal: this.effectNormal,
+          seed: event.sequence,
+        });
+      } else if (event.type === "HIT" && event.target === "PLAYER") {
+        this.effectNormal.copy(this.playerPosition).sub(this.banditPosition).normalize();
+        this.emitPackEffect("event.weapon.gun-impact.v1", {
+          position,
+          normal: this.effectNormal,
+          seed: event.sequence,
+        });
+      }
+    }
+
+    for (const event of terminalVisualEvents(consumption.events)) {
+      const recordedPosition = presentationVector(event.position);
+      const recordedVelocity = presentationVector(event.velocity);
+      const position = recordedPosition
+        ? this.combatEventPosition.set(...recordedPosition)
+        : event.target === "PLAYER" ? this.playerPosition : this.banditPosition;
+      const velocity = recordedVelocity
+        ? this.combatEventVelocity.set(...recordedVelocity)
+        : undefined;
+      if (this.packEffectsActive()) {
+        this.emitPackEffect("event.vehicle.destroyed.v1", {
+          position,
+          velocity,
+          seed: event.sequence,
+        });
+        if (event.target === "OPPONENT") this.banditWasAlive = false;
+      } else if (event.target === "OPPONENT") {
+        this.updateBanditDestruction(true, nowSeconds, true);
+      }
+    }
   }
 
   update(state, dt, nowSeconds) {
@@ -4730,25 +5140,34 @@ class FlightView {
     const gunsightPresentation = this.periodGunsight.update(this.camera, state, dt);
 
     const cameraAltitude = Math.max(0, this.camera.position.y);
-    const atmosphereMix = smoothstep(1800, 14000, cameraAltitude);
-    const baseFogDensity = 0.000055 + (0.000009 - 0.000055) * atmosphereMix;
-    this.fogColor.copy(this.fogLow).lerp(this.fogHigh, atmosphereMix);
-    const cloudExtinction = this.tacticalClouds.update(
-      this.camera.position,
-      nowSeconds,
-      this.fogColor,
-      baseFogDensity,
-    );
-    const fogDensity = baseFogDensity + cloudExtinction * 0.0011;
-    if (cloudExtinction > 0) {
-      this.fogColor.lerp(this.cloudFogColor, Math.min(0.82, cloudExtinction * 0.78));
-      this.tacticalClouds.update(this.camera.position, nowSeconds, this.fogColor, fogDensity);
+    let fogDensity;
+    if (this.packEnvironmentActive()) {
+      // The pack owns the sky, ocean, cloud layers, and linear scene fog. Keep a small equivalent
+      // density only for legacy custom shaders that still consume an exponential scalar.
+      this.fogColor.copy(this.scene.fog?.color ?? this.fogLow);
+      fogDensity = 1 / Math.max(1, Number(this.scene.fog?.far) || 56000);
+    } else {
+      const atmosphereMix = smoothstep(1800, 14000, cameraAltitude);
+      const baseFogDensity = 0.000055 + (0.000009 - 0.000055) * atmosphereMix;
+      this.fogColor.copy(this.fogLow).lerp(this.fogHigh, atmosphereMix);
+      const cloudExtinction = this.tacticalClouds.update(
+        this.camera.position,
+        nowSeconds,
+        this.fogColor,
+        baseFogDensity,
+      );
+      fogDensity = baseFogDensity + cloudExtinction * 0.0011;
+      if (cloudExtinction > 0) {
+        this.fogColor.lerp(this.cloudFogColor, Math.min(0.82, cloudExtinction * 0.78));
+        this.tacticalClouds.update(this.camera.position, nowSeconds, this.fogColor, fogDensity);
+      }
+      this.scene.fog.color.copy(this.fogColor);
+      this.scene.fog.density = fogDensity;
     }
-    this.scene.fog.color.copy(this.fogColor);
-    this.scene.fog.density = fogDensity;
 
     const isCarrier = state.carrier === true;
-    const banditAlive = state.bandit_alive !== false && state.fight !== "Splash";
+    const banditAlive = aircraftAlive(state, "opponent_terminal_state",
+      state.bandit_alive !== false && state.fight !== "Splash");
     const banditBodyPresent = state.opponent_body_present !== false;
     const targetRoot = this.presentationAssets.targetSlot.root;
     const carrierRoot = this.presentationAssets.carrierSlot.root;
@@ -4814,6 +5233,9 @@ class FlightView {
       this.fogColor,
       fogDensity,
     );
+    // Deliberately do not dispatch event.platform.wake.v1 here. The pack's one-shot showcase wake
+    // has no moving-anchor contract; production keeps the continuously attached, sea-level shader
+    // wake driven by authoritative carrier pose until that contract can preserve ship motion.
 
     targetRoot.position.copy(this.banditPosition);
     targetRoot.quaternion.copy(this.banditQuaternion);
@@ -4894,13 +5316,16 @@ class FlightView {
   }
 
   async dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.visualRuntimeEpoch += 1;
+    await this.visualRuntimeTransitions.idle();
     const visualRuntime = this.visualRuntime;
     this.visualRuntime = null;
-    this.visualRuntimeEpoch += 1;
     if (visualRuntime) await visualRuntime.dispose().catch(() => undefined);
     this.periodGunsight.dispose();
     this.banditContact.dispose();
-    this.remoteAircraft.dispose();
+    await this.remoteAircraft.dispose();
     this.tacticalClouds.dispose();
     this.playerDamageSmoke.dispose();
     this.banditDamageSmoke.dispose();
@@ -4908,7 +5333,18 @@ class FlightView {
     this.carrierRuntime.water.group.removeFromParent();
     disposeSceneResources(this.carrierRuntime.recovery.group);
     disposeSceneResources(this.carrierRuntime.water.group);
+    this.sky.mesh.removeFromParent();
+    this.sea.mesh.removeFromParent();
+    this.banditDestruction.removeFromParent();
+    this.gunEffects.removeFromParent();
+    disposeSceneResources(this.sky.mesh);
+    disposeSceneResources(this.sea.mesh);
+    disposeSceneResources(this.banditDestruction);
+    disposeSceneResources(this.gunEffects);
     await this.presentationAssets.dispose();
+    if (this.scene.environment === this.environmentTarget.texture) this.scene.environment = null;
+    this.environmentTarget.dispose();
+    this.renderer.dispose();
   }
 }
 

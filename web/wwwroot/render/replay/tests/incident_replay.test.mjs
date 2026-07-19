@@ -28,6 +28,33 @@ const fields = [
   "touchdown_primary_correction",
 ];
 
+const eventFields = [
+  "t", "tick", "sequence", "type", "source", "target", "count", "outcome",
+  "surface", "px", "py", "pz", "vx", "vy", "vz",
+];
+
+function eventRow(t, overrides = {}) {
+  const value = {
+    t,
+    tick: Math.round((t + 2) * 120),
+    sequence: t === 0 ? 1 : t === 2 ? 3 : 2,
+    type: t === 0 ? 2 : t === 2 ? 3 : 1,
+    source: 0,
+    target: 1,
+    count: 0,
+    outcome: 0,
+    surface: t === 0 || t === 2 ? 2 : 0,
+    px: t * 50,
+    py: 20,
+    pz: t * 3,
+    vx: 50,
+    vy: -2,
+    vz: 3,
+    ...overrides,
+  };
+  return eventFields.map((field) => value[field]);
+}
+
 function row(t, overrides = {}) {
   const value = {
     t, tick: (t + 2) * 120,
@@ -70,7 +97,7 @@ function row(t, overrides = {}) {
 
 function payload(overrides = {}) {
   return {
-    schema: "carrier-incident-replay.v3",
+    schema: "carrier-incident-replay.v4",
     authoritative: true,
     id: 7,
     sample_rate_hz: 12,
@@ -98,6 +125,8 @@ function payload(overrides = {}) {
         max_ias_kts: 145,
       },
     },
+    event_fields: eventFields,
+    events: [eventRow(0), eventRow(1), eventRow(2)],
     fields,
     samples: [row(-2), row(-1), row(0), row(1), row(2)],
     ...overrides,
@@ -112,12 +141,31 @@ test("authoritative replay payload decodes into a bounded monotonic clip", () =>
   assert.equal(clip.samples.length, 5);
   assert.equal(clip.samples[2].eventSurface, 2);
   assert.equal(clip.samples[2].carrierSolid, 1);
+  assert.equal(clip.events.length, 3);
+  assert.deepEqual(clip.events[0].position, [0, 20, 0]);
+  assert.deepEqual(clip.events[0].velocity, [50, -2, 3]);
+  assert.equal(clip.events[0].type, "IMPACT");
+  assert.equal(clip.events[0].target, "PLAYER");
+  const arrestmentFailure = decodeIncidentReplay({
+    ...payload(),
+    events: [eventRow(0, { type: 6 })],
+  });
+  assert.equal(arrestmentFailure.events[0].type, "ARRESTMENT_FAILED",
+    "the recorder's trap-failure event must remain playable in the browser");
   assert.equal(clip.touchdownAssessment.profile, "TEST_TOUCHDOWN_PROFILE");
   assert.equal(clip.touchdownAssessment.limits.hardSinkFpm, 900);
   assert.equal(clip.duration, 4);
   assert.equal(decodeIncidentReplay({ ...payload(), authoritative: false }), null);
   assert.equal(decodeIncidentReplay({ ...payload(), touchdown_assessment: null }), null);
   assert.equal(decodeIncidentReplay({ ...payload(), samples: [row(0), row(0)] }), null);
+  assert.equal(decodeIncidentReplay({ ...payload(), events: [eventRow(3)] }), null,
+    "an event outside the recorded clip is rejected");
+  assert.equal(decodeIncidentReplay({ ...payload(), events: [eventRow(0, { target: 2 })] }), null,
+    "a player incident cannot contain an opponent-target event");
+  assert.equal(decodeIncidentReplay({
+    ...payload(),
+    events: [eventRow(0), eventRow(1, { sequence: 1 })],
+  }), null, "event sequences must be strictly increasing");
 });
 
 test("interpolation moves recorded aircraft and carrier without inventing another physics pass", () => {
@@ -132,7 +180,13 @@ test("interpolation moves recorded aircraft and carrier without inventing anothe
   const projected = replayFrameState({
     carrier: true, context: "live", tx: 999, ty: 999, tz: 999,
     opponent_body_present: true,
-  }, frame);
+    recent_events: [{ sequence: 900, type: "DESTROYED", target: "PLAYER" }],
+    tracers: [[1, 2, 3, 4, 5, 6]],
+    rounds_fired: 42,
+    player_health: 0,
+    opponent_terminal_state: "SETTLED",
+    opponent_impact_surface: "WATER",
+  }, frame, [], "incident-replay:7:1");
   assert.equal(projected.replay_external, true);
   assert.equal(projected.px, -25);
   assert.equal(projected.indicated_airspeed_kts, 135);
@@ -141,6 +195,15 @@ test("interpolation moves recorded aircraft and carrier without inventing anothe
   assert.equal(projected.tz, -50.75);
   assert.equal(projected.opponent_body_present, false,
     "an unrecorded future opponent must not contaminate authoritative replay");
+  assert.equal(projected.event_stream_id, "incident-replay:7:1");
+  assert.deepEqual(projected.recent_events, [],
+    "live terminal events must never leak into replay presentation");
+  assert.deepEqual(projected.tracers, []);
+  assert.equal(projected.rounds_fired, 0);
+  assert.equal(projected.player_health, 1);
+  assert.equal(projected.opponent_terminal_state, "FLYING");
+  assert.equal(projected.opponent_impact_surface, "NONE");
+  assert.equal(projected.suppress_unrecorded_combat_transients, true);
 });
 
 test("causal review uses the exported hard-sink limit and authoritative correction", () => {
@@ -391,6 +454,7 @@ test("controller pulls a clip once, auto-plays it, and holds the physical end st
   assert.equal(controller.ingest({ incident_replay_id: 7, incident_replay_available: true }, 1000), true);
   assert.equal(controller.ingest({ incident_replay_id: 7, incident_replay_available: true }, 1001), false);
   assert.equal(consumes, 1);
+  assert.equal(controller.eventStreamId, "incident-replay:7:1");
   assert.equal(controller.frame(1000).t, -2);
   assert.equal(controller.frame(5000).t, 2);
   assert.equal(controller.frame(6000).t, 2, "end hold keeps the settled evidence visible");
@@ -398,7 +462,50 @@ test("controller pulls a clip once, auto-plays it, and holds the physical end st
   assert.equal(controller.active, false);
 
   assert.equal(controller.start(7000), true, "cached clip supports Replay Again without transport");
+  assert.equal(controller.eventStreamId, "incident-replay:7:2");
   assert.equal(consumes, 1);
+});
+
+test("playback exposes only recorded events reached in this replay generation", () => {
+  const controller = new IncidentReplayController(() => JSON.stringify(payload()));
+  const live = {
+    finished: true,
+    incident_replay_id: 7,
+    incident_replay_available: true,
+    recent_events: [{ sequence: 999, type: "SORTIE_FINISHED" }],
+  };
+
+  const preRoll = advanceIncidentReplay(controller, live, 1000);
+  assert.equal(preRoll.eventStreamId, "incident-replay:7:1");
+  assert.deepEqual(preRoll.presentedState.recent_events, []);
+
+  const afterSkippedFrames = advanceIncidentReplay(controller, {
+    ...live,
+    incident_replay_available: false,
+  }, 4250);
+  assert.deepEqual(
+    afterSkippedFrames.presentedState.recent_events.map((event) => event.sequence),
+    [1, 2],
+    "a slow render frame retains every authoritative event crossed in order",
+  );
+  assert.deepEqual(afterSkippedFrames.presentedState.recent_events[0].position, [0, 20, 0]);
+
+  const endHold = advanceIncidentReplay(controller, {
+    ...live,
+    incident_replay_available: false,
+  }, 5250);
+  assert.deepEqual(endHold.presentedState.recent_events.map((event) => event.sequence), [1, 2, 3]);
+
+  controller.start(7000);
+  const replayAgain = advanceIncidentReplay(controller, {
+    ...live,
+    incident_replay_available: false,
+  }, 10250);
+  assert.equal(replayAgain.eventStreamId, "incident-replay:7:2");
+  assert.deepEqual(replayAgain.presentedState.recent_events.map((event) => event.sequence), [1, 2]);
+  assert.equal(replayAgain.presentedState.recent_events[0].sequence,
+    afterSkippedFrames.presentedState.recent_events[0].sequence,
+    "original event sequence remains the stable deterministic effect seed");
 });
 
 test("finished snapshot pipeline substitutes recorded state and defers debrief until replay ends", () => {

@@ -57,8 +57,12 @@ function normalisePlayer(value) {
     (sum, component, index) => sum + component * value.up[index], 0,
   ) / (forwardLength * upLength));
   if (!Number.isFinite(frameCosine) || frameCosine >= 0.98) return null;
-  const alive = value.alive !== false;
-  const bodyPresent = typeof value.bodyPresent === "boolean" ? value.bodyPresent : alive;
+  const terminalCandidate = cleanText(value.terminalState, 32, "").toUpperCase();
+  const hasTerminalState = VALID_TERMINAL_STATES.has(terminalCandidate);
+  const alive = hasTerminalState ? terminalCandidate === "FLYING" : value.alive !== false;
+  const bodyPresent = hasTerminalState
+    ? terminalCandidate !== "SETTLED"
+    : typeof value.bodyPresent === "boolean" ? value.bodyPresent : alive;
   const terminalState = normaliseTerminalState(value.terminalState, alive, bodyPresent);
   return {
     playerId: cleanText(value.playerId, 80, "unknown"),
@@ -98,8 +102,12 @@ function normaliseBogey(value) {
     (sum, component, index) => sum + component * value.up[index], 0,
   ) / (forwardLength * upLength));
   if (!Number.isFinite(frameCosine) || frameCosine >= 0.98) return null;
-  const alive = value.alive !== false;
-  const bodyPresent = typeof value.bodyPresent === "boolean" ? value.bodyPresent : alive;
+  const terminalCandidate = cleanText(value.terminalState, 32, "").toUpperCase();
+  const hasTerminalState = VALID_TERMINAL_STATES.has(terminalCandidate);
+  const alive = hasTerminalState ? terminalCandidate === "FLYING" : value.alive !== false;
+  const bodyPresent = hasTerminalState
+    ? terminalCandidate !== "SETTLED"
+    : typeof value.bodyPresent === "boolean" ? value.bodyPresent : alive;
   const terminalState = normaliseTerminalState(value.terminalState, alive, bodyPresent);
   return {
     bogeyId: cleanText(value.bogeyId, 80, "bogey"),
@@ -250,6 +258,7 @@ export class GlobalRoomClient {
     this.sectorIndex = null;
     this.spawnOrigin = [0, 0, 0];
     this.sequence = 0;
+    this.socketPresentationId = "";
     this.lastSentAt = Number.NEGATIVE_INFINITY;
     this.lastPublishedTransition = "";
     this.lastCadence = null;
@@ -282,6 +291,7 @@ export class GlobalRoomClient {
       this.scheduleReconnect();
       return;
     }
+    this.socketPresentationId = "";
     this.socket = socket;
     socket.addEventListener("open", () => {
       if (socket !== this.socket) return;
@@ -309,6 +319,7 @@ export class GlobalRoomClient {
     socket.addEventListener("close", () => {
       if (socket !== this.socket) return;
       this.socket = null;
+      this.socketPresentationId = "";
       this.clearRemoteContacts("disconnect");
       this.lastServerTimeMs = Number.NEGATIVE_INFINITY;
       if (!this.started) return;
@@ -347,6 +358,24 @@ export class GlobalRoomClient {
         clearedBecause: reason,
       }, this.playerId);
     } catch (error) { this.lastError = String(error); }
+  }
+
+  reconnectForPresentationContract() {
+    const socket = this.socket;
+    this.socket = null;
+    this.socketPresentationId = "";
+    this.lastSentAt = Number.NEGATIVE_INFINITY;
+    this.lastPublishedTransition = "";
+    this.lastCadence = null;
+    this.lastServerTimeMs = Number.NEGATIVE_INFINITY;
+    this.clearRemoteContacts("presentation-contract-change");
+    if (socket && socket.readyState < 2) {
+      try { socket.close(4002, "Presentation contract changed"); }
+      catch { /* The replacement connection remains the recovery path. */ }
+    }
+    // The browser pilot key is deliberately unchanged. Both room implementations resolve it to
+    // the existing player identity and sector, while the fresh socket gets a new presentation pin.
+    if (this.started) this.connect();
   }
 
   receive(raw) {
@@ -411,7 +440,10 @@ export class GlobalRoomClient {
   publish(state) {
     const socket = this.socket;
     const now = this.now();
-    if (!state || !this.playerId || !socket || socket.readyState !== 1) return false;
+    // A reconnect retains playerId for UI continuity, so transport readiness alone is not enough:
+    // wait for the new welcome before a pose can race ahead of its hello handshake.
+    if (!state || !this.playerId || this.phase !== "online"
+      || !socket || socket.readyState !== 1) return false;
     const position = [state.px, state.py, state.pz];
     const forward = [state.pfx, state.pfy, state.pfz];
     const up = [state.plx, state.ply, state.plz];
@@ -421,9 +453,13 @@ export class GlobalRoomClient {
       && socket.bufferedAmount > PRESENCE_MAXIMUM_BUFFERED_BYTES) return false;
 
     const phase = normalisePhase(state.session_phase);
-    const alive = state.player_alive !== false;
     const terminalCandidate = cleanText(state.player_terminal_state, 32, "").toUpperCase();
     const hasExplicitTerminalState = VALID_TERMINAL_STATES.has(terminalCandidate);
+    // Terminal state is lifecycle truth. An undamaged deck/water impact is still no longer a
+    // combat-capable aircraft even when subsystem health leaves player_alive true.
+    const alive = hasExplicitTerminalState
+      ? terminalCandidate === "FLYING"
+      : state.player_alive !== false;
     const bodyPresent = hasExplicitTerminalState
       ? terminalCandidate !== "SETTLED"
       : typeof state.player_body_present === "boolean" ? state.player_body_present : alive;
@@ -436,6 +472,10 @@ export class GlobalRoomClient {
     const presentationId = cleanText(
       state.player_presentation_id, 128, "presentation.vehicle.player.v1",
     );
+    if (this.socketPresentationId && presentationId !== this.socketPresentationId) {
+      this.reconnectForPresentationContract();
+      return false;
+    }
     const sendInterval = phase === "ACTIVE"
       ? PRESENCE_SEND_INTERVAL_MS : PRESENCE_IDLE_SEND_INTERVAL_MS;
     const transition = [
@@ -470,6 +510,7 @@ export class GlobalRoomClient {
       return false;
     }
     this.sequence = sequence;
+    this.socketPresentationId = presentationId;
     this.lastSentAt = now;
     this.lastPublishedTransition = transition;
     this.lastCadence = sendInterval === PRESENCE_SEND_INTERVAL_MS ? "20Hz" : "1Hz";
@@ -482,6 +523,7 @@ export class GlobalRoomClient {
     this.reconnectTimer = null;
     const socket = this.socket;
     this.socket = null;
+    this.socketPresentationId = "";
     if (socket && socket.readyState < 2) socket.close(1000, "Leaving room");
     this.clearRemoteContacts("stopped");
     this.setStatus(this.url ? "offline" : "off");
@@ -505,6 +547,7 @@ export class GlobalRoomClient {
       sectorIndex: this.sectorIndex,
       spawnOrigin: Object.freeze(this.spawnOrigin.slice()),
       sequence: this.sequence,
+      socketPresentationId: this.socketPresentationId || null,
       cadence: this.lastCadence,
       lastServerTimeMs: Number.isFinite(this.lastServerTimeMs) ? this.lastServerTimeMs : null,
       lastError: this.lastError,

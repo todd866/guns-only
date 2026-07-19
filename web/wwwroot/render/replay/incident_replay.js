@@ -1,5 +1,6 @@
-const SCHEMA = "carrier-incident-replay.v3";
+const SCHEMA = "carrier-incident-replay.v4";
 const MAX_SAMPLES = 400;
+const MAX_EVENTS = 128;
 const MAX_DURATION_SECONDS = 31;
 
 const SURFACES = Object.freeze([
@@ -18,6 +19,19 @@ const TERMINAL_STATES = Object.freeze([
 const EVENTS = Object.freeze([
   "HIT", "DESTROYED", "IMPACT", "SETTLED", "TERMINAL LIMIT", "SORTIE FINISHED",
   "ARRESTMENT FAILED",
+]);
+const EVENT_TOKENS = Object.freeze([
+  "HIT", "DESTROYED", "IMPACT", "SETTLED", "TERMINAL_LIMIT_REACHED",
+  "SORTIE_FINISHED", "ARRESTMENT_FAILED",
+]);
+const COMBAT_ROLES = Object.freeze(["NONE", "PLAYER", "OPPONENT"]);
+const SORTIE_OUTCOMES = Object.freeze(["NONE", "VICTORY", "DEFEAT", "DRAW"]);
+const SURFACE_TOKENS = Object.freeze([
+  "NONE", "WATER", "FLIGHT_DECK", "CARRIER_STRUCTURE", "SIMULATION_BOUNDARY",
+]);
+const INCIDENT_EVENT_TYPES = new Set([
+  "HIT", "DESTROYED", "IMPACT", "SETTLED", "TERMINAL_LIMIT_REACHED",
+  "ARRESTMENT_FAILED",
 ]);
 const ARRESTMENT_FAILURES = Object.freeze([
   "NONE", "ENERGY CAPACITY EXCEEDED", "RUNOUT EXHAUSTED", "LINE LOAD EXCEEDED",
@@ -71,6 +85,73 @@ function fieldMap(fields) {
 function rowValue(row, fields, name, fallback = 0) {
   const index = fields.get(name);
   return index === undefined ? fallback : finite(row[index], fallback);
+}
+
+function strictRowNumber(row, fields, name) {
+  const index = fields.get(name);
+  if (index === undefined || index >= row.length) return null;
+  const value = Number(row[index]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function enumToken(values, value) {
+  return Number.isInteger(value) && value >= 0 && value < values.length
+    ? values[value]
+    : null;
+}
+
+function decodeReplayEvents(payload) {
+  if (!Array.isArray(payload.event_fields) || !Array.isArray(payload.events)
+    || payload.events.length > MAX_EVENTS) return null;
+  const fields = fieldMap(payload.event_fields);
+  const required = [
+    "t", "tick", "sequence", "type", "source", "target", "count", "outcome",
+    "surface", "px", "py", "pz", "vx", "vy", "vz",
+  ];
+  if (required.some((field) => !fields.has(field))) return null;
+
+  const events = [];
+  let lastTime = Number.NEGATIVE_INFINITY;
+  let lastTick = -1;
+  let lastSequence = 0;
+  for (const row of payload.events) {
+    if (!Array.isArray(row)) return null;
+    const values = Object.fromEntries(required.map((field) => [
+      field, strictRowNumber(row, fields, field),
+    ]));
+    if (Object.values(values).some((value) => value === null)) return null;
+    const tick = values.tick;
+    const sequence = values.sequence;
+    const type = enumToken(EVENT_TOKENS, values.type);
+    const source = enumToken(COMBAT_ROLES, values.source);
+    const target = enumToken(COMBAT_ROLES, values.target);
+    const outcome = enumToken(SORTIE_OUTCOMES, values.outcome);
+    const surface = enumToken(SURFACE_TOKENS, values.surface);
+    if (!Number.isSafeInteger(tick) || tick < 0
+      || !Number.isSafeInteger(sequence) || sequence <= lastSequence
+      || !Number.isSafeInteger(values.count) || values.count < 0
+      || values.t < lastTime || tick < lastTick
+      || type === null || source === null || target === null
+      || outcome === null || surface === null
+      || target !== "PLAYER" || !INCIDENT_EVENT_TYPES.has(type)) return null;
+    events.push(Object.freeze({
+      t: values.t,
+      tick,
+      sequence,
+      type,
+      source,
+      target,
+      count: values.count,
+      outcome,
+      surface,
+      position: Object.freeze([values.px, values.py, values.pz]),
+      velocity: Object.freeze([values.vx, values.vy, values.vz]),
+    }));
+    lastTime = values.t;
+    lastTick = tick;
+    lastSequence = sequence;
+  }
+  return Object.freeze(events);
 }
 
 function decodeTouchdownAssessment(value) {
@@ -137,6 +218,8 @@ export function decodeIncidentReplay(payload) {
   if (payload.samples.length < 2 || payload.samples.length > MAX_SAMPLES) return null;
   const touchdownAssessment = decodeTouchdownAssessment(payload.touchdown_assessment);
   if (!touchdownAssessment) return null;
+  const events = decodeReplayEvents(payload);
+  if (!events) return null;
   const fields = fieldMap(payload.fields);
   for (const required of [
     "t", "tick", "px", "py", "pz", "pfx", "pfy", "pfz", "plx", "ply", "plz",
@@ -231,6 +314,10 @@ export function decodeIncidentReplay(payload) {
   }
   const duration = samples.at(-1).t - samples[0].t;
   if (!(duration > 0) || duration > MAX_DURATION_SECONDS) return null;
+  if (events.some((event) => event.t < samples[0].t - 1e-6
+    || event.t > samples.at(-1).t + 1e-6
+    || event.tick < samples[0].tick || event.tick > samples.at(-1).tick
+    || event.target !== "PLAYER")) return null;
   const incidentIndex = Math.round(finite(payload.incident_index, -1));
   if (incidentIndex < 0 || incidentIndex >= samples.length) return null;
 
@@ -244,6 +331,7 @@ export function decodeIncidentReplay(payload) {
     touchdownAssessment,
     incidentIndex,
     samples: Object.freeze(samples),
+    events,
     startTime: samples[0].t,
     endTime: samples.at(-1).t,
     duration,
@@ -522,11 +610,39 @@ export function analyseIncidentReplay(clip) {
   });
 }
 
-export function replayFrameState(liveState, frame) {
+export function replayFrameState(liveState, frame, replayEvents = [], eventStreamId = "") {
   if (!frame) return liveState;
   return {
     ...liveState,
     replay_external: true,
+    event_stream_id: eventStreamId,
+    recent_events: Array.isArray(replayEvents) ? replayEvents : [],
+    // Combat projectile history, cumulative counters and damage state are not part of the v4
+    // carrier recorder. Neutralise them explicitly rather than leaking final-live transients into
+    // historical frames. The ordered replay events above are the sole one-shot effect source.
+    suppress_unrecorded_combat_transients: true,
+    tracers: [],
+    opponent_tracers: [],
+    gun_firing: false,
+    opponent_trigger_down: false,
+    opponent_gun_firing: false,
+    hit: false,
+    rounds_fired: 0,
+    opponent_rounds_fired: 0,
+    hits: 0,
+    opponent_hits: 0,
+    kill_progress: 0,
+    player_health: 1,
+    opponent_health: 1,
+    bandit_health: 1,
+    player_alive: frame.terminal === 0,
+    opponent_alive: true,
+    bandit_alive: true,
+    opponent_terminal_state: "FLYING",
+    opponent_impact_surface: "NONE",
+    fight: "Replay",
+    splash_cue: false,
+    transition_cue: "",
     px: frame.px, py: frame.py, pz: frame.pz,
     pfx: frame.pfx, pfy: frame.pfy, pfz: frame.pfz,
     plx: frame.plx, ply: frame.ply, plz: frame.plz,
@@ -589,6 +705,8 @@ export class IncidentReplayController {
     this.active = false;
     this.startedAtMs = 0;
     this.lastLoadedId = 0;
+    this.playbackGeneration = 0;
+    this.eventStreamId = "";
   }
 
   ingest(state, nowMs) {
@@ -612,6 +730,8 @@ export class IncidentReplayController {
   start(nowMs) {
     if (!this.clip) return false;
     this.startedAtMs = finite(nowMs);
+    this.playbackGeneration += 1;
+    this.eventStreamId = `incident-replay:${this.clip.id}:${this.playbackGeneration}`;
     this.active = true;
     return true;
   }
@@ -630,6 +750,12 @@ export class IncidentReplayController {
     const replayTime = this.clip.startTime + Math.min(elapsed, this.clip.duration);
     return interpolateIncidentReplay(this.clip, replayTime);
   }
+
+  eventsThrough(replayTime) {
+    if (!this.active || !this.clip) return Object.freeze([]);
+    const time = finite(replayTime, this.clip.startTime);
+    return Object.freeze(this.clip.events.filter((event) => event.t <= time + 1e-9));
+  }
 }
 
 /// One frame of the app-facing replay pipeline. Keeping lifecycle deferral and state substitution
@@ -637,10 +763,17 @@ export class IncidentReplayController {
 export function advanceIncidentReplay(controller, liveState, nowMs) {
   controller?.ingest(liveState, nowMs);
   const frame = controller?.frame(nowMs) ?? null;
+  const replayEvents = frame ? controller.eventsThrough(frame.t) : [];
   return Object.freeze({
     active: frame !== null,
     frame,
-    presentedState: replayFrameState(liveState, frame),
+    eventStreamId: frame ? controller.eventStreamId : null,
+    presentedState: replayFrameState(
+      liveState,
+      frame,
+      replayEvents,
+      frame ? controller.eventStreamId : "",
+    ),
     deferFinishedDebrief: liveState?.finished === true && frame !== null,
   });
 }

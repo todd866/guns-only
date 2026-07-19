@@ -66,18 +66,36 @@ public class IncidentReplayRecorderTests {
             EventSurface: eventSurface);
     }
 
+    static IncidentReplayEvent ReplayEvent(long tick, long sequence,
+        SessionEventType type, ImpactSurface surface = ImpactSurface.None,
+        CombatRole source = CombatRole.None) {
+        IncidentReplaySample sample = Sample(tick);
+        return new IncidentReplayEvent(
+            new SessionEvent(sequence, tick, type, source, CombatRole.Player,
+                0, SortieOutcome.None, surface),
+            sample.TimeSeconds,
+            sample.Player.Position,
+            sample.Player.VelocityVector());
+    }
+
     static IncidentReplayClip RecordDeckIncident(IncidentReplayRecorder recorder,
         long impactTick = 1_800) {
         for (long tick = 0; tick < impactTick; tick++) recorder.Observe(Sample(tick));
+        recorder.ObserveEvent(ReplayEvent(impactTick, 1,
+            SessionEventType.Impact, ImpactSurface.FlightDeck));
         recorder.Observe(Sample(impactTick,
             AircraftTerminalState.Impacted, ImpactSurface.FlightDeck,
             eventSequence: 1, eventType: SessionEventType.Impact,
             eventSurface: ImpactSurface.FlightDeck));
+        recorder.ObserveEvent(ReplayEvent(impactTick + 1, 2,
+            SessionEventType.Destroyed));
         for (long tick = impactTick + 1; tick < impactTick + 240; tick++)
             recorder.Observe(Sample(tick,
                 AircraftTerminalState.Impacted, ImpactSurface.FlightDeck,
                 eventSequence: 2, eventType: SessionEventType.Destroyed,
                 eventSurface: ImpactSurface.None));
+        recorder.ObserveEvent(ReplayEvent(impactTick + 240, 3,
+            SessionEventType.Settled, ImpactSurface.FlightDeck));
         recorder.Observe(Sample(impactTick + 240,
             AircraftTerminalState.Settled, ImpactSurface.FlightDeck,
             eventSequence: 3, eventType: SessionEventType.Settled,
@@ -129,6 +147,7 @@ public class IncidentReplayRecorderTests {
         Assert.Equal(ImpactSurface.Water, clip.Samples[^1].Surface);
         Assert.Equal(AircraftTerminalState.Settled, clip.Samples[^1].TerminalState);
         Assert.True(clip.Samples.Count <= IncidentReplayRecorder.MaximumSamples);
+        Assert.True(clip.Events.Count <= IncidentReplayRecorder.MaximumEvents);
     }
 
     [Fact]
@@ -195,5 +214,44 @@ public class IncidentReplayRecorderTests {
 
         Assert.Equal(clipA.IncidentSampleIndex, clipB.IncidentSampleIndex);
         Assert.Equal(clipA.Samples, clipB.Samples);
+        Assert.Equal(clipA.Events, clipB.Events);
+    }
+
+    [Fact]
+    public void SameTickImpactAndDestructionRemainDistinctOrderedEvents() {
+        var recorder = new IncidentReplayRecorder();
+        const long impactTick = 1_200;
+        for (long tick = 0; tick < impactTick; tick++) recorder.Observe(Sample(tick));
+
+        IncidentReplayEvent impact = ReplayEvent(impactTick, 41,
+            SessionEventType.Impact, ImpactSurface.FlightDeck);
+        IncidentReplayEvent destroyed = ReplayEvent(impactTick, 42,
+            SessionEventType.Destroyed);
+        recorder.ObserveEvent(impact);
+        recorder.Observe(Sample(impactTick,
+            AircraftTerminalState.Impacted, ImpactSurface.FlightDeck,
+            eventSequence: 41, eventType: SessionEventType.Impact,
+            eventSurface: ImpactSurface.FlightDeck));
+        recorder.ObserveEvent(destroyed);
+        // The sample policy deliberately retains the pre-impulse contact state for this tick.
+        recorder.Observe(Sample(impactTick,
+            AircraftTerminalState.Impacted, ImpactSurface.FlightDeck,
+            eventSequence: 42, eventType: SessionEventType.Destroyed));
+        recorder.ObserveEvent(ReplayEvent(impactTick + 120, 43,
+            SessionEventType.Settled, ImpactSurface.FlightDeck));
+        recorder.Observe(Sample(impactTick + 120,
+            AircraftTerminalState.Settled, ImpactSurface.FlightDeck,
+            eventSequence: 43, eventType: SessionEventType.Settled,
+            eventSurface: ImpactSurface.FlightDeck));
+
+        IncidentReplayClip clip = Assert.IsType<IncidentReplayClip>(recorder.FrozenClip);
+        Assert.Equal(41, clip.Samples[clip.IncidentSampleIndex].EventSequence);
+        Assert.Collection(clip.Events,
+            replayEvent => Assert.Equal(impact, replayEvent),
+            replayEvent => Assert.Equal(destroyed, replayEvent),
+            replayEvent => Assert.Equal(43, replayEvent.Event.Sequence));
+        Assert.Equal(clip.Events[0].Event.Tick, clip.Events[1].Event.Tick);
+        Assert.Equal(clip.Events[0].Position, clip.Events[1].Position);
+        Assert.Equal(clip.Events[0].Velocity, clip.Events[1].Velocity);
     }
 }

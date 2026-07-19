@@ -3,6 +3,8 @@ const DEFAULT_OCEAN_URL = "../../content/packs/korea-1950s/environment/ocean.mat
 const DEFAULT_ATMOSPHERE_URL = "../../content/packs/korea-1950s/environment/atmosphere.material.json";
 
 const OCEAN_VERTEX = `
+#include <common>
+#include <logdepthbuf_pars_vertex>
 uniform float uTime;
 uniform vec4 uWaveA;
 uniform vec4 uWaveB;
@@ -22,11 +24,12 @@ void applyWave(vec4 wave, float speed, vec2 point, inout float height, inout vec
 
 void main() {
   vec3 transformed = position;
+  vec2 worldPoint = (modelMatrix * vec4(position, 1.0)).xz;
   float height = 0.0;
   vec2 slope = vec2(0.0);
-  applyWave(uWaveA, uWaveSpeed.x, transformed.xz, height, slope);
-  applyWave(uWaveB, uWaveSpeed.y, transformed.xz, height, slope);
-  applyWave(uWaveC, uWaveSpeed.z, transformed.xz, height, slope);
+  applyWave(uWaveA, uWaveSpeed.x, worldPoint, height, slope);
+  applyWave(uWaveB, uWaveSpeed.y, worldPoint, height, slope);
+  applyWave(uWaveC, uWaveSpeed.z, worldPoint, height, slope);
   transformed.y += height;
   vec3 localNormal = normalize(vec3(-slope.x, 1.0, -slope.y));
   vec4 world = modelMatrix * vec4(transformed, 1.0);
@@ -34,10 +37,13 @@ void main() {
   vWorldPosition = world.xyz;
   vWorldNormal = normalize(mat3(modelMatrix) * localNormal);
   gl_Position = projectionMatrix * viewMatrix * world;
+  #include <logdepthbuf_vertex>
 }
 `;
 
 const OCEAN_FRAGMENT = `
+#include <common>
+#include <logdepthbuf_pars_fragment>
 uniform float uTime;
 uniform sampler2D uNormalMap;
 uniform sampler2D uFoamMap;
@@ -60,6 +66,7 @@ varying vec3 vWorldPosition;
 varying vec3 vWorldNormal;
 
 void main() {
+  #include <logdepthbuf_fragment>
   vec2 detailUv = vWorldPosition.xz * 0.0015 + vec2(uTime * 0.008, -uTime * 0.005);
   vec3 detailA = texture2D(uNormalMap, detailUv).xyz * 2.0 - 1.0;
   vec3 detailB = texture2D(uNormalMap, detailUv * 0.43 + vec2(-uTime * 0.003, uTime * 0.006)).xyz * 2.0 - 1.0;
@@ -211,12 +218,18 @@ async function fetchJson(url, fetchImpl) {
   return response.json();
 }
 
-async function loadTexture(THREE, loader, descriptor, documentUrl) {
-  const texture = await loader.loadAsync(new URL(descriptor.uri, documentUrl).href);
+async function loadTexture(THREE, loader, descriptor, documentUrl, anisotropy = 1) {
+  const assetUrl = new URL(descriptor.uri, documentUrl);
+  const document = new URL(documentUrl);
+  const packVersion = document.searchParams.get("packVersion");
+  if (packVersion && assetUrl.origin === document.origin && !assetUrl.searchParams.has("packVersion")) {
+    assetUrl.searchParams.set("packVersion", packVersion);
+  }
+  const texture = await loader.loadAsync(assetUrl.href);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.colorSpace = THREE.NoColorSpace;
-  texture.anisotropy = 4;
+  texture.anisotropy = Math.max(1, Math.round(Number(anisotropy) || 1));
   texture.needsUpdate = true;
   return texture;
 }
@@ -235,11 +248,20 @@ export async function loadKoreaEnvironment(THREE, options = {}) {
     fetchJson(atmosphereUrl, fetchImpl),
   ]);
   const loader = options.textureLoader ?? new THREE.TextureLoader(options.manager);
-  const [normalMap, foamMap, cloudShape] = await Promise.all([
-    loadTexture(THREE, loader, oceanConfig.textures.normal, oceanUrl),
-    loadTexture(THREE, loader, oceanConfig.textures.foam, oceanUrl),
-    loadTexture(THREE, loader, atmosphereConfig.textures.cloudShape, atmosphereUrl),
+  const textureResults = await Promise.allSettled([
+    loadTexture(THREE, loader, oceanConfig.textures.normal, oceanUrl, options.anisotropy),
+    loadTexture(THREE, loader, oceanConfig.textures.foam, oceanUrl, options.anisotropy),
+    loadTexture(THREE, loader, atmosphereConfig.textures.cloudShape, atmosphereUrl,
+      options.anisotropy),
   ]);
+  const failedTexture = textureResults.find((result) => result.status === "rejected");
+  if (failedTexture) {
+    for (const result of textureResults) {
+      if (result.status === "fulfilled") result.value.dispose?.();
+    }
+    throw failedTexture.reason;
+  }
+  const [normalMap, foamMap, cloudShape] = textureResults.map((result) => result.value);
   return createKoreaEnvironment(THREE, { ...options, oceanConfig, atmosphereConfig, normalMap, foamMap, cloudShape });
 }
 

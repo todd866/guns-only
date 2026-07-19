@@ -28,6 +28,10 @@ public static class PresenceProtocol {
     static readonly HashSet<string> ValidImpactSurfaces = [
         "NONE", "WATER", "FLIGHT_DECK", "CARRIER_STRUCTURE", "SIMULATION_BOUNDARY"
     ];
+    static readonly HashSet<string> PlayerPresentationIds = [
+        "presentation.vehicle.player.v1",
+        "presentation.vehicle.glider-strike.v1"
+    ];
 
     public static bool IsAllowedOrigin(string? requestOrigin, string? configuredOrigins) {
         string? requested = CanonicalOrigin(requestOrigin);
@@ -48,7 +52,11 @@ public static class PresenceProtocol {
     }
 
     public static bool TryValidatePose(PoseMessage message, long previousSequence,
-        out ValidatedPose pose) {
+        out ValidatedPose pose) =>
+        TryValidatePose(message, previousSequence, previousPose: null, out pose);
+
+    public static bool TryValidatePose(PoseMessage message, long previousSequence,
+        ValidatedPose? previousPose, out ValidatedPose pose) {
         pose = default!;
         if (!string.Equals(message.Type, "pose", StringComparison.Ordinal)
             || message.Protocol != Version
@@ -63,16 +71,15 @@ public static class PresenceProtocol {
             return false;
 
         string missionId = CleanToken(message.MissionId, 96, "mission.unknown");
-        string presentationId = CleanToken(message.PresentationId, 128,
-            "presentation.vehicle.player.v1");
         string phase = NormalisePhase(message.Phase);
-        bool alive = message.Alive;
         string terminalCandidate = CleanToken(message.TerminalState, 32, "").ToUpperInvariant();
         bool hasTerminalState = ValidTerminalStates.Contains(terminalCandidate);
+        bool alive = hasTerminalState ? terminalCandidate == "FLYING" : message.Alive;
         bool bodyPresent = hasTerminalState
             ? terminalCandidate != "SETTLED"
             : message.BodyPresent ?? alive;
         string? entityId = CleanOptionalToken(message.EntityId, 128);
+        string presentationId = PresentationForConnection(message.PresentationId, previousPose);
         string terminalState = NormaliseTerminalState(
             message.TerminalState, alive, bodyPresent);
         string impactSurface = NormaliseImpactSurface(message.ImpactSurface, terminalState);
@@ -197,6 +204,22 @@ public static class PresenceProtocol {
     static string? CleanOptionalToken(string? value, int maximumLength) {
         string cleaned = CleanToken(value, maximumLength, "");
         return cleaned.Length == 0 ? null : cleaned;
+    }
+
+    static string NormalisePlayerPresentationId(string? value) {
+        string candidate = CleanToken(value, 128, "presentation.vehicle.player.v1");
+        return PlayerPresentationIds.Contains(candidate)
+            ? candidate
+            : "presentation.vehicle.player.v1";
+    }
+
+    static string PresentationForConnection(string? requestedPresentationId,
+        ValidatedPose? previousPose) {
+        string requested = NormalisePlayerPresentationId(requestedPresentationId);
+        if (previousPose is null) return requested;
+        // EntityId is untrusted too. Keep one visual contract for this validated socket lifetime;
+        // a future server-owned sortie transition can safely provide a finer-grained edge.
+        return NormalisePlayerPresentationId(previousPose.PresentationId);
     }
 
     static string NormalisePhase(string? value) {

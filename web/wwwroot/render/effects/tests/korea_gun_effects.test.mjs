@@ -46,3 +46,20 @@ test("quality tier scales particle counts", () => {
   mobile.dispose();
   desktop.dispose();
 });
+
+test("replay scope reset clears particles and deterministic seeds reproduce debris", () => {
+  const first = new KoreaGunEffects(THREE, profile, { qualityTier: "balanced" });
+  const replay = new KoreaGunEffects(THREE, profile, { qualityTier: "balanced" });
+  const payload = { position: [4, 5, 6], velocity: [20, 0, -3], seed: 19 };
+  first.emit("event.vehicle.destroyed.v1", payload);
+  replay.emit("event.vehicle.destroyed.v1", payload);
+  const velocities = (effects) => effects.items
+    .filter((item) => item.gravity)
+    .map((item) => item.velocity.toArray());
+  assert.deepEqual(velocities(first), velocities(replay));
+  first.clear();
+  assert.equal(first.items.length, 0);
+  assert.equal(first.group.children.length, 0);
+  first.dispose();
+  replay.dispose();
+});
