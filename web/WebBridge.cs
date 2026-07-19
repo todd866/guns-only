@@ -27,7 +27,8 @@ public static partial class WebBridge {
     static PromptCue _cue;
     static DoctrineAdvice _advice = new(1.0, 0.0, "setup");
     static double _acc, _simTimeMs, _lastRange, _closureKts, _closureSmooth;
-    static int _shotsTotal, _shotsInWindow;
+    static double _splashCueUntilMs = double.NegativeInfinity;
+    static int _shotsTotal, _shotsInWindow, _killCount;
     static bool _triggerDown;
     static int _beatIndex = 1;
     static bool _knockedOff;
@@ -46,15 +47,23 @@ public static partial class WebBridge {
     static Carrier.DeckConfiguration _deckConfiguration = Carrier.DeckConfiguration.Axial;
     static bool _waveOffArmed;
     static double _waveOffUntilMs;
-    /// The sortie is over: splash, recovery result, sea impact, or knock-it-off. The sim stops
-    /// stepping. Before this, a 12G pull from inverted flew THROUGH the sea to -10,679 ft and
-    /// kept integrating, because nothing ever checked.
+    /// The sortie is over only for a recovery result, sea impact, or knock-it-off. A splash starts
+    /// another engagement, so it must never enter this terminal path.
     static bool Frozen => _knockedOff || (_player?.BelowGround ?? false)
         || _recovery is Carrier.Recovery.HardLanding
             or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater
         || (_recovery == Carrier.Recovery.Trap
-            && _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped)
-        || _gunKill?.Outcome == FightOutcome.Splash;
+            && _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped);
+
+    static void ContinueFightAfterSplash() {
+        _killCount++;
+        _splashCueUntilMs = _simTimeMs + 2200.0;
+        _bandit = _beat.CreateNextBandit(_player.State, _killCount);
+        _gunKill = new GunKill();
+        _lastRange = Geometry.Range(_player.State, _bandit.State);
+        _closureKts = 0.0;
+        _closureSmooth = 0.0;
+    }
 
     static void FinishPreviousRecoveryAttempt() {
         if (!_recoveryAttemptActive) return;
@@ -129,7 +138,8 @@ public static partial class WebBridge {
         _advice = new DoctrineAdvice(1.0, 0.0, "setup");
         _cue = PromptCue.None;
         _triggerDown = false;
-        _acc = 0; _shotsTotal = 0; _shotsInWindow = 0;
+        _acc = 0; _shotsTotal = 0; _shotsInWindow = 0; _killCount = 0;
+        _splashCueUntilMs = double.NegativeInfinity;
         _lastRange = Geometry.Range(_player.State, _bandit.State);
         _closureKts = 0; _closureSmooth = 0;
         // _simTimeMs deliberately NOT reset: one monotonic clock for grammar timestamps.
@@ -215,10 +225,11 @@ public static partial class WebBridge {
             // GunKill samples both aircraft at the beginning of the fixed tick. Its continuous
             // round/target intersection then covers this exact dt before either aircraft advances.
             _gunKill.Step(_triggerDown, _player.State, _bandit.State, Dt);
-            if (_gunKill.Outcome == FightOutcome.Splash) break;     // freeze at the real impact
+            if (_gunKill.Outcome == FightOutcome.Splash)
+                ContinueFightAfterSplash();
             _player.Step(_detents.Command, Dt);
             _fuel.Step(Dt, _detents.Throttle, _player.ThrustFraction);
-            if (_gunKill.BanditAlive) _bandit.Step(_player.State, Dt);
+            _bandit.Step(_player.State, Dt);
             if (_carrier is not null) {
                 _carrier.Step(Dt);
                 Carrier.TouchdownResult touchdown = _carrier.EvaluateRecovery(
@@ -320,6 +331,10 @@ public static partial class WebBridge {
                 ? "BOLTER — IN-FLIGHT ENGAGEMENT"
                 : "BOLTER — GO AROUND";
         }
+        RtbGuidance rtb = _carrier is null
+            ? default
+            : _fuel.GuidanceTo(simulationPosition, displayHeadingRad, _carrier.Position);
+        bool splashCue = _simTimeMs < _splashCueUntilMs;
         // hand-built JSON: no serializer, no reflection, trim-safe, allocation-cheap.
         return "{"
             + $"\"t\":{_simTimeMs / 1000.0:F4},"
@@ -356,6 +371,7 @@ public static partial class WebBridge {
             + TracerJson()
             + $"\"kill_progress\":{_gunKill.KillProgress:F3},\"bandit_health\":{_gunKill.BanditHealth:F3},"
             + $"\"fight\":\"{_gunKill.Outcome}\",\"bandit_alive\":{(_gunKill.BanditAlive ? "true" : "false")},"
+            + $"\"kill_count\":{_killCount},\"splash_cue\":{(splashCue ? "true" : "false")},"
             + $"\"below_ground\":{(_player.BelowGround ? "true" : "false")},"
             + $"\"knocked_off\":{(_knockedOff ? "true" : "false")},"
             + $"\"frozen\":{(Frozen ? "true" : "false")},"
@@ -366,6 +382,9 @@ public static partial class WebBridge {
             + $"\"fuel_trend_lb_min\":{_fuel.FuelTrendLbPerMinute:F2},"
             + $"\"fuel_capacity_lb\":{FuelModel.DefaultFuelLb:F1},\"fuel_bingo_lb\":{FuelModel.BingoFuelLb:F1},"
             + $"\"fuel_bingo\":{(_fuel.IsBingo ? "true" : "false")},"
+            + $"\"rtb\":{(_fuel.RtbAdvisory ? "true" : "false")},\"rtb_steer\":{(rtb.Active ? "true" : "false")},"
+            + $"\"rtb_bearing_deg\":{rtb.BearingRad * 57.29577951308232:F2},\"rtb_turn_deg\":{rtb.TurnRad * 57.29577951308232:F2},"
+            + $"\"rtb_range_nm\":{rtb.RangeM / 1852.0:F2},"
             + $"\"approach\":{(_detents.ApproachMode ? "true" : "false")},"
             + $"\"mode\":\"{mode}\",\"wave_off\":{(waveOff ? "true" : "false")},"
             + lsoJson

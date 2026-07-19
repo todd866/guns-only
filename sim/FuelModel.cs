@@ -13,11 +13,13 @@ public sealed class FuelModel {
     public double BurnLbPerMinute { get; private set; }
     public double FuelTrendLbPerMinute => FuelLb > 0.0 ? -BurnLbPerMinute : 0.0;
     public bool IsBingo => FuelLb <= BingoFuelLb;
+    public bool RtbAdvisory { get; private set; }
 
     public FuelModel(double initialFuelLb = DefaultFuelLb) {
         if (!double.IsFinite(initialFuelLb) || initialFuelLb < 0.0)
             throw new ArgumentOutOfRangeException(nameof(initialFuelLb));
         FuelLb = initialFuelLb;
+        RtbAdvisory = IsBingo;
     }
 
     /// <summary>Advance fuel using seconds, commanded lever position, and spooled thrust.</summary>
@@ -27,6 +29,26 @@ public sealed class FuelModel {
 
         BurnLbPerMinute = BurnRateLbPerMinute(throttle, thrustFraction);
         FuelLb = Math.Max(0.0, FuelLb - BurnLbPerMinute * dtSeconds / 60.0);
+        if (IsBingo) RtbAdvisory = true;
+    }
+
+    /// <summary>
+    /// Advisory navigation back to a home point after bingo. It never changes aircraft controls;
+    /// shells can render the absolute bearing and signed shortest turn for the pilot to follow.
+    /// </summary>
+    public RtbGuidance GuidanceTo(in Vec3D position, double headingRad, in Vec3D home) {
+        if (!double.IsFinite(headingRad)
+            || !double.IsFinite(position.X) || !double.IsFinite(position.Y) || !double.IsFinite(position.Z)
+            || !double.IsFinite(home.X) || !double.IsFinite(home.Y) || !double.IsFinite(home.Z))
+            throw new ArgumentOutOfRangeException(nameof(position));
+
+        double eastM = home.X - position.X;
+        double northM = home.Z - position.Z;
+        double rangeM = Math.Sqrt(eastM * eastM + northM * northM);
+        double bearingRad = rangeM < 1e-9 ? headingRad : Math.Atan2(eastM, northM);
+        double turnRad = Math.Atan2(Math.Sin(bearingRad - headingRad),
+            Math.Cos(bearingRad - headingRad));
+        return new RtbGuidance(RtbAdvisory, bearingRad, turnRad, rangeM);
     }
 
     /// <summary>
@@ -51,3 +73,9 @@ public sealed class FuelModel {
         return dryBurn + 90.0 + 60.0 * afterburnerCommand;
     }
 }
+
+public readonly record struct RtbGuidance(
+    bool Active,
+    double BearingRad,
+    double TurnRad,
+    double RangeM);

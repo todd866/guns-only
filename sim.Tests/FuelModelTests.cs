@@ -54,4 +54,27 @@ public class FuelModelTests {
 
         Assert.Equal(0.0, fuel.FuelLb);
     }
+
+    [Fact]
+    public void CrossingBingoLatchesRtbAndProvidesBoatSteering() {
+        var fuel = new FuelModel(initialFuelLb: FuelModel.BingoFuelLb + 1.0);
+        var position = new Vec3D(0.0, 1200.0, 0.0);
+        var boat = new Vec3D(1000.0, 20.0, 1000.0);
+
+        Assert.False(fuel.RtbAdvisory);
+        fuel.Step(1.0, throttle: 1.0, thrustFraction: 1.0);
+        var guidance = fuel.GuidanceTo(position, headingRad: 0.0, boat);
+
+        Assert.True(fuel.IsBingo);
+        Assert.True(fuel.RtbAdvisory);
+        Assert.True(guidance.Active);
+        Assert.Equal(Math.PI / 4.0, guidance.BearingRad, 12);
+        Assert.Equal(Math.PI / 4.0, guidance.TurnRad, 12);
+        Assert.Equal(Math.Sqrt(2_000_000.0), guidance.RangeM, 9);
+
+        // The RTB transition is a latch and the guidance is a pure deterministic calculation.
+        fuel.Step(10.0, throttle: 0.0, thrustFraction: 0.0);
+        Assert.True(fuel.RtbAdvisory);
+        Assert.Equal(guidance, fuel.GuidanceTo(position, headingRad: 0.0, boat));
+    }
 }

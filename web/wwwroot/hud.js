@@ -896,6 +896,94 @@ class CombatHud {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(String(Math.round(wrap360(heading))).padStart(3, "0"), this.width / 2, y - 1);
+
+    // At bingo the boat caret stays on the visible edge of the tape until the pilot turns it in.
+    // This is guidance only: no flight-control command is fed back into the kernel.
+    const boatTurn = Number(state.rtb_turn_deg);
+    if (state.rtb_steer === true && Number.isFinite(boatTurn)) {
+      const shownTurn = clamp(boatTurn, -48, 48);
+      const boatX = this.width / 2 + shownTurn * pixelsPerDegree;
+      ctx.fillStyle = AMBER;
+      ctx.strokeStyle = AMBER;
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(boatX - 6, y - 21);
+      ctx.lineTo(boatX, y - 15);
+      ctx.lineTo(boatX + 6, y - 21);
+      ctx.stroke();
+      ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillText(Math.abs(boatTurn) > 48 ? (boatTurn < 0 ? "◀ B" : "B ▶") : "B", boatX, y - 28);
+    }
+  }
+
+  drawSortieStatus(frame) {
+    const { state } = frame;
+    const ctx = this.ctx;
+    const kills = Math.max(0, Math.floor(Number(state.kill_count) || 0));
+    const x = this.safeInsets.left + 18;
+    const y = this.safeInsets.top + 17;
+
+    ctx.save();
+    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const tally = `KILLS ${String(kills).padStart(2, "0")}`;
+    const tallyWidth = ctx.measureText(tally).width + 18;
+    this.glassPanel(x, y, tallyWidth, 23, kills > 0 ? GREEN : GREEN_DIM);
+    ctx.fillStyle = kills > 0 ? GREEN : GREEN_DIM;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(tally, x + tallyWidth / 2, y + 12);
+
+    if (state.splash_cue === true) {
+      const width = Math.min(310, this.width - 34);
+      const height = 63;
+      const cueX = (this.width - width) / 2;
+      const cueY = state.rtb === true
+        ? Math.max(this.safeInsets.top + 258, this.height * 0.31)
+        : Math.max(this.safeInsets.top + 225, this.height * 0.27);
+      this.glassPanel(cueX, cueY, width, height, GREEN);
+      ctx.fillStyle = GREEN;
+      ctx.shadowColor = "rgba(77, 255, 136, 0.62)";
+      ctx.shadowBlur = 12;
+      ctx.font = "800 24px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillText("SPLASH!", this.width / 2, cueY + 23);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = GREEN_DIM;
+      ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillText(`NEW BANDIT · KILLS ${kills}`, this.width / 2, cueY + 47);
+    }
+    ctx.restore();
+  }
+
+  drawRtbCue(state) {
+    if (state.rtb !== true) return;
+
+    const ctx = this.ctx;
+    const bearing = Number(state.rtb_bearing_deg);
+    const turn = Number(state.rtb_turn_deg);
+    const rangeNm = Number(state.rtb_range_nm);
+    const hasSteer = state.rtb_steer === true
+      && Number.isFinite(bearing) && Number.isFinite(turn) && Number.isFinite(rangeNm);
+    const direction = Math.abs(turn) < 3 ? "STEADY"
+      : `TURN ${turn < 0 ? "L" : "R"} ${Math.round(Math.abs(turn))}°`;
+    const detail = hasSteer
+      ? `BOAT ${String(Math.round(wrap360(bearing))).padStart(3, "0")}° · ${rangeNm.toFixed(1)} NM · ${direction}`
+      : "BREAK OFF · RECOVER";
+    const width = Math.min(this.touchMode ? 264 : 330, this.width - 34);
+    const height = 44;
+    const x = (this.width - width) / 2;
+    const y = Math.max(this.safeInsets.top + 198, 203);
+
+    ctx.save();
+    this.glassPanel(x, y, width, height, AMBER);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = AMBER;
+    ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText("BINGO - RTB", this.width / 2, y + 14);
+    ctx.fillStyle = GREEN_DIM;
+    ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText(detail, this.width / 2, y + 32);
+    ctx.restore();
   }
 
   drawModeCue(frame) {
@@ -1416,7 +1504,7 @@ class CombatHud {
       ctx.fillStyle = accent;
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
-      ctx.fillText(critical ? "LOW" : "BINGO", x + width / 2, y + (this.touchMode ? 44 : 49));
+      ctx.fillText(critical ? "LOW - RTB" : "BINGO - RTB", x + width / 2, y + (this.touchMode ? 44 : 49));
     }
     ctx.restore();
   }
@@ -1528,7 +1616,7 @@ class CombatHud {
     ctx.fillText(`G ${(Number(state.g_actual) || 0).toFixed(1)} · α ${(Number(state.aoa_deg) || 0).toFixed(1)}°`, dataLeft, y + 63);
     ctx.fillStyle = ownFuelLow ? (ownFuel <= bingoThreshold * 0.5 ? RED : AMBER) : GREEN;
     ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(`${Math.round(ownFuel)}LB ${Math.round(fuelBurn)}LB/MIN`, dataLeft, y + 84);
+    ctx.fillText(ownFuelLow ? "BINGO · RTB" : `${Math.round(ownFuel)}LB ${Math.round(fuelBurn)}LB/MIN`, dataLeft, y + 84);
 
     ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillStyle = AMBER;
@@ -1626,6 +1714,8 @@ class CombatHud {
     this.drawBandit(frame);
     this.drawSaBar(frame);
     this.drawHeadingTape(frame.state);
+    this.drawSortieStatus(frame);
+    this.drawRtbCue(frame.state);
 
     // Speed trend: smoothed dV/dt, projected ~6 s ahead (the classic acceleration caret).
     const spd = Number(frame.state.speed_kts) || 0;

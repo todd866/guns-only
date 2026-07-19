@@ -139,6 +139,37 @@ public static class FlightModel {
     internal static double FightRollRate(in AircraftParams p) =>
         p.FightRollRateMaxRad > 0.0 ? p.FightRollRateMaxRad : p.RollRateMaxRad;
 
+    internal static double AlphaAeroMax(in AircraftParams p) => p.CLMax / p.CLAlpha;
+    internal static double AlphaAeroMin(in AircraftParams p) => p.CLMin / p.CLAlpha;
+
+    /// Keep the rigid attitude inside the lift-curve envelope. CL saturation by itself only caps
+    /// force; it does not stop angular inertia from carrying the nose through the relative wind and
+    /// producing a 90-110 degree "AoA" departure. Rotate only about body right, preserving roll and
+    /// sideslip, and trim an outward rate spike to the manual pitch-rate envelope. The normal moment
+    /// law reaches this boundary continuously; this projection is the hard aerodynamic backstop.
+    internal static (QuaternionD attitude, BodyRates rates) EnforceAlphaEnvelope(
+        QuaternionD attitude, BodyRates rates, in Vec3D vhat, in AircraftParams p) {
+        attitude = attitude.Normalized();
+        var bodyUp = attitude.Rotate(new Vec3D(0, 1, 0));
+        var bodyForward = attitude.Rotate(new Vec3D(0, 0, 1));
+        double alpha = System.Math.Atan2(-vhat.Dot(bodyUp), vhat.Dot(bodyForward));
+        double limited = System.Math.Clamp(alpha, AlphaAeroMin(p), AlphaAeroMax(p));
+        if (limited == alpha) return (attitude, rates);
+
+        // In this body basis, a positive quaternion rotation about +right pitches the nose down.
+        // Therefore the correction angle is alpha-limited. Applied locally, it leaves body right
+        // (and hence beta) unchanged while setting atan2 incidence exactly to the requested bound.
+        double halfCorrection = 0.5 * (alpha - limited);
+        var correction = new QuaternionD(System.Math.Cos(halfCorrection),
+            System.Math.Sin(halfCorrection), 0.0, 0.0);
+        attitude = (attitude * correction).Normalized();
+
+        double qLimit = p.ManualPitchRateMaxRad;
+        if (alpha > limited && rates.Q > qLimit) rates = rates with { Q = qLimit };
+        if (alpha < limited && rates.Q < -qLimit) rates = rates with { Q = -qLimit };
+        return (attitude, rates);
+    }
+
     internal static StateDeriv Derivatives(in RawState r, in PilotCommand c, in AircraftParams p, in Vec3D liftRef, in Vec3D wind) {
         // Aerodynamics acts on the AIR, and the air may be moving: true airspeed = ground
         // velocity − wind. Everything aero (dynamic pressure, the lift/drag/thrust frame) is
@@ -205,7 +236,22 @@ public static class FlightModel {
         double scale = vn < 1e-10 ? 2.0 : 2.0 * System.Math.Atan2(vn, error.W) / vn;
         // Quaternion local axes are right/up/forward. Positive aircraft q and p rotate about
         // -right and -forward respectively; positive r rotates about up.
-        double errP = -error.Z * scale, errQ = -error.X * scale, errR = error.Y * scale;
+        double errQ = -error.X * scale, errR = error.Y * scale;
+        // Roll control is explicitly a BODY-forward-axis error. Extracting roll from the full
+        // horizon/flight-frame quaternion made its sign depend on the bank frame near a vertical
+        // flight path. Project the desired up axis into the plane normal to the aircraft nose and
+        // measure its signed angle from body up toward body right. This has no Euler/gimbal pole:
+        // a positive command remains positive p while pointing straight up or straight down.
+        var bodyRight = attitude.Rotate(new Vec3D(1, 0, 0));
+        var bodyUpForRoll = attitude.Rotate(new Vec3D(0, 1, 0));
+        var bodyForwardForRoll = attitude.Rotate(new Vec3D(0, 0, 1));
+        var targetUpForRoll = target.Rotate(new Vec3D(0, 1, 0));
+        var targetUpPlane = targetUpForRoll
+            - bodyForwardForRoll * targetUpForRoll.Dot(bodyForwardForRoll);
+        double errP = targetUpPlane.Length < 1e-9
+            ? -error.Z * scale
+            : System.Math.Atan2(targetUpPlane.Dot(bodyRight),
+                targetUpPlane.Dot(bodyUpForRoll));
         var rates = r.BodyRates;
         bool directPitch = double.IsFinite(c.CommandedPitchRad);
         double qCommand = 0.0;
@@ -217,7 +263,7 @@ public static class FlightModel {
             double nz = TargetNz(r, c, p, dynamicPressure);
             double cl = nz * r.Mass * G0 / System.Math.Max(dynamicPressure * p.WingAreaM2, 1e-6);
             alphaTarget = System.Math.Clamp(cl / p.CLAlpha,
-                p.CLMin / p.CLAlpha, p.CLMax / p.CLAlpha);
+                AlphaAeroMin(p), AlphaAeroMax(p));
             var bodyUp = attitude.Rotate(new Vec3D(0, 1, 0));
             var bodyForward = attitude.Rotate(new Vec3D(0, 0, 1));
             alpha = System.Math.Atan2(-vhat.Dot(bodyUp), vhat.Dot(bodyForward));
@@ -254,7 +300,6 @@ public static class FlightModel {
         double pitchMoment = System.Math.Clamp(pitchStiffness * pitchError
             - p.PitchDampingNms * (rates.Q - qCommand),
             -pitchMomentMax, pitchMomentMax);
-        var bodyRight = attitude.Rotate(new Vec3D(1, 0, 0));
         double beta = System.Math.Asin(System.Math.Clamp(vhat.Dot(bodyRight), -1.0, 1.0));
         // Positive beta in this body basis means the velocity vector is to the right of the nose,
         // so a positive yaw moment aligns the nose with it and drives beta toward zero. Fade the
@@ -292,7 +337,7 @@ public static class FlightModel {
         var lift = (upRef * System.Math.Cos(c.BankTarget) + rightRef * System.Math.Sin(c.BankTarget)).Normalized();
         double nz = TargetNz(r, c, p, dynamicPressure);
         double cl = nz * r.Mass * G0 / System.Math.Max(dynamicPressure * p.WingAreaM2, 1e-6);
-        double alpha = System.Math.Clamp(cl / p.CLAlpha, p.CLMin / p.CLAlpha, p.CLMax / p.CLAlpha);
+        double alpha = System.Math.Clamp(cl / p.CLAlpha, AlphaAeroMin(p), AlphaAeroMax(p));
         var forward = (vhat * System.Math.Cos(alpha) + lift * System.Math.Sin(alpha)).Normalized();
         var up = (lift * System.Math.Cos(alpha) - vhat * System.Math.Sin(alpha)).Normalized();
         return QuaternionD.FromFrame(up.Cross(forward).Normalized(), up, forward);

@@ -266,6 +266,10 @@ public sealed class DetentLayer {
         s.BodyAttitude.IsFinite && s.BodyAttitude.LengthSquared >= 1e-12;
 
     static double BodyBank(in AircraftState s) {
+        // Above the horizon-bank validity threshold AircraftSim publishes bank in its
+        // parallel-transported body/lift frame. Do not reconstruct an Euler bank from world-up:
+        // that frame collapses at +/-90 degrees and was able to reverse the pilot's roll command.
+        if (System.Math.Abs(s.ForwardDir().Y) >= AircraftSim.HorizonValidY) return s.Bank;
         var forward = s.BodyAttitude.Rotate(new Vec3D(0, 0, 1));
         var bodyUp = s.BodyAttitude.Rotate(new Vec3D(0, 1, 0));
         var up0 = new Vec3D(0, 1, 0) - forward * forward.Y;

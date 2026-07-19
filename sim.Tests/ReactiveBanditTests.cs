@@ -19,6 +19,43 @@ public class ReactiveBanditTests {
     }
 
     [Fact]
+    public void ReplacementBogeyStartsInAnOffsetReciprocalMerge() {
+        var player = State(800.0, 1250.0, -400.0, 170.0, chi: 0.72);
+        var bandit = Assert.IsType<ReactiveBandit>(
+            Beats.CarrierApproach().CreateNextBandit(player, engagementNumber: 1));
+        var line = (bandit.State.Position - player.Position).Normalized();
+        double closureMps = (player.VelocityVector() - bandit.State.VelocityVector()).Dot(line);
+
+        Assert.InRange(Geometry.Range(player, bandit.State), 3000.0, 3800.0);
+        Assert.InRange(Math.Abs(bandit.State.Position.Y - player.Position.Y), 80.0, 180.0);
+        Assert.Equal(180.0, bandit.State.Speed, 10);
+        Assert.True(closureMps > 280.0, $"replacement must drive a real merge; closure={closureMps:F1} m/s");
+        Assert.True(Geometry.AngleOff(bandit.State, player) < 0.30,
+            "the new fighter must be pointed into the merge, not presented as a passive tail shot");
+        Assert.False(CameraSolver.GunWindow(player, bandit.State),
+            "the new fighter must spawn outside the immediate gun envelope");
+    }
+
+    [Fact]
+    public void ReplacementSequenceIsDeterministic() {
+        var player = State(-250.0, 2100.0, 900.0, 165.0, chi: -1.08);
+
+        for (int engagement = 1; engagement <= 6; engagement++) {
+            var first = ReactiveBandit.SpawnForMerge(player, FlightModel.Sabre, engagement);
+            var second = ReactiveBandit.SpawnForMerge(player, FlightModel.Sabre, engagement);
+            Assert.Equal(first.State, second.State);
+
+            for (int tick = 0; tick < AircraftSim.TickHz; tick++) {
+                first.Step(player, Dt);
+                second.Step(player, Dt);
+                Assert.Equal(first.State, second.State);
+                Assert.Equal(first.Tactic, second.Tactic);
+                Assert.Equal(first.LastCommand, second.LastCommand);
+            }
+        }
+    }
+
+    [Fact]
     public void NeutralContactIsAcquiredAndTurnedToward() {
         var player = State(1500.0, 1000.0, 1200.0, 160.0);
         var bandit = new ReactiveBandit(State(0.0, 1000.0, 0.0, 165.0), FlightModel.Sabre);

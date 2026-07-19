@@ -65,7 +65,7 @@ public sealed class AircraftSim {
             return System.Math.Asin(System.Math.Clamp(vhat.Dot(BodyRight), -1.0, 1.0));
         }
     }
-    const double HorizonValidY = 0.94; // |vhat.Y| below this (~|gamma| < 70 deg): horizon bank well-defined
+    internal const double HorizonValidY = 0.94; // |vhat.Y| below this (~|gamma| < 70 deg): horizon bank well-defined
 
     public AircraftSim(AircraftState initial, AircraftParams p) {
         State = initial; _p = p;
@@ -84,6 +84,9 @@ public sealed class AircraftSim {
         } else {
             State = initial with { BodyAttitude = initial.BodyAttitude.Normalized() };
         }
+        var constrained = FlightModel.EnforceAlphaEnvelope(State.BodyAttitude,
+            State.BodyRates, initial.ForwardDir(), p);
+        State = State with { BodyAttitude = constrained.attitude, BodyRates = constrained.rates };
     }
 
     void InitFrame(in Vec3D vhat) {
@@ -151,6 +154,15 @@ public sealed class AircraftSim {
         }
         var vhat = vel.Normalized();
 
+        // CL saturation limits force but cannot, by itself, stop pitch inertia from rotating the
+        // body through the relative wind. Keep the actual rigid attitude on the same alpha bounds
+        // used by the G/CL command law before publishing state or carrying it into the next tick.
+        var airForEnvelope = vel - gust;
+        var alphaVhat = airForEnvelope.Length < 1e-9 ? vhat : airForEnvelope.Normalized();
+        var constrained = FlightModel.EnforceAlphaEnvelope(attitude, bodyRates, alphaVhat, _p);
+        attitude = constrained.attitude;
+        bodyRates = constrained.rates;
+
         // Parallel-transport the lift reference perpendicular to the new velocity.
         var lr = _liftRef - vhat * _liftRef.Dot(vhat);
         _liftRef = lr.Length < 1e-6 ? FallbackRef(vhat) : lr.Normalized();
@@ -166,6 +178,18 @@ public sealed class AircraftSim {
             _bank = System.Math.Atan2(liftDir.Dot(rightH), liftDir.Dot(upPerpH));
             _liftRef = upPerpH;
             _reportedBank = _bank;
+        } else {
+            // Horizon bank is undefined at the pole. Express the REAL body lift plane in the
+            // parallel-transported frame instead; this is continuous through straight up/down and
+            // gives DetentLayer an actual body-roll phase for its moving rate-command lead.
+            var bodyUp = attitude.Rotate(new Vec3D(0, 1, 0));
+            var bodyLiftPlane = bodyUp - vhat * bodyUp.Dot(vhat);
+            if (bodyLiftPlane.Length >= 1e-9) {
+                var bodyLift = bodyLiftPlane.Normalized();
+                var rightRef = _liftRef.Cross(vhat).Normalized();
+                _bank = System.Math.Atan2(bodyLift.Dot(rightRef), bodyLift.Dot(_liftRef));
+            }
+            _reportedBank = _bank; // transported body bank; HUD may treat it as invalid near vertical
         }
 
         double gamma = System.Math.Asin(System.Math.Clamp(vhat.Y, -1, 1));

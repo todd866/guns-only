@@ -22,11 +22,13 @@ public class CarrierFlightHarnessTests {
     /// The rig IS the web bridge's inner loop, headless.
     sealed class CarrierRig {
         public readonly AircraftSim Player;
-        public readonly IBandit Bandit;
+        public IBandit Bandit { get; private set; }
         public readonly Carrier Ship;
         public readonly BurbleField Burble;
-        public readonly GunKill Fight = new();
+        public GunKill Fight { get; private set; } = new();
+        public GunKill? LastKill { get; private set; }
         public readonly ArrestmentModel Arrestment = new();
+        readonly BeatSetup _beat;
         readonly DetentLayer _d = new() { Variant = ValleyVariant.PhysicsOnly };   // parity with the carrier beat
         readonly KeyGrammar _keys = new();
         readonly AircraftParams _air = FlightModel.Sabre;
@@ -38,23 +40,25 @@ public class CarrierFlightHarnessTests {
         const double Dt = 1.0 / 120.0;
         public Carrier.Recovery Recovery = Carrier.Recovery.Flying;
         public Carrier.TouchdownResult LastTouchdown = Carrier.TouchdownResult.Flying;
+        public int KillCount { get; private set; }
+        public Vec3D LastSplashPlayerPosition { get; private set; }
+        public AircraftState LastSpawnState { get; private set; }
         public bool ApproachMode { get; private set; }
         public bool Terminal => Recovery is Carrier.Recovery.HardLanding
             or Carrier.Recovery.RampStrike or Carrier.Recovery.InTheWater
             || (Recovery == Carrier.Recovery.Trap
-                && Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped)
-            || Fight.Outcome == FightOutcome.Splash;
+                && Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped);
 
         public CarrierRig(Carrier.DeckConfiguration configuration = Carrier.DeckConfiguration.Axial) {
-            var beat = Beats.CarrierApproach(configuration);
-            Ship = beat.Carrier!;
+            _beat = Beats.CarrierApproach(configuration);
+            Ship = _beat.Carrier!;
             var windResolvedPlayer = Ship.ToWorldStateFromAir(
-                beat.Player, DetentLayer.OnSpeedAoARad);
+                _beat.Player, DetentLayer.OnSpeedAoARad);
             Burble = new BurbleField(Ship,
                 new TurbulenceField(intensityMps: 3.0, outerScaleM: 80.0, intermittency: 0.6, seed: 0xB0A7),
                 sinkMps: 1.8);
-            Player = new AircraftSim(windResolvedPlayer, beat.PlayerAir) { Wind = Burble };
-            Bandit = beat.CreateBandit();
+            Player = new AircraftSim(windResolvedPlayer, _beat.PlayerAir) { Wind = Burble };
+            Bandit = _beat.CreateBandit();
         }
 
         public void Key(GKey k, bool down) {
@@ -112,11 +116,15 @@ public class CarrierFlightHarnessTests {
             }
             Fight.Step(_triggerDown, Player.State, Bandit.State, Dt);
             if (Fight.Outcome == FightOutcome.Splash) {
-                _t += Dt * 1000.0;
-                return;
+                LastKill = Fight;
+                KillCount++;
+                LastSplashPlayerPosition = Player.State.Position;
+                Bandit = _beat.CreateNextBandit(Player.State, KillCount);
+                LastSpawnState = Bandit.State;
+                Fight = new GunKill();
             }
             Player.Step(_d.Command, Dt);
-            if (Fight.BanditAlive) Bandit.Step(Player.State, Dt);
+            Bandit.Step(Player.State, Dt);
             Ship.Step(Dt);
             var touchdown = Ship.EvaluateRecovery(Player.State, Player.AngleOfAttackRad,
                 DifficultyModel.ForLevel(0));
@@ -341,7 +349,7 @@ public class CarrierFlightHarnessTests {
         // assertion instead of being indistinguishable from a loop cutoff; the assertion below
         // still requires the BUILD 25 intercept to splash before 75 s.
         while (rig.TimeSeconds < 100.0 && rig.Recovery == Carrier.Recovery.Flying
-               && rig.Fight.Outcome == FightOutcome.Flying) {
+               && rig.KillCount == 0) {
             // Manage closure instead of idling merely because range is below 2.5 km. Against a
             // maneuvering fighter that old rule bled the pursuer below 50 m/s before it ever got
             // around the first turn. Preserve fighting speed, and pull power only for a real
@@ -401,20 +409,30 @@ public class CarrierFlightHarnessTests {
             if (!double.IsFinite(firstHitAt) && rig.Fight.HitCount > 0) firstHitAt = rig.TimeSeconds;
         }
 
+        var kill = Assert.IsType<GunKill>(rig.LastKill);
         _o.WriteLine($"FULL SORTIE: free={freeAt:F1}s egress={egressAt:F1}s/{egressSpeedKt:F0}kt/{egressAlt:F0}m "
             + $"leadAvail={leadAvailableAt:F1}s onPipper={leadAt:F1}s firstHit={firstHitAt:F1}s splash={rig.TimeSeconds:F1}s "
             + $"range={rig.RangeM:F0}m/min{minRangeM:F0}m aimErr={rig.GunAimErrorDeg:F2}°/min{minAimErrorDeg:F2}° "
-            + $"rounds={rig.Fight.RoundsFired} hits={rig.Fight.HitCount} "
-            + $"ammo={rig.Fight.AmmoRemaining} outcome={rig.Fight.Outcome}");
+            + $"rounds={kill.RoundsFired} hits={kill.HitCount} ammo={kill.AmmoRemaining} "
+            + $"kills={rig.KillCount} nextRange={rig.RangeM:F0}m nextOutcome={rig.Fight.Outcome}");
         Assert.Equal(Carrier.Recovery.Flying, rig.Recovery);
         Assert.True(achievedLead, "the pilot must close, fly the computed lead pipper, and fire on solution");
-        Assert.True(rig.Fight.HitCount >= GunKill.DefaultHitsToKill, "only real round intersections may do damage");
-        Assert.True(rig.Fight.RoundsFired > rig.Fight.HitCount, "the harness must permit honest misses, not award every trigger tick");
+        Assert.True(kill.HitCount >= GunKill.DefaultHitsToKill, "only real round intersections may do damage");
+        Assert.True(kill.RoundsFired > kill.HitCount, "the harness must permit honest misses, not award every trigger tick");
         Assert.True(firstHitAt > leadAt + 0.15, "damage must wait for round time-of-flight, not advance with trigger time");
-        Assert.True(rig.Fight.AmmoRemaining < GunKill.DefaultAmmo, "a real finite magazine must feed the sortie");
-        Assert.Equal(FightOutcome.Splash, rig.Fight.Outcome);
-        Assert.False(rig.Fight.BanditAlive);
-        Assert.Equal(1.0, rig.Fight.KillProgress, 10);
+        Assert.True(kill.AmmoRemaining < GunKill.DefaultAmmo, "a real finite magazine must feed the sortie");
+        Assert.Equal(FightOutcome.Splash, kill.Outcome);
+        Assert.False(kill.BanditAlive);
+        Assert.Equal(1.0, kill.KillProgress, 10);
+        Assert.Equal(1, rig.KillCount);
+        Assert.Equal(FightOutcome.Flying, rig.Fight.Outcome);
+        Assert.True(rig.Fight.BanditAlive);
+        Assert.IsType<ReactiveBandit>(rig.Bandit);
+        Assert.InRange(rig.RangeM, 2500.0, 4500.0);
+        Assert.InRange(Math.Abs(rig.LastSpawnState.Position.Y - rig.S.Position.Y), 0.0, 300.0);
+        Assert.True(rig.LastSpawnState.Speed >= 150.0, "the next bogey must arrive with fighting energy");
+        Assert.True((rig.S.Position - rig.LastSplashPlayerPosition).Length > 0.5,
+            "ownship must keep integrating through the splash tick");
         Assert.True(rig.TimeSeconds < 75.0, "the tuned finals-to-splash intercept must stay well below BUILD 23's ~110 s");
     }
 

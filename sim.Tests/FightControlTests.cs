@@ -15,9 +15,9 @@ public class FightControlTests {
         public readonly KeyGrammar Keys = new();
         double _timeMs;
 
-        public FightRig(double knots, double bankDeg = 0.0) {
+        public FightRig(double knots, double bankDeg = 0.0, double gammaDeg = 0.0) {
             var initial = new AircraftState(new Vec3D(0, 3000, 0), knots * MpsPerKnot,
-                0, 0, bankDeg / Deg, FlightModel.Sabre.MassKg);
+                gammaDeg / Deg, 0, bankDeg / Deg, FlightModel.Sabre.MassKg);
             Sim = new AircraftSim(initial, FlightModel.Sabre);
         }
 
@@ -109,6 +109,38 @@ public class FightControlTests {
         Assert.InRange(maxRollRateDeg, 120.0, 145.0); // NACA-observed F-86 scale: ~140 deg/s
     }
 
+    [Theory]
+    [InlineData(85.0)]
+    [InlineData(-85.0)]
+    public void FullBackstickRollNearVerticalKeepsCommandedBodyDirection(double gammaDeg) {
+        var a = new FightRig(375, gammaDeg: gammaDeg);
+        var b = new FightRig(375, gammaDeg: gammaDeg);
+        a.Set(GKey.PullUp, true);
+        a.Set(GKey.RollRight, true);
+        b.Set(GKey.PullUp, true);
+        b.Set(GKey.RollRight, true);
+        double bodyRoll = 0.0, peakPositiveP = 0.0;
+        int opposingFrames = 0;
+
+        for (int i = 0; i < 360; i++) {
+            a.Step();
+            b.Step();
+            double p = a.Sim.State.BodyRates.P;
+            bodyRoll += p * Dt;
+            peakPositiveP = System.Math.Max(peakPositiveP, p);
+            if (i >= 12 && p < -0.02) opposingFrames++;
+        }
+
+        Assert.True(bodyRoll > 1.5,
+            $"{gammaDeg:+0;-0} deg flight path rolled {bodyRoll * Deg:F1} deg opposite/right-insufficient");
+        Assert.True(peakPositiveP * Deg > 90.0,
+            $"{gammaDeg:+0;-0} deg flight path only reached {peakPositiveP * Deg:F1} deg/s commanded p");
+        Assert.True(opposingFrames <= 2,
+            $"{gammaDeg:+0;-0} deg flight path produced {opposingFrames} frames opposing right roll");
+        Assert.Equal(a.Sim.State, b.Sim.State);
+        Assert.Equal(a.Sim.AngleOfAttackRad, b.Sim.AngleOfAttackRad);
+    }
+
     [Fact]
     public void HardPullPinsAeroLimitWithoutDepartureOrRateSpike() {
         var rig = new FightRig(375, 90);
@@ -126,5 +158,37 @@ public class FightControlTests {
             $"hard pull departed to {maxAbsAoaDeg:F1} deg AoA");
         Assert.True(maxAbsPitchRateDeg < 40.0,
             $"pitch rate spiked to {maxAbsPitchRateDeg:F1} deg/s");
+    }
+
+    [Fact]
+    public void HardPullAndPushStayInsideBothAeroAoaLimits() {
+        var pull = new FightRig(375, gammaDeg: 85.0);
+        var push = new FightRig(180, gammaDeg: -85.0);
+        pull.Set(GKey.PullUp, true);
+        push.Set(GKey.PushDown, true);
+        push.Set(GKey.Override, true);
+        double maxAlpha = double.NegativeInfinity;
+        double minAlpha = double.PositiveInfinity;
+        double maxNz = double.NegativeInfinity;
+
+        for (int i = 0; i < 720; i++) {
+            pull.Step();
+            push.Step();
+            maxAlpha = System.Math.Max(maxAlpha, pull.Sim.AngleOfAttackRad);
+            minAlpha = System.Math.Min(minAlpha, push.Sim.AngleOfAttackRad);
+            maxNz = System.Math.Max(maxNz, pull.Sim.LastNz);
+        }
+
+        double alphaMax = FlightModel.Sabre.CLMax / FlightModel.Sabre.CLAlpha;
+        double alphaMin = FlightModel.Sabre.CLMin / FlightModel.Sabre.CLAlpha;
+        Assert.True(maxAlpha <= alphaMax + 1e-10,
+            $"hard pull exceeded +aero alpha: {maxAlpha * Deg:F2} > {alphaMax * Deg:F2} deg");
+        Assert.True(minAlpha >= alphaMin - 1e-10,
+            $"hard push exceeded -aero alpha: {minAlpha * Deg:F2} < {alphaMin * Deg:F2} deg");
+        Assert.True(maxAlpha >= alphaMax - 0.01,
+            $"hard pull lost authority: only {maxAlpha * Deg:F2} of {alphaMax * Deg:F2} deg alpha");
+        Assert.True(minAlpha <= alphaMin + 0.01,
+            $"hard push did not reach the negative aero boundary: {minAlpha * Deg:F2} deg");
+        Assert.True(maxNz > 6.5, $"bounded pull no longer reaches the Sabre limit: {maxNz:F2} G");
     }
 }

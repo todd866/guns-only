@@ -9,6 +9,11 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     public IBandit CreateBandit() => UsesReactiveBandit
         ? new ReactiveBandit(Bandit, BanditAir)
         : new RailBandit(Bandit, BanditAir, BanditTimeline);
+
+    /// A splash starts another fighter engagement instead of replaying the mission's opening setup.
+    /// Replacement opponents are always fighters, including after a specialized target beat.
+    public IBandit CreateNextBandit(in AircraftState player, int engagementNumber) =>
+        ReactiveBandit.SpawnForMerge(player, FlightModel.Sabre, engagementNumber);
 }
 
 public sealed class RailBandit : IBandit {

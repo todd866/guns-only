@@ -163,7 +163,7 @@ const heldKeys = new Set();
 // state each frame from a REAL playthrough and POSTs it to /telemetry (same origin, so the dev
 // server writes it to disk for analysis). Fire-and-forget — a failed POST must never disturb the
 // sim. Sampled at ~30 Hz to keep sessions a few MB.
-const BUILD = "32";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
+const BUILD = "33";   // MUST match the HUD build stamp — recorded so stale-build sessions are obvious
 const recorder = {
   session: `web-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
   build: BUILD,

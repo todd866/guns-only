@@ -31,6 +31,7 @@ public sealed class ReactiveBandit : IBandit {
 
     readonly AircraftSim _sim;
     readonly Vec3D _fightCentre;
+    readonly double _ceilingM;
     double _defendUntil = double.NegativeInfinity;
     double _defendCooldownUntil = double.NegativeInfinity;
     double _nextJinkAt = double.PositiveInfinity;
@@ -40,6 +41,40 @@ public sealed class ReactiveBandit : IBandit {
     public ReactiveBandit(AircraftState initial, AircraftParams parameters) {
         _sim = new AircraftSim(initial, parameters);
         _fightCentre = initial.Position;
+        // Preserve the original low-level fight volume while allowing a replacement fighter to
+        // meet a high-altitude ownship near its present altitude (for example, after the AWACS beat).
+        _ceilingM = System.Math.Max(CeilingM, initial.Position.Y + 1000.0);
+    }
+
+    /// Deterministically put a fresh fighter into a real offset, reciprocal merge. Engagement
+    /// number replaces randomness: successive bogeys alternate sides and cycle modest variations
+    /// in spacing/altitude while retaining fighting energy and a fair head-on presentation.
+    public static ReactiveBandit SpawnForMerge(in AircraftState player,
+        AircraftParams parameters, int engagementNumber) {
+        if (engagementNumber < 1)
+            throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
+
+        int variation = (engagementNumber - 1) % 3;
+        double side = (engagementNumber & 1) == 1 ? 1.0 : -1.0;
+        var forward = new Vec3D(System.Math.Sin(player.Chi), 0.0, System.Math.Cos(player.Chi));
+        var right = new Vec3D(System.Math.Cos(player.Chi), 0.0, -System.Math.Sin(player.Chi));
+        double alongM = 3200.0 + variation * 260.0;
+        double offsetM = side * (560.0 + variation * 110.0);
+        double altitudeOffsetM = variation switch { 0 => 120.0, 1 => -80.0, _ => 40.0 };
+        double altitudeM = System.Math.Max(FloorM + 260.0,
+            player.Position.Y + altitudeOffsetM);
+        var position = player.Position + forward * alongM + right * offsetM;
+        position = position with { Y = altitudeM };
+
+        // Aim slightly beyond ownship's current position. This is an offset head-on merge, not a
+        // stationary target parked in the pipper, and the reactive pilot takes over immediately.
+        var mergePoint = player.Position + forward * 420.0;
+        var toMerge = mergePoint - position;
+        double horizontalM = System.Math.Sqrt(toMerge.X * toMerge.X + toMerge.Z * toMerge.Z);
+        double chi = System.Math.Atan2(toMerge.X, toMerge.Z);
+        double gamma = System.Math.Atan2(toMerge.Y, System.Math.Max(1.0, horizontalM));
+        var initial = new AircraftState(position, 180.0, gamma, chi, 0.0, parameters.MassKg);
+        return new ReactiveBandit(initial, parameters);
     }
 
     public AircraftState State => _sim.State;
@@ -73,7 +108,7 @@ public sealed class ReactiveBandit : IBandit {
             _nextJinkAt = double.PositiveInfinity;
         }
 
-        if (radius > ReturnRadiusM || own.Position.Y > CeilingM + 350.0) {
+        if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
             Tactic = BanditTactic.Return;
             return;
         }
@@ -175,7 +210,7 @@ public sealed class ReactiveBandit : IBandit {
     }
 
     Vec3D KeepAimInFightVolume(in Vec3D aim) {
-        double y = System.Math.Clamp(aim.Y, FloorM + 180.0, CeilingM - 180.0);
+        double y = System.Math.Clamp(aim.Y, FloorM + 180.0, _ceilingM - 180.0);
         var horizontal = new Vec3D(aim.X - _fightCentre.X, 0.0, aim.Z - _fightCentre.Z);
         if (horizontal.Length > ReturnRadiusM - 500.0)
             horizontal = horizontal.Normalized() * (ReturnRadiusM - 500.0);
