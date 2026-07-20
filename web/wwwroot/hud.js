@@ -5,6 +5,7 @@ import {
   speedTapeMarkers,
   stallAwareness,
   systemsReadout,
+  targetClosureReadout,
 } from "./render/hud/hud_readouts.js";
 import {
   carrierAoARelevant,
@@ -713,7 +714,8 @@ class CombatHud {
       ctx.shadowBlur = 0;
 
       if (!frame.padlock) {
-        const dataLine = `${formatRange(state.range_m).replace(" ", "")} C${formatSigned(state.closure_kts)}`;
+        const closure = targetClosureReadout(state.closure_kts);
+        const dataLine = `${formatRange(state.range_m).replace(" ", "")} · ${closure.compactText}`;
         ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
         const textWidth = ctx.measureText(dataLine).width;
         const textHeight = 14;
@@ -794,7 +796,8 @@ class CombatHud {
 
     const length = Math.hypot(dx, dy) || 1;
     const azimuth = angles.azimuth * RAD_TO_DEG;
-    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${formatRange(state.range_m).replace(" ", "")} · C${formatSigned(state.closure_kts)}`;
+    const closure = targetClosureReadout(state.closure_kts);
+    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${formatRange(state.range_m).replace(" ", "")} · ${closure.compactText}`;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
@@ -1809,7 +1812,7 @@ class CombatHud {
     ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillStyle = AMBER;
     ctx.fillText(formatRange(state.range_m), targetLeft, y + 21);
-    ctx.fillText(`C${formatSigned(state.closure_kts)}`, targetLeft, y + 42);
+    ctx.fillText(targetClosureReadout(state.closure_kts).text, targetLeft, y + 42);
     ctx.fillText(`G ${String(ammo).padStart(3, "0")}`, targetLeft, y + 63);
     ctx.fillStyle = gunColor;
     if (cue) ctx.fillText(cue, targetLeft, y + 84);

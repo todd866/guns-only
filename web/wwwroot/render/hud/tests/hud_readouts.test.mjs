@@ -8,6 +8,7 @@ import {
   speedTapeMarkers,
   stallAwareness,
   systemsReadout,
+  targetClosureReadout,
 } from "../hud_readouts.js";
 
 test("airdata makes indicated airspeed primary and formats one universal groundspeed", () => {
@@ -49,6 +50,18 @@ test("stall awareness and corner marker stay entirely in KIAS", () => {
     carrier: true,
     mode: "APPROACH",
   }), []);
+});
+
+test("target closure is explicit about whether range is closing or opening", () => {
+  assert.deepEqual(targetClosureReadout(42.4), {
+    closureKts: 42.4,
+    trend: "closing",
+    compactText: "42KT CLOSING",
+    text: "42 KT CLOSING",
+  });
+  assert.equal(targetClosureReadout(-18.6).text, "19 KT OPENING");
+  assert.equal(targetClosureReadout(0.2).text, "RANGE STEADY");
+  assert.equal(targetClosureReadout(undefined).text, "CLOSURE -- KT");
 });
 
 test("powered fuel readout uses pounds per minute and time to bingo", () => {

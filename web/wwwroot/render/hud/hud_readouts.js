@@ -61,6 +61,39 @@ export function speedTapeMarkers(state = {}) {
   return [{ value: cornerKias, label: "COR", unit: "KIAS" }];
 }
 
+export function targetClosureReadout(value) {
+  const closureKts = finiteNumber(value);
+  if (closureKts === null) {
+    return {
+      closureKts: null,
+      trend: "unknown",
+      compactText: "CLOSURE --",
+      text: "CLOSURE -- KT",
+    };
+  }
+
+  const roundedKts = Math.round(Math.abs(closureKts));
+  if (roundedKts === 0) {
+    return {
+      closureKts,
+      trend: "steady",
+      compactText: "RANGE STEADY",
+      text: "RANGE STEADY",
+    };
+  }
+
+  // Positive closure means range is decreasing; negative closure means it is increasing. Spell
+  // the decision out instead of making the pilot decode the former unexplained `C+42` notation.
+  const trend = closureKts > 0 ? "closing" : "opening";
+  const label = trend.toUpperCase();
+  return {
+    closureKts,
+    trend,
+    compactText: `${roundedKts}KT ${label}`,
+    text: `${roundedKts} KT ${label}`,
+  };
+}
+
 export function fuelReadout(state = {}) {
   const fuelLb = Math.max(0, finiteNumber(state.fuel_lb) ?? 0);
   const capacityLb = Math.max(0,
