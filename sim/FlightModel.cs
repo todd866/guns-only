@@ -33,16 +33,25 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     // PLACEHOLDER gentler direct-attitude hold for fine approach corrections.
     double ApproachPitchStiffnessNmRad = 360000, double ApproachPitchMomentMaxNm = 110000,
     double CYBeta = 0.65,
+    // Attached-flow lateral derivatives. Moments use the conventional non-dimensional law
+    // q*S*b*(ClBeta*beta + ClP*p*b/2V + ClR*r*b/2V + ClDeltaA*deltaA + ClDeltaR*deltaR).
+    // Delta derivatives are per radian; the explicit stops convert normalized pilot controls.
+    // ClP < 0 is natural roll damping; pilot and explicit SAS aileron are recorded separately.
+    double ClBeta = -0.040, double ClP = -0.420, double ClR = 0.080,
+    double ClDeltaA = 0.084511274781796, double ClDeltaR = 0.027501974166280,
+    double MaxAileronDeflectionRad = 0.349065850398866,
+    double MaxRudderDeflectionRad = 0.436332312998582,
+    string LateralDerivativeProfileId = "generic-lateral-provisional-v1",
     // Manual pitch-rate command and legacy State.Bank compatibility. Body attitude is authoritative;
     // the compatibility pair keeps old telemetry/RK4 behavior separate from the flown roll tuning.
     double ManualPitchRateMaxRad = 0.60, double ManualPitchAngleTau = 0.60,
-    // Optional flown-axis roll authority. RollRateMaxRad remains the generic/compatibility value;
-    // a fighter can expose its real manual rate without changing compatibility command-bank tuning.
+    // Legacy/AI bank-tracker rate limit. Physical flown roll derives its rate from the lateral
+    // derivatives above; this separate limit preserves command-bank compatibility callers.
     double FightRollRateMaxRad = -1.0,
     double CompatibilityRollRateMaxRad = -1.0, double CompatibilityBankTau = -1.0,
     // Stability augmentation. YawBetaStiffness centers the ball independently of the attitude
-    // tracker; RollHoldDamping is blended in only near a captured roll target, never while the
-    // pilot's rate-command lead is asking for a roll.
+    // tracker. RollHoldDamping belongs only to legacy/AI bank-attitude commands; flown/manual roll
+    // receives no hold/SAS moment unless a future model publishes explicit SasRollControl.
     double YawBetaStiffnessNmRad = 180000, double RollHoldDampingNms = 50000,
     double RollHoldErrorRad = 0.10,
     // Airframe envelope limits. Defaults preserve the existing unmanned/afterburning aircraft;
@@ -70,7 +79,7 @@ public readonly record struct RawState(Vec3D Pos, Vec3D Vel, double Bank, double
     QuaternionD Attitude, BodyRates BodyRates);
 
 public readonly record struct StateDeriv(Vec3D DPos, Vec3D DVel, double DBank,
-    QuaternionD DAttitude, BodyRates DBodyRates);
+    QuaternionD DAttitude, BodyRates DBodyRates, double RollMomentNm);
 
 internal readonly record struct AeroResult(Vec3D Accel, Vec3D LiftDir, Vec3D AirVelocity,
     double Alpha, double Beta, double Nz, double DynamicPressure);
@@ -91,7 +100,12 @@ public static class FlightModel {
         RollRateMaxRad: 0.65, BankTau: 0.52,
         RollDampingNms: 70000, RollMomentMaxNm: 180000,
         PitchMomentMaxNm: 200000,
-        FightRollRateMaxRad: 2.40,            // NACA operational peak: ~138–140 deg/s
+        ClBeta: -0.040, ClP: -0.420, ClR: 0.080,
+        ClDeltaA: 0.084511274781796, ClDeltaR: 0.027501974166280,
+        MaxAileronDeflectionRad: 0.349065850398866, // provisional effective +/-20-deg stop
+        MaxRudderDeflectionRad: 0.436332312998582,  // provisional effective +/-25-deg stop
+        LateralDerivativeProfileId: "f86f-30-lateral-provisional-v1",
+        FightRollRateMaxRad: 2.40,            // legacy bank-tracker cap; physical profile also fits ~140 deg/s
         CompatibilityRollRateMaxRad: 2.1, CompatibilityBankTau: 0.18,
         MCrit: 0.89, WaveDragK: 500.0,        // rapid swept-wing drag rise around M0.86–0.89
         PositiveStructuralLimitG: 7.0,        // T.O. 1F-86F-1 maneuver limit: +7 G
@@ -121,6 +135,26 @@ public static class FlightModel {
         CD0: 0.0115, InducedK: 0.0284, CLMax: 1.30, CLMin: -0.50,
         RollRateMaxRad: 1.6, BankTau: 0.28,
         MCrit: 0.68, WaveDragK: 190.0,
+        // Explicit small-airframe rigid-body and lateral profile. Inheriting the 6.9-tonne
+        // Sabre-shaped defaults gave this 140 kg, ~5.8 m-span glider an Ixx of 9,000 kg m2 and
+        // made a full aileron step nearly inert. These are provisional geometry-derived values,
+        // not a claim about an extant type: Ixx/Iyy/Izz follow a distributed 140 kg wing/pod,
+        // while the derivative set gives a naturally damped ~120 deg/s terminal roll rate at the
+        // mission's 100 m/s release condition. All authority still scales with q through the
+        // ordinary derivative law.
+        IxxKgM2: 210.0, IyyKgM2: 140.0, IzzKgM2: 350.0,
+        RollStiffnessNmRad: 2000.0, PitchStiffnessNmRad: 1700.0,
+        YawStiffnessNmRad: 1200.0,
+        RollDampingNms: 800.0, PitchDampingNms: 700.0, YawDampingNms: 700.0,
+        RollMomentMaxNm: 1500.0, PitchMomentMaxNm: 1200.0, YawMomentMaxNm: 1000.0,
+        ApproachPitchStiffnessNmRad: 1400.0, ApproachPitchMomentMaxNm: 1000.0,
+        ClBeta: -0.070, ClP: -0.620, ClR: 0.110,
+        ClDeltaA: 0.110, ClDeltaR: 0.020,
+        MaxAileronDeflectionRad: 0.349065850398866,
+        MaxRudderDeflectionRad: 0.436332312998582,
+        LateralDerivativeProfileId: "glider-strike-geometry-provisional-v1",
+        YawBetaStiffnessNmRad: 1600.0, RollHoldDampingNms: 600.0,
+        WingSpanM: 5.81, // sqrt(AR 13 * 2.6 m2)
         MaxThrustFraction: 0.0);          // no engine and therefore no powered lever range
 
     /// The KJ-500-class AEW&C: how the PLA sees and coordinates. Enormous, slow, turboprop,
@@ -265,9 +299,10 @@ public static class FlightModel {
         double rho = atmosphere.Sample(r.Pos.Y).DensityKgM3;
         double q = 0.5 * rho * speed * speed;
         var aero = Aerodynamics(r, c, p, wind, netThrustN, configuration, atmosphere);
-        var (dAttitude, dRates) = RotationalDerivatives(r, c, p, liftRef, controlVhat, q,
+        var (dAttitude, dRates, rollMomentNm) = RotationalDerivatives(r, c, p, liftRef, controlVhat, q,
             speed, configuration, atmosphere);
-        return new StateDeriv(r.Vel, aero.Accel, BankRate(r.Bank, c.BankTarget, p), dAttitude, dRates);
+        return new StateDeriv(r.Vel, aero.Accel, BankRate(r.Bank, c.BankTarget, p),
+            dAttitude, dRates, rollMomentNm);
     }
 
     internal static AeroResult Aerodynamics(in RawState r, in PilotCommand c,
@@ -317,7 +352,7 @@ public static class FlightModel {
         return new AeroResult(accel, liftDir, vAir, alpha, beta, liftAccel / G0, q);
     }
 
-    static (QuaternionD dAttitude, BodyRates dRates) RotationalDerivatives(in RawState r,
+    static (QuaternionD dAttitude, BodyRates dRates, double rollMomentNm) RotationalDerivatives(in RawState r,
         in PilotCommand c, in AircraftParams p, in Vec3D liftRef, in Vec3D vhat,
         double dynamicPressure, double speed, in AirframeAerodynamicState configuration,
         IAtmosphereModel atmosphere) {
@@ -365,24 +400,19 @@ public static class FlightModel {
         }
         double pitchStiffness = directPitch ? p.ApproachPitchStiffnessNmRad : p.PitchStiffnessNmRad;
         double pitchMomentMax = directPitch ? p.ApproachPitchMomentMaxNm : p.PitchMomentMaxNm;
-        // DetentLayer's active roll-rate command holds the target a fixed lead ahead of the body.
-        // Near zero error the pilot has released/captured the roll axis:
-        // blend in extra p damping there so a gust or residual pitch/yaw coupling dies promptly.
-        // Outside this small capture region the extra hold is exactly zero, preserving commanded
-        // roll authority from the control-authority pass.
+        // Legacy doctrine/AI commands retain their bank-attitude controller. Flown controls do not:
+        // their rolling moment is generated below from aileron and aerodynamic lateral derivatives.
         double separation = SeparationFraction(alpha, p);
+        double rollRateMax = FightRollRate(p);
         double rollHoldBlend = 1.0 - System.Math.Clamp(System.Math.Abs(errP)
             / System.Math.Max(p.RollHoldErrorRad, 1e-6), 0.0, 1.0);
         double rollDamping = p.RollDampingNms + p.RollHoldDampingNms * rollHoldBlend;
-        // Rate-limit the attitude error before applying the moment. A distant target therefore
-        // cannot create a 2-3x rate spike, while DetentLayer's moving lead still commands the full
-        // 2.4 rad/s Sabre roll rate and a tap remains a small, placeable attitude correction.
-        double rollRateMax = FightRollRate(p);
         double rollRateCommand = System.Math.Clamp(p.RollStiffnessNmRad * errP / rollDamping,
             -rollRateMax, rollRateMax);
         double rollControlBlend = 1.0 - 0.92 * separation;
-        double rollMoment = System.Math.Clamp(rollDamping * (rollRateCommand - rates.P),
-            -p.RollMomentMaxNm, p.RollMomentMaxNm) * rollControlBlend;
+        double legacyRollMoment = c.DirectLateralControl ? 0.0
+            : System.Math.Clamp(rollDamping * (rollRateCommand - rates.P),
+                -p.RollMomentMaxNm, p.RollMomentMaxNm) * rollControlBlend;
         // FREE/FIGHT is direct normal-load control: protected G maps to a CL-limited alpha target;
         // an explicit incidence demand can refocus beyond the break. The same continuous moment
         // loop tracks either target plus required turn rate. Carrier approach keeps its separate
@@ -428,11 +458,37 @@ public static class FlightModel {
         double stalledYawMoment = p.StallYawCoupling * momentScale
             * (ProfileDragCoefficient(rightAlpha, mach, p)
                 - ProfileDragCoefficient(leftAlpha, mach, p)) * wingSeparation;
-        rollMoment += stalledRollMoment;
-        // Split-flap and future asymmetric-configuration lift enters through the same continuous
-        // rigid-body moment path as stalled-wing differential lift; no forced roll rate or failure
-        // animation is needed.
-        rollMoment += momentScale * configuration.LateralLiftCoefficientDifference;
+        // In attached flow the manual path is an ordinary derivative model. Full aileron authority
+        // therefore scales with q, neutral aileron is exactly zero, and ClP supplies the natural
+        // rate damping. As the wing separates, fade this attached circulation out while the local
+        // differential-incidence model above fades in continuously.
+        double nondimensionalP = System.Math.Clamp(rates.P * span
+            / (2.0 * System.Math.Max(speed, 1e-6)), -2.0, 2.0);
+        double nondimensionalR = System.Math.Clamp(rates.R * span
+            / (2.0 * System.Math.Max(speed, 1e-6)), -2.0, 2.0);
+        double pilotAileron = System.Math.Clamp(c.RollControl, -1.0, 1.0)
+            * p.MaxAileronDeflectionRad;
+        double sasAileron = System.Math.Clamp(c.SasRollControl, -1.0, 1.0)
+            * p.MaxAileronDeflectionRad;
+        double rudderDeflection = System.Math.Clamp(c.Rudder, -1.0, 1.0)
+            * p.MaxRudderDeflectionRad;
+        double attachedRollCoefficient = p.ClBeta * beta
+            + p.ClP * nondimensionalP + p.ClR * nondimensionalR
+            + p.ClDeltaA * System.Math.Clamp(pilotAileron + sasAileron,
+                -p.MaxAileronDeflectionRad, p.MaxAileronDeflectionRad)
+            + p.ClDeltaR * rudderDeflection;
+        double attachedRollMoment = dynamicPressure * p.WingAreaM2 * span
+            * attachedRollCoefficient;
+        double rollMoment = legacyRollMoment
+            + (c.DirectLateralControl ? attachedRollMoment * (1.0 - wingSeparation) : 0.0)
+            + stalledRollMoment;
+        // Split-flap lift is attached circulation and fades with the same separation state as the
+        // symmetric flap increment. Torn structure/catastrophic damage is a distinct persistent
+        // asymmetry: retaining it after the wing separates is physical, whereas retaining full
+        // flap-lift authority was an accidental post-stall control boost.
+        rollMoment += momentScale
+            * (configuration.LateralLiftCoefficientDifference * (1.0 - separation)
+                + configuration.PersistentLateralLiftCoefficientDifference);
         double meanChord = p.WingAreaM2 / System.Math.Max(span, 1e-6);
         pitchMoment += dynamicPressure * p.WingAreaM2 * meanChord
             * configuration.PitchMomentCoefficientIncrement;
@@ -447,7 +503,7 @@ public static class FlightModel {
         double qDot = (pitchMoment + (p.IzzKgM2 - p.IxxKgM2) * rates.R * rates.P) / p.IyyKgM2;
         double rDot = (yawMoment + (p.IxxKgM2 - p.IyyKgM2) * rates.P * rates.Q) / p.IzzKgM2;
         var omega = new QuaternionD(0, -rates.Q, rates.R, -rates.P);
-        return ((attitude * omega) * 0.5, new BodyRates(pDot, qDot, rDot));
+        return ((attitude * omega) * 0.5, new BodyRates(pDot, qDot, rDot), rollMoment);
     }
 
     static QuaternionD TargetAttitude(in RawState r, in PilotCommand c, in AircraftParams p,

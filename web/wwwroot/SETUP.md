@@ -2,9 +2,11 @@
 
 The function in `api/telemetry.js` uses Vercel Blob's HTTP API directly, so this static deployment
 does not need a `package.json`, an npm install, or a build step. The browser samples the 120 Hz
-authority at 20 Hz, uploads one immutable chunk every 30 seconds, and keeps only one upload in
-flight. Failed uploads retain a bounded recent trace and back off exponentially, up to five
-minutes, rather than hammering a broken endpoint.
+authority at 20 Hz and losslessly omits unchanged retained snapshot fields between two-second
+keyframes. It
+uploads one immutable chunk every 30 seconds and keeps only one upload in flight. Failed uploads
+retain a bounded recent trace and back off exponentially, up to five minutes, rather than
+hammering a broken endpoint.
 Each successful flush is byte-bounded in the browser, gzip-compressed, and stored as an immutable
 private chunk at `telemetry/<session>/<batch-id>.jsonl.gz`; the browser retains that batch ID and
 exact request body across transport/storage retries. An already-existing path is therefore a
@@ -48,6 +50,12 @@ First smoke-test the deployed rewrite. A configured deployment returns `204` onl
 the immutable object (or confirms that the same batch already exists). Invalid requests return
 `400`, oversized requests return `413`, and configuration/storage outages return `503`, allowing the
 browser to retain the exact pending batch and back off. Complete the Blob check below as well:
+
+The Origin check prevents browser cross-site writes; it is provenance, not authentication, because
+a command-line caller can supply the same header. Production must therefore keep a Vercel Firewall
+per-IP rate limit on `POST /telemetry`, a spend alert, and an operator kill switch. The function also
+bounds both streamed and Vercel-preparsed request envelopes, including requests without
+`Content-Length`.
 
 ```sh
 curl -i -X POST 'https://guns-only.vercel.app/telemetry' \

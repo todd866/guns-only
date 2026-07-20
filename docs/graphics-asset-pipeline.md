@@ -22,9 +22,15 @@ pack.json
 └── licenses.json
 ```
 
-## First authored Korea set
+## First generated Korea placeholder set
 
-The starter pack now ships a complete, contract-valid visual slice rather than procedural placeholders:
+The starter pack ships a complete, contract-valid visual slice for integration and testing. Every
+current asset is deliberately marked `status: "placeholder"`: the generated geometry, materials,
+environment, and effects exercise the real IDs, LODs, budgets, licences, sockets, and runtime paths,
+but have not passed production art review. `placeholder` is a maturity label, not a request to invent
+extra scenery; the renderer may load it through the authored path while product code decides whether
+that visual helps the current pilot task. Promote assets individually to `production` only after a
+visual review against an explicit user problem.
 
 | Asset | Runtime representation | Detail strategy |
 | --- | --- | --- |
@@ -36,7 +42,7 @@ The starter pack now ships a complete, contract-valid visual slice rather than p
 | Ocean / atmosphere | material profiles plus seeded PNG maps | scrolling wave normals, crest foam, haze, sun disc, and quality-tier cloud shells |
 | Gun / impact / destruction / wake | data profile plus pooled Three runtime | deterministic seeded particles and mobile / balanced / desktop tiers |
 
-The GLBs are code-authored with the pinned Three r160 exporter so a useful initial set can be rebuilt offline and reviewed immediately. Their deterministic source includes topology, UV layout, tangent generation, compact base-colour/normal/packed-ORM maps, decals, instrument faces, and static material batching. Embedded PNGs keep the files self-contained; the optional production optimization step can transcode them to KTX2 once the pinned offline tools are installed. Later Blender or externally licensed replacements can retain the same asset IDs, coordinate frame, LOD thresholds, material vocabulary, and anchor contracts, so gameplay and the platform/session layer do not need to change.
+The placeholder GLBs are code-authored with the pinned Three r160 exporter so the integration set can be rebuilt offline and reviewed immediately. Their deterministic source includes topology, UV layout, tangent generation, compact base-colour/normal/packed-ORM maps, decals, instrument faces, and static material batching. Embedded PNGs keep the files self-contained; the optional production optimization step can transcode them to KTX2 once the pinned offline tools are installed. Later Blender or externally licensed replacements can retain the same asset IDs, coordinate frame, LOD thresholds, material vocabulary, and anchor contracts, so gameplay and the platform/session layer do not need to change.
 
 Regenerate the current set with the exact commands in `tools/assets/README.md`. Use the browser labs below for visual review after staging:
 

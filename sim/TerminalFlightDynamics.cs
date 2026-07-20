@@ -19,8 +19,8 @@ internal static class TerminalFlightDynamics {
             PitchMomentCoefficientIncrement =
                 survivingConfiguration.PitchMomentCoefficientIncrement
                 + CatastrophicNoseDownMoment,
-            LateralLiftCoefficientDifference =
-                survivingConfiguration.LateralLiftCoefficientDifference
+            PersistentLateralLiftCoefficientDifference =
+                survivingConfiguration.PersistentLateralLiftCoefficientDifference
                 + side * CatastrophicAsymmetricLift
         };
     }
@@ -34,7 +34,12 @@ internal static class TerminalFlightDynamics {
         GDemand: 0.0,
         BankTarget: state.Bank,
         Throttle: 0.0,
-        Rudder: 0.0);
+        Rudder: 0.0,
+        RollControl: 0.0,
+        SasRollControl: 0.0,
+        // Uncontrolled means neutral physical surfaces plus damaged-airframe moments. It must not
+        // silently re-enter the legacy bank-attitude servo merely because pilot authority ended.
+        DirectLateralControl: true);
 
     public static void Step(AircraftSim aircraft,
         in AirframeAerodynamicState survivingConfiguration,

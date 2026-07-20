@@ -2,6 +2,7 @@ using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Turbulence;
 
 namespace GunsOnly.Web;
@@ -106,6 +107,9 @@ public static partial class WebBridge {
         IBandit _bandit = Session.Bandit;
         BeatSetup _beat = Session.Beat;
         DetentLayer _detents = Session.Controls;
+        PilotCommand requestedCommand = _detents.Command;
+        PilotCommand appliedCommand = _player.LastAppliedCommand;
+        bool lateralControlApplied = _player.HasAppliedFlightCommand;
         GunKill _gunKill = Session.PlayerGun;
         GunKill _opponentGun = Session.OpponentGun;
         FuelModel _fuel = Session.PlayerFuel;
@@ -119,6 +123,11 @@ public static partial class WebBridge {
         PromptCue _cue = Session.Cue;
         double _simTimeMs = Session.TimeMilliseconds;
         double _closureKts = Session.ClosureKts;
+        bool hasEngine = _beat.PlayerAir.ThrustMaxN > 0.0
+            && _beat.PlayerAir.MaxThrustFraction > 0.0;
+        // Mission 4 is an explicit engine-less prototype and does not inherit the Sabre's utility
+        // systems as pilot-facing equipment merely because the current kernel reuses that object.
+        bool hasF86UtilitySystems = Session.BeatIndex != 4;
         bool ready = Session.Lifecycle == SimulationSession.LifecycleState.Ready;
         bool paused = Session.Lifecycle == SimulationSession.LifecycleState.Paused;
         bool finished = Session.Lifecycle == SimulationSession.LifecycleState.Finished;
@@ -163,10 +172,13 @@ public static partial class WebBridge {
             trueAirspeedMps, playerPosition.Y, atmosphere);
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
         Vec3D localWindVelocity = groundVelocity - airVelocity;
+        CloudSample localCloud = (Session.Weather?.Clouds ?? ClearCloudField.Instance)
+            .Sample(playerPosition, _simTimeMs / 1000.0);
         double groundSpeedMps = Math.Sqrt(
             groundVelocity.X * groundVelocity.X + groundVelocity.Z * groundVelocity.Z);
         double positiveLoadFactor = Math.Max(1.0,
-            Math.Max(_player.LastNz, _detents.Command.GDemand));
+            Math.Max(_player.LastNz,
+                lateralControlApplied ? appliedCommand.GDemand : 0.0));
         double configuredLiftIncrement = _systems.AerodynamicState.LiftCoefficientIncrement;
         double stallSpeedKias = AirData.StallSpeedKiasAtAltitude(
             s.Mass, _beat.PlayerAir, playerPosition.Y, 1.0, configuredLiftIncrement,
@@ -245,6 +257,9 @@ public static partial class WebBridge {
         // forever, so terminal presentation comes from the durable outcome and ordered events.
         bool splashCue = !finished && Session.SplashCueActive;
         string transitionCue = finished ? "" : Session.TransitionCue;
+        string configurationCue = finished ? "" : Session.ConfigurationCue;
+        string configurationTarget = Session.ConfigurationTarget
+            == FlightConfigurationTarget.Recovery ? "RECOVERY" : "COMBAT";
         double surfaceAltitudeM = 0.0;
         if (_carrier is not null && _carrier.WithinDeckFootprint(playerPosition))
             surfaceAltitudeM = playerPosition.Y - _carrier.DeckFrame(playerPosition).height;
@@ -285,14 +300,40 @@ public static partial class WebBridge {
             + $"\"static_pressure_hpa\":{atmosphericState.PressurePa / 100.0:F2},"
             + $"\"air_density_kg_m3\":{atmosphericState.DensityKgM3:F6},"
             + $"\"wind_x_mps\":{localWindVelocity.X:F3},\"wind_y_mps\":{localWindVelocity.Y:F3},\"wind_z_mps\":{localWindVelocity.Z:F3},"
+            + $"\"visibility_m\":{localCloud.VisibilityM:F1},\"cloud_fraction_01\":{localCloud.CloudFraction01:F4},"
+            + $"\"cloud_extinction_per_m\":{localCloud.ExtinctionPerMetre:F8},\"precipitation_mm_hr\":{localCloud.PrecipitationMmPerHour:F3},"
+            + $"\"cloud_turbulence_x_mps\":{localCloud.TurbulenceVelocityMps.X:F3},\"cloud_turbulence_y_mps\":{localCloud.TurbulenceVelocityMps.Y:F3},\"cloud_turbulence_z_mps\":{localCloud.TurbulenceVelocityMps.Z:F3},"
+            + $"\"cloud_vertical_air_mps\":{localCloud.VerticalAirVelocityMps:F3},\"icing_hazard_01\":{localCloud.IcingHazard01:F4},\"lightning_hazard_01\":{localCloud.LightningHazard01:F4},"
             // Compatibility consumers keep receiving speed_kts, but it now means the primary KIAS.
             + $"\"speed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
             + $"\"stall_speed_kias\":{stallSpeedKias:F2},"
             + $"\"accelerated_stall_speed_kias\":{acceleratedStallSpeedKias:F2},"
             + $"\"corner_speed_kias\":{cornerSpeedKias:F2},"
+            + $"\"effective_on_speed_aoa_deg\":{_detents.EffectiveOnSpeedAoARad(_beat.PlayerAir) * 57.29577951308232:F3},"
+            + $"\"on_speed_aoa_tolerance_deg\":{Lso.AoaToleranceRad * 57.29577951308232:F3},"
             + $"\"stall_load_factor\":{positiveLoadFactor:F3},\"alt_ft\":{playerPosition.Y * 3.28084:F1},"
             + $"\"radar_alt_ft\":{radarAltitudeM * 3.28084:F1},\"vertical_speed_fpm\":{verticalSpeedMps * 196.8504:F1},"
-            + $"\"g_actual\":{_player.LastNz:F3},\"g_cmd\":{_detents.Command.GDemand:F3},"
+            + $"\"g_actual\":{_player.LastNz:F3},\"g_cmd\":{appliedCommand.GDemand:F3},"
+            + $"\"bank_target_deg\":{appliedCommand.BankTarget * 57.29577951308232:F3},"
+            + $"\"roll_control\":{appliedCommand.RollControl:F3},"
+            + $"\"pilot_aileron\":{appliedCommand.RollControl:F3},"
+            + $"\"sas_aileron\":{appliedCommand.SasRollControl:F3},"
+            + $"\"aileron_command_deg\":{appliedCommand.RollControl * _beat.PlayerAir.MaxAileronDeflectionRad * 57.29577951308232:F3},"
+            + $"\"sas_aileron_deg\":{appliedCommand.SasRollControl * _beat.PlayerAir.MaxAileronDeflectionRad * 57.29577951308232:F3},"
+            + $"\"total_aileron_command_deg\":{Math.Clamp(appliedCommand.RollControl + appliedCommand.SasRollControl, -1.0, 1.0) * _beat.PlayerAir.MaxAileronDeflectionRad * 57.29577951308232:F3},"
+            + $"\"lateral_control_applied\":{(lateralControlApplied ? "true" : "false")},"
+            + $"\"direct_lateral_control\":{(appliedCommand.DirectLateralControl ? "true" : "false")},"
+            + $"\"requested_g_cmd\":{requestedCommand.GDemand:F3},"
+            + $"\"requested_bank_target_deg\":{requestedCommand.BankTarget * 57.29577951308232:F3},"
+            + $"\"requested_rudder\":{requestedCommand.Rudder:F3},"
+            + $"\"requested_roll_control\":{requestedCommand.RollControl:F3},"
+            + $"\"requested_sas_aileron\":{requestedCommand.SasRollControl:F3},"
+            + $"\"requested_direct_lateral_control\":{(requestedCommand.DirectLateralControl ? "true" : "false")},"
+            + $"\"lateral_derivative_profile\":\"{_beat.PlayerAir.LateralDerivativeProfileId}\","
+            + $"\"lateral_cl_beta\":{_beat.PlayerAir.ClBeta:F6},\"lateral_cl_p\":{_beat.PlayerAir.ClP:F6},"
+            + $"\"lateral_cl_r\":{_beat.PlayerAir.ClR:F6},\"lateral_cl_delta_a_per_rad\":{_beat.PlayerAir.ClDeltaA:F6},"
+            + $"\"lateral_cl_delta_r_per_rad\":{_beat.PlayerAir.ClDeltaR:F6},"
+            + $"\"roll_moment_nm\":{_player.LastRollMomentNm:F1},"
             + $"\"g_valley\":{_detents.ValleyG:F3},"
             + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
             + $"\"g_hardmax\":{Protection.HardMaxG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
@@ -307,6 +348,7 @@ public static partial class WebBridge {
             + $"\"angle_off_deg\":{Geometry.AngleOff(s, b) * 57.2958:F2},"
             + $"\"range_m\":{Geometry.Range(s, b):F1},\"closure_kts\":{_closureKts:F1},"
             + $"\"gun_window\":{(CameraSolver.GunWindow(s, b) ? "true" : "false")},"
+            + $"\"gun_solution_raw\":{(_gunKill.InstantaneousGunSolution ? "true" : "false")},"
             + $"\"gun_solution\":{(_gunKill.GunSolution ? "true" : "false")},"
             + $"\"lead_valid\":{(_gunKill.HasLeadSolution ? "true" : "false")},"
             + $"\"lead_x\":{_gunKill.LeadPipper.X:F3},\"lead_y\":{_gunKill.LeadPipper.Y:F3},\"lead_z\":{_gunKill.LeadPipper.Z:F3},"
@@ -328,10 +370,24 @@ public static partial class WebBridge {
             + CombatEventsJson()
             + $"\"kill_count\":{Session.KillCount},\"splash_cue\":{(splashCue ? "true" : "false")},"
             + $"\"transition_cue\":\"{transitionCue}\","
+            + $"\"configuration_target\":\"{configurationTarget}\","
+            + $"\"configuration_automatic\":{(Session.ConfigurationAutomationEnabled ? "true" : "false")},"
+            + $"\"configuration_transition\":{(Session.ConfigurationTransitionActive ? "true" : "false")},"
+            + $"\"configuration_gear_auto\":{(Session.AutomaticGearSelection ? "true" : "false")},"
+            + $"\"configuration_flap_auto\":{(Session.AutomaticFlapSelection ? "true" : "false")},"
+            + $"\"configuration_cue\":\"{configurationCue}\","
             // Legacy frozen drives a mobile CSS interlock; Ready/Paused use their dedicated fields.
             + $"\"below_ground\":{(s.Position.Y <= 0.0 ? "true" : "false")},\"frozen\":false,"
             + $"\"shots_total\":{Session.ShotsTotal},\"shots_in_window\":{Session.ShotsInWindow},"
-            + $"\"throttle\":{_detents.Throttle:F3},\"engine\":{_player.ThrustFraction:F3},"
+            + $"\"throttle\":{_detents.Throttle:F3},\"requested_throttle\":{requestedCommand.Throttle:F3},"
+            + $"\"applied_throttle\":{appliedCommand.Throttle:F3},\"engine\":{_player.ThrustFraction:F3},"
+            + $"\"has_engine\":{(hasEngine ? "true" : "false")},"
+            + $"\"max_thrust_fraction\":{_beat.PlayerAir.MaxThrustFraction:F3},"
+            + $"\"has_afterburner\":{(_beat.PlayerAir.MaxThrustFraction > 1.0 ? "true" : "false")},"
+            + $"\"has_retractable_gear\":{(hasF86UtilitySystems ? "true" : "false")},"
+            + $"\"has_flaps\":{(hasF86UtilitySystems ? "true" : "false")},"
+            + $"\"has_electrical_system\":{(hasF86UtilitySystems ? "true" : "false")},"
+            + $"\"has_utility_hydraulics\":{(hasF86UtilitySystems ? "true" : "false")},"
             + $"\"engine_rpm_pct\":{engine.RpmPercent:F2},\"engine_thrust_lbf\":{engine.NetThrustLbf:F1},"
             + $"\"engine_running\":{(engine.Running ? "true" : "false")},"
             + $"\"fuel_lb\":{_fuel.FuelLb:F2},\"fuel_flow_lb_min\":{_fuel.SmoothedBurnLbPerMinute:F2},"
@@ -358,6 +414,7 @@ public static partial class WebBridge {
             + $"\"flap_limit_exceeded\":{(_systems.FlapLimitExceeded ? "true" : "false")},"
             + $"\"primary_bus_powered\":{(_systems.PrimaryBusPowered ? "true" : "false")},"
             + $"\"utility_hydraulic_pressure_psi\":{_systems.UtilityHydraulicPressurePsi:F1},"
+            + $"\"utility_hydraulic_nominal_psi\":{_systems.Profile.UtilityHydraulicNominalPsi:F1},"
             + MaintenanceScenarioJson()
             + $"\"approach\":{(_detents.ApproachMode ? "true" : "false")},"
             + $"\"mode\":\"{mode}\",\"wave_off\":{(waveOff ? "true" : "false")},"

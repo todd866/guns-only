@@ -25,7 +25,7 @@ const fields = [
   "arrest_remaining_energy_mj", "arrest_effective_capacity_mj", "arrest_peak_load_kn",
   "arrest_max_line_load_kn", "arrest_initial_closure_kts",
   "carrier_solid", "touchdown_grade", "touchdown_deviations",
-  "touchdown_primary_correction",
+  "touchdown_primary_correction", "control_applied", "direct_lateral_control",
 ];
 
 const eventFields = [
@@ -90,6 +90,8 @@ function row(t, overrides = {}) {
     touchdown_grade: t < 0 ? 0 : 2,
     touchdown_deviations: 0,
     touchdown_primary_correction: 0,
+    control_applied: t < 0 ? 1 : 0,
+    direct_lateral_control: 1,
     ...overrides,
   };
   return fields.map((field) => value[field]);
@@ -97,7 +99,7 @@ function row(t, overrides = {}) {
 
 function payload(overrides = {}) {
   return {
-    schema: "carrier-incident-replay.v4",
+    schema: "carrier-incident-replay.v5",
     authoritative: true,
     id: 7,
     sample_rate_hz: 12,

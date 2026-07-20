@@ -44,9 +44,33 @@ async function readJsonBody(request) {
   // stream fallback so the function is also usable when helpers are disabled.
   const body = request.body;
   if (body !== undefined && body !== null) {
-    if (Buffer.isBuffer(body)) return JSON.parse(body.toString("utf8"));
-    if (typeof body === "string") return JSON.parse(body);
-    if (typeof body === "object") return body;
+    if (Buffer.isBuffer(body)) {
+      if (body.byteLength > MAX_REQUEST_BYTES) {
+        throw new RequestBodyTooLargeError(`telemetry request exceeds ${MAX_REQUEST_BYTES} bytes`);
+      }
+      return JSON.parse(body.toString("utf8"));
+    }
+    if (typeof body === "string") {
+      if (Buffer.byteLength(body, "utf8") > MAX_REQUEST_BYTES) {
+        throw new RequestBodyTooLargeError(`telemetry request exceeds ${MAX_REQUEST_BYTES} bytes`);
+      }
+      return JSON.parse(body);
+    }
+    if (typeof body === "object") {
+      // Vercel may parse JSON before the function runs, including a chunked request without a
+      // Content-Length header. Re-serialise that bounded envelope so the platform helper cannot
+      // bypass the same memory/write ceiling enforced by the stream fallback below.
+      let encoded;
+      try {
+        encoded = JSON.stringify(body);
+      } catch {
+        throw new InvalidTelemetryPayloadError("telemetry payload must be serializable JSON");
+      }
+      if (Buffer.byteLength(encoded, "utf8") > MAX_REQUEST_BYTES) {
+        throw new RequestBodyTooLargeError(`telemetry request exceeds ${MAX_REQUEST_BYTES} bytes`);
+      }
+      return body;
+    }
   }
 
   const chunks = [];

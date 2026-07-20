@@ -6,7 +6,22 @@ public sealed class AircraftSim {
     public const double TickHz = 120.0;
     public AircraftState State { get; private set; }
     public double LastNz { get; private set; } = 1.0;
+    /// Stage-averaged rolling moment applied by the rigid-body model during the latest fixed tick.
+    public double LastRollMomentNm { get; private set; }
+    /// The exact control command consumed by the most recent aerodynamic Step. Requested detent
+    /// state lives elsewhere; this is actuator-path truth for telemetry and replay.
+    public PilotCommand LastAppliedCommand { get; private set; } = NeutralExternalCommand(
+        default, 0.0);
+    /// False while an external contact model owns kinematics (arrestment, catapult, wreck motion)
+    /// or before the first aerodynamic Step. LastAppliedCommand is neutralised in those phases so
+    /// consumers cannot accidentally present a stale pilot input as applied control authority.
+    public bool HasAppliedFlightCommand { get; private set; }
     public bool Buffet { get; private set; }
+    const double BuffetEnterFraction = 0.86;
+    const double BuffetExitFraction = 0.80;
+    const double BuffetEnterDwellSeconds = 0.075;
+    const double BuffetExitDwellSeconds = 0.18;
+    double _buffetTransitionSeconds;
     /// Below the actual sea surface. The kernel reports physical contact only; shells own the
     /// continuous crash-to-respawn transition.
     public bool BelowGround => State.Position.Y <= 0.0;
@@ -160,7 +175,11 @@ public sealed class AircraftSim {
         Vec3D liftPlane = bodyUp - vhat * bodyUp.Dot(vhat);
         LiftDir = liftPlane.Length < 1e-9 ? bodyUp : liftPlane.Normalized();
         LastNz = 0.0;
+        LastRollMomentNm = 0.0;
+        LastAppliedCommand = NeutralExternalCommand(State, LastAppliedCommand.Throttle);
+        HasAppliedFlightCommand = false;
         Buffet = false;
+        _buffetTransitionSeconds = 0.0;
     }
 
     /// <summary>
@@ -186,6 +205,8 @@ public sealed class AircraftSim {
             throw new ArgumentOutOfRangeException(nameof(throttle));
         if (!double.IsFinite(dt) || dt < 0.0)
             throw new ArgumentOutOfRangeException(nameof(dt));
+        LastAppliedCommand = NeutralExternalCommand(State, throttle);
+        HasAppliedFlightCommand = false;
         AdvanceEngine(throttle, dt);
     }
 
@@ -198,6 +219,8 @@ public sealed class AircraftSim {
     }
 
     public void Step(in PilotCommand cmd, double dt) {
+        LastAppliedCommand = cmd;
+        HasAppliedFlightCommand = true;
         var s = State;
         var vel0 = s.VelocityVector();
         var vhat0 = vel0.Length < 1e-9 ? s.ForwardDir() : vel0.Normalized();
@@ -233,6 +256,8 @@ public sealed class AircraftSim {
         _bank = WrapPi(r.Bank + (k1.DBank + 2 * (k2.DBank + k3.DBank) + k4.DBank) * (dt / 6));
         var attitude = (r.Attitude + (k1.DAttitude + (k2.DAttitude + k3.DAttitude) * 2 + k4.DAttitude) * (dt / 6)).Normalized();
         var bodyRates = r.BodyRates + (k1.DBodyRates + (k2.DBodyRates + k3.DBodyRates) * 2 + k4.DBodyRates) * (dt / 6);
+        LastRollMomentNm = (k1.RollMomentNm + 2.0 * (k2.RollMomentNm + k3.RollMomentNm)
+            + k4.RollMomentNm) / 6.0;
 
         double speed = vel.Length;
         // Translational state is never rewritten to a minimum flying speed. At the exact zero-vector
@@ -258,7 +283,7 @@ public sealed class AircraftSim {
         } else {
             // Horizon bank is undefined at the pole. Express the REAL body lift plane in the
             // parallel-transported frame instead; this is continuous through straight up/down and
-            // gives DetentLayer an actual body-roll phase for its moving rate-command lead.
+            // gives DetentLayer the actual body-roll phase needed to keep its manoeuvre plane honest.
             var bodyUp = attitude.Rotate(new Vec3D(0, 1, 0));
             var bodyLiftPlane = bodyUp - vhat * bodyUp.Dot(vhat);
             if (bodyLiftPlane.Length >= 1e-9) {
@@ -283,7 +308,7 @@ public sealed class AircraftSim {
         LiftDir = aero.LiftDir;
         var (_, nzMax, nzMin) = FlightModel.ClampNz(State, cmd, _p, AirspeedMps,
             configuration, AtmosphereModel);
-        Buffet = cmd.GDemand > 0.85 * nzMax || cmd.GDemand < 0.85 * nzMin;
+        UpdateBuffetCue(cmd.GDemand, nzMax, nzMin, dt);
 
         // Drive the rotational buffet from the gust and its gradient across the airframe. Pitch is
         // forced by the vertical-gust AoA at the CG, yaw by the lateral-gust sideslip, roll by the
@@ -308,6 +333,34 @@ public sealed class AircraftSim {
             rollGust = _rollGustFiltered;
         }
         _buffet.Step(alphaGust, betaGust, rollGust, dt);
+    }
+
+    static PilotCommand NeutralExternalCommand(in AircraftState state, double throttle) => new(
+        GDemand: 0.0,
+        BankTarget: state.Bank,
+        Throttle: double.IsFinite(throttle) ? throttle : 0.0,
+        Rudder: 0.0,
+        RollControl: 0.0,
+        SasRollControl: 0.0,
+        DirectLateralControl: true);
+
+    void UpdateBuffetCue(double gDemand, double nzMax, double nzMin, double dt) {
+        double positiveFraction = nzMax > 1e-6 ? gDemand / nzMax : double.NegativeInfinity;
+        double negativeFraction = nzMin < -1e-6 ? gDemand / nzMin : double.NegativeInfinity;
+        double limitFraction = System.Math.Max(positiveFraction, negativeFraction);
+        bool desired = Buffet
+            ? limitFraction > BuffetExitFraction
+            : limitFraction >= BuffetEnterFraction;
+        if (desired == Buffet) {
+            _buffetTransitionSeconds = 0.0;
+            return;
+        }
+
+        _buffetTransitionSeconds += dt;
+        double dwell = desired ? BuffetEnterDwellSeconds : BuffetExitDwellSeconds;
+        if (_buffetTransitionSeconds < dwell) return;
+        Buffet = desired;
+        _buffetTransitionSeconds = 0.0;
     }
 
     void AdvanceEngine(double throttle, double dt) {

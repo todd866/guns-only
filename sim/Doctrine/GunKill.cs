@@ -23,6 +23,8 @@ public sealed class GunKill {
     public const double GravityMps2 = 9.80665;
 
     const double FireIntervalSeconds = 1.0 / RoundsPerSecond;
+    const double GunSolutionAcquireSeconds = 0.08;
+    const double GunSolutionReleaseSeconds = 0.12;
     const int LeadSearchSteps = 128;
     const int LeadBisectionSteps = 48;
     static readonly Vec3D Gravity = new(0.0, -GravityMps2, 0.0);
@@ -32,6 +34,7 @@ public sealed class GunKill {
     readonly double _hitRadiusM;
     bool _triggerWasHeld;
     double _secondsToNextShot;
+    double _gunSolutionTransitionSeconds;
     int _nextRoundId = 1;
 
     public GunKill(int ammo = DefaultAmmo, int hitsToKill = DefaultHitsToKill,
@@ -64,6 +67,8 @@ public sealed class GunKill {
     public bool HasLeadSolution { get; private set; }
     /// True only when the fixed gun axis is on the computed ballistic lead solution.
     public bool GunSolution { get; private set; }
+    /// Instantaneous geometric result before the display qualification dwell is applied.
+    public bool InstantaneousGunSolution { get; private set; }
     /// Point on the required gun line, at target range, for world-to-screen pipper projection.
     public Vec3D LeadPipper { get; private set; }
     public Vec3D LeadDirection { get; private set; }
@@ -92,7 +97,7 @@ public sealed class GunKill {
     public FightOutcome Step(bool triggerHeld, in AircraftState own, in AircraftState bandit, double dt) {
         if (!double.IsFinite(dt) || dt < 0.0) throw new System.ArgumentOutOfRangeException(nameof(dt));
         HitsThisStep = 0;
-        UpdateLead(own, bandit);
+        UpdateLead(own, bandit, dt);
         if (Outcome != FightOutcome.Flying) return Outcome;
 
         var ownVelocity = own.VelocityVector();
@@ -190,7 +195,7 @@ public sealed class GunKill {
         }
     }
 
-    void UpdateLead(in AircraftState own, in AircraftState bandit) {
+    void UpdateLead(in AircraftState own, in AircraftState bandit, double dt) {
         var gunForward = GunForward(own);
         var muzzle = own.Position + gunForward * 4.0;
         var relativePosition = bandit.Position - muzzle;
@@ -202,12 +207,22 @@ public sealed class GunKill {
         double range = relativePosition.Length;
         LeadPipper = muzzle + LeadDirection * System.Math.Max(range, 1.0);
 
-        if (!HasLeadSolution) {
-            GunSolution = false;
+        double angularRadius = System.Math.Atan2(_hitRadiusM, System.Math.Max(range, 1.0));
+        InstantaneousGunSolution = HasLeadSolution
+            && gunForward.Dot(LeadDirection) >= System.Math.Cos(angularRadius);
+        UpdateQualifiedGunSolution(InstantaneousGunSolution, dt);
+    }
+
+    void UpdateQualifiedGunSolution(bool instantaneous, double dt) {
+        if (instantaneous == GunSolution) {
+            _gunSolutionTransitionSeconds = 0.0;
             return;
         }
-        double angularRadius = System.Math.Atan2(_hitRadiusM, System.Math.Max(range, 1.0));
-        GunSolution = gunForward.Dot(LeadDirection) >= System.Math.Cos(angularRadius);
+        _gunSolutionTransitionSeconds += dt;
+        double dwell = instantaneous ? GunSolutionAcquireSeconds : GunSolutionReleaseSeconds;
+        if (_gunSolutionTransitionSeconds < dwell) return;
+        GunSolution = instantaneous;
+        _gunSolutionTransitionSeconds = 0.0;
     }
 
     static bool TrySolveLead(in Vec3D relativePosition, in Vec3D relativeVelocity,

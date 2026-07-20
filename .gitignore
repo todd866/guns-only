@@ -19,3 +19,4 @@ testrig/scenarios/_replay.json
 *.env.local
 .accuracy-runner/
 .test-runner/
+.vercel

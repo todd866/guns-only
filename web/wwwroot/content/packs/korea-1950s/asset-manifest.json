@@ -19,7 +19,7 @@
       "id": "vehicle.player.sabre-fury.v1",
       "kind": "model",
       "role": "vehicle.player-exterior",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [],
       "lods": [
@@ -125,7 +125,7 @@
       "id": "vehicle.bandit.swept-wing.v1",
       "kind": "model",
       "role": "vehicle.bandit-exterior",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [],
       "lods": [
@@ -223,7 +223,7 @@
       "id": "cockpit.player.sabre-fury.v1",
       "kind": "model",
       "role": "vehicle.player-cockpit",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [],
       "lods": [
@@ -274,7 +274,7 @@
       "id": "platform.carrier.straight-deck.v1",
       "kind": "model",
       "role": "platform.carrier",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [],
       "lods": [
@@ -332,7 +332,7 @@
       "id": "platform.escort.gun-destroyer.v1",
       "kind": "model",
       "role": "platform.escort",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [],
       "lods": [
@@ -391,7 +391,7 @@
       "id": "environment.sky.haze.v1",
       "kind": "environment",
       "role": "environment.sky",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [
         {
@@ -423,7 +423,7 @@
       "id": "environment.ocean.deep.v1",
       "kind": "environment",
       "role": "environment.surface",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [
         {
@@ -462,7 +462,7 @@
       "id": "vfx.gun.fire.v1",
       "kind": "vfx",
       "role": "effects.gun-fire",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [
         {
@@ -488,7 +488,7 @@
       "id": "vfx.gun.impact.v1",
       "kind": "vfx",
       "role": "effects.gun-impact",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [
         {
@@ -514,7 +514,7 @@
       "id": "vfx.vehicle.destroyed.v1",
       "kind": "vfx",
       "role": "effects.vehicle-destroyed",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [
         {
@@ -540,7 +540,7 @@
       "id": "vfx.platform.wake.v1",
       "kind": "vfx",
       "role": "effects.platform-wake",
-      "status": "production",
+      "status": "placeholder",
       "licenseRef": "license.project-code.v1",
       "sources": [
         {

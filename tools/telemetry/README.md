@@ -15,6 +15,27 @@ sortie length. Production now writes a new bounded immutable gzip chunk on each 
 does not read Blob storage while recording. These retrieval tools protect the separate offline read
 path; they are not a substitute for keeping the immutable writer.
 
+While the recorder queue is healthy, the browser retains the full 20 Hz diagnostic cadence and
+losslessly encodes unchanged fields as
+top-level deltas (`shallow-keyframe-delta-v1`). A complete keyframe is emitted every 40 samples
+(two seconds) and at each ordinary upload boundary. The `q` field is a monotonic sample sequence;
+`s` carries a full state, `d` carries changed fields, and `x` lists removed fields. Use
+`TelemetryStateDecoder` from `web/wwwroot/render/telemetry/state_delta.js` when an analysis needs
+full snapshots. It rejects a gap in the monotonic `q` sequence instead of silently applying a delta
+to the wrong prior state, and resumes safely at the next keyframe. Never treat a delta row as
+zero/default state when its preceding keyframe is unavailable.
+
+Every immutable chunk begins with its own `hdr` row containing schema/encoding version, session,
+build, batch ID, session start time, and keyframe interval. A selected chunk is therefore
+self-describing without downloading an earlier object; its first state row is also a full keyframe.
+
+This encoding is primarily a browser/envelope and Function-parse optimization. On a real Build 47
+trace it reduced uncompressed JSON by about 76%, but gzip of the same trace was effectively
+unchanged and Brotli improved by only about 8%. Vercel automatically compresses Fast Origin
+Transfer, so do not interpret the raw reduction as an equivalent billing reduction. Verify the
+actual post-deploy incoming metric; the immutable, read-free Blob design is the cost-critical
+guarantee.
+
 ## Safety contract
 
 `download.mjs` retrieves one deliberately selected blob. For a missing output it:

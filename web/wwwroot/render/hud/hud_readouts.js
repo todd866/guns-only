@@ -48,13 +48,14 @@ export function stallAwareness(state = {}) {
   return {
     baseKias: base,
     boundaryKias,
-    // A compact maneuver-awareness margin, always expressed on the same KIAS tape.
-    amberTopKias: boundaryKias * 1.15,
+    // No arbitrary amber buffer: the rendered boundary is the current physical CLmax limit.
+    amberTopKias: null,
     unit: "KIAS",
   };
 }
 
 export function speedTapeMarkers(state = {}) {
+  if (state.carrier === true && state.mode !== "FREE") return [];
   const cornerKias = finiteNumber(state.corner_speed_kias);
   if (cornerKias === null || cornerKias <= 0) return [];
   return [{ value: cornerKias, label: "COR", unit: "KIAS" }];
@@ -133,6 +134,11 @@ function gearLeg(positionValue, indicationValue, primaryBusPowered) {
 }
 
 export function systemsReadout(state = {}) {
+  const hasEngine = state.has_engine !== false && state.fuel_consumes !== false;
+  const hasElectricalSystem = state.has_electrical_system !== false;
+  const hasUtilityHydraulics = state.has_utility_hydraulics !== false;
+  const hasRetractableGear = state.has_retractable_gear !== false;
+  const hasFlaps = state.has_flaps !== false;
   const primaryBusPowered = typeof state.primary_bus_powered === "boolean"
     ? state.primary_bus_powered
     : null;
@@ -142,19 +148,20 @@ export function systemsReadout(state = {}) {
     left: gearLeg(state.gear_left, state.gear_left_indication, primaryBusPowered),
     right: gearLeg(state.gear_right, state.gear_right_indication, primaryBusPowered),
   };
-  const gearAvailable = gearHandle !== "--"
+  const gearAvailable = hasRetractableGear && (gearHandle !== "--"
     || Object.values(gear).some((leg) => leg.state !== "unknown")
     || typeof state.gear_unsafe === "boolean"
     || typeof state.gear_warning_horn === "boolean"
-    || typeof state.gear_limit_exceeded === "boolean";
+    || typeof state.gear_limit_exceeded === "boolean");
   const gearUnsafe = state.gear_unsafe === true
     || Object.values(gear).some((leg) => leg.state === "transit");
 
   const flapLever = normalizedEnum(state.flap_lever, ["UP", "HOLD", "DOWN"], "--");
   const flapLeftDeg = finiteNumber(state.flap_left_deg);
   const flapRightDeg = finiteNumber(state.flap_right_deg);
-  const flapAvailable = flapLever !== "--" || flapLeftDeg !== null || flapRightDeg !== null
-    || typeof state.flap_split === "boolean" || typeof state.flap_limit_exceeded === "boolean";
+  const flapAvailable = hasFlaps && (flapLever !== "--" || flapLeftDeg !== null
+    || flapRightDeg !== null || typeof state.flap_split === "boolean"
+    || typeof state.flap_limit_exceeded === "boolean");
   const flapSplit = state.flap_split === true
     || (flapLeftDeg !== null && flapRightDeg !== null && Math.abs(flapLeftDeg - flapRightDeg) > 2);
   const flapPositionText = flapLeftDeg === null && flapRightDeg === null
@@ -162,25 +169,91 @@ export function systemsReadout(state = {}) {
     : flapLeftDeg !== null && flapRightDeg !== null
       ? `${Math.round(flapLeftDeg)}°/${Math.round(flapRightDeg)}°`
       : `${Math.round(flapLeftDeg ?? flapRightDeg)}°`;
+  const mode = normalizedEnum(state.mode,
+    ["FREE", "APPROACH", "WAVE-OFF", "BOLTER", "CATAPULT", "ARRESTED", "STOPPED", "TERMINAL"],
+    "--");
+  const configurationTarget = normalizedEnum(state.configuration_target,
+    ["COMBAT", "RECOVERY"], "--");
+  const configurationAutomatic = state.configuration_automatic === true;
+  const configurationTransition = state.configuration_transition === true;
+  const automaticGear = configurationAutomatic && state.configuration_gear_auto !== false;
+  const automaticFlaps = configurationAutomatic && state.configuration_flap_auto !== false;
+  // Cleanup is a phase-specific decision, not a generic objection to landing configuration.
+  // Discrete handle/indication states avoid relevance flicker while the physical legs travel.
+  const cleanupMode = configurationTarget === "COMBAT"
+    || (configurationTarget === "--"
+      && (mode === "FREE" || mode === "WAVE-OFF" || mode === "BOLTER"));
+  const gearNeedsCleanup = hasRetractableGear && (gearHandle === "DOWN"
+    || Object.values(gear).some((leg) => leg.state === "down" || leg.state === "transit"));
+  // Flap angles are authoritative actuator positions rounded by the bridge, not noisy graphics
+  // estimates. The quarter-degree deadband is the systems model's existing deployed threshold.
+  const flapNeedsCleanup = hasFlaps && (flapLever === "DOWN"
+    || Math.max(flapLeftDeg ?? 0, flapRightDeg ?? 0) > 0.25);
+  const manualConfigurationOutstanding = configurationAutomatic
+    && ((gearNeedsCleanup && !automaticGear) || (flapNeedsCleanup && !automaticFlaps));
+  const configurationActionable = cleanupMode && (gearNeedsCleanup || flapNeedsCleanup)
+    && (!configurationAutomatic || manualConfigurationOutstanding);
 
   const utilityHydraulicPressurePsi = finiteNumber(state.utility_hydraulic_pressure_psi);
+  const utilityHydraulicNominalPsi = finiteNumber(state.utility_hydraulic_nominal_psi);
+  const hydraulicFraction = utilityHydraulicPressurePsi !== null
+    && utilityHydraulicNominalPsi !== null
+    && utilityHydraulicNominalPsi > 0
+    ? utilityHydraulicPressurePsi / utilityHydraulicNominalPsi
+    : null;
   const engineRpmPct = finiteNumber(state.engine_rpm_pct);
   const engineRunning = typeof state.engine_running === "boolean" ? state.engine_running : null;
-  const engineAvailable = engineRpmPct !== null || engineRunning !== null;
-  const electricalAvailable = primaryBusPowered !== null;
-  const hydraulicAvailable = utilityHydraulicPressurePsi !== null;
+  const engineAvailable = hasEngine && (engineRpmPct !== null || engineRunning !== null);
+  const electricalAvailable = hasElectricalSystem && primaryBusPowered !== null;
+  const hydraulicAvailable = hasUtilityHydraulics && utilityHydraulicPressurePsi !== null;
 
   const warnings = [];
-  if (engineRunning === false) warnings.push({ text: "ENGINE FLAMEOUT", level: "warning" });
-  if (state.gear_warning_horn === true) warnings.push({ text: "GEAR WARNING", level: "warning" });
-  if (state.gear_limit_exceeded === true) warnings.push({ text: "GEAR OVERSPEED", level: "warning" });
-  else if (gearUnsafe) warnings.push({ text: "GEAR UNSAFE", level: "caution" });
-  if (state.flap_limit_exceeded === true) warnings.push({ text: "FLAP OVERSPEED", level: "warning" });
-  if (flapSplit) warnings.push({ text: "FLAP SPLIT", level: "warning" });
-  if (primaryBusPowered === false) warnings.push({ text: "PRIMARY BUS", level: "caution" });
+  if (engineAvailable && engineRunning === false) {
+    warnings.push({ text: "ENGINE FLAMEOUT", level: "warning" });
+  }
+  if (gearAvailable && state.gear_warning_horn === true) {
+    warnings.push({ text: "GEAR WARNING", level: "warning" });
+  }
+  if (gearAvailable && state.gear_limit_exceeded === true) {
+    warnings.push({ text: "GEAR OVERSPEED", level: "warning" });
+  } else if (gearAvailable && gearUnsafe
+      && !(configurationTransition && automaticGear)) {
+    warnings.push({ text: "GEAR UNSAFE", level: "caution" });
+  }
+  if (flapAvailable && state.flap_limit_exceeded === true) {
+    warnings.push({ text: "FLAP OVERSPEED", level: "warning" });
+  }
+  if (flapAvailable && flapSplit) warnings.push({ text: "FLAP SPLIT", level: "warning" });
+  if (electricalAvailable && primaryBusPowered === false) {
+    warnings.push({ text: "PRIMARY BUS", level: "caution" });
+  }
+  if (hydraulicAvailable && hydraulicFraction !== null && hydraulicFraction <= 0.10) {
+    warnings.push({ text: "UTILITY HYD LOW", level: "warning" });
+  } else if (hydraulicAvailable && hydraulicFraction !== null && hydraulicFraction < 0.90) {
+    warnings.push({ text: "UTILITY HYD DEGRADED", level: "caution" });
+  }
+  if (configurationActionable && gearNeedsCleanup
+      && !warnings.some((warning) => warning.text.startsWith("GEAR "))) {
+    warnings.push({ text: "CLEAN UP GEAR", level: "caution" });
+  }
+  if (configurationActionable && flapNeedsCleanup
+      && !warnings.some((warning) => warning.text.startsWith("FLAP "))) {
+    warnings.push({ text: "CLEAN UP FLAPS", level: "caution" });
+  }
+
+  const transitionActive = (gearAvailable && gearUnsafe)
+    || (flapAvailable && flapLever !== "--" && flapLever !== "HOLD");
+  // The landing scan remains present in the groove. After a wave-off/bolter it earns its space
+  // only until the configuration is clean or while a real transition/failure remains.
+  const recoveryRelevant = state.carrier === true
+    && (configurationTarget === "RECOVERY" || mode === "APPROACH");
+  const relevant = state.maintenance_scenario === true || warnings.length > 0
+    || transitionActive || configurationTransition || recoveryRelevant
+    || configurationActionable;
 
   return {
     available: gearAvailable || flapAvailable || engineAvailable || electricalAvailable || hydraulicAvailable,
+    relevant,
     gearAvailable,
     gearHandle,
     gear,
@@ -194,8 +267,17 @@ export function systemsReadout(state = {}) {
     flapPositionText,
     flapSplit,
     flapLimitExceeded: state.flap_limit_exceeded === true,
+    configurationActionable,
+    configurationTarget,
+    configurationAutomatic,
+    configurationTransition,
+    automaticGear,
+    automaticFlaps,
+    gearNeedsCleanup,
+    flapNeedsCleanup,
     primaryBusPowered,
     utilityHydraulicPressurePsi,
+    utilityHydraulicNominalPsi,
     engineAvailable,
     engineRpmPct,
     engineRunning,

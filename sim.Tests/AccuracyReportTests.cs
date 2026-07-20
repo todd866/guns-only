@@ -356,9 +356,8 @@ public sealed class AccuracyReportTests {
         var sim = new AircraftSim(initial, FlightModel.Sabre);
         double maxRate = 0.0;
         for (int tick = 0; tick < 3.0 * AircraftSim.TickHz; tick++) {
-            double target = Math.IEEERemainder(sim.BodyRollRad +
-                FlightModel.Sabre.FightRollRateMaxRad * FlightModel.Sabre.BankTau, 2.0 * Math.PI);
-            sim.Step(new PilotCommand(1.0, target, 1.0, 0.0), Dt);
+            sim.Step(new PilotCommand(1.0, sim.BodyRollRad, 1.0, 0.0,
+                RollControl: 1.0, DirectLateralControl: true), Dt);
             if (tick >= 0.4 * AircraftSim.TickHz)
                 maxRate = Math.Max(maxRate, Math.Abs(sim.State.BodyRates.P));
         }

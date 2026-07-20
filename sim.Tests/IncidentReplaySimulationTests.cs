@@ -76,9 +76,14 @@ public class IncidentReplaySimulationTests {
             incident.TouchdownAssessmentProfileId);
         Assert.Equal(preImpulseSinkMps, incident.DeckSinkRateMps, 10);
         Assert.Equal(preImpulseClosureMps, incident.DeckClosureMps, 10);
+        Assert.True(incident.CommandAppliedToFlight);
+        Assert.True(incident.CommandDirectLateralControl);
         Assert.True(clip.IncidentSampleIndex + 1 < clip.Samples.Count);
         IncidentReplaySample afterImpulse = clip.Samples[clip.IncidentSampleIndex + 1];
         Assert.Equal(AircraftTerminalState.Impacted, afterImpulse.TerminalState);
+        Assert.False(afterImpulse.CommandAppliedToFlight);
+        Assert.True(afterImpulse.CommandDirectLateralControl);
+        Assert.Equal(0.0, afterImpulse.CommandRollControl, 10);
         Assert.Equal(incident.Tick + 1, afterImpulse.Tick);
         Assert.Equal(incident.TimeSeconds + SimulationSession.FixedDeltaSeconds,
             afterImpulse.TimeSeconds, 10);

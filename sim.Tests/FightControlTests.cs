@@ -109,6 +109,204 @@ public class FightControlTests {
         Assert.InRange(maxRollRateDeg, 120.0, 145.0); // NACA-observed F-86 scale: ~140 deg/s
     }
 
+    [Fact]
+    public void GliderStrikeHasAUsableExplicitPhysicalAileronResponse() {
+        var setup = Beats.BalloonStrike();
+        var sim = new AircraftSim(setup.Player, FlightModel.GliderStrike);
+        var right = new PilotCommand(1.0, 0.0, 0.0, 0.0,
+            RollControl: 1.0, DirectLateralControl: true);
+        double maxRollRateDeg = 0.0;
+        for (int i = 0; i < 2 * AircraftSim.TickHz; i++) {
+            sim.Step(right, Dt);
+            maxRollRateDeg = System.Math.Max(maxRollRateDeg,
+                sim.State.BodyRates.P * Deg);
+        }
+
+        Assert.Equal("glider-strike-geometry-provisional-v1",
+            FlightModel.GliderStrike.LateralDerivativeProfileId);
+        Assert.InRange(FlightModel.GliderStrike.IxxKgM2, 100.0, 500.0);
+        Assert.InRange(FlightModel.GliderStrike.WingSpanM, 5.0, 7.0);
+        Assert.InRange(maxRollRateDeg, 80.0, 145.0);
+        Assert.True(sim.State.BodyAttitude.IsFinite && sim.State.BodyRates.IsFinite,
+            "small-airframe inertias must retain a finite rigid-body response");
+    }
+
+    [Fact]
+    public void NeutralManualRollDampsRateWithoutCapturingBank() {
+        var initial = new AircraftState(new Vec3D(0, 3000, 0), 375 * MpsPerKnot,
+            0.0, 0.0, 58.0 / Deg, FlightModel.Sabre.MassKg,
+            BodyRates: new BodyRates(0.55, 0.0, 0.0));
+        var sim = new AircraftSim(initial, FlightModel.Sabre);
+        // Deliberately conflicting BankTarget proves that the physical flown path does not use it
+        // as a hidden wings-level command.
+        var neutral = new PilotCommand(1.0, 0.0, 0.85, 0.0,
+            RollControl: 0.0, SasRollControl: 0.0, DirectLateralControl: true);
+
+        for (int i = 0; i < 240; i++) sim.Step(neutral, Dt);
+
+        // A banked, turning aircraft may retain a few deg/s from beta/r coupling; the invariant is
+        // that the original 31.5 deg/s has naturally damped without a bank-capture servo.
+        Assert.True(System.Math.Abs(sim.State.BodyRates.P) * Deg < 10.0,
+            $"natural lateral derivatives left {sim.State.BodyRates.P * Deg:F1} deg/s roll");
+        Assert.True(System.Math.Abs(sim.BodyRollRad) * Deg > 35.0,
+            $"neutral manual control captured the conflicting wings-level target: {sim.BodyRollRad * Deg:F1} deg");
+    }
+
+    [Fact]
+    public void ManualRollDirectionWinsOverAConflictingBankTarget() {
+        var sim = new AircraftSim(new AircraftState(new Vec3D(0, 3000, 0),
+            375 * MpsPerKnot, 0.0, 0.0, 0.0, FlightModel.Sabre.MassKg), FlightModel.Sabre);
+        var rightRoll = new PilotCommand(1.0, -1.0, 0.85, 0.0,
+            RollControl: 1.0,
+            SasRollControl: 0.0,
+            DirectLateralControl: true);
+
+        for (int i = 0; i < 30; i++) sim.Step(rightRoll, Dt);
+
+        Assert.True(sim.State.BodyRates.P > 0.0,
+            $"right aileron was overridden by bank target: {sim.State.BodyRates.P * Deg:F1} deg/s");
+        Assert.True(sim.BodyRollRad > 0.0,
+            $"right aileron produced {sim.BodyRollRad * Deg:F1} deg bank");
+    }
+
+    [Fact]
+    public void NeutralManualAileronHasNoHiddenServoAndNaturalRollDampingOpposesRate() {
+        var initial = new AircraftState(new Vec3D(0, 3000, 0), 375 * MpsPerKnot,
+            0.0, 0.0, 0.0, FlightModel.Sabre.MassKg,
+            BodyRates: new BodyRates(0.40, 0.0, 0.0));
+        var sim = new AircraftSim(initial, FlightModel.Sabre);
+        var neutral = new PilotCommand(1.0, 1.25, 0.85, 0.0,
+            RollControl: 0.0, SasRollControl: 0.0, DirectLateralControl: true);
+
+        sim.Step(neutral, Dt);
+
+        Assert.True(sim.LastRollMomentNm < 0.0,
+            $"natural ClP damping did not oppose positive p: {sim.LastRollMomentNm:F0} Nm");
+        Assert.True(sim.State.BodyRates.P < initial.BodyRates.P,
+            $"neutral aileron increased p: {initial.BodyRates.P:F3} -> {sim.State.BodyRates.P:F3}");
+        Assert.True(sim.BodyRollRad > 0.0,
+            "conflicting bank target generated a hidden wings-left servo moment");
+    }
+
+    [Fact]
+    public void ManualAileronAuthorityScalesWithDynamicPressure() {
+        static AircraftSim Rig(double speedMps) => new(new AircraftState(
+            new Vec3D(0, 3000, 0), speedMps, 0.0, 0.0, 0.0,
+            FlightModel.Sabre.MassKg), FlightModel.Sabre);
+        var slow = Rig(100.0);
+        var fast = Rig(200.0);
+        var right = new PilotCommand(1.0, 0.0, 0.85, 0.0,
+            RollControl: 1.0, DirectLateralControl: true);
+
+        slow.Step(right, Dt);
+        fast.Step(right, Dt);
+
+        Assert.True(fast.LastRollMomentNm > slow.LastRollMomentNm * 3.5,
+            $"aileron moment did not follow q: slow={slow.LastRollMomentNm:F0}, fast={fast.LastRollMomentNm:F0} Nm");
+    }
+
+    [Fact]
+    public void PositiveRepoBetaProducesNegativeDihedralRollMoment() {
+        const double beta = 10.0 / Deg;
+        // Repository beta is velocity-to-the-right of the nose. Yaw the body left while inertial
+        // velocity remains north so vhat dot bodyRight is positive by construction.
+        var forward = new Vec3D(-System.Math.Sin(beta), 0.0, System.Math.Cos(beta));
+        var up = new Vec3D(0.0, 1.0, 0.0);
+        var attitude = QuaternionD.FromFrame(up.Cross(forward), up, forward);
+        var raw = new RawState(new Vec3D(0.0, 3000.0, 0.0),
+            new Vec3D(0.0, 0.0, 375.0 * MpsPerKnot), 0.0,
+            FlightModel.Sabre.MassKg, attitude, default);
+        var command = new PilotCommand(1.0, 0.0, 0.85, 0.0,
+            DirectLateralControl: true);
+
+        StateDeriv derivative = FlightModel.Derivatives(raw, command, FlightModel.Sabre,
+            up, Vec3D.Zero, 0.0, AirframeAerodynamicState.Clean);
+
+        Assert.True(derivative.RollMomentNm < 0.0,
+            $"positive repo beta produced {derivative.RollMomentNm:F0} Nm; ClBeta sign drifted");
+    }
+
+    [Fact]
+    public void PositiveRepoRudderProducesPositiveRollingMoment() {
+        var raw = LevelRaw(bankRad: 0.0);
+        var command = new PilotCommand(1.0, 0.0, 0.85, 0.6,
+            DirectLateralControl: true);
+
+        StateDeriv derivative = FlightModel.Derivatives(raw, command, FlightModel.Sabre,
+            new Vec3D(0.0, 1.0, 0.0), Vec3D.Zero, 0.0,
+            AirframeAerodynamicState.Clean);
+
+        Assert.True(derivative.RollMomentNm > 0.0,
+            $"positive repo rudder produced {derivative.RollMomentNm:F0} Nm; ClDeltaR sign drifted");
+    }
+
+    [Fact]
+    public void SplitFlapRollFadesWithSeparationButStructuralDamagePersists() {
+        static RawState AtAlpha(double alpha) {
+            var forward = new Vec3D(0.0, System.Math.Sin(alpha), System.Math.Cos(alpha));
+            var up = new Vec3D(0.0, System.Math.Cos(alpha), -System.Math.Sin(alpha));
+            var right = up.Cross(forward);
+            return new RawState(new Vec3D(0.0, 3000.0, 0.0),
+                new Vec3D(0.0, 0.0, 180.0), 0.0, FlightModel.Sabre.MassKg,
+                QuaternionD.FromFrame(right, up, forward), default);
+        }
+
+        var neutral = new PilotCommand(1.0, 0.0, 0.85, 0.0,
+            DirectLateralControl: true);
+        var splitFlap = new AirframeAerodynamicState(0.0, 0.0, 0.0,
+            LateralLiftCoefficientDifference: 0.20);
+        var structuralDamage = new AirframeAerodynamicState(0.0, 0.0, 0.0,
+            LateralLiftCoefficientDifference: 0.0,
+            PersistentLateralLiftCoefficientDifference: 0.20);
+        double separatedAlpha = FlightModel.AlphaAeroMax(FlightModel.Sabre) + 0.14;
+
+        double splitAttached = FlightModel.Derivatives(AtAlpha(0.0), neutral,
+            FlightModel.Sabre, new Vec3D(0.0, 1.0, 0.0), Vec3D.Zero, 0.0,
+            splitFlap).RollMomentNm;
+        double splitSeparated = FlightModel.Derivatives(AtAlpha(separatedAlpha), neutral,
+            FlightModel.Sabre, new Vec3D(0.0, 1.0, 0.0), Vec3D.Zero, 0.0,
+            splitFlap).RollMomentNm;
+        double damageAttached = FlightModel.Derivatives(AtAlpha(0.0), neutral,
+            FlightModel.Sabre, new Vec3D(0.0, 1.0, 0.0), Vec3D.Zero, 0.0,
+            structuralDamage).RollMomentNm;
+        double damageSeparated = FlightModel.Derivatives(AtAlpha(separatedAlpha), neutral,
+            FlightModel.Sabre, new Vec3D(0.0, 1.0, 0.0), Vec3D.Zero, 0.0,
+            structuralDamage).RollMomentNm;
+
+        Assert.True(splitAttached > 1000.0);
+        Assert.Equal(0.0, splitSeparated, 6);
+        Assert.Equal(damageAttached, damageSeparated, 6);
+        Assert.Equal(splitAttached, damageAttached, 6);
+    }
+
+    [Theory]
+    [InlineData(-120.0)]
+    [InlineData(-45.0)]
+    [InlineData(0.0)]
+    [InlineData(60.0)]
+    [InlineData(145.0)]
+    public void NeutralManualLateralControlsProduceExactlyZeroMomentAtAnyBank(double bankDeg) {
+        var raw = LevelRaw(bankDeg / Deg);
+        // A conflicting legacy target is deliberate: direct manual mode must ignore it.
+        var command = new PilotCommand(1.0, -1.7, 0.85, 0.0,
+            RollControl: 0.0, SasRollControl: 0.0, DirectLateralControl: true);
+
+        StateDeriv derivative = FlightModel.Derivatives(raw, command, FlightModel.Sabre,
+            new Vec3D(0.0, 1.0, 0.0), Vec3D.Zero, 0.0,
+            AirframeAerodynamicState.Clean);
+
+        Assert.Equal(0.0, derivative.RollMomentNm, 8);
+    }
+
+    static RawState LevelRaw(double bankRad) {
+        var forward = new Vec3D(0.0, 0.0, 1.0);
+        var up = new Vec3D(System.Math.Sin(bankRad), System.Math.Cos(bankRad), 0.0);
+        var right = up.Cross(forward);
+        return new RawState(new Vec3D(0.0, 3000.0, 0.0),
+            forward * (375.0 * MpsPerKnot), bankRad, FlightModel.Sabre.MassKg,
+            QuaternionD.FromFrame(right, up, forward), default);
+    }
+
     [Theory]
     [InlineData(85.0)]
     [InlineData(-85.0)]

@@ -45,4 +45,44 @@ public class RigidBodyTests {
         Assert.True(System.Math.Abs(sim.State.BodyRates.P) < 0.05, "roll damping must arrest the rate");
         Assert.True(System.Math.Abs(sim.BodyRollRad) < 0.05, "the attitude controller must recover wings level");
     }
+
+    [Fact]
+    public void ExternalKinematicsResetRollingMomentDiagnostic() {
+        var sim = new AircraftSim(Level(), FlightModel.Sabre);
+        var manualRoll = new PilotCommand(1.0, 0.0, 0.85, 0.0,
+            RollControl: 1.0, DirectLateralControl: true);
+        sim.Step(manualRoll, Dt);
+        Assert.NotEqual(0.0, sim.LastRollMomentNm);
+
+        sim.AdoptExternalKinematics(sim.State with { BodyRates = default });
+
+        Assert.Equal(0.0, sim.LastRollMomentNm);
+    }
+
+    [Fact]
+    public void AppliedCommandTruthTracksFlightTerminalAndExternalConstraintPhases() {
+        var sim = new AircraftSim(Level(), FlightModel.Sabre);
+        var flown = new PilotCommand(3.0, 0.7, 0.91, 0.2,
+            RollControl: 0.8, SasRollControl: -0.15,
+            DirectLateralControl: true);
+
+        sim.Step(flown, Dt);
+        Assert.True(sim.HasAppliedFlightCommand);
+        Assert.Equal(flown, sim.LastAppliedCommand);
+
+        TerminalFlightDynamics.Step(sim, AirframeAerodynamicState.Clean,
+            handedness: -1, Dt);
+        Assert.True(sim.HasAppliedFlightCommand);
+        Assert.True(sim.LastAppliedCommand.DirectLateralControl);
+        Assert.Equal(0.0, sim.LastAppliedCommand.RollControl, 10);
+        Assert.Equal(0.0, sim.LastAppliedCommand.SasRollControl, 10);
+        Assert.Equal(0.0, sim.LastAppliedCommand.GDemand, 10);
+
+        sim.AdoptExternalKinematics(sim.State with { BodyRates = default });
+        Assert.False(sim.HasAppliedFlightCommand);
+        Assert.True(sim.LastAppliedCommand.DirectLateralControl);
+        Assert.Equal(0.0, sim.LastAppliedCommand.RollControl, 10);
+        Assert.Equal(0.0, sim.LastAppliedCommand.SasRollControl, 10);
+        Assert.Equal(0.0, sim.LastRollMomentNm, 10);
+    }
 }

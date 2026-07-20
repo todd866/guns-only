@@ -17,6 +17,7 @@ public enum AircraftTerminalState {
     SimulationBounded
 }
 public enum ImpactSurface { None, Water, FlightDeck, CarrierStructure, SimulationBoundary }
+public enum FlightConfigurationTarget { Combat, Recovery }
 public enum SessionEventType {
     Hit,
     Destroyed,
@@ -85,6 +86,7 @@ public sealed class SimulationSession {
     bool _triggerDown;
     bool _opponentTriggerDown;
     int _beatIndex = 1;
+    bool _prechargeSystemsOnStage = true;
     long _playerSpawnSequence;
     long _banditSpawnSequence;
     long _carrierSpawnSequence;
@@ -115,6 +117,12 @@ public sealed class SimulationSession {
     Carrier.DeckConfiguration _deckConfiguration;
     bool _waveOffArmed;
     double _waveOffUntilMs = double.NegativeInfinity;
+    FlightConfigurationTarget _configurationTarget = FlightConfigurationTarget.Combat;
+    bool _configurationAutomationEnabled;
+    bool _manualGearConfiguration;
+    bool _manualFlapConfiguration;
+    bool _configurationWasReady = true;
+    double _configurationReadyCueUntilMs = double.NegativeInfinity;
 
     public SimulationSession(int beatIndex = 1,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial,
@@ -177,6 +185,36 @@ public sealed class SimulationSession {
     public bool TransitionCueActive => _catapult.IsActive || _simTimeMs < _transitionCueUntilMs;
     public string TransitionCue => TransitionCueActive ? _transitionCue : "";
     public bool WaveOffActive => _carrier is not null && _simTimeMs < _waveOffUntilMs;
+    public FlightConfigurationTarget ConfigurationTarget => _configurationTarget;
+    public bool ConfigurationAutomationEnabled => _configurationAutomationEnabled;
+    public bool AutomaticGearSelection => _configurationAutomationEnabled
+        && !_manualGearConfiguration;
+    public bool AutomaticFlapSelection => _configurationAutomationEnabled
+        && !_manualFlapConfiguration;
+    public bool ConfigurationTransitionActive => _configurationAutomationEnabled
+        && !ConfigurationReady;
+    public string ConfigurationCue {
+        get {
+            if (!_configurationAutomationEnabled) return "";
+            if (!ConfigurationReady) {
+                string gear = GearAtTarget ? "" : _configurationTarget
+                    == FlightConfigurationTarget.Combat ? "GEAR UP" : "GEAR DOWN";
+                string flaps = FlapsAtTarget ? "" : _configurationTarget
+                    == FlightConfigurationTarget.Combat ? "FLAPS UP" : "FLAPS DOWN";
+                string action = string.Join(" / ", new[] { gear, flaps }
+                    .Where(static value => value.Length > 0));
+                bool manual = (!GearAtTarget && _manualGearConfiguration)
+                    || (!FlapsAtTarget && _manualFlapConfiguration);
+                string prefix = manual ? "MANUAL CONFIG"
+                    : _configurationTarget == FlightConfigurationTarget.Combat
+                        ? "AUTO CLEANUP" : "AUTO RECOVERY CONFIG";
+                return $"{prefix} · {action}";
+            }
+            if (_simTimeMs >= _configurationReadyCueUntilMs) return "";
+            return _configurationTarget == FlightConfigurationTarget.Combat
+                ? "CLEAN · READY TO FIGHT" : "RECOVERY CONFIGURED";
+        }
+    }
     /// The player's preferred free-flight assistance mode. Carrier beats may temporarily force the
     /// effective detent layer to PhysicsOnly so their neutral ApproachLaw cannot cap combat at 1 G.
     public ValleyVariant Variant => _requestedVariant;
@@ -191,6 +229,7 @@ public sealed class SimulationSession {
     public void StartBeat(int index,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial) {
         if (index is < 1 or > 6) index = 1;
+        _prechargeSystemsOnStage = true;
         _beatIndex = index;
         _deckConfiguration = deckConfiguration;
         _beatFactory = index switch {
@@ -218,6 +257,10 @@ public sealed class SimulationSession {
     public void StartBeat(Func<BeatSetup> beatFactory) {
         ArgumentNullException.ThrowIfNull(beatFactory);
         _beatIndex = 0;
+        // Custom scenario authors own their initial systems condition. Preserve the historical
+        // unpressurised component state so a fault injected after staging cannot inherit hidden
+        // stored pressure from the built-in airborne-mission convenience.
+        _prechargeSystemsOnStage = false;
         _beatFactory = beatFactory;
         BeatSetup setup = beatFactory();
         _deckConfiguration = setup.Carrier?.Configuration ?? _deckConfiguration;
@@ -272,9 +315,13 @@ public sealed class SimulationSession {
         // Once ownship is physically destroyed, input cannot be allowed to reanimate controls or
         // systems. Restart remains available through the early branch above.
         if (_playerTerminalState != AircraftTerminalState.Flying) return;
+        bool newPress = pressed && _keys.PhaseAt(key, _simTimeMs) == KeyPhase.Idle;
         _keys.Feed(key, pressed, _simTimeMs);
         if (key == GKey.Trigger) Trigger(pressed);
-        if (key == GKey.GearToggle && pressed) {
+        // A browser may repeat key-down while G remains held. Configuration selectors respond to
+        // the physical rising edge, not to the host's keyboard repeat cadence.
+        if (key == GKey.GearToggle && newPress) {
+            if (_configurationAutomationEnabled) _manualGearConfiguration = true;
             LandingGearHandle selected = _systems.GearHandle == LandingGearHandle.Up
                 ? LandingGearHandle.Down : LandingGearHandle.Up;
             if (selected == LandingGearHandle.Down && _maintenanceScenario is not null)
@@ -282,22 +329,32 @@ public sealed class SimulationSession {
             else
                 _systems.CommandGear(selected);
         }
-        if (key == GKey.FlapUp)
-            _systems.SetFlapLever(pressed ? WingFlapLever.Up : WingFlapLever.Hold);
-        if (key == GKey.FlapDown)
-            _systems.SetFlapLever(pressed ? WingFlapLever.Down : WingFlapLever.Hold);
+        if (key is GKey.FlapUp or GKey.FlapDown) {
+            if (newPress && _configurationAutomationEnabled) _manualFlapConfiguration = true;
+            RefreshFlapLeverFromHeldInput();
+        }
         if (key == GKey.EmergencyGearRelease) {
             if (_maintenanceScenario is not null)
                 _maintenanceScenario.SetEmergencyGearRelease(pressed, TimeSeconds);
             else
                 _systems.SetEmergencyGearRelease(pressed);
         }
-        if (key == GKey.GearHornCutout && pressed)
+        if (key == GKey.GearHornCutout && newPress)
             _systems.SilenceGearWarningHorn();
-        if (key == GKey.ConfirmGearExtensionFailure && pressed)
+        if (key == GKey.ConfirmGearExtensionFailure && newPress)
             _maintenanceScenario?.ConfirmNormalExtensionFailure(TimeSeconds);
-        if (key == GKey.InspectGearDownlocks && pressed)
+        if (key == GKey.InspectGearDownlocks && newPress)
             _maintenanceScenario?.InspectMechanicalDownlocks(TimeSeconds);
+    }
+
+    void RefreshFlapLeverFromHeldInput() {
+        bool upHeld = _keys.PhaseAt(GKey.FlapUp, _simTimeMs) != KeyPhase.Idle;
+        bool downHeld = _keys.PhaseAt(GKey.FlapDown, _simTimeMs) != KeyPhase.Idle;
+        // Conflicting spring-loaded selections resolve to HOLD. Releasing either key resumes the
+        // other still-held command instead of allowing an unrelated key-up to cancel it.
+        _systems.SetFlapLever(upHeld == downHeld
+            ? WingFlapLever.Hold
+            : upHeld ? WingFlapLever.Up : WingFlapLever.Down);
     }
 
     /// <summary>
@@ -341,10 +398,19 @@ public sealed class SimulationSession {
         _fuel = CreatePlayerFuel();
         bool maintenanceRecovery = _beat.MaintenanceScenario
             == MaintenanceScenarioKind.F86EmergencyGearRecovery;
-        _systems = CreatePlayerSystems(onApproach: _carrier is not null && !maintenanceRecovery);
+        _systems = CreatePlayerSystems(
+            onApproach: _carrier is not null && !maintenanceRecovery,
+            prechargeUtilityHydraulics: _prechargeSystemsOnStage && !maintenanceRecovery);
         _maintenanceScenario = maintenanceRecovery
             ? new F86EmergencyGearRecoveryScenario(_systems)
             : null;
+        _configurationAutomationEnabled = _carrier is not null && !maintenanceRecovery;
+        _configurationTarget = _configurationAutomationEnabled
+            ? FlightConfigurationTarget.Recovery : FlightConfigurationTarget.Combat;
+        _manualGearConfiguration = false;
+        _manualFlapConfiguration = false;
+        _configurationWasReady = ConfigurationReady;
+        _configurationReadyCueUntilMs = double.NegativeInfinity;
         if (_carrier is not null) {
             _difficulty = _recoveryProgress.PreviewNextAttempt();
             _carrier.ApplyDifficulty(_difficulty);
@@ -427,11 +493,17 @@ public sealed class SimulationSession {
         return player;
     }
 
-    AirframeSystems CreatePlayerSystems(bool onApproach) => new(
+    AirframeSystems CreatePlayerSystems(bool onApproach,
+        bool prechargeUtilityHydraulics) => new(
         initialGear: onApproach ? LandingGearHandle.Down : LandingGearHandle.Up,
         initialFlapDegrees: onApproach
             ? AirframeSystemsProfile.F86FResearchBasis.FullFlapDegrees
-            : 0.0);
+            : 0.0,
+        // Every current beat starts with an already-running airborne jet. Prime the normal system
+        // to that steady state instead of flashing a fictitious pump failure during the first
+        // numerical time constant. The maintenance beat deliberately starts unpressurised because
+        // its utility-pump failure is injected at staging.
+        initialUtilityHydraulicPressureFraction: prechargeUtilityHydraulics ? 1.0 : 0.0);
 
     AircraftState WithCurrentFuelMass(in AircraftState state) {
         double fuelFreeMass = _beat.PlayerAir.FuelFreeMassKg;
@@ -472,6 +544,56 @@ public sealed class SimulationSession {
         _detents.ConfigureFor(_beat.PlayerAir);
         _waveOffArmed = approachMode;
         _waveOffUntilMs = double.NegativeInfinity;
+    }
+
+    bool GearAtTarget => _configurationTarget == FlightConfigurationTarget.Recovery
+        ? _systems.AllGearDownAndLocked : _systems.AllGearUpAndLocked;
+
+    bool FlapsAtTarget => _configurationTarget == FlightConfigurationTarget.Recovery
+        ? Math.Min(_systems.LeftFlapDegrees, _systems.RightFlapDegrees)
+            >= _systems.FullFlapDegrees - 0.25
+        : Math.Max(_systems.LeftFlapDegrees, _systems.RightFlapDegrees) <= 0.25;
+
+    bool ConfigurationReady => GearAtTarget && FlapsAtTarget;
+
+    /// <summary>
+    /// Switch the default configuration task. Manual selections suspend automation only for the
+    /// current task; the next recovery/combat transition deliberately restores the useful default.
+    /// Internal visibility keeps the state machine directly testable without exposing a second
+    /// player-facing control alongside G and the spring-loaded flap selector.
+    /// </summary>
+    internal void SelectAutomaticConfigurationTarget(FlightConfigurationTarget target) {
+        if (!_configurationAutomationEnabled || target == _configurationTarget) return;
+        _configurationTarget = target;
+        _manualGearConfiguration = false;
+        _manualFlapConfiguration = false;
+        _configurationReadyCueUntilMs = double.NegativeInfinity;
+        _configurationWasReady = ConfigurationReady;
+        ApplyAutomaticConfigurationCommands();
+    }
+
+    void ApplyAutomaticConfigurationCommands() {
+        if (!_configurationAutomationEnabled) return;
+        if (!_manualGearConfiguration) {
+            _systems.CommandGear(_configurationTarget == FlightConfigurationTarget.Recovery
+                ? LandingGearHandle.Down : LandingGearHandle.Up);
+        }
+        if (!_manualFlapConfiguration) {
+            WingFlapLever lever = FlapsAtTarget ? WingFlapLever.Hold
+                : _configurationTarget == FlightConfigurationTarget.Recovery
+                    ? WingFlapLever.Down : WingFlapLever.Up;
+            _systems.SetFlapLever(lever);
+        }
+    }
+
+    void ObserveAutomaticConfiguration() {
+        if (!_configurationAutomationEnabled) return;
+        bool ready = ConfigurationReady;
+        if (ready && !_configurationWasReady) {
+            _configurationReadyCueUntilMs = _simTimeMs + 2500.0;
+            if (!_manualFlapConfiguration) _systems.SetFlapLever(WingFlapLever.Hold);
+        }
+        _configurationWasReady = ready;
     }
 
     void ClearHeldInput() {
@@ -868,6 +990,7 @@ public sealed class SimulationSession {
         _recovery = Carrier.Recovery.Flying;
         _touchdown = Carrier.TouchdownResult.Flying;
         ResetFlightControls(approachMode: false);
+        SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
         _recoveryAttemptActive = _carrier is not null;
         _attemptHadSetback = false;
         _attemptCleanRecorded = false;
@@ -893,10 +1016,12 @@ public sealed class SimulationSession {
             Math.Max(0.0, trueAirspeedMps), kinematicState.Position.Y,
             _player.AtmosphereModel)
             * AirData.MpsToKnots;
+        ApplyAutomaticConfigurationCommands();
         _systems.Step(FixedDeltaSeconds, new AirframeSystemsInput(
             _player.LastEngineOperatingPoint.RpmPercent,
             iasKts,
             weightOnWheels));
+        ObserveAutomaticConfiguration();
         // Session time advances at the end of StepCore. Keep every scenario record in that same
         // beginning-of-tick epoch so a same-tick trap/loss cannot precede its latest observation.
         _maintenanceScenario?.Step(TimeSeconds);
@@ -934,7 +1059,10 @@ public sealed class SimulationSession {
         }
 
         Carrier.TouchdownResult touchdown = _touchdown;
-        PilotCommand command = _detents.Command;
+        // Replay records the command actually consumed by AircraftSim, not merely the pilot's
+        // still-requested detent. External arrest/catapult/wreck phases explicitly report that no
+        // aerodynamic control command was applied, avoiding a stale stick position in the lesson.
+        PilotCommand command = _player.LastAppliedCommand;
         Carrier.Recovery recovery = _arrestment.Phase
                 == ArrestmentModel.ArrestmentPhase.Failed
             ? Carrier.Recovery.ArrestmentFailed
@@ -948,7 +1076,7 @@ public sealed class SimulationSession {
             GroundSpeedKts: Math.Sqrt(groundVelocity.X * groundVelocity.X
                 + groundVelocity.Z * groundVelocity.Z) * AirData.MpsToKnots,
             AngleOfAttackDeg: _player.AngleOfAttackRad * 57.29577951308232,
-            ThrottleCommand: _detents.Throttle,
+            ThrottleCommand: command.Throttle,
             EnginePowerFraction: _player.ThrustFraction,
             FlightPathAngleDeg: state.Gamma * 57.29577951308232,
             VerticalSpeedFpm: groundVelocity.Y * 196.8503937007874,
@@ -1030,7 +1158,9 @@ public sealed class SimulationSession {
             TouchdownAdaptiveMinimumIndicatedAirspeedMps:
                 _difficulty.MinTrapSpeedMps,
             TouchdownAdaptiveMaximumIndicatedAirspeedMps:
-                _difficulty.MaxTrapSpeedMps));
+                _difficulty.MaxTrapSpeedMps,
+            CommandAppliedToFlight: _player.HasAppliedFlightCommand,
+            CommandDirectLateralControl: command.DirectLateralControl));
     }
 
     static QuaternionD CarrierConstrainedAttitude(Carrier carrier, double pitchRad) {
@@ -1132,6 +1262,7 @@ public sealed class SimulationSession {
                 surfaceVelocity, surfaceHeight, carrierSolid: solid);
         } else if (contact == Carrier.Recovery.Bolter) {
             _attemptHadSetback = true;
+            SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
             if (_recovery != Carrier.Recovery.Bolter) {
                 double retainedEnginePower = _player.ThrustFraction;
                 _player = CreatePlayer(_carrier.BolterFlyawayState(_player.State));
@@ -1192,6 +1323,9 @@ public sealed class SimulationSession {
             if (_carrier is not null) {
                 bool inSlot = _carrier.InApproachSlot(_player.State,
                     _player.IndicatedAirspeedMps);
+                if (inSlot && !WaveOffActive && _recovery != Carrier.Recovery.Bolter
+                    && _detents.Throttle < 0.95) SelectAutomaticConfigurationTarget(
+                    FlightConfigurationTarget.Recovery);
                 _detents.ApproachMode = inSlot && _detents.Throttle < 0.95;
                 var (along, _, height) = _carrier.LandingFrame(_player.State.Position);
                 double gsLineH = Math.Max(0.0,
@@ -1206,6 +1340,12 @@ public sealed class SimulationSession {
             _detents.AerodynamicConfiguration = _systems.AerodynamicState;
             _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir,
                 _advice, FixedDeltaSeconds);
+            if (_waveOffArmed && _detents.Throttle >= 0.95) {
+                _waveOffUntilMs = _simTimeMs + 5000.0;
+                _waveOffArmed = false;
+                SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
+                if (_recoveryAttemptActive) _attemptHadSetback = true;
+            }
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             PreparePlayerForPoweredTick();
             _player.Step(_detents.Command, FixedDeltaSeconds);
@@ -1394,6 +1534,9 @@ public sealed class SimulationSession {
         if (_carrier is not null) {
             bool inSlot = _carrier.InApproachSlot(
                 _player.State, _player.IndicatedAirspeedMps);
+            if (inSlot && !WaveOffActive && _recovery != Carrier.Recovery.Bolter
+                && _detents.Throttle < 0.95) SelectAutomaticConfigurationTarget(
+                FlightConfigurationTarget.Recovery);
             _detents.ApproachMode = inSlot && _detents.Throttle < 0.95;
             if (_detents.ApproachMode) _waveOffArmed = true;
             else if (!inSlot && _detents.Throttle < 0.95) _waveOffArmed = false;
@@ -1417,6 +1560,7 @@ public sealed class SimulationSession {
         if (_waveOffArmed && _detents.Throttle >= 0.95) {
             _waveOffUntilMs = _simTimeMs + 5000.0;
             _waveOffArmed = false;
+            SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
             if (_recoveryAttemptActive) _attemptHadSetback = true;
         }
         _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);

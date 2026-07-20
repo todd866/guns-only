@@ -39,22 +39,89 @@ export function projectTestFlightState(state = {}) {
     ? state.primary_bus_powered
     : null;
   const utilityHydraulicPressurePsi = finiteNumber(state.utility_hydraulic_pressure_psi);
+  const utilityHydraulicNominalPsi = finiteNumber(state.utility_hydraulic_nominal_psi);
+  const hasEngine = state.has_engine !== false && state.fuel_consumes !== false;
+  const hasElectricalSystem = state.has_electrical_system !== false;
+  const hasUtilityHydraulics = state.has_utility_hydraulics !== false;
+  const hasRetractableGear = state.has_retractable_gear !== false;
+  const hasFlaps = state.has_flaps !== false;
   const gearHandle = enumToken(state.gear_handle, ["UP", "DOWN"]);
   const flapLever = enumToken(state.flap_lever, ["UP", "HOLD", "DOWN"]);
+  const mode = enumToken(state.mode,
+    ["FREE", "APPROACH", "WAVE-OFF", "BOLTER", "CATAPULT", "ARRESTED", "STOPPED", "TERMINAL"]);
+  const configurationTarget = enumToken(state.configuration_target, ["COMBAT", "RECOVERY"]);
+  const configurationAutomatic = state.configuration_automatic === true;
+  const configurationTransition = state.configuration_transition === true;
+  const automaticGear = configurationAutomatic && state.configuration_gear_auto !== false;
+  const automaticFlaps = configurationAutomatic && state.configuration_flap_auto !== false;
+  const gearNose = gearIndication(state.gear_nose_indication);
+  const gearLeft = gearIndication(state.gear_left_indication);
+  const gearRight = gearIndication(state.gear_right_indication);
   const flapLeftDeg = finiteNumber(state.flap_left_deg);
   const flapRightDeg = finiteNumber(state.flap_right_deg);
   const flapSplit = state.flap_split === true
     || (flapLeftDeg !== null && flapRightDeg !== null
       && Math.abs(flapLeftDeg - flapRightDeg) > 1);
+  const hydraulicFraction = utilityHydraulicPressurePsi !== null
+    && utilityHydraulicNominalPsi !== null
+    && utilityHydraulicNominalPsi > 0
+    ? utilityHydraulicPressurePsi / utilityHydraulicNominalPsi
+    : null;
+  const hydraulicState = !hasUtilityHydraulics
+    ? "unavailable"
+    : hydraulicFraction === null
+      ? "unknown"
+      : hydraulicFraction <= 0.10
+        ? "warning"
+        : hydraulicFraction < 0.90 ? "caution" : "nominal";
+  const cleanupMode = configurationTarget === "COMBAT"
+    || (configurationTarget === UNKNOWN
+      && (mode === "FREE" || mode === "WAVE-OFF" || mode === "BOLTER"));
+  const gearNeedsCleanup = hasRetractableGear && (gearHandle === "DOWN"
+    || [gearNose, gearLeft, gearRight].some((leg) => leg.state === "down"
+      || (primaryBusPowered !== false && leg.state === "striped")));
+  // These are deterministic actuator positions rounded by the bridge. Relevance crosses this
+  // physical threshold once during travel instead of following a noisy rendered animation.
+  const flapNeedsCleanup = hasFlaps && (flapLever === "DOWN"
+    || Math.max(flapLeftDeg ?? 0, flapRightDeg ?? 0) > 0.25);
+  const manualConfigurationOutstanding = configurationAutomatic
+    && ((gearNeedsCleanup && !automaticGear) || (flapNeedsCleanup && !automaticFlaps));
+  const configurationActionable = cleanupMode && (gearNeedsCleanup || flapNeedsCleanup)
+    && (!configurationAutomatic || manualConfigurationOutstanding);
 
   const warnings = [];
-  if (engineRunning === false) warnings.push({ text: "ENGINE OUT", level: "warning" });
-  if (primaryBusPowered === false) warnings.push({ text: "PRIMARY BUS OFF", level: "caution" });
-  if (state.gear_warning_horn === true) warnings.push({ text: "GEAR HORN", level: "warning" });
-  if (state.gear_limit_exceeded === true) warnings.push({ text: "GEAR OVERSPEED", level: "warning" });
-  else if (state.gear_unsafe === true) warnings.push({ text: "GEAR UNSAFE", level: "caution" });
-  if (state.flap_limit_exceeded === true) warnings.push({ text: "FLAP OVERSPEED", level: "warning" });
-  if (flapSplit) warnings.push({ text: "FLAP SPLIT", level: "warning" });
+  if (hasEngine && engineRunning === false) {
+    warnings.push({ text: "ENGINE OUT", level: "warning" });
+  }
+  if (hasElectricalSystem && primaryBusPowered === false) {
+    warnings.push({ text: "PRIMARY BUS OFF", level: "caution" });
+  }
+  if (hasUtilityHydraulics && hydraulicState === "warning") {
+    warnings.push({ text: "UTILITY HYD LOW", level: "warning" });
+  } else if (hasUtilityHydraulics && hydraulicState === "caution") {
+    warnings.push({ text: "UTILITY HYD DEGRADED", level: "caution" });
+  }
+  if (hasRetractableGear && state.gear_warning_horn === true) {
+    warnings.push({ text: "GEAR HORN", level: "warning" });
+  }
+  if (hasRetractableGear && state.gear_limit_exceeded === true) {
+    warnings.push({ text: "GEAR OVERSPEED", level: "warning" });
+  } else if (hasRetractableGear && state.gear_unsafe === true
+      && !(configurationTransition && automaticGear)) {
+    warnings.push({ text: "GEAR UNSAFE", level: "caution" });
+  }
+  if (hasFlaps && state.flap_limit_exceeded === true) {
+    warnings.push({ text: "FLAP OVERSPEED", level: "warning" });
+  }
+  if (hasFlaps && flapSplit) warnings.push({ text: "FLAP SPLIT", level: "warning" });
+  if (configurationActionable && gearNeedsCleanup
+      && !warnings.some((warning) => warning.text.startsWith("GEAR "))) {
+    warnings.push({ text: "CLEAN UP GEAR", level: "caution" });
+  }
+  if (configurationActionable && flapNeedsCleanup
+      && !warnings.some((warning) => warning.text.startsWith("FLAP "))) {
+    warnings.push({ text: "CLEAN UP FLAPS", level: "caution" });
+  }
 
   const maintenanceActive = state.maintenance_scenario === true;
   const maintenanceScore = finiteNumber(state.maintenance_score);
@@ -67,23 +134,34 @@ export function projectTestFlightState(state = {}) {
 
   return {
     engine: {
-      rpmText: roundedText(engineRpmPct, "%"),
-      runningText: engineRunning === true ? "RUNNING" : engineRunning === false ? "OUT" : UNKNOWN,
-      state: engineRunning === false ? "warning" : engineRunning === true ? "nominal" : "unknown",
+      rpmText: hasEngine ? roundedText(engineRpmPct, "%") : UNKNOWN,
+      runningText: !hasEngine
+        ? UNKNOWN
+        : engineRunning === true ? "RUNNING" : engineRunning === false ? "OUT" : UNKNOWN,
+      state: !hasEngine
+        ? "unavailable"
+        : engineRunning === false ? "warning" : engineRunning === true ? "nominal" : "unknown",
     },
     electrical: {
-      primaryBusText: primaryBusPowered === true ? "ON" : primaryBusPowered === false ? "OFF" : UNKNOWN,
-      state: primaryBusPowered === false ? "caution" : primaryBusPowered === true ? "nominal" : "unknown",
+      primaryBusText: !hasElectricalSystem
+        ? UNKNOWN
+        : primaryBusPowered === true ? "ON" : primaryBusPowered === false ? "OFF" : UNKNOWN,
+      state: !hasElectricalSystem
+        ? "unavailable"
+        : primaryBusPowered === false ? "caution" : primaryBusPowered === true ? "nominal" : "unknown",
     },
     hydraulic: {
-      pressureText: roundedText(utilityHydraulicPressurePsi, " PSI"),
-      state: utilityHydraulicPressurePsi === null ? "unknown" : "nominal",
+      pressureText: hasUtilityHydraulics
+        ? roundedText(utilityHydraulicPressurePsi, " PSI")
+        : UNKNOWN,
+      state: hydraulicState,
     },
     gear: {
       handleText: gearHandle,
-      nose: gearIndication(state.gear_nose_indication),
-      left: gearIndication(state.gear_left_indication),
-      right: gearIndication(state.gear_right_indication),
+      nose: gearNose,
+      left: gearLeft,
+      right: gearRight,
+      inTransit: hasRetractableGear && state.gear_unsafe === true,
     },
     flaps: {
       leverText: flapLever,
@@ -91,6 +169,17 @@ export function projectTestFlightState(state = {}) {
       rightText: roundedText(flapRightDeg, "°"),
       split: flapSplit,
       overspeed: state.flap_limit_exceeded === true,
+      inTransit: hasFlaps && flapLever !== UNKNOWN && flapLever !== "HOLD",
+    },
+    configuration: {
+      actionable: configurationActionable,
+      gearNeedsCleanup,
+      flapNeedsCleanup,
+      target: configurationTarget,
+      automatic: configurationAutomatic,
+      transition: configurationTransition,
+      automaticGear,
+      automaticFlaps,
     },
     warnings,
     warningText: warnings.length ? warnings.map((warning) => warning.text).join(" · ") : "INDICATIONS NORMAL",
@@ -110,6 +199,18 @@ export function projectTestFlightState(state = {}) {
         : "INACTIVE",
     },
   };
+}
+
+/** The action panel exists only while it can change a live pilot decision. */
+export function testFlightConsoleRelevant(projected) {
+  const routineAutomaticTransition = projected?.configuration?.automatic === true
+    && projected?.configuration?.transition === true
+    && projected?.configuration?.actionable !== true;
+  return projected?.maintenance?.active === true
+    || (projected?.warnings?.length ?? 0) > 0
+    || (!routineAutomaticTransition && projected?.gear?.inTransit === true)
+    || (!routineAutomaticTransition && projected?.flaps?.inTransit === true)
+    || projected?.configuration?.actionable === true;
 }
 
 function action(id, code, gkey, behavior) {

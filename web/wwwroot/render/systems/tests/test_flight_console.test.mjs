@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   createPilotActionController,
   projectTestFlightState,
+  testFlightConsoleRelevant,
   TEST_FLIGHT_ACTIONS,
 } from "../test_flight_console.js";
 
@@ -72,6 +73,133 @@ test("formats engine, gear, flap and overspeed warnings from observable telemetr
     "FLAP OVERSPEED",
   ]);
   assert.equal(projected.warningLevel, "warning");
+});
+
+test("hydraulic truth drives warning state and panel relevance", () => {
+  const failed = projectTestFlightState({
+    utility_hydraulic_pressure_psi: 0,
+    utility_hydraulic_nominal_psi: 3000,
+  });
+  assert.equal(failed.hydraulic.state, "warning");
+  assert.match(failed.warningText, /UTILITY HYD LOW/);
+  assert.equal(testFlightConsoleRelevant(failed), true);
+
+  const normal = projectTestFlightState({
+    engine_running: true,
+    primary_bus_powered: true,
+    utility_hydraulic_pressure_psi: 3000,
+    utility_hydraulic_nominal_psi: 3000,
+    gear_unsafe: false,
+    flap_lever: "HOLD",
+  });
+  assert.equal(normal.hydraulic.state, "nominal");
+  assert.equal(testFlightConsoleRelevant(normal), false);
+});
+
+test("engine-less vehicles do not manufacture Sabre system failures", () => {
+  const projected = projectTestFlightState({
+    has_engine: false,
+    has_electrical_system: false,
+    has_utility_hydraulics: false,
+    has_retractable_gear: false,
+    has_flaps: false,
+    engine_running: false,
+    primary_bus_powered: false,
+    utility_hydraulic_pressure_psi: 0,
+    utility_hydraulic_nominal_psi: 3000,
+    gear_unsafe: true,
+    gear_warning_horn: true,
+    flap_limit_exceeded: true,
+  });
+  assert.equal(projected.engine.state, "unavailable");
+  assert.equal(projected.hydraulic.state, "unavailable");
+  assert.deepEqual(projected.warnings, []);
+  assert.equal(testFlightConsoleRelevant(projected), false);
+});
+
+test("maintenance and configuration transitions surface the console only while actionable", () => {
+  assert.equal(testFlightConsoleRelevant(projectTestFlightState({
+    maintenance_scenario: true,
+  })), true);
+  assert.equal(testFlightConsoleRelevant(projectTestFlightState({
+    flap_lever: "DOWN",
+  })), true);
+  assert.equal(testFlightConsoleRelevant(projectTestFlightState({
+    gear_unsafe: true,
+  })), true);
+});
+
+test("post-launch cleanup is actionable but normal landing configuration is not test-console clutter", () => {
+  const dirty = projectTestFlightState({
+    mode: "FREE",
+    gear_handle: "DOWN",
+    gear_nose_indication: "DOWN_LOCKED",
+    gear_left_indication: "DOWN_LOCKED",
+    gear_right_indication: "DOWN_LOCKED",
+    flap_lever: "HOLD",
+    flap_left_deg: 38,
+    flap_right_deg: 38,
+    primary_bus_powered: true,
+  });
+  assert.deepEqual(dirty.configuration, {
+    actionable: true,
+    gearNeedsCleanup: true,
+    flapNeedsCleanup: true,
+    target: "--",
+    automatic: false,
+    transition: false,
+    automaticGear: false,
+    automaticFlaps: false,
+  });
+  assert.deepEqual(dirty.warnings, [
+    { text: "CLEAN UP GEAR", level: "caution" },
+    { text: "CLEAN UP FLAPS", level: "caution" },
+  ]);
+  assert.equal(testFlightConsoleRelevant(dirty), true);
+
+  const approach = projectTestFlightState({
+    mode: "APPROACH",
+    gear_handle: "DOWN",
+    gear_nose_indication: "DOWN_LOCKED",
+    gear_left_indication: "DOWN_LOCKED",
+    gear_right_indication: "DOWN_LOCKED",
+    flap_lever: "HOLD",
+    flap_left_deg: 38,
+    flap_right_deg: 38,
+  });
+  assert.deepEqual(approach.configuration, {
+    actionable: false,
+    gearNeedsCleanup: true,
+    flapNeedsCleanup: true,
+    target: "--",
+    automatic: false,
+    transition: false,
+    automaticGear: false,
+    automaticFlaps: false,
+  });
+  assert.deepEqual(approach.warnings, []);
+  assert.equal(testFlightConsoleRelevant(approach), false);
+
+  const automaticCleanup = projectTestFlightState({
+    mode: "FREE",
+    configuration_target: "COMBAT",
+    configuration_automatic: true,
+    configuration_transition: true,
+    configuration_gear_auto: true,
+    configuration_flap_auto: true,
+    gear_handle: "UP",
+    gear_nose_indication: "UNSAFE",
+    gear_left_indication: "UNSAFE",
+    gear_right_indication: "UNSAFE",
+    gear_unsafe: true,
+    flap_lever: "UP",
+    flap_left_deg: 30,
+    flap_right_deg: 30,
+  });
+  assert.equal(automaticCleanup.configuration.actionable, false);
+  assert.deepEqual(automaticCleanup.warnings, []);
+  assert.equal(testFlightConsoleRelevant(automaticCleanup), false,
+    "routine automation belongs in the compact flight scan, not the test-flight console");
 });
 
 test("unknown or non-finite state remains explicitly unavailable", () => {
@@ -208,7 +336,15 @@ test("production shell installs, updates, and safely labels the test-flight cons
   assert.match(appSource, /renderTestFlightConsole\(state\)/);
   assert.match(appSource, /testFlightActionController\.releaseAll\(\)/);
   assert.match(appSource, /document\.addEventListener\("visibilitychange"/);
-  assert.match(indexSource, /id="test-flight-console"/);
+  assert.match(indexSource, /id="test-flight-console" hidden data-relevance="none"/);
+  assert.match(indexSource, /#test-flight-console\[hidden\] \{ display: none; \}/);
+  assert.match(appSource, /testFlightConsole\.hidden = !relevant/);
+  assert.match(appSource,
+    /state\.ready !== true && state\.paused !== true && state\.finished !== true[\s\S]*?testFlightConsoleRelevant\(projected\)/);
+  assert.doesNotMatch(indexSource, /<details id="test-flight-console" open>/,
+    "test instrumentation must not cover the default flying view");
+  assert.match(indexSource,
+    /<summary role="button" aria-expanded="false" aria-label="Toggle test-flight action console">/);
   assert.match(indexSource, />TEST FLIGHT</);
   assert.match(indexSource, /data-test-action="emergencyGearRelease"/);
   assert.match(indexSource, /data-test-action="confirmGearFailure"/);

@@ -9,6 +9,7 @@ public readonly record struct LsoAdvice(string Call, LsoSeverity Severity);
 /// positive AoA error is slow.
 public static class Lso {
     public const string FreeFlightCall = "RETURN ASTERN TO TRAP";
+    public const double AoaToleranceRad = 0.015; // ~0.9 degrees either side of configured on-speed.
     const double GlideslopeSlope = 0.06116;   // tan 3.5°
 
     public static LsoAdvice? AdviseForMode(Carrier carrier, in AircraftState aircraft,
@@ -27,8 +28,6 @@ public static class Lso {
 
         double glideslopeTolerance = System.Math.Max(1.5, range * 0.004);
         double lineupTolerance = System.Math.Max(2.5, range * 0.006);
-        const double AoaTolerance = 0.015;    // ~0.9°
-
         bool gross = !double.IsFinite(glideslopeError) || !double.IsFinite(cross)
             || !double.IsFinite(aoaError) || along > 30.0 || height < -5.0
             || glideslopeError > System.Math.Max(10.0, range * 0.025)
@@ -46,12 +45,12 @@ public static class Lso {
             return new("SINK RATE · POWER", LsoSeverity.Correcting);
 
         bool low = glideslopeError > glideslopeTolerance;
-        bool slow = aoaError > AoaTolerance;
+        bool slow = aoaError > AoaToleranceRad;
         if (low && slow) return new("POWER", LsoSeverity.Correcting);
 
         double verticalScore = System.Math.Abs(glideslopeError) / glideslopeTolerance;
         double lineupScore = System.Math.Abs(cross) / lineupTolerance;
-        double energyScore = System.Math.Abs(aoaError) / AoaTolerance;
+        double energyScore = System.Math.Abs(aoaError) / AoaToleranceRad;
         if (verticalScore <= 1.0 && lineupScore <= 1.0 && energyScore <= 1.0)
             return new("ON THE BALL", LsoSeverity.OnBall);
 

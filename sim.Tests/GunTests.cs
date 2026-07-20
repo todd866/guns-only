@@ -152,6 +152,26 @@ public class GunTests {
     }
 
     [Fact]
+    public void GunSolutionRequiresStableAcquisitionAndRelease() {
+        var gun = new GunKill();
+        var own = State(Vec3D.Zero);
+        var onAxis = State(new Vec3D(0.0, 0.0, 400.0));
+        var offAxis = State(new Vec3D(300.0, 0.0, 400.0));
+
+        gun.Step(false, own, onAxis, Dt);
+        Assert.True(gun.InstantaneousGunSolution);
+        Assert.False(gun.GunSolution);
+        for (int i = 0; i < 12; i++) gun.Step(false, own, onAxis, Dt);
+        Assert.True(gun.GunSolution);
+
+        for (int i = 0; i < 6; i++) gun.Step(false, own, offAxis, Dt);
+        Assert.False(gun.InstantaneousGunSolution);
+        Assert.True(gun.GunSolution);
+        for (int i = 0; i < 12; i++) gun.Step(false, own, offAxis, Dt);
+        Assert.False(gun.GunSolution);
+    }
+
+    [Fact]
     public void IdenticalInputsProduceIdenticalRoundsAndDamage() {
         var a = new GunKill(ammo: 20);
         var b = new GunKill(ammo: 20);

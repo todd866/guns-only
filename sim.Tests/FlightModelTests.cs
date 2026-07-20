@@ -46,6 +46,24 @@ public class FlightModelTests {
         for (int i = 0; i < 120; i++) sim.Step(hard, 1.0/AircraftSim.TickHz);
         Assert.True(sim.Buffet);
     }
+    [Fact] public void BuffetCueDoesNotChatterAcrossSingleTickBoundaryCrossings() {
+        var sim = new AircraftSim(Level(140), FlightModel.Sabre);
+        var hard = new PilotCommand(9.0, 0.0, 1.0, 0.0);
+        for (int i = 0; i < 120; i++) sim.Step(hard, 1.0/AircraftSim.TickHz);
+        Assert.True(sim.Buffet);
+
+        int transitions = 0;
+        bool previous = sim.Buffet;
+        for (int i = 0; i < 120; i++) {
+            sim.Step(i % 2 == 0 ? Cruise : hard, 1.0/AircraftSim.TickHz);
+            if (sim.Buffet != previous) transitions++;
+            previous = sim.Buffet;
+        }
+        Assert.Equal(0, transitions);
+
+        for (int i = 0; i < 60; i++) sim.Step(Cruise, 1.0/AircraftSim.TickHz);
+        Assert.False(sim.Buffet);
+    }
     [Fact] public void BankApproachesTargetAtFiniteRate() {
         var sim = new AircraftSim(Level(), FlightModel.Sabre);
         var roll = new PilotCommand(1.0, 1.5708, 0.85, 0.0);

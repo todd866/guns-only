@@ -156,6 +156,75 @@ public class DetentLayerTests {
         Assert.True(wentNegative, "bank target should wrap past +pi into negative (through inverted), not pin");
         Assert.InRange(d.Command.BankTarget, -System.Math.PI - 1e-9, System.Math.PI + 1e-9);
     }
+    [Fact] public void FlownRollPublishesPilotAileronAndNeutralDoesNotCaptureAnAttitude() {
+        var initial = new AircraftSim(Fast with { Bank = 0.72 }, FlightModel.Sabre);
+        var d = new DetentLayer(); var g = new KeyGrammar();
+
+        d.Tick(g, 0.0, initial.State, FlightModel.Sabre, Advice, 1.0 / AircraftSim.TickHz);
+        Assert.True(d.Command.DirectLateralControl);
+        Assert.Equal(0.0, d.Command.RollControl, 10);
+        Assert.Equal(0.0, d.Command.SasRollControl, 10);
+        Assert.Equal(initial.BodyRollRad, d.Command.BankTarget, 6);
+
+        g.Feed(GKey.RollRight, true, 10.0);
+        d.Tick(g, 10.0, initial.State, FlightModel.Sabre, Advice, 1.0 / AircraftSim.TickHz);
+        Assert.Equal(1.0, d.Command.RollControl, 10);
+        Assert.Equal(0.0, d.Command.SasRollControl, 10);
+
+        g.Feed(GKey.RollRight, false, 20.0);
+        d.Tick(g, 20.0, initial.State, FlightModel.Sabre, Advice, 1.0 / AircraftSim.TickHz);
+        Assert.Equal(0.0, d.Command.RollControl, 10);
+        Assert.Equal(0.0, d.Command.SasRollControl, 10);
+        Assert.Equal(initial.BodyRollRad, d.Command.BankTarget, 6);
+    }
+    [Fact] public void DeferredRollTapsReplayOnlyUnseenPressesAndPreserveEveryPulse() {
+        var sim = new AircraftSim(Fast, FlightModel.Sabre);
+        var d = new DetentLayer();
+        var g = new KeyGrammar();
+        double dt = 1.0 / AircraftSim.TickHz;
+
+        // This press was observed down, so its later deferred tap classification must not fly it
+        // for a second time.
+        g.Feed(GKey.RollRight, true, 0.0);
+        d.Tick(g, 0.0, sim.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(1.0, d.Command.RollControl, 10);
+        g.Feed(GKey.RollRight, false, 90.0);
+        d.Tick(g, 400.0, sim.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(0.0, d.Command.RollControl, 10);
+
+        // A later tap occurs entirely between polls. The old sticky sampled boolean suppressed it;
+        // the press token now yields exactly one fixed-tick pulse.
+        g.Feed(GKey.RollRight, true, 500.0);
+        g.Feed(GKey.RollRight, false, 580.0);
+        d.Tick(g, 900.0, sim.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(1.0, d.Command.RollControl, 10);
+        d.Tick(g, 900.0 + 1000.0 / AircraftSim.TickHz,
+            sim.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(0.0, d.Command.RollControl, 10);
+
+        // Two unseen taps committed in one poll remain two ordered pulses instead of collapsing
+        // through `rTaps > 0`. A left tap has the corresponding negative sign and no residue.
+        g.Feed(GKey.RollRight, true, 1000.0);
+        g.Feed(GKey.RollRight, false, 1080.0);
+        g.Feed(GKey.RollRight, true, 1400.0);
+        g.Feed(GKey.RollRight, false, 1480.0);
+        d.Tick(g, 1800.0, sim.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(1.0, d.Command.RollControl, 10);
+        d.Tick(g, 1800.0 + 1000.0 / AircraftSim.TickHz,
+            sim.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(1.0, d.Command.RollControl, 10);
+        d.Tick(g, 1800.0 + 2000.0 / AircraftSim.TickHz,
+            sim.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(0.0, d.Command.RollControl, 10);
+
+        g.Feed(GKey.RollLeft, true, 2000.0);
+        g.Feed(GKey.RollLeft, false, 2080.0);
+        d.Tick(g, 2400.0, sim.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(-1.0, d.Command.RollControl, 10);
+        d.Tick(g, 2400.0 + 1000.0 / AircraftSim.TickHz,
+            sim.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(0.0, d.Command.RollControl, 10);
+    }
     [Fact] public void EaseTapDoesNotSurvivePullRecommit() {
         var d = new DetentLayer { Variant = ValleyVariant.DoctrineDeep }; var g = new KeyGrammar();
         g.Feed(GKey.PullUp, true, 0);

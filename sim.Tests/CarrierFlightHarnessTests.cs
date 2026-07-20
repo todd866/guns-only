@@ -724,9 +724,16 @@ public class CarrierFlightHarnessTests {
 
         rig.Key(GKey.ThrottleUp, true);
         bool leftApproachLaw = false;
+        bool sawAutomaticCleanup = false;
+        bool sawReadyToFight = false;
         double freeAt = double.NaN;
+        void ObserveConfigurationCue() {
+            sawAutomaticCleanup |= rig.Session.ConfigurationCue.StartsWith("AUTO CLEANUP");
+            sawReadyToFight |= rig.Session.ConfigurationCue == "CLEAN · READY TO FIGHT";
+        }
         while (rig.TimeSeconds < 6.0 && rig.Session.Recovery == Carrier.Recovery.Flying) {
             rig.Step();
+            ObserveConfigurationCue();
             leftApproachLaw |= !rig.ApproachMode;
             if (rig.Mode == "FREE") {
                 freeAt = rig.TimeSeconds;
@@ -739,15 +746,12 @@ public class CarrierFlightHarnessTests {
         Assert.True(double.IsFinite(freeAt),
             "the five-second wave-off must settle into free flight");
         Assert.InRange(freeAt, 0.0, 5.5);
-
-        // A waveoff does not magically clean the aircraft up: make the procedural gear/flap calls
-        // the player must make, then let the real transitions and drag disappear over time.
-        rig.Key(GKey.GearToggle, true);
-        rig.Key(GKey.GearToggle, false);
-        rig.Key(GKey.FlapUp, true);
+        Assert.Equal(FlightConfigurationTarget.Combat, rig.Session.ConfigurationTarget);
+        Assert.True(rig.Session.AutomaticGearSelection);
+        Assert.True(rig.Session.AutomaticFlapSelection);
 
         while (rig.TimeSeconds < 20.0 && rig.Session.Recovery == Carrier.Recovery.Flying
-               && (rig.S.Position.Y < finalsAltitude + 100.0
+               && (rig.S.Position.Y < finalsAltitude + 150.0
                    || rig.Player.AirspeedMps < 100.0)) {
             bool accelerate = rig.S.Position.Y >= finalsAltitude + 170.0;
             double gammaLow = accelerate ? 0.025 : 0.09;
@@ -755,8 +759,8 @@ public class CarrierFlightHarnessTests {
             rig.Key(GKey.PullUp, rig.S.Gamma < gammaLow);
             rig.Key(GKey.PushDown, rig.S.Gamma > gammaHigh);
             rig.Step();
+            ObserveConfigurationCue();
         }
-        rig.Key(GKey.FlapUp, false);
         rig.Key(GKey.PullUp, false);
         rig.Key(GKey.PushDown, false);
         double egressAt = rig.TimeSeconds;
@@ -767,6 +771,10 @@ public class CarrierFlightHarnessTests {
         Assert.Equal(1.0, FlightModel.Sabre.MaxThrustFraction);
         Assert.True(rig.Session.PlayerSystems.AllGearUpAndLocked);
         Assert.InRange(rig.Session.PlayerSystems.EffectiveFlapFraction, 0.0, 0.01);
+        Assert.True(sawAutomaticCleanup,
+            "waveoff must explicitly announce the automatic cleanup task");
+        Assert.True(sawReadyToFight,
+            "physical gear/flap completion must announce that the jet is ready to fight");
         Assert.True(rig.S.Position.Y > finalsAltitude + 150.0,
             $"egress must gain useful altitude: {finalsAltitude:F0}→{rig.S.Position.Y:F0} m");
         Assert.True(rig.Player.AirspeedMps > Math.Max(94.0, finalsSpeed + 20.0),
@@ -814,8 +822,13 @@ public class CarrierFlightHarnessTests {
                 : Geometry.BankToPlaceLiftVectorOn(rig.S, aimPoint);
             double bankError = Math.IEEERemainder(wantedBank - rig.S.Bank,
                 2.0 * Math.PI);
-            rig.Key(GKey.RollRight, bankError > 0.035);
-            rig.Key(GKey.RollLeft, bankError < -0.035);
+            // The flown lateral model is a real aileron/Clp system, so neutralising at the desired
+            // bank is already too late: angular momentum carries the lift vector through it. This
+            // short rate lead makes the synthetic pilot release the public roll key before capture,
+            // just as a human rolls out, without adding a hidden bank-hold servo to the aircraft.
+            double predictedBankError = bankError - rig.S.BodyRates.P * 0.18;
+            rig.Key(GKey.RollRight, predictedBankError > 0.035);
+            rig.Key(GKey.RollLeft, predictedBankError < -0.035);
             Vec3D aimDirection = (aimPoint - rig.S.Position).Normalized();
             double aimError = Math.Acos(Math.Clamp(
                 rig.Player.BodyForward.Dot(aimDirection), -1.0, 1.0));
@@ -858,6 +871,13 @@ public class CarrierFlightHarnessTests {
         }
         rig.Key(GKey.RudderRight, false);
         rig.Key(GKey.RudderLeft, false);
+        // The synthetic pilot has completed the intercept. Stand down every manoeuvring input it
+        // may have held on the splash tick; terminal physics should evaluate a surviving ownship,
+        // not keep flying the last bang-bang pursuit command while the wreck falls to the sea.
+        rig.Key(GKey.RollRight, false);
+        rig.Key(GKey.RollLeft, false);
+        rig.Key(GKey.PullUp, false);
+        rig.Key(GKey.PushDown, false);
 
         _o.WriteLine($"FULL SORTIE: free={freeAt:F1}s "
             + $"egress={egressAt:F1}s/{egressSpeedKt:F0}kt/{egressAltitude:F0}m "
@@ -898,8 +918,18 @@ public class CarrierFlightHarnessTests {
         AircraftState destroyedBandit = rig.B;
         while (rig.Session.Lifecycle != SimulationSession.LifecycleState.Finished
             && rig.TimeSeconds < destroyedAt
-                + SimulationSession.TerminalSimulationLimitSeconds + 20.0)
+                + SimulationSession.TerminalSimulationLimitSeconds + 20.0) {
+            // Splash is not permission for the synthetic pilot to stop flying. Recover the bank and
+            // flight path using the same public controls while the destroyed aircraft completes its
+            // physical fall; otherwise the test is measuring an abandoned ownship, not continuity.
+            double recoveryBankError = Math.IEEERemainder(-rig.S.Bank, 2.0 * Math.PI);
+            rig.Key(GKey.RollRight, recoveryBankError > 0.035);
+            rig.Key(GKey.RollLeft, recoveryBankError < -0.035);
+            bool bankNearlyLevel = Math.Abs(recoveryBankError) < 0.20;
+            rig.Key(GKey.PullUp, bankNearlyLevel && rig.S.Gamma < -0.02);
+            rig.Key(GKey.PushDown, bankNearlyLevel && rig.S.Gamma > 0.12);
             rig.Step();
+        }
 
         Assert.NotEqual(destroyedBandit.Position, rig.B.Position);
         Assert.Equal(SimulationSession.LifecycleState.Finished, rig.Session.Lifecycle);

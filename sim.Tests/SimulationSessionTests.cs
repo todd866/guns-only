@@ -111,6 +111,71 @@ public class SimulationSessionTests {
     }
 
     [Fact]
+    public void GearCyclesOncePerGPressAndMissionStagingDoesNotOverrideThePilot() {
+        var session = new SimulationSession(5);
+        double stagedFlapDegrees = session.PlayerSystems.LeftFlapDegrees;
+
+        Assert.Equal(LandingGearHandle.Down, session.PlayerSystems.GearHandle);
+        Assert.True(stagedFlapDegrees > 0.0);
+        session.Begin();
+
+        session.FeedKey(GKey.GearToggle, true);
+        Assert.Equal(LandingGearHandle.Up, session.PlayerSystems.GearHandle);
+        session.FeedKey(GKey.GearToggle, true); // host key-repeat while G is still held
+        Assert.Equal(LandingGearHandle.Up, session.PlayerSystems.GearHandle);
+        session.FeedKey(GKey.GearToggle, false);
+
+        session.FeedKey(GKey.FlapUp, true);
+        for (int i = 0; i < 240; i++) session.StepFixed();
+
+        Assert.Equal(LandingGearHandle.Up, session.PlayerSystems.GearHandle);
+        Assert.Equal(WingFlapLever.Up, session.PlayerSystems.FlapLever);
+        Assert.True(session.PlayerSystems.LeftFlapDegrees < stagedFlapDegrees,
+            "the pilot's cleanup command must survive the carrier approach controller");
+
+        session.FeedKey(GKey.FlapUp, false);
+        double heldFlapDegrees = session.PlayerSystems.LeftFlapDegrees;
+        for (int i = 0; i < 60; i++) session.StepFixed();
+        Assert.Equal(WingFlapLever.Hold, session.PlayerSystems.FlapLever);
+        Assert.Equal(heldFlapDegrees, session.PlayerSystems.LeftFlapDegrees, precision: 12);
+
+        session.FeedKey(GKey.GearToggle, true);
+        Assert.Equal(LandingGearHandle.Down, session.PlayerSystems.GearHandle);
+        session.FeedKey(GKey.GearToggle, true); // repeat still cannot reverse the selection
+        Assert.Equal(LandingGearHandle.Down, session.PlayerSystems.GearHandle);
+        session.FeedKey(GKey.GearToggle, false);
+    }
+
+    [Fact]
+    public void FlapBracketsAreSpringLoadedExplicitCommands() {
+        var session = new SimulationSession(1);
+        session.Begin();
+
+        session.FeedKey(GKey.FlapDown, true);
+        Assert.Equal(WingFlapLever.Down, session.PlayerSystems.FlapLever);
+        for (int i = 0; i < 120; i++) session.StepFixed();
+        Assert.True(session.PlayerSystems.LeftFlapDegrees > 0.0);
+
+        session.FeedKey(GKey.FlapDown, false);
+        double selectedDegrees = session.PlayerSystems.LeftFlapDegrees;
+        Assert.Equal(WingFlapLever.Hold, session.PlayerSystems.FlapLever);
+        for (int i = 0; i < 60; i++) session.StepFixed();
+        Assert.Equal(selectedDegrees, session.PlayerSystems.LeftFlapDegrees, precision: 12);
+
+        session.FeedKey(GKey.FlapUp, true);
+        Assert.Equal(WingFlapLever.Up, session.PlayerSystems.FlapLever);
+        session.FeedKey(GKey.FlapDown, true);
+        Assert.Equal(WingFlapLever.Hold, session.PlayerSystems.FlapLever);
+        session.FeedKey(GKey.FlapDown, false);
+        Assert.True(session.PlayerSystems.FlapLever == WingFlapLever.Up,
+            "releasing one conflicting selection must resume the other held command");
+        session.StepFixed();
+        Assert.True(session.PlayerSystems.LeftFlapDegrees < selectedDegrees);
+        session.FeedKey(GKey.FlapUp, false);
+        Assert.Equal(WingFlapLever.Hold, session.PlayerSystems.FlapLever);
+    }
+
+    [Fact]
     public void BeginAdvancesAtFixedRateAndPauseIsAStableHold() {
         var session = new SimulationSession(1);
         AircraftState initial = session.Player.State;

@@ -3,18 +3,70 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const appUrl = new URL("../../../app.js", import.meta.url);
+const hudUrl = new URL("../../../hud.js", import.meta.url);
+const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
 
-test("production creates the pack-local environment and effects adapters", async () => {
+test("production admits only state-bearing environment visuals and event-bearing effects", async () => {
   const source = await readFile(appUrl, "utf8");
-  assert.match(source, /createKoreaEnvironmentFactory\(THREE,[\s\S]*environmentFactory,/);
+  assert.match(source, /const PRODUCTION_PACK_ENVIRONMENT_ENABLED = false/);
+  assert.match(source, /const PRODUCTION_SIMULATED_CLOUDS_ENABLED = false/);
+  assert.match(source, /const PRODUCTION_ESCORT_PRESENTATION_ENABLED = false/);
+  assert.match(source, /const PRODUCTION_NONCOMBAT_WORLD_BOGEYS_VISIBLE = false/);
+  assert.match(source, /createDecisionSupportSky\(\)/);
+  assert.match(source, /createDecisionSupportSea\(\)/);
+  assert.match(source,
+    /const environmentFactory = PRODUCTION_PACK_ENVIRONMENT_ENABLED && isKoreaPack/);
   assert.match(source, /createKoreaEffectsFactory\(THREE,[\s\S]*effectsFactory,/);
-  assert.match(source, /this\.tacticalClouds\.group\.visible = false/,
-    "the pack cloud layers replace rather than double-render the procedural field");
-  assert.match(source, /manageFog: true/,
-    "the selected visual profile owns standard-material fog while its environment is active");
+  assert.match(source, /manageFog: Boolean\(environmentFactory\)/);
+  assert.match(source, /postStackFactory: createDecisionSupportPostStack/);
+  assert.match(source, /fogDensityForVisibility\(reportedVisibilityM\)/,
+    "production visibility must come from the scenario weather projection");
+  assert.match(source,
+    /escortRoot\.visible = isCarrier && PRODUCTION_ESCORT_PRESENTATION_ENABLED/);
+  assert.match(source,
+    /this\.escortSlot\.root\.visible = PRODUCTION_ESCORT_PRESENTATION_ENABLED\s*&& state\.carrier === true;[\s\S]*this\.resolveVisibleSlots\(\)/,
+    "disabled presentation slots must be gated before registry resolution and network loading");
+  assert.match(source,
+    /PRODUCTION_NONCOMBAT_WORLD_BOGEYS_VISIBLE \? snapshot\?\.bogeys \?\? \[\] : \[\]/,
+    "server traffic must not masquerade as targetable combat contacts");
   assert.match(source, /emitPackEffect\("event\.weapon\.gun-fire\.v1"/);
   assert.match(source, /emitPackEffect\("event\.weapon\.gun-impact\.v1"/);
   assert.match(source, /emitPackEffect\("event\.vehicle\.destroyed\.v1"/);
+});
+
+test("decision-support ocean and warnings carry truth without presentation flicker", async () => {
+  const [appSource, hudSource] = await Promise.all([
+    readFile(appUrl, "utf8"),
+    readFile(hudUrl, "utf8"),
+  ]);
+  assert.match(appSource, /uWindSpeed/);
+  assert.match(appSource, /Number\(state\.wind_x_mps\)/);
+  assert.match(appSource, /const windBlend = expStep/,
+    "surface-wind direction should not rotate with single-frame turbulence");
+  assert.doesNotMatch(hudSource, /Math\.sin\(now \* Math\.PI/,
+    "warnings must remain legible instead of blinking on and off");
+  assert.doesNotMatch(hudSource, /desynchronized\s*:\s*true/,
+    "HUD and WebGL scene must remain in the same compositor path");
+  assert.match(hudSource, /frame\.padlockTarget === "carrier"/);
+  assert.match(hudSource, /this\._carrierPatternCue\.update\(state, frame\.dt\)/);
+  assert.match(hudSource, /this\._aoaIndexerCue\.update/);
+  assert.match(hudSource, /this\._lsoDisplayCue\.update/);
+});
+
+test("bridge publishes authoritative local weather instead of renderer-owned decoration", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source,
+    /\(Session\.Weather\?\.Clouds \?\? ClearCloudField\.Instance\)[\s\S]*\.Sample\(playerPosition,/);
+  for (const field of [
+    "visibility_m",
+    "cloud_fraction_01",
+    "cloud_extinction_per_m",
+    "precipitation_mm_hr",
+    "icing_hazard_01",
+    "lightning_hazard_01",
+  ]) {
+    assert.match(source, new RegExp(`\\\\\"${field}\\\\\"`));
+  }
 });
 
 test("hidden replay exterior is preloaded and obsolete pack runtimes are disposed", async () => {
@@ -26,6 +78,15 @@ test("hidden replay exterior is preloaded and obsolete pack runtimes are dispose
     /if \(!pack\?\.profile \|\| !key\) \{[\s\S]*const epoch = \+\+this\.visualRuntimeEpoch;[\s\S]*queueVisualRuntimeTransition/,
     "an unstaged or invalidated pack must retire its old visual runtime");
   assert.match(source, /previous\?\.dispose\(\)/);
+});
+
+test("production keeps the rejected authored cockpit out of the pilot's SA view", async () => {
+  const source = await readFile(appUrl, "utf8");
+  assert.match(source, /const PRODUCTION_AUTHORED_COCKPIT_ENABLED = false/);
+  assert.match(source,
+    /this\.cockpitSlot\.root\.visible = PRODUCTION_AUTHORED_COCKPIT_ENABLED/);
+  assert.match(source, /const gunsightAnchor = cockpitRoot\.visible/,
+    "a hidden authoring cockpit must not retain ownership of the live gunsight");
 });
 
 test("multiplayer consumes pack slots at physical scale with a separate distant contact", async () => {

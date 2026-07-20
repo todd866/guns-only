@@ -112,7 +112,9 @@ public class IncidentReplayProjectionTests {
         TouchdownAdaptiveMinimumIndicatedAirspeedMps:
             DifficultyModel.ForLevel(3).MinTrapSpeedMps,
         TouchdownAdaptiveMaximumIndicatedAirspeedMps:
-            DifficultyModel.ForLevel(3).MaxTrapSpeedMps);
+            DifficultyModel.ForLevel(3).MaxTrapSpeedMps,
+        CommandAppliedToFlight: terminal == AircraftTerminalState.Flying,
+        CommandDirectLateralControl: true);
 
     static IncidentReplayEvent ReplayEvent(long tick, double time,
         SessionEventType type, long sequence, ImpactSurface surface,
@@ -197,6 +199,8 @@ public class IncidentReplayProjectionTests {
             | Carrier.TouchdownDeviation.Lineup), rows[1][74].GetInt32());
         Assert.Equal((int)Carrier.TouchdownCorrection.WaveOffEarlier,
             rows[1][75].GetInt32());
+        Assert.Equal(0, rows[1][76].GetInt32());
+        Assert.Equal(1, rows[1][77].GetInt32());
     }
 
     [Fact]

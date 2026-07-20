@@ -100,6 +100,22 @@ test("canonical starter content passes strict validation", async () => {
   });
 });
 
+test("canonical generated visual set is labelled placeholder until production art review", async () => {
+  const manifest = await readJson(path.join(
+    REPOSITORY_ROOT,
+    "content/packs/korea-1950s/asset-manifest.json",
+  ));
+  assert.equal(manifest.assets.length > 0, true);
+  assert.deepEqual(
+    manifest.assets.filter((asset) => asset.status !== "placeholder").map((asset) => ({
+      id: asset.id,
+      status: asset.status,
+    })),
+    [],
+    "code-generated starter visuals must not claim production art maturity",
+  );
+});
+
 test("WebBridge Korea presentation constants match the canonical starter pack", async () => {
   const bridgeSource = await readFile(path.join(REPOSITORY_ROOT, WEB_BRIDGE), "utf8");
   const constants = csharpStringConstants(bridgeSource);

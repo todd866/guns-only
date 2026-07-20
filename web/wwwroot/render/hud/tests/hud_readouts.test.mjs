@@ -40,10 +40,15 @@ test("stall awareness and corner marker stay entirely in KIAS", () => {
   assert.deepEqual(awareness, {
     baseKias: 119.0,
     boundaryKias: 197.33,
-    amberTopKias: 197.33 * 1.15,
+    amberTopKias: null,
     unit: "KIAS",
   });
   assert.deepEqual(markers, [{ value: 314.79, label: "COR", unit: "KIAS" }]);
+  assert.deepEqual(speedTapeMarkers({
+    corner_speed_kias: 314.79,
+    carrier: true,
+    mode: "APPROACH",
+  }), []);
 });
 
 test("powered fuel readout uses pounds per minute and time to bingo", () => {
@@ -203,6 +208,147 @@ test("systems readout surfaces procedural failure cues without inventing absent 
   ]);
 });
 
+test("normal systems stay latent while recovery, transitions, and failures surface them", () => {
+  const normal = systemsReadout({
+    has_engine: true,
+    has_retractable_gear: true,
+    has_flaps: true,
+    has_electrical_system: true,
+    has_utility_hydraulics: true,
+    engine_running: true,
+    gear_handle: "UP",
+    gear_nose_indication: "UP_LOCKED",
+    gear_left_indication: "UP_LOCKED",
+    gear_right_indication: "UP_LOCKED",
+    gear_unsafe: false,
+    flap_lever: "HOLD",
+    primary_bus_powered: true,
+    utility_hydraulic_pressure_psi: 3000,
+    utility_hydraulic_nominal_psi: 3000,
+  });
+  assert.equal(normal.available, true);
+  assert.equal(normal.relevant, false);
+
+  assert.equal(systemsReadout({
+    carrier: true,
+    mode: "APPROACH",
+    gear_handle: "DOWN",
+  }).relevant, true);
+
+  const hydraulicFailure = systemsReadout({
+    utility_hydraulic_pressure_psi: 0,
+    utility_hydraulic_nominal_psi: 3000,
+  });
+  assert.equal(hydraulicFailure.relevant, true);
+  assert.deepEqual(hydraulicFailure.warnings,
+    [{ text: "UTILITY HYD LOW", level: "warning" }]);
+});
+
+test("dirty free-flight configuration surfaces until physically clean without flagging approach config", () => {
+  const dirty = systemsReadout({
+    mode: "FREE",
+    gear_handle: "DOWN",
+    gear_nose_indication: "DOWN_LOCKED",
+    gear_left_indication: "DOWN_LOCKED",
+    gear_right_indication: "DOWN_LOCKED",
+    gear_unsafe: false,
+    flap_lever: "HOLD",
+    flap_left_deg: 38,
+    flap_right_deg: 38,
+    primary_bus_powered: true,
+  });
+  assert.equal(dirty.configurationActionable, true);
+  assert.equal(dirty.gearNeedsCleanup, true);
+  assert.equal(dirty.flapNeedsCleanup, true);
+  assert.equal(dirty.relevant, true);
+  assert.deepEqual(dirty.warnings, [
+    { text: "CLEAN UP GEAR", level: "caution" },
+    { text: "CLEAN UP FLAPS", level: "caution" },
+  ]);
+
+  const approach = systemsReadout({
+    carrier: true,
+    mode: "APPROACH",
+    gear_handle: "DOWN",
+    gear_nose_indication: "DOWN_LOCKED",
+    gear_left_indication: "DOWN_LOCKED",
+    gear_right_indication: "DOWN_LOCKED",
+    gear_unsafe: false,
+    flap_lever: "HOLD",
+    flap_left_deg: 38,
+    flap_right_deg: 38,
+  });
+  assert.equal(approach.configurationActionable, false);
+  assert.equal(approach.relevant, true,
+    "landing configuration remains useful in the recovery scan");
+  assert.deepEqual(approach.warnings, []);
+
+  const recoveryTargetBeforeApproachLaw = systemsReadout({
+    carrier: true,
+    mode: "FREE",
+    configuration_target: "RECOVERY",
+    configuration_automatic: true,
+    gear_handle: "DOWN",
+    gear_nose_indication: "DOWN_LOCKED",
+    gear_left_indication: "DOWN_LOCKED",
+    gear_right_indication: "DOWN_LOCKED",
+    flap_lever: "HOLD",
+    flap_left_deg: 38,
+    flap_right_deg: 38,
+  });
+  assert.equal(recoveryTargetBeforeApproachLaw.configurationActionable, false);
+  assert.deepEqual(recoveryTargetBeforeApproachLaw.warnings, [],
+    "recovery intent must prevent a false cleanup demand before the groove law engages");
+
+  const clean = systemsReadout({
+    mode: "FREE",
+    gear_handle: "UP",
+    gear_nose_indication: "UP_LOCKED",
+    gear_left_indication: "UP_LOCKED",
+    gear_right_indication: "UP_LOCKED",
+    gear_unsafe: false,
+    flap_lever: "HOLD",
+    flap_left_deg: 0,
+    flap_right_deg: 0,
+  });
+  assert.equal(clean.configurationActionable, false);
+  assert.equal(clean.relevant, false);
+
+  const cleanWaveOff = systemsReadout({
+    carrier: true,
+    mode: "WAVE-OFF",
+    gear_handle: "UP",
+    gear_nose_indication: "UP_LOCKED",
+    gear_left_indication: "UP_LOCKED",
+    gear_right_indication: "UP_LOCKED",
+    gear_unsafe: false,
+    flap_lever: "HOLD",
+    flap_left_deg: 0,
+    flap_right_deg: 0,
+  });
+  assert.equal(cleanWaveOff.relevant, false,
+    "a completed cleanup must remove the post-launch systems panel");
+});
+
+test("engine-less vehicles do not inherit fighter warnings or systems relevance", () => {
+  const readout = systemsReadout({
+    has_engine: false,
+    has_retractable_gear: false,
+    has_flaps: false,
+    has_electrical_system: false,
+    has_utility_hydraulics: false,
+    engine_running: false,
+    gear_unsafe: true,
+    flap_limit_exceeded: true,
+    primary_bus_powered: false,
+    utility_hydraulic_pressure_psi: 0,
+    utility_hydraulic_nominal_psi: 3000,
+  });
+  assert.equal(readout.available, false);
+  assert.equal(readout.relevant, false);
+  assert.deepEqual(readout.warnings, []);
+});
+
 test("production HUD consumes the pure KIAS, corner, and fuel readouts", async () => {
   const source = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
   assert.match(source, /airdataReadout\(frame\.state\)/);
@@ -210,4 +356,18 @@ test("production HUD consumes the pure KIAS, corner, and fuel readouts", async (
   assert.match(source, /fixedMarkers:\s*speedTapeMarkers\(frame\.state\)/);
   assert.match(source, /fuelReadout\(state\)/);
   assert.match(source, /systemsReadout\(frame\.state\)/);
+  assert.match(source, /state\.has_engine === false \|\| state\.fuel_consumes === false/);
+  assert.match(source, /state\.effective_on_speed_aoa_deg/);
+  assert.match(source, /state\.on_speed_aoa_tolerance_deg/);
+  assert.match(source, /case "COME LEFT": return "COME LEFT"/);
+  assert.match(source, /case "COME RIGHT": return "COME RIGHT"/);
+  assert.match(source, /case "TERMINAL":/);
+  assert.match(source, /this\._speedEntityId !== speedEntityId/);
+  assert.match(source, /1 - Math\.exp\(-dt \/ 0\.20\)/);
+  assert.doesNotMatch(source, /Number\(state\.kill_progress\)/,
+    "hit count is not a physical damage percentage");
+  assert.doesNotMatch(source, /`AIRFRAME \$\{Math\.round\(health \* 100\)\}%`/,
+    "abstract health must not masquerade as an airframe condition indication");
+  assert.doesNotMatch(source, /this\.drawFrameWash\(\)/,
+    "scanlines and vignette have no decision-support role");
 });

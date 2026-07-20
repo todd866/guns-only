@@ -6,6 +6,14 @@ import {
   stallAwareness,
   systemsReadout,
 } from "./render/hud/hud_readouts.js";
+import {
+  carrierAoARelevant,
+  carrierConfigurationCue,
+  carrierDistanceM,
+  carrierRelativeMotion,
+  CarrierPatternCueQualifier,
+} from "./render/hud/carrier_sa.js";
+import { AoAIndexerQualifier, DisplayCueQualifier } from "./render/hud/stable_cues.js";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.56)";
@@ -68,6 +76,7 @@ function hudMode(state) {
     case "ARRESTMENT FAILED":
     case "CATAPULT":
     case "BOLTER":
+    case "TERMINAL":
       return state.mode;
     default:
       break;
@@ -85,6 +94,8 @@ function lsoToken(call) {
     case "SLOW": return "SLOW";
     case "POWER": return "POWER";
     case "SINK RATE · POWER": return "SINK RATE · POWER";
+    case "COME LEFT": return "COME LEFT";
+    case "COME RIGHT": return "COME RIGHT";
     case "WAVE OFF, WAVE OFF": return "WAVE OFF";
     default: return "";
   }
@@ -118,7 +129,10 @@ function isFightHudActive(state) {
 class CombatHud {
   constructor(canvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
+    // Keep HUD and WebGL scene in the browser's ordinary compositing path. A desynchronized 2D
+    // canvas may present one compositor frame ahead of the scene beneath it, which reads as a
+    // whole-HUD tear/flicker during fast manoeuvring.
+    this.ctx = canvas.getContext("2d", { alpha: true });
     this.width = 1;
     this.height = 1;
     this.pixelRatio = 1;
@@ -149,6 +163,9 @@ class CombatHud {
     this._modeCueStartedAt = -Infinity;
     this._lastDifficulty = null;
     this._difficultyCueStartedAt = -Infinity;
+    this._carrierPatternCue = new CarrierPatternCueQualifier();
+    this._aoaIndexerCue = new AoAIndexerQualifier();
+    this._lsoDisplayCue = new DisplayCueQualifier();
   }
 
   resize(width, height, pixelRatio, safeInsets = null) {
@@ -658,6 +675,7 @@ class CombatHud {
 
   drawBandit(frame) {
     const { state, camera, banditPosition } = frame;
+    if (frame.padlock && frame.padlockTarget === "carrier") return;
     if (!isFightHudActive(state)) return;
     const angles = this.banditAngles(frame);
     const projection = this.project(banditPosition, camera);
@@ -711,18 +729,6 @@ class CombatHud {
         ctx.fillText(dataLine, textX, textY + textHeight / 2);
       }
 
-      const progress = clamp(Number(state.kill_progress) || 0, 0, 1);
-      if (progress > 0) {
-        const barWidth = size * 2;
-        const barX = projection.x - size;
-        const barY = projection.y + size + 5;
-        ctx.fillStyle = "rgba(1, 8, 12, 0.78)";
-        ctx.fillRect(barX - 2, barY - 2, barWidth + 4, 7);
-        ctx.fillStyle = "rgba(77, 255, 136, 0.2)";
-        ctx.fillRect(barX, barY, barWidth, 3);
-        ctx.fillStyle = solution ? AMBER : GREEN;
-        ctx.fillRect(barX, barY, barWidth * progress, 3);
-      }
       return;
     }
 
@@ -925,6 +931,7 @@ class CombatHud {
 
   drawRtbCue(state) {
     if (state.rtb !== true) return;
+    if (["TERMINAL", "ARRESTED", "STOPPED", "CATAPULT"].includes(hudMode(state))) return;
 
     const ctx = this.ctx;
     const fuel = fuelReadout(state);
@@ -988,9 +995,9 @@ class CombatHud {
     ctx.globalAlpha = fade;
     this.glassPanel(x, y, width, height, waveOff ? "rgba(255, 70, 93, 0.72)" : accent);
     if (waveOff) {
-      ctx.fillStyle = Math.sin(now * Math.PI * 4) > -0.35
-        ? "rgba(255, 70, 93, 0.13)"
-        : "rgba(255, 176, 32, 0.08)";
+      // Keep the urgent cue stable. Alternating fills looked like renderer flicker and made the
+      // wording harder to acquire during the exact manoeuvre where the pilot is busiest.
+      ctx.fillStyle = "rgba(255, 70, 93, 0.13)";
       roundedRect(ctx, x + 1, y + 1, width - 2, height - 2, 4);
       ctx.fill();
     }
@@ -1003,7 +1010,7 @@ class CombatHud {
   }
 
   drawDifficulty(frame) {
-    const { state, now } = frame;
+    const { state } = frame;
     if (state.carrier !== true) return;
     const level = clamp(Math.round(Number(state.difficulty_level) || 0), 0, 5);
     if (this._lastDifficulty === null) {
@@ -1031,13 +1038,19 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawAoAIndexer(state) {
-    if (state.carrier !== true || !isApproachMode(state)) return;
+  drawAoAIndexer(state, dt = 0) {
+    if (state.carrier !== true || !isApproachMode(state)) {
+      this._aoaIndexerCue.reset();
+      return;
+    }
     const aoa = Number(state.aoa_deg);
-    if (!Number.isFinite(aoa)) return;
+    const onSpeed = Number(state.effective_on_speed_aoa_deg);
+    const tolerance = Number(state.on_speed_aoa_tolerance_deg);
+    const qualified = this._aoaIndexerCue.update({ aoa, onSpeed, tolerance }, dt);
+    if (!qualified) return;
 
-    const fast = aoa < 9.8;
-    const slow = aoa > 11.4;
+    const fast = qualified === "FAST";
+    const slow = qualified === "SLOW";
     const accent = fast ? AMBER : slow ? RED : GREEN;
     const ctx = this.ctx;
     const x = this.getLayout().tapeInset + 45;
@@ -1109,21 +1122,23 @@ class CombatHud {
     ctx.rect(x - 33, centerY - halfHeight, 66, tapeHeight);
     ctx.clip();
 
-    // Low-speed awareness is derived from the same q*S*CLmax boundary as the flight model. Both
-    // the red/hatched stall region and amber maneuver margin live on this KIAS scale.
+    // Low-speed awareness is derived from the same q*S*CLmax boundary as the flight model. An
+    // amber region appears only when the kernel supplies a separately derived maneuver margin.
     if (lowSpeed?.unit === "KIAS"
-        && Number.isFinite(lowSpeed.boundaryKias)
-        && Number.isFinite(lowSpeed.amberTopKias)) {
+        && Number.isFinite(lowSpeed.boundaryKias)) {
       const tapeTop = centerY - halfHeight;
       const tapeBottom = centerY + halfHeight;
       const yForSpeed = (speedKias) => centerY - (speedKias - value) * pxPerUnit;
       const boundaryY = yForSpeed(lowSpeed.boundaryKias);
-      const amberTopY = yForSpeed(lowSpeed.amberTopKias);
-      const amberY0 = clamp(amberTopY, tapeTop, tapeBottom);
-      const amberY1 = clamp(boundaryY, tapeTop, tapeBottom);
-      if (amberY1 > amberY0) {
-        ctx.fillStyle = "rgba(255, 176, 32, 0.19)";
-        ctx.fillRect(x - 33, amberY0, 66, amberY1 - amberY0);
+      if (Number.isFinite(lowSpeed.amberTopKias)
+          && lowSpeed.amberTopKias > lowSpeed.boundaryKias) {
+        const amberTopY = yForSpeed(lowSpeed.amberTopKias);
+        const amberY0 = clamp(amberTopY, tapeTop, tapeBottom);
+        const amberY1 = clamp(boundaryY, tapeTop, tapeBottom);
+        if (amberY1 > amberY0) {
+          ctx.fillStyle = "rgba(255, 176, 32, 0.19)";
+          ctx.fillRect(x - 33, amberY0, 66, amberY1 - amberY0);
+        }
       }
 
       const redY = clamp(boundaryY, tapeTop, tapeBottom);
@@ -1292,9 +1307,7 @@ class CombatHud {
 
     const markers = [
       [state.sustained, "S", GREEN_DIM],
-      [state.g_valley, "V", GREEN],
-      [state.g_maxperform, "M", AMBER],
-      [state.g_hardmax, "H", RED],
+      [state.g_hardmax, "L", RED],
     ].map(([g, label, color]) => ({ x: mapG(g), label, color }))
       .sort((a, b) => a.x - b.x);
     const minLabelGap = 17;
@@ -1343,16 +1356,13 @@ class CombatHud {
     let occupiedLines = 0;
 
     if (state.tier === 3) {
-      const flash = Math.sin(now * Math.PI * 4) > -0.2;
-      if (flash) {
-        ctx.shadowColor = "rgba(255, 176, 32, 0.58)";
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = AMBER;
-        ctx.font = "800 19px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("OVERRIDE", this.width / 2, warningY);
-        ctx.shadowBlur = 0;
-      }
+      ctx.shadowColor = "rgba(255, 176, 32, 0.58)";
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = AMBER;
+      ctx.font = "800 19px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("OVERRIDE", this.width / 2, warningY);
+      ctx.shadowBlur = 0;
       occupiedLines += 1;
     }
 
@@ -1367,7 +1377,6 @@ class CombatHud {
 
     for (const warning of systems?.warnings ?? []) {
       const urgent = warning.level === "warning";
-      if (urgent && Math.sin(now * Math.PI * 5) < -0.25) continue;
       ctx.fillStyle = urgent ? RED : AMBER;
       ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
@@ -1379,7 +1388,7 @@ class CombatHud {
   // Physical proximity warning plus brief, non-blocking outcome transitions. Neither path owns
   // simulation time: the aircraft, carrier and opponent continue moving behind every cue.
   drawOutcomeCues(frame) {
-    const { state, now } = frame;
+    const { state } = frame;
     const ctx = this.ctx;
     const radarAltFt = Number(state.radar_alt_ft);
     const verticalSpeedFpm = Number(state.vertical_speed_fpm);
@@ -1388,20 +1397,26 @@ class CombatHud {
     // quiet; a fast sink close to sea/deck level gets the urgent warning.
     if (Number.isFinite(radarAltFt) && Number.isFinite(verticalSpeedFpm)
         && radarAltFt < 500 && verticalSpeedFpm < -1000) {
-      if (Math.sin(now * Math.PI * 5) > -0.2) {
-        ctx.fillStyle = RED;
-        ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("PULL UP", this.width / 2, this.height - this.safeInsets.bottom - 104);
-      }
+      ctx.fillStyle = RED;
+      ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const pullUpY = frame.padlock
+        ? Math.max(this.safeInsets.top + 150, this.height - this.safeInsets.bottom - 286)
+        : this.height - this.safeInsets.bottom - 104;
+      ctx.fillText("PULL UP", this.width / 2, pullUpY);
     }
 
-    const title = typeof state.transition_cue === "string" ? state.transition_cue : "";
+    const transitionTitle = typeof state.transition_cue === "string"
+      ? state.transition_cue : "";
+    const configurationTitle = typeof state.configuration_cue === "string"
+      ? state.configuration_cue : "";
+    const title = transitionTitle || configurationTitle;
     if (!title) return;
     const respawn = title.includes("RESPAWN");
     const trapped = title.includes("TRAPPED");
-    const accent = respawn ? RED : trapped ? GREEN : AMBER;
+    const ready = title.includes("READY TO FIGHT") || title.includes("CONFIGURED");
+    const accent = respawn ? RED : trapped || ready ? GREEN : AMBER;
     ctx.save();
     const w = Math.min(360, this.width - 34);
     const h = 48;
@@ -1414,19 +1429,17 @@ class CombatHud {
     ctx.fillStyle = accent;
     ctx.shadowColor = trapped ? "rgba(77, 255, 136, 0.50)" : "transparent";
     ctx.shadowBlur = trapped ? 9 : 0;
-    ctx.font = "800 18px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(title, this.width / 2, y + h / 2);
+    ctx.font = `800 ${title.length > 32 ? 12 : title.length > 24 ? 15 : 18}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    ctx.fillText(this.fitText(title, w - 24), this.width / 2, y + h / 2);
     ctx.shadowBlur = 0;
     ctx.restore();
   }
 
   drawDamageFeedback(frame) {
     const { state, now } = frame;
-    const healthValue = Number(state.player_health);
-    const health = clamp(Number.isFinite(healthValue) ? healthValue : 1, 0, 1);
     const hitActive = now < this._damageFlashUntil;
     const destroyedActive = now < this._destroyedFlashUntil;
-    if (!hitActive && !destroyedActive && health >= 0.999) return;
+    if (!hitActive && !destroyedActive) return;
 
     const ctx = this.ctx;
     ctx.save();
@@ -1462,19 +1475,6 @@ class CombatHud {
       ctx.shadowBlur = 0;
     }
 
-    if (health < 0.999) {
-      const label = `AIRFRAME ${Math.round(health * 100)}%`;
-      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      const width = ctx.measureText(label).width + 18;
-      const x = this.width - this.safeInsets.right - width - 18;
-      const y = this.safeInsets.top + 34;
-      const accent = health <= 0.25 ? RED : AMBER;
-      this.glassPanel(x, y, width, 22, accent);
-      ctx.fillStyle = accent;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, x + width / 2, y + 11);
-    }
     ctx.restore();
   }
 
@@ -1487,11 +1487,16 @@ class CombatHud {
   }
 
   drawThrottle(state) {
+    if (state.has_engine === false || state.fuel_consumes === false) return;
     const thr = Number(state.throttle);           // commanded lever, 0..1.3
     const eng = Number(state.engine);             // actual engine output (spooled, LAGS the lever)
     if (!Number.isFinite(thr)) return;
     const ctx = this.ctx;
-    const maxT = 1.3;                              // top of scale = full afterburner
+    const reportedMaximum = Number(state.max_thrust_fraction);
+    const maxT = Number.isFinite(reportedMaximum) && reportedMaximum > 0
+      ? reportedMaximum
+      : 1.0;
+    const hasAfterburner = state.has_afterburner === true && maxT > 1.0;
     // Big vertical bar immediately left of the speed tape, same height, so throttle reads as a
     // primary instrument next to airspeed.
     const centerY = this.getInstrumentCenterY();
@@ -1503,8 +1508,10 @@ class CombatHud {
 
     ctx.fillStyle = "rgba(1, 9, 14, 0.6)"; ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = "rgba(77, 255, 136, 0.35)"; ctx.lineWidth = 1.2; ctx.strokeRect(x, y, w, h);
-    // afterburner zone (above MIL) shaded amber
-    ctx.fillStyle = "rgba(255, 176, 32, 0.16)"; ctx.fillRect(x, yOf(maxT), w, yOf(1.0) - yOf(maxT));
+    if (hasAfterburner) {
+      ctx.fillStyle = "rgba(255, 176, 32, 0.16)";
+      ctx.fillRect(x, yOf(maxT), w, yOf(1.0) - yOf(maxT));
+    }
     // ENGINE fill = actual output; the GAP up to the lever caret is the spool lag you feel
     const ey = yOf(eng);
     ctx.fillStyle = eng > 1.005 ? AMBER : GREEN;
@@ -1517,7 +1524,7 @@ class CombatHud {
     ctx.fillStyle = thr > 1.005 ? AMBER : GREEN;
     ctx.beginPath(); ctx.moveTo(x + w + 1, ly); ctx.lineTo(x + w + 11, ly - 6); ctx.lineTo(x + w + 11, ly + 6); ctx.closePath(); ctx.fill();
 
-    if (eng > 1.005) {
+    if (hasAfterburner && eng > 1.005) {
       ctx.textBaseline = "middle";
       ctx.textAlign = "center";
       ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -1610,7 +1617,7 @@ class CombatHud {
   }
 
   drawSystemsPanel(systems) {
-    if (!systems?.available) return;
+    if (!systems?.available || !systems.relevant) return;
     const ctx = this.ctx;
     const warning = systems.warnings.some((item) => item.level === "warning");
     const caution = systems.warnings.length > 0;
@@ -1684,8 +1691,16 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawPadlockSa(frame) {
-    if (!frame.padlock) return;
+  drawPadlockSa(frame, systems = null) {
+    if (!frame.padlock) {
+      this._carrierPatternCue.reset();
+      return;
+    }
+    if (frame.padlockTarget === "carrier") {
+      this.drawCarrierPadlockSa(frame, systems);
+      return;
+    }
+    this._carrierPatternCue.reset();
 
     const state = frame.state;
     const ctx = this.ctx;
@@ -1801,22 +1816,258 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawFooter(state) {
+  drawCarrierPadlockSa(frame, systems = null) {
+    const state = frame.state;
+    const ctx = this.ctx;
+    const sideMargin = 12;
+    const availableWidth = Math.max(1,
+      this.width - this.safeInsets.left - this.safeInsets.right - sideMargin * 2);
+    const compact = availableWidth < 620 || this.height < 560;
+    const width = Math.min(compact ? 480 : 660, availableWidth);
+    const nominalHeight = compact ? 164 : 174;
+    const controlClearance = this.touchMode ? 132 : 74;
+    const bottomLimit = this.height - this.safeInsets.bottom - controlClearance;
+    const minimumHeight = compact ? 92 : 132;
+    // Short landscape phones need the pattern card above three rows of real system controls.
+    // Move the card upward and allow a denser row pitch; never preserve a nominal panel height by
+    // drawing through the buttons the pilot is trying to use.
+    const desiredTop = this.safeInsets.top + (compact ? 112 : 150);
+    const topLimit = Math.min(desiredTop,
+      Math.max(this.safeInsets.top + 64, bottomLimit - minimumHeight));
+    const height = Math.max(minimumHeight,
+      Math.min(nominalHeight, bottomLimit - topLimit));
+    const x = this.safeInsets.left + (availableWidth - width) / 2 + sideMargin;
+    const y = Math.max(topLimit, bottomLimit - height);
+    const inset = compact ? 8 : 12;
+    const mapWidth = compact ? Math.max(126, width * 0.44) : Math.min(300, width * 0.47);
+    const mapLeft = x + inset;
+    const mapTop = y + inset;
+    const mapRight = mapLeft + mapWidth;
+    const mapBottom = y + height - inset;
+    const mapHeight = mapBottom - mapTop;
+    const mapCentreX = mapLeft + mapWidth * 0.61;
+    const mapCentreY = mapTop + Math.min(31, mapHeight * 0.22);
+    const metresPerPixel = Math.max(48, 5900 / Math.max(82, mapHeight - 22));
+    const cue = this._carrierPatternCue.update(state, frame.dt);
+    const configuration = carrierConfigurationCue(systems);
+    const along = Number(state.deck_along);
+    const cross = Number(state.deck_cross);
+    const deckLength = Math.max(180, Number(state.deck_len) || 250);
+    const deckWidth = Math.max(25, Number(state.deck_w) || 32);
+    const mapPoint = (alongM, crossM) => ({
+      x: mapCentreX + crossM / metresPerPixel,
+      y: mapCentreY - alongM / metresPerPixel,
+    });
+
+    ctx.save();
+    this.glassPanel(x, y, width, height, "rgba(255, 176, 32, 0.52)");
+    ctx.fillStyle = "rgba(1, 8, 12, 0.46)";
+    roundedRect(ctx, mapLeft, mapTop, mapWidth, mapHeight, 5);
+    ctx.fill();
+
+    // The inbound initial begins astern, crosses toward the bow, then breaks into a port
+    // downwind. A small starboard offset keeps the high-speed initial distinct from final.
+    const initial = mapPoint(-5556, 320);
+    const breakPoint = mapPoint(450, 320);
+    const downwindEntry = mapPoint(250, -900);
+    const downwind180 = mapPoint(-1650, -900);
+    const finalTurn = mapPoint(-2250, 0);
+    const deckCentre = mapPoint(0, 0);
+
+    ctx.save();
+    roundedRect(ctx, mapLeft, mapTop, mapWidth, mapHeight, 5);
+    ctx.clip();
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.38)";
+    ctx.lineWidth = 1.25;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(initial.x, initial.y);
+    ctx.lineTo(breakPoint.x, breakPoint.y);
+    ctx.bezierCurveTo(
+      mapPoint(250, -160).x, mapPoint(250, -160).y,
+      mapPoint(500, -760).x, mapPoint(500, -760).y,
+      downwindEntry.x, downwindEntry.y,
+    );
+    ctx.lineTo(downwind180.x, downwind180.y);
+    ctx.bezierCurveTo(
+      mapPoint(-2050, -900).x, mapPoint(-2050, -900).y,
+      mapPoint(-2450, -420).x, mapPoint(-2450, -420).y,
+      finalTurn.x, finalTurn.y,
+    );
+    ctx.lineTo(deckCentre.x, deckCentre.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const deckPxLength = Math.max(7, deckLength / metresPerPixel);
+    const deckPxWidth = Math.max(3, deckWidth / metresPerPixel);
+    ctx.fillStyle = "rgba(77, 255, 136, 0.42)";
+    ctx.fillRect(
+      deckCentre.x - deckPxWidth / 2,
+      deckCentre.y - deckPxLength / 2,
+      deckPxWidth,
+      deckPxLength,
+    );
+    ctx.strokeStyle = AMBER;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(deckCentre.x + 11, deckCentre.y - 15);
+    ctx.lineTo(deckCentre.x + 11, deckCentre.y + 15);
+    ctx.lineTo(deckCentre.x + 7, deckCentre.y + 9);
+    ctx.moveTo(deckCentre.x + 11, deckCentre.y + 15);
+    ctx.lineTo(deckCentre.x + 15, deckCentre.y + 9);
+    ctx.stroke();
+
+    if (Number.isFinite(along) && Number.isFinite(cross)) {
+      const rawOwnship = mapPoint(along, cross);
+      const ownshipX = clamp(rawOwnship.x, mapLeft + 8, mapRight - 8);
+      const ownshipY = clamp(rawOwnship.y, mapTop + 8, mapBottom - 8);
+      const offScale = ownshipX !== rawOwnship.x || ownshipY !== rawOwnship.y;
+      const motion = carrierRelativeMotion(state);
+      const track = motion.trackRad ?? 0;
+      ctx.save();
+      ctx.translate(ownshipX, ownshipY);
+      ctx.rotate(track);
+      ctx.fillStyle = offScale ? AMBER : GREEN;
+      ctx.strokeStyle = offScale ? AMBER : GREEN;
+      ctx.shadowColor = offScale ? "rgba(255, 176, 32, 0.55)" : "rgba(77, 255, 136, 0.60)";
+      ctx.shadowBlur = 5;
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(-4.5, 5.5);
+      ctx.lineTo(0, 3);
+      ctx.lineTo(4.5, 5.5);
+      ctx.closePath();
+      if (offScale) ctx.stroke();
+      else ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+
+    // Fixed-aircraft attitude remains available while the pilot's head is turned toward the boat.
+    const attitudeRadius = compact ? 17 : 20;
+    const attitudeX = mapLeft + attitudeRadius + 7;
+    const attitudeY = mapTop + attitudeRadius + 7;
+    const pitch = clamp(Number(state.pitch_deg) || 0, -90, 90);
+    const bank = (Number(state.bank_deg) || 0) * DEG;
+    const horizonY = clamp(pitch * 0.60, -attitudeRadius + 4, attitudeRadius - 4);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(attitudeX, attitudeY, attitudeRadius, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.translate(attitudeX, attitudeY);
+    ctx.rotate(-bank);
+    ctx.fillStyle = "rgba(75, 135, 165, 0.19)";
+    ctx.fillRect(-42, -42, 84, horizonY + 42);
+    ctx.fillStyle = "rgba(70, 48, 25, 0.17)";
+    ctx.fillRect(-42, horizonY, 84, 42 - horizonY);
+    ctx.strokeStyle = GREEN;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(-30, horizonY);
+    ctx.lineTo(30, horizonY);
+    ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = GREEN_DIM;
+    ctx.beginPath();
+    ctx.arc(attitudeX, attitudeY, attitudeRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = AMBER;
+    ctx.beginPath();
+    ctx.moveTo(attitudeX - 10, attitudeY);
+    ctx.lineTo(attitudeX - 3, attitudeY);
+    ctx.lineTo(attitudeX, attitudeY + 3);
+    ctx.lineTo(attitudeX + 3, attitudeY);
+    ctx.lineTo(attitudeX + 10, attitudeY);
+    ctx.stroke();
+
+    ctx.fillStyle = GREEN_DIM;
+    ctx.font = "650 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText("INITIAL", clamp(initial.x + 4, mapLeft + 3, mapRight - 38),
+      clamp(initial.y, mapTop + 6, mapBottom - 6));
+    ctx.fillText("180", clamp(downwind180.x - 17, mapLeft + 3, mapRight - 18),
+      clamp(downwind180.y, mapTop + 6, mapBottom - 6));
+    ctx.fillText("FINAL", clamp(finalTurn.x + 4, mapLeft + 3, mapRight - 31),
+      clamp(finalTurn.y - 6, mapTop + 6, mapBottom - 6));
+    ctx.fillStyle = AMBER;
+    const wodText = `WOD ${Math.round(Number(state.wod_kts) || 0)}`;
+    ctx.fillText(wodText, clamp(deckCentre.x + 18, mapLeft + 3, mapRight - 42),
+      clamp(deckCentre.y + 3, mapTop + 6, mapBottom - 6));
+
+    const dataLeft = mapRight + (compact ? 9 : 15);
+    const dataRight = x + width - inset;
+    const dataWidth = Math.max(20, dataRight - dataLeft);
+    const distanceM = carrierDistanceM(state);
+    const airdata = airdataReadout(state);
+    const brc = wrap360((Number(state.cheading) || 0) * RAD_TO_DEG);
+    const finalCourse = wrap360((Number(state.landing_heading) || 0) * RAD_TO_DEG);
+    const showRecoveryAoA = carrierAoARelevant(cue.phase);
+    const aoa = Number(state.aoa_deg);
+    const onSpeed = Number(state.effective_on_speed_aoa_deg);
+    const tolerance = Number(state.on_speed_aoa_tolerance_deg);
+    const aoaState = showRecoveryAoA
+      ? this._aoaIndexerCue.update({ aoa, onSpeed, tolerance }, frame.dt)
+      : (this._aoaIndexerCue.reset(), null);
+    const aoaText = showRecoveryAoA && Number.isFinite(aoa)
+      ? ` · α ${aoa.toFixed(1)}° ${aoaState === "FAST" ? "FAST" : aoaState === "SLOW" ? "SLOW" : aoaState === "ON_SPEED" ? "ON" : ""}`
+      : "";
+    const gearWarning = systems?.gearWarningHorn || systems?.gearLimitExceeded
+      || systems?.gearUnsafe;
+    const rowStep = (height - 24) / 6;
+    const rowY = (index) => y + 14 + rowStep * index;
+    const drawFit = (text, index, color = GREEN_DIM, font = null) => {
+      ctx.fillStyle = color;
+      ctx.font = font ?? `${compact ? 650 : 700} ${compact ? 7 : 8}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.fillText(this.fitText(text, dataWidth), dataLeft, rowY(index));
+    };
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    drawFit(cue.title, 0, AMBER,
+      `800 ${compact ? 11 : 13}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`);
+    drawFit(cue.instruction, 1, GREEN,
+      `700 ${compact ? 7 : 9}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`);
+    drawFit(`${Math.round(airdata.indicatedKts)} KIAS · ${Math.round(Number(state.alt_ft) || 0)} FT${aoaText}`,
+      2, aoaState === "SLOW" ? RED : aoaState === "FAST" ? AMBER : GREEN_DIM);
+    drawFit(`BOAT ${distanceM === null ? "---" : (distanceM / 1852).toFixed(1)} NM · BRC ${String(Math.round(brc)).padStart(3, "0")}° · FNL ${String(Math.round(finalCourse)).padStart(3, "0")}°`,
+      3, GREEN_DIM);
+    drawFit(`REL ${Number.isFinite(along) ? Math.round(along) : "---"} M · XTK ${Number.isFinite(cross) ? formatSigned(cross) : "---"} M`,
+      4, GREEN_DIM);
+    drawFit(configuration.gearText, 5,
+      configuration.gearLocked ? GREEN : gearWarning ? RED : AMBER);
+    drawFit(configuration.flapText, 6,
+      configuration.flapSplit ? RED : configuration.flapsKnown ? GREEN : GREEN_DIM);
+    ctx.restore();
+  }
+
+  drawFooter(frame) {
+    const state = frame.state;
     const mode = hudMode(state);
-    if (state.carrier !== true || (mode !== "APPROACH" && mode !== "WAVE-OFF")) return;
-    const call = lsoToken(String(state.lso ?? state.context ?? ""));
-    if (!call) return;
+    if (state.carrier !== true || (mode !== "APPROACH" && mode !== "WAVE-OFF")) {
+      this._lsoDisplayCue.reset();
+      return;
+    }
+    const rawCall = lsoToken(String(state.lso ?? state.context ?? ""));
+    const severity = String(state.lso_severity ?? "").toUpperCase();
+    const urgent = rawCall === "WAVE OFF" || severity === "WAVEOFF";
+    const cue = this._lsoDisplayCue.update(rawCall ? {
+      key: `${rawCall}:${severity}`,
+      call: rawCall,
+      severity,
+    } : null, frame.dt, { urgent });
+    if (!cue) return;
 
     const ctx = this.ctx;
-    const accent = call === "WAVE OFF" ? RED : state.lso_severity === "CORRECTING" ? AMBER : GREEN;
+    const accent = cue.call === "WAVE OFF" ? RED : cue.severity === "CORRECTING" ? AMBER : GREEN;
     const y = this.height - this.safeInsets.bottom - (this.touchMode ? 110 : 21);
     ctx.font = "800 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const width = Math.max(72, ctx.measureText(call).width + 28);
+    const width = Math.max(72, ctx.measureText(cue.call).width + 28);
     this.glassPanel((this.width - width) / 2, y - 14, width, 28, accent);
     ctx.fillStyle = accent;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(call, this.width / 2, y);
+    ctx.fillText(cue.call, this.width / 2, y);
   }
 
   drawLegend() {
@@ -1845,15 +2096,15 @@ class CombatHud {
 
     const wideLines = [
       "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL   ·   A / D  RUDDER   ·   W / S  THROTTLE",
-      "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   F  GUNS   ·   V  PADLOCK   ·   DRAG  LOOK",
-      "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   1–5  MISSION   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE",
+      "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   F  GUNS   ·   V  TARGET / BOAT PADLOCK   ·   DRAG  LOOK",
+      "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   1–6  MISSION   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE",
     ];
     const compactLines = [
       "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL",
       "A / D  RUDDER   ·   W / S  THROTTLE",
       "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE = HOLD)",
-      "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   F  GUNS   ·   M  SOUND",
-      "V  PADLOCK   ·   DRAG  LOOK   ·   1–5  MISSION   ·   R  RESTART   ·   H  HIDE",
+      "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   F  GUNS   ·   V  PADLOCK   ·   M  SOUND",
+      "V  PADLOCK   ·   DRAG  LOOK   ·   1–6  MISSION   ·   R  RESTART   ·   H  HIDE",
     ];
     const lines = compact ? compactLines : wideLines;
     const lineHeight = compact ? 27 : 31;
@@ -1867,7 +2118,6 @@ class CombatHud {
     const ctx = this.ctx;
     ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
-    this.drawFrameWash();
     this.updateGunAudio(frame);
 
     this.worldPoint.copy(frame.playerPosition).addScaledVector(frame.playerForward, 10000);
@@ -1879,6 +2129,7 @@ class CombatHud {
       ? this.project(frame.directorPoint, frame.camera, this.projectionC)
       : null;
     const systems = systemsReadout(frame.state);
+    const carrierPadlock = frame.padlock && frame.padlockTarget === "carrier";
 
     if (!frame.padlock) this.drawPitchLadder(frame.state, frame.camera);
     this.drawAirframeSymbols(noseAnchor, frame.state, flightPathAnchor);
@@ -1886,16 +2137,23 @@ class CombatHud {
     this.drawAimPoint(frame, noseAnchor, directorAnchor);
     this.drawBandit(frame);
     this.drawHeadingTape(frame.state);
-    this.drawSortieStatus(frame);
     this.drawRtbCue(frame.state);
 
     // Speed trend: smoothed dV/dt, projected ~6 s ahead (the classic acceleration caret).
     const airdata = airdataReadout(frame.state);
     const spd = airdata.indicatedKts;
     const dt = Math.max(1e-3, Number(frame.dt) || 1 / 60);
+    const speedEntityId = String(frame.state.player_entity_id ?? "legacy");
+    if (this._speedEntityId !== speedEntityId) {
+      this._speedEntityId = speedEntityId;
+      this._prevSpeed = spd;
+      this._speedRate = 0;
+    }
     if (this._prevSpeed === undefined) this._prevSpeed = spd;
     const inst = (spd - this._prevSpeed) / dt;                 // kts/s
-    this._speedRate = (this._speedRate || 0) * 0.92 + inst * 0.08;
+    const speedBlend = 1 - Math.exp(-dt / 0.20);
+    this._speedRate = (this._speedRate || 0)
+      + speedBlend * (inst - (this._speedRate || 0));
     this._prevSpeed = spd;
     const speedTrend = clamp(this._speedRate * 6, -60, 60);    // project 6 s, cap for tape sanity
 
@@ -1919,18 +2177,19 @@ class CombatHud {
         step: frame.state.alt_ft > 10000 ? 1000 : 500,
         decimals: 0,
       });
-      this.drawGTape(frame.state);
+      if (isFightHudActive(frame.state)) this.drawGTape(frame.state);
       this.drawThrottle(frame.state);
       this.drawFuel(frame.state);
     }
     this.drawWarnings(frame, systems);
-    this.drawSystemsPanel(systems);
-    this.drawAoAIndexer(frame.state);
-    this.drawPadlockSa(frame);
-    this.drawFooter(frame.state);
+    if (!carrierPadlock) {
+      this.drawSystemsPanel(systems);
+      this.drawAoAIndexer(frame.state, frame.dt);
+    }
+    this.drawPadlockSa(frame, systems);
+    this.drawFooter(frame);
     this.drawLegend();
     this.drawModeCue(frame);
-    this.drawDifficulty(frame);
     this.drawOutcomeCues(frame);
     this.drawDamageFeedback(frame);
   }

@@ -1,0 +1,42 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
+const appUrl = new URL("../../../app.js", import.meta.url);
+
+test("flight telemetry separates pilot aileron, SAS, rolling moment, and achieved rate", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+
+  assert.match(source, /\\\"roll_control\\\"/);
+  assert.match(source, /\\\"pilot_aileron\\\"/);
+  assert.match(source, /appliedCommand\.RollControl/);
+  assert.match(source, /\\\"sas_aileron\\\"/);
+  assert.match(source, /appliedCommand\.SasRollControl/);
+  assert.match(source, /\\\"aileron_command_deg\\\"/);
+  assert.match(source, /MaxAileronDeflectionRad/);
+  assert.match(source, /\\\"sas_aileron_deg\\\"/);
+  assert.match(source, /\\\"lateral_derivative_profile\\\"/);
+  assert.match(source, /LateralDerivativeProfileId/);
+  assert.match(source, /\\\"roll_moment_nm\\\"/);
+  assert.match(source, /_player\.LastRollMomentNm/);
+  assert.match(source, /\\\"roll_rate_dps\\\"/);
+  assert.match(source, /s\.BodyRates\.P \* 57\.2958/);
+  assert.match(source, /\\\"lateral_control_applied\\\"/);
+  assert.match(source, /_player\.HasAppliedFlightCommand/);
+  assert.match(source, /\\\"direct_lateral_control\\\"/);
+  assert.match(source, /appliedCommand\.DirectLateralControl/);
+  assert.match(source, /\\\"requested_roll_control\\\"/);
+  assert.match(source, /requestedCommand\.RollControl/);
+  assert.match(source, /\\\"total_aileron_command_deg\\\"/);
+  assert.match(source,
+    /Math\.Clamp\(appliedCommand\.RollControl \+ appliedCommand\.SasRollControl/);
+});
+
+test("system neutralisation emits reconstructable input releases", async () => {
+  const source = await readFile(appUrl, "utf8");
+  assert.match(source, /releaseAllMappedKeys\(reason = "system-neutralise"\)/);
+  assert.match(source, /recorder\.event\("up", code, \{[\s\S]*neutralised: true,[\s\S]*owners,/);
+  assert.match(source, /releaseAllMappedKeys\("visibility-hidden"\)/);
+  assert.match(source, /clearFlightInput\(`pause:\$\{reason\}`\)/);
+});

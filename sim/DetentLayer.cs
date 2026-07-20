@@ -21,11 +21,9 @@ public sealed class DetentLayer {
     double _gCmd = 1.0, _bankTarget;
     bool _bankTargetInitialized;
     const double Tau = 0.07, StickyStepG = 0.5;
-    const double RollReturnRate = 0.6; // rad/s — reflex return toward wings-level when roll is un-commanded
-    const double RollLevelDelayMs = 1500; // wait this long after the last roll input before settling to level
-    double _rollIdleMs;
-    int _rollDirection;
-    bool _rollRightSampled, _rollLeftSampled, _rollRightWasDown, _rollLeftWasDown;
+    readonly HashSet<int> _sampledRollRightPresses = new();
+    readonly HashSet<int> _sampledRollLeftPresses = new();
+    readonly Queue<int> _pendingRollTapPulses = new();
 
     // MAGIC CARPET (approach mode). The G-command grammar is wrong for a landing: with the valley
     // pinned at 1 G the pull has no authority, so the aircraft just sinks (the "uncontrollable"
@@ -204,26 +202,57 @@ public sealed class DetentLayer {
         // aero-limited G/AoA law, with bank defining the turn plane.
         }
 
-        // Roll is also a rate command. The target stays a fixed lead ahead of the actual bank while
-        // held, so there is no stored-up bank target to roll through after release. Releasing captures
-        // the bank; pressing the opposite key moves the lead across the current attitude immediately,
-        // which gives the rate loop a crisp braking command. Approach keeps its wings-level reflex.
-        int rTaps = keys.TakeTaps(GKey.RollRight, nowMs), lTaps = keys.TakeTaps(GKey.RollLeft, nowMs);
-        bool rollRight = keys.PhaseAt(GKey.RollRight, nowMs) != KeyPhase.Idle;
-        bool rollLeft = keys.PhaseAt(GKey.RollLeft, nowMs) != KeyPhase.Idle;
-        if (rollRight && !_rollRightWasDown) _rollRightSampled = false;
-        if (rollLeft && !_rollLeftWasDown) _rollLeftSampled = false;
-        if (rollRight) _rollRightSampled = true;
-        if (rollLeft) _rollLeftSampled = true;
-        bool rollInput = rollRight || rollLeft || rTaps > 0 || lTaps > 0;
-        _rollIdleMs = rollInput ? 0.0 : _rollIdleMs + dt * 1000.0;
-        // Approach mode retains fine ~20°/s lineup authority. FREE/FIGHT gets the Sabre's measured
-        // scale (~2.4 rad/s, 137.5°/s), but as a moving rate lead: a tap is still a small correction,
-        // not a snap to a stored distant attitude.
-        double rollRate = ApproachMode ? 0.35 : FlightModel.FightRollRate(p); // ~20°/s vs ~140°/s
-        double levelDelay = ApproachMode ? 0.0 : RollLevelDelayMs;
-        double returnRate = ApproachMode ? 1.4 : RollReturnRate;  // firm, so it settles level and stays
+        // Keyboard/tilt roll is a physical aileron command, not a disguised bank-attitude hold.
+        // Neutral means zero pilot aileron; natural ClP damping arrests p without defending an
+        // invisible captured bank angle or injecting a hidden SAS command.
+        // BankTarget still follows the actual body lift plane because pitch/G control needs to know
+        // which plane the pilot is currently manoeuvring in. Legacy synthetic command-only callers
+        // retain their old bank-target projection, but flown AircraftSim states take the aileron path.
+        IReadOnlyList<KeyTap> rightTapEvents = keys.TakeTapEvents(GKey.RollRight, nowMs);
+        IReadOnlyList<KeyTap> leftTapEvents = keys.TakeTapEvents(GKey.RollLeft, nowMs);
+        // Deferred tap classification must not replay a press that was already sampled as a held
+        // aileron command. Conversely, input edges which both arrived between fixed ticks still
+        // deserve one deterministic pulse apiece. Stable press tokens make both cases exact even
+        // when several browser events are batched into one simulation advance.
+        var tapEvents = new List<(KeyTap Tap, int Direction)>(
+            rightTapEvents.Count + leftTapEvents.Count);
+        foreach (KeyTap tap in rightTapEvents) tapEvents.Add((tap, 1));
+        foreach (KeyTap tap in leftTapEvents) tapEvents.Add((tap, -1));
+        tapEvents.Sort(static (a, b) => {
+            int byRelease = a.Tap.ReleaseTimeMs.CompareTo(b.Tap.ReleaseTimeMs);
+            if (byRelease != 0) return byRelease;
+            // Same-timestamp opposite edges are ordered consistently; their equal and opposite
+            // fixed-tick impulses therefore still net deterministically.
+            return b.Direction.CompareTo(a.Direction);
+        });
+        int unseenRollTapCount = 0;
+        foreach (var (tap, direction) in tapEvents) {
+            HashSet<int> sampled = direction > 0
+                ? _sampledRollRightPresses : _sampledRollLeftPresses;
+            if (sampled.Remove(tap.PressSequence)) continue;
+            _pendingRollTapPulses.Enqueue(direction);
+            unseenRollTapCount++;
+        }
+
+        KeyPhase rollRightPhase = keys.PhaseAt(GKey.RollRight, nowMs);
+        KeyPhase rollLeftPhase = keys.PhaseAt(GKey.RollLeft, nowMs);
+        bool rollRight = rollRightPhase != KeyPhase.Idle;
+        bool rollLeft = rollLeftPhase != KeyPhase.Idle;
+        if (rollRight) _sampledRollRightPresses.Add(keys.PressSequence(GKey.RollRight));
+        if (rollLeft) _sampledRollLeftPresses.Add(keys.PressSequence(GKey.RollLeft));
+        // At most the current press and a provisionally consumed double-tap arm can still produce
+        // a future committed event. Pruning long-press tokens prevents unbounded history growth.
+        PruneSampledPresses(_sampledRollRightPresses, keys.PressSequence(GKey.RollRight)
+            - (rollRightPhase == KeyPhase.DoubleHeld ? 1 : 0));
+        PruneSampledPresses(_sampledRollLeftPresses, keys.PressSequence(GKey.RollLeft)
+            - (rollLeftPhase == KeyPhase.DoubleHeld ? 1 : 0));
+        // Approach uses a reduced stick/aileron fraction for fine lineup corrections. FREE/FIGHT
+        // exposes full lateral travel; q and the derivative law determine the resulting roll rate.
+        double aileronAuthority = ApproachMode ? 0.40 : 1.0;
         int rollDirection = (rollRight ? 1 : 0) - (rollLeft ? 1 : 0);
+        int tapDirection = rollDirection == 0 && _pendingRollTapPulses.Count > 0
+            ? _pendingRollTapPulses.Dequeue() : 0;
+        int effectiveRollDirection = rollDirection != 0 ? rollDirection : tapDirection;
         if (HasBodyAttitude(s)) {
             double bodyBank = BodyBank(s);
             // Capture the aircraft's ACTUAL bank on entry to the fight. _bankTarget used to start at
@@ -233,30 +262,17 @@ public sealed class DetentLayer {
                 _bankTarget = bodyBank;
                 _bankTargetInitialized = true;
             }
-            if (rollDirection != 0) {
-                _bankTarget = bodyBank + rollDirection * rollRate * p.BankTau;
-            } else if (_rollDirection != 0) {
-                _bankTarget = bodyBank; // release: arrest and hold the bank actually achieved
-            }
-            // A press/release entirely between sim ticks still gets one small deterministic step.
-            if (rTaps > 0 && !_rollRightSampled) _bankTarget += rTaps * 0.07;
-            if (lTaps > 0 && !_rollLeftSampled) _bankTarget -= lTaps * 0.07;
+            _bankTarget = bodyBank;
         } else {
             // Compatibility for synthetic command-only callers which do not carry BodyAttitude.
             // Keep their legacy integration semantics; flown AircraftSim states use the rate law above.
-            if (rTaps > 0 || lTaps > 0) _bankTarget = ApproachMode ? _bankTarget : ValleyBank;
+            if (unseenRollTapCount > 0)
+                _bankTarget = ApproachMode ? _bankTarget : ValleyBank;
             double fallbackRate = ApproachMode ? 0.35 : 1.6;
             if (rollRight) _bankTarget += fallbackRate * dt;
             if (rollLeft) _bankTarget -= fallbackRate * dt;
         }
-        if (ApproachMode && !rollInput && _rollIdleMs > levelDelay) {
-            double err = System.Math.IEEERemainder(0.0 - _bankTarget, 2 * System.Math.PI); // toward wings-level
-            _bankTarget += System.Math.Clamp(err, -returnRate * dt, returnRate * dt);
-        }
         _bankTarget = System.Math.IEEERemainder(_bankTarget, 2 * System.Math.PI); // circular: continuous roll through inverted
-        _rollDirection = rollDirection;
-        _rollRightWasDown = rollRight;
-        _rollLeftWasDown = rollLeft;
 
         // Continuous throttle: HOLD W to spool up (through MIL into A/B where the airframe has it),
         // HOLD S to bring it back. Tap-only detents did nothing on a hold, which is why it felt dead.
@@ -319,8 +335,15 @@ public sealed class DetentLayer {
         Command = new PilotCommand(_gCmd, _bankTarget, Throttle, rudder,
             ApproachMode ? _cmdPitch : double.NaN,
             EnvelopeOverride: !ApproachMode && over && (pull != KeyPhase.Idle || push != KeyPhase.Idle),
-            RollControl: rollDirection,
-            CommandedAlphaRad: commandedAlpha);
+            RollControl: effectiveRollDirection * aileronAuthority,
+            CommandedAlphaRad: commandedAlpha,
+            SasRollControl: 0.0,
+            DirectLateralControl: true);
+    }
+
+    static void PruneSampledPresses(HashSet<int> sampledPresses,
+        int oldestPotentiallyDeferredPress) {
+        sampledPresses.RemoveWhere(sequence => sequence < oldestPotentiallyDeferredPress);
     }
 
     /// <summary>

@@ -80,6 +80,8 @@
       text-shadow: 0 1px 4px #000;
     }
 
+    #multiplayer-status[hidden] { display: none; }
+
     #multiplayer-status[data-phase="online"] {
       border-color: rgba(77, 255, 136, .52);
       color: #b8ffcf;
@@ -502,6 +504,8 @@
       pointer-events: auto;
       touch-action: manipulation;
     }
+
+    #test-flight-console[hidden] { display: none; }
 
     #test-flight-console > summary {
       display: flex;
@@ -1175,7 +1179,7 @@
 <body>
   <canvas id="scene" tabindex="0" aria-label="Air combat simulation view"></canvas>
   <canvas id="hud" aria-hidden="true"></canvas>
-  <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off">SOLO · ROOM NOT CONFIGURED</div>
+  <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off" hidden>SOLO · ROOM NOT CONFIGURED</div>
 
   <section id="incident-replay-overlay" aria-hidden="true" aria-label="Authoritative carrier incident replay">
     <div class="replay-head">
@@ -1201,8 +1205,8 @@
     </div>
   </section>
 
-  <details id="test-flight-console" open>
-    <summary role="button" aria-expanded="true" aria-label="Toggle test-flight action console">
+  <details id="test-flight-console" hidden data-relevance="none">
+    <summary role="button" aria-expanded="false" aria-label="Toggle test-flight action console">
       <span class="tf-title">TEST FLIGHT</span>
       <span class="tf-collapse-cue" aria-hidden="true"></span>
     </summary>
@@ -1272,6 +1276,10 @@
       <div class="touch-utils">
         <button class="touch-control touch-utility" type="button" data-mobile-action="recenter">CENTER</button>
         <button class="touch-control touch-utility" type="button" data-mobile-action="restart">RESTART</button>
+        <button class="touch-control touch-utility" type="button" data-pulse-key="KeyG" aria-label="Toggle landing gear">GEAR<br>G</button>
+        <button class="touch-control touch-utility" type="button" data-pulse-key="KeyV" aria-label="Padlock target or nearby carrier">PADLOCK<br>V</button>
+        <button class="touch-control touch-utility" type="button" data-hold-key="BracketLeft" aria-label="Hold wing flaps up">FLAP<br>UP</button>
+        <button class="touch-control touch-utility" type="button" data-hold-key="BracketRight" aria-label="Hold wing flaps down">FLAP<br>DOWN</button>
       </div>
       <div class="touch-actions">
         <button class="touch-control" type="button" data-hold-key="Space" aria-label="Maximum G override">MAX<br>G</button>
@@ -1331,7 +1339,7 @@
   </div>
 
   <script src="./multiplayer-config.js"></script>
-  <script type="module" src="./app.js?v=46"></script>
+  <script type="module" src="./app.js?v=47"></script>
   <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
 </body>
 </html>

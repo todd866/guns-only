@@ -61,8 +61,11 @@ public readonly record struct AirframeAerodynamicState(
     double LiftCoefficientIncrement,
     double DragCoefficientIncrement,
     double PitchMomentCoefficientIncrement,
-    double LateralLiftCoefficientDifference) {
-    public static AirframeAerodynamicState Clean => new(0.0, 0.0, 0.0, 0.0);
+    // Attached-flow asymmetry such as split flaps loses circulation with the rest of the wing.
+    double LateralLiftCoefficientDifference,
+    // Persistent geometry/damage asymmetry survives separation and is therefore kept distinct.
+    double PersistentLateralLiftCoefficientDifference = 0.0) {
+    public static AirframeAerodynamicState Clean => new(0.0, 0.0, 0.0, 0.0, 0.0);
 }
 
 /// <summary>
@@ -188,6 +191,7 @@ public sealed class AirframeSystems {
         && Math.Max(LeftFlapDegrees, RightFlapDegrees) > 0.25;
     public bool FlapSplit => Math.Abs(LeftFlapDegrees - RightFlapDegrees) > 1.0;
     public double FlapSplitDegrees => LeftFlapDegrees - RightFlapDegrees;
+    public double FullFlapDegrees => _profile.FullFlapDegrees;
     public double EffectiveFlapFraction => Math.Clamp(
         (LeftFlapDegrees + RightFlapDegrees) / (2.0 * _profile.FullFlapDegrees), 0.0, 1.0);
     public double EffectiveGearFraction => Math.Clamp(
@@ -217,17 +221,23 @@ public sealed class AirframeSystems {
     public AirframeSystems(
         AirframeSystemsProfile? profile = null,
         LandingGearHandle initialGear = LandingGearHandle.Up,
-        double initialFlapDegrees = 0.0) {
+        double initialFlapDegrees = 0.0,
+        double initialUtilityHydraulicPressureFraction = 0.0) {
         _profile = profile ?? AirframeSystemsProfile.F86FResearchBasis;
         if (!double.IsFinite(initialFlapDegrees)
             || initialFlapDegrees < 0.0
             || initialFlapDegrees > _profile.FullFlapDegrees)
             throw new ArgumentOutOfRangeException(nameof(initialFlapDegrees));
+        if (!double.IsFinite(initialUtilityHydraulicPressureFraction)
+            || initialUtilityHydraulicPressureFraction < 0.0
+            || initialUtilityHydraulicPressureFraction > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(initialUtilityHydraulicPressureFraction));
 
         GearHandle = initialGear;
         double gear = initialGear == LandingGearHandle.Down ? 1.0 : 0.0;
         NoseGearPosition = LeftMainGearPosition = RightMainGearPosition = gear;
         LeftFlapDegrees = RightFlapDegrees = initialFlapDegrees;
+        UtilityHydraulicPressureFraction = initialUtilityHydraulicPressureFraction;
     }
 
     public void CommandGear(LandingGearHandle handle) => GearHandle = handle;

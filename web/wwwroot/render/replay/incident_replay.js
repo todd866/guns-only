@@ -1,4 +1,4 @@
-const SCHEMA = "carrier-incident-replay.v4";
+const SCHEMA = "carrier-incident-replay.v5";
 const MAX_SAMPLES = 400;
 const MAX_EVENTS = 128;
 const MAX_DURATION_SECONDS = 31;
@@ -236,7 +236,7 @@ export function decodeIncidentReplay(payload) {
     "arrest_remaining_energy_mj", "arrest_effective_capacity_mj", "arrest_peak_load_kn",
     "arrest_max_line_load_kn", "arrest_initial_closure_kts",
     "carrier_solid", "touchdown_grade", "touchdown_deviations",
-    "touchdown_primary_correction",
+    "touchdown_primary_correction", "control_applied", "direct_lateral_control",
   ]) if (!fields.has(required)) return null;
 
   const samples = payload.samples.map((row) => {
@@ -306,6 +306,8 @@ export function decodeIncidentReplay(payload) {
       touchdownGrade: rowValue(row, fields, "touchdown_grade"),
       touchdownDeviations: rowValue(row, fields, "touchdown_deviations"),
       touchdownCorrection: rowValue(row, fields, "touchdown_primary_correction"),
+      controlApplied: rowValue(row, fields, "control_applied") === 1,
+      directLateralControl: rowValue(row, fields, "direct_lateral_control") === 1,
     });
   });
   if (samples.some((sample) => sample === null)) return null;

@@ -239,6 +239,32 @@ test("streamed requests are bounded even without Content-Length", async () => {
   assert.equal(fetchCalls, 0);
 });
 
+test("Vercel-preparsed requests are bounded even without Content-Length", async () => {
+  let fetchCalls = 0;
+  await withTelemetryEnvironment(async () => {
+    fetchCalls++;
+    return { ok: true, status: 200, text: async () => "" };
+  }, async () => {
+    const response = responseRecorder();
+    await telemetry({
+      method: "POST",
+      headers: {
+        host: "guns-only.vercel.app",
+        origin: "https://guns-only.vercel.app",
+        "content-type": "application/json",
+      },
+      body: {
+        session: "preparsed-oversized",
+        rows: [{ k: "st" }],
+        ignoredPadding: "x".repeat(2 * 1024 * 1024 + 64 * 1024),
+      },
+    }, response);
+
+    assert.equal(response.statusCode, 413);
+  }, "production");
+  assert.equal(fetchCalls, 0);
+});
+
 test("oversized row batches return 413 without a storage operation", async () => {
   let fetchCalls = 0;
   await withTelemetryEnvironment(async () => {
@@ -344,7 +370,7 @@ test("deployment config limits immutable caching to SHA-versioned heavy pack art
   assert.doesNotMatch(serializedRules, /app\.js|hud\.js|_framework|\.json/);
 });
 
-test("recorder keeps 20 Hz samples but batches production uploads every 30 seconds", async () => {
+test("recorder losslessly encodes retained 20 Hz samples and batches uploads every 30 seconds", async () => {
   const app = await readFile(new URL("../app.js", `file://${__filename}`), "utf8");
   const index = await readFile(new URL("../index.html", `file://${__filename}`), "utf8");
   const stride = Number(app.match(/TELEMETRY_TICK_STRIDE = (\d+);/)?.[1]);
@@ -356,6 +382,11 @@ test("recorder keeps 20 Hz samples but batches production uploads every 30 secon
   assert.equal(normalSamplesPerBatch, 600);
   assert.ok(bufferLimit >= normalSamplesPerBatch * 2, "buffer should retain at least two normal batches");
   assert.match(app, /buildTelemetryBatch\(/);
+  assert.match(app, /TelemetryStateEncoder/);
+  assert.match(app, /_stateEncoder\.forceKeyframe\(\)/);
+  assert.match(app, /releaseTelemetryMaterializedStates\(batch\.rows\)/);
+  assert.match(app, /this\.droppedRows \+= overflow/);
+  assert.match(app, /ensureTelemetryChunkHeader\(this\.buf, this\.chunkHeader\(batchId\)\)/);
   assert.match(app, /body: batch\.payload/);
   assert.doesNotMatch(app, /keepalive\s*:\s*(?:true|false)/);
   assert.match(app, /pagehide[^\n]+recorder\.flush\(\{ force: true \}\)/);

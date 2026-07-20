@@ -87,8 +87,10 @@ public sealed class PostStallFlightTests(ITestOutputHelper output) {
         output.WriteLine($"entry alpha={rig.Sim.AngleOfAttackRad * Deg:F1} beta={rig.Sim.SideslipRad * Deg:F1} "
             + $"p={p:F1} r={r:F1} deg/s speed={rig.Sim.AirspeedMps / MpsPerKnot:F0} kt alt={rig.Sim.State.Position.Y:F0} m");
 
-        Assert.True(rig.Sim.AngleOfAttackRad * Deg > 20.0,
-            $"override never crossed the lift break: {rig.Sim.AngleOfAttackRad * Deg:F1} deg");
+        double liftBreakDeg = FlightModel.Sabre.CLMax / FlightModel.Sabre.CLAlpha * Deg;
+        Assert.True(rig.Sim.AngleOfAttackRad * Deg > liftBreakDeg + 3.0,
+            $"override never crossed the {liftBreakDeg:F1}-deg lift break: "
+            + $"{rig.Sim.AngleOfAttackRad * Deg:F1} deg");
         Assert.True(p > 25.0 && r > 15.0,
             $"no right autorotation: p={p:F1}, r={r:F1} deg/s");
 

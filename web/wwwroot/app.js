@@ -30,8 +30,13 @@ import {
 import {
   createPilotActionController,
   projectTestFlightState,
+  testFlightConsoleRelevant,
   TEST_FLIGHT_ACTIONS,
 } from "./render/systems/test_flight_console.js";
+import {
+  contextualPadlockTarget,
+  padlockTargetValid,
+} from "./render/hud/carrier_sa.js";
 import {
   GlobalRoomClient,
   resolveGlobalRoomUrl,
@@ -48,6 +53,14 @@ import {
   buildTelemetryBatch,
   retainNewestTelemetryRows,
 } from "./render/telemetry/telemetry_batch.js";
+import {
+  DEFAULT_KEYFRAME_INTERVAL_SAMPLES,
+  ensureTelemetryChunkHeader,
+  ensureTelemetryChunkKeyframe,
+  releaseTelemetryMaterializedStates,
+  TelemetryStateEncoder,
+  TELEMETRY_STATE_ENCODING,
+} from "./render/telemetry/state_delta.js";
 import { createVisualRuntime } from "./render/visual/index.js";
 import {
   createKoreaEffectsFactory,
@@ -63,6 +76,16 @@ const PADLOCK_MAX_PITCH = 88 * DEG;
 const PADLOCK_FRAME_FRACTION = 0.88;
 const MAX_TRACERS = 48;
 const SUN_DIRECTION = new THREE.Vector3(0.32, 0.78, -0.53).normalize();
+const CLEAR_AIR_VISIBILITY_M = 100_000;
+
+// Production visuals must carry decision-relevant truth. The generated Korea environment and
+// cockpit remain useful authoring fixtures in their labs, but neither is allowed into the flying
+// view until it represents authoritative state and passes an in-mission visual review. Pack weapon
+// and damage effects remain enabled because each one is evidence of a real simulation event.
+const PRODUCTION_PACK_ENVIRONMENT_ENABLED = false;
+const PRODUCTION_SIMULATED_CLOUDS_ENABLED = false;
+const PRODUCTION_ESCORT_PRESENTATION_ENABLED = false;
+const PRODUCTION_NONCOMBAT_WORLD_BOGEYS_VISIBLE = false;
 
 const sceneCanvas = document.querySelector("#scene");
 const hudCanvas = document.querySelector("#hud");
@@ -170,7 +193,8 @@ if (mobileControls) {
     }
 
     .touch-mode .touch-utils {
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: repeat(2, 50px);
       gap: 4px;
     }
 
@@ -270,6 +294,8 @@ const TELEMETRY_TICK_STRIDE = 6; // 120 Hz authority -> 20 Hz diagnostic trace.
 const TELEMETRY_FLUSH_INTERVAL_MS = 30_000;
 const TELEMETRY_MAX_BACKOFF_MS = 5 * 60_000;
 const TELEMETRY_BUFFER_LIMIT = 1_500;
+const TELEMETRY_SCHEMA_VERSION = "2.0.0";
+const TELEMETRY_SESSION_STARTED_AT = Date.now();
 
 function newTelemetryBatchId() {
   const unique = globalThis.crypto?.randomUUID?.()
@@ -278,7 +304,7 @@ function newTelemetryBatchId() {
 }
 
 const recorder = {
-  session: `web-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+  session: `web-${TELEMETRY_SESSION_STARTED_AT}-${Math.floor(Math.random() * 1e6)}`,
   build: BUILD,
   buf: [],
   lastSampleKey: null,
@@ -295,27 +321,49 @@ const recorder = {
   _retryDelay: TELEMETRY_FLUSH_INTERVAL_MS,
   _nextPost: performance.now() + TELEMETRY_FLUSH_INTERVAL_MS,
   _lastContext: new Map(),
-  enqueue(row) {
-    this.buf.push(row);
-    this.buf = retainNewestTelemetryRows(this.buf, TELEMETRY_BUFFER_LIMIT);
-  },
-  ensureHeader() {
-    if (this._headerSent) return;
-    this.enqueue({
+  _stateEncoder: new TelemetryStateEncoder(),
+  chunkHeader(batchId = null) {
+    const header = {
       k: "hdr",
+      schema_version: TELEMETRY_SCHEMA_VERSION,
       build: this.build,
       session: this.session,
       ua: navigator.userAgent,
-      t0: Date.now(),
-    });
+      t0: TELEMETRY_SESSION_STARTED_AT,
+      state_encoding: TELEMETRY_STATE_ENCODING,
+      keyframe_interval_samples: DEFAULT_KEYFRAME_INTERVAL_SAMPLES,
+    };
+    if (batchId) header.batch_id = batchId;
+    return header;
+  },
+  enqueue(row) {
+    this.buf.push(row);
+    if (this.buf.length > TELEMETRY_BUFFER_LIMIT) {
+      const overflow = this.buf.length - TELEMETRY_BUFFER_LIMIT;
+      this.buf = ensureTelemetryChunkKeyframe(
+        retainNewestTelemetryRows(this.buf, TELEMETRY_BUFFER_LIMIT),
+      );
+      this.droppedRows += overflow;
+    }
+  },
+  ensureHeader() {
+    if (this._headerSent) return;
+    this.enqueue(this.chunkHeader());
     this._headerSent = true;
   },
   // Every method is fully guarded: telemetry must NEVER be able to crash the flight loop (an
   // earlier version did — an oversized keepalive-fetch body throws, and it killed the sim).
-  event(type, code) {
+  event(type, code, detail = {}) {
     try {
       this.ensureHeader();
-      this.enqueue({ k: "in", t: Math.round(performance.now()), type, code, held: [...heldKeys] });
+      this.enqueue({
+        k: "in",
+        t: Math.round(performance.now()),
+        type,
+        code,
+        held: [...heldKeys],
+        ...detail,
+      });
     }
     catch (e) { this.errors++; this.lastError = String(e); }
   },
@@ -344,7 +392,12 @@ const recorder = {
       // The header always precedes state or multiplayer context, so downloaded chunks retain an
       // unambiguous build/session identity even when the room connects before the first sim tick.
       this.ensureHeader();
-      this.enqueue({ k: "st", t: Math.round(performance.now()), build: this.build, held: [...heldKeys], s: state });
+      this.enqueue(this._stateEncoder.encode({
+        state,
+        time: Math.round(performance.now()),
+        build: this.build,
+        held: heldKeys,
+      }));
       if (performance.now() >= this._nextPost) this.flush();
     } catch (e) { this.errors++; this.lastError = String(e); }
   },
@@ -355,18 +408,29 @@ const recorder = {
         || this._sending || (!force && now < this._nextPost)) return;
       let batch = this._pendingBatch;
       if (!batch) {
+        // Defensive recovery guard: no retained queue may be serialized with a leading delta,
+        // even after an outage/truncation path added in a future recorder revision.
+        this.buf = ensureTelemetryChunkKeyframe(this.buf);
+        const batchId = newTelemetryBatchId();
+        this.buf = ensureTelemetryChunkHeader(this.buf, this.chunkHeader(batchId));
         batch = buildTelemetryBatch({
           session: this.session,
-          batchId: newTelemetryBatchId(),
+          batchId,
           rows: this.buf,
         });
-        this.buf = batch.remainingRows;
+        // A byte/row capacity split can fall between periodic keyframes. Promote the first retained
+        // state while its non-enumerable materialized snapshot is still available in memory.
+        this.buf = ensureTelemetryChunkKeyframe(batch.remainingRows);
+        releaseTelemetryMaterializedStates(batch.rows);
         this.droppedRows += batch.droppedRows;
         if (!batch.payload) {
           this._nextPost = performance.now() + TELEMETRY_FLUSH_INTERVAL_MS;
           return;
         }
         this._pendingBatch = batch;
+        // Samples collected while this immutable upload is in flight form the next chunk. Start
+        // that chunk with a full state so every ordinary 30-second Blob is independently useful.
+        this._stateEncoder.forceKeyframe();
       }
       this.lastPost = now;
       this.lastPayloadBytes = batch.requestBytes;
@@ -434,6 +498,7 @@ document.addEventListener("visibilitychange", () => {
 let bridge = null;
 const keyOwners = new Map();
 let padlock = false;
+let padlockTarget = "bandit";
 let dragging = false;
 let activePointer = null;
 let lastPointerX = 0;
@@ -465,6 +530,9 @@ function renderMultiplayerStatus(status) {
   multiplayerStatus.dataset.bogeys = String(presentation.bogeys);
   multiplayerStatus.textContent = presentation.text;
   multiplayerStatus.title = presentation.title;
+  multiplayerStatus.hidden = !["connecting", "reconnecting", "offline"].includes(
+    presentation.phase,
+  );
   recorder.context("multiplayer", presenceTelemetryContext(status));
 }
 
@@ -520,7 +588,7 @@ function pressMappedKey(code, source) {
   if (owners.size > 1) return true;
   heldKeys.add(code);
   bridge.FeedKey(gkey, true);
-  recorder.event("down", code);
+  recorder.event("down", code, { source });
   return true;
 }
 
@@ -532,18 +600,25 @@ function releaseMappedKey(code, source) {
   heldKeys.delete(code);
   const gkey = keyMap.get(code);
   if (bridge && gkey !== undefined) bridge.FeedKey(gkey, false);
-  recorder.event("up", code);
+  recorder.event("up", code, { source });
 }
 
-function releaseAllMappedKeys() {
-  if (bridge) {
-    for (const code of heldKeys) {
-      const gkey = keyMap.get(code);
-      if (gkey !== undefined) bridge.FeedKey(gkey, false);
-    }
+function releaseAllMappedKeys(reason = "system-neutralise") {
+  // System neutralisation is a real control transition. Record each release after removing it from
+  // heldKeys so event-only telemetry can reconstruct blur/pause/visibility boundaries faithfully.
+  for (const code of [...heldKeys]) {
+    const owners = [...(keyOwners.get(code) ?? [])];
+    const gkey = keyMap.get(code);
+    if (bridge && gkey !== undefined) bridge.FeedKey(gkey, false);
+    heldKeys.delete(code);
+    recorder.event("up", code, {
+      source: "system",
+      reason,
+      neutralised: true,
+      owners,
+    });
   }
   keyOwners.clear();
-  heldKeys.clear();
 }
 
 function setTestFlightValue(node, text, state = null) {
@@ -555,6 +630,20 @@ function setTestFlightValue(node, text, state = null) {
 function renderTestFlightConsole(state) {
   if (!testFlightUi) return;
   const projected = projectTestFlightState(state);
+  const relevant = state.ready !== true && state.paused !== true && state.finished !== true
+    && testFlightConsoleRelevant(projected);
+  if (testFlightConsole) {
+    const wasHidden = testFlightConsole.hidden;
+    testFlightConsole.hidden = !relevant;
+    testFlightConsole.dataset.relevance = projected.maintenance.active
+      ? "maintenance"
+      : projected.warnings.length ? "abnormal" : relevant ? "transition" : "none";
+    if (!relevant && !wasHidden) {
+      testFlightConsole.open = false;
+      testFlightActionController?.releaseAll();
+    }
+  }
+  if (!relevant) return;
 
   setTestFlightValue(testFlightUi.engineRpm, projected.engine.rpmText, projected.engine.state);
   setTestFlightValue(testFlightUi.engineRunning,
@@ -700,23 +789,34 @@ function installTestFlightConsole() {
   syncConsoleDisclosure();
 }
 
-function clearFlightInput() {
+function clearFlightInput(reason = "presentation-reset") {
   resetMobileInput();
-  releaseAllMappedKeys();
+  releaseAllMappedKeys(reason);
   dragging = false;
   activePointer = null;
   sceneCanvas.classList.remove("dragging");
 }
 
 function resetMissionPresentation() {
-  clearFlightInput();
+  clearFlightInput("mission-reset");
   incidentReplay?.stop();
   renderIncidentReplay(null);
   padlock = false;
+  padlockTarget = "bandit";
   sensorYaw = 0;
   sensorPitch = 0;
   lastLookTime = performance.now();
   activeView?.hud.setLegendVisible?.(false);
+}
+
+function togglePadlock() {
+  if (padlock) {
+    padlock = false;
+    padlockTarget = "bandit";
+    return;
+  }
+  padlock = true;
+  padlockTarget = contextualPadlockTarget(latestState);
 }
 
 function missionBrief() {
@@ -859,7 +959,7 @@ function setPauseReason(reason, active) {
   if (active) pauseReasons.add(reason);
   else pauseReasons.delete(reason);
   const paused = pauseReasons.size > 0;
-  if (active) clearFlightInput();
+  if (active) clearFlightInput(`pause:${reason}`);
   applyBridgePause();
   renderPauseUi();
   if (wasPaused && !paused) resetFrameClock();
@@ -1024,6 +1124,14 @@ function angleNearestReference(angle, reference) {
 function smoothstep(edge0, edge1, value) {
   const x = clamp((value - edge0) / (edge1 - edge0), 0, 1);
   return x * x * (3 - 2 * x);
+}
+
+// FogExp2 reaches two per cent transmission at the reported meteorological visibility. Keeping
+// this conversion at the renderer boundary makes visibility a projection of weather truth rather
+// than an art preset.
+function fogDensityForVisibility(visibilityM) {
+  const physicalVisibility = clamp(Number(visibilityM) || CLEAR_AIR_VISIBILITY_M, 150, 200_000);
+  return Math.sqrt(-Math.log(0.02)) / physicalVisibility;
 }
 
 function gameViewport() {
@@ -3300,6 +3408,193 @@ function createSea() {
   return { mesh, uniforms };
 }
 
+// The production scene is deliberately closer to a flight-test visual system than a decorative
+// game sky. It supplies an unambiguous world horizon and altitude-dependent atmospheric colour;
+// clouds, stars, a sun disc, and other scene dressing are absent unless a later renderer can bind
+// them to scenario-owned state.
+function createDecisionSupportSky() {
+  const uniforms = {
+    uAltitude: { value: 0 },
+  };
+  const material = new THREE.ShaderMaterial({
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    depthTest: false,
+    uniforms,
+    vertexShader: /* glsl */ `
+      varying vec3 vDirection;
+
+      void main() {
+        vDirection = normalize(mat3(modelMatrix) * position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision highp float;
+      uniform float uAltitude;
+      varying vec3 vDirection;
+
+      void main() {
+        vec3 direction = normalize(vDirection);
+        float aboveHorizon = max(direction.y, 0.0);
+        float altitudeMix = smoothstep(2500.0, 18000.0, max(uAltitude, 0.0));
+        vec3 horizon = mix(vec3(0.34, 0.47, 0.52), vec3(0.18, 0.33, 0.50), altitudeMix);
+        vec3 zenith = mix(vec3(0.035, 0.16, 0.34), vec3(0.006, 0.025, 0.105), altitudeMix);
+        float skyCurve = pow(aboveHorizon, mix(0.42, 0.30, altitudeMix));
+        vec3 color = mix(horizon, zenith, skyCurve);
+
+        // A narrow, non-luminous horizon shoulder stays visible during unusual attitudes and over
+        // the far-field sea. It is an attitude reference, not simulated cloud or weather.
+        float horizonShoulder = exp(-abs(direction.y) * 70.0);
+        color = mix(color, horizon * 1.08, horizonShoulder * 0.38);
+        if (direction.y < 0.0) {
+          color = mix(vec3(0.022, 0.075, 0.095), horizon, exp(direction.y * 16.0));
+        }
+
+        gl_FragColor = vec4(color, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(4096, 36, 20), material);
+  mesh.name = "DECISION_SUPPORT_SKY";
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -100;
+  return { mesh, uniforms };
+}
+
+// The collision surface stays exactly planar, but the presentation carries wind-aligned, physically
+// scaled crest cues. They give the pilot optic flow, height/closure judgment, and surface-wind SA
+// without inventing wave displacement that the flight model does not collide with. The shader is
+// driven by the authoritative local wind and fades its detail before it can alias at the horizon.
+function createDecisionSupportSea() {
+  const uniforms = {
+    uAltitude: { value: 0 },
+    uFogColor: { value: new THREE.Color(0x6f8790) },
+    uFogDensity: { value: fogDensityForVisibility(CLEAR_AIR_VISIBILITY_M) },
+    uTime: { value: 0 },
+    uWind: { value: new THREE.Vector2() },
+    uWindSpeed: { value: 0 },
+  };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: /* glsl */ `
+      varying vec3 vWorldPosition;
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
+
+      void main() {
+        vec3 worldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+        float radial = length(position.xz);
+        // Keep the tactical recovery area exactly planar. Curvature beyond it supplies the real
+        // geometric horizon used for attitude and altitude judgment without moving nearby truth.
+        float curvedRadial = max(radial - 12000.0, 0.0);
+        worldPosition.y -= curvedRadial * curvedRadial / 12742000.0;
+        vWorldPosition = worldPosition;
+        gl_Position = projectionMatrix * viewMatrix * vec4(worldPosition, 1.0);
+        #include <logdepthbuf_vertex>
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision highp float;
+      uniform float uAltitude;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
+      uniform float uTime;
+      uniform vec2 uWind;
+      uniform float uWindSpeed;
+      varying vec3 vWorldPosition;
+      #include <logdepthbuf_pars_fragment>
+
+      float crest(float phase) {
+        float wave = 0.5 + 0.5 * sin(phase);
+        return wave * wave * wave * wave;
+      }
+
+      void main() {
+        float distanceFromEye = length(vWorldPosition - cameraPosition);
+        vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
+        float grazing = pow(1.0 - clamp(viewDirection.y, 0.0, 1.0), 3.0);
+        float altitudeMix = smoothstep(2500.0, 18000.0, max(uAltitude, 0.0));
+        vec3 water = mix(vec3(0.016, 0.090, 0.112), vec3(0.010, 0.040, 0.075), altitudeMix);
+        // View-angle variation preserves the sea plane and geometric horizon.
+        water = mix(water, uFogColor * 0.70, grazing * 0.48);
+
+        // Two deep-water spatial scales (48 m and 15 m) travel at their dispersion-derived phase
+        // rates. Only their contrast is drawn: geometry and collision truth remain at sea level.
+        // The cross-wind modulation prevents a screen-space stripe pattern while retaining a clear
+        // wind-axis cue. In calm air the contrast disappears instead of implying a false wind.
+        vec2 windDirection = uWindSpeed > 0.25 ? normalize(uWind) : vec2(0.0, 1.0);
+        vec2 windCross = vec2(-windDirection.y, windDirection.x);
+        float alongWind = dot(vWorldPosition.xz, windDirection);
+        float acrossWind = dot(vWorldPosition.xz, windCross);
+        float primaryPhase = alongWind * 0.1308997
+          + 0.42 * sin(acrossWind * 0.022) - uTime * 1.133;
+        float secondaryPhase = alongWind * 0.4188790
+          - 0.31 * sin(acrossWind * 0.057 + 1.7) - uTime * 2.027;
+        float primaryCrest = crest(primaryPhase);
+        float secondaryCrest = crest(secondaryPhase);
+        float surfaceCue = mix(primaryCrest, secondaryCrest, 0.34);
+        float windCue = smoothstep(1.5, 12.0, uWindSpeed);
+        float altitudeCue = 1.0 - smoothstep(3500.0, 15000.0, uAltitude);
+        float rangeCue = 1.0 - smoothstep(6500.0, 30000.0, distanceFromEye);
+        float cueStrength = windCue * altitudeCue * rangeCue;
+        water *= 0.94 + surfaceCue * cueStrength * 0.14;
+
+        // Whitecaps are a high-wind observation, not generic decoration. They appear only on the
+        // most coherent windward crests and fade with the same resolvability gates.
+        float whitecap = smoothstep(0.88, 0.98, primaryCrest * 0.78 + secondaryCrest * 0.22)
+          * smoothstep(9.0, 17.0, uWindSpeed) * altitudeCue * rangeCue;
+        water = mix(water, vec3(0.66, 0.76, 0.75), whitecap * 0.32);
+        float visibilityFog = 1.0 - exp(
+          -uFogDensity * uFogDensity * distanceFromEye * distanceFromEye
+        );
+        vec3 color = mix(water, uFogColor, clamp(visibilityFog, 0.0, 1.0));
+
+        gl_FragColor = vec4(color, 1.0);
+        #include <logdepthbuf_fragment>
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const mesh = new THREE.Mesh(createOceanGeometry(
+    650000,
+    mobileControls ? 84 : 104,
+    mobileControls ? 120 : 156,
+  ), material);
+  mesh.name = "DECISION_SUPPORT_SEA";
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -10;
+  return { mesh, uniforms };
+}
+
+// Browser MSAA already preserves the geometric edges the pilot uses. A direct path avoids adding
+// bloom or other full-frame treatment whose only justification would be that the graphics stack
+// supports it. Event effects still render normally through the same scene.
+function createDecisionSupportPostStack({ renderer, scene, camera, config }) {
+  let activeScene = scene;
+  let activeCamera = camera;
+  return {
+    render() { renderer.render(activeScene, activeCamera); },
+    setSize() {},
+    configure() {},
+    setSceneCamera(nextScene, nextCamera) {
+      activeScene = nextScene;
+      activeCamera = nextCamera;
+    },
+    diagnostics() {
+      return Object.freeze({
+        mode: "direct",
+        reason: "production-decision-support",
+        toneMapping: config.renderer?.toneMapping ?? "aces_filmic",
+      });
+    },
+    dispose() {},
+  };
+}
+
 // Production presentation boundary. The simulation projects stable presentation IDs; this manager
 // resolves them through the staged content pack and owns every registry instance it attaches. The
 // current procedural meshes remain first-class compatibility fallbacks, so a missing/unbuilt pack
@@ -3312,6 +3607,12 @@ const DEFAULT_TARGET_PRESENTATION_ID = "presentation.vehicle.bandit.v1";
 const DEFAULT_COCKPIT_PRESENTATION_ID = "presentation.cockpit.player.v1";
 const DEFAULT_CARRIER_PRESENTATION_ID = "presentation.platform.carrier.v1";
 const DEFAULT_ESCORT_PRESENTATION_ID = "presentation.platform.escort.v1";
+
+// The current cockpit GLB is an authoring/reference asset, not an acceptable production view: its
+// opaque slabs and oversized canopy structure obscure the exact airdata and energy cues this sim
+// is trying to teach. Keep it available in Asset Lab, but ship the information-efficient SA view
+// until a cockpit presentation passes an actual in-mission visual review.
+const PRODUCTION_AUTHORED_COCKPIT_ENABLED = false;
 
 function createHiddenPresentation() {
   const group = new THREE.Group();
@@ -3906,11 +4207,16 @@ class PresentationAssetManager {
       this.requested.escortEntityId,
     );
     const replayExternal = state.replay_external === true;
-    this.cockpitSlot.root.visible = !replayExternal && this.requested.cockpitPresentationId !== "";
+    this.cockpitSlot.root.visible = PRODUCTION_AUTHORED_COCKPIT_ENABLED
+      && !replayExternal
+      && this.requested.cockpitPresentationId !== "";
     this.playerExteriorSlot.root.visible = replayExternal;
     this.targetSlot.root.visible = state.opponent_body_present !== false;
     this.carrierSlot.root.visible = state.carrier === true;
-    this.escortSlot.root.visible = state.carrier === true;
+    // A hidden decorative escort must not even enter asset resolution: visibility here is the
+    // resolver's admission gate, not merely a later draw toggle in FlightView.update().
+    this.escortSlot.root.visible = PRODUCTION_ESCORT_PRESENTATION_ENABLED
+      && state.carrier === true;
     this.requestPack(state);
     this.resolveVisibleSlots();
   }
@@ -4127,7 +4433,7 @@ class RemoteAircraftManager {
       ...(snapshot?.players ?? [])
         .filter((player) => player?.playerId !== ownPlayerId)
         .map((contact) => ({ contact, kind: "player", id: contact.playerId })),
-      ...(snapshot?.bogeys ?? [])
+      ...(PRODUCTION_NONCOMBAT_WORLD_BOGEYS_VISIBLE ? snapshot?.bogeys ?? [] : [])
         .map((contact) => ({ contact, kind: "bogey", id: contact.bogeyId })),
     ];
     for (const { contact, kind, id } of contacts) {
@@ -4249,15 +4555,24 @@ class FlightView {
     this.scene = new THREE.Scene();
     this.environmentTarget = createLitEnvironment(this.renderer);
     this.scene.environment = this.environmentTarget.texture;
-    this.fogLow = new THREE.Color(0x7898a0);
-    this.fogHigh = new THREE.Color(0x1c2a43);
+    this.fogLow = new THREE.Color(0x6f8790);
+    this.fogHigh = new THREE.Color(0x263d55);
     this.fogColor = this.fogLow.clone();
-    this.scene.fog = new THREE.FogExp2(this.fogColor, 0.000055);
-    this.sky = createSky();
-    this.sea = createSea();
-    this.tacticalClouds = createTacticalCloudField(THREE, {
-      qualityTier: VISUAL_QUALITY.tier,
-    });
+    this.scene.fog = new THREE.FogExp2(
+      this.fogColor,
+      fogDensityForVisibility(CLEAR_AIR_VISIBILITY_M),
+    );
+    this.sky = createDecisionSupportSky();
+    this.sea = createDecisionSupportSea();
+    this.tacticalClouds = PRODUCTION_SIMULATED_CLOUDS_ENABLED
+      ? createTacticalCloudField(THREE, { qualityTier: VISUAL_QUALITY.tier })
+      : {
+        group: new THREE.Group(),
+        update: () => 0,
+        dispose() {},
+      };
+    this.tacticalClouds.group.name = "AUTHORITATIVE_WEATHER_CLOUDS";
+    this.tacticalClouds.group.visible = PRODUCTION_SIMULATED_CLOUDS_ENABLED;
     this.scene.add(this.sky.mesh, this.sea.mesh, this.tacticalClouds.group);
     this.cloudFogColor = new THREE.Color(0xb8c6c8);
 
@@ -4328,6 +4643,7 @@ class FlightView {
     this.opponentMuzzleRightPosition = new THREE.Vector3();
     this.playerQuaternion = new THREE.Quaternion();
     this.banditPosition = new THREE.Vector3();
+    this.carrierPosition = new THREE.Vector3();
     this.playerDamagePosition = new THREE.Vector3();
     this.banditDamagePosition = new THREE.Vector3();
     this.effectNormal = new THREE.Vector3(0, 1, 0);
@@ -4442,7 +4758,7 @@ class FlightView {
     this.visualRuntimeError = null;
     const profileUrl = new URL("visual-profile.json", this.presentationAssets.requested.packUri).href;
     const isKoreaPack = pack.id === "korea-1950s";
-    const environmentFactory = isKoreaPack
+    const environmentFactory = PRODUCTION_PACK_ENVIRONMENT_ENABLED && isKoreaPack
       ? createKoreaEnvironmentFactory(THREE, {
         profileUrl,
         packVersion: pack.packVersion,
@@ -4461,8 +4777,11 @@ class FlightView {
           if (!this.disposed) {
             this.sky.mesh.visible = true;
             this.sea.mesh.visible = true;
-            this.tacticalClouds.group.visible = true;
-            this.scene.fog = new THREE.FogExp2(this.fogColor, 0.000055);
+            this.tacticalClouds.group.visible = PRODUCTION_SIMULATED_CLOUDS_ENABLED;
+            this.scene.fog = new THREE.FogExp2(
+              this.fogColor,
+              fogDensityForVisibility(CLEAR_AIR_VISIBILITY_M),
+            );
           }
         },
       })
@@ -4508,7 +4827,8 @@ class FlightView {
           lights: { ambient: this.ambient, sun: this.sun },
           environmentFactory,
           effectsFactory,
-          manageFog: true,
+          manageFog: Boolean(environmentFactory),
+          postStackFactory: createDecisionSupportPostStack,
           manageRendererSize: false,
           shadowModes: mobileControls ? ["carrier"] : ["combat", "carrier", "replay"],
           shadowHalfExtents: { combat: 44, carrier: 190, replay: 160 },
@@ -4604,7 +4924,10 @@ class FlightView {
 
   updateGimbal(dt) {
     if (padlock) {
-      this.localTarget.copy(this.banditPosition).sub(this.playerPosition).normalize();
+      const trackedPosition = padlockTarget === "carrier"
+        ? this.carrierPosition
+        : this.banditPosition;
+      this.localTarget.copy(trackedPosition).sub(this.playerPosition).normalize();
       this.inversePlayerQuaternion.copy(this.playerQuaternion).invert();
       this.localTarget.applyQuaternion(this.inversePlayerQuaternion);
 
@@ -5047,6 +5370,13 @@ class FlightView {
   }
 
   update(state, dt, nowSeconds) {
+    // A contextual lock is presentation state, not a promise to track stale geometry forever.
+    // Leaving the boat's vicinity, losing the target, entering replay, or reaching terminal state
+    // releases the view instead of silently looking at an invalid/stale world position.
+    if (padlock && !padlockTargetValid(state, padlockTarget)) {
+      padlock = false;
+      padlockTarget = "bandit";
+    }
     const playerFrame = this.frameFromState(state, "p", this.playerFrame);
     const banditFrame = this.frameFromState(state, "b", this.banditFrame);
     const nextBanditEntityId = projectedId(state.bandit_entity_id);
@@ -5068,6 +5398,10 @@ class FlightView {
     this.playerRight.copy(playerFrame.right);
     this.playerQuaternion.copy(playerFrame.quaternion);
     this.banditPosition.set(state.bx, state.by, -state.bz);
+    if (state.carrier === true && Number.isFinite(state.cx)
+      && Number.isFinite(state.cy) && Number.isFinite(state.cz)) {
+      this.carrierPosition.set(state.cx, state.cy, -state.cz);
+    }
     this.banditQuaternion.copy(banditFrame.quaternion);
     if (state.lead_valid === true && Number.isFinite(state.lead_x)
       && Number.isFinite(state.lead_y) && Number.isFinite(state.lead_z)) {
@@ -5088,10 +5422,12 @@ class FlightView {
     playerExteriorRoot.scale.setScalar(1);
     playerExteriorRoot.updateMatrixWorld(true);
 
-    const gunsightAnchor = this.presentationAssets.semanticAnchor(
-      this.presentationAssets.cockpitSlot,
-      "gunsight.origin",
-    );
+    const gunsightAnchor = cockpitRoot.visible
+      ? this.presentationAssets.semanticAnchor(
+        this.presentationAssets.cockpitSlot,
+        "gunsight.origin",
+      )
+      : null;
     if (gunsightAnchor !== this.periodGunsight.anchor) {
       if (gunsightAnchor) this.periodGunsight.attach(gunsightAnchor);
       else this.periodGunsight.detach();
@@ -5148,14 +5484,24 @@ class FlightView {
       fogDensity = 1 / Math.max(1, Number(this.scene.fog?.far) || 56000);
     } else {
       const atmosphereMix = smoothstep(1800, 14000, cameraAltitude);
-      const baseFogDensity = 0.000055 + (0.000009 - 0.000055) * atmosphereMix;
-      this.fogColor.copy(this.fogLow).lerp(this.fogHigh, atmosphereMix);
-      const cloudExtinction = this.tacticalClouds.update(
-        this.camera.position,
-        nowSeconds,
-        this.fogColor,
-        baseFogDensity,
+      const reportedVisibilityM = clamp(
+        Number(state.visibility_m) || CLEAR_AIR_VISIBILITY_M,
+        150,
+        200_000,
       );
+      const baseFogDensity = fogDensityForVisibility(reportedVisibilityM);
+      this.fogColor.copy(this.fogLow).lerp(this.fogHigh, atmosphereMix);
+      const cloudTruthActive = PRODUCTION_SIMULATED_CLOUDS_ENABLED
+        && Number(state.cloud_fraction_01) > 0.01;
+      this.tacticalClouds.group.visible = cloudTruthActive;
+      const cloudExtinction = cloudTruthActive
+        ? this.tacticalClouds.update(
+          this.camera.position,
+          nowSeconds,
+          this.fogColor,
+          baseFogDensity,
+        )
+        : 0;
       fogDensity = baseFogDensity + cloudExtinction * 0.0011;
       if (cloudExtinction > 0) {
         this.fogColor.lerp(this.cloudFogColor, Math.min(0.82, cloudExtinction * 0.78));
@@ -5174,7 +5520,7 @@ class FlightView {
     const escortRoot = this.presentationAssets.escortSlot.root;
     targetRoot.visible = banditBodyPresent;
     carrierRoot.visible = isCarrier;
-    escortRoot.visible = isCarrier;
+    escortRoot.visible = isCarrier && PRODUCTION_ESCORT_PRESENTATION_ENABLED;
     if (isCarrier) {
       // Sim frame X=east, Y=up, Z=north; render flips Z. Deck-centre origin at deck height.
       // The hull follows the moving deck's bow-up pitch; water effects use a separate level root.
@@ -5260,13 +5606,18 @@ class FlightView {
     this.remoteAircraft.update(dt, this.camera.position, { historicalReplay: replayExternal });
 
     this.sky.mesh.position.copy(this.camera.position);
-    this.sky.uniforms.uTime.value = nowSeconds;
     this.sky.uniforms.uAltitude.value = cameraAltitude;
     this.sea.mesh.position.set(this.camera.position.x, 0, this.camera.position.z);
-    this.sea.uniforms.uTime.value = nowSeconds;
     this.sea.uniforms.uAltitude.value = cameraAltitude;
     this.sea.uniforms.uFogColor.value.copy(this.fogColor);
     this.sea.uniforms.uFogDensity.value = fogDensity;
+    this.sea.uniforms.uTime.value = nowSeconds;
+    const windTargetX = Number(state.wind_x_mps) || 0;
+    const windTargetZ = -(Number(state.wind_z_mps) || 0); // simulation Z is negated in render space
+    const windBlend = expStep(0.55, dt); // weather/turbulence changes must not rotate the sea frame-to-frame
+    this.sea.uniforms.uWind.value.x += (windTargetX - this.sea.uniforms.uWind.value.x) * windBlend;
+    this.sea.uniforms.uWind.value.y += (windTargetZ - this.sea.uniforms.uWind.value.y) * windBlend;
+    this.sea.uniforms.uWindSpeed.value = this.sea.uniforms.uWind.value.length();
 
     const shadowFocus = isCarrier ? carrierRoot.position : this.playerPosition;
     if (this.visualRuntime?.initialized) {
@@ -5294,6 +5645,7 @@ class FlightView {
     hudFrame.sensorYaw = sensorYaw;
     hudFrame.sensorPitch = sensorPitch;
     hudFrame.padlock = padlock;
+    hudFrame.padlockTarget = padlockTarget;
     hudFrame.periodGunsightVisible = gunsightPresentation.visible;
     hudFrame.triggerHeld = heldKeys.has("KeyF");
     hudFrame.dt = dt;
@@ -5600,6 +5952,25 @@ function installMobileInput(view) {
     button.addEventListener("lostpointercapture", endControl);
   });
 
+  let pulseSequence = 0;
+  touchControls.querySelectorAll("[data-pulse-key]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const code = button.dataset.pulseKey;
+      const source = `touch:pulse:${++pulseSequence}`;
+      if (!pressMappedKey(code, source)) return;
+      if (code === "KeyV") togglePadlock();
+      releaseMappedKey(code, source);
+      button.classList.add("active");
+      button.setAttribute("aria-pressed", "true");
+      window.setTimeout(() => {
+        button.classList.remove("active");
+        button.setAttribute("aria-pressed", "false");
+      }, 140);
+    });
+  });
+
   touchControls.querySelector('[data-mobile-action="enable-tilt"]')?.addEventListener("click", enableTilt);
   touchControls.querySelector('[data-mobile-action="buttons-only"]')?.addEventListener("click", () => {
     useButtonStick("BUTTON STICK");
@@ -5632,7 +6003,7 @@ function installMobileInput(view) {
     suspended = document.hidden;
     if (suspended) {
       resetMobileInput();
-      releaseAllMappedKeys();
+      releaseAllMappedKeys("visibility-hidden");
     } else if (tiltState === "enabled") {
       awaitFreshCentre();
     }
@@ -5722,9 +6093,9 @@ function installInput(view) {
 
     const gkey = keyMap.get(event.code);
     if (gkey === undefined) return;
-    if (event.code === "KeyV") padlock = !padlock;
+    if (!pressMappedKey(event.code, "keyboard")) return;
+    if (event.code === "KeyV") togglePadlock();
     if (event.code === "KeyF") view.hud.armAudio();
-    pressMappedKey(event.code, "keyboard");
   }, { passive: false });
 
   window.addEventListener("keyup", (event) => {

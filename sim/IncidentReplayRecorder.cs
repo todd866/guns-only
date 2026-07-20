@@ -85,7 +85,9 @@ public readonly record struct IncidentReplaySample(
     double TouchdownAdaptiveMaximumSinkRateMps = 0.0,
     double TouchdownAdaptiveMaximumLineupM = 0.0,
     double TouchdownAdaptiveMinimumIndicatedAirspeedMps = 0.0,
-    double TouchdownAdaptiveMaximumIndicatedAirspeedMps = 0.0);
+    double TouchdownAdaptiveMaximumIndicatedAirspeedMps = 0.0,
+    bool CommandAppliedToFlight = false,
+    bool CommandDirectLateralControl = false);
 
 /// <summary>
 /// One authoritative discrete event retained beside the sampled replay states. The event keeps
