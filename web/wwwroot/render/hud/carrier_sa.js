@@ -235,6 +235,18 @@ export function carrierPatternCue(state = {}, options = {}) {
   if (mode === "WAVE-OFF" || mode === "BOLTER") return phaseCue("WAVE-OFF", state, details);
 
   const finalCrossLimit = previousPhase === "FINAL" ? 450 : 360;
+  // The simulation exits APPROACH as the aircraft passes +30 m. If a fresh padlock is acquired
+  // immediately after an overflight, infer the missed approach from observable aircraft truth
+  // instead of sending a low, dirty jet to a 350-knot initial. The DOWN handle deliberately
+  // distinguishes this from a post-catapult departure whose gear may still be in transit.
+  const missedApproach = alongM > 30 && alongM <= 500
+    && Math.abs(crossM) <= finalCrossLimit
+    && inbound === true
+    && approachEnergy
+    && configured
+    && token(state.gear_handle) === "DOWN";
+  if (missedApproach) return phaseCue("WAVE-OFF", state, details);
+
   // Keep final guidance through the ramp and wire area. The old -350 m upper bound dropped a
   // correctly configured aircraft into JOIN during the most workload-intensive final seconds.
   // +30 m matches the simulation's authoritative approach-slot boundary; wave-off and bolter

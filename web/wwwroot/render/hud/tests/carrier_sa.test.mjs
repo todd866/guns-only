@@ -151,6 +151,31 @@ test("pattern coach distinguishes astern initial from final using energy, mode, 
   assert.equal(liveInCloseSnapshot.phase, "FINAL",
     "in-close guidance must remain FINAL through the ramp instead of reverting to JOIN");
   assert.equal(liveInCloseSnapshot.title, "FINAL · BALL");
+
+  const liveOverflightSnapshot = carrierPatternCue(pattern({
+    mode: "FREE",
+    approach: false,
+    deck_along: 203,
+    deck_cross: -2,
+    deck_height: 59,
+    deck_closure_kts: 100,
+    indicated_airspeed_kts: 131,
+  }));
+  assert.equal(liveOverflightSnapshot.phase, "WAVE-OFF",
+    "a centered, low-energy overflight must teach the missed approach, not a 350-knot join");
+
+  const catapultDeparture = carrierPatternCue(pattern({
+    mode: "FREE",
+    approach: false,
+    deck_along: 203,
+    deck_cross: -2,
+    deck_height: 59,
+    deck_closure_kts: 100,
+    indicated_airspeed_kts: 131,
+    gear_handle: "UP",
+  }));
+  assert.notEqual(catapultDeparture.phase, "WAVE-OFF",
+    "an UP gear handle must keep a post-catapult departure out of inferred recovery guidance");
 });
 
 test("pattern coach classifies port downwind, the 180, and waveoff from relative motion", () => {
