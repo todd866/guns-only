@@ -9,6 +9,7 @@ import {
   stallAwareness,
   systemsReadout,
   targetClosureReadout,
+  visualMergeWeaponsCue,
 } from "../hud_readouts.js";
 
 test("airdata makes indicated airspeed primary and formats one universal groundspeed", () => {
@@ -62,6 +63,32 @@ test("target closure is explicit about whether range is closing or opening", () 
   assert.equal(targetClosureReadout(-18.6).text, "19 KT OPENING");
   assert.equal(targetClosureReadout(0.2).text, "RANGE STEADY");
   assert.equal(targetClosureReadout(undefined).text, "CLOSURE -- KT");
+});
+
+test("visual merge weapon safety stays visible only while it changes a pilot decision", () => {
+  const base = { visual_merge_evaluation: true };
+  assert.deepEqual(visualMergeWeaponsCue({ ...base, weapons_inhibited: true }), {
+    text: "GUNS SAFE · FIRST PASS",
+    level: "caution",
+  });
+  assert.deepEqual(visualMergeWeaponsCue({
+    ...base,
+    player_trigger_interlocked: true,
+  }), {
+    text: "RELEASE TRIGGER TO ARM",
+    level: "warning",
+  });
+  assert.deepEqual(visualMergeWeaponsCue({ ...base, weapons_hot_cue: true }), {
+    text: "GUNS HOT",
+    level: "normal",
+  });
+  assert.equal(visualMergeWeaponsCue(base), null,
+    "an armed steady-state fight must return the HUD space");
+  assert.equal(visualMergeWeaponsCue({
+    ...base,
+    weapons_inhibited: true,
+    terminal_phase_active: true,
+  }), null);
 });
 
 test("powered fuel readout uses pounds per minute and time to bingo", () => {
@@ -369,7 +396,11 @@ test("production HUD consumes the pure KIAS, corner, and fuel readouts", async (
   assert.match(source, /fixedMarkers:\s*speedTapeMarkers\(frame\.state\)/);
   assert.match(source, /fuelReadout\(state\)/);
   assert.match(source, /systemsReadout\(frame\.state\)/);
+  assert.match(source, /visualMergeWeaponsCue\(frame\.state\)/);
+  assert.match(source, /this\.drawVisualMergeWeaponsCue\(frame\)/);
   assert.match(source, /state\.has_engine === false \|\| state\.fuel_consumes === false/);
+  assert.match(source, /state\.engine_spool_fraction \?\? state\.engine/);
+  assert.match(source, /Number\.isFinite\(sustained\) && sustained >= 1\.0/);
   assert.match(source, /state\.effective_on_speed_aoa_deg/);
   assert.match(source, /state\.on_speed_aoa_tolerance_deg/);
   assert.match(source, /case "COME LEFT": return "COME LEFT"/);

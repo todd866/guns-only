@@ -121,6 +121,11 @@ test("a fresh Beat 4 pose keeps the actual server-known glider contract", () => 
     "presentation.vehicle.glider-strike.v1",
   );
   assert.equal(
+    validatePose({ ...base, presentationId: "presentation.vehicle.f22a.public-data-surrogate.v1" })
+      .presentationId,
+    "presentation.vehicle.f22a.public-data-surrogate.v1",
+  );
+  assert.equal(
     validatePose({ ...base, presentationId: "presentation.attacker.allocate-every-frame" })
       .presentationId,
     "presentation.vehicle.player.v1",

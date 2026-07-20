@@ -89,6 +89,30 @@ test("production keeps the rejected authored cockpit out of the pilot's SA view"
     "a hidden authoring cockpit must not retain ownership of the live gunsight");
 });
 
+test("modern surrogate mission stays an explicit abstract visual contact without Korea asset fetches", async () => {
+  const [appSource, bridgeSource] = await Promise.all([
+    readFile(appUrl, "utf8"),
+    readFile(bridgeUrl, "utf8"),
+  ]);
+  for (const presentationId of [
+    "presentation.vehicle.f22a.public-data-surrogate.v1",
+    "presentation.vehicle.su27s.public-data-surrogate.v1",
+  ]) {
+    assert.match(appSource, new RegExp(`\\["${presentationId.replaceAll(".", "\\.")}", createDrone\\]`),
+      `${presentationId} needs an immediately visible compatibility contact`);
+    assert.ok(appSource.includes(`"${presentationId}",`),
+      `${presentationId} must be excluded from pack registry resolution`);
+  }
+  assert.match(appSource,
+    /if \(ABSTRACT_ONLY_PRESENTATION_IDS\.has\(slot\.presentationId\)\) return;/,
+    "an abstract-only contact must not generate missing Korea descriptor/network noise");
+  assert.match(bridgeSource,
+    /modernSurrogate \|\| balloonPrototype\s*\? "null" : .*KoreaAssetManifestId/,
+    "the modern surrogate mission must not claim a Korea asset manifest");
+  assert.doesNotMatch(bridgeSource, /missionDefinitionId\s*=\s*Session\.BeatIndex\s*switch/,
+    "mission identity belongs to content rather than an index-to-label bridge switch");
+});
+
 test("multiplayer consumes pack slots at physical scale with a separate distant contact", async () => {
   const source = await readFile(appUrl, "utf8");
   assert.match(source, /createDynamicSlot\([\s\S]*projection\.presentationId/);

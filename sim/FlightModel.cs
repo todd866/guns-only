@@ -2,7 +2,11 @@ using GunsOnly.Sim.Propulsion;
 
 namespace GunsOnly.Sim;
 
-public enum PropulsionModelKind { GenericDensityScaled, J47Ge27 }
+public enum PropulsionModelKind {
+    GenericDensityScaled,
+    J47Ge27,
+    AfterburningTurbofanPublicDataSurrogate
+}
 
 /// SpoolUpTau/SpoolDownTau: first-order engine lag, in seconds. Thrust is NOT instantaneous.
 /// This is the difference between a toy and a sim on the back side of the power curve, where
@@ -71,7 +75,13 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     // fuel on top of a reference gross weight. A negative fuel-free mass preserves legacy/custom
     // aircraft whose mass does not yet participate in the resource model.
     PropulsionModelKind PropulsionModel = PropulsionModelKind.GenericDensityScaled,
-    double FuelFreeMassKg = -1.0);
+    double FuelFreeMassKg = -1.0,
+    // Generic propulsion historically supplied thrust but no fuel-flow truth. These three
+    // optional anchors make a mission's explicitly labelled surrogate engine consume fuel without
+    // pretending that the kernel owns an OEM engine deck. Zero preserves legacy generic aircraft.
+    double GenericIdleFuelFlowLbPerMinute = 0.0,
+    double GenericMilitaryFuelFlowLbPerMinute = 0.0,
+    double GenericAfterburnerFuelFlowLbPerMinute = 0.0);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -167,6 +177,83 @@ public static class FlightModel {
         MCrit: 0.60, WaveDragK: 90.0,
         MaxThrustFraction: 1.0);
 
+    /// F-22A PUBLIC-DATA SURROGATE for a visual, guns-only merge. Public anchors are the USAF
+    /// fact sheet's 840 ft2 wing, 43,340 lb empty weight, 18,000 lb internal fuel, +9 G limit,
+    /// and two engines in the 35,000 lb-thrust class. The military/afterburner split, drag polar,
+    /// inertias, control derivatives and fuel-flow anchors below are transparent mission
+    /// surrogates, not a claim to an OEM deck, modern FLCS, thrust-vectoring or classified data.
+    /// https://www.af.mil/About-Us/Fact-Sheets/Display/Article/104506/f-22-raptor/
+    public static readonly AircraftParams F22APublicDataSurrogate = new(
+        MassKg: 27700.0,
+        WingAreaM2: 78.04,
+        ThrustMaxN: 233600.0,
+        CD0: 0.0175, InducedK: 0.045, CLMax: 1.50, CLMin: -0.75,
+        RollRateMaxRad: 2.8, BankTau: 0.20,
+        MCrit: 0.95, WaveDragK: 70.0,
+        SpoolUpTau: 1.2, SpoolDownTau: 0.8,
+        CLAlpha: 4.8,
+        IxxKgM2: 55000.0, IyyKgM2: 280000.0, IzzKgM2: 315000.0,
+        RollStiffnessNmRad: 1200000.0, PitchStiffnessNmRad: 3000000.0,
+        YawStiffnessNmRad: 900000.0,
+        RollDampingNms: 360000.0, PitchDampingNms: 1200000.0,
+        YawDampingNms: 520000.0,
+        RollMomentMaxNm: 1400000.0, PitchMomentMaxNm: 3400000.0,
+        YawMomentMaxNm: 1200000.0,
+        ClBeta: -0.055, ClP: -0.48, ClR: 0.10,
+        ClDeltaA: 0.105, ClDeltaR: 0.030,
+        LateralDerivativeProfileId: "f22a-public-data-surrogate-v1",
+        ManualPitchRateMaxRad: 0.85,
+        FightRollRateMaxRad: 2.8,
+        CompatibilityRollRateMaxRad: 2.8, CompatibilityBankTau: 0.20,
+        YawBetaStiffnessNmRad: 800000.0, RollHoldDampingNms: 0.0,
+        PositiveStructuralLimitG: 9.0, MaxPerformFraction: 1.0,
+        MaxThrustFraction: 1.35,
+        HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 2.8,
+        WingSpanM: 13.56,
+        PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
+        FuelFreeMassKg: 19535.0,
+        GenericIdleFuelFlowLbPerMinute: 32.0,
+        GenericMilitaryFuelFlowLbPerMinute: 250.0,
+        GenericAfterburnerFuelFlowLbPerMinute: 650.0);
+
+    /// Su-27S PUBLIC-DATA SURROGATE for the same bounded visual exercise. The Ukrainian state
+    /// export catalogue anchors public dimensions, mass, installed gun and engine thrust class.
+    /// Aerodynamic/control/fuel coefficients are rounded mission surrogates. No radar, RWR,
+    /// datalink, missile, modern FLCS or exact propulsion performance is represented.
+    /// https://www.ukrspecexport.com/uploads/files/Categories/pdf_1/a205b8.pdf
+    public static readonly AircraftParams Su27SPublicDataSurrogate = new(
+        MassKg: 22500.0, // representative visual-merge weight after ingress
+        WingAreaM2: 62.0,
+        ThrustMaxN: 152400.0,
+        CD0: 0.0195, InducedK: 0.050, CLMax: 1.65, CLMin: -0.75,
+        RollRateMaxRad: 2.5, BankTau: 0.24,
+        MCrit: 0.93, WaveDragK: 80.0,
+        SpoolUpTau: 1.4, SpoolDownTau: 0.85,
+        CLAlpha: 4.9,
+        IxxKgM2: 68000.0, IyyKgM2: 270000.0, IzzKgM2: 320000.0,
+        RollStiffnessNmRad: 1100000.0, PitchStiffnessNmRad: 2800000.0,
+        YawStiffnessNmRad: 900000.0,
+        RollDampingNms: 390000.0, PitchDampingNms: 1150000.0,
+        YawDampingNms: 540000.0,
+        RollMomentMaxNm: 1300000.0, PitchMomentMaxNm: 3200000.0,
+        YawMomentMaxNm: 1200000.0,
+        ClBeta: -0.060, ClP: -0.50, ClR: 0.11,
+        ClDeltaA: 0.100, ClDeltaR: 0.032,
+        LateralDerivativeProfileId: "su27s-public-data-surrogate-v1",
+        ManualPitchRateMaxRad: 0.82,
+        FightRollRateMaxRad: 2.5,
+        CompatibilityRollRateMaxRad: 2.5, CompatibilityBankTau: 0.24,
+        YawBetaStiffnessNmRad: 820000.0, RollHoldDampingNms: 0.0,
+        PositiveStructuralLimitG: 9.0, MaxPerformFraction: 1.0,
+        MaxThrustFraction: 1.609,
+        HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 3.2,
+        WingSpanM: 14.70,
+        PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
+        FuelFreeMassKg: 19500.0,
+        GenericIdleFuelFlowLbPerMinute: 38.0,
+        GenericMilitaryFuelFlowLbPerMinute: 285.0,
+        GenericAfterburnerFuelFlowLbPerMinute: 850.0);
+
     public static double NzAeroMax(in AircraftState s, in AircraftParams p) {
         return NzAeroMax(s, p, s.Speed);
     }
@@ -246,7 +333,10 @@ public static class FlightModel {
         return t * t * (3.0 - 2.0 * t); // smoothstep: zero slope at attached and fully separated ends
     }
 
-    static double ProfileDragCoefficient(double alpha, double mach, in AircraftParams p) {
+    // Internal rather than private because decision-support projections must evaluate the exact
+    // same polar as the force kernel. A second simplified drag equation produced a plausible-looking
+    // sustained-G marker which was wrong by almost one G near the high-lift drag rise.
+    internal static double ProfileDragCoefficient(double alpha, double mach, in AircraftParams p) {
         double cl = LiftCoefficient(alpha, p);
         double attached = p.CD0 * MachDragFactor(mach, p) + p.InducedK * cl * cl;
         double stallAlpha = alpha >= 0.0 ? AlphaAeroMax(p) : -AlphaAeroMin(p);

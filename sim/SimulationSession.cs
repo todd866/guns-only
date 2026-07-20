@@ -65,6 +65,7 @@ public sealed class SimulationSession {
     FuelModel _fuel = null!;
     AirframeSystems _systems = null!;
     F86EmergencyGearRecoveryScenario? _maintenanceScenario;
+    VisualMergeEvaluation? _visualMergeEvaluation;
     PromptTracker _prompts = null!;
     PromptCue _cue;
     DoctrineAdvice _advice = new(1.0, 0.0, "setup");
@@ -146,7 +147,18 @@ public sealed class SimulationSession {
     public GunKill OpponentGun => _opponentGun;
     public FuelModel PlayerFuel => _fuel;
     public AirframeSystems PlayerSystems => _systems;
+    public bool PlayerSystemsSimulated => _beat.PlayerAircraft.SystemsSimulated;
+    /// <summary>
+    /// Aerodynamic configuration which the active capability is allowed to contribute. A
+    /// compatibility AirframeSystems object still exists for the flat snapshot ABI, but an
+    /// aircraft which explicitly declares its systems unsimulated can never acquire invisible
+    /// F-86 gear/flap lift or drag through that object.
+    /// </summary>
+    public AirframeAerodynamicState PlayerAerodynamicConfiguration => PlayerSystemsSimulated
+        ? _systems.AerodynamicState
+        : AirframeAerodynamicState.Clean;
     public F86EmergencyGearRecoveryScenario? MaintenanceScenario => _maintenanceScenario;
+    public VisualMergeEvaluation? VisualMergeEvaluation => _visualMergeEvaluation;
     public PromptCue Cue => _cue;
     public DoctrineAdvice Advice => _advice;
     public Carrier? Carrier => _carrier;
@@ -179,6 +191,9 @@ public sealed class SimulationSession {
     public long CarrierSpawnSequence => _carrier is null ? 0 : _carrierSpawnSequence;
     public bool TriggerDown => _triggerDown;
     public bool OpponentTriggerDown => _opponentTriggerDown;
+    public bool WeaponsInhibited => _visualMergeEvaluation?.WeaponsInhibited ?? false;
+    public bool PlayerWeaponsAuthorized =>
+        _visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true;
     // Compatibility projection for the old transient HUD. Terminal destruction is represented by
     // ordered events plus Outcome; a frozen simulation clock must never hold a timed cue forever.
     public bool SplashCueActive => false;
@@ -228,7 +243,7 @@ public sealed class SimulationSession {
     /// <summary>Construct and stage one of the built-in beats. Physics remains held in Ready.</summary>
     public void StartBeat(int index,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial) {
-        if (index is < 1 or > 6) index = 1;
+        if (index is < 1 or > 7) index = 1;
         _prechargeSystemsOnStage = true;
         _beatIndex = index;
         _deckConfiguration = deckConfiguration;
@@ -238,6 +253,7 @@ public sealed class SimulationSession {
             4 => Beats.BalloonStrike,
             5 => () => Beats.CarrierApproach(deckConfiguration),
             6 => () => Beats.EmergencyGearRecovery(deckConfiguration),
+            7 => Beats.ModernVisualMerge,
             _ => Beats.Perch
         };
         StageBeat(_beatFactory());
@@ -288,6 +304,9 @@ public sealed class SimulationSession {
             _recoveryAttemptActive = true;
         }
         _maintenanceScenario?.Begin(TimeSeconds);
+        if (_carrier is null && _beat.PlayerAir.ThrustMaxN > 0.0
+            && _beat.InitialThrottle >= 0.995)
+            ShowTransition("MIL SET · FIGHT", 1800.0);
         Lifecycle = LifecycleState.Active;
     }
 
@@ -315,6 +334,10 @@ public sealed class SimulationSession {
         // Once ownship is physically destroyed, input cannot be allowed to reanimate controls or
         // systems. Restart remains available through the early branch above.
         if (_playerTerminalState != AircraftTerminalState.Flying) return;
+        // Capability truth is also an input boundary. Modern/glider prototypes currently expose no
+        // simulated undercarriage, flap, hydraulic or inspection system, so accepting these keys
+        // would create hidden F-86 configuration drag while the HUD correctly showed no system.
+        if (!PlayerSystemsSimulated && IsPlayerSystemsAction(key)) return;
         bool newPress = pressed && _keys.PhaseAt(key, _simTimeMs) == KeyPhase.Idle;
         _keys.Feed(key, pressed, _simTimeMs);
         if (key == GKey.Trigger) Trigger(pressed);
@@ -346,6 +369,11 @@ public sealed class SimulationSession {
         if (key == GKey.InspectGearDownlocks && newPress)
             _maintenanceScenario?.InspectMechanicalDownlocks(TimeSeconds);
     }
+
+    static bool IsPlayerSystemsAction(GKey key) => key is
+        GKey.GearToggle or GKey.FlapUp or GKey.FlapDown
+        or GKey.EmergencyGearRelease or GKey.GearHornCutout
+        or GKey.ConfirmGearExtensionFailure or GKey.InspectGearDownlocks;
 
     void RefreshFlapLeverFromHeldInput() {
         bool upHeld = _keys.PhaseAt(GKey.FlapUp, _simTimeMs) != KeyPhase.Idle;
@@ -399,12 +427,16 @@ public sealed class SimulationSession {
         bool maintenanceRecovery = _beat.MaintenanceScenario
             == MaintenanceScenarioKind.F86EmergencyGearRecovery;
         _systems = CreatePlayerSystems(
-            onApproach: _carrier is not null && !maintenanceRecovery,
+            onApproach: PlayerSystemsSimulated && _carrier is not null && !maintenanceRecovery,
             prechargeUtilityHydraulics: _prechargeSystemsOnStage && !maintenanceRecovery);
         _maintenanceScenario = maintenanceRecovery
             ? new F86EmergencyGearRecoveryScenario(_systems)
             : null;
-        _configurationAutomationEnabled = _carrier is not null && !maintenanceRecovery;
+        _visualMergeEvaluation = _beat.VisualMergeEvaluation is { } evaluation
+            ? new VisualMergeEvaluation(evaluation)
+            : null;
+        _configurationAutomationEnabled = PlayerSystemsSimulated
+            && _carrier is not null && !maintenanceRecovery;
         _configurationTarget = _configurationAutomationEnabled
             ? FlightConfigurationTarget.Recovery : FlightConfigurationTarget.Combat;
         _manualGearConfiguration = false;
@@ -415,7 +447,7 @@ public sealed class SimulationSession {
             _difficulty = _recoveryProgress.PreviewNextAttempt();
             _carrier.ApplyDifficulty(_difficulty);
             double configuredOnSpeedAoa = DetentLayer.OnSpeedAoARad
-                - _systems.AerodynamicState.LiftCoefficientIncrement
+                - PlayerAerodynamicConfiguration.LiftCoefficientIncrement
                     / Math.Max(_beat.PlayerAir.CLAlpha, 1e-6);
             _carrier.ApproachDirectorPitchOffsetRad = configuredOnSpeedAoa;
             _beat = _beat with {
@@ -439,16 +471,25 @@ public sealed class SimulationSession {
         _bandit.Wind = _player.Wind;
         _bandit.Atmosphere = _player.AtmosphereModel;
         CombatConfig combat = _beat.CombatRules;
-        _gunKill = new GunKill(combat.PlayerAmmo, combat.OpponentHitsToDefeat);
-        _opponentGun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat);
+        _gunKill = new GunKill(combat.PlayerAmmo, combat.OpponentHitsToDefeat,
+            combat.PlayerGunProfile.EffectiveHitRadiusM, combat.PlayerGunProfile);
+        _opponentGun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
+            combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
+        _visualMergeEvaluation?.Step(_player.State, _bandit.State,
+            _player.AtmosphereModel, 0.0, _player.AirspeedMps);
         _keys = new KeyGrammar();
         _detents = new DetentLayer {
             Variant = _carrier is not null ? ValleyVariant.PhysicsOnly : _requestedVariant,
             ApproachMode = _carrier is not null,
-            AerodynamicConfiguration = _systems.AerodynamicState,
+            AerodynamicConfiguration = PlayerAerodynamicConfiguration,
             AtmosphereModel = _player.AtmosphereModel
         };
-        _detents.ConfigureFor(_beat.PlayerAir);
+        _detents.ConfigureFor(_beat.PlayerAir, _beat.InitialThrottle);
+        // Built-in combat beats are already airborne and running at their staged power. Seed the
+        // operating point so Ready telemetry and the first rendered frame do not claim a stopped
+        // engine immediately before the first fixed tick snaps it to the same MIL command.
+        if (_carrier is null && _beat.PlayerAir.ThrustMaxN > 0.0)
+            _player.SeedEnginePowerFraction(_detents.Throttle);
         _prompts = new PromptTracker();
         _advice = new DoctrineAdvice(1.0, 0.0, "setup");
         _cue = PromptCue.None;
@@ -488,7 +529,7 @@ public sealed class SimulationSession {
                     ?? new TurbulenceField(intensityMps: 1.2, outerScaleM: 130.0,
                         intermittency: 0.5, seed: 0xB0A7),
             EngineFuelAvailable = _fuel.HasFuel,
-            AerodynamicConfiguration = _systems.AerodynamicState
+            AerodynamicConfiguration = PlayerAerodynamicConfiguration
         };
         return player;
     }
@@ -534,14 +575,14 @@ public sealed class SimulationSession {
         ambient,
         sinkMps: difficulty.BurbleSinkMps);
 
-    void ResetFlightControls(bool approachMode) {
+    void ResetFlightControls(bool approachMode, double initialThrottle) {
         _detents = new DetentLayer {
             Variant = _carrier is not null ? ValleyVariant.PhysicsOnly : _requestedVariant,
             ApproachMode = approachMode,
-            AerodynamicConfiguration = _systems.AerodynamicState,
+            AerodynamicConfiguration = PlayerAerodynamicConfiguration,
             AtmosphereModel = _player.AtmosphereModel
         };
-        _detents.ConfigureFor(_beat.PlayerAir);
+        _detents.ConfigureFor(_beat.PlayerAir, initialThrottle);
         _waveOffArmed = approachMode;
         _waveOffUntilMs = double.NegativeInfinity;
     }
@@ -605,6 +646,7 @@ public sealed class SimulationSession {
             else
                 _systems.SetEmergencyGearRelease(false);
         }
+        if (_triggerDown) _visualMergeEvaluation?.ObserveTriggerReleased();
         _triggerDown = false;
         _opponentTriggerDown = false;
         _accumulatorSeconds = 0.0;
@@ -614,7 +656,9 @@ public sealed class SimulationSession {
         if (down && !_triggerDown) {
             _shotsTotal++;
             if (CameraSolver.GunWindow(_player.State, _bandit.State)) _shotsInWindow++;
+            _visualMergeEvaluation?.ObserveTriggerPressed(_player.State, _bandit.State);
         }
+        if (!down) _visualMergeEvaluation?.ObserveTriggerReleased();
         _triggerDown = down;
     }
 
@@ -648,7 +692,10 @@ public sealed class SimulationSession {
 
     void StepWeapons(in AircraftState playerState, in AircraftState opponentState,
         bool playerTriggerHeld, bool allowNewFire = true) {
-        bool opponentIntent = allowNewFire && _beat.CombatRules.OpponentAmmo > 0
+        bool weaponsReleased = allowNewFire && !WeaponsInhibited;
+        bool playerWeaponsAuthorized = weaponsReleased
+            && (_visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true);
+        bool opponentIntent = weaponsReleased && _beat.CombatRules.OpponentAmmo > 0
             && _bandit.WantsToFire(playerState);
         _opponentTriggerDown = opponentIntent
             && _opponentGun.AmmoRemaining > 0
@@ -657,9 +704,11 @@ public sealed class SimulationSession {
         // Both weapons receive the same beginning-of-tick world snapshot. Neither combatant gets
         // to observe the other's already-integrated future position or suppress same-tick return
         // fire by resolving its own hit first.
-        _gunKill.Step(allowNewFire && playerTriggerHeld,
+        _gunKill.Step(playerWeaponsAuthorized && playerTriggerHeld,
             playerState, opponentState, FixedDeltaSeconds);
         _opponentGun.Step(_opponentTriggerDown, opponentState, playerState, FixedDeltaSeconds);
+        _visualMergeEvaluation?.ObserveProjectileState(
+            _gunKill.RoundsFired, _gunKill.HitCount);
 
         if (_gunKill.HitsThisStep > 0)
             EmitEvent(SessionEventType.Hit, CombatRole.Player, CombatRole.Opponent,
@@ -690,7 +739,7 @@ public sealed class SimulationSession {
             _playerTerminalState = AircraftTerminalState.DestroyedAirborne;
             _player.EngineCombustionAvailable = false;
             _player.AerodynamicConfiguration = TerminalFlightDynamics.Configuration(
-                _systems.AerodynamicState, handedness: -1);
+                PlayerAerodynamicConfiguration, handedness: -1);
         } else if (target == CombatRole.Opponent) {
             if (_opponentTerminalState != AircraftTerminalState.Flying) return;
             _opponentTerminalState = AircraftTerminalState.DestroyedAirborne;
@@ -989,7 +1038,7 @@ public sealed class SimulationSession {
         _arrestment.Reset();
         _recovery = Carrier.Recovery.Flying;
         _touchdown = Carrier.TouchdownResult.Flying;
-        ResetFlightControls(approachMode: false);
+        ResetFlightControls(approachMode: false, initialThrottle: retainedEnginePower);
         SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
         _recoveryAttemptActive = _carrier is not null;
         _attemptHadSetback = false;
@@ -1002,7 +1051,7 @@ public sealed class SimulationSession {
     void PreparePlayerForPoweredTick() {
         RefreshPlayerMass();
         _player.EngineFuelAvailable = _fuel.HasFuel;
-        _player.AerodynamicConfiguration = _systems.AerodynamicState;
+        _player.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
     }
 
     void ConsumeFuelAndStepSystems(in AircraftState kinematicState,
@@ -1016,16 +1065,18 @@ public sealed class SimulationSession {
             Math.Max(0.0, trueAirspeedMps), kinematicState.Position.Y,
             _player.AtmosphereModel)
             * AirData.MpsToKnots;
-        ApplyAutomaticConfigurationCommands();
-        _systems.Step(FixedDeltaSeconds, new AirframeSystemsInput(
-            _player.LastEngineOperatingPoint.RpmPercent,
-            iasKts,
-            weightOnWheels));
-        ObserveAutomaticConfiguration();
+        if (PlayerSystemsSimulated) {
+            ApplyAutomaticConfigurationCommands();
+            _systems.Step(FixedDeltaSeconds, new AirframeSystemsInput(
+                _player.LastEngineOperatingPoint.RpmPercent,
+                iasKts,
+                weightOnWheels));
+            ObserveAutomaticConfiguration();
+        }
         // Session time advances at the end of StepCore. Keep every scenario record in that same
         // beginning-of-tick epoch so a same-tick trap/loss cannot precede its latest observation.
         _maintenanceScenario?.Step(TimeSeconds);
-        _player.AerodynamicConfiguration = _systems.AerodynamicState;
+        _player.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
     }
 
     void StepFailedPlayerSystems(bool weightOnWheels) {
@@ -1035,8 +1086,9 @@ public sealed class SimulationSession {
         _player.EngineFuelAvailable = _fuel.HasFuel;
         double iasKts = AirData.IndicatedAirspeedMps(_player.AirspeedMps,
             _player.State.Position.Y, _player.AtmosphereModel) * AirData.MpsToKnots;
-        _systems.Step(FixedDeltaSeconds, new AirframeSystemsInput(
-            _player.LastEngineOperatingPoint.RpmPercent, iasKts, weightOnWheels));
+        if (PlayerSystemsSimulated)
+            _systems.Step(FixedDeltaSeconds, new AirframeSystemsInput(
+                _player.LastEngineOperatingPoint.RpmPercent, iasKts, weightOnWheels));
         _maintenanceScenario?.Step(TimeSeconds);
     }
 
@@ -1303,11 +1355,11 @@ public sealed class SimulationSession {
             playerTriggerHeld: false, allowNewFire: false);
 
         if (_playerTerminalState == AircraftTerminalState.DestroyedAirborne) {
-            TerminalFlightDynamics.Step(_player, _systems.AerodynamicState,
+            TerminalFlightDynamics.Step(_player, PlayerAerodynamicConfiguration,
                 handedness: -1, FixedDeltaSeconds);
             StepFailedPlayerSystems(weightOnWheels: false);
             _player.AerodynamicConfiguration = TerminalFlightDynamics.Configuration(
-                _systems.AerodynamicState, handedness: -1);
+                PlayerAerodynamicConfiguration, handedness: -1);
         } else if (_playerTerminalState == AircraftTerminalState.Impacted
             && _playerWreckMotion is not null) {
             _player.AdvanceEngineOnly(0.0, FixedDeltaSeconds);
@@ -1337,7 +1389,7 @@ public sealed class SimulationSession {
             _advice = _beat.Law.Advise(_player.State, _bandit.State,
                 _beat.PlayerAir, _player.AirspeedMps);
             _detents.AirspeedMps = _player.AirspeedMps;
-            _detents.AerodynamicConfiguration = _systems.AerodynamicState;
+            _detents.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
             _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir,
                 _advice, FixedDeltaSeconds);
             if (_waveOffArmed && _detents.Throttle >= 0.95) {
@@ -1551,7 +1603,7 @@ public sealed class SimulationSession {
         _advice = _beat.Law.Advise(_player.State, _bandit.State, _beat.PlayerAir,
             _player.AirspeedMps);
         _detents.AirspeedMps = _player.AirspeedMps;
-        _detents.AerodynamicConfiguration = _systems.AerodynamicState;
+        _detents.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
         if (_carrier is not null)
             _carrier.ApproachDirectorPitchOffsetRad =
                 _detents.EffectiveOnSpeedAoARad(_beat.PlayerAir);
@@ -1575,6 +1627,8 @@ public sealed class SimulationSession {
         // Both aircraft receive the same beginning-of-tick world snapshot. Giving the bandit the
         // already-integrated player leaked one fixed tick of future ownship motion into its law.
         _bandit.Step(previousPlayerState, FixedDeltaSeconds);
+        _visualMergeEvaluation?.Step(_player.State, _bandit.State,
+            _player.AtmosphereModel, FixedDeltaSeconds, _player.AirspeedMps);
 
         if (_carrier is not null) {
             _carrier.Step(FixedDeltaSeconds);

@@ -79,8 +79,27 @@ public class ReactiveBanditTests {
         bandit.Step(player, Dt);
 
         Assert.Equal(BanditTactic.Energy, bandit.Tactic);
-        Assert.True(bandit.LastCommand.Throttle > FlightModel.Sabre.MaxThrustFraction);
+        Assert.Equal(FlightModel.Sabre.MaxThrustFraction,
+            bandit.LastCommand.Throttle, 12);
         Assert.Equal(FlightModel.Sabre.MaxThrustFraction, bandit.ThrustFraction, 12);
+    }
+
+    [Fact]
+    public void ModernLowEnergyOpponentCanSelectRealAfterburnerWhileSabreRemainsBounded() {
+        var player = new AircraftState(new Vec3D(1200.0, 5486.4, 1800.0),
+            260.0, 0.0, 0.0, 0.0, FlightModel.F22APublicDataSurrogate.MassKg);
+        var modernState = new AircraftState(new Vec3D(0.0, 5486.4, 0.0),
+            100.0, 0.0, 0.0, 0.0, FlightModel.Su27SPublicDataSurrogate.MassKg);
+        var modern = new ReactiveBandit(modernState,
+            FlightModel.Su27SPublicDataSurrogate);
+
+        modern.Step(player, Dt);
+
+        Assert.Equal(BanditTactic.Energy, modern.Tactic);
+        Assert.True(modern.LastCommand.Throttle > 1.30);
+        Assert.Equal(FlightModel.Su27SPublicDataSurrogate.MaxThrustFraction,
+            modern.LastCommand.Throttle, 12);
+        Assert.True(modern.ThrustFraction > 1.30);
     }
 
     [Fact]

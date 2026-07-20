@@ -1,4 +1,6 @@
-using GunsOnly.Sim; using Xunit;
+using GunsOnly.Sim;
+using GunsOnly.Sim.Propulsion;
+using Xunit;
 public class ProtectionTests {
     static AircraftState At(double speed) => new(new Vec3D(0,3000,0), speed, 0, 0, 0, FlightModel.Sabre.MassKg);
     [Fact] public void SabreFullBackstickProtectionReachesHardMax() {
@@ -37,6 +39,59 @@ public class ProtectionTests {
         var wing = Protection.MaxPerformG(st, FlightModel.Sabre);
         Assert.InRange(sus, 4.7, 5.3);
         Assert.InRange(wing - sus, 1.7, 2.3);
+    }
+    [Fact] public void LiveSustainedGUsesJ47SpoolAndTheProductionHighLiftDrag() {
+        const double altitudeM = 3048.0;
+        double speedMps = AirData.TrueAirspeedForCalibratedAirspeedMps(
+            250.0 / AirData.MpsToKnots, altitudeM);
+        var state = new AircraftState(new Vec3D(0, altitudeM, 0), speedMps,
+            0.0, 0.0, 0.0, FlightModel.Sabre.MassKg);
+        AtmosphericState atmosphere = StandardAtmosphere1976.Instance.Sample(altitudeM);
+        double mach = speedMps / atmosphere.SpeedOfSoundMps;
+        double fullThrust = J47PerformanceMap.Evaluate(1.0, altitudeM, mach).NetThrustN;
+        double partialThrust = J47PerformanceMap.Evaluate(0.85, altitudeM, mach).NetThrustN;
+
+        double legacy = Protection.SustainedG(state, FlightModel.Sabre,
+            speedMps, StandardAtmosphere1976.Instance);
+        double liveFull = Protection.SustainedG(state, FlightModel.Sabre,
+            speedMps, fullThrust, AirframeAerodynamicState.Clean,
+            StandardAtmosphere1976.Instance);
+        double livePartial = Protection.SustainedG(state, FlightModel.Sabre,
+            speedMps, partialThrust, AirframeAerodynamicState.Clean,
+            StandardAtmosphere1976.Instance);
+
+        Assert.InRange(liveFull, 3.8, 4.1);
+        Assert.True(legacy > liveFull + 0.3,
+            $"the old simplified marker should materially overstate the exact polar: {legacy:F2} vs {liveFull:F2}");
+        Assert.True(livePartial < liveFull,
+            $"less spool/net thrust must lower the live marker: {livePartial:F2} vs {liveFull:F2}");
+    }
+    [Fact] public void LiveSustainedGAccountsForConfigurationAndHidesWhenOneGIsImpossible() {
+        const double altitudeM = 3048.0;
+        double speedMps = 250.0 / AirData.MpsToKnots;
+        var state = new AircraftState(new Vec3D(0, altitudeM, 0), speedMps,
+            0.0, 0.0, 0.0, FlightModel.Sabre.MassKg);
+        AtmosphericState atmosphere = StandardAtmosphere1976.Instance.Sample(altitudeM);
+        double mach = speedMps / atmosphere.SpeedOfSoundMps;
+        double thrust = J47PerformanceMap.Evaluate(1.0, altitudeM, mach).NetThrustN;
+        var gearAndFlaps = new AirframeAerodynamicState(
+            LiftCoefficientIncrement: 0.30,
+            DragCoefficientIncrement: 0.125,
+            PitchMomentCoefficientIncrement: 0.0,
+            LateralLiftCoefficientDifference: 0.0);
+
+        double clean = Protection.SustainedG(state, FlightModel.Sabre,
+            speedMps, thrust, AirframeAerodynamicState.Clean,
+            StandardAtmosphere1976.Instance);
+        double configured = Protection.SustainedG(state, FlightModel.Sabre,
+            speedMps, thrust, gearAndFlaps, StandardAtmosphere1976.Instance);
+        double stopped = Protection.SustainedG(state, FlightModel.Sabre,
+            speedMps, 0.0, AirframeAerodynamicState.Clean,
+            StandardAtmosphere1976.Instance);
+
+        Assert.True(configured < clean,
+            $"gear/flap drag must lower the live energy-neutral load: {configured:F2} vs {clean:F2}");
+        Assert.Equal(0.0, stopped);
     }
     [Fact] public void TierOrderingHoldsAtAllSpeeds() {
         foreach (var v in new[] { 41.0, 45.0, 60.0, 90.0, 150.0, 250.0, 400.0 }) {

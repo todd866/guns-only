@@ -42,6 +42,8 @@ Open `http://localhost:8877/`.
 - `wwwroot/render/presentation/` — cockpit motion, period sight, distant contact, and escort adapters.
 - `wwwroot/vendor/three.module.js` — vendored renderer dependency; no CDN is required.
 - `wwwroot/api/telemetry.js` — production Vercel telemetry endpoint.
+- `wwwroot/api/build-info.js` — uncached public deployment provenance for stale-tab detection.
+- `wwwroot/api/telemetry-admin.js` — production-only, bounded operator access to selected telemetry.
 
 ## Frame convention
 

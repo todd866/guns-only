@@ -190,7 +190,7 @@ public sealed class AircraftSim {
         if (!double.IsFinite(powerFraction))
             throw new ArgumentOutOfRangeException(nameof(powerFraction));
         _thrustFrac = System.Math.Clamp(powerFraction, 0.0,
-            System.Math.Clamp(_p.MaxThrustFraction, 0.0, 1.35));
+            System.Math.Clamp(_p.MaxThrustFraction, 0.0, 1.65));
         _spoolInit = true;
         EvaluateEngineOperatingPoint();
     }
@@ -368,7 +368,7 @@ public sealed class AircraftSim {
         // opening lever position, then lag every change after that. A failed/starved engine has a
         // zero target; combustion thrust and fuel flow disappear immediately while a future engine
         // dynamics layer can replace the present stopped-RPM approximation with windmilling RPM.
-        double leverStop = System.Math.Clamp(_p.MaxThrustFraction, 0.0, 1.35);
+        double leverStop = System.Math.Clamp(_p.MaxThrustFraction, 0.0, 1.65);
         bool canRun = EngineFuelAvailable && EngineCombustionAvailable && _p.ThrustMaxN > 0.0;
         double lever = canRun ? System.Math.Clamp(throttle, 0.0, leverStop) : 0.0;
         if (!_spoolInit) { _thrustFrac = lever; _spoolInit = true; }
@@ -400,14 +400,37 @@ public sealed class AircraftSim {
             return;
         }
 
-        double thrustN = _thrustFrac * _p.ThrustMaxN
-            * (atmosphericState.DensityKgM3 / AirData.SeaLevelDensityKgM3);
+        double densityRatio = atmosphericState.DensityKgM3 / AirData.SeaLevelDensityKgM3;
+        // Transparent generic afterburning-turbofan surrogate: gross thrust lapses approximately
+        // with sqrt(density ratio), while bounded inlet ram recovery grows with Mach. This avoids
+        // applying the legacy turbojet/toy density-linear lapse to Mission 7, but remains explicitly
+        // short of an OEM engine deck. Sea-level over-recovery is capped and no hidden supercruise,
+        // nozzle schedule, installation loss, or classified control law is implied.
+        double thrustLapse = _p.PropulsionModel
+            == PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate
+                ? System.Math.Clamp(System.Math.Sqrt(System.Math.Max(0.0, densityRatio))
+                    * (1.0 + 0.10 * System.Math.Clamp(mach, 0.0, 1.5)), 0.30, 1.05)
+                : densityRatio;
+        double thrustN = _thrustFrac * _p.ThrustMaxN * thrustLapse;
+        double corePower = System.Math.Clamp(_thrustFrac, 0.0, 1.0);
+        double genericLeverStop = System.Math.Clamp(_p.MaxThrustFraction, 0.0, 1.65);
+        double fuelFlow = _p.GenericIdleFuelFlowLbPerMinute;
+        if (_p.GenericMilitaryFuelFlowLbPerMinute > 0.0) {
+            fuelFlow += (_p.GenericMilitaryFuelFlowLbPerMinute
+                - _p.GenericIdleFuelFlowLbPerMinute) * corePower;
+            if (_thrustFrac > 1.0 && genericLeverStop > 1.0) {
+                double afterburner = System.Math.Clamp(
+                    (_thrustFrac - 1.0) / (genericLeverStop - 1.0), 0.0, 1.0);
+                fuelFlow += (_p.GenericAfterburnerFuelFlowLbPerMinute
+                    - _p.GenericMilitaryFuelFlowLbPerMinute) * afterburner;
+            }
+        }
         LastEngineOperatingPoint = new EngineOperatingPoint(
-            Rpm: 100.0 * _thrustFrac,
-            RpmPercent: 100.0 * _thrustFrac,
+            Rpm: 100.0 * corePower,
+            RpmPercent: 100.0 * corePower,
             NetThrustN: thrustN,
             NetThrustLbf: thrustN / J47PerformanceMap.NewtonsPerPoundForce,
-            FuelFlowLbPerMinute: 0.0,
+            FuelFlowLbPerMinute: System.Math.Max(0.0, fuelFlow),
             Running: true);
     }
 

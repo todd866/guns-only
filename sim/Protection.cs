@@ -55,6 +55,66 @@ public static class Protection {
         return System.Math.Clamp(n, System.Math.Min(1.0, mp), mp);
     }
 
+    /// <summary>
+    /// Live, level-turn sustained load factor using the physical net thrust, current spool state,
+    /// exact production drag polar, Mach drag, and actual gear/flap/damage configuration. A zero
+    /// result means the aircraft cannot sustain a one-G level condition at the present energy and
+    /// configuration; presentation should hide the marker rather than invent a one-G floor.
+    /// </summary>
+    public static double SustainedG(in AircraftState s, in AircraftParams p,
+        double airspeedMps, double actualNetThrustN,
+        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) {
+        ArgumentNullException.ThrowIfNull(atmosphere);
+        double speed = double.IsFinite(airspeedMps) && airspeedMps >= 0.0
+            ? airspeedMps : s.Speed;
+        if (!double.IsFinite(actualNetThrustN) || actualNetThrustN <= 0.0
+            || !double.IsFinite(speed) || speed <= 0.0)
+            return 0.0;
+
+        AtmosphericState atmosphericState = atmosphere.Sample(s.Position.Y);
+        double qS = 0.5 * atmosphericState.DensityKgM3 * speed * speed * p.WingAreaM2;
+        if (qS <= 1e-9 || s.Mass <= 0.0 || p.CLAlpha <= 0.0) return 0.0;
+
+        double configuredClMax = p.CLMax + configuration.LiftCoefficientIncrement;
+        double configuredAeroMax = qS * configuredClMax / (s.Mass * FlightModel.G0);
+        double hardMax = System.Math.Min(configuredAeroMax, p.PositiveStructuralLimitG);
+        double maxPerform = System.Math.Min(
+            System.Math.Max(1.2, p.MaxPerformFraction * configuredAeroMax), hardMax);
+        if (maxPerform < 1.0) return 0.0;
+
+        double mach = speed / System.Math.Max(atmosphericState.SpeedOfSoundMps, 1e-9);
+        // Local functions cannot close over ref-like `in` parameters. Snapshot the immutable values
+        // once; the solver remains allocation-free and every candidate sees one coherent state.
+        AircraftState state = s;
+        AircraftParams parameters = p;
+        AirframeAerodynamicState currentConfiguration = configuration;
+        bool CanSustain(double loadFactor) {
+            double totalCl = loadFactor * state.Mass * FlightModel.G0 / qS;
+            double cleanCl = totalCl - currentConfiguration.LiftCoefficientIncrement;
+            if (cleanCl < parameters.CLMin || cleanCl > parameters.CLMax) return false;
+            double alpha = cleanCl / parameters.CLAlpha;
+            double cd = FlightModel.ProfileDragCoefficient(alpha, mach, parameters)
+                + currentConfiguration.DragCoefficientIncrement;
+            double dragN = qS * cd;
+            // The kernel applies thrust on the body axis, so only its air-path component pays the
+            // drag bill in a steady level turn. This becomes material at high lift coefficient.
+            double propulsiveN = actualNetThrustN * System.Math.Max(0.0,
+                System.Math.Cos(alpha));
+            return propulsiveN + 1e-9 >= dragN;
+        }
+
+        if (!CanSustain(1.0)) return 0.0;
+        if (CanSustain(maxPerform)) return maxPerform;
+
+        double low = 1.0, high = maxPerform;
+        for (int i = 0; i < 40; i++) {
+            double candidate = (low + high) * 0.5;
+            if (CanSustain(candidate)) low = candidate;
+            else high = candidate;
+        }
+        return low;
+    }
+
     /// Default unmanned structural limit retained for airframes that do not override the parameter.
     public const double StructuralLimitG = 12.0;
 }

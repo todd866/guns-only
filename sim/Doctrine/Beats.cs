@@ -10,7 +10,9 @@ public sealed record CombatConfig(
     int PlayerAmmo = GunKill.DefaultAmmo,
     int OpponentAmmo = GunKill.DefaultAmmo,
     int PlayerHitsToDefeat = 4,
-    int OpponentHitsToDefeat = GunKill.DefaultHitsToKill) {
+    int OpponentHitsToDefeat = GunKill.DefaultHitsToKill,
+    GunProfile? PlayerGun = null,
+    GunProfile? OpponentGun = null) {
     public static CombatConfig Fighter { get; } = new();
     public static CombatConfig GliderAgainstUnarmedTarget { get; } = new(
         PlayerAmmo: 50,
@@ -22,6 +24,71 @@ public sealed record CombatConfig(
         OpponentAmmo: 0,
         PlayerHitsToDefeat: 4,
         OpponentHitsToDefeat: GunKill.DefaultHitsToKill);
+    public static CombatConfig ModernVisualMerge { get; } = new(
+        PlayerAmmo: 480,
+        OpponentAmmo: 150,
+        PlayerHitsToDefeat: 3,
+        OpponentHitsToDefeat: 3,
+        PlayerGun: GunProfiles.M61A2PublicDataSurrogate,
+        OpponentGun: GunProfiles.GSh301PublicDataSurrogate);
+
+    public GunProfile PlayerGunProfile => PlayerGun ?? GunProfiles.SixM3FiftyCal;
+    public GunProfile OpponentGunProfile => OpponentGun ?? GunProfiles.SixM3FiftyCal;
+}
+
+/// <summary>
+/// Pilot-facing capability identity. A system which is not yet simulated is named explicitly;
+/// presentation must not silently project F-86 utility hydraulics into another aircraft merely
+/// because the current session owns an internal compatibility object.
+/// </summary>
+public sealed record AircraftCapability(
+    string Id,
+    string DisplayName,
+    string PresentationId,
+    string SystemsProfileId,
+    bool SystemsSimulated,
+    bool PublicDataSurrogate = false,
+    string PublicSourceUrl = "") {
+    public static AircraftCapability F86F30 { get; } = new(
+        "aircraft.f86f30.v1", "F-86F-30",
+        "presentation.vehicle.player.v1", "systems.f86f.utility.v1", true);
+    public static AircraftCapability F86F30Bandit { get; } = F86F30 with {
+        Id = "aircraft.f86f30.bandit.v1",
+        PresentationId = "presentation.vehicle.bandit.v1"
+    };
+    public static AircraftCapability BalloonGliderPrototype { get; } = new(
+        "aircraft.balloon-glider.prototype.v1", "Balloon glider prototype",
+        "presentation.vehicle.glider-strike.v1", "systems.none.engine-less.v1", false);
+    public static AircraftCapability AwacsTargetPrototype { get; } = new(
+        "aircraft.awacs-target.prototype.v1", "AEW&C target prototype",
+        "presentation.vehicle.awacs-target.v1", "systems.target-only.prototype.v1", false);
+    public static AircraftCapability F22ASurrogate { get; } = new(
+        "aircraft.f22a.public-data-surrogate.v1", "F-22A public-data surrogate",
+        "presentation.vehicle.f22a.public-data-surrogate.v1",
+        "systems.modern-airborne.not-simulated.v1", false, true,
+        "https://www.af.mil/About-Us/Fact-Sheets/Display/Article/104506/f-22-raptor/");
+    public static AircraftCapability Su27SSurrogate { get; } = new(
+        "aircraft.su27s.public-data-surrogate.v1", "Su-27S public-data surrogate",
+        "presentation.vehicle.su27s.public-data-surrogate.v1",
+        "systems.modern-airborne.not-simulated.v1", false, true,
+        "https://www.ukrspecexport.com/uploads/files/Categories/pdf_1/a205b8.pdf");
+}
+
+public enum MissionContentFamily {
+    Korea1950s,
+    Korea2030sPrototype,
+    ModernPublicDataSurrogate,
+    Custom
+}
+
+/// <summary>Stable mission identity lives with content, not a bridge switch over menu indexes.</summary>
+public sealed record MissionContract(
+    string Id,
+    MissionContentFamily ContentFamily,
+    bool PublicDataSurrogate = false,
+    string RulesOfEngagement = "GUNS_ONLY") {
+    public static MissionContract Custom { get; } = new(
+        "mission.custom.v1", MissionContentFamily.Custom);
 }
 
 /// <summary>
@@ -35,6 +102,18 @@ public sealed record FuelConfig(
     double BingoThresholdLb = FuelModel.BingoFuelLb,
     bool ConsumesFuel = true) {
     public static FuelConfig PoweredJet { get; } = new();
+    /// <summary>
+    /// Internal fuel at the start of a short-range visual engagement. The tanks retain their
+    /// physical 2,826 lb capacity and ordinary 800 lb bingo; only the staged quantity changes.
+    /// Starting every merge at maximum internal fuel made a representative combat-weight Sabre
+    /// carry another 1,026 lb into a fight which is already assumed to occur after takeoff and
+    /// ingress. Carrier and maintenance sorties deliberately do not inherit this loadout.
+    /// </summary>
+    public static FuelConfig FighterEngagement { get; } = new(
+        CapacityLb: FuelModel.DefaultFuelLb,
+        InitialFuelLb: 1800.0,
+        BingoThresholdLb: FuelModel.BingoFuelLb,
+        ConsumesFuel: true);
     public static FuelConfig EngineLess { get; } = new(
         CapacityLb: 0.0,
         InitialFuelLb: 0.0,
@@ -53,19 +132,31 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     AircraftParams? PlayerParams = null, AircraftParams? BanditParams = null,
     GunsOnly.Sim.Carrier? Carrier = null, bool UsesReactiveBandit = false,
     CombatConfig? Combat = null, FuelConfig? Fuel = null,
-    MaintenanceScenarioKind MaintenanceScenario = MaintenanceScenarioKind.None) {
+    MaintenanceScenarioKind MaintenanceScenario = MaintenanceScenarioKind.None,
+    double InitialThrottle = 0.85,
+    MissionContract? Mission = null,
+    AircraftCapability? PlayerCapability = null,
+    AircraftCapability? BanditCapability = null,
+    VisualMergeEvaluationConfig? VisualMergeEvaluation = null,
+    bool UsesNeutralMergeBandit = false) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
     public FuelConfig FuelLoadout => Fuel ?? FuelConfig.PoweredJet;
-    public IBandit CreateBandit() => UsesReactiveBandit
-        ? new ReactiveBandit(Bandit, BanditAir)
-        : new RailBandit(Bandit, BanditAir, BanditTimeline);
+    public MissionContract MissionIdentity => Mission ?? MissionContract.Custom;
+    public AircraftCapability PlayerAircraft => PlayerCapability ?? AircraftCapability.F86F30;
+    public AircraftCapability BanditAircraft => BanditCapability
+        ?? AircraftCapability.F86F30Bandit;
+    public IBandit CreateBandit() => UsesNeutralMergeBandit
+        ? new NeutralMergeBandit(Bandit, BanditAir)
+        : UsesReactiveBandit
+            ? new ReactiveBandit(Bandit, BanditAir)
+            : new RailBandit(Bandit, BanditAir, BanditTimeline);
 
     /// Deterministic merge factory retained for a future continuous-operations ruleset. The
     /// current discrete SimulationSession finishes after one engagement and does not call it.
     public IBandit CreateNextBandit(in AircraftState player, int engagementNumber) =>
-        ReactiveBandit.SpawnForMerge(player, FlightModel.Sabre, engagementNumber);
+        ReactiveBandit.SpawnForMerge(player, BanditAir, engagementNumber);
 }
 
 public sealed class RailBandit : IBandit {
@@ -145,6 +236,8 @@ public static class Beats {
     const double Alt = 3000;
     static AircraftState S(double x, double y, double z, double chi, double v) =>
         new(new Vec3D(x, y, z), v, 0, chi, 0, FlightModel.Sabre.MassKg);
+    static MissionContract KoreaMission(string id) => new(
+        id, MissionContentFamily.Korea1950s);
 
     public static BeatSetup Perch() => new("Perch attack",
         Player: S(0, Alt + 300, -500, 0, 200),
@@ -155,7 +248,10 @@ public static class Beats {
             (5.0, new PilotCommand(4.0, -1.10, 1.0, 0)),   // 4G left turn
             (25.0, new PilotCommand(1.0, 0.0, 0.85, 0)),
         },
-        Combat: CombatConfig.Fighter);
+        Combat: CombatConfig.Fighter,
+        Fuel: FuelConfig.FighterEngagement,
+        InitialThrottle: 1.0,
+        Mission: KoreaMission("mission.perch-attack.v1"));
 
     public static BeatSetup BreakDefense() => new("Break defense",
         Player: S(0, Alt, 0, 0, 190),
@@ -166,7 +262,10 @@ public static class Beats {
             (8.0, new PilotCommand(2.5, -0.60, 1.0, 0)),   // press the attack
             (20.0, new PilotCommand(1.0, 0.0, 0.7, 0)),    // knock it off
         },
-        Combat: CombatConfig.Fighter);
+        Combat: CombatConfig.Fighter,
+        Fuel: FuelConfig.FighterEngagement,
+        InitialThrottle: 1.0,
+        Mission: KoreaMission("mission.break-defense.v1"));
 
     /// KOREA 2030s PROXY WAR — balloon-lofted glider strike on a PLA-supported AEW&C.
     /// You were carried to 60,000 ft under a balloon and cut loose. No engine: every turn is a
@@ -198,7 +297,12 @@ public static class Beats {
             PlayerParams: FlightModel.GliderStrike,
             BanditParams: FlightModel.AwacsTarget,
             Combat: CombatConfig.GliderAgainstUnarmedTarget,
-            Fuel: FuelConfig.EngineLess);
+            Fuel: FuelConfig.EngineLess,
+            Mission: new MissionContract(
+                "mission.korea-2030s.balloon-strike.prototype.v1",
+                MissionContentFamily.Korea2030sPrototype),
+            PlayerCapability: AircraftCapability.BalloonGliderPrototype,
+            BanditCapability: AircraftCapability.AwacsTargetPrototype);
     }
 
     /// CARRIER RECOVERY. You start in the active groove: low, slow, astern of the boat on a shallow
@@ -229,7 +333,8 @@ public static class Beats {
         // Kinematic — it does not fly, it steams.
         Carrier: carrier,
         UsesReactiveBandit: true,
-        Combat: CombatConfig.CarrierQualification);
+        Combat: CombatConfig.CarrierQualification,
+        Mission: KoreaMission("mission.carrier-qualification.v1"));
     }
 
     /// <summary>
@@ -261,7 +366,51 @@ public static class Beats {
             },
             Carrier: carrier,
             Combat: CombatConfig.CarrierQualification,
-            MaintenanceScenario: MaintenanceScenarioKind.F86EmergencyGearRecovery);
+            MaintenanceScenario: MaintenanceScenarioKind.F86EmergencyGearRecovery,
+            Mission: KoreaMission("mission.f86f.degraded-gear-recovery.v1"));
+    }
+
+    /// <summary>
+    /// Straightforward guns-only dogfight between public-data airframe surrogates. The scenario
+    /// begins at 18,000 ft in an offset reciprocal visual merge after both packages have reached
+    /// the merge without a BVR result. Guns are safe through the first pass; there is no radar,
+    /// stealth, missile, RWR, datalink, thrust-vectoring, or modern-FLCS simulation hiding behind
+    /// the labels.
+    /// </summary>
+    public static BeatSetup ModernVisualMerge() {
+        const double AltitudeM = 5486.4; // 18,000 ft
+        return new BeatSetup("Visual merge — F-22A surrogate vs Su-27S surrogate",
+            Player: new AircraftState(
+                new Vec3D(-120.0, AltitudeM, -3200.0),
+                300.0, 0.0, 0.0, 0.0,
+                FlightModel.F22APublicDataSurrogate.MassKg),
+            Bandit: new AircraftState(
+                new Vec3D(120.0, AltitudeM + 60.0, 3200.0),
+                285.0, 0.0, Math.PI, 0.0,
+                FlightModel.Su27SPublicDataSurrogate.MassKg),
+            Law: new PurePursuitLaw(),
+            BanditTimeline: new() {
+                (0.0, new PilotCommand(1.0, 0.0, 1.0, 0.0)),
+            },
+            PlayerParams: FlightModel.F22APublicDataSurrogate,
+            BanditParams: FlightModel.Su27SPublicDataSurrogate,
+            UsesNeutralMergeBandit: true,
+            Combat: CombatConfig.ModernVisualMerge,
+            Fuel: new FuelConfig(
+                CapacityLb: 18000.0,
+                // The fight begins after launch and ingress, not at chocks with topped tanks.
+                InitialFuelLb: 12000.0,
+                BingoThresholdLb: 4000.0,
+                ConsumesFuel: true),
+            InitialThrottle: 1.0,
+            Mission: new MissionContract(
+                "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+                MissionContentFamily.ModernPublicDataSurrogate,
+                PublicDataSurrogate: true,
+                RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE"),
+            PlayerCapability: AircraftCapability.F22ASurrogate,
+            BanditCapability: AircraftCapability.Su27SSurrogate,
+            VisualMergeEvaluation: new VisualMergeEvaluationConfig());
     }
 
     public static BeatSetup Saddle() => new("Saddle + shot",
@@ -276,5 +425,8 @@ public static class Beats {
             (16.0, new PilotCommand(2.0, 0.55, 0.9, 0)),
             (20.0, new PilotCommand(2.0, -0.55, 0.9, 0)),
         },
-        Combat: CombatConfig.Fighter);
+        Combat: CombatConfig.Fighter,
+        Fuel: FuelConfig.FighterEngagement,
+        InitialThrottle: 1.0,
+        Mission: KoreaMission("mission.saddle-tracking.v1"));
 }

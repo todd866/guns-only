@@ -71,6 +71,19 @@ public sealed class PresenceProtocolTests {
     }
 
     [Fact]
+    public void ModernSurrogatePresentationIsExplicitlyAllowlisted() {
+        PoseMessage modern = ValidPose() with {
+            MissionId = "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+            EntityId = "entity.player.modern.1",
+            PresentationId = "presentation.vehicle.f22a.public-data-surrogate.v1"
+        };
+        Assert.True(PresenceProtocol.TryValidatePose(
+            modern, 0, previousPose: null, out ValidatedPose pose));
+        Assert.Equal("presentation.vehicle.f22a.public-data-surrogate.v1",
+            pose.PresentationId);
+    }
+
+    [Fact]
     public void PresentationContractIsAllowlistedAndPinnedForTheConnectionLifetime() {
         PoseMessage initial = ValidPose(1) with { EntityId = "entity.sortie.1" };
         Assert.True(PresenceProtocol.TryValidatePose(

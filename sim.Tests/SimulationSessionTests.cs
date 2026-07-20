@@ -433,22 +433,37 @@ public class SimulationSessionTests {
     }
 
     [Fact]
-    public void PoweredSabreRetainsDefaultFuelAndBurn() {
+    public void BuiltInDogfightStagesAtMilWithEngagementFuelAndBriefCue() {
         var session = new SimulationSession(1);
 
-        Assert.Equal(FuelConfig.PoweredJet, session.Beat.FuelLoadout);
+        Assert.Equal(FuelConfig.FighterEngagement, session.Beat.FuelLoadout);
         Assert.Equal(FuelModel.DefaultFuelLb, session.PlayerFuel.CapacityLb);
-        Assert.Equal(FuelModel.DefaultFuelLb, session.PlayerFuel.FuelLb);
+        Assert.Equal(1800.0, session.PlayerFuel.FuelLb);
         Assert.Equal(FuelModel.BingoFuelLb, session.PlayerFuel.BingoThresholdLb);
         Assert.True(session.PlayerFuel.ConsumesFuel);
+        Assert.Equal(1.0, session.Controls.Throttle, precision: 12);
+        Assert.Equal(1.0, session.Player.ThrustFraction, precision: 12);
+        Assert.True(session.Player.LastEngineOperatingPoint.Running);
 
         session.Begin();
+        Assert.Equal("MIL SET · FIGHT", session.TransitionCue);
         session.StepFixed();
 
-        Assert.True(session.PlayerFuel.FuelLb < FuelModel.DefaultFuelLb);
+        Assert.True(session.PlayerFuel.FuelLb < 1800.0);
         Assert.True(session.PlayerFuel.BurnLbPerMinute > 0.0);
         Assert.False(session.PlayerFuel.IsBingo);
         Assert.False(session.PlayerFuel.RtbAdvisory);
+    }
+
+    [Theory]
+    [InlineData(5)]
+    [InlineData(6)]
+    public void RecoveryAndMaintenanceKeepTheirOwnFullFuelAndApproachPower(int beatIndex) {
+        var session = new SimulationSession(beatIndex);
+
+        Assert.Equal(FuelConfig.PoweredJet, session.Beat.FuelLoadout);
+        Assert.Equal(FuelModel.DefaultFuelLb, session.PlayerFuel.FuelLb);
+        Assert.Equal(0.85, session.Controls.Throttle, precision: 12);
     }
 
     [Fact]

@@ -94,6 +94,25 @@ export function targetClosureReadout(value) {
   };
 }
 
+// Weapon availability is an authoritative visual-merge safety state, not generic coaching copy.
+// SAFE and an outstanding release interlock remain visible; HOT is supplied only for the bounded
+// transition window owned by the simulation and then this returns null so the HUD gets its space
+// back. Terminal/debrief presentation never inherits a stale in-flight call.
+export function visualMergeWeaponsCue(state = {}) {
+  if (state.visual_merge_evaluation !== true
+      || state.terminal_phase_active === true || state.finished === true) return null;
+  if (state.weapons_inhibited === true) {
+    return { text: "GUNS SAFE · FIRST PASS", level: "caution" };
+  }
+  if (state.player_trigger_interlocked === true) {
+    return { text: "RELEASE TRIGGER TO ARM", level: "warning" };
+  }
+  if (state.weapons_hot_cue === true) {
+    return { text: "GUNS HOT", level: "normal" };
+  }
+  return null;
+}
+
 export function fuelReadout(state = {}) {
   const fuelLb = Math.max(0, finiteNumber(state.fuel_lb) ?? 0);
   const capacityLb = Math.max(0,

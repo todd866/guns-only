@@ -70,6 +70,10 @@
     {
       "source": "/telemetry",
       "destination": "/api/telemetry"
+    },
+    {
+      "source": "/telemetry-admin",
+      "destination": "/api/telemetry-admin"
     }
   ]
 }

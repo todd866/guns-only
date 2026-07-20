@@ -6,6 +6,7 @@ import {
   stallAwareness,
   systemsReadout,
   targetClosureReadout,
+  visualMergeWeaponsCue,
 } from "./render/hud/hud_readouts.js";
 import {
   carrierAoARelevant,
@@ -1308,8 +1309,10 @@ class CombatHud {
     ctx.lineTo(x + width, y);
     ctx.stroke();
 
+    const sustained = Number(state.sustained);
     const markers = [
-      [state.sustained, "S", GREEN_DIM],
+      ...(Number.isFinite(sustained) && sustained >= 1.0
+        ? [[sustained, "S", GREEN_DIM]] : []),
       [state.g_hardmax, "L", RED],
     ].map(([g, label, color]) => ({ x: mapG(g), label, color }))
       .sort((a, b) => a.x - b.x);
@@ -1492,7 +1495,7 @@ class CombatHud {
   drawThrottle(state) {
     if (state.has_engine === false || state.fuel_consumes === false) return;
     const thr = Number(state.throttle);           // commanded lever, 0..1.3
-    const eng = Number(state.engine);             // actual engine output (spooled, LAGS the lever)
+    const eng = Number(state.engine_spool_fraction ?? state.engine); // spool/RPM state; LAGS lever
     if (!Number.isFinite(thr)) return;
     const ctx = this.ctx;
     const reportedMaximum = Number(state.max_thrust_fraction);
@@ -2044,6 +2047,28 @@ class CombatHud {
     ctx.restore();
   }
 
+  drawVisualMergeWeaponsCue(frame) {
+    const cue = visualMergeWeaponsCue(frame.state);
+    if (!cue) return;
+
+    const ctx = this.ctx;
+    const accent = cue.level === "warning" ? RED
+      : cue.level === "caution" ? AMBER : GREEN;
+    const y = this.height - this.safeInsets.bottom - (this.touchMode ? 110 : 21);
+    ctx.save();
+    ctx.font = "800 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const maximumWidth = Math.max(72,
+      this.width - this.safeInsets.left - this.safeInsets.right - 20);
+    const width = Math.min(maximumWidth,
+      Math.max(92, ctx.measureText(cue.text).width + 28));
+    this.glassPanel((this.width - width) / 2, y - 14, width, 28, accent);
+    ctx.fillStyle = accent;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(this.fitText(cue.text, width - 18), this.width / 2, y);
+    ctx.restore();
+  }
+
   drawFooter(frame) {
     const state = frame.state;
     const mode = hudMode(state);
@@ -2100,14 +2125,14 @@ class CombatHud {
     const wideLines = [
       "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL   ·   A / D  RUDDER   ·   W / S  THROTTLE",
       "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   F  GUNS   ·   V  TARGET / BOAT PADLOCK   ·   DRAG  LOOK",
-      "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   1–6  MISSION   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE",
+      "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   1–7  MISSION   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE",
     ];
     const compactLines = [
       "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL",
       "A / D  RUDDER   ·   W / S  THROTTLE",
       "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE = HOLD)",
       "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   F  GUNS   ·   V  PADLOCK   ·   M  SOUND",
-      "V  PADLOCK   ·   DRAG  LOOK   ·   1–6  MISSION   ·   R  RESTART   ·   H  HIDE",
+      "V  PADLOCK   ·   DRAG  LOOK   ·   1–7  MISSION   ·   R  RESTART   ·   H  HIDE",
     ];
     const lines = compact ? compactLines : wideLines;
     const lineHeight = compact ? 27 : 31;
@@ -2190,6 +2215,7 @@ class CombatHud {
       this.drawAoAIndexer(frame.state, frame.dt);
     }
     this.drawPadlockSa(frame, systems);
+    this.drawVisualMergeWeaponsCue(frame);
     this.drawFooter(frame);
     this.drawLegend();
     this.drawModeCue(frame);

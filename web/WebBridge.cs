@@ -14,7 +14,7 @@ namespace GunsOnly.Web;
 /// </summary>
 [SupportedOSPlatform("browser")]
 public static partial class WebBridge {
-    static readonly SimulationSession Session = new(5, Carrier.DeckConfiguration.Axial);
+    static readonly SimulationSession Session = new(1, Carrier.DeckConfiguration.Axial);
     static Carrier.DeckConfiguration _deckConfiguration = Carrier.DeckConfiguration.Axial;
 
     // Stable presentation IDs are copied from the staged Korea pack contract. The bridge projects
@@ -22,9 +22,9 @@ public static partial class WebBridge {
     // assets. Beat 4 predates that pack and therefore advertises an explicit, unstaged compatibility
     // contract instead of pretending its balloon glider and AEW&C belong to 1950s Korea.
     const string KoreaPackId = "korea-1950s";
-    const string KoreaPackVersion = "0.2.1";
+    const string KoreaPackVersion = "0.2.2";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.2.0";
+    const string SnapshotSchemaVersion = "1.3.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -45,6 +45,13 @@ public static partial class WebBridge {
     const string BalloonVisualProfileId = "visual.korea-2030s.balloon.prototype.v1";
     const string GliderPresentationId = "presentation.vehicle.glider-strike.v1";
     const string AwacsPresentationId = "presentation.vehicle.awacs-target.v1";
+
+    const string ModernSurrogatePackId = "korea-2030s-public-surrogate";
+    const string ModernSurrogatePackVersion = "0.1.0";
+    const string ModernSurrogatePresentationProfileId =
+        "presentation.modern.visual-merge.public-data-surrogate.v1";
+    const string ModernSurrogateVisualProfileId =
+        "visual.modern.abstract-contact.public-data-surrogate.v1";
 
     [JSExport]
     public static void StartBeat(int index) => Session.StartBeat(index, _deckConfiguration);
@@ -125,9 +132,10 @@ public static partial class WebBridge {
         double _closureKts = Session.ClosureKts;
         bool hasEngine = _beat.PlayerAir.ThrustMaxN > 0.0
             && _beat.PlayerAir.MaxThrustFraction > 0.0;
-        // Mission 4 is an explicit engine-less prototype and does not inherit the Sabre's utility
-        // systems as pilot-facing equipment merely because the current kernel reuses that object.
-        bool hasF86UtilitySystems = Session.BeatIndex != 4;
+        // Capability identity, rather than a menu-index exception, decides whether the internal
+        // compatibility systems object is pilot-facing. Modern airborne surrogates therefore do
+        // not inherit an F-86 hydraulic/gear panel they do not actually simulate.
+        bool hasSimulatedAirframeSystems = _beat.PlayerAircraft.SystemsSimulated;
         bool ready = Session.Lifecycle == SimulationSession.LifecycleState.Ready;
         bool paused = Session.Lifecycle == SimulationSession.LifecycleState.Paused;
         bool finished = Session.Lifecycle == SimulationSession.LifecycleState.Finished;
@@ -179,7 +187,8 @@ public static partial class WebBridge {
         double positiveLoadFactor = Math.Max(1.0,
             Math.Max(_player.LastNz,
                 lateralControlApplied ? appliedCommand.GDemand : 0.0));
-        double configuredLiftIncrement = _systems.AerodynamicState.LiftCoefficientIncrement;
+        double configuredLiftIncrement =
+            Session.PlayerAerodynamicConfiguration.LiftCoefficientIncrement;
         double stallSpeedKias = AirData.StallSpeedKiasAtAltitude(
             s.Mass, _beat.PlayerAir, playerPosition.Y, 1.0, configuredLiftIncrement,
             atmosphere);
@@ -249,6 +258,9 @@ public static partial class WebBridge {
                 ? "BOLTER — IN-FLIGHT ENGAGEMENT"
                 : "BOLTER — GO AROUND";
         }
+        if (Session.VisualMergeEvaluation is { } mergeEvaluation
+            && !Session.TerminalPhaseActive)
+            context = mergeEvaluation.Cue;
 
         RtbGuidance rtb = _carrier is null
             ? default
@@ -266,6 +278,9 @@ public static partial class WebBridge {
         double radarAltitudeM = Math.Max(0.0, playerPosition.Y - surfaceAltitudeM);
         double verticalSpeedMps = arrested ? 0.0 : s.VelocityVector().Y;
         var engine = _player.LastEngineOperatingPoint;
+        double sustainedG = Protection.SustainedG(s, _beat.PlayerAir,
+            trueAirspeedMps, engine.NetThrustN,
+            Session.PlayerAerodynamicConfiguration, atmosphere);
 
         // Hand-built JSON: no serializer, no reflection, trim-safe, allocation-cheap.
         return "{"
@@ -337,7 +352,7 @@ public static partial class WebBridge {
             + $"\"g_valley\":{_detents.ValleyG:F3},"
             + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
             + $"\"g_hardmax\":{Protection.HardMaxG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
-            + $"\"sustained\":{Protection.SustainedG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
+            + $"\"sustained\":{sustainedG:F3},"
             + $"\"sticky\":{_detents.StickyOffsetG:F2},\"tier\":{(int)_detents.Tier},"
             + $"\"variant\":{GetVariant()},\"buffet\":{(_player.Buffet ? "true" : "false")},"
             + $"\"prompt\":{(int)_cue},"
@@ -347,15 +362,16 @@ public static partial class WebBridge {
             + $"\"roll_rate_dps\":{s.BodyRates.P * 57.2958:F2},\"pitch_rate_dps\":{s.BodyRates.Q * 57.2958:F2},\"yaw_rate_dps\":{s.BodyRates.R * 57.2958:F2},"
             + $"\"angle_off_deg\":{Geometry.AngleOff(s, b) * 57.2958:F2},"
             + $"\"range_m\":{Geometry.Range(s, b):F1},\"closure_kts\":{_closureKts:F1},"
-            + $"\"gun_window\":{(CameraSolver.GunWindow(s, b) ? "true" : "false")},"
+            + $"\"gun_window\":{(!Session.WeaponsInhibited && CameraSolver.GunWindow(s, b) ? "true" : "false")},"
             + $"\"gun_solution_raw\":{(_gunKill.InstantaneousGunSolution ? "true" : "false")},"
-            + $"\"gun_solution\":{(_gunKill.GunSolution ? "true" : "false")},"
-            + $"\"lead_valid\":{(_gunKill.HasLeadSolution ? "true" : "false")},"
+            + $"\"gun_solution\":{(!Session.WeaponsInhibited && _gunKill.GunSolution ? "true" : "false")},"
+            + $"\"lead_valid\":{(!Session.WeaponsInhibited && _gunKill.HasLeadSolution ? "true" : "false")},"
             + $"\"lead_x\":{_gunKill.LeadPipper.X:F3},\"lead_y\":{_gunKill.LeadPipper.Y:F3},\"lead_z\":{_gunKill.LeadPipper.Z:F3},"
             + $"\"lead_tof\":{_gunKill.LeadTimeOfFlight:F4},\"ammo\":{_gunKill.AmmoRemaining},"
+            + $"\"player_gun_profile_id\":\"{_gunKill.Profile.Id}\","
             + $"\"rounds_fired\":{_gunKill.RoundsFired},\"hits\":{_gunKill.HitCount},"
             + $"\"hit\":{(_gunKill.HitThisStep ? "true" : "false")},"
-            + $"\"gun_firing\":{(Session.TriggerDown && _gunKill.AmmoRemaining > 0 && _gunKill.BanditAlive ? "true" : "false")},"
+            + $"\"gun_firing\":{(Session.TriggerDown && Session.PlayerWeaponsAuthorized && _gunKill.AmmoRemaining > 0 && _gunKill.BanditAlive ? "true" : "false")},"
             + TracerJson("tracers", _gunKill.RoundsInFlight)
             + $"\"kill_progress\":{_gunKill.KillProgress:F3},"
             + $"\"opponent_health\":{_gunKill.TargetHealth:F3},\"opponent_alive\":{(_gunKill.TargetAlive ? "true" : "false")},"
@@ -363,6 +379,7 @@ public static partial class WebBridge {
             + $"\"fight\":\"{_gunKill.Outcome}\",\"bandit_alive\":{(_gunKill.BanditAlive ? "true" : "false")},"
             + $"\"player_health\":{_opponentGun.TargetHealth:F3},\"player_alive\":{(_opponentGun.TargetAlive ? "true" : "false")},"
             + $"\"opponent_ammo\":{_opponentGun.AmmoRemaining},"
+            + $"\"opponent_gun_profile_id\":\"{_opponentGun.Profile.Id}\","
             + $"\"opponent_rounds_fired\":{_opponentGun.RoundsFired},\"opponent_hits\":{_opponentGun.HitCount},"
             + $"\"opponent_trigger_down\":{(Session.OpponentTriggerDown ? "true" : "false")},"
             + $"\"opponent_gun_firing\":{(Session.OpponentTriggerDown && _opponentGun.AmmoRemaining > 0 && _opponentGun.TargetAlive ? "true" : "false")},"
@@ -381,14 +398,16 @@ public static partial class WebBridge {
             + $"\"shots_total\":{Session.ShotsTotal},\"shots_in_window\":{Session.ShotsInWindow},"
             + $"\"throttle\":{_detents.Throttle:F3},\"requested_throttle\":{requestedCommand.Throttle:F3},"
             + $"\"applied_throttle\":{appliedCommand.Throttle:F3},\"engine\":{_player.ThrustFraction:F3},"
+            + $"\"engine_spool_fraction\":{_player.ThrustFraction:F4},"
             + $"\"has_engine\":{(hasEngine ? "true" : "false")},"
             + $"\"max_thrust_fraction\":{_beat.PlayerAir.MaxThrustFraction:F3},"
             + $"\"has_afterburner\":{(_beat.PlayerAir.MaxThrustFraction > 1.0 ? "true" : "false")},"
-            + $"\"has_retractable_gear\":{(hasF86UtilitySystems ? "true" : "false")},"
-            + $"\"has_flaps\":{(hasF86UtilitySystems ? "true" : "false")},"
-            + $"\"has_electrical_system\":{(hasF86UtilitySystems ? "true" : "false")},"
-            + $"\"has_utility_hydraulics\":{(hasF86UtilitySystems ? "true" : "false")},"
+            + $"\"has_retractable_gear\":{(hasSimulatedAirframeSystems ? "true" : "false")},"
+            + $"\"has_flaps\":{(hasSimulatedAirframeSystems ? "true" : "false")},"
+            + $"\"has_electrical_system\":{(hasSimulatedAirframeSystems ? "true" : "false")},"
+            + $"\"has_utility_hydraulics\":{(hasSimulatedAirframeSystems ? "true" : "false")},"
             + $"\"engine_rpm_pct\":{engine.RpmPercent:F2},\"engine_thrust_lbf\":{engine.NetThrustLbf:F1},"
+            + $"\"engine_net_thrust_lbf\":{engine.NetThrustLbf:F1},"
             + $"\"engine_running\":{(engine.Running ? "true" : "false")},"
             + $"\"fuel_lb\":{_fuel.FuelLb:F2},\"fuel_flow_lb_min\":{_fuel.SmoothedBurnLbPerMinute:F2},"
             + $"\"fuel_trend_lb_min\":{_fuel.FuelTrendLbPerMinute:F2},"
@@ -416,6 +435,7 @@ public static partial class WebBridge {
             + $"\"utility_hydraulic_pressure_psi\":{_systems.UtilityHydraulicPressurePsi:F1},"
             + $"\"utility_hydraulic_nominal_psi\":{_systems.Profile.UtilityHydraulicNominalPsi:F1},"
             + MaintenanceScenarioJson()
+            + VisualMergeEvaluationJson()
             + $"\"approach\":{(_detents.ApproachMode ? "true" : "false")},"
             + $"\"mode\":\"{mode}\",\"wave_off\":{(waveOff ? "true" : "false")},"
             + lsoJson
@@ -472,34 +492,63 @@ public static partial class WebBridge {
             + $"\"maintenance_recovered\":{(scenario.Recovered ? "true" : "false")},";
     }
 
+    static string VisualMergeEvaluationJson() {
+        VisualMergeEvaluation? evaluation = Session.VisualMergeEvaluation;
+        if (evaluation is null)
+            return "\"visual_merge_evaluation\":false,\"weapons_inhibited\":false,"
+                + "\"player_trigger_interlocked\":false,\"weapons_hot_cue\":false,"
+                + "\"weapons_state_cue\":\"\",";
+        return "\"visual_merge_evaluation\":true,"
+            + $"\"weapons_inhibited\":{(evaluation.WeaponsInhibited ? "true" : "false")},"
+            + $"\"player_trigger_interlocked\":{(evaluation.PlayerTriggerInterlocked ? "true" : "false")},"
+            + $"\"weapons_hot_cue\":{(evaluation.WeaponsHotCueActive ? "true" : "false")},"
+            + $"\"weapons_state_cue\":\"{evaluation.WeaponsStateCue}\","
+            + $"\"first_pass_complete\":{(evaluation.FirstPassComplete ? "true" : "false")},"
+            + $"\"visual_merge_score\":{evaluation.Score},"
+            + $"\"minimum_merge_range_m\":{evaluation.MinimumMergeRangeM:F1},"
+            + $"\"minimum_energy_kias\":{evaluation.MinimumEnergyKias:F1},"
+            + $"\"peak_closure_kts\":{evaluation.PeakClosureKts:F1},"
+            + $"\"closure_decision_score\":{evaluation.ClosureScore:F1},"
+            + $"\"rear_quarter_valid\":{(evaluation.CurrentRearQuarterValid ? "true" : "false")},"
+            + $"\"rear_quarter_dwell_s\":{evaluation.RearQuarterDwellSeconds:F2},"
+            + $"\"head_on_trigger_violations\":{evaluation.HeadOnTriggerViolations},"
+            + $"\"high_aspect_trigger_violations\":{evaluation.HighAspectTriggerViolations},"
+            + $"\"overshoot_count\":{evaluation.Overshoots},"
+            + $"\"evaluated_projectile_rounds\":{evaluation.ProjectileRoundsFired},"
+            + $"\"evaluated_projectile_hits\":{evaluation.ProjectileHits},";
+    }
+
     /// Stable pack/profile identity and entity-to-presentation bindings for the current snapshot.
     /// Session-owned spawn sequences yield a fresh entity ID on the exact snapshot where a logical
     /// vehicle replaces the prior one, including restart and crash respawn. This keeps render-
     /// instance lifetime out of display names, coordinates, and resettable mission counters.
     static string PresentationContractJson(bool hasCarrier) {
-        bool balloonPrototype = Session.BeatIndex == 4;
-        string packId = balloonPrototype ? BalloonPackId : KoreaPackId;
-        string packVersion = balloonPrototype ? BalloonPackVersion : KoreaPackVersion;
-        string packUriJson = balloonPrototype ? "null" : $"\"{KoreaPackUri}\"";
-        string presentationProfileId = balloonPrototype
-            ? BalloonPresentationProfileId : KoreaPresentationProfileId;
-        string visualProfileId = balloonPrototype ? BalloonVisualProfileId : KoreaVisualProfileId;
-        string assetProfileJson = balloonPrototype ? "null" : $"\"{KoreaAssetProfileId}\"";
-        string assetManifestJson = balloonPrototype ? "null" : $"\"{KoreaAssetManifestId}\"";
-        string audioProfileJson = balloonPrototype ? "null" : $"\"{FixedWingAudioProfileId}\"";
-        string playerPresentationId = balloonPrototype ? GliderPresentationId : PlayerPresentationId;
-        string cockpitPresentationJson = balloonPrototype
+        MissionContract mission = Session.Beat.MissionIdentity;
+        AircraftCapability player = Session.Beat.PlayerAircraft;
+        AircraftCapability bandit = Session.Beat.BanditAircraft;
+        bool balloonPrototype = mission.ContentFamily == MissionContentFamily.Korea2030sPrototype;
+        bool modernSurrogate = mission.ContentFamily
+            == MissionContentFamily.ModernPublicDataSurrogate;
+        string packId = modernSurrogate ? ModernSurrogatePackId
+            : balloonPrototype ? BalloonPackId : KoreaPackId;
+        string packVersion = modernSurrogate ? ModernSurrogatePackVersion
+            : balloonPrototype ? BalloonPackVersion : KoreaPackVersion;
+        string packUriJson = modernSurrogate || balloonPrototype
+            ? "null" : $"\"{KoreaPackUri}\"";
+        string presentationProfileId = modernSurrogate
+            ? ModernSurrogatePresentationProfileId
+            : balloonPrototype ? BalloonPresentationProfileId : KoreaPresentationProfileId;
+        string visualProfileId = modernSurrogate
+            ? ModernSurrogateVisualProfileId
+            : balloonPrototype ? BalloonVisualProfileId : KoreaVisualProfileId;
+        string assetProfileJson = modernSurrogate || balloonPrototype
+            ? "null" : $"\"{KoreaAssetProfileId}\"";
+        string assetManifestJson = modernSurrogate || balloonPrototype
+            ? "null" : $"\"{KoreaAssetManifestId}\"";
+        string audioProfileJson = modernSurrogate || balloonPrototype
+            ? "null" : $"\"{FixedWingAudioProfileId}\"";
+        string cockpitPresentationJson = modernSurrogate || balloonPrototype
             ? "null" : $"\"{PlayerCockpitPresentationId}\"";
-        string banditPresentationId = balloonPrototype && Session.KillCount == 0
-            ? AwacsPresentationId : BanditPresentationId;
-        string missionDefinitionId = Session.BeatIndex switch {
-            2 => "mission.break-defense.v1",
-            3 => "mission.saddle-tracking.v1",
-            4 => "mission.korea-2030s.balloon-strike.prototype.v1",
-            5 => "mission.carrier-qualification.v1",
-            6 => "mission.f86f.degraded-gear-recovery.v1",
-            _ => "mission.perch-attack.v1"
-        };
         string carrierEntityJson = hasCarrier
             ? $"\"entity.carrier.{Session.CarrierSpawnSequence}\"" : "null";
         string carrierPresentationJson = hasCarrier ? $"\"{CarrierPresentationId}\"" : "null";
@@ -507,7 +556,9 @@ public static partial class WebBridge {
         return $"\"snapshot_schema_version\":\"{SnapshotSchemaVersion}\","
             + $"\"pack_id\":\"{packId}\",\"pack_version\":\"{packVersion}\","
             + $"\"content_pack_uri\":{packUriJson},"
-            + $"\"mission_definition_id\":\"{missionDefinitionId}\","
+            + $"\"mission_definition_id\":\"{mission.Id}\","
+            + $"\"rules_of_engagement\":\"{mission.RulesOfEngagement}\","
+            + $"\"public_data_surrogate\":{(mission.PublicDataSurrogate ? "true" : "false")},"
             + $"\"presentation_profile_id\":\"{presentationProfileId}\","
             + $"\"visual_profile_id\":\"{visualProfileId}\","
             + $"\"asset_profile_id\":{assetProfileJson},\"asset_manifest_id\":{assetManifestJson},"
@@ -516,11 +567,19 @@ public static partial class WebBridge {
             + $"\"input_profile_id\":\"{FixedWingInputProfileId}\","
             + $"\"audio_profile_id\":{audioProfileJson},"
             + $"\"effects_profile_id\":\"{FixedWingEffectsProfileId}\","
+            + $"\"player_aircraft_id\":\"{player.Id}\","
+            + $"\"player_aircraft_name\":\"{player.DisplayName}\","
+            + $"\"player_systems_profile_id\":\"{player.SystemsProfileId}\","
+            + $"\"player_systems_simulated\":{(player.SystemsSimulated ? "true" : "false")},"
             + $"\"player_entity_id\":\"entity.player.{Session.PlayerSpawnSequence}\","
-            + $"\"player_presentation_id\":\"{playerPresentationId}\","
+            + $"\"player_presentation_id\":\"{player.PresentationId}\","
             + $"\"cockpit_presentation_id\":{cockpitPresentationJson},"
+            + $"\"bandit_aircraft_id\":\"{bandit.Id}\","
+            + $"\"bandit_aircraft_name\":\"{bandit.DisplayName}\","
+            + $"\"bandit_systems_profile_id\":\"{bandit.SystemsProfileId}\","
+            + $"\"bandit_systems_simulated\":{(bandit.SystemsSimulated ? "true" : "false")},"
             + $"\"bandit_entity_id\":\"entity.bandit.{Session.BanditSpawnSequence}\","
-            + $"\"bandit_presentation_id\":\"{banditPresentationId}\","
+            + $"\"bandit_presentation_id\":\"{bandit.PresentationId}\","
             + $"\"carrier_entity_id\":{carrierEntityJson},"
             + $"\"carrier_presentation_id\":{carrierPresentationJson},";
     }

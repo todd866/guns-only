@@ -19,7 +19,7 @@
          deployment. Vercel treats every published api/*.js file as a function, and shipping the
          renderer's Node tests plus 8 MB of unreferenced template assets only adds deploy/transfer
          surface. -->
-    <Content Update="wwwroot/api/telemetry.test.js" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/api/*.test.js" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/render/**/tests/**" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/lib/**" CopyToPublishDirectory="Never" />
   </ItemGroup>

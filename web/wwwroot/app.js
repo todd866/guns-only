@@ -28,6 +28,13 @@ import {
   incidentReplayLabels,
 } from "./render/replay/incident_replay.js";
 import {
+  buildInfoUrl,
+  CANONICAL_PRODUCTION_ORIGIN,
+  createReleaseIdentity,
+  normalizeBuildInfo,
+  runningBuildInfoUrl,
+} from "./render/release/release_identity.js";
+import {
   createPilotActionController,
   projectTestFlightState,
   testFlightConsoleRelevant,
@@ -103,9 +110,15 @@ const readyTitle = document.querySelector("#ready-title");
 const readyBrief = document.querySelector("#ready-brief");
 const readySortie = document.querySelector("#ready-sortie");
 const readyConfig = document.querySelector("#ready-config");
+const readyMissionNav = document.querySelector("#ready-mission-nav");
+const readyMissionPrev = document.querySelector("#ready-mission-prev");
+const readyMissionNext = document.querySelector("#ready-mission-next");
+const readyMissionPosition = document.querySelector("#ready-mission-position");
 const readyStart = document.querySelector("#ready-start");
 const readyReplay = document.querySelector("#ready-replay");
 const readyHint = document.querySelector("#ready-hint");
+const readyBuild = document.querySelector("#ready-build");
+const readyBuildReload = document.querySelector("#ready-build-reload");
 const incidentReplayOverlay = document.querySelector("#incident-replay-overlay");
 const incidentReplayTime = document.querySelector("#incident-replay-time");
 const incidentReplayMetrics = document.querySelector("#incident-replay-metrics");
@@ -285,9 +298,20 @@ const heldKeys = new Set();
 // Tuning feel by guesswork is a waste of time; this captures every input event and a 20 Hz state
 // trace from a real playthrough, then POSTs immutable batches to /telemetry (same origin, so the dev
 // server writes them to disk for analysis). A failed POST must never disturb the simulation.
-// The entrypoint query is the cache-busting build identity served by index.html. Deriving the
-// telemetry stamp from import.meta.url makes it impossible for those two versions to drift.
-const BUILD = new URL(import.meta.url).searchParams.get("v") || "dev";
+// The release module owns the human build. The entrypoint query remains an independent cache key,
+// so a mixed shell/app can be detected instead of silently reporting whichever integer happened
+// to be embedded in stale HTML. Production metadata adds commit/deployment discrimination when
+// Vercel provides it, while local development remains fully offline.
+const ENTRYPOINT_BUILD = new URL(import.meta.url).searchParams.get("v") || "dev";
+let buildIdentity = createReleaseIdentity({ entrypointBuild: ENTRYPOINT_BUILD });
+const BUILD = buildIdentity.telemetryBuild;
+const BUILD_IDENTITY_REVALIDATE_MS = 60_000;
+let runningBuildInfo = null;
+let lastKnownBuildInfo = null;
+let buildIdentityLookup = null;
+let buildIdentityLastCheckedAt = Number.NEGATIVE_INFINITY;
+let buildIdentityLookupAttempted = false;
+let buildIdentityLookupSucceeded = false;
 const TELEMETRY_TICK_STRIDE = 6; // 120 Hz authority -> 20 Hz diagnostic trace.
 // Preserve the 20 Hz reconstruction trace, but amortize Function and Blob-object overhead into
 // 30-second immutable chunks. The bounded buffer still holds more than a full interval.
@@ -306,6 +330,7 @@ function newTelemetryBatchId() {
 const recorder = {
   session: `web-${TELEMETRY_SESSION_STARTED_AT}-${Math.floor(Math.random() * 1e6)}`,
   build: BUILD,
+  buildIdentity: buildIdentity.telemetry,
   buf: [],
   lastSampleKey: null,
   lastPost: performance.now(),
@@ -332,6 +357,7 @@ const recorder = {
       t0: TELEMETRY_SESSION_STARTED_AT,
       state_encoding: TELEMETRY_STATE_ENCODING,
       keyframe_interval_samples: DEFAULT_KEYFRAME_INTERVAL_SAMPLES,
+      build_identity: this.buildIdentity,
     };
     if (batchId) header.batch_id = batchId;
     return header;
@@ -486,6 +512,124 @@ const recorder = {
   },
 };
 globalThis.__rec = recorder;   // inspectable: __rec.samples / .flushes / .errors / .lastError
+
+function renderBuildIdentity() {
+  if (!readyBuild) return;
+  readyBuild.textContent = buildIdentity.label;
+  readyBuild.dataset.state = buildIdentity.state;
+  readyBuild.title = buildIdentity.stale
+    ? "This tab is not running the current production release. Reload before flying."
+    : `Application ${buildIdentity.telemetryBuild}`;
+  if (readyBuildReload) readyBuildReload.hidden = !buildIdentity.stale;
+}
+
+function buildIdentityBlocksSortie() {
+  return buildIdentity.stale || buildIdentity.state === "checking";
+}
+
+function applyBuildIdentity(nextIdentity) {
+  const changed = JSON.stringify(buildIdentity.telemetry)
+    !== JSON.stringify(nextIdentity.telemetry);
+  buildIdentity = nextIdentity;
+  globalThis.__gunsBuild = buildIdentity;
+  recorder.build = buildIdentity.telemetryBuild;
+  recorder.buildIdentity = buildIdentity.telemetry;
+  // If deployment metadata arrives after the first sample, the next stored state is a keyframe
+  // carrying the resolved identity rather than an ambiguous continuation of the provisional one.
+  if (changed) {
+    recorder._stateEncoder.forceKeyframe();
+    recorder.context("build_identity", buildIdentity.telemetry);
+  }
+  renderBuildIdentity();
+  renderPauseUi();
+}
+
+function resolvedBuildIdentity() {
+  return createReleaseIdentity({
+    entrypointBuild: ENTRYPOINT_BUILD,
+    running: runningBuildInfo,
+    current: lastKnownBuildInfo,
+    lookup: buildIdentityLookupSucceeded
+      ? "complete" : buildIdentityLookupAttempted ? "unverified" : "checking",
+  });
+}
+
+async function fetchBuildInfo(url, signal) {
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) throw new Error(`build-info HTTP ${response.status}`);
+  const info = normalizeBuildInfo(await response.json());
+  if (!info) throw new Error("invalid build-info response");
+  return info;
+}
+
+function resolveBuildIdentity({ force = false } = {}) {
+  const now = Date.now();
+  if (buildIdentityLookup) return buildIdentityLookup;
+  if (!force && now - buildIdentityLastCheckedAt < BUILD_IDENTITY_REVALIDATE_MS) {
+    return Promise.resolve(buildIdentity);
+  }
+  buildIdentityLastCheckedAt = now;
+  buildIdentityLookupAttempted = true;
+
+  buildIdentityLookup = (async () => {
+    const currentUrl = buildInfoUrl(window.location);
+    if (!currentUrl) {
+      buildIdentityLookupSucceeded = true;
+      applyBuildIdentity(resolvedBuildIdentity());
+      return buildIdentity;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3_000);
+    try {
+      const runningUrl = runningBuildInfoUrl(window.location);
+      // A direct Vercel deployment has two identities: its immutable same-origin code and the
+      // canonical production alias. Capture the former once before comparing the latter. On the
+      // canonical alias both URLs are the same, so the one response below establishes both.
+      if (!runningBuildInfo && runningUrl && runningUrl !== currentUrl) {
+        try {
+          runningBuildInfo = await fetchBuildInfo(runningUrl, controller.signal);
+        } catch {
+          // Continue to the canonical lookup. An unavailable old endpoint should not manufacture
+          // a stale decision, while a different entrypoint build remains independently detectable.
+        }
+      }
+      const current = await fetchBuildInfo(currentUrl, controller.signal);
+      // The first matching production response identifies the deployment this app started on.
+      // Later lookups are comparisons against that immutable baseline, including BFCache restores.
+      if (!runningBuildInfo
+        && ENTRYPOINT_BUILD === current.build && current.build === buildIdentity.releaseBuild) {
+        runningBuildInfo = current;
+      }
+      lastKnownBuildInfo = current;
+      buildIdentityLookupSucceeded = true;
+      applyBuildIdentity(resolvedBuildIdentity());
+    } catch {
+      // A transient metadata failure must not erase a previously verified stale/current decision.
+      applyBuildIdentity(resolvedBuildIdentity());
+    } finally {
+      clearTimeout(timeout);
+    }
+    return buildIdentity;
+  })().finally(() => {
+    buildIdentityLookup = null;
+  });
+  return buildIdentityLookup;
+}
+
+function reloadCurrentBuild() {
+  const destination = buildIdentity.stale
+    ? new URL(window.location.pathname, CANONICAL_PRODUCTION_ORIGIN)
+    : new URL(window.location.href);
+  if (selectedBeat !== 1) destination.searchParams.set("mission", String(selectedBeat));
+  destination.searchParams.set("build", buildIdentity.currentBuild || buildIdentity.releaseBuild);
+  window.location.replace(destination.href);
+}
+
 // Ordinary fetch has no guaranteed unload delivery, but forcing the current tail as soon as the
 // page becomes hidden gives it the best available head start without reintroducing keepalive's
 // 64 KB cap. The single-flight guard makes duplicate lifecycle events harmless.
@@ -493,7 +637,12 @@ window.addEventListener("pagehide", () => recorder.flush({ force: true }));
 window.addEventListener("beforeunload", () => recorder.flush({ force: true }));
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) recorder.flush({ force: true });
+  else if (!document.hidden) void resolveBuildIdentity();
 });
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) void resolveBuildIdentity({ force: true });
+});
+window.addEventListener("focus", () => void resolveBuildIdentity());
 
 let bridge = null;
 const keyOwners = new Map();
@@ -510,13 +659,21 @@ let resetMobileInput = () => {};
 let setMobileFrozen = () => {};
 let activeView = null;
 let latestState = null;
-let selectedBeat = 5;
+const requestedInitialBeat = Number(new URLSearchParams(window.location.search).get("mission"));
+let selectedBeat = Number.isInteger(requestedInitialBeat)
+  && requestedInitialBeat >= 1 && requestedInitialBeat <= 7 ? requestedInitialBeat : 1;
 let resetFrameClock = () => {};
 let bridgePauseApplied = null;
 let testFlightActionController = null;
 let multiplayer = null;
 let incidentReplay = null;
 const pauseReasons = new Set(["ready"]);
+
+readyBuildReload?.addEventListener("click", reloadCurrentBuild);
+globalThis.__gunsBuild = buildIdentity;
+renderBuildIdentity();
+recorder.context("build_identity", buildIdentity.telemetry);
+queueMicrotask(() => void resolveBuildIdentity());
 
 function renderMultiplayerStatus(status) {
   if (!multiplayerStatus || !status) return;
@@ -558,8 +715,8 @@ const MISSION_BRIEFS = Object.freeze({
   4: {
     kicker: "Intercept · mission 04",
     title: "Balloon Strike",
-    sortie: "High-altitude intercept",
-    brief: "Climb into thin air, protect your energy state, and solve the high-altitude firing pass before the target slips outside reach.",
+    sortie: "Engine-less diving pass",
+    brief: "You are already in the terminal geometry with no engine. Dispose of excess altitude in a controlled dive, protect enough IAS for one gun solution, and do not plan a second attack.",
   },
   5: {
     kicker: "Carrier cycle · mission 05",
@@ -572,6 +729,12 @@ const MISSION_BRIEFS = Object.freeze({
     title: "Degraded Recovery",
     sortie: "Utility-hydraulic failure · emergency gear · RTB",
     brief: "Diagnose the failed normal extension from indications and elapsed time. Emergency-extend below the limit, verify every downlock, then recover aboard.",
+  },
+  7: {
+    kicker: "Visual fight · mission 07",
+    title: "F-22A vs Su-27S",
+    sortie: "Public-data surrogates · guns only",
+    brief: "Take the neutral high-aspect merge with guns safe through the first pass. Then fight for the rear quarter, preserve IAS, control closure, and let actual projectiles decide the result. No missiles or unmodelled modern sensors.",
   },
 });
 
@@ -891,6 +1054,11 @@ function renderPauseUi(state = latestState) {
   const showScreen = !help && !calibrating && (ready || finished || background || sessionPaused);
   const brief = missionBrief();
 
+  if (readyMissionNav) readyMissionNav.hidden = !ready;
+  if (readyMissionPosition) {
+    readyMissionPosition.textContent = `MISSION ${String(selectedBeat).padStart(2, "0")} / 07`;
+  }
+
   document.documentElement.classList.toggle("run-paused", pauseReasons.size > 0);
   readyScreen.classList.toggle("visible", showScreen);
   readyScreen.setAttribute("aria-hidden", String(!showScreen));
@@ -906,7 +1074,9 @@ function renderPauseUi(state = latestState) {
     readySortie.textContent = `${brief.title} · ${String(state?.sortie_outcome || "complete").toLowerCase()}`;
     readyConfig.textContent = state?.maintenance_scenario === true
       ? `Procedure ${Math.round(Number(state?.maintenance_score) || 0)}/${Math.round(Number(state?.maintenance_max_score) || 100)} · ${Math.round(Number(state?.maintenance_demerits) || 0)} demerits`
-      : replayAnalysis
+        : state?.visual_merge_evaluation === true
+          ? `Decision score ${Math.round(Number(state?.visual_merge_score) || 0)}/100 · rear-quarter dwell ${(Number(state?.rear_quarter_dwell_s) || 0).toFixed(1)} s · ${Math.round(Number(state?.evaluated_projectile_hits) || 0)} projectile hits`
+        : replayAnalysis
         ? `Sim touchdown ${replayAnalysis.touchdownAssessment.grade === "NONE" ? "not graded" : replayAnalysis.touchdownAssessment.grade} · ${replayAnalysis.touchdownAssessment.profile} v${replayAnalysis.touchdownAssessment.version} · replay cached · causal review is not an LSO grade`
         : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
     readyReplay.hidden = !incidentReplay?.clip;
@@ -925,6 +1095,8 @@ function renderPauseUi(state = latestState) {
       ? `Guns hot · ${deck || "axial"} deck`
       : selectedBeat === 6
         ? `Maintenance profile · ${deck || "axial"} deck`
+        : selectedBeat === 7
+          ? "Public-data surrogates · guns only · first pass safe"
         : "Guns hot · air start";
     readyStart.textContent = "Fly mission";
     readyHint.textContent = background ? "Return to the game to fly" : "Press Enter to fly";
@@ -939,12 +1111,20 @@ function renderPauseUi(state = latestState) {
     readyHint.textContent = "Press Enter to resume";
   }
 
+  renderBuildIdentity();
+  if (buildIdentity.stale) {
+    readyHint.textContent = "Older or mixed build detected · reload the current release";
+  } else if (buildIdentity.state === "checking" && ready) {
+    readyHint.textContent = "Verifying current release…";
+  }
+
   // Ready cannot be dismissed while another safety interlock is still active. The relevant
   // prompt (controls or tilt calibration) owns the screen until its own reason clears.
   const blockers = [...pauseReasons].filter((reason) =>
     reason !== "ready" && reason !== "finished"
       && reason !== "background" && reason !== "session");
-  readyStart.disabled = blockers.length > 0 || ((ready || finished) && background);
+  readyStart.disabled = buildIdentityBlocksSortie()
+    || blockers.length > 0 || ((ready || finished) && background);
 }
 
 function applyBridgePause() {
@@ -980,8 +1160,17 @@ function enterReady({ resetBridge = true } = {}) {
 }
 
 function selectMission(index) {
-  selectedBeat = clamp(Math.round(Number(index) || 1), 1, 6);
+  selectedBeat = clamp(Math.round(Number(index) || 1), 1, 7);
+  const missionUrl = new URL(window.location.href);
+  if (selectedBeat === 1) missionUrl.searchParams.delete("mission");
+  else missionUrl.searchParams.set("mission", String(selectedBeat));
+  window.history.replaceState(window.history.state, "", missionUrl);
   enterReady();
+}
+
+function stepMission(direction) {
+  const count = Object.keys(MISSION_BRIEFS).length;
+  selectMission(((selectedBeat - 1 + direction + count) % count) + 1);
 }
 
 function restartMission() {
@@ -997,7 +1186,7 @@ function toggleDeckAndReady() {
 }
 
 function beginFlight() {
-  if (!bridge || !pauseReasons.has("ready")) return false;
+  if (buildIdentityBlocksSortie() || !bridge || !pauseReasons.has("ready")) return false;
   const blockers = [...pauseReasons].filter((reason) => reason !== "ready");
   if (blockers.length) return false;
   clearFlightInput();
@@ -1011,6 +1200,7 @@ function beginFlight() {
 }
 
 function activateReadyAction() {
+  if (buildIdentityBlocksSortie()) return false;
   if (pauseReasons.has("finished")) {
     restartMission();
     return true;
@@ -1059,6 +1249,9 @@ readyStart.addEventListener("click", () => {
   activeView?.hud.armAudio();
   activateReadyAction();
 });
+
+readyMissionPrev?.addEventListener("click", () => stepMission(-1));
+readyMissionNext?.addEventListener("click", () => stepMission(1));
 
 readyReplay?.addEventListener("click", () => {
   if (!incidentReplay?.start(performance.now())) return;
@@ -3625,9 +3818,18 @@ const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
   ["presentation.vehicle.awacs-target.v1", createAwacs],
   ["presentation.vehicle.player.v1", createDrone],
   ["presentation.vehicle.glider-strike.v1", createGlider],
+  // Mission 7 deliberately uses the existing abstract contact body until purpose-built,
+  // reviewed silhouettes exist. Its capability/telemetry identity remains explicit; this is a
+  // visibility aid for a guns-only visual fight, not a claim to an F-22 or Su-27 exterior model.
+  ["presentation.vehicle.f22a.public-data-surrogate.v1", createDrone],
+  ["presentation.vehicle.su27s.public-data-surrogate.v1", createDrone],
   [DEFAULT_COCKPIT_PRESENTATION_ID, createHiddenPresentation],
   ["presentation.platform.carrier.v1", createCarrier],
   [DEFAULT_ESCORT_PRESENTATION_ID, createHiddenPresentation],
+]);
+const ABSTRACT_ONLY_PRESENTATION_IDS = new Set([
+  "presentation.vehicle.f22a.public-data-surrogate.v1",
+  "presentation.vehicle.su27s.public-data-surrogate.v1",
 ]);
 
 function projectedId(value, fallback = "") {
@@ -4054,6 +4256,7 @@ class PresentationAssetManager {
   }
 
   resolveSlot(slot, { preload = false } = {}) {
+    if (ABSTRACT_ONLY_PRESENTATION_IDS.has(slot.presentationId)) return;
     if (!this.activePack || !this.runtime || (!slot.root.visible && !preload)) return;
     const registry = this.runtime.registry;
     const descriptorScope = {
@@ -6060,7 +6263,7 @@ function installInput(view) {
       return;
     }
 
-    if (/^Digit[1-6]$/.test(event.code)) {
+    if (/^Digit[1-7]$/.test(event.code)) {
       selectMission(Number(event.code.slice(-1)));
       return;
     }

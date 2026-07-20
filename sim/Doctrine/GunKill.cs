@@ -22,7 +22,6 @@ public sealed class GunKill {
     public const double MaxFlightSeconds = 1.75;
     public const double GravityMps2 = 9.80665;
 
-    const double FireIntervalSeconds = 1.0 / RoundsPerSecond;
     const double GunSolutionAcquireSeconds = 0.08;
     const double GunSolutionReleaseSeconds = 0.12;
     const int LeadSearchSteps = 128;
@@ -32,23 +31,36 @@ public sealed class GunKill {
     readonly List<GunRound> _rounds = new(48);
     readonly int _hitsToKill;
     readonly double _hitRadiusM;
+    readonly GunProfile _profile;
     bool _triggerWasHeld;
     double _secondsToNextShot;
     double _gunSolutionTransitionSeconds;
     int _nextRoundId = 1;
 
     public GunKill(int ammo = DefaultAmmo, int hitsToKill = DefaultHitsToKill,
-        double hitRadiusM = DefaultHitRadiusM) {
+        double hitRadiusM = DefaultHitRadiusM, GunProfile? profile = null) {
         if (ammo < 0) throw new System.ArgumentOutOfRangeException(nameof(ammo));
         if (hitsToKill <= 0) throw new System.ArgumentOutOfRangeException(nameof(hitsToKill));
-        if (!double.IsFinite(hitRadiusM) || hitRadiusM <= 0.0)
+        _profile = profile ?? GunProfiles.SixM3FiftyCal;
+        if (!double.IsFinite(_profile.MuzzleVelocityMps) || _profile.MuzzleVelocityMps <= 0.0
+            || !double.IsFinite(_profile.RoundsPerSecond) || _profile.RoundsPerSecond <= 0.0
+            || !double.IsFinite(_profile.MaximumFlightSeconds)
+            || _profile.MaximumFlightSeconds <= 0.0
+            || !double.IsFinite(_profile.EffectiveHitRadiusM)
+            || _profile.EffectiveHitRadiusM <= 0.0)
+            throw new System.ArgumentOutOfRangeException(nameof(profile));
+        double selectedHitRadius = profile is not null && hitRadiusM == DefaultHitRadiusM
+            ? profile.EffectiveHitRadiusM
+            : hitRadiusM;
+        if (!double.IsFinite(selectedHitRadius) || selectedHitRadius <= 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(hitRadiusM));
         AmmoRemaining = ammo;
         _hitsToKill = hitsToKill;
-        _hitRadiusM = hitRadiusM;
+        _hitRadiusM = selectedHitRadius;
     }
 
     public IReadOnlyList<GunRound> RoundsInFlight => _rounds;
+    public GunProfile Profile => _profile;
     public int AmmoRemaining { get; private set; }
     public int RoundsFired { get; private set; }
     public int HitCount { get; private set; }
@@ -81,7 +93,7 @@ public sealed class GunKill {
         if (Outcome != FightOutcome.Splash)
             throw new System.InvalidOperationException(
                 "A gun can move to the next target only after the current target is splashed.");
-        var next = new GunKill(AmmoRemaining, _hitsToKill, _hitRadiusM) {
+        var next = new GunKill(AmmoRemaining, _hitsToKill, _hitRadiusM, _profile) {
             RoundsFired = RoundsFired,
             _triggerWasHeld = _triggerWasHeld,
             _secondsToNextShot = _secondsToNextShot,
@@ -135,8 +147,8 @@ public sealed class GunKill {
             }
 
             var firingPosition = own.Position + ownVelocity * elapsed + gunForward * 4.0;
-            Fire(firingPosition, ownVelocity + gunForward * MuzzleVelocityMps);
-            _secondsToNextShot = FireIntervalSeconds;
+            Fire(firingPosition, ownVelocity + gunForward * _profile.MuzzleVelocityMps);
+            _secondsToNextShot = 1.0 / _profile.RoundsPerSecond;
 
             // Avoid firing at t=dt and again at the next step's t=0. The shot at this boundary is
             // owned by this step and the full interval remains on the cadence clock.
@@ -187,7 +199,7 @@ public sealed class GunKill {
             }
 
             double age = round.AgeSeconds + dt;
-            if (age >= MaxFlightSeconds || nextPosition.Y < -100.0) {
+            if (age >= _profile.MaximumFlightSeconds || nextPosition.Y < -100.0) {
                 _rounds.RemoveAt(i);
                 continue;
             }
@@ -225,7 +237,7 @@ public sealed class GunKill {
         _gunSolutionTransitionSeconds = 0.0;
     }
 
-    static bool TrySolveLead(in Vec3D relativePosition, in Vec3D relativeVelocity,
+    bool TrySolveLead(in Vec3D relativePosition, in Vec3D relativeVelocity,
         out Vec3D direction, out double timeOfFlight) {
         direction = Vec3D.Zero;
         timeOfFlight = 0.0;
@@ -234,7 +246,7 @@ public sealed class GunKill {
         double lo = 0.0;
         double fLo = LeadEquation(relativePosition, relativeVelocity, lo);
         for (int i = 1; i <= LeadSearchSteps; i++) {
-            double hi = MaxFlightSeconds * i / LeadSearchSteps;
+            double hi = _profile.MaximumFlightSeconds * i / LeadSearchSteps;
             double fHi = LeadEquation(relativePosition, relativeVelocity, hi);
             if (fHi <= 0.0 && fLo > 0.0) {
                 for (int iteration = 0; iteration < LeadBisectionSteps; iteration++) {
@@ -257,9 +269,9 @@ public sealed class GunKill {
         return false;
     }
 
-    static double LeadEquation(in Vec3D relativePosition, in Vec3D relativeVelocity, double t) {
+    double LeadEquation(in Vec3D relativePosition, in Vec3D relativeVelocity, double t) {
         var required = relativePosition + relativeVelocity * t - Gravity * (0.5 * t * t);
-        double muzzleDistance = MuzzleVelocityMps * t;
+        double muzzleDistance = _profile.MuzzleVelocityMps * t;
         return required.Dot(required) - muzzleDistance * muzzleDistance;
     }
 

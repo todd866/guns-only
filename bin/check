@@ -45,11 +45,15 @@ test -f "$publish_dir/wwwroot/render/assets/asset_registry.js"
 test -f "$publish_dir/wwwroot/render/presence/global_room_client.js"
 test -f "$publish_dir/wwwroot/multiplayer-config.js"
 test -f "$publish_dir/wwwroot/api/telemetry.js"
+test -f "$publish_dir/wwwroot/api/build-info.js"
+test -f "$publish_dir/wwwroot/api/telemetry-admin.js"
 test ! -f "$publish_dir/wwwroot/api/telemetry.test.js"
+test ! -f "$publish_dir/wwwroot/api/telemetry-admin.test.js"
 test ! -d "$publish_dir/wwwroot/render/presence/tests"
 test ! -d "$publish_dir/wwwroot/render/telemetry/tests"
 test ! -d "$publish_dir/wwwroot/lib/bootstrap"
 test -f "$publish_dir/wwwroot/vercel.json"
+rg -q '"source": "/telemetry-admin"' "$publish_dir/wwwroot/vercel.json"
 
 test -f world-worker/src/index.js
 test -f world-worker/src/world.js

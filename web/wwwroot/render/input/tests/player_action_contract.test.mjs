@@ -155,6 +155,9 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["incident-replay-skip", /incidentReplaySkip\?\.addEventListener\("click", skipIncidentReplay\)/],
     ["ready-start", /readyStart\.addEventListener\("click"/],
     ["ready-replay", /readyReplay\?\.addEventListener\("click"/],
+    ["ready-build-reload", /readyBuildReload\?\.addEventListener\("click", reloadCurrentBuild\)/],
+    ["ready-mission-prev", /readyMissionPrev\?\.addEventListener\("click", \(\) => stepMission\(-1\)\)/],
+    ["ready-mission-next", /readyMissionNext\?\.addEventListener\("click", \(\) => stepMission\(1\)\)/],
   ]);
 
   for (const button of htmlButtons(indexSource)) {
@@ -206,11 +209,34 @@ test("touch pilots can explicitly command gear, both flap directions, and contex
     "a paused or rejected keyboard V press must not change presentation state");
 });
 
+test("fresh and touch-only players can reach every mission without a hidden keyboard dependency", () => {
+  assert.match(appSource, /let selectedBeat = [\s\S]*?\? requestedInitialBeat : 1;/,
+    "a fresh visitor should begin at the first guns-only BFM drill");
+  assert.match(bridgeSource, /static readonly SimulationSession Session = new\(1,/,
+    "the bridge and browser must agree on the initial mission");
+  assert.match(appSource, /function stepMission\(direction\)[\s\S]*?selectMission\(/);
+  assert.match(appSource, /requestedInitialBeat <= 7 \? requestedInitialBeat : 1/,
+    "a mission query may deep-link only to a real briefing");
+  assert.ok(htmlButtons(indexSource).some((button) => button.attributes.id === "ready-mission-prev"));
+  assert.ok(htmlButtons(indexSource).some((button) => button.attributes.id === "ready-mission-next"));
+  assert.match(indexSource,
+    /\.ready-mission-nav\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)\s+minmax\(0, 1\.15fr\)\s+minmax\(0, 1fr\)/,
+    "mission navigation must shrink inside a narrow phone briefing card");
+});
+
+test("the engine-less balloon mission briefing teaches the actual diving energy problem", () => {
+  const mission = appSource.match(/4:\s*\{[\s\S]*?title: "Balloon Strike"[\s\S]*?brief: "([^"]+)"/)?.[1];
+  assert.ok(mission, "Mission 4 needs an explicit briefing");
+  assert.match(mission, /no engine/i);
+  assert.match(mission, /controlled dive/i);
+  assert.doesNotMatch(mission, /climb/i);
+});
+
 test("non-bridge player actions advertised by the quicklook have observable UI handlers", () => {
   const directActions = [
     ["H HIDE", /event\.code === "KeyH"[\s\S]*?view\.hud\.toggleLegend\(\)/],
     ["M SOUND", /event\.code === "KeyM"[\s\S]*?view\.hud\.toggleAudio\(\)/],
-    ["1–6 MISSION", /\^Digit\[1-6\]\$[\s\S]*?selectMission\(/],
+    ["1–7 MISSION", /\^Digit\[1-7\]\$[\s\S]*?selectMission\(/],
     ["DRAG LOOK", /sceneCanvas\.addEventListener\("pointermove"/],
   ];
   for (const [help, handler] of directActions) {

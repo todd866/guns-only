@@ -40,3 +40,13 @@ test("system neutralisation emits reconstructable input releases", async () => {
   assert.match(source, /releaseAllMappedKeys\("visibility-hidden"\)/);
   assert.match(source, /clearFlightInput\(`pause:\$\{reason\}`\)/);
 });
+
+test("engine telemetry separates spool state from physical net thrust", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+
+  assert.match(source, /\\\"engine_spool_fraction\\\"/);
+  assert.match(source, /_player\.ThrustFraction/);
+  assert.match(source, /\\\"engine_net_thrust_lbf\\\"/);
+  assert.match(source, /engine\.NetThrustLbf/);
+  assert.match(source, /Protection\.SustainedG\(s, _beat\.PlayerAir,[\s\S]*engine\.NetThrustN,[\s\S]*Session\.PlayerAerodynamicConfiguration/);
+});

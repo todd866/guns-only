@@ -1,6 +1,7 @@
 namespace GunsOnly.Sim;
 
-/// The actuated per-tick command (post-detent). GDemand in g, BankTarget rad, Throttle 0..1,
+/// The actuated per-tick command (post-detent). GDemand in g, BankTarget rad, Throttle 0..the
+/// airframe's published lever stop (1.0 is military power; values above 1.0 are afterburner),
 /// Rudder, RollControl (pilot aileron), and SasRollControl -1..1. DirectLateralControl selects the
 /// physical aileron/derivative path used by flown controls; false retains the legacy/AI bank tracker.
 /// CommandedPitchRad is an absolute body pitch used by the approach law; NaN means derive pitch from G demand.

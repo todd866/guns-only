@@ -17,9 +17,12 @@ on production and preview deployments, and caps the declared, streamed, row-coun
 payload sizes. A hidden/pagehide event makes a best-effort immediate tail upload; browsers still do
 not guarantee ordinary fetch delivery during final teardown.
 
-The `?v=` value on the `app.js` entry in `index.html` is also the telemetry build identity. Keep it
-monotonically increasing across production deployments; bump it whenever the app/module graph
-changes, and never reuse a build number from an older deployment.
+The release number is declared in `render/release/release_identity.js` and `api/build-info.js`; the
+`?v=` value on the `app.js` entry in `index.html` is an independent cache key used to detect a
+mixed shell/module graph. Keep all three values equal and monotonically increasing across
+production releases. Production telemetry adds the Vercel revision and deployment identity, so
+two deployments of the same human-facing build can still be distinguished. The briefing/debrief
+surface warns about a stale or mixed tab and blocks only the next sortie until it is reloaded.
 
 `vercel.json` gives a one-year immutable browser cache only to heavy pack art requested with its
 manifest SHA-256 query (`?sha256=<64 hex characters>`). Direct unversioned art, app/HUD modules,
@@ -39,10 +42,12 @@ Deploy from the directory that is the copy/publish output of `web/wwwroot`:
 vercel deploy --prod
 ```
 
-Because `api/telemetry.js` and `vercel.json` live inside `web/wwwroot`, they are included in that
-copy. At the deploy root Vercel discovers `api/telemetry.js` as `/api/telemetry`; `vercel.json`
-rewrites the recorder's unchanged `/telemetry` POST to it. The local Python telemetry server still
-handles `/telemetry` directly and continues writing JSONL files to disk.
+Because the API functions and `vercel.json` live inside `web/wwwroot`, they are included in that
+copy. At the deploy root Vercel discovers the write endpoint, public build-provenance endpoint, and
+production-only operator endpoint under `/api`; `vercel.json` provides the stable `/telemetry` and
+`/telemetry-admin` rewrites, while the shell reads build provenance from `/api/build-info`. The
+local Python telemetry server still handles
+`/telemetry` directly and continues writing JSONL files to disk.
 
 ## Verify production capture
 
@@ -64,29 +69,35 @@ curl -i -X POST 'https://guns-only.vercel.app/telemetry' \
   --data '{"session":"smoke-test","batchId":"batch-smoke-000001","rows":[{"k":"hdr","build":"smoke"}]}'
 ```
 
-Fly the deployed game for several seconds, then use the repository's bounded local retrieval tools.
-The list operation is separate, returns at most 50 items here, and never auto-paginates:
+Fly the deployed game for several seconds, then use the repository's bounded local operator tool.
+Load the separate read-only operator credential from Keychain; do not export the Blob store's
+master token. The list operation returns at most 50 items here and never auto-paginates:
 
 ```sh
-export BLOB_READ_WRITE_TOKEN='load-this-from-a-secure-local-source'
-node tools/telemetry/list.mjs --prefix 'telemetry/' --limit 50 \
-  > /tmp/guns-only-telemetry-page.json
+export TELEMETRY_ADMIN_TOKEN="$(security find-generic-password -w \
+  -a iantodd -s com.gunsonly.telemetry-admin)"
+node tools/telemetry/admin.mjs list \
+  --prefix 'telemetry/' --limit 50 \
+  --output '/tmp/guns-only-telemetry-page.json'
 ```
 
 Review that JSON locally, select one chunk, and pass its listed `url`, `size`, and `etag` to the
 single-blob downloader:
 
 ```sh
-node tools/telemetry/download.mjs \
+node tools/telemetry/admin.mjs get \
   --url 'PASTE_ONE_LISTED_BLOB_URL_HERE' \
   --output '/tmp/flight-chunk.jsonl.gz' \
   --expected-size LISTED_SIZE \
   --etag 'LISTED_ETAG'
+unset TELEMETRY_ADMIN_TOKEN
 ```
 
-The downloader performs exactly one GET for a missing blob, never uses `HEAD` or `Range`, never
-follows redirects or retries, caps bytes before and during streaming, verifies supplied metadata,
-and atomically installs the completed file. A verified local cache hit performs no request.
+The operator endpoint and downloader together perform exactly one GET for a selected missing blob,
+never use `HEAD` or `Range`, never follow redirects or retry, cap bytes before and during streaming,
+verify supplied metadata, and atomically install the completed file. A verified local cache hit
+performs no request. The endpoint is production-only, bearer-authenticated, uncached, and has no
+CORS grant; the Blob master token remains inside Vercel.
 
 > **Production telemetry must never be downloaded through the Vercel dashboard, a browser, the
 > Codex Chrome bridge, or browser automation.** Dashboard activity was not the primary cause of the

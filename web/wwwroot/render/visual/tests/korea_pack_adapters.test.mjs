@@ -12,9 +12,9 @@ test("pack resource URLs are versioned beside the selected visual profile", () =
     packResourceUrl(
       "effects/guns.effects.json",
       "https://game.test/content/packs/korea-1950s/visual-profile.json?old=1",
-      "0.2.1",
+      "0.2.2",
     ),
-    "https://game.test/content/packs/korea-1950s/effects/guns.effects.json?packVersion=0.2.1",
+    "https://game.test/content/packs/korea-1950s/effects/guns.effects.json?packVersion=0.2.2",
   );
 });
 
@@ -26,7 +26,7 @@ test("environment adapter attaches, consumes presentation frame inputs, and disp
   const group = new THREE.Group();
   const factory = createKoreaEnvironmentFactory(THREE, {
     profileUrl: "https://game.test/content/packs/korea-1950s/visual-profile.json",
-    packVersion: "0.2.1",
+    packVersion: "0.2.2",
     sunDirection: new THREE.Vector3(1, 2, 3),
     loadEnvironment: async (_three, options) => {
       calls.push(["load", options]);
@@ -57,7 +57,7 @@ test("environment adapter attaches, consumes presentation frame inputs, and disp
   adapter.update({ elapsedSeconds: 12.5 }, context);
   assert.equal(calls[0][1].qualityTier, "desktop");
   assert.equal(calls[0][1].anisotropy, 4);
-  assert.match(calls[0][1].oceanUrl, /ocean\.material\.json\?packVersion=0\.2\.1$/);
+  assert.match(calls[0][1].oceanUrl, /ocean\.material\.json\?packVersion=0\.2\.2$/);
   assert.deepEqual(
     [calls[0][1].fogColor, calls[0][1].fogNear, calls[0][1].fogFar],
     ["#ABCDEF", 1234, 56789],
@@ -76,7 +76,7 @@ test("effects adapter dispatches only declared bindings and owns its scene lifec
   const calls = [];
   const factory = createKoreaEffectsFactory(THREE, {
     profileUrl: "https://game.test/content/packs/korea-1950s/visual-profile.json",
-    packVersion: "0.2.1",
+    packVersion: "0.2.2",
     loadEffects: async (_three, options) => {
       calls.push(["load", options.profileUrl, options.qualityTier]);
       return {

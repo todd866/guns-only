@@ -98,8 +98,22 @@ public sealed class DetentLayer {
     /// earlier configuration already brought below that stop.
     public void ConfigureFor(AircraftParams parameters) {
         ArgumentNullException.ThrowIfNull(parameters);
-        double leverStop = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.35);
+        double leverStop = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.65);
         _throttleLever = System.Math.Clamp(_throttleLever, 0.0, leverStop);
+        Throttle = _throttleLever;
+        Command = Command with { Throttle = Throttle };
+    }
+
+    /// <summary>
+    /// Stage a scenario-owned opening power setting at the same physical airframe stop used by
+    /// live input. This is an initialization boundary, not an in-flight throttle teleport.
+    /// </summary>
+    public void ConfigureFor(AircraftParams parameters, double initialThrottle) {
+        ArgumentNullException.ThrowIfNull(parameters);
+        if (!double.IsFinite(initialThrottle) || initialThrottle < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(initialThrottle));
+        double leverStop = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.65);
+        _throttleLever = System.Math.Clamp(initialThrottle, 0.0, leverStop);
         Throttle = _throttleLever;
         Command = Command with { Throttle = Throttle };
     }
@@ -305,7 +319,7 @@ public sealed class DetentLayer {
         autoThr = System.Math.Clamp(autoThr, 0.0, 0.95);
         // The lever stop is an airframe capability. A dry-thrust Sabre stops at MIL (1.0),
         // while an afterburning definition may expose the full staged range to 1.35.
-        double leverStop = System.Math.Clamp(p.MaxThrustFraction, 0.0, 1.35);
+        double leverStop = System.Math.Clamp(p.MaxThrustFraction, 0.0, 1.65);
         if (ApproachMode && !_manualThrottle) {
             _throttleLever = System.Math.Min(autoThr, leverStop); // track the real lever for smooth takeover
         } else {
@@ -398,13 +412,13 @@ public sealed class DetentLayer {
 
         return System.Math.Clamp(ThrottleForRequiredThrust(requiredThrustN,
             state.Position.Y, mach, parameters, atmosphere), 0.0,
-            System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.35));
+            System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.65));
     }
 
     static double ThrottleForRequiredThrust(double requiredThrustN, double altitudeM,
         double mach, in AircraftParams parameters, IAtmosphereModel atmosphere) {
         if (requiredThrustN <= 0.0 || parameters.ThrustMaxN <= 0.0) return 0.0;
-        double stop = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.35);
+        double stop = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.65);
         if (stop <= 0.0) return 0.0;
 
         if (parameters.PropulsionModel != PropulsionModelKind.J47Ge27) {

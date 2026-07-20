@@ -3,6 +3,11 @@
 Use these dependency-free Node.js tools for every production telemetry retrieval. They are designed
 to make the network cost visible and mechanically bounded.
 
+When the private store's master credential is intentionally unavailable on the local machine, use
+`admin.mjs` with the separate operator credential. The production-only endpoint keeps the Blob
+master token inside Vercel and permits only one bounded list page or one already-selected immutable
+chunk. It has no write, delete, CORS, retry, Range, or automatic-pagination path.
+
 > **Never download telemetry with the Vercel dashboard, an ordinary browser, the Codex Chrome
 > bridge, or browser automation. Do not automate dashboard Blob list/detail views.** Use only the
 > local commands below. Dashboard activity is not the primary cause of the historical transfer
@@ -71,11 +76,32 @@ node tools/telemetry/list.mjs --prefix 'telemetry/' --limit 50 \
   > /tmp/guns-only-telemetry-page.json
 ```
 
+Or, with the narrower operator credential, write the same single metadata page directly as a
+mode-`0600` file (the command refuses to replace an existing path):
+
+```sh
+export TELEMETRY_ADMIN_TOKEN='load-this-from-a-secure-local-source'
+node tools/telemetry/admin.mjs list \
+  --prefix 'telemetry/' --limit 50 \
+  --output '/tmp/guns-only-telemetry-page.json'
+```
+
 Review that bounded JSON page locally and select one blob. Copy its `url`, `size`, and `etag` into a
 single download command:
 
 ```sh
 node tools/telemetry/download.mjs \
+  --url 'https://STORE.private.blob.vercel-storage.com/telemetry/SESSION/CHUNK.jsonl.gz' \
+  --output '/tmp/guns-only-telemetry/CHUNK.jsonl.gz' \
+  --expected-size 12345 \
+  --etag 'ETAG_FROM_LIST'
+```
+
+The operator equivalent makes one request through the authenticated gate and requires the selected
+list row's exact size and ETag:
+
+```sh
+node tools/telemetry/admin.mjs get \
   --url 'https://STORE.private.blob.vercel-storage.com/telemetry/SESSION/CHUNK.jsonl.gz' \
   --output '/tmp/guns-only-telemetry/CHUNK.jsonl.gz' \
   --expected-size 12345 \

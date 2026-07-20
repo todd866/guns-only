@@ -63,8 +63,6 @@ public sealed class ReactiveBandit : IBandit {
     const double ThreatRangeM = 1500.0;
     const double DefendSeconds = 3.4;
     const double DefendCooldownSeconds = 3.8;
-    const double EnergyEntryMps = 112.0;
-    const double EnergyExitMps = 142.0;
 
     // Uneven timing, direction, and G make the break readable as a jink rather than an orbit.
     // This is a fixed deterministic sequence, advanced only while a real defensive threat exists.
@@ -75,6 +73,12 @@ public sealed class ReactiveBandit : IBandit {
     readonly AircraftSim _sim;
     readonly Vec3D _fightCentre;
     readonly double _ceilingM;
+    readonly double _energyEntryMps;
+    readonly double _energyExitMps;
+    readonly double _lowSpeedMps;
+    readonly double _highSpeedMps;
+    readonly double _maximumThrottle;
+    readonly double _defensivePower;
     double _defendUntil = double.NegativeInfinity;
     double _defendCooldownUntil = double.NegativeInfinity;
     double _nextJinkAt = double.PositiveInfinity;
@@ -86,6 +90,17 @@ public sealed class ReactiveBandit : IBandit {
     public ReactiveBandit(AircraftState initial, AircraftParams parameters) {
         _sim = new AircraftSim(initial, parameters);
         _fightCentre = initial.Position;
+        // Scale the controller's energy gates from the staged fight speed. The original 180 m/s
+        // reference reproduces the Sabre thresholds; a modern public-data surrogate no longer
+        // chops power until it decelerates into a Korean-War speed band.
+        double referenceSpeedMps = System.Math.Max(180.0, initial.Speed);
+        _energyEntryMps = referenceSpeedMps * (112.0 / 180.0);
+        _energyExitMps = referenceSpeedMps * (142.0 / 180.0);
+        _lowSpeedMps = referenceSpeedMps * (145.0 / 180.0);
+        _highSpeedMps = referenceSpeedMps * (205.0 / 180.0);
+        _maximumThrottle = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.65);
+        _defensivePower = System.Math.Min(_maximumThrottle,
+            _maximumThrottle > 1.35 ? 1.35 : 1.05);
         // Preserve the original low-level fight volume while allowing a replacement fighter to
         // meet a high-altitude ownship near its present altitude (for example, after the AWACS beat).
         _ceilingM = System.Math.Max(CeilingM, initial.Position.Y + 1000.0);
@@ -141,6 +156,14 @@ public sealed class ReactiveBandit : IBandit {
     public double ThrustFraction => _sim.ThrustFraction;
     public BanditTactic Tactic { get; private set; } = BanditTactic.Acquire;
     public PilotCommand LastCommand { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
+
+    /// <summary>
+    /// Preserve the real engine spool state when scenario geometry hands this controller an
+    /// already-flying aircraft. The controller changes pilot intent; it must not replace the
+    /// physical engine with a freshly initialized one.
+    /// </summary>
+    internal void SeedEnginePowerFraction(double powerFraction) =>
+        _sim.SeedEnginePowerFraction(powerFraction);
 
     public bool WantsToFire(in AircraftState player) => !CatastrophicallyDamaged
         && Tactic == BanditTactic.Acquire
@@ -210,8 +233,8 @@ public sealed class ReactiveBandit : IBandit {
             return;
         }
 
-        if (own.Speed < EnergyEntryMps
-            || (Tactic == BanditTactic.Energy && own.Speed < EnergyExitMps)) {
+        if (own.Speed < _energyEntryMps
+            || (Tactic == BanditTactic.Energy && own.Speed < _energyExitMps)) {
             Tactic = BanditTactic.Energy;
             return;
         }
@@ -261,7 +284,10 @@ public sealed class ReactiveBandit : IBandit {
         double angle = AngleTo(aim);
         // Moderate rate fighter: enough to point and threaten, below an ace's max-performance pull.
         double g = System.Math.Clamp(1.15 + angle * 1.45, 1.15, 3.20);
-        double throttle = State.Speed < 145.0 ? 1.05 : State.Speed > 205.0 ? 0.45 : 0.84;
+        double throttle = State.Speed < _lowSpeedMps
+            ? System.Math.Min(_maximumThrottle, 1.05)
+            : State.Speed > _highSpeedMps ? System.Math.Min(_maximumThrottle, 0.45)
+            : System.Math.Min(_maximumThrottle, 0.84);
         return new PilotCommand(g, bank, throttle, 0.0);
     }
 
@@ -282,7 +308,7 @@ public sealed class ReactiveBandit : IBandit {
             bank = LimitedBankTo(safe, 0.92);
             g = 2.35;
         }
-        return new PilotCommand(g, bank, 1.05, direction * 0.10);
+        return new PilotCommand(g, bank, _defensivePower, direction * 0.10);
     }
 
     PilotCommand EnergyCommand(in AircraftState player) {
@@ -291,10 +317,12 @@ public sealed class ReactiveBandit : IBandit {
         // bandit straight back to acquire; low altitude instead commands a safe climbing turn.
         if (own.Position.Y < FloorM + 180.0) {
             var climb = KeepAimInFightVolume(player.Position with { Y = FloorM + 650.0 });
-            return new PilotCommand(1.85, LimitedBankTo(climb, 0.65), 1.28, 0.0);
+            return new PilotCommand(1.85, LimitedBankTo(climb, 0.65),
+                _maximumThrottle, 0.0);
         }
         var extension = own.Position + own.ForwardDir() * 1200.0 + new Vec3D(0.0, -280.0, 0.0);
-        return new PilotCommand(0.55, LimitedBankTo(extension, 0.38), 1.28, 0.0);
+        return new PilotCommand(0.55, LimitedBankTo(extension, 0.38),
+            _maximumThrottle, 0.0);
     }
 
     PilotCommand ReturnCommand() {
@@ -302,7 +330,9 @@ public sealed class ReactiveBandit : IBandit {
         double bank = LimitedBankTo(target, 0.95);
         double angle = AngleTo(target);
         double g = System.Math.Clamp(1.2 + angle * 1.15, 1.2, 2.8);
-        double throttle = State.Speed < 145.0 ? 1.05 : 0.72;
+        double throttle = State.Speed < _lowSpeedMps
+            ? System.Math.Min(_maximumThrottle, 1.05)
+            : System.Math.Min(_maximumThrottle, 0.72);
         return new PilotCommand(g, bank, throttle, 0.0);
     }
 
