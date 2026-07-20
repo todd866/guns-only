@@ -235,7 +235,11 @@ export function carrierPatternCue(state = {}, options = {}) {
   if (mode === "WAVE-OFF" || mode === "BOLTER") return phaseCue("WAVE-OFF", state, details);
 
   const finalCrossLimit = previousPhase === "FINAL" ? 450 : 360;
-  const finalGeometry = alongM < -350 && alongM > -12_000
+  // Keep final guidance through the ramp and wire area. The old -350 m upper bound dropped a
+  // correctly configured aircraft into JOIN during the most workload-intensive final seconds.
+  // +30 m matches the simulation's authoritative approach-slot boundary; wave-off and bolter
+  // states are already handled above.
+  const finalGeometry = alongM <= 30 && alongM > -12_000
     && Math.abs(crossM) <= finalCrossLimit;
   // Inside roughly one mile, landing configuration + approach energy is sufficient recovery
   // intent even if a frame arrives without closure. Wave-off/bolter modes are handled above.

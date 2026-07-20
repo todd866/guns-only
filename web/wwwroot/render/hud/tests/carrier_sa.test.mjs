@@ -138,6 +138,19 @@ test("pattern coach distinguishes astern initial from final using energy, mode, 
   assert.equal(liveCloseSnapshot.phase, "FINAL",
     "authoritative positive closure and landing configuration must beat rounded vector ambiguity");
   assert.match(liveCloseSnapshot.instruction, /ON-SPEED AOA/);
+
+  const liveInCloseSnapshot = carrierPatternCue(pattern({
+    mode: "FREE",
+    approach: true,
+    deck_along: -332,
+    deck_cross: -2,
+    deck_height: 61,
+    deck_closure_kts: 100,
+    indicated_airspeed_kts: 122,
+  }));
+  assert.equal(liveInCloseSnapshot.phase, "FINAL",
+    "in-close guidance must remain FINAL through the ramp instead of reverting to JOIN");
+  assert.equal(liveInCloseSnapshot.title, "FINAL · BALL");
 });
 
 test("pattern coach classifies port downwind, the 180, and waveoff from relative motion", () => {
