@@ -289,6 +289,48 @@ public static class FlightModel {
         GenericMilitaryFuelFlowLbPerMinute: 250.0,
         GenericAfterburnerFuelFlowLbPerMinute: 650.0);
 
+    /// F-35C PUBLIC-DATA CARRIER SURROGATE. The public anchors are the programme card's
+    /// 668 ft2 wing, 34,800 lb empty weight, 19,750 lb internal fuel, 7.5 G limit and
+    /// 25,000/40,000 lb military/max uninstalled thrust ratings. The polar, control derivatives,
+    /// inertia and fuel-flow values remain rounded reduced-order gameplay surrogates; this is not
+    /// an OEM flight-control or approach-performance deck.
+    /// https://www.f35.com/content/dam/lockheed-martin/aero/f35/documents/FG21-00000_001F35FastFacts2_2021.pdf
+    public static readonly AircraftParams F35CPublicDataCarrierSurrogate = new(
+        MassKg: 22000.0,
+        WingAreaM2: 62.1,
+        ThrustMaxN: 111200.0,
+        CD0: 0.021, InducedK: 0.052, CLMax: 1.55, CLMin: -0.68,
+        RollRateMaxRad: 2.2, BankTau: 0.25,
+        MCrit: 0.92, WaveDragK: 78.0,
+        SpoolUpTau: 1.5, SpoolDownTau: 0.9,
+        CLAlpha: 4.7,
+        IxxKgM2: 72000.0, IyyKgM2: 300000.0, IzzKgM2: 345000.0,
+        RollStiffnessNmRad: 1150000.0, PitchStiffnessNmRad: 2850000.0,
+        YawStiffnessNmRad: 950000.0,
+        RollDampingNms: 390000.0, PitchDampingNms: 1250000.0,
+        YawDampingNms: 560000.0,
+        RollMomentMaxNm: 1250000.0, PitchMomentMaxNm: 3000000.0,
+        YawMomentMaxNm: 1150000.0,
+        ApproachPitchStiffnessNmRad: 620000.0,
+        ApproachPitchMomentMaxNm: 520000.0,
+        ClBeta: -0.058, ClP: -0.49, ClR: 0.10,
+        ClDeltaA: 0.098, ClDeltaR: 0.031,
+        LateralDerivativeProfileId: "f35c-public-data-carrier-surrogate-v1",
+        ManualPitchRateMaxRad: 0.76,
+        FightRollRateMaxRad: 2.2,
+        CompatibilityRollRateMaxRad: 2.2, CompatibilityBankTau: 0.25,
+        YawBetaStiffnessNmRad: 840000.0, RollHoldDampingNms: 0.0,
+        PositiveStructuralLimitG: 7.5, MaxPerformFraction: 1.0,
+        NormalPullUsesMaxPerformance: true,
+        MaxThrustFraction: 1.60,
+        HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 2.9,
+        WingSpanM: 13.1,
+        PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
+        FuelFreeMassKg: 15785.0,
+        GenericIdleFuelFlowLbPerMinute: 24.0,
+        GenericMilitaryFuelFlowLbPerMinute: 175.0,
+        GenericAfterburnerFuelFlowLbPerMinute: 460.0);
+
     /// Su-27S PUBLIC-DATA SURROGATE for the same bounded visual exercise. The Ukrainian state
     /// export catalogue anchors public dimensions, mass, installed gun and engine thrust class.
     /// Aerodynamic/control/fuel coefficients are rounded mission surrogates. No radar, RWR,

@@ -29,6 +29,18 @@ python3 -m http.server 8877
 
 Open `http://localhost:8877/`.
 
+Production must never be deployed from the checked-in `web/wwwroot` source tree: it does not
+contain the generated `_framework` WebAssembly payload. Use the guarded release command instead:
+
+```sh
+bin/deploy-web --preview
+bin/deploy-web --prod
+```
+
+The command publishes to an isolated directory, rejects missing/incomplete Blazor assets and leaked
+test files, verifies the deployment URL, and only then promotes a production deployment. It refuses
+a dirty worktree unless `GUNS_ALLOW_DIRTY_DEPLOY=1` is set deliberately.
+
 ## Layout
 
 - `WebBridge.cs` — temporary JavaScript-facing projection over the production simulation session.

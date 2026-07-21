@@ -82,6 +82,15 @@ public sealed record AircraftCapability(
         "systems.modern-airborne.not-simulated.v1", false, true,
         "https://www.af.mil/About-Us/Fact-Sheets/Display/Article/104506/f-22-raptor/",
         AutoGcasCapabilityProfile.ModernCrewedPublicDataSurrogate);
+    public static AircraftCapability F35CCarrierSurrogate { get; } = new(
+        "aircraft.f35c.public-data-carrier-surrogate.v1",
+        "F-35C public-data carrier surrogate",
+        "presentation.vehicle.f35c.public-data-surrogate.v1",
+        // The generic recovery system supplies only pilot-visible gear/flap state and the physical
+        // downlock boundary needed by the carrier model. It is not labelled as an F-35 utility or
+        // flight-control system simulation.
+        "systems.carrier-recovery.generic-surrogate.v1", true, true,
+        "https://www.f35.com/content/dam/lockheed-martin/aero/f35/documents/FG21-00000_001F35FastFacts2_2021.pdf");
     public static AircraftCapability Su27SSurrogate { get; } = new(
         "aircraft.su27s.public-data-surrogate.v1", "Su-27S public-data surrogate",
         "presentation.vehicle.su27s.public-data-surrogate.v1",
@@ -147,6 +156,15 @@ public enum MaintenanceScenarioKind {
     F86EmergencyGearRecovery
 }
 
+/// <summary>
+/// Keeps a sortie alive across successive, physically distinct opponents. Resources remain with
+/// the player; only target-owned state is replaced after the destruction presentation has had a
+/// short, deterministic dwell.
+/// </summary>
+public sealed record ContinuousCombatConfig(
+    double ReplacementDelaySeconds = 2.5,
+    double? ReplacementSpeedMps = null);
+
 public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit, IExecutionLaw Law,
     List<(double T, PilotCommand Cmd)> BanditTimeline,
     AircraftParams? PlayerParams = null, AircraftParams? BanditParams = null,
@@ -161,7 +179,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     bool UsesNeutralMergeBandit = false,
     DroneRaidScenarioDefinition? DroneRaid = null,
     PilotPhysiologyProfile? PlayerPhysiologyProfile = null,
-    bool RecoveryCompletesSortie = false) {
+    bool RecoveryCompletesSortie = false,
+    ContinuousCombatConfig? ContinuousCombat = null) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
@@ -181,10 +200,15 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             ? new ReactiveBandit(Bandit, BanditAir)
             : new RailBandit(Bandit, BanditAir, BanditTimeline);
 
-    /// Deterministic merge factory retained for a future continuous-operations ruleset. The
-    /// current discrete SimulationSession finishes after one engagement and does not call it.
-    public IBandit CreateNextBandit(in AircraftState player, int engagementNumber) =>
-        ReactiveBandit.SpawnForMerge(player, BanditAir, engagementNumber);
+    /// Deterministic merge factory for a continuous-operations ruleset. Successor aircraft inherit
+    /// the mission's staged opponent speed rather than falling back to a Korea-era constant.
+    public IBandit CreateNextBandit(in AircraftState player, int engagementNumber) {
+        double replacementSpeedMps = ContinuousCombat is { } continuous
+            ? continuous.ReplacementSpeedMps ?? Bandit.Speed
+            : 180.0;
+        return ReactiveBandit.SpawnForMerge(
+            player, BanditAir, engagementNumber, replacementSpeedMps);
+    }
 }
 
 public sealed class RailBandit : IBandit {
@@ -368,6 +392,51 @@ public static class Beats {
     }
 
     /// <summary>
+    /// Reduced-order F-35C conversion sortie used by the player-facing Raptor programme. Public
+    /// geometry, mass, fuel and thrust anchors identify the aircraft; the carrier model and generic
+    /// recovery configuration are deliberately not represented as an OEM F-35 systems simulation.
+    /// The historical F-86 carrier fixture remains available through <see cref="CarrierApproach"/>.
+    /// </summary>
+    public static BeatSetup F35CCarrierApproach(
+        GunsOnly.Sim.Carrier.DeckConfiguration configuration =
+            GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
+        var carrier = new GunsOnly.Sim.Carrier(
+            deckCentre: new Vec3D(0, 20, 0), headingRad: 0, speedMps: 3,
+            deckAltM: 20, deckLengthM: 250, deckWidthM: 30,
+            configuration: configuration);
+        var start = carrier.LandingPoint(along: -1700, height: 100);
+        return new BeatSetup("F-35C carrier conversion",
+            Player: new AircraftState(start, 70, -0.06, carrier.LandingHeadingRad, 0,
+                FlightModel.F35CPublicDataCarrierSurrogate.MassKg),
+            Bandit: new AircraftState(new Vec3D(0, 1500, 50000), 120, 0, 0, 0,
+                FlightModel.Sabre.MassKg),
+            Law: new ApproachLaw(),
+            BanditTimeline: new() {
+                (0.0, new PilotCommand(1.0, 0.0, 0.30, 0)),
+            },
+            PlayerParams: FlightModel.F35CPublicDataCarrierSurrogate,
+            BanditParams: FlightModel.Sabre,
+            Carrier: carrier,
+            UsesReactiveBandit: false,
+            Combat: CombatConfig.CarrierRecoveryOnly,
+            Fuel: new FuelConfig(
+                CapacityLb: 19750.0,
+                InitialFuelLb: 9000.0,
+                BingoThresholdLb: 3000.0,
+                ConsumesFuel: true),
+            InitialThrottle: 0.82,
+            Mission: new MissionContract(
+                "mission.modern.f35c.carrier-conversion.public-data-surrogate.v1",
+                MissionContentFamily.ModernPublicDataSurrogate,
+                PublicDataSurrogate: true,
+                RulesOfEngagement: "RECOVERY_ONLY",
+                Era: "MODERN_PUBLIC_DATA_EXERCISE"),
+            PlayerCapability: AircraftCapability.F35CCarrierSurrogate,
+            PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
+            RecoveryCompletesSortie: true);
+    }
+
+    /// <summary>
     /// MAINTENANCE TEST FLIGHT — airborne utility-hydraulic loss followed by an evidence-driven
     /// emergency-gear procedure and carrier recovery. The fault identity remains scenario-private;
     /// the pilot receives only pressure, handle, and independent leg indications.
@@ -443,7 +512,8 @@ public static class Beats {
             PlayerCapability: AircraftCapability.F22ASurrogate,
             BanditCapability: AircraftCapability.Su27SSurrogate,
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(),
-            PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference);
+            PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
+            ContinuousCombat: new ContinuousCombatConfig());
     }
 
     /// <summary>

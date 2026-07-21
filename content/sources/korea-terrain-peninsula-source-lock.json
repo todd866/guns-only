@@ -1,0 +1,998 @@
+{
+  "schemaVersion": "1.0.0",
+  "sourceLockId": "source-lock.korea-terrain.peninsula.v1",
+  "checkedAt": "2026-07-21",
+  "canonicalCoverage": {
+    "id": "korean-peninsula",
+    "aoiWgs84": [
+      124.0,
+      33.0,
+      131.0,
+      43.0
+    ],
+    "description": "Peninsula-wide source envelope, including Jeju and enough adjacent sea for carrier mission placement. Runtime regions are derived from this stable geodetic index rather than one monolithic projected raster.",
+    "sourceCellRange": {
+      "minimumLatitudeCell": 33,
+      "maximumLatitudeCell": 42,
+      "minimumLongitudeCell": 124,
+      "maximumLongitudeCell": 130
+    },
+    "implicitWaterCells": [
+      "N33E124",
+      "N33E125",
+      "N33E127",
+      "N34E124",
+      "N35E124",
+      "N35E130",
+      "N36E124",
+      "N36E130",
+      "N38E129",
+      "N38E130",
+      "N39E129",
+      "N39E130",
+      "N40E130"
+    ]
+  },
+  "runtimeRegions": [
+    {
+      "id": "central-front",
+      "displayName": "Kaesong\u2013Iron Triangle\u2013Hwachon",
+      "aoiWgs84": [
+        126.5,
+        37.85,
+        127.8,
+        38.75
+      ],
+      "referenceOriginWgs84": [
+        127.15,
+        38.3
+      ],
+      "workingCrs": "EPSG:32652",
+      "verticalCrs": "EPSG:3855",
+      "acquisitionCells": [
+        "N37E126",
+        "N37E127",
+        "N38E126",
+        "N38E127"
+      ]
+    }
+  ],
+  "products": [
+    {
+      "id": "cop-dem-glo-30-aws-edition-04",
+      "owner": "European Union / ESA / DLR e.V. / Airbus Defence and Space GmbH",
+      "productId": "Copernicus DEM GLO-30 DGED",
+      "edition": "04",
+      "editionDate": "2019-07-31",
+      "distributionSnapshot": "AWS Open Data objects last modified 2022-05-09",
+      "horizontalCrs": "EPSG:4326",
+      "verticalCrs": "EPSG:3855",
+      "sampleArcSeconds": 1,
+      "heightEncoding": "GeoTIFF float32 orthometric metres",
+      "waterMaskEncoding": "GeoTIFF uint8; 0 land, 1 ocean, 2 lake, 3 river",
+      "licence": {
+        "name": "Licence for Copernicus DEM instance COP-DEM-GLO-30-F Global 30m Full, Free & Open",
+        "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E126_00_DEM/INFO/eula_F.pdf",
+        "artifactPolicy": "commit-derived",
+        "requiredNotices": [
+          "produced using Copernicus WorldDEM-30 \u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+          "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30."
+        ]
+      },
+      "objects": [
+        {
+          "cell": "N33E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N33_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N33_00_E126_00_DEM/Copernicus_DSM_COG_10_N33_00_E126_00_DEM.tif",
+          "bytes": 8820433,
+          "sha256": "61cdc972f8e3a8c05da9fd52ed965f86eb6e21579f583a69da0a566211059221"
+        },
+        {
+          "cell": "N33E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N33_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N33_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N33_00_E126_00_WBM.tif",
+          "bytes": 97122,
+          "sha256": "d72601fce09824caba10d3daa1e08127131f28a1f17581048440f43fba9eb38c"
+        },
+        {
+          "cell": "N33E128",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N33_00_E128_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N33_00_E128_00_DEM/Copernicus_DSM_COG_10_N33_00_E128_00_DEM.tif",
+          "bytes": 105848,
+          "sha256": "8d0d95ed8e17efc0c6944efcfa0dd31ab32bc9ffe45e55674d9cfe3c4c31b6d3"
+        },
+        {
+          "cell": "N33E128",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N33_00_E128_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N33_00_E128_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N33_00_E128_00_WBM.tif",
+          "bytes": 69172,
+          "sha256": "b861315786348758dde96cca608f49e258815a43220aab73ba6eaccef7e8e975"
+        },
+        {
+          "cell": "N33E129",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N33_00_E129_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N33_00_E129_00_DEM/Copernicus_DSM_COG_10_N33_00_E129_00_DEM.tif",
+          "bytes": 11116872,
+          "sha256": "446d35312057a8621bd2b0858c05d8c4c2f7fc7761adcf410b27b7dc4d0dc451"
+        },
+        {
+          "cell": "N33E129",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N33_00_E129_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N33_00_E129_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N33_00_E129_00_WBM.tif",
+          "bytes": 201230,
+          "sha256": "6a45a35e23e6288fbd0fafd5ebfcae2f057757bed4a0d57fa30cd7f12937b0ae"
+        },
+        {
+          "cell": "N33E130",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N33_00_E130_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N33_00_E130_00_DEM/Copernicus_DSM_COG_10_N33_00_E130_00_DEM.tif",
+          "bytes": 37476173,
+          "sha256": "974a4ee09503e4d08ad609ce1ff99a23e6d13461d38a0535e11c4546415417c0"
+        },
+        {
+          "cell": "N33E130",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N33_00_E130_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N33_00_E130_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N33_00_E130_00_WBM.tif",
+          "bytes": 205718,
+          "sha256": "c512801d4df2e75c7afc18e0f624025d12d5b855ba9640e751a9ffd44c911ad4"
+        },
+        {
+          "cell": "N34E125",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N34_00_E125_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E125_00_DEM/Copernicus_DSM_COG_10_N34_00_E125_00_DEM.tif",
+          "bytes": 1395399,
+          "sha256": "e6665fa5d115376ce6ce3ffb52ddf231a9876f2448760bb1f930295ea3fa09cd"
+        },
+        {
+          "cell": "N34E125",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N34_00_E125_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E125_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N34_00_E125_00_WBM.tif",
+          "bytes": 115678,
+          "sha256": "dbb32c9af01a9774591b0e4264ce3c251bbd6f82e03ce61734051237ca5622b8"
+        },
+        {
+          "cell": "N34E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N34_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E126_00_DEM/Copernicus_DSM_COG_10_N34_00_E126_00_DEM.tif",
+          "bytes": 26025882,
+          "sha256": "7e886d6b9a2e951dedc9176113418930e4657c17c92845c1d7c8a5a14a4e8e9e"
+        },
+        {
+          "cell": "N34E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N34_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N34_00_E126_00_WBM.tif",
+          "bytes": 327432,
+          "sha256": "29d6a4e48af4022d160329a361b946c78da941b6e86cbd5eb81787fc76d56a41"
+        },
+        {
+          "cell": "N34E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N34_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E127_00_DEM/Copernicus_DSM_COG_10_N34_00_E127_00_DEM.tif",
+          "bytes": 17762299,
+          "sha256": "4372a3c58515e5a3c769dcfa7aae50bd9b528686f20156da3d0f73dfa2db3f99"
+        },
+        {
+          "cell": "N34E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N34_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N34_00_E127_00_WBM.tif",
+          "bytes": 236310,
+          "sha256": "6e51b0c85f9b0a7e469cb49428bb51c25b947068189ff745322c483f17db1500"
+        },
+        {
+          "cell": "N34E128",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N34_00_E128_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E128_00_DEM/Copernicus_DSM_COG_10_N34_00_E128_00_DEM.tif",
+          "bytes": 5970354,
+          "sha256": "babf0edcea1bb270ceb3f3fb45aa095676f7555f6e9856ddb09111ac0c0e3b19"
+        },
+        {
+          "cell": "N34E128",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N34_00_E128_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E128_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N34_00_E128_00_WBM.tif",
+          "bytes": 153428,
+          "sha256": "cef1aeec9d9bb794c74a13d9aa18f0de61330fcb40544559ba65ee065b73a963"
+        },
+        {
+          "cell": "N34E129",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N34_00_E129_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E129_00_DEM/Copernicus_DSM_COG_10_N34_00_E129_00_DEM.tif",
+          "bytes": 4158318,
+          "sha256": "5eed44d79aa4f08e4fced5224e951d08ff3a30f6c29d9055cd8e427e1a993837"
+        },
+        {
+          "cell": "N34E129",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N34_00_E129_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E129_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N34_00_E129_00_WBM.tif",
+          "bytes": 122850,
+          "sha256": "c180e6d00a8bd1698d7bb44789a9f82b0a4b7b5505ffa4e1819f21888b8aa00f"
+        },
+        {
+          "cell": "N34E130",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N34_00_E130_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E130_00_DEM/Copernicus_DSM_COG_10_N34_00_E130_00_DEM.tif",
+          "bytes": 2216269,
+          "sha256": "ad2302418a119146ca91c4e760596d83fb80631e991fce842ab0ca7074cfd24e"
+        },
+        {
+          "cell": "N34E130",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N34_00_E130_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N34_00_E130_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N34_00_E130_00_WBM.tif",
+          "bytes": 81797,
+          "sha256": "24968d64d5e8c398323a8e635c8c844fdccca0a64b6de5bf3d116c74e1b26c79"
+        },
+        {
+          "cell": "N35E125",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N35_00_E125_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E125_00_DEM/Copernicus_DSM_COG_10_N35_00_E125_00_DEM.tif",
+          "bytes": 132624,
+          "sha256": "d963668157d5c75ec0d03d922bef77516f834ca6ff140bf60670857e103b8136"
+        },
+        {
+          "cell": "N35E125",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N35_00_E125_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E125_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N35_00_E125_00_WBM.tif",
+          "bytes": 71173,
+          "sha256": "7c1f69031cf1e02ac67f4d9b7002d9bf3385676268b041909a346b7ae3cb191d"
+        },
+        {
+          "cell": "N35E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N35_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E126_00_DEM/Copernicus_DSM_COG_10_N35_00_E126_00_DEM.tif",
+          "bytes": 28862336,
+          "sha256": "de25b78d939cea3d3582cba2845ea99b22770b2d246572f21602bcfce126cd32"
+        },
+        {
+          "cell": "N35E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N35_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N35_00_E126_00_WBM.tif",
+          "bytes": 233414,
+          "sha256": "48909b2c913fbe38af8a8a562693b369d374d2facf111a28c400cc71c2b713f9"
+        },
+        {
+          "cell": "N35E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N35_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E127_00_DEM/Copernicus_DSM_COG_10_N35_00_E127_00_DEM.tif",
+          "bytes": 48350062,
+          "sha256": "cba7be6c567073110da11ace1a454b5fc37ea604c583f60ff79ef08766a360a2"
+        },
+        {
+          "cell": "N35E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N35_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N35_00_E127_00_WBM.tif",
+          "bytes": 140941,
+          "sha256": "b268b9f21fb0b291840f3fab1c759e5bc88b60f188040ecef27e9a560d669a63"
+        },
+        {
+          "cell": "N35E128",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N35_00_E128_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E128_00_DEM/Copernicus_DSM_COG_10_N35_00_E128_00_DEM.tif",
+          "bytes": 48282057,
+          "sha256": "e0dded2916256a50ba6972590676269eea48496ae9a1f89a0b37353fb51628be"
+        },
+        {
+          "cell": "N35E128",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N35_00_E128_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E128_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N35_00_E128_00_WBM.tif",
+          "bytes": 217938,
+          "sha256": "07ca181812a98616404ac52fe45f9bcadb6e8f331e5328d62317f655fc483ae1"
+        },
+        {
+          "cell": "N35E129",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N35_00_E129_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E129_00_DEM/Copernicus_DSM_COG_10_N35_00_E129_00_DEM.tif",
+          "bytes": 18359741,
+          "sha256": "2749f616c0a47b8e510df77026c4578b2cb869b0d1940d0544345fdb18faad37"
+        },
+        {
+          "cell": "N35E129",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N35_00_E129_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E129_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N35_00_E129_00_WBM.tif",
+          "bytes": 114012,
+          "sha256": "7b77113570363831ea94bf9817ba171f7133c28f3a259e8183aa3ecc108900fc"
+        },
+        {
+          "cell": "N36E125",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N36_00_E125_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N36_00_E125_00_DEM/Copernicus_DSM_COG_10_N36_00_E125_00_DEM.tif",
+          "bytes": 146640,
+          "sha256": "9f7a2f0061c33aea91632c2c88b6fae114ead5cd2fd96420baf342c2ac06923e"
+        },
+        {
+          "cell": "N36E125",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N36_00_E125_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N36_00_E125_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N36_00_E125_00_WBM.tif",
+          "bytes": 71488,
+          "sha256": "612df6ee25659dd9908d52a12016410e391b189d11d0afab33fed8913cdaa560"
+        },
+        {
+          "cell": "N36E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N36_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N36_00_E126_00_DEM/Copernicus_DSM_COG_10_N36_00_E126_00_DEM.tif",
+          "bytes": 31029477,
+          "sha256": "a53f177c57f1b9477e59d3426b65ecd6f7645891554d87e2aaf444a3474b3f55"
+        },
+        {
+          "cell": "N36E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N36_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N36_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N36_00_E126_00_WBM.tif",
+          "bytes": 211813,
+          "sha256": "59ed8c56bb5cf0f024e0a6d6953d04b4fec3f6617f81603c06c7bed4811459df"
+        },
+        {
+          "cell": "N36E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N36_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N36_00_E127_00_DEM/Copernicus_DSM_COG_10_N36_00_E127_00_DEM.tif",
+          "bytes": 49583060,
+          "sha256": "5acd8774fc11205e1029b20a59f3444750ac5546a5186e936b8bf334a0f9f48e"
+        },
+        {
+          "cell": "N36E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N36_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N36_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N36_00_E127_00_WBM.tif",
+          "bytes": 156363,
+          "sha256": "c433272ffe72d82de76ebe5a40af8f6212f4ce448360a4d3db816be9d8485043"
+        },
+        {
+          "cell": "N36E128",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N36_00_E128_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N36_00_E128_00_DEM/Copernicus_DSM_COG_10_N36_00_E128_00_DEM.tif",
+          "bytes": 48490284,
+          "sha256": "8af5b10b27529358db96d8b019c8c5fee09426dcc48a831fe5f16514febd47f8"
+        },
+        {
+          "cell": "N36E128",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N36_00_E128_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N36_00_E128_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N36_00_E128_00_WBM.tif",
+          "bytes": 148716,
+          "sha256": "d6ba8c3ae3a450011692b1fe85b21a42ce241c7c2b9fe934fa11c8a78e8482b2"
+        },
+        {
+          "cell": "N36E129",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N36_00_E129_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N36_00_E129_00_DEM/Copernicus_DSM_COG_10_N36_00_E129_00_DEM.tif",
+          "bytes": 21247924,
+          "sha256": "1ece0425f75768c8e557c49cd4dd3988f55b4eaa8b28a831ab21b8bbe5fe61a8"
+        },
+        {
+          "cell": "N36E129",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N36_00_E129_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N36_00_E129_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N36_00_E129_00_WBM.tif",
+          "bytes": 91159,
+          "sha256": "378c0a9f416443c6afc752acb2f50b9532be0499920a031a2becd8178b7bdcdf"
+        },
+        {
+          "cell": "N37E124",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N37_00_E124_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E124_00_DEM/Copernicus_DSM_COG_10_N37_00_E124_00_DEM.tif",
+          "bytes": 577794,
+          "sha256": "a6aecca0f6333383516fdb5819504f0446d0d413afeec9f9eeca4e247852f58d"
+        },
+        {
+          "cell": "N37E124",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N37_00_E124_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E124_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N37_00_E124_00_WBM.tif",
+          "bytes": 78313,
+          "sha256": "a6dbfd424f586be3fd3bad50d794dc6fea67855b42cb929394b0eadbc25e53a8"
+        },
+        {
+          "cell": "N37E125",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N37_00_E125_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E125_00_DEM/Copernicus_DSM_COG_10_N37_00_E125_00_DEM.tif",
+          "bytes": 8307868,
+          "sha256": "a983c349e5ef34fa3516929b26d0d25b1dd2c857a946c739d7c05561746cd378"
+        },
+        {
+          "cell": "N37E125",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N37_00_E125_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E125_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N37_00_E125_00_WBM.tif",
+          "bytes": 154519,
+          "sha256": "a3c62792369a7bffcbc3e820267640b16151b352c9c9cebf7182d428f243a962"
+        },
+        {
+          "cell": "N37E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N37_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E126_00_DEM/Copernicus_DSM_COG_10_N37_00_E126_00_DEM.tif",
+          "bytes": 29862574,
+          "sha256": "f530dd28308ecd6c5ceb0405dc1ffb7113bcafdec30d023de50f16dc433a274f"
+        },
+        {
+          "cell": "N37E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N37_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N37_00_E126_00_WBM.tif",
+          "bytes": 235750,
+          "sha256": "0ec61dc81702bad0d58389c784d064425d4f7464093f3fd8e815f59feaa14939"
+        },
+        {
+          "cell": "N37E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N37_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E127_00_DEM/Copernicus_DSM_COG_10_N37_00_E127_00_DEM.tif",
+          "bytes": 49403795,
+          "sha256": "4f8fef79da8c18ed9a9a0fb97b3d2695c4681181e013e039d87044e5479f7df6"
+        },
+        {
+          "cell": "N37E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N37_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N37_00_E127_00_WBM.tif",
+          "bytes": 157869,
+          "sha256": "d644c03e1f7949e6179832feaf5c34e211e2c2998cb9f78d67b898c7199bd53f"
+        },
+        {
+          "cell": "N37E128",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N37_00_E128_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E128_00_DEM/Copernicus_DSM_COG_10_N37_00_E128_00_DEM.tif",
+          "bytes": 45141829,
+          "sha256": "69036070795162395dcea060375abba2d448dc2a5b74949844784466191b707c"
+        },
+        {
+          "cell": "N37E128",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N37_00_E128_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E128_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N37_00_E128_00_WBM.tif",
+          "bytes": 88618,
+          "sha256": "58f5d36a03d4b17362b317912988e9dd5a326375f4b91de0dc2c53f30dd0ff1f"
+        },
+        {
+          "cell": "N37E129",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N37_00_E129_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E129_00_DEM/Copernicus_DSM_COG_10_N37_00_E129_00_DEM.tif",
+          "bytes": 8758373,
+          "sha256": "089d1ab46d897b9bc325249767fe3787d7cb54a1c614041b6f9b2935a8707c0a"
+        },
+        {
+          "cell": "N37E129",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N37_00_E129_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E129_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N37_00_E129_00_WBM.tif",
+          "bytes": 74474,
+          "sha256": "40c217d3afd859362d91b87b8795269b3b2fb3dfafa703c61ff5116612861b4c"
+        },
+        {
+          "cell": "N37E130",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N37_00_E130_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E130_00_DEM/Copernicus_DSM_COG_10_N37_00_E130_00_DEM.tif",
+          "bytes": 516549,
+          "sha256": "779be0ecc06dbaba9a3bbe4bfd2e83e760bb875e1a960cc6d2e21f75a5e1a0bf"
+        },
+        {
+          "cell": "N37E130",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N37_00_E130_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E130_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N37_00_E130_00_WBM.tif",
+          "bytes": 72331,
+          "sha256": "a6cbad9cd2ac13b3415a80c722b6a4d58b4e4cc9d31ba2d684d61c5d471b9d37"
+        },
+        {
+          "cell": "N38E124",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N38_00_E124_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E124_00_DEM/Copernicus_DSM_COG_10_N38_00_E124_00_DEM.tif",
+          "bytes": 3342624,
+          "sha256": "c7c725610e1dd2095d388305123f2370782213a981fed43c0fd5124ec44607f7"
+        },
+        {
+          "cell": "N38E124",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N38_00_E124_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E124_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N38_00_E124_00_WBM.tif",
+          "bytes": 91294,
+          "sha256": "101b49fe24d3a662a625fc6c013e65a4f3415983b97b3c6c99188b14ac7a9865"
+        },
+        {
+          "cell": "N38E125",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N38_00_E125_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E125_00_DEM/Copernicus_DSM_COG_10_N38_00_E125_00_DEM.tif",
+          "bytes": 45858273,
+          "sha256": "afd55fc111533635163a9d2ba9adfc411015e9303fd8337d4478d1ee1c03a164"
+        },
+        {
+          "cell": "N38E125",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N38_00_E125_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E125_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N38_00_E125_00_WBM.tif",
+          "bytes": 225344,
+          "sha256": "5915b641bbd56cb6c6b0effd2f0b139e745461cc8f6c4aa7701039b5458dd208"
+        },
+        {
+          "cell": "N38E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N38_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E126_00_DEM/Copernicus_DSM_COG_10_N38_00_E126_00_DEM.tif",
+          "bytes": 49183981,
+          "sha256": "b871d71df0f4fd8f63e9696bd49e15cf753a4e8a040f3f35d7b0fef2b3e061a9"
+        },
+        {
+          "cell": "N38E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N38_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N38_00_E126_00_WBM.tif",
+          "bytes": 154802,
+          "sha256": "b882867ae187d25ddc91e3985090bd7084a5b95c2c060d051652671c595b374f"
+        },
+        {
+          "cell": "N38E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N38_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E127_00_DEM/Copernicus_DSM_COG_10_N38_00_E127_00_DEM.tif",
+          "bytes": 46332224,
+          "sha256": "295f132528e85087584a65e104d5c97afae29c9001b338822ce5e12521a94a06"
+        },
+        {
+          "cell": "N38E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N38_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N38_00_E127_00_WBM.tif",
+          "bytes": 122274,
+          "sha256": "9357eced2457908390e2a530273dbde2d65ff3028b9313990fb30e5d08196bbb"
+        },
+        {
+          "cell": "N38E128",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N38_00_E128_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E128_00_DEM/Copernicus_DSM_COG_10_N38_00_E128_00_DEM.tif",
+          "bytes": 18904152,
+          "sha256": "ef70790d1e4c889f6a0965b7f39fb8627e5682ddad7cc893cf61084af8c7c012"
+        },
+        {
+          "cell": "N38E128",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N38_00_E128_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E128_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N38_00_E128_00_WBM.tif",
+          "bytes": 100961,
+          "sha256": "2f8e3e3ef7a3df988d6249a3f4c65f4b6e996e1367e2fed360b2b59b576c6604"
+        },
+        {
+          "cell": "N39E124",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N39_00_E124_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N39_00_E124_00_DEM/Copernicus_DSM_COG_10_N39_00_E124_00_DEM.tif",
+          "bytes": 13250100,
+          "sha256": "0064a96acda06e3e11c1dc600b9386cc1e3c4a4b0216f2d96e9e789b46fbbfd9"
+        },
+        {
+          "cell": "N39E124",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N39_00_E124_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N39_00_E124_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N39_00_E124_00_WBM.tif",
+          "bytes": 152725,
+          "sha256": "ca67639f5ab4a8611e991230cd4acccf63ba04e58ce8a7b81d1c71b52e501dbd"
+        },
+        {
+          "cell": "N39E125",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N39_00_E125_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N39_00_E125_00_DEM/Copernicus_DSM_COG_10_N39_00_E125_00_DEM.tif",
+          "bytes": 40719607,
+          "sha256": "5855d3ef72252f6a3b8db372993c8501521b35f9a28b76fcb43de1922554061c"
+        },
+        {
+          "cell": "N39E125",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N39_00_E125_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N39_00_E125_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N39_00_E125_00_WBM.tif",
+          "bytes": 184690,
+          "sha256": "092989622f64e324796bcc1178f4ce6165a218b2c710af92592c7a8b6cd1741e"
+        },
+        {
+          "cell": "N39E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N39_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N39_00_E126_00_DEM/Copernicus_DSM_COG_10_N39_00_E126_00_DEM.tif",
+          "bytes": 47757201,
+          "sha256": "bb8a55ac3f5ae2ab60c30bf9c3fc56fa5a9ec705d775a68511c2e8b6f7574e8e"
+        },
+        {
+          "cell": "N39E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N39_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N39_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N39_00_E126_00_WBM.tif",
+          "bytes": 90842,
+          "sha256": "99f05bac428af449d588386da957aa49fdf9ee4a6a4b55f97f688b337dd130e6"
+        },
+        {
+          "cell": "N39E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N39_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N39_00_E127_00_DEM/Copernicus_DSM_COG_10_N39_00_E127_00_DEM.tif",
+          "bytes": 29825339,
+          "sha256": "f4e3aaddb861813244cbc9886323931a210c4e36085f9b4b0f72cc120e5c82c0"
+        },
+        {
+          "cell": "N39E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N39_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N39_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N39_00_E127_00_WBM.tif",
+          "bytes": 142986,
+          "sha256": "0005abd8e839b04eeaee0d03277ee425a892d47d0bfbef778681f4ec38185d11"
+        },
+        {
+          "cell": "N39E128",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N39_00_E128_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N39_00_E128_00_DEM/Copernicus_DSM_COG_10_N39_00_E128_00_DEM.tif",
+          "bytes": 136662,
+          "sha256": "71ea74134e51170639184c79554bda9e706f0ec41b2f5d943166b29fe87ddf30"
+        },
+        {
+          "cell": "N39E128",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N39_00_E128_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N39_00_E128_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N39_00_E128_00_WBM.tif",
+          "bytes": 69540,
+          "sha256": "ca7d952f1bdde2f235bd4a3b1279490d6b9232339f6bbb04e404dccde262754f"
+        },
+        {
+          "cell": "N40E124",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N40_00_E124_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E124_00_DEM/Copernicus_DSM_COG_10_N40_00_E124_00_DEM.tif",
+          "bytes": 48416238,
+          "sha256": "08aca334c2d50742d42516a46be79d670d5e7d4f0f3795df0b46faed176c8a2d"
+        },
+        {
+          "cell": "N40E124",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N40_00_E124_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E124_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N40_00_E124_00_WBM.tif",
+          "bytes": 151432,
+          "sha256": "3507b9667f9b62053291a797182ba83a7f932ff0674a1c679c33863a54a94b36"
+        },
+        {
+          "cell": "N40E125",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N40_00_E125_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E125_00_DEM/Copernicus_DSM_COG_10_N40_00_E125_00_DEM.tif",
+          "bytes": 46819719,
+          "sha256": "9ecefbd3a4eb1787162557b171287ae235b33f1a9f4a02d5f907959647e2a968"
+        },
+        {
+          "cell": "N40E125",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N40_00_E125_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E125_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N40_00_E125_00_WBM.tif",
+          "bytes": 129009,
+          "sha256": "f43e975a4be70c5010b66fd700c2d8b10fc7cef9f71eedb7d3f01bffff124783"
+        },
+        {
+          "cell": "N40E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N40_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E126_00_DEM/Copernicus_DSM_COG_10_N40_00_E126_00_DEM.tif",
+          "bytes": 45108775,
+          "sha256": "57cbc10038e42fcc9e2691350cd3a1fc7cab10a1b52d07b3e5f646981e84bad2"
+        },
+        {
+          "cell": "N40E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N40_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N40_00_E126_00_WBM.tif",
+          "bytes": 68963,
+          "sha256": "250f191042b3ed076d9bd43636c7f732b0e5d7878e3f3ab81af177d4aaa35b62"
+        },
+        {
+          "cell": "N40E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N40_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E127_00_DEM/Copernicus_DSM_COG_10_N40_00_E127_00_DEM.tif",
+          "bytes": 43110819,
+          "sha256": "dd0db61a19cc2466779e19678381e173fb3a007c80d43f9c4b4b827b43d230e8"
+        },
+        {
+          "cell": "N40E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N40_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N40_00_E127_00_WBM.tif",
+          "bytes": 34857,
+          "sha256": "44f0f4da2b16f0728446b27d7fc1b0ee9e4a0f908fe94b74d5c230c847462c54"
+        },
+        {
+          "cell": "N40E128",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N40_00_E128_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E128_00_DEM/Copernicus_DSM_COG_10_N40_00_E128_00_DEM.tif",
+          "bytes": 37309018,
+          "sha256": "dd0397b3ae76ee16d3aaa96ade4270b887e4092744197678373b8f9e75bc2654"
+        },
+        {
+          "cell": "N40E128",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N40_00_E128_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E128_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N40_00_E128_00_WBM.tif",
+          "bytes": 68742,
+          "sha256": "f8a97a281c1d89c70896393a572e556007ee2be6879f743638ef71e165038caa"
+        },
+        {
+          "cell": "N40E129",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N40_00_E129_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E129_00_DEM/Copernicus_DSM_COG_10_N40_00_E129_00_DEM.tif",
+          "bytes": 10618090,
+          "sha256": "1f81b31000b7ceac683ffb2857b77bd636d51b607d4424b638886b3d30f5f3be"
+        },
+        {
+          "cell": "N40E129",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N40_00_E129_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E129_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N40_00_E129_00_WBM.tif",
+          "bytes": 74435,
+          "sha256": "a623e8cf54a27c14f6a939fd66b5da070787e605f3588212e55c18cd3d9a9df4"
+        },
+        {
+          "cell": "N41E124",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N41_00_E124_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E124_00_DEM/Copernicus_DSM_COG_10_N41_00_E124_00_DEM.tif",
+          "bytes": 45829731,
+          "sha256": "062840ce1dcff417e6beaa2dc8f75a85c638960dabc613e71b301975742bce7e"
+        },
+        {
+          "cell": "N41E124",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N41_00_E124_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E124_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N41_00_E124_00_WBM.tif",
+          "bytes": 106499,
+          "sha256": "f16a6ec9414e73986f507c86eced541e4231922062259a284f663768c357a481"
+        },
+        {
+          "cell": "N41E125",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N41_00_E125_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E125_00_DEM/Copernicus_DSM_COG_10_N41_00_E125_00_DEM.tif",
+          "bytes": 45009269,
+          "sha256": "31cfd6215732d0831dabd98bbb97e8d382e94ce93ba3f9ce494f683e81db7e7b"
+        },
+        {
+          "cell": "N41E125",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N41_00_E125_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E125_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N41_00_E125_00_WBM.tif",
+          "bytes": 77878,
+          "sha256": "a67fafaa0543e3d72ca6b40d401d9292a80e0e1185ca5e19a40c50431d090e60"
+        },
+        {
+          "cell": "N41E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N41_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E126_00_DEM/Copernicus_DSM_COG_10_N41_00_E126_00_DEM.tif",
+          "bytes": 44525364,
+          "sha256": "a22df7e58c25f3c1986e286c3e6a21c25b1222bbad3537fedb8776dcd94b05b0"
+        },
+        {
+          "cell": "N41E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N41_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N41_00_E126_00_WBM.tif",
+          "bytes": 85877,
+          "sha256": "006b72d32accc5864e7a8e5adee0b4ddf5dd04e668733a75c472798bc0a47c48"
+        },
+        {
+          "cell": "N41E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N41_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E127_00_DEM/Copernicus_DSM_COG_10_N41_00_E127_00_DEM.tif",
+          "bytes": 42450659,
+          "sha256": "5e18cd8e42cd2556cc8bd585b285a8a28f003886a8b57305e7a27aa7c7dcd8b8"
+        },
+        {
+          "cell": "N41E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N41_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N41_00_E127_00_WBM.tif",
+          "bytes": 56416,
+          "sha256": "19e5de03224f7fd78daec51f1e1b9be12af83662a1408fa33541816728676d84"
+        },
+        {
+          "cell": "N41E128",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N41_00_E128_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E128_00_DEM/Copernicus_DSM_COG_10_N41_00_E128_00_DEM.tif",
+          "bytes": 40831414,
+          "sha256": "ab5cc06f90f23e8d5de51c52e70775fbdb2a5fd2ba3fc721ba5078239b8f1bba"
+        },
+        {
+          "cell": "N41E128",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N41_00_E128_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E128_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N41_00_E128_00_WBM.tif",
+          "bytes": 42979,
+          "sha256": "e70c786af7894dc5449a29c86c2ffda716581ce1d026478766e6029a7cf73b4e"
+        },
+        {
+          "cell": "N41E129",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N41_00_E129_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E129_00_DEM/Copernicus_DSM_COG_10_N41_00_E129_00_DEM.tif",
+          "bytes": 35221629,
+          "sha256": "cf7e14af648c1c0ca9bf19d37f17cbe467aee4412539dac9471a4f3e165a7e79"
+        },
+        {
+          "cell": "N41E129",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N41_00_E129_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E129_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N41_00_E129_00_WBM.tif",
+          "bytes": 68655,
+          "sha256": "8df1df58a24ec6f23f136d27afd6b1c8693c81395ea57b500ffd94dabac5ab76"
+        },
+        {
+          "cell": "N41E130",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N41_00_E130_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E130_00_DEM/Copernicus_DSM_COG_10_N41_00_E130_00_DEM.tif",
+          "bytes": 98155,
+          "sha256": "354985d104ba877c1a1a0a7a0bae6593660cb159a68171db79a039abe8239a03"
+        },
+        {
+          "cell": "N41E130",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N41_00_E130_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N41_00_E130_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N41_00_E130_00_WBM.tif",
+          "bytes": 68316,
+          "sha256": "604350f41603e7a50a7ae2a521d4186bfbc6ff06d16de4b3d135b9f8d9521d74"
+        },
+        {
+          "cell": "N42E124",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N42_00_E124_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E124_00_DEM/Copernicus_DSM_COG_10_N42_00_E124_00_DEM.tif",
+          "bytes": 45976007,
+          "sha256": "cd9da69f40cce55d3f3900a524f529dd3271379602604c86f7a8dd15dd279673"
+        },
+        {
+          "cell": "N42E124",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N42_00_E124_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E124_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N42_00_E124_00_WBM.tif",
+          "bytes": 62177,
+          "sha256": "7967f168a7096bf33737a339daf029e6963e66c3160c4ddd803ddb7999cd2851"
+        },
+        {
+          "cell": "N42E125",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N42_00_E125_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E125_00_DEM/Copernicus_DSM_COG_10_N42_00_E125_00_DEM.tif",
+          "bytes": 43493874,
+          "sha256": "ad1ea6a3672ae0d69f00888be14d65d26dd65ecebdf627dc6b62edf02b3b05d7"
+        },
+        {
+          "cell": "N42E125",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N42_00_E125_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E125_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N42_00_E125_00_WBM.tif",
+          "bytes": 106569,
+          "sha256": "5674e9f4bf94a6b9d83a8749f1212bcf2669cc81920a89d7ad57dbf02ea14f40"
+        },
+        {
+          "cell": "N42E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N42_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E126_00_DEM/Copernicus_DSM_COG_10_N42_00_E126_00_DEM.tif",
+          "bytes": 43188308,
+          "sha256": "46ac31f79da481dd42c79269f50fbc12df5838656f77491de5eb62771c203d2c"
+        },
+        {
+          "cell": "N42E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N42_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N42_00_E126_00_WBM.tif",
+          "bytes": 78724,
+          "sha256": "45311af6bdf2e881833070cfa6a044ebf3aeab9646000c235fca64f1f1808799"
+        },
+        {
+          "cell": "N42E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N42_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E127_00_DEM/Copernicus_DSM_COG_10_N42_00_E127_00_DEM.tif",
+          "bytes": 42778018,
+          "sha256": "7c306aa37161dc918cea957b1f783bfb0e995d6fda3d64781e08b64303c41503"
+        },
+        {
+          "cell": "N42E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N42_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N42_00_E127_00_WBM.tif",
+          "bytes": 103649,
+          "sha256": "9e950ef3fc1b40ed57493e5e5a119b7babbf45047101e80fda1c56b8a6f8977d"
+        },
+        {
+          "cell": "N42E128",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N42_00_E128_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E128_00_DEM/Copernicus_DSM_COG_10_N42_00_E128_00_DEM.tif",
+          "bytes": 41965271,
+          "sha256": "8ad5c10f2d11cc24a843c5d4512d19e0bd87922b94eeb3955117aadb8a3d25c7"
+        },
+        {
+          "cell": "N42E128",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N42_00_E128_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E128_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N42_00_E128_00_WBM.tif",
+          "bytes": 40301,
+          "sha256": "8a78d6bc1ceeb0afe5b9159f0fcafddd9520602c7f0ec82b232164571e3ae61b"
+        },
+        {
+          "cell": "N42E129",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N42_00_E129_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E129_00_DEM/Copernicus_DSM_COG_10_N42_00_E129_00_DEM.tif",
+          "bytes": 44714059,
+          "sha256": "0cf955cb9f8a59a478807c6cbe8bf04af6e049202bcd18ece1f94460ae016fc2"
+        },
+        {
+          "cell": "N42E129",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N42_00_E129_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E129_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N42_00_E129_00_WBM.tif",
+          "bytes": 76111,
+          "sha256": "97926197ef583d099f052c747d24d80b4792615b7f7476350aefdeb27b89d8b4"
+        },
+        {
+          "cell": "N42E130",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N42_00_E130_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E130_00_DEM/Copernicus_DSM_COG_10_N42_00_E130_00_DEM.tif",
+          "bytes": 32647489,
+          "sha256": "824751c4ff95928bec8bcd19680b6d7de1c2be8dba127439a4f8c5340a0cf82a"
+        },
+        {
+          "cell": "N42E130",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N42_00_E130_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E130_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N42_00_E130_00_WBM.tif",
+          "bytes": 160907,
+          "sha256": "d4776e37254de8a7fe940116b7e6d4bf72d6dc671dfa2e3321fa5372cefc377e"
+        }
+      ]
+    }
+  ]
+}

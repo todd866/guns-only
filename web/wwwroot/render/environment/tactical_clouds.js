@@ -1,7 +1,126 @@
 const DEFAULT_CELL_SIZE_METRES = 6200;
+const UINT64_MASK = (1n << 64n) - 1n;
+const HASH_GOLD = 0x9e3779b97f4a7c15n;
+const HASH_K1 = 0xbf58476d1ce4e5b9n;
+const HASH_K2 = 0x94d049bb133111ebn;
+const LAYER_FAMILY = 0x46c89d3178a425e7n;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function smoothstep01(value) {
+  const t = clamp(value, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function finite(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function u64(value) {
+  return value & UINT64_MASK;
+}
+
+function parseSeed(value) {
+  if (typeof value === "bigint") return u64(value);
+  if (typeof value === "string" && /^[0-9a-f]+$/i.test(value.trim())) {
+    return u64(BigInt(`0x${value.trim()}`));
+  }
+  if (typeof value === "string" && /^0x[0-9a-f]+$/i.test(value.trim())) {
+    return u64(BigInt(value.trim()));
+  }
+  if (Number.isSafeInteger(value)) return u64(BigInt(value));
+  return 1n;
+}
+
+// This is the integer/value-noise primitive used by sim/Turbulence/Hashing.cs. Keeping its
+// CPU implementation bit-identical means the visible layer holes are selected from the same
+// deterministic scalar field sampled by the WASM cloud truth. The fragment shader adds only
+// sub-cell texture; it does not decide where the authored weather exists.
+function mix64(input) {
+  let value = u64(input);
+  value = u64((value ^ (value >> 30n)) * HASH_K1);
+  value = u64((value ^ (value >> 27n)) * HASH_K2);
+  return u64(value ^ (value >> 31n));
+}
+
+function latticeHash(ix, iy, iz, salt) {
+  let hash = mix64(u64(salt + HASH_GOLD));
+  hash = mix64(u64(hash + u64(HASH_GOLD * u64(ix))));
+  hash = mix64(u64(hash + u64(HASH_GOLD * u64(iy))));
+  hash = mix64(u64(hash + u64(HASH_GOLD * u64(iz))));
+  return hash;
+}
+
+function latticeCorner(ix, iy, iz, salt) {
+  const top53 = latticeHash(BigInt(ix), BigInt(iy), BigInt(iz), salt) >> 11n;
+  return Number(top53) / 9007199254740992 * 2 - 1;
+}
+
+function fade(value) {
+  return value * value * value * (value * (value * 6 - 15) + 10);
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+/** Bit-equivalent port of the simulation's smooth 3-D value-noise primitive. */
+export function simulationValueNoise(x, y, z, seed) {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const iz = Math.floor(z);
+  const fx = x - ix;
+  const fy = y - iy;
+  const fz = z - iz;
+  const u = fade(fx);
+  const v = fade(fy);
+  const w = fade(fz);
+  const salt = parseSeed(seed);
+  const c000 = latticeCorner(ix, iy, iz, salt);
+  const c100 = latticeCorner(ix + 1, iy, iz, salt);
+  const c010 = latticeCorner(ix, iy + 1, iz, salt);
+  const c110 = latticeCorner(ix + 1, iy + 1, iz, salt);
+  const c001 = latticeCorner(ix, iy, iz + 1, salt);
+  const c101 = latticeCorner(ix + 1, iy, iz + 1, salt);
+  const c011 = latticeCorner(ix, iy + 1, iz + 1, salt);
+  const c111 = latticeCorner(ix + 1, iy + 1, iz + 1, salt);
+  const x00 = lerp(c000, c100, u);
+  const x10 = lerp(c010, c110, u);
+  const x01 = lerp(c001, c101, u);
+  const x11 = lerp(c011, c111, u);
+  return lerp(lerp(x00, x10, v), lerp(x01, x11, v), w);
+}
+
+function layerSalt(seed, layerIndex) {
+  return u64(parseSeed(seed) ^ LAYER_FAMILY
+    ^ u64(BigInt(layerIndex + 1) * HASH_GOLD));
+}
+
+/** Exact horizontal coverage envelope used by LayeredCloudField for one authored layer. */
+export function layerCloudCoverageAt(eastMetres, northMetres, layer, layerIndex, seed,
+  simulationTimeSeconds = 0) {
+  const meanFraction = clamp(finite(layer?.coverage, finite(layer?.coverage_01, 0)), 0, 1);
+  if (meanFraction <= 0) return 0;
+  if (meanFraction >= 1) return 1;
+  const scale = Math.max(1, finite(layer?.scaleMetres,
+    finite(layer?.scale_m, DEFAULT_CELL_SIZE_METRES)));
+  const east = eastMetres - finite(layer?.windEastMps, layer?.wind_east_mps)
+    * simulationTimeSeconds;
+  const north = northMetres - finite(layer?.windNorthMps, layer?.wind_north_mps)
+    * simulationTimeSeconds;
+  const x = east / scale;
+  const z = north / scale;
+  const salt = layerSalt(seed, layerIndex);
+  const noise = 0.68 * simulationValueNoise(x, 0, z, salt)
+    + 0.22 * simulationValueNoise(x * 2.07, 11, z * 2.07, u64(salt + 0x9e37n))
+    + 0.10 * simulationValueNoise(x * 4.13, -7, z * 4.13, u64(salt + 0x51edn));
+  const normalized = clamp(0.5 + 0.5 * noise, 0, 1);
+  const transition = 0.14;
+  const threshold = 1 - meanFraction;
+  return smoothstep01((normalized - threshold + transition) / (2 * transition));
 }
 
 function hash32(value) {
@@ -18,7 +137,7 @@ function unitHash(cellX, cellZ, channel = 0) {
   return hash32(seed) / 0xffffffff;
 }
 
-/** Deterministic world-anchored cloud placement shared by runtime and tests. */
+/** Legacy/default deterministic descriptor retained as the no-weather development fallback. */
 export function cloudCellDescriptor(cellX, cellZ, options = {}) {
   const cellSize = options.cellSizeMetres ?? DEFAULT_CELL_SIZE_METRES;
   const baseAltitude = options.altitudeMetres ?? 1450;
@@ -28,6 +147,7 @@ export function cloudCellDescriptor(cellX, cellZ, options = {}) {
   const width = 1050 + unitHash(cellX, cellZ, 3) * 1750;
   const height = 310 + unitHash(cellX, cellZ, 4) * 460;
   return Object.freeze({
+    kind: "layer",
     cellX,
     cellZ,
     present,
@@ -35,89 +155,272 @@ export function cloudCellDescriptor(cellX, cellZ, options = {}) {
     z: (cellZ + 0.16 + unitHash(cellX, cellZ, 2) * 0.68) * cellSize,
     y: baseAltitude + (unitHash(cellX, cellZ, 5) - 0.5) * thickness * 0.58,
     width,
+    depth: width,
     height,
     opacity: 0.58 + unitHash(cellX, cellZ, 6) * 0.30,
     phase: unitHash(cellX, cellZ, 7) * 37,
   });
 }
 
-/** Approximate extinction inside the ellipsoidal tactical cloud volume. */
+/** Approximate presentation density; exact cockpit extinction comes from the WASM CloudSample. */
 export function cloudDensityAt(position, descriptors) {
   let density = 0;
   for (const cloud of descriptors ?? []) {
     if (!cloud?.present) continue;
-    const nx = (Number(position?.x) - cloud.x) / Math.max(1, cloud.width * 0.43);
-    const ny = (Number(position?.y) - cloud.y) / Math.max(1, cloud.height * 0.58);
-    const nz = (Number(position?.z) - cloud.z) / Math.max(1, cloud.width * 0.43);
+    const radiusX = Math.max(1, cloud.radiusX ?? cloud.width * 0.43);
+    const radiusY = Math.max(1, cloud.radiusY ?? cloud.height * 0.58);
+    const radiusZ = Math.max(1, cloud.radiusZ ?? (cloud.depth ?? cloud.width) * 0.43);
+    const nx = (finite(position?.x) - cloud.x) / radiusX;
+    const ny = (finite(position?.y) - cloud.y) / radiusY;
+    const nz = (finite(position?.z) - cloud.z) / radiusZ;
     const radius = Math.sqrt(nx * nx + ny * ny + nz * nz);
-    density = Math.max(density, 1 - clamp((radius - 0.34) / 0.66, 0, 1));
+    density = Math.max(density, (cloud.opacity ?? 1)
+      * (1 - clamp((radius - 0.34) / 0.66, 0, 1)));
   }
-  return density;
+  return clamp(density, 0, 1);
 }
 
-const CLOUD_VERTEX = /* glsl */ `
+function normalizeLayer(source = {}) {
+  const baseM = finite(source.baseM, source.base_m ?? 1100);
+  const topM = Math.max(baseM + 1, finite(source.topM, source.top_m ?? 1900));
+  return {
+    baseM,
+    topM,
+    coverage: clamp(finite(source.coverage, source.coverage_01 ?? 0.38), 0, 1),
+    scaleMetres: Math.max(500, finite(source.scaleMetres, source.scale_m ?? DEFAULT_CELL_SIZE_METRES)),
+    extinctionPerM: Math.max(0, finite(source.extinctionPerM, source.extinction_per_m ?? 0.014)),
+    windEastMps: finite(source.windEastMps, source.wind_east_mps),
+    windNorthMps: finite(source.windNorthMps, source.wind_north_mps),
+  };
+}
+
+function normalizeCell(source = {}) {
+  const baseM = finite(source.baseM, source.base_m);
+  const topM = Math.max(baseM + 1, finite(source.topM, source.top_m ?? baseM + 2000));
+  return {
+    kind: "cell",
+    initialX: finite(source.eastM, source.east_m),
+    // Simulation Z is north; three.js uses -Z as forward/north throughout this app.
+    initialZ: -finite(source.northM, source.north_m),
+    y: 0.5 * (baseM + topM),
+    radiusX: Math.max(1, finite(source.radiusEastM, source.radius_east_m ?? 2000)),
+    radiusY: 0.5 * (topM - baseM),
+    radiusZ: Math.max(1, finite(source.radiusNorthM, source.radius_north_m ?? 2000)),
+    startS: Math.max(0, finite(source.startS, source.start_s)),
+    lifetimeS: Math.max(0.001, finite(source.lifetimeS, source.lifetime_s ?? 900)),
+    transitionS: Math.max(0, finite(source.transitionS, source.transition_s ?? 20)),
+    windX: finite(source.windEastMps, source.wind_east_mps),
+    windZ: -finite(source.windNorthMps, source.wind_north_mps),
+    peakCoverage: clamp(finite(source.coverage, source.coverage_01 ?? 1), 0, 1),
+    extinctionPerM: Math.max(0, finite(source.extinctionPerM,
+      source.extinction_per_m ?? 0.02)),
+    phase: finite(source.phase, 13.7),
+    present: false,
+    opacity: 0,
+    x: 0,
+    z: 0,
+  };
+}
+
+/** Convert the bridge's simulation-frame descriptor contract once at the render boundary. */
+export function weatherConfigurationFromState(state = {}) {
+  return {
+    id: String(state.weather_profile_id ?? "weather.none"),
+    seed: String(state.weather_seed_hex ?? "0000000000000001"),
+    layers: Array.isArray(state.weather_layers) ? state.weather_layers.map(normalizeLayer) : [],
+    cells: Array.isArray(state.weather_cells) ? state.weather_cells.map(normalizeCell) : [],
+  };
+}
+
+const VOLUME_VERTEX = /* glsl */ `
   precision highp float;
-  varying vec2 vCloudUv;
+  attribute float instanceOpacity;
+  attribute float instancePhase;
   varying vec3 vWorldCenter;
+  varying vec3 vWorldSurface;
+  varying vec3 vRadii;
+  varying float vInstanceOpacity;
+  varying float vInstancePhase;
   #include <common>
   #include <logdepthbuf_pars_vertex>
   void main() {
     vec4 worldCenter = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-    vec3 worldAxisX = (modelMatrix * vec4(instanceMatrix[0].xyz, 0.0)).xyz;
-    vec3 worldAxisY = (modelMatrix * vec4(instanceMatrix[1].xyz, 0.0)).xyz;
+    vec3 axisX = (modelMatrix * vec4(instanceMatrix[0].xyz, 0.0)).xyz;
+    vec3 axisY = (modelMatrix * vec4(instanceMatrix[1].xyz, 0.0)).xyz;
+    vec3 axisZ = (modelMatrix * vec4(instanceMatrix[2].xyz, 0.0)).xyz;
+    vec4 worldSurface = modelMatrix * instanceMatrix * vec4(position, 1.0);
+    vWorldCenter = worldCenter.xyz;
+    vWorldSurface = worldSurface.xyz;
+    vRadii = max(vec3(length(axisX), length(axisY), length(axisZ)), vec3(0.001));
+    vInstanceOpacity = instanceOpacity;
+    vInstancePhase = instancePhase;
+    gl_Position = projectionMatrix * viewMatrix * worldSurface;
+    #include <logdepthbuf_vertex>
+  }
+`;
+
+const VOLUME_FRAGMENT = /* glsl */ `
+  precision highp float;
+  uniform float uTime;
+  uniform float uOpticalScale;
+  uniform vec3 uSunDirection;
+  uniform vec3 uLightColor;
+  uniform vec3 uShadowColor;
+  uniform vec3 uFogColor;
+  uniform float uFogDensity;
+  varying vec3 vWorldCenter;
+  varying vec3 vWorldSurface;
+  varying vec3 vRadii;
+  varying float vInstanceOpacity;
+  varying float vInstancePhase;
+  #include <logdepthbuf_pars_fragment>
+
+  float hash31(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+  }
+
+  float noise31(vec3 p) {
+    vec3 cell = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(
+      mix(mix(hash31(cell), hash31(cell + vec3(1,0,0)), f.x),
+          mix(hash31(cell + vec3(0,1,0)), hash31(cell + vec3(1,1,0)), f.x), f.y),
+      mix(mix(hash31(cell + vec3(0,0,1)), hash31(cell + vec3(1,0,1)), f.x),
+          mix(hash31(cell + vec3(0,1,1)), hash31(cell + vec3(1,1,1)), f.x), f.y), f.z);
+  }
+
+  float cloudDensity(vec3 worldPoint) {
+    vec3 q = (worldPoint - vWorldCenter) / vRadii;
+    float envelope = 1.0 - smoothstep(0.55, 1.0, length(q));
+    float base = smoothstep(-1.0, -0.58, q.y);
+    // Texture is volume-local so an advecting cloud carries its billows with it instead of
+    // swimming through a stationary world-noise field.
+    vec3 texturePoint = q * vec3(2.15, 2.85, 2.15)
+      + vec3(vInstancePhase, 0.0, -vInstancePhase);
+    float broad = noise31(texturePoint);
+    float detail = noise31(texturePoint * 2.31 + 7.4);
+    float erosion = broad * 0.72 + detail * 0.28;
+    return clamp(envelope * base * (0.42 + 0.95 * erosion) - 0.10, 0.0, 1.0);
+  }
+
+  void main() {
+    if (vInstanceOpacity <= 0.001) discard;
+    vec3 rayDirection = normalize(vWorldSurface - cameraPosition);
+    vec3 rayOrigin = (cameraPosition - vWorldCenter) / vRadii;
+    vec3 ray = rayDirection / vRadii;
+    float a = dot(ray, ray);
+    float b = dot(rayOrigin, ray);
+    float c = dot(rayOrigin, rayOrigin) - 1.0;
+    float discriminant = b * b - a * c;
+    if (discriminant <= 0.0) discard;
+    float root = sqrt(discriminant);
+    float nearT = (-b - root) / a;
+    float farT = (-b + root) / a;
+    bool cameraInside = dot(rayOrigin, rayOrigin) < 1.0;
+    if ((!cameraInside && !gl_FrontFacing) || (cameraInside && gl_FrontFacing)) discard;
+    nearT = max(0.0, nearT);
+    farT = min(farT, 24000.0);
+    if (farT <= nearT) discard;
+
+    float stepLength = (farT - nearT) / float(CLOUD_STEPS);
+    float transmittance = 1.0;
+    vec3 scattered = vec3(0.0);
+    float jitter = hash31(gl_FragCoord.xyx + vInstancePhase);
+    float firstT = nearT + jitter * stepLength;
+    for (int index = 0; index < CLOUD_STEPS; index++) {
+      float distanceAlongRay = firstT + float(index) * stepLength;
+      vec3 samplePoint = cameraPosition + rayDirection * distanceAlongRay;
+      float density = cloudDensity(samplePoint) * vInstanceOpacity;
+      if (density > 0.002) {
+        float sunOcclusion = cloudDensity(samplePoint + uSunDirection * 170.0)
+          + 0.65 * cloudDensity(samplePoint + uSunDirection * 430.0);
+        float lightTransmission = exp(-1.15 * sunOcclusion);
+        float forward = pow(max(0.0, dot(rayDirection, uSunDirection)), 5.0);
+        vec3 lighting = mix(uShadowColor, uLightColor,
+          clamp(0.24 + 0.76 * lightTransmission + 0.18 * forward, 0.0, 1.0));
+        float alpha = 1.0 - exp(-density * uOpticalScale * stepLength);
+        scattered += transmittance * alpha * lighting;
+        transmittance *= 1.0 - alpha;
+        if (transmittance < 0.018) break;
+      }
+    }
+    float alpha = 1.0 - transmittance;
+    if (alpha < 0.008) discard;
+    vec3 color = scattered / max(alpha, 0.001);
+    float fog = 1.0 - exp(-uFogDensity * uFogDensity * nearT * nearT);
+    color = mix(color, uFogColor, fog);
+    gl_FragColor = vec4(color, alpha * (1.0 - fog * 0.45));
+    #include <logdepthbuf_fragment>
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+
+const IMPOSTOR_VERTEX = /* glsl */ `
+  precision highp float;
+  attribute float instanceOpacity;
+  attribute float instancePhase;
+  varying vec2 vCloudUv;
+  varying vec3 vWorldCenter;
+  varying float vInstanceOpacity;
+  varying float vInstancePhase;
+  #include <common>
+  #include <logdepthbuf_pars_vertex>
+  void main() {
+    vec4 worldCenter = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+    vec3 axisX = (modelMatrix * vec4(instanceMatrix[0].xyz, 0.0)).xyz;
+    vec3 axisY = (modelMatrix * vec4(instanceMatrix[1].xyz, 0.0)).xyz;
     vec4 viewCenter = viewMatrix * worldCenter;
-    viewCenter.xy += position.xy * vec2(length(worldAxisX), length(worldAxisY));
+    viewCenter.xy += position.xy * vec2(length(axisX), length(axisY));
     vCloudUv = uv;
     vWorldCenter = worldCenter.xyz;
+    vInstanceOpacity = instanceOpacity;
+    vInstancePhase = instancePhase;
     gl_Position = projectionMatrix * viewCenter;
     #include <logdepthbuf_vertex>
   }
 `;
 
-const CLOUD_FRAGMENT = /* glsl */ `
+const IMPOSTOR_FRAGMENT = /* glsl */ `
   precision highp float;
   uniform float uTime;
-  uniform float uDensity;
-  uniform float uCoverage;
-  uniform vec2 uWind;
   uniform vec3 uLightColor;
   uniform vec3 uShadowColor;
   uniform vec3 uFogColor;
   uniform float uFogDensity;
   varying vec2 vCloudUv;
   varying vec3 vWorldCenter;
+  varying float vInstanceOpacity;
+  varying float vInstancePhase;
   #include <logdepthbuf_pars_fragment>
-
   float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
     return fract(p.x * p.y);
   }
-
   float noise21(vec2 p) {
     vec2 cell = floor(p);
     vec2 f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash21(cell), hash21(cell + vec2(1.0, 0.0)), f.x),
-      mix(hash21(cell + vec2(0.0, 1.0)), hash21(cell + vec2(1.0)), f.x), f.y);
+    return mix(mix(hash21(cell), hash21(cell + vec2(1,0)), f.x),
+      mix(hash21(cell + vec2(0,1)), hash21(cell + vec2(1)), f.x), f.y);
   }
-
   void main() {
     vec2 centred = vCloudUv * 2.0 - 1.0;
-    vec2 motion = uWind * uTime * 0.000018;
-    float broad = noise21(vCloudUv * 3.15 + motion + vWorldCenter.xz * 0.00017);
-    float detail = noise21(vCloudUv * 8.7 - motion * 1.7 + vWorldCenter.zx * 0.00031);
-    float body = broad * 0.73 + detail * 0.27;
-    float envelope = 1.0 - smoothstep(0.46, 1.0,
-      length(centred * vec2(0.82, 1.23)));
-    float cloud = smoothstep(uCoverage, uCoverage + 0.18, body + envelope * 0.42);
-    float lowerShade = smoothstep(0.94, 0.08, vCloudUv.y);
-    vec3 color = mix(uLightColor, uShadowColor, lowerShade * (0.34 + broad * 0.32));
+    float broad = noise21(vCloudUv * 3.1 + vInstancePhase + uTime * 0.004);
+    float detail = noise21(vCloudUv * 8.9 - vInstancePhase * 0.3);
+    float envelope = 1.0 - smoothstep(0.44, 1.0, length(centred * vec2(0.83, 1.22)));
+    float body = smoothstep(0.39, 0.61, broad * 0.72 + detail * 0.28 + envelope * 0.38);
+    float lowerShade = smoothstep(0.95, 0.08, vCloudUv.y);
+    vec3 color = mix(uLightColor, uShadowColor, lowerShade * (0.30 + broad * 0.30));
     float distanceToCamera = distance(cameraPosition, vWorldCenter);
     float fog = 1.0 - exp(-uFogDensity * uFogDensity
       * distanceToCamera * distanceToCamera);
     color = mix(color, uFogColor, fog);
-    float alpha = cloud * envelope * uDensity * (1.0 - fog * 0.72);
+    float alpha = body * envelope * vInstanceOpacity * (1.0 - fog * 0.72);
     if (alpha < 0.012) discard;
     gl_FragColor = vec4(color, alpha);
     #include <logdepthbuf_fragment>
@@ -127,148 +430,300 @@ const CLOUD_FRAGMENT = /* glsl */ `
 `;
 
 function tierGridSize(tier) {
-  if (tier === "mobile") return 5;
-  if (tier === "desktop") return 9;
-  return 7;
+  if (tier === "desktop") return 7;
+  return 5;
+}
+
+function tierMarchSteps(tier) {
+  if (tier === "desktop") return 32;
+  if (tier === "balanced") return 20;
+  return 0;
+}
+
+function tierLobeCount(tier) {
+  if (tier === "desktop") return 3;
+  if (tier === "balanced") return 2;
+  return 1;
+}
+
+function layerDescriptor(cellX, cellZ, layer, layerIndex, seed) {
+  const cellSize = Math.max(2200, layer.scaleMetres * 0.92);
+  const channel = layerIndex * 17;
+  const originX = (cellX + 0.12 + unitHash(cellX, cellZ, channel + 1) * 0.76) * cellSize;
+  const originNorth = (cellZ + 0.12 + unitHash(cellX, cellZ, channel + 2) * 0.76) * cellSize;
+  const coverage = layerCloudCoverageAt(originX, originNorth, layer, layerIndex, seed, 0);
+  const thickness = layer.topM - layer.baseM;
+  const radiusX = cellSize * (0.34 + unitHash(cellX, cellZ, channel + 3) * 0.17);
+  const radiusZ = cellSize * (0.32 + unitHash(cellX, cellZ, channel + 4) * 0.18);
+  const radiusY = thickness * (0.36 + unitHash(cellX, cellZ, channel + 5) * 0.10);
+  return {
+    kind: "layer",
+    layerIndex,
+    cellX,
+    cellZ,
+    originX,
+    originZ: -originNorth,
+    x: originX,
+    z: -originNorth,
+    y: 0.5 * (layer.baseM + layer.topM)
+      + (unitHash(cellX, cellZ, channel + 6) - 0.5) * thickness * 0.10,
+    radiusX,
+    radiusY,
+    radiusZ,
+    width: radiusX * 2,
+    height: radiusY * 2,
+    depth: radiusZ * 2,
+    windX: layer.windEastMps,
+    windZ: -layer.windNorthMps,
+    present: coverage > 0.035,
+    opacity: clamp(coverage * clamp(layer.extinctionPerM / 0.014, 0.55, 1.35), 0, 1),
+    phase: unitHash(cellX, cellZ, channel + 7) * 31 + layerIndex * 9.7,
+  };
+}
+
+function attachedLobeDescriptor(parent, lobeIndex) {
+  const channel = 41 + parent.layerIndex * 19 + lobeIndex * 7;
+  const angle = unitHash(parent.cellX, parent.cellZ, channel) * Math.PI * 2;
+  const distance = 0.24 + unitHash(parent.cellX, parent.cellZ, channel + 1) * 0.22;
+  const scale = 0.54 + unitHash(parent.cellX, parent.cellZ, channel + 2) * 0.18;
+  const radiusX = parent.radiusX * scale;
+  const radiusY = parent.radiusY * (0.62
+    + unitHash(parent.cellX, parent.cellZ, channel + 3) * 0.18);
+  const radiusZ = parent.radiusZ * (0.56
+    + unitHash(parent.cellX, parent.cellZ, channel + 4) * 0.18);
+  const offsetX = Math.cos(angle) * parent.radiusX * distance;
+  const offsetZ = Math.sin(angle) * parent.radiusZ * distance;
+  return {
+    ...parent,
+    originX: parent.originX + offsetX,
+    originZ: parent.originZ + offsetZ,
+    x: parent.x + offsetX,
+    z: parent.z + offsetZ,
+    y: parent.y + parent.radiusY * (0.18
+      + unitHash(parent.cellX, parent.cellZ, channel + 5) * 0.25),
+    radiusX,
+    radiusY,
+    radiusZ,
+    width: radiusX * 2,
+    height: radiusY * 2,
+    depth: radiusZ * 2,
+    opacity: parent.opacity * 0.94,
+    phase: parent.phase + 4.3 * (lobeIndex + 1),
+  };
 }
 
 export function createTacticalCloudField(THREE, options = {}) {
   const tier = options.qualityTier ?? "balanced";
+  const volumetric = tier !== "mobile";
   const gridSize = options.gridSize ?? tierGridSize(tier);
-  const capacity = gridSize * gridSize;
-  const settings = {
-    cellSizeMetres: options.cellSizeMetres ?? DEFAULT_CELL_SIZE_METRES,
-    altitudeMetres: options.altitudeMetres ?? 1450,
-    thicknessMetres: options.thicknessMetres ?? 620,
-    coverage: options.coverage ?? 0.38,
-  };
+  const lobesPerCloud = tierLobeCount(tier);
+  const maxLayers = Math.max(1, options.maxLayers ?? 3);
+  const maxCells = Math.max(0, options.maxCells ?? 8);
+  const capacity = gridSize * gridSize * maxLayers * lobesPerCloud + maxCells;
   const group = new THREE.Group();
   group.name = "TACTICAL_CLOUD_FIELD";
 
   const uniforms = {
     uTime: { value: 0 },
-    uDensity: { value: tier === "mobile" ? 0.62 : 0.78 },
-    uCoverage: { value: 0.49 },
-    uWind: { value: new THREE.Vector2(7.5, -1.8) },
-    uLightColor: { value: new THREE.Color(0xf5f1e8) },
-    uShadowColor: { value: new THREE.Color(0x758995) },
+    uOpticalScale: { value: tier === "desktop" ? 0.0018 : 0.00155 },
+    uSunDirection: { value: new THREE.Vector3(0.32, 0.78, -0.53).normalize() },
+    uLightColor: { value: new THREE.Color(0xf8f3e8) },
+    uShadowColor: { value: new THREE.Color(0x71838e) },
     uFogColor: { value: new THREE.Color(0x7898a0) },
     uFogDensity: { value: 0.000055 },
   };
+  if (options.sunDirection?.isVector3) {
+    uniforms.uSunDirection.value.copy(options.sunDirection).normalize();
+  }
   const material = new THREE.ShaderMaterial({
-    name: "MAT_TACTICAL_CLOUDS",
+    name: volumetric ? "MAT_AUTHORITATIVE_CLOUD_VOLUMES" : "MAT_AUTHORITATIVE_CLOUD_IMPOSTORS",
     uniforms,
-    vertexShader: CLOUD_VERTEX,
-    fragmentShader: CLOUD_FRAGMENT,
+    defines: volumetric ? { CLOUD_STEPS: tierMarchSteps(tier) } : {},
+    vertexShader: volumetric ? VOLUME_VERTEX : IMPOSTOR_VERTEX,
+    fragmentShader: volumetric ? VOLUME_FRAGMENT : IMPOSTOR_FRAGMENT,
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
-  const geometry = new THREE.PlaneGeometry(2, 2, 1, 1);
+  const geometry = volumetric
+    ? new THREE.SphereGeometry(1, tier === "desktop" ? 18 : 14, tier === "desktop" ? 12 : 9)
+    : new THREE.PlaneGeometry(2, 2, 1, 1);
+  const opacityAttribute = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+  const phaseAttribute = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+  geometry.setAttribute("instanceOpacity", opacityAttribute);
+  geometry.setAttribute("instancePhase", phaseAttribute);
   const cloudMesh = new THREE.InstancedMesh(geometry, material, capacity);
-  cloudMesh.name = "TACTICAL_CLOUD_PUFFS";
+  cloudMesh.name = volumetric ? "TACTICAL_CLOUD_VOLUMES" : "TACTICAL_CLOUD_IMPOSTORS";
   cloudMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   cloudMesh.frustumCulled = false;
   cloudMesh.renderOrder = 2;
-  cloudMesh.castShadow = false;
-  cloudMesh.receiveShadow = false;
+  cloudMesh.count = gridSize * gridSize;
   group.add(cloudMesh);
 
   const shadowMaterial = new THREE.MeshBasicMaterial({
     name: "MAT_TACTICAL_CLOUD_SHADOWS",
     color: 0x183946,
     transparent: true,
-    opacity: tier === "mobile" ? 0.035 : 0.065,
+    opacity: tier === "mobile" ? 0.032 : 0.058,
     depthWrite: false,
     side: THREE.DoubleSide,
     fog: true,
   });
-  const shadowMesh = new THREE.InstancedMesh(
-    new THREE.PlaneGeometry(2, 2, 1, 1),
-    shadowMaterial,
-    capacity,
-  );
+  const shadowGeometry = new THREE.PlaneGeometry(2, 2, 1, 1);
+  const shadowMesh = new THREE.InstancedMesh(shadowGeometry, shadowMaterial, capacity);
   shadowMesh.name = "TACTICAL_CLOUD_SHADOWS";
   shadowMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   shadowMesh.frustumCulled = false;
   shadowMesh.renderOrder = -4;
+  shadowMesh.count = gridSize * gridSize;
   group.add(shadowMesh);
 
   const dummy = new THREE.Object3D();
   const descriptors = [];
-  let centreCellX = Number.NaN;
-  let centreCellZ = Number.NaN;
+  let weather = {
+    id: "weather.fallback",
+    seed: "0000000000000001",
+    layers: [normalizeLayer(options)],
+    cells: [],
+  };
+  let weatherKey = `${weather.id}|${weather.seed}`;
+  let gridKey = "";
 
-  function rebuild(cameraPosition) {
-    centreCellX = Math.floor(cameraPosition.x / settings.cellSizeMetres);
-    centreCellZ = Math.floor(cameraPosition.z / settings.cellSizeMetres);
+  function rebuild(cameraPosition, timeSeconds) {
     descriptors.length = 0;
     const half = Math.floor(gridSize / 2);
-    let index = 0;
-    for (let z = -half; z <= half; z++) {
-      for (let x = -half; x <= half; x++) {
-        const descriptor = cloudCellDescriptor(centreCellX + x, centreCellZ + z, settings);
-        descriptors.push(descriptor);
-        if (descriptor.present) {
-          dummy.position.set(descriptor.x, descriptor.y, descriptor.z);
-          dummy.rotation.set(0, 0, 0);
-          dummy.scale.set(descriptor.width * 0.5, descriptor.height * 0.5, 1);
-        } else {
-          dummy.position.set(descriptor.x, descriptor.y, descriptor.z);
-          dummy.rotation.set(0, 0, 0);
-          dummy.scale.setScalar(0.0001);
+    weather.layers.slice(0, maxLayers).forEach((layer, layerIndex) => {
+      const cellSize = Math.max(2200, layer.scaleMetres * 0.92);
+      const canonicalX = cameraPosition.x - layer.windEastMps * timeSeconds;
+      const canonicalNorth = -cameraPosition.z - layer.windNorthMps * timeSeconds;
+      const centreCellX = Math.floor(canonicalX / cellSize);
+      const centreCellZ = Math.floor(canonicalNorth / cellSize);
+      for (let z = -half; z <= half; z++) {
+        for (let x = -half; x <= half; x++) {
+          const descriptor = layerDescriptor(centreCellX + x, centreCellZ + z,
+            layer, layerIndex, weather.seed);
+          descriptors.push(descriptor);
+          if (descriptor.present) {
+            for (let lobe = 1; lobe < lobesPerCloud; lobe++) {
+              descriptors.push(attachedLobeDescriptor(descriptor, lobe - 1));
+            }
+          }
         }
-        dummy.updateMatrix();
-        cloudMesh.setMatrixAt(index, dummy.matrix);
-
-        if (descriptor.present) {
-          dummy.position.set(descriptor.x, 0.42, descriptor.z);
-          dummy.rotation.set(-Math.PI / 2, 0, 0);
-          dummy.scale.set(descriptor.width * 0.44, descriptor.width * 0.31, 1);
-        } else {
-          dummy.scale.setScalar(0.0001);
-        }
-        dummy.updateMatrix();
-        shadowMesh.setMatrixAt(index, dummy.matrix);
-        index++;
       }
-    }
-    cloudMesh.instanceMatrix.needsUpdate = true;
-    shadowMesh.instanceMatrix.needsUpdate = true;
+    });
+    for (const cell of weather.cells.slice(0, maxCells)) descriptors.push({ ...cell });
   }
 
-  function update(cameraPosition, timeSeconds, fogColor, fogDensity) {
-    const nextCellX = Math.floor(cameraPosition.x / settings.cellSizeMetres);
-    const nextCellZ = Math.floor(cameraPosition.z / settings.cellSizeMetres);
-    if (nextCellX !== centreCellX || nextCellZ !== centreCellZ) rebuild(cameraPosition);
-    uniforms.uTime.value = Number(timeSeconds) || 0;
+  function nextGridKey(cameraPosition, timeSeconds) {
+    return weather.layers.slice(0, maxLayers).map((layer) => {
+      const cellSize = Math.max(2200, layer.scaleMetres * 0.92);
+      const x = Math.floor((cameraPosition.x - layer.windEastMps * timeSeconds) / cellSize);
+      const north = Math.floor((-cameraPosition.z - layer.windNorthMps * timeSeconds) / cellSize);
+      return `${x}:${north}`;
+    }).join("|");
+  }
+
+  function lifecycle(age, lifetime, transition) {
+    if (age < 0 || age > lifetime) return 0;
+    if (transition <= 0) return 1;
+    return smoothstep01(age / transition) * smoothstep01((lifetime - age) / transition);
+  }
+
+  function applyMatrices(timeSeconds) {
+    const sun = uniforms.uSunDirection.value;
+    const sunY = Math.max(0.12, Math.abs(sun.y));
+    let index = 0;
+    for (const descriptor of descriptors) {
+      if (descriptor.kind === "cell") {
+        const age = timeSeconds - descriptor.startS;
+        const life = lifecycle(age, descriptor.lifetimeS, descriptor.transitionS);
+        descriptor.present = life > 0.001;
+        descriptor.opacity = descriptor.peakCoverage * life;
+        descriptor.x = descriptor.initialX + descriptor.windX * Math.max(0, age);
+        descriptor.z = descriptor.initialZ + descriptor.windZ * Math.max(0, age);
+      } else {
+        descriptor.x = descriptor.originX + descriptor.windX * timeSeconds;
+        descriptor.z = descriptor.originZ + descriptor.windZ * timeSeconds;
+      }
+
+      const shown = descriptor.present && descriptor.opacity > 0.002;
+      dummy.position.set(descriptor.x, descriptor.y, descriptor.z);
+      dummy.rotation.set(0, 0, 0);
+      if (shown) {
+        dummy.scale.set(descriptor.radiusX, descriptor.radiusY,
+          volumetric ? descriptor.radiusZ : 1);
+      } else {
+        dummy.scale.setScalar(0.0001);
+      }
+      dummy.updateMatrix();
+      cloudMesh.setMatrixAt(index, dummy.matrix);
+      opacityAttribute.setX(index, shown ? descriptor.opacity : 0);
+      phaseAttribute.setX(index, descriptor.phase ?? 0);
+
+      const groundOffset = descriptor.y / sunY;
+      dummy.position.set(
+        descriptor.x - sun.x * groundOffset,
+        1.2,
+        descriptor.z - sun.z * groundOffset,
+      );
+      dummy.rotation.set(-Math.PI / 2, 0, 0);
+      if (shown) dummy.scale.set(descriptor.radiusX * 0.88, descriptor.radiusZ * 0.78, 1);
+      else dummy.scale.setScalar(0.0001);
+      dummy.updateMatrix();
+      shadowMesh.setMatrixAt(index, dummy.matrix);
+      index++;
+    }
+    cloudMesh.count = index;
+    shadowMesh.count = index;
+    cloudMesh.instanceMatrix.needsUpdate = true;
+    shadowMesh.instanceMatrix.needsUpdate = true;
+    opacityAttribute.needsUpdate = true;
+    phaseAttribute.needsUpdate = true;
+  }
+
+  function update(cameraPosition, simulationTimeSeconds, fogColor, fogDensity, sunDirection) {
+    const timeSeconds = Math.max(0, finite(simulationTimeSeconds));
+    const nextKey = nextGridKey(cameraPosition, timeSeconds);
+    if (nextKey !== gridKey) {
+      gridKey = nextKey;
+      rebuild(cameraPosition, timeSeconds);
+    }
+    if (sunDirection?.isVector3) uniforms.uSunDirection.value.copy(sunDirection).normalize();
+    applyMatrices(timeSeconds);
+    uniforms.uTime.value = timeSeconds;
     if (fogColor?.isColor) uniforms.uFogColor.value.copy(fogColor);
     if (Number.isFinite(fogDensity)) uniforms.uFogDensity.value = fogDensity;
     return cloudDensityAt(cameraPosition, descriptors);
   }
 
   function configure(configuration = {}) {
-    if (Number.isFinite(configuration.altitudeMetres)) {
-      settings.altitudeMetres = configuration.altitudeMetres;
-    }
-    if (Number.isFinite(configuration.thicknessMetres)) {
-      settings.thicknessMetres = configuration.thicknessMetres;
-    }
-    if (Number.isFinite(configuration.coverage)) {
-      settings.coverage = clamp(configuration.coverage, 0, 1);
-    }
-    if (Array.isArray(configuration.wind) && configuration.wind.length >= 2) {
-      uniforms.uWind.value.set(Number(configuration.wind[0]) || 0, Number(configuration.wind[1]) || 0);
-    }
-    centreCellX = Number.NaN;
-    centreCellZ = Number.NaN;
+    const normalized = {
+      id: String(configuration.id ?? "weather.custom"),
+      seed: String(configuration.seed ?? "0000000000000001"),
+      layers: Array.isArray(configuration.layers)
+        ? configuration.layers.map(normalizeLayer).slice(0, maxLayers) : [],
+      cells: Array.isArray(configuration.cells)
+        ? configuration.cells.map((cell) => cell.kind === "cell" ? { ...cell } : normalizeCell(cell))
+          .slice(0, maxCells) : [],
+    };
+    weather = normalized;
+    weatherKey = `${weather.id}|${weather.seed}`;
+    gridKey = "";
+  }
+
+  function configureFromState(state = {}) {
+    const next = weatherConfigurationFromState(state);
+    const nextKey = `${next.id}|${next.seed}`;
+    if (nextKey === weatherKey) return false;
+    configure(next);
+    return true;
   }
 
   function dispose() {
     group.removeFromParent();
     geometry.dispose();
     material.dispose();
-    shadowMesh.geometry.dispose();
+    shadowGeometry.dispose();
     shadowMaterial.dispose();
   }
 
@@ -278,9 +733,12 @@ export function createTacticalCloudField(THREE, options = {}) {
     shadowMesh,
     descriptors,
     uniforms,
-    settings,
+    get settings() { return weather; },
+    volumetric,
+    lobesPerCloud,
     update,
     configure,
+    configureFromState,
     dispose,
   });
 }

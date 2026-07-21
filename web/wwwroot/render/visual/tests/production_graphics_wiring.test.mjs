@@ -9,7 +9,7 @@ const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
 test("production admits only state-bearing environment visuals and event-bearing effects", async () => {
   const source = await readFile(appUrl, "utf8");
   assert.match(source, /const PRODUCTION_PACK_ENVIRONMENT_ENABLED = false/);
-  assert.match(source, /const PRODUCTION_SIMULATED_CLOUDS_ENABLED = false/);
+  assert.match(source, /const PRODUCTION_SIMULATED_CLOUDS_ENABLED = true/);
   assert.match(source, /const PRODUCTION_ESCORT_PRESENTATION_ENABLED = false/);
   assert.match(source, /const PRODUCTION_NONCOMBAT_WORLD_BOGEYS_VISIBLE = false/);
   assert.match(source, /createDecisionSupportSky\(\)/);
@@ -21,6 +21,12 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /postStackFactory: createDecisionSupportPostStack/);
   assert.match(source, /fogDensityForVisibility\(reportedVisibilityM\)/,
     "production visibility must come from the scenario weather projection");
+  assert.match(source, /this\.tacticalClouds\.configureFromState\(state\)/,
+    "production clouds must be reconstructed from the authoritative weather descriptors");
+  assert.match(source, /Number\(state\.t\) \|\| 0/,
+    "cloud advection must use deterministic simulation time rather than wall time");
+  assert.doesNotMatch(source, /baseFogDensity \+ cloudExtinction/,
+    "presentation must not add invented extinction over the WASM visibility sample");
   assert.match(source,
     /escortRoot\.visible = isCarrier && PRODUCTION_ESCORT_PRESENTATION_ENABLED/);
   assert.match(source,
@@ -129,9 +135,16 @@ test("bridge publishes authoritative local weather instead of renderer-owned dec
     "precipitation_mm_hr",
     "icing_hazard_01",
     "lightning_hazard_01",
+    "weather_profile_id",
+    "weather_seed_hex",
+    "weather_layers",
+    "weather_cells",
   ]) {
     assert.match(source, new RegExp(`\\\\\"${field}\\\\\"`));
   }
+  assert.match(source,
+    /StartBeatWithEnvironment\([\s\S]*KoreaWeatherPresets\.ForBeat\(index\)/,
+    "built-in sorties must stage deterministic Korea weather alongside terrain");
 });
 
 test("hidden replay exterior is preloaded and obsolete pack runtimes are disposed", async () => {

@@ -1,0 +1,269 @@
+{
+  "$schema": "https://guns-only.invalid/schemas/v1/campaign-governance.schema.json",
+  "schemaVersion": "1.0.0",
+  "governanceId": "governance.korea-braided.v1",
+  "governanceVersion": "1.0.0",
+  "campaignId": "campaign.korea-braided.v1",
+  "status": "active",
+  "northStar": "The player begins by trying to win the next Korean war and keeps playing because flying the first war makes the people, places, limits, and recurring decisions of the 2030s war matter.",
+  "primaryTimelines": [
+    {
+      "timelineId": "timeline.korea-1950s.v1",
+      "kind": "historical",
+      "displayName": "Korea, 1950–1953",
+      "dateRange": "1950-1953",
+      "dramaticFunction": "Give human scale, historical causality, and remembered consequences to decisions that initially appear abstract in the modern war.",
+      "factualBoundary": "Events, equipment, institutions, landscape, and chronology remain recognizably historical; reconstruction and compression are disclosed at the point of use."
+    },
+    {
+      "timelineId": "timeline.korea-2030s.v1",
+      "kind": "speculative",
+      "displayName": "Korea, 2030s",
+      "dateRange": "2033-2034",
+      "dramaticFunction": "Turn inherited geography, institutions, memories, and aviation problems into consequential choices under modern attrition and incomplete information.",
+      "factualBoundary": "The conflict, organizations, operations, and future platforms are explicitly alternate-history fiction grounded only in declared historical anchors and technical constraints."
+    }
+  ],
+  "nestedMemoryPolicy": {
+    "allowed": true,
+    "rules": [
+      "A memory belongs to a named character in one primary timeline and never presents itself as an omniscient third campaign.",
+      "A Ukraine memory must explain a later skill, relationship, wound, belief, or decision rather than provide generic combat texture.",
+      "Contemporary-conflict memories receive dedicated evidence and representation review before approval."
+    ]
+  },
+  "narrative": {
+    "braidUnit": "mission_dossier",
+    "historicalFunction": "The historical sortie changes the emotional or intellectual meaning of a later modern decision.",
+    "modernFunction": "The modern sortie supplies urgency and then tests whether knowledge carried from the historical storyline changes action.",
+    "openingMissionContractId": "mission.korea-2030s.drone-raid-defence.prototype.v1",
+    "openingAircraftCapabilityId": "aircraft.f22a.public-data-surrogate.v1",
+    "authoredOrderOwns": [
+      "character revelations",
+      "historical causality",
+      "the first presentation of a learning objective",
+      "the sortie in which prior knowledge is tested",
+      "the transition from F-22 privilege to drone scarcity"
+    ],
+    "seedMayVary": [
+      "weather within authored bounds",
+      "serviceability and repair timing",
+      "threat composition within the mission contract",
+      "optional objectives",
+      "route offers that do not violate reveal prerequisites"
+    ],
+    "rules": [
+      "The campaign has exactly two primary story maps even when a sortie contains a nested memory.",
+      "A historical mission is not approved solely because it features an unlockable aircraft.",
+      "The same Korean terrain skeleton may recur, but land cover, infrastructure, sensors, people, and rules are era-specific.",
+      "No procedural route may reveal the answer to an authored dramatic question before the mission that establishes that question."
+    ]
+  },
+  "progression": {
+    "runUnit": "sortie",
+    "stateLifetimes": [
+      {
+        "lifetime": "sortie",
+        "owns": [
+          "physical entity state",
+          "ammunition and fuel",
+          "damage",
+          "contact belief",
+          "ordered events and outcome"
+        ],
+        "resetRule": "Ends with the authoritative SimulationSession sortie."
+      },
+      {
+        "lifetime": "run",
+        "owns": [
+          "route seed and current node",
+          "airframe readiness and repair queue",
+          "parts and munitions",
+          "network integrity",
+          "intelligence confidence"
+        ],
+        "resetRule": "Ends when the operation succeeds or no viable route remains."
+      },
+      {
+        "lifetime": "profile",
+        "owns": [
+          "content unlocks",
+          "story and archive discoveries",
+          "records",
+          "starting options"
+        ],
+        "resetRule": "Durable unless the player explicitly deletes the profile."
+      }
+    ],
+    "allowedPermanentUnlockKinds": [
+      "aircraft_type",
+      "archive_entry",
+      "historical_chapter",
+      "mission",
+      "mission_type",
+      "route_intel",
+      "starting_package",
+      "story_node"
+    ],
+    "forbiddenPermanentAdvantages": [
+      "aerodynamic_buff",
+      "ai_performance_penalty",
+      "hidden_accuracy_buff",
+      "sensor_truth_buff",
+      "structural_limit_buff",
+      "weapon_damage_buff"
+    ],
+    "readinessResources": [
+      "airframe_readiness",
+      "ammunition_stock",
+      "controller_capacity",
+      "f22_inventory",
+      "intelligence_confidence",
+      "network_integrity",
+      "repair_capacity",
+      "spare_engines",
+      "time"
+    ],
+    "attritionRules": [
+      "Every readiness change has a visible cause and a future decision consequence.",
+      "Ordinary failure normally consumes time, serviceability, or repair capacity rather than deleting an F-22 outright.",
+      "Permanent airframe loss requires an explicit and telegraphed catastrophic outcome.",
+      "Drones have named physical, sensor, link, or autonomy limits and at least one tactically meaningful strength.",
+      "Every generated node offers at least one aircraft-and-mission combination the current run can launch."
+    ],
+    "failurePolicy": [
+      "Failure may unlock historical context or an archive fragment without advancing the modern front.",
+      "No single ordinary failure may create an unrecoverable fleet death spiral.",
+      "A run ends only after an explicit terminal outcome, not because a hidden resource crossed a threshold."
+    ],
+    "mergePolicy": [
+      "Permanent unlocks and archive discoveries merge by set union.",
+      "Records merge by the declared best-value rule for that record.",
+      "Two active runs never merge field by field; retain one complete run after an explicit choice."
+    ]
+  },
+  "education": {
+    "deliveryLoop": "experience_explanation_reapplication",
+    "surfaces": [
+      "in_flight",
+      "debrief",
+      "archive"
+    ],
+    "objectiveGrammar": "Each objective states an observable action the player can perform under named conditions.",
+    "assessmentPolicy": "Transfer is evaluated through a later flight decision and recorded evidence, never through a mandatory trivia quiz.",
+    "rules": [
+      "In-flight presentation supplies honest cues and consequences but no lecture during tactical workload.",
+      "A debrief prioritizes at most the configured number of insights supported by the sortie record.",
+      "Archive depth is optional and exposes claims, disagreement, sources, and simulation abstractions.",
+      "Basic controls, safety cues, and accessibility information are never withheld as progression rewards."
+    ]
+  },
+  "evidence": {
+    "epistemicLabels": [
+      "engineering",
+      "history",
+      "reconstruction",
+      "fiction"
+    ],
+    "sourceGrades": [
+      "journalism",
+      "official_synthesis",
+      "oral_history",
+      "primary_document",
+      "scholarly_secondary",
+      "technical_reference"
+    ],
+    "sourceRules": [
+      "Engineering, history, and reconstruction claims cite at least one registered source.",
+      "A primary document establishes what its author measured, recorded, ordered, or claimed, not automatic neutral truth.",
+      "Material disagreement receives more than one relevant perspective or an explicit research gap.",
+      "Research citation and shipped-asset licensing are separate obligations."
+    ],
+    "disputePolicy": "Preserve credible disagreement, avoid false numerical precision, and state what the mission requires without declaring an unnecessary winner.",
+    "fictionPolicy": "Invented 2030s events and organizations are labeled fiction even when grounded in real institutions or durable technical constraints.",
+    "abstractionPolicy": "Record what the simulation changes or omits, why the abstraction exists, and how the player can discover its boundary."
+  },
+  "reviewGates": [
+    {
+      "gateId": "narrative_braid",
+      "ownerRole": "narrative_editor",
+      "blocking": true,
+      "exitCriteria": [
+        "The dossier spans both primary timelines.",
+        "The historical sortie changes the meaning of a named modern decision.",
+        "Reveal order and procedural variation boundaries are explicit."
+      ]
+    },
+    {
+      "gateId": "simulation_integrity",
+      "ownerRole": "simulation_reviewer",
+      "blocking": true,
+      "exitCriteria": [
+        "Vehicles and systems use declared capability and mission contracts.",
+        "Outcomes and debrief evidence come from authoritative recorded state.",
+        "Progression grants no prohibited physical or informational buff."
+      ]
+    },
+    {
+      "gateId": "evidence",
+      "ownerRole": "research_editor",
+      "blocking": true,
+      "exitCriteria": [
+        "Claims are labeled and source references close.",
+        "Disagreement and uncertainty are preserved where material.",
+        "Abstractions are separate from factual claims."
+      ]
+    },
+    {
+      "gateId": "learning_design",
+      "ownerRole": "learning_designer",
+      "blocking": true,
+      "exitCriteria": [
+        "Every objective is observable.",
+        "Experience, debrief explanation, and later reapplication are all authored.",
+        "Telemetry can test whether the lesson transfers."
+      ]
+    },
+    {
+      "gateId": "representation",
+      "ownerRole": "perspective_reviewer",
+      "blocking": true,
+      "exitCriteria": [
+        "Playable actors retain goals and agency beyond faction labels.",
+        "Real conflict memory is not used only as aesthetic texture.",
+        "Institutional claims, character beliefs, and narration remain distinct."
+      ]
+    },
+    {
+      "gateId": "production",
+      "ownerRole": "mission_director",
+      "blocking": true,
+      "exitCriteria": [
+        "Terrain, graphics, audio, UI, and performance expose every cue the decision model expects.",
+        "Accessibility alternatives exist for critical visual and audio information.",
+        "The mission passes its declared telemetry and playtest proofs."
+      ]
+    }
+  ],
+  "changeControl": {
+    "dossierStatuses": [
+      "pitch",
+      "researching",
+      "prototype",
+      "review",
+      "approved",
+      "retired"
+    ],
+    "constitutionalChangeRequires": [
+      "a dated design record explaining the decision",
+      "a campaign governance version increment",
+      "a migration note for affected dossiers and durable saves",
+      "re-review of every gate whose assumptions changed"
+    ],
+    "schemaChangeRequires": [
+      "validator tests for the new invariant",
+      "migration or explicit compatibility for existing dossiers",
+      "updated authoring documentation"
+    ]
+  }
+}

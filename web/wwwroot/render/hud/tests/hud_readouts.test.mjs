@@ -413,7 +413,11 @@ test("production HUD consumes stabilized KIAS plus physical corner and fuel read
   assert.match(source, /const spd = display\.indicatedKts/);
   assert.match(source, /lowSpeed:\s*stallAwareness\(frame\.state\)/);
   assert.match(source, /fixedMarkers:\s*speedTapeMarkers\(frame\.state\)/);
-  assert.match(source, /this\.drawAirdataLabels\(frame\.state, tapeInset, display\)/);
+  assert.match(source,
+    /this\.drawAirdataLabels\(frame\.state, tapeInset, this\.width - tapeInset, display\)/);
+  assert.match(source, /ctx\.fillText\("ALT FT", altitudeX/);
+  assert.match(source, /ctx\.fillText\(verticalText, altitudeX/,
+    "vertical speed belongs to the altitude-side readout");
   assert.match(source, /verticalSpeedText\(verticalSpeedFpm\)/);
   assert.doesNotMatch(source, /if \(!frame\.padlock\)\s*\{\s*const tapeInset/,
     "padlock must retain the physical IAS/stall/corner tape instead of a duplicate card");
@@ -429,8 +433,8 @@ test("production HUD consumes stabilized KIAS plus physical corner and fuel read
   assert.match(source, /case "COME LEFT": return "COME LEFT"/);
   assert.match(source, /case "COME RIGHT": return "COME RIGHT"/);
   assert.match(source, /case "TERMINAL":/);
-  assert.match(source, /this\._speedEntityId !== speedEntityId/);
-  assert.match(source, /1 - Math\.exp\(-dt \/ 0\.20\)/);
+  assert.match(source, /display\.indicatedRateKtsPerSecond \* 6/);
+  assert.match(source, /const trendAlpha = clamp\(\(Math\.abs\(trend\) - 2\) \/ 4/);
   assert.doesNotMatch(source, /Number\(state\.kill_progress\)/,
     "hit count is not a physical damage percentage");
   assert.doesNotMatch(source, /`AIRFRAME \$\{Math\.round\(health \* 100\)\}%`/,

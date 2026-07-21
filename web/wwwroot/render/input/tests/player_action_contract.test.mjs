@@ -10,7 +10,7 @@ import { CONTROL_BINDINGS } from "../../settings/player_settings.js";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../");
 
 const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
-  sessionSource, bridgeSource] = await Promise.all([
+  sessionSource, bridgeSource, progressionSource] = await Promise.all([
   "web/wwwroot/app.js",
   "web/wwwroot/hud.js",
   "web/wwwroot/index.html",
@@ -18,6 +18,7 @@ const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
   "sim/DetentLayer.cs",
   "sim/SimulationSession.cs",
   "web/WebBridge.cs",
+  "web/wwwroot/render/progression/campaign_progression.js",
 ].map((relativePath) => readFile(path.join(ROOT, relativePath), "utf8")));
 
 function normalizedCopy(source, { markup = false } = {}) {
@@ -175,7 +176,7 @@ test("every visible HTML button is wired through one auditable action surface", 
     const attrs = button.attributes;
     const hooks = [
       "data-test-action", "data-hold-key", "data-pulse-key", "data-mobile-action",
-      "data-sortie-activity", "data-mission-select", "data-deck-configuration",
+      "data-program-node", "data-deck-configuration",
     ]
       .filter((name) => attrs[name] !== undefined);
     if (attrs.id && explicitButtons.has(attrs.id)) {
@@ -245,112 +246,53 @@ test("touch pilots can explicitly command gear, both flap directions, and contex
     "a paused or rejected keyboard V press must not change presentation state");
 });
 
-test("fresh and touch-only players can reach every mission without a hidden keyboard dependency", () => {
-  assert.match(appSource, /let selectedBeat = [\s\S]*?\? requestedInitialBeat : 1;/,
-    "a fresh visitor should begin at the first guns-only BFM drill");
-  assert.match(bridgeSource, /static readonly SimulationSession Session = new\(1,/,
-    "the bridge and browser must agree on the initial mission");
-  assert.match(appSource, /requestedInitialBeat <= 8 \? requestedInitialBeat : 1/,
-    "a mission query may deep-link only to a real briefing");
+test("fresh players launch directly into the first F-22 merge", () => {
+  assert.match(appSource,
+    /initialProgramNode = requestedProgramNode[\s\S]*?recommendedCampaignNode\(campaignProfile\)/);
+  assert.match(appSource, /let selectedBeat = initialProgramNode\.mission/);
+  assert.match(bridgeSource, /static readonly SimulationSession Session = new\(7,/,
+    "the bridge fallback and browser must agree on the F-22 first experience");
+  assert.match(appSource, /let autoLaunchPending = true/);
+  assert.match(appSource,
+    /function tryAutoLaunch\([\s\S]*?pauseReasons\.has\("ready"\)[\s\S]*?return launchMission\(selectedBeat\)/);
 
   const buttons = htmlButtons(indexSource);
-  const selectIds = buttons.filter((button) => button.attributes["data-mission-select"] !== undefined)
-    .map((button) => Number(button.attributes["data-mission-select"]));
-  assert.deepEqual(selectIds, [1, 2, 7, 5, 6, 3, 4, 8],
-    "the activity-first display order is a deliberate product contract");
-  assert.deepEqual([...selectIds].sort(), [1, 2, 3, 4, 5, 6, 7, 8]);
-  assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1,
-    "the briefing owns one unambiguous primary launch action");
-  assert.match(appSource,
-    /function activateReadyAction\([\s\S]*?pauseReasons\.has\("ready"\)\) return launchMission\(selectedBeat\)/,
-    "the primary action must launch the currently previewed mission");
-
-  assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/,
-    "the full-screen sortie picker must isolate background controls as a modal dialog");
-  assert.match(indexSource, /\.ready-selector,[\s\S]*?touch-action:\s*pan-y/,
-    "the picker must remain vertically scrollable inside a page that disables body touch gestures");
-  assert.match(indexSource, /\.ready-activity-nav button\s*\{[\s\S]*?min-height:\s*50px/,
-    "activity targets must remain touch-sized");
-  assert.match(indexSource, /\.sortie-choice\s*\{[\s\S]*?min-height:\s*78px/,
-    "sortie cards must remain touch-sized");
-});
-
-test("the sortie catalogue is activity-first, complete, and synchronized with briefing truth", () => {
-  const expectedGroups = new Map([
-    ["dogfight", [1, 2, 7]],
-    ["carrier", [5, 6]],
-    ["gunnery", [3, 4]],
-    ["defence", [8]],
+  const nodeIds = buttons.filter((button) => button.attributes["data-program-node"] !== undefined)
+    .map((button) => button.attributes["data-program-node"]);
+  assert.deepEqual(nodeIds, [
+    "first-merge", "raid-defence", "endurance-merge", "carrier-conversion",
   ]);
-  const groupMatches = [...indexSource.matchAll(
-    /<section\s+id="ready-group-[^"]+"[\s\S]*?data-sortie-group="([^"]+)"[^>]*>([\s\S]*?)<\/section>/g,
-  )];
-  assert.deepEqual(groupMatches.map((match) => match[1]), [...expectedGroups.keys()]);
-  for (const [, activity, body] of groupMatches) {
-    const missions = [...body.matchAll(/data-mission-select="(\d+)"/g)]
-      .map((match) => Number(match[1]));
-    assert.deepEqual(missions, expectedGroups.get(activity), `${activity}: wrong mission membership`);
-  }
-  assert.match(appSource,
-    /dogfight:\s*Object\.freeze\(\{ label: "Dogfight", missions: Object\.freeze\(\[1, 2, 7\]\)/);
-  assert.match(appSource,
-    /carrier:\s*Object\.freeze\(\{ label: "Carrier", missions: Object\.freeze\(\[5, 6\]\)/);
-  assert.match(appSource,
-    /gunnery:\s*Object\.freeze\(\{ label: "Gunnery", missions: Object\.freeze\(\[3, 4\]\)/);
-  assert.match(appSource,
-    /defence:\s*Object\.freeze\(\{ label: "Defence", missions: Object\.freeze\(\[8\]\)/);
-
-  const buttons = htmlButtons(indexSource);
-  for (let mission = 1; mission <= 8; mission += 1) {
-    const select = buttons.find((button) => button.attributes["data-mission-select"] === String(mission));
-    assert.ok(select, `mission ${mission}: missing select card`);
-
-    const block = appSource.match(new RegExp(`\\n\\s*${mission}: \\{([\\s\\S]*?)\\n\\s*\\},`))?.[1];
-    assert.ok(block, `mission ${mission}: missing briefing model`);
-    const title = block.match(/title: "([^"]+)"/)?.[1];
-    const card = block.match(/card: "([^"]+)"/)?.[1];
-    assert.ok(title && card, `mission ${mission}: briefing needs title and card copy`);
-    assert.ok(select.text.includes(normalizedCopy(title)), `mission ${mission}: card title drifted from briefing`);
-    assert.ok(select.text.includes(normalizedCopy(card)), `mission ${mission}: card summary drifted from briefing`);
-  }
-
-  assert.match(appSource,
-    /selectedActivity = MISSION_BRIEFS\[selectedBeat\]\?\.activity/,
-    "deep-linked missions must open their own activity group");
-  assert.match(appSource,
-    /function selectMission\([\s\S]*?selectedActivity = MISSION_BRIEFS\[selectedBeat\]\?\.activity[\s\S]*?activityMissionSelection\.set\(selectedActivity, selectedBeat\)/,
-    "card, digit, and deep-link selection must not diverge from the visible activity");
-  const selectMissionBody = appSource.match(
-    /function selectMission\([\s\S]*?\)\s*\{([\s\S]*?)\n\}/,
-  )?.[1] ?? "";
-  assert.doesNotMatch(selectMissionBody, /enterReady\(/,
-    "previewing a catalogue card must not restage the authoritative simulation");
-  assert.match(appSource,
-    /const missionUrl = new URL\(window\.location\.href\)[\s\S]*?searchParams\.delete\("mission"\)[\s\S]*?searchParams\.set\("mission", String\(selectedBeat\)\)[\s\S]*?history\.replaceState\(window\.history\.state, "", missionUrl\)/,
-    "mission selection must preserve unrelated URL parameters and the hash while default mission 1 stays canonical");
+  assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
+  assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
+  assert.match(indexSource, /\.ready-selector,[\s\S]*?touch-action:\s*pan-y/);
+  assert.match(indexSource, /\.sortie-choice\s*\{[\s\S]*?min-height:\s*78px/);
 });
 
-test("sortie-picker keyboard and modal behavior cannot leak into flight shortcuts", () => {
+test("the player-facing program is linear and performance-gated", () => {
+  assert.match(progressionSource,
+    /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "raid-defence"[\s\S]*?mission: 8[\s\S]*?id: "endurance-merge"[\s\S]*?mission: 7[\s\S]*?id: "carrier-conversion"[\s\S]*?mission: 5/);
+  assert.match(progressionSource,
+    /case "first-merge":[\s\S]*?kills >= 1[\s\S]*?case "raid-defence":[\s\S]*?drone_raid_score\) >= 65[\s\S]*?case "endurance-merge":[\s\S]*?kills >= 2/);
+  assert.match(progressionSource,
+    /function campaignNodeUnlocked[\s\S]*?CAMPAIGN_NODES\[node\.sequence - 2\][\s\S]*?qualifications/);
+  assert.match(appSource,
+    /function recordCampaignQualification[\s\S]*?qualifyCampaignNode[\s\S]*?saveCampaignProfile/);
+  assert.match(appSource,
+    /function selectCampaignNode[\s\S]*?campaignNodeUnlocked[\s\S]*?selectedBeat = node\.mission/);
+  assert.match(appSource,
+    /searchParams\.delete\("mission"\)[\s\S]*?searchParams\.set\("program", selectedProgramNodeId\)[\s\S]*?history\.replaceState/);
+});
+
+test("program modal behavior cannot leak into flight shortcuts", () => {
   assert.match(appSource,
     /function nativeInteractiveOwnsKey\(event\)[\s\S]*?"Enter", "NumpadEnter", "Space"[\s\S]*?"ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"/);
   const nativeGuard = appSource.match(
     /function nativeInteractiveOwnsKey\(event\)\s*\{([\s\S]*?)\n}/,
   )?.[1] ?? "";
-  assert.doesNotMatch(nativeGuard, /Digit|KeyC|KeyH|KeyM|KeyR/,
-    "number and briefing shortcuts must still work while a menu button owns focus");
-  assert.match(appSource,
-    /window\.addEventListener\("keydown"[\s\S]*?if \(nativeInteractiveOwnsKey\(event\)\) return;[\s\S]*?\^Digit\[1-8\]\$/,
-    "native button activation must be separated from, not replace, mission shortcuts");
+  assert.doesNotMatch(nativeGuard, /Digit|KeyC|KeyH|KeyM|KeyR/);
+  assert.doesNotMatch(appSource, /\^Digit\[1-8\]\$/,
+    "raw beat-number shortcuts must not bypass progression");
 
-  assert.match(appSource,
-    /button\.tabIndex = selected \? 0 : -1/,
-    "activity tabs need a single roving tab stop");
-  assert.match(appSource,
-    /readyActivityNav\?\.addEventListener\("keydown"[\s\S]*?\["ArrowLeft", "ArrowRight", "Home", "End"\][\s\S]*?focus\(\{ preventScroll: true }\)[\s\S]*?selectActivity/,
-    "activity tabs need standard arrow, Home, and End navigation");
-  assert.match(appSource,
-    /function selectActivity\([\s\S]*?selectMission\(mission, \{ focus: false }\)/,
-    "changing tabs must not steal focus back to a mission card");
   assert.match(appSource,
     /const target = !readyStart\.disabled \? readyStart : selectedMission/,
     "initial modal focus must keep the advertised Enter-to-fly action honest");
@@ -418,7 +360,7 @@ test("non-bridge player actions advertised by the quicklook have observable UI h
   const directActions = [
     ["H HIDE", /event\.code === "KeyH"[\s\S]*?view\.hud\.toggleLegend\(\)/],
     ["M SOUND", /event\.code === "KeyM"[\s\S]*?commitPlayerSettings\(\{ \.\.\.playerSettings, audio: !playerSettings\.audio \}\)/],
-    ["1–8 MISSION", /\^Digit\[1-8\]\$[\s\S]*?selectMission\(/],
+    ["R RESTART", /event\.code === "KeyR"[\s\S]*?restartMissionNow\(\)/],
     ["DRAG LOOK", /sceneCanvas\.addEventListener\("pointermove"/],
   ];
   for (const [help, handler] of directActions) {

@@ -74,6 +74,17 @@ import {
 import { RemoteAssetResolutionPolicy } from "./render/presence/remote_asset_policy.js";
 import { gTolerancePresentation } from "./render/physiology/g_tolerance_presentation.js";
 import {
+  CAMPAIGN_NODES,
+  campaignNode,
+  campaignNodeQualified,
+  campaignNodeUnlocked,
+  loadCampaignProfile,
+  nextCampaignNode,
+  qualifyCampaignNode,
+  recommendedCampaignNode,
+  saveCampaignProfile,
+} from "./render/progression/campaign_progression.js";
+import {
   buildTelemetryBatch,
   retainNewestTelemetryRows,
 } from "./render/telemetry/telemetry_batch.js";
@@ -121,7 +132,7 @@ const CLEAR_AIR_VISIBILITY_M = 100_000;
 // view until it represents authoritative state and passes an in-mission visual review. Pack weapon
 // and damage effects remain enabled because each one is evidence of a real simulation event.
 const PRODUCTION_PACK_ENVIRONMENT_ENABLED = false;
-const PRODUCTION_SIMULATED_CLOUDS_ENABLED = false;
+const PRODUCTION_SIMULATED_CLOUDS_ENABLED = true;
 const PRODUCTION_ESCORT_PRESENTATION_ENABLED = false;
 const PRODUCTION_NONCOMBAT_WORLD_BOGEYS_VISIBLE = false;
 const PRODUCTION_KOREA_TERRAIN_ENABLED = true;
@@ -161,10 +172,9 @@ const readyDeckButtons = [...document.querySelectorAll("[data-deck-configuration
 const readyMenuTitle = document.querySelector("#ready-menu-title");
 const readyMenuHelp = document.querySelector("#ready-menu-help");
 const readySelector = document.querySelector("#ready-selector");
-const readyActivityNav = document.querySelector("#ready-activity-nav");
-const readyActivityButtons = [...document.querySelectorAll("[data-sortie-activity]")];
-const readyMissionGroups = [...document.querySelectorAll("[data-sortie-group]")];
-const readyMissionOptions = [...document.querySelectorAll("[data-mission-option]")];
+const readyProgramButtons = [...document.querySelectorAll("[data-program-node]")];
+const readyProgramStatuses = [...document.querySelectorAll("[data-program-status]")];
+const readyProgramProgress = document.querySelector("#ready-program-progress");
 const readyStart = document.querySelector("#ready-start");
 const readyReplay = document.querySelector("#ready-replay");
 const readySettings = document.querySelector("#ready-settings");
@@ -699,6 +709,7 @@ function applyBuildIdentity(nextIdentity) {
   }
   renderBuildIdentity();
   renderPauseUi();
+  queueMicrotask(tryAutoLaunch);
 }
 
 function resolvedBuildIdentity() {
@@ -782,7 +793,8 @@ function reloadCurrentBuild() {
   const destination = buildIdentity.stale
     ? new URL(window.location.pathname, CANONICAL_PRODUCTION_ORIGIN)
     : new URL(window.location.href);
-  if (selectedBeat !== 1) destination.searchParams.set("mission", String(selectedBeat));
+  destination.searchParams.delete("mission");
+  destination.searchParams.set("program", selectedProgramNodeId);
   destination.searchParams.set("build", buildIdentity.currentBuild || buildIdentity.releaseBuild);
   window.location.replace(destination.href);
 }
@@ -826,11 +838,17 @@ let resetMobileInput = () => {};
 let setMobileFrozen = () => {};
 let activeView = null;
 let latestState = null;
-const requestedInitialBeat = Number(new URLSearchParams(window.location.search).get("mission"));
-let selectedBeat = Number.isInteger(requestedInitialBeat)
-  && requestedInitialBeat >= 1 && requestedInitialBeat <= 8 ? requestedInitialBeat : 1;
+let campaignProfile = loadCampaignProfile();
+const requestedProgramNode = campaignNode(
+  new URLSearchParams(window.location.search).get("program"),
+);
+const initialProgramNode = requestedProgramNode
+  && campaignNodeUnlocked(campaignProfile, requestedProgramNode.id)
+  ? requestedProgramNode : recommendedCampaignNode(campaignProfile);
+let selectedProgramNodeId = initialProgramNode.id;
+let selectedBeat = initialProgramNode.mission;
 let stagedBeat = selectedBeat;
-let selectedDeckConfiguration = 0;
+let selectedDeckConfiguration = 1;
 let stagedDeckConfiguration = selectedDeckConfiguration;
 let resetFrameClock = () => {};
 let bridgePauseApplied = null;
@@ -839,6 +857,7 @@ let multiplayer = null;
 let incidentReplay = null;
 let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
+let autoLaunchPending = true;
 let settingsReturnFocus = null;
 let bindingCaptureAction = null;
 let lastAccessibilityAnnouncement = "";
@@ -1107,12 +1126,13 @@ const MISSION_BRIEFS = Object.freeze({
   },
   5: {
     activity: "carrier",
-    kicker: "Carrier qualification · mission 05",
-    title: "Final Approach",
+    kicker: "Carrier conversion · programme 04",
+    title: "F-35C Carrier Conversion",
     sortie: "One recovery attempt · trap or bolter",
-    card: "Fly one scored pass from the active groove to a trap or bolter.",
-    brief: "Start on-speed near 136 KIAS. Use power to control glideslope, keep lineup inside the landing area, and fly through touchdown without a flare. A trap or bolter ends the attempt with its recorded grade and primary correction.",
-    controls: "W/S power · arrows fly · V padlocks the boat\nTarget: 136 KIAS · on-speed AOA · 463–1,024 FPM at touchdown",
+    configuration: "F-35C public-data carrier surrogate · recovery only · angled deck",
+    card: "Convert to the carrier after three Raptor qualifications, then fly one scored pass.",
+    brief: "This is a reduced-order F-35C carrier surrogate, not an OEM systems or flight-control model. Use power to control glideslope, hold lineup inside the angled landing area, and fly through touchdown without a flare. A trap or bolter ends the attempt with its recorded grade and primary correction.",
+    controls: "W/S power · arrows fly · V padlocks the boat\nFly the on-speed AOA cue · power for glideslope · no flare",
   },
   6: {
     activity: "carrier",
@@ -1127,10 +1147,10 @@ const MISSION_BRIEFS = Object.freeze({
     activity: "dogfight",
     kicker: "Visual fight · mission 07",
     title: "F-22A vs Su-27S",
-    sortie: "Public-data surrogates · guns only",
-    configuration: "F-22 public-data surrogate · guns only · Auto-GCAS armed",
-    card: "Take a neutral modern visual merge with guns safe through the first pass.",
-    brief: "Take the neutral high-aspect merge with guns safe through the first pass. Then fight for the rear quarter, preserve IAS, and manage both G onset and duration: 9 G is available, but vision and consciousness are physiological state. Auto-GCAS responds only to predicted terrain collision; hold K to paddle an active fly-up. No missiles or unmodelled modern sensors.",
+    sortie: "Continuous visual merges · public-data surrogates · guns only",
+    configuration: "F-22 public-data surrogate · 480 rounds across all fights · Auto-GCAS armed",
+    card: "Splash successive Su-27 surrogates; each replacement enters through a fresh neutral merge.",
+    brief: "Each splash stages another offset Su-27 visual merge after a short destruction dwell. Fuel, ammunition, ownship damage, and kill count persist, so burst discipline matters; every new opponent starts guns-safe through the first pass. Fight for the rear quarter, preserve IAS, and manage both G onset and duration: 9 G is available, but vision and consciousness are physiological state. Auto-GCAS responds only to predicted terrain collision; hold K to paddle an active fly-up. No missiles or unmodelled modern sensors.",
     controls: "Arrows fly · W/S power · F guns · V padlock\nSpace releases the G limiter · hold K only to paddle an active Auto-GCAS fly-up",
   },
   8: {
@@ -1145,17 +1165,34 @@ const MISSION_BRIEFS = Object.freeze({
   },
 });
 
-const MISSION_ACTIVITIES = Object.freeze({
-  dogfight: Object.freeze({ label: "Dogfight", missions: Object.freeze([1, 2, 7]) }),
-  carrier: Object.freeze({ label: "Carrier", missions: Object.freeze([5, 6]) }),
-  gunnery: Object.freeze({ label: "Gunnery", missions: Object.freeze([3, 4]) }),
-  defence: Object.freeze({ label: "Defence", missions: Object.freeze([8]) }),
+const CAMPAIGN_BRIEFS = Object.freeze({
+  "first-merge": Object.freeze({
+    kicker: "Raptor programme · qualification 01",
+    title: "First Merge",
+    sortie: "F-22A vs Su-27S · guns only · first pass safe",
+    configuration: "F-22 public-data surrogate · 480 rounds · Auto-GCAS armed",
+    brief: "You are already at the visual merge. Survive the first pass, fight into the rear quarter, and splash one Su-27 surrogate. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
+    controls: "Arrows fly · W/S power · F guns · V padlock\nSplash one bandit to qualify · Space releases the G limiter",
+  }),
+  "raid-defence": Object.freeze({
+    ...MISSION_BRIEFS[8],
+    kicker: "Raptor programme · qualification 02",
+    title: "Raid Defence",
+    sortie: "F-22A defensive intercept · four staged raiders",
+    configuration: "F-22 public-data surrogate · 480 rounds · Auto-GCAS armed",
+  }),
+  "endurance-merge": Object.freeze({
+    ...MISSION_BRIEFS[7],
+    kicker: "Raptor programme · qualification 03",
+    title: "Endurance Merge",
+    sortie: "Successive visual merges · persistent fuel, ammunition, and damage",
+    brief: "Two splashes earn carrier conversion. Each replacement Su-27 enters through a fresh neutral merge while fuel, ammunition, damage, and your kill count persist. Burst discipline and G management now matter across the whole sortie, not just one fight.",
+    controls: "Arrows fly · W/S power · F guns · V padlock\nSplash two bandits in one sortie to qualify",
+  }),
+  "carrier-conversion": Object.freeze({
+    ...MISSION_BRIEFS[5],
+  }),
 });
-
-let selectedActivity = MISSION_BRIEFS[selectedBeat]?.activity || "dogfight";
-const activityMissionSelection = new Map(Object.entries(MISSION_ACTIVITIES)
-  .map(([activity, definition]) => [activity, definition.missions[0]]));
-activityMissionSelection.set(selectedActivity, selectedBeat);
 
 function pressMappedKey(code, source, gkeyOverride = undefined) {
   const gkey = gkeyOverride ?? keyMap.get(code);
@@ -1469,7 +1506,8 @@ function togglePadlock() {
 }
 
 function missionBrief() {
-  return MISSION_BRIEFS[selectedBeat] || MISSION_BRIEFS[1];
+  return CAMPAIGN_BRIEFS[selectedProgramNodeId]
+    || MISSION_BRIEFS[selectedBeat] || CAMPAIGN_BRIEFS["first-merge"];
 }
 
 function healthPercent(value) {
@@ -1522,10 +1560,18 @@ function renderIncidentReplay(frame) {
     ? touchdown.deviations.join(" | ") : "NO RECORDED DEVIATIONS";
   const passGrade = String(latestState?.carrier_pass_grade || "NONE").replaceAll("_", " ");
   const passPhases = String(latestState?.carrier_pass_phase_summary || "").replaceAll("_", " ");
+  const passCorrection = String(latestState?.carrier_pass_primary_correction || "NONE")
+    .replaceAll("_", " ");
+  const waveOff = latestState?.carrier_pass_waveoff_required === true
+    ? latestState?.carrier_pass_waveoff_complied === true
+      ? "WAVE-OFF COMPLIED" : "WAVE-OFF NOT COMPLIED"
+    : null;
   incidentReplayOutcome.textContent = `PHYSICAL OUTCOME · ${analysis.physicalOutcome}`;
   incidentReplayGrade.textContent = [
     `FULL-PASS GRADE · ${passGrade}`,
+    waveOff,
     passPhases || null,
+    passCorrection !== "NONE" ? `FULL-PASS PRIMARY · ${passCorrection}` : null,
     `TOUCHDOWN ASSESSMENT · ${grade} · ${deviations} · PRIMARY ${touchdown.primaryCorrection}`,
     `${touchdown.profile} v${touchdown.version}`,
   ].filter(Boolean).join("  ·  ");
@@ -1543,26 +1589,32 @@ function renderIncidentReplay(frame) {
   if (incidentReplayCamera) incidentReplayCamera.value = incidentReplay.camera;
 }
 
-function renderSortieSelection() {
-  for (const button of readyActivityButtons) {
-    const selected = button.dataset.sortieActivity === selectedActivity;
-    button.setAttribute("aria-selected", String(selected));
-    button.tabIndex = selected ? 0 : -1;
+function renderCampaignProgress() {
+  const qualifiedCount = CAMPAIGN_NODES.filter((node) =>
+    campaignNodeQualified(campaignProfile, node.id)).length;
+  if (readyProgramProgress) {
+    readyProgramProgress.textContent = `${qualifiedCount} / ${CAMPAIGN_NODES.length} QUALIFIED`;
   }
-  for (const group of readyMissionGroups) {
-    group.hidden = group.dataset.sortieGroup !== selectedActivity;
+  for (const button of readyProgramButtons) {
+    const nodeId = button.dataset.programNode;
+    const selected = nodeId === selectedProgramNodeId;
+    const qualified = campaignNodeQualified(campaignProfile, nodeId);
+    const unlocked = campaignNodeUnlocked(campaignProfile, nodeId);
+    button.disabled = !unlocked;
+    button.setAttribute("aria-pressed", String(selected));
+    button.closest(".sortie-option")?.setAttribute("data-selected", String(selected));
+    button.closest(".sortie-option")?.setAttribute(
+      "data-program-state", qualified ? "qualified" : unlocked ? "available" : "locked",
+    );
+    if (selected) button.setAttribute("aria-current", "step");
+    else button.removeAttribute("aria-current");
   }
-  for (const option of readyMissionOptions) {
-    const mission = Number(option.dataset.missionOption);
-    const selected = mission === selectedBeat;
-    option.dataset.selected = String(selected);
-    const selectButton = option.querySelector("[data-mission-select]");
-    selectButton?.setAttribute("aria-pressed", String(selected));
-    if (selected) selectButton?.setAttribute("aria-current", "true");
-    else selectButton?.removeAttribute("aria-current");
+  for (const status of readyProgramStatuses) {
+    const nodeId = status.dataset.programStatus;
+    status.textContent = campaignNodeQualified(campaignProfile, nodeId)
+      ? "QUALIFIED" : campaignNodeUnlocked(campaignProfile, nodeId) ? "AVAILABLE" : "LOCKED";
   }
-  const carrierSelected = [5, 6].includes(selectedBeat);
-  if (readyDeckConfig) readyDeckConfig.hidden = !carrierSelected;
+  if (readyDeckConfig) readyDeckConfig.hidden = true;
   for (const button of readyDeckButtons) {
     button.setAttribute("aria-pressed", String(
       Number(button.dataset.deckConfiguration) === selectedDeckConfiguration,
@@ -1579,7 +1631,7 @@ function readyScreenFocusables() {
 function focusReadyScreen() {
   if (!readyScreen.classList.contains("visible")) return;
   const selectedMission = readyScreen.querySelector(
-    `[data-mission-select="${selectedBeat}"]`,
+    `[data-program-node="${selectedProgramNodeId}"]`,
   );
   // Keep Enter-to-fly honest: when the primary action is available it owns initial focus. During
   // release verification the selected card is the safe focusable fallback, never a disabled button.
@@ -1605,26 +1657,70 @@ function carrierQualificationDebriefFacts(state) {
   const touchdownGrade = String(state?.touchdown_grade || "UNASSESSED")
     .replaceAll("_", " ")
     .replaceAll("HARDSINKRATE", "HARD SINK RATE");
-  const correction = String(state?.touchdown_primary_correction || "REVIEW APPROACH")
+  const touchdownCorrection = String(state?.touchdown_primary_correction || "NONE")
     .replaceAll("_", " ");
   const passGrade = String(state?.carrier_pass_grade || "UNASSESSED")
     .replaceAll("_", " ");
+  const passCorrection = String(state?.carrier_pass_primary_correction || "NONE")
+    .replaceAll("_", " ");
   const phases = String(state?.carrier_pass_phase_summary || "")
     .replaceAll("_", " ");
+  const waveOff = state?.carrier_pass_waveoff_required === true
+    ? state?.carrier_pass_waveoff_complied === true
+      ? "wave-off complied" : "wave-off not complied"
+    : "";
   const wire = Math.max(0, Math.round(Number(state?.wire) || 0));
   let touchdown;
   if (recovery === "TRAP" || String(state?.arrest_phase || "").toUpperCase() === "STOPPED") {
-    touchdown = [touchdownGrade, wire > 0 ? `wire ${wire}` : "wire caught"].join(" · ");
+    touchdown = [touchdownGrade === "NONE" ? "not assessed" : touchdownGrade,
+      wire > 0 ? `wire ${wire}` : "wire caught"].join(" · ");
   } else if (state?.bolter === true || recovery === "BOLTER") {
-    touchdown = [touchdownGrade, "no wire"].join(" · ");
-  } else touchdown = touchdownGrade;
-  return Object.freeze({ passGrade, phases, touchdown, correction });
+    touchdown = [touchdownGrade === "NONE" ? "not assessed" : touchdownGrade,
+      "no wire"].join(" · ");
+  } else touchdown = touchdownGrade === "NONE" ? "not assessed" : touchdownGrade;
+  return Object.freeze({
+    passGrade: passGrade === "NONE" ? "NOT ASSESSED" : passGrade,
+    phases,
+    waveOff,
+    passCorrection: passCorrection === "NONE" ? "none recorded" : passCorrection,
+    touchdown,
+    touchdownCorrection: touchdownCorrection === "NONE"
+      ? "none recorded" : touchdownCorrection,
+  });
+}
+
+function carrierQualificationPhysicalOutcome(state) {
+  const recovery = String(state?.recovery || "").toUpperCase().replaceAll("_", "");
+  const surface = String(state?.player_impact_surface || "").toUpperCase();
+  if (state?.bolter === true || recovery === "BOLTER") return "Bolter";
+  if (recovery === "TRAP" || String(state?.arrest_phase || "").toUpperCase() === "STOPPED")
+    return "Recovered";
+  if (recovery === "INTHEWATER" || surface === "WATER") return "In the water";
+  if (recovery === "RAMPSTRIKE") return "Ramp strike";
+  if (surface === "CARRIER_STRUCTURE") return "Carrier structure impact";
+  if (surface === "FLIGHT_DECK") return "Flight deck impact";
+  if (surface === "SIMULATION_BOUNDARY") return "Simulation boundary";
+  return "Attempt complete";
 }
 
 function isCarrierQualificationState(state) {
   return state?.carrier === true
-    && String(state?.mission_definition_id || "").toLowerCase()
-      === "mission.carrier-qualification.v1";
+    && [
+      "mission.carrier-qualification.v1",
+      "mission.modern.f35c.carrier-conversion.public-data-surrogate.v1",
+    ].includes(String(state?.mission_definition_id || "").toLowerCase());
+}
+
+function recordCampaignQualification(state) {
+  const result = qualifyCampaignNode(campaignProfile, selectedProgramNodeId, state);
+  if (!result.newlyQualified) return false;
+  campaignProfile = saveCampaignProfile(result.profile);
+  renderCampaignProgress();
+  recorder.event("progression", "qualification_earned", {
+    node: selectedProgramNodeId,
+    mission: selectedBeat,
+  });
+  return true;
 }
 
 function renderPauseUi(state = latestState) {
@@ -1641,19 +1737,19 @@ function renderPauseUi(state = latestState) {
   const wasScreenVisible = readyScreen.classList.contains("visible");
   const startWasDisabled = readyStart.disabled;
 
-  readyScreen.dataset.mode = ready ? "selection" : finished ? "debrief" : "pause";
+  readyScreen.dataset.mode = ready ? "program" : finished ? "debrief" : "pause";
   if (readySelector) readySelector.hidden = !ready;
   if (readyDeckConfig && !ready) readyDeckConfig.hidden = true;
-  if (ready) renderSortieSelection();
+  if (ready) renderCampaignProgress();
   if (readyMenuTitle) {
     readyMenuTitle.textContent = ready
-      ? "Choose a sortie" : finished ? "Sortie complete" : "Flight paused";
+      ? "Raptor program" : finished ? "Sortie complete" : "Flight paused";
   }
   if (readyMenuHelp) {
     readyMenuHelp.textContent = ready
-      ? "Choose an activity and sortie. Selection previews the briefing; the primary action launches it."
+      ? "Performance unlocks the next assignment. Carrier conversion follows three F-22 qualifications."
       : finished
-        ? "Review the result, replay the incident when available, or restage the sortie."
+        ? "Review the result, continue when qualified, or fly the assignment again."
         : "The deterministic flight clock is stopped and all controls are neutralised.";
   }
 
@@ -1674,7 +1770,10 @@ function renderPauseUi(state = latestState) {
     readyRestart.hidden = ready;
     readyRestart.textContent = finished ? "Fly again" : "Restart sortie";
   }
-  if (readyReturn) readyReturn.hidden = ready || finished;
+  if (readyReturn) {
+    readyReturn.hidden = ready;
+    readyReturn.textContent = "Mission program";
+  }
 
   if (finished) {
     const result = sortieResultCopy(state);
@@ -1687,13 +1786,12 @@ function renderPauseUi(state = latestState) {
     readyBrief.textContent = replayAnalysis
       ? `${result.brief} ${replayAnalysis.physicalOutcome}. Next pass: ${replayAnalysis.correction}`
       : result.brief;
-    const recovery = String(state?.recovery || "").toUpperCase();
     if (readySortieLabel) readySortieLabel.textContent = carrierQualification
       ? "Physical outcome" : "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = carrierQualification
       ? "Full-pass assessment" : "Result";
     readySortie.textContent = carrierQualification
-      ? `${state?.bolter === true || recovery === "BOLTER" ? "Bolter" : recovery === "TRAP" ? "Recovered" : "Complete"}${Number(state?.wire) > 0 ? ` · wire ${Math.round(Number(state.wire))}` : ""}`
+      ? `${carrierQualificationPhysicalOutcome(state)}${Number(state?.wire) > 0 ? ` · wire ${Math.round(Number(state.wire))}` : ""}`
       : `${brief.title} · ${String(state?.sortie_outcome || "complete").toLowerCase()}`;
     readyConfig.textContent = state?.maintenance_scenario === true
       ? `Procedure ${Math.round(Number(state?.maintenance_score) || 0)}/${Math.round(Number(state?.maintenance_max_score) || 100)} · ${Math.round(Number(state?.maintenance_demerits) || 0)} demerits`
@@ -1702,18 +1800,26 @@ function renderPauseUi(state = latestState) {
         : state?.visual_merge_evaluation === true
           ? `Decision score ${Math.round(Number(state?.visual_merge_score) || 0)}/100 · rear-quarter dwell ${(Number(state?.rear_quarter_dwell_s) || 0).toFixed(1)} s · ${Math.round(Number(state?.evaluated_projectile_hits) || 0)} projectile hits`
           : carrierQualification
-            ? `${carrierFacts.passGrade}${carrierFacts.phases ? ` · ${carrierFacts.phases}` : ""}`
+            ? [carrierFacts.passGrade, carrierFacts.waveOff, carrierFacts.phases]
+              .filter(Boolean).join(" · ")
             : replayAnalysis
               ? `Sim touchdown ${replayAnalysis.touchdownAssessment.grade === "NONE" ? "not graded" : replayAnalysis.touchdownAssessment.grade} · ${replayAnalysis.touchdownAssessment.profile} v${replayAnalysis.touchdownAssessment.version} · replay cached · causal review is not an LSO grade`
               : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
     readyReplay.hidden = !incidentReplay?.clip;
-    readyStart.textContent = carrierQualification ? "Set up another pass" : "Return to briefing";
+    const nextNode = nextCampaignNode(campaignProfile, selectedProgramNodeId);
+    readyStart.textContent = nextNode
+      ? `Continue: ${nextNode.title}`
+      : campaignNodeQualified(campaignProfile, selectedProgramNodeId)
+        ? "Fly again" : "Retry qualification";
     if (readyControls) readyControls.textContent = carrierQualification
-      ? `Touchdown assessment · ${carrierFacts.touchdown}\nPrimary correction · ${carrierFacts.correction}`
-      : "Review the result · replay when available · return to briefing when ready";
+      ? `Full-pass primary · ${carrierFacts.passCorrection}\nTouchdown assessment · ${carrierFacts.touchdown}\nTouchdown primary · ${carrierFacts.touchdownCorrection}`
+      : campaignNodeQualified(campaignProfile, selectedProgramNodeId)
+        ? "Qualification earned · the next assignment is available"
+        : `Qualification incomplete · ${campaignNode(selectedProgramNodeId)?.qualification || "fly again"}`;
     readyHint.textContent = background
       ? "Return to the game to restage"
-      : "Press Enter to return to briefing · R restarts";
+      : nextNode ? "Press Enter to continue · R flies this assignment again"
+        : "Press Enter to fly again";
   } else if (ready) {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = "Configuration";
@@ -1722,11 +1828,10 @@ function renderPauseUi(state = latestState) {
     readyTitle.textContent = brief.title;
     readyBrief.textContent = brief.brief;
     readySortie.textContent = brief.sortie;
-    const deck = selectedDeckConfiguration === 1 ? "angled" : "axial";
     readyConfig.textContent = selectedBeat === 5
-      ? `Guns safe · recovery only · ${deck} deck`
+      ? "F-35C reduced-order public-data surrogate · recovery only · angled deck"
       : selectedBeat === 6
-        ? `Maintenance profile · ${deck || "axial"} deck`
+        ? "Maintenance profile · axial deck"
         : brief.configuration || "Guns hot · air start";
     if (readyControls) readyControls.textContent = brief.controls
       || "Arrows fly · W/S power · F guns · V padlock\nH opens controls · R restarts";
@@ -1782,6 +1887,7 @@ function setPauseReason(reason, active) {
   applyBridgePause();
   renderPauseUi();
   if (wasPaused && !paused) resetFrameClock();
+  queueMicrotask(tryAutoLaunch);
 }
 
 function enterReady({ resetBridge = true, focus = true } = {}) {
@@ -1813,33 +1919,29 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
   if (focus) queueMicrotask(focusReadyScreen);
 }
 
-function selectMission(index, { focus = true } = {}) {
-  const previous = selectedBeat;
-  selectedBeat = clamp(Math.round(Number(index) || 1), 1, 8);
-  selectedActivity = MISSION_BRIEFS[selectedBeat]?.activity || "dogfight";
-  activityMissionSelection.set(selectedActivity, selectedBeat);
+function selectCampaignNode(nodeId, { focus = true } = {}) {
+  const node = campaignNode(nodeId);
+  if (!node || !campaignNodeUnlocked(campaignProfile, node.id)) return false;
+  const previous = selectedProgramNodeId;
+  selectedProgramNodeId = node.id;
+  selectedBeat = node.mission;
+  selectedDeckConfiguration = selectedBeat === 5 ? 1 : selectedDeckConfiguration;
   const missionUrl = new URL(window.location.href);
-  if (selectedBeat === 1) missionUrl.searchParams.delete("mission");
-  else missionUrl.searchParams.set("mission", String(selectedBeat));
+  missionUrl.searchParams.delete("mission");
+  missionUrl.searchParams.set("program", selectedProgramNodeId);
   window.history.replaceState(window.history.state, "", missionUrl);
-  recorder.event("ui", "mission_previewed", {
+  recorder.event("ui", "program_node_previewed", {
+    node: selectedProgramNodeId,
     mission: selectedBeat,
-    previous_mission: previous,
+    previous_node: previous,
   });
   renderPauseUi();
   if (focus) queueMicrotask(focusReadyScreen);
-}
-
-function selectActivity(activity) {
-  const definition = MISSION_ACTIVITIES[activity];
-  if (!definition) return;
-  const mission = activityMissionSelection.get(activity) ?? definition.missions[0];
-  recorder.event("ui", "activity_previewed", { activity, mission });
-  selectMission(mission, { focus: false });
+  return true;
 }
 
 function launchMission(index = selectedBeat) {
-  if (Number(index) !== selectedBeat) selectMission(index, { focus: false });
+  if (Number(index) !== selectedBeat) return false;
   const deckChanged = [5, 6].includes(selectedBeat)
     && stagedDeckConfiguration !== selectedDeckConfiguration;
   if (!pauseReasons.has("ready") || stagedBeat !== selectedBeat || deckChanged) {
@@ -1861,6 +1963,15 @@ function restartMissionNow() {
 function returnToCatalogue() {
   enterReady();
   return true;
+}
+
+function tryAutoLaunch() {
+  if (!autoLaunchPending || !bridge || !pauseReasons.has("ready")
+    || buildIdentityBlocksSortie()) return false;
+  const blockers = [...pauseReasons].filter((reason) => reason !== "ready");
+  if (blockers.length) return false;
+  autoLaunchPending = false;
+  return launchMission(selectedBeat);
 }
 
 function toggleSessionPause() {
@@ -1916,8 +2027,9 @@ function beginFlight() {
 function activateReadyAction() {
   if (buildIdentityBlocksSortie()) return false;
   if (pauseReasons.has("finished")) {
-    restartMission();
-    return true;
+    const nextNode = nextCampaignNode(campaignProfile, selectedProgramNodeId);
+    if (nextNode) selectCampaignNode(nextNode.id, { focus: false });
+    return restartMissionNow();
   }
   if (pauseReasons.has("ready")) return launchMission(selectedBeat);
   if (pauseReasons.has("session")) {
@@ -1964,29 +2076,9 @@ readyStart.addEventListener("click", () => {
   activateReadyAction();
 });
 
-readyActivityNav?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-sortie-activity]");
-  if (!button) return;
-  selectActivity(button.dataset.sortieActivity);
-});
-
-readyActivityNav?.addEventListener("keydown", (event) => {
-  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.code)) return;
-  event.preventDefault();
-  const current = readyActivityButtons.indexOf(event.target.closest("[data-sortie-activity]"));
-  if (current < 0) return;
-  const last = readyActivityButtons.length - 1;
-  const next = event.code === "Home" ? 0
-    : event.code === "End" ? last
-      : event.code === "ArrowLeft" ? (current - 1 + readyActivityButtons.length) % readyActivityButtons.length
-        : (current + 1) % readyActivityButtons.length;
-  readyActivityButtons[next].focus({ preventScroll: true });
-  selectActivity(readyActivityButtons[next].dataset.sortieActivity);
-});
-
 readySelector?.addEventListener("click", (event) => {
-  const select = event.target.closest("[data-mission-select]");
-  if (select) selectMission(Number(select.dataset.missionSelect));
+  const select = event.target.closest("[data-program-node]");
+  if (select) selectCampaignNode(select.dataset.programNode);
 });
 
 readyDeckConfig?.addEventListener("click", (event) => {
@@ -5542,10 +5634,14 @@ class FlightView {
     this.sky = createDecisionSupportSky();
     this.sea = createDecisionSupportSea();
     this.tacticalClouds = PRODUCTION_SIMULATED_CLOUDS_ENABLED
-      ? createTacticalCloudField(THREE, { qualityTier: VISUAL_QUALITY.tier })
+      ? createTacticalCloudField(THREE, {
+        qualityTier: VISUAL_QUALITY.tier,
+        sunDirection: SUN_DIRECTION,
+      })
       : {
         group: new THREE.Group(),
         update: () => 0,
+        configureFromState: () => false,
         dispose() {},
       };
     this.tacticalClouds.group.name = "AUTHORITATIVE_WEATHER_CLOUDS";
@@ -6049,7 +6145,7 @@ class FlightView {
     data.incomingTracers.heads.material.color.set(0xffe2c4);
   }
 
-  updateBanditDestruction(alive, nowSeconds, forceSplash = false) {
+  updateBanditDestruction(alive, nowSeconds, forceSplash = false, eventPosition = null) {
     const effect = this.banditDestruction;
     if (this.packEffectsActive()) {
       // Authored one-shots belong to ordered simulation events. Health/alive edges are retained
@@ -6069,7 +6165,7 @@ class FlightView {
       this.banditSplashTime = nowSeconds;
       this.banditDestructionForcedUntil = nowSeconds + 4.8;
       this.banditWasAlive = true;
-      effect.position.copy(this.banditPosition);
+      effect.position.copy(eventPosition ?? this.banditPosition);
       effect.visible = true;
     }
 
@@ -6405,7 +6501,10 @@ class FlightView {
         });
         if (event.target === "OPPONENT") this.banditWasAlive = false;
       } else if (event.target === "OPPONENT") {
-        this.updateBanditDestruction(true, nowSeconds, true);
+        // A replacement may already own banditPosition when an older detached wreck reaches the
+        // surface. Anchor the fallback burst to the event's immutable physics pose, not the live
+        // target slot, so an old impact cannot make the current opponent appear to explode.
+        this.updateBanditDestruction(true, nowSeconds, true, position);
       }
     }
   }
@@ -6565,21 +6664,31 @@ class FlightView {
       );
       const baseFogDensity = fogDensityForVisibility(reportedVisibilityM);
       this.fogColor.copy(this.fogLow).lerp(this.fogHigh, atmosphereMix);
+      // Layer/cell definitions describe the weather around the aircraft; local cloud fraction
+      // only says whether the eye point is presently in condensate. Never hide nearby clouds just
+      // because the pilot is flying through one of the holes between them.
       const cloudTruthActive = PRODUCTION_SIMULATED_CLOUDS_ENABLED
-        && Number(state.cloud_fraction_01) > 0.01;
+        && ((Array.isArray(state.weather_layers) && state.weather_layers.length > 0)
+          || (Array.isArray(state.weather_cells) && state.weather_cells.length > 0));
       this.tacticalClouds.group.visible = cloudTruthActive;
-      const cloudExtinction = cloudTruthActive
-        ? this.tacticalClouds.update(
+      if (cloudTruthActive) {
+        this.tacticalClouds.configureFromState(state);
+        this.tacticalClouds.update(
           this.camera.position,
-          nowSeconds,
+          Number(state.t) || 0,
           this.fogColor,
           baseFogDensity,
-        )
-        : 0;
-      fogDensity = baseFogDensity + cloudExtinction * 0.0011;
-      if (cloudExtinction > 0) {
-        this.fogColor.lerp(this.cloudFogColor, Math.min(0.82, cloudExtinction * 0.78));
-        this.tacticalClouds.update(this.camera.position, nowSeconds, this.fogColor, fogDensity);
+          SUN_DIRECTION,
+        );
+      }
+      // Visibility is the exact LayeredCloudField sample from WASM. The renderer changes the
+      // scattering colour while inside condensate, but must not add a second invented extinction.
+      const localCloudFraction = clamp(Number(state.cloud_fraction_01) || 0, 0, 1);
+      const localExtinction = Math.max(0, Number(state.cloud_extinction_per_m) || 0);
+      fogDensity = baseFogDensity;
+      if (localCloudFraction > 0.001 || localExtinction > 0) {
+        const cloudColorMix = clamp(localCloudFraction * 1.18 + localExtinction * 18, 0, 0.88);
+        this.fogColor.lerp(this.cloudFogColor, cloudColorMix);
       }
       this.scene.fog.color.copy(this.fogColor);
       this.scene.fog.density = fogDensity;
@@ -7191,13 +7300,6 @@ function installInput(view) {
       return;
     }
 
-    if (/^Digit[1-8]$/.test(event.code)) {
-      const wasInCatalogue = pauseReasons.has("ready");
-      selectMission(Number(event.code.slice(-1)));
-      if (!wasInCatalogue) enterReady();
-      return;
-    }
-
     if (event.code === "F1") {
       bridge.SetVariant(bridge.GetVariant() === 0 ? 1 : 0);
       return;
@@ -7220,7 +7322,7 @@ function installInput(view) {
     }
 
     if (event.code === "KeyR") {
-      restartMission();
+      restartMissionNow();
       return;
     }
 
@@ -7369,6 +7471,7 @@ async function boot() {
   syncPadlockUi();
   installTestFlightConsole();
   renderPauseUi();
+  queueMicrotask(tryAutoLaunch);
   let firstFrame = true;
 
   globalThis.__gunsLifecycle = {
@@ -7429,7 +7532,10 @@ async function boot() {
       const replayPresentation = advanceIncidentReplay(incidentReplay, state, now);
       const replayFrame = replayPresentation.frame;
       const replayActive = replayPresentation.active;
-      if (!replayActive) reconcileBridgeLifecycle(state);
+      if (!replayActive) {
+        recordCampaignQualification(state);
+        reconcileBridgeLifecycle(state);
+      }
       multiplayer?.publish(state);
       // Debug/QA hook: lets browser automation inspect live control response, session lifecycle,
       // and state that a screenshot cannot establish. Keep this projection read-only; production

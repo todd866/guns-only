@@ -58,13 +58,14 @@ export class PresentationEventStreams {
  */
 export function terminalVisualEvents(events) {
   if (!Array.isArray(events) || events.length === 0) return Object.freeze([]);
+  const actorTick = (event) => `${event?.entity_id ?? event?.target ?? "NONE"}:${event?.tick ?? -1}`;
   const impacts = new Set(events
     .filter((event) => event?.type === "IMPACT")
-    .map((event) => `${event.target ?? "NONE"}:${event.tick ?? -1}`));
+    .map(actorTick));
   return Object.freeze(events.filter((event) => {
     if (event?.type === "IMPACT") return event.surface !== "SIMULATION_BOUNDARY";
     if (event?.type !== "DESTROYED") return false;
-    return !impacts.has(`${event.target ?? "NONE"}:${event.tick ?? -1}`);
+    return !impacts.has(actorTick(event));
   }));
 }
 

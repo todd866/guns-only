@@ -1,9 +1,11 @@
 # Modern visual merge thin slice
 
-Mission 7 is a straightforward guns-only fight: an F-22A public-data surrogate meets a Su-27S
-public-data surrogate at an offset reciprocal merge near 18,000 ft. Guns remain inhibited until the
-first pass is complete. After that, the ordinary fixed-step aircraft, reactive opponent, projectile,
-damage, impact, and sortie-outcome models decide what happens.
+Mission 7 is a continuous guns-only fight: an F-22A public-data surrogate meets successive Su-27S
+public-data surrogates in offset reciprocal merges, beginning near 18,000 ft. Guns remain inhibited
+until the first pass of every engagement is complete. Each splash opens a short destruction dwell,
+then a new opponent enters without replenishing ownship fuel, ammunition, or damage. The previous
+wreck keeps its entity identity and continues through fixed-step failed-flight, impact, and
+settlement physics after leaving the combat-target slot.
 
 “Post-BVR” is scenario background only. This slice does **not** simulate or imply radar, stealth,
 missiles, RWR, datalink, exact modern flight-control laws, or classified data. It does represent the
@@ -39,7 +41,8 @@ override. The lever arm and allocator gains are gameplay surrogates, not publish
 
 Once guns are hot, a pitch-only gameplay aid can converge the gun line on the existing ballistic
 lead solution inside an eight-degree, 1 km acquisition gate. It requests no more than 17 deg/s and
-may alter the protected load-factor command by at most 3 G. It cannot roll into plane, manage
+subtracts measured body pitch rate before converting the residual into no more than 3 G of
+protected command augmentation. It cannot roll into plane, manage
 closure, acquire a target outside that gate, or press the trigger; an explicit pitch/alpha override,
 high-alpha recovery, loss of control authority, or aircraft-owned Auto-GCAS takes precedence. These
 limits are player-assistance tuning, not a representation of an F-22 production fire-control law.
@@ -56,9 +59,9 @@ The evaluator records, rather than invents:
 - valid rear-quarter dwell; and
 - actual rounds and swept projectile hits from each aircraft's selected gun profile.
 
-The score is a compact debrief aid, not a substitute for the physical sortie result. A held trigger
-during the safe phase is interlocked; the pilot must release it before the gun can fire after the
-merge.
+The per-engagement score is a compact teaching aid, while kill count and resources remain cumulative
+across the sortie. It is not a substitute for the physical result. A held trigger during any safe
+phase is interlocked; the pilot must release it before the gun can fire after that merge.
 
 ## Presentation and multiplayer contract
 

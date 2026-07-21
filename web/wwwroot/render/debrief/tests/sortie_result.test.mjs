@@ -282,3 +282,18 @@ test("app consumes the pure evidence-based debrief module", async () => {
   assert.doesNotMatch(app, /function sortieResultCopy\(/);
   assert.doesNotMatch(app, /The opponent's gun solution was decisive\. The loss was/);
 });
+
+test("carrier debrief keeps physical outcome, full-pass trend, and touchdown facts distinct", async () => {
+  const app = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
+
+  assert.match(app,
+    /function carrierQualificationPhysicalOutcome\(state\)[\s\S]*?surface === "WATER"\) return "In the water"[\s\S]*?surface === "CARRIER_STRUCTURE"\) return "Carrier structure impact"/);
+  assert.match(app,
+    /carrier_pass_waveoff_required[\s\S]*?wave-off complied[\s\S]*?wave-off not complied/,
+    "the pass assessment must state whether an issued wave-off was obeyed");
+  assert.match(app,
+    /Full-pass primary · \$\{carrierFacts\.passCorrection\}[\s\S]*?Touchdown assessment · \$\{carrierFacts\.touchdown\}[\s\S]*?Touchdown primary · \$\{carrierFacts\.touchdownCorrection\}/,
+    "pass correction and touchdown assessment must not overwrite one another");
+  assert.match(app,
+    /readySortieLabel\.textContent = carrierQualification[\s\S]*?"Physical outcome"[\s\S]*?readyConfigLabel\.textContent = carrierQualification[\s\S]*?"Full-pass assessment"/);
+});

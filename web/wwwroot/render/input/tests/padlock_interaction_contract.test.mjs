@@ -168,7 +168,8 @@ test("padlock retains stabilized primary flight data instead of swapping to a du
     "speed tape motion must use stabilized IAS, not noisy frame truth");
   assert.match(draw, /value:\s*spd[\s\S]*?displayValue:\s*display\.indicatedDigits/,
     "the IAS scale and hysteretic digits must remain distinct");
-  assert.match(draw, /drawAirdataLabels\(frame\.state, tapeInset, display\)/,
+  assert.match(draw,
+    /drawAirdataLabels\(frame\.state, tapeInset, this\.width - tapeInset, display\)/,
     "secondary G/S and V/S must use the same bounded display filter");
   assert.match(draw, /value:\s*display\.altitudeFt[\s\S]*?displayValue:\s*display\.altitudeDigits/);
   assert.match(draw, /drawHeadingTape\(frame\.state,[^\n]*display/,

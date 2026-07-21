@@ -24,7 +24,7 @@ public class GunneryPitchAssistTests {
         bool enabled = true, bool hasLead = true, AircraftParams? parameters = null) =>
         GunneryPitchAssist.Apply(command, aircraft.State,
             parameters ?? FlightModel.F22APublicDataSurrogate,
-            aircraft.LiftDir, aircraft.AirspeedMps, aircraft.AtmosphereModel,
+            aircraft.AirspeedMps, aircraft.AtmosphereModel,
             lead, hasLead, rangeM, enabled);
 
     [Fact]
@@ -47,6 +47,9 @@ public class GunneryPitchAssistTests {
             7.49 * DegreesToRadians, 7.51 * DegreesToRadians);
         Assert.Equal(FlightModel.F22APublicDataSurrogate.GunneryPitchAssistMaxRateRad,
             result.State.RequestedPitchRateRadPerSecond, 10);
+        Assert.Equal(0.0, result.State.MeasuredPitchRateRadPerSecond, 10);
+        Assert.Equal(result.State.RequestedPitchRateRadPerSecond,
+            result.State.PitchRateErrorRadPerSecond, 10);
         Assert.InRange(result.State.LoadFactorCorrectionG, 0.01,
             FlightModel.F22APublicDataSurrogate.GunneryPitchAssistMaxCorrectionG);
         Assert.Equal(pilot.GDemand + result.State.LoadFactorCorrectionG,
@@ -62,6 +65,36 @@ public class GunneryPitchAssistTests {
         Assert.Equal(pilot.SasRollControl, result.Command.SasRollControl);
         Assert.Equal(pilot.DirectLateralControl,
             result.Command.DirectLateralControl);
+    }
+
+    [Fact]
+    public void SubtractsMeasuredBodyPitchRateBeforeAddingAnyG() {
+        AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
+        AircraftSim trimmed = ModernAircraft();
+        const double measuredPitchRate = 0.24;
+        var aircraft = new AircraftSim(trimmed.State with {
+            BodyRates = new BodyRates(0.0, measuredPitchRate, 0.0)
+        }, parameters);
+        var pilot = new PilotCommand(5.0, 0.0, 1.0, 0.0,
+            DirectLateralControl: true);
+
+        GunneryPitchAssistResult result = Apply(aircraft, pilot,
+            PitchLead(aircraft, 4.0));
+
+        Assert.True(result.State.Active);
+        Assert.Equal(measuredPitchRate,
+            result.State.MeasuredPitchRateRadPerSecond, 10);
+        Assert.Equal(result.State.RequestedPitchRateRadPerSecond - measuredPitchRate,
+            result.State.PitchRateErrorRadPerSecond, 10);
+        double expectedCorrection = Math.Clamp(
+            result.State.PitchRateErrorRadPerSecond * aircraft.AirspeedMps
+                / FlightModel.G0,
+            -parameters.GunneryPitchAssistMaxCorrectionG,
+            parameters.GunneryPitchAssistMaxCorrectionG);
+        Assert.Equal(expectedCorrection, result.State.LoadFactorCorrectionG, 10);
+        Assert.True(result.State.PitchRateErrorRadPerSecond < 0.0);
+        Assert.True(result.State.LoadFactorCorrectionG < 0.0);
+        Assert.True(result.Command.GDemand < pilot.GDemand);
     }
 
     [Fact]

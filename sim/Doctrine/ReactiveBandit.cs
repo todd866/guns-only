@@ -110,9 +110,12 @@ public sealed class ReactiveBandit : IBandit {
     /// number replaces randomness: successive bogeys alternate sides and cycle modest variations
     /// in spacing/altitude while retaining fighting energy and a fair head-on presentation.
     public static ReactiveBandit SpawnForMerge(in AircraftState player,
-        AircraftParams parameters, int engagementNumber) {
+        AircraftParams parameters, int engagementNumber,
+        double speedMps = 180.0) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
+        if (!double.IsFinite(speedMps) || speedMps <= 0.0)
+            throw new System.ArgumentOutOfRangeException(nameof(speedMps));
 
         int variation = (engagementNumber - 1) % 3;
         double side = (engagementNumber & 1) == 1 ? 1.0 : -1.0;
@@ -133,7 +136,7 @@ public sealed class ReactiveBandit : IBandit {
         double horizontalM = System.Math.Sqrt(toMerge.X * toMerge.X + toMerge.Z * toMerge.Z);
         double chi = System.Math.Atan2(toMerge.X, toMerge.Z);
         double gamma = System.Math.Atan2(toMerge.Y, System.Math.Max(1.0, horizontalM));
-        var initial = new AircraftState(position, 180.0, gamma, chi, 0.0, parameters.MassKg);
+        var initial = new AircraftState(position, speedMps, gamma, chi, 0.0, parameters.MassKg);
         return new ReactiveBandit(initial, parameters);
     }
 

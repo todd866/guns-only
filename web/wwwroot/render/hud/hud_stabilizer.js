@@ -16,13 +16,17 @@ function nearestHeading(value, reference) {
   return reference + (((value - reference + 540) % 360) - 180);
 }
 
-function smoothBounded(current, measured, deltaSeconds, timeConstant, maximumLag) {
+function smoothBounded(current, measured, deltaSeconds, timeConstant, maximumLag, deadband = 0) {
   if (!Number.isFinite(measured)) return current;
   if (!Number.isFinite(current)) return measured;
   const dt = clamp(finite(deltaSeconds, 0), 0, 0.25);
   if (dt === 0) return current;
+  const error = measured - current;
+  const quietBand = Math.max(0, finite(deadband, 0));
+  if (Math.abs(error) <= quietBand) return current;
+  const target = measured - Math.sign(error) * quietBand;
   const alpha = 1 - Math.exp(-dt / Math.max(0.001, timeConstant));
-  let next = current + (measured - current) * alpha;
+  let next = current + (target - current) * alpha;
   const lag = measured - next;
   if (Math.abs(lag) > maximumLag) next = measured - Math.sign(lag) * maximumLag;
   return next;
@@ -49,6 +53,70 @@ export class StableRoundedValue {
     const threshold = this.step * (0.5 + this.hysteresisFraction);
     while (number >= this.value + threshold) this.value += this.step;
     while (number <= this.value - threshold) this.value -= this.step;
+    return this.value;
+  }
+}
+
+/**
+ * A sampled rate estimate for display trends. Differentiating a per-frame filtered value makes
+ * tiny sample and frame-time changes look like alternating acceleration. A short measurement
+ * window gives a calm caret while still showing a deliberate energy change within a fraction of
+ * a second.
+ */
+export class StableRateEstimate {
+  constructor({
+    sampleSeconds = 0.10,
+    smoothingSeconds = 0.45,
+    deadbandPerSecond = 0.35,
+    qualifySeconds = 0.50,
+  } = {}) {
+    this.sampleSeconds = Math.max(0.05, finite(sampleSeconds, 0.10));
+    this.smoothingSeconds = Math.max(0.05, finite(smoothingSeconds, 0.45));
+    this.deadbandPerSecond = Math.max(0, finite(deadbandPerSecond, 0.35));
+    this.qualifySeconds = Math.max(this.sampleSeconds, finite(qualifySeconds, 0.50));
+    this.reset();
+  }
+
+  reset(value = null) {
+    this.reference = finite(value);
+    this.elapsed = 0;
+    this.value = 0;
+    this.candidateDirection = 0;
+    this.candidateSeconds = 0;
+  }
+
+  update(measured, deltaSeconds = 0) {
+    const number = finite(measured);
+    if (number === null) return this.value;
+    if (this.reference === null) {
+      this.reference = number;
+      return this.value;
+    }
+    this.elapsed += clamp(finite(deltaSeconds, 0), 0, 0.25);
+    if (this.elapsed < this.sampleSeconds) return this.value;
+
+    const measuredRate = (number - this.reference) / this.elapsed;
+    const target = Math.abs(measuredRate) <= this.deadbandPerSecond
+      ? 0
+      : measuredRate - Math.sign(measuredRate) * this.deadbandPerSecond;
+    const direction = Math.sign(target);
+    if (direction === 0) {
+      this.candidateDirection = 0;
+      this.candidateSeconds = 0;
+    } else if (direction === this.candidateDirection) {
+      this.candidateSeconds += this.elapsed;
+    } else {
+      this.candidateDirection = direction;
+      this.candidateSeconds = this.elapsed;
+    }
+    const alpha = 1 - Math.exp(-this.elapsed / this.smoothingSeconds);
+    const qualifiedTarget = direction !== 0
+      && (Math.sign(this.value) === direction || this.candidateSeconds >= this.qualifySeconds)
+      ? target : 0;
+    this.value += (qualifiedTarget - this.value) * alpha;
+    if (Math.abs(this.value) < 0.05 && qualifiedTarget === 0) this.value = 0;
+    this.reference = number;
+    this.elapsed = 0;
     return this.value;
   }
 }
@@ -95,10 +163,11 @@ export class VisibilityEnvelope {
  */
 export class HudSignalStabilizer {
   constructor() {
-    this.speedDigits = new StableRoundedValue();
+    this.speedDigits = new StableRoundedValue({ hysteresisFraction: 0.30 });
     this.altitudeDigits = new StableRoundedValue();
     this.headingDigits = new StableRoundedValue();
     this.verticalSpeedDigits = new StableRoundedValue({ step: 50, hysteresisFraction: 0.20 });
+    this.speedRate = new StableRateEstimate();
     this.reset();
   }
 
@@ -109,6 +178,7 @@ export class HudSignalStabilizer {
     this.altitudeFt = null;
     this.verticalSpeedFpm = null;
     this.headingUnwrappedDeg = null;
+    this.speedRate.reset();
     this.speedDigits.reset();
     this.altitudeDigits.reset();
     this.headingDigits.reset();
@@ -135,13 +205,14 @@ export class HudSignalStabilizer {
       this.altitudeFt = altitude;
       this.verticalSpeedFpm = verticalSpeed;
       this.headingUnwrappedDeg = heading;
+      this.speedRate.reset(indicated);
       this.speedDigits.reset();
       this.altitudeDigits.reset();
       this.headingDigits.reset();
       this.verticalSpeedDigits.reset();
     } else {
       this.indicatedKts = smoothBounded(
-        this.indicatedKts, indicated, deltaSeconds, 0.14, 3,
+        this.indicatedKts, indicated, deltaSeconds, 0.42, 3, 0.45,
       );
       this.groundKts = ground === null ? null : smoothBounded(
         this.groundKts, ground, deltaSeconds, 0.16, 3,
@@ -162,6 +233,7 @@ export class HudSignalStabilizer {
     return {
       indicatedKts: this.indicatedKts,
       indicatedDigits: this.speedDigits.update(this.indicatedKts),
+      indicatedRateKtsPerSecond: this.speedRate.update(this.indicatedKts, deltaSeconds),
       groundKts: this.groundKts,
       altitudeFt: this.altitudeFt,
       altitudeDigits: this.altitudeDigits.update(this.altitudeFt),

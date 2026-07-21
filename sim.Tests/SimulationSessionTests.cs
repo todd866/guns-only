@@ -464,11 +464,22 @@ public class SimulationSessionTests {
         Assert.False(session.PlayerFuel.RtbAdvisory);
     }
 
-    [Theory]
-    [InlineData(5)]
-    [InlineData(6)]
-    public void RecoveryAndMaintenanceKeepTheirOwnFullFuelAndApproachPower(int beatIndex) {
-        var session = new SimulationSession(beatIndex);
+    [Fact]
+    public void F35CCarrierConversionKeepsItsExplicitFuelAndApproachPower() {
+        var session = new SimulationSession(5);
+
+        Assert.Equal(new FuelConfig(
+            CapacityLb: 19750.0,
+            InitialFuelLb: 9000.0,
+            BingoThresholdLb: 3000.0,
+            ConsumesFuel: true), session.Beat.FuelLoadout);
+        Assert.Equal(9000.0, session.PlayerFuel.FuelLb);
+        Assert.Equal(0.82, session.Controls.Throttle, precision: 12);
+    }
+
+    [Fact]
+    public void MaintenanceKeepsItsOwnFullFuelAndApproachPower() {
+        var session = new SimulationSession(6);
 
         Assert.Equal(FuelConfig.PoweredJet, session.Beat.FuelLoadout);
         Assert.Equal(FuelModel.DefaultFuelLb, session.PlayerFuel.FuelLb);

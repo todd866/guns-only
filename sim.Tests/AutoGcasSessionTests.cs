@@ -95,6 +95,57 @@ public class AutoGcasSessionTests {
     }
 
     [Fact]
+    public void TerrainPredictionRunsAtFlightComputerCadenceWhileRecoveryRemainsContinuous() {
+        var session = ThreatSession();
+        session.Begin();
+
+        for (int tick = 0; tick < AircraftSim.TickHz; tick++) session.StepFixed();
+
+        Assert.Equal((int)(AircraftSim.TickHz
+            / SimulationSession.AutoGcasPredictionIntervalTicks),
+            session.AutoGcasPredictionEvaluationCount);
+        Assert.True(session.AutoGcas.Active);
+        Assert.Equal(5.0, session.Player.LastAppliedCommand.GDemand, 12);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+    }
+
+    [Fact]
+    public void BankedFlyUpCapturesUprightWithoutRepeatedAobHunting() {
+        var session = new SimulationSession();
+        session.StartBeat(() => ModernTestBeat(
+            ModernState(170.0, gammaDegrees: -20.0, bankDegrees: 90.0)));
+        session.SetTerrainSurface(FlatTerrain());
+        session.Begin();
+
+        bool captured = false;
+        int commandReversalsAfterCapture = 0;
+        int previousCommandSign = 0;
+        double maximumBankAfterCaptureDegrees = 0.0;
+        for (int tick = 0; tick < 4 * AircraftSim.TickHz
+            && session.PlayerTerminalState == AircraftTerminalState.Flying; tick++) {
+            session.StepFixed();
+            double bankDegrees = Math.Abs(session.Player.State.Bank) * 180.0 / Math.PI;
+            if (bankDegrees <= 10.0) captured = true;
+            if (captured) maximumBankAfterCaptureDegrees = Math.Max(
+                maximumBankAfterCaptureDegrees, bankDegrees);
+
+            double sas = session.Player.LastAppliedCommand.SasRollControl;
+            int commandSign = Math.Abs(sas) < 0.05 ? 0 : Math.Sign(sas);
+            if (captured && commandSign != 0) {
+                if (previousCommandSign != 0 && commandSign != previousCommandSign)
+                    commandReversalsAfterCapture++;
+                previousCommandSign = commandSign;
+            }
+        }
+
+        Assert.True(captured, "Auto-GCAS never captured wings-level during the fly-up.");
+        Assert.InRange(commandReversalsAfterCapture, 0, 1);
+        Assert.InRange(maximumBankAfterCaptureDegrees, 0.0, 15.0);
+        Assert.InRange(Math.Abs(session.Player.State.Bank) * 180.0 / Math.PI, 0.0, 6.0);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+    }
+
+    [Fact]
     public void ProtectionTransitionsAreRetainedAtTheExactAuthorityTick() {
         var session = ThreatSession();
         session.Begin();

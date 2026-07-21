@@ -29,6 +29,37 @@ The source-backed fact/fiction boundary and setting options live in
 [`world-backstory-research.md`](world-backstory-research.md); implementation documents should not
 promote one of its proposed fictional dates or organizations to canon accidentally.
 
+## Campaign governance boundary
+
+Campaign authorship is a governed input to the platform, not presentation copy wrapped around a
+mission index. [`content-governance.md`](content-governance.md) defines the active authoring contract,
+and `content/governance/` contains machine-readable policy and mission dossiers.
+
+The governance layer owns:
+
+- which revelations and cross-era echoes are authored rather than randomized;
+- the separation between historical claims, engineering claims, reconstruction, and fiction;
+- learning objectives that move from experienced consequence to debrief explanation to later
+  application;
+- allowed permanent unlocks and forbidden physical or informational buffs;
+- attrition fairness and readiness-resource vocabulary;
+- representation, evidence, simulation-integrity, production, and approval gates.
+
+It does not advance physics, adjudicate outcomes, or mutate an aircraft. A future run director reads
+approved stable IDs and chooses a mission contract, seed, route state, and readiness state. The
+`SimulationSession` produces the authoritative sortie outcome. Campaign code consumes that outcome
+through a versioned result adapter; it cannot override projectile, damage, recovery, sensor, or
+grading truth.
+
+```text
+campaign governance -> approved mission dossier -> run director -> mission contract
+    -> SimulationSession -> ordered outcome evidence -> debrief/profile progression
+```
+
+The normal repository gate validates dossier schema, timeline closure, references, evidence closure,
+educational transfer, progression allowlists, and blocking reviews. Human reviewers retain authority
+over historical interpretation, dramatic quality, learning usefulness, and respectful portrayal.
+
 The browser is the canonical product shell. The retired desktop shell is not a compatibility target.
 
 ## Future domain boundary

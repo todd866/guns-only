@@ -226,6 +226,31 @@ public class GunTests {
     }
 
     [Fact]
+    public void FreshShooterKeepsExistingTargetDamageButOwnsFreshWeaponState() {
+        var first = new GunKill(ammo: 1, hitsToKill: 3, hitRadiusM: 1.0);
+        var own = State(Vec3D.Zero);
+        var target = State(new Vec3D(0.0, 0.0, 200.0));
+
+        for (int tick = 0; tick < 120 && first.HitCount == 0; tick++)
+            first.Step(true, own, target, Dt);
+
+        Assert.Equal(1, first.HitCount);
+        Assert.Equal(FightOutcome.Flying, first.Outcome);
+        var replacement = first.CreateForFreshShooterAgainstSameTarget(
+            ammo: 13,
+            hitRadiusM: GunProfiles.GSh301PublicDataSurrogate.EffectiveHitRadiusM,
+            profile: GunProfiles.GSh301PublicDataSurrogate);
+
+        Assert.Equal(first.HitCount, replacement.HitCount);
+        Assert.Equal(first.TargetHealth, replacement.TargetHealth, 12);
+        Assert.Equal(FightOutcome.Flying, replacement.Outcome);
+        Assert.Equal(13, replacement.AmmoRemaining);
+        Assert.Equal(0, replacement.RoundsFired);
+        Assert.Empty(replacement.RoundsInFlight);
+        Assert.Equal(GunProfiles.GSh301PublicDataSurrogate, replacement.Profile);
+    }
+
+    [Fact]
     public void NextTargetCanFireAtCadenceBoundaryWherePreviousTargetSplashes() {
         double interval = 1.0 / GunKill.RoundsPerSecond;
         var gun = new GunKill(ammo: 4, hitsToKill: 1, hitRadiusM: 0.05);

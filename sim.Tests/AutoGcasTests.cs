@@ -133,13 +133,29 @@ public class AutoGcasTests {
 
         Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
         PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
-        Assert.Equal(expectedRollControl, recovery.RollControl);
+        Assert.Equal(0.0, recovery.RollControl);
+        Assert.Equal(expectedRollControl, recovery.SasRollControl);
         Assert.Equal(5.0, recovery.GDemand);
         Assert.Equal(0.91, recovery.Throttle);
         Assert.Equal(0.0, recovery.BankTarget);
         Assert.Equal(0.0, recovery.Rudder);
         Assert.True(recovery.DirectLateralControl);
         Assert.False(recovery.EnvelopeOverride);
+    }
+
+    [Theory]
+    [InlineData(60.0, -1.0)]
+    [InlineData(-60.0, 1.0)]
+    public void WingsLevelCaptureBrakesResidualRollInsteadOfHuntingBank(
+        double rollRateDegreesPerSecond, double expectedDirection) {
+        AutoGcasStepResult result = Step(Input(FlightState(
+            altitudeM: 170.0, gammaDegrees: -20.0, bankDegrees: 1.0,
+            bodyRollRateRadPerSecond: Radians(rollRateDegreesPerSecond))));
+
+        Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
+        PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
+        Assert.Equal(0.0, recovery.RollControl);
+        Assert.Equal(expectedDirection, Math.Sign(recovery.SasRollControl));
     }
 
     [Theory]
@@ -171,7 +187,8 @@ public class AutoGcasTests {
 
         Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
         PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
-        Assert.Equal(-1.0, recovery.RollControl, 12);
+        Assert.Equal(0.0, recovery.RollControl, 12);
+        Assert.Equal(-1.0, recovery.SasRollControl, 12);
         Assert.Equal(5.0, recovery.GDemand);
     }
 
@@ -187,7 +204,8 @@ public class AutoGcasTests {
 
         Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
         PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
-        Assert.Equal(1.0, Math.Abs(recovery.RollControl), 12);
+        Assert.Equal(0.0, recovery.RollControl, 12);
+        Assert.Equal(1.0, Math.Abs(recovery.SasRollControl), 12);
         Assert.Equal(0.0, recovery.GDemand);
     }
 
@@ -200,6 +218,7 @@ public class AutoGcasTests {
         Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
         PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
         Assert.Equal(0.0, recovery.RollControl, 12);
+        Assert.Equal(0.0, recovery.SasRollControl, 12);
         Assert.Equal(5.0, recovery.GDemand);
     }
 

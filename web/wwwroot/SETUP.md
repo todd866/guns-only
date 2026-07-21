@@ -36,14 +36,20 @@ store**, and connect it to the project/Production environment. Vercel must expos
 the production function receives the variable. Do not put the token in this repository or browser
 code.
 
-Deploy from the directory that is the copy/publish output of `web/wwwroot`:
+Deploy only through the repository's guarded publish command:
 
 ```sh
-vercel deploy --prod
+bin/deploy-web --prod
 ```
 
-Because the API functions and `vercel.json` live inside `web/wwwroot`, they are included in that
-copy. At the deploy root Vercel discovers the write endpoint, public build-provenance endpoint, and
+Do **not** run Vercel from the checked-in `web/wwwroot` directory. That source tree contains the
+shell but not the generated `_framework` WebAssembly runtime, producing a superficially healthy
+deployment whose flight kernel can never start. `bin/deploy-web` performs a Release publish in an
+isolated directory, requires the loader and boot manifest, rejects leaked test files, smoke-tests
+the deployment, and promotes it only after those checks pass.
+
+Because the API functions and `vercel.json` live inside `web/wwwroot`, the publish artifact includes
+them. At the deploy root Vercel discovers the write endpoint, public build-provenance endpoint, and
 production-only operator endpoint under `/api`; `vercel.json` provides the stable `/telemetry` and
 `/telemetry-admin` rewrites, while the shell reads build provenance from `/api/build-info`. The
 local Python telemetry server still handles

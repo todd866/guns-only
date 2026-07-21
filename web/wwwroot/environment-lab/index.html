@@ -24,8 +24,8 @@
             <option value="desktop">Desktop</option>
           </select>
         </label>
-        <label>Camera altitude <output id="altitude-value">180 m</output>
-          <input id="altitude" type="range" min="8" max="9000" value="180" step="1">
+        <label>Camera altitude <output id="altitude-value">2,200 m</output>
+          <input id="altitude" type="range" min="8" max="9000" value="2200" step="1">
         </label>
       </section>
       <section>
@@ -53,11 +53,11 @@
       <canvas id="scene"></canvas>
       <div class="readout" aria-label="Renderer metrics">
         <span><b id="triangles">—</b> triangles</span>
-        <span><b id="layers">—</b> cloud layers</span>
+        <span><b id="layers">—</b> active cloud volumes</span>
         <span><b id="draws">—</b> draw calls</span>
       </div>
     </section>
   </main>
-  <script type="module" src="./main.js"></script>
+  <script type="module" src="./main.js?v=authoritative-clouds-v3"></script>
 </body>
 </html>

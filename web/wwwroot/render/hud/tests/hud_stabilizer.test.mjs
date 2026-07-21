@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   HudSignalStabilizer,
   latchedRectVisibility,
+  StableRateEstimate,
   StableRoundedValue,
   VisibilityEnvelope,
 } from "../hud_stabilizer.js";
@@ -66,6 +67,67 @@ test("F-22 tape filtering removes sample jitter but bounds manoeuvre lag", () =>
     assert.ok(Math.abs(display.indicatedKts - measured) <= 3.000001);
   }
   assert.ok(display.headingDeg < 10, "heading smoothing must cross north by the short path");
+});
+
+test("airspeed tape and trend reject sustained small reversals without hiding acceleration", () => {
+  const filter = new HudSignalStabilizer();
+  let display = filter.update({
+    player_entity_id: "f22",
+    indicated_airspeed_kts: 420,
+    alt_ft: 12_000,
+  }, 1 / 60);
+  const settledTape = [];
+  const settledDigits = [];
+  const settledRates = [];
+  for (let index = 0; index < 360; index += 1) {
+    const seconds = index / 60;
+    display = filter.update({
+      player_entity_id: "f22",
+      indicated_airspeed_kts: 420 + Math.sin(seconds * Math.PI * 2 * 1.1) * 2.2,
+      alt_ft: 12_000,
+    }, 1 / 60);
+    if (index >= 120) {
+      settledTape.push(display.indicatedKts);
+      settledDigits.push(display.indicatedDigits);
+      settledRates.push(display.indicatedRateKtsPerSecond);
+    }
+  }
+  assert.ok(Math.max(...settledTape) - Math.min(...settledTape) < 1.2,
+    "a small repeating IAS reversal must not make the whole scale breathe");
+  assert.deepEqual([...new Set(settledDigits)], [420],
+    "the boxed airspeed must not count up and down around a steady mean");
+  assert.ok(Math.max(...settledRates.map(Math.abs)) < 0.35,
+    "the acceleration caret must remain neutral during display chatter");
+
+  for (let index = 0; index < 60; index += 1) {
+    const measured = 420 + (60 * (index + 1) / 60);
+    display = filter.update({
+      player_entity_id: "f22",
+      indicated_airspeed_kts: measured,
+      alt_ft: 12_000,
+    }, 1 / 60);
+    assert.ok(Math.abs(display.indicatedKts - measured) <= 3.000001);
+  }
+  assert.ok(display.indicatedRateKtsPerSecond > 10,
+    "a deliberate acceleration must still produce an immediate positive trend");
+});
+
+test("rate estimate waits for a sustained reversal before flipping the caret", () => {
+  const rate = new StableRateEstimate({ sampleSeconds: 0.25 });
+  let measured = 200;
+  rate.reset(measured);
+  for (let index = 0; index < 60; index += 1) {
+    measured += 0.1;
+    rate.update(measured, 1 / 60);
+  }
+  assert.ok(rate.value > 0);
+  const positive = rate.value;
+  for (let index = 0; index < 30; index += 1) {
+    measured -= 0.005;
+    rate.update(measured, 1 / 60);
+  }
+  assert.ok(rate.value >= 0 && rate.value < positive,
+    "a weak opposite sample may relax the caret but must not flip it");
 });
 
 test("a replacement ownship resets filters rather than animating stale airdata", () => {

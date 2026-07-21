@@ -1,0 +1,410 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guns-only.invalid/schemas/v1/campaign-governance.schema.json",
+  "title": "Guns Only campaign governance",
+  "description": "Machine-readable constitutional policy for a campaign, its story braid, progression, evidence, education, and release gates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "governanceId",
+    "governanceVersion",
+    "campaignId",
+    "status",
+    "northStar",
+    "primaryTimelines",
+    "narrative",
+    "progression",
+    "education",
+    "evidence",
+    "reviewGates",
+    "changeControl"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://guns-only.invalid/schemas/v1/campaign-governance.schema.json"
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "governanceId": {
+      "$ref": "#/$defs/versionedId"
+    },
+    "governanceVersion": {
+      "$ref": "#/$defs/semver"
+    },
+    "campaignId": {
+      "$ref": "#/$defs/versionedId"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "active",
+        "superseded"
+      ]
+    },
+    "northStar": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 500
+    },
+    "primaryTimelines": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/timeline"
+      }
+    },
+    "nestedMemoryPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed",
+        "rules"
+      ],
+      "properties": {
+        "allowed": {
+          "type": "boolean"
+        },
+        "rules": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    },
+    "narrative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "braidUnit",
+        "historicalFunction",
+        "modernFunction",
+        "openingMissionContractId",
+        "openingAircraftCapabilityId",
+        "authoredOrderOwns",
+        "seedMayVary",
+        "rules"
+      ],
+      "properties": {
+        "braidUnit": {
+          "const": "mission_dossier"
+        },
+        "historicalFunction": {
+          "type": "string",
+          "minLength": 10
+        },
+        "modernFunction": {
+          "type": "string",
+          "minLength": 10
+        },
+        "openingMissionContractId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "openingAircraftCapabilityId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "authoredOrderOwns": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "seedMayVary": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "rules": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    },
+    "progression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runUnit",
+        "stateLifetimes",
+        "allowedPermanentUnlockKinds",
+        "forbiddenPermanentAdvantages",
+        "readinessResources",
+        "attritionRules",
+        "failurePolicy",
+        "mergePolicy"
+      ],
+      "properties": {
+        "runUnit": {
+          "const": "sortie"
+        },
+        "stateLifetimes": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "lifetime",
+              "owns",
+              "resetRule"
+            ],
+            "properties": {
+              "lifetime": {
+                "enum": [
+                  "sortie",
+                  "run",
+                  "profile"
+                ]
+              },
+              "owns": {
+                "$ref": "#/$defs/nonEmptyStrings"
+              },
+              "resetRule": {
+                "type": "string",
+                "minLength": 5
+              }
+            }
+          }
+        },
+        "allowedPermanentUnlockKinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "forbiddenPermanentAdvantages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "readinessResources": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "attritionRules": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "failurePolicy": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "mergePolicy": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    },
+    "education": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deliveryLoop",
+        "surfaces",
+        "objectiveGrammar",
+        "assessmentPolicy",
+        "rules"
+      ],
+      "properties": {
+        "deliveryLoop": {
+          "const": "experience_explanation_reapplication"
+        },
+        "surfaces": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "in_flight",
+              "debrief",
+              "archive"
+            ]
+          }
+        },
+        "objectiveGrammar": {
+          "type": "string",
+          "minLength": 10
+        },
+        "assessmentPolicy": {
+          "type": "string",
+          "minLength": 10
+        },
+        "rules": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "epistemicLabels",
+        "sourceGrades",
+        "sourceRules",
+        "disputePolicy",
+        "fictionPolicy",
+        "abstractionPolicy"
+      ],
+      "properties": {
+        "epistemicLabels": {
+          "type": "array",
+          "minItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "engineering",
+              "history",
+              "reconstruction",
+              "fiction"
+            ]
+          }
+        },
+        "sourceGrades": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "sourceRules": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "disputePolicy": {
+          "type": "string",
+          "minLength": 10
+        },
+        "fictionPolicy": {
+          "type": "string",
+          "minLength": 10
+        },
+        "abstractionPolicy": {
+          "type": "string",
+          "minLength": 10
+        }
+      }
+    },
+    "reviewGates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gateId",
+          "ownerRole",
+          "blocking",
+          "exitCriteria"
+        ],
+        "properties": {
+          "gateId": {
+            "$ref": "#/$defs/id"
+          },
+          "ownerRole": {
+            "$ref": "#/$defs/id"
+          },
+          "blocking": {
+            "type": "boolean"
+          },
+          "exitCriteria": {
+            "$ref": "#/$defs/nonEmptyStrings"
+          }
+        }
+      }
+    },
+    "changeControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dossierStatuses",
+        "constitutionalChangeRequires",
+        "schemaChangeRequires"
+      ],
+      "properties": {
+        "dossierStatuses": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "pitch",
+              "researching",
+              "prototype",
+              "review",
+              "approved",
+              "retired"
+            ]
+          }
+        },
+        "constitutionalChangeRequires": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "schemaChangeRequires": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "versionedId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*\\.v[1-9][0-9]*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "nonEmptyStrings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "timeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timelineId",
+        "kind",
+        "displayName",
+        "dateRange",
+        "dramaticFunction",
+        "factualBoundary"
+      ],
+      "properties": {
+        "timelineId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "kind": {
+          "enum": [
+            "historical",
+            "speculative"
+          ]
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dateRange": {
+          "type": "string",
+          "minLength": 4
+        },
+        "dramaticFunction": {
+          "type": "string",
+          "minLength": 10
+        },
+        "factualBoundary": {
+          "type": "string",
+          "minLength": 10
+        }
+      }
+    }
+  }
+}

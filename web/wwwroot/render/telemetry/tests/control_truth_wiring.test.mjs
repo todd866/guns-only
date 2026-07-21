@@ -76,6 +76,10 @@ test("gunnery pitch assistance publishes request, limits, and achieved command s
   assert.match(source, /gunneryPitchAssist\.TotalLeadErrorRad/);
   assert.match(source, /\\\"gunnery_pitch_rate_cmd_dps\\\"/);
   assert.match(source, /gunneryPitchAssist\.RequestedPitchRateRadPerSecond/);
+  assert.match(source, /\\\"gunnery_pitch_rate_measured_dps\\\"/);
+  assert.match(source, /gunneryPitchAssist\.MeasuredPitchRateRadPerSecond/);
+  assert.match(source, /\\\"gunnery_pitch_rate_error_dps\\\"/);
+  assert.match(source, /gunneryPitchAssist\.PitchRateErrorRadPerSecond/);
   assert.match(source, /\\\"gunnery_pitch_assist_g\\\"/);
   assert.match(source, /gunneryPitchAssist\.AssistedLoadFactorG/);
   assert.match(source, /\\\"gunnery_pitch_assist_delta_g\\\"/);

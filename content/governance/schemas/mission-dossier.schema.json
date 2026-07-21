@@ -1,0 +1,828 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guns-only.invalid/schemas/v1/mission-dossier.schema.json",
+  "title": "Guns Only braided mission dossier",
+  "description": "Reviewable authoring record joining missions, narrative echoes, learning objectives, claims, progression, representation, and production proof.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "dossierId",
+    "governanceId",
+    "status",
+    "title",
+    "dramaticQuestion",
+    "sorties",
+    "braid",
+    "learningObjectives",
+    "educationDelivery",
+    "claims",
+    "sources",
+    "abstractions",
+    "progression",
+    "representation",
+    "production",
+    "reviews"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://guns-only.invalid/schemas/v1/mission-dossier.schema.json"
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "dossierId": {
+      "$ref": "#/$defs/versionedId"
+    },
+    "governanceId": {
+      "$ref": "#/$defs/versionedId"
+    },
+    "status": {
+      "enum": [
+        "pitch",
+        "researching",
+        "prototype",
+        "review",
+        "approved",
+        "retired"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "dramaticQuestion": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 300
+    },
+    "sorties": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "#/$defs/sortie"
+      }
+    },
+    "braid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revealOrder",
+        "echoes",
+        "carriedKnowledge",
+        "authoredInvariants",
+        "authoredDifferences"
+      ],
+      "properties": {
+        "revealOrder": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/versionedId"
+          }
+        },
+        "echoes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "echoId",
+              "sortieIds",
+              "constant",
+              "changed",
+              "dramaticPurpose"
+            ],
+            "properties": {
+              "echoId": {
+                "$ref": "#/$defs/versionedId"
+              },
+              "sortieIds": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "$ref": "#/$defs/versionedId"
+                }
+              },
+              "constant": {
+                "type": "string",
+                "minLength": 5
+              },
+              "changed": {
+                "type": "string",
+                "minLength": 5
+              },
+              "dramaticPurpose": {
+                "type": "string",
+                "minLength": 10
+              }
+            }
+          }
+        },
+        "carriedKnowledge": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "authoredInvariants": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "authoredDifferences": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    },
+    "learningObjectives": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "objectiveId",
+          "playerCan",
+          "introducedInSortieId",
+          "explainedByDebriefId",
+          "reappliedInSortieId",
+          "evaluatedBy",
+          "archiveEntryId"
+        ],
+        "properties": {
+          "objectiveId": {
+            "$ref": "#/$defs/versionedId"
+          },
+          "playerCan": {
+            "type": "string",
+            "minLength": 10
+          },
+          "introducedInSortieId": {
+            "$ref": "#/$defs/versionedId"
+          },
+          "explainedByDebriefId": {
+            "$ref": "#/$defs/versionedId"
+          },
+          "reappliedInSortieId": {
+            "$ref": "#/$defs/versionedId"
+          },
+          "evaluatedBy": {
+            "$ref": "#/$defs/nonEmptyStrings"
+          },
+          "archiveEntryId": {
+            "$ref": "#/$defs/versionedId"
+          }
+        }
+      }
+    },
+    "educationDelivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "debriefs",
+        "archiveEntries",
+        "interruptionBudget"
+      ],
+      "properties": {
+        "debriefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/debrief"
+          }
+        },
+        "archiveEntries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/archiveEntry"
+          }
+        },
+        "interruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mandatoryInFlightLessons",
+            "maxPrioritizedDebriefInsights",
+            "archiveIsOptional"
+          ],
+          "properties": {
+            "mandatoryInFlightLessons": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "maxPrioritizedDebriefInsights": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            },
+            "archiveIsOptional": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/claim"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "abstractions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "abstractionId",
+          "affects",
+          "description",
+          "reason",
+          "playerDisclosure"
+        ],
+        "properties": {
+          "abstractionId": {
+            "$ref": "#/$defs/versionedId"
+          },
+          "affects": {
+            "enum": [
+              "physics",
+              "systems",
+              "sensors",
+              "weapons",
+              "terrain",
+              "weather",
+              "history",
+              "narrative",
+              "interface",
+              "progression"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 10
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10
+          },
+          "playerDisclosure": {
+            "type": "string",
+            "minLength": 5
+          }
+        }
+      }
+    },
+    "progression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entryConditions",
+        "completionUnlocks",
+        "failureUnlocks",
+        "runStateEffects",
+        "routeGuarantee"
+      ],
+      "properties": {
+        "entryConditions": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "completionUnlocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unlock"
+          }
+        },
+        "failureUnlocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unlock"
+          }
+        },
+        "runStateEffects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/runEffect"
+          }
+        },
+        "routeGuarantee": {
+          "type": "string",
+          "minLength": 10
+        }
+      }
+    },
+    "representation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agencyRules",
+        "civilianContext",
+        "perspectiveRisks",
+        "mitigations",
+        "memoryOwnership"
+      ],
+      "properties": {
+        "agencyRules": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "civilianContext": {
+          "type": "string",
+          "minLength": 10
+        },
+        "perspectiveRisks": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "mitigations": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "memoryOwnership": {
+          "type": "string",
+          "minLength": 10
+        }
+      }
+    },
+    "production": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "terrainCorridors",
+        "visualProofs",
+        "requiredSystems",
+        "accessibilityProofs",
+        "telemetryQuestions"
+      ],
+      "properties": {
+        "terrainCorridors": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "corridorId",
+              "sortieIds",
+              "purpose",
+              "nearFieldRequirements"
+            ],
+            "properties": {
+              "corridorId": {
+                "$ref": "#/$defs/versionedId"
+              },
+              "sortieIds": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/$defs/versionedId"
+                }
+              },
+              "purpose": {
+                "type": "string",
+                "minLength": 10
+              },
+              "nearFieldRequirements": {
+                "$ref": "#/$defs/nonEmptyStrings"
+              }
+            }
+          }
+        },
+        "visualProofs": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "requiredSystems": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "accessibilityProofs": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "telemetryQuestions": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    },
+    "reviews": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gateId",
+          "status",
+          "notes",
+          "evidence"
+        ],
+        "properties": {
+          "gateId": {
+            "$ref": "#/$defs/id"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "passed",
+              "failed",
+              "waived"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "waiver": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "scope",
+              "reason",
+              "ownerRole",
+              "expiresOn",
+              "playerConsequence"
+            ],
+            "properties": {
+              "scope": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ownerRole": {
+                "$ref": "#/$defs/id"
+              },
+              "expiresOn": {
+                "type": "string",
+                "minLength": 10
+              },
+              "playerConsequence": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "versionedId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*\\.v[1-9][0-9]*$"
+    },
+    "nonEmptyStrings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "sortie": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sortieId",
+        "timelineId",
+        "missionContractId",
+        "perspective",
+        "playerFantasy",
+        "scenarioSummary",
+        "centralDecision",
+        "failureMeaning",
+        "successMeaning"
+      ],
+      "properties": {
+        "sortieId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "timelineId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "missionContractId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "perspective": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "faction",
+            "actorRole",
+            "vehicleCapabilityId",
+            "controlMode"
+          ],
+          "properties": {
+            "faction": {
+              "$ref": "#/$defs/id"
+            },
+            "actorRole": {
+              "type": "string",
+              "minLength": 2
+            },
+            "vehicleCapabilityId": {
+              "$ref": "#/$defs/versionedId"
+            },
+            "controlMode": {
+              "enum": [
+                "crewed",
+                "remote",
+                "autonomous",
+                "supervised_autonomy"
+              ]
+            }
+          }
+        },
+        "playerFantasy": {
+          "type": "string",
+          "minLength": 10
+        },
+        "scenarioSummary": {
+          "type": "string",
+          "minLength": 20
+        },
+        "centralDecision": {
+          "type": "string",
+          "minLength": 10
+        },
+        "failureMeaning": {
+          "type": "string",
+          "minLength": 10
+        },
+        "successMeaning": {
+          "type": "string",
+          "minLength": 10
+        },
+        "nestedMemory": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "memoryId",
+            "ownerActor",
+            "location",
+            "epistemicLimit",
+            "laterConsequence"
+          ],
+          "properties": {
+            "memoryId": {
+              "$ref": "#/$defs/versionedId"
+            },
+            "ownerActor": {
+              "type": "string",
+              "minLength": 2
+            },
+            "location": {
+              "type": "string",
+              "minLength": 2
+            },
+            "epistemicLimit": {
+              "type": "string",
+              "minLength": 10
+            },
+            "laterConsequence": {
+              "type": "string",
+              "minLength": 10
+            }
+          }
+        }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claimId",
+        "label",
+        "statement",
+        "appearsInSortieIds",
+        "sourceRefs",
+        "qualification"
+      ],
+      "properties": {
+        "claimId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "label": {
+          "enum": [
+            "engineering",
+            "history",
+            "reconstruction",
+            "fiction"
+          ]
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 10
+        },
+        "appearsInSortieIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/versionedId"
+          }
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/versionedId"
+          }
+        },
+        "qualification": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "grade",
+        "title",
+        "publisher",
+        "uri",
+        "supportsClaimIds",
+        "perspective"
+      ],
+      "properties": {
+        "sourceId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "grade": {
+          "$ref": "#/$defs/id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "publisher": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri"
+        },
+        "publishedOn": {
+          "type": "string",
+          "minLength": 4
+        },
+        "accessedOn": {
+          "type": "string",
+          "minLength": 10
+        },
+        "supportsClaimIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/versionedId"
+          }
+        },
+        "perspective": {
+          "type": "string",
+          "minLength": 5
+        }
+      }
+    },
+    "debrief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "debriefId",
+        "triggerEvidence",
+        "insight",
+        "neverClaims"
+      ],
+      "properties": {
+        "debriefId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "triggerEvidence": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "insight": {
+          "type": "string",
+          "minLength": 10
+        },
+        "neverClaims": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    },
+    "archiveEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "archiveEntryId",
+        "title",
+        "depth",
+        "claimRefs",
+        "abstractionRefs"
+      ],
+      "properties": {
+        "archiveEntryId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "depth": {
+          "enum": [
+            "brief",
+            "intermediate",
+            "deep"
+          ]
+        },
+        "claimRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/versionedId"
+          }
+        },
+        "abstractionRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/versionedId"
+          }
+        }
+      }
+    },
+    "unlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "contentId",
+        "storyReason"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/id"
+        },
+        "contentId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "storyReason": {
+          "type": "string",
+          "minLength": 10
+        }
+      }
+    },
+    "runEffect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resource",
+        "operation",
+        "amount",
+        "cause",
+        "boundedRecovery"
+      ],
+      "properties": {
+        "resource": {
+          "$ref": "#/$defs/id"
+        },
+        "operation": {
+          "enum": [
+            "add",
+            "subtract",
+            "set_state"
+          ]
+        },
+        "amount": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "cause": {
+          "type": "string",
+          "minLength": 5
+        },
+        "boundedRecovery": {
+          "type": "string",
+          "minLength": 5
+        }
+      }
+    }
+  }
+}

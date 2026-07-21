@@ -149,6 +149,8 @@ public static class AutoGcasController {
 
     const double RecoveryRollCaptureSeconds = 0.35;
     const double RecoveryRollDeadbandRad = 2.0 * Math.PI / 180.0;
+    const double RecoveryRollRateDampingGain = 0.72;
+    const double RecoveryRollRateDeadbandRadPerSecond = 1.0 * Math.PI / 180.0;
     const double ResponseAuthorityMargin = 0.82;
     const double RecoveryCompletionHorizonSeconds = 20.0;
 
@@ -318,7 +320,8 @@ public static class AutoGcasController {
         EscapeFrame frame = BuildEscapeFrame(input, input.Aircraft.Position,
             velocity, lift);
         RecoveryResponse response = ResponseFor(input, config);
-        RecoveryGuidance guidance = GuidanceFor(frame, response, config);
+        RecoveryGuidance guidance = GuidanceFor(frame,
+            input.Aircraft.BodyRates.P, response, config);
         return new PilotCommand(
             // The recovery is one continuous aircraft-owned command. The airframe remains the
             // authority on achieved G; an escape-aligned steep pull must not collapse merely
@@ -329,9 +332,12 @@ public static class AutoGcasController {
             Rudder: 0.0,
             CommandedPitchRad: double.NaN,
             EnvelopeOverride: false,
-            RollControl: guidance.RollControl,
+            // Auto-GCAS is aircraft-owned augmentation, not pilot aileron. Publishing it through
+            // the explicit SAS channel keeps telemetry honest while the physical derivative law
+            // still sums both channels at the actuator stop.
+            RollControl: 0.0,
             CommandedAlphaRad: double.NaN,
-            SasRollControl: 0.0,
+            SasRollControl: guidance.RollControl,
             DirectLateralControl: true);
     }
 
@@ -412,7 +418,8 @@ public static class AutoGcasController {
             double gDemand;
             double rollControl;
             if (recovery) {
-                RecoveryGuidance guidance = GuidanceFor(frame, response, config);
+                RecoveryGuidance guidance = GuidanceFor(frame,
+                    rollRate, response, config);
                 rollControl = guidance.RollControl;
                 double achievableDemand = Math.Min(
                     guidance.LoadFactorDemandG, response.MaximumLoadFactorG);
@@ -566,13 +573,20 @@ public static class AutoGcasController {
             && targetBank <= bank + 2.0 * Math.PI / 180.0;
     }
 
-    static RecoveryGuidance GuidanceFor(in EscapeFrame frame,
+    static RecoveryGuidance GuidanceFor(in EscapeFrame frame, double rollRateRadPerSecond,
         in RecoveryResponse response, AutoGcasConfiguration config) {
-        double rollControl = Math.Abs(frame.RollErrorRad) <= RecoveryRollDeadbandRad
+        double maximumRollRate = response.MaximumRollRateRadPerSecond;
+        double desiredRollRate = Math.Abs(frame.RollErrorRad) <= RecoveryRollDeadbandRad
             ? 0.0
-            : Math.Clamp(-frame.RollErrorRad
-                / (RecoveryRollCaptureSeconds
-                    * response.MaximumRollRateRadPerSecond), -1.0, 1.0);
+            : Math.Clamp(-frame.RollErrorRad / RecoveryRollCaptureSeconds,
+                -maximumRollRate, maximumRollRate);
+        double rateError = desiredRollRate - rollRateRadPerSecond;
+        double rollControl = desiredRollRate / maximumRollRate
+            + RecoveryRollRateDampingGain * rateError / maximumRollRate;
+        if (Math.Abs(frame.RollErrorRad) <= RecoveryRollDeadbandRad
+            && Math.Abs(rollRateRadPerSecond) <= RecoveryRollRateDeadbandRadPerSecond)
+            rollControl = 0.0;
+        else rollControl = Math.Clamp(rollControl, -1.0, 1.0);
         // Positive normal load is useful throughout the steep/vertical fly-up whenever the
         // physical lift plane has any component away from terrain. That removes the old arbitrary
         // 30-degree bank gate and its loss of G at steep flight-path angles. If the aircraft is

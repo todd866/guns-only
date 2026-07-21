@@ -24,6 +24,7 @@ import {
 } from "./render/hud/hud_stabilizer.js";
 import { AoAIndexerQualifier, DisplayCueQualifier } from "./render/hud/stable_cues.js";
 import { fighterHudLayout } from "./render/hud/fighter_layout.js";
+import { gunFunnelProfile, gunFunnelSamples } from "./render/hud/gun_funnel.js";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -660,22 +661,7 @@ class CombatHud {
       return;
     }
 
-    // The pack cockpit carries an actual infinity-collimated reflector sight. Keep this canvas
-    // fallback only for compatibility cockpits that do not publish a gunsight.origin anchor.
-    if (frame.periodGunsightVisible !== true) {
-      ctx.save();
-      ctx.translate(anchor.x, anchor.y);
-      this.setLine("rgba(77, 255, 136, 0.72)", 1.2);
-      ctx.beginPath();
-      ctx.arc(0, 0, 28, 0, Math.PI * 2);
-      for (let i = 0; i < 4; i++) {
-        const angle = i * Math.PI / 2;
-        ctx.moveTo(Math.cos(angle) * 18, Math.sin(angle) * 18);
-        ctx.lineTo(Math.cos(angle) * 35, Math.sin(angle) * 35);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
+    this.drawGunFunnel(frame, anchor);
 
     let rawPipperVisible = false;
     if (state.lead_valid === true && leadPipper) {
@@ -730,6 +716,60 @@ class CombatHud {
       ctx.restore();
     }
 
+  }
+
+  drawGunFunnel(frame, anchor) {
+    const ctx = this.ctx;
+    const projection = frame.camera?.projectionMatrix?.elements;
+    const focalLengthPx = this.width * 0.5 * (Number(projection?.[0]) || 1);
+    const samples = gunFunnelSamples({
+      ...gunFunnelProfile(frame.state),
+      focalLengthPx,
+    });
+    const bank = (Number(frame.state.bank_deg) || 0) * DEG;
+
+    ctx.save();
+    ctx.translate(anchor.x, anchor.y);
+    ctx.rotate(-bank);
+    this.setLine("rgba(77, 255, 136, 0.70)", 1.15);
+
+    // A small gun cross owns boresight. The two continuously narrowing rails below it are the
+    // traditional wingspan-ranging funnel; the separate moving pipper remains the actual lead cue.
+    ctx.beginPath();
+    ctx.moveTo(-14, 0);
+    ctx.lineTo(-4, 0);
+    ctx.moveTo(4, 0);
+    ctx.lineTo(14, 0);
+    ctx.moveTo(0, -9);
+    ctx.lineTo(0, -3);
+    ctx.moveTo(0, 3);
+    ctx.lineTo(0, 9);
+    ctx.stroke();
+
+    ctx.beginPath();
+    samples.forEach((sample, index) => {
+      if (index === 0) ctx.moveTo(-sample.halfWidthPx, sample.yPx);
+      else ctx.lineTo(-sample.halfWidthPx, sample.yPx);
+    });
+    for (let index = samples.length - 1; index >= 0; index -= 1) {
+      const sample = samples[index];
+      if (index === samples.length - 1) ctx.moveTo(sample.halfWidthPx, sample.yPx);
+      else ctx.lineTo(sample.halfWidthPx, sample.yPx);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.42)";
+    ctx.lineWidth = 1;
+    for (const index of [2, 5, samples.length - 1]) {
+      const sample = samples[index];
+      ctx.beginPath();
+      ctx.moveTo(-sample.halfWidthPx - 3, sample.yPx);
+      ctx.lineTo(-sample.halfWidthPx + 2, sample.yPx);
+      ctx.moveTo(sample.halfWidthPx - 2, sample.yPx);
+      ctx.lineTo(sample.halfWidthPx + 3, sample.yPx);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // The deck diamond and waterline director are one published recovery contract. Align the stable
@@ -1147,7 +1187,15 @@ class CombatHud {
       ctx.shadowBlur = 0;
       ctx.fillStyle = GREEN_DIM;
       ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText(`IMPACT PHYSICS RUNNING · KILLS ${kills}`, this.width / 2, cueY + 47);
+      const replacementPending = state.opponent_replacement_pending === true;
+      const replacementSeconds = Math.max(0,
+        Number(state.opponent_replacement_s) || 0);
+      const nextEngagement = Math.max(2,
+        Math.floor(Number(state.engagement_number) || Math.max(1, kills)) + 1);
+      const detail = replacementPending
+        ? `BANDIT ${nextEngagement} IN ${replacementSeconds.toFixed(1)} SEC · KILLS ${kills}`
+        : `IMPACT PHYSICS RUNNING · KILLS ${kills}`;
+      ctx.fillText(detail, this.width / 2, cueY + 47);
     }
     ctx.restore();
   }
@@ -1461,7 +1509,7 @@ class CombatHud {
 
     // Trend caret: a vertical line from the current value to where the value is heading (value +
     // trend over the lookahead), clamped to the tape. Amber, so accel/decel reads at a glance.
-    const trendAlpha = clamp((Math.abs(trend) - 0.15) / 1.35, 0, 1);
+    const trendAlpha = clamp((Math.abs(trend) - 2) / 4, 0, 1);
     if (trendAlpha > 0.01) {
       ctx.save();
       ctx.globalAlpha *= trendAlpha;
@@ -1486,7 +1534,7 @@ class CombatHud {
     }
   }
 
-  drawAirdataLabels(state, x, display = {}) {
+  drawAirdataLabels(state, speedX, altitudeX, display = {}) {
     const data = airdataReadout(state);
     const groundKts = Number.isFinite(display.groundKts) ? display.groundKts : null;
     const verticalSpeedFpm = Number.isFinite(display.verticalSpeedDigits)
@@ -1505,24 +1553,21 @@ class CombatHud {
     ctx.textBaseline = "middle";
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(data.unitText, x, centerY - tapeHeight / 2 - 12);
+    ctx.fillText(data.unitText, speedX, centerY - tapeHeight / 2 - 12);
+    ctx.fillText("ALT FT", altitudeX, centerY - tapeHeight / 2 - 12);
 
-    // Earth-relative speed and the aircraft's actual vertical motion sit directly under IAS.
-    // They stay numerically explicit instead of adding another decorative analogue instrument.
+    // Earth-relative speed stays with airspeed; vertical motion stays with altitude. Both remain
+    // numeric rather than adding two more analogue instruments to the transparent world view.
     ctx.fillStyle = "rgba(3, 13, 20, 0.88)";
-    roundedRect(ctx, x - 31, centerY + 11, 62, 27, 3);
+    roundedRect(ctx, speedX - 31, centerY + 11, 62, 14, 3);
     ctx.fill();
-    ctx.strokeStyle = "rgba(77, 255, 136, 0.14)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x - 27, centerY + 24.5);
-    ctx.lineTo(x + 27, centerY + 24.5);
-    ctx.stroke();
+    roundedRect(ctx, altitudeX - 37, centerY + 11, 74, 14, 3);
+    ctx.fill();
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(groundText, x, centerY + 17.5);
+    ctx.fillText(groundText, speedX, centerY + 18);
     ctx.font = "700 6.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(verticalText, x, centerY + 31.5);
+    ctx.fillText(verticalText, altitudeX, centerY + 18);
     ctx.restore();
   }
 
@@ -2465,14 +2510,14 @@ class CombatHud {
     const wideLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${binding("fire", "KeyF")}  GUNS   ·   ${binding("padlock", "KeyV")}  TARGET / BOAT PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK`,
-      `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   1–8  MISSION   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE`,
+      `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE`,
     ];
     const compactLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL`,
       `${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
       `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${binding("fire", "KeyF")}  GUNS   ·   M  SOUND`,
-      `${binding("padlock", "KeyV")}  PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK   ·   1–8  MISSION   ·   R  RESTART   ·   H  HIDE`,
+      `${binding("padlock", "KeyV")}  PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK   ·   R  RESTART   ·   H  HIDE`,
     ];
     if (gcasAvailable) {
       wideLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE AN ACTIVE FLY-UP)`);
@@ -2526,22 +2571,10 @@ class CombatHud {
     this.drawHeadingTape(frame.state, { headingDeg: display.headingDeg, headingDigits: display.headingDigits, padlock: frame.padlock });
     this.drawRtbCue(frame.state);
 
-    // Speed trend: smoothed dV/dt, projected ~6 s ahead (the classic acceleration caret).
+    // Speed trend: a windowed presentation estimate projected ~6 s ahead. The rate estimator
+    // deliberately ignores one-frame IAS reversals so the caret reports energy trend, not noise.
     const spd = display.indicatedKts;
-    const dt = Math.max(1e-3, Number(frame.dt) || 1 / 60);
-    const speedEntityId = String(frame.state.player_entity_id ?? "legacy");
-    if (this._speedEntityId !== speedEntityId) {
-      this._speedEntityId = speedEntityId;
-      this._prevSpeed = spd;
-      this._speedRate = 0;
-    }
-    if (this._prevSpeed === undefined) this._prevSpeed = spd;
-    const inst = (spd - this._prevSpeed) / dt;                 // kts/s
-    const speedBlend = 1 - Math.exp(-dt / 0.20);
-    this._speedRate = (this._speedRate || 0)
-      + speedBlend * (inst - (this._speedRate || 0));
-    this._prevSpeed = spd;
-    const speedTrend = clamp(this._speedRate * 6, -60, 60);    // project 6 s, cap for tape sanity
+    const speedTrend = clamp(display.indicatedRateKtsPerSecond * 6, -60, 60);
 
     const tapeInset = this.getLayout().tapeInset;
     this.drawVerticalTape({
@@ -2555,7 +2588,7 @@ class CombatHud {
       lowSpeed: stallAwareness(frame.state),
       fixedMarkers: speedTapeMarkers(frame.state),
     });
-    this.drawAirdataLabels(frame.state, tapeInset, display);
+    this.drawAirdataLabels(frame.state, tapeInset, this.width - tapeInset, display);
     this.drawVerticalTape({
       value: display.altitudeFt,
       displayValue: display.altitudeDigits,

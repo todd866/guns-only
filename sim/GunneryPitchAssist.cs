@@ -2,18 +2,20 @@ namespace GunsOnly.Sim;
 
 /// <summary>
 /// Observable state of the bounded player gunnery aid. RequestedPitchRate is the rate needed to
-/// converge the body-fixed gun line on the ballistic lead direction; achieved motion remains a
-/// result of the ordinary protected load-factor and rigid-body model.
+/// converge the body-fixed gun line on the ballistic lead direction. PitchRateError is that rate
+/// minus measured body q; only this residual is converted into a protected load-factor correction.
 /// </summary>
 public readonly record struct GunneryPitchAssistState(
     bool Active,
     double TotalLeadErrorRad,
     double PitchLeadErrorRad,
     double RequestedPitchRateRadPerSecond,
+    double MeasuredPitchRateRadPerSecond,
+    double PitchRateErrorRadPerSecond,
     double AssistedLoadFactorG,
     double LoadFactorCorrectionG) {
     public static GunneryPitchAssistState Inactive(double pilotLoadFactorG = 1.0) =>
-        new(false, 0.0, 0.0, 0.0, pilotLoadFactorG, 0.0);
+        new(false, 0.0, 0.0, 0.0, 0.0, 0.0, pilotLoadFactorG, 0.0);
 }
 
 public readonly record struct GunneryPitchAssistResult(
@@ -29,7 +31,6 @@ public static class GunneryPitchAssist {
         in PilotCommand pilotCommand,
         in AircraftState aircraft,
         in AircraftParams parameters,
-        in Vec3D liftDirection,
         double airspeedMps,
         IAtmosphereModel atmosphere,
         in Vec3D ballisticLeadDirection,
@@ -52,6 +53,7 @@ public static class GunneryPitchAssist {
             || !double.IsFinite(rangeM) || rangeM <= 0.0
             || rangeM > parameters.GunneryPitchAssistMaxRangeM
             || !double.IsFinite(airspeedMps) || airspeedMps <= 1.0
+            || !aircraft.BodyRates.IsFinite
             || !aircraft.BodyAttitude.IsFinite
             || aircraft.BodyAttitude.LengthSquared < 1e-12
             || !IsFinite(ballisticLeadDirection)
@@ -75,22 +77,20 @@ public static class GunneryPitchAssist {
             parameters.GunneryPitchAssistGainPerSecond * pitchError,
             -parameters.GunneryPitchAssistMaxRateRad,
             parameters.GunneryPitchAssistMaxRateRad);
+        double measuredPitchRate = aircraft.BodyRates.Q;
+        double pitchRateError = requestedPitchRate - measuredPitchRate;
 
-        double liftVertical = IsFinite(liftDirection) && liftDirection.Length > 1e-9
-            ? System.Math.Clamp(liftDirection.Normalized().Y, -1.0, 1.0)
-            : System.Math.Clamp(bodyUp.Y, -1.0, 1.0);
-        // In the production rate law q = (n - liftVertical) g / V. Invert that same relation so
-        // this helper requests a pitch rate through ordinary protected G instead of teleporting
-        // attitude or adding a hidden moment.
-        double rateLoadFactor = liftVertical
-            + requestedPitchRate * airspeedMps / FlightModel.G0;
+        // The production law has the incremental relation delta-q = delta-n * g / V. Subtract
+        // measured q from desired convergence rate, then add only that residual to the player's
+        // protected G request. This behaves as a damped augmentation rather than replacing the
+        // pilot's pull with a second absolute pitch-rate controller.
+        double rateCorrectionG = pitchRateError * airspeedMps / FlightModel.G0;
         double protectedMaximum = Protection.MaxPerformG(
             aircraft, parameters, airspeedMps, atmosphere);
         double protectedMinimum = System.Math.Max(FlightModel.NzAeroMin(
             aircraft, parameters, airspeedMps, atmosphere), -1.5);
         double lower = System.Math.Min(protectedMinimum, protectedMaximum);
-        double targetLoadFactor = System.Math.Clamp(rateLoadFactor, lower, protectedMaximum);
-        double correction = System.Math.Clamp(targetLoadFactor - pilotCommand.GDemand,
+        double correction = System.Math.Clamp(rateCorrectionG,
             -parameters.GunneryPitchAssistMaxCorrectionG,
             parameters.GunneryPitchAssistMaxCorrectionG);
         double assistedLoadFactor = System.Math.Clamp(
@@ -102,6 +102,8 @@ public static class GunneryPitchAssist {
             TotalLeadErrorRad: totalError,
             PitchLeadErrorRad: pitchError,
             RequestedPitchRateRadPerSecond: requestedPitchRate,
+            MeasuredPitchRateRadPerSecond: measuredPitchRate,
+            PitchRateErrorRadPerSecond: pitchRateError,
             AssistedLoadFactorG: assistedLoadFactor,
             LoadFactorCorrectionG: correction);
         return new GunneryPitchAssistResult(

@@ -13,6 +13,15 @@ same aircraft entity through:
 4. `SETTLED`: motion is negligible relative to the final surface.
 5. `SORTIE_FINISHED`: only now does the outcome become final and the debrief interlock open.
 
+Continuous-combat sorties do not weaken that contract. After a short destruction dwell, the
+mission can detach the killed opponent from the targeting slot and stage a new authoritative
+fighter. The old entity retains its original spawn identity and continues to integrate in the
+background through `IMPACT` and `SETTLED`; those events include entity identity, position, and
+velocity so telemetry, effects, and a later replay cannot mistake the successor for the wreck.
+Player fuel, ammunition, damage, physiology, and kill count remain continuous across the handoff.
+If the player is lost, any unresolved detached wrecks continue to the same physical or explicit
+numerical terminal boundary before the sortie debrief becomes final.
+
 A geometrically caught wire has its own continuous failure path. The fixed-capacity arresting
 engine integrates actual aircraft kinetic energy against its preselected force curve. If energy,
 payout, or safe line load is exhausted, the session emits `ARRESTMENT_FAILED`, preserves the

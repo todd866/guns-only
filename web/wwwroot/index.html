@@ -866,7 +866,7 @@
       box-shadow: 0 0 12px rgba(77, 255, 136, .58);
     }
 
-    #ready-screen:not([data-mode="selection"]) .ready-card { width: min(520px, 100%); }
+    #ready-screen:not([data-mode="program"]) .ready-card { width: min(520px, 100%); }
 
     .ready-menu-header {
       display: flex;
@@ -908,7 +908,7 @@
       min-height: 0;
     }
 
-    #ready-screen:not([data-mode="selection"]) .ready-layout { display: block; }
+    #ready-screen:not([data-mode="program"]) .ready-layout { display: block; }
     .ready-selector[hidden] { display: none; }
 
     .ready-selector,
@@ -991,6 +991,22 @@
       line-height: 1.45;
     }
 
+    .ready-program-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    #ready-program-progress {
+      flex: none;
+      padding-top: 2px;
+      color: rgba(77, 255, 136, .7);
+      font-size: 8px;
+      font-weight: 850;
+      letter-spacing: .08em;
+    }
+
     .sortie-option {
       display: block;
       min-width: 0;
@@ -1006,6 +1022,10 @@
       background: rgba(77, 255, 136, .075);
       box-shadow: inset 3px 0 0 #4dff88;
     }
+
+    .sortie-option[data-program-state="qualified"] { border-color: rgba(77, 255, 136, .28); }
+    .sortie-option[data-program-state="locked"] { opacity: .46; }
+    .sortie-choice:disabled { cursor: not-allowed; }
 
     .sortie-choice {
       appearance: none;
@@ -1039,13 +1059,25 @@
       font: 650 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
     }
 
-    .sortie-choice > span:last-child {
+    .sortie-choice > span:not(.sortie-number) {
       display: block;
       margin-top: 4px;
       color: rgba(217, 255, 229, .48);
       font-size: 10px;
       line-height: 1.4;
     }
+
+    .sortie-choice > small {
+      display: block;
+      margin-top: 7px;
+      color: rgba(77, 255, 136, .58);
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: .06em;
+    }
+
+    .sortie-number b { float: right; color: rgba(217, 255, 229, .42); }
+    .sortie-option[data-program-state="qualified"] .sortie-number b { color: #4dff88; }
 
     #ready-kicker {
       margin-bottom: 10px;
@@ -1126,7 +1158,7 @@
     .ready-deck-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 
     .ready-deck-options button {
-      min-height: 38px;
+      min-height: 44px;
       border: 1px solid rgba(77, 255, 136, .22);
       border-radius: 4px;
       color: rgba(217, 255, 229, .65);
@@ -1206,7 +1238,7 @@
     .settings-card button,
     .settings-card select,
     .settings-card input {
-      min-height: 38px;
+      min-height: 44px;
       border: 1px solid rgba(77, 255, 136, .24);
       border-radius: 4px;
       color: rgba(217, 255, 229, .78);
@@ -1866,127 +1898,68 @@
     <div id="rotate-hint">ROTATE TO LANDSCAPE<br><small>Tilt steering is designed for a wide screen.</small></div>
   </div>
 
-  <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="selection">
+  <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="program">
     <div class="ready-card">
       <header class="ready-menu-header">
         <div class="ready-menu-brand">Guns Only</div>
         <div>
-          <h1 id="ready-menu-title">Choose a sortie</h1>
-          <p id="ready-menu-help">Choose an activity and sortie. Selection previews the briefing; the primary action launches it.</p>
+          <h1 id="ready-menu-title">Raptor program</h1>
+          <p id="ready-menu-help">Performance unlocks the next assignment. Carrier conversion follows three F-22 qualifications.</p>
         </div>
       </header>
 
       <div class="ready-layout">
-        <section id="ready-selector" class="ready-selector" aria-label="Sortie catalogue">
-          <nav id="ready-activity-nav" class="ready-activity-nav" role="tablist" aria-label="Choose activity">
-            <button id="ready-activity-dogfight" type="button" role="tab" aria-selected="true" aria-controls="ready-group-dogfight" data-sortie-activity="dogfight">
-              <span>Dogfight</span><small>3 sorties</small>
-            </button>
-            <button id="ready-activity-carrier" type="button" role="tab" aria-selected="false" aria-controls="ready-group-carrier" data-sortie-activity="carrier">
-              <span>Carrier</span><small>2 sorties</small>
-            </button>
-            <button id="ready-activity-gunnery" type="button" role="tab" aria-selected="false" aria-controls="ready-group-gunnery" data-sortie-activity="gunnery">
-              <span>Gunnery</span><small>2 sorties</small>
-            </button>
-            <button id="ready-activity-defence" type="button" role="tab" aria-selected="false" aria-controls="ready-group-defence" data-sortie-activity="defence">
-              <span>Defence</span><small>1 sortie</small>
-            </button>
-          </nav>
-
+        <section id="ready-selector" class="ready-selector" aria-label="Raptor program progression">
+          <div class="ready-group-heading ready-program-heading">
+            <div>
+              <h2>Qualification track</h2>
+              <p>Old prototypes stay out of the player path. Fly well to move forward.</p>
+            </div>
+            <output id="ready-program-progress">0 / 4 QUALIFIED</output>
+          </div>
           <div class="ready-mission-groups">
-            <section id="ready-group-dogfight" class="ready-mission-group" role="tabpanel" aria-labelledby="ready-activity-dogfight" data-sortie-group="dogfight">
-              <div class="ready-group-heading">
-                <h2>Dogfight</h2>
-                <p>Visual guns-only fights: offensive, defensive, or neutral.</p>
-              </div>
-              <div class="sortie-option" data-mission-option="1" data-selected="true">
-                <button type="button" class="sortie-choice" data-mission-select="1" aria-pressed="true">
-                  <span class="sortie-number">01 · Offensive</span>
-                  <strong>Perch Attack</strong>
-                  <span>Start high at the bandit's six and convert the perch into a gun solution.</span>
-                </button>
-              </div>
-              <div class="sortie-option" data-mission-option="2" data-selected="false">
-                <button type="button" class="sortie-choice" data-mission-select="2" aria-pressed="false">
-                  <span class="sortie-number">02 · Defensive</span>
-                  <strong>Break Defense</strong>
-                  <span>A bandit begins at your high six. Survive, then reverse the fight.</span>
-                </button>
-              </div>
-              <div class="sortie-option" data-mission-option="7" data-selected="false">
-                <button type="button" class="sortie-choice" data-mission-select="7" aria-pressed="false">
-                  <span class="sortie-number">07 · Neutral merge</span>
-                  <strong>F-22A vs Su-27S</strong>
-                  <span>Take a neutral modern visual merge with guns safe through the first pass.</span>
-                </button>
-              </div>
-            </section>
-
-            <section id="ready-group-carrier" class="ready-mission-group" role="tabpanel" aria-labelledby="ready-activity-carrier" data-sortie-group="carrier" hidden>
-              <div class="ready-group-heading">
-                <h2>Carrier &amp; recovery</h2>
-                <p>Deck approaches in the carrier testbed, with physical arrestment and replay.</p>
-              </div>
-              <div class="sortie-option" data-mission-option="5" data-selected="false">
-                <button type="button" class="sortie-choice" data-mission-select="5" aria-pressed="false">
-                  <span class="sortie-number">05 · Carrier qualification</span>
-                  <strong>Final Approach</strong>
-                  <span>Fly one scored pass from the active groove to a trap or bolter.</span>
-                </button>
-              </div>
-              <div class="sortie-option" data-mission-option="6" data-selected="false">
-                <button type="button" class="sortie-choice" data-mission-select="6" aria-pressed="false">
-                  <span class="sortie-number">06 · Maintenance test flight</span>
-                  <strong>Degraded Recovery</strong>
-                  <span>Diagnose a failed normal gear extension and recover aboard safely.</span>
-                </button>
-              </div>
-            </section>
-
-            <section id="ready-group-gunnery" class="ready-mission-group" role="tabpanel" aria-labelledby="ready-activity-gunnery" data-sortie-group="gunnery" hidden>
-              <div class="ready-group-heading">
-                <h2>Gunnery</h2>
-                <p>Tracking discipline and a one-pass energy attack.</p>
-              </div>
-              <div class="sortie-option" data-mission-option="3" data-selected="false">
-                <button type="button" class="sortie-choice" data-mission-select="3" aria-pressed="false">
-                  <span class="sortie-number">03 · Tracking drill</span>
-                  <strong>Saddle + Shot</strong>
-                  <span>Track a weaving target and fire only from a stable gun solution.</span>
-                </button>
-              </div>
-              <div class="sortie-option" data-mission-option="4" data-selected="false">
-                <button type="button" class="sortie-choice" data-mission-select="4" aria-pressed="false">
-                  <span class="sortie-number">04 · 2030s prototype</span>
-                  <strong>Balloon Strike</strong>
-                  <span>Trade a finite altitude budget for one engine-less attack on an AWACS.</span>
-                </button>
-              </div>
-            </section>
-
-            <section id="ready-group-defence" class="ready-mission-group" role="tabpanel" aria-labelledby="ready-activity-defence" data-sortie-group="defence" hidden>
-              <div class="ready-group-heading">
-                <h2>Air defence</h2>
-                <p>Ammunition-limited interception where every second and every round matters.</p>
-              </div>
-              <div class="sortie-option" data-mission-option="8" data-selected="false">
-                <button type="button" class="sortie-choice" data-mission-select="8" aria-pressed="false">
-                  <span class="sortie-number">08 · 2030s air defence</span>
-                  <strong>Drone Raid Defence</strong>
-                  <span>Stop four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring.</span>
-                </button>
-              </div>
-            </section>
+            <div class="sortie-option" data-selected="true" data-program-state="available">
+              <button type="button" class="sortie-choice" data-program-node="first-merge" aria-pressed="true">
+                <span class="sortie-number">01 · F-22A <b data-program-status="first-merge">AVAILABLE</b></span>
+                <strong>First Merge</strong>
+                <span>Win one guns-only visual engagement.</span>
+                <small>SPLASH ONE BANDIT</small>
+              </button>
+            </div>
+            <div class="sortie-option" data-selected="false" data-program-state="locked">
+              <button type="button" class="sortie-choice" data-program-node="raid-defence" aria-pressed="false" disabled>
+                <span class="sortie-number">02 · F-22A <b data-program-status="raid-defence">LOCKED</b></span>
+                <strong>Raid Defence</strong>
+                <span>Stop four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring.</span>
+                <small>65+ SCORE · 3 KILLS · MAX 1 LEAKER</small>
+              </button>
+            </div>
+            <div class="sortie-option" data-selected="false" data-program-state="locked">
+              <button type="button" class="sortie-choice" data-program-node="endurance-merge" aria-pressed="false" disabled>
+                <span class="sortie-number">03 · F-22A <b data-program-status="endurance-merge">LOCKED</b></span>
+                <strong>Endurance Merge</strong>
+                <span>Survive successive neutral merges and score twice.</span>
+                <small>SPLASH TWO BANDITS IN ONE SORTIE</small>
+              </button>
+            </div>
+            <div class="sortie-option" data-selected="false" data-program-state="locked">
+              <button type="button" class="sortie-choice" data-program-node="carrier-conversion" aria-pressed="false" disabled>
+                <span class="sortie-number">04 · F-35C <b data-program-status="carrier-conversion">LOCKED</b></span>
+                <strong>Carrier Conversion</strong>
+                <span>Fly one scored recovery from the active groove.</span>
+                <small>REQUIRES THREE RAPTOR QUALIFICATIONS</small>
+              </button>
+            </div>
           </div>
         </section>
 
         <section class="ready-briefing" aria-label="Selected sortie briefing">
-          <div id="ready-kicker">BFM drill · mission 01</div>
-          <h2 id="ready-title">Perch Attack</h2>
-          <p id="ready-brief">Convert altitude and position into a controlled gun solution. Stay in plane, manage closure, and do not trade the perch for an overshoot.</p>
+          <div id="ready-kicker">Raptor programme · qualification 01</div>
+          <h2 id="ready-title">First Merge</h2>
+          <p id="ready-brief">You are already at the visual merge. Survive the first pass, fight into the rear quarter, and splash one Su-27 surrogate.</p>
           <div class="ready-facts" aria-label="Mission details">
-            <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">Offensive conversion</span></div>
-            <div class="ready-fact"><small id="ready-config-label">Configuration</small><span id="ready-config">Guns hot · air start</span></div>
+            <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">F-22A vs Su-27S · guns only · first pass safe</span></div>
+            <div class="ready-fact"><small id="ready-config-label">Configuration</small><span id="ready-config">F-22 public-data surrogate · 480 rounds · Auto-GCAS armed</span></div>
           </div>
           <div id="ready-deck-config" class="ready-deck-config" hidden>
             <span class="ready-deck-label">Deck layout</span>
@@ -1996,18 +1969,18 @@
             </div>
             <p>This changes the complete landing centreline, wire, rollout, and starting geometry.</p>
           </div>
-          <p id="ready-controls" class="ready-controls">Arrows fly · W/S power · G gear · [ / ] flaps (release to hold)
-F guns · V padlock · H controls · 1–8 missions · R restart</p>
-          <button id="ready-start" type="button">Fly Perch Attack</button>
+          <p id="ready-controls" class="ready-controls">Arrows fly · W/S power · F guns · V padlock
+Splash one bandit to qualify · H controls · R restarts</p>
+          <button id="ready-start" type="button">Fly First Merge</button>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
           <div class="ready-secondary-actions">
             <button id="ready-settings" type="button">Settings</button>
             <button id="ready-restart" type="button" hidden>Restart sortie</button>
-            <button id="ready-return" type="button" hidden>Return to catalogue</button>
+            <button id="ready-return" type="button" hidden>Mission program</button>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 54 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 55 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
@@ -2057,7 +2030,7 @@ F guns · V padlock · H controls · 1–8 missions · R restart</p>
   </div>
 
   <script src="./multiplayer-config.js"></script>
-  <script type="module" src="./app.js?v=54"></script>
+  <script type="module" src="./app.js?v=55"></script>
   <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
 </body>
 </html>

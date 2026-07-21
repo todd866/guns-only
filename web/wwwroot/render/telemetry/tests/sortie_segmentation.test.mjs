@@ -21,9 +21,8 @@ test("the finished edge forces a final keyframe, lifecycle event, and upload", (
     /if \(finishedEdge\) \{[\s\S]*?"sortie_finished"[\s\S]*?touchdown_primary_correction[\s\S]*?this\.endSortie\("finished", state\)[\s\S]*?this\.flush\(\{ force: true \}\)/);
 });
 
-test("catalogue choices are observable without pretending they launched a sortie", () => {
-  assert.match(app, /recorder\.event\("ui", "mission_previewed"/);
-  assert.match(app, /recorder\.event\("ui", "activity_previewed"/);
+test("program choices are observable without pretending they launched a sortie", () => {
+  assert.match(app, /recorder\.event\("ui", "program_node_previewed"/);
   assert.match(app, /recorder\.event\("ui", "deck_configuration_previewed"/);
   assert.match(app, /recorder\.event\("lifecycle", "sortie_staged"/);
 });

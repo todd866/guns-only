@@ -5,13 +5,17 @@ repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$repo_dir"
 dotnet_cli=${GUNS_DOTNET_CLI:-dotnet}
 
+sh -n bin/deploy-web
 node --check web/wwwroot/app.js
 node --check web/wwwroot/hud.js
 node --check web/wwwroot/multiplayer-config.js
 node --check web/wwwroot/api/telemetry.js
 node tools/assets/validate-manifests.mjs --strict
+node tools/content/validate-governance.mjs --strict
 asset_tests=$(find tools/assets -type f -name '*.test.mjs' -print | sort)
 node --test $asset_tests
+content_tests=$(find tools/content -type f -name '*.test.mjs' -print | sort)
+node --test $content_tests
 node --test tools/telemetry/test/*.test.mjs
 runtime_tests=$(find web/wwwroot/render -type f -path '*/tests/*.test.mjs' -print | sort)
 node --test $runtime_tests

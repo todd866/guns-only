@@ -15,11 +15,14 @@ namespace GunsOnly.Web;
 [SupportedOSPlatform("browser")]
 public static partial class WebBridge {
     static readonly ITerrainSurface CentralFrontTerrain = KoreaTerrainTruth.Load();
-    static readonly SimulationSession Session = new(1, Carrier.DeckConfiguration.Axial);
-    static Carrier.DeckConfiguration _deckConfiguration = Carrier.DeckConfiguration.Axial;
+    static readonly SimulationSession Session = new(7, Carrier.DeckConfiguration.Angled,
+        KoreaWeatherPresets.ForBeat(7));
+    static Carrier.DeckConfiguration _deckConfiguration = Carrier.DeckConfiguration.Angled;
     static double _worldOriginEastM;
     static double _worldOriginNorthM;
     static bool _worldOriginConfigured;
+    static WeatherProfile? _weatherRenderProfile;
+    static string? _weatherRenderJson;
 
     const double CarrierTerrainPlacementEastM = 100_000.0;
     const double MaximumWorldOriginMagnitudeM = 10_000_000.0;
@@ -63,8 +66,8 @@ public static partial class WebBridge {
         "visual.modern.abstract-contact.public-data-surrogate.v1";
 
     [JSExport]
-    public static void StartBeat(int index) => Session.StartBeatWithTerrain(
-        index, TerrainForBeat(index), _deckConfiguration);
+    public static void StartBeat(int index) => Session.StartBeatWithEnvironment(
+        index, KoreaWeatherPresets.ForBeat(index), TerrainForBeat(index), _deckConfiguration);
 
     /// <summary>
     /// Anchor mission-local coordinates to the persistent room's X=east/Z=north origin. The room
@@ -371,6 +374,7 @@ public static partial class WebBridge {
             + $"\"cloud_extinction_per_m\":{localCloud.ExtinctionPerMetre:F8},\"precipitation_mm_hr\":{localCloud.PrecipitationMmPerHour:F3},"
             + $"\"cloud_turbulence_x_mps\":{localCloud.TurbulenceVelocityMps.X:F3},\"cloud_turbulence_y_mps\":{localCloud.TurbulenceVelocityMps.Y:F3},\"cloud_turbulence_z_mps\":{localCloud.TurbulenceVelocityMps.Z:F3},"
             + $"\"cloud_vertical_air_mps\":{localCloud.VerticalAirVelocityMps:F3},\"icing_hazard_01\":{localCloud.IcingHazard01:F4},\"lightning_hazard_01\":{localCloud.LightningHazard01:F4},"
+            + WeatherRenderJson()
             // Compatibility consumers keep receiving speed_kts, but it now means the primary KIAS.
             + $"\"speed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
             + $"\"stall_speed_kias\":{stallSpeedKias:F2},"
@@ -461,6 +465,8 @@ public static partial class WebBridge {
             + $"\"gunnery_pitch_error_deg\":{gunneryPitchAssist.PitchLeadErrorRad * 57.29577951308232:F3},"
             + $"\"gunnery_total_lead_error_deg\":{gunneryPitchAssist.TotalLeadErrorRad * 57.29577951308232:F3},"
             + $"\"gunnery_pitch_rate_cmd_dps\":{gunneryPitchAssist.RequestedPitchRateRadPerSecond * 57.29577951308232:F3},"
+            + $"\"gunnery_pitch_rate_measured_dps\":{gunneryPitchAssist.MeasuredPitchRateRadPerSecond * 57.29577951308232:F3},"
+            + $"\"gunnery_pitch_rate_error_dps\":{gunneryPitchAssist.PitchRateErrorRadPerSecond * 57.29577951308232:F3},"
             + $"\"gunnery_pitch_assist_g\":{gunneryPitchAssist.AssistedLoadFactorG:F3},"
             + $"\"gunnery_pitch_assist_delta_g\":{gunneryPitchAssist.LoadFactorCorrectionG:F3},"
             + $"\"high_alpha_recovery\":{(_detents.HighAlphaRecoveryActive ? "true" : "false")},"
@@ -484,6 +490,9 @@ public static partial class WebBridge {
             + $"\"lead_valid\":{(!Session.WeaponsInhibited && _gunKill.HasLeadSolution ? "true" : "false")},"
             + $"\"lead_x\":{_gunKill.LeadPipper.X:F3},\"lead_y\":{_gunKill.LeadPipper.Y:F3},\"lead_z\":{_gunKill.LeadPipper.Z:F3},"
             + $"\"lead_tof\":{_gunKill.LeadTimeOfFlight:F4},\"ammo\":{_gunKill.AmmoRemaining},"
+            + $"\"gun_muzzle_velocity_mps\":{_gunKill.Profile.MuzzleVelocityMps:F2},"
+            + $"\"gun_max_flight_s\":{_gunKill.Profile.MaximumFlightSeconds:F3},"
+            + $"\"target_wingspan_m\":{(_beat.BanditAir.WingSpanM > 0.0 ? _beat.BanditAir.WingSpanM : Math.Sqrt(4.5 * _beat.BanditAir.WingAreaM2)):F2},"
             + $"\"player_gun_profile_id\":\"{_gunKill.Profile.Id}\","
             + $"\"rounds_fired\":{_gunKill.RoundsFired},\"hits\":{_gunKill.HitCount},"
             + $"\"hit\":{(_gunKill.HitThisStep ? "true" : "false")},"
@@ -501,7 +510,11 @@ public static partial class WebBridge {
             + $"\"opponent_gun_firing\":{(Session.OpponentTriggerDown && _opponentGun.AmmoRemaining > 0 && _opponentGun.TargetAlive ? "true" : "false")},"
             + TracerJson("opponent_tracers", _opponentGun.RoundsInFlight)
             + CombatEventsJson()
-            + $"\"kill_count\":{Session.KillCount},\"splash_cue\":{(splashCue ? "true" : "false")},"
+            + $"\"kill_count\":{Session.KillCount},\"engagement_number\":{Session.EngagementNumber},"
+            + $"\"continuous_combat\":{(Session.ContinuousCombat ? "true" : "false")},"
+            + $"\"opponent_replacement_pending\":{(Session.OpponentReplacementPending ? "true" : "false")},"
+            + $"\"opponent_replacement_s\":{Session.OpponentReplacementSeconds:F3},"
+            + $"\"splash_cue\":{(splashCue ? "true" : "false")},"
             + $"\"transition_cue\":\"{transitionCue}\","
             + $"\"configuration_target\":\"{configurationTarget}\","
             + $"\"configuration_automatic\":{(Session.ConfigurationAutomationEnabled ? "true" : "false")},"
@@ -591,6 +604,85 @@ public static partial class WebBridge {
             }
         }
         return json.Append('"').ToString();
+    }
+
+    /// <summary>
+    /// Slowly changing cloud-definition contract for the browser volume renderer. The exact
+    /// at-aircraft visibility and hazards above still come from ICloudField.Sample; these immutable
+    /// descriptors let presentation reconstruct the surrounding seeded field without inventing a
+    /// second weather day. Z remains simulation north here and is flipped once by the JS adapter.
+    /// </summary>
+    static string WeatherRenderJson() {
+        WeatherProfile? profile = Session.Weather;
+        if (ReferenceEquals(profile, _weatherRenderProfile) && _weatherRenderJson is not null)
+            return _weatherRenderJson;
+        var json = new System.Text.StringBuilder(512);
+        json.Append("\"weather_profile_id\":").Append(JsonString(profile?.Id));
+        if (profile?.Clouds is not LayeredCloudField field) {
+            _weatherRenderProfile = profile;
+            _weatherRenderJson = json.Append(",\"weather_seed_hex\":\"0000000000000000\","
+                + "\"weather_clear_visibility_m\":100000.0,\"weather_layers\":[],"
+                + "\"weather_cells\":[],").ToString();
+            return _weatherRenderJson;
+        }
+
+        json.Append(",\"weather_seed_hex\":\"")
+            .Append(field.Seed.ToString("x16", System.Globalization.CultureInfo.InvariantCulture))
+            .Append("\",\"weather_clear_visibility_m\":")
+            .AppendFormat(System.Globalization.CultureInfo.InvariantCulture, "{0:F1}",
+                field.ClearAirVisibilityM)
+            .Append(",\"weather_layers\":[");
+        for (int i = 0; i < field.Layers.Count; i++) {
+            if (i != 0) json.Append(',');
+            CloudLayerDefinition layer = field.Layers[i];
+            json.AppendFormat(System.Globalization.CultureInfo.InvariantCulture,
+                "{{\"base_m\":{0:F1},\"top_m\":{1:F1},\"coverage_01\":{2:F4},"
+                + "\"scale_m\":{3:F1},\"edge_m\":{4:F1},\"extinction_per_m\":{5:F8},"
+                + "\"liquid_kg_m3\":{6:F7},\"ice_kg_m3\":{7:F7},"
+                + "\"precipitation_mm_hr\":{8:F3},\"turbulence_mps\":{9:F3},"
+                + "\"vertical_air_mps\":{10:F3},\"icing_01\":{11:F4},"
+                + "\"lightning_01\":{12:F4},\"wind_east_mps\":{13:F3},"
+                + "\"wind_north_mps\":{14:F3}}}",
+                layer.BaseAltitudeM, layer.TopAltitudeM, layer.MeanCloudFraction01,
+                layer.HorizontalStructureScaleM, layer.VerticalEdgeTransitionM,
+                layer.ExtinctionPerMetreAtFullCloud, layer.LiquidWaterKgPerM3AtFullCloud,
+                layer.IceWaterKgPerM3AtFullCloud,
+                layer.PrecipitationMmPerHourAtFullCloud,
+                layer.TurbulenceRmsMpsAtFullCloud,
+                layer.VerticalAirVelocityMpsAtFullCloud,
+                layer.IcingHazard01AtFullCloud, layer.LightningHazard01AtFullCloud,
+                layer.AdvectionVelocityMps.X, layer.AdvectionVelocityMps.Z);
+        }
+
+        json.Append("],\"weather_cells\":[");
+        for (int i = 0; i < field.ConvectiveCells.Count; i++) {
+            if (i != 0) json.Append(',');
+            ConvectiveCellDefinition cell = field.ConvectiveCells[i];
+            json.AppendFormat(System.Globalization.CultureInfo.InvariantCulture,
+                "{{\"east_m\":{0:F1},\"north_m\":{1:F1},\"base_m\":{2:F1},"
+                + "\"top_m\":{3:F1},\"radius_east_m\":{4:F1},"
+                + "\"radius_north_m\":{5:F1},\"start_s\":{6:F2},"
+                + "\"lifetime_s\":{7:F2},\"transition_s\":{8:F2},"
+                + "\"wind_east_mps\":{9:F3},\"wind_north_mps\":{10:F3},"
+                + "\"coverage_01\":{11:F4},\"extinction_per_m\":{12:F8},"
+                + "\"liquid_kg_m3\":{13:F7},\"ice_kg_m3\":{14:F7},"
+                + "\"precipitation_mm_hr\":{15:F3},\"turbulence_mps\":{16:F3},"
+                + "\"vertical_air_mps\":{17:F3},\"icing_01\":{18:F4},"
+                + "\"lightning_01\":{19:F4}}}",
+                cell.InitialCentreWorldM.X, cell.InitialCentreWorldM.Z,
+                cell.BaseAltitudeM, cell.TopAltitudeM,
+                cell.HorizontalRadiusEastM, cell.HorizontalRadiusNorthM,
+                cell.StartTimeSeconds, cell.LifetimeSeconds,
+                cell.LifecycleTransitionSeconds, cell.AdvectionVelocityMps.X,
+                cell.AdvectionVelocityMps.Z, cell.PeakCloudFraction01,
+                cell.PeakExtinctionPerMetre, cell.PeakLiquidWaterKgPerM3,
+                cell.PeakIceWaterKgPerM3, cell.PeakPrecipitationMmPerHour,
+                cell.PeakTurbulenceRmsMps, cell.PeakVerticalAirVelocityMps,
+                cell.PeakIcingHazard01, cell.PeakLightningHazard01);
+        }
+        _weatherRenderProfile = profile;
+        _weatherRenderJson = json.Append("],").ToString();
+        return _weatherRenderJson;
     }
 
     static string PilotStateToken(PilotOperationalState state) => state switch {
@@ -829,6 +921,7 @@ public static partial class WebBridge {
         SessionEventType.SortieFinished => "SORTIE_FINISHED",
         SessionEventType.ArrestmentFailed => "ARRESTMENT_FAILED",
         SessionEventType.RaidTargetLeaked => "RAID_TARGET_LEAKED",
+        SessionEventType.OpponentSpawned => "OPPONENT_SPAWNED",
         SessionEventType.AutoGcasTransition => "AUTO_GCAS_TRANSITION",
         _ => "UNKNOWN"
     };
@@ -899,6 +992,17 @@ public static partial class WebBridge {
                 .Append(",\"outcome\":\"").Append(SortieOutcomeToken(e.Outcome))
                 .Append("\",\"surface\":\"").Append(ImpactSurfaceToken(e.Surface))
                 .Append('"');
+            if (e.EntitySequence > 0) {
+                string entityKind = e.Target == CombatRole.Player ? "player" : "bandit";
+                json.Append(",\"entity_id\":\"entity.").Append(entityKind).Append('.')
+                    .Append(e.EntitySequence).Append('"');
+            }
+            if (e.HasKinematics) {
+                json.AppendFormat(System.Globalization.CultureInfo.InvariantCulture,
+                    ",\"position\":[{0:F3},{1:F3},{2:F3}],\"velocity\":[{3:F3},{4:F3},{5:F3}]",
+                    e.Position.X, e.Position.Y, e.Position.Z,
+                    e.Velocity.X, e.Velocity.Y, e.Velocity.Z);
+            }
             if (e.Type == SessionEventType.AutoGcasTransition
                 && e.AutoGcasPhase is { } autoGcasPhase
                 && e.AutoGcasInhibitReason is { } autoGcasInhibitReason) {

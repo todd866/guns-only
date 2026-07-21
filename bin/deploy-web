@@ -1,0 +1,118 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    echo "usage: bin/deploy-web --preview|--prod" >&2
+    exit 2
+}
+
+target=${1:-}
+case "$target" in
+    --preview|--prod) ;;
+    *) usage ;;
+esac
+[ "$#" -eq 1 ] || usage
+
+repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$repo_dir"
+
+dotnet_cli=${GUNS_DOTNET_CLI:-dotnet}
+vercel_cli=${GUNS_VERCEL_CLI:-vercel}
+command -v "$dotnet_cli" >/dev/null 2>&1 || {
+    echo "deploy-web: dotnet CLI is unavailable" >&2
+    exit 1
+}
+command -v "$vercel_cli" >/dev/null 2>&1 || {
+    echo "deploy-web: Vercel CLI is unavailable" >&2
+    exit 1
+}
+command -v curl >/dev/null 2>&1 || {
+    echo "deploy-web: curl is unavailable" >&2
+    exit 1
+}
+
+if [ "${GUNS_ALLOW_DIRTY_DEPLOY:-0}" != "1" ]; then
+    if ! git diff --quiet || ! git diff --cached --quiet \
+        || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+        echo "deploy-web: refusing to deploy a dirty worktree" >&2
+        echo "commit the intended release or set GUNS_ALLOW_DIRTY_DEPLOY=1 deliberately" >&2
+        exit 1
+    fi
+fi
+
+project_link="$repo_dir/.vercel/project.json"
+if [ ! -f "$project_link" ]; then
+    echo "deploy-web: $project_link is missing; run 'vercel link' at the repository root" >&2
+    exit 1
+fi
+
+scratch_dir=$(mktemp -d)
+publish_dir="$scratch_dir/publish"
+trap 'rm -rf "$scratch_dir"' EXIT HUP INT TERM
+
+"$dotnet_cli" publish web/GunsOnly.Web.csproj \
+    --configuration Release --nologo --output "$publish_dir"
+
+deploy_root="$publish_dir/wwwroot"
+require_file() {
+    if [ ! -f "$deploy_root/$1" ]; then
+        echo "deploy-web: publish artifact is missing $1" >&2
+        exit 1
+    fi
+}
+
+require_file index.html
+require_file app.js
+require_file _framework/blazor.webassembly.js
+require_file _framework/blazor.boot.json
+require_file api/build-info.js
+require_file api/telemetry.js
+require_file vercel.json
+
+if [ -f "$deploy_root/api/telemetry.test.js" ] \
+    || [ -d "$deploy_root/render/telemetry/tests" ]; then
+    echo "deploy-web: source/test tree leaked into the production artifact" >&2
+    exit 1
+fi
+
+framework_files=$(find "$deploy_root/_framework" -type f | wc -l | tr -d ' ')
+if [ "$framework_files" -lt 20 ]; then
+    echo "deploy-web: incomplete Blazor framework payload ($framework_files files)" >&2
+    exit 1
+fi
+
+mkdir -p "$deploy_root/.vercel"
+cp "$project_link" "$deploy_root/.vercel/project.json"
+
+cd "$deploy_root"
+if [ "$target" = "--prod" ]; then
+    deployment_output=$("$vercel_cli" deploy --prod --skip-domain --yes)
+else
+    deployment_output=$("$vercel_cli" deploy --yes)
+fi
+printf '%s\n' "$deployment_output"
+deployment_url=$(printf '%s\n' "$deployment_output" \
+    | awk '/^https:\/\// { url=$0 } END { print url }')
+if [ -z "$deployment_url" ]; then
+    echo "deploy-web: Vercel did not return a deployment URL" >&2
+    exit 1
+fi
+
+verify_deployment() {
+    base_url=$1
+    curl --fail --silent --show-error --location \
+        "$base_url/_framework/blazor.webassembly.js" --output /dev/null
+    curl --fail --silent --show-error --location \
+        "$base_url/_framework/blazor.boot.json" --output /dev/null
+}
+
+# Production is created without touching the public aliases. Only a deployment which serves both
+# stable Blazor bootstrap assets is eligible for promotion.
+verify_deployment "$deployment_url"
+
+if [ "$target" = "--prod" ]; then
+    "$vercel_cli" promote "$deployment_url" --yes
+    verify_deployment "https://guns-only.vercel.app"
+fi
+
+echo "deploy-web: verified $deployment_url"

@@ -1,0 +1,630 @@
+{
+  "$schema": "https://guns-only.invalid/schemas/v1/mission-dossier.schema.json",
+  "schemaVersion": "1.0.0",
+  "dossierId": "dossier.first-echo.v1",
+  "governanceId": "governance.korea-braided.v1",
+  "status": "researching",
+  "title": "First Echo: Altitude Is Privilege",
+  "dramaticQuestion": "What remains of air power when altitude, information, and expensive machinery are progressively stripped away?",
+  "sorties": [
+    {
+      "sortieId": "sortie.2034.f22-drone-screen.v1",
+      "timelineId": "timeline.korea-2030s.v1",
+      "missionContractId": "mission.korea-2030s.drone-raid-defence.prototype.v1",
+      "perspective": {
+        "faction": "us-rok-coalition",
+        "actorRole": "F-22 pilot defending a pressured air corridor",
+        "vehicleCapabilityId": "aircraft.f22a.public-data-surrogate.v1",
+        "controlMode": "crewed"
+      },
+      "playerFantasy": "Begin above the weather in an exceptionally capable fighter and dismantle a drone raid before it reaches the defended corridor.",
+      "scenarioSummary": "The campaign opens with apparently abundant speed, altitude, sensor support, and ammunition, but the raid presents more targets than the player can engage carelessly and every high-energy correction consumes position and time.",
+      "centralDecision": "Prioritize targets and control closure instead of treating superior performance as unlimited time or perfect information.",
+      "failureMeaning": "The corridor takes damage and the run absorbs a visible readiness cost, while the historical context and first coaching fragment remain discoverable.",
+      "successMeaning": "The raid is contained, the F-22 force remains available, and the player earns the first historical sortie that gives the corridor a human past."
+    },
+    {
+      "sortieId": "sortie.1951.sanctuary-line.v1",
+      "timelineId": "timeline.korea-1950s.v1",
+      "missionContractId": "mission.korea-1950s.sanctuary-line.f86.v1",
+      "perspective": {
+        "faction": "un-command",
+        "actorRole": "F-86 pilot near the Yalu with limited fuel and incomplete identification",
+        "vehicleCapabilityId": "aircraft.f86f30.v1",
+        "controlMode": "crewed"
+      },
+      "playerFantasy": "Fly the same geometry without modern abundance: visually acquire, identify, fight, and still preserve enough energy and fuel to return.",
+      "scenarioSummary": "A damaged opponent runs toward the sanctuary line while fuel falls and identification remains imperfect. The aircraft gives honest performance but little excess capacity to repair a poor approach.",
+      "centralDecision": "Decide whether a fleeting tactical opportunity justifies spending fuel, certainty, and political margin near the border.",
+      "failureMeaning": "Failure reveals whether the decisive error was identification, closure, energy, fuel planning, or an unjustified border risk rather than reducing the outcome to a kill count.",
+      "successMeaning": "The player returns with a defensible decision and recognizes that the modern corridor inherited geographic and political limits rather than appearing as an abstract arena."
+    },
+    {
+      "sortieId": "sortie.2034.low-road.v1",
+      "timelineId": "timeline.korea-2030s.v1",
+      "missionContractId": "mission.korea-2030s.low-road.attritable-drone.v1",
+      "perspective": {
+        "faction": "dprk",
+        "actorRole": "Experienced remote drone operator flying a limited fixed-wing aircraft",
+        "vehicleCapabilityId": "aircraft.attritable-low-level-drone.prototype.v1",
+        "controlMode": "remote"
+      },
+      "playerFantasy": "Survive beneath the radar picture in a slow, energy-limited drone by reading terrain and protecting a fragile control link.",
+      "scenarioSummary": "With high-end aircraft scarce and the network contested, the operator follows a river-and-road corridor at low altitude. Weak acceleration, narrow sensor coverage, link geometry, obstacles, and uncertain tasking make terrain knowledge more valuable than nominal technology.",
+      "centralDecision": "Choose when to remain masked, when to climb for information or link quality, and when the mission is no longer worth the aircraft and recovered data.",
+      "failureMeaning": "A crash, lost link, or unjustified exposure identifies a specific terrain, energy, or communications decision and carries a bounded readiness consequence.",
+      "successMeaning": "The operator completes or responsibly aborts the task, and the player understands the opposing force as experienced people adapting under scarcity rather than an anonymous drone supply.",
+      "nestedMemory": {
+        "memoryId": "memory.ukraine.low-road.v1",
+        "ownerActor": "The DPRK operator flying this sortie",
+        "location": "Ukraine, exact location withheld pending research",
+        "epistemicLimit": "The sequence is a subjective character memory and cannot establish the complete history, prevalence, or institutional meaning of DPRK experience in Ukraine.",
+        "laterConsequence": "A remembered choice about terrain masking and a damaged link explains the operator's Korean route choice and affects whether another character trusts the abort."
+      }
+    }
+  ],
+  "braid": {
+    "revealOrder": [
+      "sortie.2034.f22-drone-screen.v1",
+      "sortie.1951.sanctuary-line.v1",
+      "sortie.2034.low-road.v1"
+    ],
+    "echoes": [
+      {
+        "echoId": "echo.closure-without-excess.v1",
+        "sortieIds": [
+          "sortie.2034.f22-drone-screen.v1",
+          "sortie.1951.sanctuary-line.v1"
+        ],
+        "constant": "Fixed-gun geometry still requires lead, range judgment, closure control, and enough energy to leave.",
+        "changed": "The F-22 begins with greater performance and information; the F-86 makes each correction and identification decision visibly expensive.",
+        "dramaticPurpose": "Reveal that superior machinery can conceal but cannot repeal the physical problem the historical pilot had to understand directly."
+      },
+      {
+        "echoId": "echo.altitude-is-privilege.v1",
+        "sortieIds": [
+          "sortie.2034.f22-drone-screen.v1",
+          "sortie.2034.low-road.v1"
+        ],
+        "constant": "Altitude trades concealment for energy, sensor horizon, communications reach, and exposure.",
+        "changed": "The F-22 can usually choose altitude; the attritable drone must bargain for seconds above terrain masking.",
+        "dramaticPurpose": "Turn the opening power fantasy into a remembered privilege when attrition later forces the player into limited drones."
+      },
+      {
+        "echoId": "echo.river-border.v1",
+        "sortieIds": [
+          "sortie.1951.sanctuary-line.v1",
+          "sortie.2034.low-road.v1"
+        ],
+        "constant": "A river valley is simultaneously geography, flight path, communications geometry, and political boundary.",
+        "changed": "The historical pilot sees terrain and a line on a map; the modern operator receives denser but fallible geofences, tracks, and tasking.",
+        "dramaticPurpose": "Make the modern route carry remembered political and human meaning rather than function as a convenient low-poly trench."
+      }
+    ],
+    "carriedKnowledge": [
+      "Closure control learned in the opening is made explicit by the F-86 and tested again in a low-performance drone.",
+      "The player learns that more symbols can still represent uncertain claims.",
+      "The player recognizes altitude as an operational resource rather than a neutral camera position.",
+      "The same terrain can preserve physical continuity while institutions, vegetation, infrastructure, and memory change."
+    ],
+    "authoredInvariants": [
+      "The F-22 sortie is the campaign's first playable mission.",
+      "The first F-86 context is revealed before the low-level modern return.",
+      "The Ukraine sequence remains an owned memory inside the 2030s storyline.",
+      "No outcome narration declares the fictional 2034 conflict a forecast."
+    ],
+    "authoredDifferences": [
+      "Weather, raid composition, serviceability, and optional objectives may vary within validated bounds.",
+      "The low-level route may choose among authored corridors that preserve the same visibility, link, and terrain decisions.",
+      "The player may reach the drone sortie because of F-22 attrition, mission tasking, or a perspective chapter, but the transition cause must be explicit."
+    ]
+  },
+  "learningObjectives": [
+    {
+      "objectiveId": "learning.control-closure.v1",
+      "playerCan": "Control closure before gun range and preserve a viable separation or recovery path after the pass.",
+      "introducedInSortieId": "sortie.2034.f22-drone-screen.v1",
+      "explainedByDebriefId": "debrief.closure-ledger.v1",
+      "reappliedInSortieId": "sortie.1951.sanctuary-line.v1",
+      "evaluatedBy": [
+        "peak closure after offensive geometry is established",
+        "overshoot count",
+        "energy and fuel remaining after disengagement"
+      ],
+      "archiveEntryId": "archive.energy-and-closure.v1"
+    },
+    {
+      "objectiveId": "learning.treat-tracks-as-claims.v1",
+      "playerCan": "Delay or bound an action when track age, source, identity, or authorization does not support certainty.",
+      "introducedInSortieId": "sortie.2034.f22-drone-screen.v1",
+      "explainedByDebriefId": "debrief.track-is-a-claim.v1",
+      "reappliedInSortieId": "sortie.2034.low-road.v1",
+      "evaluatedBy": [
+        "track age and source at the decision event",
+        "time between contradictory observations and action",
+        "whether the player used visual or route evidence to revise the estimate"
+      ],
+      "archiveEntryId": "archive.sensors-and-belief.v1"
+    },
+    {
+      "objectiveId": "learning.trade-altitude.v1",
+      "playerCan": "Choose altitude by balancing terrain clearance, energy, visibility, sensor horizon, link geometry, and threat exposure.",
+      "introducedInSortieId": "sortie.1951.sanctuary-line.v1",
+      "explainedByDebriefId": "debrief.altitude-trade.v1",
+      "reappliedInSortieId": "sortie.2034.low-road.v1",
+      "evaluatedBy": [
+        "radar altitude and vertical-speed history near terrain",
+        "link margin before and after climbs",
+        "time exposed above the authored masking height",
+        "energy margin at escape decision"
+      ],
+      "archiveEntryId": "archive.altitude-is-privilege.v1"
+    }
+  ],
+  "educationDelivery": {
+    "debriefs": [
+      {
+        "debriefId": "debrief.closure-ledger.v1",
+        "triggerEvidence": [
+          "an offensive overshoot",
+          "excess closure inside the declared gun gate",
+          "insufficient energy or fuel to re-engage or leave"
+        ],
+        "insight": "Reconstruct the player's range, closure, lead demand, and remaining energy at the decision point; explain only the first controllable error in that chain.",
+        "neverClaims": [
+          "that one target-speed number is universally correct",
+          "that the pitch assist chose the pursuit geometry",
+          "that a miss proves lack of knowledge"
+        ]
+      },
+      {
+        "debriefId": "debrief.track-is-a-claim.v1",
+        "triggerEvidence": [
+          "action on a stale or low-confidence track",
+          "a material conflict between two sources",
+          "successful revision after new evidence"
+        ],
+        "insight": "Show the observation timeline and distinguish world truth from what the actor could reasonably believe when the decision was made.",
+        "neverClaims": [
+          "that the tactical display was omniscient",
+          "that the player should use hidden simulation truth",
+          "that uncertainty removes responsibility"
+        ]
+      },
+      {
+        "debriefId": "debrief.altitude-trade.v1",
+        "triggerEvidence": [
+          "terrain clearance below the mission margin",
+          "a climb that restores the link but creates threat exposure",
+          "an attempted climb without enough energy"
+        ],
+        "insight": "Replay altitude, vertical speed, energy, link margin, and threat exposure together so altitude is understood as a trade rather than a single safe value.",
+        "neverClaims": [
+          "that low flight is always safer",
+          "that a lost link has one universal cause",
+          "that terrain detail not rendered to the player was fair evidence"
+        ]
+      }
+    ],
+    "archiveEntries": [
+      {
+        "archiveEntryId": "archive.energy-and-closure.v1",
+        "title": "Energy, Closure, and the Gun Solution",
+        "depth": "intermediate",
+        "claimRefs": [
+          "claim.energy-cost-of-lift.v1"
+        ],
+        "abstractionRefs": [
+          "abstraction.f22-public-surrogate.v1"
+        ]
+      },
+      {
+        "archiveEntryId": "archive.sensors-and-belief.v1",
+        "title": "A Track Is a Claim",
+        "depth": "deep",
+        "claimRefs": [
+          "claim.rf-line-of-sight.v1",
+          "claim.2034-conflict-is-fiction.v1"
+        ],
+        "abstractionRefs": [
+          "abstraction.future-sensor-network.v1"
+        ]
+      },
+      {
+        "archiveEntryId": "archive.altitude-is-privilege.v1",
+        "title": "Altitude, Terrain, and Operational Privilege",
+        "depth": "deep",
+        "claimRefs": [
+          "claim.f86-yalu-constraints.v1",
+          "claim.energy-cost-of-lift.v1",
+          "claim.ukraine-memory-is-fiction.v1"
+        ],
+        "abstractionRefs": [
+          "abstraction.historical-compression.v1",
+          "abstraction.ukraine-composite-memory.v1",
+          "abstraction.low-level-corridor.v1"
+        ]
+      }
+    ],
+    "interruptionBudget": {
+      "mandatoryInFlightLessons": 0,
+      "maxPrioritizedDebriefInsights": 1,
+      "archiveIsOptional": true
+    }
+  },
+  "claims": [
+    {
+      "claimId": "claim.f86-yalu-constraints.v1",
+      "label": "history",
+      "statement": "F-86 operations in northwestern Korea combined limited endurance with politically consequential restrictions around the Chinese border and Yalu sanctuary.",
+      "appearsInSortieIds": [
+        "sortie.1951.sanctuary-line.v1"
+      ],
+      "sourceRefs": [
+        "source.usaf-korea-history.v1",
+        "source.coalition-airwar-korea.v1"
+      ],
+      "qualification": "The mission does not use disputed victory ratios or imply that every unit, date, pilot, or engagement experienced identical orders and enforcement."
+    },
+    {
+      "claimId": "claim.energy-cost-of-lift.v1",
+      "label": "engineering",
+      "statement": "Producing additional lift for a harder turn increases induced drag and can spend airspeed or altitude faster than available thrust restores it.",
+      "appearsInSortieIds": [
+        "sortie.2034.f22-drone-screen.v1",
+        "sortie.1951.sanctuary-line.v1",
+        "sortie.2034.low-road.v1"
+      ],
+      "sourceRefs": [
+        "source.faa-pilot-handbook.v1"
+      ],
+      "qualification": "The exact energy rate is airframe-, configuration-, atmosphere-, and maneuver-dependent; the archive explains the relationship rather than promising one universal corner speed."
+    },
+    {
+      "claimId": "claim.rf-line-of-sight.v1",
+      "label": "engineering",
+      "statement": "Terrain and low altitude can obstruct or reduce line-of-sight command-and-control radio coverage, so climbing may restore a link while increasing exposure.",
+      "appearsInSortieIds": [
+        "sortie.2034.low-road.v1"
+      ],
+      "sourceRefs": [
+        "source.ntia-terrain-radio.v1"
+      ],
+      "qualification": "The mission's link model is a bounded gameplay model; real propagation also depends on frequency, antennas, power, atmosphere, interference, relays, and system design."
+    },
+    {
+      "claimId": "claim.f22-public-surrogate.v1",
+      "label": "reconstruction",
+      "statement": "The playable F-22 is a public-data surrogate using declared public characteristics and gameplay-bounded systems rather than a claim to reproduce classified performance or software.",
+      "appearsInSortieIds": [
+        "sortie.2034.f22-drone-screen.v1"
+      ],
+      "sourceRefs": [
+        "source.usaf-f22-fact-sheet.v1"
+      ],
+      "qualification": "The source supports only its published facts; modern combat behavior, controls, sensor fusion, and scenario effectiveness remain declared reconstruction or fiction."
+    },
+    {
+      "claimId": "claim.2034-conflict-is-fiction.v1",
+      "label": "fiction",
+      "statement": "The 2034 Korean conflict, its initiating events, organizations, raids, readiness ledger, and operational outcomes are alternate-history fiction.",
+      "appearsInSortieIds": [
+        "sortie.2034.f22-drone-screen.v1",
+        "sortie.2034.low-road.v1"
+      ],
+      "sourceRefs": [],
+      "qualification": "Real institutions and technical constraints may anchor the setting, but the game does not present this war as a prediction."
+    },
+    {
+      "claimId": "claim.ukraine-memory-is-fiction.v1",
+      "label": "fiction",
+      "statement": "This particular DPRK operator, their Ukraine memory, its location, dialogue, actions, and later Korean consequences are invented for the campaign.",
+      "appearsInSortieIds": [
+        "sortie.2034.low-road.v1"
+      ],
+      "sourceRefs": [],
+      "qualification": "Any real historical context later placed around the memory must be registered as separate history or reconstruction claims before approval."
+    }
+  ],
+  "sources": [
+    {
+      "sourceId": "source.usaf-korea-history.v1",
+      "grade": "official_synthesis",
+      "title": "The U.S. Air Force in Korea",
+      "publisher": "U.S. Air Force Historical Support Division",
+      "uri": "https://www.afhistory.af.mil/FAQs/Fact-Sheets/Article/458968/the-u-s-air-force-in-korea/",
+      "accessedOn": "2026-07-19",
+      "supportsClaimIds": [
+        "claim.f86-yalu-constraints.v1"
+      ],
+      "perspective": "Official U.S. Air Force institutional history; useful but not a complete multinational or opposing account."
+    },
+    {
+      "sourceId": "source.coalition-airwar-korea.v1",
+      "grade": "official_synthesis",
+      "title": "Coalition Air Warfare in the Korean War, 1950–1953",
+      "publisher": "Air Force History and Museums Program",
+      "uri": "https://media.defense.gov/2010/Sep/24/2001329764/-1/-1/0/AFD-100924-016.pdf",
+      "publishedOn": "2005",
+      "accessedOn": "2026-07-19",
+      "supportsClaimIds": [
+        "claim.f86-yalu-constraints.v1"
+      ],
+      "perspective": "U.S. official historical synthesis focused on coalition air operations; opposing and individual experiences require additional sources during mission research."
+    },
+    {
+      "sourceId": "source.faa-pilot-handbook.v1",
+      "grade": "technical_reference",
+      "title": "Pilot's Handbook of Aeronautical Knowledge",
+      "publisher": "U.S. Federal Aviation Administration",
+      "uri": "https://www.faa.gov/regulations_policies/handbooks_manuals/aviation/phak",
+      "supportsClaimIds": [
+        "claim.energy-cost-of-lift.v1"
+      ],
+      "perspective": "General aviation educational reference for aerodynamic principles, not an exact performance source for any campaign aircraft."
+    },
+    {
+      "sourceId": "source.ntia-terrain-radio.v1",
+      "grade": "technical_reference",
+      "title": "Quantifying the Effects of Terrain for VHF and Higher Frequency Application",
+      "publisher": "National Telecommunications and Information Administration, Institute for Telecommunication Sciences",
+      "uri": "https://its.ntia.gov/publications/details?pub=2223",
+      "publishedOn": "1986",
+      "supportsClaimIds": [
+        "claim.rf-line-of-sight.v1"
+      ],
+      "perspective": "General technical treatment of terrain, line-of-sight, diffraction, antenna height, and radio horizons; not a source for any fictional military link's frequency or exact performance."
+    },
+    {
+      "sourceId": "source.usaf-f22-fact-sheet.v1",
+      "grade": "primary_document",
+      "title": "F-22 Raptor fact sheet",
+      "publisher": "U.S. Air Force",
+      "uri": "https://www.af.mil/About-Us/Fact-Sheets/Display/Article/104506/f-22-raptor/",
+      "supportsClaimIds": [
+        "claim.f22-public-surrogate.v1"
+      ],
+      "perspective": "Official public description of the aircraft; neither a complete technical dataset nor independent evidence of combat effectiveness."
+    }
+  ],
+  "abstractions": [
+    {
+      "abstractionId": "abstraction.f22-public-surrogate.v1",
+      "affects": "physics",
+      "description": "The F-22 flight, control, gun, and protection models are rounded public-data surrogates with explicitly bounded gameplay assistance.",
+      "reason": "Classified and unavailable data preclude an exact model, while the opening needs a coherent high-capability aircraft with honest internal physics.",
+      "playerDisclosure": "Aircraft name and archive entry both identify the public-data surrogate."
+    },
+    {
+      "abstractionId": "abstraction.future-sensor-network.v1",
+      "affects": "sensors",
+      "description": "The 2034 coalition and DPRK sensor, link, fusion, geofence, and authorization systems are fictional capability models built from durable functions and constraints.",
+      "reason": "Future named systems and outcomes cannot be sourced, but contacts still need age, source, uncertainty, latency, and failure behavior for gameplay.",
+      "playerDisclosure": "Archive and mission briefing label the network as 2034 fiction and expose each track's modeled evidence fields."
+    },
+    {
+      "abstractionId": "abstraction.historical-compression.v1",
+      "affects": "history",
+      "description": "The 1951 mission compresses geography, timing, communications, and representative constraints into one authored sortie rather than recreating a named engagement.",
+      "reason": "The lesson needs a coherent decision without falsely assigning invented acts to a real pilot or unit.",
+      "playerDisclosure": "The briefing calls the sortie a composite and the archive separates documented constraints from invented events."
+    },
+    {
+      "abstractionId": "abstraction.ukraine-composite-memory.v1",
+      "affects": "history",
+      "description": "The Ukraine sequence is a fictional character memory whose real historical anchors remain intentionally unfilled while research and perspective review are pending.",
+      "reason": "The authoring machinery must preserve the idea without converting an unresearched contemporary-conflict vignette into canon.",
+      "playerDisclosure": "No playable release is permitted until sourced context and a fiction label can appear together."
+    },
+    {
+      "abstractionId": "abstraction.low-level-corridor.v1",
+      "affects": "terrain",
+      "description": "Low-level gameplay uses a limited set of high-detail authored corridors within the larger sourced terrain rather than uniform near-field density across Korea.",
+      "reason": "Motion parallax, obstacle visibility, shadows, collision truth, and stable frame time matter more than undifferentiated geographic breadth for drone flight.",
+      "playerDisclosure": "Mission boundaries follow operational route constraints and never use invisible walls inside the decision corridor."
+    },
+    {
+      "abstractionId": "abstraction.readiness-progression.v1",
+      "affects": "progression",
+      "description": "Fleet inventory, inspections, repair capacity, and parts are compressed run resources rather than a complete squadron logistics simulation.",
+      "reason": "The run needs legible attrition decisions without pretending to model every maintainer, component, supply route, and command assignment.",
+      "playerDisclosure": "Every readiness delta names its cause, duration or recovery path, and missions made unavailable."
+    }
+  ],
+  "progression": {
+    "entryConditions": [
+      "A new profile receives this dossier's F-22 sortie as its first campaign node.",
+      "The historical and low-level drone sorties remain locked until their authored reveal prerequisites are met."
+    ],
+    "completionUnlocks": [
+      {
+        "kind": "historical_chapter",
+        "contentId": "story.korea-1951.sanctuary-line.v1",
+        "storyReason": "Containing the modern raid reveals that the defended corridor inherited an older border problem."
+      },
+      {
+        "kind": "mission",
+        "contentId": "mission.korea-1950s.sanctuary-line.f86.v1",
+        "storyReason": "The first historical chapter is learned by flying its decision rather than reading a detached unlock card."
+      },
+      {
+        "kind": "archive_entry",
+        "contentId": "archive.energy-and-closure.v1",
+        "storyReason": "The player's recorded opening engagement supplies evidence for the first technical debrief."
+      },
+      {
+        "kind": "mission_type",
+        "contentId": "mission-type.low-level-drone-route.v1",
+        "storyReason": "Later attrition and perspective chapters can now turn altitude privilege into a low-level route problem."
+      }
+    ],
+    "failureUnlocks": [
+      {
+        "kind": "archive_entry",
+        "contentId": "archive.energy-and-closure.v1",
+        "storyReason": "Failure supplies especially legible closure and prioritization evidence without pretending the modern front advanced."
+      },
+      {
+        "kind": "story_node",
+        "contentId": "story.fragment.corridor-before.v1",
+        "storyReason": "A damaged corridor still prompts the first fragment of its 1950s history so narrative discovery is not gated entirely by mastery."
+      }
+    ],
+    "runStateEffects": [
+      {
+        "resource": "airframe_readiness",
+        "operation": "set_state",
+        "amount": "outcome-derived inspection, repairable damage, or ready",
+        "cause": "Authoritative aircraft state and recovery outcome at sortie completion",
+        "boundedRecovery": "Every non-catastrophic state names a repair time or later inspection decision."
+      },
+      {
+        "resource": "f22_inventory",
+        "operation": "subtract",
+        "amount": 1,
+        "cause": "Only an explicit catastrophic-loss event, never an ordinary mission-grade failure",
+        "boundedRecovery": "Route generation retains at least one launchable non-F-22 mission and surfaces replacement or adaptation options."
+      },
+      {
+        "resource": "network_integrity",
+        "operation": "subtract",
+        "amount": "outcome-derived bounded loss",
+        "cause": "Raid leakers damage declared corridor relays or force their displacement",
+        "boundedRecovery": "A repair, escort, relocation, or degraded-link route is offered before the value can reach a terminal threshold."
+      }
+    ],
+    "routeGuarantee": "After every outcome the director must offer at least one mission that can launch with current aircraft, network, and repair state; scarcity changes the problem but never produces a hidden unwinnable menu."
+  },
+  "representation": {
+    "agencyRules": [
+      "ROK actors set objectives, limits, and consequences rather than receiving a complete American mission list.",
+      "The 1951 pilot is a specific fictional person inside documented constraints, not an avatar for an entire coalition.",
+      "The DPRK operator has professional judgment, relationships, fear, and reasons to abort that are not reducible to obedience or fanaticism.",
+      "No side receives omniscient narration or a monopoly on competence, uncertainty, mercy, or error."
+    ],
+    "civilianContext": "The defended corridor, border geography, communications infrastructure, and low-level route have civilian users and consequences that briefings and outcomes must acknowledge without turning civilians into score modifiers.",
+    "perspectiveRisks": [
+      "Using a current war as aesthetic backstory for an enemy character.",
+      "Implying one fictional veteran represents all DPRK personnel or a settled historical pattern.",
+      "Making the 1950s storyline exist only to validate modern coalition policy.",
+      "Treating high-end American capability as moral authority rather than temporary operational privilege."
+    ],
+    "mitigations": [
+      "Keep the Ukraine memory blocked from approval until its real anchors and limitations are separately sourced.",
+      "Review the memory for Ukrainian and Korean agency as well as technical plausibility.",
+      "Give the remembered choice a later interpersonal and operational consequence rather than using it as a combat montage.",
+      "Test scripts for clear separation among character memory, institutional claim, debrief inference, and narrator fact."
+    ],
+    "memoryOwnership": "The Ukraine scene is explicitly the DPRK operator's incomplete memory; its framing, omissions, and emotional emphasis belong to that character and cannot settle objective history."
+  },
+  "production": {
+    "terrainCorridors": [
+      {
+        "corridorId": "terrain.central-front-high.v1",
+        "sortieIds": [
+          "sortie.2034.f22-drone-screen.v1"
+        ],
+        "purpose": "Establish the modern battlespace from altitude while retaining recognizable rivers, ridges, settlements, weather, and the defended corridor below.",
+        "nearFieldRequirements": [
+          "No low-level proof requirement during the opening engagement.",
+          "Distant terrain must still expose relief, cloud relationship, and route-scale landmarks."
+        ]
+      },
+      {
+        "corridorId": "terrain.yalu-river-low.v1",
+        "sortieIds": [
+          "sortie.1951.sanctuary-line.v1",
+          "sortie.2034.low-road.v1"
+        ],
+        "purpose": "Support historically distinct surfaces over recognizable shared relief and make terrain, border, energy, and link decisions visible at low altitude.",
+        "nearFieldRequirements": [
+          "Stable collision terrain and radar-altitude truth beneath the complete playable route.",
+          "Trees, buildings, poles, embankments, roads, river edges, smoke, and shadows supply motion parallax at representative drone speeds.",
+          "Thin obstacles are visible early enough to avoid or are excluded from collision authority.",
+          "1951 and 2034 vegetation, settlement, infrastructure, lighting, and damage are separate dated layers.",
+          "Terrain masking used by sensors and links matches the visible ridge and valley geometry."
+        ]
+      }
+    ],
+    "visualProofs": [
+      "A recorded 60-second low-level drone route maintains target frame time and has no uncommanded HUD or terrain flicker.",
+      "Independent reviewers can estimate dangerous height trend from ground cues, radar altitude, and vertical speed before warning onset.",
+      "Motion parallax remains legible in clear, snow, rain, and degraded sensor presentation variants.",
+      "The gun funnel, target data, and terrain cues remain distinguishable without occupying cockpit-scale screen area."
+    ],
+    "requiredSystems": [
+      "deterministic route and weather seed",
+      "airframe-specific dynamics and energy state",
+      "contact belief with source, age, and uncertainty",
+      "terrain collision and line-of-sight queries",
+      "remote-link latency, loss, and bounded lost-link behavior",
+      "readiness outcome adapter above SimulationSession",
+      "event-backed adaptive debrief"
+    ],
+    "accessibilityProofs": [
+      "Critical altitude trend is available through redundant motion, numeric, and warning cues.",
+      "Track confidence and source are not encoded by color alone.",
+      "Debrief reconstructions support pause, scrub, text summary, and reduced-motion presentation.",
+      "Archive depth and educational prompts can be dismissed without hiding controls or objectives."
+    ],
+    "telemetryQuestions": [
+      "Do players control closure more effectively in the F-86 after the F-22 debrief?",
+      "Can players explain why they climbed or stayed masked during the drone route using visible evidence?",
+      "Are low-level collisions preceded by readable cues for long enough to support a decision?",
+      "Does the historical sortie measurably change how players describe the modern corridor and border decision?",
+      "Do players perceive the DPRK operator as a character with agency rather than an equipment-delivery device?"
+    ]
+  },
+  "reviews": [
+    {
+      "gateId": "narrative_braid",
+      "status": "pending",
+      "notes": "The three-sortie reveal order and echoes are authored; character identities, exact transitions, and outcome consequences remain unwritten.",
+      "evidence": [
+        "braid revealOrder and echo records in this dossier"
+      ]
+    },
+    {
+      "gateId": "simulation_integrity",
+      "status": "pending",
+      "notes": "The opening mission exists as a prototype contract; the historical sanctuary and low-level drone contracts require production definitions and validation cards.",
+      "evidence": [
+        "sim/Doctrine/Beats.cs opening F-22 mission and capability identities",
+        "declared abstractions in this dossier"
+      ]
+    },
+    {
+      "gateId": "evidence",
+      "status": "pending",
+      "notes": "Core Korea, aerodynamic, link, and F-22 anchors are registered. The 1951 composite needs narrower unit/date research and the Ukraine context is intentionally not yet claimed.",
+      "evidence": [
+        "claim and source closure in this dossier",
+        "docs/world-backstory-research.md"
+      ]
+    },
+    {
+      "gateId": "learning_design",
+      "status": "pending",
+      "notes": "Observable objectives and transfer sorties are declared; telemetry thresholds and debrief prioritization require prototype playtests.",
+      "evidence": [
+        "learningObjectives and educationDelivery records in this dossier"
+      ]
+    },
+    {
+      "gateId": "representation",
+      "status": "pending",
+      "notes": "Perspective risks are explicit. The DPRK operator and Ukraine memory remain blocked pending research, character writing, and dedicated perspective review.",
+      "evidence": [
+        "representation record and abstraction.ukraine-composite-memory.v1"
+      ]
+    },
+    {
+      "gateId": "production",
+      "status": "pending",
+      "notes": "Low-level corridor requirements are acceptance criteria, not a claim that the current renderer satisfies them.",
+      "evidence": [
+        "terrain corridor, visual proof, accessibility proof, and telemetry requirements in this dossier"
+      ]
+    }
+  ]
+}

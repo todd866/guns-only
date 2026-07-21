@@ -34,6 +34,13 @@ divergence timeline, factions, environmental implications, and sortie hooks are 
 crop, source stack, licence gates, vertical-datum handling, weather archives, and ingestion QA are
 specified in [docs/korea-environment-data-sources.md](docs/korea-environment-data-sources.md).
 
+Campaign authorship is governed by
+[docs/content-governance.md](docs/content-governance.md). Its machine-readable campaign policy and
+mission dossiers make the two-timeline braid, educational transfer loop, claim/source boundary,
+progression allowlists, attrition fairness, perspective review, and release gates testable in
+`bin/check`. The opening worked dossier begins with F-22 privilege, reframes it through a 1951 F-86
+sortie, and returns at low level in an attritable drone; it remains explicitly in research status.
+
 The current Korea presentation is a versioned content pack rather than renderer hard-coding. The
 web snapshot carries stable entity, pack, profile, and presentation IDs; the browser resolves those
 through the asset registry, including authored glTF models, screen-size LOD selection, and
@@ -70,6 +77,9 @@ Korean terrain tiles and sensor/icing integration are the next consumers of thes
   point, a pilot action, an observed response, and a defensible diagnosis form a complete learning
   loop. The debrief judges evidence and procedure rather than whether the player guessed a hidden
   fault identifier.
+- **Teach through consequence and transfer.** Let the player encounter an aviation problem, explain
+  it briefly from recorded evidence, then ask them to apply it in another aircraft, era, or mission.
+  Optional archives own depth, sources, disagreement, and declared simulation abstractions.
 
 ## Controls in the current build
 
@@ -98,8 +108,9 @@ sim.Tests/    unit, accuracy, determinism, carrier, combat, and sortie-lifecycle
 web/          canonical browser shell: WebAssembly bridge, three.js renderer, HUD, input
 server/       local ASP.NET parity server for the versioned multiplayer protocol
 world-worker/ persistent Cloudflare Durable Object, identities, sectors, and AI bogeys
-content/      schemas and versioned era/presentation packs
+content/      schemas, campaign governance, mission dossiers, and versioned era/presentation packs
 tools/assets/ deterministic asset validation, inspection, generation, and web staging
+tools/content/ campaign/dossier schema and cross-document governance validation
 docs/         current platform architecture plus dated research and design records
 bin/check     aggregate JavaScript, .NET, test, and publish verification
 ```

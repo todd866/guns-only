@@ -42,6 +42,19 @@ test("same-tick collision facts coalesce but later physical impact remains visib
   assert.deepEqual(terminalVisualEvents(collision).map((event) => event.sequence), [3, 5, 6, 7]);
 });
 
+test("terminal coalescing is scoped to one entity instead of the shared opponent role", () => {
+  const replacementTimeline = [
+    { sequence: 10, tick: 100, type: "IMPACT", target: "OPPONENT",
+      entity_id: "entity.bandit.1", surface: "WATER" },
+    { sequence: 11, tick: 100, type: "DESTROYED", target: "OPPONENT",
+      entity_id: "entity.bandit.2", surface: "NONE" },
+    { sequence: 12, tick: 140, type: "IMPACT", target: "OPPONENT",
+      entity_id: "entity.bandit.2", surface: "WATER" },
+  ];
+  assert.deepEqual(terminalVisualEvents(replacementTimeline)
+    .map((event) => event.sequence), [10, 11, 12]);
+});
+
 test("simulation vectors enter the renderer frame with one Z flip", () => {
   assert.deepEqual(presentationVector([12, 3, -8]), [12, 3, 8]);
   assert.deepEqual(presentationVector({ x: -2, y: 4, z: 9 }), [-2, 4, -9]);

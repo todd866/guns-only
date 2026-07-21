@@ -117,6 +117,24 @@ public sealed class GunKill {
         return CreateReplacementTarget(preserveRoundsInFlight: false);
     }
 
+    /// <summary>
+    /// Hand a still-living target to a physically fresh shooter. Damage already inflicted on the
+    /// target survives, while the replacement aircraft receives its own magazine, cadence, rounds,
+    /// and gun profile. This keeps target health from being accidentally repaired when a continuous
+    /// combat mission stages a successor opponent.
+    /// </summary>
+    public GunKill CreateForFreshShooterAgainstSameTarget(int ammo,
+        double hitRadiusM, GunProfile profile) {
+        if (Outcome != FightOutcome.Flying)
+            throw new System.InvalidOperationException(
+                "A fresh shooter cannot inherit a target which has already been splashed.");
+        var next = new GunKill(ammo, _hitsToKill, hitRadiusM, profile) {
+            HitCount = HitCount,
+            Outcome = Outcome
+        };
+        return next;
+    }
+
     GunKill CreateReplacementTarget(bool preserveRoundsInFlight) {
         var next = new GunKill(AmmoRemaining, _hitsToKill, _hitRadiusM, _profile) {
             RoundsFired = RoundsFired,
