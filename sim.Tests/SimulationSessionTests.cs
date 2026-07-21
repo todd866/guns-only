@@ -368,7 +368,13 @@ public class SimulationSessionTests {
         session.Begin();
         session.FeedKey(GKey.Trigger, true);
 
-        RunUntilFinished(session);
+        bool sawResolvingSplash = false;
+        for (int i = 0; i < (SimulationSession.TerminalSimulationLimitSeconds + 20.0)
+            * AircraftSim.TickHz
+            && session.Lifecycle != SimulationSession.LifecycleState.Finished; i++) {
+            session.StepFixed();
+            sawResolvingSplash |= session.SplashCueActive;
+        }
 
         Assert.Equal(1, session.KillCount);
         Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
@@ -379,6 +385,8 @@ public class SimulationSessionTests {
         Assert.Equal(FightOutcome.Splash, session.PlayerGun.Outcome);
         Assert.False(session.PlayerGun.TargetAlive);
         Assert.Equal(firstBanditSpawn, session.BanditSpawnSequence);
+        Assert.True(sawResolvingSplash,
+            "a kill must acknowledge splash while physical impact is still resolving");
         Assert.False(session.SplashCueActive);
     }
 

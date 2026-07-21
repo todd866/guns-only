@@ -147,8 +147,8 @@ test("padlock owns a specific contact and exposes an honest accessible lifecycle
     appSource,
     'touchControls.querySelectorAll("[data-pulse-key]").forEach',
   );
-  const padlockToggleIndex = pulseControls.indexOf('if (code === "KeyV") togglePadlock();');
-  const padlockReturnIndex = pulseControls.indexOf('if (code === "KeyV") return;');
+  const padlockToggleIndex = pulseControls.indexOf('if (physicalCode === "KeyV") togglePadlock();');
+  const padlockReturnIndex = pulseControls.indexOf('if (physicalCode === "KeyV") return;');
   const transientPulseIndex = pulseControls.indexOf('button.classList.add("active")');
   assert.ok(padlockToggleIndex >= 0 && padlockReturnIndex > padlockToggleIndex,
     "mobile V must drive padlock and then leave persistent UI state to syncPadlockUi");

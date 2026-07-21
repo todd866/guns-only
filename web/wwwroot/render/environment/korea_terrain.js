@@ -1,3 +1,8 @@
+import {
+  createKoreaSceneryRuntime,
+  disposeKoreaSceneryTile,
+} from "./korea_scenery.js";
+
 const DEFAULT_MANIFEST_URL = new URL(
   "../../content/packs/korea-1950s/environment/terrain/central-front.manifest.json",
   import.meta.url,
@@ -8,6 +13,13 @@ const TIER_DISTANCE_METRES = Object.freeze({
   balanced: Object.freeze([16_000, 42_000, 88_000]),
   desktop: Object.freeze([24_000, 60_000, 118_000]),
 });
+
+const TIER_STREAMING = Object.freeze({
+  mobile: Object.freeze({ lookAheadSeconds: 12, pageLoads: 1 }),
+  balanced: Object.freeze({ lookAheadSeconds: 20, pageLoads: 2 }),
+  desktop: Object.freeze({ lookAheadSeconds: 28, pageLoads: 3 }),
+});
+const MAX_STREAM_LOOK_AHEAD_METRES = 24_000;
 
 export const TERRAIN_CURVATURE_START_M = 12_000;
 export const TERRAIN_EARTH_RADIUS_M = 6_371_000;
@@ -43,6 +55,7 @@ const TERRAIN_FRAGMENT = /* glsl */ `
 uniform vec3 uSunDirection;
 uniform vec3 uFogColor;
 uniform float uFogDensity;
+uniform float uModernScenery;
 varying vec3 vTerrainNormal;
 varying vec3 vTerrainWorldPosition;
 varying float vTerrainHeight;
@@ -64,6 +77,17 @@ void main() {
   vec3 albedo = mix(valley, upland, elevation);
   albedo = mix(albedo, drySlope, smoothstep(0.16, 0.62, steepness) * 0.68);
   albedo = mix(albedo, ridge, highRidge * (0.42 + steepness * 0.58));
+  float lowland = (1.0 - smoothstep(180.0, 720.0, vTerrainHeight))
+    * (1.0 - smoothstep(0.08, 0.42, steepness));
+  float parcelA = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.0061
+    + sin(vTerrainWorldPosition.z * 0.0017) * 1.8);
+  float parcelB = 0.5 + 0.5 * sin(vTerrainWorldPosition.z * 0.0083
+    + sin(vTerrainWorldPosition.x * 0.0013) * 2.1);
+  float parcels = smoothstep(0.31, 0.69, parcelA * 0.56 + parcelB * 0.44);
+  vec3 periodCultivation = mix(vec3(0.29, 0.31, 0.12), vec3(0.43, 0.39, 0.17), parcels);
+  vec3 modernCultivation = mix(vec3(0.24, 0.34, 0.13), vec3(0.46, 0.44, 0.20), parcels);
+  albedo = mix(albedo, mix(periodCultivation, modernCultivation, uModernScenery),
+    lowland * (0.16 + parcels * 0.20));
 
   float diffuse = 0.43 + 0.57 * max(dot(normal, normalize(uSunDirection)), 0.0);
   float distanceToCamera = length(cameraPosition - vTerrainWorldPosition);
@@ -117,6 +141,40 @@ export function validateTerrainManifest(value) {
     }
   }
   return value;
+}
+
+export function validateTerrainAtlasManifest(value) {
+  if (!value || value.schemaVersion !== "2.0.0"
+    || typeof value.terrainId !== "string"
+    || !Array.isArray(value.boundsLocalM) || value.boundsLocalM.length !== 4
+    || !value.boundsLocalM.every(Number.isFinite)
+    || !Number.isFinite(value.tileSpanM) || value.tileSpanM <= 0
+    || !Number.isFinite(value.pageSpanM) || value.pageSpanM < value.tileSpanM
+    || !Array.isArray(value.pages) || value.pages.length === 0) {
+    throw new TypeError("Invalid Korea terrain atlas manifest.");
+  }
+  const ids = new Set();
+  for (const page of value.pages) {
+    if (typeof page?.id !== "string" || ids.has(page.id)
+      || !Array.isArray(page.boundsLocalM) || page.boundsLocalM.length !== 4
+      || !page.boundsLocalM.every(Number.isFinite)
+      || typeof page.manifest?.uri !== "string"
+      || !/^[0-9a-f]{64}$/.test(page.manifest.sha256)
+      || !Number.isSafeInteger(page.manifest.byteLength)
+      || page.manifest.byteLength <= 0) {
+      throw new TypeError(`Invalid Korea terrain atlas page: ${page?.id ?? "unknown"}.`);
+    }
+    ids.add(page.id);
+  }
+  return value;
+}
+
+function distanceToBounds(eastM, northM, bounds) {
+  const deltaEast = eastM < bounds[0] ? bounds[0] - eastM
+    : eastM > bounds[2] ? eastM - bounds[2] : 0;
+  const deltaNorth = northM < bounds[1] ? bounds[1] - northM
+    : northM > bounds[3] ? northM - bounds[3] : 0;
+  return Math.hypot(deltaEast, deltaNorth);
 }
 
 export function selectTerrainLod(distanceM, tier = "balanced", lodCount = 4,
@@ -257,7 +315,7 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
 }
 
 export class TerrainBundleReader {
-  constructor(bundleUrl, byteLength, fetchImpl = fetch) {
+  constructor(bundleUrl, byteLength, fetchImpl = fetch, maximumCachedRanges = 96) {
     this.bundleUrl = bundleUrl;
     this.byteLength = byteLength;
     this.fetch = fetchImpl;
@@ -269,6 +327,7 @@ export class TerrainBundleReader {
     this.networkRequests = 0;
     this.networkBytes = 0;
     this.rangeCacheHits = 0;
+    this.maximumCachedRanges = Math.max(1, Math.round(finite(maximumCachedRanges, 96)));
   }
 
   async read(record) {
@@ -280,6 +339,8 @@ export class TerrainBundleReader {
     const cached = this.rangeCache.get(key);
     if (cached) {
       this.rangeCacheHits++;
+      this.rangeCache.delete(key);
+      this.rangeCache.set(key, cached);
       return cached;
     }
     const pending = this.pendingRanges.get(key);
@@ -329,6 +390,9 @@ export class TerrainBundleReader {
     }
     this.rangeCapability = true;
     this.rangeCache.set(key, buffer);
+    while (this.rangeCache.size > this.maximumCachedRanges) {
+      this.rangeCache.delete(this.rangeCache.keys().next().value);
+    }
     return buffer;
   }
 
@@ -359,8 +423,17 @@ function createTerrainMaterial(THREE, options = {}) {
       },
       uFogColor: { value: new THREE.Color(options.fogColor ?? 0x6f8790) },
       uFogDensity: { value: finite(options.fogDensity, 0.000055) },
+      uModernScenery: { value: options.sceneryEra === "modern" ? 1 : 0 },
     },
   });
+}
+
+function disposeMeshScenery(mesh) {
+  if (!mesh) return;
+  for (const child of [...mesh.children]) {
+    if (child.userData?.scenery) disposeKoreaSceneryTile(child);
+  }
+  delete mesh.userData.scenery;
 }
 
 class KoreaTerrainPresentation {
@@ -370,8 +443,15 @@ class KoreaTerrainPresentation {
     this.reader = reader;
     this.qualityTier = options.qualityTier ?? "balanced";
     this.group = new THREE.Group();
-    this.group.name = "KOREA_CENTRAL_FRONT_TERRAIN";
-    this.material = createTerrainMaterial(THREE, options);
+    this.group.name = options.groupName ?? "KOREA_CENTRAL_FRONT_TERRAIN";
+    this.material = options.material ?? createTerrainMaterial(THREE, options);
+    this.ownsMaterial = !options.material;
+    this.sceneryRuntime = options.sceneryRuntime
+      ?? (options.sceneryEra ? createKoreaSceneryRuntime(THREE, {
+        era: options.sceneryEra,
+        qualityTier: this.qualityTier,
+      }) : null);
+    this.ownsSceneryRuntime = !options.sceneryRuntime && this.sceneryRuntime !== null;
     this.entries = new Map(manifest.chunks.map((chunk) => [chunk.id, {
       chunk,
       mesh: null,
@@ -384,12 +464,20 @@ class KoreaTerrainPresentation {
     this.queue = [];
     this.activeLoads = 0;
     this.maximumLoads = Math.max(1, Math.round(finite(options.maximumConcurrentLoads, 6)));
+    this.chunkLoadRadiusM = Number.isFinite(options.chunkLoadRadiusM)
+      ? Math.max(0, options.chunkLoadRadiusM) : Number.POSITIVE_INFINITY;
+    this.chunkEvictRadiusM = Number.isFinite(options.chunkEvictRadiusM)
+      ? Math.max(this.chunkLoadRadiusM, options.chunkEvictRadiusM)
+      : Number.POSITIVE_INFINITY;
     this.disposed = false;
     this.worldEastM = 0;
     this.worldNorthM = 0;
     this.loadedBytes = 0;
-    this.ready = Promise.all(manifest.chunks.map((chunk) =>
-      this.requestLevel(this.entries.get(chunk.id), chunk.lods.length - 1)));
+    this.idleWaiters = [];
+    this.ready = options.lazyChunks === true
+      ? Promise.resolve([])
+      : Promise.all(manifest.chunks.map((chunk) =>
+        this.requestLevel(this.entries.get(chunk.id), chunk.lods.length - 1)));
   }
 
   requestLevel(entry, level) {
@@ -415,8 +503,64 @@ class KoreaTerrainPresentation {
       void this.load(work).finally(() => {
         this.activeLoads--;
         this.pump();
+        this.resolveIdleWaiters();
       });
     }
+    this.resolveIdleWaiters();
+  }
+
+  resolveIdleWaiters() {
+    if (this.activeLoads || this.queue.length) return;
+    for (const resolve of this.idleWaiters.splice(0)) resolve();
+  }
+
+  whenIdle() {
+    if (!this.activeLoads && !this.queue.length) return Promise.resolve();
+    return new Promise((resolve) => this.idleWaiters.push(resolve));
+  }
+
+  replaceSceneryRuntime(runtime, ownsRuntime = false) {
+    if (this.disposed || runtime === this.sceneryRuntime) return Promise.resolve([]);
+    const previousRuntime = this.sceneryRuntime;
+    const disposePrevious = this.ownsSceneryRuntime;
+    this.sceneryRuntime = runtime;
+    this.ownsSceneryRuntime = ownsRuntime;
+    const replacements = [];
+    for (const entry of this.entries.values()) {
+      const mesh = entry.mesh;
+      const level = entry.level;
+      if (!mesh || !Number.isInteger(level)) continue;
+      disposeMeshScenery(mesh);
+      if (!runtime || level !== 0) continue;
+      const record = entry.chunk.lods[level];
+      replacements.push(this.reader.read(record).then((buffer) => {
+        if (this.disposed || this.sceneryRuntime !== runtime
+          || entry.mesh !== mesh || entry.level !== level) return null;
+        const decoded = decodeTerrainRecord(buffer, record, this.manifest.quantization);
+        const scenery = runtime.createTile(entry.chunk, decoded, level);
+        if (!scenery) return null;
+        mesh.add(scenery);
+        mesh.userData.scenery = scenery.userData.scenery;
+        return scenery;
+      }).catch((error) => {
+        if (!this.disposed && entry.mesh === mesh) {
+          entry.error = String(error?.message ?? error);
+        }
+        return null;
+      }));
+    }
+    if (disposePrevious) previousRuntime?.dispose();
+    return Promise.all(replacements);
+  }
+
+  setSceneryEra(era) {
+    if (this.disposed || era === this.sceneryRuntime?.era) return Promise.resolve([]);
+    const runtime = era ? createKoreaSceneryRuntime(this.THREE, {
+      era,
+      qualityTier: this.qualityTier,
+    }) : null;
+    this.material.uniforms.uModernScenery.value = era === "modern" ? 1 : 0;
+    return this.replaceSceneryRuntime(runtime, runtime !== null);
   }
 
   async load(work) {
@@ -439,6 +583,11 @@ class KoreaTerrainPresentation {
         triangles: built.triangleCount,
         spacingM: record.spacingM,
       });
+      const scenery = this.sceneryRuntime?.createTile(entry.chunk, decoded, level);
+      if (scenery) {
+        mesh.add(scenery);
+        mesh.userData.scenery = scenery.userData.scenery;
+      }
       mesh.frustumCulled = true;
       const previous = entry.mesh;
       entry.mesh = mesh;
@@ -449,6 +598,7 @@ class KoreaTerrainPresentation {
       this.loadedBytes += record.byteLength;
       this.group.add(mesh);
       if (previous) {
+        disposeMeshScenery(previous);
         previous.removeFromParent();
         previous.geometry.dispose();
       }
@@ -510,13 +660,25 @@ class KoreaTerrainPresentation {
     for (const attribute of touchedAttributes) attribute.needsUpdate = true;
   }
 
+  evictEntry(entry) {
+    if (!entry.mesh && entry.requestedLevel === null) return;
+    entry.requestToken++;
+    entry.requestedLevel = null;
+    disposeMeshScenery(entry.mesh);
+    entry.mesh?.geometry.dispose();
+    entry.mesh?.removeFromParent();
+    entry.mesh = null;
+    entry.level = null;
+    entry.normalBoundary = null;
+  }
+
   setPlacement(eastM = 0, northM = 0) {
     this.worldEastM = finite(eastM);
     this.worldNorthM = finite(northM);
     this.group.position.set(this.worldEastM, 0, -this.worldNorthM);
   }
 
-  update({ cameraPosition, fogColor, fogDensity, sunDirection, placementEastM,
+  update({ cameraPosition, streamPosition, fogColor, fogDensity, sunDirection, placementEastM,
     placementNorthM } = {}) {
     if (this.disposed) return;
     if (placementEastM !== undefined || placementNorthM !== undefined) {
@@ -528,12 +690,21 @@ class KoreaTerrainPresentation {
     if (!cameraPosition) return;
 
     const requests = [];
+    const priorityPosition = streamPosition ?? cameraPosition;
     for (const entry of this.entries.values()) {
       const bounds = entry.chunk.boundsLocalM;
       const centreEast = this.worldEastM + (bounds[0] + bounds[2]) * 0.5;
       const centreRenderNorth = -(this.worldNorthM + (bounds[1] + bounds[3]) * 0.5);
-      const distance = Math.hypot(cameraPosition.x - centreEast,
+      const cameraDistance = Math.hypot(cameraPosition.x - centreEast,
         cameraPosition.z - centreRenderNorth);
+      const streamDistance = Math.hypot(priorityPosition.x - centreEast,
+        priorityPosition.z - centreRenderNorth);
+      const distance = Math.min(cameraDistance, streamDistance);
+      if (distance > this.chunkEvictRadiusM) {
+        this.evictEntry(entry);
+        continue;
+      }
+      if (distance > this.chunkLoadRadiusM) continue;
       const level = selectTerrainLod(distance, this.qualityTier,
         entry.chunk.lods.length, entry.level);
       if (level !== entry.level && level !== entry.requestedLevel) {
@@ -547,15 +718,19 @@ class KoreaTerrainPresentation {
   diagnostics() {
     const levels = {};
     let errors = 0;
+    let residentChunks = 0;
     for (const entry of this.entries.values()) {
       const key = entry.level === null ? "pending" : `lod${entry.level}`;
       levels[key] = (levels[key] ?? 0) + 1;
+      if (entry.mesh) residentChunks++;
       if (entry.error) errors++;
     }
     return Object.freeze({
       terrainId: this.manifest.terrainId,
       qualityTier: this.qualityTier,
+      sceneryEra: this.sceneryRuntime?.era ?? null,
       chunks: this.entries.size,
+      residentChunks,
       levels: Object.freeze(levels),
       activeLoads: this.activeLoads,
       queuedLoads: this.queue.length,
@@ -572,11 +747,314 @@ class KoreaTerrainPresentation {
     for (const work of this.queue.splice(0)) work.resolve(work.entry.mesh);
     for (const entry of this.entries.values()) {
       entry.requestToken++;
+      disposeMeshScenery(entry.mesh);
       entry.mesh?.geometry.dispose();
       entry.mesh?.removeFromParent();
       entry.mesh = null;
       entry.normalBoundary = null;
     }
+    this.resolveIdleWaiters();
+    if (this.ownsSceneryRuntime) this.sceneryRuntime?.dispose();
+    if (this.ownsMaterial) this.material.dispose();
+    this.group.removeFromParent();
+  }
+}
+
+function versionedAssetUrl(uri, baseUrl, sha256) {
+  const result = new URL(uri, baseUrl);
+  if (result.origin === new URL(baseUrl).origin && /^[0-9a-f]{64}$/.test(sha256)) {
+    result.searchParams.set("sha256", sha256);
+  }
+  return result.href;
+}
+
+class KoreaTerrainAtlasPresentation {
+  constructor(THREE, manifest, manifestUrl, options) {
+    this.THREE = THREE;
+    this.manifest = manifest;
+    this.manifestUrl = manifestUrl;
+    this.fetch = options.fetch ?? fetch;
+    this.qualityTier = options.qualityTier ?? "balanced";
+    const tierStreaming = TIER_STREAMING[this.qualityTier] ?? TIER_STREAMING.balanced;
+    const thresholds = TIER_DISTANCE_METRES[this.qualityTier] ?? TIER_DISTANCE_METRES.balanced;
+    const defaultLoadRadiusM = thresholds.at(-1) + manifest.tileSpanM * Math.SQRT2;
+    this.chunkLoadRadiusM = Math.max(0,
+      finite(options.chunkLoadRadiusM, manifest.streaming?.chunkLoadRadiusM ?? defaultLoadRadiusM));
+    this.chunkEvictRadiusM = Math.max(this.chunkLoadRadiusM,
+      finite(options.chunkEvictRadiusM,
+        manifest.streaming?.chunkEvictRadiusM ?? this.chunkLoadRadiusM + 24_000));
+    this.pageLoadRadiusM = Math.max(this.chunkLoadRadiusM,
+      finite(options.pageLoadRadiusM,
+        manifest.streaming?.pageLoadRadiusM ?? this.chunkLoadRadiusM));
+    this.pageEvictRadiusM = Math.max(this.pageLoadRadiusM,
+      finite(options.pageEvictRadiusM,
+        manifest.streaming?.pageEvictRadiusM ?? this.chunkEvictRadiusM + 32_000));
+    this.lookAheadSeconds = Math.max(0,
+      finite(options.lookAheadSeconds,
+        manifest.streaming?.lookAheadSeconds ?? tierStreaming.lookAheadSeconds));
+    this.maximumPageLoads = Math.max(1, Math.round(finite(options.maximumPageLoads,
+      tierStreaming.pageLoads)));
+    this.maximumChunkLoads = Math.max(1,
+      Math.round(finite(options.maximumConcurrentLoads, 6)));
+    this.maximumCachedRanges = Math.max(1,
+      Math.round(finite(options.maximumCachedRanges, 8)));
+    this.sceneryEra = options.sceneryEra ?? manifest.scenery?.defaultProfile ?? null;
+    this.group = new THREE.Group();
+    this.group.name = "KOREA_PENINSULA_TERRAIN_ATLAS";
+    this.material = createTerrainMaterial(THREE, { ...options, sceneryEra: this.sceneryEra });
+    this.sceneryRuntime = this.sceneryEra
+      ? createKoreaSceneryRuntime(THREE, {
+        era: this.sceneryEra,
+        qualityTier: this.qualityTier,
+      })
+      : null;
+    this.pages = new Map(manifest.pages.map((page) => [page.id, {
+      descriptor: page,
+      presentation: null,
+      pending: null,
+      queued: false,
+      generation: 0,
+      error: null,
+    }]));
+    this.pageQueue = [];
+    this.activePageLoads = 0;
+    this.idleWaiters = [];
+    this.disposed = false;
+    this.worldEastM = 0;
+    this.worldNorthM = 0;
+    this.previousCameraLocal = null;
+    this.lastUpdate = null;
+    this.loadedPageManifests = 0;
+    this.ready = Promise.resolve([]);
+  }
+
+  setPlacement(eastM = 0, northM = 0) {
+    this.worldEastM = finite(eastM);
+    this.worldNorthM = finite(northM);
+    this.group.position.set(this.worldEastM, 0, -this.worldNorthM);
+  }
+
+  setSceneryEra(era) {
+    if (this.disposed || era === this.sceneryEra) return Promise.resolve([]);
+    const runtime = era ? createKoreaSceneryRuntime(this.THREE, {
+      era,
+      qualityTier: this.qualityTier,
+    }) : null;
+    const previousRuntime = this.sceneryRuntime;
+    this.sceneryEra = era;
+    this.sceneryRuntime = runtime;
+    this.material.uniforms.uModernScenery.value = era === "modern" ? 1 : 0;
+    const replacements = [];
+    for (const state of this.pages.values()) {
+      if (state.presentation) {
+        replacements.push(state.presentation.replaceSceneryRuntime(runtime, false));
+      }
+    }
+    previousRuntime?.dispose();
+    return Promise.all(replacements);
+  }
+
+  requestPage(state, distance) {
+    if (this.disposed || state.presentation || state.pending || state.queued) return;
+    state.queued = true;
+    this.pageQueue.push({ state, distance, generation: state.generation });
+    this.pageQueue.sort((left, right) => left.distance - right.distance);
+    this.pumpPages();
+  }
+
+  pumpPages() {
+    while (!this.disposed && this.activePageLoads < this.maximumPageLoads
+      && this.pageQueue.length) {
+      const work = this.pageQueue.shift();
+      work.state.queued = false;
+      if (work.generation !== work.state.generation || work.state.presentation) continue;
+      this.activePageLoads++;
+      const pending = this.loadPage(work);
+      work.state.pending = pending;
+      void pending.finally(() => {
+        if (work.state.pending === pending) work.state.pending = null;
+        this.activePageLoads--;
+        this.pumpPages();
+        this.resolveIdleWaiters();
+      });
+    }
+    this.resolveIdleWaiters();
+  }
+
+  async loadPage({ state, generation }) {
+    const descriptor = state.descriptor;
+    const pageManifestUrl = versionedAssetUrl(descriptor.manifest.uri,
+      this.manifestUrl, descriptor.manifest.sha256);
+    try {
+      const response = await this.fetch(pageManifestUrl);
+      if (!response.ok) {
+        throw new Error(`Terrain page manifest request failed: ${response.status} ${pageManifestUrl}`);
+      }
+      const pageManifest = validateTerrainManifest(await response.json());
+      const bundleUrl = versionedAssetUrl(pageManifest.bundle.uri,
+        pageManifestUrl, pageManifest.bundle.sha256);
+      const reader = new TerrainBundleReader(bundleUrl, pageManifest.bundle.byteLength,
+        this.fetch, this.maximumCachedRanges);
+      const presentation = new KoreaTerrainPresentation(this.THREE, pageManifest, reader, {
+        qualityTier: this.qualityTier,
+        maximumConcurrentLoads: this.maximumChunkLoads,
+        chunkLoadRadiusM: this.chunkLoadRadiusM,
+        chunkEvictRadiusM: this.chunkEvictRadiusM,
+        lazyChunks: true,
+        material: this.material,
+        sceneryRuntime: this.sceneryRuntime,
+        groupName: `KOREA_TERRAIN_PAGE_${descriptor.id.toUpperCase()}`,
+      });
+      if (this.disposed || generation !== state.generation) {
+        presentation.dispose();
+        return;
+      }
+      state.presentation = presentation;
+      state.error = null;
+      this.loadedPageManifests++;
+      this.group.add(presentation.group);
+      if (this.lastUpdate) presentation.update(this.lastUpdate);
+    } catch (error) {
+      if (!this.disposed && generation === state.generation) {
+        state.error = String(error?.message ?? error);
+      }
+    }
+  }
+
+  evictPage(state) {
+    if (!state.presentation && !state.pending && !state.queued) return;
+    state.generation++;
+    state.queued = false;
+    state.presentation?.dispose();
+    state.presentation = null;
+    state.error = null;
+  }
+
+  resolveIdleWaiters() {
+    if (this.activePageLoads || this.pageQueue.length) return;
+    for (const resolve of this.idleWaiters.splice(0)) resolve();
+  }
+
+  async whenIdle() {
+    if (this.activePageLoads || this.pageQueue.length) {
+      await new Promise((resolve) => this.idleWaiters.push(resolve));
+    }
+    await Promise.all([...this.pages.values()]
+      .map((state) => state.presentation?.whenIdle()).filter(Boolean));
+  }
+
+  update({ cameraPosition, streamPosition, deltaSeconds, fogColor, fogDensity, sunDirection,
+    placementEastM, placementNorthM } = {}) {
+    if (this.disposed) return;
+    if (placementEastM !== undefined || placementNorthM !== undefined) {
+      this.setPlacement(placementEastM ?? this.worldEastM, placementNorthM ?? this.worldNorthM);
+    }
+    if (fogColor) this.material.uniforms.uFogColor.value.copy(fogColor);
+    if (Number.isFinite(fogDensity)) this.material.uniforms.uFogDensity.value = fogDensity;
+    if (sunDirection) this.material.uniforms.uSunDirection.value.copy(sunDirection).normalize();
+    if (!cameraPosition) return;
+
+    const cameraLocal = new this.THREE.Vector3(
+      cameraPosition.x - this.worldEastM,
+      cameraPosition.y,
+      cameraPosition.z + this.worldNorthM,
+    );
+    const streamLocal = streamPosition
+      ? new this.THREE.Vector3(
+        streamPosition.x - this.worldEastM,
+        streamPosition.y,
+        streamPosition.z + this.worldNorthM,
+      )
+      : cameraLocal.clone();
+    if (!streamPosition && this.previousCameraLocal && Number.isFinite(deltaSeconds)
+      && deltaSeconds > 0) {
+      const lookAhead = cameraLocal.clone().sub(this.previousCameraLocal)
+        .multiplyScalar(this.lookAheadSeconds / deltaSeconds);
+      const length = lookAhead.length();
+      if (length > MAX_STREAM_LOOK_AHEAD_METRES) {
+        lookAhead.multiplyScalar(MAX_STREAM_LOOK_AHEAD_METRES / length);
+      }
+      streamLocal.add(lookAhead);
+    }
+    if (!this.previousCameraLocal) this.previousCameraLocal = cameraLocal.clone();
+    else this.previousCameraLocal.copy(cameraLocal);
+
+    this.lastUpdate = {
+      cameraPosition: cameraLocal,
+      streamPosition: streamLocal,
+      fogColor,
+      fogDensity,
+      sunDirection,
+      placementEastM: 0,
+      placementNorthM: 0,
+    };
+    const cameraEastM = cameraLocal.x;
+    const cameraNorthM = -cameraLocal.z;
+    const streamEastM = streamLocal.x;
+    const streamNorthM = -streamLocal.z;
+    const requested = [];
+    for (const state of this.pages.values()) {
+      const bounds = state.descriptor.boundsLocalM;
+      const distance = Math.min(
+        distanceToBounds(cameraEastM, cameraNorthM, bounds),
+        distanceToBounds(streamEastM, streamNorthM, bounds),
+      );
+      if (distance > this.pageEvictRadiusM) {
+        this.evictPage(state);
+        continue;
+      }
+      state.presentation?.update(this.lastUpdate);
+      if (distance <= this.pageLoadRadiusM && !state.presentation
+        && !state.pending && !state.queued) requested.push({ state, distance });
+    }
+    requested.sort((left, right) => left.distance - right.distance);
+    for (const request of requested) this.requestPage(request.state, request.distance);
+  }
+
+  diagnostics() {
+    let residentPages = 0;
+    let residentChunks = 0;
+    let errors = 0;
+    let networkRequests = 0;
+    let networkBytes = 0;
+    for (const state of this.pages.values()) {
+      if (state.presentation) {
+        residentPages++;
+        const page = state.presentation.diagnostics();
+        residentChunks += page.residentChunks;
+        networkRequests += page.transfer.networkRequests;
+        networkBytes += page.transfer.networkBytes;
+      }
+      if (state.error) errors++;
+    }
+    return Object.freeze({
+      terrainId: this.manifest.terrainId,
+      qualityTier: this.qualityTier,
+      sceneryEra: this.sceneryEra,
+      pages: this.pages.size,
+      residentPages,
+      residentChunks,
+      activePageLoads: this.activePageLoads,
+      queuedPageLoads: this.pageQueue.length,
+      loadedPageManifests: this.loadedPageManifests,
+      networkRequests,
+      networkBytes,
+      errors,
+      disposed: this.disposed,
+    });
+  }
+
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.pageQueue.length = 0;
+    for (const state of this.pages.values()) {
+      state.generation++;
+      state.presentation?.dispose();
+      state.presentation = null;
+    }
+    for (const resolve of this.idleWaiters.splice(0)) resolve();
+    this.sceneryRuntime?.dispose();
     this.material.dispose();
     this.group.removeFromParent();
   }
@@ -590,12 +1068,15 @@ export async function loadKoreaTerrain(THREE, options = {}) {
   if (!response.ok) {
     throw new Error(`Terrain manifest request failed: ${response.status} ${manifestUrl}`);
   }
-  const manifest = validateTerrainManifest(await response.json());
-  const bundleUrl = new URL(manifest.bundle.uri, manifestUrl);
-  if (bundleUrl.origin === new URL(manifestUrl).origin) {
-    bundleUrl.searchParams.set("sha256", manifest.bundle.sha256);
+  const value = await response.json();
+  if (value?.schemaVersion === "2.0.0") {
+    const atlas = validateTerrainAtlasManifest(value);
+    return new KoreaTerrainAtlasPresentation(THREE, atlas, manifestUrl, options);
   }
-  const reader = new TerrainBundleReader(bundleUrl.href,
-    manifest.bundle.byteLength, fetchImpl);
+  const manifest = validateTerrainManifest(value);
+  const bundleUrl = versionedAssetUrl(manifest.bundle.uri,
+    manifestUrl, manifest.bundle.sha256);
+  const reader = new TerrainBundleReader(bundleUrl,
+    manifest.bundle.byteLength, fetchImpl, options.maximumCachedRanges);
   return new KoreaTerrainPresentation(THREE, manifest, reader, options);
 }

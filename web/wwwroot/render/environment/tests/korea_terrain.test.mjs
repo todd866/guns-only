@@ -8,6 +8,7 @@ import {
   selectTerrainLod,
   terrainCurvatureDropM,
   TerrainBundleReader,
+  validateTerrainAtlasManifest,
   validateTerrainManifest,
 } from "../korea_terrain.js";
 
@@ -124,6 +125,24 @@ test("validates range-addressable terrain records and rejects overruns", () => {
   assert.throws(() => validateTerrainManifest(invalid), /Invalid Korea terrain LOD/);
 });
 
+test("validates paged atlas manifests and rejects duplicate page identities", () => {
+  const atlas = {
+    schemaVersion: "2.0.0",
+    terrainId: "terrain.atlas-test.v1",
+    boundsLocalM: [0, 0, 16, 8],
+    tileSpanM: 8,
+    pageSpanM: 8,
+    pages: [{
+      id: "west",
+      boundsLocalM: [0, 0, 8, 8],
+      manifest: { uri: "west.json", byteLength: 100, sha256: "c".repeat(64) },
+    }],
+  };
+  assert.equal(validateTerrainAtlasManifest(atlas).terrainId, "terrain.atlas-test.v1");
+  atlas.pages.push(structuredClone(atlas.pages[0]));
+  assert.throws(() => validateTerrainAtlasManifest(atlas), /Invalid Korea terrain atlas page/);
+});
+
 test("decodes little-endian decimetres and omits all-water triangles", () => {
   const values = new Int16Array([
     -32768, -32768, 100,
@@ -221,6 +240,106 @@ test("uses HTTP ranges and safely falls back when a server returns the complete 
     "a Range-ignorant server must download the full bundle at most once");
 });
 
+test("bounds the successful range cache with least-recently-used eviction", async () => {
+  const source = new Uint8Array([1, 2, 3, 4]).buffer;
+  const requests = [];
+  const reader = new TerrainBundleReader("https://game.test/terrain", 4,
+    async (_url, options) => {
+      requests.push(options.headers.Range);
+      const match = /^bytes=(\d+)-(\d+)$/.exec(options.headers.Range);
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => source.slice(Number(match[1]), Number(match[2]) + 1),
+      };
+    }, 2);
+  await reader.read({ byteOffset: 0, byteLength: 1 });
+  await reader.read({ byteOffset: 1, byteLength: 1 });
+  await reader.read({ byteOffset: 0, byteLength: 1 });
+  await reader.read({ byteOffset: 2, byteLength: 1 });
+  await reader.read({ byteOffset: 1, byteLength: 1 });
+  assert.deepEqual(requests, ["bytes=0-0", "bytes=1-1", "bytes=2-2", "bytes=1-1"]);
+  assert.equal(reader.diagnostics().cachedRanges, 2);
+});
+
+test("streams atlas pages around the aircraft and evicts pages behind it", async () => {
+  const pageManifest = (id, minimumEastM) => ({
+    schemaVersion: "1.0.0",
+    terrainId: `terrain.page-${id}.v1`,
+    boundsLocalM: [minimumEastM, 0, minimumEastM + 8, 8],
+    quantization,
+    bundle: { uri: `${id}.terrain`, byteLength: 18, sha256: id.repeat(64).slice(0, 64) },
+    chunks: [{
+      id: `${id}-chunk`,
+      boundsLocalM: [minimumEastM, 0, minimumEastM + 8, 8],
+      lods: [{ level: 0, sampleCount: 3, byteOffset: 0, byteLength: 18, spacingM: 4 }],
+    }],
+  });
+  const west = pageManifest("d", 0);
+  const east = pageManifest("e", 8);
+  const atlas = {
+    schemaVersion: "2.0.0",
+    terrainId: "terrain.korea.atlas-stream-test.v1",
+    boundsLocalM: [0, 0, 16, 8],
+    tileSpanM: 8,
+    pageSpanM: 8,
+    pages: [
+      {
+        id: "west",
+        boundsLocalM: [0, 0, 8, 8],
+        manifest: { uri: "west.manifest.json", byteLength: 100, sha256: "f".repeat(64) },
+      },
+      {
+        id: "east",
+        boundsLocalM: [8, 0, 16, 8],
+        manifest: { uri: "east.manifest.json", byteLength: 100, sha256: "a".repeat(64) },
+      },
+    ],
+  };
+  const requested = [];
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/korea.atlas.json",
+    qualityTier: "balanced",
+    pageLoadRadiusM: 1,
+    pageEvictRadiusM: 2,
+    chunkLoadRadiusM: 6,
+    chunkEvictRadiusM: 8,
+    lookAheadSeconds: 0,
+    maximumPageLoads: 1,
+    maximumConcurrentLoads: 1,
+    fetch: async (url, options = {}) => {
+      requested.push({ url: String(url), range: options.headers?.Range ?? null });
+      if (String(url).endsWith("korea.atlas.json")) {
+        return { ok: true, status: 200, json: async () => atlas };
+      }
+      if (String(url).includes("west.manifest.json")) {
+        return { ok: true, status: 200, json: async () => west };
+      }
+      if (String(url).includes("east.manifest.json")) {
+        return { ok: true, status: 200, json: async () => east };
+      }
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => new ArrayBuffer(18),
+      };
+    },
+  });
+
+  terrain.update({ cameraPosition: new THREE.Vector3(1, 500, -4), deltaSeconds: 1 });
+  await terrain.whenIdle();
+  assert.equal(terrain.diagnostics().residentPages, 1);
+  assert.equal(terrain.diagnostics().residentChunks, 1);
+  terrain.update({ cameraPosition: new THREE.Vector3(15, 500, -4), deltaSeconds: 1 });
+  await terrain.whenIdle();
+  assert.equal(terrain.diagnostics().residentPages, 1);
+  assert.equal(terrain.diagnostics().residentChunks, 1);
+  assert.equal(terrain.pages.get("west").presentation, null);
+  assert.ok(terrain.pages.get("east").presentation);
+  assert.equal(requested.filter((request) => request.range).length, 2);
+  terrain.dispose();
+});
+
 test("versions a same-origin bundle with its manifest hash while preserving Range", async () => {
   const requested = [];
   const source = manifest();
@@ -248,6 +367,54 @@ test("versions a same-origin bundle with its manifest hash while preserving Rang
     },
   ]);
   assert.equal(terrain.diagnostics().transfer.completeBundleFallback, false);
+  terrain.dispose();
+});
+
+test("swaps 1950s and 2030s scenery in place without refetching retained terrain", async () => {
+  const source = manifest();
+  source.boundsLocalM = [0, 0, 1_000, 1_000];
+  source.chunks[0].boundsLocalM = [0, 0, 1_000, 1_000];
+  source.chunks[0].generation = { seed: 99, landFraction: 1 };
+  const requested = [];
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/era-swap.manifest.json",
+    sceneryEra: "1950s",
+    qualityTier: "mobile",
+    fetch: async (url, options = {}) => {
+      requested.push({ url: String(url), range: options.headers?.Range ?? null });
+      if (!options.headers?.Range) {
+        return { ok: true, status: 200, json: async () => source };
+      }
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => new ArrayBuffer(18),
+      };
+    },
+  });
+  await terrain.ready;
+  const entry = terrain.entries.get("e00-n00");
+  assert.equal(entry.mesh.userData.scenery.period, "1950s");
+  assert.equal(terrain.material.uniforms.uModernScenery.value, 0);
+  const periodScenery = entry.mesh.children.find((child) => child.userData.scenery);
+  let disposedPeriodBatches = 0;
+  for (const child of periodScenery.children) {
+    child.addEventListener("dispose", () => disposedPeriodBatches++);
+  }
+
+  await terrain.setSceneryEra("modern");
+  assert.equal(terrain.diagnostics().sceneryEra, "modern");
+  assert.equal(entry.mesh.userData.scenery.period, "2030s");
+  assert.equal(terrain.material.uniforms.uModernScenery.value, 1);
+  assert.equal(disposedPeriodBatches, periodScenery.children.length,
+    "an era swap must release every replaced instanced GPU buffer");
+  assert.equal(requested.length, 2,
+    "the successful height range should be reused while only scenery instances change");
+  assert.equal(terrain.diagnostics().transfer.rangeCacheHits, 1);
+
+  await terrain.setSceneryEra("1950s");
+  assert.equal(entry.mesh.userData.scenery.period, "1950s");
+  assert.equal(requested.length, 2);
   terrain.dispose();
 });
 

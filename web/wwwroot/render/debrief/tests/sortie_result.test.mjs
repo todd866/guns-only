@@ -36,6 +36,46 @@ test("deck and carrier-structure losses remain physically distinct", () => {
   assert.match(structure.brief, /approach geometry/i);
 });
 
+test("carrier qualification makes trap evidence authoritative instead of combat victory copy", () => {
+  const result = sortieResultCopy({
+    mission_definition_id: "mission.carrier-qualification.v1",
+    carrier: true,
+    sortie_outcome: "VICTORY",
+    recovery: "Trap",
+    arrest_phase: "STOPPED",
+    wire: 3,
+    touchdown_grade: "FAIR",
+    touchdown_deviations: "FAST|LINEUP",
+    touchdown_primary_correction: "STABILIZE IAS",
+    opponent_health: 1,
+  });
+
+  assert.equal(result.title, "Trapped · Wire 3");
+  assert.match(result.brief, /FAIR/);
+  assert.match(result.brief, /FAST · LINEUP/);
+  assert.match(result.brief, /STABILIZE IAS/);
+  assert.doesNotMatch(result.brief, /opponent|damaged flight/i);
+});
+
+test("carrier qualification reports a bolter even when the generic outcome token is draw", () => {
+  const result = sortieResultCopy({
+    mission_definition_id: "mission.carrier-qualification.v1",
+    carrier: true,
+    sortie_outcome: "DRAW",
+    recovery: "Bolter",
+    bolter: true,
+    touchdown_grade: "NO GRADE",
+    touchdown_deviations: "HARD SINK RATE",
+    touchdown_primary_correction: "ADD POWER EARLIER",
+  });
+
+  assert.equal(result.title, "Bolter · No wire");
+  assert.match(result.brief, /No arresting wire was caught/);
+  assert.match(result.brief, /HARD SINK RATE/);
+  assert.match(result.brief, /ADD POWER EARLIER/);
+  assert.doesNotMatch(result.brief, /mutual|opponent/i);
+});
+
 test("an explicit opponent destruction event retains the combat-loss diagnosis", () => {
   const result = sortieResultCopy({
     sortie_outcome: "DEFEAT",

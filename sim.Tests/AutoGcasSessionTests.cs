@@ -19,8 +19,7 @@ public class AutoGcasSessionTests {
             gammaDegrees * Math.PI / 180.0,
             0.0,
             bankDegrees * Math.PI / 180.0,
-            FlightModel.F22APublicDataSurrogate.MassKg,
-            QuaternionD.Identity);
+            FlightModel.F22APublicDataSurrogate.MassKg);
 
     static BeatSetup ModernTestBeat(AircraftState player,
         PilotPhysiologyProfile? physiology = null) => new(
@@ -93,6 +92,38 @@ public class AutoGcasSessionTests {
         Assert.False(session.Player.LastAppliedCommand.EnvelopeOverride);
         Assert.False(session.PlayerWeaponsAuthorized);
         Assert.Equal(0, session.PlayerGun.RoundsFired);
+    }
+
+    [Fact]
+    public void ProtectionTransitionsAreRetainedAtTheExactAuthorityTick() {
+        var session = ThreatSession();
+        session.Begin();
+
+        session.StepFixed();
+
+        SessionEvent activation = Assert.Single(session.RecentEvents,
+            e => e.Type == SessionEventType.AutoGcasTransition);
+        Assert.Equal(1, activation.Tick);
+        Assert.Equal(CombatRole.Player, activation.Target);
+        Assert.Equal(AutoGcasPhase.FlyUp, activation.AutoGcasPhase);
+        Assert.Equal(AutoGcasInhibitReason.None,
+            activation.AutoGcasInhibitReason);
+        Assert.Equal("AUTO GCAS · FLYUP", activation.AutoGcasCue);
+        Assert.Equal(1, activation.AutoGcasActivationCount);
+
+        session.FeedKey(GKey.AutoGcasOverride, true);
+        session.StepFixed();
+
+        SessionEvent paddle = session.RecentEvents[^1];
+        Assert.Equal(SessionEventType.AutoGcasTransition, paddle.Type);
+        Assert.Equal(2, paddle.Tick);
+        Assert.Equal(AutoGcasPhase.Inhibited, paddle.AutoGcasPhase);
+        Assert.Equal(AutoGcasInhibitReason.PilotOverride,
+            paddle.AutoGcasInhibitReason);
+        Assert.Equal("GCAS PADDLE", paddle.AutoGcasCue);
+        Assert.Equal(1, paddle.AutoGcasActivationCount);
+        Assert.Equal(1, paddle.AutoGcasReleaseCount);
+        Assert.Equal(1, paddle.AutoGcasOverrideCount);
     }
 
     [Fact]

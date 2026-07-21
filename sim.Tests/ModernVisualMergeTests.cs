@@ -24,6 +24,7 @@ public class ModernVisualMergeTests {
 
         public void Step() {
             Detent.AirspeedMps = Sim.AirspeedMps;
+            Detent.MeasuredAngleOfAttackRad = Sim.AngleOfAttackRad;
             Detent.Tick(Keys, _timeMs, Sim.State,
                 FlightModel.F22APublicDataSurrogate,
                 // Deliberately well below max performance: Mission 7's normal pull must not be
@@ -200,6 +201,91 @@ public class ModernVisualMergeTests {
         Assert.True(finalSpecificEnergy < initialSpecificEnergy - 40.0,
             $"high-alpha manoeuvre did not collect an energy bill: {initialSpecificEnergy:F0} -> {finalSpecificEnergy:F0} m");
         Assert.True(rig.Sim.State.BodyAttitude.IsFinite && rig.Sim.State.BodyRates.IsFinite);
+    }
+
+    [Fact]
+    public void ReleasingOverrideRecapturesSafeAlphaAndRequiresANeutralPullBoundary() {
+        var rig = new ModernControlRig(speedMps: 105.0);
+        rig.Set(GKey.PullUp, true);
+        rig.Set(GKey.Override, true);
+        for (int tick = 0; tick < 3 * AircraftSim.TickHz; tick++) rig.Step();
+
+        Assert.True(rig.Sim.AngleOfAttackRad * Deg > 45.0,
+            "fixture must enter the high-alpha override region");
+
+        rig.Set(GKey.Override, false); // Up deliberately remains held.
+        double peakRecoveryVectorDeg = 0.0;
+        for (int tick = 0; tick < 3 * AircraftSim.TickHz; tick++) {
+            rig.Step();
+            peakRecoveryVectorDeg = Math.Max(peakRecoveryVectorDeg,
+                Math.Abs(rig.Sim.LastPitchThrustVectorAngleRad) * Deg);
+        }
+
+        Assert.True(rig.Detent.HighAlphaRecoveryActive,
+            "held pull must not re-arm while the release recovery owns the axis");
+        Assert.Equal(DemandTier.Baseline, rig.Detent.Tier);
+        Assert.Equal(1.0, rig.Detent.Command.GDemand, 2);
+        Assert.True(rig.Sim.AngleOfAttackRad * Deg < 13.0,
+            $"override release remained pinned near the lift break at {rig.Sim.AngleOfAttackRad * Deg:F1} deg");
+        Assert.InRange(peakRecoveryVectorDeg, 15.0,
+            FlightModel.F22APublicDataSurrogate.PitchThrustVectorMaxRad * Deg + 1e-6);
+        Assert.True(Math.Abs(rig.Sim.LastPitchThrustVectorMomentNm) <= 1e-6,
+            "the vector command should unwind once safe alpha is recaptured");
+
+        rig.Set(GKey.PullUp, false);
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && rig.Detent.HighAlphaRecoveryActive; tick++) rig.Step();
+        Assert.False(rig.Detent.HighAlphaRecoveryActive);
+
+        rig.Set(GKey.PullUp, true);
+        for (int tick = 0; tick < AircraftSim.TickHz; tick++) rig.Step();
+        Assert.Equal(DemandTier.MaxPerform, rig.Detent.Tier);
+        Assert.True(rig.Detent.Command.GDemand > 1.2,
+            "a fresh pull must regain the ordinary protected envelope");
+    }
+
+    [Fact]
+    public void F22PitchVectoringIsAnExplicitThrustDependentAirframeCapability() {
+        AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
+        Assert.Equal(20.0, parameters.PitchThrustVectorMaxRad * Deg, 8);
+        Assert.True(parameters.PitchThrustVectorMomentArmM > 0.0);
+
+        var powered = new ModernControlRig(speedMps: 105.0);
+        powered.Set(GKey.PullUp, true);
+        powered.Set(GKey.Override, true);
+        double peakAngleDeg = 0.0, peakMomentNm = 0.0;
+        for (int tick = 0; tick < 2 * AircraftSim.TickHz; tick++) {
+            powered.Step();
+            peakAngleDeg = Math.Max(peakAngleDeg,
+                Math.Abs(powered.Sim.LastPitchThrustVectorAngleRad) * Deg);
+            peakMomentNm = Math.Max(peakMomentNm,
+                Math.Abs(powered.Sim.LastPitchThrustVectorMomentNm));
+        }
+
+        Assert.InRange(peakAngleDeg, 10.0, 20.0 + 1e-6);
+        Assert.True(peakMomentNm > 100_000.0,
+            $"configured nozzle generated only {peakMomentNm:F0} N m");
+
+        var unpowered = new AircraftSim(new AircraftState(
+            new Vec3D(0.0, AltitudeM, 0.0), 105.0,
+            0.0, 0.0, 0.0, parameters.MassKg), parameters);
+        for (int tick = 0; tick < AircraftSim.TickHz; tick++)
+            unpowered.Step(new PilotCommand(1.0, 0.0, 0.0, 0.0,
+                CommandedAlphaRad: 1.10), Dt);
+        Assert.Equal(0.0, unpowered.LastPitchThrustVectorMomentNm, 12);
+
+        var fixedNozzle = parameters with {
+            PitchThrustVectorMaxRad = 0.0,
+            PitchThrustVectorMomentArmM = 0.0
+        };
+        var fixedSim = new AircraftSim(new AircraftState(
+            new Vec3D(0.0, AltitudeM, 0.0), 105.0,
+            0.0, 0.0, 0.0, fixedNozzle.MassKg), fixedNozzle);
+        for (int tick = 0; tick < AircraftSim.TickHz; tick++)
+            fixedSim.Step(new PilotCommand(1.0, 0.0, 1.0, 0.0,
+                CommandedAlphaRad: 1.10), Dt);
+        Assert.Equal(0.0, fixedSim.LastPitchThrustVectorAngleRad, 12);
+        Assert.Equal(0.0, fixedSim.LastPitchThrustVectorMomentNm, 12);
     }
 
     [Fact]

@@ -71,6 +71,20 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     bool NormalPullUsesMaxPerformance = false, double PositiveOverrideLimitG = -1.0,
     bool DynamicPressureScheduledPostStallOverride = false,
     double MaxThrustFraction = 1.35,
+    // Optional integrated pitch-thrust-vectoring control. Zero preserves an ordinary fixed nozzle.
+    // MaxRad is the thrust-force vector limit; MomentArmM is a reduced-order CG-to-resultant-nozzle
+    // lever arm. Alpha/rate gains belong to the transparent control-law surrogate, not an OEM law.
+    double PitchThrustVectorMaxRad = 0.0, double PitchThrustVectorMomentArmM = 0.0,
+    double PitchThrustVectorAlphaGain = 0.0,
+    double PitchThrustVectorRateGainSeconds = 0.0,
+    // Optional player gunnery assistance. A zero rate disables it. The assist owns pitch only,
+    // engages inside its lead-solution capture cone/range, and may move the pilot's protected
+    // load-factor request by at most MaxCorrectionG; roll, closure, and firing remain manual.
+    double GunneryPitchAssistMaxRateRad = 0.0,
+    double GunneryPitchAssistCaptureAngleRad = 0.0,
+    double GunneryPitchAssistMaxRangeM = 0.0,
+    double GunneryPitchAssistGainPerSecond = 0.0,
+    double GunneryPitchAssistMaxCorrectionG = 0.0,
     // Extra drag from buffet/separation as the wing approaches CLmax. The quadratic polar remains
     // authoritative below OnsetFraction; this smooth term only closes the hard-turn energy bill.
     double HighLiftDragOnsetFraction = 1.0, double HighLiftDragK = 0.0,
@@ -101,7 +115,8 @@ public readonly record struct StateDeriv(Vec3D DPos, Vec3D DVel, double DBank,
     QuaternionD DAttitude, BodyRates DBodyRates, double RollMomentNm);
 
 internal readonly record struct AeroResult(Vec3D Accel, Vec3D LiftDir, Vec3D AirVelocity,
-    double Alpha, double Beta, double Nz, double DynamicPressure);
+    double Alpha, double Beta, double Nz, double DynamicPressure,
+    double PitchThrustVectorAngleRad, double PitchThrustVectorMomentNm);
 
 public static class FlightModel {
     public const double G0 = 9.80665;
@@ -213,7 +228,9 @@ public static class FlightModel {
     /// fact sheet's 840 ft2 wing, 43,340 lb empty weight, 18,000 lb internal fuel, +9 G limit,
     /// and two engines in the 35,000 lb-thrust class. The military/afterburner split, drag polar,
     /// inertias, control derivatives and fuel-flow anchors below are transparent mission
-    /// surrogates, not a claim to an OEM deck, modern FLCS, thrust-vectoring or classified data.
+    /// surrogates, not a claim to an OEM deck, exact modern FLCS or classified data. The public
+    /// two-dimensional pitch-thrust-vectoring capability is represented by an explicitly bounded
+    /// reduced-order force/moment allocator.
     /// https://www.af.mil/About-Us/Fact-Sheets/Display/Article/104506/f-22-raptor/
     public static readonly AircraftParams F22APublicDataSurrogate = new(
         MassKg: 27700.0,
@@ -249,6 +266,21 @@ public static class FlightModel {
         PositiveOverrideLimitG: 11.0,
         DynamicPressureScheduledPostStallOverride: true,
         MaxThrustFraction: 1.35,
+        // NASA identifies +/-20 degrees of F-22 pitch vectoring. The 6.5 m resultant lever arm and
+        // gains are labelled gameplay surrogates: nozzle force is physical and thrust-dependent,
+        // while the unpublished integrated control allocation is not being guessed as aircraft data.
+        PitchThrustVectorMaxRad: 0.349065850398866,
+        PitchThrustVectorMomentArmM: 6.5,
+        PitchThrustVectorAlphaGain: 0.85,
+        PitchThrustVectorRateGainSeconds: 0.12,
+        // Gameplay assist, not an F-22 performance claim. Inside an eight-degree/1 km ballistic-
+        // lead gate it requests up to 17 deg/s of pitch convergence and may contribute at most
+        // three protected G. The player still has to solve roll plane, closure, range, and trigger.
+        GunneryPitchAssistMaxRateRad: 0.30,
+        GunneryPitchAssistCaptureAngleRad: 0.139626340159546,
+        GunneryPitchAssistMaxRangeM: 1000.0,
+        GunneryPitchAssistGainPerSecond: 2.4,
+        GunneryPitchAssistMaxCorrectionG: 3.0,
         HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 2.8,
         WingSpanM: 13.56, PostStallAlphaCommandRad: 1.10,
         PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
@@ -434,8 +466,8 @@ public static class FlightModel {
         double rho = atmosphere.Sample(r.Pos.Y).DensityKgM3;
         double q = 0.5 * rho * speed * speed;
         var aero = Aerodynamics(r, c, p, wind, netThrustN, configuration, atmosphere);
-        var (dAttitude, dRates, rollMomentNm) = RotationalDerivatives(r, c, p, liftRef, controlVhat, q,
-            speed, configuration, atmosphere);
+        var (dAttitude, dRates, rollMomentNm) = RotationalDerivatives(r, c, p, liftRef,
+            controlVhat, q, speed, netThrustN, configuration, atmosphere);
         return new StateDeriv(r.Vel, aero.Accel, BankRate(r.Bank, c.BankTarget, p),
             dAttitude, dRates, rollMomentNm);
     }
@@ -473,7 +505,12 @@ public static class FlightModel {
                     + System.Math.Abs(c.Rudder) * 0.15 * p.CD0 + beta * beta * 0.08;
         double liftAccel = q * p.WingAreaM2 * cl / r.Mass;
         double dragAccel = q * p.WingAreaM2 * cd / r.Mass;
-        double thrustAccel = System.Math.Max(0.0, netThrustN) / r.Mass;
+        double usableThrustN = System.Math.Max(0.0, netThrustN);
+        double thrustAccel = usableThrustN / r.Mass;
+        double pitchThrustVectorAngle = PitchThrustVectorAngle(r, c, p, vhat, q,
+            configuration);
+        double pitchThrustVectorMoment = PitchThrustVectorMoment(
+            pitchThrustVectorAngle, usableThrustN, p);
 
         // Aerodynamic lift and side force stay perpendicular to the relative wind while their
         // orientation comes from the real body axes. Rudder authority retains the tuned jink term.
@@ -482,15 +519,51 @@ public static class FlightModel {
         var sidePlane = bodyRight - vhat * bodyRight.Dot(vhat);
         var sideDir = sidePlane.Length < 1e-9 ? bodyRight : sidePlane.Normalized();
         double sideAccel = c.Rudder * 0.06 * speed - q * p.WingAreaM2 * p.CYBeta * beta / r.Mass;
-        var accel = bodyForward * thrustAccel - vhat * dragAccel + liftDir * liftAccel
+        // Positive vector angle is a positive-q (nose-up) control demand. With the nozzles aft of
+        // the CG, the corresponding thrust resultant points toward body-down; the lever arm turns
+        // that force into the positive pitch moment returned alongside this force evaluation.
+        var thrustDirection = bodyForward * System.Math.Cos(pitchThrustVectorAngle)
+            - bodyUp * System.Math.Sin(pitchThrustVectorAngle);
+        var accel = thrustDirection * thrustAccel - vhat * dragAccel + liftDir * liftAccel
                   + sideDir * sideAccel - new Vec3D(0, G0, 0);
-        return new AeroResult(accel, liftDir, vAir, alpha, beta, liftAccel / G0, q);
+        return new AeroResult(accel, liftDir, vAir, alpha, beta, liftAccel / G0, q,
+            pitchThrustVectorAngle, pitchThrustVectorMoment);
     }
+
+    static double PitchThrustVectorAngle(in RawState r, in PilotCommand c,
+        in AircraftParams p, in Vec3D vhat, double dynamicPressure,
+        in AirframeAerodynamicState configuration) {
+        if (p.PitchThrustVectorMaxRad <= 0.0
+            || p.PitchThrustVectorMomentArmM <= 0.0
+            || p.PitchThrustVectorAlphaGain <= 0.0
+            || double.IsFinite(c.CommandedPitchRad))
+            return 0.0;
+
+        var attitude = r.Attitude.Normalized();
+        var bodyUp = attitude.Rotate(new Vec3D(0, 1, 0));
+        var bodyForward = attitude.Rotate(new Vec3D(0, 0, 1));
+        double alpha = System.Math.Atan2(-vhat.Dot(bodyUp), vhat.Dot(bodyForward));
+        double separation = SeparationFraction(alpha, p);
+        if (separation <= 0.0) return 0.0;
+
+        double targetAlpha = TargetAlpha(r, c, p, dynamicPressure, configuration);
+        double demand = p.PitchThrustVectorAlphaGain * (targetAlpha - alpha)
+            - p.PitchThrustVectorRateGainSeconds * r.BodyRates.Q;
+        // The nozzles are integrated into the same alpha/rate loop as the aerodynamic surfaces.
+        // Separation schedules them in continuously; attached flight remains bit-for-bit fixed-
+        // nozzle until the ordinary controls begin losing effectiveness.
+        return System.Math.Clamp(demand, -p.PitchThrustVectorMaxRad,
+            p.PitchThrustVectorMaxRad) * separation;
+    }
+
+    static double PitchThrustVectorMoment(double angleRad, double netThrustN,
+        in AircraftParams p) => netThrustN * p.PitchThrustVectorMomentArmM
+            * System.Math.Sin(angleRad);
 
     static (QuaternionD dAttitude, BodyRates dRates, double rollMomentNm) RotationalDerivatives(in RawState r,
         in PilotCommand c, in AircraftParams p, in Vec3D liftRef, in Vec3D vhat,
-        double dynamicPressure, double speed, in AirframeAerodynamicState configuration,
-        IAtmosphereModel atmosphere) {
+        double dynamicPressure, double speed, double netThrustN,
+        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) {
         var attitude = r.Attitude.Normalized();
         var target = TargetAttitude(r, c, p, liftRef, vhat, dynamicPressure, configuration);
         var error = attitude.Conjugate() * target;
@@ -627,6 +700,10 @@ public static class FlightModel {
         double meanChord = p.WingAreaM2 / System.Math.Max(span, 1e-6);
         pitchMoment += dynamicPressure * p.WingAreaM2 * meanChord
             * configuration.PitchMomentCoefficientIncrement;
+        double pitchThrustVectorAngle = PitchThrustVectorAngle(r, c, p, vhat,
+            dynamicPressure, configuration);
+        pitchMoment += PitchThrustVectorMoment(pitchThrustVectorAngle,
+            System.Math.Max(0.0, netThrustN), p);
 
         double yawMoment = System.Math.Clamp((p.YawStiffnessNmRad * errR
             - p.YawDampingNms * rates.R + coordinatorMoment) * yawStabilityBlend

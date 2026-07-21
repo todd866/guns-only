@@ -22,10 +22,11 @@ test("AoA indexer ignores noisy threshold crossings until a qualified state pers
   assert.equal(qualifier.state, "FAST", "exit hysteresis prevents a boundary chatter pulse");
 });
 
-test("LSO-style display qualifier persists ordinary calls but escalates an urgent waveoff immediately", () => {
+test("LSO display persists ordinary calls but escalates power and waveoff commands immediately", () => {
   const qualifier = new DisplayCueQualifier({ acquireSeconds: 0.25, releaseSeconds: 0.35 });
   const ball = { key: "ON THE BALL", call: "ON THE BALL" };
   const power = { key: "POWER", call: "POWER" };
+  const addPower = { key: "ADD POWER NOW", call: "ADD POWER NOW" };
   const waveoff = { key: "WAVE OFF", call: "WAVE OFF" };
   assert.equal(qualifier.update(ball, 0.02)?.call, "ON THE BALL");
 
@@ -37,5 +38,6 @@ test("LSO-style display qualifier persists ordinary calls but escalates an urgen
   assert.equal(qualifier.current?.call, "POWER");
   for (let index = 0; index < 10; index += 1) qualifier.update(null, 0.02);
   assert.equal(qualifier.current?.call, "POWER", "brief call dropout does not blink the footer");
+  assert.equal(qualifier.update(addPower, 0.001, { urgent: true })?.call, "ADD POWER NOW");
   assert.equal(qualifier.update(waveoff, 0.001, { urgent: true })?.call, "WAVE OFF");
 });

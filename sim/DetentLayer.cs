@@ -69,6 +69,12 @@ public sealed class DetentLayer {
     public double AirspeedMps = double.NaN;     // authoritative |ground velocity - wind| for protection in every mode
     public double ApproachAirspeedMps = double.NaN; // session supplies filtered local-air speed
     public double DeckClosureMps = double.NaN;      // positive toward the moving landing area
+    /// Authoritative incidence feedback for override-release recovery. NaN keeps standalone legacy
+    /// callers stateless; SimulationSession and flown control rigs supply AircraftSim's air-relative
+    /// measurement on every tick.
+    public double MeasuredAngleOfAttackRad = double.NaN;
+    public bool HighAlphaRecoveryActive { get; private set; }
+    bool _overrideIncidenceActiveLastTick;
     public AirframeAerodynamicState AerodynamicConfiguration =
         AirframeAerodynamicState.Clean;
     /// <summary>
@@ -167,6 +173,29 @@ public sealed class DetentLayer {
         // actuator targets, never the keyboard/override flag itself.
         bool over = keys.PhaseAt(GKey.Override, nowMs) != KeyPhase.Idle;
         double cap = over ? overrideMax : maxPerform;
+        bool overrideIncidenceActive = !ApproachMode && over
+            && (pull != KeyPhase.Idle || push != KeyPhase.Idle);
+        if (_overrideIncidenceActiveLastTick && !over
+            && p.DynamicPressureScheduledPostStallOverride
+            && double.IsFinite(MeasuredAngleOfAttackRad)) {
+            double breakAlpha = MeasuredAngleOfAttackRad >= 0.0
+                ? FlightModel.AlphaAeroMax(p) : -FlightModel.AlphaAeroMin(p);
+            if (System.Math.Abs(MeasuredAngleOfAttackRad) > breakAlpha + 0.035)
+                HighAlphaRecoveryActive = true;
+        }
+        // A fresh deliberate override always owns the axis. Otherwise recovery remains captured
+        // until incidence is safely inside the break and the pilot has crossed a neutral pitch-
+        // input boundary; a still-held Up key cannot immediately pin the jet back on the limiter.
+        if (over) HighAlphaRecoveryActive = false;
+        else if (HighAlphaRecoveryActive
+            && pull == KeyPhase.Idle && push == KeyPhase.Idle
+            && double.IsFinite(MeasuredAngleOfAttackRad)) {
+            double recoveryExitAlpha = 0.70 * (MeasuredAngleOfAttackRad >= 0.0
+                ? FlightModel.AlphaAeroMax(p) : -FlightModel.AlphaAeroMin(p));
+            if (System.Math.Abs(MeasuredAngleOfAttackRad) <= recoveryExitAlpha)
+                HighAlphaRecoveryActive = false;
+        }
+        _overrideIncidenceActiveLastTick = overrideIncidenceActive;
 
         if (ApproachMode) {
             double onSpeedAoaRad = EffectiveOnSpeedAoARad(p);
@@ -206,7 +235,20 @@ public sealed class DetentLayer {
             if (push != KeyPhase.Idle || _waveOffSeconds >= 4.0 || s.Gamma >= 0.07) _waveOff = false;
         }
         double target; DemandTier tier;
-        if (pull != KeyPhase.Idle) {
+        if (HighAlphaRecoveryActive) {
+            // Modern high-alpha re-entry: releasing Space is an unambiguous request to restore the
+            // protected envelope. Capture a neutral load-factor command while the integrated
+            // alpha/rate loop (including any configured thrust vectoring) drives through the break.
+            // Push remains available as an explicit unload; held pull is ignored until re-armed.
+            tier = DemandTier.Baseline;
+            StickyOffsetG = 0.0;
+            if (push != KeyPhase.Idle) {
+                double recoveryFloor = System.Math.Max(
+                    FlightModel.NzAeroMin(s, p, AirspeedMps, AtmosphereModel), -1.5);
+                target = System.Math.Max(recoveryFloor, -1.0);
+            } else target = 1.0;
+        }
+        else if (pull != KeyPhase.Idle) {
             // A modern max-performance control law is not the doctrine "valley": full ordinary
             // pull deliberately rides the protected envelope and should not provoke an EASE cue
             // merely because the tactical adviser currently recommends less G. Space remains the

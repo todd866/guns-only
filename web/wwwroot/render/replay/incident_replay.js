@@ -612,11 +612,13 @@ export function analyseIncidentReplay(clip) {
   });
 }
 
-export function replayFrameState(liveState, frame, replayEvents = [], eventStreamId = "") {
+export function replayFrameState(liveState, frame, replayEvents = [], eventStreamId = "",
+  replayCamera = "CHASE") {
   if (!frame) return liveState;
   return {
     ...liveState,
     replay_external: true,
+    replay_camera: replayCamera,
     event_stream_id: eventStreamId,
     recent_events: Array.isArray(replayEvents) ? replayEvents : [],
     // Combat projectile history, cumulative counters and damage state are not part of the v4
@@ -709,6 +711,10 @@ export class IncidentReplayController {
     this.lastLoadedId = 0;
     this.playbackGeneration = 0;
     this.eventStreamId = "";
+    this.playbackRate = 1;
+    this.paused = false;
+    this.playheadTime = 0;
+    this.camera = "CHASE";
   }
 
   ingest(state, nowMs) {
@@ -734,6 +740,10 @@ export class IncidentReplayController {
     this.startedAtMs = finite(nowMs);
     this.playbackGeneration += 1;
     this.eventStreamId = `incident-replay:${this.clip.id}:${this.playbackGeneration}`;
+    this.playbackRate = 1;
+    this.paused = false;
+    this.playheadTime = this.clip.startTime;
+    this.camera = "CHASE";
     this.active = true;
     return true;
   }
@@ -742,15 +752,84 @@ export class IncidentReplayController {
     this.active = false;
   }
 
+  currentTime(nowMs) {
+    if (!this.clip) return 0;
+    if (this.paused) return this.playheadTime;
+    const elapsed = Math.max(0, (finite(nowMs) - this.startedAtMs) / 1000);
+    return this.clip.startTime + elapsed * this.playbackRate;
+  }
+
+  seek(replayTime, nowMs) {
+    if (!this.clip) return false;
+    const target = Math.max(this.clip.startTime,
+      Math.min(this.clip.endTime, finite(replayTime, this.clip.startTime)));
+    this.playheadTime = target;
+    this.playbackGeneration += 1;
+    this.eventStreamId = `incident-replay:${this.clip.id}:${this.playbackGeneration}`;
+    this.startedAtMs = finite(nowMs) - ((target - this.clip.startTime)
+      / Math.max(0.01, this.playbackRate)) * 1000;
+    this.active = true;
+    return true;
+  }
+
+  seekFraction(fraction, nowMs) {
+    if (!this.clip) return false;
+    const bounded = Math.max(0, Math.min(1, finite(fraction)));
+    return this.seek(this.clip.startTime + this.clip.duration * bounded, nowMs);
+  }
+
+  setPaused(paused, nowMs) {
+    if (!this.clip || !this.active) return false;
+    const next = Boolean(paused);
+    if (next === this.paused) return true;
+    if (next) this.playheadTime = Math.min(this.clip.endTime, this.currentTime(nowMs));
+    else this.startedAtMs = finite(nowMs) - ((this.playheadTime - this.clip.startTime)
+      / Math.max(0.01, this.playbackRate)) * 1000;
+    this.paused = next;
+    return true;
+  }
+
+  togglePaused(nowMs) {
+    return this.setPaused(!this.paused, nowMs);
+  }
+
+  setPlaybackRate(rate, nowMs) {
+    if (!this.clip) return false;
+    const next = [0.25, 0.5, 1, 2].includes(Number(rate)) ? Number(rate) : null;
+    if (next === null) return false;
+    const current = Math.min(this.clip.endTime, this.currentTime(nowMs));
+    this.playbackRate = next;
+    this.playheadTime = current;
+    this.startedAtMs = finite(nowMs) - ((current - this.clip.startTime) / next) * 1000;
+    return true;
+  }
+
+  setCamera(camera) {
+    const next = String(camera || "").toUpperCase();
+    if (!["CHASE", "DECK", "COCKPIT"].includes(next)) return false;
+    this.camera = next;
+    return true;
+  }
+
+  jumpToNextEvent(nowMs) {
+    if (!this.clip?.events?.length) return false;
+    const current = this.currentTime(nowMs);
+    const next = this.clip.events.find((event) => event.t > current + 0.03)
+      ?? this.clip.events[0];
+    return this.seek(next.t, nowMs);
+  }
+
   frame(nowMs) {
     if (!this.active || !this.clip) return null;
-    const elapsed = Math.max(0, (finite(nowMs) - this.startedAtMs) / 1000);
-    if (elapsed > this.clip.duration + IncidentReplayController.END_HOLD_SECONDS) {
+    const replayTime = this.currentTime(nowMs);
+    const overrun = replayTime - this.clip.endTime;
+    if (!this.paused && overrun > IncidentReplayController.END_HOLD_SECONDS) {
       this.active = false;
       return null;
     }
-    const replayTime = this.clip.startTime + Math.min(elapsed, this.clip.duration);
-    return interpolateIncidentReplay(this.clip, replayTime);
+    const bounded = Math.min(replayTime, this.clip.endTime);
+    if (this.paused) this.playheadTime = bounded;
+    return interpolateIncidentReplay(this.clip, bounded);
   }
 
   eventsThrough(replayTime) {
@@ -775,6 +854,7 @@ export function advanceIncidentReplay(controller, liveState, nowMs) {
       frame,
       replayEvents,
       frame ? controller.eventStreamId : "",
+      frame ? controller.camera : "CHASE",
     ),
     deferFinishedDebrief: liveState?.finished === true && frame !== null,
   });

@@ -108,14 +108,15 @@ public static partial class WebBridge {
     public static int GetDeckConfiguration() =>
         _deckConfiguration == Carrier.DeckConfiguration.Angled ? 1 : 0;
 
+    /// <summary>
+    /// Update the next carrier staging preference without mutating the live or previewed session.
+    /// StartBeat remains the single explicit authority boundary for applying the geometry.
+    /// </summary>
     [JSExport]
     public static void SetDeckConfiguration(int value) {
         _deckConfiguration = value == 1
             ? Carrier.DeckConfiguration.Angled
             : Carrier.DeckConfiguration.Axial;
-        if (Session.BeatIndex is 5 or 6)
-            Session.StartBeatWithTerrain(Session.BeatIndex,
-                TerrainForBeat(Session.BeatIndex), _deckConfiguration);
     }
 
     [JSExport]
@@ -162,6 +163,7 @@ public static partial class WebBridge {
         bool pilotGzValid = _player.HasValidPilotNormalAcceleration;
         AutoGcasState autoGcas = Session.AutoGcas;
         AutoGcasPrediction autoGcasPrediction = autoGcas.Prediction;
+        GunneryPitchAssistState gunneryPitchAssist = Session.GunneryPitchAssist;
         string autoGcasProfileIdJson = JsonString(Session.PlayerAutoGcasCapability.Id);
         string autoGcasCueJson = JsonString(autoGcas.Cue);
         Carrier? _carrier = Session.Carrier;
@@ -452,6 +454,16 @@ public static partial class WebBridge {
             + $"\"lateral_cl_r\":{_beat.PlayerAir.ClR:F6},\"lateral_cl_delta_a_per_rad\":{_beat.PlayerAir.ClDeltaA:F6},"
             + $"\"lateral_cl_delta_r_per_rad\":{_beat.PlayerAir.ClDeltaR:F6},"
             + $"\"roll_moment_nm\":{_player.LastRollMomentNm:F1},"
+            + $"\"pitch_thrust_vector_deg\":{_player.LastPitchThrustVectorAngleRad * 57.29577951308232:F3},"
+            + $"\"pitch_thrust_vector_moment_nm\":{_player.LastPitchThrustVectorMomentNm:F1},"
+            + $"\"pitch_thrust_vector_limit_deg\":{_beat.PlayerAir.PitchThrustVectorMaxRad * 57.29577951308232:F3},"
+            + $"\"gunnery_pitch_assist\":{(gunneryPitchAssist.Active ? "true" : "false")},"
+            + $"\"gunnery_pitch_error_deg\":{gunneryPitchAssist.PitchLeadErrorRad * 57.29577951308232:F3},"
+            + $"\"gunnery_total_lead_error_deg\":{gunneryPitchAssist.TotalLeadErrorRad * 57.29577951308232:F3},"
+            + $"\"gunnery_pitch_rate_cmd_dps\":{gunneryPitchAssist.RequestedPitchRateRadPerSecond * 57.29577951308232:F3},"
+            + $"\"gunnery_pitch_assist_g\":{gunneryPitchAssist.AssistedLoadFactorG:F3},"
+            + $"\"gunnery_pitch_assist_delta_g\":{gunneryPitchAssist.LoadFactorCorrectionG:F3},"
+            + $"\"high_alpha_recovery\":{(_detents.HighAlphaRecoveryActive ? "true" : "false")},"
             + $"\"g_valley\":{_detents.ValleyG:F3},"
             + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
             + $"\"g_hardmax\":{Protection.HardMaxG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
@@ -817,6 +829,7 @@ public static partial class WebBridge {
         SessionEventType.SortieFinished => "SORTIE_FINISHED",
         SessionEventType.ArrestmentFailed => "ARRESTMENT_FAILED",
         SessionEventType.RaidTargetLeaked => "RAID_TARGET_LEAKED",
+        SessionEventType.AutoGcasTransition => "AUTO_GCAS_TRANSITION",
         _ => "UNKNOWN"
     };
 
@@ -885,7 +898,24 @@ public static partial class WebBridge {
                 .Append("\",\"count\":").Append(e.Count)
                 .Append(",\"outcome\":\"").Append(SortieOutcomeToken(e.Outcome))
                 .Append("\",\"surface\":\"").Append(ImpactSurfaceToken(e.Surface))
-                .Append("\"}");
+                .Append('"');
+            if (e.Type == SessionEventType.AutoGcasTransition
+                && e.AutoGcasPhase is { } autoGcasPhase
+                && e.AutoGcasInhibitReason is { } autoGcasInhibitReason) {
+                json.Append(",\"auto_gcas_phase\":\"")
+                    .Append(AutoGcasPhaseToken(autoGcasPhase))
+                    .Append("\",\"auto_gcas_inhibit_reason\":\"")
+                    .Append(AutoGcasInhibitToken(autoGcasInhibitReason))
+                    .Append("\",\"auto_gcas_cue\":")
+                    .Append(JsonString(e.AutoGcasCue))
+                    .Append(",\"auto_gcas_activation_count\":")
+                    .Append(e.AutoGcasActivationCount)
+                    .Append(",\"auto_gcas_release_count\":")
+                    .Append(e.AutoGcasReleaseCount)
+                    .Append(",\"auto_gcas_override_count\":")
+                    .Append(e.AutoGcasOverrideCount);
+            }
+            json.Append('}');
         }
         json.Append("],");
         return json.ToString();
@@ -902,6 +932,7 @@ public static partial class WebBridge {
         ArrestmentModel arrestment = Session.Arrestment;
         CatapultLaunchModel catapult = Session.Catapult;
         RecoveryDifficulty difficulty = Session.Difficulty;
+        CarrierPassResult pass = Session.CarrierPass;
         BurbleField? burble = Session.Burble;
 
         var (along, cross, height) = c.LandingFrame(playerPosition);
@@ -941,6 +972,22 @@ public static partial class WebBridge {
             Carrier.TouchdownCorrection.MeetAdaptiveTarget => "MEET TRAINING TARGET",
             _ => "NONE"
         };
+        string passGrade = pass.Grade switch {
+            CarrierPassGrade.NoGrade => "NO GRADE",
+            _ => pass.Grade.ToString().ToUpperInvariant()
+        };
+        string passDeviations = pass.Deviations.ToString().ToUpperInvariant()
+            .Replace(", ", "|");
+        string passCorrection = pass.PrimaryCorrection switch {
+            Carrier.TouchdownCorrection.WaveOffEarlier => "WAVE OFF EARLIER",
+            Carrier.TouchdownCorrection.AddPowerEarlier => "ADD POWER EARLIER",
+            Carrier.TouchdownCorrection.StabilizeIas => "STABILIZE IAS",
+            Carrier.TouchdownCorrection.EstablishLineupEarlier => "ESTABLISH LINEUP EARLIER",
+            Carrier.TouchdownCorrection.FlyOnSpeedAoa => "FLY ON-SPEED AOA",
+            Carrier.TouchdownCorrection.FlyThroughNoFlare => "FLY THROUGH — DO NOT FLARE",
+            Carrier.TouchdownCorrection.MeetAdaptiveTarget => "MEET TRAINING TARGET",
+            _ => "NONE"
+        };
         return $"\"carrier\":true,"
             + $"\"cx\":{c.Position.X:F2},\"cy\":{c.Position.Y:F2},\"cz\":{c.Position.Z:F2},"
             + $"\"cheading\":{c.HeadingRad:F5},\"deck_len\":{c.DeckLengthM:F1},\"deck_w\":{c.DeckHalfWidthM * 2:F1},\"deck_alt\":{c.DeckAltM:F1},"
@@ -965,6 +1012,11 @@ public static partial class WebBridge {
             + $"\"wire\":{wire},\"touchdown_quality\":\"{quality}\",\"hook_outcome\":\"{hook}\","
             + $"\"touchdown_grade\":\"{grade}\",\"touchdown_deviations\":\"{deviations}\","
             + $"\"touchdown_primary_correction\":\"{correction}\","
+            + $"\"carrier_pass_grade\":\"{passGrade}\",\"carrier_pass_deviations\":\"{passDeviations}\","
+            + $"\"carrier_pass_primary_correction\":\"{passCorrection}\","
+            + $"\"carrier_pass_phase_summary\":{JsonString(pass.PhaseSummary)},"
+            + $"\"carrier_pass_waveoff_required\":{(pass.WaveOffRequired ? "true" : "false")},"
+            + $"\"carrier_pass_waveoff_complied\":{(pass.WaveOffComplied ? "true" : "false")},"
             + $"\"soft_trap\":{(touchdown.Quality == Carrier.TouchdownQuality.Soft && recovery == Carrier.Recovery.Trap ? "true" : "false")},"
             + $"\"hard_trap\":{(touchdown.Quality == Carrier.TouchdownQuality.Hard && recovery == Carrier.Recovery.Trap ? "true" : "false")},"
             + $"\"arrest_phase\":\"{arrestPhase}\",\"arrest_speed_kts\":{arrestment.RelativeSpeedMps * 1.94384:F2},"

@@ -12,10 +12,13 @@ public class ReactiveBanditTests {
         new(new Vec3D(x, y, z), speed, 0.0, chi, 0.0, FlightModel.Sabre.MassKg);
 
     [Fact]
-    public void CarrierBeatBuildsTheReactiveOpponent() {
+    public void CarrierQualificationKeepsCombatOutOfTheRecoveryAuthority() {
         var beat = Beats.CarrierApproach();
-        Assert.True(beat.UsesReactiveBandit);
-        Assert.IsType<ReactiveBandit>(beat.CreateBandit());
+        Assert.False(beat.UsesReactiveBandit);
+        Assert.True(beat.RecoveryCompletesSortie);
+        Assert.Equal(0, beat.CombatRules.PlayerAmmo);
+        Assert.Equal(0, beat.CombatRules.OpponentAmmo);
+        Assert.IsType<RailBandit>(beat.CreateBandit());
     }
 
     [Fact]

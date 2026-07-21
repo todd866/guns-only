@@ -51,6 +51,6 @@ test("Auto-GCAS presentation is demand-driven and G-LOC grants no aural channel"
     /const conscious = frame\.state\.pilot_conscious !== false;[\s\S]*?this\.audioEnabled && conscious/,
     "an unconscious pilot must not receive impossible audio information");
   assert.match(source,
-    /if \(gcasAvailable\)[\s\S]*?K  AGCAS PADDLE/,
+    /if \(gcasAvailable\)[\s\S]*?binding\("gcasOverride", "KeyK"\)[\s\S]*?AGCAS PADDLE/,
     "paddle help must appear only on a capable aircraft");
 });

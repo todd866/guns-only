@@ -54,6 +54,41 @@ export class StableRoundedValue {
 }
 
 /**
+ * A presentation-only opacity envelope for cues that would otherwise flash when an authoritative
+ * boolean crosses a threshold for a single frame. Urgent callers can still request immediate
+ * onset; the release envelope only prevents an instantaneous visual dropout.
+ */
+export class VisibilityEnvelope {
+  constructor({ attackSeconds = 0.05, releaseSeconds = 0.16 } = {}) {
+    this.attackSeconds = Math.max(0, finite(attackSeconds, 0.05));
+    this.releaseSeconds = Math.max(0, finite(releaseSeconds, 0.16));
+    this.reset();
+  }
+
+  reset(value = 0) {
+    this.value = clamp(finite(value, 0), 0, 1);
+  }
+
+  update(visible, deltaSeconds = 0, { instantAttack = false, instantRelease = false } = {}) {
+    const target = visible === true ? 1 : 0;
+    if ((target === 1 && instantAttack) || (target === 0 && instantRelease)) {
+      this.value = target;
+      return this.value;
+    }
+    const duration = target > this.value ? this.attackSeconds : this.releaseSeconds;
+    if (duration === 0) {
+      this.value = target;
+      return this.value;
+    }
+    const step = clamp(finite(deltaSeconds, 0), 0, 0.25) / duration;
+    this.value = target > this.value
+      ? Math.min(target, this.value + step)
+      : Math.max(target, this.value - step);
+    return this.value;
+  }
+}
+
+/**
  * Presentation-only filtering for fast, continuously moving scales. It removes sample/rounding
  * chatter without changing simulation truth, warnings, limits, gun solutions, or recorded data.
  * Maximum-lag clamps keep rapid F-22 acceleration and descent immediately legible.

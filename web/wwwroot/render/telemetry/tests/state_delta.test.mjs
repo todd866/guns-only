@@ -85,6 +85,8 @@ test("a real batch capacity split promotes the next queued delta into an indepen
     build: "test",
   }));
   assert.ok(rows[1].d);
+  rows[3].authority_tick_delta = 6;
+  rows[3].sample_reason = "cadence";
 
   const first = buildTelemetryBatch({
     session: "test",
@@ -101,6 +103,8 @@ test("a real batch capacity split promotes the next queued delta into an indepen
   assert.ok(retained[1].s);
   assert.equal(retained[1].d, undefined);
   assert.deepEqual(retained[1].s, { ...constants, tick: 3 });
+  assert.equal(retained[1].authority_tick_delta, 6);
+  assert.equal(retained[1].sample_reason, "cadence");
 
   const second = buildTelemetryBatch({
     session: "test",

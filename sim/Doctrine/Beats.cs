@@ -24,6 +24,11 @@ public sealed record CombatConfig(
         OpponentAmmo: 0,
         PlayerHitsToDefeat: 4,
         OpponentHitsToDefeat: GunKill.DefaultHitsToKill);
+    public static CombatConfig CarrierRecoveryOnly { get; } = new(
+        PlayerAmmo: 0,
+        OpponentAmmo: 0,
+        PlayerHitsToDefeat: 4,
+        OpponentHitsToDefeat: GunKill.DefaultHitsToKill);
     public static CombatConfig ModernVisualMerge { get; } = new(
         PlayerAmmo: 480,
         OpponentAmmo: 150,
@@ -155,7 +160,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     VisualMergeEvaluationConfig? VisualMergeEvaluation = null,
     bool UsesNeutralMergeBandit = false,
     DroneRaidScenarioDefinition? DroneRaid = null,
-    PilotPhysiologyProfile? PlayerPhysiologyProfile = null) {
+    PilotPhysiologyProfile? PlayerPhysiologyProfile = null,
+    bool RecoveryCompletesSortie = false) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
@@ -342,10 +348,11 @@ public static class Beats {
         var start = carrier.LandingPoint(along: -1500, height: 90);
         return new BeatSetup("Carrier approach",
         Player: new AircraftState(start, 70, -0.06, carrier.LandingHeadingRad, 0, FlightModel.Sabre.MassKg),
-        // A Sabre-class bogey ~3.1 km from the finals spawn, displaced right and above the egress.
-        // It now owns a reactive AircraftSim: it points into the merge, breaks a gun threat, jinks,
-        // unloads for energy, and returns toward this fight volume instead of flying a straight rail.
-        Bandit: new AircraftState(new Vec3D(450, 650, 1500), 105, 0, 0.0, 0, FlightModel.Sabre.MassKg),
+        // The one-opponent ABI still needs a finite aircraft state, but carrier qualification is a
+        // recovery attempt rather than a hidden combat sortie. Keep the inert rail well outside the
+        // recovery volume so neither its navigation nor an incidental impact can author the result.
+        Bandit: new AircraftState(new Vec3D(0, 1500, 50000), 120, 0, 0.0, 0,
+            FlightModel.Sabre.MassKg),
         Law: new ApproachLaw(),
         BanditTimeline: new() {
             (0.0, new PilotCommand(1.0, 0.0, 0.30, 0)),
@@ -354,9 +361,10 @@ public static class Beats {
         // The real target: a ~250 m × 30 m carrier, 20 m freeboard, steaming north into the wind.
         // Kinematic — it does not fly, it steams.
         Carrier: carrier,
-        UsesReactiveBandit: true,
-        Combat: CombatConfig.CarrierQualification,
-        Mission: KoreaMission("mission.carrier-qualification.v1"));
+        UsesReactiveBandit: false,
+        Combat: CombatConfig.CarrierRecoveryOnly,
+        Mission: KoreaMission("mission.carrier-qualification.v1"),
+        RecoveryCompletesSortie: true);
     }
 
     /// <summary>
@@ -396,8 +404,9 @@ public static class Beats {
     /// Straightforward guns-only dogfight between public-data airframe surrogates. The scenario
     /// begins at 18,000 ft in an offset reciprocal visual merge after both packages have reached
     /// the merge without a BVR result. Guns are safe through the first pass; there is no radar,
-    /// stealth, missile, RWR, datalink, thrust-vectoring, or modern-FLCS simulation hiding behind
-    /// the labels.
+    /// stealth, missile, RWR, datalink, exact modern-FLCS, or classified simulation hiding behind
+    /// the labels. The bounded pitch-thrust-vector and gunnery-assist surrogates are explicit in the
+    /// public-data airframe definition rather than implied by the mission label.
     /// </summary>
     public static BeatSetup ModernVisualMerge() {
         const double AltitudeM = 5486.4; // 18,000 ft

@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
+const { join } = require("node:path");
 const { Readable } = require("node:stream");
+const { pathToFileURL } = require("node:url");
 const { gunzipSync } = require("node:zlib");
 const test = require("node:test");
 
@@ -374,7 +376,9 @@ test("deployment config limits immutable caching to SHA-versioned heavy pack ass
 test("recorder losslessly encodes retained 20 Hz samples and batches uploads every 30 seconds", async () => {
   const app = await readFile(new URL("../app.js", `file://${__filename}`), "utf8");
   const index = await readFile(new URL("../index.html", `file://${__filename}`), "utf8");
-  const stride = Number(app.match(/TELEMETRY_TICK_STRIDE = (\d+);/)?.[1]);
+  const scheduler = await import(pathToFileURL(join(__dirname,
+    "../render/telemetry/sample_scheduler.js")).href);
+  const stride = scheduler.DEFAULT_TELEMETRY_TICK_STRIDE;
   const interval = Number(app.match(/TELEMETRY_FLUSH_INTERVAL_MS = ([\d_]+);/)?.[1].replaceAll("_", ""));
   const bufferLimit = Number(app.match(/TELEMETRY_BUFFER_LIMIT = ([\d_]+);/)?.[1].replaceAll("_", ""));
   const normalSamplesPerBatch = interval / 1000 * 120 / stride;
@@ -390,7 +394,8 @@ test("recorder losslessly encodes retained 20 Hz samples and batches uploads eve
   assert.match(app, /ensureTelemetryChunkHeader\(this\.buf, this\.chunkHeader\(batchId\)\)/);
   assert.match(app, /body: batch\.payload/);
   assert.doesNotMatch(app, /keepalive\s*:\s*(?:true|false)/);
-  assert.match(app, /pagehide[^\n]+recorder\.flush\(\{ force: true \}\)/);
+  assert.match(app,
+    /window\.addEventListener\("pagehide", \(\) => \{[\s\S]*?recorder\.flush\(\{ force: true \}\)[\s\S]*?\}\);/);
   assert.match(app, /document\.hidden\) recorder\.flush\(\{ force: true \}\)/);
   // The shell must cache-bust application changes, but unrelated UI work legitimately advances
   // the revision. Pinning yesterday's exact integer makes a healthy deploy fail this cost guard.

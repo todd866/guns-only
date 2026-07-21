@@ -468,6 +468,48 @@ test("controller pulls a clip once, auto-plays it, and holds the physical end st
   assert.equal(consumes, 1);
 });
 
+test("interactive playback can pause, scrub, change rate, jump events, and switch camera", () => {
+  const controller = new IncidentReplayController(() => JSON.stringify(payload()));
+  assert.equal(controller.ingest({
+    incident_replay_id: 7,
+    incident_replay_available: true,
+  }, 1000), true);
+
+  assert.equal(controller.setPaused(true, 2000), true);
+  assert.equal(controller.paused, true);
+  assert.equal(controller.frame(9000).t, -1, "paused playhead does not drift with wall time");
+
+  const firstGeneration = controller.playbackGeneration;
+  assert.equal(controller.seekFraction(0.75, 9000), true);
+  assert.equal(controller.frame(12000).t, 1);
+  assert.equal(controller.playbackGeneration, firstGeneration + 1,
+    "scrubbing creates a fresh presentation-event generation");
+
+  assert.equal(controller.setPlaybackRate(2, 12000), true);
+  assert.equal(controller.setPaused(false, 12000), true);
+  assert.equal(controller.frame(12250).t, 1.5);
+  assert.equal(controller.setPlaybackRate(3, 12250), false,
+    "unsupported rates cannot create unreviewed timing modes");
+
+  assert.equal(controller.setCamera("deck"), true);
+  assert.equal(controller.camera, "DECK");
+  assert.equal(controller.setCamera("orbit"), false);
+  const projected = advanceIncidentReplay(controller, {
+    finished: true,
+    carrier: true,
+    incident_replay_id: 7,
+    incident_replay_available: false,
+  }, 12250);
+  assert.equal(projected.presentedState.replay_camera, "DECK");
+
+  controller.setPaused(true, 12250);
+  assert.equal(controller.seek(-1.5, 12250), true);
+  assert.equal(controller.jumpToNextEvent(12250), true);
+  assert.equal(controller.frame(12250).t, 0, "event jump lands on the next recorded event");
+  assert.equal(controller.jumpToNextEvent(12250), true);
+  assert.equal(controller.frame(12250).t, 1);
+});
+
 test("playback exposes only recorded events reached in this replay generation", () => {
   const controller = new IncidentReplayController(() => JSON.stringify(payload()));
   const live = {

@@ -20,12 +20,14 @@ import { padlockOrientationModel } from "./render/camera/padlock_controller.js";
 import {
   HudSignalStabilizer,
   latchedRectVisibility,
+  VisibilityEnvelope,
 } from "./render/hud/hud_stabilizer.js";
 import { AoAIndexerQualifier, DisplayCueQualifier } from "./render/hud/stable_cues.js";
+import { fighterHudLayout } from "./render/hud/fighter_layout.js";
 
 const GREEN = "#4dff88";
-const GREEN_DIM = "rgba(77, 255, 136, 0.56)";
-const GREEN_FAINT = "rgba(77, 255, 136, 0.14)";
+const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
+const GREEN_FAINT = "rgba(77, 255, 136, 0.18)";
 const AMBER = "#ffb020";
 const RED = "#ff465d";
 const GLASS = "rgba(2, 10, 16, 0.72)";
@@ -36,6 +38,18 @@ const MODE_CUE_SECONDS = 1.5;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function controlBindingLabel(code, fallback) {
+  const labels = {
+    ArrowDown: "DOWN", ArrowUp: "UP", ArrowLeft: "LEFT", ArrowRight: "RIGHT",
+    Space: "SPACE", BracketLeft: "[", BracketRight: "]",
+  };
+  const value = String(code ?? fallback ?? "").trim();
+  if (labels[value]) return labels[value];
+  if (/^Key[A-Z]$/.test(value)) return value.slice(3);
+  if (/^Digit[0-9]$/.test(value)) return value.slice(5);
+  return value.replace(/([a-z])([A-Z])/g, "$1 $2").toUpperCase();
 }
 
 function snapPixel(value, pixelRatio = 1) {
@@ -106,7 +120,8 @@ function lsoToken(call) {
     case "FAST": return "FAST";
     case "SLOW": return "SLOW";
     case "POWER": return "POWER";
-    case "SINK RATE · POWER": return "SINK RATE · POWER";
+    case "SINK RATE · POWER": return "ADD POWER NOW";
+    case "ADD POWER NOW": return "ADD POWER NOW";
     case "COME LEFT": return "COME LEFT";
     case "COME RIGHT": return "COME RIGHT";
     case "WAVE OFF, WAVE OFF": return "WAVE OFF";
@@ -142,15 +157,18 @@ function isFightHudActive(state) {
 class CombatHud {
   constructor(canvas) {
     this.canvas = canvas;
-    // Keep HUD and WebGL scene in the browser's ordinary compositing path. A desynchronized 2D
-    // canvas may present one compositor frame ahead of the scene beneath it, which reads as a
-    // whole-HUD tear/flicker during fast manoeuvring.
-    this.ctx = canvas.getContext("2d", { alpha: true });
+    // Render a complete HUD frame away from the visible canvas, then replace the presentation
+    // surface in one copy operation. This prevents a compositor flush from exposing the clear or
+    // a partially drawn HUD while the WebGL frame beneath it is already visible.
+    this._hudSurface = document.createElement("canvas");
+    this.ctx = this._hudSurface.getContext("2d", { alpha: true });
+    this._presentationCtx = canvas.getContext("2d", { alpha: true });
     this.width = 1;
     this.height = 1;
     this.pixelRatio = 1;
     this.legendVisible = false;
     this.touchMode = false;
+    this.controlBindings = null;
     this.safeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
     this.worldPoint = new THREE.Vector3();
@@ -185,23 +203,56 @@ class CombatHud {
     this._difficultyCueStartedAt = -Infinity;
     this._carrierPatternCue = new CarrierPatternCueQualifier();
     this._aoaIndexerCue = new AoAIndexerQualifier();
-    this._lsoDisplayCue = new DisplayCueQualifier();
+    this._lsoDisplayCue = new DisplayCueQualifier({
+      acquireSeconds: 0.55,
+      releaseSeconds: 0.50,
+    });
     this._gunSolutionCue = new DisplayCueQualifier({ acquireSeconds: 0.05, releaseSeconds: 0.09 });
     this._gunSolutionEntityId = "";
     this._signals = new HudSignalStabilizer();
+    this._leadPipperEnvelope = new VisibilityEnvelope({
+      attackSeconds: 0.035,
+      releaseSeconds: 0.12,
+    });
+    this._buffetEnvelope = new VisibilityEnvelope({ releaseSeconds: 0.22 });
+    this._pullUpEnvelope = new VisibilityEnvelope({ releaseSeconds: 0.24 });
+    this._lastLeadPipperX = null;
+    this._lastLeadPipperY = null;
     this._banditMarkerInside = false;
     this._banditMarkerEntityId = "";
   }
 
   resize(width, height, pixelRatio, safeInsets = null) {
-    this.width = width;
-    this.height = height;
-    this.pixelRatio = pixelRatio;
+    const nextWidth = Math.max(1, Number(width) || 1);
+    const nextHeight = Math.max(1, Number(height) || 1);
+    const nextPixelRatio = Math.max(1, Number(pixelRatio) || 1);
+    const backingWidth = Math.max(1, Math.round(nextWidth * nextPixelRatio));
+    const backingHeight = Math.max(1, Math.round(nextHeight * nextPixelRatio));
+    const backingStoreChanged = this.canvas.width !== backingWidth
+      || this.canvas.height !== backingHeight
+      || this._hudSurface.width !== backingWidth
+      || this._hudSurface.height !== backingHeight;
+    this.width = nextWidth;
+    this.height = nextHeight;
+    this.pixelRatio = nextPixelRatio;
     if (safeInsets) this.safeInsets = safeInsets;
-    this.canvas.width = Math.max(1, Math.round(width * pixelRatio));
-    this.canvas.height = Math.max(1, Math.round(height * pixelRatio));
-    this.canvas.style.width = `${width}px`;
-    this.canvas.style.height = `${height}px`;
+    this.canvas.style.width = `${nextWidth}px`;
+    this.canvas.style.height = `${nextHeight}px`;
+    if (!backingStoreChanged) return;
+    this.canvas.width = backingWidth;
+    this.canvas.height = backingHeight;
+    this._hudSurface.width = backingWidth;
+    this._hudSurface.height = backingHeight;
+  }
+
+  commitFrame() {
+    const ctx = this._presentationCtx;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "copy";
+    ctx.drawImage(this._hudSurface, 0, 0);
+    ctx.restore();
   }
 
   toggleLegend() {
@@ -218,6 +269,10 @@ class CombatHud {
   setTouchMode(enabled) {
     this.touchMode = Boolean(enabled);
     if (this.touchMode) this.legendVisible = false;
+  }
+
+  setControlBindings(bindings) {
+    this.controlBindings = bindings && typeof bindings === "object" ? { ...bindings } : null;
   }
 
   noteCombatEvent(event, now) {
@@ -281,7 +336,11 @@ class CombatHud {
   }
 
   toggleAudio() {
-    this.audioEnabled = !this.audioEnabled;
+    return this.setAudioEnabled(!this.audioEnabled);
+  }
+
+  setAudioEnabled(enabled) {
+    this.audioEnabled = Boolean(enabled);
     this._gunAudioFiring = false;
     if (!this.audioEnabled && this._gunAudioGain && this._audioCtx)
       this._gunAudioGain.gain.setTargetAtTime(0, this._audioCtx.currentTime, 0.012);
@@ -379,38 +438,20 @@ class CombatHud {
   }
 
   getTapeInset() {
-    const sideSafe = Math.max(this.safeInsets.left, this.safeInsets.right);
-    return sideSafe > 0
-      ? clamp(Math.max(this.width * 0.055 + sideSafe, sideSafe + 56), 48, 140)
-      : clamp(this.width * 0.055, 48, 78);
+    return this.getLayout().tapeInset;
   }
 
   getInstrumentCenterY() {
-    return this.touchMode
-      ? this.height * 0.49 - this.safeInsets.bottom * 0.5
-      : this.height * 0.51;
+    return this.getLayout().instrumentCenterY;
   }
 
   getLayout() {
-    const tapeInset = this.getTapeInset();
-    const tapeHalfWidth = 35;
-    const safePadding = 20;
-    const controlClearance = this.touchMode ? 138 : 112;
-    return {
-      tapeInset,
-      targetSafe: {
-        left: tapeInset + tapeHalfWidth + safePadding,
-        right: this.width - tapeInset - tapeHalfWidth - safePadding,
-        top: 151,
-        bottom: this.height - this.safeInsets.bottom - controlClearance,
-      },
-      ladderSafe: {
-        left: tapeInset + tapeHalfWidth + 10,
-        right: this.width - tapeInset - tapeHalfWidth - 10,
-        top: 144,
-        bottom: this.height - this.safeInsets.bottom - (this.touchMode ? 128 : 106),
-      },
-    };
+    return fighterHudLayout({
+      width: this.width,
+      height: this.height,
+      touchMode: this.touchMode,
+      safeInsets: this.safeInsets,
+    });
   }
 
   drawPitchLadder(state, camera) {
@@ -471,8 +512,11 @@ class CombatHud {
         rungCenter.x - projectionCenterX,
         rungCenter.y - projectionCenterY,
       );
-      if (rotatedDistance > radius + 1) continue;
+      const edgeAlpha = clamp((radius + 1 - rotatedDistance) / 26, 0, 1);
+      if (edgeAlpha <= 0) continue;
 
+      ctx.save();
+      ctx.globalAlpha *= edgeAlpha;
       const major = rung % 10 === 0;
       const halfWidth = rung === 0 ? 106 : major ? 67 : 43;
       const centerGap = rung === 0 ? 29 : 20;
@@ -506,6 +550,7 @@ class CombatHud {
         ctx.fillText(String(Math.abs(rung)), 0, 0.5);
         ctx.restore();
       }
+      ctx.restore();
     }
     ctx.setLineDash([]);
     ctx.restore();
@@ -567,7 +612,12 @@ class CombatHud {
   }
 
   drawGunSight(frame, anchor) {
-    if (!isFightHudActive(frame.state)) return;
+    if (!isFightHudActive(frame.state)) {
+      this._leadPipperEnvelope.reset();
+      this._lastLeadPipperX = null;
+      this._lastLeadPipperY = null;
+      return;
+    }
 
     const { state, triggerHeld, camera, leadPipper, now } = frame;
     const hits = Number(state.hits) || 0;
@@ -577,7 +627,6 @@ class CombatHud {
     }
     this._lastHudHits = hits;
     const hitFlash = now < this._hitFlashUntil;
-    const leadValid = state.lead_valid === true && leadPipper;
     const solution = frame.visualGunSolution === true;
     const ctx = this.ctx;
     const ammo = Math.max(0, Number(state.ammo) || 0);
@@ -600,11 +649,16 @@ class CombatHud {
       ctx.fillStyle = cueColor;
       ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
-      ctx.fillText(cue, this.width / 2, Math.max(212, this.safeInsets.top + 210));
+      ctx.fillText(cue, this.width / 2, this.getLayout().weaponCueY);
     }
     ctx.restore();
 
-    if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
+    if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) {
+      this._leadPipperEnvelope.reset();
+      this._lastLeadPipperX = null;
+      this._lastLeadPipperY = null;
+      return;
+    }
 
     // The pack cockpit carries an actual infinity-collimated reflector sight. Keep this canvas
     // fallback only for compatibility cockpits that do not publish a gunsight.origin anchor.
@@ -623,27 +677,33 @@ class CombatHud {
       ctx.restore();
     }
 
-    let pipperX = anchor.x;
-    let pipperY = anchor.y;
-    let pipperVisible = false;
-    if (leadValid) {
+    let rawPipperVisible = false;
+    if (state.lead_valid === true && leadPipper) {
       const leadProjection = this.project(leadPipper, camera, this.projectionA);
       if (!leadProjection.behind && Number.isFinite(leadProjection.x)
         && Number.isFinite(leadProjection.y)) {
         // Draw the exact world point emitted by GunKill through the same live PerspectiveCamera
         // that rendered the FPV. The old reciprocal screen-space offset put the visible cue on the
         // opposite side of the required gun line when a pilot steered the nose toward it.
-        pipperX = leadProjection.x;
-        pipperY = leadProjection.y;
-        pipperVisible = pipperX > -50 && pipperX < this.width + 50
-          && pipperY > -50 && pipperY < this.height + 50;
+        rawPipperVisible = leadProjection.x > -50 && leadProjection.x < this.width + 50
+          && leadProjection.y > -50 && leadProjection.y < this.height + 50;
+        if (rawPipperVisible) {
+          this._lastLeadPipperX = leadProjection.x;
+          this._lastLeadPipperY = leadProjection.y;
+        }
       }
     }
+    const pipperAlpha = this._leadPipperEnvelope.update(rawPipperVisible, frame.dt);
+    const pipperVisible = pipperAlpha > 0.01
+      && Number.isFinite(this._lastLeadPipperX) && Number.isFinite(this._lastLeadPipperY);
 
     if (pipperVisible) {
+      const pipperX = this._lastLeadPipperX;
+      const pipperY = this._lastLeadPipperY;
       const wasted = triggerHeld && !solution;
       const color = hitFlash ? GREEN : wasted ? RED : solution ? GREEN : AMBER;
       ctx.save();
+      ctx.globalAlpha *= pipperAlpha;
       ctx.strokeStyle = "rgba(255, 176, 32, 0.30)";
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 5]);
@@ -892,17 +952,24 @@ class CombatHud {
   drawHeadingTape(state, { headingDeg = null, headingDigits = null, padlock = false } = {}) {
     const ctx = this.ctx;
     const heading = Number.isFinite(headingDeg) ? headingDeg : Number(state.heading_deg) || 0;
-    const width = Math.min(440, this.width * 0.42);
+    const layout = this.getLayout();
+    const width = layout.heading.width;
     const x0 = (this.width - width) / 2;
-    const y = 113;
+    const y = layout.heading.y;
     const pixelsPerDegree = width / 100;
 
-    ctx.fillStyle = "rgba(2, 10, 16, 0.3)";
-    ctx.fillRect(x0 - 8, y - 14, width + 16, 34);
     ctx.save();
     ctx.beginPath();
     ctx.rect(x0, y - 14, width, 34);
     ctx.clip();
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.16)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x0, y + 12.5);
+    ctx.lineTo(this.width / 2 - 29, y + 12.5);
+    ctx.moveTo(this.width / 2 + 29, y + 12.5);
+    ctx.lineTo(x0 + width, y + 12.5);
+    ctx.stroke();
     this.setLine(GREEN_DIM, 1);
     ctx.font = "500 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
@@ -921,17 +988,17 @@ class CombatHud {
     }
     ctx.restore();
 
-    ctx.fillStyle = GLASS;
+    ctx.fillStyle = "rgba(2, 10, 16, 0.72)";
     ctx.strokeStyle = GREEN;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = 1.1;
     ctx.beginPath();
-    ctx.moveTo(this.width / 2 - 24, y - 17);
-    ctx.lineTo(this.width / 2 + 24, y - 17);
-    ctx.lineTo(this.width / 2 + 24, y + 13);
-    ctx.lineTo(this.width / 2 + 6, y + 13);
-    ctx.lineTo(this.width / 2, y + 19);
-    ctx.lineTo(this.width / 2 - 6, y + 13);
-    ctx.lineTo(this.width / 2 - 24, y + 13);
+    ctx.moveTo(this.width / 2 - 22, y - 15);
+    ctx.lineTo(this.width / 2 + 22, y - 15);
+    ctx.lineTo(this.width / 2 + 22, y + 11);
+    ctx.lineTo(this.width / 2 + 5, y + 11);
+    ctx.lineTo(this.width / 2, y + 16);
+    ctx.lineTo(this.width / 2 - 5, y + 11);
+    ctx.lineTo(this.width / 2 - 22, y + 11);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -940,11 +1007,11 @@ class CombatHud {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const shownHeading = Number.isFinite(headingDigits) ? headingDigits : heading;
-    ctx.fillText(String(Math.round(wrap360(shownHeading))).padStart(3, "0"), this.width / 2, y - 1);
+    ctx.fillText(String(Math.round(wrap360(shownHeading))).padStart(3, "0"), this.width / 2, y - 2);
     if (padlock) {
       ctx.fillStyle = GREEN_DIM;
       ctx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText("OWN HDG", this.width / 2, y - 27);
+      ctx.fillText("OWN HDG", this.width / 2, y - 25);
     }
 
     // At bingo the boat caret stays on the visible edge of the tape until the pilot turns it in.
@@ -1076,11 +1143,11 @@ class CombatHud {
       ctx.shadowColor = "rgba(77, 255, 136, 0.62)";
       ctx.shadowBlur = 12;
       ctx.font = "800 24px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText("SPLASH!", this.width / 2, cueY + 23);
+      ctx.fillText("SPLASH", this.width / 2, cueY + 23);
       ctx.shadowBlur = 0;
       ctx.fillStyle = GREEN_DIM;
       ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText(`NEW BANDIT · KILLS ${kills}`, this.width / 2, cueY + 47);
+      ctx.fillText(`IMPACT PHYSICS RUNNING · KILLS ${kills}`, this.width / 2, cueY + 47);
     }
     ctx.restore();
   }
@@ -1105,7 +1172,7 @@ class CombatHud {
     const width = Math.min(this.touchMode ? 264 : 330, this.width - 34);
     const height = 44;
     const x = (this.width - width) / 2;
-    const y = Math.max(this.safeInsets.top + 198, 203);
+    const y = this.getLayout().weaponCueY - 56;
 
     ctx.save();
     this.glassPanel(x, y, width, height, AMBER);
@@ -1145,7 +1212,7 @@ class CombatHud {
     const width = Math.min(136, this.width - 34);
     const height = 27;
     const x = (this.width - width) / 2;
-    const y = Math.max(143, this.safeInsets.top + 138);
+    const y = this.getLayout().modeCueY;
 
     ctx.save();
     ctx.globalAlpha = fade;
@@ -1209,27 +1276,30 @@ class CombatHud {
     const slow = qualified === "SLOW";
     const accent = fast ? AMBER : slow ? RED : GREEN;
     const ctx = this.ctx;
-    const x = this.getLayout().tapeInset + 45;
-    const y = this.getInstrumentCenterY() - 38;
-    const width = 70;
-    const height = 76;
+    const layout = this.getLayout();
+    const x = layout.tapeInset + 47;
+    const y = layout.instrumentCenterY;
 
     ctx.save();
-    this.glassPanel(x, y, width, height, accent);
     ctx.fillStyle = GREEN_DIM;
-    ctx.font = "650 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`α ${aoa.toFixed(1)}°`, x + width / 2, y + 11);
+    ctx.fillText(`α ${aoa.toFixed(1)}`, x, y - 34);
 
     const row = (label, rowY, active) => {
       ctx.fillStyle = active ? accent : "rgba(77, 255, 136, 0.22)";
-      ctx.font = `${active ? 800 : 600} 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-      ctx.fillText(label, x + width / 2, rowY);
+      ctx.font = `${active ? 800 : 600} ${active ? 13 : 10}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      if (active) {
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 5;
+      }
+      ctx.fillText(label, x, rowY);
+      ctx.shadowBlur = 0;
     };
-    row("▽", y + 29, fast);
-    row("○", y + 47, !fast && !slow);
-    row("△", y + 65, slow);
+    row("▽", y - 17, fast);
+    row("○", y + 1, !fast && !slow);
+    row("△", y + 19, slow);
     ctx.restore();
   }
 
@@ -1249,8 +1319,9 @@ class CombatHud {
     fixedMarkers = [],
   }) {
     const ctx = this.ctx;
-    const centerY = this.getInstrumentCenterY();
-    const tapeHeight = Math.min(310, this.height * (this.touchMode ? 0.36 : 0.43));
+    const layout = this.getLayout();
+    const centerY = layout.instrumentCenterY;
+    const tapeHeight = layout.tapeHeight;
     const halfHeight = tapeHeight / 2;
     const pixelsPerStep = 34;
     const rightSide = x > this.width / 2;
@@ -1259,9 +1330,9 @@ class CombatHud {
     const wash = ctx.createLinearGradient(x - 34, 0, x + 34, 0);
     if (rightSide) {
       wash.addColorStop(0, "rgba(1, 9, 14, 0)");
-      wash.addColorStop(1, "rgba(1, 9, 14, 0.58)");
+      wash.addColorStop(1, "rgba(1, 9, 14, 0.29)");
     } else {
-      wash.addColorStop(0, "rgba(1, 9, 14, 0.58)");
+      wash.addColorStop(0, "rgba(1, 9, 14, 0.29)");
       wash.addColorStop(1, "rgba(1, 9, 14, 0)");
     }
     ctx.fillStyle = wash;
@@ -1390,7 +1461,10 @@ class CombatHud {
 
     // Trend caret: a vertical line from the current value to where the value is heading (value +
     // trend over the lookahead), clamped to the tape. Amber, so accel/decel reads at a glance.
-    if (Math.abs(trend) > 0.5) {
+    const trendAlpha = clamp((Math.abs(trend) - 0.15) / 1.35, 0, 1);
+    if (trendAlpha > 0.01) {
+      ctx.save();
+      ctx.globalAlpha *= trendAlpha;
       const spineX = rightSide ? x - 32 : x + 32;
       const trendY = clamp(centerY - trend * pxPerUnit, centerY - halfHeight, centerY + halfHeight);
       ctx.strokeStyle = AMBER;
@@ -1408,6 +1482,7 @@ class CombatHud {
       ctx.closePath();
       ctx.fillStyle = AMBER;
       ctx.fill();
+      ctx.restore();
     }
   }
 
@@ -1421,8 +1496,9 @@ class CombatHud {
       : data.groundText;
     const verticalText = verticalSpeedText(verticalSpeedFpm);
     const ctx = this.ctx;
-    const centerY = this.getInstrumentCenterY();
-    const tapeHeight = Math.min(310, this.height * (this.touchMode ? 0.36 : 0.43));
+    const layout = this.getLayout();
+    const centerY = layout.instrumentCenterY;
+    const tapeHeight = layout.tapeHeight;
 
     ctx.save();
     ctx.textAlign = "center";
@@ -1452,19 +1528,20 @@ class CombatHud {
 
   drawGTape(state) {
     const ctx = this.ctx;
-    const x = this.safeInsets.left + 28;
-    const y = this.height - this.safeInsets.bottom - (this.touchMode ? 121 : 88);
-    const width = Math.min(258, this.width * 0.27);
+    const layout = this.getLayout();
+    const x = this.safeInsets.left + 24;
+    const y = layout.secondaryBottom - 9;
+    const width = Math.min(166, Math.max(112, this.width * 0.18));
     const maxG = Math.max(10, Number(state.g_hardmax) || 10);
     const mapG = (g) => x + clamp((Number(g) || 0) / maxG, 0, 1) * width;
     const tierColor = state.tier === 3 ? AMBER : GREEN;
 
-    const wash = ctx.createLinearGradient(x - 8, 0, x + width + 8, 0);
-    wash.addColorStop(0, "rgba(1, 9, 14, 0.62)");
-    wash.addColorStop(0.78, "rgba(1, 9, 14, 0.36)");
+    const wash = ctx.createLinearGradient(x - 6, 0, x + width + 6, 0);
+    wash.addColorStop(0, "rgba(1, 9, 14, 0.42)");
+    wash.addColorStop(0.72, "rgba(1, 9, 14, 0.20)");
     wash.addColorStop(1, "rgba(1, 9, 14, 0)");
     ctx.fillStyle = wash;
-    ctx.fillRect(x - 8, y - 31, width + 16, 58);
+    ctx.fillRect(x - 6, y - 27, width + 12, 50);
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
@@ -1530,7 +1607,8 @@ class CombatHud {
   drawWarnings(frame, systems = null) {
     const { state, now } = frame;
     const ctx = this.ctx;
-    const warningY = state.mode ? 220 : 166;
+    const warningY = this.getLayout().warningY;
+    const maxWarningLines = 3;
     let occupiedLines = 0;
 
     const gcasActive = state.auto_gcas_active === true;
@@ -1566,21 +1644,28 @@ class CombatHud {
       ctx.font = "800 19px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
       ctx.fillText(alphaOverride ? "AOA LIMIT OFF" : "G LIMIT OVERRIDE",
-        this.width / 2, warningY);
+        this.width / 2, warningY + occupiedLines * 21);
       ctx.shadowBlur = 0;
       occupiedLines += 1;
     }
 
-    if (state.buffet) {
+    const buffetAlpha = this._buffetEnvelope.update(state.buffet === true, frame.dt, {
+      instantAttack: true,
+    });
+    if (buffetAlpha > 0.01) {
+      ctx.save();
+      ctx.globalAlpha *= buffetAlpha;
       ctx.fillStyle = RED;
       ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
       ctx.fillText("BUFFET · CL MAX", this.width / 2,
         warningY + occupiedLines * 21);
+      ctx.restore();
       occupiedLines += 1;
     }
 
     for (const warning of systems?.warnings ?? []) {
+      if (occupiedLines >= maxWarningLines) break;
       const urgent = warning.level === "warning";
       ctx.fillStyle = urgent ? RED : AMBER;
       ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -1600,9 +1685,15 @@ class CombatHud {
 
     // Actual surface proximity only: no training floor. A normal carrier approach (~650 fpm) is
     // quiet; a fast sink close to sea/deck level gets the urgent warning.
-    if (state.auto_gcas_available !== true
+    const pullUpActive = state.auto_gcas_available !== true
         && Number.isFinite(radarAltFt) && Number.isFinite(verticalSpeedFpm)
-        && radarAltFt < 500 && verticalSpeedFpm < -1000) {
+        && radarAltFt < 500 && verticalSpeedFpm < -1000;
+    const pullUpAlpha = this._pullUpEnvelope.update(pullUpActive, frame.dt, {
+      instantAttack: true,
+    });
+    if (pullUpAlpha > 0.01) {
+      ctx.save();
+      ctx.globalAlpha *= pullUpAlpha;
       ctx.fillStyle = RED;
       ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
@@ -1611,6 +1702,7 @@ class CombatHud {
         ? Math.max(this.safeInsets.top + 150, this.height - this.safeInsets.bottom - 286)
         : this.height - this.safeInsets.bottom - 104;
       ctx.fillText("PULL UP", this.width / 2, pullUpY);
+      ctx.restore();
     }
 
     const transitionTitle = typeof state.transition_cue === "string"
@@ -1703,39 +1795,57 @@ class CombatHud {
       ? reportedMaximum
       : 1.0;
     const hasAfterburner = state.has_afterburner === true && maxT > 1.0;
-    // Big vertical bar immediately left of the speed tape, same height, so throttle reads as a
-    // primary instrument next to airspeed.
-    const centerY = this.getInstrumentCenterY();
-    const h = Math.min(310, this.height * (this.touchMode ? 0.36 : 0.43));
-    const w = 22;
-    const x = this.getLayout().tapeInset - 52;
+    // Power is a supporting energy cue, not a third flight-data tape.  A thin actual-output rail
+    // plus a command caret preserves spool-lag information without blocking the outside world.
+    const layout = this.getLayout();
+    const centerY = layout.instrumentCenterY;
+    const h = layout.tapeHeight;
+    const railWidth = 6;
+    const x = layout.tapeInset - 46;
     const y = centerY - h / 2;
     const yOf = (f) => y + h - (clamp(f, 0, maxT) / maxT) * h;
 
-    ctx.fillStyle = "rgba(1, 9, 14, 0.6)"; ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = "rgba(77, 255, 136, 0.35)"; ctx.lineWidth = 1.2; ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = "rgba(1, 9, 14, 0.34)";
+    ctx.fillRect(x, y, railWidth, h);
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.28)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, railWidth, h);
     if (hasAfterburner) {
       ctx.fillStyle = "rgba(255, 176, 32, 0.16)";
-      ctx.fillRect(x, yOf(maxT), w, yOf(1.0) - yOf(maxT));
+      ctx.fillRect(x, yOf(maxT), railWidth, yOf(1.0) - yOf(maxT));
     }
-    // ENGINE fill = actual output; the GAP up to the lever caret is the spool lag you feel
+    // Engine fill is actual output; the gap to the caret is the spool lag the pilot feels.
     const ey = yOf(eng);
     ctx.fillStyle = eng > 1.005 ? AMBER : GREEN;
-    ctx.fillRect(x + 1.5, ey, w - 3, y + h - ey);
-    // Detent lines remain legible without standing labels.
-    ctx.strokeStyle = "rgba(77, 255, 136, 0.45)"; ctx.lineWidth = 1;
-    for (const f of [0.55, 0.85, 1.0]) { const t = yOf(f); ctx.beginPath(); ctx.moveTo(x, t); ctx.lineTo(x + w, t); ctx.stroke(); }
-    // commanded LEVER caret: a bold triangle on the right edge showing where you set it
+    ctx.fillRect(x + 1.5, ey, railWidth - 3, y + h - ey);
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.38)";
+    ctx.lineWidth = 1;
+    for (const fraction of [0.55, 0.85, 1.0]) {
+      const detentY = yOf(fraction);
+      ctx.beginPath();
+      ctx.moveTo(x - 2, detentY);
+      ctx.lineTo(x + railWidth + 2, detentY);
+      ctx.stroke();
+    }
     const ly = yOf(thr);
     ctx.fillStyle = thr > 1.005 ? AMBER : GREEN;
-    ctx.beginPath(); ctx.moveTo(x + w + 1, ly); ctx.lineTo(x + w + 11, ly - 6); ctx.lineTo(x + w + 11, ly + 6); ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + railWidth + 1, ly);
+    ctx.lineTo(x + railWidth + 8, ly - 4);
+    ctx.lineTo(x + railWidth + 8, ly + 4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = GREEN_DIM;
+    ctx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("PWR", x + railWidth / 2, y - 9);
 
     if (hasAfterburner && eng > 1.005) {
-      ctx.textBaseline = "middle";
-      ctx.textAlign = "center";
-      ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillStyle = AMBER;
-      ctx.fillText("A/B", x + w / 2, y + h + 11);
+      ctx.fillText("A/B", x + railWidth / 2, y + h + 10);
     }
   }
 
@@ -1748,57 +1858,52 @@ class CombatHud {
     const bingoThreshold = readout.bingoThresholdLb;
     const accent = readout.critical ? RED : readout.bingo ? AMBER : GREEN;
     const ctx = this.ctx;
-    const width = Math.min(this.touchMode ? 176 : 218, this.width - this.safeInsets.left - this.safeInsets.right - 36);
-    const height = 56;
-    const x = this.touchMode
-      ? Math.max(
-        this.safeInsets.left + 18,
-        this.width - this.getTapeInset() - 47 - width,
-      )
-      : this.width - this.safeInsets.right - width - 18;
-    const y = this.height - this.safeInsets.bottom - (this.touchMode ? 124 : 92);
-    const barX = x + 10;
-    const barY = y + 45;
-    const barWidth = width - 20;
+    const layout = this.getLayout();
+    const width = Math.min(176,
+      this.width - this.safeInsets.left - this.safeInsets.right - 36);
+    const height = 42;
+    const x = this.width - this.safeInsets.right - width - 18;
+    const y = layout.secondaryBottom - height;
+    const barX = x + 9;
+    const barY = y + 36;
+    const barWidth = width - 18;
     const fuelRatio = capacity > 0 ? clamp(fuel / capacity, 0, 1) : 0;
     const currentX = barX + barWidth * fuelRatio;
     const projectedRatio = capacity > 0 ? clamp((fuel + trend * 5) / capacity, 0, 1) : 0;
     const projectedX = barX + barWidth * projectedRatio;
 
     ctx.save();
-    this.glassPanel(x, y, width, height, accent);
-    ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    roundedRect(ctx, x, y, width, height, 4);
+    ctx.fillStyle = "rgba(1, 9, 14, 0.38)";
+    ctx.fill();
+    ctx.strokeStyle = readout.bingo ? accent : "rgba(77, 255, 136, 0.20)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.textBaseline = "middle";
-    ctx.textAlign = "left";
     ctx.fillStyle = accent;
-    ctx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
-    ctx.fillText(`${String(Math.round(fuel)).padStart(4, "0")} LB`, x + 10, y + 13);
+    ctx.fillText(`F ${String(Math.round(fuel)).padStart(4, "0")}`, x + 9, y + 10);
     ctx.fillStyle = readout.bingo ? accent : GREEN;
-    ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "right";
-    ctx.fillText(readout.flowText, x + width - 10, y + 11);
-    if (readout.flowUnitText) {
-      ctx.fillStyle = GREEN_DIM;
-      ctx.font = "650 6px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText(readout.flowUnitText, x + width - 10, y + 21);
-    }
+    ctx.fillText(readout.flowText, x + width - 9, y + 10);
     ctx.fillStyle = readout.bingo ? accent : GREEN_DIM;
     ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
-    ctx.fillText(readout.decisionText, x + 10, y + 29);
+    ctx.fillText(readout.decisionText, x + 9, y + 25);
 
     ctx.fillStyle = "rgba(77, 255, 136, 0.12)";
-    ctx.fillRect(barX, barY, barWidth, 5);
+    ctx.fillRect(barX, barY, barWidth, 3);
     ctx.fillStyle = accent;
-    ctx.fillRect(barX, barY, barWidth * fuelRatio, 5);
+    ctx.fillRect(barX, barY, barWidth * fuelRatio, 3);
     if (readout.consumesFuel && capacity > 0) {
       const bingoX = barX + barWidth * clamp(bingoThreshold / capacity, 0, 1);
       ctx.strokeStyle = AMBER;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(bingoX, barY - 2);
-      ctx.lineTo(bingoX, barY + 7);
+      ctx.lineTo(bingoX, barY + 5);
       ctx.stroke();
     }
 
@@ -1831,7 +1936,7 @@ class CombatHud {
     const width = this.touchMode ? 184 : 228;
     const height = this.touchMode ? 62 : 72;
     const x = this.width - this.safeInsets.right - width - 18;
-    const fuelY = this.height - this.safeInsets.bottom - (this.touchMode ? 124 : 92);
+    const fuelY = this.getLayout().secondaryBottom - 42;
     const y = Math.max(this.safeInsets.top + 24, fuelY - height - 8);
     const gearArrow = systems.gearHandle === "DOWN" ? "↓"
       : systems.gearHandle === "UP" ? "↑" : "—";
@@ -1926,7 +2031,7 @@ class CombatHud {
     padlockCtx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const modeWidth = Math.min(this.width - 28, padlockCtx.measureText(modeText).width + 18);
     const modeX = (this.width - modeWidth) / 2;
-    const modeY = this.safeInsets.top + 54;
+    const modeY = Math.max(this.safeInsets.top + 4, this.getLayout().heading.top - 24);
     this.glassPanel(modeX, modeY, modeWidth, 20, frame.manualLookActive ? AMBER : GREEN_DIM);
     padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN;
     padlockCtx.textAlign = "center";
@@ -2309,7 +2414,8 @@ class CombatHud {
     }
     const rawCall = lsoToken(String(state.lso ?? state.context ?? ""));
     const severity = String(state.lso_severity ?? "").toUpperCase();
-    const urgent = rawCall === "WAVE OFF" || severity === "WAVEOFF";
+    const urgent = rawCall === "WAVE OFF" || rawCall === "ADD POWER NOW"
+      || severity === "WAVEOFF";
     const cue = this._lsoDisplayCue.update(rawCall ? {
       key: `${rawCall}:${severity}`,
       call: rawCall,
@@ -2354,21 +2460,23 @@ class CombatHud {
     ctx.textBaseline = "middle";
     ctx.fillText("CONTROL QUICKLOOK", this.width / 2, y + 23);
 
+    const binding = (action, fallback) => controlBindingLabel(this.controlBindings?.[action], fallback);
+
     const wideLines = [
-      "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL   ·   A / D  RUDDER   ·   W / S  THROTTLE",
-      "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   F  GUNS   ·   V  TARGET / BOAT PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK",
-      "SPACE  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   1–8  MISSION   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE",
+      `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
+      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${binding("fire", "KeyF")}  GUNS   ·   ${binding("padlock", "KeyV")}  TARGET / BOAT PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK`,
+      `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   1–8  MISSION   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE`,
     ];
     const compactLines = [
-      "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL",
-      "A / D  RUDDER   ·   W / S  THROTTLE",
-      "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE = HOLD)",
-      "SPACE  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   F  GUNS   ·   M  SOUND",
-      "V  PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK   ·   1–8  MISSION   ·   R  RESTART   ·   H  HIDE",
+      `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL`,
+      `${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
+      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
+      `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${binding("fire", "KeyF")}  GUNS   ·   M  SOUND`,
+      `${binding("padlock", "KeyV")}  PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK   ·   1–8  MISSION   ·   R  RESTART   ·   H  HIDE`,
     ];
     if (gcasAvailable) {
-      wideLines.push("K  AGCAS PADDLE (HOLD TO OVERRIDE AN ACTIVE FLY-UP)");
-      compactLines.push("K  AGCAS PADDLE (HOLD TO OVERRIDE FLY-UP)");
+      wideLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE AN ACTIVE FLY-UP)`);
+      compactLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE FLY-UP)`);
     }
     const lines = compact ? compactLines : wideLines;
     const lineHeight = compact ? 27 : 31;
@@ -2390,6 +2498,9 @@ class CombatHud {
     if (gunSolutionEntityId !== this._gunSolutionEntityId) {
       this._gunSolutionEntityId = gunSolutionEntityId;
       this._gunSolutionCue.reset();
+      this._leadPipperEnvelope.reset();
+      this._lastLeadPipperX = null;
+      this._lastLeadPipperY = null;
     }
     frame.visualGunSolution = this._gunSolutionCue.update(
       { key: hasGunSolution(frame.state) ? "solution" : "no-solution" },
@@ -2469,6 +2580,7 @@ class CombatHud {
     this.drawModeCue(frame);
     this.drawOutcomeCues(frame);
     this.drawDamageFeedback(frame);
+    this.commitFrame();
   }
 }
 

@@ -41,8 +41,14 @@ public static class Lso {
         bool unrecoverableSink = sinkRateMps > Carrier.MaxTrapSinkMps && range < 220.0;
         if (waveOff || gross || unrecoverableSink)
             return new("WAVE OFF, WAVE OFF", LsoSeverity.WaveOff);
-        if (sinkRateMps > Carrier.HardTrapSinkMps)
-            return new("SINK RATE · POWER", LsoSeverity.Correcting);
+        // Call the trend while there is still useful flight path, not only after the touchdown has
+        // already crossed the hard-arrival boundary. Close aboard this is an immediate command;
+        // the display qualifier may still dwell ordinary lineup/energy corrections.
+        double nominalSinkMps = System.Math.Max(Carrier.MinTrapSinkMps,
+            carrier.DeckClosureMps(aircraft) * GlideslopeSlope);
+        double earlySinkCallMps = nominalSinkMps + 0.45;
+        if (sinkRateMps > earlySinkCallMps && range < 1100.0)
+            return new("ADD POWER NOW", LsoSeverity.Correcting);
 
         bool low = glideslopeError > glideslopeTolerance;
         bool slow = aoaError > AoaToleranceRad;

@@ -28,7 +28,6 @@ public sealed record AutoGcasConfiguration(
     double RecoveryRollRateRadPerSecond,
     double RecoveryLoadFactorG,
     double RecoveryGOnsetRatePerSecond,
-    double PullBankGateRad,
     double TriggerTimeAvailableSeconds,
     double WarningLeadSeconds,
     double TerrainBufferM,
@@ -44,7 +43,6 @@ public sealed record AutoGcasConfiguration(
         RecoveryRollRateRadPerSecond: 150.0 * Math.PI / 180.0,
         RecoveryLoadFactorG: 5.0,
         RecoveryGOnsetRatePerSecond: 6.0,
-        PullBankGateRad: 30.0 * Math.PI / 180.0,
         TriggerTimeAvailableSeconds: 1.5,
         WarningLeadSeconds: 3.0,
         // Public F-16 implementation: 30 ft terrain-model + 15 ft trajectory buffer.
@@ -133,6 +131,26 @@ public static class AutoGcasController {
         double CurrentClearanceM,
         double MinimumClearanceM,
         double ViolationTimeSeconds);
+
+    readonly record struct EscapeFrame(
+        Vec3D EscapeNormal,
+        Vec3D LiftNormal,
+        double RollErrorRad);
+
+    readonly record struct RecoveryResponse(
+        double MaximumRollRateRadPerSecond,
+        double RollTimeConstantSeconds,
+        double MaximumLoadFactorG,
+        double GOnsetRatePerSecond);
+
+    readonly record struct RecoveryGuidance(
+        double RollControl,
+        double LoadFactorDemandG);
+
+    const double RecoveryRollCaptureSeconds = 0.35;
+    const double RecoveryRollDeadbandRad = 2.0 * Math.PI / 180.0;
+    const double ResponseAuthorityMargin = 0.82;
+    const double RecoveryCompletionHorizonSeconds = 20.0;
 
     public static AutoGcasStepResult Step(double dtSeconds,
         in AutoGcasState previous, in AutoGcasInput input,
@@ -295,19 +313,23 @@ public static class AutoGcasController {
 
     static PilotCommand RecoveryCommand(in AutoGcasInput input,
         AutoGcasConfiguration config) {
-        double bank = Math.IEEERemainder(input.Aircraft.Bank, 2.0 * Math.PI);
-        double roll = Math.Abs(bank) <= 2.0 * Math.PI / 180.0
-            ? 0.0 : -Math.Sign(bank);
-        double gDemand = Math.Abs(bank) <= config.PullBankGateRad
-            ? config.RecoveryLoadFactorG : 1.0;
+        Vec3D velocity = input.Aircraft.VelocityVector();
+        Vec3D lift = ActualLiftNormal(input.Aircraft, velocity);
+        EscapeFrame frame = BuildEscapeFrame(input, input.Aircraft.Position,
+            velocity, lift);
+        RecoveryResponse response = ResponseFor(input, config);
+        RecoveryGuidance guidance = GuidanceFor(frame, response, config);
         return new PilotCommand(
-            GDemand: gDemand,
+            // The recovery is one continuous aircraft-owned command. The airframe remains the
+            // authority on achieved G; an escape-aligned steep pull must not collapse merely
+            // because a horizon-bank scalar is singular. A truly inverted lift plane unloads.
+            GDemand: guidance.LoadFactorDemandG,
             BankTarget: 0.0,
             Throttle: input.EffectivePilotCommand.Throttle,
             Rudder: 0.0,
             CommandedPitchRad: double.NaN,
             EnvelopeOverride: false,
-            RollControl: roll,
+            RollControl: guidance.RollControl,
             CommandedAlphaRad: double.NaN,
             SasRollControl: 0.0,
             DirectLateralControl: true);
@@ -339,8 +361,13 @@ public static class AutoGcasController {
         AutoGcasConfiguration config, double? automatedRecoveryDelaySeconds) {
         Vec3D position = input.Aircraft.Position;
         Vec3D velocity = input.Aircraft.VelocityVector();
-        double bank = Math.IEEERemainder(input.Aircraft.Bank, 2.0 * Math.PI);
-        double recoveryG = 1.0;
+        Vec3D liftNormal = ActualLiftNormal(input.Aircraft, velocity);
+        double rollRate = input.Aircraft.BodyRates.P;
+        // Do not give a bunt/negative-G entry a free instantaneous return to +1 G at takeover.
+        // The same bounded onset model must unwind the effective pilot load first.
+        double recoveryG = Math.Clamp(Math.Min(1.0,
+            input.EffectivePilotCommand.GDemand), -1.5, 1.0);
+        RecoveryResponse response = ResponseFor(input, config);
         bool usedFallback = false;
         if (!TryClearance(input, position, out double currentClearance,
             out bool currentFallback))
@@ -350,55 +377,84 @@ public static class AutoGcasController {
         double minimumClearance = currentClearance;
         double violationTime = currentClearance <= config.TerrainBufferM
             ? 0.0 : double.PositiveInfinity;
+        // A finite positive clearance at the ordinary threat-lookahead boundary is not a save if
+        // the aircraft is still descending. Near vertical, a 5 G fly-up can take materially longer
+        // than eight seconds to reach the trajectory minimum. Recovery paths therefore run until
+        // climb is actually established (or this bounded completion horizon expires). A descending
+        // threat path uses the same horizon so the system can intervene before an eight-second
+        // detector would make a ten-to-twelve-second vertical recovery physically impossible.
+        bool descendingThreat = velocity.Y < -1.0;
+        double threatEvaluationSeconds = descendingThreat
+            ? Math.Max(config.LookaheadSeconds,
+                RecoveryCompletionHorizonSeconds)
+            : config.LookaheadSeconds;
+        double predictionSeconds = automatedRecoveryDelaySeconds is { } recoveryDelay
+            ? recoveryDelay + RecoveryCompletionHorizonSeconds
+            : threatEvaluationSeconds;
         int steps = Math.Max(1, (int)Math.Ceiling(
-            config.LookaheadSeconds / config.PredictionStepSeconds));
-        double dt = config.LookaheadSeconds / steps;
+            predictionSeconds / config.PredictionStepSeconds));
+        double dt = predictionSeconds / steps;
+        bool recoveryClimbEstablished = false;
+        double recoveryClearanceGainSeconds = 0.0;
+        double pointClearance = currentClearance;
 
         for (int step = 1; step <= steps; step++) {
             Vec3D segmentStart = position;
             double time = (step - 1) * dt;
             bool recovery = automatedRecoveryDelaySeconds is { } delay
                 && time >= delay + config.ControlResponseDelaySeconds;
-            double gDemand;
-            if (recovery) {
-                bank = MoveAngleToward(bank, 0.0,
-                    config.RecoveryRollRateRadPerSecond * dt);
-                recoveryG = Math.Min(config.RecoveryLoadFactorG,
-                    recoveryG + config.RecoveryGOnsetRatePerSecond * dt);
-                gDemand = Math.Abs(bank) <= config.PullBankGateRad
-                    ? recoveryG : 1.0;
-            } else {
-                double rollLimit = input.AircraftParameters.FightRollRateMaxRad > 0.0
-                    ? input.AircraftParameters.FightRollRateMaxRad
-                    : input.AircraftParameters.RollRateMaxRad;
-                double rollRate = input.EffectivePilotCommand.DirectLateralControl
-                    ? input.EffectivePilotCommand.RollControl * rollLimit
-                    : Math.Clamp(Math.IEEERemainder(
-                        input.EffectivePilotCommand.BankTarget - bank, 2.0 * Math.PI) / 0.4,
-                        -rollLimit, rollLimit);
-                bank = Math.IEEERemainder(bank + rollRate * dt, 2.0 * Math.PI);
-                gDemand = input.EffectivePilotCommand.GDemand;
-            }
-
             Vec3D vhat = velocity.Length > 1e-6
                 ? velocity.Normalized() : input.Aircraft.ForwardDir();
-            Vec3D worldUp = new(0.0, 1.0, 0.0);
-            Vec3D upPlane = worldUp - vhat * vhat.Dot(worldUp);
-            if (upPlane.Length < 1e-6) {
-                Vec3D bodyUp = input.Aircraft.BodyAttitude.Rotate(worldUp);
-                upPlane = bodyUp - vhat * bodyUp.Dot(vhat);
+            liftNormal = TransportNormal(liftNormal, vhat,
+                ActualLiftNormal(input.Aircraft, velocity));
+            EscapeFrame frame = BuildEscapeFrame(input, position, velocity,
+                liftNormal);
+            double gDemand;
+            double rollControl;
+            if (recovery) {
+                RecoveryGuidance guidance = GuidanceFor(frame, response, config);
+                rollControl = guidance.RollControl;
+                double achievableDemand = Math.Min(
+                    guidance.LoadFactorDemandG, response.MaximumLoadFactorG);
+                recoveryG = MoveToward(recoveryG, achievableDemand,
+                    response.GOnsetRatePerSecond * dt);
+                gDemand = recoveryG;
+            } else {
+                if (input.EffectivePilotCommand.DirectLateralControl) {
+                    rollControl = Math.Clamp(
+                        input.EffectivePilotCommand.RollControl, -1.0, 1.0);
+                } else {
+                    double bankError = Math.IEEERemainder(
+                        input.EffectivePilotCommand.BankTarget - frame.RollErrorRad,
+                        2.0 * Math.PI);
+                    rollControl = Math.Clamp(bankError
+                        / (RecoveryRollCaptureSeconds
+                            * response.MaximumRollRateRadPerSecond), -1.0, 1.0);
+                }
+                gDemand = Math.Min(input.EffectivePilotCommand.GDemand,
+                    response.MaximumLoadFactorG);
             }
-            Vec3D upReference = upPlane.Length < 1e-6
-                ? new Vec3D(1.0, 0.0, 0.0) : upPlane.Normalized();
-            Vec3D rightReference = upReference.Cross(vhat).Normalized();
-            Vec3D lift = upReference * Math.Cos(bank)
-                + rightReference * Math.Sin(bank);
+
+            double targetRollRate = rollControl
+                * response.MaximumRollRateRadPerSecond;
+            double responseFraction = 1.0 - Math.Exp(
+                -dt / response.RollTimeConstantSeconds);
+            double nextRollRate = rollRate
+                + (targetRollRate - rollRate) * responseFraction;
+            double rollDelta = 0.5 * (rollRate + nextRollRate) * dt;
+            liftNormal = RotateNormal(liftNormal, vhat, rollDelta);
+            rollRate = nextRollRate;
+
+            Vec3D worldUp = new(0.0, 1.0, 0.0);
             double limitedG = Math.Clamp(gDemand, -1.5,
-                Math.Max(1.0, input.AircraftParameters.PositiveStructuralLimitG));
-            Vec3D acceleration = lift * (limitedG * FlightModel.G0)
+                response.MaximumLoadFactorG);
+            Vec3D acceleration = liftNormal * (limitedG * FlightModel.G0)
                 - worldUp * FlightModel.G0;
-            velocity += acceleration * dt;
-            position += velocity * dt;
+            Vec3D nextVelocity = velocity + acceleration * dt;
+            // Trapezoidal translation avoids the optimistic height gain of the previous
+            // semi-implicit Euler step during the first, most terrain-critical part of fly-up.
+            position += (velocity + nextVelocity) * (0.5 * dt);
+            velocity = nextVelocity;
 
             // Endpoint-only sampling aliases narrow ridges at combat speed. Sweep every predicted
             // segment at the terrain grid's resolution-aware spacing; if any interior point enters
@@ -412,6 +468,31 @@ public static class AutoGcasController {
             if (double.IsPositiveInfinity(violationTime)
                 && clearance <= config.TerrainBufferM)
                 violationTime = (step - 1) * dt;
+
+            if (!TryClearance(input, position, out double nextPointClearance,
+                out bool pointFallback))
+                return new PathPrediction(false, usedFallback, currentClearance,
+                    minimumClearance, violationTime);
+            usedFallback |= pointFallback;
+            if (recovery && nextPointClearance > pointClearance + 1e-5)
+                recoveryClearanceGainSeconds += dt;
+            else recoveryClearanceGainSeconds = 0.0;
+            pointClearance = nextPointClearance;
+
+            // A half-second of increasing terrain clearance establishes that the predicted
+            // trajectory has passed its real minimum. World vertical speed alone is insufficient
+            // over rising ground.
+            if (recoveryClearanceGainSeconds >= 0.5
+                && time + dt >= threatEvaluationSeconds) {
+                recoveryClimbEstablished = true;
+                break;
+            }
+        }
+        if (automatedRecoveryDelaySeconds.HasValue
+            && !recoveryClimbEstablished) {
+            // Never convert a descending endpoint into a promised save. Keeping the path valid but
+            // unsafe lets the last-instance logic trigger at the first defensible opportunity.
+            minimumClearance = Math.Min(minimumClearance, config.TerrainBufferM);
         }
         return new PathPrediction(true, usedFallback, currentClearance,
             minimumClearance, violationTime);
@@ -475,19 +556,149 @@ public static class AutoGcasController {
     }
 
     static bool PilotRecoveryCredited(in AutoGcasInput input) {
-        double bank = Math.Abs(Math.IEEERemainder(
-            input.Aircraft.Bank, 2.0 * Math.PI));
+        Vec3D velocity = input.Aircraft.VelocityVector();
+        EscapeFrame frame = BuildEscapeFrame(input, input.Aircraft.Position,
+            velocity, ActualLiftNormal(input.Aircraft, velocity));
+        double bank = Math.Abs(frame.RollErrorRad);
         double targetBank = Math.Abs(Math.IEEERemainder(
             input.EffectivePilotCommand.BankTarget, 2.0 * Math.PI));
         return input.EffectivePilotCommand.GDemand >= 3.0
             && targetBank <= bank + 2.0 * Math.PI / 180.0;
     }
 
-    static double MoveAngleToward(double current, double target, double maximumDelta) {
-        double error = Math.IEEERemainder(target - current, 2.0 * Math.PI);
-        if (Math.Abs(error) <= maximumDelta) return target;
-        return Math.IEEERemainder(current + Math.Sign(error) * maximumDelta,
-            2.0 * Math.PI);
+    static RecoveryGuidance GuidanceFor(in EscapeFrame frame,
+        in RecoveryResponse response, AutoGcasConfiguration config) {
+        double rollControl = Math.Abs(frame.RollErrorRad) <= RecoveryRollDeadbandRad
+            ? 0.0
+            : Math.Clamp(-frame.RollErrorRad
+                / (RecoveryRollCaptureSeconds
+                    * response.MaximumRollRateRadPerSecond), -1.0, 1.0);
+        // Positive normal load is useful throughout the steep/vertical fly-up whenever the
+        // physical lift plane has any component away from terrain. That removes the old arbitrary
+        // 30-degree bank gate and its loss of G at steep flight-path angles. If the aircraft is
+        // genuinely inverted relative to the local escape plane, however, positive G points into
+        // terrain: unload while rolling, then command the full fly-up as soon as lift is useful.
+        double loadDemand = frame.LiftNormal.Dot(frame.EscapeNormal) >= 0.0
+            ? config.RecoveryLoadFactorG : 0.0;
+        return new RecoveryGuidance(rollControl, loadDemand);
+    }
+
+    static RecoveryResponse ResponseFor(in AutoGcasInput input,
+        AutoGcasConfiguration config) {
+        AircraftParams aircraft = input.AircraftParameters;
+        double airspeed = Math.Max(input.IndicatedAirspeedMps
+            ?? input.Aircraft.Speed, 1.0);
+        double span = aircraft.WingSpanM > 0.0
+            ? aircraft.WingSpanM
+            : Math.Sqrt(4.5 * aircraft.WingAreaM2);
+
+        // The attached-flow derivative law used by AircraftSim has the steady solution below.
+        // A public-data margin keeps the fast-time predictor on the slow/weak side of that same
+        // physical response instead of assuming the old unconditional 150 deg/s roll.
+        double derivativeRollRate = 2.0 * airspeed
+            * Math.Abs(aircraft.ClDeltaA) * aircraft.MaxAileronDeflectionRad
+            / Math.Max(Math.Abs(aircraft.ClP) * span, 1e-6);
+        double configuredRollRate = Math.Min(config.RecoveryRollRateRadPerSecond,
+            aircraft.FightRollRateMaxRad > 0.0
+                ? aircraft.FightRollRateMaxRad : aircraft.RollRateMaxRad);
+        double maximumRollRate = Math.Max(5.0 * Math.PI / 180.0,
+            Math.Min(configuredRollRate,
+                derivativeRollRate * ResponseAuthorityMargin));
+
+        double dynamicPressure = AirData.EquivalentDynamicPressurePa(airspeed);
+        double rollDamping = dynamicPressure * aircraft.WingAreaM2 * span * span
+            * Math.Abs(aircraft.ClP) / (2.0 * airspeed);
+        double rollTimeConstant = Math.Clamp(
+            aircraft.IxxKgM2 / Math.Max(rollDamping, 1.0)
+                / ResponseAuthorityMargin, 0.18, 0.85);
+        double aerodynamicLoad = dynamicPressure * aircraft.WingAreaM2
+            * Math.Max(aircraft.CLMax, 0.0)
+            / Math.Max(input.Aircraft.Mass * FlightModel.G0, 1.0);
+        double maximumLoad = Math.Clamp(
+            aerodynamicLoad * ResponseAuthorityMargin, 1.0,
+            Math.Min(config.RecoveryLoadFactorG,
+                Math.Max(1.0, aircraft.PositiveStructuralLimitG)));
+        return new RecoveryResponse(maximumRollRate, rollTimeConstant,
+            maximumLoad,
+            config.RecoveryGOnsetRatePerSecond * ResponseAuthorityMargin);
+    }
+
+    static EscapeFrame BuildEscapeFrame(in AutoGcasInput input,
+        in Vec3D position, in Vec3D velocity, in Vec3D liftHint) {
+        Vec3D forward = velocity.Length > 1e-6
+            ? velocity.Normalized() : input.Aircraft.ForwardDir();
+        Vec3D lift = TransportNormal(liftHint, forward,
+            ActualLiftNormal(input.Aircraft, velocity));
+        Vec3D terrainUp = TerrainUp(input, position);
+        Vec3D escapePlane = terrainUp - forward * terrainUp.Dot(forward);
+        // Exactly normal-to-terrain flight has no unique roll-upright direction. Preserve the
+        // current physical manoeuvre plane, which is continuous through a vertical dive and lets
+        // the commanded positive-G pull begin without an arbitrary 90-degree roll.
+        Vec3D escape = escapePlane.Length < 1e-6
+            ? lift : escapePlane.Normalized();
+        Vec3D escapeRight = escape.Cross(forward);
+        if (escapeRight.Length < 1e-6)
+            escapeRight = OrthogonalNormal(forward);
+        else escapeRight = escapeRight.Normalized();
+        double rollError = Math.Atan2(lift.Dot(escapeRight), lift.Dot(escape));
+        // atan2(+-0, -1) is platform-sign sensitive at exactly inverted. Either shortest path is
+        // valid, but choosing one deterministically prevents the controller from returning zero.
+        if (Math.Abs(rollError) < 1e-12 && lift.Dot(escape) < 0.0)
+            rollError = Math.PI;
+        return new EscapeFrame(escape, lift, rollError);
+    }
+
+    static Vec3D ActualLiftNormal(in AircraftState aircraft, in Vec3D velocity) {
+        Vec3D forward = velocity.Length > 1e-6
+            ? velocity.Normalized() : aircraft.ForwardDir();
+        Vec3D bodyUp = aircraft.BodyAttitude.Rotate(new Vec3D(0.0, 1.0, 0.0));
+        Vec3D liftPlane = bodyUp - forward * bodyUp.Dot(forward);
+        if (liftPlane.Length >= 1e-6) return liftPlane.Normalized();
+        Vec3D bodyRight = aircraft.BodyAttitude.Rotate(new Vec3D(1.0, 0.0, 0.0));
+        Vec3D rightPlane = bodyRight - forward * bodyRight.Dot(forward);
+        return rightPlane.Length >= 1e-6
+            ? rightPlane.Normalized() : OrthogonalNormal(forward);
+    }
+
+    static Vec3D TerrainUp(in AutoGcasInput input, in Vec3D position) {
+        if (input.Terrain is not null
+            && input.Terrain.TrySample(position.X, position.Z,
+                out TerrainSample sample)
+            && sample.UpNormal.Length >= 1e-6)
+            return sample.UpNormal.Normalized();
+        return new Vec3D(0.0, 1.0, 0.0);
+    }
+
+    static Vec3D TransportNormal(in Vec3D normal, in Vec3D forward,
+        in Vec3D fallback) {
+        Vec3D plane = normal - forward * normal.Dot(forward);
+        if (plane.Length >= 1e-6) return plane.Normalized();
+        Vec3D fallbackPlane = fallback - forward * fallback.Dot(forward);
+        return fallbackPlane.Length >= 1e-6
+            ? fallbackPlane.Normalized() : OrthogonalNormal(forward);
+    }
+
+    static Vec3D RotateNormal(in Vec3D normal, in Vec3D forward,
+        double angleRad) {
+        Vec3D transported = TransportNormal(normal, forward,
+            OrthogonalNormal(forward));
+        Vec3D physicalRight = transported.Cross(forward).Normalized();
+        return (transported * Math.Cos(angleRad)
+            + physicalRight * Math.Sin(angleRad)).Normalized();
+    }
+
+    static Vec3D OrthogonalNormal(in Vec3D forward) {
+        Vec3D seed = Math.Abs(forward.Y) < 0.9
+            ? new Vec3D(0.0, 1.0, 0.0)
+            : new Vec3D(1.0, 0.0, 0.0);
+        Vec3D plane = seed - forward * seed.Dot(forward);
+        return plane.Length >= 1e-6
+            ? plane.Normalized() : new Vec3D(0.0, 0.0, 1.0);
+    }
+
+    static double MoveToward(double current, double target, double maximumDelta) {
+        if (Math.Abs(target - current) <= maximumDelta) return target;
+        return current + Math.Sign(target - current) * maximumDelta;
     }
 
     static bool ValidAircraft(in AircraftState state) =>
@@ -526,9 +737,7 @@ public static class AutoGcasController {
         Positive(config.ExitDwellSeconds, nameof(config.ExitDwellSeconds));
         if (!double.IsFinite(config.TerrainBufferM) || config.TerrainBufferM < 0.0
             || !double.IsFinite(config.ExitPredictionMarginM)
-            || config.ExitPredictionMarginM < 0.0
-            || !double.IsFinite(config.PullBankGateRad)
-            || config.PullBankGateRad < 0.0)
+            || config.ExitPredictionMarginM < 0.0)
             throw new ArgumentOutOfRangeException(nameof(config));
     }
 }

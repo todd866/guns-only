@@ -46,8 +46,21 @@ test("terrain stays lazy through Ready and shares the active ocean curvature con
     /if \(state\?\.ready !== true\) void this\.ensureTerrainPresentation\(\)/,
     "the first non-Ready frame should start the retained terrain single flight");
   assert.match(source,
-    /this\.terrainPresentation \|\| this\.terrainPresentationPromise[\s\S]*return this\.terrainPresentationPromise/,
+    /if \(this\.terrainPresentation\) \{[\s\S]*return this\.terrainSceneryEraPromise\?\.then[\s\S]*if \(this\.terrainPresentationPromise\) return this\.terrainPresentationPromise/,
     "repeated gameplay frames must reuse one terrain load");
+  assert.match(source,
+    /const sceneryEra = terrainPackId\.includes\("modern"\) \|\| selectedBeat === 7 \|\| selectedBeat === 8[\s\S]*\? "modern" : "1950s"/,
+    "the F-22 and drone missions must select the 2030s profile without duplicating terrain bytes");
+  assert.match(source,
+    /presentation\.setSceneryEra\(sceneryEra\)/,
+    "restaging across eras must replace scenery without rebuilding the retained terrain atlas");
+  assert.match(source, /const DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL = null;/,
+    "an unqualified peninsula atlas must remain unreachable from the production browser");
+  assert.doesNotMatch(source, /peninsula-r2|pub-[a-z0-9]+\.r2\.dev/,
+    "production source must not expose the temporary atlas host or a query-string bypass");
+  assert.match(source, /manifestUrl: DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL/);
+  assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
+    "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
     /TERRAIN_CURVATURE_START_M[\s\S]*TERRAIN_EARTH_RADIUS_M/);
   assert.match(source,
@@ -88,6 +101,17 @@ test("decision-support ocean and warnings carry truth without presentation flick
     "warnings must remain legible instead of blinking on and off");
   assert.doesNotMatch(hudSource, /desynchronized\s*:\s*true/,
     "HUD and WebGL scene must remain in the same compositor path");
+  assert.match(hudSource, /this\._hudSurface = document\.createElement\("canvas"\)/,
+    "the visible HUD should only receive complete frames");
+  assert.match(hudSource, /globalCompositeOperation = "copy"/,
+    "a complete buffered frame must replace the prior HUD atomically");
+  assert.match(hudSource, /if \(!backingStoreChanged\) return/,
+    "redundant viewport events must not clear and reallocate the HUD canvas");
+  assert.match(appSource, /if \(!surfaceChanged\) return/,
+    "redundant visual-viewport scroll events must not reset the WebGL surface");
+  assert.match(hudSource, /new VisibilityEnvelope/);
+  assert.match(hudSource, /const edgeAlpha = clamp/,
+    "moving ladder rungs should fade at the aperture instead of popping");
   assert.match(hudSource, /frame\.padlockTarget === "carrier"/);
   assert.match(hudSource, /this\._carrierPatternCue\.update\(state, frame\.dt\)/);
   assert.match(hudSource, /this\._aoaIndexerCue\.update/);

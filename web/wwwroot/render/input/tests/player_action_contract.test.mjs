@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { TEST_FLIGHT_ACTIONS } from "../../systems/test_flight_console.js";
+import { CONTROL_BINDINGS } from "../../settings/player_settings.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../");
 
@@ -46,10 +47,12 @@ function htmlButtons(source) {
 }
 
 function baseKeyMap(source) {
-  const body = source.match(/const keyMap = new Map\(\[([\s\S]*?)\]\);/)?.[1];
-  assert.ok(body, "app.js must keep one auditable host-code to GKey map");
-  return new Map([...body.matchAll(/\["([^"]+)",\s*(\d+)\]/g)]
-    .map((match) => [match[1], Number(match[2])]));
+  assert.match(source, /keyboardMapForSettings\(playerSettings\)/,
+    "app.js must derive one auditable host-code to GKey map from player settings");
+  const result = new Map(CONTROL_BINDINGS.map(({ defaultCode, gkey }) => [defaultCode, gkey]));
+  assert.match(source, /keyMap\.set\("KeyR", 11\)/);
+  result.set("KeyR", 11);
+  return result;
 }
 
 function gkeyOrdinals(source) {
@@ -75,24 +78,24 @@ const gkeys = gkeyOrdinals(keyGrammarSource);
 // lifecycle and its pilot-observable consequence here. That makes dead controls and UI/runtime
 // drift fail review before they reach a sortie.
 const BRIDGE_ACTIONS = Object.freeze([
-  { id: "pull", code: "ArrowDown", gkey: "PullUp", behavior: "hold", help: "DOWN / UP PULL / PUSH", consumer: /GKey\.PullUp/, observable: /requested_g_cmd/ },
-  { id: "push", code: "ArrowUp", gkey: "PushDown", behavior: "hold", help: "DOWN / UP PULL / PUSH", consumer: /GKey\.PushDown/, observable: /requested_g_cmd/ },
-  { id: "roll-left", code: "ArrowLeft", gkey: "RollLeft", behavior: "hold", help: "LEFT / RIGHT ROLL", consumer: /GKey\.RollLeft/, observable: /requested_roll_control/ },
-  { id: "roll-right", code: "ArrowRight", gkey: "RollRight", behavior: "hold", help: "LEFT / RIGHT ROLL", consumer: /GKey\.RollRight/, observable: /requested_roll_control/ },
-  { id: "rudder-left", code: "KeyA", gkey: "RudderLeft", behavior: "hold", help: "A / D RUDDER", consumer: /GKey\.RudderLeft/, observable: /requested_rudder/ },
-  { id: "rudder-right", code: "KeyD", gkey: "RudderRight", behavior: "hold", help: "A / D RUDDER", consumer: /GKey\.RudderRight/, observable: /requested_rudder/ },
-  { id: "power-up", code: "KeyW", gkey: "ThrottleUp", behavior: "hold", help: "W / S THROTTLE", consumer: /GKey\.ThrottleUp/, observable: /requested_throttle/ },
-  { id: "power-down", code: "KeyS", gkey: "ThrottleDown", behavior: "hold", help: "W / S THROTTLE", consumer: /GKey\.ThrottleDown/, observable: /requested_throttle/ },
-  { id: "guns", code: "KeyF", gkey: "Trigger", behavior: "hold", help: "F GUNS", consumer: /GKey\.Trigger/, observable: /gun_firing/ },
+  { id: "pull", bindingAction: "pull", code: "ArrowDown", gkey: "PullUp", behavior: "hold", help: "PULL / PUSH", consumer: /GKey\.PullUp/, observable: /requested_g_cmd/ },
+  { id: "push", bindingAction: "push", code: "ArrowUp", gkey: "PushDown", behavior: "hold", help: "PULL / PUSH", consumer: /GKey\.PushDown/, observable: /requested_g_cmd/ },
+  { id: "roll-left", bindingAction: "rollLeft", code: "ArrowLeft", gkey: "RollLeft", behavior: "hold", help: "ROLL", consumer: /GKey\.RollLeft/, observable: /requested_roll_control/ },
+  { id: "roll-right", bindingAction: "rollRight", code: "ArrowRight", gkey: "RollRight", behavior: "hold", help: "ROLL", consumer: /GKey\.RollRight/, observable: /requested_roll_control/ },
+  { id: "rudder-left", bindingAction: "rudderLeft", code: "KeyA", gkey: "RudderLeft", behavior: "hold", help: "RUDDER", consumer: /GKey\.RudderLeft/, observable: /requested_rudder/ },
+  { id: "rudder-right", bindingAction: "rudderRight", code: "KeyD", gkey: "RudderRight", behavior: "hold", help: "RUDDER", consumer: /GKey\.RudderRight/, observable: /requested_rudder/ },
+  { id: "power-up", bindingAction: "powerUp", code: "KeyW", gkey: "ThrottleUp", behavior: "hold", help: "THROTTLE", consumer: /GKey\.ThrottleUp/, observable: /requested_throttle/ },
+  { id: "power-down", bindingAction: "powerDown", code: "KeyS", gkey: "ThrottleDown", behavior: "hold", help: "THROTTLE", consumer: /GKey\.ThrottleDown/, observable: /requested_throttle/ },
+  { id: "guns", bindingAction: "fire", code: "KeyF", gkey: "Trigger", behavior: "hold", help: "GUNS", consumer: /GKey\.Trigger/, observable: /gun_firing/ },
   // Padlock is a presentation action as well as a bridge key. Its observable evidence therefore
   // lives in app.js/HUD state, not in aircraft dynamics.
-  { id: "padlock", code: "KeyV", gkey: "Padlock", behavior: "momentary", help: "V TARGET / BOAT PADLOCK", uiConsumer: /contextualPadlockTarget\(latestState\)/, uiObservable: /hudFrame\.padlockTarget = padlockTarget/ },
+  { id: "padlock", bindingAction: "padlock", code: "KeyV", gkey: "Padlock", behavior: "momentary", help: "TARGET / BOAT PADLOCK", uiConsumer: /contextualPadlockTarget\(latestState\)/, uiObservable: /hudFrame\.padlockTarget = padlockTarget/ },
   { id: "restart", code: "KeyR", gkey: "Restart", behavior: "momentary", help: "R RESTART", consumer: /key == GKey\.Restart/, uiConsumer: /restartMission\(\)/ },
-  { id: "limit-override", code: "Space", gkey: "Override", behavior: "hold", help: "SPACE LIMIT OVERRIDE", consumer: /GKey\.Override/, observable: /requested_g_cmd/ },
-  { id: "auto-gcas-paddle", code: "KeyK", gkey: "AutoGcasOverride", behavior: "hold", help: "K AGCAS PADDLE", consumer: /GKey\.AutoGcasOverride/, observable: /auto_gcas_override_held/ },
-  { id: "gear-toggle", code: "KeyG", gkey: "GearToggle", behavior: "momentary", help: "G GEAR", testAction: "gearToggle", consumer: /key == GKey\.GearToggle/, observable: /gear_handle/ },
-  { id: "flaps-up", code: "BracketLeft", gkey: "FlapUp", behavior: "hold", help: "[ / ] FLAPS UP / DOWN", testAction: "flapUp", consumer: /GKey\.FlapUp/, observable: /flap_lever/ },
-  { id: "flaps-down", code: "BracketRight", gkey: "FlapDown", behavior: "hold", help: "[ / ] FLAPS UP / DOWN", testAction: "flapDown", consumer: /GKey\.FlapDown/, observable: /flap_lever/ },
+  { id: "limit-override", bindingAction: "limitOverride", code: "Space", gkey: "Override", behavior: "hold", help: "LIMIT OVERRIDE", consumer: /GKey\.Override/, observable: /requested_g_cmd/ },
+  { id: "auto-gcas-paddle", bindingAction: "gcasOverride", code: "KeyK", gkey: "AutoGcasOverride", behavior: "hold", help: "AGCAS PADDLE", consumer: /GKey\.AutoGcasOverride/, observable: /auto_gcas_override_held/ },
+  { id: "gear-toggle", bindingAction: "gearToggle", code: "KeyG", gkey: "GearToggle", behavior: "momentary", help: "GEAR", testAction: "gearToggle", consumer: /key == GKey\.GearToggle/, observable: /gear_handle/ },
+  { id: "flaps-up", bindingAction: "flapUp", code: "BracketLeft", gkey: "FlapUp", behavior: "hold", help: "FLAPS UP / DOWN", testAction: "flapUp", consumer: /GKey\.FlapUp/, observable: /flap_lever/ },
+  { id: "flaps-down", bindingAction: "flapDown", code: "BracketRight", gkey: "FlapDown", behavior: "hold", help: "FLAPS UP / DOWN", testAction: "flapDown", consumer: /GKey\.FlapDown/, observable: /flap_lever/ },
   { id: "emergency-gear", code: "KeyE", gkey: "EmergencyGearRelease", behavior: "hold", help: "HOLD E", testAction: "emergencyGearRelease", consumer: /key == GKey\.EmergencyGearRelease/, observable: /gear_nose/ },
   { id: "horn-cutout", code: "TestFlightGearHornCutout", gkey: "GearHornCutout", behavior: "momentary", help: "GEAR HORN CUTOUT", testAction: "gearHornCutout", consumer: /GKey\.GearHornCutout/, observable: /gear_warning_horn/ },
   { id: "confirm-extension-failure", code: "KeyN", gkey: "ConfirmGearExtensionFailure", behavior: "momentary", help: "N · CONFIRM FAILED EXTENSION", testAction: "confirmGearFailure", consumer: /GKey\.ConfirmGearExtensionFailure/, observable: /MaintenanceScenarioJson\(\)/ },
@@ -114,6 +117,10 @@ test("every advertised bridge action has help copy, a runtime consumer, and obse
   const simConsumers = `${detentSource}\n${sessionSource}`;
   for (const action of BRIDGE_ACTIONS) {
     assert.ok(copy.includes(action.help), `${action.id}: missing player-facing help '${action.help}'`);
+    if (action.bindingAction) {
+      assert.ok(hudSource.includes(`binding("${action.bindingAction}", "${action.code}")`),
+        `${action.id}: quicklook must render the current binding with its default fallback`);
+    }
     if (action.consumer) {
       assert.match(simConsumers, action.consumer, `${action.id}: GKey has no simulation consumer`);
     }
@@ -149,17 +156,26 @@ test("keyboard dispatch is edge-safe and every held action has a release path", 
 
 test("every visible HTML button is wired through one auditable action surface", () => {
   const explicitButtons = new Map([
+    ["pause-button", /pauseButton\?\.addEventListener\("click", toggleSessionPause\)/],
+    ["incident-replay-play", /incidentReplayPlay\?\.addEventListener\("click"/],
+    ["incident-replay-event-jump", /incidentReplayEventJump\?\.addEventListener\("click"/],
     ["incident-replay-skip", /incidentReplaySkip\?\.addEventListener\("click", skipIncidentReplay\)/],
     ["ready-start", /readyStart\.addEventListener\("click"/],
     ["ready-replay", /readyReplay\?\.addEventListener\("click"/],
+    ["ready-settings", /readySettings\?\.addEventListener\("click", openSettings\)/],
+    ["ready-restart", /readyRestart\?\.addEventListener\("click", restartMissionNow\)/],
+    ["ready-return", /readyReturn\?\.addEventListener\("click", returnToCatalogue\)/],
     ["ready-build-reload", /readyBuildReload\?\.addEventListener\("click", reloadCurrentBuild\)/],
+    ["settings-close", /\[settingsClose, settingsCloseBottom\][\s\S]*?addEventListener\("click", closeSettings\)/],
+    ["settings-close-bottom", /\[settingsClose, settingsCloseBottom\][\s\S]*?addEventListener\("click", closeSettings\)/],
+    ["settings-reset-bindings", /settingsResetBindings\?\.addEventListener\("click"/],
   ]);
 
   for (const button of htmlButtons(indexSource)) {
     const attrs = button.attributes;
     const hooks = [
       "data-test-action", "data-hold-key", "data-pulse-key", "data-mobile-action",
-      "data-sortie-activity", "data-mission-select", "data-mission-launch",
+      "data-sortie-activity", "data-mission-select", "data-deck-configuration",
     ]
       .filter((name) => attrs[name] !== undefined);
     if (attrs.id && explicitButtons.has(attrs.id)) {
@@ -191,10 +207,10 @@ test("every visible HTML button is wired through one auditable action surface", 
         /readySelector\?\.addEventListener\("click"[\s\S]*?selectMission\(Number\(select\.dataset\.missionSelect\)\)/,
         `${button.text}: mission card has no delegated selection handler`);
     }
-    if (attrs["data-mission-launch"] !== undefined) {
+    if (attrs["data-deck-configuration"] !== undefined) {
       assert.match(appSource,
-        /readySelector\?\.addEventListener\("click"[\s\S]*?launchMission\(Number\(launch\.dataset\.missionLaunch\)\)/,
-        `${button.text}: mission card has no direct launch handler`);
+        /readyDeckConfig\?\.addEventListener\("click"[\s\S]*?selectDeckConfiguration\(Number\(button\.dataset\.deckConfiguration\)\)/,
+        `${button.text}: deck configuration has no delegated selection handler`);
     }
   }
 });
@@ -216,16 +232,16 @@ test("touch pilots can explicitly command gear, both flap directions, and contex
     "the touch paddle must appear only when Auto-GCAS is active and the pilot can operate it");
 
   assert.match(appSource,
-    /querySelectorAll\("\[data-hold-key\]"\)[\s\S]*?addEventListener\("pointerdown"[\s\S]*?pressMappedKey\(code, source\)[\s\S]*?addEventListener\("pointerup", endControl\)[\s\S]*?addEventListener\("pointercancel", endControl\)[\s\S]*?addEventListener\("lostpointercapture", endControl\)/,
+    /querySelectorAll\("\[data-hold-key\]"\)[\s\S]*?addEventListener\("pointerdown"[\s\S]*?pressMappedKey\(code, source, gkey\)[\s\S]*?addEventListener\("pointerup", endControl\)[\s\S]*?addEventListener\("pointercancel", endControl\)[\s\S]*?addEventListener\("lostpointercapture", endControl\)/,
     "held touch controls need down, up, cancellation, and lost-pointer release paths");
   assert.match(appSource,
-    /querySelectorAll\("\[data-pulse-key\]"\)[\s\S]*?if \(!pressMappedKey\(code, source\)\) return;[\s\S]*?releaseMappedKey\(code, source\)/,
+    /querySelectorAll\("\[data-pulse-key\]"\)[\s\S]*?if \(!pressMappedKey\(code, source, gkey\)\) return;[\s\S]*?releaseMappedKey\(code, source\)/,
     "a pulse control must always emit exactly one accepted down/up pair");
   assert.match(appSource,
-    /querySelectorAll\("\[data-pulse-key\]"\)[\s\S]*?if \(!pressMappedKey\(code, source\)\) return;[\s\S]*?code === "KeyV"[\s\S]*?togglePadlock\(\)/,
+    /querySelectorAll\("\[data-pulse-key\]"\)[\s\S]*?if \(!pressMappedKey\(code, source, gkey\)\) return;[\s\S]*?physicalCode === "KeyV"[\s\S]*?togglePadlock\(\)/,
     "the V pulse must drive contextual presentation only after the bridge accepts the action");
   assert.match(appSource,
-    /if \(!pressMappedKey\(event\.code, "keyboard"\)\) return;[\s\S]*?event\.code === "KeyV"[\s\S]*?togglePadlock\(\)/,
+    /const gkey = keyMap\.get\(event\.code\);[\s\S]*?if \(!pressMappedKey\(event\.code, "keyboard"\)\) return;[\s\S]*?gkey === 9[\s\S]*?togglePadlock\(\)/,
     "a paused or rejected keyboard V press must not change presentation state");
 });
 
@@ -240,13 +256,14 @@ test("fresh and touch-only players can reach every mission without a hidden keyb
   const buttons = htmlButtons(indexSource);
   const selectIds = buttons.filter((button) => button.attributes["data-mission-select"] !== undefined)
     .map((button) => Number(button.attributes["data-mission-select"]));
-  const launchIds = buttons.filter((button) => button.attributes["data-mission-launch"] !== undefined)
-    .map((button) => Number(button.attributes["data-mission-launch"]));
   assert.deepEqual(selectIds, [1, 2, 7, 5, 6, 3, 4, 8],
     "the activity-first display order is a deliberate product contract");
   assert.deepEqual([...selectIds].sort(), [1, 2, 3, 4, 5, 6, 7, 8]);
-  assert.deepEqual([...launchIds].sort(), [1, 2, 3, 4, 5, 6, 7, 8],
-    "every selectable sortie also needs a one-click launch target");
+  assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1,
+    "the briefing owns one unambiguous primary launch action");
+  assert.match(appSource,
+    /function activateReadyAction\([\s\S]*?pauseReasons\.has\("ready"\)\) return launchMission\(selectedBeat\)/,
+    "the primary action must launch the currently previewed mission");
 
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/,
     "the full-screen sortie picker must isolate background controls as a modal dialog");
@@ -286,9 +303,7 @@ test("the sortie catalogue is activity-first, complete, and synchronized with br
   const buttons = htmlButtons(indexSource);
   for (let mission = 1; mission <= 8; mission += 1) {
     const select = buttons.find((button) => button.attributes["data-mission-select"] === String(mission));
-    const launch = buttons.find((button) => button.attributes["data-mission-launch"] === String(mission));
     assert.ok(select, `mission ${mission}: missing select card`);
-    assert.ok(launch?.attributes["aria-label"], `mission ${mission}: direct launch needs an accessible name`);
 
     const block = appSource.match(new RegExp(`\\n\\s*${mission}: \\{([\\s\\S]*?)\\n\\s*\\},`))?.[1];
     assert.ok(block, `mission ${mission}: missing briefing model`);
@@ -305,6 +320,11 @@ test("the sortie catalogue is activity-first, complete, and synchronized with br
   assert.match(appSource,
     /function selectMission\([\s\S]*?selectedActivity = MISSION_BRIEFS\[selectedBeat\]\?\.activity[\s\S]*?activityMissionSelection\.set\(selectedActivity, selectedBeat\)/,
     "card, digit, and deep-link selection must not diverge from the visible activity");
+  const selectMissionBody = appSource.match(
+    /function selectMission\([\s\S]*?\)\s*\{([\s\S]*?)\n\}/,
+  )?.[1] ?? "";
+  assert.doesNotMatch(selectMissionBody, /enterReady\(/,
+    "previewing a catalogue card must not restage the authoritative simulation");
   assert.match(appSource,
     /const missionUrl = new URL\(window\.location\.href\)[\s\S]*?searchParams\.delete\("mission"\)[\s\S]*?searchParams\.set\("mission", String\(selectedBeat\)\)[\s\S]*?history\.replaceState\(window\.history\.state, "", missionUrl\)/,
     "mission selection must preserve unrelated URL parameters and the hash while default mission 1 stays canonical");
@@ -397,7 +417,7 @@ test("drone-raid coaching is mission-gated and carries live efficiency truth int
 test("non-bridge player actions advertised by the quicklook have observable UI handlers", () => {
   const directActions = [
     ["H HIDE", /event\.code === "KeyH"[\s\S]*?view\.hud\.toggleLegend\(\)/],
-    ["M SOUND", /event\.code === "KeyM"[\s\S]*?view\.hud\.toggleAudio\(\)/],
+    ["M SOUND", /event\.code === "KeyM"[\s\S]*?commitPlayerSettings\(\{ \.\.\.playerSettings, audio: !playerSettings\.audio \}\)/],
     ["1–8 MISSION", /\^Digit\[1-8\]\$[\s\S]*?selectMission\(/],
     ["DRAG LOOK", /sceneCanvas\.addEventListener\("pointermove"/],
   ];

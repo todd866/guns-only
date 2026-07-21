@@ -26,6 +26,14 @@ function fullStateRow({ state, time, build, held, sequence }) {
   };
 }
 
+function samplingEvidence(row) {
+  const evidence = {};
+  if (Object.prototype.hasOwnProperty.call(row ?? {}, "authority_tick_delta"))
+    evidence.authority_tick_delta = row.authority_tick_delta;
+  if (typeof row?.sample_reason === "string") evidence.sample_reason = row.sample_reason;
+  return evidence;
+}
+
 /**
  * Losslessly removes unchanged top-level fields from the 20 Hz state trace.
  *
@@ -126,13 +134,16 @@ export function ensureTelemetryChunkKeyframe(rows) {
     throw new Error("telemetry chunk begins with a delta that cannot be promoted");
   }
   const delta = rows[stateIndex];
-  const promoted = fullStateRow({
-    state: hidden.state,
-    time: delta.t,
-    build: hidden.build,
-    held: Array.isArray(delta.held) ? delta.held : [],
-    sequence: delta.q,
-  });
+  const promoted = {
+    ...fullStateRow({
+      state: hidden.state,
+      time: delta.t,
+      build: hidden.build,
+      held: Array.isArray(delta.held) ? delta.held : [],
+      sequence: delta.q,
+    }),
+    ...samplingEvidence(delta),
+  };
   const next = [...rows];
   next[stateIndex] = promoted;
   return next;

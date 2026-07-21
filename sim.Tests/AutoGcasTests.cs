@@ -9,11 +9,35 @@ public class AutoGcasTests {
         AutoGcasCapabilityProfile.ModernCrewedPublicDataSurrogate;
 
     static AircraftState FlightState(double altitudeM, double speedMps = 250.0,
-        double gammaDegrees = 0.0, double bankDegrees = 0.0) => new(
-            new Vec3D(0.0, altitudeM, 0.0), speedMps,
-            Radians(gammaDegrees), 0.0, Radians(bankDegrees),
-            FlightModel.F22APublicDataSurrogate.MassKg,
-            QuaternionD.Identity);
+        double gammaDegrees = 0.0, double bankDegrees = 0.0,
+        double bodyRollRateRadPerSecond = 0.0) {
+        AircraftParams aircraft = FlightModel.F22APublicDataSurrogate;
+        double gamma = Radians(gammaDegrees);
+        double bank = Radians(bankDegrees);
+        Vec3D forward = new(0.0, Math.Sin(gamma), Math.Cos(gamma));
+        Vec3D worldUp = new(0.0, 1.0, 0.0);
+        Vec3D upPlane = worldUp - forward * forward.Dot(worldUp);
+        Vec3D upReference = upPlane.Length < 1e-7
+            ? new Vec3D(0.0, 0.0, -1.0) : upPlane.Normalized();
+        Vec3D rightReference = upReference.Cross(forward).Normalized();
+        Vec3D lift = (upReference * Math.Cos(bank)
+            + rightReference * Math.Sin(bank)).Normalized();
+        double dynamicPressure = AirData.TrueDynamicPressurePa(speedMps, altitudeM);
+        double alpha = Math.Clamp(aircraft.MassKg * FlightModel.G0
+                / Math.Max(dynamicPressure * aircraft.WingAreaM2
+                    * aircraft.CLAlpha, 1e-9),
+            aircraft.CLMin / aircraft.CLAlpha,
+            aircraft.CLMax / aircraft.CLAlpha);
+        Vec3D bodyForward = (forward * Math.Cos(alpha)
+            + lift * Math.Sin(alpha)).Normalized();
+        Vec3D bodyUp = (lift * Math.Cos(alpha)
+            - forward * Math.Sin(alpha)).Normalized();
+        QuaternionD attitude = QuaternionD.FromFrame(
+            bodyUp.Cross(bodyForward).Normalized(), bodyUp, bodyForward);
+        return new AircraftState(new Vec3D(0.0, altitudeM, 0.0), speedMps,
+            gamma, 0.0, bank, aircraft.MassKg, attitude,
+            new BodyRates(bodyRollRateRadPerSecond, 0.0, 0.0));
+    }
 
     static PilotCommand Command(double gDemand = 1.0, double bankTargetDegrees = 0.0,
         double throttle = 0.82, double rollControl = 0.0,
@@ -101,7 +125,7 @@ public class AutoGcasTests {
     [Theory]
     [InlineData(90.0, -1.0)]
     [InlineData(-90.0, 1.0)]
-    public void FlyUpRollsShortestDirectionTowardUprightBeforePulling(
+    public void FlyUpRollsShortestDirectionTowardTheEscapePlane(
         double bankDegrees, double expectedRollControl) {
         AutoGcasStepResult result = Step(Input(FlightState(
             altitudeM: 80.0, gammaDegrees: -30.0,
@@ -110,7 +134,7 @@ public class AutoGcasTests {
         Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
         PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
         Assert.Equal(expectedRollControl, recovery.RollControl);
-        Assert.Equal(1.0, recovery.GDemand);
+        Assert.Equal(5.0, recovery.GDemand);
         Assert.Equal(0.91, recovery.Throttle);
         Assert.Equal(0.0, recovery.BankTarget);
         Assert.Equal(0.0, recovery.Rudder);
@@ -119,19 +143,115 @@ public class AutoGcasTests {
     }
 
     [Theory]
-    [InlineData(30.0, 5.0)]
-    [InlineData(-30.0, 5.0)]
-    [InlineData(30.01, 1.0)]
-    [InlineData(-30.01, 1.0)]
-    public void FlyUpOnlyCommandsRecoveryGInsideTheBankGate(
-        double bankDegrees, double expectedG) {
+    [InlineData(30.0)]
+    [InlineData(-30.0)]
+    [InlineData(80.0)]
+    [InlineData(-80.0)]
+    public void EscapeAlignedLiftKeepsTheFullFlyUpDemandAtHighBank(
+        double bankDegrees) {
         AutoGcasStepResult result = Step(Input(FlightState(
             altitudeM: 60.0, gammaDegrees: -30.0,
             bankDegrees: bankDegrees)));
 
         Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
         PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
-        Assert.Equal(expectedG, recovery.GDemand);
+        Assert.Equal(5.0, recovery.GDemand);
+    }
+
+    [Fact]
+    public void SteepDiveUsesPhysicalAttitudeRatherThanSingularLegacyBank() {
+        AircraftState physicalRightBank = FlightState(
+            altitudeM: 900.0, speedMps: 300.0,
+            gammaDegrees: -80.0, bankDegrees: 80.0) with {
+                // State.Bank is a compatibility value and can disagree near the vertical pole.
+                Bank = Radians(-80.0)
+            };
+
+        AutoGcasStepResult result = Step(Input(physicalRightBank));
+
+        Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
+        PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
+        Assert.Equal(-1.0, recovery.RollControl, 12);
+        Assert.Equal(5.0, recovery.GDemand);
+    }
+
+    [Fact]
+    public void InvertedRecoveryUnloadsUntilLiftPointsAwayFromTerrain() {
+        AircraftState inverted = FlightState(
+            altitudeM: 900.0, speedMps: 300.0,
+            gammaDegrees: -60.0, bankDegrees: 180.0) with {
+                Bank = 0.0
+            };
+
+        AutoGcasStepResult result = Step(Input(inverted));
+
+        Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
+        PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
+        Assert.Equal(1.0, Math.Abs(recovery.RollControl), 12);
+        Assert.Equal(0.0, recovery.GDemand);
+    }
+
+    [Fact]
+    public void ExactVerticalDivePreservesItsPhysicalEscapePlaneAndPulls() {
+        AutoGcasStepResult result = Step(Input(FlightState(
+            altitudeM: 900.0, speedMps: 300.0,
+            gammaDegrees: -90.0, bankDegrees: 0.0)));
+
+        Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
+        PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
+        Assert.Equal(0.0, recovery.RollControl, 12);
+        Assert.Equal(5.0, recovery.GDemand);
+    }
+
+    [Fact]
+    public void PredictedVerticalSaveProducesAuthoritativeTerrainClearance() {
+        AircraftState initial = FlightState(
+            altitudeM: 3200.0, speedMps: 300.0,
+            gammaDegrees: -89.0, bankDegrees: 0.0);
+        var aircraft = new AircraftSim(initial,
+            FlightModel.F22APublicDataSurrogate);
+        aircraft.SeedEnginePowerFraction(1.0);
+        PilotCommand pilot = Command(throttle: 1.0);
+        AutoGcasStepResult activation = Step(new AutoGcasInput(
+            aircraft.State,
+            FlightModel.F22APublicDataSurrogate,
+            pilot,
+            Terrain: null,
+            FallbackSurfaceElevationM: 0.0,
+            IndicatedAirspeedMps: aircraft.IndicatedAirspeedMps));
+
+        Assert.Equal(AutoGcasPhase.FlyUp, activation.State.Phase);
+        Assert.True(activation.State.Prediction.ImmediateRecoveryMinimumClearanceM
+            > Modern.Configuration.TerrainBufferM);
+        PilotCommand recovery = Assert.IsType<PilotCommand>(
+            activation.RecoveryCommand);
+        double minimumClearance = aircraft.State.Position.Y;
+        for (int tick = 0; tick < 20 * AircraftSim.TickHz; tick++) {
+            aircraft.Step(recovery, TickSeconds);
+            minimumClearance = Math.Min(minimumClearance,
+                aircraft.State.Position.Y);
+            if (aircraft.State.Position.Y <= 0.0) break;
+            if (aircraft.State.Gamma >= 0.0 && tick > AircraftSim.TickHz) break;
+        }
+
+        Assert.True(minimumClearance >= Modern.Configuration.TerrainBufferM,
+            $"predicted save bottomed at only {minimumClearance:F2} m AGL");
+    }
+
+    [Fact]
+    public void NegativeGEntryCannotReceiveAnOptimisticInstantaneousUnload() {
+        AircraftState state = FlightState(
+            altitudeM: 2000.0, speedMps: 260.0,
+            gammaDegrees: -60.0, bankDegrees: 0.0);
+
+        AutoGcasStepResult neutral = Step(Input(state, Command(gDemand: 1.0)));
+        AutoGcasStepResult bunt = Step(Input(state, Command(gDemand: -1.0)));
+
+        Assert.True(neutral.State.Prediction.Valid);
+        Assert.True(bunt.State.Prediction.Valid);
+        Assert.True(bunt.State.Prediction.ImmediateRecoveryMinimumClearanceM
+                <= neutral.State.Prediction.ImmediateRecoveryMinimumClearanceM,
+            "a negative-G entry must be unwound through the modeled onset response");
     }
 
     [Fact]

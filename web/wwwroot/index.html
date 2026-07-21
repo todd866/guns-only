@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="run-paused">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -968,8 +968,8 @@
     .ready-activity-nav button:focus-visible,
     .sortie-choice:hover,
     .sortie-choice:focus-visible,
-    .sortie-launch:hover,
-    .sortie-launch:focus-visible {
+    .ready-deck-options button:hover,
+    .ready-deck-options button:focus-visible {
       outline: 2px solid rgba(141, 255, 179, .9);
       outline-offset: 1px;
     }
@@ -992,8 +992,7 @@
     }
 
     .sortie-option {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 54px;
+      display: block;
       min-width: 0;
       margin-top: 7px;
       overflow: hidden;
@@ -1008,8 +1007,7 @@
       box-shadow: inset 3px 0 0 #4dff88;
     }
 
-    .sortie-choice,
-    .sortie-launch {
+    .sortie-choice {
       appearance: none;
       border: 0;
       color: inherit;
@@ -1047,27 +1045,6 @@
       color: rgba(217, 255, 229, .48);
       font-size: 10px;
       line-height: 1.4;
-    }
-
-    .sortie-launch {
-      min-width: 54px;
-      min-height: 78px;
-      border-left: 1px solid rgba(77, 255, 136, .14);
-      color: rgba(141, 255, 179, .8);
-      font-size: 9px;
-      font-weight: 900;
-      letter-spacing: .13em;
-      text-transform: uppercase;
-    }
-
-    .sortie-launch:hover,
-    .sortie-launch:focus-visible { background: rgba(77, 255, 136, .14); }
-
-    .ready-deck-note {
-      margin: 12px 2px 0;
-      color: rgba(217, 255, 229, .4);
-      font-size: 9px;
-      line-height: 1.5;
     }
 
     #ready-kicker {
@@ -1127,6 +1104,52 @@
       letter-spacing: .04em;
     }
 
+    .ready-deck-config {
+      margin: -7px 0 18px;
+      padding: 12px;
+      border: 1px solid rgba(77, 255, 136, .14);
+      border-radius: 6px;
+      background: rgba(77, 255, 136, .035);
+    }
+
+    .ready-deck-config[hidden] { display: none; }
+
+    .ready-deck-label {
+      display: block;
+      margin-bottom: 8px;
+      color: rgba(217, 255, 229, .48);
+      font-size: 8px;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    .ready-deck-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+
+    .ready-deck-options button {
+      min-height: 38px;
+      border: 1px solid rgba(77, 255, 136, .22);
+      border-radius: 4px;
+      color: rgba(217, 255, 229, .65);
+      background: rgba(0, 0, 0, .14);
+      cursor: pointer;
+      font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .ready-deck-options button[aria-pressed="true"] {
+      border-color: rgba(77, 255, 136, .75);
+      color: #dffff0;
+      background: rgba(77, 255, 136, .14);
+    }
+
+    .ready-deck-config p {
+      margin: 8px 0 0;
+      color: rgba(217, 255, 229, .38);
+      font-size: 8px;
+      line-height: 1.45;
+    }
+
     .ready-controls {
       margin: 0 0 22px;
       color: rgba(217, 255, 229, .48);
@@ -1134,6 +1157,7 @@
       line-height: 1.75;
       letter-spacing: .06em;
       text-transform: uppercase;
+      white-space: pre-line;
     }
 
     #ready-start {
@@ -1168,6 +1192,66 @@
       box-shadow: none;
       cursor: wait;
     }
+
+    .ready-secondary-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+      margin-top: 8px;
+    }
+
+    .ready-secondary-actions button,
+    .replay-controls button,
+    .replay-controls select,
+    .settings-card button,
+    .settings-card select,
+    .settings-card input {
+      min-height: 38px;
+      border: 1px solid rgba(77, 255, 136, .24);
+      border-radius: 4px;
+      color: rgba(217, 255, 229, .78);
+      background: rgba(77, 255, 136, .045);
+      font: 750 9px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .ready-secondary-actions button:hover,
+    .ready-secondary-actions button:focus-visible,
+    .replay-controls button:hover,
+    .replay-controls button:focus-visible,
+    .settings-card button:hover,
+    .settings-card button:focus-visible,
+    .settings-card input:focus-visible,
+    .settings-card select:focus-visible {
+      outline: 2px solid rgba(141, 255, 179, .9);
+      outline-offset: 1px;
+    }
+
+    .ready-secondary-actions button[hidden] { display: none; }
+
+    #pause-button {
+      position: fixed;
+      z-index: 9;
+      top: calc(var(--safe-top) + 12px);
+      right: calc(var(--safe-right) + 12px);
+      min-width: 76px;
+      min-height: 44px;
+      border: 1px solid rgba(77, 255, 136, .35);
+      border-radius: 4px;
+      color: rgba(217, 255, 229, .76);
+      background: rgba(2, 11, 17, .72);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    #pause-button:hover,
+    #pause-button:focus-visible { outline: 2px solid #8dffb3; outline-offset: 1px; }
+    .run-paused #pause-button,
+    .incident-replay #pause-button { display: none; }
 
     #ready-replay {
       appearance: none;
@@ -1270,7 +1354,6 @@
       .ready-activity-nav { margin-bottom: 13px; }
       .ready-activity-nav button { min-height: 48px; font-size: 9px; }
       .sortie-choice { min-height: 74px; padding: 9px 10px; }
-      .sortie-launch { min-height: 74px; }
       #ready-title { font-size: 26px; }
       #ready-brief { margin: 9px 0 13px; line-height: 1.5; }
       .ready-facts { margin-bottom: 13px; }
@@ -1281,8 +1364,6 @@
     @media (max-width: 380px) {
       .ready-activity-nav button small { display: none; }
       .ready-activity-nav button { min-height: 46px; padding-inline: 3px; }
-      .sortie-option { grid-template-columns: minmax(0, 1fr) 48px; }
-      .sortie-launch { min-width: 48px; }
       .ready-facts { grid-template-columns: 1fr; }
       .ready-fact + .ready-fact { padding-left: 4px; border-top: 1px solid rgba(77, 255, 136, .12); border-left: 0; }
     }
@@ -1429,6 +1510,17 @@
       background: rgba(234, 255, 245, .18);
     }
 
+    #incident-replay-scrubber {
+      position: absolute;
+      z-index: 2;
+      inset: -12px 0;
+      width: 100%;
+      height: 28px;
+      margin: 0;
+      opacity: .001;
+      cursor: ew-resize;
+    }
+
     #incident-replay-progress {
       width: 0;
       height: 100%;
@@ -1478,6 +1570,77 @@
       color: #fff;
     }
 
+    .replay-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.1fr 1.1fr 1.25fr;
+      gap: 6px;
+      margin-top: 9px;
+    }
+
+    .replay-controls select { padding-inline: 6px; }
+
+    #settings-screen {
+      position: fixed;
+      z-index: 25;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: calc(var(--safe-top) + 14px) calc(var(--safe-right) + 14px)
+        calc(var(--safe-bottom) + 14px) calc(var(--safe-left) + 14px);
+      background: rgba(0, 7, 12, .82);
+      backdrop-filter: blur(14px);
+    }
+
+    #settings-screen.visible { display: grid; }
+
+    .settings-card {
+      width: min(760px, 100%);
+      max-height: min(820px, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 28px));
+      overflow: auto;
+      padding: 22px;
+      border: 1px solid rgba(77, 255, 136, .28);
+      border-radius: 8px;
+      background: rgba(3, 13, 20, .97);
+      box-shadow: 0 24px 90px rgba(0, 0, 0, .62);
+      color: #eafff1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .settings-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .settings-head h2 { margin: 0; font: 650 24px/1.1 Inter, ui-sans-serif, system-ui, sans-serif; }
+    .settings-copy { color: rgba(217, 255, 229, .55); font-size: 10px; line-height: 1.5; }
+    .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; margin: 18px 0; }
+    .settings-toggle { display: flex; align-items: center; gap: 10px; min-height: 42px; font-size: 10px; }
+    .settings-toggle input { width: 20px; height: 20px; min-height: 0; accent-color: #4dff88; }
+    .settings-range { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 12px; font-size: 10px; }
+    .settings-range input { grid-column: 1 / -1; min-height: 24px; accent-color: #4dff88; }
+    .settings-bindings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
+    .settings-binding { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; min-width: 0; padding: 7px 8px; border: 1px solid rgba(77, 255, 136, .12); border-radius: 4px; font-size: 9px; }
+    .settings-binding button { min-width: 54px; }
+    .settings-binding button[data-capturing="true"] { border-color: #ffcf82; color: #ffdf9c; }
+    .settings-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }
+
+    .visually-hidden {
+      position: fixed !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      white-space: nowrap !important;
+      border: 0 !important;
+    }
+
+    .high-contrast #hud { filter: contrast(1.32) brightness(1.14); }
+    .high-contrast .ready-card,
+    .high-contrast .settings-card { border-color: rgba(141, 255, 179, .72); background: rgba(0, 9, 14, .985); }
+    .large-interface-text .ready-card,
+    .large-interface-text .settings-card { zoom: 1.12; }
+    .forced-reduced-motion *,
+    .forced-reduced-motion *::before,
+    .forced-reduced-motion *::after { animation: none !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+
     @media (max-width: 620px), (max-height: 500px) {
       #incident-replay-overlay { padding: 9px; }
       .replay-head, .replay-review { width: min(620px, calc(100vw - 18px)); padding: 7px 9px; }
@@ -1485,6 +1648,10 @@
       #incident-replay-outcome { font-size: 8px; }
       #incident-replay-grade { font-size: 7px; }
       #incident-replay-cause, #incident-replay-correction { font-size: 7px; }
+      .replay-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .replay-controls select:last-of-type { grid-column: 1 / -1; }
+      .settings-grid, .settings-bindings { grid-template-columns: 1fr; }
+      .settings-card { padding: 17px; }
     }
 
     #fatal {
@@ -1549,6 +1716,8 @@
   <canvas id="hud" aria-hidden="true"></canvas>
   <div id="view-status" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off" hidden>SOLO · ROOM NOT CONFIGURED</div>
+  <button id="pause-button" type="button" aria-label="Pause sortie">Pause · Esc</button>
+  <output id="flight-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></output>
 
   <div id="pilot-physiology" aria-hidden="true" hidden>
     <div id="pilot-physiology-vignette" class="pilot-physiology-layer"></div>
@@ -1573,11 +1742,27 @@
       <div class="replay-review-label">AUTOMATED CAUSAL REVIEW · NOT AN LSO GRADE</div>
       <div id="incident-replay-cause"></div>
       <div id="incident-replay-correction"></div>
-      <div class="replay-timeline" aria-hidden="true">
+      <div class="replay-timeline">
         <div id="incident-replay-progress"></div>
         <div id="incident-replay-decision" data-reached="false"></div>
+        <input id="incident-replay-scrubber" type="range" min="0" max="1000" value="0" aria-label="Replay position">
       </div>
-      <button id="incident-replay-skip" type="button">Skip to debrief · Esc</button>
+      <div class="replay-controls" aria-label="Replay controls">
+        <button id="incident-replay-play" type="button">Pause</button>
+        <button id="incident-replay-event-jump" type="button">Next event</button>
+        <select id="incident-replay-rate" aria-label="Replay speed">
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+        </select>
+        <select id="incident-replay-camera" aria-label="Replay camera">
+          <option value="CHASE">Chase camera</option>
+          <option value="DECK">Deck camera</option>
+          <option value="COCKPIT">Cockpit camera</option>
+        </select>
+        <button id="incident-replay-skip" type="button">Debrief · Esc</button>
+      </div>
     </div>
   </section>
 
@@ -1630,7 +1815,7 @@
         <button class="tf-action" type="button" data-test-action="inspectGearDownlocks" data-maintenance-only="true">I · Inspect three<br>downlocks</button>
         <button class="tf-action" type="button" data-test-action="flapUp">Hold flaps<br>up</button>
         <button class="tf-action" type="button" data-test-action="flapDown">Hold flaps<br>down</button>
-        <button class="tf-action emergency" type="button" data-test-action="emergencyGearRelease">E · Hold emergency<br>gear release</button>
+        <button class="tf-action emergency" type="button" data-test-action="emergencyGearRelease" data-maintenance-only="true">E · Hold emergency<br>gear release</button>
       </div>
       <p class="tf-note">TEST INSTRUMENTATION · COMMANDS MOVE CONTROLS; INDICATIONS REPORT RESULTS. RELEASE OR POINTER LOSS RETURNS SPRING-LOADED CONTROLS SAFE. HOLD E + PRESS I TO VERIFY DOWNLOCKS.</p>
     </div>
@@ -1687,7 +1872,7 @@
         <div class="ready-menu-brand">Guns Only</div>
         <div>
           <h1 id="ready-menu-title">Choose a sortie</h1>
-          <p id="ready-menu-help">Choose an activity and sortie. Select a card for its briefing or use Fly to launch it directly.</p>
+          <p id="ready-menu-help">Choose an activity and sortie. Selection previews the briefing; the primary action launches it.</p>
         </div>
       </header>
 
@@ -1720,7 +1905,6 @@
                   <strong>Perch Attack</strong>
                   <span>Start high at the bandit's six and convert the perch into a gun solution.</span>
                 </button>
-                <button type="button" class="sortie-launch" data-mission-launch="1" aria-label="Fly Perch Attack now">Fly</button>
               </div>
               <div class="sortie-option" data-mission-option="2" data-selected="false">
                 <button type="button" class="sortie-choice" data-mission-select="2" aria-pressed="false">
@@ -1728,7 +1912,6 @@
                   <strong>Break Defense</strong>
                   <span>A bandit begins at your high six. Survive, then reverse the fight.</span>
                 </button>
-                <button type="button" class="sortie-launch" data-mission-launch="2" aria-label="Fly Break Defense now">Fly</button>
               </div>
               <div class="sortie-option" data-mission-option="7" data-selected="false">
                 <button type="button" class="sortie-choice" data-mission-select="7" aria-pressed="false">
@@ -1736,7 +1919,6 @@
                   <strong>F-22A vs Su-27S</strong>
                   <span>Take a neutral modern visual merge with guns safe through the first pass.</span>
                 </button>
-                <button type="button" class="sortie-launch" data-mission-launch="7" aria-label="Fly F-22A versus Su-27S now">Fly</button>
               </div>
             </section>
 
@@ -1749,9 +1931,8 @@
                 <button type="button" class="sortie-choice" data-mission-select="5" aria-pressed="false">
                   <span class="sortie-number">05 · Carrier qualification</span>
                   <strong>Final Approach</strong>
-                  <span>Join the active groove, fly the ball, trap, and return to combat.</span>
+                  <span>Fly one scored pass from the active groove to a trap or bolter.</span>
                 </button>
-                <button type="button" class="sortie-launch" data-mission-launch="5" aria-label="Fly Final Approach now">Fly</button>
               </div>
               <div class="sortie-option" data-mission-option="6" data-selected="false">
                 <button type="button" class="sortie-choice" data-mission-select="6" aria-pressed="false">
@@ -1759,9 +1940,7 @@
                   <strong>Degraded Recovery</strong>
                   <span>Diagnose a failed normal gear extension and recover aboard safely.</span>
                 </button>
-                <button type="button" class="sortie-launch" data-mission-launch="6" aria-label="Fly Degraded Recovery now">Fly</button>
               </div>
-              <p class="ready-deck-note">Press C in the briefing to switch the complete landing setup between axial and 9° angled deck geometry.</p>
             </section>
 
             <section id="ready-group-gunnery" class="ready-mission-group" role="tabpanel" aria-labelledby="ready-activity-gunnery" data-sortie-group="gunnery" hidden>
@@ -1775,7 +1954,6 @@
                   <strong>Saddle + Shot</strong>
                   <span>Track a weaving target and fire only from a stable gun solution.</span>
                 </button>
-                <button type="button" class="sortie-launch" data-mission-launch="3" aria-label="Fly Saddle and Shot now">Fly</button>
               </div>
               <div class="sortie-option" data-mission-option="4" data-selected="false">
                 <button type="button" class="sortie-choice" data-mission-select="4" aria-pressed="false">
@@ -1783,7 +1961,6 @@
                   <strong>Balloon Strike</strong>
                   <span>Trade a finite altitude budget for one engine-less attack on an AWACS.</span>
                 </button>
-                <button type="button" class="sortie-launch" data-mission-launch="4" aria-label="Fly Balloon Strike now">Fly</button>
               </div>
             </section>
 
@@ -1798,7 +1975,6 @@
                   <strong>Drone Raid Defence</strong>
                   <span>Stop four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring.</span>
                 </button>
-                <button type="button" class="sortie-launch" data-mission-launch="8" aria-label="Fly Drone Raid Defence now">Fly</button>
               </div>
             </section>
           </div>
@@ -1809,21 +1985,58 @@
           <h2 id="ready-title">Perch Attack</h2>
           <p id="ready-brief">Convert altitude and position into a controlled gun solution. Stay in plane, manage closure, and do not trade the perch for an overshoot.</p>
           <div class="ready-facts" aria-label="Mission details">
-            <div class="ready-fact"><small>Sortie</small><span id="ready-sortie">Offensive conversion</span></div>
-            <div class="ready-fact"><small>Configuration</small><span id="ready-config">Guns hot · air start</span></div>
+            <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">Offensive conversion</span></div>
+            <div class="ready-fact"><small id="ready-config-label">Configuration</small><span id="ready-config">Guns hot · air start</span></div>
           </div>
-          <p class="ready-controls">Arrows fly · W/S power · G gear · [ / ] flaps (release to hold)<br>F guns · V padlock · H controls · 1–8 missions · R restart</p>
+          <div id="ready-deck-config" class="ready-deck-config" hidden>
+            <span class="ready-deck-label">Deck layout</span>
+            <div class="ready-deck-options" role="group" aria-label="Carrier deck layout">
+              <button type="button" data-deck-configuration="0" aria-pressed="true">Axial deck</button>
+              <button type="button" data-deck-configuration="1" aria-pressed="false">9° angled</button>
+            </div>
+            <p>This changes the complete landing centreline, wire, rollout, and starting geometry.</p>
+          </div>
+          <p id="ready-controls" class="ready-controls">Arrows fly · W/S power · G gear · [ / ] flaps (release to hold)
+F guns · V padlock · H controls · 1–8 missions · R restart</p>
           <button id="ready-start" type="button">Fly Perch Attack</button>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
+          <div class="ready-secondary-actions">
+            <button id="ready-settings" type="button">Settings</button>
+            <button id="ready-restart" type="button" hidden>Restart sortie</button>
+            <button id="ready-return" type="button" hidden>Return to catalogue</button>
+          </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 53 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 54 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
       </div>
     </div>
   </div>
+
+  <section id="settings-screen" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-describedby="settings-copy" aria-hidden="true">
+    <div class="settings-card">
+      <header class="settings-head">
+        <h2 id="settings-title">Settings</h2>
+        <button id="settings-close" type="button">Done · Esc</button>
+      </header>
+      <p id="settings-copy" class="settings-copy">Preferences apply immediately and stay on this device. Touch controls retain their labelled actions when keyboard bindings change.</p>
+      <div class="settings-grid">
+        <label class="settings-toggle"><input id="setting-audio" type="checkbox"> Sound</label>
+        <label class="settings-toggle"><input id="setting-high-contrast" type="checkbox"> High-contrast HUD</label>
+        <label class="settings-toggle"><input id="setting-reduced-motion" type="checkbox"> Reduce motion</label>
+        <label class="settings-toggle"><input id="setting-large-text" type="checkbox"> Larger interface text</label>
+        <label class="settings-range" for="setting-tilt-sensitivity"><span>Tilt sensitivity</span><output id="setting-tilt-sensitivity-value">1.00×</output><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1"></label>
+      </div>
+      <div class="settings-copy">Keyboard flight controls</div>
+      <div id="settings-bindings" class="settings-bindings"></div>
+      <div class="settings-actions">
+        <button id="settings-reset-bindings" type="button">Reset controls</button>
+        <button id="settings-close-bottom" type="button">Done</button>
+      </div>
+    </div>
+  </section>
 
   <div id="boot" role="status" aria-live="polite">
     <div class="boot-card">
@@ -1844,7 +2057,7 @@
   </div>
 
   <script src="./multiplayer-config.js"></script>
-  <script type="module" src="./app.js?v=53"></script>
+  <script type="module" src="./app.js?v=54"></script>
   <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
 </body>
 </html>

@@ -43,7 +43,8 @@ public enum SessionEventType {
     TerminalLimitReached,
     SortieFinished,
     ArrestmentFailed,
-    RaidTargetLeaked
+    RaidTargetLeaked,
+    AutoGcasTransition
 }
 
 /// A bounded, ordered record of discrete simulation facts. Sequence numbers are monotonic for the
@@ -57,7 +58,13 @@ public readonly record struct SessionEvent(
     CombatRole Target,
     int Count,
     SortieOutcome Outcome,
-    ImpactSurface Surface = ImpactSurface.None);
+    ImpactSurface Surface = ImpactSurface.None,
+    AutoGcasPhase? AutoGcasPhase = null,
+    AutoGcasInhibitReason? AutoGcasInhibitReason = null,
+    string? AutoGcasCue = null,
+    int AutoGcasActivationCount = 0,
+    int AutoGcasReleaseCount = 0,
+    int AutoGcasOverrideCount = 0);
 
 /// <summary>
 /// Presentation-independent lifecycle for one deterministic Guns Only sortie.
@@ -84,6 +91,8 @@ public sealed class SimulationSession {
     AirframeSystems _systems = null!;
     PilotPhysiologyModel _pilotPhysiology = null!;
     AutoGcasState _autoGcasState;
+    GunneryPitchAssistState _gunneryPitchAssistState =
+        GunneryPitchAssistState.Inactive();
     PilotCommand _pilotDelayedCommand;
     bool _pilotCommandResponseInitialized;
     bool _pilotControlInterlocked;
@@ -113,6 +122,7 @@ public sealed class SimulationSession {
     double _closureSmooth;
     string _transitionCue = "";
     double _transitionCueUntilMs = double.NegativeInfinity;
+    double _splashCueUntilMs = double.NegativeInfinity;
     int _shotsTotal;
     int _shotsInWindow;
     int _killCount;
@@ -145,6 +155,7 @@ public sealed class SimulationSession {
     bool _attemptCleanRecorded;
     Carrier.Recovery _recovery = Carrier.Recovery.Flying;
     Carrier.TouchdownResult _touchdown = Carrier.TouchdownResult.Flying;
+    readonly CarrierPassRecorder _carrierPass = new();
     readonly ArrestmentModel _arrestment = new();
     readonly CatapultLaunchModel _catapult = new();
     BurbleField? _burble;
@@ -187,6 +198,8 @@ public sealed class SimulationSession {
     public AutoGcasCapabilityProfile PlayerAutoGcasCapability =>
         _beat.PlayerAircraft.AutomaticGroundCollisionAvoidance;
     public AutoGcasState AutoGcas => _autoGcasState;
+    public GunneryPitchAssistState GunneryPitchAssist =>
+        _gunneryPitchAssistState;
     public bool AutoGcasOverrideHeld => PlayerAutoGcasCapability.Available
         && _pilotPhysiology.State.ControlAuthority01 >= 0.55
         && _keys.PhaseAt(GKey.AutoGcasOverride, _simTimeMs) != KeyPhase.Idle;
@@ -215,6 +228,7 @@ public sealed class SimulationSession {
     public RecoveryDifficulty Difficulty => _difficulty;
     public Carrier.Recovery Recovery => _recovery;
     public Carrier.TouchdownResult Touchdown => _touchdown;
+    public CarrierPassResult CarrierPass => _carrierPass.Result;
     public ArrestmentModel Arrestment => _arrestment;
     public CatapultLaunchModel Catapult => _catapult;
     public BurbleField? Burble => _burble;
@@ -254,7 +268,7 @@ public sealed class SimulationSession {
             != PilotControlImpairment.Incapacitated;
     // Compatibility projection for the old transient HUD. Terminal destruction is represented by
     // ordered events plus Outcome; a frozen simulation clock must never hold a timed cue forever.
-    public bool SplashCueActive => false;
+    public bool SplashCueActive => _simTimeMs < _splashCueUntilMs;
     public bool TransitionCueActive => _catapult.IsActive || _simTimeMs < _transitionCueUntilMs;
     public string TransitionCue => TransitionCueActive ? _transitionCue : "";
     public bool WaveOffActive => _carrier is not null && _simTimeMs < _waveOffUntilMs;
@@ -569,6 +583,7 @@ public sealed class SimulationSession {
 
         _recovery = Carrier.Recovery.Flying;
         _touchdown = Carrier.TouchdownResult.Flying;
+        _carrierPass.Reset();
         _arrestment.Reset();
         _catapult.Reset();
         _waveOffArmed = _carrier is not null;
@@ -599,6 +614,7 @@ public sealed class SimulationSession {
         _detents.ConfigureFor(_beat.PlayerAir, _beat.InitialThrottle);
         _pilotPhysiology = new PilotPhysiologyModel(_beat.PlayerPilotPhysiology);
         _autoGcasState = AutoGcasState.Initial(PlayerAutoGcasCapability.Available);
+        _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
         _pilotDelayedCommand = _detents.Command;
         _pilotCommandResponseInitialized = true;
         _pilotControlInterlocked = false;
@@ -636,6 +652,7 @@ public sealed class SimulationSession {
         _incidentReplay.Reset();
         _transitionCue = "";
         _transitionCueUntilMs = double.NegativeInfinity;
+        _splashCueUntilMs = double.NegativeInfinity;
         _lastRange = Geometry.Range(_player.State, _bandit.State);
         _closureKts = 0.0;
         _closureSmooth = 0.0;
@@ -700,6 +717,7 @@ public sealed class SimulationSession {
         sinkMps: difficulty.BurbleSinkMps);
 
     void ResetFlightControls(bool approachMode, double initialThrottle) {
+        _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
         _detents = new DetentLayer {
             Variant = _carrier is not null ? ValleyVariant.PhysicsOnly : _requestedVariant,
             ApproachMode = approachMode,
@@ -763,6 +781,7 @@ public sealed class SimulationSession {
 
     void ClearHeldInput() {
         _keys = new KeyGrammar();
+        _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
         if (_systems is not null) {
             _systems.SetFlapLever(WingFlapLever.Hold);
             if (_maintenanceScenario is { Started: true, Finished: false })
@@ -794,7 +813,8 @@ public sealed class SimulationSession {
 
     void EmitEvent(SessionEventType type, CombatRole source, CombatRole target,
         int count = 0, SortieOutcome outcome = SortieOutcome.None,
-        ImpactSurface surface = ImpactSurface.None) {
+        ImpactSurface surface = ImpactSurface.None,
+        AutoGcasState? autoGcas = null) {
         if (_recentEvents.Count == RecentEventCapacity) _recentEvents.RemoveAt(0);
         var sessionEvent = new SessionEvent(
             ++_eventSequence,
@@ -804,7 +824,13 @@ public sealed class SimulationSession {
             target,
             count,
             outcome,
-            surface);
+            surface,
+            autoGcas?.Phase,
+            autoGcas?.InhibitReason,
+            autoGcas?.Cue,
+            autoGcas?.ActivationCount ?? 0,
+            autoGcas?.ReleaseCount ?? 0,
+            autoGcas?.PilotOverrideCount ?? 0);
         _recentEvents.Add(sessionEvent);
 
         // The carrier incident recorder receives the event at the authoritative emission boundary,
@@ -867,6 +893,7 @@ public sealed class SimulationSession {
     }
 
     void BeginCatastrophicDamage(CombatRole target, CombatRole source) {
+        _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
         BeginTerminalClock();
         if (target == CombatRole.Player) {
             if (_playerTerminalState != AircraftTerminalState.Flying) return;
@@ -880,6 +907,7 @@ public sealed class SimulationSession {
             if (_opponentTerminalState != AircraftTerminalState.Flying) return;
             _opponentTerminalState = AircraftTerminalState.DestroyedAirborne;
             _bandit.ApplyCatastrophicDamage(handedness: 1);
+            _splashCueUntilMs = _simTimeMs + 3000.0;
         } else return;
         EmitEvent(SessionEventType.Destroyed, source, target);
     }
@@ -1226,6 +1254,18 @@ public sealed class SimulationSession {
         Lifecycle = LifecycleState.Finished;
     }
 
+    void FinishCarrierQualificationSortie(bool recovered) {
+        if (!_beat.RecoveryCompletesSortie || Lifecycle != LifecycleState.Active) return;
+        if (recovered) RecordStoppedTrap();
+        _outcome = recovered ? SortieOutcome.Victory : SortieOutcome.Draw;
+        _pendingOutcome = _outcome;
+        EmitEvent(SessionEventType.SortieFinished,
+            CombatRole.None, CombatRole.None, outcome: _outcome);
+        FinishPreviousRecoveryAttempt();
+        ClearHeldInput();
+        Lifecycle = LifecycleState.Finished;
+    }
+
     void CompleteRelaunch() {
         AircraftState launchState = _catapult.State;
         double retainedEnginePower = _player.ThrustFraction;
@@ -1243,6 +1283,7 @@ public sealed class SimulationSession {
         _arrestment.Reset();
         _recovery = Carrier.Recovery.Flying;
         _touchdown = Carrier.TouchdownResult.Flying;
+        _carrierPass.Reset();
         ResetFlightControls(approachMode: false, initialThrottle: retainedEnginePower);
         SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
         _recoveryAttemptActive = _carrier is not null;
@@ -1396,6 +1437,7 @@ public sealed class SimulationSession {
     /// </summary>
     PilotCommand ApplyAutoGcas(in PilotCommand effectivePilotCommand) {
         AutoGcasCapabilityProfile capability = PlayerAutoGcasCapability;
+        AutoGcasState previous = _autoGcasState;
         var result = AutoGcasController.Step(FixedDeltaSeconds, _autoGcasState,
             new AutoGcasInput(
                 Aircraft: _player.State,
@@ -1408,8 +1450,52 @@ public sealed class SimulationSession {
                 PilotOverrideHeld: AutoGcasOverrideHeld,
                 IndicatedAirspeedMps: _player.IndicatedAirspeedMps),
             capability);
+        bool evidenceChanged = result.State.Phase != previous.Phase
+            || result.State.InhibitReason != previous.InhibitReason
+            || result.State.Cue != previous.Cue
+            || result.State.ActivationCount != previous.ActivationCount
+            || result.State.ReleaseCount != previous.ReleaseCount
+            || result.State.PilotOverrideCount != previous.PilotOverrideCount;
+        if (evidenceChanged) {
+            EmitEvent(SessionEventType.AutoGcasTransition,
+                CombatRole.None, CombatRole.Player,
+                count: result.State.ActivationCount,
+                autoGcas: result.State);
+        }
         _autoGcasState = result.State;
+        if (_autoGcasState.Active)
+            _gunneryPitchAssistState = GunneryPitchAssistState.Inactive(
+                effectivePilotCommand.GDemand);
         return result.RecoveryCommand ?? effectivePilotCommand;
+    }
+
+    /// <summary>
+    /// Add a bounded, pitch-only convergence request before human physiology and aircraft-owned
+    /// Auto-GCAS. The lead sample is the previous 120 Hz weapon evaluation; using that one-tick-old
+    /// authoritative result avoids advancing projectiles twice or inventing a second ballistic law.
+    /// </summary>
+    PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {
+        bool enabled = PlayerWeaponsAuthorized
+            && _beat.CombatRules.PlayerAmmo > 0
+            && _playerTerminalState == AircraftTerminalState.Flying
+            && _opponentTerminalState == AircraftTerminalState.Flying
+            && _gunKill.TargetAlive
+            && !_detents.ApproachMode
+            && !_detents.HighAlphaRecoveryActive
+            && !_pilotControlInterlocked;
+        GunneryPitchAssistResult result = GunsOnly.Sim.GunneryPitchAssist.Apply(
+            requestedPilotCommand,
+            _player.State,
+            _beat.PlayerAir,
+            _player.LiftDir,
+            _player.AirspeedMps,
+            _player.AtmosphereModel,
+            _gunKill.LeadDirection,
+            _gunKill.HasLeadSolution,
+            Geometry.Range(_player.State, _bandit.State),
+            enabled);
+        _gunneryPitchAssistState = result.State;
+        return result.Command;
     }
 
     void StepPilotPhysiology(double normalAccelerationG) {
@@ -1653,6 +1739,32 @@ public sealed class SimulationSession {
             carrierSolid: Carrier.SolidCollision.FlightDeck);
     }
 
+    void ObserveCarrierPass() {
+        if (_carrier is null || _touchdown.Recovery != Carrier.Recovery.Flying
+            || _playerTerminalState != AircraftTerminalState.Flying) return;
+        var (along, cross, height) = _carrier.LandingFrame(_player.State.Position);
+        double distance = _carrier.TouchdownAlongM - along;
+        if (CarrierPassRecorder.PhaseForDistance(distance) == CarrierPassPhase.None) return;
+        double desiredHeight = Math.Max(0.0, distance * Carrier.GlideslopeSlope);
+        double onSpeedAoa = _detents.EffectiveOnSpeedAoARad(_beat.PlayerAir);
+        LsoAdvice? lso = Lso.AdviseForMode(
+            _carrier,
+            _player.State,
+            _player.AngleOfAttackRad,
+            _carrier.ApproachDirectorPitchOffsetRad,
+            _detents.ApproachMode,
+            WaveOffActive);
+        _carrierPass.Observe(new CarrierPassSample(
+            DistanceToTouchdownM: distance,
+            GlideslopeErrorM: desiredHeight - height,
+            LineupErrorM: cross,
+            IndicatedAirspeedMps: _player.IndicatedAirspeedMps,
+            AngleOfAttackErrorRad: _player.AngleOfAttackRad - onSpeedAoa,
+            SinkRateMps: _carrier.DeckSinkRateMps(_player.State),
+            LsoWaveOff: lso?.Severity == LsoSeverity.WaveOff,
+            PilotWaveOff: WaveOffActive));
+    }
+
     /// Apply the one authoritative carrier-contact path after an airborne player tick. Combat and
     /// terminal lifecycle state do not change deck geometry, hook interception, gear validation,
     /// bolter energy, or arresting-wire engagement, so both ordinary flight and a surviving
@@ -1675,8 +1787,10 @@ public sealed class SimulationSession {
             previousPlayerState.Position, _player.State.Position);
 
         if (_touchdown.Recovery == Carrier.Recovery.Flying
-            && contact != Carrier.Recovery.Flying)
+            && contact != Carrier.Recovery.Flying) {
             _touchdown = touchdown;
+            _carrierPass.Complete(touchdown);
+        }
 
         bool validRecoveryContact = solid == Carrier.SolidCollision.FlightDeck
             && topDeckContact
@@ -1721,8 +1835,12 @@ public sealed class SimulationSession {
             var (along, cross, height) = _carrier.DeckFrame(_player.State.Position);
             if (height > 8.0 || along > _carrier.DeckLengthM * 0.5 + 5.0
                 || Math.Abs(cross) > _carrier.DeckHalfWidthM + 10.0) {
-                _recovery = Carrier.Recovery.Flying;
-                _touchdown = Carrier.TouchdownResult.Flying;
+                if (_beat.RecoveryCompletesSortie) {
+                    FinishCarrierQualificationSortie(recovered: false);
+                } else {
+                    _recovery = Carrier.Recovery.Flying;
+                    _touchdown = Carrier.TouchdownResult.Flying;
+                }
             }
         } else {
             _recovery = contact;
@@ -1738,6 +1856,8 @@ public sealed class SimulationSession {
                 HandleArrestmentFailure();
             } else if (_arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped) {
                 if (_maintenanceScenario is not null) FinishRecoveredMaintenanceSortie();
+                else if (_beat.RecoveryCompletesSortie)
+                    FinishCarrierQualificationSortie(recovered: true);
                 else BeginRelaunch();
             }
         }
@@ -1784,6 +1904,7 @@ public sealed class SimulationSession {
             _advice = _beat.Law.Advise(_player.State, _bandit.State,
                 _beat.PlayerAir, _player.AirspeedMps);
             _detents.AirspeedMps = _player.AirspeedMps;
+            _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
             _detents.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
             _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir,
                 _advice, FixedDeltaSeconds);
@@ -1794,7 +1915,8 @@ public sealed class SimulationSession {
                 if (_recoveryAttemptActive) _attemptHadSetback = true;
             }
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
-            PilotCommand effectiveCommand = ApplyPilotPhysiology(_detents.Command);
+            PilotCommand assistedCommand = ApplyGunneryPitchAssist(_detents.Command);
+            PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
             PilotCommand flightCommand = ApplyAutoGcas(effectiveCommand);
             PreparePlayerForPoweredTick();
             _player.Step(flightCommand, FixedDeltaSeconds);
@@ -1973,6 +2095,8 @@ public sealed class SimulationSession {
             if (_playerTerminalState == AircraftTerminalState.Flying
                 && _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped) {
                 if (_maintenanceScenario is not null) FinishRecoveredMaintenanceSortie();
+                else if (_beat.RecoveryCompletesSortie)
+                    FinishCarrierQualificationSortie(recovered: true);
                 else BeginRelaunch();
             }
             CompleteCarrierConstraintTick(playerState, opponentState);
@@ -2004,6 +2128,7 @@ public sealed class SimulationSession {
         _advice = _beat.Law.Advise(_player.State, _bandit.State, _beat.PlayerAir,
             _player.AirspeedMps);
         _detents.AirspeedMps = _player.AirspeedMps;
+        _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
         _detents.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
         if (_carrier is not null)
             _carrier.ApproachDirectorPitchOffsetRad =
@@ -2020,7 +2145,8 @@ public sealed class SimulationSession {
 
         AircraftState previousPlayerState = _player.State;
         AircraftState previousOpponentState = _bandit.State;
-        PilotCommand effectiveCommand = ApplyPilotPhysiology(_detents.Command);
+        PilotCommand assistedCommand = ApplyGunneryPitchAssist(_detents.Command);
+        PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
         PilotCommand flightCommand = ApplyAutoGcas(effectiveCommand);
         StepWeapons(previousPlayerState, previousOpponentState, _triggerDown);
         PreparePlayerForPoweredTick();
@@ -2036,6 +2162,7 @@ public sealed class SimulationSession {
 
         if (_carrier is not null) {
             _carrier.Step(FixedDeltaSeconds);
+            ObserveCarrierPass();
         }
 
         ObserveCombatDamage();

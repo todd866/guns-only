@@ -22,6 +22,11 @@ public sealed class AircraftSim {
     public double LastNz { get; private set; } = 1.0;
     /// Stage-averaged rolling moment applied by the rigid-body model during the latest fixed tick.
     public double LastRollMomentNm { get; private set; }
+    /// Integrated flight-control allocation at the physical nozzle/resultant-thrust boundary.
+    /// Positive angle commands positive-q (nose-up) moment; zero identifies a fixed nozzle or an
+    /// attached-flow condition that does not need propulsive control authority.
+    public double LastPitchThrustVectorAngleRad { get; private set; }
+    public double LastPitchThrustVectorMomentNm { get; private set; }
     /// The exact control command consumed by the most recent aerodynamic Step. Requested detent
     /// state lives elsewhere; this is actuator-path truth for telemetry and replay.
     public PilotCommand LastAppliedCommand { get; private set; } = NeutralExternalCommand(
@@ -200,6 +205,8 @@ public sealed class AircraftSim {
         LastPilotNormalAccelerationG = pilotNormalAccelerationG ?? 1.0;
         HasValidPilotNormalAcceleration = pilotNormalAccelerationG.HasValue;
         LastRollMomentNm = 0.0;
+        LastPitchThrustVectorAngleRad = 0.0;
+        LastPitchThrustVectorMomentNm = 0.0;
         LastAppliedCommand = NeutralExternalCommand(State, LastAppliedCommand.Throttle);
         HasAppliedFlightCommand = false;
         Buffet = false;
@@ -231,6 +238,8 @@ public sealed class AircraftSim {
             throw new ArgumentOutOfRangeException(nameof(dt));
         LastAppliedCommand = NeutralExternalCommand(State, throttle);
         HasAppliedFlightCommand = false;
+        LastPitchThrustVectorAngleRad = 0.0;
+        LastPitchThrustVectorMomentNm = 0.0;
         AdvanceEngine(throttle, dt);
     }
 
@@ -329,6 +338,8 @@ public sealed class AircraftSim {
             configuration, AtmosphereModel);
         _airVelocity = aero.AirVelocity;
         LastNz = aero.Nz;
+        LastPitchThrustVectorAngleRad = aero.PitchThrustVectorAngleRad;
+        LastPitchThrustVectorMomentNm = aero.PitchThrustVectorMomentNm;
         var nonGravitationalAcceleration = aero.Accel + new Vec3D(0.0, FlightModel.G0, 0.0);
         LastPilotNormalAccelerationG = nonGravitationalAcceleration.Dot(BodyUp)
             / FlightModel.G0;

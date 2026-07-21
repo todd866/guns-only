@@ -16,8 +16,22 @@ public class CarrierFlightHarnessTests {
 
     sealed class SessionHarness {
         public SessionHarness(
-            Carrier.DeckConfiguration configuration = Carrier.DeckConfiguration.Axial) {
-            Session = new SimulationSession(5, configuration);
+            Carrier.DeckConfiguration configuration = Carrier.DeckConfiguration.Axial,
+            bool continuousCycle = false) {
+            if (continuousCycle) {
+                BeatSetup baseline = Beats.CarrierApproach(configuration);
+                BeatSetup cycle = baseline with {
+                    Bandit = new AircraftState(new Vec3D(450, 650, 1500), 105, 0, 0.0,
+                        0, FlightModel.Sabre.MassKg),
+                    UsesReactiveBandit = true,
+                    Combat = CombatConfig.CarrierQualification,
+                    RecoveryCompletesSortie = false
+                };
+                Session = new SimulationSession();
+                Session.StartBeat(() => cycle);
+            } else {
+                Session = new SimulationSession(5, configuration);
+            }
             Session.Begin();
         }
 
@@ -75,7 +89,8 @@ public class CarrierFlightHarnessTests {
     }
 
     static SimulationSession NearWireCombatSession(double targetRangeM,
-        double heightM = 0.02, double? alongM = null) {
+        double heightM = 0.02, double? alongM = null,
+        bool recoveryCompletesSortie = false) {
         BeatSetup baseline = Beats.CarrierApproach();
         Carrier ship = baseline.Carrier!;
         // One fixed tick carries the main wheels through the deck beside wire three. This remains a
@@ -106,12 +121,56 @@ public class CarrierFlightHarnessTests {
                 (0.0, new PilotCommand(1.0, 0.0, 0.30, 0.0))
             },
             Combat = new CombatConfig(PlayerAmmo: 4, OpponentAmmo: 0,
-                PlayerHitsToDefeat: 4, OpponentHitsToDefeat: 1)
+                PlayerHitsToDefeat: 4, OpponentHitsToDefeat: 1),
+            RecoveryCompletesSortie = recoveryCompletesSortie
         };
         var session = new SimulationSession();
         session.StartBeat(() => setup);
         session.Begin();
         return session;
+    }
+
+    [Fact]
+    public void ProductionQualificationFinishesAtAStoppedTrapWithoutStartingCombat() {
+        var session = NearWireCombatSession(targetRangeM: 2000.0,
+            recoveryCompletesSortie: true);
+
+        session.StepFixed();
+        for (int i = 0; i < 10 * AircraftSim.TickHz
+            && session.Lifecycle != SimulationSession.LifecycleState.Finished; i++)
+            session.StepFixed();
+
+        Assert.Equal(Carrier.Recovery.Trap, session.Recovery);
+        Assert.Equal(ArrestmentModel.ArrestmentPhase.Stopped, session.Arrestment.Phase);
+        Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
+        Assert.Equal(SortieOutcome.Victory, session.Outcome);
+        Assert.False(session.Catapult.IsActive);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+        Assert.Equal(AircraftTerminalState.Flying, session.OpponentTerminalState);
+        Assert.Equal(CarrierPassGrade.NoGrade, session.CarrierPass.Grade);
+        Assert.True(session.CarrierPass.Deviations.HasFlag(CarrierPassDeviation.Incomplete),
+            "a near-wire fixture must be reported as an incomplete pass, not a clean full pass");
+    }
+
+    [Fact]
+    public void ProductionQualificationFinishesAsBolterBeforeAnyOpponentOutcome() {
+        Carrier ship = Beats.CarrierApproach().Carrier!;
+        double missedWiresAlong = ship.WireAlongM(4) + Carrier.HookToMainGearM + 4.8;
+        var session = NearWireCombatSession(targetRangeM: 2000.0,
+            alongM: missedWiresAlong, recoveryCompletesSortie: true);
+
+        session.StepFixed();
+        Assert.Equal(Carrier.Recovery.Bolter, session.Recovery);
+        for (int i = 0; i < 8 * AircraftSim.TickHz
+            && session.Lifecycle != SimulationSession.LifecycleState.Finished; i++)
+            session.StepFixed();
+
+        Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
+        Assert.Equal(SortieOutcome.Draw, session.Outcome);
+        Assert.Equal(Carrier.Recovery.Bolter, session.Recovery);
+        Assert.Equal(AircraftTerminalState.Flying, session.OpponentTerminalState);
+        Assert.Equal(CarrierPassGrade.NoGrade, session.CarrierPass.Grade);
+        Assert.True(session.CarrierPass.Deviations.HasFlag(CarrierPassDeviation.Incomplete));
     }
 
     [Fact]
@@ -150,7 +209,7 @@ public class CarrierFlightHarnessTests {
         var sinkCall = Lso.Advise(ship, sinkingOnBall, DetentLayer.OnSpeedAoARad,
             DetentLayer.OnSpeedAoARad);
         Assert.Equal(LsoSeverity.Correcting, sinkCall.Severity);
-        Assert.Equal("SINK RATE · POWER", sinkCall.Call);
+        Assert.Equal("ADD POWER NOW", sinkCall.Call);
 
         var unrecoverableAtRamp = CarrierState(ship, along: -75.0, cross: 0.0, lowM: 0.0)
             with { Gamma = -0.12 };
@@ -234,7 +293,7 @@ public class CarrierFlightHarnessTests {
     [InlineData(Carrier.DeckConfiguration.Angled)]
     public void PublishedRecoveryDirectorAndDeckRelativeFpmTrapAndRelaunch(
         Carrier.DeckConfiguration configuration) {
-        var rig = new SessionHarness(configuration);
+        var rig = new SessionHarness(configuration, continuousCycle: true);
         long spawn = rig.Session.PlayerSpawnSequence;
         bool arrested = false, launched = false, relaunched = false;
         Carrier.TouchdownResult trap = Carrier.TouchdownResult.Flying;
@@ -327,7 +386,7 @@ public class CarrierFlightHarnessTests {
     [InlineData(Carrier.DeckConfiguration.Angled)]
     public void ACompetentPilotTrapsRollsOutAndRelaunches(
         Carrier.DeckConfiguration configuration) {
-        var rig = new SessionHarness(configuration);
+        var rig = new SessionHarness(configuration, continuousCycle: true);
         bool sawArrestment = false;
         bool sawCatapult = false;
         bool relaunched = false;
@@ -713,7 +772,7 @@ public class CarrierFlightHarnessTests {
 
     [Fact]
     public void PilotStartsOnFinalsFirewallsEgressesAndKills() {
-        var rig = new SessionHarness();
+        var rig = new SessionHarness(continuousCycle: true);
         double finalsAltitude = rig.S.Position.Y, finalsSpeed = rig.Player.AirspeedMps;
         Vec3D banditStart = rig.B.Position;
 

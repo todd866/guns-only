@@ -5,6 +5,7 @@ import {
   HudSignalStabilizer,
   latchedRectVisibility,
   StableRoundedValue,
+  VisibilityEnvelope,
 } from "../hud_stabilizer.js";
 
 test("stable digits do not chatter across a rounding boundary", () => {
@@ -14,6 +15,20 @@ test("stable digits do not chatter across a rounding boundary", () => {
     assert.equal(value.update(sample), 556);
   }
   assert.equal(value.update(556.72), 557);
+});
+
+test("visibility envelope removes one-frame dropouts without delaying urgent onset", () => {
+  const envelope = new VisibilityEnvelope({ attackSeconds: 0.1, releaseSeconds: 0.2 });
+  assert.equal(envelope.update(true, 0.001, { instantAttack: true }), 1);
+  assert.equal(envelope.update(false, 0.02), 0.9);
+  assert.equal(envelope.update(true, 0.02), 1,
+    "one valid frame restores the cue instead of producing a blink");
+  assert.equal(envelope.update(false, 0.1), 0.5);
+  assert.equal(envelope.update(false, 0.1), 0);
+
+  envelope.reset();
+  assert.equal(envelope.update(true, 0.05), 0.5);
+  assert.equal(envelope.update(true, 0.05), 1);
 });
 
 test("F-22 tape filtering removes sample jitter but bounds manoeuvre lag", () => {

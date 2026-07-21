@@ -87,6 +87,63 @@ function withSortieLessons(result, state) {
   return withAutoGcasLesson(withGToleranceLesson(result, state), state);
 }
 
+function readableToken(value, fallback = "Not recorded") {
+  const normalized = token(value);
+  if (!normalized) return fallback;
+  return normalized
+    .replaceAll("UNSAFESINKRATE", "UNSAFE SINK RATE")
+    .replaceAll("HARDSINKRATE", "HARD SINK RATE")
+    .replaceAll("LOWSINKRATE", "LOW SINK RATE")
+    .replaceAll("ADAPTIVEDIFFICULTY", "ADAPTIVE DIFFICULTY")
+    .replaceAll("_", " ")
+    .replaceAll("|", " · ");
+}
+
+function isCarrierQualification(state) {
+  return state?.carrier === true
+    && token(state?.mission_definition_id) === "MISSION.CARRIER-QUALIFICATION.V1";
+}
+
+function carrierQualificationCopy(state) {
+  const recovery = token(state?.recovery);
+  const trapped = recovery === "TRAP" || token(state?.arrest_phase) === "STOPPED";
+  const bolter = state?.bolter === true || recovery === "BOLTER";
+  const wire = Math.max(0, Math.round(Number(state?.wire) || 0));
+  const grade = readableToken(state?.touchdown_grade, "UNASSESSED");
+  const deviations = readableToken(state?.touchdown_deviations, "No recorded deviations");
+  const correction = readableToken(
+    state?.touchdown_primary_correction,
+    "Review the approach",
+  );
+
+  if (trapped) {
+    return withSortieLessons({
+      kicker: "Carrier qualification debrief",
+      title: wire > 0 ? `Trapped · Wire ${wire}` : "Trapped",
+      brief: `${grade}. Recorded deviations: ${deviations}. Primary correction: ${correction}.`,
+    }, state);
+  }
+  if (bolter) {
+    return withSortieLessons({
+      kicker: "Carrier qualification debrief",
+      title: "Bolter · No wire",
+      brief: `${grade}. No arresting wire was caught. Recorded deviations: ${deviations}. Primary correction: ${correction}.`,
+    }, state);
+  }
+  if (token(state?.sortie_outcome) === "DEFEAT") {
+    return withSortieLessons({
+      kicker: "Carrier qualification debrief",
+      title: "Aircraft Lost",
+      brief: carrierLossBrief(state),
+    }, state);
+  }
+  return withSortieLessons({
+    kicker: "Carrier qualification debrief",
+    title: "Recovery Incomplete",
+    brief: `The aircraft was not recovered. Recorded deviations: ${deviations}. Primary correction: ${correction}.`,
+  }, state);
+}
+
 /**
  * Produce the concise result-card story from authoritative snapshot evidence.
  * Detailed replay analysis is appended separately when the recorded clip is available.
@@ -130,6 +187,8 @@ export function sortieResultCopy(state) {
         : `The aircraft was not recovered. Evidence-based procedure score ${score}/${maximum}.`,
     }, state);
   }
+
+  if (isCarrierQualification(state)) return carrierQualificationCopy(state);
 
   switch (token(state?.sortie_outcome)) {
     case "VICTORY":

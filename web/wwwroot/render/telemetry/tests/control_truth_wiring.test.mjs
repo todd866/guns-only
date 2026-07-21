@@ -64,3 +64,20 @@ test("modern envelope override publishes its ceiling and distinguishes G from Ao
   assert.match(hud, /state\.tier === 3[\s\S]*?requested_alpha_deg[\s\S]*?AOA LIMIT OFF[\s\S]*?G LIMIT OVERRIDE/,
     "Space must explain whether it released the G limiter or the AoA limiter");
 });
+
+test("gunnery pitch assistance publishes request, limits, and achieved command separately", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+
+  assert.match(source, /\\\"gunnery_pitch_assist\\\"/);
+  assert.match(source, /gunneryPitchAssist\.Active/);
+  assert.match(source, /\\\"gunnery_pitch_error_deg\\\"/);
+  assert.match(source, /gunneryPitchAssist\.PitchLeadErrorRad/);
+  assert.match(source, /\\\"gunnery_total_lead_error_deg\\\"/);
+  assert.match(source, /gunneryPitchAssist\.TotalLeadErrorRad/);
+  assert.match(source, /\\\"gunnery_pitch_rate_cmd_dps\\\"/);
+  assert.match(source, /gunneryPitchAssist\.RequestedPitchRateRadPerSecond/);
+  assert.match(source, /\\\"gunnery_pitch_assist_g\\\"/);
+  assert.match(source, /gunneryPitchAssist\.AssistedLoadFactorG/);
+  assert.match(source, /\\\"gunnery_pitch_assist_delta_g\\\"/);
+  assert.match(source, /gunneryPitchAssist\.LoadFactorCorrectionG/);
+});
