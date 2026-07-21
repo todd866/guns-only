@@ -6,6 +6,7 @@ import {
   stallAwareness,
   systemsReadout,
   targetClosureReadout,
+  verticalSpeedText,
   visualMergeWeaponsCue,
 } from "./render/hud/hud_readouts.js";
 import {
@@ -1410,11 +1411,15 @@ class CombatHud {
     }
   }
 
-  drawAirdataLabels(state, x, groundKts = null) {
+  drawAirdataLabels(state, x, display = {}) {
     const data = airdataReadout(state);
+    const groundKts = Number.isFinite(display.groundKts) ? display.groundKts : null;
+    const verticalSpeedFpm = Number.isFinite(display.verticalSpeedDigits)
+      ? display.verticalSpeedDigits : data.verticalSpeedFpm;
     const groundText = Number.isFinite(groundKts)
       ? `G/S ${Math.round(Math.max(0, groundKts))}`
       : data.groundText;
+    const verticalText = verticalSpeedText(verticalSpeedFpm);
     const ctx = this.ctx;
     const centerY = this.getInstrumentCenterY();
     const tapeHeight = Math.min(310, this.height * (this.touchMode ? 0.36 : 0.43));
@@ -1426,13 +1431,22 @@ class CombatHud {
     ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillText(data.unitText, x, centerY - tapeHeight / 2 - 12);
 
-    // One compact earth-speed readout directly under the primary IAS value box.
+    // Earth-relative speed and the aircraft's actual vertical motion sit directly under IAS.
+    // They stay numerically explicit instead of adding another decorative analogue instrument.
     ctx.fillStyle = "rgba(3, 13, 20, 0.88)";
-    roundedRect(ctx, x - 27, centerY + 11, 54, 13, 3);
+    roundedRect(ctx, x - 31, centerY + 11, 62, 27, 3);
     ctx.fill();
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.14)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x - 27, centerY + 24.5);
+    ctx.lineTo(x + 27, centerY + 24.5);
+    ctx.stroke();
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillText(groundText, x, centerY + 17.5);
+    ctx.font = "700 6.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText(verticalText, x, centerY + 31.5);
     ctx.restore();
   }
 
@@ -2430,7 +2444,7 @@ class CombatHud {
       lowSpeed: stallAwareness(frame.state),
       fixedMarkers: speedTapeMarkers(frame.state),
     });
-    this.drawAirdataLabels(frame.state, tapeInset, display.groundKts);
+    this.drawAirdataLabels(frame.state, tapeInset, display);
     this.drawVerticalTape({
       value: display.altitudeFt,
       displayValue: display.altitudeDigits,

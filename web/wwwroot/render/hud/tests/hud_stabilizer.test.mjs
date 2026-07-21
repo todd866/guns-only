@@ -63,6 +63,65 @@ test("a replacement ownship resets filters rather than animating stale airdata",
   assert.equal(replacement.altitudeFt, 18_000);
 });
 
+test("vertical speed filtering preserves sign, bounds lag, resets scope, and never invents zero", () => {
+  const filter = new HudSignalStabilizer();
+  let display = filter.update({
+    player_entity_id: "jet",
+    indicated_airspeed_kts: 140,
+    alt_ft: 600,
+    vertical_speed_fpm: -650,
+  }, 1 / 60);
+  assert.equal(display.verticalSpeedFpm, -650);
+  assert.equal(display.verticalSpeedDigits, -650);
+
+  const jittered = [];
+  for (let index = 0; index < 60; index += 1) {
+    display = filter.update({
+      player_entity_id: "jet",
+      indicated_airspeed_kts: 140,
+      alt_ft: 600,
+      vertical_speed_fpm: index % 2 === 0 ? -628 : -672,
+    }, 1 / 60);
+    jittered.push(display.verticalSpeedFpm);
+    assert.equal(display.verticalSpeedDigits, -650);
+  }
+  assert.ok(Math.max(...jittered) - Math.min(...jittered) < 20);
+
+  display = filter.update({
+    player_entity_id: "jet",
+    indicated_airspeed_kts: 180,
+    alt_ft: 650,
+    vertical_speed_fpm: 4000,
+  }, 1 / 60);
+  assert.ok(display.verticalSpeedFpm > 0, "a fast sink-to-climb reversal must be immediately legible");
+  assert.ok(Math.abs(display.verticalSpeedFpm - 4000) <= 250.000001);
+
+  display = filter.update({
+    player_entity_id: "jet",
+    indicated_airspeed_kts: 180,
+    alt_ft: 650,
+  }, 1 / 60);
+  assert.equal(display.verticalSpeedFpm, null);
+  assert.equal(display.verticalSpeedDigits, null);
+
+  filter.update({
+    player_entity_id: "jet",
+    indicated_airspeed_kts: 180,
+    alt_ft: 650,
+    vertical_speed_fpm: -500,
+  }, 1 / 60);
+  display = filter.update({
+    player_entity_id: "jet",
+    replay_external: true,
+    indicated_airspeed_kts: 180,
+    alt_ft: 650,
+    vertical_speed_fpm: 1200,
+  }, 1 / 60);
+  assert.equal(display.verticalSpeedFpm, 1200,
+    "live-to-replay must reset instead of smearing two different timelines");
+  assert.equal(display.verticalSpeedDigits, 1200);
+});
+
 test("target-box visibility uses enter and exit hysteresis", () => {
   const rectangle = { left: 100, right: 900, top: 100, bottom: 600 };
   assert.equal(latchedRectVisibility(false, { x: 126, y: 300 }, rectangle, 20, 6), true);

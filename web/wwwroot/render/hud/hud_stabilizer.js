@@ -63,6 +63,7 @@ export class HudSignalStabilizer {
     this.speedDigits = new StableRoundedValue();
     this.altitudeDigits = new StableRoundedValue();
     this.headingDigits = new StableRoundedValue();
+    this.verticalSpeedDigits = new StableRoundedValue({ step: 50, hysteresisFraction: 0.20 });
     this.reset();
   }
 
@@ -71,19 +72,22 @@ export class HudSignalStabilizer {
     this.indicatedKts = null;
     this.groundKts = null;
     this.altitudeFt = null;
+    this.verticalSpeedFpm = null;
     this.headingUnwrappedDeg = null;
     this.speedDigits.reset();
     this.altitudeDigits.reset();
     this.headingDigits.reset();
+    this.verticalSpeedDigits.reset();
   }
 
   update(state = {}, deltaSeconds = 0) {
-    const entityId = String(state.player_entity_id ?? "legacy");
+    const entityId = `${String(state.player_entity_id ?? "legacy")}:${state.replay_external === true ? "replay" : "live"}`;
     const indicated = Math.max(0,
       finite(state.indicated_airspeed_kts, finite(state.speed_kts, 0)));
     const groundTruth = finite(state.ground_speed_kts, finite(state.groundspeed_kts));
     const ground = groundTruth === null ? null : Math.max(0, groundTruth);
     const altitude = finite(state.alt_ft, 0);
+    const verticalSpeed = finite(state.vertical_speed_fpm);
     const heading = wrapDegrees(finite(state.heading_deg, 0));
     const discontinuity = this.entityId !== entityId
       || !Number.isFinite(this.indicatedKts)
@@ -94,10 +98,12 @@ export class HudSignalStabilizer {
       this.indicatedKts = indicated;
       this.groundKts = ground;
       this.altitudeFt = altitude;
+      this.verticalSpeedFpm = verticalSpeed;
       this.headingUnwrappedDeg = heading;
       this.speedDigits.reset();
       this.altitudeDigits.reset();
       this.headingDigits.reset();
+      this.verticalSpeedDigits.reset();
     } else {
       this.indicatedKts = smoothBounded(
         this.indicatedKts, indicated, deltaSeconds, 0.14, 3,
@@ -108,6 +114,10 @@ export class HudSignalStabilizer {
       this.altitudeFt = smoothBounded(
         this.altitudeFt, altitude, deltaSeconds, 0.12, 18,
       );
+      this.verticalSpeedFpm = verticalSpeed === null ? null : smoothBounded(
+        this.verticalSpeedFpm, verticalSpeed, deltaSeconds, 0.18, 250,
+      );
+      if (verticalSpeed === null) this.verticalSpeedDigits.reset();
       const unwrappedHeading = nearestHeading(heading, this.headingUnwrappedDeg);
       this.headingUnwrappedDeg = smoothBounded(
         this.headingUnwrappedDeg, unwrappedHeading, deltaSeconds, 0.10, 2.5,
@@ -120,6 +130,9 @@ export class HudSignalStabilizer {
       groundKts: this.groundKts,
       altitudeFt: this.altitudeFt,
       altitudeDigits: this.altitudeDigits.update(this.altitudeFt),
+      verticalSpeedFpm: this.verticalSpeedFpm,
+      verticalSpeedDigits: this.verticalSpeedFpm === null
+        ? null : this.verticalSpeedDigits.update(this.verticalSpeedFpm),
       headingDeg: wrapDegrees(this.headingUnwrappedDeg),
       headingDigits: wrapDegrees(this.headingDigits.update(this.headingUnwrappedDeg)),
     };

@@ -9,6 +9,7 @@ import {
   stallAwareness,
   systemsReadout,
   targetClosureReadout,
+  verticalSpeedText,
   visualMergeWeaponsCue,
 } from "../hud_readouts.js";
 
@@ -18,18 +19,35 @@ test("airdata makes indicated airspeed primary and formats one universal grounds
     speed_kts: 999,
     true_airspeed_kts: 219.0,
     ground_speed_kts: 214.4,
+    vertical_speed_fpm: -641,
   });
 
   assert.equal(readout.indicatedKts, 197.08);
   assert.equal(readout.primaryText, "197");
   assert.equal(readout.unitText, "A/S KIAS");
   assert.equal(readout.groundText, "G/S 214");
+  assert.equal(readout.verticalSpeedFpm, -641);
+  assert.equal(readout.verticalText, "V/S -650 FPM");
   assert.equal(readout.trueKts, 219.0);
 });
 
 test("legacy speed alias remains an indicated-airdata fallback", () => {
   assert.equal(airdataReadout({ speed_kts: 181 }).indicatedKts, 181);
   assert.equal(airdataReadout({ speed_kts: 181 }).groundText, "G/S ---");
+  assert.equal(airdataReadout({ speed_kts: 181 }).verticalText, "V/S --- FPM");
+});
+
+test("vertical speed is signed, deadbanded, compact, and never inferred from carrier sink", () => {
+  assert.equal(verticalSpeedText(undefined), "V/S --- FPM");
+  assert.equal(verticalSpeedText(24.9), "V/S 0 FPM");
+  assert.equal(verticalSpeedText(25), "V/S +50 FPM");
+  assert.equal(verticalSpeedText(-25), "V/S -50 FPM");
+  assert.equal(verticalSpeedText(641), "V/S +650 FPM");
+  assert.equal(verticalSpeedText(-641), "V/S -650 FPM");
+  assert.equal(verticalSpeedText(12_420), "V/S +12.4K FPM");
+  assert.equal(verticalSpeedText(-123_500), "V/S -124K FPM");
+  assert.equal(airdataReadout({ sink_rate_fpm: 700 }).verticalText, "V/S --- FPM",
+    "positive-down deck-relative sink is not an ownship vertical-speed substitute");
 });
 
 test("stall awareness and corner marker stay entirely in KIAS", () => {
@@ -395,6 +413,8 @@ test("production HUD consumes stabilized KIAS plus physical corner and fuel read
   assert.match(source, /const spd = display\.indicatedKts/);
   assert.match(source, /lowSpeed:\s*stallAwareness\(frame\.state\)/);
   assert.match(source, /fixedMarkers:\s*speedTapeMarkers\(frame\.state\)/);
+  assert.match(source, /this\.drawAirdataLabels\(frame\.state, tapeInset, display\)/);
+  assert.match(source, /verticalSpeedText\(verticalSpeedFpm\)/);
   assert.doesNotMatch(source, /if \(!frame\.padlock\)\s*\{\s*const tapeInset/,
     "padlock must retain the physical IAS/stall/corner tape instead of a duplicate card");
   assert.match(source, /fuelReadout\(state\)/);

@@ -17,6 +17,22 @@ function decisionMinutes(prefix, value) {
   return `${prefix} ${minutes === "--" ? "--" : `${minutes}M`}`;
 }
 
+export function verticalSpeedText(value) {
+  const measuredFpm = finiteNumber(value);
+  if (measuredFpm === null) return "V/S --- FPM";
+  const roundedFpm = Math.abs(measuredFpm) < 25
+    ? 0
+    : Math.sign(measuredFpm) * Math.round(Math.abs(measuredFpm) / 50) * 50;
+  const magnitude = Math.abs(roundedFpm);
+  const compactMagnitude = magnitude >= 100_000
+    ? `${Math.round(magnitude / 1000)}K`
+    : magnitude >= 10_000
+      ? `${(magnitude / 1000).toFixed(1).replace(/\.0$/, "")}K`
+      : String(magnitude);
+  const sign = roundedFpm > 0 ? "+" : roundedFpm < 0 ? "-" : "";
+  return `V/S ${sign}${compactMagnitude} FPM`;
+}
+
 export function airdataReadout(state = {}) {
   const indicatedKts = Math.max(0,
     finiteNumber(state.indicated_airspeed_kts)
@@ -26,15 +42,18 @@ export function airdataReadout(state = {}) {
   const groundKts = finiteNumber(state.ground_speed_kts)
     ?? finiteNumber(state.groundspeed_kts);
   const cornerKias = finiteNumber(state.corner_speed_kias);
+  const verticalSpeedFpm = finiteNumber(state.vertical_speed_fpm);
 
   return {
     indicatedKts,
     trueKts,
     groundKts,
     cornerKias,
+    verticalSpeedFpm,
     primaryText: String(Math.round(indicatedKts)),
     unitText: "A/S KIAS",
     groundText: `G/S ${groundKts === null ? "---" : Math.round(Math.max(0, groundKts))}`,
+    verticalText: verticalSpeedText(verticalSpeedFpm),
   };
 }
 
