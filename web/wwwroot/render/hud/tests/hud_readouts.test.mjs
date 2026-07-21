@@ -394,6 +394,9 @@ test("production HUD consumes the pure KIAS, corner, and fuel readouts", async (
   assert.match(source, /airdataReadout\(frame\.state\)/);
   assert.match(source, /lowSpeed:\s*stallAwareness\(frame\.state\)/);
   assert.match(source, /fixedMarkers:\s*speedTapeMarkers\(frame\.state\)/);
+  assert.match(source,
+    /padlockAirdataWidth[\s\S]*?Number\.isFinite\(airdata\.cornerKias\)[\s\S]*?COR\$\{Math\.round\(airdata\.cornerKias\)\}[\s\S]*?COR \$\{Math\.round\(airdata\.cornerKias\)\}[\s\S]*?padlockSpeedText[\s\S]*?KIAS\$\{cornerText\}[\s\S]*?fitText\(padlockSpeedText, padlockAirdataWidth\)/,
+    "bandit padlock must retain the corner-speed cue hidden with the main speed tape");
   assert.match(source, /fuelReadout\(state\)/);
   assert.match(source, /systemsReadout\(frame\.state\)/);
   assert.match(source, /visualMergeWeaponsCue\(frame\.state\)/);

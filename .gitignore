@@ -6,6 +6,8 @@ bin/obj-*
 **/bin/Debug/
 **/bin/Release/
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
 testrig/out/
 testrig/scenarios/_replay.json
 

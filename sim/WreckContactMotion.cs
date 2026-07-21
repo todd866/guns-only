@@ -58,7 +58,7 @@ internal sealed class WreckContactMotion {
         _carrier = carrier;
         _mode = surface switch {
             ImpactSurface.Water => ContactMode.Water,
-            ImpactSurface.FlightDeck => ContactMode.Deck,
+            ImpactSurface.FlightDeck or ImpactSurface.Ground => ContactMode.Deck,
             _ => ContactMode.DebrisAirborne
         };
         CarrierSolid = surface == ImpactSurface.FlightDeck

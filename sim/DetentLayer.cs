@@ -120,8 +120,12 @@ public sealed class DetentLayer {
 
     public void Tick(KeyGrammar keys, double nowMs, in AircraftState s, in AircraftParams p, DoctrineAdvice advice, double dt) {
         double maxPerform = Protection.MaxPerformG(s, p, AirspeedMps, AtmosphereModel);
-        double hardMax = Protection.HardMaxG(s, p, AirspeedMps, AtmosphereModel);
-        ValleyG = Variant == ValleyVariant.DoctrineDeep ? System.Math.Min(advice.RecommendedG, maxPerform) : maxPerform;
+        double overrideMax = Protection.OverrideMaxG(s, p, AirspeedMps, AtmosphereModel);
+        bool maxPerformancePull = Variant == ValleyVariant.PhysicsOnly
+            || p.NormalPullUsesMaxPerformance;
+        ValleyG = maxPerformancePull
+            ? maxPerform
+            : System.Math.Min(advice.RecommendedG, maxPerform);
         ValleyBank = advice.RecommendedBank;
 
         var pull = keys.PhaseAt(GKey.PullUp, nowMs);
@@ -140,13 +144,14 @@ public sealed class DetentLayer {
             pushTaps = 0;
         }
 
-        // Override (spacebar): the ONLY way past the protection boundary. Bare arrows are
-        // always envelope-protected and can never depart; holding Override raises the ceiling
-        // and publishes an explicit post-break incidence demand below. The flight model sees that
-        // ordinary actuator target, never the keyboard/override flag itself. Replaces the old
-        // double-tap-hold vocabulary entirely (arrows no longer reach OverDemand).
+        // Override (spacebar): the ONLY way past the protection boundary. Bare arrows are always
+        // envelope-protected and can never depart. An explicitly configured modern surrogate uses
+        // the override as a G-limiter release while attached-flow authority remains, then blends
+        // progressively into a post-break incidence demand as dynamic pressure falls. Other
+        // airframes retain their direct post-break demand. The flight model sees only ordinary
+        // actuator targets, never the keyboard/override flag itself.
         bool over = keys.PhaseAt(GKey.Override, nowMs) != KeyPhase.Idle;
-        double cap = over ? hardMax : maxPerform;
+        double cap = over ? overrideMax : maxPerform;
 
         if (ApproachMode) {
             double onSpeedAoaRad = EffectiveOnSpeedAoARad(p);
@@ -187,7 +192,13 @@ public sealed class DetentLayer {
         }
         double target; DemandTier tier;
         if (pull != KeyPhase.Idle) {
-            tier = over ? DemandTier.OverDemand : DemandTier.Valley;
+            // A modern max-performance control law is not the doctrine "valley": full ordinary
+            // pull deliberately rides the protected envelope and should not provoke an EASE cue
+            // merely because the tactical adviser currently recommends less G. Space remains the
+            // distinct over-demand tier.
+            tier = over ? DemandTier.OverDemand
+                : p.NormalPullUsesMaxPerformance ? DemandTier.MaxPerform
+                : DemandTier.Valley;
             StickyOffsetG -= pushTaps * StickyStepG;                       // ease taps (<=0)
             double baseG = over ? cap : ValleyG;                          // override => pull to the limit
             target = System.Math.Clamp(baseG + StickyOffsetG, System.Math.Min(1.0, cap), cap);
@@ -342,7 +353,7 @@ public sealed class DetentLayer {
         if (keys.PhaseAt(GKey.RudderLeft, nowMs) != KeyPhase.Idle)  rudder -= 0.6;
 
         double commandedAlpha = !ApproachMode && over && pull != KeyPhase.Idle
-            ? p.PostStallAlphaCommandRad
+            ? OverridePullAlpha(s, p)
             : !ApproachMode && over && push != KeyPhase.Idle
                 ? -0.70 * p.PostStallAlphaCommandRad
                 : double.NaN;
@@ -353,6 +364,26 @@ public sealed class DetentLayer {
             CommandedAlphaRad: commandedAlpha,
             SasRollControl: 0.0,
             DirectLateralControl: true);
+    }
+
+    double OverridePullAlpha(in AircraftState s, in AircraftParams p) {
+        if (!p.DynamicPressureScheduledPostStallOverride)
+            return p.PostStallAlphaCommandRad;
+
+        double aeroMax = FlightModel.NzAeroMax(s, p, AirspeedMps, AtmosphereModel);
+        double span = System.Math.Max(p.PositiveStructuralLimitG - 1.0, 1.0);
+        double shortfall = System.Math.Clamp(
+            (p.PositiveStructuralLimitG - aeroMax) / span, 0.0, 1.0);
+        if (shortfall <= 0.0) return double.NaN;
+
+        // Smoothstep avoids an alpha-target discontinuity at corner. At a small shortfall the
+        // demand only nudges through CLmax; deep in the low-q regime it approaches the configured
+        // high-alpha target. Forces, separation, drag and departure remain continuous functions of
+        // the resulting state—there is no Cobra/spin mode, timer or scripted rotation here.
+        double blend = shortfall * shortfall * (3.0 - 2.0 * shortfall);
+        double stallAlpha = FlightModel.AlphaAeroMax(p);
+        double highAlpha = System.Math.Max(stallAlpha, p.PostStallAlphaCommandRad);
+        return stallAlpha + (highAlpha - stallAlpha) * blend;
     }
 
     static void PruneSampledPresses(HashSet<int> sampledPresses,

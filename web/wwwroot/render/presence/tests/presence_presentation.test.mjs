@@ -5,6 +5,7 @@ import {
   presenceTelemetryContext,
   projectRemoteContact,
   remoteContactVisible,
+  snapshotForTerrainFrame,
   shouldResetRemoteInterpolation,
 } from "../presence_presentation.js";
 
@@ -92,6 +93,37 @@ test("legacy peers use mission identity for discontinuity and alive for body pre
   });
   assert.equal(shouldResetRemoteInterpolation(first.continuityKey, next), true);
   assert.equal(next.bodyPresent, false);
+});
+
+test("shared Korea terrain shows only contacts which use the same global substrate", () => {
+  const snapshot = {
+    players: [
+      { playerId: "inland", missionId: "mission.perch-attack.v1" },
+      { playerId: "boat", missionId: "mission.carrier-qualification.v1" },
+      { playerId: "maintenance", missionId: "mission.f86f.degraded-gear-recovery.v1" },
+    ],
+    bogeys: [{ bogeyId: "world-bogey" }],
+  };
+  const framed = snapshotForTerrainFrame(snapshot, {
+    multiplayer_terrain_shared: true,
+    world_frame_id: "world.korea-central-front.v1",
+  });
+  assert.deepEqual(framed.players.map((player) => player.playerId), ["inland"]);
+  assert.equal(framed.bogeys.length, 1);
+  assert.equal(snapshot.players.length, 3, "projection must not mutate the room snapshot");
+});
+
+test("local carrier training cannot display shared-world aircraft over its instanced terrain", () => {
+  const snapshot = {
+    players: [{ playerId: "inland", missionId: "mission.perch-attack.v1" }],
+    bogeys: [{ bogeyId: "world-bogey" }],
+  };
+  const framed = snapshotForTerrainFrame(snapshot, {
+    multiplayer_terrain_shared: false,
+    world_frame_id: "local.carrier-training.v1",
+  });
+  assert.deepEqual(framed.players, []);
+  assert.deepEqual(framed.bogeys, []);
 });
 
 test("room status visibly teaches the browser callsign and assigned world origin", () => {

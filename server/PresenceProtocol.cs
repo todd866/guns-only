@@ -26,7 +26,8 @@ public static class PresenceProtocol {
         "FLYING", "DESTROYED_AIRBORNE", "IMPACTED", "SETTLED", "SIMULATION_BOUNDED"
     ];
     static readonly HashSet<string> ValidImpactSurfaces = [
-        "NONE", "WATER", "FLIGHT_DECK", "CARRIER_STRUCTURE", "SIMULATION_BOUNDARY"
+        "NONE", "WATER", "GROUND", "FLIGHT_DECK", "CARRIER_STRUCTURE",
+        "SIMULATION_BOUNDARY"
     ];
     static readonly HashSet<string> PlayerPresentationIds = [
         "presentation.vehicle.player.v1",

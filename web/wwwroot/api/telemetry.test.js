@@ -350,10 +350,11 @@ test("storage failures return 503 so the browser retains the exact pending batch
   assert.equal(fetchCalls, 1, "non-retryable storage authentication failure should fail fast");
 });
 
-test("deployment config limits immutable caching to SHA-versioned heavy pack art", async () => {
+test("deployment config limits immutable caching to SHA-versioned heavy pack assets", async () => {
   const config = JSON.parse(await readFile(new URL("../vercel.json", `file://${__filename}`), "utf8"));
   assert.deepEqual(config.headers.map((rule) => rule.source), [
     "/content/packs/(.*)\\.glb",
+    "/content/packs/(.*)\\.terrain",
     "/content/packs/(.*)\\.ktx2",
     "/content/packs/(.*)\\.png",
     "/content/packs/(.*)\\.webp",

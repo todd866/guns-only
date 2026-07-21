@@ -48,6 +48,44 @@
         }
       ],
       "notes": "Covers project-authored generated geometry, material profiles, textures, shaders, and procedural factories. Imported models, textures, fonts, and audio require their own entries before merge."
+    },
+    {
+      "licenseId": "license.copernicus-dem-glo30.v1",
+      "appliesTo": [
+        "environment.terrain.central-front.v1"
+      ],
+      "spdxExpression": "LicenseRef-Copernicus-DEM-GLO-30-F",
+      "copyright": "© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018",
+      "authors": [
+        "DLR e.V.",
+        "Airbus Defence and Space GmbH",
+        "European Union Copernicus Programme",
+        "European Space Agency"
+      ],
+      "sourceUri": "https://copernicus-dem-30m.s3.amazonaws.com/",
+      "redistribution": {
+        "allowed": true,
+        "commercialUseAllowed": true,
+        "modificationAllowed": true,
+        "shareAlikeRequired": false,
+        "notices": [
+          "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+          "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.",
+          "No endorsement by the Provider, Licensor, European Union, ESA, or other Copernicus entities is implied."
+        ]
+      },
+      "attributionText": "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "evidence": [
+        {
+          "type": "license_file",
+          "uri": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E126_00_DEM/INFO/eula_F.pdf"
+        },
+        {
+          "type": "source_page",
+          "uri": "repo://content/sources/korea-terrain-source-lock.json"
+        }
+      ],
+      "notes": "Derived runtime heights, water classification, LOD bundles, simulation truth, and QA preview. Raw source GeoTIFFs remain outside Git."
     }
   ]
 }

@@ -78,11 +78,12 @@ Korean terrain tiles and sensor/icing integration are the next consumers of thes
 | Pitch | **↓** pull / **↑** push |
 | Roll | **← / →** |
 | Throttle | **W / S** |
+| Envelope override | **Space** — high-q G-limit release / low-q high-alpha authority |
 | Guns | **F** |
 | Padlock | **V** |
 | Landing gear | **G** |
 | Flaps | **[** retract / **]** extend (hold) |
-| Restart / select exercise | **R / 1–7** |
+| Restart / select exercise | **R / 1–8** |
 
 On mobile, the browser build provides an on-screen throttle, tilt-to-roll, and a fire button.
 

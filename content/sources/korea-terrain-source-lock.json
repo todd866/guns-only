@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "1.0.0",
+  "sourceLockId": "source-lock.korea-terrain.v1",
+  "checkedAt": "2026-07-21",
+  "canonicalCoverage": {
+    "id": "korean-peninsula",
+    "aoiWgs84": [124.0, 33.0, 131.0, 43.0],
+    "description": "Peninsula-wide source envelope, including Jeju and enough adjacent sea for carrier mission placement. Runtime regions are derived from this stable geodetic index rather than one monolithic projected raster.",
+    "sourceCellRange": {
+      "minimumLatitudeCell": 33,
+      "maximumLatitudeCell": 42,
+      "minimumLongitudeCell": 124,
+      "maximumLongitudeCell": 130
+    }
+  },
+  "runtimeRegions": [
+    {
+      "id": "central-front",
+      "displayName": "Kaesong–Iron Triangle–Hwachon",
+      "aoiWgs84": [126.5, 37.85, 127.8, 38.75],
+      "referenceOriginWgs84": [127.15, 38.3],
+      "workingCrs": "EPSG:32652",
+      "verticalCrs": "EPSG:3855",
+      "acquisitionCells": [
+        "N37E126",
+        "N37E127",
+        "N38E126",
+        "N38E127"
+      ]
+    }
+  ],
+  "products": [
+    {
+      "id": "cop-dem-glo-30-aws-edition-04",
+      "owner": "European Union / ESA / DLR e.V. / Airbus Defence and Space GmbH",
+      "productId": "Copernicus DEM GLO-30 DGED",
+      "edition": "04",
+      "editionDate": "2019-07-31",
+      "distributionSnapshot": "AWS Open Data objects last modified 2022-05-09",
+      "horizontalCrs": "EPSG:4326",
+      "verticalCrs": "EPSG:3855",
+      "sampleArcSeconds": 1,
+      "heightEncoding": "GeoTIFF float32 orthometric metres",
+      "waterMaskEncoding": "GeoTIFF uint8; 0 land, 1 ocean, 2 lake, 3 river",
+      "licence": {
+        "name": "Licence for Copernicus DEM instance COP-DEM-GLO-30-F Global 30m Full, Free & Open",
+        "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E126_00_DEM/INFO/eula_F.pdf",
+        "artifactPolicy": "commit-derived",
+        "requiredNotices": [
+          "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+          "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30."
+        ]
+      },
+      "objects": [
+        {
+          "cell": "N37E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N37_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E126_00_DEM/Copernicus_DSM_COG_10_N37_00_E126_00_DEM.tif",
+          "bytes": 29862574,
+          "sha256": "f530dd28308ecd6c5ceb0405dc1ffb7113bcafdec30d023de50f16dc433a274f"
+        },
+        {
+          "cell": "N37E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N37_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N37_00_E126_00_WBM.tif",
+          "bytes": 235750,
+          "sha256": "0ec61dc81702bad0d58389c784d064425d4f7464093f3fd8e815f59feaa14939"
+        },
+        {
+          "cell": "N37E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N37_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E127_00_DEM/Copernicus_DSM_COG_10_N37_00_E127_00_DEM.tif",
+          "bytes": 49403795,
+          "sha256": "4f8fef79da8c18ed9a9a0fb97b3d2695c4681181e013e039d87044e5479f7df6"
+        },
+        {
+          "cell": "N37E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N37_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N37_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N37_00_E127_00_WBM.tif",
+          "bytes": 157869,
+          "sha256": "d644c03e1f7949e6179832feaf5c34e211e2c2998cb9f78d67b898c7199bd53f"
+        },
+        {
+          "cell": "N38E126",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N38_00_E126_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E126_00_DEM/Copernicus_DSM_COG_10_N38_00_E126_00_DEM.tif",
+          "bytes": 49183981,
+          "sha256": "b871d71df0f4fd8f63e9696bd49e15cf753a4e8a040f3f35d7b0fef2b3e061a9"
+        },
+        {
+          "cell": "N38E126",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N38_00_E126_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E126_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N38_00_E126_00_WBM.tif",
+          "bytes": 154802,
+          "sha256": "b882867ae187d25ddc91e3985090bd7084a5b95c2c060d051652671c595b374f"
+        },
+        {
+          "cell": "N38E127",
+          "kind": "dem",
+          "file": "Copernicus_DSM_COG_10_N38_00_E127_00_DEM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E127_00_DEM/Copernicus_DSM_COG_10_N38_00_E127_00_DEM.tif",
+          "bytes": 46332224,
+          "sha256": "295f132528e85087584a65e104d5c97afae29c9001b338822ce5e12521a94a06"
+        },
+        {
+          "cell": "N38E127",
+          "kind": "water-mask",
+          "file": "Copernicus_DSM_COG_10_N38_00_E127_00_WBM.tif",
+          "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N38_00_E127_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N38_00_E127_00_WBM.tif",
+          "bytes": 122274,
+          "sha256": "9357eced2457908390e2a530273dbde2d65ff3028b9313990fb30e5d08196bbb"
+        }
+      ]
+    }
+  ]
+}

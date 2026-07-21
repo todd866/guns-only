@@ -24,7 +24,7 @@ const VALID_TERMINAL_STATES = new Set([
   "FLYING", "DESTROYED_AIRBORNE", "IMPACTED", "SETTLED", "SIMULATION_BOUNDED",
 ]);
 const VALID_IMPACT_SURFACES = new Set([
-  "NONE", "WATER", "FLIGHT_DECK", "CARRIER_STRUCTURE", "SIMULATION_BOUNDARY",
+  "NONE", "WATER", "GROUND", "FLIGHT_DECK", "CARRIER_STRUCTURE", "SIMULATION_BOUNDARY",
 ]);
 const normalisePhase = (value) => {
   const candidate = cleanText(value, 24, "ACTIVE").toUpperCase();

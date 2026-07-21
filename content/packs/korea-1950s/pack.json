@@ -2,7 +2,7 @@
   "$schema": "../../schemas/content-pack.schema.json",
   "schemaVersion": "1.0.0",
   "packId": "korea-1950s",
-  "packVersion": "0.2.2",
+  "packVersion": "0.3.0",
   "displayName": "Korea 1950s: Carrier Jets",
   "summary": "Early swept-wing guns-only fighter combat and straight-deck carrier operations using the current simulation definitions and replaceable renderer profiles.",
   "status": "experimental",
@@ -18,8 +18,8 @@
     "displayName": "Korean Peninsula and adjacent seas",
     "region": "Northeast Asia",
     "referenceOrigin": {
-      "latitude": 37.5,
-      "longitude": 127.5
+      "latitude": 38.3,
+      "longitude": 127.15
     }
   },
   "tags": [

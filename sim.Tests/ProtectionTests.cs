@@ -17,6 +17,15 @@ public class ProtectionTests {
     }
     [Fact] public void HardMaxCapsAtStructural() => Assert.Equal(
         FlightModel.Sabre.PositiveStructuralLimitG, Protection.HardMaxG(At(400), FlightModel.Sabre), 6);
+    [Fact] public void ModernSurrogateSeparatesNormalNineGProtectionFromOverrideDemand() {
+        var parameters = FlightModel.F22APublicDataSurrogate;
+        var state = new AircraftState(new Vec3D(0, 5486.4, 0), 300.0,
+            0.0, 0.0, 0.0, parameters.MassKg);
+
+        Assert.Equal(9.0, Protection.MaxPerformG(state, parameters), 6);
+        Assert.Equal(9.0, Protection.HardMaxG(state, parameters), 6);
+        Assert.Equal(11.0, Protection.OverrideMaxG(state, parameters), 6);
+    }
     [Fact] public void SlowFlightProtectionIsAeroLimited() {
         var s = At(110);
         Assert.True(Protection.MaxPerformG(s, FlightModel.Sabre) < 3.0);

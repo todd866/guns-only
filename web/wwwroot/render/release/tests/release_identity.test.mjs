@@ -61,11 +61,11 @@ test("release identity detects mixed shell and superseded production builds", ()
 
   const superseded = createReleaseIdentity({
     entrypointBuild: RELEASE_BUILD,
-    current: { build: "49" },
+    current: { build: "50" },
     lookup: "complete",
   });
   assert.equal(superseded.stale, true);
-  assert.match(superseded.label, /CURRENT BUILD 49/);
+  assert.match(superseded.label, /CURRENT BUILD 50/);
 
   const redeployed = createReleaseIdentity({
     entrypointBuild: RELEASE_BUILD,
@@ -74,8 +74,10 @@ test("release identity detects mixed shell and superseded production builds", ()
     lookup: "complete",
   });
   assert.equal(redeployed.stale, true);
-  assert.match(redeployed.label, /RUNNING BUILD 48 · REV aaaaaaaa/);
-  assert.match(redeployed.label, /CURRENT BUILD 48 · REV bbbbbbbb/);
+  assert.match(redeployed.label,
+    new RegExp(`RUNNING BUILD ${RELEASE_BUILD} · REV aaaaaaaa`));
+  assert.match(redeployed.label,
+    new RegExp(`CURRENT BUILD ${RELEASE_BUILD} · REV bbbbbbbb`));
 
   const sameRevisionNewDeployment = createReleaseIdentity({
     entrypointBuild: RELEASE_BUILD,

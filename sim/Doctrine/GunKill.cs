@@ -93,13 +93,38 @@ public sealed class GunKill {
         if (Outcome != FightOutcome.Splash)
             throw new System.InvalidOperationException(
                 "A gun can move to the next target only after the current target is splashed.");
+        return CreateReplacementTarget(preserveRoundsInFlight: true);
+    }
+
+    /// Continue cumulative magazine/fire evidence after a splashed target in a staged stream.
+    /// Unlike a genuinely concurrent world, the successor did not exist while the old rounds were
+    /// airborne; discarding those rounds prevents them from being reassigned to a later spawn.
+    public GunKill CreateForStagedNextTarget() {
+        if (Outcome != FightOutcome.Splash)
+            throw new System.InvalidOperationException(
+                "A staged successor is valid only after the current target is splashed.");
+        return CreateReplacementTarget(preserveRoundsInFlight: false);
+    }
+
+    /// Continue the same magazine after a still-flying target leaves the simulated engagement.
+    /// This is intentionally narrower than CreateForNextTarget: a leaked raid target is no longer
+    /// authoritative, so rounds pursuing it are discarded rather than teleported onto its staged
+    /// successor. Cumulative ammunition and fire-discipline evidence remain continuous.
+    public GunKill CreateForRetargetedTarget() {
+        if (Outcome != FightOutcome.Flying)
+            throw new System.InvalidOperationException(
+                "A live retarget is only valid while the current target is still flying.");
+        return CreateReplacementTarget(preserveRoundsInFlight: false);
+    }
+
+    GunKill CreateReplacementTarget(bool preserveRoundsInFlight) {
         var next = new GunKill(AmmoRemaining, _hitsToKill, _hitRadiusM, _profile) {
             RoundsFired = RoundsFired,
             _triggerWasHeld = _triggerWasHeld,
             _secondsToNextShot = _secondsToNextShot,
             _nextRoundId = _nextRoundId,
         };
-        next._rounds.AddRange(_rounds);
+        if (preserveRoundsInFlight) next._rounds.AddRange(_rounds);
         return next;
     }
 

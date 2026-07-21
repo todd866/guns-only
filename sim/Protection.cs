@@ -26,6 +26,23 @@ public static class Protection {
         return System.Math.Min(FlightModel.NzAeroMax(s, p, airspeedMps, atmosphere),
             p.PositiveStructuralLimitG);
     }
+    /// <summary>
+    /// Deliberate control-law override ceiling. It remains aero-limited and defaults to the normal
+    /// structural boundary; only an airframe with an explicit positive surrogate override can
+    /// command beyond that boundary. Aerodynamic derivatives consume the resulting actuator
+    /// demand, never the keyboard/override metadata.
+    /// </summary>
+    public static double OverrideMaxG(in AircraftState s, in AircraftParams p) =>
+        OverrideMaxG(s, p, s.Speed);
+    public static double OverrideMaxG(in AircraftState s, in AircraftParams p,
+        double airspeedMps) => OverrideMaxG(s, p, airspeedMps,
+            StandardAtmosphere1976.Instance);
+    public static double OverrideMaxG(in AircraftState s, in AircraftParams p,
+        double airspeedMps, IAtmosphereModel atmosphere) {
+        ArgumentNullException.ThrowIfNull(atmosphere);
+        return System.Math.Min(FlightModel.NzAeroMax(s, p, airspeedMps, atmosphere),
+            FlightModel.PositiveControlLimitG(p));
+    }
     /// The energy-NEUTRAL turn: the G at which thrust exactly balances drag, so you can hold
     /// it forever without scrubbing a knot. This is what the drone's flight AI flies for a
     /// routine tactical turn — the player spends energy deliberately (override) rather than

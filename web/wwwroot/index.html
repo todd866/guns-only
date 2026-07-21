@@ -485,7 +485,7 @@
       pointer-events: auto;
     }
 
-    .touch-mode #ready-screen { z-index: 9; }
+    .touch-mode #ready-screen { z-index: 13; }
 
     #test-flight-console {
       position: fixed;
@@ -758,14 +758,14 @@
 
     .ready-card {
       position: relative;
-      width: min(520px, 100%);
+      display: flex;
+      width: min(980px, 100%);
       max-height: 100%;
-      overflow: auto;
-      padding: clamp(24px, 5vw, 36px);
+      flex-direction: column;
+      overflow: hidden;
       border: 1px solid rgba(77, 255, 136, .25);
       border-radius: 10px;
-      background:
-        linear-gradient(145deg, rgba(5, 20, 27, .96), rgba(2, 10, 16, .92));
+      background: linear-gradient(145deg, rgba(5, 20, 27, .98), rgba(2, 10, 16, .96));
       box-shadow:
         inset 0 0 0 1px rgba(204, 255, 221, .025),
         0 24px 90px rgba(0, 0, 0, .58),
@@ -776,12 +776,217 @@
     .ready-card::before {
       content: "";
       position: absolute;
+      z-index: 1;
       top: -1px;
-      left: 30px;
+      left: 24px;
       width: 86px;
       height: 2px;
       background: #4dff88;
       box-shadow: 0 0 12px rgba(77, 255, 136, .58);
+    }
+
+    #ready-screen:not([data-mode="selection"]) .ready-card { width: min(520px, 100%); }
+
+    .ready-menu-header {
+      display: flex;
+      align-items: baseline;
+      gap: 22px;
+      padding: 20px 24px 17px;
+      border-bottom: 1px solid rgba(77, 255, 136, .12);
+    }
+
+    .ready-menu-brand {
+      flex: none;
+      color: #4dff88;
+      font-size: 9px;
+      font-weight: 850;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    #ready-menu-title {
+      margin: 0;
+      color: #f2fff6;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: .02em;
+    }
+
+    #ready-menu-help {
+      margin: 3px 0 0;
+      color: rgba(217, 255, 229, .45);
+      font-size: 10px;
+      line-height: 1.4;
+      letter-spacing: .04em;
+    }
+
+    .ready-layout {
+      display: grid;
+      grid-template-columns: minmax(0, .96fr) minmax(0, 1.04fr);
+      min-height: 0;
+    }
+
+    #ready-screen:not([data-mode="selection"]) .ready-layout { display: block; }
+    .ready-selector[hidden] { display: none; }
+
+    .ready-selector,
+    .ready-briefing {
+      min-width: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .ready-selector {
+      padding: 18px;
+      border-right: 1px solid rgba(77, 255, 136, .12);
+    }
+
+    .ready-briefing { padding: clamp(24px, 4vw, 36px); }
+
+    .ready-activity-nav {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .ready-activity-nav button {
+      appearance: none;
+      min-width: 0;
+      min-height: 50px;
+      padding: 8px 6px;
+      border: 1px solid rgba(77, 255, 136, .18);
+      border-radius: 5px;
+      color: rgba(217, 255, 229, .64);
+      background: rgba(77, 255, 136, .035);
+      cursor: pointer;
+      font: 800 10px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .ready-activity-nav button small {
+      display: block;
+      margin-top: 4px;
+      color: rgba(217, 255, 229, .32);
+      font-size: 8px;
+      letter-spacing: .04em;
+    }
+
+    .ready-activity-nav button[aria-selected="true"] {
+      border-color: rgba(77, 255, 136, .72);
+      color: #dffff0;
+      background: rgba(77, 255, 136, .13);
+    }
+
+    .ready-activity-nav button:hover,
+    .ready-activity-nav button:focus-visible,
+    .sortie-choice:hover,
+    .sortie-choice:focus-visible,
+    .sortie-launch:hover,
+    .sortie-launch:focus-visible {
+      outline: 2px solid rgba(141, 255, 179, .9);
+      outline-offset: 1px;
+    }
+
+    .ready-mission-group[hidden] { display: none; }
+
+    .ready-group-heading { margin: 0 2px 11px; }
+
+    .ready-group-heading h2 {
+      margin: 0;
+      color: rgba(242, 255, 246, .9);
+      font: 650 16px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .ready-group-heading p {
+      margin: 4px 0 0;
+      color: rgba(217, 255, 229, .42);
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
+    .sortie-option {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 54px;
+      min-width: 0;
+      margin-top: 7px;
+      overflow: hidden;
+      border: 1px solid rgba(217, 255, 229, .12);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .sortie-option[data-selected="true"] {
+      border-color: rgba(77, 255, 136, .6);
+      background: rgba(77, 255, 136, .075);
+      box-shadow: inset 3px 0 0 #4dff88;
+    }
+
+    .sortie-choice,
+    .sortie-launch {
+      appearance: none;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .sortie-choice {
+      min-width: 0;
+      min-height: 78px;
+      padding: 10px 12px;
+      text-align: left;
+    }
+
+    .sortie-number {
+      display: block;
+      margin-bottom: 3px;
+      color: rgba(77, 255, 136, .67);
+      font-size: 8px;
+      font-weight: 850;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    .sortie-choice strong {
+      display: block;
+      color: #f2fff6;
+      font: 650 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .sortie-choice > span:last-child {
+      display: block;
+      margin-top: 4px;
+      color: rgba(217, 255, 229, .48);
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .sortie-launch {
+      min-width: 54px;
+      min-height: 78px;
+      border-left: 1px solid rgba(77, 255, 136, .14);
+      color: rgba(141, 255, 179, .8);
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+
+    .sortie-launch:hover,
+    .sortie-launch:focus-visible { background: rgba(77, 255, 136, .14); }
+
+    .ready-deck-note {
+      margin: 12px 2px 0;
+      color: rgba(217, 255, 229, .4);
+      font-size: 9px;
+      line-height: 1.5;
     }
 
     #ready-kicker {
@@ -797,7 +1002,7 @@
       margin: 0;
       color: #f2fff6;
       font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-      font-size: clamp(25px, 6vw, 36px);
+      font-size: clamp(25px, 5vw, 34px);
       font-weight: 640;
       letter-spacing: .025em;
     }
@@ -817,10 +1022,7 @@
       border-block: 1px solid rgba(77, 255, 136, .12);
     }
 
-    .ready-fact {
-      min-width: 0;
-      padding: 12px 4px;
-    }
+    .ready-fact { min-width: 0; padding: 12px 4px; }
 
     .ready-fact + .ready-fact {
       padding-left: 15px;
@@ -831,67 +1033,26 @@
       display: block;
       margin-bottom: 4px;
       color: rgba(217, 255, 229, .38);
-      font-size: 7px;
+      font-size: 8px;
       letter-spacing: .15em;
       text-transform: uppercase;
     }
 
     .ready-fact span {
       display: block;
-      overflow: hidden;
       color: rgba(217, 255, 229, .82);
-      font-size: 9px;
-      letter-spacing: .07em;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: 10px;
+      line-height: 1.4;
+      letter-spacing: .04em;
     }
 
     .ready-controls {
       margin: 0 0 22px;
       color: rgba(217, 255, 229, .48);
-      font-size: 8px;
+      font-size: 9px;
       line-height: 1.75;
       letter-spacing: .06em;
       text-transform: uppercase;
-    }
-
-    .ready-mission-nav {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr);
-      align-items: center;
-      gap: 8px;
-      margin: 0 0 14px;
-    }
-
-    .ready-mission-nav[hidden] { display: none; }
-
-    .ready-mission-nav button {
-      appearance: none;
-      min-width: 0;
-      min-height: 38px;
-      border: 1px solid rgba(77, 255, 136, .28);
-      border-radius: 5px;
-      color: rgba(217, 255, 229, .78);
-      background: rgba(77, 255, 136, .06);
-      cursor: pointer;
-      font: 800 8px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-    }
-
-    .ready-mission-nav button:hover,
-    .ready-mission-nav button:focus-visible {
-      outline: none;
-      border-color: rgba(77, 255, 136, .72);
-      background: rgba(77, 255, 136, .14);
-    }
-
-    #ready-mission-position {
-      color: rgba(217, 255, 229, .56);
-      font-size: 8px;
-      font-weight: 800;
-      letter-spacing: .12em;
-      text-align: center;
     }
 
     #ready-start {
@@ -1001,14 +1162,60 @@
 
     #ready-build-reload[hidden] { display: none; }
 
+    @media (max-width: 760px) {
+      #ready-screen {
+        padding:
+          calc(var(--safe-top) + 8px)
+          calc(var(--safe-right) + 8px)
+          calc(var(--safe-bottom) + 8px)
+          calc(var(--safe-left) + 8px);
+      }
+
+      .ready-card {
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .ready-menu-header { gap: 12px; padding: 16px 15px 13px; }
+      .ready-menu-brand { font-size: 7px; }
+      #ready-menu-title { font-size: 16px; }
+      #ready-menu-help { font-size: 9px; }
+      .ready-layout { display: block; }
+      .ready-selector { overflow: visible; padding: 13px; border: 0; border-bottom: 1px solid rgba(77, 255, 136, .12); }
+      .ready-briefing { overflow: visible; padding: 20px 16px; }
+      .ready-activity-nav { margin-bottom: 13px; }
+      .ready-activity-nav button { min-height: 48px; font-size: 9px; }
+      .sortie-choice { min-height: 74px; padding: 9px 10px; }
+      .sortie-launch { min-height: 74px; }
+      #ready-title { font-size: 26px; }
+      #ready-brief { margin: 9px 0 13px; line-height: 1.5; }
+      .ready-facts { margin-bottom: 13px; }
+      .ready-fact { padding-block: 9px; }
+      .ready-controls { margin-bottom: 13px; line-height: 1.5; }
+    }
+
+    @media (max-width: 380px) {
+      .ready-activity-nav button small { display: none; }
+      .ready-activity-nav button { min-height: 46px; padding-inline: 3px; }
+      .sortie-option { grid-template-columns: minmax(0, 1fr) 48px; }
+      .sortie-launch { min-width: 48px; }
+      .ready-facts { grid-template-columns: 1fr; }
+      .ready-fact + .ready-fact { padding-left: 4px; border-top: 1px solid rgba(77, 255, 136, .12); border-left: 0; }
+    }
+
     @media (max-height: 500px) and (orientation: landscape) {
-      .ready-card { padding: 18px 25px; }
+      .ready-menu-header { padding-block: 12px 10px; }
+      .ready-selector { padding-block: 12px; }
+      .ready-briefing { padding-block: 18px; }
       #ready-title { font-size: 24px; }
       #ready-brief { margin: 7px 0 11px; line-height: 1.45; }
       .ready-facts { margin-bottom: 11px; }
       .ready-fact { padding-block: 8px; }
       .ready-controls { margin-bottom: 11px; line-height: 1.45; }
-      #ready-start { min-height: 42px; }
+      #ready-start { min-height: 44px; }
     }
 
     #incident-replay-overlay {
@@ -1361,7 +1568,7 @@
         <button class="touch-control touch-utility" type="button" data-hold-key="BracketRight" aria-label="Hold wing flaps down">FLAP<br>DOWN</button>
       </div>
       <div class="touch-actions">
-        <button class="touch-control" type="button" data-hold-key="Space" aria-label="Maximum G override">MAX<br>G</button>
+        <button class="touch-control" type="button" data-hold-key="Space" aria-label="G-limiter and high-alpha override">LIMIT<br>OVR</button>
         <button class="touch-control touch-fire" type="button" data-hold-key="KeyF">FIRE</button>
       </div>
     </div>
@@ -1383,27 +1590,146 @@
     <div id="rotate-hint">ROTATE TO LANDSCAPE<br><small>Tilt steering is designed for a wide screen.</small></div>
   </div>
 
-  <div id="ready-screen" role="dialog" aria-labelledby="ready-title" aria-describedby="ready-brief" aria-hidden="true">
+  <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="selection">
     <div class="ready-card">
-      <div id="ready-kicker">BFM drill · mission 01</div>
-      <h2 id="ready-title">Perch Attack</h2>
-      <p id="ready-brief">Convert altitude and position into a controlled gun solution. Stay in plane, manage closure, and do not trade the perch for an overshoot.</p>
-      <div class="ready-facts" aria-label="Mission details">
-        <div class="ready-fact"><small>Sortie</small><span id="ready-sortie">Offensive conversion</span></div>
-        <div class="ready-fact"><small>Configuration</small><span id="ready-config">Guns hot · air start</span></div>
-      </div>
-      <nav id="ready-mission-nav" class="ready-mission-nav" aria-label="Choose mission">
-        <button id="ready-mission-prev" type="button" aria-label="Previous mission">Prev</button>
-        <output id="ready-mission-position" aria-live="polite">Mission 01 / 07</output>
-        <button id="ready-mission-next" type="button" aria-label="Next mission">Next</button>
-      </nav>
-      <p class="ready-controls">Arrows fly · W/S power · G gear · [ / ] flaps (release to hold)<br>F guns · V padlock · H controls · 1–7 missions · R restart</p>
-      <button id="ready-start" type="button">Fly mission</button>
-      <button id="ready-replay" type="button" hidden>Replay incident again</button>
-      <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
-      <div id="ready-build-row">
-        <output id="ready-build" data-state="checking">Build 48 · verifying</output>
-        <button id="ready-build-reload" type="button" hidden>Reload current build</button>
+      <header class="ready-menu-header">
+        <div class="ready-menu-brand">Guns Only</div>
+        <div>
+          <h1 id="ready-menu-title">Choose a sortie</h1>
+          <p id="ready-menu-help">Choose an activity and sortie. Select a card for its briefing or use Fly to launch it directly.</p>
+        </div>
+      </header>
+
+      <div class="ready-layout">
+        <section id="ready-selector" class="ready-selector" aria-label="Sortie catalogue">
+          <nav id="ready-activity-nav" class="ready-activity-nav" role="tablist" aria-label="Choose activity">
+            <button id="ready-activity-dogfight" type="button" role="tab" aria-selected="true" aria-controls="ready-group-dogfight" data-sortie-activity="dogfight">
+              <span>Dogfight</span><small>3 sorties</small>
+            </button>
+            <button id="ready-activity-carrier" type="button" role="tab" aria-selected="false" aria-controls="ready-group-carrier" data-sortie-activity="carrier">
+              <span>Carrier</span><small>2 sorties</small>
+            </button>
+            <button id="ready-activity-gunnery" type="button" role="tab" aria-selected="false" aria-controls="ready-group-gunnery" data-sortie-activity="gunnery">
+              <span>Gunnery</span><small>2 sorties</small>
+            </button>
+            <button id="ready-activity-defence" type="button" role="tab" aria-selected="false" aria-controls="ready-group-defence" data-sortie-activity="defence">
+              <span>Defence</span><small>1 sortie</small>
+            </button>
+          </nav>
+
+          <div class="ready-mission-groups">
+            <section id="ready-group-dogfight" class="ready-mission-group" role="tabpanel" aria-labelledby="ready-activity-dogfight" data-sortie-group="dogfight">
+              <div class="ready-group-heading">
+                <h2>Dogfight</h2>
+                <p>Visual guns-only fights: offensive, defensive, or neutral.</p>
+              </div>
+              <div class="sortie-option" data-mission-option="1" data-selected="true">
+                <button type="button" class="sortie-choice" data-mission-select="1" aria-pressed="true">
+                  <span class="sortie-number">01 · Offensive</span>
+                  <strong>Perch Attack</strong>
+                  <span>Start high at the bandit's six and convert the perch into a gun solution.</span>
+                </button>
+                <button type="button" class="sortie-launch" data-mission-launch="1" aria-label="Fly Perch Attack now">Fly</button>
+              </div>
+              <div class="sortie-option" data-mission-option="2" data-selected="false">
+                <button type="button" class="sortie-choice" data-mission-select="2" aria-pressed="false">
+                  <span class="sortie-number">02 · Defensive</span>
+                  <strong>Break Defense</strong>
+                  <span>A bandit begins at your high six. Survive, then reverse the fight.</span>
+                </button>
+                <button type="button" class="sortie-launch" data-mission-launch="2" aria-label="Fly Break Defense now">Fly</button>
+              </div>
+              <div class="sortie-option" data-mission-option="7" data-selected="false">
+                <button type="button" class="sortie-choice" data-mission-select="7" aria-pressed="false">
+                  <span class="sortie-number">07 · Neutral merge</span>
+                  <strong>F-22A vs Su-27S</strong>
+                  <span>Take a neutral modern visual merge with guns safe through the first pass.</span>
+                </button>
+                <button type="button" class="sortie-launch" data-mission-launch="7" aria-label="Fly F-22A versus Su-27S now">Fly</button>
+              </div>
+            </section>
+
+            <section id="ready-group-carrier" class="ready-mission-group" role="tabpanel" aria-labelledby="ready-activity-carrier" data-sortie-group="carrier" hidden>
+              <div class="ready-group-heading">
+                <h2>Carrier &amp; recovery</h2>
+                <p>Deck approaches in the carrier testbed, with physical arrestment and replay.</p>
+              </div>
+              <div class="sortie-option" data-mission-option="5" data-selected="false">
+                <button type="button" class="sortie-choice" data-mission-select="5" aria-pressed="false">
+                  <span class="sortie-number">05 · Carrier qualification</span>
+                  <strong>Final Approach</strong>
+                  <span>Join the active groove, fly the ball, trap, and return to combat.</span>
+                </button>
+                <button type="button" class="sortie-launch" data-mission-launch="5" aria-label="Fly Final Approach now">Fly</button>
+              </div>
+              <div class="sortie-option" data-mission-option="6" data-selected="false">
+                <button type="button" class="sortie-choice" data-mission-select="6" aria-pressed="false">
+                  <span class="sortie-number">06 · Maintenance test flight</span>
+                  <strong>Degraded Recovery</strong>
+                  <span>Diagnose a failed normal gear extension and recover aboard safely.</span>
+                </button>
+                <button type="button" class="sortie-launch" data-mission-launch="6" aria-label="Fly Degraded Recovery now">Fly</button>
+              </div>
+              <p class="ready-deck-note">Press C in the briefing to switch the complete landing setup between axial and 9° angled deck geometry.</p>
+            </section>
+
+            <section id="ready-group-gunnery" class="ready-mission-group" role="tabpanel" aria-labelledby="ready-activity-gunnery" data-sortie-group="gunnery" hidden>
+              <div class="ready-group-heading">
+                <h2>Gunnery</h2>
+                <p>Tracking discipline and a one-pass energy attack.</p>
+              </div>
+              <div class="sortie-option" data-mission-option="3" data-selected="false">
+                <button type="button" class="sortie-choice" data-mission-select="3" aria-pressed="false">
+                  <span class="sortie-number">03 · Tracking drill</span>
+                  <strong>Saddle + Shot</strong>
+                  <span>Track a weaving target and fire only from a stable gun solution.</span>
+                </button>
+                <button type="button" class="sortie-launch" data-mission-launch="3" aria-label="Fly Saddle and Shot now">Fly</button>
+              </div>
+              <div class="sortie-option" data-mission-option="4" data-selected="false">
+                <button type="button" class="sortie-choice" data-mission-select="4" aria-pressed="false">
+                  <span class="sortie-number">04 · 2030s prototype</span>
+                  <strong>Balloon Strike</strong>
+                  <span>Trade a finite altitude budget for one engine-less attack on an AWACS.</span>
+                </button>
+                <button type="button" class="sortie-launch" data-mission-launch="4" aria-label="Fly Balloon Strike now">Fly</button>
+              </div>
+            </section>
+
+            <section id="ready-group-defence" class="ready-mission-group" role="tabpanel" aria-labelledby="ready-activity-defence" data-sortie-group="defence" hidden>
+              <div class="ready-group-heading">
+                <h2>Air defence</h2>
+                <p>Ammunition-limited interception where every second and every round matters.</p>
+              </div>
+              <div class="sortie-option" data-mission-option="8" data-selected="false">
+                <button type="button" class="sortie-choice" data-mission-select="8" aria-pressed="false">
+                  <span class="sortie-number">08 · 2030s air defence</span>
+                  <strong>Drone Raid Defence</strong>
+                  <span>Stop four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring.</span>
+                </button>
+                <button type="button" class="sortie-launch" data-mission-launch="8" aria-label="Fly Drone Raid Defence now">Fly</button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="ready-briefing" aria-label="Selected sortie briefing">
+          <div id="ready-kicker">BFM drill · mission 01</div>
+          <h2 id="ready-title">Perch Attack</h2>
+          <p id="ready-brief">Convert altitude and position into a controlled gun solution. Stay in plane, manage closure, and do not trade the perch for an overshoot.</p>
+          <div class="ready-facts" aria-label="Mission details">
+            <div class="ready-fact"><small>Sortie</small><span id="ready-sortie">Offensive conversion</span></div>
+            <div class="ready-fact"><small>Configuration</small><span id="ready-config">Guns hot · air start</span></div>
+          </div>
+          <p class="ready-controls">Arrows fly · W/S power · G gear · [ / ] flaps (release to hold)<br>F guns · V padlock · H controls · 1–8 missions · R restart</p>
+          <button id="ready-start" type="button">Fly Perch Attack</button>
+          <button id="ready-replay" type="button" hidden>Replay incident again</button>
+          <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
+          <div id="ready-build-row">
+            <output id="ready-build" data-state="checking">Build 49 · verifying</output>
+            <button id="ready-build-reload" type="button" hidden>Reload current build</button>
+          </div>
+        </section>
       </div>
     </div>
   </div>
@@ -1427,7 +1753,7 @@
   </div>
 
   <script src="./multiplayer-config.js"></script>
-  <script type="module" src="./app.js?v=48"></script>
+  <script type="module" src="./app.js?v=49"></script>
   <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
 </body>
 </html>

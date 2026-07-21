@@ -459,6 +459,45 @@
       ]
     },
     {
+      "id": "environment.terrain.central-front.v1",
+      "kind": "environment",
+      "role": "environment.terrain",
+      "status": "production",
+      "licenseRef": "license.copernicus-dem-glo30.v1",
+      "sources": [
+        {
+          "uri": "environment/terrain/central-front.manifest.json",
+          "format": "guns-only-terrain-manifest",
+          "mediaType": "application/json",
+          "sha256": "81827e73c01e547552ea48e8dac04fdb6c1b1d97d8e6bac245f3ee15f5c1bfa1",
+          "sizeBytes": 106976
+        },
+        {
+          "uri": "environment/terrain/central-front.terrain",
+          "format": "guns-only-terrain-bundle",
+          "mediaType": "application/octet-stream",
+          "sha256": "18dc413e6ac1511072b5792b6fbf3d4532ee91d740a3b0a60da8e6cc2c33e67d",
+          "sizeBytes": 11268082
+        },
+        {
+          "uri": "environment/terrain/central-front.truth",
+          "format": "guns-only-quantized-terrain-grid",
+          "mediaType": "application/octet-stream",
+          "sha256": "d9b054da29d5ceee12374301bb6f9023d0ca958d2418fbc83dc92f1842262702",
+          "sizeBytes": 2101314
+        },
+        {
+          "uri": "environment/terrain/central-front-preview.png",
+          "format": "png",
+          "mediaType": "image/png",
+          "sha256": "712910a05204c35e475c5b9cf7cdf4ffffa32a2dacc2a1b6235e3267a3c54121",
+          "sizeBytes": 2154659
+        }
+      ],
+      "fallbacks": [],
+      "notes": "Range-addressable 64/128/256/512 m runtime LODs derived from locked Copernicus GLO-30 elevation and water masks. The 128 m truth grid is embedded by the web shell for authoritative clearance and surface contact."
+    },
+    {
       "id": "vfx.gun.fire.v1",
       "kind": "vfx",
       "role": "effects.gun-fire",

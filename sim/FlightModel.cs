@@ -60,7 +60,16 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     double RollHoldErrorRad = 0.10,
     // Airframe envelope limits. Defaults preserve the existing unmanned/afterburning aircraft;
     // the F-86 overrides these with its piloted structural limit and dry-thrust-only J47.
+    // The three control-law fields are explicit gameplay-surrogate policy, not hidden aircraft
+    // data: NormalPullUsesMaxPerformance bypasses the teaching detent while retaining the ordinary
+    // structural/AoA protection; PositiveOverrideLimitG is the actuator-demand ceiling available
+    // only through the input layer's deliberate override (negative preserves the structural cap);
+    // DynamicPressureScheduledPostStallOverride makes that override a G release above corner and a
+    // progressively deeper incidence release below corner instead of commanding one fixed alpha
+    // at every speed.
     double PositiveStructuralLimitG = 12.0, double MaxPerformFraction = 0.92,
+    bool NormalPullUsesMaxPerformance = false, double PositiveOverrideLimitG = -1.0,
+    bool DynamicPressureScheduledPostStallOverride = false,
     double MaxThrustFraction = 1.35,
     // Extra drag from buffet/separation as the wing approaches CLmax. The quadratic polar remains
     // authoritative below OnsetFraction; this smooth term only closes the hard-turn energy bill.
@@ -177,6 +186,29 @@ public static class FlightModel {
         MCrit: 0.60, WaveDragK: 90.0,
         MaxThrustFraction: 1.0);
 
+    /// Korea-2030s one-way attack-drone PROTOTYPE. These rounded values define a transparent
+    /// mission surrogate, not an extant Chinese or American system: a 500 kg, subsonic powered
+    /// airframe that holds one straight inbound track while the player learns defensive cutoff
+    /// geometry. It has no speculative sensors, autonomy, datalink, countermeasures, or weapon.
+    public static readonly AircraftParams OneWayAttackDronePrototype = new(
+        MassKg: 500.0, WingAreaM2: 4.5, ThrustMaxN: 2600.0,
+        CD0: 0.030, InducedK: 0.060, CLMax: 1.25, CLMin: -0.45,
+        RollRateMaxRad: 1.0, BankTau: 0.55,
+        MCrit: 0.72, WaveDragK: 120.0,
+        SpoolUpTau: 1.0, SpoolDownTau: 0.7,
+        CLAlpha: 4.2,
+        IxxKgM2: 650.0, IyyKgM2: 1200.0, IzzKgM2: 1600.0,
+        RollStiffnessNmRad: 9000.0, PitchStiffnessNmRad: 15000.0,
+        YawStiffnessNmRad: 8500.0,
+        RollDampingNms: 4200.0, PitchDampingNms: 7000.0,
+        YawDampingNms: 4500.0,
+        RollMomentMaxNm: 7000.0, PitchMomentMaxNm: 12000.0,
+        YawMomentMaxNm: 6500.0,
+        WingSpanM: 5.5,
+        PositiveStructuralLimitG: 4.0,
+        MaxPerformFraction: 0.8,
+        MaxThrustFraction: 1.0);
+
     /// F-22A PUBLIC-DATA SURROGATE for a visual, guns-only merge. Public anchors are the USAF
     /// fact sheet's 840 ft2 wing, 43,340 lb empty weight, 18,000 lb internal fuel, +9 G limit,
     /// and two engines in the 35,000 lb-thrust class. The military/afterburner split, drag polar,
@@ -207,9 +239,18 @@ public static class FlightModel {
         CompatibilityRollRateMaxRad: 2.8, CompatibilityBankTau: 0.20,
         YawBetaStiffnessNmRad: 800000.0, RollHoldDampingNms: 0.0,
         PositiveStructuralLimitG: 9.0, MaxPerformFraction: 1.0,
+        // Public +9 G remains the normal protected boundary. These are deliberately labelled
+        // gameplay-surrogate control laws: they do not claim that an actual F-22 exposes an
+        // 11 G pilot switch or this exact alpha schedule. Full ordinary pull gets the useful
+        // protected envelope; Space trades protection for a bounded 11 G demand above corner or
+        // progressively up to 63 degrees incidence below corner. The continuous polar, drag and
+        // rigid-body equations still decide the achieved motion and energy loss.
+        NormalPullUsesMaxPerformance: true,
+        PositiveOverrideLimitG: 11.0,
+        DynamicPressureScheduledPostStallOverride: true,
         MaxThrustFraction: 1.35,
         HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 2.8,
-        WingSpanM: 13.56,
+        WingSpanM: 13.56, PostStallAlphaCommandRad: 1.10,
         PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
         FuelFreeMassKg: 19535.0,
         GenericIdleFuelFlowLbPerMinute: 32.0,
@@ -304,6 +345,10 @@ public static class FlightModel {
 
     internal static double AlphaAeroMax(in AircraftParams p) => p.CLMax / p.CLAlpha;
     internal static double AlphaAeroMin(in AircraftParams p) => p.CLMin / p.CLAlpha;
+    internal static double PositiveControlLimitG(in AircraftParams p) =>
+        double.IsFinite(p.PositiveOverrideLimitG) && p.PositiveOverrideLimitG > 0.0
+            ? System.Math.Max(p.PositiveStructuralLimitG, p.PositiveOverrideLimitG)
+            : p.PositiveStructuralLimitG;
 
     /// Continuous whole-wing lift curve. The attached-flow branch is exactly the calibrated
     /// linear curve through CLmax/CLmin. Beyond either break, separated lift decays with incidence
@@ -640,7 +685,7 @@ public static class FlightModel {
         double dynamicPressure, in AirframeAerodynamicState configuration) {
         double nzMax = System.Math.Min(dynamicPressure * p.WingAreaM2
             * (p.CLMax + configuration.LiftCoefficientIncrement) / (r.Mass * G0),
-            p.PositiveStructuralLimitG);
+            PositiveControlLimitG(p));
         double nzMin = System.Math.Max(dynamicPressure * p.WingAreaM2
             * (p.CLMin + configuration.LiftCoefficientIncrement) / (r.Mass * G0), -1.5);
         return System.Math.Clamp(c.GDemand, nzMin, nzMax);
@@ -668,7 +713,7 @@ public static class FlightModel {
         double q = 0.5 * atmosphere.Sample(s.Position.Y).DensityKgM3 * speed * speed;
         double nzMax = System.Math.Min(q * p.WingAreaM2
             * (p.CLMax + configuration.LiftCoefficientIncrement) / (s.Mass * G0),
-            p.PositiveStructuralLimitG);
+            PositiveControlLimitG(p));
         double nzMin = System.Math.Max(q * p.WingAreaM2
             * (p.CLMin + configuration.LiftCoefficientIncrement) / (s.Mass * G0), -1.5);
         return (System.Math.Clamp(c.GDemand, nzMin, nzMax), nzMax, nzMin);

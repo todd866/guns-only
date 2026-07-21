@@ -1,4 +1,5 @@
 import path from "node:path";
+import { stat } from "node:fs/promises";
 import {
   ID_PATTERN,
   SHA256_PATTERN,
@@ -509,7 +510,10 @@ function validateProfiles(root, record, assetMap, issues, warnings) {
   for (const [field, value] of [
     ["skyAssetId", profile.environment?.skyAssetId],
     ["surfaceAssetId", profile.environment?.surfaceAssetId],
-  ]) requireAsset(value, `$.environment.${field}`);
+    ["terrainAssetId", profile.environment?.terrainAssetId],
+  ]) {
+    if (value !== undefined) requireAsset(value, `$.environment.${field}`);
+  }
   for (let index = 0; index < (profile.environment?.platformAssetIds ?? []).length; index++) {
     requireAsset(profile.environment.platformAssetIds[index], `$.environment.platformAssetIds[${index}]`);
   }
@@ -721,7 +725,20 @@ export async function validateRepository(options = {}) {
   }
 
   const assets = [...assetResults.values()].flat();
-  const totalBytes = assets.reduce((sum, item) => sum + (item.info?.bytes ?? 0), 0);
+  // Account for the complete validated asset-source closure, not just the first source chosen as
+  // an asset's inspection target. Terrain and other compound assets may own several runtime files;
+  // a path set keeps shared textures/buffers from inflating the deploy-size signal.
+  const assetManifestFiles = new Set(runtimeFilesByManifest.keys());
+  const referencedFiles = new Set();
+  for (const runtimeFiles of runtimeFilesByManifest.values()) {
+    for (const file of runtimeFiles) {
+      if (!assetManifestFiles.has(file)) referencedFiles.add(file);
+    }
+  }
+  const referencedFileSizes = await Promise.all(
+    [...referencedFiles].map(async (file) => (await stat(file)).size),
+  );
+  const totalBytes = referencedFileSizes.reduce((sum, bytes) => sum + bytes, 0);
   const totalTriangles = assets.reduce((sum, item) => sum + (item.model?.triangles ?? 0), 0);
   const summary = {
     schemas: schemas.files.length,
@@ -730,6 +747,7 @@ export async function validateRepository(options = {}) {
     profiles: [...records.values()].filter((item) => item.kind === "visuals").length,
     assets: assets.length,
     licenses: [...records.values()].filter((item) => item.kind === "licenses").reduce((sum, item) => sum + (Array.isArray(item.document?.entries) ? item.document.entries.length : Array.isArray(item.document?.licenses) ? item.document.licenses.length : 0), 0),
+    referencedFiles: referencedFiles.size,
     referencedBytes: totalBytes,
     modelTriangles: totalTriangles,
   };
@@ -767,7 +785,7 @@ export function formatValidationReport(report) {
   const lines = [
     `Asset content validation: ${status}`,
     `Schemas ${report.summary.schemas} · documents ${report.summary.manifests} · packs ${report.summary.packs} · profiles ${report.summary.profiles}`,
-    `Assets ${report.summary.assets} · licenses ${report.summary.licenses} · referenced ${formatBytes(report.summary.referencedBytes)} · model triangles ${report.summary.modelTriangles.toLocaleString("en-US")}`,
+    `Assets ${report.summary.assets} · licenses ${report.summary.licenses} · unique asset-source closure ${report.summary.referencedFiles} files / ${formatBytes(report.summary.referencedBytes)} · model triangles ${report.summary.modelTriangles.toLocaleString("en-US")}`,
   ];
   if (report.errors.length) {
     lines.push("", `Errors (${report.errors.length})`);

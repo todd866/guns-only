@@ -12,6 +12,11 @@ import { sortieResultCopy } from "./render/debrief/sortie_result.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
 import {
+  loadKoreaTerrain,
+  TERRAIN_CURVATURE_START_M,
+  TERRAIN_EARTH_RADIUS_M,
+} from "./render/environment/korea_terrain.js";
+import {
   PresentationEventStreams,
   presentationVector,
   terminalVisualEvents,
@@ -53,6 +58,7 @@ import {
   presenceTelemetryContext,
   projectRemoteContact,
   remoteContactVisible,
+  snapshotForTerrainFrame,
   shouldResetRemoteInterpolation,
 } from "./render/presence/presence_presentation.js";
 import { RemoteAssetResolutionPolicy } from "./render/presence/remote_asset_policy.js";
@@ -93,6 +99,7 @@ const PRODUCTION_PACK_ENVIRONMENT_ENABLED = false;
 const PRODUCTION_SIMULATED_CLOUDS_ENABLED = false;
 const PRODUCTION_ESCORT_PRESENTATION_ENABLED = false;
 const PRODUCTION_NONCOMBAT_WORLD_BOGEYS_VISIBLE = false;
+const PRODUCTION_KOREA_TERRAIN_ENABLED = true;
 
 const sceneCanvas = document.querySelector("#scene");
 const hudCanvas = document.querySelector("#hud");
@@ -110,10 +117,13 @@ const readyTitle = document.querySelector("#ready-title");
 const readyBrief = document.querySelector("#ready-brief");
 const readySortie = document.querySelector("#ready-sortie");
 const readyConfig = document.querySelector("#ready-config");
-const readyMissionNav = document.querySelector("#ready-mission-nav");
-const readyMissionPrev = document.querySelector("#ready-mission-prev");
-const readyMissionNext = document.querySelector("#ready-mission-next");
-const readyMissionPosition = document.querySelector("#ready-mission-position");
+const readyMenuTitle = document.querySelector("#ready-menu-title");
+const readyMenuHelp = document.querySelector("#ready-menu-help");
+const readySelector = document.querySelector("#ready-selector");
+const readyActivityNav = document.querySelector("#ready-activity-nav");
+const readyActivityButtons = [...document.querySelectorAll("[data-sortie-activity]")];
+const readyMissionGroups = [...document.querySelectorAll("[data-sortie-group]")];
+const readyMissionOptions = [...document.querySelectorAll("[data-mission-option]")];
 const readyStart = document.querySelector("#ready-start");
 const readyReplay = document.querySelector("#ready-replay");
 const readyHint = document.querySelector("#ready-hint");
@@ -661,12 +671,13 @@ let activeView = null;
 let latestState = null;
 const requestedInitialBeat = Number(new URLSearchParams(window.location.search).get("mission"));
 let selectedBeat = Number.isInteger(requestedInitialBeat)
-  && requestedInitialBeat >= 1 && requestedInitialBeat <= 7 ? requestedInitialBeat : 1;
+  && requestedInitialBeat >= 1 && requestedInitialBeat <= 8 ? requestedInitialBeat : 1;
 let resetFrameClock = () => {};
 let bridgePauseApplied = null;
 let testFlightActionController = null;
 let multiplayer = null;
 let incidentReplay = null;
+let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
 
 readyBuildReload?.addEventListener("click", reloadCurrentBuild);
@@ -675,8 +686,21 @@ renderBuildIdentity();
 recorder.context("build_identity", buildIdentity.telemetry);
 queueMicrotask(() => void resolveBuildIdentity());
 
+function applyMultiplayerWorldOrigin(status) {
+  if (!status) return;
+  if (status.phase === "online" && Array.isArray(status.spawnOrigin)
+    && status.spawnOrigin.length === 3 && status.spawnOrigin.every(Number.isFinite)) {
+    const originKey = `${status.worldEpoch || "world.unknown"}|${status.spawnOrigin.join(",")}`;
+    if (bridge && originKey !== appliedMultiplayerWorldOrigin
+      && bridge.SetWorldOrigin(status.spawnOrigin[0], status.spawnOrigin[2]) === true) {
+      appliedMultiplayerWorldOrigin = originKey;
+    }
+  }
+}
+
 function renderMultiplayerStatus(status) {
-  if (!multiplayerStatus || !status) return;
+  if (!status) return;
+  if (!multiplayerStatus) return;
   const presentation = presenceStatusPresentation(status);
   multiplayerStatus.dataset.phase = status.phase;
   multiplayerStatus.dataset.playerId = status.playerId || "";
@@ -695,48 +719,87 @@ function renderMultiplayerStatus(status) {
 
 const MISSION_BRIEFS = Object.freeze({
   1: {
+    activity: "dogfight",
     kicker: "BFM drill · mission 01",
     title: "Perch Attack",
     sortie: "Offensive conversion",
+    configuration: "F-86F-30 · guns hot · high-six perch",
+    card: "Start high at the bandit's six and convert the perch into a gun solution.",
     brief: "Convert altitude and position into a controlled gun solution. Stay in plane, manage closure, and do not trade the perch for an overshoot.",
   },
   2: {
+    activity: "dogfight",
     kicker: "BFM drill · mission 02",
     title: "Break Defense",
     sortie: "Defensive reaction",
+    configuration: "F-86F-30 · guns hot · bandit high six",
+    card: "A bandit begins at your high six. Survive, then reverse the fight.",
     brief: "Survive the opening break, preserve energy, and reverse the geometry when the attacker spends too much nose authority.",
   },
   3: {
+    activity: "gunnery",
     kicker: "BFM drill · mission 03",
     title: "Saddle + Shot",
     sortie: "Gunnery setup",
+    configuration: "F-86F-30 · guns hot · tracking start",
+    card: "Track a weaving target and fire only from a stable gun solution.",
     brief: "Settle behind the target, control angle-off and closure, then fire only when the lead solution stabilises inside the gun envelope.",
   },
   4: {
+    activity: "gunnery",
     kicker: "Intercept · mission 04",
     title: "Balloon Strike",
     sortie: "Engine-less diving pass",
+    configuration: "Engine-less glider · 50 rounds · one pass",
+    card: "Trade a finite altitude budget for one engine-less attack on an AWACS.",
     brief: "You are already in the terminal geometry with no engine. Dispose of excess altitude in a controlled dive, protect enough IAS for one gun solution, and do not plan a second attack.",
   },
   5: {
+    activity: "carrier",
     kicker: "Carrier cycle · mission 05",
     title: "Final Approach",
     sortie: "Recovery + relaunch",
+    card: "Join the active groove, fly the ball, trap, and return to combat.",
     brief: "Fly the ball to a clean trap. The deck cycle continues through arrestment and catapult, returning you to an armed combat patrol.",
   },
   6: {
+    activity: "carrier",
     kicker: "Maintenance test flight · mission 06",
     title: "Degraded Recovery",
     sortie: "Utility-hydraulic failure · emergency gear · RTB",
+    card: "Diagnose a failed normal gear extension and recover aboard safely.",
     brief: "Diagnose the failed normal extension from indications and elapsed time. Emergency-extend below the limit, verify every downlock, then recover aboard.",
   },
   7: {
+    activity: "dogfight",
     kicker: "Visual fight · mission 07",
     title: "F-22A vs Su-27S",
     sortie: "Public-data surrogates · guns only",
+    card: "Take a neutral modern visual merge with guns safe through the first pass.",
     brief: "Take the neutral high-aspect merge with guns safe through the first pass. Then fight for the rear quarter, preserve IAS, control closure, and let actual projectiles decide the result. No missiles or unmodelled modern sensors.",
   },
+  8: {
+    activity: "defence",
+    kicker: "Air defence · mission 08",
+    title: "Drone Raid Defence",
+    sortie: "Defensive intercept · four sequential raiders",
+    configuration: "F-22 public-data surrogate · 480 rounds · one authoritative target at a time",
+    card: "Stop four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring.",
+    brief: "This is a four-raider sequential stream: one target is authoritative at a time, and the next enters only after the current raider is killed or leaks. Fly cutoff geometry, take the first valid gun solution, and protect ammunition; the score rewards zero leakers, quick neutralizations, and rounds per kill.",
+  },
 });
+
+const MISSION_ACTIVITIES = Object.freeze({
+  dogfight: Object.freeze({ label: "Dogfight", missions: Object.freeze([1, 2, 7]) }),
+  carrier: Object.freeze({ label: "Carrier", missions: Object.freeze([5, 6]) }),
+  gunnery: Object.freeze({ label: "Gunnery", missions: Object.freeze([3, 4]) }),
+  defence: Object.freeze({ label: "Defence", missions: Object.freeze([8]) }),
+});
+
+let selectedActivity = MISSION_BRIEFS[selectedBeat]?.activity || "dogfight";
+const activityMissionSelection = new Map(Object.entries(MISSION_ACTIVITIES)
+  .map(([activity, definition]) => [activity, definition.missions[0]]));
+activityMissionSelection.set(selectedActivity, selectedBeat);
 
 function pressMappedKey(code, source) {
   const gkey = keyMap.get(code);
@@ -1044,6 +1107,56 @@ function renderIncidentReplay(frame) {
   incidentReplayDecision.dataset.reached = String(frame.t >= analysis.decisionTime);
 }
 
+function renderSortieSelection() {
+  for (const button of readyActivityButtons) {
+    const selected = button.dataset.sortieActivity === selectedActivity;
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  }
+  for (const group of readyMissionGroups) {
+    group.hidden = group.dataset.sortieGroup !== selectedActivity;
+  }
+  for (const option of readyMissionOptions) {
+    const mission = Number(option.dataset.missionOption);
+    const selected = mission === selectedBeat;
+    option.dataset.selected = String(selected);
+    const selectButton = option.querySelector("[data-mission-select]");
+    selectButton?.setAttribute("aria-pressed", String(selected));
+    if (selected) selectButton?.setAttribute("aria-current", "true");
+    else selectButton?.removeAttribute("aria-current");
+  }
+}
+
+function readyScreenFocusables() {
+  return [...readyScreen.querySelectorAll(
+    'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+  )].filter((element) => !element.closest("[hidden]"));
+}
+
+function focusReadyScreen() {
+  if (!readyScreen.classList.contains("visible")) return;
+  const selectedMission = readyScreen.querySelector(
+    `[data-mission-select="${selectedBeat}"]`,
+  );
+  // Keep Enter-to-fly honest: when the primary action is available it owns initial focus. During
+  // release verification the selected card is the safe focusable fallback, never a disabled button.
+  const target = !readyStart.disabled ? readyStart : selectedMission;
+  target?.focus({ preventScroll: true });
+}
+
+function droneRaidDebriefFacts(state) {
+  const score = Math.round(Number(state?.drone_raid_score) || 0);
+  const maximum = Math.round(Number(state?.drone_raid_max_score) || 100);
+  const kills = Math.max(0, Math.round(Number(state?.drone_raid_kills) || 0));
+  const leakers = Math.max(0, Math.round(Number(state?.drone_raid_leakers) || 0));
+  const roundsPerKill = Number(state?.drone_raid_rounds_per_kill);
+  const facts = [`Raid score ${score}/${maximum}`, `${kills} down`];
+  if (leakers > 0) facts.push(`${leakers} leaker${leakers === 1 ? "" : "s"}`);
+  if (kills > 0 && Number.isFinite(roundsPerKill))
+    facts.push(`${roundsPerKill.toFixed(1)} rounds/kill`);
+  return facts.join(" · ");
+}
+
 function renderPauseUi(state = latestState) {
   const ready = pauseReasons.has("ready");
   const finished = pauseReasons.has("finished");
@@ -1053,13 +1166,34 @@ function renderPauseUi(state = latestState) {
   const sessionPaused = pauseReasons.has("session");
   const showScreen = !help && !calibrating && (ready || finished || background || sessionPaused);
   const brief = missionBrief();
+  const wasScreenVisible = readyScreen.classList.contains("visible");
+  const startWasDisabled = readyStart.disabled;
 
-  if (readyMissionNav) readyMissionNav.hidden = !ready;
-  if (readyMissionPosition) {
-    readyMissionPosition.textContent = `MISSION ${String(selectedBeat).padStart(2, "0")} / 07`;
+  readyScreen.dataset.mode = ready ? "selection" : finished ? "debrief" : "pause";
+  if (readySelector) readySelector.hidden = !ready;
+  if (ready) renderSortieSelection();
+  if (readyMenuTitle) {
+    readyMenuTitle.textContent = ready
+      ? "Choose a sortie" : finished ? "Sortie complete" : "Flight paused";
+  }
+  if (readyMenuHelp) {
+    readyMenuHelp.textContent = ready
+      ? "Choose an activity and sortie. Select a card for its briefing or use Fly to launch it directly."
+      : finished
+        ? "Review the result, replay the incident when available, or restage the sortie."
+        : "The deterministic flight clock is stopped and all controls are neutralised.";
   }
 
   document.documentElement.classList.toggle("run-paused", pauseReasons.size > 0);
+  sceneCanvas.inert = showScreen;
+  touchControls.inert = showScreen;
+  if (testFlightConsole) testFlightConsole.inert = showScreen;
+  if (!showScreen && wasScreenVisible && readyScreen.contains(document.activeElement)) {
+    const focusOwner = calibrating
+      ? tiltPrompt?.querySelector("button:not([disabled])")
+      : sceneCanvas;
+    focusOwner?.focus({ preventScroll: true });
+  }
   readyScreen.classList.toggle("visible", showScreen);
   readyScreen.setAttribute("aria-hidden", String(!showScreen));
 
@@ -1074,6 +1208,8 @@ function renderPauseUi(state = latestState) {
     readySortie.textContent = `${brief.title} · ${String(state?.sortie_outcome || "complete").toLowerCase()}`;
     readyConfig.textContent = state?.maintenance_scenario === true
       ? `Procedure ${Math.round(Number(state?.maintenance_score) || 0)}/${Math.round(Number(state?.maintenance_max_score) || 100)} · ${Math.round(Number(state?.maintenance_demerits) || 0)} demerits`
+      : state?.drone_raid_evaluation === true
+        ? droneRaidDebriefFacts(state)
         : state?.visual_merge_evaluation === true
           ? `Decision score ${Math.round(Number(state?.visual_merge_score) || 0)}/100 · rear-quarter dwell ${(Number(state?.rear_quarter_dwell_s) || 0).toFixed(1)} s · ${Math.round(Number(state?.evaluated_projectile_hits) || 0)} projectile hits`
         : replayAnalysis
@@ -1097,8 +1233,8 @@ function renderPauseUi(state = latestState) {
         ? `Maintenance profile · ${deck || "axial"} deck`
         : selectedBeat === 7
           ? "Public-data surrogates · guns only · first pass safe"
-        : "Guns hot · air start";
-    readyStart.textContent = "Fly mission";
+        : brief.configuration || "Guns hot · air start";
+    readyStart.textContent = `Fly ${brief.title}`;
     readyHint.textContent = background ? "Return to the game to fly" : "Press Enter to fly";
   } else {
     readyReplay.hidden = true;
@@ -1125,6 +1261,9 @@ function renderPauseUi(state = latestState) {
       && reason !== "background" && reason !== "session");
   readyStart.disabled = buildIdentityBlocksSortie()
     || blockers.length > 0 || ((ready || finished) && background);
+
+  if (showScreen && !wasScreenVisible) queueMicrotask(focusReadyScreen);
+  else if (showScreen && startWasDisabled && !readyStart.disabled) queueMicrotask(focusReadyScreen);
 }
 
 function applyBridgePause() {
@@ -1145,7 +1284,7 @@ function setPauseReason(reason, active) {
   if (wasPaused && !paused) resetFrameClock();
 }
 
-function enterReady({ resetBridge = true } = {}) {
+function enterReady({ resetBridge = true, focus = true } = {}) {
   const preserveCalibration = pauseReasons.has("calibration");
   const preserveBackground = pauseReasons.has("background");
   resetMissionPresentation();
@@ -1154,23 +1293,35 @@ function enterReady({ resetBridge = true } = {}) {
   if (preserveCalibration) pauseReasons.add("calibration");
   if (preserveBackground) pauseReasons.add("background");
   if (resetBridge) bridge?.StartBeat(selectedBeat);
+  if ([5, 6].includes(selectedBeat)) activeView?.clearRemotePlayers();
   bridgePauseApplied = true; // StartBeat is an authoritative transition to Ready.
   renderPauseUi();
   resetFrameClock();
+  if (focus) queueMicrotask(focusReadyScreen);
 }
 
-function selectMission(index) {
-  selectedBeat = clamp(Math.round(Number(index) || 1), 1, 7);
+function selectMission(index, { focus = true } = {}) {
+  selectedBeat = clamp(Math.round(Number(index) || 1), 1, 8);
+  selectedActivity = MISSION_BRIEFS[selectedBeat]?.activity || "dogfight";
+  activityMissionSelection.set(selectedActivity, selectedBeat);
   const missionUrl = new URL(window.location.href);
   if (selectedBeat === 1) missionUrl.searchParams.delete("mission");
   else missionUrl.searchParams.set("mission", String(selectedBeat));
   window.history.replaceState(window.history.state, "", missionUrl);
-  enterReady();
+  enterReady({ focus });
 }
 
-function stepMission(direction) {
-  const count = Object.keys(MISSION_BRIEFS).length;
-  selectMission(((selectedBeat - 1 + direction + count) % count) + 1);
+function selectActivity(activity) {
+  const definition = MISSION_ACTIVITIES[activity];
+  if (!definition) return;
+  const mission = activityMissionSelection.get(activity) ?? definition.missions[0];
+  selectMission(mission, { focus: false });
+}
+
+function launchMission(index) {
+  selectMission(index);
+  activeView?.hud.armAudio();
+  return beginFlight();
 }
 
 function restartMission() {
@@ -1180,9 +1331,9 @@ function restartMission() {
 function toggleDeckAndReady() {
   resetMissionPresentation();
   bridge.ToggleDeckConfiguration();
-  // The bridge restarts beat 5 when its deck changes. Other beats do not contain a carrier, so
+  // The bridge restarts carrier beats 5 and 6 when their deck changes. Other beats do not contain a carrier, so
   // restart them explicitly to keep C's lifecycle semantics consistent everywhere.
-  enterReady({ resetBridge: selectedBeat !== 5 });
+  enterReady({ resetBridge: ![5, 6].includes(selectedBeat) });
 }
 
 function beginFlight() {
@@ -1250,8 +1401,50 @@ readyStart.addEventListener("click", () => {
   activateReadyAction();
 });
 
-readyMissionPrev?.addEventListener("click", () => stepMission(-1));
-readyMissionNext?.addEventListener("click", () => stepMission(1));
+readyActivityNav?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-sortie-activity]");
+  if (!button) return;
+  selectActivity(button.dataset.sortieActivity);
+});
+
+readyActivityNav?.addEventListener("keydown", (event) => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.code)) return;
+  event.preventDefault();
+  const current = readyActivityButtons.indexOf(event.target.closest("[data-sortie-activity]"));
+  if (current < 0) return;
+  const last = readyActivityButtons.length - 1;
+  const next = event.code === "Home" ? 0
+    : event.code === "End" ? last
+      : event.code === "ArrowLeft" ? (current - 1 + readyActivityButtons.length) % readyActivityButtons.length
+        : (current + 1) % readyActivityButtons.length;
+  readyActivityButtons[next].focus({ preventScroll: true });
+  selectActivity(readyActivityButtons[next].dataset.sortieActivity);
+});
+
+readySelector?.addEventListener("click", (event) => {
+  const launch = event.target.closest("[data-mission-launch]");
+  if (launch) {
+    launchMission(Number(launch.dataset.missionLaunch));
+    return;
+  }
+  const select = event.target.closest("[data-mission-select]");
+  if (select) selectMission(Number(select.dataset.missionSelect));
+});
+
+readyScreen.addEventListener("keydown", (event) => {
+  if (event.code !== "Tab" || !readyScreen.classList.contains("visible")) return;
+  const focusable = readyScreenFocusables();
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus({ preventScroll: true });
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus({ preventScroll: true });
+  }
+});
 
 readyReplay?.addEventListener("click", () => {
   if (!incidentReplay?.start(performance.now())) return;
@@ -3382,10 +3575,12 @@ function createSea() {
         tangentZ = mix(vec3(0.0, 0.0, 1.0), tangentZ, geometryDetail);
         // Curvature begins beyond the local tactical bubble, so flat-world sim objects still sit
         // in the water nearby while the ocean meets a believable horizon at altitude.
-        float horizonRadial = max(radial - 12000.0, 0.0);
-        worldBase.y -= horizonRadial * horizonRadial / 12742000.0;
-        if (radial > 12000.0) {
-          vec2 curveSlope = -position.xz * (horizonRadial / max(radial, 1.0)) / 6371000.0;
+        float horizonRadial = max(radial - ${TERRAIN_CURVATURE_START_M.toFixed(1)}, 0.0);
+        worldBase.y -= horizonRadial * horizonRadial
+          / ${(2 * TERRAIN_EARTH_RADIUS_M).toFixed(1)};
+        if (radial > ${TERRAIN_CURVATURE_START_M.toFixed(1)}) {
+          vec2 curveSlope = -position.xz * (horizonRadial / max(radial, 1.0))
+            / ${TERRAIN_EARTH_RADIUS_M.toFixed(1)};
           tangentX.y += curveSlope.x;
           tangentZ.y += curveSlope.y;
         }
@@ -3682,8 +3877,9 @@ function createDecisionSupportSea() {
         float radial = length(position.xz);
         // Keep the tactical recovery area exactly planar. Curvature beyond it supplies the real
         // geometric horizon used for attitude and altitude judgment without moving nearby truth.
-        float curvedRadial = max(radial - 12000.0, 0.0);
-        worldPosition.y -= curvedRadial * curvedRadial / 12742000.0;
+        float curvedRadial = max(radial - ${TERRAIN_CURVATURE_START_M.toFixed(1)}, 0.0);
+        worldPosition.y -= curvedRadial * curvedRadial
+          / ${(2 * TERRAIN_EARTH_RADIUS_M).toFixed(1)};
         vWorldPosition = worldPosition;
         gl_Position = projectionMatrix * viewMatrix * vec4(worldPosition, 1.0);
         #include <logdepthbuf_vertex>
@@ -4907,7 +5103,38 @@ class FlightView {
       dt: 0,
       now: 0,
     };
+    this.terrainPresentation = null;
+    this.terrainPresentationError = null;
+    this.terrainPresentationPromise = null;
     this.resize();
+  }
+
+  ensureTerrainPresentation() {
+    if (!PRODUCTION_KOREA_TERRAIN_ENABLED || this.disposed
+      || this.terrainPresentation || this.terrainPresentationPromise) {
+      return this.terrainPresentationPromise ?? Promise.resolve(this.terrainPresentation);
+    }
+    this.terrainPresentationError = null;
+    this.terrainPresentationPromise = loadKoreaTerrain(THREE, {
+      qualityTier: VISUAL_QUALITY.tier,
+      maximumConcurrentLoads: VISUAL_QUALITY.tier === "mobile" ? 3 : 6,
+      sunDirection: SUN_DIRECTION,
+    }).then((terrain) => {
+      if (this.disposed) {
+        terrain.dispose();
+        return null;
+      }
+      this.terrainPresentation = terrain;
+      this.scene.add(terrain.group);
+      return terrain;
+    }).catch((error) => {
+      if (!this.disposed) {
+        this.terrainPresentationError = String(error?.message ?? error);
+        console.warn("Korea terrain unavailable; ocean presentation retained.", error);
+      }
+      return null;
+    });
+    return this.terrainPresentationPromise;
   }
 
   resize() {
@@ -5573,6 +5800,9 @@ class FlightView {
   }
 
   update(state, dt, nowSeconds) {
+    // The sortie chooser owns Ready. Defer the manifest and all height ranges until gameplay has
+    // actually begun, then retain the single shared presentation across pause/replay/restage.
+    if (state?.ready !== true) void this.ensureTerrainPresentation();
     // A contextual lock is presentation state, not a promise to track stale geometry forever.
     // Leaving the boat's vicinity, losing the target, entering replay, or reaching terminal state
     // releases the view instead of silently looking at an invalid/stale world position.
@@ -5713,6 +5943,20 @@ class FlightView {
       this.scene.fog.color.copy(this.fogColor);
       this.scene.fog.density = fogDensity;
     }
+
+    // The bridge owns the one terrain-frame transform used by both physics and presentation.
+    // Shared-world sorties apply the inverse room origin; local carrier training retains its
+    // explicit offshore placement and is excluded from remote-aircraft presentation.
+    const terrainPlacementEastM = Number(state.terrain_placement_east_m);
+    const terrainPlacementNorthM = Number(state.terrain_placement_north_m);
+    this.terrainPresentation?.update({
+      cameraPosition: this.camera.position,
+      fogColor: this.fogColor,
+      fogDensity,
+      sunDirection: SUN_DIRECTION,
+      placementEastM: Number.isFinite(terrainPlacementEastM) ? terrainPlacementEastM : 0,
+      placementNorthM: Number.isFinite(terrainPlacementNorthM) ? terrainPlacementNorthM : 0,
+    });
 
     const isCarrier = state.carrier === true;
     const banditAlive = aircraftAlive(state, "opponent_terminal_state",
@@ -5861,19 +6105,28 @@ class FlightView {
       ...this.presentationAssets.diagnostics(),
       visualRuntime: this.visualRuntime?.diagnostics() ?? null,
       visualRuntimeError: this.visualRuntimeError,
+      terrain: this.terrainPresentation?.diagnostics() ?? null,
+      terrainError: this.terrainPresentationError,
       multiplayer: this.remoteAircraft.diagnostics(),
     });
   }
 
-  syncRemotePlayers(snapshot, ownPlayerId) {
-    this.remoteAircraft.sync(snapshot, ownPlayerId);
+  syncRemotePlayers(snapshot, ownPlayerId, localState) {
+    this.remoteAircraft.sync(snapshotForTerrainFrame(snapshot, localState), ownPlayerId);
     return this.remoteAircraft.aircraft.size;
+  }
+
+  clearRemotePlayers() {
+    this.remoteAircraft.sync({ players: [], bogeys: [] }, null);
   }
 
   async dispose() {
     if (this.disposed) return;
     this.disposed = true;
     this.visualRuntimeEpoch += 1;
+    this.terrainPresentation?.dispose();
+    this.terrainPresentation = null;
+    await this.terrainPresentationPromise?.catch(() => undefined);
     await this.visualRuntimeTransitions.idle();
     const visualRuntime = this.visualRuntime;
     this.visualRuntime = null;
@@ -6184,7 +6437,10 @@ function installMobileInput(view) {
   window.addEventListener("pointerup", endControl);
   window.addEventListener("pointercancel", endControl);
 
-  const preventGesture = (event) => event.preventDefault();
+  const preventGesture = (event) => {
+    if (event.type === "touchmove" && event.target.closest?.("#ready-screen")) return;
+    event.preventDefault();
+  };
   document.addEventListener("touchmove", preventGesture, { passive: false });
   document.addEventListener("gesturestart", preventGesture, { passive: false });
   document.addEventListener("gesturechange", preventGesture, { passive: false });
@@ -6248,8 +6504,21 @@ function installMobileInput(view) {
   };
 }
 
+function nativeInteractiveOwnsKey(event) {
+  const target = event.target;
+  if (target.closest?.("input, select, textarea")) return true;
+  if (!target.closest?.("button, a[href], [role=button]")) return false;
+  return [
+    "Enter", "NumpadEnter", "Space",
+    "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End",
+  ].includes(event.code);
+}
+
 function installInput(view) {
   window.addEventListener("keydown", (event) => {
+    // Native controls own Enter, Space and arrow-key semantics while focused. This prevents the
+    // dialog's mission buttons from leaking into flight shortcuts or launching the previous card.
+    if (nativeInteractiveOwnsKey(event)) return;
     if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Space", "BracketLeft", "BracketRight", "F1", "Enter", "NumpadEnter", "Escape"].includes(event.code)) {
       event.preventDefault();
     }
@@ -6263,7 +6532,7 @@ function installInput(view) {
       return;
     }
 
-    if (/^Digit[1-7]$/.test(event.code)) {
+    if (/^Digit[1-8]$/.test(event.code)) {
       selectMission(Number(event.code.slice(-1)));
       return;
     }
@@ -6302,6 +6571,7 @@ function installInput(view) {
   }, { passive: false });
 
   window.addEventListener("keyup", (event) => {
+    if (nativeInteractiveOwnsKey(event)) return;
     if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Space", "BracketLeft", "BracketRight"].includes(event.code)) {
       event.preventDefault();
     }
@@ -6391,7 +6661,7 @@ async function boot() {
   multiplayer = new GlobalRoomClient({
     url: resolveGlobalRoomUrl(),
     onSnapshot: (snapshot, ownPlayerId) => {
-      const rendered = view.syncRemotePlayers(snapshot, ownPlayerId);
+      const rendered = view.syncRemotePlayers(snapshot, ownPlayerId, latestState);
       if (multiplayerStatus) {
         multiplayerStatus.dataset.rendered = String(rendered);
         multiplayerStatus.dataset.snapshotTime = String(snapshot.serverTimeMs || 0);
@@ -6399,7 +6669,10 @@ async function boot() {
         multiplayerStatus.dataset.bogeyPosition = snapshot.bogeys?.[0]?.position?.join(",") || "";
       }
     },
-    onStatus: renderMultiplayerStatus,
+    onStatus: (status) => {
+      applyMultiplayerWorldOrigin(status);
+      renderMultiplayerStatus(status);
+    },
   });
   multiplayer.start();
 

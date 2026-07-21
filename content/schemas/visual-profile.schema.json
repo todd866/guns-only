@@ -177,6 +177,9 @@
         "surfaceAssetId": {
           "$ref": "#/$defs/versionedId"
         },
+        "terrainAssetId": {
+          "$ref": "#/$defs/versionedId"
+        },
         "platformAssetIds": {
           "type": "array",
           "uniqueItems": true,

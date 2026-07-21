@@ -1,4 +1,5 @@
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
 
 namespace GunsOnly.Sim.Tests;
 
@@ -516,6 +517,88 @@ public class SimulationSessionTests {
         Assert.True(session.PlayerFuel.ConsumesFuel);
         Assert.False(session.PlayerFuel.IsBingo);
         Assert.False(session.PlayerFuel.RtbAdvisory);
+    }
+
+    [Fact]
+    public void BuiltInBeatUsesExplicitTerrainForGroundImpactTruth() {
+        var terrain = new BilinearHeightGrid(-10_000.0, -10_000.0,
+            10_000.0, 10_000.0,
+            new double[,]
+            {
+                { 4_000.0, 4_000.0, 4_000.0 },
+                { 4_000.0, 4_000.0, 4_000.0 },
+                { 4_000.0, 4_000.0, 4_000.0 }
+            });
+        var session = new SimulationSession();
+        session.StartBeatWithTerrain(1, terrain);
+
+        Assert.Same(terrain, session.Terrain);
+        session.Begin();
+        session.StepFixed();
+
+        Assert.Equal(AircraftTerminalState.Impacted, session.PlayerTerminalState);
+        Assert.Equal(ImpactSurface.Ground, session.PlayerImpactSurface);
+        Assert.Contains(session.RecentEvents, e => e.Type == SessionEventType.Impact
+            && e.Target == CombatRole.Player && e.Surface == ImpactSurface.Ground);
+    }
+
+    [Fact]
+    public void TerrainCanBeReanchoredWithoutRestagingTheActiveSortie() {
+        var initialTerrain = new BilinearHeightGrid(-10_000.0, -10_000.0,
+            10_000.0, 10_000.0,
+            new double[,]
+            {
+                { 0.0, 0.0, 0.0 },
+                { 0.0, 0.0, 0.0 },
+                { 0.0, 0.0, 0.0 }
+            });
+        var reanchoredTerrain = new BilinearHeightGrid(-10_000.0, -10_000.0,
+            10_000.0, 10_000.0,
+            new double[,]
+            {
+                { 4_000.0, 4_000.0, 4_000.0 },
+                { 4_000.0, 4_000.0, 4_000.0 },
+                { 4_000.0, 4_000.0, 4_000.0 }
+            });
+        var session = new SimulationSession();
+        session.StartBeatWithTerrain(1, initialTerrain);
+        long playerSpawn = session.PlayerSpawnSequence;
+        session.Begin();
+
+        session.SetTerrainSurface(reanchoredTerrain);
+        session.StepFixed();
+
+        Assert.Same(reanchoredTerrain, session.Terrain);
+        Assert.Equal(playerSpawn, session.PlayerSpawnSequence);
+        Assert.Equal(AircraftTerminalState.Impacted, session.PlayerTerminalState);
+        Assert.Equal(ImpactSurface.Ground, session.PlayerImpactSurface);
+    }
+
+    [Fact]
+    public void CarrierSortieGroundWreckRemainsOnTerrainInsteadOfFallingToSea() {
+        var terrain = new BilinearHeightGrid(-10_000.0, -10_000.0,
+            10_000.0, 10_000.0,
+            new double[,]
+            {
+                { 150.0, 150.0, 150.0 },
+                { 150.0, 150.0, 150.0 },
+                { 150.0, 150.0, 150.0 }
+            });
+        var session = new SimulationSession();
+        session.StartBeatWithTerrain(5, terrain);
+        session.Begin();
+
+        for (int tick = 0; tick < 20 * AircraftSim.TickHz
+            && session.PlayerTerminalState != AircraftTerminalState.Settled; tick++) {
+            session.StepFixed();
+        }
+
+        Assert.Equal(AircraftTerminalState.Settled, session.PlayerTerminalState);
+        Assert.Equal(ImpactSurface.Ground, session.PlayerImpactSurface);
+        Assert.True(session.Player.State.Position.Y >= 149.9,
+            $"ground wreck fell below terrain: {session.Player.State.Position.Y:F2} m");
+        Assert.DoesNotContain(session.RecentEvents, e => e.Type == SessionEventType.Impact
+            && e.Target == CombatRole.Player && e.Surface == ImpactSurface.Water);
     }
 
     [Fact]

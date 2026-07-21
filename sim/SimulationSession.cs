@@ -1,4 +1,5 @@
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Turbulence;
 
 namespace GunsOnly.Sim;
@@ -16,7 +17,14 @@ public enum AircraftTerminalState {
     /// </summary>
     SimulationBounded
 }
-public enum ImpactSurface { None, Water, FlightDeck, CarrierStructure, SimulationBoundary }
+public enum ImpactSurface {
+    None,
+    Water,
+    FlightDeck,
+    CarrierStructure,
+    SimulationBoundary,
+    Ground
+}
 public enum FlightConfigurationTarget { Combat, Recovery }
 public enum SessionEventType {
     Hit,
@@ -25,7 +33,8 @@ public enum SessionEventType {
     Settled,
     TerminalLimitReached,
     SortieFinished,
-    ArrestmentFailed
+    ArrestmentFailed,
+    RaidTargetLeaked
 }
 
 /// A bounded, ordered record of discrete simulation facts. Sequence numbers are monotonic for the
@@ -66,12 +75,14 @@ public sealed class SimulationSession {
     AirframeSystems _systems = null!;
     F86EmergencyGearRecoveryScenario? _maintenanceScenario;
     VisualMergeEvaluation? _visualMergeEvaluation;
+    DroneRaidEvaluation? _droneRaidEvaluation;
     PromptTracker _prompts = null!;
     PromptCue _cue;
     DoctrineAdvice _advice = new(1.0, 0.0, "setup");
     Func<BeatSetup> _beatFactory = Beats.Perch;
     ValleyVariant _requestedVariant = ValleyVariant.DoctrineDeep;
     WeatherProfile? _weatherProfile;
+    ITerrainSurface? _terrainSurface;
 
     double _accumulatorSeconds;
     double _simTimeMs;
@@ -84,6 +95,7 @@ public sealed class SimulationSession {
     int _shotsTotal;
     int _shotsInWindow;
     int _killCount;
+    int _droneRaidTargetIndex;
     bool _triggerDown;
     bool _opponentTriggerDown;
     int _beatIndex = 1;
@@ -129,6 +141,7 @@ public sealed class SimulationSession {
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial,
         WeatherProfile? weather = null) {
         _weatherProfile = weather;
+        _terrainSurface = weather?.Terrain;
         StartBeat(beatIndex, deckConfiguration);
     }
 
@@ -159,6 +172,7 @@ public sealed class SimulationSession {
         : AirframeAerodynamicState.Clean;
     public F86EmergencyGearRecoveryScenario? MaintenanceScenario => _maintenanceScenario;
     public VisualMergeEvaluation? VisualMergeEvaluation => _visualMergeEvaluation;
+    public DroneRaidEvaluation? DroneRaidEvaluation => _droneRaidEvaluation;
     public PromptCue Cue => _cue;
     public DoctrineAdvice Advice => _advice;
     public Carrier? Carrier => _carrier;
@@ -177,6 +191,11 @@ public sealed class SimulationSession {
     public SortieOutcome PendingOutcome => _pendingOutcome;
     public AircraftTerminalState PlayerTerminalState => _playerTerminalState;
     public AircraftTerminalState OpponentTerminalState => _opponentTerminalState;
+    /// A completed staged raid has no authoritative target even though its last mission-killed or
+    /// leaked vehicle is not integrated through the ordinary one-opponent terminal state machine.
+    public bool OpponentBodyPresent => _droneRaidEvaluation is {
+        Finished: true, OwnshipLost: false
+    } ? false : _opponentTerminalState != AircraftTerminalState.Settled;
     public ImpactSurface PlayerImpactSurface => _playerImpactSurface;
     public ImpactSurface OpponentImpactSurface => _opponentImpactSurface;
     /// <summary>The last authoritative carrier proxy contacted by the player wreck.</summary>
@@ -239,11 +258,20 @@ public sealed class SimulationSession {
     /// existing deterministic default wind; no process-global environment is mutated.
     /// </summary>
     public WeatherProfile? Weather => _weatherProfile;
+    public ITerrainSurface? Terrain => _terrainSurface;
+
+    /// <summary>
+    /// Re-anchor the immutable terrain substrate without restaging aircraft, weapons, fuel, or
+    /// mission progression. The browser uses this once its persistent-world sector origin is
+    /// known; every subsequent AGL, line-of-sight, impact, and wreck query observes the same
+    /// translated surface. Scenario authors should still prefer StartBeatWithTerrain at staging.
+    /// </summary>
+    public void SetTerrainSurface(ITerrainSurface? terrain) => _terrainSurface = terrain;
 
     /// <summary>Construct and stage one of the built-in beats. Physics remains held in Ready.</summary>
     public void StartBeat(int index,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial) {
-        if (index is < 1 or > 7) index = 1;
+        if (index is < 1 or > 8) index = 1;
         _prechargeSystemsOnStage = true;
         _beatIndex = index;
         _deckConfiguration = deckConfiguration;
@@ -254,6 +282,7 @@ public sealed class SimulationSession {
             5 => () => Beats.CarrierApproach(deckConfiguration),
             6 => () => Beats.EmergencyGearRecovery(deckConfiguration),
             7 => Beats.ModernVisualMerge,
+            8 => Beats.DroneRaidDefense,
             _ => Beats.Perch
         };
         StageBeat(_beatFactory());
@@ -263,6 +292,18 @@ public sealed class SimulationSession {
     public void StartBeat(int index, WeatherProfile? weather,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial) {
         _weatherProfile = weather;
+        _terrainSurface = weather?.Terrain;
+        StartBeat(index, deckConfiguration);
+    }
+
+    /// <summary>
+    /// Stage a built-in beat over explicit terrain while retaining the beat's established default
+    /// atmosphere and wind. This keeps a data-pack surface from silently changing flight weather.
+    /// </summary>
+    public void StartBeatWithTerrain(int index, ITerrainSurface? terrain,
+        Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial) {
+        _weatherProfile = null;
+        _terrainSurface = terrain;
         StartBeat(index, deckConfiguration);
     }
 
@@ -304,6 +345,9 @@ public sealed class SimulationSession {
             _recoveryAttemptActive = true;
         }
         _maintenanceScenario?.Begin(TimeSeconds);
+        _droneRaidEvaluation?.Begin(TimeSeconds, _gunKill.RoundsFired);
+        _droneRaidEvaluation?.Step(TimeSeconds, _player.State, _bandit.State,
+            _gunKill.GunSolution, _gunKill.RoundsFired);
         if (_carrier is null && _beat.PlayerAir.ThrustMaxN > 0.0
             && _beat.InitialThrottle >= 0.995)
             ShowTransition("MIL SET · FIGHT", 1800.0);
@@ -435,6 +479,10 @@ public sealed class SimulationSession {
         _visualMergeEvaluation = _beat.VisualMergeEvaluation is { } evaluation
             ? new VisualMergeEvaluation(evaluation)
             : null;
+        _droneRaidEvaluation = _beat.DroneRaid is { } raid
+            ? new DroneRaidEvaluation(raid)
+            : null;
+        _droneRaidTargetIndex = 0;
         _configurationAutomationEnabled = PlayerSystemsSimulated
             && _carrier is not null && !maintenanceRecovery;
         _configurationTarget = _configurationAutomationEnabled
@@ -721,8 +769,13 @@ public sealed class SimulationSession {
     void ObserveCombatDamage() {
         if (_gunKill.Outcome == FightOutcome.Splash
             && _opponentTerminalState == AircraftTerminalState.Flying) {
-            _killCount++;
-            BeginCatastrophicDamage(CombatRole.Opponent, CombatRole.Player);
+            if (_droneRaidEvaluation is { Finished: false }) {
+                ResolveDroneRaidTarget(neutralized: true,
+                    TimeSeconds + FixedDeltaSeconds);
+            } else {
+                _killCount++;
+                BeginCatastrophicDamage(CombatRole.Opponent, CombatRole.Player);
+            }
         }
         if (_opponentGun.Outcome == FightOutcome.Splash
             && _playerTerminalState == AircraftTerminalState.Flying) {
@@ -736,6 +789,8 @@ public sealed class SimulationSession {
         BeginTerminalClock();
         if (target == CombatRole.Player) {
             if (_playerTerminalState != AircraftTerminalState.Flying) return;
+            _droneRaidEvaluation?.RecordOwnshipLost(
+                TimeSeconds + FixedDeltaSeconds, _gunKill.RoundsFired);
             _playerTerminalState = AircraftTerminalState.DestroyedAirborne;
             _player.EngineCombustionAvailable = false;
             _player.AerodynamicConfiguration = TerminalFlightDynamics.Configuration(
@@ -746,6 +801,62 @@ public sealed class SimulationSession {
             _bandit.ApplyCatastrophicDamage(handedness: 1);
         } else return;
         EmitEvent(SessionEventType.Destroyed, source, target);
+    }
+
+    void ObserveDroneRaidTarget(double completedTimeSeconds) {
+        DroneRaidEvaluation? evaluation = _droneRaidEvaluation;
+        if (evaluation is null || !evaluation.Started || evaluation.Finished) return;
+
+        if (evaluation.HasLeaked(_bandit.State))
+            ResolveDroneRaidTarget(neutralized: false, completedTimeSeconds);
+        if (Lifecycle != LifecycleState.Active || evaluation.Finished) return;
+        evaluation.Step(completedTimeSeconds, _player.State, _bandit.State,
+            _gunKill.GunSolution, _gunKill.RoundsFired);
+    }
+
+    void ResolveDroneRaidTarget(bool neutralized, double completedTimeSeconds) {
+        DroneRaidEvaluation? evaluation = _droneRaidEvaluation;
+        DroneRaidScenarioDefinition? definition = _beat.DroneRaid;
+        if (evaluation is null || definition is null || evaluation.Finished) return;
+
+        if (neutralized) {
+            evaluation.RecordNeutralized(completedTimeSeconds, _gunKill.RoundsFired);
+            _killCount++;
+            EmitEvent(SessionEventType.Destroyed,
+                CombatRole.Player, CombatRole.Opponent);
+        } else {
+            evaluation.RecordLeaked(completedTimeSeconds, _gunKill.RoundsFired);
+            EmitEvent(SessionEventType.RaidTargetLeaked,
+                CombatRole.Opponent, CombatRole.None,
+                count: _droneRaidTargetIndex + 1);
+        }
+
+        if (evaluation.Finished) {
+            _outcome = evaluation.ZeroLeakers
+                ? SortieOutcome.Victory : SortieOutcome.Defeat;
+            _pendingOutcome = _outcome;
+            EmitEvent(SessionEventType.SortieFinished,
+                CombatRole.None, CombatRole.None, outcome: _outcome);
+            ClearHeldInput();
+            Lifecycle = LifecycleState.Finished;
+            return;
+        }
+
+        _droneRaidTargetIndex++;
+        AircraftState nextState = definition.Targets[_droneRaidTargetIndex];
+        _bandit = new RailBandit(nextState, _beat.BanditAir, _beat.BanditTimeline) {
+            Wind = _player.Wind,
+            Atmosphere = _player.AtmosphereModel
+        };
+        _gunKill = neutralized
+            ? _gunKill.CreateForStagedNextTarget()
+            : _gunKill.CreateForRetargetedTarget();
+        _opponentTerminalState = AircraftTerminalState.Flying;
+        _opponentImpactSurface = ImpactSurface.None;
+        _banditSpawnSequence++;
+        _lastRange = Geometry.Range(_player.State, _bandit.State);
+        _closureKts = _closureSmooth = 0.0;
+        ShowTransition(evaluation.Cue, 2200.0);
     }
 
     void BeginTerminalClock() {
@@ -786,9 +897,20 @@ public sealed class SimulationSession {
                 return (carrierSurface, solid, surfaceVelocity, height);
             }
         }
-        return current.Position.Y <= 0.0
-            ? (ImpactSurface.Water, Carrier.SolidCollision.None, Vec3D.Zero, 0.0)
-            : (ImpactSurface.None, Carrier.SolidCollision.None, Vec3D.Zero, 0.0);
+        var natural = DetectNaturalSurface(current);
+        return (natural.surface, Carrier.SolidCollision.None, Vec3D.Zero, natural.height);
+    }
+
+    (ImpactSurface surface, double height) DetectNaturalSurface(in AircraftState state) {
+        if (_terrainSurface?.TrySample(state.Position.X, state.Position.Z,
+            out TerrainSample sample) == true) {
+            if (state.Position.Y > sample.HeightM)
+                return (ImpactSurface.None, sample.HeightM);
+            return (sample.Kind == TerrainSurfaceKind.Water
+                ? ImpactSurface.Water : ImpactSurface.Ground, sample.HeightM);
+        }
+        return state.Position.Y <= 0.0
+            ? (ImpactSurface.Water, 0.0) : (ImpactSurface.None, 0.0);
     }
 
     void RegisterAirborneImpact(CombatRole target, ImpactSurface surface,
@@ -848,6 +970,8 @@ public sealed class SimulationSession {
         in Vec3D surfaceVelocity, double surfaceHeightM,
         bool tangentialImpulseAlreadyResolved = false,
         Carrier.SolidCollision carrierSolid = Carrier.SolidCollision.None) {
+        Carrier? contactCarrier = surface is ImpactSurface.FlightDeck
+            or ImpactSurface.CarrierStructure ? _carrier : null;
         if (target == CombatRole.Player) {
             if (_maintenanceScenario is { Finished: false }) {
                 _attemptHadSetback = true;
@@ -856,7 +980,7 @@ public sealed class SimulationSession {
             _playerTerminalState = AircraftTerminalState.Impacted;
             _playerImpactSurface = surface;
             _playerWreckMotion = new WreckContactMotion(_player.State, surface,
-                surfaceVelocity, surfaceHeightM, _carrier,
+                surfaceVelocity, surfaceHeightM, contactCarrier,
                 tangentialImpulseAlreadyResolved,
                 ResolvePlayerCarrierSolid(surface, carrierSolid));
             _playerCarrierSolid = _playerWreckMotion.CarrierSolid;
@@ -864,7 +988,7 @@ public sealed class SimulationSession {
         } else {
             _opponentTerminalState = AircraftTerminalState.Impacted;
             _opponentImpactSurface = surface;
-            _bandit.ApplySurfaceImpact(surface, surfaceVelocity, surfaceHeightM, _carrier);
+            _bandit.ApplySurfaceImpact(surface, surfaceVelocity, surfaceHeightM, contactCarrier);
         }
     }
 
@@ -1635,6 +1759,15 @@ public sealed class SimulationSession {
         }
 
         ObserveCombatDamage();
+        if (Lifecycle != LifecycleState.Active) {
+            _simTimeMs += FixedDeltaSeconds * 1000.0;
+            return;
+        }
+        ObserveDroneRaidTarget(TimeSeconds + FixedDeltaSeconds);
+        if (Lifecycle != LifecycleState.Active) {
+            _simTimeMs += FixedDeltaSeconds * 1000.0;
+            return;
+        }
         if (TerminalPhaseActive) {
             if (_playerTerminalState == AircraftTerminalState.DestroyedAirborne) {
                 var contact = DetectImpact(previousPlayerState, _player.State);
@@ -1666,15 +1799,17 @@ public sealed class SimulationSession {
             return;
         }
 
-        if (_player.BelowGround) {
-            RegisterUndamagedCrash(CombatRole.Player, ImpactSurface.Water,
-                Vec3D.Zero, 0.0);
+        var playerNaturalContact = DetectNaturalSurface(_player.State);
+        if (playerNaturalContact.surface != ImpactSurface.None) {
+            RegisterUndamagedCrash(CombatRole.Player, playerNaturalContact.surface,
+                Vec3D.Zero, playerNaturalContact.height);
             _simTimeMs += FixedDeltaSeconds * 1000.0;
             return;
         }
-        if (_bandit.State.Position.Y <= 0.0) {
-            RegisterUndamagedCrash(CombatRole.Opponent, ImpactSurface.Water,
-                Vec3D.Zero, 0.0);
+        var opponentNaturalContact = DetectNaturalSurface(_bandit.State);
+        if (opponentNaturalContact.surface != ImpactSurface.None) {
+            RegisterUndamagedCrash(CombatRole.Opponent, opponentNaturalContact.surface,
+                Vec3D.Zero, opponentNaturalContact.height);
             _simTimeMs += FixedDeltaSeconds * 1000.0;
             return;
         }

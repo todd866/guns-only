@@ -14,15 +14,24 @@ namespace GunsOnly.Web;
 /// </summary>
 [SupportedOSPlatform("browser")]
 public static partial class WebBridge {
+    static readonly ITerrainSurface CentralFrontTerrain = KoreaTerrainTruth.Load();
     static readonly SimulationSession Session = new(1, Carrier.DeckConfiguration.Axial);
     static Carrier.DeckConfiguration _deckConfiguration = Carrier.DeckConfiguration.Axial;
+    static double _worldOriginEastM;
+    static double _worldOriginNorthM;
+    static bool _worldOriginConfigured;
+
+    const double CarrierTerrainPlacementEastM = 100_000.0;
+    const double MaximumWorldOriginMagnitudeM = 10_000_000.0;
+    const string SharedTerrainFrameId = "world.korea-central-front.v1";
+    const string CarrierTrainingFrameId = "local.carrier-training.v1";
 
     // Stable presentation IDs are copied from the staged Korea pack contract. The bridge projects
     // semantic bindings only; the renderer/AssetRegistry resolves them to authored or procedural
     // assets. Beat 4 predates that pack and therefore advertises an explicit, unstaged compatibility
     // contract instead of pretending its balloon glider and AEW&C belong to 1950s Korea.
     const string KoreaPackId = "korea-1950s";
-    const string KoreaPackVersion = "0.2.2";
+    const string KoreaPackVersion = "0.3.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
     const string SnapshotSchemaVersion = "1.3.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
@@ -54,7 +63,27 @@ public static partial class WebBridge {
         "visual.modern.abstract-contact.public-data-surrogate.v1";
 
     [JSExport]
-    public static void StartBeat(int index) => Session.StartBeat(index, _deckConfiguration);
+    public static void StartBeat(int index) => Session.StartBeatWithTerrain(
+        index, TerrainForBeat(index), _deckConfiguration);
+
+    /// <summary>
+    /// Anchor mission-local coordinates to the persistent room's X=east/Z=north origin. The room
+    /// transports local poses plus this same origin; translating the terrain by its inverse makes
+    /// AGL/collision truth and every observer's rendered substrate agree. Carrier qualifications
+    /// remain explicitly local instances because each sortie owns a carrier at local zero.
+    /// </summary>
+    [JSExport]
+    public static bool SetWorldOrigin(double eastM, double northM) {
+        if (!double.IsFinite(eastM) || !double.IsFinite(northM)
+            || Math.Abs(eastM) > MaximumWorldOriginMagnitudeM
+            || Math.Abs(northM) > MaximumWorldOriginMagnitudeM)
+            return false;
+        _worldOriginEastM = eastM;
+        _worldOriginNorthM = northM;
+        _worldOriginConfigured = true;
+        Session.SetTerrainSurface(TerrainForBeat(Session.BeatIndex));
+        return true;
+    }
 
     [JSExport]
     public static void Begin() => Session.Begin();
@@ -85,7 +114,8 @@ public static partial class WebBridge {
             ? Carrier.DeckConfiguration.Angled
             : Carrier.DeckConfiguration.Axial;
         if (Session.BeatIndex is 5 or 6)
-            Session.StartBeat(Session.BeatIndex, _deckConfiguration);
+            Session.StartBeatWithTerrain(Session.BeatIndex,
+                TerrainForBeat(Session.BeatIndex), _deckConfiguration);
     }
 
     [JSExport]
@@ -116,6 +146,10 @@ public static partial class WebBridge {
         DetentLayer _detents = Session.Controls;
         PilotCommand requestedCommand = _detents.Command;
         PilotCommand appliedCommand = _player.LastAppliedCommand;
+        string requestedAlphaDegreesJson = double.IsFinite(requestedCommand.CommandedAlphaRad)
+            ? (requestedCommand.CommandedAlphaRad * 57.29577951308232).ToString(
+                "F3", System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
         bool lateralControlApplied = _player.HasAppliedFlightCommand;
         GunKill _gunKill = Session.PlayerGun;
         GunKill _opponentGun = Session.OpponentGun;
@@ -272,7 +306,9 @@ public static partial class WebBridge {
         string configurationCue = finished ? "" : Session.ConfigurationCue;
         string configurationTarget = Session.ConfigurationTarget
             == FlightConfigurationTarget.Recovery ? "RECOVERY" : "COMBAT";
-        double surfaceAltitudeM = 0.0;
+        double surfaceAltitudeM = Session.Terrain?.TrySample(
+            playerPosition.X, playerPosition.Z, out TerrainSample terrainSample) == true
+                ? terrainSample.HeightM : 0.0;
         if (_carrier is not null && _carrier.WithinDeckFootprint(playerPosition))
             surfaceAltitudeM = playerPosition.Y - _carrier.DeckFrame(playerPosition).height;
         double radarAltitudeM = Math.Max(0.0, playerPosition.Y - surfaceAltitudeM);
@@ -285,6 +321,11 @@ public static partial class WebBridge {
         // Hand-built JSON: no serializer, no reflection, trim-safe, allocation-cheap.
         return "{"
             + PresentationContractJson(_carrier is not null)
+            + $"\"world_frame_id\":\"{WorldFrameId(Session.BeatIndex)}\","
+            + $"\"world_origin_configured\":{(_worldOriginConfigured ? "true" : "false")},"
+            + $"\"world_origin_east_m\":{_worldOriginEastM:F1},\"world_origin_north_m\":{_worldOriginNorthM:F1},"
+            + $"\"terrain_placement_east_m\":{TerrainPlacementEastM(Session.BeatIndex):F1},\"terrain_placement_north_m\":{TerrainPlacementNorthM(Session.BeatIndex):F1},"
+            + $"\"multiplayer_terrain_shared\":{(_worldOriginConfigured && HasSharedTerrainFrame(Session.BeatIndex) ? "true" : "false")},"
             + $"\"t\":{_simTimeMs / 1000.0:F4},"
             + $"\"tick\":{Session.Tick},"
             + $"\"ready\":{(ready ? "true" : "false")},\"paused\":{(paused ? "true" : "false")},"
@@ -298,7 +339,7 @@ public static partial class WebBridge {
             + $"\"opponent_impact_surface\":\"{ImpactSurfaceToken(Session.OpponentImpactSurface)}\","
             + $"\"incident_replay_id\":{Session.IncidentReplay.ClipId},"
             + $"\"incident_replay_available\":{(Session.IncidentReplay.ExportAvailable ? "true" : "false")},"
-            + $"\"opponent_body_present\":{(Session.OpponentTerminalState == AircraftTerminalState.Settled ? "false" : "true")},"
+            + $"\"opponent_body_present\":{(Session.OpponentBodyPresent ? "true" : "false")},"
             + $"\"px\":{playerPosition.X:F3},\"py\":{playerPosition.Y:F3},\"pz\":{playerPosition.Z:F3},"
             + $"\"pfx\":{pf.X:F5},\"pfy\":{pf.Y:F5},\"pfz\":{pf.Z:F5},"
             + $"\"plx\":{pl.X:F5},\"ply\":{pl.Y:F5},\"plz\":{pl.Z:F5},"
@@ -343,6 +384,8 @@ public static partial class WebBridge {
             + $"\"requested_rudder\":{requestedCommand.Rudder:F3},"
             + $"\"requested_roll_control\":{requestedCommand.RollControl:F3},"
             + $"\"requested_sas_aileron\":{requestedCommand.SasRollControl:F3},"
+            + $"\"requested_envelope_override\":{(_detents.Tier == DemandTier.OverDemand ? "true" : "false")},"
+            + $"\"requested_alpha_deg\":{requestedAlphaDegreesJson},"
             + $"\"requested_direct_lateral_control\":{(requestedCommand.DirectLateralControl ? "true" : "false")},"
             + $"\"lateral_derivative_profile\":\"{_beat.PlayerAir.LateralDerivativeProfileId}\","
             + $"\"lateral_cl_beta\":{_beat.PlayerAir.ClBeta:F6},\"lateral_cl_p\":{_beat.PlayerAir.ClP:F6},"
@@ -352,6 +395,7 @@ public static partial class WebBridge {
             + $"\"g_valley\":{_detents.ValleyG:F3},"
             + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
             + $"\"g_hardmax\":{Protection.HardMaxG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
+            + $"\"g_override_max\":{Protection.OverrideMaxG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
             + $"\"sustained\":{sustainedG:F3},"
             + $"\"sticky\":{_detents.StickyOffsetG:F2},\"tier\":{(int)_detents.Tier},"
             + $"\"variant\":{GetVariant()},\"buffet\":{(_player.Buffet ? "true" : "false")},"
@@ -394,7 +438,7 @@ public static partial class WebBridge {
             + $"\"configuration_flap_auto\":{(Session.AutomaticFlapSelection ? "true" : "false")},"
             + $"\"configuration_cue\":\"{configurationCue}\","
             // Legacy frozen drives a mobile CSS interlock; Ready/Paused use their dedicated fields.
-            + $"\"below_ground\":{(s.Position.Y <= 0.0 ? "true" : "false")},\"frozen\":false,"
+            + $"\"below_ground\":{(playerPosition.Y <= surfaceAltitudeM ? "true" : "false")},\"frozen\":false,"
             + $"\"shots_total\":{Session.ShotsTotal},\"shots_in_window\":{Session.ShotsInWindow},"
             + $"\"throttle\":{_detents.Throttle:F3},\"requested_throttle\":{requestedCommand.Throttle:F3},"
             + $"\"applied_throttle\":{appliedCommand.Throttle:F3},\"engine\":{_player.ThrustFraction:F3},"
@@ -436,6 +480,7 @@ public static partial class WebBridge {
             + $"\"utility_hydraulic_nominal_psi\":{_systems.Profile.UtilityHydraulicNominalPsi:F1},"
             + MaintenanceScenarioJson()
             + VisualMergeEvaluationJson()
+            + DroneRaidEvaluationJson()
             + $"\"approach\":{(_detents.ApproachMode ? "true" : "false")},"
             + $"\"mode\":\"{mode}\",\"wave_off\":{(waveOff ? "true" : "false")},"
             + lsoJson
@@ -518,6 +563,38 @@ public static partial class WebBridge {
             + $"\"evaluated_projectile_hits\":{evaluation.ProjectileHits},";
     }
 
+    static string DroneRaidEvaluationJson() {
+        DroneRaidEvaluation? evaluation = Session.DroneRaidEvaluation;
+        if (evaluation is null)
+            return "\"drone_raid_evaluation\":false,";
+
+        string timeToLeak = double.IsFinite(evaluation.TargetTimeToLeakSeconds)
+            ? evaluation.TargetTimeToLeakSeconds.ToString("F2",
+                System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
+        return "\"drone_raid_evaluation\":true,"
+            + $"\"drone_raid_mode\":\"{DroneRaidScenarioDefinition.ResolutionMode}\","
+            + $"\"drone_raid_score\":{evaluation.Score},"
+            + $"\"drone_raid_max_score\":{evaluation.MaximumScore},"
+            + $"\"drone_raid_containment_score\":{evaluation.ContainmentScore},"
+            + $"\"drone_raid_time_score\":{evaluation.TimeScore},"
+            + $"\"drone_raid_fire_discipline_score\":{evaluation.FireDisciplineScore},"
+            + $"\"drone_raid_targets_total\":{evaluation.TotalTargets},"
+            + $"\"drone_raid_targets_resolved\":{evaluation.TargetsResolved},"
+            + $"\"drone_raid_active_target\":{evaluation.ActiveTargetNumber},"
+            + $"\"drone_raid_kills\":{evaluation.Kills},"
+            + $"\"drone_raid_leakers\":{evaluation.Leakers},"
+            + $"\"drone_raid_zero_leakers\":{(evaluation.ZeroLeakers ? "true" : "false")},"
+            + $"\"drone_raid_finished\":{(evaluation.Finished ? "true" : "false")},"
+            + $"\"drone_raid_ownship_lost\":{(evaluation.OwnshipLost ? "true" : "false")},"
+            + $"\"drone_raid_target_elapsed_s\":{evaluation.ActiveTargetElapsedSeconds:F2},"
+            + $"\"drone_raid_time_to_leak_s\":{timeToLeak},"
+            + $"\"drone_raid_average_ttn_s\":{evaluation.AverageTimeToNeutralizeSeconds:F2},"
+            + $"\"drone_raid_rounds_per_kill\":{evaluation.RoundsPerKill:F2},"
+            + $"\"drone_raid_tail_chase\":{(evaluation.TailChaseGeometry ? "true" : "false")},"
+            + $"\"drone_raid_cue\":\"{evaluation.Cue}\",";
+    }
+
     /// Stable pack/profile identity and entity-to-presentation bindings for the current snapshot.
     /// Session-owned spawn sequences yield a fresh entity ID on the exact snapshot where a logical
     /// vehicle replaces the prior one, including restart and crash respawn. This keeps render-
@@ -526,9 +603,13 @@ public static partial class WebBridge {
         MissionContract mission = Session.Beat.MissionIdentity;
         AircraftCapability player = Session.Beat.PlayerAircraft;
         AircraftCapability bandit = Session.Beat.BanditAircraft;
-        bool balloonPrototype = mission.ContentFamily == MissionContentFamily.Korea2030sPrototype;
+        // Content family expresses the world/era; presentation follows the actual vehicle stack.
+        // Both 2030s missions share a family, but the balloon glider and F-22 drone-defence
+        // surrogate must not advertise one another's compatibility profile.
+        bool balloonPrototype = player.Id == AircraftCapability.BalloonGliderPrototype.Id;
         bool modernSurrogate = mission.ContentFamily
-            == MissionContentFamily.ModernPublicDataSurrogate;
+            == MissionContentFamily.ModernPublicDataSurrogate
+            || player.Id == AircraftCapability.F22ASurrogate.Id;
         string packId = modernSurrogate ? ModernSurrogatePackId
             : balloonPrototype ? BalloonPackId : KoreaPackId;
         string packVersion = modernSurrogate ? ModernSurrogatePackVersion
@@ -557,6 +638,7 @@ public static partial class WebBridge {
             + $"\"pack_id\":\"{packId}\",\"pack_version\":\"{packVersion}\","
             + $"\"content_pack_uri\":{packUriJson},"
             + $"\"mission_definition_id\":\"{mission.Id}\","
+            + $"\"mission_era\":\"{mission.Era}\","
             + $"\"rules_of_engagement\":\"{mission.RulesOfEngagement}\","
             + $"\"public_data_surrogate\":{(mission.PublicDataSurrogate ? "true" : "false")},"
             + $"\"presentation_profile_id\":\"{presentationProfileId}\","
@@ -618,6 +700,7 @@ public static partial class WebBridge {
         SessionEventType.TerminalLimitReached => "TERMINAL_LIMIT_REACHED",
         SessionEventType.SortieFinished => "SORTIE_FINISHED",
         SessionEventType.ArrestmentFailed => "ARRESTMENT_FAILED",
+        SessionEventType.RaidTargetLeaked => "RAID_TARGET_LEAKED",
         _ => "UNKNOWN"
     };
 
@@ -642,11 +725,28 @@ public static partial class WebBridge {
 
     static string ImpactSurfaceToken(ImpactSurface surface) => surface switch {
         ImpactSurface.Water => "WATER",
+        ImpactSurface.Ground => "GROUND",
         ImpactSurface.FlightDeck => "FLIGHT_DECK",
         ImpactSurface.CarrierStructure => "CARRIER_STRUCTURE",
         ImpactSurface.SimulationBoundary => "SIMULATION_BOUNDARY",
         _ => "NONE"
     };
+
+    static bool HasSharedTerrainFrame(int index) => index is not (5 or 6);
+
+    static string WorldFrameId(int index) => HasSharedTerrainFrame(index)
+        ? SharedTerrainFrameId : CarrierTrainingFrameId;
+
+    static double TerrainPlacementEastM(int index) => HasSharedTerrainFrame(index)
+        ? -_worldOriginEastM : CarrierTerrainPlacementEastM;
+
+    static double TerrainPlacementNorthM(int index) => HasSharedTerrainFrame(index)
+        ? -_worldOriginNorthM : 0.0;
+
+    static ITerrainSurface TerrainForBeat(int index) => new TranslatedTerrainSurface(
+        CentralFrontTerrain,
+        TerrainPlacementEastM(index),
+        TerrainPlacementNorthM(index));
 
     static string CombatRoleToken(CombatRole role) => role switch {
         CombatRole.Player => "PLAYER",

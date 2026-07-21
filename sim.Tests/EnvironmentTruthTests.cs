@@ -139,9 +139,53 @@ public class EnvironmentTruthTests {
         Assert.Equal(expectedNormal.X, centre.UpNormal.X, 12);
         Assert.Equal(expectedNormal.Y, centre.UpNormal.Y, 12);
         Assert.Equal(expectedNormal.Z, centre.UpNormal.Z, 12);
+        Assert.Equal(TerrainSurfaceKind.Land, centre.Kind);
         Assert.Equal(0.0, terrain.Sample(100.0, 200.0).HeightM);
         Assert.Equal(30.0, terrain.Sample(110.0, 210.0).HeightM);
         Assert.False(terrain.TrySample(99.999, 205.0, out _));
+    }
+
+    [Fact]
+    public void TranslatedTerrainMovesBoundsAndQueriesWithoutCopyingTruth() {
+        var source = new BilinearHeightGrid(-10.0, -20.0, 10.0, 20.0,
+            new double[,]
+            {
+                { 100.0, 110.0 },
+                { 120.0, 130.0 }
+            });
+        var translated = new TranslatedTerrainSurface(source,
+            eastOffsetM: 1_000.0, northOffsetM: -2_000.0);
+
+        Assert.Equal(new TerrainBounds(990.0, 1_000.0, -2_020.0, -2_000.0),
+            translated.Bounds);
+        Assert.Equal(source.HorizontalResolutionM, translated.HorizontalResolutionM);
+        Assert.True(translated.TrySample(995.0, -2_010.0, out TerrainSample sample));
+        Assert.Equal(115.0, sample.HeightM, 12);
+        Assert.False(translated.TrySample(-5.0, -10.0, out _));
+    }
+
+    [Fact]
+    public void InverseObserverOriginSamplesTheSameGloballyAnchoredTerrainPoint() {
+        var source = new BilinearHeightGrid(-100.0, -100.0, 100.0, 100.0,
+            new double[,]
+            {
+                { 0.0, 10.0, 20.0 },
+                { 100.0, 110.0, 120.0 },
+                { 200.0, 210.0, 220.0 }
+            });
+        const double observerWorldEastM = 50.0;
+        const double observerWorldNorthM = -50.0;
+        var observerLocal = new TranslatedTerrainSurface(source,
+            eastOffsetM: -observerWorldEastM,
+            northOffsetM: -observerWorldNorthM);
+
+        Assert.True(observerLocal.TrySample(0.0, 0.0, out TerrainSample localSample));
+        TerrainSample globalSample = source.Sample(
+            observerWorldEastM, observerWorldNorthM);
+
+        Assert.Equal(globalSample.HeightM, localSample.HeightM, 12);
+        Assert.Equal(globalSample.UpNormal, localSample.UpNormal);
+        Assert.Equal(65.0, localSample.HeightM, 12);
     }
 
     [Fact]

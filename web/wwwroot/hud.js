@@ -891,15 +891,94 @@ class CombatHud {
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillText(Math.abs(boatTurn) > 48 ? (boatTurn < 0 ? "◀ B" : "B ▶") : "B", boatX, y - 28);
     }
+
+    // Exact line-of-sight bearing to the one authoritative raider. This is deliberately not an
+    // invented cutoff solution or defended-point bearing: the mission cue still tells the pilot
+    // whether to lead or cut across, while this caret makes the current target's steering bearing
+    // unambiguous even when it is outside the visible heading-tape span.
+    const raidActive = state.drone_raid_evaluation === true
+      && state.finished !== true && state.drone_raid_finished !== true;
+    const playerEast = Number(state.px);
+    const playerNorth = Number(state.pz);
+    const raiderEast = Number(state.bx);
+    const raiderNorth = Number(state.bz);
+    if (raidActive && [playerEast, playerNorth, raiderEast, raiderNorth]
+      .every(Number.isFinite)) {
+      const east = raiderEast - playerEast;
+      const north = raiderNorth - playerNorth;
+      if (Math.hypot(east, north) > 1) {
+        const raiderBearing = wrap360(Math.atan2(east, north) * RAD_TO_DEG);
+        const raiderTurn = ((raiderBearing - heading + 540) % 360) - 180;
+        const shownTurn = clamp(raiderTurn, -48, 48);
+        const raiderX = this.width / 2 + shownTurn * pixelsPerDegree;
+        const rawTarget = Number(state.drone_raid_active_target);
+        const target = Number.isFinite(rawTarget) ? Math.max(1, Math.floor(rawTarget)) : 1;
+        const label = Math.abs(raiderTurn) > 48
+          ? (raiderTurn < 0 ? `◀ R${target}` : `R${target} ▶`)
+          : `R${target}`;
+        ctx.fillStyle = AMBER;
+        ctx.strokeStyle = AMBER;
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(raiderX - 6, y + 27);
+        ctx.lineTo(raiderX, y + 21);
+        ctx.lineTo(raiderX + 6, y + 27);
+        ctx.stroke();
+        ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.fillText(label, raiderX, y + 35);
+      }
+    }
   }
 
   drawSortieStatus(frame) {
     const { state } = frame;
     const ctx = this.ctx;
     const kills = Math.max(0, Math.floor(Number(state.kill_count) || 0));
+    const raid = state.drone_raid_evaluation === true;
 
     ctx.save();
-    if (kills > 0) {
+    if (raid && state.finished !== true && state.drone_raid_finished !== true) {
+      const x = this.safeInsets.left + 18;
+      const y = this.safeInsets.top + 17;
+      // On narrow screens reserve the upper-right ammunition readout instead of painting a full-
+      // width raid card underneath it.
+      const narrowRaidLayout = this.width - this.safeInsets.left - this.safeInsets.right < 420;
+      const rightClearance = narrowRaidLayout ? 82 : 18;
+      const width = Math.max(1, Math.min(350, this.width - this.safeInsets.left
+        - this.safeInsets.right - 18 - rightClearance));
+      const total = Math.max(1, Math.floor(Number(state.drone_raid_targets_total) || 1));
+      const raidKills = Math.max(0, Math.floor(Number(state.drone_raid_kills) || 0));
+      const leakers = Math.max(0, Math.floor(Number(state.drone_raid_leakers) || 0));
+      const rawActiveTarget = Number(state.drone_raid_active_target);
+      const activeTarget = Number.isFinite(rawActiveTarget)
+        ? clamp(Math.floor(rawActiveTarget), 1, total)
+        : clamp(raidKills + leakers + 1, 1, total);
+      const rawTimeToLeak = state.drone_raid_time_to_leak_s;
+      const timeToLeak = typeof rawTimeToLeak === "number" && Number.isFinite(rawTimeToLeak)
+        ? rawTimeToLeak : null;
+      const roundsPerKill = Number(state.drone_raid_rounds_per_kill);
+      const timeText = timeToLeak === null ? "—" : `${Math.ceil(Math.max(0, timeToLeak))}s`;
+      const cue = typeof state.drone_raid_cue === "string" ? state.drone_raid_cue : "";
+      const headerParts = [`RAIDER ${activeTarget}/${total} ACTIVE`, `${raidKills} DOWN`];
+      if (leakers > 0) headerParts.push(`${leakers} LEAKER${leakers === 1 ? "" : "S"}`);
+      const metricParts = [`TLEAK ${timeText}`];
+      if (raidKills > 0 && Number.isFinite(roundsPerKill))
+        metricParts.push(`RPK ${roundsPerKill.toFixed(1)}`);
+
+      this.glassPanel(x, y, width, 61, leakers > 0 ? AMBER : GREEN);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = leakers > 0 ? AMBER : GREEN;
+      ctx.fillText(this.fitText(headerParts.join(" · "), width - 20),
+        x + 10, y + 13);
+      ctx.fillStyle = GREEN_DIM;
+      ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillText(this.fitText(metricParts.join(" · "), width - 20),
+        x + 10, y + 31);
+      ctx.fillStyle = leakers > 0 ? AMBER : GREEN;
+      ctx.fillText(this.fitText(cue, width - 20), x + 10, y + 49);
+    } else if (!raid && kills > 0) {
       const x = this.safeInsets.left + 18;
       const y = this.safeInsets.top + 17;
       ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -912,7 +991,7 @@ class CombatHud {
       ctx.fillText(tally, x + tallyWidth / 2, y + 12);
     }
 
-    if (state.splash_cue === true && state.finished !== true) {
+    if (!raid && state.splash_cue === true && state.finished !== true) {
       const width = Math.min(310, this.width - 34);
       const height = 63;
       const cueX = (this.width - width) / 2;
@@ -1362,12 +1441,14 @@ class CombatHud {
     let occupiedLines = 0;
 
     if (state.tier === 3) {
+      const alphaOverride = Number.isFinite(state.requested_alpha_deg);
       ctx.shadowColor = "rgba(255, 176, 32, 0.58)";
       ctx.shadowBlur = 10;
       ctx.fillStyle = AMBER;
       ctx.font = "800 19px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
-      ctx.fillText("OVERRIDE", this.width / 2, warningY);
+      ctx.fillText(alphaOverride ? "AOA LIMIT OFF" : "G LIMIT OVERRIDE",
+        this.width / 2, warningY);
       ctx.shadowBlur = 0;
       occupiedLines += 1;
     }
@@ -1805,7 +1886,17 @@ class CombatHud {
     ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.fillStyle = GREEN;
-    ctx.fillText(`${Math.round(airdata.indicatedKts)} KIAS`, dataLeft, y + 21);
+    const padlockAirdataWidth = Math.max(60, targetLeft - dataLeft - 14);
+    const compactPadlockAirdata = padlockAirdataWidth < 120;
+    const cornerText = Number.isFinite(airdata.cornerKias)
+      ? compactPadlockAirdata
+        ? ` COR${Math.round(airdata.cornerKias)}`
+        : ` · COR ${Math.round(airdata.cornerKias)}`
+      : "";
+    const padlockSpeedText = compactPadlockAirdata
+      ? `${Math.round(airdata.indicatedKts)}KIAS${cornerText}`
+      : `${Math.round(airdata.indicatedKts)} KIAS${cornerText}`;
+    ctx.fillText(this.fitText(padlockSpeedText, padlockAirdataWidth), dataLeft, y + 21);
     ctx.fillText(`${Math.round(Number(state.alt_ft) || 0)} FT`, dataLeft, y + 42);
     ctx.fillText(`G ${(Number(state.g_actual) || 0).toFixed(1)} · α ${(Number(state.aoa_deg) || 0).toFixed(1)}°`, dataLeft, y + 63);
     ctx.fillStyle = fuel.critical ? RED : fuel.bingo ? AMBER : GREEN;
@@ -2125,14 +2216,14 @@ class CombatHud {
     const wideLines = [
       "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL   ·   A / D  RUDDER   ·   W / S  THROTTLE",
       "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   F  GUNS   ·   V  TARGET / BOAT PADLOCK   ·   DRAG  LOOK",
-      "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   1–7  MISSION   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE",
+      "SPACE  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   1–8  MISSION   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE",
     ];
     const compactLines = [
       "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL",
       "A / D  RUDDER   ·   W / S  THROTTLE",
       "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE = HOLD)",
-      "SPACE  OVERRIDE (MAX G — CAN DEPART)   ·   F  GUNS   ·   V  PADLOCK   ·   M  SOUND",
-      "V  PADLOCK   ·   DRAG  LOOK   ·   1–7  MISSION   ·   R  RESTART   ·   H  HIDE",
+      "SPACE  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   F  GUNS   ·   M  SOUND",
+      "V  PADLOCK   ·   DRAG  LOOK   ·   1–8  MISSION   ·   R  RESTART   ·   H  HIDE",
     ];
     const lines = compact ? compactLines : wideLines;
     const lineHeight = compact ? 27 : 31;
@@ -2215,6 +2306,7 @@ class CombatHud {
       this.drawAoAIndexer(frame.state, frame.dt);
     }
     this.drawPadlockSa(frame, systems);
+    this.drawSortieStatus(frame);
     this.drawVisualMergeWeaponsCue(frame);
     this.drawFooter(frame);
     this.drawLegend();

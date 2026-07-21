@@ -1,3 +1,8 @@
+import {
+  TERRAIN_CURVATURE_START_M,
+  TERRAIN_EARTH_RADIUS_M,
+} from "./korea_terrain.js";
+
 const DEFAULT_PROFILE_URL = "../../content/packs/korea-1950s/visual-profile.json";
 const DEFAULT_OCEAN_URL = "../../content/packs/korea-1950s/environment/ocean.material.json";
 const DEFAULT_ATMOSPHERE_URL = "../../content/packs/korea-1950s/environment/atmosphere.material.json";
@@ -33,6 +38,9 @@ void main() {
   transformed.y += height;
   vec3 localNormal = normalize(vec3(-slope.x, 1.0, -slope.y));
   vec4 world = modelMatrix * vec4(transformed, 1.0);
+  float radial = distance(world.xz, cameraPosition.xz);
+  float curvedRadial = max(radial - ${TERRAIN_CURVATURE_START_M.toFixed(1)}, 0.0);
+  world.y -= curvedRadial * curvedRadial / ${(2 * TERRAIN_EARTH_RADIUS_M).toFixed(1)};
   vUv = uv;
   vWorldPosition = world.xyz;
   vWorldNormal = normalize(mat3(modelMatrix) * localNormal);

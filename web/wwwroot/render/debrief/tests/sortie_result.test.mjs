@@ -87,6 +87,47 @@ test("maintenance score copy preserves recovered and incomplete outcomes", () =>
   assert.match(lost.brief, /40\/100/);
 });
 
+test("drone raid debrief distinguishes containment, penetration, and ownship loss", () => {
+  const defeated = sortieResultCopy({
+    drone_raid_evaluation: true,
+    drone_raid_zero_leakers: true,
+    drone_raid_kills: 4,
+    drone_raid_targets_total: 4,
+    drone_raid_leakers: 0,
+    drone_raid_score: 94,
+    drone_raid_max_score: 100,
+    sortie_outcome: "VICTORY",
+  });
+  const penetrated = sortieResultCopy({
+    drone_raid_evaluation: true,
+    drone_raid_zero_leakers: false,
+    drone_raid_kills: 3,
+    drone_raid_targets_total: 4,
+    drone_raid_leakers: 1,
+    drone_raid_score: 61,
+    drone_raid_max_score: 100,
+    sortie_outcome: "DEFEAT",
+  });
+  const lost = sortieResultCopy({
+    drone_raid_evaluation: true,
+    drone_raid_ownship_lost: true,
+    drone_raid_kills: 1,
+    drone_raid_targets_total: 4,
+    drone_raid_leakers: 3,
+    drone_raid_score: 32,
+    drone_raid_max_score: 100,
+    sortie_outcome: "DEFEAT",
+  });
+
+  assert.equal(defeated.title, "Raid Defeated");
+  assert.match(defeated.brief, /physical gunfire/i);
+  assert.doesNotMatch(defeated.brief, /wreck|impact|settling/i);
+  assert.equal(penetrated.title, "Raid Penetrated");
+  assert.match(penetrated.brief, /crossed the defended ring/i);
+  assert.equal(lost.title, "Ownship Lost");
+  assert.match(lost.brief, /unresolved raider.*penetration/i);
+});
+
 test("app consumes the pure evidence-based debrief module", async () => {
   const app = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
 

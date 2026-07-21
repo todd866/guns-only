@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -93,26 +93,60 @@ test("canonical starter content passes strict validation", async () => {
     manifests: 4,
     packs: 1,
     profiles: 1,
-    assets: 11,
-    licenses: 1,
-    referencedBytes: 2317099,
+    assets: 12,
+    licenses: 2,
+    referencedFiles: 19,
+    referencedBytes: 18872309,
     modelTriangles: 20396,
   });
 });
 
-test("canonical generated visual set is labelled placeholder until production art review", async () => {
+test("asset-source closure bytes include every unique source without double counting", async () => {
+  const manifestFile = path.join(
+    REPOSITORY_ROOT,
+    "content/packs/korea-1950s/asset-manifest.json",
+  );
+  const manifest = await readJson(manifestFile);
+  const sourceUris = manifest.assets.flatMap((asset) => [
+    ...(asset.sources ?? []).map((source) => source.uri),
+    ...(asset.lods ?? []).map((lod) => lod.source?.uri),
+  ]).filter((uri) => typeof uri === "string");
+  assert.equal(sourceUris.filter((uri) => uri === "effects/guns.effects.json").length, 4,
+    "fixture must retain a shared source that exercises de-duplication");
+
+  const uniqueUris = [...new Set(sourceUris)];
+  const expectedBytes = (await Promise.all(uniqueUris.map(async (uri) =>
+    (await stat(path.resolve(path.dirname(manifestFile), uri))).size)))
+    .reduce((sum, bytes) => sum + bytes, 0);
+  const report = await validateRepository({
+    root: REPOSITORY_ROOT,
+    packs: [STARTER_PACK],
+    strict: true,
+  });
+
+  assert.equal(report.summary.referencedFiles, uniqueUris.length);
+  assert.equal(report.summary.referencedBytes, expectedBytes);
+});
+
+test("canonical project-generated visual set remains placeholder until production art review", async () => {
   const manifest = await readJson(path.join(
     REPOSITORY_ROOT,
     "content/packs/korea-1950s/asset-manifest.json",
   ));
   assert.equal(manifest.assets.length > 0, true);
   assert.deepEqual(
-    manifest.assets.filter((asset) => asset.status !== "placeholder").map((asset) => ({
+    manifest.assets.filter((asset) => asset.licenseRef === "license.project-code.v1"
+      && asset.status !== "placeholder").map((asset) => ({
       id: asset.id,
       status: asset.status,
     })),
     [],
-    "code-generated starter visuals must not claim production art maturity",
+    "project-generated starter visuals must not claim production art maturity",
+  );
+  assert.deepEqual(
+    manifest.assets.filter((asset) => asset.status === "production").map((asset) => asset.id),
+    ["environment.terrain.central-front.v1"],
+    "the reviewed source-derived terrain is the only production asset",
   );
 });
 

@@ -14,8 +14,36 @@ const TERMINAL_STATES = new Set([
   "FLYING", "DESTROYED_AIRBORNE", "IMPACTED", "SETTLED", "SIMULATION_BOUNDED",
 ]);
 const IMPACT_SURFACES = new Set([
-  "NONE", "WATER", "FLIGHT_DECK", "CARRIER_STRUCTURE", "SIMULATION_BOUNDARY",
+  "NONE", "WATER", "GROUND", "FLIGHT_DECK", "CARRIER_STRUCTURE", "SIMULATION_BOUNDARY",
 ]);
+const SHARED_KOREA_TERRAIN_MISSIONS = new Set([
+  "mission.perch-attack.v1",
+  "mission.break-defense.v1",
+  "mission.saddle-tracking.v1",
+  "mission.korea-2030s.balloon-strike.prototype.v1",
+  "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+  "mission.korea-2030s.drone-raid-defence.prototype.v1",
+]);
+
+/**
+ * Keep presence from silently combining an instanced carrier sortie with the globally anchored
+ * Korea substrate. Inland sorties share the room frame; carrier sorties each own a boat at local
+ * zero and therefore show no remote aircraft. An inland observer admits only the known missions
+ * bound to this substrate; local-carrier and unknown/legacy frames remain omitted until the server
+ * carries first-class world-frame and carrier-instance identity.
+ */
+export function snapshotForTerrainFrame(snapshot, localState) {
+  const shared = localState?.multiplayer_terrain_shared === true
+    && localState?.world_frame_id === "world.korea-central-front.v1";
+  if (!shared) return { ...snapshot, players: [], bogeys: [] };
+  return {
+    ...snapshot,
+    players: (snapshot?.players ?? []).filter(
+      (player) => SHARED_KOREA_TERRAIN_MISSIONS.has(cleanLabel(player?.missionId, 96)),
+    ),
+    bogeys: snapshot?.bogeys ?? [],
+  };
+}
 
 /**
  * Project transport state into the small set of facts the 3D presence layer actually needs.

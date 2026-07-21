@@ -21,6 +21,7 @@ node --test world-worker/tests/*.test.mjs
 scratch_dir=$(mktemp -d)
 publish_dir="$scratch_dir/publish"
 staged_content_dir="$scratch_dir/content"
+dotnet_artifacts_dir="$scratch_dir/dotnet-artifacts"
 trap 'rm -rf "$scratch_dir"' EXIT HUP INT TERM
 
 node tools/assets/build-assets.mjs stage \
@@ -28,15 +29,20 @@ node tools/assets/build-assets.mjs stage \
   --output "$staged_content_dir"
 diff -qr "$staged_content_dir" web/wwwroot/content
 
-"$dotnet_cli" restore GunsOnly.sln --nologo --ignore-failed-sources
-"$dotnet_cli" build GunsOnly.sln --configuration Release --no-restore --nologo
+"$dotnet_cli" restore GunsOnly.sln --nologo --ignore-failed-sources \
+  --artifacts-path "$dotnet_artifacts_dir"
+"$dotnet_cli" build GunsOnly.sln --configuration Release --no-restore --nologo \
+  --artifacts-path "$dotnet_artifacts_dir"
 "$dotnet_cli" test sim.Tests/GunsOnly.Sim.Tests.csproj \
-  --configuration Release --no-build --nologo
+  --configuration Release --no-build --nologo \
+  --artifacts-path "$dotnet_artifacts_dir"
 "$dotnet_cli" test server.Tests/GunsOnly.Server.Tests.csproj \
-  --configuration Release --no-build --nologo
+  --configuration Release --no-build --nologo \
+  --artifacts-path "$dotnet_artifacts_dir"
 
 "$dotnet_cli" publish web/GunsOnly.Web.csproj \
-  --configuration Release --no-restore --nologo --output "$publish_dir"
+  --configuration Release --no-restore --nologo --output "$publish_dir" \
+  --artifacts-path "$dotnet_artifacts_dir"
 
 test -f "$publish_dir/wwwroot/index.html"
 test -f "$publish_dir/wwwroot/_framework/blazor.webassembly.js"

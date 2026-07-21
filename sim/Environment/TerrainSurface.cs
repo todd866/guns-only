@@ -11,8 +11,11 @@ public readonly record struct TerrainBounds(
         && northM >= MinimumNorthM && northM <= MaximumNorthM;
 }
 
-/// <summary>Terrain height and upward world normal at local east/north coordinates.</summary>
-public readonly record struct TerrainSample(double HeightM, Vec3D UpNormal);
+public enum TerrainSurfaceKind { Land, Water }
+
+/// <summary>Terrain height, upward world normal, and physical surface at local coordinates.</summary>
+public readonly record struct TerrainSample(double HeightM, Vec3D UpNormal,
+    TerrainSurfaceKind Kind = TerrainSurfaceKind.Land);
 
 /// <summary>
 /// Renderer-independent terrain truth in the simulation's local X=east, Y=up, Z=north frame.
@@ -23,6 +26,37 @@ public interface ITerrainSurface {
     TerrainBounds Bounds { get; }
     double HorizontalResolutionM { get; }
     bool TrySample(double eastM, double northM, out TerrainSample sample);
+}
+
+/// <summary>
+/// Places immutable georeferenced terrain into a mission-local frame without copying its samples.
+/// Positive offsets move the source east/north in that frame; simulation queries are translated
+/// back to the source before sampling.
+/// </summary>
+public sealed class TranslatedTerrainSurface : ITerrainSurface {
+    readonly ITerrainSurface _source;
+    readonly double _eastOffsetM;
+    readonly double _northOffsetM;
+
+    public TerrainBounds Bounds { get; }
+    public double HorizontalResolutionM => _source.HorizontalResolutionM;
+
+    public TranslatedTerrainSurface(ITerrainSurface source,
+        double eastOffsetM, double northOffsetM) {
+        _source = source ?? throw new ArgumentNullException(nameof(source));
+        DefinitionValidation.Finite(eastOffsetM, nameof(eastOffsetM));
+        DefinitionValidation.Finite(northOffsetM, nameof(northOffsetM));
+        _eastOffsetM = eastOffsetM;
+        _northOffsetM = northOffsetM;
+        Bounds = new TerrainBounds(
+            source.Bounds.MinimumEastM + eastOffsetM,
+            source.Bounds.MaximumEastM + eastOffsetM,
+            source.Bounds.MinimumNorthM + northOffsetM,
+            source.Bounds.MaximumNorthM + northOffsetM);
+    }
+
+    public bool TrySample(double eastM, double northM, out TerrainSample sample) =>
+        _source.TrySample(eastM - _eastOffsetM, northM - _northOffsetM, out sample);
 }
 
 /// <summary>Immutable regular grid with analytic bilinear height and normal interpolation.</summary>

@@ -15,6 +15,13 @@
     <ProjectReference Include="../sim/GunsOnly.Sim.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource
+      Include="../content/packs/korea-1950s/environment/terrain/central-front.truth"
+      Link="Data/central-front.truth"
+      LogicalName="GunsOnly.Web.Data.KoreaCentralFront.truth"
+      Condition="'$(EmbedKoreaTerrainTruth)' != 'false'" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- Keep source-only QA and the unused Blazor-template Bootstrap tree out of the static
          deployment. Vercel treats every published api/*.js file as a function, and shipping the
          renderer's Node tests plus 8 MB of unreferenced template assets only adds deploy/transfer

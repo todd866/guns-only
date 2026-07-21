@@ -31,6 +31,12 @@ public sealed record CombatConfig(
         OpponentHitsToDefeat: 3,
         PlayerGun: GunProfiles.M61A2PublicDataSurrogate,
         OpponentGun: GunProfiles.GSh301PublicDataSurrogate);
+    public static CombatConfig ModernDroneDefense { get; } = new(
+        PlayerAmmo: 480,
+        OpponentAmmo: 0,
+        PlayerHitsToDefeat: 3,
+        OpponentHitsToDefeat: 1,
+        PlayerGun: GunProfiles.M61A2PublicDataSurrogate);
 
     public GunProfile PlayerGunProfile => PlayerGun ?? GunProfiles.SixM3FiftyCal;
     public GunProfile OpponentGunProfile => OpponentGun ?? GunProfiles.SixM3FiftyCal;
@@ -72,6 +78,10 @@ public sealed record AircraftCapability(
         "presentation.vehicle.su27s.public-data-surrogate.v1",
         "systems.modern-airborne.not-simulated.v1", false, true,
         "https://www.ukrspecexport.com/uploads/files/Categories/pdf_1/a205b8.pdf");
+    public static AircraftCapability OneWayAttackDronePrototype { get; } = new(
+        "aircraft.one-way-attack-drone.prototype.v1", "One-way attack drone prototype",
+        "presentation.vehicle.one-way-attack-drone.prototype.v1",
+        "systems.uncrewed-prototype.not-simulated.v1", false);
 }
 
 public enum MissionContentFamily {
@@ -86,7 +96,8 @@ public sealed record MissionContract(
     string Id,
     MissionContentFamily ContentFamily,
     bool PublicDataSurrogate = false,
-    string RulesOfEngagement = "GUNS_ONLY") {
+    string RulesOfEngagement = "GUNS_ONLY",
+    string Era = "UNSPECIFIED") {
     public static MissionContract Custom { get; } = new(
         "mission.custom.v1", MissionContentFamily.Custom);
 }
@@ -138,7 +149,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     AircraftCapability? PlayerCapability = null,
     AircraftCapability? BanditCapability = null,
     VisualMergeEvaluationConfig? VisualMergeEvaluation = null,
-    bool UsesNeutralMergeBandit = false) {
+    bool UsesNeutralMergeBandit = false,
+    DroneRaidScenarioDefinition? DroneRaid = null) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
@@ -237,7 +249,7 @@ public static class Beats {
     static AircraftState S(double x, double y, double z, double chi, double v) =>
         new(new Vec3D(x, y, z), v, 0, chi, 0, FlightModel.Sabre.MassKg);
     static MissionContract KoreaMission(string id) => new(
-        id, MissionContentFamily.Korea1950s);
+        id, MissionContentFamily.Korea1950s, Era: "KOREA_1950S");
 
     public static BeatSetup Perch() => new("Perch attack",
         Player: S(0, Alt + 300, -500, 0, 200),
@@ -283,10 +295,9 @@ public static class Beats {
         const double DropAlt = 10058;   // 33,000 ft — 3k above the target, low overtake, flyable
         const double AwacsAlt = 9144;   // 30,000 ft
         return new BeatSetup("Balloon strike — KJ-500",
-            // Cut loose slow (a balloon gives you height, not speed) 20 km south, nose down.
-            // 8 km lateral vs 12 km of height to lose: the glider must DIVE onto it (~57 deg),
-            // not glide. At 20 km it simply sailed — L/D 28 buys 336 km from that height, so
-            // the approach has to be steep or there is no intercept at all (found by flying it).
+            // Cut loose slow (a balloon gives you height, not speed) 3.5 km south, nose down.
+            // This is the terminal setup after the longer glide: the remaining height must be
+            // deliberately spent in a steep approach or the glider sails past the firing geometry.
             Player: new AircraftState(new Vec3D(0, DropAlt, -3500), 100, -0.06, 0, 0, FlightModel.GliderStrike.MassKg),
             Bandit: new AircraftState(new Vec3D(0, AwacsAlt, 0), 130, 0, 0, 0, FlightModel.AwacsTarget.MassKg),
             Law: new PurePursuitLaw(),
@@ -300,7 +311,8 @@ public static class Beats {
             Fuel: FuelConfig.EngineLess,
             Mission: new MissionContract(
                 "mission.korea-2030s.balloon-strike.prototype.v1",
-                MissionContentFamily.Korea2030sPrototype),
+                MissionContentFamily.Korea2030sPrototype,
+                Era: "KOREA_2030S_PROXY"),
             PlayerCapability: AircraftCapability.BalloonGliderPrototype,
             BanditCapability: AircraftCapability.AwacsTargetPrototype);
     }
@@ -407,10 +419,67 @@ public static class Beats {
                 "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,
                 PublicDataSurrogate: true,
-                RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE"),
+                RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE",
+                Era: "MODERN_PUBLIC_DATA_EXERCISE"),
             PlayerCapability: AircraftCapability.F22ASurrogate,
             BanditCapability: AircraftCapability.Su27SSurrogate,
             VisualMergeEvaluation: new VisualMergeEvaluationConfig());
+    }
+
+    /// <summary>
+    /// KOREA 2030s PROXY WAR — a public-data F-22 flight surrogate defends a fixed inner ring
+    /// against four explicitly fictional one-way attack-drone prototypes. The current kernel owns
+    /// one opponent, so the raid is an honest staged stream rather than four visually concurrent
+    /// targets with only one physically authoritative. Each target flies a straight inbound track;
+    /// the scored decision is cutoff geometry, first-valid-shot timing, and burst discipline.
+    /// </summary>
+    public static BeatSetup DroneRaidDefense() {
+        const double AltitudeM = 2200.0;
+        const double DroneSpeedMps = 115.0;
+        const double DroneMassKg = 500.0;
+        static AircraftState Inbound(double x, double z) => new(
+            new Vec3D(x, AltitudeM, z),
+            DroneSpeedMps, 0.0, Math.Atan2(-x, -z), 0.0, DroneMassKg);
+
+        AircraftState[] targets = {
+            Inbound(0.0, 8500.0),
+            Inbound(4200.0, 7800.0),
+            Inbound(-4800.0, 7600.0),
+            Inbound(2600.0, 9000.0),
+        };
+        var raid = new DroneRaidScenarioDefinition(
+            defendedPoint: new Vec3D(0.0, 0.0, 0.0),
+            defendedRadiusM: 750.0,
+            targets: targets);
+
+        return new BeatSetup("Drone raid defence — staged stream",
+            Player: new AircraftState(
+                new Vec3D(0.0, AltitudeM + 250.0, -2200.0),
+                250.0, 0.0, 0.0, 0.0,
+                FlightModel.F22APublicDataSurrogate.MassKg),
+            Bandit: targets[0],
+            Law: new PurePursuitLaw(),
+            BanditTimeline: new() {
+                (0.0, new PilotCommand(1.0, 0.0, 0.92, 0.0)),
+            },
+            PlayerParams: FlightModel.F22APublicDataSurrogate,
+            BanditParams: FlightModel.OneWayAttackDronePrototype,
+            Combat: CombatConfig.ModernDroneDefense,
+            Fuel: new FuelConfig(
+                CapacityLb: 18000.0,
+                InitialFuelLb: 10500.0,
+                BingoThresholdLb: 3500.0,
+                ConsumesFuel: true),
+            InitialThrottle: 1.0,
+            Mission: new MissionContract(
+                "mission.korea-2030s.drone-raid-defence.prototype.v1",
+                MissionContentFamily.Korea2030sPrototype,
+                PublicDataSurrogate: true,
+                RulesOfEngagement: "GUNS_ONLY_DEFENSIVE_INTERCEPT",
+                Era: "KOREA_2030S_PROXY"),
+            PlayerCapability: AircraftCapability.F22ASurrogate,
+            BanditCapability: AircraftCapability.OneWayAttackDronePrototype,
+            DroneRaid: raid);
     }
 
     public static BeatSetup Saddle() => new("Saddle + shot",

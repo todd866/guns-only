@@ -34,6 +34,47 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /emitPackEffect\("event\.vehicle\.destroyed\.v1"/);
 });
 
+test("terrain stays lazy through Ready and shares the active ocean curvature contract", async () => {
+  const [source, bridgeSource] = await Promise.all([
+    readFile(appUrl, "utf8"),
+    readFile(bridgeUrl, "utf8"),
+  ]);
+  assert.match(source,
+    /this\.terrainPresentationPromise = null;[\s\S]*ensureTerrainPresentation\(\)/,
+    "constructing FlightView must not start terrain network work");
+  assert.match(source,
+    /if \(state\?\.ready !== true\) void this\.ensureTerrainPresentation\(\)/,
+    "the first non-Ready frame should start the retained terrain single flight");
+  assert.match(source,
+    /this\.terrainPresentation \|\| this\.terrainPresentationPromise[\s\S]*return this\.terrainPresentationPromise/,
+    "repeated gameplay frames must reuse one terrain load");
+  assert.match(source,
+    /TERRAIN_CURVATURE_START_M[\s\S]*TERRAIN_EARTH_RADIUS_M/);
+  assert.match(source,
+    /function createDecisionSupportSea\(\)[\s\S]*TERRAIN_CURVATURE_START_M\.toFixed\(1\)[\s\S]*2 \* TERRAIN_EARTH_RADIUS_M/,
+    "active ocean and terrain must use one curvature start/radius contract");
+  assert.match(source,
+    /bridge\.SetWorldOrigin\(status\.spawnOrigin\[0\], status\.spawnOrigin\[2\]\)/,
+    "the room welcome must anchor simulation terrain to the browser's assigned world origin");
+  assert.match(source,
+    /placementEastM: Number\.isFinite\(terrainPlacementEastM\)[\s\S]*placementNorthM: Number\.isFinite\(terrainPlacementNorthM\)/,
+    "presentation must consume the bridge's terrain transform rather than inventing its own");
+  assert.doesNotMatch(source,
+    /placementEastM: state\.carrier === true \? 100_000 : 0/,
+    "the old mission-local placement would disagree with shared-world coordinates");
+  assert.match(bridgeSource,
+    /TerrainPlacementEastM\(int index\)[\s\S]*\? -_worldOriginEastM/,
+    "simulation terrain must use the inverse room-origin transform");
+  for (const field of [
+    "terrain_placement_east_m",
+    "terrain_placement_north_m",
+    "multiplayer_terrain_shared",
+  ]) {
+    assert.ok(bridgeSource.includes(field),
+      `the authoritative bridge frame contract must publish ${field}`);
+  }
+});
+
 test("decision-support ocean and warnings carry truth without presentation flicker", async () => {
   const [appSource, hudSource] = await Promise.all([
     readFile(appUrl, "utf8"),

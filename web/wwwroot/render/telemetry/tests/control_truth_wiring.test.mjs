@@ -4,6 +4,7 @@ import test from "node:test";
 
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
 const appUrl = new URL("../../../app.js", import.meta.url);
+const hudUrl = new URL("../../../hud.js", import.meta.url);
 
 test("flight telemetry separates pilot aileron, SAS, rolling moment, and achieved rate", async () => {
   const source = await readFile(bridgeUrl, "utf8");
@@ -49,4 +50,17 @@ test("engine telemetry separates spool state from physical net thrust", async ()
   assert.match(source, /\\\"engine_net_thrust_lbf\\\"/);
   assert.match(source, /engine\.NetThrustLbf/);
   assert.match(source, /Protection\.SustainedG\(s, _beat\.PlayerAir,[\s\S]*engine\.NetThrustN,[\s\S]*Session\.PlayerAerodynamicConfiguration/);
+});
+
+test("modern envelope override publishes its ceiling and distinguishes G from AoA release", async () => {
+  const [bridge, hud] = await Promise.all([
+    readFile(bridgeUrl, "utf8"),
+    readFile(hudUrl, "utf8"),
+  ]);
+
+  assert.match(bridge, /\\\"g_override_max\\\"[\s\S]*?Protection\.OverrideMaxG/);
+  assert.match(bridge, /\\\"requested_envelope_override\\\"[\s\S]*?DemandTier\.OverDemand/);
+  assert.match(bridge, /\\\"requested_alpha_deg\\\"[\s\S]*?requestedAlphaDegreesJson/);
+  assert.match(hud, /state\.tier === 3[\s\S]*?requested_alpha_deg[\s\S]*?AOA LIMIT OFF[\s\S]*?G LIMIT OVERRIDE/,
+    "Space must explain whether it released the G limiter or the AoA limiter");
 });

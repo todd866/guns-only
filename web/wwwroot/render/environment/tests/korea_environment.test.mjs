@@ -3,6 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
 import { createKoreaEnvironment, loadKoreaEnvironment } from "../korea_environment.js";
+import {
+  TERRAIN_CURVATURE_START_M,
+  TERRAIN_EARTH_RADIUS_M,
+} from "../korea_terrain.js";
 
 const packRoot = new URL("../../../../../content/packs/korea-1950s/", import.meta.url);
 const oceanConfig = JSON.parse(await readFile(new URL("environment/ocean.material.json", packRoot), "utf8"));
@@ -45,6 +49,15 @@ test("builds quality-tier ocean and cloud geometry and follows the camera horizo
   assert.match(desktop.ocean.material.vertexShader,
     /worldPoint = \(modelMatrix \* vec4\(position, 1\.0\)\)\.xz/,
     "camera recentering must not drag the wave phase through world space");
+  assert.match(desktop.ocean.material.vertexShader,
+    /distance\(world\.xz, cameraPosition\.xz\)/,
+    "the pack ocean must curve in the same camera-relative space as terrain");
+  assert.ok(desktop.ocean.material.vertexShader.includes(
+    `max(radial - ${TERRAIN_CURVATURE_START_M.toFixed(1)}, 0.0)`),
+    "the pack ocean must share terrain's curvature start");
+  assert.ok(desktop.ocean.material.vertexShader.includes(
+    `/ ${(2 * TERRAIN_EARTH_RADIUS_M).toFixed(1)}`),
+    "the pack ocean must share terrain's Earth-radius denominator");
   mobile.dispose();
   desktop.dispose();
   assert.equal(desktop.group.parent, null);

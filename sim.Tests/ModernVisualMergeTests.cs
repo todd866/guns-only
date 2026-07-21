@@ -5,6 +5,34 @@ namespace GunsOnly.Sim.Tests;
 public class ModernVisualMergeTests {
     const double AltitudeM = 5486.4;
     const double Dt = 1.0 / AircraftSim.TickHz;
+    const double Deg = 180.0 / Math.PI;
+
+    sealed class ModernControlRig {
+        public readonly AircraftSim Sim;
+        public readonly DetentLayer Detent = new(); // production default: DoctrineDeep
+        public readonly KeyGrammar Keys = new();
+        double _timeMs;
+
+        public ModernControlRig(double speedMps) {
+            AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
+            Sim = new AircraftSim(new AircraftState(
+                new Vec3D(0.0, AltitudeM, 0.0), speedMps,
+                0.0, 0.0, 0.0, parameters.MassKg), parameters);
+        }
+
+        public void Set(GKey key, bool down) => Keys.Feed(key, down, _timeMs);
+
+        public void Step() {
+            Detent.AirspeedMps = Sim.AirspeedMps;
+            Detent.Tick(Keys, _timeMs, Sim.State,
+                FlightModel.F22APublicDataSurrogate,
+                // Deliberately well below max performance: Mission 7's normal pull must not be
+                // weakened by the teaching detent even when doctrine recommends conserving G.
+                new DoctrineAdvice(3.2, 0.0, "modern control-law fixture"), Dt);
+            Sim.Step(Detent.Command, Dt);
+            _timeMs += Dt * 1000.0;
+        }
+    }
 
     static AircraftState State(double z, double speed, double chi, double mass,
         double x = 0.0) => new(
@@ -89,6 +117,89 @@ public class ModernVisualMergeTests {
         Assert.True(session.Player.ThrustFraction > 1.20);
         Assert.True(session.Player.LastEngineOperatingPoint.NetThrustN
             > FlightModel.F22APublicDataSurrogate.ThrustMaxN);
+    }
+
+    [Fact]
+    public void OrdinaryMissionSevenPullPromptlyReachesTheProtectedNineGEnvelope() {
+        var rig = new ModernControlRig(speedMps: 300.0);
+        rig.Set(GKey.PullUp, true);
+        double peakNz = 0.0;
+        int firstEightGTick = -1;
+
+        for (int tick = 0; tick < 2 * AircraftSim.TickHz; tick++) {
+            rig.Step();
+            peakNz = Math.Max(peakNz, rig.Sim.LastNz);
+            if (firstEightGTick < 0 && rig.Sim.LastNz >= 8.0)
+                firstEightGTick = tick + 1;
+            Assert.False(double.IsFinite(rig.Detent.Command.CommandedAlphaRad),
+                "ordinary pull must retain AoA protection");
+        }
+
+        Assert.True(FlightModel.F22APublicDataSurrogate.NormalPullUsesMaxPerformance);
+        Assert.Equal(DemandTier.MaxPerform, rig.Detent.Tier);
+        Assert.False(rig.Detent.Command.EnvelopeOverride);
+        Assert.Equal(9.0, rig.Detent.Command.GDemand, 2);
+        Assert.InRange(peakNz, 8.5, 9.7);
+        Assert.True(firstEightGTick > 0 && firstEightGTick * Dt <= 0.8,
+            $"ordinary pull took {(firstEightGTick < 0 ? double.PositiveInfinity : firstEightGTick * Dt):F2} s to reach 8 G");
+
+        var prompt = new PromptTracker().Cue(
+            new DoctrineAdvice(3.2, 0.0, "conserve energy"),
+            rig.Detent.Command, rig.Detent.Tier);
+        Assert.Equal(PromptCue.None, prompt);
+    }
+
+    [Fact]
+    public void HighDynamicPressureOverrideReleasesGNotTheAlphaLimiter() {
+        var rig = new ModernControlRig(speedMps: 300.0);
+        rig.Set(GKey.PullUp, true);
+        rig.Set(GKey.Override, true);
+        double peakNz = 0.0, peakAlphaDeg = 0.0;
+
+        for (int tick = 0; tick < AircraftSim.TickHz; tick++) {
+            rig.Step();
+            peakNz = Math.Max(peakNz, rig.Sim.LastNz);
+            peakAlphaDeg = Math.Max(peakAlphaDeg, rig.Sim.AngleOfAttackRad * Deg);
+            Assert.False(double.IsFinite(rig.Detent.Command.CommandedAlphaRad),
+                "above corner, override should release G while retaining attached-flow alpha protection");
+        }
+
+        Assert.Equal(11.0, rig.Detent.Command.GDemand, 2);
+        Assert.Equal(DemandTier.OverDemand, rig.Detent.Tier);
+        Assert.True(rig.Detent.Command.EnvelopeOverride);
+        Assert.True(peakNz > 9.25,
+            $"override never crossed the normal +9 G boundary: peak {peakNz:F2} G");
+        Assert.True(peakAlphaDeg < FlightModel.F22APublicDataSurrogate.CLMax
+            / FlightModel.F22APublicDataSurrogate.CLAlpha * Deg + 2.0,
+            $"high-q override unnecessarily departed attached flow at {peakAlphaDeg:F1} deg alpha");
+    }
+
+    [Fact]
+    public void LowDynamicPressureOverrideNaturallyProducesCostlyHighAlpha() {
+        var rig = new ModernControlRig(speedMps: 105.0);
+        rig.Set(GKey.PullUp, true);
+        rig.Set(GKey.Override, true);
+        double initialSpecificEnergy = rig.Sim.State.Position.Y
+            + rig.Sim.AirspeedMps * rig.Sim.AirspeedMps / (2.0 * FlightModel.G0);
+        double peakAlphaDeg = 0.0, peakCommandDeg = 0.0;
+
+        for (int tick = 0; tick < 3 * AircraftSim.TickHz; tick++) {
+            rig.Step();
+            peakAlphaDeg = Math.Max(peakAlphaDeg, rig.Sim.AngleOfAttackRad * Deg);
+            if (double.IsFinite(rig.Detent.Command.CommandedAlphaRad))
+                peakCommandDeg = Math.Max(peakCommandDeg,
+                    rig.Detent.Command.CommandedAlphaRad * Deg);
+        }
+
+        double finalSpecificEnergy = rig.Sim.State.Position.Y
+            + rig.Sim.AirspeedMps * rig.Sim.AirspeedMps / (2.0 * FlightModel.G0);
+        Assert.True(peakCommandDeg > 55.0,
+            $"low-q override only requested {peakCommandDeg:F1} deg alpha");
+        Assert.True(peakAlphaDeg > 45.0,
+            $"rigid-body/aero response only reached {peakAlphaDeg:F1} deg alpha");
+        Assert.True(finalSpecificEnergy < initialSpecificEnergy - 40.0,
+            $"high-alpha manoeuvre did not collect an energy bill: {initialSpecificEnergy:F0} -> {finalSpecificEnergy:F0} m");
+        Assert.True(rig.Sim.State.BodyAttitude.IsFinite && rig.Sim.State.BodyRates.IsFinite);
     }
 
     [Fact]

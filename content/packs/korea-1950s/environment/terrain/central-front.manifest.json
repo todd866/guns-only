@@ -1,0 +1,3727 @@
+{
+  "acquisitionCells": [
+    "N37E126",
+    "N37E127",
+    "N38E126",
+    "N38E127"
+  ],
+  "aoiWgs84": [
+    126.5,
+    37.85,
+    127.8,
+    38.75
+  ],
+  "boundsLocalM": [
+    -65536.0,
+    -65536.0,
+    65536.0,
+    65536.0
+  ],
+  "build": {
+    "builder": "tools/terrain/build_korea_terrain.py",
+    "builderVersion": 1,
+    "numpyVersion": "2.4.1",
+    "pillowVersion": "12.1.0"
+  },
+  "bundle": {
+    "byteLength": 11268082,
+    "recordCount": 256,
+    "sha256": "18dc413e6ac1511072b5792b6fbf3d4532ee91d740a3b0a60da8e6cc2c33e67d",
+    "uri": "central-front.terrain"
+  },
+  "canonicalCoverageId": "korean-peninsula",
+  "chunks": [
+    {
+      "boundsLocalM": [
+        -65536.0,
+        -65536.0,
+        -49152.0,
+        -49152.0
+      ],
+      "eastIndex": 0,
+      "id": "e00-n00",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 0,
+          "level": 0,
+          "maximumHeightM": 452.8,
+          "minimumHeightM": 0.8,
+          "sampleCount": 257,
+          "sha256": "de3df8fc0478800028874758088eb20260c565931d781f627b531828a2f0ba07",
+          "spacingM": 64.0,
+          "waterFraction": 0.207634
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 132112,
+          "level": 1,
+          "maximumHeightM": 446.5,
+          "minimumHeightM": 1.4,
+          "sampleCount": 129,
+          "sha256": "3f6ed9a9e92d60aa56b4f8cfcd1ab54f23e354f32481cf8be2dfc1c35f21c05f",
+          "spacingM": 128.0,
+          "waterFraction": 0.2075
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 165408,
+          "level": 2,
+          "maximumHeightM": 406.8,
+          "minimumHeightM": 1.9,
+          "sampleCount": 65,
+          "sha256": "3e9e40105436b83ea26effd78bae0941c1066f48558d8c71c63f316fae3d8c99",
+          "spacingM": 256.0,
+          "waterFraction": 0.206391
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 173872,
+          "level": 3,
+          "maximumHeightM": 379.5,
+          "minimumHeightM": 2.5,
+          "sampleCount": 33,
+          "sha256": "aa909e1a75f746debf95bee18247bc6934b990c19220e465056b7ef7682ba9bd",
+          "spacingM": 512.0,
+          "waterFraction": 0.205693
+        }
+      ],
+      "northIndex": 0
+    },
+    {
+      "boundsLocalM": [
+        -49152.0,
+        -65536.0,
+        -32768.0,
+        -49152.0
+      ],
+      "eastIndex": 1,
+      "id": "e01-n00",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 176064,
+          "level": 0,
+          "maximumHeightM": 232.0,
+          "minimumHeightM": 0.6,
+          "sampleCount": 257,
+          "sha256": "59d6b83d3c1924aa8a785c72f3181eb403640ad85f70f1c66e2410380b123768",
+          "spacingM": 64.0,
+          "waterFraction": 0.16727
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 308176,
+          "level": 1,
+          "maximumHeightM": 232.0,
+          "minimumHeightM": 0.6,
+          "sampleCount": 129,
+          "sha256": "d7fedcdf57fa1a6ec198922c812a2dca5f0674f7a580e681d08bbb988451a20e",
+          "spacingM": 128.0,
+          "waterFraction": 0.167478
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 341472,
+          "level": 2,
+          "maximumHeightM": 197.4,
+          "minimumHeightM": 1.2,
+          "sampleCount": 65,
+          "sha256": "19d69a287296359f8a02701021bb1a4ec4fa65644534ae41ae4d96a05be71623",
+          "spacingM": 256.0,
+          "waterFraction": 0.166627
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 349936,
+          "level": 3,
+          "maximumHeightM": 176.5,
+          "minimumHeightM": 1.2,
+          "sampleCount": 33,
+          "sha256": "a957d2026f9f9040986c099f5a535899d8981cc7fd190d6814664861d19016cf",
+          "spacingM": 512.0,
+          "waterFraction": 0.164371
+        }
+      ],
+      "northIndex": 0
+    },
+    {
+      "boundsLocalM": [
+        -32768.0,
+        -65536.0,
+        -16384.0,
+        -49152.0
+      ],
+      "eastIndex": 2,
+      "id": "e02-n00",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 352128,
+          "level": 0,
+          "maximumHeightM": 613.3,
+          "minimumHeightM": 3.3,
+          "sampleCount": 257,
+          "sha256": "2dc799d2ecb2c7f97426be275bd0267e7f655981609d3b431345de2140eb4bf7",
+          "spacingM": 64.0,
+          "waterFraction": 0.006359
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 484240,
+          "level": 1,
+          "maximumHeightM": 601.4,
+          "minimumHeightM": 4.4,
+          "sampleCount": 129,
+          "sha256": "1998ae9b1438f990201255ec21d579b1b37ac1bf41d4c94a47f67842bdad4ebd",
+          "spacingM": 128.0,
+          "waterFraction": 0.006129
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 517536,
+          "level": 2,
+          "maximumHeightM": 569.6,
+          "minimumHeightM": 6.4,
+          "sampleCount": 65,
+          "sha256": "dc7a2a6f5c5c5602bb20867fa39eaa85b478ede88d37575bcd0d3ad812e860f5",
+          "spacingM": 256.0,
+          "waterFraction": 0.006864
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 526000,
+          "level": 3,
+          "maximumHeightM": 569.6,
+          "minimumHeightM": 6.4,
+          "sampleCount": 33,
+          "sha256": "583b605ef4eafdfc4246034ed46012eb80edd5a4cac13e12e783cfac7405ca78",
+          "spacingM": 512.0,
+          "waterFraction": 0.009183
+        }
+      ],
+      "northIndex": 0
+    },
+    {
+      "boundsLocalM": [
+        -16384.0,
+        -65536.0,
+        0.0,
+        -49152.0
+      ],
+      "eastIndex": 3,
+      "id": "e03-n00",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 528192,
+          "level": 0,
+          "maximumHeightM": 636.7,
+          "minimumHeightM": 28.4,
+          "sampleCount": 257,
+          "sha256": "8563b7e20ca77366e9360aa94d488ed44d905216f9a5140b58f0acc29b47bbbc",
+          "spacingM": 64.0,
+          "waterFraction": 0.002756
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 660304,
+          "level": 1,
+          "maximumHeightM": 628.7,
+          "minimumHeightM": 29.5,
+          "sampleCount": 129,
+          "sha256": "fc1f3781058d728e3125be60005c836d74c1f6f648d07288d17c4dc0e7951342",
+          "spacingM": 128.0,
+          "waterFraction": 0.003065
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 693600,
+          "level": 2,
+          "maximumHeightM": 619.8,
+          "minimumHeightM": 33.4,
+          "sampleCount": 65,
+          "sha256": "60954ebca666dd63917530a218701cc571dc95e6778829b4adc74038d8598cd2",
+          "spacingM": 256.0,
+          "waterFraction": 0.003787
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 702064,
+          "level": 3,
+          "maximumHeightM": 619.8,
+          "minimumHeightM": 34.9,
+          "sampleCount": 33,
+          "sha256": "0af7ad2fdf26f972c42aec4fe49427bcfb460c3e6aa3e78cffcfb8669bcb78e9",
+          "spacingM": 512.0,
+          "waterFraction": 0.004591
+        }
+      ],
+      "northIndex": 0
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        -65536.0,
+        16384.0,
+        -49152.0
+      ],
+      "eastIndex": 4,
+      "id": "e04-n00",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 704256,
+          "level": 0,
+          "maximumHeightM": 871.8,
+          "minimumHeightM": 41.3,
+          "sampleCount": 257,
+          "sha256": "4b34771387e8f2d28dac219edacb8eca37e8a95045c06054d7d1456571e43b4b",
+          "spacingM": 64.0,
+          "waterFraction": 0.002195
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 836368,
+          "level": 1,
+          "maximumHeightM": 868.7,
+          "minimumHeightM": 42.3,
+          "sampleCount": 129,
+          "sha256": "a306c9f91c9a06e3dbf5f4f34b73c78b00771bb6e5294680b85eb52aaecd5be3",
+          "spacingM": 128.0,
+          "waterFraction": 0.002223
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 869664,
+          "level": 2,
+          "maximumHeightM": 859.6,
+          "minimumHeightM": 46.0,
+          "sampleCount": 65,
+          "sha256": "65cbb282b01f32e2656d6eb4b8fad7f432a853930317d4750ccc121e2389c3f9",
+          "spacingM": 256.0,
+          "waterFraction": 0.001657
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 878128,
+          "level": 3,
+          "maximumHeightM": 802.2,
+          "minimumHeightM": 46.0,
+          "sampleCount": 33,
+          "sha256": "6f0c1d6b3f139ab7782d769e01ed537a85dc16abc51de2379617990c79cb0f67",
+          "spacingM": 512.0,
+          "waterFraction": 0.001837
+        }
+      ],
+      "northIndex": 0
+    },
+    {
+      "boundsLocalM": [
+        16384.0,
+        -65536.0,
+        32768.0,
+        -49152.0
+      ],
+      "eastIndex": 5,
+      "id": "e05-n00",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 880320,
+          "level": 0,
+          "maximumHeightM": 924.7,
+          "minimumHeightM": 25.2,
+          "sampleCount": 257,
+          "sha256": "5c8676bd89f83a1079a9082735c314be9e344154051f01f4adcdb5c6af589f48",
+          "spacingM": 64.0,
+          "waterFraction": 0.035459
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 1012432,
+          "level": 1,
+          "maximumHeightM": 918.3,
+          "minimumHeightM": 25.2,
+          "sampleCount": 129,
+          "sha256": "cd381db87b108f595642b4f43f888bfbc62d5f6fb11cdff39c9335c2c38551b7",
+          "spacingM": 128.0,
+          "waterFraction": 0.035274
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 1045728,
+          "level": 2,
+          "maximumHeightM": 892.5,
+          "minimumHeightM": 25.9,
+          "sampleCount": 65,
+          "sha256": "c12e9295cb988a819388d4711821c6b46212a032cff4ecff144a10f160944664",
+          "spacingM": 256.0,
+          "waterFraction": 0.036923
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 1054192,
+          "level": 3,
+          "maximumHeightM": 892.5,
+          "minimumHeightM": 30.8,
+          "sampleCount": 33,
+          "sha256": "d70dab00eb8be42259585206593a3c5a1d7da3a027340d6818359d28bd5ec99d",
+          "spacingM": 512.0,
+          "waterFraction": 0.034894
+        }
+      ],
+      "northIndex": 0
+    },
+    {
+      "boundsLocalM": [
+        32768.0,
+        -65536.0,
+        49152.0,
+        -49152.0
+      ],
+      "eastIndex": 6,
+      "id": "e06-n00",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 1056384,
+          "level": 0,
+          "maximumHeightM": 641.4,
+          "minimumHeightM": 49.3,
+          "sampleCount": 257,
+          "sha256": "11bb46cc48977b5fddaecdde63b2ed0f5d0b09a0895ade8c9860c1691816163c",
+          "spacingM": 64.0,
+          "waterFraction": 0.032234
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 1188496,
+          "level": 1,
+          "maximumHeightM": 641.4,
+          "minimumHeightM": 49.3,
+          "sampleCount": 129,
+          "sha256": "eea8c5b1098283231c7f8fa58364a7ecda0485c5fd2bd5a7221863eb67a5704d",
+          "spacingM": 128.0,
+          "waterFraction": 0.03269
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 1221792,
+          "level": 2,
+          "maximumHeightM": 582.0,
+          "minimumHeightM": 49.3,
+          "sampleCount": 65,
+          "sha256": "9846d58c41fc3a4f8b3aff7616f05a14aa804751c06808245063e82d1a192b4d",
+          "spacingM": 256.0,
+          "waterFraction": 0.031716
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 1230256,
+          "level": 3,
+          "maximumHeightM": 574.4,
+          "minimumHeightM": 50.4,
+          "sampleCount": 33,
+          "sha256": "3b5756f0157a842cb9e17a21414233d06f3249c2361952d25b54dc3f28648ec9",
+          "spacingM": 512.0,
+          "waterFraction": 0.034894
+        }
+      ],
+      "northIndex": 0
+    },
+    {
+      "boundsLocalM": [
+        49152.0,
+        -65536.0,
+        65536.0,
+        -49152.0
+      ],
+      "eastIndex": 7,
+      "id": "e07-n00",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 1232448,
+          "level": 0,
+          "maximumHeightM": 906.1,
+          "minimumHeightM": 74.6,
+          "sampleCount": 257,
+          "sha256": "dd58090b7da93a921ce2b65f81b83defa308d4d9c9df976af2cc11c9d2375053",
+          "spacingM": 64.0,
+          "waterFraction": 0.001469
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 1364560,
+          "level": 1,
+          "maximumHeightM": 900.6,
+          "minimumHeightM": 74.9,
+          "sampleCount": 129,
+          "sha256": "afb807194693e935ba07d3c2deda8d738d5354ba26ea001a897f1df9f78e57ca",
+          "spacingM": 128.0,
+          "waterFraction": 0.001683
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 1397856,
+          "level": 2,
+          "maximumHeightM": 880.0,
+          "minimumHeightM": 74.9,
+          "sampleCount": 65,
+          "sha256": "33c31c7f2b71b2e5a623491380b8dfe3c3ba90fdfe349312cc7a815fbdc8d73a",
+          "spacingM": 256.0,
+          "waterFraction": 0.001893
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 1406320,
+          "level": 3,
+          "maximumHeightM": 877.0,
+          "minimumHeightM": 74.9,
+          "sampleCount": 33,
+          "sha256": "bd7350b6752c35997ddcbed7dd2b9865fdc958c6fd4186dec432a735ef9f1871",
+          "spacingM": 512.0,
+          "waterFraction": 0.002755
+        }
+      ],
+      "northIndex": 0
+    },
+    {
+      "boundsLocalM": [
+        -65536.0,
+        -49152.0,
+        -49152.0,
+        -32768.0
+      ],
+      "eastIndex": 0,
+      "id": "e00-n01",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 1408512,
+          "level": 0,
+          "maximumHeightM": 301.3,
+          "minimumHeightM": 1.2,
+          "sampleCount": 257,
+          "sha256": "5051b625daad1d2ac1b067003ffeb33a15a010b2eb77ee2ef1e7fa04bb73d456",
+          "spacingM": 64.0,
+          "waterFraction": 0.034384
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 1540624,
+          "level": 1,
+          "maximumHeightM": 284.8,
+          "minimumHeightM": 1.3,
+          "sampleCount": 129,
+          "sha256": "820e07f0b86711383e8150ffb632006e7dc738bb0692a49657584ecc39532d29",
+          "spacingM": 128.0,
+          "waterFraction": 0.034974
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 1573920,
+          "level": 2,
+          "maximumHeightM": 262.6,
+          "minimumHeightM": 1.3,
+          "sampleCount": 65,
+          "sha256": "c9815574d183fc1b3e4588ef4e74283c3bdb730dcbb4a0b059dbd209cfb481f2",
+          "spacingM": 256.0,
+          "waterFraction": 0.037396
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 1582384,
+          "level": 3,
+          "maximumHeightM": 233.5,
+          "minimumHeightM": 1.3,
+          "sampleCount": 33,
+          "sha256": "4d938b673942c8671191b0891e3ec1c0098c484be79583a0fb9bef59b8324fca",
+          "spacingM": 512.0,
+          "waterFraction": 0.042241
+        }
+      ],
+      "northIndex": 1
+    },
+    {
+      "boundsLocalM": [
+        -49152.0,
+        -49152.0,
+        -32768.0,
+        -32768.0
+      ],
+      "eastIndex": 1,
+      "id": "e01-n01",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 1584576,
+          "level": 0,
+          "maximumHeightM": 283.4,
+          "minimumHeightM": 2.6,
+          "sampleCount": 257,
+          "sha256": "36e483e60f690894159573a940a211cd8cd9eaa2a9cc6c99f1378f9af82719b2",
+          "spacingM": 64.0,
+          "waterFraction": 0.032219
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 1716688,
+          "level": 1,
+          "maximumHeightM": 269.3,
+          "minimumHeightM": 3.0,
+          "sampleCount": 129,
+          "sha256": "1c021e7d55a7db9514c44cc5811dc6481852720f80eb9b87afe39365f3bee671",
+          "spacingM": 128.0,
+          "waterFraction": 0.03233
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 1749984,
+          "level": 2,
+          "maximumHeightM": 269.3,
+          "minimumHeightM": 3.0,
+          "sampleCount": 65,
+          "sha256": "6a403ec51187859d42475e02bf4f0560548d994a7c1702a4c38891069372dafc",
+          "spacingM": 256.0,
+          "waterFraction": 0.033136
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 1758448,
+          "level": 3,
+          "maximumHeightM": 226.7,
+          "minimumHeightM": 3.7,
+          "sampleCount": 33,
+          "sha256": "1215951a4ceb56e5e33df59c1ddc20d0999e3fdcf673cbe58689b84c04cb9aef",
+          "spacingM": 512.0,
+          "waterFraction": 0.035813
+        }
+      ],
+      "northIndex": 1
+    },
+    {
+      "boundsLocalM": [
+        -32768.0,
+        -49152.0,
+        -16384.0,
+        -32768.0
+      ],
+      "eastIndex": 2,
+      "id": "e02-n01",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 1760640,
+          "level": 0,
+          "maximumHeightM": 665.1,
+          "minimumHeightM": 2.6,
+          "sampleCount": 257,
+          "sha256": "59d74f0dea4b19b7912ec9dcae23d89f271889584cc1c1242bac3e4e1a8a920c",
+          "spacingM": 64.0,
+          "waterFraction": 0.033914
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 1892752,
+          "level": 1,
+          "maximumHeightM": 657.4,
+          "minimumHeightM": 2.6,
+          "sampleCount": 129,
+          "sha256": "e8509ac813d12c51b4f8a6c590c8861a4d688d6d1683351c6f9aec612cd94ac3",
+          "spacingM": 128.0,
+          "waterFraction": 0.034914
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 1926048,
+          "level": 2,
+          "maximumHeightM": 642.5,
+          "minimumHeightM": 2.6,
+          "sampleCount": 65,
+          "sha256": "aea9bc5a2dd68a119e9552b8f5872db4a9549bf8e435e7f1a58968e8643a4612",
+          "spacingM": 256.0,
+          "waterFraction": 0.034556
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 1934512,
+          "level": 3,
+          "maximumHeightM": 627.5,
+          "minimumHeightM": 3.9,
+          "sampleCount": 33,
+          "sha256": "62dee6fcda1bbfc2fdbdd908c7652877427042e2bb758b5a82341b8eaae3531a",
+          "spacingM": 512.0,
+          "waterFraction": 0.033058
+        }
+      ],
+      "northIndex": 1
+    },
+    {
+      "boundsLocalM": [
+        -16384.0,
+        -49152.0,
+        0.0,
+        -32768.0
+      ],
+      "eastIndex": 3,
+      "id": "e03-n01",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 1936704,
+          "level": 0,
+          "maximumHeightM": 751.6,
+          "minimumHeightM": 20.5,
+          "sampleCount": 257,
+          "sha256": "623ae3a24b5e57eababbda472bfeb758503c2997409e2f255bf6e47ac495e5c9",
+          "spacingM": 64.0,
+          "waterFraction": 0.005314
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 2068816,
+          "level": 1,
+          "maximumHeightM": 738.3,
+          "minimumHeightM": 20.5,
+          "sampleCount": 129,
+          "sha256": "26a52785c47709ea5536928e04456440124de1ef584b43fe71346e42a161225b",
+          "spacingM": 128.0,
+          "waterFraction": 0.005529
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 2102112,
+          "level": 2,
+          "maximumHeightM": 718.0,
+          "minimumHeightM": 20.5,
+          "sampleCount": 65,
+          "sha256": "06727bcf23dceb5c4ae71ddd20ea0af96d65be6cb82ea8f6662bd55b92493556",
+          "spacingM": 256.0,
+          "waterFraction": 0.006391
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 2110576,
+          "level": 3,
+          "maximumHeightM": 692.4,
+          "minimumHeightM": 20.5,
+          "sampleCount": 33,
+          "sha256": "e4990a0fd9908e17bd0a586471152c792fa4a0f9955e21b36afc8c763c1082f4",
+          "spacingM": 512.0,
+          "waterFraction": 0.007346
+        }
+      ],
+      "northIndex": 1
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        -49152.0,
+        16384.0,
+        -32768.0
+      ],
+      "eastIndex": 4,
+      "id": "e04-n01",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 2112768,
+          "level": 0,
+          "maximumHeightM": 922.1,
+          "minimumHeightM": 61.7,
+          "sampleCount": 257,
+          "sha256": "5af627ed783449613849e9c3d6381267b2b13dc346b09e573f3900d192c08460",
+          "spacingM": 64.0,
+          "waterFraction": 0.005208
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 2244880,
+          "level": 1,
+          "maximumHeightM": 920.3,
+          "minimumHeightM": 61.9,
+          "sampleCount": 129,
+          "sha256": "9d1e127edad357a29dcbe5ff8ef0bc04b31f9fc69918d494ab80c7dd753ed575",
+          "spacingM": 128.0,
+          "waterFraction": 0.005348
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 2278176,
+          "level": 2,
+          "maximumHeightM": 909.4,
+          "minimumHeightM": 62.8,
+          "sampleCount": 65,
+          "sha256": "10f8ea824a18e66f4c3c728532d1953bc0c81ff119c5b171d569fcb729665348",
+          "spacingM": 256.0,
+          "waterFraction": 0.006391
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 2286640,
+          "level": 3,
+          "maximumHeightM": 909.4,
+          "minimumHeightM": 62.8,
+          "sampleCount": 33,
+          "sha256": "6c3a864623ed0db883fd4f8306b44d2169bab6c3bff01c6c98d4f9bf5d9566fb",
+          "spacingM": 512.0,
+          "waterFraction": 0.011938
+        }
+      ],
+      "northIndex": 1
+    },
+    {
+      "boundsLocalM": [
+        16384.0,
+        -49152.0,
+        32768.0,
+        -32768.0
+      ],
+      "eastIndex": 5,
+      "id": "e05-n01",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 2288832,
+          "level": 0,
+          "maximumHeightM": 1456.3,
+          "minimumHeightM": 71.0,
+          "sampleCount": 257,
+          "sha256": "3ffc5ca214f5dce063f8a3c6e1f68585ab86c2455020dad3bbc9ada098a5a7f6",
+          "spacingM": 64.0,
+          "waterFraction": 0.001226
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 2420944,
+          "level": 1,
+          "maximumHeightM": 1451.1,
+          "minimumHeightM": 73.8,
+          "sampleCount": 129,
+          "sha256": "8a3d921870fc31f1b23f9e55df2e831c0984adf0caba731abc0598347e5a1e02",
+          "spacingM": 128.0,
+          "waterFraction": 0.001262
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 2454240,
+          "level": 2,
+          "maximumHeightM": 1445.8,
+          "minimumHeightM": 74.9,
+          "sampleCount": 65,
+          "sha256": "785eaa87169e3f43c4058972ffa51215b195a1b886dea66d22d5f498d5ae21c7",
+          "spacingM": 256.0,
+          "waterFraction": 0.00071
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 2462704,
+          "level": 3,
+          "maximumHeightM": 1355.2,
+          "minimumHeightM": 76.8,
+          "sampleCount": 33,
+          "sha256": "773019b69af499b1ce6b5ebb66ae0c9b91f121d9bd5bb0793330d9845220cd38",
+          "spacingM": 512.0,
+          "waterFraction": 0.0
+        }
+      ],
+      "northIndex": 1
+    },
+    {
+      "boundsLocalM": [
+        32768.0,
+        -49152.0,
+        49152.0,
+        -32768.0
+      ],
+      "eastIndex": 6,
+      "id": "e06-n01",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 2464896,
+          "level": 0,
+          "maximumHeightM": 1434.9,
+          "minimumHeightM": 67.0,
+          "sampleCount": 257,
+          "sha256": "b547553a54210b7e5ffa4e0bbf2b77ad3a47cea736e835e72307c6bdc0f174cf",
+          "spacingM": 64.0,
+          "waterFraction": 0.053415
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 2597008,
+          "level": 1,
+          "maximumHeightM": 1422.0,
+          "minimumHeightM": 67.0,
+          "sampleCount": 129,
+          "sha256": "39c385c2ce036499d0b78dd6deec3ccef40a3f512d1dc429eb123336cbf597ab",
+          "spacingM": 128.0,
+          "waterFraction": 0.053723
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 2630304,
+          "level": 2,
+          "maximumHeightM": 1408.2,
+          "minimumHeightM": 69.7,
+          "sampleCount": 65,
+          "sha256": "cc7979f2798669818b85fcab26df93395ea3d98a3e3b49453216b4bfd0711d26",
+          "spacingM": 256.0,
+          "waterFraction": 0.054438
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 2638768,
+          "level": 3,
+          "maximumHeightM": 1363.3,
+          "minimumHeightM": 71.8,
+          "sampleCount": 33,
+          "sha256": "ae17206a76ce5ff6b34e463b1eb5d36bd1eb6336bfe869328002adbcb8176d0a",
+          "spacingM": 512.0,
+          "waterFraction": 0.055096
+        }
+      ],
+      "northIndex": 1
+    },
+    {
+      "boundsLocalM": [
+        49152.0,
+        -49152.0,
+        65536.0,
+        -32768.0
+      ],
+      "eastIndex": 7,
+      "id": "e07-n01",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 2640960,
+          "level": 0,
+          "maximumHeightM": 875.1,
+          "minimumHeightM": 70.2,
+          "sampleCount": 257,
+          "sha256": "bf21b2e55522be946595f3a27d59c0118c5c70edb3836b3bc547e77bbccca56a",
+          "spacingM": 64.0,
+          "waterFraction": 0.084861
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 2773072,
+          "level": 1,
+          "maximumHeightM": 867.8,
+          "minimumHeightM": 70.3,
+          "sampleCount": 129,
+          "sha256": "d4adcb1bde8438d1a871370a75bbf5520e3973b6b299ec25ec172ff5496cf807",
+          "spacingM": 128.0,
+          "waterFraction": 0.086053
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 2806368,
+          "level": 2,
+          "maximumHeightM": 864.5,
+          "minimumHeightM": 71.3,
+          "sampleCount": 65,
+          "sha256": "8cb633a117c1f68cb4ca42a6b0429680126d1b363c45fb26c1e65d8111e1ee23",
+          "spacingM": 256.0,
+          "waterFraction": 0.085917
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 2814832,
+          "level": 3,
+          "maximumHeightM": 864.5,
+          "minimumHeightM": 72.1,
+          "sampleCount": 33,
+          "sha256": "9e32f5874d0deb5afe8cf7415c8a3becabd2c1460e29128b20b0727a51bc5f01",
+          "spacingM": 512.0,
+          "waterFraction": 0.086318
+        }
+      ],
+      "northIndex": 1
+    },
+    {
+      "boundsLocalM": [
+        -65536.0,
+        -32768.0,
+        -49152.0,
+        -16384.0
+      ],
+      "eastIndex": 0,
+      "id": "e00-n02",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 2817024,
+          "level": 0,
+          "maximumHeightM": 747.0,
+          "minimumHeightM": 2.7,
+          "sampleCount": 257,
+          "sha256": "4ebcdb1c7dd3c35cad9daf01eb82617e194f2b4a0f1e4a3158aac8952678f0c3",
+          "spacingM": 64.0,
+          "waterFraction": 0.01832
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 2949136,
+          "level": 1,
+          "maximumHeightM": 747.0,
+          "minimumHeightM": 2.7,
+          "sampleCount": 129,
+          "sha256": "bd01f6eb87eb7b295f0759c16f9a441ff1242c9410fabdeef0f45335ba0f90f2",
+          "spacingM": 128.0,
+          "waterFraction": 0.018509
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 2982432,
+          "level": 2,
+          "maximumHeightM": 728.1,
+          "minimumHeightM": 3.4,
+          "sampleCount": 65,
+          "sha256": "36710fb4f14385e73786a95c0f96946339ec55afcccb1137a3398559176f7df6",
+          "spacingM": 256.0,
+          "waterFraction": 0.018225
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 2990896,
+          "level": 3,
+          "maximumHeightM": 721.6,
+          "minimumHeightM": 3.6,
+          "sampleCount": 33,
+          "sha256": "d747c4182bcfc4ab77a14913f94c34819761c23394462cfe0fedfb655968ce42",
+          "spacingM": 512.0,
+          "waterFraction": 0.019284
+        }
+      ],
+      "northIndex": 2
+    },
+    {
+      "boundsLocalM": [
+        -49152.0,
+        -32768.0,
+        -32768.0,
+        -16384.0
+      ],
+      "eastIndex": 1,
+      "id": "e01-n02",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 2993088,
+          "level": 0,
+          "maximumHeightM": 756.1,
+          "minimumHeightM": 19.6,
+          "sampleCount": 257,
+          "sha256": "85cd97c35382cb41fa3cb678b932aa247ad7815464270906e1d24fa62a40a08c",
+          "spacingM": 64.0,
+          "waterFraction": 0.014065
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 3125200,
+          "level": 1,
+          "maximumHeightM": 747.5,
+          "minimumHeightM": 20.0,
+          "sampleCount": 129,
+          "sha256": "062a1431928f935e9a19eaa1407a558f0475b46a5ac73c64c88cde8bcb6639b6",
+          "spacingM": 128.0,
+          "waterFraction": 0.013821
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 3158496,
+          "level": 2,
+          "maximumHeightM": 747.5,
+          "minimumHeightM": 20.0,
+          "sampleCount": 65,
+          "sha256": "7b44a68475faa2dd7a0e590f6cf8cd2beb9c46dc7490350be11a0e1366e100b4",
+          "spacingM": 256.0,
+          "waterFraction": 0.015621
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 3166960,
+          "level": 3,
+          "maximumHeightM": 747.5,
+          "minimumHeightM": 20.0,
+          "sampleCount": 33,
+          "sha256": "8123235aa42fddca10cd41f333272b63430326d21bf1764601e6c7a336edc6a4",
+          "spacingM": 512.0,
+          "waterFraction": 0.018365
+        }
+      ],
+      "northIndex": 2
+    },
+    {
+      "boundsLocalM": [
+        -32768.0,
+        -32768.0,
+        -16384.0,
+        -16384.0
+      ],
+      "eastIndex": 2,
+      "id": "e02-n02",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 3169152,
+          "level": 0,
+          "maximumHeightM": 346.1,
+          "minimumHeightM": 6.9,
+          "sampleCount": 257,
+          "sha256": "5598d834faacef0e76216d420521ece9e9251286f10be9bfd156ac426405623d",
+          "spacingM": 64.0,
+          "waterFraction": 0.008615
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 3301264,
+          "level": 1,
+          "maximumHeightM": 337.1,
+          "minimumHeightM": 7.2,
+          "sampleCount": 129,
+          "sha256": "e88a51dd1b8aceec50fce116e533ca6f1c72f3762cdeb58cffcd0db9172e8259",
+          "spacingM": 128.0,
+          "waterFraction": 0.009194
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 3334560,
+          "level": 2,
+          "maximumHeightM": 319.6,
+          "minimumHeightM": 7.6,
+          "sampleCount": 65,
+          "sha256": "46d6ec7839615dda3e012c4d874739ba3e4cca646056635909b9461d685a5f67",
+          "spacingM": 256.0,
+          "waterFraction": 0.009467
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 3343024,
+          "level": 3,
+          "maximumHeightM": 280.6,
+          "minimumHeightM": 9.1,
+          "sampleCount": 33,
+          "sha256": "682aeb853123660ef08c966989164abe4e78bc93573aca096f76071cfa6a7378",
+          "spacingM": 512.0,
+          "waterFraction": 0.009183
+        }
+      ],
+      "northIndex": 2
+    },
+    {
+      "boundsLocalM": [
+        -16384.0,
+        -32768.0,
+        0.0,
+        -16384.0
+      ],
+      "eastIndex": 3,
+      "id": "e03-n02",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 3345216,
+          "level": 0,
+          "maximumHeightM": 622.2,
+          "minimumHeightM": 8.9,
+          "sampleCount": 257,
+          "sha256": "33033f44c1bd2bb26bc3d072250d633c34ce9cddcc9386f6c3f0a8300fcc1b64",
+          "spacingM": 64.0,
+          "waterFraction": 0.029342
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 3477328,
+          "level": 1,
+          "maximumHeightM": 622.2,
+          "minimumHeightM": 9.4,
+          "sampleCount": 129,
+          "sha256": "dba9b64a2ce27f269e8d19a2fec59e06b98db2ba2878365c1868fdd592e82680",
+          "spacingM": 128.0,
+          "waterFraction": 0.029806
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 3510624,
+          "level": 2,
+          "maximumHeightM": 622.2,
+          "minimumHeightM": 9.4,
+          "sampleCount": 65,
+          "sha256": "c54dccef37f4bfa0eff04aa2e4f7cf9f249cdf7a6b9dde36f841ef75085c5d9a",
+          "spacingM": 256.0,
+          "waterFraction": 0.030533
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 3519088,
+          "level": 3,
+          "maximumHeightM": 622.2,
+          "minimumHeightM": 11.8,
+          "sampleCount": 33,
+          "sha256": "4ed02248001d6ae81f3137f0f7b6ed0ec26f1199478198d52c94491bdbcc3d67",
+          "spacingM": 512.0,
+          "waterFraction": 0.030303
+        }
+      ],
+      "northIndex": 2
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        -32768.0,
+        16384.0,
+        -16384.0
+      ],
+      "eastIndex": 4,
+      "id": "e04-n02",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 3521280,
+          "level": 0,
+          "maximumHeightM": 910.4,
+          "minimumHeightM": 48.0,
+          "sampleCount": 257,
+          "sha256": "e200645234ef2874240bc5193b96546d7722a1468895227f043b187711c6df6e",
+          "spacingM": 64.0,
+          "waterFraction": 0.011703
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 3653392,
+          "level": 1,
+          "maximumHeightM": 893.7,
+          "minimumHeightM": 48.0,
+          "sampleCount": 129,
+          "sha256": "c477c5e364e1c13e10023a36f96e3ab1702a7ddabb3dffa67ab900b7df1afde5",
+          "spacingM": 128.0,
+          "waterFraction": 0.011538
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 3686688,
+          "level": 2,
+          "maximumHeightM": 893.7,
+          "minimumHeightM": 48.8,
+          "sampleCount": 65,
+          "sha256": "96b8b3eeee27f5f82609438a1d9201d51d9f10aa329065d4290edbf9c48da582",
+          "spacingM": 256.0,
+          "waterFraction": 0.012308
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 3695152,
+          "level": 3,
+          "maximumHeightM": 831.9,
+          "minimumHeightM": 53.7,
+          "sampleCount": 33,
+          "sha256": "0d8e5df7e761b414f26b4df87edf685d8a512b0ebe3712c6fd5270df70acbe78",
+          "spacingM": 512.0,
+          "waterFraction": 0.013774
+        }
+      ],
+      "northIndex": 2
+    },
+    {
+      "boundsLocalM": [
+        16384.0,
+        -32768.0,
+        32768.0,
+        -16384.0
+      ],
+      "eastIndex": 5,
+      "id": "e05-n02",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 3697344,
+          "level": 0,
+          "maximumHeightM": 1155.6,
+          "minimumHeightM": 115.5,
+          "sampleCount": 257,
+          "sha256": "a18335358bf7d2afba2672fcc963717e8cbe8cc75298581b4399b16466b6d48b",
+          "spacingM": 64.0,
+          "waterFraction": 0.001877
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 3829456,
+          "level": 1,
+          "maximumHeightM": 1148.0,
+          "minimumHeightM": 115.5,
+          "sampleCount": 129,
+          "sha256": "0be6e7e20e934c13111ee8c7626bdfee1ad887bdeb6649ad43b919e6a6b98bfd",
+          "spacingM": 128.0,
+          "waterFraction": 0.001983
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 3862752,
+          "level": 2,
+          "maximumHeightM": 1133.1,
+          "minimumHeightM": 115.5,
+          "sampleCount": 65,
+          "sha256": "6712f5e6b312aea01fafe1628e5be9be38b4af66db707898e08ecca3c136dc40",
+          "spacingM": 256.0,
+          "waterFraction": 0.001657
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 3871216,
+          "level": 3,
+          "maximumHeightM": 1103.0,
+          "minimumHeightM": 115.5,
+          "sampleCount": 33,
+          "sha256": "230270f992d6efc9ee000630a170a5c4dca137853b2cec0d4d89bc34db6e70b8",
+          "spacingM": 512.0,
+          "waterFraction": 0.000918
+        }
+      ],
+      "northIndex": 2
+    },
+    {
+      "boundsLocalM": [
+        32768.0,
+        -32768.0,
+        49152.0,
+        -16384.0
+      ],
+      "eastIndex": 6,
+      "id": "e06-n02",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 3873408,
+          "level": 0,
+          "maximumHeightM": 1280.0,
+          "minimumHeightM": 100.9,
+          "sampleCount": 257,
+          "sha256": "39c0878fcfff4e7c257cb28a3af6846ead0698a6d1a8cb92cdfc6fd7f62ac37e",
+          "spacingM": 64.0,
+          "waterFraction": 0.026389
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 4005520,
+          "level": 1,
+          "maximumHeightM": 1280.0,
+          "minimumHeightM": 101.6,
+          "sampleCount": 129,
+          "sha256": "06139985290e3706164283799a54127f85f3dbe6db3eb02e3b63cb920d640d82",
+          "spacingM": 128.0,
+          "waterFraction": 0.026681
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 4038816,
+          "level": 2,
+          "maximumHeightM": 1280.0,
+          "minimumHeightM": 102.0,
+          "sampleCount": 65,
+          "sha256": "fceae36ebc7444e63bf3d72824179d25605b5d2e52a3a97d3ea5c73a7e4ed1cf",
+          "spacingM": 256.0,
+          "waterFraction": 0.028166
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 4047280,
+          "level": 3,
+          "maximumHeightM": 1274.6,
+          "minimumHeightM": 103.4,
+          "sampleCount": 33,
+          "sha256": "7651e6eb116aa7646aae76b72c1b877ff825d3ece0d85476549e8431fdb041a3",
+          "spacingM": 512.0,
+          "waterFraction": 0.029385
+        }
+      ],
+      "northIndex": 2
+    },
+    {
+      "boundsLocalM": [
+        49152.0,
+        -32768.0,
+        65536.0,
+        -16384.0
+      ],
+      "eastIndex": 7,
+      "id": "e07-n02",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 4049472,
+          "level": 0,
+          "maximumHeightM": 1145.1,
+          "minimumHeightM": 102.3,
+          "sampleCount": 257,
+          "sha256": "496739b950c03cc7ed9ba62eccb88346f736db910bc82323f4cdd6aeb300b8f6",
+          "spacingM": 64.0,
+          "waterFraction": 0.07823
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 4181584,
+          "level": 1,
+          "maximumHeightM": 1125.4,
+          "minimumHeightM": 102.3,
+          "sampleCount": 129,
+          "sha256": "aaa405c2bde10afffffa1ee93e3768d47179e5421b60d521fb5dae82500aa3aa",
+          "spacingM": 128.0,
+          "waterFraction": 0.07818
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 4214880,
+          "level": 2,
+          "maximumHeightM": 1125.4,
+          "minimumHeightM": 102.3,
+          "sampleCount": 65,
+          "sha256": "0f70b192882962dbac0b530e9a22b9aa5300c2c3a40865fd3d9e988a415c5140",
+          "spacingM": 256.0,
+          "waterFraction": 0.076213
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 4223344,
+          "level": 3,
+          "maximumHeightM": 1116.3,
+          "minimumHeightM": 105.2,
+          "sampleCount": 33,
+          "sha256": "c99a852c62ba4a04e3db3da0ab14db7931c98d8fad3ae6b51c13485198032960",
+          "spacingM": 512.0,
+          "waterFraction": 0.078053
+        }
+      ],
+      "northIndex": 2
+    },
+    {
+      "boundsLocalM": [
+        -65536.0,
+        -16384.0,
+        -49152.0,
+        0.0
+      ],
+      "eastIndex": 0,
+      "id": "e00-n03",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 4225536,
+          "level": 0,
+          "maximumHeightM": 750.0,
+          "minimumHeightM": 12.1,
+          "sampleCount": 257,
+          "sha256": "8ea127e58391954d4ebe1d0def06a1512dc35cb35306d8df0f5689e7c5e07c32",
+          "spacingM": 64.0,
+          "waterFraction": 0.049236
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 4357648,
+          "level": 1,
+          "maximumHeightM": 750.0,
+          "minimumHeightM": 12.3,
+          "sampleCount": 129,
+          "sha256": "7ee5f005b9889468ab8c27f710fc68b92a0e0693dc532e84a09cbab10f688168",
+          "spacingM": 128.0,
+          "waterFraction": 0.048555
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 4390944,
+          "level": 2,
+          "maximumHeightM": 739.2,
+          "minimumHeightM": 12.4,
+          "sampleCount": 65,
+          "sha256": "e6d2f016b611438a800fde14428161b084b01de6344c1d0c3f5daba40002a5a3",
+          "spacingM": 256.0,
+          "waterFraction": 0.048994
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 4399408,
+          "level": 3,
+          "maximumHeightM": 702.7,
+          "minimumHeightM": 12.5,
+          "sampleCount": 33,
+          "sha256": "69e0850ff8e18cdaeea257612f07f3c2b2dc33c61feceec931ede111d538ff99",
+          "spacingM": 512.0,
+          "waterFraction": 0.049587
+        }
+      ],
+      "northIndex": 3
+    },
+    {
+      "boundsLocalM": [
+        -49152.0,
+        -16384.0,
+        -32768.0,
+        0.0
+      ],
+      "eastIndex": 1,
+      "id": "e01-n03",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 4401600,
+          "level": 0,
+          "maximumHeightM": 701.6,
+          "minimumHeightM": 43.6,
+          "sampleCount": 257,
+          "sha256": "b44ae98d4aac39ea9746368cf20a3c0782418dbd4373fd1cc3c6426e138142de",
+          "spacingM": 64.0,
+          "waterFraction": 0.003407
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 4533712,
+          "level": 1,
+          "maximumHeightM": 701.6,
+          "minimumHeightM": 44.1,
+          "sampleCount": 129,
+          "sha256": "e15fb1bda81fabca02a9b37331be05e2ede19654fae750debeedba3c9c87b6ff",
+          "spacingM": 128.0,
+          "waterFraction": 0.003365
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 4567008,
+          "level": 2,
+          "maximumHeightM": 676.0,
+          "minimumHeightM": 45.1,
+          "sampleCount": 65,
+          "sha256": "1bdc77172227bd8c767d07df4125a9ff5889cf928d778a239c6d6947ffbdd8b8",
+          "spacingM": 256.0,
+          "waterFraction": 0.002604
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 4575472,
+          "level": 3,
+          "maximumHeightM": 659.0,
+          "minimumHeightM": 46.4,
+          "sampleCount": 33,
+          "sha256": "88d61fb63107a25f884d1e71d1fb0eff4ce6865a2ea6d3b987d664e4d7ae244e",
+          "spacingM": 512.0,
+          "waterFraction": 0.003673
+        }
+      ],
+      "northIndex": 3
+    },
+    {
+      "boundsLocalM": [
+        -32768.0,
+        -16384.0,
+        -16384.0,
+        0.0
+      ],
+      "eastIndex": 2,
+      "id": "e02-n03",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 4577664,
+          "level": 0,
+          "maximumHeightM": 508.7,
+          "minimumHeightM": 32.4,
+          "sampleCount": 257,
+          "sha256": "0021c716675a4793668bcf10e6be038c8707d32a156c4dc8e4610d6205c46fd7",
+          "spacingM": 64.0,
+          "waterFraction": 0.017109
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 4709776,
+          "level": 1,
+          "maximumHeightM": 507.5,
+          "minimumHeightM": 33.2,
+          "sampleCount": 129,
+          "sha256": "b7fa833ce045e821582a78c0d4161c971ffef9b9faef1fd31e447c3864f211b0",
+          "spacingM": 128.0,
+          "waterFraction": 0.017247
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 4743072,
+          "level": 2,
+          "maximumHeightM": 496.3,
+          "minimumHeightM": 33.2,
+          "sampleCount": 65,
+          "sha256": "4399a67dc5468ef24612b07c1fe02d7adf4c26a1a154d581d13fe2ff8736b35d",
+          "spacingM": 256.0,
+          "waterFraction": 0.015621
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 4751536,
+          "level": 3,
+          "maximumHeightM": 468.8,
+          "minimumHeightM": 34.7,
+          "sampleCount": 33,
+          "sha256": "209e395461da082a9700e145d67986b075c126362aed1db7e56c47bf3f059374",
+          "spacingM": 512.0,
+          "waterFraction": 0.015611
+        }
+      ],
+      "northIndex": 3
+    },
+    {
+      "boundsLocalM": [
+        -16384.0,
+        -16384.0,
+        0.0,
+        0.0
+      ],
+      "eastIndex": 3,
+      "id": "e03-n03",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 4753728,
+          "level": 0,
+          "maximumHeightM": 653.6,
+          "minimumHeightM": 39.1,
+          "sampleCount": 257,
+          "sha256": "24698f01fd8db922a239ce8ffed7d5769648835714618f3190ece5a108c1e56b",
+          "spacingM": 64.0,
+          "waterFraction": 0.002634
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 4885840,
+          "level": 1,
+          "maximumHeightM": 633.5,
+          "minimumHeightM": 40.6,
+          "sampleCount": 129,
+          "sha256": "77d4028b89e81e7a86979f934a215b2fac9c8a30ff11613bd4d6cf87c1aa8a35",
+          "spacingM": 128.0,
+          "waterFraction": 0.002764
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 4919136,
+          "level": 2,
+          "maximumHeightM": 625.2,
+          "minimumHeightM": 40.6,
+          "sampleCount": 65,
+          "sha256": "962a184a062922bfe50f9fb20660fa585c8ce3f00fa1641efee80439aa0472ac",
+          "spacingM": 256.0,
+          "waterFraction": 0.003314
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 4927600,
+          "level": 3,
+          "maximumHeightM": 625.2,
+          "minimumHeightM": 40.6,
+          "sampleCount": 33,
+          "sha256": "796965aad801d7ab844fd05c197695c6958c9a14152afa4cf1a0c04d845abedc",
+          "spacingM": 512.0,
+          "waterFraction": 0.002755
+        }
+      ],
+      "northIndex": 3
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        -16384.0,
+        16384.0,
+        0.0
+      ],
+      "eastIndex": 4,
+      "id": "e04-n03",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 4929792,
+          "level": 0,
+          "maximumHeightM": 938.3,
+          "minimumHeightM": 107.0,
+          "sampleCount": 257,
+          "sha256": "88042ce20437f753d1c6da1d9d0c7fb2a338e6bd9ae7e0877ac3c87f1ebd6e26",
+          "spacingM": 64.0,
+          "waterFraction": 0.024664
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 5061904,
+          "level": 1,
+          "maximumHeightM": 938.3,
+          "minimumHeightM": 112.4,
+          "sampleCount": 129,
+          "sha256": "aac8e9e047597b26f9a73e2a9fdcdd4f7ef1586debaff2f5539495e25afabe52",
+          "spacingM": 128.0,
+          "waterFraction": 0.024938
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 5095200,
+          "level": 2,
+          "maximumHeightM": 870.2,
+          "minimumHeightM": 126.5,
+          "sampleCount": 65,
+          "sha256": "6f6ee66d92b897ef8ae00e6f338fa3231e6bc4e62ea167146bd6766e4ab57e0e",
+          "spacingM": 256.0,
+          "waterFraction": 0.025562
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 5103664,
+          "level": 3,
+          "maximumHeightM": 868.5,
+          "minimumHeightM": 126.5,
+          "sampleCount": 33,
+          "sha256": "71cfd89afe161add56ba9c3296af0f6598cb1b28e577256c1ceb65c9a5b43f9c",
+          "spacingM": 512.0,
+          "waterFraction": 0.02663
+        }
+      ],
+      "northIndex": 3
+    },
+    {
+      "boundsLocalM": [
+        16384.0,
+        -16384.0,
+        32768.0,
+        0.0
+      ],
+      "eastIndex": 5,
+      "id": "e05-n03",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 5105856,
+          "level": 0,
+          "maximumHeightM": 1047.7,
+          "minimumHeightM": 176.5,
+          "sampleCount": 257,
+          "sha256": "357aa2c50b146285c6afc3b7b8792715d6fe655073606c7be5f2d3f439ab3ada",
+          "spacingM": 64.0,
+          "waterFraction": 0.007555
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 5237968,
+          "level": 1,
+          "maximumHeightM": 1039.6,
+          "minimumHeightM": 176.5,
+          "sampleCount": 129,
+          "sha256": "1cc7099e9886466afba8ae03cc60c54f64bb51c76782d9bd171c388b28ae4fbc",
+          "spacingM": 128.0,
+          "waterFraction": 0.007211
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 5271264,
+          "level": 2,
+          "maximumHeightM": 1039.6,
+          "minimumHeightM": 181.2,
+          "sampleCount": 65,
+          "sha256": "1a6b5aed4ae19062701cc3985060685510fe533d8fcb7909df382d2de216fe09",
+          "spacingM": 256.0,
+          "waterFraction": 0.006627
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 5279728,
+          "level": 3,
+          "maximumHeightM": 1039.6,
+          "minimumHeightM": 181.4,
+          "sampleCount": 33,
+          "sha256": "8ba379a3d61c0a1e121606fa43f90641c4afeb5d78130eb6c0e49e0a26a1494d",
+          "spacingM": 512.0,
+          "waterFraction": 0.002755
+        }
+      ],
+      "northIndex": 3
+    },
+    {
+      "boundsLocalM": [
+        32768.0,
+        -16384.0,
+        49152.0,
+        0.0
+      ],
+      "eastIndex": 6,
+      "id": "e06-n03",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 5281920,
+          "level": 0,
+          "maximumHeightM": 1166.1,
+          "minimumHeightM": 163.4,
+          "sampleCount": 257,
+          "sha256": "2f01b72fcc785deb5b4a2c91219d44aac114486b87c96d94877d77a2806606bf",
+          "spacingM": 64.0,
+          "waterFraction": 0.0
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 5414032,
+          "level": 1,
+          "maximumHeightM": 1163.6,
+          "minimumHeightM": 163.6,
+          "sampleCount": 129,
+          "sha256": "211a16461f6f12fd5b4824c8835fe9e4e64f7cba99e2901b4ade5e0e3ac8264b",
+          "spacingM": 128.0,
+          "waterFraction": 0.0
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 5447328,
+          "level": 2,
+          "maximumHeightM": 1135.0,
+          "minimumHeightM": 165.6,
+          "sampleCount": 65,
+          "sha256": "46174ab5ac3ab6c4c16102e851237242991fce6312095b67ddbe4ee6bc65148a",
+          "spacingM": 256.0,
+          "waterFraction": 0.0
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 5455792,
+          "level": 3,
+          "maximumHeightM": 1115.4,
+          "minimumHeightM": 170.9,
+          "sampleCount": 33,
+          "sha256": "f9d28ea1d76f6c2bc0436f023803f55c1f837b20783f9dc6a8ec48ff5f9751f1",
+          "spacingM": 512.0,
+          "waterFraction": 0.0
+        }
+      ],
+      "northIndex": 3
+    },
+    {
+      "boundsLocalM": [
+        49152.0,
+        -16384.0,
+        65536.0,
+        0.0
+      ],
+      "eastIndex": 7,
+      "id": "e07-n03",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 5457984,
+          "level": 0,
+          "maximumHeightM": 1181.5,
+          "minimumHeightM": 164.8,
+          "sampleCount": 257,
+          "sha256": "11231a61f875e37c7f8eb2a6dda85f64773c3cf6169e48b2c1b450a2bd771d97",
+          "spacingM": 64.0,
+          "waterFraction": 0.017911
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 5590096,
+          "level": 1,
+          "maximumHeightM": 1173.1,
+          "minimumHeightM": 171.1,
+          "sampleCount": 129,
+          "sha256": "971e2d3cec8c56aed1bbdddd64baa6e9ae7953c1f9589bb18ec966883bc22130",
+          "spacingM": 128.0,
+          "waterFraction": 0.017968
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 5623392,
+          "level": 2,
+          "maximumHeightM": 1173.1,
+          "minimumHeightM": 171.9,
+          "sampleCount": 65,
+          "sha256": "05d39e090d00d71720ecb42440924f2fa85010f7339e1c180eb686305b1ff799",
+          "spacingM": 256.0,
+          "waterFraction": 0.017988
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 5631856,
+          "level": 3,
+          "maximumHeightM": 1165.1,
+          "minimumHeightM": 173.3,
+          "sampleCount": 33,
+          "sha256": "77be11668d0a17cff63e6f3c11778d0a374d9d4006aa36f5998f4438bc4a5886",
+          "spacingM": 512.0,
+          "waterFraction": 0.019284
+        }
+      ],
+      "northIndex": 3
+    },
+    {
+      "boundsLocalM": [
+        -65536.0,
+        0.0,
+        -49152.0,
+        16384.0
+      ],
+      "eastIndex": 0,
+      "id": "e00-n04",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 5634048,
+          "level": 0,
+          "maximumHeightM": 448.5,
+          "minimumHeightM": 13.0,
+          "sampleCount": 257,
+          "sha256": "d16c0052e512945a147edeaf2c31fa8961afff4f90108c17070fa70291fc8c53",
+          "spacingM": 64.0,
+          "waterFraction": 0.02536
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 5766160,
+          "level": 1,
+          "maximumHeightM": 442.1,
+          "minimumHeightM": 13.3,
+          "sampleCount": 129,
+          "sha256": "8948661ef44e9950246d1c16f8b21e9da876c7c42715d0b07cce3735d4d43c74",
+          "spacingM": 128.0,
+          "waterFraction": 0.024758
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 5799456,
+          "level": 2,
+          "maximumHeightM": 409.9,
+          "minimumHeightM": 13.6,
+          "sampleCount": 65,
+          "sha256": "a97b2f0dd496baf05f0f939373483cfecfeb4e7fca4bd7bd13ee81199cbf9ef8",
+          "spacingM": 256.0,
+          "waterFraction": 0.026036
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 5807920,
+          "level": 3,
+          "maximumHeightM": 409.9,
+          "minimumHeightM": 19.8,
+          "sampleCount": 33,
+          "sha256": "4a49fdca48bc72c1fa00cbd4077aeb7f947ae4efc5df1e44087cf05b203a1250",
+          "spacingM": 512.0,
+          "waterFraction": 0.022039
+        }
+      ],
+      "northIndex": 4
+    },
+    {
+      "boundsLocalM": [
+        -49152.0,
+        0.0,
+        -32768.0,
+        16384.0
+      ],
+      "eastIndex": 1,
+      "id": "e01-n04",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 5810112,
+          "level": 0,
+          "maximumHeightM": 703.7,
+          "minimumHeightM": 32.3,
+          "sampleCount": 257,
+          "sha256": "7caebd8b98e3d831cd992f54187fab9c7b2a4258a5026241b22706e2b9601baa",
+          "spacingM": 64.0,
+          "waterFraction": 0.009508
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 5942224,
+          "level": 1,
+          "maximumHeightM": 699.7,
+          "minimumHeightM": 33.6,
+          "sampleCount": 129,
+          "sha256": "e6ac838d49b1f3f687e110f55a0b5a3ec401aac3f98670b0e57e9130ebcd277b",
+          "spacingM": 128.0,
+          "waterFraction": 0.009495
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 5975520,
+          "level": 2,
+          "maximumHeightM": 697.0,
+          "minimumHeightM": 35.8,
+          "sampleCount": 65,
+          "sha256": "e4af2d29b4a53abcf88c92f5d4993f012275ebb451cc9285008be5e1ee3fc4b6",
+          "spacingM": 256.0,
+          "waterFraction": 0.008994
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 5983984,
+          "level": 3,
+          "maximumHeightM": 653.9,
+          "minimumHeightM": 36.1,
+          "sampleCount": 33,
+          "sha256": "24f67a4a583cdf2d9f85d65712f8502c2ab2dfc050d5f54ea13bbf88bd32cd35",
+          "spacingM": 512.0,
+          "waterFraction": 0.006428
+        }
+      ],
+      "northIndex": 4
+    },
+    {
+      "boundsLocalM": [
+        -32768.0,
+        0.0,
+        -16384.0,
+        16384.0
+      ],
+      "eastIndex": 2,
+      "id": "e02-n04",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 5986176,
+          "level": 0,
+          "maximumHeightM": 791.3,
+          "minimumHeightM": 50.9,
+          "sampleCount": 257,
+          "sha256": "5885e76cb5bf206d2b459c7d87a2ea188481d9869e431a31ed4c7a2c8b90e58a",
+          "spacingM": 64.0,
+          "waterFraction": 0.069736
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 6118288,
+          "level": 1,
+          "maximumHeightM": 786.7,
+          "minimumHeightM": 51.8,
+          "sampleCount": 129,
+          "sha256": "297cf990ae1bc0b1da41213957f3cbff62c7e21176ee572afb4eae829043e36d",
+          "spacingM": 128.0,
+          "waterFraction": 0.069167
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 6151584,
+          "level": 2,
+          "maximumHeightM": 733.8,
+          "minimumHeightM": 51.8,
+          "sampleCount": 65,
+          "sha256": "77a4d0cadaf22926bc02c657d1053abc850880b5975a3fd319af18fc4a0cd82c",
+          "spacingM": 256.0,
+          "waterFraction": 0.070296
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 6160048,
+          "level": 3,
+          "maximumHeightM": 733.2,
+          "minimumHeightM": 55.9,
+          "sampleCount": 33,
+          "sha256": "5ae9e0c0454c414d542a042005d615520779b9c5b08b490db3f49ebd2cd4df74",
+          "spacingM": 512.0,
+          "waterFraction": 0.066116
+        }
+      ],
+      "northIndex": 4
+    },
+    {
+      "boundsLocalM": [
+        -16384.0,
+        0.0,
+        0.0,
+        16384.0
+      ],
+      "eastIndex": 3,
+      "id": "e03-n04",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 6162240,
+          "level": 0,
+          "maximumHeightM": 753.5,
+          "minimumHeightM": 81.6,
+          "sampleCount": 257,
+          "sha256": "36e9561e741a41f547283e5191fd56cbb4b3384b7c40e894f489842d69b3df5d",
+          "spacingM": 64.0,
+          "waterFraction": 0.009114
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 6294352,
+          "level": 1,
+          "maximumHeightM": 743.0,
+          "minimumHeightM": 81.6,
+          "sampleCount": 129,
+          "sha256": "a1150e87c1d3c9dfe15792f889baa6785e9b146ca5fd5ea50d167a3070855df7",
+          "spacingM": 128.0,
+          "waterFraction": 0.009314
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 6327648,
+          "level": 2,
+          "maximumHeightM": 724.9,
+          "minimumHeightM": 82.7,
+          "sampleCount": 65,
+          "sha256": "15de559b80050c09dee2fced2d74d71e40e1c39958f79c9933b6b45b564b51a6",
+          "spacingM": 256.0,
+          "waterFraction": 0.008757
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 6336112,
+          "level": 3,
+          "maximumHeightM": 663.5,
+          "minimumHeightM": 82.7,
+          "sampleCount": 33,
+          "sha256": "ae3e6baedd17c34ac148fba4cd89b53657799e254251c801c5823befb31e62b8",
+          "spacingM": 512.0,
+          "waterFraction": 0.010101
+        }
+      ],
+      "northIndex": 4
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        0.0,
+        16384.0,
+        16384.0
+      ],
+      "eastIndex": 4,
+      "id": "e04-n04",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 6338304,
+          "level": 0,
+          "maximumHeightM": 701.7,
+          "minimumHeightM": 190.5,
+          "sampleCount": 257,
+          "sha256": "7ff70aeaa18bc5804be08831a1500c29cf0bf5bec222e4700c6fea593213f8a0",
+          "spacingM": 64.0,
+          "waterFraction": 0.036352
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 6470416,
+          "level": 1,
+          "maximumHeightM": 694.6,
+          "minimumHeightM": 192.3,
+          "sampleCount": 129,
+          "sha256": "a5a8011cb85af35daaae49c6708bafbe5f11ad3c75d51e9f4835a989a4e27cde",
+          "spacingM": 128.0,
+          "waterFraction": 0.036296
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 6503712,
+          "level": 2,
+          "maximumHeightM": 667.4,
+          "minimumHeightM": 198.6,
+          "sampleCount": 65,
+          "sha256": "fd13703173d2b6fdb5d89c734a5ca7a40e4a9b768b863d6f8978a2693f115e16",
+          "spacingM": 256.0,
+          "waterFraction": 0.03503
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 6512176,
+          "level": 3,
+          "maximumHeightM": 663.5,
+          "minimumHeightM": 200.3,
+          "sampleCount": 33,
+          "sha256": "969b55e16f1c1dc092abb8a3657ff991f852d6fa264ac06ab2e9f18a5ff35d83",
+          "spacingM": 512.0,
+          "waterFraction": 0.035813
+        }
+      ],
+      "northIndex": 4
+    },
+    {
+      "boundsLocalM": [
+        16384.0,
+        0.0,
+        32768.0,
+        16384.0
+      ],
+      "eastIndex": 5,
+      "id": "e05-n04",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 6514368,
+          "level": 0,
+          "maximumHeightM": 1042.3,
+          "minimumHeightM": 193.7,
+          "sampleCount": 257,
+          "sha256": "6a0671d5a73f5a1c8da9be0c6497b997d5c1ad80c5c2da5a15ad46e0e79512dd",
+          "spacingM": 64.0,
+          "waterFraction": 0.004012
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 6646480,
+          "level": 1,
+          "maximumHeightM": 1032.2,
+          "minimumHeightM": 194.4,
+          "sampleCount": 129,
+          "sha256": "8bef5402ae7f4a0686f532f33fab785bea7090b8bf214c06780caafcd0bfb014",
+          "spacingM": 128.0,
+          "waterFraction": 0.004026
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 6679776,
+          "level": 2,
+          "maximumHeightM": 999.2,
+          "minimumHeightM": 199.3,
+          "sampleCount": 65,
+          "sha256": "878668f30945b44888ea206d8336288f3bca00d405c9d595c2756f0409ff4386",
+          "spacingM": 256.0,
+          "waterFraction": 0.00497
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 6688240,
+          "level": 3,
+          "maximumHeightM": 999.2,
+          "minimumHeightM": 199.3,
+          "sampleCount": 33,
+          "sha256": "751801f63b73f63a91d8076de9a493c1ee26ec423920073ef402ed33957035de",
+          "spacingM": 512.0,
+          "waterFraction": 0.002755
+        }
+      ],
+      "northIndex": 4
+    },
+    {
+      "boundsLocalM": [
+        32768.0,
+        0.0,
+        49152.0,
+        16384.0
+      ],
+      "eastIndex": 6,
+      "id": "e06-n04",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 6690432,
+          "level": 0,
+          "maximumHeightM": 811.9,
+          "minimumHeightM": 200.2,
+          "sampleCount": 257,
+          "sha256": "ea63317fbbc91de83000219640773982cf7df3bf8fc04c41d0998993f9753cea",
+          "spacingM": 64.0,
+          "waterFraction": 0.000348
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 6822544,
+          "level": 1,
+          "maximumHeightM": 811.4,
+          "minimumHeightM": 200.2,
+          "sampleCount": 129,
+          "sha256": "fbdc7e398b469bc533c187387d65462115197a6cdcc2601fba7f24f7918b99d9",
+          "spacingM": 128.0,
+          "waterFraction": 0.00024
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 6855840,
+          "level": 2,
+          "maximumHeightM": 797.6,
+          "minimumHeightM": 200.2,
+          "sampleCount": 65,
+          "sha256": "c752b63fa4fbd0889d14101e32a08468bb8e1853ad195da472b70457367ecd96",
+          "spacingM": 256.0,
+          "waterFraction": 0.0
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 6864304,
+          "level": 3,
+          "maximumHeightM": 773.6,
+          "minimumHeightM": 200.2,
+          "sampleCount": 33,
+          "sha256": "537c137ed216af89872b0c63be3e41585edff7d3acc4f698776a26d6f6e213df",
+          "spacingM": 512.0,
+          "waterFraction": 0.0
+        }
+      ],
+      "northIndex": 4
+    },
+    {
+      "boundsLocalM": [
+        49152.0,
+        0.0,
+        65536.0,
+        16384.0
+      ],
+      "eastIndex": 7,
+      "id": "e07-n04",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 6866496,
+          "level": 0,
+          "maximumHeightM": 1111.0,
+          "minimumHeightM": 169.6,
+          "sampleCount": 257,
+          "sha256": "59361f41bdfb4445be55c12a0cb91ee563c86425923c8f53a6864721be979030",
+          "spacingM": 64.0,
+          "waterFraction": 0.100138
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 6998608,
+          "level": 1,
+          "maximumHeightM": 1107.5,
+          "minimumHeightM": 169.6,
+          "sampleCount": 129,
+          "sha256": "f204b32adc25d87959fb0381675adf435af6775489544eda9fac45a33979b241",
+          "spacingM": 128.0,
+          "waterFraction": 0.100234
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 7031904,
+          "level": 2,
+          "maximumHeightM": 1107.5,
+          "minimumHeightM": 169.6,
+          "sampleCount": 65,
+          "sha256": "55eb8812c1e3a73156163795f624013511fe5d2abf5e28a16d15ab9bdb474330",
+          "spacingM": 256.0,
+          "waterFraction": 0.098935
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 7040368,
+          "level": 3,
+          "maximumHeightM": 1103.9,
+          "minimumHeightM": 173.3,
+          "sampleCount": 33,
+          "sha256": "22d4bbea95449a3d3683b2a9f0b6087e676ae82fe6e5bb95cdfa523d6cd5d0df",
+          "spacingM": 512.0,
+          "waterFraction": 0.102847
+        }
+      ],
+      "northIndex": 4
+    },
+    {
+      "boundsLocalM": [
+        -65536.0,
+        16384.0,
+        -49152.0,
+        32768.0
+      ],
+      "eastIndex": 0,
+      "id": "e00-n05",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 7042560,
+          "level": 0,
+          "maximumHeightM": 564.1,
+          "minimumHeightM": 32.7,
+          "sampleCount": 257,
+          "sha256": "e070f99e14522a68eb80ac361b87d01967ce8bdfd49421731fc5347a20dccd74",
+          "spacingM": 64.0,
+          "waterFraction": 0.01458
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 7174672,
+          "level": 1,
+          "maximumHeightM": 564.1,
+          "minimumHeightM": 33.1,
+          "sampleCount": 129,
+          "sha256": "2e48ad706e4be71ffff0dc8f697096e89bef4b8648f8b4fb506ee5af1cc48d27",
+          "spacingM": 128.0,
+          "waterFraction": 0.013881
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 7207968,
+          "level": 2,
+          "maximumHeightM": 556.0,
+          "minimumHeightM": 33.1,
+          "sampleCount": 65,
+          "sha256": "9c1f2dd8c8f1836702ee2342da065968f2180f22e808b1ec6e2c1ee7f5adcb93",
+          "spacingM": 256.0,
+          "waterFraction": 0.013728
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 7216432,
+          "level": 3,
+          "maximumHeightM": 520.3,
+          "minimumHeightM": 33.1,
+          "sampleCount": 33,
+          "sha256": "7077cebfe1b95779cb8bd148c87e39ae046d4bfdea92019afde4cf939d804ebf",
+          "spacingM": 512.0,
+          "waterFraction": 0.010101
+        }
+      ],
+      "northIndex": 5
+    },
+    {
+      "boundsLocalM": [
+        -49152.0,
+        16384.0,
+        -32768.0,
+        32768.0
+      ],
+      "eastIndex": 1,
+      "id": "e01-n05",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 7218624,
+          "level": 0,
+          "maximumHeightM": 771.2,
+          "minimumHeightM": 64.4,
+          "sampleCount": 257,
+          "sha256": "d0628511da3352f41512c29ef91c01261338c0b13d550d003642384a7b6b8e25",
+          "spacingM": 64.0,
+          "waterFraction": 0.002241
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 7350736,
+          "level": 1,
+          "maximumHeightM": 771.2,
+          "minimumHeightM": 66.1,
+          "sampleCount": 129,
+          "sha256": "305c0da17c6eda29578f40d130f47357fb75d37894587506b2c5e0bc05f8d480",
+          "spacingM": 128.0,
+          "waterFraction": 0.002043
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 7384032,
+          "level": 2,
+          "maximumHeightM": 771.2,
+          "minimumHeightM": 68.5,
+          "sampleCount": 65,
+          "sha256": "f1d7018062f11ed6132d4a34213d7cbe64462eb444b0f8c4b62fa083395d7316",
+          "spacingM": 256.0,
+          "waterFraction": 0.001657
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 7392496,
+          "level": 3,
+          "maximumHeightM": 721.6,
+          "minimumHeightM": 68.5,
+          "sampleCount": 33,
+          "sha256": "76fd6f5c7c348ca2ed57bd825586c11638366bc81c7a7f3e743a8d29069f6402",
+          "spacingM": 512.0,
+          "waterFraction": 0.003673
+        }
+      ],
+      "northIndex": 5
+    },
+    {
+      "boundsLocalM": [
+        -32768.0,
+        16384.0,
+        -16384.0,
+        32768.0
+      ],
+      "eastIndex": 2,
+      "id": "e02-n05",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 7394688,
+          "level": 0,
+          "maximumHeightM": 744.7,
+          "minimumHeightM": 102.1,
+          "sampleCount": 257,
+          "sha256": "d2b4b9185afc8a84caa12bea6cd33ac6771e51db68bef6daa1371c55050aec84",
+          "spacingM": 64.0,
+          "waterFraction": 0.029872
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 7526800,
+          "level": 1,
+          "maximumHeightM": 744.1,
+          "minimumHeightM": 103.0,
+          "sampleCount": 129,
+          "sha256": "d0a8f1b32ee8ddf0c5a0756aad015d5ddc33a8082500f13418e0063927438dbf",
+          "spacingM": 128.0,
+          "waterFraction": 0.029986
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 7560096,
+          "level": 2,
+          "maximumHeightM": 728.1,
+          "minimumHeightM": 106.4,
+          "sampleCount": 65,
+          "sha256": "6b9745456c59570ef7bbb38cac9de3a880cc2f76327ea628b56728e8086230c2",
+          "spacingM": 256.0,
+          "waterFraction": 0.030533
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 7568560,
+          "level": 3,
+          "maximumHeightM": 707.6,
+          "minimumHeightM": 106.7,
+          "sampleCount": 33,
+          "sha256": "abc68199eade323b138ab8540c298d706839533794b32b0eff05832fe04238ac",
+          "spacingM": 512.0,
+          "waterFraction": 0.027548
+        }
+      ],
+      "northIndex": 5
+    },
+    {
+      "boundsLocalM": [
+        -16384.0,
+        16384.0,
+        0.0,
+        32768.0
+      ],
+      "eastIndex": 3,
+      "id": "e03-n05",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 7570752,
+          "level": 0,
+          "maximumHeightM": 867.3,
+          "minimumHeightM": 151.8,
+          "sampleCount": 257,
+          "sha256": "2cca4ee5be5ab8c30cf0b5b9adf01e6dc2c2297f1fab3413bf6c0628bd0a7e54",
+          "spacingM": 64.0,
+          "waterFraction": 0.000908
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 7702864,
+          "level": 1,
+          "maximumHeightM": 867.3,
+          "minimumHeightM": 152.5,
+          "sampleCount": 129,
+          "sha256": "7eb317f43b567d01c2a0c825b2915f68ec8d600e667ad7fd1b42528a16aed661",
+          "spacingM": 128.0,
+          "waterFraction": 0.001202
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 7736160,
+          "level": 2,
+          "maximumHeightM": 864.9,
+          "minimumHeightM": 152.5,
+          "sampleCount": 65,
+          "sha256": "dedee360ad39c1d104973207799231571b3e89fb24dbebb1c9580ecb87716d62",
+          "spacingM": 256.0,
+          "waterFraction": 0.00142
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 7744624,
+          "level": 3,
+          "maximumHeightM": 784.5,
+          "minimumHeightM": 152.5,
+          "sampleCount": 33,
+          "sha256": "2a635a4f97a306f2ca68dc37d09a55825c6921d1eeeecea02c6e4c6ca6238031",
+          "spacingM": 512.0,
+          "waterFraction": 0.001837
+        }
+      ],
+      "northIndex": 5
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        16384.0,
+        16384.0,
+        32768.0
+      ],
+      "eastIndex": 4,
+      "id": "e04-n05",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 7746816,
+          "level": 0,
+          "maximumHeightM": 920.5,
+          "minimumHeightM": 171.0,
+          "sampleCount": 257,
+          "sha256": "151150155cc38a59a13875faf4c73cfcf7280736f91c7fbb4753d827dbd8a1af",
+          "spacingM": 64.0,
+          "waterFraction": 0.007994
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 7878928,
+          "level": 1,
+          "maximumHeightM": 902.0,
+          "minimumHeightM": 172.0,
+          "sampleCount": 129,
+          "sha256": "e178afb73ea245d09a4a3d4a3801ef1c8331d71678e18c4d2ad24d242ebce37c",
+          "spacingM": 128.0,
+          "waterFraction": 0.008173
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 7912224,
+          "level": 2,
+          "maximumHeightM": 885.8,
+          "minimumHeightM": 173.6,
+          "sampleCount": 65,
+          "sha256": "6d07331ec5c634718d371e4f9b721d0fac5e0681b549ddb74dab8ba615c40843",
+          "spacingM": 256.0,
+          "waterFraction": 0.008757
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 7920688,
+          "level": 3,
+          "maximumHeightM": 869.6,
+          "minimumHeightM": 175.7,
+          "sampleCount": 33,
+          "sha256": "2f6fbba43b5f4280b7bc2621db32d1d5f72d22d1ff2952b8e7312a7c56cbf320",
+          "spacingM": 512.0,
+          "waterFraction": 0.008264
+        }
+      ],
+      "northIndex": 5
+    },
+    {
+      "boundsLocalM": [
+        16384.0,
+        16384.0,
+        32768.0,
+        32768.0
+      ],
+      "eastIndex": 5,
+      "id": "e05-n05",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 7922880,
+          "level": 0,
+          "maximumHeightM": 1107.3,
+          "minimumHeightM": 280.7,
+          "sampleCount": 257,
+          "sha256": "17c2bd102459d09e2b016b2957b336036179f80d921fbb911140705caa04c15d",
+          "spacingM": 64.0,
+          "waterFraction": 0.004164
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 8054992,
+          "level": 1,
+          "maximumHeightM": 1103.8,
+          "minimumHeightM": 280.7,
+          "sampleCount": 129,
+          "sha256": "222511b34168ccada225f4dc6252f1fe75c65db52a702c59e0965255289cff88",
+          "spacingM": 128.0,
+          "waterFraction": 0.003966
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 8088288,
+          "level": 2,
+          "maximumHeightM": 1082.1,
+          "minimumHeightM": 283.1,
+          "sampleCount": 65,
+          "sha256": "d69eb32d57f7bc9a3e4c8aab460cac5bccba599ab2503ae2f4da96a35e769391",
+          "spacingM": 256.0,
+          "waterFraction": 0.003787
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 8096752,
+          "level": 3,
+          "maximumHeightM": 1082.1,
+          "minimumHeightM": 293.5,
+          "sampleCount": 33,
+          "sha256": "9d536b69defcba63d29e3681c4d3572d8d22c586ad36b9a8c06e31213d86121c",
+          "spacingM": 512.0,
+          "waterFraction": 0.003673
+        }
+      ],
+      "northIndex": 5
+    },
+    {
+      "boundsLocalM": [
+        32768.0,
+        16384.0,
+        49152.0,
+        32768.0
+      ],
+      "eastIndex": 6,
+      "id": "e06-n05",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 8098944,
+          "level": 0,
+          "maximumHeightM": 1094.4,
+          "minimumHeightM": 282.4,
+          "sampleCount": 257,
+          "sha256": "1bda7117821e1a26782b316e556798533ca211413fc2f6411e9278e7b341816e",
+          "spacingM": 64.0,
+          "waterFraction": 0.022271
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 8231056,
+          "level": 1,
+          "maximumHeightM": 1083.1,
+          "minimumHeightM": 283.5,
+          "sampleCount": 129,
+          "sha256": "57579383ad5cd8b40ab258e82368a7b14fc68cfae54cde238ca07c66e5d8c534",
+          "spacingM": 128.0,
+          "waterFraction": 0.022054
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 8264352,
+          "level": 2,
+          "maximumHeightM": 1061.3,
+          "minimumHeightM": 285.6,
+          "sampleCount": 65,
+          "sha256": "77ec60a9586a46dfce93abddf715421594879e38d548bc70b44226ba9b7ccac5",
+          "spacingM": 256.0,
+          "waterFraction": 0.022485
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 8272816,
+          "level": 3,
+          "maximumHeightM": 1061.3,
+          "minimumHeightM": 289.7,
+          "sampleCount": 33,
+          "sha256": "b5793ca6d3cf50b79211646fe67896a5a47ffd225d8e725676c0924b08b0c4fb",
+          "spacingM": 512.0,
+          "waterFraction": 0.025712
+        }
+      ],
+      "northIndex": 5
+    },
+    {
+      "boundsLocalM": [
+        49152.0,
+        16384.0,
+        65536.0,
+        32768.0
+      ],
+      "eastIndex": 7,
+      "id": "e07-n05",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 8275008,
+          "level": 0,
+          "maximumHeightM": 1062.8,
+          "minimumHeightM": 316.3,
+          "sampleCount": 257,
+          "sha256": "b9ab7bc75700224f23d83ab66d2d82b2a16565af68ccb83339e3bd497dcf9a4c",
+          "spacingM": 64.0,
+          "waterFraction": 0.19964
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 8407120,
+          "level": 1,
+          "maximumHeightM": 1057.2,
+          "minimumHeightM": 316.3,
+          "sampleCount": 129,
+          "sha256": "9675fced931ef5b1e172a8c7f617113bcb811b96ef16fa1f869c834f79749d77",
+          "spacingM": 128.0,
+          "waterFraction": 0.197825
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 8440416,
+          "level": 2,
+          "maximumHeightM": 1033.3,
+          "minimumHeightM": 318.2,
+          "sampleCount": 65,
+          "sha256": "8f3eaba31ba176e39efaa69367ed671fedc2dbb031d55526485b5501579c7e98",
+          "spacingM": 256.0,
+          "waterFraction": 0.195266
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 8448880,
+          "level": 3,
+          "maximumHeightM": 983.2,
+          "minimumHeightM": 318.2,
+          "sampleCount": 33,
+          "sha256": "6d901803dad24a1ae9e0ef4f3e949ef496d1f81351fbe23d1b01aa9c909777e3",
+          "spacingM": 512.0,
+          "waterFraction": 0.195592
+        }
+      ],
+      "northIndex": 5
+    },
+    {
+      "boundsLocalM": [
+        -65536.0,
+        32768.0,
+        -49152.0,
+        49152.0
+      ],
+      "eastIndex": 0,
+      "id": "e00-n06",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 8451072,
+          "level": 0,
+          "maximumHeightM": 595.2,
+          "minimumHeightM": 68.8,
+          "sampleCount": 257,
+          "sha256": "acff02257a321229b017dae5e3451fe55543ff2ed0a3bd752852b118ba56cb47",
+          "spacingM": 64.0,
+          "waterFraction": 0.01726
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 8583184,
+          "level": 1,
+          "maximumHeightM": 583.2,
+          "minimumHeightM": 68.8,
+          "sampleCount": 129,
+          "sha256": "7894fdc3c8e930fcacaff2ec0a6e1ade3f9f64d1bd0d02948ded4451fc02be0d",
+          "spacingM": 128.0,
+          "waterFraction": 0.017247
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 8616480,
+          "level": 2,
+          "maximumHeightM": 583.2,
+          "minimumHeightM": 70.4,
+          "sampleCount": 65,
+          "sha256": "7ca0e43eb04ad06a8908597e13970d097dcaea01212f9fe1cef9aea17a06a591",
+          "spacingM": 256.0,
+          "waterFraction": 0.017278
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 8624944,
+          "level": 3,
+          "maximumHeightM": 583.2,
+          "minimumHeightM": 71.2,
+          "sampleCount": 33,
+          "sha256": "29d40f555af3c4d7b7e36737e6268b3c4b95aa7413989fae4fae1dba22ab4336",
+          "spacingM": 512.0,
+          "waterFraction": 0.02112
+        }
+      ],
+      "northIndex": 6
+    },
+    {
+      "boundsLocalM": [
+        -49152.0,
+        32768.0,
+        -32768.0,
+        49152.0
+      ],
+      "eastIndex": 1,
+      "id": "e01-n06",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 8627136,
+          "level": 0,
+          "maximumHeightM": 1013.1,
+          "minimumHeightM": 145.3,
+          "sampleCount": 257,
+          "sha256": "5c2b28dd593e3531399b0946ef86f304344b6a81f2d55cca11a564f579f11f15",
+          "spacingM": 64.0,
+          "waterFraction": 0.021363
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 8759248,
+          "level": 1,
+          "maximumHeightM": 1013.1,
+          "minimumHeightM": 148.0,
+          "sampleCount": 129,
+          "sha256": "4f4819e71471920c7c2ce63483fd70f1a6d731688465b34f9481cd713271dc88",
+          "spacingM": 128.0,
+          "waterFraction": 0.021513
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 8792544,
+          "level": 2,
+          "maximumHeightM": 999.5,
+          "minimumHeightM": 148.0,
+          "sampleCount": 65,
+          "sha256": "20ae8c65a261f8c2446f9627d8fa3ff99a317c116db01b08335d2a03f101aed2",
+          "spacingM": 256.0,
+          "waterFraction": 0.022012
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 8801008,
+          "level": 3,
+          "maximumHeightM": 987.7,
+          "minimumHeightM": 148.0,
+          "sampleCount": 33,
+          "sha256": "dc4658b04a4d6ee4a1c9bfd33fc320a17b7c7f53e4c73cc053466319389cbc00",
+          "spacingM": 512.0,
+          "waterFraction": 0.022039
+        }
+      ],
+      "northIndex": 6
+    },
+    {
+      "boundsLocalM": [
+        -32768.0,
+        32768.0,
+        -16384.0,
+        49152.0
+      ],
+      "eastIndex": 2,
+      "id": "e02-n06",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 8803200,
+          "level": 0,
+          "maximumHeightM": 980.7,
+          "minimumHeightM": 122.1,
+          "sampleCount": 257,
+          "sha256": "3fe70d46688173e477e63df0ddcdc7594a778e216622f3a3be81804dfc5d4c8c",
+          "spacingM": 64.0,
+          "waterFraction": 0.005314
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 8935312,
+          "level": 1,
+          "maximumHeightM": 980.4,
+          "minimumHeightM": 122.6,
+          "sampleCount": 129,
+          "sha256": "d787da655ac58cfaabd7bc2505bf3dbf0f3b9e4a67dd8528c72f167454fe1e36",
+          "spacingM": 128.0,
+          "waterFraction": 0.005408
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 8968608,
+          "level": 2,
+          "maximumHeightM": 980.4,
+          "minimumHeightM": 124.9,
+          "sampleCount": 65,
+          "sha256": "b34b7fe79a3724ba37a9050694627b1d2dc48813cbd47bb14f67e8a4965ef4a0",
+          "spacingM": 256.0,
+          "waterFraction": 0.00568
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 8977072,
+          "level": 3,
+          "maximumHeightM": 980.4,
+          "minimumHeightM": 126.6,
+          "sampleCount": 33,
+          "sha256": "b8cf93124e760c2a17c55ba99cb12f73d6855e60697d714d49633de55880b1ce",
+          "spacingM": 512.0,
+          "waterFraction": 0.003673
+        }
+      ],
+      "northIndex": 6
+    },
+    {
+      "boundsLocalM": [
+        -16384.0,
+        32768.0,
+        0.0,
+        49152.0
+      ],
+      "eastIndex": 3,
+      "id": "e03-n06",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 8979264,
+          "level": 0,
+          "maximumHeightM": 1150.0,
+          "minimumHeightM": 141.7,
+          "sampleCount": 257,
+          "sha256": "2a1a6c7ade5756e9c95bcf9ed7bc52bdfaa4de8ab98f954eef651355ff29b399",
+          "spacingM": 64.0,
+          "waterFraction": 0.011749
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 9111376,
+          "level": 1,
+          "maximumHeightM": 1127.5,
+          "minimumHeightM": 143.4,
+          "sampleCount": 129,
+          "sha256": "2f0d1fb55dc73c93955e85ec9bfcd9a811665cd18a5b5051b04f77267bafe868",
+          "spacingM": 128.0,
+          "waterFraction": 0.011538
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 9144672,
+          "level": 2,
+          "maximumHeightM": 1118.9,
+          "minimumHeightM": 143.4,
+          "sampleCount": 65,
+          "sha256": "b37c1b472b8a8301a4f4dcf2c36a0e840045a324c2132f679a6448cc971efcb6",
+          "spacingM": 256.0,
+          "waterFraction": 0.011361
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 9153136,
+          "level": 3,
+          "maximumHeightM": 1118.9,
+          "minimumHeightM": 150.7,
+          "sampleCount": 33,
+          "sha256": "6d49143dc1582e9ae14bb41a47c2808a53001a86da13ae5cd81ebdc913dd263b",
+          "spacingM": 512.0,
+          "waterFraction": 0.012856
+        }
+      ],
+      "northIndex": 6
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        32768.0,
+        16384.0,
+        49152.0
+      ],
+      "eastIndex": 4,
+      "id": "e04-n06",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 9155328,
+          "level": 0,
+          "maximumHeightM": 1330.9,
+          "minimumHeightM": 216.2,
+          "sampleCount": 257,
+          "sha256": "04f741aa0bef413f07fafeafcf4b6dddfa56b6314e0326746ae00a1ea6034ab1",
+          "spacingM": 64.0,
+          "waterFraction": 0.005027
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 9287440,
+          "level": 1,
+          "maximumHeightM": 1328.6,
+          "minimumHeightM": 216.7,
+          "sampleCount": 129,
+          "sha256": "4aee587be798e3d02297eb040f2428472cf6853688745ba830470095b85f3aee",
+          "spacingM": 128.0,
+          "waterFraction": 0.004747
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 9320736,
+          "level": 2,
+          "maximumHeightM": 1298.2,
+          "minimumHeightM": 216.7,
+          "sampleCount": 65,
+          "sha256": "96c8467375f142e6af295ed20751d86cfad7d3c33cd89ba51207c0b4af303e4e",
+          "spacingM": 256.0,
+          "waterFraction": 0.005444
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 9329200,
+          "level": 3,
+          "maximumHeightM": 1247.3,
+          "minimumHeightM": 221.5,
+          "sampleCount": 33,
+          "sha256": "dd70c0d8b992de6cb117d6d7aca5841e6a4b3770a53eb6c1720810032e22823f",
+          "spacingM": 512.0,
+          "waterFraction": 0.000918
+        }
+      ],
+      "northIndex": 6
+    },
+    {
+      "boundsLocalM": [
+        16384.0,
+        32768.0,
+        32768.0,
+        49152.0
+      ],
+      "eastIndex": 5,
+      "id": "e05-n06",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 9331392,
+          "level": 0,
+          "maximumHeightM": 1197.5,
+          "minimumHeightM": 342.9,
+          "sampleCount": 257,
+          "sha256": "60d0444f2240ad95397b0e0a4d9b165afdfeb2f790805974d7a8f7d4eb1592cf",
+          "spacingM": 64.0,
+          "waterFraction": 0.000242
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 9463504,
+          "level": 1,
+          "maximumHeightM": 1191.0,
+          "minimumHeightM": 342.9,
+          "sampleCount": 129,
+          "sha256": "08f6e92c9b290f98d93e6f37ce018e514626073b917a627a70ee1441ca3f3e9f",
+          "spacingM": 128.0,
+          "waterFraction": 0.00018
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 9496800,
+          "level": 2,
+          "maximumHeightM": 1191.0,
+          "minimumHeightM": 354.4,
+          "sampleCount": 65,
+          "sha256": "5142df0a73c9ce6ad9f9d109994613e63c94415a488452db1d34cdbd0184cc92",
+          "spacingM": 256.0,
+          "waterFraction": 0.000237
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 9505264,
+          "level": 3,
+          "maximumHeightM": 1184.1,
+          "minimumHeightM": 361.8,
+          "sampleCount": 33,
+          "sha256": "a8cc36a424478799cfdbb193a17e965aa8a02e056d2534b4a47992accd425f27",
+          "spacingM": 512.0,
+          "waterFraction": 0.0
+        }
+      ],
+      "northIndex": 6
+    },
+    {
+      "boundsLocalM": [
+        32768.0,
+        32768.0,
+        49152.0,
+        49152.0
+      ],
+      "eastIndex": 6,
+      "id": "e06-n06",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 9507456,
+          "level": 0,
+          "maximumHeightM": 966.4,
+          "minimumHeightM": 315.7,
+          "sampleCount": 257,
+          "sha256": "838313e1b282e6b29f06a6c061a853103266d372acddf374240536f7cbaab97b",
+          "spacingM": 64.0,
+          "waterFraction": 0.015201
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 9639568,
+          "level": 1,
+          "maximumHeightM": 952.4,
+          "minimumHeightM": 316.5,
+          "sampleCount": 129,
+          "sha256": "47bbea433e6d50f2a86eb591150b7bb07afb45c410d9a51ed19f784fce4a5c2e",
+          "spacingM": 128.0,
+          "waterFraction": 0.014542
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 9672864,
+          "level": 2,
+          "maximumHeightM": 943.0,
+          "minimumHeightM": 316.8,
+          "sampleCount": 65,
+          "sha256": "41d75c33848dd7e3a7fdb881338b0bd8a1760165d2d306b493d08c7af314ca8a",
+          "spacingM": 256.0,
+          "waterFraction": 0.013491
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 9681328,
+          "level": 3,
+          "maximumHeightM": 943.0,
+          "minimumHeightM": 317.4,
+          "sampleCount": 33,
+          "sha256": "22fae301cf21d7fe684a1f5c98ca5f1ec099bd224372b63ea339f748fcf0036e",
+          "spacingM": 512.0,
+          "waterFraction": 0.014692
+        }
+      ],
+      "northIndex": 6
+    },
+    {
+      "boundsLocalM": [
+        49152.0,
+        32768.0,
+        65536.0,
+        49152.0
+      ],
+      "eastIndex": 7,
+      "id": "e07-n06",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 9683520,
+          "level": 0,
+          "maximumHeightM": 1235.1,
+          "minimumHeightM": 328.1,
+          "sampleCount": 257,
+          "sha256": "d269b4422d4cca6b7eedd8536218d61dc6ea09980958b4ad14bd678c43c2b15b",
+          "spacingM": 64.0,
+          "waterFraction": 0.0
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 9815632,
+          "level": 1,
+          "maximumHeightM": 1229.8,
+          "minimumHeightM": 328.3,
+          "sampleCount": 129,
+          "sha256": "d033297685634a67015d469f561b27bb6e2151338750e16796729c240b53d2b1",
+          "spacingM": 128.0,
+          "waterFraction": 0.0
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 9848928,
+          "level": 2,
+          "maximumHeightM": 1212.6,
+          "minimumHeightM": 329.9,
+          "sampleCount": 65,
+          "sha256": "b5a8eeeb5f3416d4081bcecbb92a773e0b1373132358a5af4bd01e01813c34d1",
+          "spacingM": 256.0,
+          "waterFraction": 0.0
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 9857392,
+          "level": 3,
+          "maximumHeightM": 1183.5,
+          "minimumHeightM": 330.2,
+          "sampleCount": 33,
+          "sha256": "0cbe61a3322d767492bcd4076571cb07c668f152ee7e936b6597b5d100b25c00",
+          "spacingM": 512.0,
+          "waterFraction": 0.0
+        }
+      ],
+      "northIndex": 6
+    },
+    {
+      "boundsLocalM": [
+        -65536.0,
+        49152.0,
+        -49152.0,
+        65536.0
+      ],
+      "eastIndex": 0,
+      "id": "e00-n07",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 9859584,
+          "level": 0,
+          "maximumHeightM": 1097.7,
+          "minimumHeightM": 118.8,
+          "sampleCount": 257,
+          "sha256": "1187035119e2e66ed9f549c8264579d8746457a0f48e0acc5494662697ba9874",
+          "spacingM": 64.0,
+          "waterFraction": 0.000681
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 9991696,
+          "level": 1,
+          "maximumHeightM": 1090.6,
+          "minimumHeightM": 120.2,
+          "sampleCount": 129,
+          "sha256": "a9a64adc2ed7d5f3a7f96a4952a6243ff4cc7d5bb9494a3ec95d4260a114de95",
+          "spacingM": 128.0,
+          "waterFraction": 0.000661
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 10024992,
+          "level": 2,
+          "maximumHeightM": 1090.6,
+          "minimumHeightM": 126.0,
+          "sampleCount": 65,
+          "sha256": "7c08363d130a840c436b9afe86ed835a5441421866f2b289ff6cfedc52ba6e0e",
+          "spacingM": 256.0,
+          "waterFraction": 0.00071
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 10033456,
+          "level": 3,
+          "maximumHeightM": 1090.6,
+          "minimumHeightM": 126.0,
+          "sampleCount": 33,
+          "sha256": "a66cdc58da5e3bde36ef3295100cfd01dec290806570ed12c0482f7adf1823e1",
+          "spacingM": 512.0,
+          "waterFraction": 0.000918
+        }
+      ],
+      "northIndex": 7
+    },
+    {
+      "boundsLocalM": [
+        -49152.0,
+        49152.0,
+        -32768.0,
+        65536.0
+      ],
+      "eastIndex": 1,
+      "id": "e01-n07",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 10035648,
+          "level": 0,
+          "maximumHeightM": 1264.6,
+          "minimumHeightM": 120.4,
+          "sampleCount": 257,
+          "sha256": "e241c6bca9e03ce10a30a9b96dd9f599ff975b1826e04eb3a1e688329a3586e7",
+          "spacingM": 64.0,
+          "waterFraction": 0.029145
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 10167760,
+          "level": 1,
+          "maximumHeightM": 1251.8,
+          "minimumHeightM": 120.4,
+          "sampleCount": 129,
+          "sha256": "11934e7a4e1e50f8ebec5bc2f1ae62d71eda57ee59138c15fca83684c882d51c",
+          "spacingM": 128.0,
+          "waterFraction": 0.029505
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 10201056,
+          "level": 2,
+          "maximumHeightM": 1236.5,
+          "minimumHeightM": 121.1,
+          "sampleCount": 65,
+          "sha256": "ca60b52f7151ef6415514766ece4f9a6c1204dc41cdaea49aba232292de8b2fd",
+          "spacingM": 256.0,
+          "waterFraction": 0.030769
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 10209520,
+          "level": 3,
+          "maximumHeightM": 1161.5,
+          "minimumHeightM": 121.5,
+          "sampleCount": 33,
+          "sha256": "8acbd9a823a40b8e5c57ca53a3572c7e2cb73e683ff620a844a041f278391adb",
+          "spacingM": 512.0,
+          "waterFraction": 0.02663
+        }
+      ],
+      "northIndex": 7
+    },
+    {
+      "boundsLocalM": [
+        -32768.0,
+        49152.0,
+        -16384.0,
+        65536.0
+      ],
+      "eastIndex": 2,
+      "id": "e02-n07",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 10211712,
+          "level": 0,
+          "maximumHeightM": 1190.5,
+          "minimumHeightM": 134.0,
+          "sampleCount": 257,
+          "sha256": "7e7a02c93816809cf45dd28061af0c2a666fc63d7521686de06375e60111d15d",
+          "spacingM": 64.0,
+          "waterFraction": 0.009508
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 10343824,
+          "level": 1,
+          "maximumHeightM": 1190.5,
+          "minimumHeightM": 134.0,
+          "sampleCount": 129,
+          "sha256": "fb9f7d84b56617a7f26c2dc1aebecb9f41a030b3c5061e244207636909c802c5",
+          "spacingM": 128.0,
+          "waterFraction": 0.008834
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 10377120,
+          "level": 2,
+          "maximumHeightM": 1190.5,
+          "minimumHeightM": 136.4,
+          "sampleCount": 65,
+          "sha256": "f7d51d875cac6d5b3bcf33a9462d0a9f214812dfdc83d6ddbcadc2029a79a47d",
+          "spacingM": 256.0,
+          "waterFraction": 0.008047
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 10385584,
+          "level": 3,
+          "maximumHeightM": 1161.6,
+          "minimumHeightM": 136.4,
+          "sampleCount": 33,
+          "sha256": "777990c135a28f06da936b472a2e17f9bb8e55ad5994fde7ff73847f24cbea07",
+          "spacingM": 512.0,
+          "waterFraction": 0.008264
+        }
+      ],
+      "northIndex": 7
+    },
+    {
+      "boundsLocalM": [
+        -16384.0,
+        49152.0,
+        0.0,
+        65536.0
+      ],
+      "eastIndex": 3,
+      "id": "e03-n07",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 10387776,
+          "level": 0,
+          "maximumHeightM": 1301.5,
+          "minimumHeightM": 166.1,
+          "sampleCount": 257,
+          "sha256": "48deee780dff2419ca9ccc196dd7fae5034539418d74fbe1f0e1ae0fcc261edd",
+          "spacingM": 64.0,
+          "waterFraction": 0.005693
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 10519888,
+          "level": 1,
+          "maximumHeightM": 1288.6,
+          "minimumHeightM": 168.6,
+          "sampleCount": 129,
+          "sha256": "7fe1ecc626dbc52cc794b65a24afa1cae855501df810f1f5acaf0a79c9e8cd87",
+          "spacingM": 128.0,
+          "waterFraction": 0.005829
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 10553184,
+          "level": 2,
+          "maximumHeightM": 1265.7,
+          "minimumHeightM": 169.9,
+          "sampleCount": 65,
+          "sha256": "bb047df9cf48b0da4f18b61069a4194fc5174f25013b12e09eb3ae42213976fc",
+          "spacingM": 256.0,
+          "waterFraction": 0.004497
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 10561648,
+          "level": 3,
+          "maximumHeightM": 1240.5,
+          "minimumHeightM": 171.5,
+          "sampleCount": 33,
+          "sha256": "f2432c48e4a96744efaf0c39cad6b858e31669ff7fc6a748ae73ace93e0a63b9",
+          "spacingM": 512.0,
+          "waterFraction": 0.002755
+        }
+      ],
+      "northIndex": 7
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        49152.0,
+        16384.0,
+        65536.0
+      ],
+      "eastIndex": 4,
+      "id": "e04-n07",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 10563840,
+          "level": 0,
+          "maximumHeightM": 1517.5,
+          "minimumHeightM": 338.7,
+          "sampleCount": 257,
+          "sha256": "11659da84ea5ac7f4e2e579c9b172a1a2207c07bea32d4196698631ac7ec3098",
+          "spacingM": 64.0,
+          "waterFraction": 0.0
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 10695952,
+          "level": 1,
+          "maximumHeightM": 1517.5,
+          "minimumHeightM": 338.7,
+          "sampleCount": 129,
+          "sha256": "8be0938daf33330497f7d4c882d712f2840b121a89466e6fad3af1d672bccc21",
+          "spacingM": 128.0,
+          "waterFraction": 0.0
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 10729248,
+          "level": 2,
+          "maximumHeightM": 1491.2,
+          "minimumHeightM": 338.7,
+          "sampleCount": 65,
+          "sha256": "a72a378b323553d3da70b88ec2cbe49face2a4b7e2922530ba9de3bc9916789f",
+          "spacingM": 256.0,
+          "waterFraction": 0.0
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 10737712,
+          "level": 3,
+          "maximumHeightM": 1446.2,
+          "minimumHeightM": 338.7,
+          "sampleCount": 33,
+          "sha256": "26f0cff1acdfba83b575f747cda23d4661134332e4189d81d2d5698982c37c94",
+          "spacingM": 512.0,
+          "waterFraction": 0.0
+        }
+      ],
+      "northIndex": 7
+    },
+    {
+      "boundsLocalM": [
+        16384.0,
+        49152.0,
+        32768.0,
+        65536.0
+      ],
+      "eastIndex": 5,
+      "id": "e05-n07",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 10739904,
+          "level": 0,
+          "maximumHeightM": 1194.5,
+          "minimumHeightM": 89.3,
+          "sampleCount": 257,
+          "sha256": "6e747a0919aee35971bf73a125414a157f1c9f2b5bc8f60a8cdb4a02907bf31b",
+          "spacingM": 64.0,
+          "waterFraction": 0.00922
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 10872016,
+          "level": 1,
+          "maximumHeightM": 1184.4,
+          "minimumHeightM": 90.6,
+          "sampleCount": 129,
+          "sha256": "c50b05ee04f761db81c47ff8e62c10c59861a9c39b296668d01386cd9531efa0",
+          "spacingM": 128.0,
+          "waterFraction": 0.008954
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 10905312,
+          "level": 2,
+          "maximumHeightM": 1184.4,
+          "minimumHeightM": 93.6,
+          "sampleCount": 65,
+          "sha256": "2ddb33fcb6b3eb20ed13b5dd584f2d8db03935aeff1550adc1697d9964b04620",
+          "spacingM": 256.0,
+          "waterFraction": 0.008994
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 10913776,
+          "level": 3,
+          "maximumHeightM": 1170.6,
+          "minimumHeightM": 110.7,
+          "sampleCount": 33,
+          "sha256": "202519b59e75f136b5d5eb2d1e281289ee23cd5b5a1d63827ede2ec587e94514",
+          "spacingM": 512.0,
+          "waterFraction": 0.006428
+        }
+      ],
+      "northIndex": 7
+    },
+    {
+      "boundsLocalM": [
+        32768.0,
+        49152.0,
+        49152.0,
+        65536.0
+      ],
+      "eastIndex": 6,
+      "id": "e06-n07",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 10915968,
+          "level": 0,
+          "maximumHeightM": 1085.2,
+          "minimumHeightM": 218.8,
+          "sampleCount": 257,
+          "sha256": "c24f33b8b892956dbb8afb04fd974c52442820a4488171eaa697ececc68c7bc5",
+          "spacingM": 64.0,
+          "waterFraction": 0.001802
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 11048080,
+          "level": 1,
+          "maximumHeightM": 1085.2,
+          "minimumHeightM": 218.8,
+          "sampleCount": 129,
+          "sha256": "24a1fe1a249033b463fb4d63888276983fe247677ac1808702832b10b3b1ccdc",
+          "spacingM": 128.0,
+          "waterFraction": 0.001923
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 11081376,
+          "level": 2,
+          "maximumHeightM": 1085.2,
+          "minimumHeightM": 218.8,
+          "sampleCount": 65,
+          "sha256": "50431dfa2f156f075ef7425f520ee33630994347f636860110218f3d43704969",
+          "spacingM": 256.0,
+          "waterFraction": 0.001657
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 11089840,
+          "level": 3,
+          "maximumHeightM": 1024.4,
+          "minimumHeightM": 222.0,
+          "sampleCount": 33,
+          "sha256": "1e3c6c8ded521f41a7457b4676dc9b6a74d5464f7b6c2042702923cbbea71db2",
+          "spacingM": 512.0,
+          "waterFraction": 0.000918
+        }
+      ],
+      "northIndex": 7
+    },
+    {
+      "boundsLocalM": [
+        49152.0,
+        49152.0,
+        65536.0,
+        65536.0
+      ],
+      "eastIndex": 7,
+      "id": "e07-n07",
+      "lods": [
+        {
+          "byteLength": 132098,
+          "byteOffset": 11092032,
+          "level": 0,
+          "maximumHeightM": 1222.5,
+          "minimumHeightM": 9.2,
+          "sampleCount": 257,
+          "sha256": "bbf148b7f537c9c256c41199ed2040fa7e1596ce4cce97531dbfce463aa406a5",
+          "spacingM": 64.0,
+          "waterFraction": 0.0124
+        },
+        {
+          "byteLength": 33282,
+          "byteOffset": 11224144,
+          "level": 1,
+          "maximumHeightM": 1218.3,
+          "minimumHeightM": 9.2,
+          "sampleCount": 129,
+          "sha256": "dbd94866aeba9c517f2851d3954d33f15c55610756baedb057aa797aaa022827",
+          "spacingM": 128.0,
+          "waterFraction": 0.012019
+        },
+        {
+          "byteLength": 8450,
+          "byteOffset": 11257440,
+          "level": 2,
+          "maximumHeightM": 1218.3,
+          "minimumHeightM": 10.1,
+          "sampleCount": 65,
+          "sha256": "b1fed13aafcbbd2042352c84922d76287e7f76bcc63ede67a9b25d626a44106c",
+          "spacingM": 256.0,
+          "waterFraction": 0.011598
+        },
+        {
+          "byteLength": 2178,
+          "byteOffset": 11265904,
+          "level": 3,
+          "maximumHeightM": 1218.3,
+          "minimumHeightM": 10.1,
+          "sampleCount": 33,
+          "sha256": "14d691e444e35ee615896844075fd8659a4771f5dd4fbd99007676d005c20e9a",
+          "spacingM": 512.0,
+          "waterFraction": 0.011019
+        }
+      ],
+      "northIndex": 7
+    }
+  ],
+  "displayName": "Kaesong\u2013Iron Triangle\u2013Hwachon",
+  "horizontalCrs": "EPSG:32652",
+  "preview": {
+    "byteLength": 2154659,
+    "sha256": "712910a05204c35e475c5b9cf7cdf4ffffa32a2dacc2a1b6235e3267a3c54121",
+    "uri": "central-front-preview.png"
+  },
+  "quantization": {
+    "metresPerUnit": 0.1,
+    "rowOrder": "south-to-north",
+    "storage": "little-endian-signed-int16",
+    "waterSentinel": -32768
+  },
+  "referenceOrigin": {
+    "eastingM": 338232.271543,
+    "latitude": 38.3,
+    "longitude": 127.15,
+    "northingM": 4240720.442914
+  },
+  "schemaVersion": "1.0.0",
+  "simulationTruth": {
+    "byteLength": 2101314,
+    "height": 1025,
+    "maximumHeightM": 1517.5,
+    "minimumHeightM": 0.6,
+    "sha256": "d9b054da29d5ceee12374301bb6f9023d0ca958d2418fbc83dc92f1842262702",
+    "spacingM": 128.0,
+    "uri": "central-front.truth",
+    "waterFraction": 0.026575,
+    "width": 1025
+  },
+  "source": {
+    "edition": "04",
+    "modifiedData": true,
+    "productId": "cop-dem-glo-30-aws-edition-04",
+    "requiredNotices": [
+      "produced using Copernicus WorldDEM-30 \u00a9 DLR e.V. 2010-2014 and \u00a9 Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30."
+    ],
+    "sourceLockId": "source-lock.korea-terrain.v1"
+  },
+  "terrainId": "terrain.korea.central-front.v1",
+  "tileSpanM": 16384.0,
+  "verticalCrs": "EPSG:3855"
+}
