@@ -22,6 +22,36 @@ heights with a dedicated water sentinel:
 The canonical source lock already declares the whole-peninsula envelope. Additional runtime
 regions use the same geodetic index and builder contract; no region invents a second Korea.
 
+## R2 delivery
+
+Published web packs live in the isolated `guns-only-terrain-prod` Cloudflare R2 bucket. Treat
+object keys as immutable: use a version prefix containing the bundle SHA-256, upload every file
+with `Cache-Control: public, max-age=31536000, immutable`, and point the game at the manifest. The
+manifest's relative URIs keep its bundle and preview in the same version prefix.
+
+The first verified pilot is under
+`korea-v1-central-front-18dc413e6ac15110/`. Its temporary public endpoint is:
+
+```text
+https://pub-5be4f759b3b24bff8e135c34d60fdcbe.r2.dev/
+```
+
+The `r2.dev` hostname is for validation, not the production game. Before switching the runtime,
+attach a Cloudflare-managed custom hostname to the bucket and use that hostname for the manifest.
+The account currently has no managed zone, so this is the only remaining infrastructure step.
+
+Apply and verify the public, read-only browser policy with the repository-owned configuration:
+
+```sh
+npx wrangler r2 bucket cors set guns-only-terrain-prod \
+  --file tools/terrain/r2-cors.json
+npx wrangler r2 bucket cors list guns-only-terrain-prod
+```
+
+The wildcard origin is intentional for public terrain bytes. The bucket remains read-only over
+HTTP, while writes continue to require authenticated Cloudflare tooling. `GET`, `HEAD`, and the
+`Range` request header are the only browser capabilities the runtime needs.
+
 Required notice for these modified products:
 
 > produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH
