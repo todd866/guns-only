@@ -354,23 +354,71 @@ test("storage failures return 503 so the browser retains the exact pending batch
 
 test("deployment config limits immutable caching to SHA-versioned heavy pack assets", async () => {
   const config = JSON.parse(await readFile(new URL("../vercel.json", `file://${__filename}`), "utf8"));
-  assert.deepEqual(config.headers.map((rule) => rule.source), [
+
+  // Immutable caching must stay limited to the SHA-versioned heavy pack assets. Additional non-cache
+  // header rules (e.g. the app-shell security headers) are allowed, but must not set Cache-Control,
+  // so the shell can never be pinned to an immutable cache.
+  const setsCacheControl = (rule) =>
+    (rule.headers ?? []).some((header) => header.key.toLowerCase() === "cache-control");
+  const cacheRules = config.headers.filter(setsCacheControl);
+  assert.deepEqual(cacheRules.map((rule) => rule.source), [
     "/content/packs/(.*)\\.glb",
     "/content/packs/(.*)\\.terrain",
     "/content/packs/(.*)\\.ktx2",
     "/content/packs/(.*)\\.png",
     "/content/packs/(.*)\\.webp",
   ]);
-  for (const rule of config.headers) {
+  for (const rule of cacheRules) {
     assert.deepEqual(rule.has, [{ type: "query", key: "sha256", value: "^[0-9a-f]{64}$" }]);
     assert.deepEqual(rule.headers, [{
       key: "Cache-Control",
       value: "public, max-age=31536000, immutable",
     }]);
   }
+  assert.doesNotMatch(JSON.stringify(cacheRules), /app\.js|hud\.js|_framework|\.json/);
 
-  const serializedRules = JSON.stringify(config.headers);
-  assert.doesNotMatch(serializedRules, /app\.js|hud\.js|_framework|\.json/);
+  for (const rule of config.headers.filter((rule) => !setsCacheControl(rule))) {
+    assert.ok(rule.headers.every((header) => header.key.toLowerCase() !== "cache-control"),
+      `non-cache rule for ${rule.source} must not introduce caching`);
+  }
+});
+
+test("telemetry write endpoint rate-limits a single client IP (defense-in-depth)", async () => {
+  const previousMax = process.env.TELEMETRY_RATE_LIMIT_MAX;
+  process.env.TELEMETRY_RATE_LIMIT_MAX = "2";
+  try {
+    await withTelemetryEnvironment(
+      async () => ({ ok: true, status: 200, text: async () => "" }),
+      async () => {
+        // A distinct IP keeps this test isolated from the shared default bucket used by others.
+        const headers = {
+          host: "guns-only.vercel.app",
+          origin: "https://guns-only.vercel.app",
+          "content-type": "application/json",
+          "x-real-ip": "203.0.113.51",
+        };
+        const post = async () => {
+          const response = responseRecorder();
+          await telemetry({
+            method: "POST",
+            headers,
+            body: { session: "ratelimit", batchId: "batch-ratelimit-0001", rows: [{ k: "st", tick: 1 }] },
+          }, response);
+          return response;
+        };
+
+        assert.equal((await post()).statusCode, 204, "first request within the limit is accepted");
+        assert.equal((await post()).statusCode, 204, "second request within the limit is accepted");
+        const limited = await post();
+        assert.equal(limited.statusCode, 429, "third request exceeds the per-IP window and is refused");
+        assert.equal(limited.headers.get("retry-after"), "60");
+      },
+      "production",
+    );
+  } finally {
+    if (previousMax === undefined) delete process.env.TELEMETRY_RATE_LIMIT_MAX;
+    else process.env.TELEMETRY_RATE_LIMIT_MAX = previousMax;
+  }
 });
 
 test("recorder losslessly encodes retained 20 Hz samples and batches uploads every 30 seconds", async () => {

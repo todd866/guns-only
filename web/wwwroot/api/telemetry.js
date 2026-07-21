@@ -17,6 +17,14 @@ const MAX_JSONL_BYTES = 2 * 1024 * 1024;
 const MAX_REQUEST_BYTES = MAX_JSONL_BYTES + 64 * 1024;
 const gzipAsync = promisify(gzip);
 
+// Best-effort per-IP write throttle. Vercel Fluid Compute reuses instances, so this meaningfully
+// bounds a single-source flood of the unauthenticated Blob writer; it is defense-in-depth, not a
+// substitute for a Vercel Firewall rate rule (the authoritative control), which should also be set.
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_DEFAULT_MAX = 120;
+const RATE_LIMIT_MAX_TRACKED_IPS = 10_000;
+const rateLimitBuckets = new Map();
+
 class BlobHttpError extends Error {
   constructor(status, detail) {
     super(`Vercel Blob returned ${status}${detail ? `: ${detail}` : ""}`);
@@ -147,6 +155,41 @@ function declaredBodyIsTooLarge(request) {
   if (rawLength === undefined) return false;
   const length = Number(rawLength);
   return Number.isFinite(length) && length > MAX_REQUEST_BYTES;
+}
+
+function rateLimitMaxWrites() {
+  const configured = Number(process.env.TELEMETRY_RATE_LIMIT_MAX);
+  return Number.isFinite(configured) && configured > 0 ? configured : RATE_LIMIT_DEFAULT_MAX;
+}
+
+function clientIp(request) {
+  const realIp = firstHeader(request, "x-real-ip");
+  if (typeof realIp === "string" && realIp.trim()) return realIp.trim();
+  const forwarded = firstHeader(request, "x-forwarded-for");
+  if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
+  return "unknown";
+}
+
+// Fixed-window per-IP counter. Returns true when this request should be rejected. Expired buckets
+// are swept lazily, and if the map stays saturated with live buckets we refuse new IPs rather than
+// let the limiter itself grow without bound.
+function rateLimitExceeded(request, now) {
+  const ip = clientIp(request);
+  let bucket = rateLimitBuckets.get(ip);
+  if (!bucket || now - bucket.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    if (rateLimitBuckets.size >= RATE_LIMIT_MAX_TRACKED_IPS) {
+      for (const [key, value] of rateLimitBuckets) {
+        if (now - value.windowStart >= RATE_LIMIT_WINDOW_MS) rateLimitBuckets.delete(key);
+      }
+      if (rateLimitBuckets.size >= RATE_LIMIT_MAX_TRACKED_IPS && !rateLimitBuckets.has(ip)) {
+        return true;
+      }
+    }
+    bucket = { count: 0, windowStart: now };
+    rateLimitBuckets.set(ip, bucket);
+  }
+  bucket.count += 1;
+  return bucket.count > rateLimitMaxWrites();
 }
 
 function uploadUrl(pathname) {
@@ -295,6 +338,11 @@ module.exports = async function telemetry(request, response) {
   }
   if (declaredBodyIsTooLarge(request)) {
     finish(response, 413, "Telemetry request is too large");
+    return;
+  }
+  if (rateLimitExceeded(request, Date.now())) {
+    response.setHeader("Retry-After", "60");
+    finish(response, 429, "Too many telemetry requests");
     return;
   }
 

@@ -418,26 +418,6 @@ class CombatHud {
     ctx.stroke();
   }
 
-  drawFrameWash() {
-    const ctx = this.ctx;
-    const vignette = ctx.createRadialGradient(
-      this.width * 0.5,
-      this.height * 0.48,
-      Math.min(this.width, this.height) * 0.16,
-      this.width * 0.5,
-      this.height * 0.5,
-      Math.max(this.width, this.height) * 0.72,
-    );
-    vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
-    vignette.addColorStop(0.72, "rgba(0, 8, 11, 0.025)");
-    vignette.addColorStop(1, "rgba(0, 5, 8, 0.22)");
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, this.width, this.height);
-
-    ctx.fillStyle = "rgba(100, 255, 190, 0.018)";
-    for (let y = 0; y < this.height; y += 4) ctx.fillRect(0, y, this.width, 1);
-  }
-
   getTapeInset() {
     return this.getLayout().tapeInset;
   }

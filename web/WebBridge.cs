@@ -123,10 +123,6 @@ public static partial class WebBridge {
     }
 
     [JSExport]
-    public static void ToggleDeckConfiguration() =>
-        SetDeckConfiguration(GetDeckConfiguration() == 0 ? 1 : 0);
-
-    [JSExport]
     public static void Advance(double deltaSeconds) => Session.Advance(deltaSeconds);
 
     /// <summary>
@@ -515,13 +511,13 @@ public static partial class WebBridge {
             + $"\"opponent_replacement_pending\":{(Session.OpponentReplacementPending ? "true" : "false")},"
             + $"\"opponent_replacement_s\":{Session.OpponentReplacementSeconds:F3},"
             + $"\"splash_cue\":{(splashCue ? "true" : "false")},"
-            + $"\"transition_cue\":\"{transitionCue}\","
-            + $"\"configuration_target\":\"{configurationTarget}\","
+            + $"\"transition_cue\":{JsonString(transitionCue)},"
+            + $"\"configuration_target\":{JsonString(configurationTarget)},"
             + $"\"configuration_automatic\":{(Session.ConfigurationAutomationEnabled ? "true" : "false")},"
             + $"\"configuration_transition\":{(Session.ConfigurationTransitionActive ? "true" : "false")},"
             + $"\"configuration_gear_auto\":{(Session.AutomaticGearSelection ? "true" : "false")},"
             + $"\"configuration_flap_auto\":{(Session.AutomaticFlapSelection ? "true" : "false")},"
-            + $"\"configuration_cue\":\"{configurationCue}\","
+            + $"\"configuration_cue\":{JsonString(configurationCue)},"
             // Legacy frozen drives a mobile CSS interlock; Ready/Paused use their dedicated fields.
             + $"\"below_ground\":{(playerPosition.Y <= surfaceAltitudeM ? "true" : "false")},\"frozen\":false,"
             + $"\"shots_total\":{Session.ShotsTotal},\"shots_in_window\":{Session.ShotsInWindow},"
@@ -570,41 +566,18 @@ public static partial class WebBridge {
             + $"\"mode\":\"{mode}\",\"wave_off\":{(waveOff ? "true" : "false")},"
             + lsoJson
             + CarrierJson(simulationPosition)
-            + $"\"context\":\"{context}\",\"beat\":\"{_beat.Name}\""
+            + $"\"context\":{JsonString(context)},\"beat\":{JsonString(_beat.Name)}"
             + "}";
     }
 
-    static string NullableNumberJson(double? value) => value is { } number
-        && double.IsFinite(number)
-            ? number.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
-            : "null";
+    // The flat browser snapshot's JSON primitives live in the plain, testable SnapshotJson helper
+    // (sim.Tests links and exercises it). These thin delegates keep every existing call site
+    // unchanged while removing the duplicate implementation.
+    static string NullableNumberJson(double? value) => SnapshotJson.NullableNumberJson(value);
 
-    static string FiniteNumberJson(double value) => double.IsFinite(value)
-        ? value.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)
-        : "null";
+    static string FiniteNumberJson(double value) => SnapshotJson.FiniteNumberJson(value);
 
-    static string JsonString(string? value) {
-        var json = new System.Text.StringBuilder((value?.Length ?? 0) + 2);
-        json.Append('"');
-        foreach (char character in value ?? "") {
-            switch (character) {
-                case '"': json.Append("\\\""); break;
-                case '\\': json.Append("\\\\"); break;
-                case '\b': json.Append("\\b"); break;
-                case '\f': json.Append("\\f"); break;
-                case '\n': json.Append("\\n"); break;
-                case '\r': json.Append("\\r"); break;
-                case '\t': json.Append("\\t"); break;
-                default:
-                    if (character < 0x20)
-                        json.Append("\\u").Append(((int)character).ToString("x4"));
-                    else
-                        json.Append(character);
-                    break;
-            }
-        }
-        return json.Append('"').ToString();
-    }
+    static string JsonString(string? value) => SnapshotJson.JsonString(value);
 
     /// <summary>
     /// Slowly changing cloud-definition contract for the browser volume renderer. The exact
@@ -749,7 +722,7 @@ public static partial class WebBridge {
         };
         return "\"maintenance_scenario\":true,"
             + $"\"maintenance_state\":\"{state}\","
-            + $"\"maintenance_instruction\":\"{scenario.PilotInstruction}\","
+            + $"\"maintenance_instruction\":{JsonString(scenario.PilotInstruction)},"
             + $"\"maintenance_score\":{scenario.Score},"
             + $"\"maintenance_max_score\":{scenario.MaximumScore},"
             + $"\"maintenance_demerits\":{scenario.DemeritCount},"
@@ -767,7 +740,7 @@ public static partial class WebBridge {
             + $"\"weapons_inhibited\":{(evaluation.WeaponsInhibited ? "true" : "false")},"
             + $"\"player_trigger_interlocked\":{(evaluation.PlayerTriggerInterlocked ? "true" : "false")},"
             + $"\"weapons_hot_cue\":{(evaluation.WeaponsHotCueActive ? "true" : "false")},"
-            + $"\"weapons_state_cue\":\"{evaluation.WeaponsStateCue}\","
+            + $"\"weapons_state_cue\":{JsonString(evaluation.WeaponsStateCue)},"
             + $"\"first_pass_complete\":{(evaluation.FirstPassComplete ? "true" : "false")},"
             + $"\"visual_merge_score\":{evaluation.Score},"
             + $"\"minimum_merge_range_m\":{evaluation.MinimumMergeRangeM:F1},"
@@ -812,7 +785,7 @@ public static partial class WebBridge {
             + $"\"drone_raid_average_ttn_s\":{evaluation.AverageTimeToNeutralizeSeconds:F2},"
             + $"\"drone_raid_rounds_per_kill\":{evaluation.RoundsPerKill:F2},"
             + $"\"drone_raid_tail_chase\":{(evaluation.TailChaseGeometry ? "true" : "false")},"
-            + $"\"drone_raid_cue\":\"{evaluation.Cue}\",";
+            + $"\"drone_raid_cue\":{JsonString(evaluation.Cue)},";
     }
 
     /// Stable pack/profile identity and entity-to-presentation bindings for the current snapshot.
@@ -857,7 +830,7 @@ public static partial class WebBridge {
         return $"\"snapshot_schema_version\":\"{SnapshotSchemaVersion}\","
             + $"\"pack_id\":\"{packId}\",\"pack_version\":\"{packVersion}\","
             + $"\"content_pack_uri\":{packUriJson},"
-            + $"\"mission_definition_id\":\"{mission.Id}\","
+            + $"\"mission_definition_id\":{JsonString(mission.Id)},"
             + $"\"mission_era\":\"{mission.Era}\","
             + $"\"rules_of_engagement\":\"{mission.RulesOfEngagement}\","
             + $"\"public_data_surrogate\":{(mission.PublicDataSurrogate ? "true" : "false")},"
@@ -869,19 +842,19 @@ public static partial class WebBridge {
             + $"\"input_profile_id\":\"{FixedWingInputProfileId}\","
             + $"\"audio_profile_id\":{audioProfileJson},"
             + $"\"effects_profile_id\":\"{FixedWingEffectsProfileId}\","
-            + $"\"player_aircraft_id\":\"{player.Id}\","
-            + $"\"player_aircraft_name\":\"{player.DisplayName}\","
-            + $"\"player_systems_profile_id\":\"{player.SystemsProfileId}\","
+            + $"\"player_aircraft_id\":{JsonString(player.Id)},"
+            + $"\"player_aircraft_name\":{JsonString(player.DisplayName)},"
+            + $"\"player_systems_profile_id\":{JsonString(player.SystemsProfileId)},"
             + $"\"player_systems_simulated\":{(player.SystemsSimulated ? "true" : "false")},"
             + $"\"player_entity_id\":\"entity.player.{Session.PlayerSpawnSequence}\","
-            + $"\"player_presentation_id\":\"{player.PresentationId}\","
+            + $"\"player_presentation_id\":{JsonString(player.PresentationId)},"
             + $"\"cockpit_presentation_id\":{cockpitPresentationJson},"
-            + $"\"bandit_aircraft_id\":\"{bandit.Id}\","
-            + $"\"bandit_aircraft_name\":\"{bandit.DisplayName}\","
-            + $"\"bandit_systems_profile_id\":\"{bandit.SystemsProfileId}\","
+            + $"\"bandit_aircraft_id\":{JsonString(bandit.Id)},"
+            + $"\"bandit_aircraft_name\":{JsonString(bandit.DisplayName)},"
+            + $"\"bandit_systems_profile_id\":{JsonString(bandit.SystemsProfileId)},"
             + $"\"bandit_systems_simulated\":{(bandit.SystemsSimulated ? "true" : "false")},"
             + $"\"bandit_entity_id\":\"entity.bandit.{Session.BanditSpawnSequence}\","
-            + $"\"bandit_presentation_id\":\"{bandit.PresentationId}\","
+            + $"\"bandit_presentation_id\":{JsonString(bandit.PresentationId)},"
             + $"\"carrier_entity_id\":{carrierEntityJson},"
             + $"\"carrier_presentation_id\":{carrierPresentationJson},";
     }
@@ -1114,10 +1087,10 @@ public static partial class WebBridge {
             + $"\"in_close_burble\":{inClose:F3},\"in_close\":{(inClose > 0.20 ? "true" : "false")},"
             + $"\"recovery\":\"{recovery}\",\"bolter\":{(recovery == Carrier.Recovery.Bolter ? "true" : "false")},"
             + $"\"wire\":{wire},\"touchdown_quality\":\"{quality}\",\"hook_outcome\":\"{hook}\","
-            + $"\"touchdown_grade\":\"{grade}\",\"touchdown_deviations\":\"{deviations}\","
-            + $"\"touchdown_primary_correction\":\"{correction}\","
-            + $"\"carrier_pass_grade\":\"{passGrade}\",\"carrier_pass_deviations\":\"{passDeviations}\","
-            + $"\"carrier_pass_primary_correction\":\"{passCorrection}\","
+            + $"\"touchdown_grade\":\"{grade}\",\"touchdown_deviations\":{JsonString(deviations)},"
+            + $"\"touchdown_primary_correction\":{JsonString(correction)},"
+            + $"\"carrier_pass_grade\":\"{passGrade}\",\"carrier_pass_deviations\":{JsonString(passDeviations)},"
+            + $"\"carrier_pass_primary_correction\":{JsonString(passCorrection)},"
             + $"\"carrier_pass_phase_summary\":{JsonString(pass.PhaseSummary)},"
             + $"\"carrier_pass_waveoff_required\":{(pass.WaveOffRequired ? "true" : "false")},"
             + $"\"carrier_pass_waveoff_complied\":{(pass.WaveOffComplied ? "true" : "false")},"
