@@ -2,6 +2,12 @@
 
 Status: active authoring contract, 2026-07-21
 
+> **2026-07-22 pivot:** the opening product now leads with an F-22 arcade/roguelite loop and the
+> historical two-era campaign is deferred as later depth — see
+> [ADR-0001](adr-0001-f22-first-arcade-pivot.md). Constitutional decision #1 below ("two equal
+> campaign spines") describes the eventual historical product, not what currently ships; the shipped
+> F-22 "Raptor program" is deliberately not yet bound to this governance contract.
+
 This document governs campaign structure, mission authorship, educational material, historical
 claims, speculative fiction, progression, and representation. It sits above individual mission
 implementations and below the project's product thesis. A mission can be mechanically functional

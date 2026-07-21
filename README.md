@@ -13,13 +13,17 @@ mobile, with nothing to install.
 
 ## The current slice
 
-The playable prototype is a Korean-era swept-wing fighter loop: fly a Sabre/Fury-class jet,
-fight a reactive bandit with ballistic guns, recover aboard a moving straight-deck carrier, and
-launch again. Its reduced-order 6DOF model is tuned around the F-86 energy envelope, while the
-carrier simulation includes wind over deck, burble, moving deck geometry, wire arrestment,
-bolters, and catapult relaunches.
+The playable prototype opens with the F-22: a fast, arcade-leaning guns-only program (the "Raptor
+program") where you fly a public-data F-22A surrogate, fight a reactive bandit with ballistic guns,
+and advance through performance-gated merges before a carrier-recovery conversion. The reduced-order
+6DOF kernel also carries a Sabre-class F-86 energy model used by the carrier-recovery and
+maintenance-test-flight exercises; the carrier simulation includes wind over deck, burble, moving
+deck geometry, wire arrestment, bolters, and catapult relaunches. See
+[docs/adr-0001-f22-first-arcade-pivot.md](docs/adr-0001-f22-first-arcade-pivot.md) for why the
+opening leads with the F-22 rather than the historical Sabre.
 
-This is the first side of a two-era Korean campaign, not the limit of the project. The historical
+The longer-term project is a two-era Korean campaign — deferred behind the F-22 opener as depth for
+repeat players (see ADR-0001), not the current build. The historical
 1950s side grows into early helicopters and maintenance-test-flight sorties. An explicitly
 alternate-history 2030s side returns to the same peninsula for a US--China-shadowed drone proxy
 war after a fictional rapid Taiwan fait accompli that never becomes a direct great-power war.
@@ -94,6 +98,9 @@ Korean terrain tiles and sensor/icing integration are the next consumers of thes
 | Landing gear | **G** |
 | Flaps | **[** retract / **]** extend (hold) |
 | Restart / select exercise | **R / 1–8** |
+
+Landing gear and flaps apply only to airframes that simulate those systems (the carrier-recovery and
+maintenance exercises); the F-22 opener has no retractable gear or flaps.
 
 On mobile, the browser build provides an on-screen throttle, tilt-to-roll, and a fire button.
 

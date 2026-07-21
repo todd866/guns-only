@@ -2,6 +2,12 @@
 
 Status: active direction, 2026-07-19
 
+> **2026-07-22 pivot:** the opening product now leads with an F-22 arcade/roguelite loop; the
+> historical two-era campaign and its governance/terrain machinery are deferred as later depth — see
+> [ADR-0001](adr-0001-f22-first-arcade-pivot.md). The "Korea 1950s first" pack ordering and the
+> migration sequence below predate that decision and describe the eventual historical product. The
+> platform invariants, authoritative-tick order, and engine architecture remain current.
+
 ## Product boundary
 
 Guns Only is a close-range air-combat and maintenance-test-flight platform, not one aircraft
