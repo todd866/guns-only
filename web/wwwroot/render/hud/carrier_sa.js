@@ -100,8 +100,35 @@ export function carrierPadlockEligible(state = {}, radiusM = CARRIER_PADLOCK_RAD
   return distanceM !== null && distanceM <= radiusM;
 }
 
+function banditPadlockEligible(state = {}) {
+  if (!state || typeof state !== "object" || state.replay_external === true
+      || state.finished === true || state.terminal_phase_active === true
+      || token(state.mode) === "TERMINAL") return false;
+  return [state.bx, state.by, state.bz].every((value) => finite(value) !== null)
+    && state.opponent_body_present !== false
+    && state.bandit_alive !== false
+    && state.opponent_alive !== false;
+}
+
+function carrierRecoveryIntent(state = {}) {
+  const mode = token(state?.mode);
+  return state?.maintenance_scenario === true
+    || state?.approach === true
+    || ["APPROACH", "WAVE-OFF", "BOLTER", "ARRESTED", "STOPPED", "CATAPULT"].includes(mode)
+    || token(state?.configuration_target) === "RECOVERY";
+}
+
+export function carrierPadlockSupersededByCombat(state = {}) {
+  return carrierPadlockEligible(state, CARRIER_PADLOCK_RELEASE_RADIUS_M)
+    && banditPadlockEligible(state)
+    && !carrierRecoveryIntent(state);
+}
+
 export function contextualPadlockTarget(state = {}) {
-  return carrierPadlockEligible(state) ? "carrier" : "bandit";
+  const carrierAvailable = carrierPadlockEligible(state);
+  const banditAvailable = banditPadlockEligible(state);
+  return carrierAvailable && (carrierRecoveryIntent(state) || !banditAvailable)
+    ? "carrier" : "bandit";
 }
 
 export function padlockTargetValid(state = {}, target = "bandit") {
@@ -110,11 +137,13 @@ export function padlockTargetValid(state = {}, target = "bandit") {
       || token(state.mode) === "TERMINAL") return false;
   // Acquisition remains the deliberate 12 NM gate. Once selected, one mile of release
   // hysteresis prevents normal ship/aircraft motion at the boundary from chattering the view.
-  if (target === "carrier") return carrierPadlockEligible(state, CARRIER_PADLOCK_RELEASE_RADIUS_M);
-  return [state.bx, state.by, state.bz].every((value) => finite(value) !== null)
-    && state.opponent_body_present !== false
-    && state.bandit_alive !== false
-    && state.opponent_alive !== false;
+  // A recovery-selected boat must not survive the authoritative transition back to combat when
+  // a live bandit is available: release it, then let the pilot deliberately reacquire the threat.
+  if (target === "carrier") {
+    return carrierPadlockEligible(state, CARRIER_PADLOCK_RELEASE_RADIUS_M)
+      && !carrierPadlockSupersededByCombat(state);
+  }
+  return banditPadlockEligible(state);
 }
 
 export function carrierRelativeMotion(state = {}) {

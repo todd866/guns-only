@@ -118,6 +118,11 @@ test("padlock owns a specific contact and exposes an honest accessible lifecycle
   assert.match(appSource,
     /padlockEntityId[\s\S]*?nextBanditEntityId !== padlockEntityId[\s\S]*?releasePadlock\("target changed"\)/,
     "replacement/despawned contacts must explicitly break the old padlock");
+  assert.match(appSource,
+    /padlockTarget === "carrier"[\s\S]*?carrierPadlockSupersededByCombat\(state\)[\s\S]*?releasePadlock\("combat task"\)/,
+    "the trap-to-combat transition must release a stale boat lock before ordinary validity loss");
+  assert.match(appSource, /Boat padlock off · V for bandit/,
+    "the release announcement must explain the task change and teach the next action");
   assert.match(appSource, /state\.pilot_conscious === false[\s\S]*?releasePadlock/,
     "an incapacitated pilot cannot retain supernatural visual tally");
 

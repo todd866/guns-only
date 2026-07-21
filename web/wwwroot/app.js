@@ -51,6 +51,7 @@ import {
   TEST_FLIGHT_ACTIONS,
 } from "./render/systems/test_flight_console.js";
 import {
+  carrierPadlockSupersededByCombat,
   contextualPadlockTarget,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
@@ -1105,6 +1106,8 @@ function releasePadlock(reason = "manual", { announce = true, record = true } = 
   gimbalReturnFast = true;
   const message = reason === "manual"
     ? "Padlock off · forward view"
+    : reason === "combat task"
+      ? "Boat padlock off · V for bandit"
     : `Padlock lost · ${reason}`;
   syncPadlockUi(announce ? message : null);
   if (record) recorder.event("view", "Padlock", {
@@ -5902,6 +5905,9 @@ class FlightView {
     // drone/bandit, survive loss of consciousness, or keep tracking stale/replay geometry.
     if (padlock && state.pilot_conscious === false) {
       releasePadlock("pilot incapacitated");
+    } else if (padlock && padlockTarget === "carrier"
+        && carrierPadlockSupersededByCombat(state)) {
+      releasePadlock("combat task");
     } else if (padlock && !padlockTargetValid(state, padlockTarget)) {
       releasePadlock("target unavailable");
     } else if (padlock && padlockTarget === "bandit" && padlockEntityId

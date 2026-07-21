@@ -5,6 +5,7 @@ import {
   carrierConfigurationCue,
   carrierDistanceM,
   carrierLandingConfigured,
+  carrierPadlockSupersededByCombat,
   carrierPadlockEligible,
   carrierPatternCue,
   carrierRelativeMotion,
@@ -61,7 +62,10 @@ test("padlock validity releases stale boat/replay geometry and preserves combat 
   const carrierState = {
     carrier: true, px: 0, py: 100, pz: 0, cx: 0, cy: 20, cz: 1000,
     bx: 10, by: 100, bz: 500, opponent_body_present: true,
+    configuration_target: "RECOVERY",
   };
+  assert.equal(contextualPadlockTarget(carrierState), "carrier",
+    "recovery intent keeps the boat as the useful reference despite a staged bandit");
   assert.equal(padlockTargetValid(carrierState, "carrier"), true);
   const boundaryState = { ...carrierState, px: 0, py: 100, pz: 0, cy: 20 };
   assert.equal(carrierPadlockEligible({ ...boundaryState, cz: CARRIER_PADLOCK_RADIUS_M + 10 }), false,
@@ -75,6 +79,62 @@ test("padlock validity releases stale boat/replay geometry and preserves combat 
   assert.equal(padlockTargetValid({ ...carrierState, opponent_body_present: false }, "bandit"), false);
   assert.equal(padlockTargetValid({ ...carrierState, bandit_alive: false }, "bandit"), false);
   assert.equal(padlockTargetValid({ ...carrierState, opponent_alive: false }, "bandit"), false);
+});
+
+test("a completed trap and relaunch hands contextual padlock from recovery back to combat", () => {
+  const shared = {
+    carrier: true,
+    px: 0, py: 80, pz: 250,
+    cx: 0, cy: 20, cz: 0,
+    bx: 450, by: 650, bz: 1500,
+    opponent_body_present: true,
+    bandit_alive: true,
+    opponent_alive: true,
+  };
+  const stoppedTrap = {
+    ...shared,
+    mode: "STOPPED",
+    configuration_target: "RECOVERY",
+  };
+  assert.equal(contextualPadlockTarget(stoppedTrap), "carrier");
+  assert.equal(padlockTargetValid(stoppedTrap, "carrier"), true);
+  for (const mode of ["CATAPULT", "WAVE-OFF", "BOLTER"]) {
+    const recoveryTransition = {
+      ...shared,
+      mode,
+      configuration_target: "COMBAT",
+    };
+    assert.equal(contextualPadlockTarget(recoveryTransition), "carrier",
+      `${mode} remains a recovery task even while the jet cleans up`);
+    assert.equal(padlockTargetValid(recoveryTransition, "carrier"), true);
+  }
+
+  const postLaunchCombat = {
+    ...shared,
+    px: 0, py: 110, pz: 600,
+    mode: "FREE",
+    approach: false,
+    configuration_target: "COMBAT",
+  };
+  assert.equal(contextualPadlockTarget(postLaunchCombat), "bandit",
+    "carrier proximity must not outrank a valid threat after automatic combat cleanup");
+  assert.equal(carrierPadlockSupersededByCombat(postLaunchCombat), true);
+  assert.equal(padlockTargetValid(postLaunchCombat, "carrier"), false,
+    "the pre-trap boat lock must release instead of surviving into the dogfight");
+  assert.equal(padlockTargetValid(postLaunchCombat, "bandit"), true);
+
+  assert.equal(contextualPadlockTarget({
+    ...postLaunchCombat,
+    opponent_body_present: false,
+  }), "carrier", "the boat remains a safe fallback when no combat target exists");
+  assert.equal(contextualPadlockTarget({
+    ...postLaunchCombat,
+    maintenance_scenario: true,
+  }), "carrier", "maintenance recovery remains boat-centric even with a staged target body");
+  assert.equal(carrierPadlockSupersededByCombat({
+    ...postLaunchCombat,
+    terminal_phase_active: true,
+  }), false, "terminal invalidation is not misreported as a combat-task handoff");
 });
 
 test("deck-relative track preserves landing-frame signs", () => {
