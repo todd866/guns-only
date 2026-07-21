@@ -92,13 +92,32 @@ else
 fi
 printf '%s\n' "$deployment_output"
 deployment_url=$(printf '%s\n' "$deployment_output" \
-    | awk '/^https:\/\// { url=$0 } END { print url }')
+    | awk '
+        /^https:\/\// { url=$0 }
+        /"url"[[:space:]]*:/ {
+            candidate=$0
+            sub(/^.*"url"[[:space:]]*:[[:space:]]*"/, "", candidate)
+            sub(/".*$/, "", candidate)
+            if (candidate ~ /^https:\/\//) url=candidate
+        }
+        END { print url }
+    ')
 if [ -z "$deployment_url" ]; then
     echo "deploy-web: Vercel did not return a deployment URL" >&2
     exit 1
 fi
 
-verify_deployment() {
+verify_candidate() {
+    deployment=$1
+    "$vercel_cli" curl /_framework/blazor.webassembly.js \
+        --deployment "$deployment" -- \
+        --fail --silent --show-error --output /dev/null
+    "$vercel_cli" curl /_framework/blazor.boot.json \
+        --deployment "$deployment" -- \
+        --fail --silent --show-error --output /dev/null
+}
+
+verify_public() {
     base_url=$1
     curl --fail --silent --show-error --location \
         "$base_url/_framework/blazor.webassembly.js" --output /dev/null
@@ -107,12 +126,13 @@ verify_deployment() {
 }
 
 # Production is created without touching the public aliases. Only a deployment which serves both
-# stable Blazor bootstrap assets is eligible for promotion.
-verify_deployment "$deployment_url"
+# stable Blazor bootstrap assets is eligible for promotion. `vercel curl` supplies the authenticated
+# protection bypass which current Vercel deployments require before they own a public alias.
+verify_candidate "$deployment_url"
 
 if [ "$target" = "--prod" ]; then
     "$vercel_cli" promote "$deployment_url" --yes
-    verify_deployment "https://guns-only.vercel.app"
+    verify_public "https://guns-only.vercel.app"
 fi
 
 echo "deploy-web: verified $deployment_url"
