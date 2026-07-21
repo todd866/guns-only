@@ -118,6 +118,21 @@ public sealed class DetentLayer {
         Command = Command with { Throttle = Throttle };
     }
 
+    /// <summary>
+    /// Hold the physical lever at an externally latched position without changing its manual/auto
+    /// ownership. Pilot-incapacitation logic uses this after Tick so keyboard state may remain
+    /// observable while it cannot walk the actual lever during G-LOC.
+    /// </summary>
+    internal void HoldThrottle(AircraftParams parameters, double throttle) {
+        ArgumentNullException.ThrowIfNull(parameters);
+        if (!double.IsFinite(throttle))
+            throw new ArgumentOutOfRangeException(nameof(throttle));
+        double leverStop = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.65);
+        _throttleLever = System.Math.Clamp(throttle, 0.0, leverStop);
+        Throttle = _throttleLever;
+        Command = Command with { Throttle = Throttle };
+    }
+
     public void Tick(KeyGrammar keys, double nowMs, in AircraftState s, in AircraftParams p, DoctrineAdvice advice, double dt) {
         double maxPerform = Protection.MaxPerformG(s, p, AirspeedMps, AtmosphereModel);
         double overrideMax = Protection.OverrideMaxG(s, p, AirspeedMps, AtmosphereModel);

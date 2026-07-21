@@ -128,6 +128,113 @@ test("drone raid debrief distinguishes containment, penetration, and ownship los
   assert.match(lost.brief, /unresolved raider.*penetration/i);
 });
 
+test("sorties without G-LOC preserve their established copy exactly", () => {
+  const expected = sortieResultCopy({ sortie_outcome: "VICTORY" });
+  const withZeroCount = sortieResultCopy({
+    sortie_outcome: "VICTORY",
+    pilot_g_loc_count: 0,
+    pilot_peak_positive_g: 9.1,
+    pilot_peak_negative_g: -1.4,
+    pilot_push_pull_penalty_g: 0.8,
+  });
+
+  assert.deepEqual(withZeroCount, expected);
+});
+
+test("G-LOC teaching decorates combat, carrier, maintenance, and drone results once", () => {
+  const physiology = {
+    pilot_g_loc_count: 2,
+    pilot_peak_positive_g: 9.24,
+    pilot_peak_negative_g: -1.36,
+    pilot_push_pull_penalty_g: 0.78,
+  };
+  const results = [
+    sortieResultCopy({ ...physiology, sortie_outcome: "VICTORY" }),
+    sortieResultCopy({
+      ...physiology,
+      sortie_outcome: "DEFEAT",
+      carrier: true,
+      player_impact_surface: "FLIGHT_DECK",
+    }),
+    sortieResultCopy({
+      ...physiology,
+      maintenance_scenario: true,
+      maintenance_recovered: true,
+      maintenance_procedure_complete: true,
+      maintenance_score: 100,
+      maintenance_max_score: 100,
+    }),
+    sortieResultCopy({
+      ...physiology,
+      drone_raid_evaluation: true,
+      drone_raid_zero_leakers: true,
+      drone_raid_targets_total: 4,
+      drone_raid_kills: 4,
+    }),
+  ];
+
+  for (const result of results) {
+    assert.match(result.brief, /Pilot G-LOC: 2 episodes \(sortie peak \+9\.2 G/);
+    assert.match(result.brief, /modeled push-pull penalty 0\.8 G after a −1\.4 G push/);
+    assert.match(result.brief, /review unload timing, G-onset rate, and cumulative exposure/i);
+    assert.equal(result.brief.match(/Pilot G-LOC:/g)?.length, 1);
+    assert.doesNotMatch(result.brief, /injur|safe|good G|low G/i);
+  }
+});
+
+test("sub-threshold push-pull state stays out of the concise G-LOC lesson", () => {
+  const result = sortieResultCopy({
+    sortie_outcome: "DRAW",
+    pilot_g_loc_count: 1,
+    pilot_peak_positive_g: 7.45,
+    pilot_peak_negative_g: -0.9,
+    pilot_push_pull_penalty_g: 0.5,
+  });
+
+  assert.match(result.brief, /Pilot G-LOC: 1 episode \(sortie peak \+7\.5 G\)/);
+  assert.doesNotMatch(result.brief, /push-pull|negative|penalty/i);
+});
+
+test("sorties without an Auto-GCAS fly-up preserve established copy exactly", () => {
+  const expected = sortieResultCopy({ sortie_outcome: "VICTORY" });
+  const withInactiveSystem = sortieResultCopy({
+    sortie_outcome: "VICTORY",
+    auto_gcas_available: true,
+    auto_gcas_activation_count: 0,
+    auto_gcas_phase: "ARMED",
+  });
+
+  assert.deepEqual(withInactiveSystem, expected);
+});
+
+test("an Auto-GCAS intervention teaches the procedural response without guessing cause", () => {
+  const result = sortieResultCopy({
+    sortie_outcome: "VICTORY",
+    auto_gcas_activation_count: 2,
+    auto_gcas_override_count: 1,
+  });
+
+  assert.match(result.brief, /Auto-GCAS: 2 fly-ups; 1 pilot paddle override\./);
+  assert.match(result.brief, /valid or uncertain fly-up as a discontinue\/RTB event/i);
+  assert.match(result.brief,
+    /review terrain prediction, recovery G, system status, and control state/i);
+  assert.doesNotMatch(result.brief, /distracted|unconscious|pilot error|saved/i,
+    "a counter alone cannot diagnose why the intervention occurred");
+});
+
+test("G-LOC and Auto-GCAS lessons coexist exactly once", () => {
+  const result = sortieResultCopy({
+    sortie_outcome: "DEFEAT",
+    player_impact_surface: "GROUND",
+    pilot_g_loc_count: 1,
+    pilot_peak_positive_g: 8.7,
+    auto_gcas_activation_count: 1,
+  });
+
+  assert.equal(result.brief.match(/Pilot G-LOC:/g)?.length, 1);
+  assert.equal(result.brief.match(/Auto-GCAS:/g)?.length, 1);
+});
+
 test("app consumes the pure evidence-based debrief module", async () => {
   const app = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
 

@@ -96,6 +96,75 @@
 
     #multiplayer-status[data-phase="off"] { opacity: .48; }
 
+    #pilot-physiology {
+      --pilot-vignette-opacity: 0;
+      --pilot-blackout-opacity: 0;
+      --pilot-redout-opacity: 0;
+      position: fixed;
+      /* Above every in-world HUD, touch and test-flight surface. Boot/fatal and paused meta UI
+         remain deliberately outside the simulated visual channel. */
+      z-index: 15;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    #pilot-physiology[hidden] { display: none; }
+    .run-paused #pilot-physiology { display: none !important; }
+
+    .pilot-physiology-layer {
+      position: absolute;
+      inset: 0;
+      will-change: opacity;
+      transition: opacity 70ms linear;
+    }
+
+    #pilot-physiology-vignette {
+      opacity: var(--pilot-vignette-opacity);
+      background: radial-gradient(
+        ellipse 72% 64% at 50% 48%,
+        rgba(0, 0, 0, 0) 12%,
+        rgba(0, 0, 0, .16) 48%,
+        rgba(0, 0, 0, .98) 100%
+      );
+    }
+
+    #pilot-physiology-blackout {
+      opacity: var(--pilot-blackout-opacity);
+      background: #000;
+    }
+
+    #pilot-physiology-redout {
+      opacity: var(--pilot-redout-opacity);
+      background: radial-gradient(
+        ellipse 76% 68% at 50% 48%,
+        rgba(105, 0, 0, .18) 8%,
+        rgba(142, 0, 0, .64) 68%,
+        rgba(78, 0, 0, .92) 100%
+      );
+    }
+
+    #pilot-physiology-cue {
+      position: absolute;
+      z-index: 1;
+      left: 50%;
+      bottom: calc(var(--safe-bottom) + 18%);
+      transform: translateX(-50%);
+      max-width: min(88vw, 520px);
+      padding: 5px 8px;
+      border-radius: 3px;
+      color: rgba(255, 237, 196, .94);
+      background: rgba(5, 8, 10, .68);
+      font: 800 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .12em;
+      text-align: center;
+      text-shadow: 0 1px 3px #000;
+      white-space: nowrap;
+    }
+
+    #pilot-physiology-cue[hidden] { display: none; }
+    #pilot-physiology-cue[data-level="critical"] { color: #fff; }
+
     #touch-controls {
       position: fixed;
       z-index: 10;
@@ -1247,7 +1316,8 @@
     .incident-replay #hud,
     .incident-replay #touch-controls,
     .incident-replay #test-flight-console,
-    .incident-replay #multiplayer-status { display: none !important; }
+    .incident-replay #multiplayer-status,
+    .incident-replay #pilot-physiology { display: none !important; }
 
     .replay-head,
     .replay-review {
@@ -1467,6 +1537,13 @@
   <canvas id="hud" aria-hidden="true"></canvas>
   <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off" hidden>SOLO · ROOM NOT CONFIGURED</div>
 
+  <div id="pilot-physiology" aria-hidden="true" hidden>
+    <div id="pilot-physiology-vignette" class="pilot-physiology-layer"></div>
+    <div id="pilot-physiology-blackout" class="pilot-physiology-layer"></div>
+    <div id="pilot-physiology-redout" class="pilot-physiology-layer"></div>
+    <output id="pilot-physiology-cue" role="status" aria-live="polite" hidden></output>
+  </div>
+
   <section id="incident-replay-overlay" aria-hidden="true" aria-label="Authoritative carrier incident replay">
     <div class="replay-head">
       <div class="replay-title-row">
@@ -1568,6 +1645,7 @@
         <button class="touch-control touch-utility" type="button" data-hold-key="BracketRight" aria-label="Hold wing flaps down">FLAP<br>DOWN</button>
       </div>
       <div class="touch-actions">
+        <button id="touch-gcas-paddle" class="touch-control touch-wave" type="button" data-hold-key="KeyK" aria-label="Hold Auto-GCAS paddle override" hidden>GCAS<br>PADDLE</button>
         <button class="touch-control" type="button" data-hold-key="Space" aria-label="G-limiter and high-alpha override">LIMIT<br>OVR</button>
         <button class="touch-control touch-fire" type="button" data-hold-key="KeyF">FIRE</button>
       </div>
@@ -1726,7 +1804,7 @@
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 49 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 50 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
@@ -1753,7 +1831,7 @@
   </div>
 
   <script src="./multiplayer-config.js"></script>
-  <script type="module" src="./app.js?v=49"></script>
+  <script type="module" src="./app.js?v=50"></script>
   <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
 </body>
 </html>

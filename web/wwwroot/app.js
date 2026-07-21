@@ -62,6 +62,7 @@ import {
   shouldResetRemoteInterpolation,
 } from "./render/presence/presence_presentation.js";
 import { RemoteAssetResolutionPolicy } from "./render/presence/remote_asset_policy.js";
+import { gTolerancePresentation } from "./render/physiology/g_tolerance_presentation.js";
 import {
   buildTelemetryBatch,
   retainNewestTelemetryRows,
@@ -108,6 +109,9 @@ const bootStatus = document.querySelector("#boot-status");
 const fatalScreen = document.querySelector("#fatal");
 const fatalMessage = document.querySelector("#fatal-message");
 const multiplayerStatus = document.querySelector("#multiplayer-status");
+const pilotPhysiology = document.querySelector("#pilot-physiology");
+const pilotPhysiologyCue = document.querySelector("#pilot-physiology-cue");
+const touchGcasPaddle = document.querySelector("#touch-gcas-paddle");
 const touchControls = document.querySelector("#touch-controls");
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
@@ -296,7 +300,7 @@ const keyMap = new Map([
   ["KeyS", 7],
   ["KeyF", 8],
   ["KeyV", 9],
-  ["KeyK", 10],
+  ["KeyK", 20],
   ["KeyR", 11],
   ["Space", 12],
 ]);
@@ -717,6 +721,35 @@ function renderMultiplayerStatus(status) {
   recorder.context("multiplayer", presenceTelemetryContext(status));
 }
 
+function renderPilotPhysiology(state) {
+  if (touchGcasPaddle) {
+    touchGcasPaddle.hidden = !(state?.auto_gcas_active === true
+      && Number(state?.pilot_control_authority_01) >= 0.55);
+  }
+  if (!pilotPhysiology) return;
+  const presentation = gTolerancePresentation(state);
+  pilotPhysiology.hidden = !presentation.active;
+  pilotPhysiology.setAttribute("aria-hidden", String(!presentation.active));
+  pilotPhysiology.dataset.state = presentation.stage;
+  pilotPhysiology.style.setProperty(
+    "--pilot-vignette-opacity",
+    presentation.vignetteOpacity.toFixed(4),
+  );
+  pilotPhysiology.style.setProperty(
+    "--pilot-blackout-opacity",
+    presentation.blackoutOpacity.toFixed(4),
+  );
+  pilotPhysiology.style.setProperty(
+    "--pilot-redout-opacity",
+    presentation.redoutOpacity.toFixed(4),
+  );
+  if (pilotPhysiologyCue) {
+    pilotPhysiologyCue.hidden = presentation.cue === null;
+    pilotPhysiologyCue.textContent = presentation.cue?.text ?? "";
+    pilotPhysiologyCue.dataset.level = presentation.cue?.level ?? "";
+  }
+}
+
 const MISSION_BRIEFS = Object.freeze({
   1: {
     activity: "dogfight",
@@ -775,17 +808,18 @@ const MISSION_BRIEFS = Object.freeze({
     kicker: "Visual fight · mission 07",
     title: "F-22A vs Su-27S",
     sortie: "Public-data surrogates · guns only",
+    configuration: "F-22 public-data surrogate · guns only · Auto-GCAS armed",
     card: "Take a neutral modern visual merge with guns safe through the first pass.",
-    brief: "Take the neutral high-aspect merge with guns safe through the first pass. Then fight for the rear quarter, preserve IAS, control closure, and let actual projectiles decide the result. No missiles or unmodelled modern sensors.",
+    brief: "Take the neutral high-aspect merge with guns safe through the first pass. Then fight for the rear quarter, preserve IAS, and manage both G onset and duration: 9 G is available, but vision and consciousness are physiological state. Auto-GCAS responds only to predicted terrain collision; hold K to paddle an active fly-up. No missiles or unmodelled modern sensors.",
   },
   8: {
     activity: "defence",
     kicker: "Air defence · mission 08",
     title: "Drone Raid Defence",
     sortie: "Defensive intercept · four sequential raiders",
-    configuration: "F-22 public-data surrogate · 480 rounds · one authoritative target at a time",
+    configuration: "F-22 public-data surrogate · 480 rounds · Auto-GCAS armed · one authoritative target at a time",
     card: "Stop four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring.",
-    brief: "This is a four-raider sequential stream: one target is authoritative at a time, and the next enters only after the current raider is killed or leaks. Fly cutoff geometry, take the first valid gun solution, and protect ammunition; the score rewards zero leakers, quick neutralizations, and rounds per kill.",
+    brief: "This is a four-raider sequential stream: one target is authoritative at a time, and the next enters only after the current raider is killed or leaks. Fly cutoff geometry, take the first valid gun solution, and protect ammunition; the score rewards zero leakers, quick neutralizations, and rounds per kill. Auto-GCAS is terrain-triggered and K is its held paddle override.",
   },
 });
 
@@ -1231,8 +1265,6 @@ function renderPauseUi(state = latestState) {
       ? `Guns hot · ${deck || "axial"} deck`
       : selectedBeat === 6
         ? `Maintenance profile · ${deck || "axial"} deck`
-        : selectedBeat === 7
-          ? "Public-data surrogates · guns only · first pass safe"
         : brief.configuration || "Guns hot · air start";
     readyStart.textContent = `Fly ${brief.title}`;
     readyHint.textContent = background ? "Return to the game to fly" : "Press Enter to fly";
@@ -6737,6 +6769,7 @@ async function boot() {
       recorder.sample(state);
       renderTestFlightConsole(state);
       const presentedState = replayPresentation.presentedState;
+      renderPilotPhysiology(presentedState);
       view.update(presentedState, replayActive ? dt : pauseReasons.size > 0 ? 0 : dt, now / 1000);
       renderIncidentReplay(replayFrame);
       renderPauseUi(state);

@@ -32,6 +32,61 @@ function carrierLossBrief(state) {
   }
 }
 
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatG(value) {
+  return Math.abs(value).toFixed(1);
+}
+
+function withGToleranceLesson(result, state) {
+  const gLocCount = Math.max(0, Math.trunc(finiteNumber(state?.pilot_g_loc_count) ?? 0));
+  if (gLocCount === 0) {
+    return result;
+  }
+
+  const peakPositiveG = finiteNumber(state?.pilot_peak_positive_g);
+  const peakNegativeG = finiteNumber(state?.pilot_peak_negative_g);
+  const pushPullPenaltyG = finiteNumber(state?.pilot_push_pull_penalty_g);
+  const peakCopy = peakPositiveG === null
+    ? "sortie peak +G unavailable"
+    : `sortie peak +${formatG(Math.max(0, peakPositiveG))} G`;
+  const pushPullCopy = pushPullPenaltyG !== null && pushPullPenaltyG > 0.5
+    ? `; modeled push-pull penalty ${formatG(pushPullPenaltyG)} G${peakNegativeG !== null && peakNegativeG < 0
+      ? ` after a −${formatG(peakNegativeG)} G push`
+      : ""}`
+    : "";
+  const episodeCopy = `${gLocCount} ${gLocCount === 1 ? "episode" : "episodes"}`;
+
+  return {
+    ...result,
+    brief: `${result.brief} Pilot G-LOC: ${episodeCopy} (${peakCopy}${pushPullCopy}); review unload timing, G-onset rate, and cumulative exposure.`,
+  };
+}
+
+function withAutoGcasLesson(result, state) {
+  const activations = Math.max(0,
+    Math.trunc(finiteNumber(state?.auto_gcas_activation_count) ?? 0));
+  if (activations === 0) return result;
+
+  const overrides = Math.max(0,
+    Math.trunc(finiteNumber(state?.auto_gcas_override_count) ?? 0));
+  const activationCopy = `${activations} ${activations === 1 ? "fly-up" : "fly-ups"}`;
+  const overrideCopy = overrides > 0
+    ? `; ${overrides} pilot ${overrides === 1 ? "paddle override" : "paddle overrides"}`
+    : "";
+  return {
+    ...result,
+    brief: `${result.brief} Auto-GCAS: ${activationCopy}${overrideCopy}. Treat a valid or uncertain fly-up as a discontinue/RTB event; review terrain prediction, recovery G, system status, and control state before another sortie.`,
+  };
+}
+
+function withSortieLessons(result, state) {
+  return withAutoGcasLesson(withGToleranceLesson(result, state), state);
+}
+
 /**
  * Produce the concise result-card story from authoritative snapshot evidence.
  * Detailed replay analysis is appended separately when the recorded clip is available.
@@ -47,7 +102,7 @@ export function sortieResultCopy(state) {
     const leakers = Math.max(0, Math.round(Number(state.drone_raid_leakers) || 0));
     const ownshipLost = state.drone_raid_ownship_lost === true;
     const zeroLeakers = state.drone_raid_zero_leakers === true;
-    return {
+    return withSortieLessons({
       kicker: "Air-defence debrief",
       title: ownshipLost ? "Ownship Lost" : zeroLeakers ? "Raid Defeated" : "Raid Penetrated",
       brief: ownshipLost
@@ -55,7 +110,7 @@ export function sortieResultCopy(state) {
         : zeroLeakers
           ? `All ${total} staged raiders were neutralized by physical gunfire before the defended ring. Score ${score}/${maximum}.`
           : `${leakers} of ${total} staged raiders crossed the defended ring; ${kills} were neutralized by physical gunfire. Score ${score}/${maximum}.`,
-    };
+    }, state);
   }
 
   if (state?.maintenance_scenario === true) {
@@ -67,39 +122,39 @@ export function sortieResultCopy(state) {
       : 100;
     const recovered = state.maintenance_recovered === true;
     const complete = state.maintenance_procedure_complete === true;
-    return {
+    return withSortieLessons({
       kicker: "Maintenance test-flight debrief",
       title: recovered ? complete ? "Recovery Complete" : "Procedure Incomplete" : "Aircraft Lost",
       brief: recovered
         ? `Aircraft recovered aboard. Evidence-based procedure score ${score}/${maximum}.`
         : `The aircraft was not recovered. Evidence-based procedure score ${score}/${maximum}.`,
-    };
+    }, state);
   }
 
   switch (token(state?.sortie_outcome)) {
     case "VICTORY":
-      return {
+      return withSortieLessons({
         kicker: "Sortie complete",
         title: "Victory",
         brief: "The opponent's damaged flight, physical impact, and wreck settling were simulated before debrief.",
-      };
+      }, state);
     case "DEFEAT":
-      return {
+      return withSortieLessons({
         kicker: "Sortie complete",
         title: "Aircraft Lost",
         brief: carrierLossBrief(state),
-      };
+      }, state);
     case "DRAW":
-      return {
+      return withSortieLessons({
         kicker: "Sortie complete",
         title: "Mutual Kill",
         brief: "Both damaged aircraft were carried through their physical terminal trajectories before debrief.",
-      };
+      }, state);
     default:
-      return {
+      return withSortieLessons({
         kicker: "Sortie complete",
         title: "Fight Complete",
         brief: "The deterministic sortie clock stopped only after the terminal physical state resolved.",
-      };
+      }, state);
   }
 }

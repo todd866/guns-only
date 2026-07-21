@@ -5,6 +5,20 @@ namespace GunsOnly.Sim;
 public sealed class AircraftSim {
     public const double TickHz = 120.0;
     public AircraftState State { get; private set; }
+    /// <summary>
+    /// Latest pilot head-to-foot normal specific force, in multiples of standard gravity.
+    /// Unlike <see cref="LastNz"/>, this is the complete non-gravitational force acceleration
+    /// (aerodynamic, propulsive, and side force) projected onto the aircraft body-up axis. This is
+    /// the authoritative input for pilot-physiology models; LastNz remains the legacy wing-lift
+    /// diagnostic used by the existing flight-model contracts.
+    /// </summary>
+    public double LastPilotNormalAccelerationG { get; private set; } = 1.0;
+    /// <summary>
+    /// True when <see cref="LastPilotNormalAccelerationG"/> came from a complete aerodynamic force
+    /// evaluation or was supplied explicitly by the owner of an external contact phase. External
+    /// kinematics alone do not contain enough information to reconstruct occupant specific force.
+    /// </summary>
+    public bool HasValidPilotNormalAcceleration { get; private set; }
     public double LastNz { get; private set; } = 1.0;
     /// Stage-averaged rolling moment applied by the rigid-body model during the latest fixed tick.
     public double LastRollMomentNm { get; private set; }
@@ -162,11 +176,15 @@ public sealed class AircraftSim {
     /// contact integration). This is internal so presentation cannot move an aircraft. Air data and
     /// body-frame compatibility state are refreshed from the supplied world state.
     /// </summary>
-    internal void AdoptExternalKinematics(in AircraftState state) {
+    internal void AdoptExternalKinematics(in AircraftState state,
+        double? pilotNormalAccelerationG = null) {
         if (!IsFinite(state.Position) || !double.IsFinite(state.Speed)
             || state.Speed < 0.0 || !state.BodyAttitude.IsFinite
             || !state.BodyRates.IsFinite)
             throw new ArgumentOutOfRangeException(nameof(state));
+        if (pilotNormalAccelerationG.HasValue
+            && !double.IsFinite(pilotNormalAccelerationG.Value))
+            throw new ArgumentOutOfRangeException(nameof(pilotNormalAccelerationG));
         State = state with { BodyAttitude = state.BodyAttitude.Normalized() };
         _airVelocity = State.VelocityVector() - WindAt(State.Position);
         _bank = _reportedBank = State.Bank;
@@ -175,6 +193,12 @@ public sealed class AircraftSim {
         Vec3D liftPlane = bodyUp - vhat * bodyUp.Dot(vhat);
         LiftDir = liftPlane.Length < 1e-9 ? bodyUp : liftPlane.Normalized();
         LastNz = 0.0;
+        // Position/velocity/attitude do not reveal the external constraint force. Preserve a
+        // neutral numeric value for defensive consumers, but make its invalidity explicit unless
+        // the contact model supplies its own occupant-normal acceleration (deck support, impact,
+        // catapult pitch, and ballistic wreck motion are materially different cases).
+        LastPilotNormalAccelerationG = pilotNormalAccelerationG ?? 1.0;
+        HasValidPilotNormalAcceleration = pilotNormalAccelerationG.HasValue;
         LastRollMomentNm = 0.0;
         LastAppliedCommand = NeutralExternalCommand(State, LastAppliedCommand.Throttle);
         HasAppliedFlightCommand = false;
@@ -305,6 +329,10 @@ public sealed class AircraftSim {
             configuration, AtmosphereModel);
         _airVelocity = aero.AirVelocity;
         LastNz = aero.Nz;
+        var nonGravitationalAcceleration = aero.Accel + new Vec3D(0.0, FlightModel.G0, 0.0);
+        LastPilotNormalAccelerationG = nonGravitationalAcceleration.Dot(BodyUp)
+            / FlightModel.G0;
+        HasValidPilotNormalAcceleration = true;
         LiftDir = aero.LiftDir;
         var (_, nzMax, nzMin) = FlightModel.ClampNz(State, cmd, _p, AirspeedMps,
             configuration, AtmosphereModel);

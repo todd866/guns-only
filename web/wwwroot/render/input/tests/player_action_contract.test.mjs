@@ -89,6 +89,7 @@ const BRIDGE_ACTIONS = Object.freeze([
   { id: "padlock", code: "KeyV", gkey: "Padlock", behavior: "momentary", help: "V TARGET / BOAT PADLOCK", uiConsumer: /contextualPadlockTarget\(latestState\)/, uiObservable: /hudFrame\.padlockTarget = padlockTarget/ },
   { id: "restart", code: "KeyR", gkey: "Restart", behavior: "momentary", help: "R RESTART", consumer: /key == GKey\.Restart/, uiConsumer: /restartMission\(\)/ },
   { id: "limit-override", code: "Space", gkey: "Override", behavior: "hold", help: "SPACE LIMIT OVERRIDE", consumer: /GKey\.Override/, observable: /requested_g_cmd/ },
+  { id: "auto-gcas-paddle", code: "KeyK", gkey: "AutoGcasOverride", behavior: "hold", help: "K AGCAS PADDLE", consumer: /GKey\.AutoGcasOverride/, observable: /auto_gcas_override_held/ },
   { id: "gear-toggle", code: "KeyG", gkey: "GearToggle", behavior: "momentary", help: "G GEAR", testAction: "gearToggle", consumer: /key == GKey\.GearToggle/, observable: /gear_handle/ },
   { id: "flaps-up", code: "BracketLeft", gkey: "FlapUp", behavior: "hold", help: "[ / ] FLAPS UP / DOWN", testAction: "flapUp", consumer: /GKey\.FlapUp/, observable: /flap_lever/ },
   { id: "flaps-down", code: "BracketRight", gkey: "FlapDown", behavior: "hold", help: "[ / ] FLAPS UP / DOWN", testAction: "flapDown", consumer: /GKey\.FlapDown/, observable: /flap_lever/ },
@@ -106,11 +107,7 @@ test("player action contract preserves the C# GKey ABI and classifies every live
 
   const declared = new Set(BRIDGE_ACTIONS.map((action) => action.code));
   const unclassified = [...mappedCodes.keys()].filter((code) => !declared.has(code));
-  // KeyK is a historical no-op left in the ABI-era map. It is not advertised. Keeping this one
-  // exception explicit prevents another dead key from slipping in; removing KeyK is also valid.
-  assert.deepEqual(unclassified.filter((code) => code !== "KeyK"), []);
-  assert.doesNotMatch(copy, /(?:^|\s)K\s+(?:KNOCK|KIO|ABORT)(?:\s|$)/,
-    "the historical KeyK no-op must never be promised to a player");
+  assert.deepEqual(unclassified, []);
 });
 
 test("every advertised bridge action has help copy, a runtime consumer, and observable truth", () => {
@@ -210,6 +207,13 @@ test("touch pilots can explicitly command gear, both flap directions, and contex
   assert.ok(find("data-hold-key", "BracketLeft"), "mobile surface needs a spring-loaded flap-up button");
   assert.ok(find("data-hold-key", "BracketRight"), "mobile surface needs a spring-loaded flap-down button");
   assert.ok(find("data-pulse-key", "KeyV"), "mobile surface needs the same contextual padlock action as V");
+  const gcasPaddle = find("data-hold-key", "KeyK");
+  assert.ok(gcasPaddle, "touch pilots need the same held Auto-GCAS paddle as keyboard pilots");
+  assert.equal(gcasPaddle.attributes.hidden, "",
+    "the paddle must be absent until an active recoverable fly-up makes it relevant");
+  assert.match(appSource,
+    /touchGcasPaddle\.hidden = !\(state\?\.auto_gcas_active === true[\s\S]*?pilot_control_authority_01\) >= 0\.55/,
+    "the touch paddle must appear only when Auto-GCAS is active and the pilot can operate it");
 
   assert.match(appSource,
     /querySelectorAll\("\[data-hold-key\]"\)[\s\S]*?addEventListener\("pointerdown"[\s\S]*?pressMappedKey\(code, source\)[\s\S]*?addEventListener\("pointerup", endControl\)[\s\S]*?addEventListener\("pointercancel", endControl\)[\s\S]*?addEventListener\("lostpointercapture", endControl\)/,

@@ -33,7 +33,7 @@ public static partial class WebBridge {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.3.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.3.0";
+    const string SnapshotSchemaVersion = "1.4.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -155,6 +155,15 @@ public static partial class WebBridge {
         GunKill _opponentGun = Session.OpponentGun;
         FuelModel _fuel = Session.PlayerFuel;
         AirframeSystems _systems = Session.PlayerSystems;
+        PilotPhysiologyState pilotPhysiology = Session.PilotPhysiologyState;
+        string pilotPhysiologyProfileIdJson = JsonString(
+            Session.PilotPhysiology.Profile.Id);
+        string pilotState = PilotStateToken(Session.PilotState);
+        bool pilotGzValid = _player.HasValidPilotNormalAcceleration;
+        AutoGcasState autoGcas = Session.AutoGcas;
+        AutoGcasPrediction autoGcasPrediction = autoGcas.Prediction;
+        string autoGcasProfileIdJson = JsonString(Session.PlayerAutoGcasCapability.Id);
+        string autoGcasCueJson = JsonString(autoGcas.Cue);
         Carrier? _carrier = Session.Carrier;
         Carrier.Recovery _recovery = Session.Recovery;
         Carrier.TouchdownResult _touchdown = Session.Touchdown;
@@ -370,6 +379,57 @@ public static partial class WebBridge {
             + $"\"stall_load_factor\":{positiveLoadFactor:F3},\"alt_ft\":{playerPosition.Y * 3.28084:F1},"
             + $"\"radar_alt_ft\":{radarAltitudeM * 3.28084:F1},\"vertical_speed_fpm\":{verticalSpeedMps * 196.8504:F1},"
             + $"\"g_actual\":{_player.LastNz:F3},\"g_cmd\":{appliedCommand.GDemand:F3},"
+            + $"\"pilot_physiology_profile_id\":{pilotPhysiologyProfileIdJson},"
+            + $"\"pilot_state\":\"{pilotState}\","
+            + $"\"pilot_gz\":{pilotPhysiology.NormalAccelerationG:F4},"
+            + $"\"pilot_gz_valid\":{(pilotGzValid ? "true" : "false")},"
+            + $"\"pilot_positive_onset_rate_g_per_second\":{pilotPhysiology.PositiveOnsetRateGPerSecond:F4},"
+            + $"\"pilot_negative_onset_rate_g_per_second\":{pilotPhysiology.NegativeOnsetRateGPerSecond:F4},"
+            + $"\"pilot_positive_exposure_g_seconds\":{pilotPhysiology.PositiveExposureGSeconds:F4},"
+            + $"\"pilot_negative_exposure_g_seconds\":{pilotPhysiology.NegativeExposureGSeconds:F4},"
+            + $"\"pilot_effective_retinal_reserve_01\":{pilotPhysiology.EffectiveRetinalResource01:F5},"
+            + $"\"pilot_effective_cerebral_reserve_01\":{pilotPhysiology.EffectiveCerebralResource01:F5},"
+            + $"\"pilot_peripheral_vision_01\":{pilotPhysiology.PeripheralVision01:F5},"
+            + $"\"pilot_central_vision_01\":{pilotPhysiology.VisualAcuity01:F5},"
+            + $"\"pilot_redout_01\":{pilotPhysiology.Redout01:F5},"
+            + $"\"pilot_consciousness_01\":{pilotPhysiology.Consciousness01:F5},"
+            + $"\"pilot_conscious\":{(pilotPhysiology.Consciousness01 > 0.0 ? "true" : "false")},"
+            + $"\"pilot_cognitive_capacity_01\":{pilotPhysiology.CognitiveCapacity01:F5},"
+            + $"\"pilot_control_authority_01\":{pilotPhysiology.ControlAuthority01:F5},"
+            + $"\"pilot_additional_control_delay_seconds\":{pilotPhysiology.AdditionalControlDelaySeconds:F4},"
+            + $"\"pilot_incapacitation_remaining_seconds\":{pilotPhysiology.AbsoluteIncapacitationRemainingSeconds:F4},"
+            + $"\"pilot_agsm_engagement_01\":{pilotPhysiology.TechniqueEngagement01:F5},"
+            + $"\"pilot_push_pull_penalty_g\":{pilotPhysiology.PushPullPenaltyG:F4},"
+            + $"\"pilot_effective_peripheral_loss_g\":{pilotPhysiology.EffectivePositivePeripheralLossG:F4},"
+            + $"\"pilot_effective_blackout_g\":{pilotPhysiology.EffectivePositiveBlackoutG:F4},"
+            + $"\"pilot_effective_loc_g\":{pilotPhysiology.EffectivePositiveLossOfConsciousnessG:F4},"
+            + $"\"pilot_effective_negative_redout_magnitude_g\":{pilotPhysiology.EffectiveNegativeRedoutMagnitudeG:F4},"
+            + $"\"pilot_effective_negative_loc_magnitude_g\":{pilotPhysiology.EffectiveNegativeLossOfConsciousnessMagnitudeG:F4},"
+            + $"\"pilot_control_interlocked\":{(Session.PilotControlInterlocked ? "true" : "false")},"
+            + $"\"pilot_trigger_interlocked\":{(Session.PilotTriggerInterlocked ? "true" : "false")},"
+            + $"\"pilot_g_loc_count\":{Session.PilotGLocCount},"
+            + $"\"pilot_peak_positive_g\":{Session.PilotPeakPositiveG:F4},"
+            + $"\"pilot_peak_negative_g\":{Session.PilotPeakNegativeG:F4},"
+            + $"\"auto_gcas_profile_id\":{autoGcasProfileIdJson},"
+            + $"\"auto_gcas_available\":{(Session.PlayerAutoGcasCapability.Available ? "true" : "false")},"
+            + $"\"auto_gcas_phase\":\"{AutoGcasPhaseToken(autoGcas.Phase)}\","
+            + $"\"auto_gcas_active\":{(autoGcas.Active ? "true" : "false")},"
+            + $"\"auto_gcas_warning\":{(autoGcas.Warning ? "true" : "false")},"
+            + $"\"auto_gcas_cue\":{autoGcasCueJson},"
+            + $"\"auto_gcas_inhibit_reason\":\"{AutoGcasInhibitToken(autoGcas.InhibitReason)}\","
+            + $"\"auto_gcas_override_held\":{(Session.AutoGcasOverrideHeld ? "true" : "false")},"
+            + $"\"auto_gcas_activation_count\":{autoGcas.ActivationCount},"
+            + $"\"auto_gcas_override_count\":{autoGcas.PilotOverrideCount},"
+            + $"\"auto_gcas_release_count\":{autoGcas.ReleaseCount},"
+            + $"\"auto_gcas_active_seconds\":{autoGcas.ActiveSeconds:F4},"
+            + $"\"auto_gcas_prediction_valid\":{(autoGcasPrediction.Valid ? "true" : "false")},"
+            + $"\"auto_gcas_used_fallback_terrain\":{(autoGcasPrediction.UsedFallbackTerrain ? "true" : "false")},"
+            + $"\"auto_gcas_current_clearance_m\":{FiniteNumberJson(autoGcasPrediction.CurrentClearanceM)},"
+            + $"\"auto_gcas_pilot_minimum_clearance_m\":{FiniteNumberJson(autoGcasPrediction.PilotMinimumClearanceM)},"
+            + $"\"auto_gcas_recovery_minimum_clearance_m\":{FiniteNumberJson(autoGcasPrediction.ImmediateRecoveryMinimumClearanceM)},"
+            + $"\"auto_gcas_pilot_violation_time_seconds\":{FiniteNumberJson(autoGcasPrediction.PilotViolationTimeSeconds)},"
+            + $"\"auto_gcas_time_available_seconds\":{FiniteNumberJson(autoGcasPrediction.TimeAvailableToAvoidGroundImpactSeconds)},"
+            + $"\"auto_gcas_pilot_recovery_credited\":{(autoGcasPrediction.PilotRecoveryCredited ? "true" : "false")},"
             + $"\"bank_target_deg\":{appliedCommand.BankTarget * 57.29577951308232:F3},"
             + $"\"roll_control\":{appliedCommand.RollControl:F3},"
             + $"\"pilot_aileron\":{appliedCommand.RollControl:F3},"
@@ -493,6 +553,62 @@ public static partial class WebBridge {
         && double.IsFinite(number)
             ? number.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
             : "null";
+
+    static string FiniteNumberJson(double value) => double.IsFinite(value)
+        ? value.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)
+        : "null";
+
+    static string JsonString(string? value) {
+        var json = new System.Text.StringBuilder((value?.Length ?? 0) + 2);
+        json.Append('"');
+        foreach (char character in value ?? "") {
+            switch (character) {
+                case '"': json.Append("\\\""); break;
+                case '\\': json.Append("\\\\"); break;
+                case '\b': json.Append("\\b"); break;
+                case '\f': json.Append("\\f"); break;
+                case '\n': json.Append("\\n"); break;
+                case '\r': json.Append("\\r"); break;
+                case '\t': json.Append("\\t"); break;
+                default:
+                    if (character < 0x20)
+                        json.Append("\\u").Append(((int)character).ToString("x4"));
+                    else
+                        json.Append(character);
+                    break;
+            }
+        }
+        return json.Append('"').ToString();
+    }
+
+    static string PilotStateToken(PilotOperationalState state) => state switch {
+        PilotOperationalState.Straining => "STRAINING",
+        PilotOperationalState.Grayout => "GRAYOUT",
+        PilotOperationalState.Blackout => "BLACKOUT",
+        PilotOperationalState.GLoc => "G_LOC",
+        PilotOperationalState.Recovering => "RECOVERING",
+        PilotOperationalState.Redout => "REDOUT",
+        _ => "NORMAL"
+    };
+
+    static string AutoGcasPhaseToken(AutoGcasPhase phase) => phase switch {
+        AutoGcasPhase.Armed => "ARMED",
+        AutoGcasPhase.Warning => "WARNING",
+        AutoGcasPhase.FlyUp => "FLY_UP",
+        AutoGcasPhase.Inhibited => "INHIBITED",
+        _ => "UNAVAILABLE"
+    };
+
+    static string AutoGcasInhibitToken(AutoGcasInhibitReason reason) => reason switch {
+        AutoGcasInhibitReason.CapabilityUnavailable => "CAPABILITY_UNAVAILABLE",
+        AutoGcasInhibitReason.Disabled => "DISABLED",
+        AutoGcasInhibitReason.Configuration => "CONFIGURATION",
+        AutoGcasInhibitReason.LowAirspeed => "LOW_AIRSPEED",
+        AutoGcasInhibitReason.TerrainData => "TERRAIN_DATA",
+        AutoGcasInhibitReason.InvalidState => "INVALID_STATE",
+        AutoGcasInhibitReason.PilotOverride => "PILOT_OVERRIDE",
+        _ => "NONE"
+    };
 
     static string GearHandleToken(LandingGearHandle handle) => handle switch {
         LandingGearHandle.Down => "DOWN",

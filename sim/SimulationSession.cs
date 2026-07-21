@@ -26,6 +26,15 @@ public enum ImpactSurface {
     Ground
 }
 public enum FlightConfigurationTarget { Combat, Recovery }
+public enum PilotOperationalState {
+    Normal,
+    Straining,
+    Grayout,
+    Blackout,
+    GLoc,
+    Recovering,
+    Redout
+}
 public enum SessionEventType {
     Hit,
     Destroyed,
@@ -73,6 +82,18 @@ public sealed class SimulationSession {
     GunKill _opponentGun = null!;
     FuelModel _fuel = null!;
     AirframeSystems _systems = null!;
+    PilotPhysiologyModel _pilotPhysiology = null!;
+    AutoGcasState _autoGcasState;
+    PilotCommand _pilotDelayedCommand;
+    bool _pilotCommandResponseInitialized;
+    bool _pilotControlInterlocked;
+    bool _pilotTriggerInterlocked;
+    bool _pilotWasIncapacitated;
+    bool _pilotRecovering;
+    int _pilotGLocCount;
+    double _pilotPeakPositiveG;
+    double _pilotPeakNegativeG;
+    double _pilotHeldThrottle;
     F86EmergencyGearRecoveryScenario? _maintenanceScenario;
     VisualMergeEvaluation? _visualMergeEvaluation;
     DroneRaidEvaluation? _droneRaidEvaluation;
@@ -160,6 +181,20 @@ public sealed class SimulationSession {
     public GunKill OpponentGun => _opponentGun;
     public FuelModel PlayerFuel => _fuel;
     public AirframeSystems PlayerSystems => _systems;
+    public PilotPhysiologyModel PilotPhysiology => _pilotPhysiology;
+    public PilotPhysiologyState PilotPhysiologyState => _pilotPhysiology.State;
+    public PilotOperationalState PilotState => ResolvePilotOperationalState();
+    public AutoGcasCapabilityProfile PlayerAutoGcasCapability =>
+        _beat.PlayerAircraft.AutomaticGroundCollisionAvoidance;
+    public AutoGcasState AutoGcas => _autoGcasState;
+    public bool AutoGcasOverrideHeld => PlayerAutoGcasCapability.Available
+        && _pilotPhysiology.State.ControlAuthority01 >= 0.55
+        && _keys.PhaseAt(GKey.AutoGcasOverride, _simTimeMs) != KeyPhase.Idle;
+    public bool PilotControlInterlocked => _pilotControlInterlocked;
+    public bool PilotTriggerInterlocked => _pilotTriggerInterlocked;
+    public int PilotGLocCount => _pilotGLocCount;
+    public double PilotPeakPositiveG => _pilotPeakPositiveG;
+    public double PilotPeakNegativeG => _pilotPeakNegativeG;
     public bool PlayerSystemsSimulated => _beat.PlayerAircraft.SystemsSimulated;
     /// <summary>
     /// Aerodynamic configuration which the active capability is allowed to contribute. A
@@ -212,7 +247,11 @@ public sealed class SimulationSession {
     public bool OpponentTriggerDown => _opponentTriggerDown;
     public bool WeaponsInhibited => _visualMergeEvaluation?.WeaponsInhibited ?? false;
     public bool PlayerWeaponsAuthorized =>
-        _visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true;
+        (_visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true)
+        && !_autoGcasState.Active
+        && !_pilotTriggerInterlocked
+        && _pilotPhysiology.State.ControlImpairment
+            != PilotControlImpairment.Incapacitated;
     // Compatibility projection for the old transient HUD. Terminal destruction is represented by
     // ordered events plus Outcome; a frozen simulation clock must never hold a timed cue forever.
     public bool SplashCueActive => false;
@@ -378,6 +417,10 @@ public sealed class SimulationSession {
         // Once ownship is physically destroyed, input cannot be allowed to reanimate controls or
         // systems. Restart remains available through the early branch above.
         if (_playerTerminalState != AircraftTerminalState.Flying) return;
+        // G-LOC is a control-ownership boundary, not merely a visual effect. Releases still pass
+        // through so held browser keys can cross the required neutral boundary after recovery,
+        // but no new pilot actuator/system press is accepted while controls remain interlocked.
+        if (pressed && _pilotControlInterlocked && IsPilotActuatedAction(key)) return;
         // Capability truth is also an input boundary. Modern/glider prototypes currently expose no
         // simulated undercarriage, flap, hydraulic or inspection system, so accepting these keys
         // would create hidden F-86 configuration drag while the HUD correctly showed no system.
@@ -418,6 +461,27 @@ public sealed class SimulationSession {
         GKey.GearToggle or GKey.FlapUp or GKey.FlapDown
         or GKey.EmergencyGearRelease or GKey.GearHornCutout
         or GKey.ConfirmGearExtensionFailure or GKey.InspectGearDownlocks;
+
+    static bool IsPilotActuatedAction(GKey key) => key is
+        GKey.PullUp or GKey.PushDown or GKey.RollLeft or GKey.RollRight
+        or GKey.RudderLeft or GKey.RudderRight
+        or GKey.ThrottleUp or GKey.ThrottleDown or GKey.Trigger
+        or GKey.Override or GKey.AutoGcasOverride
+        || IsPlayerSystemsAction(key);
+
+    void ReleaseSpringLoadedPilotActuators() {
+        _keys.Feed(GKey.FlapUp, false, _simTimeMs);
+        _keys.Feed(GKey.FlapDown, false, _simTimeMs);
+        _systems.SetFlapLever(WingFlapLever.Hold);
+        _keys.Feed(GKey.EmergencyGearRelease, false, _simTimeMs);
+        if (_maintenanceScenario is { Started: true, Finished: false })
+            _maintenanceScenario.SetEmergencyGearRelease(false, TimeSeconds);
+        else
+            _systems.SetEmergencyGearRelease(false);
+        _keys.Feed(GKey.AutoGcasOverride, false, _simTimeMs);
+        _keys.Feed(GKey.Trigger, false, _simTimeMs);
+        Trigger(false);
+    }
 
     void RefreshFlapLeverFromHeldInput() {
         bool upHeld = _keys.PhaseAt(GKey.FlapUp, _simTimeMs) != KeyPhase.Idle;
@@ -533,6 +597,18 @@ public sealed class SimulationSession {
             AtmosphereModel = _player.AtmosphereModel
         };
         _detents.ConfigureFor(_beat.PlayerAir, _beat.InitialThrottle);
+        _pilotPhysiology = new PilotPhysiologyModel(_beat.PlayerPilotPhysiology);
+        _autoGcasState = AutoGcasState.Initial(PlayerAutoGcasCapability.Available);
+        _pilotDelayedCommand = _detents.Command;
+        _pilotCommandResponseInitialized = true;
+        _pilotControlInterlocked = false;
+        _pilotTriggerInterlocked = false;
+        _pilotWasIncapacitated = false;
+        _pilotRecovering = false;
+        _pilotGLocCount = 0;
+        _pilotPeakPositiveG = 1.0;
+        _pilotPeakNegativeG = 0.0;
+        _pilotHeldThrottle = _detents.Command.Throttle;
         // Built-in combat beats are already airborne and running at their staged power. Seed the
         // operating point so Ready telemetry and the first rendered frame do not claim a stopped
         // engine immediately before the first fixed tick snaps it to the same MIL command.
@@ -706,7 +782,13 @@ public sealed class SimulationSession {
             if (CameraSolver.GunWindow(_player.State, _bandit.State)) _shotsInWindow++;
             _visualMergeEvaluation?.ObserveTriggerPressed(_player.State, _bandit.State);
         }
-        if (!down) _visualMergeEvaluation?.ObserveTriggerReleased();
+        if (!down) {
+            _visualMergeEvaluation?.ObserveTriggerReleased();
+            // G-LOC releases the pilot's grip even if the browser key remains electrically held.
+            // Re-arming requires an observable release made after useful control has returned.
+            if (_pilotPhysiology.State.ControlAuthority01 >= 0.55)
+                _pilotTriggerInterlocked = false;
+        }
         _triggerDown = down;
     }
 
@@ -741,8 +823,7 @@ public sealed class SimulationSession {
     void StepWeapons(in AircraftState playerState, in AircraftState opponentState,
         bool playerTriggerHeld, bool allowNewFire = true) {
         bool weaponsReleased = allowNewFire && !WeaponsInhibited;
-        bool playerWeaponsAuthorized = weaponsReleased
-            && (_visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true);
+        bool playerWeaponsAuthorized = weaponsReleased && PlayerWeaponsAuthorized;
         bool opponentIntent = weaponsReleased && _beat.CombatRules.OpponentAmmo > 0
             && _bandit.WantsToFire(playerState);
         _opponentTriggerDown = opponentIntent
@@ -1178,6 +1259,196 @@ public sealed class SimulationSession {
         _player.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
     }
 
+    PilotOperationalState ResolvePilotOperationalState() {
+        PilotPhysiologyState state = _pilotPhysiology.State;
+        if (state.ControlImpairment == PilotControlImpairment.Incapacitated)
+            return PilotOperationalState.GLoc;
+        if (state.VisualImpairment == PilotVisualImpairment.Redout)
+            return PilotOperationalState.Redout;
+        if (state.VisualImpairment == PilotVisualImpairment.Blackout)
+            return PilotOperationalState.Blackout;
+        if (state.VisualImpairment is PilotVisualImpairment.Greyout
+            or PilotVisualImpairment.TunnelVision
+            or PilotVisualImpairment.PeripheralLoss)
+            return PilotOperationalState.Grayout;
+        if (_pilotRecovering) return PilotOperationalState.Recovering;
+        if (state.ControlImpairment is PilotControlImpairment.Strained
+            or PilotControlImpairment.Degraded)
+            return PilotOperationalState.Straining;
+        return PilotOperationalState.Normal;
+    }
+
+    bool PilotControlsReleased() =>
+        _keys.PhaseAt(GKey.PullUp, _simTimeMs) == KeyPhase.Idle
+        && _keys.PhaseAt(GKey.PushDown, _simTimeMs) == KeyPhase.Idle
+        && _keys.PhaseAt(GKey.RollLeft, _simTimeMs) == KeyPhase.Idle
+        && _keys.PhaseAt(GKey.RollRight, _simTimeMs) == KeyPhase.Idle
+        && _keys.PhaseAt(GKey.RudderLeft, _simTimeMs) == KeyPhase.Idle
+        && _keys.PhaseAt(GKey.RudderRight, _simTimeMs) == KeyPhase.Idle
+        && _keys.PhaseAt(GKey.ThrottleUp, _simTimeMs) == KeyPhase.Idle
+        && _keys.PhaseAt(GKey.ThrottleDown, _simTimeMs) == KeyPhase.Idle
+        && _keys.PhaseAt(GKey.Override, _simTimeMs) == KeyPhase.Idle
+        && _keys.PhaseAt(GKey.AutoGcasOverride, _simTimeMs) == KeyPhase.Idle;
+
+    PilotCommand NeutralPilotCommand(double throttle) => new(
+        GDemand: 1.0,
+        BankTarget: _player.State.Bank,
+        Throttle: throttle,
+        Rudder: 0.0,
+        CommandedPitchRad: double.NaN,
+        EnvelopeOverride: false,
+        RollControl: 0.0,
+        CommandedAlphaRad: double.NaN,
+        SasRollControl: 0.0,
+        DirectLateralControl: true);
+
+    static double BlendAngle(double from, double to, double amount) => from
+        + Math.IEEERemainder(to - from, 2.0 * Math.PI) * amount;
+
+    double BlendOptionalAngle(double from, double to, double amount,
+        double physicalFallback) {
+        if (!double.IsFinite(to)) return double.NaN;
+        double start = double.IsFinite(from) ? from : physicalFallback;
+        return BlendAngle(start, to, amount);
+    }
+
+    PilotCommand BlendPilotCommand(in PilotCommand from, in PilotCommand to,
+        double amount) => new(
+        GDemand: from.GDemand + (to.GDemand - from.GDemand) * amount,
+        BankTarget: BlendAngle(from.BankTarget, to.BankTarget, amount),
+        Throttle: from.Throttle + (to.Throttle - from.Throttle) * amount,
+        Rudder: from.Rudder + (to.Rudder - from.Rudder) * amount,
+        CommandedPitchRad: BlendOptionalAngle(from.CommandedPitchRad,
+            to.CommandedPitchRad, amount, _player.BodyPitchRad),
+        EnvelopeOverride: to.EnvelopeOverride,
+        RollControl: from.RollControl + (to.RollControl - from.RollControl) * amount,
+        CommandedAlphaRad: BlendOptionalAngle(from.CommandedAlphaRad,
+            to.CommandedAlphaRad, amount, _player.AngleOfAttackRad),
+        SasRollControl: from.SasRollControl
+            + (to.SasRollControl - from.SasRollControl) * amount,
+        DirectLateralControl: to.DirectLateralControl);
+
+    /// Translate the previous tick's authoritative physiology into actuator-path truth. Normal
+    /// physiology is bit-for-bit transparent. As cerebral reserve falls, response latency grows
+    /// and available control shrinks around the hands-off 1-G/zero-aileron state. G-LOC releases
+    /// the controls entirely and requires a real neutral input boundary before control can return.
+    PilotCommand ApplyPilotPhysiology(in PilotCommand requested) {
+        PilotPhysiologyState state = _pilotPhysiology.State;
+        if (state.ControlImpairment == PilotControlImpairment.Incapacitated) {
+            _pilotControlInterlocked = true;
+            _pilotTriggerInterlocked = true;
+        }
+        PilotCommand constrainedRequested = requested;
+        if (_pilotControlInterlocked) {
+            // Losing consciousness leaves the physical throttle lever where it was. Detent input
+            // remains observable for release interlocking, but cannot move the lever during G-LOC.
+            _detents.HoldThrottle(_beat.PlayerAir, _pilotHeldThrottle);
+            constrainedRequested = constrainedRequested with {
+                Throttle = _pilotHeldThrottle
+            };
+            PilotCommand neutral = NeutralPilotCommand(_pilotHeldThrottle);
+            _pilotDelayedCommand = neutral;
+            _pilotCommandResponseInitialized = true;
+            if (state.ControlAuthority01 >= 0.55 && PilotControlsReleased())
+                _pilotControlInterlocked = false;
+            else
+                return neutral;
+        }
+
+        if (!_pilotCommandResponseInitialized) {
+            _pilotDelayedCommand = requested;
+            _pilotCommandResponseInitialized = true;
+        }
+        double delay = state.AdditionalControlDelaySeconds;
+        double response = delay <= 1e-6
+            ? 1.0 : 1.0 - Math.Exp(-FixedDeltaSeconds / delay);
+        _pilotDelayedCommand = BlendPilotCommand(
+            _pilotDelayedCommand, constrainedRequested, response);
+
+        double authority = Math.Clamp(state.ControlAuthority01, 0.0, 1.0);
+        if (authority >= 0.999999) return _pilotDelayedCommand;
+        return new PilotCommand(
+            GDemand: 1.0 + (_pilotDelayedCommand.GDemand - 1.0) * authority,
+            BankTarget: BlendAngle(_player.State.Bank,
+                _pilotDelayedCommand.BankTarget, authority),
+            Throttle: _pilotDelayedCommand.Throttle,
+            Rudder: _pilotDelayedCommand.Rudder * authority,
+            CommandedPitchRad: double.IsFinite(_pilotDelayedCommand.CommandedPitchRad)
+                ? BlendAngle(_player.BodyPitchRad,
+                    _pilotDelayedCommand.CommandedPitchRad, authority)
+                : double.NaN,
+            EnvelopeOverride: _pilotDelayedCommand.EnvelopeOverride && authority >= 0.65,
+            RollControl: _pilotDelayedCommand.RollControl * authority,
+            CommandedAlphaRad: double.IsFinite(_pilotDelayedCommand.CommandedAlphaRad)
+                ? BlendAngle(_player.AngleOfAttackRad,
+                    _pilotDelayedCommand.CommandedAlphaRad, authority)
+                : double.NaN,
+            SasRollControl: _pilotDelayedCommand.SasRollControl * authority,
+            DirectLateralControl: _pilotDelayedCommand.DirectLateralControl);
+    }
+
+    /// <summary>
+    /// Apply the aircraft-owned recovery after the effective human control path. The predictor
+    /// therefore sees delayed/degraded/released controls during physiological impairment, but it
+    /// never receives consciousness as a trigger: only a predicted buffered terrain violation can
+    /// command a fly-up. Actual recovery acceleration is integrated by AircraftSim and fed back to
+    /// PilotPhysiology on the same tick, so Auto-GCAS does not magically end a blackout.
+    /// </summary>
+    PilotCommand ApplyAutoGcas(in PilotCommand effectivePilotCommand) {
+        AutoGcasCapabilityProfile capability = PlayerAutoGcasCapability;
+        var result = AutoGcasController.Step(FixedDeltaSeconds, _autoGcasState,
+            new AutoGcasInput(
+                Aircraft: _player.State,
+                AircraftParameters: _beat.PlayerAir,
+                EffectivePilotCommand: effectivePilotCommand,
+                Terrain: _terrainSurface,
+                FallbackSurfaceElevationM: null,
+                Enabled: true,
+                ConfigurationPermitsRecovery: _carrier is null,
+                PilotOverrideHeld: AutoGcasOverrideHeld,
+                IndicatedAirspeedMps: _player.IndicatedAirspeedMps),
+            capability);
+        _autoGcasState = result.State;
+        return result.RecoveryCommand ?? effectivePilotCommand;
+    }
+
+    void StepPilotPhysiology(double normalAccelerationG) {
+        // An unconscious pilot cannot keep actively performing an AGSM. Engagement has its own
+        // physiological release/engagement constants, so effort decays and later rebuilds instead
+        // of switching as an artificial binary protection bonus.
+        double techniqueEffort = _pilotPhysiology.State.ControlImpairment
+                == PilotControlImpairment.Incapacitated
+            ? 0.0 : _pilotPhysiology.Profile.Technique.NominalEffort01;
+        PilotPhysiologyState next = _pilotPhysiology.Step(FixedDeltaSeconds,
+            new PilotPhysiologyInput(normalAccelerationG, techniqueEffort));
+        _pilotPeakPositiveG = Math.Max(_pilotPeakPositiveG, normalAccelerationG);
+        _pilotPeakNegativeG = Math.Min(_pilotPeakNegativeG, normalAccelerationG);
+
+        bool incapacitated = next.ControlImpairment
+            == PilotControlImpairment.Incapacitated;
+        if (incapacitated && !_pilotWasIncapacitated) {
+            _pilotGLocCount++;
+            _pilotControlInterlocked = true;
+            _pilotTriggerInterlocked = true;
+            _pilotHeldThrottle = _player.LastAppliedCommand.Throttle;
+            ReleaseSpringLoadedPilotActuators();
+            _pilotRecovering = false;
+        } else if (!incapacitated && _pilotWasIncapacitated) {
+            _pilotRecovering = true;
+        }
+        if (_pilotRecovering
+            && next.ControlAuthority01 >= 0.995
+            && next.CognitiveCapacity01 >= 0.995
+            && next.EffectiveCerebralResource01 >= 0.99)
+            _pilotRecovering = false;
+        _pilotWasIncapacitated = incapacitated;
+    }
+
+    void StepPilotPhysiologyFromAircraft() => StepPilotPhysiology(
+        _player.HasValidPilotNormalAcceleration
+            ? _player.LastPilotNormalAccelerationG
+            : 1.0);
+
     void ConsumeFuelAndStepSystems(in AircraftState kinematicState,
         double trueAirspeedMps, bool weightOnWheels) {
         _fuel.Step(FixedDeltaSeconds,
@@ -1523,11 +1794,15 @@ public sealed class SimulationSession {
                 if (_recoveryAttemptActive) _attemptHadSetback = true;
             }
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
+            PilotCommand effectiveCommand = ApplyPilotPhysiology(_detents.Command);
+            PilotCommand flightCommand = ApplyAutoGcas(effectiveCommand);
             PreparePlayerForPoweredTick();
-            _player.Step(_detents.Command, FixedDeltaSeconds);
+            _player.Step(flightCommand, FixedDeltaSeconds);
             ConsumeFuelAndStepSystems(_player.State, _player.AirspeedMps,
                 weightOnWheels: false);
         }
+
+        StepPilotPhysiologyFromAircraft();
 
         _bandit.Step(previousPlayer, FixedDeltaSeconds);
         _carrier?.Step(FixedDeltaSeconds);
@@ -1632,6 +1907,7 @@ public sealed class SimulationSession {
             _carrier.Step(FixedDeltaSeconds);
             _catapult.Step(_carrier, FixedDeltaSeconds);
             _player.AdoptExternalKinematics(_catapult.State);
+            StepPilotPhysiologyFromAircraft();
             ObserveCombatDamage();
             if (_playerTerminalState != AircraftTerminalState.Flying) {
                 AircraftState handoff = _catapult.State;
@@ -1670,6 +1946,7 @@ public sealed class SimulationSession {
             _carrier.Step(FixedDeltaSeconds);
             _arrestment.Step(_carrier, FixedDeltaSeconds);
             _player.AdoptExternalKinematics(CurrentArrestmentState());
+            StepPilotPhysiologyFromAircraft();
             bool arrestmentFailed = _arrestment.Phase
                 == ArrestmentModel.ArrestmentPhase.Failed;
             if (arrestmentFailed) HandleArrestmentFailure();
@@ -1743,9 +2020,12 @@ public sealed class SimulationSession {
 
         AircraftState previousPlayerState = _player.State;
         AircraftState previousOpponentState = _bandit.State;
+        PilotCommand effectiveCommand = ApplyPilotPhysiology(_detents.Command);
+        PilotCommand flightCommand = ApplyAutoGcas(effectiveCommand);
         StepWeapons(previousPlayerState, previousOpponentState, _triggerDown);
         PreparePlayerForPoweredTick();
-        _player.Step(_detents.Command, FixedDeltaSeconds);
+        _player.Step(flightCommand, FixedDeltaSeconds);
+        StepPilotPhysiologyFromAircraft();
         ConsumeFuelAndStepSystems(_player.State, _player.AirspeedMps,
             weightOnWheels: false);
         // Both aircraft receive the same beginning-of-tick world snapshot. Giving the bandit the

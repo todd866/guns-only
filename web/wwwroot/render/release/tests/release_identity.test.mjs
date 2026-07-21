@@ -35,6 +35,7 @@ function responseRecorder() {
 }
 
 test("release identity detects mixed shell and superseded production builds", () => {
+  const nextBuild = String(Number(RELEASE_BUILD) + 1);
   const current = createReleaseIdentity({
     entrypointBuild: RELEASE_BUILD,
     running: { build: RELEASE_BUILD, revision: "abcdef1234567890", deployment: "dpl_current" },
@@ -61,11 +62,11 @@ test("release identity detects mixed shell and superseded production builds", ()
 
   const superseded = createReleaseIdentity({
     entrypointBuild: RELEASE_BUILD,
-    current: { build: "50" },
+    current: { build: nextBuild },
     lookup: "complete",
   });
   assert.equal(superseded.stale, true);
-  assert.match(superseded.label, /CURRENT BUILD 50/);
+  assert.match(superseded.label, new RegExp(`CURRENT BUILD ${nextBuild}`));
 
   const redeployed = createReleaseIdentity({
     entrypointBuild: RELEASE_BUILD,

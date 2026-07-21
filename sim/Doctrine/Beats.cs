@@ -54,7 +54,10 @@ public sealed record AircraftCapability(
     string SystemsProfileId,
     bool SystemsSimulated,
     bool PublicDataSurrogate = false,
-    string PublicSourceUrl = "") {
+    string PublicSourceUrl = "",
+    AutoGcasCapabilityProfile? AutoGcas = null) {
+    public AutoGcasCapabilityProfile AutomaticGroundCollisionAvoidance =>
+        AutoGcas ?? AutoGcasCapabilityProfile.None;
     public static AircraftCapability F86F30 { get; } = new(
         "aircraft.f86f30.v1", "F-86F-30",
         "presentation.vehicle.player.v1", "systems.f86f.utility.v1", true);
@@ -72,7 +75,8 @@ public sealed record AircraftCapability(
         "aircraft.f22a.public-data-surrogate.v1", "F-22A public-data surrogate",
         "presentation.vehicle.f22a.public-data-surrogate.v1",
         "systems.modern-airborne.not-simulated.v1", false, true,
-        "https://www.af.mil/About-Us/Fact-Sheets/Display/Article/104506/f-22-raptor/");
+        "https://www.af.mil/About-Us/Fact-Sheets/Display/Article/104506/f-22-raptor/",
+        AutoGcasCapabilityProfile.ModernCrewedPublicDataSurrogate);
     public static AircraftCapability Su27SSurrogate { get; } = new(
         "aircraft.su27s.public-data-surrogate.v1", "Su-27S public-data surrogate",
         "presentation.vehicle.su27s.public-data-surrogate.v1",
@@ -150,7 +154,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     AircraftCapability? BanditCapability = null,
     VisualMergeEvaluationConfig? VisualMergeEvaluation = null,
     bool UsesNeutralMergeBandit = false,
-    DroneRaidScenarioDefinition? DroneRaid = null) {
+    DroneRaidScenarioDefinition? DroneRaid = null,
+    PilotPhysiologyProfile? PlayerPhysiologyProfile = null) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
@@ -159,6 +164,11 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     public AircraftCapability PlayerAircraft => PlayerCapability ?? AircraftCapability.F86F30;
     public AircraftCapability BanditAircraft => BanditCapability
         ?? AircraftCapability.F86F30Bandit;
+    /// Pilot capability belongs to the actor and mission, not to the aircraft's aerodynamic
+    /// coefficients. The Korea profile is the period-fighter default; modern missions opt into
+    /// their full-coverage-suit/pressure-breathing surrogate explicitly below.
+    public PilotPhysiologyProfile PlayerPilotPhysiology => PlayerPhysiologyProfile
+        ?? PilotPhysiologyProfile.KoreaFastJetReference;
     public IBandit CreateBandit() => UsesNeutralMergeBandit
         ? new NeutralMergeBandit(Bandit, BanditAir)
         : UsesReactiveBandit
@@ -423,7 +433,8 @@ public static class Beats {
                 Era: "MODERN_PUBLIC_DATA_EXERCISE"),
             PlayerCapability: AircraftCapability.F22ASurrogate,
             BanditCapability: AircraftCapability.Su27SSurrogate,
-            VisualMergeEvaluation: new VisualMergeEvaluationConfig());
+            VisualMergeEvaluation: new VisualMergeEvaluationConfig(),
+            PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference);
     }
 
     /// <summary>
@@ -479,7 +490,8 @@ public static class Beats {
                 Era: "KOREA_2030S_PROXY"),
             PlayerCapability: AircraftCapability.F22ASurrogate,
             BanditCapability: AircraftCapability.OneWayAttackDronePrototype,
-            DroneRaid: raid);
+            DroneRaid: raid,
+            PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference);
     }
 
     public static BeatSetup Saddle() => new("Saddle + shot",

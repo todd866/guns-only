@@ -155,6 +155,9 @@ class CombatHud {
     this._audioCtx = null;
     this._gunAudioGain = null;
     this._gunAudioFiring = false;
+    this._gcasAudioGain = null;
+    this._gcasAudioOscillator = null;
+    this._gcasAudioLevel = -1;
     this._lastHudHits = 0;
     this._hitFlashUntil = -1;
     this._damageFlashUntil = -1;
@@ -219,6 +222,8 @@ class CombatHud {
       const master = audio.createGain();
       const filter = audio.createBiquadFilter();
       const oscillator = audio.createOscillator();
+      const gcasOscillator = audio.createOscillator();
+      const gcasGain = audio.createGain();
       const noise = audio.createBufferSource();
       const buffer = audio.createBuffer(1, 4096, audio.sampleRate);
       const samples = buffer.getChannelData(0);
@@ -229,6 +234,9 @@ class CombatHud {
       }
       oscillator.type = "sawtooth";
       oscillator.frequency.value = 63;
+      gcasOscillator.type = "square";
+      gcasOscillator.frequency.value = 760;
+      gcasGain.gain.value = 0;
       noise.buffer = buffer;
       noise.loop = true;
       filter.type = "lowpass";
@@ -239,10 +247,15 @@ class CombatHud {
       noise.connect(filter);
       filter.connect(master);
       master.connect(audio.destination);
+      gcasOscillator.connect(gcasGain);
+      gcasGain.connect(audio.destination);
       oscillator.start();
       noise.start();
+      gcasOscillator.start();
       this._audioCtx = audio;
       this._gunAudioGain = master;
+      this._gcasAudioGain = gcasGain;
+      this._gcasAudioOscillator = gcasOscillator;
     }
     if (this._audioCtx.state === "suspended") this._audioCtx.resume().catch(() => {});
   }
@@ -252,6 +265,9 @@ class CombatHud {
     this._gunAudioFiring = false;
     if (!this.audioEnabled && this._gunAudioGain && this._audioCtx)
       this._gunAudioGain.gain.setTargetAtTime(0, this._audioCtx.currentTime, 0.012);
+    if (!this.audioEnabled && this._gcasAudioGain && this._audioCtx)
+      this._gcasAudioGain.gain.setTargetAtTime(0, this._audioCtx.currentTime, 0.012);
+    this._gcasAudioLevel = -1;
     return this.audioEnabled;
   }
 
@@ -264,6 +280,28 @@ class CombatHud {
     this._gunAudioFiring = firing;
     const target = firing ? 0.028 : 0;
     this._gunAudioGain.gain.setTargetAtTime(target, this._audioCtx.currentTime, firing ? 0.008 : 0.018);
+  }
+
+  updateGcasAudio(frame) {
+    const active = frame.state.auto_gcas_active === true;
+    const warning = frame.state.auto_gcas_warning === true;
+    // A conscious pilot receives an aural attention getter. During actual G-LOC the model does
+    // not grant the player an impossible auditory channel; recovery remains visible in telemetry
+    // and the debrief after consciousness returns.
+    const conscious = frame.state.pilot_conscious !== false;
+    const rateHz = active ? 6 : warning ? 3 : 0;
+    const phaseOn = rateHz > 0
+      && Math.floor((Number(frame.now) || 0) * rateHz * 2) % 2 === 0;
+    const level = this.audioEnabled && conscious && phaseOn
+      ? active ? 0.024 : 0.014 : 0;
+    if (level > 0 && !this._audioCtx) this.armAudio();
+    if (!this._gcasAudioGain || !this._gcasAudioOscillator || !this._audioCtx) return;
+    if (level === this._gcasAudioLevel) return;
+    this._gcasAudioLevel = level;
+    this._gcasAudioOscillator.frequency.setTargetAtTime(
+      active ? 920 : 760, this._audioCtx.currentTime, 0.006,
+    );
+    this._gcasAudioGain.gain.setTargetAtTime(level, this._audioCtx.currentTime, 0.008);
   }
 
   project(world, camera, out = this.projectionA) {
@@ -1440,6 +1478,31 @@ class CombatHud {
     const warningY = state.mode ? 220 : 166;
     let occupiedLines = 0;
 
+    const gcasActive = state.auto_gcas_active === true;
+    const gcasWarning = state.auto_gcas_warning === true;
+    const gcasLowEnergy = state.auto_gcas_available === true
+      && state.auto_gcas_inhibit_reason === "LOW_AIRSPEED"
+      && Number(state.radar_alt_ft) < 1500
+      && Number(state.vertical_speed_fpm) < -500;
+    const gcasTerrainUnavailable = state.auto_gcas_available === true
+      && state.auto_gcas_inhibit_reason === "TERRAIN_DATA"
+      && Number(state.radar_alt_ft) < 3000
+      && Number(state.vertical_speed_fpm) < -1000;
+    if (gcasActive || gcasWarning || gcasLowEnergy || gcasTerrainUnavailable) {
+      const text = gcasActive ? "AUTO GCAS · FLYUP"
+        : gcasWarning ? "PULL UP"
+          : gcasLowEnergy ? "AIRSPEED" : "GCAS TERRAIN";
+      ctx.shadowColor = gcasActive || gcasWarning
+        ? "rgba(255, 70, 93, 0.62)" : "rgba(255, 176, 32, 0.5)";
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = gcasActive || gcasWarning ? RED : AMBER;
+      ctx.font = "800 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(text, this.width / 2, warningY);
+      ctx.shadowBlur = 0;
+      occupiedLines += 1;
+    }
+
     if (state.tier === 3) {
       const alphaOverride = Number.isFinite(state.requested_alpha_deg);
       ctx.shadowColor = "rgba(255, 176, 32, 0.58)";
@@ -1482,7 +1545,8 @@ class CombatHud {
 
     // Actual surface proximity only: no training floor. A normal carrier approach (~650 fpm) is
     // quiet; a fast sink close to sea/deck level gets the urgent warning.
-    if (Number.isFinite(radarAltFt) && Number.isFinite(verticalSpeedFpm)
+    if (state.auto_gcas_available !== true
+        && Number.isFinite(radarAltFt) && Number.isFinite(verticalSpeedFpm)
         && radarAltFt < 500 && verticalSpeedFpm < -1000) {
       ctx.fillStyle = RED;
       ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -2189,12 +2253,13 @@ class CombatHud {
     ctx.fillText(cue.call, this.width / 2, y);
   }
 
-  drawLegend() {
+  drawLegend(frame) {
     if (!this.legendVisible || this.touchMode || document.documentElement.classList.contains("touch-mode")) return;
     const ctx = this.ctx;
     const panelWidth = Math.min(930, this.width - 34);
     const compact = this.width < 760;
-    const panelHeight = compact ? 202 : 164;
+    const gcasAvailable = frame.state.auto_gcas_available === true;
+    const panelHeight = compact ? (gcasAvailable ? 229 : 202) : (gcasAvailable ? 195 : 164);
     const x = (this.width - panelWidth) / 2;
     const y = (this.height - panelHeight) / 2;
 
@@ -2225,6 +2290,10 @@ class CombatHud {
       "SPACE  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   F  GUNS   ·   M  SOUND",
       "V  PADLOCK   ·   DRAG  LOOK   ·   1–8  MISSION   ·   R  RESTART   ·   H  HIDE",
     ];
+    if (gcasAvailable) {
+      wideLines.push("K  AGCAS PADDLE (HOLD TO OVERRIDE AN ACTIVE FLY-UP)");
+      compactLines.push("K  AGCAS PADDLE (HOLD TO OVERRIDE FLY-UP)");
+    }
     const lines = compact ? compactLines : wideLines;
     const lineHeight = compact ? 27 : 31;
     const startY = y + (compact ? 59 : 61);
@@ -2238,6 +2307,7 @@ class CombatHud {
     ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
     this.updateGunAudio(frame);
+    this.updateGcasAudio(frame);
 
     this.worldPoint.copy(frame.playerPosition).addScaledVector(frame.playerForward, 10000);
     const noseAnchor = this.project(this.worldPoint, frame.camera, this.noseProjection);
@@ -2309,7 +2379,7 @@ class CombatHud {
     this.drawSortieStatus(frame);
     this.drawVisualMergeWeaponsCue(frame);
     this.drawFooter(frame);
-    this.drawLegend();
+    this.drawLegend(frame);
     this.drawModeCue(frame);
     this.drawOutcomeCues(frame);
     this.drawDamageFeedback(frame);
