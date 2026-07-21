@@ -11,6 +11,7 @@ import {
   CarrierPatternCueQualifier,
   contextualPadlockTarget,
   CARRIER_PADLOCK_RADIUS_M,
+  CARRIER_PADLOCK_RELEASE_RADIUS_M,
   padlockTargetValid,
 } from "../carrier_sa.js";
 import { systemsReadout } from "../hud_readouts.js";
@@ -62,11 +63,18 @@ test("padlock validity releases stale boat/replay geometry and preserves combat 
     bx: 10, by: 100, bz: 500, opponent_body_present: true,
   };
   assert.equal(padlockTargetValid(carrierState, "carrier"), true);
-  assert.equal(padlockTargetValid({ ...carrierState, cz: 30_000 }, "carrier"), false);
+  const boundaryState = { ...carrierState, px: 0, py: 100, pz: 0, cy: 20 };
+  assert.equal(carrierPadlockEligible({ ...boundaryState, cz: CARRIER_PADLOCK_RADIUS_M + 10 }), false,
+    "a new carrier lock cannot acquire beyond 12 NM");
+  assert.equal(padlockTargetValid({ ...boundaryState, cz: CARRIER_PADLOCK_RADIUS_M + 10 }, "carrier"), true,
+    "an existing carrier lock receives bounded release hysteresis");
+  assert.equal(padlockTargetValid({ ...boundaryState, cz: CARRIER_PADLOCK_RELEASE_RADIUS_M + 10 }, "carrier"), false);
   assert.equal(padlockTargetValid({ ...carrierState, replay_external: true }, "carrier"), false);
   assert.equal(contextualPadlockTarget({ ...carrierState, carrier: false }), "bandit");
   assert.equal(padlockTargetValid({ ...carrierState, carrier: false }, "bandit"), true);
   assert.equal(padlockTargetValid({ ...carrierState, opponent_body_present: false }, "bandit"), false);
+  assert.equal(padlockTargetValid({ ...carrierState, bandit_alive: false }, "bandit"), false);
+  assert.equal(padlockTargetValid({ ...carrierState, opponent_alive: false }, "bandit"), false);
 });
 
 test("deck-relative track preserves landing-frame signs", () => {

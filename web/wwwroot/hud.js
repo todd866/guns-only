@@ -15,6 +15,11 @@ import {
   carrierRelativeMotion,
   CarrierPatternCueQualifier,
 } from "./render/hud/carrier_sa.js";
+import { padlockOrientationModel } from "./render/camera/padlock_controller.js";
+import {
+  HudSignalStabilizer,
+  latchedRectVisibility,
+} from "./render/hud/hud_stabilizer.js";
 import { AoAIndexerQualifier, DisplayCueQualifier } from "./render/hud/stable_cues.js";
 
 const GREEN = "#4dff88";
@@ -30,6 +35,11 @@ const MODE_CUE_SECONDS = 1.5;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function snapPixel(value, pixelRatio = 1) {
+  const ratio = Math.max(1, Number(pixelRatio) || 1);
+  return Math.round(value * ratio) / ratio;
 }
 
 function wrap360(value) {
@@ -103,10 +113,10 @@ function lsoToken(call) {
   }
 }
 
-function gunCue(state, hitFlash) {
+function gunCue(state, hitFlash, solution = hasGunSolution(state)) {
   if (hitFlash) return "HITS";
   if ((Number(state.ammo) || 0) <= 0) return "EMPTY";
-  if (hasGunSolution(state)) return "SHOOT";
+  if (solution) return "SHOOT";
   return "";
 }
 
@@ -146,6 +156,10 @@ class CombatHud {
     this.ndc = new THREE.Vector3();
     this.cameraPoint = new THREE.Vector3();
     this.relative = new THREE.Vector3();
+    this.noseCameraVector = new THREE.Vector3();
+    this.liftCameraVector = new THREE.Vector3();
+    this.worldUpCameraVector = new THREE.Vector3();
+    this.worldUpVector = new THREE.Vector3(0, 1, 0);
     this.banditAnglesValue = { azimuth: 0, elevation: 0 };
     this.projectionA = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
     this.projectionB = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
@@ -171,6 +185,11 @@ class CombatHud {
     this._carrierPatternCue = new CarrierPatternCueQualifier();
     this._aoaIndexerCue = new AoAIndexerQualifier();
     this._lsoDisplayCue = new DisplayCueQualifier();
+    this._gunSolutionCue = new DisplayCueQualifier({ acquireSeconds: 0.05, releaseSeconds: 0.09 });
+    this._gunSolutionEntityId = "";
+    this._signals = new HudSignalStabilizer();
+    this._banditMarkerInside = false;
+    this._banditMarkerEntityId = "";
   }
 
   resize(width, height, pixelRatio, safeInsets = null) {
@@ -557,11 +576,34 @@ class CombatHud {
     }
     this._lastHudHits = hits;
     const hitFlash = now < this._hitFlashUntil;
-    if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
-
     const leadValid = state.lead_valid === true && leadPipper;
-    const solution = hasGunSolution(state);
+    const solution = frame.visualGunSolution === true;
     const ctx = this.ctx;
+    const ammo = Math.max(0, Number(state.ammo) || 0);
+    const cue = gunCue(state, hitFlash, solution);
+    const cueColor = hitFlash || solution ? GREEN : RED;
+
+    // Ammunition and a qualified SHOOT/HITS state remain available while the pilot is looking
+    // away from the waterline. The reticle itself still belongs to the actual nose projection.
+    ctx.save();
+    ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillStyle = GREEN_DIM;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      `G${String(ammo).padStart(3, "0")}`,
+      this.width - this.safeInsets.right - 18,
+      this.safeInsets.top + 20,
+    );
+    if (cue) {
+      ctx.fillStyle = cueColor;
+      ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(cue, this.width / 2, Math.max(212, this.safeInsets.top + 210));
+    }
+    ctx.restore();
+
+    if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
 
     // The pack cockpit carries an actual infinity-collimated reflector sight. Keep this canvas
     // fallback only for compatibility cockpits that do not publish a gunsight.origin anchor.
@@ -627,26 +669,6 @@ class CombatHud {
       ctx.restore();
     }
 
-    const ammo = Math.max(0, Number(state.ammo) || 0);
-    const cue = gunCue(state, hitFlash);
-    const cueColor = hitFlash || solution ? GREEN : RED;
-    ctx.save();
-    ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillStyle = GREEN_DIM;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    ctx.fillText(
-      `G${String(ammo).padStart(3, "0")}`,
-      this.width - this.safeInsets.right - 18,
-      this.safeInsets.top + 20,
-    );
-    if (cue) {
-      ctx.fillStyle = cueColor;
-      ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(cue, this.width / 2, Math.max(212, this.safeInsets.top + 210));
-    }
-    ctx.restore();
   }
 
   // The deck diamond and waterline director are one published recovery contract. Align the stable
@@ -721,15 +743,23 @@ class CombatHud {
     const projection = this.project(banditPosition, camera);
     const layout = this.getLayout();
     const safe = layout.targetSafe;
-    const solution = hasGunSolution(state);
+    const solution = frame.visualGunSolution === true;
     const color = solution ? AMBER : GREEN;
     const ctx = this.ctx;
     const size = solution ? 32 : 27;
-    const inside = !projection.behind
-      && projection.x >= safe.left + size
-      && projection.x <= safe.right - size
-      && projection.y >= safe.top + size
-      && projection.y <= safe.bottom - size;
+    const markerEntityId = String(state.bandit_entity_id ?? "legacy");
+    if (markerEntityId !== this._banditMarkerEntityId) {
+      this._banditMarkerEntityId = markerEntityId;
+      this._banditMarkerInside = false;
+    }
+    const inside = latchedRectVisibility(
+      this._banditMarkerInside,
+      projection,
+      safe,
+      size,
+      6,
+    );
+    this._banditMarkerInside = inside;
 
     if (inside) {
       const corner = 8;
@@ -752,23 +782,21 @@ class CombatHud {
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      if (!frame.padlock) {
-        const closure = targetClosureReadout(state.closure_kts);
-        const dataLine = `${formatRange(state.range_m).replace(" ", "")} · ${closure.compactText}`;
-        ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-        const textWidth = ctx.measureText(dataLine).width;
-        const textHeight = 14;
-        const rightX = projection.x + size + 8;
-        const useRight = rightX + textWidth + 8 <= safe.right;
-        const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
-        const textY = clamp(projection.y - textHeight / 2, safe.top, safe.bottom - textHeight);
-        ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
-        ctx.fillRect(textX - 4, textY, textWidth + 8, textHeight);
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = color;
-        ctx.fillText(dataLine, textX, textY + textHeight / 2);
-      }
+      const closure = targetClosureReadout(state.closure_kts);
+      const dataLine = `${formatRange(state.range_m).replace(" ", "")} · ${closure.compactText}`;
+      ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      const textWidth = ctx.measureText(dataLine).width;
+      const textHeight = 14;
+      const rightX = projection.x + size + 8;
+      const useRight = rightX + textWidth + 8 <= safe.right;
+      const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
+      const textY = clamp(projection.y - textHeight / 2, safe.top, safe.bottom - textHeight);
+      ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
+      ctx.fillRect(textX - 4, textY, textWidth + 8, textHeight);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = color;
+      ctx.fillText(dataLine, textX, textY + textHeight / 2);
 
       return;
     }
@@ -797,10 +825,12 @@ class CombatHud {
 
     // Padlock locators live at the actual display edge; normal HUD locators retain the protected
     // tape area. Keep these as scalars so the hot draw path creates no extra layout object.
-    const locatorLeft = frame.padlock ? this.safeInsets.left + 26 : safe.left;
-    const locatorRight = frame.padlock ? this.width - this.safeInsets.right - 26 : safe.right;
-    const locatorTop = frame.padlock ? this.safeInsets.top + 62 : safe.top;
-    const locatorBottom = frame.padlock ? this.height - this.safeInsets.bottom - 58 : safe.bottom;
+    const locatorLeft = safe.left;
+    const locatorRight = safe.right;
+    const locatorTop = frame.padlock ? Math.max(safe.top, this.safeInsets.top + 78) : safe.top;
+    const locatorBottom = frame.padlock
+      ? Math.max(locatorTop + 20, safe.bottom)
+      : safe.bottom;
     const safeCenterX = (locatorLeft + locatorRight) * 0.5;
     const safeCenterY = (locatorTop + locatorBottom) * 0.5;
     const halfWidth = (locatorRight - locatorLeft) * 0.5;
@@ -831,8 +861,6 @@ class CombatHud {
     ctx.shadowBlur = 0;
     ctx.restore();
 
-    if (frame.padlock) return;
-
     const length = Math.hypot(dx, dy) || 1;
     const azimuth = angles.azimuth * RAD_TO_DEG;
     const closure = targetClosureReadout(state.closure_kts);
@@ -860,9 +888,9 @@ class CombatHud {
     return this.banditAnglesValue;
   }
 
-  drawHeadingTape(state) {
+  drawHeadingTape(state, { headingDeg = null, headingDigits = null, padlock = false } = {}) {
     const ctx = this.ctx;
-    const heading = Number(state.heading_deg) || 0;
+    const heading = Number.isFinite(headingDeg) ? headingDeg : Number(state.heading_deg) || 0;
     const width = Math.min(440, this.width * 0.42);
     const x0 = (this.width - width) / 2;
     const y = 113;
@@ -882,7 +910,7 @@ class CombatHud {
     const first = Math.floor((heading - 55) / 5) * 5;
     for (let mark = first; mark <= heading + 55; mark += 5) {
       const delta = ((mark - heading + 540) % 360) - 180;
-      const x = this.width / 2 + delta * pixelsPerDegree;
+      const x = snapPixel(this.width / 2 + delta * pixelsPerDegree, this.pixelRatio);
       const major = mark % 10 === 0;
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -910,7 +938,13 @@ class CombatHud {
     ctx.font = "700 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(String(Math.round(wrap360(heading))).padStart(3, "0"), this.width / 2, y - 1);
+    const shownHeading = Number.isFinite(headingDigits) ? headingDigits : heading;
+    ctx.fillText(String(Math.round(wrap360(shownHeading))).padStart(3, "0"), this.width / 2, y - 1);
+    if (padlock) {
+      ctx.fillStyle = GREEN_DIM;
+      ctx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillText("OWN HDG", this.width / 2, y - 27);
+    }
 
     // At bingo the boat caret stays on the visible edge of the tape until the pilot turns it in.
     // This is guidance only: no flight-control command is fed back into the kernel.
@@ -1203,6 +1237,7 @@ class CombatHud {
   // stack of identical "0"s — a tape that reads plausible while saying nothing.
   drawVerticalTape({
     value,
+    displayValue = value,
     x,
     step,
     decimals = 0,
@@ -1286,7 +1321,10 @@ class CombatHud {
     for (let i = -7; i <= 7; i++) {
       const mark = base + i * step;
       if (floor !== null && mark < floor) continue;
-      const y = centerY - ((mark - value) / step) * pixelsPerStep;
+      const y = snapPixel(
+        centerY - ((mark - value) / step) * pixelsPerStep,
+        this.pixelRatio,
+      );
       this.setLine(GREEN_DIM, 1);
       ctx.beginPath();
       if (rightSide) {
@@ -1347,7 +1385,7 @@ class CombatHud {
     ctx.fillStyle = GREEN;
     ctx.font = "700 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
-    ctx.fillText(`${value.toFixed(decimals)}${suffix}`, x, centerY + 0.5);
+    ctx.fillText(`${displayValue.toFixed(decimals)}${suffix}`, x, centerY + 0.5);
 
     // Trend caret: a vertical line from the current value to where the value is heading (value +
     // trend over the lookahead), clamped to the tape. Amber, so accel/decel reads at a glance.
@@ -1372,8 +1410,11 @@ class CombatHud {
     }
   }
 
-  drawAirdataLabels(state, x) {
+  drawAirdataLabels(state, x, groundKts = null) {
     const data = airdataReadout(state);
+    const groundText = Number.isFinite(groundKts)
+      ? `G/S ${Math.round(Math.max(0, groundKts))}`
+      : data.groundText;
     const ctx = this.ctx;
     const centerY = this.getInstrumentCenterY();
     const tapeHeight = Math.min(310, this.height * (this.touchMode ? 0.36 : 0.43));
@@ -1391,7 +1432,7 @@ class CombatHud {
     ctx.fill();
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(data.groundText, x, centerY + 17.5);
+    ctx.fillText(groundText, x, centerY + 17.5);
     ctx.restore();
   }
 
@@ -1842,139 +1883,192 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawPadlockSa(frame, systems = null) {
+  drawPadlockSa(frame, systems = null, noseAnchor = null) {
     if (!frame.padlock) {
       this._carrierPatternCue.reset();
       return;
     }
+
+    const padlockCtx = this.ctx;
+    const padlockCamera = frame.camera;
+    this.noseCameraVector.copy(frame.playerForward)
+      .transformDirection(padlockCamera.matrixWorldInverse);
+    this.liftCameraVector.copy(frame.playerUp)
+      .transformDirection(padlockCamera.matrixWorldInverse);
+    this.worldUpCameraVector.copy(this.worldUpVector)
+      .transformDirection(padlockCamera.matrixWorldInverse);
+    const orientation = padlockOrientationModel({
+      noseCamera: this.noseCameraVector,
+      liftCamera: this.liftCameraVector,
+      worldUpCamera: this.worldUpCameraVector,
+      sensorYawRad: frame.sensorYaw,
+      sensorPitchRad: frame.sensorPitch,
+    });
+
+    const targetLabel = frame.padlockTarget === "carrier" ? "BOAT" : "BANDIT";
+    const phase = frame.manualLookActive ? "SLEW · RELEASE TO RETURN" : frame.padlockPhase || "TRACK";
+    const modeText = `${targetLabel} PADLOCK · ${phase} · V FORWARD`;
+    padlockCtx.save();
+    padlockCtx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const modeWidth = Math.min(this.width - 28, padlockCtx.measureText(modeText).width + 18);
+    const modeX = (this.width - modeWidth) / 2;
+    const modeY = this.safeInsets.top + 54;
+    this.glassPanel(modeX, modeY, modeWidth, 20, frame.manualLookActive ? AMBER : GREEN_DIM);
+    padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN;
+    padlockCtx.textAlign = "center";
+    padlockCtx.textBaseline = "middle";
+    padlockCtx.fillText(this.fitText(modeText, modeWidth - 12), this.width / 2, modeY + 10);
+
+    // These cues exist only when the pilot is actually looking away from the waterline. Together
+    // they answer the useful BFM question: where is the nose, which way should I roll, then pull?
+    const offAxis = Math.abs(Number(frame.sensorYaw) || 0) > 10 * DEG
+      || Math.abs(Number(frame.sensorPitch) || 0) > 8 * DEG
+      || frame.manualLookActive === true;
+    if (offAxis) {
+      const targetSafe = this.getLayout().targetSafe;
+      const left = targetSafe.left + 12;
+      const right = targetSafe.right - 12;
+      const top = Math.max(
+        targetSafe.top + 12,
+        this.safeInsets.top + (this.height < 400 ? 112 : 148),
+      );
+      const bottom = Math.min(
+        targetSafe.bottom - 12,
+        this.height - this.safeInsets.bottom - (this.touchMode ? 116 : 70),
+      );
+      const centreX = (left + right) * 0.5;
+      const centreY = clamp(
+        this.getInstrumentCenterY(),
+        top + 26,
+        Math.max(top + 26, bottom - 26),
+      );
+      const anchorVisible = noseAnchor && !noseAnchor.behind
+        && Number.isFinite(noseAnchor.x) && Number.isFinite(noseAnchor.y)
+        && noseAnchor.x >= left && noseAnchor.x <= right
+        && noseAnchor.y >= top && noseAnchor.y <= bottom;
+      let noseX;
+      let noseY;
+      let noseDirectionX;
+      let noseDirectionY;
+      if (anchorVisible) {
+        noseX = noseAnchor.x;
+        noseY = noseAnchor.y;
+        noseDirectionX = orientation.nose.x;
+        noseDirectionY = orientation.nose.y;
+      } else {
+        let dx = orientation.nose.x;
+        let dy = orientation.nose.y;
+        if (noseAnchor && !noseAnchor.behind
+            && Number.isFinite(noseAnchor.x) && Number.isFinite(noseAnchor.y)) {
+          dx = noseAnchor.x - centreX;
+          dy = noseAnchor.y - centreY;
+          const magnitude = Math.hypot(dx, dy) || 1;
+          dx /= magnitude;
+          dy /= magnitude;
+        }
+        const scale = Math.min(
+          (dx >= 0 ? right - centreX : centreX - left) / Math.max(Math.abs(dx), 0.001),
+          (dy >= 0 ? bottom - centreY : centreY - top) / Math.max(Math.abs(dy), 0.001),
+        );
+        noseX = centreX + dx * scale;
+        noseY = centreY + dy * scale;
+        noseDirectionX = dx;
+        noseDirectionY = dy;
+      }
+
+      padlockCtx.save();
+      padlockCtx.translate(noseX, noseY);
+      if (!anchorVisible) {
+        padlockCtx.rotate(Math.atan2(noseDirectionY, noseDirectionX));
+        this.setLine(AMBER, 1.7);
+        padlockCtx.beginPath();
+        padlockCtx.moveTo(11, 0);
+        padlockCtx.lineTo(-5, -7);
+        padlockCtx.lineTo(-2, 0);
+        padlockCtx.lineTo(-5, 7);
+        padlockCtx.stroke();
+        padlockCtx.rotate(-Math.atan2(noseDirectionY, noseDirectionX));
+      }
+      padlockCtx.fillStyle = AMBER;
+      padlockCtx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      padlockCtx.textAlign = "center";
+      padlockCtx.fillText("NOSE", 0, anchorVisible ? 17 : -12);
+      padlockCtx.restore();
+
+      // Lift-vector caret is centred in the current view, not on a duplicated attitude gauge. A
+      // roll moves this caret around the target; a pull moves the nose in the indicated direction.
+      if (orientation.liftValid) {
+        const pullRadius = 47;
+        const pullX = centreX + orientation.lift.x * pullRadius;
+        const pullY = centreY + orientation.lift.y * pullRadius;
+        padlockCtx.strokeStyle = GREEN;
+        padlockCtx.fillStyle = GREEN;
+        padlockCtx.lineWidth = 1.5;
+        padlockCtx.beginPath();
+        padlockCtx.moveTo(centreX + orientation.lift.x * 29, centreY + orientation.lift.y * 29);
+        padlockCtx.lineTo(pullX, pullY);
+        padlockCtx.stroke();
+        padlockCtx.save();
+        padlockCtx.translate(pullX, pullY);
+        padlockCtx.rotate(Math.atan2(orientation.lift.y, orientation.lift.x));
+        padlockCtx.beginPath();
+        padlockCtx.moveTo(7, 0);
+        padlockCtx.lineTo(-4, -4);
+        padlockCtx.lineTo(-4, 4);
+        padlockCtx.closePath();
+        padlockCtx.fill();
+        padlockCtx.restore();
+        padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        padlockCtx.textAlign = "center";
+        padlockCtx.fillText("PULL", pullX + orientation.lift.x * 14, pullY + orientation.lift.y * 14);
+      }
+
+      if (orientation.horizonValid) {
+        const horizonX = centreX;
+        const horizonY = clamp(centreY + 75, top + 24, bottom - 18);
+        padlockCtx.strokeStyle = GREEN_DIM;
+        padlockCtx.lineWidth = 1.2;
+        padlockCtx.beginPath();
+        padlockCtx.moveTo(
+          horizonX - orientation.horizon.x * 25,
+          horizonY - orientation.horizon.y * 25,
+        );
+        padlockCtx.lineTo(
+          horizonX + orientation.horizon.x * 25,
+          horizonY + orientation.horizon.y * 25,
+        );
+        padlockCtx.stroke();
+        padlockCtx.fillStyle = GREEN_DIM;
+        padlockCtx.beginPath();
+        padlockCtx.moveTo(
+          horizonX + orientation.worldUp.x * 16,
+          horizonY + orientation.worldUp.y * 16,
+        );
+        padlockCtx.lineTo(
+          horizonX + orientation.worldUp.x * 8 - orientation.horizon.x * 3,
+          horizonY + orientation.worldUp.y * 8 - orientation.horizon.y * 3,
+        );
+        padlockCtx.lineTo(
+          horizonX + orientation.worldUp.x * 8 + orientation.horizon.x * 3,
+          horizonY + orientation.worldUp.y * 8 + orientation.horizon.y * 3,
+        );
+        padlockCtx.closePath();
+        padlockCtx.fill();
+      }
+    }
+    padlockCtx.restore();
+
     if (frame.padlockTarget === "carrier") {
-      this.drawCarrierPadlockSa(frame, systems);
+      // The pattern map solves recovery geometry when tracking the boat, but it should not cover
+      // the world while the pilot is deliberately slewing their head away from it.
+      if (!frame.manualLookActive) this.drawCarrierPadlockSa(frame, systems);
       return;
     }
     this._carrierPatternCue.reset();
+    // IAS/altitude/G/power/fuel and target range/closure remain in their normal locations. The old
+    // duplicate bottom instrument card added eye travel without adding any decision information.
+    return;
 
-    const state = frame.state;
-    const ctx = this.ctx;
-    const width = Math.min(520, Math.max(300, this.width - 36));
-    const height = 112;
-    const x = (this.width - width) / 2;
-    const y = Math.max(this.safeInsets.top + 205, this.height - this.safeInsets.bottom - 231);
-    const attitudeX = x + 52;
-    const attitudeY = y + 52;
-    const attitudeRadius = 33;
-    const pitch = clamp(Number(state.pitch_deg) || 0, -90, 90);
-    const bank = (Number(state.bank_deg) || 0) * DEG;
-    const horizonY = clamp(pitch * 1.05, -attitudeRadius + 7, attitudeRadius - 7);
-    const dataLeft = x + 108;
-    const dataWidth = width - 118;
-    const targetLeft = dataLeft + dataWidth * 0.53;
-    const ammo = Math.max(0, Number(state.ammo) || 0);
-    const cue = gunCue(state, frame.now < this._hitFlashUntil);
-    const gunColor = cue === "EMPTY" ? RED
-      : cue === "SHOOT" || cue === "HITS" ? GREEN
-      : cue === "IN RANGE" ? AMBER : GREEN_DIM;
-    const airdata = airdataReadout(state);
-    const fuel = fuelReadout(state);
-
-    ctx.save();
-    this.glassPanel(x, y, width, height, "rgba(255, 176, 32, 0.48)");
-
-    // Fixed-aircraft mini attitude indicator. The rotated horizon and its arrow show gravity-up
-    // even while the camera is looking away from the nose; exact pitch/bank remain below it.
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(attitudeX, attitudeY, attitudeRadius, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.translate(attitudeX, attitudeY);
-    ctx.rotate(-bank);
-    ctx.fillStyle = "rgba(77, 255, 136, 0.055)";
-    ctx.fillRect(-attitudeRadius * 2, -attitudeRadius * 2, attitudeRadius * 4, horizonY + attitudeRadius * 2);
-    ctx.fillStyle = "rgba(255, 176, 32, 0.045)";
-    ctx.fillRect(-attitudeRadius * 2, horizonY, attitudeRadius * 4, attitudeRadius * 2 - horizonY);
-    ctx.strokeStyle = GREEN;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-attitudeRadius * 1.5, horizonY);
-    ctx.lineTo(attitudeRadius * 1.5, horizonY);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(0, horizonY - 13);
-    ctx.lineTo(-4, horizonY - 7);
-    ctx.moveTo(0, horizonY - 13);
-    ctx.lineTo(4, horizonY - 7);
-    ctx.stroke();
-    ctx.fillStyle = GREEN;
-    ctx.beginPath();
-    ctx.moveTo(0, -attitudeRadius + 4);
-    ctx.lineTo(-4, -attitudeRadius + 11);
-    ctx.lineTo(4, -attitudeRadius + 11);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
-    ctx.strokeStyle = GREEN_DIM;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(attitudeX, attitudeY, attitudeRadius, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = AMBER;
-    ctx.beginPath();
-    ctx.moveTo(attitudeX, attitudeY - attitudeRadius - 4);
-    ctx.lineTo(attitudeX - 4, attitudeY - attitudeRadius + 3);
-    ctx.lineTo(attitudeX + 4, attitudeY - attitudeRadius + 3);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.strokeStyle = GREEN;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(attitudeX - 20, attitudeY);
-    ctx.lineTo(attitudeX - 6, attitudeY);
-    ctx.lineTo(attitudeX, attitudeY + 4);
-    ctx.lineTo(attitudeX + 6, attitudeY);
-    ctx.lineTo(attitudeX + 20, attitudeY);
-    ctx.stroke();
-    ctx.fillStyle = GREEN_DIM;
-    ctx.font = "650 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(`P ${formatSigned(pitch)}° · B ${formatSigned(Number(state.bank_deg) || 0)}°`, attitudeX, y + 96);
-
-    ctx.strokeStyle = "rgba(77, 255, 136, 0.20)";
-    ctx.beginPath();
-    ctx.moveTo(x + 102, y + 9);
-    ctx.lineTo(x + 102, y + height - 9);
-    ctx.moveTo(targetLeft - 9, y + 12);
-    ctx.lineTo(targetLeft - 9, y + height - 12);
-    ctx.stroke();
-
-    ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "left";
-    ctx.fillStyle = GREEN;
-    const padlockAirdataWidth = Math.max(60, targetLeft - dataLeft - 14);
-    const compactPadlockAirdata = padlockAirdataWidth < 120;
-    const cornerText = Number.isFinite(airdata.cornerKias)
-      ? compactPadlockAirdata
-        ? ` COR${Math.round(airdata.cornerKias)}`
-        : ` · COR ${Math.round(airdata.cornerKias)}`
-      : "";
-    const padlockSpeedText = compactPadlockAirdata
-      ? `${Math.round(airdata.indicatedKts)}KIAS${cornerText}`
-      : `${Math.round(airdata.indicatedKts)} KIAS${cornerText}`;
-    ctx.fillText(this.fitText(padlockSpeedText, padlockAirdataWidth), dataLeft, y + 21);
-    ctx.fillText(`${Math.round(Number(state.alt_ft) || 0)} FT`, dataLeft, y + 42);
-    ctx.fillText(`G ${(Number(state.g_actual) || 0).toFixed(1)} · α ${(Number(state.aoa_deg) || 0).toFixed(1)}°`, dataLeft, y + 63);
-    ctx.fillStyle = fuel.critical ? RED : fuel.bingo ? AMBER : GREEN;
-    ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(fuel.padlockText, dataLeft, y + 84);
-
-    ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillStyle = AMBER;
-    ctx.fillText(formatRange(state.range_m), targetLeft, y + 21);
-    ctx.fillText(targetClosureReadout(state.closure_kts).text, targetLeft, y + 42);
-    ctx.fillText(`G ${String(ammo).padStart(3, "0")}`, targetLeft, y + 63);
-    ctx.fillStyle = gunColor;
-    if (cue) ctx.fillText(cue, targetLeft, y + 84);
-    ctx.restore();
   }
 
   drawCarrierPadlockSa(frame, systems = null) {
@@ -1986,7 +2080,7 @@ class CombatHud {
     const compact = availableWidth < 620 || this.height < 560;
     const width = Math.min(compact ? 480 : 660, availableWidth);
     const nominalHeight = compact ? 164 : 174;
-    const controlClearance = this.touchMode ? 132 : 74;
+    const controlClearance = this.touchMode ? 148 : 108;
     const bottomLimit = this.height - this.safeInsets.bottom - controlClearance;
     const minimumHeight = compact ? 92 : 132;
     // Short landscape phones need the pattern card above three rows of real system controls.
@@ -2013,6 +2107,7 @@ class CombatHud {
     const configuration = carrierConfigurationCue(systems);
     const along = Number(state.deck_along);
     const cross = Number(state.deck_cross);
+    const relativeMotion = carrierRelativeMotion(state);
     const deckLength = Math.max(180, Number(state.deck_len) || 250);
     const deckWidth = Math.max(25, Number(state.deck_w) || 32);
     const mapPoint = (alongM, crossM) => ({
@@ -2083,8 +2178,7 @@ class CombatHud {
       const ownshipX = clamp(rawOwnship.x, mapLeft + 8, mapRight - 8);
       const ownshipY = clamp(rawOwnship.y, mapTop + 8, mapBottom - 8);
       const offScale = ownshipX !== rawOwnship.x || ownshipY !== rawOwnship.y;
-      const motion = carrierRelativeMotion(state);
-      const track = motion.trackRad ?? 0;
+      const track = relativeMotion.trackRad ?? 0;
       ctx.save();
       ctx.translate(ownshipX, ownshipY);
       ctx.rotate(track);
@@ -2104,47 +2198,11 @@ class CombatHud {
     }
     ctx.restore();
 
-    // Fixed-aircraft attitude remains available while the pilot's head is turned toward the boat.
-    const attitudeRadius = compact ? 17 : 20;
-    const attitudeX = mapLeft + attitudeRadius + 7;
-    const attitudeY = mapTop + attitudeRadius + 7;
-    const pitch = clamp(Number(state.pitch_deg) || 0, -90, 90);
-    const bank = (Number(state.bank_deg) || 0) * DEG;
-    const horizonY = clamp(pitch * 0.60, -attitudeRadius + 4, attitudeRadius - 4);
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(attitudeX, attitudeY, attitudeRadius, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.translate(attitudeX, attitudeY);
-    ctx.rotate(-bank);
-    ctx.fillStyle = "rgba(75, 135, 165, 0.19)";
-    ctx.fillRect(-42, -42, 84, horizonY + 42);
-    ctx.fillStyle = "rgba(70, 48, 25, 0.17)";
-    ctx.fillRect(-42, horizonY, 84, 42 - horizonY);
-    ctx.strokeStyle = GREEN;
-    ctx.lineWidth = 1.1;
-    ctx.beginPath();
-    ctx.moveTo(-30, horizonY);
-    ctx.lineTo(30, horizonY);
-    ctx.stroke();
-    ctx.restore();
-    ctx.strokeStyle = GREEN_DIM;
-    ctx.beginPath();
-    ctx.arc(attitudeX, attitudeY, attitudeRadius, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = AMBER;
-    ctx.beginPath();
-    ctx.moveTo(attitudeX - 10, attitudeY);
-    ctx.lineTo(attitudeX - 3, attitudeY);
-    ctx.lineTo(attitudeX, attitudeY + 3);
-    ctx.lineTo(attitudeX + 3, attitudeY);
-    ctx.lineTo(attitudeX + 10, attitudeY);
-    ctx.stroke();
-
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "650 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
+    ctx.fillText("DECK UP", mapLeft + 5, mapTop + 7);
     ctx.fillText("INITIAL", clamp(initial.x + 4, mapLeft + 3, mapRight - 38),
       clamp(initial.y, mapTop + 6, mapBottom - 6));
     ctx.fillText("180", clamp(downwind180.x - 17, mapLeft + 3, mapRight - 18),
@@ -2161,6 +2219,10 @@ class CombatHud {
     const dataWidth = Math.max(20, dataRight - dataLeft);
     const distanceM = carrierDistanceM(state);
     const airdata = airdataReadout(state);
+    const displayIndicated = Number.isFinite(frame.displayAirdata?.indicatedKts)
+      ? frame.displayAirdata.indicatedKts : airdata.indicatedKts;
+    const displayAltitude = Number.isFinite(frame.displayAirdata?.altitudeFt)
+      ? frame.displayAirdata.altitudeFt : Number(state.alt_ft) || 0;
     const brc = wrap360((Number(state.cheading) || 0) * RAD_TO_DEG);
     const finalCourse = wrap360((Number(state.landing_heading) || 0) * RAD_TO_DEG);
     const showRecoveryAoA = carrierAoARelevant(cue.phase);
@@ -2189,11 +2251,11 @@ class CombatHud {
       `800 ${compact ? 11 : 13}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`);
     drawFit(cue.instruction, 1, GREEN,
       `700 ${compact ? 7 : 9}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`);
-    drawFit(`${Math.round(airdata.indicatedKts)} KIAS · ${Math.round(Number(state.alt_ft) || 0)} FT${aoaText}`,
+    drawFit(`${Math.round(displayIndicated)} KIAS · ${Math.round(displayAltitude)} FT${aoaText}`,
       2, aoaState === "SLOW" ? RED : aoaState === "FAST" ? AMBER : GREEN_DIM);
     drawFit(`BOAT ${distanceM === null ? "---" : (distanceM / 1852).toFixed(1)} NM · BRC ${String(Math.round(brc)).padStart(3, "0")}° · FNL ${String(Math.round(finalCourse)).padStart(3, "0")}°`,
       3, GREEN_DIM);
-    drawFit(`REL ${Number.isFinite(along) ? Math.round(along) : "---"} M · XTK ${Number.isFinite(cross) ? formatSigned(cross) : "---"} M`,
+    drawFit(`REL ${Number.isFinite(along) ? Math.round(along) : "---"} M · XTK ${Number.isFinite(cross) ? formatSigned(cross) : "---"} M · TRK ${Number.isFinite(relativeMotion.trackRad) ? `${formatSigned(relativeMotion.trackRad * RAD_TO_DEG)}°` : "---"}`,
       4, GREEN_DIM);
     drawFit(configuration.gearText, 5,
       configuration.gearLocked ? GREEN : gearWarning ? RED : AMBER);
@@ -2280,7 +2342,7 @@ class CombatHud {
 
     const wideLines = [
       "DOWN / UP  PULL / PUSH   ·   LEFT / RIGHT  ROLL   ·   A / D  RUDDER   ·   W / S  THROTTLE",
-      "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   F  GUNS   ·   V  TARGET / BOAT PADLOCK   ·   DRAG  LOOK",
+      "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   F  GUNS   ·   V  TARGET / BOAT PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK",
       "SPACE  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   1–8  MISSION   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE",
     ];
     const compactLines = [
@@ -2288,7 +2350,7 @@ class CombatHud {
       "A / D  RUDDER   ·   W / S  THROTTLE",
       "G  GEAR   ·   [ / ]  FLAPS UP / DOWN (RELEASE = HOLD)",
       "SPACE  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   F  GUNS   ·   M  SOUND",
-      "V  PADLOCK   ·   DRAG  LOOK   ·   1–8  MISSION   ·   R  RESTART   ·   H  HIDE",
+      "V  PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK   ·   1–8  MISSION   ·   R  RESTART   ·   H  HIDE",
     ];
     if (gcasAvailable) {
       wideLines.push("K  AGCAS PADDLE (HOLD TO OVERRIDE AN ACTIVE FLY-UP)");
@@ -2308,6 +2370,17 @@ class CombatHud {
     ctx.clearRect(0, 0, this.width, this.height);
     this.updateGunAudio(frame);
     this.updateGcasAudio(frame);
+    const display = this._signals.update(frame.state, frame.dt);
+    frame.displayAirdata = display;
+    const gunSolutionEntityId = String(frame.state.player_entity_id ?? "legacy");
+    if (gunSolutionEntityId !== this._gunSolutionEntityId) {
+      this._gunSolutionEntityId = gunSolutionEntityId;
+      this._gunSolutionCue.reset();
+    }
+    frame.visualGunSolution = this._gunSolutionCue.update(
+      { key: hasGunSolution(frame.state) ? "solution" : "no-solution" },
+      frame.dt,
+    )?.key === "solution";
 
     this.worldPoint.copy(frame.playerPosition).addScaledVector(frame.playerForward, 10000);
     const noseAnchor = this.project(this.worldPoint, frame.camera, this.noseProjection);
@@ -2325,12 +2398,11 @@ class CombatHud {
     this.drawGunSight(frame, noseAnchor);
     this.drawAimPoint(frame, noseAnchor, directorAnchor);
     this.drawBandit(frame);
-    this.drawHeadingTape(frame.state);
+    this.drawHeadingTape(frame.state, { headingDeg: display.headingDeg, headingDigits: display.headingDigits, padlock: frame.padlock });
     this.drawRtbCue(frame.state);
 
     // Speed trend: smoothed dV/dt, projected ~6 s ahead (the classic acceleration caret).
-    const airdata = airdataReadout(frame.state);
-    const spd = airdata.indicatedKts;
+    const spd = display.indicatedKts;
     const dt = Math.max(1e-3, Number(frame.dt) || 1 / 60);
     const speedEntityId = String(frame.state.player_entity_id ?? "legacy");
     if (this._speedEntityId !== speedEntityId) {
@@ -2346,36 +2418,36 @@ class CombatHud {
     this._prevSpeed = spd;
     const speedTrend = clamp(this._speedRate * 6, -60, 60);    // project 6 s, cap for tape sanity
 
-    if (!frame.padlock) {
-      const tapeInset = this.getLayout().tapeInset;
-      this.drawVerticalTape({
-        value: spd,
-        x: tapeInset,
-        floor: 0,
-        step: 20,
-        decimals: 0,
-        trend: speedTrend,
-        lowSpeed: stallAwareness(frame.state),
-        fixedMarkers: speedTapeMarkers(frame.state),
-      });
-      this.drawAirdataLabels(frame.state, tapeInset);
-      this.drawVerticalTape({
-        value: Number(frame.state.alt_ft) || 0,
-        x: this.width - tapeInset,
-        floor: 0,
-        step: frame.state.alt_ft > 10000 ? 1000 : 500,
-        decimals: 0,
-      });
-      if (isFightHudActive(frame.state)) this.drawGTape(frame.state);
-      this.drawThrottle(frame.state);
-      this.drawFuel(frame.state);
-    }
+    const tapeInset = this.getLayout().tapeInset;
+    this.drawVerticalTape({
+      value: spd,
+      displayValue: display.indicatedDigits,
+      x: tapeInset,
+      floor: 0,
+      step: 20,
+      decimals: 0,
+      trend: speedTrend,
+      lowSpeed: stallAwareness(frame.state),
+      fixedMarkers: speedTapeMarkers(frame.state),
+    });
+    this.drawAirdataLabels(frame.state, tapeInset, display.groundKts);
+    this.drawVerticalTape({
+      value: display.altitudeFt,
+      displayValue: display.altitudeDigits,
+      x: this.width - tapeInset,
+      floor: 0,
+      step: frame.state.alt_ft > 10000 ? 1000 : 500,
+      decimals: 0,
+    });
+    if (isFightHudActive(frame.state)) this.drawGTape(frame.state);
+    this.drawThrottle(frame.state);
+    this.drawFuel(frame.state);
     this.drawWarnings(frame, systems);
     if (!carrierPadlock) {
       this.drawSystemsPanel(systems);
       this.drawAoAIndexer(frame.state, frame.dt);
     }
-    this.drawPadlockSa(frame, systems);
+    this.drawPadlockSa(frame, systems, noseAnchor);
     this.drawSortieStatus(frame);
     this.drawVisualMergeWeaponsCue(frame);
     this.drawFooter(frame);

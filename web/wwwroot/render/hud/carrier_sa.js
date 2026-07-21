@@ -1,4 +1,5 @@
 export const CARRIER_PADLOCK_RADIUS_M = 12 * 1852;
+export const CARRIER_PADLOCK_RELEASE_RADIUS_M = 13 * 1852;
 
 const M_TO_FT = 3.280839895;
 const DEFAULT_PHASE_ACQUIRE_SECONDS = 0.28;
@@ -107,9 +108,13 @@ export function padlockTargetValid(state = {}, target = "bandit") {
   if (!state || typeof state !== "object" || state.replay_external === true
       || state.finished === true || state.terminal_phase_active === true
       || token(state.mode) === "TERMINAL") return false;
-  if (target === "carrier") return carrierPadlockEligible(state);
+  // Acquisition remains the deliberate 12 NM gate. Once selected, one mile of release
+  // hysteresis prevents normal ship/aircraft motion at the boundary from chattering the view.
+  if (target === "carrier") return carrierPadlockEligible(state, CARRIER_PADLOCK_RELEASE_RADIUS_M);
   return [state.bx, state.by, state.bz].every((value) => finite(value) !== null)
-    && state.opponent_body_present !== false;
+    && state.opponent_body_present !== false
+    && state.bandit_alive !== false
+    && state.opponent_alive !== false;
 }
 
 export function carrierRelativeMotion(state = {}) {

@@ -8,6 +8,11 @@ import {
 } from "./render/assets/index.js?runtime=2";
 import { createThreeR160AssetRegistry } from "./render/assets/three_r160_loader.js?runtime=2";
 import { applyCarrierRootPose } from "./render/carrier/carrier_motion.js";
+import {
+  advanceForwardGimbal,
+  advancePadlockGimbal,
+  PADLOCK_LIMITS,
+} from "./render/camera/padlock_controller.js";
 import { sortieResultCopy } from "./render/debrief/sortie_result.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -50,6 +55,10 @@ import {
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
 import {
+  applyLookDelta,
+  trackpadLookDelta,
+} from "./render/input/look_gesture.js";
+import {
   GlobalRoomClient,
   resolveGlobalRoomUrl,
 } from "./render/presence/global_room_client.js";
@@ -83,11 +92,9 @@ import {
 import { AsyncTransitionQueue } from "./render/visual/async_transition_queue.js";
 
 const DEG = Math.PI / 180;
-const MAX_GIMBAL_YAW = 150 * DEG;
-const MAX_GIMBAL_PITCH = 90 * DEG;
-const PADLOCK_MAX_YAW = 165 * DEG;
-const PADLOCK_MAX_PITCH = 88 * DEG;
-const PADLOCK_FRAME_FRACTION = 0.88;
+const MAX_GIMBAL_YAW = PADLOCK_LIMITS.yawRad;
+const MAX_GIMBAL_PITCH = PADLOCK_LIMITS.pitchRad;
+const TRACKPAD_LOOK_RELEASE_MS = 110;
 const MAX_TRACERS = 48;
 const SUN_DIRECTION = new THREE.Vector3(0.32, 0.78, -0.53).normalize();
 const CLEAR_AIR_VISIBILITY_M = 100_000;
@@ -111,8 +118,10 @@ const fatalMessage = document.querySelector("#fatal-message");
 const multiplayerStatus = document.querySelector("#multiplayer-status");
 const pilotPhysiology = document.querySelector("#pilot-physiology");
 const pilotPhysiologyCue = document.querySelector("#pilot-physiology-cue");
+const viewStatus = document.querySelector("#view-status");
 const touchGcasPaddle = document.querySelector("#touch-gcas-paddle");
 const touchControls = document.querySelector("#touch-controls");
+const touchPadlockButton = touchControls?.querySelector('[data-pulse-key="KeyV"]') ?? null;
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
 const readyScreen = document.querySelector("#ready-screen");
@@ -227,7 +236,7 @@ if (mobileControls) {
 
     .touch-mode .touch-utility {
       min-width: 50px;
-      min-height: 27px;
+      min-height: 44px;
       padding: 4px 5px;
       font-size: 7.5px;
     }
@@ -662,11 +671,15 @@ let bridge = null;
 const keyOwners = new Map();
 let padlock = false;
 let padlockTarget = "bandit";
+let padlockEntityId = "";
+let padlockPhase = "OFF";
 let dragging = false;
 let activePointer = null;
 let lastPointerX = 0;
 let lastPointerY = 0;
-let lastLookTime = performance.now();
+let trackpadLookActive = false;
+let trackpadLookReleaseTimer = 0;
+let gimbalReturnFast = false;
 let sensorYaw = 0;
 let sensorPitch = 0;
 let resetMobileInput = () => {};
@@ -1054,29 +1067,87 @@ function clearFlightInput(reason = "presentation-reset") {
   releaseAllMappedKeys(reason);
   dragging = false;
   activePointer = null;
+  trackpadLookActive = false;
+  if (trackpadLookReleaseTimer) window.clearTimeout(trackpadLookReleaseTimer);
+  trackpadLookReleaseTimer = 0;
+  gimbalReturnFast = true;
   sceneCanvas.classList.remove("dragging");
+}
+
+function manualLookActive() {
+  return dragging || trackpadLookActive;
+}
+
+function padlockLabel(target = padlockTarget) {
+  return target === "carrier" ? "BOAT" : "BANDIT";
+}
+
+function syncPadlockUi(announcement = null) {
+  if (touchPadlockButton) {
+    touchPadlockButton.classList.toggle("active", padlock);
+    touchPadlockButton.setAttribute("aria-pressed", String(padlock));
+    touchPadlockButton.setAttribute(
+      "aria-label",
+      padlock ? `Release ${padlockLabel().toLowerCase()} padlock` : "Padlock target or nearby carrier",
+    );
+  }
+  if (announcement && viewStatus) viewStatus.textContent = announcement;
+}
+
+function releasePadlock(reason = "manual", { announce = true, record = true } = {}) {
+  if (!padlock) return false;
+  const releasedTarget = padlockTarget;
+  const releasedEntityId = padlockEntityId;
+  padlock = false;
+  padlockTarget = "bandit";
+  padlockEntityId = "";
+  padlockPhase = "RETURN";
+  gimbalReturnFast = true;
+  const message = reason === "manual"
+    ? "Padlock off · forward view"
+    : `Padlock lost · ${reason}`;
+  syncPadlockUi(announce ? message : null);
+  if (record) recorder.event("view", "Padlock", {
+    selected: false,
+    target: releasedTarget,
+    entity_id: releasedEntityId,
+    reason,
+  });
+  return true;
 }
 
 function resetMissionPresentation() {
   clearFlightInput("mission-reset");
   incidentReplay?.stop();
   renderIncidentReplay(null);
-  padlock = false;
-  padlockTarget = "bandit";
+  if (padlock) releasePadlock("mission reset", { announce: false, record: false });
+  else syncPadlockUi();
   sensorYaw = 0;
   sensorPitch = 0;
-  lastLookTime = performance.now();
+  padlockPhase = "OFF";
+  gimbalReturnFast = false;
   activeView?.hud.setLegendVisible?.(false);
 }
 
 function togglePadlock() {
   if (padlock) {
-    padlock = false;
-    padlockTarget = "bandit";
+    releasePadlock("manual");
     return;
   }
   padlock = true;
   padlockTarget = contextualPadlockTarget(latestState);
+  padlockEntityId = padlockTarget === "bandit"
+    ? projectedId(latestState?.bandit_entity_id)
+    : "carrier";
+  padlockPhase = manualLookActive() ? "SLEW" : "ACQUIRE";
+  gimbalReturnFast = false;
+  syncPadlockUi(`${padlockLabel()} padlock on`);
+  recorder.event("view", "Padlock", {
+    selected: true,
+    target: padlockTarget,
+    entity_id: padlockEntityId,
+    reason: "manual",
+  });
 }
 
 function missionBrief() {
@@ -1530,13 +1601,6 @@ function clamp(value, min, max) {
 
 function expStep(rate, dt) {
   return 1 - Math.exp(-rate * dt);
-}
-
-function angleNearestReference(angle, reference) {
-  const delta = angle - reference;
-  if (delta > Math.PI) return angle - Math.PI * 2;
-  if (delta < -Math.PI) return angle + Math.PI * 2;
-  return angle;
 }
 
 function smoothstep(edge0, edge1, value) {
@@ -5075,6 +5139,7 @@ class FlightView {
     this.playerQuaternion = new THREE.Quaternion();
     this.banditPosition = new THREE.Vector3();
     this.carrierPosition = new THREE.Vector3();
+    this.carrierPadlockPosition = new THREE.Vector3();
     this.playerDamagePosition = new THREE.Vector3();
     this.banditDamagePosition = new THREE.Vector3();
     this.effectNormal = new THREE.Vector3(0, 1, 0);
@@ -5130,6 +5195,9 @@ class FlightView {
       sensorYaw: 0,
       sensorPitch: 0,
       padlock: false,
+      padlockTarget: "bandit",
+      padlockPhase: "OFF",
+      manualLookActive: false,
       periodGunsightVisible: false,
       triggerHeld: false,
       dt: 0,
@@ -5385,53 +5453,47 @@ class FlightView {
   }
 
   updateGimbal(dt) {
+    if (manualLookActive()) {
+      padlockPhase = padlock ? "SLEW" : "FREE";
+      return;
+    }
+
     if (padlock) {
       const trackedPosition = padlockTarget === "carrier"
-        ? this.carrierPosition
+        ? this.carrierPadlockPosition
         : this.banditPosition;
       this.localTarget.copy(trackedPosition).sub(this.playerPosition).normalize();
       this.inversePlayerQuaternion.copy(this.playerQuaternion).invert();
       this.localTarget.applyQuaternion(this.inversePlayerQuaternion);
-
-      // Follow the target through the six on the same side of the canopy. Raw atan2 jumps from
-      // +180 to -180 there; resolving it beside the current head angle prevents a 330-degree
-      // whip across the nose in the middle of a break turn.
-      const targetHorizontal = Math.hypot(this.localTarget.x, this.localTarget.z);
-      const rawTargetYaw = targetHorizontal < 0.02
-        ? sensorYaw
-        : Math.atan2(this.localTarget.x, -this.localTarget.z);
-      const targetYaw = angleNearestReference(rawTargetYaw, sensorYaw);
-      const targetPitch = Math.atan2(
-        this.localTarget.y,
-        targetHorizontal,
-      );
-
-      // Keep a little nose-side framing instead of cancelling every bit of own-ship motion with
-      // a dead-centre target lock. The residual 12% makes pitch/roll readable while leaving the
-      // bandit comfortably inside the 66-degree view through normal dogfight geometry.
-      const desiredYaw = clamp(
-        targetYaw * PADLOCK_FRAME_FRACTION,
-        -PADLOCK_MAX_YAW,
-        PADLOCK_MAX_YAW,
-      );
-      const desiredPitch = clamp(
-        targetPitch * PADLOCK_FRAME_FRACTION,
-        -PADLOCK_MAX_PITCH,
-        PADLOCK_MAX_PITCH,
-      );
-      const trackingError = Math.max(
-        Math.abs(targetYaw - sensorYaw),
-        Math.abs(targetPitch - sensorPitch),
-      );
-      const follow = expStep(trackingError > 28 * DEG ? 18 : 12, dt);
-      sensorYaw += (desiredYaw - sensorYaw) * follow;
-      sensorPitch += (desiredPitch - sensorPitch) * follow;
-    } else if (!dragging && performance.now() - lastLookTime > 900) {
-      const recenter = expStep(1.65, dt);
-      sensorYaw += (0 - sensorYaw) * recenter;
-      sensorPitch += (0 - sensorPitch) * recenter;
-      if (Math.abs(sensorYaw) < 0.0001) sensorYaw = 0;
-      if (Math.abs(sensorPitch) < 0.0001) sensorPitch = 0;
+      const next = advancePadlockGimbal({
+        localTarget: this.localTarget,
+        yawRad: sensorYaw,
+        pitchRad: sensorPitch,
+        deltaSeconds: dt,
+        aspect: this.camera.aspect,
+        verticalFovRad: this.camera.fov * DEG,
+        returning: gimbalReturnFast,
+      });
+      sensorYaw = next.yawRad;
+      sensorPitch = next.pitchRad;
+      if (next.trackingErrorRad < 0.6 * DEG) gimbalReturnFast = false;
+      padlockPhase = next.trackingErrorRad < 1.5 * DEG
+        ? "TRACK"
+        : gimbalReturnFast ? "RETURN" : "ACQUIRE";
+    } else {
+      const next = advanceForwardGimbal({
+        yawRad: sensorYaw,
+        pitchRad: sensorPitch,
+        deltaSeconds: dt,
+      });
+      sensorYaw = next.yawRad;
+      sensorPitch = next.pitchRad;
+      if (next.trackingErrorRad < 0.25 * DEG) {
+        gimbalReturnFast = false;
+        padlockPhase = "OFF";
+      } else {
+        padlockPhase = "RETURN";
+      }
     }
   }
 
@@ -5835,16 +5897,19 @@ class FlightView {
     // The sortie chooser owns Ready. Defer the manifest and all height ranges until gameplay has
     // actually begun, then retain the single shared presentation across pause/replay/restage.
     if (state?.ready !== true) void this.ensureTerrainPresentation();
-    // A contextual lock is presentation state, not a promise to track stale geometry forever.
-    // Leaving the boat's vicinity, losing the target, entering replay, or reaching terminal state
-    // releases the view instead of silently looking at an invalid/stale world position.
-    if (padlock && !padlockTargetValid(state, padlockTarget)) {
-      padlock = false;
-      padlockTarget = "bandit";
+    const nextBanditEntityId = projectedId(state.bandit_entity_id);
+    // Padlock is bound to a specific visual tally. It may not silently transfer to a replacement
+    // drone/bandit, survive loss of consciousness, or keep tracking stale/replay geometry.
+    if (padlock && state.pilot_conscious === false) {
+      releasePadlock("pilot incapacitated");
+    } else if (padlock && !padlockTargetValid(state, padlockTarget)) {
+      releasePadlock("target unavailable");
+    } else if (padlock && padlockTarget === "bandit" && padlockEntityId
+        && nextBanditEntityId !== padlockEntityId) {
+      releasePadlock("target changed");
     }
     const playerFrame = this.frameFromState(state, "p", this.playerFrame);
     const banditFrame = this.frameFromState(state, "b", this.banditFrame);
-    const nextBanditEntityId = projectedId(state.bandit_entity_id);
     const nextPlayerEntityId = projectedId(state.player_entity_id);
     if (this.banditEntityId && nextBanditEntityId !== this.banditEntityId) {
       this.banditDamageSmoke.clear();
@@ -5864,8 +5929,13 @@ class FlightView {
     this.playerQuaternion.copy(playerFrame.quaternion);
     this.banditPosition.set(state.bx, state.by, -state.bz);
     if (state.carrier === true && Number.isFinite(state.cx)
-      && Number.isFinite(state.cy) && Number.isFinite(state.cz)) {
+        && Number.isFinite(state.cy) && Number.isFinite(state.cz)) {
       this.carrierPosition.set(state.cx, state.cy, -state.cz);
+      if (Number.isFinite(state.tx) && Number.isFinite(state.ty) && Number.isFinite(state.tz)) {
+        this.carrierPadlockPosition.set(state.tx, state.ty, -state.tz);
+      } else {
+        this.carrierPadlockPosition.copy(this.carrierPosition);
+      }
     }
     this.banditQuaternion.copy(banditFrame.quaternion);
     if (state.lead_valid === true && Number.isFinite(state.lead_x)
@@ -5935,7 +6005,9 @@ class FlightView {
       this.localGimbalQuaternion.copy(this.localYawQuaternion).multiply(this.localPitchQuaternion);
       this.camera.quaternion.copy(this.playerQuaternion).multiply(this.localGimbalQuaternion);
     }
-    if (replayExternal) this.cockpitHead.reset(state);
+    // Padlock is an orientation aid, not a cinematic camera. Applying buffet/head-lag after the
+    // target solve makes the contact and every view-relative cue wander by a degree or two.
+    if (replayExternal || padlock) this.cockpitHead.reset(state);
     else this.cockpitHead.update(this.camera, state, dt);
     this.camera.updateMatrixWorld(true);
     const gunsightPresentation = this.periodGunsight.update(this.camera, state, dt);
@@ -6125,6 +6197,8 @@ class FlightView {
     hudFrame.sensorPitch = sensorPitch;
     hudFrame.padlock = padlock;
     hudFrame.padlockTarget = padlockTarget;
+    hudFrame.padlockPhase = padlockPhase;
+    hudFrame.manualLookActive = manualLookActive();
     hudFrame.periodGunsightVisible = gunsightPresentation.visible;
     hudFrame.triggerHeld = heldKeys.has("KeyF");
     hudFrame.dt = dt;
@@ -6450,6 +6524,9 @@ function installMobileInput(view) {
       if (!pressMappedKey(code, source)) return;
       if (code === "KeyV") togglePadlock();
       releaseMappedKey(code, source);
+      // Padlock is a selected view mode. Its pressed state is owned by syncPadlockUi for the full
+      // lock lifetime; momentarily flashing it like GEAR made touch users think the lock had ended.
+      if (code === "KeyV") return;
       button.classList.add("active");
       button.setAttribute("aria-pressed", "true");
       window.setTimeout(() => {
@@ -6628,7 +6705,7 @@ function installInput(view) {
     activePointer = event.pointerId;
     lastPointerX = event.clientX;
     lastPointerY = event.clientY;
-    lastLookTime = performance.now();
+    gimbalReturnFast = false;
     sceneCanvas.classList.add("dragging");
     sceneCanvas.setPointerCapture(event.pointerId);
     sceneCanvas.focus({ preventScroll: true });
@@ -6640,22 +6717,47 @@ function installInput(view) {
     const dy = event.clientY - lastPointerY;
     lastPointerX = event.clientX;
     lastPointerY = event.clientY;
-    lastLookTime = performance.now();
-    sensorYaw = clamp(sensorYaw + dx * 0.0027, -MAX_GIMBAL_YAW, MAX_GIMBAL_YAW);
-    sensorPitch = clamp(sensorPitch - dy * 0.00245, -MAX_GIMBAL_PITCH, MAX_GIMBAL_PITCH);
+    ({ yawRad: sensorYaw, pitchRad: sensorPitch } = applyLookDelta(
+      { yawRad: sensorYaw, pitchRad: sensorPitch },
+      { yawRad: dx * 0.0027, pitchRad: -dy * 0.00245 },
+      { yawRad: MAX_GIMBAL_YAW, pitchRad: MAX_GIMBAL_PITCH },
+    ));
   });
 
   function endDrag(event) {
     if (event.pointerId !== activePointer) return;
     dragging = false;
     activePointer = null;
-    lastLookTime = performance.now();
+    // Manual slew is temporary. Keep the selected padlock, then return quickly to its target;
+    // without padlock selected, return to the forward view.
+    gimbalReturnFast = true;
     sceneCanvas.classList.remove("dragging");
     if (sceneCanvas.hasPointerCapture(event.pointerId)) sceneCanvas.releasePointerCapture(event.pointerId);
   }
 
   sceneCanvas.addEventListener("pointerup", endDrag);
   sceneCanvas.addEventListener("pointercancel", endDrag);
+
+  sceneCanvas.addEventListener("wheel", (event) => {
+    if (event.ctrlKey || Math.abs(event.deltaX) + Math.abs(event.deltaY) < 0.01) return;
+    event.preventDefault();
+    const delta = trackpadLookDelta(event, window.innerHeight);
+    ({ yawRad: sensorYaw, pitchRad: sensorPitch } = applyLookDelta(
+      { yawRad: sensorYaw, pitchRad: sensorPitch },
+      delta,
+      { yawRad: MAX_GIMBAL_YAW, pitchRad: MAX_GIMBAL_PITCH },
+    ));
+    trackpadLookActive = true;
+    gimbalReturnFast = false;
+    if (trackpadLookReleaseTimer) window.clearTimeout(trackpadLookReleaseTimer);
+    trackpadLookReleaseTimer = window.setTimeout(() => {
+      trackpadLookReleaseTimer = 0;
+      trackpadLookActive = false;
+      // Do not cancel padlock: this is the precise moment the temporary head slew hands control
+      // back to either the target tracker or the forward-view recenter.
+      gimbalReturnFast = true;
+    }, TRACKPAD_LOOK_RELEASE_MS);
+  }, { passive: false });
 
   let resizeFrame = 0;
   function scheduleResize() {
@@ -6711,6 +6813,7 @@ async function boot() {
   let previous = performance.now();
   resetFrameClock = () => { previous = performance.now(); };
   installInput(view);
+  syncPadlockUi();
   installTestFlightConsole();
   renderPauseUi();
   let firstFrame = true;
@@ -6721,6 +6824,20 @@ async function boot() {
     begin: beginFlight,
     restart: restartMission,
   };
+  Object.defineProperty(globalThis, "__gunsView", {
+    configurable: true,
+    value: Object.freeze({
+      snapshot: () => Object.freeze({
+        padlock,
+        target: padlock ? padlockTarget : "forward",
+        entityId: padlockEntityId,
+        phase: padlockPhase,
+        manualLook: manualLookActive(),
+        yawDeg: sensorYaw / DEG,
+        pitchDeg: sensorPitch / DEG,
+      }),
+    }),
+  });
   const assetDiagnostics = {};
   Object.defineProperties(assetDiagnostics, {
     snapshot: {
