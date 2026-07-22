@@ -79,6 +79,7 @@ import {
 } from "./render/presence/presence_presentation.js";
 import { RemoteAssetResolutionPolicy } from "./render/presence/remote_asset_policy.js";
 import { gTolerancePresentation } from "./render/physiology/g_tolerance_presentation.js";
+import { createHotSnapshotSource } from "./render/state/hot_snapshot.js";
 import {
   CAMPAIGN_NODES,
   campaignNode,
@@ -842,6 +843,7 @@ window.addEventListener("pageshow", (event) => {
 window.addEventListener("focus", () => void resolveBuildIdentity());
 
 let bridge = null;
+let snapshotSource = null;
 const keyOwners = new Map();
 let padlock = false;
 let padlockTarget = "bandit";
@@ -2349,7 +2351,7 @@ function updateCarrierRecoveryOverlay(presentation, state, scaleGroup = true) {
     presentation.ols.ball.position.y = clamp(-error / tolerance, -1.35, 1.35) * 0.56;
     presentation.ols.group.visible = range < 6500 || state.approach === true;
     presentation.ols.waveOff.visible = state.wave_off === true
-      || state.lso_severity === "WAVE_OFF";
+      || state.lso_severity === "WAVEOFF";
     presentation.ols.ball.visible = !presentation.ols.waveOff.visible;
   }
   const caughtWire = state.arrest_phase === "ARRESTED" || state.arrest_phase === "STOPPED"
@@ -5684,7 +5686,26 @@ async function boot() {
   await getConfig();
   const assemblyExports = await getAssemblyExports("GunsOnly.Web");
   bridge = assemblyExports.GunsOnly.Web.WebBridge;
+  // Per-frame state now rides the kernel's numeric hot buffer; the full JSON snapshot is
+  // re-fetched only when its cold_version slot bumps (or on the source's fallback interval).
+  // The MemoryView is fetched once; copyTo re-derives the WASM view per call, so a persistent
+  // Float64Array copy stays valid across memory growth.
+  const hotFrameView = bridge.GetHotFrame();
+  const hotFrameCopy = new Float64Array(hotFrameView.length);
+  snapshotSource = createHotSnapshotSource({
+    layoutJson: bridge.GetHotLayout(),
+    readHotFrame: () => {
+      hotFrameView.copyTo(hotFrameCopy, 0);
+      return hotFrameCopy;
+    },
+    fetchColdState: () => JSON.parse(bridge.GetState()),
+  });
   incidentReplay = new IncidentReplayController((clipId) => bridge.ConsumeIncidentReplay(clipId));
+  // QA hook: browser automation confirms the JSON cold path actually went low-rate.
+  Object.defineProperty(globalThis, "__gunsSnapshotBridge", {
+    configurable: true,
+    value: Object.freeze({ diagnostics: () => snapshotSource.diagnostics() }),
+  });
   bridge.StartBeat(selectedBeat);   // initialise the sortie; Begin is the explicit clock release
   bridgePauseApplied = true;
 
@@ -5772,7 +5793,8 @@ async function boot() {
       const dt = clamp((now - previous) / 1000, 0, 0.25);
       previous = now;
       if (pauseReasons.size === 0) bridge.Advance(dt);
-      const state = JSON.parse(bridge.GetState());
+      else bridge.RefreshHotFrame();
+      const state = snapshotSource.frame(now);
       latestState = state;
       const replayPresentation = advanceIncidentReplay(incidentReplay, state, now);
       const replayFrame = replayPresentation.frame;

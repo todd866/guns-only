@@ -97,8 +97,33 @@ public static partial class WebBridge {
             : Carrier.DeckConfiguration.Axial;
     }
 
+    static readonly double[] HotFrameBuffer = new double[SnapshotHotFrame.SlotCount];
+
     [JSExport]
-    public static void Advance(double deltaSeconds) => Session.Advance(deltaSeconds);
+    public static void Advance(double deltaSeconds) {
+        Session.Advance(deltaSeconds);
+        SnapshotHotFrame.Fill(HotFrameBuffer, Session,
+            _worldOriginEastM, _worldOriginNorthM, _worldOriginConfigured);
+    }
+
+    /// Refill the hot frame without stepping the simulation — the JS loop calls this on frames
+    /// where it withholds Advance (pause interlocks) so lifecycle edges still reach the buffer
+    /// and its cold_version the same frame.
+    [JSExport]
+    public static void RefreshHotFrame() => SnapshotHotFrame.Fill(HotFrameBuffer, Session,
+        _worldOriginEastM, _worldOriginNorthM, _worldOriginConfigured);
+
+    /// One-time layout contract for the per-frame buffer (slot names/kinds/indices, presence
+    /// slots, tracer regions). See SnapshotHotFrame.
+    [JSExport]
+    public static string GetHotLayout() => SnapshotHotFrame.LayoutJson();
+
+    /// The persistent per-frame buffer as a MemoryView over WASM memory. Fetched once at boot;
+    /// the browser copies it out each frame (copyTo re-derives the view, so memory growth is
+    /// safe) and merges it onto the low-rate GetState JSON.
+    [JSExport]
+    [return: JSMarshalAs<JSType.MemoryView>]
+    public static ArraySegment<double> GetHotFrame() => new(HotFrameBuffer);
 
     /// <summary>
     /// Pull the frozen carrier-incident clip exactly once. GetState advertises only its small ID;

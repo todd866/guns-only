@@ -10,6 +10,7 @@ namespace GunsOnly.Sim.Tests;
 /// session is stepped a handful of ticks and its projection is parsed and structurally checked. This
 /// guards the whole hand-built JSON contract against a stray NaN/Infinity token or a malformed field.
 /// </summary>
+[Collection("snapshot-projection-statics")]
 public class SnapshotProjectionTests {
     sealed class FlatTerrain : ITerrainSurface {
         readonly double _heightM;
