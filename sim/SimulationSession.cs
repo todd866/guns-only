@@ -533,6 +533,19 @@ public sealed class SimulationSession {
             _maintenanceScenario?.InspectMechanicalDownlocks(TimeSeconds);
     }
 
+    /// <summary>Set the latest continuous lateral-stick command from a direct-input host.</summary>
+    public void SetAnalogRollControl(double value) {
+        if (!double.IsFinite(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        if (Lifecycle != LifecycleState.Active
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _pilotControlInterlocked) {
+            _detents.ClearAnalogRollControl();
+            return;
+        }
+        _detents.SetAnalogRollControl(value);
+    }
+
     static bool IsPlayerSystemsAction(GKey key) => key is
         GKey.GearToggle or GKey.FlapUp or GKey.FlapDown
         or GKey.EmergencyGearRelease or GKey.GearHornCutout
@@ -546,6 +559,7 @@ public sealed class SimulationSession {
         || IsPlayerSystemsAction(key);
 
     void ReleaseSpringLoadedPilotActuators() {
+        _detents.ClearAnalogRollControl();
         _keys.Feed(GKey.FlapUp, false, _simTimeMs);
         _keys.Feed(GKey.FlapDown, false, _simTimeMs);
         _systems.SetFlapLever(WingFlapLever.Hold);
@@ -851,6 +865,7 @@ public sealed class SimulationSession {
 
     void ClearHeldInput() {
         _keys = new KeyGrammar();
+        _detents.ClearAnalogRollControl();
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
         if (_systems is not null) {
             _systems.SetFlapLever(WingFlapLever.Hold);
@@ -1555,7 +1570,8 @@ public sealed class SimulationSession {
         && _keys.PhaseAt(GKey.ThrottleUp, _simTimeMs) == KeyPhase.Idle
         && _keys.PhaseAt(GKey.ThrottleDown, _simTimeMs) == KeyPhase.Idle
         && _keys.PhaseAt(GKey.Override, _simTimeMs) == KeyPhase.Idle
-        && _keys.PhaseAt(GKey.AutoGcasOverride, _simTimeMs) == KeyPhase.Idle;
+        && _keys.PhaseAt(GKey.AutoGcasOverride, _simTimeMs) == KeyPhase.Idle
+        && System.Math.Abs(_detents.Command.RollControl) <= 1e-9;
 
     PilotCommand NeutralPilotCommand(double throttle) => new(
         GDemand: 1.0,

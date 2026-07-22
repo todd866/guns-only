@@ -34,50 +34,63 @@ export function verticalSpeedText(value) {
 }
 
 export function airdataReadout(state = {}) {
+  const calibratedKts = finiteNumber(state.calibrated_airspeed_kts);
   const indicatedKts = Math.max(0,
-    finiteNumber(state.indicated_airspeed_kts)
+    calibratedKts
+      ?? finiteNumber(state.indicated_airspeed_kts)
       ?? finiteNumber(state.speed_kts)
       ?? 0);
+  const speedUnit = calibratedKts === null ? "KIAS" : "KCAS";
   const trueKts = finiteNumber(state.true_airspeed_kts);
   const groundKts = finiteNumber(state.ground_speed_kts)
     ?? finiteNumber(state.groundspeed_kts);
-  const cornerKias = finiteNumber(state.corner_speed_kias);
+  const cornerKts = finiteNumber(state.corner_speed_kcas)
+    ?? finiteNumber(state.corner_speed_kias);
+  const mach = finiteNumber(state.mach);
   const verticalSpeedFpm = finiteNumber(state.vertical_speed_fpm);
 
   return {
     indicatedKts,
+    speedUnit,
     trueKts,
     groundKts,
-    cornerKias,
+    cornerKts,
+    mach,
     verticalSpeedFpm,
     primaryText: String(Math.round(indicatedKts)),
-    unitText: "A/S KIAS",
+    unitText: `A/S ${speedUnit}`,
+    machText: mach === null ? null : `M ${Math.max(0, mach).toFixed(2).replace(/^0/, "")}`,
     groundText: `G/S ${groundKts === null ? "---" : Math.round(Math.max(0, groundKts))}`,
     verticalText: verticalSpeedText(verticalSpeedFpm),
   };
 }
 
 export function stallAwareness(state = {}) {
-  const base = finiteNumber(state.stall_speed_kias);
-  const accelerated = finiteNumber(state.accelerated_stall_speed_kias)
-    ?? finiteNumber(state.load_adjusted_stall_speed_kias);
+  const calibrated = finiteNumber(state.stall_speed_kcas) !== null;
+  const base = finiteNumber(state.stall_speed_kcas)
+    ?? finiteNumber(state.stall_speed_kias);
+  const accelerated = calibrated
+    ? finiteNumber(state.accelerated_stall_speed_kcas)
+    : finiteNumber(state.accelerated_stall_speed_kias)
+      ?? finiteNumber(state.load_adjusted_stall_speed_kias);
   if (base === null || base <= 0 || accelerated === null || accelerated <= 0) return null;
 
-  const boundaryKias = Math.max(base, accelerated);
+  const boundaryKts = Math.max(base, accelerated);
   return {
-    baseKias: base,
-    boundaryKias,
+    baseKts: base,
+    boundaryKts,
     // No arbitrary amber buffer: the rendered boundary is the current physical CLmax limit.
-    amberTopKias: null,
-    unit: "KIAS",
+    amberTopKts: null,
+    unit: calibrated ? "KCAS" : "KIAS",
   };
 }
 
 export function speedTapeMarkers(state = {}) {
   if (state.carrier === true && state.mode !== "FREE") return [];
-  const cornerKias = finiteNumber(state.corner_speed_kias);
-  if (cornerKias === null || cornerKias <= 0) return [];
-  return [{ value: cornerKias, label: "COR", unit: "KIAS" }];
+  const cornerKcas = finiteNumber(state.corner_speed_kcas);
+  const cornerKts = cornerKcas ?? finiteNumber(state.corner_speed_kias);
+  if (cornerKts === null || cornerKts <= 0) return [];
+  return [{ value: cornerKts, label: "COR", unit: cornerKcas === null ? "KIAS" : "KCAS" }];
 }
 
 export function targetClosureReadout(value) {
@@ -113,6 +126,26 @@ export function targetClosureReadout(value) {
   };
 }
 
+export function targetRangeReadout(value) {
+  const metres = finiteNumber(value);
+  if (metres === null || metres < 0) {
+    return {
+      rangeNm: null,
+      compactText: "---",
+      text: "---",
+    };
+  }
+
+  const rangeNm = metres / 1852;
+  const decimals = rangeNm < 1 ? 2 : rangeNm < 10 ? 1 : 0;
+  const valueText = rangeNm.toFixed(decimals);
+  return {
+    rangeNm,
+    compactText: `${valueText}NM`,
+    text: `${valueText} NM`,
+  };
+}
+
 // Weapon availability is an authoritative visual-merge safety state, not generic coaching copy.
 // SAFE and an outstanding release interlock remain visible; HOT is supplied only for the bounded
 // transition window owned by the simulation and then this returns null so the HUD gets its space
@@ -141,14 +174,14 @@ export function fuelReadout(state = {}) {
   const consumesFuel = state.fuel_consumes !== false;
   const bingo = consumesFuel
     && (state.fuel_bingo === true || fuelLb <= bingoThresholdLb);
-  // The cockpit contract is pounds per minute throughout. `fuel_burn_lb_min` remains a temporary
-  // bridge fallback while older recordings are still useful, but an hourly-rate value is never
-  // accepted or synthesized here.
-  const flowLbPerMinute = Math.max(0,
-    finiteNumber(state.fuel_flow_lb_min)
-      ?? finiteNumber(state.fuel_burn_lb_min)
-      ?? 0);
-  const flowText = consumesFuel ? `FF ${Math.round(flowLbPerMinute)}` : "UNPOWERED";
+  // USAF airborne-display convention is mass flow per hour. Older snapshots carried a per-minute
+  // engineering rate, so convert it at this presentation boundary rather than changing physics.
+  const directFlowPph = finiteNumber(state.fuel_flow_pph);
+  const legacyFlowLbPerMinute = finiteNumber(state.fuel_flow_lb_min)
+    ?? finiteNumber(state.fuel_burn_lb_min);
+  const flowPoundsPerHour = Math.max(0,
+    directFlowPph ?? (legacyFlowLbPerMinute === null ? 0 : legacyFlowLbPerMinute * 60));
+  const flowText = consumesFuel ? `FF ${Math.round(flowPoundsPerHour)}` : "UNPOWERED";
   const decisionText = consumesFuel
     ? decisionMinutes(bingo ? "END" : "BGO", bingo
       ? state.fuel_endurance_minutes
@@ -162,12 +195,12 @@ export function fuelReadout(state = {}) {
     consumesFuel,
     bingo,
     critical: consumesFuel && fuelLb <= bingoThresholdLb * 0.5,
-    flowLbPerMinute,
+    flowPoundsPerHour,
     flowText,
-    flowUnitText: consumesFuel ? "LB/MIN" : "",
+    flowUnitText: consumesFuel ? "PPH" : "",
     decisionText,
     padlockText: consumesFuel
-      ? `${Math.round(fuelLb)}LB · ${flowText} LB/MIN · ${decisionText}`
+      ? `${Math.round(fuelLb)}LB · ${flowText} PPH · ${decisionText}`
       : `${Math.round(fuelLb)}LB · UNPOWERED`,
   };
 }

@@ -58,6 +58,9 @@ public static partial class WebBridge {
     public static void FeedKey(int gkey, bool pressed) => Session.FeedKey((GKey)gkey, pressed);
 
     [JSExport]
+    public static void SetAnalogRollControl(double value) => Session.SetAnalogRollControl(value);
+
+    [JSExport]
     public static void SetVariant(int value) => Session.SetVariant(
         value == 1 ? ValleyVariant.PhysicsOnly : ValleyVariant.DoctrineDeep);
 

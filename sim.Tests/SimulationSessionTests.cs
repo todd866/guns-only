@@ -112,6 +112,25 @@ public class SimulationSessionTests {
     }
 
     [Fact]
+    public void AnalogRollIsAcceptedOnlyInActiveFlightAndPauseNeutralizesIt() {
+        var session = new SimulationSession(1);
+
+        session.SetAnalogRollControl(0.35);
+        session.Begin();
+        session.StepFixed();
+        Assert.Equal(0.0, session.Controls.Command.RollControl, 10);
+
+        session.SetAnalogRollControl(0.35);
+        session.StepFixed();
+        Assert.Equal(0.35, session.Controls.Command.RollControl, 10);
+
+        session.SetPaused(true);
+        session.SetPaused(false);
+        session.StepFixed();
+        Assert.Equal(0.0, session.Controls.Command.RollControl, 10);
+    }
+
+    [Fact]
     public void GearCyclesOncePerGPressAndMissionStagingDoesNotOverrideThePilot() {
         var session = new SimulationSession(5);
         double stagedFlapDegrees = session.PlayerSystems.LeftFlapDegrees;

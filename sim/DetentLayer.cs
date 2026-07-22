@@ -24,6 +24,24 @@ public sealed class DetentLayer {
     readonly HashSet<int> _sampledRollRightPresses = new();
     readonly HashSet<int> _sampledRollLeftPresses = new();
     readonly Queue<int> _pendingRollTapPulses = new();
+    double _analogRollControl;
+    bool _analogRollControlActive;
+
+    /// <summary>
+    /// Supply a continuous pilot lateral-stick command. Keyboard/touch-button roll commands retain
+    /// priority while held so the analogue path can coexist with the accessibility button stick.
+    /// </summary>
+    public void SetAnalogRollControl(double value) {
+        if (!double.IsFinite(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        _analogRollControl = System.Math.Clamp(value, -1.0, 1.0);
+        _analogRollControlActive = true;
+    }
+
+    public void ClearAnalogRollControl() {
+        _analogRollControl = 0.0;
+        _analogRollControlActive = false;
+    }
 
     // MAGIC CARPET (approach mode). The G-command grammar is wrong for a landing: with the valley
     // pinned at 1 G the pull has no authority, so the aircraft just sinks (the "uncontrollable"
@@ -335,6 +353,9 @@ public sealed class DetentLayer {
         int tapDirection = rollDirection == 0 && _pendingRollTapPulses.Count > 0
             ? _pendingRollTapPulses.Dequeue() : 0;
         int effectiveRollDirection = rollDirection != 0 ? rollDirection : tapDirection;
+        double requestedRollControl = effectiveRollDirection != 0
+            ? effectiveRollDirection
+            : _analogRollControlActive ? _analogRollControl : 0.0;
         if (HasBodyAttitude(s)) {
             double bodyBank = BodyBank(s);
             // Capture the aircraft's ACTUAL bank on entry to the fight. _bankTarget used to start at
@@ -417,7 +438,7 @@ public sealed class DetentLayer {
         Command = new PilotCommand(_gCmd, _bankTarget, Throttle, rudder,
             ApproachMode ? _cmdPitch : double.NaN,
             EnvelopeOverride: !ApproachMode && over && (pull != KeyPhase.Idle || push != KeyPhase.Idle),
-            RollControl: effectiveRollDirection * aileronAuthority,
+            RollControl: requestedRollControl * aileronAuthority,
             CommandedAlphaRad: commandedAlpha,
             SasRollControl: 0.0,
             DirectLateralControl: true);

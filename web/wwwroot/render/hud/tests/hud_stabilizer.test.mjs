@@ -69,6 +69,17 @@ test("F-22 tape filtering removes sample jitter but bounds manoeuvre lag", () =>
   assert.ok(display.headingDeg < 10, "heading smoothing must cross north by the short path");
 });
 
+test("F-22 tape prefers the explicit calibrated-airdata channel", () => {
+  const filter = new HudSignalStabilizer();
+  const display = filter.update({
+    player_entity_id: "cas-contract",
+    calibrated_airspeed_kts: 311,
+    indicated_airspeed_kts: 999,
+    alt_ft: 12_000,
+  }, 1 / 60);
+  assert.equal(display.indicatedKts, 311);
+});
+
 test("airspeed tape and trend reject sustained small reversals without hiding acceleration", () => {
   const filter = new HudSignalStabilizer();
   let display = filter.update({

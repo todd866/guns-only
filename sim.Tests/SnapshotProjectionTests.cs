@@ -68,6 +68,14 @@ public class SnapshotProjectionTests {
         Assert.Equal("1.5.0",
             root.GetProperty("snapshot_schema_version").GetString());
         Assert.False(string.IsNullOrEmpty(root.GetProperty("beat").GetString()));
+        Assert.Equal(root.GetProperty("indicated_airspeed_kts").GetDouble(),
+            root.GetProperty("calibrated_airspeed_kts").GetDouble(), 10);
+        Assert.Equal(root.GetProperty("stall_speed_kias").GetDouble(),
+            root.GetProperty("stall_speed_kcas").GetDouble(), 10);
+        Assert.Equal(root.GetProperty("corner_speed_kias").GetDouble(),
+            root.GetProperty("corner_speed_kcas").GetDouble(), 10);
+        Assert.InRange(Math.Abs(root.GetProperty("fuel_flow_lb_min").GetDouble() * 60.0
+            - root.GetProperty("fuel_flow_pph").GetDouble()), 0.0, 0.31);
 
         // (f) the ballistic gun trajectory the HUD funnel projects: nine finite samples whose
         // range from the shooter increases monotonically away from the muzzle station.

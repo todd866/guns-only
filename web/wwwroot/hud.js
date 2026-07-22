@@ -6,6 +6,7 @@ import {
   stallAwareness,
   systemsReadout,
   targetClosureReadout,
+  targetRangeReadout,
   verticalSpeedText,
   visualMergeWeaponsCue,
 } from "./render/hud/hud_readouts.js";
@@ -89,13 +90,6 @@ function roundedRect(ctx, x, y, width, height, radius) {
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
-}
-
-function formatRange(metres) {
-  if (!Number.isFinite(metres)) return "---";
-  if (metres < 1000) return `${Math.round(metres)} M`;
-  if (metres < 10000) return `${(metres / 1000).toFixed(1)} KM`;
-  return `${Math.round(metres / 1000)} KM`;
 }
 
 function formatSigned(value) {
@@ -979,7 +973,7 @@ class CombatHud {
       ctx.shadowBlur = 0;
 
       const closure = targetClosureReadout(state.closure_kts);
-      const dataLine = `${formatRange(state.range_m).replace(" ", "")} · ${closure.compactText}`;
+      const dataLine = `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`;
       ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       const textWidth = ctx.measureText(dataLine).width;
       const textHeight = 14;
@@ -1065,7 +1059,7 @@ class CombatHud {
     const length = Math.hypot(dx, dy) || 1;
     const azimuth = angles.azimuth * RAD_TO_DEG;
     const closure = targetClosureReadout(state.closure_kts);
-    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${formatRange(state.range_m).replace(" ", "")} · ${closure.compactText}`;
+    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
@@ -1500,15 +1494,15 @@ class CombatHud {
 
     // Low-speed awareness is derived from the same q*S*CLmax boundary as the flight model. An
     // amber region appears only when the kernel supplies a separately derived maneuver margin.
-    if (lowSpeed?.unit === "KIAS"
-        && Number.isFinite(lowSpeed.boundaryKias)) {
+    if ((lowSpeed?.unit === "KCAS" || lowSpeed?.unit === "KIAS")
+        && Number.isFinite(lowSpeed.boundaryKts)) {
       const tapeTop = centerY - halfHeight;
       const tapeBottom = centerY + halfHeight;
       const yForSpeed = (speedKias) => centerY - (speedKias - value) * pxPerUnit;
-      const boundaryY = yForSpeed(lowSpeed.boundaryKias);
-      if (Number.isFinite(lowSpeed.amberTopKias)
-          && lowSpeed.amberTopKias > lowSpeed.boundaryKias) {
-        const amberTopY = yForSpeed(lowSpeed.amberTopKias);
+      const boundaryY = yForSpeed(lowSpeed.boundaryKts);
+      if (Number.isFinite(lowSpeed.amberTopKts)
+          && lowSpeed.amberTopKts > lowSpeed.boundaryKts) {
+        const amberTopY = yForSpeed(lowSpeed.amberTopKts);
         const amberY0 = clamp(amberTopY, tapeTop, tapeBottom);
         const amberY1 = clamp(boundaryY, tapeTop, tapeBottom);
         if (amberY1 > amberY0) {
@@ -1562,7 +1556,8 @@ class CombatHud {
     }
 
     for (const marker of fixedMarkers) {
-      if (marker?.unit !== "KIAS" || !Number.isFinite(marker.value)) continue;
+      if ((marker?.unit !== "KCAS" && marker?.unit !== "KIAS")
+          || !Number.isFinite(marker.value)) continue;
       const rawY = centerY - (marker.value - value) * pxPerUnit;
       const markerY = clamp(rawY, centerY - halfHeight + 7, centerY + halfHeight - 7);
       const offscale = rawY < centerY - halfHeight || rawY > centerY + halfHeight;
@@ -1650,6 +1645,7 @@ class CombatHud {
     const groundText = Number.isFinite(groundKts)
       ? `G/S ${Math.round(Math.max(0, groundKts))}`
       : data.groundText;
+    const speedSecondaryText = data.machText ?? groundText;
     const verticalText = verticalSpeedText(verticalSpeedFpm);
     const ctx = this.ctx;
     const layout = this.getLayout();
@@ -1677,7 +1673,7 @@ class CombatHud {
     ctx.fill();
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(groundText, speedX, readoutY);
+    ctx.fillText(speedSecondaryText, speedX, readoutY);
     ctx.font = "700 6.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillText(verticalText, altitudeX, readoutY);
     ctx.restore();
@@ -2715,7 +2711,7 @@ class CombatHud {
       `800 ${compact ? 11 : 13}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`);
     drawFit(cue.instruction, 1, GREEN,
       `700 ${compact ? 7 : 9}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`);
-    drawFit(`${Math.round(displayIndicated)} KIAS · ${Math.round(displayAltitude)} FT${aoaText}`,
+    drawFit(`${Math.round(displayIndicated)} ${airdata.speedUnit} · ${Math.round(displayAltitude)} FT${aoaText}`,
       2, aoaState === "SLOW" ? RED : aoaState === "FAST" ? AMBER : GREEN_DIM);
     drawFit(`BOAT ${distanceM === null ? "---" : (distanceM / 1852).toFixed(1)} NM · BRC ${String(Math.round(brc)).padStart(3, "0")}° · FNL ${String(Math.round(finalCourse)).padStart(3, "0")}°`,
       3, GREEN_DIM);

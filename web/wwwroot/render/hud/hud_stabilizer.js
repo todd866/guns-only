@@ -188,7 +188,8 @@ export class HudSignalStabilizer {
   update(state = {}, deltaSeconds = 0) {
     const entityId = `${String(state.player_entity_id ?? "legacy")}:${state.replay_external === true ? "replay" : "live"}`;
     const indicated = Math.max(0,
-      finite(state.indicated_airspeed_kts, finite(state.speed_kts, 0)));
+      finite(state.calibrated_airspeed_kts,
+        finite(state.indicated_airspeed_kts, finite(state.speed_kts, 0))));
     const groundTruth = finite(state.ground_speed_kts, finite(state.groundspeed_kts));
     const ground = groundTruth === null ? null : Math.max(0, groundTruth);
     const altitude = finite(state.alt_ft, 0);

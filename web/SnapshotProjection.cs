@@ -299,6 +299,10 @@ internal static class SnapshotProjection {
             + $"\"blx\":{bl.X:F5},\"bly\":{bl.Y:F5},\"blz\":{bl.Z:F5},"
             + $"\"buffet_pitch_deg\":{_player.PitchBuffetRad * 57.2958:F3},\"buffet_roll_deg\":{_player.RollBuffetRad * 57.2958:F3},\"buffet_yaw_deg\":{_player.YawBuffetRad * 57.2958:F3},"
             + $"\"indicated_airspeed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
+            // The current pitot/static model has no aircraft-specific indication-error card, so
+            // its primary airspeed is ideal CAS. Publish that truth explicitly while retaining the
+            // older IAS key for replay and third-party consumer compatibility.
+            + $"\"calibrated_airspeed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
             + $"\"equivalent_airspeed_kts\":{equivalentAirspeedMps * AirData.MpsToKnots:F2},"
             + $"\"true_airspeed_kts\":{trueAirspeedMps * AirData.MpsToKnots:F2},"
             + $"\"ground_speed_kts\":{groundSpeedMps * AirData.MpsToKnots:F2},"
@@ -317,6 +321,9 @@ internal static class SnapshotProjection {
             + $"\"stall_speed_kias\":{stallSpeedKias:F2},"
             + $"\"accelerated_stall_speed_kias\":{acceleratedStallSpeedKias:F2},"
             + $"\"corner_speed_kias\":{cornerSpeedKias:F2},"
+            + $"\"stall_speed_kcas\":{stallSpeedKias:F2},"
+            + $"\"accelerated_stall_speed_kcas\":{acceleratedStallSpeedKias:F2},"
+            + $"\"corner_speed_kcas\":{cornerSpeedKias:F2},"
             + $"\"effective_on_speed_aoa_deg\":{_detents.EffectiveOnSpeedAoARad(_beat.PlayerAir) * 57.29577951308232:F3},"
             + $"\"on_speed_aoa_tolerance_deg\":{Lso.AoaToleranceRad * 57.29577951308232:F3},"
             + $"\"stall_load_factor\":{positiveLoadFactor:F3},\"alt_ft\":{playerPosition.Y * 3.28084:F1},"
@@ -478,6 +485,7 @@ internal static class SnapshotProjection {
             + $"\"engine_net_thrust_lbf\":{engine.NetThrustLbf:F1},"
             + $"\"engine_running\":{(engine.Running ? "true" : "false")},"
             + $"\"fuel_lb\":{_fuel.FuelLb:F2},\"fuel_flow_lb_min\":{_fuel.SmoothedBurnLbPerMinute:F2},"
+            + $"\"fuel_flow_pph\":{_fuel.SmoothedBurnLbPerMinute * 60.0:F1},"
             + $"\"fuel_trend_lb_min\":{_fuel.FuelTrendLbPerMinute:F2},"
             + $"\"fuel_minutes_to_bingo\":{NullableNumberJson(_fuel.MinutesToBingo)},"
             + $"\"fuel_endurance_minutes\":{NullableNumberJson(_fuel.EnduranceMinutes)},"

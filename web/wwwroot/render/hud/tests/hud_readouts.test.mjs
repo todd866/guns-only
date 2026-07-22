@@ -9,22 +9,27 @@ import {
   stallAwareness,
   systemsReadout,
   targetClosureReadout,
+  targetRangeReadout,
   verticalSpeedText,
   visualMergeWeaponsCue,
 } from "../hud_readouts.js";
 
-test("airdata makes indicated airspeed primary and formats one universal groundspeed", () => {
+test("airdata makes calibrated airspeed primary and exposes Mach", () => {
   const readout = airdataReadout({
+    calibrated_airspeed_kts: 196.52,
     indicated_airspeed_kts: 197.08,
     speed_kts: 999,
     true_airspeed_kts: 219.0,
     ground_speed_kts: 214.4,
+    mach: 0.884,
     vertical_speed_fpm: -641,
   });
 
-  assert.equal(readout.indicatedKts, 197.08);
+  assert.equal(readout.indicatedKts, 196.52);
   assert.equal(readout.primaryText, "197");
-  assert.equal(readout.unitText, "A/S KIAS");
+  assert.equal(readout.speedUnit, "KCAS");
+  assert.equal(readout.unitText, "A/S KCAS");
+  assert.equal(readout.machText, "M .88");
   assert.equal(readout.groundText, "G/S 214");
   assert.equal(readout.verticalSpeedFpm, -641);
   assert.equal(readout.verticalText, "V/S -650 FPM");
@@ -33,6 +38,9 @@ test("airdata makes indicated airspeed primary and formats one universal grounds
 
 test("legacy speed alias remains an indicated-airdata fallback", () => {
   assert.equal(airdataReadout({ speed_kts: 181 }).indicatedKts, 181);
+  assert.equal(airdataReadout({ speed_kts: 181 }).speedUnit, "KIAS");
+  assert.equal(airdataReadout({ speed_kts: 181 }).unitText, "A/S KIAS");
+  assert.equal(airdataReadout({ speed_kts: 181 }).machText, null);
   assert.equal(airdataReadout({ speed_kts: 181 }).groundText, "G/S ---");
   assert.equal(airdataReadout({ speed_kts: 181 }).verticalText, "V/S --- FPM");
 });
@@ -50,25 +58,29 @@ test("vertical speed is signed, deadbanded, compact, and never inferred from car
     "positive-down deck-relative sink is not an ownship vertical-speed substitute");
 });
 
-test("stall awareness and corner marker stay entirely in KIAS", () => {
+test("stall awareness and corner marker use the calibrated-airdata contract", () => {
   const awareness = stallAwareness({
-    stall_speed_kias: 119.0,
-    accelerated_stall_speed_kias: 197.33,
+    stall_speed_kcas: 119.0,
+    accelerated_stall_speed_kcas: 197.33,
   });
-  const markers = speedTapeMarkers({ corner_speed_kias: 314.79 });
+  const markers = speedTapeMarkers({ corner_speed_kcas: 314.79 });
 
   assert.deepEqual(awareness, {
-    baseKias: 119.0,
-    boundaryKias: 197.33,
-    amberTopKias: null,
-    unit: "KIAS",
+    baseKts: 119.0,
+    boundaryKts: 197.33,
+    amberTopKts: null,
+    unit: "KCAS",
   });
-  assert.deepEqual(markers, [{ value: 314.79, label: "COR", unit: "KIAS" }]);
+  assert.deepEqual(markers, [{ value: 314.79, label: "COR", unit: "KCAS" }]);
   assert.deepEqual(speedTapeMarkers({
-    corner_speed_kias: 314.79,
+    corner_speed_kcas: 314.79,
     carrier: true,
     mode: "APPROACH",
   }), []);
+  assert.equal(stallAwareness({
+    stall_speed_kias: 120,
+    accelerated_stall_speed_kias: 180,
+  }).unit, "KIAS", "older recordings retain an honest legacy label");
 });
 
 test("target closure is explicit about whether range is closing or opening", () => {
@@ -81,6 +93,19 @@ test("target closure is explicit about whether range is closing or opening", () 
   assert.equal(targetClosureReadout(-18.6).text, "19 KT OPENING");
   assert.equal(targetClosureReadout(0.2).text, "RANGE STEADY");
   assert.equal(targetClosureReadout(undefined).text, "CLOSURE -- KT");
+});
+
+test("fighter target range uses nautical miles with gun-range precision", () => {
+  assert.deepEqual(targetRangeReadout(258), {
+    rangeNm: 258 / 1852,
+    compactText: "0.14NM",
+    text: "0.14 NM",
+  });
+  assert.equal(targetRangeReadout(450).text, "0.24 NM");
+  assert.equal(targetRangeReadout(1852).text, "1.0 NM");
+  assert.equal(targetRangeReadout(18_520).text, "10 NM");
+  assert.equal(targetRangeReadout(undefined).text, "---");
+  assert.equal(targetRangeReadout(-1).text, "---");
 });
 
 test("visual merge weapon safety stays visible only while it changes a pilot decision", () => {
@@ -109,7 +134,7 @@ test("visual merge weapon safety stays visible only while it changes a pilot dec
   }), null);
 });
 
-test("powered fuel readout uses pounds per minute and time to bingo", () => {
+test("powered fuel readout uses USAF pounds per hour and time to bingo", () => {
   const readout = fuelReadout({
     fuel_lb: 2825,
     fuel_capacity_lb: 2826,
@@ -121,18 +146,23 @@ test("powered fuel readout uses pounds per minute and time to bingo", () => {
     fuel_bingo: false,
   });
 
-  assert.equal(readout.flowLbPerMinute, 105.47);
-  assert.equal(readout.flowText, "FF 105");
-  assert.equal(readout.flowUnitText, "LB/MIN");
+  assert.equal(readout.flowPoundsPerHour, 6328.2);
+  assert.equal(readout.flowText, "FF 6328");
+  assert.equal(readout.flowUnitText, "PPH");
   assert.equal(readout.decisionText, "BGO 24M");
-  assert.equal(readout.padlockText, "2825LB · FF 105 LB/MIN · BGO 24M");
+  assert.equal(readout.padlockText, "2825LB · FF 6328 PPH · BGO 24M");
 });
 
-test("legacy per-minute burn is the only temporary fuel-flow fallback", () => {
+test("direct PPH wins and legacy per-minute burn converts at the display boundary", () => {
+  assert.equal(fuelReadout({
+    fuel_lb: 2000,
+    fuel_flow_pph: 6012.4,
+    fuel_flow_lb_min: 20,
+  }).flowText, "FF 6012");
   assert.equal(fuelReadout({
     fuel_lb: 2000,
     fuel_burn_lb_min: 44.6,
-  }).flowText, "FF 45");
+  }).flowText, "FF 2676");
   assert.equal(fuelReadout({ fuel_lb: 2000 }).flowText, "FF 0");
 });
 

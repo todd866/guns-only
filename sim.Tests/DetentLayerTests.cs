@@ -177,6 +177,30 @@ public class DetentLayerTests {
         Assert.Equal(0.0, d.Command.SasRollControl, 10);
         Assert.Equal(initial.BodyRollRad, d.Command.BankTarget, 6);
     }
+    [Fact] public void AnalogRollIsProgressiveAndKeyboardRetainsPriority() {
+        var initial = new AircraftSim(Fast, FlightModel.Sabre);
+        var d = new DetentLayer();
+        var g = new KeyGrammar();
+        double dt = 1.0 / AircraftSim.TickHz;
+
+        d.SetAnalogRollControl(0.24);
+        d.Tick(g, 0.0, initial.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(0.24, d.Command.RollControl, 10);
+
+        g.Feed(GKey.RollLeft, true, 10.0);
+        d.Tick(g, 10.0, initial.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(-1.0, d.Command.RollControl, 10);
+
+        g.Feed(GKey.RollLeft, false, 20.0);
+        d.Tick(g, 20.0, initial.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(0.24, d.Command.RollControl, 10);
+
+        d.ClearAnalogRollControl();
+        d.Tick(g, 30.0, initial.State, FlightModel.Sabre, Advice, dt);
+        Assert.Equal(0.0, d.Command.RollControl, 10);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            d.SetAnalogRollControl(double.NaN));
+    }
     [Fact] public void DeferredRollTapsReplayOnlyUnseenPressesAndPreserveEveryPulse() {
         var sim = new AircraftSim(Fast, FlightModel.Sabre);
         var d = new DetentLayer();

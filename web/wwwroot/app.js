@@ -55,6 +55,7 @@ import {
   applyLookDelta,
   trackpadLookDelta,
 } from "./render/input/look_gesture.js";
+import { mobileRollCommand } from "./render/input/mobile_tilt_input.js";
 import {
   GlobalRoomClient,
   resolveGlobalRoomUrl,
@@ -4711,6 +4712,7 @@ function installMobileInput(view) {
   let latestOrientation = null;
   let filteredPitch = 0;
   let filteredRoll = 0;
+  let lastAnalogRollCommand = 0;
   let suspended = false;
   let frozen = false;
   let frozenRestartSent = false;
@@ -4746,6 +4748,7 @@ function installMobileInput(view) {
       if (code) releaseMappedKey(code, `tilt:${axis}`);
       tiltKeys[axis] = null;
     }
+    forceAnalogRollNeutral();
   }
 
   function updateTiltAxis(axis, value, negativeCode, positiveCode) {
@@ -4759,6 +4762,29 @@ function installMobileInput(view) {
     }
     const next = value <= -TILT_DEADZONE ? negativeCode : value >= TILT_DEADZONE ? positiveCode : null;
     if (next && pressMappedKey(next, source)) tiltKeys[axis] = next;
+  }
+
+  function setAnalogRollCommand(value) {
+    if (typeof bridge?.SetAnalogRollControl !== "function") return false;
+    const command = clamp(Number(value) || 0, -1, 1);
+    // Phone sensors and pointer moves can report sub-noise changes faster than the fixed clock.
+    // Keep the latest command without needlessly crossing the WASM bridge for the same value.
+    if (Math.abs(command - lastAnalogRollCommand) >= 0.002) {
+      bridge.SetAnalogRollControl(command);
+      lastAnalogRollCommand = command;
+    }
+    return true;
+  }
+
+  function forceAnalogRollNeutral() {
+    if (typeof bridge?.SetAnalogRollControl !== "function") return false;
+    bridge.SetAnalogRollControl(0);
+    lastAnalogRollCommand = 0;
+    return true;
+  }
+
+  function updateAnalogRoll(value) {
+    return setAnalogRollCommand(mobileRollCommand(value));
   }
 
   function captureCentre(sample, message = "TILT CENTRED") {
@@ -4830,7 +4856,9 @@ function installMobileInput(view) {
     filteredPitch = filteredPitch * 0.72 + pitch * 0.28;
     filteredRoll = filteredRoll * 0.72 + roll * 0.28;
     updateTiltAxis("pitch", filteredPitch, "ArrowUp", "ArrowDown");
-    updateTiltAxis("roll", filteredRoll, "ArrowLeft", "ArrowRight");
+    if (!updateAnalogRoll(filteredRoll)) {
+      updateTiltAxis("roll", filteredRoll, "ArrowLeft", "ArrowRight");
+    }
   }
 
   function startOrientationListener() {
