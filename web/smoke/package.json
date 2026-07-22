@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Headless browser smoke test: boots the published web app and requires it reaches a running flight kernel. Catches app.js render-path regressions the Node/dotnet suites cannot (they never execute app.js).",
+  "scripts": {
+    "test": "node --test smoke.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.0"
+  }
+}

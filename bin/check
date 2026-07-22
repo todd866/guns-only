@@ -65,6 +65,23 @@ test ! -d "$publish_dir/wwwroot/lib/bootstrap"
 test -f "$publish_dir/wwwroot/vercel.json"
 rg -q '"source": "/telemetry-admin"' "$publish_dir/wwwroot/vercel.json"
 
+# Browser smoke test: boot the published app in headless Chromium and require it reaches a running
+# flight kernel (the #boot screen settles without the #fatal "FLIGHT KERNEL OFFLINE" modal). This is
+# the only gate that executes app.js's real render path, so it catches boot regressions -- e.g. a
+# deleted render helper that leaves syntax valid but breaks new FlightView() -- that every Node and
+# .NET suite passes green. Set GUNS_SKIP_SMOKE=1 to skip it for a quick offline run.
+if [ -z "${GUNS_SKIP_SMOKE:-}" ]; then
+  (cd web/smoke && npm install --no-audit --no-fund --silent)
+  if [ -n "${CI:-}" ]; then
+    (cd web/smoke && npx --yes playwright install --with-deps chromium)
+  else
+    (cd web/smoke && npx --yes playwright install chromium)
+  fi
+  SMOKE_WWWROOT="$publish_dir/wwwroot" node --test web/smoke/smoke.test.mjs
+else
+  echo "Skipping browser smoke test (GUNS_SKIP_SMOKE set)."
+fi
+
 test -f world-worker/src/index.js
 test -f world-worker/src/world.js
 test -f world-worker/wrangler.jsonc
