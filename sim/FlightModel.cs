@@ -58,6 +58,21 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     // receives no hold/SAS moment unless a future model publishes explicit SasRollControl.
     double YawBetaStiffnessNmRad = 180000, double RollHoldDampingNms = 50000,
     double RollHoldErrorRad = 0.10,
+    // BANK-HOLD (fly-by-wire roll-rate command with attitude hold). A modern FBW fighter holds the
+    // bank the pilot last set: with the stick centred it drives the roll RATE to zero and freezes
+    // the current bank, so cross-coupling (dihedral beta, inertial pitch/yaw coupling) cannot
+    // slowly roll the wing off during a hard pull and force constant aileron correction. This is an
+    // explicit augmentation moment on the FLOWN (DirectLateralControl) path only, applied on top of
+    // the bare aileron/derivative aerodynamics -- it is NOT aircraft aero data. RollHoldRateGainNms
+    // is the tunable hold strength in Nm per rad/s of unwanted roll rate (raise it for a stiffer
+    // hold, lower it for a looser one); the applied moment is clamped to the aileron authority
+    // (RollMomentMaxNm) so it stays physically bounded. RollHoldDeadband is the |RollControl| below
+    // which the hold is active; it fades to zero the instant the pilot commands a deliberate roll so
+    // it never fights a commanded roll. Zero gain (the default, and every non-FBW airframe such as
+    // the Sabre and the balloon glider) disables it and reproduces the old bare-aileron behaviour
+    // bit-for-bit. The law is deterministic: a pure function of the measured body roll rate and the
+    // lateral command, with no captured target attitude, integrator, RNG or wall-clock.
+    double RollHoldRateGainNms = 0.0, double RollHoldDeadband = 0.05,
     // Airframe envelope limits. Defaults preserve the existing unmanned/afterburning aircraft;
     // the F-86 overrides these with its piloted structural limit and dry-thrust-only J47.
     // The three control-law fields are explicit gameplay-surrogate policy, not hidden aircraft
@@ -264,6 +279,11 @@ public static class FlightModel {
         FightRollRateMaxRad: 2.8,
         CompatibilityRollRateMaxRad: 2.8, CompatibilityBankTau: 0.20,
         YawBetaStiffnessNmRad: 800000.0, RollHoldDampingNms: 0.0,
+        // FBW bank-hold: the F-22 pilot flies a roll-rate command and the FLCS holds the bank he
+        // last set, so a hard pull does not require constant aileron to stay in plane. ~1.8x the
+        // full aileron authority per rad/s gives a firm hold that saturates near ~0.55 rad/s of
+        // unwanted roll; tune with RollHoldRateGainNms.
+        RollHoldRateGainNms: 2_500_000.0,
         PositiveStructuralLimitG: 9.0, MaxPerformFraction: 1.0,
         // Public +9 G remains the normal protected boundary. These are deliberately labelled
         // gameplay-surrogate control laws: they do not claim that an actual F-22 exposes an
@@ -335,6 +355,8 @@ public static class FlightModel {
         FightRollRateMaxRad: 2.2,
         CompatibilityRollRateMaxRad: 2.2, CompatibilityBankTau: 0.25,
         YawBetaStiffnessNmRad: 840000.0, RollHoldDampingNms: 0.0,
+        // FBW bank-hold, matched to this airframe's aileron authority (see RollHoldRateGainNms).
+        RollHoldRateGainNms: 2_200_000.0,
         PositiveStructuralLimitG: 7.5, MaxPerformFraction: 1.0,
         NormalPullUsesMaxPerformance: true,
         MaxThrustFraction: 1.60,
@@ -374,6 +396,8 @@ public static class FlightModel {
         FightRollRateMaxRad: 2.5,
         CompatibilityRollRateMaxRad: 2.5, CompatibilityBankTau: 0.24,
         YawBetaStiffnessNmRad: 820000.0, RollHoldDampingNms: 0.0,
+        // FBW bank-hold, matched to this airframe's aileron authority (see RollHoldRateGainNms).
+        RollHoldRateGainNms: 2_400_000.0,
         PositiveStructuralLimitG: 9.0, MaxPerformFraction: 1.0,
         MaxThrustFraction: 1.609,
         HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 3.2,
@@ -754,6 +778,29 @@ public static class FlightModel {
         rollMoment += momentScale
             * (configuration.LateralLiftCoefficientDifference * (1.0 - separation)
                 + configuration.PersistentLateralLiftCoefficientDifference);
+        // Bank-hold augmentation (see AircraftParams.RollHoldRateGainNms). When the pilot centres
+        // the stick this drives the flown roll rate to zero, holding the current bank against the
+        // drift a hard pull would otherwise induce. It engages only inside the lateral-command
+        // deadband (so a deliberate roll retains full authority), fades out with the same wing
+        // separation that fades the aileron (so it cannot fight an autorotating departure), and is
+        // clamped to the aileron authority. rates.P == 0 contributes exactly zero, so the neutral-
+        // stick zero-moment invariant and every zero-gain (non-FBW) airframe are unchanged.
+        if (c.DirectLateralControl && p.RollHoldRateGainNms > 0.0) {
+            // Stand down whenever EITHER the pilot aileron OR an active stability-augmentation roll
+            // (e.g. an Auto-GCAS roll-to-upright, which drives SasRollControl) is commanding roll,
+            // so the hold never fights a deliberate or automatic roll -- it only holds a bank the
+            // lateral axis is otherwise leaving alone.
+            double lateralCommand =
+                System.Math.Abs(System.Math.Clamp(c.RollControl, -1.0, 1.0))
+                + System.Math.Abs(System.Math.Clamp(c.SasRollControl, -1.0, 1.0));
+            double holdEngage = 1.0 - System.Math.Clamp(
+                lateralCommand / System.Math.Max(p.RollHoldDeadband, 1e-6), 0.0, 1.0);
+            if (holdEngage > 0.0) {
+                double holdMoment = System.Math.Clamp(-p.RollHoldRateGainNms * rates.P,
+                    -p.RollMomentMaxNm, p.RollMomentMaxNm);
+                rollMoment += holdMoment * holdEngage * (1.0 - wingSeparation);
+            }
+        }
         double meanChord = p.WingAreaM2 / System.Math.Max(span, 1e-6);
         pitchMoment += dynamicPressure * p.WingAreaM2 * meanChord
             * configuration.PitchMomentCoefficientIncrement;

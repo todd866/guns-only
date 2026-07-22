@@ -177,18 +177,26 @@ test("decodes little-endian decimetres and omits all-water triangles", () => {
 });
 
 test("selects progressively coarser LODs with tier-specific distance", () => {
-  assert.equal(selectTerrainLod(5_000, "balanced", 4), 0);
+  // Weak tiers floor at LOD1 (129^2): mobile/balanced never draw the 257^2 LOD0 surface, nor its
+  // LOD0-only near-chunk scenery, even at the surface. This caps near-ground fill-rate/overdraw.
+  assert.equal(selectTerrainLod(5_000, "balanced", 4), 1);
   assert.equal(selectTerrainLod(30_000, "balanced", 4), 1);
   assert.equal(selectTerrainLod(70_000, "balanced", 4), 2);
   assert.equal(selectTerrainLod(200_000, "balanced", 4), 3);
+  assert.equal(selectTerrainLod(5_000, "mobile", 4), 1);
   assert.equal(selectTerrainLod(12_000, "mobile", 4), 1);
+  // Desktop retains full near-ground detail at LOD0.
+  assert.equal(selectTerrainLod(5_000, "desktop", 4), 0);
   assert.equal(selectTerrainLod(12_000, "desktop", 4), 0);
-  assert.equal(selectTerrainLod(16_500, "balanced", 4, 0), 0,
+  // The floor is clamped to the chunk's coarsest level, so a single-LOD chunk is unaffected.
+  assert.equal(selectTerrainLod(0, "balanced", 1), 0);
+  // Hysteresis retains the current LOD across a small threshold crossing (desktop keeps LOD0).
+  assert.equal(selectTerrainLod(25_000, "desktop", 4, 0), 0,
     "a small outward threshold crossing should retain the current LOD");
-  assert.equal(selectTerrainLod(18_000, "balanced", 4, 0), 1);
-  assert.equal(selectTerrainLod(15_000, "balanced", 4, 1), 1,
+  assert.equal(selectTerrainLod(28_000, "desktop", 4, 0), 1);
+  assert.equal(selectTerrainLod(22_000, "desktop", 4, 1), 1,
     "a small inward threshold crossing should retain the current LOD");
-  assert.equal(selectTerrainLod(14_000, "balanced", 4, 1), 0);
+  assert.equal(selectTerrainLod(20_000, "desktop", 4, 1), 0);
 });
 
 test("uses the active ocean curvature contract for terrain presentation", () => {

@@ -56,6 +56,7 @@ uniform vec3 uSunDirection;
 uniform vec3 uFogColor;
 uniform float uFogDensity;
 uniform float uModernScenery;
+uniform float uParcelTint;
 varying vec3 vTerrainNormal;
 varying vec3 vTerrainWorldPosition;
 varying float vTerrainHeight;
@@ -77,17 +78,23 @@ void main() {
   vec3 albedo = mix(valley, upland, elevation);
   albedo = mix(albedo, drySlope, smoothstep(0.16, 0.62, steepness) * 0.68);
   albedo = mix(albedo, ridge, highRidge * (0.42 + steepness * 0.58));
-  float lowland = (1.0 - smoothstep(180.0, 720.0, vTerrainHeight))
-    * (1.0 - smoothstep(0.08, 0.42, steepness));
-  float parcelA = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.0061
-    + sin(vTerrainWorldPosition.z * 0.0017) * 1.8);
-  float parcelB = 0.5 + 0.5 * sin(vTerrainWorldPosition.z * 0.0083
-    + sin(vTerrainWorldPosition.x * 0.0013) * 2.1);
-  float parcels = smoothstep(0.31, 0.69, parcelA * 0.56 + parcelB * 0.44);
-  vec3 periodCultivation = mix(vec3(0.29, 0.31, 0.12), vec3(0.43, 0.39, 0.17), parcels);
-  vec3 modernCultivation = mix(vec3(0.24, 0.34, 0.13), vec3(0.46, 0.44, 0.20), parcels);
-  albedo = mix(albedo, mix(periodCultivation, modernCultivation, uModernScenery),
-    lowland * (0.16 + parcels * 0.20));
+  // Parcel/cultivation tint is the shader's most expensive fragment work (four sin() plus two
+  // nested sin()). It is a fine-grain readability treatment only visible up close, so a tier
+  // uniform gates it off entirely on the mobile/balanced visual tiers where fill-rate is scarce.
+  // uParcelTint is a compile-time-constant-per-material uniform, so the branch is fully coherent.
+  if (uParcelTint > 0.5) {
+    float lowland = (1.0 - smoothstep(180.0, 720.0, vTerrainHeight))
+      * (1.0 - smoothstep(0.08, 0.42, steepness));
+    float parcelA = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.0061
+      + sin(vTerrainWorldPosition.z * 0.0017) * 1.8);
+    float parcelB = 0.5 + 0.5 * sin(vTerrainWorldPosition.z * 0.0083
+      + sin(vTerrainWorldPosition.x * 0.0013) * 2.1);
+    float parcels = smoothstep(0.31, 0.69, parcelA * 0.56 + parcelB * 0.44);
+    vec3 periodCultivation = mix(vec3(0.29, 0.31, 0.12), vec3(0.43, 0.39, 0.17), parcels);
+    vec3 modernCultivation = mix(vec3(0.24, 0.34, 0.13), vec3(0.46, 0.44, 0.20), parcels);
+    albedo = mix(albedo, mix(periodCultivation, modernCultivation, uModernScenery),
+      lowland * (0.16 + parcels * 0.20));
+  }
 
   float diffuse = 0.43 + 0.57 * max(dot(normal, normalize(uSunDirection)), 0.0);
   float distanceToCamera = length(cameraPosition - vTerrainWorldPosition);
@@ -182,15 +189,20 @@ export function selectTerrainLod(distanceM, tier = "balanced", lodCount = 4,
   const thresholds = TIER_DISTANCE_METRES[tier] ?? TIER_DISTANCE_METRES.balanced;
   const distance = Math.max(0, finite(distanceM));
   const maximumLevel = Math.max(0, lodCount - 1);
+  // Floor the near-ground LOD on the weak tiers: mobile/balanced never draw the 257^2 LOD0 surface
+  // (nor its LOD0-only near-chunk tree/building scenery) even at the surface, capping fill-rate and
+  // overdraw where it hurts most. Desktop retains full LOD0 detail. Clamped to the chunk's coarsest
+  // available level so a single-LOD chunk is unaffected.
+  const minimumLevel = tier === "desktop" ? 0 : Math.min(1, maximumLevel);
   let selected = thresholds.findIndex((threshold) => distance < threshold);
   if (selected < 0) selected = thresholds.length;
-  selected = Math.min(maximumLevel, selected);
+  selected = Math.min(maximumLevel, Math.max(minimumLevel, selected));
   if (!Number.isInteger(currentLevel) || currentLevel < 0 || currentLevel > maximumLevel) {
     return selected;
   }
   const margin = Math.min(0.45, Math.max(0, finite(hysteresis, 0.12)));
-  let level = currentLevel;
-  while (level > 0 && distance < thresholds[level - 1] * (1 - margin)) level--;
+  let level = Math.max(minimumLevel, currentLevel);
+  while (level > minimumLevel && distance < thresholds[level - 1] * (1 - margin)) level--;
   while (level < maximumLevel && distance >= thresholds[level] * (1 + margin)) level++;
   return level;
 }
@@ -290,6 +302,16 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setIndex(indices);
+  // Two material groups so the flat top surface can render single-sided (THREE.FrontSide halves
+  // its fragment work — this is where the "face-full of ground" fill cost lives) while the thin
+  // perimeter skirts stay double-sided. A seam skirt is viewed from either side depending on which
+  // neighbour is lower, so single-siding it could open the very crack it exists to hide; the skirt
+  // area is negligible, so keeping only it double-sided costs almost nothing.
+  const surfaceIndexCount = surfaceTriangleCount * 3;
+  geometry.addGroup(0, surfaceIndexCount, 0);
+  if (indices.length > surfaceIndexCount) {
+    geometry.addGroup(surfaceIndexCount, indices.length - surfaceIndexCount, 1);
+  }
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
   const normalAttribute = geometry.getAttribute("normal");
@@ -414,7 +436,10 @@ function createTerrainMaterial(THREE, options = {}) {
     name: "MAT_KOREA_CENTRAL_FRONT_TERRAIN",
     vertexShader: TERRAIN_VERTEX,
     fragmentShader: TERRAIN_FRAGMENT,
-    side: THREE.DoubleSide,
+    // The winding leaves the sourced top surface front-facing with +Y normals (see the geometry
+    // comment above), so single-siding it halves the dominant terrain fragment cost. The seam
+    // skirts keep their own double-sided material via a geometry group.
+    side: THREE.FrontSide,
     uniforms: {
       uEarthRadiusM: { value: TERRAIN_EARTH_RADIUS_M },
       uCurvatureStartM: { value: TERRAIN_CURVATURE_START_M },
@@ -424,7 +449,23 @@ function createTerrainMaterial(THREE, options = {}) {
       uFogColor: { value: new THREE.Color(options.fogColor ?? 0x6f8790) },
       uFogDensity: { value: finite(options.fogDensity, 0.000055) },
       uModernScenery: { value: options.sceneryEra === "modern" ? 1 : 0 },
+      // Full-detail parcel/cultivation tint only on the desktop tier; the cheaper mobile/balanced
+      // tiers drop the shader's most expensive fragment term (see TERRAIN_FRAGMENT).
+      uParcelTint: { value: options.qualityTier === "desktop" ? 1 : 0 },
     },
+  });
+}
+
+// Companion material for the perimeter skirts only. It shares the surface material's uniforms
+// object by reference, so every uniform update (fog, sun, era) reaches both with no extra work; it
+// differs solely in rendering both faces so a seam skirt is never culled from the viewing side.
+function createTerrainSkirtMaterial(THREE, surfaceMaterial) {
+  return new THREE.ShaderMaterial({
+    name: "MAT_KOREA_CENTRAL_FRONT_TERRAIN_SKIRT",
+    vertexShader: TERRAIN_VERTEX,
+    fragmentShader: TERRAIN_FRAGMENT,
+    side: THREE.DoubleSide,
+    uniforms: surfaceMaterial.uniforms,
   });
 }
 
@@ -446,6 +487,9 @@ class KoreaTerrainPresentation {
     this.group.name = options.groupName ?? "KOREA_CENTRAL_FRONT_TERRAIN";
     this.material = options.material ?? createTerrainMaterial(THREE, options);
     this.ownsMaterial = !options.material;
+    this.skirtMaterial = options.skirtMaterial
+      ?? createTerrainSkirtMaterial(THREE, this.material);
+    this.ownsSkirtMaterial = !options.skirtMaterial;
     this.sceneryRuntime = options.sceneryRuntime
       ?? (options.sceneryEra ? createKoreaSceneryRuntime(THREE, {
         era: options.sceneryEra,
@@ -574,7 +618,8 @@ class KoreaTerrainPresentation {
       }
       const decoded = decodeTerrainRecord(buffer, record, this.manifest.quantization);
       const built = createTerrainGeometry(this.THREE, entry.chunk, decoded);
-      const mesh = new this.THREE.Mesh(built.geometry, this.material);
+      const mesh = new this.THREE.Mesh(built.geometry,
+        [this.material, this.skirtMaterial]);
       mesh.name = `TERRAIN_${entry.chunk.id.toUpperCase()}_LOD${level}`;
       mesh.position.set(built.centreEast, 0, -built.centreNorth);
       mesh.userData.terrain = Object.freeze({
@@ -756,6 +801,7 @@ class KoreaTerrainPresentation {
     this.resolveIdleWaiters();
     if (this.ownsSceneryRuntime) this.sceneryRuntime?.dispose();
     if (this.ownsMaterial) this.material.dispose();
+    if (this.ownsSkirtMaterial) this.skirtMaterial.dispose();
     this.group.removeFromParent();
   }
 }
@@ -802,6 +848,7 @@ class KoreaTerrainAtlasPresentation {
     this.group = new THREE.Group();
     this.group.name = "KOREA_PENINSULA_TERRAIN_ATLAS";
     this.material = createTerrainMaterial(THREE, { ...options, sceneryEra: this.sceneryEra });
+    this.skirtMaterial = createTerrainSkirtMaterial(THREE, this.material);
     this.sceneryRuntime = this.sceneryEra
       ? createKoreaSceneryRuntime(THREE, {
         era: this.sceneryEra,
@@ -902,6 +949,7 @@ class KoreaTerrainAtlasPresentation {
         chunkEvictRadiusM: this.chunkEvictRadiusM,
         lazyChunks: true,
         material: this.material,
+        skirtMaterial: this.skirtMaterial,
         sceneryRuntime: this.sceneryRuntime,
         groupName: `KOREA_TERRAIN_PAGE_${descriptor.id.toUpperCase()}`,
       });
@@ -1056,6 +1104,7 @@ class KoreaTerrainAtlasPresentation {
     for (const resolve of this.idleWaiters.splice(0)) resolve();
     this.sceneryRuntime?.dispose();
     this.material.dispose();
+    this.skirtMaterial.dispose();
     this.group.removeFromParent();
   }
 }

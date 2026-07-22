@@ -188,6 +188,60 @@ public class FightControlTests {
             "conflicting bank target generated a hidden wings-left servo moment");
     }
 
+    // A hard hands-off pull with a lateral disturbance: return the total body roll the aircraft
+    // accumulates about its own roll axis (the integral of the body roll rate, unconfounded by the
+    // pull's flight-path-frame rotation) and the roll rate still present at the end. Same command,
+    // one airframe with the FBW bank-hold and an otherwise-identical clone with the hold off.
+    static (double AccumulatedBodyRollRad, double FinalRollRateRad) HardPullBankDrift(
+        in AircraftParams param) {
+        var disturbed = new AircraftState(new Vec3D(0, 6000, 0), 250.0, 0.0, 0.0,
+            25.0 / Deg, param.MassKg, BodyRates: new BodyRates(0.35, 0.0, 0.0));
+        var sim = new AircraftSim(disturbed, param);
+        var pull = new PilotCommand(7.0, 25.0 / Deg, 1.0, 0.0,
+            RollControl: 0.0, SasRollControl: 0.0, DirectLateralControl: true);
+        double accumulated = 0.0;
+        for (int i = 0; i < 360; i++) { // 3 s hard pull, hands off the roll axis
+            sim.Step(pull, Dt);
+            accumulated += sim.State.BodyRates.P * Dt;
+        }
+        return (accumulated, sim.State.BodyRates.P);
+    }
+
+    [Fact]
+    public void FbwBankHoldContainsUncommandedRollUnderHardPullYetLeavesCommandedRollFree() {
+        var p = FlightModel.F22APublicDataSurrogate;
+        // The complaint: pulling hard lets the bank drift, forcing constant aileron. The FBW
+        // bank-hold must arrest the uncommanded roll and materially contain the bank versus an
+        // identical airframe with the hold switched off.
+        var withHold = HardPullBankDrift(p);
+        var withoutHold = HardPullBankDrift(p with { RollHoldRateGainNms = 0.0 });
+
+        Assert.True(System.Math.Abs(withHold.FinalRollRateRad) * Deg < 2.0,
+            $"bank-hold left {withHold.FinalRollRateRad * Deg:F1} deg/s of uncommanded roll");
+        Assert.True(System.Math.Abs(withHold.FinalRollRateRad)
+            < 0.25 * System.Math.Abs(withoutHold.FinalRollRateRad),
+            $"hold barely damped roll rate: {withHold.FinalRollRateRad * Deg:F1} vs "
+                + $"{withoutHold.FinalRollRateRad * Deg:F1} deg/s hands-off");
+        Assert.True(System.Math.Abs(withHold.AccumulatedBodyRollRad)
+            < 0.6 * System.Math.Abs(withoutHold.AccumulatedBodyRollRad),
+            $"hold barely contained body roll: {withHold.AccumulatedBodyRollRad * Deg:F1} vs "
+                + $"{withoutHold.AccumulatedBodyRollRad * Deg:F1} deg");
+
+        // A deliberate roll still gets full FBW rate authority: the hold fades out of its way.
+        var rolling = new AircraftSim(new AircraftState(new Vec3D(0, 6000, 0), 250.0,
+            0.0, 0.0, 0.0, p.MassKg), p);
+        var rollRight = new PilotCommand(1.0, 0.0, 1.0, 0.0,
+            RollControl: 1.0, DirectLateralControl: true);
+        double maxRollRateDeg = 0.0;
+        for (int i = 0; i < 120; i++) {
+            rolling.Step(rollRight, Dt);
+            maxRollRateDeg = System.Math.Max(maxRollRateDeg,
+                System.Math.Abs(rolling.State.BodyRates.P) * Deg);
+        }
+        Assert.True(maxRollRateDeg > 90.0,
+            $"commanded roll only reached {maxRollRateDeg:F0} deg/s with the hold present");
+    }
+
     [Fact]
     public void ManualAileronAuthorityScalesWithDynamicPressure() {
         static AircraftSim Rig(double speedMps) => new(new AircraftState(
