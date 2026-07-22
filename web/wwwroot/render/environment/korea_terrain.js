@@ -340,7 +340,10 @@ export class TerrainBundleReader {
   constructor(bundleUrl, byteLength, fetchImpl = fetch, maximumCachedRanges = 96) {
     this.bundleUrl = bundleUrl;
     this.byteLength = byteLength;
-    this.fetch = fetchImpl;
+    // Native window.fetch rejects an arbitrary receiver. Wrapping it keeps the eventual request a
+    // bare call instead of `reader.fetch(...)`, which otherwise binds `this` to this reader and
+    // leaves every terrain chunk stuck in its retry loop with an "Illegal invocation" error.
+    this.fetch = (...args) => fetchImpl(...args);
     this.completeBuffer = null;
     this.rangeCache = new Map();
     this.pendingRanges = new Map();

@@ -162,7 +162,7 @@ public sealed class GunKill {
 
         var ownVelocity = own.VelocityVector();
         var banditVelocity = bandit.VelocityVector();
-        var gunForward = GunForward(own);
+        var gunForward = GunDirection(own);
         double elapsed = 0.0;
 
         if (!triggerHeld || AmmoRemaining == 0) {
@@ -256,7 +256,7 @@ public sealed class GunKill {
     }
 
     void UpdateLead(in AircraftState own, in AircraftState bandit, double dt) {
-        var gunForward = GunForward(own);
+        var gunForward = GunDirection(own);
         var muzzle = own.Position + gunForward * MuzzleOffsetM;
         var relativePosition = bandit.Position - muzzle;
         var relativeVelocity = bandit.VelocityVector() - own.VelocityVector();
@@ -382,7 +382,8 @@ public sealed class GunKill {
         return v * cos + unitAxis.Cross(v) * sin + unitAxis * (unitAxis.Dot(v) * (1.0 - cos));
     }
 
-    static Vec3D GunForward(in AircraftState state) {
+    /// <summary>The physical body-axis gun direction used by both fire control and projectiles.</summary>
+    public static Vec3D GunDirection(in AircraftState state) {
         if (state.BodyAttitude.IsFinite && state.BodyAttitude.LengthSquared >= 1e-12) {
             var bodyForward = state.BodyAttitude.Rotate(new Vec3D(0.0, 0.0, 1.0));
             if (IsFinite(bodyForward) && bodyForward.Length > 0.5) return bodyForward.Normalized();

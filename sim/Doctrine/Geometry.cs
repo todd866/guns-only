@@ -1,8 +1,17 @@
 namespace GunsOnly.Sim.Doctrine;
 public static class Geometry {
     public static double Range(in AircraftState own, in AircraftState bandit) => (bandit.Position - own.Position).Length;
+    public static double Range(in AircraftState own, in ActorObservation contact) =>
+        (contact.Position - own.Position).Length;
+    public static double Range(in ActorObservation own, in AircraftState contact) =>
+        (contact.Position - own.Position).Length;
     public static double AngleOff(in AircraftState own, in AircraftState bandit) {
         var los = (bandit.Position - own.Position).Normalized();
+        double d = System.Math.Clamp(own.ForwardDir().Dot(los), -1, 1);
+        return System.Math.Acos(d);
+    }
+    public static double AngleOff(in AircraftState own, in ActorObservation contact) {
+        var los = (contact.Position - own.Position).Normalized();
         double d = System.Math.Clamp(own.ForwardDir().Dot(los), -1, 1);
         return System.Math.Acos(d);
     }

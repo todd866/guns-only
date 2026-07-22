@@ -58,6 +58,14 @@ public static partial class WebBridge {
     public static void FeedKey(int gkey, bool pressed) => Session.FeedKey((GKey)gkey, pressed);
 
     [JSExport]
+    public static void SuppressPendingThrottleTap(bool increase) =>
+        Session.SuppressPendingThrottleTap(increase);
+
+    [JSExport]
+    public static void FeedDirectThrottle(bool increase, bool pressed) =>
+        Session.FeedDirectThrottle(increase, pressed);
+
+    [JSExport]
     public static void SetAnalogRollControl(double value) => Session.SetAnalogRollControl(value);
 
     [JSExport]
@@ -118,9 +126,9 @@ public static partial class WebBridge {
     static double TerrainPlacementNorthM(int index) => HasSharedTerrainFrame(index)
         ? -_worldOriginNorthM : 0.0;
 
-    // Null when the Korea terrain is not embedded (the default F-22 arcade opener flies over sea
-    // level). The session and projection treat a null terrain as sea level; the browser skips the
-    // multi-megabyte visual-terrain fetch when the snapshot reports terrain_present=false.
+    // Null only when a constrained build explicitly opts out of the embedded Korea terrain. The
+    // session and projection treat that as sea level; the browser then skips the multi-megabyte
+    // visual-terrain fetch because the snapshot reports terrain_present=false.
     static ITerrainSurface? TerrainForBeat(int index) => CentralFrontTerrain is null ? null
         : new TranslatedTerrainSurface(CentralFrontTerrain,
             TerrainPlacementEastM(index), TerrainPlacementNorthM(index));

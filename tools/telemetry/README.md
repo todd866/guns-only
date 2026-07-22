@@ -6,7 +6,9 @@ to make the network cost visible and mechanically bounded.
 When the private store's master credential is intentionally unavailable on the local machine, use
 `admin.mjs` with the separate operator credential. The production-only endpoint keeps the Blob
 master token inside Vercel and permits only one bounded list page or one already-selected immutable
-chunk. It has no write, delete, CORS, retry, Range, or automatic-pagination path.
+chunk. A separate report-only credential permits one bounded aggregate summary page without
+returning raw rows, session/sortie identifiers, user agents, Blob URLs, or object pathnames. The
+endpoint has no write, delete, CORS, retry, Range, or automatic-pagination path.
 
 > **Never download telemetry with the Vercel dashboard, an ordinary browser, the Codex Chrome
 > bridge, or browser automation. Do not automate dashboard Blob list/detail views.** Use only the
@@ -65,6 +67,15 @@ to 50 results, refuses limits above 100, limits its JSON response to 1 MiB, and 
 cursor automatically. Listing is itself a billed Blob operation, so request another page only by
 supplying the returned cursor explicitly.
 
+`admin.mjs summary` is the preferred routine reporting path. One operator request lists at most 20
+objects, then reads only that page inside Vercel. It caps compressed input at 16 MiB, decompressed
+input at 32 MiB, each decompressed chunk at 2 MiB, and total work at 25 seconds. Its response
+contains counts, coverage/partiality, build mix, lifecycle outcomes, and aggregate combat measures;
+it never returns raw rows or identifiers. `has_more`, `next_cursor`, failed chunks, and skipped
+chunks make incomplete coverage explicit. Legacy flat-file objects are reported separately as
+`chunks_unsupported_format` and are never downloaded by the summary route. Each summary still
+performs billed Blob reads, so keep the prefix narrow and request another cursor only deliberately.
+
 ## Workflow
 
 Run from the repository root with the private store token in the environment. There is no token CLI
@@ -85,6 +96,19 @@ node tools/telemetry/admin.mjs list \
   --prefix 'telemetry/' --limit 50 \
   --output '/tmp/guns-only-telemetry-page.json'
 ```
+
+For routine play-session reporting, use the report-only credential. This cannot authorize raw
+`list` or `get` actions:
+
+```sh
+export TELEMETRY_REPORT_TOKEN='load-this-from-a-secure-local-source'
+node tools/telemetry/admin.mjs summary \
+  --prefix 'telemetry/web-1784' --limit 20 \
+  --output '/tmp/guns-only-telemetry-summary.json'
+```
+
+If `scope.partial` is true, review the coverage fields and make a separate explicit request with
+the returned cursor only when the additional Blob-read cost is justified.
 
 Review that bounded JSON page locally and select one blob. Copy its `url`, `size`, and `etag` into a
 single download command:
@@ -135,8 +159,9 @@ node tools/telemetry/list.mjs \
 ## Intentional limitations
 
 - There is no bulk sync, automatic pagination, concurrency, retry, range resume, redirect following,
-  or decompression. A failed transfer removes its partial file; manually invoking the command again
-  is a new and visible GET.
+  or client-side summary decompression. A failed transfer removes its partial file; manually
+  invoking the command again is a new and visible GET. The production summary endpoint performs
+  tightly bounded server-side decompression solely to emit non-identifying aggregates.
 - ETag is useful for identity/cache checks but is not treated as a cryptographic checksum. Supply a
   trusted SHA-256 when that distinction matters.
 - A cache hit without newly supplied metadata assumes the source URL is immutable. That is true for

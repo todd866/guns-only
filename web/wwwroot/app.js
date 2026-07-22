@@ -55,12 +55,15 @@ import {
   applyLookDelta,
   trackpadLookDelta,
 } from "./render/input/look_gesture.js";
+import { mobileControlProfile } from "./render/input/mobile_control_profile.js";
+import { mobileThrottleRockerState } from "./render/input/mobile_throttle_rocker.js";
 import {
   mobileRollCommand,
   smoothTilt,
   StableTiltCalibration,
   TiltSensorWatchdog,
 } from "./render/input/mobile_tilt_input.js";
+import { mobileVirtualStickState } from "./render/input/mobile_virtual_stick.js";
 import {
   GlobalRoomClient,
   resolveGlobalRoomUrl,
@@ -148,7 +151,9 @@ const CLEAR_AIR_VISIBILITY_M = 100_000;
 // view until it represents authoritative state and passes an in-mission visual review. Pack weapon
 // and damage effects remain enabled because each one is evidence of a real simulation event.
 const PRODUCTION_PACK_ENVIRONMENT_ENABLED = false;
-const PRODUCTION_SIMULATED_CLOUDS_ENABLED = false;
+// Tactical clouds are authoritative weather. Production uses the bounded impostor path; the richer
+// ray-marched path stays available for an explicit, frame-governed high-end mode.
+const PRODUCTION_SIMULATED_CLOUDS_ENABLED = true;
 const PRODUCTION_ESCORT_PRESENTATION_ENABLED = false;
 const PRODUCTION_NONCOMBAT_WORLD_BOGEYS_VISIBLE = false;
 const PRODUCTION_KOREA_TERRAIN_ENABLED = true;
@@ -172,6 +177,18 @@ const viewStatus = document.querySelector("#view-status");
 const touchGcasPaddle = document.querySelector("#touch-gcas-paddle");
 const touchControls = document.querySelector("#touch-controls");
 const touchPadlockButton = touchControls?.querySelector('[data-pulse-key="KeyV"]') ?? null;
+const touchThrottleControls = document.querySelector("#touch-throttle-controls");
+const touchThrottleRocker = touchControls?.querySelector('[data-mobile-action="throttle-rocker"]') ?? null;
+const touchThrottleRockerKnob = document.querySelector("#touch-throttle-rocker-knob");
+const touchWaveOffButton = document.querySelector("#touch-wave-off");
+const touchContextControls = document.querySelector("#touch-context-controls");
+const touchGearButton = document.querySelector("#touch-gear");
+const touchFlapUpButton = document.querySelector("#touch-flap-up");
+const touchFlapDownButton = document.querySelector("#touch-flap-down");
+const touchLimitOverride = document.querySelector("#touch-limit-override");
+const touchFireButton = document.querySelector("#touch-fire");
+const fallbackStick = touchControls?.querySelector('[data-mobile-action="virtual-stick"]') ?? null;
+const fallbackStickKnob = document.querySelector("#fallback-stick-knob");
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
 const readyScreen = document.querySelector("#ready-screen");
@@ -225,6 +242,7 @@ const settingsReducedMotion = document.querySelector("#setting-reduced-motion");
 const settingsLargeText = document.querySelector("#setting-large-text");
 const settingsTiltSensitivity = document.querySelector("#setting-tilt-sensitivity");
 const settingsTiltSensitivityValue = document.querySelector("#setting-tilt-sensitivity-value");
+const settingsKeyboardBindings = document.querySelector("#settings-keyboard-bindings");
 const settingsBindings = document.querySelector("#settings-bindings");
 const settingsResetBindings = document.querySelector("#settings-reset-bindings");
 const testFlightConsole = document.querySelector("#test-flight-console");
@@ -259,6 +277,7 @@ document.documentElement.classList.toggle("touch-mode", mobileControls);
 // treatment; this mobile-only override owns the live control geometry so the HUD can reserve a
 // matching clear strip without changing the desktop layout.
 if (mobileControls) {
+  settingsKeyboardBindings?.removeAttribute("open");
   const mobileLayout = document.createElement("style");
   mobileLayout.id = "mobile-flight-layout";
   mobileLayout.textContent = `
@@ -285,26 +304,14 @@ if (mobileControls) {
       letter-spacing: .045em;
     }
 
-    .touch-mode .touch-stack {
-      display: grid;
-      grid-template-columns: repeat(2, 46px);
-      gap: 4px;
-    }
-
-    .touch-mode .touch-stack .touch-label {
-      grid-column: 1 / -1;
-      font-size: 7px;
-      line-height: 1;
-    }
-
     .touch-mode .touch-wave {
       min-width: 58px;
       height: 48px;
     }
 
-    .touch-mode .touch-utils {
+    .touch-mode .touch-context {
       display: grid;
-      grid-template-columns: repeat(2, 50px);
+      grid-template-columns: repeat(3, 50px);
       gap: 4px;
     }
 
@@ -316,7 +323,7 @@ if (mobileControls) {
     }
 
     .touch-mode .touch-actions {
-      gap: 5px;
+      gap: 6px;
     }
 
     .touch-mode .touch-fire {
@@ -329,16 +336,6 @@ if (mobileControls) {
 
     .touch-mode #fallback-stick {
       bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
-      gap: 4px;
-    }
-
-    .touch-mode #fallback-stick .touch-control {
-      min-width: 42px;
-      width: 42px;
-      height: 42px;
-      min-height: 42px;
-      padding: 3px;
-      font-size: 7px;
     }
 
     .touch-mode.run-frozen .touch-left,
@@ -861,6 +858,7 @@ let gimbalReturnFast = false;
 let sensorYaw = 0;
 let sensorPitch = 0;
 let resetMobileInput = () => {};
+let releaseHiddenMobileControls = () => {};
 let setMobileFrozen = () => {};
 let activeView = null;
 let latestState = null;
@@ -1081,10 +1079,7 @@ function renderMultiplayerStatus(status) {
 }
 
 function renderPilotPhysiology(state) {
-  if (touchGcasPaddle) {
-    touchGcasPaddle.hidden = !(state?.auto_gcas_active === true
-      && Number(state?.pilot_control_authority_01) >= 0.55);
-  }
+  syncMobileControlProfile(state);
   if (!pilotPhysiology) return;
   const presentation = gTolerancePresentation(state);
   pilotPhysiology.hidden = !presentation.active;
@@ -1107,6 +1102,24 @@ function renderPilotPhysiology(state) {
     pilotPhysiologyCue.textContent = presentation.cue?.text ?? "";
     pilotPhysiologyCue.dataset.level = presentation.cue?.level ?? "";
   }
+}
+
+function syncMobileControlProfile(state) {
+  if (!mobileControls || !touchControls) return;
+  const profile = mobileControlProfile(state);
+  if (touchThrottleControls) touchThrottleControls.hidden = !profile.throttle;
+  if (touchWaveOffButton) touchWaveOffButton.hidden = !profile.waveOff;
+  if (touchGearButton) touchGearButton.hidden = !profile.gear;
+  if (touchFlapUpButton) touchFlapUpButton.hidden = !profile.flaps;
+  if (touchFlapDownButton) touchFlapDownButton.hidden = !profile.flaps;
+  if (touchPadlockButton) touchPadlockButton.hidden = !profile.padlock;
+  if (touchLimitOverride) touchLimitOverride.hidden = !profile.limitOverride;
+  if (touchFireButton) touchFireButton.hidden = !profile.fire;
+  if (touchGcasPaddle) touchGcasPaddle.hidden = !profile.gcasOverride;
+  if (touchContextControls) {
+    touchContextControls.hidden = !profile.gear && !profile.flaps;
+  }
+  releaseHiddenMobileControls();
 }
 
 const MISSION_BRIEFS = Object.freeze({
@@ -1225,7 +1238,13 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   }),
 });
 
-function pressMappedKey(code, source, gkeyOverride = undefined) {
+// Codes whose bridge DOWN edge used the source-aware direct throttle path. Their matching UP edge
+// must use the same path so the simulation grammar never classifies a rocker hold as a keyboard
+// tap or double-tap arm (which once consumed a prior legitimate keyboard throttle tap).
+const directThrottleHeld = new Map(); // code -> increase (true = throttle up)
+
+function pressMappedKey(code, source, gkeyOverride = undefined,
+  directThrottleIncrease = undefined) {
   const gkey = gkeyOverride ?? keyMap.get(code);
   if (!bridge || gkey === undefined || pauseReasons.size > 0) return false;
   let owners = keyOwners.get(code);
@@ -1238,21 +1257,33 @@ function pressMappedKey(code, source, gkeyOverride = undefined) {
   if (owners.size > 1) return true;
   heldKeys.add(code);
   activeGkeys.set(code, gkey);
-  bridge.FeedKey(gkey, true);
+  if (directThrottleIncrease !== undefined
+    && typeof bridge.FeedDirectThrottle === "function") {
+    bridge.FeedDirectThrottle(directThrottleIncrease, true);
+    directThrottleHeld.set(code, directThrottleIncrease);
+  } else {
+    bridge.FeedKey(gkey, true);
+  }
   recorder.event("down", code, { source });
   return true;
 }
 
 function releaseMappedKey(code, source) {
   const owners = keyOwners.get(code);
-  if (!owners?.delete(source)) return;
-  if (owners.size) return;
+  if (!owners?.delete(source)) return false;
+  if (owners.size) return false;
   keyOwners.delete(code);
   heldKeys.delete(code);
   const gkey = activeGkeys.get(code) ?? keyMap.get(code);
-  if (bridge && gkey !== undefined) bridge.FeedKey(gkey, false);
+  const directIncrease = directThrottleHeld.get(code);
+  directThrottleHeld.delete(code);
+  if (bridge && directIncrease !== undefined
+    && typeof bridge.FeedDirectThrottle === "function") {
+    bridge.FeedDirectThrottle(directIncrease, false);
+  } else if (bridge && gkey !== undefined) bridge.FeedKey(gkey, false);
   activeGkeys.delete(code);
   recorder.event("up", code, { source });
+  return true;
 }
 
 function releaseAllMappedKeys(reason = "system-neutralise") {
@@ -1261,7 +1292,12 @@ function releaseAllMappedKeys(reason = "system-neutralise") {
   for (const code of [...heldKeys]) {
     const owners = [...(keyOwners.get(code) ?? [])];
     const gkey = activeGkeys.get(code) ?? keyMap.get(code);
-    if (bridge && gkey !== undefined) bridge.FeedKey(gkey, false);
+    const directIncrease = directThrottleHeld.get(code);
+    directThrottleHeld.delete(code);
+    if (bridge && directIncrease !== undefined
+      && typeof bridge.FeedDirectThrottle === "function") {
+      bridge.FeedDirectThrottle(directIncrease, false);
+    } else if (bridge && gkey !== undefined) bridge.FeedKey(gkey, false);
     heldKeys.delete(code);
     activeGkeys.delete(code);
     recorder.event("up", code, {
@@ -3442,6 +3478,10 @@ class FlightView {
       ? createTacticalCloudField(THREE, {
         qualityTier: VISUAL_QUALITY.tier,
         sunDirection: SUN_DIRECTION,
+        // Keep authoritative weather visible in production without paying the full-resolution
+        // overlapping ray-march cost. The volumetric path remains available to an explicit
+        // high-end quality mode once it is backed by a production frame-time governor.
+        volumetric: false,
       })
       : {
         group: new THREE.Group(),
@@ -3779,7 +3819,10 @@ class FlightView {
           manageFog: Boolean(environmentFactory),
           postStackFactory: createDecisionSupportPostStack,
           manageRendererSize: false,
-          shadowModes: mobileControls ? ["carrier"] : ["combat", "carrier", "replay"],
+          // The production cockpit and normal-flight ownship exterior are hidden, while terrain
+          // does not consume the directional shadow map. Preserve the pass where it has visible
+          // receivers (carrier work and desktop external replay) instead of paying for it in combat.
+          shadowModes: mobileControls ? ["carrier"] : ["carrier", "replay"],
           shadowHalfExtents: { combat: 44, carrier: 190, replay: 160 },
           onResolutionChange: (pixelRatio) => {
             const carrierVisual = this.presentationAssets.carrierSlot.object;
@@ -4325,7 +4368,7 @@ class FlightView {
     // The sortie chooser owns Ready. Defer the manifest and all height ranges until gameplay has
     // actually begun, then retain the single shared presentation across pause/replay/restage.
     // Only fetch the multi-megabyte visual terrain when the sim actually has a terrain surface.
-    // The F-22 arcade opener flies over sea level (terrain_present=false), so it never pays for it.
+    // Constrained builds can explicitly omit terrain truth and retain the sea-level fallback.
     if (state?.ready !== true && state?.terrain_present === true) void this.ensureTerrainPresentation();
     const nextBanditEntityId = projectedId(state.bandit_entity_id);
     // Padlock is bound to a specific visual tally. It may not silently transfer to a replacement
@@ -4745,6 +4788,10 @@ function installMobileInput(view) {
   let filteredRoll = 0;
   let lastOrientationSampleMs = null;
   let lastAnalogRollCommand = 0;
+  let throttleRockerPointerId = null;
+  let throttleRockerControl = null;
+  const virtualStickAxes = { roll: null, pitch: null };
+  let virtualStickPointerId = null;
   let suspended = false;
   let frozen = false;
   let frozenRestartSent = false;
@@ -4754,7 +4801,7 @@ function installMobileInput(view) {
     onFallback: () => {
       if (!suspended && !frozen && !document.hidden
           && (tiltState === "waiting" || tiltState === "enabled")) {
-        useButtonStick("TILT SIGNAL LOST · BUTTONS");
+        useThumbStick("TILT SIGNAL LOST · STICK");
       }
     },
   });
@@ -4829,8 +4876,239 @@ function installMobileInput(view) {
     return setAnalogRollCommand(mobileRollCommand(value));
   }
 
+  function releaseThrottleRockerCommand(control) {
+    if (!control) return;
+    // WAVE OFF can co-own Touch:KeyW. Only the owner that sends the final key-up may discard the
+    // pending tap; otherwise releasing the rocker would change the still-held wave-off command.
+    const wasDirect = directThrottleHeld.has(control.code);
+    const released = releaseMappedKey(control.code, control.source);
+    // The source-aware direct hold never leaves a deferred tap behind; only a legacy keyboard-
+    // grammar edge (older bridge, or a co-owned wave-off press) still needs release suppression.
+    if (released && !wasDirect
+      && typeof bridge?.SuppressPendingThrottleTap === "function") {
+      bridge.SuppressPendingThrottleTap(control.physicalCode === "KeyW");
+    }
+  }
+
+  function setThrottleRockerCode(physicalCode, source) {
+    const active = throttleRockerControl;
+    if (active?.physicalCode === physicalCode && active.source === source) return true;
+    releaseThrottleRockerCommand(active);
+    throttleRockerControl = null;
+    if (!physicalCode) return true;
+    const code = `Touch:${physicalCode}`;
+    const gkey = touchGkeyByDefaultCode.get(physicalCode);
+    if (!pressMappedKey(code, source, gkey, physicalCode === "KeyW")) return false;
+    throttleRockerControl = { code, physicalCode, source };
+    return true;
+  }
+
+  function renderThrottleRocker(power = 0, physicalCode = null) {
+    if (!touchThrottleRocker) return;
+    const height = touchThrottleRocker.clientHeight;
+    const knobHeight = touchThrottleRockerKnob?.offsetHeight ?? 0;
+    const travel = Math.max(0, (height - knobHeight) / 2 - 5);
+    const direction = physicalCode === "KeyW" ? "up"
+      : physicalCode === "KeyS" ? "down" : "neutral";
+    touchThrottleRocker.style.setProperty("--throttle-y",
+      `${-clamp(Number(power) || 0, -1, 1) * travel}px`);
+    touchThrottleRocker.dataset.active = String(
+      throttleRockerPointerId !== null || throttleRockerControl !== null,
+    );
+    touchThrottleRocker.dataset.direction = direction;
+    touchThrottleRocker.setAttribute("aria-label", direction === "up"
+      ? "Throttle rocker — increasing power"
+      : direction === "down" ? "Throttle rocker — decreasing power" : "Throttle rocker");
+  }
+
+  function releaseThrottleRocker() {
+    const pointerId = throttleRockerPointerId;
+    throttleRockerPointerId = null;
+    const active = throttleRockerControl;
+    throttleRockerControl = null;
+    releaseThrottleRockerCommand(active);
+    renderThrottleRocker();
+    if (pointerId !== null && touchThrottleRocker?.hasPointerCapture?.(pointerId)) {
+      try { touchThrottleRocker.releasePointerCapture(pointerId); } catch { /* already released */ }
+    }
+  }
+
+  function updateThrottleRockerPointer(event) {
+    if (!touchThrottleRocker || event.pointerId !== throttleRockerPointerId) return;
+    const state = mobileThrottleRockerState(event, touchThrottleRocker.getBoundingClientRect(), {
+      code: throttleRockerControl?.physicalCode ?? null,
+    });
+    const source = `touch:throttle-rocker:pointer:${event.pointerId}`;
+    if (!setThrottleRockerCode(state.code, source)) {
+      releaseThrottleRocker();
+      return;
+    }
+    renderThrottleRocker(state.power, state.code);
+  }
+
+  function beginThrottleRocker(event) {
+    if (!touchThrottleRocker || touchThrottleRocker.closest?.("[hidden]")
+      || frozen || suspended || document.hidden || pauseReasons.size > 0) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (throttleRockerPointerId !== null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    releaseThrottleRocker();
+    throttleRockerPointerId = event.pointerId;
+    touchThrottleRocker.focus({ preventScroll: true });
+    try { touchThrottleRocker.setPointerCapture(event.pointerId); } catch { /* pointer may be gone */ }
+    updateThrottleRockerPointer(event);
+  }
+
+  function moveThrottleRocker(event) {
+    if (event.pointerId !== throttleRockerPointerId) return;
+    if (touchThrottleRocker?.closest?.("[hidden]")
+      || frozen || suspended || document.hidden || pauseReasons.size > 0) {
+      releaseThrottleRocker();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    updateThrottleRockerPointer(event);
+  }
+
+  function endThrottleRocker(event) {
+    if (event.pointerId !== throttleRockerPointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    releaseThrottleRocker();
+  }
+
+  function throttleRockerKeyboardEvent(event, pressed) {
+    const physicalCode = event.code === "ArrowUp" ? "KeyW"
+      : event.code === "ArrowDown" ? "KeyS" : null;
+    if (!physicalCode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const keyboardSource = "touch:throttle-rocker:keyboard";
+    if (!pressed) {
+      if (throttleRockerControl?.source === keyboardSource
+        && throttleRockerControl.physicalCode === physicalCode) releaseThrottleRocker();
+      return;
+    }
+    if (throttleRockerPointerId !== null || touchThrottleRocker?.closest?.("[hidden]")
+      || frozen || suspended || document.hidden || pauseReasons.size > 0) return;
+    if (!setThrottleRockerCode(physicalCode, keyboardSource)) return;
+    renderThrottleRocker(physicalCode === "KeyW" ? 0.78 : -0.78, physicalCode);
+  }
+
+  function setVirtualStickAxis(axis, physicalCode, source) {
+    const active = virtualStickAxes[axis];
+    if (active?.physicalCode === physicalCode && active.source === source) return;
+    if (active) releaseMappedKey(active.code, active.source);
+    virtualStickAxes[axis] = null;
+    if (!physicalCode) return;
+    const code = `Touch:${physicalCode}`;
+    const gkey = touchGkeyByDefaultCode.get(physicalCode);
+    if (pressMappedKey(code, source, gkey)) {
+      virtualStickAxes[axis] = { code, physicalCode, source };
+    }
+  }
+
+  function renderVirtualStick(x = 0, y = 0) {
+    if (!fallbackStick) return;
+    const active = Math.abs(x) > 0.01 || Math.abs(y) > 0.01;
+    const diameter = Math.min(fallbackStick.clientWidth, fallbackStick.clientHeight);
+    const knobDiameter = Math.max(fallbackStickKnob?.offsetWidth ?? 0,
+      fallbackStickKnob?.offsetHeight ?? 0);
+    const travel = Math.max(0, (diameter - knobDiameter) / 2 - 4);
+    fallbackStick.style.setProperty("--stick-x", `${x * travel}px`);
+    fallbackStick.style.setProperty("--stick-y", `${y * travel}px`);
+    fallbackStick.dataset.active = String(active);
+  }
+
+  function releaseVirtualStick() {
+    const pointerId = virtualStickPointerId;
+    virtualStickPointerId = null;
+    for (const axis of ["roll", "pitch"]) {
+      const active = virtualStickAxes[axis];
+      if (active) releaseMappedKey(active.code, active.source);
+      virtualStickAxes[axis] = null;
+    }
+    forceAnalogRollNeutral();
+    renderVirtualStick();
+    if (pointerId !== null && fallbackStick?.hasPointerCapture?.(pointerId)) {
+      try { fallbackStick.releasePointerCapture(pointerId); } catch { /* already released */ }
+    }
+  }
+
+  function updateVirtualStickPointer(event) {
+    if (!fallbackStick || event.pointerId !== virtualStickPointerId) return;
+    const state = mobileVirtualStickState(event, fallbackStick.getBoundingClientRect(), {
+      rollCode: virtualStickAxes.roll?.physicalCode ?? null,
+      pitchCode: virtualStickAxes.pitch?.physicalCode ?? null,
+    });
+    const source = `touch:virtual-stick:pointer:${event.pointerId}`;
+    if (setAnalogRollCommand(state.x)) {
+      setVirtualStickAxis("roll", null, `${source}:roll`);
+    } else {
+      setVirtualStickAxis("roll", state.rollCode, `${source}:roll`);
+    }
+    setVirtualStickAxis("pitch", state.pitchCode, `${source}:pitch`);
+    renderVirtualStick(state.x, state.y);
+  }
+
+  function renderVirtualStickKeyboard() {
+    const roll = virtualStickAxes.roll?.physicalCode;
+    const pitch = virtualStickAxes.pitch?.physicalCode;
+    renderVirtualStick(roll === "ArrowLeft" ? -0.72 : roll === "ArrowRight" ? 0.72 : 0,
+      pitch === "ArrowUp" ? -0.72 : pitch === "ArrowDown" ? 0.72 : 0);
+  }
+
+  function beginVirtualStick(event) {
+    if (!fallbackStick || tiltState !== "fallback" || frozen || suspended
+      || document.hidden || pauseReasons.size > 0) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (virtualStickPointerId !== null && event.pointerId !== virtualStickPointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    releaseVirtualStick();
+    virtualStickPointerId = event.pointerId;
+    fallbackStick.focus({ preventScroll: true });
+    try { fallbackStick.setPointerCapture(event.pointerId); } catch { /* pointer may be gone */ }
+    updateVirtualStickPointer(event);
+  }
+
+  function moveVirtualStick(event) {
+    if (event.pointerId !== virtualStickPointerId) return;
+    if (tiltState !== "fallback" || frozen || suspended
+      || document.hidden || pauseReasons.size > 0) {
+      releaseVirtualStick();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    updateVirtualStickPointer(event);
+  }
+
+  function endVirtualStick(event) {
+    if (event.pointerId !== virtualStickPointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    releaseVirtualStick();
+  }
+
+  function virtualStickKeyboardEvent(event, pressed) {
+    if (tiltState !== "fallback"
+      || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const axis = ["ArrowLeft", "ArrowRight"].includes(event.code) ? "roll" : "pitch";
+    const active = virtualStickAxes[axis];
+    if (!pressed && active?.physicalCode !== event.code) return;
+    setVirtualStickAxis(axis, pressed ? event.code : null,
+      `touch:virtual-stick:keyboard:${axis}`);
+    renderVirtualStickKeyboard();
+  }
+
   function captureCentre(sample, message = "TILT CENTRED", timestampMs = performance.now()) {
     tiltWatchdog.recovered();
+    releaseVirtualStick();
     calibration = { roll: sample.roll, pitch: sample.pitch };
     calibrationAngle = sample.angle;
     tiltCalibration.reset();
@@ -4839,6 +5117,7 @@ function installMobileInput(view) {
     lastOrientationSampleMs = timestampMs;
     releaseTiltAxes();
     document.documentElement.classList.remove("tilt-pending");
+    tiltStatus?.setAttribute("aria-label", "Recenter tilt controls");
     status(message);
     setPauseReason("calibration", false);
   }
@@ -4874,13 +5153,15 @@ function installMobileInput(view) {
     }
   }
 
-  function useButtonStick(message) {
+  function useThumbStick(message) {
     stopOrientationListener();
     releaseTiltAxes();
+    releaseVirtualStick();
     tiltState = "fallback";
     document.documentElement.classList.remove("tilt-pending", "tilt-enabled");
     document.documentElement.classList.add("tilt-fallback");
-    status(message || "BUTTON STICK");
+    tiltStatus?.setAttribute("aria-label", "Switch to tilt controls");
+    status(message || "THUMB STICK");
     setPauseReason("calibration", false);
   }
 
@@ -4930,6 +5211,7 @@ function installMobileInput(view) {
   }
 
   function startOrientationListener() {
+    releaseVirtualStick();
     setPauseReason("calibration", true);
     if (!orientationListening) {
       window.addEventListener("deviceorientation", handleOrientation, { passive: true });
@@ -4953,7 +5235,7 @@ function installMobileInput(view) {
       return;
     }
     if (!orientationSupported) {
-      useButtonStick("TILT UNAVAILABLE · BUTTONS");
+      useThumbStick("TILT UNAVAILABLE · STICK");
       return;
     }
 
@@ -4965,25 +5247,26 @@ function installMobileInput(view) {
       if (typeof requestPermission === "function") {
         const permission = await requestPermission.call(globalThis.DeviceOrientationEvent);
         if (permission !== "granted") {
-          useButtonStick("TILT DENIED · BUTTONS");
+          useThumbStick("TILT DENIED · STICK");
           return;
         }
       }
       startOrientationListener();
     } catch (error) {
       console.warn("Tilt permission unavailable", error);
-      useButtonStick("TILT DENIED · BUTTONS");
+      useThumbStick("TILT DENIED · STICK");
     }
   }
 
   function recenterTilt() {
+    releaseVirtualStick();
     setPauseReason("calibration", true);
     if (tiltState === "enabled" && latestOrientation) {
       awaitFreshCentre();
       return;
     }
     if (!orientationSupported) {
-      useButtonStick("TILT UNAVAILABLE · BUTTONS");
+      useThumbStick("TILT UNAVAILABLE · STICK");
       return;
     }
     if (tiltTitle) tiltTitle.textContent = "TAP TO ENABLE TILT";
@@ -4991,6 +5274,7 @@ function installMobileInput(view) {
     document.documentElement.classList.remove("tilt-fallback");
     document.documentElement.classList.add("tilt-pending");
     tiltState = "off";
+    tiltStatus?.setAttribute("aria-label", "Choose tilt or thumb-stick controls");
     status("TILT OFF");
   }
 
@@ -5007,6 +5291,17 @@ function installMobileInput(view) {
     activeControls.delete(event.pointerId);
     setControlActive(control.button);
   }
+
+  releaseHiddenMobileControls = () => {
+    for (const [pointerId, control] of [...activeControls]) {
+      if (!control.button.closest?.("[hidden]")) continue;
+      releaseMappedKey(control.code, control.source);
+      activeControls.delete(pointerId);
+      setControlActive(control.button);
+    }
+    if ((throttleRockerPointerId !== null || throttleRockerControl)
+      && touchThrottleRocker?.closest?.("[hidden]")) releaseThrottleRocker();
+  };
 
   function restartFrozenRun(event) {
     if (!frozen || frozenRestartSent) return;
@@ -5071,18 +5366,55 @@ function installMobileInput(view) {
     });
   });
 
+  touchThrottleRocker?.addEventListener("pointerdown", beginThrottleRocker, { passive: false });
+  touchThrottleRocker?.addEventListener("pointermove", moveThrottleRocker, { passive: false });
+  touchThrottleRocker?.addEventListener("pointerup", endThrottleRocker, { passive: false });
+  touchThrottleRocker?.addEventListener("pointercancel", endThrottleRocker, { passive: false });
+  touchThrottleRocker?.addEventListener("lostpointercapture", endThrottleRocker,
+    { passive: false });
+  touchThrottleRocker?.addEventListener("keydown",
+    (event) => throttleRockerKeyboardEvent(event, true));
+  touchThrottleRocker?.addEventListener("keyup",
+    (event) => throttleRockerKeyboardEvent(event, false));
+  touchThrottleRocker?.addEventListener("blur", () => {
+    if (throttleRockerControl?.source === "touch:throttle-rocker:keyboard") {
+      releaseThrottleRocker();
+    }
+  });
+  touchThrottleRocker?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  fallbackStick?.addEventListener("pointerdown", beginVirtualStick, { passive: false });
+  fallbackStick?.addEventListener("pointermove", moveVirtualStick, { passive: false });
+  fallbackStick?.addEventListener("pointerup", endVirtualStick, { passive: false });
+  fallbackStick?.addEventListener("pointercancel", endVirtualStick, { passive: false });
+  fallbackStick?.addEventListener("lostpointercapture", endVirtualStick, { passive: false });
+  fallbackStick?.addEventListener("keydown", (event) => virtualStickKeyboardEvent(event, true));
+  fallbackStick?.addEventListener("keyup", (event) => virtualStickKeyboardEvent(event, false));
+  fallbackStick?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
   touchControls.querySelector('[data-mobile-action="enable-tilt"]')?.addEventListener("click", enableTilt);
   touchControls.querySelector('[data-mobile-action="buttons-only"]')?.addEventListener("click", () => {
-    useButtonStick("BUTTON STICK");
+    useThumbStick("THUMB STICK");
   });
   touchControls.querySelector('[data-mobile-action="recenter"]')?.addEventListener("click", recenterTilt);
-  touchControls.querySelector('[data-mobile-action="restart"]')?.addEventListener("click", restartMission);
   touchControls.addEventListener("contextmenu", (event) => event.preventDefault());
   window.addEventListener("pointerup", endControl);
   window.addEventListener("pointercancel", endControl);
+  window.addEventListener("pointerup", endThrottleRocker);
+  window.addEventListener("pointercancel", endThrottleRocker);
+  window.addEventListener("pointerup", endVirtualStick);
+  window.addEventListener("pointercancel", endVirtualStick);
 
   const preventGesture = (event) => {
-    if (event.type === "touchmove" && event.target.closest?.("#ready-screen")) return;
+    if (event.type === "touchmove" && event.target.closest?.(
+      "#ready-screen, #settings-screen, #incident-replay-overlay, #test-flight-console",
+    )) return;
     event.preventDefault();
   };
   document.addEventListener("touchmove", preventGesture, { passive: false });
@@ -5092,6 +5424,8 @@ function installMobileInput(view) {
   document.addEventListener("dblclick", preventGesture, { passive: false });
 
   function orientationChanged() {
+    releaseThrottleRocker();
+    releaseVirtualStick();
     if (tiltState === "enabled" || tiltState === "waiting") awaitFreshCentre();
   }
 
@@ -5100,10 +5434,14 @@ function installMobileInput(view) {
   window.addEventListener("blur", () => {
     suspended = true;
     tiltWatchdog.stop();
+    releaseThrottleRocker();
+    releaseVirtualStick();
     releaseTiltAxes();
   });
   window.addEventListener("pagehide", () => {
     tiltWatchdog.stop();
+    releaseThrottleRocker();
+    releaseVirtualStick();
     releaseTiltAxes();
   });
   window.addEventListener("focus", () => {
@@ -5127,6 +5465,8 @@ function installMobileInput(view) {
     for (const control of activeControls.values()) buttons.add(control.button);
     activeControls.clear();
     for (const button of buttons) setControlActive(button);
+    releaseThrottleRocker();
+    releaseVirtualStick();
     releaseTiltAxes();
     filteredPitch = 0;
     filteredRoll = 0;
@@ -5152,7 +5492,7 @@ function installMobileInput(view) {
     document.documentElement.classList.add("tilt-pending");
     status("TILT OFF");
   } else {
-    useButtonStick("TILT UNAVAILABLE · BUTTONS");
+    useThumbStick("TILT UNAVAILABLE · STICK");
   }
 
   globalThis.__gunsMobile = {

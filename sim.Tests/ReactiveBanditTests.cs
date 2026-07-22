@@ -211,4 +211,55 @@ public class ReactiveBanditTests {
         Assert.True(Math.Abs(first.State.Chi - initialBandit.Chi) > 0.10,
             $"defender stayed effectively straight: chi={first.State.Chi:F3}");
     }
+
+    [Theory]
+    [InlineData(BanditFireControl.MinimumRangeM - 0.5, false)]
+    [InlineData(BanditFireControl.MinimumRangeM, true)]
+    [InlineData(BanditFireControl.MaximumRangeM, true)]
+    [InlineData(BanditFireControl.MaximumRangeM + 0.5, false)]
+    public void FiringEnvelopeHoldsBothRangeBoundaries(double rangeM, bool expected) {
+        var own = State(0.0, 3000.0, 0.0, 200.0);
+        // Cancel the level-flight AoA: point the physical gun axis exactly at the contact so the
+        // range gates are isolated from the nose-error gate.
+        var contactState = State(0.0, 3000.0, rangeM, 200.0);
+        var gunLine = GunKill.GunDirection(own);
+        contactState = contactState with {
+            Position = own.Position + gunLine * rangeM
+        };
+        Assert.Equal(expected, BanditFireControl.InFiringEnvelope(
+            own, ActorObservation.Capture(contactState, 0)));
+    }
+
+    [Theory]
+    [InlineData(60.0, false)]   // deep inside the no-fire minimum range: window is unusable
+    [InlineData(880.0, true)]   // just inside maximum range: window must still be rewarded
+    [InlineData(1400.0, false)] // beyond maximum range: no window
+    public void LookaheadRolloutRewardsOnlyTheUsableFiringEnvelope(
+        double rangeM, bool windowExpected) {
+        // A co-speed contact pinned dead ahead keeps the rollout range essentially constant, so
+        // the gun-window reward (10 points per rollout second) dominates every shaping term when
+        // and only when the geometry is inside the envelope the trigger can actually use. The
+        // old rollout also rewarded nose-on time INSIDE the no-fire minimum range, letting a
+        // close overshoot outscore a genuinely usable solution.
+        AircraftParams air = FlightModel.Su27SPublicDataSurrogate;
+        var own = new AircraftState(
+            new Vec3D(0.0, 5486.4, 0.0), 300.0, 0.0, 0.0, 0.0, air.MassKg);
+        var contact = new AircraftState(
+            new Vec3D(0.0, 5486.4, rangeM), 300.0, 0.0, 0.0, 0.0, air.MassKg);
+        var bandit = new ReactiveBandit(own, air, PilotSkill.Ace);
+
+        bandit.Step(ActorObservation.Capture(contact, 0), Dt);
+
+        BanditDecisionTrace trace = bandit.DecisionTrace;
+        Assert.Equal(6, trace.CandidateCount);
+        double best = double.NegativeInfinity;
+        for (int index = 0; index < trace.CandidateCount; index++)
+            best = Math.Max(best, trace.CandidateAt(index).Score);
+        if (windowExpected)
+            Assert.True(best > 8.0,
+                $"an in-envelope hold must earn the window reward: best={best:F2}");
+        else
+            Assert.True(best < 5.0,
+                $"no candidate may be rewarded for an unusable window: best={best:F2}");
+    }
 }

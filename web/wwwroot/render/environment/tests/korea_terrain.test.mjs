@@ -207,6 +207,17 @@ test("uses the active ocean curvature contract for terrain presentation", () => 
 
 test("uses HTTP ranges and safely falls back when a server returns the complete bundle", async () => {
   const complete = new Uint8Array([1, 2, 3, 4, 5, 6]).buffer;
+  let fetchReceiver = "not-called";
+  const bindingReader = new TerrainBundleReader("https://game.test/terrain", 6,
+    async function (_url, options) {
+      fetchReceiver = this;
+      assert.equal(options.headers.Range, "bytes=0-0");
+      return { ok: true, status: 206, arrayBuffer: async () => complete.slice(0, 1) };
+    });
+  await bindingReader.read({ byteOffset: 0, byteLength: 1 });
+  assert.equal(fetchReceiver, undefined,
+    "the native fetch implementation must not receive TerrainBundleReader as its receiver");
+
   const requested = [];
   const rangeReader = new TerrainBundleReader("https://game.test/terrain", 6,
     async (_url, options) => {

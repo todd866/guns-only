@@ -7,13 +7,16 @@ import { pathToFileURL } from "node:url";
 
 const DEFAULT_ENDPOINT = "https://guns-only.vercel.app/telemetry-admin";
 const MAX_LIST_ITEMS = 100;
+const MAX_SUMMARY_ITEMS = 20;
 const MAX_LIST_BYTES = 1024 * 1024;
+const MAX_SUMMARY_BYTES = 1024 * 1024;
 const MAX_CHUNK_BYTES = 4 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 const HELP = `Usage:
   node tools/telemetry/admin.mjs list [--prefix telemetry/...] [--limit N] [--cursor VALUE] [--output FILE]
   node tools/telemetry/admin.mjs get --url URL --expected-size N --etag VALUE --output FILE
+  node tools/telemetry/admin.mjs summary [--prefix telemetry/...] [--limit N] [--cursor VALUE] [--output FILE]
 
 Options:
   --endpoint URL       Operator endpoint (default: ${DEFAULT_ENDPOINT})
@@ -21,9 +24,10 @@ Options:
   --output FILE        Required for get; optional mode-0600 JSON file for list
   --help               Show this help
 
-TELEMETRY_ADMIN_TOKEN is read only from the environment and never printed. Each
-invocation makes exactly one bounded request with no retry, redirect, Range, or
-automatic pagination. The Vercel Blob master credential remains inside Vercel.
+TELEMETRY_ADMIN_TOKEN authorizes list/get; TELEMETRY_REPORT_TOKEN authorizes only
+summary. Tokens are read only from the environment and never printed. Each invocation
+makes exactly one bounded operator request with no retry, redirect, Range, or automatic
+pagination. The Vercel Blob master credential remains inside Vercel.
 `;
 
 class AdminRetrievalError extends Error {}
@@ -42,8 +46,8 @@ function positiveInteger(raw, name, maximum = Number.MAX_SAFE_INTEGER) {
 function parseArguments(args) {
   const [operation, ...rest] = args;
   if (operation === "--help" || operation === undefined) return { help: true };
-  if (!new Set(["list", "get"]).has(operation)) {
-    throw new AdminRetrievalError("operation must be list or get");
+  if (!new Set(["list", "get", "summary"]).has(operation)) {
+    throw new AdminRetrievalError("operation must be list, get, or summary");
   }
   const options = { operation };
   for (let index = 0; index < rest.length; index += 1) {
@@ -159,23 +163,31 @@ export async function main(args = process.argv.slice(2), environment = process.e
     io.log(HELP);
     return null;
   }
-  const token = environment.TELEMETRY_ADMIN_TOKEN;
+  const tokenName = options.operation === "summary"
+    ? "TELEMETRY_REPORT_TOKEN"
+    : "TELEMETRY_ADMIN_TOKEN";
+  const token = environment[tokenName];
   if (typeof token !== "string" || token.length < 32) {
-    throw new AdminRetrievalError("TELEMETRY_ADMIN_TOKEN is missing or too short");
+    throw new AdminRetrievalError(`${tokenName} is missing or too short`);
   }
   const endpoint = validateEndpoint(options.endpoint);
   endpoint.searchParams.set("action", options.operation);
 
   let maximumBytes;
-  if (options.operation === "list") {
+  if (options.operation === "list" || options.operation === "summary") {
     const prefix = options.prefix || "telemetry/";
     if (!prefix.startsWith("telemetry/") || prefix.length > 1024) {
       throw new AdminRetrievalError("prefix must start with telemetry/");
     }
+    const maximumItems = options.operation === "summary" ? MAX_SUMMARY_ITEMS : MAX_LIST_ITEMS;
+    const limit = options.limit || (options.operation === "summary" ? MAX_SUMMARY_ITEMS : 50);
+    if (limit > maximumItems) {
+      throw new AdminRetrievalError(`${options.operation} limit exceeds its maximum`);
+    }
     endpoint.searchParams.set("prefix", prefix);
-    endpoint.searchParams.set("limit", String(options.limit || 50));
+    endpoint.searchParams.set("limit", String(limit));
     if (options.cursor !== undefined) endpoint.searchParams.set("cursor", options.cursor);
-    maximumBytes = MAX_LIST_BYTES;
+    maximumBytes = options.operation === "summary" ? MAX_SUMMARY_BYTES : MAX_LIST_BYTES;
   } else {
     if (!options.url || !options.expectedSize || !options.etag || !options.output) {
       throw new AdminRetrievalError("get requires --url, --expected-size, --etag, and --output");
@@ -206,11 +218,22 @@ export async function main(args = process.argv.slice(2), environment = process.e
     }
     const body = await readBounded(response, maximumBytes);
 
-    if (options.operation === "list") {
+    if (options.operation === "list" || options.operation === "summary") {
       let payload;
-      try { payload = JSON.parse(body.toString("utf8")); } catch { throw new AdminRetrievalError("list response was invalid JSON"); }
-      if (!payload || !Array.isArray(payload.blobs) || payload.blobs.length > (options.limit || 50)) {
+      try { payload = JSON.parse(body.toString("utf8")); } catch {
+        throw new AdminRetrievalError(`${options.operation} response was invalid JSON`);
+      }
+      if (options.operation === "list"
+        && (!payload || !Array.isArray(payload.blobs) || payload.blobs.length > (options.limit || 50))) {
         throw new AdminRetrievalError("list response exceeded its item limit");
+      }
+      if (options.operation === "summary" && (
+        !payload || payload.version !== 1
+        || payload.privacy?.raw_rows_returned !== false
+        || payload.privacy?.identifiers_returned !== false
+        || payload.privacy?.user_agents_returned !== false
+      )) {
+        throw new AdminRetrievalError("summary response did not satisfy the privacy contract");
       }
       const output = Buffer.from(`${JSON.stringify(payload, null, 2)}\n`);
       if (options.output) {

@@ -335,8 +335,11 @@ const VOLUME_FRAGMENT = /* glsl */ `
       vec3 samplePoint = cameraPosition + rayDirection * distanceAlongRay;
       float density = cloudDensity(samplePoint) * vInstanceOpacity;
       if (density > 0.002) {
-        float sunOcclusion = cloudDensity(samplePoint + uSunDirection * 170.0)
-          + 0.65 * cloudDensity(samplePoint + uSunDirection * 430.0);
+        // One mid-distance probe retains the self-shadowing cue without tripling the already
+        // expensive density work at every ray step. The old near/far pair was the largest
+        // avoidable fragment cost once several cloud lobes overlapped the same screen pixels.
+        float sunOcclusion = 1.42
+          * cloudDensity(samplePoint + uSunDirection * 290.0);
         float lightTransmission = exp(-1.15 * sunOcclusion);
         float forward = pow(max(0.0, dot(rayDirection, uSunDirection)), 5.0);
         vec3 lighting = mix(uShadowColor, uLightColor,
@@ -365,6 +368,7 @@ const IMPOSTOR_VERTEX = /* glsl */ `
   attribute float instancePhase;
   varying vec2 vCloudUv;
   varying vec3 vWorldCenter;
+  varying float vWorldRadius;
   varying float vInstanceOpacity;
   varying float vInstancePhase;
   #include <common>
@@ -377,6 +381,7 @@ const IMPOSTOR_VERTEX = /* glsl */ `
     viewCenter.xy += position.xy * vec2(length(axisX), length(axisY));
     vCloudUv = uv;
     vWorldCenter = worldCenter.xyz;
+    vWorldRadius = max(length(axisX), length(axisY));
     vInstanceOpacity = instanceOpacity;
     vInstancePhase = instancePhase;
     gl_Position = projectionMatrix * viewCenter;
@@ -393,6 +398,7 @@ const IMPOSTOR_FRAGMENT = /* glsl */ `
   uniform float uFogDensity;
   varying vec2 vCloudUv;
   varying vec3 vWorldCenter;
+  varying float vWorldRadius;
   varying float vInstanceOpacity;
   varying float vInstancePhase;
   #include <logdepthbuf_pars_fragment>
@@ -420,12 +426,52 @@ const IMPOSTOR_FRAGMENT = /* glsl */ `
     float fog = 1.0 - exp(-uFogDensity * uFogDensity
       * distanceToCamera * distanceToCamera);
     color = mix(color, uFogColor, fog);
-    float alpha = body * envelope * vInstanceOpacity * (1.0 - fog * 0.72);
+    // A camera-intersecting billboard otherwise becomes a flat screen-sized slab. Local cloud
+    // visibility already comes from the authoritative fog sample, so fade the proxy near its
+    // centre and let it represent only the surrounding cloud body.
+    float nearFade = smoothstep(vWorldRadius * 0.28, vWorldRadius * 0.82, distanceToCamera);
+    float alpha = body * envelope * vInstanceOpacity * nearFade * (1.0 - fog * 0.72);
     if (alpha < 0.012) discard;
     gl_FragColor = vec4(color, alpha);
     #include <logdepthbuf_fragment>
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
+  }
+`;
+
+const SHADOW_VERTEX = /* glsl */ `
+  precision highp float;
+  varying vec2 vShadowUv;
+  #include <common>
+  #include <logdepthbuf_pars_vertex>
+  #include <fog_pars_vertex>
+  void main() {
+    vShadowUv = uv;
+    vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    #include <logdepthbuf_vertex>
+    #include <fog_vertex>
+  }
+`;
+
+const SHADOW_FRAGMENT = /* glsl */ `
+  precision highp float;
+  uniform vec3 uShadowColor;
+  uniform float uShadowOpacity;
+  varying vec2 vShadowUv;
+  #include <logdepthbuf_pars_fragment>
+  #include <fog_pars_fragment>
+  void main() {
+    vec2 centred = vShadowUv * 2.0 - 1.0;
+    float shadowEnvelope = 1.0 - smoothstep(0.18, 1.0,
+      length(centred * vec2(0.84, 1.08)));
+    float alpha = uShadowOpacity * shadowEnvelope * shadowEnvelope;
+    if (alpha < 0.002) discard;
+    gl_FragColor = vec4(uShadowColor, alpha);
+    #include <logdepthbuf_fragment>
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    #include <fog_fragment>
   }
 `;
 
@@ -435,14 +481,16 @@ function tierGridSize(tier) {
 }
 
 function tierMarchSteps(tier) {
-  if (tier === "desktop") return 32;
-  if (tier === "balanced") return 20;
+  // Full-resolution cloud volumes overlap heavily. Per-pixel jitter hides the coarse stepping,
+  // so these budgets preserve the soft volume while keeping the fragment cost bounded.
+  if (tier === "desktop") return 12;
+  if (tier === "balanced") return 8;
   return 0;
 }
 
 function tierLobeCount(tier) {
-  if (tier === "desktop") return 3;
-  if (tier === "balanced") return 2;
+  if (tier === "desktop") return 2;
+  if (tier === "balanced") return 1;
   return 1;
 }
 
@@ -514,7 +562,7 @@ function attachedLobeDescriptor(parent, lobeIndex) {
 
 export function createTacticalCloudField(THREE, options = {}) {
   const tier = options.qualityTier ?? "balanced";
-  const volumetric = tier !== "mobile";
+  const volumetric = options.volumetric ?? tier !== "mobile";
   const gridSize = options.gridSize ?? tierGridSize(tier);
   const lobesPerCloud = tierLobeCount(tier);
   const maxLayers = Math.max(1, options.maxLayers ?? 3);
@@ -546,7 +594,7 @@ export function createTacticalCloudField(THREE, options = {}) {
     side: THREE.DoubleSide,
   });
   const geometry = volumetric
-    ? new THREE.SphereGeometry(1, tier === "desktop" ? 18 : 14, tier === "desktop" ? 12 : 9)
+    ? new THREE.SphereGeometry(1, tier === "desktop" ? 14 : 10, tier === "desktop" ? 9 : 7)
     : new THREE.PlaneGeometry(2, 2, 1, 1);
   const opacityAttribute = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
   const phaseAttribute = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
@@ -557,14 +605,23 @@ export function createTacticalCloudField(THREE, options = {}) {
   cloudMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   cloudMesh.frustumCulled = false;
   cloudMesh.renderOrder = 2;
-  cloudMesh.count = gridSize * gridSize;
+  // No instance transforms are valid until the first update. Starting empty also avoids a frame
+  // of identity-sized clouds at the origin while authoritative weather is being configured.
+  cloudMesh.count = 0;
   group.add(cloudMesh);
 
-  const shadowMaterial = new THREE.MeshBasicMaterial({
+  const shadowMaterial = new THREE.ShaderMaterial({
     name: "MAT_TACTICAL_CLOUD_SHADOWS",
-    color: 0x183946,
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uShadowColor: { value: new THREE.Color(0x183946) },
+        uShadowOpacity: { value: tier === "mobile" ? 0.032 : 0.058 },
+      },
+    ]),
+    vertexShader: SHADOW_VERTEX,
+    fragmentShader: SHADOW_FRAGMENT,
     transparent: true,
-    opacity: tier === "mobile" ? 0.032 : 0.058,
     depthWrite: false,
     side: THREE.DoubleSide,
     fog: true,
@@ -575,7 +632,7 @@ export function createTacticalCloudField(THREE, options = {}) {
   shadowMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   shadowMesh.frustumCulled = false;
   shadowMesh.renderOrder = -4;
-  shadowMesh.count = gridSize * gridSize;
+  shadowMesh.count = 0;
   group.add(shadowMesh);
 
   const dummy = new THREE.Object3D();
@@ -588,6 +645,9 @@ export function createTacticalCloudField(THREE, options = {}) {
   };
   let weatherKey = `${weather.id}|${weather.seed}`;
   let gridKey = "";
+  let matricesDirty = true;
+  let appliedTimeSeconds = Number.NaN;
+  const nextSunDirection = new THREE.Vector3();
 
   function rebuild(cameraPosition, timeSeconds) {
     descriptors.length = 0;
@@ -647,17 +707,16 @@ export function createTacticalCloudField(THREE, options = {}) {
       }
 
       const shown = descriptor.present && descriptor.opacity > 0.002;
+      // Hidden weather cells still participate in deterministic coverage/density queries, but
+      // sending degenerate sphere instances for them wastes vertex and attribute bandwidth.
+      if (!shown) continue;
       dummy.position.set(descriptor.x, descriptor.y, descriptor.z);
       dummy.rotation.set(0, 0, 0);
-      if (shown) {
-        dummy.scale.set(descriptor.radiusX, descriptor.radiusY,
-          volumetric ? descriptor.radiusZ : 1);
-      } else {
-        dummy.scale.setScalar(0.0001);
-      }
+      dummy.scale.set(descriptor.radiusX, descriptor.radiusY,
+        volumetric ? descriptor.radiusZ : 1);
       dummy.updateMatrix();
       cloudMesh.setMatrixAt(index, dummy.matrix);
-      opacityAttribute.setX(index, shown ? descriptor.opacity : 0);
+      opacityAttribute.setX(index, descriptor.opacity);
       phaseAttribute.setX(index, descriptor.phase ?? 0);
 
       const groundOffset = descriptor.y / sunY;
@@ -667,8 +726,7 @@ export function createTacticalCloudField(THREE, options = {}) {
         descriptor.z - sun.z * groundOffset,
       );
       dummy.rotation.set(-Math.PI / 2, 0, 0);
-      if (shown) dummy.scale.set(descriptor.radiusX * 0.88, descriptor.radiusZ * 0.78, 1);
-      else dummy.scale.setScalar(0.0001);
+      dummy.scale.set(descriptor.radiusX * 0.88, descriptor.radiusZ * 0.78, 1);
       dummy.updateMatrix();
       shadowMesh.setMatrixAt(index, dummy.matrix);
       index++;
@@ -687,9 +745,22 @@ export function createTacticalCloudField(THREE, options = {}) {
     if (nextKey !== gridKey) {
       gridKey = nextKey;
       rebuild(cameraPosition, timeSeconds);
+      matricesDirty = true;
     }
-    if (sunDirection?.isVector3) uniforms.uSunDirection.value.copy(sunDirection).normalize();
-    applyMatrices(timeSeconds);
+    if (sunDirection?.isVector3) {
+      nextSunDirection.copy(sunDirection).normalize();
+      if (nextSunDirection.distanceToSquared(uniforms.uSunDirection.value) > 1e-12) {
+        uniforms.uSunDirection.value.copy(nextSunDirection);
+        matricesDirty = true;
+      }
+    }
+    // The render loop can present the same simulation snapshot more than once. Do not rebuild and
+    // upload both instance buffers until deterministic time, grid placement, or sun direction moves.
+    if (matricesDirty || timeSeconds !== appliedTimeSeconds) {
+      applyMatrices(timeSeconds);
+      matricesDirty = false;
+      appliedTimeSeconds = timeSeconds;
+    }
     uniforms.uTime.value = timeSeconds;
     if (fogColor?.isColor) uniforms.uFogColor.value.copy(fogColor);
     if (Number.isFinite(fogDensity)) uniforms.uFogDensity.value = fogDensity;

@@ -64,6 +64,42 @@ public sealed class KeyGrammar {
             }
         }
     }
+    /// <summary>
+    /// Source-aware direct-manipulation edge (a spring-loaded rocker/lever hold, not a keyboard
+    /// key). A direct hold never participates in tap/double-tap classification: a prior pending
+    /// keyboard tap is COMMITTED immediately (this press can never be its double-tap arm, so the
+    /// promised fine step must not be consumed), the hold itself reads as a plain Held phase, and
+    /// its release leaves no pending tap behind.
+    /// </summary>
+    public void FeedDirect(GKey key, bool pressed, double timeMs) {
+        var s = S(key);
+        if (pressed && !s.Down) {
+            if (s.PendingTap is KeyTap tap) {
+                s.Committed.Add(tap);
+                s.PendingTap = null;
+                if (s.Committed.Count > MaxBufferedTaps)
+                    s.Committed.RemoveRange(0, s.Committed.Count - MaxBufferedTaps);
+            }
+            s.IsDouble = false;
+            s.ConsumedArm = null;
+            s.Down = true; s.PressT = timeMs; s.Presses++;
+        } else if (!pressed && s.Down) {
+            s.Down = false; s.ReleaseT = timeMs; s.Releases++;
+            s.IsDouble = false;
+            s.ConsumedArm = null;
+        }
+    }
+
+    /// <summary>
+    /// Discard the uncommitted tap left by a direct-manipulation control release. Call this
+    /// synchronously after its key-up edge so the completed hold cannot become a delayed detent;
+    /// ordinary keyboard taps retain the normal deferred classification path.
+    /// </summary>
+    public void SuppressPendingTap(GKey key) {
+        var s = S(key);
+        s.PendingTap = null;
+        s.ConsumedArm = null;
+    }
     const int MaxBufferedTaps = 64; // bound: keys nobody drains (rudder etc.) must not grow forever
     static void CommitExpiredImpl(KS s, double nowMs, double gapMs) {
         if (s.PendingTap is KeyTap tap && nowMs - tap.ReleaseTimeMs > gapMs) {

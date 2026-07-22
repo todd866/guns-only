@@ -8,7 +8,7 @@ namespace GunsOnly.Sim.Doctrine;
 /// not a combat kinematic shortcut: both aircraft use <see cref="AircraftSim"/> throughout, and
 /// only the opponent's pilot command changes after the pass.
 /// </summary>
-public sealed class NeutralMergeBandit : IBandit {
+public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
     const double MergeGateM = 900.0;
     const double OpeningConfirmationSeconds = 0.20;
     readonly AircraftParams _parameters;
@@ -61,11 +61,18 @@ public sealed class NeutralMergeBandit : IBandit {
     public ImpactSurface WreckSurface => _fight?.WreckSurface ?? ImpactSurface.None;
     public bool WreckSurfaceChangedThisStep =>
         _fight?.WreckSurfaceChangedThisStep ?? false;
+    public BanditDecisionTrace DecisionTrace =>
+        (_fight as IBanditDecisionTraceSource)?.DecisionTrace ?? default;
+    public BanditPolicyMemory PolicyMemory =>
+        (_fight as IBanditDecisionTraceSource)?.PolicyMemory ?? default;
+    public PilotCommand AppliedCommand =>
+        (_fight as IBanditDecisionTraceSource)?.AppliedCommand ??
+        new PilotCommand(1.0, 0.0, 1.0, 0.0);
 
-    public bool WantsToFire(in AircraftState player) =>
+    public bool WantsToFire(in ActorObservation player) =>
         _fight?.WantsToFire(player) ?? false;
 
-    public void Step(in AircraftState player, double dt) {
+    public void Step(in ActorObservation player, double dt) {
         if (!double.IsFinite(dt) || dt <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(dt));
         if (_fight is not null) {

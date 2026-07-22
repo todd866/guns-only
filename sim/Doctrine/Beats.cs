@@ -268,8 +268,8 @@ public sealed class RailBandit : IBandit {
         _sim.Step(_tl[_active].Cmd, dt);
         T += dt;
     }
-    public void Step(in AircraftState player, double dt) => Step(dt);
-    public bool WantsToFire(in AircraftState player) => !CatastrophicallyDamaged
+    public void Step(in ActorObservation player, double dt) => Step(dt);
+    public bool WantsToFire(in ActorObservation player) => !CatastrophicallyDamaged
         && BanditFireControl.WantsToFire(State, player, T);
     public void ApplyCatastrophicDamage(int handedness) {
         if (CatastrophicallyDamaged) return;

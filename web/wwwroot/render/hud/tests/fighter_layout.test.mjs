@@ -33,10 +33,37 @@ test("touch layout respects safe areas and preserves a usable central aperture",
 });
 
 test("short landscape layout keeps high-centre cues separated", () => {
-  const layout = fighterHudLayout({ width: 844, height: 390 });
+  const safeBottom = 21;
+  const layout = fighterHudLayout({
+    width: 844,
+    height: 390,
+    touchMode: true,
+    safeInsets: { top: 0, right: 47, bottom: safeBottom, left: 47 },
+  });
+  const stickTop = 390 - safeBottom - 8 - 112;
 
   assert.ok(layout.heading.top >= 0);
   assert.ok(layout.warningY < layout.weaponCueY);
   assert.ok(layout.weaponCueY <= layout.instrumentCenterY - 36);
   assert.ok(layout.tapeHeight < 390);
+  assert.ok(stickTop - layout.targetSafe.bottom >= 16);
+  assert.ok(stickTop - layout.ladderSafe.bottom >= 8);
+});
+
+test("small-phone landscape keeps a positive touch targeting aperture", () => {
+  const safeBottom = 21;
+  const layout = fighterHudLayout({
+    width: 667,
+    height: 375,
+    touchMode: true,
+    safeInsets: { top: 0, right: 44, bottom: safeBottom, left: 44 },
+  });
+  const stickTop = 375 - safeBottom - 8 - 104;
+
+  assert.ok(layout.targetSafe.left < layout.targetSafe.right);
+  assert.ok(layout.targetSafe.top < layout.targetSafe.bottom);
+  assert.ok(layout.ladderSafe.left < layout.ladderSafe.right);
+  assert.ok(layout.ladderSafe.top < layout.ladderSafe.bottom);
+  assert.ok(stickTop - layout.targetSafe.bottom >= 16);
+  assert.ok(stickTop - layout.ladderSafe.bottom >= 8);
 });

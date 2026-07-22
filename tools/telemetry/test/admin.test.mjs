@@ -6,6 +6,7 @@ import { main } from "../admin.mjs";
 
 const ENVIRONMENT = {
   TELEMETRY_ADMIN_TOKEN: "test-operator-secret-that-is-longer-than-32-characters",
+  TELEMETRY_REPORT_TOKEN: "test-report-secret-that-is-longer-than-32-characters",
 };
 
 test("operator bearer can only be sent to the canonical project or loopback", async () => {
@@ -82,4 +83,72 @@ test("private output installation is atomic and cannot replace a racing destinat
   assert.match(source, /await link\(temporary, destination\)/);
   assert.doesNotMatch(source, /rename\(temporary, destination\)/);
   assert.match(source, /error\.code === "EEXIST"[\s\S]*?refusing to replace/);
+});
+
+test("summary uses only the report token and validates the privacy contract", async () => {
+  const previousFetch = globalThis.fetch;
+  const calls = [];
+  const output = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url: String(url), options });
+    const body = JSON.stringify({
+      version: 1,
+      scope: { partial: false },
+      coverage: { chunks_read: 2 },
+      sessions: { observed: 1 },
+      sorties: { observed: 1 },
+      combat: { rounds_fired: 12 },
+      privacy: {
+        raw_rows_returned: false,
+        identifiers_returned: false,
+        user_agents_returned: false,
+      },
+    });
+    return new Response(body, {
+      status: 200,
+      headers: { "content-length": String(Buffer.byteLength(body)) },
+    });
+  };
+  try {
+    const payload = await main([
+      "summary",
+      "--prefix", "telemetry/web-1784",
+      "--limit", "2",
+    ], ENVIRONMENT, { log(value) { output.push(value); }, error() {} });
+    assert.equal(payload.sessions.observed, 1);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].options.headers.Authorization,
+      `Bearer ${ENVIRONMENT.TELEMETRY_REPORT_TOKEN}`);
+    assert.equal(new URL(calls[0].url).searchParams.get("action"), "summary");
+    assert.equal(new URL(calls[0].url).searchParams.get("limit"), "2");
+    assert.doesNotMatch(output.join("\n"), /test-report-secret/);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("summary rejects responses that claim to include identifiers", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    const body = JSON.stringify({
+      version: 1,
+      privacy: {
+        raw_rows_returned: false,
+        identifiers_returned: true,
+        user_agents_returned: false,
+      },
+    });
+    return new Response(body, {
+      status: 200,
+      headers: { "content-length": String(Buffer.byteLength(body)) },
+    });
+  };
+  try {
+    await assert.rejects(
+      () => main(["summary", "--limit", "1"], ENVIRONMENT),
+      /did not satisfy the privacy contract/,
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });

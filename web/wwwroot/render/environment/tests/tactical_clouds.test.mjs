@@ -26,12 +26,52 @@ test("cloud density rises inside a present cloud and clears outside it", () => {
 
 test("runtime builds one instanced cloud and shadow draw for its tier", () => {
   const field = createTacticalCloudField(THREE, { qualityTier: "mobile" });
-  assert.equal(field.cloudMesh.count, 25);
-  assert.equal(field.shadowMesh.count, 25);
+  assert.equal(field.cloudMesh.count, 0);
+  assert.equal(field.shadowMesh.count, 0);
   const extinction = field.update(new THREE.Vector3(0, 1450, 0), 2,
     new THREE.Color(0x7898a0), 0.000055);
   assert.ok(extinction >= 0 && extinction <= 1);
   assert.equal(field.descriptors.length, 25);
+  const shown = field.descriptors.filter((cloud) => cloud.present && cloud.opacity > 0.002);
+  assert.equal(field.cloudMesh.count, shown.length);
+  assert.equal(field.shadowMesh.count, shown.length);
+
+  const matrixVersion = field.cloudMesh.instanceMatrix.version;
+  field.update(new THREE.Vector3(20, 1450, -20), 2,
+    new THREE.Color(0x7898a0), 0.000055);
+  assert.equal(field.cloudMesh.instanceMatrix.version, matrixVersion,
+    "re-presenting one simulation instant should not upload unchanged transforms");
+  field.dispose();
+});
+
+test("volumetric tiers bound overlapping ray-march work", () => {
+  const balanced = createTacticalCloudField(THREE, { qualityTier: "balanced" });
+  const desktop = createTacticalCloudField(THREE, { qualityTier: "desktop" });
+  assert.equal(balanced.cloudMesh.material.defines.CLOUD_STEPS, 8);
+  assert.equal(desktop.cloudMesh.material.defines.CLOUD_STEPS, 12);
+  assert.equal(balanced.lobesPerCloud, 1);
+  assert.equal(desktop.lobesPerCloud, 2);
+  assert.equal(
+    desktop.cloudMesh.material.fragmentShader.match(/cloudDensity\(samplePoint \+/g)?.length,
+    1,
+    "each march step should use one self-shadow probe",
+  );
+  balanced.dispose();
+  desktop.dispose();
+});
+
+test("an explicit performance override keeps desktop weather on the impostor path", () => {
+  const field = createTacticalCloudField(THREE, {
+    qualityTier: "desktop",
+    volumetric: false,
+  });
+  assert.equal(field.volumetric, false);
+  assert.equal(field.cloudMesh.name, "TACTICAL_CLOUD_IMPOSTORS");
+  assert.deepEqual(field.cloudMesh.material.defines, {});
+  assert.match(field.cloudMesh.material.fragmentShader, /nearFade/,
+    "camera-intersecting impostors must fade instead of becoming a screen-sized slab");
+  assert.match(field.shadowMesh.material.fragmentShader, /shadowEnvelope/,
+    "cloud shadows must feather instead of exposing rectangular proxy geometry");
   field.dispose();
 });
 
@@ -93,9 +133,9 @@ test("bridge weather conversion flips north once and balanced tier builds ray vo
   field.update(new THREE.Vector3(0, 2000, 0), 10,
     new THREE.Color(0x7898a0), 0.000055, new THREE.Vector3(0.3, 0.8, -0.5));
   assert.equal(field.cloudMesh.name, "TACTICAL_CLOUD_VOLUMES");
-  assert.equal(field.cloudMesh.material.defines.CLOUD_STEPS, 20);
-  assert.equal(field.lobesPerCloud, 2);
-  assert.ok(field.cloudMesh.count > 26 && field.cloudMesh.count <= 51);
+  assert.equal(field.cloudMesh.material.defines.CLOUD_STEPS, 8);
+  assert.equal(field.lobesPerCloud, 1);
+  assert.ok(field.cloudMesh.count > 0 && field.cloudMesh.count <= 26);
   assert.equal(field.shadowMesh.count, field.cloudMesh.count);
   field.dispose();
 });

@@ -7,6 +7,7 @@ const sceneBuildersUrl = new URL("../../scene/scene_builders.js", import.meta.ur
 const hudUrl = new URL("../../../hud.js", import.meta.url);
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
 const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
+const webProjectUrl = new URL("../../../../GunsOnly.Web.csproj", import.meta.url);
 // The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
 // SnapshotProjection; the contract scan reads both so a field is found wherever it now lives.
 const readBridgeContract = () =>
@@ -26,10 +27,17 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /createKoreaEffectsFactory\(THREE,[\s\S]*effectsFactory,/);
   assert.match(source, /manageFog: Boolean\(environmentFactory\)/);
   assert.match(source, /postStackFactory: createDecisionSupportPostStack/);
+  assert.match(source,
+    /shadowModes: mobileControls \? \["carrier"\] : \["carrier", "replay"\]/,
+    "combat must not pay for a shadow pass without a visible ownship or shadow-receiving terrain");
+  assert.doesNotMatch(source, /shadowModes:[^\n]*"combat"/);
   assert.match(source, /fogDensityForVisibility\(reportedVisibilityM\)/,
     "production visibility must come from the scenario weather projection");
   assert.match(source, /this\.tacticalClouds\.configureFromState\(state\)/,
     "production clouds must be reconstructed from the authoritative weather descriptors");
+  assert.match(source,
+    /createTacticalCloudField\(THREE, \{[\s\S]*?volumetric: false,[\s\S]*?\}\)/,
+    "production must use the bounded cloud impostor path until a frame-time governor exists");
   assert.match(source, /Number\(state\.t\) \|\| 0/,
     "cloud advection must use deterministic simulation time rather than wall time");
   assert.doesNotMatch(source, /baseFogDensity \+ cloudExtinction/,
@@ -47,12 +55,16 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /emitPackEffect\("event\.vehicle\.destroyed\.v1"/);
 });
 
-test("terrain stays lazy through Ready and shares the active ocean curvature contract", async () => {
-  const [source, sceneBuilders, bridgeSource] = await Promise.all([
+test("terrain ships by default, stays lazy through Ready, and shares the ocean curvature contract", async () => {
+  const [source, sceneBuilders, bridgeSource, webProject] = await Promise.all([
     readFile(appUrl, "utf8"),
     readFile(sceneBuildersUrl, "utf8"),
     readBridgeContract(),
+    readFile(webProjectUrl, "utf8"),
   ]);
+  assert.ok(webProject.includes(
+    `Condition="'$(EmbedKoreaTerrainTruth)' != 'false'"`,
+  ), "production must embed terrain truth unless a constrained build explicitly opts out");
   assert.match(source,
     /this\.terrainPresentationPromise = null;[\s\S]*ensureTerrainPresentation\(\)/,
     "constructing FlightView must not start terrain network work");

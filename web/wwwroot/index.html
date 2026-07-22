@@ -232,27 +232,120 @@
       gap: 8px;
     }
 
+    .touch-right {
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
     .touch-left { left: calc(env(safe-area-inset-left, 0px) + 10px); }
     .touch-right { right: calc(env(safe-area-inset-right, 0px) + 10px); }
 
-    .touch-stack,
     .touch-actions,
-    .touch-utils {
+    .touch-context {
       display: flex;
       gap: 7px;
     }
 
-    .touch-stack { flex-direction: column; }
     .touch-actions { align-items: flex-end; }
-    .touch-utils { flex-direction: column; }
+    .touch-context { align-items: flex-end; }
 
-    .touch-label {
-      color: rgba(217, 255, 229, .58);
-      font-size: 8px;
-      letter-spacing: .14em;
+    .touch-left[hidden],
+    .touch-context[hidden],
+    .touch-control[hidden] { display: none; }
+
+    #touch-throttle-rocker {
+      --throttle-y: 0px;
+      position: relative;
+      display: block;
+      width: 52px;
+      min-width: 52px;
+      height: 112px;
+      min-height: 112px;
+      padding: 0;
+      overflow: hidden;
+      border-radius: 26px;
+      opacity: .72;
+      touch-action: none;
+      transition: border-color 100ms ease, opacity 100ms ease;
+    }
+
+    #touch-throttle-rocker::before {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      left: 8px;
+      height: 1px;
+      content: "";
+      background: rgba(141, 255, 179, .14);
+      pointer-events: none;
+    }
+
+    #touch-throttle-rocker[data-active="true"] {
+      border-color: rgba(163, 255, 194, .72);
+      opacity: 1;
+    }
+
+    #touch-throttle-rocker:focus-visible {
+      outline: 2px solid #8dffb3;
+      outline-offset: 2px;
+      opacity: 1;
+    }
+
+    #touch-throttle-rocker-knob {
+      position: absolute;
+      z-index: 1;
+      top: 50%;
+      left: 50%;
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 44px;
+      border: 1px solid rgba(178, 255, 202, .62);
+      border-radius: 20px;
+      color: rgba(217, 255, 229, .76);
+      background: rgba(21, 67, 46, .84);
+      box-shadow: 0 0 16px rgba(77, 255, 136, .18);
+      pointer-events: none;
+      transform: translate(-50%, calc(-50% + var(--throttle-y)));
+      transition: transform 80ms ease-out;
+    }
+
+    #touch-throttle-rocker[data-active="true"] #touch-throttle-rocker-knob {
+      transition: none;
+    }
+
+    #touch-throttle-rocker[data-direction="up"] #touch-throttle-rocker-knob,
+    #touch-throttle-rocker[data-direction="down"] #touch-throttle-rocker-knob {
+      color: #07140c;
+      border-color: #a3ffc2;
+      background: rgba(77, 255, 136, .88);
+      box-shadow: 0 0 20px rgba(77, 255, 136, .34);
+    }
+
+    .throttle-rocker-mark {
+      position: absolute;
+      z-index: 2;
+      right: 0;
+      left: 0;
+      color: rgba(217, 255, 229, .44);
+      font-size: 14px;
+      line-height: 1;
+      pointer-events: none;
       text-align: center;
-      text-transform: uppercase;
-      text-shadow: 0 1px 3px #000;
+    }
+
+    .throttle-rocker-plus { top: 9px; }
+    .throttle-rocker-minus { bottom: 9px; }
+
+    #touch-throttle-rocker[data-direction="up"] .throttle-rocker-plus,
+    #touch-throttle-rocker[data-direction="down"] .throttle-rocker-minus {
+      color: #eafff0;
+      text-shadow: 0 0 8px rgba(77, 255, 136, .72);
+    }
+
+    .throttle-rocker-label {
+      font: 800 7px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .1em;
     }
 
     .touch-fire {
@@ -296,22 +389,93 @@
     }
 
     #fallback-stick {
+      appearance: none;
       position: absolute;
-      left: 50%;
+      left: 43%;
       bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
       display: none;
-      gap: 6px;
+      width: 112px;
+      height: 112px;
+      padding: 0;
+      border: 1px solid rgba(141, 255, 179, .34);
+      border-radius: 50%;
+      color: rgba(217, 255, 229, .56);
+      background: radial-gradient(circle at 50% 50%,
+        rgba(28, 69, 51, .36) 0 27%, rgba(2, 11, 17, .58) 29% 100%);
+      box-shadow: inset 0 0 26px rgba(77, 255, 136, .08), 0 8px 24px rgba(0, 0, 0, .22);
+      opacity: .66;
+      touch-action: none;
       transform: translateX(-50%);
+      transition: border-color 100ms ease, opacity 100ms ease;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
-    .tilt-fallback #fallback-stick { display: flex; }
+    .tilt-fallback #fallback-stick { display: block; }
 
-    #fallback-stick .touch-control {
-      min-width: 48px;
+    #fallback-stick::before,
+    #fallback-stick::after {
+      position: absolute;
+      content: "";
+      background: rgba(141, 255, 179, .15);
+      pointer-events: none;
+    }
+
+    #fallback-stick::before {
+      top: 50%;
+      right: 17px;
+      left: 17px;
+      height: 1px;
+    }
+
+    #fallback-stick::after {
+      top: 17px;
+      bottom: 17px;
+      left: 50%;
+      width: 1px;
+    }
+
+    #fallback-stick-knob {
+      position: absolute;
+      z-index: 1;
+      top: 50%;
+      left: 50%;
       width: 48px;
       height: 48px;
-      padding: 4px;
-      font-size: 8px;
+      border: 1px solid rgba(178, 255, 202, .66);
+      border-radius: 50%;
+      background: rgba(21, 67, 46, .84);
+      box-shadow: 0 0 18px rgba(77, 255, 136, .2);
+      pointer-events: none;
+      transform: translate(calc(-50% + var(--stick-x, 0px)),
+        calc(-50% + var(--stick-y, 0px)));
+      transition: transform 80ms ease-out;
+    }
+
+    #fallback-stick[data-active="true"] {
+      border-color: rgba(163, 255, 194, .72);
+      background: radial-gradient(circle at 50% 50%,
+        rgba(40, 108, 76, .46) 0 27%, rgba(2, 11, 17, .68) 29% 100%);
+      opacity: 1;
+    }
+
+    #fallback-stick[data-active="true"] #fallback-stick-knob { transition: none; }
+
+    #fallback-stick:focus-visible {
+      outline: 2px solid #8dffb3;
+      outline-offset: 2px;
+      opacity: 1;
+    }
+
+    .fallback-stick-label {
+      position: absolute;
+      right: 0;
+      bottom: 9px;
+      left: 0;
+      font: 700 7px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .12em;
+      pointer-events: none;
+      text-align: center;
     }
 
     #tilt-prompt {
@@ -370,14 +534,28 @@
     }
 
     #tilt-status {
+      appearance: none;
       position: absolute;
-      top: calc(env(safe-area-inset-top, 0px) + 9px);
-      right: calc(env(safe-area-inset-right, 0px) + 11px);
+      top: calc(env(safe-area-inset-top, 0px) + 64px);
+      right: calc(env(safe-area-inset-right, 0px) + 12px);
+      min-width: 44px;
+      min-height: 44px;
+      padding: 6px 8px;
+      border: 1px solid rgba(77, 255, 136, .2);
+      border-radius: 4px;
       color: rgba(77, 255, 136, .64);
-      font-size: 8px;
+      background: rgba(2, 11, 17, .52);
+      font: 750 8px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       letter-spacing: .11em;
-      pointer-events: none;
+      pointer-events: auto;
       text-shadow: 0 1px 4px #000;
+      text-transform: uppercase;
+      touch-action: manipulation;
+    }
+
+    #tilt-status:focus-visible {
+      outline: 2px solid #8dffb3;
+      outline-offset: 1px;
     }
 
     #rotate-hint {
@@ -403,12 +581,6 @@
     @media (max-height: 430px) {
       .touch-left, .touch-right { gap: 6px; }
       .touch-control { min-height: 43px; }
-      .touch-stack {
-        display: grid;
-        grid-template-columns: repeat(2, 52px);
-        gap: 6px;
-      }
-      .touch-stack .touch-label { grid-column: 1 / -1; }
       .touch-fire { width: 68px; height: 68px; }
       .touch-wave { min-width: 67px; height: 50px; }
       .touch-utility { min-height: 44px; }
@@ -418,8 +590,13 @@
       .touch-left, .touch-right { transform: scale(.9); }
       .touch-left { transform-origin: bottom left; }
       .touch-right { transform-origin: bottom right; }
-      #fallback-stick { gap: 4px; }
-      #fallback-stick .touch-control { min-width: 44px; width: 44px; height: 44px; }
+      #touch-throttle-rocker {
+        width: 48px;
+        min-width: 48px;
+        height: 104px;
+        min-height: 104px;
+      }
+      #fallback-stick { width: 104px; height: 104px; }
     }
 
     #boot {
@@ -1280,6 +1457,21 @@
       text-transform: uppercase;
     }
 
+    .pause-mobile { display: none; }
+
+    .touch-mode #pause-button {
+      min-width: 44px;
+      width: 44px;
+      padding: 0;
+    }
+
+    .touch-mode #pause-button .pause-desktop { display: none; }
+    .touch-mode #pause-button .pause-mobile { display: inline; }
+
+    .touch-mode #test-flight-console {
+      top: calc(var(--safe-top) + 116px);
+    }
+
     #pause-button:hover,
     #pause-button:focus-visible { outline: 2px solid #8dffb3; outline-offset: 1px; }
     .run-paused #pause-button,
@@ -1636,6 +1828,9 @@
       box-shadow: 0 24px 90px rgba(0, 0, 0, .62);
       color: #eafff1;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
     }
 
     .settings-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -1650,7 +1845,32 @@
     .settings-binding { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; min-width: 0; padding: 7px 8px; border: 1px solid rgba(77, 255, 136, .12); border-radius: 4px; font-size: 9px; }
     .settings-binding button { min-width: 54px; }
     .settings-binding button[data-capturing="true"] { border-color: #ffcf82; color: #ffdf9c; }
-    .settings-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }
+    .settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+    .settings-disclosure {
+      margin-top: 8px;
+      border-top: 1px solid rgba(77, 255, 136, .12);
+    }
+
+    .settings-disclosure > summary {
+      display: flex;
+      min-height: 44px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: rgba(217, 255, 229, .62);
+      cursor: pointer;
+      font-size: 10px;
+      letter-spacing: .08em;
+      list-style: none;
+      text-transform: uppercase;
+      touch-action: manipulation;
+    }
+
+    .settings-disclosure > summary::-webkit-details-marker { display: none; }
+    .settings-disclosure > summary::after { content: "Hide"; font-size: 8px; opacity: .58; }
+    .settings-disclosure:not([open]) > summary::after { content: "15 bindings"; }
+    .settings-binding-actions { display: flex; justify-content: flex-start; margin-top: 8px; }
 
     .visually-hidden {
       position: fixed !important;
@@ -1742,13 +1962,15 @@
       #boot::before, .boot-track::after { animation-duration: 4s; }
     }
   </style>
+  <!-- Static-site Web Analytics. Vercel serves this endpoint only on deployed environments. -->
+  <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
   <canvas id="scene" tabindex="0" aria-label="Air combat simulation view"></canvas>
   <canvas id="hud" aria-hidden="true"></canvas>
   <div id="view-status" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off" hidden>SOLO · ROOM NOT CONFIGURED</div>
-  <button id="pause-button" type="button" aria-label="Pause sortie">Pause · Esc</button>
+  <button id="pause-button" type="button" aria-label="Pause sortie"><span class="pause-desktop">Pause · Esc</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>
   <output id="flight-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></output>
 
   <div id="pilot-physiology" aria-hidden="true" hidden>
@@ -1854,45 +2076,43 @@
   </details>
 
   <div id="touch-controls" aria-label="Mobile flight controls">
-    <div id="tilt-status" aria-live="polite">TILT OFF</div>
+    <button id="tilt-status" type="button" data-mobile-action="recenter" aria-live="polite" aria-label="Recenter tilt controls">TILT OFF</button>
 
-    <div class="touch-left">
-      <div class="touch-stack">
-        <div class="touch-label">Throttle</div>
-        <button class="touch-control" type="button" data-hold-key="KeyW" aria-label="Increase throttle">POWER<br>+</button>
-        <button class="touch-control" type="button" data-hold-key="KeyS" aria-label="Decrease throttle">POWER<br>−</button>
-      </div>
-      <button class="touch-control touch-wave" type="button" data-hold-key="KeyW" aria-label="Firewall throttle and wave off">WAVE<br>OFF</button>
+    <div id="touch-throttle-controls" class="touch-left" hidden>
+      <button id="touch-throttle-rocker" class="touch-control" type="button" data-mobile-action="throttle-rocker" data-active="false" data-direction="neutral" aria-label="Throttle rocker" aria-describedby="touch-throttle-help" aria-keyshortcuts="ArrowUp ArrowDown">
+        <span class="throttle-rocker-mark throttle-rocker-plus" aria-hidden="true">+</span>
+        <span id="touch-throttle-rocker-knob" aria-hidden="true"><span class="throttle-rocker-label">PWR</span></span>
+        <span class="throttle-rocker-mark throttle-rocker-minus" aria-hidden="true">−</span>
+      </button>
+      <span id="touch-throttle-help" class="visually-hidden">Drag toward plus to increase power or minus to decrease power. Release stops changing power; the selected power remains set.</span>
+      <button id="touch-wave-off" class="touch-control touch-wave" type="button" data-hold-key="KeyW" aria-label="Firewall throttle and wave off" hidden>WAVE<br>OFF</button>
     </div>
 
     <div class="touch-right">
-      <div class="touch-utils">
-        <button class="touch-control touch-utility" type="button" data-mobile-action="recenter">CENTER</button>
-        <button class="touch-control touch-utility" type="button" data-mobile-action="restart">RESTART</button>
-        <button class="touch-control touch-utility" type="button" data-pulse-key="KeyG" aria-label="Toggle landing gear">GEAR<br>G</button>
-        <button class="touch-control touch-utility" type="button" data-pulse-key="KeyV" aria-label="Padlock target or nearby carrier" aria-pressed="false">PADLOCK<br>V</button>
-        <button class="touch-control touch-utility" type="button" data-hold-key="BracketLeft" aria-label="Hold wing flaps up">FLAP<br>UP</button>
-        <button class="touch-control touch-utility" type="button" data-hold-key="BracketRight" aria-label="Hold wing flaps down">FLAP<br>DOWN</button>
+      <div id="touch-context-controls" class="touch-context" hidden>
+        <button id="touch-gear" class="touch-control touch-utility" type="button" data-pulse-key="KeyG" aria-label="Toggle landing gear" hidden>GEAR<br>G</button>
+        <button id="touch-flap-up" class="touch-control touch-utility" type="button" data-hold-key="BracketLeft" aria-label="Hold wing flaps up" hidden>FLAP<br>UP</button>
+        <button id="touch-flap-down" class="touch-control touch-utility" type="button" data-hold-key="BracketRight" aria-label="Hold wing flaps down" hidden>FLAP<br>DOWN</button>
       </div>
       <div class="touch-actions">
         <button id="touch-gcas-paddle" class="touch-control touch-wave" type="button" data-hold-key="KeyK" aria-label="Hold Auto-GCAS paddle override" hidden>GCAS<br>PADDLE</button>
-        <button class="touch-control" type="button" data-hold-key="Space" aria-label="G-limiter and high-alpha override">LIMIT<br>OVR</button>
-        <button class="touch-control touch-fire" type="button" data-hold-key="KeyF">FIRE</button>
+        <button id="touch-limit-override" class="touch-control" type="button" data-hold-key="Space" aria-label="G-limiter and high-alpha override" hidden>LIMIT<br>OVR</button>
+        <button class="touch-control touch-utility" type="button" data-pulse-key="KeyV" aria-label="Padlock target or nearby carrier" aria-pressed="false" hidden>PADLOCK<br>V</button>
+        <button id="touch-fire" class="touch-control touch-fire" type="button" data-hold-key="KeyF" hidden>FIRE</button>
       </div>
     </div>
 
-    <div id="fallback-stick" aria-label="Button flight stick">
-      <button class="touch-control" type="button" data-hold-key="ArrowLeft">ROLL<br>◀</button>
-      <button class="touch-control" type="button" data-hold-key="ArrowRight">ROLL<br>▶</button>
-      <button class="touch-control" type="button" data-hold-key="ArrowDown">PULL<br>▼</button>
-      <button class="touch-control" type="button" data-hold-key="ArrowUp">PUSH<br>▲</button>
-    </div>
+    <button id="fallback-stick" type="button" data-mobile-action="virtual-stick" data-active="false" aria-label="Flight stick" aria-describedby="fallback-stick-help" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight">
+      <span id="fallback-stick-knob" aria-hidden="true"></span>
+      <span class="fallback-stick-label" aria-hidden="true">STICK</span>
+      <span id="fallback-stick-help" class="visually-hidden">Drag in any direction. Down pulls, up pushes. The stick centres when released.</span>
+    </button>
 
     <div id="tilt-prompt" role="dialog" aria-modal="true" aria-labelledby="tilt-title">
       <strong id="tilt-title">TAP TO ENABLE TILT</strong>
       <p>Hold your comfortable flying angle; this becomes centre. Then tilt forward to push, back to pull, and left/right to roll.</p>
       <button class="touch-choice" type="button" data-mobile-action="enable-tilt">ENABLE TILT</button>
-      <button class="touch-choice secondary" type="button" data-mobile-action="buttons-only">BUTTONS ONLY</button>
+      <button class="touch-choice secondary" type="button" data-mobile-action="buttons-only">USE THUMB STICK</button>
     </div>
 
     <div id="rotate-hint">ROTATE TO LANDSCAPE<br><small>Tilt steering is designed for a wide screen.</small></div>
@@ -2002,10 +2222,14 @@ Splash one bandit to qualify · H controls · R restarts</p>
         <label class="settings-toggle"><input id="setting-large-text" type="checkbox"> Larger interface text</label>
         <label class="settings-range" for="setting-tilt-sensitivity"><span>Tilt sensitivity</span><output id="setting-tilt-sensitivity-value">1.00×</output><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1"></label>
       </div>
-      <div class="settings-copy">Keyboard flight controls</div>
-      <div id="settings-bindings" class="settings-bindings"></div>
+      <details id="settings-keyboard-bindings" class="settings-disclosure" open>
+        <summary>Keyboard flight controls</summary>
+        <div id="settings-bindings" class="settings-bindings"></div>
+        <div class="settings-binding-actions">
+          <button id="settings-reset-bindings" type="button">Reset keyboard controls</button>
+        </div>
+      </details>
       <div class="settings-actions">
-        <button id="settings-reset-bindings" type="button">Reset controls</button>
         <button id="settings-close-bottom" type="button">Done</button>
       </div>
     </div>

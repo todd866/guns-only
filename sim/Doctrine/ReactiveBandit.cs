@@ -1,7 +1,8 @@
 namespace GunsOnly.Sim.Doctrine;
 
 /// A flyable bandit contract. Scripted beats ignore ownship; reactive beats receive the player's
-/// beginning-of-tick state so both aircraft still advance on the same deterministic time sample.
+/// belief-limited beginning-of-tick observation so both aircraft still advance on the same
+/// deterministic time sample without exposing authoritative target internals to the policy.
 public interface IBandit {
     AircraftState State { get; }
     Vec3D LiftDir { get; }
@@ -14,13 +15,13 @@ public interface IBandit {
     bool WreckSurfaceChangedThisStep { get; }
     /// Tactical trigger intent only. The session owns ammunition, cadence, projectiles, damage,
     /// and outcomes; an opponent controller cannot manufacture a hit.
-    bool WantsToFire(in AircraftState player);
+    bool WantsToFire(in ActorObservation player);
     /// Irreversible combat-damage boundary. Subsequent Step calls still integrate the same entity,
     /// but through its failed engine and damaged aerodynamic state rather than its tactical law.
     void ApplyCatastrophicDamage(int handedness);
     void ApplySurfaceImpact(ImpactSurface surface, in Vec3D surfaceVelocity,
         double surfaceHeightM, Carrier? carrier = null);
-    void Step(in AircraftState player, double dt);
+    void Step(in ActorObservation player, double dt);
 }
 
 /// Deterministic, intentionally conservative gun employment shared by scripted and reactive
@@ -33,22 +34,32 @@ public static class BanditFireControl {
     public const double BurstSeconds = 0.35;
     public const double BurstCycleSeconds = 1.25;
 
-    public static bool WantsToFire(in AircraftState own, in AircraftState player,
+    public static bool WantsToFire(in AircraftState own, in ActorObservation player,
         double engagementSeconds) {
         if (!double.IsFinite(engagementSeconds) || engagementSeconds < 0.0) return false;
+        if (!InFiringEnvelope(own, player)) return false;
+
+        double burstPhase = engagementSeconds % BurstCycleSeconds;
+        return burstPhase < BurstSeconds;
+    }
+
+    /// <summary>Physical range/body-axis envelope, independent of the burst clock.</summary>
+    public static bool InFiringEnvelope(in AircraftState own, in ActorObservation player) {
         var line = player.Position - own.Position;
         double range = line.Length;
         if (!double.IsFinite(range) || range < MinimumRangeM || range > MaximumRangeM)
             return false;
 
-        var bodyForward = own.BodyAttitude.IsFinite && own.BodyAttitude.LengthSquared >= 1e-12
-            ? own.BodyAttitude.Rotate(new Vec3D(0.0, 0.0, 1.0)).Normalized()
-            : own.ForwardDir();
-        if (bodyForward.Dot(line * (1.0 / range)) < System.Math.Cos(MaximumNoseErrorRad))
-            return false;
+        return NoseErrorRad(own, player) <= MaximumNoseErrorRad;
+    }
 
-        double burstPhase = engagementSeconds % BurstCycleSeconds;
-        return burstPhase < BurstSeconds;
+    /// <summary>Angular error between the physical gun axis and the observed contact.</summary>
+    public static double NoseErrorRad(in AircraftState own, in ActorObservation player) {
+        var line = player.Position - own.Position;
+        double range = line.Length;
+        if (!double.IsFinite(range) || range < 1e-9) return 0.0;
+        double dot = GunKill.GunDirection(own).Dot(line * (1.0 / range));
+        return System.Math.Acos(System.Math.Clamp(dot, -1.0, 1.0));
     }
 }
 
@@ -56,7 +67,7 @@ public enum BanditTactic { Acquire, Defend, Energy, Return }
 
 /// Deterministic, deliberately beatable BFM opponent. It owns a normal AircraftSim and supplies
 /// only pilot controls: no kinematic shortcuts, wall clock, or random source enters the kernel.
-public sealed class ReactiveBandit : IBandit {
+public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     const double FloorM = 260.0;
     const double CeilingM = 3200.0;
     // Believable guns knife-fight ceiling (~37,700 ft). The per-fight ceiling may sit LOWER (it
@@ -100,6 +111,7 @@ public sealed class ReactiveBandit : IBandit {
     const int LookaheadDecisionCadenceTicks = 12; // ~0.1 s at 120 Hz
     PilotCommand _lookaheadCommand = new(1.0, 0.0, 0.85, 0.0);
     int _lookaheadHoldTicks;
+    long _selectionSequence;
 
     public PilotSkill Skill { get; }
 
@@ -185,6 +197,16 @@ public sealed class ReactiveBandit : IBandit {
     public double ThrustFraction => _sim.ThrustFraction;
     public BanditTactic Tactic { get; private set; } = BanditTactic.Acquire;
     public PilotCommand LastCommand { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
+    public PilotCommand AppliedCommand => LastCommand;
+    public BanditDecisionTrace DecisionTrace { get; private set; }
+    public BanditPolicyMemory PolicyMemory => new(
+        Tactic,
+        T,
+        System.Math.Max(0.0, _defendUntil - T),
+        System.Math.Max(0.0, _defendCooldownUntil - T),
+        _jinkIndex,
+        _breakSign,
+        _lookaheadHoldTicks);
 
     /// <summary>
     /// Preserve the real engine spool state when scenario geometry hands this controller an
@@ -194,7 +216,7 @@ public sealed class ReactiveBandit : IBandit {
     internal void SeedEnginePowerFraction(double powerFraction) =>
         _sim.SeedEnginePowerFraction(powerFraction);
 
-    public bool WantsToFire(in AircraftState player) => !CatastrophicallyDamaged
+    public bool WantsToFire(in ActorObservation player) => !CatastrophicallyDamaged
         && Tactic == BanditTactic.Acquire
         && BanditFireControl.WantsToFire(State, player, T);
 
@@ -216,7 +238,7 @@ public sealed class ReactiveBandit : IBandit {
         _sim.AdoptExternalKinematics(_wreckMotion.State);
     }
 
-    public void Step(in AircraftState player, double dt) {
+    public void Step(in ActorObservation player, double dt) {
         if (!double.IsFinite(dt) || dt <= 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(dt));
 
@@ -255,11 +277,12 @@ public sealed class ReactiveBandit : IBandit {
             BanditTactic.Return => ReturnCommand(),
             _ => AcquireCommand(player)
         };
+        RecordSingleCandidateDecision(LastCommand);
         _sim.Step(LastCommand, dt);
         T += dt;
     }
 
-    void SelectTactic(in AircraftState player) {
+    void SelectTactic(in ActorObservation player) {
         var own = State;
         double radius = HorizontalDistance(own.Position, _fightCentre);
 
@@ -288,7 +311,7 @@ public sealed class ReactiveBandit : IBandit {
         Tactic = BanditTactic.Acquire;
     }
 
-    bool IsGunThreat(in AircraftState player) {
+    bool IsGunThreat(in ActorObservation player) {
         var own = State;
         var ownToPlayer = player.Position - own.Position;
         double range = ownToPlayer.Length;
@@ -302,7 +325,7 @@ public sealed class ReactiveBandit : IBandit {
         return rearAspect < -0.45 && attackerAngle > 0.91 && closing > -5.0;
     }
 
-    void EnterDefence(in AircraftState player) {
+    void EnterDefence(in ActorObservation player) {
         var own = State;
         var forward = own.ForwardDir();
         var right = new Vec3D(0.0, 1.0, 0.0).Cross(forward);
@@ -314,7 +337,7 @@ public sealed class ReactiveBandit : IBandit {
         Tactic = BanditTactic.Defend;
     }
 
-    PilotCommand AcquireCommand(in AircraftState player) {
+    PilotCommand AcquireCommand(in ActorObservation player) {
         var own = State;
         double range = (player.Position - own.Position).Length;
         double leadSeconds = System.Math.Clamp(range / 900.0, 0.35, 1.35);
@@ -353,7 +376,7 @@ public sealed class ReactiveBandit : IBandit {
         return new PilotCommand(g, bank, _defensivePower, direction * 0.10);
     }
 
-    PilotCommand EnergyCommand(in AircraftState player) {
+    PilotCommand EnergyCommand(in ActorObservation player) {
         var own = State;
         // Unload into a shallow descending extension. Once speed is back, SelectTactic sends the
         // bandit straight back to acquire; low altitude instead commands a safe climbing turn.
@@ -407,7 +430,7 @@ public sealed class ReactiveBandit : IBandit {
     /// probe of the real kernel while the player is predicted by honest physical extension of the
     /// OBSERVED state only. The choice is recomputed on a fixed tick cadence and held between
     /// recomputes so the rollout cost stays bounded and the whole layer stays deterministic.
-    PilotCommand LookaheadCommand(in AircraftState player) {
+    PilotCommand LookaheadCommand(in ActorObservation player) {
         if (_lookaheadHoldTicks > 0) {
             _lookaheadHoldTicks--;
             return _lookaheadCommand;
@@ -454,21 +477,66 @@ public sealed class ReactiveBandit : IBandit {
 
         double bestScore = double.NegativeInfinity;
         var bestCommand = candidates[0];
+        int bestIndex = 0;
+        Span<double> scores = stackalloc double[candidates.Length];
         for (int i = 0; i < candidates.Length; i++) {
             double s = ScoreCandidate(candidates[i], player);
-            if (s > bestScore) { bestScore = s; bestCommand = candidates[i]; }
+            scores[i] = s;
+            if (s > bestScore) {
+                bestScore = s;
+                bestCommand = candidates[i];
+                bestIndex = i;
+            }
         }
         _lookaheadCommand = bestCommand;
+        DecisionTrace = new BanditDecisionTrace(
+            ++_selectionSequence,
+            Skill,
+            bestCommand,
+            bestIndex,
+            candidates.Length,
+            new BanditDecisionCandidate(
+                0, candidates[0], scores[0], HasScore: true, Available: true),
+            new BanditDecisionCandidate(
+                1, candidates[1], scores[1], HasScore: true, Available: true),
+            new BanditDecisionCandidate(
+                2, candidates[2], scores[2], HasScore: true, Available: true),
+            new BanditDecisionCandidate(
+                3, candidates[3], scores[3], HasScore: true, Available: true),
+            new BanditDecisionCandidate(
+                4, candidates[4], scores[4], HasScore: true, Available: true),
+            new BanditDecisionCandidate(
+                5, candidates[5], scores[5], HasScore: true, Available: true));
         return bestCommand;
+    }
+
+    void RecordSingleCandidateDecision(in PilotCommand command) {
+        var selected = new BanditDecisionCandidate(
+            0, command, Score: 0.0, HasScore: false, Available: true);
+        DecisionTrace = new BanditDecisionTrace(
+            ++_selectionSequence,
+            Skill,
+            command,
+            SelectedCandidateIndex: 0,
+            CandidateCount: 1,
+            selected,
+            default,
+            default,
+            default,
+            default,
+            default);
     }
 
     /// Roll one held candidate command forward in a throwaway probe of the deterministic kernel while
     /// predicting the player by a coordinated-turn extension of the OBSERVED state (belief-limited and
     /// honest: no hidden opponent internals are read). Higher return is a better future firing
     /// position. Pure function of the two passed states — no wall clock, RNG, or hidden truth.
-    double ScoreCandidate(in PilotCommand command, in AircraftState player) {
+    double ScoreCandidate(in PilotCommand command, in ActorObservation player) {
         const double dt = 1.0 / AircraftSim.TickHz;
-        const double gunConeRad = 0.2094; // 12 deg, matching CameraSolver.GunWindow
+        // Optimize the envelope the trigger can ACTUALLY use. The old 12-degree camera window made
+        // the lookahead tests look threatening while first-pass-safe production fights never fired:
+        // every selected "solution" remained outside BanditFireControl's real 3-degree gate.
+        const double gunConeRad = BanditFireControl.MaximumNoseErrorRad;
         var probe = new AircraftSim(State, _parameters, _sim.AtmosphereModel) { Wind = _sim.Wind };
         probe.SeedEnginePowerFraction(_sim.ThrustFraction);
 
@@ -500,19 +568,25 @@ public sealed class ReactiveBandit : IBandit {
             minY = System.Math.Min(minY, probeState.Position.Y);
             maxY = System.Math.Max(maxY, probeState.Position.Y);
             var predictedPlayer = player with { Position = predictedPos };
-            if (Geometry.Range(probeState, predictedPlayer) < BanditFireControl.MaximumRangeM
-                && Geometry.AngleOff(probeState, predictedPlayer) < gunConeRad)
+            // Reward exactly the envelope the trigger can use. Counting any nose-on sample below
+            // maximum range also rewarded geometry inside the no-fire minimum range, so a close
+            // overshoot could outscore a genuinely usable solution.
+            if (BanditFireControl.InFiringEnvelope(probeState, predictedPlayer))
                 windowSeconds += dt;
         }
 
         var terminal = probe.State;
         var terminalPlayer = player with { Position = predictedPos };
         double termRange = Geometry.Range(terminal, terminalPlayer);
-        double termAngle = Geometry.AngleOff(terminal, terminalPlayer);
+        double termAngle = GunAngleOff(terminal, terminalPlayer);
         const double idealRangeM = 450.0; // centre of the gun band: pull the fight inside firing range
 
-        // Nose-on shaping: the strongest driver toward a solution.
-        double score = -4.0 * termAngle;
+        // Nose-on shaping is expressed in physical gun-cone widths. The previous per-radian
+        // penalty was almost flat around a three-degree solution (only ~0.2 score at the edge),
+        // so range management dominated and the controller happily orbited just outside the
+        // trigger gate. Keep a smooth gradient toward the real envelope without widening it.
+        double coneErrors = termAngle / gunConeRad;
+        double score = -0.75 * coneErrors;
         // Direct conversion reward: seconds of gun window accrued over the rollout.
         score += 10.0 * windowSeconds;
         // Range management: pull the fight INTO firing range rather than zooming away or overshooting
@@ -531,5 +605,9 @@ public sealed class ReactiveBandit : IBandit {
         if (maxY > CombatCeilingM - 200.0)
             score -= 0.02 * (maxY - (CombatCeilingM - 200.0));
         return score;
+    }
+
+    static double GunAngleOff(in AircraftState own, in ActorObservation contact) {
+        return BanditFireControl.NoseErrorRad(own, contact);
     }
 }

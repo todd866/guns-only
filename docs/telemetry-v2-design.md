@@ -1,11 +1,37 @@
 # Telemetry v2 — per-decision transition capture (design)
 
-Status: Design, 2026-07-22 · Implements the data-capture foundation of
+Status: Sim-side foundation implemented, 2026-07-22 · Implements the data-capture foundation of
 [adaptive-teacher-design.md](adaptive-teacher-design.md) ("Sequencing — the first slice").
 Synthesises the design with an independent Codex architecture consult (Claude has lead; Codex's
 corrections are marked ⟐). Naming trap: the existing `TELEMETRY_SCHEMA_VERSION "2.0.0"` is the
 browser *chunk-envelope* version — **not** this. This doc introduces a distinct
 `decision_schema_version`.
+
+## Implementation status
+
+Implemented in the simulation assembly:
+
+- `ActorObservation` is now the target-input type consumed by every `IBandit` policy.
+- Trainable `ReactiveBandit` actors expose their exact maneuver-selection trace, fixed candidate
+  ordering/scores, selection sequence, applied command, and actor-visible policy memory.
+- `DecisionRecorder` is a preallocated circular stream with global sequences, idempotent cursor
+  reads, bounded batches, explicit overflow-gap metadata, and sequenced restart boundaries. Capture
+  is a staged-sortie setting, so it cannot create an unmarked mid-episode hole. The session records
+  trigger intent at tick rate and marks maneuver selection only on the policy's real cadence.
+- Seeded headless production-gun episodes can emit auditable transition/reward components as
+  `guns-only.combat-transition.v1` JSON Lines for an external trainer. The wire format uses explicit
+  DTOs and versions its config, scenario, observation, action, reward, policy, and seed generator;
+  it carries effective reward weights and marks the not-yet-supplied artifact hash as incomplete.
+- Both live and headless transitions preserve an exact `next_observation == observation` chain.
+  Maneuver selection/application and fire evaluation/consumption/authorization are separate facts,
+  including on terminal gun ticks. Every micro-transition retains the policy skill identity even
+  when a high-tier actor is holding a prior selection, and both paths share the same
+  weapon-authorized firing-envelope reward predicate.
+
+Still intentionally pending: browser draining/packing and durable transport; the separately keyed
+privileged-truth materialization; a real artifact/build hash; retention/export of referenced sparse
+events beyond the presentation ring; and a policy adapter for applying learned actions. `RailBandit`
+scripted content is outside the trainable actor stream.
 
 ## Goal
 

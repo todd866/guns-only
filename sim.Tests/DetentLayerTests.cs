@@ -86,12 +86,79 @@ public class DetentLayerTests {
         Run(d, g, 90, 600, Fast);
         Assert.Equal(0.9, d.Command.BankTarget, 2);
     }
-    [Fact] public void ThrottleTapsStepDetents() {
+    [Theory]
+    [InlineData(GKey.ThrottleUp, 1.0)]
+    [InlineData(GKey.ThrottleDown, 0.70)]
+    public void ThrottleTapsStepDetents(GKey key, double expected) {
         var d = new DetentLayer(); var g = new KeyGrammar();
         Assert.Equal(0.85, d.Throttle, 6); // default cruise... spec detents idle/cruise/mil
-        g.Feed(GKey.ThrottleUp, true, 0); g.Feed(GKey.ThrottleUp, false, 80);
+        g.Feed(key, true, 0); g.Feed(key, false, 80);
         Run(d, g, 80, 500, Fast); // tap commits after the 250 ms double window
-        Assert.Equal(1.0, d.Throttle, 6);
+        Assert.Equal(expected, d.Throttle, 6);
+    }
+    [Theory]
+    [InlineData(GKey.ThrottleUp, 0.15)]
+    [InlineData(GKey.ThrottleDown, -0.15)]
+    public void SampledKeyboardThrottleTapRetainsDeferredFineStep(GKey key, double step) {
+        var d = new DetentLayer(); var g = new KeyGrammar();
+        g.Feed(key, true, 0);
+        Run(d, g, 0, 100, Fast);
+        double afterHold = d.Throttle;
+
+        g.Feed(key, false, 100);
+        Run(d, g, 100, 600, Fast);
+
+        Assert.Equal(Math.Clamp(afterHold + step, 0.0, FlightModel.Sabre.MaxThrustFraction),
+            d.Throttle, 10);
+    }
+    [Theory]
+    [InlineData(GKey.ThrottleUp)]
+    [InlineData(GKey.ThrottleDown)]
+    public void SuppressedShortThrottleHoldIsNotReplayedAsDeferredTap(GKey key) {
+        var d = new DetentLayer(); var g = new KeyGrammar();
+        double initial = d.Throttle;
+        g.Feed(key, true, 0);
+        Run(d, g, 0, 100, Fast);
+        double afterHold = d.Throttle;
+        Assert.NotEqual(initial, afterHold);
+
+        g.Feed(key, false, 100);
+        g.SuppressPendingTap(key); // direct-manipulation rocker release, not a keyboard tap
+        Run(d, g, 100, 600, Fast); // crosses the deferred 250 ms tap-classification window
+
+        Assert.Equal(afterHold, d.Throttle, 10);
+    }
+    [Fact] public void DirectRockerHoldCommitsAPriorKeyboardThrottleTapInsteadOfConsumingIt() {
+        // Mixed input sources on one throttle key: a legitimate keyboard tap, then the phone
+        // rocker engaged INSIDE the 250 ms double-tap window and held longer than TapMaxMs.
+        // The direct hold must never become the tap's double-held arm — the promised keyboard
+        // fine step commits — and its release must not replay as a deferred tap. The control
+        // run performs the identical tap and identical 300 ms direct hold, only OUTSIDE the
+        // window; both schedules must land on exactly the same lever position.
+        const double stepMs = 1000.0 / AircraftSim.TickHz;
+        static void RunTicks(DetentLayer d, KeyGrammar g, int fromTick, int toTick) {
+            for (int i = fromTick; i < toTick; i++)
+                d.Tick(g, i * (1000.0 / AircraftSim.TickHz), Fast, FlightModel.Sabre,
+                    Advice, 1.0 / AircraftSim.TickHz);
+        }
+        var mixed = new DetentLayer(); var g1 = new KeyGrammar();
+        var control = new DetentLayer(); var g2 = new KeyGrammar();
+        g1.Feed(GKey.ThrottleDown, true, 0); g1.Feed(GKey.ThrottleDown, false, 10 * stepMs);
+        g2.Feed(GKey.ThrottleDown, true, 0); g2.Feed(GKey.ThrottleDown, false, 10 * stepMs);
+
+        RunTicks(mixed, g1, 0, 24);
+        g1.FeedDirect(GKey.ThrottleDown, true, 24 * stepMs);   // 200 ms: inside the double window
+        RunTicks(mixed, g1, 24, 60);
+        g1.FeedDirect(GKey.ThrottleDown, false, 60 * stepMs);  // 300 ms hold: longer than TapMaxMs
+        RunTicks(mixed, g1, 60, 144);
+
+        RunTicks(control, g2, 0, 72);                          // tap classifies normally first
+        g2.FeedDirect(GKey.ThrottleDown, true, 72 * stepMs);   // identical 36-tick rocker hold
+        RunTicks(control, g2, 72, 108);
+        g2.FeedDirect(GKey.ThrottleDown, false, 108 * stepMs);
+        RunTicks(control, g2, 108, 144);
+
+        Assert.Equal(control.Throttle, mixed.Throttle, 10);
     }
     [Fact] public void SabreThrottleStopsAtMilitaryPower() {
         var d = new DetentLayer(); var g = new KeyGrammar();

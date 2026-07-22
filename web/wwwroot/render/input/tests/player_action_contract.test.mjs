@@ -237,25 +237,33 @@ test("every visible HTML button is wired through one auditable action surface", 
   }
 });
 
-test("touch pilots can explicitly command gear, both flap directions, and contextual padlock", () => {
+test("touch pilots retain system commands but the live surface makes them contextual", () => {
   const buttons = htmlButtons(indexSource);
   const find = (attribute, value) => buttons.find((button) => button.attributes[attribute] === value);
 
-  assert.ok(find("data-pulse-key", "KeyG"), "mobile surface needs a gear-toggle button");
-  assert.ok(find("data-hold-key", "BracketLeft"), "mobile surface needs a spring-loaded flap-up button");
-  assert.ok(find("data-hold-key", "BracketRight"), "mobile surface needs a spring-loaded flap-down button");
+  assert.equal(find("data-pulse-key", "KeyG")?.attributes.hidden, "",
+    "gear must start absent until the aircraft and configuration make it relevant");
+  assert.equal(find("data-hold-key", "BracketLeft")?.attributes.hidden, "",
+    "flaps-up must start absent until the aircraft and configuration make it relevant");
+  assert.equal(find("data-hold-key", "BracketRight")?.attributes.hidden, "",
+    "flaps-down must start absent until the aircraft and configuration make it relevant");
   assert.ok(find("data-pulse-key", "KeyV"), "mobile surface needs the same contextual padlock action as V");
   const gcasPaddle = find("data-hold-key", "KeyK");
   assert.ok(gcasPaddle, "touch pilots need the same held Auto-GCAS paddle as keyboard pilots");
   assert.equal(gcasPaddle.attributes.hidden, "",
     "the paddle must be absent until an active recoverable fly-up makes it relevant");
   assert.match(appSource,
-    /touchGcasPaddle\.hidden = !\(state\?\.auto_gcas_active === true[\s\S]*?pilot_control_authority_01\) >= 0\.55/,
-    "the touch paddle must appear only when Auto-GCAS is active and the pilot can operate it");
+    /const profile = mobileControlProfile\(state\)[\s\S]*?touchGcasPaddle\.hidden = !profile\.gcasOverride/,
+    "one state-driven profile must own contextual phone-control visibility");
+  assert.equal(buttons.some((button) => button.attributes["data-mobile-action"] === "restart"), false,
+    "restart belongs to pause/debrief and the frozen whole-screen target, not the live HUD");
 
   assert.match(appSource,
     /querySelectorAll\("\[data-hold-key\]"\)[\s\S]*?addEventListener\("pointerdown"[\s\S]*?pressMappedKey\(code, source, gkey\)[\s\S]*?addEventListener\("pointerup", endControl\)[\s\S]*?addEventListener\("pointercancel", endControl\)[\s\S]*?addEventListener\("lostpointercapture", endControl\)/,
     "held touch controls need down, up, cancellation, and lost-pointer release paths");
+  assert.match(appSource,
+    /releaseHiddenMobileControls = \(\) => \{[\s\S]*?closest\?\.\("\[hidden\]"\)[\s\S]*?releaseMappedKey\(control\.code, control\.source\)/,
+    "a contextual control hidden mid-hold must release explicitly on Safari");
   assert.match(appSource,
     /querySelectorAll\("\[data-pulse-key\]"\)[\s\S]*?if \(!pressMappedKey\(code, source, gkey\)\) return;[\s\S]*?releaseMappedKey\(code, source\)/,
     "a pulse control must always emit exactly one accepted down/up pair");
@@ -265,6 +273,127 @@ test("touch pilots can explicitly command gear, both flap directions, and contex
   assert.match(appSource,
     /const gkey = keyMap\.get\(event\.code\);[\s\S]*?if \(!pressMappedKey\(event\.code, "keyboard"\)\) return;[\s\S]*?gkey === 9[\s\S]*?togglePadlock\(\)/,
     "a paused or rejected keyboard V press must not change presentation state");
+});
+
+test("phone settings remain scrollable and collapse desktop-only binding density", () => {
+  assert.match(indexSource,
+    /\.settings-card\s*\{[\s\S]*?overflow:\s*auto[\s\S]*?touch-action:\s*pan-y/);
+  assert.match(indexSource,
+    /<details id="settings-keyboard-bindings" class="settings-disclosure" open>/);
+  assert.match(appSource, /settingsKeyboardBindings\?\.removeAttribute\("open"\)/,
+    "touch mode should collapse the fifteen keyboard binding buttons");
+  assert.match(appSource,
+    /#ready-screen, #settings-screen, #incident-replay-overlay, #test-flight-console/,
+    "touchmove protection must exempt every scrollable modal surface");
+});
+
+test("fallback flight control is one spring-loaded virtual stick", () => {
+  const buttons = htmlButtons(indexSource);
+  const stick = buttons.filter((button) =>
+    button.attributes["data-mobile-action"] === "virtual-stick");
+  const fallbackDirections = buttons.filter((button) =>
+    ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]
+      .includes(button.attributes["data-hold-key"]));
+
+  assert.equal(stick.length, 1, "fallback mode needs one visible thumb target");
+  assert.equal(stick[0].attributes.id, "fallback-stick");
+  assert.equal(stick[0].attributes["aria-label"], "Flight stick");
+  assert.equal(fallbackDirections.length, 0,
+    "the four directional fallback buttons must not return");
+  assert.match(indexSource, /id="fallback-stick-knob"/);
+  assert.match(indexSource,
+    /#fallback-stick\s*\{[\s\S]*?width:\s*112px[\s\S]*?height:\s*112px[\s\S]*?touch-action:\s*none/);
+  assert.match(indexSource, /USE THUMB STICK/);
+
+  assert.match(appSource,
+    /fallbackStick\?\.addEventListener\("pointerdown", beginVirtualStick[\s\S]*?pointermove", moveVirtualStick[\s\S]*?pointerup", endVirtualStick[\s\S]*?pointercancel", endVirtualStick[\s\S]*?lostpointercapture", endVirtualStick/,
+    "the stick must own every pointer termination path");
+  assert.match(appSource,
+    /function beginVirtualStick[\s\S]*?virtualStickPointerId !== null[\s\S]*?setPointerCapture/,
+    "a second finger must not steal the active stick pointer");
+  assert.match(appSource,
+    /function releaseVirtualStick[\s\S]*?virtualStickPointerId = null[\s\S]*?releaseMappedKey[\s\S]*?forceAnalogRollNeutral\(\)[\s\S]*?renderVirtualStick\(\)/,
+    "one idempotent release path must neutralise pitch, roll, and the visual knob");
+  assert.match(appSource,
+    /resetMobileInput = \(\) => \{[\s\S]*?releaseVirtualStick\(\)[\s\S]*?releaseTiltAxes\(\)/,
+    "pause, freeze, visibility, and mission resets must centre the virtual stick");
+});
+
+test("phone throttle is one spring-loaded rocker on the existing W/S grammar", () => {
+  const buttons = htmlButtons(indexSource);
+  const rockers = buttons.filter((button) =>
+    button.attributes["data-mobile-action"] === "throttle-rocker");
+  const directPowerButtons = buttons.filter((button) =>
+    ["KeyW", "KeyS"].includes(button.attributes["data-hold-key"])
+      && button.attributes.id !== "touch-wave-off");
+  const waveOff = buttons.find((button) => button.attributes.id === "touch-wave-off");
+
+  assert.equal(rockers.length, 1, "power adjustment needs one visible thumb target");
+  assert.equal(rockers[0].attributes.id, "touch-throttle-rocker");
+  assert.equal(rockers[0].attributes["aria-label"], "Throttle rocker");
+  assert.equal(rockers[0].attributes["aria-describedby"], "touch-throttle-help");
+  assert.equal(rockers[0].attributes["aria-keyshortcuts"], "ArrowUp ArrowDown");
+  assert.equal(directPowerButtons.length, 0,
+    "separate POWER plus/minus buttons must not return");
+  assert.equal(waveOff?.attributes["data-hold-key"], "KeyW",
+    "the contextual wave-off action still needs a held firewall command");
+  assert.equal(waveOff?.attributes.hidden, "");
+  assert.match(indexSource, /id="touch-throttle-rocker-knob"/);
+  assert.match(indexSource, /id="touch-throttle-help"[^>]*>[^<]*selected power remains set/);
+  assert.match(indexSource,
+    /#touch-throttle-rocker\s*\{[\s\S]*?width:\s*52px[\s\S]*?height:\s*112px[\s\S]*?touch-action:\s*none/);
+  assert.match(indexSource,
+    /@media \(max-width:\s*700px\)[\s\S]*?#touch-throttle-rocker\s*\{[\s\S]*?width:\s*48px[\s\S]*?height:\s*104px/);
+
+  assert.match(appSource,
+    /touchThrottleRocker\?\.addEventListener\("pointerdown", beginThrottleRocker[\s\S]*?pointermove", moveThrottleRocker[\s\S]*?pointerup", endThrottleRocker[\s\S]*?pointercancel", endThrottleRocker[\s\S]*?lostpointercapture", endThrottleRocker/,
+    "the rocker must own every pointer termination path");
+  assert.match(appSource,
+    /function beginThrottleRocker[\s\S]*?throttleRockerPointerId !== null[\s\S]*?setPointerCapture/,
+    "a second finger must not steal the active throttle pointer");
+  assert.match(appSource,
+    /function setThrottleRockerCode[\s\S]*?`Touch:\$\{physicalCode\}`[\s\S]*?touchGkeyByDefaultCode\.get\(physicalCode\)/,
+    "the rocker and WAVE OFF must share Touch:KeyW ownership");
+  assert.match(appSource,
+    /function releaseThrottleRocker[\s\S]*?throttleRockerPointerId = null[\s\S]*?releaseThrottleRockerCommand\(active\)[\s\S]*?renderThrottleRocker\(\)/,
+    "one idempotent release path must stop W/S and centre the visual puck");
+  assert.match(appSource,
+    /function releaseThrottleRockerCommand[\s\S]*?releaseMappedKey\(control\.code, control\.source\)[\s\S]*?bridge\?\.SuppressPendingThrottleTap[\s\S]*?bridge\.SuppressPendingThrottleTap\(control\.physicalCode === "KeyW"\)/,
+    "a rocker release must suppress its deferred keyboard tap only after the final shared key-up");
+  assert.match(webBridgeSource,
+    /SuppressPendingThrottleTap\(bool increase\)[\s\S]*?Session\.SuppressPendingThrottleTap\(increase\)/);
+  assert.match(sessionSource,
+    /SuppressPendingThrottleTap\(bool increase\)[\s\S]*?_keys\.SuppressPendingTap\(increase \? GKey\.ThrottleUp : GKey\.ThrottleDown\)/);
+  assert.match(keyGrammarSource,
+    /SuppressPendingTap\(GKey key\)[\s\S]*?s\.PendingTap = null[\s\S]*?s\.ConsumedArm = null/,
+    "ordinary keyboard taps stay deferred unless a direct-manipulation release opts out");
+  assert.match(appSource,
+    /releaseHiddenMobileControls = \(\) => \{[\s\S]*?touchThrottleRocker\?\.closest\?\.\("\[hidden\]"\)[\s\S]*?releaseThrottleRocker\(\)/,
+    "hiding engine controls mid-hold must release the rocker explicitly");
+  assert.match(appSource,
+    /touchThrottleRocker\?\.addEventListener\("keydown"[\s\S]*?throttleRockerKeyboardEvent\(event, true\)[\s\S]*?"keyup"[\s\S]*?throttleRockerKeyboardEvent\(event, false\)[\s\S]*?"blur"/,
+    "focused arrow-key operation needs down, up, and focus-loss release paths");
+  assert.match(appSource,
+    /resetMobileInput = \(\) => \{[\s\S]*?releaseThrottleRocker\(\)[\s\S]*?releaseVirtualStick\(\)/,
+    "pause, freeze, visibility, and mission resets must spring the rocker neutral");
+});
+
+test("phone chrome uses distinct vertical anchors", () => {
+  const pauseTop = Number(indexSource.match(
+    /#pause-button\s*\{[\s\S]*?top:\s*calc\(var\(--safe-top\) \+ (\d+)px\)/,
+  )?.[1]);
+  const tiltTop = Number(indexSource.match(
+    /#tilt-status\s*\{[\s\S]*?top:\s*calc\(env\(safe-area-inset-top, 0px\) \+ (\d+)px\)/,
+  )?.[1]);
+  const consoleTop = Number(indexSource.match(
+    /\.touch-mode #test-flight-console\s*\{[\s\S]*?top:\s*calc\(var\(--safe-top\) \+ (\d+)px\)/,
+  )?.[1]);
+
+  assert.ok(Number.isFinite(pauseTop) && Number.isFinite(tiltTop) && Number.isFinite(consoleTop));
+  assert.ok(tiltTop >= pauseTop + 44,
+    "the tilt recenter target must sit below the 44px pause target");
+  assert.ok(consoleTop >= tiltTop + 44,
+    "the contextual action console must sit below the tilt target");
 });
 
 test("fresh players launch directly into the first F-22 merge", () => {

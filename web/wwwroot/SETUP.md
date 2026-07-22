@@ -36,6 +36,20 @@ store**, and connect it to the project/Production environment. Vercel must expos
 the production function receives the variable. Do not put the token in this repository or browser
 code.
 
+Enable **Web Analytics** for the project as well. The static shell loads
+`/_vercel/insights/script.js` directly, so this app does not use the Next.js React component or an
+npm package. After deployment, visit the canonical site and confirm that the script request returns
+`200`; visitor counts begin only after real page views reach that instrumented deployment.
+
+Production also has two deliberately separate operator credentials:
+
+- `TELEMETRY_ADMIN_TOKEN` authorizes the bounded raw metadata/list and selected-chunk paths.
+- `TELEMETRY_REPORT_TOKEN` authorizes only non-identifying aggregate summaries and cannot list or
+  download raw telemetry.
+
+Both must be sensitive Production variables. Keep their local counterparts in Keychain rather
+than the repository or shell history.
+
 Deploy only through the repository's guarded publish command:
 
 ```sh
@@ -86,6 +100,21 @@ node tools/telemetry/admin.mjs list \
   --prefix 'telemetry/' --limit 50 \
   --output '/tmp/guns-only-telemetry-page.json'
 ```
+
+Routine reporting should use the narrower report credential instead of raw access:
+
+```sh
+export TELEMETRY_REPORT_TOKEN="$(security find-generic-password -w \
+  -a iantodd -s guns-only-telemetry-report)"
+node tools/telemetry/admin.mjs summary \
+  --prefix 'telemetry/web-1784728' --limit 20 \
+  --output '/tmp/guns-only-telemetry-summary.json'
+unset TELEMETRY_REPORT_TOKEN
+```
+
+The summary reads at most one explicit page, returns no rows, user agents, Blob paths, or
+session/sortie identifiers, and exposes partial coverage plus a cursor instead of paginating
+automatically. Legacy flat objects are counted as unsupported and are not downloaded.
 
 Review that JSON locally, select one chunk, and pass its listed `url`, `size`, and `etag` to the
 single-blob downloader:

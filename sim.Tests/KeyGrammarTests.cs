@@ -89,4 +89,13 @@ public class KeyGrammarTests {
         Assert.Equal(1, g.TakeTapsSince(GKey.PushDown, 100, 900)); // only the 580 tap counts; the 80 tap is discarded
         Assert.Equal(0, g.TakeTaps(GKey.PushDown, 900));           // and both are gone
     }
+    [Fact] public void DirectHoldNeverClassifiesAndCommitsThePriorKeyboardTap() {
+        var g = new KeyGrammar();
+        g.Feed(GKey.ThrottleUp, true, 0); g.Feed(GKey.ThrottleUp, false, 80); // keyboard tap
+        g.FeedDirect(GKey.ThrottleUp, true, 200);        // rocker press inside the double window
+        Assert.Equal(KeyPhase.Held, g.PhaseAt(GKey.ThrottleUp, 210));  // never DoubleHeld
+        Assert.Equal(1, g.TakeTaps(GKey.ThrottleUp, 210)); // the prior tap committed immediately
+        g.FeedDirect(GKey.ThrottleUp, false, 500);       // long direct hold releases
+        Assert.Equal(0, g.TakeTaps(GKey.ThrottleUp, 1000)); // and leaves no deferred tap behind
+    }
 }

@@ -1,5 +1,6 @@
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Sim.Training;
 using GunsOnly.Sim.Turbulence;
 
 namespace GunsOnly.Sim;
@@ -183,7 +184,16 @@ public sealed class SimulationSession {
     readonly List<SessionEvent> _recentEvents = new(RecentEventCapacity);
     readonly List<DetachedOpponentWreck> _detachedOpponentWrecks = new();
     readonly IncidentReplayRecorder _incidentReplay = new();
+    readonly DecisionRecorder _decisionRecorder = new();
     long _eventSequence;
+    long _decisionClosedActorSpawnSequence;
+    long _decisionLastCapturedActorSpawnSequence;
+    long _decisionPendingTruncatedActorSpawnSequence;
+    PendingTerminalDecision? _decisionPendingTerminal;
+    bool _decisionCaptureEnabled = true;
+    bool _decisionFireIntentEvaluatedThisTick;
+    bool _decisionFireIntentConsumedThisTick;
+    bool _decisionFireAuthorizedThisTick;
 
     Carrier? _carrier;
     readonly RecoveryProgress _recoveryProgress = new();
@@ -307,6 +317,22 @@ public sealed class SimulationSession {
     public IReadOnlyList<DetachedOpponentWreck> DetachedOpponentWrecks =>
         _detachedOpponentWrecks;
     public IncidentReplayRecorder IncidentReplay => _incidentReplay;
+    public DecisionRecorder Decisions => _decisionRecorder;
+    /// <summary>
+    /// Selects whether a staged sortie emits decision records. Changing this while the simulation
+    /// clock is released would create an unmarked hole in an otherwise contiguous episode, so the
+    /// setting may only change while the session is Ready.
+    /// </summary>
+    public bool DecisionCaptureEnabled {
+        get => _decisionCaptureEnabled;
+        set {
+            if (value != _decisionCaptureEnabled
+                && Lifecycle != LifecycleState.Ready)
+                throw new InvalidOperationException(
+                    "Decision capture can only change while the session is staged in Ready.");
+            _decisionCaptureEnabled = value;
+        }
+    }
     public long PlayerSpawnSequence => _playerSpawnSequence;
     public long BanditSpawnSequence => _banditSpawnSequence;
     public long CarrierSpawnSequence => _carrier is null ? 0 : _carrierSpawnSequence;
@@ -538,6 +564,29 @@ public sealed class SimulationSession {
             _maintenanceScenario?.InspectMechanicalDownlocks(TimeSeconds);
     }
 
+    /// <summary>
+    /// A spring-loaded direct throttle control is a continuous hold, never a deferred keyboard
+    /// tap. Its host calls this immediately after the matching release edge.
+    /// </summary>
+    public void SuppressPendingThrottleTap(bool increase) =>
+        _keys.SuppressPendingTap(increase ? GKey.ThrottleUp : GKey.ThrottleDown);
+
+    /// <summary>
+    /// Source-aware direct throttle hold edge (the phone rocker). Unlike FeedKey, a direct hold
+    /// never enters tap/double-tap classification: a prior legitimate keyboard throttle tap is
+    /// committed rather than consumed as a double-tap arm, and the hold's release leaves no
+    /// deferred tap behind, so no post-release suppression call is needed.
+    /// </summary>
+    public void FeedDirectThrottle(bool increase, bool pressed) {
+        if (Lifecycle != LifecycleState.Active) return;
+        if (_playerTerminalState != AircraftTerminalState.Flying) return;
+        // Same G-LOC ownership boundary as FeedKey: releases pass through so held controls can
+        // cross the required neutral boundary, but no new press is accepted while interlocked.
+        if (pressed && _pilotControlInterlocked) return;
+        _keys.FeedDirect(increase ? GKey.ThrottleUp : GKey.ThrottleDown,
+            pressed, _simTimeMs);
+    }
+
     /// <summary>Set the latest continuous lateral-stick command from a direct-input host.</summary>
     public void SetAnalogRollControl(double value) {
         if (!double.IsFinite(value))
@@ -632,14 +681,250 @@ public sealed class SimulationSession {
     }
 
     void RunFixedTick() {
+        DecisionTickCapture? decisionCapture = BeginDecisionTickCapture();
+        _decisionFireIntentEvaluatedThisTick = false;
+        _decisionFireIntentConsumedThisTick = false;
+        _decisionFireAuthorizedThisTick = false;
         StepDetachedOpponentWrecks();
         StepCore();
+        if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
+        StepPendingTerminalDecision();
         _tick++;
         CaptureIncidentReplaySample();
     }
 
+    readonly record struct DecisionTickCapture(
+        IBandit Actor,
+        IBanditDecisionTraceSource TraceSource,
+        AircraftState ActorState,
+        ActorObservation PlayerObservation,
+        BanditPolicyMemory PolicyMemory,
+        long SelectionSequence,
+        long PlayerSpawnSequence,
+        long ActorSpawnSequence,
+        double ElapsedSeconds,
+        GunKill ActorGun,
+        GunKill PlayerGun,
+        int ActorAmmo,
+        int ActorRounds,
+        int ActorHits,
+        int PlayerHits,
+        long EventSequence,
+        bool WeaponsAuthorized);
+
+    DecisionTickCapture? BeginDecisionTickCapture() {
+        if (!DecisionCaptureEnabled
+            || _banditSpawnSequence == _decisionClosedActorSpawnSequence
+            || _bandit is not IBanditDecisionTraceSource traceSource)
+            return null;
+        AircraftState playerState = _player.State;
+        return new DecisionTickCapture(
+            _bandit,
+            traceSource,
+            _bandit.State,
+            ActorObservation.Capture(playerState, _tick),
+            traceSource.PolicyMemory,
+            traceSource.DecisionTrace.SelectionSequence,
+            _playerSpawnSequence,
+            _banditSpawnSequence,
+            TimeSeconds,
+            _opponentGun,
+            _gunKill,
+            _opponentGun.AmmoRemaining,
+            _opponentGun.RoundsFired,
+            _opponentGun.HitCount,
+            _gunKill.HitCount,
+            _eventSequence,
+            OpponentWeaponsAuthorized());
+    }
+
+    /// <summary>
+    /// A terminal decision record whose destruction outcome is still provisional: one combatant is
+    /// already destroyed, but the other can still be splashed by rounds that were airborne before
+    /// the destruction. The immutable terminal record is appended only after those rounds settle,
+    /// with its reward/outcome amended to the authoritative final result (e.g. a delayed mutual
+    /// kill). Observations, action, and event provenance stay exactly as captured at the terminal
+    /// tick; only the destruction facts, hit totals, and event range may be amended.
+    /// </summary>
+    readonly record struct PendingTerminalDecision(
+        BanditDecisionRecord Record,
+        IBandit Actor,
+        GunKill ActorGun,
+        GunKill PlayerGun,
+        int ActorHitsBaseline,
+        int PlayerHitsBaseline,
+        long EventSequenceBase);
+
+    void CompleteDecisionTickCapture(in DecisionTickCapture capture) {
+        BanditDecisionTrace trace = capture.TraceSource.DecisionTrace;
+        if (trace.SelectionSequence <= 0L) return;
+
+        bool actorReplaced = capture.ActorSpawnSequence != _banditSpawnSequence
+            || !ReferenceEquals(capture.Actor, _bandit);
+        bool actorDestroyed = capture.Actor.CatastrophicallyDamaged;
+        bool opponentDestroyed = _playerTerminalState != AircraftTerminalState.Flying;
+        bool terminated = actorReplaced || actorDestroyed || opponentDestroyed;
+        bool truncated = !terminated && Lifecycle != LifecycleState.Active;
+        DecisionTerminationReason terminationReason = actorDestroyed && opponentDestroyed
+            ? DecisionTerminationReason.MutualDestruction
+            : opponentDestroyed
+                ? DecisionTerminationReason.OpponentDestroyed
+                : actorDestroyed
+                    ? DecisionTerminationReason.ActorDestroyed
+                    : actorReplaced
+                        ? DecisionTerminationReason.ActorReplaced
+                        : truncated
+                            ? DecisionTerminationReason.SortieFinished
+                            : DecisionTerminationReason.None;
+
+        CombatPolicyObservation observation = CombatPolicyObservation.Capture(
+            _tick,
+            capture.ElapsedSeconds,
+            capture.ActorState,
+            capture.PlayerObservation,
+            capture.ActorAmmo,
+            capture.WeaponsAuthorized);
+        ActorObservation nextPlayerObservation = ActorObservation.Capture(
+            _player.State, _tick + 1L);
+        CombatPolicyObservation nextObservation = CombatPolicyObservation.Capture(
+            _tick + 1L,
+            TimeSeconds,
+            capture.Actor.State,
+            nextPlayerObservation,
+            capture.ActorGun.AmmoRemaining,
+            !terminated && !truncated && OpponentWeaponsAuthorized());
+        bool inEnvelope =
+            CombatRewardModel.InAuthorizedFiringEnvelope(observation);
+        var components = new CombatRewardComponents(
+            ElapsedSeconds: FixedDeltaSeconds,
+            GeometryPotentialDelta: CombatRewardModel.GeometryPotential(nextObservation)
+                - CombatRewardModel.GeometryPotential(observation),
+            FiringEnvelopeSeconds: inEnvelope ? FixedDeltaSeconds : 0.0,
+            RoundsFired: capture.ActorGun.RoundsFired - capture.ActorRounds,
+            HitsScored: capture.ActorGun.HitCount - capture.ActorHits,
+            HitsReceived: capture.PlayerGun.HitCount - capture.PlayerHits,
+            OpponentDestroyed: opponentDestroyed,
+            OwnshipDestroyed: actorDestroyed);
+        bool hasEvents = _eventSequence > capture.EventSequence;
+        bool maneuverSelected = trace.SelectionSequence > capture.SelectionSequence;
+        bool memoryReset = capture.ActorSpawnSequence
+            != _decisionLastCapturedActorSpawnSequence;
+        bool previousEpisodeTruncated = memoryReset
+            && _decisionPendingTruncatedActorSpawnSequence > 0L
+            && _decisionPendingTruncatedActorSpawnSequence
+                != capture.ActorSpawnSequence;
+        var record = new BanditDecisionRecord(
+            Sequence: 0L,
+            Kind: DecisionRecordKind.Transition,
+            BoundaryTick: 0L,
+            BoundaryReason: DecisionBoundaryReason.None,
+            capture.PlayerSpawnSequence,
+            capture.ActorSpawnSequence,
+            PolicySkill: trace.Skill,
+            MemoryReset: memoryReset,
+            PreviousActorSpawnSequence: previousEpisodeTruncated
+                ? _decisionPendingTruncatedActorSpawnSequence : 0L,
+            PreviousActorEpisodeTruncated: previousEpisodeTruncated,
+            observation,
+            nextObservation,
+            ManeuverSelected: maneuverSelected,
+            ManeuverTrace: maneuverSelected ? trace : default,
+            PolicyMemoryBefore: capture.PolicyMemory,
+            PolicyMemoryAfter: capture.TraceSource.PolicyMemory,
+            ManeuverApplied: capture.TraceSource.AppliedCommand,
+            FireIntentEvaluated: _decisionFireIntentEvaluatedThisTick,
+            FireIntentConsumed: _decisionFireIntentConsumedThisTick,
+            FireAuthorized: _decisionFireAuthorizedThisTick,
+            OutcomeComponents: components,
+            EventSequenceFirst: hasEvents ? capture.EventSequence + 1L : 0L,
+            EventSequenceLast: hasEvents ? _eventSequence : 0L,
+            Terminated: terminated,
+            Truncated: truncated,
+            TerminationReason: terminationReason);
+        // A destruction terminal is not authoritative while the surviving combatant can still be
+        // hit by rounds that were already airborne: production keeps advancing those rounds after
+        // the first splash, so a delayed mutual kill would otherwise be frozen out of the stream.
+        // Buffer the terminal record and let StepPendingTerminalDecision finalize it once the
+        // in-flight rounds settle (or the outcome can no longer change).
+        bool terminalOutcomeStillOpen = terminated && !actorReplaced
+            && actorDestroyed != opponentDestroyed
+            && Lifecycle == LifecycleState.Active
+            && (actorDestroyed
+                ? capture.ActorGun.TargetAlive
+                    && capture.ActorGun.RoundsInFlight.Count > 0
+                : capture.PlayerGun.TargetAlive
+                    && capture.PlayerGun.RoundsInFlight.Count > 0);
+        if (terminalOutcomeStillOpen) {
+            _decisionPendingTerminal = new PendingTerminalDecision(
+                record, capture.Actor, capture.ActorGun, capture.PlayerGun,
+                capture.ActorHits, capture.PlayerHits, capture.EventSequence);
+        } else {
+            _decisionRecorder.Append(record);
+        }
+        _decisionLastCapturedActorSpawnSequence = capture.ActorSpawnSequence;
+        if (previousEpisodeTruncated)
+            _decisionPendingTruncatedActorSpawnSequence = 0L;
+        if (terminated || truncated)
+            _decisionClosedActorSpawnSequence = capture.ActorSpawnSequence;
+    }
+
+    void StepPendingTerminalDecision() {
+        if (_decisionPendingTerminal is not { } pending) return;
+        bool actorReplaced = pending.Record.ActorSpawnSequence != _banditSpawnSequence
+            || !ReferenceEquals(pending.Actor, _bandit);
+        bool actorDestroyed = pending.Actor.CatastrophicallyDamaged;
+        bool opponentDestroyed = _playerTerminalState != AircraftTerminalState.Flying;
+        bool outcomeStillOpen = !actorReplaced
+            && actorDestroyed != opponentDestroyed
+            && Lifecycle == LifecycleState.Active
+            && (actorDestroyed
+                ? pending.ActorGun.TargetAlive
+                    && pending.ActorGun.RoundsInFlight.Count > 0
+                : pending.PlayerGun.TargetAlive
+                    && pending.PlayerGun.RoundsInFlight.Count > 0);
+        if (!outcomeStillOpen) FinalizePendingTerminalDecision();
+    }
+
+    void FinalizePendingTerminalDecision() {
+        if (_decisionPendingTerminal is not { } pending) return;
+        _decisionPendingTerminal = null;
+        bool actorDestroyed = pending.Actor.CatastrophicallyDamaged;
+        bool opponentDestroyed = _playerTerminalState != AircraftTerminalState.Flying;
+        DecisionTerminationReason reason = actorDestroyed && opponentDestroyed
+            ? DecisionTerminationReason.MutualDestruction
+            : opponentDestroyed
+                ? DecisionTerminationReason.OpponentDestroyed
+                : DecisionTerminationReason.ActorDestroyed;
+        bool hasEvents = _eventSequence > pending.EventSequenceBase;
+        _decisionRecorder.Append(pending.Record with {
+            OutcomeComponents = pending.Record.OutcomeComponents with {
+                HitsScored = pending.ActorGun.HitCount - pending.ActorHitsBaseline,
+                HitsReceived = pending.PlayerGun.HitCount - pending.PlayerHitsBaseline,
+                OpponentDestroyed = opponentDestroyed,
+                OwnshipDestroyed = actorDestroyed
+            },
+            EventSequenceFirst = hasEvents ? pending.EventSequenceBase + 1L : 0L,
+            EventSequenceLast = hasEvents ? _eventSequence : 0L,
+            TerminationReason = reason
+        });
+    }
+
     void StageBeat(BeatSetup setup) {
         ArgumentNullException.ThrowIfNull(setup);
+        // Restaging discards any still-airborne rounds, so a buffered terminal record can no
+        // longer change: append it before the terminal states below are reset.
+        FinalizePendingTerminalDecision();
+        if (_bandit is not null
+            && _decisionLastCapturedActorSpawnSequence == _banditSpawnSequence
+            && _decisionClosedActorSpawnSequence != _banditSpawnSequence) {
+            _decisionRecorder.AppendEpisodeBoundary(
+                _playerSpawnSequence,
+                _banditSpawnSequence,
+                _tick,
+                DecisionBoundaryReason.ActorRestaged);
+            _decisionPendingTruncatedActorSpawnSequence = _banditSpawnSequence;
+            _decisionClosedActorSpawnSequence = _banditSpawnSequence;
+        }
         FinishPreviousRecoveryAttempt();
         _beat = setup;
         _carrier = _beat.Carrier;
@@ -979,15 +1264,29 @@ public sealed class SimulationSession {
         }
     }
 
+    bool OpponentWeaponsAuthorized(bool allowNewFire = true) =>
+        Lifecycle == LifecycleState.Active
+        && allowNewFire
+        && !TerminalPhaseActive
+        && !WeaponsInhibited
+        && _beat.CombatRules.OpponentAmmo > 0
+        && _opponentGun.AmmoRemaining > 0
+        && _opponentGun.TargetAlive
+        && !_bandit.CatastrophicallyDamaged;
+
     void StepWeapons(in AircraftState playerState, in AircraftState opponentState,
         bool playerTriggerHeld, bool allowNewFire = true) {
         bool weaponsReleased = allowNewFire && !WeaponsInhibited;
         bool playerWeaponsAuthorized = weaponsReleased && PlayerWeaponsAuthorized;
-        bool opponentIntent = weaponsReleased && _beat.CombatRules.OpponentAmmo > 0
-            && _bandit.WantsToFire(playerState);
+        bool opponentIntentEvaluated = weaponsReleased
+            && _beat.CombatRules.OpponentAmmo > 0;
+        bool opponentIntent = opponentIntentEvaluated
+            && _bandit.WantsToFire(ObservePlayer(playerState));
         _opponentTriggerDown = opponentIntent
-            && _opponentGun.AmmoRemaining > 0
-            && _opponentGun.TargetAlive;
+            && OpponentWeaponsAuthorized(allowNewFire);
+        _decisionFireIntentEvaluatedThisTick = opponentIntentEvaluated;
+        _decisionFireIntentConsumedThisTick = opponentIntent;
+        _decisionFireAuthorizedThisTick = _opponentTriggerDown;
 
         // Both weapons receive the same beginning-of-tick world snapshot. Neither combatant gets
         // to observe the other's already-integrated future position or suppress same-tick return
@@ -1119,6 +1418,9 @@ public sealed class SimulationSession {
             if (clearHeldInput) ClearHeldInput();
         }
     }
+
+    ActorObservation ObservePlayer(in AircraftState state) =>
+        ActorObservation.Capture(state, Tick);
 
     void UpdatePendingOutcome() {
         bool playerLost = _playerTerminalState != AircraftTerminalState.Flying;
@@ -1288,7 +1590,7 @@ public sealed class SimulationSession {
                 continue;
 
             AircraftState previous = wreck.Actor.State;
-            wreck.Actor.Step(_player.State, FixedDeltaSeconds);
+            wreck.Actor.Step(ObservePlayer(_player.State), FixedDeltaSeconds);
             AircraftState current = wreck.Actor.State;
             if (wreck.TerminalState == AircraftTerminalState.DestroyedAirborne) {
                 var contact = DetectImpact(previous, current);
@@ -2264,7 +2566,7 @@ public sealed class SimulationSession {
 
         StepPilotPhysiologyFromAircraft();
 
-        _bandit.Step(previousPlayer, FixedDeltaSeconds);
+        _bandit.Step(ObservePlayer(previousPlayer), FixedDeltaSeconds);
         _carrier?.Step(FixedDeltaSeconds);
         ObserveCombatDamage();
 
@@ -2363,7 +2665,7 @@ public sealed class SimulationSession {
                 - (_player.Wind?.Sample(catapultState.Position) ?? Vec3D.Zero);
             ConsumeFuelAndStepSystems(catapultState, catapultAirVelocity.Length,
                 weightOnWheels: true);
-            _bandit.Step(catapultState, FixedDeltaSeconds);
+            _bandit.Step(ObservePlayer(catapultState), FixedDeltaSeconds);
             _carrier.Step(FixedDeltaSeconds);
             _catapult.Step(_carrier, FixedDeltaSeconds);
             _player.AdoptExternalKinematics(_catapult.State);
@@ -2402,7 +2704,7 @@ public sealed class SimulationSession {
                 allowNewFire: allowNewFire);
             ConsumeFuelAndStepSystems(playerState, _player.AirspeedMps,
                 weightOnWheels: true);
-            _bandit.Step(playerState, FixedDeltaSeconds);
+            _bandit.Step(ObservePlayer(playerState), FixedDeltaSeconds);
             _carrier.Step(FixedDeltaSeconds);
             _arrestment.Step(_carrier, FixedDeltaSeconds);
             _player.AdoptExternalKinematics(CurrentArrestmentState());
@@ -2496,7 +2798,7 @@ public sealed class SimulationSession {
             weightOnWheels: false);
         // Both aircraft receive the same beginning-of-tick world snapshot. Giving the bandit the
         // already-integrated player leaked one fixed tick of future ownship motion into its law.
-        _bandit.Step(previousPlayerState, FixedDeltaSeconds);
+        _bandit.Step(ObservePlayer(previousPlayerState), FixedDeltaSeconds);
         _visualMergeEvaluation?.Step(_player.State, _bandit.State,
             _player.AtmosphereModel, FixedDeltaSeconds, _player.AirspeedMps);
 
