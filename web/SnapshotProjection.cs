@@ -35,7 +35,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.3.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.4.0";
+    const string SnapshotSchemaVersion = "1.5.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -288,6 +288,10 @@ internal static class SnapshotProjection {
             + $"\"incident_replay_available\":{(Session.IncidentReplay.ExportAvailable ? "true" : "false")},"
             + $"\"opponent_body_present\":{(Session.OpponentBodyPresent ? "true" : "false")},"
             + $"\"px\":{playerPosition.X:F3},\"py\":{playerPosition.Y:F3},\"pz\":{playerPosition.Z:F3},"
+            // World-frame ground velocity: the browser projects the flight-path marker (FPV) from
+            // this exact vector, so the HUD velocity symbol and the rendered world can never
+            // disagree about where the jet is actually going.
+            + $"\"vx\":{groundVelocity.X:F3},\"vy\":{groundVelocity.Y:F3},\"vz\":{groundVelocity.Z:F3},"
             + $"\"pfx\":{pf.X:F5},\"pfy\":{pf.Y:F5},\"pfz\":{pf.Z:F5},"
             + $"\"plx\":{pl.X:F5},\"ply\":{pl.Y:F5},\"plz\":{pl.Z:F5},"
             + $"\"bx\":{b.Position.X:F3},\"by\":{b.Position.Y:F3},\"bz\":{b.Position.Z:F3},"
@@ -426,6 +430,8 @@ internal static class SnapshotProjection {
             + $"\"gun_muzzle_velocity_mps\":{_gunKill.Profile.MuzzleVelocityMps:F2},"
             + $"\"gun_max_flight_s\":{_gunKill.Profile.MaximumFlightSeconds:F3},"
             + $"\"target_wingspan_m\":{(_beat.BanditAir.WingSpanM > 0.0 ? _beat.BanditAir.WingSpanM : Math.Sqrt(4.5 * _beat.BanditAir.WingAreaM2)):F2},"
+            + GunTrajectoryJson(playerPosition, groundVelocity, pf, pl, s.BodyRates,
+                _gunKill.Profile)
             + $"\"player_gun_profile_id\":\"{_gunKill.Profile.Id}\","
             + $"\"rounds_fired\":{_gunKill.RoundsFired},\"hits\":{_gunKill.HitCount},"
             + $"\"hit\":{(_gunKill.HitThisStep ? "true" : "false")},"
@@ -796,6 +802,34 @@ internal static class SnapshotProjection {
             + $"\"bandit_presentation_id\":{JsonString(bandit.PresentationId)},"
             + $"\"carrier_entity_id\":{carrierEntityJson},"
             + $"\"carrier_presentation_id\":{carrierPresentationJson},";
+    }
+
+    /// <summary>
+    /// ~9 closed-form samples of the gun's bullets-in-the-air locus (GunKill.BallisticFunnelPoint):
+    /// where a round fired age seconds ago is NOW, ages evenly spaced out to the effective
+    /// wingspan-ranging envelope. r is each sample's current range from the shooter, which is the
+    /// scale the HUD funnel's wingspan half-width keys on. A deterministic pure function of the
+    /// emitted player state (position, velocity, body axes, body rates) — the HUD only projects.
+    /// </summary>
+    static string GunTrajectoryJson(in Vec3D shooterPosition, in Vec3D shooterVelocity,
+        in Vec3D bodyForward, in Vec3D bodyUp, in BodyRates bodyRates, GunProfile profile) {
+        const int SampleCount = 9;
+        double horizonSeconds = Math.Min(profile.MaximumFlightSeconds,
+            GunKill.EffectiveRangingFlightSeconds);
+        Vec3D angularVelocity = GunKill.WorldAngularVelocity(bodyForward, bodyUp, bodyRates);
+        var json = new System.Text.StringBuilder(32 + SampleCount * 64);
+        json.Append("\"gun_trajectory\":[");
+        for (int i = 0; i < SampleCount; i++) {
+            if (i != 0) json.Append(',');
+            double age = horizonSeconds * i / (SampleCount - 1);
+            Vec3D p = GunKill.BallisticFunnelPoint(shooterPosition, shooterVelocity,
+                bodyForward, angularVelocity, profile.MuzzleVelocityMps, age);
+            json.AppendFormat(System.Globalization.CultureInfo.InvariantCulture,
+                "{{\"x\":{0:F2},\"y\":{1:F2},\"z\":{2:F2},\"r\":{3:F1}}}",
+                p.X, p.Y, p.Z, (p - shooterPosition).Length);
+        }
+        json.Append("],");
+        return json.ToString();
     }
 
     // Flat numeric arrays keep the web hot path compact: [x,y,z,vx,vy,vz].

@@ -26,7 +26,7 @@ import { AoAIndexerQualifier, DisplayCueQualifier } from "./render/hud/stable_cu
 import { fighterHudLayout } from "./render/hud/fighter_layout.js";
 import {
   gunFunnelProfile,
-  gunFunnelSamples,
+  gunFunnelRail,
   gunFunnelEnvelope,
   gunFunnelUsable,
 } from "./render/hud/gun_funnel.js";
@@ -45,7 +45,6 @@ const DEG = Math.PI / 180;
 // dive. This keeps the numeric readout believable; it never touches simulation truth or warnings.
 const READABLE_VERTICAL_SPEED_FPM = 9950;
 const RAD_TO_DEG = 180 / Math.PI;
-const FPV_VERTICAL_FOV_DEG = 66;
 const MODE_CUE_SECONDS = 1.5;
 
 function clamp(value, min, max) {
@@ -166,6 +165,16 @@ function isFightHudActive(state) {
   return state.carrier !== true || hudMode(state) === "FREE" || hudMode(state) === "WAVE-OFF";
 }
 
+// Single source of truth for "the padlock view is genuinely looking away from the nose".
+// drawPadlockSa draws its off-axis cues (including the bandit edge caret) exactly when this is
+// true, and drawBandit suppresses its own off-screen locator under the same predicate, so the
+// two arrows can never disagree about where the bandit is.
+function padlockLooksOffAxis(frame) {
+  return Math.abs(Number(frame.sensorYaw) || 0) > 10 * DEG
+    || Math.abs(Number(frame.sensorPitch) || 0) > 8 * DEG
+    || frame.manualLookActive === true;
+}
+
 class CombatHud {
   constructor(canvas) {
     this.canvas = canvas;
@@ -197,6 +206,11 @@ class CombatHud {
     this.projectionC = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
     this.noseProjection = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
     this._funnelTargetProj = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
+    this._trajectoryProj = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
+    this.velocityDirection = new THREE.Vector3();
+    // Harness-only geometry record (window.__HUD_DEBUG__); null in production, so the hot draw
+    // path pays a single boolean test per frame.
+    this._debug = null;
     this.audioEnabled = true;
     this._audioCtx = null;
     this._gunAudioGain = null;
@@ -454,9 +468,10 @@ class CombatHud {
     const radius = Math.max(120, this.height * 0.42);
     const projection = camera?.projectionMatrix?.elements;
     const matrixScaleY = Number(projection?.[5]);
-    const fallbackScaleY = 1 / Math.tan(FPV_VERTICAL_FOV_DEG * DEG * 0.5);
-    const focalLengthY = this.height * 0.5
-      * (Number.isFinite(matrixScaleY) && matrixScaleY > 0 ? matrixScaleY : fallbackScaleY);
+    // The ladder is drawn with the SAME projection as the rendered world — no synthetic
+    // pixels-per-degree fallback. Without a live camera matrix there is no honest ladder.
+    if (!Number.isFinite(matrixScaleY) || matrixScaleY <= 0) return;
+    const focalLengthY = this.height * 0.5 * matrixScaleY;
     // Match the PerspectiveCamera principal point. The normal FPV camera has no view offset, so
     // this is the exact canvas centre; retaining the matrix term keeps the HUD calibrated if that
     // ever changes.
@@ -466,8 +481,6 @@ class CombatHud {
     const sinBank = Math.sin(bank);
     const layout = this.getLayout();
     const safe = layout.ladderSafe;
-    const screenCenterX = this.width * 0.5;
-    const screenCenterY = this.height * 0.5;
     const rotatePoint = (x, y) => ({
       x: projectionCenterX + x * cosBank - y * sinBank,
       y: projectionCenterY + x * sinBank + y * cosBank,
@@ -488,8 +501,16 @@ class CombatHud {
     ctx.beginPath();
     ctx.rect(safe.left, safe.top, Math.max(0, safe.right - safe.left), Math.max(0, safe.bottom - safe.top));
     ctx.clip();
+    // Declutter exclusion: rungs must not stab through the gunsight/FPV working area at screen
+    // centre. Even-odd clip = everything except a circle around the projection centre. The rungs
+    // keep their own centre gap as well, so the ladder still reads as one instrument.
+    const exclusionRadius = clamp(this.height * 0.115, 72, 102);
+    ctx.beginPath();
+    ctx.rect(0, 0, this.width, this.height);
+    ctx.arc(projectionCenterX, projectionCenterY, exclusionRadius, 0, Math.PI * 2);
+    ctx.clip("evenodd");
 
-    ctx.font = "500 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const firstRung = Math.max(-90, Math.ceil((pitch - 25) / 5) * 5);
@@ -508,40 +529,59 @@ class CombatHud {
       const edgeAlpha = clamp((radius + 1 - rotatedDistance) / 26, 0, 1);
       if (edgeAlpha <= 0) continue;
 
+      const major = rung % 10 === 0;
+      // Long continuous bars (F-16 style): the horizon is the dominant rung, majors are long
+      // enough to read as one line under bank, minors stay short so the ladder does not bar-code.
+      const halfWidth = rung === 0 ? 188 : major ? 96 : 50;
+      const centerGap = rung === 0 ? 30 : 22;
+
+      if (this._debug) {
+        const a = rotatePoint(-halfWidth, localY);
+        const b = rotatePoint(halfWidth, localY);
+        this._debug.ladderRungs.push({
+          deg: rung,
+          cx: rungCenter.x,
+          cy: rungCenter.y,
+          x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+          angleRad: bank,
+          localY,
+        });
+      }
+
       ctx.save();
       ctx.globalAlpha *= edgeAlpha;
-      const major = rung % 10 === 0;
-      const halfWidth = rung === 0 ? 106 : major ? 67 : 43;
-      const centerGap = rung === 0 ? 29 : 20;
       ctx.strokeStyle = rung === 0 ? GREEN : GREEN_DIM;
       ctx.fillStyle = rung === 0 ? GREEN : GREEN_DIM;
-      ctx.lineWidth = rung === 0 ? 1.65 : 1.05;
-      ctx.setLineDash(rung < 0 ? [5, 5] : []);
+      ctx.lineWidth = rung === 0 ? 1.8 : major ? 1.2 : 1.0;
+      // Negative rungs: calm long dashes, not confetti.
+      ctx.setLineDash(rung < 0 ? [12, 7] : []);
       ctx.beginPath();
       segment(-halfWidth, localY, -centerGap, localY);
       segment(centerGap, localY, halfWidth, localY);
+      ctx.stroke();
       if (major && rung !== 0) {
-        const tooth = rung > 0 ? 6 : -6;
+        // Solid end teeth pointing toward the horizon, even on dashed negative rungs.
+        ctx.setLineDash([]);
+        const tooth = rung > 0 ? 7 : -7;
+        ctx.beginPath();
         segment(-halfWidth, localY, -halfWidth, localY + tooth);
         segment(halfWidth, localY, halfWidth, localY + tooth);
+        ctx.stroke();
       } else if (rung === 0) {
-        segment(-centerGap, localY, -centerGap + 7, localY - 5);
-        segment(centerGap, localY, centerGap - 7, localY - 5);
+        ctx.beginPath();
+        segment(-centerGap, localY, -centerGap + 8, localY - 5);
+        segment(centerGap, localY, centerGap - 8, localY - 5);
+        ctx.stroke();
       }
-      ctx.stroke();
 
       if (major) {
+        // Numbers on BOTH ends, counter-rotated so they always read upright under any bank.
         ctx.setLineDash([]);
-        const leftLabel = rotatePoint(-halfWidth - 14, localY);
-        const rightLabel = rotatePoint(halfWidth + 14, localY);
-        const leftDistance = Math.hypot(leftLabel.x - screenCenterX, leftLabel.y - screenCenterY);
-        const rightDistance = Math.hypot(rightLabel.x - screenCenterX, rightLabel.y - screenCenterY);
-        const label = leftDistance <= rightDistance ? leftLabel : rightLabel;
-        ctx.save();
-        ctx.translate(label.x, label.y);
-        ctx.rotate(bank);
-        ctx.fillText(String(Math.abs(rung)), 0, 0.5);
-        ctx.restore();
+        const text = String(Math.abs(rung));
+        for (const end of [-1, 1]) {
+          const label = rotatePoint(end * (halfWidth + 15), localY);
+          ctx.fillText(text, label.x, label.y + 0.5);
+        }
       }
       ctx.restore();
     }
@@ -549,27 +589,25 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawAirframeSymbols(anchor, state, flightPathAnchor = null) {
+  // ONE projection pipeline for the airframe symbols. The camera is bolted to the body axis, so
+  // the WATERLINE is the projected body-forward direction (the nose anchor computed in draw()) and
+  // is drawn body-referenced — screen-aligned by construction, no bank decal. The FPV is the
+  // projected WORLD VELOCITY direction through the same camera: the alpha gap between the two is
+  // therefore true by construction (focal * tan(aoa) along body-down), and sideslip shows up
+  // laterally for free. No synthetic pixels-per-degree offset exists anywhere in this path.
+  drawAirframeSymbols(anchor, state, fpvAnchor = null) {
     if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
     const ctx = this.ctx;
-    const bank = (Number(state.bank_deg) || 0) * DEG;
 
     ctx.save();
-    ctx.translate(anchor.x, anchor.y);
-    ctx.rotate(-bank);
     this.setLine(GREEN, 1.15);
     ctx.shadowColor = "rgba(77, 255, 136, 0.3)";
     ctx.shadowBlur = 3;
 
-    // The camera is bolted to the BODY axis now, so screen centre is the WATERLINE / gun line (the
-    // nose), and the velocity vector sits angle-of-attack BELOW it. Drawing both is what restores
-    // "pitch authority": a pull raises the waterline against the world even at CLmax, while the FPM
-    // shows the jet still isn't climbing — the back-side sight picture, made legible.
-    const ppd = clamp(this.height / 66, 7.2, 12.5);
-    const aoaPx = (Number(state.aoa_deg) || 0) * ppd;   // velocity vector is AoA below the waterline
-
-    // WATERLINE / boresight at screen centre (the nose = gun line). The gun window lives here,
-    // because the gun points along the body axis, not the flight path.
+    // WATERLINE / boresight (the nose = gun line). The gun window lives here, because the gun
+    // points along the body axis, not the flight path.
+    ctx.save();
+    ctx.translate(anchor.x, anchor.y);
     ctx.beginPath();
     ctx.moveTo(-15, 0);
     ctx.lineTo(-6, 0);
@@ -577,30 +615,29 @@ class CombatHud {
     ctx.lineTo(6, 0);
     ctx.lineTo(15, 0);
     ctx.stroke();
-
-    // Outside recovery the air-relative approximation remains useful. In the carrier groove the
-    // caller supplies the actual deck-relative velocity projected through the camera: wind-over-
-    // deck and the moving landing area otherwise put this marker in the wrong place.
-    const projectedFpm = isApproachMode(state) && flightPathAnchor
-      && !flightPathAnchor.behind && Number.isFinite(flightPathAnchor.x)
-      && Number.isFinite(flightPathAnchor.y);
-    ctx.save();
-    if (projectedFpm) {
-      ctx.rotate(bank);
-      ctx.translate(flightPathAnchor.x - anchor.x, flightPathAnchor.y - anchor.y);
-    } else {
-      ctx.translate(0, aoaPx);
-    }
-    ctx.beginPath();
-    ctx.arc(0, 0, 5, 0, Math.PI * 2);
-    ctx.moveTo(-16, 0);
-    ctx.lineTo(-5, 0);
-    ctx.moveTo(5, 0);
-    ctx.lineTo(16, 0);
-    ctx.moveTo(0, -5);
-    ctx.lineTo(0, -11);
-    ctx.stroke();
     ctx.restore();
+
+    // FPV — the PRIMARY flight symbol: circle + wings + tail tick, projected from the actual
+    // velocity vector (deck-relative in the carrier groove, world ground velocity otherwise).
+    const fpvVisible = fpvAnchor && !fpvAnchor.behind
+      && Number.isFinite(fpvAnchor.x) && Number.isFinite(fpvAnchor.y);
+    if (fpvVisible) {
+      ctx.save();
+      ctx.translate(fpvAnchor.x, fpvAnchor.y);
+      this.setLine(GREEN, 1.7);
+      ctx.shadowColor = "rgba(77, 255, 136, 0.42)";
+      ctx.shadowBlur = 5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, Math.PI * 2);
+      ctx.moveTo(-24, 0);
+      ctx.lineTo(-7, 0);
+      ctx.moveTo(7, 0);
+      ctx.lineTo(24, 0);
+      ctx.moveTo(0, -7);
+      ctx.lineTo(0, -14);
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -713,12 +750,11 @@ class CombatHud {
   drawGunFunnel(frame, anchor) {
     const ctx = this.ctx;
     const { state, camera } = frame;
-    const bank = (Number(state.bank_deg) || 0) * DEG;
 
-    // The gun cross always owns boresight, whether or not a ranging solution exists.
+    // The gun cross always owns boresight, whether or not a ranging solution exists. It is a
+    // body symbol seen through a body-fixed camera, so it is screen-aligned — no bank decal.
     ctx.save();
     ctx.translate(anchor.x, anchor.y);
-    ctx.rotate(-bank);
     this.setLine("rgba(77, 255, 136, 0.70)", 1.15);
     ctx.beginPath();
     ctx.moveTo(-14, 0); ctx.lineTo(-4, 0);
@@ -735,16 +771,38 @@ class CombatHud {
     const envelope = gunFunnelEnvelope(profile);
     if (!gunFunnelUsable(state, envelope)) return;
 
-    // A REAL gunsight funnel: anchored at the BORESIGHT (the gun cross), hung BELOW the pipper, and
-    // rotated by -bank so its axis rides the LIFT VECTOR and banks with the jet. Each rail half-
-    // width is the span the target's wingspan subtends at that range (focal*wingspan/2r, from
-    // gunFunnelSamples) — a FIXED calibrated scale, independent of how big the target looks. The
-    // pilot pulls the target's wings into the walls: the vertical spot where they fill the funnel
-    // width reads range, and filling anywhere inside the mouth means inside effective gun range.
-    // Near range = wide mouth at the bottom; far range = narrow throat pinching up into the pipper.
+    // A REAL gunsight funnel: the kernel's gun_trajectory is the bullets-in-the-air locus (where
+    // rounds fired over the last second actually ARE — gravity droop and own-ship rotation lag
+    // included, closed form). Each sample is projected through the SAME live camera that renders
+    // the world, so the funnel follows where bullets actually go and is correct under any bank BY
+    // CONSTRUCTION. The rails sit perpendicular to the local projected path, one wingspan apart
+    // at each sample's range (halfWidth = focal * span/2 / r — a FIXED calibrated scale). The
+    // pilot pulls the target between the rails: where its wings fill the funnel width reads range.
+    const trajectory = Array.isArray(state.gun_trajectory) ? state.gun_trajectory : null;
+    if (!trajectory || trajectory.length < 2) return;
     const focalLengthPx = this.width * 0.5
       * (Number(camera?.projectionMatrix?.elements?.[0]) || 1);
-    const samples = gunFunnelSamples({ ...profile, focalLengthPx });
+    const projected = [];
+    for (const sample of trajectory) {
+      const x = Number(sample?.x);
+      const y = Number(sample?.y);
+      const z = Number(sample?.z);
+      const rangeM = Number(sample?.r);
+      if (![x, y, z, rangeM].every(Number.isFinite)) continue;
+      // Kernel positions are sim-frame (Z north); render space flips Z, same as bx/by/bz.
+      this.worldPoint.set(x, y, -z);
+      const p = this.project(this.worldPoint, camera, this._trajectoryProj);
+      if (p.behind || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+      projected.push({ x: p.x, y: p.y, rangeM });
+    }
+    const rail = gunFunnelRail(projected, {
+      targetWingspanM: profile.targetWingspanM,
+      focalLengthPx,
+      nearRangeM: envelope.nearRangeM,
+      farRangeM: envelope.farRangeM,
+    });
+    if (rail.length < 2) return;
+    if (this._debug) this._debug.funnel = rail.map((s) => ({ ...s }));
 
     // Green means inside effective gun range (the gate above); brighten on the authoritative
     // lead solution so it reads as SHOOT. Deliberately not gun_window, which is only a coarse
@@ -752,50 +810,40 @@ class CombatHud {
     const solution = frame.visualGunSolution === true;
     const railColor = solution ? "rgba(77, 255, 136, 0.92)" : "rgba(77, 255, 136, 0.68)";
 
-    // The funnel hangs downward (belly side) from the boresight in the rotated body frame. fraction
-    // 1 = far range at the throat (y = 0, the pipper); fraction 0 = near range at the mouth (y =
-    // funnelLength, the widest point below). Because near range subtends the largest apparent span,
-    // the rails naturally splay open at the bottom and converge up toward the pipper.
-    const funnelLength = clamp(this.height * 0.30, 96, 200);
-    const yOf = (fraction) => funnelLength * (1 - fraction);
-
     ctx.save();
-    ctx.translate(anchor.x, anchor.y);
-    ctx.rotate(-bank);
     this.setLine(railColor, solution ? 1.9 : 1.3);
     ctx.shadowColor = solution ? "rgba(77, 255, 136, 0.5)" : "rgba(77, 255, 136, 0.28)";
     ctx.shadowBlur = solution ? 6 : 3;
-    ctx.beginPath();
-    samples.forEach((s, i) => {
-      const y = yOf(s.fraction);
-      if (i === 0) ctx.moveTo(-s.halfWidthPx, y);
-      else ctx.lineTo(-s.halfWidthPx, y);
-    });
-    ctx.stroke();
-    ctx.beginPath();
-    samples.forEach((s, i) => {
-      const y = yOf(s.fraction);
-      if (i === 0) ctx.moveTo(s.halfWidthPx, y);
-      else ctx.lineTo(s.halfWidthPx, y);
-    });
-    ctx.stroke();
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      rail.forEach((s, i) => {
+        const x = s.x + side * s.perpX * s.halfWidthPx;
+        const y = s.y + side * s.perpY * s.halfWidthPx;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
     ctx.shadowBlur = 0;
 
-    // Near / mid / far range gradations across the rails.
+    // Near / mid / far range gradations across the rails, along the local perpendicular.
     ctx.strokeStyle = railColor;
     ctx.lineWidth = 1;
-    for (const i of [0, Math.floor(samples.length / 2), samples.length - 1]) {
-      const s = samples[i];
-      const y = yOf(s.fraction);
+    for (const i of [0, Math.floor(rail.length / 2), rail.length - 1]) {
+      const s = rail[i];
       ctx.beginPath();
-      ctx.moveTo(-s.halfWidthPx - 4, y); ctx.lineTo(-s.halfWidthPx + 2, y);
-      ctx.moveTo(s.halfWidthPx - 2, y); ctx.lineTo(s.halfWidthPx + 4, y);
+      for (const side of [-1, 1]) {
+        ctx.moveTo(s.x + side * s.perpX * (s.halfWidthPx + 4),
+          s.y + side * s.perpY * (s.halfWidthPx + 4));
+        ctx.lineTo(s.x + side * s.perpX * (s.halfWidthPx - 2),
+          s.y + side * s.perpY * (s.halfWidthPx - 2));
+      }
       ctx.stroke();
     }
     ctx.restore();
 
-    // Mark the bandit in screen space (unrotated) so the pilot sees which way to pull it into the
-    // walls. The funnel walls are the range scale; this diamond is the thing to fly into them.
+    // Mark the bandit in screen space so the pilot sees which way to pull it into the walls. The
+    // funnel walls are the range scale; this diamond is the thing to fly between them.
     const target = this.project(frame.banditPosition, camera, this._funnelTargetProj);
     if (!target.behind && Number.isFinite(target.x) && Number.isFinite(target.y)) {
       ctx.save();
@@ -882,6 +930,13 @@ class CombatHud {
     if (!isFightHudActive(state)) return;
     const angles = this.banditAngles(frame);
     const projection = this.project(banditPosition, camera);
+    if (this._debug) {
+      this._debug.banditPx = {
+        x: projection.x,
+        y: projection.y,
+        behind: projection.behind === true,
+      };
+    }
     const layout = this.getLayout();
     const safe = layout.targetSafe;
     const solution = frame.visualGunSolution === true;
@@ -941,6 +996,11 @@ class CombatHud {
 
       return;
     }
+
+    // Off-screen bandit: in an off-axis padlock view the padlock SA layer owns the single edge
+    // caret (same predicate, one source of truth) — drawing a second, differently-referenced
+    // arrow here is exactly the disagreement being removed.
+    if (frame.padlock && padlockLooksOffAxis(frame)) return;
 
     let dx;
     let dy;
@@ -1606,16 +1666,20 @@ class CombatHud {
 
     // Earth-relative speed stays with airspeed; vertical motion stays with altitude. Both remain
     // numeric rather than adding two more analogue instruments to the transparent world view.
+    // They live BELOW the tape clip window: tape tick labels scroll continuously with the value
+    // and can land anywhere inside the tape, so a readout inside that band (the old centerY+18
+    // position) collided with them near round altitudes. Below the clip they can never touch.
+    const readoutY = centerY + tapeHeight / 2 + 13;
     ctx.fillStyle = "rgba(3, 13, 20, 0.88)";
-    roundedRect(ctx, speedX - 31, centerY + 11, 62, 14, 3);
+    roundedRect(ctx, speedX - 31, readoutY - 7, 62, 14, 3);
     ctx.fill();
-    roundedRect(ctx, altitudeX - 37, centerY + 11, 74, 14, 3);
+    roundedRect(ctx, altitudeX - 37, readoutY - 7, 74, 14, 3);
     ctx.fill();
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(groundText, speedX, centerY + 18);
+    ctx.fillText(groundText, speedX, readoutY);
     ctx.font = "700 6.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(verticalText, altitudeX, centerY + 18);
+    ctx.fillText(verticalText, altitudeX, readoutY);
     ctx.restore();
   }
 
@@ -2133,10 +2197,9 @@ class CombatHud {
 
     // These cues exist only when the pilot is actually looking away from the waterline. Together
     // they answer the three BFM questions: where is the bandit, WHICH WAY DO I ROLL to put my lift
-    // line on it, and what is my attitude so I do not fly into the ground.
-    const offAxis = Math.abs(Number(frame.sensorYaw) || 0) > 10 * DEG
-      || Math.abs(Number(frame.sensorPitch) || 0) > 8 * DEG
-      || frame.manualLookActive === true;
+    // line on it, and what is my attitude so I do not fly into the ground. The same predicate
+    // suppresses drawBandit's off-screen arrow, so exactly one locator is ever visible.
+    const offAxis = padlockLooksOffAxis(frame);
     if (offAxis) {
       const state = frame.state;
       const isBanditPadlock = frame.padlockTarget !== "carrier";
@@ -2789,11 +2852,41 @@ class CombatHud {
       frame.dt,
     )?.key === "solution";
 
+    // Harness-only geometry contract (assertions.mjs): populated when window.__HUD_DEBUG__ is
+    // set, a single falsy test per frame otherwise.
+    this._debug = globalThis.__HUD_DEBUG__ === true
+      ? { waterlinePx: null, fpvPx: null, ladderRungs: [], funnel: null, banditPx: null }
+      : null;
+
     this.worldPoint.copy(frame.playerPosition).addScaledVector(frame.playerForward, 10000);
     const noseAnchor = this.project(this.worldPoint, frame.camera, this.noseProjection);
-    const flightPathAnchor = frame.flightPathPoint
-      ? this.project(frame.flightPathPoint, frame.camera, this.projectionB)
-      : null;
+    // FPV anchor: ONE projection pipeline for every mode. The carrier groove supplies the actual
+    // deck-relative flight path point; everywhere else the world ground-velocity vector from the
+    // kernel snapshot is projected through the same camera. No synthetic screen offsets.
+    let fpvAnchor = null;
+    if (isApproachMode(frame.state) && frame.flightPathPoint) {
+      fpvAnchor = this.project(frame.flightPathPoint, frame.camera, this.projectionB);
+    } else {
+      const vx = Number(frame.state.vx);
+      const vy = Number(frame.state.vy);
+      const vz = Number(frame.state.vz);
+      const speed = Math.hypot(vx, vy, vz);
+      if (Number.isFinite(speed) && speed > 0.5) {
+        // Snapshot velocity is sim-frame (Z north); render space flips Z, same as px/py/pz.
+        this.velocityDirection.set(vx, vy, -vz).multiplyScalar(10000 / speed);
+        this.worldPoint.copy(frame.playerPosition).add(this.velocityDirection);
+        fpvAnchor = this.project(this.worldPoint, frame.camera, this.projectionB);
+      }
+    }
+    if (this._debug) {
+      this._debug.waterlinePx = noseAnchor.behind
+        ? null : { x: noseAnchor.x, y: noseAnchor.y };
+      this._debug.fpvPx = fpvAnchor && !fpvAnchor.behind
+        ? { x: fpvAnchor.x, y: fpvAnchor.y } : null;
+      const m = frame.camera?.projectionMatrix?.elements;
+      this._debug.focalXPx = this.width * 0.5 * (Number(m?.[0]) || 0);
+      this._debug.focalYPx = this.height * 0.5 * (Number(m?.[5]) || 0);
+    }
     const directorAnchor = frame.directorPoint
       ? this.project(frame.directorPoint, frame.camera, this.projectionC)
       : null;
@@ -2801,7 +2894,7 @@ class CombatHud {
     const carrierPadlock = frame.padlock && frame.padlockTarget === "carrier";
 
     if (!frame.padlock) this.drawPitchLadder(frame.state, frame.camera);
-    this.drawAirframeSymbols(noseAnchor, frame.state, flightPathAnchor);
+    this.drawAirframeSymbols(noseAnchor, frame.state, fpvAnchor);
     this.drawGunSight(frame, noseAnchor);
     this.drawAimPoint(frame, noseAnchor, directorAnchor);
     this.drawBandit(frame);
@@ -2850,6 +2943,10 @@ class CombatHud {
     this.drawModeCue(frame);
     this.drawOutcomeCues(frame);
     this.drawDamageFeedback(frame);
+    if (this._debug) {
+      globalThis.__HUD_GEOMETRY = this._debug;
+      this._debug = null;
+    }
     this.commitFrame();
   }
 }

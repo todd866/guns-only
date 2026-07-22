@@ -61,6 +61,7 @@ test ! -f "$publish_dir/wwwroot/api/telemetry.test.js"
 test ! -f "$publish_dir/wwwroot/api/telemetry-admin.test.js"
 test ! -d "$publish_dir/wwwroot/render/presence/tests"
 test ! -d "$publish_dir/wwwroot/render/telemetry/tests"
+test ! -d "$publish_dir/wwwroot/render/hud/tests"
 test ! -d "$publish_dir/wwwroot/lib/bootstrap"
 test -f "$publish_dir/wwwroot/vercel.json"
 rg -q '"source": "/telemetry-admin"' "$publish_dir/wwwroot/vercel.json"
@@ -78,6 +79,10 @@ if [ -z "${GUNS_SKIP_SMOKE:-}" ]; then
     (cd web/smoke && npx --yes playwright install chromium)
   fi
   SMOKE_WWWROOT="$publish_dir/wwwroot" node --test web/smoke/smoke.test.mjs
+  # HUD geometry contract: numeric assertions through the real hud.js in headless Chromium
+  # (waterline/FPV alpha gap, ladder tan-projection spacing, funnel-on-trajectory, bandit
+  # marker). Lives with the browser gates because it shares the web/smoke Playwright install.
+  node web/wwwroot/render/hud/tests/harness/assertions.mjs
 else
   echo "Skipping browser smoke test (GUNS_SKIP_SMOKE set)."
 fi

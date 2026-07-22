@@ -274,4 +274,51 @@ public class GunTests {
         Assert.Equal(0, next.HitCount);
         Assert.Equal(FightOutcome.Flying, next.Outcome);
     }
+
+    [Fact]
+    public void BallisticFunnelPointWithoutRotationIsTheGravityDroopedGunLine() {
+        // Zero angular velocity: the shooter's own displacement cancels exactly, leaving rounds
+        // riding the gun line at muzzle velocity and falling with gravity — independent of the
+        // shooter's velocity vector.
+        var position = new Vec3D(120.0, 2500.0, -800.0);
+        var velocity = new Vec3D(30.0, -8.0, 220.0);
+        var forward = new Vec3D(0.1, -0.03, 0.99).Normalized();
+        const double MuzzleVelocity = 870.0;
+
+        foreach (double age in new[] { 0.0, 0.3, 0.9 }) {
+            Vec3D sample = GunKill.BallisticFunnelPoint(position, velocity, forward,
+                Vec3D.Zero, MuzzleVelocity, age);
+            Vec3D expected = position + forward * GunKill.MuzzleOffsetM
+                + forward * (MuzzleVelocity * age)
+                + new Vec3D(0.0, -0.5 * GunKill.GravityMps2 * age * age, 0.0);
+            Assert.True((sample - expected).Length < 1e-9,
+                $"age {age}: {(sample - expected).Length} m off the drooped gun line");
+        }
+    }
+
+    [Fact]
+    public void BallisticFunnelPointLagsBelowTheGunLineDuringAPitchUpPull() {
+        // Level flight, nose north, pulling up at a steady positive pitch rate: rounds fired a
+        // moment ago left along a LOWER gun line, so the funnel locus must hang below the current
+        // boresight, and monotonically more so with age.
+        var position = new Vec3D(0.0, 3000.0, 0.0);
+        var forward = new Vec3D(0.0, 0.0, 1.0);
+        var up = new Vec3D(0.0, 1.0, 0.0);
+        var velocity = forward * 230.0;
+        Vec3D omega = GunKill.WorldAngularVelocity(forward, up,
+            new BodyRates(0.0, 0.20, 0.0)); // ~11.5 deg/s pitch-up
+
+        double previousDepression = 0.0;
+        foreach (double age in new[] { 0.225, 0.45, 0.675, 0.9 }) {
+            Vec3D sample = GunKill.BallisticFunnelPoint(position, velocity, forward,
+                omega, GunKill.MuzzleVelocityMps, age);
+            Vec3D line = sample - position;
+            double depressionRad = Math.Atan2(-(line.Y - line.Z * forward.Y), line.Z);
+            Assert.True(depressionRad > previousDepression,
+                $"age {age}: depression {depressionRad} rad must grow below the gun line");
+            previousDepression = depressionRad;
+        }
+        // At 0.9 s of age the lag must dominate gravity drop: more than 2 degrees below boresight.
+        Assert.True(previousDepression > 2.0 * Math.PI / 180.0);
+    }
 }

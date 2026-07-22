@@ -9,7 +9,6 @@ const EFFECTIVE_TOF_S = 0.9;
 const EFFECTIVE_CEILING_M = 900;
 const MIN_TRACKING_RANGE_M = 150;
 const MIN_HALF_WIDTH_PX = 2.5;
-const DEFAULT_SAMPLE_COUNT = 9;
 
 function positive(value, fallback) {
   const numeric = Number(value);
@@ -47,32 +46,67 @@ export function gunFunnelEnvelope({ muzzleVelocityMps, maximumFlightSeconds } = 
   return { nearRangeM, farRangeM };
 }
 
-// The funnel rails as a range scale. Each rung is the projected apparent half-span the
-// target's wingspan subtends at that range; stacked across the envelope they form the
-// converging funnel (wide near, narrow far). Screen placement lives in the HUD, which centres
-// these on the projected target so "wings touch the rails" reads out the range directly.
-export function gunFunnelSamples({
-  muzzleVelocityMps,
-  maximumFlightSeconds,
+// Drawable funnel geometry from the PROJECTED ballistic trajectory. `points` are screen-space
+// samples of the kernel's gun_trajectory (bullets-in-the-air locus) ordered near -> far:
+// {x, y, rangeM}. The usable envelope [nearRangeM, farRangeM] is cut out of the projected
+// polyline with exact interpolated endpoints, and each kept point carries the FIXED wingspan
+// ranging scale (halfWidthPx = focal * span/2 / range — calibrated, independent of how big the
+// target happens to look) plus the local unit perpendicular to the projected path, which is the
+// direction the two rails are offset. Pure geometry: the HUD owns cameras, canvas and colors.
+export function gunFunnelRail(points, {
   targetWingspanM,
   focalLengthPx,
-  sampleCount = DEFAULT_SAMPLE_COUNT,
+  nearRangeM,
+  farRangeM,
 } = {}) {
   const wingspan = positive(targetWingspanM, DEFAULT_TARGET_WINGSPAN_M);
   const focal = positive(focalLengthPx, 500);
-  const count = Math.max(3, Math.round(Number(sampleCount) || DEFAULT_SAMPLE_COUNT));
-  const { nearRangeM, farRangeM } = gunFunnelEnvelope({
-    muzzleVelocityMps,
-    maximumFlightSeconds,
-  });
+  const near = positive(nearRangeM, MIN_TRACKING_RANGE_M);
+  const far = positive(farRangeM, EFFECTIVE_CEILING_M);
+  const path = (Array.isArray(points) ? points : []).filter((point) => point
+    && Number.isFinite(point.x) && Number.isFinite(point.y)
+    && Number.isFinite(point.rangeM) && point.rangeM > 0);
+  if (path.length < 2 || far <= near) return [];
 
-  return Array.from({ length: count }, (_, index) => {
-    const fraction = index / (count - 1);
-    const rangeM = nearRangeM + (farRangeM - nearRangeM) * fraction;
+  const lerp = (a, b, f) => ({
+    x: a.x + (b.x - a.x) * f,
+    y: a.y + (b.y - a.y) * f,
+    rangeM: a.rangeM + (b.rangeM - a.rangeM) * f,
+  });
+  const clipped = [];
+  for (let i = 0; i < path.length; i++) {
+    const sample = path[i];
+    const previous = path[i - 1];
+    if (previous) {
+      for (const boundary of [near, far]) {
+        if ((previous.rangeM < boundary) !== (sample.rangeM < boundary)) {
+          const f = (boundary - previous.rangeM) / (sample.rangeM - previous.rangeM);
+          if (f > 0 && f < 1) clipped.push(lerp(previous, sample, f));
+        }
+      }
+    }
+    if (sample.rangeM >= near && sample.rangeM <= far) clipped.push(sample);
+  }
+  clipped.sort((a, b) => a.rangeM - b.rangeM);
+  if (clipped.length < 2) return [];
+
+  return clipped.map((sample, index) => {
+    const ahead = clipped[Math.min(index + 1, clipped.length - 1)];
+    const behind = clipped[Math.max(index - 1, 0)];
+    const dx = ahead.x - behind.x;
+    const dy = ahead.y - behind.y;
+    const length = Math.hypot(dx, dy);
+    // A path flown wings-level projects almost end-on (the eye is at the gun): fall back to a
+    // vertical path direction so the rails stay horizontal instead of collapsing.
+    const perpX = length > 1e-6 ? -dy / length : 1;
+    const perpY = length > 1e-6 ? dx / length : 0;
     return {
-      rangeM,
-      fraction,
-      halfWidthPx: Math.max(MIN_HALF_WIDTH_PX, focal * (wingspan * 0.5) / rangeM),
+      x: sample.x,
+      y: sample.y,
+      rangeM: sample.rangeM,
+      halfWidthPx: Math.max(MIN_HALF_WIDTH_PX, focal * (wingspan * 0.5) / sample.rangeM),
+      perpX,
+      perpY,
     };
   });
 }

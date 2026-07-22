@@ -65,9 +65,33 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.4.0",
+        Assert.Equal("1.5.0",
             root.GetProperty("snapshot_schema_version").GetString());
         Assert.False(string.IsNullOrEmpty(root.GetProperty("beat").GetString()));
+
+        // (f) the ballistic gun trajectory the HUD funnel projects: nine finite samples whose
+        // range from the shooter increases monotonically away from the muzzle station.
+        JsonElement trajectory = root.GetProperty("gun_trajectory");
+        Assert.Equal(JsonValueKind.Array, trajectory.ValueKind);
+        Assert.Equal(9, trajectory.GetArrayLength());
+        double previousRange = double.NegativeInfinity;
+        foreach (JsonElement sample in trajectory.EnumerateArray()) {
+            Assert.True(double.IsFinite(sample.GetProperty("x").GetDouble()));
+            Assert.True(double.IsFinite(sample.GetProperty("y").GetDouble()));
+            Assert.True(double.IsFinite(sample.GetProperty("z").GetDouble()));
+            double range = sample.GetProperty("r").GetDouble();
+            Assert.True(double.IsFinite(range) && range > previousRange);
+            previousRange = range;
+        }
+        // The far sample must reach the effective ranging envelope while staying inside the
+        // physical maximum: muzzle velocity times the 0.9 s effective flight time, give or take
+        // the shooter's own motion.
+        Assert.InRange(previousRange, 300.0, 1400.0);
+
+        // (g) world ground velocity is emitted for the projected flight-path marker.
+        Assert.True(double.IsFinite(root.GetProperty("vx").GetDouble()));
+        Assert.True(double.IsFinite(root.GetProperty("vy").GetDouble()));
+        Assert.True(double.IsFinite(root.GetProperty("vz").GetDouble()));
     }
 
     [Fact]

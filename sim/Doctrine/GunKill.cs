@@ -21,6 +21,11 @@ public sealed class GunKill {
     public const double DefaultHitRadiusM = 8.0;
     public const double MaxFlightSeconds = 1.75;
     public const double GravityMps2 = 9.80665;
+    // Physical muzzle station: rounds leave 4 m ahead of the aircraft reference point on the gun line.
+    public const double MuzzleOffsetM = 4.0;
+    // Effective wingspan-ranging flight time for the HUD funnel trajectory: past this the rounds
+    // have bled too much energy to range on. Mirrors EFFECTIVE_TOF_S in render/hud/gun_funnel.js.
+    public const double EffectiveRangingFlightSeconds = 0.9;
 
     const double GunSolutionAcquireSeconds = 0.08;
     const double GunSolutionReleaseSeconds = 0.12;
@@ -189,7 +194,7 @@ public sealed class GunKill {
                 if (Outcome != FightOutcome.Flying) break;
             }
 
-            var firingPosition = own.Position + ownVelocity * elapsed + gunForward * 4.0;
+            var firingPosition = own.Position + ownVelocity * elapsed + gunForward * MuzzleOffsetM;
             Fire(firingPosition, ownVelocity + gunForward * _profile.MuzzleVelocityMps);
             _secondsToNextShot = 1.0 / _profile.RoundsPerSecond;
 
@@ -252,7 +257,7 @@ public sealed class GunKill {
 
     void UpdateLead(in AircraftState own, in AircraftState bandit, double dt) {
         var gunForward = GunForward(own);
-        var muzzle = own.Position + gunForward * 4.0;
+        var muzzle = own.Position + gunForward * MuzzleOffsetM;
         var relativePosition = bandit.Position - muzzle;
         var relativeVelocity = bandit.VelocityVector() - own.VelocityVector();
 
@@ -316,6 +321,65 @@ public sealed class GunKill {
         var required = relativePosition + relativeVelocity * t - Gravity * (0.5 * t * t);
         double muzzleDistance = _profile.MuzzleVelocityMps * t;
         return required.Dot(required) - muzzleDistance * muzzleDistance;
+    }
+
+    /// <summary>
+    /// Closed-form world position, NOW, of a round fired <paramref name="ageSeconds"/> ago — the
+    /// "bullets in the air" locus a real EEGS funnel draws. The firing state is retrodicted from
+    /// the CURRENT shooter state alone (position, velocity, gun line, world angular velocity),
+    /// assuming the recent history was the current steady rotation: the gun line and velocity are
+    /// rotated back through -omega*age (exact Rodrigues rotation), the flown path is the exact
+    /// closed-form integral of that rotating velocity, and the round then flies ballistically:
+    /// p = muzzle + v0*age + 0.5*g*age^2 — no stepping anywhere. Deterministic pure function of
+    /// the arguments; age 0 is the muzzle station. With zero angular velocity the shooter's own
+    /// displacement cancels exactly and the locus reduces to
+    /// p + MuzzleOffset*f + muzzleVelocity*f*age + 0.5*g*age^2: relative to the shooter the
+    /// rounds ride the gun line and fall with gravity — the classic tracer droop. (The
+    /// instantaneous path p0 + v0*t + 0.5*g*t^2 of a round fired NOW is a near-ray from the eye
+    /// and projects to a single point; only the fired-ago locus has real screen extent.)
+    /// </summary>
+    public static Vec3D BallisticFunnelPoint(in Vec3D shooterPosition, in Vec3D shooterVelocity,
+        in Vec3D gunForward, in Vec3D worldAngularVelocityRadPerSecond,
+        double muzzleVelocityMps, double ageSeconds) {
+        double age = System.Math.Max(0.0, ageSeconds);
+        double omega = worldAngularVelocityRadPerSecond.Length;
+        Vec3D firedForward = gunForward;
+        Vec3D firedVelocity = shooterVelocity;
+        Vec3D flownPath = shooterVelocity * age;
+        if (omega > 1e-9) {
+            Vec3D axis = worldAngularVelocityRadPerSecond * (1.0 / omega);
+            double angle = omega * age;
+            firedForward = RotateAbout(gunForward, axis, -angle);
+            firedVelocity = RotateAbout(shooterVelocity, axis, -angle);
+            // Exact integral of R(-omega*s) * v over s in [0, age]:
+            // planar*sin(wt)/w + (axis x v)*(cos(wt)-1)/w + axial*t.
+            double sin = System.Math.Sin(angle);
+            double cos = System.Math.Cos(angle);
+            Vec3D axial = axis * axis.Dot(shooterVelocity);
+            Vec3D planar = shooterVelocity - axial;
+            Vec3D binormal = axis.Cross(shooterVelocity);
+            flownPath = planar * (sin / omega)
+                + binormal * ((cos - 1.0) / omega)
+                + axial * age;
+        }
+        Vec3D muzzle = shooterPosition - flownPath + firedForward * MuzzleOffsetM;
+        Vec3D initialVelocity = firedVelocity + firedForward * muzzleVelocityMps;
+        return muzzle + initialVelocity * age + Gravity * (0.5 * age * age);
+    }
+
+    /// World angular velocity from body rates and the world images of the body axes, matching the
+    /// attitude integrator convention (FlightModel/WreckContactMotion: omega quaternion
+    /// (0, -Q, R, -P) in the (right, up, forward) body basis).
+    public static Vec3D WorldAngularVelocity(in Vec3D bodyForward, in Vec3D bodyUp,
+        in BodyRates rates) {
+        Vec3D bodyRight = bodyUp.Cross(bodyForward);
+        return bodyRight * -rates.Q + bodyUp * rates.R + bodyForward * -rates.P;
+    }
+
+    static Vec3D RotateAbout(in Vec3D v, in Vec3D unitAxis, double angleRad) {
+        double cos = System.Math.Cos(angleRad);
+        double sin = System.Math.Sin(angleRad);
+        return v * cos + unitAxis.Cross(v) * sin + unitAxis * (unitAxis.Dot(v) * (1.0 - cos));
     }
 
     static Vec3D GunForward(in AircraftState state) {

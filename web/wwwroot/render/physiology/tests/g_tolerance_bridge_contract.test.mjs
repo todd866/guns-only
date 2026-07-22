@@ -10,10 +10,10 @@ const readBridgeContract = () =>
   Promise.all([readFile(bridgeUrl, "utf8"), readFile(projectionUrl, "utf8")])
     .then((parts) => parts.join("\n"));
 
-test("WebBridge 1.4 projects the authoritative pilot physiology contract", async () => {
+test("WebBridge 1.5 projects the authoritative pilot physiology contract", async () => {
   const source = await readBridgeContract();
 
-  assert.match(source, /const string SnapshotSchemaVersion = "1\.4\.0";/);
+  assert.match(source, /const string SnapshotSchemaVersion = "1\.5\.0";/);
   assert.match(source,
     /PilotPhysiologyState pilotPhysiology = Session\.PilotPhysiologyState;/);
   assert.match(source,

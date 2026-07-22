@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="robots" content="noindex" />
+  <title>HUD visual test harness</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      padding: 18px;
+      background: #02070f;
+      color: #cff4de;
+      font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    #hud {
+      display: block;
+      background: #08192e; /* solid dark blue so HUD strokes are legible without the 3D world */
+      border: 1px solid rgba(77, 255, 136, 0.25);
+    }
+    #label { margin-top: 10px; max-width: 1300px; opacity: 0.8; }
+  </style>
+</head>
+<body>
+  <canvas id="hud" width="1300" height="900"></canvas>
+  <div id="label">?scenario=NAME renders one scenario; ?all=1 exposes window.__renderScenario for the runner.</div>
+  <script type="module" src="./harness.js"></script>
+</body>
+</html>
