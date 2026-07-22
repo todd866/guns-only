@@ -14,7 +14,7 @@ namespace GunsOnly.Web;
 /// </summary>
 [SupportedOSPlatform("browser")]
 public static partial class WebBridge {
-    static readonly ITerrainSurface CentralFrontTerrain = KoreaTerrainTruth.Load();
+    static readonly ITerrainSurface? CentralFrontTerrain = KoreaTerrainTruth.Load();
     static readonly SimulationSession Session = new(7, Carrier.DeckConfiguration.Angled,
         KoreaWeatherPresets.ForBeat(7));
     static Carrier.DeckConfiguration _deckConfiguration = Carrier.DeckConfiguration.Angled;
@@ -111,8 +111,10 @@ public static partial class WebBridge {
     static double TerrainPlacementNorthM(int index) => HasSharedTerrainFrame(index)
         ? -_worldOriginNorthM : 0.0;
 
-    static ITerrainSurface TerrainForBeat(int index) => new TranslatedTerrainSurface(
-        CentralFrontTerrain,
-        TerrainPlacementEastM(index),
-        TerrainPlacementNorthM(index));
+    // Null when the Korea terrain is not embedded (the default F-22 arcade opener flies over sea
+    // level). The session and projection treat a null terrain as sea level; the browser skips the
+    // multi-megabyte visual-terrain fetch when the snapshot reports terrain_present=false.
+    static ITerrainSurface? TerrainForBeat(int index) => CentralFrontTerrain is null ? null
+        : new TranslatedTerrainSurface(CentralFrontTerrain,
+            TerrainPlacementEastM(index), TerrainPlacementNorthM(index));
 }

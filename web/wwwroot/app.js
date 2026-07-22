@@ -6043,7 +6043,9 @@ class FlightView {
   update(state, dt, nowSeconds) {
     // The sortie chooser owns Ready. Defer the manifest and all height ranges until gameplay has
     // actually begun, then retain the single shared presentation across pause/replay/restage.
-    if (state?.ready !== true) void this.ensureTerrainPresentation();
+    // Only fetch the multi-megabyte visual terrain when the sim actually has a terrain surface.
+    // The F-22 arcade opener flies over sea level (terrain_present=false), so it never pays for it.
+    if (state?.ready !== true && state?.terrain_present === true) void this.ensureTerrainPresentation();
     const nextBanditEntityId = projectedId(state.bandit_entity_id);
     // Padlock is bound to a specific visual tally. It may not silently transfer to a replacement
     // drone/bandit, survive loss of consciousness, or keep tracking stale/replay geometry.

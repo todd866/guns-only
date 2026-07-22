@@ -9,10 +9,13 @@ internal static class KoreaTerrainTruth {
     const string ResourceName = "GunsOnly.Web.Data.KoreaCentralFront.truth";
     static readonly byte[] ExpectedMagic = "GOKTRN1\0"u8.ToArray();
 
-    public static ITerrainSurface Load() {
-        using Stream stream = Assembly.GetExecutingAssembly()
-            .GetManifestResourceStream(ResourceName)
-            ?? throw new InvalidOperationException($"missing embedded terrain truth {ResourceName}");
+    /// Returns null when the terrain grid is not embedded in this build (EmbedKoreaTerrainTruth is
+    /// off by default for the F-22 arcade opener, which flies over sea level — see ADR-0001). The
+    /// simulation treats a null terrain surface as sea level.
+    public static ITerrainSurface? Load() {
+        using Stream? stream = Assembly.GetExecutingAssembly()
+            .GetManifestResourceStream(ResourceName);
+        if (stream is null) return null;
         using var reader = new BinaryReader(stream);
         byte[] magic = reader.ReadBytes(8);
         if (!magic.SequenceEqual(ExpectedMagic))

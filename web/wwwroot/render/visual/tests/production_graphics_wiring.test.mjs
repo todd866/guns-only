@@ -55,8 +55,8 @@ test("terrain stays lazy through Ready and shares the active ocean curvature con
     /this\.terrainPresentationPromise = null;[\s\S]*ensureTerrainPresentation\(\)/,
     "constructing FlightView must not start terrain network work");
   assert.match(source,
-    /if \(state\?\.ready !== true\) void this\.ensureTerrainPresentation\(\)/,
-    "the first non-Ready frame should start the retained terrain single flight");
+    /if \(state\?\.ready !== true && state\?\.terrain_present === true\) void this\.ensureTerrainPresentation\(\)/,
+    "a non-Ready frame with terrain present should start the retained terrain single flight");
   assert.match(source,
     /if \(this\.terrainPresentation\) \{[\s\S]*return this\.terrainSceneryEraPromise\?\.then[\s\S]*if \(this\.terrainPresentationPromise\) return this\.terrainPresentationPromise/,
     "repeated gameplay frames must reuse one terrain load");

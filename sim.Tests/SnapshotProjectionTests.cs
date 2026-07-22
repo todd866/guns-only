@@ -32,6 +32,9 @@ public class SnapshotProjectionTests {
         session.Begin();
         for (int tick = 0; tick < ticks; tick++)
             session.StepFixed();
+        // Terrain reaches the projection through the session (Session.Terrain), not the dead BuildState
+        // terrain parameter, so drive it here to exercise the terrain_present / sea-level paths.
+        if (terrain is not null) session.SetTerrainSurface(terrain);
         return SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Angled,
             0.0, 0.0, false, terrain);
     }
@@ -57,6 +60,10 @@ public class SnapshotProjectionTests {
         Assert.True(root.TryGetProperty("world_frame_id", out JsonElement worldFrameId));
         Assert.False(string.IsNullOrEmpty(worldFrameId.GetString()));
 
+        // (e) the F-22 arcade opener flies over sea level: no terrain surface, so the browser can
+        // skip the multi-megabyte visual-terrain fetch.
+        Assert.False(root.GetProperty("terrain_present").GetBoolean());
+
         // (d) spot-check stable contract fields.
         Assert.Equal("1.4.0",
             root.GetProperty("snapshot_schema_version").GetString());
@@ -64,12 +71,12 @@ public class SnapshotProjectionTests {
     }
 
     [Fact]
-    public void BuildStateWithFlatTerrainStaysParseableAndFinite() {
+    public void BuildStateReportsTerrainPresentWhenTheSessionHasATerrainSurface() {
         string json = ProjectAfterSteps(7, 12, new FlatTerrain(0.0));
 
         using JsonDocument document = JsonDocument.Parse(json);
         Assert.DoesNotContain("NaN", json);
         Assert.DoesNotContain("Infinity", json);
-        Assert.True(document.RootElement.TryGetProperty("world_frame_id", out _));
+        Assert.True(document.RootElement.GetProperty("terrain_present").GetBoolean());
     }
 }

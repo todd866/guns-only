@@ -272,6 +272,7 @@ internal static class SnapshotProjection {
             + $"\"world_origin_east_m\":{WorldOriginEastM:F1},\"world_origin_north_m\":{WorldOriginNorthM:F1},"
             + $"\"terrain_placement_east_m\":{TerrainPlacementEastM(Session.BeatIndex):F1},\"terrain_placement_north_m\":{TerrainPlacementNorthM(Session.BeatIndex):F1},"
             + $"\"multiplayer_terrain_shared\":{(WorldOriginConfigured && HasSharedTerrainFrame(Session.BeatIndex) ? "true" : "false")},"
+            + $"\"terrain_present\":{(Session.Terrain is not null ? "true" : "false")},"
             + $"\"t\":{_simTimeMs / 1000.0:F4},"
             + $"\"tick\":{Session.Tick},"
             + $"\"ready\":{(ready ? "true" : "false")},\"paused\":{(paused ? "true" : "false")},"
