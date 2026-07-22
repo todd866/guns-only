@@ -3996,6 +3996,45 @@ function createAwacs() {
   return group;
 }
 
+// Shared ocean mesh used by the decision-support sea below. (It formerly lived between the retired
+// createSky/createSea builders; those were deleted in Build 56 but this helper is still live.)
+function createOceanGeometry(radius = 360000, radialSegments = 145, angularSegments = 192) {
+  // Concentric exponential rings spend vertices where a landing pilot needs them: ~7 m radial
+  // spacing under the aircraft, ~85 m at 1.5 km, then progressively coarser toward the horizon.
+  // This is both lighter and far more useful than uniformly tessellating a 500 km square. The two
+  // segment arguments are the explicit quality knobs if a lower-end WebGL target needs scaling.
+  const positions = [0, 0, 0];
+  const indices = [];
+  const growth = 8.0;
+  const growthScale = Math.exp(growth) - 1;
+  for (let ring = 1; ring <= radialSegments; ring++) {
+    const t = ring / radialSegments;
+    const ringRadius = radius * (Math.exp(growth * t) - 1) / growthScale;
+    for (let segment = 0; segment < angularSegments; segment++) {
+      const angle = segment / angularSegments * Math.PI * 2;
+      positions.push(Math.cos(angle) * ringRadius, 0, Math.sin(angle) * ringRadius);
+    }
+  }
+  for (let segment = 0; segment < angularSegments; segment++) {
+    const next = (segment + 1) % angularSegments;
+    indices.push(0, 1 + next, 1 + segment);
+  }
+  for (let ring = 1; ring < radialSegments; ring++) {
+    const inner = 1 + (ring - 1) * angularSegments;
+    const outer = inner + angularSegments;
+    for (let segment = 0; segment < angularSegments; segment++) {
+      const next = (segment + 1) % angularSegments;
+      indices.push(inner + segment, inner + next, outer + segment);
+      indices.push(inner + next, outer + next, outer + segment);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 // The production scene is deliberately closer to a flight-test visual system than a decorative
 // game sky. It supplies an unambiguous world horizon and altitude-dependent atmospheric colour;
 // clouds, stars, a sun disc, and other scene dressing are absent unless a later renderer can bind
