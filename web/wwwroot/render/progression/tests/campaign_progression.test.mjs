@@ -13,18 +13,18 @@ import {
   saveCampaignProfile,
 } from "../campaign_progression.js";
 
-test("the Raptor program is linear and carrier conversion sits behind three qualifications", () => {
+test("the Raptor program is linear and the ace duel sits behind three qualifications", () => {
   assert.deepEqual(CAMPAIGN_NODES.map(({ id, mission, aircraft }) => ({ id, mission, aircraft })), [
     { id: "first-merge", mission: 7, aircraft: "F-22A" },
     { id: "raid-defence", mission: 8, aircraft: "F-22A" },
     { id: "endurance-merge", mission: 7, aircraft: "F-22A" },
-    { id: "carrier-conversion", mission: 5, aircraft: "F-35C" },
+    { id: "ace-duel", mission: 9, aircraft: "F-22A" },
   ]);
   const fresh = createCampaignProfile();
   assert.equal(recommendedCampaignNode(fresh).id, "first-merge");
   assert.equal(campaignNodeUnlocked(fresh, "first-merge"), true);
   assert.equal(campaignNodeUnlocked(fresh, "raid-defence"), false);
-  assert.equal(campaignNodeUnlocked(fresh, "carrier-conversion"), false);
+  assert.equal(campaignNodeUnlocked(fresh, "ace-duel"), false);
 });
 
 test("performance, not opening a menu, unlocks each next mission", () => {
@@ -68,28 +68,28 @@ test("performance, not opening a menu, unlocks each next mission", () => {
   }, 103);
   profile = result.profile;
   assert.equal(result.newlyQualified, true);
-  assert.equal(nextCampaignNode(profile, "endurance-merge").id, "carrier-conversion");
-  assert.equal(campaignNodeUnlocked(profile, "carrier-conversion"), true);
+  assert.equal(nextCampaignNode(profile, "endurance-merge").id, "ace-duel");
+  assert.equal(campaignNodeUnlocked(profile, "ace-duel"), true);
 });
 
-test("carrier qualification requires a stopped trap victory", () => {
+test("the ace-duel capstone requires one splash of the forced Ace bandit", () => {
   const base = createCampaignProfile({ qualifications: {
     "first-merge": { qualifiedAt: 1 },
     "raid-defence": { qualifiedAt: 2 },
     "endurance-merge": { qualifiedAt: 3 },
   } });
-  assert.equal(campaignNodeSatisfied("carrier-conversion", {
-    finished: true,
-    sortie_outcome: "DRAW",
-    recovery: "BOLTER",
+  // A completed merge without a kill does not qualify the capstone.
+  assert.equal(campaignNodeSatisfied("ace-duel", {
+    visual_merge_evaluation: true,
+    kill_count: 0,
   }), false);
-  const result = qualifyCampaignNode(base, "carrier-conversion", {
-    finished: true,
-    sortie_outcome: "VICTORY",
-    recovery: "TRAP",
+  const result = qualifyCampaignNode(base, "ace-duel", {
+    visual_merge_evaluation: true,
+    visual_merge_score: 88,
+    kill_count: 1,
   }, 4);
   assert.equal(result.newlyQualified, true);
-  assert.equal(nextCampaignNode(result.profile, "carrier-conversion"), null);
+  assert.equal(nextCampaignNode(result.profile, "ace-duel"), null);
 });
 
 test("anonymous progress survives storage failures and malformed saved data", () => {

@@ -522,6 +522,28 @@ public static class Beats {
     }
 
     /// <summary>
+    /// CLIMACTIC GUNS-ONLY DUEL — the Raptor programme's final exam. Identical honest F-22A-vs-Su-27S
+    /// public-data neutral merge as <see cref="ModernVisualMerge"/> (same ballistics, G-physiology,
+    /// first-pass-safe ROE and airframe surrogates), but a SINGLE lone bandit flown at the Ace tier:
+    /// lookahead BFM that actually converts the merge and fights the vertical. There is no continuous
+    /// replacement stream — one decisive fight against the best pilot the ladder can field. Winning it
+    /// is the programme capstone. No radar, missile, stealth, or classified-system simulation.
+    /// </summary>
+    public static BeatSetup ModernAceDuel() => ModernVisualMerge() with {
+        Name = "Ace duel — F-22A surrogate vs Su-27S surrogate ace",
+        // A lone climactic duel: drop the continuous-operations replacement stream so the sortie is
+        // one merge against one opponent, and force the Ace tier rather than the escalation curve.
+        ContinuousCombat = null,
+        BanditSkill = PilotSkill.Ace,
+        Mission = new MissionContract(
+            "mission.modern.ace-duel.f22a-vs-su27s.public-data-surrogate.v1",
+            MissionContentFamily.ModernPublicDataSurrogate,
+            PublicDataSurrogate: true,
+            RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE",
+            Era: "MODERN_PUBLIC_DATA_EXERCISE"),
+    };
+
+    /// <summary>
     /// KOREA 2030s PROXY WAR — a public-data F-22 flight surrogate defends a fixed inner ring
     /// against four explicitly fictional one-way attack-drone prototypes. The current kernel owns
     /// one opponent, so the raid is an honest staged stream rather than four visually concurrent

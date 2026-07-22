@@ -265,7 +265,7 @@ test("fresh players launch directly into the first F-22 merge", () => {
   const nodeIds = buttons.filter((button) => button.attributes["data-program-node"] !== undefined)
     .map((button) => button.attributes["data-program-node"]);
   assert.deepEqual(nodeIds, [
-    "first-merge", "raid-defence", "endurance-merge", "carrier-conversion",
+    "first-merge", "raid-defence", "endurance-merge", "ace-duel",
   ]);
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
@@ -275,7 +275,7 @@ test("fresh players launch directly into the first F-22 merge", () => {
 
 test("the player-facing program is linear and performance-gated", () => {
   assert.match(progressionSource,
-    /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "raid-defence"[\s\S]*?mission: 8[\s\S]*?id: "endurance-merge"[\s\S]*?mission: 7[\s\S]*?id: "carrier-conversion"[\s\S]*?mission: 5/);
+    /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "raid-defence"[\s\S]*?mission: 8[\s\S]*?id: "endurance-merge"[\s\S]*?mission: 7[\s\S]*?id: "ace-duel"[\s\S]*?mission: 9/);
   assert.match(progressionSource,
     /case "first-merge":[\s\S]*?kills >= 1[\s\S]*?case "raid-defence":[\s\S]*?drone_raid_score\) >= 65[\s\S]*?case "endurance-merge":[\s\S]*?kills >= 2/);
   assert.match(progressionSource,

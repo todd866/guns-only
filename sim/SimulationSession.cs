@@ -372,7 +372,7 @@ public sealed class SimulationSession {
     /// <summary>Construct and stage one of the built-in beats. Physics remains held in Ready.</summary>
     public void StartBeat(int index,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial) {
-        if (index is < 1 or > 8) index = 1;
+        if (index is < 1 or > 9) index = 1;
         _prechargeSystemsOnStage = true;
         _beatIndex = index;
         _deckConfiguration = deckConfiguration;
@@ -384,6 +384,7 @@ public sealed class SimulationSession {
             6 => () => Beats.EmergencyGearRecovery(deckConfiguration),
             7 => Beats.ModernVisualMerge,
             8 => Beats.DroneRaidDefense,
+            9 => Beats.ModernAceDuel,
             _ => Beats.Perch
         };
         StageBeat(_beatFactory());

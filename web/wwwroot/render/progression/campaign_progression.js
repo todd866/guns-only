@@ -30,13 +30,13 @@ export const CAMPAIGN_NODES = Object.freeze([
     qualification: "SPLASH TWO BANDITS IN ONE SORTIE",
   }),
   Object.freeze({
-    id: "carrier-conversion",
-    mission: 5,
+    id: "ace-duel",
+    mission: 9,
     sequence: 4,
-    aircraft: "F-35C",
-    title: "Carrier Conversion",
-    shortObjective: "Fly one scored recovery from the active groove.",
-    qualification: "TRAP ABOARD",
+    aircraft: "F-22A",
+    title: "Ace Duel",
+    shortObjective: "Win a lone guns-only duel against a forced Ace bandit.",
+    qualification: "SPLASH THE ACE",
   }),
 ]);
 
@@ -127,11 +127,8 @@ export function campaignNodeSatisfied(nodeId, state) {
         && Number(state?.drone_raid_leakers) <= 1;
     case "endurance-merge":
       return state?.visual_merge_evaluation === true && kills >= 2;
-    case "carrier-conversion":
-      return state?.finished === true
-        && String(state?.sortie_outcome || "").toUpperCase() === "VICTORY"
-        && (String(state?.recovery || "").toUpperCase() === "TRAP"
-          || String(state?.arrest_phase || "").toUpperCase() === "STOPPED");
+    case "ace-duel":
+      return state?.visual_merge_evaluation === true && kills >= 1;
     default:
       return false;
   }

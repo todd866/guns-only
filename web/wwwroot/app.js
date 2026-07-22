@@ -1207,8 +1207,13 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     brief: "Two splashes earn carrier conversion. Each replacement Su-27 enters through a fresh neutral merge while fuel, ammunition, damage, and your kill count persist. Burst discipline and G management now matter across the whole sortie, not just one fight.",
     controls: "Arrows fly · W/S power · F guns · V padlock\nSplash two bandits in one sortie to qualify",
   }),
-  "carrier-conversion": Object.freeze({
-    ...MISSION_BRIEFS[5],
+  "ace-duel": Object.freeze({
+    kicker: "Raptor programme · final exam",
+    title: "Ace Duel",
+    sortie: "F-22A vs Su-27S ace · lone guns-only duel · first pass safe",
+    configuration: "F-22 public-data surrogate · 480 rounds · Auto-GCAS armed",
+    brief: "The programme's final exam: one merge, one bandit, flown by the best pilot the ladder can field. This Su-27 surrogate reads the fight a manoeuvre ahead—it converts the merge and takes it into the vertical. Survive the first pass, then out-fly a genuine ace for the rear quarter and splash it. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
+    controls: "Arrows fly · W/S power · F guns · V padlock\nSplash the ace to complete the programme · Space releases the G limiter",
   }),
 });
 
@@ -3565,6 +3570,7 @@ class FlightView {
     const terrainPackId = this.presentationAssets.requested.packId
       || this.presentationAssets.activePack?.id || "korea-1950s";
     const sceneryEra = terrainPackId.includes("modern") || selectedBeat === 7 || selectedBeat === 8
+      || selectedBeat === 9
       ? "modern" : "1950s";
     if (!PRODUCTION_KOREA_TERRAIN_ENABLED || this.disposed) {
       return Promise.resolve(this.terrainPresentation);
