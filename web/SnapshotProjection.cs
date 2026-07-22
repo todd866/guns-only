@@ -99,6 +99,7 @@ internal static class SnapshotProjection {
         AutoGcasState autoGcas = Session.AutoGcas;
         AutoGcasPrediction autoGcasPrediction = autoGcas.Prediction;
         GunneryPitchAssistState gunneryPitchAssist = Session.GunneryPitchAssist;
+        PadlockRollAssistState padlockRollAssist = Session.BanditPadlockRollAssist;
         string autoGcasProfileIdJson = JsonString(Session.PlayerAutoGcasCapability.Id);
         string autoGcasCueJson = JsonString(autoGcas.Cue);
         Carrier? _carrier = Session.Carrier;
@@ -413,6 +414,18 @@ internal static class SnapshotProjection {
             + $"\"gunnery_pitch_rate_error_dps\":{gunneryPitchAssist.PitchRateErrorRadPerSecond * 57.29577951308232:F3},"
             + $"\"gunnery_pitch_assist_g\":{gunneryPitchAssist.AssistedLoadFactorG:F3},"
             + $"\"gunnery_pitch_assist_delta_g\":{gunneryPitchAssist.LoadFactorCorrectionG:F3},"
+            + $"\"padlock_roll_assist_selected\":{(padlockRollAssist.Selected ? "true" : "false")},"
+            + $"\"padlock_roll_assist_geometry_valid\":{(padlockRollAssist.GeometryValid ? "true" : "false")},"
+            + $"\"padlock_roll_assist_captured\":{(padlockRollAssist.Captured ? "true" : "false")},"
+            + $"\"padlock_roll_assist_active\":{(padlockRollAssist.Active ? "true" : "false")},"
+            + $"\"padlock_roll_assist_any_plane\":{(padlockRollAssist.AnyPlane ? "true" : "false")},"
+            + $"\"padlock_roll_assist_target_sequence\":{padlockRollAssist.TargetSpawnSequence},"
+            + $"\"padlock_roll_plane_magnitude\":{padlockRollAssist.PlaneMagnitude:F6},"
+            + $"\"padlock_roll_error_deg\":{padlockRollAssist.RollErrorRad * 57.29577951308232:F3},"
+            + $"\"padlock_roll_rate_cmd_dps\":{padlockRollAssist.DesiredRollRateRadPerSecond * 57.29577951308232:F3},"
+            + $"\"padlock_roll_rate_measured_dps\":{padlockRollAssist.MeasuredRollRateRadPerSecond * 57.29577951308232:F3},"
+            + $"\"padlock_target_plane_rate_dps\":{padlockRollAssist.EstimatedTargetPlaneRateRadPerSecond * 57.29577951308232:F3},"
+            + $"\"padlock_roll_assist_aileron\":{padlockRollAssist.SasRollControl:F4},"
             + $"\"high_alpha_recovery\":{(_detents.HighAlphaRecoveryActive ? "true" : "false")},"
             + $"\"g_valley\":{_detents.ValleyG:F3},"
             + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"

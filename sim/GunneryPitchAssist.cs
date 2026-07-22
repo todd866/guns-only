@@ -38,7 +38,8 @@ public static class GunneryPitchAssist {
         in Vec3D ballisticLeadDirection,
         bool hasBallisticLead,
         double rangeM,
-        bool enabled) {
+        bool enabled,
+        bool lateralRollEnabled = true) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         GunneryPitchAssistResult inactive = new(pilotCommand,
             GunneryPitchAssistState.Inactive(pilotCommand.GDemand));
@@ -108,10 +109,12 @@ public static class GunneryPitchAssist {
         // never fires and never alters the ballistic path the fired rounds actually fly.
         Vec3D bodyRight = attitude.Rotate(new Vec3D(1.0, 0.0, 0.0));
         double lateralError = System.Math.Atan2(lead.Dot(bodyRight), forwardProjection);
-        double rollAssist = System.Math.Clamp(
-            parameters.GunneryLateralAssistRollGain * lateralError,
-            -parameters.GunneryLateralAssistMaxRoll,
-            parameters.GunneryLateralAssistMaxRoll);
+        double rollAssist = lateralRollEnabled
+            ? System.Math.Clamp(
+                parameters.GunneryLateralAssistRollGain * lateralError,
+                -parameters.GunneryLateralAssistMaxRoll,
+                parameters.GunneryLateralAssistMaxRoll)
+            : 0.0;
         double yawAssist = System.Math.Clamp(
             parameters.GunneryLateralAssistYawGain * lateralError,
             -parameters.GunneryLateralAssistMaxYaw,

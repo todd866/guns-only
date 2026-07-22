@@ -4,7 +4,8 @@
 // and the this.hud.draw(hudFrame) call site in app.js), but from fixed synthetic scenarios instead
 // of a live kernel: a real THREE.PerspectiveCamera (66° vfov, matching app.js), body-axis player
 // vectors, world bandit/lead points, and the padlock sensor angles derived through the production
-// padlock_controller math. now is pinned to 0 and dt is a fixed step, so renders are deterministic.
+// padlock_controller math. now defaults to 0 and dt is a fixed step, so renders are deterministic;
+// callers can request another explicit time to inspect animation phases.
 //
 // This file is a test instrument. It is excluded from publish by the csproj's
 // wwwroot/render/**/tests/** rule and must never ship.
@@ -219,6 +220,7 @@ export function buildFrame(scenario) {
     padlockTarget: view.padlockTarget ?? "bandit",
     padlockPhase: view.padlockPhase ?? "OFF",
     manualLookActive: view.manualLookActive === true,
+    padlockTrackPrimed: view.primeTrack === true,
     periodGunsightVisible: false,
     triggerHeld: scenario.triggerHeld === true,
     dt: FIXED_DT,
@@ -228,7 +230,7 @@ export function buildFrame(scenario) {
 
 let lastRenderedFrame = null;
 
-async function renderScenario(name) {
+async function renderScenario(name, now = 0) {
   const scenario = scenarioByName(name);
   if (!scenario) throw new Error(`unknown HUD scenario: ${name}`);
   window.__hudReady = null;
@@ -238,6 +240,13 @@ async function renderScenario(name) {
   hud.setAudioEnabled(false);
   hud.resize(WIDTH, HEIGHT, 1);
   const frame = buildFrame(scenario);
+  frame.now = Number.isFinite(Number(now)) ? Number(now) : 0;
+  if (scenario.view?.primeTrack === true) {
+    const requestedPhase = frame.padlockPhase;
+    frame.padlockPhase = "TRACK";
+    hud.draw(frame);
+    frame.padlockPhase = requestedPhase;
+  }
   for (let i = 0; i < SETTLE_FRAMES; i += 1) hud.draw(frame);
   lastRenderedFrame = frame;
 
@@ -263,6 +272,10 @@ function computeProbes(frame) {
   const position = frame.playerPosition;
   const far = (direction) => position.clone().addScaledVector(direction, 10000);
   const velocityDirection = frame.playerVelocity.clone().normalize();
+  const targetDirection = frame.banditPosition.clone().sub(frame.playerPosition).normalize();
+  const targetRight = targetDirection.dot(frame.playerRight);
+  const targetUp = targetDirection.dot(frame.playerUp);
+  const targetForward = targetDirection.dot(frame.playerForward);
 
   // Projected world-up direction near the view axis: two points on a vertical world line ahead
   // of the aircraft. In a gnomonic projection a straight world line is a straight screen line,
@@ -304,6 +317,10 @@ function computeProbes(frame) {
     })),
     worldUpScreen,
     horizonScreen,
+    padlockPlaneMagnitude: Math.hypot(targetRight, targetUp),
+    padlockRollErrorRad: Math.hypot(targetRight, targetUp) < 0.035 && targetForward < 0
+      ? 0 : Math.atan2(targetRight, targetUp),
+    padlockTargetForward: targetForward,
   };
 }
 
@@ -323,6 +340,12 @@ window.__debugScenario = async (name) => {
     geometry: window.__HUD_GEOMETRY ?? null,
     probes: computeProbes(frame),
     padlock: frame.padlock === true,
+    padlockState: {
+      phase: frame.padlockPhase,
+      manualLookActive: frame.manualLookActive,
+      target: frame.padlockTarget,
+      trackPrimed: frame.padlockTrackPrimed,
+    },
     state: {
       aoa_deg: frame.state.aoa_deg,
       beta_deg: frame.state.beta_deg,
@@ -394,7 +417,7 @@ window.__hudReady = null;
 const params = new URLSearchParams(window.location.search);
 const requested = params.get("scenario");
 if (requested) {
-  renderScenario(requested).catch((error) => {
+  renderScenario(requested, params.get("now") ?? 0).catch((error) => {
     window.__hudError = String(error?.message ?? error);
     if (label) label.textContent = window.__hudError;
   });

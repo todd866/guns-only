@@ -17,7 +17,10 @@ import {
   carrierRelativeMotion,
   CarrierPatternCueQualifier,
 } from "./render/hud/carrier_sa.js";
-import { padlockOrientationModel } from "./render/camera/padlock_controller.js";
+import {
+  padlockLiftPlaneModel,
+  padlockOrientationModel,
+} from "./render/camera/padlock_controller.js";
 import {
   HudSignalStabilizer,
   latchedRectVisibility,
@@ -241,6 +244,9 @@ class CombatHud {
     this._lastLeadPipperY = null;
     this._banditMarkerInside = false;
     this._banditMarkerEntityId = "";
+    this._padlockLiftCaptured = false;
+    this._padlockCaptureEntityId = "";
+    this._padlockTrackEstablished = false;
   }
 
   resize(width, height, pixelRatio, safeInsets = null) {
@@ -836,22 +842,8 @@ class CombatHud {
     }
     ctx.restore();
 
-    // Mark the bandit in screen space so the pilot sees which way to pull it into the walls. The
-    // funnel walls are the range scale; this diamond is the thing to fly between them.
-    const target = this.project(frame.banditPosition, camera, this._funnelTargetProj);
-    if (!target.behind && Number.isFinite(target.x) && Number.isFinite(target.y)) {
-      ctx.save();
-      this.setLine(solution ? GREEN : AMBER, 1.4);
-      const r = 5;
-      ctx.beginPath();
-      ctx.moveTo(target.x, target.y - r);
-      ctx.lineTo(target.x + r, target.y);
-      ctx.lineTo(target.x, target.y + r);
-      ctx.lineTo(target.x - r, target.y);
-      ctx.closePath();
-      ctx.stroke();
-      ctx.restore();
-    }
+    // drawBandit owns the one target marker. Adding another diamond here made the funnel,
+    // lead pipper and target box collapse into an unreadable knot near a valid solution.
   }
 
   // The deck diamond and waterline director are one published recovery contract. Align the stable
@@ -934,9 +926,10 @@ class CombatHud {
     const layout = this.getLayout();
     const safe = layout.targetSafe;
     const solution = frame.visualGunSolution === true;
-    const color = solution ? AMBER : GREEN;
+    const padlockedBandit = frame.padlock && frame.padlockTarget !== "carrier";
+    const color = padlockedBandit || solution ? AMBER : GREEN;
     const ctx = this.ctx;
-    const size = solution ? 32 : 27;
+    const size = solution ? 32 : padlockedBandit ? 30 : 27;
     const markerEntityId = String(state.bandit_entity_id ?? "legacy");
     if (markerEntityId !== this._banditMarkerEntityId) {
       this._banditMarkerEntityId = markerEntityId;
@@ -972,6 +965,15 @@ class CombatHud {
       ctx.stroke();
       ctx.shadowBlur = 0;
 
+      // The selected padlock target gets one centre dot inside the ordinary target brackets.
+      // drawPadlockSa deliberately does not add a second diamond over the same aircraft.
+      if (padlockedBandit) {
+        ctx.fillStyle = AMBER;
+        ctx.beginPath();
+        ctx.arc(projection.x, projection.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       const closure = targetClosureReadout(state.closure_kts);
       const dataLine = `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`;
       ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -991,10 +993,9 @@ class CombatHud {
       return;
     }
 
-    // Off-screen bandit: in an off-axis padlock view the padlock SA layer owns the single edge
-    // caret (same predicate, one source of truth) — drawing a second, differently-referenced
-    // arrow here is exactly the disagreement being removed.
-    if (frame.padlock && padlockLooksOffAxis(frame)) return;
+    // Combat padlock owns one edge locator at every look angle. Drawing the ordinary forward-HUD
+    // arrow as well would create two differently referenced directions around the threshold.
+    if (frame.padlock && frame.padlockTarget !== "carrier") return;
 
     let dx;
     let dy;
@@ -2158,6 +2159,9 @@ class CombatHud {
   drawPadlockSa(frame, systems = null, noseAnchor = null) {
     if (!frame.padlock) {
       this._carrierPatternCue.reset();
+      this._padlockLiftCaptured = false;
+      this._padlockCaptureEntityId = "";
+      this._padlockTrackEstablished = false;
       return;
     }
 
@@ -2177,28 +2181,59 @@ class CombatHud {
       sensorPitchRad: frame.sensorPitch,
     });
 
-    const targetLabel = frame.padlockTarget === "carrier" ? "BOAT" : "BANDIT";
-    const phase = frame.manualLookActive ? "SLEW · RELEASE TO RETURN" : frame.padlockPhase || "TRACK";
-    const modeText = `${targetLabel} PADLOCK · ${phase} · V FORWARD`;
+    const isBanditPadlock = frame.padlockTarget !== "carrier";
+    const targetLabel = isBanditPadlock ? "BANDIT" : "BOAT";
+    if (isBanditPadlock) {
+      const captureEntityId = String(frame.state.bandit_entity_id ?? "legacy");
+      if (captureEntityId !== this._padlockCaptureEntityId) {
+        this._padlockCaptureEntityId = captureEntityId;
+        this._padlockLiftCaptured = false;
+        this._padlockTrackEstablished = false;
+      }
+      if (frame.manualLookActive) {
+        this._padlockTrackEstablished = false;
+      } else if (frame.padlockPhase === "TRACK") {
+        this._padlockTrackEstablished = true;
+      }
+    } else {
+      this._padlockLiftCaptured = false;
+      this._padlockTrackEstablished = false;
+      this._padlockCaptureEntityId = "";
+    }
+    const phase = frame.manualLookActive ? "MANUAL LOOK" : frame.padlockPhase || "TRACK";
+    const exitBinding = this.touchMode
+      ? "PADLOCK: EXIT"
+      : `${controlBindingLabel(this.controlBindings?.padlock, "KeyV")}: FORWARD`;
+    const modeTitle = `${targetLabel} PADLOCK`;
+    const cameraSettling = isBanditPadlock && this._padlockTrackEstablished
+      && phase !== "TRACK" && !frame.manualLookActive;
+    const modeStatus = frame.manualLookActive
+      ? "RELEASE LOOK TO REACQUIRE"
+      : phase === "TRACK" ? `TRACKING · ${exitBinding}`
+        : cameraSettling ? `CAMERA SETTLING · ${exitBinding}` : `${phase} TARGET`;
     padlockCtx.save();
-    padlockCtx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const modeWidth = Math.min(this.width - 28, padlockCtx.measureText(modeText).width + 18);
+    padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const titleWidth = padlockCtx.measureText(modeTitle).width;
+    padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const statusWidth = padlockCtx.measureText(modeStatus).width;
+    const modeWidth = Math.min(this.width - 28, Math.max(titleWidth, statusWidth) + 20);
     const modeX = (this.width - modeWidth) / 2;
-    const modeY = Math.max(this.safeInsets.top + 4, this.getLayout().heading.top - 24);
-    this.glassPanel(modeX, modeY, modeWidth, 20, frame.manualLookActive ? AMBER : GREEN_DIM);
+    const modeY = Math.max(this.safeInsets.top + 3, this.getLayout().heading.top - 30);
+    this.glassPanel(modeX, modeY, modeWidth, 28, frame.manualLookActive ? AMBER : GREEN_DIM);
     padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN;
     padlockCtx.textAlign = "center";
     padlockCtx.textBaseline = "middle";
-    padlockCtx.fillText(this.fitText(modeText, modeWidth - 12), this.width / 2, modeY + 10);
+    padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    padlockCtx.fillText(this.fitText(modeTitle, modeWidth - 12), this.width / 2, modeY + 9);
+    padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN_DIM;
+    padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    padlockCtx.fillText(this.fitText(modeStatus, modeWidth - 12), this.width / 2, modeY + 20);
 
-    // These cues exist only when the pilot is actually looking away from the waterline. Together
-    // they answer the three BFM questions: where is the bandit, WHICH WAY DO I ROLL to put my lift
-    // line on it, and what is my attitude so I do not fly into the ground. The same predicate
-    // suppresses drawBandit's off-screen arrow, so exactly one locator is ever visible.
-    const offAxis = padlockLooksOffAxis(frame);
-    if (offAxis) {
+    // Combat padlock always owns its director and locator, including near the forward-view
+    // threshold. Boat padlock only needs this compact SA when the pilot deliberately looks away.
+    const dedicatedSa = isBanditPadlock || padlockLooksOffAxis(frame);
+    if (dedicatedSa) {
       const state = frame.state;
-      const isBanditPadlock = frame.padlockTarget !== "carrier";
       const targetSafe = this.getLayout().targetSafe;
       const left = targetSafe.left + 12;
       const right = targetSafe.right - 12;
@@ -2217,6 +2252,16 @@ class CombatHud {
         Math.max(top + 26, bottom - 26),
       );
       const blink = Math.floor((Number(frame.now) || 0) * 5) % 2 === 0;
+      const pitchDeg = Number(state.pitch_deg) || 0;
+      const radarAltFt = Number.isFinite(Number(state.radar_alt_ft))
+        ? Number(state.radar_alt_ft) : Number(state.alt_ft);
+      const sinkFpm = Number(state.vertical_speed_fpm);
+      const noseLow = pitchDeg < -2 || (Number.isFinite(sinkFpm) && sinkFpm < -1500);
+      const groundDanger = Number.isFinite(radarAltFt) && radarAltFt < 2000 && noseLow;
+      const centralPullUp = state.auto_gcas_active === true
+        || state.auto_gcas_warning === true
+        || (state.auto_gcas_available !== true
+          && radarAltFt < 500 && sinkFpm < -1000);
 
       // Where is the bandit in this view. In padlock the sensor is slaved to it, so it usually sits
       // near centre (offset toward the nose by the protected-offset geometry); a manual slew can
@@ -2226,7 +2271,7 @@ class CombatHud {
         && Number.isFinite(banditProj.x) && Number.isFinite(banditProj.y)
         && banditProj.x >= left && banditProj.x <= right
         && banditProj.y >= top && banditProj.y <= bottom;
-      // Unit screen direction from view-centre toward the bandit (for the roll cue and edge caret).
+      // Unit screen direction from view-centre toward the bandit (for the gate tether/edge caret).
       let banditDirX = 0;
       let banditDirY = 0;
       let banditDirValid = false;
@@ -2248,34 +2293,119 @@ class CombatHud {
         banditDirValid = true;
       }
 
-      // === HERO CUE: the lift-line roll cue ("roll to put your lift line on the bandit, then pull").
-      // A prominent lift line from view-centre along orientation.lift; a curved roll arrow sweeping
-      // from the lift line to the bandit; the whole line lights up with a bold PULL once the lift
-      // line is on the bandit. This is the biggest thing on the screen.
+      const statusDirective = (text, accent) => {
+        padlockCtx.save();
+        padlockCtx.font = "800 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        const directiveWidth = Math.min(right - left,
+          Math.max(94, padlockCtx.measureText(text).width + 24));
+        const directiveY = top + 2;
+        this.glassPanel(centreX - directiveWidth / 2, directiveY,
+          directiveWidth, 24, accent);
+        padlockCtx.fillStyle = accent;
+        padlockCtx.textAlign = "center";
+        padlockCtx.textBaseline = "middle";
+        padlockCtx.fillText(this.fitText(text, directiveWidth - 14),
+          centreX, directiveY + 12);
+        padlockCtx.restore();
+      };
+
+      const steeringAvailable = isBanditPadlock && this._padlockTrackEstablished
+        && !frame.manualLookActive && !groundDanger && !centralPullUp;
+      if (!steeringAvailable) this._padlockLiftCaptured = false;
+      if (isBanditPadlock && !this._padlockTrackEstablished && !frame.manualLookActive
+          && !groundDanger && !centralPullUp) {
+        statusDirective("ACQUIRING BANDIT", AMBER);
+      }
+
+      // === HERO CUE: a graphical roll-then-pull director. The green aircraft/lift index is the
+      // thing being controlled; the amber gate is where it needs to go. Animated chevrons travel
+      // along the shortest roll arc until capture, then flow out along lift toward the target.
       let liftOnBandit = false;
-      if (isBanditPadlock && orientation.liftValid) {
+      const targetVectorLength = this.relative.copy(frame.banditPosition)
+        .sub(frame.playerPosition).length();
+      if (targetVectorLength > 1e-6) this.relative.multiplyScalar(1 / targetVectorLength);
+      // In production, the fixed-tick controller publishes the exact geometry and capture latch it
+      // is using for the mild roll hold. Harnesses and older snapshots retain the independent JS
+      // calculation as a compatibility/falsification path, never as actuator authority.
+      // Detect the authoritative schema by field presence, not by its current selected value. On
+      // the first TRACK frame the bridge transition has not yet reached the next snapshot; falling
+      // back on a false value would flash the old zero-dwell JS capture before kernel truth arrives.
+      const kernelSteeringReported = Object.prototype.hasOwnProperty.call(
+        state, "padlock_roll_assist_selected");
+      const kernelRollErrorDeg = Number(state.padlock_roll_error_deg);
+      const steering = steeringAvailable && orientation.liftValid
+        ? kernelSteeringReported ? {
+          valid: state.padlock_roll_assist_selected === true
+            && state.padlock_roll_assist_geometry_valid === true
+            && Number.isFinite(kernelRollErrorDeg),
+          captured: state.padlock_roll_assist_captured === true,
+          anyPlane: state.padlock_roll_assist_any_plane === true,
+          rollErrorRad: Number.isFinite(kernelRollErrorDeg)
+            ? kernelRollErrorDeg * DEG : null,
+        } : padlockLiftPlaneModel({
+          targetRight: this.relative.dot(frame.playerRight),
+          targetUp: this.relative.dot(frame.playerUp),
+          targetForward: this.relative.dot(frame.playerForward),
+          wasCaptured: this._padlockLiftCaptured,
+        }) : null;
+      this._padlockLiftCaptured = steering?.valid ? steering.captured : false;
+      if (steering?.valid) {
+        if (this._debug) {
+          this._debug.padlockDirector = {
+            rollErrorRad: steering.rollErrorRad,
+            captured: steering.captured,
+            anyPlane: steering.anyPlane,
+            assistActive: state.padlock_roll_assist_active === true,
+          };
+        }
         const liftAngle = Math.atan2(orientation.lift.y, orientation.lift.x);
         const liftLen = clamp(Math.min(right - centreX, centreX - left, bottom - centreY) * 0.9,
           46, 92);
-        // Alignment: angle between the lift line and the centre->bandit direction.
-        let alignDelta = null;
-        if (banditDirValid) {
-          const banditAngle = Math.atan2(banditDirY, banditDirX);
-          alignDelta = Math.atan2(Math.sin(banditAngle - liftAngle), Math.cos(banditAngle - liftAngle));
-          liftOnBandit = Math.abs(alignDelta) < 14 * DEG;
-        }
+        const alignDelta = steering.rollErrorRad;
+        liftOnBandit = steering.captured;
+        const now = Number(frame.now) || 0;
+        const arcR = Math.max(30, liftLen * 0.56);
+        const indexLen = liftOnBandit ? liftLen : Math.max(30, arcR - 8);
 
-        const litColor = liftOnBandit ? "#7dffb0" : GREEN;
+        const drawVectorChevron = (positionAngle, headingAngle,
+          radius, size, color, alpha = 1) => {
+          const chevronX = centreX + Math.cos(positionAngle) * radius;
+          const chevronY = centreY + Math.sin(positionAngle) * radius;
+          padlockCtx.save();
+          padlockCtx.translate(chevronX, chevronY);
+          padlockCtx.rotate(headingAngle);
+          padlockCtx.globalAlpha = alpha;
+          padlockCtx.fillStyle = color;
+          padlockCtx.beginPath();
+          padlockCtx.moveTo(size, 0);
+          padlockCtx.lineTo(-size * 0.58, -size * 0.72);
+          padlockCtx.lineTo(-size * 0.12, 0);
+          padlockCtx.lineTo(-size * 0.58, size * 0.72);
+          padlockCtx.closePath();
+          padlockCtx.fill();
+          padlockCtx.restore();
+        };
+
+        const litColor = liftOnBandit ? "#7dffb0" : GREEN_DIM;
         padlockCtx.save();
         padlockCtx.strokeStyle = litColor;
         padlockCtx.fillStyle = litColor;
-        padlockCtx.lineWidth = liftOnBandit ? 3.4 : 2.4;
+        padlockCtx.lineWidth = liftOnBandit ? 3.4 : 1.8;
         padlockCtx.lineCap = "round";
-        padlockCtx.shadowColor = liftOnBandit ? "rgba(77, 255, 136, 0.85)" : "rgba(77, 255, 136, 0.4)";
-        padlockCtx.shadowBlur = liftOnBandit ? 12 : 5;
-        const tipX = centreX + orientation.lift.x * liftLen;
-        const tipY = centreY + orientation.lift.y * liftLen;
+        padlockCtx.shadowColor = liftOnBandit
+          ? "rgba(77, 255, 136, 0.85)" : "rgba(77, 255, 136, 0.28)";
+        padlockCtx.shadowBlur = liftOnBandit ? 12 : 3;
+        const tipX = centreX + orientation.lift.x * indexLen;
+        const tipY = centreY + orientation.lift.y * indexLen;
+        // A miniature aircraft/body index makes the controlled roll axis explicit: the crossbar
+        // rotates with the jet and the long stem points along positive lift.
+        const bodyRightX = -orientation.lift.y;
+        const bodyRightY = orientation.lift.x;
         padlockCtx.beginPath();
+        padlockCtx.moveTo(centreX - bodyRightX * 12, centreY - bodyRightY * 12);
+        padlockCtx.lineTo(centreX + bodyRightX * 12, centreY + bodyRightY * 12);
+        padlockCtx.moveTo(centreX - orientation.lift.x * 9, centreY - orientation.lift.y * 9);
+        padlockCtx.lineTo(centreX + orientation.lift.x * 6, centreY + orientation.lift.y * 6);
         padlockCtx.moveTo(centreX + orientation.lift.x * 12, centreY + orientation.lift.y * 12);
         padlockCtx.lineTo(tipX, tipY);
         padlockCtx.stroke();
@@ -2284,79 +2414,126 @@ class CombatHud {
         padlockCtx.translate(tipX, tipY);
         padlockCtx.rotate(liftAngle);
         padlockCtx.beginPath();
-        padlockCtx.moveTo(10, 0);
-        padlockCtx.lineTo(-5, -6);
-        padlockCtx.lineTo(-5, 6);
+        padlockCtx.moveTo(liftOnBandit ? 10 : 7, 0);
+        padlockCtx.lineTo(liftOnBandit ? -5 : -4, liftOnBandit ? -6 : -4);
+        padlockCtx.lineTo(liftOnBandit ? -5 : -4, liftOnBandit ? 6 : 4);
         padlockCtx.closePath();
         padlockCtx.fill();
         padlockCtx.restore();
         padlockCtx.shadowBlur = 0;
 
-        // Curved roll arrow: sweeps along an arc from the lift line toward the bandit, so the pilot
-        // reads directly which way to roll to bring the two together. Lights to PULL when aligned.
-        if (banditDirValid && alignDelta !== null && !liftOnBandit) {
-          const arcR = Math.max(24, liftLen * 0.52);
+        // Roll phase: repeated amber chevrons move from the aircraft index toward the physical
+        // lift-plane gate. A dashed tether associates that symbolic gate with the one target box.
+        if (!liftOnBandit) {
           const endAngle = liftAngle + alignDelta;
+          const absDelta = Math.abs(alignDelta);
           padlockCtx.strokeStyle = AMBER;
           padlockCtx.fillStyle = AMBER;
-          padlockCtx.lineWidth = 2.4;
+          padlockCtx.lineWidth = 2.8;
+          padlockCtx.shadowColor = "rgba(255, 176, 32, 0.65)";
+          padlockCtx.shadowBlur = 7;
           padlockCtx.beginPath();
           padlockCtx.arc(centreX, centreY, arcR, liftAngle, endAngle, alignDelta < 0);
           padlockCtx.stroke();
-          // Arrowhead at the bandit end of the arc, tangent to the sweep direction.
-          const tangent = endAngle + (alignDelta < 0 ? -Math.PI / 2 : Math.PI / 2);
+
+          const rollChevronCount = absDelta > 70 * DEG ? 4 : absDelta > 38 * DEG ? 3 : 2;
+          const rollPhase = (now * 0.55) % 1;
+          for (let index = 0; index < rollChevronCount; index += 1) {
+            const fraction = 0.16
+              + (((index / rollChevronCount) + rollPhase) % 1) * 0.72;
+            const chevronAngle = liftAngle + alignDelta * fraction;
+            const tangent = chevronAngle + (alignDelta < 0 ? -Math.PI / 2 : Math.PI / 2);
+            drawVectorChevron(chevronAngle, tangent,
+              arcR, 6.2, AMBER, 0.68 + fraction * 0.32);
+          }
+
+          // This is a lift-plane capture gate, not a second target position. A dashed tether to the
+          // ordinary target brackets makes that relationship explicit even in a deep aft view,
+          // where camera offset and physical roll demand deliberately do not share a screen angle.
           const headX = centreX + Math.cos(endAngle) * arcR;
           const headY = centreY + Math.sin(endAngle) * arcR;
           padlockCtx.save();
           padlockCtx.translate(headX, headY);
-          padlockCtx.rotate(tangent);
+          padlockCtx.rotate(endAngle);
+          padlockCtx.lineWidth = 2.2;
           padlockCtx.beginPath();
-          padlockCtx.moveTo(7, 0);
-          padlockCtx.lineTo(-4, -5);
-          padlockCtx.lineTo(-4, 5);
-          padlockCtx.closePath();
-          padlockCtx.fill();
+          padlockCtx.moveTo(-5, -10);
+          padlockCtx.lineTo(4, -10);
+          padlockCtx.lineTo(4, -5);
+          padlockCtx.moveTo(4, 5);
+          padlockCtx.lineTo(4, 10);
+          padlockCtx.lineTo(-5, 10);
+          padlockCtx.stroke();
           padlockCtx.restore();
-          padlockCtx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-          padlockCtx.textAlign = "center";
-          padlockCtx.fillText("ROLL", centreX, top + 12);
-        }
-        // Bold PULL on the lift line once it is on the bandit.
-        if (liftOnBandit) {
-          padlockCtx.fillStyle = litColor;
-          padlockCtx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-          padlockCtx.textAlign = "center";
-          padlockCtx.textBaseline = "middle";
-          padlockCtx.shadowColor = "rgba(77, 255, 136, 0.8)";
-          padlockCtx.shadowBlur = 8;
-          padlockCtx.fillText("PULL",
-            centreX + orientation.lift.x * (liftLen + 18),
-            centreY + orientation.lift.y * (liftLen + 18));
-          padlockCtx.shadowBlur = 0;
+
+          const tetherX = banditProj.x - headX;
+          const tetherY = banditProj.y - headY;
+          const tetherLength = Math.hypot(tetherX, tetherY);
+          if (banditOnScreen && tetherLength > 52) {
+            const tetherUnitX = tetherX / tetherLength;
+            const tetherUnitY = tetherY / tetherLength;
+            padlockCtx.shadowBlur = 0;
+            padlockCtx.globalAlpha = 0.55;
+            padlockCtx.lineWidth = 1.3;
+            padlockCtx.setLineDash([3, 5]);
+            padlockCtx.beginPath();
+            padlockCtx.moveTo(headX + tetherUnitX * 12, headY + tetherUnitY * 12);
+            padlockCtx.lineTo(banditProj.x - tetherUnitX * 38,
+              banditProj.y - tetherUnitY * 38);
+            padlockCtx.stroke();
+            padlockCtx.setLineDash([]);
+            padlockCtx.globalAlpha = 1;
+          }
+        } else {
+          // Capture phase: the roll arc disappears and bright chevrons stream out along positive
+          // lift. Four restrained outer ticks reinforce the existing target brackets without
+          // introducing a second circular reticle over the contact.
+          const pullPhase = (now * 0.7) % 1;
+          for (let index = 0; index < 3; index += 1) {
+            const fraction = ((index / 3) + pullPhase) % 1;
+            const radius = 20 + fraction * (liftLen - 28);
+            drawVectorChevron(liftAngle, liftAngle,
+              radius, 7.2, litColor, 0.58 + fraction * 0.42);
+          }
+          padlockCtx.strokeStyle = litColor;
+          padlockCtx.lineWidth = 1.8;
+          padlockCtx.globalAlpha = 0.72;
+          padlockCtx.beginPath();
+          padlockCtx.arc(centreX, centreY, 17 + Math.sin(now * 4) * 1.5,
+            0, Math.PI * 2);
+          padlockCtx.stroke();
+          if (banditOnScreen) {
+            // Cardinal capture ticks let the amber box remain the sole target-position glyph.
+            padlockCtx.globalAlpha = 0.58 + Math.sin(now * 4) * 0.14;
+            padlockCtx.lineWidth = 2.0;
+            const captureRadius = 34 + Math.sin(now * 4) * 1.5;
+            const captureTickLength = 7;
+            padlockCtx.beginPath();
+            for (let index = 0; index < 4; index += 1) {
+              const angle = index * Math.PI / 2;
+              const cos = Math.cos(angle);
+              const sin = Math.sin(angle);
+              padlockCtx.moveTo(
+                banditProj.x + cos * captureRadius,
+                banditProj.y + sin * captureRadius,
+              );
+              padlockCtx.lineTo(
+                banditProj.x + cos * (captureRadius + captureTickLength),
+                banditProj.y + sin * (captureRadius + captureTickLength),
+              );
+            }
+            padlockCtx.stroke();
+          }
+          padlockCtx.globalAlpha = 1;
         }
         padlockCtx.restore();
       }
 
-      // === BANDIT LOCATOR: always mark the bandit. On-screen -> diamond; off-screen/behind -> an
-      // edge caret pointing at it with a rough (screen-referenced) clock position.
+      // === BANDIT LOCATOR: drawBandit owns the single on-screen target box. This layer only adds
+      // an edge caret when a manual slew puts that target off-screen or behind the current view.
       if (isBanditPadlock) {
         padlockCtx.save();
-        if (banditOnScreen) {
-          const r = liftOnBandit ? 8 : 6.5;
-          padlockCtx.strokeStyle = liftOnBandit ? "#7dffb0" : AMBER;
-          padlockCtx.fillStyle = liftOnBandit ? "#7dffb0" : AMBER;
-          padlockCtx.lineWidth = 1.8;
-          padlockCtx.beginPath();
-          padlockCtx.moveTo(banditProj.x, banditProj.y - r);
-          padlockCtx.lineTo(banditProj.x + r, banditProj.y);
-          padlockCtx.lineTo(banditProj.x, banditProj.y + r);
-          padlockCtx.lineTo(banditProj.x - r, banditProj.y);
-          padlockCtx.closePath();
-          padlockCtx.stroke();
-          padlockCtx.beginPath();
-          padlockCtx.arc(banditProj.x, banditProj.y, 1.6, 0, Math.PI * 2);
-          padlockCtx.fill();
-        } else if (banditDirValid) {
+        if (!banditOnScreen && banditDirValid) {
           const scale = Math.min(
             (banditDirX >= 0 ? right - centreX : centreX - left) / Math.max(Math.abs(banditDirX), 0.001),
             (banditDirY >= 0 ? bottom - centreY : centreY - top) / Math.max(Math.abs(banditDirY), 0.001),
@@ -2429,17 +2606,17 @@ class CombatHud {
       padlockCtx.translate(noseX, noseY);
       if (!anchorVisible) {
         padlockCtx.rotate(Math.atan2(noseDirectionY, noseDirectionX));
-        this.setLine("rgba(255, 176, 32, 0.75)", 1.5);
+        this.setLine("rgba(255, 176, 32, 0.86)", 2.0);
         padlockCtx.beginPath();
-        padlockCtx.moveTo(10, 0);
-        padlockCtx.lineTo(-5, -6);
+        padlockCtx.moveTo(12, 0);
+        padlockCtx.lineTo(-6, -7);
         padlockCtx.lineTo(-2, 0);
-        padlockCtx.lineTo(-5, 6);
+        padlockCtx.lineTo(-6, 7);
         padlockCtx.stroke();
         padlockCtx.rotate(-Math.atan2(noseDirectionY, noseDirectionX));
       }
       padlockCtx.fillStyle = "rgba(255, 176, 32, 0.85)";
-      padlockCtx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      padlockCtx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       padlockCtx.textAlign = "center";
       padlockCtx.textBaseline = "alphabetic";
       padlockCtx.fillText("NOSE", 0, anchorVisible ? 16 : -11);
@@ -2448,7 +2625,6 @@ class CombatHud {
       // === ATTITUDE / GROUND: a readable horizon (bank AND pitch) plus a ground-proximity warning
       // that flashes when the jet is nose-low and low. Do NOT fly into the ground = obvious.
       if (orientation.horizonValid) {
-        const pitchDeg = Number(state.pitch_deg) || 0;
         const horizonX = centreX;
         // Pitch drives the horizon up/down along world-up: nose-up pushes the horizon down.
         const pitchOffset = clamp(pitchDeg * 1.4, -34, 34);
@@ -2458,13 +2634,6 @@ class CombatHud {
         const hx = orientation.horizon.x;
         const hy = orientation.horizon.y;
         const halfSpan = 34;
-
-        // Ground-danger: nose-low and low. The true, unclamped sink rate / radar altitude decide.
-        const radarAltFt = Number.isFinite(Number(state.radar_alt_ft))
-          ? Number(state.radar_alt_ft) : Number(state.alt_ft);
-        const sinkFpm = Number(state.vertical_speed_fpm);
-        const noseLow = pitchDeg < -2 || (Number.isFinite(sinkFpm) && sinkFpm < -1500);
-        const groundDanger = Number.isFinite(radarAltFt) && radarAltFt < 2000 && noseLow;
 
         padlockCtx.save();
         const horizonColor = groundDanger ? RED : GREEN_DIM;
@@ -2504,7 +2673,7 @@ class CombatHud {
         padlockCtx.textBaseline = "middle";
         padlockCtx.fillText(`${pitchDeg >= 0 ? "+" : ""}${Math.round(pitchDeg)}°`,
           horizonX + halfSpan + 6, horizonY);
-        if (groundDanger && blink) {
+        if (groundDanger && blink && !centralPullUp) {
           padlockCtx.fillStyle = RED;
           padlockCtx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
           padlockCtx.textAlign = "center";

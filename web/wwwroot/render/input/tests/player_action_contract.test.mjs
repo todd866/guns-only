@@ -93,8 +93,9 @@ const BRIDGE_ACTIONS = Object.freeze([
   { id: "power-up", bindingAction: "powerUp", code: "KeyW", gkey: "ThrottleUp", behavior: "hold", help: "THROTTLE", consumer: /GKey\.ThrottleUp/, observable: /requested_throttle/ },
   { id: "power-down", bindingAction: "powerDown", code: "KeyS", gkey: "ThrottleDown", behavior: "hold", help: "THROTTLE", consumer: /GKey\.ThrottleDown/, observable: /requested_throttle/ },
   { id: "guns", bindingAction: "fire", code: "KeyF", gkey: "Trigger", behavior: "hold", help: "GUNS", consumer: /GKey\.Trigger/, observable: /gun_firing/ },
-  // Padlock is a presentation action as well as a bridge key. Its observable evidence therefore
-  // lives in app.js/HUD state, not in aircraft dynamics.
+  // Padlock selection and camera motion remain presentation actions. Once bandit tracking is
+  // established, app.js sends a separate semantic transition to the fixed-tick roll augmentation;
+  // it never turns camera pixels or RAF timing into aircraft input.
   { id: "padlock", bindingAction: "padlock", code: "KeyV", gkey: "Padlock", behavior: "momentary", help: "TARGET / BOAT PADLOCK", uiConsumer: /contextualPadlockTarget\(latestState\)/, uiObservable: /hudFrame\.padlockTarget = padlockTarget/ },
   { id: "restart", code: "KeyR", gkey: "Restart", behavior: "momentary", help: "R RESTART", consumer: /key == GKey\.Restart/, uiConsumer: /restartMission\(\)/ },
   { id: "limit-override", bindingAction: "limitOverride", code: "Space", gkey: "Override", behavior: "hold", help: "LIMIT OVERRIDE", consumer: /GKey\.Override/, observable: /requested_g_cmd/ },
@@ -117,6 +118,21 @@ test("player action contract preserves the C# GKey ABI and classifies every live
   const declared = new Set(BRIDGE_ACTIONS.map((action) => action.code));
   const unclassified = [...mappedCodes.keys()].filter((code) => !declared.has(code));
   assert.deepEqual(unclassified, []);
+});
+
+test("bandit padlock roll hold stays a fixed-tick, safety-preemptible augmentation", () => {
+  assert.match(webBridgeSource,
+    /SetBanditPadlockRollAssist\(bool selected\)[\s\S]*?Session\.SetBanditPadlockRollAssist\(selected\)/,
+    "the browser may send only the discrete selected/tracked state");
+  assert.match(sessionSource,
+    /ApplyGunneryPitchAssist\(_detents\.Command\)[\s\S]*?ApplyPilotPhysiology\(assistedCommand\)[\s\S]*?ApplyBanditPadlockRollAssist\([\s\S]*?ApplyAutoGcas\(padlockAssistedCommand\)/,
+    "padlock SAS must follow the effective human path and remain below Auto-GCAS priority");
+  assert.match(sessionSource,
+    /_banditPadlockRollAssistTargetSequence == _banditSpawnSequence/,
+    "a replacement opponent must not inherit the old capture latch");
+  assert.match(projectionSource,
+    /padlock_roll_assist_active[\s\S]*?padlock_roll_error_deg[\s\S]*?padlock_roll_assist_aileron/,
+    "the applied augmentation needs distinct observable telemetry");
 });
 
 test("every advertised bridge action has help copy, a runtime consumer, and observable truth", () => {

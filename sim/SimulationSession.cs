@@ -125,6 +125,9 @@ public sealed class SimulationSession {
     double _autoGcasPredictionElapsedSeconds;
     GunneryPitchAssistState _gunneryPitchAssistState =
         GunneryPitchAssistState.Inactive();
+    readonly PadlockRollAssist _padlockRollAssist = new();
+    bool _banditPadlockRollAssistSelected;
+    long _banditPadlockRollAssistTargetSequence;
     PilotCommand _pilotDelayedCommand;
     bool _pilotCommandResponseInitialized;
     bool _pilotControlInterlocked;
@@ -236,6 +239,8 @@ public sealed class SimulationSession {
     public int AutoGcasPredictionEvaluationCount => _autoGcasPredictionEvaluationCount;
     public GunneryPitchAssistState GunneryPitchAssist =>
         _gunneryPitchAssistState;
+    public PadlockRollAssistState BanditPadlockRollAssist =>
+        _padlockRollAssist.State;
     public bool AutoGcasOverrideHeld => PlayerAutoGcasCapability.Available
         && _pilotPhysiology.State.ControlAuthority01 >= 0.55
         && _keys.PhaseAt(GKey.AutoGcasOverride, _simTimeMs) != KeyPhase.Idle;
@@ -546,6 +551,26 @@ public sealed class SimulationSession {
         _detents.SetAnalogRollControl(value);
     }
 
+    /// <summary>
+    /// Select the current local opponent for the low-authority padlock lift-plane hold. The browser
+    /// supplies only this discrete semantic transition; geometry and actuator demand remain owned
+    /// by the deterministic 120 Hz simulation. Capturing the spawn sequence prevents a replacement
+    /// opponent from inheriting the previous contact's assist latch.
+    /// </summary>
+    public void SetBanditPadlockRollAssist(bool selected) {
+        if (!selected) {
+            _banditPadlockRollAssistSelected = false;
+            _banditPadlockRollAssistTargetSequence = 0;
+            _padlockRollAssist.Reset();
+            return;
+        }
+        if (!_banditPadlockRollAssistSelected) {
+            _banditPadlockRollAssistTargetSequence = _banditSpawnSequence;
+            _padlockRollAssist.Reset();
+        }
+        _banditPadlockRollAssistSelected = true;
+    }
+
     static bool IsPlayerSystemsAction(GKey key) => key is
         GKey.GearToggle or GKey.FlapUp or GKey.FlapDown
         or GKey.EmergencyGearRelease or GKey.GearHornCutout
@@ -696,6 +721,9 @@ public sealed class SimulationSession {
         _autoGcasPredictionEvaluationCount = 0;
         _autoGcasPredictionElapsedSeconds = 0.0;
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
+        _banditPadlockRollAssistSelected = false;
+        _banditPadlockRollAssistTargetSequence = 0;
+        _padlockRollAssist.Reset();
         _pilotDelayedCommand = _detents.Command;
         _pilotCommandResponseInitialized = true;
         _pilotControlInterlocked = false;
@@ -867,6 +895,7 @@ public sealed class SimulationSession {
         _keys = new KeyGrammar();
         _detents.ClearAnalogRollControl();
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
+        _padlockRollAssist.Reset();
         if (_systems is not null) {
             _systems.SetFlapLever(WingFlapLever.Hold);
             if (_maintenanceScenario is { Started: true, Finished: false })
@@ -995,6 +1024,7 @@ public sealed class SimulationSession {
 
     void BeginCatastrophicDamage(CombatRole target, CombatRole source) {
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
+        _padlockRollAssist.Reset();
         if (target == CombatRole.Player) {
             if (_playerTerminalState != AircraftTerminalState.Flying) return;
             BeginTerminalClock();
@@ -1074,6 +1104,7 @@ public sealed class SimulationSession {
         _opponentTerminalState = AircraftTerminalState.Flying;
         _opponentImpactSurface = ImpactSurface.None;
         _banditSpawnSequence++;
+        _padlockRollAssist.Reset();
         _lastRange = Geometry.Range(_player.State, _bandit.State);
         _closureKts = _closureSmooth = 0.0;
         ShowTransition(evaluation.Cue, 2200.0);
@@ -1381,6 +1412,7 @@ public sealed class SimulationSession {
         _splashCueUntilMs = double.NegativeInfinity;
         _engagementNumber = nextEngagement;
         _banditSpawnSequence++;
+        _padlockRollAssist.Reset();
         _lastRange = Geometry.Range(_player.State, _bandit.State);
         _closureKts = _closureSmooth = 0.0;
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
@@ -1683,9 +1715,12 @@ public sealed class SimulationSession {
         bool immediatePaddle = _autoGcasState.Active && AutoGcasOverrideHeld;
         if (_autoGcasPredictionTicksRemaining > 0 && !immediatePaddle) {
             _autoGcasPredictionTicksRemaining--;
-            if (_autoGcasState.Active)
+            if (_autoGcasState.Active) {
                 _gunneryPitchAssistState = GunneryPitchAssistState.Inactive(
                     effectivePilotCommand.GDemand);
+            }
+            if (_autoGcasState.Warning || _autoGcasState.Active)
+                _padlockRollAssist.Reset();
             return _autoGcasRecoveryCommand is { } heldRecovery
                 ? heldRecovery with { Throttle = effectivePilotCommand.Throttle }
                 : effectivePilotCommand;
@@ -1724,6 +1759,8 @@ public sealed class SimulationSession {
         if (_autoGcasState.Active)
             _gunneryPitchAssistState = GunneryPitchAssistState.Inactive(
                 effectivePilotCommand.GDemand);
+        if (_autoGcasState.Warning || _autoGcasState.Active)
+            _padlockRollAssist.Reset();
         return _autoGcasRecoveryCommand is { } recovery
             ? recovery with { Throttle = effectivePilotCommand.Throttle }
             : effectivePilotCommand;
@@ -1744,6 +1781,8 @@ public sealed class SimulationSession {
             && !_detents.ApproachMode
             && !_detents.HighAlphaRecoveryActive
             && !_pilotControlInterlocked;
+        bool padlockOwnsRollPlane = _banditPadlockRollAssistSelected
+            && _banditPadlockRollAssistTargetSequence == _banditSpawnSequence;
         GunneryPitchAssistResult result = GunsOnly.Sim.GunneryPitchAssist.Apply(
             requestedPilotCommand,
             _player.State,
@@ -1753,8 +1792,42 @@ public sealed class SimulationSession {
             _gunKill.LeadDirection,
             _gunKill.HasLeadSolution,
             Geometry.Range(_player.State, _bandit.State),
-            enabled);
+            enabled,
+            lateralRollEnabled: !padlockOwnsRollPlane);
         _gunneryPitchAssistState = result.State;
+        return result.Command;
+    }
+
+    /// <summary>
+    /// Add the aircraft-owned padlock plane trim after the effective human-control path. Raw pilot
+    /// roll remains the immediate override signal; the small correction occupies only the explicit
+    /// SAS channel, and Auto-GCAS still runs afterward with unconditional safety priority.
+    /// </summary>
+    PilotCommand ApplyBanditPadlockRollAssist(
+        in PilotCommand effectiveCommand,
+        double rawPilotRollControl) {
+        bool targetCurrent = _banditPadlockRollAssistSelected
+            && _banditPadlockRollAssistTargetSequence == _banditSpawnSequence;
+        bool eligible = targetCurrent
+            && _playerTerminalState == AircraftTerminalState.Flying
+            && _opponentTerminalState == AircraftTerminalState.Flying
+            && _gunKill.TargetAlive
+            && !_detents.ApproachMode
+            && !_detents.HighAlphaRecoveryActive
+            && !_pilotControlInterlocked
+            && !effectiveCommand.EnvelopeOverride
+            && !double.IsFinite(effectiveCommand.CommandedAlphaRad)
+            && !_autoGcasState.Warning
+            && !_autoGcasState.Active;
+        PadlockRollAssistResult result = _padlockRollAssist.Step(
+            effectiveCommand,
+            _player.State,
+            _bandit.State.Position,
+            _banditPadlockRollAssistTargetSequence,
+            selected: _banditPadlockRollAssistSelected,
+            eligible,
+            rawPilotRollControl,
+            FixedDeltaSeconds);
         return result.Command;
     }
 
@@ -2177,7 +2250,9 @@ public sealed class SimulationSession {
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             PilotCommand assistedCommand = ApplyGunneryPitchAssist(_detents.Command);
             PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
-            PilotCommand flightCommand = ApplyAutoGcas(effectiveCommand);
+            PilotCommand padlockAssistedCommand = ApplyBanditPadlockRollAssist(
+                effectiveCommand, _detents.Command.RollControl);
+            PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
             PreparePlayerForPoweredTick();
             _player.Step(flightCommand, FixedDeltaSeconds);
             ConsumeFuelAndStepSystems(_player.State, _player.AirspeedMps,
@@ -2407,7 +2482,9 @@ public sealed class SimulationSession {
         AircraftState previousOpponentState = _bandit.State;
         PilotCommand assistedCommand = ApplyGunneryPitchAssist(_detents.Command);
         PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
-        PilotCommand flightCommand = ApplyAutoGcas(effectiveCommand);
+        PilotCommand padlockAssistedCommand = ApplyBanditPadlockRollAssist(
+            effectiveCommand, _detents.Command.RollControl);
+        PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
         StepWeapons(previousPlayerState, previousOpponentState, _triggerDown);
         PreparePlayerForPoweredTick();
         _player.Step(flightCommand, FixedDeltaSeconds);

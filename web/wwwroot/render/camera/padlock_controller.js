@@ -90,8 +90,20 @@ export function advancePadlockGimbal({
   returning = false,
   limits = PADLOCK_LIMITS,
 } = {}) {
-  const target = targetLookAngles(localTarget, yawRad);
-  const desired = desiredPadlockAngles(target, { aspect, verticalFovRad, limits });
+  let target = targetLookAngles(localTarget, yawRad);
+  let desired = desiredPadlockAngles(target, { aspect, verticalFovRad, limits });
+  let shoulderHandoff = false;
+  // Preserve the chosen shoulder through the immediate +179/-179 crossing. If the target keeps
+  // travelling around the far side, however, the unwrapped bearing eventually strands the gimbal
+  // against +/-165 while the contact walks out of the protected view. Once clamping grows the
+  // residual beyond the intended protected offset, deliberately reacquire via the other shoulder.
+  const clampResidual = Math.abs(target.yawRad - desired.yawRad);
+  if (Math.abs(target.yawRad) > Math.PI
+      && clampResidual > desired.protectedYawOffsetRad + 0.5 * DEG) {
+    target = targetLookAngles(localTarget, 0);
+    desired = desiredPadlockAngles(target, { aspect, verticalFovRad, limits });
+    shoulderHandoff = true;
+  }
   const yawRate = returning
     ? limits.returnYawRateRadPerSecond
     : limits.trackingYawRateRadPerSecond;
@@ -107,6 +119,7 @@ export function advancePadlockGimbal({
     targetPitchRad: target.pitchRad,
     desiredYawRad: desired.yawRad,
     desiredPitchRad: desired.pitchRad,
+    shoulderHandoff,
     trackingErrorRad: Math.max(
       Math.abs(desired.yawRad - nextYaw),
       Math.abs(desired.pitchRad - nextPitch),
@@ -178,5 +191,73 @@ export function padlockOrientationModel({
     horizon,
     horizonValid: worldUpMagnitude >= 0.035,
     noseBehind: finite(noseCamera?.z) > 0,
+  };
+}
+
+/**
+ * Resolve the physical roll needed to put positive body lift in the target plane. targetRight and
+ * targetUp are components of the normalized target direction in the aircraft body frame. Unlike a
+ * screen-space target offset, this error is independent of where the padlock camera points: a
+ * positive/right bank reduces a positive error one-for-one, including in aft and inverted views.
+ *
+ * Capture uses separate enter/exit thresholds so the director cannot chatter between roll and
+ * pull while the pilot hunts the lift plane.
+ */
+export function padlockLiftPlaneModel({
+  targetRight,
+  targetUp,
+  targetForward = 0,
+  wasCaptured = false,
+  captureToleranceRad = 11 * DEG,
+  releaseToleranceRad = 18 * DEG,
+} = {}) {
+  const right = finite(targetRight);
+  const up = finite(targetUp);
+  const forward = finite(targetForward);
+  const planeMagnitude = Math.hypot(right, up);
+  if (planeMagnitude < 0.035) {
+    // At exact/near six o'clock the target has no unique roll plane: every current lift plane
+    // reduces the 180-degree nose error. Show a neutral current-plane pull instead of inventing a
+    // left/right roll. Near the nose, no steering director is needed.
+    if (forward < 0) {
+      return {
+        valid: true,
+        captured: true,
+        anyPlane: true,
+        action: "PULL",
+        direction: null,
+        rollErrorRad: 0,
+      };
+    }
+    return {
+      valid: false,
+      captured: false,
+      anyPlane: false,
+      action: "WAIT",
+      direction: null,
+      rollErrorRad: null,
+    };
+  }
+
+  const rollErrorRad = Math.atan2(right / planeMagnitude, up / planeMagnitude);
+  const captureTolerance = clamp(
+    Math.abs(finite(captureToleranceRad, 11 * DEG)),
+    1 * DEG,
+    45 * DEG,
+  );
+  const releaseTolerance = clamp(
+    Math.abs(finite(releaseToleranceRad, 18 * DEG)),
+    captureTolerance,
+    60 * DEG,
+  );
+  const captured = Math.abs(rollErrorRad)
+    <= (wasCaptured ? releaseTolerance : captureTolerance);
+  return {
+    valid: true,
+    captured,
+    anyPlane: false,
+    action: captured ? "PULL" : "ROLL",
+    direction: captured ? null : rollErrorRad > 0 ? "RIGHT" : "LEFT",
+    rollErrorRad,
   };
 }

@@ -844,6 +844,8 @@ let padlock = false;
 let padlockTarget = "bandit";
 let padlockEntityId = "";
 let padlockPhase = "OFF";
+let padlockTrackEstablished = false;
+let appliedBanditPadlockRollAssist = null;
 let dragging = false;
 let activePointer = null;
 let lastPointerX = 0;
@@ -1455,6 +1457,18 @@ function manualLookActive() {
   return dragging || trackpadLookActive;
 }
 
+// Padlock selection remains a presentation decision, but the resulting low-authority hold is a
+// fixed-tick simulation control law. Cross the bridge only on semantic state transitions; camera
+// pixels and render cadence never become actuator input.
+function syncBanditPadlockRollAssist() {
+  const selected = padlock && padlockTarget === "bandit"
+    && padlockTrackEstablished && !manualLookActive();
+  if (!bridge || typeof bridge.SetBanditPadlockRollAssist !== "function"
+      || selected === appliedBanditPadlockRollAssist) return;
+  bridge.SetBanditPadlockRollAssist(selected);
+  appliedBanditPadlockRollAssist = selected;
+}
+
 function padlockLabel(target = padlockTarget) {
   return target === "carrier" ? "BOAT" : "BANDIT";
 }
@@ -1479,7 +1493,9 @@ function releasePadlock(reason = "manual", { announce = true, record = true } = 
   padlockTarget = "bandit";
   padlockEntityId = "";
   padlockPhase = "RETURN";
+  padlockTrackEstablished = false;
   gimbalReturnFast = true;
+  syncBanditPadlockRollAssist();
   const message = reason === "manual"
     ? "Padlock off · forward view"
     : reason === "combat task"
@@ -1504,6 +1520,9 @@ function resetMissionPresentation() {
   sensorYaw = 0;
   sensorPitch = 0;
   padlockPhase = "OFF";
+  padlockTrackEstablished = false;
+  appliedBanditPadlockRollAssist = null;
+  syncBanditPadlockRollAssist();
   gimbalReturnFast = false;
   activeView?.hud.setLegendVisible?.(false);
 }
@@ -1519,7 +1538,9 @@ function togglePadlock() {
     ? projectedId(latestState?.bandit_entity_id)
     : "carrier";
   padlockPhase = manualLookActive() ? "SLEW" : "ACQUIRE";
+  padlockTrackEstablished = false;
   gimbalReturnFast = false;
+  syncBanditPadlockRollAssist();
   syncPadlockUi(`${padlockLabel()} padlock on`);
   recorder.event("view", "Padlock", {
     selected: true,
@@ -3848,6 +3869,8 @@ class FlightView {
   updateGimbal(dt) {
     if (manualLookActive()) {
       padlockPhase = padlock ? "SLEW" : "FREE";
+      padlockTrackEstablished = false;
+      syncBanditPadlockRollAssist();
       return;
     }
 
@@ -3873,6 +3896,8 @@ class FlightView {
       padlockPhase = next.trackingErrorRad < 1.5 * DEG
         ? "TRACK"
         : gimbalReturnFast ? "RETURN" : "ACQUIRE";
+      if (padlockPhase === "TRACK") padlockTrackEstablished = true;
+      syncBanditPadlockRollAssist();
     } else {
       const next = advanceForwardGimbal({
         yawRad: sensorYaw,
@@ -3887,6 +3912,8 @@ class FlightView {
       } else {
         padlockPhase = "RETURN";
       }
+      padlockTrackEstablished = false;
+      syncBanditPadlockRollAssist();
     }
   }
 
@@ -5165,6 +5192,10 @@ function installInput(view) {
   sceneCanvas.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 && event.pointerType === "mouse") return;
     dragging = true;
+    // Stand the fixed-tick augmentation down before the next RAF advances simulation. Waiting for
+    // updateGimbal would permit one catch-up frame of assist after the pilot starts a manual look.
+    padlockTrackEstablished = false;
+    syncBanditPadlockRollAssist();
     activePointer = event.pointerId;
     lastPointerX = event.clientX;
     lastPointerY = event.clientY;
@@ -5211,6 +5242,8 @@ function installInput(view) {
       { yawRad: MAX_GIMBAL_YAW, pitchRad: MAX_GIMBAL_PITCH },
     ));
     trackpadLookActive = true;
+    padlockTrackEstablished = false;
+    syncBanditPadlockRollAssist();
     gimbalReturnFast = false;
     if (trackpadLookReleaseTimer) window.clearTimeout(trackpadLookReleaseTimer);
     trackpadLookReleaseTimer = window.setTimeout(() => {

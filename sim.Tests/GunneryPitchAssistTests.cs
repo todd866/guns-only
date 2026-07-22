@@ -166,6 +166,28 @@ public class GunneryPitchAssistTests {
     }
 
     [Fact]
+    public void PadlockMayOwnRollWithoutDisablingPitchOrRudderConvergence() {
+        AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
+        AircraftSim aircraft = ModernAircraft();
+        var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
+            RollControl: 0.13, DirectLateralControl: true);
+        double radians = 5.0 * DegreesToRadians;
+        Vec3D lateralLead = (aircraft.BodyForward * Math.Cos(radians)
+            + aircraft.BodyRight * Math.Sin(radians)).Normalized();
+
+        GunneryPitchAssistResult result = GunneryPitchAssist.Apply(
+            pilot, aircraft.State, parameters, aircraft.AirspeedMps,
+            aircraft.AtmosphereModel, lateralLead, hasBallisticLead: true,
+            rangeM: 600.0, enabled: true, lateralRollEnabled: false);
+
+        Assert.True(result.State.Active);
+        Assert.Equal(pilot.RollControl, result.Command.RollControl, 12);
+        Assert.True(result.Command.Rudder > pilot.Rudder,
+            "terminal yaw walk remains available while padlock owns the roll plane");
+        Assert.Equal(pilot.GDemand, result.Command.GDemand, 12);
+    }
+
+    [Fact]
     public void DisengagesOutsideShotGateAndDuringPitchOverride() {
         AircraftSim aircraft = ModernAircraft();
         var pilot = new PilotCommand(4.0, 0.20, 1.0, 0.0,

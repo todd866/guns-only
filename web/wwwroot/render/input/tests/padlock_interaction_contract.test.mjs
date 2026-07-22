@@ -84,6 +84,9 @@ test("two-finger slew is a temporary manual look and never cancels selected padl
   assert.match(wheelBody, /applyLookDelta\(/,
     "trackpad deltas must share the same bounded gimbal state as pointer look");
   assert.match(wheelBody, /trackpadLookActive = true/);
+  assert.match(wheelBody,
+    /trackpadLookActive = true[\s\S]*?padlockTrackEstablished = false[\s\S]*?syncBanditPadlockRollAssist\(\)/,
+    "trackpad look must stand down physical assist before the next simulation advance");
   assert.doesNotMatch(wheelBody, /releasePadlock\(|togglePadlock\(|padlock\s*=\s*false/,
     "manual head movement is an override of the camera, not an override of padlock selection");
 
@@ -156,6 +159,30 @@ test("padlock owns a specific contact and exposes an honest accessible lifecycle
     "mobile V must return before the generic 140 ms pulse reset");
   assert.match(appSource, /hudFrame\.padlockPhase = padlockPhase/);
   assert.match(appSource, /hudFrame\.manualLookActive = manualLookActive\(\)/);
+
+  const syncAssist = balancedBlock(appSource,
+    "function syncBanditPadlockRollAssist()");
+  assert.match(syncAssist,
+    /padlock && padlockTarget === "bandit"[\s\S]*?padlockTrackEstablished[\s\S]*?!manualLookActive\(\)/,
+    "only a tracked, unslewed bandit padlock may request the physical roll hold");
+  assert.match(syncAssist, /selected === appliedBanditPadlockRollAssist/,
+    "render cadence must collapse to discrete assist-selection transitions");
+  assert.match(syncAssist, /bridge\.SetBanditPadlockRollAssist\(selected\)/,
+    "the browser must send semantic selection, never a render-derived aileron value");
+  assert.doesNotMatch(syncAssist, /sensorYaw|sensorPitch|rollError|SetAnalogRollControl/);
+
+  const updateGimbal = balancedBlock(appSource, "updateGimbal(dt)");
+  assert.match(updateGimbal,
+    /padlockPhase === "TRACK"[\s\S]*?padlockTrackEstablished = true[\s\S]*?syncBanditPadlockRollAssist\(\)/,
+    "assist must wait for first camera acquisition but survive ordinary later servo lag");
+  assert.match(updateGimbal,
+    /manualLookActive\(\)[\s\S]*?padlockTrackEstablished = false[\s\S]*?syncBanditPadlockRollAssist\(\)/,
+    "manual look must stand the assist down and require reacquisition");
+  const pointerDown = balancedBlock(appSource,
+    'sceneCanvas.addEventListener("pointerdown"');
+  assert.match(pointerDown,
+    /dragging = true[\s\S]*?padlockTrackEstablished = false[\s\S]*?syncBanditPadlockRollAssist\(\)/,
+    "pointer look must stand down physical assist before the next simulation advance");
 });
 
 test("padlock retains stabilized primary flight data instead of swapping to a duplicate card", () => {
@@ -184,6 +211,7 @@ test("padlock retains stabilized primary flight data instead of swapping to a du
 
 test("padlock-only orientation and target cues solve roll-then-pull without permanent clutter", () => {
   assert.match(hudSource, /padlockOrientationModel/);
+  assert.match(hudSource, /padlockLiftPlaneModel/);
   assert.match(hudSource, /latchedRectVisibility/,
     "the target box/edge locator boundary needs hysteresis instead of a one-frame hard switch");
   assert.match(hudSource, /this\._gunSolutionCue = new DisplayCueQualifier/,
@@ -193,6 +221,36 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
 
   const padlockSa = balancedBlock(hudSource, "drawPadlockSa(");
   assert.match(padlockSa, /padlockOrientationModel\(/);
+  assert.match(padlockSa,
+    /targetRight: this\.relative\.dot\(frame\.playerRight\)[\s\S]*?targetUp: this\.relative\.dot\(frame\.playerUp\)/,
+    "roll guidance must come from aircraft body geometry rather than camera-offset pixels");
+  assert.match(padlockSa, /wasCaptured: this\._padlockLiftCaptured/,
+    "roll-to-pull capture needs hysteresis in the live presentation loop");
+  assert.match(padlockSa,
+    /padlock_roll_assist_selected[\s\S]*?padlock_roll_error_deg[\s\S]*?padlock_roll_assist_captured/,
+    "production symbology and physical hold must consume the same fixed-tick roll-plane truth");
+  assert.match(padlockSa,
+    /hasOwnProperty\.call\([\s\S]*?padlock_roll_assist_selected[\s\S]*?valid: state\.padlock_roll_assist_selected === true/,
+    "a present-but-false kernel selection must not fall back to the zero-dwell JS capture model");
+  assert.match(padlockSa, /this\._padlockTrackEstablished[\s\S]*?const steeringAvailable/,
+    "ordinary camera-servo lag after first acquisition must not blank physical steering");
+  assert.match(padlockSa, /CAMERA SETTLING/,
+    "camera lag may be reported but must not masquerade as loss of physical steering");
+  assert.match(padlockSa, /rollChevronCount[\s\S]*?drawVectorChevron/,
+    "the shortest roll arc needs repeated directional chevrons, not a text instruction");
+  assert.match(padlockSa, /lift-plane capture gate[\s\S]*?setLineDash\(\[3, 5\]\)/,
+    "the roll destination must be graphically associated with the selected target");
+  assert.match(padlockSa, /pullPhase[\s\S]*?drawVectorChevron/,
+    "capture must become an outward graphical pull flow along the lift vector");
+  assert.doesNotMatch(padlockSa, /ROLL LEFT|ROLL RIGHT|`ROLL \$\{/,
+    "tracked padlock steering must not depend on reading left/right command text");
+  assert.match(padlockSa, /RELEASE LOOK TO REACQUIRE/,
+    "temporary manual look must suppress steering and teach the return behavior once");
+  assert.match(padlockSa, /ACQUIRING BANDIT/,
+    "camera motion and pilot steering commands must not compete during acquisition");
+  assert.match(padlockSa,
+    /const steeringAvailable = [\s\S]*?!groundDanger && !centralPullUp/,
+    "ground and GCAS warnings must pre-empt combat steering in padlock");
   assert.match(padlockSa, /NOSE/,
     "view-relative ownship nose direction is the essential pull cue");
   assert.match(padlockSa, /padlockPhase|manualLookActive/,
@@ -203,6 +261,6 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
   const bandit = balancedBlock(hudSource, "drawBandit(frame)");
   assert.doesNotMatch(bandit, /if \(!frame\.padlock\)\s*\{\s*const closure/,
     "range and closure belong beside the tracked target even in padlock");
-  assert.match(bandit, /formatRange\(state\.range_m\)/);
+  assert.match(bandit, /targetRangeReadout\(state\.range_m\)/);
   assert.match(bandit, /targetClosureReadout\(state\.closure_kts\)/);
 });

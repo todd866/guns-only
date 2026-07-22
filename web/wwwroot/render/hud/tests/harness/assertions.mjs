@@ -186,6 +186,30 @@ function assertBandit(data) {
     error <= 2, `error ${error.toFixed(3)} px (tol 2)`);
 }
 
+function assertPadlockDirector(data) {
+  const { name, geometry, probes, padlockState } = data;
+  const director = geometry.padlockDirector;
+  const shouldHaveDirector = data.padlock
+    && padlockState?.target !== "carrier"
+    && (padlockState?.phase === "TRACK" || padlockState?.trackPrimed === true)
+    && padlockState?.manualLookActive !== true
+    && (probes.padlockPlaneMagnitude >= 0.035 || probes.padlockTargetForward < 0)
+    && name !== "padlock-ground-warning";
+  check(name, "padlock director presence follows valid tracked physical geometry",
+    Boolean(director) === shouldHaveDirector,
+    `${director ? "present" : "absent"}; expected ${shouldHaveDirector ? "present" : "absent"}`);
+  if (!director) return;
+  const error = Math.abs(director.rollErrorRad - probes.padlockRollErrorRad);
+  check(name, "padlock roll error == atan2(target-right, target-up)",
+    error <= 1e-9,
+    `error ${(error * RAD).toFixed(9)} deg (tol ${(1e-9 * RAD).toFixed(9)})`);
+  if (probes.padlockPlaneMagnitude < 0.035 && probes.padlockTargetForward < 0) {
+    check(name, "dead-six director retains the current lift plane",
+      director.anyPlane === true && director.captured === true,
+      `anyPlane=${director.anyPlane}; captured=${director.captured}`);
+  }
+}
+
 function assertFunnelContainsTarget(data) {
   const { name, geometry, probes, state } = data;
   if (!data.banditOnTrajectory || !Array.isArray(geometry.funnel)) return;
@@ -241,6 +265,7 @@ async function main() {
       assertLadder(data);
       assertFunnel(data);
       assertBandit(data);
+      if (data.padlock) assertPadlockDirector(data);
       assertFunnelContainsTarget(data);
     }
     if (pageErrors.length > 0) {
