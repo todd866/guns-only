@@ -1714,9 +1714,10 @@ public sealed class SimulationSession {
     }
 
     /// <summary>
-    /// Add a bounded, pitch-only convergence request before human physiology and aircraft-owned
-    /// Auto-GCAS. The lead sample is the previous 120 Hz weapon evaluation; using that one-tick-old
-    /// authoritative result avoids advancing projectiles twice or inventing a second ballistic law.
+    /// Add a bounded two-axis (pitch load-factor plus lateral roll/rudder) convergence request before
+    /// human physiology and aircraft-owned Auto-GCAS. The lead sample is the previous 120 Hz weapon
+    /// evaluation; using that one-tick-old authoritative result avoids advancing projectiles twice or
+    /// inventing a second ballistic law.
     /// </summary>
     PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {
         bool enabled = PlayerWeaponsAuthorized

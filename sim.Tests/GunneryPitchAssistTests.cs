@@ -124,24 +124,45 @@ public class GunneryPitchAssistTests {
     }
 
     [Fact]
-    public void LateralLeadErrorNeverManufacturesRollOrYawInput() {
+    public void LateralLeadErrorWalksTheNoseWithBoundedRollAndYawTowardTheSolution() {
+        AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
         AircraftSim aircraft = ModernAircraft();
-        var pilot = new PilotCommand(1.0, -0.70, 1.0, 0.30,
-            RollControl: -0.55, SasRollControl: 0.12,
+        // Neutral pilot lateral inputs so the assist contribution is measured in isolation.
+        var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
+            RollControl: 0.0, SasRollControl: 0.12,
             DirectLateralControl: true);
         double radians = 5.0 * DegreesToRadians;
+        // Lead five degrees to the RIGHT of the boresight: a purely lateral miss.
         Vec3D lateralLead = (aircraft.BodyForward * Math.Cos(radians)
             + aircraft.BodyRight * Math.Sin(radians)).Normalized();
 
         GunneryPitchAssistResult result = Apply(aircraft, pilot, lateralLead);
 
         Assert.True(result.State.Active);
+        // A purely lateral miss leaves the pitch load-factor request untouched ...
         Assert.Equal(0.0, result.State.PitchLeadErrorRad, 10);
         Assert.Equal(0.0, result.State.RequestedPitchRateRadPerSecond, 10);
-        Assert.Equal(pilot.BankTarget, result.Command.BankTarget);
-        Assert.Equal(pilot.Rudder, result.Command.Rudder);
-        Assert.Equal(pilot.RollControl, result.Command.RollControl);
+        Assert.Equal(pilot.GDemand, result.Command.GDemand, 10);
+        // ... but the nose is now walked toward the solution in BOTH lateral axes, toward the side
+        // the lead sits on, and each stays inside the airframe's bounded lateral-assist authority.
+        Assert.True(result.Command.RollControl > 0.0,
+            $"expected right-roll assist toward the lead, got {result.Command.RollControl:F3}");
+        Assert.True(result.Command.Rudder > 0.0,
+            $"expected right-rudder assist toward the lead, got {result.Command.Rudder:F3}");
+        Assert.InRange(result.Command.RollControl, 0.0,
+            parameters.GunneryLateralAssistMaxRoll);
+        Assert.InRange(result.Command.Rudder, 0.0,
+            parameters.GunneryLateralAssistMaxYaw);
+        // The assist never touches the aileron-SAS channel or the legacy bank tracker.
         Assert.Equal(pilot.SasRollControl, result.Command.SasRollControl);
+        Assert.Equal(pilot.BankTarget, result.Command.BankTarget);
+
+        // A mirror-image lead to the LEFT drives the assist the other way (sign symmetry, no bias).
+        Vec3D leftLead = (aircraft.BodyForward * Math.Cos(radians)
+            - aircraft.BodyRight * Math.Sin(radians)).Normalized();
+        GunneryPitchAssistResult left = Apply(aircraft, pilot, leftLead);
+        Assert.True(left.Command.RollControl < 0.0);
+        Assert.True(left.Command.Rudder < 0.0);
     }
 
     [Fact]
@@ -158,7 +179,7 @@ public class GunneryPitchAssistTests {
         AssertInactiveUnchanged(Apply(aircraft, pilot, validLead,
             rangeM: 1000.01), pilot);
         AssertInactiveUnchanged(Apply(aircraft, pilot,
-            PitchLead(aircraft, 8.01)), pilot);
+            PitchLead(aircraft, 14.01)), pilot);
         AssertInactiveUnchanged(Apply(aircraft,
             pilot with { EnvelopeOverride = true }, validLead),
             pilot with { EnvelopeOverride = true });

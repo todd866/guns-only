@@ -143,7 +143,7 @@ public class AceBanditTests {
         var beat = Beats.ModernVisualMerge();
         var player = new AircraftState(new Vec3D(0.0, 3000.0, 0.0),
             240.0, 0.0, 0.0, 0.0, FlightModel.F22APublicDataSurrogate.MassKg);
-        var ace = Assert.IsType<ReactiveBandit>(beat.CreateNextBandit(player, engagementNumber: 3));
+        var ace = Assert.IsType<ReactiveBandit>(beat.CreateNextBandit(player, engagementNumber: 4));
         Assert.Equal(PilotSkill.Ace, ace.Skill);
         // A Competent flown from the identical spawned start is the control.
         var competent = new ReactiveBandit(ace.State, beat.BanditAir, PilotSkill.Competent);

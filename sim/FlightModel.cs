@@ -77,14 +77,23 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     double PitchThrustVectorMaxRad = 0.0, double PitchThrustVectorMomentArmM = 0.0,
     double PitchThrustVectorAlphaGain = 0.0,
     double PitchThrustVectorRateGainSeconds = 0.0,
-    // Optional player gunnery assistance. A zero rate disables it. The assist owns pitch only,
-    // engages inside its lead-solution capture cone/range, and may move the pilot's protected
-    // load-factor request by at most MaxCorrectionG; roll, closure, and firing remain manual.
+    // Optional player gunnery assistance. A zero rate disables it. The pitch aid engages inside its
+    // lead-solution capture cone/range and may move the pilot's protected load-factor request by at
+    // most MaxCorrectionG; closure and firing remain manual.
     double GunneryPitchAssistMaxRateRad = 0.0,
     double GunneryPitchAssistCaptureAngleRad = 0.0,
     double GunneryPitchAssistMaxRangeM = 0.0,
     double GunneryPitchAssistGainPerSecond = 0.0,
     double GunneryPitchAssistMaxCorrectionG = 0.0,
+    // Optional lateral (roll + yaw) half of the SAME gunnery aid; zero gains disable it. Inside the
+    // identical capture cone/range, a bounded roll toward the side the ballistic lead sits on plus a
+    // bounded rudder walk the nose LATERALLY onto the solution, so a keyboard pilot converts by
+    // pointing roughly at the bandit and holding fire. Both are proportional to the lateral lead
+    // error (exactly zero when aligned) and clamped; the rounds still fly the real ballistic arc.
+    double GunneryLateralAssistRollGain = 0.0,
+    double GunneryLateralAssistMaxRoll = 0.0,
+    double GunneryLateralAssistYawGain = 0.0,
+    double GunneryLateralAssistMaxYaw = 0.0,
     // Extra drag from buffet/separation as the wing approaches CLmax. The quadratic polar remains
     // authoritative below OnsetFraction; this smooth term only closes the hard-turn energy bill.
     double HighLiftDragOnsetFraction = 1.0, double HighLiftDragK = 0.0,
@@ -273,14 +282,20 @@ public static class FlightModel {
         PitchThrustVectorMomentArmM: 6.5,
         PitchThrustVectorAlphaGain: 0.85,
         PitchThrustVectorRateGainSeconds: 0.12,
-        // Gameplay assist, not an F-22 performance claim. Inside an eight-degree/1 km ballistic-
-        // lead gate it requests up to 17 deg/s of pitch convergence and may contribute at most
-        // three protected G. The player still has to solve roll plane, closure, range, and trigger.
+        // Gameplay assist, not an F-22 performance claim. Inside a fourteen-degree/1 km ballistic-
+        // lead gate it walks the nose onto the lead solution in BOTH axes: up to 17 deg/s of pitch
+        // convergence contributing at most 3.5 protected G, plus a bounded roll+rudder lateral pull
+        // toward the target's side. The player still has to solve closure, range, and trigger, and
+        // the rounds fly the real ballistic arc -- this magnetises the nose, it does not teleport hits.
         GunneryPitchAssistMaxRateRad: 0.30,
-        GunneryPitchAssistCaptureAngleRad: 0.139626340159546,
+        GunneryPitchAssistCaptureAngleRad: 0.244346095279206, // 14 deg
         GunneryPitchAssistMaxRangeM: 1000.0,
         GunneryPitchAssistGainPerSecond: 2.4,
-        GunneryPitchAssistMaxCorrectionG: 3.0,
+        GunneryPitchAssistMaxCorrectionG: 3.5,
+        GunneryLateralAssistRollGain: 2.0,
+        GunneryLateralAssistMaxRoll: 0.6,
+        GunneryLateralAssistYawGain: 2.0,
+        GunneryLateralAssistMaxYaw: 0.5,
         HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 2.8,
         WingSpanM: 13.56, PostStallAlphaCommandRad: 1.10,
         PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,

@@ -59,6 +59,11 @@ public enum BanditTactic { Acquire, Defend, Energy, Return }
 public sealed class ReactiveBandit : IBandit {
     const double FloorM = 260.0;
     const double CeilingM = 3200.0;
+    // Believable guns knife-fight ceiling (~37,700 ft). The per-fight ceiling may sit LOWER (it
+    // tracks the merge altitude to preserve the low-level fight volume) but must never FLOAT above
+    // this: a real gun dogfight does not climb into the stratosphere. It bounds both the merge spawn
+    // altitude and the high-skill lookahead vertical, so the fight cannot ratchet up to FL600.
+    const double CombatCeilingM = 11500.0;
     const double ReturnRadiusM = 5200.0;
     const double ThreatRangeM = 1500.0;
     const double DefendSeconds = 3.4;
@@ -116,9 +121,12 @@ public sealed class ReactiveBandit : IBandit {
         _maximumThrottle = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.65);
         _defensivePower = System.Math.Min(_maximumThrottle,
             _maximumThrottle > 1.35 ? 1.35 : 1.05);
-        // Preserve the original low-level fight volume while allowing a replacement fighter to
-        // meet a high-altitude ownship near its present altitude (for example, after the AWACS beat).
-        _ceilingM = System.Math.Max(CeilingM, initial.Position.Y + 1000.0);
+        // Preserve the original low-level fight volume while allowing a replacement fighter to meet a
+        // higher ownship near its present altitude (for example, after the AWACS beat) -- but cap the
+        // effective ceiling at the believable combat ceiling so it can never float into the
+        // stratosphere and drag a knife-fight to FL600.
+        _ceilingM = System.Math.Min(CombatCeilingM,
+            System.Math.Max(CeilingM, initial.Position.Y + 1000.0));
     }
 
     /// Deterministically put a fresh fighter into a real offset, reciprocal merge. Engagement
@@ -139,8 +147,11 @@ public sealed class ReactiveBandit : IBandit {
         double alongM = 3200.0 + variation * 260.0;
         double offsetM = side * (560.0 + variation * 110.0);
         double altitudeOffsetM = variation switch { 0 => 120.0, 1 => -80.0, _ => 40.0 };
-        double altitudeM = System.Math.Max(FloorM + 260.0,
-            player.Position.Y + altitudeOffsetM);
+        // Keep the merge near ownship, but never spawn a fresh bandit above the believable combat
+        // ceiling: if the player has climbed out of band, the successor still merges in-band so the
+        // fight is drawn back down rather than staged in the stratosphere.
+        double altitudeM = System.Math.Clamp(player.Position.Y + altitudeOffsetM,
+            FloorM + 260.0, CombatCeilingM);
         var position = player.Position + forward * alongM + right * offsetM;
         position = position with { Y = altitudeM };
 
@@ -475,6 +486,7 @@ public sealed class ReactiveBandit : IBandit {
 
         double windowSeconds = 0.0;
         double minY = double.PositiveInfinity;
+        double maxY = double.NegativeInfinity;
         int horizon = _profile.LookaheadHorizonTicks;
         for (int t = 0; t < horizon; t++) {
             probe.Step(command, dt);
@@ -486,6 +498,7 @@ public sealed class ReactiveBandit : IBandit {
             predictedPos += predVel * dt;
             var probeState = probe.State;
             minY = System.Math.Min(minY, probeState.Position.Y);
+            maxY = System.Math.Max(maxY, probeState.Position.Y);
             var predictedPlayer = player with { Position = predictedPos };
             if (Geometry.Range(probeState, predictedPlayer) < BanditFireControl.MaximumRangeM
                 && Geometry.AngleOff(probeState, predictedPlayer) < gunConeRad)
@@ -511,6 +524,12 @@ public sealed class ReactiveBandit : IBandit {
         // Floor avoidance: a hard penalty as the rollout approaches the water.
         if (minY < FloorM + 200.0)
             score -= 0.02 * (FloorM + 200.0 - minY);
+        // Ceiling discipline: the mirror of floor avoidance. A guns knife-fight must not chase the
+        // player into the stratosphere, so climbing past the believable combat ceiling is penalised.
+        // This is a CEILING, not an altitude reward -- it is zero in-band and only ever pushes the
+        // fight back down, so vertical maneuvers still emerge purely when they improve the angle.
+        if (maxY > CombatCeilingM - 200.0)
+            score -= 0.02 * (maxY - (CombatCeilingM - 200.0));
         return score;
     }
 }

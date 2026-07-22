@@ -516,8 +516,9 @@ public static class Beats {
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
             ContinuousCombat: new ContinuousCombatConfig(),
-            // The opening neutral-merge dogfight is engagement 1: field a Veteran, not a passive
-            // Competent. Continuous successors escalate via ForEngagement at CreateNextBandit.
+            // The opening neutral-merge dogfight is engagement 1: a gentle Novice warm-up under the
+            // interim ForEngagement ramp (1 Novice, 2 Competent, 3 Veteran, 4+ Ace). Continuous
+            // successors escalate via ForEngagement at CreateNextBandit.
             BanditSkill: BanditSkillProfile.ForEngagement(1));
     }
 

@@ -23,8 +23,10 @@ public readonly record struct GunneryPitchAssistResult(
     GunneryPitchAssistState State);
 
 /// <summary>
-/// Pure pitch-only lead convergence. It cannot acquire a target, roll into the gun plane, fire,
-/// exceed the protected envelope, or operate during an explicit pitch/alpha override.
+/// Bounded two-axis lead convergence: a pitch load-factor correction plus an optional lateral
+/// (roll + rudder) pull, both driven off the ballistic lead direction. It cannot acquire a target,
+/// fire, exceed the protected envelope, or operate during an explicit pitch/alpha override, and the
+/// lateral half stays off entirely for any airframe that leaves its lateral gains at zero.
 /// </summary>
 public static class GunneryPitchAssist {
     public static GunneryPitchAssistResult Apply(
@@ -97,6 +99,26 @@ public static class GunneryPitchAssist {
             pilotCommand.GDemand + correction, lower, protectedMaximum);
         correction = assistedLoadFactor - pilotCommand.GDemand;
 
+        // Lateral (roll + yaw) convergence: the horizontal analogue of the pitch aid. The signed
+        // lateral miss angle is the lead's body-right component; a positive value (lead to the right)
+        // asks for right roll and right rudder, both proportional to that angle and therefore exactly
+        // zero when the nose is already aligned. Each is clamped, then added to the pilot's own
+        // lateral commands (themselves clamped to unit authority). This banks toward the target and
+        // walks the nose across, so a keyboard pilot converts by pointing roughly at the bandit -- it
+        // never fires and never alters the ballistic path the fired rounds actually fly.
+        Vec3D bodyRight = attitude.Rotate(new Vec3D(1.0, 0.0, 0.0));
+        double lateralError = System.Math.Atan2(lead.Dot(bodyRight), forwardProjection);
+        double rollAssist = System.Math.Clamp(
+            parameters.GunneryLateralAssistRollGain * lateralError,
+            -parameters.GunneryLateralAssistMaxRoll,
+            parameters.GunneryLateralAssistMaxRoll);
+        double yawAssist = System.Math.Clamp(
+            parameters.GunneryLateralAssistYawGain * lateralError,
+            -parameters.GunneryLateralAssistMaxYaw,
+            parameters.GunneryLateralAssistMaxYaw);
+        double assistedRoll = System.Math.Clamp(pilotCommand.RollControl + rollAssist, -1.0, 1.0);
+        double assistedRudder = System.Math.Clamp(pilotCommand.Rudder + yawAssist, -1.0, 1.0);
+
         var state = new GunneryPitchAssistState(
             Active: true,
             TotalLeadErrorRad: totalError,
@@ -107,7 +129,11 @@ public static class GunneryPitchAssist {
             AssistedLoadFactorG: assistedLoadFactor,
             LoadFactorCorrectionG: correction);
         return new GunneryPitchAssistResult(
-            pilotCommand with { GDemand = assistedLoadFactor }, state);
+            pilotCommand with {
+                GDemand = assistedLoadFactor,
+                RollControl = assistedRoll,
+                Rudder = assistedRudder,
+            }, state);
     }
 
     static bool IsFinite(in Vec3D value) => double.IsFinite(value.X)
