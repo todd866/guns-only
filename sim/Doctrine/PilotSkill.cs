@@ -22,4 +22,13 @@ public readonly record struct BanditSkillProfile(
         PilotSkill.Ace       => new(9.00, 2.20, true, true, 3, 150),
         _ => For(PilotSkill.Competent),
     };
+
+    /// Deterministic per-wave escalation curve for the flagship continuous-combat gauntlet: a pure
+    /// function of the 1-based engagement number, with NO RNG, wall clock, or date. The player meets
+    /// a genuinely threatening pilot from the opening merge and it hardens toward the climax.
+    ///
+    /// PROVISIONAL / TUNABLE: engagement 1-2 field a Veteran, 3+ an Ace. This is the initial curve;
+    /// widen it (e.g. a Competent warm-up, or a Novice tutorial wave) by editing only this mapping.
+    public static PilotSkill ForEngagement(int engagementNumber) =>
+        engagementNumber <= 2 ? PilotSkill.Veteran : PilotSkill.Ace;
 }

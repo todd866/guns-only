@@ -126,7 +126,7 @@ public sealed class ReactiveBandit : IBandit {
     /// in spacing/altitude while retaining fighting energy and a fair head-on presentation.
     public static ReactiveBandit SpawnForMerge(in AircraftState player,
         AircraftParams parameters, int engagementNumber,
-        double speedMps = 180.0) {
+        double speedMps = 180.0, PilotSkill skill = PilotSkill.Competent) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         if (!double.IsFinite(speedMps) || speedMps <= 0.0)
@@ -152,7 +152,7 @@ public sealed class ReactiveBandit : IBandit {
         double chi = System.Math.Atan2(toMerge.X, toMerge.Z);
         double gamma = System.Math.Atan2(toMerge.Y, System.Math.Max(1.0, horizontalM));
         var initial = new AircraftState(position, speedMps, gamma, chi, 0.0, parameters.MassKg);
-        return new ReactiveBandit(initial, parameters);
+        return new ReactiveBandit(initial, parameters, skill);
     }
 
     public AircraftState State => _sim.State;

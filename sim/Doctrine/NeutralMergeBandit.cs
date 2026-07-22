@@ -13,6 +13,7 @@ public sealed class NeutralMergeBandit : IBandit {
     const double OpeningConfirmationSeconds = 0.20;
     readonly AircraftParams _parameters;
     readonly AircraftSim _mergeSim;
+    readonly PilotSkill _skill;
     ReactiveBandit? _fight;
     IWindField? _wind;
     IAtmosphereModel _atmosphere;
@@ -20,8 +21,10 @@ public sealed class NeutralMergeBandit : IBandit {
     double _minimumRangeM = double.PositiveInfinity;
     double _openingSeconds;
 
-    public NeutralMergeBandit(AircraftState initial, AircraftParams parameters) {
+    public NeutralMergeBandit(AircraftState initial, AircraftParams parameters,
+        PilotSkill skill = PilotSkill.Competent) {
         _parameters = parameters;
+        _skill = skill;
         _mergeSim = new AircraftSim(initial, parameters);
         _atmosphere = _mergeSim.AtmosphereModel;
     }
@@ -47,6 +50,11 @@ public sealed class NeutralMergeBandit : IBandit {
     }
     public double T { get; private set; }
     public bool FirstPassComplete => _fight is not null;
+    /// The pilot tier this merge is briefed to hand its post-pass dogfight to, and (once the pass
+    /// completes) the tier actually flying. Null before the handoff, mirroring FirstPassComplete —
+    /// an honest inspection seam for verifying the flagship opener fields the intended tier.
+    public PilotSkill BriefedSkill => _skill;
+    public PilotSkill? FightSkill => _fight?.Skill;
     public double ThrustFraction => _fight?.ThrustFraction ?? _mergeSim.ThrustFraction;
     public bool CatastrophicallyDamaged => _fight?.CatastrophicallyDamaged ?? false;
     public bool WreckSettled => _fight?.WreckSettled ?? false;
@@ -97,7 +105,7 @@ public sealed class NeutralMergeBandit : IBandit {
 
     void BeginFight() {
         if (_fight is not null) return;
-        var fight = new ReactiveBandit(_mergeSim.State, _parameters) {
+        var fight = new ReactiveBandit(_mergeSim.State, _parameters, _skill) {
             Wind = _wind,
             Atmosphere = _atmosphere
         };

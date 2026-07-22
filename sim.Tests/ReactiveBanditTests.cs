@@ -39,6 +39,77 @@ public class ReactiveBanditTests {
             "the new fighter must spawn outside the immediate gun envelope");
     }
 
+    [Theory]
+    [InlineData(1, PilotSkill.Veteran)]
+    [InlineData(2, PilotSkill.Veteran)]
+    [InlineData(3, PilotSkill.Ace)]
+    [InlineData(4, PilotSkill.Ace)]
+    [InlineData(5, PilotSkill.Ace)]
+    public void ForEngagementIsADeterministicVeteranThenAceCurve(int engagement, PilotSkill expected) {
+        Assert.Equal(expected, BanditSkillProfile.ForEngagement(engagement));
+        // Pure function of the int: repeated calls agree.
+        Assert.Equal(expected, BanditSkillProfile.ForEngagement(engagement));
+    }
+
+    [Fact]
+    public void SpawnForMergeThreadsTheRequestedSkillOntoTheBandit() {
+        var player = State(0.0, 3000.0, 0.0, 240.0);
+        Assert.Equal(PilotSkill.Ace,
+            ReactiveBandit.SpawnForMerge(player, FlightModel.Sabre, 1, 180.0, PilotSkill.Ace).Skill);
+        Assert.Equal(PilotSkill.Veteran,
+            ReactiveBandit.SpawnForMerge(player, FlightModel.Sabre, 1, 180.0, PilotSkill.Veteran).Skill);
+        // Default remains Competent so unspecified spawns stay byte-identical.
+        Assert.Equal(PilotSkill.Competent,
+            ReactiveBandit.SpawnForMerge(player, FlightModel.Sabre, 1).Skill);
+    }
+
+    [Theory]
+    [InlineData(1, PilotSkill.Veteran)]
+    [InlineData(2, PilotSkill.Veteran)]
+    [InlineData(3, PilotSkill.Ace)]
+    public void FlagshipContinuousSuccessorEscalatesByEngagementNumber(int engagement, PilotSkill expected) {
+        var player = State(0.0, 5486.4, 0.0, 300.0);
+        var successor = Assert.IsType<ReactiveBandit>(
+            Beats.ModernVisualMerge().CreateNextBandit(player, engagement));
+        Assert.Equal(expected, successor.Skill);
+    }
+
+    [Fact]
+    public void FlagshipOpeningNeutralMergeIsBriefedAsAVeteranAndHandsOffToOne() {
+        var beat = Beats.ModernVisualMerge();
+        Assert.Equal(PilotSkill.Veteran, beat.BanditSkill);
+        var merge = Assert.IsType<NeutralMergeBandit>(beat.CreateBandit());
+        Assert.Equal(PilotSkill.Veteran, merge.BriefedSkill);
+
+        // Fly the production merge geometry until the neutral pass completes and the fight is handed
+        // to the reactive pilot; the tier the opener actually fields must be the briefed Veteran.
+        var playerSim = new AircraftSim(beat.Player, beat.PlayerAir);
+        var straight = new PilotCommand(1.0, 0.0, 1.0, 0.0);
+        for (int tick = 0; tick < 40 * AircraftSim.TickHz && !merge.FirstPassComplete; tick++) {
+            var ps = playerSim.State;
+            merge.Step(ps, Dt);
+            playerSim.Step(straight, Dt);
+        }
+        Assert.True(merge.FirstPassComplete, "production merge geometry must complete its neutral pass");
+        Assert.Equal(PilotSkill.Veteran, merge.FightSkill);
+    }
+
+    [Fact]
+    public void DefaultBeatSkillStillConstructsACompetentReactiveBandit() {
+        // A beat that opts into the reactive pilot without naming a tier keeps the Competent default,
+        // so every non-flagship beat stays byte-identical to before the escalation was threaded.
+        var beat = new BeatSetup(
+            "reactive default fixture",
+            State(0.0, 3000.0, -400.0, 190.0),
+            State(0.0, 3000.0, 0.0, 180.0),
+            new PurePursuitLaw(),
+            new() { (0.0, new PilotCommand(1.0, 0.0, 0.85, 0.0)) },
+            UsesReactiveBandit: true);
+        Assert.Equal(PilotSkill.Competent, beat.BanditSkill);
+        Assert.Equal(PilotSkill.Competent,
+            Assert.IsType<ReactiveBandit>(beat.CreateBandit()).Skill);
+    }
+
     [Fact]
     public void ReplacementSequenceIsDeterministic() {
         var player = State(-250.0, 2100.0, 900.0, 165.0, chi: -1.08);

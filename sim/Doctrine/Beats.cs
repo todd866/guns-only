@@ -180,7 +180,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     DroneRaidScenarioDefinition? DroneRaid = null,
     PilotPhysiologyProfile? PlayerPhysiologyProfile = null,
     bool RecoveryCompletesSortie = false,
-    ContinuousCombatConfig? ContinuousCombat = null) {
+    ContinuousCombatConfig? ContinuousCombat = null,
+    PilotSkill BanditSkill = PilotSkill.Competent) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
@@ -195,9 +196,9 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     public PilotPhysiologyProfile PlayerPilotPhysiology => PlayerPhysiologyProfile
         ?? PilotPhysiologyProfile.KoreaFastJetReference;
     public IBandit CreateBandit() => UsesNeutralMergeBandit
-        ? new NeutralMergeBandit(Bandit, BanditAir)
+        ? new NeutralMergeBandit(Bandit, BanditAir, BanditSkill)
         : UsesReactiveBandit
-            ? new ReactiveBandit(Bandit, BanditAir)
+            ? new ReactiveBandit(Bandit, BanditAir, BanditSkill)
             : new RailBandit(Bandit, BanditAir, BanditTimeline);
 
     /// Deterministic merge factory for a continuous-operations ruleset. Successor aircraft inherit
@@ -207,7 +208,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             ? continuous.ReplacementSpeedMps ?? Bandit.Speed
             : 180.0;
         return ReactiveBandit.SpawnForMerge(
-            player, BanditAir, engagementNumber, replacementSpeedMps);
+            player, BanditAir, engagementNumber, replacementSpeedMps,
+            BanditSkillProfile.ForEngagement(engagementNumber));
     }
 }
 
@@ -513,7 +515,10 @@ public static class Beats {
             BanditCapability: AircraftCapability.Su27SSurrogate,
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
-            ContinuousCombat: new ContinuousCombatConfig());
+            ContinuousCombat: new ContinuousCombatConfig(),
+            // The opening neutral-merge dogfight is engagement 1: field a Veteran, not a passive
+            // Competent. Continuous successors escalate via ForEngagement at CreateNextBandit.
+            BanditSkill: BanditSkillProfile.ForEngagement(1));
     }
 
     /// <summary>

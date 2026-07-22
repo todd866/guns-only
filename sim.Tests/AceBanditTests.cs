@@ -111,6 +111,53 @@ public class AceBanditTests {
             $"ace={aceResult.solutionSeconds:F2}s competent={competentResult.solutionSeconds:F2}s");
     }
 
+    // Same steady-turn reference as above, but the target is placed relative to the bandit's ACTUAL
+    // spawned nose so the measurement works for a bandit whose start came from the production spawn
+    // path (SpawnForMerge positions it relative to the player, not at a fixed test coordinate).
+    static double SolutionSecondsAgainstSteadyTurnAheadOfNose(ReactiveBandit bandit, double seconds) {
+        var p = FlightModel.F22APublicDataSurrogate;
+        var b0 = bandit.State;
+        var fwd = b0.ForwardDir();
+        var right = new Vec3D(0.0, 1.0, 0.0).Cross(fwd);
+        right = right.Length < 1e-6 ? new Vec3D(1.0, 0.0, 0.0) : right.Normalized();
+        var targetPos = b0.Position + fwd * 700.0 + right * 1600.0;
+        var target = new AircraftSim(
+            new AircraftState(targetPos, 210.0, 0.0, b0.Chi, 0.0, p.MassKg), p);
+        var steadyTurn = new PilotCommand(4.0, 0.8, 0.85, 0.0);
+        double sol = 0.0;
+        int ticks = (int)(seconds * AircraftSim.TickHz);
+        for (int i = 0; i < ticks; i++) {
+            var targetState = target.State;
+            bandit.Step(targetState, Dt);
+            target.Step(steadyTurn, Dt);
+            if (CameraSolver.GunWindow(bandit.State, target.State)) sol += Dt;
+        }
+        return sol;
+    }
+
+    // The whole point of the slice: a bandit produced by the FLAGSHIP PRODUCTION spawn path at an
+    // escalated engagement is an Ace, and that Ace actually threatens — it accrues a real gun solution
+    // against a steady-turn reference where a Competent at the identical start gets ~nothing.
+    [Fact]
+    public void FlagshipSpawnPathAceThreatensWhereACompetentAtTheSameStartDoesNot() {
+        var beat = Beats.ModernVisualMerge();
+        var player = new AircraftState(new Vec3D(0.0, 3000.0, 0.0),
+            240.0, 0.0, 0.0, 0.0, FlightModel.F22APublicDataSurrogate.MassKg);
+        var ace = Assert.IsType<ReactiveBandit>(beat.CreateNextBandit(player, engagementNumber: 3));
+        Assert.Equal(PilotSkill.Ace, ace.Skill);
+        // A Competent flown from the identical spawned start is the control.
+        var competent = new ReactiveBandit(ace.State, beat.BanditAir, PilotSkill.Competent);
+
+        double aceSol = SolutionSecondsAgainstSteadyTurnAheadOfNose(ace, 30.0);
+        double competentSol = SolutionSecondsAgainstSteadyTurnAheadOfNose(competent, 30.0);
+        Assert.True(competentSol < 0.5,
+            $"flat competent should barely convert: {competentSol:F2}s");
+        Assert.True(aceSol > 1.0,
+            $"the spawn-path ace must accrue a real gun solution: {aceSol:F2}s");
+        Assert.True(aceSol > competentSol + 1.0,
+            $"ace={aceSol:F2}s competent={competentSol:F2}s");
+    }
+
     [Fact]
     public void AceUsesTheVerticalMoreThanAFlatCompetentBandit() {
         var p = FlightModel.F22APublicDataSurrogate;
