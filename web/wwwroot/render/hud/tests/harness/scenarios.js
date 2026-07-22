@@ -263,7 +263,7 @@ export const SCENARIOS = [
   },
   {
     name: "vs-extreme",
-    about: "vertical_speed_fpm = 19700 in a steep zoom: the V/S readout must show the capped (readable) value, not the raw five-figure spike.",
+    about: "vertical_speed_fpm = 19700 in a steep zoom: the compact V/S readout must preserve the real value as +19.7K FPM.",
     player: { headingDeg: 90, pitchDeg: 32, bankDeg: 0, altFt: 12500 },
     bandit: { azimuthDeg: 0, elevationDeg: 0, rangeM: 2500 },
     lead: null,

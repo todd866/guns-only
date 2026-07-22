@@ -817,7 +817,10 @@ public sealed class SimulationSession {
             initialFuelLb: loadout.InitialFuelLb,
             capacityLb: loadout.CapacityLb,
             bingoThresholdLb: loadout.BingoThresholdLb,
-            consumesFuel: loadout.ConsumesFuel);
+            consumesFuel: loadout.ConsumesFuel,
+            jokerThresholdLb: loadout.JokerThresholdLb,
+            minimumFuelThresholdLb: loadout.MinimumFuelThresholdLb,
+            emergencyFuelThresholdLb: loadout.EmergencyFuelThresholdLb);
     }
 
     static BurbleField CreateBurble(Carrier carrier, in RecoveryDifficulty difficulty,

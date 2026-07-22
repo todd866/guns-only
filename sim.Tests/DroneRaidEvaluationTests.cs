@@ -39,6 +39,10 @@ public class DroneRaidEvaluationTests {
         Assert.Equal("gun.m61a2.public-data-surrogate.v1",
             session.PlayerGun.Profile.Id);
         Assert.Equal(0, session.OpponentGun.AmmoRemaining);
+        Assert.Equal(5500.0, session.PlayerFuel.JokerThresholdLb);
+        Assert.Equal(3500.0, session.PlayerFuel.BingoThresholdLb);
+        Assert.Equal(2100.0, session.PlayerFuel.MinimumFuelThresholdLb);
+        Assert.Equal(1200.0, session.PlayerFuel.EmergencyFuelThresholdLb);
         Assert.NotNull(session.DroneRaidEvaluation);
         Assert.False(session.DroneRaidEvaluation!.Started);
 

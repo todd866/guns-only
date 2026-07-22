@@ -76,6 +76,22 @@ public class SnapshotProjectionTests {
             root.GetProperty("corner_speed_kcas").GetDouble(), 10);
         Assert.InRange(Math.Abs(root.GetProperty("fuel_flow_lb_min").GetDouble() * 60.0
             - root.GetProperty("fuel_flow_pph").GetDouble()), 0.0, 0.31);
+        Assert.True(root.TryGetProperty("fuel_joker_lb", out JsonElement jokerThreshold));
+        Assert.True(root.TryGetProperty("fuel_minimum_lb", out JsonElement minimumThreshold));
+        Assert.True(root.TryGetProperty("fuel_emergency_lb", out JsonElement emergencyThreshold));
+        Assert.True(root.TryGetProperty("fuel_minutes_to_joker", out _));
+        Assert.True(root.TryGetProperty("fuel_joker", out _));
+        Assert.True(root.TryGetProperty("fuel_minimum", out _));
+        Assert.True(root.TryGetProperty("fuel_emergency", out _));
+        if (beatIndex == 7) {
+            Assert.Equal(6000.0, jokerThreshold.GetDouble());
+            Assert.Equal(2100.0, minimumThreshold.GetDouble());
+            Assert.Equal(1200.0, emergencyThreshold.GetDouble());
+        } else {
+            Assert.Equal(JsonValueKind.Null, jokerThreshold.ValueKind);
+            Assert.Equal(JsonValueKind.Null, minimumThreshold.ValueKind);
+            Assert.Equal(JsonValueKind.Null, emergencyThreshold.ValueKind);
+        }
         Assert.False(root.GetProperty("padlock_roll_assist_selected").GetBoolean());
         Assert.False(root.GetProperty("padlock_roll_assist_active").GetBoolean());
         Assert.True(double.IsFinite(

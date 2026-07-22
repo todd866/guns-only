@@ -80,6 +80,72 @@ test("F-22 tape prefers the explicit calibrated-airdata channel", () => {
   assert.equal(display.indicatedKts, 311);
 });
 
+test("missing primary signals stay invalid, clear immediately, and reacquire without zero", () => {
+  const filter = new HudSignalStabilizer();
+  let display = filter.update({ player_entity_id: "validity" }, 1 / 60);
+  assert.deepEqual({
+    indicatedKts: display.indicatedKts,
+    indicatedDigits: display.indicatedDigits,
+    altitudeFt: display.altitudeFt,
+    altitudeDigits: display.altitudeDigits,
+    headingDeg: display.headingDeg,
+    headingDigits: display.headingDigits,
+  }, {
+    indicatedKts: null,
+    indicatedDigits: null,
+    altitudeFt: null,
+    altitudeDigits: null,
+    headingDeg: null,
+    headingDigits: null,
+  });
+
+  display = filter.update({
+    player_entity_id: "validity",
+    calibrated_airspeed_kts: 420,
+    alt_ft: 12_000,
+    heading_deg: 87,
+  }, 1 / 60);
+  assert.equal(display.indicatedKts, 420);
+  assert.equal(display.altitudeFt, 12_000);
+  assert.equal(display.headingDeg, 87);
+
+  display = filter.update({ player_entity_id: "validity" }, 1 / 60);
+  assert.equal(display.indicatedKts, null);
+  assert.equal(display.indicatedDigits, null);
+  assert.equal(display.altitudeFt, null);
+  assert.equal(display.altitudeDigits, null);
+  assert.equal(display.headingDeg, null);
+  assert.equal(display.headingDigits, null);
+
+  display = filter.update({
+    player_entity_id: "validity",
+    calibrated_airspeed_kts: 510,
+    alt_ft: 14_000,
+    heading_deg: 102,
+  }, 1 / 60);
+  assert.equal(display.indicatedKts, 510);
+  assert.equal(display.altitudeFt, 14_000);
+  assert.equal(display.headingDeg, 102);
+});
+
+test("loss of one airdata channel does not reset unrelated valid channels", () => {
+  const filter = new HudSignalStabilizer();
+  filter.update({
+    player_entity_id: "partial",
+    calibrated_airspeed_kts: 400,
+    alt_ft: 10_000,
+    heading_deg: 90,
+  }, 1 / 60);
+  const display = filter.update({
+    player_entity_id: "partial",
+    alt_ft: 10_100,
+    heading_deg: 91,
+  }, 1 / 60);
+  assert.equal(display.indicatedKts, null);
+  assert.ok(display.altitudeFt > 10_000);
+  assert.ok(display.headingDeg > 90);
+});
+
 test("airspeed tape and trend reject sustained small reversals without hiding acceleration", () => {
   const filter = new HudSignalStabilizer();
   let display = filter.update({

@@ -317,7 +317,8 @@ internal static class SnapshotProjection {
             + $"\"cloud_turbulence_x_mps\":{localCloud.TurbulenceVelocityMps.X:F3},\"cloud_turbulence_y_mps\":{localCloud.TurbulenceVelocityMps.Y:F3},\"cloud_turbulence_z_mps\":{localCloud.TurbulenceVelocityMps.Z:F3},"
             + $"\"cloud_vertical_air_mps\":{localCloud.VerticalAirVelocityMps:F3},\"icing_hazard_01\":{localCloud.IcingHazard01:F4},\"lightning_hazard_01\":{localCloud.LightningHazard01:F4},"
             + WeatherRenderJson()
-            // Compatibility consumers keep receiving speed_kts, but it now means the primary KIAS.
+            // Compatibility consumers keep receiving speed_kts, but live snapshots now expose the
+            // same ideal calibrated-airspeed truth as the primary KCAS channel above.
             + $"\"speed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
             + $"\"stall_speed_kias\":{stallSpeedKias:F2},"
             + $"\"accelerated_stall_speed_kias\":{acceleratedStallSpeedKias:F2},"
@@ -500,11 +501,18 @@ internal static class SnapshotProjection {
             + $"\"fuel_lb\":{_fuel.FuelLb:F2},\"fuel_flow_lb_min\":{_fuel.SmoothedBurnLbPerMinute:F2},"
             + $"\"fuel_flow_pph\":{_fuel.SmoothedBurnLbPerMinute * 60.0:F1},"
             + $"\"fuel_trend_lb_min\":{_fuel.FuelTrendLbPerMinute:F2},"
+            + $"\"fuel_minutes_to_joker\":{NullableNumberJson(_fuel.MinutesToJoker)},"
             + $"\"fuel_minutes_to_bingo\":{NullableNumberJson(_fuel.MinutesToBingo)},"
             + $"\"fuel_endurance_minutes\":{NullableNumberJson(_fuel.EnduranceMinutes)},"
             + $"\"fuel_capacity_lb\":{_fuel.CapacityLb:F1},\"fuel_bingo_lb\":{_fuel.BingoThresholdLb:F1},"
+            + $"\"fuel_joker_lb\":{NullableNumberJson(_fuel.JokerThresholdLb)},"
+            + $"\"fuel_minimum_lb\":{NullableNumberJson(_fuel.MinimumFuelThresholdLb)},"
+            + $"\"fuel_emergency_lb\":{NullableNumberJson(_fuel.EmergencyFuelThresholdLb)},"
             + $"\"fuel_consumes\":{(_fuel.ConsumesFuel ? "true" : "false")},"
+            + $"\"fuel_joker\":{(_fuel.IsJoker ? "true" : "false")},"
             + $"\"fuel_bingo\":{(_fuel.IsBingo ? "true" : "false")},"
+            + $"\"fuel_minimum\":{(_fuel.IsMinimumFuel ? "true" : "false")},"
+            + $"\"fuel_emergency\":{(_fuel.IsEmergencyFuel ? "true" : "false")},"
             + $"\"rtb\":{(_fuel.RtbAdvisory ? "true" : "false")},\"rtb_steer\":{(rtb.Active ? "true" : "false")},"
             + $"\"rtb_bearing_deg\":{rtb.BearingRad * 57.29577951308232:F2},\"rtb_turn_deg\":{rtb.TurnRad * 57.29577951308232:F2},"
             + $"\"rtb_range_nm\":{rtb.RangeM / 1852.0:F2},"

@@ -45,7 +45,10 @@ export class StableRoundedValue {
 
   update(measured) {
     const number = finite(measured);
-    if (number === null) return this.value ?? 0;
+    if (number === null) {
+      this.reset();
+      return null;
+    }
     if (this.value === null || Math.abs(number - this.value) > this.step * 4) {
       this.value = Math.round(number / this.step) * this.step;
       return this.value;
@@ -187,16 +190,16 @@ export class HudSignalStabilizer {
 
   update(state = {}, deltaSeconds = 0) {
     const entityId = `${String(state.player_entity_id ?? "legacy")}:${state.replay_external === true ? "replay" : "live"}`;
-    const indicated = Math.max(0,
-      finite(state.calibrated_airspeed_kts,
-        finite(state.indicated_airspeed_kts, finite(state.speed_kts, 0))));
+    const indicatedTruth = finite(state.calibrated_airspeed_kts,
+      finite(state.indicated_airspeed_kts, finite(state.speed_kts)));
+    const indicated = indicatedTruth === null ? null : Math.max(0, indicatedTruth);
     const groundTruth = finite(state.ground_speed_kts, finite(state.groundspeed_kts));
     const ground = groundTruth === null ? null : Math.max(0, groundTruth);
-    const altitude = finite(state.alt_ft, 0);
+    const altitude = finite(state.alt_ft);
     const verticalSpeed = finite(state.vertical_speed_fpm);
-    const heading = wrapDegrees(finite(state.heading_deg, 0));
+    const headingTruth = finite(state.heading_deg);
+    const heading = headingTruth === null ? null : wrapDegrees(headingTruth);
     const discontinuity = this.entityId !== entityId
-      || !Number.isFinite(this.indicatedKts)
       || finite(deltaSeconds, 0) > 0.25;
 
     if (discontinuity) {
@@ -212,37 +215,68 @@ export class HudSignalStabilizer {
       this.headingDigits.reset();
       this.verticalSpeedDigits.reset();
     } else {
-      this.indicatedKts = smoothBounded(
-        this.indicatedKts, indicated, deltaSeconds, 0.42, 3, 0.45,
-      );
+      if (indicated === null) {
+        this.indicatedKts = null;
+        this.speedRate.reset();
+        this.speedDigits.reset();
+      } else if (this.indicatedKts === null) {
+        this.indicatedKts = indicated;
+        this.speedRate.reset(indicated);
+        this.speedDigits.reset();
+      } else {
+        this.indicatedKts = smoothBounded(
+          this.indicatedKts, indicated, deltaSeconds, 0.42, 3, 0.45,
+        );
+      }
       this.groundKts = ground === null ? null : smoothBounded(
         this.groundKts, ground, deltaSeconds, 0.16, 3,
       );
-      this.altitudeFt = smoothBounded(
-        this.altitudeFt, altitude, deltaSeconds, 0.12, 18,
-      );
+      if (altitude === null) {
+        this.altitudeFt = null;
+        this.altitudeDigits.reset();
+      } else if (this.altitudeFt === null) {
+        this.altitudeFt = altitude;
+        this.altitudeDigits.reset();
+      } else {
+        this.altitudeFt = smoothBounded(
+          this.altitudeFt, altitude, deltaSeconds, 0.12, 18,
+        );
+      }
       this.verticalSpeedFpm = verticalSpeed === null ? null : smoothBounded(
         this.verticalSpeedFpm, verticalSpeed, deltaSeconds, 0.18, 250,
       );
       if (verticalSpeed === null) this.verticalSpeedDigits.reset();
-      const unwrappedHeading = nearestHeading(heading, this.headingUnwrappedDeg);
-      this.headingUnwrappedDeg = smoothBounded(
-        this.headingUnwrappedDeg, unwrappedHeading, deltaSeconds, 0.10, 2.5,
-      );
+      if (heading === null) {
+        this.headingUnwrappedDeg = null;
+        this.headingDigits.reset();
+      } else if (this.headingUnwrappedDeg === null) {
+        this.headingUnwrappedDeg = heading;
+        this.headingDigits.reset();
+      } else {
+        const unwrappedHeading = nearestHeading(heading, this.headingUnwrappedDeg);
+        this.headingUnwrappedDeg = smoothBounded(
+          this.headingUnwrappedDeg, unwrappedHeading, deltaSeconds, 0.10, 2.5,
+        );
+      }
     }
 
     return {
       indicatedKts: this.indicatedKts,
-      indicatedDigits: this.speedDigits.update(this.indicatedKts),
-      indicatedRateKtsPerSecond: this.speedRate.update(this.indicatedKts, deltaSeconds),
+      indicatedDigits: this.indicatedKts === null
+        ? null : this.speedDigits.update(this.indicatedKts),
+      indicatedRateKtsPerSecond: this.indicatedKts === null
+        ? 0 : this.speedRate.update(this.indicatedKts, deltaSeconds),
       groundKts: this.groundKts,
       altitudeFt: this.altitudeFt,
-      altitudeDigits: this.altitudeDigits.update(this.altitudeFt),
+      altitudeDigits: this.altitudeFt === null
+        ? null : this.altitudeDigits.update(this.altitudeFt),
       verticalSpeedFpm: this.verticalSpeedFpm,
       verticalSpeedDigits: this.verticalSpeedFpm === null
         ? null : this.verticalSpeedDigits.update(this.verticalSpeedFpm),
-      headingDeg: wrapDegrees(this.headingUnwrappedDeg),
-      headingDigits: wrapDegrees(this.headingDigits.update(this.headingUnwrappedDeg)),
+      headingDeg: this.headingUnwrappedDeg === null
+        ? null : wrapDegrees(this.headingUnwrappedDeg),
+      headingDigits: this.headingUnwrappedDeg === null
+        ? null : wrapDegrees(this.headingDigits.update(this.headingUnwrappedDeg)),
     };
   }
 }

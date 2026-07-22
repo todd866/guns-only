@@ -56,6 +56,10 @@ public class ModernVisualMergeTests {
         Assert.Equal("gun.m61a2.public-data-surrogate.v1", session.PlayerGun.Profile.Id);
         Assert.Equal("gun.gsh301.public-data-surrogate.v1", session.OpponentGun.Profile.Id);
         Assert.Equal(12000.0, session.PlayerFuel.FuelLb, 8);
+        Assert.Equal(6000.0, session.PlayerFuel.JokerThresholdLb);
+        Assert.Equal(4000.0, session.PlayerFuel.BingoThresholdLb);
+        Assert.Equal(2100.0, session.PlayerFuel.MinimumFuelThresholdLb);
+        Assert.Equal(1200.0, session.PlayerFuel.EmergencyFuelThresholdLb);
         Assert.NotNull(session.VisualMergeEvaluation);
         Assert.True(session.WeaponsInhibited);
         Assert.Equal("GUNS SAFE · FIRST PASS",

@@ -42,17 +42,17 @@ const AMBER = "#ffb020";
 const RED = "#ff465d";
 const GLASS = "rgba(2, 10, 16, 0.72)";
 const DEG = Math.PI / 180;
-
-// Readout peg for the vertical-speed digits only. A fighter HUD VVI beyond ~9.9K fpm conveys
-// nothing actionable that the ground-proximity warnings (which use the raw, unclamped sink rate)
-// do not already own, and the raw value can spike into a five-figure "K" reading during a steep
-// dive. This keeps the numeric readout believable; it never touches simulation truth or warnings.
-const READABLE_VERTICAL_SPEED_FPM = 9950;
 const RAD_TO_DEG = 180 / Math.PI;
 const MODE_CUE_SECONDS = 1.5;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function finiteHudNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function controlBindingLabel(code, fallback) {
@@ -1086,7 +1086,9 @@ class CombatHud {
 
   drawHeadingTape(state, { headingDeg = null, headingDigits = null, padlock = false } = {}) {
     const ctx = this.ctx;
-    const heading = Number.isFinite(headingDeg) ? headingDeg : Number(state.heading_deg) || 0;
+    const rawHeading = finiteHudNumber(state.heading_deg);
+    const heading = Number.isFinite(headingDeg) ? headingDeg : rawHeading;
+    const headingValid = Number.isFinite(heading);
     const layout = this.getLayout();
     const width = layout.heading.width;
     const x0 = (this.width - width) / 2;
@@ -1110,16 +1112,20 @@ class CombatHud {
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
 
-    const first = Math.floor((heading - 55) / 5) * 5;
-    for (let mark = first; mark <= heading + 55; mark += 5) {
-      const delta = ((mark - heading + 540) % 360) - 180;
-      const x = snapPixel(this.width / 2 + delta * pixelsPerDegree, this.pixelRatio);
-      const major = mark % 10 === 0;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x, y + (major ? 7 : 4));
-      ctx.stroke();
-      if (major) ctx.fillText(String(Math.round(wrap360(mark) / 10)).padStart(2, "0"), x, y - 12);
+    if (headingValid) {
+      const first = Math.floor((heading - 55) / 5) * 5;
+      for (let mark = first; mark <= heading + 55; mark += 5) {
+        const delta = ((mark - heading + 540) % 360) - 180;
+        const x = snapPixel(this.width / 2 + delta * pixelsPerDegree, this.pixelRatio);
+        const major = mark % 10 === 0;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + (major ? 7 : 4));
+        ctx.stroke();
+        if (major) {
+          ctx.fillText(String(Math.round(wrap360(mark) / 10)).padStart(2, "0"), x, y - 12);
+        }
+      }
     }
     ctx.restore();
 
@@ -1142,7 +1148,9 @@ class CombatHud {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const shownHeading = Number.isFinite(headingDigits) ? headingDigits : heading;
-    ctx.fillText(String(Math.round(wrap360(shownHeading))).padStart(3, "0"), this.width / 2, y - 2);
+    ctx.fillText(Number.isFinite(shownHeading)
+      ? String(Math.round(wrap360(shownHeading))).padStart(3, "0") : "---",
+      this.width / 2, y - 2);
     if (padlock) {
       ctx.fillStyle = GREEN_DIM;
       ctx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -1151,8 +1159,8 @@ class CombatHud {
 
     // At bingo the boat caret stays on the visible edge of the tape until the pilot turns it in.
     // This is guidance only: no flight-control command is fed back into the kernel.
-    const boatTurn = Number(state.rtb_turn_deg);
-    if (state.rtb_steer === true && Number.isFinite(boatTurn)) {
+    const boatTurn = finiteHudNumber(state.rtb_turn_deg);
+    if (headingValid && state.rtb_steer === true && Number.isFinite(boatTurn)) {
       const shownTurn = clamp(boatTurn, -48, 48);
       const boatX = this.width / 2 + shownTurn * pixelsPerDegree;
       ctx.fillStyle = AMBER;
@@ -1173,11 +1181,11 @@ class CombatHud {
     // unambiguous even when it is outside the visible heading-tape span.
     const raidActive = state.drone_raid_evaluation === true
       && state.finished !== true && state.drone_raid_finished !== true;
-    const playerEast = Number(state.px);
-    const playerNorth = Number(state.pz);
-    const raiderEast = Number(state.bx);
-    const raiderNorth = Number(state.bz);
-    if (raidActive && [playerEast, playerNorth, raiderEast, raiderNorth]
+    const playerEast = finiteHudNumber(state.px);
+    const playerNorth = finiteHudNumber(state.pz);
+    const raiderEast = finiteHudNumber(state.bx);
+    const raiderNorth = finiteHudNumber(state.bz);
+    if (headingValid && raidActive && [playerEast, playerNorth, raiderEast, raiderNorth]
       .every(Number.isFinite)) {
       const east = raiderEast - playerEast;
       const north = raiderNorth - playerNorth;
@@ -1301,9 +1309,9 @@ class CombatHud {
 
     const ctx = this.ctx;
     const fuel = fuelReadout(state);
-    const bearing = Number(state.rtb_bearing_deg);
-    const turn = Number(state.rtb_turn_deg);
-    const rangeNm = Number(state.rtb_range_nm);
+    const bearing = finiteHudNumber(state.rtb_bearing_deg);
+    const turn = finiteHudNumber(state.rtb_turn_deg);
+    const rangeNm = finiteHudNumber(state.rtb_range_nm);
     const hasSteer = state.rtb_steer === true
       && Number.isFinite(bearing) && Number.isFinite(turn) && Number.isFinite(rangeNm);
     const direction = Math.abs(turn) < 3 ? "STEADY"
@@ -1312,18 +1320,21 @@ class CombatHud {
       ? `BOAT ${String(Math.round(wrap360(bearing))).padStart(3, "0")}° · ${rangeNm.toFixed(1)} NM · ${direction}`
       : "BREAK OFF · RECOVER";
     const detail = fuel.bingo ? `${boatDetail} · ${fuel.decisionText}` : boatDetail;
+    const headline = fuel.emergencyFuel ? "EMER FUEL - RTB"
+      : fuel.minimumFuel ? "MIN FUEL - RTB" : "BINGO - RTB";
+    const accent = fuel.emergencyFuel ? RED : AMBER;
     const width = Math.min(this.touchMode ? 264 : 330, this.width - 34);
     const height = 44;
     const x = (this.width - width) / 2;
     const y = this.getLayout().weaponCueY - 56;
 
     ctx.save();
-    this.glassPanel(x, y, width, height, AMBER);
+    this.glassPanel(x, y, width, height, accent);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = AMBER;
+    ctx.fillStyle = accent;
     ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText("BINGO - RTB", this.width / 2, y + 14);
+    ctx.fillText(headline, this.width / 2, y + 14);
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillText(detail, this.width / 2, y + 32);
@@ -1469,6 +1480,8 @@ class CombatHud {
     const pixelsPerStep = 34;
     const rightSide = x > this.width / 2;
     const pxPerUnit = pixelsPerStep / step;
+    const valueValid = Number.isFinite(value);
+    const displayValueValid = valueValid && Number.isFinite(displayValue);
 
     const wash = ctx.createLinearGradient(x - 34, 0, x + 34, 0);
     if (rightSide) {
@@ -1495,7 +1508,7 @@ class CombatHud {
 
     // Low-speed awareness is derived from the same q*S*CLmax boundary as the flight model. An
     // amber region appears only when the kernel supplies a separately derived maneuver margin.
-    if ((lowSpeed?.unit === "KCAS" || lowSpeed?.unit === "KIAS")
+    if (valueValid && (lowSpeed?.unit === "KCAS" || lowSpeed?.unit === "KIAS")
         && Number.isFinite(lowSpeed.boundaryKts)) {
       const tapeTop = centerY - halfHeight;
       const tapeBottom = centerY + halfHeight;
@@ -1532,32 +1545,34 @@ class CombatHud {
       }
     }
 
-    const base = Math.floor(value / step) * step;
-    for (let i = -7; i <= 7; i++) {
-      const mark = base + i * step;
-      if (floor !== null && mark < floor) continue;
-      const y = snapPixel(
-        centerY - ((mark - value) / step) * pixelsPerStep,
-        this.pixelRatio,
-      );
-      this.setLine(GREEN_DIM, 1);
-      ctx.beginPath();
-      if (rightSide) {
-        ctx.moveTo(x - 28, y);
-        ctx.lineTo(x - 19, y);
-      } else {
-        ctx.moveTo(x + 19, y);
-        ctx.lineTo(x + 28, y);
+    if (valueValid) {
+      const base = Math.floor(value / step) * step;
+      for (let i = -7; i <= 7; i++) {
+        const mark = base + i * step;
+        if (floor !== null && mark < floor) continue;
+        const y = snapPixel(
+          centerY - ((mark - value) / step) * pixelsPerStep,
+          this.pixelRatio,
+        );
+        this.setLine(GREEN_DIM, 1);
+        ctx.beginPath();
+        if (rightSide) {
+          ctx.moveTo(x - 28, y);
+          ctx.lineTo(x - 19, y);
+        } else {
+          ctx.moveTo(x + 19, y);
+          ctx.lineTo(x + 28, y);
+        }
+        ctx.stroke();
+        ctx.fillStyle = GREEN_DIM;
+        ctx.font = "500 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.textAlign = rightSide ? "right" : "left";
+        ctx.fillText(mark.toFixed(decimals), rightSide ? x + 24 : x - 24, y);
       }
-      ctx.stroke();
-      ctx.fillStyle = GREEN_DIM;
-      ctx.font = "500 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.textAlign = rightSide ? "right" : "left";
-      ctx.fillText(mark.toFixed(decimals), rightSide ? x + 24 : x - 24, y);
     }
 
     for (const marker of fixedMarkers) {
-      if ((marker?.unit !== "KCAS" && marker?.unit !== "KIAS")
+      if (!valueValid || (marker?.unit !== "KCAS" && marker?.unit !== "KIAS")
           || !Number.isFinite(marker.value)) continue;
       const rawY = centerY - (marker.value - value) * pxPerUnit;
       const markerY = clamp(rawY, centerY - halfHeight + 7, centerY + halfHeight - 7);
@@ -1601,11 +1616,13 @@ class CombatHud {
     ctx.fillStyle = GREEN;
     ctx.font = "700 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
-    ctx.fillText(`${displayValue.toFixed(decimals)}${suffix}`, x, centerY + 0.5);
+    ctx.fillText(displayValueValid ? `${displayValue.toFixed(decimals)}${suffix}` : "---",
+      x, centerY + 0.5);
 
     // Trend caret: a vertical line from the current value to where the value is heading (value +
     // trend over the lookahead), clamped to the tape. Amber, so accel/decel reads at a glance.
-    const trendAlpha = clamp((Math.abs(trend) - 2) / 4, 0, 1);
+    const trendAlpha = valueValid && Number.isFinite(trend)
+      ? clamp((Math.abs(trend) - 2) / 4, 0, 1) : 0;
     if (trendAlpha > 0.01) {
       ctx.save();
       ctx.globalAlpha *= trendAlpha;
@@ -1633,18 +1650,10 @@ class CombatHud {
   drawAirdataLabels(state, speedX, altitudeX, display = {}) {
     const data = airdataReadout(state);
     const groundKts = Number.isFinite(display.groundKts) ? display.groundKts : null;
-    // The sim emits vertical_speed_fpm as the world-up velocity component (m/s * 196.85). That
-    // conversion is dimensionally correct, but in a steep nose-low dive/zoom the raw value is a
-    // genuine 100+ m/s that renders as an unreadable five-figure "V/S +19.7K FPM". Peg the READOUT
-    // to a believable VVI envelope so it stays legible; the true unclamped sink rate still drives
-    // the GCAS / PULL-UP ground warnings (drawWarnings / drawOutcomeCues read raw state directly).
-    const rawVerticalSpeedFpm = Number.isFinite(display.verticalSpeedDigits)
+    const verticalSpeedFpm = Number.isFinite(display.verticalSpeedDigits)
       ? display.verticalSpeedDigits : data.verticalSpeedFpm;
-    const verticalSpeedFpm = Number.isFinite(rawVerticalSpeedFpm)
-      ? clamp(rawVerticalSpeedFpm, -READABLE_VERTICAL_SPEED_FPM, READABLE_VERTICAL_SPEED_FPM)
-      : rawVerticalSpeedFpm;
     const groundText = Number.isFinite(groundKts)
-      ? `G/S ${Math.round(Math.max(0, groundKts))}`
+      ? `G/S ${Math.round(Math.max(0, groundKts))} KT`
       : data.groundText;
     const speedSecondaryText = data.machText ?? groundText;
     const verticalText = verticalSpeedText(verticalSpeedFpm);
@@ -2010,7 +2019,8 @@ class CombatHud {
     const trend = Math.min(0, Number(state.fuel_trend_lb_min) || 0);
     const capacity = readout.capacityLb;
     const bingoThreshold = readout.bingoThresholdLb;
-    const accent = readout.critical ? RED : readout.bingo ? AMBER : GREEN;
+    const advisory = readout.statusText !== null;
+    const accent = readout.critical ? RED : advisory ? AMBER : GREEN;
     const ctx = this.ctx;
     const layout = this.getLayout();
     const width = Math.min(176,
@@ -2030,22 +2040,22 @@ class CombatHud {
     roundedRect(ctx, x, y, width, height, 4);
     ctx.fillStyle = "rgba(1, 9, 14, 0.38)";
     ctx.fill();
-    ctx.strokeStyle = readout.bingo ? accent : "rgba(77, 255, 136, 0.20)";
+    ctx.strokeStyle = advisory ? accent : "rgba(77, 255, 136, 0.20)";
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.textBaseline = "middle";
     ctx.fillStyle = accent;
     ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
-    ctx.fillText(`F ${String(Math.round(fuel)).padStart(4, "0")}`, x + 9, y + 10);
-    ctx.fillStyle = readout.bingo ? accent : GREEN;
+    ctx.fillText(readout.quantityText, x + 9, y + 10);
+    ctx.fillStyle = advisory ? accent : GREEN;
     ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "right";
     ctx.fillText(readout.flowText, x + width - 9, y + 10);
-    ctx.fillStyle = readout.bingo ? accent : GREEN_DIM;
+    ctx.fillStyle = advisory ? accent : GREEN_DIM;
     ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
-    ctx.fillText(readout.decisionText, x + 9, y + 25);
+    ctx.fillText(readout.decisionDisplayText, x + 9, y + 25);
 
     ctx.fillStyle = "rgba(77, 255, 136, 0.12)";
     ctx.fillRect(barX, barY, barWidth, 3);
@@ -2851,7 +2861,7 @@ class CombatHud {
     const displayIndicated = Number.isFinite(frame.displayAirdata?.indicatedKts)
       ? frame.displayAirdata.indicatedKts : airdata.indicatedKts;
     const displayAltitude = Number.isFinite(frame.displayAirdata?.altitudeFt)
-      ? frame.displayAirdata.altitudeFt : Number(state.alt_ft) || 0;
+      ? frame.displayAirdata.altitudeFt : finiteHudNumber(state.alt_ft);
     const brc = wrap360((Number(state.cheading) || 0) * RAD_TO_DEG);
     const finalCourse = wrap360((Number(state.landing_heading) || 0) * RAD_TO_DEG);
     const showRecoveryAoA = carrierAoARelevant(cue.phase);
@@ -2880,7 +2890,11 @@ class CombatHud {
       `800 ${compact ? 11 : 13}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`);
     drawFit(cue.instruction, 1, GREEN,
       `700 ${compact ? 7 : 9}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`);
-    drawFit(`${Math.round(displayIndicated)} ${airdata.speedUnit} · ${Math.round(displayAltitude)} FT${aoaText}`,
+    const speedText = Number.isFinite(displayIndicated)
+      ? `${Math.round(displayIndicated)} ${airdata.speedUnit}` : `--- ${airdata.speedUnit}`;
+    const altitudeText = Number.isFinite(displayAltitude)
+      ? `${Math.round(displayAltitude)} FT` : "--- FT";
+    drawFit(`${speedText} · ${altitudeText}${aoaText}`,
       2, aoaState === "SLOW" ? RED : aoaState === "FAST" ? AMBER : GREEN_DIM);
     drawFit(`BOAT ${distanceM === null ? "---" : (distanceM / 1852).toFixed(1)} NM · BRC ${String(Math.round(brc)).padStart(3, "0")}° · FNL ${String(Math.round(finalCourse)).padStart(3, "0")}°`,
       3, GREEN_DIM);

@@ -129,7 +129,10 @@ public sealed record FuelConfig(
     double CapacityLb = FuelModel.DefaultFuelLb,
     double InitialFuelLb = FuelModel.DefaultFuelLb,
     double BingoThresholdLb = FuelModel.BingoFuelLb,
-    bool ConsumesFuel = true) {
+    bool ConsumesFuel = true,
+    double? JokerThresholdLb = null,
+    double? MinimumFuelThresholdLb = null,
+    double? EmergencyFuelThresholdLb = null) {
     public static FuelConfig PoweredJet { get; } = new();
     /// <summary>
     /// Internal fuel at the start of a short-range visual engagement. The tanks retain their
@@ -503,7 +506,12 @@ public static class Beats {
                 // The fight begins after launch and ingress, not at chocks with topped tanks.
                 InitialFuelLb: 12000.0,
                 BingoThresholdLb: 4000.0,
-                ConsumesFuel: true),
+                ConsumesFuel: true,
+                // Exercise-planning value, not an aircraft limitation. AFMAN 11-2F-22A defines
+                // Joker as pre-briefed; MIN/EMER are the published F-22 thresholds.
+                JokerThresholdLb: 6000.0,
+                MinimumFuelThresholdLb: 2100.0,
+                EmergencyFuelThresholdLb: 1200.0),
             InitialThrottle: 1.0,
             Mission: new MissionContract(
                 "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
@@ -587,7 +595,10 @@ public static class Beats {
                 CapacityLb: 18000.0,
                 InitialFuelLb: 10500.0,
                 BingoThresholdLb: 3500.0,
-                ConsumesFuel: true),
+                ConsumesFuel: true,
+                JokerThresholdLb: 5500.0,
+                MinimumFuelThresholdLb: 2100.0,
+                EmergencyFuelThresholdLb: 1200.0),
             InitialThrottle: 1.0,
             Mission: new MissionContract(
                 "mission.korea-2030s.drone-raid-defence.prototype.v1",

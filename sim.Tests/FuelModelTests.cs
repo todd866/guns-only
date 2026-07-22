@@ -11,9 +11,15 @@ public class FuelModelTests {
         Assert.Equal(FuelModel.DefaultFuelLb, fuel.CapacityLb);
         Assert.Equal(FuelModel.DefaultFuelLb, fuel.FuelLb);
         Assert.Equal(FuelModel.BingoFuelLb, fuel.BingoThresholdLb);
+        Assert.Null(fuel.JokerThresholdLb);
+        Assert.Null(fuel.MinimumFuelThresholdLb);
+        Assert.Null(fuel.EmergencyFuelThresholdLb);
         Assert.True(fuel.ConsumesFuel);
         Assert.True(fuel.HasFuel);
+        Assert.False(fuel.IsJoker);
         Assert.False(fuel.IsBingo);
+        Assert.False(fuel.IsMinimumFuel);
+        Assert.False(fuel.IsEmergencyFuel);
         Assert.False(fuel.RtbAdvisory);
     }
 
@@ -77,6 +83,52 @@ public class FuelModelTests {
         unpowered.Step(1.0, 100.0);
         Assert.Null(unpowered.MinutesToBingo);
         Assert.Null(unpowered.EnduranceMinutes);
+    }
+
+    [Fact]
+    public void F22ExerciseThresholdsPreserveJokerBingoMinimumAndEmergencySemantics() {
+        var fuel = new FuelModel(
+            initialFuelLb: 6200.0,
+            capacityLb: 18000.0,
+            bingoThresholdLb: 4000.0,
+            consumesFuel: true,
+            jokerThresholdLb: 6000.0,
+            minimumFuelThresholdLb: 2100.0,
+            emergencyFuelThresholdLb: 1200.0);
+
+        fuel.Step(60.0, 200.0);
+        Assert.True(fuel.IsJoker);
+        Assert.False(fuel.IsBingo);
+        Assert.False(fuel.RtbAdvisory,
+            "Joker terminates the event; it does not itself command RTB");
+
+        fuel.Step(60.0, 2000.0);
+        Assert.True(fuel.IsBingo);
+        Assert.True(fuel.RtbAdvisory);
+        Assert.False(fuel.IsMinimumFuel);
+
+        fuel.Step(60.0, 1900.0);
+        Assert.True(fuel.IsMinimumFuel);
+        Assert.False(fuel.IsEmergencyFuel);
+
+        fuel.Step(60.0, 900.0);
+        Assert.True(fuel.IsEmergencyFuel);
+    }
+
+    [Fact]
+    public void FuelDecisionThresholdsValidateCapacityAndOperationalOrder() {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FuelModel(
+            capacityLb: 10000.0, bingoThresholdLb: 4000.0,
+            jokerThresholdLb: 3000.0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FuelModel(
+            capacityLb: 10000.0, bingoThresholdLb: 4000.0,
+            minimumFuelThresholdLb: 5000.0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FuelModel(
+            capacityLb: 10000.0, bingoThresholdLb: 4000.0,
+            minimumFuelThresholdLb: 2000.0, emergencyFuelThresholdLb: 2500.0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FuelModel(
+            capacityLb: 10000.0, bingoThresholdLb: 4000.0,
+            jokerThresholdLb: 11000.0));
     }
 
     [Fact]

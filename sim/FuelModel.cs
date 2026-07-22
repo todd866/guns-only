@@ -15,6 +15,9 @@ public sealed class FuelModel {
 
     public double CapacityLb { get; }
     public double BingoThresholdLb { get; }
+    public double? JokerThresholdLb { get; }
+    public double? MinimumFuelThresholdLb { get; }
+    public double? EmergencyFuelThresholdLb { get; }
     public bool ConsumesFuel { get; }
     public double FuelLb { get; private set; }
     /// <summary>The instantaneous flow used for this tick's real fuel decrement.</summary>
@@ -28,17 +31,34 @@ public sealed class FuelModel {
         && SmoothedBurnLbPerMinute > 1e-9
             ? (FuelLb - BingoThresholdLb) / SmoothedBurnLbPerMinute
             : null;
+    public double? MinutesToJoker => ConsumesFuel && JokerThresholdLb is { } joker
+        && FuelLb > joker && SmoothedBurnLbPerMinute > 1e-9
+            ? (FuelLb - joker) / SmoothedBurnLbPerMinute
+            : null;
     public double? EnduranceMinutes => ConsumesFuel && SmoothedBurnLbPerMinute > 1e-9
         ? FuelLb / SmoothedBurnLbPerMinute
         : null;
     public bool HasFuel => !ConsumesFuel || FuelLb > 0.0;
     public bool IsBingo => ConsumesFuel && FuelLb <= BingoThresholdLb;
+    public bool IsJoker => ConsumesFuel && JokerThresholdLb is { } joker
+        && FuelLb <= joker;
+    /// <summary>
+    /// Reduced-order current-quantity flags. The real calls use projected landing fuel; the
+    /// simulation has no tanker/divert forecast, so it never manufactures an optimistic projection.
+    /// </summary>
+    public bool IsMinimumFuel => ConsumesFuel && MinimumFuelThresholdLb is { } minimum
+        && FuelLb <= minimum;
+    public bool IsEmergencyFuel => ConsumesFuel && EmergencyFuelThresholdLb is { } emergency
+        && FuelLb <= emergency;
     public bool RtbAdvisory { get; private set; }
 
     public FuelModel(double initialFuelLb = DefaultFuelLb,
         double capacityLb = DefaultFuelLb,
         double bingoThresholdLb = BingoFuelLb,
-        bool consumesFuel = true) {
+        bool consumesFuel = true,
+        double? jokerThresholdLb = null,
+        double? minimumFuelThresholdLb = null,
+        double? emergencyFuelThresholdLb = null) {
         if (!double.IsFinite(initialFuelLb) || initialFuelLb < 0.0)
             throw new ArgumentOutOfRangeException(nameof(initialFuelLb));
         if (!double.IsFinite(capacityLb) || capacityLb < 0.0)
@@ -49,12 +69,37 @@ public sealed class FuelModel {
         if (!double.IsFinite(bingoThresholdLb) || bingoThresholdLb < 0.0
             || bingoThresholdLb > capacityLb)
             throw new ArgumentOutOfRangeException(nameof(bingoThresholdLb));
+        ValidateOptionalThreshold(jokerThresholdLb, capacityLb, nameof(jokerThresholdLb));
+        ValidateOptionalThreshold(minimumFuelThresholdLb, capacityLb,
+            nameof(minimumFuelThresholdLb));
+        ValidateOptionalThreshold(emergencyFuelThresholdLb, capacityLb,
+            nameof(emergencyFuelThresholdLb));
+        if (jokerThresholdLb is { } joker && joker < bingoThresholdLb)
+            throw new ArgumentOutOfRangeException(nameof(jokerThresholdLb),
+                "joker must be at or above bingo");
+        if (minimumFuelThresholdLb is { } minimum && minimum > bingoThresholdLb)
+            throw new ArgumentOutOfRangeException(nameof(minimumFuelThresholdLb),
+                "minimum fuel must be at or below bingo");
+        if (emergencyFuelThresholdLb is { } emergency
+            && emergency > (minimumFuelThresholdLb ?? bingoThresholdLb))
+            throw new ArgumentOutOfRangeException(nameof(emergencyFuelThresholdLb),
+                "emergency fuel must be at or below minimum fuel");
 
         CapacityLb = capacityLb;
         BingoThresholdLb = bingoThresholdLb;
+        JokerThresholdLb = jokerThresholdLb;
+        MinimumFuelThresholdLb = minimumFuelThresholdLb;
+        EmergencyFuelThresholdLb = emergencyFuelThresholdLb;
         ConsumesFuel = consumesFuel;
         FuelLb = initialFuelLb;
         RtbAdvisory = IsBingo;
+    }
+
+    static void ValidateOptionalThreshold(double? threshold, double capacityLb,
+        string parameterName) {
+        if (threshold is not { } value) return;
+        if (!double.IsFinite(value) || value < 0.0 || value > capacityLb)
+            throw new ArgumentOutOfRangeException(parameterName);
     }
 
     /// <summary>

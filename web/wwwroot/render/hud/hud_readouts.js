@@ -14,7 +14,7 @@ function roundedMinutes(value) {
 
 function decisionMinutes(prefix, value) {
   const minutes = roundedMinutes(value);
-  return `${prefix} ${minutes === "--" ? "--" : `${minutes}M`}`;
+  return `${prefix} ${minutes} MIN`;
 }
 
 export function verticalSpeedText(value) {
@@ -35,11 +35,11 @@ export function verticalSpeedText(value) {
 
 export function airdataReadout(state = {}) {
   const calibratedKts = finiteNumber(state.calibrated_airspeed_kts);
-  const indicatedKts = Math.max(0,
-    calibratedKts
-      ?? finiteNumber(state.indicated_airspeed_kts)
-      ?? finiteNumber(state.speed_kts)
-      ?? 0);
+  const measuredIndicatedKts = calibratedKts
+    ?? finiteNumber(state.indicated_airspeed_kts)
+    ?? finiteNumber(state.speed_kts);
+  const indicatedKts = measuredIndicatedKts === null
+    ? null : Math.max(0, measuredIndicatedKts);
   const speedUnit = calibratedKts === null ? "KIAS" : "KCAS";
   const trueKts = finiteNumber(state.true_airspeed_kts);
   const groundKts = finiteNumber(state.ground_speed_kts)
@@ -57,10 +57,10 @@ export function airdataReadout(state = {}) {
     cornerKts,
     mach,
     verticalSpeedFpm,
-    primaryText: String(Math.round(indicatedKts)),
+    primaryText: indicatedKts === null ? "---" : String(Math.round(indicatedKts)),
     unitText: `A/S ${speedUnit}`,
     machText: mach === null ? null : `M ${Math.max(0, mach).toFixed(2).replace(/^0/, "")}`,
-    groundText: `G/S ${groundKts === null ? "---" : Math.round(Math.max(0, groundKts))}`,
+    groundText: `G/S ${groundKts === null ? "---" : Math.round(Math.max(0, groundKts))} KT`,
     verticalText: verticalSpeedText(verticalSpeedFpm),
   };
 }
@@ -166,42 +166,81 @@ export function visualMergeWeaponsCue(state = {}) {
 }
 
 export function fuelReadout(state = {}) {
-  const fuelLb = Math.max(0, finiteNumber(state.fuel_lb) ?? 0);
+  const measuredFuelLb = finiteNumber(state.fuel_lb);
+  const fuelLb = measuredFuelLb === null ? null : Math.max(0, measuredFuelLb);
   const capacityLb = Math.max(0,
     finiteNumber(state.fuel_capacity_lb) ?? DEFAULT_FUEL_CAPACITY_LB);
   const bingoThresholdLb = Math.max(0,
     finiteNumber(state.fuel_bingo_lb) ?? DEFAULT_BINGO_FUEL_LB);
+  const jokerThresholdLb = finiteNumber(state.fuel_joker_lb);
+  const minimumFuelThresholdLb = finiteNumber(state.fuel_minimum_lb);
+  const emergencyFuelThresholdLb = finiteNumber(state.fuel_emergency_lb);
   const consumesFuel = state.fuel_consumes !== false;
   const bingo = consumesFuel
-    && (state.fuel_bingo === true || fuelLb <= bingoThresholdLb);
+    && (state.fuel_bingo === true
+      || (fuelLb !== null && fuelLb <= bingoThresholdLb));
+  const joker = consumesFuel && (state.fuel_joker === true
+    || (fuelLb !== null && jokerThresholdLb !== null && fuelLb <= jokerThresholdLb));
+  const minimumFuel = consumesFuel && (state.fuel_minimum === true
+    || (fuelLb !== null && minimumFuelThresholdLb !== null
+      && fuelLb <= minimumFuelThresholdLb));
+  const emergencyFuel = consumesFuel && (state.fuel_emergency === true
+    || (fuelLb !== null && emergencyFuelThresholdLb !== null
+      && fuelLb <= emergencyFuelThresholdLb));
   // USAF airborne-display convention is mass flow per hour. Older snapshots carried a per-minute
   // engineering rate, so convert it at this presentation boundary rather than changing physics.
   const directFlowPph = finiteNumber(state.fuel_flow_pph);
   const legacyFlowLbPerMinute = finiteNumber(state.fuel_flow_lb_min)
     ?? finiteNumber(state.fuel_burn_lb_min);
-  const flowPoundsPerHour = Math.max(0,
-    directFlowPph ?? (legacyFlowLbPerMinute === null ? 0 : legacyFlowLbPerMinute * 60));
-  const flowText = consumesFuel ? `FF ${Math.round(flowPoundsPerHour)}` : "UNPOWERED";
+  const measuredFlowPph = directFlowPph
+    ?? (legacyFlowLbPerMinute === null ? null : legacyFlowLbPerMinute * 60);
+  const flowPoundsPerHour = measuredFlowPph === null
+    ? null : Math.max(0, measuredFlowPph);
+  const flowText = consumesFuel
+    ? `FF ${flowPoundsPerHour === null ? "---" : Math.round(flowPoundsPerHour)} PPH`
+    : "UNPOWERED";
   const decisionText = consumesFuel
-    ? decisionMinutes(bingo ? "END" : "BGO", bingo
-      ? state.fuel_endurance_minutes
-      : state.fuel_minutes_to_bingo)
-    : "END --";
+    ? bingo
+      ? decisionMinutes("END", state.fuel_endurance_minutes)
+      : jokerThresholdLb !== null && !joker
+        ? decisionMinutes("JOKER", state.fuel_minutes_to_joker)
+        : decisionMinutes("BINGO", state.fuel_minutes_to_bingo)
+    : "END -- MIN";
+  const statusText = emergencyFuel ? "EMER FUEL"
+    : minimumFuel ? "MIN FUEL"
+      : bingo ? "BINGO"
+        : joker ? "JOKER" : null;
+  const decisionDisplayText = statusText
+    ? `${statusText} · ${decisionText}` : decisionText;
+  const explicitCriticalThreshold = minimumFuelThresholdLb !== null
+    || emergencyFuelThresholdLb !== null;
+  const legacyCritical = !explicitCriticalThreshold && fuelLb !== null
+    && fuelLb <= bingoThresholdLb * 0.5;
+  const quantityText = `F ${fuelLb === null ? "---" : Math.round(fuelLb)} LB`;
 
   return {
     fuelLb,
     capacityLb,
     bingoThresholdLb,
+    jokerThresholdLb,
+    minimumFuelThresholdLb,
+    emergencyFuelThresholdLb,
     consumesFuel,
+    joker,
     bingo,
-    critical: consumesFuel && fuelLb <= bingoThresholdLb * 0.5,
+    minimumFuel,
+    emergencyFuel,
+    critical: consumesFuel && (emergencyFuel || legacyCritical),
+    statusText,
     flowPoundsPerHour,
     flowText,
     flowUnitText: consumesFuel ? "PPH" : "",
+    quantityText,
     decisionText,
+    decisionDisplayText,
     padlockText: consumesFuel
-      ? `${Math.round(fuelLb)}LB · ${flowText} PPH · ${decisionText}`
-      : `${Math.round(fuelLb)}LB · UNPOWERED`,
+      ? `${fuelLb === null ? "---" : Math.round(fuelLb)} LB · ${flowText} · ${decisionDisplayText}`
+      : `${fuelLb === null ? "---" : Math.round(fuelLb)} LB · UNPOWERED`,
   };
 }
 

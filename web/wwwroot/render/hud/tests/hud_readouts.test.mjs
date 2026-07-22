@@ -30,7 +30,7 @@ test("airdata makes calibrated airspeed primary and exposes Mach", () => {
   assert.equal(readout.speedUnit, "KCAS");
   assert.equal(readout.unitText, "A/S KCAS");
   assert.equal(readout.machText, "M .88");
-  assert.equal(readout.groundText, "G/S 214");
+  assert.equal(readout.groundText, "G/S 214 KT");
   assert.equal(readout.verticalSpeedFpm, -641);
   assert.equal(readout.verticalText, "V/S -650 FPM");
   assert.equal(readout.trueKts, 219.0);
@@ -41,8 +41,17 @@ test("legacy speed alias remains an indicated-airdata fallback", () => {
   assert.equal(airdataReadout({ speed_kts: 181 }).speedUnit, "KIAS");
   assert.equal(airdataReadout({ speed_kts: 181 }).unitText, "A/S KIAS");
   assert.equal(airdataReadout({ speed_kts: 181 }).machText, null);
-  assert.equal(airdataReadout({ speed_kts: 181 }).groundText, "G/S ---");
+  assert.equal(airdataReadout({ speed_kts: 181 }).groundText, "G/S --- KT");
   assert.equal(airdataReadout({ speed_kts: 181 }).verticalText, "V/S --- FPM");
+});
+
+test("missing primary airdata fails visibly instead of becoming a plausible zero", () => {
+  const readout = airdataReadout({});
+  assert.equal(readout.indicatedKts, null);
+  assert.equal(readout.primaryText, "---");
+  assert.equal(readout.groundKts, null);
+  assert.equal(readout.groundText, "G/S --- KT");
+  assert.equal(readout.verticalSpeedFpm, null);
 });
 
 test("vertical speed is signed, deadbanded, compact, and never inferred from carrier sink", () => {
@@ -53,6 +62,7 @@ test("vertical speed is signed, deadbanded, compact, and never inferred from car
   assert.equal(verticalSpeedText(641), "V/S +650 FPM");
   assert.equal(verticalSpeedText(-641), "V/S -650 FPM");
   assert.equal(verticalSpeedText(12_420), "V/S +12.4K FPM");
+  assert.equal(verticalSpeedText(19_700), "V/S +19.7K FPM");
   assert.equal(verticalSpeedText(-123_500), "V/S -124K FPM");
   assert.equal(airdataReadout({ sink_rate_fpm: 700 }).verticalText, "V/S --- FPM",
     "positive-down deck-relative sink is not an ownship vertical-speed substitute");
@@ -147,10 +157,11 @@ test("powered fuel readout uses USAF pounds per hour and time to bingo", () => {
   });
 
   assert.equal(readout.flowPoundsPerHour, 6328.2);
-  assert.equal(readout.flowText, "FF 6328");
+  assert.equal(readout.quantityText, "F 2825 LB");
+  assert.equal(readout.flowText, "FF 6328 PPH");
   assert.equal(readout.flowUnitText, "PPH");
-  assert.equal(readout.decisionText, "BGO 24M");
-  assert.equal(readout.padlockText, "2825LB · FF 6328 PPH · BGO 24M");
+  assert.equal(readout.decisionText, "BINGO 24 MIN");
+  assert.equal(readout.padlockText, "2825 LB · FF 6328 PPH · BINGO 24 MIN");
 });
 
 test("direct PPH wins and legacy per-minute burn converts at the display boundary", () => {
@@ -158,12 +169,13 @@ test("direct PPH wins and legacy per-minute burn converts at the display boundar
     fuel_lb: 2000,
     fuel_flow_pph: 6012.4,
     fuel_flow_lb_min: 20,
-  }).flowText, "FF 6012");
+  }).flowText, "FF 6012 PPH");
   assert.equal(fuelReadout({
     fuel_lb: 2000,
     fuel_burn_lb_min: 44.6,
-  }).flowText, "FF 2676");
-  assert.equal(fuelReadout({ fuel_lb: 2000 }).flowText, "FF 0");
+  }).flowText, "FF 2676 PPH");
+  assert.equal(fuelReadout({ fuel_lb: 2000 }).flowText, "FF --- PPH");
+  assert.equal(fuelReadout({ fuel_lb: 2000, fuel_flow_pph: 0 }).flowText, "FF 0 PPH");
 });
 
 test("bingo switches the decision to endurance and preserves unavailable values", () => {
@@ -173,21 +185,64 @@ test("bingo switches the decision to endurance and preserves unavailable values"
     fuel_flow_lb_min: 87,
     fuel_endurance_minutes: 9.2,
     fuel_bingo: true,
-  }).decisionText, "END 9M");
+  }).decisionText, "END 9 MIN");
 
   assert.equal(fuelReadout({
     fuel_lb: 1200,
     fuel_flow_lb_min: 0,
     fuel_minutes_to_bingo: null,
-  }).decisionText, "BGO --");
+  }).decisionText, "BINGO -- MIN");
+});
+
+test("F-22 fuel calls preserve Joker, Bingo, minimum, and emergency precedence", () => {
+  const base = {
+    fuel_capacity_lb: 18_000,
+    fuel_joker_lb: 6000,
+    fuel_bingo_lb: 4000,
+    fuel_minimum_lb: 2100,
+    fuel_emergency_lb: 1200,
+    fuel_flow_pph: 24_000,
+  };
+  const normal = fuelReadout({
+    ...base, fuel_lb: 6500, fuel_minutes_to_joker: 1.25,
+  });
+  assert.equal(normal.statusText, null);
+  assert.equal(normal.decisionText, "JOKER 1 MIN");
+
+  const joker = fuelReadout({
+    ...base, fuel_lb: 5800, fuel_minutes_to_bingo: 4.1,
+  });
+  assert.equal(joker.statusText, "JOKER");
+  assert.equal(joker.decisionDisplayText, "JOKER · BINGO 4 MIN");
+
+  assert.equal(fuelReadout({ ...base, fuel_lb: 3900 }).statusText, "BINGO");
+  assert.equal(fuelReadout({ ...base, fuel_lb: 2000 }).statusText, "MIN FUEL");
+  const emergency = fuelReadout({ ...base, fuel_lb: 1100 });
+  assert.equal(emergency.statusText, "EMER FUEL");
+  assert.equal(emergency.critical, true);
+});
+
+test("missing fuel and flow remain unavailable while explicit status stays authoritative", () => {
+  const unavailable = fuelReadout({ fuel_consumes: true });
+  assert.equal(unavailable.fuelLb, null);
+  assert.equal(unavailable.quantityText, "F --- LB");
+  assert.equal(unavailable.flowPoundsPerHour, null);
+  assert.equal(unavailable.flowText, "FF --- PPH");
+  assert.equal(unavailable.bingo, false);
+  assert.equal(unavailable.critical, false);
+
+  const declared = fuelReadout({ fuel_bingo: true });
+  assert.equal(declared.fuelLb, null);
+  assert.equal(declared.bingo, true);
+  assert.equal(declared.statusText, "BINGO");
 });
 
 test("engine-less loadout reports unpowered instead of inventing endurance", () => {
   const readout = fuelReadout({ fuel_lb: 0, fuel_consumes: false });
   assert.equal(readout.flowText, "UNPOWERED");
   assert.equal(readout.flowUnitText, "");
-  assert.equal(readout.decisionText, "END --");
-  assert.equal(readout.padlockText, "0LB · UNPOWERED");
+  assert.equal(readout.decisionText, "END -- MIN");
+  assert.equal(readout.padlockText, "0 LB · UNPOWERED");
 });
 
 test("systems readout preserves command, three independent gear indications, and flap asymmetry", () => {
@@ -464,7 +519,11 @@ test("production HUD consumes stabilized KIAS plus physical corner and fuel read
   assert.match(source, /case "COME RIGHT": return "COME RIGHT"/);
   assert.match(source, /case "TERMINAL":/);
   assert.match(source, /display\.indicatedRateKtsPerSecond \* 6/);
-  assert.match(source, /const trendAlpha = clamp\(\(Math\.abs\(trend\) - 2\) \/ 4/);
+  assert.match(source, /const trendAlpha = valueValid && Number\.isFinite\(trend\)/);
+  assert.match(source, /ctx\.fillText\(readout\.quantityText/);
+  assert.match(source, /ctx\.fillText\(readout\.flowText/);
+  assert.doesNotMatch(source, /READABLE_VERTICAL_SPEED_FPM/,
+    "vertical speed must never be silently under-reported");
   assert.doesNotMatch(source, /Number\(state\.kill_progress\)/,
     "hit count is not a physical damage percentage");
   assert.doesNotMatch(source, /`AIRFRAME \$\{Math\.round\(health \* 100\)\}%`/,

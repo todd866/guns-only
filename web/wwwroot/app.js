@@ -55,7 +55,12 @@ import {
   applyLookDelta,
   trackpadLookDelta,
 } from "./render/input/look_gesture.js";
-import { mobileRollCommand } from "./render/input/mobile_tilt_input.js";
+import {
+  mobileRollCommand,
+  smoothTilt,
+  StableTiltCalibration,
+  TiltSensorWatchdog,
+} from "./render/input/mobile_tilt_input.js";
 import {
   GlobalRoomClient,
   resolveGlobalRoomUrl,
@@ -1169,9 +1174,9 @@ const MISSION_BRIEFS = Object.freeze({
     kicker: "Visual fight · mission 07",
     title: "F-22A vs Su-27S",
     sortie: "Continuous visual merges · public-data surrogates · guns only",
-    configuration: "F-22 public-data surrogate · 480 rounds across all fights · Auto-GCAS armed",
+    configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     card: "Splash successive Su-27 surrogates; each replacement enters through a fresh neutral merge.",
-    brief: "Each splash stages another offset Su-27 visual merge after a short destruction dwell. Fuel, ammunition, ownship damage, and kill count persist, so burst discipline matters; every new opponent starts guns-safe through the first pass. Fight for the rear quarter, preserve IAS, and manage both G onset and duration: 9 G is available, but vision and consciousness are physiological state. Auto-GCAS responds only to predicted terrain collision; hold K to paddle an active fly-up. No missiles or unmodelled modern sensors.",
+    brief: "Each splash stages another offset Su-27 visual merge after a short destruction dwell. Fuel, ammunition, ownship damage, and kill count persist, so burst discipline matters; every new opponent starts guns-safe through the first pass. Fight for the rear quarter, preserve energy, and manage both G onset and duration: 9 G is available, but vision and consciousness are physiological state. Auto-GCAS responds only to predicted terrain collision; hold K to paddle an active fly-up. No missiles or unmodelled modern sensors.",
     controls: "Arrows fly · W/S power · F guns · V padlock\nSpace releases the G limiter · hold K only to paddle an active Auto-GCAS fly-up",
   },
   8: {
@@ -1179,7 +1184,7 @@ const MISSION_BRIEFS = Object.freeze({
     kicker: "Air defence · mission 08",
     title: "Drone Raid Defence",
     sortie: "Defensive intercept · four sequential raiders",
-    configuration: "F-22 public-data surrogate · 480 rounds · Auto-GCAS armed · one authoritative target at a time",
+    configuration: "F-22 public-data surrogate · 480 rounds · Joker 5,500 LB · Bingo 3,500 LB · Auto-GCAS armed · one authoritative target at a time",
     card: "Stop four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring.",
     brief: "This is a four-raider sequential stream: one target is authoritative at a time, and the next enters only after the current raider is killed or leaks. Fly cutoff geometry, take the first valid gun solution, and protect ammunition; the score rewards zero leakers, quick neutralizations, and rounds per kill. Auto-GCAS is terrain-triggered and K is its held paddle override.",
     controls: "Arrows fly · W/S power · F guns · V padlock\n480 rounds for four raiders · hold K only during an active Auto-GCAS fly-up",
@@ -1191,7 +1196,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     kicker: "Raptor programme · qualification 01",
     title: "First Merge",
     sortie: "F-22A vs Su-27S · guns only · first pass safe",
-    configuration: "F-22 public-data surrogate · 480 rounds · Auto-GCAS armed",
+    configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     brief: "You are already at the visual merge. Survive the first pass, fight into the rear quarter, and splash one Su-27 surrogate. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
     controls: "Arrows fly · W/S power · F guns · V padlock\nSplash one bandit to qualify · Space releases the G limiter",
   }),
@@ -1200,7 +1205,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     kicker: "Raptor programme · qualification 02",
     title: "Raid Defence",
     sortie: "F-22A defensive intercept · four staged raiders",
-    configuration: "F-22 public-data surrogate · 480 rounds · Auto-GCAS armed",
+    configuration: "F-22 public-data surrogate · 480 rounds · Joker 5,500 LB · Bingo 3,500 LB · Auto-GCAS armed",
   }),
   "endurance-merge": Object.freeze({
     ...MISSION_BRIEFS[7],
@@ -1214,7 +1219,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     kicker: "Raptor programme · final exam",
     title: "Ace Duel",
     sortie: "F-22A vs Su-27S ace · lone guns-only duel · first pass safe",
-    configuration: "F-22 public-data surrogate · 480 rounds · Auto-GCAS armed",
+    configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     brief: "The programme's final exam: one merge, one bandit, flown by the best pilot the ladder can field. This Su-27 surrogate reads the fight a manoeuvre ahead—it converts the merge and takes it into the vertical. Survive the first pass, then out-fly a genuine ace for the rear quarter and splash it. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
     controls: "Arrows fly · W/S power · F guns · V padlock\nSplash the ace to complete the programme · Space releases the G limiter",
   }),
@@ -4733,16 +4738,26 @@ function installMobileInput(view) {
   const orientationSupported = typeof globalThis.DeviceOrientationEvent !== "undefined";
   let tiltState = "off";
   let orientationListening = false;
-  let orientationTimer = 0;
   let calibration = null;
   let calibrationAngle = null;
   let latestOrientation = null;
   let filteredPitch = 0;
   let filteredRoll = 0;
+  let lastOrientationSampleMs = null;
   let lastAnalogRollCommand = 0;
   let suspended = false;
   let frozen = false;
   let frozenRestartSent = false;
+  const tiltCalibration = new StableTiltCalibration();
+  const tiltWatchdog = new TiltSensorWatchdog({
+    onStale: handleOrientationStale,
+    onFallback: () => {
+      if (!suspended && !frozen && !document.hidden
+          && (tiltState === "waiting" || tiltState === "enabled")) {
+        useButtonStick("TILT SIGNAL LOST · BUTTONS");
+      }
+    },
+  });
 
   function status(message) {
     if (tiltStatus) tiltStatus.textContent = message;
@@ -4814,38 +4829,52 @@ function installMobileInput(view) {
     return setAnalogRollCommand(mobileRollCommand(value));
   }
 
-  function captureCentre(sample, message = "TILT CENTRED") {
+  function captureCentre(sample, message = "TILT CENTRED", timestampMs = performance.now()) {
+    tiltWatchdog.recovered();
     calibration = { roll: sample.roll, pitch: sample.pitch };
     calibrationAngle = sample.angle;
+    tiltCalibration.reset();
     filteredPitch = 0;
     filteredRoll = 0;
+    lastOrientationSampleMs = timestampMs;
     releaseTiltAxes();
     document.documentElement.classList.remove("tilt-pending");
     status(message);
     setPauseReason("calibration", false);
   }
 
-  function awaitFreshCentre() {
+  function awaitFreshCentre(message = "TILT RECENTRING…") {
+    tiltWatchdog.beginRecovery();
     setPauseReason("calibration", true);
+    tiltState = "waiting";
     calibration = null;
     calibrationAngle = null;
+    tiltCalibration.reset();
     filteredPitch = 0;
     filteredRoll = 0;
+    lastOrientationSampleMs = null;
     releaseTiltAxes();
     if (tiltTitle) tiltTitle.textContent = "HOLD LEVEL — RECENTRING";
     if (tiltCopy) tiltCopy.textContent = "Hold your flying angle while the controls find a fresh centre.";
     document.documentElement.classList.add("tilt-pending");
-    status("TILT RECENTRING…");
+    status(message);
+  }
+
+  function handleOrientationStale() {
+    if (suspended || frozen || document.hidden
+        || (tiltState !== "waiting" && tiltState !== "enabled")) return;
+    awaitFreshCentre("TILT SIGNAL LOST · HOLD LEVEL");
   }
 
   function stopOrientationListener() {
-    if (!orientationListening) return;
-    window.removeEventListener("deviceorientation", handleOrientation);
-    orientationListening = false;
+    tiltWatchdog.stop();
+    if (orientationListening) {
+      window.removeEventListener("deviceorientation", handleOrientation);
+      orientationListening = false;
+    }
   }
 
   function useButtonStick(message) {
-    window.clearTimeout(orientationTimer);
     stopOrientationListener();
     releaseTiltAxes();
     tiltState = "fallback";
@@ -4856,22 +4885,31 @@ function installMobileInput(view) {
   }
 
   function handleOrientation(event) {
-    if (suspended || document.hidden || (tiltState !== "waiting" && tiltState !== "enabled")) return;
+    if (suspended || frozen || document.hidden
+        || (tiltState !== "waiting" && tiltState !== "enabled")) return;
     const sample = orientationAxes(event);
     if (!sample) return;
+    const timestampMs = performance.now();
     latestOrientation = sample;
+    tiltWatchdog.sample();
 
-    if (tiltState === "waiting") {
-      window.clearTimeout(orientationTimer);
+    if (tiltState === "waiting" || !calibration || calibrationAngle !== sample.angle) {
+      if (tiltState !== "waiting") awaitFreshCentre("SCREEN ROTATED · HOLD LEVEL");
+      const centre = tiltCalibration.add(sample, timestampMs);
+      if (!centre) return;
       tiltState = "enabled";
-      captureCentre(sample);
+      captureCentre(centre, calibrationAngle === null ? "TILT CENTRED" : "TILT RECENTRED",
+        timestampMs);
       document.documentElement.classList.remove("tilt-pending", "tilt-fallback");
       document.documentElement.classList.add("tilt-enabled");
       return;
     }
 
-    if (!calibration || calibrationAngle !== sample.angle) {
-      captureCentre(sample, "TILT RECENTRED");
+    // Keep liveness monitoring active behind pause/settings overlays without restoring actuator
+    // input until the flight clock is released again.
+    if (pauseReasons.size > 0) {
+      lastOrientationSampleMs = timestampMs;
+      releaseTiltAxes();
       return;
     }
 
@@ -4880,8 +4918,11 @@ function installMobileInput(view) {
       * PITCH_GAIN * sensitivity, -30, 30);
     const roll = clamp(angleDelta(sample.roll, calibration.roll)
       * ROLL_GAIN * sensitivity, -30, 30);
-    filteredPitch = filteredPitch * 0.72 + pitch * 0.28;
-    filteredRoll = filteredRoll * 0.72 + roll * 0.28;
+    const deltaSeconds = lastOrientationSampleMs === null
+      ? 0 : Math.max(0, timestampMs - lastOrientationSampleMs) / 1000;
+    lastOrientationSampleMs = timestampMs;
+    filteredPitch = smoothTilt(filteredPitch, pitch, deltaSeconds);
+    filteredRoll = smoothTilt(filteredRoll, roll, deltaSeconds);
     updateTiltAxis("pitch", filteredPitch, "ArrowUp", "ArrowDown");
     if (!updateAnalogRoll(filteredRoll)) {
       updateTiltAxis("roll", filteredRoll, "ArrowLeft", "ArrowRight");
@@ -4895,16 +4936,20 @@ function installMobileInput(view) {
       orientationListening = true;
     }
     tiltState = "waiting";
+    calibration = null;
+    calibrationAngle = null;
+    tiltCalibration.reset();
+    lastOrientationSampleMs = null;
     status("WAITING FOR TILT…");
     if (tiltTitle) tiltTitle.textContent = "HOLD LEVEL — CALIBRATING";
     if (tiltCopy) tiltCopy.textContent = "Hold the device at your comfortable flying angle while the sensor centres.";
-    orientationTimer = window.setTimeout(() => useButtonStick("NO TILT DATA · BUTTONS"), 3000);
+    tiltWatchdog.beginRecovery();
   }
 
   async function enableTilt() {
     if (tiltState === "requesting" || tiltState === "waiting") return;
     if (tiltState === "enabled" && latestOrientation) {
-      captureCentre(latestOrientation);
+      awaitFreshCentre();
       return;
     }
     if (!orientationSupported) {
@@ -4934,7 +4979,7 @@ function installMobileInput(view) {
   function recenterTilt() {
     setPauseReason("calibration", true);
     if (tiltState === "enabled" && latestOrientation) {
-      captureCentre(latestOrientation);
+      awaitFreshCentre();
       return;
     }
     if (!orientationSupported) {
@@ -5047,22 +5092,31 @@ function installMobileInput(view) {
   document.addEventListener("dblclick", preventGesture, { passive: false });
 
   function orientationChanged() {
-    if (tiltState === "enabled") awaitFreshCentre();
+    if (tiltState === "enabled" || tiltState === "waiting") awaitFreshCentre();
   }
 
   window.addEventListener("orientationchange", orientationChanged, { passive: true });
   window.screen?.orientation?.addEventListener?.("change", orientationChanged);
-  window.addEventListener("blur", () => { suspended = true; });
+  window.addEventListener("blur", () => {
+    suspended = true;
+    tiltWatchdog.stop();
+    releaseTiltAxes();
+  });
+  window.addEventListener("pagehide", () => {
+    tiltWatchdog.stop();
+    releaseTiltAxes();
+  });
   window.addEventListener("focus", () => {
     suspended = false;
-    if (tiltState === "enabled") awaitFreshCentre();
+    if (tiltState === "enabled" || tiltState === "waiting") awaitFreshCentre();
   });
   document.addEventListener("visibilitychange", () => {
     suspended = document.hidden;
     if (suspended) {
+      tiltWatchdog.stop();
       resetMobileInput();
       releaseAllMappedKeys("visibility-hidden");
-    } else if (tiltState === "enabled") {
+    } else if (tiltState === "enabled" || tiltState === "waiting") {
       awaitFreshCentre();
     }
   });
@@ -5076,6 +5130,7 @@ function installMobileInput(view) {
     releaseTiltAxes();
     filteredPitch = 0;
     filteredRoll = 0;
+    lastOrientationSampleMs = null;
   };
 
   setMobileFrozen = (nextFrozen) => {
@@ -5084,7 +5139,12 @@ function installMobileInput(view) {
     frozen = next;
     frozenRestartSent = false;
     document.documentElement.classList.toggle("run-frozen", frozen);
-    if (frozen) resetMobileInput();
+    if (frozen) {
+      tiltWatchdog.stop();
+      resetMobileInput();
+    } else if (tiltState === "enabled" || tiltState === "waiting") {
+      awaitFreshCentre();
+    }
   };
 
   if (orientationSupported) {
