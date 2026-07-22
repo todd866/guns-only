@@ -86,8 +86,14 @@ public sealed class ReactiveBandit : IBandit {
     int _breakSign = 1;
     int _damageHandedness = 1;
     WreckContactMotion? _wreckMotion;
+    readonly BanditSkillProfile _profile;
 
-    public ReactiveBandit(AircraftState initial, AircraftParams parameters) {
+    public PilotSkill Skill { get; }
+
+    public ReactiveBandit(AircraftState initial, AircraftParams parameters,
+        PilotSkill skill = PilotSkill.Competent) {
+        Skill = skill;
+        _profile = BanditSkillProfile.For(skill);
         _sim = new AircraftSim(initial, parameters);
         _fightCentre = initial.Position;
         // Scale the controller's energy gates from the staged fight speed. The original 180 m/s
@@ -285,8 +291,9 @@ public sealed class ReactiveBandit : IBandit {
 
         double bank = LimitedBankTo(aim, 1.08);
         double angle = AngleTo(aim);
-        // Moderate rate fighter: enough to point and threaten, below an ace's max-performance pull.
-        double g = System.Math.Clamp(1.15 + angle * 1.45, 1.15, 3.20);
+        // Rate fighter: point and threaten. Competent stays below an ace's max-performance pull
+        // (gain 1.45, cap 3.20); higher skill tiers pull harder via their profile.
+        double g = System.Math.Clamp(1.15 + angle * _profile.AcquireGGain, 1.15, _profile.MaxAcquireG);
         double throttle = State.Speed < _lowSpeedMps
             ? System.Math.Min(_maximumThrottle, 1.05)
             : State.Speed > _highSpeedMps ? System.Math.Min(_maximumThrottle, 0.45)
