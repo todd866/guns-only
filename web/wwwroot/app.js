@@ -142,7 +142,7 @@ const CLEAR_AIR_VISIBILITY_M = 100_000;
 // view until it represents authoritative state and passes an in-mission visual review. Pack weapon
 // and damage effects remain enabled because each one is evidence of a real simulation event.
 const PRODUCTION_PACK_ENVIRONMENT_ENABLED = false;
-const PRODUCTION_SIMULATED_CLOUDS_ENABLED = true;
+const PRODUCTION_SIMULATED_CLOUDS_ENABLED = false;
 const PRODUCTION_ESCORT_PRESENTATION_ENABLED = false;
 const PRODUCTION_NONCOMBAT_WORLD_BOGEYS_VISIBLE = false;
 const PRODUCTION_KOREA_TERRAIN_ENABLED = true;
