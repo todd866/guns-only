@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const appUrl = new URL("../../../app.js", import.meta.url);
+const sceneBuildersUrl = new URL("../../scene/scene_builders.js", import.meta.url);
 const hudUrl = new URL("../../../hud.js", import.meta.url);
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
 const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
@@ -47,8 +48,9 @@ test("production admits only state-bearing environment visuals and event-bearing
 });
 
 test("terrain stays lazy through Ready and shares the active ocean curvature contract", async () => {
-  const [source, bridgeSource] = await Promise.all([
+  const [source, sceneBuilders, bridgeSource] = await Promise.all([
     readFile(appUrl, "utf8"),
+    readFile(sceneBuildersUrl, "utf8"),
     readBridgeContract(),
   ]);
   assert.match(source,
@@ -74,8 +76,14 @@ test("terrain stays lazy through Ready and shares the active ocean curvature con
   assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
     "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
-    /TERRAIN_CURVATURE_START_M[\s\S]*TERRAIN_EARTH_RADIUS_M/);
-  assert.match(source,
+    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js"/,
+    "the active ocean builder must be sourced from the scene builder module");
+  assert.match(source, /createDecisionSupportSea\(\)/,
+    "production must instantiate the decision-support sea");
+  assert.match(sceneBuilders,
+    /import \{[\s\S]*TERRAIN_CURVATURE_START_M,[\s\S]*TERRAIN_EARTH_RADIUS_M,[\s\S]*\} from "\.\.\/environment\/korea_terrain\.js"/,
+    "the ocean builder must read the terrain curvature constants from the terrain contract");
+  assert.match(sceneBuilders,
     /function createDecisionSupportSea\(\)[\s\S]*TERRAIN_CURVATURE_START_M\.toFixed\(1\)[\s\S]*2 \* TERRAIN_EARTH_RADIUS_M/,
     "active ocean and terrain must use one curvature start/radius contract");
   assert.match(source,
