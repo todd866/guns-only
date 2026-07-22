@@ -428,8 +428,16 @@ public static class AutoGcasController {
                 gDemand = recoveryG;
             } else {
                 if (input.EffectivePilotCommand.DirectLateralControl) {
+                    // Predict the same clamped actuator demand FlightModel flies: pilot aileron
+                    // PLUS the explicit SAS roll channel. The padlock roll assist deliberately
+                    // commands its entire roll through SasRollControl, so reading only
+                    // RollControl made the predictor assume wings-steady while the real aircraft
+                    // rolled and redirected its lift vector during a low-altitude padlocked turn.
                     rollControl = Math.Clamp(
-                        input.EffectivePilotCommand.RollControl, -1.0, 1.0);
+                        Math.Clamp(input.EffectivePilotCommand.RollControl, -1.0, 1.0)
+                        + Math.Clamp(
+                            input.EffectivePilotCommand.SasRollControl, -1.0, 1.0),
+                        -1.0, 1.0);
                 } else {
                     double bankError = Math.IEEERemainder(
                         input.EffectivePilotCommand.BankTarget - frame.RollErrorRad,

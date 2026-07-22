@@ -170,6 +170,23 @@ export class TiltSensorWatchdog {
  * motions for formation-like corrections while retaining full aileron authority at a deliberate
  * 30-degree tilt. Sensitivity is applied to the measured angle before this function.
  */
+/**
+ * Decide whether the latest continuous roll command must cross the WASM bridge.
+ *
+ * Sub-noise deltas are suppressed so sensor jitter cannot spam the bridge, but the transition to
+ * exact neutral is ALWAYS transmitted while the previously sent command is nonzero: the
+ * simulation's G-LOC control interlock releases only when the flown roll command is exactly zero,
+ * so a suppressed final zero would latch a stale sub-noise roll command and keep the pilot locked
+ * out with the phone physically neutral.
+ */
+export function shouldTransmitAnalogRoll(command, lastSent, { epsilon = 0.002 } = {}) {
+  const next = Number(command);
+  if (!Number.isFinite(next)) return false;
+  const previous = Number(lastSent) || 0;
+  if (next === 0) return previous !== 0;
+  return Math.abs(next - previous) >= Math.max(0, Number(epsilon) || 0);
+}
+
 export function mobileRollCommand(degrees, {
   deadzoneDegrees = 4,
   fullScaleDegrees = 30,

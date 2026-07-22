@@ -59,6 +59,7 @@ import { mobileControlProfile } from "./render/input/mobile_control_profile.js";
 import { mobileThrottleRockerState } from "./render/input/mobile_throttle_rocker.js";
 import {
   mobileRollCommand,
+  shouldTransmitAnalogRoll,
   smoothTilt,
   StableTiltCalibration,
   TiltSensorWatchdog,
@@ -4857,8 +4858,10 @@ function installMobileInput(view) {
     if (typeof bridge?.SetAnalogRollControl !== "function") return false;
     const command = clamp(Number(value) || 0, -1, 1);
     // Phone sensors and pointer moves can report sub-noise changes faster than the fixed clock.
-    // Keep the latest command without needlessly crossing the WASM bridge for the same value.
-    if (Math.abs(command - lastAnalogRollCommand) >= 0.002) {
+    // Keep the latest command without needlessly crossing the WASM bridge for the same value —
+    // but ALWAYS transmit the transition to exact neutral: suppressing it latched a stale
+    // sub-noise roll command, and the simulation's G-LOC interlock releases only at exactly zero.
+    if (shouldTransmitAnalogRoll(command, lastAnalogRollCommand)) {
       bridge.SetAnalogRollControl(command);
       lastAnalogRollCommand = command;
     }

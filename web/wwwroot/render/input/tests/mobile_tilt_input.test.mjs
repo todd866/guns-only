@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   mobileRollCommand,
+  shouldTransmitAnalogRoll,
   smoothTilt,
   StableTiltCalibration,
   TiltSensorWatchdog,
@@ -26,6 +27,31 @@ test("phone roll curve is odd, monotonic, and rejects invalid sensor data", () =
   }
   assert.equal(mobileRollCommand(undefined), 0);
   assert.equal(mobileRollCommand(Number.NaN), 0);
+});
+
+test("bridge suppression never swallows the transition to exact neutral", () => {
+  // Sub-noise deltas stay suppressed so sensor jitter cannot spam the WASM bridge...
+  assert.equal(shouldTransmitAnalogRoll(0.00121, 0), false);
+  assert.equal(shouldTransmitAnalogRoll(0.5015, 0.5), false);
+  assert.equal(shouldTransmitAnalogRoll(0.504, 0.5), true);
+  // ...but the return to EXACTLY zero always transmits while a nonzero command is latched.
+  // A 4.5-degree tilt sends about 0.00121; entering the 4-degree neutral zone then yields 0,
+  // which the old deadband suppressed — the simulation kept RollControl = 0.00121 forever and
+  // the G-LOC interlock (|roll| <= 1e-9) never released.
+  assert.equal(shouldTransmitAnalogRoll(0, 0.00121), true);
+  assert.equal(shouldTransmitAnalogRoll(0, -0.00121), true);
+  assert.equal(shouldTransmitAnalogRoll(0, 0.5), true);
+  // Zero-to-zero stays quiet, and invalid values never cross the bridge.
+  assert.equal(shouldTransmitAnalogRoll(0, 0), false);
+  assert.equal(shouldTransmitAnalogRoll(Number.NaN, 0.5), false);
+});
+
+test("production analog roll wires the zero-transition-safe suppression", async () => {
+  const source = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
+  assert.match(source, /if \(shouldTransmitAnalogRoll\(command, lastAnalogRollCommand\)\) \{/,
+    "setAnalogRollCommand must gate the bridge through shouldTransmitAnalogRoll");
+  assert.doesNotMatch(source, /Math\.abs\(command - lastAnalogRollCommand\) >= 0\.002/,
+    "the raw deadband that suppressed the final zero transition must not return");
 });
 
 function sample(roll, pitch = 42, angle = 0) {

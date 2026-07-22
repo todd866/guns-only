@@ -467,5 +467,31 @@ public class AutoGcasTests {
         Assert.Equal(0, result.State.ActivationCount);
     }
 
+    [Fact]
+    public void PadlockSasRollIsPredictedExactlyLikePilotRollDuringTerrainPrediction() {
+        // The padlock roll assist commands its entire roll through the explicit SAS channel with
+        // neutral pilot aileron. FlightModel flies the clamped RollControl + SasRollControl sum,
+        // so the terrain predictor must fly the identical demand: reading only RollControl
+        // predicted a wings-steady trajectory while the real aircraft rolled its lift vector
+        // away during a low-altitude padlocked turn.
+        AircraftState state = FlightState(altitudeM: 420.0, gammaDegrees: -20.0);
+
+        AutoGcasStepResult pilotRoll = Step(Input(state, Command(rollControl: 0.18)));
+        AutoGcasStepResult sasRoll = Step(Input(state,
+            Command() with { SasRollControl = 0.18 }));
+        AutoGcasStepResult neutral = Step(Input(state, Command()));
+
+        Assert.Equal(pilotRoll.State.Prediction, sasRoll.State.Prediction);
+        Assert.Equal(pilotRoll.State.Phase, sasRoll.State.Phase);
+        Assert.NotEqual(neutral.State.Prediction.PilotMinimumClearanceM,
+            sasRoll.State.Prediction.PilotMinimumClearanceM);
+
+        // A split demand saturates at the same physical actuator stop as full deflection.
+        AutoGcasStepResult split = Step(Input(state,
+            Command(rollControl: 0.7) with { SasRollControl = 0.6 }));
+        AutoGcasStepResult full = Step(Input(state, Command(rollControl: 1.0)));
+        Assert.Equal(full.State.Prediction, split.State.Prediction);
+    }
+
     static double Radians(double degrees) => degrees * Math.PI / 180.0;
 }
