@@ -35,22 +35,26 @@ public static class BanditFireControl {
     public const double BurstCycleSeconds = 1.25;
 
     public static bool WantsToFire(in AircraftState own, in ActorObservation player,
-        double engagementSeconds) {
+        double engagementSeconds, double? noseErrorGateRad = null) {
         if (!double.IsFinite(engagementSeconds) || engagementSeconds < 0.0) return false;
-        if (!InFiringEnvelope(own, player)) return false;
+        if (!InFiringEnvelope(own, player, noseErrorGateRad)) return false;
 
         double burstPhase = engagementSeconds % BurstCycleSeconds;
         return burstPhase < BurstSeconds;
     }
 
-    /// <summary>Physical range/body-axis envelope, independent of the burst clock.</summary>
-    public static bool InFiringEnvelope(in AircraftState own, in ActorObservation player) {
+    /// <summary>Physical range/body-axis envelope, independent of the burst clock. The nose-error
+    /// gate defaults to the historical 3 degrees; skill profiles may widen their own trigger
+    /// discipline (rounds remain honest ballistics, so a wide-gate burst is tracer pressure and
+    /// near misses, not free hits).</summary>
+    public static bool InFiringEnvelope(in AircraftState own, in ActorObservation player,
+        double? noseErrorGateRad = null) {
         var line = player.Position - own.Position;
         double range = line.Length;
         if (!double.IsFinite(range) || range < MinimumRangeM || range > MaximumRangeM)
             return false;
 
-        return NoseErrorRad(own, player) <= MaximumNoseErrorRad;
+        return NoseErrorRad(own, player) <= (noseErrorGateRad ?? MaximumNoseErrorRad);
     }
 
     /// <summary>Angular error between the physical gun axis and the observed contact.</summary>
@@ -77,6 +81,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     const double CombatCeilingM = 11500.0;
     const double ReturnRadiusM = 5200.0;
     const double ThreatRangeM = 1500.0;
+    const double MergeSpawnClearanceM = 600.0;
     const double DefendSeconds = 3.4;
     const double DefendCooldownSeconds = 3.8;
 
@@ -90,6 +95,12 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     readonly AircraftParams _parameters;
     readonly Vec3D _fightCentre;
     readonly double _ceilingM;
+    // Authoritative terrain, when the mission supplies one. Every floor number in this controller
+    // is an offset above the LOCAL surface, not sea level; without terrain the surface is 0 and
+    // the historical sea-level behaviour is reproduced exactly. Mutable because the session can
+    // re-anchor the world origin mid-sortie (SetWorldOrigin): a bandit holding the previous
+    // translation would silently sample the wrong ground.
+    GunsOnly.Sim.Environment.ITerrainSurface? _terrain;
     readonly double _energyEntryMps;
     readonly double _energyExitMps;
     readonly double _lowSpeedMps;
@@ -116,10 +127,12 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     public PilotSkill Skill { get; }
 
     public ReactiveBandit(AircraftState initial, AircraftParams parameters,
-        PilotSkill skill = PilotSkill.Competent) {
+        PilotSkill skill = PilotSkill.Competent,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
         Skill = skill;
         _profile = BanditSkillProfile.For(skill);
         _parameters = parameters;
+        _terrain = terrain;
         _sim = new AircraftSim(initial, parameters);
         _fightCentre = initial.Position;
         // Scale the controller's energy gates from the staged fight speed. The original 180 m/s
@@ -146,7 +159,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     /// in spacing/altitude while retaining fighting energy and a fair head-on presentation.
     public static ReactiveBandit SpawnForMerge(in AircraftState player,
         AircraftParams parameters, int engagementNumber,
-        double speedMps = 180.0, PilotSkill skill = PilotSkill.Competent) {
+        double speedMps = 180.0, PilotSkill skill = PilotSkill.Competent,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         if (!double.IsFinite(speedMps) || speedMps <= 0.0)
@@ -165,6 +179,30 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double altitudeM = System.Math.Clamp(player.Position.Y + altitudeOffsetM,
             FloorM + 260.0, CombatCeilingM);
         var position = player.Position + forward * alongM + right * offsetM;
+        // A replacement that tracks a low-flying player must still merge with real room above the
+        // actual ground under and ahead of it — a fresh fighter materialising 8 seconds from a
+        // ridge it cannot out-turn is a spawn defect, not a fight. Sweep the whole early run-in
+        // toward the merge at terrain resolution so a ridge BETWEEN two endpoint samples cannot
+        // hide; fall back to endpoint sampling if the sweep leaves terrain truth bounds.
+        var runInM = new Vec3D(position.X - forward.X * 1600.0, 0.0,
+            position.Z - forward.Z * 1600.0);
+        double surfaceM = System.Math.Max(
+            SurfaceHeightM(terrain, position.X, position.Z),
+            SurfaceHeightM(terrain, runInM.X, runInM.Z));
+        if (terrain is not null) {
+            try {
+                double sweptClearanceM = GunsOnly.Sim.Environment.TerrainQueries
+                    .MinimumClearanceM(terrain, position with { Y = 0.0 }, runInM,
+                        maximumHorizontalStepM: 60.0);
+                surfaceM = System.Math.Max(surfaceM,
+                    System.Math.Max(0.0, -sweptClearanceM));
+            } catch (System.ArgumentOutOfRangeException) {
+                // Out-of-bounds run-in: keep the endpoint estimate.
+            }
+        }
+        altitudeM = System.Math.Clamp(altitudeM,
+            System.Math.Min(surfaceM + MergeSpawnClearanceM, CombatCeilingM),
+            CombatCeilingM);
         position = position with { Y = altitudeM };
 
         // Aim slightly beyond ownship's current position. This is an offset head-on merge, not a
@@ -175,7 +213,61 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double chi = System.Math.Atan2(toMerge.X, toMerge.Z);
         double gamma = System.Math.Atan2(toMerge.Y, System.Math.Max(1.0, horizontalM));
         var initial = new AircraftState(position, speedMps, gamma, chi, 0.0, parameters.MassKg);
-        return new ReactiveBandit(initial, parameters, skill);
+        return new ReactiveBandit(initial, parameters, skill, terrain);
+    }
+
+    static double SurfaceHeightM(GunsOnly.Sim.Environment.ITerrainSurface? terrain,
+        double x, double z) =>
+        terrain is not null
+            && terrain.TrySample(x, z, out GunsOnly.Sim.Environment.TerrainSample sample)
+            && double.IsFinite(sample.HeightM)
+            ? System.Math.Max(0.0, sample.HeightM) : 0.0;
+
+    /// The controller's floor at a horizontal location: the historical sea-level floor raised by
+    /// the real ground. Every avoidance offset in this file is measured above THIS, so over open
+    /// water (or with no terrain supplied) behaviour is bit-identical to the legacy constants.
+    double LocalFloorM(double x, double z) => FloorM + SurfaceHeightM(_terrain, x, z);
+
+    /// Last-instance terrain check: does the trajectory over the next 2.5 seconds still leave
+    /// room for a pull-out at the G this airframe can actually achieve? Clearance closure is
+    /// measured TERRAIN-relative (surface sampled now, mid-horizon, and at the horizon along the
+    /// current velocity), so level flight into rising ground registers exactly like a dive over
+    /// flat ground — world vertical speed alone cannot see a ridge. Deterministic, belief-free,
+    /// and cheap: three bilinear terrain samples.
+    bool NeedsTerrainRecovery() {
+        var own = State;
+        var velocity = own.VelocityVector();
+        double speed = System.Math.Max(own.Speed, 1.0);
+        double clearanceHereM = own.Position.Y
+            - SurfaceHeightM(_terrain, own.Position.X, own.Position.Z);
+        var mid = own.Position + velocity * 1.25;
+        var far = own.Position + velocity * 2.5;
+        double clearanceMidM = mid.Y - SurfaceHeightM(_terrain, mid.X, mid.Z);
+        double clearanceFarM = far.Y - SurfaceHeightM(_terrain, far.X, far.Z);
+        double worstAheadM = System.Math.Min(clearanceMidM, clearanceFarM);
+        // A low-altitude reflex, not a maneuvering governor: the straight-line projection is
+        // deliberately pessimistic, which is right at the bottom of the sky and wrong about a
+        // Split-S entered with a mile of air below. Above this band the lookahead scoring (and
+        // the state machine's floor logic) own vertical judgement.
+        if (System.Math.Min(clearanceHereM, worstAheadM) > 1500.0) return false;
+        double closureMps = System.Math.Max(
+            (clearanceHereM - clearanceMidM) / 1.25,
+            (clearanceHereM - clearanceFarM) / 2.5);
+        if (closureMps <= 0.0) return false;
+        // Pull-out through the terrain-relative closure angle at the G actually available:
+        // the profile's tactical limit, further bounded by what the wing can generate at this
+        // airspeed — a slow bandit cannot buy its published G out of thin air.
+        double sinGammaEff = System.Math.Clamp(closureMps / speed, 0.0, 1.0);
+        double cosGammaEff = System.Math.Sqrt(1.0 - sinGammaEff * sinGammaEff);
+        double dynamicPressurePa = AirData.EquivalentDynamicPressurePa(speed);
+        double aerodynamicG = dynamicPressurePa * _parameters.WingAreaM2
+            * System.Math.Max(_parameters.CLMax, 0.0)
+            / System.Math.Max(own.Mass * FlightModel.G0, 1.0);
+        double usableG = System.Math.Clamp(
+            System.Math.Min(_profile.MaxAcquireG, aerodynamicG * 0.82), 1.2, 9.0);
+        double radialAccel = System.Math.Max((usableG - 1.0) * FlightModel.G0, 1.0);
+        double pullOutM = speed * speed * (1.0 - cosGammaEff) / radialAccel;
+        return worstAheadM < pullOutM + 120.0;
     }
 
     public AircraftState State => _sim.State;
@@ -216,9 +308,15 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     internal void SeedEnginePowerFraction(double powerFraction) =>
         _sim.SeedEnginePowerFraction(powerFraction);
 
+    /// <summary>Follow a session terrain replacement (world-origin re-anchor or data-pack swap)
+    /// so floor sense and the recovery reflex keep sampling the currently authoritative ground.
+    /// </summary>
+    public void UpdateTerrain(GunsOnly.Sim.Environment.ITerrainSurface? terrain) =>
+        _terrain = terrain;
+
     public bool WantsToFire(in ActorObservation player) => !CatastrophicallyDamaged
         && Tactic == BanditTactic.Acquire
-        && BanditFireControl.WantsToFire(State, player, T);
+        && BanditFireControl.WantsToFire(State, player, T, _profile.FireConeRad);
 
     public void ApplyCatastrophicDamage(int handedness) {
         if (CatastrophicallyDamaged) return;
@@ -254,6 +352,21 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             LastCommand = TerminalFlightDynamics.UncontrolledCommand(_sim.State);
             TerminalFlightDynamics.Step(_sim, AirframeAerodynamicState.Clean,
                 _damageHandedness, dt);
+            T += dt;
+            return;
+        }
+
+        // Terrain recovery pre-empts every tactical layer. The lookahead horizon (0.75-1.25 s) is
+        // SHORTER than a combat-speed pull-out, so scoring alone cannot protect the bandit: by the
+        // time a rolled-out candidate touches the hill, no candidate recovers. This reflex is the
+        // bandit's own last-instance check — roll upright and pull at the profile's maximum before
+        // the dive passes the point where its own G can still save it.
+        if (NeedsTerrainRecovery()) {
+            LastCommand = new PilotCommand(_profile.MaxAcquireG, 0.0,
+                _maximumThrottle, 0.0);
+            Tactic = BanditTactic.Return; // never firing while recovering from the dirt
+            RecordSingleCandidateDecision(LastCommand);
+            _sim.Step(LastCommand, dt);
             T += dt;
             return;
         }
@@ -294,6 +407,16 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
 
         if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
             Tactic = BanditTactic.Return;
+            return;
+        }
+
+        // Deny the stratosphere plink. A player camping above the believable combat ceiling turns
+        // a ceiling-limited bandit into a stationary target; real BFM answers that by unloading,
+        // extending away, and rebuilding energy below — dragging the fight back down instead of
+        // hovering at the cap waiting to be shot from above.
+        if (player.Position.Y > _ceilingM + 350.0
+            && own.Position.Y > _ceilingM - 900.0) {
+            Tactic = BanditTactic.Energy;
             return;
         }
 
@@ -366,9 +489,15 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double bank = direction * 1.18;
         double g = JinkG[_jinkIndex];
 
-        // Near the water, keep the hard turn but bias it upward rather than pulling into the sea.
-        if (State.Position.Y < FloorM + 140.0) {
-            var safe = new Vec3D(State.Position.X, FloorM + 420.0, State.Position.Z)
+        // Near the surface, keep the hard turn but bias it upward rather than pulling into the
+        // ground. The floor is the LOCAL one: sample both here and along the escape direction so
+        // a jink flown toward rising ground climbs over it instead of trusting sea level.
+        var escapeAhead = State.Position + State.ForwardDir() * 800.0;
+        double defendFloor = System.Math.Max(
+            LocalFloorM(State.Position.X, State.Position.Z),
+            LocalFloorM(escapeAhead.X, escapeAhead.Z));
+        if (State.Position.Y < defendFloor + 140.0) {
+            var safe = new Vec3D(State.Position.X, defendFloor + 420.0, State.Position.Z)
                 + State.ForwardDir() * 800.0;
             bank = LimitedBankTo(safe, 0.92);
             g = 2.35;
@@ -378,20 +507,32 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
 
     PilotCommand EnergyCommand(in ActorObservation player) {
         var own = State;
+        double hereFloor = LocalFloorM(own.Position.X, own.Position.Z);
         // Unload into a shallow descending extension. Once speed is back, SelectTactic sends the
         // bandit straight back to acquire; low altitude instead commands a safe climbing turn.
-        if (own.Position.Y < FloorM + 180.0) {
-            var climb = KeepAimInFightVolume(player.Position with { Y = FloorM + 650.0 });
+        if (own.Position.Y < hereFloor + 180.0) {
+            var climb = KeepAimInFightVolume(player.Position with { Y = hereFloor + 650.0 });
             return new PilotCommand(1.85, LimitedBankTo(climb, 0.65),
                 _maximumThrottle, 0.0);
         }
         var extension = own.Position + own.ForwardDir() * 1200.0 + new Vec3D(0.0, -280.0, 0.0);
+        // The descending extension must not descend into rising ground ahead.
+        double aheadFloor = LocalFloorM(extension.X, extension.Z);
+        if (extension.Y < aheadFloor + 180.0)
+            extension = extension with { Y = aheadFloor + 180.0 };
         return new PilotCommand(0.55, LimitedBankTo(extension, 0.38),
             _maximumThrottle, 0.0);
     }
 
     PilotCommand ReturnCommand() {
-        var target = _fightCentre with { Y = System.Math.Clamp(_fightCentre.Y + 250.0, FloorM + 300.0, CeilingM - 300.0) };
+        // The per-fight ceiling (not the legacy low-level constant) bounds the return target, and
+        // the floor is the local surface at the fight centre.
+        double centreFloor = LocalFloorM(_fightCentre.X, _fightCentre.Z);
+        double lowY = centreFloor + 300.0;
+        double highY = System.Math.Max(lowY, _ceilingM - 300.0);
+        var target = _fightCentre with {
+            Y = System.Math.Clamp(_fightCentre.Y + 250.0, lowY, highY)
+        };
         double bank = LimitedBankTo(target, 0.95);
         double angle = AngleTo(target);
         double g = System.Math.Clamp(1.2 + angle * 1.15, 1.2, 2.8);
@@ -402,11 +543,15 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     }
 
     Vec3D KeepAimInFightVolume(in Vec3D aim) {
-        double y = System.Math.Clamp(aim.Y, FloorM + 180.0, _ceilingM - 180.0);
         var horizontal = new Vec3D(aim.X - _fightCentre.X, 0.0, aim.Z - _fightCentre.Z);
         if (horizontal.Length > ReturnRadiusM - 500.0)
             horizontal = horizontal.Normalized() * (ReturnRadiusM - 500.0);
-        return new Vec3D(_fightCentre.X + horizontal.X, y, _fightCentre.Z + horizontal.Z);
+        double x = _fightCentre.X + horizontal.X;
+        double z = _fightCentre.Z + horizontal.Z;
+        double floorY = LocalFloorM(x, z) + 180.0;
+        double y = System.Math.Clamp(aim.Y, floorY,
+            System.Math.Max(floorY, _ceilingM - 180.0));
+        return new Vec3D(x, y, z);
     }
 
     double LimitedBankTo(in Vec3D target, double limit) =>
@@ -535,7 +680,11 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         const double dt = 1.0 / AircraftSim.TickHz;
         // Optimize the envelope the trigger can ACTUALLY use. The old 12-degree camera window made
         // the lookahead tests look threatening while first-pass-safe production fights never fired:
-        // every selected "solution" remained outside BanditFireControl's real 3-degree gate.
+        // every selected "solution" remained outside BanditFireControl's real 3-degree gate. The
+        // optimizer deliberately keeps chasing 3-degree solutions even for a profile with a wider
+        // TRIGGER cone: the wide gate is opportunistic tracer pressure on the way through, not a
+        // license to fly sloppier geometry (widening the shaping cone here re-flattens the angle
+        // gradient and the controller goes back to orbiting outside the gate).
         const double gunConeRad = BanditFireControl.MaximumNoseErrorRad;
         var probe = new AircraftSim(State, _parameters, _sim.AtmosphereModel) { Wind = _sim.Wind };
         probe.SeedEnginePowerFraction(_sim.ThrustFraction);
@@ -553,7 +702,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             : 0.0;
 
         double windowSeconds = 0.0;
-        double minY = double.PositiveInfinity;
+        double minClearanceM = double.PositiveInfinity;
         double maxY = double.NegativeInfinity;
         int horizon = _profile.LookaheadHorizonTicks;
         for (int t = 0; t < horizon; t++) {
@@ -565,7 +714,10 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
                 System.Math.Cos(predChi) * System.Math.Cos(predGamma)) * predSpeed;
             predictedPos += predVel * dt;
             var probeState = probe.State;
-            minY = System.Math.Min(minY, probeState.Position.Y);
+            // Clearance is height above the LOCAL surface along the rolled-out path — the whole
+            // point of the lookahead is that a hill inside the horizon is a fact, not sea level.
+            minClearanceM = System.Math.Min(minClearanceM, probeState.Position.Y
+                - SurfaceHeightM(_terrain, probeState.Position.X, probeState.Position.Z));
             maxY = System.Math.Max(maxY, probeState.Position.Y);
             var predictedPlayer = player with { Position = predictedPos };
             // Reward exactly the envelope the trigger can use. Counting any nose-on sample below
@@ -595,9 +747,14 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // Speed (kinetic-energy) retention only -- NOT raw altitude, which would reward an endless
         // zoom climb out of the fight. Vertical maneuvers still emerge when they improve the angle.
         score += 0.010 * System.Math.Min(terminal.Speed, 320.0);
-        // Floor avoidance: a hard penalty as the rollout approaches the water.
-        if (minY < FloorM + 200.0)
-            score -= 0.02 * (FloorM + 200.0 - minY);
+        // Floor avoidance: a hard penalty as the rollout approaches the local surface, and an
+        // outright disqualifier for a path that actually reaches it. The gradient alone maxes out
+        // near the magnitude of a full gun-window reward, which let a kill-shot candidate accept
+        // flying into a hill; no firing solution is worth controlled flight into terrain.
+        if (minClearanceM < FloorM + 200.0)
+            score -= 0.02 * (FloorM + 200.0 - minClearanceM);
+        if (minClearanceM < 60.0)
+            score -= 40.0 + 0.5 * (60.0 - minClearanceM);
         // Ceiling discipline: the mirror of floor avoidance. A guns knife-fight must not chase the
         // player into the stratosphere, so climbing past the believable combat ceiling is penalised.
         // This is a CEILING, not an altitude reward -- it is zero in-band and only ever pushes the

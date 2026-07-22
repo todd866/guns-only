@@ -34,7 +34,8 @@ public sealed record AutoGcasConfiguration(
     double MinimumRecoveryAirspeedMps,
     double ExitClearanceM,
     double ExitPredictionMarginM,
-    double ExitDwellSeconds) {
+    double ExitDwellSeconds,
+    double AttentivePilotTriggerFactor = 0.45) {
 
     public static AutoGcasConfiguration ModernPublicDataSurrogate { get; } = new(
         LookaheadSeconds: 8.0,
@@ -76,7 +77,8 @@ public readonly record struct AutoGcasInput(
     bool Enabled = true,
     bool ConfigurationPermitsRecovery = true,
     bool PilotOverrideHeld = false,
-    double? IndicatedAirspeedMps = null);
+    double? IndicatedAirspeedMps = null,
+    bool PilotActivelyFlying = false);
 
 public readonly record struct AutoGcasPrediction(
     bool Valid,
@@ -269,8 +271,22 @@ public static class AutoGcasController {
         }
 
         bool collisionThreat = pilot.MinimumClearanceM <= config.TerrainBufferM;
+        // Auto-GCAS is a lost-consciousness / lost-SA backstop, not a low-flying governor. While
+        // the pilot is demonstrably flying the aircraft — conscious with control authority and
+        // actively commanding through the HUMAN input path — the commitment point defers toward
+        // the true last instant so deliberate low-level flight is never interrupted. The full
+        // conservative boundary returns the moment the pilot goes passive (G-LOC releases the
+        // controls, a fixated hands-off padlock turn), which is exactly the case the system
+        // exists to save. Only the caller-supplied flag defers: the credited-recovery estimate is
+        // computed from the EFFECTIVE command, which aircraft-owned assists contribute to, so
+        // using it here would let autonomous gunnery G masquerade as pilot attention. The warning
+        // boundary scales too — deliberately: a Warning resets the padlock roll assist, so early
+        // warning chatter during intentional low flight is real control interference, not merely
+        // noise.
+        double boundaryFactor = input.PilotActivelyFlying
+            ? config.AttentivePilotTriggerFactor : 1.0;
         bool trigger = collisionThreat
-            && timeAvailable <= config.TriggerTimeAvailableSeconds;
+            && timeAvailable <= config.TriggerTimeAvailableSeconds * boundaryFactor;
         if (trigger) {
             var active = new AutoGcasState(
                 AutoGcasPhase.FlyUp, AutoGcasInhibitReason.None,
@@ -282,8 +298,8 @@ public static class AutoGcasController {
         }
 
         bool warning = collisionThreat
-            && timeAvailable <= config.TriggerTimeAvailableSeconds
-                + config.WarningLeadSeconds;
+            && timeAvailable <= (config.TriggerTimeAvailableSeconds
+                + config.WarningLeadSeconds) * boundaryFactor;
         return Result(previous,
             warning ? AutoGcasPhase.Warning : AutoGcasPhase.Armed,
             AutoGcasInhibitReason.None, warning ? "PULL UP" : "", prediction);
@@ -760,6 +776,10 @@ public static class AutoGcasController {
         if (!double.IsFinite(config.TerrainBufferM) || config.TerrainBufferM < 0.0
             || !double.IsFinite(config.ExitPredictionMarginM)
             || config.ExitPredictionMarginM < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(config));
+        if (!double.IsFinite(config.AttentivePilotTriggerFactor)
+            || config.AttentivePilotTriggerFactor <= 0.0
+            || config.AttentivePilotTriggerFactor > 1.0)
             throw new ArgumentOutOfRangeException(nameof(config));
     }
 }

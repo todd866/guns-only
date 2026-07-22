@@ -398,7 +398,15 @@ public sealed class SimulationSession {
     /// known; every subsequent AGL, line-of-sight, impact, and wreck query observes the same
     /// translated surface. Scenario authors should still prefer StartBeatWithTerrain at staging.
     /// </summary>
-    public void SetTerrainSurface(ITerrainSurface? terrain) => _terrainSurface = terrain;
+    public void SetTerrainSurface(ITerrainSurface? terrain) {
+        _terrainSurface = terrain;
+        // The active opponent captured the previous surface at construction; a world-origin
+        // re-anchor must reach it or its floor sense silently reads the stale translation.
+        switch (_bandit) {
+            case ReactiveBandit reactive: reactive.UpdateTerrain(terrain); break;
+            case NeutralMergeBandit merge: merge.UpdateTerrain(terrain); break;
+        }
+    }
 
     /// <summary>Construct and stage one of the built-in beats. Physics remains held in Ready.</summary>
     public void StartBeat(int index,
@@ -978,7 +986,7 @@ public sealed class SimulationSession {
         _burble = _carrier is null ? null : CreateBurble(_carrier, _difficulty,
             _weatherProfile?.Wind);
         _player = CreatePlayer(_beat.Player);
-        _bandit = _beat.CreateBandit();
+        _bandit = _beat.CreateBandit(_terrainSurface);
         _playerSpawnSequence++;
         _banditSpawnSequence++;
         if (_carrier is not null) _carrierSpawnSequence++;
@@ -1510,7 +1518,19 @@ public sealed class SimulationSession {
         if (target == CombatRole.Player && surface is ImpactSurface.FlightDeck
             or ImpactSurface.CarrierStructure)
             CaptureIncidentReplaySample(completedContactTick: true);
-        BeginCatastrophicDamage(target, CombatRole.None);
+        // A maneuvering opponent flown into the surface while the player is alive and engaged is
+        // a maneuver kill: the impact stays a physical event (source None), but the destruction is
+        // attributed to the player and credited like a gun kill. Only genuine combat opponents
+        // qualify — drone-raid targets keep their own leak/neutralize accounting, and a scripted
+        // pattern bogey crashing in a non-combat beat credits nobody.
+        bool maneuverKill = target == CombatRole.Opponent
+            && _playerTerminalState == AircraftTerminalState.Flying
+            && _droneRaidEvaluation is null
+            && (_beat.ContinuousCombat is not null
+                || _beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit);
+        if (maneuverKill) _killCount++;
+        BeginCatastrophicDamage(target,
+            maneuverKill ? CombatRole.Player : CombatRole.None);
         StartWreckContact(target, surface, surfaceVelocity, surfaceHeightM,
             tangentialImpulseAlreadyResolved, carrierSolid);
         UpdatePendingOutcome();
@@ -1689,7 +1709,7 @@ public sealed class SimulationSession {
             if (settledIndex < 0) break;
             _detachedOpponentWrecks.RemoveAt(settledIndex);
         }
-        _bandit = _beat.CreateNextBandit(_player.State, nextEngagement);
+        _bandit = _beat.CreateNextBandit(_player.State, nextEngagement, _terrainSurface);
         _bandit.Wind = _player.Wind;
         _bandit.Atmosphere = _player.AtmosphereModel;
         _gunKill = _gunKill.Outcome == FightOutcome.Splash
@@ -2032,6 +2052,18 @@ public sealed class SimulationSession {
         }
 
         AutoGcasState previous = _autoGcasState;
+        // "Actively flying" means the pilot is conscious with control authority AND the HUMAN is
+        // currently commanding the aircraft. This must read the raw detent-layer command, never
+        // the effective command: gunnery pitch assist adds up to 3.5 G and lateral authority of
+        // its own, so a hands-off pilot fixated near a target would otherwise be classified as
+        // attentive and lose the conservative backstop — the exact state Auto-GCAS exists for.
+        PilotCommand humanCommand = _detents.Command;
+        bool pilotActivelyFlying = _pilotPhysiology.State.ControlAuthority01 >= 0.55
+            && (humanCommand.EnvelopeOverride
+                || System.Math.Abs(humanCommand.RollControl) > 0.05
+                || System.Math.Abs(humanCommand.Rudder) > 0.05
+                || humanCommand.GDemand >= 2.0
+                || humanCommand.GDemand <= 0.0);
         var result = AutoGcasController.Step(_autoGcasPredictionElapsedSeconds, _autoGcasState,
             new AutoGcasInput(
                 Aircraft: _player.State,
@@ -2042,7 +2074,8 @@ public sealed class SimulationSession {
                 Enabled: true,
                 ConfigurationPermitsRecovery: _carrier is null,
                 PilotOverrideHeld: AutoGcasOverrideHeld,
-                IndicatedAirspeedMps: _player.IndicatedAirspeedMps),
+                IndicatedAirspeedMps: _player.IndicatedAirspeedMps,
+                PilotActivelyFlying: pilotActivelyFlying),
             capability);
         _autoGcasPredictionElapsedSeconds = 0.0;
         _autoGcasPredictionTicksRemaining = AutoGcasPredictionIntervalTicks - 1;

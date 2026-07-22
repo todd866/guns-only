@@ -493,5 +493,77 @@ public class AutoGcasTests {
         Assert.Equal(full.State.Prediction, split.State.Prediction);
     }
 
+    [Fact]
+    public void ActivelyFlyingPilotCommitsLaterButIsStillCaught() {
+        // Auto-GCAS is a lost-consciousness / lost-SA backstop, not a low-flying governor: a
+        // conscious pilot actively commanding the aircraft gets a deferred commitment point, and
+        // the full conservative boundary returns the moment the controls go passive. Both pilots
+        // descending the same profile must ultimately be caught — the attentive one lower.
+        const double sinkRate = 60.0;
+        const double dt = 0.10;
+
+        double TriggerAltitude(bool activelyFlying) {
+            AutoGcasState state = AutoGcasState.Initial(true);
+            for (double altitude = 900.0; altitude > 0.0; altitude -= sinkRate * dt) {
+                var input = Input(FlightState(
+                    altitudeM: altitude, gammaDegrees: -14.0)) with {
+                    PilotActivelyFlying = activelyFlying
+                };
+                AutoGcasStepResult result = Step(input, state, dtSeconds: dt);
+                state = result.State;
+                if (state.Active) return altitude;
+            }
+            return double.NaN;
+        }
+
+        double passiveTrigger = TriggerAltitude(activelyFlying: false);
+        double attentiveTrigger = TriggerAltitude(activelyFlying: true);
+
+        Assert.False(double.IsNaN(passiveTrigger), "the passive descent must be caught");
+        Assert.False(double.IsNaN(attentiveTrigger),
+            "the backstop must still catch an attentive pilot who never recovers");
+        Assert.True(attentiveTrigger < passiveTrigger - 20.0,
+            $"an actively flying pilot must get a later commitment: passive at "
+            + $"{passiveTrigger:F0} m, attentive at {attentiveTrigger:F0} m");
+    }
+
+    [Fact]
+    public void EffectiveCommandGAloneNeverDefersTheCommitment() {
+        // Gunnery pitch assist contributes up to 3.5 G through the EFFECTIVE command, so command
+        // G must not buy the deferred commitment on its own: only the session's explicit
+        // actively-flying signal (derived from the raw human input path) defers. Otherwise a
+        // hands-off pilot fixated near a target would be classified as attentive by the
+        // autopilot's own pull — the precise lost-SA state the backstop exists for. (The
+        // credited pull may legitimately trigger later or not at all because the predicted
+        // recovery path genuinely clears; it must never trigger LOWER than the same command
+        // carries with the attentive flag set.)
+        const double sinkRate = 60.0;
+        const double dt = 0.10;
+
+        double TriggerAltitude(PilotCommand command, bool activelyFlying) {
+            AutoGcasState state = AutoGcasState.Initial(true);
+            for (double altitude = 900.0; altitude > 0.0; altitude -= sinkRate * dt) {
+                var input = Input(FlightState(
+                    altitudeM: altitude, gammaDegrees: -14.0), command) with {
+                    PilotActivelyFlying = activelyFlying
+                };
+                AutoGcasStepResult result = Step(input, state, dtSeconds: dt);
+                state = result.State;
+                if (state.Active) return altitude;
+            }
+            return double.NaN;
+        }
+
+        PilotCommand assisted = Command(gDemand: 3.5, directLateralControl: false);
+        double assistedNoFlag = TriggerAltitude(assisted, activelyFlying: false);
+        double assistedFlagged = TriggerAltitude(assisted, activelyFlying: true);
+
+        Assert.True(double.IsNaN(assistedFlagged)
+            || double.IsNaN(assistedNoFlag)
+            || assistedNoFlag >= assistedFlagged,
+            "without the human-input flag, assist G must commit no later than with it: "
+            + $"noFlag={assistedNoFlag:F0}, flagged={assistedFlagged:F0}");
+    }
+
     static double Radians(double degrees) => degrees * Math.PI / 180.0;
 }

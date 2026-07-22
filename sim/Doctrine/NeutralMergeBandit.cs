@@ -14,6 +14,7 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
     readonly AircraftParams _parameters;
     readonly AircraftSim _mergeSim;
     readonly PilotSkill _skill;
+    GunsOnly.Sim.Environment.ITerrainSurface? _terrain;
     ReactiveBandit? _fight;
     IWindField? _wind;
     IAtmosphereModel _atmosphere;
@@ -22,9 +23,11 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
     double _openingSeconds;
 
     public NeutralMergeBandit(AircraftState initial, AircraftParams parameters,
-        PilotSkill skill = PilotSkill.Competent) {
+        PilotSkill skill = PilotSkill.Competent,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
         _parameters = parameters;
         _skill = skill;
+        _terrain = terrain;
         _mergeSim = new AircraftSim(initial, parameters);
         _atmosphere = _mergeSim.AtmosphereModel;
     }
@@ -110,9 +113,15 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
         _fight!.ApplySurfaceImpact(surface, surfaceVelocity, surfaceHeightM, carrier);
     }
 
+    /// <summary>Follow a session terrain replacement through to the active fight controller.</summary>
+    public void UpdateTerrain(GunsOnly.Sim.Environment.ITerrainSurface? terrain) {
+        _terrain = terrain;
+        _fight?.UpdateTerrain(terrain);
+    }
+
     void BeginFight() {
         if (_fight is not null) return;
-        var fight = new ReactiveBandit(_mergeSim.State, _parameters, _skill) {
+        var fight = new ReactiveBandit(_mergeSim.State, _parameters, _skill, _terrain) {
             Wind = _wind,
             Atmosphere = _atmosphere
         };

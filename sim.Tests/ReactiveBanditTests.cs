@@ -262,4 +262,133 @@ public class ReactiveBanditTests {
             Assert.True(best < 5.0,
                 $"no candidate may be rewarded for an unusable window: best={best:F2}");
     }
+
+    static GunsOnly.Sim.Environment.BilinearHeightGrid Plateau(double heightM) {
+        var heights = new double[2, 2] {
+            { heightM, heightM }, { heightM, heightM }
+        };
+        return new GunsOnly.Sim.Environment.BilinearHeightGrid(
+            -60_000.0, -60_000.0, 120_000.0, 120_000.0, heights);
+    }
+
+    [Fact]
+    public void SpawnForMergeClearsTheRealSurfaceUnderTheMerge() {
+        // Production defect (Build 68 telemetry): a replacement tracking a player at 3,200 ft over
+        // Korean terrain spawned with sea-level clearance math and flew into a ridge 7.5 seconds
+        // later. The merge must begin with honest room above the LOCAL surface.
+        var terrain = Plateau(1500.0);
+        var player = State(0.0, 1700.0, 0.0, 240.0);
+
+        var withTerrain = ReactiveBandit.SpawnForMerge(
+            player, FlightModel.Sabre, engagementNumber: 4, 180.0, PilotSkill.Ace, terrain);
+        var withoutTerrain = ReactiveBandit.SpawnForMerge(
+            player, FlightModel.Sabre, engagementNumber: 4, 180.0, PilotSkill.Ace);
+
+        Assert.True(withTerrain.State.Position.Y >= 2100.0 - 1e-9,
+            $"spawn must clear terrain+600m: y={withTerrain.State.Position.Y:F0}");
+        Assert.True(withoutTerrain.State.Position.Y < 2100.0,
+            "control: the sea-level spawn sits lower, so the terrain path is what raised it");
+    }
+
+    [Fact]
+    public void CompetentPursuitOverHighTerrainHoldsTheLocalFloor() {
+        // The controller's floor offsets are measured above the LOCAL surface. Chasing a very low
+        // player over a 1,200 m plateau must not descend to the legacy sea-level floor band.
+        var terrain = Plateau(1200.0);
+        AircraftParams air = FlightModel.Sabre;
+        var own = new AircraftState(new Vec3D(0.0, 1500.0, 0.0), 200.0, 0.0, 0.0, 0.0, air.MassKg);
+        var bandit = new ReactiveBandit(own, air, PilotSkill.Competent, terrain);
+        var lowPlayer = State(0.0, 1260.0, 2600.0, 200.0);
+
+        double minClearance = double.PositiveInfinity;
+        double settledMinClearance = double.PositiveInfinity;
+        for (int tick = 0; tick < 20 * AircraftSim.TickHz; tick++) {
+            bandit.Step(ActorObservation.Capture(lowPlayer, tick), Dt);
+            double clearance = bandit.State.Position.Y - 1200.0;
+            minClearance = Math.Min(minClearance, clearance);
+            if (tick >= 4 * AircraftSim.TickHz)
+                settledMinClearance = Math.Min(settledMinClearance, clearance);
+        }
+
+        Assert.True(minClearance > 250.0,
+            $"pursuit sank into the legacy sea-level band: min clearance={minClearance:F0} m");
+        Assert.True(settledMinClearance > 280.0,
+            "the settled pursuit must hold a terrain-raised band, not the player's "
+            + $"near-surface altitude: settled min clearance={settledMinClearance:F0} m");
+    }
+
+    [Fact]
+    public void VeteranLookaheadRefusesToTradeAKillLineForTerrain() {
+        // Build 68 telemetry: every lookahead-tier bandit eventually terrain-killed itself in the
+        // low fight because rollout scoring measured altitude against sea level. A candidate whose
+        // rolled-out path reaches the local surface must lose to any surviving candidate.
+        var terrain = Plateau(1500.0);
+        AircraftParams air = FlightModel.Su27SPublicDataSurrogate;
+        var own = new AircraftState(
+            new Vec3D(0.0, 1900.0, 0.0), 240.0, 0.0, 0.0, 0.0, air.MassKg);
+        var bandit = new ReactiveBandit(own, air, PilotSkill.Veteran, terrain);
+        // A slow contact just below, circling: nose-low candidates aim well under the surface.
+        var contact = new AircraftState(
+            new Vec3D(300.0, 1750.0, 800.0), 140.0, 0.0, 0.0, 0.9, air.MassKg);
+
+        double minClearance = double.PositiveInfinity;
+        for (int tick = 0; tick < 20 * AircraftSim.TickHz; tick++) {
+            bandit.Step(ActorObservation.Capture(contact, tick), Dt);
+            minClearance = Math.Min(minClearance,
+                bandit.State.Position.Y - 1500.0);
+        }
+
+        Assert.True(minClearance > 60.0,
+            $"lookahead flew the fight into the hill: min clearance={minClearance:F0} m");
+    }
+
+    [Fact]
+    public void TerrainReplacementReachesTheActiveBandit() {
+        // The session can re-anchor the world origin mid-sortie (SetWorldOrigin), replacing the
+        // translated terrain surface. A bandit that kept its construction-time reference would
+        // silently sample the stale ground. Diving toward what the NEW surface says is a plateau
+        // must engage the recovery reflex only after the update arrives.
+        AircraftParams air = FlightModel.Su27SPublicDataSurrogate;
+        var diving = new AircraftState(
+            new Vec3D(0.0, 1700.0, 0.0), 260.0, -0.9, 0.0, 0.0, air.MassKg);
+        var contact = State(0.0, 400.0, 4000.0, 200.0);
+
+        var blind = new ReactiveBandit(diving, air, PilotSkill.Veteran);
+        blind.Step(ActorObservation.Capture(contact, 0), Dt);
+        Assert.NotEqual(BanditTactic.Return, blind.Tactic);
+
+        var updated = new ReactiveBandit(diving, air, PilotSkill.Veteran);
+        updated.UpdateTerrain(Plateau(1500.0));
+        updated.Step(ActorObservation.Capture(contact, 0), Dt);
+        Assert.Equal(BanditTactic.Return, updated.Tactic);
+        Assert.Equal(BanditSkillProfile.For(PilotSkill.Veteran).MaxAcquireG,
+            updated.LastCommand.GDemand, 6);
+    }
+
+    [Fact]
+    public void VeteranTriggerGateIsWiderThanCompetentAndStaysHonest() {
+        // The Veteran deliberately shoots a wider nose-error gate — tracer pressure with honest
+        // ballistics — while Novice/Competent keep the historical 3-degree discipline exactly.
+        var own = State(0.0, 3000.0, 0.0, 200.0);
+        var gunLine = GunKill.GunDirection(own);
+        Vec3D perpendicular = new Vec3D(0.0, 1.0, 0.0).Cross(gunLine).Normalized();
+        double offAxisRad = 4.0 * Math.PI / 180.0;
+        var contactState = State(0.0, 3000.0, 500.0, 200.0) with {
+            Position = own.Position
+                + (gunLine * Math.Cos(offAxisRad) + perpendicular * Math.Sin(offAxisRad)) * 500.0
+        };
+        var observation = ActorObservation.Capture(contactState, 0);
+
+        Assert.False(BanditFireControl.WantsToFire(own, observation, 0.0),
+            "4 degrees off must stay outside the historical gate");
+        Assert.False(BanditFireControl.WantsToFire(own, observation, 0.0,
+            BanditSkillProfile.For(PilotSkill.Competent).FireConeRad));
+        Assert.True(BanditFireControl.WantsToFire(own, observation, 0.0,
+            BanditSkillProfile.For(PilotSkill.Veteran).FireConeRad),
+            "the Veteran's 5-degree gate must accept a 4-degree snapshot");
+        Assert.Equal(3.0 * Math.PI / 180.0,
+            BanditSkillProfile.For(PilotSkill.Novice).FireConeRad, 12);
+        Assert.Equal(3.0 * Math.PI / 180.0,
+            BanditSkillProfile.For(PilotSkill.Competent).FireConeRad, 12);
+    }
 }

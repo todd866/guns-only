@@ -91,3 +91,36 @@ plane exists. Auto-GCAS recovery runs afterward and therefore always pre-empts t
 augmentation. The snapshot
 publishes capture, physical error, requested roll rate, measured roll rate, and the distinct SAS
 aileron contribution so flown tuning remains auditable.
+
+## Aft-hemisphere padlock rebuild (adopted design, next HUD build)
+
+Production complaint (Build 68/69): padlock is confusing when the bandit is aft, and the off-axis
+locator arrow "wanders in a weird way." External review (gpt-5.6-sol over the actual padlock
+files) confirmed the roll LAW is correct — body-frame `atan2(targetRight, targetUp)`, invariant
+sign, SAS holds but never initiates — and located the failure in presentation: the current HUD
+mixes three coordinate frames (camera-projected target, camera-projected lift/world-up, and a
+body-frame roll error drawn as a screen-angle offset), which stops meaning one thing the moment
+the target crosses the wing line. The hybrid horizon also derives from camera-projected world-up
+and can vanish when that projection is singular.
+
+Adopted design — a modernized Falcon 3 "target locator window":
+
+1. Keep the camera's protected target offset, the body-frame roll computation, the 11°/18°
+   capture hysteresis, and the existing SAS law untouched.
+2. Replace the free-floating roll arc AND the hybrid horizon with ONE bounded (~120 px)
+   body-fixed ownship inset below view centre: true ADI from ownship attitude/gravity (never the
+   camera), fixed waterline, radar altitude + vertical trend, and the target-plane gate drawn at
+   the signed physical roll error. Chevrons always mean keyboard roll direction — NEVER mirrored
+   by camera yaw or target hemisphere.
+3. Explicit view-orientation language outside the inset: `AFT · R SHOULDER` / `AFT · L SHOULDER`
+   from body-frame target hemisphere plus the actual sensor shoulder; latch the shoulder-handoff
+   indication 250–400 ms so the seam is perceivable rather than a mystery cut.
+4. Fade the directive roll cue between target-plane magnitudes 0.035–0.12 (matching the sim's
+   authority blend); below the floor show a neutral pull ring, not a false "captured" green.
+5. Do not auto-snap views; a manual hold-to-glance-forward key may come later.
+
+Harness debt this rebuild must pay: aft roll-error cases in all four right/up quadrants, a sweep
+across view azimuth, ±179° shoulder handoff, near-six noise around both magnitude thresholds,
+vertical camera views, and (new) locator-arrow direction assertions — the arrow must track the
+great-circle screen direction to the target monotonically through a full orbit, which is exactly
+what "wanders" today. Assert inset gate angle and command SIGN, not merely the scalar error.

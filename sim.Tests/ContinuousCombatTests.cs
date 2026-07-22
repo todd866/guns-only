@@ -141,4 +141,35 @@ public class ContinuousCombatTests {
         Assert.DoesNotContain(session.RecentEvents,
             e => e.Type == SessionEventType.OpponentSpawned);
     }
+
+    [Fact]
+    public void OpponentFlownIntoTheSurfaceIsCreditedAsAManeuverKill() {
+        // BFM parlance: an opponent maneuvered into the ground while the player is alive and
+        // engaged is the player's kill. The physical Impact event keeps source None, but the
+        // Destroyed attribution and the kill counter belong to the player — Build 68 telemetry
+        // showed two bandits dying to terrain with no credit and no attribution.
+        BeatSetup setup = CloseTailFixture(replacementDelaySeconds: 0.5);
+        setup = setup with {
+            Bandit = new AircraftState(new Vec3D(0.0, 120.0, 900.0), 250.0,
+                -0.6, 0.0, 0.0, FlightModel.Su27SPublicDataSurrogate.MassKg)
+        };
+        var session = new SimulationSession();
+        session.StartBeat(() => setup);
+        session.Begin();
+
+        for (int tick = 0; tick < 3 * AircraftSim.TickHz
+            && session.OpponentTerminalState == AircraftTerminalState.Flying; tick++)
+            session.StepFixed();
+
+        Assert.Equal(0, session.PlayerGun.RoundsFired);
+        Assert.NotEqual(AircraftTerminalState.Flying, session.OpponentTerminalState);
+        Assert.Equal(1, session.KillCount);
+        Assert.Contains(session.RecentEvents, e => e.Type == SessionEventType.Impact
+            && e.Target == CombatRole.Opponent && e.Source == CombatRole.None);
+        Assert.Contains(session.RecentEvents, e => e.Type == SessionEventType.Destroyed
+            && e.Target == CombatRole.Opponent && e.Source == CombatRole.Player);
+        Assert.True(session.OpponentReplacementPending,
+            "a maneuver kill in continuous combat must stage the next merge");
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+    }
 }

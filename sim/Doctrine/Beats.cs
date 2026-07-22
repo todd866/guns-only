@@ -198,21 +198,25 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     /// their full-coverage-suit/pressure-breathing surrogate explicitly below.
     public PilotPhysiologyProfile PlayerPilotPhysiology => PlayerPhysiologyProfile
         ?? PilotPhysiologyProfile.KoreaFastJetReference;
-    public IBandit CreateBandit() => UsesNeutralMergeBandit
-        ? new NeutralMergeBandit(Bandit, BanditAir, BanditSkill)
+    public IBandit CreateBandit(
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) => UsesNeutralMergeBandit
+        ? new NeutralMergeBandit(Bandit, BanditAir, BanditSkill, terrain)
         : UsesReactiveBandit
-            ? new ReactiveBandit(Bandit, BanditAir, BanditSkill)
+            ? new ReactiveBandit(Bandit, BanditAir, BanditSkill, terrain)
             : new RailBandit(Bandit, BanditAir, BanditTimeline);
 
     /// Deterministic merge factory for a continuous-operations ruleset. Successor aircraft inherit
-    /// the mission's staged opponent speed rather than falling back to a Korea-era constant.
-    public IBandit CreateNextBandit(in AircraftState player, int engagementNumber) {
+    /// the mission's staged opponent speed rather than falling back to a Korea-era constant. The
+    /// terrain surface, when supplied, keeps replacement merges and the bandit's own floor sense
+    /// honest over real ground instead of a sea-level constant.
+    public IBandit CreateNextBandit(in AircraftState player, int engagementNumber,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
         double replacementSpeedMps = ContinuousCombat is { } continuous
             ? continuous.ReplacementSpeedMps ?? Bandit.Speed
             : 180.0;
         return ReactiveBandit.SpawnForMerge(
             player, BanditAir, engagementNumber, replacementSpeedMps,
-            BanditSkillProfile.ForEngagement(engagementNumber));
+            BanditSkillProfile.ForEngagement(engagementNumber), terrain);
     }
 }
 
