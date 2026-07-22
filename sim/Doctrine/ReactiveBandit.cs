@@ -71,6 +71,7 @@ public sealed class ReactiveBandit : IBandit {
     static readonly double[] JinkG = { 3.15, 2.70, 3.30, 2.85, 3.05 };
 
     readonly AircraftSim _sim;
+    readonly AircraftParams _parameters;
     readonly Vec3D _fightCentre;
     readonly double _ceilingM;
     readonly double _energyEntryMps;
@@ -88,12 +89,20 @@ public sealed class ReactiveBandit : IBandit {
     WreckContactMotion? _wreckMotion;
     readonly BanditSkillProfile _profile;
 
+    // Lookahead decision cache. Rolling ~5-7 candidate maneuvers forward over the horizon every
+    // tick is wasteful, so the choice is recomputed on a fixed deterministic cadence and held
+    // between recomputes. The cadence counts real ticks (never wall-clock), keeping determinism.
+    const int LookaheadDecisionCadenceTicks = 12; // ~0.1 s at 120 Hz
+    PilotCommand _lookaheadCommand = new(1.0, 0.0, 0.85, 0.0);
+    int _lookaheadHoldTicks;
+
     public PilotSkill Skill { get; }
 
     public ReactiveBandit(AircraftState initial, AircraftParams parameters,
         PilotSkill skill = PilotSkill.Competent) {
         Skill = skill;
         _profile = BanditSkillProfile.For(skill);
+        _parameters = parameters;
         _sim = new AircraftSim(initial, parameters);
         _fightCentre = initial.Position;
         // Scale the controller's energy gates from the staged fight speed. The original 180 m/s
@@ -212,6 +221,18 @@ public sealed class ReactiveBandit : IBandit {
             LastCommand = TerminalFlightDynamics.UncontrolledCommand(_sim.State);
             TerminalFlightDynamics.Step(_sim, AirframeAerodynamicState.Clean,
                 _damageHandedness, dt);
+            T += dt;
+            return;
+        }
+
+        // High-skill tiers replace the flat-turn state machine with a short-horizon lookahead: roll
+        // candidate maneuvers forward in the deterministic kernel and fly the one that best improves
+        // the future firing position. The vertical fight emerges from the score, it is not scripted.
+        // Novice/Competent keep LookaheadHorizonTicks == 0 and the state machine below UNCHANGED.
+        if (_profile.LookaheadHorizonTicks > 0) {
+            LastCommand = LookaheadCommand(player);
+            Tactic = BanditTactic.Acquire; // in-envelope firing is governed by BanditFireControl
+            _sim.Step(LastCommand, dt);
             T += dt;
             return;
         }
@@ -365,5 +386,131 @@ public sealed class ReactiveBandit : IBandit {
     static double HorizontalDistance(in Vec3D a, in Vec3D b) {
         double dx = a.X - b.X, dz = a.Z - b.Z;
         return System.Math.Sqrt(dx * dx + dz * dz);
+    }
+
+    // ---- Lookahead BFM decision layer -----------------------------------------------------------
+
+    /// Choose the maneuver that best improves the future firing position. A small candidate set
+    /// spans the fight (hard/moderate lead-turn, a pull into the vertical, a nose-low reposition, an
+    /// unload/extend, and a reverse); each is rolled forward LookaheadHorizonTicks in a throwaway
+    /// probe of the real kernel while the player is predicted by honest physical extension of the
+    /// OBSERVED state only. The choice is recomputed on a fixed tick cadence and held between
+    /// recomputes so the rollout cost stays bounded and the whole layer stays deterministic.
+    PilotCommand LookaheadCommand(in AircraftState player) {
+        if (_lookaheadHoldTicks > 0) {
+            _lookaheadHoldTicks--;
+            return _lookaheadCommand;
+        }
+        _lookaheadHoldTicks = LookaheadDecisionCadenceTicks - 1;
+
+        double range = (player.Position - State.Position).Length;
+        double leadSeconds = System.Math.Clamp(range / 900.0, 0.35, 1.35);
+        var leadPoint = player.Position + player.VelocityVector() * leadSeconds;
+
+        // Throttle schedule mirrors the acquire law's energy management so lookahead never
+        // manufactures thrust the airframe cannot deliver.
+        double fastThrottle = System.Math.Min(_maximumThrottle, 1.05);
+        double cruiseThrottle = System.Math.Min(_maximumThrottle, 0.84);
+        double maxG = _profile.MaxAcquireG;
+
+        // Full 3D pursuit uses the UNCLAMPED lift-vector-on-target roll: the bank that places the
+        // lift vector on the aim point may exceed 90 deg (rolling toward inverted) so the ace can
+        // pull its nose DOWN onto a target below and behind -- a Split-S / nose-low recommit the old
+        // 74 deg-clamped state machine could never fly. Whether the pull ends up level, nose-high, or
+        // nose-low is decided by the score, not scripted.
+        double bankOnLead = Geometry.BankToPlaceLiftVectorOn(State, leadPoint);
+        // Pull into the vertical: place the lift vector up-and-across (a high yo-yo).
+        var verticalAim = leadPoint + new Vec3D(0.0, System.Math.Max(900.0, range * 0.9), 0.0);
+        // Nose-low reposition (low yo-yo): tighten in-plane and regain energy when fast and high.
+        var lowAim = leadPoint + new Vec3D(0.0, -System.Math.Max(500.0, range * 0.5), 0.0);
+
+        var candidates = new PilotCommand[] {
+            // Hard 3D pursuit: max-perform pull with the lift vector planted on the lead point.
+            new(maxG, bankOnLead, fastThrottle, 0.0),
+            // Moderate 3D pursuit: a sustainable rate pull that trades less energy.
+            new(System.Math.Min(maxG, 4.0), bankOnLead, cruiseThrottle, 0.0),
+            // Pull into the vertical (high yo-yo).
+            new(System.Math.Min(maxG, 6.5), Geometry.BankToPlaceLiftVectorOn(State, verticalAim),
+                fastThrottle, 0.0),
+            // Nose-low reposition (low yo-yo / Split-S recommit).
+            new(System.Math.Min(maxG, 5.5), Geometry.BankToPlaceLiftVectorOn(State, lowAim),
+                fastThrottle, 0.0),
+            // Unload / extend: near-1 G, max throttle, wings toward the target — rebuild energy.
+            new(1.05, LimitedBankTo(leadPoint, 0.45), _maximumThrottle, 0.0),
+            // Reverse: bank the opposite way for a scissors/reposition flavour.
+            new(System.Math.Min(maxG, 4.5), -bankOnLead, cruiseThrottle, 0.0),
+        };
+
+        double bestScore = double.NegativeInfinity;
+        var bestCommand = candidates[0];
+        for (int i = 0; i < candidates.Length; i++) {
+            double s = ScoreCandidate(candidates[i], player);
+            if (s > bestScore) { bestScore = s; bestCommand = candidates[i]; }
+        }
+        _lookaheadCommand = bestCommand;
+        return bestCommand;
+    }
+
+    /// Roll one held candidate command forward in a throwaway probe of the deterministic kernel while
+    /// predicting the player by a coordinated-turn extension of the OBSERVED state (belief-limited and
+    /// honest: no hidden opponent internals are read). Higher return is a better future firing
+    /// position. Pure function of the two passed states — no wall clock, RNG, or hidden truth.
+    double ScoreCandidate(in PilotCommand command, in AircraftState player) {
+        const double dt = 1.0 / AircraftSim.TickHz;
+        const double gunConeRad = 0.2094; // 12 deg, matching CameraSolver.GunWindow
+        var probe = new AircraftSim(State, _parameters, _sim.AtmosphereModel) { Wind = _sim.Wind };
+        probe.SeedEnginePowerFraction(_sim.ThrustFraction);
+
+        // Belief-limited player prediction: a coordinated turn extrapolated from the OBSERVED state
+        // only (speed, flight-path angle, and the reported flight-path bank). This is honest -- it
+        // reads no hidden opponent internals -- and, unlike a straight-line guess, it anticipates a
+        // maneuvering target curving back into the fight instead of appearing to flee forever.
+        var predictedPos = player.Position;
+        double predChi = player.Chi;
+        double predGamma = player.Gamma;
+        double predSpeed = player.Speed;
+        double predTurnRate = predSpeed > 1.0
+            ? FlightModel.G0 * System.Math.Tan(System.Math.Clamp(player.Bank, -1.3, 1.3)) / predSpeed
+            : 0.0;
+
+        double windowSeconds = 0.0;
+        double minY = double.PositiveInfinity;
+        int horizon = _profile.LookaheadHorizonTicks;
+        for (int t = 0; t < horizon; t++) {
+            probe.Step(command, dt);
+            predChi += predTurnRate * dt;
+            var predVel = new Vec3D(
+                System.Math.Sin(predChi) * System.Math.Cos(predGamma),
+                System.Math.Sin(predGamma),
+                System.Math.Cos(predChi) * System.Math.Cos(predGamma)) * predSpeed;
+            predictedPos += predVel * dt;
+            var probeState = probe.State;
+            minY = System.Math.Min(minY, probeState.Position.Y);
+            var predictedPlayer = player with { Position = predictedPos };
+            if (Geometry.Range(probeState, predictedPlayer) < BanditFireControl.MaximumRangeM
+                && Geometry.AngleOff(probeState, predictedPlayer) < gunConeRad)
+                windowSeconds += dt;
+        }
+
+        var terminal = probe.State;
+        var terminalPlayer = player with { Position = predictedPos };
+        double termRange = Geometry.Range(terminal, terminalPlayer);
+        double termAngle = Geometry.AngleOff(terminal, terminalPlayer);
+        const double idealRangeM = 450.0; // centre of the gun band: pull the fight inside firing range
+
+        // Nose-on shaping: the strongest driver toward a solution.
+        double score = -4.0 * termAngle;
+        // Direct conversion reward: seconds of gun window accrued over the rollout.
+        score += 10.0 * windowSeconds;
+        // Range management: pull the fight INTO firing range rather than zooming away or overshooting
+        // through the merge. Distance from the band centre is penalised both long and short.
+        score -= 0.004 * System.Math.Abs(termRange - idealRangeM);
+        // Speed (kinetic-energy) retention only -- NOT raw altitude, which would reward an endless
+        // zoom climb out of the fight. Vertical maneuvers still emerge when they improve the angle.
+        score += 0.010 * System.Math.Min(terminal.Speed, 320.0);
+        // Floor avoidance: a hard penalty as the rollout approaches the water.
+        if (minY < FloorM + 200.0)
+            score -= 0.02 * (FloorM + 200.0 - minY);
+        return score;
     }
 }

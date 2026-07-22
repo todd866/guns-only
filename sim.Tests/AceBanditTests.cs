@@ -60,12 +60,11 @@ public class AceBanditTests {
         Assert.True(aceMaxG > competentMaxG + 1.5, $"ace={aceMaxG:F2} competent={competentMaxG:F2}");
     }
 
-    // TASK-8 ACCEPTANCE TARGET (currently failing by design): a high-skill AI must out-fight a weak
-    // one. Task 2 measured that raising G alone leaves the ace TIED with a novice (1.5s vs 1.5s) --
-    // it wins the head-on window but never converts to a sustained solution. Enabling this requires
-    // the tactical behaviours (overshoot-forcing defence, disengage/re-engage, doctrine) and the
-    // win% tuning of Tasks 4-8. Unskip and satisfy it in Task 8.
-    [Fact(Skip = "Task-8 outcome: needs the ace tactical behaviours (Tasks 4-6) + tuning, not just G")]
+    // A high-skill AI must out-fight a weak one. Raising G alone left the ace TIED with a novice
+    // (~1.5s vs ~1.5s): it won the head-on window but never converted to a sustained solution. The
+    // short-horizon lookahead decision layer (ReactiveBandit.LookaheadCommand) converts the merge --
+    // it pulls nose-low after the pass, gets its nose on, and holds a long gun solution.
+    [Fact]
     public void AceOutFightsANoviceHeadToHead() {
         var p = FlightModel.F22APublicDataSurrogate;
         var ace = new ReactiveBandit(F22(0.0, 3000.0, 0.0, 220.0, chi: 0.0), p, PilotSkill.Ace);
@@ -73,5 +72,53 @@ public class AceBanditTests {
         var result = BfmDuel.Fly(ace, novice, 45.0);
         Assert.True(result.ASolutionSeconds > result.BSolutionSeconds + 1.0,
             $"ace={result.ASolutionSeconds:F1}s novice={result.BSolutionSeconds:F1}s");
+    }
+
+    // A fixed-turn reference target: a throwaway airframe held in a steady rate turn, driven on the
+    // same deterministic sample as the bandit. Returns (gun-solution seconds the bandit held on it,
+    // own altitude excursion max-min). Reads only the target's beginning-of-tick state — honest.
+    static (double solutionSeconds, double altitudeExcursion) FlyAgainstSteadyTurnTarget(
+        ReactiveBandit bandit, double seconds) {
+        var p = FlightModel.F22APublicDataSurrogate;
+        // Target ahead of and slightly across the bandit, holding a sustained 4 G right turn.
+        var target = new AircraftSim(F22(700.0, 3000.0, 1600.0, 210.0, chi: 0.0), p);
+        var steadyTurn = new PilotCommand(4.0, 0.8, 0.85, 0.0);
+        double sol = 0.0, minY = double.PositiveInfinity, maxY = double.NegativeInfinity;
+        int ticks = (int)(seconds * AircraftSim.TickHz);
+        for (int i = 0; i < ticks; i++) {
+            var targetState = target.State;
+            bandit.Step(targetState, Dt);
+            target.Step(steadyTurn, Dt);
+            if (CameraSolver.GunWindow(bandit.State, target.State)) sol += Dt;
+            minY = Math.Min(minY, bandit.State.Position.Y);
+            maxY = Math.Max(maxY, bandit.State.Position.Y);
+        }
+        return (sol, maxY - minY);
+    }
+
+    [Fact]
+    public void AceConvertsAgainstASteadyTurnWhereACompetentBanditGetsNothing() {
+        var p = FlightModel.F22APublicDataSurrogate;
+        var ace = new ReactiveBandit(F22(0.0, 3000.0, 0.0, 240.0, chi: 0.0), p, PilotSkill.Ace);
+        var competent = new ReactiveBandit(F22(0.0, 3000.0, 0.0, 240.0, chi: 0.0), p, PilotSkill.Competent);
+        var aceResult = FlyAgainstSteadyTurnTarget(ace, 30.0);
+        var competentResult = FlyAgainstSteadyTurnTarget(competent, 30.0);
+        Assert.True(competentResult.solutionSeconds < 0.5,
+            $"flat competent should barely convert: {competentResult.solutionSeconds:F2}s");
+        Assert.True(aceResult.solutionSeconds > 1.0,
+            $"ace must accrue a real gun solution: {aceResult.solutionSeconds:F2}s");
+        Assert.True(aceResult.solutionSeconds > competentResult.solutionSeconds + 1.0,
+            $"ace={aceResult.solutionSeconds:F2}s competent={competentResult.solutionSeconds:F2}s");
+    }
+
+    [Fact]
+    public void AceUsesTheVerticalMoreThanAFlatCompetentBandit() {
+        var p = FlightModel.F22APublicDataSurrogate;
+        var ace = new ReactiveBandit(F22(0.0, 3000.0, 0.0, 240.0, chi: 0.0), p, PilotSkill.Ace);
+        var competent = new ReactiveBandit(F22(0.0, 3000.0, 0.0, 240.0, chi: 0.0), p, PilotSkill.Competent);
+        double aceExcursion = FlyAgainstSteadyTurnTarget(ace, 30.0).altitudeExcursion;
+        double competentExcursion = FlyAgainstSteadyTurnTarget(competent, 30.0).altitudeExcursion;
+        Assert.True(aceExcursion > competentExcursion + 200.0,
+            $"ace must fight in the vertical: ace={aceExcursion:F0} m competent={competentExcursion:F0} m");
     }
 }
