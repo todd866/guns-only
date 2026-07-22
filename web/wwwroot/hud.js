@@ -38,6 +38,12 @@ const AMBER = "#ffb020";
 const RED = "#ff465d";
 const GLASS = "rgba(2, 10, 16, 0.72)";
 const DEG = Math.PI / 180;
+
+// Readout peg for the vertical-speed digits only. A fighter HUD VVI beyond ~9.9K fpm conveys
+// nothing actionable that the ground-proximity warnings (which use the raw, unclamped sink rate)
+// do not already own, and the raw value can spike into a five-figure "K" reading during a steep
+// dive. This keeps the numeric readout believable; it never touches simulation truth or warnings.
+const READABLE_VERTICAL_SPEED_FPM = 9950;
 const RAD_TO_DEG = 180 / Math.PI;
 const FPV_VERTICAL_FOV_DEG = 66;
 const MODE_CUE_SECONDS = 1.5;
@@ -729,17 +735,13 @@ class CombatHud {
     const envelope = gunFunnelEnvelope(profile);
     if (!gunFunnelUsable(state, envelope)) return;
 
-    // Centre the funnel on the target and hide it if the target is not in front of us. This is
-    // a FIXED wingspan scale: each rail half-width is the span this wingspan subtends at that
-    // range (focal*wingspan/2r from gunFunnelSamples), independent of how big the target
-    // currently looks. The pilot flies the target's wings into the walls; the range where they
-    // touch is the range, and touching inside the funnel means inside effective gun range. The
-    // widths are the calibrated content; the vertical spread is presentation. (Sizing the rails
-    // from the *measured* apparent span instead would make the fit tautological — it would match
-    // at every range and read out nothing.)
-    const target = this.project(frame.banditPosition, camera, this._funnelTargetProj);
-    if (target.behind || !Number.isFinite(target.x) || !Number.isFinite(target.y)) return;
-
+    // A REAL gunsight funnel: anchored at the BORESIGHT (the gun cross), hung BELOW the pipper, and
+    // rotated by -bank so its axis rides the LIFT VECTOR and banks with the jet. Each rail half-
+    // width is the span the target's wingspan subtends at that range (focal*wingspan/2r, from
+    // gunFunnelSamples) — a FIXED calibrated scale, independent of how big the target looks. The
+    // pilot pulls the target's wings into the walls: the vertical spot where they fill the funnel
+    // width reads range, and filling anywhere inside the mouth means inside effective gun range.
+    // Near range = wide mouth at the bottom; far range = narrow throat pinching up into the pipper.
     const focalLengthPx = this.width * 0.5
       * (Number(camera?.projectionMatrix?.elements?.[0]) || 1);
     const samples = gunFunnelSamples({ ...profile, focalLengthPx });
@@ -749,15 +751,20 @@ class CombatHud {
     // 800 m / 12-degree framing cone, not a firing solution.
     const solution = frame.visualGunSolution === true;
     const railColor = solution ? "rgba(77, 255, 136, 0.92)" : "rgba(77, 255, 136, 0.68)";
-    const HALF_BAND_PX = 46; // near (wide) at the bottom, far (narrow) at the top
 
-    // fraction 0 = near edge (bottom), 1 = far edge (top).
-    const yOf = (fraction) => HALF_BAND_PX * (1 - 2 * fraction);
+    // The funnel hangs downward (belly side) from the boresight in the rotated body frame. fraction
+    // 1 = far range at the throat (y = 0, the pipper); fraction 0 = near range at the mouth (y =
+    // funnelLength, the widest point below). Because near range subtends the largest apparent span,
+    // the rails naturally splay open at the bottom and converge up toward the pipper.
+    const funnelLength = clamp(this.height * 0.30, 96, 200);
+    const yOf = (fraction) => funnelLength * (1 - fraction);
 
     ctx.save();
-    ctx.translate(target.x, target.y);
+    ctx.translate(anchor.x, anchor.y);
     ctx.rotate(-bank);
-    this.setLine(railColor, solution ? 1.7 : 1.2);
+    this.setLine(railColor, solution ? 1.9 : 1.3);
+    ctx.shadowColor = solution ? "rgba(77, 255, 136, 0.5)" : "rgba(77, 255, 136, 0.28)";
+    ctx.shadowBlur = solution ? 6 : 3;
     ctx.beginPath();
     samples.forEach((s, i) => {
       const y = yOf(s.fraction);
@@ -772,6 +779,7 @@ class CombatHud {
       else ctx.lineTo(s.halfWidthPx, y);
     });
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
     // Near / mid / far range gradations across the rails.
     ctx.strokeStyle = railColor;
@@ -780,11 +788,28 @@ class CombatHud {
       const s = samples[i];
       const y = yOf(s.fraction);
       ctx.beginPath();
-      ctx.moveTo(-s.halfWidthPx - 3, y); ctx.lineTo(-s.halfWidthPx + 2, y);
-      ctx.moveTo(s.halfWidthPx - 2, y); ctx.lineTo(s.halfWidthPx + 3, y);
+      ctx.moveTo(-s.halfWidthPx - 4, y); ctx.lineTo(-s.halfWidthPx + 2, y);
+      ctx.moveTo(s.halfWidthPx - 2, y); ctx.lineTo(s.halfWidthPx + 4, y);
       ctx.stroke();
     }
     ctx.restore();
+
+    // Mark the bandit in screen space (unrotated) so the pilot sees which way to pull it into the
+    // walls. The funnel walls are the range scale; this diamond is the thing to fly into them.
+    const target = this.project(frame.banditPosition, camera, this._funnelTargetProj);
+    if (!target.behind && Number.isFinite(target.x) && Number.isFinite(target.y)) {
+      ctx.save();
+      this.setLine(solution ? GREEN : AMBER, 1.4);
+      const r = 5;
+      ctx.beginPath();
+      ctx.moveTo(target.x, target.y - r);
+      ctx.lineTo(target.x + r, target.y);
+      ctx.lineTo(target.x, target.y + r);
+      ctx.lineTo(target.x - r, target.y);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // The deck diamond and waterline director are one published recovery contract. Align the stable
@@ -1552,8 +1577,16 @@ class CombatHud {
   drawAirdataLabels(state, speedX, altitudeX, display = {}) {
     const data = airdataReadout(state);
     const groundKts = Number.isFinite(display.groundKts) ? display.groundKts : null;
-    const verticalSpeedFpm = Number.isFinite(display.verticalSpeedDigits)
+    // The sim emits vertical_speed_fpm as the world-up velocity component (m/s * 196.85). That
+    // conversion is dimensionally correct, but in a steep nose-low dive/zoom the raw value is a
+    // genuine 100+ m/s that renders as an unreadable five-figure "V/S +19.7K FPM". Peg the READOUT
+    // to a believable VVI envelope so it stays legible; the true unclamped sink rate still drives
+    // the GCAS / PULL-UP ground warnings (drawWarnings / drawOutcomeCues read raw state directly).
+    const rawVerticalSpeedFpm = Number.isFinite(display.verticalSpeedDigits)
       ? display.verticalSpeedDigits : data.verticalSpeedFpm;
+    const verticalSpeedFpm = Number.isFinite(rawVerticalSpeedFpm)
+      ? clamp(rawVerticalSpeedFpm, -READABLE_VERTICAL_SPEED_FPM, READABLE_VERTICAL_SPEED_FPM)
+      : rawVerticalSpeedFpm;
     const groundText = Number.isFinite(groundKts)
       ? `G/S ${Math.round(Math.max(0, groundKts))}`
       : data.groundText;
@@ -2099,11 +2132,14 @@ class CombatHud {
     padlockCtx.fillText(this.fitText(modeText, modeWidth - 12), this.width / 2, modeY + 10);
 
     // These cues exist only when the pilot is actually looking away from the waterline. Together
-    // they answer the useful BFM question: where is the nose, which way should I roll, then pull?
+    // they answer the three BFM questions: where is the bandit, WHICH WAY DO I ROLL to put my lift
+    // line on it, and what is my attitude so I do not fly into the ground.
     const offAxis = Math.abs(Number(frame.sensorYaw) || 0) > 10 * DEG
       || Math.abs(Number(frame.sensorPitch) || 0) > 8 * DEG
       || frame.manualLookActive === true;
     if (offAxis) {
+      const state = frame.state;
+      const isBanditPadlock = frame.padlockTarget !== "carrier";
       const targetSafe = this.getLayout().targetSafe;
       const left = targetSafe.left + 12;
       const right = targetSafe.right - 12;
@@ -2121,6 +2157,182 @@ class CombatHud {
         top + 26,
         Math.max(top + 26, bottom - 26),
       );
+      const blink = Math.floor((Number(frame.now) || 0) * 5) % 2 === 0;
+
+      // Where is the bandit in this view. In padlock the sensor is slaved to it, so it usually sits
+      // near centre (offset toward the nose by the protected-offset geometry); a manual slew can
+      // push it off-screen or behind, so we always resolve a screen direction to point at it.
+      const banditProj = this.project(frame.banditPosition, padlockCamera, this._funnelTargetProj);
+      const banditOnScreen = isBanditPadlock && !banditProj.behind
+        && Number.isFinite(banditProj.x) && Number.isFinite(banditProj.y)
+        && banditProj.x >= left && banditProj.x <= right
+        && banditProj.y >= top && banditProj.y <= bottom;
+      // Unit screen direction from view-centre toward the bandit (for the roll cue and edge caret).
+      let banditDirX = 0;
+      let banditDirY = 0;
+      let banditDirValid = false;
+      if (isBanditPadlock && !banditProj.behind
+          && Number.isFinite(banditProj.x) && Number.isFinite(banditProj.y)) {
+        const dx = banditProj.x - centreX;
+        const dy = banditProj.y - centreY;
+        const magnitude = Math.hypot(dx, dy);
+        if (magnitude > 10) {
+          banditDirX = dx / magnitude;
+          banditDirY = dy / magnitude;
+          banditDirValid = true;
+        }
+      } else if (isBanditPadlock && banditProj.behind) {
+        // Behind the sensor: mirror the nose direction so the caret still points sensibly.
+        const magnitude = Math.hypot(orientation.nose.x, orientation.nose.y) || 1;
+        banditDirX = -orientation.nose.x / magnitude;
+        banditDirY = -orientation.nose.y / magnitude;
+        banditDirValid = true;
+      }
+
+      // === HERO CUE: the lift-line roll cue ("roll to put your lift line on the bandit, then pull").
+      // A prominent lift line from view-centre along orientation.lift; a curved roll arrow sweeping
+      // from the lift line to the bandit; the whole line lights up with a bold PULL once the lift
+      // line is on the bandit. This is the biggest thing on the screen.
+      let liftOnBandit = false;
+      if (isBanditPadlock && orientation.liftValid) {
+        const liftAngle = Math.atan2(orientation.lift.y, orientation.lift.x);
+        const liftLen = clamp(Math.min(right - centreX, centreX - left, bottom - centreY) * 0.9,
+          46, 92);
+        // Alignment: angle between the lift line and the centre->bandit direction.
+        let alignDelta = null;
+        if (banditDirValid) {
+          const banditAngle = Math.atan2(banditDirY, banditDirX);
+          alignDelta = Math.atan2(Math.sin(banditAngle - liftAngle), Math.cos(banditAngle - liftAngle));
+          liftOnBandit = Math.abs(alignDelta) < 14 * DEG;
+        }
+
+        const litColor = liftOnBandit ? "#7dffb0" : GREEN;
+        padlockCtx.save();
+        padlockCtx.strokeStyle = litColor;
+        padlockCtx.fillStyle = litColor;
+        padlockCtx.lineWidth = liftOnBandit ? 3.4 : 2.4;
+        padlockCtx.lineCap = "round";
+        padlockCtx.shadowColor = liftOnBandit ? "rgba(77, 255, 136, 0.85)" : "rgba(77, 255, 136, 0.4)";
+        padlockCtx.shadowBlur = liftOnBandit ? 12 : 5;
+        const tipX = centreX + orientation.lift.x * liftLen;
+        const tipY = centreY + orientation.lift.y * liftLen;
+        padlockCtx.beginPath();
+        padlockCtx.moveTo(centreX + orientation.lift.x * 12, centreY + orientation.lift.y * 12);
+        padlockCtx.lineTo(tipX, tipY);
+        padlockCtx.stroke();
+        // Broad arrowhead at the lift-line tip (this is the direction a pull throws the nose).
+        padlockCtx.save();
+        padlockCtx.translate(tipX, tipY);
+        padlockCtx.rotate(liftAngle);
+        padlockCtx.beginPath();
+        padlockCtx.moveTo(10, 0);
+        padlockCtx.lineTo(-5, -6);
+        padlockCtx.lineTo(-5, 6);
+        padlockCtx.closePath();
+        padlockCtx.fill();
+        padlockCtx.restore();
+        padlockCtx.shadowBlur = 0;
+
+        // Curved roll arrow: sweeps along an arc from the lift line toward the bandit, so the pilot
+        // reads directly which way to roll to bring the two together. Lights to PULL when aligned.
+        if (banditDirValid && alignDelta !== null && !liftOnBandit) {
+          const arcR = Math.max(24, liftLen * 0.52);
+          const endAngle = liftAngle + alignDelta;
+          padlockCtx.strokeStyle = AMBER;
+          padlockCtx.fillStyle = AMBER;
+          padlockCtx.lineWidth = 2.4;
+          padlockCtx.beginPath();
+          padlockCtx.arc(centreX, centreY, arcR, liftAngle, endAngle, alignDelta < 0);
+          padlockCtx.stroke();
+          // Arrowhead at the bandit end of the arc, tangent to the sweep direction.
+          const tangent = endAngle + (alignDelta < 0 ? -Math.PI / 2 : Math.PI / 2);
+          const headX = centreX + Math.cos(endAngle) * arcR;
+          const headY = centreY + Math.sin(endAngle) * arcR;
+          padlockCtx.save();
+          padlockCtx.translate(headX, headY);
+          padlockCtx.rotate(tangent);
+          padlockCtx.beginPath();
+          padlockCtx.moveTo(7, 0);
+          padlockCtx.lineTo(-4, -5);
+          padlockCtx.lineTo(-4, 5);
+          padlockCtx.closePath();
+          padlockCtx.fill();
+          padlockCtx.restore();
+          padlockCtx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          padlockCtx.textAlign = "center";
+          padlockCtx.fillText("ROLL", centreX, top + 12);
+        }
+        // Bold PULL on the lift line once it is on the bandit.
+        if (liftOnBandit) {
+          padlockCtx.fillStyle = litColor;
+          padlockCtx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          padlockCtx.textAlign = "center";
+          padlockCtx.textBaseline = "middle";
+          padlockCtx.shadowColor = "rgba(77, 255, 136, 0.8)";
+          padlockCtx.shadowBlur = 8;
+          padlockCtx.fillText("PULL",
+            centreX + orientation.lift.x * (liftLen + 18),
+            centreY + orientation.lift.y * (liftLen + 18));
+          padlockCtx.shadowBlur = 0;
+        }
+        padlockCtx.restore();
+      }
+
+      // === BANDIT LOCATOR: always mark the bandit. On-screen -> diamond; off-screen/behind -> an
+      // edge caret pointing at it with a rough (screen-referenced) clock position.
+      if (isBanditPadlock) {
+        padlockCtx.save();
+        if (banditOnScreen) {
+          const r = liftOnBandit ? 8 : 6.5;
+          padlockCtx.strokeStyle = liftOnBandit ? "#7dffb0" : AMBER;
+          padlockCtx.fillStyle = liftOnBandit ? "#7dffb0" : AMBER;
+          padlockCtx.lineWidth = 1.8;
+          padlockCtx.beginPath();
+          padlockCtx.moveTo(banditProj.x, banditProj.y - r);
+          padlockCtx.lineTo(banditProj.x + r, banditProj.y);
+          padlockCtx.lineTo(banditProj.x, banditProj.y + r);
+          padlockCtx.lineTo(banditProj.x - r, banditProj.y);
+          padlockCtx.closePath();
+          padlockCtx.stroke();
+          padlockCtx.beginPath();
+          padlockCtx.arc(banditProj.x, banditProj.y, 1.6, 0, Math.PI * 2);
+          padlockCtx.fill();
+        } else if (banditDirValid) {
+          const scale = Math.min(
+            (banditDirX >= 0 ? right - centreX : centreX - left) / Math.max(Math.abs(banditDirX), 0.001),
+            (banditDirY >= 0 ? bottom - centreY : centreY - top) / Math.max(Math.abs(banditDirY), 0.001),
+          );
+          const edgeX = centreX + banditDirX * scale;
+          const edgeY = centreY + banditDirY * scale;
+          padlockCtx.save();
+          padlockCtx.translate(edgeX, edgeY);
+          padlockCtx.rotate(Math.atan2(banditDirY, banditDirX));
+          this.setLine(AMBER, 2.0);
+          padlockCtx.beginPath();
+          padlockCtx.moveTo(12, 0);
+          padlockCtx.lineTo(-5, -8);
+          padlockCtx.lineTo(-1, 0);
+          padlockCtx.lineTo(-5, 8);
+          padlockCtx.closePath();
+          padlockCtx.stroke();
+          padlockCtx.restore();
+          // Rough clock: 12 o'clock = top of view. Screen-referenced, an at-a-glance heads-up.
+          const clockAngle = Math.atan2(banditDirX, -banditDirY); // 0 = up, +CW
+          let clock = Math.round(((clockAngle / (Math.PI * 2)) * 12 + 12)) % 12;
+          if (clock === 0) clock = 12;
+          padlockCtx.fillStyle = AMBER;
+          padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          padlockCtx.textAlign = "center";
+          padlockCtx.textBaseline = "middle";
+          const labelX = clamp(edgeX - banditDirX * 16, left + 12, right - 12);
+          const labelY = clamp(edgeY - banditDirY * 16, top + 8, bottom - 8);
+          padlockCtx.fillText(`${clock} O'C`, labelX, labelY);
+        }
+        padlockCtx.restore();
+      }
+
+      // NOSE tick: a small amber caret at the waterline projection (or the view edge if the nose is
+      // off-screen), so the pilot keeps a sense of where the jet points relative to the padlock.
       const anchorVisible = noseAnchor && !noseAnchor.behind
         && Number.isFinite(noseAnchor.x) && Number.isFinite(noseAnchor.y)
         && noseAnchor.x >= left && noseAnchor.x <= right
@@ -2154,85 +2366,95 @@ class CombatHud {
         noseDirectionX = dx;
         noseDirectionY = dy;
       }
-
       padlockCtx.save();
       padlockCtx.translate(noseX, noseY);
       if (!anchorVisible) {
         padlockCtx.rotate(Math.atan2(noseDirectionY, noseDirectionX));
-        this.setLine(AMBER, 1.7);
+        this.setLine("rgba(255, 176, 32, 0.75)", 1.5);
         padlockCtx.beginPath();
-        padlockCtx.moveTo(11, 0);
-        padlockCtx.lineTo(-5, -7);
+        padlockCtx.moveTo(10, 0);
+        padlockCtx.lineTo(-5, -6);
         padlockCtx.lineTo(-2, 0);
-        padlockCtx.lineTo(-5, 7);
+        padlockCtx.lineTo(-5, 6);
         padlockCtx.stroke();
         padlockCtx.rotate(-Math.atan2(noseDirectionY, noseDirectionX));
       }
-      padlockCtx.fillStyle = AMBER;
-      padlockCtx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      padlockCtx.fillStyle = "rgba(255, 176, 32, 0.85)";
+      padlockCtx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       padlockCtx.textAlign = "center";
-      padlockCtx.fillText("NOSE", 0, anchorVisible ? 17 : -12);
+      padlockCtx.textBaseline = "alphabetic";
+      padlockCtx.fillText("NOSE", 0, anchorVisible ? 16 : -11);
       padlockCtx.restore();
 
-      // Lift-vector caret is centred in the current view, not on a duplicated attitude gauge. A
-      // roll moves this caret around the target; a pull moves the nose in the indicated direction.
-      if (orientation.liftValid) {
-        const pullRadius = 47;
-        const pullX = centreX + orientation.lift.x * pullRadius;
-        const pullY = centreY + orientation.lift.y * pullRadius;
-        padlockCtx.strokeStyle = GREEN;
-        padlockCtx.fillStyle = GREEN;
-        padlockCtx.lineWidth = 1.5;
-        padlockCtx.beginPath();
-        padlockCtx.moveTo(centreX + orientation.lift.x * 29, centreY + orientation.lift.y * 29);
-        padlockCtx.lineTo(pullX, pullY);
-        padlockCtx.stroke();
-        padlockCtx.save();
-        padlockCtx.translate(pullX, pullY);
-        padlockCtx.rotate(Math.atan2(orientation.lift.y, orientation.lift.x));
-        padlockCtx.beginPath();
-        padlockCtx.moveTo(7, 0);
-        padlockCtx.lineTo(-4, -4);
-        padlockCtx.lineTo(-4, 4);
-        padlockCtx.closePath();
-        padlockCtx.fill();
-        padlockCtx.restore();
-        padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-        padlockCtx.textAlign = "center";
-        padlockCtx.fillText("PULL", pullX + orientation.lift.x * 14, pullY + orientation.lift.y * 14);
-      }
-
+      // === ATTITUDE / GROUND: a readable horizon (bank AND pitch) plus a ground-proximity warning
+      // that flashes when the jet is nose-low and low. Do NOT fly into the ground = obvious.
       if (orientation.horizonValid) {
+        const pitchDeg = Number(state.pitch_deg) || 0;
         const horizonX = centreX;
-        const horizonY = clamp(centreY + 75, top + 24, bottom - 18);
-        padlockCtx.strokeStyle = GREEN_DIM;
-        padlockCtx.lineWidth = 1.2;
+        // Pitch drives the horizon up/down along world-up: nose-up pushes the horizon down.
+        const pitchOffset = clamp(pitchDeg * 1.4, -34, 34);
+        const baseY = clamp(centreY + 74, top + 30, bottom - 24);
+        const horizonY = clamp(baseY + orientation.worldUp.y * pitchOffset,
+          top + 24, bottom - 18);
+        const hx = orientation.horizon.x;
+        const hy = orientation.horizon.y;
+        const halfSpan = 34;
+
+        // Ground-danger: nose-low and low. The true, unclamped sink rate / radar altitude decide.
+        const radarAltFt = Number.isFinite(Number(state.radar_alt_ft))
+          ? Number(state.radar_alt_ft) : Number(state.alt_ft);
+        const sinkFpm = Number(state.vertical_speed_fpm);
+        const noseLow = pitchDeg < -2 || (Number.isFinite(sinkFpm) && sinkFpm < -1500);
+        const groundDanger = Number.isFinite(radarAltFt) && radarAltFt < 2000 && noseLow;
+
+        padlockCtx.save();
+        const horizonColor = groundDanger ? RED : GREEN_DIM;
+        padlockCtx.strokeStyle = horizonColor;
+        padlockCtx.lineWidth = 1.6;
+        if (groundDanger) {
+          padlockCtx.shadowColor = "rgba(255, 70, 93, 0.6)";
+          padlockCtx.shadowBlur = blink ? 10 : 3;
+        }
         padlockCtx.beginPath();
-        padlockCtx.moveTo(
-          horizonX - orientation.horizon.x * 25,
-          horizonY - orientation.horizon.y * 25,
-        );
-        padlockCtx.lineTo(
-          horizonX + orientation.horizon.x * 25,
-          horizonY + orientation.horizon.y * 25,
-        );
+        padlockCtx.moveTo(horizonX - hx * halfSpan, horizonY - hy * halfSpan);
+        padlockCtx.lineTo(horizonX + hx * halfSpan, horizonY + hy * halfSpan);
         padlockCtx.stroke();
-        padlockCtx.fillStyle = GREEN_DIM;
+        // Ground-side hatching (toward -worldUp) so the down side reads as the earth at a glance.
+        padlockCtx.lineWidth = 1;
+        for (const t of [-0.6, -0.2, 0.2, 0.6]) {
+          const px = horizonX + hx * halfSpan * t;
+          const py = horizonY + hy * halfSpan * t;
+          padlockCtx.beginPath();
+          padlockCtx.moveTo(px, py);
+          padlockCtx.lineTo(px - orientation.worldUp.x * 6, py - orientation.worldUp.y * 6);
+          padlockCtx.stroke();
+        }
+        // Sky "up" tick so bank direction is unambiguous.
+        padlockCtx.fillStyle = horizonColor;
         padlockCtx.beginPath();
-        padlockCtx.moveTo(
-          horizonX + orientation.worldUp.x * 16,
-          horizonY + orientation.worldUp.y * 16,
-        );
-        padlockCtx.lineTo(
-          horizonX + orientation.worldUp.x * 8 - orientation.horizon.x * 3,
-          horizonY + orientation.worldUp.y * 8 - orientation.horizon.y * 3,
-        );
-        padlockCtx.lineTo(
-          horizonX + orientation.worldUp.x * 8 + orientation.horizon.x * 3,
-          horizonY + orientation.worldUp.y * 8 + orientation.horizon.y * 3,
-        );
+        padlockCtx.moveTo(horizonX + orientation.worldUp.x * 15, horizonY + orientation.worldUp.y * 15);
+        padlockCtx.lineTo(horizonX + orientation.worldUp.x * 7 - hx * 3, horizonY + orientation.worldUp.y * 7 - hy * 3);
+        padlockCtx.lineTo(horizonX + orientation.worldUp.x * 7 + hx * 3, horizonY + orientation.worldUp.y * 7 + hy * 3);
         padlockCtx.closePath();
         padlockCtx.fill();
+        padlockCtx.shadowBlur = 0;
+        // Numeric pitch, so attitude reads without decoding the line.
+        padlockCtx.fillStyle = groundDanger ? RED : GREEN_DIM;
+        padlockCtx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        padlockCtx.textAlign = "left";
+        padlockCtx.textBaseline = "middle";
+        padlockCtx.fillText(`${pitchDeg >= 0 ? "+" : ""}${Math.round(pitchDeg)}°`,
+          horizonX + halfSpan + 6, horizonY);
+        if (groundDanger && blink) {
+          padlockCtx.fillStyle = RED;
+          padlockCtx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          padlockCtx.textAlign = "center";
+          padlockCtx.shadowColor = "rgba(255, 70, 93, 0.7)";
+          padlockCtx.shadowBlur = 8;
+          padlockCtx.fillText("GROUND · PULL UP", horizonX, horizonY + 22);
+          padlockCtx.shadowBlur = 0;
+        }
+        padlockCtx.restore();
       }
     }
     padlockCtx.restore();
