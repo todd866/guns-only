@@ -3,9 +3,15 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
+const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
+// The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
+// SnapshotProjection; the contract scan reads both so a field is found wherever it now lives.
+const readBridgeContract = () =>
+  Promise.all([readFile(bridgeUrl, "utf8"), readFile(projectionUrl, "utf8")])
+    .then((parts) => parts.join("\n"));
 
 test("WebBridge 1.4 projects the authoritative pilot physiology contract", async () => {
-  const source = await readFile(bridgeUrl, "utf8");
+  const source = await readBridgeContract();
 
   assert.match(source, /const string SnapshotSchemaVersion = "1\.4\.0";/);
   assert.match(source,
@@ -54,7 +60,7 @@ test("WebBridge 1.4 projects the authoritative pilot physiology contract", async
 });
 
 test("bridge keeps pilot intent distinct from physiology-impaired actuator truth", async () => {
-  const source = await readFile(bridgeUrl, "utf8");
+  const source = await readBridgeContract();
 
   assert.match(source, /PilotCommand requestedCommand = _detents\.Command;/);
   assert.match(source, /PilotCommand appliedCommand = _player\.LastAppliedCommand;/);
@@ -63,7 +69,7 @@ test("bridge keeps pilot intent distinct from physiology-impaired actuator truth
 });
 
 test("pilot state is a closed token set and profile IDs use JSON escaping", async () => {
-  const source = await readFile(bridgeUrl, "utf8");
+  const source = await readBridgeContract();
 
   for (const token of [
     "NORMAL",

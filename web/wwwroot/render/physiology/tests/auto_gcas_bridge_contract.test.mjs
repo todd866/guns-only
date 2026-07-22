@@ -3,10 +3,16 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
+const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
+// The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
+// SnapshotProjection; the contract scan reads both so a field is found wherever it now lives.
+const readBridgeContract = () =>
+  Promise.all([readFile(bridgeUrl, "utf8"), readFile(projectionUrl, "utf8")])
+    .then((parts) => parts.join("\n"));
 const hudUrl = new URL("../../../hud.js", import.meta.url);
 
 test("bridge projects authoritative Auto-GCAS state without JSON non-finite values", async () => {
-  const source = await readFile(bridgeUrl, "utf8");
+  const source = await readBridgeContract();
   const requiredFields = [
     "auto_gcas_profile_id",
     "auto_gcas_available",

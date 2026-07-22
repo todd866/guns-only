@@ -23,6 +23,7 @@
     <ProjectReference Include="..\sim\GunsOnly.Sim.csproj" />
     <Compile Include="..\web\IncidentReplayProjection.cs" Link="IncidentReplayProjection.cs" />
     <Compile Include="..\web\SnapshotJson.cs" Link="SnapshotJson.cs" />
+    <Compile Include="..\web\SnapshotProjection.cs" Link="SnapshotProjection.cs" />
   </ItemGroup>
 
 </Project>

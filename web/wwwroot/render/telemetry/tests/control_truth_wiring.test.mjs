@@ -3,11 +3,17 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
+const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
+// The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
+// SnapshotProjection; the contract scan reads both so a field is found wherever it now lives.
+const readBridgeContract = () =>
+  Promise.all([readFile(bridgeUrl, "utf8"), readFile(projectionUrl, "utf8")])
+    .then((parts) => parts.join("\n"));
 const appUrl = new URL("../../../app.js", import.meta.url);
 const hudUrl = new URL("../../../hud.js", import.meta.url);
 
 test("flight telemetry separates pilot aileron, SAS, rolling moment, and achieved rate", async () => {
-  const source = await readFile(bridgeUrl, "utf8");
+  const source = await readBridgeContract();
 
   assert.match(source, /\\\"roll_control\\\"/);
   assert.match(source, /\\\"pilot_aileron\\\"/);
@@ -43,7 +49,7 @@ test("system neutralisation emits reconstructable input releases", async () => {
 });
 
 test("engine telemetry separates spool state from physical net thrust", async () => {
-  const source = await readFile(bridgeUrl, "utf8");
+  const source = await readBridgeContract();
 
   assert.match(source, /\\\"engine_spool_fraction\\\"/);
   assert.match(source, /_player\.ThrustFraction/);
@@ -54,7 +60,7 @@ test("engine telemetry separates spool state from physical net thrust", async ()
 
 test("modern envelope override publishes its ceiling and distinguishes G from AoA release", async () => {
   const [bridge, hud] = await Promise.all([
-    readFile(bridgeUrl, "utf8"),
+    readBridgeContract(),
     readFile(hudUrl, "utf8"),
   ]);
 
@@ -66,7 +72,7 @@ test("modern envelope override publishes its ceiling and distinguishes G from Ao
 });
 
 test("gunnery pitch assistance publishes request, limits, and achieved command separately", async () => {
-  const source = await readFile(bridgeUrl, "utf8");
+  const source = await readBridgeContract();
 
   assert.match(source, /\\\"gunnery_pitch_assist\\\"/);
   assert.match(source, /gunneryPitchAssist\.Active/);

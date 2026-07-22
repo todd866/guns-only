@@ -5,6 +5,12 @@ import test from "node:test";
 const appUrl = new URL("../../../app.js", import.meta.url);
 const hudUrl = new URL("../../../hud.js", import.meta.url);
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
+const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
+// The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
+// SnapshotProjection; the contract scan reads both so a field is found wherever it now lives.
+const readBridgeContract = () =>
+  Promise.all([readFile(bridgeUrl, "utf8"), readFile(projectionUrl, "utf8")])
+    .then((parts) => parts.join("\n"));
 
 test("production admits only state-bearing environment visuals and event-bearing effects", async () => {
   const source = await readFile(appUrl, "utf8");
@@ -43,7 +49,7 @@ test("production admits only state-bearing environment visuals and event-bearing
 test("terrain stays lazy through Ready and shares the active ocean curvature contract", async () => {
   const [source, bridgeSource] = await Promise.all([
     readFile(appUrl, "utf8"),
-    readFile(bridgeUrl, "utf8"),
+    readBridgeContract(),
   ]);
   assert.match(source,
     /this\.terrainPresentationPromise = null;[\s\S]*ensureTerrainPresentation\(\)/,
@@ -125,7 +131,7 @@ test("decision-support ocean and warnings carry truth without presentation flick
 });
 
 test("bridge publishes authoritative local weather instead of renderer-owned decoration", async () => {
-  const source = await readFile(bridgeUrl, "utf8");
+  const source = await readBridgeContract();
   assert.match(source,
     /\(Session\.Weather\?\.Clouds \?\? ClearCloudField\.Instance\)[\s\S]*\.Sample\(playerPosition,/);
   for (const field of [
@@ -170,7 +176,7 @@ test("production keeps the rejected authored cockpit out of the pilot's SA view"
 test("modern surrogate mission stays an explicit abstract visual contact without Korea asset fetches", async () => {
   const [appSource, bridgeSource] = await Promise.all([
     readFile(appUrl, "utf8"),
-    readFile(bridgeUrl, "utf8"),
+    readBridgeContract(),
   ]);
   for (const presentationId of [
     "presentation.vehicle.f22a.public-data-surrogate.v1",

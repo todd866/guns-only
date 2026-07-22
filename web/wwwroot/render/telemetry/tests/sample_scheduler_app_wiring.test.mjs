@@ -5,6 +5,12 @@ import test from "node:test";
 const appUrl = new URL("../../../app.js", import.meta.url);
 const sessionUrl = new URL("../../../../../sim/SimulationSession.cs", import.meta.url);
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
+const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
+// The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
+// SnapshotProjection; the contract scan reads both so a field is found wherever it now lives.
+const readBridgeContract = () =>
+  Promise.all([readFile(bridgeUrl, "utf8"), readFile(projectionUrl, "utf8")])
+    .then((parts) => parts.join("\n"));
 
 test("the browser recorder uses elapsed ticks and persists cadence/gap evidence", async () => {
   const app = await readFile(appUrl, "utf8");
@@ -25,7 +31,7 @@ test("the browser recorder uses elapsed ticks and persists cadence/gap evidence"
 test("Auto-GCAS transitions survive between render snapshots as exact authority events", async () => {
   const [session, bridge] = await Promise.all([
     readFile(sessionUrl, "utf8"),
-    readFile(bridgeUrl, "utf8"),
+    readBridgeContract(),
   ]);
 
   assert.match(session, /SessionEventType\.AutoGcasTransition/);

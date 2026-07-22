@@ -10,7 +10,7 @@ import { CONTROL_BINDINGS } from "../../settings/player_settings.js";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../");
 
 const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
-  sessionSource, bridgeSource, progressionSource] = await Promise.all([
+  sessionSource, webBridgeSource, progressionSource, projectionSource] = await Promise.all([
   "web/wwwroot/app.js",
   "web/wwwroot/hud.js",
   "web/wwwroot/index.html",
@@ -19,7 +19,12 @@ const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
   "sim/SimulationSession.cs",
   "web/WebBridge.cs",
   "web/wwwroot/render/progression/campaign_progression.js",
+  "web/SnapshotProjection.cs",
 ].map((relativePath) => readFile(path.join(ROOT, relativePath), "utf8")));
+
+// The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
+// SnapshotProjection; action observables are scanned across both so a field is found wherever it lives.
+const bridgeSource = `${webBridgeSource}\n${projectionSource}`;
 
 function normalizedCopy(source, { markup = false } = {}) {
   const visible = markup

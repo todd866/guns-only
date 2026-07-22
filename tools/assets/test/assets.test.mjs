@@ -15,6 +15,9 @@ const REPOSITORY_ROOT = path.resolve(TEST_DIRECTORY, "../../..");
 const FIXTURE = path.join(TEST_DIRECTORY, "fixtures/socket-triangle.gltf");
 const STARTER_PACK = "content/packs/korea-1950s/pack.json";
 const WEB_BRIDGE = "web/WebBridge.cs";
+// The flat-snapshot presentation constants moved out of the browser-only WebBridge into the plain,
+// linkable SnapshotProjection; both files are scanned so the constants are tracked wherever they live.
+const SNAPSHOT_PROJECTION = "web/SnapshotProjection.cs";
 
 function csharpStringConstants(source) {
   const constants = new Map();
@@ -152,7 +155,8 @@ test("canonical project-generated visual set remains placeholder until productio
 
 test("WebBridge Korea presentation constants match the canonical starter pack", async () => {
   const bridgeSource = await readFile(path.join(REPOSITORY_ROOT, WEB_BRIDGE), "utf8");
-  const constants = csharpStringConstants(bridgeSource);
+  const projectionSource = await readFile(path.join(REPOSITORY_ROOT, SNAPSHOT_PROJECTION), "utf8");
+  const constants = csharpStringConstants(`${bridgeSource}\n${projectionSource}`);
   const packFile = path.join(REPOSITORY_ROOT, STARTER_PACK);
   const packDirectory = path.dirname(packFile);
   const pack = await readJson(packFile);

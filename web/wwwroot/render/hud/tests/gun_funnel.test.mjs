@@ -46,7 +46,10 @@ test("larger targets produce a wider range funnel without changing its range sca
 test("production wires funnel geometry to authoritative bridge fields", async () => {
   const [hudSource, bridgeSource] = await Promise.all([
     readFile(new URL("../../../hud.js", import.meta.url), "utf8"),
+    Promise.all([
     readFile(new URL("../../../../WebBridge.cs", import.meta.url), "utf8"),
+    readFile(new URL("../../../../SnapshotProjection.cs", import.meta.url), "utf8"),
+  ]).then((parts) => parts.join("\n")),
   ]);
 
   assert.match(hudSource, /this\.drawGunFunnel\(frame, anchor\)/);
