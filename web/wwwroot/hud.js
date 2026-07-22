@@ -24,7 +24,12 @@ import {
 } from "./render/hud/hud_stabilizer.js";
 import { AoAIndexerQualifier, DisplayCueQualifier } from "./render/hud/stable_cues.js";
 import { fighterHudLayout } from "./render/hud/fighter_layout.js";
-import { gunFunnelProfile, gunFunnelSamples } from "./render/hud/gun_funnel.js";
+import {
+  gunFunnelProfile,
+  gunFunnelSamples,
+  gunFunnelEnvelope,
+  gunFunnelUsable,
+} from "./render/hud/gun_funnel.js";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -185,6 +190,7 @@ class CombatHud {
     this.projectionB = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
     this.projectionC = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
     this.noseProjection = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
+    this._funnelTargetProj = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
     this.audioEnabled = true;
     this._audioCtx = null;
     this._gunAudioGain = null;
@@ -700,53 +706,82 @@ class CombatHud {
 
   drawGunFunnel(frame, anchor) {
     const ctx = this.ctx;
-    const projection = frame.camera?.projectionMatrix?.elements;
-    const focalLengthPx = this.width * 0.5 * (Number(projection?.[0]) || 1);
-    const samples = gunFunnelSamples({
-      ...gunFunnelProfile(frame.state),
-      focalLengthPx,
-    });
-    const bank = (Number(frame.state.bank_deg) || 0) * DEG;
+    const { state, camera } = frame;
+    const bank = (Number(state.bank_deg) || 0) * DEG;
 
+    // The gun cross always owns boresight, whether or not a ranging solution exists.
     ctx.save();
     ctx.translate(anchor.x, anchor.y);
     ctx.rotate(-bank);
     this.setLine("rgba(77, 255, 136, 0.70)", 1.15);
-
-    // A small gun cross owns boresight. The two continuously narrowing rails below it are the
-    // traditional wingspan-ranging funnel; the separate moving pipper remains the actual lead cue.
     ctx.beginPath();
-    ctx.moveTo(-14, 0);
-    ctx.lineTo(-4, 0);
-    ctx.moveTo(4, 0);
-    ctx.lineTo(14, 0);
-    ctx.moveTo(0, -9);
-    ctx.lineTo(0, -3);
-    ctx.moveTo(0, 3);
-    ctx.lineTo(0, 9);
+    ctx.moveTo(-14, 0); ctx.lineTo(-4, 0);
+    ctx.moveTo(4, 0); ctx.lineTo(14, 0);
+    ctx.moveTo(0, -9); ctx.lineTo(0, -3);
+    ctx.moveTo(0, 3); ctx.lineTo(0, 9);
     ctx.stroke();
+    ctx.restore();
 
+    // The wingspan-ranging funnel exists only when it can actually range: a live target, a
+    // valid lead solution to key off (a real sight cages otherwise), a known wingspan, and a
+    // range inside the effective envelope.
+    const profile = gunFunnelProfile(state);
+    const envelope = gunFunnelEnvelope(profile);
+    if (!gunFunnelUsable(state, envelope)) return;
+
+    // Centre the funnel on the target and hide it if the target is not in front of us. This is
+    // a FIXED wingspan scale: each rail half-width is the span this wingspan subtends at that
+    // range (focal*wingspan/2r from gunFunnelSamples), independent of how big the target
+    // currently looks. The pilot flies the target's wings into the walls; the range where they
+    // touch is the range, and touching inside the funnel means inside effective gun range. The
+    // widths are the calibrated content; the vertical spread is presentation. (Sizing the rails
+    // from the *measured* apparent span instead would make the fit tautological — it would match
+    // at every range and read out nothing.)
+    const target = this.project(frame.banditPosition, camera, this._funnelTargetProj);
+    if (target.behind || !Number.isFinite(target.x) || !Number.isFinite(target.y)) return;
+
+    const focalLengthPx = this.width * 0.5
+      * (Number(camera?.projectionMatrix?.elements?.[0]) || 1);
+    const samples = gunFunnelSamples({ ...profile, focalLengthPx });
+
+    // Green means inside effective gun range (the gate above); brighten on the authoritative
+    // lead solution so it reads as SHOOT. Deliberately not gun_window, which is only a coarse
+    // 800 m / 12-degree framing cone, not a firing solution.
+    const solution = frame.visualGunSolution === true;
+    const railColor = solution ? "rgba(77, 255, 136, 0.92)" : "rgba(77, 255, 136, 0.68)";
+    const HALF_BAND_PX = 46; // near (wide) at the bottom, far (narrow) at the top
+
+    // fraction 0 = near edge (bottom), 1 = far edge (top).
+    const yOf = (fraction) => HALF_BAND_PX * (1 - 2 * fraction);
+
+    ctx.save();
+    ctx.translate(target.x, target.y);
+    ctx.rotate(-bank);
+    this.setLine(railColor, solution ? 1.7 : 1.2);
     ctx.beginPath();
-    samples.forEach((sample, index) => {
-      if (index === 0) ctx.moveTo(-sample.halfWidthPx, sample.yPx);
-      else ctx.lineTo(-sample.halfWidthPx, sample.yPx);
+    samples.forEach((s, i) => {
+      const y = yOf(s.fraction);
+      if (i === 0) ctx.moveTo(-s.halfWidthPx, y);
+      else ctx.lineTo(-s.halfWidthPx, y);
     });
-    for (let index = samples.length - 1; index >= 0; index -= 1) {
-      const sample = samples[index];
-      if (index === samples.length - 1) ctx.moveTo(sample.halfWidthPx, sample.yPx);
-      else ctx.lineTo(sample.halfWidthPx, sample.yPx);
-    }
+    ctx.stroke();
+    ctx.beginPath();
+    samples.forEach((s, i) => {
+      const y = yOf(s.fraction);
+      if (i === 0) ctx.moveTo(s.halfWidthPx, y);
+      else ctx.lineTo(s.halfWidthPx, y);
+    });
     ctx.stroke();
 
-    ctx.strokeStyle = "rgba(77, 255, 136, 0.42)";
+    // Near / mid / far range gradations across the rails.
+    ctx.strokeStyle = railColor;
     ctx.lineWidth = 1;
-    for (const index of [2, 5, samples.length - 1]) {
-      const sample = samples[index];
+    for (const i of [0, Math.floor(samples.length / 2), samples.length - 1]) {
+      const s = samples[i];
+      const y = yOf(s.fraction);
       ctx.beginPath();
-      ctx.moveTo(-sample.halfWidthPx - 3, sample.yPx);
-      ctx.lineTo(-sample.halfWidthPx + 2, sample.yPx);
-      ctx.moveTo(sample.halfWidthPx - 2, sample.yPx);
-      ctx.lineTo(sample.halfWidthPx + 3, sample.yPx);
+      ctx.moveTo(-s.halfWidthPx - 3, y); ctx.lineTo(-s.halfWidthPx + 2, y);
+      ctx.moveTo(s.halfWidthPx - 2, y); ctx.lineTo(s.halfWidthPx + 3, y);
       ctx.stroke();
     }
     ctx.restore();
