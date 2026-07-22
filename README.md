@@ -2,7 +2,11 @@
 
 Guns Only is a browser-first combat and maintenance-test-flight platform about the aircraft state
 an experienced pilot perceives, the decisions they make, and the physical consequences that follow.
-It is also the first proving ground for a broader decision-simulation substrate: hidden truth,
+At heart it is an educational tool in a video game's clothing: the honest sim and evidence-based
+debrief are the point, and the arcade F-22 roguelite is the delivery (see
+[docs/adaptive-teacher-design.md](docs/adaptive-teacher-design.md) for the adaptive-teacher AI and
+data-flywheel direction). It is also the first proving ground for a broader decision-simulation
+substrate: hidden truth,
 partial observations, equipment degradation, procedures, scarce resources, handoffs, and an
 evidence-based debrief. Future domains can include casualty evacuation, medical-drone operations,
 and austere medical-team training, while aviation remains the place where the core contracts are
@@ -15,7 +19,14 @@ mobile, with nothing to install.
 
 The playable prototype opens with the F-22: a fast, arcade-leaning guns-only program (the "Raptor
 program") where you fly a public-data F-22A surrogate, fight a reactive bandit with ballistic guns,
-and advance through performance-gated merges before a carrier-recovery conversion. The reduced-order
+and advance through performance-gated merges to a climactic one-v-one against an Ace. Enemy skill
+escalates per engagement (Novice → Competent → Veteran → Ace); the higher tiers fly a deterministic
+short-horizon lookahead that converts to gun solutions and fights in the vertical rather than
+cheating with extra G. Keyboard flying gets honest augmentation — two-axis gunnery assist, FBW
+bank-hold, and Space as the deliberate max-perform/high-alpha commit. The HUD is held to projective
+truth: an EEGS-style funnel drawn along the real ballistic locus, an FPV whose gap below the
+waterline is exactly alpha, and a screenshot+assertion harness gating every HUD change
+(see [docs/hud-symbology-notes.md](docs/hud-symbology-notes.md)). The reduced-order
 6DOF kernel also carries a Sabre-class F-86 energy model used by the carrier-recovery and
 maintenance-test-flight exercises; the carrier simulation includes wind over deck, burble, moving
 deck geometry, wire arrestment, bolters, and catapult relaunches. See
@@ -158,5 +169,9 @@ Then open `http://localhost:8877/`.
 Playable prototype under active development. **One Honest Sortie** now has an explicit
 Ready/Active/Paused/Finished lifecycle, mutually physical guns, player and opponent damage,
 ordered combat events, durable outcomes, and airframe-specific fuel/loadout rules in the production
-session and web build. The remaining milestone work is fallible contact belief, generic weapon and
-damage components, and a real debrief/scoring pass.
+session and web build. Recent additions: the per-engagement skill ladder with the lookahead ace,
+a duel/win-rate harness, realistic combat-altitude bounds, two-axis gunnery assist, FBW bank-hold,
+the trajectory-true HUD with its screenshot/assertion harness, and the F-22 Ace Duel campaign
+capstone. The remaining milestone work is fallible contact belief, per-decision telemetry v2
+(designed in [docs/telemetry-v2-design.md](docs/telemetry-v2-design.md)), the seeded roguelite run
+loop, and a real debrief/scoring pass.
