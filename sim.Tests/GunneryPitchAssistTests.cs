@@ -75,7 +75,9 @@ public class GunneryPitchAssistTests {
         var aircraft = new AircraftSim(trimmed.State with {
             BodyRates = new BodyRates(0.0, measuredPitchRate, 0.0)
         }, parameters);
-        var pilot = new PilotCommand(5.0, 0.0, 1.0, 0.0,
+        // Hands-off-class demand: the two-sided damping applies only below a deliberate pull
+        // (>= 2 G the negative authority is zero — the assist may never steal a pull).
+        var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
             DirectLateralControl: true);
 
         GunneryPitchAssistResult result = Apply(aircraft, pilot,
@@ -270,4 +272,23 @@ public class GunneryPitchAssistTests {
         Assert.False(result.State.Active);
         Assert.Equal(expected, result.Command);
     }
+    [Fact]
+    public void AssistNeverReducesADeliberateHighGPull() {
+        // Pilot report (Build 80): pulling to the shoot cue was impossible without Space
+        // because the damping residual subtracted from a hard pull whenever measured pitch
+        // rate exceeded the assist's capture rate.
+        AircraftParams air = FlightModel.F22APublicDataSurrogate;
+        var state = new AircraftState(new Vec3D(0.0, 3000.0, 0.0), 250.0,
+            0.0, 0.0, 0.0, air.MassKg,
+            QuaternionD.Identity, new BodyRates(0.0, 0.35, 0.0));
+        var pilot = new PilotCommand(8.0, 0.0, 0.9, 0.0);
+        var aircraftSim = new AircraftSim(state, air);
+        GunneryPitchAssistResult result = GunsOnly.Sim.GunneryPitchAssist.Apply(
+            pilot, state, air, 250.0, aircraftSim.AtmosphereModel,
+            new Vec3D(0.0, 0.01, 1.0), hasBallisticLead: true,
+            rangeM: 600.0, enabled: true);
+        Assert.True(result.Command.GDemand >= 8.0 - 1e-9,
+            $"assist reduced a deliberate 8 G pull to {result.Command.GDemand:F2}");
+    }
+
 }

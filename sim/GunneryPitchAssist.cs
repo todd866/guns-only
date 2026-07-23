@@ -94,8 +94,15 @@ public static class GunneryPitchAssist {
         double protectedMinimum = System.Math.Max(FlightModel.NzAeroMin(
             aircraft, parameters, airspeedMps, atmosphere), -1.5);
         double lower = System.Math.Min(protectedMinimum, protectedMaximum);
+        // The damped augmentation must never OPPOSE a deliberate pull: with the pilot at high
+        // G the measured pitch rate exceeds the assist's gentle capture rate, and the negative
+        // residual was subtracting up to the full correction authority — "impossible to pull to
+        // the shoot cue without spacebar" (Space disables the assist, which is why it 'fixed'
+        // it). Hands-off, the full two-sided damping keeps the smooth capture.
+        double negativeAuthority = pilotCommand.GDemand >= 2.0
+            ? 0.0 : -parameters.GunneryPitchAssistMaxCorrectionG;
         double correction = System.Math.Clamp(rateCorrectionG,
-            -parameters.GunneryPitchAssistMaxCorrectionG,
+            negativeAuthority,
             parameters.GunneryPitchAssistMaxCorrectionG);
         double assistedLoadFactor = System.Math.Clamp(
             pilotCommand.GDemand + correction, lower, protectedMaximum);

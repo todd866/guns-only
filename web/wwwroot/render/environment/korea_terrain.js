@@ -107,17 +107,24 @@ void main() {
   float bandStep = smoothstep(0.12, 0.22, elevation) * 0.34
     + smoothstep(0.42, 0.55, elevation) * 0.33
     + smoothstep(0.75, 0.88, elevation) * 0.33;
-  vec3 sValley = vec3(0.36, 0.52, 0.20);
-  vec3 sUpland = vec3(0.22, 0.40, 0.18);
-  vec3 sRock = vec3(0.58, 0.52, 0.42);
-  vec3 sRidge = vec3(0.70, 0.68, 0.60);
+  // Pilot verdict on the first pass: "too green, like a neon desert". Desaturated toward
+  // olive/earth, plus a cheap two-octave large-wavelength patchwork so lowlands read as
+  // varied country instead of one flat wash.
+  vec3 sValley = vec3(0.31, 0.40, 0.21);
+  vec3 sUpland = vec3(0.25, 0.32, 0.19);
+  vec3 sRock = vec3(0.50, 0.45, 0.36);
+  vec3 sRidge = vec3(0.62, 0.60, 0.53);
   vec3 sAlbedo = mix(sValley, sUpland, bandStep);
+  float patchwork = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.00023
+    + sin(vTerrainWorldPosition.z * 0.00017) * 2.3);
+  sAlbedo = mix(sAlbedo, vec3(0.40, 0.38, 0.24),
+    patchwork * (1.0 - smoothstep(0.15, 0.45, steepness)) * 0.30);
   sAlbedo = mix(sAlbedo, sRock, smoothstep(0.22, 0.60, steepness) * 0.72);
   sAlbedo = mix(sAlbedo, sRidge, highRidge * (0.35 + steepness * 0.45));
   float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
   halfLambert *= halfLambert;
-  float toneRamp = 0.46 + 0.32 * smoothstep(0.30, 0.42, halfLambert)
-    + 0.22 * smoothstep(0.62, 0.74, halfLambert);
+  float toneRamp = 0.40 + 0.30 * smoothstep(0.30, 0.42, halfLambert)
+    + 0.20 * smoothstep(0.62, 0.74, halfLambert);
   vec3 viewDirection = normalize(cameraPosition - vTerrainWorldPosition);
   float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
   vec3 stylizedLit = sAlbedo * toneRamp

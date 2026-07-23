@@ -46,7 +46,12 @@ public sealed record AutoGcasConfiguration(
     double ExitDwellSeconds,
     double AttentivePilotTriggerFactor = 0.06,
     double ManeuveringTerrainBufferM = 30.48,
-    double StableTerrainBufferM = 6.096) {
+    double StableTerrainBufferM = 6.096,
+    bool SuppressDescendingThreatExtension = false,
+    // Attentive threat horizon: "would holding THIS input for two seconds hit the buffer?"
+    // The legacy 8-20 s straight-line hold armed the system on fights the pilot was never
+    // going to lose — production fly-ups fired with 16-104 s of actual time-to-impact.
+    double AttentiveThreatHorizonSeconds = 2.0) {
 
     public static AutoGcasConfiguration ModernPublicDataSurrogate { get; } = new(
         LookaheadSeconds: 8.0,
@@ -526,8 +531,18 @@ public static class AutoGcasController {
             rollRate = nextRollRate;
 
             Vec3D worldUp = new(0.0, 1.0, 0.0);
+            // Aero-cap the modelled pull at the CURRENT modelled airspeed: commanding G (and
+            // its induced drag) that the wing cannot generate at the decaying modelled speed
+            // made predicted recoveries stall themselves — production false fly-ups fired with
+            // 16-104 s of real time-to-impact because recoverable states read unrecoverable.
+            double speedForAero = Math.Max(velocity.Length, 1.0);
+            double qNow = 0.5 * 1.225 * speedForAero * speedForAero;
+            double massNow = Math.Max(input.Aircraft.Mass, 1.0);
+            double aeroCapG = qNow * input.AircraftParameters.WingAreaM2
+                * Math.Max(input.AircraftParameters.CLMax, 0.1)
+                / (massNow * FlightModel.G0);
             double limitedG = Math.Clamp(gDemand, -1.5,
-                response.MaximumLoadFactorG);
+                Math.Min(response.MaximumLoadFactorG, aeroCapG));
             Vec3D acceleration = liftNormal * (limitedG * FlightModel.G0)
                 - worldUp * FlightModel.G0;
             // Energy model: a hard pull near CLmax decelerates the aircraft violently, which
@@ -537,23 +552,19 @@ public static class AutoGcasController {
             // supplied airspeed is the deliberate surrogate at terrain-proximate altitudes;
             // thrust at the current lever opposes it so an afterburning recovery is not
             // over-credited with deceleration it will not have.
-            double speedNow = velocity.Length;
-            if (speedNow > 1.0) {
-                double dynamicPressure = 0.5 * 1.225 * speedNow * speedNow;
-                double wingArea = input.AircraftParameters.WingAreaM2;
-                double mass = Math.Max(input.Aircraft.Mass, 1.0);
+            if (speedForAero > 1.0) {
                 double liftCoefficient = Math.Clamp(
-                    Math.Abs(limitedG) * mass * FlightModel.G0
-                        / Math.Max(dynamicPressure * wingArea, 1e-6),
+                    Math.Abs(limitedG) * massNow * FlightModel.G0
+                        / Math.Max(qNow * input.AircraftParameters.WingAreaM2, 1e-6),
                     0.0, Math.Max(input.AircraftParameters.CLMax, 0.1));
-                double dragN = dynamicPressure * wingArea
+                double dragN = qNow * input.AircraftParameters.WingAreaM2
                     * (input.AircraftParameters.CD0
                         + input.AircraftParameters.InducedK
                             * liftCoefficient * liftCoefficient);
                 double thrustN = Math.Clamp(input.EffectivePilotCommand.Throttle, 0.0, 1.65)
                     * Math.Max(input.AircraftParameters.ThrustMaxN, 0.0);
-                Vec3D vhat2 = velocity * (1.0 / speedNow);
-                acceleration += vhat2 * ((thrustN - dragN) / mass);
+                Vec3D vhat2 = velocity * (1.0 / speedForAero);
+                acceleration += vhat2 * ((thrustN - dragN) / massNow);
             }
             Vec3D nextVelocity = velocity + acceleration * dt;
             // Trapezoidal translation avoids the optimistic height gain of the previous
