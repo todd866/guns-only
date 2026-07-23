@@ -1158,7 +1158,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     /// position. Pure function of the two passed states — no wall clock, RNG, or hidden truth.
     double ScoreCandidate(in PilotCommand command, in ActorObservation player) {
         const double dt = 1.0 / AircraftSim.TickHz;
-        const double threatWeight = 24.0;
+        const double threatWeight = 26.0;
         // Optimize the envelope the trigger can ACTUALLY use. The old 12-degree camera window made
         // the lookahead tests look threatening while first-pass-safe production fights never fired:
         // every selected "solution" remained outside BanditFireControl's real 3-degree gate. The
@@ -1273,7 +1273,11 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // Defensive conversion denial: projected seconds inside the observed player's gun-quality
         // geometry carry the same magnitude as earning our own window.
         score -= threatWeight * threatSeconds;
-        if (_profile.ForcesOvershoot) {
+        // Overshoot-forcing only means something against an actual attacker: when the observed
+        // player is broadly pointing at us. Against a runner these terms are pure noise that
+        // dilutes pursuit commitment (post-merge regression: the valley-hunt Ace tracked 4.1 deg
+        // instead of converting).
+        if (_profile.ForcesOvershoot && initialPlayerAngleOffRad < System.Math.PI / 2.0) {
             // Reward candidates which make the observed attacker's nose fall behind the LOS, plus
             // the actual closure reversal that marks an overshoot. These are rollout outcomes, not
             // a defensive mode switch: every available maneuver still competes in the same score.

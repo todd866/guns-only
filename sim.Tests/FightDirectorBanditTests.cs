@@ -121,10 +121,11 @@ public class FightDirectorBanditTests {
         // assertion is intended to pin.
         //
         // Tuning note: the nominal 10-point threat term was not strong enough to beat the
-        // offensive window/range shaping in this real-kernel saddle. The accepted weights are
-        // 24 points per projected threat-second, 8 points per radian of attacker angle-off growth,
-        // and a 2-point closure-reversal bonus. They produce a 1.475 s maximum window here while
-        // retaining the shared floor/ceiling/energy score for every defensive candidate.
+        // offensive window/range shaping in this real-kernel saddle; 24 was tuned first, then
+        // 26 after the Build-91 merge (segment-swept clearance seeding shifted candidate scores
+        // ~35 ms past the bound). 8 points per radian of attacker angle-off growth and a 2-point
+        // closure-reversal bonus, both gated on the player actually attacking (nose within 90
+        // degrees) so a fleeing target does not dilute pursuit commitment.
         RearAttackResult competent = FlyRearAttack(PilotSkill.Competent);
         RearAttackResult ace = FlyRearAttack(PilotSkill.Ace);
 
