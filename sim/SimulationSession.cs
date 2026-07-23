@@ -169,6 +169,7 @@ public sealed class SimulationSession {
     int _engagementNumber = 1;
     EngagementCounters _engagementCounters;
     readonly List<EngagementReport> _engagementReports = new();
+    readonly FightDirector _fightDirector = new();
     int _droneRaidTargetIndex;
     bool _triggerDown;
     bool _opponentTriggerDown;
@@ -328,6 +329,9 @@ public sealed class SimulationSession {
     public EngagementReport? LastEngagementReport =>
         _engagementReports.Count == 0 ? null : _engagementReports[^1];
     public IReadOnlyList<EngagementReport> EngagementReports => _engagementReports;
+    public DirectorPhase DirectorPhase => _fightDirector.Phase;
+    public LearnerBands LearnerBands => _fightDirector.Bands;
+    public SpawnSpec? LastDirectorSpawn { get; private set; }
     public bool OpponentReplacementPending => ContinuousCombat
         && Lifecycle == LifecycleState.Active
         && _playerTerminalState == AircraftTerminalState.Flying
@@ -1116,6 +1120,8 @@ public sealed class SimulationSession {
         _engagementNumber = 1;
         _engagementCounters = default;
         _engagementReports.Clear();
+        _fightDirector.Reset();
+        LastDirectorSpawn = null;
         _outcome = SortieOutcome.None;
         _pendingOutcome = SortieOutcome.None;
         _playerTerminalState = AircraftTerminalState.Flying;
@@ -1787,7 +1793,10 @@ public sealed class SimulationSession {
         int nextEngagement = _engagementNumber + 1;
         CompleteEngagementIfEnded();
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
-        _bandit = _beat.CreateNextBandit(_player.State, nextEngagement, _terrainSurface);
+        SpawnSpec directorSpawn = _fightDirector.NextSpawn(nextEngagement);
+        LastDirectorSpawn = directorSpawn;
+        _bandit = _beat.CreateNextBandit(
+            _player.State, nextEngagement, _terrainSurface, directorSpawn);
         _bandit.Wind = _player.Wind;
         _bandit.Atmosphere = _player.AtmosphereModel;
         _gunKill = _gunKill.Outcome == FightOutcome.Splash
@@ -1814,8 +1823,7 @@ public sealed class SimulationSession {
         _nextOpponentSpawnAtMs = double.NegativeInfinity;
         _splashCueUntilMs = double.NegativeInfinity;
         _engagementNumber = nextEngagement;
-        StartEngagementCounters(BanditSkillProfile.ForEngagement(nextEngagement),
-            opponentWasBoss: false);
+        StartEngagementCounters(directorSpawn.Skill, directorSpawn.Boss);
         _banditSpawnSequence++;
         _padlockRollAssist.Reset();
         _lastRange = Geometry.Range(_player.State, _bandit.State);
@@ -1873,6 +1881,7 @@ public sealed class SimulationSession {
             Math.Max(0, _autoGcasState.ActivationCount
                 - _engagementCounters.GcasActivationsAtStart));
         _engagementReports.Add(report);
+        _fightDirector.Observe(in report);
         _engagementCounters.Active = false;
     }
 

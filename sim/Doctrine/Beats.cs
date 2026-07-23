@@ -212,15 +212,18 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     /// terrain surface, when supplied, keeps replacement merges and the bandit's own floor sense
     /// honest over real ground instead of a sea-level constant.
     public IBandit CreateNextBandit(in AircraftState player, int engagementNumber,
-        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null, SpawnSpec? spec = null) {
         double replacementSpeedMps = ContinuousCombat is { } continuous
             ? continuous.ReplacementSpeedMps ?? Bandit.Speed
             : 180.0;
+        // Without a director decision the interim per-engagement ladder still applies (the
+        // director's own cold start reproduces it, so the two paths cannot diverge silently).
+        PilotSkill skill = spec?.Skill ?? BanditSkillProfile.ForEngagement(engagementNumber);
         return ReactiveBandit.SpawnForMerge(
             player, BanditAir,
             engagementNumber: engagementNumber,
             speedMps: replacementSpeedMps,
-            skill: BanditSkillProfile.ForEngagement(engagementNumber),
+            skill: skill,
             terrain: terrain);
     }
 }

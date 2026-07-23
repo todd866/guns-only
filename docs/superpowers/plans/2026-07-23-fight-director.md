@@ -176,7 +176,7 @@ public sealed class FightDirector {        // owns a LearnerModel internally
 
 **Key assertions:** an integration test through `SimulationSession` continuous combat: a player scripted to dominate (kills each bandit fast, concedes nothing) sees tiers climb and then a boss spawn flagged `Boss == true` with the cooldown respected; a session reset clears director state; capture-on vs capture-off determinism unchanged (existing suite).
 
-- [ ] Steps: failing tests → fail → implement → pass → full `sim.Tests` suite green → commit `feat(session): FightDirector drives continuous-combat spawns`
+- [x] Steps: failing tests → fail → implement → pass → full `sim.Tests` suite green → commit `feat(session): FightDirector drives continuous-combat spawns`
 
 ---
 

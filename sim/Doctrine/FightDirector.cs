@@ -35,6 +35,7 @@ public sealed class FightDirector {
     PilotSkill _releaseTier = PilotSkill.Novice;
 
     public DirectorPhase Phase => _phase;
+    public LearnerBands Bands => _learner.Bands;
 
     public void Observe(in EngagementReport report) {
         _learner.Observe(in report);
