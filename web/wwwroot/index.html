@@ -581,8 +581,27 @@
       letter-spacing: .12em;
     }
 
+    /* Portrait is a first-class assisted mode (Build 75): tilt flies, throttle holds corner,
+       guns fire in solution. The old ROTATE TO LANDSCAPE blocker is gone. */
+    #portrait-chips { display: none; }
     @media (orientation: portrait) {
-      .touch-mode #rotate-hint { display: grid; }
+      .touch-mode #portrait-chips {
+        display: flex;
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+        gap: 10px;
+        z-index: 30;
+      }
+      .touch-mode #portrait-chips .touch-control {
+        min-width: 64px;
+        min-height: 44px;
+        font-size: 11px;
+      }
+      .touch-mode #touch-throttle-rocker,
+      .touch-mode #touch-fire,
+      .touch-mode #touch-limit-override { display: none; }
     }
 
     @media (max-height: 430px) {
@@ -2107,6 +2126,12 @@
         <button class="touch-control touch-utility" type="button" data-pulse-key="KeyV" aria-label="Padlock target or nearby carrier" aria-pressed="false" hidden>PADLOCK<br>V</button>
         <button id="touch-fire" class="touch-control touch-fire" type="button" data-hold-key="KeyF" hidden>FIRE</button>
       </div>
+      <div id="portrait-chips" role="group" aria-label="Assisted flight controls">
+        <button class="touch-control" type="button" data-assist-nudge="-1" aria-label="Hold a slower speed">SLOWER</button>
+        <button class="touch-control" type="button" data-hold-key="ArrowDown" data-assist-chip="pull" aria-label="Hold to pull harder">PULL</button>
+        <button class="touch-control" type="button" data-hold-key="ArrowUp" data-assist-chip="ease" aria-label="Hold to ease the pull">EASE</button>
+        <button class="touch-control" type="button" data-assist-nudge="1" aria-label="Hold a faster speed">FASTER</button>
+      </div>
     </div>
 
     <button id="fallback-stick" type="button" data-mobile-action="virtual-stick" data-active="false" aria-label="Flight stick" aria-describedby="fallback-stick-help" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight">
@@ -2122,7 +2147,7 @@
       <button class="touch-choice secondary" type="button" data-mobile-action="buttons-only">USE THUMB STICK</button>
     </div>
 
-    <div id="rotate-hint">ROTATE TO LANDSCAPE<br><small>Tilt steering is designed for a wide screen.</small></div>
+    <div id="rotate-hint" hidden></div>
   </div>
 
   <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="program">
@@ -2207,7 +2232,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 74 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 75 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
@@ -2261,7 +2286,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
   </div>
 
   <script src="./multiplayer-config.js"></script>
-  <script type="module" src="./app.js?v=74"></script>
+  <script type="module" src="./app.js?v=75"></script>
   <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
 </body>
 </html>

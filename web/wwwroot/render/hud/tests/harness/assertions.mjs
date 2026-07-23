@@ -194,7 +194,7 @@ function assertPadlockDirector(data) {
     && (padlockState?.phase === "TRACK" || padlockState?.trackPrimed === true)
     && padlockState?.manualLookActive !== true
     && (probes.padlockPlaneMagnitude >= 0.035 || probes.padlockTargetForward < 0)
-    && name !== "padlock-ground-warning";
+    && !name.endsWith("padlock-ground-warning");
   check(name, "padlock director presence follows valid tracked physical geometry",
     Boolean(director) === shouldHaveDirector,
     `${director ? "present" : "absent"}; expected ${shouldHaveDirector ? "present" : "absent"}`);
@@ -306,9 +306,10 @@ function assertBasicJobs(data) {
     check(name, "marker and locator arrow are mutually exclusive",
       !(locator.markerInside && locator.arrowDrawn),
       `markerInside=${locator.markerInside} arrowDrawn=${locator.arrowDrawn}`);
+    const viewport = data.viewport ?? { width: 1400, height: 1020 };
     if (geometry.banditPx && !geometry.banditPx.behind
-        && geometry.banditPx.x >= 20 && geometry.banditPx.x <= 1380
-        && geometry.banditPx.y >= 20 && geometry.banditPx.y <= 1000) {
+        && geometry.banditPx.x >= 20 && geometry.banditPx.x <= viewport.width - 20
+        && geometry.banditPx.y >= 20 && geometry.banditPx.y <= viewport.height - 20) {
       check(name, "visible bandit gets the marker, not the arrow",
         locator.markerInside && !locator.arrowDrawn,
         `bandit at ${geometry.banditPx.x?.toFixed?.(0)},${geometry.banditPx.y?.toFixed?.(0)}: `
@@ -317,44 +318,66 @@ function assertBasicJobs(data) {
   }
 }
 
+// The portrait assisted mode is a first-class experience, so a phone-portrait pass runs the
+// core scenarios through the SAME geometry contract at 430x860. The full battery stays on the
+// landscape pass to bound gate time.
+const PORTRAIT_SCENARIOS = new Set([
+  "assisted-corner-hold",
+  "forward-level", "forward-bandit-near-edge", "forward-bandit-offscreen",
+  "funnel-level-mid", "padlock-bandit-right-high", "padlock-bandit-behind",
+  "padlock-aft-right-high",
+]);
+
+async function runViewport(site, browser, { label, width, height, subset }) {
+  const page = await browser.newPage({ viewport: { width, height } });
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+  await page.goto(
+    `${site.url}render/hud/tests/harness/harness.html?all=1&w=${width}&h=${height}`,
+    { waitUntil: "load", timeout: 30000 },
+  );
+  await page.waitForFunction(() => window.__hudReady === "harness", { timeout: 15000 });
+  const names = await page.evaluate(() => window.__scenarioNames);
+  if (!Array.isArray(names) || names.length === 0) {
+    throw new Error("harness exposed no scenarios");
+  }
+
+  for (const name of names) {
+    if (subset && !subset.has(name)) continue;
+    console.log(`\n[${label}] ${name}`);
+    const data = await page.evaluate(
+      (scenario) => window.__debugScenario(scenario), name,
+    );
+    if (!data.geometry) {
+      check(`${label}:${name}`, "debug geometry produced", false,
+        "window.__HUD_GEOMETRY missing");
+      continue;
+    }
+    data.name = `${label}:${name}`;
+    data.viewport = { width, height };
+    assertAirframeSymbols(data);
+    assertLadder(data);
+    assertFunnel(data);
+    assertBandit(data);
+    if (data.padlock) assertPadlockDirector(data);
+    assertPadlockInsetAndLocator(data);
+    assertBasicJobs(data);
+    assertFunnelContainsTarget(data);
+  }
+  if (pageErrors.length > 0) {
+    failures.push(`[${label}] uncaught page errors:\n${pageErrors.join("\n")}`);
+  }
+  await page.close();
+}
+
 async function main() {
   const site = await serveStatic(WWWROOT);
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 1020 } });
-    const pageErrors = [];
-    page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}render/hud/tests/harness/harness.html?all=1`, {
-      waitUntil: "load",
-      timeout: 30000,
-    });
-    await page.waitForFunction(() => window.__hudReady === "harness", { timeout: 15000 });
-    const names = await page.evaluate(() => window.__scenarioNames);
-    if (!Array.isArray(names) || names.length === 0) {
-      throw new Error("harness exposed no scenarios");
-    }
-
-    for (const name of names) {
-      console.log(`\n${name}`);
-      const data = await page.evaluate(
-        (scenario) => window.__debugScenario(scenario), name,
-      );
-      if (!data.geometry) {
-        check(name, "debug geometry produced", false, "window.__HUD_GEOMETRY missing");
-        continue;
-      }
-      assertAirframeSymbols(data);
-      assertLadder(data);
-      assertFunnel(data);
-      assertBandit(data);
-      if (data.padlock) assertPadlockDirector(data);
-      assertPadlockInsetAndLocator(data);
-      assertBasicJobs(data);
-      assertFunnelContainsTarget(data);
-    }
-    if (pageErrors.length > 0) {
-      failures.push(`uncaught page errors:\n${pageErrors.join("\n")}`);
-    }
+    await runViewport(site, browser,
+      { label: "landscape", width: 1400, height: 1020, subset: null });
+    await runViewport(site, browser,
+      { label: "portrait", width: 430, height: 860, subset: PORTRAIT_SCENARIOS });
   } finally {
     await browser.close();
     await site.close();

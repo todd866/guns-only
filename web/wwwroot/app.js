@@ -275,6 +275,15 @@ const smallViewport = Math.min(
 ) <= 900 || Math.min(window.innerWidth, window.innerHeight) <= 600;
 const mobileControls = coarsePointer || (touchCapable && smallViewport);
 document.documentElement.classList.toggle("touch-mode", mobileControls);
+// Portrait + touch = assisted flight: tilt flies, throttle holds corner velocity, guns fire
+// while the solution is qualified. Landscape keeps the full manual control set.
+const portraitMedia = window.matchMedia?.("(orientation: portrait)");
+function syncAssistedFlight() {
+  const assisted = mobileControls && portraitMedia?.matches === true;
+  document.documentElement.classList.toggle("portrait-assist", assisted);
+  bridge?.SetAssistedFlight?.(assisted);
+}
+portraitMedia?.addEventListener?.("change", () => syncAssistedFlight());
 // iOS Safari/CriOS has no element-fullscreen API: standalone (Add to Home Screen) is the only
 // way to shed the browser chrome. Say so once, on the ready screen, only where it applies.
 const isIosBrowserTab = /iPhone|iPad/.test(navigator.userAgent)
@@ -2133,6 +2142,7 @@ function beginFlight() {
   });
   // Touch pilots get the widened gunnery assist; tilt input cannot hold a funnel.
   bridge.SetTouchControlModality?.(mobileControls);
+  syncAssistedFlight();
   // Fullscreen where the platform allows it (Android Chrome). iOS has no element fullscreen;
   // the Add-to-Home-Screen standalone app is the fullscreen path there (see ready-screen hint).
   if (mobileControls && !document.fullscreenElement
@@ -5448,6 +5458,11 @@ function installMobileInput(view) {
     useThumbStick("THUMB STICK");
   });
   touchControls.querySelector('[data-mobile-action="recenter"]')?.addEventListener("click", recenterTilt);
+  touchControls.querySelectorAll("[data-assist-nudge]").forEach((button) => {
+    button.addEventListener("click", () => {
+      bridge?.NudgeAssistedSpeed?.(Number(button.dataset.assistNudge) || 0);
+    });
+  });
   touchControls.addEventListener("contextmenu", (event) => event.preventDefault());
   window.addEventListener("pointerup", endControl);
   window.addEventListener("pointercancel", endControl);

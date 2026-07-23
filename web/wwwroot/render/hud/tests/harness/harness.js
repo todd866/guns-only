@@ -18,8 +18,13 @@ import {
 } from "../../../camera/padlock_controller.js";
 import { SCENARIOS, buildScenarioState, scenarioByName } from "./scenarios.js";
 
-const WIDTH = 1300;
-const HEIGHT = 900;
+// Viewport is parameterizable so the same deterministic scenarios render at phone portrait
+// sizes too — a layout that only ever renders at desktop landscape is untested for the
+// portrait assisted mode ("if I can find a problem in the first 5 seconds we need better
+// tests").
+const urlParams = new URLSearchParams(globalThis.location?.search ?? "");
+const WIDTH = Math.max(320, Number(urlParams.get("w")) || 1300);
+const HEIGHT = Math.max(320, Number(urlParams.get("h")) || 900);
 const DEG = Math.PI / 180;
 const BACKGROUND = "#08192e"; // solid dark blue so the green/amber strokes read on their own
 const SETTLE_FRAMES = 6; // lets acquire/attack envelopes (pipper, cues) reach steady state

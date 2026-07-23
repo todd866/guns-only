@@ -198,6 +198,8 @@ test("every visible HTML button is wired through one auditable action surface", 
     const hooks = [
       "data-test-action", "data-hold-key", "data-pulse-key", "data-mobile-action",
       "data-program-node", "data-deck-configuration",
+      // Build 75 portrait-assist speed nudges; wired in app.js via [data-assist-nudge].
+      "data-assist-nudge",
     ]
       .filter((name) => attrs[name] !== undefined);
     if (attrs.id && explicitButtons.has(attrs.id)) {
@@ -291,15 +293,26 @@ test("fallback flight control is one spring-loaded virtual stick", () => {
   const buttons = htmlButtons(indexSource);
   const stick = buttons.filter((button) =>
     button.attributes["data-mobile-action"] === "virtual-stick");
-  const fallbackDirections = buttons.filter((button) =>
-    ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]
-      .includes(button.attributes["data-hold-key"]));
+  // The ban protects against the old four-button directional pad returning as the PRIMARY
+  // flight control. Portrait assisted flight (Build 75) deliberately carries exactly two
+  // marked pitch-bias chips (PULL/EASE) on top of tilt; lateral buttons stay banned outright.
+  const lateralButtons = buttons.filter((button) =>
+    ["ArrowLeft", "ArrowRight"].includes(button.attributes["data-hold-key"]));
+  const pitchButtons = buttons.filter((button) =>
+    ["ArrowUp", "ArrowDown"].includes(button.attributes["data-hold-key"]));
 
   assert.equal(stick.length, 1, "fallback mode needs one visible thumb target");
   assert.equal(stick[0].attributes.id, "fallback-stick");
   assert.equal(stick[0].attributes["aria-label"], "Flight stick");
-  assert.equal(fallbackDirections.length, 0,
-    "the four directional fallback buttons must not return");
+  assert.equal(lateralButtons.length, 0,
+    "lateral directional buttons must not return");
+  assert.equal(pitchButtons.length, 2, "exactly the two assisted pitch-bias chips");
+  for (const chip of pitchButtons) {
+    assert.ok(chip.attributes["data-assist-chip"],
+      "pitch hold buttons exist only as marked assisted-flight bias chips");
+  }
+  assert.match(appSource, /data-assist-nudge/,
+    "assisted speed nudges must be wired in app.js");
   assert.match(indexSource, /id="fallback-stick-knob"/);
   assert.match(indexSource,
     /#fallback-stick\s*\{[\s\S]*?width:\s*112px[\s\S]*?height:\s*112px[\s\S]*?touch-action:\s*none/);

@@ -1702,6 +1702,15 @@ class CombatHud {
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillText(speedSecondaryText, speedX, readoutY);
+    // Assisted flight (portrait): the throttle is holding corner velocity; say so where the
+    // pilot's speed attention already lives. Guarded on field presence for older snapshots.
+    if (state.assisted_flight === true) {
+      const bias = Number(state.assisted_speed_bias_kts) || 0;
+      ctx.fillStyle = AMBER;
+      ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillText(bias === 0 ? "AUTO \u00B7 CORNER"
+        : `AUTO \u00B7 COR${bias > 0 ? "+" : ""}${bias}KT`, speedX, readoutY + 14);
+    }
     ctx.font = "700 6.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillText(verticalText, altitudeX, readoutY);
     ctx.restore();

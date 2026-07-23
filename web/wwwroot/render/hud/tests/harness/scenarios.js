@@ -339,6 +339,17 @@ export const SCENARIOS = [
     state: { range_m: 1100 },
   },
   {
+    name: "assisted-corner-hold",
+    about: "Rung-1 assisted flight: the AUTO · CORNER chip rides the speed readout while the machine holds corner velocity; +30 bias shows as COR+30KT.",
+    player: { headingDeg: 0, pitchDeg: 2, bankDeg: 20, altFt: 9000 },
+    bandit: { azimuthDeg: 10, elevationDeg: 4, rangeM: 700 },
+    lead: null,
+    state: {
+      range_m: 700, bank_deg: 20,
+      assisted_flight: true, assisted_speed_bias_kts: 30,
+    },
+  },
+  {
     name: "forward-level",
     about: "Baseline forward HUD, no padlock: pitch ladder, tapes, heading, G/power/fuel, bandit box at 950 m, caged sight.",
     player: { headingDeg: 5, pitchDeg: 0, bankDeg: 0, altFt: 8000 },
