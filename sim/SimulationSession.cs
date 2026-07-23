@@ -2083,8 +2083,13 @@ public sealed class SimulationSession {
         // its own, so a hands-off pilot fixated near a target would otherwise be classified as
         // attentive and lose the conservative backstop — the exact state Auto-GCAS exists for.
         PilotCommand humanCommand = _detents.Command;
+        // Assisted flight IS attentive flight: the autopilot holds corner and pulls about-right
+        // on purpose, and a rung-1 pilot has no Space key to declare intent with — without this,
+        // portrait pilots always got the full conservative boundary and the 12 G snatch bounced
+        // them off every low fight. G-LOC still restores full protection via the authority gate.
         bool pilotActivelyFlying = _pilotPhysiology.State.ControlAuthority01 >= 0.55
-            && (humanCommand.EnvelopeOverride
+            && (_assistedFlight
+                || humanCommand.EnvelopeOverride
                 || System.Math.Abs(humanCommand.RollControl) > 0.05
                 || System.Math.Abs(humanCommand.Rudder) > 0.05
                 || humanCommand.GDemand >= 2.0

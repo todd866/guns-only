@@ -906,6 +906,12 @@ const initialProgramNode = requestedProgramNode
   ? requestedProgramNode : recommendedCampaignNode(campaignProfile);
 let selectedProgramNodeId = initialProgramNode.id;
 let selectedBeat = initialProgramNode.mission;
+// Rung-1 portrait assisted flight is the endless gauntlet, not a one-kill exercise: "it ends
+// as soon as I kill the guy which is no fun". Mission 7 is the continuous-combat merge with
+// per-engagement escalation; landscape keeps the program's ordinary progression.
+if (mobileControls && window.matchMedia?.("(orientation: portrait)")?.matches === true) {
+  selectedBeat = 7;
+}
 let stagedBeat = selectedBeat;
 let selectedDeckConfiguration = 1;
 let stagedDeckConfiguration = selectedDeckConfiguration;
@@ -5259,7 +5265,14 @@ function installMobileInput(view) {
     lastOrientationSampleMs = timestampMs;
     filteredPitch = smoothTilt(filteredPitch, pitch, deltaSeconds);
     filteredRoll = smoothTilt(filteredRoll, roll, deltaSeconds);
-    updateTiltAxis("pitch", filteredPitch, "ArrowUp", "ArrowDown");
+    // Rung-1 assisted flight: tilt owns ROLL ONLY. Fore/aft phone wobble is not a pitch
+    // intention — it kicked the about-right auto-pull off constantly ("very pitch-sensitive",
+    // first portrait flight). Pitch bias belongs to the PULL/EASE chips alone.
+    if (document.documentElement.classList.contains("portrait-assist")) {
+      updateTiltAxis("pitch", 0, "ArrowUp", "ArrowDown");
+    } else {
+      updateTiltAxis("pitch", filteredPitch, "ArrowUp", "ArrowDown");
+    }
     if (!updateAnalogRoll(filteredRoll)) {
       updateTiltAxis("roll", filteredRoll, "ArrowLeft", "ArrowRight");
     }

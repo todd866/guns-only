@@ -313,6 +313,13 @@ test("fallback flight control is one spring-loaded virtual stick", () => {
   }
   assert.match(appSource, /data-assist-nudge/,
     "assisted speed nudges must be wired in app.js");
+  // First portrait flight reports, pinned: phone wobble must not fight the auto-pull, and a
+  // fighter must always show a trigger.
+  assert.match(appSource,
+    /portrait-assist[\s\S]{0,200}updateTiltAxis\("pitch", 0/,
+    "assisted flight must gate the tilt pitch axis to roll-only");
+  assert.doesNotMatch(indexSource, /#touch-fire[^{]*\{[^}]*display:\s*none/,
+    "the FIRE button must stay visible in every touch layout");
   assert.match(indexSource, /id="fallback-stick-knob"/);
   assert.match(indexSource,
     /#fallback-stick\s*\{[\s\S]*?width:\s*112px[\s\S]*?height:\s*112px[\s\S]*?touch-action:\s*none/);

@@ -300,13 +300,20 @@ function assertPadlockInsetAndLocator(data) {
 // scenario. One glyph per job — if the target marker is on screen, the locator arrow is
 // redundant noise pointing at a dude you can already see.
 function assertBasicJobs(data) {
-  const { name, geometry } = data;
+  const { name, geometry, probes } = data;
   const locator = geometry.banditLocator;
   if (locator) {
     check(name, "marker and locator arrow are mutually exclusive",
       !(locator.markerInside && locator.arrowDrawn),
       `markerInside=${locator.markerInside} arrowDrawn=${locator.arrowDrawn}`);
     const viewport = data.viewport ?? { width: 1400, height: 1020 };
+    if (locator?.arrowDrawn && Number.isFinite(locator.dirX)
+        && probes.banditCameraDir) {
+      const dot = locator.dirX * probes.banditCameraDir.x
+        + locator.dirY * probes.banditCameraDir.y;
+      check(name, "locator arrow points along the camera-space target direction",
+        dot >= 0.995, `dot ${dot.toFixed(5)} (tol 0.995)`);
+    }
     if (geometry.banditPx && !geometry.banditPx.behind
         && geometry.banditPx.x >= 20 && geometry.banditPx.x <= viewport.width - 20
         && geometry.banditPx.y >= 20 && geometry.banditPx.y <= viewport.height - 20) {

@@ -1000,27 +1000,45 @@ class CombatHud {
     // arrow as well would create two differently referenced directions around the threshold.
     if (frame.padlock && frame.padlockTarget !== "carrier") return;
 
+    // Direction from the CAMERA-SPACE target vector — the same continuous rule the padlock
+    // caret uses. The old projected-point path blew up near the side plane and switched frames
+    // entirely for a target behind, which is exactly the "arrow bouncing around" the pilot
+    // reported twice. Ambiguous only exactly dead-astern, where the previous smoothed direction
+    // is retained through a bounded per-frame slew.
     let dx;
     let dy;
-    if (!projection.behind && Number.isFinite(projection.x) && Number.isFinite(projection.y)) {
-      dx = projection.x - this.width / 2;
-      dy = projection.y - this.height / 2;
+    this.relative.copy(frame.banditPosition).sub(frame.playerPosition)
+      .transformDirection(frame.camera.matrixWorldInverse);
+    const locatorPlaneMagnitude = Math.hypot(this.relative.x, this.relative.y);
+    if (locatorPlaneMagnitude > 0.02) {
+      dx = this.relative.x / locatorPlaneMagnitude;
+      dy = -this.relative.y / locatorPlaneMagnitude;
+    } else if (Number.isFinite(this._locatorArrowAngle)) {
+      dx = Math.cos(this._locatorArrowAngle);
+      dy = Math.sin(this._locatorArrowAngle);
     } else {
-      // Camera-space X/Y collapse to zero for a target exactly behind the pilot. Resolve that
-      // singular case from own-ship-relative bearing and current head angle so the locator always
-      // points along the shortest pan back to the bandit instead of arbitrarily pointing down.
-      const yawError = wrapPi(angles.azimuth - (Number(frame.sensorYaw) || 0));
-      const pitchError = clamp(
-        angles.elevation - (Number(frame.sensorPitch) || 0),
-        -Math.PI / 2,
-        Math.PI / 2,
-      );
-      dx = Math.sin(yawError);
-      dy = -Math.sin(pitchError);
-      if (Math.abs(dx) + Math.abs(dy) < 0.02) {
-        dx = yawError < 0 || (yawError === 0 && angles.azimuth < 0) ? -1 : 1;
-      }
+      dx = 1;
+      dy = 0;
     }
+    // Bounded angular slew (6 rad/s) kills frame-to-frame jitter without lying about
+    // direction. The smoothing state resets whenever display time is not flowing continuously
+    // forward (a fresh frame after the marker owned the glyph, a scenario switch in the
+    // harness), so a stale angle can never lag a newly appearing arrow.
+    const rawAngle = Math.atan2(dy, dx);
+    const nowT = Number(frame.now) || 0;
+    const continuous = Number.isFinite(this._locatorArrowAngle)
+      && nowT > this._locatorArrowLastNow
+      && nowT - this._locatorArrowLastNow < 0.25;
+    if (continuous) {
+      const step = clamp(wrapPi(rawAngle - this._locatorArrowAngle),
+        -6 * (Number(frame.dt) || 0.016), 6 * (Number(frame.dt) || 0.016));
+      this._locatorArrowAngle = this._locatorArrowAngle + step;
+    } else {
+      this._locatorArrowAngle = rawAngle;
+    }
+    this._locatorArrowLastNow = nowT;
+    dx = Math.cos(this._locatorArrowAngle);
+    dy = Math.sin(this._locatorArrowAngle);
 
     // Padlock locators live at the actual display edge; normal HUD locators retain the protected
     // tape area. Keep these as scalars so the hot draw path creates no extra layout object.
@@ -1044,6 +1062,8 @@ class CombatHud {
 
     if (this._debug && this._debug.banditLocator) {
       this._debug.banditLocator.arrowDrawn = true;
+      this._debug.banditLocator.dirX = dx;
+      this._debug.banditLocator.dirY = dy;
     }
     ctx.save();
     ctx.translate(x, y);
