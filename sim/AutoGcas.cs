@@ -44,7 +44,7 @@ public sealed record AutoGcasConfiguration(
     // terrain-masking. While the HUMAN input path shows active commanding, the system fires only
     // when even an immediate max-perform recovery is about to become impossible.
     double ExitDwellSeconds,
-    double AttentivePilotTriggerFactor = 0.06,
+    double AttentivePilotTriggerFactor = 0.02,
     double ManeuveringTerrainBufferM = 30.48,
     double StableTerrainBufferM = 6.096,
     bool SuppressDescendingThreatExtension = false,
