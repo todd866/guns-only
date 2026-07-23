@@ -579,3 +579,23 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   period.dispose();
   modern.dispose();
 });
+
+test("aerial perspective is banded so ridgelines separate in value", () => {
+  const material = createTerrainMaterial(THREE, { sceneryEra: "modern", qualityTier: "desktop" });
+
+  assert.ok(material.uniforms.uHazeBands, "band count must be a uniform");
+  assert.ok(material.uniforms.uHazeBandBlend, "band blend must be a uniform");
+  assert.match(material.fragmentShader, /floor\(aerial \* uHazeBands\) \/ uHazeBands/,
+    "haze must be quantised into discrete distance planes");
+  assert.ok(material.uniforms.uHazeBands.value >= 3,
+    "fewer than three planes cannot separate stacked ridges");
+
+  // Banding must degrade to the old smooth wash when disabled, not divide by zero.
+  const off = createTerrainMaterial(THREE, { sceneryEra: "modern", hazeBands: 0 });
+  assert.equal(off.uniforms.uHazeBands.value, 0);
+  assert.match(off.fragmentShader, /uHazeBands > 0\.5/,
+    "the shader must guard the divide when banding is disabled");
+
+  material.dispose();
+  off.dispose();
+});

@@ -70,6 +70,8 @@ uniform float uModernScenery;
 uniform float uParcelTint;
 uniform float uShadowFloor;
 uniform vec2 uOcclusionRange;
+uniform float uHazeBands;
+uniform float uHazeBandBlend;
 varying float vConcavity;
 varying vec3 vTerrainNormal;
 varying vec3 vTerrainWorldPosition;
@@ -167,6 +169,10 @@ void main() {
   float distanceToCamera = length(cameraPosition - vTerrainWorldPosition);
   float aerial = 1.0 - exp(-fogDensity * fogDensity
     * distanceToCamera * distanceToCamera);
+  if (uHazeBands > 0.5) {
+    float banded = floor(aerial * uHazeBands) / uHazeBands;
+    aerial = mix(aerial, banded, uHazeBandBlend);
+  }
   vec3 color = mix(lit, hazeColor, clamp(aerial, 0.0, 1.0));
   gl_FragColor = vec4(color, 1.0);
   #include <logdepthbuf_fragment>
@@ -580,6 +586,10 @@ export function createTerrainMaterial(THREE, options = {}) {
           finite(options.occlusionMax, 1.12),
         ),
       },
+      // Discrete aerial-perspective planes. Stacked ridges each land on their own value step,
+      // which is what makes receding terrain read as depth rather than as fade.
+      uHazeBands: { value: finite(options.hazeBands, 6) },
+      uHazeBandBlend: { value: finite(options.hazeBandBlend, 0.65) },
     },
   });
 }
