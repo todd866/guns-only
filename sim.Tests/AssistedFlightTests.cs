@@ -51,7 +51,7 @@ public class AssistedFlightTests {
         AircraftState player = State(new Vec3D(0.0, TestAltitudeM, 0.0),
             initialTasMps, testMassKg, bank: 40.0 * Math.PI / 180.0);
         // Far abeam keeps the target outside the 60-degree nose cone and removes gunnery assist,
-        // leaving the 1.3-G energy-rebuild baseline as the repeatable speed-hold load.
+        // leaving the 1.05-G hold-the-path baseline as the repeatable speed-hold load.
         AircraftState bandit = State(new Vec3D(-100_000.0, TestAltitudeM, 0.0),
             initialTasMps, testMassKg);
         var session = new SimulationSession();
@@ -216,14 +216,20 @@ public class AssistedFlightTests {
             "held push must replace, not fight, the assisted baseline");
     }
 
+    // Pilot-tuned contract (2026-07-23, "portrait is pulling way too hard by default"): the
+    // auto-pull is about-right, growing with off-axis angle. On the nose it relaxes to a light
+    // sustaining pull and lets the gunnery correction do the fine tracking; the full protected
+    // repositioning pull belongs only to a target near the 60-degree cone edge; outside the cone
+    // the assist holds the path instead of climbing away.
     [Fact]
-    public void AutoPullTargetsFourGInsideTheNoseConeAndOnePointThreeOutside() {
+    public void AutoPullGrowsWithOffAxisAngleAndHoldsPathOutsideTheCone() {
         AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
         AircraftState state = State(new Vec3D(0.0, 3_000.0, 0.0),
             210.0, parameters.MassKg);
         var detents = new DetentLayer {
             AssistedFlight = true,
             AssistedTargetWithinNoseCone = true,
+            AssistedTargetNoseAngleRad = 0.0,
             AssistedCalibratedAirspeedMps = 210.0,
             AssistedTargetCalibratedAirspeedMps = 210.0,
             AirspeedMps = 210.0,
@@ -235,13 +241,19 @@ public class AssistedFlightTests {
 
         for (int i = 0; i < 240; i++)
             detents.Tick(keys, i * dt * 1000.0, state, parameters, advice, dt);
+        Assert.Equal(1.4, detents.Command.GDemand, 6);
+
+        detents.AssistedTargetNoseAngleRad = System.Math.PI / 3.0;
+        for (int i = 240; i < 480; i++)
+            detents.Tick(keys, i * dt * 1000.0, state, parameters, advice, dt);
         double maxPerform = Protection.MaxPerformG(state, parameters, 210.0,
             StandardAtmosphere1976.Instance);
         Assert.Equal(Math.Min(4.0, maxPerform), detents.Command.GDemand, 6);
 
         detents.AssistedTargetWithinNoseCone = false;
-        for (int i = 240; i < 480; i++)
+        detents.AssistedTargetNoseAngleRad = 2.0;
+        for (int i = 480; i < 720; i++)
             detents.Tick(keys, i * dt * 1000.0, state, parameters, advice, dt);
-        Assert.Equal(1.3, detents.Command.GDemand, 6);
+        Assert.Equal(1.0, detents.Command.GDemand, 6);
     }
 }

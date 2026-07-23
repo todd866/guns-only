@@ -65,6 +65,9 @@ public static partial class WebBridge {
         Session.NudgeAssistedSpeed(direction);
 
     [JSExport]
+    public static void ReleaseWeaponsHold() => Session.ReleaseWeaponsHold();
+
+    [JSExport]
     public static void Begin() => Session.Begin();
 
     [JSExport]

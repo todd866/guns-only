@@ -39,7 +39,19 @@ public sealed class VisualMergeEvaluation {
     }
 
     public bool FirstPassComplete { get; private set; }
+    public bool FirstPassHoldReleasedByPilot { get; private set; }
     public bool WeaponsInhibited => !FirstPassComplete;
+
+    /// <summary>
+    /// Pilot authority over the first-pass discipline: tapping the GUNS SAFE annunciation arms
+    /// the gun immediately. The release is recorded so the debrief stays honest about it — the
+    /// merge score still reflects whatever pass geometry was actually flown.
+    /// </summary>
+    public void ReleaseFirstPassHold() {
+        if (FirstPassComplete) return;
+        FirstPassComplete = true;
+        FirstPassHoldReleasedByPilot = true;
+    }
     public bool PlayerTriggerInterlocked => _playerTriggerInterlocked;
     public bool PlayerWeaponsAuthorized => FirstPassComplete && !_playerTriggerInterlocked;
     public bool WeaponsHotCueActive => PlayerWeaponsAuthorized

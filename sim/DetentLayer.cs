@@ -19,6 +19,7 @@ public sealed class DetentLayer {
     /// </summary>
     internal bool AssistedFlight;
     internal bool AssistedTargetWithinNoseCone;
+    internal double AssistedTargetNoseAngleRad = double.NaN;
     internal double AssistedCalibratedAirspeedMps = double.NaN;
     internal double AssistedTargetCalibratedAirspeedMps = double.NaN;
 
@@ -311,15 +312,32 @@ public sealed class DetentLayer {
             target = System.Math.Min(maxPerform, 1.55);   // smooth hands-off rotation; stick still has full authority
         }
         else if (AssistedFlight) {
-            // Portrait-phone baseline: an ordinary protected tracking demand while the target is
-            // near the nose, or a mild energy-rebuild pull outside that cone. Pull/push branches
-            // above own the axis completely whenever the pilot is touching it; the existing
-            // gunnery correction is layered later by SimulationSession like any other pilot demand.
+            // Portrait-phone baseline, pilot-tuned (2026-07-23): the old blanket 4 G in-cone pull
+            // made the phone "almost impossible to stop pitching up" — the bandit is near the nose
+            // most of a fight, so the assist owned the pitch axis at full pull. About-right means
+            // the demand GROWS with off-axis angle: on the nose the later gunnery correction does
+            // the fine tracking over a light sustaining pull, and only a target near the cone edge
+            // (60 deg) draws the full protected repositioning pull. Outside the cone the assist
+            // holds the path instead of climbing away. Pull/push branches above still own the axis
+            // completely whenever the pilot is touching it.
             tier = DemandTier.Baseline;
             StickyOffsetG = 0.0;
-            target = AssistedTargetWithinNoseCone
-                ? System.Math.Min(4.0, maxPerform)
-                : 1.3;
+            if (AssistedTargetWithinNoseCone) {
+                double fullPullG = System.Math.Min(4.0, maxPerform);
+                if (double.IsFinite(AssistedTargetNoseAngleRad)) {
+                    double offAxis = System.Math.Clamp(
+                        AssistedTargetNoseAngleRad / (System.Math.PI / 3.0), 0.0, 1.0);
+                    target = 1.4 + (fullPullG - 1.4) * offAxis * offAxis;
+                } else {
+                    target = fullPullG; // standalone callers without angle keep the old contract
+                }
+            } else {
+                // Bank-compensated path hold: wings level this is exactly 1.0 (no climb-away);
+                // banked it carries the level-turn load so the assisted turn neither balloons
+                // nor sheds the corner-hold drag budget the speed loop is trimmed against.
+                target = System.Math.Clamp(
+                    1.0 / System.Math.Max(System.Math.Cos(s.Bank), 0.5), 1.0, 1.35);
+            }
         }
         else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; }
         Tier = tier;

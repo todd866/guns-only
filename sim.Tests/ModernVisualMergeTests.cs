@@ -66,6 +66,21 @@ public class ModernVisualMergeTests {
             session.VisualMergeEvaluation!.WeaponsStateCue);
     }
 
+    // Pilot request (2026-07-23): "I should be able to click 'guns safe' and arm the gun."
+    // Tapping the annunciation releases the first-pass hold immediately, the release is recorded
+    // for the debrief, and the ownership boundaries still hold (no arming a destroyed ownship).
+    [Fact]
+    public void PilotCanReleaseTheFirstPassWeaponsHoldByHand() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        Assert.True(session.WeaponsInhibited);
+
+        session.ReleaseWeaponsHold();
+        Assert.False(session.WeaponsInhibited);
+        Assert.True(session.PlayerWeaponsAuthorized);
+        Assert.True(session.VisualMergeEvaluation!.FirstPassHoldReleasedByPilot);
+    }
+
     [Fact]
     public void HeldTriggerCannotPreFireTheFirstPassOrAutoFireWhenTheSafetyReleases() {
         var session = new SimulationSession(7);

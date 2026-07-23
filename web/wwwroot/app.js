@@ -5675,6 +5675,18 @@ function installInput(view) {
 
   sceneCanvas.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 && event.pointerType === "mouse") return;
+    // Tapping the GUNS SAFE annunciation arms the gun instead of starting a look drag.
+    const cueHit = hudCanvas?.__weaponsCueHit;
+    if (cueHit) {
+      const hudRect = hudCanvas.getBoundingClientRect();
+      const hx = event.clientX - hudRect.left;
+      const hy = event.clientY - hudRect.top;
+      if (hx >= cueHit.x && hx <= cueHit.x + cueHit.w
+        && hy >= cueHit.y && hy <= cueHit.y + cueHit.h) {
+        bridge?.ReleaseWeaponsHold?.();
+        return;
+      }
+    }
     dragging = true;
     // Stand the fixed-tick augmentation down before the next RAF advances simulation. Waiting for
     // updateGimbal would permit one catch-up frame of assist after the pilot starts a manual look.

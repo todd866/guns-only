@@ -559,6 +559,18 @@ public sealed class SimulationSession {
             _assistedSpeedBiasIndex + Math.Sign(direction), -2, 2);
     }
 
+    /// <summary>
+    /// Pilot taps the GUNS SAFE annunciation: release the first-pass weapons hold and arm the
+    /// gun. Subject to the same ownership boundaries as any pilot actuation — no reanimating a
+    /// destroyed ownship and no acting through a G-LOC control interlock.
+    /// </summary>
+    public void ReleaseWeaponsHold() {
+        if (Lifecycle != LifecycleState.Active) return;
+        if (_playerTerminalState != AircraftTerminalState.Flying) return;
+        if (_pilotControlInterlocked) return;
+        _visualMergeEvaluation?.ReleaseFirstPassHold();
+    }
+
     public void FeedKey(GKey key, bool pressed) {
         if (key == GKey.Restart) {
             if (pressed) Restart();
@@ -2312,6 +2324,7 @@ public sealed class SimulationSession {
             _detents.AssistedCalibratedAirspeedMps = double.NaN;
             _detents.AssistedTargetCalibratedAirspeedMps = double.NaN;
             _detents.AssistedTargetWithinNoseCone = false;
+            _detents.AssistedTargetNoseAngleRad = double.NaN;
             return;
         }
         _detents.AssistedCalibratedAirspeedMps = _player.IndicatedAirspeedMps;
@@ -2324,11 +2337,15 @@ public sealed class SimulationSession {
 
         Vec3D toTarget = _bandit.State.Position - _player.State.Position;
         double rangeSquared = toTarget.Dot(toTarget);
-        _detents.AssistedTargetWithinNoseCone = _opponentTerminalState
-                == AircraftTerminalState.Flying
+        bool targetValid = _opponentTerminalState == AircraftTerminalState.Flying
             && _gunKill.TargetAlive
-            && rangeSquared > 1e-12
-            && _player.BodyForward.Dot(toTarget * (1.0 / Math.Sqrt(rangeSquared))) >= 0.5;
+            && rangeSquared > 1e-12;
+        double noseDot = targetValid
+            ? _player.BodyForward.Dot(toTarget * (1.0 / Math.Sqrt(rangeSquared)))
+            : double.NaN;
+        _detents.AssistedTargetWithinNoseCone = targetValid && noseDot >= 0.5;
+        _detents.AssistedTargetNoseAngleRad = targetValid
+            ? Math.Acos(Math.Clamp(noseDot, -1.0, 1.0)) : double.NaN;
     }
 
     /// <summary>

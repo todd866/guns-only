@@ -3030,6 +3030,7 @@ class CombatHud {
 
   drawVisualMergeWeaponsCue(frame) {
     const cue = visualMergeWeaponsCue(frame.state);
+    if (this.canvas) this.canvas.__weaponsCueHit = null;
     if (!cue) return;
 
     const ctx = this.ctx;
@@ -3048,6 +3049,12 @@ class CombatHud {
     ctx.textBaseline = "middle";
     ctx.fillText(this.fitText(cue.text, width - 18), this.width / 2, y);
     ctx.restore();
+    // The SAFE annunciation is also the control: tapping it releases the first-pass hold.
+    // Publish the hit rect in CSS-pixel HUD coordinates for the pointer layer.
+    if (this.canvas && frame.state.weapons_inhibited === true) {
+      this.canvas.__weaponsCueHit =
+        { x: (this.width - width) / 2, y: y - 14, w: width, h: 28 };
+    }
   }
 
   drawFooter(frame) {
