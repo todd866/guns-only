@@ -35,7 +35,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.3.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.10.0";
+    const string SnapshotSchemaVersion = "1.11.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -381,6 +381,8 @@ internal static class SnapshotProjection {
             + $"\"auto_gcas_activation_count\":{autoGcas.ActivationCount},"
             + $"\"auto_gcas_override_count\":{autoGcas.PilotOverrideCount},"
             + $"\"auto_gcas_release_count\":{autoGcas.ReleaseCount},"
+            + $"\"gcas_last_flyup_bottom_ft\":{NullableNumberJson(Session.LastAutoGcasFlyUpBottomClearanceM * 3.28084)},"
+            + $"\"gcas_flyup_count\":{Session.CompletedAutoGcasFlyUpCount},"
             + $"\"auto_gcas_active_seconds\":{autoGcas.ActiveSeconds:F4},"
             + $"\"auto_gcas_prediction_valid\":{(autoGcasPrediction.Valid ? "true" : "false")},"
             + $"\"auto_gcas_used_fallback_terrain\":{(autoGcasPrediction.UsedFallbackTerrain ? "true" : "false")},"

@@ -25,6 +25,8 @@ test("bridge projects authoritative Auto-GCAS state without JSON non-finite valu
     "auto_gcas_activation_count",
     "auto_gcas_override_count",
     "auto_gcas_release_count",
+    "gcas_last_flyup_bottom_ft",
+    "gcas_flyup_count",
     "auto_gcas_active_seconds",
     "auto_gcas_prediction_valid",
     "auto_gcas_used_fallback_terrain",
