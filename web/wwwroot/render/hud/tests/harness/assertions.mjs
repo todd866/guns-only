@@ -363,6 +363,17 @@ function assertWarningLine(data) {
       geometry.warningLine === "PULL UP",
       `warningLine=${JSON.stringify(geometry.warningLine)}`);
   }
+  if (name.endsWith(":gcas-bottom-out-release")) {
+    const bottomFt = Math.round(Number(state.gcas_last_flyup_bottom_ft));
+    const marginFt = Math.round(Number(state.gcas_last_flyup_bottom_ft) - 100);
+    const expected = `GCAS BOTTOM ${bottomFt} FT · `
+      + `${marginFt >= 0 ? "+" : ""}${marginFt} VS 100 FT MSD`;
+    check(name, "released fly-up shows its bottom and signed 100 FT MSD margin",
+      state.auto_gcas_release_count === 1
+        && state.gcas_flyup_count === 1
+        && geometry.warningLine === expected,
+      `warningLine=${JSON.stringify(geometry.warningLine)}; expected=${JSON.stringify(expected)}`);
+  }
 }
 
 function assertBasicJobs(data) {
@@ -430,7 +441,7 @@ function assertGunHeat(data) {
 const PORTRAIT_SCENARIOS = new Set([
   "assisted-corner-hold",
   "forward-level", "forward-bandit-near-edge", "forward-bandit-offscreen",
-  "gun-overheat-latched",
+  "gun-overheat-latched", "gcas-bottom-out-release",
   "funnel-level-mid", "padlock-bandit-right-high", "padlock-bandit-behind",
   "padlock-aft-right-high",
 ]);
