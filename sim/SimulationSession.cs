@@ -166,6 +166,8 @@ public sealed class SimulationSession {
     int _droneRaidTargetIndex;
     bool _triggerDown;
     bool _opponentTriggerDown;
+    bool _assistedFlight;
+    int _assistedSpeedBiasIndex;
     int _beatIndex = 1;
     bool _prechargeSystemsOnStage = true;
     long _playerSpawnSequence;
@@ -343,6 +345,8 @@ public sealed class SimulationSession {
     public long CarrierSpawnSequence => _carrier is null ? 0 : _carrierSpawnSequence;
     public bool TriggerDown => _triggerDown;
     public bool OpponentTriggerDown => _opponentTriggerDown;
+    public bool AssistedFlight => _assistedFlight;
+    public int AssistedSpeedBiasKts => _assistedSpeedBiasIndex * 30;
     public bool WeaponsInhibited => _visualMergeEvaluation?.WeaponsInhibited ?? false;
     public bool PlayerWeaponsAuthorized =>
         (_visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true)
@@ -526,6 +530,20 @@ public sealed class SimulationSession {
     public void SetVariant(ValleyVariant variant) {
         _requestedVariant = variant;
         if (_carrier is null) _detents.Variant = variant;
+    }
+
+    /// <summary>Enable or disable the pilot-selected assisted dogfighting command layer.</summary>
+    public void SetAssistedFlight(bool enabled) => _assistedFlight = enabled;
+
+    /// <summary>
+    /// Move the assisted corner-speed preference by one 30-knot step in the requested direction.
+    /// The five deterministic positions deliberately expose only the pilot-owner's small desired
+    /// speed range; zero is a no-op and larger magnitudes still mean one directional step.
+    /// </summary>
+    public void NudgeAssistedSpeed(int direction) {
+        if (direction == 0) return;
+        _assistedSpeedBiasIndex = Math.Clamp(
+            _assistedSpeedBiasIndex + Math.Sign(direction), -2, 2);
     }
 
     public void FeedKey(GKey key, bool pressed) {
@@ -1019,6 +1037,8 @@ public sealed class SimulationSession {
         _autoGcasPredictionEvaluationCount = 0;
         _autoGcasPredictionElapsedSeconds = 0.0;
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
+        _assistedFlight = false;
+        _assistedSpeedBiasIndex = 0;
         _banditPadlockRollAssistSelected = false;
         _banditPadlockRollAssistTargetSequence = 0;
         _padlockRollAssist.Reset();
@@ -2159,6 +2179,35 @@ public sealed class SimulationSession {
     }
 
     /// <summary>
+    /// Refresh the detent layer from authoritative live geometry and air data. The corner target is
+    /// the exact altitude/configuration-aware CAS computation published by SnapshotProjection.
+    /// </summary>
+    void ConfigureAssistedFlightDetents() {
+        _detents.AssistedFlight = _assistedFlight && !_detents.ApproachMode;
+        if (!_detents.AssistedFlight) {
+            _detents.AssistedCalibratedAirspeedMps = double.NaN;
+            _detents.AssistedTargetCalibratedAirspeedMps = double.NaN;
+            _detents.AssistedTargetWithinNoseCone = false;
+            return;
+        }
+        _detents.AssistedCalibratedAirspeedMps = _player.IndicatedAirspeedMps;
+        double cornerKias = AirData.PositiveCornerSpeedKiasAtAltitude(
+            _player.State.Mass, _beat.PlayerAir, _player.State.Position.Y,
+            PlayerAerodynamicConfiguration.LiftCoefficientIncrement,
+            _player.AtmosphereModel);
+        _detents.AssistedTargetCalibratedAirspeedMps =
+            (cornerKias + AssistedSpeedBiasKts) / AirData.MpsToKnots;
+
+        Vec3D toTarget = _bandit.State.Position - _player.State.Position;
+        double rangeSquared = toTarget.Dot(toTarget);
+        _detents.AssistedTargetWithinNoseCone = _opponentTerminalState
+                == AircraftTerminalState.Flying
+            && _gunKill.TargetAlive
+            && rangeSquared > 1e-12
+            && _player.BodyForward.Dot(toTarget * (1.0 / Math.Sqrt(rangeSquared))) >= 0.5;
+    }
+
+    /// <summary>
     /// Add the aircraft-owned padlock plane trim after the effective human-control path. Raw pilot
     /// roll remains the immediate override signal; the small correction occupies only the explicit
     /// SAS channel, and Auto-GCAS still runs afterward with unconditional safety priority.
@@ -2599,6 +2648,7 @@ public sealed class SimulationSession {
             _detents.AirspeedMps = _player.AirspeedMps;
             _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
             _detents.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
+            ConfigureAssistedFlightDetents();
             _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir,
                 _advice, FixedDeltaSeconds);
             if (_waveOffArmed && _detents.Throttle >= 0.95) {
@@ -2825,6 +2875,7 @@ public sealed class SimulationSession {
         _detents.AirspeedMps = _player.AirspeedMps;
         _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
         _detents.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
+        ConfigureAssistedFlightDetents();
         if (_carrier is not null)
             _carrier.ApproachDirectorPitchOffsetRad =
                 _detents.EffectiveOnSpeedAoARad(_beat.PlayerAir);
@@ -2845,7 +2896,9 @@ public sealed class SimulationSession {
         PilotCommand padlockAssistedCommand = ApplyBanditPadlockRollAssist(
             effectiveCommand, _detents.Command.RollControl);
         PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
-        StepWeapons(previousPlayerState, previousOpponentState, _triggerDown);
+        bool assistedTrigger = _assistedFlight && _gunKill.GunSolution;
+        StepWeapons(previousPlayerState, previousOpponentState,
+            _triggerDown || assistedTrigger);
         PreparePlayerForPoweredTick();
         _player.Step(flightCommand, FixedDeltaSeconds);
         StepPilotPhysiologyFromAircraft();

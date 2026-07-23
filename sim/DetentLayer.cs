@@ -12,6 +12,16 @@ public sealed class DetentLayer {
     public double ValleyBank { get; private set; }
     public double Throttle { get; private set; } = 0.85;
 
+    /// <summary>
+    /// Session-owned assisted-fight inputs. SimulationSession refreshes the measured calibrated
+    /// airspeed, live corner target, and target cone before every command tick; DetentLayer remains
+    /// the sole owner of the resulting pilot-demand and speed-hold lever commands.
+    /// </summary>
+    internal bool AssistedFlight;
+    internal bool AssistedTargetWithinNoseCone;
+    internal double AssistedCalibratedAirspeedMps = double.NaN;
+    internal double AssistedTargetCalibratedAirspeedMps = double.NaN;
+
     double _throttleLever = 0.85;   // continuous, 0..1.3 (>1 = afterburner)
     bool _manualThrottle;   // on the approach, the pilot touching W/S stands the auto-throttle down
     bool _waveOff;          // pilot firewalled the throttle on the approach → go around, climb away
@@ -291,6 +301,17 @@ public sealed class DetentLayer {
             tier = DemandTier.Valley;
             target = System.Math.Min(maxPerform, 1.55);   // smooth hands-off rotation; stick still has full authority
         }
+        else if (AssistedFlight) {
+            // Portrait-phone baseline: an ordinary protected tracking demand while the target is
+            // near the nose, or a mild energy-rebuild pull outside that cone. Pull/push branches
+            // above own the axis completely whenever the pilot is touching it; the existing
+            // gunnery correction is layered later by SimulationSession like any other pilot demand.
+            tier = DemandTier.Baseline;
+            StickyOffsetG = 0.0;
+            target = AssistedTargetWithinNoseCone
+                ? System.Math.Min(4.0, maxPerform)
+                : 1.3;
+        }
         else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; }
         Tier = tier;
         _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
@@ -384,10 +405,10 @@ public sealed class DetentLayer {
         bool sHeld = keys.PhaseAt(GKey.ThrottleDown, nowMs) != KeyPhase.Idle;
         int thUp = keys.TakeTaps(GKey.ThrottleUp, nowMs), thDn = keys.TakeTaps(GKey.ThrottleDown, nowMs);
         if (wHeld || sHeld || thUp > 0 || thDn > 0) _manualThrottle = true;   // pilot took the throttle
-        // Auto-throttle = speed-hold, PLUS the climb nudge: the flight-path-up you commanded that
-        // pitch couldn't safely give is delivered here as power, so a pull actually CLIMBS (on energy,
-        // through the spool lag) instead of mushing at CLmax. Capped short of a firewall so the auto
-        // path can't trip the wave-off. Pilot's W/S still stands the whole thing down (below).
+        // Auto-throttle = the shared speed-hold lever. Approach adds its backside/glidepath terms;
+        // assisted fight supplies calibrated airspeed and the live corner target through the same
+        // proportional controller. Pilot W/S owns the assisted lever only while held, then neutral
+        // releases it cleanly back to corner hold.
         double speedForApproach = double.IsFinite(ApproachAirspeedMps)
             ? ApproachAirspeedMps
             : double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed;
@@ -395,22 +416,36 @@ public sealed class DetentLayer {
             ? ApproachPowerFeedForward(s, p, speedForApproach,
                 AerodynamicConfiguration, AtmosphereModel)
             : 0.0;
-        double autoThr = ApproachTrimThrottle
-            + 0.026 * (ApproachSpeedMps - speedForApproach); // AIRspeed hold
+        double leverStop = System.Math.Clamp(p.MaxThrustFraction, 0.0, 1.65);
+        double autoThr = SpeedHoldThrottle(ApproachTrimThrottle,
+            ApproachSpeedMps, speedForApproach);
         if (ApproachMode) {
+            // The flight-path-up you commanded that pitch could not safely give is delivered here
+            // as power, so a pull actually climbs instead of mushing at CLmax.
             // BACK-SIDE RULE: power flies the glidepath. Below the glideslope LINE (spatial height
             // error, set by the session) → add power to climb back onto it — this recaptures the path
             // instead of just holding the angle low, so flying the velocity vector at the wires
             // actually traps. Plus the pilot's active up-command (AoA above on-speed) spools too.
             autoThr += GlidePowerPerM * System.Math.Max(0.0, GlideslopeErrorM)
                      + ClimbAoaPower * _approachClimbDemand;
+            autoThr = System.Math.Clamp(autoThr, 0.0, 0.95);
+        } else if (AssistedFlight
+            && double.IsFinite(AssistedCalibratedAirspeedMps)
+            && double.IsFinite(AssistedTargetCalibratedAirspeedMps)) {
+            double fightTrimThrottle = SpeedHoldPowerFeedForward(s, p,
+                double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed,
+                System.Math.Max(_gCmd, 0.0), referenceFlightPathRad: 0.0,
+                AerodynamicConfiguration, AtmosphereModel);
+            autoThr = System.Math.Clamp(SpeedHoldThrottle(fightTrimThrottle,
+                AssistedTargetCalibratedAirspeedMps,
+                AssistedCalibratedAirspeedMps), 0.0, leverStop);
         }
-        autoThr = System.Math.Clamp(autoThr, 0.0, 0.95);
         // The lever stop is an airframe capability. A dry-thrust Sabre stops at MIL (1.0),
         // while an afterburning definition may expose the full staged range to 1.35.
-        double leverStop = System.Math.Clamp(p.MaxThrustFraction, 0.0, 1.65);
         if (ApproachMode && !_manualThrottle) {
             _throttleLever = System.Math.Min(autoThr, leverStop); // track the real lever for smooth takeover
+        } else if (AssistedFlight && !wHeld && !sHeld) {
+            _throttleLever = System.Math.Min(autoThr, leverStop);
         } else {
             if (wHeld) _throttleLever += ThrottleRate * dt;
             if (sHeld) _throttleLever -= ThrottleRate * dt;
@@ -484,6 +519,18 @@ public sealed class DetentLayer {
     internal static double ApproachPowerFeedForward(in AircraftState state,
         in AircraftParams parameters, double trueAirspeedMps,
         in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) {
+        return SpeedHoldPowerFeedForward(state, parameters, trueAirspeedMps,
+            referenceLoadFactorG: 1.0, ApproachGlideslope, configuration, atmosphere);
+    }
+
+    static double SpeedHoldThrottle(double trimThrottle, double targetSpeedMps,
+        double measuredSpeedMps) =>
+            trimThrottle + 0.026 * (targetSpeedMps - measuredSpeedMps);
+
+    static double SpeedHoldPowerFeedForward(in AircraftState state,
+        in AircraftParams parameters, double trueAirspeedMps,
+        double referenceLoadFactorG, double referenceFlightPathRad,
+        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         if (!double.IsFinite(trueAirspeedMps) || trueAirspeedMps <= 0.0
             || parameters.ThrustMaxN <= 0.0)
@@ -498,8 +545,8 @@ public sealed class DetentLayer {
         // Lift normal to the reference path balances the corresponding weight component. Flap
         // camber supplies part of that CL; only the remaining clean-wing CL drives induced drag in
         // the kernel's current additive-configuration polar.
-        double totalCl = state.Mass * FlightModel.G0
-            * System.Math.Cos(ApproachGlideslope) / qS;
+        double totalCl = System.Math.Max(0.0, referenceLoadFactorG)
+            * state.Mass * FlightModel.G0 * System.Math.Cos(referenceFlightPathRad) / qS;
         double cleanCl = System.Math.Clamp(
             totalCl - configuration.LiftCoefficientIncrement,
             parameters.CLMin, parameters.CLMax);
@@ -517,7 +564,7 @@ public sealed class DetentLayer {
             + System.Math.Max(0.0, configuration.DragCoefficientIncrement);
         double dragN = qS * cd;
         double requiredThrustN = System.Math.Max(0.0,
-            dragN + state.Mass * FlightModel.G0 * System.Math.Sin(ApproachGlideslope));
+            dragN + state.Mass * FlightModel.G0 * System.Math.Sin(referenceFlightPathRad));
 
         return System.Math.Clamp(ThrottleForRequiredThrust(requiredThrustN,
             state.Position.Y, mach, parameters, atmosphere), 0.0,

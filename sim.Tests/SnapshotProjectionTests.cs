@@ -66,8 +66,10 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.7.0",
+        Assert.Equal("1.8.0",
             root.GetProperty("snapshot_schema_version").GetString());
+        Assert.False(root.GetProperty("assisted_flight").GetBoolean());
+        Assert.Equal(0, root.GetProperty("assisted_speed_bias_kts").GetInt32());
         Assert.False(string.IsNullOrEmpty(root.GetProperty("beat").GetString()));
         Assert.Equal(root.GetProperty("indicated_airspeed_kts").GetDouble(),
             root.GetProperty("calibrated_airspeed_kts").GetDouble(), 10);
@@ -132,6 +134,23 @@ public class SnapshotProjectionTests {
         Assert.True(double.IsFinite(root.GetProperty("vx").GetDouble()));
         Assert.True(double.IsFinite(root.GetProperty("vy").GetDouble()));
         Assert.True(double.IsFinite(root.GetProperty("vz").GetDouble()));
+    }
+
+    [Fact]
+    public void ColdStateProjectsAssistedFlightSelectionAndSpeedBias() {
+        var session = new SimulationSession(7, Carrier.DeckConfiguration.Angled,
+            KoreaWeatherPresets.ForBeat(7));
+        session.SetAssistedFlight(true);
+        session.NudgeAssistedSpeed(1);
+        session.NudgeAssistedSpeed(1);
+
+        string json = SnapshotProjection.BuildState(session,
+            Carrier.DeckConfiguration.Angled, 0.0, 0.0, false, terrain: null);
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+
+        Assert.True(root.GetProperty("assisted_flight").GetBoolean());
+        Assert.Equal(60, root.GetProperty("assisted_speed_bias_kts").GetInt32());
     }
 
     [Fact]

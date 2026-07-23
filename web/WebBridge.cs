@@ -53,6 +53,14 @@ public static partial class WebBridge {
         Session.SetTouchControlModality(touch);
 
     [JSExport]
+    public static void SetAssistedFlight(bool enabled) =>
+        Session.SetAssistedFlight(enabled);
+
+    [JSExport]
+    public static void NudgeAssistedSpeed(int direction) =>
+        Session.NudgeAssistedSpeed(direction);
+
+    [JSExport]
     public static void Begin() => Session.Begin();
 
     [JSExport]
