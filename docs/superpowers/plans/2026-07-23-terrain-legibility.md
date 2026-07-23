@@ -89,11 +89,32 @@ test("bakes a concavity attribute so valley floors read as enclosed", () => {
     "every vertex, skirts included, needs a concavity value");
   assert.ok(concavity.getX(4) < 0.5,
     "the pit at the centre must read as concave");
-  assert.ok(concavity.getX(0) > 0.5,
-    "the surrounding plateau must read as convex relative to the pit");
   for (let index = 0; index < concavity.count; index++) {
     const value = concavity.getX(index);
     assert.ok(value >= 0 && value <= 1, `concavity ${value} must stay in [0, 1]`);
+  }
+  built.geometry.dispose();
+});
+
+test("concavity fades to neutral at chunk edges so neighbours cannot seam", () => {
+  // Each chunk can only see its own samples, so a clamped neighbourhood at the boundary would
+  // give the SAME world position a different value in each of the two chunks that share it —
+  // painting a visible grid of seams every 16 km. Forcing the boundary to exactly 0.5 makes both
+  // sides agree by construction.
+  const values = new Int16Array([
+    1000, 1000, 1000,
+    1000, 0, 1000,
+    1000, 1000, 1000,
+  ]);
+  const record = manifest().chunks[0].lods[0];
+  const decoded = decodeTerrainRecord(values.buffer, record, quantization);
+  const built = createTerrainGeometry(THREE, manifest().chunks[0], decoded);
+  const concavity = built.geometry.getAttribute("concavity");
+
+  // Every perimeter sample of the 3x3 grid sits on the chunk boundary.
+  for (const index of [0, 1, 2, 3, 5, 6, 7, 8]) {
+    assert.equal(concavity.getX(index), 0.5,
+      `boundary sample ${index} must be exactly neutral`);
   }
   built.geometry.dispose();
 });
@@ -166,8 +187,18 @@ In `createTerrainGeometry`, insert immediately after the loop that fills `positi
         }
       }
       const relative = heights[index] - total / count;
-      concavity[index] = Math.min(1, Math.max(0,
+      const raw = Math.min(1, Math.max(0,
         relative / TERRAIN_CONCAVITY_RELIEF_M * 0.5 + 0.5));
+      // A chunk can only see its own samples, so a clamped neighbourhood at the boundary would
+      // give the SAME world position different occlusion in each of the two chunks sharing it —
+      // a visible seam grid every tile span. Fading to exactly 0.5 over the ring width makes both
+      // sides agree by construction, at the cost of occlusion in a band that is a few percent of
+      // the tile. Do not replace this with cross-chunk sampling: it would make geometry depend on
+      // neighbour load order and break determinism.
+      const edgeDistance = Math.min(east, north,
+        sampleCount - 1 - east, sampleCount - 1 - north);
+      const edgeFade = Math.min(1, edgeDistance / ringSamples);
+      concavity[index] = 0.5 + (raw - 0.5) * edgeFade;
     }
   }
 ```
