@@ -318,6 +318,15 @@ public static class FlightModel {
         GunneryLateralAssistMaxYaw: 0.5,
         HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 2.8,
         WingSpanM: 13.56, PostStallAlphaCommandRad: 1.10,
+        // F-22 HIGH-ALPHA CONTAINMENT (docs/f22-high-alpha-review.md). These explicit provisional
+        // values prevent this departure-resistant surrogate from inheriting the F-86-shaped
+        // differential-wing autorotation and pitch break. Real beta, body rates, damage and
+        // thrust asymmetry remain available disturbances. PostStallDragMax is stated explicitly
+        // until the F-22-only body-axis CN/CA schedule below owns separated-flow forces.
+        PostStallDragMax: 0.90,
+        StallRollCoupling: 0.0,
+        StallYawCoupling: 0.0,
+        StallPitchBreakNm: 0.0,
         PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
         FuelFreeMassKg: 19535.0,
         GenericIdleFuelFlowLbPerMinute: 32.0,
