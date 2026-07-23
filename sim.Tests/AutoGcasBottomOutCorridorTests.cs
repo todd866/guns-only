@@ -61,6 +61,8 @@ public class AutoGcasBottomOutCorridorTests {
         session.SetTerrainSurface(FlatTerrain());
         session.SetAssistedFlight(true);
         session.Begin();
+        Assert.Null(session.LastAutoGcasFlyUpBottomClearanceM);
+        Assert.Equal(0, session.CompletedAutoGcasFlyUpCount);
         // A neutral assisted pilot never reaches the ground: the about-right auto-pull flattens
         // the dive on its own (the corridor's first run proved it). The hazard is the pilot
         // HOLDING the push bias into terrain — commanded descent, attentive by definition.
@@ -79,16 +81,19 @@ public class AutoGcasBottomOutCorridorTests {
                 // (and legal) story than the one this corridor measures.
                 session.FeedKey(GKey.PushDown, false);
             }
-            if (activated)
+            if (session.AutoGcas.Active)
                 minimumAgl = System.Math.Min(minimumAgl, session.Player.State.Position.Y);
-            if (activated && session.Player.State.VelocityVector().Y > 5.0
-                && session.Player.State.Position.Y > minimumAgl + 150.0) break;
+            if (session.CompletedAutoGcasFlyUpCount > 0) break;
         }
 
         _output.WriteLine($"v={speedMps} gamma={gammaDeg}: activated={activated} " +
             $"bottom={minimumAgl:F0} m AGL ({minimumAgl * 3.28084:F0} ft)");
         Assert.True(activated, "the descent must eventually trigger the fly-up");
         Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+        Assert.Equal(1, session.CompletedAutoGcasFlyUpCount);
+        double recordedBottomM = Assert.IsType<double>(
+            session.LastAutoGcasFlyUpBottomClearanceM);
+        Assert.InRange(System.Math.Abs(recordedBottomM - minimumAgl), 0.0, 0.01);
         Assert.True(minimumAgl >= 30.0,
             $"fly-up violated the 100 ft maneuvering MSD floor: {minimumAgl:F1} m");
         Assert.True(minimumAgl <= maxBottomM,
