@@ -105,6 +105,9 @@ test("production app renders authoritative physiology through a normally hidden 
 
   assert.match(app, /import \{ gTolerancePresentation \} from "\.\/render\/physiology\/g_tolerance_presentation\.js";/);
   assert.match(app, /renderPilotPhysiology\(presentedState\)/);
+  assert.match(app,
+    /externalCamera = activeView\?\.externalCameraActive === true;[\s\S]*?presentation\.active && !externalCamera/,
+    "external cameras must suppress only the first-person physiology presentation");
   assert.doesNotMatch(app, /g_actual\s*[><=].*(BLACKOUT|G_LOC)/);
   assert.match(html, /id="pilot-physiology" aria-hidden="true" hidden/);
   assert.match(html, /#pilot-physiology\[hidden\] \{ display: none; \}/);
