@@ -102,7 +102,7 @@ public readonly record struct EngagementReport(
 
 **Key assertions:** scripted session where the bandit holds a solution for K ticks ⇒ `SolutionSecondsConceded ≈ K*dt`; player kill ⇒ `Outcome == Victory` and next report's `EngagementNumber` increments; counters reset between engagements (second report's deltas independent of first).
 
-- [ ] Steps: failing tests → fail → implement → pass → commit `feat(session): per-engagement player-performance reports`
+- [x] Steps: failing tests → fail → implement → pass → commit `feat(session): per-engagement player-performance reports`
 
 ---
 
@@ -162,7 +162,7 @@ public sealed class FightDirector {        // owns a LearnerModel internally
 
 **Key assertions:** scripted histories drive exact phase walks — the boss fires at exactly the threshold crossing (not one fight earlier, honouring cooldown); post-boss release is served both after boss win and boss loss; loss-streak easing; cold-start parity table; identical history ⇒ identical `SpawnSpec` sequence.
 
-- [ ] Steps: failing tests → fail → implement → pass → commit `feat(ai): FightDirector — performance-driven pacing with boss trigger`
+- [x] Steps: failing tests → fail → implement → pass → commit `feat(ai): FightDirector — performance-driven pacing with boss trigger`
 
 ---
 
