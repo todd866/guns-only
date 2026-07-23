@@ -1063,8 +1063,7 @@ public sealed class SimulationSession {
         _autoGcasPredictionEvaluationCount = 0;
         _autoGcasPredictionElapsedSeconds = 0.0;
         _gcasLowLevelStandby = false;
-        _gcasCarefulControlSeconds = 0.0;
-        _gcasRearmAboveGateSeconds = 0.0;
+        _gcasTimeSinceStandbyInputSeconds = double.PositiveInfinity;
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
         _assistedFlight = false;
         _assistedSpeedBiasIndex = 0;
@@ -2122,7 +2121,7 @@ public sealed class SimulationSession {
             && (AutoGcasOverrideHeld || sustainedInputPaddle);
         // The low-level standby latch runs every tick, ahead of the prediction cadence, so a
         // careful gate crossing is recognised at the crossing rather than a prediction later.
-        UpdateGcasLowLevelStandbyLatch();
+        UpdateGcasLowLevelStandby();
         if (_autoGcasPredictionTicksRemaining > 0 && !immediatePaddle) {
             _autoGcasPredictionTicksRemaining--;
             if (_autoGcasState.Active) {
@@ -2212,67 +2211,59 @@ public sealed class SimulationSession {
     public void SetAutoGcasEnabled(bool enabled) => _autoGcasEnabled = enabled;
     double _pilotInputOverrideSeconds;
 
-    // Low-level standby latch (pilot doctrine, 2026-07-23): "if you carefully descend through
-    // 1000 ft AO then GCAS turns itself off — it's a failsafe for 'I got disoriented while
-    // dogfighting', not 'I fucked up while low flying'." A conscious pilot flying a controlled,
-    // gentle path through the 1000 ft above-obstacles gate claims the low block on purpose and
-    // stands the system down; climbing back above the gate for a sustained period re-arms it.
-    // Getting TUMBLED below the gate mid-fight (steep, banked, loaded, rolling) keeps it armed —
-    // exactly the lost-SA case the system exists for. G-LOC always restores protection through
-    // the control-authority gate. The deliberate trade: a conscious wings-level CFIT below the
-    // gate is now the pilot's own — that is the doctrine, not an oversight. Assisted (rung-1)
-    // flight never latches standby: the portrait autopilot has no terrain logic of its own.
-    const double GcasStandbyGateClearanceM = 304.8;
-    const double GcasStandbyCarefulSeconds = 1.5;
-    const double GcasStandbyRearmSeconds = 5.0;
+    // Low-level standby v2 (pilot doctrine, 2026-07-23 flight reports): Auto-GCAS is a failsafe
+    // for "I got disoriented while dogfighting", not a low-flying governor. The Build-83 LATCH
+    // (careful crossing + timed re-arm) still fought the pilot: an aggressive descent never
+    // latched it, and its 5-second re-arm silently re-armed the system every time a ridge fell
+    // away underneath a valley run. v2 is a continuous rule with no memory to mis-latch:
+    //
+    //   conscious + unassisted + hands-on + below 1000 ft AO  =>  the low block is the pilot's.
+    //
+    // Hands leave the controls for a few seconds, or G-LOC drops control authority, and full
+    // protection is back within a prediction tick — exactly the disoriented/unconscious case the
+    // system exists for. Above the gate the system is always armed (with the attentive-pilot
+    // boundary as ever). The deliberate trade stands: a conscious hands-on CFIT below the gate
+    // is the pilot's own. Assisted (rung-1) flight never stands down: the portrait autopilot has
+    // no terrain logic of its own. "Hands-on" reads the raw detent command — any non-neutral
+    // pitch demand, roll, rudder, or override counts; only a fully released, trimmed-neutral
+    // stick goes hands-off.
+    const double GcasStandbyGateClearanceM = 304.8;      // 1000 ft AO
+    const double GcasStandbyRearmClearanceM = 335.28;    // 1100 ft — hysteresis so the chip never flaps
+    // Telemetry-set (web-1784790165022): this pilot flies deliberate valley stretches on a
+    // literally neutral stick for seconds at a time — a short input memory re-armed the system
+    // mid-run and it fired at 204 ft under a stable path. Once the pilot has claimed the low
+    // block hands-on, it stays theirs through quiet stretches; G-LOC hands the watch back
+    // IMMEDIATELY through the authority gate regardless of this window, which is the real
+    // unconscious-pilot detector. Only a long fully-idle stretch lets the machine reclaim it.
+    const double GcasStandbyInputMemorySeconds = 20.0;
     bool _gcasLowLevelStandby;
-    double _gcasCarefulControlSeconds;
-    double _gcasRearmAboveGateSeconds;
+    double _gcasTimeSinceStandbyInputSeconds = double.PositiveInfinity;
     public bool AutoGcasLowLevelStandby => _gcasLowLevelStandby;
 
-    void UpdateGcasLowLevelStandbyLatch() {
+    void UpdateGcasLowLevelStandby() {
+        PilotCommand human = _detents.Command;
+        bool handsOn = human.EnvelopeOverride
+            || System.Math.Abs(human.RollControl) > 0.02
+            || System.Math.Abs(human.Rudder) > 0.02
+            || System.Math.Abs(human.GDemand - 1.0) > 0.05;
+        _gcasTimeSinceStandbyInputSeconds = handsOn
+            ? 0.0 : _gcasTimeSinceStandbyInputSeconds + FixedDeltaSeconds;
+
         double clearanceM = double.PositiveInfinity;
         if (_terrainSurface is not null && _terrainSurface.TrySample(
             _player.State.Position.X, _player.State.Position.Z, out TerrainSample sample))
             clearanceM = _player.State.Position.Y - sample.HeightM;
         else if (_terrainSurface is null)
             clearanceM = _player.State.Position.Y;
-        Vec3D velocity = _player.State.VelocityVector();
-        double gammaSin = velocity.Y / System.Math.Max(velocity.Length, 1.0);
-        double bankRad = System.Math.Abs(
-            System.Math.IEEERemainder(_player.State.Bank, 2.0 * System.Math.PI));
-        PilotCommand human = _detents.Command;
-        // "Careful" is flown, not declared: conscious, unassisted, on a path no steeper than a
-        // deliberate descent (~15 deg), wings inside 45 deg, an unloaded-to-gentle stick, and no
-        // meaningful roll rate. Sustained for 1.5 s it demonstrates control anywhere; crossing
-        // the gate with that history latches standby at the crossing itself.
-        bool careful = _pilotPhysiology.State.ControlAuthority01 >= 0.55
+
+        double gateM = _gcasLowLevelStandby
+            ? GcasStandbyRearmClearanceM : GcasStandbyGateClearanceM;
+        _gcasLowLevelStandby = double.IsFinite(clearanceM)
+            && clearanceM < gateM
             && !_assistedFlight
-            && gammaSin > -0.26
-            && bankRad < 45.0 * System.Math.PI / 180.0
-            && human.GDemand > -0.25 && human.GDemand < 2.0
-            && System.Math.Abs(_player.State.BodyRates.P) < 0.5;
-        _gcasCarefulControlSeconds = careful
-            ? _gcasCarefulControlSeconds + FixedDeltaSeconds : 0.0;
-        if (!_gcasLowLevelStandby) {
-            if (!_autoGcasState.Active
-                && double.IsFinite(clearanceM)
-                && clearanceM < GcasStandbyGateClearanceM
-                && _gcasCarefulControlSeconds >= GcasStandbyCarefulSeconds) {
-                _gcasLowLevelStandby = true;
-                _gcasRearmAboveGateSeconds = 0.0;
-            }
-            return;
-        }
-        if (clearanceM > GcasStandbyGateClearanceM) {
-            _gcasRearmAboveGateSeconds += FixedDeltaSeconds;
-            if (_gcasRearmAboveGateSeconds >= GcasStandbyRearmSeconds) {
-                _gcasLowLevelStandby = false;
-                _gcasCarefulControlSeconds = 0.0;
-            }
-        } else {
-            _gcasRearmAboveGateSeconds = 0.0;
-        }
+            && _pilotPhysiology.State.ControlAuthority01 >= 0.55
+            && _gcasTimeSinceStandbyInputSeconds <= GcasStandbyInputMemorySeconds
+            && !_autoGcasState.Active;
     }
 
     PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {

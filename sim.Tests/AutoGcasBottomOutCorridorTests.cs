@@ -41,17 +41,19 @@ public class AutoGcasBottomOutCorridorTests {
         BanditCapability: AircraftCapability.Su27SSurrogate,
         PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference);
 
-    // Attentive/assisted combat flight (the deferred boundary). Bottom-out band: above the
-    // 13.7 m terrain buffer, below ~90 m (~300 ft) — centred on the pilot's 200 ft spec.
-    // Final semantics (pilot spec, 2026-07-23): a 100 ft MSD floor while maneuvering (20 ft on
-    // stable paths), with the fly-up bottoming within ~250 ft of margin above that floor in hard
-    // dives. Floors and ceilings below encode exactly that.
+    // Attentive/assisted combat flight (the deferred boundary). Pilot spec sharpened
+    // 2026-07-23: "if autogcas goes off and I don't bottom out at 100 ft MSD on a 12 G pull
+    // then that was too early." Bottom-out band: above the 30 m (100 ft) maneuvering MSD
+    // floor, below ~215 ft — the fly-up is a genuine last-instance 12 G save, not an early
+    // bounce. Tuned via ControlResponseDelaySeconds 0.06 + ResponseAuthorityMargin 0.90
+    // (the predictor credits the recovery it actually delivers); measured bottoms 124-188 ft.
     [Theory]
-    [InlineData(250.0, -20.0, 0.0, 120.0)]
-    [InlineData(300.0, -35.0, 0.0, 120.0)]
-    [InlineData(220.0, -45.0, 0.0, 120.0)]
-    // Banked entry pays the roll-to-upright phase before the pull; the ceiling allows for it.
-    [InlineData(260.0, -25.0, 60.0, 155.0)]
+    [InlineData(250.0, -20.0, 0.0, 65.0)]
+    [InlineData(300.0, -35.0, 0.0, 65.0)]
+    [InlineData(220.0, -45.0, 0.0, 65.0)]
+    // Banked entry pays the roll-to-upright phase before the pull; measured 38 m — the
+    // ceiling still allows the roll phase headroom.
+    [InlineData(260.0, -25.0, 60.0, 75.0)]
     public void AttentiveFlyUpBottomsNearTwoHundredFeet(double speedMps, double gammaDeg,
         double bankDeg, double maxBottomM) {
         var session = new SimulationSession();

@@ -60,7 +60,12 @@ public sealed record AutoGcasConfiguration(
     public static AutoGcasConfiguration ModernPublicDataSurrogate { get; } = new(
         LookaheadSeconds: 8.0,
         PredictionStepSeconds: 0.05,
-        ControlResponseDelaySeconds: 0.12,
+        // One prediction step of modeled takeover latency. The physical response lag is
+        // carried by the G-onset ramp and roll capture in BOTH predictor and airframe;
+        // stacking a long extra delay here made the predictor ~50 m more pessimistic than
+        // the recovery it actually flies, which is exactly "that was too early" (pilot spec:
+        // bottoms near the 100 ft MSD floor on the 12 G pull, corridor-measured 124-188 ft).
+        ControlResponseDelaySeconds: 0.06,
         RecoveryRollRateRadPerSecond: 150.0 * Math.PI / 180.0,
         // The PREDICTOR'S planning load. ResponseAuthorityMargin (0.82) derates it to ~12 G of
         // modelled delivery — matching what the airframe actually flies under the override-law
@@ -184,7 +189,7 @@ public static class AutoGcasController {
     const double RecoveryRollDeadbandRad = 2.0 * Math.PI / 180.0;
     const double RecoveryRollRateDampingGain = 0.72;
     const double RecoveryRollRateDeadbandRadPerSecond = 1.0 * Math.PI / 180.0;
-    const double ResponseAuthorityMargin = 0.82;
+    const double ResponseAuthorityMargin = 0.90;
     const double RecoveryCompletionHorizonSeconds = 20.0;
 
     public static AutoGcasStepResult Step(double dtSeconds,
