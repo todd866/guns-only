@@ -201,10 +201,12 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     public PilotPhysiologyProfile PlayerPilotPhysiology => PlayerPhysiologyProfile
         ?? PilotPhysiologyProfile.KoreaFastJetReference;
     public IBandit CreateBandit(
-        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) => UsesNeutralMergeBandit
-        ? new NeutralMergeBandit(Bandit, BanditAir, BanditSkill, terrain)
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
+        SpawnSpec? spec = null) => UsesNeutralMergeBandit
+        ? new NeutralMergeBandit(Bandit, BanditAir, spec?.Skill ?? BanditSkill, terrain)
         : UsesReactiveBandit
-            ? new ReactiveBandit(Bandit, BanditAir, BanditSkill, terrain)
+            ? new ReactiveBandit(Bandit, BanditAir, spec?.Skill ?? BanditSkill, terrain,
+                profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null)
             : new RailBandit(Bandit, BanditAir, BanditTimeline);
 
     /// Deterministic merge factory for a continuous-operations ruleset. Successor aircraft inherit

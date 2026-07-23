@@ -471,6 +471,7 @@ public sealed class SimulationSession {
             9 => Beats.ModernAceDuel,
             _ => Beats.Perch
         };
+        _fightDirector.Reset();
         StageBeat(_beatFactory());
     }
 
@@ -518,6 +519,7 @@ public sealed class SimulationSession {
         // stored pressure from the built-in airborne-mission convenience.
         _prechargeSystemsOnStage = false;
         _beatFactory = beatFactory;
+        _fightDirector.Reset();
         BeatSetup setup = beatFactory();
         _deckConfiguration = setup.Carrier?.Configuration ?? _deckConfiguration;
         StageBeat(setup);
@@ -1057,7 +1059,15 @@ public sealed class SimulationSession {
         _burble = _carrier is null ? null : CreateBurble(_carrier, _difficulty,
             _weatherProfile?.Wind);
         _player = CreatePlayer(_beat.Player);
-        _bandit = _beat.CreateBandit(_terrainSurface);
+        // Pacing memory survives the pilot: when the director has observed history and this beat
+        // fields a skill-driven continuous-combat opponent, the OPENING spawn is a director
+        // decision too — a boss loss last life opens this life in RELEASE, not back at the ramp.
+        SpawnSpec? openingSpawn = _beat.ContinuousCombat is not null
+            && (_beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit)
+            && _fightDirector.HasHistory
+            ? _fightDirector.NextSpawn(1)
+            : null;
+        _bandit = _beat.CreateBandit(_terrainSurface, openingSpawn);
         _playerSpawnSequence++;
         _banditSpawnSequence++;
         if (_carrier is not null) _carrierSpawnSequence++;
@@ -1120,8 +1130,7 @@ public sealed class SimulationSession {
         _engagementNumber = 1;
         _engagementCounters = default;
         _engagementReports.Clear();
-        _fightDirector.Reset();
-        LastDirectorSpawn = null;
+        LastDirectorSpawn = openingSpawn;
         _outcome = SortieOutcome.None;
         _pendingOutcome = SortieOutcome.None;
         _playerTerminalState = AircraftTerminalState.Flying;
@@ -1141,7 +1150,8 @@ public sealed class SimulationSession {
         _lastRange = Geometry.Range(_player.State, _bandit.State);
         _closureKts = 0.0;
         _closureSmooth = 0.0;
-        StartEngagementCounters(_beat.BanditSkill, opponentWasBoss: false);
+        StartEngagementCounters(openingSpawn?.Skill ?? _beat.BanditSkill,
+            openingSpawn?.Boss ?? false);
         // Simulation time is deliberately monotonic across restarts because KeyGrammar timestamps
         // all input in this epoch. Only flight-local state and the accumulator reset.
         Lifecycle = LifecycleState.Ready;

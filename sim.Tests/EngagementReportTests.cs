@@ -31,6 +31,7 @@ public class EngagementReportTests {
         State(160.0),
         new PurePursuitLaw(),
         new() { (0.0, new PilotCommand(1.0, 0.0, 0.85, 0.0)) },
+        UsesReactiveBandit: true,
         Combat: new CombatConfig(
             PlayerAmmo: 60,
             OpponentAmmo: 60,

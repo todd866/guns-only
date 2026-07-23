@@ -36,6 +36,10 @@ public sealed class FightDirector {
 
     public DirectorPhase Phase => _phase;
     public LearnerBands Bands => _learner.Bands;
+    /// True once any engagement has been observed — the gate for consulting the director on a
+    /// sortie's OPENING spawn, so pacing memory (a boss loss, an easing streak) survives the
+    /// player's death into their next life instead of resetting with the sortie.
+    public bool HasHistory => _anyObserved || _phase != DirectorPhase.Calm;
 
     public void Observe(in EngagementReport report) {
         _learner.Observe(in report);

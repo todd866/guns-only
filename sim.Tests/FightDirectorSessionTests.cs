@@ -51,7 +51,11 @@ public class FightDirectorSessionTests {
     }
 
     [Fact]
-    public void RestartResetsTheDirectorToColdStart() {
+    public void RestartPreservesDirectorMemoryButStartBeatResetsIt() {
+        // Pacing memory must survive the pilot: dying is precisely the moment the director's
+        // next decision matters, so Restart (fly again) keeps the learner state and consults
+        // the director for the OPENING spawn of the new life. Staging a new beat is a new
+        // learner context and resets it.
         var session = new SimulationSession();
         session.StartBeat(EngagementReportTests.ContinuousDuel);
         session.Begin();
@@ -59,9 +63,23 @@ public class FightDirectorSessionTests {
         for (int tick = 0; tick < 3 * AircraftSim.TickHz
             && session.EngagementReports.Count < 1; tick++)
             session.StepFixed();
-        Assert.NotEmpty(session.EngagementReports);
+        EngagementReport firstLifeReport = Assert.Single(session.EngagementReports);
 
         session.Restart();
+
+        Assert.Empty(session.EngagementReports);   // per-sortie evidence clears
+        var reference = new FightDirector();
+        reference.Observe(in firstLifeReport);
+        SpawnSpec expectedOpening = reference.NextSpawn(1);
+        SpawnSpec actualOpening = Assert.IsType<SpawnSpec>(session.LastDirectorSpawn);
+        Assert.Equal(expectedOpening, actualOpening);
+        Assert.Equal(reference.Phase, session.DirectorPhase);
+        Assert.NotEqual(DirectorPhase.Calm, session.DirectorPhase);
+        session.Begin();
+        var openingBandit = Assert.IsType<ReactiveBandit>(session.Bandit);
+        Assert.Equal(expectedOpening.Skill, openingBandit.Skill);
+
+        session.StartBeat(EngagementReportTests.ContinuousDuel);
 
         Assert.Equal(DirectorPhase.Calm, session.DirectorPhase);
         Assert.Null(session.LastDirectorSpawn);
