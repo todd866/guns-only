@@ -167,6 +167,8 @@ public sealed class SimulationSession {
     int _shotsInWindow;
     int _killCount;
     int _engagementNumber = 1;
+    EngagementCounters _engagementCounters;
+    readonly List<EngagementReport> _engagementReports = new();
     int _droneRaidTargetIndex;
     bool _triggerDown;
     bool _opponentTriggerDown;
@@ -200,6 +202,20 @@ public sealed class SimulationSession {
     bool _decisionFireIntentEvaluatedThisTick;
     bool _decisionFireIntentConsumedThisTick;
     bool _decisionFireAuthorizedThisTick;
+
+    struct EngagementCounters {
+        public bool Active;
+        public int EngagementNumber;
+        public PilotSkill OpponentSkill;
+        public bool OpponentWasBoss;
+        public double DurationSeconds;
+        public double SolutionSecondsConceded;
+        public int HitsTakenAtStart;
+        public int ShotsTotalAtStart;
+        public int ShotsInWindowAtStart;
+        public int OvershootsAtStart;
+        public int GcasActivationsAtStart;
+    }
 
     Carrier? _carrier;
     readonly RecoveryProgress _recoveryProgress = new();
@@ -309,6 +325,9 @@ public sealed class SimulationSession {
     public int KillCount => _killCount;
     public bool ContinuousCombat => _beat.ContinuousCombat is not null;
     public int EngagementNumber => _engagementNumber;
+    public EngagementReport? LastEngagementReport =>
+        _engagementReports.Count == 0 ? null : _engagementReports[^1];
+    public IReadOnlyList<EngagementReport> EngagementReports => _engagementReports;
     public bool OpponentReplacementPending => ContinuousCombat
         && Lifecycle == LifecycleState.Active
         && _playerTerminalState == AircraftTerminalState.Flying
@@ -1095,6 +1114,8 @@ public sealed class SimulationSession {
         _shotsInWindow = 0;
         _killCount = 0;
         _engagementNumber = 1;
+        _engagementCounters = default;
+        _engagementReports.Clear();
         _outcome = SortieOutcome.None;
         _pendingOutcome = SortieOutcome.None;
         _playerTerminalState = AircraftTerminalState.Flying;
@@ -1114,6 +1135,7 @@ public sealed class SimulationSession {
         _lastRange = Geometry.Range(_player.State, _bandit.State);
         _closureKts = 0.0;
         _closureSmooth = 0.0;
+        StartEngagementCounters(_beat.BanditSkill, opponentWasBoss: false);
         // Simulation time is deliberately monotonic across restarts because KeyGrammar timestamps
         // all input in this epoch. Only flight-local state and the accumulator reset.
         Lifecycle = LifecycleState.Ready;
@@ -1364,6 +1386,7 @@ public sealed class SimulationSession {
         if (_opponentGun.HitsThisStep > 0)
             EmitEvent(SessionEventType.Hit, CombatRole.Opponent, CombatRole.Player,
                 _opponentGun.HitsThisStep);
+        AccumulateEngagementCounters();
     }
 
     void ObserveCombatDamage() {
@@ -1383,6 +1406,7 @@ public sealed class SimulationSession {
             BeginCatastrophicDamage(CombatRole.Player, CombatRole.Opponent);
         }
         UpdatePendingOutcome();
+        CompleteEngagementIfEnded();
     }
 
     void BeginCatastrophicDamage(CombatRole target, CombatRole source) {
@@ -1588,6 +1612,7 @@ public sealed class SimulationSession {
         StartWreckContact(target, surface, surfaceVelocity, surfaceHeightM,
             tangentialImpulseAlreadyResolved, carrierSolid);
         UpdatePendingOutcome();
+        CompleteEngagementIfEnded();
     }
 
     Carrier.SolidCollision ResolvePlayerCarrierSolid(ImpactSurface surface,
@@ -1760,6 +1785,7 @@ public sealed class SimulationSession {
             return false;
 
         int nextEngagement = _engagementNumber + 1;
+        CompleteEngagementIfEnded();
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
         _bandit = _beat.CreateNextBandit(_player.State, nextEngagement, _terrainSurface);
         _bandit.Wind = _player.Wind;
@@ -1788,6 +1814,8 @@ public sealed class SimulationSession {
         _nextOpponentSpawnAtMs = double.NegativeInfinity;
         _splashCueUntilMs = double.NegativeInfinity;
         _engagementNumber = nextEngagement;
+        StartEngagementCounters(BanditSkillProfile.ForEngagement(nextEngagement),
+            opponentWasBoss: false);
         _banditSpawnSequence++;
         _padlockRollAssist.Reset();
         _lastRange = Geometry.Range(_player.State, _bandit.State);
@@ -1797,6 +1825,55 @@ public sealed class SimulationSession {
             CombatRole.None, CombatRole.Opponent, count: nextEngagement);
         ShowTransition($"BANDIT {nextEngagement} INBOUND · V PADLOCK", 2600.0);
         return true;
+    }
+
+    void StartEngagementCounters(PilotSkill opponentSkill, bool opponentWasBoss) {
+        _engagementCounters = new EngagementCounters {
+            Active = true,
+            EngagementNumber = _engagementNumber,
+            OpponentSkill = opponentSkill,
+            OpponentWasBoss = opponentWasBoss,
+            HitsTakenAtStart = _opponentGun.HitCount,
+            ShotsTotalAtStart = _shotsTotal,
+            ShotsInWindowAtStart = _shotsInWindow,
+            OvershootsAtStart = _visualMergeEvaluation?.Overshoots ?? 0,
+            GcasActivationsAtStart = _autoGcasState.ActivationCount
+        };
+    }
+
+    void AccumulateEngagementCounters() {
+        if (!_engagementCounters.Active) return;
+        _engagementCounters.DurationSeconds += FixedDeltaSeconds;
+        if (_opponentGun.GunSolution)
+            _engagementCounters.SolutionSecondsConceded += FixedDeltaSeconds;
+    }
+
+    void CompleteEngagementIfEnded() {
+        if (!_engagementCounters.Active) return;
+        bool playerLost = _playerTerminalState != AircraftTerminalState.Flying;
+        bool opponentLost = _opponentTerminalState != AircraftTerminalState.Flying;
+        if (!playerLost && !opponentLost) return;
+
+        SortieOutcome outcome = playerLost && opponentLost ? SortieOutcome.Draw
+            : opponentLost ? SortieOutcome.Victory
+            : SortieOutcome.Defeat;
+        var report = new EngagementReport(
+            _engagementCounters.EngagementNumber,
+            _engagementCounters.OpponentSkill,
+            _engagementCounters.OpponentWasBoss,
+            outcome,
+            _engagementCounters.DurationSeconds,
+            _engagementCounters.SolutionSecondsConceded,
+            Math.Max(0, _opponentGun.HitCount - _engagementCounters.HitsTakenAtStart),
+            Math.Max(0, _shotsTotal - _engagementCounters.ShotsTotalAtStart),
+            Math.Max(0, _shotsInWindow - _engagementCounters.ShotsInWindowAtStart),
+            Math.Max(0, (_visualMergeEvaluation?.Overshoots ?? 0)
+                - _engagementCounters.OvershootsAtStart),
+            _visualMergeEvaluation?.MinimumEnergyKias ?? double.PositiveInfinity,
+            Math.Max(0, _autoGcasState.ActivationCount
+                - _engagementCounters.GcasActivationsAtStart));
+        _engagementReports.Add(report);
+        _engagementCounters.Active = false;
     }
 
     void DetachCurrentOpponent(AircraftTerminalState terminalState,
