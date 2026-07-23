@@ -2130,8 +2130,11 @@ public sealed class SimulationSession {
             }
             if (_autoGcasState.Warning || _autoGcasState.Active)
                 _padlockRollAssist.Reset();
+            // The recovery command owns the lever: at speed it commands idle (popping the
+            // automatic speed brake) as part of the save; at low energy it carries the
+            // pilot's lever forward from the prediction tick.
             return _autoGcasRecoveryCommand is { } heldRecovery
-                ? heldRecovery with { Throttle = effectivePilotCommand.Throttle }
+                ? heldRecovery
                 : effectivePilotCommand;
         }
 
@@ -2190,7 +2193,7 @@ public sealed class SimulationSession {
         if (_autoGcasState.Warning || _autoGcasState.Active)
             _padlockRollAssist.Reset();
         return _autoGcasRecoveryCommand is { } recovery
-            ? recovery with { Throttle = effectivePilotCommand.Throttle }
+            ? recovery
             : effectivePilotCommand;
     }
 

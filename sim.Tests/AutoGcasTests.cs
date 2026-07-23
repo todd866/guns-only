@@ -136,7 +136,10 @@ public class AutoGcasTests {
         Assert.Equal(0.0, recovery.RollControl);
         Assert.Equal(expectedRollControl, recovery.SasRollControl);
         Assert.Equal(Modern.Configuration.RecoveryLoadFactorG, recovery.GDemand);
-        Assert.Equal(0.91, recovery.Throttle);
+        // Energy management is part of the save: above the fast-recovery gate the fly-up
+        // commands idle (popping the automatic speed brake) instead of holding the pilot's
+        // lever — idle/brake/pull.
+        Assert.Equal(0.0, recovery.Throttle);
         Assert.Equal(0.0, recovery.BankTarget);
         Assert.Equal(0.0, recovery.Rudder);
         Assert.True(recovery.DirectLateralControl);
@@ -228,9 +231,10 @@ public class AutoGcasTests {
     public void PredictedVerticalSaveProducesAuthoritativeTerrainClearance() {
         AircraftState initial = FlightState(
             // Inside the 12 G emergency-authority trigger envelope: the redesigned system
-            // holds fire far longer than the old 5 G model, so the vertical-save scenario must
-            // begin lower to activate at all.
-            altitudeM: 1500.0, speedMps: 300.0,
+            // holds fire far longer than the old 5 G model — and the idle/brake/pull energy
+            // model tightens the modeled pull-out further — so the vertical-save scenario
+            // must begin lower still to activate at all.
+            altitudeM: 1350.0, speedMps: 300.0,
             gammaDegrees: -89.0, bankDegrees: 0.0);
         var aircraft = new AircraftSim(initial,
             FlightModel.F22APublicDataSurrogate);

@@ -405,14 +405,21 @@ public static class AutoGcasController {
             velocity, lift);
         RecoveryResponse response = ResponseFor(input, config);
         RecoveryGuidance guidance = GuidanceFor(frame,
-            input.Aircraft.BodyRates.P, response, config);
+            input.Aircraft.BodyRates.P, response, config,
+            velocity.Y / System.Math.Max(velocity.Length, 1.0));
         return new PilotCommand(
             // The recovery is one continuous aircraft-owned command. The airframe remains the
             // authority on achieved G; an escape-aligned steep pull must not collapse merely
             // because a horizon-bank scalar is singular. A truly inverted lift plane unloads.
             GDemand: guidance.LoadFactorDemandG,
             BankTarget: 0.0,
-            Throttle: input.EffectivePilotCommand.Throttle,
+            // Energy management IS the recovery at speed (pilot spec: "at high speed it
+            // should be going idle/brake/pull — autogcas should be *impressive*"): above the
+            // fast-recovery gate the lever goes to idle, which also pops the automatic speed
+            // brake, and the shed knots tighten the pull-out radius. A low-energy recovery
+            // keeps the pilot's lever — the AIRSPEED-degraded branch needs every knot.
+            Throttle: RecoveryThrottle(input.IndicatedAirspeedMps
+                ?? input.Aircraft.Speed, input.EffectivePilotCommand.Throttle),
             Rudder: 0.0,
             CommandedPitchRad: double.NaN,
             // The fly-up claims the emergency/override law: the predictor's time-available
@@ -507,7 +514,8 @@ public static class AutoGcasController {
             double rollControl;
             if (recovery) {
                 RecoveryGuidance guidance = GuidanceFor(frame,
-                    rollRate, response, config);
+                    rollRate, response, config,
+                    velocity.Y / Math.Max(velocity.Length, 1.0));
                 rollControl = guidance.RollControl;
                 double achievableDemand = Math.Min(
                     guidance.LoadFactorDemandG, response.MaximumLoadFactorG);
@@ -579,7 +587,13 @@ public static class AutoGcasController {
                     * (input.AircraftParameters.CD0
                         + input.AircraftParameters.InducedK
                             * liftCoefficient * liftCoefficient);
-                double thrustN = Math.Clamp(input.EffectivePilotCommand.Throttle, 0.0, 1.65)
+                // Recovery segments fly the same idle-at-speed lever policy the commanded
+                // fly-up uses; threat segments keep the pilot's lever. The predictor does not
+                // credit the popped speed brake's extra drag — a conservative, honest gap.
+                double leverForSegment = recovery
+                    ? RecoveryThrottle(speedForAero, input.EffectivePilotCommand.Throttle)
+                    : input.EffectivePilotCommand.Throttle;
+                double thrustN = Math.Clamp(leverForSegment, 0.0, 1.65)
                     * Math.Max(input.AircraftParameters.ThrustMaxN, 0.0);
                 Vec3D vhat2 = velocity * (1.0 / speedForAero);
                 acceleration += vhat2 * ((thrustN - dragN) / massNow);
@@ -700,8 +714,25 @@ public static class AutoGcasController {
             && targetBank <= bank + 2.0 * Math.PI / 180.0;
     }
 
+    // Climb capture: once the recovery has the nose established above this flight-path angle,
+    // guidance holds the climb instead of continuing the full recovery pull. Without capture the
+    // modeled 12 G recovery LOOPS — over a 20 s completion horizon from high altitude the
+    // predicted jet pulls through, goes over the top, and is descending again at the window end,
+    // so recovery "never establishes", the unsafe clamp floors the minimum clearance at the
+    // buffer, and time-available reads zero at FL270 (production Build-87 telemetry: twelve
+    // fly-ups from 29,000 ft, every one with recovery_min pinned at exactly 30.48 m).
+    const double RecoveryClimbCaptureSin = 0.14; // ~8 degrees
+    const double RecoveryClimbHoldG = 1.2;
+    // Above this speed the recovery commands idle (which pops the automatic speed brake);
+    // shedding energy tightens the pull-out radius. Below it, keep the pilot's lever.
+    const double FastRecoveryAirspeedMps = 180.0; // ~350 KCAS
+
+    static double RecoveryThrottle(double airspeedMps, double pilotLever) =>
+        airspeedMps > FastRecoveryAirspeedMps ? 0.0 : pilotLever;
+
     static RecoveryGuidance GuidanceFor(in EscapeFrame frame, double rollRateRadPerSecond,
-        in RecoveryResponse response, AutoGcasConfiguration config) {
+        in RecoveryResponse response, AutoGcasConfiguration config,
+        double flightPathSin = double.NegativeInfinity) {
         double maximumRollRate = response.MaximumRollRateRadPerSecond;
         double desiredRollRate = Math.Abs(frame.RollErrorRad) <= RecoveryRollDeadbandRad
             ? 0.0
@@ -720,7 +751,9 @@ public static class AutoGcasController {
         // genuinely inverted relative to the local escape plane, however, positive G points into
         // terrain: unload while rolling, then command the full fly-up as soon as lift is useful.
         double loadDemand = frame.LiftNormal.Dot(frame.EscapeNormal) >= 0.0
-            ? config.RecoveryLoadFactorG : 0.0;
+            ? (flightPathSin >= RecoveryClimbCaptureSin
+                ? RecoveryClimbHoldG : config.RecoveryLoadFactorG)
+            : 0.0;
         return new RecoveryGuidance(rollControl, loadDemand);
     }
 
