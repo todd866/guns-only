@@ -43,6 +43,8 @@ uniform float uCurvatureStartM;
 varying vec3 vTerrainNormal;
 varying vec3 vTerrainWorldPosition;
 varying float vTerrainHeight;
+attribute float concavity;
+varying float vConcavity;
 #include <common>
 #include <logdepthbuf_pars_vertex>
 
@@ -54,6 +56,7 @@ void main() {
   vTerrainNormal = normalize(mat3(modelMatrix) * normal);
   vTerrainWorldPosition = world.xyz;
   vTerrainHeight = position.y;
+  vConcavity = concavity;
   gl_Position = projectionMatrix * viewMatrix * world;
   #include <logdepthbuf_vertex>
 }
@@ -65,6 +68,9 @@ uniform vec3 uFogColor;
 uniform float uFogDensity;
 uniform float uModernScenery;
 uniform float uParcelTint;
+uniform float uShadowFloor;
+uniform vec2 uOcclusionRange;
+varying float vConcavity;
 varying vec3 vTerrainNormal;
 varying vec3 vTerrainWorldPosition;
 varying float vTerrainHeight;
@@ -106,7 +112,8 @@ void main() {
       lowland * (0.16 + parcels * 0.20));
   }
 
-  float diffuse = 0.43 + 0.57 * max(dot(normal, normalize(uSunDirection)), 0.0);
+  float diffuse = uShadowFloor
+    + (1.0 - uShadowFloor) * max(dot(normal, normalize(uSunDirection)), 0.0);
   vec3 lit = albedo * diffuse;
 
   #else
@@ -134,8 +141,9 @@ void main() {
   sAlbedo = mix(sAlbedo, sRidge, highRidge * (0.35 + steepness * 0.45));
   float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
   halfLambert *= halfLambert;
-  float toneRamp = 0.40 + 0.30 * smoothstep(0.30, 0.42, halfLambert)
-    + 0.20 * smoothstep(0.62, 0.74, halfLambert);
+  float toneRamp = uShadowFloor
+    + (1.0 - uShadowFloor) * (0.42 * smoothstep(0.26, 0.40, halfLambert)
+      + 0.58 * smoothstep(0.58, 0.76, halfLambert));
   vec3 viewDirection = normalize(cameraPosition - vTerrainWorldPosition);
   float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
   vec3 stylizedLit = sAlbedo * toneRamp
@@ -143,6 +151,9 @@ void main() {
 
   vec3 lit = stylizedLit;
   #endif
+  // Baked enclosure darkens valley floors and lets ridge crests catch light. This is the term the
+  // renderer was missing relative to the source hillshade in central-front-preview.png.
+  lit *= mix(uOcclusionRange.x, uOcclusionRange.y, clamp(vConcavity, 0.0, 1.0));
   // Illustrative atmosphere: the period haze whites the world out from altitude, which is
   // period-honest but buries the 2030s palette entirely. The modern era thins the density and
   // hazes toward a saturated sky blue instead of white — distance stays readable as COLOR.
@@ -534,7 +545,7 @@ export class TerrainBundleReader {
   }
 }
 
-function createTerrainMaterial(THREE, options = {}) {
+export function createTerrainMaterial(THREE, options = {}) {
   return new THREE.ShaderMaterial({
     name: "MAT_KOREA_CENTRAL_FRONT_TERRAIN",
     vertexShader: TERRAIN_VERTEX,
@@ -557,6 +568,17 @@ function createTerrainMaterial(THREE, options = {}) {
       // shading discards periodLit, so skip its four otherwise invisible sin() calls there too.
       uParcelTint: {
         value: options.qualityTier === "desktop" && options.sceneryEra !== "modern" ? 1 : 0,
+      },
+      // Darkest-slope lighting. The old 0.43 / 0.40 floors put every slope in the world inside the
+      // top 60% of the value range, which is why densely dissected Korean terrain rendered as a
+      // flat wash. Legibility now comes from value, and hue separation keeps dark slopes readable.
+      uShadowFloor: { value: finite(options.shadowFloor, 0.12) },
+      // Baked-occlusion multiplier at fully concave (x) and fully convex (y).
+      uOcclusionRange: {
+        value: new THREE.Vector2(
+          finite(options.occlusionMin, 0.55),
+          finite(options.occlusionMax, 1.12),
+        ),
       },
     },
   });

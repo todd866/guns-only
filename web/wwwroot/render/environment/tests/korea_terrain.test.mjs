@@ -3,6 +3,7 @@ import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
 import {
   createTerrainGeometry,
+  createTerrainMaterial,
   decodeTerrainRecord,
   loadKoreaTerrain,
   selectTerrainLod,
@@ -549,4 +550,32 @@ test("reconciles same-LOD boundary normals and restores them across LOD swaps", 
   const eastFineEdge = 3;
   assertVectorNear(normalAt(west, westFineEdge), normalAt(east, eastFineEdge));
   terrain.dispose();
+});
+
+test("terrain shading consumes baked occlusion and opens the value range", () => {
+  const period = createTerrainMaterial(THREE, { sceneryEra: "period", qualityTier: "desktop" });
+  const modern = createTerrainMaterial(THREE, { sceneryEra: "modern", qualityTier: "desktop" });
+
+  assert.match(period.vertexShader, /attribute float concavity;/,
+    "the vertex shader must declare the baked occlusion attribute");
+  assert.match(period.vertexShader, /vConcavity = concavity;/);
+  assert.match(period.fragmentShader, /varying float vConcavity;/);
+
+  // Era is a compile-time #define, so both materials share one fragmentShader string. Asserting
+  // against both is deliberate: it catches an accidental split into two sources.
+  assert.match(period.fragmentShader, /uOcclusionRange/);
+  assert.ok(period.uniforms.uOcclusionRange, "occlusion range must be a uniform");
+  assert.ok(period.uniforms.uShadowFloor, "shadow floor must be a uniform");
+
+  // The floors that crushed relief into the top 60% of value must be gone.
+  assert.doesNotMatch(period.fragmentShader, /0\.43 \+ 0\.57 \*/,
+    "the period diffuse floor of 0.43 must be replaced by the uShadowFloor uniform");
+  assert.doesNotMatch(modern.fragmentShader, /toneRamp = 0\.40 \+/,
+    "the modern tone-ramp floor of 0.40 must be replaced by the uShadowFloor uniform");
+
+  assert.ok(period.uniforms.uShadowFloor.value <= 0.2,
+    "a legible hillshade needs the darkest slope well below 40% lit");
+
+  period.dispose();
+  modern.dispose();
 });
