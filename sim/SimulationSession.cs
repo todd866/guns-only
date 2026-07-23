@@ -73,7 +73,8 @@ public readonly record struct SessionEvent(
     Vec3D Velocity = default);
 
 /// <summary>
-/// A mission-killed opponent which no longer owns combat targeting but continues through the same
+/// An opponent which no longer owns combat targeting but remains physically integrated. A flying
+/// raid leaker continues its ordinary egress; a mission-killed opponent continues through the same
 /// failed-flight, impact, and settlement physics as any terminal aircraft.
 /// </summary>
 public sealed class DetachedOpponentWreck {
@@ -105,6 +106,9 @@ public sealed class SimulationSession {
     // Terrain prediction is deliberately a flight-computer-rate task rather than a 120 Hz
     // actuator task. The held recovery command still reaches AircraftSim every fixed tick.
     public const int AutoGcasPredictionIntervalTicks = 6;
+    /// Flying raid leakers remain visible physical actors until they are well outside the local
+    /// engagement volume. This is a deterministic simulation boundary, not a scoring boundary.
+    public const double DetachedOpponentEgressRangeM = 12_000.0;
     /// Fail-safe only: catastrophic configurations normally reach a physical surface much sooner.
     /// The explicit event prevents an out-of-bounds trajectory from holding a session forever.
     public const double TerminalSimulationLimitSeconds = 180.0;
@@ -276,6 +280,15 @@ public sealed class SimulationSession {
     public AirframeAerodynamicState PlayerAerodynamicConfiguration => PlayerSystemsSimulated
         ? _systems.AerodynamicState
         : AirframeAerodynamicState.Clean;
+    /// Aircraft-owned automatic surfaces are composed inside AircraftSim so they can use live air
+    /// data without contaminating the pilot-selectable systems state. Consumers which calculate a
+    /// current envelope use this effective configuration; setters continue to use the base state.
+    public AirframeAerodynamicState PlayerEffectiveAerodynamicConfiguration =>
+        _player is null
+            || _beat.PlayerAir.HighAlphaModel
+                != HighAlphaModelKind.F22PublicDataSurrogate
+            ? PlayerAerodynamicConfiguration
+            : _player.EffectiveAerodynamicConfiguration;
     public F86EmergencyGearRecoveryScenario? MaintenanceScenario => _maintenanceScenario;
     public VisualMergeEvaluation? VisualMergeEvaluation => _visualMergeEvaluation;
     public DroneRaidEvaluation? DroneRaidEvaluation => _droneRaidEvaluation;
@@ -1410,6 +1423,7 @@ public sealed class SimulationSession {
             EmitEvent(SessionEventType.Destroyed,
                 CombatRole.Player, CombatRole.Opponent);
         } else {
+            DetachCurrentOpponent(AircraftTerminalState.Flying, ImpactSurface.None);
             evaluation.RecordLeaked(completedTimeSeconds, _gunKill.RoundsFired);
             EmitEvent(SessionEventType.RaidTargetLeaked,
                 CombatRole.Opponent, CombatRole.None,
@@ -1629,7 +1643,8 @@ public sealed class SimulationSession {
     }
 
     void StepDetachedOpponentWrecks() {
-        foreach (DetachedOpponentWreck wreck in _detachedOpponentWrecks) {
+        for (int i = _detachedOpponentWrecks.Count - 1; i >= 0; i--) {
+            DetachedOpponentWreck wreck = _detachedOpponentWrecks[i];
             if (wreck.TerminalState is AircraftTerminalState.Settled
                 or AircraftTerminalState.SimulationBounded)
                 continue;
@@ -1637,6 +1652,12 @@ public sealed class SimulationSession {
             AircraftState previous = wreck.Actor.State;
             wreck.Actor.Step(ObservePlayer(_player.State), FixedDeltaSeconds);
             AircraftState current = wreck.Actor.State;
+            if (wreck.TerminalState == AircraftTerminalState.Flying
+                && Geometry.Range(_player.State, current)
+                    > DetachedOpponentEgressRangeM) {
+                _detachedOpponentWrecks.RemoveAt(i);
+                continue;
+            }
             if (wreck.TerminalState == AircraftTerminalState.DestroyedAirborne) {
                 var contact = DetectImpact(previous, current);
                 if (contact.surface != ImpactSurface.None) {
@@ -1724,16 +1745,7 @@ public sealed class SimulationSession {
             return false;
 
         int nextEngagement = _engagementNumber + 1;
-        _detachedOpponentWrecks.Add(new DetachedOpponentWreck(
-            _bandit, _banditSpawnSequence,
-            _opponentTerminalState, _opponentImpactSurface));
-        while (_detachedOpponentWrecks.Count > 8) {
-            int settledIndex = _detachedOpponentWrecks.FindIndex(
-                static wreck => wreck.TerminalState is AircraftTerminalState.Settled
-                    or AircraftTerminalState.SimulationBounded);
-            if (settledIndex < 0) break;
-            _detachedOpponentWrecks.RemoveAt(settledIndex);
-        }
+        DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
         _bandit = _beat.CreateNextBandit(_player.State, nextEngagement, _terrainSurface);
         _bandit.Wind = _player.Wind;
         _bandit.Atmosphere = _player.AtmosphereModel;
@@ -1770,6 +1782,19 @@ public sealed class SimulationSession {
             CombatRole.None, CombatRole.Opponent, count: nextEngagement);
         ShowTransition($"BANDIT {nextEngagement} INBOUND · V PADLOCK", 2600.0);
         return true;
+    }
+
+    void DetachCurrentOpponent(AircraftTerminalState terminalState,
+        ImpactSurface impactSurface) {
+        _detachedOpponentWrecks.Add(new DetachedOpponentWreck(
+            _bandit, _banditSpawnSequence, terminalState, impactSurface));
+        while (_detachedOpponentWrecks.Count > 8) {
+            int settledIndex = _detachedOpponentWrecks.FindIndex(
+                static wreck => wreck.TerminalState is AircraftTerminalState.Settled
+                    or AircraftTerminalState.SimulationBounded);
+            if (settledIndex < 0) break;
+            _detachedOpponentWrecks.RemoveAt(settledIndex);
+        }
     }
 
     void ForceDetachedOpponentTerminalLimits() {
@@ -2222,7 +2247,7 @@ public sealed class SimulationSession {
         _detents.AssistedCalibratedAirspeedMps = _player.IndicatedAirspeedMps;
         double cornerKias = AirData.PositiveCornerSpeedKiasAtAltitude(
             _player.State.Mass, _beat.PlayerAir, _player.State.Position.Y,
-            PlayerAerodynamicConfiguration.LiftCoefficientIncrement,
+            PlayerEffectiveAerodynamicConfiguration.PositiveLiftCoefficientIncrement,
             _player.AtmosphereModel);
         _detents.AssistedTargetCalibratedAirspeedMps =
             (cornerKias + AssistedSpeedBiasKts) / AirData.MpsToKnots;
@@ -2676,7 +2701,8 @@ public sealed class SimulationSession {
                 _beat.PlayerAir, _player.AirspeedMps);
             _detents.AirspeedMps = _player.AirspeedMps;
             _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
-            _detents.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
+            _detents.AerodynamicConfiguration =
+                PlayerEffectiveAerodynamicConfiguration;
             ConfigureAssistedFlightDetents();
             _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir,
                 _advice, FixedDeltaSeconds);
@@ -2903,7 +2929,7 @@ public sealed class SimulationSession {
             _player.AirspeedMps);
         _detents.AirspeedMps = _player.AirspeedMps;
         _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
-        _detents.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
+        _detents.AerodynamicConfiguration = PlayerEffectiveAerodynamicConfiguration;
         ConfigureAssistedFlightDetents();
         if (_carrier is not null)
             _carrier.ApproachDirectorPitchOffsetRad =
