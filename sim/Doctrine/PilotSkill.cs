@@ -4,6 +4,13 @@ namespace GunsOnly.Sim.Doctrine;
 /// novice up to a genuinely threatening ace; the gauntlet spawns higher tiers toward the climax.
 public enum PilotSkill { Novice, Competent, Veteran, Ace }
 
+/// How readily a pilot leaves the traditional perch to fight a target in the low block.
+public enum LowBlockDoctrine {
+    Conservative,
+    BoomAndZoom,
+    Hunt
+}
+
 /// Skill-gated knobs read by ReactiveBandit. Competent reproduces the historical hard-coded
 /// bandit (g = 1.15 + angle*1.45, capped 3.20; no overshoot/disengage/doctrine variety) within
 /// the historical envelope; higher tiers unlock capability. DELIBERATE departures from strict
@@ -20,7 +27,11 @@ public enum PilotSkill { Novice, Competent, Veteran, Ace }
 public readonly record struct BanditSkillProfile(
     double MaxAcquireG, double AcquireGGain, bool ForcesOvershoot,
     bool DisengagesWhenLosing, int DoctrineCount, int LookaheadHorizonTicks,
-    double FireConeDeg = 3.0, bool IsBoss = false,
+    double FireConeDeg = 3.0,
+    LowBlockDoctrine LowBlockDoctrine = LowBlockDoctrine.Conservative,
+    double LowBlockClearanceM = 260.0,
+    double LowBlockRecommitSeconds = 0.0,
+    bool IsBoss = false,
     double CommitDominanceSeconds = 8.0) {
     /// Trigger nose-error gate in radians. Novice/Competent keep the historical 3-degree
     /// discipline exactly. The Veteran deliberately shoots a WIDER gate: with honest ballistics a
@@ -29,10 +40,25 @@ public readonly record struct BanditSkillProfile(
     public double FireConeRad => FireConeDeg * System.Math.PI / 180.0;
 
     public static BanditSkillProfile For(PilotSkill skill) => skill switch {
-        PilotSkill.Novice    => new(2.40, 1.00, false, false, 1, 0),
-        PilotSkill.Competent => new(3.20, 1.45, false, false, 1, 0),
-        PilotSkill.Veteran   => new(5.50, 1.80, false, true, 2, 90, FireConeDeg: 5.0),
-        PilotSkill.Ace       => new(9.00, 2.20, true, true, 3, 150, FireConeDeg: 3.5),
+        PilotSkill.Novice => new(
+            2.40, 1.00, false, false, 1, 0),
+        PilotSkill.Competent => new(
+            3.20, 1.45, false, false, 1, 0,
+            LowBlockDoctrine: LowBlockDoctrine.BoomAndZoom,
+            LowBlockClearanceM: 180.0,
+            LowBlockRecommitSeconds: 5.0),
+        PilotSkill.Veteran => new(
+            5.50, 1.80, false, true, 2, 90,
+            FireConeDeg: 5.0,
+            LowBlockDoctrine: LowBlockDoctrine.Hunt,
+            LowBlockClearanceM: 180.0,
+            LowBlockRecommitSeconds: 1.8),
+        PilotSkill.Ace => new(
+            9.00, 2.20, true, true, 3, 150,
+            FireConeDeg: 3.5,
+            LowBlockDoctrine: LowBlockDoctrine.Hunt,
+            LowBlockClearanceM: 105.0,
+            LowBlockRecommitSeconds: 0.35),
         _ => For(PilotSkill.Competent),
     };
 

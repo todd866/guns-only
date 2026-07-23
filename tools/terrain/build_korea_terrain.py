@@ -25,6 +25,12 @@ WATER_SENTINEL = -32768
 TILE_SPAN_METRES = 16_384.0
 LOD_SAMPLES = (257, 129, 65, 33)
 SIM_SPACING_METRES = 128.0
+TERRAIN_VERSION = "central-front-carved-valleys-v3"
+VALLEY_SEED = 0x56414C4C455932
+MAXIMUM_VALLEY_WALL_RISE_METRES = 1800.0
+WATER_ROUTE_PENALTY_METRES = 10_000.0
+HIGH_GROUND_ROUTE_REWARD = 4.0
+ROUTE_FLANK_MARGIN_METRES = 1_000.0
 
 WGS84_A = 6_378_137.0
 WGS84_F = 1.0 / 298.257223563
@@ -33,6 +39,49 @@ WGS84_EP2 = WGS84_E2 / (1.0 - WGS84_E2)
 UTM_K0 = 0.9996
 UTM_ZONE = 52
 UTM_CENTRAL_MERIDIAN = math.radians(UTM_ZONE * 6 - 183)
+
+# The drainage graph is authored in the stable central-front local frame. The seed moves interior
+# control points by bounded metre offsets and selects every floor width / wall angle; explicit
+# node elevations make every named run descend to the one coastal outlet. Routes share graph
+# nodes, so junctions are one rounded distance field instead of crossing, visual-only trenches.
+VALLEY_NODE_BASES = {
+    "coast-outlet": (-46_000, -56_000, 0.0),
+    "lower-mouth-approach": (-38_000, -50_000, 2.0),
+    "lower-west": (-37_000, -45_000, 6.0),
+    "lower-bend": (-27_000, -40_000, 12.0),
+    "lower-mid": (-27_000, -35_000, 18.0),
+    "lower-upper": (-22_000, -28_000, 22.0),
+    "central-junction": (-5_000, -20_000, 25.0),
+    "marquee-lower": (4_000, -12_000, 40.0),
+    "marquee-mid": (15_000, 5_000, 60.0),
+    "marquee-upper": (20_000, 21_000, 80.0),
+    "marquee-ridge": (25_000, 29_000, 100.0),
+    "marquee-head": (40_000, 29_000, 120.0),
+    "south-lower": (5_000, -18_000, 110.0),
+    "south-mid": (20_000, -21_000, 220.0),
+    "south-head": (35_000, -25_000, 250.0),
+    "north-lower": (-12_000, 4_000, 80.0),
+    "north-mid": (-8_000, 22_000, 140.0),
+    "north-head": (-12_000, 38_000, 160.0),
+}
+
+VALLEY_RUN_NODE_IDS = {
+    "marquee-east-to-coast": (
+        "marquee-head", "marquee-ridge", "marquee-upper", "marquee-mid",
+        "marquee-lower", "central-junction", "lower-upper", "lower-mid", "lower-bend",
+        "lower-west", "lower-mouth-approach", "coast-outlet",
+    ),
+    "southern-tributary-to-coast": (
+        "south-head", "south-mid", "south-lower", "central-junction",
+        "lower-upper", "lower-mid", "lower-bend", "lower-west",
+        "lower-mouth-approach", "coast-outlet",
+    ),
+    "northern-tributary-to-coast": (
+        "north-head", "north-mid", "north-lower", "central-junction",
+        "lower-upper", "lower-mid", "lower-bend", "lower-west",
+        "lower-mouth-approach", "coast-outlet",
+    ),
+}
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -45,6 +94,320 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def seeded_integer(seed: int, label: str, minimum: int, maximum: int) -> int:
+    if minimum > maximum:
+        raise ValueError("seeded integer bounds are reversed")
+    digest = hashlib.sha256(f"{seed:016x}:{label}".encode("ascii")).digest()
+    value = int.from_bytes(digest[:8], "little")
+    return minimum + value % (maximum - minimum + 1)
+
+
+def build_valley_network(seed: int = VALLEY_SEED, sample_local=None) -> dict[str, object]:
+    nodes: dict[str, dict[str, float | str]] = {}
+    fixed_nodes = {"coast-outlet"}
+    for node_id, (base_east, base_north, floor_height) in VALLEY_NODE_BASES.items():
+        jitter_east = 0 if node_id in fixed_nodes else seeded_integer(
+            seed, f"{node_id}:east", -650, 650)
+        jitter_north = 0 if node_id in fixed_nodes else seeded_integer(
+            seed, f"{node_id}:north", -650, 650)
+        nodes[node_id] = {
+            "id": node_id,
+            "eastM": float(base_east + jitter_east),
+            "northM": float(base_north + jitter_north),
+            "floorHeightM": floor_height,
+            "floorWidthM": float(seeded_integer(seed, f"{node_id}:width", 1500, 3000)),
+            "wallAngleDegrees": float(seeded_integer(seed, f"{node_id}:wall", 20, 30)),
+        }
+
+    if sample_local is not None:
+        search_offsets = np.arange(-1_600.0, 1_600.1, 200.0)
+        east_offsets, north_offsets = np.meshgrid(search_offsets, search_offsets)
+        radial_penalty = np.hypot(east_offsets, north_offsets) * 0.035
+        for node_id, node in nodes.items():
+            if node_id == "coast-outlet":
+                continue
+            candidate_east = float(node["eastM"]) + east_offsets
+            candidate_north = float(node["northM"]) + north_offsets
+            candidate_height, candidate_water = sample_local(
+                candidate_east, candidate_north)
+            support_distance = (
+                0.5 * float(node["floorWidthM"]) + ROUTE_FLANK_MARGIN_METRES
+            )
+            support_heights = []
+            support_water = []
+            for support_east, support_north in (
+                (-support_distance, 0.0),
+                (support_distance, 0.0),
+                (0.0, -support_distance),
+                (0.0, support_distance),
+            ):
+                flank_height, flank_water = sample_local(
+                    candidate_east + support_east,
+                    candidate_north + support_north,
+                )
+                support_heights.append(flank_height)
+                support_water.append(flank_water)
+            supported_height = (
+                0.25 * candidate_height
+                + 0.75 * np.mean(np.stack(support_heights), axis=0)
+            )
+            candidate_cost = (
+                -supported_height * HIGH_GROUND_ROUTE_REWARD
+                + radial_penalty
+                + np.where(
+                    candidate_water | np.any(np.stack(support_water), axis=0),
+                    WATER_ROUTE_PENALTY_METRES,
+                    0.0,
+                )
+            )
+            best = int(np.argmin(candidate_cost))
+            node["eastM"] = float(candidate_east.flat[best])
+            node["northM"] = float(candidate_north.flat[best])
+
+    reaches: list[dict[str, object]] = []
+    edge_lengths: dict[tuple[str, str], float] = {}
+    seen_edges: set[tuple[str, str]] = set()
+    for run_id, node_ids in VALLEY_RUN_NODE_IDS.items():
+        for upstream_id, downstream_id in zip(node_ids, node_ids[1:]):
+            edge = (upstream_id, downstream_id)
+            if edge in seen_edges:
+                continue
+            seen_edges.add(edge)
+            upstream = nodes[upstream_id]
+            downstream = nodes[downstream_id]
+            delta_east = float(downstream["eastM"]) - float(upstream["eastM"])
+            delta_north = float(downstream["northM"]) - float(upstream["northM"])
+            direct_length = math.hypot(delta_east, delta_north)
+            normal_east = -delta_north / direct_length
+            normal_north = delta_east / direct_length
+            piece_count = max(2, math.ceil(direct_length / 2_200.0))
+            amplitude = float(seeded_integer(
+                seed, f"{upstream_id}--{downstream_id}:meander-amplitude", 2000, 3000))
+            cycles = max(1, round(direct_length / 7_500.0))
+            phase = math.radians(seeded_integer(
+                seed, f"{upstream_id}--{downstream_id}:meander-phase", 0, 359))
+            interior_along = np.arange(1, piece_count, dtype=np.float64) / piece_count
+            meander_targets = amplitude * np.sin(math.pi * interior_along) ** 2 * np.sin(
+                2.0 * math.pi * cycles * interior_along + phase)
+            if sample_local is None:
+                selected_lateral = meander_targets
+            else:
+                lateral_candidates = np.arange(-3_200.0, 3_200.1, 200.0)
+                candidate_east = (
+                    float(upstream["eastM"]) + interior_along[:, None] * delta_east
+                    + lateral_candidates[None, :] * normal_east
+                )
+                candidate_north = (
+                    float(upstream["northM"]) + interior_along[:, None] * delta_north
+                    + lateral_candidates[None, :] * normal_north
+                )
+                candidate_height, candidate_water = sample_local(
+                    candidate_east, candidate_north)
+                flank_distance = (
+                    0.5 * (
+                        float(upstream["floorWidthM"])
+                        + interior_along * (
+                            float(downstream["floorWidthM"])
+                            - float(upstream["floorWidthM"])
+                        )
+                    )
+                    + ROUTE_FLANK_MARGIN_METRES
+                )
+                left_height, left_water = sample_local(
+                    candidate_east + flank_distance[:, None] * normal_east,
+                    candidate_north + flank_distance[:, None] * normal_north,
+                )
+                right_height, right_water = sample_local(
+                    candidate_east - flank_distance[:, None] * normal_east,
+                    candidate_north - flank_distance[:, None] * normal_north,
+                )
+                supported_height = (
+                    0.25 * candidate_height
+                    + 0.75 * np.minimum(left_height, right_height)
+                )
+                local_cost = (
+                    -supported_height.astype(np.float64) * HIGH_GROUND_ROUTE_REWARD
+                    + 0.045 * np.abs(
+                        lateral_candidates[None, :] - meander_targets[:, None])
+                    + np.where(
+                        candidate_water | left_water | right_water,
+                        WATER_ROUTE_PENALTY_METRES,
+                        0.0,
+                    )
+                )
+                path_cost = np.empty_like(local_cost)
+                previous = np.empty(local_cost.shape, dtype=np.int16)
+                path_cost[0] = local_cost[0] + 0.11 * np.abs(lateral_candidates)
+                previous[0] = -1
+                transition = 0.11 * np.abs(
+                    lateral_candidates[:, None] - lateral_candidates[None, :])
+                for row in range(1, local_cost.shape[0]):
+                    candidates = path_cost[row - 1][:, None] + transition
+                    previous[row] = np.argmin(candidates, axis=0)
+                    path_cost[row] = local_cost[row] + np.min(candidates, axis=0)
+                selected_indices = np.empty(local_cost.shape[0], dtype=np.int16)
+                selected_indices[-1] = np.argmin(
+                    path_cost[-1] + 0.11 * np.abs(lateral_candidates))
+                for row in range(local_cost.shape[0] - 1, 0, -1):
+                    selected_indices[row - 1] = previous[row, selected_indices[row]]
+                selected_lateral = lateral_candidates[selected_indices]
+            centreline: list[dict[str, float | str]] = []
+            for index in range(piece_count + 1):
+                along = index / piece_count
+                if index == 0:
+                    centreline.append(upstream)
+                    continue
+                if index == piece_count:
+                    centreline.append(downstream)
+                    continue
+                lateral = float(selected_lateral[index - 1])
+                centreline.append({
+                    "id": f"{upstream_id}--{downstream_id}@{index}",
+                    "eastM": float(upstream["eastM"]) + along * delta_east
+                    + lateral * normal_east,
+                    "northM": float(upstream["northM"]) + along * delta_north
+                    + lateral * normal_north,
+                    "floorHeightM": float(upstream["floorHeightM"]) + along * (
+                        float(downstream["floorHeightM"])
+                        - float(upstream["floorHeightM"])),
+                    "floorWidthM": float(upstream["floorWidthM"]) + along * (
+                        float(downstream["floorWidthM"])
+                        - float(upstream["floorWidthM"])),
+                    "wallAngleDegrees": float(upstream["wallAngleDegrees"]) + along * (
+                        float(downstream["wallAngleDegrees"])
+                        - float(upstream["wallAngleDegrees"])),
+                })
+            edge_length = 0.0
+            parent_id = f"{upstream_id}--{downstream_id}"
+            for index, (piece_start, piece_end) in enumerate(
+                    zip(centreline, centreline[1:])):
+                edge_length += math.hypot(
+                    float(piece_end["eastM"]) - float(piece_start["eastM"]),
+                    float(piece_end["northM"]) - float(piece_start["northM"]),
+                )
+                reaches.append({
+                    "id": f"{parent_id}:{index:02d}",
+                    "parentId": parent_id,
+                    "upstream": piece_start,
+                    "downstream": piece_end,
+                })
+            edge_lengths[edge] = edge_length
+
+    runs: list[dict[str, object]] = []
+    for run_id, node_ids in VALLEY_RUN_NODE_IDS.items():
+        length = sum(
+            edge_lengths[(upstream_id, downstream_id)]
+            for upstream_id, downstream_id in zip(node_ids, node_ids[1:])
+        )
+        runs.append({
+            "id": run_id,
+            "nodeIds": list(node_ids),
+            "lengthM": round(length, 3),
+            "outletNodeId": node_ids[-1],
+            "floorWidthRangeM": [
+                min(float(nodes[node_id]["floorWidthM"]) for node_id in node_ids),
+                max(float(nodes[node_id]["floorWidthM"]) for node_id in node_ids),
+            ],
+            "wallAngleRangeDegrees": [
+                min(float(nodes[node_id]["wallAngleDegrees"]) for node_id in node_ids),
+                max(float(nodes[node_id]["wallAngleDegrees"]) for node_id in node_ids),
+            ],
+            "floorHeightsM": [
+                float(nodes[node_id]["floorHeightM"]) for node_id in node_ids
+            ],
+        })
+    return {
+        "id": TERRAIN_VERSION,
+        "seed": f"0x{seed:014x}",
+        "algorithm": "seeded-drainage-aligned-connected-u-valley-v3",
+        "nodes": nodes,
+        "reaches": reaches,
+        "runs": runs,
+    }
+
+
+def carve_valley_network(local_east: np.ndarray, local_north: np.ndarray,
+                         height: np.ndarray, water: np.ndarray,
+                         network: dict[str, object]) -> np.ndarray:
+    target = np.full(height.shape, np.inf, dtype=np.float64)
+    floor_target = np.full(height.shape, np.inf, dtype=np.float64)
+    for reach in network["reaches"]:
+        upstream = reach["upstream"]
+        downstream = reach["downstream"]
+        start_east = float(upstream["eastM"])
+        start_north = float(upstream["northM"])
+        delta_east = float(downstream["eastM"]) - start_east
+        delta_north = float(downstream["northM"]) - start_north
+        length_squared = delta_east * delta_east + delta_north * delta_north
+        along = np.clip(
+            ((local_east - start_east) * delta_east
+             + (local_north - start_north) * delta_north) / length_squared,
+            0.0,
+            1.0,
+        )
+        closest_east = start_east + along * delta_east
+        closest_north = start_north + along * delta_north
+        distance = np.hypot(local_east - closest_east, local_north - closest_north)
+        floor_height = (
+            float(upstream["floorHeightM"])
+            + along * (float(downstream["floorHeightM"])
+                       - float(upstream["floorHeightM"]))
+        )
+        half_width = 0.5 * (
+            float(upstream["floorWidthM"])
+            + along * (float(downstream["floorWidthM"])
+                       - float(upstream["floorWidthM"]))
+        )
+        upstream_slope = math.tan(math.radians(float(upstream["wallAngleDegrees"])))
+        downstream_slope = math.tan(math.radians(float(downstream["wallAngleDegrees"])))
+        wall_slope = upstream_slope + along * (downstream_slope - upstream_slope)
+        wall_distance = np.maximum(0.0, distance - half_width)
+        profile = floor_height + wall_distance * wall_slope
+        active = wall_distance * wall_slope <= MAXIMUM_VALLEY_WALL_RISE_METRES
+        target = np.where(active, np.minimum(target, profile), target)
+        floor_target = np.where(
+            active & (distance <= half_width),
+            np.minimum(floor_target, floor_height),
+            floor_target,
+        )
+
+    carved = np.minimum(height.astype(np.float64), target)
+    # Hydrologically condition the U-floor to its authored downhill grade. This deliberately
+    # fills small source-DEM pits as well as cutting intervening rises; otherwise a zero-height
+    # pond or noisy river sample can turn the nominally descending route back uphill. The wall
+    # field remains cut-only, and the locked water classification is restored below.
+    on_floor = np.isfinite(floor_target) & ~water
+    carved[on_floor] = floor_target[on_floor]
+    carved[water] = height[water]
+    return carved.astype(np.float32)
+
+
+class CarvedTerrainSurface:
+    def __init__(self, source: SourceMosaic, reference_east_m: float,
+                 reference_north_m: float, seed: int = VALLEY_SEED):
+        self.source = source
+        self.reference_east_m = reference_east_m
+        self.reference_north_m = reference_north_m
+        def sample_local(local_east, local_north):
+            return source.sample(
+                local_east + reference_east_m,
+                local_north + reference_north_m,
+            )
+
+        self.network = build_valley_network(seed, sample_local)
+
+    def sample(self, easting: np.ndarray, northing: np.ndarray):
+        height, water = self.source.sample(easting, northing)
+        carved = carve_valley_network(
+            easting - self.reference_east_m,
+            northing - self.reference_north_m,
+            height,
+            water,
+            self.network,
+        )
+        return carved, water
 
 
 def wgs84_to_utm(latitude_deg: np.ndarray | float, longitude_deg: np.ndarray | float):
@@ -360,17 +723,19 @@ def main() -> None:
     )
 
     mosaic = SourceMosaic(source_lock, region, arguments.cache)
+    surface = CarvedTerrainSurface(mosaic, float(reference_east), float(reference_north))
     bundle_path = arguments.output / "central-front.terrain"
     truth_path = arguments.output / "central-front.truth"
     preview_path = arguments.output / "central-front-preview.png"
-    chunks, bundle = build_bundle(mosaic, projected_bounds, local_bounds, bundle_path)
-    truth = build_truth(mosaic, projected_bounds, local_bounds, truth_path)
-    build_preview(mosaic, projected_bounds, preview_path)
+    chunks, bundle = build_bundle(surface, projected_bounds, local_bounds, bundle_path)
+    truth = build_truth(surface, projected_bounds, local_bounds, truth_path)
+    build_preview(surface, projected_bounds, preview_path)
 
     source_product = source_lock["products"][0]
     manifest = {
         "schemaVersion": "1.0.0",
-        "terrainId": "terrain.korea.central-front.v1",
+        "terrainId": "terrain.korea.central-front.v2",
+        "terrainVersion": TERRAIN_VERSION,
         "displayName": region["displayName"],
         "canonicalCoverageId": source_lock["canonicalCoverage"]["id"],
         "aoiWgs84": region["aoiWgs84"],
@@ -405,6 +770,16 @@ def main() -> None:
             "byteLength": preview_path.stat().st_size,
         },
         "chunks": chunks,
+        "carving": {
+            "id": surface.network["id"],
+            "seed": surface.network["seed"],
+            "algorithm": surface.network["algorithm"],
+            "junctionNodeIds": ["central-junction"],
+            "controlNodes": list(surface.network["nodes"].values()),
+            "majorRuns": surface.network["runs"],
+            "sharedSurfaceContract":
+                "carve-before-renderer-lod-and-kernel-truth-quantization",
+        },
         "source": {
             "sourceLockId": source_lock["sourceLockId"],
             "productId": source_product["id"],
@@ -414,7 +789,7 @@ def main() -> None:
         },
         "build": {
             "builder": "tools/terrain/build_korea_terrain.py",
-            "builderVersion": 1,
+            "builderVersion": 2,
             "numpyVersion": np.__version__,
             "pillowVersion": PIL.__version__,
         },

@@ -455,6 +455,29 @@ public static class FlightModel {
         GenericMilitaryFuelFlowLbPerMinute: 285.0,
         GenericAfterburnerFuelFlowLbPerMinute: 850.0);
 
+    /// Su-35S PUBLIC-DATA SURROGATE for the Ace rung of the same visual-merge exercise. This is
+    /// deliberately the Su-27S surrogate with a small, reviewable delta set, not a guessed OEM
+    /// flight model: UAC publishes two 117S engines at 8,800 kgf dry / 14,500 kgf special
+    /// afterburner thrust and describes the type as a deep Su-27 modernization with improved
+    /// maneuverability. Holding the Su-27S thrust lever range makes a 16% base-thrust increase
+    /// land at about 284 kN total maximum thrust, matching that public full-afterburner class.
+    /// Roll response is only six percent stronger/faster; every polar, lift, mass, inertia,
+    /// structural, drag, fuel, and systems limitation otherwise remains the Su-27S surrogate.
+    /// https://uacrussia.ru/en/aircraft/lineup/military/su-35/
+    public static readonly AircraftParams Su35SPublicDataSurrogate =
+        Su27SPublicDataSurrogate with {
+            ThrustMaxN = Su27SPublicDataSurrogate.ThrustMaxN * 1.16,
+            RollRateMaxRad = 2.65,
+            BankTau = 0.22,
+            RollMomentMaxNm = 1_378_000.0,
+            ClDeltaA = 0.106,
+            LateralDerivativeProfileId = "su35s-public-data-surrogate-v1",
+            FightRollRateMaxRad = 2.65,
+            CompatibilityRollRateMaxRad = 2.65,
+            CompatibilityBankTau = 0.22,
+            RollHoldRateGainNms = 2_500_000.0
+        };
+
     public static double NzAeroMax(in AircraftState s, in AircraftParams p) {
         return NzAeroMax(s, p, s.Speed);
     }

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../sim.Tests/GunsOnly.Sim.Tests.csproj" />
+    <ProjectReference Include="../../server.Tests/GunsOnly.Server.Tests.csproj" />
+    <PackageReference Include="xunit.extensibility.execution" Version="2.9.3" />
+  </ItemGroup>
+</Project>

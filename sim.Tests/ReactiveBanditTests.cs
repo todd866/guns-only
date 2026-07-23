@@ -1,6 +1,8 @@
 using System;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
+using GunsOnly.Web;
 using Xunit;
 
 namespace GunsOnly.Sim.Tests;
@@ -73,6 +75,49 @@ public class ReactiveBanditTests {
         var successor = Assert.IsType<ReactiveBandit>(
             Beats.ModernVisualMerge().CreateNextBandit(player, engagement));
         Assert.Equal(expected, successor.Skill);
+    }
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(3, false)]
+    [InlineData(4, true)]
+    [InlineData(5, true)]
+    public void FlagshipAirframeEscalationKeepsSu27UntilTheAceRung(
+        int engagement, bool expectsSu35) {
+        BeatSetup beat = Beats.ModernVisualMerge();
+        var player = State(0.0, 3048.0, 0.0, 300.0);
+        var successor = Assert.IsType<ReactiveBandit>(
+            beat.CreateNextBandit(player, engagement));
+
+        AircraftParams expectedAir = expectsSu35
+            ? FlightModel.Su35SPublicDataSurrogate
+            : FlightModel.Su27SPublicDataSurrogate;
+        AircraftCapability expectedCapability = expectsSu35
+            ? AircraftCapability.Su35SSurrogate
+            : AircraftCapability.Su27SSurrogate;
+        Assert.Same(expectedAir, successor.AircraftParameters);
+        Assert.Same(expectedAir, beat.BanditAirForEngagement(engagement));
+        Assert.Same(expectedCapability,
+            beat.BanditAircraftForEngagement(engagement));
+    }
+
+    [Fact]
+    public void Su35SurrogateIsThePublishedThrustClassWithModestRollDeltas() {
+        AircraftParams su27 = FlightModel.Su27SPublicDataSurrogate;
+        AircraftParams su35 = FlightModel.Su35SPublicDataSurrogate;
+
+        Assert.Equal(su27.ThrustMaxN * 1.16, su35.ThrustMaxN, 8);
+        Assert.Equal(su27.MaxThrustFraction, su35.MaxThrustFraction);
+        Assert.Equal(su27.MassKg, su35.MassKg);
+        Assert.Equal(su27.WingAreaM2, su35.WingAreaM2);
+        Assert.InRange(su35.FightRollRateMaxRad / su27.FightRollRateMaxRad,
+            1.05, 1.07);
+        Assert.Equal("su35s-public-data-surrogate-v1",
+            su35.LateralDerivativeProfileId);
+        Assert.Equal("aircraft.su35s.public-data-surrogate.v1",
+            AircraftCapability.Su35SSurrogate.Id);
+        Assert.True(AircraftCapability.Su35SSurrogate.PublicDataSurrogate);
     }
 
     [Fact]
@@ -291,6 +336,24 @@ public class ReactiveBanditTests {
             $"spawn must clear terrain+600m: y={withTerrain.State.Position.Y:F0}");
         Assert.True(withoutTerrain.State.Position.Y < 2100.0,
             "control: the sea-level spawn sits lower, so the terrain path is what raised it");
+    }
+
+    [Fact]
+    public void SpawnForMergeClearsTheCarvedValleySurface() {
+        ITerrainSurface terrain = KoreaTerrainTruth.Load()
+            ?? throw new InvalidOperationException("carved Korea truth was not embedded");
+        const double eastM = 17_800.0;
+        const double northM = 11_700.0;
+        Assert.True(terrain.TrySample(eastM, northM, out TerrainSample floor));
+        var player = State(eastM, floor.HeightM + 220.0, northM, 240.0, chi: -2.42);
+
+        var bandit = ReactiveBandit.SpawnForMerge(
+            player, FlightModel.Sabre, engagementNumber: 4, 180.0, PilotSkill.Ace, terrain);
+        Assert.True(terrain.TrySample(
+            bandit.State.Position.X, bandit.State.Position.Z, out TerrainSample spawnSurface));
+        Assert.True(bandit.State.Position.Y >= spawnSurface.HeightM + 600.0 - 1e-9,
+            $"carved-surface spawn clearance was "
+            + $"{bandit.State.Position.Y - spawnSurface.HeightM:F0} m");
     }
 
     [Fact]

@@ -2,7 +2,7 @@
   "$schema": "../../schemas/visual-profile.schema.json",
   "schemaVersion": "1.0.0",
   "profileId": "visual.korea-1950s.default.v1",
-  "profileVersion": "0.1.0",
+  "profileVersion": "0.2.0",
   "packId": "korea-1950s",
   "displayName": "Korea 1950s Default Visuals",
   "presentationProfileId": "presentation.korea-1950s.fixed-wing.v1",
@@ -107,7 +107,7 @@
   "environment": {
     "skyAssetId": "environment.sky.haze.v1",
     "surfaceAssetId": "environment.ocean.deep.v1",
-    "terrainAssetId": "environment.terrain.central-front.v1",
+    "terrainAssetId": "environment.terrain.central-front.v2",
     "platformAssetIds": [
       "platform.carrier.straight-deck.v1",
       "platform.escort.gun-destroyer.v1"

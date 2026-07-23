@@ -19,17 +19,289 @@
   ],
   "build": {
     "builder": "tools/terrain/build_korea_terrain.py",
-    "builderVersion": 1,
+    "builderVersion": 2,
     "numpyVersion": "2.4.1",
     "pillowVersion": "12.1.0"
   },
   "bundle": {
     "byteLength": 11268082,
     "recordCount": 256,
-    "sha256": "18dc413e6ac1511072b5792b6fbf3d4532ee91d740a3b0a60da8e6cc2c33e67d",
+    "sha256": "d98ada3ab1f1c06c491e2321772cfa7e938d294369bcf1423cedfee3b8c8a3c1",
     "uri": "central-front.terrain"
   },
   "canonicalCoverageId": "korean-peninsula",
+  "carving": {
+    "algorithm": "seeded-drainage-aligned-connected-u-valley-v3",
+    "controlNodes": [
+      {
+        "eastM": -46000.0,
+        "floorHeightM": 0.0,
+        "floorWidthM": 2484.0,
+        "id": "coast-outlet",
+        "northM": -56000.0,
+        "wallAngleDegrees": 30.0
+      },
+      {
+        "eastM": -36572.0,
+        "floorHeightM": 2.0,
+        "floorWidthM": 1976.0,
+        "id": "lower-mouth-approach",
+        "northM": -51051.0,
+        "wallAngleDegrees": 20.0
+      },
+      {
+        "eastM": -38082.0,
+        "floorHeightM": 6.0,
+        "floorWidthM": 2239.0,
+        "id": "lower-west",
+        "northM": -45847.0,
+        "wallAngleDegrees": 28.0
+      },
+      {
+        "eastM": -26654.0,
+        "floorHeightM": 12.0,
+        "floorWidthM": 2488.0,
+        "id": "lower-bend",
+        "northM": -41639.0,
+        "wallAngleDegrees": 20.0
+      },
+      {
+        "eastM": -27190.0,
+        "floorHeightM": 18.0,
+        "floorWidthM": 2274.0,
+        "id": "lower-mid",
+        "northM": -33680.0,
+        "wallAngleDegrees": 28.0
+      },
+      {
+        "eastM": -21481.0,
+        "floorHeightM": 22.0,
+        "floorWidthM": 1804.0,
+        "id": "lower-upper",
+        "northM": -28307.0,
+        "wallAngleDegrees": 29.0
+      },
+      {
+        "eastM": -3984.0,
+        "floorHeightM": 25.0,
+        "floorWidthM": 1702.0,
+        "id": "central-junction",
+        "northM": -19301.0,
+        "wallAngleDegrees": 24.0
+      },
+      {
+        "eastM": 2185.0,
+        "floorHeightM": 50.0,
+        "floorWidthM": 2455.0,
+        "id": "marquee-lower",
+        "northM": -12671.0,
+        "wallAngleDegrees": 28.0
+      },
+      {
+        "eastM": 15413.0,
+        "floorHeightM": 100.0,
+        "floorWidthM": 2211.0,
+        "id": "marquee-mid",
+        "northM": 4641.0,
+        "wallAngleDegrees": 24.0
+      },
+      {
+        "eastM": 20804.0,
+        "floorHeightM": 160.0,
+        "floorWidthM": 2528.0,
+        "id": "marquee-upper",
+        "northM": 22118.0,
+        "wallAngleDegrees": 21.0
+      },
+      {
+        "eastM": 25146.0,
+        "floorHeightM": 210.0,
+        "floorWidthM": 1817.0,
+        "id": "marquee-ridge",
+        "northM": 29186.0,
+        "wallAngleDegrees": 28.0
+      },
+      {
+        "eastM": 40422.0,
+        "floorHeightM": 250.0,
+        "floorWidthM": 2106.0,
+        "id": "marquee-head",
+        "northM": 29671.0,
+        "wallAngleDegrees": 30.0
+      },
+      {
+        "eastM": 3513.0,
+        "floorHeightM": 110.0,
+        "floorWidthM": 2242.0,
+        "id": "south-lower",
+        "northM": -17348.0,
+        "wallAngleDegrees": 27.0
+      },
+      {
+        "eastM": 19909.0,
+        "floorHeightM": 220.0,
+        "floorWidthM": 2036.0,
+        "id": "south-mid",
+        "northM": -21804.0,
+        "wallAngleDegrees": 25.0
+      },
+      {
+        "eastM": 35579.0,
+        "floorHeightM": 250.0,
+        "floorWidthM": 1826.0,
+        "id": "south-head",
+        "northM": -23768.0,
+        "wallAngleDegrees": 21.0
+      },
+      {
+        "eastM": -10903.0,
+        "floorHeightM": 80.0,
+        "floorWidthM": 1775.0,
+        "id": "north-lower",
+        "northM": 2857.0,
+        "wallAngleDegrees": 30.0
+      },
+      {
+        "eastM": -9248.0,
+        "floorHeightM": 140.0,
+        "floorWidthM": 2070.0,
+        "id": "north-mid",
+        "northM": 20627.0,
+        "wallAngleDegrees": 23.0
+      },
+      {
+        "eastM": -10024.0,
+        "floorHeightM": 160.0,
+        "floorWidthM": 1947.0,
+        "id": "north-head",
+        "northM": 38764.0,
+        "wallAngleDegrees": 21.0
+      }
+    ],
+    "id": "central-front-carved-valleys-v3",
+    "junctionNodeIds": [
+      "central-junction"
+    ],
+    "majorRuns": [
+      {
+        "floorHeightsM": [
+          250.0,
+          210.0,
+          160.0,
+          100.0,
+          50.0,
+          25.0,
+          22.0,
+          18.0,
+          12.0,
+          6.0,
+          2.0,
+          0.0
+        ],
+        "floorWidthRangeM": [
+          1702.0,
+          2528.0
+        ],
+        "id": "marquee-east-to-coast",
+        "lengthM": 144134.136,
+        "nodeIds": [
+          "marquee-head",
+          "marquee-ridge",
+          "marquee-upper",
+          "marquee-mid",
+          "marquee-lower",
+          "central-junction",
+          "lower-upper",
+          "lower-mid",
+          "lower-bend",
+          "lower-west",
+          "lower-mouth-approach",
+          "coast-outlet"
+        ],
+        "outletNodeId": "coast-outlet",
+        "wallAngleRangeDegrees": [
+          20.0,
+          30.0
+        ]
+      },
+      {
+        "floorHeightsM": [
+          250.0,
+          220.0,
+          110.0,
+          25.0,
+          22.0,
+          18.0,
+          12.0,
+          6.0,
+          2.0,
+          0.0
+        ],
+        "floorWidthRangeM": [
+          1702.0,
+          2488.0
+        ],
+        "id": "southern-tributary-to-coast",
+        "lengthM": 111536.299,
+        "nodeIds": [
+          "south-head",
+          "south-mid",
+          "south-lower",
+          "central-junction",
+          "lower-upper",
+          "lower-mid",
+          "lower-bend",
+          "lower-west",
+          "lower-mouth-approach",
+          "coast-outlet"
+        ],
+        "outletNodeId": "coast-outlet",
+        "wallAngleRangeDegrees": [
+          20.0,
+          30.0
+        ]
+      },
+      {
+        "floorHeightsM": [
+          160.0,
+          140.0,
+          80.0,
+          25.0,
+          22.0,
+          18.0,
+          12.0,
+          6.0,
+          2.0,
+          0.0
+        ],
+        "floorWidthRangeM": [
+          1702.0,
+          2488.0
+        ],
+        "id": "northern-tributary-to-coast",
+        "lengthM": 135647.515,
+        "nodeIds": [
+          "north-head",
+          "north-mid",
+          "north-lower",
+          "central-junction",
+          "lower-upper",
+          "lower-mid",
+          "lower-bend",
+          "lower-west",
+          "lower-mouth-approach",
+          "coast-outlet"
+        ],
+        "outletNodeId": "coast-outlet",
+        "wallAngleRangeDegrees": [
+          20.0,
+          30.0
+        ]
+      }
+    ],
+    "seed": "0x56414c4c455932",
+    "sharedSurfaceContract": "carve-before-renderer-lod-and-kernel-truth-quantization"
+  },
   "chunks": [
     {
       "boundsLocalM": [
@@ -103,9 +375,9 @@
           "byteOffset": 176064,
           "level": 0,
           "maximumHeightM": 232.0,
-          "minimumHeightM": 0.6,
+          "minimumHeightM": 0.0,
           "sampleCount": 257,
-          "sha256": "59d6b83d3c1924aa8a785c72f3181eb403640ad85f70f1c66e2410380b123768",
+          "sha256": "2d09eb3cfb92768353e795fdb7fabcd259c4a9a970963aeb68418bb0a15a6a2a",
           "spacingM": 64.0,
           "waterFraction": 0.16727
         },
@@ -114,9 +386,9 @@
           "byteOffset": 308176,
           "level": 1,
           "maximumHeightM": 232.0,
-          "minimumHeightM": 0.6,
+          "minimumHeightM": 0.0,
           "sampleCount": 129,
-          "sha256": "d7fedcdf57fa1a6ec198922c812a2dca5f0674f7a580e681d08bbb988451a20e",
+          "sha256": "2ab8d7ee12e37c021e68a472fd82eaa72369267b42608dd7e10073592f9f7dcc",
           "spacingM": 128.0,
           "waterFraction": 0.167478
         },
@@ -125,9 +397,9 @@
           "byteOffset": 341472,
           "level": 2,
           "maximumHeightM": 197.4,
-          "minimumHeightM": 1.2,
+          "minimumHeightM": 0.0,
           "sampleCount": 65,
-          "sha256": "19d69a287296359f8a02701021bb1a4ec4fa65644534ae41ae4d96a05be71623",
+          "sha256": "de32770df47b576cbd719b46419b2dd79aa5094baa639a9d403dd4c840e7de48",
           "spacingM": 256.0,
           "waterFraction": 0.166627
         },
@@ -136,9 +408,9 @@
           "byteOffset": 349936,
           "level": 3,
           "maximumHeightM": 176.5,
-          "minimumHeightM": 1.2,
+          "minimumHeightM": 0.0,
           "sampleCount": 33,
-          "sha256": "a957d2026f9f9040986c099f5a535899d8981cc7fd190d6814664861d19016cf",
+          "sha256": "1b58c697c619249e9b923d65993c657253b2d65062b7ddcc0a601f7e02c0043d",
           "spacingM": 512.0,
           "waterFraction": 0.164371
         }
@@ -559,9 +831,9 @@
           "byteOffset": 1584576,
           "level": 0,
           "maximumHeightM": 283.4,
-          "minimumHeightM": 2.6,
+          "minimumHeightM": 2.9,
           "sampleCount": 257,
-          "sha256": "36e483e60f690894159573a940a211cd8cd9eaa2a9cc6c99f1378f9af82719b2",
+          "sha256": "fe9db7ac0f9d65490302356e48ca8b4e01fb10bed6131f1f578fa2545b358edd",
           "spacingM": 64.0,
           "waterFraction": 0.032219
         },
@@ -572,7 +844,7 @@
           "maximumHeightM": 269.3,
           "minimumHeightM": 3.0,
           "sampleCount": 129,
-          "sha256": "1c021e7d55a7db9514c44cc5811dc6481852720f80eb9b87afe39365f3bee671",
+          "sha256": "838fbb1ccdf10e7379cfcfe2374ee336418651bc50bc4b56f503b7133f203e44",
           "spacingM": 128.0,
           "waterFraction": 0.03233
         },
@@ -583,7 +855,7 @@
           "maximumHeightM": 269.3,
           "minimumHeightM": 3.0,
           "sampleCount": 65,
-          "sha256": "6a403ec51187859d42475e02bf4f0560548d994a7c1702a4c38891069372dafc",
+          "sha256": "bc5b10af18ffe7461c70760c813429bf58ee114b8808b5367e0115ba9d96d63e",
           "spacingM": 256.0,
           "waterFraction": 0.033136
         },
@@ -592,9 +864,9 @@
           "byteOffset": 1758448,
           "level": 3,
           "maximumHeightM": 226.7,
-          "minimumHeightM": 3.7,
+          "minimumHeightM": 3.3,
           "sampleCount": 33,
-          "sha256": "1215951a4ceb56e5e33df59c1ddc20d0999e3fdcf673cbe58689b84c04cb9aef",
+          "sha256": "91ef4a81b6d1e5fdee778adc80c065974b9f83e3316eec4306b0df32758baed6",
           "spacingM": 512.0,
           "waterFraction": 0.035813
         }
@@ -618,7 +890,7 @@
           "maximumHeightM": 665.1,
           "minimumHeightM": 2.6,
           "sampleCount": 257,
-          "sha256": "59d74f0dea4b19b7912ec9dcae23d89f271889584cc1c1242bac3e4e1a8a920c",
+          "sha256": "5783abacc7b1b07dd5818caad0cbf77a13aef056615c1720c0e4f465e32ef769",
           "spacingM": 64.0,
           "waterFraction": 0.033914
         },
@@ -629,7 +901,7 @@
           "maximumHeightM": 657.4,
           "minimumHeightM": 2.6,
           "sampleCount": 129,
-          "sha256": "e8509ac813d12c51b4f8a6c590c8861a4d688d6d1683351c6f9aec612cd94ac3",
+          "sha256": "d1ca377fe34ab844814a22d7d2de06fe3b7baecb51610c94e05e77b5a1dee893",
           "spacingM": 128.0,
           "waterFraction": 0.034914
         },
@@ -640,7 +912,7 @@
           "maximumHeightM": 642.5,
           "minimumHeightM": 2.6,
           "sampleCount": 65,
-          "sha256": "aea9bc5a2dd68a119e9552b8f5872db4a9549bf8e435e7f1a58968e8643a4612",
+          "sha256": "f7c1889b613b2cff8d3394ccf77d60cf14579aa1cb3acd2884e9440e852a99c0",
           "spacingM": 256.0,
           "waterFraction": 0.034556
         },
@@ -651,7 +923,7 @@
           "maximumHeightM": 627.5,
           "minimumHeightM": 3.9,
           "sampleCount": 33,
-          "sha256": "62dee6fcda1bbfc2fdbdd908c7652877427042e2bb758b5a82341b8eaae3531a",
+          "sha256": "2e09e956aca1a6ffba3b2850cecafbe65f34e05866fcf51f72bdd9a9b5a9a7a3",
           "spacingM": 512.0,
           "waterFraction": 0.033058
         }
@@ -1074,7 +1346,7 @@
           "maximumHeightM": 346.1,
           "minimumHeightM": 6.9,
           "sampleCount": 257,
-          "sha256": "5598d834faacef0e76216d420521ece9e9251286f10be9bfd156ac426405623d",
+          "sha256": "ef67c74d1142d6ac7cbcd9b414c47283581d94970cbbe5bb774c3e8275369ef9",
           "spacingM": 64.0,
           "waterFraction": 0.008615
         },
@@ -1085,7 +1357,7 @@
           "maximumHeightM": 337.1,
           "minimumHeightM": 7.2,
           "sampleCount": 129,
-          "sha256": "e88a51dd1b8aceec50fce116e533ca6f1c72f3762cdeb58cffcd0db9172e8259",
+          "sha256": "eeab103e37b81ce435797ec44d8dc83f77570c5686ef7c2d661f44ea89231d96",
           "spacingM": 128.0,
           "waterFraction": 0.009194
         },
@@ -1096,7 +1368,7 @@
           "maximumHeightM": 319.6,
           "minimumHeightM": 7.6,
           "sampleCount": 65,
-          "sha256": "46d6ec7839615dda3e012c4d874739ba3e4cca646056635909b9461d685a5f67",
+          "sha256": "b4f3fe3a7b73ac81b6a50351b586f273903361199a92eba631afae02ace892d7",
           "spacingM": 256.0,
           "waterFraction": 0.009467
         },
@@ -1105,9 +1377,9 @@
           "byteOffset": 3343024,
           "level": 3,
           "maximumHeightM": 280.6,
-          "minimumHeightM": 9.1,
+          "minimumHeightM": 10.0,
           "sampleCount": 33,
-          "sha256": "682aeb853123660ef08c966989164abe4e78bc93573aca096f76071cfa6a7378",
+          "sha256": "e85c51f1cca7c985a4da8e8cafae9eec0e721e3cc6c19b85052f995e950de8ca",
           "spacingM": 512.0,
           "waterFraction": 0.009183
         }
@@ -1128,10 +1400,10 @@
           "byteLength": 132098,
           "byteOffset": 3345216,
           "level": 0,
-          "maximumHeightM": 622.2,
+          "maximumHeightM": 594.6,
           "minimumHeightM": 8.9,
           "sampleCount": 257,
-          "sha256": "33033f44c1bd2bb26bc3d072250d633c34ce9cddcc9386f6c3f0a8300fcc1b64",
+          "sha256": "a92d2df5a0a4ca20e021e71b220c4e840de6a1235d2565c8b040c57e639a9354",
           "spacingM": 64.0,
           "waterFraction": 0.029342
         },
@@ -1139,10 +1411,10 @@
           "byteLength": 33282,
           "byteOffset": 3477328,
           "level": 1,
-          "maximumHeightM": 622.2,
+          "maximumHeightM": 594.6,
           "minimumHeightM": 9.4,
           "sampleCount": 129,
-          "sha256": "dba9b64a2ce27f269e8d19a2fec59e06b98db2ba2878365c1868fdd592e82680",
+          "sha256": "817bafc730b282ba485606cc76bdee42c78fd9c624d61b54f13134deb802bfea",
           "spacingM": 128.0,
           "waterFraction": 0.029806
         },
@@ -1150,10 +1422,10 @@
           "byteLength": 8450,
           "byteOffset": 3510624,
           "level": 2,
-          "maximumHeightM": 622.2,
+          "maximumHeightM": 586.2,
           "minimumHeightM": 9.4,
           "sampleCount": 65,
-          "sha256": "c54dccef37f4bfa0eff04aa2e4f7cf9f249cdf7a6b9dde36f841ef75085c5d9a",
+          "sha256": "cefc4786c982c087fb99f94116469861aedcc14df9da4fd45855238e2bc9df9a",
           "spacingM": 256.0,
           "waterFraction": 0.030533
         },
@@ -1161,10 +1433,10 @@
           "byteLength": 2178,
           "byteOffset": 3519088,
           "level": 3,
-          "maximumHeightM": 622.2,
+          "maximumHeightM": 586.2,
           "minimumHeightM": 11.8,
           "sampleCount": 33,
-          "sha256": "4ed02248001d6ae81f3137f0f7b6ed0ec26f1199478198d52c94491bdbcc3d67",
+          "sha256": "273c3447e172cfc12eb293296b579d527680a205bf2ecc2d7196164b1a5baf59",
           "spacingM": 512.0,
           "waterFraction": 0.030303
         }
@@ -1185,10 +1457,10 @@
           "byteLength": 132098,
           "byteOffset": 3521280,
           "level": 0,
-          "maximumHeightM": 910.4,
-          "minimumHeightM": 48.0,
+          "maximumHeightM": 726.3,
+          "minimumHeightM": 33.9,
           "sampleCount": 257,
-          "sha256": "e200645234ef2874240bc5193b96546d7722a1468895227f043b187711c6df6e",
+          "sha256": "70dd67356ff036524bf0017803fba5d8312f0075242822d1b924635e2ac166d6",
           "spacingM": 64.0,
           "waterFraction": 0.011703
         },
@@ -1196,10 +1468,10 @@
           "byteLength": 33282,
           "byteOffset": 3653392,
           "level": 1,
-          "maximumHeightM": 893.7,
-          "minimumHeightM": 48.0,
+          "maximumHeightM": 725.0,
+          "minimumHeightM": 33.9,
           "sampleCount": 129,
-          "sha256": "c477c5e364e1c13e10023a36f96e3ab1702a7ddabb3dffa67ab900b7df1afde5",
+          "sha256": "a801321bcfc7a19e22e2704acc80610159b5c9f33ec5cfb66a6a77c8e2c51470",
           "spacingM": 128.0,
           "waterFraction": 0.011538
         },
@@ -1207,10 +1479,10 @@
           "byteLength": 8450,
           "byteOffset": 3686688,
           "level": 2,
-          "maximumHeightM": 893.7,
-          "minimumHeightM": 48.8,
+          "maximumHeightM": 725.0,
+          "minimumHeightM": 34.2,
           "sampleCount": 65,
-          "sha256": "96b8b3eeee27f5f82609438a1d9201d51d9f10aa329065d4290edbf9c48da582",
+          "sha256": "9251921587d52d3ccf7149196f105c613af3616ba4767319550049f7041fdaa4",
           "spacingM": 256.0,
           "waterFraction": 0.012308
         },
@@ -1218,10 +1490,10 @@
           "byteLength": 2178,
           "byteOffset": 3695152,
           "level": 3,
-          "maximumHeightM": 831.9,
-          "minimumHeightM": 53.7,
+          "maximumHeightM": 696.7,
+          "minimumHeightM": 34.8,
           "sampleCount": 33,
-          "sha256": "0d8e5df7e761b414f26b4df87edf685d8a512b0ebe3712c6fd5270df70acbe78",
+          "sha256": "ec26f3d64f1b53905b29fa87a08b4f55562fc042a0556089f35a8ca3b59b1cfd",
           "spacingM": 512.0,
           "waterFraction": 0.013774
         }
@@ -1245,7 +1517,7 @@
           "maximumHeightM": 1155.6,
           "minimumHeightM": 115.5,
           "sampleCount": 257,
-          "sha256": "a18335358bf7d2afba2672fcc963717e8cbe8cc75298581b4399b16466b6d48b",
+          "sha256": "eda412626a101de046e3980c0fb932cc417db459beb4c09c103469c2910e6b18",
           "spacingM": 64.0,
           "waterFraction": 0.001877
         },
@@ -1256,7 +1528,7 @@
           "maximumHeightM": 1148.0,
           "minimumHeightM": 115.5,
           "sampleCount": 129,
-          "sha256": "0be6e7e20e934c13111ee8c7626bdfee1ad887bdeb6649ad43b919e6a6b98bfd",
+          "sha256": "b36bdced4c6e5f758c214ec121e7b3439d682e4808bdd1cb2eb22a5b5efa5675",
           "spacingM": 128.0,
           "waterFraction": 0.001983
         },
@@ -1264,10 +1536,10 @@
           "byteLength": 8450,
           "byteOffset": 3862752,
           "level": 2,
-          "maximumHeightM": 1133.1,
+          "maximumHeightM": 1129.4,
           "minimumHeightM": 115.5,
           "sampleCount": 65,
-          "sha256": "6712f5e6b312aea01fafe1628e5be9be38b4af66db707898e08ecca3c136dc40",
+          "sha256": "a7f0fd62c13188b1842eabfa73671fa2b6000dbaad66dc2d05323f3d82b00777",
           "spacingM": 256.0,
           "waterFraction": 0.001657
         },
@@ -1278,7 +1550,7 @@
           "maximumHeightM": 1103.0,
           "minimumHeightM": 115.5,
           "sampleCount": 33,
-          "sha256": "230270f992d6efc9ee000630a170a5c4dca137853b2cec0d4d89bc34db6e70b8",
+          "sha256": "0ee828abf0aadd82084970be3dd35e00603c5f4b56d8fc4856bf9ce392c0c8a9",
           "spacingM": 512.0,
           "waterFraction": 0.000918
         }
@@ -1302,7 +1574,7 @@
           "maximumHeightM": 1280.0,
           "minimumHeightM": 100.9,
           "sampleCount": 257,
-          "sha256": "39c0878fcfff4e7c257cb28a3af6846ead0698a6d1a8cb92cdfc6fd7f62ac37e",
+          "sha256": "bf4149ef048f799924527dfa76c204d4b0c3a09a4608f445ad9815294f9465d3",
           "spacingM": 64.0,
           "waterFraction": 0.026389
         },
@@ -1313,7 +1585,7 @@
           "maximumHeightM": 1280.0,
           "minimumHeightM": 101.6,
           "sampleCount": 129,
-          "sha256": "06139985290e3706164283799a54127f85f3dbe6db3eb02e3b63cb920d640d82",
+          "sha256": "1e21fb290ad387c71686312f62536d3539dcc7298813b496af436e1101345f66",
           "spacingM": 128.0,
           "waterFraction": 0.026681
         },
@@ -1324,7 +1596,7 @@
           "maximumHeightM": 1280.0,
           "minimumHeightM": 102.0,
           "sampleCount": 65,
-          "sha256": "fceae36ebc7444e63bf3d72824179d25605b5d2e52a3a97d3ea5c73a7e4ed1cf",
+          "sha256": "46f678b8409d329a06a9f680255d61054533292c7ae636d87a0ed1dd0a7c5435",
           "spacingM": 256.0,
           "waterFraction": 0.028166
         },
@@ -1335,7 +1607,7 @@
           "maximumHeightM": 1274.6,
           "minimumHeightM": 103.4,
           "sampleCount": 33,
-          "sha256": "7651e6eb116aa7646aae76b72c1b877ff825d3ece0d85476549e8431fdb041a3",
+          "sha256": "ef806b8f1b020122a7e47cf83b7d88edcbdea2f468b7a7d61a5731dbc5379bfd",
           "spacingM": 512.0,
           "waterFraction": 0.029385
         }
@@ -1585,9 +1857,9 @@
           "byteOffset": 4753728,
           "level": 0,
           "maximumHeightM": 653.6,
-          "minimumHeightM": 39.1,
+          "minimumHeightM": 29.0,
           "sampleCount": 257,
-          "sha256": "24698f01fd8db922a239ce8ffed7d5769648835714618f3190ece5a108c1e56b",
+          "sha256": "98e9402ebd88e9eee6b547419265c70311b5700cc24ff1e1e4028f45f7943804",
           "spacingM": 64.0,
           "waterFraction": 0.002634
         },
@@ -1596,9 +1868,9 @@
           "byteOffset": 4885840,
           "level": 1,
           "maximumHeightM": 633.5,
-          "minimumHeightM": 40.6,
+          "minimumHeightM": 29.0,
           "sampleCount": 129,
-          "sha256": "77d4028b89e81e7a86979f934a215b2fac9c8a30ff11613bd4d6cf87c1aa8a35",
+          "sha256": "0ec6723dcfcafcaf337988f2f7ebadf4c7f0d127d12e25cf9db901d79c27a90d",
           "spacingM": 128.0,
           "waterFraction": 0.002764
         },
@@ -1607,9 +1879,9 @@
           "byteOffset": 4919136,
           "level": 2,
           "maximumHeightM": 625.2,
-          "minimumHeightM": 40.6,
+          "minimumHeightM": 29.1,
           "sampleCount": 65,
-          "sha256": "962a184a062922bfe50f9fb20660fa585c8ce3f00fa1641efee80439aa0472ac",
+          "sha256": "1faf55704843a93d289fda3c9d5d87e59cf8844304a2ff91c1897c32c85b6f6e",
           "spacingM": 256.0,
           "waterFraction": 0.003314
         },
@@ -1618,9 +1890,9 @@
           "byteOffset": 4927600,
           "level": 3,
           "maximumHeightM": 625.2,
-          "minimumHeightM": 40.6,
+          "minimumHeightM": 29.1,
           "sampleCount": 33,
-          "sha256": "796965aad801d7ab844fd05c197695c6958c9a14152afa4cf1a0c04d845abedc",
+          "sha256": "95193b27ce76b3881f3c316222e29d6546dd05748217e111203542369b28f035",
           "spacingM": 512.0,
           "waterFraction": 0.002755
         }
@@ -1641,10 +1913,10 @@
           "byteLength": 132098,
           "byteOffset": 4929792,
           "level": 0,
-          "maximumHeightM": 938.3,
-          "minimumHeightM": 107.0,
+          "maximumHeightM": 714.8,
+          "minimumHeightM": 38.1,
           "sampleCount": 257,
-          "sha256": "88042ce20437f753d1c6da1d9d0c7fb2a338e6bd9ae7e0877ac3c87f1ebd6e26",
+          "sha256": "d9a4f4388e17e8051935fb2bd324ab8c1023225d4e720f60923288d957417010",
           "spacingM": 64.0,
           "waterFraction": 0.024664
         },
@@ -1652,10 +1924,10 @@
           "byteLength": 33282,
           "byteOffset": 5061904,
           "level": 1,
-          "maximumHeightM": 938.3,
-          "minimumHeightM": 112.4,
+          "maximumHeightM": 699.7,
+          "minimumHeightM": 38.1,
           "sampleCount": 129,
-          "sha256": "aac8e9e047597b26f9a73e2a9fdcdd4f7ef1586debaff2f5539495e25afabe52",
+          "sha256": "774afbd521a02b6f9004e049b9923f0d7199be1b78e4c6350d34f6ad498082c6",
           "spacingM": 128.0,
           "waterFraction": 0.024938
         },
@@ -1663,10 +1935,10 @@
           "byteLength": 8450,
           "byteOffset": 5095200,
           "level": 2,
-          "maximumHeightM": 870.2,
-          "minimumHeightM": 126.5,
+          "maximumHeightM": 687.1,
+          "minimumHeightM": 38.1,
           "sampleCount": 65,
-          "sha256": "6f6ee66d92b897ef8ae00e6f338fa3231e6bc4e62ea167146bd6766e4ab57e0e",
+          "sha256": "7d1247e0d1fa9c4e4eab06d21c0a8884e1985d12c28785a23e6d38d4076e7fa0",
           "spacingM": 256.0,
           "waterFraction": 0.025562
         },
@@ -1674,10 +1946,10 @@
           "byteLength": 2178,
           "byteOffset": 5103664,
           "level": 3,
-          "maximumHeightM": 868.5,
-          "minimumHeightM": 126.5,
+          "maximumHeightM": 628.7,
+          "minimumHeightM": 38.1,
           "sampleCount": 33,
-          "sha256": "71cfd89afe161add56ba9c3296af0f6598cb1b28e577256c1ceb65c9a5b43f9c",
+          "sha256": "eb9edbd94539632e6a8c7568811c3c998aaeecb57bbe6dfe6d646aba336b7f71",
           "spacingM": 512.0,
           "waterFraction": 0.02663
         }
@@ -2041,9 +2313,9 @@
           "byteOffset": 6162240,
           "level": 0,
           "maximumHeightM": 753.5,
-          "minimumHeightM": 81.6,
+          "minimumHeightM": 70.0,
           "sampleCount": 257,
-          "sha256": "36e9561e741a41f547283e5191fd56cbb4b3384b7c40e894f489842d69b3df5d",
+          "sha256": "d2a6a6e97db418bbf038f4614ff7d953088c0be955603bdae7ad17973fc2dd4e",
           "spacingM": 64.0,
           "waterFraction": 0.009114
         },
@@ -2052,9 +2324,9 @@
           "byteOffset": 6294352,
           "level": 1,
           "maximumHeightM": 743.0,
-          "minimumHeightM": 81.6,
+          "minimumHeightM": 70.0,
           "sampleCount": 129,
-          "sha256": "a1150e87c1d3c9dfe15792f889baa6785e9b146ca5fd5ea50d167a3070855df7",
+          "sha256": "14612a591521ad0a6ab7648436de13ed74ad090dbc845569275c805607271bf2",
           "spacingM": 128.0,
           "waterFraction": 0.009314
         },
@@ -2063,9 +2335,9 @@
           "byteOffset": 6327648,
           "level": 2,
           "maximumHeightM": 724.9,
-          "minimumHeightM": 82.7,
+          "minimumHeightM": 70.0,
           "sampleCount": 65,
-          "sha256": "15de559b80050c09dee2fced2d74d71e40e1c39958f79c9933b6b45b564b51a6",
+          "sha256": "3495a09e4888f14604b7bdf774bb3cd063615f7a800abfcfbf362df8404d6496",
           "spacingM": 256.0,
           "waterFraction": 0.008757
         },
@@ -2074,9 +2346,9 @@
           "byteOffset": 6336112,
           "level": 3,
           "maximumHeightM": 663.5,
-          "minimumHeightM": 82.7,
+          "minimumHeightM": 70.0,
           "sampleCount": 33,
-          "sha256": "ae3e6baedd17c34ac148fba4cd89b53657799e254251c801c5823befb31e62b8",
+          "sha256": "2139104e7936ce07fd1c24b61912db5cd66fdbf68a29db1ca7a051fc24785f69",
           "spacingM": 512.0,
           "waterFraction": 0.010101
         }
@@ -2097,10 +2369,10 @@
           "byteLength": 132098,
           "byteOffset": 6338304,
           "level": 0,
-          "maximumHeightM": 701.7,
-          "minimumHeightM": 190.5,
+          "maximumHeightM": 663.5,
+          "minimumHeightM": 84.6,
           "sampleCount": 257,
-          "sha256": "7ff70aeaa18bc5804be08831a1500c29cf0bf5bec222e4700c6fea593213f8a0",
+          "sha256": "78d816702f9bbe49e2a0d315546e42edd20e39cb0b4d52ac72ae810cbdede973",
           "spacingM": 64.0,
           "waterFraction": 0.036352
         },
@@ -2108,10 +2380,10 @@
           "byteLength": 33282,
           "byteOffset": 6470416,
           "level": 1,
-          "maximumHeightM": 694.6,
-          "minimumHeightM": 192.3,
+          "maximumHeightM": 663.5,
+          "minimumHeightM": 84.7,
           "sampleCount": 129,
-          "sha256": "a5a8011cb85af35daaae49c6708bafbe5f11ad3c75d51e9f4835a989a4e27cde",
+          "sha256": "26e6317aac5f374bfdf2e44aa0647c717048fcb4e1de3385c33d74176d6c5d02",
           "spacingM": 128.0,
           "waterFraction": 0.036296
         },
@@ -2119,10 +2391,10 @@
           "byteLength": 8450,
           "byteOffset": 6503712,
           "level": 2,
-          "maximumHeightM": 667.4,
-          "minimumHeightM": 198.6,
+          "maximumHeightM": 663.5,
+          "minimumHeightM": 84.7,
           "sampleCount": 65,
-          "sha256": "fd13703173d2b6fdb5d89c734a5ca7a40e4a9b768b863d6f8978a2693f115e16",
+          "sha256": "2195c96385d6afdc84b5a567980f5f4c8389a98d123c1b0023a52d6742800d31",
           "spacingM": 256.0,
           "waterFraction": 0.03503
         },
@@ -2131,9 +2403,9 @@
           "byteOffset": 6512176,
           "level": 3,
           "maximumHeightM": 663.5,
-          "minimumHeightM": 200.3,
+          "minimumHeightM": 85.0,
           "sampleCount": 33,
-          "sha256": "969b55e16f1c1dc092abb8a3657ff991f852d6fa264ac06ab2e9f18a5ff35d83",
+          "sha256": "ad59bb1960adfc8f2bcc26e9e53980a5346f8159c612310a4e9a58332e022d73",
           "spacingM": 512.0,
           "waterFraction": 0.035813
         }
@@ -2155,9 +2427,9 @@
           "byteOffset": 6514368,
           "level": 0,
           "maximumHeightM": 1042.3,
-          "minimumHeightM": 193.7,
+          "minimumHeightM": 100.0,
           "sampleCount": 257,
-          "sha256": "6a0671d5a73f5a1c8da9be0c6497b997d5c1ad80c5c2da5a15ad46e0e79512dd",
+          "sha256": "725cb69b9abe69b14a9429c0c91a59ec2a30e5d650d0027a68f8282dc541ef1d",
           "spacingM": 64.0,
           "waterFraction": 0.004012
         },
@@ -2166,9 +2438,9 @@
           "byteOffset": 6646480,
           "level": 1,
           "maximumHeightM": 1032.2,
-          "minimumHeightM": 194.4,
+          "minimumHeightM": 100.0,
           "sampleCount": 129,
-          "sha256": "8bef5402ae7f4a0686f532f33fab785bea7090b8bf214c06780caafcd0bfb014",
+          "sha256": "3df129f0420dde68a643d2514e9718df90984d05f358831e25bdce9709fd8cdf",
           "spacingM": 128.0,
           "waterFraction": 0.004026
         },
@@ -2177,9 +2449,9 @@
           "byteOffset": 6679776,
           "level": 2,
           "maximumHeightM": 999.2,
-          "minimumHeightM": 199.3,
+          "minimumHeightM": 100.0,
           "sampleCount": 65,
-          "sha256": "878668f30945b44888ea206d8336288f3bca00d405c9d595c2756f0409ff4386",
+          "sha256": "a52d1df78e181f7d87d359a1fefd61ae0ef604f0074f9db53857d88df137ea1c",
           "spacingM": 256.0,
           "waterFraction": 0.00497
         },
@@ -2188,9 +2460,9 @@
           "byteOffset": 6688240,
           "level": 3,
           "maximumHeightM": 999.2,
-          "minimumHeightM": 199.3,
+          "minimumHeightM": 100.0,
           "sampleCount": 33,
-          "sha256": "751801f63b73f63a91d8076de9a493c1ee26ec423920073ef402ed33957035de",
+          "sha256": "8acf7ccf67066c1eace2ad46cb433c73aba80e65dec5edcdd1c98db965f9935a",
           "spacingM": 512.0,
           "waterFraction": 0.002755
         }
@@ -2496,10 +2768,10 @@
           "byteLength": 132098,
           "byteOffset": 7570752,
           "level": 0,
-          "maximumHeightM": 867.3,
-          "minimumHeightM": 151.8,
+          "maximumHeightM": 744.2,
+          "minimumHeightM": 124.7,
           "sampleCount": 257,
-          "sha256": "2cca4ee5be5ab8c30cf0b5b9adf01e6dc2c2297f1fab3413bf6c0628bd0a7e54",
+          "sha256": "3f125aaae04e899792f9059416664d1b395db23cf4e247edbd9cd145fa125625",
           "spacingM": 64.0,
           "waterFraction": 0.000908
         },
@@ -2507,10 +2779,10 @@
           "byteLength": 33282,
           "byteOffset": 7702864,
           "level": 1,
-          "maximumHeightM": 867.3,
-          "minimumHeightM": 152.5,
+          "maximumHeightM": 738.0,
+          "minimumHeightM": 124.8,
           "sampleCount": 129,
-          "sha256": "7eb317f43b567d01c2a0c825b2915f68ec8d600e667ad7fd1b42528a16aed661",
+          "sha256": "36a6d22328f169c2893f09444d8f72cff05a44f5a7303d4020d859151aae865b",
           "spacingM": 128.0,
           "waterFraction": 0.001202
         },
@@ -2518,10 +2790,10 @@
           "byteLength": 8450,
           "byteOffset": 7736160,
           "level": 2,
-          "maximumHeightM": 864.9,
-          "minimumHeightM": 152.5,
+          "maximumHeightM": 726.5,
+          "minimumHeightM": 124.8,
           "sampleCount": 65,
-          "sha256": "dedee360ad39c1d104973207799231571b3e89fb24dbebb1c9580ecb87716d62",
+          "sha256": "41945369383f9f0e34bbd6debe2a017c4095b0b9bc6759949de1a6eb87a268b0",
           "spacingM": 256.0,
           "waterFraction": 0.00142
         },
@@ -2529,10 +2801,10 @@
           "byteLength": 2178,
           "byteOffset": 7744624,
           "level": 3,
-          "maximumHeightM": 784.5,
-          "minimumHeightM": 152.5,
+          "maximumHeightM": 680.9,
+          "minimumHeightM": 124.8,
           "sampleCount": 33,
-          "sha256": "2a635a4f97a306f2ca68dc37d09a55825c6921d1eeeecea02c6e4c6ca6238031",
+          "sha256": "3bf0e66025583b1a3ee2d23316eeaedb219909e47bd33ecbda9b540f06aa1829",
           "spacingM": 512.0,
           "waterFraction": 0.001837
         }
@@ -2554,9 +2826,9 @@
           "byteOffset": 7746816,
           "level": 0,
           "maximumHeightM": 920.5,
-          "minimumHeightM": 171.0,
+          "minimumHeightM": 169.9,
           "sampleCount": 257,
-          "sha256": "151150155cc38a59a13875faf4c73cfcf7280736f91c7fbb4753d827dbd8a1af",
+          "sha256": "365a872ab272e882b5bb31805d891904ef0490e744359be73e42dbf9d2b3546c",
           "spacingM": 64.0,
           "waterFraction": 0.007994
         },
@@ -2565,9 +2837,9 @@
           "byteOffset": 7878928,
           "level": 1,
           "maximumHeightM": 902.0,
-          "minimumHeightM": 172.0,
+          "minimumHeightM": 170.5,
           "sampleCount": 129,
-          "sha256": "e178afb73ea245d09a4a3d4a3801ef1c8331d71678e18c4d2ad24d242ebce37c",
+          "sha256": "bfc2ea7ac4029814b6da154a8a938efee241e7eff771036c12276ba29f456257",
           "spacingM": 128.0,
           "waterFraction": 0.008173
         },
@@ -2576,9 +2848,9 @@
           "byteOffset": 7912224,
           "level": 2,
           "maximumHeightM": 885.8,
-          "minimumHeightM": 173.6,
+          "minimumHeightM": 170.6,
           "sampleCount": 65,
-          "sha256": "6d07331ec5c634718d371e4f9b721d0fac5e0681b549ddb74dab8ba615c40843",
+          "sha256": "25e230fa886e3c39cf1aad13906cfd964a050ddd876c4de93a7c5c82400f8e9e",
           "spacingM": 256.0,
           "waterFraction": 0.008757
         },
@@ -2587,9 +2859,9 @@
           "byteOffset": 7920688,
           "level": 3,
           "maximumHeightM": 869.6,
-          "minimumHeightM": 175.7,
+          "minimumHeightM": 175.6,
           "sampleCount": 33,
-          "sha256": "2f6fbba43b5f4280b7bc2621db32d1d5f72d22d1ff2952b8e7312a7c56cbf320",
+          "sha256": "c6987924fef9ed54541ea6c80531f9b654af1e8e013245615085689509edf5b3",
           "spacingM": 512.0,
           "waterFraction": 0.008264
         }
@@ -2610,10 +2882,10 @@
           "byteLength": 132098,
           "byteOffset": 7922880,
           "level": 0,
-          "maximumHeightM": 1107.3,
-          "minimumHeightM": 280.7,
+          "maximumHeightM": 1023.3,
+          "minimumHeightM": 138.1,
           "sampleCount": 257,
-          "sha256": "17c2bd102459d09e2b016b2957b336036179f80d921fbb911140705caa04c15d",
+          "sha256": "926415cca753a35867f144efa3e5f062594337ae3540632bfe47ed747ba40559",
           "spacingM": 64.0,
           "waterFraction": 0.004164
         },
@@ -2621,10 +2893,10 @@
           "byteLength": 33282,
           "byteOffset": 8054992,
           "level": 1,
-          "maximumHeightM": 1103.8,
-          "minimumHeightM": 280.7,
+          "maximumHeightM": 1023.3,
+          "minimumHeightM": 138.1,
           "sampleCount": 129,
-          "sha256": "222511b34168ccada225f4dc6252f1fe75c65db52a702c59e0965255289cff88",
+          "sha256": "37315566389e11a6dd418d8042a9003a52e4634cb29d4c539b73d2e0927fd52d",
           "spacingM": 128.0,
           "waterFraction": 0.003966
         },
@@ -2632,10 +2904,10 @@
           "byteLength": 8450,
           "byteOffset": 8088288,
           "level": 2,
-          "maximumHeightM": 1082.1,
-          "minimumHeightM": 283.1,
+          "maximumHeightM": 978.2,
+          "minimumHeightM": 138.1,
           "sampleCount": 65,
-          "sha256": "d69eb32d57f7bc9a3e4c8aab460cac5bccba599ab2503ae2f4da96a35e769391",
+          "sha256": "7506e563114227c4ae2d71a2786f0f3e726c8691f9a2080c28ff55beeb53885e",
           "spacingM": 256.0,
           "waterFraction": 0.003787
         },
@@ -2643,10 +2915,10 @@
           "byteLength": 2178,
           "byteOffset": 8096752,
           "level": 3,
-          "maximumHeightM": 1082.1,
-          "minimumHeightM": 293.5,
+          "maximumHeightM": 958.2,
+          "minimumHeightM": 138.1,
           "sampleCount": 33,
-          "sha256": "9d536b69defcba63d29e3681c4d3572d8d22c586ad36b9a8c06e31213d86121c",
+          "sha256": "f52f510b3d77d795989a1cf0229ba77e053bb02859b15c34aa63b09be1fc7bf2",
           "spacingM": 512.0,
           "waterFraction": 0.003673
         }
@@ -2667,10 +2939,10 @@
           "byteLength": 132098,
           "byteOffset": 8098944,
           "level": 0,
-          "maximumHeightM": 1094.4,
-          "minimumHeightM": 282.4,
+          "maximumHeightM": 1022.8,
+          "minimumHeightM": 229.3,
           "sampleCount": 257,
-          "sha256": "1bda7117821e1a26782b316e556798533ca211413fc2f6411e9278e7b341816e",
+          "sha256": "849f8b9350a13754ace22789bac7b2d5ef8231d7dc1c974c6cc3e5d933f589e6",
           "spacingM": 64.0,
           "waterFraction": 0.022271
         },
@@ -2678,10 +2950,10 @@
           "byteLength": 33282,
           "byteOffset": 8231056,
           "level": 1,
-          "maximumHeightM": 1083.1,
-          "minimumHeightM": 283.5,
+          "maximumHeightM": 1003.5,
+          "minimumHeightM": 229.4,
           "sampleCount": 129,
-          "sha256": "57579383ad5cd8b40ab258e82368a7b14fc68cfae54cde238ca07c66e5d8c534",
+          "sha256": "3b56b15ee33fc6cb950fd4585a130845af44d48df6411fab97943acc503685a1",
           "spacingM": 128.0,
           "waterFraction": 0.022054
         },
@@ -2689,10 +2961,10 @@
           "byteLength": 8450,
           "byteOffset": 8264352,
           "level": 2,
-          "maximumHeightM": 1061.3,
-          "minimumHeightM": 285.6,
+          "maximumHeightM": 985.9,
+          "minimumHeightM": 229.4,
           "sampleCount": 65,
-          "sha256": "77ec60a9586a46dfce93abddf715421594879e38d548bc70b44226ba9b7ccac5",
+          "sha256": "16018799ac7865bae26f9911748993c0876f1ff6c8b60b951a2224d316b99300",
           "spacingM": 256.0,
           "waterFraction": 0.022485
         },
@@ -2700,10 +2972,10 @@
           "byteLength": 2178,
           "byteOffset": 8272816,
           "level": 3,
-          "maximumHeightM": 1061.3,
-          "minimumHeightM": 289.7,
+          "maximumHeightM": 933.6,
+          "minimumHeightM": 229.5,
           "sampleCount": 33,
-          "sha256": "b5793ca6d3cf50b79211646fe67896a5a47ffd225d8e725676c0924b08b0c4fb",
+          "sha256": "10ef84cd10daea8563538617b06ba63713b4c787ff9eedde9bd941b205ea9285",
           "spacingM": 512.0,
           "waterFraction": 0.025712
         }
@@ -2955,7 +3227,7 @@
           "maximumHeightM": 1150.0,
           "minimumHeightM": 141.7,
           "sampleCount": 257,
-          "sha256": "2a1a6c7ade5756e9c95bcf9ed7bc52bdfaa4de8ab98f954eef651355ff29b399",
+          "sha256": "e4f55715301347078753d3efac324c595e6e3388ddc77db258cb5dfcdfd0e12d",
           "spacingM": 64.0,
           "waterFraction": 0.011749
         },
@@ -2966,7 +3238,7 @@
           "maximumHeightM": 1127.5,
           "minimumHeightM": 143.4,
           "sampleCount": 129,
-          "sha256": "2f0d1fb55dc73c93955e85ec9bfcd9a811665cd18a5b5051b04f77267bafe868",
+          "sha256": "d46c1247ee3a3f125ae37e72195f4561da09fc955fc0f81f75486a10491aa6ce",
           "spacingM": 128.0,
           "waterFraction": 0.011538
         },
@@ -2977,7 +3249,7 @@
           "maximumHeightM": 1118.9,
           "minimumHeightM": 143.4,
           "sampleCount": 65,
-          "sha256": "b37c1b472b8a8301a4f4dcf2c36a0e840045a324c2132f679a6448cc971efcb6",
+          "sha256": "6b8df9359fe19a3faff2ac22dabb4ca628063f2dc5a37f12fec4284bb0ced3e2",
           "spacingM": 256.0,
           "waterFraction": 0.011361
         },
@@ -2988,7 +3260,7 @@
           "maximumHeightM": 1118.9,
           "minimumHeightM": 150.7,
           "sampleCount": 33,
-          "sha256": "6d49143dc1582e9ae14bb41a47c2808a53001a86da13ae5cd81ebdc913dd263b",
+          "sha256": "d1784ae265da1baca92d97c99879547551fb0584cf9722a2391da32f5eba8350",
           "spacingM": 512.0,
           "waterFraction": 0.012856
         }
@@ -3683,8 +3955,8 @@
   "displayName": "Kaesong\u2013Iron Triangle\u2013Hwachon",
   "horizontalCrs": "EPSG:32652",
   "preview": {
-    "byteLength": 2154659,
-    "sha256": "712910a05204c35e475c5b9cf7cdf4ffffa32a2dacc2a1b6235e3267a3c54121",
+    "byteLength": 2109891,
+    "sha256": "68957273973eba63cb862f07e0be32ef41d084ee06ce8d3f5539c9602ef902d7",
     "uri": "central-front-preview.png"
   },
   "quantization": {
@@ -3704,8 +3976,8 @@
     "byteLength": 2101314,
     "height": 1025,
     "maximumHeightM": 1517.5,
-    "minimumHeightM": 0.6,
-    "sha256": "d9b054da29d5ceee12374301bb6f9023d0ca958d2418fbc83dc92f1842262702",
+    "minimumHeightM": 0.0,
+    "sha256": "115600ebb844013b3f86dc8fc57b0701b860025877f682fbdd96760b2aa8b594",
     "spacingM": 128.0,
     "uri": "central-front.truth",
     "waterFraction": 0.026575,
@@ -3721,7 +3993,8 @@
     ],
     "sourceLockId": "source-lock.korea-terrain.v1"
   },
-  "terrainId": "terrain.korea.central-front.v1",
+  "terrainId": "terrain.korea.central-front.v2",
+  "terrainVersion": "central-front-carved-valleys-v3",
   "tileSpanM": 16384.0,
   "verticalCrs": "EPSG:3855"
 }

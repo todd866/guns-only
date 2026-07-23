@@ -2,7 +2,7 @@
   "$schema": "../../schemas/asset-manifest.schema.json",
   "schemaVersion": "1.0.0",
   "manifestId": "manifest.korea-1950s.default.v1",
-  "manifestVersion": "0.3.0",
+  "manifestVersion": "0.4.0",
   "packId": "korea-1950s",
   "coordinateSystem": {
     "units": "metres",
@@ -260,14 +260,38 @@
         "textureMemoryMiB": 2
       },
       "anchors": [
-        { "id": "camera.cockpit", "node": "SOCKET_CAMERA_COCKPIT" },
-        { "id": "canopy.hinge", "node": "SOCKET_CANOPY_HINGE" },
-        { "id": "gunsight.origin", "node": "SOCKET_GUNSIGHT_ORIGIN" },
-        { "id": "instrument-panel.origin", "node": "SOCKET_INSTRUMENT_PANEL_ORIGIN" },
-        { "id": "muzzle.left", "node": "SOCKET_MUZZLE_LEFT" },
-        { "id": "muzzle.right", "node": "SOCKET_MUZZLE_RIGHT" },
-        { "id": "control.stick", "node": "SOCKET_CONTROL_STICK" },
-        { "id": "control.throttle", "node": "SOCKET_CONTROL_THROTTLE" }
+        {
+          "id": "camera.cockpit",
+          "node": "SOCKET_CAMERA_COCKPIT"
+        },
+        {
+          "id": "canopy.hinge",
+          "node": "SOCKET_CANOPY_HINGE"
+        },
+        {
+          "id": "gunsight.origin",
+          "node": "SOCKET_GUNSIGHT_ORIGIN"
+        },
+        {
+          "id": "instrument-panel.origin",
+          "node": "SOCKET_INSTRUMENT_PANEL_ORIGIN"
+        },
+        {
+          "id": "muzzle.left",
+          "node": "SOCKET_MUZZLE_LEFT"
+        },
+        {
+          "id": "muzzle.right",
+          "node": "SOCKET_MUZZLE_RIGHT"
+        },
+        {
+          "id": "control.stick",
+          "node": "SOCKET_CONTROL_STICK"
+        },
+        {
+          "id": "control.throttle",
+          "node": "SOCKET_CONTROL_THROTTLE"
+        }
       ]
     },
     {
@@ -459,7 +483,7 @@
       ]
     },
     {
-      "id": "environment.terrain.central-front.v1",
+      "id": "environment.terrain.central-front.v2",
       "kind": "environment",
       "role": "environment.terrain",
       "status": "production",
@@ -469,33 +493,33 @@
           "uri": "environment/terrain/central-front.manifest.json",
           "format": "guns-only-terrain-manifest",
           "mediaType": "application/json",
-          "sha256": "81827e73c01e547552ea48e8dac04fdb6c1b1d97d8e6bac245f3ee15f5c1bfa1",
-          "sizeBytes": 106976
+          "sha256": "6017b706c24b9bdf9465fa0e04ec8798c030936a6a8ba2254e0361ac0c850ce5",
+          "sizeBytes": 113286
         },
         {
           "uri": "environment/terrain/central-front.terrain",
           "format": "guns-only-terrain-bundle",
           "mediaType": "application/octet-stream",
-          "sha256": "18dc413e6ac1511072b5792b6fbf3d4532ee91d740a3b0a60da8e6cc2c33e67d",
+          "sha256": "d98ada3ab1f1c06c491e2321772cfa7e938d294369bcf1423cedfee3b8c8a3c1",
           "sizeBytes": 11268082
         },
         {
           "uri": "environment/terrain/central-front.truth",
           "format": "guns-only-quantized-terrain-grid",
           "mediaType": "application/octet-stream",
-          "sha256": "d9b054da29d5ceee12374301bb6f9023d0ca958d2418fbc83dc92f1842262702",
+          "sha256": "115600ebb844013b3f86dc8fc57b0701b860025877f682fbdd96760b2aa8b594",
           "sizeBytes": 2101314
         },
         {
           "uri": "environment/terrain/central-front-preview.png",
           "format": "png",
           "mediaType": "image/png",
-          "sha256": "712910a05204c35e475c5b9cf7cdf4ffffa32a2dacc2a1b6235e3267a3c54121",
-          "sizeBytes": 2154659
+          "sha256": "68957273973eba63cb862f07e0be32ef41d084ee06ce8d3f5539c9602ef902d7",
+          "sizeBytes": 2109891
         }
       ],
       "fallbacks": [],
-      "notes": "Range-addressable 64/128/256/512 m runtime LODs derived from locked Copernicus GLO-30 elevation and water masks. The 128 m truth grid is embedded by the web shell for authoritative clearance and surface contact."
+      "notes": "Terrain v3: range-addressable 64/128/256/512 m runtime LODs with the seeded connected flyable-scale valley carve applied to locked Copernicus GLO-30 elevation and water masks before quantization. The 128 m truth grid is generated from the same carved sampler and embedded by the web shell for authoritative clearance and surface contact."
     },
     {
       "id": "vfx.gun.fire.v1",

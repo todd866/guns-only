@@ -128,6 +128,9 @@ public sealed class SimulationSession {
     int _autoGcasPredictionTicksRemaining;
     int _autoGcasPredictionEvaluationCount;
     double _autoGcasPredictionElapsedSeconds;
+    double _autoGcasFlyUpMinimumClearanceM = double.PositiveInfinity;
+    double? _lastAutoGcasFlyUpBottomClearanceM;
+    int _completedAutoGcasFlyUpCount;
     GunneryPitchAssistState _gunneryPitchAssistState =
         GunneryPitchAssistState.Inactive();
     readonly PadlockRollAssist _padlockRollAssist = new();
@@ -270,6 +273,9 @@ public sealed class SimulationSession {
         _beat.PlayerAircraft.AutomaticGroundCollisionAvoidance;
     public AutoGcasState AutoGcas => _autoGcasState;
     public int AutoGcasPredictionEvaluationCount => _autoGcasPredictionEvaluationCount;
+    public double? LastAutoGcasFlyUpBottomClearanceM =>
+        _lastAutoGcasFlyUpBottomClearanceM;
+    public int CompletedAutoGcasFlyUpCount => _completedAutoGcasFlyUpCount;
     public GunneryPitchAssistState GunneryPitchAssist =>
         _gunneryPitchAssistState;
     public PadlockRollAssistState BanditPadlockRollAssist =>
@@ -1095,6 +1101,9 @@ public sealed class SimulationSession {
         _autoGcasPredictionTicksRemaining = 0;
         _autoGcasPredictionEvaluationCount = 0;
         _autoGcasPredictionElapsedSeconds = 0.0;
+        _autoGcasFlyUpMinimumClearanceM = double.PositiveInfinity;
+        _lastAutoGcasFlyUpBottomClearanceM = null;
+        _completedAutoGcasFlyUpCount = 0;
         _gcasLowLevelStandby = false;
         _gcasTimeSinceStandbyInputSeconds = double.PositiveInfinity;
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
@@ -2201,6 +2210,9 @@ public sealed class SimulationSession {
     PilotCommand ApplyAutoGcas(in PilotCommand effectivePilotCommand) {
         AutoGcasCapabilityProfile capability = PlayerAutoGcasCapability;
         _autoGcasPredictionElapsedSeconds += FixedDeltaSeconds;
+        // Prediction runs at flight-computer cadence, but the bottom-out instrument samples the
+        // physical aircraft and terrain on every 120 Hz authority tick throughout a fly-up.
+        SampleAutoGcasFlyUpClearance();
         // Pilot rule (2026-07-23): ANY control input sustained longer than 0.2 s cancels an
         // ACTIVE fly-up — sustained input during recovery IS the paddle. Runs every tick,
         // ahead of the prediction cadence, so the release is immediate.
@@ -2229,8 +2241,11 @@ public sealed class SimulationSession {
             }
             if (_autoGcasState.Warning || _autoGcasState.Active)
                 _padlockRollAssist.Reset();
+            // The recovery command owns the lever: at speed it commands idle (popping the
+            // automatic speed brake) as part of the save; at low energy it carries the
+            // pilot's lever forward from the prediction tick.
             return _autoGcasRecoveryCommand is { } heldRecovery
-                ? heldRecovery with { Throttle = effectivePilotCommand.Throttle }
+                ? heldRecovery
                 : effectivePilotCommand;
         }
 
@@ -2283,13 +2298,24 @@ public sealed class SimulationSession {
         }
         _autoGcasState = result.State;
         _autoGcasRecoveryCommand = result.RecoveryCommand;
+        if (!previous.Active && _autoGcasState.Active) {
+            _autoGcasFlyUpMinimumClearanceM = double.PositiveInfinity;
+            SampleAutoGcasFlyUpClearance();
+        } else if (previous.Active && !_autoGcasState.Active) {
+            _lastAutoGcasFlyUpBottomClearanceM =
+                double.IsFinite(_autoGcasFlyUpMinimumClearanceM)
+                    ? _autoGcasFlyUpMinimumClearanceM
+                    : null;
+            _completedAutoGcasFlyUpCount++;
+            _autoGcasFlyUpMinimumClearanceM = double.PositiveInfinity;
+        }
         if (_autoGcasState.Active)
             _gunneryPitchAssistState = GunneryPitchAssistState.Inactive(
                 effectivePilotCommand.GDemand);
         if (_autoGcasState.Warning || _autoGcasState.Active)
             _padlockRollAssist.Reset();
         return _autoGcasRecoveryCommand is { } recovery
-            ? recovery with { Throttle = effectivePilotCommand.Throttle }
+            ? recovery
             : effectivePilotCommand;
     }
 
@@ -2309,6 +2335,21 @@ public sealed class SimulationSession {
     bool _autoGcasEnabled = true;
     public void SetAutoGcasEnabled(bool enabled) => _autoGcasEnabled = enabled;
     double _pilotInputOverrideSeconds;
+
+    void SampleAutoGcasFlyUpClearance() {
+        if (!_autoGcasState.Active) return;
+
+        double clearanceM = double.PositiveInfinity;
+        if (_terrainSurface is not null && _terrainSurface.TrySample(
+            _player.State.Position.X, _player.State.Position.Z, out TerrainSample sample))
+            clearanceM = _player.State.Position.Y - sample.HeightM;
+        else if (_terrainSurface is null)
+            clearanceM = _player.State.Position.Y;
+
+        if (double.IsFinite(clearanceM))
+            _autoGcasFlyUpMinimumClearanceM =
+                System.Math.Min(_autoGcasFlyUpMinimumClearanceM, clearanceM);
+    }
 
     // Low-level standby v2 (pilot doctrine, 2026-07-23 flight reports): Auto-GCAS is a failsafe
     // for "I got disoriented while dogfighting", not a low-flying governor. The Build-83 LATCH

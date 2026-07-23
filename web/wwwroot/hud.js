@@ -217,6 +217,9 @@ class CombatHud {
     this._gcasAudioGain = null;
     this._gcasAudioOscillator = null;
     this._gcasAudioLevel = -1;
+    this._lastGcasReleaseCount = 0;
+    this._gcasBottomLine = null;
+    this._gcasBottomLineUntil = -Infinity;
     this._lastHudHits = 0;
     this._hitFlashUntil = -1;
     this._damageFlashUntil = -1;
@@ -1888,6 +1891,28 @@ class CombatHud {
       && state.auto_gcas_inhibit_reason === "TERRAIN_DATA"
       && Number(state.radar_alt_ft) < 3000
       && Number(state.vertical_speed_fpm) < -1000;
+    const gcasReleaseCount = Math.max(0,
+      Math.trunc(Number(state.auto_gcas_release_count) || 0));
+    if (gcasReleaseCount < this._lastGcasReleaseCount) {
+      // Restart/replay rewind: a prior sortie's edge must not leak into the new timeline.
+      this._gcasBottomLine = null;
+      this._gcasBottomLineUntil = -Infinity;
+    } else if (gcasReleaseCount > this._lastGcasReleaseCount) {
+      const bottomFt = Number(state.gcas_last_flyup_bottom_ft);
+      const completedFlyUps = Math.max(0,
+        Math.trunc(Number(state.gcas_flyup_count) || 0));
+      if (state.gcas_last_flyup_bottom_ft !== null
+        && Number.isFinite(bottomFt) && completedFlyUps > 0) {
+        const roundedBottomFt = Math.round(bottomFt);
+        const marginFt = Math.round(bottomFt - 100);
+        this._gcasBottomLine = `GCAS BOTTOM ${roundedBottomFt} FT · `
+          + `${marginFt >= 0 ? "+" : ""}${marginFt} VS 100 FT MSD`;
+        this._gcasBottomLineUntil = now + 7;
+      }
+    }
+    this._lastGcasReleaseCount = gcasReleaseCount;
+    const gcasBottomLineVisible = this._gcasBottomLine !== null
+      && now < this._gcasBottomLineUntil;
     if (gcasActive || gcasWarning || gcasLowEnergy || gcasTerrainUnavailable) {
       const text = gcasActive ? "AUTO GCAS · FLYUP"
         : gcasWarning ? "PULL UP"
@@ -1902,6 +1927,14 @@ class CombatHud {
       ctx.shadowBlur = 0;
       occupiedLines += 1;
       if (this._debug) this._debug.warningLine = text;
+    } else if (gcasBottomLineVisible) {
+      // Post-save evidence is a status, not another warning: quiet dim amber, no glow.
+      ctx.fillStyle = "rgba(255, 176, 32, 0.55)";
+      ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(this._gcasBottomLine, this.width / 2, warningY);
+      occupiedLines += 1;
+      if (this._debug) this._debug.warningLine = this._gcasBottomLine;
     } else if (state.auto_gcas_available === true
       && state.auto_gcas_inhibit_reason === "LOW_LEVEL_STANDBY") {
       // Deliberate low-level standby is a status, not an alert: the pilot descended through
