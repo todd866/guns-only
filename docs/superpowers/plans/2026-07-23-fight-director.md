@@ -58,7 +58,7 @@ Assert.True(maxContinuousWindowSeconds(PilotSkill.Ace) < 1.5);
 // Determinism: identical setup twice ⇒ identical DecisionTrace sequences.
 ```
 
-- [ ] Steps: failing tests → verify fail → implement → verify pass → re-run `ReactiveBanditTests`+`AceBanditTests`+`AiThreatTests` green → commit `feat(ai): threat-aware defensive lookahead — the bandit gets a second act`
+- [x] Steps: failing tests → verify fail → implement → verify pass → re-run `ReactiveBanditTests`+`AceBanditTests`+`AiThreatTests` green → commit `feat(ai): threat-aware defensive lookahead — the bandit gets a second act`
 
 ---
 
@@ -72,7 +72,7 @@ Assert.True(maxContinuousWindowSeconds(PilotSkill.Ace) < 1.5);
 
 **Key assertions:** ace openers differ across engagement numbers 1/2/3 (tactic/command strings over the first 2 s), identical for the same number twice; Novice/Competent (`DoctrineCount == 1`) unchanged.
 
-- [ ] Steps: failing tests → fail → implement → pass → commit `feat(ai): deterministic opener doctrine variety keyed on engagement number`
+- [x] Steps: failing tests → fail → implement → pass → commit `feat(ai): deterministic opener doctrine variety keyed on engagement number`
 
 ---
 

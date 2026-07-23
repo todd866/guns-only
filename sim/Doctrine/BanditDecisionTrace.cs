@@ -33,10 +33,14 @@ public readonly record struct BanditDecisionTrace(
     BanditDecisionCandidate Candidate2,
     BanditDecisionCandidate Candidate3,
     BanditDecisionCandidate Candidate4,
-    BanditDecisionCandidate Candidate5) {
+    BanditDecisionCandidate Candidate5,
+    BanditDecisionCandidate Candidate6 = default,
+    BanditDecisionCandidate Candidate7 = default,
+    BanditDecisionCandidate Candidate8 = default) {
 
     public const string SelectionMode = "deterministic";
     public const string TieBreakRule = "first-maximum-in-declared-order";
+    public const int CandidateCapacity = 9;
 
     public BanditDecisionCandidate CandidateAt(int index) => index switch {
         0 => Candidate0,
@@ -45,6 +49,9 @@ public readonly record struct BanditDecisionTrace(
         3 => Candidate3,
         4 => Candidate4,
         5 => Candidate5,
+        6 => Candidate6,
+        7 => Candidate7,
+        8 => Candidate8,
         _ => throw new ArgumentOutOfRangeException(nameof(index))
     };
 }

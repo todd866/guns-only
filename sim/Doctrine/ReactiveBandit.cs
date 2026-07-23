@@ -115,8 +115,9 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     int _damageHandedness = 1;
     WreckContactMotion? _wreckMotion;
     readonly BanditSkillProfile _profile;
+    readonly int _doctrine;
 
-    // Lookahead decision cache. Rolling ~5-7 candidate maneuvers forward over the horizon every
+    // Lookahead decision cache. Rolling a small candidate set forward over the horizon every
     // tick is wasteful, so the choice is recomputed on a fixed deterministic cadence and held
     // between recomputes. The cadence counts real ticks (never wall-clock), keeping determinism.
     const int LookaheadDecisionCadenceTicks = 12; // ~0.1 s at 120 Hz
@@ -128,9 +129,13 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
 
     public ReactiveBandit(AircraftState initial, AircraftParams parameters,
         PilotSkill skill = PilotSkill.Competent,
-        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
+        int engagementNumber = 1) {
+        if (engagementNumber < 1)
+            throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         Skill = skill;
         _profile = BanditSkillProfile.For(skill);
+        _doctrine = (engagementNumber - 1) % System.Math.Max(1, _profile.DoctrineCount);
         _parameters = parameters;
         _terrain = terrain;
         _sim = new AircraftSim(initial, parameters);
@@ -213,7 +218,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double chi = System.Math.Atan2(toMerge.X, toMerge.Z);
         double gamma = System.Math.Atan2(toMerge.Y, System.Math.Max(1.0, horizontalM));
         var initial = new AircraftState(position, speedMps, gamma, chi, 0.0, parameters.MassKg);
-        return new ReactiveBandit(initial, parameters, skill, terrain);
+        return new ReactiveBandit(
+            initial, parameters, skill, terrain, engagementNumber);
     }
 
     static double SurfaceHeightM(GunsOnly.Sim.Environment.ITerrainSurface? terrain,
@@ -632,6 +638,47 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // Nose-low reposition (low yo-yo): tighten in-plane and regain energy when fast and high.
         var lowAim = leadPoint + new Vec3D(0.0, -System.Math.Max(500.0, range * 0.5), 0.0);
 
+        // Defensive lift-vector placements. Project an up-and-across direction onto the plane
+        // perpendicular to the observed attacker LOS, then give the scorer both sides of that
+        // out-of-plane exit. These are possibilities, not scripted reactions: they still compete
+        // with every offensive candidate through the same rollout score.
+        var attackerLos = player.Position - State.Position;
+        var attackerLosDir = attackerLos.Length > 1e-6
+            ? attackerLos.Normalized()
+            : State.ForwardDir() * -1.0;
+        var worldUp = new Vec3D(0.0, 1.0, 0.0);
+        var across = worldUp.Cross(attackerLosDir);
+        if (across.Length < 1e-6)
+            across = new Vec3D(1.0, 0.0, 0.0);
+        else
+            across = across.Normalized();
+        var upAcross = worldUp + across;
+        upAcross -= attackerLosDir * upAcross.Dot(attackerLosDir);
+        if (upAcross.Length < 1e-6) upAcross = across;
+        upAcross = upAcross.Normalized();
+        var reverseAcross = worldUp * 0.35 - across;
+        reverseAcross -= attackerLosDir * reverseAcross.Dot(attackerLosDir);
+        if (reverseAcross.Length < 1e-6) reverseAcross = across * -1.0;
+        reverseAcross = reverseAcross.Normalized();
+        double defensiveOffsetM = System.Math.Max(900.0, range);
+        var breakAim = State.Position + upAcross * defensiveOffsetM;
+        var reverseAim = State.Position + reverseAcross * defensiveOffsetM;
+        var awayFromPlayer = State.Position - player.Position;
+        if (awayFromPlayer.Length < 1e-6)
+            awayFromPlayer = State.ForwardDir();
+        var separateAim = State.Position + awayFromPlayer.Normalized() * 1400.0;
+        double breakBank = Geometry.BankToPlaceLiftVectorOn(State, breakAim);
+        double orthogonalReverseBank = Geometry.BankToPlaceLiftVectorOn(State, reverseAim);
+        // Current observed gun-quality geometry is also the compatibility boundary for
+        // CandidateCount: neutral selections keep enumerating the original six, while the fixed
+        // nine-slot trace still carries append-only profile-gated defensive candidates.
+        var playerToOwn = State.Position - player.Position;
+        double playerToOwnRangeM = playerToOwn.Length;
+        bool playerGunThreat = playerToOwnRangeM > 1e-6
+            && playerToOwnRangeM < BanditFireControl.MaximumRangeM
+            && player.ForwardDir().Dot(playerToOwn * (1.0 / playerToOwnRangeM))
+                > System.Math.Cos(12.0 * System.Math.PI / 180.0);
+
         var candidates = new PilotCommand[] {
             // Hard 3D pursuit: max-perform pull with the lift vector planted on the lead point.
             new(maxG, bankOnLead, fastThrottle, 0.0),
@@ -647,14 +694,31 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             new(1.05, LimitedBankTo(leadPoint, 0.45), _maximumThrottle, 0.0),
             // Reverse: bank the opposite way for a scissors/reposition flavour.
             new(System.Math.Min(maxG, 4.5), -bankOnLead, cruiseThrottle, 0.0),
+            // Break: max-perform, up-and-across out of the attacker's projected gun line.
+            new(maxG, breakBank, fastThrottle, 0.0),
+            // Orthogonal reverse: give the scorer the opposite out-of-plane exit at moderate G.
+            new(System.Math.Min(maxG, 4.5),
+                orthogonalReverseBank,
+                cruiseThrottle, 0.0),
+            // True separation: unload and accelerate toward the point diametrically away from
+            // the player. Candidate 4 intentionally remains the historical lead-point extension.
+            new(1.05, LimitedBankTo(separateAim, 0.45), _maximumThrottle, 0.0),
+        };
+        Span<bool> available = stackalloc bool[] {
+            true, true, true, true, true, true,
+            _profile.ForcesOvershoot,
+            _profile.ForcesOvershoot,
+            _profile.DisengagesWhenLosing
         };
 
         double bestScore = double.NegativeInfinity;
         var bestCommand = candidates[0];
         int bestIndex = 0;
         Span<double> scores = stackalloc double[candidates.Length];
+        scores.Clear();
         for (int i = 0; i < candidates.Length; i++) {
-            double s = ScoreCandidate(candidates[i], player);
+            if (!available[i]) continue;
+            double s = ScoreCandidate(candidates[i], player) + DoctrineOpenerBias(i);
             scores[i] = s;
             if (s > bestScore) {
                 bestScore = s;
@@ -668,7 +732,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             Skill,
             bestCommand,
             bestIndex,
-            candidates.Length,
+            playerGunThreat || bestIndex >= 6 ? candidates.Length : 6,
             new BanditDecisionCandidate(
                 0, candidates[0], scores[0], HasScore: true, Available: true),
             new BanditDecisionCandidate(
@@ -680,8 +744,30 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             new BanditDecisionCandidate(
                 4, candidates[4], scores[4], HasScore: true, Available: true),
             new BanditDecisionCandidate(
-                5, candidates[5], scores[5], HasScore: true, Available: true));
+                5, candidates[5], scores[5], HasScore: true, Available: true),
+            new BanditDecisionCandidate(
+                6, candidates[6], scores[6],
+                HasScore: available[6], Available: available[6]),
+            new BanditDecisionCandidate(
+                7, candidates[7], scores[7],
+                HasScore: available[7], Available: available[7]),
+            new BanditDecisionCandidate(
+                8, candidates[8], scores[8],
+                HasScore: available[8], Available: available[8]));
         return bestCommand;
+    }
+
+    double DoctrineOpenerBias(int candidateIndex) {
+        if (_doctrine == 0 || T >= 2.0) return 0.0;
+        double fade = 1.0 - T / 2.0;
+        return _doctrine switch {
+            // One-circle / energy opener: favour the sustainable pull and the historical unload.
+            1 when candidateIndex == 1 => 1.00 * fade,
+            1 when candidateIndex == 4 => 3.00 * fade,
+            // Vertical entry: favour the existing high-yo-yo candidate.
+            2 when candidateIndex == 2 => 4.00 * fade,
+            _ => 0.0
+        };
     }
 
     void RecordSingleCandidateDecision(in PilotCommand command) {
@@ -707,6 +793,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     /// position. Pure function of the two passed states — no wall clock, RNG, or hidden truth.
     double ScoreCandidate(in PilotCommand command, in ActorObservation player) {
         const double dt = 1.0 / AircraftSim.TickHz;
+        const double threatWeight = 24.0;
         // Optimize the envelope the trigger can ACTUALLY use. The old 12-degree camera window made
         // the lookahead tests look threatening while first-pass-safe production fights never fired:
         // every selected "solution" remained outside BanditFireControl's real 3-degree gate. The
@@ -729,8 +816,20 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double predTurnRate = predSpeed > 1.0
             ? FlightModel.G0 * System.Math.Tan(System.Math.Clamp(player.Bank, -1.3, 1.3)) / predSpeed
             : 0.0;
+        var initialPlayerToProbe = State.Position - player.Position;
+        double initialPlayerRangeM = initialPlayerToProbe.Length;
+        double initialPlayerAngleOffRad = initialPlayerRangeM > 1e-6
+            ? System.Math.Acos(System.Math.Clamp(
+                player.ForwardDir().Dot(initialPlayerToProbe * (1.0 / initialPlayerRangeM)),
+                -1.0, 1.0))
+            : 0.0;
+        double initialPlayerClosureMps = initialPlayerRangeM > 1e-6
+            ? -(State.VelocityVector() - player.VelocityVector())
+                .Dot(initialPlayerToProbe * (1.0 / initialPlayerRangeM))
+            : 0.0;
 
         double windowSeconds = 0.0;
+        double threatSeconds = 0.0;
         double minClearanceM = double.PositiveInfinity;
         double maxY = double.NegativeInfinity;
         int horizon = _profile.LookaheadHorizonTicks;
@@ -754,10 +853,29 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             // overshoot could outscore a genuinely usable solution.
             if (BanditFireControl.InFiringEnvelope(probeState, predictedPlayer))
                 windowSeconds += dt;
+            // Score the same geometry from the attacker's side. The predicted player direction
+            // and position come only from ActorObservation; the probe is this candidate's honest
+            // kernel rollout. A projected player gun line should compete point-for-point with
+            // earning our own gun line instead of letting a doomed offensive solution win.
+            var playerToProbe = probeState.Position - predictedPos;
+            double threatRangeM = playerToProbe.Length;
+            if (threatRangeM < BanditFireControl.MaximumRangeM
+                && threatRangeM > 1e-6) {
+                double playerNoseDot = predVel.Normalized()
+                    .Dot(playerToProbe * (1.0 / threatRangeM));
+                double playerNoseErrorRad = System.Math.Acos(
+                    System.Math.Clamp(playerNoseDot, -1.0, 1.0));
+                if (playerNoseErrorRad < 12.0 * System.Math.PI / 180.0)
+                    threatSeconds += dt;
+            }
         }
 
         var terminal = probe.State;
         var terminalPlayer = player with { Position = predictedPos };
+        var terminalPredictedPlayerVelocity = new Vec3D(
+            System.Math.Sin(predChi) * System.Math.Cos(predGamma),
+            System.Math.Sin(predGamma),
+            System.Math.Cos(predChi) * System.Math.Cos(predGamma)) * predSpeed;
         double termRange = Geometry.Range(terminal, terminalPlayer);
         double termAngle = GunAngleOff(terminal, terminalPlayer);
         const double idealRangeM = 450.0; // centre of the gun band: pull the fight inside firing range
@@ -770,6 +888,27 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double score = -0.75 * coneErrors;
         // Direct conversion reward: seconds of gun window accrued over the rollout.
         score += 10.0 * windowSeconds;
+        // Defensive conversion denial: projected seconds inside the observed player's gun-quality
+        // geometry carry the same magnitude as earning our own window.
+        score -= threatWeight * threatSeconds;
+        if (_profile.ForcesOvershoot) {
+            // Reward candidates which make the observed attacker's nose fall behind the LOS, plus
+            // the actual closure reversal that marks an overshoot. These are rollout outcomes, not
+            // a defensive mode switch: every available maneuver still competes in the same score.
+            var terminalPlayerToProbe = terminal.Position - predictedPos;
+            double terminalPlayerRangeM = terminalPlayerToProbe.Length;
+            if (terminalPlayerRangeM > 1e-6) {
+                var terminalLos = terminalPlayerToProbe * (1.0 / terminalPlayerRangeM);
+                double terminalPlayerAngleOffRad = System.Math.Acos(System.Math.Clamp(
+                    terminalPredictedPlayerVelocity.Normalized().Dot(terminalLos), -1.0, 1.0));
+                score += 8.0 * System.Math.Max(
+                    0.0, terminalPlayerAngleOffRad - initialPlayerAngleOffRad);
+                double terminalPlayerClosureMps =
+                    -(terminal.VelocityVector() - terminalPredictedPlayerVelocity).Dot(terminalLos);
+                if (initialPlayerClosureMps > 0.0 && terminalPlayerClosureMps <= 0.0)
+                    score += 2.0;
+            }
+        }
         // Range management: pull the fight INTO firing range rather than zooming away or overshooting
         // through the merge. Distance from the band centre is penalised both long and short.
         score -= 0.004 * System.Math.Abs(termRange - idealRangeM);

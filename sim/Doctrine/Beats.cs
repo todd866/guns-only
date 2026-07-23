@@ -217,8 +217,11 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             ? continuous.ReplacementSpeedMps ?? Bandit.Speed
             : 180.0;
         return ReactiveBandit.SpawnForMerge(
-            player, BanditAir, engagementNumber, replacementSpeedMps,
-            BanditSkillProfile.ForEngagement(engagementNumber), terrain);
+            player, BanditAir,
+            engagementNumber: engagementNumber,
+            speedMps: replacementSpeedMps,
+            skill: BanditSkillProfile.ForEngagement(engagementNumber),
+            terrain: terrain);
     }
 }
 
