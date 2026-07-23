@@ -251,10 +251,13 @@ public class ReactiveBanditTests {
         bandit.Step(ActorObservation.Capture(contact, 0), Dt);
 
         BanditDecisionTrace trace = bandit.DecisionTrace;
-        Assert.Equal(6, trace.CandidateCount);
+        Assert.Equal(9, trace.CandidateCount);
         double best = double.NegativeInfinity;
-        for (int index = 0; index < trace.CandidateCount; index++)
-            best = Math.Max(best, trace.CandidateAt(index).Score);
+        for (int index = 0; index < trace.CandidateCount; index++) {
+            BanditDecisionCandidate candidate = trace.CandidateAt(index);
+            if (!candidate.HasScore) continue;
+            best = Math.Max(best, candidate.Score);
+        }
         if (windowExpected)
             Assert.True(best > 8.0,
                 $"an in-envelope hold must earn the window reward: best={best:F2}");
