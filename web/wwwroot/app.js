@@ -3679,6 +3679,8 @@ class FlightView {
       flightPathPoint: null,
       sensorYaw: 0,
       sensorPitch: 0,
+      lookYaw: 0,
+      lookPitch: 0,
       padlock: false,
       padlockTarget: "bandit",
       padlockPhase: "OFF",
@@ -4761,6 +4763,11 @@ class FlightView {
     hudFrame.flightPathPoint = isCarrier ? this.deckFlightPathPoint : null;
     hudFrame.sensorYaw = sensorYaw;
     hudFrame.sensorPitch = sensorPitch;
+    // The HUD frame carries the same current eye-line offsets that orient the render camera.
+    // Forward symbology can therefore remain airframe-referenced during drag/two-finger look and
+    // throughout the smooth return to boresight. Padlock retains its existing sensor contract.
+    hudFrame.lookYaw = padlock ? 0 : sensorYaw;
+    hudFrame.lookPitch = padlock ? 0 : sensorPitch;
     hudFrame.padlock = padlock;
     hudFrame.padlockTarget = padlockTarget;
     hudFrame.padlockPhase = padlockPhase;

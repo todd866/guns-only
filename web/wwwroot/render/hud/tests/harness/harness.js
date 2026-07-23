@@ -172,12 +172,19 @@ export function buildFrame(scenario) {
     )
     : banditPosition.clone();
 
-  // Sensor gimbal: "auto" reproduces the padlock controller's steady-state TRACK solution (the
-  // protected-offset geometry that keeps some nose-to-target displacement in view); otherwise the
-  // scenario pins explicit yaw/pitch (e.g. a manual slew looking forward).
+  // Sensor gimbal: lookYawDeg/lookPitchDeg are the deterministic equivalent of app.js's manual
+  // drag/two-finger look and feed both the camera and HUD-frame look contract. "auto" is reserved
+  // for padlock: it reproduces the controller's protected-offset TRACK solution. That off-axis
+  // solution does not change camera focal length; it changes apparent pixel/angle spacing through
+  // ordinary gnomonic distortion, so manual-look scenarios must not use it as a focal probe.
   let sensorYaw = 0;
   let sensorPitch = 0;
-  if (view.sensor === "auto") {
+  const hasManualLook = Number.isFinite(Number(view.lookYawDeg))
+    || Number.isFinite(Number(view.lookPitchDeg));
+  if (hasManualLook) {
+    sensorYaw = (Number(view.lookYawDeg) || 0) * DEG;
+    sensorPitch = (Number(view.lookPitchDeg) || 0) * DEG;
+  } else if (view.sensor === "auto") {
     const localTarget = banditPosition.clone().sub(playerPosition).normalize()
       .applyQuaternion(quaternion.clone().invert());
     const desired = desiredPadlockAngles(targetLookAngles(localTarget, 0), {
@@ -221,6 +228,8 @@ export function buildFrame(scenario) {
     flightPathPoint: null,
     sensorYaw,
     sensorPitch,
+    lookYaw: hasManualLook ? sensorYaw : 0,
+    lookPitch: hasManualLook ? sensorPitch : 0,
     padlock: view.padlock === true,
     padlockTarget: view.padlockTarget ?? "bandit",
     padlockPhase: view.padlockPhase ?? "OFF",
@@ -264,16 +273,35 @@ async function renderScenario(name, now = 0) {
 // PerspectiveCamera with THREE's own math, bypassing every hud.js drawing path. assertions.mjs
 // compares hud.js's recorded debug geometry against these.
 function projectProbe(camera, world) {
+  const cameraPoint = world.clone().applyMatrix4(camera.matrixWorldInverse);
   const ndc = world.clone().project(camera);
   return {
     x: (ndc.x * 0.5 + 0.5) * WIDTH,
     y: (-ndc.y * 0.5 + 0.5) * HEIGHT,
+    behind: cameraPoint.z >= -0.01,
   };
 }
 
 function computeProbes(frame) {
   const camera = frame.camera;
   const m = camera.projectionMatrix.elements;
+  const focalXPx = WIDTH * 0.5 * m[0];
+  const focalYPx = HEIGHT * 0.5 * m[5];
+  const projectionCenter = {
+    x: WIDTH * (0.5 - m[8] * 0.5),
+    y: HEIGHT * (0.5 + m[9] * 0.5),
+  };
+  const lookYaw = Number(frame.lookYaw) || 0;
+  const lookPitch = Number(frame.lookPitch) || 0;
+  const boresightForward = Math.cos(lookYaw) * Math.cos(lookPitch) > 1e-6;
+  // Independent closed-form projection of body-forward through app.js's
+  // body * yaw(-lookYaw) * pitch(lookPitch) camera orientation.
+  const lookBoresight = boresightForward
+    ? {
+      x: projectionCenter.x - focalXPx * Math.tan(lookYaw) / Math.cos(lookPitch),
+      y: projectionCenter.y + focalYPx * Math.tan(lookPitch),
+    }
+    : null;
   const position = frame.playerPosition;
   const far = (direction) => position.clone().addScaledVector(direction, 10000);
   const velocityDirection = frame.playerVelocity.clone().normalize();
@@ -311,8 +339,11 @@ function computeProbes(frame) {
   }
 
   return {
-    focalXPx: WIDTH * 0.5 * m[0],
-    focalYPx: HEIGHT * 0.5 * m[5],
+    focalXPx,
+    focalYPx,
+    nominalFocalYPx: HEIGHT * 0.5 / Math.tan(66 * DEG * 0.5),
+    projectionCenter,
+    lookBoresight,
     waterline: projectProbe(camera, far(frame.playerForward)),
     fpv: projectProbe(camera, far(velocityDirection)),
     bandit: projectProbe(camera, frame.banditPosition),
@@ -362,6 +393,10 @@ window.__debugScenario = async (name) => {
       manualLookActive: frame.manualLookActive,
       target: frame.padlockTarget,
       trackPrimed: frame.padlockTrackPrimed,
+    },
+    look: {
+      yawDeg: frame.lookYaw / DEG,
+      pitchDeg: frame.lookPitch / DEG,
     },
     state: {
       aoa_deg: frame.state.aoa_deg,
