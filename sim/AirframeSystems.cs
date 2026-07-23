@@ -64,8 +64,11 @@ public readonly record struct AirframeAerodynamicState(
     // Attached-flow asymmetry such as split flaps loses circulation with the rest of the wing.
     double LateralLiftCoefficientDifference,
     // Persistent geometry/damage asymmetry survives separation and is therefore kept distinct.
-    double PersistentLateralLiftCoefficientDifference = 0.0) {
-    public static AirframeAerodynamicState Clean => new(0.0, 0.0, 0.0, 0.0, 0.0);
+    double PersistentLateralLiftCoefficientDifference = 0.0,
+    // Configuration metadata used by aircraft-specific automatic surfaces. It carries no force by
+    // itself; the existing explicit drag increments remain the authoritative gear aerodynamics.
+    double LandingGearFraction = 0.0) {
+    public static AirframeAerodynamicState Clean => new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 }
 
 /// <summary>
@@ -214,7 +217,8 @@ public sealed class AirframeSystems {
                 // inserted later without changing the state machine or flight-model contract.
                 PitchMomentCoefficientIncrement: 0.0,
                 LateralLiftCoefficientDifference:
-                    _profile.FullFlapLiftCoefficientIncrement * split);
+                    _profile.FullFlapLiftCoefficientIncrement * split,
+                LandingGearFraction: gear);
         }
     }
 
