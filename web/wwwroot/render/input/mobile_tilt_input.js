@@ -188,9 +188,12 @@ export function shouldTransmitAnalogRoll(command, lastSent, { epsilon = 0.002 } 
 }
 
 export function mobileRollCommand(degrees, {
-  deadzoneDegrees = 4,
-  fullScaleDegrees = 30,
-  exponent = 1.7,
+  // Softened after the first Build 72 phone sortie ("a bit too sensitive"): a wider deadzone,
+  // more physical tilt for full deflection, and a gentler mid-range. The user-adjustable
+  // tiltSensitivity multiplier still scales the incoming angle before this curve.
+  deadzoneDegrees = 5,
+  fullScaleDegrees = 38,
+  exponent = 2.0,
 } = {}) {
   const angle = Number(degrees);
   if (!Number.isFinite(angle)) return 0;

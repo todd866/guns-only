@@ -275,6 +275,14 @@ const smallViewport = Math.min(
 ) <= 900 || Math.min(window.innerWidth, window.innerHeight) <= 600;
 const mobileControls = coarsePointer || (touchCapable && smallViewport);
 document.documentElement.classList.toggle("touch-mode", mobileControls);
+// iOS Safari/CriOS has no element-fullscreen API: standalone (Add to Home Screen) is the only
+// way to shed the browser chrome. Say so once, on the ready screen, only where it applies.
+const isIosBrowserTab = /iPhone|iPad/.test(navigator.userAgent)
+  && window.matchMedia?.("(display-mode: standalone)").matches !== true
+  && navigator.standalone !== true;
+const iosFullscreenHint = isIosBrowserTab && mobileControls
+  ? " Fullscreen on iPhone: Share \u2192 Add to Home Screen, then fly from the icon."
+  : "";
 
 // Keep the phone controls in two shallow, thumb-sized edge groups. The page owns the base visual
 // treatment; this mobile-only override owns the live control geometry so the HUD can reserve a
@@ -1853,11 +1861,12 @@ function renderPauseUi(state = latestState) {
       ? "Raptor program" : finished ? "Sortie complete" : "Flight paused";
   }
   if (readyMenuHelp) {
-    readyMenuHelp.textContent = ready
+    readyMenuHelp.textContent = (ready
       ? "Performance unlocks the next assignment. Carrier conversion follows three F-22 qualifications."
       : finished
         ? "Review the result, continue when qualified, or fly the assignment again."
-        : "The deterministic flight clock is stopped and all controls are neutralised.";
+        : "The deterministic flight clock is stopped and all controls are neutralised.")
+      + (ready ? iosFullscreenHint : "");
   }
 
   document.documentElement.classList.toggle("run-paused", pauseReasons.size > 0);
@@ -2122,6 +2131,15 @@ function beginFlight() {
     mission: selectedBeat,
     deckConfiguration: selectedDeckConfiguration === 1 ? "ANGLED" : "AXIAL",
   });
+  // Touch pilots get the widened gunnery assist; tilt input cannot hold a funnel.
+  bridge.SetTouchControlModality?.(mobileControls);
+  // Fullscreen where the platform allows it (Android Chrome). iOS has no element fullscreen;
+  // the Add-to-Home-Screen standalone app is the fullscreen path there (see ready-screen hint).
+  if (mobileControls && !document.fullscreenElement
+      && document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen({ navigationUI: "hide" })
+      .catch(() => {});
+  }
   bridge.Begin();
   pauseReasons.delete("ready");
   bridgePauseApplied = false;

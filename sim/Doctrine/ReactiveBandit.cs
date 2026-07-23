@@ -469,6 +469,22 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
 
         double bank = LimitedBankTo(aim, 1.08);
         double angle = AngleTo(aim);
+        // The legacy bank cap (±62°) cannot place the lift vector below the horizon, so a steep
+        // climbing pursuit of a target BELOW adds climb instead of converting: gamma-dot =
+        // (n·cosφ − cosγ)·g/V stays positive and modern thrust sustains it — production
+        // telemetry showed a Novice "fleeing" 10,000 ft upward exactly this way. When climbing
+        // steeply at a lower target, unload below cos(gamma) and let gravity bring the nose down
+        // before resuming the rate fight.
+        var velocity = own.VelocityVector();
+        double gamma = System.Math.Asin(System.Math.Clamp(
+            velocity.Y / System.Math.Max(own.Speed, 1.0), -1.0, 1.0));
+        if (gamma > 0.35 && aim.Y < own.Position.Y - 200.0) {
+            // A firm bunt at reduced power: gamma-dot must go decisively negative, and thrust
+            // must stop underwriting the climb, or the pushover takes tens of seconds at
+            // fighter thrust-to-weight.
+            return new PilotCommand(-0.20, bank,
+                System.Math.Min(_maximumThrottle, 0.35), 0.0);
+        }
         // Rate fighter: point and threaten. Competent stays below an ace's max-performance pull
         // (gain 1.45, cap 3.20); higher skill tiers pull harder via their profile.
         double g = System.Math.Clamp(1.15 + angle * _profile.AcquireGGain, 1.15, _profile.MaxAcquireG);
@@ -520,6 +536,19 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double aheadFloor = LocalFloorM(extension.X, extension.Z);
         if (extension.Y < aheadFloor + 180.0)
             extension = extension with { Y = aheadFloor + 180.0 };
+        // A real energy extension is flown toward the horizon, not along whatever flight path
+        // Energy was entered with. Nose-high at 0.55 G on an afterburning airframe is an
+        // accidental sustained zoom: gamma-dot ~ (n - cos(gamma))*g/V barely moves while thrust
+        // holds the speed below the Energy exit gate — production telemetry showed a "fleeing"
+        // bandit climbing 10,000 ft that way. Climbing: deep unload at part power so gravity
+        // brings the nose down promptly; only then the ordinary max-throttle extension.
+        var velocity = own.VelocityVector();
+        double gamma = System.Math.Asin(System.Math.Clamp(
+            velocity.Y / System.Math.Max(own.Speed, 1.0), -1.0, 1.0));
+        if (gamma > 0.09) {
+            return new PilotCommand(-0.10, LimitedBankTo(extension, 0.38),
+                System.Math.Min(_maximumThrottle, 0.40), 0.0);
+        }
         return new PilotCommand(0.55, LimitedBankTo(extension, 0.38),
             _maximumThrottle, 0.0);
     }

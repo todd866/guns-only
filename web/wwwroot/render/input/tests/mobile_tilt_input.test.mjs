@@ -11,18 +11,23 @@ import {
 } from "../mobile_tilt_input.js";
 
 test("phone roll has a real neutral zone and progressive authority", () => {
+  // Build 73 softened defaults after the first phone sortie: deadzone 5 deg, full scale 38 deg,
+  // exponent 2.0. Small tilts must produce genuinely small commands.
   assert.equal(mobileRollCommand(0), 0);
-  assert.equal(mobileRollCommand(4), 0);
-  assert.equal(mobileRollCommand(-4), 0);
-  assert.ok(mobileRollCommand(10) > 0.08 && mobileRollCommand(10) < 0.09);
-  assert.ok(mobileRollCommand(20) > 0.43 && mobileRollCommand(20) < 0.45);
-  assert.equal(mobileRollCommand(30), 1);
+  assert.equal(mobileRollCommand(5), 0);
+  assert.equal(mobileRollCommand(-5), 0);
+  assert.ok(mobileRollCommand(10) > 0.015 && mobileRollCommand(10) < 0.03);
+  assert.ok(mobileRollCommand(20) > 0.18 && mobileRollCommand(20) < 0.23);
+  assert.ok(mobileRollCommand(30) > 0.5 && mobileRollCommand(30) < 0.65);
+  assert.equal(mobileRollCommand(38), 1);
   assert.equal(mobileRollCommand(45), 1);
-  assert.equal(mobileRollCommand(-30), -1);
+  assert.equal(mobileRollCommand(-38), -1);
 });
 
 test("phone roll curve is odd, monotonic, and rejects invalid sensor data", () => {
-  for (const angle of [5, 8, 12, 18, 24, 30]) {
+  // Angles start above the 5-degree deadzone: inside it both sides are exactly zero and
+  // strict equality distinguishes -0.
+  for (const angle of [6, 8, 12, 18, 24, 30]) {
     assert.equal(mobileRollCommand(-angle), -mobileRollCommand(angle));
   }
   assert.equal(mobileRollCommand(undefined), 0);

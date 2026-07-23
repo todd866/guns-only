@@ -2115,6 +2115,10 @@ public sealed class SimulationSession {
     /// evaluation; using that one-tick-old authoritative result avoids advancing projectiles twice or
     /// inventing a second ballistic law.
     /// </summary>
+    // Touch devices cannot fly precision gunnery with tilt input; the assist widens for them.
+    bool _touchControlModality;
+    public void SetTouchControlModality(bool touch) => _touchControlModality = touch;
+
     PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {
         bool enabled = PlayerWeaponsAuthorized
             && _beat.CombatRules.PlayerAmmo > 0
@@ -2126,10 +2130,23 @@ public sealed class SimulationSession {
             && !_pilotControlInterlocked;
         bool padlockOwnsRollPlane = _banditPadlockRollAssistSelected
             && _banditPadlockRollAssistTargetSequence == _banditSpawnSequence;
+        // A wider capture cone and one extra protected G on touch: tilt input cannot hold the
+        // funnel the way arrow keys can. Ballistics stay untouched — the assist magnetises the
+        // nose, the rounds still have to fly there.
+        AircraftParams assistAir = _touchControlModality
+            ? _beat.PlayerAir with {
+                GunneryPitchAssistCaptureAngleRad =
+                    _beat.PlayerAir.GunneryPitchAssistCaptureAngleRad * 1.35,
+                GunneryPitchAssistMaxCorrectionG =
+                    _beat.PlayerAir.GunneryPitchAssistMaxCorrectionG + 1.0,
+                GunneryLateralAssistRollGain =
+                    _beat.PlayerAir.GunneryLateralAssistRollGain * 1.25,
+            }
+            : _beat.PlayerAir;
         GunneryPitchAssistResult result = GunsOnly.Sim.GunneryPitchAssist.Apply(
             requestedPilotCommand,
             _player.State,
-            _beat.PlayerAir,
+            assistAir,
             _player.AirspeedMps,
             _player.AtmosphereModel,
             _gunKill.LeadDirection,

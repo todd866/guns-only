@@ -49,6 +49,10 @@ public static partial class WebBridge {
     }
 
     [JSExport]
+    public static void SetTouchControlModality(bool touch) =>
+        Session.SetTouchControlModality(touch);
+
+    [JSExport]
     public static void Begin() => Session.Begin();
 
     [JSExport]
