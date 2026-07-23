@@ -280,6 +280,15 @@ public sealed class SimulationSession {
     public AirframeAerodynamicState PlayerAerodynamicConfiguration => PlayerSystemsSimulated
         ? _systems.AerodynamicState
         : AirframeAerodynamicState.Clean;
+    /// Aircraft-owned automatic surfaces are composed inside AircraftSim so they can use live air
+    /// data without contaminating the pilot-selectable systems state. Consumers which calculate a
+    /// current envelope use this effective configuration; setters continue to use the base state.
+    public AirframeAerodynamicState PlayerEffectiveAerodynamicConfiguration =>
+        _player is null
+            || _beat.PlayerAir.HighAlphaModel
+                != HighAlphaModelKind.F22PublicDataSurrogate
+            ? PlayerAerodynamicConfiguration
+            : _player.EffectiveAerodynamicConfiguration;
     public F86EmergencyGearRecoveryScenario? MaintenanceScenario => _maintenanceScenario;
     public VisualMergeEvaluation? VisualMergeEvaluation => _visualMergeEvaluation;
     public DroneRaidEvaluation? DroneRaidEvaluation => _droneRaidEvaluation;
@@ -2214,7 +2223,7 @@ public sealed class SimulationSession {
         _detents.AssistedCalibratedAirspeedMps = _player.IndicatedAirspeedMps;
         double cornerKias = AirData.PositiveCornerSpeedKiasAtAltitude(
             _player.State.Mass, _beat.PlayerAir, _player.State.Position.Y,
-            PlayerAerodynamicConfiguration.LiftCoefficientIncrement,
+            PlayerEffectiveAerodynamicConfiguration.PositiveLiftCoefficientIncrement,
             _player.AtmosphereModel);
         _detents.AssistedTargetCalibratedAirspeedMps =
             (cornerKias + AssistedSpeedBiasKts) / AirData.MpsToKnots;
@@ -2668,7 +2677,8 @@ public sealed class SimulationSession {
                 _beat.PlayerAir, _player.AirspeedMps);
             _detents.AirspeedMps = _player.AirspeedMps;
             _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
-            _detents.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
+            _detents.AerodynamicConfiguration =
+                PlayerEffectiveAerodynamicConfiguration;
             ConfigureAssistedFlightDetents();
             _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir,
                 _advice, FixedDeltaSeconds);
@@ -2895,7 +2905,7 @@ public sealed class SimulationSession {
             _player.AirspeedMps);
         _detents.AirspeedMps = _player.AirspeedMps;
         _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
-        _detents.AerodynamicConfiguration = PlayerAerodynamicConfiguration;
+        _detents.AerodynamicConfiguration = PlayerEffectiveAerodynamicConfiguration;
         ConfigureAssistedFlightDetents();
         if (_carrier is not null)
             _carrier.ApproachDirectorPitchOffsetRad =

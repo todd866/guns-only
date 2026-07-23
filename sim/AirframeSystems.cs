@@ -67,8 +67,15 @@ public readonly record struct AirframeAerodynamicState(
     double PersistentLateralLiftCoefficientDifference = 0.0,
     // Configuration metadata used by aircraft-specific automatic surfaces. It carries no force by
     // itself; the existing explicit drag increments remain the authoritative gear aerodynamics.
-    double LandingGearFraction = 0.0) {
-    public static AirframeAerodynamicState Clean => new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    double LandingGearFraction = 0.0,
+    // A lift-limit increment moves the positive attached-flow break without adding camber lift at
+    // zero alpha. This is distinct from the existing flap LiftCoefficientIncrement by design.
+    double LiftLimitCoefficientIncrement = 0.0) {
+    public static AirframeAerodynamicState Clean =>
+        new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+
+    public double PositiveLiftCoefficientIncrement =>
+        LiftCoefficientIncrement + LiftLimitCoefficientIncrement;
 }
 
 /// <summary>

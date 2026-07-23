@@ -232,7 +232,10 @@ public class ModernVisualMergeTests {
         // docs/f22-high-alpha-review.md replaces the old fixed 85%-effective pitch moment with
         // q-bounded aero plus rate-limited TVC. Recovery is therefore pinned to re-entering the
         // attached/protected side of CLmax, not the old unphysical sub-13-degree response time.
-        double attachedFlowBoundaryDeg = FlightModel.F22APublicDataSurrogate.CLMax
+        double attachedFlowBoundaryDeg =
+            (FlightModel.F22APublicDataSurrogate.CLMax
+                + rig.Sim.EffectiveAerodynamicConfiguration
+                    .LiftLimitCoefficientIncrement)
             / FlightModel.F22APublicDataSurrogate.CLAlpha * Deg;
         Assert.True(rig.Sim.AngleOfAttackRad * Deg < attachedFlowBoundaryDeg + 1.0,
             $"override release did not recapture attached flow: {rig.Sim.AngleOfAttackRad * Deg:F1} deg");

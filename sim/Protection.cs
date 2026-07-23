@@ -16,6 +16,13 @@ public static class Protection {
             p.MaxPerformFraction * FlightModel.NzAeroMax(s, p, airspeedMps, atmosphere));
         return System.Math.Min(baseG, HardMaxG(s, p, airspeedMps, atmosphere));
     }
+    public static double MaxPerformG(in AircraftState s, in AircraftParams p,
+        double airspeedMps, in AirframeAerodynamicState configuration,
+        IAtmosphereModel atmosphere) {
+        double aeroMax = ConfiguredNzAeroMax(s, p, airspeedMps, configuration, atmosphere);
+        double baseG = System.Math.Max(1.2, p.MaxPerformFraction * aeroMax);
+        return System.Math.Min(baseG, System.Math.Min(aeroMax, p.PositiveStructuralLimitG));
+    }
     public static double HardMaxG(in AircraftState s, in AircraftParams p) =>
         HardMaxG(s, p, s.Speed);
     public static double HardMaxG(in AircraftState s, in AircraftParams p, double airspeedMps) =>
@@ -43,6 +50,12 @@ public static class Protection {
         return System.Math.Min(FlightModel.NzAeroMax(s, p, airspeedMps, atmosphere),
             FlightModel.PositiveControlLimitG(p));
     }
+    public static double OverrideMaxG(in AircraftState s, in AircraftParams p,
+        double airspeedMps, in AirframeAerodynamicState configuration,
+        IAtmosphereModel atmosphere) =>
+        System.Math.Min(ConfiguredNzAeroMax(
+            s, p, airspeedMps, configuration, atmosphere),
+            FlightModel.PositiveControlLimitG(p));
     /// The energy-NEUTRAL turn: the G at which thrust exactly balances drag, so you can hold
     /// it forever without scrubbing a knot. This is what the drone's flight AI flies for a
     /// routine tactical turn — the player spends energy deliberately (override) rather than
@@ -92,7 +105,8 @@ public static class Protection {
         double qS = 0.5 * atmosphericState.DensityKgM3 * speed * speed * p.WingAreaM2;
         if (qS <= 1e-9 || s.Mass <= 0.0 || p.CLAlpha <= 0.0) return 0.0;
 
-        double configuredClMax = p.CLMax + configuration.LiftCoefficientIncrement;
+        double configuredClMax = p.CLMax
+            + FlightModel.PositiveLiftCoefficientIncrement(configuration);
         double configuredAeroMax = qS * configuredClMax / (s.Mass * FlightModel.G0);
         double hardMax = System.Math.Min(configuredAeroMax, p.PositiveStructuralLimitG);
         double maxPerform = System.Math.Min(
@@ -108,9 +122,15 @@ public static class Protection {
         bool CanSustain(double loadFactor) {
             double totalCl = loadFactor * state.Mass * FlightModel.G0 / qS;
             double cleanCl = totalCl - currentConfiguration.LiftCoefficientIncrement;
-            if (cleanCl < parameters.CLMin || cleanCl > parameters.CLMax) return false;
+            if (cleanCl < parameters.CLMin
+                || cleanCl > parameters.CLMax
+                    + currentConfiguration.LiftLimitCoefficientIncrement)
+                return false;
             double alpha = cleanCl / parameters.CLAlpha;
-            double cd = FlightModel.ProfileDragCoefficient(alpha, mach, parameters)
+            double cd = (currentConfiguration.LiftLimitCoefficientIncrement > 0.0
+                    ? FlightModel.ProfileDragCoefficient(
+                        alpha, mach, parameters, currentConfiguration)
+                    : FlightModel.ProfileDragCoefficient(alpha, mach, parameters))
                 + currentConfiguration.DragCoefficientIncrement;
             double dragN = qS * cd;
             // The kernel applies thrust on the body axis, so only its air-path component pays the
@@ -130,6 +150,19 @@ public static class Protection {
             else high = candidate;
         }
         return low;
+    }
+
+    static double ConfiguredNzAeroMax(in AircraftState s, in AircraftParams p,
+        double airspeedMps, in AirframeAerodynamicState configuration,
+        IAtmosphereModel atmosphere) {
+        ArgumentNullException.ThrowIfNull(atmosphere);
+        double speed = double.IsFinite(airspeedMps) && airspeedMps >= 0.0
+            ? airspeedMps : s.Speed;
+        double q = 0.5 * atmosphere.Sample(s.Position.Y).DensityKgM3
+            * speed * speed;
+        return q * p.WingAreaM2
+            * (p.CLMax + FlightModel.PositiveLiftCoefficientIncrement(configuration))
+            / (s.Mass * FlightModel.G0);
     }
 
     /// Default unmanned structural limit retained for airframes that do not override the parameter.

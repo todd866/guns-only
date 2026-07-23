@@ -10,6 +10,11 @@ public sealed class AircraftSim {
     /// Labelled F-22 splayed-surface flat-plate surrogate, calibrated against the clean model's
     /// idle deceleration near 350 KCAS rather than claimed as a production drag coefficient.
     public const double AutomaticSpeedBrakeDragCoefficientIncrement = 0.022;
+    public const double AutomaticLeadingEdgeFlapFullKcas = 250.0;
+    public const double AutomaticLeadingEdgeFlapRetractedKcas = 300.0;
+    public const double AutomaticLeadingEdgeFlapAlphaOnsetDegrees = 4.0;
+    public const double AutomaticLeadingEdgeFlapFullAlphaDegrees = 12.0;
+    public const double AutomaticLeadingEdgeFlapLiftLimitIncrement = 0.25;
     public AircraftState State { get; private set; }
     /// <summary>
     /// Latest pilot head-to-foot normal specific force, in multiples of standard gravity.
@@ -131,6 +136,8 @@ public sealed class AircraftSim {
         AirframeAerodynamicState.Clean;
     /// <summary>F-22 splayed-surface speed-brake surrogate deployment, zero for other airframes.</summary>
     public double SpeedBrake { get; private set; }
+    /// <summary>F-22 automatic leading-edge-flap deployment, zero for other airframes.</summary>
+    public double LeadingEdgeFlaps { get; private set; }
     public Vec3D BodyRight => State.BodyAttitude.Rotate(new Vec3D(1, 0, 0));
     public Vec3D BodyUp => State.BodyAttitude.Rotate(new Vec3D(0, 1, 0));
     public Vec3D BodyForward => State.BodyAttitude.Rotate(new Vec3D(0, 0, 1));
@@ -407,6 +414,7 @@ public sealed class AircraftSim {
         AirframeAerodynamicState configuration = AerodynamicConfiguration;
         if (_p.HighAlphaModel != HighAlphaModelKind.F22PublicDataSurrogate) {
             SpeedBrake = 0.0;
+            LeadingEdgeFlaps = 0.0;
             EffectiveAerodynamicConfiguration = configuration;
             return;
         }
@@ -420,11 +428,31 @@ public sealed class AircraftSim {
         SpeedBrake += (target - SpeedBrake)
             * (1.0 - System.Math.Exp(-dt / tau));
         SpeedBrake = System.Math.Clamp(SpeedBrake, 0.0, 1.0);
+        double casKts = IndicatedAirspeedMps * AirData.MpsToKnots;
+        LeadingEdgeFlaps = AutomaticLeadingEdgeFlapSchedule(casKts, AngleOfAttackRad);
         EffectiveAerodynamicConfiguration = configuration with {
             DragCoefficientIncrement = configuration.DragCoefficientIncrement
-                + AutomaticSpeedBrakeDragCoefficientIncrement * SpeedBrake
+                + AutomaticSpeedBrakeDragCoefficientIncrement * SpeedBrake,
+            LiftLimitCoefficientIncrement = configuration.LiftLimitCoefficientIncrement
+                + AutomaticLeadingEdgeFlapLiftLimitIncrement * LeadingEdgeFlaps
         };
     }
+
+    internal static double AutomaticLeadingEdgeFlapSchedule(double calibratedAirspeedKts,
+        double alphaRad) {
+        double speedPhase = System.Math.Clamp(
+            (AutomaticLeadingEdgeFlapRetractedKcas - calibratedAirspeedKts)
+            / (AutomaticLeadingEdgeFlapRetractedKcas
+                - AutomaticLeadingEdgeFlapFullKcas), 0.0, 1.0);
+        double alphaDegrees = alphaRad * 180.0 / System.Math.PI;
+        double alphaPhase = System.Math.Clamp(
+            (alphaDegrees - AutomaticLeadingEdgeFlapAlphaOnsetDegrees)
+            / (AutomaticLeadingEdgeFlapFullAlphaDegrees
+                - AutomaticLeadingEdgeFlapAlphaOnsetDegrees), 0.0, 1.0);
+        return SmoothStep(speedPhase) * SmoothStep(alphaPhase);
+    }
+
+    static double SmoothStep(double phase) => phase * phase * (3.0 - 2.0 * phase);
 
     static PilotCommand NeutralExternalCommand(in AircraftState state, double throttle) => new(
         GDemand: 0.0,

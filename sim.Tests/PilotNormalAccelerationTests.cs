@@ -61,7 +61,8 @@ public sealed class PilotNormalAccelerationTests {
             final.Mass, final.BodyAttitude, final.BodyRates);
         var spooled = demand with { Throttle = sim.ThrustFraction };
         var aero = FlightModel.Aerodynamics(finalRaw, spooled, parameters, Vec3D.Zero,
-            sim.LastEngineOperatingPoint.NetThrustN, AirframeAerodynamicState.Clean,
+            sim.LastEngineOperatingPoint.NetThrustN,
+            sim.EffectiveAerodynamicConfiguration,
             sim.AtmosphereModel);
         double expectedFromForces = (aero.Accel + new Vec3D(0.0, FlightModel.G0, 0.0))
             .Dot(sim.BodyUp) / FlightModel.G0;

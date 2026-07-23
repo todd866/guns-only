@@ -168,8 +168,15 @@ public sealed class DetentLayer {
     }
 
     public void Tick(KeyGrammar keys, double nowMs, in AircraftState s, in AircraftParams p, DoctrineAdvice advice, double dt) {
-        double maxPerform = Protection.MaxPerformG(s, p, AirspeedMps, AtmosphereModel);
-        double overrideMax = Protection.OverrideMaxG(s, p, AirspeedMps, AtmosphereModel);
+        bool scheduledLiftLimit = AerodynamicConfiguration.LiftLimitCoefficientIncrement > 0.0;
+        double maxPerform = scheduledLiftLimit
+            ? Protection.MaxPerformG(s, p, AirspeedMps,
+                AerodynamicConfiguration, AtmosphereModel)
+            : Protection.MaxPerformG(s, p, AirspeedMps, AtmosphereModel);
+        double overrideMax = scheduledLiftLimit
+            ? Protection.OverrideMaxG(s, p, AirspeedMps,
+                AerodynamicConfiguration, AtmosphereModel)
+            : Protection.OverrideMaxG(s, p, AirspeedMps, AtmosphereModel);
         bool maxPerformancePull = Variant == ValleyVariant.PhysicsOnly
             || p.NormalPullUsesMaxPerformance;
         ValleyG = maxPerformancePull
@@ -207,7 +214,8 @@ public sealed class DetentLayer {
             && p.DynamicPressureScheduledPostStallOverride
             && double.IsFinite(MeasuredAngleOfAttackRad)) {
             double breakAlpha = MeasuredAngleOfAttackRad >= 0.0
-                ? FlightModel.AlphaAeroMax(p) : -FlightModel.AlphaAeroMin(p);
+                ? FlightModel.AlphaAeroMax(p, AerodynamicConfiguration)
+                : -FlightModel.AlphaAeroMin(p);
             if (System.Math.Abs(MeasuredAngleOfAttackRad) > breakAlpha + 0.035)
                 HighAlphaRecoveryActive = true;
         }
@@ -219,7 +227,8 @@ public sealed class DetentLayer {
             && pull == KeyPhase.Idle && push == KeyPhase.Idle
             && double.IsFinite(MeasuredAngleOfAttackRad)) {
             double recoveryExitAlpha = 0.70 * (MeasuredAngleOfAttackRad >= 0.0
-                ? FlightModel.AlphaAeroMax(p) : -FlightModel.AlphaAeroMin(p));
+                ? FlightModel.AlphaAeroMax(p, AerodynamicConfiguration)
+                : -FlightModel.AlphaAeroMin(p));
             if (System.Math.Abs(MeasuredAngleOfAttackRad) <= recoveryExitAlpha)
                 HighAlphaRecoveryActive = false;
         }
@@ -483,7 +492,10 @@ public sealed class DetentLayer {
         if (!p.DynamicPressureScheduledPostStallOverride)
             return p.PostStallAlphaCommandRad;
 
-        double aeroMax = FlightModel.NzAeroMax(s, p, AirspeedMps, AtmosphereModel);
+        double aeroMax = AerodynamicConfiguration.LiftLimitCoefficientIncrement > 0.0
+            ? Protection.OverrideMaxG(s, p, AirspeedMps,
+                AerodynamicConfiguration, AtmosphereModel)
+            : FlightModel.NzAeroMax(s, p, AirspeedMps, AtmosphereModel);
         double span = System.Math.Max(p.PositiveStructuralLimitG - 1.0, 1.0);
         double shortfall = System.Math.Clamp(
             (p.PositiveStructuralLimitG - aeroMax) / span, 0.0, 1.0);
@@ -494,7 +506,7 @@ public sealed class DetentLayer {
         // high-alpha target. Forces, separation, drag and departure remain continuous functions of
         // the resulting state—there is no Cobra/spin mode, timer or scripted rotation here.
         double blend = shortfall * shortfall * (3.0 - 2.0 * shortfall);
-        double stallAlpha = FlightModel.AlphaAeroMax(p);
+        double stallAlpha = FlightModel.AlphaAeroMax(p, AerodynamicConfiguration);
         double highAlpha = System.Math.Max(stallAlpha, p.PostStallAlphaCommandRad);
         return stallAlpha + (highAlpha - stallAlpha) * blend;
     }

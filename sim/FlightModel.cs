@@ -505,6 +505,12 @@ public static class FlightModel {
 
     internal static double AlphaAeroMax(in AircraftParams p) => p.CLMax / p.CLAlpha;
     internal static double AlphaAeroMin(in AircraftParams p) => p.CLMin / p.CLAlpha;
+    internal static double AlphaAeroMax(in AircraftParams p,
+        in AirframeAerodynamicState configuration) =>
+        (p.CLMax + configuration.LiftLimitCoefficientIncrement) / p.CLAlpha;
+    internal static double PositiveLiftCoefficientIncrement(
+        in AirframeAerodynamicState configuration) =>
+        configuration.PositiveLiftCoefficientIncrement;
     internal static double PositiveControlLimitG(in AircraftParams p) =>
         double.IsFinite(p.PositiveOverrideLimitG) && p.PositiveOverrideLimitG > 0.0
             ? System.Math.Max(p.PositiveStructuralLimitG, p.PositiveOverrideLimitG)
@@ -538,6 +544,24 @@ public static class FlightModel {
         return sign * separated;
     }
 
+    internal static double LiftCoefficient(double alpha, in AircraftParams p,
+        in AirframeAerodynamicState configuration) {
+        double liftLimitIncrement = configuration.LiftLimitCoefficientIncrement;
+        if (p.HighAlphaModel != HighAlphaModelKind.F22PublicDataSurrogate
+            || liftLimitIncrement <= 0.0 || alpha <= AlphaAeroMax(p))
+            return LiftCoefficient(alpha, p);
+
+        double configuredStall = AlphaAeroMax(p, configuration);
+        if (alpha <= configuredStall) return p.CLAlpha * alpha;
+
+        var (cn, ca) = F22BodyAxisCoefficients(alpha);
+        double bodyAxisLift = cn * System.Math.Cos(alpha) - ca * System.Math.Sin(alpha);
+        double phase = System.Math.Clamp(
+            (alpha - configuredStall) / 0.14, 0.0, 1.0);
+        phase = phase * phase * (3.0 - 2.0 * phase);
+        return Lerp(p.CLMax + liftLimitIncrement, bodyAxisLift, phase);
+    }
+
     /// <summary>
     /// Coarse F-22 body-axis normal/axial public-data surrogate. Values are deliberately visible at
     /// the review's 18/36/45/60/90-degree stations: vortex normal force persists through 60 degrees
@@ -558,6 +582,15 @@ public static class FlightModel {
         double stall = alpha >= 0.0 ? AlphaAeroMax(p) : -AlphaAeroMin(p);
         double t = System.Math.Clamp((System.Math.Abs(alpha) - stall) / 0.14, 0.0, 1.0);
         return t * t * (3.0 - 2.0 * t); // smoothstep: zero slope at attached and fully separated ends
+    }
+
+    internal static double SeparationFraction(double alpha, in AircraftParams p,
+        in AirframeAerodynamicState configuration) {
+        if (configuration.LiftLimitCoefficientIncrement <= 0.0 || alpha < 0.0)
+            return SeparationFraction(alpha, p);
+        double stall = AlphaAeroMax(p, configuration);
+        double t = System.Math.Clamp((alpha - stall) / 0.14, 0.0, 1.0);
+        return t * t * (3.0 - 2.0 * t);
     }
 
     static double InterpolateAlphaSchedule(double absoluteAlphaRad,
@@ -657,6 +690,39 @@ public static class FlightModel {
         return breakCd + (System.Math.Max(p.PostStallDragMax, breakCd) - breakCd) * blend;
     }
 
+    internal static double ProfileDragCoefficient(double alpha, double mach,
+        in AircraftParams p, in AirframeAerodynamicState configuration) {
+        double liftLimitIncrement = configuration.LiftLimitCoefficientIncrement;
+        if (p.HighAlphaModel != HighAlphaModelKind.F22PublicDataSurrogate
+            || liftLimitIncrement <= 0.0 || alpha < 0.0)
+            return ProfileDragCoefficient(alpha, mach, p);
+
+        double configuredStall = AlphaAeroMax(p, configuration);
+        double configuredPeak = p.CLMax + liftLimitIncrement;
+        double machFactor = MachDragFactor(mach, p);
+        double cl = LiftCoefficient(alpha, p, configuration);
+        double highLiftFraction = System.Math.Abs(cl)
+            / System.Math.Max(configuredPeak, 1e-6);
+        double highLiftExcess = System.Math.Max(0.0,
+            highLiftFraction - p.HighLiftDragOnsetFraction);
+        double attached = p.CD0 * machFactor + p.InducedK * cl * cl
+            + p.HighLiftDragK * highLiftExcess * highLiftExcess;
+        if (alpha <= configuredStall) return attached;
+
+        double breakExcess = System.Math.Max(0.0,
+            1.0 - p.HighLiftDragOnsetFraction);
+        double breakCd = p.CD0 * machFactor
+            + p.InducedK * configuredPeak * configuredPeak
+            + p.HighLiftDragK * breakExcess * breakExcess;
+        var (cn, ca) = F22BodyAxisCoefficients(alpha);
+        double bodyAxisCd = System.Math.Max(0.0,
+            cn * System.Math.Sin(alpha) + ca * System.Math.Cos(alpha)) * machFactor;
+        double phase = System.Math.Clamp(
+            (alpha - configuredStall) / 0.14, 0.0, 1.0);
+        phase = phase * phase * (3.0 - 2.0 * phase);
+        return Lerp(breakCd, bodyAxisCd, phase);
+    }
+
     internal static StateDeriv Derivatives(in RawState r, in PilotCommand c,
         in AircraftParams p, in Vec3D liftRef, in Vec3D wind, double netThrustN,
         in AirframeAerodynamicState configuration) {
@@ -716,14 +782,23 @@ public static class FlightModel {
         AtmosphericState atmosphericState = atmosphere.Sample(r.Pos.Y);
         double rho = atmosphericState.DensityKgM3;
         double q = 0.5 * rho * speed * speed;
-        double attachedConfiguration = 1.0 - SeparationFraction(alpha, p);
-        double cl = LiftCoefficient(alpha, p)
+        bool scheduledLiftLimit = p.HighAlphaModel
+                == HighAlphaModelKind.F22PublicDataSurrogate
+            && configuration.LiftLimitCoefficientIncrement > 0.0;
+        double attachedConfiguration = 1.0 - (scheduledLiftLimit
+            ? SeparationFraction(alpha, p, configuration)
+            : SeparationFraction(alpha, p));
+        double cl = (scheduledLiftLimit
+                ? LiftCoefficient(alpha, p, configuration)
+                : LiftCoefficient(alpha, p))
             + configuration.LiftCoefficientIncrement * attachedConfiguration;
         double mach = speed / atmosphericState.SpeedOfSoundMps;
         double effectiveRudderCommand = p.HighAlphaModel
             == HighAlphaModelKind.F22PublicDataSurrogate
                 ? F22EffectiveRudderCommand(alpha, c) : c.Rudder;
-        double cd = ProfileDragCoefficient(alpha, mach, p)
+        double cd = (scheduledLiftLimit
+                ? ProfileDragCoefficient(alpha, mach, p, configuration)
+                : ProfileDragCoefficient(alpha, mach, p))
                     + configuration.DragCoefficientIncrement
                     + System.Math.Abs(effectiveRudderCommand) * 0.15 * p.CD0
                     + beta * beta * 0.08;
@@ -750,7 +825,9 @@ public static class FlightModel {
         double sideAccel = effectiveRudderCommand * rudderSideEffectiveness * 0.06 * speed
             - q * p.WingAreaM2 * p.CYBeta * beta / r.Mass;
         bool useF22BodyAxisForces = p.HighAlphaModel
-            == HighAlphaModelKind.F22PublicDataSurrogate && alpha > AlphaAeroMax(p);
+            == HighAlphaModelKind.F22PublicDataSurrogate
+            && alpha > (scheduledLiftLimit
+                ? AlphaAeroMax(p, configuration) : AlphaAeroMax(p));
         Vec3D aerodynamicAccel = Vec3D.Zero;
         if (useF22BodyAxisForces) {
             // Apply the scheduled force in body axes, then add configuration/rudder/beta drag in
@@ -760,8 +837,9 @@ public static class FlightModel {
             // wind plane.
             var (cn, ca) = F22BodyAxisCoefficients(alpha);
             double forceScale = q * p.WingAreaM2 / r.Mass;
-            double extraLiftCoefficient = configuration.LiftCoefficientIncrement
-                * attachedConfiguration;
+            double extraLiftCoefficient = scheduledLiftLimit
+                ? cl - (cn * System.Math.Cos(alpha) - ca * System.Math.Sin(alpha))
+                : configuration.LiftCoefficientIncrement * attachedConfiguration;
             double extraDragCoefficient = configuration.DragCoefficientIncrement
                 + System.Math.Abs(effectiveRudderCommand) * 0.15 * p.CD0
                 + beta * beta * 0.08;
@@ -797,7 +875,7 @@ public static class FlightModel {
         var bodyUp = attitude.Rotate(new Vec3D(0, 1, 0));
         var bodyForward = attitude.Rotate(new Vec3D(0, 0, 1));
         double alpha = System.Math.Atan2(-vhat.Dot(bodyUp), vhat.Dot(bodyForward));
-        double separation = SeparationFraction(alpha, p);
+        double separation = SeparationFraction(alpha, p, configuration);
         if (separation <= 0.0) return 0.0;
 
         double targetAlpha = TargetAlpha(r, c, p, dynamicPressure, configuration);
@@ -849,9 +927,10 @@ public static class FlightModel {
         double pitchError = directPitch ? errQ : alphaTarget - alpha;
         double demand = System.Math.Clamp(stiffness * pitchError
             - p.PitchDampingNms * (r.BodyRates.Q - qCommand), -momentMax, momentMax);
-        double stallAlpha = alpha >= 0.0 ? AlphaAeroMax(p) : -AlphaAeroMin(p);
+        double stallAlpha = alpha >= 0.0
+            ? AlphaAeroMax(p, configuration) : -AlphaAeroMin(p);
         demand += -System.Math.Sign(alpha) * p.StallPitchBreakNm
-            * SeparationFraction(alpha, p)
+            * SeparationFraction(alpha, p, configuration)
             * System.Math.Clamp((System.Math.Abs(alpha) - stallAlpha) / 0.25, 0.0, 1.0);
         double span = p.WingSpanM > 0.0 ? p.WingSpanM
             : System.Math.Sqrt(4.5 * p.WingAreaM2);
@@ -922,7 +1001,7 @@ public static class FlightModel {
             * speed * speed;
         if (!double.IsFinite(c.CommandedAlphaRad) && c.GDemand > 0.0) {
             double aeroLimit = dynamicPressure * p.WingAreaM2
-                * (p.CLMax + configuration.LiftCoefficientIncrement)
+                * (p.CLMax + PositiveLiftCoefficientIncrement(configuration))
                 / (r.Mass * G0);
             double structuralLimit = c.GDemand <= p.PositiveStructuralLimitG + 1e-6
                 ? p.PositiveStructuralLimitG : PositiveControlLimitG(p);
@@ -1001,7 +1080,7 @@ public static class FlightModel {
         double pitchMomentMax = directPitch ? p.ApproachPitchMomentMaxNm : p.PitchMomentMaxNm;
         // Legacy doctrine/AI commands retain their bank-attitude controller. Flown controls do not:
         // their rolling moment is generated below from aileron and aerodynamic lateral derivatives.
-        double separation = SeparationFraction(alpha, p);
+        double separation = SeparationFraction(alpha, p, configuration);
         double rollRateMax = FightRollRate(p);
         double rollHoldBlend = 1.0 - System.Math.Clamp(System.Math.Abs(errP)
             / System.Math.Max(p.RollHoldErrorRad, 1e-6), 0.0, 1.0);
@@ -1021,7 +1100,8 @@ public static class FlightModel {
         double pitchMoment = System.Math.Clamp(pitchStiffness * pitchError
             - p.PitchDampingNms * (rates.Q - qCommand),
             -pitchMomentMax, pitchMomentMax) * pitchControlBlend;
-        double stallAlpha = alpha >= 0.0 ? AlphaAeroMax(p) : -AlphaAeroMin(p);
+        double stallAlpha = alpha >= 0.0
+            ? AlphaAeroMax(p, configuration) : -AlphaAeroMin(p);
         double pitchBreak = -System.Math.Sign(alpha) * p.StallPitchBreakNm * separation
             * System.Math.Clamp((System.Math.Abs(alpha) - stallAlpha) / 0.25, 0.0, 1.0);
         pitchMoment += pitchBreak;
@@ -1050,8 +1130,9 @@ public static class FlightModel {
         differentialAlpha = System.Math.Clamp(differentialAlpha, -0.20, 0.20);
         double leftAlpha = alpha - differentialAlpha;
         double rightAlpha = alpha + differentialAlpha;
-        double localWingSeparation = System.Math.Max(SeparationFraction(leftAlpha, p),
-            SeparationFraction(rightAlpha, p));
+        double localWingSeparation = System.Math.Max(
+            SeparationFraction(leftAlpha, p, configuration),
+            SeparationFraction(rightAlpha, p, configuration));
         double wingSeparation = 0.75 * separation + 0.25 * localWingSeparation;
         double momentScale = dynamicPressure * p.WingAreaM2 * span * 0.25;
         double stalledRollMoment = p.StallRollCoupling * momentScale
@@ -1211,7 +1292,7 @@ public static class FlightModel {
         double cl = nz * r.Mass * G0 / System.Math.Max(dynamicPressure * p.WingAreaM2, 1e-6);
         double protectedAlpha = System.Math.Clamp(
             (cl - configuration.LiftCoefficientIncrement) / p.CLAlpha,
-            AlphaAeroMin(p), AlphaAeroMax(p));
+            AlphaAeroMin(p), AlphaAeroMax(p, configuration));
         if (!double.IsFinite(c.CommandedAlphaRad)) return protectedAlpha;
 
         // The protection/control layer may deliberately demand incidence beyond the lift break.
@@ -1224,7 +1305,8 @@ public static class FlightModel {
     static double TargetNz(in RawState r, in PilotCommand c, in AircraftParams p,
         double dynamicPressure, in AirframeAerodynamicState configuration) {
         double nzMax = System.Math.Min(dynamicPressure * p.WingAreaM2
-            * (p.CLMax + configuration.LiftCoefficientIncrement) / (r.Mass * G0),
+            * (p.CLMax + PositiveLiftCoefficientIncrement(configuration))
+                / (r.Mass * G0),
             PositiveControlLimitG(p));
         double nzMin = System.Math.Max(dynamicPressure * p.WingAreaM2
             * (p.CLMin + configuration.LiftCoefficientIncrement) / (r.Mass * G0), -1.5);
@@ -1252,7 +1334,8 @@ public static class FlightModel {
         double speed = ResolveAirspeed(s, airspeedMps);
         double q = 0.5 * atmosphere.Sample(s.Position.Y).DensityKgM3 * speed * speed;
         double nzMax = System.Math.Min(q * p.WingAreaM2
-            * (p.CLMax + configuration.LiftCoefficientIncrement) / (s.Mass * G0),
+            * (p.CLMax + PositiveLiftCoefficientIncrement(configuration))
+                / (s.Mass * G0),
             PositiveControlLimitG(p));
         double nzMin = System.Math.Max(q * p.WingAreaM2
             * (p.CLMin + configuration.LiftCoefficientIncrement) / (s.Mass * G0), -1.5);
