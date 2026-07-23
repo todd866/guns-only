@@ -75,6 +75,49 @@ public class ReactiveBanditTests {
         Assert.Equal(expected, successor.Skill);
     }
 
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(3, false)]
+    [InlineData(4, true)]
+    [InlineData(5, true)]
+    public void FlagshipAirframeEscalationKeepsSu27UntilTheAceRung(
+        int engagement, bool expectsSu35) {
+        BeatSetup beat = Beats.ModernVisualMerge();
+        var player = State(0.0, 3048.0, 0.0, 300.0);
+        var successor = Assert.IsType<ReactiveBandit>(
+            beat.CreateNextBandit(player, engagement));
+
+        AircraftParams expectedAir = expectsSu35
+            ? FlightModel.Su35SPublicDataSurrogate
+            : FlightModel.Su27SPublicDataSurrogate;
+        AircraftCapability expectedCapability = expectsSu35
+            ? AircraftCapability.Su35SSurrogate
+            : AircraftCapability.Su27SSurrogate;
+        Assert.Same(expectedAir, successor.AircraftParameters);
+        Assert.Same(expectedAir, beat.BanditAirForEngagement(engagement));
+        Assert.Same(expectedCapability,
+            beat.BanditAircraftForEngagement(engagement));
+    }
+
+    [Fact]
+    public void Su35SurrogateIsThePublishedThrustClassWithModestRollDeltas() {
+        AircraftParams su27 = FlightModel.Su27SPublicDataSurrogate;
+        AircraftParams su35 = FlightModel.Su35SPublicDataSurrogate;
+
+        Assert.Equal(su27.ThrustMaxN * 1.16, su35.ThrustMaxN, 8);
+        Assert.Equal(su27.MaxThrustFraction, su35.MaxThrustFraction);
+        Assert.Equal(su27.MassKg, su35.MassKg);
+        Assert.Equal(su27.WingAreaM2, su35.WingAreaM2);
+        Assert.InRange(su35.FightRollRateMaxRad / su27.FightRollRateMaxRad,
+            1.05, 1.07);
+        Assert.Equal("su35s-public-data-surrogate-v1",
+            su35.LateralDerivativeProfileId);
+        Assert.Equal("aircraft.su35s.public-data-surrogate.v1",
+            AircraftCapability.Su35SSurrogate.Id);
+        Assert.True(AircraftCapability.Su35SSurrogate.PublicDataSurrogate);
+    }
+
     [Fact]
     public void FlagshipOpeningNeutralMergeIsBriefedAsANoviceAndHandsOffToOne() {
         var beat = Beats.ModernVisualMerge();
