@@ -188,6 +188,60 @@ public class DroneRaidEvaluationTests {
     }
 
     [Fact]
+    public void LeakerKeepsFlyingOutsideCombatAndIsPrunedAfterTwelveKilometres() {
+        AircraftState player = new(new Vec3D(0.0, AltitudeM, -11_990.0),
+            200.0, 0.0, Math.PI, 0.0, FlightModel.F22APublicDataSurrogate.MassKg);
+        AircraftState leaked = State(0.0, 0.0, heading: 0.0);
+        AircraftState next = State(1000.0, -10_000.0, heading: 0.0);
+        var definition = new DroneRaidScenarioDefinition(
+            defendedPoint: Vec3D.Zero,
+            defendedRadiusM: 10.0,
+            targets: new[] { leaked, next });
+        BeatSetup setup = Beats.DroneRaidDefense() with {
+            Player = player,
+            Bandit = leaked,
+            BanditTimeline = new() {
+                (0.0, new PilotCommand(1.0, 0.0, 0.92, 0.0))
+            },
+            DroneRaid = definition
+        };
+        var session = new SimulationSession();
+        session.StartBeat(() => setup);
+        long leakedSpawnSequence = session.BanditSpawnSequence;
+        session.Begin();
+
+        session.StepFixed();
+
+        Assert.Equal(1, session.DroneRaidEvaluation!.Leakers);
+        Assert.Equal(2, session.DroneRaidEvaluation.ActiveTargetNumber);
+        Assert.Equal(leakedSpawnSequence + 1, session.BanditSpawnSequence);
+        Assert.Equal(next.Position, session.Bandit.State.Position);
+        DetachedOpponentWreck egressor = Assert.Single(session.DetachedOpponentWrecks);
+        Assert.Equal(AircraftTerminalState.Flying, egressor.TerminalState);
+        Assert.Equal(leakedSpawnSequence, egressor.SpawnSequence);
+        AircraftState detachedStart = egressor.Aircraft;
+        AircraftState nextStart = session.Bandit.State;
+
+        session.StepFixed();
+
+        Assert.NotEqual(detachedStart, egressor.Aircraft);
+        Assert.NotEqual(nextStart, session.Bandit.State);
+        Assert.Same(egressor, Assert.Single(session.DetachedOpponentWrecks));
+        Assert.Equal(AircraftTerminalState.Flying, session.OpponentTerminalState);
+        Assert.Equal(FightOutcome.Flying, session.PlayerGun.Outcome);
+
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && session.DetachedOpponentWrecks.Count > 0; tick++)
+            session.StepFixed();
+
+        Assert.Empty(session.DetachedOpponentWrecks);
+        Assert.Equal(2, session.DroneRaidEvaluation.ActiveTargetNumber);
+        Assert.Equal(leakedSpawnSequence + 1, session.BanditSpawnSequence);
+        Assert.NotEqual(next.Position, session.Bandit.State.Position);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+    }
+
+    [Fact]
     public void UnopposedRaidEventuallyProducesFourObservableLeakersAndDefeat() {
         var session = new SimulationSession(8);
         long initialSpawnSequence = session.BanditSpawnSequence;
