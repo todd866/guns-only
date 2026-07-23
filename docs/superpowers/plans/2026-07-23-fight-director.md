@@ -131,7 +131,7 @@ public sealed class LearnerModel {         // deterministic; owns a bounded wind
 
 **Key assertions:** four dominant reports ⇒ `Overall == Dominant` reached one step at a time; oscillating borderline input does not flap bands (hysteresis); boss defeat leaves bands unchanged but resets `SecondsSinceLastDefeat`; identical report sequence ⇒ identical bands.
 
-- [ ] Steps: failing tests → fail → implement → pass → commit `feat(ai): LearnerModel V0 — banded per-concept skill estimate`
+- [x] Steps: failing tests → fail → implement → pass → commit `feat(ai): LearnerModel V0 — banded per-concept skill estimate`
 
 ---
 
