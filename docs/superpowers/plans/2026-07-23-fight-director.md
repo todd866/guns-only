@@ -208,7 +208,7 @@ public static BanditSkillProfile Boss() => For(PilotSkill.Ace) with {
 
 ### Task 8: Full gate
 
-- [ ] Run the full gate (command in the header; capture bin/check's own exit code). Expected green: all new suites + `ReactiveBanditTests`/`AceBanditTests`/`AiThreatTests`/determinism unchanged. No `web/wwwroot` diffs ⇒ no build-stamp bump.
+- [x] Run the full gate (command in the header; capture bin/check's own exit code). Expected green: all new suites + `ReactiveBanditTests`/`AceBanditTests`/`AiThreatTests`/determinism unchanged. No `web/wwwroot` diffs ⇒ no build-stamp bump.
 - [ ] Commit any tidy-ups. Worktree branch `fight-director` is the deliverable; merge into `pivot-hardening` is a separate reviewed step (main tree has concurrent uncommitted work).
 
 ## Self-Review
