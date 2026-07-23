@@ -224,7 +224,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             engagementNumber: engagementNumber,
             speedMps: replacementSpeedMps,
             skill: skill,
-            terrain: terrain);
+            terrain: terrain,
+            profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null);
     }
 }
 

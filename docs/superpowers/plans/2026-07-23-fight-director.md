@@ -202,7 +202,7 @@ public static BanditSkillProfile Boss() => For(PilotSkill.Ace) with {
 
 **Key assertions:** pre-commit stalk fires fewer rounds per solution-second than a plain Ace in the same scripted geometry while holding ≥ its solution-seconds (declines marginal shots, keeps dominance); a scripted player energy collapse trips the commit within a bounded time and rounds follow; commit latches; tick-for-tick determinism; a non-boss Ace is byte-identical to before this task.
 
-- [ ] Steps: failing tests → fail → implement → pass → re-run full `sim.Tests` → commit `feat(ai): honest cat-and-mouse boss — stalk, commit trigger, roll-in`
+- [x] Steps: failing tests → fail → implement → pass → re-run full `sim.Tests` → commit `feat(ai): honest cat-and-mouse boss — stalk, commit trigger, roll-in`
 
 ---
 

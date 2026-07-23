@@ -130,11 +130,11 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     public ReactiveBandit(AircraftState initial, AircraftParams parameters,
         PilotSkill skill = PilotSkill.Competent,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
-        int engagementNumber = 1) {
+        int engagementNumber = 1, BanditSkillProfile? profile = null) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         Skill = skill;
-        _profile = BanditSkillProfile.For(skill);
+        _profile = profile ?? BanditSkillProfile.For(skill);
         _doctrine = (engagementNumber - 1) % System.Math.Max(1, _profile.DoctrineCount);
         _parameters = parameters;
         _terrain = terrain;
@@ -165,7 +165,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     public static ReactiveBandit SpawnForMerge(in AircraftState player,
         AircraftParams parameters, int engagementNumber,
         double speedMps = 180.0, PilotSkill skill = PilotSkill.Competent,
-        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
+        BanditSkillProfile? profile = null) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         if (!double.IsFinite(speedMps) || speedMps <= 0.0)
@@ -219,7 +220,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double gamma = System.Math.Atan2(toMerge.Y, System.Math.Max(1.0, horizontalM));
         var initial = new AircraftState(position, speedMps, gamma, chi, 0.0, parameters.MassKg);
         return new ReactiveBandit(
-            initial, parameters, skill, terrain, engagementNumber);
+            initial, parameters, skill, terrain, engagementNumber, profile);
     }
 
     static double SurfaceHeightM(GunsOnly.Sim.Environment.ITerrainSurface? terrain,
@@ -322,7 +323,51 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
 
     public bool WantsToFire(in ActorObservation player) => !CatastrophicallyDamaged
         && Tactic == BanditTactic.Acquire
-        && BanditFireControl.WantsToFire(State, player, T, _profile.FireConeRad);
+        && BanditFireControl.WantsToFire(State, player, T, EffectiveFireConeRad);
+
+    /// A committed boss shoots with the standard Ace gate; a stalking boss holds its raised
+    /// quality bar. Every other tier reads its profile cone unchanged.
+    double EffectiveFireConeRad => _profile.IsBoss && !BossCommitted
+        ? _profile.FireConeRad
+        : _profile.IsBoss
+            ? BanditSkillProfile.For(PilotSkill.Ace).FireConeRad
+            : _profile.FireConeRad;
+
+    /// Latched roll-in state for the boss overlay. Deterministic and observation-only: the
+    /// trigger reads exactly the player observation every bandit gets.
+    public bool BossCommitted { get; private set; }
+    double _bossDominanceSeconds;
+
+    void UpdateBossCommitment(in ActorObservation player, double dt) {
+        var los = player.Position - State.Position;
+        double rangeM = los.Length;
+        if (rangeM < 1e-6) return;
+        var losDir = los * (1.0 / rangeM);
+        double playerNoseErrorRad = System.Math.Acos(System.Math.Clamp(
+            player.ForwardDir().Dot(losDir * -1.0), -1.0, 1.0));
+
+        // (a) Energy collapse: the player is slow and the boss holds a real reserve.
+        if (player.Speed < 140.0 && State.Speed >= player.Speed + 30.0) {
+            BossCommitted = true;
+            return;
+        }
+        // (b) Caught nose-off inside pounce range: the player turned away too close to the cat.
+        if (playerNoseErrorRad > 60.0 * System.Math.PI / 180.0 && rangeM < 1200.0) {
+            BossCommitted = true;
+            return;
+        }
+        // (c) Sustained dominance: behind the 3-9 line and closing, long enough that the point
+        // is made. The accumulator resets the moment the geometry is contested.
+        bool behindThreeNine = playerNoseErrorRad > System.Math.PI / 2.0;
+        double closureMps = (State.VelocityVector() - player.VelocityVector()).Dot(losDir);
+        if (behindThreeNine && closureMps >= 0.0) {
+            _bossDominanceSeconds += dt;
+            if (_bossDominanceSeconds >= _profile.CommitDominanceSeconds)
+                BossCommitted = true;
+        } else {
+            _bossDominanceSeconds = 0.0;
+        }
+    }
 
     public void ApplyCatastrophicDamage(int handedness) {
         if (CatastrophicallyDamaged) return;
@@ -381,6 +426,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // candidate maneuvers forward in the deterministic kernel and fly the one that best improves
         // the future firing position. The vertical fight emerges from the score, it is not scripted.
         // Novice/Competent keep LookaheadHorizonTicks == 0 and the state machine below UNCHANGED.
+        if (_profile.IsBoss && !BossCommitted) UpdateBossCommitment(player, dt);
+
         if (_profile.LookaheadHorizonTicks > 0) {
             LastCommand = LookaheadCommand(player);
             Tactic = BanditTactic.Acquire; // in-envelope firing is governed by BanditFireControl
@@ -915,6 +962,10 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // Speed (kinetic-energy) retention only -- NOT raw altitude, which would reward an endless
         // zoom climb out of the fight. Vertical maneuvers still emerge when they improve the angle.
         score += 0.010 * System.Math.Min(terminal.Speed, 320.0);
+        // A stalking boss doubles the energy-reserve weight: conservative-dominant flying — keep
+        // smash in hand, refuse the gamble — until the commit trigger removes the bias.
+        if (_profile.IsBoss && !BossCommitted)
+            score += 0.010 * System.Math.Min(terminal.Speed, 320.0);
         // Floor avoidance: a hard penalty as the rollout approaches the local surface, and an
         // outright disqualifier for a path that actually reaches it. The gradient alone maxes out
         // near the magnitude of a full gun-window reward, which let a kill-shot candidate accept
