@@ -176,6 +176,70 @@ test("decodes little-endian decimetres and omits all-water triangles", () => {
   waterBuilt.geometry.dispose();
 });
 
+test("bakes a concavity attribute so valley floors read as enclosed", () => {
+  // Heights are decimetres (metresPerUnit 0.1): a 100 m plateau with a single
+  // 0 m pit at the centre. The pit is the most concave sample in the grid.
+  const values = new Int16Array([
+    1000, 1000, 1000,
+    1000, 0, 1000,
+    1000, 1000, 1000,
+  ]);
+  const record = manifest().chunks[0].lods[0];
+  const decoded = decodeTerrainRecord(values.buffer, record, quantization);
+  const built = createTerrainGeometry(THREE, manifest().chunks[0], decoded);
+
+  const concavity = built.geometry.getAttribute("concavity");
+  assert.ok(concavity, "terrain geometry must carry a baked concavity attribute");
+  assert.equal(concavity.itemSize, 1);
+  assert.equal(concavity.count, built.geometry.getAttribute("position").count,
+    "every vertex, skirts included, needs a concavity value");
+  assert.ok(concavity.getX(4) < 0.5,
+    "the pit at the centre must read as concave");
+  for (let index = 0; index < concavity.count; index++) {
+    const value = concavity.getX(index);
+    assert.ok(value >= 0 && value <= 1, `concavity ${value} must stay in [0, 1]`);
+  }
+  built.geometry.dispose();
+});
+
+test("concavity fades to neutral at chunk edges so neighbours cannot seam", () => {
+  // Each chunk can only see its own samples, so a clamped neighbourhood at the boundary would
+  // give the SAME world position a different value in each of the two chunks that share it —
+  // painting a visible grid of seams every 16 km. Forcing the boundary to exactly 0.5 makes both
+  // sides agree by construction.
+  const values = new Int16Array([
+    1000, 1000, 1000,
+    1000, 0, 1000,
+    1000, 1000, 1000,
+  ]);
+  const record = manifest().chunks[0].lods[0];
+  const decoded = decodeTerrainRecord(values.buffer, record, quantization);
+  const built = createTerrainGeometry(THREE, manifest().chunks[0], decoded);
+  const concavity = built.geometry.getAttribute("concavity");
+
+  // Every perimeter sample of the 3x3 grid sits on the chunk boundary.
+  for (const index of [0, 1, 2, 3, 5, 6, 7, 8]) {
+    assert.equal(concavity.getX(index), 0.5,
+      `boundary sample ${index} must be exactly neutral`);
+  }
+  built.geometry.dispose();
+});
+
+test("concavity is deterministic across repeated builds", () => {
+  const values = new Int16Array([1000, 400, 1000, 250, 0, 250, 1000, 400, 1000]);
+  const record = manifest().chunks[0].lods[0];
+  const first = createTerrainGeometry(THREE, manifest().chunks[0],
+    decodeTerrainRecord(values.buffer, record, quantization));
+  const second = createTerrainGeometry(THREE, manifest().chunks[0],
+    decodeTerrainRecord(values.buffer, record, quantization));
+  assert.deepEqual(
+    Array.from(first.geometry.getAttribute("concavity").array),
+    Array.from(second.geometry.getAttribute("concavity").array),
+  );
+  first.geometry.dispose();
+  second.geometry.dispose();
+});
+
 test("selects progressively coarser LODs with tier-specific distance", () => {
   // Weak tiers floor at LOD1 (129^2): mobile/balanced never draw the 257^2 LOD0 surface, nor its
   // LOD0-only near-chunk scenery, even at the surface. This caps near-ground fill-rate/overdraw.

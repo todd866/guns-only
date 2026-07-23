@@ -24,6 +24,14 @@ const MAX_STREAM_LOOK_AHEAD_METRES = 24_000;
 export const TERRAIN_CURVATURE_START_M = 12_000;
 export const TERRAIN_EARTH_RADIUS_M = 6_371_000;
 
+// Baked terrain occlusion. The sampling radius is expressed in METRES and converted to samples
+// per LOD, so a valley reads with the same enclosure at 64 m and at 256 m spacing and does not
+// pop across an LOD change. 300 m is about the floor width of a Korean central-highland valley.
+export const TERRAIN_CONCAVITY_RADIUS_M = 300;
+// Relief that saturates the attribute. Height differences beyond this clamp, so a 1,500 m ridge
+// wall does not crush every lesser fold to black.
+export const TERRAIN_CONCAVITY_RELIEF_M = 120;
+
 export function terrainCurvatureDropM(radialDistanceM) {
   const curvedRadialM = Math.max(finite(radialDistanceM) - TERRAIN_CURVATURE_START_M, 0);
   return curvedRadialM * curvedRadialM / (2 * TERRAIN_EARTH_RADIUS_M);
@@ -312,6 +320,47 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
       positions[index * 3 + 2] = -(minimumNorth + north * spacingNorth - centreNorth);
     }
   }
+  // Baked ambient occlusion: each sample against the mean of its ring neighbours. Negative means
+  // the sample sits below its surroundings (enclosed valley floor); positive means it stands proud
+  // (ridge crest). This is the term that makes dissected terrain legible, and baking it here keeps
+  // the fragment shader free of neighbourhood sampling.
+  const spacingM = Math.max(spacingEast, spacingNorth);
+  const ringSamples = Math.max(1, Math.min(
+    Math.floor((sampleCount - 1) / 2),
+    Math.round(TERRAIN_CONCAVITY_RADIUS_M / spacingM),
+  ));
+  const concavity = new Float32Array(baseVertexCount + skirtVertexCount);
+  for (let north = 0; north < sampleCount; north++) {
+    for (let east = 0; east < sampleCount; east++) {
+      const index = north * sampleCount + east;
+      let total = 0;
+      let count = 0;
+      for (let northStep = -1; northStep <= 1; northStep++) {
+        for (let eastStep = -1; eastStep <= 1; eastStep++) {
+          if (northStep === 0 && eastStep === 0) continue;
+          const sampleNorth = Math.min(sampleCount - 1,
+            Math.max(0, north + northStep * ringSamples));
+          const sampleEast = Math.min(sampleCount - 1,
+            Math.max(0, east + eastStep * ringSamples));
+          total += heights[sampleNorth * sampleCount + sampleEast];
+          count++;
+        }
+      }
+      const relative = heights[index] - total / count;
+      const raw = Math.min(1, Math.max(0,
+        relative / TERRAIN_CONCAVITY_RELIEF_M * 0.5 + 0.5));
+      // A chunk can only see its own samples, so a clamped neighbourhood at the boundary would
+      // give the SAME world position different occlusion in each of the two chunks sharing it —
+      // a visible seam grid every tile span. Fading to exactly 0.5 over the ring width makes both
+      // sides agree by construction, at the cost of occlusion in a band that is a few percent of
+      // the tile. Do not replace this with cross-chunk sampling: it would make geometry depend on
+      // neighbour load order and break determinism.
+      const edgeDistance = Math.min(east, north,
+        sampleCount - 1 - east, sampleCount - 1 - north);
+      const edgeFade = Math.min(1, edgeDistance / ringSamples);
+      concavity[index] = 0.5 + (raw - 0.5) * edgeFade;
+    }
+  }
   const indices = [];
   for (let north = 0; north < sampleCount - 1; north++) {
     for (let east = 0; east < sampleCount - 1; east++) {
@@ -337,6 +386,8 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
     positions[bottomIndex * 3] = positions[sourceIndex * 3];
     positions[bottomIndex * 3 + 1] = positions[sourceIndex * 3 + 1] - skirtDepthM;
     positions[bottomIndex * 3 + 2] = positions[sourceIndex * 3 + 2];
+    concavity[topIndex] = concavity[sourceIndex];
+    concavity[bottomIndex] = concavity[sourceIndex];
   }
   for (let perimeterIndex = 0; perimeterIndex < perimeter.length; perimeterIndex++) {
     const next = (perimeterIndex + 1) % perimeter.length;
@@ -349,6 +400,7 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("concavity", new THREE.BufferAttribute(concavity, 1));
   geometry.setIndex(indices);
   // Two material groups so the flat top surface can render single-sided (THREE.FrontSide halves
   // its fragment work — this is where the "face-full of ground" fill cost lives) while the thin
