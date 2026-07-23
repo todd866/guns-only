@@ -163,6 +163,7 @@ public static class CombatDatasetJsonLines {
         PilotSkill.Competent => "guns-only.reactive-bandit.v1:competent",
         PilotSkill.Veteran => "guns-only.reactive-bandit.v1:veteran",
         PilotSkill.Ace => "guns-only.reactive-bandit.v1:ace",
+        PilotSkill.Machine => "guns-only.reactive-bandit.v1:machine",
         _ => throw new ArgumentOutOfRangeException(nameof(skill))
     };
 

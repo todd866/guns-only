@@ -231,12 +231,21 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         ?? PilotPhysiologyProfile.KoreaFastJetReference;
     public IBandit CreateBandit(
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
-        SpawnSpec? spec = null) => UsesNeutralMergeBandit
-        ? new NeutralMergeBandit(Bandit, BanditAir, spec?.Skill ?? BanditSkill, terrain)
-        : UsesReactiveBandit
-            ? new ReactiveBandit(Bandit, BanditAir, spec?.Skill ?? BanditSkill, terrain,
-                profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null)
-            : new RailBandit(Bandit, BanditAir, BanditTimeline);
+        SpawnSpec? spec = null) {
+        if (UsesNeutralMergeBandit)
+            return new NeutralMergeBandit(Bandit, BanditAir, spec?.Skill ?? BanditSkill, terrain);
+        if (!UsesReactiveBandit)
+            return new RailBandit(Bandit, BanditAir, BanditTimeline);
+        // A director-staged opening (post-restart pacing memory) may resolve a skill whose
+        // airframe differs from the beat's staged one — a machine spike surviving a restart
+        // must fly the UCAV at UCAV mass, not the staged airframe with a 15 G label.
+        PilotSkill skill = spec?.Skill ?? BanditSkill;
+        AircraftParams air = BanditAirForSkill(skill);
+        AircraftState initial = ReferenceEquals(air, BanditAir)
+            ? Bandit : Bandit with { Mass = air.MassKg };
+        return new ReactiveBandit(initial, air, skill, terrain,
+            profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null);
+    }
 
     /// Deterministic merge factory for a continuous-operations ruleset. Successor aircraft inherit
     /// the mission's staged opponent speed rather than falling back to a Korea-era constant. The

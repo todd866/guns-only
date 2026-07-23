@@ -915,6 +915,7 @@ internal static class SnapshotProjection {
         PilotSkill.Novice => "NOVICE",
         PilotSkill.Veteran => "VETERAN",
         PilotSkill.Ace => "ACE",
+        PilotSkill.Machine => "MACHINE",
         _ => "COMPETENT"
     };
 

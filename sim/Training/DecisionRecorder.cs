@@ -218,7 +218,7 @@ public sealed class DecisionRecorder {
         if (record.Kind != DecisionRecordKind.Transition
             || record.BoundaryTick != 0L
             || record.BoundaryReason != DecisionBoundaryReason.None
-            || record.PolicySkill is < PilotSkill.Novice or > PilotSkill.Ace)
+            || record.PolicySkill is < PilotSkill.Novice or > PilotSkill.Machine)
             throw new ArgumentOutOfRangeException(nameof(record));
         if (record.PreviousActorSpawnSequence < 0
             || (record.PreviousActorEpisodeTruncated

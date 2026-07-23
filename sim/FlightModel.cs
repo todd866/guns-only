@@ -478,7 +478,11 @@ public static class FlightModel {
             ThrustMaxN = 72000.0,
             MaxThrustFraction = 1.0,          // no afterburner class on the drone surrogate
             CD0 = 0.0160,
-            CLMax = 1.70,
+            // 1.95 is the DECLARED polar doing all the work: with the generic high-alpha model
+            // (no F-22 LEF bonus) this is what buys the 15 G corner — and the induced drag of
+            // riding it is what melts the drone's energy. Tuned against the duel-harness
+            // balance gate (machine must out-solution the Ace vs the reference player).
+            CLMax = 1.95,
             FuelFreeMassKg = 11000.0,
             PositiveStructuralLimitG = 15.0,
             PositiveOverrideLimitG = 15.0,    // no crew: no separate emergency tier
@@ -489,6 +493,11 @@ public static class FlightModel {
             RollMomentMaxNm = 700000.0, PitchMomentMaxNm = 1700000.0, YawMomentMaxNm = 600000.0,
             RollHoldRateGainNms = 1200000.0,
             PitchThrustVectorMaxRad = 0.0,    // no TVC claim for the drone
+            // The with-derivation must not smuggle the F-22's high-alpha identity into the
+            // drone: generic post-stall aero, no LEF lift bonus, no F-22 body-axis schedules,
+            // no q-scheduled post-stall override. Its envelope IS its declared polar.
+            HighAlphaModel = HighAlphaModelKind.Generic,
+            DynamicPressureScheduledPostStallOverride = false,
             LateralDerivativeProfileId = "ucav-interceptor-surrogate-v1"
         };
 

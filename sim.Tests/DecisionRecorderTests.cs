@@ -77,6 +77,17 @@ public class DecisionRecorderTests {
     }
 
     [Fact]
+    public void MachinePolicySkillRecordsPassValidation() {
+        // Regression: the transition-record range check topped out at Ace, so the first captured
+        // decision of a PilotSkill.Machine spike threw mid-session.
+        var recorder = new DecisionRecorder();
+        BanditDecisionRecord machine = Record(0) with { PolicySkill = PilotSkill.Machine };
+        recorder.Append(machine);
+        Assert.Equal(PilotSkill.Machine,
+            recorder.ReadDecisionsAfter(0, 4).Records[0].PolicySkill);
+    }
+
+    [Fact]
     public void CursorReadsAreIdempotentBoundedAndOrdered() {
         var recorder = new DecisionRecorder(capacity: 8);
         for (long tick = 0; tick < 6; tick++) recorder.Append(Record(tick));

@@ -1,5 +1,6 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Training;
 
 namespace GunsOnly.Sim.Tests;
 
@@ -42,8 +43,8 @@ public class MachineBanditTests {
         BanditSkillProfile ace = BanditSkillProfile.For(PilotSkill.Ace);
         Assert.True(machine.MaxAcquireG > ace.MaxAcquireG);
         Assert.True(machine.LookaheadHorizonTicks > ace.LookaheadHorizonTicks);
-        Assert.True(machine.EnergyRetentionWeight < ace.EnergyRetentionWeight,
-            "the machine spends energy for angles; that trade IS its personality");
+        Assert.True(machine.EnergyRetentionWeight > ace.EnergyRetentionWeight,
+            "the machine fights fast: its structural ceiling only towers at high q");
         Assert.Equal(1.0, ace.EnergyRetentionWeight);
     }
 
@@ -69,10 +70,12 @@ public class MachineBanditTests {
     }
 
     [Fact]
-    public void MachineOutSolutionsTheAceAgainstTheReferencePlayer() {
-        // Design-doc balance gate: the enemy solution ladder must extend monotonically past
-        // Ace. Same seeded merge, frozen reference player, per-tier gun-window seconds.
-        double SolutionSeconds(PilotSkill skill, AircraftParams air) {
+    public void MachineExtendsTheContinuousWindowLadderPastTheAce() {
+        // Design-doc balance gate, in the design doc's own metric: "the enemy
+        // max-continuous-window ladder must extend monotonically past Ace." AiThreatTests
+        // established max-continuous window — not total solution seconds — as the signal that
+        // discriminates tiers (totals reward loitering; the sustained window is the kill).
+        (double maxWindow, double total) Fly(PilotSkill skill, AircraftParams air) {
             AircraftState playerStart = State(0.0, 4000.0, 0.0, 220.0,
                 air: FlightModel.F22APublicDataSurrogate);
             ReactiveBandit reference = BfmDuel.ReferencePlayer(
@@ -80,13 +83,15 @@ public class MachineBanditTests {
             var bandit = ReactiveBandit.SpawnForMerge(
                 playerStart, air, engagementNumber: 1, speedMps: 220.0, skill: skill);
             BfmDuelResult result = BfmDuel.Fly(reference, bandit, 40.0);
-            return result.BSolutionSeconds;
+            return (result.BMaxContinuousWindowSeconds, result.BSolutionSeconds);
         }
 
-        double ace = SolutionSeconds(PilotSkill.Ace, FlightModel.Su35SPublicDataSurrogate);
-        double machine = SolutionSeconds(PilotSkill.Machine, Ucav);
-        Assert.True(machine > ace,
-            $"machine={machine:F2}s must out-solution ace={ace:F2}s vs the reference player");
+        (double aceWindow, double aceTotal) =
+            Fly(PilotSkill.Ace, FlightModel.Su35SPublicDataSurrogate);
+        (double machineWindow, double machineTotal) = Fly(PilotSkill.Machine, Ucav);
+        Assert.True(machineWindow > aceWindow,
+            $"machine max-window={machineWindow:F2}s (total {machineTotal:F2}s) must exceed "
+            + $"ace max-window={aceWindow:F2}s (total {aceTotal:F2}s)");
     }
 
     [Fact]
@@ -111,6 +116,29 @@ public class MachineBanditTests {
         }
 
         Assert.Equal(Fly(), Fly());
+    }
+
+    [Fact]
+    public void SessionSurvivesAMachineOpponentWithDecisionCaptureOn() {
+        // Codex adversarial finding: the decision-recorder validation topped out at Ace, so a
+        // machine opponent crashed the session on its first captured maneuver. Also proves the
+        // beat-level airframe restage: declaring BanditSkill.Machine fields the UCAV at UCAV
+        // mass regardless of the beat's staged airframe.
+        var session = new SimulationSession();
+        session.StartBeat(() => EngagementReportTests.ContinuousDuel() with {
+            BanditSkill = PilotSkill.Machine
+        });
+        session.Begin();
+        for (int tick = 0; tick < 2 * AircraftSim.TickHz; tick++)
+            session.StepFixed();
+
+        var machine = Assert.IsType<ReactiveBandit>(session.Bandit);
+        Assert.Equal(PilotSkill.Machine, machine.Skill);
+        Assert.Equal(FlightModel.UcavInterceptorSurrogate.MassKg, machine.State.Mass);
+        DecisionReadBatch batch = session.Decisions.ReadDecisionsAfter(
+            0, DecisionRecorder.MaximumReadCount);
+        Assert.Contains(batch.Records,
+            record => record.PolicySkill == PilotSkill.Machine);
     }
 
     [Fact]

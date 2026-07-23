@@ -61,16 +61,18 @@ public readonly record struct BanditSkillProfile(
             LowBlockClearanceM: 105.0,
             LowBlockRecommitSeconds: 0.35),
         // The robot (docs/robot-airframe-design.md): airframe-limited G, machine trigger
-        // discipline, the longest lookahead on the ladder — and a personality that SPENDS
-        // energy for angles (the honest aero of a 15 G pull is its weakness; the reduced
-        // retention weight makes it use the envelope corners instead of husbanding smash).
+        // discipline, the longest lookahead on the ladder — and a personality that fights FAST.
+        // Its 15 G structural ceiling only towers over humans at high dynamic pressure (slow,
+        // everyone is aero-limited alike), so the raised retention weight keeps it in the
+        // regime where its envelope IS the advantage. The counter stays honest physics: every
+        // max-perform pull hemorrhages energy — bait the pull, make it burn, kill it slow.
         PilotSkill.Machine => new(
             15.0, 2.20, true, true, 3, 180,
             FireConeDeg: 3.0,
             LowBlockDoctrine: LowBlockDoctrine.Hunt,
             LowBlockClearanceM: 105.0,
             LowBlockRecommitSeconds: 0.35,
-            EnergyRetentionWeight: 0.45),
+            EnergyRetentionWeight: 1.30),
         _ => For(PilotSkill.Competent),
     };
 

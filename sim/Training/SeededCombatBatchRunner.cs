@@ -172,11 +172,18 @@ public static class SeededCombatBatchRunner {
         cancellationToken.ThrowIfCancellationRequested();
 
         AircraftParams referenceAir = FlightModel.F22APublicDataSurrogate;
-        AircraftParams learningAir = FlightModel.Su27SPublicDataSurrogate;
+        AircraftParams learningAir = behaviorSkill == PilotSkill.Machine
+            ? FlightModel.UcavInterceptorSurrogate
+            : FlightModel.Su27SPublicDataSurrogate;
         var reference = new ReactiveBandit(
             scenario.ReferenceStart, referenceAir, referenceSkill);
+        // Scenario factories stage skill-agnostic states; a machine episode restages the
+        // learning fighter at UCAV mass so the airframe it flies is the airframe it weighs.
         var learning = new ReactiveBandit(
-            scenario.LearningFighterStart, learningAir, behaviorSkill);
+            behaviorSkill == PilotSkill.Machine
+                ? scenario.LearningFighterStart with { Mass = learningAir.MassKg }
+                : scenario.LearningFighterStart,
+            learningAir, behaviorSkill);
         CombatConfig combat = CombatConfig.ModernVisualMerge;
         var referenceGun = new GunKill(
             combat.PlayerAmmo,

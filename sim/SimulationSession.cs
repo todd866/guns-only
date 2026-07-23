@@ -1163,7 +1163,7 @@ public sealed class SimulationSession {
         // raid would misattribute the whole raid to one staged skill, so counters stay off.
         if (_beat.DroneRaid is null)
             StartEngagementCounters(openingSpawn?.Skill ?? _beat.BanditSkill,
-                openingSpawn?.Boss ?? false);
+                openingSpawn is { } opening && (opening.Boss || opening.Machine));
         // Simulation time is deliberately monotonic across restarts because KeyGrammar timestamps
         // all input in this epoch. Only flight-local state and the accumulator reset.
         Lifecycle = LifecycleState.Ready;
