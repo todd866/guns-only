@@ -211,9 +211,11 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         && ContinuousCombat is not null
         && BanditAircraft.Id == AircraftCapability.Su27SSurrogate.Id;
     public AircraftParams BanditAirForSkill(PilotSkill skill) =>
-        UsesSu35SAtAceRung(skill)
-            ? FlightModel.Su35SPublicDataSurrogate
-            : BanditAir;
+        skill == PilotSkill.Machine
+            ? FlightModel.UcavInterceptorSurrogate
+            : UsesSu35SAtAceRung(skill)
+                ? FlightModel.Su35SPublicDataSurrogate
+                : BanditAir;
     public AircraftCapability BanditAircraftForSkill(PilotSkill skill) =>
         UsesSu35SAtAceRung(skill)
             ? AircraftCapability.Su35SSurrogate

@@ -1819,6 +1819,9 @@ public sealed class SimulationSession {
         LastDirectorSpawn = directorSpawn;
         _bandit = _beat.CreateNextBandit(
             _player.State, nextEngagement, _terrainSurface, directorSpawn);
+        // Spike opponents of either flavour (cat or machine) carry the report quarantine: an
+        // expected loss to one must not crater the ordinary-fight skill estimate.
+        bool spikeOpponent = directorSpawn.Boss || directorSpawn.Machine;
         _bandit.Wind = _player.Wind;
         _bandit.Atmosphere = _player.AtmosphereModel;
         _gunKill = _gunKill.Outcome == FightOutcome.Splash
@@ -1845,7 +1848,7 @@ public sealed class SimulationSession {
         _nextOpponentSpawnAtMs = double.NegativeInfinity;
         _splashCueUntilMs = double.NegativeInfinity;
         _engagementNumber = nextEngagement;
-        StartEngagementCounters(directorSpawn.Skill, directorSpawn.Boss);
+        StartEngagementCounters(directorSpawn.Skill, spikeOpponent);
         _banditSpawnSequence++;
         _padlockRollAssist.Reset();
         _lastRange = Geometry.Range(_player.State, _bandit.State);

@@ -464,6 +464,34 @@ public static class FlightModel {
     /// Roll response is only six percent stronger/faster; every polar, lift, mass, inertia,
     /// structural, drag, fuel, and systems limitation otherwise remains the Su-27S surrogate.
     /// https://uacrussia.ru/en/aircraft/lineup/military/su-35/
+    /// Uncrewed post-Ace opponent airframe (docs/robot-airframe-design.md): a labelled
+    /// gameplay surrogate in the X-47 class, no OEM performance claim. No pilot aboard, so the
+    /// airframe — not physiology — sets the G boundary (15 G structural). Identity: generous
+    /// CLMax reaches a corner no crewed jet can ride, but a drone trades engine for
+    /// expendability — thrust class far below the F-22 — so it CANNOT sustain the corner it can
+    /// reach: hard turning melts its energy through the same continuous polar as everyone else.
+    /// The counter is energy fighting, never rate fighting.
+    public static readonly AircraftParams UcavInterceptorSurrogate =
+        F22APublicDataSurrogate with {
+            MassKg = 12500.0,
+            WingAreaM2 = 58.0,
+            ThrustMaxN = 72000.0,
+            MaxThrustFraction = 1.0,          // no afterburner class on the drone surrogate
+            CD0 = 0.0160,
+            CLMax = 1.70,
+            FuelFreeMassKg = 11000.0,
+            PositiveStructuralLimitG = 15.0,
+            PositiveOverrideLimitG = 15.0,    // no crew: no separate emergency tier
+            IxxKgM2 = 22000.0, IyyKgM2 = 110000.0, IzzKgM2 = 125000.0,
+            RollStiffnessNmRad = 600000.0, PitchStiffnessNmRad = 1500000.0,
+            YawStiffnessNmRad = 450000.0,
+            RollDampingNms = 180000.0, PitchDampingNms = 600000.0, YawDampingNms = 260000.0,
+            RollMomentMaxNm = 700000.0, PitchMomentMaxNm = 1700000.0, YawMomentMaxNm = 600000.0,
+            RollHoldRateGainNms = 1200000.0,
+            PitchThrustVectorMaxRad = 0.0,    // no TVC claim for the drone
+            LateralDerivativeProfileId = "ucav-interceptor-surrogate-v1"
+        };
+
     public static readonly AircraftParams Su35SPublicDataSurrogate =
         Su27SPublicDataSurrogate with {
             ThrustMaxN = Su27SPublicDataSurrogate.ThrustMaxN * 1.16,

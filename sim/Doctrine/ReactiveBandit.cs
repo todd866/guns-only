@@ -1300,7 +1300,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         score -= 0.004 * System.Math.Abs(termRange - idealRangeM);
         // Speed (kinetic-energy) retention only -- NOT raw altitude, which would reward an endless
         // zoom climb out of the fight. Vertical maneuvers still emerge when they improve the angle.
-        score += 0.010 * System.Math.Min(terminal.Speed, 320.0);
+        score += 0.010 * _profile.EnergyRetentionWeight
+            * System.Math.Min(terminal.Speed, 320.0);
         // A stalking boss doubles the energy-reserve weight: conservative-dominant flying — keep
         // smash in hand, refuse the gamble — until the commit trigger removes the bias.
         if (_profile.IsBoss && !BossCommitted)

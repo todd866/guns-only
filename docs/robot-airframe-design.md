@@ -27,10 +27,41 @@ advantage is not smarter BFM but a wider physical envelope, honestly simulated.
   energy tactics: you cannot win a circle against it, so the lesson is vertical fighting, energy
   sanctuaries, and one-pass discipline. Debrief should say so explicitly.
 
+## Status (2026-07-23, machine-spike build)
+
+Implemented as a **FightDirector spike flavour**, not a fixed ladder rung: `PilotSkill.Machine`
++ `FlightModel.UcavInterceptorSurrogate` (15 G structural, CLMax 1.70, thrust class ~0.59 T/W,
+no TVC claim), served when the spike trigger fires AND the learner's **energy band is strictly
+the weakest axis** — the machine is deliberate practice for the exact player it punishes.
+`EnergyRetentionWeight 0.45` makes it spend smash for angles through the ordinary lookahead;
+the same aero that grants its corner melts ~13 kt/s holding it, so the vulnerability window is
+physics, not scripting. Corridor tests: `sim.Tests/MachineBanditTests.cs` (15 G reachable in
+the fight band, sustained-pull energy collapse, ladder-monotonic solution seconds past Ace,
+spike-flavour selection, bit determinism).
+
+## Become the machine (design sketch — approved direction, not yet built)
+
+Pilot-user direction (2026-07-23): *"if you get gunned by one then maybe you become the thing
+you can't kill otherwise."* The honesty story writes itself: the player's G boundary was always
+the body aboard — flying a **captured machine remotely** removes the body, so the player pulls
+the same honest 15 G with zero G-LOC, and learns the machine's weakness from inside it.
+
+- **Capture, not reward-for-dying.** Dying to the machine must not be the unlock (perverse
+  incentive: players feed themselves to it). Gate the capture on having fought it WELL before
+  losing — e.g. survived its first commit window, or forced N overshoots — and frame it as
+  salvage/telemetry capture in the debrief.
+- **A bounded loan, not a permanent airframe.** One sortie (or one gauntlet segment) in the
+  machine, then back to the jet. It is a lesson and a release valve, not a new main.
+- **What you fight as the machine** is the dominance display inverted: ordinary human tiers you
+  now execute — and the energy lesson lands from the other side when YOU stall out of a 15 G
+  cone and get gunned by a Competent who kept their smash.
+- **Touches:** player airframe swap at staging, physiology profile swap (the remote pilot needs
+  the existing `systems.modern-airborne.not-simulated.v1`-style machine precedent), progression
+  persistence, HUD labelling. Own spec + plan when picked up.
+
 ## Not in scope
 
-Player-flyable robot, swarm behavior, and datalink/EW flavor — later. One honest airframe and
-one ladder slot first.
+Swarm behavior and datalink/EW flavor — later.
 
 ## Build order
 

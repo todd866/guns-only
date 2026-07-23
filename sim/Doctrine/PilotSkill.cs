@@ -2,7 +2,7 @@ namespace GunsOnly.Sim.Doctrine;
 
 /// Opponent competence tiers for the roguelite escalation. The ladder spans a deliberately dumb
 /// novice up to a genuinely threatening ace; the gauntlet spawns higher tiers toward the climax.
-public enum PilotSkill { Novice, Competent, Veteran, Ace }
+public enum PilotSkill { Novice, Competent, Veteran, Ace, Machine }
 
 /// How readily a pilot leaves the traditional perch to fight a target in the low block.
 public enum LowBlockDoctrine {
@@ -32,7 +32,8 @@ public readonly record struct BanditSkillProfile(
     double LowBlockClearanceM = 260.0,
     double LowBlockRecommitSeconds = 0.0,
     bool IsBoss = false,
-    double CommitDominanceSeconds = 8.0) {
+    double CommitDominanceSeconds = 8.0,
+    double EnergyRetentionWeight = 1.0) {
     /// Trigger nose-error gate in radians. Novice/Competent keep the historical 3-degree
     /// discipline exactly. The Veteran deliberately shoots a WIDER gate: with honest ballistics a
     /// wide-gate burst is tracer pressure and near misses — the mid-ladder player finally gets
@@ -59,6 +60,17 @@ public readonly record struct BanditSkillProfile(
             LowBlockDoctrine: LowBlockDoctrine.Hunt,
             LowBlockClearanceM: 105.0,
             LowBlockRecommitSeconds: 0.35),
+        // The robot (docs/robot-airframe-design.md): airframe-limited G, machine trigger
+        // discipline, the longest lookahead on the ladder — and a personality that SPENDS
+        // energy for angles (the honest aero of a 15 G pull is its weakness; the reduced
+        // retention weight makes it use the envelope corners instead of husbanding smash).
+        PilotSkill.Machine => new(
+            15.0, 2.20, true, true, 3, 180,
+            FireConeDeg: 3.0,
+            LowBlockDoctrine: LowBlockDoctrine.Hunt,
+            LowBlockClearanceM: 105.0,
+            LowBlockRecommitSeconds: 0.35,
+            EnergyRetentionWeight: 0.45),
         _ => For(PilotSkill.Competent),
     };
 

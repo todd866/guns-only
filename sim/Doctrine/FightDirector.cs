@@ -5,7 +5,8 @@ public enum DirectorPhase { Calm, Build, Boss, Release }
 /// The next engagement the director wants staged. Reason is a short human-readable line for
 /// debrief/telemetry — it explains the pick, it never affects behaviour.
 public readonly record struct SpawnSpec(
-    PilotSkill Skill, int DoctrineIndex, bool Boss, string Reason);
+    PilotSkill Skill, int DoctrineIndex, bool Boss, string Reason,
+    bool Machine = false);
 
 /// Session-scale pacing for infinite-spawn continuous combat: CALM → BUILD → BOSS → RELEASE.
 /// Owns a LearnerModel and turns its banded estimate into the next spawn's tier/doctrine, with
@@ -77,6 +78,16 @@ public sealed class FightDirector {
 
         if (_phase == DirectorPhase.Boss || BossTriggerHolds()) {
             _phase = DirectorPhase.Boss;
+            // Spike flavour targets the weakest concept: an energy-sloppy player meets the
+            // 15 G machine (it executes rate-fighters and dies to energy discipline); everyone
+            // else meets the cat (defensive BFM under a superior pilot).
+            bool machine = _learner.Bands.Energy < _learner.Bands.DefensiveBfm
+                && _learner.Bands.Energy < _learner.Bands.Gunnery;
+            if (machine)
+                return WithDoctrine(PilotSkill.Machine, engagementNumber, boss: false,
+                    FormattableString.Invariant(
+                        $"machine: {_learner.WinStreak}-win streak, energy is the gap"))
+                    with { Machine = true };
             return WithDoctrine(PilotSkill.Ace, engagementNumber, boss: true,
                 FormattableString.Invariant(
                     $"boss: {_learner.WinStreak}-win streak, {(int)_learner.SecondsSinceLastDefeat}s unbeaten"));
