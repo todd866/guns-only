@@ -4,6 +4,17 @@ namespace GunsOnly.Sim.Doctrine;
 
 public enum FightOutcome { Flying, Splash }
 
+/// <summary>
+/// Deterministic barrel limits for the player's infinite-ammunition gun. Time advances only
+/// through <see cref="GunKill.Step"/>; no presentation or wall-clock state enters the model.
+/// </summary>
+public sealed record GunHeatConfig(
+    double ContinuousFireSecondsToOverheat = 5.0,
+    double FullCooldownSeconds = 12.0,
+    double RearmHeatThreshold = 0.5) {
+    public static GunHeatConfig PlayerInfiniteAmmo { get; } = new();
+}
+
 /// One deterministic .50-calibre round in world space. Velocity includes the firing aircraft's
 /// translational velocity; gravity is integrated by GunKill while the round is alive.
 public readonly record struct GunRound(int Id, Vec3D Position, Vec3D Velocity, double AgeSeconds);
@@ -37,13 +48,15 @@ public sealed class GunKill {
     readonly int _hitsToKill;
     readonly double _hitRadiusM;
     readonly GunProfile _profile;
+    readonly GunHeatConfig? _heatConfig;
     bool _triggerWasHeld;
     double _secondsToNextShot;
     double _gunSolutionTransitionSeconds;
     int _nextRoundId = 1;
 
     public GunKill(int ammo = DefaultAmmo, int hitsToKill = DefaultHitsToKill,
-        double hitRadiusM = DefaultHitRadiusM, GunProfile? profile = null) {
+        double hitRadiusM = DefaultHitRadiusM, GunProfile? profile = null,
+        GunHeatConfig? heatConfig = null) {
         if (ammo < 0) throw new System.ArgumentOutOfRangeException(nameof(ammo));
         if (hitsToKill <= 0) throw new System.ArgumentOutOfRangeException(nameof(hitsToKill));
         _profile = profile ?? GunProfiles.SixM3FiftyCal;
@@ -59,15 +72,30 @@ public sealed class GunKill {
             : hitRadiusM;
         if (!double.IsFinite(selectedHitRadius) || selectedHitRadius <= 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(hitRadiusM));
+        if (heatConfig is not null
+            && (!double.IsFinite(heatConfig.ContinuousFireSecondsToOverheat)
+                || heatConfig.ContinuousFireSecondsToOverheat <= 0.0
+                || !double.IsFinite(heatConfig.FullCooldownSeconds)
+                || heatConfig.FullCooldownSeconds <= 0.0
+                || !double.IsFinite(heatConfig.RearmHeatThreshold)
+                || heatConfig.RearmHeatThreshold <= 0.0
+                || heatConfig.RearmHeatThreshold >= 1.0))
+            throw new System.ArgumentOutOfRangeException(nameof(heatConfig));
         AmmoRemaining = ammo;
         _hitsToKill = hitsToKill;
         _hitRadiusM = selectedHitRadius;
+        _heatConfig = heatConfig;
     }
 
     public IReadOnlyList<GunRound> RoundsInFlight => _rounds;
     public GunProfile Profile => _profile;
+    public GunHeatConfig? HeatConfig => _heatConfig;
+    public bool HasInfiniteAmmo => _heatConfig is not null;
     public int AmmoRemaining { get; private set; }
     public int RoundsFired { get; private set; }
+    public bool FiredThisStep { get; private set; }
+    public double BarrelHeat { get; private set; }
+    public bool BarrelOverheated { get; private set; }
     public int HitCount { get; private set; }
     public int HitsThisStep { get; private set; }
     public bool HitThisStep => HitsThisStep != 0;
@@ -141,11 +169,14 @@ public sealed class GunKill {
     }
 
     GunKill CreateReplacementTarget(bool preserveRoundsInFlight) {
-        var next = new GunKill(AmmoRemaining, _hitsToKill, _hitRadiusM, _profile) {
+        var next = new GunKill(
+            AmmoRemaining, _hitsToKill, _hitRadiusM, _profile, _heatConfig) {
             RoundsFired = RoundsFired,
             _triggerWasHeld = _triggerWasHeld,
             _secondsToNextShot = _secondsToNextShot,
             _nextRoundId = _nextRoundId,
+            BarrelHeat = BarrelHeat,
+            BarrelOverheated = BarrelOverheated,
         };
         if (preserveRoundsInFlight) next._rounds.AddRange(_rounds);
         return next;
@@ -157,7 +188,10 @@ public sealed class GunKill {
     public FightOutcome Step(bool triggerHeld, in AircraftState own, in AircraftState bandit, double dt) {
         if (!double.IsFinite(dt) || dt < 0.0) throw new System.ArgumentOutOfRangeException(nameof(dt));
         HitsThisStep = 0;
+        FiredThisStep = false;
         UpdateLead(own, bandit, dt);
+        bool barrelAllowsFire = StepBarrelHeat(
+            triggerHeld && Outcome == FightOutcome.Flying && AmmoRemaining > 0, dt);
         if (Outcome != FightOutcome.Flying) return Outcome;
 
         var ownVelocity = own.VelocityVector();
@@ -165,7 +199,7 @@ public sealed class GunKill {
         var gunForward = GunDirection(own);
         double elapsed = 0.0;
 
-        if (!triggerHeld || AmmoRemaining == 0) {
+        if (!triggerHeld || AmmoRemaining == 0 || !barrelAllowsFire) {
             AdvanceRounds(dt, bandit.Position, banditVelocity);
             _triggerWasHeld = triggerHeld;
             _secondsToNextShot = 0.0;
@@ -214,8 +248,39 @@ public sealed class GunKill {
 
     void Fire(in Vec3D position, in Vec3D velocity) {
         _rounds.Add(new GunRound(_nextRoundId++, position, velocity, 0.0));
-        AmmoRemaining--;
+        if (!HasInfiniteAmmo) AmmoRemaining--;
         RoundsFired++;
+        FiredThisStep = true;
+    }
+
+    bool StepBarrelHeat(bool firingRequested, double dt) {
+        if (_heatConfig is null) return true;
+
+        // A latched gun cools even if the pilot keeps squeezing the trigger because no rounds are
+        // leaving the weapon. Crossing the strict re-arm threshold takes effect on the next step,
+        // keeping the whole current tick on one deterministic thermal branch.
+        if (BarrelOverheated) {
+            BarrelHeat = System.Math.Max(0.0,
+                BarrelHeat - dt / _heatConfig.FullCooldownSeconds);
+            if (BarrelHeat < _heatConfig.RearmHeatThreshold)
+                BarrelOverheated = false;
+            return false;
+        }
+
+        if (!firingRequested) {
+            BarrelHeat = System.Math.Max(0.0,
+                BarrelHeat - dt / _heatConfig.FullCooldownSeconds);
+            return true;
+        }
+
+        BarrelHeat = System.Math.Min(1.0,
+            BarrelHeat + dt / _heatConfig.ContinuousFireSecondsToOverheat);
+        if (BarrelHeat >= 1.0) {
+            BarrelHeat = 1.0;
+            BarrelOverheated = true;
+            return false;
+        }
+        return true;
     }
 
     void AdvanceRounds(double dt, in Vec3D banditStart, in Vec3D banditVelocity) {

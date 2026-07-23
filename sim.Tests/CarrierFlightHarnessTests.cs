@@ -956,8 +956,9 @@ public class CarrierFlightHarnessTests {
             "the harness must permit honest misses, not award every trigger tick");
         Assert.True(firstHitAt > leadAt + 0.15,
             "damage must wait for round time-of-flight, not advance with trigger time");
-        Assert.True(kill.AmmoRemaining < GunKill.DefaultAmmo,
-            "a real finite magazine must feed the sortie");
+        Assert.True(kill.HasInfiniteAmmo,
+            "the player sortie must use the thermally limited infinite gun");
+        Assert.Equal(GunKill.DefaultAmmo, kill.AmmoRemaining);
         Assert.Equal(FightOutcome.Splash, kill.Outcome);
         Assert.False(kill.BanditAlive);
         Assert.Equal(1.0, kill.KillProgress, 10);

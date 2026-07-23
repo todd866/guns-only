@@ -381,7 +381,7 @@ public class SimulationSessionTests {
     }
 
     [Fact]
-    public void TerminalVictoryDoesNotReplaceTheOpponentOrRefillTheMagazine() {
+    public void TerminalVictoryDoesNotReplaceTheOpponentOrResetTheGun() {
         var session = new SimulationSession(3);
         long firstBanditSpawn = session.BanditSpawnSequence;
         session.Begin();
@@ -398,9 +398,9 @@ public class SimulationSessionTests {
         Assert.Equal(1, session.KillCount);
         Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
         Assert.Equal(SortieOutcome.Victory, session.Outcome);
-        Assert.InRange(session.PlayerGun.AmmoRemaining, 0, GunKill.DefaultAmmo - 1);
-        Assert.Equal(GunKill.DefaultAmmo - session.PlayerGun.AmmoRemaining,
-            session.PlayerGun.RoundsFired);
+        Assert.True(session.PlayerGun.HasInfiniteAmmo);
+        Assert.Equal(GunKill.DefaultAmmo, session.PlayerGun.AmmoRemaining);
+        Assert.True(session.PlayerGun.RoundsFired > 0);
         Assert.Equal(FightOutcome.Splash, session.PlayerGun.Outcome);
         Assert.False(session.PlayerGun.TargetAlive);
         Assert.Equal(firstBanditSpawn, session.BanditSpawnSequence);

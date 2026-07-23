@@ -1042,7 +1042,8 @@ public sealed class SimulationSession {
         _bandit.Atmosphere = _player.AtmosphereModel;
         CombatConfig combat = _beat.CombatRules;
         _gunKill = new GunKill(combat.PlayerAmmo, combat.OpponentHitsToDefeat,
-            combat.PlayerGunProfile.EffectiveHitRadiusM, combat.PlayerGunProfile);
+            combat.PlayerGunProfile.EffectiveHitRadiusM, combat.PlayerGunProfile,
+            combat.PlayerGunEnabled ? GunHeatConfig.PlayerInfiniteAmmo : null);
         _opponentGun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
             combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
         _visualMergeEvaluation?.Step(_player.State, _bandit.State,
@@ -2276,7 +2277,7 @@ public sealed class SimulationSession {
 
     PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {
         bool enabled = PlayerWeaponsAuthorized
-            && _beat.CombatRules.PlayerAmmo > 0
+            && _beat.CombatRules.PlayerGunEnabled
             && _playerTerminalState == AircraftTerminalState.Flying
             && _opponentTerminalState == AircraftTerminalState.Flying
             && _gunKill.TargetAlive
