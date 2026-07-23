@@ -246,7 +246,7 @@ export async function run(options) {
         () => Number(globalThis.__gunsState?.radar_alt_ft) <= 2_500
           && globalThis.__gunsState?.player_terminal_state === "FLYING",
         undefined,
-        { timeout: 30_000 },
+        { timeout: 240_000 },
       );
       const before = await page.evaluate(projectedState);
       const deltas = await page.evaluate((durationMs) => new Promise((resolveSample) => {
