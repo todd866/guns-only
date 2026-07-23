@@ -35,7 +35,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.3.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.5.0";
+    const string SnapshotSchemaVersion = "1.6.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -178,6 +178,11 @@ internal static class SnapshotProjection {
             configuredLiftIncrement, atmosphere);
         double cornerSpeedKias = AirData.PositiveCornerSpeedKiasAtAltitude(
             s.Mass, _beat.PlayerAir, playerPosition.Y, configuredLiftIncrement, atmosphere);
+        // Recomputed per snapshot build exactly like the corner point above, so the band tracks
+        // fuel burn and configuration with the same cadence and stays deterministic.
+        (double cornerBandMinKias, double cornerBandMaxKias) =
+            AirData.PositiveCornerBandKiasAtAltitude(
+                s.Mass, _beat.PlayerAir, playerPosition.Y, configuredLiftIncrement, atmosphere);
         bool waveOff = Session.WaveOffActive;
         string mode = _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Failed
             ? "ARRESTMENT FAILED"
@@ -323,6 +328,9 @@ internal static class SnapshotProjection {
             + $"\"stall_speed_kias\":{stallSpeedKias:F2},"
             + $"\"accelerated_stall_speed_kias\":{acceleratedStallSpeedKias:F2},"
             + $"\"corner_speed_kias\":{cornerSpeedKias:F2},"
+            // Corner as a range: the CAS band holding >= 95% of peak instantaneous turn rate.
+            + $"\"corner_band_min_kias\":{cornerBandMinKias:F2},"
+            + $"\"corner_band_max_kias\":{cornerBandMaxKias:F2},"
             + $"\"stall_speed_kcas\":{stallSpeedKias:F2},"
             + $"\"accelerated_stall_speed_kcas\":{acceleratedStallSpeedKias:F2},"
             + $"\"corner_speed_kcas\":{cornerSpeedKias:F2},"
@@ -800,6 +808,13 @@ internal static class SnapshotProjection {
         string carrierEntityJson = hasCarrier
             ? $"\"entity.carrier.{Session.CarrierSpawnSequence}\"" : "null";
         string carrierPresentationJson = hasCarrier ? $"\"{CarrierPresentationId}\"" : "null";
+        // Production telemetry must know which AI tier a fight was against. Skill exists only on
+        // the two doctrine pilots; scripted rail/wreck actors project null, never a fake tier.
+        string banditSkillJson = Session.Bandit switch {
+            NeutralMergeBandit merge => $"\"{PilotSkillToken(merge.Skill)}\"",
+            ReactiveBandit reactive => $"\"{PilotSkillToken(reactive.Skill)}\"",
+            _ => "null"
+        };
 
         return $"\"snapshot_schema_version\":\"{SnapshotSchemaVersion}\","
             + $"\"pack_id\":\"{packId}\",\"pack_version\":\"{packVersion}\","
@@ -829,6 +844,7 @@ internal static class SnapshotProjection {
             + $"\"bandit_systems_simulated\":{(bandit.SystemsSimulated ? "true" : "false")},"
             + $"\"bandit_entity_id\":\"entity.bandit.{Session.BanditSpawnSequence}\","
             + $"\"bandit_presentation_id\":{JsonString(bandit.PresentationId)},"
+            + $"\"bandit_skill\":{banditSkillJson},"
             + $"\"carrier_entity_id\":{carrierEntityJson},"
             + $"\"carrier_presentation_id\":{carrierPresentationJson},";
     }
@@ -879,6 +895,13 @@ internal static class SnapshotProjection {
         json.Append("],");
         return json.ToString();
     }
+
+    static string PilotSkillToken(PilotSkill skill) => skill switch {
+        PilotSkill.Novice => "NOVICE",
+        PilotSkill.Veteran => "VETERAN",
+        PilotSkill.Ace => "ACE",
+        _ => "COMPETENT"
+    };
 
     static string SortieOutcomeToken(SortieOutcome outcome) => outcome switch {
         SortieOutcome.Victory => "VICTORY",

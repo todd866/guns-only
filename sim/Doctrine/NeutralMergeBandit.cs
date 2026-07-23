@@ -58,6 +58,9 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
     /// an honest inspection seam for verifying the flagship opener fields the intended tier.
     public PilotSkill BriefedSkill => _skill;
     public PilotSkill? FightSkill => _fight?.Skill;
+    /// The tier this actor fields across both phases: the scripted merge is briefed at the same
+    /// tier its post-pass ReactiveBandit fights at, so snapshot consumers read one stable value.
+    public PilotSkill Skill => _skill;
     public double ThrustFraction => _fight?.ThrustFraction ?? _mergeSim.ThrustFraction;
     public bool CatastrophicallyDamaged => _fight?.CatastrophicallyDamaged ?? false;
     public bool WreckSettled => _fight?.WreckSettled ?? false;

@@ -292,7 +292,9 @@ public static class FlightModel {
         // progressively up to 63 degrees incidence below corner. The continuous polar, drag and
         // rigid-body equations still decide the achieved motion and energy loss.
         NormalPullUsesMaxPerformance: true,
-        PositiveOverrideLimitG: 11.0,
+        // 12 G is the labelled gameplay-surrogate emergency ceiling shared by the pilot's
+        // envelope-override commit and the Auto-GCAS fly-up authority.
+        PositiveOverrideLimitG: 12.0,
         DynamicPressureScheduledPostStallOverride: true,
         MaxThrustFraction: 1.35,
         // NASA identifies +/-20 degrees of F-22 pitch vectoring. The 6.5 m resultant lever arm and

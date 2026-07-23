@@ -90,7 +90,17 @@ export function speedTapeMarkers(state = {}) {
   const cornerKcas = finiteNumber(state.corner_speed_kcas);
   const cornerKts = cornerKcas ?? finiteNumber(state.corner_speed_kias);
   if (cornerKts === null || cornerKts <= 0) return [];
-  return [{ value: cornerKts, label: "COR", unit: cornerKcas === null ? "KIAS" : "KCAS" }];
+  const marker = { value: cornerKts, label: "COR", unit: cornerKcas === null ? "KIAS" : "KCAS" };
+  // Corner is a band, not a point: the kernel's >=95%-of-peak turn-rate CAS range. Band geometry
+  // attaches only when both edges arrive finite, positive, and ordered, so a legacy or degenerate
+  // snapshot degrades to the point caret instead of a misdrawn strip.
+  const bandMinKts = finiteNumber(state.corner_band_min_kias);
+  const bandMaxKts = finiteNumber(state.corner_band_max_kias);
+  if (bandMinKts !== null && bandMaxKts !== null && bandMinKts > 0 && bandMaxKts > bandMinKts) {
+    marker.bandMinValue = bandMinKts;
+    marker.bandMaxValue = bandMaxKts;
+  }
+  return [marker];
 }
 
 export function targetClosureReadout(value) {

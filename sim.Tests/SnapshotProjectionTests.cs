@@ -66,7 +66,7 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.5.0",
+        Assert.Equal("1.6.0",
             root.GetProperty("snapshot_schema_version").GetString());
         Assert.False(string.IsNullOrEmpty(root.GetProperty("beat").GetString()));
         Assert.Equal(root.GetProperty("indicated_airspeed_kts").GetDouble(),
@@ -75,6 +75,15 @@ public class SnapshotProjectionTests {
             root.GetProperty("stall_speed_kcas").GetDouble(), 10);
         Assert.Equal(root.GetProperty("corner_speed_kias").GetDouble(),
             root.GetProperty("corner_speed_kcas").GetDouble(), 10);
+        // Corner band: the >= 95%-of-peak turn-rate CAS range strictly brackets the corner caret.
+        double cornerKias = root.GetProperty("corner_speed_kias").GetDouble();
+        double cornerBandMin = root.GetProperty("corner_band_min_kias").GetDouble();
+        double cornerBandMax = root.GetProperty("corner_band_max_kias").GetDouble();
+        Assert.True(cornerBandMin < cornerKias && cornerKias < cornerBandMax);
+        // Fielded AI tier: doctrine pilots project their tier, scripted rail actors project null.
+        JsonElement banditSkill = root.GetProperty("bandit_skill");
+        if (beatIndex == 7) Assert.Equal("NOVICE", banditSkill.GetString());
+        else Assert.Equal(JsonValueKind.Null, banditSkill.ValueKind);
         Assert.InRange(Math.Abs(root.GetProperty("fuel_flow_lb_min").GetDouble() * 60.0
             - root.GetProperty("fuel_flow_pph").GetDouble()), 0.0, 0.31);
         Assert.True(root.TryGetProperty("fuel_joker_lb", out JsonElement jokerThreshold));
@@ -123,6 +132,28 @@ public class SnapshotProjectionTests {
         Assert.True(double.IsFinite(root.GetProperty("vx").GetDouble()));
         Assert.True(double.IsFinite(root.GetProperty("vy").GetDouble()));
         Assert.True(double.IsFinite(root.GetProperty("vz").GetDouble()));
+    }
+
+    [Fact]
+    public void BuildStateProjectsTheFieldedBanditSkillTierForBothDoctrinePilots() {
+        // ReactiveBandit path: no built-in beat stages one directly, so drive a custom setup.
+        var session = new SimulationSession();
+        session.StartBeat(() => Doctrine.Beats.Perch() with {
+            UsesReactiveBandit = true,
+            BanditSkill = Doctrine.PilotSkill.Veteran,
+        });
+        session.Begin();
+        for (int tick = 0; tick < 8; tick++) session.StepFixed();
+        string reactiveJson = SnapshotProjection.BuildState(session,
+            Carrier.DeckConfiguration.Angled, 0.0, 0.0, false, null);
+        using JsonDocument reactive = JsonDocument.Parse(reactiveJson);
+        Assert.Equal("VETERAN",
+            reactive.RootElement.GetProperty("bandit_skill").GetString());
+
+        // NeutralMergeBandit path at a non-default tier: the climactic Ace duel beat.
+        string aceJson = ProjectAfterSteps(9, 8, null);
+        using JsonDocument ace = JsonDocument.Parse(aceJson);
+        Assert.Equal("ACE", ace.RootElement.GetProperty("bandit_skill").GetString());
     }
 
     [Fact]

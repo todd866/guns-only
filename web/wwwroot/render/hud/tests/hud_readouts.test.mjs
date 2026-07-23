@@ -93,6 +93,35 @@ test("stall awareness and corner marker use the calibrated-airdata contract", ()
   }).unit, "KIAS", "older recordings retain an honest legacy label");
 });
 
+test("corner marker carries the kernel's turn-rate band and degrades to a point without it", () => {
+  assert.deepEqual(speedTapeMarkers({
+    corner_speed_kcas: 314.79,
+    corner_band_min_kias: 291.4,
+    corner_band_max_kias: 341.2,
+  }), [{
+    value: 314.79,
+    label: "COR",
+    unit: "KCAS",
+    bandMinValue: 291.4,
+    bandMaxValue: 341.2,
+  }]);
+  // One missing edge, a degenerate band, or an inverted band must not fabricate a strip.
+  assert.deepEqual(speedTapeMarkers({
+    corner_speed_kias: 314.79,
+    corner_band_min_kias: 291.4,
+  }), [{ value: 314.79, label: "COR", unit: "KIAS" }]);
+  assert.deepEqual(speedTapeMarkers({
+    corner_speed_kias: 314.79,
+    corner_band_min_kias: 300,
+    corner_band_max_kias: 300,
+  }), [{ value: 314.79, label: "COR", unit: "KIAS" }]);
+  assert.deepEqual(speedTapeMarkers({
+    corner_speed_kias: 314.79,
+    corner_band_min_kias: 341.2,
+    corner_band_max_kias: 291.4,
+  }), [{ value: 314.79, label: "COR", unit: "KIAS" }]);
+});
+
 test("target closure is explicit about whether range is closing or opening", () => {
   assert.deepEqual(targetClosureReadout(42.4), {
     closureKts: 42.4,

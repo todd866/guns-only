@@ -321,6 +321,18 @@ function computeProbes(frame) {
     padlockRollErrorRad: Math.hypot(targetRight, targetUp) < 0.035 && targetForward < 0
       ? 0 : Math.atan2(targetRight, targetUp),
     padlockTargetForward: targetForward,
+    padlockTargetRight: targetRight,
+    // Independent expectation for the off-axis locator: camera-space target direction mapped to
+    // screen (+y down). Continuous through the aft hemisphere, unlike a perspective projection.
+    banditCameraDir: (() => {
+      const rel = new THREE.Vector3().copy(frame.banditPosition)
+        .sub(frame.playerPosition)
+        .transformDirection(camera.matrixWorldInverse);
+      const planeMagnitude = Math.hypot(rel.x, rel.y);
+      return planeMagnitude > 0.02
+        ? { x: rel.x / planeMagnitude, y: -rel.y / planeMagnitude }
+        : null;
+    })(),
   };
 }
 

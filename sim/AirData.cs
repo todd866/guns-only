@@ -175,6 +175,90 @@ public static class AirData {
             parameters.PositiveStructuralLimitG, liftCoefficientIncrement, atmosphere);
     }
 
+    /// Corner is a band, not a point: edges are where instantaneous turn rate falls to this
+    /// fraction of its peak. 0.95 keeps the strip narrow enough to remain a commitment.
+    public const double CornerBandTurnRateFraction = 0.95;
+    // Fixed deterministic TAS grid (60..420 m/s, 2 m/s step): identical inputs must always yield
+    // bit-identical band edges, and the span comfortably brackets every simulated airframe's
+    // corner so grid clipping cannot silently truncate an honest edge.
+    const double CornerBandGridMinTasMps = 60.0;
+    const double CornerBandGridMaxTasMps = 420.0;
+    const double CornerBandGridStepTasMps = 2.0;
+
+    /// <summary>
+    /// The CAS/IAS band within which instantaneous turn rate holds at or above
+    /// <see cref="CornerBandTurnRateFraction"/> of its peak: omega(v) = g*sqrt(n(v)^2-1)/v with
+    /// n(v) = min(structural limit, q*S*CLmax/(m*g)), sampled on the fixed TAS grid above and
+    /// projected through the same compressible pitot/static solution as the corner marker so the
+    /// band registers against the primary airspeed tape.
+    /// </summary>
+    public static (double MinKias, double MaxKias) PositiveCornerBandKiasAtAltitude(
+        double massKg, AircraftParams parameters, double altitudeM,
+        double liftCoefficientIncrement = 0.0, IAtmosphereModel? atmosphere = null) {
+        ArgumentNullException.ThrowIfNull(parameters);
+        ValidatePositiveFinite(massKg, nameof(massKg));
+        ValidatePositiveFinite(parameters.WingAreaM2, nameof(parameters.WingAreaM2));
+        double configuredClMax = parameters.CLMax + liftCoefficientIncrement;
+        ValidatePositiveFinite(configuredClMax, nameof(liftCoefficientIncrement));
+        double structuralLimitG = parameters.PositiveStructuralLimitG;
+        ValidatePositiveFinite(structuralLimitG,
+            nameof(parameters.PositiveStructuralLimitG));
+
+        // One shared quadratic coefficient (n_aero = coefficient * v^2) keeps the grid sweep
+        // allocation-free and cheap enough to recompute on every snapshot build as mass changes.
+        AtmosphericState state = Sample(atmosphere, altitudeM);
+        double aerodynamicLoadPerTasSquared = 0.5 * state.DensityKgM3
+            * parameters.WingAreaM2 * configuredClMax / (massKg * FlightModel.G0);
+
+        const int sampleCount = (int)((CornerBandGridMaxTasMps - CornerBandGridMinTasMps)
+            / CornerBandGridStepTasMps) + 1;
+        Span<double> turnRates = stackalloc double[sampleCount];
+        double peakTurnRate = 0.0;
+        for (int i = 0; i < sampleCount; i++) {
+            double tas = CornerBandGridMinTasMps + i * CornerBandGridStepTasMps;
+            double load = Math.Min(structuralLimitG,
+                aerodynamicLoadPerTasSquared * tas * tas);
+            double rate = load > 1.0
+                ? FlightModel.G0 * Math.Sqrt(load * load - 1.0) / tas : 0.0;
+            turnRates[i] = rate;
+            if (rate > peakTurnRate) peakTurnRate = rate;
+        }
+
+        if (peakTurnRate <= 0.0) {
+            // No sampled grid speed can pull above 1 G at this mass/altitude. The band honestly
+            // degenerates onto the analytic corner marker instead of inventing a range.
+            double corner = PositiveCornerSpeedKiasAtAltitude(massKg, parameters, altitudeM,
+                liftCoefficientIncrement, atmosphere);
+            return (corner, corner);
+        }
+
+        // omega(v) is unimodal under min(structural, quadratic), so the threshold region is one
+        // contiguous run; scanning from both ends cannot skip a disconnected pocket.
+        double threshold = CornerBandTurnRateFraction * peakTurnRate;
+        int first = 0;
+        while (turnRates[first] < threshold) first++;
+        int last = sampleCount - 1;
+        while (turnRates[last] < threshold) last--;
+
+        // Linear interpolation of the threshold crossing keeps band edges from stepping in whole
+        // 2 m/s grid quanta as fuel burns off; the interpolant is as deterministic as the grid.
+        double minTas = CornerBandGridMinTasMps + first * CornerBandGridStepTasMps;
+        if (first > 0) {
+            double atEdge = turnRates[first];
+            double below = turnRates[first - 1];
+            minTas -= CornerBandGridStepTasMps * (atEdge - threshold) / (atEdge - below);
+        }
+        double maxTas = CornerBandGridMinTasMps + last * CornerBandGridStepTasMps;
+        if (last < sampleCount - 1) {
+            double atEdge = turnRates[last];
+            double above = turnRates[last + 1];
+            maxTas += CornerBandGridStepTasMps * (atEdge - threshold) / (atEdge - above);
+        }
+
+        return (CalibratedAirspeedMps(minTas, altitudeM, atmosphere) * MpsToKnots,
+            CalibratedAirspeedMps(maxTas, altitudeM, atmosphere) * MpsToKnots);
+    }
+
     static double ImpactPressureRatio(double mach) {
         ValidateNonNegativeFinite(mach, nameof(mach));
         if (mach <= 1.0)

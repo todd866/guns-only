@@ -235,6 +235,67 @@ function assertFunnelContainsTarget(data) {
     + ` at r=${best.rangeM.toFixed(0)} m`);
 }
 
+function assertPadlockInsetAndLocator(data) {
+  const { name, geometry, probes, padlockState } = data;
+  if (!data.padlock || padlockState?.target === "carrier") return;
+
+  // The body-fixed locator inset is the padlock's single ownship instrument: always present in
+  // bandit padlock, valid at every camera attitude (that is the point of being body-fixed).
+  const inset = geometry.padlockInset;
+  check(name, "locator inset present in bandit padlock", Boolean(inset),
+    inset ? "present" : "missing");
+  if (!inset) return;
+
+  const bankDeg = Number(data.state.bank_deg) || 0;
+  check(name, "inset ADI bank == ownship bank",
+    Math.abs(inset.bankDeg - bankDeg) <= 1e-9, `${inset.bankDeg} vs ${bankDeg}`);
+  const pitchDeg = Number(data.state.pitch_deg) || 0;
+  check(name, "inset horizon offset finite and pitch-signed",
+    Number.isFinite(inset.horizonOffsetPx)
+      && (pitchDeg === 0 || Math.sign(inset.horizonOffsetPx) === Math.sign(pitchDeg)),
+    `offset ${inset.horizonOffsetPx?.toFixed?.(2)} px for pitch ${pitchDeg} deg`);
+
+  // The gate is the signed BODY-FRAME roll error, never mirrored by camera azimuth or target
+  // hemisphere. Chevrons therefore always mean keyboard roll direction.
+  const director = geometry.padlockDirector;
+  if (director && !director.captured && !director.anyPlane) {
+    const error = Math.abs(inset.gateAngleFromUpRad - probes.padlockRollErrorRad);
+    check(name, "inset gate == body-frame roll error (never mirrored)",
+      error <= 1e-9,
+      `error ${(error * RAD).toFixed(9)} deg`);
+  } else if (director && (director.captured || director.anyPlane)) {
+    check(name, "captured/neutral gate sits on the lift line",
+      inset.gateAngleFromUpRad === 0,
+      `gate ${inset.gateAngleFromUpRad}`);
+  }
+  check(name, "neutral ring follows the dead-six anyPlane state",
+    Boolean(inset.neutral) === Boolean(director?.anyPlane),
+    `neutral=${inset.neutral}; anyPlane=${director?.anyPlane}`);
+
+  // AFT / shoulder language from the body-frame hemisphere.
+  if (probes.padlockTargetForward < -0.17) {
+    const ambiguous = Math.abs(probes.padlockTargetRight) < 0.05;
+    const expectedShoulder = probes.padlockTargetRight >= 0 ? "R" : "L";
+    check(name, "aft label present with the correct shoulder",
+      typeof inset.aftLabel === "string"
+        && inset.aftLabel.includes("AFT")
+        && (ambiguous
+          ? !inset.aftLabel.includes("SHOULDER")
+          : inset.aftLabel.includes(`${expectedShoulder} SHOULDER`)),
+      `label "${inset.aftLabel}" for targetRight ${probes.padlockTargetRight.toFixed(3)}`);
+  }
+
+  // The off-axis locator caret must track the camera-space great-circle direction to the
+  // target — continuity through the aft hemisphere is exactly what "wanders" was.
+  const locator = geometry.padlockLocator;
+  if (locator?.drawn && probes.banditCameraDir) {
+    const dot = locator.dirX * probes.banditCameraDir.x
+      + locator.dirY * probes.banditCameraDir.y;
+    check(name, "locator caret points along the camera-space target direction",
+      dot >= 0.995, `dot ${dot.toFixed(5)} (tol 0.995)`);
+  }
+}
+
 async function main() {
   const site = await serveStatic(WWWROOT);
   const browser = await chromium.launch({ headless: true });
@@ -266,6 +327,7 @@ async function main() {
       assertFunnel(data);
       assertBandit(data);
       if (data.padlock) assertPadlockDirector(data);
+      assertPadlockInsetAndLocator(data);
       assertFunnelContainsTarget(data);
     }
     if (pageErrors.length > 0) {

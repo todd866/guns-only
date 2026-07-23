@@ -24,7 +24,7 @@ public class ProtectionTests {
 
         Assert.Equal(9.0, Protection.MaxPerformG(state, parameters), 6);
         Assert.Equal(9.0, Protection.HardMaxG(state, parameters), 6);
-        Assert.Equal(11.0, Protection.OverrideMaxG(state, parameters), 6);
+        Assert.Equal(12.0, Protection.OverrideMaxG(state, parameters), 6);
     }
     [Fact] public void SlowFlightProtectionIsAeroLimited() {
         var s = At(110);

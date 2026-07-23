@@ -16,10 +16,15 @@ public enum AutoGcasInhibitReason {
 }
 
 /// <summary>
-/// Public-data recovery calibration. The modern profile is deliberately a transparent F-16/F-22
-/// family surrogate, not a claim about classified Raptor OFP logic. Public NASA/USAF sources
-/// support a last-instance terrain predictor, roughly 150 deg/s roll toward upright, an up-to-5 G
-/// fly-up, and a 1.5 second time-available trigger boundary.
+/// Recovery calibration. The modern profile is deliberately a transparent F-16/F-22 family
+/// surrogate, not a claim about classified Raptor OFP logic. Public NASA/USAF sources support a
+/// last-instance terrain predictor, roughly 150 deg/s roll toward upright, and a 1.5 second
+/// time-available trigger boundary. The fly-up load factor is a deliberate DEPARTURE from the
+/// public 5 G F-16 number: this system commands an aircraft-emergency 12 G pull (aero-limited in
+/// practice), which makes the trigger boundary literally "a max-perform recovery is about to
+/// become impossible" and keeps the system invisible during aggressive deliberate low flying.
+/// The pilot model still integrates the recovery G — the machine does not grey out, the human
+/// might.
 /// </summary>
 public sealed record AutoGcasConfiguration(
     double LookaheadSeconds,
@@ -34,15 +39,19 @@ public sealed record AutoGcasConfiguration(
     double MinimumRecoveryAirspeedMps,
     double ExitClearanceM,
     double ExitPredictionMarginM,
+    // Flight-tested (Build 69/70 pilot reports + screen recording): any factor loose enough to
+    // "protect" an attentive pilot seizes the jet mid-gun-engagement during deliberate
+    // terrain-masking. While the HUMAN input path shows active commanding, the system fires only
+    // when even an immediate max-perform recovery is about to become impossible.
     double ExitDwellSeconds,
-    double AttentivePilotTriggerFactor = 0.35) {
+    double AttentivePilotTriggerFactor = 0.15) {
 
     public static AutoGcasConfiguration ModernPublicDataSurrogate { get; } = new(
         LookaheadSeconds: 8.0,
         PredictionStepSeconds: 0.10,
         ControlResponseDelaySeconds: 0.20,
         RecoveryRollRateRadPerSecond: 150.0 * Math.PI / 180.0,
-        RecoveryLoadFactorG: 5.0,
+        RecoveryLoadFactorG: 12.0,
         RecoveryGOnsetRatePerSecond: 6.0,
         TriggerTimeAvailableSeconds: 1.5,
         WarningLeadSeconds: 3.0,
@@ -347,7 +356,11 @@ public static class AutoGcasController {
             Throttle: input.EffectivePilotCommand.Throttle,
             Rudder: 0.0,
             CommandedPitchRad: double.NaN,
-            EnvelopeOverride: false,
+            // The fly-up claims the emergency/override law: the predictor's time-available
+            // boundary is computed against this same authority, so the airframe must be allowed
+            // to deliver it — a 9 G normal-law recovery under a 12 G promise bottoms below the
+            // predicted save.
+            EnvelopeOverride: true,
             // Auto-GCAS is aircraft-owned augmentation, not pilot aileron. Publishing it through
             // the explicit SAS channel keeps telemetry honest while the physical derivative law
             // still sums both channels at the actuator stop.
@@ -652,10 +665,15 @@ public static class AutoGcasController {
         double aerodynamicLoad = dynamicPressure * aircraft.WingAreaM2
             * Math.Max(aircraft.CLMax, 0.0)
             / Math.Max(input.Aircraft.Mass * FlightModel.G0, 1.0);
+        // A last-instance system is allowed to bend the jet to miss the ground: the recovery
+        // authority is the configured emergency load, not the placarded structural limit, and
+        // what the airframe actually achieves remains aero-limited through the same margin.
+        double emergencyCeilingG = Math.Max(
+            Math.Max(1.0, aircraft.PositiveStructuralLimitG),
+            aircraft.PositiveOverrideLimitG > 0.0 ? aircraft.PositiveOverrideLimitG : 1.0);
         double maximumLoad = Math.Clamp(
             aerodynamicLoad * ResponseAuthorityMargin, 1.0,
-            Math.Min(config.RecoveryLoadFactorG,
-                Math.Max(1.0, aircraft.PositiveStructuralLimitG)));
+            Math.Min(config.RecoveryLoadFactorG, emergencyCeilingG));
         return new RecoveryResponse(maximumRollRate, rollTimeConstant,
             maximumLoad,
             config.RecoveryGOnsetRatePerSecond * ResponseAuthorityMargin);

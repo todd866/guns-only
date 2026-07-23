@@ -135,12 +135,14 @@ public class AutoGcasTests {
         PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
         Assert.Equal(0.0, recovery.RollControl);
         Assert.Equal(expectedRollControl, recovery.SasRollControl);
-        Assert.Equal(5.0, recovery.GDemand);
+        Assert.Equal(Modern.Configuration.RecoveryLoadFactorG, recovery.GDemand);
         Assert.Equal(0.91, recovery.Throttle);
         Assert.Equal(0.0, recovery.BankTarget);
         Assert.Equal(0.0, recovery.Rudder);
         Assert.True(recovery.DirectLateralControl);
-        Assert.False(recovery.EnvelopeOverride);
+        // The fly-up claims the emergency/override law so the airframe can deliver the same
+        // authority the time-available boundary was computed against.
+        Assert.True(recovery.EnvelopeOverride);
     }
 
     [Theory]
@@ -171,7 +173,7 @@ public class AutoGcasTests {
 
         Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
         PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
-        Assert.Equal(5.0, recovery.GDemand);
+        Assert.Equal(Modern.Configuration.RecoveryLoadFactorG, recovery.GDemand);
     }
 
     [Fact]
@@ -189,7 +191,7 @@ public class AutoGcasTests {
         PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
         Assert.Equal(0.0, recovery.RollControl, 12);
         Assert.Equal(-1.0, recovery.SasRollControl, 12);
-        Assert.Equal(5.0, recovery.GDemand);
+        Assert.Equal(Modern.Configuration.RecoveryLoadFactorG, recovery.GDemand);
     }
 
     [Fact]
@@ -219,13 +221,16 @@ public class AutoGcasTests {
         PilotCommand recovery = Assert.IsType<PilotCommand>(result.RecoveryCommand);
         Assert.Equal(0.0, recovery.RollControl, 12);
         Assert.Equal(0.0, recovery.SasRollControl, 12);
-        Assert.Equal(5.0, recovery.GDemand);
+        Assert.Equal(Modern.Configuration.RecoveryLoadFactorG, recovery.GDemand);
     }
 
     [Fact]
     public void PredictedVerticalSaveProducesAuthoritativeTerrainClearance() {
         AircraftState initial = FlightState(
-            altitudeM: 3200.0, speedMps: 300.0,
+            // Inside the 12 G emergency-authority trigger envelope: the redesigned system
+            // holds fire far longer than the old 5 G model, so the vertical-save scenario must
+            // begin lower to activate at all.
+            altitudeM: 1500.0, speedMps: 300.0,
             gammaDegrees: -89.0, bankDegrees: 0.0);
         var aircraft = new AircraftSim(initial,
             FlightModel.F22APublicDataSurrogate);

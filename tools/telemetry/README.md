@@ -36,6 +36,14 @@ Every immutable chunk begins with its own `hdr` row containing schema/encoding v
 build, batch ID, session start time, and keyframe interval. A selected chunk is therefore
 self-describing without downloading an earlier object; its first state row is also a full keyframe.
 
+Render stalls are invisible to the sim-tick-scheduled state stream, so the recorder also emits one
+`{"k":"perf"}` row per 5 seconds of wall time while recording: `t` (same `performance.now()` time
+base as every other row), `frame_ms_p50`, `frame_ms_p95`, `frame_ms_max`, `long_frames` (frames
+over 50 ms in the window), and `frames`, all computed from the render loop's raw
+requestAnimationFrame deltas (`web/wwwroot/render/telemetry/frame_perf.js`). Perf rows are
+best-effort diagnostics: when the bounded recorder queue is full the perf row is skipped, so it can
+never displace a state row, and decoders that filter on `k === "st"` ignore it unchanged.
+
 This encoding is primarily a browser/envelope and Function-parse optimization. On a real Build 47
 trace it reduced uncompressed JSON by about 76%, but gzip of the same trace was effectively
 unchanged and Brotli improved by only about 8%. Vercel automatically compresses Fast Origin

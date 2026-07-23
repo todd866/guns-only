@@ -119,6 +119,61 @@ public class AirDataTests {
             corner, precision: 10);
     }
 
+    // Independent closed-form omega(v) = g*sqrt(n^2-1)/v with n = min(structural, q*S*CLmax/(m*g)),
+    // so the band test verifies physics rather than replaying the production sweep.
+    static double SabreTurnRateRadPerSecond(double tasMps, double altitudeM) {
+        double load = Math.Min(FlightModel.Sabre.PositiveStructuralLimitG,
+            AirData.PositiveLiftLimitG(tasMps, altitudeM,
+                FlightModel.Sabre.MassKg, FlightModel.Sabre));
+        return load > 1.0 ? FlightModel.G0 * Math.Sqrt(load * load - 1.0) / tasMps : 0.0;
+    }
+
+    [Fact]
+    public void CornerBandBracketsTheCornerMarkerAtNinetyFivePercentOfPeakTurnRate() {
+        const double altitudeM = 3000.0;
+        double cornerKias = AirData.PositiveCornerSpeedKiasAtAltitude(
+            FlightModel.Sabre.MassKg, FlightModel.Sabre, altitudeM);
+        (double minKias, double maxKias) = AirData.PositiveCornerBandKiasAtAltitude(
+            FlightModel.Sabre.MassKg, FlightModel.Sabre, altitudeM);
+
+        Assert.True(minKias < cornerKias && cornerKias < maxKias);
+
+        // Convert the band edges back through the pitot/static solution and confirm each holds
+        // the advertised fraction of the turn rate at the analytic corner (the true peak).
+        double peak = SabreTurnRateRadPerSecond(
+            AirData.TrueAirspeedForCalibratedAirspeedMps(
+                cornerKias / AirData.MpsToKnots, altitudeM), altitudeM);
+        double minEdge = SabreTurnRateRadPerSecond(
+            AirData.TrueAirspeedForCalibratedAirspeedMps(
+                minKias / AirData.MpsToKnots, altitudeM), altitudeM);
+        double maxEdge = SabreTurnRateRadPerSecond(
+            AirData.TrueAirspeedForCalibratedAirspeedMps(
+                maxKias / AirData.MpsToKnots, altitudeM), altitudeM);
+        Assert.InRange(minEdge / peak, 0.945, 0.955);
+        Assert.InRange(maxEdge / peak, 0.945, 0.955);
+    }
+
+    [Fact]
+    public void CornerBandIsDeterministicAndDegeneratesWithoutAUsableTurnEnvelope() {
+        (double firstMin, double firstMax) = AirData.PositiveCornerBandKiasAtAltitude(
+            FlightModel.Sabre.MassKg, FlightModel.Sabre, altitudeM: 5000.0);
+        (double secondMin, double secondMax) = AirData.PositiveCornerBandKiasAtAltitude(
+            FlightModel.Sabre.MassKg, FlightModel.Sabre, altitudeM: 5000.0);
+
+        Assert.Equal(firstMin, secondMin);
+        Assert.Equal(firstMax, secondMax);
+
+        // A mass that no sampled grid speed can lift above 1 G collapses the band onto the
+        // analytic corner marker instead of inventing a range.
+        const double leadenMassKg = 400_000.0;
+        double corner = AirData.PositiveCornerSpeedKiasAtAltitude(
+            leadenMassKg, FlightModel.Sabre, altitudeM: 0.0);
+        (double minKias, double maxKias) = AirData.PositiveCornerBandKiasAtAltitude(
+            leadenMassKg, FlightModel.Sabre, altitudeM: 0.0);
+        Assert.Equal(corner, minKias, precision: 10);
+        Assert.Equal(corner, maxKias, precision: 10);
+    }
+
     [Fact]
     public void StallAndCornerCuesAreProjectedOntoTheAltitudeCorrectIasTape() {
         double seaLevelStall = AirData.StallSpeedKiasAtAltitude(

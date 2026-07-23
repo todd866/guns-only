@@ -106,7 +106,8 @@ Korean terrain tiles and sensor/icing integration are the next consumers of thes
 | Envelope override | **Space** — high-q G-limit release / low-q high-alpha authority |
 | Guns | **F** |
 | Padlock | **V** |
-| Auto-GCAS paddle (hold to refuse a fly-up) | **K** |
+| Auto-GCAS paddle (hold to refuse a fly-up; Space also refuses while held) | **K** |
+| Controls quicklook overlay | **H** |
 | Landing gear | **G** |
 | Flaps | **[** retract / **]** extend (hold) |
 | Restart / select exercise | **R / 1–8** |

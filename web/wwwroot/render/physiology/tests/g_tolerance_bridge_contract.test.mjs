@@ -13,7 +13,7 @@ const readBridgeContract = () =>
 test("WebBridge 1.5 projects the authoritative pilot physiology contract", async () => {
   const source = await readBridgeContract();
 
-  assert.match(source, /const string SnapshotSchemaVersion = "1\.5\.0";/);
+  assert.match(source, /const string SnapshotSchemaVersion = "1\.6\.0";/);
   assert.match(source,
     /PilotPhysiologyState pilotPhysiology = Session\.PilotPhysiologyState;/);
   assert.match(source,

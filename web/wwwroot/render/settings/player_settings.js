@@ -34,6 +34,10 @@ export const DEFAULT_PLAYER_SETTINGS = Object.freeze({
   reducedMotion: false,
   largeText: false,
   tiltSensitivity: 1,
+  // Combat feedback (Build 71): symbology at full opacity blocks the view of the bandit behind
+  // it. Default slightly translucent; 1.0 remains available for bright daylight displays.
+  hudBrightness: 0.84,
+  legendSeen: false,
   bindings: Object.freeze(defaultBindings()),
 });
 
@@ -66,6 +70,9 @@ export function normalisePlayerSettings(value = {}) {
     largeText: bool(value?.largeText, DEFAULT_PLAYER_SETTINGS.largeText),
     tiltSensitivity: Math.max(0.65, Math.min(1.6,
       finite(value?.tiltSensitivity, DEFAULT_PLAYER_SETTINGS.tiltSensitivity))),
+    hudBrightness: Math.max(0.5, Math.min(1.0,
+      finite(value?.hudBrightness, DEFAULT_PLAYER_SETTINGS.hudBrightness))),
+    legendSeen: bool(value?.legendSeen, DEFAULT_PLAYER_SETTINGS.legendSeen),
     bindings: Object.freeze(bindings),
   });
 }

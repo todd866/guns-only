@@ -143,7 +143,8 @@ public class PadlockRollAssistSessionTests {
             session.StepFixed();
 
         Assert.True(session.AutoGcas.Active);
-        Assert.Equal(5.0, session.Player.LastAppliedCommand.GDemand, 12);
+        Assert.Equal(AutoGcasConfiguration.ModernPublicDataSurrogate.RecoveryLoadFactorG,
+            session.Player.LastAppliedCommand.GDemand, 12);
         Assert.False(session.BanditPadlockRollAssist.Active);
         Assert.False(session.BanditPadlockRollAssist.Captured);
         Assert.Equal(0.0, session.BanditPadlockRollAssist.SasRollControl, 12);

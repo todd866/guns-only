@@ -87,9 +87,10 @@ public class AutoGcasSessionTests {
 
         Assert.True(session.AutoGcas.Active);
         Assert.Equal(1, session.AutoGcas.ActivationCount);
-        Assert.Equal(5.0, session.Player.LastAppliedCommand.GDemand, 12);
+        Assert.Equal(AutoGcasConfiguration.ModernPublicDataSurrogate.RecoveryLoadFactorG,
+            session.Player.LastAppliedCommand.GDemand, 12);
         Assert.Equal(0.0, session.Player.LastAppliedCommand.BankTarget, 12);
-        Assert.False(session.Player.LastAppliedCommand.EnvelopeOverride);
+        Assert.True(session.Player.LastAppliedCommand.EnvelopeOverride);
         Assert.False(session.PlayerWeaponsAuthorized);
         Assert.Equal(0, session.PlayerGun.RoundsFired);
     }
@@ -105,7 +106,8 @@ public class AutoGcasSessionTests {
             / SimulationSession.AutoGcasPredictionIntervalTicks),
             session.AutoGcasPredictionEvaluationCount);
         Assert.True(session.AutoGcas.Active);
-        Assert.Equal(5.0, session.Player.LastAppliedCommand.GDemand, 12);
+        Assert.Equal(AutoGcasConfiguration.ModernPublicDataSurrogate.RecoveryLoadFactorG,
+            session.Player.LastAppliedCommand.GDemand, 12);
         Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
     }
 
@@ -253,7 +255,8 @@ public class AutoGcasSessionTests {
             "actual fly-up acceleration must continue through the physiology model");
         Assert.True(session.PilotControlInterlocked);
         Assert.True(session.PilotTriggerInterlocked);
-        Assert.Equal(5.0, session.Player.LastAppliedCommand.GDemand, 12);
+        Assert.Equal(AutoGcasConfiguration.ModernPublicDataSurrogate.RecoveryLoadFactorG,
+            session.Player.LastAppliedCommand.GDemand, 12);
         Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
     }
 }

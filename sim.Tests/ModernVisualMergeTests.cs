@@ -169,7 +169,7 @@ public class ModernVisualMergeTests {
                 "above corner, override should release G while retaining attached-flow alpha protection");
         }
 
-        Assert.Equal(11.0, rig.Detent.Command.GDemand, 2);
+        Assert.Equal(12.0, rig.Detent.Command.GDemand, 2);
         Assert.Equal(DemandTier.OverDemand, rig.Detent.Tier);
         Assert.True(rig.Detent.Command.EnvelopeOverride);
         Assert.True(peakNz > 9.25,

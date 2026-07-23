@@ -236,11 +236,22 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
     "ordinary camera-servo lag after first acquisition must not blank physical steering");
   assert.match(padlockSa, /CAMERA SETTLING/,
     "camera lag may be reported but must not masquerade as loss of physical steering");
-  assert.match(padlockSa, /rollChevronCount[\s\S]*?drawVectorChevron/,
+  // Build 71 rebuild: the roll director lives in ONE body-fixed locator inset (a true ADI +
+  // fixed waterline + the gate at the signed body-frame roll error), replacing the old
+  // camera-projected arc whose frames stopped agreeing the moment the target crossed the wing
+  // line. The contract now pins the inset's invariants instead of the old drawing internals.
+  // The method definition's BODY brace: the destructured parameter list has its own braces, so
+  // anchor past the signature's closing "})" (4-space indent is unique to the definition).
+  const inset = balancedBlock(hudSource, "sinkFpm,\n  })");
+  assert.match(padlockSa, /this\.drawPadlockLocatorInset\(frame/,
+    "padlock steering must render through the body-fixed locator inset");
+  assert.match(inset, /rotate\(-bankRad\)/,
+    "the inset ADI must derive attitude from ownship bank, never the camera");
+  assert.match(inset, /gateAngleFromUpRad \* fraction/,
     "the shortest roll arc needs repeated directional chevrons, not a text instruction");
-  assert.match(padlockSa, /lift-plane capture gate[\s\S]*?setLineDash\(\[3, 5\]\)/,
-    "the roll destination must be graphically associated with the selected target");
-  assert.match(padlockSa, /pullPhase[\s\S]*?drawVectorChevron/,
+  assert.match(inset, /TARGET AFT/,
+    "aft-hemisphere geometry must be named, not left for the pilot to infer");
+  assert.match(inset, /pullPhase|captured: streaming|fraction \* \(gateRadius/,
     "capture must become an outward graphical pull flow along the lift vector");
   assert.doesNotMatch(padlockSa, /ROLL LEFT|ROLL RIGHT|`ROLL \$\{/,
     "tracked padlock steering must not depend on reading left/right command text");

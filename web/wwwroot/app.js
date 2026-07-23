@@ -91,6 +91,7 @@ import {
   recommendedCampaignNode,
   saveCampaignProfile,
 } from "./render/progression/campaign_progression.js";
+import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   buildTelemetryBatch,
   retainNewestTelemetryRows,
@@ -454,6 +455,7 @@ const recorder = {
   _lastContext: new Map(),
   _stateEncoder: new TelemetryStateEncoder(),
   _sampleScheduler: new TelemetrySampleScheduler({ strideTicks: TELEMETRY_TICK_STRIDE }),
+  _framePerf: createFramePerfAggregator(),
   _sortieSequence: 0,
   _sortie: null,
   _lastSessionPhase: null,
@@ -531,6 +533,19 @@ const recorder = {
       });
       this.context("sortie", { ...sortie, phase: "ENDED", reason });
       this._sortie = null;
+    } catch (e) { this.errors++; this.lastError = String(e); }
+  },
+  // One "perf" row per 5 s window of requestAnimationFrame deltas: the 20 Hz state stream is
+  // sim-tick-scheduled and cannot see render stalls. Perf rows are diagnostic garnish — when the
+  // bounded queue is already full it is the perf row that is skipped, never a state row that the
+  // enqueue overflow trim would displace from the head of the queue.
+  observeFrameDelta(deltaMs) {
+    try {
+      const summary = this._framePerf.observe(deltaMs, performance.now());
+      if (!summary) return;
+      if (this.buf.length >= TELEMETRY_BUFFER_LIMIT) return;
+      this.ensureHeader();
+      this.enqueue({ k: "perf", t: Math.round(performance.now()), ...summary });
     } catch (e) { this.errors++; this.lastError = String(e); }
   },
   // Every method is fully guarded: telemetry must NEVER be able to crash the flight loop (an
@@ -909,6 +924,9 @@ function renderSettingsBindings() {
 }
 
 function applyPlayerSettings() {
+  // See-through symbology: the pilot must be able to read the bandit THROUGH the HUD.
+  if (hudCanvas) hudCanvas.style.opacity = String(playerSettings.hudBrightness);
+  if (activeView?.hud) activeView.hud.showLegendHint = !playerSettings.legendSeen;
   document.documentElement.classList.toggle("high-contrast", playerSettings.highContrast);
   document.documentElement.classList.toggle("forced-reduced-motion", playerSettings.reducedMotion);
   document.documentElement.classList.toggle("large-interface-text", playerSettings.largeText);
@@ -3943,6 +3961,7 @@ class FlightView {
       });
       sensorYaw = next.yawRad;
       sensorPitch = next.pitchRad;
+      if (next.shoulderHandoff) this.shoulderHandoffAtS = this.lastFrameNowSeconds ?? 0;
       if (next.trackingErrorRad < 0.6 * DEG) gimbalReturnFast = false;
       padlockPhase = next.trackingErrorRad < 1.5 * DEG
         ? "TRACK"
@@ -4709,6 +4728,9 @@ class FlightView {
     hudFrame.triggerHeld = isGkeyHeld(8);
     hudFrame.dt = dt;
     hudFrame.now = nowSeconds;
+    this.lastFrameNowSeconds = nowSeconds;
+    hudFrame.shoulderHandoffLatched = this.shoulderHandoffAtS !== undefined
+      && nowSeconds - this.shoulderHandoffAtS < 0.35;
     this.hud.draw(hudFrame);
   }
 
@@ -5554,6 +5576,8 @@ function installInput(view) {
     if (event.code === "KeyH") {
       const visible = view.hud.toggleLegend();
       setPauseReason("help", visible);
+      if (!playerSettings.legendSeen)
+        commitPlayerSettings({ ...playerSettings, legendSeen: true });
       return;
     }
 
@@ -5790,6 +5814,9 @@ async function boot() {
 
   function tick(now) {
     try {
+      // Raw (unclamped) render-frame delta: the perf telemetry must see the true stall length,
+      // not the 0.25 s simulation-advance cap.
+      recorder.observeFrameDelta(now - previous);
       const dt = clamp((now - previous) / 1000, 0, 0.25);
       previous = now;
       if (pauseReasons.size === 0) bridge.Advance(dt);
