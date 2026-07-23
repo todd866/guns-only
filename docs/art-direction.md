@@ -19,13 +19,27 @@ gradients, silhouette-first detail hierarchy). Applied here:
 - **Effects**: exaggerated, clean, readable — the explosions already lean this way; lean in.
 - **Obstacles** (bridges, wires): bold silhouettes and marker spheres; readability is safety.
 
-## The canon: psychological-safety rendering
+## The two-era thesis: two kinds of moral distance
 
-In-universe, combat presentation is deliberately abstracted: modern forces render kills as
-clean, stylized events as a crew-protection doctrine (the same logic behind real-world debrief
-sanitization). This is written into the world docs as doctrine, not omission — the sim shows
-what a 2030s crew station would show. It also keeps the educational platform honest about
-violence without trading in gore.
+*Owner direction: "make 1950s Korea as realistic and gory as possible, but from jet height you
+can't see much; meanwhile 2030s Korea looks like TF2 but actually is a bit horrific BECAUSE
+it's so cartoony."*
+
+- **1950s Korea — protected by physics.** The ground war is rendered as realistically and
+  unsparingly as the platform can manage: burning villages, wrecked columns, the human ruin of
+  that war. The mercy is ALTITUDE: from jet height it resolves to smoke smudges and texture.
+  Mechanically this is detail-by-altitude LOD as a moral instrument — descend low enough and
+  the war stops being abstract. The F-86 pilot's clean war was clean because of distance, and
+  the sim makes that distance literal.
+- **2030s Korea — protected by interface.** Illustrative, TF2-lineage, deliberately clean: the
+  psychological-safety rendering doctrine is total. Kills are tidy, stylized events at every
+  altitude, and that totality is the point — the cartoon IS the horror, because nothing the
+  operator does ever looks like anything. Written into the world docs as doctrine, not
+  omission: the sim shows exactly what a 2030s crew station would show.
+
+Both eras teach the same human-factors truth from opposite directions: air warfare's emotional
+distance is manufactured — by physics in one era, by rendering doctrine in the other — and an
+educational platform about operator interfaces should let the pilot feel the manufacturing.
 
 ## Hard boundaries
 
@@ -38,6 +52,8 @@ violence without trading in gore.
 
 ## Order
 
-Adopt with the carved-valley terrain build (the palette/ramp shaders land with the new
-heightfield), then sweep aircraft/effects. Reference: Mitchell, Francke, Eng — "Illustrative
-Rendering in Team Fortress 2."
+The 2030s illustrative look adopts with the carved-valley terrain build (palette/ramp shaders
+land with the new heightfield), then sweeps aircraft/effects. The 1950s ground-war realism
+lands with the historical campaign content: authored vignette sites with altitude-resolved
+detail, sub-perceptible from cruise, unmistakable from the weeds. Reference: Mitchell, Francke,
+Eng — "Illustrative Rendering in Team Fortress 2."
