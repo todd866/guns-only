@@ -5,6 +5,7 @@ import {
   createTerrainGeometry,
   decodeTerrainRecord,
   loadKoreaTerrain,
+  reconstructWaterHeights,
   selectTerrainLod,
   terrainCurvatureDropM,
   TerrainBundleReader,
@@ -143,7 +144,7 @@ test("validates paged atlas manifests and rejects duplicate page identities", ()
   assert.throws(() => validateTerrainAtlasManifest(atlas), /Invalid Korea terrain atlas page/);
 });
 
-test("decodes little-endian decimetres and omits all-water triangles", () => {
+test("reconstructs bank-height water without sea-level slot trenches", () => {
   const values = new Int16Array([
     -32768, -32768, 100,
     -32768, -32768, 200,
@@ -153,11 +154,15 @@ test("decodes little-endian decimetres and omits all-water triangles", () => {
   const decoded = decodeTerrainRecord(values.buffer, record, quantization);
   assert.equal(decoded.heights[2], 10);
   assert.equal(decoded.water[0], 1);
+  assert.deepEqual([...reconstructWaterHeights(decoded)].slice(0, 6), [10, 10, 10, 30, 10, 20],
+    "narrow inland water should inherit the nearest low bank instead of sentinel height zero");
   const built = createTerrainGeometry(THREE, manifest().chunks[0], decoded);
   assert.ok(built.triangleCount > 0);
-  assert.ok(built.surfaceTriangleCount < 8,
-    "the northwest all-water cell should not emit both surface triangles");
+  assert.equal(built.surfaceTriangleCount, 8,
+    "water and land must share one continuous triangulation for a smooth shoreline");
   assert.equal(built.geometry.attributes.position.count, 25);
+  assert.equal(built.geometry.attributes.terrainWater.getX(0), 1);
+  assert.equal(built.geometry.attributes.position.getY(0), 10);
   assert.equal(built.triangleCount - built.surfaceTriangleCount, 12,
     "land-bearing chunk edges must receive crack-hiding skirt triangles");
   assert.ok(built.skirtDepthM >= 200);
@@ -171,8 +176,10 @@ test("decodes little-endian decimetres and omits all-water triangles", () => {
     quantization,
   );
   const waterBuilt = createTerrainGeometry(THREE, manifest().chunks[0], allWater);
-  assert.equal(waterBuilt.triangleCount, 0,
-    "an all-water chunk must not draw terrain or underwater skirts");
+  assert.equal(waterBuilt.surfaceTriangleCount, 8,
+    "an all-water chunk must draw the analytic water surface");
+  assert.equal(waterBuilt.triangleCount, 8,
+    "an all-water chunk must not add underwater skirts");
   waterBuilt.geometry.dispose();
 });
 
@@ -191,12 +198,12 @@ test("selects progressively coarser LODs with tier-specific distance", () => {
   // The floor is clamped to the chunk's coarsest level, so a single-LOD chunk is unaffected.
   assert.equal(selectTerrainLod(0, "balanced", 1), 0);
   // Hysteresis retains the current LOD across a small threshold crossing (desktop keeps LOD0).
-  assert.equal(selectTerrainLod(25_000, "desktop", 4, 0), 0,
+  assert.equal(selectTerrainLod(41_000, "desktop", 4, 0), 0,
     "a small outward threshold crossing should retain the current LOD");
-  assert.equal(selectTerrainLod(28_000, "desktop", 4, 0), 1);
-  assert.equal(selectTerrainLod(22_000, "desktop", 4, 1), 1,
+  assert.equal(selectTerrainLod(46_000, "desktop", 4, 0), 1);
+  assert.equal(selectTerrainLod(37_000, "desktop", 4, 1), 1,
     "a small inward threshold crossing should retain the current LOD");
-  assert.equal(selectTerrainLod(20_000, "desktop", 4, 1), 0);
+  assert.equal(selectTerrainLod(34_000, "desktop", 4, 1), 0);
 });
 
 test("uses the active ocean curvature contract for terrain presentation", () => {

@@ -19,6 +19,18 @@ heights with a dedicated water sentinel:
 - `central-front.truth` is a compact 128 m simulation grid embedded by the web shell.
 - `central-front-preview.png` is a source-derived QA preview, not an imagery texture.
 
+Terrain version `central-front-carved-valleys-v3` applies a seeded, connected drainage graph
+before any renderer LOD or kernel-truth quantization. Three named runs share one coastal outlet
+and central junction; their 1,500–3,000 m floors descend monotonically, while seeded 20–30° wall
+profiles carve the locked DEM. Seeded control points prefer high flanking ground near each
+authored location, with a fixed water penalty keeping inland routing out of the source water
+mask; a continuity-penalized cross-track search follows the same high-ground preference between
+nodes. The land floor is hydrologically conditioned to its authored grade, cutting rises and
+filling small DEM pits so it never turns uphill, while source water classification remains
+untouched. Because the carve wraps the source sampler, every output samples the same surface
+rather than maintaining renderer-only geometry. The seed and run metrics are recorded in
+`central-front.manifest.json`.
+
 The canonical source lock already declares the whole-peninsula envelope. Additional runtime
 regions use the same geodetic index and builder contract; no region invents a second Korea.
 

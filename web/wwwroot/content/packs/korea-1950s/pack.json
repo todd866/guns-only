@@ -2,7 +2,7 @@
   "$schema": "../../schemas/content-pack.schema.json",
   "schemaVersion": "1.0.0",
   "packId": "korea-1950s",
-  "packVersion": "0.3.0",
+  "packVersion": "0.4.0",
   "displayName": "Korea 1950s: Carrier Jets",
   "summary": "Early swept-wing guns-only fighter combat and straight-deck carrier operations using the current simulation definitions and replaceable renderer profiles.",
   "status": "experimental",

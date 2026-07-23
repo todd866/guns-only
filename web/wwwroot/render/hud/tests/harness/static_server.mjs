@@ -36,16 +36,46 @@ export async function serveStatic(root) {
         response.writeHead(404).end("not found");
         return;
       }
-      response.writeHead(200, {
+      const body = await readFile(filePath);
+      const headers = {
         "content-type": MIME[extname(filePath).toLowerCase()] ?? "application/octet-stream",
         "cache-control": "no-store",
-      });
-      response.end(await readFile(filePath));
+      };
+      const range = request.headers.range?.match(/^bytes=(\d+)-(\d+)$/);
+      if (range) {
+        const start = Number(range[1]);
+        const end = Number(range[2]);
+        if (start > end || start < 0 || end >= body.length) {
+          response.writeHead(416, {
+            ...headers,
+            "content-range": `bytes */${body.length}`,
+          }).end();
+          return;
+        }
+        const slice = body.subarray(start, end + 1);
+        response.writeHead(206, {
+          ...headers,
+          "accept-ranges": "bytes",
+          "content-range": `bytes ${start}-${end}/${body.length}`,
+          "content-length": slice.length,
+        });
+        response.end(slice);
+        return;
+      }
+      response.writeHead(200, headers);
+      response.end(body);
     } catch (error) {
       response.writeHead(500).end(String(error));
     }
   });
-  await new Promise((resolvePromise) => server.listen(0, "127.0.0.1", resolvePromise));
+  await new Promise((resolvePromise, rejectPromise) => {
+    const onError = (error) => rejectPromise(error);
+    server.once("error", onError);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", onError);
+      resolvePromise();
+    });
+  });
   const { port } = server.address();
   return {
     url: `http://127.0.0.1:${port}/`,

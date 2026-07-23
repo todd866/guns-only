@@ -52,7 +52,7 @@
     {
       "licenseId": "license.copernicus-dem-glo30.v1",
       "appliesTo": [
-        "environment.terrain.central-front.v1"
+        "environment.terrain.central-front.v2"
       ],
       "spdxExpression": "LicenseRef-Copernicus-DEM-GLO-30-F",
       "copyright": "© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018",

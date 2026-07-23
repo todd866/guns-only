@@ -1,5 +1,6 @@
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Web;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -92,5 +93,53 @@ public class AutoGcasBottomOutCorridorTests {
         Assert.True(minimumAgl <= maxBottomM,
             $"fly-up bottomed at {minimumAgl:F0} m ({minimumAgl * 3.28084:F0} ft) — " +
             "triggered too soon for an attentive combat pilot (spec: ~200 ft)");
+    }
+
+    [Fact]
+    public void AttentiveFlyUpTracksTheCarvedMarqueeValleyFloor() {
+        ITerrainSurface terrain = KoreaTerrainTruth.Load()
+            ?? throw new InvalidOperationException("carved Korea truth was not embedded");
+        const double startEastM = 17_800.0;
+        const double startNorthM = 11_700.0;
+        const double targetEastM = 7_200.0;
+        const double targetNorthM = -360.0;
+        Assert.True(terrain.TrySample(startEastM, startNorthM, out TerrainSample startSurface));
+        double heading = Math.Atan2(
+            targetEastM - startEastM,
+            targetNorthM - startNorthM);
+        var player = new AircraftState(
+            new Vec3D(startEastM, startSurface.HeightM + 3000.0, startNorthM),
+            300.0, -35.0 * Math.PI / 180.0, heading, 0.0,
+            FlightModel.F22APublicDataSurrogate.MassKg);
+        var session = new SimulationSession();
+        session.StartBeat(() => Beat(player));
+        session.SetTerrainSurface(terrain);
+        session.SetAssistedFlight(true);
+        session.Begin();
+        session.FeedKey(GKey.PushDown, true);
+
+        double minimumAgl = double.PositiveInfinity;
+        bool activated = false;
+        for (int tick = 0; tick < 40 * AircraftSim.TickHz
+            && session.PlayerTerminalState == AircraftTerminalState.Flying; tick++) {
+            session.StepFixed();
+            if (!activated && session.AutoGcas.ActivationCount > 0) {
+                activated = true;
+                session.FeedKey(GKey.PushDown, false);
+            }
+            if (!activated) continue;
+            Vec3D position = session.Player.State.Position;
+            Assert.True(terrain.TrySample(position.X, position.Z, out TerrainSample surface),
+                "the carved-valley corridor must stay inside authoritative terrain bounds");
+            double agl = position.Y - surface.HeightM;
+            minimumAgl = Math.Min(minimumAgl, agl);
+            if (session.Player.State.VelocityVector().Y > 5.0
+                && agl > minimumAgl + 150.0) break;
+        }
+
+        _output.WriteLine($"carved marquee: activated={activated}, bottom={minimumAgl:F0} m AGL");
+        Assert.True(activated, "the carved-valley descent must trigger the fly-up");
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+        Assert.InRange(minimumAgl, 30.0, 180.0);
     }
 }

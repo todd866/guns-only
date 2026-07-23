@@ -135,19 +135,19 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     runwayLengthM: [1_450, 2_900],
     runwayWidthM: [38, 56],
     highRiseChance: 0.075,
-    crownColor: 0x2d512b,
-    trunkColor: 0x403527,
+    crownColor: 0x58734a,
+    trunkColor: 0x695640,
     buildingColor: 0xa9aaa3,
     roofColor: 0x515962,
-    fieldColor: 0x536b3d,
-    fieldRowColor: 0x364a2c,
-    roadColor: 0x373a3c,
+    fieldColor: 0x657748,
+    fieldRowColor: 0x4f623b,
+    roadColor: 0x505457,
     roadMarkingColor: 0xd2cfad,
     railBedColor: 0x494b4b,
     railColor: 0x777b7d,
     runwayColor: 0x303337,
     powerPoleColor: 0x686d70,
-    powerWireColor: 0x333638,
+    powerWireColor: 0x666d70,
   }),
 });
 
@@ -680,18 +680,26 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const segmentGeometry = new THREE.BoxGeometry(1, 1, 1);
   const poleGeometry = new THREE.CylinderGeometry(0.08, 0.13, 1, 6, 1);
   poleGeometry.translate(0, 0.5, 0);
-  const crownMaterial = new THREE.MeshLambertMaterial({ color: profile.crownColor });
-  const trunkMaterial = new THREE.MeshLambertMaterial({ color: profile.trunkColor });
-  const buildingMaterial = new THREE.MeshLambertMaterial({ color: profile.buildingColor });
-  const fieldMaterial = new THREE.MeshLambertMaterial({ color: profile.fieldColor });
-  const fieldRowMaterial = new THREE.MeshLambertMaterial({ color: profile.fieldRowColor });
-  const roadMaterial = new THREE.MeshLambertMaterial({ color: profile.roadColor });
+  // A restrained material-local sky fill keeps sub-pixel procedural instances legible even if a
+  // diagnostic scene momentarily stages them before its production lights. It is not a glow: the
+  // shipped hemisphere and sun still provide nearly all of the final Lambert response.
+  const litMaterial = (color) => new THREE.MeshLambertMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: 0.14,
+  });
+  const crownMaterial = litMaterial(profile.crownColor);
+  const trunkMaterial = litMaterial(profile.trunkColor);
+  const buildingMaterial = litMaterial(profile.buildingColor);
+  const fieldMaterial = litMaterial(profile.fieldColor);
+  const fieldRowMaterial = litMaterial(profile.fieldRowColor);
+  const roadMaterial = litMaterial(profile.roadColor);
   const roadMarkingMaterial = profile.roadMarkingColor === null ? null
     : new THREE.MeshBasicMaterial({ color: profile.roadMarkingColor });
-  const railBedMaterial = new THREE.MeshLambertMaterial({ color: profile.railBedColor });
-  const railMaterial = new THREE.MeshLambertMaterial({ color: profile.railColor });
-  const runwayMaterial = new THREE.MeshLambertMaterial({ color: profile.runwayColor });
-  const powerPoleMaterial = new THREE.MeshLambertMaterial({ color: profile.powerPoleColor });
+  const railBedMaterial = litMaterial(profile.railBedColor);
+  const railMaterial = litMaterial(profile.railColor);
+  const runwayMaterial = litMaterial(profile.runwayColor);
+  const powerPoleMaterial = litMaterial(profile.powerPoleColor);
   const powerWireMaterial = new THREE.MeshBasicMaterial({ color: profile.powerWireColor });
   const geometries = [
     crownGeometry, trunkGeometry, buildingGeometry, surfaceGeometry, segmentGeometry, poleGeometry,

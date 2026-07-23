@@ -33,7 +33,7 @@ internal static class SnapshotProjection {
     // assets. Beat 4 predates that pack and therefore advertises an explicit, unstaged compatibility
     // contract instead of pretending its balloon glider and AEW&C belong to 1950s Korea.
     const string KoreaPackId = "korea-1950s";
-    const string KoreaPackVersion = "0.3.0";
+    const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
     const string SnapshotSchemaVersion = "1.8.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
