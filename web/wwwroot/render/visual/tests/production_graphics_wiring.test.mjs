@@ -8,6 +8,7 @@ const hudUrl = new URL("../../../hud.js", import.meta.url);
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
 const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
 const webProjectUrl = new URL("../../../../GunsOnly.Web.csproj", import.meta.url);
+const environmentLabUrl = new URL("../../../environment-lab/main.js", import.meta.url);
 // The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
 // SnapshotProjection; the contract scan reads both so a field is found wherever it now lives.
 const readBridgeContract = () =>
@@ -118,6 +119,27 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     assert.ok(bridgeSource.includes(field),
       `the authoritative bridge frame contract must publish ${field}`);
   }
+});
+
+test("environment lab exercises the production terrain manifest and exposes the look gate", async () => {
+  const source = await readFile(environmentLabUrl, "utf8");
+  assert.match(source,
+    /import \{ loadKoreaTerrain \} from "\.\.\/render\/environment\/korea_terrain\.js"/);
+  const loadCall = source.match(/terrain = await loadKoreaTerrain\(THREE, \{([\s\S]*?)\n  \}\);/);
+  assert.ok(loadCall, "environment lab must construct the real Korea terrain presentation");
+  assert.doesNotMatch(loadCall[1], /manifestUrl/,
+    "the source lab must use korea_terrain.js's production-default manifest URL");
+  assert.match(source, /await terrain\.ready/);
+  assert.match(source, /window\.__terrainLookReady = terrain\.diagnostics\(\)/);
+  assert.match(source, /terrainState\.errors > 0 \|\| terrainState\.residentChunks === 0/,
+    "the lab must fail visibly instead of retaining an ocean-only scene");
+  assert.match(source, /logarithmicDepthBuffer: true/,
+    "the look gate must exercise production horizon depth precision");
+  assert.match(source, /new THREE\.HemisphereLight\(0xb5cad0, 0x102229, 0\.78\)/);
+  assert.match(source, /new THREE\.DirectionalLight\(0xffe2b4, 2\.65\)/);
+  assert.match(source, /loadVisualProfile\(\)/);
+  assert.match(source, /terrainFogDensity = 1 \/ Math\.max\(1, Number\(fog\.farMetres\)/,
+    "terrain look fog must derive from the active production pack profile");
 });
 
 test("decision-support ocean and warnings carry truth without presentation flicker", async () => {

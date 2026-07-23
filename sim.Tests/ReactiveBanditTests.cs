@@ -1,6 +1,8 @@
 using System;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
+using GunsOnly.Web;
 using Xunit;
 
 namespace GunsOnly.Sim.Tests;
@@ -288,6 +290,24 @@ public class ReactiveBanditTests {
             $"spawn must clear terrain+600m: y={withTerrain.State.Position.Y:F0}");
         Assert.True(withoutTerrain.State.Position.Y < 2100.0,
             "control: the sea-level spawn sits lower, so the terrain path is what raised it");
+    }
+
+    [Fact]
+    public void SpawnForMergeClearsTheCarvedValleySurface() {
+        ITerrainSurface terrain = KoreaTerrainTruth.Load()
+            ?? throw new InvalidOperationException("carved Korea truth was not embedded");
+        const double eastM = 17_800.0;
+        const double northM = 11_700.0;
+        Assert.True(terrain.TrySample(eastM, northM, out TerrainSample floor));
+        var player = State(eastM, floor.HeightM + 220.0, northM, 240.0, chi: -2.42);
+
+        var bandit = ReactiveBandit.SpawnForMerge(
+            player, FlightModel.Sabre, engagementNumber: 4, 180.0, PilotSkill.Ace, terrain);
+        Assert.True(terrain.TrySample(
+            bandit.State.Position.X, bandit.State.Position.Z, out TerrainSample spawnSurface));
+        Assert.True(bandit.State.Position.Y >= spawnSurface.HeightM + 600.0 - 1e-9,
+            $"carved-surface spawn clearance was "
+            + $"{bandit.State.Position.Y - spawnSurface.HeightM:F0} m");
     }
 
     [Fact]

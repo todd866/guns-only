@@ -11,7 +11,10 @@ const DEFAULT_MANIFEST_URL = new URL(
 const TIER_DISTANCE_METRES = Object.freeze({
   mobile: Object.freeze([10_000, 25_000, 58_000]),
   balanced: Object.freeze([16_000, 42_000, 88_000]),
-  desktop: Object.freeze([24_000, 60_000, 118_000]),
+  // Valley walls remain a primary flight reference well beyond one tile. Keeping the 64 m source
+  // grid resident through the first two tile rings prevents the authored 40–60 degree walls from
+  // collapsing into visible 128 m contour shelves in low-altitude desktop views.
+  desktop: Object.freeze([40_000, 76_000, 128_000]),
 });
 
 const TIER_STREAMING = Object.freeze({
@@ -32,20 +35,27 @@ export function terrainCurvatureDropM(radialDistanceM) {
 const TERRAIN_VERTEX = /* glsl */ `
 uniform float uEarthRadiusM;
 uniform float uCurvatureStartM;
+attribute float terrainWater;
 varying vec3 vTerrainNormal;
 varying vec3 vTerrainWorldPosition;
 varying float vTerrainHeight;
+varying float vTerrainWater;
 #include <common>
 #include <logdepthbuf_pars_vertex>
 
 void main() {
   vec4 world = modelMatrix * vec4(position, 1.0);
+  // The shared collision format retains a water sentinel rather than a second surface height.
+  // Renderer-side water vertices are reconstructed at their bank elevation below; this small lift
+  // keeps the analytic water treatment cleanly above its supporting surface without a slot trench.
+  world.y += terrainWater * 0.35;
   float radial = distance(world.xz, cameraPosition.xz);
   float curvedRadial = max(radial - uCurvatureStartM, 0.0);
   world.y -= curvedRadial * curvedRadial / (2.0 * uEarthRadiusM);
   vTerrainNormal = normalize(mat3(modelMatrix) * normal);
   vTerrainWorldPosition = world.xyz;
   vTerrainHeight = position.y;
+  vTerrainWater = terrainWater;
   gl_Position = projectionMatrix * viewMatrix * world;
   #include <logdepthbuf_vertex>
 }
@@ -60,6 +70,7 @@ uniform float uParcelTint;
 varying vec3 vTerrainNormal;
 varying vec3 vTerrainWorldPosition;
 varying float vTerrainHeight;
+varying float vTerrainWater;
 #include <common>
 #include <logdepthbuf_pars_fragment>
 
@@ -93,7 +104,7 @@ void main() {
       + sin(vTerrainWorldPosition.x * 0.0013) * 2.1);
     float parcels = smoothstep(0.31, 0.69, parcelA * 0.56 + parcelB * 0.44);
     vec3 periodCultivation = mix(vec3(0.29, 0.31, 0.12), vec3(0.43, 0.39, 0.17), parcels);
-    vec3 modernCultivation = mix(vec3(0.24, 0.34, 0.13), vec3(0.46, 0.44, 0.20), parcels);
+    vec3 modernCultivation = mix(vec3(0.20, 0.31, 0.14), vec3(0.39, 0.37, 0.18), parcels);
     albedo = mix(albedo, mix(periodCultivation, modernCultivation, uModernScenery),
       lowland * (0.16 + parcels * 0.20));
   }
@@ -110,24 +121,23 @@ void main() {
   float bandStep = smoothstep(0.12, 0.22, elevation) * 0.34
     + smoothstep(0.42, 0.55, elevation) * 0.33
     + smoothstep(0.75, 0.88, elevation) * 0.33;
-  // Pilot verdict on the first pass: "too green, like a neon desert". Desaturated toward
-  // olive/earth, plus a cheap two-octave large-wavelength patchwork so lowlands read as
-  // varied country instead of one flat wash.
-  vec3 sValley = vec3(0.31, 0.40, 0.21);
-  vec3 sUpland = vec3(0.25, 0.32, 0.19);
-  vec3 sRock = vec3(0.50, 0.45, 0.36);
-  vec3 sRidge = vec3(0.62, 0.60, 0.53);
+  // Sage/olive lowlands, umber slopes and cool-grey ridges form the authored modern-era bands.
+  // Values stay deliberately below the old pale-bone range so ACES preserves colour separation.
+  vec3 sValley = vec3(0.14, 0.21, 0.08);
+  vec3 sUpland = vec3(0.09, 0.15, 0.055);
+  vec3 sRock = vec3(0.22, 0.17, 0.09);
+  vec3 sRidge = vec3(0.30, 0.28, 0.20);
   vec3 sAlbedo = mix(sValley, sUpland, bandStep);
   float patchwork = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.00023
     + sin(vTerrainWorldPosition.z * 0.00017) * 2.3);
-  sAlbedo = mix(sAlbedo, vec3(0.40, 0.38, 0.24),
-    patchwork * (1.0 - smoothstep(0.15, 0.45, steepness)) * 0.30);
+  sAlbedo = mix(sAlbedo, vec3(0.20, 0.22, 0.09),
+    patchwork * (1.0 - smoothstep(0.15, 0.45, steepness)) * 0.34);
   sAlbedo = mix(sAlbedo, sRock, smoothstep(0.22, 0.60, steepness) * 0.72);
   sAlbedo = mix(sAlbedo, sRidge, highRidge * (0.35 + steepness * 0.45));
   float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
   halfLambert *= halfLambert;
-  float toneRamp = 0.40 + 0.30 * smoothstep(0.30, 0.42, halfLambert)
-    + 0.20 * smoothstep(0.62, 0.74, halfLambert);
+  float toneRamp = 0.40 + 0.30 * smoothstep(0.24, 0.50, halfLambert)
+    + 0.20 * smoothstep(0.52, 0.82, halfLambert);
   vec3 viewDirection = normalize(cameraPosition - vTerrainWorldPosition);
   float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
   vec3 stylizedLit = sAlbedo * toneRamp
@@ -135,12 +145,35 @@ void main() {
 
   vec3 lit = stylizedLit;
   #endif
+
+  // Inland source-water samples share the same analytic language as the shipped ocean: cool
+  // blue-green body colour, grazing-angle sky reflection, restrained sun glint and metre-scale
+  // directional breakup. The bank-height reconstruction in createTerrainGeometry keeps this
+  // surface on the valley floor instead of stretching sentinel vertices down to sea level.
+  // Era-independent: the rivers exist in both Koreas, so the water term sits outside the
+  // compiled era specialization with its own view vector.
+  vec3 waterView = normalize(cameraPosition - vTerrainWorldPosition);
+  float waterFacing = clamp(dot(normal, waterView), 0.0, 1.0);
+  float waterFresnel = pow(1.0 - waterFacing, 3.0);
+  float waterRipple = sin(vTerrainWorldPosition.x * 0.012
+      + vTerrainWorldPosition.z * 0.006)
+    + 0.55 * sin(vTerrainWorldPosition.x * -0.005
+      + vTerrainWorldPosition.z * 0.017 + 1.7);
+  vec3 waterLit = mix(vec3(0.025, 0.13, 0.17), vec3(0.10, 0.30, 0.34),
+    0.24 + waterFresnel * 0.58);
+  waterLit *= 0.94 + waterRipple * 0.035;
+  vec3 waterHalf = normalize(waterView + normalize(uSunDirection));
+  waterLit += vec3(0.88, 0.82, 0.66)
+    * pow(max(dot(normal, waterHalf), 0.0), 96.0) * 0.42;
+  float waterMask = smoothstep(0.18, 0.82, vTerrainWater);
+  lit = mix(lit, waterLit, waterMask);
+
   // Illustrative atmosphere: the period haze whites the world out from altitude, which is
   // period-honest but buries the 2030s palette entirely. The modern era thins the density and
   // hazes toward a saturated sky blue instead of white — distance stays readable as COLOR.
   #ifdef MODERN_SCENERY
   float fogDensity = uFogDensity * 0.45;
-  vec3 hazeColor = vec3(0.52, 0.66, 0.84);
+  vec3 hazeColor = vec3(0.36, 0.52, 0.68);
   #else
   float fogDensity = uFogDensity;
   vec3 hazeColor = uFogColor;
@@ -274,13 +307,96 @@ export function decodeTerrainRecord(buffer, record, quantization) {
   return { heights, water, sampleCount: record.sampleCount };
 }
 
-function triangle(indices, water, a, b, c) {
-  if (water[a] && water[b] && water[c]) return;
+export function reconstructWaterHeights(decoded, maximumBankDistanceSamples = 8) {
+  const { heights, water, sampleCount } = decoded;
+  const reconstructed = heights.slice();
+  const resolved = new Uint8Array(water.length);
+  for (let index = 0; index < water.length; index++) resolved[index] = water[index] ? 0 : 1;
+  const maximumPasses = Math.max(0, Math.round(finite(maximumBankDistanceSamples, 8)));
+  for (let pass = 0; pass < maximumPasses; pass++) {
+    const updates = [];
+    for (let north = 0; north < sampleCount; north++) {
+      for (let east = 0; east < sampleCount; east++) {
+        const index = north * sampleCount + east;
+        if (!water[index] || resolved[index]) continue;
+        let bankHeight = Number.POSITIVE_INFINITY;
+        for (let northOffset = -1; northOffset <= 1; northOffset++) {
+          const adjacentNorth = north + northOffset;
+          if (adjacentNorth < 0 || adjacentNorth >= sampleCount) continue;
+          for (let eastOffset = -1; eastOffset <= 1; eastOffset++) {
+            if (eastOffset === 0 && northOffset === 0) continue;
+            const adjacentEast = east + eastOffset;
+            if (adjacentEast < 0 || adjacentEast >= sampleCount) continue;
+            const adjacent = adjacentNorth * sampleCount + adjacentEast;
+            if (resolved[adjacent]) {
+              bankHeight = Math.min(bankHeight, reconstructed[adjacent]);
+            }
+          }
+        }
+        if (Number.isFinite(bankHeight)) updates.push({ index, bankHeight });
+      }
+    }
+    if (!updates.length) break;
+    for (const update of updates) {
+      reconstructed[update.index] = update.bankHeight;
+      resolved[update.index] = 1;
+    }
+  }
+  return reconstructed;
+}
+
+function smoothSurfaceNormals(geometry, heights, water, sampleCount, spacingEast, spacingNorth) {
+  const smoothed = new Float32Array(heights.length);
+  for (let north = 0; north < sampleCount; north++) {
+    for (let east = 0; east < sampleCount; east++) {
+      let weightedHeight = 0;
+      let totalWeight = 0;
+      for (let northOffset = -2; northOffset <= 2; northOffset++) {
+        const adjacentNorth = Math.min(sampleCount - 1, Math.max(0, north + northOffset));
+        for (let eastOffset = -2; eastOffset <= 2; eastOffset++) {
+          const adjacentEast = Math.min(sampleCount - 1, Math.max(0, east + eastOffset));
+          const weight = 1 / (1 + Math.abs(eastOffset) + Math.abs(northOffset));
+          weightedHeight += heights[adjacentNorth * sampleCount + adjacentEast] * weight;
+          totalWeight += weight;
+        }
+      }
+      smoothed[north * sampleCount + east] = weightedHeight / totalWeight;
+    }
+  }
+  const normals = geometry.getAttribute("normal");
+  for (let north = 0; north < sampleCount; north++) {
+    const south = Math.max(0, north - 1);
+    const northNeighbour = Math.min(sampleCount - 1, north + 1);
+    for (let east = 0; east < sampleCount; east++) {
+      const index = north * sampleCount + east;
+      if (water[index]) {
+        normals.setXYZ(index, 0, 1, 0);
+        continue;
+      }
+      const west = Math.max(0, east - 1);
+      const eastNeighbour = Math.min(sampleCount - 1, east + 1);
+      const eastSlope = (
+        smoothed[north * sampleCount + eastNeighbour]
+        - smoothed[north * sampleCount + west]
+      ) / Math.max(spacingEast, (eastNeighbour - west) * spacingEast);
+      const northSlope = (
+        smoothed[northNeighbour * sampleCount + east]
+        - smoothed[south * sampleCount + east]
+      ) / Math.max(spacingNorth, (northNeighbour - south) * spacingNorth);
+      const length = Math.hypot(eastSlope, 1, northSlope);
+      normals.setXYZ(index, -eastSlope / length, 1 / length, northSlope / length);
+    }
+  }
+  normals.needsUpdate = true;
+}
+
+function triangle(indices, a, b, c) {
   indices.push(a, b, c);
 }
 
 export function createTerrainGeometry(THREE, chunk, decoded) {
-  const { heights, water, sampleCount } = decoded;
+  const { water, sampleCount } = decoded;
+  const surfaceHeights = reconstructWaterHeights(decoded);
   const [minimumEast, minimumNorth, maximumEast, maximumNorth] = chunk.boundsLocalM;
   const centreEast = (minimumEast + maximumEast) * 0.5;
   const centreNorth = (minimumNorth + maximumNorth) * 0.5;
@@ -304,12 +420,14 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
   // sourced top surface. Skirts overlap mismatched neighbour edges without changing truth.
   const skirtVertexCount = perimeter.length * 2;
   const positions = new Float32Array((baseVertexCount + skirtVertexCount) * 3);
+  const waterValues = new Float32Array(baseVertexCount + skirtVertexCount);
   for (let north = 0; north < sampleCount; north++) {
     for (let east = 0; east < sampleCount; east++) {
       const index = north * sampleCount + east;
       positions[index * 3] = minimumEast + east * spacingEast - centreEast;
-      positions[index * 3 + 1] = heights[index];
+      positions[index * 3 + 1] = surfaceHeights[index];
       positions[index * 3 + 2] = -(minimumNorth + north * spacingNorth - centreNorth);
+      waterValues[index] = water[index];
     }
   }
   const indices = [];
@@ -321,8 +439,8 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
       const northeast = northwest + 1;
       // Renderer space flips north into -Z, so this winding keeps the sourced surface front-facing
       // with +Y normals. Reversing these triples makes the entire peninsula back-face culled.
-      triangle(indices, water, southwest, southeast, northwest);
-      triangle(indices, water, southeast, northeast, northwest);
+      triangle(indices, southwest, southeast, northwest);
+      triangle(indices, southeast, northeast, northwest);
     }
   }
   const surfaceTriangleCount = indices.length / 3;
@@ -337,6 +455,8 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
     positions[bottomIndex * 3] = positions[sourceIndex * 3];
     positions[bottomIndex * 3 + 1] = positions[sourceIndex * 3 + 1] - skirtDepthM;
     positions[bottomIndex * 3 + 2] = positions[sourceIndex * 3 + 2];
+    waterValues[topIndex] = water[sourceIndex];
+    waterValues[bottomIndex] = water[sourceIndex];
   }
   for (let perimeterIndex = 0; perimeterIndex < perimeter.length; perimeterIndex++) {
     const next = (perimeterIndex + 1) % perimeter.length;
@@ -349,6 +469,7 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("terrainWater", new THREE.BufferAttribute(waterValues, 1));
   geometry.setIndex(indices);
   // Two material groups so the flat top surface can render single-sided (THREE.FrontSide halves
   // its fragment work — this is where the "face-full of ground" fill cost lives) while the thin
@@ -361,6 +482,12 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
     geometry.addGroup(surfaceIndexCount, indices.length - surfaceIndexCount, 1);
   }
   geometry.computeVertexNormals();
+  // Lighting normals use a five-sample neighbourhood while vertex positions retain the exact
+  // sourced/carved grid. This removes coarse tone-ramp shelves on steep walls without changing
+  // the approved flyable floor, ridge gap, collision truth, or renderer LOD elevations.
+  smoothSurfaceNormals(
+    geometry, surfaceHeights, water, sampleCount, spacingEast, spacingNorth,
+  );
   geometry.computeBoundingSphere();
   const normalAttribute = geometry.getAttribute("normal");
   const boundaryNormals = new Float32Array(perimeter.length * 3);

@@ -99,7 +99,7 @@ test("canonical starter content passes strict validation", async () => {
     assets: 12,
     licenses: 2,
     referencedFiles: 19,
-    referencedBytes: 18872309,
+    referencedBytes: 18872218,
     modelTriangles: 20396,
   });
 });
@@ -148,7 +148,7 @@ test("canonical project-generated visual set remains placeholder until productio
   );
   assert.deepEqual(
     manifest.assets.filter((asset) => asset.status === "production").map((asset) => asset.id),
-    ["environment.terrain.central-front.v1"],
+    ["environment.terrain.central-front.v2"],
     "the reviewed source-derived terrain is the only production asset",
   );
 });
