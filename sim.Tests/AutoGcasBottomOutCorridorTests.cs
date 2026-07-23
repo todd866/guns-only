@@ -101,10 +101,10 @@ public class AutoGcasBottomOutCorridorTests {
     public void AttentiveFlyUpTracksTheCarvedMarqueeValleyFloor() {
         ITerrainSurface terrain = KoreaTerrainTruth.Load()
             ?? throw new InvalidOperationException("carved Korea truth was not embedded");
-        const double startEastM = 17_800.0;
-        const double startNorthM = 11_700.0;
-        const double targetEastM = 7_200.0;
-        const double targetNorthM = -360.0;
+        const double startEastM = 15_413.0;
+        const double startNorthM = 4_641.0;
+        const double targetEastM = 2_185.0;
+        const double targetNorthM = -12_671.0;
         Assert.True(terrain.TrySample(startEastM, startNorthM, out TerrainSample startSurface));
         double heading = Math.Atan2(
             targetEastM - startEastM,
