@@ -260,14 +260,38 @@
         "textureMemoryMiB": 2
       },
       "anchors": [
-        { "id": "camera.cockpit", "node": "SOCKET_CAMERA_COCKPIT" },
-        { "id": "canopy.hinge", "node": "SOCKET_CANOPY_HINGE" },
-        { "id": "gunsight.origin", "node": "SOCKET_GUNSIGHT_ORIGIN" },
-        { "id": "instrument-panel.origin", "node": "SOCKET_INSTRUMENT_PANEL_ORIGIN" },
-        { "id": "muzzle.left", "node": "SOCKET_MUZZLE_LEFT" },
-        { "id": "muzzle.right", "node": "SOCKET_MUZZLE_RIGHT" },
-        { "id": "control.stick", "node": "SOCKET_CONTROL_STICK" },
-        { "id": "control.throttle", "node": "SOCKET_CONTROL_THROTTLE" }
+        {
+          "id": "camera.cockpit",
+          "node": "SOCKET_CAMERA_COCKPIT"
+        },
+        {
+          "id": "canopy.hinge",
+          "node": "SOCKET_CANOPY_HINGE"
+        },
+        {
+          "id": "gunsight.origin",
+          "node": "SOCKET_GUNSIGHT_ORIGIN"
+        },
+        {
+          "id": "instrument-panel.origin",
+          "node": "SOCKET_INSTRUMENT_PANEL_ORIGIN"
+        },
+        {
+          "id": "muzzle.left",
+          "node": "SOCKET_MUZZLE_LEFT"
+        },
+        {
+          "id": "muzzle.right",
+          "node": "SOCKET_MUZZLE_RIGHT"
+        },
+        {
+          "id": "control.stick",
+          "node": "SOCKET_CONTROL_STICK"
+        },
+        {
+          "id": "control.throttle",
+          "node": "SOCKET_CONTROL_THROTTLE"
+        }
       ]
     },
     {
@@ -469,29 +493,29 @@
           "uri": "environment/terrain/central-front.manifest.json",
           "format": "guns-only-terrain-manifest",
           "mediaType": "application/json",
-          "sha256": "f548987c1a5a11d76984e52bb716c397e845e3880cee0ad9efc3395980e10ab2",
-          "sizeBytes": 113299
+          "sha256": "6017b706c24b9bdf9465fa0e04ec8798c030936a6a8ba2254e0361ac0c850ce5",
+          "sizeBytes": 113286
         },
         {
           "uri": "environment/terrain/central-front.terrain",
           "format": "guns-only-terrain-bundle",
           "mediaType": "application/octet-stream",
-          "sha256": "3160b3dc2f2e0799413706f1a7d56879dde3f87fdacfab8591f567f9766be8e3",
+          "sha256": "d98ada3ab1f1c06c491e2321772cfa7e938d294369bcf1423cedfee3b8c8a3c1",
           "sizeBytes": 11268082
         },
         {
           "uri": "environment/terrain/central-front.truth",
           "format": "guns-only-quantized-terrain-grid",
           "mediaType": "application/octet-stream",
-          "sha256": "0f40979877abddcd34221a34101a1782e9781ce43f1ce969acda6b1272dc7582",
+          "sha256": "115600ebb844013b3f86dc8fc57b0701b860025877f682fbdd96760b2aa8b594",
           "sizeBytes": 2101314
         },
         {
           "uri": "environment/terrain/central-front-preview.png",
           "format": "png",
           "mediaType": "image/png",
-          "sha256": "e67d946b290f82561e74ed3d9b4f9d5d00291a55e888d582ced88212f4edfd52",
-          "sizeBytes": 2112337
+          "sha256": "68957273973eba63cb862f07e0be32ef41d084ee06ce8d3f5539c9602ef902d7",
+          "sizeBytes": 2109891
         }
       ],
       "fallbacks": [],

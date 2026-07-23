@@ -99,7 +99,7 @@ test("canonical starter content passes strict validation", async () => {
     assets: 12,
     licenses: 2,
     referencedFiles: 19,
-    referencedBytes: 18872218,
+    referencedBytes: 18833851,
     modelTriangles: 20396,
   });
 });
