@@ -296,6 +296,27 @@ function assertPadlockInsetAndLocator(data) {
   }
 }
 
+// The "first five seconds" battery: rules a pilot notices instantly, asserted on EVERY
+// scenario. One glyph per job — if the target marker is on screen, the locator arrow is
+// redundant noise pointing at a dude you can already see.
+function assertBasicJobs(data) {
+  const { name, geometry } = data;
+  const locator = geometry.banditLocator;
+  if (locator) {
+    check(name, "marker and locator arrow are mutually exclusive",
+      !(locator.markerInside && locator.arrowDrawn),
+      `markerInside=${locator.markerInside} arrowDrawn=${locator.arrowDrawn}`);
+    if (geometry.banditPx && !geometry.banditPx.behind
+        && geometry.banditPx.x >= 20 && geometry.banditPx.x <= 1380
+        && geometry.banditPx.y >= 20 && geometry.banditPx.y <= 1000) {
+      check(name, "visible bandit gets the marker, not the arrow",
+        locator.markerInside && !locator.arrowDrawn,
+        `bandit at ${geometry.banditPx.x?.toFixed?.(0)},${geometry.banditPx.y?.toFixed?.(0)}: `
+        + `markerInside=${locator.markerInside} arrowDrawn=${locator.arrowDrawn}`);
+    }
+  }
+}
+
 async function main() {
   const site = await serveStatic(WWWROOT);
   const browser = await chromium.launch({ headless: true });
@@ -328,6 +349,7 @@ async function main() {
       assertBandit(data);
       if (data.padlock) assertPadlockDirector(data);
       assertPadlockInsetAndLocator(data);
+      assertBasicJobs(data);
       assertFunnelContainsTarget(data);
     }
     if (pageErrors.length > 0) {

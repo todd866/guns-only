@@ -69,7 +69,10 @@ public class AceBanditTests {
         var p = FlightModel.F22APublicDataSurrogate;
         var ace = new ReactiveBandit(F22(0.0, 3000.0, 0.0, 220.0, chi: 0.0), p, PilotSkill.Ace);
         var novice = new ReactiveBandit(F22(0.0, 3000.0, 4000.0, 220.0, chi: Math.PI), p, PilotSkill.Novice);
-        var result = BfmDuel.Fly(ace, novice, 45.0);
+        // 90 s, not 45: Build 73's pushover guard cured the Novice's helpless post-merge zoom
+        // (the same vertical-flee defect the pilot reported in production), so the ace's
+        // conversion now takes a real fight — measured 8.9 s vs 1.3 s by 90 s, identical at 150.
+        var result = BfmDuel.Fly(ace, novice, 90.0);
         Assert.True(result.ASolutionSeconds > result.BSolutionSeconds + 1.0,
             $"ace={result.ASolutionSeconds:F1}s novice={result.BSolutionSeconds:F1}s");
     }

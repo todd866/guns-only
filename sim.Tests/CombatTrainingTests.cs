@@ -174,10 +174,12 @@ public class CombatTrainingTests {
         string firstJson = CombatDatasetJsonLines.Serialize(first);
         string secondJson = CombatDatasetJsonLines.Serialize(second);
         Assert.Equal(firstJson, secondJson);
-        // docs/f22-high-alpha-review.md intentionally changes the F-22 kernel trajectory encoded
-        // by this deterministic export; the serializer/schema and same-seed equality remain fixed.
+        // The pinned hash moves ONLY with deliberate kernel-trajectory changes (Build 72 alpha
+        // model; Build 74 F-22 lateral authority + the bandit pushover guard). The serializer,
+        // schema, and same-seed bit-equality above are the real invariants. Print-and-update via
+        // the assertion message when a labelled flight-model change lands.
         Assert.Equal(
-            "32AD86A8F9FEDF2093740C9A0B742EDDA2362EDF59F4AE80C1DB85469380611B",
+            "58F613D308B70E6F02916517217BA4D8F26F38D9B6352D5C36CAC4B2DC6A9ED4",
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(firstJson))));
         string[] lines = firstJson.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(1 + first.Episodes.Count + first.TransitionCount, lines.Length);

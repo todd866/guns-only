@@ -938,11 +938,14 @@ class CombatHud {
     const inside = latchedRectVisibility(
       this._banditMarkerInside,
       projection,
-      safe,
-      size,
+      { left: 8, top: 8, right: this.width - 8, bottom: this.height - 8 },
+      4,
       6,
     );
     this._banditMarkerInside = inside;
+    if (this._debug) {
+      this._debug.banditLocator = { markerInside: inside, arrowDrawn: false };
+    }
 
     if (inside) {
       const corner = 8;
@@ -1039,6 +1042,9 @@ class CombatHud {
     const y = safeCenterY + dy * scale;
     const angle = Math.atan2(dy, dx);
 
+    if (this._debug && this._debug.banditLocator) {
+      this._debug.banditLocator.arrowDrawn = true;
+    }
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
@@ -2305,8 +2311,8 @@ class CombatHud {
       const banditProj = this.project(frame.banditPosition, padlockCamera, this._funnelTargetProj);
       const banditOnScreen = isBanditPadlock && !banditProj.behind
         && Number.isFinite(banditProj.x) && Number.isFinite(banditProj.y)
-        && banditProj.x >= left && banditProj.x <= right
-        && banditProj.y >= top && banditProj.y <= bottom;
+        && banditProj.x >= 8 && banditProj.x <= this.width - 8
+        && banditProj.y >= 8 && banditProj.y <= this.height - 8;
       // Unit screen direction from view-centre toward the bandit (for the edge caret + clock).
       // Derived from the CAMERA-SPACE target direction, not from projected screen coordinates:
       // the perspective projection blows up and flips as the target crosses the side plane, and

@@ -323,6 +323,22 @@ export const SCENARIOS = [
     state: { range_m: 900, closure_kts: 10, bank_deg: -25 },
   },
   {
+    name: "forward-bandit-near-edge",
+    about: "First-five-seconds battery: a bandit plainly visible near the screen edge must get the marker and NEVER the locator arrow — one glyph per job.",
+    player: { headingDeg: 0, pitchDeg: 0, bankDeg: 0, altFt: 8000 },
+    bandit: { azimuthDeg: 24, elevationDeg: 10, rangeM: 900 },
+    lead: null,
+    state: { range_m: 900 },
+  },
+  {
+    name: "forward-bandit-offscreen",
+    about: "The bandit well outside the field of view: the locator arrow must draw and the marker must not.",
+    player: { headingDeg: 0, pitchDeg: 0, bankDeg: 0, altFt: 8000 },
+    bandit: { azimuthDeg: 85, elevationDeg: 5, rangeM: 1100 },
+    lead: null,
+    state: { range_m: 1100 },
+  },
+  {
     name: "forward-level",
     about: "Baseline forward HUD, no padlock: pitch ladder, tapes, heading, G/power/fuel, bandit box at 950 m, caged sight.",
     player: { headingDeg: 5, pitchDeg: 0, bankDeg: 0, altFt: 8000 },

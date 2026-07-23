@@ -300,10 +300,14 @@ public static class FlightModel {
         RollMomentMaxNm: 1400000.0, PitchMomentMaxNm: 3400000.0,
         YawMomentMaxNm: 1200000.0,
         ClBeta: -0.055, ClP: -0.48, ClR: 0.10,
-        ClDeltaA: 0.105, ClDeltaR: 0.030,
-        LateralDerivativeProfileId: "f22a-public-data-surrogate-v1",
+        // Flight-tested (Build 73 pilot report): 0.105 gave a steady 116 deg/s at 350 KCAS —
+        // sluggish for a reversal in a Raptor-class surrogate. 0.155 puts the derivative-law
+        // steady state near 170 deg/s at combat speed, tapering through the same alpha schedule.
+        // A labelled surrogate feel number, not an OEM derivative claim.
+        ClDeltaA: 0.155, ClDeltaR: 0.030,
+        LateralDerivativeProfileId: "f22a-public-data-surrogate-v2",
         ManualPitchRateMaxRad: 0.85,
-        FightRollRateMaxRad: 2.8,
+        FightRollRateMaxRad: 3.8,
         CompatibilityRollRateMaxRad: 2.8, CompatibilityBankTau: 0.20,
         YawBetaStiffnessNmRad: 800000.0, RollHoldDampingNms: 0.0,
         // FBW bank-hold: the F-22 pilot flies a roll-rate command and the FLCS holds the bank he
