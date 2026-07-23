@@ -59,15 +59,26 @@ function trajectoryAt(trajectory, rangeM) {
 }
 
 function assertAirframeSymbols(data) {
-  const { name, geometry, probes, state } = data;
+  const { name, geometry, probes, state, look } = data;
   if (data.padlock) return; // the ladder/FPV contract is the forward HUD's
   const aoa = Number(state.aoa_deg) || 0;
   const beta = Number(state.beta_deg) || 0;
+  const lookingOffAxis = Math.abs(Number(look?.yawDeg) || 0) > 1e-9
+    || Math.abs(Number(look?.pitchDeg) || 0) > 1e-9;
+  const waterlineExpected = probes.waterline?.behind !== true;
+  const fpvExpected = probes.fpv?.behind !== true;
 
-  check(name, "waterline recorded", Boolean(geometry.waterlinePx),
-    geometry.waterlinePx ? "present" : "missing");
-  check(name, "fpv recorded", Boolean(geometry.fpvPx),
-    geometry.fpvPx ? "present" : "missing");
+  check(name, waterlineExpected ? "waterline recorded" : "waterline leaves viewport plane",
+    Boolean(geometry.waterlinePx) === waterlineExpected,
+    geometry.waterlinePx ? "present" : "absent");
+  check(name, fpvExpected ? "fpv recorded" : "fpv leaves viewport plane",
+    Boolean(geometry.fpvPx) === fpvExpected,
+    geometry.fpvPx ? "present" : "absent");
+  if (!waterlineExpected && !fpvExpected) {
+    check(name, "off-axis gun cross has no clamped ghost",
+      geometry.gunCrossPx === null, geometry.gunCrossPx ? "present" : "absent");
+    return;
+  }
   if (!geometry.waterlinePx || !geometry.fpvPx) return;
 
   // hud.js anchors match the independent probe projections.
@@ -77,6 +88,26 @@ function assertAirframeSymbols(data) {
   const fpvError = distance(geometry.fpvPx, probes.fpv);
   check(name, "fpv == projected world-velocity",
     fpvError <= 1.5, `error ${fpvError.toFixed(3)} px (tol 1.5)`);
+  if (lookingOffAxis) {
+    const nominalFocalError = Math.abs(probes.focalYPx - probes.nominalFocalYPx);
+    check(name, "manual look leaves the camera focal unchanged",
+      nominalFocalError <= 1e-9,
+      `error ${nominalFocalError.toExponential(3)} px`);
+    if (probes.lookBoresight) {
+      const offsetError = distance(geometry.waterlinePx, probes.lookBoresight);
+      check(name, "waterline == focal-projected manual-look offset",
+        offsetError <= 1.5, `error ${offsetError.toFixed(3)} px (tol 1.5)`);
+    }
+    const gunCrossError = geometry.gunCrossPx
+      ? distance(geometry.gunCrossPx, geometry.waterlinePx)
+      : Number.POSITIVE_INFINITY;
+    check(name, "gun cross remains on projected boresight",
+      gunCrossError <= 1e-9, `error ${gunCrossError.toFixed(3)} px`);
+    // Once the boresight is off-axis, gnomonic scale varies across the image (the apparent
+    // waterline/FPV pixel gap is not atan(gap/focal)). Their independently projected positions
+    // above are the valid contract; the centred small-angle checks below remain for forward view.
+    return;
+  }
 
   // The alpha gap through the focal length. The waterline sits on the projection axis, so the
   // angular separation is exactly atan(pixelDistance / focal).
@@ -97,9 +128,17 @@ function assertAirframeSymbols(data) {
 }
 
 function assertLadder(data) {
-  const { name, geometry, probes, state } = data;
+  const { name, geometry, probes, state, look } = data;
   if (data.padlock) {
     check(name, "no ladder in padlock", geometry.ladderRungs.length === 0,
+      `${geometry.ladderRungs.length} rungs recorded`);
+    return;
+  }
+  const lookingOffAxis = Math.abs(Number(look?.yawDeg) || 0) > 1e-9
+    || Math.abs(Number(look?.pitchDeg) || 0) > 1e-9;
+  if (lookingOffAxis && probes.waterline?.behind === true) {
+    check(name, "off-axis ladder has no clamped ghosts",
+      geometry.ladderRungs.length === 0,
       `${geometry.ladderRungs.length} rungs recorded`);
     return;
   }
@@ -124,6 +163,14 @@ function assertLadder(data) {
   check(name, "spacing pairs measured", spacingChecks > 0, `${spacingChecks} pairs`);
   if (pitch === 0 && rungs.has(0) && rungs.has(10)) {
     const horizonRung = rungs.get(0);
+    if (geometry.waterlinePx) {
+      const anchorError = distance(
+        { x: horizonRung.cx, y: horizonRung.cy },
+        geometry.waterlinePx,
+      );
+      check(name, "ladder origin == projected airframe boresight",
+        anchorError <= 1.5, `error ${anchorError.toFixed(3)} px (tol 1.5)`);
+    }
     const ten = rungs.get(10);
     const measured = Math.hypot(ten.cx - horizonRung.cx, ten.cy - horizonRung.cy);
     const expected = probes.focalYPx * Math.tan(10 * DEG);
@@ -179,10 +226,14 @@ function assertFunnel(data) {
 }
 
 function assertBandit(data) {
-  const { name, geometry, probes } = data;
+  const { name, geometry, probes, look } = data;
   if (!geometry.banditPx || geometry.banditPx.behind) return;
   const error = distance(geometry.banditPx, probes.bandit);
-  check(name, "bandit marker == projected bandit position",
+  const lookingOffAxis = Math.abs(Number(look?.yawDeg) || 0) > 1e-9
+    || Math.abs(Number(look?.pitchDeg) || 0) > 1e-9;
+  check(name, lookingOffAxis
+    ? "manual look keeps bandit on its world projection"
+    : "bandit marker == projected bandit position",
     error <= 2, `error ${error.toFixed(3)} px (tol 2)`);
 }
 
@@ -315,8 +366,14 @@ function assertWarningLine(data) {
 }
 
 function assertBasicJobs(data) {
-  const { name, geometry, probes } = data;
+  const { name, geometry, probes, look } = data;
   const locator = geometry.banditLocator;
+  const lookingOffAxis = Math.abs(Number(look?.yawDeg) || 0) > 1e-9
+    || Math.abs(Number(look?.pitchDeg) || 0) > 1e-9;
+  if (lookingOffAxis) {
+    check(name, "look-offset target still has exactly one marker/locator job",
+      Boolean(locator), locator ? "job recorded" : "missing");
+  }
   if (locator) {
     check(name, "marker and locator arrow are mutually exclusive",
       !(locator.markerInside && locator.arrowDrawn),

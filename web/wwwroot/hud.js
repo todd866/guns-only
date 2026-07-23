@@ -463,7 +463,7 @@ class CombatHud {
     });
   }
 
-  drawPitchLadder(state, camera) {
+  drawPitchLadder(state, camera, boresightAnchor = null) {
     const ctx = this.ctx;
     const bank = -(Number(state.bank_deg) || 0) * DEG;
     const pitch = Number(state.pitch_deg) || 0;
@@ -472,13 +472,17 @@ class CombatHud {
     const matrixScaleY = Number(projection?.[5]);
     // The ladder is drawn with the SAME projection as the rendered world — no synthetic
     // pixels-per-degree fallback. Without a live camera matrix there is no honest ladder.
-    if (!Number.isFinite(matrixScaleY) || matrixScaleY <= 0) return;
+    if (!Number.isFinite(matrixScaleY) || matrixScaleY <= 0
+      || !boresightAnchor || boresightAnchor.behind
+      || !Number.isFinite(boresightAnchor.x) || !Number.isFinite(boresightAnchor.y)) return;
     const focalLengthY = this.height * 0.5 * matrixScaleY;
-    // Match the PerspectiveCamera principal point. The normal FPV camera has no view offset, so
-    // this is the exact canvas centre; retaining the matrix term keeps the HUD calibrated if that
-    // ever changes.
-    const projectionCenterX = this.width * (0.5 - (Number(projection?.[8]) || 0) * 0.5);
-    const projectionCenterY = this.height * (0.5 + (Number(projection?.[9]) || 0) * 0.5);
+    // The ladder belongs to the AIRFRAME, not the pilot's eye line. Its local origin is therefore
+    // the projected body-forward direction computed through the actual render camera. With a
+    // forward view this is the PerspectiveCamera principal point; drag-look/two-finger-look moves
+    // it by the gnomonic look offset (focal * tan(angle)), so the complete ladder slides toward and
+    // then through the viewport edge with the waterline instead of remaining glued to the screen.
+    const projectionCenterX = boresightAnchor.x;
+    const projectionCenterY = boresightAnchor.y;
     const cosBank = Math.cos(bank);
     const sinBank = Math.sin(bank);
     const layout = this.getLayout();
@@ -495,7 +499,7 @@ class CombatHud {
     };
 
     ctx.save();
-    // Clip in screen space around the camera projection centre. Rung centres and endpoints are
+    // Clip in screen space around the projected airframe boresight. Rung centres and endpoints are
     // rotated first below, so a high-bank rung cannot be admitted by its pre-roll vertical offset.
     ctx.beginPath();
     ctx.arc(projectionCenterX, projectionCenterY, radius, 0, Math.PI * 2);
@@ -503,8 +507,8 @@ class CombatHud {
     ctx.beginPath();
     ctx.rect(safe.left, safe.top, Math.max(0, safe.right - safe.left), Math.max(0, safe.bottom - safe.top));
     ctx.clip();
-    // Declutter exclusion: rungs must not stab through the gunsight/FPV working area at screen
-    // centre. Even-odd clip = everything except a circle around the projection centre. The rungs
+    // Declutter exclusion: rungs must not stab through the gunsight/FPV working area at boresight.
+    // Even-odd clip = everything except a circle around the projected nose. The rungs
     // keep their own centre gap as well, so the ladder still reads as one instrument.
     const exclusionRadius = clamp(this.height * 0.115, 72, 102);
     ctx.beginPath();
@@ -520,8 +524,9 @@ class CombatHud {
 
     for (let rung = firstRung; rung <= lastRung; rung += 5) {
       // Perspective projection, not a fixed pixels-per-degree approximation. At level attitude the
-      // 0 rung is exactly on the camera centre; +10/-10 are equal and opposite about it. Pitching up
-      // moves the true-horizontal 0 rung down by the same projection used by the rendered world.
+      // In the forward view the 0 rung is exactly on camera centre; +10/-10 are equal and opposite
+      // about it. Pitching up moves the true-horizontal 0 rung down by the same projection used by
+      // the rendered world, while manual look translates the whole calibrated ladder with the nose.
       const localY = Math.tan((pitch - rung) * DEG) * focalLengthY;
       const rungCenter = rotatePoint(0, localY);
       const rotatedDistance = Math.hypot(
@@ -803,6 +808,7 @@ class CombatHud {
 
     // The gun cross always owns boresight, whether or not a ranging solution exists. It is a
     // body symbol seen through a body-fixed camera, so it is screen-aligned — no bank decal.
+    if (this._debug) this._debug.gunCrossPx = { x: anchor.x, y: anchor.y };
     ctx.save();
     ctx.translate(anchor.x, anchor.y);
     this.setLine("rgba(77, 255, 136, 0.70)", 1.15);
@@ -3234,6 +3240,7 @@ class CombatHud {
       ? {
         waterlinePx: null,
         fpvPx: null,
+        gunCrossPx: null,
         ladderRungs: [],
         funnel: null,
         banditPx: null,
@@ -3277,7 +3284,7 @@ class CombatHud {
     const systems = systemsReadout(frame.state);
     const carrierPadlock = frame.padlock && frame.padlockTarget === "carrier";
 
-    if (!frame.padlock) this.drawPitchLadder(frame.state, frame.camera);
+    if (!frame.padlock) this.drawPitchLadder(frame.state, frame.camera, noseAnchor);
     this.drawAirframeSymbols(noseAnchor, frame.state, fpvAnchor);
     this.drawGunSight(frame, noseAnchor);
     this.drawAimPoint(frame, noseAnchor, directorAnchor);
