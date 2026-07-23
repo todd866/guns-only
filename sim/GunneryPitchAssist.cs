@@ -39,7 +39,8 @@ public static class GunneryPitchAssist {
         bool hasBallisticLead,
         double rangeM,
         bool enabled,
-        bool lateralRollEnabled = true) {
+        bool lateralRollEnabled = true,
+        double closureMps = 0.0) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         GunneryPitchAssistResult inactive = new(pilotCommand,
             GunneryPitchAssistState.Inactive(pilotCommand.GDemand));
@@ -109,8 +110,15 @@ public static class GunneryPitchAssist {
         // never fires and never alters the ballistic path the fired rounds actually fly.
         Vec3D bodyRight = attitude.Rotate(new Vec3D(1.0, 0.0, 0.0));
         double lateralError = System.Math.Atan2(lead.Dot(bodyRight), forwardProjection);
+        // Do not fight the merge (pilot report, desktop, Build 77): inside ~2.5 seconds of a
+        // high-closure pass the line of sight swings faster than any capture is worth, and full
+        // lateral authority just wrenches the roll axis. Fade the lateral assist with
+        // time-to-pass; the pitch channel keeps its own gates.
+        double timeToPassS = closureMps > 50.0
+            ? rangeM / closureMps : double.PositiveInfinity;
+        double mergeFade = System.Math.Clamp(timeToPassS / 2.5, 0.0, 1.0);
         double rollAssist = lateralRollEnabled
-            ? System.Math.Clamp(
+            ? mergeFade * System.Math.Clamp(
                 parameters.GunneryLateralAssistRollGain * lateralError,
                 -parameters.GunneryLateralAssistMaxRoll,
                 parameters.GunneryLateralAssistMaxRoll)

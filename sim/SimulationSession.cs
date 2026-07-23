@@ -2178,7 +2178,8 @@ public sealed class SimulationSession {
             _gunKill.HasLeadSolution,
             Geometry.Range(_player.State, _bandit.State),
             enabled,
-            lateralRollEnabled: !padlockOwnsRollPlane);
+            lateralRollEnabled: !padlockOwnsRollPlane,
+            closureMps: _closureKts / 1.94384);
         _gunneryPitchAssistState = result.State;
         return result.Command;
     }

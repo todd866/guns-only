@@ -44,7 +44,7 @@ public sealed record AutoGcasConfiguration(
     // terrain-masking. While the HUMAN input path shows active commanding, the system fires only
     // when even an immediate max-perform recovery is about to become impossible.
     double ExitDwellSeconds,
-    double AttentivePilotTriggerFactor = 0.10,
+    double AttentivePilotTriggerFactor = 0.06,
     double ManeuveringTerrainBufferM = 30.48,
     double StableTerrainBufferM = 6.096) {
 
@@ -241,7 +241,13 @@ public static class AutoGcasController {
         // path sweep underneath runs at terrain-grid resolution, so a cliff face ahead enters
         // this floor the moment the predicted path crosses it.
         Vec3D flightVelocity = input.Aircraft.VelocityVector();
-        bool stableFlightPath = Math.Abs(flightVelocity.Y) < 10.0
+        // Stability is a flight-path ANGLE, not a sink rate: at 576 KCAS a 2-degree descent
+        // already sinks 10 m/s, which mis-filed every fast valley run as "maneuvering"
+        // (production fly-up at 208 ft, wings level, 576 KIAS). Four degrees of gamma at any
+        // speed is a stable pass.
+        double flightPathSin = Math.Abs(flightVelocity.Y)
+            / Math.Max(flightVelocity.Length, 1.0);
+        bool stableFlightPath = flightPathSin < 0.07
             && input.EffectivePilotCommand.GDemand > 0.4
             && input.EffectivePilotCommand.GDemand < 1.6
             && Math.Abs(input.Aircraft.BodyRates.P) < 0.15

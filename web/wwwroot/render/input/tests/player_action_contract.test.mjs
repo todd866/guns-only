@@ -419,7 +419,9 @@ test("phone chrome uses distinct vertical anchors", () => {
 test("fresh players launch directly into the first F-22 merge", () => {
   assert.match(appSource,
     /initialProgramNode = requestedProgramNode[\s\S]*?recommendedCampaignNode\(campaignProfile\)/);
-  assert.match(appSource, /let selectedBeat = initialProgramNode\.mission/);
+  // Build 78 front door: INFINITE ENEMIES — every platform boots the continuous-combat
+  // gauntlet (mission 7); the exercise menu remains reachable but is not the entry.
+  assert.match(appSource, /let selectedBeat = 7/);
   assert.match(bridgeSource, /static readonly SimulationSession Session = new\(7,/,
     "the bridge fallback and browser must agree on the F-22 first experience");
   assert.match(appSource, /let autoLaunchPending = true/);

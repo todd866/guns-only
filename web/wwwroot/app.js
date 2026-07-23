@@ -909,14 +909,11 @@ const initialProgramNode = requestedProgramNode
   && campaignNodeUnlocked(campaignProfile, requestedProgramNode.id)
   ? requestedProgramNode : recommendedCampaignNode(campaignProfile);
 let selectedProgramNodeId = initialProgramNode.id;
-let selectedBeat = initialProgramNode.mission;
-// Rung-1 portrait assisted flight is the endless gauntlet, not a one-kill exercise: "it ends
-// as soon as I kill the guy which is no fun". Mission 7 is the continuous-combat merge with
-// per-engagement escalation; landscape keeps the program's ordinary progression.
-if (coarsePointer && touchCapable
-    && window.matchMedia?.("(orientation: portrait)")?.matches === true) {
-  selectedBeat = 7;
-}
+// The front door is INFINITE ENEMIES on every platform ("this idea that the sortie ends after
+// certain criteria and there's a menu of sorties... it's not fun"): mission 7 is the
+// continuous-combat gauntlet with per-engagement escalation. The exercise menu stays reachable
+// through the ready screen and number keys; it is no longer the entry experience.
+let selectedBeat = 7;
 let stagedBeat = selectedBeat;
 let selectedDeckConfiguration = 1;
 let stagedDeckConfiguration = selectedDeckConfiguration;
