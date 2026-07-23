@@ -245,6 +245,19 @@ export const SCENARIOS = [
     },
   },
   {
+    name: "gcas-low-level-standby",
+    about: "Careful descent latched GCAS low-level standby below 1000 ft AO: the quiet dim-amber GCAS STBY status shows (no alert glow), and no PULL UP appears. Camera at standard height: the synthetic camera has a known sub-half-degree ladder/FPV divergence below ~1000 ft that is a separate harness question; the chip reads state only.",
+    player: { headingDeg: 90, pitchDeg: 0, bankDeg: 0, altFt: 8000 },
+    bandit: { azimuthDeg: 30, elevationDeg: 5, rangeM: 2500 },
+    lead: null,
+    state: {
+      range_m: 2500,
+      alt_ft: 750,
+      radar_alt_ft: 620,
+      auto_gcas_inhibit_reason: "LOW_LEVEL_STANDBY",
+    },
+  },
+  {
     name: "padlock-inverted-135",
     about: "bank_deg = 135 (past inverted) while padlocked: horizon line, ground-side hatching, sky tick and lift vector must stay coherent.",
     player: { headingDeg: 300, pitchDeg: -8, bankDeg: 135, altFt: 11000 },

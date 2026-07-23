@@ -12,7 +12,11 @@ public enum AutoGcasInhibitReason {
     LowAirspeed,
     TerrainData,
     InvalidState,
-    PilotOverride
+    PilotOverride,
+    // Pilot doctrine (2026-07-23): a careful, in-control descent through 1000 ft above
+    // obstacles stands the system down — Auto-GCAS is a lost-consciousness / lost-SA
+    // dogfighting failsafe, not a low-flying governor. Climbing back above the gate re-arms.
+    LowLevelStandby
 }
 
 /// <summary>
@@ -104,7 +108,8 @@ public readonly record struct AutoGcasInput(
     bool ConfigurationPermitsRecovery = true,
     bool PilotOverrideHeld = false,
     double? IndicatedAirspeedMps = null,
-    bool PilotActivelyFlying = false);
+    bool PilotActivelyFlying = false,
+    bool LowLevelStandby = false);
 
 public readonly record struct AutoGcasPrediction(
     bool Valid,
@@ -213,6 +218,14 @@ public static class AutoGcasController {
         if (!input.ConfigurationPermitsRecovery)
             return EndActiveForInhibit(previous, AutoGcasPhase.Inhibited,
                 AutoGcasInhibitReason.Configuration, "", AutoGcasPrediction.Invalid);
+        // Deliberate low-level standby: the session latches this after a careful, in-control
+        // descent through the 1000 ft above-obstacles gate. No prediction, no warning, no
+        // fly-up — the pilot has claimed the low block on purpose. The cue is a quiet status,
+        // not an alert; it clears when the session re-arms above the gate.
+        if (input.LowLevelStandby)
+            return EndActiveForInhibit(previous, AutoGcasPhase.Inhibited,
+                AutoGcasInhibitReason.LowLevelStandby, "GCAS STBY",
+                AutoGcasPrediction.Invalid);
         if (!ValidAircraft(input.Aircraft)
             || !ValidCommand(input.EffectivePilotCommand))
             return EndActiveForInhibit(previous, AutoGcasPhase.Inhibited,

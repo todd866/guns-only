@@ -1820,6 +1820,7 @@ class CombatHud {
     const warningY = this.getLayout().warningY;
     const maxWarningLines = 3;
     let occupiedLines = 0;
+    if (this._debug) this._debug.warningLine = null;
 
     const gcasActive = state.auto_gcas_active === true;
     const gcasWarning = state.auto_gcas_warning === true;
@@ -1844,6 +1845,17 @@ class CombatHud {
       ctx.fillText(text, this.width / 2, warningY);
       ctx.shadowBlur = 0;
       occupiedLines += 1;
+      if (this._debug) this._debug.warningLine = text;
+    } else if (state.auto_gcas_available === true
+      && state.auto_gcas_inhibit_reason === "LOW_LEVEL_STANDBY") {
+      // Deliberate low-level standby is a status, not an alert: the pilot descended through
+      // the 1000 ft AO gate on purpose and the failsafe stood itself down. Dim, no glow.
+      ctx.fillStyle = "rgba(255, 176, 32, 0.55)";
+      ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("GCAS STBY", this.width / 2, warningY);
+      occupiedLines += 1;
+      if (this._debug) this._debug.warningLine = "GCAS STBY";
     }
 
     if (state.tier === 3) {

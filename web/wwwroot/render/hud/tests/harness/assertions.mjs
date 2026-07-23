@@ -299,6 +299,21 @@ function assertPadlockInsetAndLocator(data) {
 // The "first five seconds" battery: rules a pilot notices instantly, asserted on EVERY
 // scenario. One glyph per job — if the target marker is on screen, the locator arrow is
 // redundant noise pointing at a dude you can already see.
+function assertWarningLine(data) {
+  const { name, geometry, state } = data;
+  if (state?.auto_gcas_inhibit_reason === "LOW_LEVEL_STANDBY"
+    && state?.auto_gcas_active !== true && state?.auto_gcas_warning !== true) {
+    check(name, "GCAS low-level standby shows the quiet GCAS STBY status line",
+      geometry.warningLine === "GCAS STBY",
+      `warningLine=${JSON.stringify(geometry.warningLine)}`);
+  }
+  if (state?.auto_gcas_warning === true && state?.auto_gcas_active !== true) {
+    check(name, "GCAS warning shows PULL UP",
+      geometry.warningLine === "PULL UP",
+      `warningLine=${JSON.stringify(geometry.warningLine)}`);
+  }
+}
+
 function assertBasicJobs(data) {
   const { name, geometry, probes } = data;
   const locator = geometry.banditLocator;
@@ -370,6 +385,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     assertPadlockInsetAndLocator(data);
     assertBasicJobs(data);
     assertFunnelContainsTarget(data);
+    assertWarningLine(data);
   }
   if (pageErrors.length > 0) {
     failures.push(`[${label}] uncaught page errors:\n${pageErrors.join("\n")}`);

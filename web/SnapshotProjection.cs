@@ -669,6 +669,7 @@ internal static class SnapshotProjection {
         AutoGcasInhibitReason.TerrainData => "TERRAIN_DATA",
         AutoGcasInhibitReason.InvalidState => "INVALID_STATE",
         AutoGcasInhibitReason.PilotOverride => "PILOT_OVERRIDE",
+        AutoGcasInhibitReason.LowLevelStandby => "LOW_LEVEL_STANDBY",
         _ => "NONE"
     };
 
