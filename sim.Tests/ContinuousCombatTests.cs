@@ -70,7 +70,7 @@ public class ContinuousCombatTests {
         Assert.IsType<ReactiveBandit>(session.Bandit);
         Assert.Equal(285.0, session.Bandit.State.Speed, 8);
         Assert.InRange(Geometry.Range(session.Player.State, session.Bandit.State),
-            3000.0, 3800.0);
+            2000.0, 2800.0);
         Assert.False(CameraSolver.GunWindow(session.Player.State, session.Bandit.State));
 
         Assert.NotSame(firstPlayerGun, session.PlayerGun);

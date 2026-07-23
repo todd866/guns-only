@@ -170,7 +170,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double side = (engagementNumber & 1) == 1 ? 1.0 : -1.0;
         var forward = new Vec3D(System.Math.Sin(player.Chi), 0.0, System.Math.Cos(player.Chi));
         var right = new Vec3D(System.Math.Cos(player.Chi), 0.0, -System.Math.Sin(player.Chi));
-        double alongM = 3200.0 + variation * 260.0;
+        double alongM = 2200.0 + variation * 220.0;
         double offsetM = side * (560.0 + variation * 110.0);
         double altitudeOffsetM = variation switch { 0 => 120.0, 1 => -80.0, _ => 40.0 };
         // Keep the merge near ownship, but never spawn a fresh bandit above the believable combat

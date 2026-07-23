@@ -278,8 +278,12 @@ document.documentElement.classList.toggle("touch-mode", mobileControls);
 // Portrait + touch = assisted flight: tilt flies, throttle holds corner velocity, guns fire
 // while the solution is qualified. Landscape keeps the full manual control set.
 const portraitMedia = window.matchMedia?.("(orientation: portrait)");
+// Assisted flight requires a genuinely coarse touch pointer. mobileControls alone also admits
+// small desktop windows (tall narrow window == "portrait"), which put the autopilot on a
+// keyboard pilot — reported from the desktop within minutes.
+const assistedEligible = coarsePointer && touchCapable;
 function syncAssistedFlight() {
-  const assisted = mobileControls && portraitMedia?.matches === true;
+  const assisted = assistedEligible && portraitMedia?.matches === true;
   document.documentElement.classList.toggle("portrait-assist", assisted);
   bridge?.SetAssistedFlight?.(assisted);
 }
@@ -909,7 +913,8 @@ let selectedBeat = initialProgramNode.mission;
 // Rung-1 portrait assisted flight is the endless gauntlet, not a one-kill exercise: "it ends
 // as soon as I kill the guy which is no fun". Mission 7 is the continuous-combat merge with
 // per-engagement escalation; landscape keeps the program's ordinary progression.
-if (mobileControls && window.matchMedia?.("(orientation: portrait)")?.matches === true) {
+if (coarsePointer && touchCapable
+    && window.matchMedia?.("(orientation: portrait)")?.matches === true) {
   selectedBeat = 7;
 }
 let stagedBeat = selectedBeat;

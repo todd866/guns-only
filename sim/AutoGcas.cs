@@ -44,19 +44,31 @@ public sealed record AutoGcasConfiguration(
     // terrain-masking. While the HUMAN input path shows active commanding, the system fires only
     // when even an immediate max-perform recovery is about to become impossible.
     double ExitDwellSeconds,
-    double AttentivePilotTriggerFactor = 0.15) {
+    double AttentivePilotTriggerFactor = 0.10,
+    double ManeuveringTerrainBufferM = 30.48,
+    double StableTerrainBufferM = 6.096) {
 
     public static AutoGcasConfiguration ModernPublicDataSurrogate { get; } = new(
         LookaheadSeconds: 8.0,
-        PredictionStepSeconds: 0.10,
-        ControlResponseDelaySeconds: 0.20,
+        PredictionStepSeconds: 0.05,
+        ControlResponseDelaySeconds: 0.12,
         RecoveryRollRateRadPerSecond: 150.0 * Math.PI / 180.0,
-        RecoveryLoadFactorG: 12.0,
-        RecoveryGOnsetRatePerSecond: 6.0,
+        // The PREDICTOR'S planning load. ResponseAuthorityMargin (0.82) derates it to ~12 G of
+        // modelled delivery — matching what the airframe actually flies under the override-law
+        // recovery — so the trigger no longer plans around a fictitious weaker pull and then
+        // bottoms out 1,800 ft high. Calibrated against AutoGcasBottomOutCorridorTests, whose
+        // acceptance band is the pilot's spec: an attentive fly-up bottoms near 200 ft RADALT.
+        RecoveryLoadFactorG: 14.6,
+        RecoveryGOnsetRatePerSecond: 30.0,
         TriggerTimeAvailableSeconds: 1.5,
         WarningLeadSeconds: 3.0,
-        // Public F-16 implementation: 30 ft terrain-model + 15 ft trajectory buffer.
+        // Pilot-specified two-tier protection floor: 100 ft while maneuvering, 20 ft on a
+        // stable flight path (level-ish, unloaded, wings near level) — "it's a combat sim".
+        // TerrainBufferM remains the exit-logic reference; the trigger floor is selected per
+        // step from the flight state.
         TerrainBufferM: 13.716,
+        ManeuveringTerrainBufferM: 30.48,
+        StableTerrainBufferM: 6.096,
         // Current public F-22 procedures expose a 250 KCAS configuration boundary in the pattern.
         MinimumRecoveryAirspeedMps: 250.0 / AirData.MpsToKnots,
         ExitClearanceM: 150.0,
@@ -223,9 +235,27 @@ public static class AutoGcasController {
                 AutoGcasInhibitReason.LowAirspeed, cue, AutoGcasPrediction.Invalid);
         }
 
-        PathPrediction pilot = Predict(input, config,
+        // Two-tier protection floor (pilot spec): 100 ft of clearance while maneuvering,
+        // 20 ft on a stable flight path. "Stable" is flown, not declared: near-level velocity,
+        // an unloaded-to-gentle command, wings near level, and no meaningful roll rate. The
+        // path sweep underneath runs at terrain-grid resolution, so a cliff face ahead enters
+        // this floor the moment the predicted path crosses it.
+        Vec3D flightVelocity = input.Aircraft.VelocityVector();
+        bool stableFlightPath = Math.Abs(flightVelocity.Y) < 10.0
+            && input.EffectivePilotCommand.GDemand > 0.4
+            && input.EffectivePilotCommand.GDemand < 1.6
+            && Math.Abs(input.Aircraft.BodyRates.P) < 0.15
+            && Math.Abs(Math.IEEERemainder(input.Aircraft.Bank, 2.0 * Math.PI))
+                < 35.0 * Math.PI / 180.0;
+        double protectionFloorM = stableFlightPath
+            ? config.StableTerrainBufferM : config.ManeuveringTerrainBufferM;
+        AutoGcasConfiguration effectiveConfig = config with {
+            TerrainBufferM = protectionFloorM
+        };
+
+        PathPrediction pilot = Predict(input, effectiveConfig,
             automatedRecoveryDelaySeconds: null);
-        PathPrediction immediateRecovery = Predict(input, config,
+        PathPrediction immediateRecovery = Predict(input, effectiveConfig,
             automatedRecoveryDelaySeconds: 0.0);
         if (!pilot.Valid || !immediateRecovery.Valid) {
             // Terrain-model loss during a commanded recovery is fail-operational. Continue the
@@ -239,7 +269,7 @@ public static class AutoGcasController {
                 AutoGcasPrediction.Invalid);
         }
 
-        double timeAvailable = TimeAvailable(input, config, pilot, immediateRecovery);
+        double timeAvailable = TimeAvailable(input, effectiveConfig, pilot, immediateRecovery);
         bool pilotRecoveryCredited = PilotRecoveryCredited(input);
         var prediction = new AutoGcasPrediction(
             Valid: true,
@@ -279,7 +309,7 @@ public static class AutoGcasController {
                 RecoveryCommand(input, config));
         }
 
-        bool collisionThreat = pilot.MinimumClearanceM <= config.TerrainBufferM;
+        bool collisionThreat = pilot.MinimumClearanceM <= effectiveConfig.TerrainBufferM;
         // Auto-GCAS is a lost-consciousness / lost-SA backstop, not a low-flying governor. While
         // the pilot is demonstrably flying the aircraft — conscious with control authority and
         // actively commanding through the HUMAN input path — the commitment point defers toward
@@ -494,6 +524,31 @@ public static class AutoGcasController {
                 response.MaximumLoadFactorG);
             Vec3D acceleration = liftNormal * (limitedG * FlightModel.G0)
                 - worldUp * FlightModel.G0;
+            // Energy model: a hard pull near CLmax decelerates the aircraft violently, which
+            // tightens the real pull-out radius far inside a constant-speed prediction — the
+            // corridor tests measured fly-ups bottoming 1,800 ft high against the pilot's
+            // ~200 ft spec before drag entered this integration. Sea-level density on the
+            // supplied airspeed is the deliberate surrogate at terrain-proximate altitudes;
+            // thrust at the current lever opposes it so an afterburning recovery is not
+            // over-credited with deceleration it will not have.
+            double speedNow = velocity.Length;
+            if (speedNow > 1.0) {
+                double dynamicPressure = 0.5 * 1.225 * speedNow * speedNow;
+                double wingArea = input.AircraftParameters.WingAreaM2;
+                double mass = Math.Max(input.Aircraft.Mass, 1.0);
+                double liftCoefficient = Math.Clamp(
+                    Math.Abs(limitedG) * mass * FlightModel.G0
+                        / Math.Max(dynamicPressure * wingArea, 1e-6),
+                    0.0, Math.Max(input.AircraftParameters.CLMax, 0.1));
+                double dragN = dynamicPressure * wingArea
+                    * (input.AircraftParameters.CD0
+                        + input.AircraftParameters.InducedK
+                            * liftCoefficient * liftCoefficient);
+                double thrustN = Math.Clamp(input.EffectivePilotCommand.Throttle, 0.0, 1.65)
+                    * Math.Max(input.AircraftParameters.ThrustMaxN, 0.0);
+                Vec3D vhat2 = velocity * (1.0 / speedNow);
+                acceleration += vhat2 * ((thrustN - dragN) / mass);
+            }
             Vec3D nextVelocity = velocity + acceleration * dt;
             // Trapezoidal translation avoids the optimistic height gain of the previous
             // semi-implicit Euler step during the first, most terrain-critical part of fly-up.

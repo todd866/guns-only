@@ -29,7 +29,7 @@ public class ReactiveBanditTests {
         var line = (bandit.State.Position - player.Position).Normalized();
         double closureMps = (player.VelocityVector() - bandit.State.VelocityVector()).Dot(line);
 
-        Assert.InRange(Geometry.Range(player, bandit.State), 3000.0, 3800.0);
+        Assert.InRange(Geometry.Range(player, bandit.State), 2000.0, 2800.0);
         Assert.InRange(Math.Abs(bandit.State.Position.Y - player.Position.Y), 80.0, 180.0);
         Assert.Equal(180.0, bandit.State.Speed, 10);
         Assert.True(closureMps > 280.0, $"replacement must drive a real merge; closure={closureMps:F1} m/s");

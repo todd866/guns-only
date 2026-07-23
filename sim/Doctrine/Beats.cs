@@ -488,13 +488,23 @@ public static class Beats {
     /// </summary>
     public static BeatSetup ModernVisualMerge() {
         const double AltitudeM = 5486.4; // 18,000 ft
+        // Stable corner airspeed at staging (pilot spec): the fight opens at the speed the jet
+        // wants to fight at — and the assisted-flight corner hold starts already on target
+        // instead of chasing it through the merge.
+        double playerCornerTasMps = AirData.TrueAirspeedForCalibratedAirspeedMps(
+            AirData.PositiveCornerSpeedKiasAtAltitude(
+                FlightModel.F22APublicDataSurrogate.MassKg,
+                FlightModel.F22APublicDataSurrogate, AltitudeM) / AirData.MpsToKnots,
+            AltitudeM);
         return new BeatSetup("Visual merge — F-22A surrogate vs Su-27S surrogate",
+            // Closer staging (pilot spec): at corner-speed opening energy the old 6.4 km split
+            // meant a quarter-minute of transit before anything happened.
             Player: new AircraftState(
-                new Vec3D(-120.0, AltitudeM, -3200.0),
-                300.0, 0.0, 0.0, 0.0,
+                new Vec3D(-120.0, AltitudeM, -2000.0),
+                playerCornerTasMps, 0.0, 0.0, 0.0,
                 FlightModel.F22APublicDataSurrogate.MassKg),
             Bandit: new AircraftState(
-                new Vec3D(120.0, AltitudeM + 60.0, 3200.0),
+                new Vec3D(120.0, AltitudeM + 60.0, 2000.0),
                 285.0, 0.0, Math.PI, 0.0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),

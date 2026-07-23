@@ -136,8 +136,10 @@ public class PadlockRollAssistSessionTests {
         for (int tick = 0; tick < 24; tick++) session.StepFixed();
         Assert.True(session.BanditPadlockRollAssist.Active);
 
+        // Inside the STABLE-path 20 ft (6.1 m) protection floor: a gentle padlocked turn earns
+        // the stable tier, so the old 10 m offset no longer arms the threat.
         session.SetTerrainSurface(FlatTerrain(
-            session.Player.State.Position.Y - 10.0));
+            session.Player.State.Position.Y - 4.0));
         for (int tick = 0; tick < SimulationSession.AutoGcasPredictionIntervalTicks
             && !session.AutoGcas.Active; tick++)
             session.StepFixed();
