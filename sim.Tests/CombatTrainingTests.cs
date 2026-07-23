@@ -174,8 +174,10 @@ public class CombatTrainingTests {
         string firstJson = CombatDatasetJsonLines.Serialize(first);
         string secondJson = CombatDatasetJsonLines.Serialize(second);
         Assert.Equal(firstJson, secondJson);
+        // docs/f22-high-alpha-review.md intentionally changes the F-22 kernel trajectory encoded
+        // by this deterministic export; the serializer/schema and same-seed equality remain fixed.
         Assert.Equal(
-            "CF2FF483644DC5A01C9D780BE1E7D58E68466FF8CDE28682674CBA06BF84C526",
+            "32AD86A8F9FEDF2093740C9A0B742EDDA2362EDF59F4AE80C1DB85469380611B",
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(firstJson))));
         string[] lines = firstJson.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(1 + first.Episodes.Count + first.TransitionCount, lines.Length);

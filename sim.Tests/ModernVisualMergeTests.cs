@@ -229,15 +229,22 @@ public class ModernVisualMergeTests {
             "held pull must not re-arm while the release recovery owns the axis");
         Assert.Equal(DemandTier.Baseline, rig.Detent.Tier);
         Assert.Equal(1.0, rig.Detent.Command.GDemand, 2);
-        Assert.True(rig.Sim.AngleOfAttackRad * Deg < 13.0,
-            $"override release remained pinned near the lift break at {rig.Sim.AngleOfAttackRad * Deg:F1} deg");
+        // docs/f22-high-alpha-review.md replaces the old fixed 85%-effective pitch moment with
+        // q-bounded aero plus rate-limited TVC. Recovery is therefore pinned to re-entering the
+        // attached/protected side of CLmax, not the old unphysical sub-13-degree response time.
+        double attachedFlowBoundaryDeg = FlightModel.F22APublicDataSurrogate.CLMax
+            / FlightModel.F22APublicDataSurrogate.CLAlpha * Deg;
+        Assert.True(rig.Sim.AngleOfAttackRad * Deg < attachedFlowBoundaryDeg + 1.0,
+            $"override release did not recapture attached flow: {rig.Sim.AngleOfAttackRad * Deg:F1} deg");
         Assert.InRange(peakRecoveryVectorDeg, 15.0,
             FlightModel.F22APublicDataSurrogate.PitchThrustVectorMaxRad * Deg + 1e-6);
         Assert.True(Math.Abs(rig.Sim.LastPitchThrustVectorMomentNm) <= 1e-6,
             "the vector command should unwind once safe alpha is recaptured");
 
         rig.Set(GKey.PullUp, false);
-        for (int tick = 0; tick < AircraftSim.TickHz
+        // The same bounded-control-power correction may take more than the old fixed-moment one
+        // second to reach the lower re-arm threshold after attached flow has already been regained.
+        for (int tick = 0; tick < 10 * AircraftSim.TickHz
             && rig.Detent.HighAlphaRecoveryActive; tick++) rig.Step();
         Assert.False(rig.Detent.HighAlphaRecoveryActive);
 

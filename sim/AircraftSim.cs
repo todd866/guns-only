@@ -24,9 +24,11 @@ public sealed class AircraftSim {
     public double LastRollMomentNm { get; private set; }
     /// Integrated flight-control allocation at the physical nozzle/resultant-thrust boundary.
     /// Positive angle commands positive-q (nose-up) moment; zero identifies a fixed nozzle or an
-    /// attached-flow condition that does not need propulsive control authority.
+    /// aerodynamic condition with enough control power that no propulsive residual remains.
     public double LastPitchThrustVectorAngleRad { get; private set; }
     public double LastPitchThrustVectorMomentNm { get; private set; }
+    /// <summary>Why the kernel cannot currently deliver additional commanded pull.</summary>
+    public PullLimitStatus PullLimit { get; private set; } = PullLimitStatus.None;
     /// The exact control command consumed by the most recent aerodynamic Step. Requested detent
     /// state lives elsewhere; this is actuator-path truth for telemetry and replay.
     public PilotCommand LastAppliedCommand { get; private set; } = NeutralExternalCommand(
@@ -105,6 +107,7 @@ public sealed class AircraftSim {
     bool _init;
     bool _spoolInit;
     double _thrustFrac;      // engine's actual spool state, 0..1 — lags the throttle lever
+    double _pitchThrustVectorAngleRad; // deterministic per-aircraft nozzle actuator state
     /// What the ENGINE is actually delivering, 0..1, as opposed to where the lever is. The gap
     /// between the two is the whole difficulty of flying the back side of the power curve.
     public double ThrustFraction => _thrustFrac;
@@ -207,6 +210,8 @@ public sealed class AircraftSim {
         LastRollMomentNm = 0.0;
         LastPitchThrustVectorAngleRad = 0.0;
         LastPitchThrustVectorMomentNm = 0.0;
+        _pitchThrustVectorAngleRad = 0.0;
+        PullLimit = PullLimitStatus.None;
         LastAppliedCommand = NeutralExternalCommand(State, LastAppliedCommand.Throttle);
         HasAppliedFlightCommand = false;
         Buffet = false;
@@ -240,6 +245,8 @@ public sealed class AircraftSim {
         HasAppliedFlightCommand = false;
         LastPitchThrustVectorAngleRad = 0.0;
         LastPitchThrustVectorMomentNm = 0.0;
+        _pitchThrustVectorAngleRad = 0.0;
+        PullLimit = PullLimitStatus.None;
         AdvanceEngine(throttle, dt);
     }
 
@@ -276,14 +283,22 @@ public sealed class AircraftSim {
         var r = new RawState(s.Position, vel0, _bank, s.Mass, s.BodyAttitude, s.BodyRates);
         double thrustN = LastEngineOperatingPoint.NetThrustN;
         var configuration = AerodynamicConfiguration;
+        double appliedPitchThrustVectorAngle = double.NaN;
+        if (_p.HighAlphaModel == HighAlphaModelKind.F22PublicDataSurrogate) {
+            double nozzleTarget = FlightModel.PitchThrustVectorTargetAngle(r, spooled, _p,
+                _liftRef, gust, thrustN, configuration, AtmosphereModel);
+            _pitchThrustVectorAngleRad = FlightModel.RateLimitPitchThrustVector(
+                _pitchThrustVectorAngleRad, nozzleTarget, dt, _p);
+            appliedPitchThrustVectorAngle = _pitchThrustVectorAngleRad;
+        }
         var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef, gust, thrustN,
-            configuration, AtmosphereModel);
+            configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
         var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), spooled, _p, _liftRef, gust,
-            thrustN, configuration, AtmosphereModel);
+            thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
         var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), spooled, _p, _liftRef, gust,
-            thrustN, configuration, AtmosphereModel);
+            thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
         var k4 = FlightModel.Derivatives(Apply(r, k3, dt), spooled, _p, _liftRef, gust,
-            thrustN, configuration, AtmosphereModel);
+            thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
         var pos = r.Pos + (k1.DPos + (k2.DPos + k3.DPos) * 2 + k4.DPos) * (dt / 6);
         var vel = r.Vel + (k1.DVel + (k2.DVel + k3.DVel) * 2 + k4.DVel) * (dt / 6);
         _bank = WrapPi(r.Bank + (k1.DBank + 2 * (k2.DBank + k3.DBank) + k4.DBank) * (dt / 6));
@@ -335,11 +350,13 @@ public sealed class AircraftSim {
 
         var finalRaw = new RawState(pos, vel, _bank, s.Mass, attitude, bodyRates);
         var aero = FlightModel.Aerodynamics(finalRaw, spooled, _p, gust, thrustN,
-            configuration, AtmosphereModel);
+            configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
         _airVelocity = aero.AirVelocity;
         LastNz = aero.Nz;
         LastPitchThrustVectorAngleRad = aero.PitchThrustVectorAngleRad;
         LastPitchThrustVectorMomentNm = aero.PitchThrustVectorMomentNm;
+        PullLimit = FlightModel.EvaluatePullLimit(finalRaw, spooled, _p, _liftRef, gust,
+            thrustN, aero.PitchThrustVectorAngleRad, configuration, AtmosphereModel);
         var nonGravitationalAcceleration = aero.Accel + new Vec3D(0.0, FlightModel.G0, 0.0);
         LastPilotNormalAccelerationG = nonGravitationalAcceleration.Dot(BodyUp)
             / FlightModel.G0;
