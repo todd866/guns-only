@@ -35,7 +35,7 @@ public sealed record AutoGcasConfiguration(
     double ExitClearanceM,
     double ExitPredictionMarginM,
     double ExitDwellSeconds,
-    double AttentivePilotTriggerFactor = 0.45) {
+    double AttentivePilotTriggerFactor = 0.35) {
 
     public static AutoGcasConfiguration ModernPublicDataSurrogate { get; } = new(
         LookaheadSeconds: 8.0,

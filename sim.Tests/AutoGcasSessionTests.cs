@@ -212,6 +212,25 @@ public class AutoGcasSessionTests {
     }
 
     [Fact]
+    public void EnvelopeOverrideCommitGestureAlsoRefusesAutoGcas() {
+        // Holding Space through a deliberate valley run is the max-perform declaration; the
+        // system must not fight it while the pilot is conscious with control authority.
+        var session = ThreatSession();
+        session.Begin();
+        session.StepFixed();
+        Assert.True(session.AutoGcas.Active);
+
+        session.FeedKey(GKey.Override, true);
+        Assert.True(session.AutoGcasOverrideHeld);
+        session.StepFixed();
+
+        Assert.Equal(AutoGcasPhase.Inhibited, session.AutoGcas.Phase);
+        Assert.Equal(AutoGcasInhibitReason.PilotOverride,
+            session.AutoGcas.InhibitReason);
+        Assert.False(session.AutoGcas.Active);
+    }
+
+    [Fact]
     public void AutoGcasRecoveryContinuesThroughActualGLocAndItsGFeedsPhysiology() {
         var session = ThreatSession(FastBlackoutProfile());
         session.Begin();

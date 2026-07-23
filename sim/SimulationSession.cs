@@ -251,9 +251,14 @@ public sealed class SimulationSession {
         _gunneryPitchAssistState;
     public PadlockRollAssistState BanditPadlockRollAssist =>
         _padlockRollAssist.State;
+    // The dedicated paddle (K) and the envelope-override commit gesture (Space) both refuse
+    // Auto-GCAS: holding Space through a valley run IS the deliberate low-flying declaration.
+    // Both are gated on conscious control authority, so a G-LOC with the key still physically
+    // depressed restores full protection immediately.
     public bool AutoGcasOverrideHeld => PlayerAutoGcasCapability.Available
         && _pilotPhysiology.State.ControlAuthority01 >= 0.55
-        && _keys.PhaseAt(GKey.AutoGcasOverride, _simTimeMs) != KeyPhase.Idle;
+        && (_keys.PhaseAt(GKey.AutoGcasOverride, _simTimeMs) != KeyPhase.Idle
+            || _keys.PhaseAt(GKey.Override, _simTimeMs) != KeyPhase.Idle);
     public bool PilotControlInterlocked => _pilotControlInterlocked;
     public bool PilotTriggerInterlocked => _pilotTriggerInterlocked;
     public int PilotGLocCount => _pilotGLocCount;
