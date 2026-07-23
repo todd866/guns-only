@@ -53,6 +53,10 @@ public static partial class WebBridge {
         Session.SetTouchControlModality(touch);
 
     [JSExport]
+    public static void SetAutoGcasEnabled(bool enabled) =>
+        Session.SetAutoGcasEnabled(enabled);
+
+    [JSExport]
     public static void SetAssistedFlight(bool enabled) =>
         Session.SetAssistedFlight(enabled);
 

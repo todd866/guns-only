@@ -214,6 +214,24 @@ public class AutoGcasSessionTests {
     }
 
     [Fact]
+    public void SustainedControlInputCancelsAnActiveFlyUp() {
+        // Pilot rule: any control input held longer than 0.2 s during a fly-up IS the paddle.
+        var session = ThreatSession();
+        session.Begin();
+        session.StepFixed();
+        Assert.True(session.AutoGcas.Active);
+
+        session.FeedKey(GKey.PullUp, true);
+        for (int tick = 0; tick < (int)(0.35 * AircraftSim.TickHz)
+            && session.AutoGcas.Active; tick++)
+            session.StepFixed();
+
+        Assert.False(session.AutoGcas.Active);
+        Assert.Equal(AutoGcasInhibitReason.PilotOverride,
+            session.AutoGcas.InhibitReason);
+    }
+
+    [Fact]
     public void EnvelopeOverrideCommitGestureAlsoRefusesAutoGcas() {
         // Holding Space through a deliberate valley run is the max-perform declaration; the
         // system must not fight it while the pilot is conscious with control authority.

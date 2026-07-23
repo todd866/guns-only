@@ -38,6 +38,7 @@ export const DEFAULT_PLAYER_SETTINGS = Object.freeze({
   // it. Default slightly translucent; 1.0 remains available for bright daylight displays.
   hudBrightness: 0.84,
   legendSeen: false,
+  autoGcas: true,
   bindings: Object.freeze(defaultBindings()),
 });
 
@@ -73,6 +74,7 @@ export function normalisePlayerSettings(value = {}) {
     hudBrightness: Math.max(0.5, Math.min(1.0,
       finite(value?.hudBrightness, DEFAULT_PLAYER_SETTINGS.hudBrightness))),
     legendSeen: bool(value?.legendSeen, DEFAULT_PLAYER_SETTINGS.legendSeen),
+    autoGcas: bool(value?.autoGcas, DEFAULT_PLAYER_SETTINGS.autoGcas),
     bindings: Object.freeze(bindings),
   });
 }

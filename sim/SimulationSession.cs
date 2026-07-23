@@ -2062,7 +2062,23 @@ public sealed class SimulationSession {
     PilotCommand ApplyAutoGcas(in PilotCommand effectivePilotCommand) {
         AutoGcasCapabilityProfile capability = PlayerAutoGcasCapability;
         _autoGcasPredictionElapsedSeconds += FixedDeltaSeconds;
-        bool immediatePaddle = _autoGcasState.Active && AutoGcasOverrideHeld;
+        // Pilot rule (2026-07-23): ANY control input sustained longer than 0.2 s cancels an
+        // ACTIVE fly-up — sustained input during recovery IS the paddle. Runs every tick,
+        // ahead of the prediction cadence, so the release is immediate.
+        PilotCommand rawCommand = _detents.Command;
+        bool rawInputPresent = rawCommand.EnvelopeOverride
+            || System.Math.Abs(rawCommand.RollControl) > 0.05
+            || System.Math.Abs(rawCommand.Rudder) > 0.05
+            || rawCommand.GDemand >= 2.0
+            || rawCommand.GDemand <= 0.0;
+        if (_autoGcasState.Active && rawInputPresent
+            && _pilotPhysiology.State.ControlAuthority01 >= 0.55)
+            _pilotInputOverrideSeconds += FixedDeltaSeconds;
+        else
+            _pilotInputOverrideSeconds = 0.0;
+        bool sustainedInputPaddle = _pilotInputOverrideSeconds >= 0.2;
+        bool immediatePaddle = _autoGcasState.Active
+            && (AutoGcasOverrideHeld || sustainedInputPaddle);
         if (_autoGcasPredictionTicksRemaining > 0 && !immediatePaddle) {
             _autoGcasPredictionTicksRemaining--;
             if (_autoGcasState.Active) {
@@ -2101,9 +2117,9 @@ public sealed class SimulationSession {
                 EffectivePilotCommand: effectivePilotCommand,
                 Terrain: _terrainSurface,
                 FallbackSurfaceElevationM: null,
-                Enabled: true,
+                Enabled: _autoGcasEnabled,
                 ConfigurationPermitsRecovery: _carrier is null,
-                PilotOverrideHeld: AutoGcasOverrideHeld,
+                PilotOverrideHeld: AutoGcasOverrideHeld || sustainedInputPaddle,
                 IndicatedAirspeedMps: _player.IndicatedAirspeedMps,
                 PilotActivelyFlying: pilotActivelyFlying),
             capability);
@@ -2143,6 +2159,13 @@ public sealed class SimulationSession {
     // Touch devices cannot fly precision gunnery with tilt input; the assist widens for them.
     bool _touchControlModality;
     public void SetTouchControlModality(bool touch) => _touchControlModality = touch;
+
+    // Pilot authority over the backstop itself ("it's a combat sim"): the system defaults on,
+    // and a conscious pilot may stand it down entirely from settings. K/Space remain the
+    // in-flight refusals.
+    bool _autoGcasEnabled = true;
+    public void SetAutoGcasEnabled(bool enabled) => _autoGcasEnabled = enabled;
+    double _pilotInputOverrideSeconds;
 
     PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {
         bool enabled = PlayerWeaponsAuthorized

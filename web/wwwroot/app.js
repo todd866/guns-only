@@ -240,6 +240,7 @@ const settingsScreen = document.querySelector("#settings-screen");
 const settingsClose = document.querySelector("#settings-close");
 const settingsCloseBottom = document.querySelector("#settings-close-bottom");
 const settingsAudio = document.querySelector("#setting-audio");
+const settingsAutoGcas = document.querySelector("#setting-autogcas");
 const settingsHighContrast = document.querySelector("#setting-high-contrast");
 const settingsReducedMotion = document.querySelector("#setting-reduced-motion");
 const settingsLargeText = document.querySelector("#setting-large-text");
@@ -958,6 +959,8 @@ function applyPlayerSettings() {
   activeView?.hud.setAudioEnabled(playerSettings.audio);
   activeView?.hud.setControlBindings?.(playerSettings.bindings);
   if (settingsAudio) settingsAudio.checked = playerSettings.audio;
+  if (settingsAutoGcas) settingsAutoGcas.checked = playerSettings.autoGcas !== false;
+  activeView && bridge?.SetAutoGcasEnabled?.(playerSettings.autoGcas !== false);
   if (settingsHighContrast) settingsHighContrast.checked = playerSettings.highContrast;
   if (settingsReducedMotion) settingsReducedMotion.checked = playerSettings.reducedMotion;
   if (settingsLargeText) settingsLargeText.checked = playerSettings.largeText;
@@ -1066,6 +1069,9 @@ window.addEventListener("keydown", (event) => {
 
 for (const button of [settingsClose, settingsCloseBottom])
   button?.addEventListener("click", closeSettings);
+settingsAutoGcas?.addEventListener("change", () => commitPlayerSettings({
+  ...playerSettings, autoGcas: settingsAutoGcas.checked,
+}));
 settingsAudio?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, audio: settingsAudio.checked,
 }));
@@ -2150,6 +2156,7 @@ function beginFlight() {
   });
   // Touch pilots get the widened gunnery assist; tilt input cannot hold a funnel.
   bridge.SetTouchControlModality?.(mobileControls);
+  bridge.SetAutoGcasEnabled?.(playerSettings.autoGcas !== false);
   syncAssistedFlight();
   // Fullscreen where the platform allows it (Android Chrome). iOS has no element fullscreen;
   // the Add-to-Home-Screen standalone app is the fullscreen path there (see ready-screen hint).

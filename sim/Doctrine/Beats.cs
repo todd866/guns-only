@@ -487,7 +487,10 @@ public static class Beats {
     /// public-data airframe definition rather than implied by the mission label.
     /// </summary>
     public static BeatSetup ModernVisualMerge() {
-        const double AltitudeM = 5486.4; // 18,000 ft
+        // 10,000 ft staging (pilot report: "the AI keeps flying super high"): the per-fight
+        // ceiling tracks the merge altitude (spawn + 1,000 m), so staging in the terrain block
+        // caps the whole gauntlet near 13,000 ft — the fight lives where the valleys are.
+        const double AltitudeM = 3048.0; // 10,000 ft
         // Stable corner airspeed at staging (pilot spec): the fight opens at the speed the jet
         // wants to fight at — and the assisted-flight corner hold starts already on target
         // instead of chasing it through the merge.

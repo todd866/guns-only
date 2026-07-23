@@ -69,7 +69,14 @@ public class AutoGcasBottomOutCorridorTests {
         for (int tick = 0; tick < 40 * AircraftSim.TickHz
             && session.PlayerTerminalState == AircraftTerminalState.Flying; tick++) {
             session.StepFixed();
-            if (session.AutoGcas.ActivationCount > 0) activated = true;
+            if (!activated && session.AutoGcas.ActivationCount > 0) {
+                activated = true;
+                // Release the commanded dive at activation: under the sustained-input paddle
+                // rule, input held longer than 0.2 s through a fly-up cancels it — a pilot who
+                // keeps pushing past the fly-up is choosing the ground, which is a different
+                // (and legal) story than the one this corridor measures.
+                session.FeedKey(GKey.PushDown, false);
+            }
             if (activated)
                 minimumAgl = System.Math.Min(minimumAgl, session.Player.State.Position.Y);
             if (activated && session.Player.State.VelocityVector().Y > 5.0

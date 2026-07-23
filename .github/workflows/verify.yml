@@ -1,8 +1,15 @@
 name: Verify
 
+# The full gate runs LOCALLY before every ship (bin/check is the deploy precondition), so
+# running it again on every push of an already-gated commit burned ~90% of the monthly Actions
+# quota. CI now covers pull requests and manual dispatch only.
 on:
-  push:
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

@@ -97,10 +97,42 @@ void main() {
   }
 
   float diffuse = 0.43 + 0.57 * max(dot(normal, normalize(uSunDirection)), 0.0);
+  vec3 periodLit = albedo * diffuse;
+
+  // 2030s illustrative treatment (docs/art-direction.md): Team Fortress 2-lineage shading —
+  // half-Lambert so shadowed valley walls never crush to black, a soft-edged two-step tone
+  // ramp for the painterly value structure, a saturated banded palette so elevation reads as
+  // contour bands at combat speed, and a cool sky rim on upward-facing slopes. The 1950s era
+  // keeps the sourced-realism lean above; the doctrine contrast is deliberate.
+  float bandStep = smoothstep(0.12, 0.22, elevation) * 0.34
+    + smoothstep(0.42, 0.55, elevation) * 0.33
+    + smoothstep(0.75, 0.88, elevation) * 0.33;
+  vec3 sValley = vec3(0.36, 0.52, 0.20);
+  vec3 sUpland = vec3(0.22, 0.40, 0.18);
+  vec3 sRock = vec3(0.58, 0.52, 0.42);
+  vec3 sRidge = vec3(0.70, 0.68, 0.60);
+  vec3 sAlbedo = mix(sValley, sUpland, bandStep);
+  sAlbedo = mix(sAlbedo, sRock, smoothstep(0.22, 0.60, steepness) * 0.72);
+  sAlbedo = mix(sAlbedo, sRidge, highRidge * (0.35 + steepness * 0.45));
+  float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
+  halfLambert *= halfLambert;
+  float toneRamp = 0.46 + 0.32 * smoothstep(0.30, 0.42, halfLambert)
+    + 0.22 * smoothstep(0.62, 0.74, halfLambert);
+  vec3 viewDirection = normalize(cameraPosition - vTerrainWorldPosition);
+  float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
+  vec3 stylizedLit = sAlbedo * toneRamp
+    + rim * vec3(0.09, 0.12, 0.16) * (0.4 + 0.6 * clamp(normal.y, 0.0, 1.0));
+
+  vec3 lit = mix(periodLit, stylizedLit, uModernScenery);
+  // Illustrative atmosphere: the period haze whites the world out from altitude, which is
+  // period-honest but buries the 2030s palette entirely. The modern era thins the density and
+  // hazes toward a saturated sky blue instead of white — distance stays readable as COLOR.
+  float fogDensity = uFogDensity * mix(1.0, 0.45, uModernScenery);
+  vec3 hazeColor = mix(uFogColor, vec3(0.52, 0.66, 0.84), uModernScenery);
   float distanceToCamera = length(cameraPosition - vTerrainWorldPosition);
-  float aerial = 1.0 - exp(-uFogDensity * uFogDensity
+  float aerial = 1.0 - exp(-fogDensity * fogDensity
     * distanceToCamera * distanceToCamera);
-  vec3 color = mix(albedo * diffuse, uFogColor, clamp(aerial, 0.0, 1.0));
+  vec3 color = mix(lit, hazeColor, clamp(aerial, 0.0, 1.0));
   gl_FragColor = vec4(color, 1.0);
   #include <logdepthbuf_fragment>
   #include <tonemapping_fragment>
