@@ -3511,7 +3511,6 @@ class FlightView {
       canvas: sceneCanvas,
       antialias: true,
       powerPreference: "high-performance",
-      logarithmicDepthBuffer: true,
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -3520,9 +3519,8 @@ class FlightView {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Glitch fix: the 0.12 m / 720 km clip range wasted depth precision on sub-cockpit distances.
-    // The authored eye point sits inside a 1.5 m-wide cockpit; the old 0.5 m near plane clipped
-    // canopy rails and the instrument coaming. Logarithmic depth keeps the ocean horizon stable.
+    // The authored eye point sits inside a 1.5 m-wide cockpit, so the near plane must stay inside
+    // the canopy rails and instrument coaming. The far plane retains the full ocean horizon.
     this.camera = new THREE.PerspectiveCamera(66, 1, 0.06, 680000);
     this.camera.rotation.order = "YXZ";
 

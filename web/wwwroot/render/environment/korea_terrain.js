@@ -69,6 +69,7 @@ void main() {
   float highRidge = smoothstep(850.0, 1900.0, vTerrainHeight);
   float steepness = 1.0 - clamp(normal.y, 0.0, 1.0);
 
+  #ifndef MODERN_SCENERY
   // This is an authored 1950s readability treatment, not a claim of per-pixel historical land
   // cover. Geometry and water are sourced; vegetation/cultivation become dated data layers later.
   vec3 valley = vec3(0.31, 0.34, 0.16);
@@ -80,7 +81,8 @@ void main() {
   albedo = mix(albedo, ridge, highRidge * (0.42 + steepness * 0.58));
   // Parcel/cultivation tint is the shader's most expensive fragment work (four sin() plus two
   // nested sin()). It is a fine-grain readability treatment only visible up close, so a tier
-  // uniform gates it off entirely on the mobile/balanced visual tiers where fill-rate is scarce.
+  // uniform gates it off entirely on the mobile/balanced visual tiers where fill-rate is scarce,
+  // and in the modern era where the final era mix discards this complete period-lighting path.
   // uParcelTint is a compile-time-constant-per-material uniform, so the branch is fully coherent.
   if (uParcelTint > 0.5) {
     float lowland = (1.0 - smoothstep(180.0, 720.0, vTerrainHeight))
@@ -97,8 +99,9 @@ void main() {
   }
 
   float diffuse = 0.43 + 0.57 * max(dot(normal, normalize(uSunDirection)), 0.0);
-  vec3 periodLit = albedo * diffuse;
+  vec3 lit = albedo * diffuse;
 
+  #else
   // 2030s illustrative treatment (docs/art-direction.md): Team Fortress 2-lineage shading —
   // half-Lambert so shadowed valley walls never crush to black, a soft-edged two-step tone
   // ramp for the painterly value structure, a saturated banded palette so elevation reads as
@@ -130,12 +133,18 @@ void main() {
   vec3 stylizedLit = sAlbedo * toneRamp
     + rim * vec3(0.09, 0.12, 0.16) * (0.4 + 0.6 * clamp(normal.y, 0.0, 1.0));
 
-  vec3 lit = mix(periodLit, stylizedLit, uModernScenery);
+  vec3 lit = stylizedLit;
+  #endif
   // Illustrative atmosphere: the period haze whites the world out from altitude, which is
   // period-honest but buries the 2030s palette entirely. The modern era thins the density and
   // hazes toward a saturated sky blue instead of white — distance stays readable as COLOR.
-  float fogDensity = uFogDensity * mix(1.0, 0.45, uModernScenery);
-  vec3 hazeColor = mix(uFogColor, vec3(0.52, 0.66, 0.84), uModernScenery);
+  #ifdef MODERN_SCENERY
+  float fogDensity = uFogDensity * 0.45;
+  vec3 hazeColor = vec3(0.52, 0.66, 0.84);
+  #else
+  float fogDensity = uFogDensity;
+  vec3 hazeColor = uFogColor;
+  #endif
   float distanceToCamera = length(cameraPosition - vTerrainWorldPosition);
   float aerial = 1.0 - exp(-fogDensity * fogDensity
     * distanceToCamera * distanceToCamera);
@@ -482,6 +491,7 @@ function createTerrainMaterial(THREE, options = {}) {
     // comment above), so single-siding it halves the dominant terrain fragment cost. The seam
     // skirts keep their own double-sided material via a geometry group.
     side: THREE.FrontSide,
+    defines: options.sceneryEra === "modern" ? { MODERN_SCENERY: 1 } : {},
     uniforms: {
       uEarthRadiusM: { value: TERRAIN_EARTH_RADIUS_M },
       uCurvatureStartM: { value: TERRAIN_CURVATURE_START_M },
@@ -491,9 +501,11 @@ function createTerrainMaterial(THREE, options = {}) {
       uFogColor: { value: new THREE.Color(options.fogColor ?? 0x6f8790) },
       uFogDensity: { value: finite(options.fogDensity, 0.000055) },
       uModernScenery: { value: options.sceneryEra === "modern" ? 1 : 0 },
-      // Full-detail parcel/cultivation tint only on the desktop tier; the cheaper mobile/balanced
-      // tiers drop the shader's most expensive fragment term (see TERRAIN_FRAGMENT).
-      uParcelTint: { value: options.qualityTier === "desktop" ? 1 : 0 },
+      // Full-detail parcel/cultivation tint only affects the period desktop treatment. Modern
+      // shading discards periodLit, so skip its four otherwise invisible sin() calls there too.
+      uParcelTint: {
+        value: options.qualityTier === "desktop" && options.sceneryEra !== "modern" ? 1 : 0,
+      },
     },
   });
 }
@@ -507,8 +519,18 @@ function createTerrainSkirtMaterial(THREE, surfaceMaterial) {
     vertexShader: TERRAIN_VERTEX,
     fragmentShader: TERRAIN_FRAGMENT,
     side: THREE.DoubleSide,
+    defines: { ...surfaceMaterial.defines },
     uniforms: surfaceMaterial.uniforms,
   });
+}
+
+function setTerrainMaterialEra(material, era) {
+  const modern = era === "modern";
+  const wasModern = material.defines?.MODERN_SCENERY === 1;
+  material.uniforms.uModernScenery.value = modern ? 1 : 0;
+  if (modern === wasModern) return;
+  material.defines = modern ? { ...material.defines, MODERN_SCENERY: 1 } : {};
+  material.needsUpdate = true;
 }
 
 function disposeMeshScenery(mesh) {
@@ -645,7 +667,10 @@ class KoreaTerrainPresentation {
       era,
       qualityTier: this.qualityTier,
     }) : null;
-    this.material.uniforms.uModernScenery.value = era === "modern" ? 1 : 0;
+    setTerrainMaterialEra(this.material, era);
+    setTerrainMaterialEra(this.skirtMaterial, era);
+    this.material.uniforms.uParcelTint.value =
+      this.qualityTier === "desktop" && era !== "modern" ? 1 : 0;
     return this.replaceSceneryRuntime(runtime, runtime !== null);
   }
 
@@ -932,7 +957,10 @@ class KoreaTerrainAtlasPresentation {
     const previousRuntime = this.sceneryRuntime;
     this.sceneryEra = era;
     this.sceneryRuntime = runtime;
-    this.material.uniforms.uModernScenery.value = era === "modern" ? 1 : 0;
+    setTerrainMaterialEra(this.material, era);
+    setTerrainMaterialEra(this.skirtMaterial, era);
+    this.material.uniforms.uParcelTint.value =
+      this.qualityTier === "desktop" && era !== "modern" ? 1 : 0;
     const replacements = [];
     for (const state of this.pages.values()) {
       if (state.presentation) {

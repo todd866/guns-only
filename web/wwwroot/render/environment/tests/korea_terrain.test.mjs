@@ -398,7 +398,7 @@ test("swaps 1950s and 2030s scenery in place without refetching retained terrain
   const terrain = await loadKoreaTerrain(THREE, {
     manifestUrl: "https://game.test/content/era-swap.manifest.json",
     sceneryEra: "1950s",
-    qualityTier: "mobile",
+    qualityTier: "desktop",
     fetch: async (url, options = {}) => {
       requested.push({ url: String(url), range: options.headers?.Range ?? null });
       if (!options.headers?.Range) {
@@ -415,6 +415,8 @@ test("swaps 1950s and 2030s scenery in place without refetching retained terrain
   const entry = terrain.entries.get("e00-n00");
   assert.equal(entry.mesh.userData.scenery.period, "1950s");
   assert.equal(terrain.material.uniforms.uModernScenery.value, 0);
+  assert.equal(terrain.material.uniforms.uParcelTint.value, 1);
+  assert.equal(terrain.material.defines.MODERN_SCENERY, undefined);
   const periodScenery = entry.mesh.children.find((child) => child.userData.scenery);
   let disposedPeriodBatches = 0;
   for (const child of periodScenery.children) {
@@ -425,6 +427,8 @@ test("swaps 1950s and 2030s scenery in place without refetching retained terrain
   assert.equal(terrain.diagnostics().sceneryEra, "modern");
   assert.equal(entry.mesh.userData.scenery.period, "2030s");
   assert.equal(terrain.material.uniforms.uModernScenery.value, 1);
+  assert.equal(terrain.material.uniforms.uParcelTint.value, 0);
+  assert.equal(terrain.material.defines.MODERN_SCENERY, 1);
   assert.equal(disposedPeriodBatches, periodScenery.children.length,
     "an era swap must release every replaced instanced GPU buffer");
   assert.equal(requested.length, 2,
@@ -433,6 +437,8 @@ test("swaps 1950s and 2030s scenery in place without refetching retained terrain
 
   await terrain.setSceneryEra("1950s");
   assert.equal(entry.mesh.userData.scenery.period, "1950s");
+  assert.equal(terrain.material.uniforms.uParcelTint.value, 1);
+  assert.equal(terrain.material.defines.MODERN_SCENERY, undefined);
   assert.equal(requested.length, 2);
   terrain.dispose();
 });

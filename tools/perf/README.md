@@ -1,0 +1,1 @@
+Run `node tools/perf/terrain_frame_probe.mjs` after `dotnet publish web/GunsOnly.Web.csproj -c Release` to measure a deterministic 15-second low-altitude, terrain-facing RAF window in headless SwiftShader.
