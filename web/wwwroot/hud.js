@@ -1839,6 +1839,20 @@ class CombatHud {
       occupiedLines += 1;
     }
 
+    // Why the jet is not pulling harder RIGHT NOW. Pilot report (Build 69): "sometimes it feels
+    // like it's stopped pulling entirely" — the wing was at CLmax and TVC saturated with only
+    // subtle cues. The kernel now names the binding limit; say it plainly.
+    const pullLimit = state.pull_limit;
+    if ((pullLimit === "STRUCTURAL" || pullLimit === "TVC")
+        && occupiedLines < maxWarningLines) {
+      ctx.fillStyle = AMBER;
+      ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(pullLimit === "TVC" ? "TVC SATURATED" : "STRUCTURAL LIMIT",
+        this.width / 2, warningY + occupiedLines * 21);
+      occupiedLines += 1;
+    }
+
     for (const warning of systems?.warnings ?? []) {
       if (occupiedLines >= maxWarningLines) break;
       const urgent = warning.level === "warning";

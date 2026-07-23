@@ -35,7 +35,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.3.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.6.0";
+    const string SnapshotSchemaVersion = "1.7.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -443,6 +443,7 @@ internal static class SnapshotProjection {
             + $"\"sustained\":{sustainedG:F3},"
             + $"\"sticky\":{_detents.StickyOffsetG:F2},\"tier\":{(int)_detents.Tier},"
             + $"\"variant\":{GetVariant()},\"buffet\":{(_player.Buffet ? "true" : "false")},"
+            + $"\"pull_limit\":{PullLimitJson(_player.PullLimit)},"
             + $"\"prompt\":{(int)_cue},"
             + $"\"pitch_deg\":{displayPitchRad * 57.2958:F2},\"bank_deg\":{displayBankRad * 57.2958:F2},"
             + $"\"aoa_deg\":{_player.AngleOfAttackRad * 57.2958:F2},\"beta_deg\":{_player.SideslipRad * 57.2958:F2},\"gamma_deg\":{displayGammaRad * 57.2958:F2},"
@@ -895,6 +896,13 @@ internal static class SnapshotProjection {
         json.Append("],");
         return json.ToString();
     }
+
+    static string PullLimitJson(PullLimitStatus status) => status.Reason switch {
+        PullLimitReason.AerodynamicClMax => "\"CLMAX\"",
+        PullLimitReason.Structural => "\"STRUCTURAL\"",
+        PullLimitReason.TvcSaturated => "\"TVC\"",
+        _ => "null",
+    };
 
     static string PilotSkillToken(PilotSkill skill) => skill switch {
         PilotSkill.Novice => "NOVICE",
