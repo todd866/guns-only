@@ -3,8 +3,9 @@ namespace GunsOnly.Sim.Doctrine;
 
 /// <summary>
 /// The deliberately small combat/loadout seam for the current one-player/one-opponent sortie.
-/// Mission content chooses ammunition and survivability explicitly; SimulationSession remains the
-/// authority for weapon instances, projectiles, damage, and outcomes.
+/// A positive PlayerAmmo value enables the player's infinite-ammunition, thermally limited gun;
+/// OpponentAmmo remains a finite magazine. SimulationSession remains the authority for weapon
+/// instances, projectiles, damage, and outcomes.
 /// </summary>
 public sealed record CombatConfig(
     int PlayerAmmo = GunKill.DefaultAmmo,
@@ -45,6 +46,7 @@ public sealed record CombatConfig(
 
     public GunProfile PlayerGunProfile => PlayerGun ?? GunProfiles.SixM3FiftyCal;
     public GunProfile OpponentGunProfile => OpponentGun ?? GunProfiles.SixM3FiftyCal;
+    public bool PlayerGunEnabled => PlayerAmmo > 0;
 }
 
 /// <summary>

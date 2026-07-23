@@ -136,6 +136,116 @@ public class GunTests {
     }
 
     [Fact]
+    public void InfiniteGunHeatRisesAtConfiguredRate() {
+        var gun = new GunKill(ammo: 1, hitsToKill: 100,
+            heatConfig: GunHeatConfig.PlayerInfiniteAmmo);
+        var own = State(Vec3D.Zero);
+        var offAxisBandit = State(new Vec3D(500.0, 0.0, 0.0));
+
+        for (int i = 0; i < 2 * AircraftSim.TickHz; i++)
+            gun.Step(true, own, offAxisBandit, Dt);
+
+        Assert.Equal(0.4, gun.BarrelHeat, 10);
+        Assert.False(gun.BarrelOverheated);
+        Assert.True(gun.RoundsFired > 1);
+        Assert.Equal(1, gun.AmmoRemaining);
+    }
+
+    [Fact]
+    public void InfiniteGunCoolsAtConfiguredRate() {
+        var gun = new GunKill(ammo: 1, hitsToKill: 100,
+            heatConfig: GunHeatConfig.PlayerInfiniteAmmo);
+        var own = State(Vec3D.Zero);
+        var offAxisBandit = State(new Vec3D(500.0, 0.0, 0.0));
+
+        for (int i = 0; i < 5 * AircraftSim.TickHz; i++)
+            gun.Step(true, own, offAxisBandit, Dt);
+        Assert.True(gun.BarrelOverheated);
+        Assert.Equal(1.0, gun.BarrelHeat, 12);
+
+        for (int i = 0; i < 3 * AircraftSim.TickHz; i++)
+            gun.Step(false, own, offAxisBandit, Dt);
+
+        Assert.Equal(0.75, gun.BarrelHeat, 10);
+        Assert.True(gun.BarrelOverheated);
+
+        for (int i = 0; i < 9 * AircraftSim.TickHz; i++)
+            gun.Step(false, own, offAxisBandit, Dt);
+
+        Assert.Equal(0.0, gun.BarrelHeat, 12);
+        Assert.False(gun.BarrelOverheated);
+    }
+
+    [Fact]
+    public void InfiniteGunLatchesAtMaximumAndRearmsOnlyBelowThreshold() {
+        var config = GunHeatConfig.PlayerInfiniteAmmo;
+        var gun = new GunKill(ammo: 1, hitsToKill: 100, heatConfig: config);
+        var own = State(Vec3D.Zero);
+        var offAxisBandit = State(new Vec3D(500.0, 0.0, 0.0));
+
+        for (int i = 0; i < 5 * AircraftSim.TickHz; i++)
+            gun.Step(true, own, offAxisBandit, Dt);
+
+        Assert.Equal(1.0, gun.BarrelHeat, 12);
+        Assert.True(gun.BarrelOverheated);
+
+        while (gun.BarrelHeat > config.RearmHeatThreshold)
+            gun.Step(false, own, offAxisBandit, Dt);
+
+        if (gun.BarrelHeat == config.RearmHeatThreshold) {
+            Assert.True(gun.BarrelOverheated);
+            gun.Step(false, own, offAxisBandit, Dt);
+        }
+
+        Assert.True(gun.BarrelHeat < config.RearmHeatThreshold);
+        Assert.False(gun.BarrelOverheated);
+    }
+
+    [Fact]
+    public void InfiniteGunRefusesFireWhileOverheatIsLatched() {
+        var gun = new GunKill(ammo: 1, hitsToKill: 100,
+            heatConfig: GunHeatConfig.PlayerInfiniteAmmo);
+        var own = State(Vec3D.Zero);
+        var offAxisBandit = State(new Vec3D(500.0, 0.0, 0.0));
+
+        for (int i = 0; i < 5 * AircraftSim.TickHz; i++)
+            gun.Step(true, own, offAxisBandit, Dt);
+
+        int roundsAtLatch = gun.RoundsFired;
+        for (int i = 0; i < AircraftSim.TickHz; i++) {
+            gun.Step(true, own, offAxisBandit, Dt);
+            Assert.False(gun.FiredThisStep);
+        }
+
+        Assert.True(gun.BarrelOverheated);
+        Assert.Equal(roundsAtLatch, gun.RoundsFired);
+        Assert.Equal(1, gun.AmmoRemaining);
+    }
+
+    [Fact]
+    public void IdenticalThermalInputsProduceIdenticalHeatTrace() {
+        var a = new GunKill(ammo: 1, hitsToKill: 100,
+            heatConfig: GunHeatConfig.PlayerInfiniteAmmo);
+        var b = new GunKill(ammo: 1, hitsToKill: 100,
+            heatConfig: GunHeatConfig.PlayerInfiniteAmmo);
+        var own = State(Vec3D.Zero);
+        var bandit = State(new Vec3D(500.0, 0.0, 0.0));
+
+        for (int tick = 0; tick < 20 * AircraftSim.TickHz; tick++) {
+            bool trigger = tick < 4 * AircraftSim.TickHz
+                || tick >= 7 * AircraftSim.TickHz && tick < 13 * AircraftSim.TickHz
+                || tick >= 16 * AircraftSim.TickHz;
+            a.Step(trigger, own, bandit, Dt);
+            b.Step(trigger, own, bandit, Dt);
+
+            Assert.Equal(a.BarrelHeat, b.BarrelHeat);
+            Assert.Equal(a.BarrelOverheated, b.BarrelOverheated);
+            Assert.Equal(a.FiredThisStep, b.FiredThisStep);
+            Assert.Equal(a.RoundsFired, b.RoundsFired);
+        }
+    }
+
+    [Fact]
     public void NoLeadSolutionFiresButMisses() {
         var gun = new GunKill(ammo: 12);
         var own = State(Vec3D.Zero);

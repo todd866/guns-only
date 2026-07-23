@@ -128,7 +128,7 @@ public class AssistedFlightTests {
     }
 
     [Fact]
-    public void AutoFireConsumesAmmoOnlyWhileQualifiedAndPilotTriggerStillWorks() {
+    public void AutoFireUsesInfiniteGunOnlyWhileQualifiedAndPilotTriggerStillWorks() {
         var wideGun = GunProfiles.SixM3FiftyCal with {
             Id = "gun.assisted-flight-test.v1",
             EffectiveHitRadiusM = 45.0
@@ -161,7 +161,8 @@ public class AssistedFlightTests {
         }
         Assert.True(sawQualified);
         Assert.True(sawAutomaticRound);
-        Assert.True(session.PlayerGun.AmmoRemaining < 100);
+        Assert.True(session.PlayerGun.HasInfiniteAmmo);
+        Assert.Equal(100, session.PlayerGun.AmmoRemaining);
 
         session.FeedKey(GKey.PushDown, true);
         for (int i = 0; i < 240 && session.PlayerGun.GunSolution; i++) {

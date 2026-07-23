@@ -143,6 +143,37 @@ public class ContinuousCombatTests {
     }
 
     [Fact]
+    public void ContinuousCombatNeverEndsBecausePlayerNominalAmmoIsSpent() {
+        BeatSetup setup = CloseTailFixture() with {
+            Bandit = new AircraftState(
+                new Vec3D(500.0, 5486.4, 0.0),
+                285.0, 0.0, 0.0, 0.0,
+                FlightModel.Su27SPublicDataSurrogate.MassKg),
+            Combat = new CombatConfig(
+                PlayerAmmo: 1,
+                OpponentAmmo: 0,
+                PlayerHitsToDefeat: 3,
+                OpponentHitsToDefeat: 100,
+                PlayerGun: GunProfiles.M61A2PublicDataSurrogate,
+                OpponentGun: GunProfiles.GSh301PublicDataSurrogate)
+        };
+        var session = new SimulationSession();
+        session.StartBeat(() => setup);
+        session.Begin();
+        session.FeedKey(GKey.Trigger, true);
+
+        for (int tick = 0; tick < 4 * AircraftSim.TickHz; tick++)
+            session.StepFixed();
+
+        Assert.True(session.PlayerGun.HasInfiniteAmmo);
+        Assert.True(session.PlayerGun.RoundsFired > 1);
+        Assert.Equal(1, session.PlayerGun.AmmoRemaining);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+        Assert.Equal(SortieOutcome.None, session.Outcome);
+        Assert.Equal(SortieOutcome.None, session.PendingOutcome);
+    }
+
+    [Fact]
     public void OpponentFlownIntoTheSurfaceIsCreditedAsAManeuverKill() {
         // BFM parlance: an opponent maneuvered into the ground while the player is alive and
         // engaged is the player's kill. The physical Impact event keeps source None, but the

@@ -66,8 +66,10 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.8.0",
+        Assert.Equal("1.10.0",
             root.GetProperty("snapshot_schema_version").GetString());
+        Assert.InRange(root.GetProperty("gun_heat").GetDouble(), 0.0, 1.0);
+        Assert.False(root.GetProperty("gun_overheat").GetBoolean());
         Assert.False(root.GetProperty("assisted_flight").GetBoolean());
         Assert.Equal(0, root.GetProperty("assisted_speed_bias_kts").GetInt32());
         Assert.False(string.IsNullOrEmpty(root.GetProperty("beat").GetString()));

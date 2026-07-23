@@ -373,7 +373,11 @@ window.__debugScenario = async (name) => {
       lead_valid: frame.state.lead_valid,
       gun_solution: frame.state.gun_solution,
       bandit_alive: frame.state.bandit_alive,
+      gun_heat: frame.state.gun_heat,
+      gun_overheat: frame.state.gun_overheat,
+      gun_firing: frame.state.gun_firing,
     },
+    triggerHeld: frame.triggerHeld,
     banditOnTrajectory: scenario?.bandit?.onTrajectory === true,
   };
 };

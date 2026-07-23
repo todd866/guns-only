@@ -325,12 +325,40 @@ function assertBasicJobs(data) {
   }
 }
 
+function assertGunHeat(data) {
+  const { name, geometry, state, triggerHeld } = data;
+  if (!name.endsWith(":gun-overheat-latched")) return;
+
+  const bar = geometry.gunHeat;
+  check(name, "gun heat bar present", bar?.present === true,
+    bar ? "present" : "missing");
+  check(name, "gun heat bar shows authoritative heat",
+    bar?.heat === 1 && bar?.fillFraction === 1,
+    `heat=${bar?.heat}; fill=${bar?.fillFraction}`);
+  check(name, "gun heat bar enters amber caution band",
+    bar?.caution === true && bar?.overheated === true,
+    `caution=${bar?.caution}; overheated=${bar?.overheated}`);
+
+  const annunciation = geometry.gunOverheatAnnunciation;
+  check(name, "latched overheat annunciation appears",
+    annunciation?.latched === true
+      && annunciation?.visible === true
+      && annunciation?.text === "OVERHEAT",
+    `latched=${annunciation?.latched}; visible=${annunciation?.visible}; `
+      + `text=${annunciation?.text}`);
+  check(name, "latched gun refuses fire with trigger held",
+    triggerHeld === true && state.gun_overheat === true && state.gun_firing === false,
+    `triggerHeld=${triggerHeld}; overheat=${state.gun_overheat}; `
+      + `gun_firing=${state.gun_firing}`);
+}
+
 // The portrait assisted mode is a first-class experience, so a phone-portrait pass runs the
 // core scenarios through the SAME geometry contract at 430x860. The full battery stays on the
 // landscape pass to bound gate time.
 const PORTRAIT_SCENARIOS = new Set([
   "assisted-corner-hold",
   "forward-level", "forward-bandit-near-edge", "forward-bandit-offscreen",
+  "gun-overheat-latched",
   "funnel-level-mid", "padlock-bandit-right-high", "padlock-bandit-behind",
   "padlock-aft-right-high",
 ]);
@@ -369,6 +397,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     if (data.padlock) assertPadlockDirector(data);
     assertPadlockInsetAndLocator(data);
     assertBasicJobs(data);
+    assertGunHeat(data);
     assertFunnelContainsTarget(data);
   }
   if (pageErrors.length > 0) {

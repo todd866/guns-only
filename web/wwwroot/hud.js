@@ -44,6 +44,8 @@ const GLASS = "rgba(2, 10, 16, 0.72)";
 const DEG = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
 const MODE_CUE_SECONDS = 1.5;
+const GUN_HEAT_AMBER_THRESHOLD = 0.7;
+const GUN_OVERHEAT_FLASH_HZ = 2;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -138,8 +140,8 @@ function lsoToken(call) {
 }
 
 function gunCue(state, hitFlash, solution = hasGunSolution(state)) {
+  if (state.gun_overheat === true) return "OVERHEAT";
   if (hitFlash) return "HITS";
-  if ((Number(state.ammo) || 0) <= 0) return "EMPTY";
   if (solution) return "SHOOT";
   return "";
 }
@@ -379,7 +381,7 @@ class CombatHud {
 
   updateGunAudio(frame) {
     const firing = this.audioEnabled && frame.triggerHeld && frame.state.gun_firing === true
-      && (Number(frame.state.ammo) || 0) > 0;
+      && frame.state.gun_overheat !== true;
     if (firing && !this._audioCtx) this.armAudio();
     if (!this._gunAudioGain || !this._audioCtx) return;
     if (firing === this._gunAudioFiring) return;
@@ -641,6 +643,53 @@ class CombatHud {
     ctx.restore();
   }
 
+  drawGunHeat(state) {
+    const ctx = this.ctx;
+    const heat = clamp(Number(state.gun_heat) || 0, 0, 1);
+    const overheated = state.gun_overheat === true;
+    const caution = heat >= GUN_HEAT_AMBER_THRESHOLD;
+    const color = caution ? AMBER : GREEN;
+    const width = 76;
+    const height = 7;
+    const right = this.width - this.safeInsets.right - 18;
+    const x = right - width;
+    const y = this.safeInsets.top + 18;
+
+    ctx.save();
+    ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = color;
+    ctx.textAlign = "left";
+    ctx.fillText("GUN TEMP", x, y - 2);
+    ctx.textAlign = "right";
+    ctx.fillText(String(Math.round(heat * 100)).padStart(3, "0"), right, y - 2);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
+    ctx.fillStyle = color;
+    ctx.fillRect(x + 2, y + 2, Math.max(0, (width - 4) * heat), height - 4);
+
+    // Fixed caution and overheat reference ticks make this a temperature instrument, not a
+    // generic progress bar. The latch remains authoritative in the separate annunciation.
+    ctx.strokeStyle = GREEN_DIM;
+    ctx.beginPath();
+    ctx.moveTo(x + width * GUN_HEAT_AMBER_THRESHOLD, y - 1);
+    ctx.lineTo(x + width * GUN_HEAT_AMBER_THRESHOLD, y + height + 1);
+    ctx.stroke();
+    ctx.restore();
+
+    if (this._debug) {
+      this._debug.gunHeat = {
+        present: true,
+        heat,
+        fillFraction: heat,
+        caution,
+        overheated,
+      };
+    }
+  }
+
   drawGunSight(frame, anchor) {
     if (!isFightHudActive(frame.state)) {
       this._leadPipperEnvelope.reset();
@@ -659,29 +708,30 @@ class CombatHud {
     const hitFlash = now < this._hitFlashUntil;
     const solution = frame.visualGunSolution === true;
     const ctx = this.ctx;
-    const ammo = Math.max(0, Number(state.ammo) || 0);
+    const overheated = state.gun_overheat === true;
     const cue = gunCue(state, hitFlash, solution);
-    const cueColor = hitFlash || solution ? GREEN : RED;
+    const cueColor = overheated ? RED : hitFlash || solution ? GREEN : RED;
+    const overheatVisible = !overheated
+      || Math.floor((Number(now) || 0) * GUN_OVERHEAT_FLASH_HZ * 2) % 2 === 0;
 
-    // Ammunition and a qualified SHOOT/HITS state remain available while the pilot is looking
-    // away from the waterline. The reticle itself still belongs to the actual nose projection.
+    // Barrel temperature and a qualified SHOOT/HITS/OVERHEAT state remain available while the
+    // pilot is looking away from the waterline. The reticle still belongs to the nose projection.
+    this.drawGunHeat(state);
     ctx.save();
-    ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillStyle = GREEN_DIM;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    ctx.fillText(
-      `G${String(ammo).padStart(3, "0")}`,
-      this.width - this.safeInsets.right - 18,
-      this.safeInsets.top + 20,
-    );
-    if (cue) {
+    if (cue && overheatVisible) {
       ctx.fillStyle = cueColor;
       ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
       ctx.fillText(cue, this.width / 2, this.getLayout().weaponCueY);
     }
     ctx.restore();
+    if (this._debug) {
+      this._debug.gunOverheatAnnunciation = {
+        latched: overheated,
+        visible: overheated && overheatVisible,
+        text: overheated && overheatVisible ? cue : "",
+      };
+    }
 
     if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) {
       this._leadPipperEnvelope.reset();
@@ -3162,7 +3212,15 @@ class CombatHud {
     // Harness-only geometry contract (assertions.mjs): populated when window.__HUD_DEBUG__ is
     // set, a single falsy test per frame otherwise.
     this._debug = globalThis.__HUD_DEBUG__ === true
-      ? { waterlinePx: null, fpvPx: null, ladderRungs: [], funnel: null, banditPx: null }
+      ? {
+        waterlinePx: null,
+        fpvPx: null,
+        ladderRungs: [],
+        funnel: null,
+        banditPx: null,
+        gunHeat: null,
+        gunOverheatAnnunciation: null,
+      }
       : null;
 
     this.worldPoint.copy(frame.playerPosition).addScaledVector(frame.playerForward, 10000);

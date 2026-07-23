@@ -35,7 +35,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.3.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.8.0";
+    const string SnapshotSchemaVersion = "1.10.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -459,6 +459,8 @@ internal static class SnapshotProjection {
             + $"\"lead_valid\":{(!Session.WeaponsInhibited && _gunKill.HasLeadSolution ? "true" : "false")},"
             + $"\"lead_x\":{_gunKill.LeadPipper.X:F3},\"lead_y\":{_gunKill.LeadPipper.Y:F3},\"lead_z\":{_gunKill.LeadPipper.Z:F3},"
             + $"\"lead_tof\":{_gunKill.LeadTimeOfFlight:F4},\"ammo\":{_gunKill.AmmoRemaining},"
+            + $"\"gun_heat\":{_gunKill.BarrelHeat:F3},"
+            + $"\"gun_overheat\":{(_gunKill.BarrelOverheated ? "true" : "false")},"
             + $"\"gun_muzzle_velocity_mps\":{_gunKill.Profile.MuzzleVelocityMps:F2},"
             + $"\"gun_max_flight_s\":{_gunKill.Profile.MaximumFlightSeconds:F3},"
             + $"\"target_wingspan_m\":{(_beat.BanditAir.WingSpanM > 0.0 ? _beat.BanditAir.WingSpanM : Math.Sqrt(4.5 * _beat.BanditAir.WingAreaM2)):F2},"
@@ -467,7 +469,7 @@ internal static class SnapshotProjection {
             + $"\"player_gun_profile_id\":\"{_gunKill.Profile.Id}\","
             + $"\"rounds_fired\":{_gunKill.RoundsFired},\"hits\":{_gunKill.HitCount},"
             + $"\"hit\":{(_gunKill.HitThisStep ? "true" : "false")},"
-            + $"\"gun_firing\":{(Session.TriggerDown && Session.PlayerWeaponsAuthorized && _gunKill.AmmoRemaining > 0 && _gunKill.BanditAlive ? "true" : "false")},"
+            + $"\"gun_firing\":{(Session.TriggerDown && Session.PlayerWeaponsAuthorized && _beat.CombatRules.PlayerGunEnabled && !_gunKill.BarrelOverheated && _gunKill.BanditAlive ? "true" : "false")},"
             + TracerJson("tracers", _gunKill.RoundsInFlight)
             + $"\"kill_progress\":{_gunKill.KillProgress:F3},"
             + $"\"opponent_health\":{_gunKill.TargetHealth:F3},\"opponent_alive\":{(_gunKill.TargetAlive ? "true" : "false")},"
