@@ -8,6 +8,27 @@ public enum PropulsionModelKind {
     AfterburningTurbofanPublicDataSurrogate
 }
 
+public enum HighAlphaModelKind {
+    Generic,
+    F22PublicDataSurrogate
+}
+
+public enum PullLimitReason {
+    None,
+    AerodynamicClMax,
+    Structural,
+    TvcSaturated
+}
+
+/// <summary>
+/// Session-agnostic flight-control limit annunciation. The shell may present this later; the
+/// kernel owns only the physical/control-allocation reason and never pilot physiology.
+/// </summary>
+public readonly record struct PullLimitStatus(PullLimitReason Reason) {
+    public static PullLimitStatus None => new(PullLimitReason.None);
+    public bool IsLimited => Reason != PullLimitReason.None;
+}
+
 /// SpoolUpTau/SpoolDownTau: first-order engine lag, in seconds. Thrust is NOT instantaneous.
 /// This is the difference between a toy and a sim on the back side of the power curve, where
 /// you hold the glidepath with power and the engine answers late -- and it is exactly why
@@ -92,6 +113,7 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     double PitchThrustVectorMaxRad = 0.0, double PitchThrustVectorMomentArmM = 0.0,
     double PitchThrustVectorAlphaGain = 0.0,
     double PitchThrustVectorRateGainSeconds = 0.0,
+    double PitchThrustVectorNozzleRateRadPerSecond = 0.0,
     // Optional player gunnery assistance. A zero rate disables it. The pitch aid engages inside its
     // lead-solution capture cone/range and may move the pilot's protected load-factor request by at
     // most MaxCorrectionG; closure and firing remain manual.
@@ -118,6 +140,7 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     double WingSpanM = -1.0, double PostStallAlphaCommandRad = 0.42,
     double PostStallDragMax = 0.90, double StallRollCoupling = 0.20,
     double StallYawCoupling = 0.34, double StallPitchBreakNm = 26000.0,
+    HighAlphaModelKind HighAlphaModel = HighAlphaModelKind.Generic,
     // Propulsion and mass identity are explicit so fuel quantity changes gross mass without adding
     // fuel on top of a reference gross weight. A negative fuel-free mass preserves legacy/custom
     // aircraft whose mass does not yet participate in the resource model.
@@ -141,6 +164,10 @@ public readonly record struct StateDeriv(Vec3D DPos, Vec3D DVel, double DBank,
 internal readonly record struct AeroResult(Vec3D Accel, Vec3D LiftDir, Vec3D AirVelocity,
     double Alpha, double Beta, double Nz, double DynamicPressure,
     double PitchThrustVectorAngleRad, double PitchThrustVectorMomentNm);
+
+internal readonly record struct PitchControlAllocation(double DemandMomentNm,
+    double AeroMomentNm, double ResidualMomentNm, double TvcMomentCapacityNm,
+    double TargetNozzleAngleRad);
 
 public static class FlightModel {
     public const double G0 = 9.80665;
@@ -302,6 +329,10 @@ public static class FlightModel {
         PitchThrustVectorMomentArmM: 6.5,
         PitchThrustVectorAlphaGain: 0.85,
         PitchThrustVectorRateGainSeconds: 0.12,
+        // Provisional reduced-order actuator rate: the public record supports +/-20 deg travel,
+        // not an exact production nozzle transient. It is explicit so the allocator cannot
+        // teleport the resultant through its full range in one 120 Hz tick.
+        PitchThrustVectorNozzleRateRadPerSecond: 1.047197551196598, // 60 deg/s
         // Gameplay assist, not an F-22 performance claim. Inside a fourteen-degree/1 km ballistic-
         // lead gate it walks the nose onto the lead solution in BOTH axes: up to 17 deg/s of pitch
         // convergence contributing at most 3.5 protected G, plus a bounded roll+rudder lateral pull
@@ -327,6 +358,7 @@ public static class FlightModel {
         StallRollCoupling: 0.0,
         StallYawCoupling: 0.0,
         StallPitchBreakNm: 0.0,
+        HighAlphaModel: HighAlphaModelKind.F22PublicDataSurrogate,
         PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
         FuelFreeMassKg: 19535.0,
         GenericIdleFuelFlowLbPerMinute: 32.0,
@@ -481,6 +513,12 @@ public static class FlightModel {
         double negativeStall = -AlphaAeroMin(p);
         if (alpha >= -negativeStall && alpha <= positiveStall) return p.CLAlpha * alpha;
 
+        if (p.HighAlphaModel == HighAlphaModelKind.F22PublicDataSurrogate
+            && alpha > positiveStall) {
+            var (cn, ca) = F22BodyAxisCoefficients(alpha);
+            return cn * System.Math.Cos(alpha) - ca * System.Math.Sin(alpha);
+        }
+
         double sign = alpha >= 0.0 ? 1.0 : -1.0;
         double stallAlpha = sign > 0.0 ? positiveStall : negativeStall;
         double peak = sign > 0.0 ? p.CLMax : -p.CLMin;
@@ -494,19 +532,101 @@ public static class FlightModel {
         return sign * separated;
     }
 
+    /// <summary>
+    /// Coarse F-22 body-axis normal/axial public-data surrogate. Values are deliberately visible at
+    /// the review's 18/36/45/60/90-degree stations: vortex normal force persists through 60 degrees
+    /// without extending the generic exponential wing-lift curve into that regime. CN is signed;
+    /// CA is aft-positive. This is a capability-shape surrogate, not a wind-tunnel data claim.
+    /// </summary>
+    internal static (double cn, double ca) F22BodyAxisCoefficients(double alpha) {
+        double absoluteAlpha = System.Math.Min(System.Math.Abs(alpha), System.Math.PI / 2.0);
+        double sign = alpha >= 0.0 ? 1.0 : -1.0;
+        double cn = InterpolateAlphaSchedule(absoluteAlpha,
+            at18: 1.4720, at36: 2.4500, at45: 2.3500, at60: 2.0000, at90: 1.2500);
+        double ca = InterpolateAlphaSchedule(absoluteAlpha,
+            at18: -0.3240, at36: 0.1000, at45: 0.3000, at60: 0.2500, at90: 0.0000);
+        return (sign * cn, ca);
+    }
+
     internal static double SeparationFraction(double alpha, in AircraftParams p) {
         double stall = alpha >= 0.0 ? AlphaAeroMax(p) : -AlphaAeroMin(p);
         double t = System.Math.Clamp((System.Math.Abs(alpha) - stall) / 0.14, 0.0, 1.0);
         return t * t * (3.0 - 2.0 * t); // smoothstep: zero slope at attached and fully separated ends
     }
 
+    static double InterpolateAlphaSchedule(double absoluteAlphaRad,
+        double at18, double at36, double at45, double at60, double at90) {
+        double degrees = System.Math.Clamp(absoluteAlphaRad * 180.0 / System.Math.PI,
+            18.0, 90.0);
+        if (degrees <= 36.0) return Lerp(at18, at36, (degrees - 18.0) / 18.0);
+        if (degrees <= 45.0) return Lerp(at36, at45, (degrees - 36.0) / 9.0);
+        if (degrees <= 60.0) return Lerp(at45, at60, (degrees - 45.0) / 15.0);
+        return Lerp(at60, at90, (degrees - 60.0) / 30.0);
+    }
+
+    static double Lerp(double a, double b, double t) => a + (b - a) * t;
+
+    // F-22 reduced-order control-power envelopes. PitchMomentMaxNm/YawMomentMaxNm remain demand
+    // ceilings; these provisional coefficient schedules bound what the air can actually deliver.
+    // Their moments therefore collapse exactly with q. Knots follow the adopted public-data
+    // validation stations rather than pretending to be an OEM derivative deck.
+    internal static double F22PitchAeroMomentAvailableNm(double alpha,
+        double dynamicPressure, in AircraftParams p) {
+        if (p.HighAlphaModel != HighAlphaModelKind.F22PublicDataSurrogate)
+            return double.PositiveInfinity;
+        if (dynamicPressure <= 0.0) return 0.0;
+        double cm = InterpolateAlphaSchedule(System.Math.Abs(alpha),
+            at18: 0.55, at36: 0.24, at45: 0.18, at60: 0.10, at90: 0.025);
+        double span = p.WingSpanM > 0.0 ? p.WingSpanM
+            : System.Math.Sqrt(4.5 * p.WingAreaM2);
+        double meanChord = p.WingAreaM2 / System.Math.Max(span, 1e-6);
+        return dynamicPressure * p.WingAreaM2 * meanChord * cm;
+    }
+
+    static double F22YawAeroMomentAvailableNm(double alpha,
+        double dynamicPressure, in AircraftParams p) {
+        if (p.HighAlphaModel != HighAlphaModelKind.F22PublicDataSurrogate)
+            return double.PositiveInfinity;
+        if (dynamicPressure <= 0.0) return 0.0;
+        double cn = InterpolateAlphaSchedule(System.Math.Abs(alpha),
+            at18: 0.15, at36: 0.12, at45: 0.10, at60: 0.07, at90: 0.025);
+        double span = p.WingSpanM > 0.0 ? p.WingSpanM
+            : System.Math.Sqrt(4.5 * p.WingAreaM2);
+        return dynamicPressure * p.WingAreaM2 * span * cn;
+    }
+
+    static double F22RollEffectiveness(double alpha) => InterpolateAlphaSchedule(
+        System.Math.Abs(alpha), at18: 1.00, at36: 0.58, at45: 0.44,
+        at60: 0.28, at90: 0.08);
+
+    static double F22RudderEffectiveness(double alpha) => InterpolateAlphaSchedule(
+        System.Math.Abs(alpha), at18: 1.00, at36: 0.85, at45: 0.75,
+        at60: 0.60, at90: 0.20);
+
+    static double F22AileronRudderInterconnect(double alpha) => InterpolateAlphaSchedule(
+        System.Math.Abs(alpha), at18: 0.00, at36: 0.45, at45: 0.65,
+        at60: 0.80, at90: 0.40);
+
+    static double F22EffectiveRudderCommand(double alpha, in PilotCommand c) {
+        double lateralStick = System.Math.Clamp(c.RollControl + c.SasRollControl, -1.0, 1.0);
+        return System.Math.Clamp(c.Rudder
+            + F22AileronRudderInterconnect(alpha) * lateralStick, -1.0, 1.0);
+    }
+
     // Internal rather than private because decision-support projections must evaluate the exact
     // same polar as the force kernel. A second simplified drag equation produced a plausible-looking
     // sustained-G marker which was wrong by almost one G near the high-lift drag rise.
     internal static double ProfileDragCoefficient(double alpha, double mach, in AircraftParams p) {
+        double stallAlpha = alpha >= 0.0 ? AlphaAeroMax(p) : -AlphaAeroMin(p);
+        if (p.HighAlphaModel == HighAlphaModelKind.F22PublicDataSurrogate
+            && alpha > stallAlpha) {
+            var (cn, ca) = F22BodyAxisCoefficients(alpha);
+            double bodyAxisCd = cn * System.Math.Sin(alpha) + ca * System.Math.Cos(alpha);
+            return System.Math.Max(0.0, bodyAxisCd) * MachDragFactor(mach, p);
+        }
+
         double cl = LiftCoefficient(alpha, p);
         double attached = p.CD0 * MachDragFactor(mach, p) + p.InducedK * cl * cl;
-        double stallAlpha = alpha >= 0.0 ? AlphaAeroMax(p) : -AlphaAeroMin(p);
         double peak = alpha >= 0.0 ? p.CLMax : -p.CLMin;
         double highLiftFraction = System.Math.Abs(cl) / System.Math.Max(peak, 1e-6);
         double highLiftExcess = System.Math.Max(0.0,
@@ -540,7 +660,8 @@ public static class FlightModel {
 
     internal static StateDeriv Derivatives(in RawState r, in PilotCommand c,
         in AircraftParams p, in Vec3D liftRef, in Vec3D wind, double netThrustN,
-        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) {
+        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere,
+        double pitchThrustVectorAngleRad = double.NaN) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         // Aerodynamics acts on the AIR, and the air may be moving: true airspeed = ground
         // velocity − wind. Everything aero (dynamic pressure, the lift/drag/thrust frame) is
@@ -555,9 +676,11 @@ public static class FlightModel {
             : vAir * (1.0 / speed);
         double rho = atmosphere.Sample(r.Pos.Y).DensityKgM3;
         double q = 0.5 * rho * speed * speed;
-        var aero = Aerodynamics(r, c, p, wind, netThrustN, configuration, atmosphere);
+        var aero = Aerodynamics(r, c, p, wind, netThrustN, configuration, atmosphere,
+            pitchThrustVectorAngleRad);
         var (dAttitude, dRates, rollMomentNm) = RotationalDerivatives(r, c, p, liftRef,
-            controlVhat, q, speed, netThrustN, configuration, atmosphere);
+            controlVhat, q, speed, netThrustN, configuration, atmosphere,
+            pitchThrustVectorAngleRad);
         return new StateDeriv(r.Vel, aero.Accel, BankRate(r.Bank, c.BankTarget, p),
             dAttitude, dRates, rollMomentNm);
     }
@@ -571,7 +694,8 @@ public static class FlightModel {
 
     internal static AeroResult Aerodynamics(in RawState r, in PilotCommand c,
         in AircraftParams p, in Vec3D wind, double netThrustN,
-        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) {
+        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere,
+        double pitchThrustVectorAngleRad = double.NaN) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         var vAir = r.Vel - wind;
         double speed = vAir.Length;
@@ -590,15 +714,21 @@ public static class FlightModel {
         double cl = LiftCoefficient(alpha, p)
             + configuration.LiftCoefficientIncrement * attachedConfiguration;
         double mach = speed / atmosphericState.SpeedOfSoundMps;
+        double effectiveRudderCommand = p.HighAlphaModel
+            == HighAlphaModelKind.F22PublicDataSurrogate
+                ? F22EffectiveRudderCommand(alpha, c) : c.Rudder;
         double cd = ProfileDragCoefficient(alpha, mach, p)
                     + configuration.DragCoefficientIncrement
-                    + System.Math.Abs(c.Rudder) * 0.15 * p.CD0 + beta * beta * 0.08;
+                    + System.Math.Abs(effectiveRudderCommand) * 0.15 * p.CD0
+                    + beta * beta * 0.08;
         double liftAccel = q * p.WingAreaM2 * cl / r.Mass;
         double dragAccel = q * p.WingAreaM2 * cd / r.Mass;
         double usableThrustN = System.Math.Max(0.0, netThrustN);
         double thrustAccel = usableThrustN / r.Mass;
-        double pitchThrustVectorAngle = PitchThrustVectorAngle(r, c, p, vhat, q,
-            configuration);
+        double pitchThrustVectorAngle = double.IsFinite(pitchThrustVectorAngleRad)
+            ? System.Math.Clamp(pitchThrustVectorAngleRad, -p.PitchThrustVectorMaxRad,
+                p.PitchThrustVectorMaxRad)
+            : LegacyPitchThrustVectorAngle(r, c, p, vhat, q, configuration);
         double pitchThrustVectorMoment = PitchThrustVectorMoment(
             pitchThrustVectorAngle, usableThrustN, p);
 
@@ -608,19 +738,47 @@ public static class FlightModel {
         var liftDir = liftPlane.Length < 1e-9 ? bodyUp : liftPlane.Normalized();
         var sidePlane = bodyRight - vhat * bodyRight.Dot(vhat);
         var sideDir = sidePlane.Length < 1e-9 ? bodyRight : sidePlane.Normalized();
-        double sideAccel = c.Rudder * 0.06 * speed - q * p.WingAreaM2 * p.CYBeta * beta / r.Mass;
+        double rudderSideEffectiveness = p.HighAlphaModel
+            == HighAlphaModelKind.F22PublicDataSurrogate
+                ? F22RudderEffectiveness(alpha) : 1.0;
+        double sideAccel = effectiveRudderCommand * rudderSideEffectiveness * 0.06 * speed
+            - q * p.WingAreaM2 * p.CYBeta * beta / r.Mass;
+        bool useF22BodyAxisForces = p.HighAlphaModel
+            == HighAlphaModelKind.F22PublicDataSurrogate && alpha > AlphaAeroMax(p);
+        Vec3D aerodynamicAccel = Vec3D.Zero;
+        if (useF22BodyAxisForces) {
+            // Apply the scheduled force in body axes, then add configuration/rudder/beta drag in
+            // their ordinary wind axes. At beta=0 this is algebraically the CN/CA-to-CL/CD
+            // transform exposed by LiftCoefficient/ProfileDragCoefficient; at nonzero beta it
+            // remains a genuine body-axis model instead of silently rotating axial force into the
+            // wind plane.
+            var (cn, ca) = F22BodyAxisCoefficients(alpha);
+            double forceScale = q * p.WingAreaM2 / r.Mass;
+            double extraLiftCoefficient = configuration.LiftCoefficientIncrement
+                * attachedConfiguration;
+            double extraDragCoefficient = configuration.DragCoefficientIncrement
+                + System.Math.Abs(effectiveRudderCommand) * 0.15 * p.CD0
+                + beta * beta * 0.08;
+            aerodynamicAccel = bodyUp * (forceScale * cn)
+                - bodyForward * (forceScale * ca)
+                + liftDir * (forceScale * extraLiftCoefficient)
+                - vhat * (forceScale * extraDragCoefficient);
+        }
         // Positive vector angle is a positive-q (nose-up) control demand. With the nozzles aft of
         // the CG, the corresponding thrust resultant points toward body-down; the lever arm turns
         // that force into the positive pitch moment returned alongside this force evaluation.
         var thrustDirection = bodyForward * System.Math.Cos(pitchThrustVectorAngle)
             - bodyUp * System.Math.Sin(pitchThrustVectorAngle);
-        var accel = thrustDirection * thrustAccel - vhat * dragAccel + liftDir * liftAccel
-                  + sideDir * sideAccel - new Vec3D(0, G0, 0);
+        var accel = useF22BodyAxisForces
+            ? thrustDirection * thrustAccel + aerodynamicAccel
+                + sideDir * sideAccel - new Vec3D(0, G0, 0)
+            : thrustDirection * thrustAccel - vhat * dragAccel + liftDir * liftAccel
+                + sideDir * sideAccel - new Vec3D(0, G0, 0);
         return new AeroResult(accel, liftDir, vAir, alpha, beta, liftAccel / G0, q,
             pitchThrustVectorAngle, pitchThrustVectorMoment);
     }
 
-    static double PitchThrustVectorAngle(in RawState r, in PilotCommand c,
+    static double LegacyPitchThrustVectorAngle(in RawState r, in PilotCommand c,
         in AircraftParams p, in Vec3D vhat, double dynamicPressure,
         in AirframeAerodynamicState configuration) {
         if (p.PitchThrustVectorMaxRad <= 0.0
@@ -650,10 +808,147 @@ public static class FlightModel {
         in AircraftParams p) => netThrustN * p.PitchThrustVectorMomentArmM
             * System.Math.Sin(angleRad);
 
+    static double F22PitchMomentDemand(in RawState r, in PilotCommand c,
+        in AircraftParams p, in Vec3D liftRef, in Vec3D vhat, double dynamicPressure,
+        double speed, in AirframeAerodynamicState configuration, out double alpha) {
+        var attitude = r.Attitude.Normalized();
+        var bodyUp = attitude.Rotate(new Vec3D(0, 1, 0));
+        var bodyForward = attitude.Rotate(new Vec3D(0, 0, 1));
+        alpha = System.Math.Atan2(-vhat.Dot(bodyUp), vhat.Dot(bodyForward));
+        var target = TargetAttitude(r, c, p, liftRef, vhat, dynamicPressure, configuration);
+        var error = attitude.Conjugate() * target;
+        if (error.W < 0.0) error = -error;
+        double vn = System.Math.Sqrt(error.X * error.X + error.Y * error.Y
+            + error.Z * error.Z);
+        double scale = vn < 1e-10 ? 2.0
+            : 2.0 * System.Math.Atan2(vn, error.W) / vn;
+        double errQ = -error.X * scale;
+        bool directPitch = double.IsFinite(c.CommandedPitchRad);
+        double qCommand = 0.0;
+        double alphaTarget = alpha;
+        if (!directPitch) {
+            var targetUp = target.Rotate(new Vec3D(0, 1, 0));
+            var liftPlane = targetUp - vhat * targetUp.Dot(vhat);
+            var targetLift = liftPlane.Length < 1e-9 ? targetUp : liftPlane.Normalized();
+            double nz = TargetNz(r, c, p, dynamicPressure, configuration);
+            alphaTarget = TargetAlpha(r, c, p, dynamicPressure, configuration);
+            qCommand = System.Math.Clamp((nz - targetLift.Y) * G0
+                / System.Math.Max(speed, 1e-6),
+                -p.ManualPitchRateMaxRad, p.ManualPitchRateMaxRad);
+        }
+        double stiffness = directPitch ? p.ApproachPitchStiffnessNmRad
+            : p.PitchStiffnessNmRad;
+        double momentMax = directPitch ? p.ApproachPitchMomentMaxNm
+            : p.PitchMomentMaxNm;
+        double pitchError = directPitch ? errQ : alphaTarget - alpha;
+        double demand = System.Math.Clamp(stiffness * pitchError
+            - p.PitchDampingNms * (r.BodyRates.Q - qCommand), -momentMax, momentMax);
+        double stallAlpha = alpha >= 0.0 ? AlphaAeroMax(p) : -AlphaAeroMin(p);
+        demand += -System.Math.Sign(alpha) * p.StallPitchBreakNm
+            * SeparationFraction(alpha, p)
+            * System.Math.Clamp((System.Math.Abs(alpha) - stallAlpha) / 0.25, 0.0, 1.0);
+        double span = p.WingSpanM > 0.0 ? p.WingSpanM
+            : System.Math.Sqrt(4.5 * p.WingAreaM2);
+        double meanChord = p.WingAreaM2 / System.Math.Max(span, 1e-6);
+        demand += dynamicPressure * p.WingAreaM2 * meanChord
+            * configuration.PitchMomentCoefficientIncrement;
+        return demand;
+    }
+
+    static PitchControlAllocation F22PitchAllocation(double demandMomentNm,
+        double alpha, double dynamicPressure, double netThrustN, in AircraftParams p) {
+        double aeroCapacity = F22PitchAeroMomentAvailableNm(alpha, dynamicPressure, p);
+        double aeroMoment = System.Math.Clamp(demandMomentNm, -aeroCapacity, aeroCapacity);
+        double residual = demandMomentNm - aeroMoment;
+        double usableThrust = System.Math.Max(0.0, netThrustN);
+        double tvcCapacity = usableThrust * p.PitchThrustVectorMomentArmM
+            * System.Math.Sin(System.Math.Max(0.0, p.PitchThrustVectorMaxRad));
+        double allocatedTvcMoment = System.Math.Clamp(residual, -tvcCapacity, tvcCapacity);
+        double denominator = usableThrust * p.PitchThrustVectorMomentArmM;
+        double targetAngle = denominator > 1e-9
+            ? System.Math.Asin(System.Math.Clamp(allocatedTvcMoment / denominator, -1.0, 1.0))
+            : 0.0;
+        targetAngle = System.Math.Clamp(targetAngle, -p.PitchThrustVectorMaxRad,
+            p.PitchThrustVectorMaxRad);
+        return new PitchControlAllocation(demandMomentNm, aeroMoment, residual,
+            tvcCapacity, targetAngle);
+    }
+
+    internal static double PitchThrustVectorTargetAngle(in RawState r, in PilotCommand c,
+        in AircraftParams p, in Vec3D liftRef, in Vec3D wind, double netThrustN,
+        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) {
+        if (p.HighAlphaModel != HighAlphaModelKind.F22PublicDataSurrogate
+            || p.PitchThrustVectorMaxRad <= 0.0
+            || p.PitchThrustVectorMomentArmM <= 0.0
+            || double.IsFinite(c.CommandedPitchRad)) return 0.0;
+        var vAir = r.Vel - wind;
+        double speed = vAir.Length;
+        var vhat = speed < 1e-9
+            ? r.Attitude.Normalized().Rotate(new Vec3D(0, 0, 1))
+            : vAir * (1.0 / speed);
+        double dynamicPressure = 0.5 * atmosphere.Sample(r.Pos.Y).DensityKgM3
+            * speed * speed;
+        double demand = F22PitchMomentDemand(r, c, p, liftRef, vhat, dynamicPressure,
+            speed, configuration, out double alpha);
+        return F22PitchAllocation(demand, alpha, dynamicPressure, netThrustN, p)
+            .TargetNozzleAngleRad;
+    }
+
+    internal static double RateLimitPitchThrustVector(double currentAngleRad,
+        double targetAngleRad, double dt, in AircraftParams p) {
+        double maxStep = System.Math.Max(0.0, p.PitchThrustVectorNozzleRateRadPerSecond)
+            * System.Math.Max(0.0, dt);
+        if (maxStep <= 0.0) return targetAngleRad;
+        return currentAngleRad + System.Math.Clamp(targetAngleRad - currentAngleRad,
+            -maxStep, maxStep);
+    }
+
+    internal static PullLimitStatus EvaluatePullLimit(in RawState r, in PilotCommand c,
+        in AircraftParams p, in Vec3D liftRef, in Vec3D wind, double netThrustN,
+        double pitchThrustVectorAngleRad, in AirframeAerodynamicState configuration,
+        IAtmosphereModel atmosphere) {
+        var vAir = r.Vel - wind;
+        double speed = vAir.Length;
+        var vhat = speed < 1e-9
+            ? r.Attitude.Normalized().Rotate(new Vec3D(0, 0, 1))
+            : vAir * (1.0 / speed);
+        double dynamicPressure = 0.5 * atmosphere.Sample(r.Pos.Y).DensityKgM3
+            * speed * speed;
+        if (!double.IsFinite(c.CommandedAlphaRad) && c.GDemand > 0.0) {
+            double aeroLimit = dynamicPressure * p.WingAreaM2
+                * (p.CLMax + configuration.LiftCoefficientIncrement)
+                / (r.Mass * G0);
+            double structuralLimit = c.GDemand <= p.PositiveStructuralLimitG + 1e-6
+                ? p.PositiveStructuralLimitG : PositiveControlLimitG(p);
+            if (c.GDemand >= System.Math.Min(aeroLimit, structuralLimit) - 0.02) {
+                return aeroLimit < structuralLimit
+                    ? new PullLimitStatus(PullLimitReason.AerodynamicClMax)
+                    : new PullLimitStatus(PullLimitReason.Structural);
+            }
+        }
+
+        if (p.HighAlphaModel == HighAlphaModelKind.F22PublicDataSurrogate
+            && !double.IsFinite(c.CommandedPitchRad)) {
+            double demand = F22PitchMomentDemand(r, c, p, liftRef, vhat,
+                dynamicPressure, speed, configuration, out double alpha);
+            PitchControlAllocation allocation = F22PitchAllocation(demand, alpha,
+                dynamicPressure, netThrustN, p);
+            double actualTvcMoment = PitchThrustVectorMoment(pitchThrustVectorAngleRad,
+                System.Math.Max(0.0, netThrustN), p);
+            double unmet = allocation.ResidualMomentNm - actualTvcMoment;
+            double tolerance = System.Math.Max(1_000.0,
+                0.05 * System.Math.Abs(allocation.ResidualMomentNm));
+            if (System.Math.Abs(unmet) > tolerance)
+                return new PullLimitStatus(PullLimitReason.TvcSaturated);
+        }
+        return PullLimitStatus.None;
+    }
+
     static (QuaternionD dAttitude, BodyRates dRates, double rollMomentNm) RotationalDerivatives(in RawState r,
         in PilotCommand c, in AircraftParams p, in Vec3D liftRef, in Vec3D vhat,
         double dynamicPressure, double speed, double netThrustN,
-        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) {
+        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere,
+        double pitchThrustVectorAngleRad) {
         var attitude = r.Attitude.Normalized();
         var target = TargetAttitude(r, c, p, liftRef, vhat, dynamicPressure, configuration);
         var error = attitude.Conjugate() * target;
@@ -725,13 +1020,16 @@ public static class FlightModel {
             * System.Math.Clamp((System.Math.Abs(alpha) - stallAlpha) / 0.25, 0.0, 1.0);
         pitchMoment += pitchBreak;
         double beta = System.Math.Asin(System.Math.Clamp(vhat.Dot(bodyRight), -1.0, 1.0));
+        bool f22HighAlpha = p.HighAlphaModel == HighAlphaModelKind.F22PublicDataSurrogate;
+        double effectiveRudderCommand = f22HighAlpha
+            ? F22EffectiveRudderCommand(alpha, c) : c.Rudder;
         // Positive beta in this body basis means the velocity vector is to the right of the nose,
         // so a positive yaw moment aligns the nose with it and drives beta toward zero. Fade the
         // coordinator out under full manual rudder: intermediate rudder adds to it, full rudder
         // owns the axis, and hands-off maneuvering keeps the ball centered.
-        double yawStabilityBlend = 1.0 - 0.88 * separation;
+        double yawStabilityBlend = f22HighAlpha ? 1.0 : 1.0 - 0.88 * separation;
         double coordinatorMoment = p.YawBetaStiffnessNmRad * beta
-            * (1.0 - System.Math.Clamp(System.Math.Abs(c.Rudder), 0.0, 1.0));
+            * (1.0 - System.Math.Clamp(System.Math.Abs(effectiveRudderCommand), 0.0, 1.0));
 
         // A stalled wing is not one lumped CL. Roll/yaw/beta and rudder change the local incidence
         // seen at each semispan. On the attached positive-slope lift curve that difference damps p;
@@ -768,17 +1066,31 @@ public static class FlightModel {
             * p.MaxAileronDeflectionRad;
         double sasAileron = System.Math.Clamp(c.SasRollControl, -1.0, 1.0)
             * p.MaxAileronDeflectionRad;
-        double rudderDeflection = System.Math.Clamp(c.Rudder, -1.0, 1.0)
+        double rudderDeflection = System.Math.Clamp(effectiveRudderCommand, -1.0, 1.0)
             * p.MaxRudderDeflectionRad;
-        double attachedRollCoefficient = p.ClBeta * beta
-            + p.ClP * nondimensionalP + p.ClR * nondimensionalR
-            + p.ClDeltaA * System.Math.Clamp(pilotAileron + sasAileron,
-                -p.MaxAileronDeflectionRad, p.MaxAileronDeflectionRad)
-            + p.ClDeltaR * rudderDeflection;
+        double attachedRollCoefficient;
+        if (f22HighAlpha) {
+            double rollEffectiveness = F22RollEffectiveness(alpha);
+            double rudderEffectiveness = F22RudderEffectiveness(alpha);
+            attachedRollCoefficient = p.ClBeta * beta * rudderEffectiveness
+                + p.ClP * nondimensionalP * rollEffectiveness
+                + p.ClR * nondimensionalR * rudderEffectiveness
+                + p.ClDeltaA * System.Math.Clamp(pilotAileron + sasAileron,
+                    -p.MaxAileronDeflectionRad, p.MaxAileronDeflectionRad)
+                    * rollEffectiveness
+                + p.ClDeltaR * rudderDeflection * rudderEffectiveness;
+        } else {
+            attachedRollCoefficient = p.ClBeta * beta
+                + p.ClP * nondimensionalP + p.ClR * nondimensionalR
+                + p.ClDeltaA * System.Math.Clamp(pilotAileron + sasAileron,
+                    -p.MaxAileronDeflectionRad, p.MaxAileronDeflectionRad)
+                + p.ClDeltaR * rudderDeflection;
+        }
         double attachedRollMoment = dynamicPressure * p.WingAreaM2 * span
             * attachedRollCoefficient;
         double rollMoment = legacyRollMoment
-            + (c.DirectLateralControl ? attachedRollMoment * (1.0 - wingSeparation) : 0.0)
+            + (c.DirectLateralControl ? attachedRollMoment
+                * (f22HighAlpha ? 1.0 : 1.0 - wingSeparation) : 0.0)
             + stalledRollMoment;
         // Split-flap lift is attached circulation and fades with the same separation state as the
         // symmetric flap increment. Torn structure/catastrophic damage is a distinct persistent
@@ -811,18 +1123,50 @@ public static class FlightModel {
             }
         }
         double meanChord = p.WingAreaM2 / System.Math.Max(span, 1e-6);
-        pitchMoment += dynamicPressure * p.WingAreaM2 * meanChord
+        double configurationPitchMoment = dynamicPressure * p.WingAreaM2 * meanChord
             * configuration.PitchMomentCoefficientIncrement;
-        double pitchThrustVectorAngle = PitchThrustVectorAngle(r, c, p, vhat,
-            dynamicPressure, configuration);
-        pitchMoment += PitchThrustVectorMoment(pitchThrustVectorAngle,
-            System.Math.Max(0.0, netThrustN), p);
+        pitchMoment += configurationPitchMoment;
+        if (f22HighAlpha) {
+            // PitchMomentMaxNm is a demanded moment, not free control power. Aerodynamics takes
+            // the portion available from q*S*c*Cm; only its residual reaches the thrust-vector
+            // allocator. This branch intentionally removes the old 85%-at-zero-q fixed moment.
+            double demandedPitchMoment = System.Math.Clamp(pitchStiffness * pitchError
+                - p.PitchDampingNms * (rates.Q - qCommand),
+                -pitchMomentMax, pitchMomentMax) + pitchBreak + configurationPitchMoment;
+            PitchControlAllocation allocation = F22PitchAllocation(demandedPitchMoment,
+                alpha, dynamicPressure, netThrustN, p);
+            double actualNozzleAngle = double.IsFinite(pitchThrustVectorAngleRad)
+                ? System.Math.Clamp(pitchThrustVectorAngleRad,
+                    -p.PitchThrustVectorMaxRad, p.PitchThrustVectorMaxRad)
+                : allocation.TargetNozzleAngleRad;
+            pitchMoment = allocation.AeroMomentNm + PitchThrustVectorMoment(
+                actualNozzleAngle, System.Math.Max(0.0, netThrustN), p);
+        } else {
+            double pitchThrustVectorAngle = LegacyPitchThrustVectorAngle(r, c, p, vhat,
+                dynamicPressure, configuration);
+            pitchMoment += PitchThrustVectorMoment(pitchThrustVectorAngle,
+                System.Math.Max(0.0, netThrustN), p);
+        }
 
-        double yawMoment = System.Math.Clamp((p.YawStiffnessNmRad * errR
-            - p.YawDampingNms * rates.R + coordinatorMoment) * yawStabilityBlend
-            + c.Rudder * p.YawMomentMaxNm * (1.0 - 0.15 * separation)
-            + stalledYawMoment,
-            -p.YawMomentMaxNm, p.YawMomentMaxNm);
+        // At high alpha, damp yaw about the stability normal (r*cos(alpha)-p*sin(alpha)), and let
+        // lateral stick feed the rudder through the explicit ARI above. Projecting the resulting
+        // body p/r onto the velocity axis yields the commanded stability-axis roll; no rate or
+        // departure is injected. All delivery remains bounded by q*S*b*Cn.
+        double stabilityYawRate = rates.R * System.Math.Cos(alpha)
+            - rates.P * System.Math.Sin(alpha);
+        double yawDemand = f22HighAlpha
+            ? (p.YawStiffnessNmRad * errR
+                - p.YawDampingNms * stabilityYawRate + coordinatorMoment)
+                + effectiveRudderCommand * p.YawMomentMaxNm
+            : (p.YawStiffnessNmRad * errR
+                - p.YawDampingNms * rates.R + coordinatorMoment) * yawStabilityBlend
+                + c.Rudder * p.YawMomentMaxNm * (1.0 - 0.15 * separation)
+                + stalledYawMoment;
+        double yawMoment = f22HighAlpha
+            ? System.Math.Clamp(yawDemand,
+                -F22YawAeroMomentAvailableNm(alpha, dynamicPressure, p),
+                F22YawAeroMomentAvailableNm(alpha, dynamicPressure, p))
+            : System.Math.Clamp(yawDemand, -p.YawMomentMaxNm, p.YawMomentMaxNm);
 
         double pDot = (rollMoment + (p.IyyKgM2 - p.IzzKgM2) * rates.Q * rates.R) / p.IxxKgM2;
         double qDot = (pitchMoment + (p.IzzKgM2 - p.IxxKgM2) * rates.R * rates.P) / p.IyyKgM2;
