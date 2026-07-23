@@ -82,6 +82,11 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     const double ReturnRadiusM = 5200.0;
     const double ThreatRangeM = 1500.0;
     const double MergeSpawnClearanceM = 600.0;
+    const double LowTargetClearanceM = 400.0;
+    const double LowBlockCaptureClearanceM = 480.0;
+    const double CompetentPerchClearanceM = 650.0;
+    const double CompetentAttackSeconds = 8.0;
+    const double TerrainRecoveryRollSeconds = 1.0;
     const double DefendSeconds = 3.4;
     const double DefendCooldownSeconds = 3.8;
 
@@ -115,6 +120,9 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     int _damageHandedness = 1;
     WreckContactMotion? _wreckMotion;
     readonly BanditSkillProfile _profile;
+    bool _lowAttackActive;
+    double _lowAttackEndAt = double.NegativeInfinity;
+    double _lowAttackRecommitAt = double.NegativeInfinity;
 
     // Lookahead decision cache. Rolling ~5-7 candidate maneuvers forward over the horizon every
     // tick is wasteful, so the choice is recomputed on a fixed deterministic cadence and held
@@ -125,6 +133,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     long _selectionSequence;
 
     public PilotSkill Skill { get; }
+    public AircraftParams AircraftParameters => _parameters;
 
     public ReactiveBandit(AircraftState initial, AircraftParams parameters,
         PilotSkill skill = PilotSkill.Competent,
@@ -228,6 +237,121 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     /// water (or with no terrain supplied) behaviour is bit-identical to the legacy constants.
     double LocalFloorM(double x, double z) => FloorM + SurfaceHeightM(_terrain, x, z);
 
+    readonly record struct LowAttackPlan(
+        Vec3D AimPoint,
+        double AvailableG);
+
+    bool TrySurfaceHeightM(double x, double z, out double heightM) {
+        if (_terrain is null) {
+            heightM = 0.0;
+            return true;
+        }
+        if (_terrain.TrySample(x, z,
+            out GunsOnly.Sim.Environment.TerrainSample sample)
+            && double.IsFinite(sample.HeightM)) {
+            heightM = System.Math.Max(0.0, sample.HeightM);
+            return true;
+        }
+        heightM = 0.0;
+        return false;
+    }
+
+    bool IsLowTarget(in ActorObservation player) =>
+        TrySurfaceHeightM(player.Position.X, player.Position.Z, out double surfaceM)
+        && player.Position.Y - surfaceM <= LowTargetClearanceM;
+
+    /// The G this aircraft can really produce now, bounded by both the skill profile and the
+    /// kernel's aerodynamic/structural clamp at the current airspeed, mass, configuration, and
+    /// atmosphere. Safety calculations reserve eighteen percent of the excess-over-1G authority;
+    /// commands use the full honest bound and AircraftSim remains the final force authority.
+    double AvailableAcquireG(bool safetyReserve) {
+        var requested = new PilotCommand(_profile.MaxAcquireG, 0.0, 0.0, 0.0);
+        var (_, aerodynamicMaxG, _) = FlightModel.ClampNz(
+            State, requested, _parameters, _sim.AirspeedMps,
+            _sim.EffectiveAerodynamicConfiguration, _sim.AtmosphereModel);
+        double availableG = System.Math.Min(_profile.MaxAcquireG,
+            System.Math.Max(0.0, aerodynamicMaxG));
+        return safetyReserve
+            ? 1.0 + System.Math.Max(0.0, availableG - 1.0) * 0.82
+            : availableG;
+    }
+
+    /// Build the actual low-block attack corridor. The terminal point is raised by the pull-out
+    /// height required at the G available NOW, then the entire descending segment is swept against
+    /// terrain truth. A ridge between safe endpoints therefore vetoes the attack. Leaving terrain
+    /// bounds is also a veto: absence of truth is never interpreted as flat ground.
+    bool TryLowAttackPlan(in ActorObservation player, out LowAttackPlan plan) {
+        plan = default;
+        if (_profile.LowBlockDoctrine == LowBlockDoctrine.Conservative
+            || T < _lowAttackRecommitAt
+            || !IsLowTarget(player))
+            return false;
+
+        var own = State;
+        double rangeM = (player.Position - own.Position).Length;
+        // Outside the gun band, lead the moving valley runner to shape an intercept. Inside the
+        // conversion gate, put the physical gun axis on the observed aircraft: BanditFireControl
+        // (and the honest projectile model behind it) requires current-line firing geometry.
+        double leadSeconds = rangeM <= 1200.0
+            ? 0.0
+            : System.Math.Clamp(rangeM / 900.0, 0.35, 1.35);
+        var predictedTarget = player.Position + player.VelocityVector() * leadSeconds;
+        if (!TrySurfaceHeightM(predictedTarget.X, predictedTarget.Z,
+            out double targetSurfaceM))
+            return false;
+
+        double availableG = AvailableAcquireG(safetyReserve: true);
+        if (availableG <= 1.05) return false;
+
+        double horizontalM = HorizontalDistance(own.Position, predictedTarget);
+        double desiredFloorM = _profile.LowBlockClearanceM;
+        double baseAimY = System.Math.Max(predictedTarget.Y,
+            targetSurfaceM + desiredFloorM);
+        double aimY = baseAimY;
+        double pullOutM = 0.0;
+        double rollInM = 0.0;
+        // Raising the endpoint shallows the descent and changes its pull-out height. A few fixed
+        // iterations converge this tiny monotone calculation without state or timing dependence.
+        for (int iteration = 0; iteration < 4; iteration++) {
+            double pathDescentAngleRad = System.Math.Atan2(
+                System.Math.Max(0.0, own.Position.Y - aimY),
+                System.Math.Max(1.0, horizontalM));
+            // A bandit already diving more steeply than the straight attack line must buy recovery
+            // for its real flight-path angle, not the gentler geometry it hopes to establish.
+            double descentAngleRad = System.Math.Max(pathDescentAngleRad,
+                System.Math.Max(0.0, -own.Gamma));
+            double radialAccelMps2 = (availableG - 1.0) * FlightModel.G0;
+            pullOutM = own.Speed * own.Speed
+                * (1.0 - System.Math.Cos(descentAngleRad))
+                / System.Math.Max(radialAccelMps2, 0.1);
+            // The lift vector cannot teleport upright. Reserve the terrain-relative distance
+            // closed during one representative roll/reorientation second before max-G pull starts.
+            rollInM = own.Speed * System.Math.Sin(descentAngleRad)
+                * TerrainRecoveryRollSeconds;
+            aimY = System.Math.Max(baseAimY,
+                targetSurfaceM + desiredFloorM + pullOutM + rollInM + 15.0);
+        }
+        var aimPoint = predictedTarget with { Y = aimY };
+
+        double minimumClearanceM;
+        if (_terrain is null) {
+            minimumClearanceM = System.Math.Min(own.Position.Y, aimPoint.Y);
+        } else {
+            try {
+                minimumClearanceM = GunsOnly.Sim.Environment.TerrainQueries
+                    .MinimumClearanceM(_terrain, own.Position, aimPoint,
+                        maximumHorizontalStepM: 60.0);
+            } catch (System.ArgumentOutOfRangeException) {
+                return false;
+            }
+        }
+
+        double requiredClearanceM = desiredFloorM + pullOutM + rollInM;
+        if (minimumClearanceM < requiredClearanceM) return false;
+        plan = new LowAttackPlan(aimPoint, availableG);
+        return true;
+    }
+
     /// Last-instance terrain check: does the trajectory over the next 2.5 seconds still leave
     /// room for a pull-out at the G this airframe can actually achieve? Clearance closure is
     /// measured TERRAIN-relative (surface sampled now, mid-horizon, and at the horizon along the
@@ -242,9 +366,23 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             - SurfaceHeightM(_terrain, own.Position.X, own.Position.Z);
         var mid = own.Position + velocity * 1.25;
         var far = own.Position + velocity * 2.5;
-        double clearanceMidM = mid.Y - SurfaceHeightM(_terrain, mid.X, mid.Z);
-        double clearanceFarM = far.Y - SurfaceHeightM(_terrain, far.X, far.Z);
+        if (!TrySurfaceHeightM(own.Position.X, own.Position.Z, out double surfaceHereM)
+            || !TrySurfaceHeightM(mid.X, mid.Z, out double surfaceMidM)
+            || !TrySurfaceHeightM(far.X, far.Z, out double surfaceFarM))
+            return true;
+        clearanceHereM = own.Position.Y - surfaceHereM;
+        double clearanceMidM = mid.Y - surfaceMidM;
+        double clearanceFarM = far.Y - surfaceFarM;
         double worstAheadM = System.Math.Min(clearanceMidM, clearanceFarM);
+        if (_terrain is not null) {
+            try {
+                worstAheadM = System.Math.Min(worstAheadM,
+                    GunsOnly.Sim.Environment.TerrainQueries.MinimumClearanceM(
+                        _terrain, own.Position, far, maximumHorizontalStepM: 60.0));
+            } catch (System.ArgumentOutOfRangeException) {
+                return true;
+            }
+        }
         // A low-altitude reflex, not a maneuvering governor: the straight-line projection is
         // deliberately pessimistic, which is right at the bottom of the sky and wrong about a
         // Split-S entered with a mile of air below. Above this band the lookahead scoring (and
@@ -259,15 +397,15 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // airspeed — a slow bandit cannot buy its published G out of thin air.
         double sinGammaEff = System.Math.Clamp(closureMps / speed, 0.0, 1.0);
         double cosGammaEff = System.Math.Sqrt(1.0 - sinGammaEff * sinGammaEff);
-        double dynamicPressurePa = AirData.EquivalentDynamicPressurePa(speed);
-        double aerodynamicG = dynamicPressurePa * _parameters.WingAreaM2
-            * System.Math.Max(_parameters.CLMax, 0.0)
-            / System.Math.Max(own.Mass * FlightModel.G0, 1.0);
-        double usableG = System.Math.Clamp(
-            System.Math.Min(_profile.MaxAcquireG, aerodynamicG * 0.82), 1.2, 9.0);
-        double radialAccel = System.Math.Max((usableG - 1.0) * FlightModel.G0, 1.0);
+        double usableG = AvailableAcquireG(safetyReserve: true);
+        if (usableG <= 1.0) return true;
+        double radialAccel = System.Math.Max((usableG - 1.0) * FlightModel.G0, 0.1);
         double pullOutM = speed * speed * (1.0 - cosGammaEff) / radialAccel;
-        return worstAheadM < pullOutM + 120.0;
+        double recoveryFloorM = _profile.LowBlockDoctrine == LowBlockDoctrine.Conservative
+            ? 120.0
+            : _profile.LowBlockClearanceM;
+        double rollInM = closureMps * TerrainRecoveryRollSeconds;
+        return worstAheadM < pullOutM + rollInM + recoveryFloorM;
     }
 
     public AircraftState State => _sim.State;
@@ -356,18 +494,24 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             return;
         }
 
-        // Terrain recovery pre-empts every tactical layer. The lookahead horizon (0.75-1.25 s) is
-        // SHORTER than a combat-speed pull-out, so scoring alone cannot protect the bandit: by the
-        // time a rolled-out candidate touches the hill, no candidate recovers. This reflex is the
-        // bandit's own last-instance check — roll upright and pull at the profile's maximum before
-        // the dive passes the point where its own G can still save it.
-        if (NeedsTerrainRecovery()) {
-            LastCommand = new PilotCommand(_profile.MaxAcquireG, 0.0,
-                _maximumThrottle, 0.0);
-            Tactic = BanditTactic.Return; // never firing while recovering from the dirt
-            RecordSingleCandidateDecision(LastCommand);
-            _sim.Step(LastCommand, dt);
-            T += dt;
+        bool lowTarget = IsLowTarget(player);
+        if (!lowTarget) _lowAttackActive = false;
+        bool hasLowAttackPlan = TryLowAttackPlan(player, out LowAttackPlan lowAttackPlan);
+        double ownClearanceM = State.Position.Y
+            - SurfaceHeightM(_terrain, State.Position.X, State.Position.Z);
+        bool deliberateDescentMayOverrideRecovery = hasLowAttackPlan
+            && ownClearanceM
+                > _profile.LowBlockClearanceM + 60.0;
+
+        // Terrain recovery pre-empts every tactical layer unless a deliberate low-block attack has
+        // a fresh swept corridor with an aero-honest pull-out reserve. A committed attack whose
+        // corridor disappears (typically a ridge entering the path) enters this SAME reflex even
+        // before the old straight-flight gate would have fired.
+        bool attackPathWentBad = _lowAttackActive && lowTarget && !hasLowAttackPlan;
+        if (attackPathWentBad
+            || (NeedsTerrainRecovery()
+                && !deliberateDescentMayOverrideRecovery)) {
+            FlyTerrainRecovery(dt);
             return;
         }
 
@@ -376,8 +520,24 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // the future firing position. The vertical fight emerges from the score, it is not scripted.
         // Novice/Competent keep LookaheadHorizonTicks == 0 and the state machine below UNCHANGED.
         if (_profile.LookaheadHorizonTicks > 0) {
-            LastCommand = LookaheadCommand(player);
-            Tactic = BanditTactic.Acquire; // in-envelope firing is governed by BanditFireControl
+            if (lowTarget && hasLowAttackPlan) {
+                _lowAttackActive = true;
+                if (ownClearanceM <= LowBlockCaptureClearanceM) {
+                    LastCommand = LowLevelHuntCommand(player, lowAttackPlan);
+                    RecordSingleCandidateDecision(LastCommand);
+                } else {
+                    LastCommand = LookaheadCommand(player, lowAttackPlan);
+                }
+                Tactic = BanditTactic.Acquire; // firing remains governed by BanditFireControl
+            } else if (lowTarget) {
+                _lowAttackActive = false;
+                LastCommand = LowBlockPerchCommand(player);
+                Tactic = BanditTactic.Return;
+                RecordSingleCandidateDecision(LastCommand);
+            } else {
+                LastCommand = LookaheadCommand(player);
+                Tactic = BanditTactic.Acquire;
+            }
             _sim.Step(LastCommand, dt);
             T += dt;
             return;
@@ -388,8 +548,23 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             BanditTactic.Defend => DefendCommand(),
             BanditTactic.Energy => EnergyCommand(player),
             BanditTactic.Return => ReturnCommand(),
+            _ when _profile.LowBlockDoctrine == LowBlockDoctrine.BoomAndZoom && lowTarget
+                => CompetentLowBlockCommand(player, hasLowAttackPlan, lowAttackPlan),
             _ => AcquireCommand(player)
         };
+        RecordSingleCandidateDecision(LastCommand);
+        _sim.Step(LastCommand, dt);
+        T += dt;
+    }
+
+    void FlyTerrainRecovery(double dt) {
+        _lowAttackActive = false;
+        _lowAttackRecommitAt = System.Math.Max(_lowAttackRecommitAt,
+            T + _profile.LowBlockRecommitSeconds);
+        _lookaheadHoldTicks = 0;
+        LastCommand = new PilotCommand(_profile.MaxAcquireG, 0.0,
+            _maximumThrottle, 0.0);
+        Tactic = BanditTactic.Return; // never firing while recovering from the dirt
         RecordSingleCandidateDecision(LastCommand);
         _sim.Step(LastCommand, dt);
         T += dt;
@@ -458,6 +633,147 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         _nextJinkAt = T + JinkDurations[0];
         _defendUntil = T + DefendSeconds;
         Tactic = BanditTactic.Defend;
+    }
+
+    PilotCommand CompetentLowBlockCommand(in ActorObservation player,
+        bool hasPlan, in LowAttackPlan plan) {
+        var own = State;
+        var line = player.Position - own.Position;
+        double rangeM = line.Length;
+        bool passedTarget = rangeM < 900.0
+            && line.Dot(own.ForwardDir()) < 0.0;
+        if (_lowAttackActive
+            && (T >= _lowAttackEndAt || passedTarget)) {
+            _lowAttackActive = false;
+            _lowAttackRecommitAt = T + _profile.LowBlockRecommitSeconds;
+        }
+
+        double ownClearanceM = own.Position.Y
+            - SurfaceHeightM(_terrain, own.Position.X, own.Position.Z);
+        if (!_lowAttackActive) {
+            // A Competent pilot makes honest diving passes, but only from a rebuilt perch. It does
+            // not settle into the Ace's continuous valley chase after an overshoot.
+            if (!hasPlan || ownClearanceM < CompetentPerchClearanceM - 100.0)
+                return LowBlockPerchCommand(player);
+            _lowAttackActive = true;
+            _lowAttackEndAt = T + CompetentAttackSeconds;
+        }
+
+        return CompetentAttackCommand(plan);
+    }
+
+    PilotCommand CompetentAttackCommand(in LowAttackPlan plan) {
+        var own = State;
+        var toAim = plan.AimPoint - own.Position;
+        double horizontalM = System.Math.Sqrt(
+            toAim.X * toAim.X + toAim.Z * toAim.Z);
+        double desiredGamma = System.Math.Atan2(
+            toAim.Y - own.Position.Y, System.Math.Max(1.0, horizontalM));
+        double bankLimit = toAim.Length < 1200.0 ? 1.25 : 0.85;
+        double bank = LimitedBankTo(plan.AimPoint, bankLimit);
+
+        // Track the swept path angle directly. This is the deliberate exception to the generic
+        // Acquire pushover guard: a safe pass may unload into the descent, while the Energy tactic's
+        // anti-zoom bunt remains untouched. Converting gamma error to normal-G demand is the
+        // coordinated-flight relation inverted at the aircraft's ACTUAL speed.
+        double desiredGammaRate = System.Math.Clamp(
+            (desiredGamma - own.Gamma) / 1.2, -0.25, 0.25);
+        double cosBank = System.Math.Max(0.30, System.Math.Cos(bank));
+        double g = (System.Math.Cos(own.Gamma)
+            + desiredGammaRate * own.Speed / FlightModel.G0) / cosBank;
+        g = System.Math.Clamp(g, -0.20,
+            System.Math.Max(-0.20, AvailableAcquireG(safetyReserve: false)));
+
+        double throttle = own.Speed < _lowSpeedMps
+            ? System.Math.Min(_maximumThrottle, 1.05)
+            : own.Speed > _highSpeedMps
+                ? System.Math.Min(_maximumThrottle, 0.45)
+                : System.Math.Min(_maximumThrottle, 0.90);
+        return new PilotCommand(g, bank, throttle, 0.0);
+    }
+
+    PilotCommand LowLevelHuntCommand(
+        in ActorObservation player, in LowAttackPlan plan) {
+        var own = State;
+        var toAim = plan.AimPoint - own.Position;
+        double horizontalM = System.Math.Sqrt(
+            toAim.X * toAim.X + toAim.Z * toAim.Z);
+        double desiredGamma = System.Math.Atan2(
+            toAim.Y - own.Position.Y, System.Math.Max(1.0, horizontalM));
+
+        // Near the hard deck, stop asking the long-horizon optimizer to discover a pull-out one
+        // second at a time. Track the already-swept corridor directly while retaining enough bank
+        // authority to hunt through a valley turn. The inverted coordinated-flight equation makes
+        // the commanded G exactly the amount required to establish/hold that flight-path angle,
+        // then caps it at what the wing can generate at this tick's airspeed.
+        var lateralAim = plan.AimPoint with { Y = own.Position.Y };
+        double bank = LimitedBankTo(lateralAim, 1.38);
+        double desiredGammaRate = System.Math.Clamp(
+            (desiredGamma - own.Gamma) / 0.75, -0.30, 0.30);
+        double cosBank = System.Math.Max(0.25, System.Math.Cos(bank));
+        double g = (System.Math.Cos(own.Gamma)
+            + desiredGammaRate * own.Speed / FlightModel.G0) / cosBank;
+        double rangeM = (player.Position - own.Position).Length;
+        if (rangeM <= 1200.0)
+            g = System.Math.Max(g, 3.5);
+        g = System.Math.Clamp(g, -0.20,
+            System.Math.Max(-0.20, plan.AvailableG));
+
+        var line = player.Position - own.Position;
+        rangeM = line.Length;
+        double closureMps = rangeM > 1.0
+            ? (own.VelocityVector() - player.VelocityVector())
+                .Dot(line * (1.0 / rangeM))
+            : 0.0;
+        double throttle = rangeM < 1600.0 && closureMps > 20.0
+            ? System.Math.Min(_maximumThrottle, 0.18)
+            : own.Speed < _lowSpeedMps
+            ? System.Math.Min(_maximumThrottle, 1.05)
+            : own.Speed > _highSpeedMps
+                ? System.Math.Min(_maximumThrottle, 0.45)
+                : System.Math.Min(_maximumThrottle, 0.92);
+        return new PilotCommand(g, bank, throttle, 0.0);
+    }
+
+    PilotCommand LowBlockPerchCommand(in ActorObservation player) {
+        var own = State;
+        var horizontal = new Vec3D(
+            player.Position.X - own.Position.X, 0.0,
+            player.Position.Z - own.Position.Z);
+        if (horizontal.Length < 1.0)
+            horizontal = own.ForwardDir() with { Y = 0.0 };
+        if (horizontal.Length > 1800.0)
+            horizontal = horizontal.Normalized() * 1800.0;
+        var perchPoint = own.Position + horizontal;
+
+        double highestSurfaceM = System.Math.Max(
+            SurfaceHeightM(_terrain, own.Position.X, own.Position.Z),
+            SurfaceHeightM(_terrain, perchPoint.X, perchPoint.Z));
+        if (_terrain is not null) {
+            try {
+                var zeroStart = own.Position with { Y = 0.0 };
+                var zeroEnd = perchPoint with { Y = 0.0 };
+                double zeroPathClearanceM =
+                    GunsOnly.Sim.Environment.TerrainQueries.MinimumClearanceM(
+                        _terrain, zeroStart, zeroEnd, maximumHorizontalStepM: 60.0);
+                highestSurfaceM = System.Math.Max(
+                    highestSurfaceM, System.Math.Max(0.0, -zeroPathClearanceM));
+            } catch (System.ArgumentOutOfRangeException) {
+                // With no terrain truth ahead, climb in place rather than inventing a valley.
+                perchPoint = own.Position + own.ForwardDir() * 800.0;
+            }
+        }
+        perchPoint = perchPoint with {
+            Y = System.Math.Max(perchPoint.Y,
+                highestSurfaceM + CompetentPerchClearanceM)
+        };
+
+        double bank = LimitedBankTo(perchPoint, 0.72);
+        double angle = AngleTo(perchPoint);
+        double requestedG = System.Math.Clamp(1.55 + angle * 0.90, 1.55, 3.20);
+        double g = System.Math.Min(requestedG,
+            AvailableAcquireG(safetyReserve: false));
+        return new PilotCommand(g, bank, _maximumThrottle, 0.0);
     }
 
     PilotCommand AcquireCommand(in ActorObservation player) {
@@ -604,7 +920,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     /// probe of the real kernel while the player is predicted by honest physical extension of the
     /// OBSERVED state only. The choice is recomputed on a fixed tick cadence and held between
     /// recomputes so the rollout cost stays bounded and the whole layer stays deterministic.
-    PilotCommand LookaheadCommand(in ActorObservation player) {
+    PilotCommand LookaheadCommand(in ActorObservation player,
+        LowAttackPlan? lowAttackPlan = null) {
         if (_lookaheadHoldTicks > 0) {
             _lookaheadHoldTicks--;
             return _lookaheadCommand;
@@ -613,13 +930,14 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
 
         double range = (player.Position - State.Position).Length;
         double leadSeconds = System.Math.Clamp(range / 900.0, 0.35, 1.35);
-        var leadPoint = player.Position + player.VelocityVector() * leadSeconds;
+        var leadPoint = lowAttackPlan?.AimPoint
+            ?? player.Position + player.VelocityVector() * leadSeconds;
 
         // Throttle schedule mirrors the acquire law's energy management so lookahead never
         // manufactures thrust the airframe cannot deliver.
         double fastThrottle = System.Math.Min(_maximumThrottle, 1.05);
         double cruiseThrottle = System.Math.Min(_maximumThrottle, 0.84);
-        double maxG = _profile.MaxAcquireG;
+        double maxG = AvailableAcquireG(safetyReserve: false);
 
         // Full 3D pursuit uses the UNCLAMPED lift-vector-on-target roll: the bank that places the
         // lift vector on the aim point may exceed 90 deg (rolling toward inverted) so the ace can
@@ -630,7 +948,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // Pull into the vertical: place the lift vector up-and-across (a high yo-yo).
         var verticalAim = leadPoint + new Vec3D(0.0, System.Math.Max(900.0, range * 0.9), 0.0);
         // Nose-low reposition (low yo-yo): tighten in-plane and regain energy when fast and high.
-        var lowAim = leadPoint + new Vec3D(0.0, -System.Math.Max(500.0, range * 0.5), 0.0);
+        var lowAim = lowAttackPlan?.AimPoint
+            ?? leadPoint + new Vec3D(0.0, -System.Math.Max(500.0, range * 0.5), 0.0);
 
         var candidates = new PilotCommand[] {
             // Hard 3D pursuit: max-perform pull with the lift vector planted on the lead point.
@@ -644,7 +963,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             new(System.Math.Min(maxG, 5.5), Geometry.BankToPlaceLiftVectorOn(State, lowAim),
                 fastThrottle, 0.0),
             // Unload / extend: near-1 G, max throttle, wings toward the target — rebuild energy.
-            new(1.05, LimitedBankTo(leadPoint, 0.45), _maximumThrottle, 0.0),
+            new(System.Math.Min(maxG, 1.05), LimitedBankTo(leadPoint, 0.45),
+                _maximumThrottle, 0.0),
             // Reverse: bank the opposite way for a scissors/reposition flavour.
             new(System.Math.Min(maxG, 4.5), -bankOnLead, cruiseThrottle, 0.0),
         };
@@ -731,8 +1051,10 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             : 0.0;
 
         double windowSeconds = 0.0;
-        double minClearanceM = double.PositiveInfinity;
-        double maxY = double.NegativeInfinity;
+        double minClearanceM = State.Position.Y
+            - SurfaceHeightM(_terrain, State.Position.X, State.Position.Z);
+        double maxY = State.Position.Y;
+        var previousProbePosition = State.Position;
         int horizon = _profile.LookaheadHorizonTicks;
         for (int t = 0; t < horizon; t++) {
             probe.Step(command, dt);
@@ -743,10 +1065,25 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
                 System.Math.Cos(predChi) * System.Math.Cos(predGamma)) * predSpeed;
             predictedPos += predVel * dt;
             var probeState = probe.State;
-            // Clearance is height above the LOCAL surface along the rolled-out path — the whole
-            // point of the lookahead is that a hill inside the horizon is a fact, not sea level.
-            minClearanceM = System.Math.Min(minClearanceM, probeState.Position.Y
-                - SurfaceHeightM(_terrain, probeState.Position.X, probeState.Position.Z));
+            // Sweep every rolled-out segment, not just its endpoints. This uses the same terrain
+            // query as merge-spawn safety and means every candidate which can become a new descent
+            // decision has been checked across the intervening grid cells.
+            double segmentClearanceM;
+            if (_terrain is null) {
+                segmentClearanceM = System.Math.Min(
+                    previousProbePosition.Y, probeState.Position.Y);
+            } else {
+                try {
+                    segmentClearanceM =
+                        GunsOnly.Sim.Environment.TerrainQueries.MinimumClearanceM(
+                            _terrain, previousProbePosition, probeState.Position,
+                            maximumHorizontalStepM: 60.0);
+                } catch (System.ArgumentOutOfRangeException) {
+                    return double.NegativeInfinity;
+                }
+            }
+            minClearanceM = System.Math.Min(minClearanceM, segmentClearanceM);
+            previousProbePosition = probeState.Position;
             maxY = System.Math.Max(maxY, probeState.Position.Y);
             var predictedPlayer = player with { Position = predictedPos };
             // Reward exactly the envelope the trigger can use. Counting any nose-on sample below
@@ -780,10 +1117,12 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // outright disqualifier for a path that actually reaches it. The gradient alone maxes out
         // near the magnitude of a full gun-window reward, which let a kill-shot candidate accept
         // flying into a hill; no firing solution is worth controlled flight into terrain.
-        if (minClearanceM < FloorM + 200.0)
-            score -= 0.02 * (FloorM + 200.0 - minClearanceM);
-        if (minClearanceM < 60.0)
-            score -= 40.0 + 0.5 * (60.0 - minClearanceM);
+        double hardFloorM = _profile.LowBlockClearanceM;
+        double softFloorM = hardFloorM + 120.0;
+        if (minClearanceM < softFloorM)
+            score -= 0.025 * (softFloorM - minClearanceM);
+        if (minClearanceM < hardFloorM)
+            score -= 80.0 + 0.75 * (hardFloorM - minClearanceM);
         // Ceiling discipline: the mirror of floor avoidance. A guns knife-fight must not chase the
         // player into the stratosphere, so climbing past the believable combat ceiling is penalised.
         // This is a CEILING, not an altitude reward -- it is zero in-band and only ever pushes the

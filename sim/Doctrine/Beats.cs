@@ -98,6 +98,13 @@ public sealed record AircraftCapability(
         "presentation.vehicle.su27s.public-data-surrogate.v1",
         "systems.modern-airborne.not-simulated.v1", false, true,
         "https://www.ukrspecexport.com/uploads/files/Categories/pdf_1/a205b8.pdf");
+    public static AircraftCapability Su35SSurrogate { get; } = new(
+        "aircraft.su35s.public-data-surrogate.v1", "Su-35S public-data surrogate",
+        // The aerodynamic surrogate is a transparent Su-27S delta and reuses that family's
+        // presentation until a separately governed Su-35S visual asset exists.
+        "presentation.vehicle.su27s.public-data-surrogate.v1",
+        "systems.modern-airborne.not-simulated.v1", false, true,
+        "https://uacrussia.ru/en/aircraft/lineup/military/su-35/");
     public static AircraftCapability OneWayAttackDronePrototype { get; } = new(
         "aircraft.one-way-attack-drone.prototype.v1", "One-way attack drone prototype",
         "presentation.vehicle.one-way-attack-drone.prototype.v1",
@@ -195,6 +202,18 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     public AircraftCapability PlayerAircraft => PlayerCapability ?? AircraftCapability.F86F30;
     public AircraftCapability BanditAircraft => BanditCapability
         ?? AircraftCapability.F86F30Bandit;
+    bool UsesSu35SAtAceRung(int engagementNumber) =>
+        engagementNumber >= 4
+        && ContinuousCombat is not null
+        && BanditAircraft.Id == AircraftCapability.Su27SSurrogate.Id;
+    public AircraftParams BanditAirForEngagement(int engagementNumber) =>
+        UsesSu35SAtAceRung(engagementNumber)
+            ? FlightModel.Su35SPublicDataSurrogate
+            : BanditAir;
+    public AircraftCapability BanditAircraftForEngagement(int engagementNumber) =>
+        UsesSu35SAtAceRung(engagementNumber)
+            ? AircraftCapability.Su35SSurrogate
+            : BanditAircraft;
     /// Pilot capability belongs to the actor and mission, not to the aircraft's aerodynamic
     /// coefficients. The Korea profile is the period-fighter default; modern missions opt into
     /// their full-coverage-suit/pressure-breathing surrogate explicitly below.
@@ -217,7 +236,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             ? continuous.ReplacementSpeedMps ?? Bandit.Speed
             : 180.0;
         return ReactiveBandit.SpawnForMerge(
-            player, BanditAir, engagementNumber, replacementSpeedMps,
+            player, BanditAirForEngagement(engagementNumber),
+            engagementNumber, replacementSpeedMps,
             BanditSkillProfile.ForEngagement(engagementNumber), terrain);
     }
 }
