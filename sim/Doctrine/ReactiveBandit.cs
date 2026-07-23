@@ -716,16 +716,6 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         var separateAim = State.Position + awayFromPlayer.Normalized() * 1400.0;
         double breakBank = Geometry.BankToPlaceLiftVectorOn(State, breakAim);
         double orthogonalReverseBank = Geometry.BankToPlaceLiftVectorOn(State, reverseAim);
-        // Current observed gun-quality geometry is also the compatibility boundary for
-        // CandidateCount: neutral selections keep enumerating the original six, while the fixed
-        // nine-slot trace still carries append-only profile-gated defensive candidates.
-        var playerToOwn = State.Position - player.Position;
-        double playerToOwnRangeM = playerToOwn.Length;
-        bool playerGunThreat = playerToOwnRangeM > 1e-6
-            && playerToOwnRangeM < BanditFireControl.MaximumRangeM
-            && player.ForwardDir().Dot(playerToOwn * (1.0 / playerToOwnRangeM))
-                > System.Math.Cos(12.0 * System.Math.PI / 180.0);
-
         var candidates = new PilotCommand[] {
             // Hard 3D pursuit: max-perform pull with the lift vector planted on the lead point.
             new(maxG, bankOnLead, fastThrottle, 0.0),
@@ -779,7 +769,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             Skill,
             bestCommand,
             bestIndex,
-            playerGunThreat || bestIndex >= 6 ? candidates.Length : 6,
+            candidates.Length,
             new BanditDecisionCandidate(
                 0, candidates[0], scores[0], HasScore: true, Available: true),
             new BanditDecisionCandidate(

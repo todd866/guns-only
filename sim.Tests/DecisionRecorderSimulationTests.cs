@@ -84,7 +84,7 @@ public class DecisionRecorderSimulationTests {
         Assert.All(batch.Records,
             record => Assert.Equal(PilotSkill.Ace, record.PolicySkill));
         Assert.All(batch.Records.Where(record => record.ManeuverSelected),
-            record => Assert.Equal(6, record.ManeuverTrace.CandidateCount));
+            record => Assert.Equal(9, record.ManeuverTrace.CandidateCount));
         Assert.All(batch.Records.Where(record => !record.ManeuverSelected),
             record => Assert.Equal(0, record.ManeuverTrace.CandidateCount));
     }
