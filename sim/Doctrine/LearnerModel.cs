@@ -150,8 +150,11 @@ public sealed class LearnerModel {
             }
 
             // A clean closure-control marker is meaningful only when the opponent has the
-            // lookahead capability that can actively force the overshoot.
-            if (report.OpponentSkill < PilotSkill.Veteran) return;
+            // lookahead capability that can actively force the overshoot AND a merge evaluation
+            // actually ran (a finite minimum-energy reading is its fingerprint) — otherwise
+            // "zero overshoots" is a free perfect marker with no opportunity behind it.
+            if (report.OpponentSkill < PilotSkill.Veteran
+                || !double.IsFinite(report.MinimumEnergyKias)) return;
             score += report.Overshoots <= 0 ? 100
                 : report.Overshoots == 1 ? 33
                 : 0;

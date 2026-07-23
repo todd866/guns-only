@@ -79,6 +79,36 @@ public class BossBanditTests {
     }
 
     [Fact]
+    public void ANeutralMergeCrossingDoesNotCommitTheBoss() {
+        // Adversarial-review regression: at a reciprocal merge's closest approach the player's
+        // nose necessarily sweeps past 60 deg inside 1200 m, which used to trip trigger (b) and
+        // erase the stalk phase in every production boss fight. A neutral crossing is mutual —
+        // the cat commits only when IT is pointed at a player who is not pointed back.
+        // The player FIGHTS (pure pursuit toward the boss). A straight-through non-maneuvering
+        // player is legitimately pounced at the pass; the bug was committing on a player whose
+        // nose stays in the fight.
+        AircraftState playerState = State(0.0, 3000.0, 0.0, 240.0);
+        var boss = ReactiveBandit.SpawnForMerge(
+            playerState, Air, engagementNumber: 1, speedMps: 240.0,
+            skill: PilotSkill.Ace, terrain: null,
+            profile: BanditSkillProfile.Boss());
+        var player = new AircraftSim(playerState, Air);
+        var pursuit = new GunsSaddleLaw();
+
+        for (int tick = 0; tick < 6 * AircraftSim.TickHz; tick++) {
+            AircraftState playerNow = player.State;
+            boss.Step(ActorObservation.Capture(playerNow, tick), Dt);
+            DoctrineAdvice advice = pursuit.Advise(playerNow, boss.State, Air);
+            player.Step(new PilotCommand(
+                advice.RecommendedG, advice.RecommendedBank, 0.9, 0.0), Dt);
+        }
+
+        Assert.False(boss.BossCommitted,
+            "a merge against a player whose nose stays in the fight is neutral geometry, "
+            + "not a caught mistake");
+    }
+
+    [Fact]
     public void CommitLatchesForTheEngagement() {
         var boss = Boss(State(0.0, 3000.0, 0.0, 200.0));
         var slowPlayer = ActorObservation.Capture(

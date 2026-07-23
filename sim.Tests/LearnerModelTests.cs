@@ -89,10 +89,14 @@ public class LearnerModelTests {
 
     [Fact]
     public void OvershootDisciplineCountsOnlyAgainstVeteranOrAce() {
+        // A finite minimum-energy reading marks that a merge evaluation ran (the overshoot
+        // marker's opportunity gate); 260 KIAS scores the floor marker at 67, which sits inside
+        // the Steady hysteresis band so only the overshoot marker separates the two learners.
         var noviceLearner = new LearnerModel();
         EngagementReport novice = NoOpportunity() with {
             OpponentSkill = PilotSkill.Novice,
             Overshoots = 0,
+            MinimumEnergyKias = 260.0,
         };
         noviceLearner.Observe(in novice);
 
@@ -100,6 +104,7 @@ public class LearnerModelTests {
         EngagementReport veteran = NoOpportunity() with {
             OpponentSkill = PilotSkill.Veteran,
             Overshoots = 0,
+            MinimumEnergyKias = 260.0,
         };
         veteranLearner.Observe(in veteran);
 

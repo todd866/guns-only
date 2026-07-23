@@ -1150,8 +1150,11 @@ public sealed class SimulationSession {
         _lastRange = Geometry.Range(_player.State, _bandit.State);
         _closureKts = 0.0;
         _closureSmooth = 0.0;
-        StartEngagementCounters(openingSpawn?.Skill ?? _beat.BanditSkill,
-            openingSpawn?.Boss ?? false);
+        // Drone raids score through DroneRaidEvaluation; a dogfight engagement report for a
+        // raid would misattribute the whole raid to one staged skill, so counters stay off.
+        if (_beat.DroneRaid is null)
+            StartEngagementCounters(openingSpawn?.Skill ?? _beat.BanditSkill,
+                openingSpawn?.Boss ?? false);
         // Simulation time is deliberately monotonic across restarts because KeyGrammar timestamps
         // all input in this epoch. Only flight-local state and the accumulator reset.
         Lifecycle = LifecycleState.Ready;

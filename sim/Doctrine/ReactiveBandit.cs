@@ -351,8 +351,16 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             BossCommitted = true;
             return;
         }
-        // (b) Caught nose-off inside pounce range: the player turned away too close to the cat.
-        if (playerNoseErrorRad > 60.0 * System.Math.PI / 180.0 && rangeM < 1200.0) {
+        // (b) Caught nose-off inside pounce range: the player turned away too close to the cat
+        // WHILE the cat is pointed at them. The own-nose gate keeps a neutral merge crossing —
+        // where both noses sweep off at the pass — from reading as a caught mistake; without it
+        // every reciprocal-merge boss committed at the first closest approach and the stalk
+        // phase never existed in production.
+        double ownNoseErrorRad = System.Math.Acos(System.Math.Clamp(
+            State.ForwardDir().Dot(losDir), -1.0, 1.0));
+        if (playerNoseErrorRad > 60.0 * System.Math.PI / 180.0
+            && ownNoseErrorRad < 30.0 * System.Math.PI / 180.0
+            && rangeM < 1200.0) {
             BossCommitted = true;
             return;
         }
