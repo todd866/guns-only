@@ -145,6 +145,81 @@ function assertVectorNear(actual, expected, tolerance = 1e-6) {
   }
 }
 
+function applyLegacyNormalPostProcessing(geometry, chunk, decoded) {
+  const { water, sampleCount } = decoded;
+  const heights = reconstructWaterHeights(decoded);
+  const [minimumEast, minimumNorth, maximumEast, maximumNorth] = chunk.boundsLocalM;
+  const spacingEast = (maximumEast - minimumEast) / (sampleCount - 1);
+  const spacingNorth = (maximumNorth - minimumNorth) / (sampleCount - 1);
+  const smoothed = new Float32Array(heights.length);
+  for (let north = 0; north < sampleCount; north++) {
+    for (let east = 0; east < sampleCount; east++) {
+      let weightedHeight = 0;
+      let totalWeight = 0;
+      for (let northOffset = -2; northOffset <= 2; northOffset++) {
+        const adjacentNorth = Math.min(sampleCount - 1, Math.max(0, north + northOffset));
+        for (let eastOffset = -2; eastOffset <= 2; eastOffset++) {
+          const adjacentEast = Math.min(sampleCount - 1, Math.max(0, east + eastOffset));
+          const weight = 1 / (1 + Math.abs(eastOffset) + Math.abs(northOffset));
+          weightedHeight += heights[adjacentNorth * sampleCount + adjacentEast] * weight;
+          totalWeight += weight;
+        }
+      }
+      smoothed[north * sampleCount + east] = weightedHeight / totalWeight;
+    }
+  }
+
+  const normals = geometry.getAttribute("normal");
+  for (let north = 0; north < sampleCount; north++) {
+    const south = Math.max(0, north - 1);
+    const northNeighbour = Math.min(sampleCount - 1, north + 1);
+    for (let east = 0; east < sampleCount; east++) {
+      const index = north * sampleCount + east;
+      if (water[index]) {
+        normals.setXYZ(index, 0, 1, 0);
+        continue;
+      }
+      const west = Math.max(0, east - 1);
+      const eastNeighbour = Math.min(sampleCount - 1, east + 1);
+      const eastSlope = (
+        smoothed[north * sampleCount + eastNeighbour]
+        - smoothed[north * sampleCount + west]
+      ) / Math.max(spacingEast, (eastNeighbour - west) * spacingEast);
+      const northSlope = (
+        smoothed[northNeighbour * sampleCount + east]
+        - smoothed[south * sampleCount + east]
+      ) / Math.max(spacingNorth, (northNeighbour - south) * spacingNorth);
+      const length = Math.hypot(eastSlope, 1, northSlope);
+      normals.setXYZ(index, -eastSlope / length, 1 / length, northSlope / length);
+    }
+  }
+
+  const perimeter = [];
+  for (let east = 0; east < sampleCount; east++) perimeter.push(east);
+  for (let north = 1; north < sampleCount; north++) {
+    perimeter.push(north * sampleCount + sampleCount - 1);
+  }
+  for (let east = sampleCount - 2; east >= 0; east--) {
+    perimeter.push((sampleCount - 1) * sampleCount + east);
+  }
+  for (let north = sampleCount - 2; north > 0; north--) {
+    perimeter.push(north * sampleCount);
+  }
+  const skirtStart = sampleCount * sampleCount;
+  for (let perimeterIndex = 0; perimeterIndex < perimeter.length; perimeterIndex++) {
+    const source = perimeter[perimeterIndex];
+    for (const skirtVertex of [
+      skirtStart + perimeterIndex * 2,
+      skirtStart + perimeterIndex * 2 + 1,
+    ]) {
+      normals.setXYZ(skirtVertex,
+        normals.getX(source),
+        normals.getY(source),
+        normals.getZ(source));
+    }
+  }
+}
+
 test("validates range-addressable terrain records and rejects overruns", () => {
   assert.equal(validateTerrainManifest(manifest()).terrainId, "terrain.test.v1");
   const invalid = manifest();
@@ -293,6 +368,45 @@ test("skirt vertices inherit their source surface normal so they never shade as 
   // The source normals must be genuinely surface-facing (mostly +Y), not the ~horizontal wall
   // normals — otherwise the assertion above would pass trivially on two equal wrong values.
   assert.ok(normal.getY(0) > 0.5, "a perimeter surface vertex must face upward");
+  built.geometry.dispose();
+});
+
+test("analytic heightfield normals match the legacy final normals within tolerance", () => {
+  const chunk = {
+    id: "normal-equivalence",
+    boundsLocalM: [0, 0, 8, 12],
+  };
+  const decoded = {
+    sampleCount: 5,
+    heights: Float32Array.from([
+      10, 14, 25, 18, 12,
+      8, 20, 38, 24, 15,
+      6, 16, 0, 32, 19,
+      9, 22, 41, 28, 17,
+      12, 18, 29, 21, 14,
+    ]),
+    water: Uint8Array.from([
+      0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0,
+      0, 0, 1, 0, 0,
+      0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0,
+    ]),
+  };
+  const built = createTerrainGeometry(THREE, chunk, decoded);
+  const legacy = built.geometry.clone();
+  legacy.deleteAttribute("normal");
+  legacy.computeVertexNormals();
+  applyLegacyNormalPostProcessing(legacy, chunk, decoded);
+
+  const analyticNormals = built.geometry.getAttribute("normal").array;
+  const legacyNormals = legacy.getAttribute("normal").array;
+  assert.equal(analyticNormals.length, legacyNormals.length);
+  for (let index = 0; index < analyticNormals.length; index++) {
+    assert.ok(Math.abs(analyticNormals[index] - legacyNormals[index]) <= 1e-6,
+      `normal component ${index} must preserve the computeVertexNormals result after smoothing`);
+  }
+  legacy.dispose();
   built.geometry.dispose();
 });
 

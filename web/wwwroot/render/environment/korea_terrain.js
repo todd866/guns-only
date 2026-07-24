@@ -372,6 +372,38 @@ export function reconstructWaterHeights(decoded, maximumBankDistanceSamples = 8)
   return reconstructed;
 }
 
+function computeHeightfieldNormals(THREE, geometry, heights, water, sampleCount,
+  spacingEast, spacingNorth) {
+  const values = new Float32Array(geometry.getAttribute("position").count * 3);
+  for (let north = 0; north < sampleCount; north++) {
+    const south = Math.max(0, north - 1);
+    const northNeighbour = Math.min(sampleCount - 1, north + 1);
+    for (let east = 0; east < sampleCount; east++) {
+      const index = north * sampleCount + east;
+      const offset = index * 3;
+      if (water[index]) {
+        values[offset + 1] = 1;
+        continue;
+      }
+      const west = Math.max(0, east - 1);
+      const eastNeighbour = Math.min(sampleCount - 1, east + 1);
+      const eastSlope = (
+        heights[north * sampleCount + eastNeighbour]
+        - heights[north * sampleCount + west]
+      ) / Math.max(spacingEast, (eastNeighbour - west) * spacingEast);
+      const northSlope = (
+        heights[northNeighbour * sampleCount + east]
+        - heights[south * sampleCount + east]
+      ) / Math.max(spacingNorth, (northNeighbour - south) * spacingNorth);
+      const length = Math.hypot(eastSlope, 1, northSlope);
+      values[offset] = -eastSlope / length;
+      values[offset + 1] = 1 / length;
+      values[offset + 2] = northSlope / length;
+    }
+  }
+  geometry.setAttribute("normal", new THREE.BufferAttribute(values, 3));
+}
+
 function smoothSurfaceNormals(geometry, heights, water, sampleCount, spacingEast, spacingNorth) {
   const smoothed = new Float32Array(heights.length);
   for (let north = 0; north < sampleCount; north++) {
@@ -552,19 +584,24 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
   if (indices.length > surfaceIndexCount) {
     geometry.addGroup(surfaceIndexCount, indices.length - surfaceIndexCount, 1);
   }
-  geometry.computeVertexNormals();
+  // This regular heightfield has an exact central-difference normal at every source sample. Avoid
+  // the general-purpose indexed-triangle accumulation in computeVertexNormals(), including its
+  // pass over the duplicated skirt walls; the smoothing and skirt inheritance below remain the
+  // authoritative final-normal steps.
+  computeHeightfieldNormals(
+    THREE, geometry, surfaceHeights, water, sampleCount, spacingEast, spacingNorth,
+  );
   // Lighting normals use a five-sample neighbourhood while vertex positions retain the exact
   // sourced/carved grid. This removes coarse tone-ramp shelves on steep walls without changing
   // the approved flyable floor, ridge gap, collision truth, or renderer LOD elevations.
   smoothSurfaceNormals(
     geometry, surfaceHeights, water, sampleCount, spacingEast, spacingNorth,
   );
-  // computeVertexNormals() gives each skirt vertex the ~horizontal normal of its vertical wall, so
-  // dot(N, sun) ~= 0 and the skirt renders near-black at the current shadow floor. Overwrite every
-  // skirt vertex with its source (top-surface) normal — which smoothSurfaceNormals has just
-  // refined — so the curtain shades as a continuation of the terrain edge it hides and never reads
-  // as a black slab. Runs over the perimeter only (a few hundred vertices), after the smoothing so
-  // skirts inherit the same smoothed normal as the surface edge they hang from.
+  // A skirt's geometric wall normal has dot(N, sun) ~= 0 and renders near-black at the current
+  // shadow floor. Set every skirt vertex from its source top-surface normal — which
+  // smoothSurfaceNormals has just refined — so the curtain shades as a continuation of the terrain
+  // edge it hides and never reads as a black slab. This must remain after smoothing so skirts
+  // inherit the same final normal as the surface edge they hang from.
   const normals = geometry.getAttribute("normal");
   for (let perimeterIndex = 0; perimeterIndex < perimeter.length; perimeterIndex++) {
     const sourceIndex = perimeter[perimeterIndex];
