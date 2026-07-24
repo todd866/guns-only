@@ -825,6 +825,14 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
 
   assert.ok(period.uniforms.uShadowFloor.value <= 0.2,
     "a legible hillshade needs the darkest slope well below 40% lit");
+  assert.match(modern.fragmentShader, /float valleyFloor =/);
+  assert.match(modern.fragmentShader, /float slopeFace =/);
+  assert.match(modern.fragmentShader, /float exposedFace =/);
+  assert.ok(
+    modern.fragmentShader.indexOf("lit *= mix(uOcclusionRange.x")
+      < modern.fragmentShader.indexOf("lit = mix(lit, waterLit, waterMask)"),
+    "baked terrain occlusion must remain before analytic water compositing",
+  );
 
   period.dispose();
   modern.dispose();

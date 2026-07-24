@@ -93,19 +93,27 @@ varying float vTerrainWater;
 void main() {
   vec3 normal = normalize(vTerrainNormal);
   float elevation = smoothstep(70.0, 1250.0, vTerrainHeight);
-  float highRidge = smoothstep(850.0, 1900.0, vTerrainHeight);
+  float highRidge = smoothstep(680.0, 1500.0, vTerrainHeight);
   float steepness = 1.0 - clamp(normal.y, 0.0, 1.0);
+  float valleyFloor = (1.0 - smoothstep(240.0, 560.0, vTerrainHeight))
+    * (1.0 - smoothstep(0.035, 0.11, steepness));
+  float upperSlope = smoothstep(320.0, 980.0, vTerrainHeight);
+  // normal.y hides useful angle separation near vertical: 20 degrees is only 0.06 steepness.
+  // These thresholds deliberately open the slope palette before a wall becomes cliff-like.
+  float slopeFace = smoothstep(0.035, 0.19, steepness);
+  float exposedFace = smoothstep(0.10, 0.30, steepness)
+    * (0.24 + 0.76 * smoothstep(420.0, 1050.0, vTerrainHeight));
 
   #ifndef MODERN_SCENERY
   // This is an authored 1950s readability treatment, not a claim of per-pixel historical land
   // cover. Geometry and water are sourced; vegetation/cultivation become dated data layers later.
-  vec3 valley = vec3(0.31, 0.34, 0.16);
-  vec3 upland = vec3(0.18, 0.25, 0.13);
-  vec3 drySlope = vec3(0.35, 0.31, 0.20);
-  vec3 ridge = vec3(0.43, 0.43, 0.38);
-  vec3 albedo = mix(valley, upland, elevation);
-  albedo = mix(albedo, drySlope, smoothstep(0.16, 0.62, steepness) * 0.68);
-  albedo = mix(albedo, ridge, highRidge * (0.42 + steepness * 0.58));
+  vec3 valley = vec3(0.22, 0.27, 0.075);
+  vec3 upland = vec3(0.075, 0.13, 0.035);
+  vec3 drySlope = vec3(0.27, 0.17, 0.075);
+  vec3 ridge = vec3(0.32, 0.31, 0.26);
+  vec3 albedo = mix(valley, upland, smoothstep(210.0, 880.0, vTerrainHeight));
+  albedo = mix(albedo, drySlope, slopeFace * (0.24 + upperSlope * 0.54));
+  albedo = mix(albedo, ridge, max(highRidge * 0.64, exposedFace * 0.72));
   // Parcel/cultivation tint is the shader's most expensive fragment work (four sin() plus two
   // nested sin()). It is a fine-grain readability treatment only visible up close, so a tier
   // uniform gates it off entirely on the mobile/balanced visual tiers where fill-rate is scarce,
@@ -119,10 +127,10 @@ void main() {
     float parcelB = 0.5 + 0.5 * sin(vTerrainWorldPosition.z * 0.0083
       + sin(vTerrainWorldPosition.x * 0.0013) * 2.1);
     float parcels = smoothstep(0.31, 0.69, parcelA * 0.56 + parcelB * 0.44);
-    vec3 periodCultivation = mix(vec3(0.29, 0.31, 0.12), vec3(0.43, 0.39, 0.17), parcels);
-    vec3 modernCultivation = mix(vec3(0.20, 0.31, 0.14), vec3(0.39, 0.37, 0.18), parcels);
+    vec3 periodCultivation = mix(vec3(0.19, 0.24, 0.055), vec3(0.36, 0.31, 0.09), parcels);
+    vec3 modernCultivation = mix(vec3(0.12, 0.24, 0.050), vec3(0.31, 0.29, 0.075), parcels);
     albedo = mix(albedo, mix(periodCultivation, modernCultivation, uModernScenery),
-      lowland * (0.16 + parcels * 0.20));
+      lowland * (0.22 + parcels * 0.24));
   }
 
   float diffuse = uShadowFloor
@@ -140,17 +148,20 @@ void main() {
     + smoothstep(0.75, 0.88, elevation) * 0.33;
   // Sage/olive lowlands, umber slopes and cool-grey ridges form the authored modern-era bands.
   // Values stay deliberately below the old pale-bone range so ACES preserves colour separation.
-  vec3 sValley = vec3(0.14, 0.21, 0.08);
-  vec3 sUpland = vec3(0.09, 0.15, 0.055);
-  vec3 sRock = vec3(0.22, 0.17, 0.09);
-  vec3 sRidge = vec3(0.30, 0.28, 0.20);
-  vec3 sAlbedo = mix(sValley, sUpland, bandStep);
+  vec3 sValley = vec3(0.15, 0.24, 0.055);
+  vec3 sFoothill = vec3(0.070, 0.13, 0.032);
+  vec3 sUpland = vec3(0.040, 0.075, 0.030);
+  vec3 sRock = vec3(0.25, 0.15, 0.060);
+  vec3 sRidge = vec3(0.31, 0.29, 0.23);
+  vec3 sAlbedo = mix(sValley, sFoothill, bandStep);
+  sAlbedo = mix(sAlbedo, sUpland, upperSlope * 0.76);
   float patchwork = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.00023
     + sin(vTerrainWorldPosition.z * 0.00017) * 2.3);
-  sAlbedo = mix(sAlbedo, vec3(0.20, 0.22, 0.09),
-    patchwork * (1.0 - smoothstep(0.15, 0.45, steepness)) * 0.34);
-  sAlbedo = mix(sAlbedo, sRock, smoothstep(0.22, 0.60, steepness) * 0.72);
-  sAlbedo = mix(sAlbedo, sRidge, highRidge * (0.35 + steepness * 0.45));
+  vec3 cultivation = mix(vec3(0.17, 0.25, 0.050), vec3(0.32, 0.29, 0.075),
+    smoothstep(0.32, 0.68, patchwork));
+  sAlbedo = mix(sAlbedo, cultivation, valleyFloor * (0.34 + patchwork * 0.30));
+  sAlbedo = mix(sAlbedo, sRock, slopeFace * (0.24 + upperSlope * 0.56));
+  sAlbedo = mix(sAlbedo, sRidge, max(highRidge * 0.68, exposedFace * 0.78));
   float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
   halfLambert *= halfLambert;
   float toneRamp = uShadowFloor
@@ -159,7 +170,7 @@ void main() {
   vec3 viewDirection = normalize(cameraPosition - vTerrainWorldPosition);
   float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
   vec3 stylizedLit = sAlbedo * toneRamp
-    + rim * vec3(0.09, 0.12, 0.16) * (0.4 + 0.6 * clamp(normal.y, 0.0, 1.0));
+    + rim * vec3(0.055, 0.075, 0.11) * (0.4 + 0.6 * clamp(normal.y, 0.0, 1.0));
 
   vec3 lit = stylizedLit;
   #endif

@@ -3,6 +3,7 @@ import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
 import {
   createKoreaSceneryRuntime,
+  KOREA_TREE_STAND_SIZE,
   KOREA_SCENERY_PROFILES,
   planKoreaScenery,
 } from "../korea_scenery.js";
@@ -52,6 +53,10 @@ test("plans deterministic scenery while keeping eras materially distinct", () =>
   assert.ok(KOREA_SCENERY_PROFILES.modern.highRiseChance > 0);
   assert.equal(KOREA_SCENERY_PROFILES["1950s"].roadMarkingColor, null);
   assert.ok(Number.isInteger(KOREA_SCENERY_PROFILES.modern.roadMarkingColor));
+  assert.ok(first.trees.every((tree) => Number.isInteger(tree.crownVariant)));
+  assert.ok(modern.buildings.every((building) => Number.isInteger(building.settlementIndex)
+    && Number.isInteger(building.colorVariant)));
+  assert.ok(modern.fields.every((field) => Number.isInteger(field.colorVariant)));
 
   const fullTile = { ...chunk, boundsLocalM: [0, 0, 8_192, 8_192] };
   const periodTile = planKoreaScenery(fullTile, decoded, {
@@ -126,6 +131,14 @@ test("creates instanced, disposable scenery only for the closest terrain LOD", (
   assert.ok(group.userData.scenery.fieldRows > 0);
   assert.ok(group.userData.scenery.roadSegments > 0);
   assert.ok(group.children.every((child) => child.isInstancedMesh));
+  assert.equal(group.userData.scenery.treeSilhouettes,
+    group.userData.scenery.trees * KOREA_TREE_STAND_SIZE);
+  const crowns = group.children.find((child) => child.name === "PROCEDURAL_TREE_CROWNS");
+  const roofs = group.children.find((child) => child.name === "PROCEDURAL_1950S_ROOFS");
+  assert.ok(crowns.instanceColor, "tree-stand colour variation must stay in one instance batch");
+  assert.ok(roofs?.isInstancedMesh, "settlement roof silhouettes must be instanced");
+  assert.ok(crowns.geometry.getAttribute("position").count > 7 * 10,
+    "one chunk-time tree matrix must expand to a compound stand in shared geometry");
   let disposedInstances = 0;
   for (const child of group.children) {
     child.addEventListener("dispose", () => disposedInstances++);
@@ -152,10 +165,13 @@ test("renders modern transport and power batches as instanced closest-LOD geomet
   }, flatDecodedFixture(), 0);
   const names = new Set(group.children.map((child) => child.name));
   assert.ok(names.has("PROCEDURAL_MODERN_ROADS"));
+  assert.ok(names.has("PROCEDURAL_MODERN_ROOFS"));
   assert.ok(names.has("PROCEDURAL_ROAD_MARKINGS"));
   assert.ok(names.has("PROCEDURAL_MODERN_POWER_POLES"));
   assert.ok(names.has("PROCEDURAL_POWER_LINES"));
   assert.ok(group.userData.scenery.powerPoles <= 10);
+  assert.ok(group.userData.scenery.buildingSilhouettes
+    > group.userData.scenery.buildings);
   assert.ok(group.children.every((child) => child.isInstancedMesh));
   runtime.dispose();
 });

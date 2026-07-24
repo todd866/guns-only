@@ -1,3 +1,26 @@
+import { mergeGeometries } from "../../vendor/three/addons/utils/BufferGeometryUtils.js";
+
+// One chunk-time matrix now places a whole small stand. The extra silhouettes live in the shared
+// geometry, so forest density costs vertices/fill on the under-drawn GPU instead of multiplying
+// the synchronous LOD0 planning and matrix-composition work that already hitches the main thread.
+export const KOREA_TREE_STAND_SIZE = 7;
+
+const TREE_STAND_LAYOUT = Object.freeze([
+  Object.freeze({ x: 0, z: 0, height: 1, radius: 1 }),
+  Object.freeze({ x: -1.75, z: 0.55, height: 0.76, radius: 0.82 }),
+  Object.freeze({ x: 1.45, z: -0.72, height: 0.88, radius: 0.90 }),
+  Object.freeze({ x: 0.48, z: 1.72, height: 0.68, radius: 0.76 }),
+  Object.freeze({ x: -0.72, z: -1.68, height: 0.64, radius: 0.72 }),
+  Object.freeze({ x: 2.28, z: 1.05, height: 0.58, radius: 0.66 }),
+  Object.freeze({ x: -2.18, z: -0.92, height: 0.55, radius: 0.64 }),
+]);
+
+const BUILDING_COMPOUND_LAYOUT = Object.freeze([
+  Object.freeze({ x: 0, z: 0, width: 1, depth: 1, height: 1 }),
+  Object.freeze({ x: 0.92, z: 0.48, width: 0.58, depth: 0.62, height: 0.66 }),
+  Object.freeze({ x: -0.78, z: -0.68, width: 0.50, depth: 0.68, height: 0.74 }),
+]);
+
 const QUALITY = Object.freeze({
   mobile: Object.freeze({
     treeLimit: 180,
@@ -79,10 +102,13 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     runwayWidthM: [24, 34],
     highRiseChance: 0,
     crownColor: 0x334a25,
+    crownColors: Object.freeze([0x26391f, 0x324925, 0x40542c, 0x2d4222]),
     trunkColor: 0x463722,
     buildingColor: 0x8a806b,
+    buildingColors: Object.freeze([0x817762, 0x9a8e72, 0x706b5c]),
     roofColor: 0x4b4033,
     fieldColor: 0x62683c,
+    fieldColors: Object.freeze([0x62683c, 0x777342, 0x4f6036, 0x817646]),
     fieldRowColor: 0x3f482a,
     roadColor: 0x625b4c,
     roadMarkingColor: null,
@@ -136,10 +162,13 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     runwayWidthM: [38, 56],
     highRiseChance: 0.075,
     crownColor: 0x58734a,
+    crownColors: Object.freeze([0x294b25, 0x365f2d, 0x4b7039, 0x31552b]),
     trunkColor: 0x695640,
     buildingColor: 0xa9aaa3,
+    buildingColors: Object.freeze([0x969993, 0xb3afa4, 0x8d9697, 0xc0b59e]),
     roofColor: 0x515962,
     fieldColor: 0x657748,
+    fieldColors: Object.freeze([0x657748, 0x7b8047, 0x536f3d, 0x85804d]),
     fieldRowColor: 0x4f623b,
     roadColor: 0x505457,
     roadMarkingColor: 0xd2cfad,
@@ -186,6 +215,10 @@ function randomGenerator(seed) {
 
 function between(random, range) {
   return range[0] + (range[1] - range[0]) * random();
+}
+
+function fraction(value) {
+  return value - Math.floor(value);
 }
 
 function surfaceSample(decoded, east01, north01, spanEastM, spanNorthM) {
@@ -319,7 +352,7 @@ function traceRoute(decoded, route, spanEastM, spanNorthM, options) {
     if (!start || !end) continue;
     const runM = Math.hypot(end.x - start.x, end.z - start.z);
     if (!runM || Math.abs(end.y - start.y) / runM > options.maximumGrade) continue;
-    segments.push(Object.freeze({
+    segments.push({
       fromX: start.x,
       fromY: start.y,
       fromZ: start.z,
@@ -327,7 +360,7 @@ function traceRoute(decoded, route, spanEastM, spanNorthM, options) {
       toY: end.y,
       toZ: end.z,
       widthM: options.widthM,
-    }));
+    });
   }
   return Object.freeze({ points: Object.freeze(points), segments: Object.freeze(segments) });
 }
@@ -361,7 +394,7 @@ function fieldRowSegments(fields, profile, limit) {
       const localEast = -field.widthM * 0.5 + field.widthM * (index + 1) / (count + 1);
       const startDepth = -field.depthM * 0.48;
       const endDepth = field.depthM * 0.48;
-      rows.push(Object.freeze({
+      rows.push({
         fromX: field.x + cosine * localEast + sine * startDepth,
         fromY: field.y,
         fromZ: field.z - sine * localEast + cosine * startDepth,
@@ -369,7 +402,7 @@ function fieldRowSegments(fields, profile, limit) {
         toY: field.y,
         toZ: field.z - sine * localEast + cosine * endDepth,
         widthM: profile.fieldRowWidthM,
-      }));
+      });
     }
   }
   return rows;
@@ -410,12 +443,15 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
     const north01 = random();
     const surface = surfaceSample(decoded, east01, north01, spanEastM, spanNorthM);
     if (!surface || surface.slope > profile.maximumTreeSlope) continue;
-    trees.push(Object.freeze({
+    const variation = random();
+    trees.push({
       ...surface,
-      yaw: random() * Math.PI * 2,
-      heightM: between(random, profile.treeHeightM),
-      widthScale: 0.72 + random() * 0.62,
-    }));
+      yaw: variation * Math.PI * 2,
+      heightM: profile.treeHeightM[0]
+        + (profile.treeHeightM[1] - profile.treeHeightM[0]) * fraction(variation * 3.731),
+      widthScale: 0.72 + fraction(variation * 7.123) * 0.62,
+      crownVariant: Math.floor(fraction(variation * 11.417) * profile.crownColors.length),
+    });
   }
 
   const centres = [];
@@ -426,34 +462,53 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
     const surface = surfaceSample(decoded, east01, north01, spanEastM, spanNorthM);
     if (!surface || surface.slope > profile.maximumBuildingSlope
       || surface.y > profile.maximumSettlementHeightM) continue;
-    centres.push({ east01, north01 });
+    centres.push({
+      east01,
+      north01,
+      fallbackYaw: random() * Math.PI,
+    });
+  }
+  for (let index = 0; index < centres.length; index++) {
+    const start = centres[Math.max(0, index - 1)];
+    const end = centres[Math.min(centres.length - 1, index + 1)];
+    const deltaEastM = (end.east01 - start.east01) * spanEastM;
+    const deltaNorthM = (end.north01 - start.north01) * spanNorthM;
+    centres[index].corridorYaw = Math.hypot(deltaEastM, deltaNorthM) > 1
+      ? Math.atan2(deltaEastM, -deltaNorthM)
+      : centres[index].fallbackYaw;
   }
   attempts = 0;
   while (buildings.length < buildingTarget && centres.length
     && attempts++ < buildingTarget * 14 + 64) {
-    const centre = centres[Math.floor(random() * centres.length)];
+    const settlementIndex = Math.floor(random() * centres.length);
+    const centre = centres[settlementIndex];
     const spread = profile.id === "modern" ? 0.065 : 0.038;
     const east01 = clamp(centre.east01 + (random() + random() - 1) * spread, 0.01, 0.99);
     const north01 = clamp(centre.north01 + (random() + random() - 1) * spread, 0.01, 0.99);
     const surface = surfaceSample(decoded, east01, north01, spanEastM, spanNorthM);
     if (!surface || surface.slope > profile.maximumBuildingSlope
       || surface.y > profile.maximumSettlementHeightM) continue;
-    const highRise = random() < profile.highRiseChance;
-    buildings.push(Object.freeze({
+    const style = random();
+    const highRise = style < profile.highRiseChance;
+    const quarterTurn = fraction(style * 3.719) < 0.34 ? Math.PI * 0.5 : 0;
+    buildings.push({
       ...surface,
-      yaw: random() * Math.PI * 2,
+      settlementIndex,
+      yaw: centre.corridorYaw + quarterTurn + (fraction(style * 9.137) - 0.5) * 0.24,
       widthM: between(random, profile.buildingWidthM) * (highRise ? 1.25 : 1),
       depthM: between(random, profile.buildingDepthM) * (highRise ? 1.25 : 1),
       heightM: highRise ? 24 + random() * 68 : between(random, profile.buildingHeightM),
       highRise,
-    }));
+      colorVariant: Math.floor(fraction(style * 15.311) * profile.buildingColors.length),
+    });
   }
 
   attempts = 0;
   while (fields.length < fieldTarget && attempts++ < fieldTarget * 14 + 48) {
+    const fieldStyle = random();
     const east01 = 0.025 + random() * 0.95;
     const north01 = 0.025 + random() * 0.95;
-    const yaw = random() * Math.PI;
+    const yaw = fieldStyle * Math.PI;
     const widthM = between(random, profile.fieldWidthM);
     const depthM = between(random, profile.fieldDepthM);
     const surface = rectangleSurface(
@@ -461,7 +516,13 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
       spanEastM, spanNorthM, profile.maximumFieldSlope,
     );
     if (!surface || surface.y > profile.maximumFieldHeightM) continue;
-    fields.push(Object.freeze({ ...surface, yaw, widthM, depthM }));
+    fields.push({
+      ...surface,
+      yaw,
+      widthM,
+      depthM,
+      colorVariant: Math.floor(fraction(fieldStyle * 13.173) * profile.fieldColors.length),
+    });
   }
 
   const roadRoutes = axisRoutes(
@@ -569,9 +630,9 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
         continue;
       }
       if (powerPoles.length >= quality.powerPoleLimit) break;
-      powerPoles.push(Object.freeze({ ...point, heightM: poleHeightM }));
+      powerPoles.push({ ...point, heightM: poleHeightM });
       if (prior) {
-        powerLines.push(Object.freeze({
+        powerLines.push({
           fromX: prior.x,
           fromY: prior.y + poleHeightM * 0.92,
           fromZ: prior.z,
@@ -579,7 +640,7 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
           toY: point.y + poleHeightM * 0.92,
           toZ: point.z,
           widthM: profile.id === "modern" ? 0.12 : 0.085,
-        }));
+        });
       }
       prior = point;
     }
@@ -607,6 +668,13 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
 function setMatrix(THREE, mesh, index, position, quaternion, scale, matrix) {
   matrix.compose(position, quaternion, scale);
   mesh.setMatrixAt(index, matrix);
+}
+
+function setPaletteColor(array, index, color) {
+  const offset = index * 3;
+  array[offset] = color.r;
+  array[offset + 1] = color.g;
+  array[offset + 2] = color.b;
 }
 
 function setSegmentMatrix(mesh, index, segment, widthM, heightM, yOffsetM, work) {
@@ -657,6 +725,39 @@ function addSegmentMesh(THREE, group, geometry, material, name, segments, option
   return mesh;
 }
 
+function mergeLayout(baseGeometry, layout, transform) {
+  const parts = layout.map((item) => {
+    const part = baseGeometry.clone();
+    transform(part, item);
+    return part;
+  });
+  const merged = mergeGeometries(parts, false);
+  for (const part of parts) part.dispose();
+  if (!merged) throw new Error("Failed to create shared Korea scenery geometry.");
+  merged.computeBoundingSphere();
+  return merged;
+}
+
+function createTreeStandGeometry(crownPrimitive, trunkPrimitive) {
+  const crowns = mergeLayout(crownPrimitive, TREE_STAND_LAYOUT, (geometry, tree) => {
+    geometry.scale(tree.radius, tree.height, tree.radius);
+    geometry.translate(tree.x, 0, tree.z);
+  });
+  const trunks = mergeLayout(trunkPrimitive, TREE_STAND_LAYOUT, (geometry, tree) => {
+    const trunkRadius = 0.172 * tree.radius;
+    geometry.scale(trunkRadius, tree.height * 0.48, trunkRadius);
+    geometry.translate(tree.x, 0, tree.z);
+  });
+  return { crowns, trunks };
+}
+
+function createBuildingCompoundGeometry(buildingPrimitive) {
+  return mergeLayout(buildingPrimitive, BUILDING_COMPOUND_LAYOUT, (geometry, building) => {
+    geometry.scale(building.width, building.height, building.depth);
+    geometry.translate(building.x, 0, building.z);
+  });
+}
+
 export function disposeKoreaSceneryTile(group) {
   if (!group) return;
   group.traverse((child) => {
@@ -670,12 +771,22 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const profile = KOREA_SCENERY_PROFILES[era];
   if (!profile) throw new TypeError(`Unknown Korea scenery era: ${era}.`);
   const qualityTier = options.qualityTier ?? "balanced";
-  const crownGeometry = new THREE.ConeGeometry(1, 1, 7, 1);
-  crownGeometry.translate(0, 0.5, 0);
-  const trunkGeometry = new THREE.CylinderGeometry(0.12, 0.18, 1, 5, 1);
-  trunkGeometry.translate(0, 0.5, 0);
-  const buildingGeometry = new THREE.BoxGeometry(1, 1, 1);
-  buildingGeometry.translate(0, 0.5, 0);
+  const crownPrimitive = new THREE.ConeGeometry(1, 1, 7, 1);
+  crownPrimitive.translate(0, 0.5, 0);
+  const trunkPrimitive = new THREE.CylinderGeometry(0.12, 0.18, 1, 5, 1);
+  trunkPrimitive.translate(0, 0.5, 0);
+  const treeStandGeometry = createTreeStandGeometry(crownPrimitive, trunkPrimitive);
+  const crownGeometry = treeStandGeometry.crowns;
+  const trunkGeometry = treeStandGeometry.trunks;
+  crownPrimitive.dispose();
+  trunkPrimitive.dispose();
+  const buildingPrimitive = new THREE.BoxGeometry(1, 1, 1);
+  buildingPrimitive.translate(0, 0.5, 0);
+  const buildingGeometry = createBuildingCompoundGeometry(buildingPrimitive);
+  buildingPrimitive.dispose();
+  const roofGeometry = new THREE.ConeGeometry(0.72, 1, 4, 1);
+  roofGeometry.rotateY(Math.PI * 0.25);
+  roofGeometry.translate(0, 0.5, 0);
   const surfaceGeometry = new THREE.BoxGeometry(1, 1, 1);
   const segmentGeometry = new THREE.BoxGeometry(1, 1, 1);
   const poleGeometry = new THREE.CylinderGeometry(0.08, 0.13, 1, 6, 1);
@@ -683,9 +794,9 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   // A restrained material-local sky fill keeps sub-pixel procedural instances legible even if a
   // diagnostic scene momentarily stages them before its production lights. It is not a glow: the
   // shipped hemisphere and sun still provide nearly all of the final Lambert response.
-  const litMaterial = (color) => new THREE.MeshLambertMaterial({
+  const litMaterial = (color, emissive = color) => new THREE.MeshLambertMaterial({
     color,
-    emissive: color,
+    emissive,
     emissiveIntensity: 0.14,
   });
   // Two of these layers are coplanar with their own parent slab BY CONSTRUCTION, not by terrain
@@ -712,10 +823,11 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     material.polygonOffsetUnits = -order;
     return material;
   };
-  const crownMaterial = litMaterial(profile.crownColor);
+  const crownMaterial = litMaterial(0xffffff, profile.crownColor);
   const trunkMaterial = litMaterial(profile.trunkColor);
-  const buildingMaterial = litMaterial(profile.buildingColor);
-  const fieldMaterial = litMaterial(profile.fieldColor);
+  const buildingMaterial = litMaterial(0xffffff, profile.buildingColor);
+  const roofMaterial = litMaterial(profile.roofColor);
+  const fieldMaterial = litMaterial(0xffffff, profile.fieldColor);
   const fieldRowMaterial = decalOf(litMaterial(profile.fieldRowColor), 1);
   const roadMaterial = litMaterial(profile.roadColor);
   const roadMarkingMaterial = profile.roadMarkingColor === null ? null
@@ -725,13 +837,17 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const runwayMaterial = litMaterial(profile.runwayColor);
   const powerPoleMaterial = litMaterial(profile.powerPoleColor);
   const powerWireMaterial = new THREE.MeshBasicMaterial({ color: profile.powerWireColor });
+  const crownPalette = profile.crownColors.map((color) => new THREE.Color(color));
+  const buildingPalette = profile.buildingColors.map((color) => new THREE.Color(color));
+  const fieldPalette = profile.fieldColors.map((color) => new THREE.Color(color));
   const geometries = [
-    crownGeometry, trunkGeometry, buildingGeometry, surfaceGeometry, segmentGeometry, poleGeometry,
+    crownGeometry, trunkGeometry, buildingGeometry, roofGeometry,
+    surfaceGeometry, segmentGeometry, poleGeometry,
   ];
   const materials = [
-    crownMaterial, trunkMaterial, buildingMaterial, fieldMaterial, fieldRowMaterial, roadMaterial,
-    roadMarkingMaterial, railBedMaterial, railMaterial, runwayMaterial, powerPoleMaterial,
-    powerWireMaterial,
+    crownMaterial, trunkMaterial, buildingMaterial, roofMaterial, fieldMaterial, fieldRowMaterial,
+    roadMaterial, roadMarkingMaterial, railBedMaterial, railMaterial, runwayMaterial,
+    powerPoleMaterial, powerWireMaterial,
   ].filter(Boolean);
   let disposed = false;
 
@@ -764,6 +880,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
       if (plan.trees.length) {
         const crowns = new THREE.InstancedMesh(crownGeometry, crownMaterial, plan.trees.length);
         const trunks = new THREE.InstancedMesh(trunkGeometry, trunkMaterial, plan.trees.length);
+        const crownColors = new Float32Array(plan.trees.length * 3);
         crowns.name = "PROCEDURAL_TREE_CROWNS";
         trunks.name = "PROCEDURAL_TREE_TRUNKS";
         for (let index = 0; index < plan.trees.length; index++) {
@@ -772,30 +889,49 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
           position.set(tree.x, tree.y, tree.z);
           scale.set(tree.heightM * 0.32 * tree.widthScale, tree.heightM, tree.heightM * 0.32);
           setMatrix(THREE, crowns, index, position, quaternion, scale, matrix);
-          scale.set(tree.heightM * 0.055, tree.heightM * 0.48, tree.heightM * 0.055);
-          setMatrix(THREE, trunks, index, position, quaternion, scale, matrix);
+          setPaletteColor(crownColors, index, crownPalette[tree.crownVariant]);
         }
+        // Compound crowns and trunks use the exact same stand transform. Copying the finished
+        // matrix buffer avoids recomposing all 900 desktop transforms a second time.
+        trunks.instanceMatrix.array.set(crowns.instanceMatrix.array);
+        crowns.instanceColor = new THREE.InstancedBufferAttribute(crownColors, 3);
         crowns.instanceMatrix.needsUpdate = true;
         trunks.instanceMatrix.needsUpdate = true;
+        crowns.instanceColor.needsUpdate = true;
         group.add(crowns, trunks);
       }
       if (plan.buildings.length) {
         const buildings = new THREE.InstancedMesh(
           buildingGeometry, buildingMaterial, plan.buildings.length,
         );
+        const roofs = new THREE.InstancedMesh(roofGeometry, roofMaterial, plan.buildings.length);
+        const buildingColors = new Float32Array(plan.buildings.length * 3);
         buildings.name = `PROCEDURAL_${era.toUpperCase()}_BUILDINGS`;
+        roofs.name = `PROCEDURAL_${era.toUpperCase()}_ROOFS`;
         for (let index = 0; index < plan.buildings.length; index++) {
           const building = plan.buildings[index];
           quaternion.setFromAxisAngle(yAxis, building.yaw);
           position.set(building.x, building.y, building.z);
           scale.set(building.widthM, building.heightM, building.depthM);
           setMatrix(THREE, buildings, index, position, quaternion, scale, matrix);
+          setPaletteColor(buildingColors, index, buildingPalette[building.colorVariant]);
+          position.y += building.heightM;
+          scale.set(
+            building.widthM,
+            Math.min(building.widthM, building.depthM) * (building.highRise ? 0.16 : 0.28),
+            building.depthM,
+          );
+          setMatrix(THREE, roofs, index, position, quaternion, scale, matrix);
         }
+        buildings.instanceColor = new THREE.InstancedBufferAttribute(buildingColors, 3);
         buildings.instanceMatrix.needsUpdate = true;
-        group.add(buildings);
+        buildings.instanceColor.needsUpdate = true;
+        roofs.instanceMatrix.needsUpdate = true;
+        group.add(buildings, roofs);
       }
       if (plan.fields.length) {
         const fields = new THREE.InstancedMesh(surfaceGeometry, fieldMaterial, plan.fields.length);
+        const fieldColors = new Float32Array(plan.fields.length * 3);
         fields.name = `PROCEDURAL_${era.toUpperCase()}_LAND_USE`;
         for (let index = 0; index < plan.fields.length; index++) {
           const field = plan.fields[index];
@@ -803,8 +939,11 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
           position.set(field.x, field.y + 0.035, field.z);
           scale.set(field.widthM, 0.07, field.depthM);
           setMatrix(THREE, fields, index, position, quaternion, scale, matrix);
+          setPaletteColor(fieldColors, index, fieldPalette[field.colorVariant]);
         }
+        fields.instanceColor = new THREE.InstancedBufferAttribute(fieldColors, 3);
         fields.instanceMatrix.needsUpdate = true;
+        fields.instanceColor.needsUpdate = true;
         group.add(fields);
       }
       addSegmentMesh(
@@ -866,7 +1005,9 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
         period: profile.period,
         seed: plan.seed,
         trees: plan.trees.length,
+        treeSilhouettes: plan.trees.length * KOREA_TREE_STAND_SIZE,
         buildings: plan.buildings.length,
+        buildingSilhouettes: plan.buildings.length * BUILDING_COMPOUND_LAYOUT.length,
         fields: plan.fields.length,
         fieldRows: plan.fieldRows.length,
         roadSegments: plan.roads.length,
