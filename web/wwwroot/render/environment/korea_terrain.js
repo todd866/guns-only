@@ -772,6 +772,91 @@ function disposeMeshScenery(mesh) {
   delete mesh.userData.scenery;
 }
 
+class TerrainChunkBuildScheduler {
+  constructor(options = {}) {
+    this.requestFrame = options.requestTerrainBuildFrame
+      ?? globalThis.requestAnimationFrame?.bind(globalThis)
+      ?? ((callback) => setTimeout(callback, 0));
+    this.cancelFrame = options.cancelTerrainBuildFrame
+      ?? globalThis.cancelAnimationFrame?.bind(globalThis)
+      ?? clearTimeout;
+    this.queue = [];
+    this.nextSequence = 0;
+    this.frameHandle = null;
+    this.disposed = false;
+  }
+
+  enqueue(owner, priority, build, discard) {
+    const work = {
+      owner,
+      priority,
+      build,
+      discard,
+      sequence: this.nextSequence++,
+    };
+    if (this.disposed) {
+      discard();
+      return null;
+    }
+    this.queue.push(work);
+    this.scheduleFrame();
+    return work;
+  }
+
+  scheduleFrame() {
+    if (this.disposed || this.frameHandle !== null || !this.queue.length) return;
+    this.frameHandle = this.requestFrame(() => {
+      this.frameHandle = null;
+      try {
+        this.buildNext();
+      } finally {
+        this.scheduleFrame();
+      }
+    });
+  }
+
+  buildNext() {
+    if (this.disposed || !this.queue.length) return;
+    this.queue.sort((left, right) => {
+      const leftPriority = finite(left.priority(), Number.POSITIVE_INFINITY);
+      const rightPriority = finite(right.priority(), Number.POSITIVE_INFINITY);
+      return leftPriority - rightPriority || left.sequence - right.sequence;
+    });
+    this.queue.shift().build();
+  }
+
+  cancel(work) {
+    if (!work) return false;
+    const index = this.queue.indexOf(work);
+    if (index < 0) return false;
+    this.queue.splice(index, 1);
+    work.discard();
+    this.cancelFrameIfIdle();
+    return true;
+  }
+
+  cancelOwner(owner) {
+    const cancelled = this.queue.filter((work) => work.owner === owner);
+    this.queue = this.queue.filter((work) => work.owner !== owner);
+    for (const work of cancelled) work.discard();
+    this.cancelFrameIfIdle();
+  }
+
+  cancelFrameIfIdle() {
+    if (this.queue.length || this.frameHandle === null) return;
+    this.cancelFrame(this.frameHandle);
+    this.frameHandle = null;
+  }
+
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this.frameHandle !== null) this.cancelFrame(this.frameHandle);
+    this.frameHandle = null;
+    for (const work of this.queue.splice(0)) work.discard();
+  }
+}
+
 class KoreaTerrainPresentation {
   constructor(THREE, manifest, reader, options) {
     this.THREE = THREE;
@@ -799,10 +884,16 @@ class KoreaTerrainPresentation {
       requestToken: 0,
       error: null,
       normalBoundary: null,
+      buildWork: null,
+      priorityDistance: Number.POSITIVE_INFINITY,
     }]));
     this.queue = [];
     this.activeLoads = 0;
+    this.pendingBuilds = 0;
     this.maximumLoads = Math.max(1, Math.round(finite(options.maximumConcurrentLoads, 6)));
+    this.buildScheduler = options.chunkBuildScheduler
+      ?? new TerrainChunkBuildScheduler(options);
+    this.ownsBuildScheduler = !options.chunkBuildScheduler;
     this.chunkLoadRadiusM = Number.isFinite(options.chunkLoadRadiusM)
       ? Math.max(0, options.chunkLoadRadiusM) : Number.POSITIVE_INFINITY;
     this.chunkEvictRadiusM = Number.isFinite(options.chunkEvictRadiusM)
@@ -823,6 +914,7 @@ class KoreaTerrainPresentation {
     if (this.disposed || entry.level === level && entry.mesh || entry.requestedLevel === level) {
       return Promise.resolve(entry.mesh);
     }
+    if (entry.buildWork) this.buildScheduler.cancel(entry.buildWork);
     entry.requestedLevel = level;
     const token = ++entry.requestToken;
     return new Promise((resolve) => {
@@ -849,12 +941,12 @@ class KoreaTerrainPresentation {
   }
 
   resolveIdleWaiters() {
-    if (this.activeLoads || this.queue.length) return;
+    if (this.activeLoads || this.queue.length || this.pendingBuilds) return;
     for (const resolve of this.idleWaiters.splice(0)) resolve();
   }
 
   whenIdle() {
-    if (!this.activeLoads && !this.queue.length) return Promise.resolve();
+    if (!this.activeLoads && !this.queue.length && !this.pendingBuilds) return Promise.resolve();
     return new Promise((resolve) => this.idleWaiters.push(resolve));
   }
 
@@ -915,6 +1007,37 @@ class KoreaTerrainPresentation {
         return;
       }
       const decoded = decodeTerrainRecord(buffer, record, this.manifest.quantization);
+      work.buildPending = true;
+      this.pendingBuilds++;
+      let scheduled = null;
+      scheduled = this.buildScheduler.enqueue(
+        this,
+        () => entry.priorityDistance,
+        () => {
+          if (entry.buildWork === scheduled) entry.buildWork = null;
+          this.build(work, decoded);
+        },
+        () => {
+          if (entry.buildWork === scheduled) entry.buildWork = null;
+          this.finishBuild(work);
+        },
+      );
+      entry.buildWork = scheduled;
+    } catch (error) {
+      if (token === entry.requestToken) {
+        entry.requestedLevel = null;
+        entry.error = String(error?.message ?? error);
+      }
+      resolve(entry.mesh);
+    }
+  }
+
+  build(work, decoded) {
+    const { entry, level, token } = work;
+    const record = entry.chunk.lods[level];
+    try {
+      if (this.disposed || token !== entry.requestToken
+        || entry.mesh && entry.level === level) return;
       const built = createTerrainGeometry(this.THREE, entry.chunk, decoded);
       const mesh = new this.THREE.Mesh(built.geometry,
         [this.material, this.skirtMaterial]);
@@ -946,14 +1069,22 @@ class KoreaTerrainPresentation {
         previous.geometry.dispose();
       }
       this.reconcileLoadedBoundaryNormals();
-      resolve(mesh);
     } catch (error) {
       if (token === entry.requestToken) {
         entry.requestedLevel = null;
         entry.error = String(error?.message ?? error);
       }
-      resolve(entry.mesh);
+    } finally {
+      this.finishBuild(work);
     }
+  }
+
+  finishBuild(work) {
+    if (!work.buildPending) return;
+    work.buildPending = false;
+    this.pendingBuilds--;
+    work.resolve(work.entry.mesh);
+    this.resolveIdleWaiters();
   }
 
   reconcileLoadedBoundaryNormals() {
@@ -1005,6 +1136,7 @@ class KoreaTerrainPresentation {
 
   evictEntry(entry) {
     if (!entry.mesh && entry.requestedLevel === null) return;
+    if (entry.buildWork) this.buildScheduler.cancel(entry.buildWork);
     entry.requestToken++;
     entry.requestedLevel = null;
     disposeMeshScenery(entry.mesh);
@@ -1043,6 +1175,7 @@ class KoreaTerrainPresentation {
       const streamDistance = Math.hypot(priorityPosition.x - centreEast,
         priorityPosition.z - centreRenderNorth);
       const distance = Math.min(cameraDistance, streamDistance);
+      entry.priorityDistance = distance;
       if (distance > this.chunkEvictRadiusM) {
         this.evictEntry(entry);
         continue;
@@ -1077,6 +1210,7 @@ class KoreaTerrainPresentation {
       levels: Object.freeze(levels),
       activeLoads: this.activeLoads,
       queuedLoads: this.queue.length,
+      queuedBuilds: this.pendingBuilds,
       loadedBytes: this.loadedBytes,
       transfer: this.reader.diagnostics(),
       errors,
@@ -1088,6 +1222,7 @@ class KoreaTerrainPresentation {
     if (this.disposed) return;
     this.disposed = true;
     for (const work of this.queue.splice(0)) work.resolve(work.entry.mesh);
+    this.buildScheduler.cancelOwner(this);
     for (const entry of this.entries.values()) {
       entry.requestToken++;
       disposeMeshScenery(entry.mesh);
@@ -1100,6 +1235,7 @@ class KoreaTerrainPresentation {
     if (this.ownsSceneryRuntime) this.sceneryRuntime?.dispose();
     if (this.ownsMaterial) this.material.dispose();
     if (this.ownsSkirtMaterial) this.skirtMaterial.dispose();
+    if (this.ownsBuildScheduler) this.buildScheduler.dispose();
     this.group.removeFromParent();
   }
 }
@@ -1142,6 +1278,7 @@ class KoreaTerrainAtlasPresentation {
       Math.round(finite(options.maximumConcurrentLoads, 6)));
     this.maximumCachedRanges = Math.max(1,
       Math.round(finite(options.maximumCachedRanges, 8)));
+    this.buildScheduler = new TerrainChunkBuildScheduler(options);
     this.sceneryEra = options.sceneryEra ?? manifest.scenery?.defaultProfile ?? null;
     this.group = new THREE.Group();
     this.group.name = "KOREA_PENINSULA_TERRAIN_ATLAS";
@@ -1252,6 +1389,7 @@ class KoreaTerrainAtlasPresentation {
         material: this.material,
         skirtMaterial: this.skirtMaterial,
         sceneryRuntime: this.sceneryRuntime,
+        chunkBuildScheduler: this.buildScheduler,
         groupName: `KOREA_TERRAIN_PAGE_${descriptor.id.toUpperCase()}`,
       });
       if (this.disposed || generation !== state.generation) {
@@ -1406,6 +1544,7 @@ class KoreaTerrainAtlasPresentation {
     this.sceneryRuntime?.dispose();
     this.material.dispose();
     this.skirtMaterial.dispose();
+    this.buildScheduler.dispose();
     this.group.removeFromParent();
   }
 }

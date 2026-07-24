@@ -35,6 +35,31 @@ function manifest() {
   };
 }
 
+function streamingManifest() {
+  const chunks = [
+    { id: "far", boundsLocalM: [40, 0, 42, 2] },
+    { id: "middle", boundsLocalM: [0, 0, 2, 2] },
+    { id: "near", boundsLocalM: [20, 0, 22, 2] },
+  ].map((chunk, index) => ({
+    ...chunk,
+    lods: [{
+      level: 0,
+      sampleCount: 3,
+      byteOffset: index * 18,
+      byteLength: 18,
+      spacingM: 1,
+    }],
+  }));
+  return {
+    schemaVersion: "1.0.0",
+    terrainId: "terrain.streaming-test.v1",
+    boundsLocalM: [0, 0, 42, 2],
+    quantization,
+    bundle: { uri: "streaming.terrain", byteLength: 54, sha256: "c".repeat(64) },
+    chunks,
+  };
+}
+
 function adjacentTerrainFixture() {
   const sources = [
     {
@@ -389,6 +414,72 @@ test("bounds the successful range cache with least-recently-used eviction", asyn
   await reader.read({ byteOffset: 1, byteLength: 1 });
   assert.deepEqual(requests, ["bytes=0-0", "bytes=1-1", "bytes=2-2", "bytes=1-1"]);
   assert.equal(reader.diagnostics().cachedRanges, 2);
+});
+
+test("builds at most one nearest terrain chunk per frame and drains queued builds", async () => {
+  const source = streamingManifest();
+  const scheduledFrames = new Map();
+  let nextFrameId = 1;
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/streaming.manifest.json",
+    lazyChunks: true,
+    maximumConcurrentLoads: 3,
+    requestTerrainBuildFrame: (callback) => {
+      const id = nextFrameId++;
+      scheduledFrames.set(id, callback);
+      return id;
+    },
+    cancelTerrainBuildFrame: (id) => scheduledFrames.delete(id),
+    fetch: async (_url, options = {}) => {
+      if (!options.headers?.Range) {
+        return { ok: true, status: 200, json: async () => source };
+      }
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => new ArrayBuffer(18),
+      };
+    },
+  });
+
+  terrain.update({ cameraPosition: new THREE.Vector3(21, 500, -1) });
+  for (let attempt = 0;
+    attempt < 20 && terrain.diagnostics().queuedBuilds !== 3;
+    attempt++) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(terrain.diagnostics().queuedBuilds, 3);
+  assert.equal(scheduledFrames.size, 1,
+    "all ready chunks must share one pending animation-frame callback");
+
+  const runFrame = () => {
+    assert.equal(scheduledFrames.size, 1);
+    const [id, callback] = scheduledFrames.entries().next().value;
+    scheduledFrames.delete(id);
+    callback();
+  };
+  runFrame();
+  assert.equal(terrain.diagnostics().residentChunks, 1,
+    "one animation frame may build only one chunk");
+  assert.ok(terrain.entries.get("near").mesh,
+    "the closest ready chunk must be built before manifest-order chunks");
+  assert.equal(terrain.entries.get("middle").mesh, null);
+  assert.equal(terrain.entries.get("far").mesh, null);
+
+  const residentGeometry = terrain.entries.get("near").mesh.geometry;
+  await terrain.requestLevel(terrain.entries.get("near"), 0);
+  assert.equal(terrain.entries.get("near").mesh.geometry, residentGeometry,
+    "requesting an already-resident LOD must not rebuild its geometry");
+
+  runFrame();
+  assert.equal(terrain.diagnostics().residentChunks, 2,
+    "the following frame may build exactly one more chunk");
+  assert.equal(terrain.diagnostics().queuedBuilds, 1);
+  terrain.dispose();
+  assert.equal(scheduledFrames.size, 0,
+    "teardown must cancel the frame callback for queued geometry");
+  assert.equal(terrain.diagnostics().queuedBuilds, 0,
+    "teardown must drain queued geometry work");
 });
 
 test("streams atlas pages around the aircraft and evicts pages behind it", async () => {
