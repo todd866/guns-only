@@ -2,6 +2,7 @@ import * as THREE from "./vendor/three.module.js";
 import {
   airdataReadout,
   fuelReadout,
+  speedBrakeReadout,
   speedTapeMarkers,
   stallAwareness,
   systemsReadout,
@@ -2171,6 +2172,62 @@ class CombatHud {
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillStyle = AMBER;
       ctx.fillText("A/B", x + railWidth / 2, y + h + 10);
+    }
+
+    // Idle-commanded speed brake. It belongs to the PWR rail because the LEVER commands it —
+    // pulling to idle with the gear up is the pilot action — and because drawThrottle is the one
+    // secondary block drawn unconditionally from drawFrame. It STACKS BELOW the rail rather than
+    // flanking it: x is layout.tapeInset - 46, and tapeInset floors at 48, so at a 430-wide
+    // portrait viewport x is 2 and there is no room to the left; the throttle caret owns
+    // x + railWidth + 1 .. + 8 at the very lever position (idle) where the brake deploys, so
+    // there is no room to the right either. AMBER while it travels, GREEN once fully splayed,
+    // nothing at all when stowed.
+    const brake = speedBrakeReadout(state);
+    const brakeWidth = 16;
+    // Five rows, not three: at three the 1 px stroke left a single interior row to carry the whole
+    // travel fraction, so the pilot could read amber-versus-green but not how far out the surface
+    // actually was — and travel is the thing that proves the automation ran.
+    const brakeHeight = 5;
+    const brakeX = x;
+    const brakeY = y + h + 17;
+    // The airdata chip panel starts one pixel inside the rail's left column at every viewport, so
+    // the bar is pulled one column left of it rather than sharing that seam.
+    const brakeFillWidth = Math.max(0, (brakeWidth - 2) * brake.deployment);
+    let brakeDrawn = false;
+    if (brake.visible) {
+      ctx.save();
+      const brakeColor = brake.deployed ? GREEN : AMBER;
+      ctx.strokeStyle = brakeColor;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(brakeX + 0.5, brakeY + 0.5, brakeWidth - 1, brakeHeight - 1);
+      ctx.fillStyle = brakeColor;
+      ctx.fillRect(brakeX + 1, brakeY + 1, brakeFillWidth, brakeHeight - 2);
+      ctx.font = "800 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(brake.text, brakeX, brakeY + brakeHeight + 8);
+      ctx.restore();
+      brakeDrawn = true;
+    }
+    if (this._debug) {
+      this._debug.speedBrake = {
+        available: brake.available,
+        visible: brake.visible,
+        deployment: brake.deployment,
+        deployed: brake.deployed,
+        transit: brake.transit,
+        text: brake.text,
+        // `drawn` is set INSIDE the canvas branch on purpose. Everything else here is the
+        // readout's opinion, which a geometry assertion can satisfy while the drawing code is
+        // deleted — that exact mutation passed all 904 assertions during review.
+        drawn: brakeDrawn,
+        fillWidth: brakeDrawn ? brakeFillWidth : 0,
+        color: brakeDrawn ? (brake.deployed ? GREEN : AMBER) : null,
+        x: brakeX,
+        y: brakeY,
+        width: brakeWidth,
+        height: brakeHeight,
+      };
     }
   }
 

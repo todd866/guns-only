@@ -254,6 +254,32 @@ export function fuelReadout(state = {}) {
   };
 }
 
+// The F-22 surrogate's speed brake is commanded by the throttle, not a switch: idle below
+// AircraftSim.AutomaticSpeedBrakeIdleThrottle with the gear up splays the surfaces (tau 0.50 s
+// out, 0.30 s in). The pilot asked to SEE that happen, so the readout reports travel, not just a
+// latched boolean — the transit band is what proves the automation is working. Airframes without
+// the automatic surface project has_speed_brake:false and get no dead instrument at all.
+const SPEED_BRAKE_OUT = 0.90;
+const SPEED_BRAKE_STOWED = 0.02;
+
+export function speedBrakeReadout(state = {}) {
+  const deployment = finiteNumber(state.speed_brake);
+  const available = state.has_speed_brake === true && deployment !== null;
+  const value = available ? Math.min(1, Math.max(0, deployment)) : 0;
+  const deployed = available && value >= SPEED_BRAKE_OUT;
+  const stowed = !available || value <= SPEED_BRAKE_STOWED;
+  const transit = available && !deployed && !stowed;
+  return {
+    available,
+    deployment: value,
+    deployed,
+    transit,
+    stowed,
+    visible: available && !stowed,
+    text: deployed ? "SB" : transit ? "SB↕" : "",
+  };
+}
+
 function normalizedEnum(value, accepted, fallback) {
   if (typeof value !== "string") return fallback;
   const candidate = value.trim().toUpperCase();

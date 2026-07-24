@@ -30,7 +30,7 @@
   ],
   "compatibility": {
     "minimumPlatformVersion": "0.1.0",
-    "snapshotSchemaVersion": "1.11.0",
+    "snapshotSchemaVersion": "1.12.0",
     "supportedShells": [
       "web"
     ]

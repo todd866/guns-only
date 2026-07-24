@@ -435,6 +435,80 @@ function assertGunHeat(data) {
       + `gun_firing=${state.gun_firing}`);
 }
 
+// Counts frames where the speed-brake indicator was actually drawn. The harness `state` object is
+// an explicit allowlist (harness.js), so a missing key would silently send every scenario down the
+// "no capability" branch and turn this whole assertion green-but-vacuous. main() requires at least
+// one real observation.
+let speedBrakeVisibleObservations = 0;
+
+function assertSpeedBrake(data) {
+  const { name, geometry, state, viewport } = data;
+  const brake = geometry.speedBrake;
+
+  if (state?.has_speed_brake !== true) {
+    check(name, "no speed-brake indicator without the airframe capability",
+      !brake || brake.visible === false,
+      `speedBrake=${JSON.stringify(brake ?? null)}`);
+    return;
+  }
+
+  // drawThrottle early-returns on has_engine === false, fuel_consumes === false or a non-finite
+  // throttle, taking the whole PWR block with it. Absent geometry is therefore tolerated in this
+  // branch too — but only as "nothing drawn", never as a pass for a commanded deployment.
+  const commanded = Number(state.speed_brake);
+  if (!brake) {
+    check(name, "absent PWR block never hides a commanded speed brake",
+      !(commanded > 0.02),
+      `speed_brake=${commanded} with no geometry.speedBrake record`);
+    return;
+  }
+
+  check(name, "speed-brake indicator tracks the projected deployment",
+    Math.abs(brake.deployment - Math.min(1, Math.max(0, commanded))) < 1e-6,
+    `indicator=${brake.deployment}; state=${commanded}`);
+  check(name, "fully splayed speed brake annunciates SB",
+    commanded < 0.9 || (brake.deployed === true && brake.text === "SB"),
+    `deployed=${brake.deployed}; text=${brake.text}`);
+  check(name, "stowed speed brake draws nothing",
+    commanded > 0.02 || brake.visible === false,
+    `visible=${brake.visible}`);
+
+  // `drawn` is recorded INSIDE drawThrottle's canvas branch, so it is the only field here that
+  // cannot be satisfied by the readout alone. Without it the whole block passed with every
+  // stroke, fill and label deleted — verified by mutation during review, and the same shape of
+  // hole that shipped visually broken pixels at Builds 60 and 62.
+  if (commanded > 0.02) {
+    check(name, "a commanded speed brake is actually stroked onto the canvas",
+      brake.drawn === true,
+      `drawn=${brake.drawn}; speed_brake=${commanded}`);
+    check(name, "the splay bar fill length carries the deployment fraction",
+      Math.abs(brake.fillWidth - (brake.width - 2) * brake.deployment) < 1e-6
+        && brake.fillWidth > 0,
+      `fillWidth=${brake.fillWidth}; width=${brake.width}; deployment=${brake.deployment}`);
+    // Amber while travelling, green once fully out — the transit band is the whole point of the
+    // indicator ("so I know it's working"), and nothing else pinned its colour or its glyph.
+    const expectedText = brake.deployed ? "SB" : "SB\u2195";
+    check(name, "travelling speed brake reads amber, fully splayed reads green",
+      brake.color === (brake.deployed ? "#4dff88" : "#ffb020"),
+      `color=${brake.color}; deployed=${brake.deployed}`);
+    check(name, "the speed-brake glyph distinguishes travel from fully out",
+      brake.text === expectedText,
+      `text=${JSON.stringify(brake.text)}; expected=${JSON.stringify(expectedText)}`);
+  }
+
+  if (brake.visible !== true) return;
+  speedBrakeVisibleObservations += 1;
+  // The PWR rail sits at layout.tapeInset - 46, and tapeInset FLOORS at 48, so x is 2 at the
+  // 430-wide portrait viewport. Anything drawn at a negative offset from the rail renders
+  // entirely off-canvas on a phone while passing every landscape check.
+  check(name, "speed-brake indicator stays inside the canvas",
+    brake.x >= 0 && brake.width > 0 && brake.x + brake.width <= viewport.width,
+    `x=${brake.x}; width=${brake.width}; viewportWidth=${viewport.width}`);
+  check(name, "speed-brake indicator stays inside the canvas vertically",
+    brake.y >= 0 && brake.height > 0 && brake.y + brake.height <= viewport.height,
+    `y=${brake.y}; height=${brake.height}; viewportHeight=${viewport.height}`);
+}
+
 // The portrait assisted mode is a first-class experience, so a phone-portrait pass runs the
 // core scenarios through the SAME geometry contract at 430x860. The full battery stays on the
 // landscape pass to bound gate time.
@@ -444,6 +518,7 @@ const PORTRAIT_SCENARIOS = new Set([
   "gun-overheat-latched", "gcas-bottom-out-release",
   "funnel-level-mid", "padlock-bandit-right-high", "padlock-bandit-behind",
   "padlock-aft-right-high",
+  "idle-speed-brake-out", "idle-speed-brake-transit",
 ]);
 
 async function runViewport(site, browser, { label, width, height, subset }) {
@@ -481,6 +556,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     assertPadlockInsetAndLocator(data);
     assertBasicJobs(data);
     assertGunHeat(data);
+    assertSpeedBrake(data);
     assertFunnelContainsTarget(data);
     assertWarningLine(data);
   }
@@ -501,6 +577,13 @@ async function main() {
   } finally {
     await browser.close();
     await site.close();
+  }
+
+  if (speedBrakeVisibleObservations === 0) {
+    failures.push(
+      "speed-brake assertions never saw a drawn indicator: the harness state allowlist or the "
+      + "F-22 speed-brake scenarios are broken, so those checks passed vacuously",
+    );
   }
 
   if (failures.length > 0) {

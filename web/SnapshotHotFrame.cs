@@ -278,6 +278,10 @@ internal static class SnapshotHotFrame {
         Num("applied_throttle", 3);
         Num("engine", 3);
         Num("engine_spool_fraction", 4);
+        // Continuous actuator travel: the automatic speed brake's asymmetric ramp (tau 0.50 s out,
+        // 0.30 s in) would render as ~6 visible steps on the 4 Hz cold path, so it rides the hot
+        // frame. The per-beat has_speed_brake capability flag stays cold.
+        Num("speed_brake", 4);
         Num("engine_rpm_pct", 2);
         Num("engine_thrust_lbf", 1);
         Num("engine_net_thrust_lbf", 1);
@@ -761,6 +765,7 @@ internal static class SnapshotHotFrame {
         w.Num("applied_throttle", appliedCommand.Throttle, 3);
         w.Num("engine", player.ThrustFraction, 3);
         w.Num("engine_spool_fraction", player.ThrustFraction, 4);
+        w.Num("speed_brake", player.SpeedBrake, 4);
         w.Num("engine_rpm_pct", engine.RpmPercent, 2);
         w.Num("engine_thrust_lbf", engine.NetThrustLbf, 1);
         w.Num("engine_net_thrust_lbf", engine.NetThrustLbf, 1);

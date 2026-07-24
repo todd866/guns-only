@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   airdataReadout,
   fuelReadout,
+  speedBrakeReadout,
   speedTapeMarkers,
   stallAwareness,
   systemsReadout,
@@ -274,6 +275,44 @@ test("engine-less loadout reports unpowered instead of inventing endurance", () 
   assert.equal(readout.padlockText, "0 LB · UNPOWERED");
 });
 
+test("speed brake reports travel, not just a latched boolean, and hides when stowed", () => {
+  const stowed = speedBrakeReadout({ has_speed_brake: true, speed_brake: 0 });
+  assert.equal(stowed.available, true);
+  assert.equal(stowed.stowed, true);
+  assert.equal(stowed.visible, false);
+  assert.equal(stowed.text, "");
+
+  const transit = speedBrakeReadout({ has_speed_brake: true, speed_brake: 0.45 });
+  assert.equal(transit.transit, true);
+  assert.equal(transit.deployed, false);
+  assert.equal(transit.visible, true);
+  assert.equal(transit.deployment, 0.45);
+  assert.equal(transit.text, "SB↕");
+
+  const out = speedBrakeReadout({ has_speed_brake: true, speed_brake: 1 });
+  assert.equal(out.deployed, true);
+  assert.equal(out.transit, false);
+  assert.equal(out.visible, true);
+  assert.equal(out.text, "SB");
+});
+
+test("speed brake stays absent without the airframe capability or a finite position", () => {
+  // The F-86 and the balloon glider pin SpeedBrake at exactly 0.0 in the kernel; the capability
+  // flag is what keeps a permanently-stowed indicator off their HUD instead of a dead instrument.
+  const noCapability = speedBrakeReadout({ has_speed_brake: false, speed_brake: 1 });
+  assert.equal(noCapability.available, false);
+  assert.equal(noCapability.visible, false);
+  assert.equal(noCapability.deployment, 0);
+  assert.equal(noCapability.text, "");
+
+  assert.equal(speedBrakeReadout({}).available, false);
+  assert.equal(speedBrakeReadout({ has_speed_brake: true }).available, false);
+  assert.equal(speedBrakeReadout({ has_speed_brake: true, speed_brake: "x" }).visible, false);
+  // Out-of-range projections clamp rather than overdrawing the tick.
+  assert.equal(speedBrakeReadout({ has_speed_brake: true, speed_brake: 1.4 }).deployment, 1);
+  assert.equal(speedBrakeReadout({ has_speed_brake: true, speed_brake: -0.3 }).deployment, 0);
+});
+
 test("systems readout preserves command, three independent gear indications, and flap asymmetry", () => {
   const readout = systemsReadout({
     gear_handle: "DOWN",
@@ -537,6 +576,8 @@ test("production HUD consumes stabilized KIAS plus physical corner and fuel read
     "padlock must retain the physical IAS/stall/corner tape instead of a duplicate card");
   assert.match(source, /fuelReadout\(state\)/);
   assert.match(source, /systemsReadout\(frame\.state\)/);
+  assert.match(source, /speedBrakeReadout\(state\)/,
+    "the idle-commanded speed brake annunciates on the unconditionally drawn PWR rail");
   assert.match(source, /visualMergeWeaponsCue\(frame\.state\)/);
   assert.match(source, /this\.drawVisualMergeWeaponsCue\(frame\)/);
   assert.match(source, /state\.has_engine === false \|\| state\.fuel_consumes === false/);

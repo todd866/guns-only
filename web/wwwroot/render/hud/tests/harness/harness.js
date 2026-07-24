@@ -423,6 +423,8 @@ window.__debugScenario = async (name) => {
       gun_heat: frame.state.gun_heat,
       gun_overheat: frame.state.gun_overheat,
       gun_firing: frame.state.gun_firing,
+      speed_brake: frame.state.speed_brake,
+      has_speed_brake: frame.state.has_speed_brake,
     },
     triggerHeld: frame.triggerHeld,
     banditOnTrajectory: scenario?.bandit?.onTrajectory === true,

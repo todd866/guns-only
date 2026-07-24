@@ -35,7 +35,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.11.0";
+    const string SnapshotSchemaVersion = "1.12.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -117,6 +117,12 @@ internal static class SnapshotProjection {
         // compatibility systems object is pilot-facing. Modern airborne surrogates therefore do
         // not inherit an F-86 hydraulic/gear panel they do not actually simulate.
         bool hasSimulatedAirframeSystems = _beat.PlayerAircraft.SystemsSimulated;
+        // The idle-commanded speed brake is an F-22 automatic-surface surrogate
+        // (AircraftSim.UpdateAutomaticAerodynamicConfiguration). Every other airframe pins it at
+        // exactly 0.0, so the capability flag keeps a permanently-stowed indicator off the F-86,
+        // the balloon glider and the drone-raid targets rather than showing a dead instrument.
+        bool hasAutomaticSpeedBrake =
+            _beat.PlayerAir.HighAlphaModel == HighAlphaModelKind.F22PublicDataSurrogate;
         bool ready = Session.Lifecycle == SimulationSession.LifecycleState.Ready;
         bool paused = Session.Lifecycle == SimulationSession.LifecycleState.Paused;
         bool finished = Session.Lifecycle == SimulationSession.LifecycleState.Finished;
@@ -503,6 +509,8 @@ internal static class SnapshotProjection {
             + $"\"throttle\":{_detents.Throttle:F3},\"requested_throttle\":{requestedCommand.Throttle:F3},"
             + $"\"applied_throttle\":{appliedCommand.Throttle:F3},\"engine\":{_player.ThrustFraction:F3},"
             + $"\"engine_spool_fraction\":{_player.ThrustFraction:F4},"
+            + $"\"speed_brake\":{_player.SpeedBrake:F4},"
+            + $"\"has_speed_brake\":{(hasAutomaticSpeedBrake ? "true" : "false")},"
             + $"\"has_engine\":{(hasEngine ? "true" : "false")},"
             + $"\"max_thrust_fraction\":{_beat.PlayerAir.MaxThrustFraction:F3},"
             + $"\"has_afterburner\":{(_beat.PlayerAir.MaxThrustFraction > 1.0 ? "true" : "false")},"
