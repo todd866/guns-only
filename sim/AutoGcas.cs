@@ -355,6 +355,14 @@ public static class AutoGcasController {
         // so this same last-instant commit fires for them. The commitment point is the already-
         // validated attentive boundary; the passive escalation and its PilotActivelyFlying input are
         // gone.
+        // Numerical note (Codex adversarial review 2026-07-24): TimeAvailable() bisects
+        // [0, LookaheadSeconds] eight times, so its smallest positive result is ~0.031 s, just
+        // above this 0.03 s threshold. The trigger therefore commits effectively when TimeAvailable
+        // returns 0 — i.e. the instant the immediate 12 G recovery's clearance reaches the terrain
+        // buffer. That IS the intended last instant, and the buffer (30 m manoeuvring / 6 m stable)
+        // is the margin: a closed-loop hands-off steep dive is caught 100-330 ft clear
+        // (AutoGcasPassiveSteepDiveSaveTests). Keep any future retune of these two constants aware
+        // that only a threshold >= the bisection resolution changes the commitment point.
         double boundaryFactor = config.AttentivePilotTriggerFactor;
         bool trigger = collisionThreat
             && timeAvailable <= config.TriggerTimeAvailableSeconds * boundaryFactor;
