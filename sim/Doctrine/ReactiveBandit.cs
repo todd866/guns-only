@@ -139,12 +139,16 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     public ReactiveBandit(AircraftState initial, AircraftParams parameters,
         PilotSkill skill = PilotSkill.Competent,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
-        int engagementNumber = 1, BanditSkillProfile? profile = null) {
+        int engagementNumber = 1, BanditSkillProfile? profile = null,
+        int? doctrineIndex = null) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         Skill = skill;
         _profile = profile ?? BanditSkillProfile.For(skill);
-        _doctrine = (engagementNumber - 1) % System.Math.Max(1, _profile.DoctrineCount);
+        int doctrineCount = System.Math.Max(1, _profile.DoctrineCount);
+        if (doctrineIndex is < 0 || doctrineIndex >= doctrineCount)
+            throw new System.ArgumentOutOfRangeException(nameof(doctrineIndex));
+        _doctrine = doctrineIndex ?? (engagementNumber - 1) % doctrineCount;
         _parameters = parameters;
         _terrain = terrain;
         _sim = new AircraftSim(initial, parameters);
@@ -175,7 +179,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         AircraftParams parameters, int engagementNumber,
         double speedMps = 180.0, PilotSkill skill = PilotSkill.Competent,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
-        BanditSkillProfile? profile = null) {
+        BanditSkillProfile? profile = null, int? doctrineIndex = null) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         if (!double.IsFinite(speedMps) || speedMps <= 0.0)
@@ -229,7 +233,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double gamma = System.Math.Atan2(toMerge.Y, System.Math.Max(1.0, horizontalM));
         var initial = new AircraftState(position, speedMps, gamma, chi, 0.0, parameters.MassKg);
         return new ReactiveBandit(
-            initial, parameters, skill, terrain, engagementNumber, profile);
+            initial, parameters, skill, terrain, engagementNumber, profile,
+            doctrineIndex);
     }
 
     static double SurfaceHeightM(GunsOnly.Sim.Environment.ITerrainSurface? terrain,
@@ -641,11 +646,6 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             _nextJinkAt = double.PositiveInfinity;
         }
 
-        if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
-            Tactic = BanditTactic.Return;
-            return;
-        }
-
         // Deny the stratosphere plink. A player camping above the believable combat ceiling turns
         // a ceiling-limited bandit into a stationary target; real BFM answers that by unloading,
         // extending away, and rebuilding energy below — dragging the fight back down instead of
@@ -659,6 +659,15 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         if (own.Speed < _energyEntryMps
             || (Tactic == BanditTactic.Energy && own.Speed < _energyExitMps)) {
             Tactic = BanditTactic.Energy;
+            return;
+        }
+
+        // Energy state outranks arena housekeeping. Previously a slow bandit outside the return
+        // radius stayed in Return's nose-high 2.8 G turn instead of unloading, decelerated into a
+        // deep stall, and wallowed for the rest of the engagement. Rebuild honest flying energy
+        // first; Return can bend the recovered aircraft back into the fight on a later tick.
+        if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
+            Tactic = BanditTactic.Return;
             return;
         }
 

@@ -181,6 +181,34 @@ public class FightDirectorBanditTests {
         return string.Join("|", signature);
     }
 
+    static string DirectedOpenerSignature(SpawnSpec spec) {
+        BeatSetup beat = EngagementReportTests.ContinuousDuel();
+        IBandit bandit = beat.CreateNextBandit(
+            beat.Player,
+            engagementNumber: 8,
+            spec: spec);
+        var contact = new AircraftSim(
+            State(620.0, 3350.0, 1500.0, 215.0, chi: -0.15), Air);
+        var signature = new List<string>();
+        long previousSelection = 0;
+
+        for (int tick = 0; tick < 2 * AircraftSim.TickHz; tick++) {
+            bandit.Step(ActorObservation.Capture(contact.State, tick), Dt);
+            contact.Step(new PilotCommand(1.0, 0.0, 0.84, 0.0), Dt);
+            var trace = Assert.IsAssignableFrom<IBanditDecisionTraceSource>(bandit)
+                .DecisionTrace;
+            if (trace.SelectionSequence == previousSelection)
+                continue;
+
+            previousSelection = trace.SelectionSequence;
+            PilotCommand command = trace.SelectedCommand;
+            signature.Add(FormattableString.Invariant(
+                $"{trace.SelectedCandidateIndex}:{command.GDemand:F3},{command.BankTarget:F3},{command.Throttle:F3}"));
+        }
+
+        return string.Join("|", signature);
+    }
+
     [Fact]
     public void AceOpenersCycleDeterministicallyAcrossThreeEngagementDoctrines() {
         string first = OpenerSignature(PilotSkill.Ace, engagementNumber: 1);
@@ -191,6 +219,18 @@ public class FightDirectorBanditTests {
             $"doctrine 0: {first}\ndoctrine 1: {second}\ndoctrine 2: {third}");
         Assert.Equal(second,
             OpenerSignature(PilotSkill.Ace, engagementNumber: 2));
+    }
+
+    [Fact]
+    public void FightDirectorDoctrineIndexControlsTheSpawnedOpener() {
+        string first = DirectedOpenerSignature(
+            new SpawnSpec(PilotSkill.Ace, 0, false, "test"));
+        string second = DirectedOpenerSignature(
+            new SpawnSpec(PilotSkill.Ace, 1, false, "test"));
+        string third = DirectedOpenerSignature(
+            new SpawnSpec(PilotSkill.Ace, 2, false, "test"));
+
+        Assert.Equal(3, new[] { first, second, third }.Distinct().Count());
     }
 
     [Theory]
