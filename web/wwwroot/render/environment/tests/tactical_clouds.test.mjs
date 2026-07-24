@@ -139,3 +139,138 @@ test("bridge weather conversion flips north once and balanced tier builds ray vo
   assert.equal(field.shadowMesh.count, field.cloudMesh.count);
   field.dispose();
 });
+
+test("cloud-break entry clears smoothly when terrain residency is ready", () => {
+  const field = createTacticalCloudField(THREE, {
+    qualityTier: "mobile",
+    entryResidentPages: 1,
+    entryResidentChunks: 2,
+    entryClearSeconds: 2.6,
+  });
+  const camera = new THREE.PerspectiveCamera();
+  field.beginCloudBreak({ nowSeconds: 10 });
+
+  const holding = field.updateCloudBreak({
+    camera,
+    nowSeconds: 10.5,
+    terrainStats: { residentPages: 1, residentChunks: 1 },
+    trueAirspeedKts: 400,
+  });
+  assert.equal(holding.phase, "holding");
+  assert.equal(holding.opacity, 1);
+
+  const threshold = field.updateCloudBreak({
+    camera,
+    nowSeconds: 10.6,
+    terrainStats: { residentPages: 1, residentChunks: 2 },
+    trueAirspeedKts: 400,
+  });
+  assert.equal(threshold.phase, "clearing");
+  assert.equal(threshold.reason, "residency");
+  assert.equal(threshold.opacity, 1, "the residency edge must not snap the cloud away");
+
+  const easing = field.updateCloudBreak({
+    camera,
+    nowSeconds: 11.9,
+    terrainStats: { residentPages: 1, residentChunks: 2 },
+    trueAirspeedKts: 400,
+  });
+  assert.ok(easing.coverage > 0 && easing.coverage < 1);
+  assert.ok(easing.opacity > 0 && easing.opacity < 1);
+  assert.ok(easing.fogDensity > 0);
+  field.dispose();
+});
+
+test("cloud-break entry uses a bounded timeout when terrain never becomes resident", () => {
+  const field = createTacticalCloudField(THREE, {
+    qualityTier: "mobile",
+    entryHoldTimeoutSeconds: 6,
+    entryClearSeconds: 2.6,
+  });
+  const camera = new THREE.PerspectiveCamera();
+  field.beginCloudBreak({ nowSeconds: 20 });
+
+  const beforeTimeout = field.updateCloudBreak({
+    camera,
+    nowSeconds: 25.99,
+    terrainStats: null,
+    trueAirspeedKts: 400,
+  });
+  assert.equal(beforeTimeout.phase, "holding");
+
+  const timeout = field.updateCloudBreak({
+    camera,
+    nowSeconds: 26,
+    terrainStats: { residentPages: 0, residentChunks: 0, errors: 1 },
+    trueAirspeedKts: 400,
+  });
+  assert.equal(timeout.phase, "clearing");
+  assert.equal(timeout.reason, "timeout");
+
+  const complete = field.updateCloudBreak({
+    camera,
+    nowSeconds: 28.61,
+    terrainStats: null,
+    trueAirspeedKts: 400,
+  });
+  assert.equal(complete.phase, "complete");
+  assert.equal(complete.active, false);
+  assert.equal(complete.fogDensity, 0);
+  field.dispose();
+});
+
+test("cloud-break near-field wisps are fully torn down after break-out", () => {
+  const field = createTacticalCloudField(THREE, {
+    qualityTier: "mobile",
+    entryResidentPages: 1,
+    entryResidentChunks: 1,
+    entryClearSeconds: 1,
+  });
+  const camera = new THREE.PerspectiveCamera();
+  field.beginCloudBreak({ nowSeconds: 0 });
+  field.updateCloudBreak({
+    camera,
+    nowSeconds: 0,
+    terrainStats: { residentPages: 1, residentChunks: 1 },
+    trueAirspeedKts: 450,
+  });
+  assert.ok(field.entryWispMesh);
+  assert.ok(field.cloudBreakDiagnostics().wispInstances > 0);
+  let wispMeshDisposed = false;
+  let wispGeometryDisposed = false;
+  let wispMaterialDisposed = false;
+  field.entryWispMesh.addEventListener("dispose", () => { wispMeshDisposed = true; });
+  field.entryWispMesh.geometry.addEventListener("dispose", () => { wispGeometryDisposed = true; });
+  field.entryWispMesh.material.addEventListener("dispose", () => { wispMaterialDisposed = true; });
+
+  field.updateCloudBreak({
+    camera,
+    nowSeconds: 1.01,
+    terrainStats: { residentPages: 1, residentChunks: 1 },
+    trueAirspeedKts: 450,
+  });
+  assert.equal(field.entryWispMesh, null);
+  assert.equal(field.entryInsideMesh, null);
+  assert.equal(wispMeshDisposed, true);
+  assert.equal(wispGeometryDisposed, true);
+  assert.equal(wispMaterialDisposed, true);
+  assert.equal(field.group.getObjectByName("CLOUD_BREAK_NEAR_WISPS"), undefined);
+  assert.equal(field.group.getObjectByName("CLOUD_BREAK_INSIDE_LAYER"), undefined);
+  assert.deepEqual(
+    {
+      allocated: field.cloudBreakDiagnostics().wispResourcesAllocated,
+      insideLayer: field.cloudBreakDiagnostics().insideLayerAllocated,
+      instances: field.cloudBreakDiagnostics().wispInstances,
+    },
+    { allocated: false, insideLayer: false, instances: 0 },
+  );
+
+  field.updateCloudBreak({
+    camera,
+    nowSeconds: 5,
+    terrainStats: { residentPages: 1, residentChunks: 1 },
+    trueAirspeedKts: 450,
+  });
+  assert.equal(field.entryWispMesh, null, "completed entries must not recreate hidden work");
+  field.dispose();
+});

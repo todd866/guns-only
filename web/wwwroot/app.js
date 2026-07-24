@@ -1621,6 +1621,7 @@ function resetMissionPresentation() {
   appliedBanditPadlockRollAssist = null;
   syncBanditPadlockRollAssist();
   gimbalReturnFast = false;
+  activeView?.cancelCloudBreakEntry();
   activeView?.hud.setLegendVisible?.(false);
 }
 
@@ -2170,6 +2171,7 @@ function beginFlight() {
       .catch(() => {});
   }
   bridge.Begin();
+  activeView?.beginCloudBreakEntry();
   pauseReasons.delete("ready");
   bridgePauseApplied = false;
   renderPauseUi();
@@ -3553,12 +3555,18 @@ class FlightView {
         group: new THREE.Group(),
         update: () => 0,
         configureFromState: () => false,
+        beginCloudBreak: () => Object.freeze({ active: false, phase: "disabled" }),
+        updateCloudBreak: () => Object.freeze({ active: false, phase: "disabled" }),
+        cancelCloudBreak: () => Object.freeze({ active: false, phase: "disabled" }),
+        cloudBreakDiagnostics: () => Object.freeze({ active: false, phase: "disabled" }),
         dispose() {},
       };
     this.tacticalClouds.group.name = "AUTHORITATIVE_WEATHER_CLOUDS";
     this.tacticalClouds.group.visible = PRODUCTION_SIMULATED_CLOUDS_ENABLED;
     this.scene.add(this.sky.mesh, this.sea.mesh, this.tacticalClouds.group);
     this.cloudFogColor = new THREE.Color(0xb8c6c8);
+    this.cloudBreakActive = false;
+    this.cloudBreakPresentation = this.tacticalClouds.cloudBreakDiagnostics();
 
     this.ambient = new THREE.HemisphereLight(0xb5cad0, 0x102229, 0.78);
     this.scene.add(this.ambient);
@@ -3700,6 +3708,19 @@ class FlightView {
     this.terrainPresentationPromise = null;
     this.terrainSceneryEraPromise = null;
     this.resize();
+  }
+
+  beginCloudBreakEntry() {
+    this.cloudBreakPresentation = this.tacticalClouds.beginCloudBreak();
+    this.cloudBreakActive = this.cloudBreakPresentation.active;
+    this.tacticalClouds.group.visible = this.cloudBreakActive
+      || PRODUCTION_SIMULATED_CLOUDS_ENABLED;
+  }
+
+  cancelCloudBreakEntry() {
+    if (!this.cloudBreakActive) return;
+    this.cloudBreakPresentation = this.tacticalClouds.cancelCloudBreak();
+    this.cloudBreakActive = false;
   }
 
   ensureTerrainPresentation() {
@@ -4575,6 +4596,16 @@ class FlightView {
     else this.cockpitHead.update(this.camera, state, dt);
     this.camera.updateMatrixWorld(true);
     const gunsightPresentation = this.periodGunsight.update(this.camera, state, dt);
+    if (this.cloudBreakActive) {
+      this.cloudBreakPresentation = this.tacticalClouds.updateCloudBreak({
+        camera: this.camera,
+        nowSeconds,
+        terrainStats: this.terrainPresentation?.diagnostics() ?? null,
+        trueAirspeedKts: state.true_airspeed_kts,
+      });
+      this.cloudBreakActive = this.cloudBreakPresentation.active;
+    }
+    const cloudBreak = this.cloudBreakPresentation;
 
     const cameraAltitude = Math.max(0, this.camera.position.y);
     let fogDensity;
@@ -4598,7 +4629,11 @@ class FlightView {
       const cloudTruthActive = PRODUCTION_SIMULATED_CLOUDS_ENABLED
         && ((Array.isArray(state.weather_layers) && state.weather_layers.length > 0)
           || (Array.isArray(state.weather_cells) && state.weather_cells.length > 0));
-      this.tacticalClouds.group.visible = cloudTruthActive;
+      this.tacticalClouds.group.visible = cloudTruthActive || cloudBreak.active;
+      if (this.tacticalClouds.cloudMesh) {
+        this.tacticalClouds.cloudMesh.visible = cloudTruthActive;
+        this.tacticalClouds.shadowMesh.visible = cloudTruthActive;
+      }
       if (cloudTruthActive) {
         this.tacticalClouds.configureFromState(state);
         this.tacticalClouds.update(
@@ -4613,11 +4648,13 @@ class FlightView {
       // scattering colour while inside condensate, but must not add a second invented extinction.
       const localCloudFraction = clamp(Number(state.cloud_fraction_01) || 0, 0, 1);
       const localExtinction = Math.max(0, Number(state.cloud_extinction_per_m) || 0);
-      fogDensity = baseFogDensity;
+      fogDensity = Math.max(baseFogDensity, cloudBreak.fogDensity || 0);
+      let cloudColorMix = 0;
       if (localCloudFraction > 0.001 || localExtinction > 0) {
-        const cloudColorMix = clamp(localCloudFraction * 1.18 + localExtinction * 18, 0, 0.88);
-        this.fogColor.lerp(this.cloudFogColor, cloudColorMix);
+        cloudColorMix = clamp(localCloudFraction * 1.18 + localExtinction * 18, 0, 0.88);
       }
+      cloudColorMix = Math.max(cloudColorMix, (cloudBreak.opacity || 0) * 0.94);
+      if (cloudColorMix > 0) this.fogColor.lerp(this.cloudFogColor, cloudColorMix);
       this.scene.fog.color.copy(this.fogColor);
       this.scene.fog.density = fogDensity;
     }
@@ -4795,6 +4832,7 @@ class FlightView {
       visualRuntimeError: this.visualRuntimeError,
       terrain: this.terrainPresentation?.diagnostics() ?? null,
       terrainError: this.terrainPresentationError,
+      cloudBreak: this.tacticalClouds.cloudBreakDiagnostics(),
       multiplayer: this.remoteAircraft.diagnostics(),
     });
   }
