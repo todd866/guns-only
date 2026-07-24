@@ -4,6 +4,11 @@ const HASH_GOLD = 0x9e3779b97f4a7c15n;
 const HASH_K1 = 0xbf58476d1ce4e5b9n;
 const HASH_K2 = 0x94d049bb133111ebn;
 const LAYER_FAMILY = 0x46c89d3178a425e7n;
+const DEFAULT_ENTRY_RESIDENT_PAGES = 1;
+const DEFAULT_ENTRY_RESIDENT_CHUNKS = 8;
+const DEFAULT_ENTRY_HOLD_TIMEOUT_SECONDS = 6;
+const DEFAULT_ENTRY_CLEAR_SECONDS = 2.6;
+const DEFAULT_ENTRY_EXTINCTION_PER_M = 0.024;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -475,6 +480,96 @@ const SHADOW_FRAGMENT = /* glsl */ `
   }
 `;
 
+const ENTRY_WISP_VERTEX = /* glsl */ `
+  precision highp float;
+  attribute float instancePhase;
+  varying vec2 vWispUv;
+  varying float vWispPhase;
+  #include <common>
+  #include <logdepthbuf_pars_vertex>
+  void main() {
+    vWispUv = uv;
+    vWispPhase = instancePhase;
+    vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    #include <logdepthbuf_vertex>
+  }
+`;
+
+const ENTRY_WISP_FRAGMENT = /* glsl */ `
+  precision highp float;
+  uniform float uOpacity;
+  uniform vec3 uLightColor;
+  uniform vec3 uShadowColor;
+  varying vec2 vWispUv;
+  varying float vWispPhase;
+  #include <logdepthbuf_pars_fragment>
+  void main() {
+    vec2 point = vWispUv * 2.0 - 1.0;
+    float scallop = sin(point.x * 8.0 + vWispPhase) * 0.055
+      + sin(point.x * 15.0 - vWispPhase * 1.7) * 0.025;
+    float body = 1.0 - smoothstep(0.42 + scallop, 1.0,
+      length(point * vec2(0.72, 1.46)));
+    float streak = 0.72 + 0.28 * sin(
+      point.x * 10.0 + point.y * 3.0 + vWispPhase
+    );
+    float alpha = body * (0.56 + streak * 0.28) * uOpacity;
+    if (alpha < 0.012) discard;
+    vec3 color = mix(uShadowColor, uLightColor,
+      clamp(0.42 + point.y * 0.20 + streak * 0.18, 0.0, 1.0));
+    gl_FragColor = vec4(color, alpha);
+    #include <logdepthbuf_fragment>
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+
+const ENTRY_INSIDE_VERTEX = /* glsl */ `
+  precision highp float;
+  varying vec3 vCloudDirection;
+  varying float vCloudBroad;
+  #include <common>
+  #include <logdepthbuf_pars_vertex>
+  void main() {
+    vCloudDirection = normalize(position);
+    // Broad illustrative billows need no per-pixel noise: interpolate a few vertex samples across
+    // the deliberately coarse shell so the temporary full-screen layer stays cheap on mobile.
+    vCloudBroad = 0.50
+      + sin(dot(vCloudDirection, vec3(7.1, 3.7, -5.3)) + 1.4) * 0.20
+      + sin(dot(vCloudDirection, vec3(-13.7, 9.1, 11.3)) - 0.8) * 0.11
+      + sin(dot(vCloudDirection, vec3(23.1, -17.3, 19.7)) + 2.7) * 0.055;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    #include <logdepthbuf_vertex>
+  }
+`;
+
+const ENTRY_INSIDE_FRAGMENT = /* glsl */ `
+  precision highp float;
+  uniform float uCoverage;
+  uniform float uOpacity;
+  uniform vec3 uLightColor;
+  uniform vec3 uShadowColor;
+  varying vec3 vCloudDirection;
+  varying float vCloudBroad;
+  #include <logdepthbuf_pars_fragment>
+  void main() {
+    vec3 direction = normalize(vCloudDirection);
+    float broad = vCloudBroad;
+    float threshold = 1.0 - uCoverage;
+    float body = smoothstep(threshold - 0.18, threshold + 0.18, broad);
+    float veil = clamp(body * 0.64 + uCoverage * 0.58, 0.0, 1.0);
+    float light = clamp(0.48 + direction.y * 0.16 + broad * 0.22, 0.0, 1.0);
+    vec3 color = mix(uShadowColor, uLightColor, light);
+    float alpha = veil * uOpacity * 0.992;
+    if (alpha < 0.008) discard;
+    gl_FragColor = vec4(color, alpha);
+    #include <logdepthbuf_fragment>
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+
 function tierGridSize(tier) {
   if (tier === "desktop") return 7;
   return 5;
@@ -492,6 +587,12 @@ function tierLobeCount(tier) {
   if (tier === "desktop") return 2;
   if (tier === "balanced") return 1;
   return 1;
+}
+
+function tierEntryWispCount(tier) {
+  if (tier === "desktop") return 18;
+  if (tier === "balanced") return 14;
+  return 10;
 }
 
 function layerDescriptor(cellX, cellZ, layer, layerIndex, seed) {
@@ -648,6 +749,256 @@ export function createTacticalCloudField(THREE, options = {}) {
   let matricesDirty = true;
   let appliedTimeSeconds = Number.NaN;
   const nextSunDirection = new THREE.Vector3();
+  const entryLayer = normalizeLayer({
+    baseM: 0,
+    topM: 1,
+    coverage: 1,
+    extinctionPerM: options.entryExtinctionPerM ?? DEFAULT_ENTRY_EXTINCTION_PER_M,
+  });
+  const entryResidentPages = Math.max(0, Math.round(finite(
+    options.entryResidentPages,
+    DEFAULT_ENTRY_RESIDENT_PAGES,
+  )));
+  const entryResidentChunks = Math.max(0, Math.round(finite(
+    options.entryResidentChunks,
+    DEFAULT_ENTRY_RESIDENT_CHUNKS,
+  )));
+  const entryHoldTimeoutSeconds = Math.max(0.1, finite(
+    options.entryHoldTimeoutSeconds,
+    DEFAULT_ENTRY_HOLD_TIMEOUT_SECONDS,
+  ));
+  const entryClearSeconds = Math.max(0.1, finite(
+    options.entryClearSeconds,
+    DEFAULT_ENTRY_CLEAR_SECONDS,
+  ));
+  const entryWispCount = Math.max(1, Math.round(finite(
+    options.entryWispCount,
+    tierEntryWispCount(tier),
+  )));
+  const entryState = {
+    phase: "idle",
+    reason: null,
+    begunAtSeconds: Number.NaN,
+    clearAtSeconds: Number.NaN,
+    coverage: 0,
+    opacity: 0,
+    fogDensity: 0,
+  };
+  let entryWispMesh = null;
+  let entryWispGeometry = null;
+  let entryWispMaterial = null;
+  let entryWispPhaseAttribute = null;
+  let entryInsideMesh = null;
+  let entryInsideGeometry = null;
+  let entryInsideMaterial = null;
+  const entryWispDummy = new THREE.Object3D();
+  const entryForward = new THREE.Vector3();
+  const entryRight = new THREE.Vector3();
+  const entryUp = new THREE.Vector3();
+
+  function createEntryResources() {
+    if (entryWispMesh) return;
+    // The inside layer closes the sky-dome hole that scene fog cannot cover. The moving near-field
+    // wisps are a separate one-draw instanced batch so speed remains readable against that layer.
+    entryInsideGeometry = new THREE.SphereGeometry(64, 16, 10);
+    entryInsideMaterial = new THREE.ShaderMaterial({
+      name: "MAT_CLOUD_BREAK_INSIDE_LAYER",
+      uniforms: {
+        uCoverage: { value: 1 },
+        uOpacity: { value: 1 },
+        uLightColor: { value: new THREE.Color(0xd9e2df) },
+        uShadowColor: { value: new THREE.Color(0x8ba0a4) },
+      },
+      vertexShader: ENTRY_INSIDE_VERTEX,
+      fragmentShader: ENTRY_INSIDE_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.BackSide,
+    });
+    entryInsideMesh = new THREE.Mesh(entryInsideGeometry, entryInsideMaterial);
+    entryInsideMesh.name = "CLOUD_BREAK_INSIDE_LAYER";
+    entryInsideMesh.frustumCulled = false;
+    entryInsideMesh.renderOrder = 3;
+    group.add(entryInsideMesh);
+
+    entryWispGeometry = new THREE.PlaneGeometry(2, 2, 1, 1);
+    entryWispPhaseAttribute = new THREE.InstancedBufferAttribute(
+      new Float32Array(entryWispCount),
+      1,
+    );
+    entryWispGeometry.setAttribute("instancePhase", entryWispPhaseAttribute);
+    entryWispMaterial = new THREE.ShaderMaterial({
+      name: "MAT_CLOUD_BREAK_NEAR_WISPS",
+      uniforms: {
+        uOpacity: { value: 1 },
+        uLightColor: { value: new THREE.Color(0xdce5e3) },
+        uShadowColor: { value: new THREE.Color(0x82979c) },
+      },
+      vertexShader: ENTRY_WISP_VERTEX,
+      fragmentShader: ENTRY_WISP_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    entryWispMesh = new THREE.InstancedMesh(
+      entryWispGeometry,
+      entryWispMaterial,
+      entryWispCount,
+    );
+    entryWispMesh.name = "CLOUD_BREAK_NEAR_WISPS";
+    entryWispMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    entryWispMesh.frustumCulled = false;
+    entryWispMesh.renderOrder = 4;
+    entryWispMesh.count = entryWispCount;
+    group.add(entryWispMesh);
+  }
+
+  function tearDownEntryResources() {
+    // This is a real teardown, not a visibility toggle: after break-out there is no entry draw,
+    // instance upload, shader uniform update, or retained GPU allocation.
+    entryInsideMesh?.removeFromParent();
+    entryInsideGeometry?.dispose();
+    entryInsideMaterial?.dispose();
+    entryWispMesh?.removeFromParent();
+    entryWispMesh?.dispose();
+    entryWispGeometry?.dispose();
+    entryWispMaterial?.dispose();
+    entryInsideMesh = null;
+    entryInsideGeometry = null;
+    entryInsideMaterial = null;
+    entryWispMesh = null;
+    entryWispGeometry = null;
+    entryWispMaterial = null;
+    entryWispPhaseAttribute = null;
+  }
+
+  function entrySnapshot() {
+    return Object.freeze({
+      active: entryState.phase === "holding" || entryState.phase === "clearing",
+      phase: entryState.phase,
+      reason: entryState.reason,
+      coverage: entryState.coverage,
+      opacity: entryState.opacity,
+      fogDensity: entryState.fogDensity,
+      wispInstances: entryWispMesh?.count ?? 0,
+      wispResourcesAllocated: entryWispMesh !== null,
+      insideLayerAllocated: entryInsideMesh !== null,
+    });
+  }
+
+  function beginCloudBreak({ nowSeconds } = {}) {
+    tearDownEntryResources();
+    entryState.phase = "holding";
+    entryState.reason = null;
+    entryState.begunAtSeconds = Number.isFinite(nowSeconds) ? nowSeconds : Number.NaN;
+    entryState.clearAtSeconds = Number.NaN;
+    entryState.coverage = entryLayer.coverage;
+    entryState.opacity = 1;
+    entryState.fogDensity = entryLayer.extinctionPerM;
+    createEntryResources();
+    return entrySnapshot();
+  }
+
+  function updateEntryWisps(camera, elapsedSeconds, trueAirspeedKts) {
+    if (!entryWispMesh || !camera?.position || !camera?.quaternion) return;
+    const reportedTrueAirspeedKts = Number(trueAirspeedKts);
+    const trueAirspeedMps = clamp(
+      Number.isFinite(reportedTrueAirspeedKts) ? reportedTrueAirspeedKts : 400,
+      0,
+      720,
+    ) * 0.514444;
+    entryInsideMesh.position.copy(camera.position);
+    entryInsideMaterial.uniforms.uCoverage.value = entryState.coverage;
+    entryInsideMaterial.uniforms.uOpacity.value = entryState.opacity;
+    entryForward.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    entryRight.set(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+    entryUp.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+    for (let index = 0; index < entryWispCount; index++) {
+      const lane = unitHash(index, 0, 91);
+      const vertical = unitHash(index, 0, 92);
+      const phase = unitHash(index, 0, 93);
+      const speedScale = 0.78 + unitHash(index, 0, 94) * 0.62;
+      const travelLength = 105 + unitHash(index, 0, 95) * 75;
+      const distanceAhead = 88
+        - ((elapsedSeconds * trueAirspeedMps * speedScale + phase * travelLength)
+          % travelLength);
+      const proximity = 1 - clamp((distanceAhead + 12) / 100, 0, 1);
+      const side = (lane < 0.5 ? -1 : 1)
+        * (3.5 + Math.abs(lane - 0.5) * 19 + proximity * 6.5);
+      const height = (vertical - 0.5) * (10 + proximity * 7);
+      entryWispDummy.position.copy(camera.position)
+        .addScaledVector(entryForward, distanceAhead)
+        .addScaledVector(entryRight, side)
+        .addScaledVector(entryUp, height);
+      entryWispDummy.quaternion.copy(camera.quaternion);
+      entryWispDummy.rotateZ((unitHash(index, 0, 96) - 0.5) * 0.55);
+      entryWispDummy.scale.set(
+        4.5 + unitHash(index, 0, 97) * 7.5 + proximity * 5,
+        1.0 + unitHash(index, 0, 98) * 2.2,
+        1,
+      );
+      entryWispDummy.updateMatrix();
+      entryWispMesh.setMatrixAt(index, entryWispDummy.matrix);
+      entryWispPhaseAttribute.setX(index, phase * 29 + index * 1.7);
+    }
+    entryWispMaterial.uniforms.uOpacity.value = entryState.opacity * 0.74;
+    entryWispMesh.instanceMatrix.needsUpdate = true;
+    entryWispPhaseAttribute.needsUpdate = true;
+  }
+
+  function updateCloudBreak({
+    camera,
+    nowSeconds,
+    terrainStats,
+    trueAirspeedKts,
+  } = {}) {
+    if (entryState.phase !== "holding" && entryState.phase !== "clearing") {
+      return entrySnapshot();
+    }
+    const now = finite(nowSeconds);
+    if (!Number.isFinite(entryState.begunAtSeconds)) entryState.begunAtSeconds = now;
+    const elapsedSeconds = Math.max(0, now - entryState.begunAtSeconds);
+    // Residency is the primary release. Wall time is deliberately only the escape hatch for a
+    // disabled, missing, or failed terrain pack.
+    const resident = finite(terrainStats?.residentPages) >= entryResidentPages
+      && finite(terrainStats?.residentChunks) >= entryResidentChunks;
+    const timedOut = elapsedSeconds >= entryHoldTimeoutSeconds;
+    if (entryState.phase === "holding" && (resident || timedOut)) {
+      entryState.phase = "clearing";
+      entryState.reason = resident ? "residency" : "timeout";
+      entryState.clearAtSeconds = now;
+    }
+    if (entryState.phase === "clearing") {
+      const clearProgress = smoothstep01(
+        (now - entryState.clearAtSeconds) / entryClearSeconds,
+      );
+      entryState.coverage = entryLayer.coverage * (1 - clearProgress);
+      entryState.opacity = 1 - clearProgress;
+      entryState.fogDensity = entryLayer.extinctionPerM
+        * entryState.coverage * entryState.opacity;
+      if (clearProgress >= 1) {
+        entryState.phase = "complete";
+        entryState.coverage = 0;
+        entryState.opacity = 0;
+        entryState.fogDensity = 0;
+        tearDownEntryResources();
+        return entrySnapshot();
+      }
+    }
+    updateEntryWisps(camera, elapsedSeconds, trueAirspeedKts);
+    return entrySnapshot();
+  }
+
+  function cancelCloudBreak() {
+    entryState.phase = "idle";
+    entryState.reason = "cancelled";
+    entryState.coverage = 0;
+    entryState.opacity = 0;
+    entryState.fogDensity = 0;
+    tearDownEntryResources();
+    return entrySnapshot();
+  }
+
 
   function rebuild(cameraPosition, timeSeconds) {
     descriptors.length = 0;
@@ -791,6 +1142,7 @@ export function createTacticalCloudField(THREE, options = {}) {
   }
 
   function dispose() {
+    tearDownEntryResources();
     group.removeFromParent();
     geometry.dispose();
     material.dispose();
@@ -807,9 +1159,15 @@ export function createTacticalCloudField(THREE, options = {}) {
     get settings() { return weather; },
     volumetric,
     lobesPerCloud,
+    get entryWispMesh() { return entryWispMesh; },
+    get entryInsideMesh() { return entryInsideMesh; },
     update,
     configure,
     configureFromState,
+    beginCloudBreak,
+    updateCloudBreak,
+    cancelCloudBreak,
+    cloudBreakDiagnostics: entrySnapshot,
     dispose,
   });
 }
