@@ -226,6 +226,44 @@ test("concavity fades to neutral at chunk edges so neighbours cannot seam", () =
   built.geometry.dispose();
 });
 
+test("skirt vertices inherit their source surface normal so they never shade as black walls", () => {
+  // Skirts are near-vertical crack-hiding curtains dropped below each perimeter vertex. Their own
+  // wall normals have dot(N, sun) ~= 0, so once the shadow floor dropped from 0.43 to 0.12 they
+  // render as near-black slabs, most visibly at waterlines. computeVertexNormals() assigns those
+  // wall normals; this asserts they are overwritten with the top-surface normal, which makes the
+  // skirt shade as a continuation of the terrain edge and vanish.
+  // A flat plateau: every surface normal is exactly (0, 1, 0), while computeVertexNormals() would
+  // give each vertical skirt wall a ~horizontal normal. So an inherited-vs-wall normal is an
+  // unambiguous difference, and the RED run confirmed the walls start out un-inherited.
+  const values = new Int16Array([
+    500, 500, 500,
+    500, 500, 500,
+    500, 500, 500,
+  ]);
+  const record = manifest().chunks[0].lods[0];
+  const decoded = decodeTerrainRecord(values.buffer, record, quantization);
+  const built = createTerrainGeometry(THREE, manifest().chunks[0], decoded);
+  const normal = built.geometry.getAttribute("normal");
+
+  // 3x3 grid: baseVertexCount 9 is skirtStart. Perimeter order is the same one the builder walks:
+  // top row, right column, bottom row (reversed), left column (reversed).
+  const perimeter = [0, 1, 2, 5, 8, 7, 6, 3];
+  for (let i = 0; i < perimeter.length; i++) {
+    const source = perimeter[i];
+    for (const skirtVertex of [9 + i * 2, 9 + i * 2 + 1]) {
+      assert.ok(
+        Math.abs(normal.getX(skirtVertex) - normal.getX(source)) < 1e-6
+        && Math.abs(normal.getY(skirtVertex) - normal.getY(source)) < 1e-6
+        && Math.abs(normal.getZ(skirtVertex) - normal.getZ(source)) < 1e-6,
+        `skirt vertex ${skirtVertex} must carry source vertex ${source}'s normal`);
+    }
+  }
+  // The source normals must be genuinely surface-facing (mostly +Y), not the ~horizontal wall
+  // normals — otherwise the assertion above would pass trivially on two equal wrong values.
+  assert.ok(normal.getY(0) > 0.5, "a perimeter surface vertex must face upward");
+  built.geometry.dispose();
+});
+
 test("concavity is deterministic across repeated builds", () => {
   const values = new Int16Array([1000, 400, 1000, 250, 0, 250, 1000, 400, 1000]);
   const record = manifest().chunks[0].lods[0];

@@ -430,6 +430,24 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
     geometry.addGroup(surfaceIndexCount, indices.length - surfaceIndexCount, 1);
   }
   geometry.computeVertexNormals();
+  // computeVertexNormals() gives each skirt vertex the ~horizontal normal of its vertical wall, so
+  // dot(N, sun) ~= 0 and the skirt renders near-black at the current shadow floor. Overwrite every
+  // skirt vertex with its source (top-surface) normal — the same vertices were duplicated for
+  // exactly this reason (see the skirt-position loop) — so the curtain shades as a continuation of
+  // the terrain edge it hides and never reads as a black slab. This runs over the perimeter only
+  // (a few hundred vertices), not the full grid.
+  const normals = geometry.getAttribute("normal");
+  for (let perimeterIndex = 0; perimeterIndex < perimeter.length; perimeterIndex++) {
+    const sourceIndex = perimeter[perimeterIndex];
+    const topIndex = skirtStart + perimeterIndex * 2;
+    const bottomIndex = topIndex + 1;
+    for (const skirtVertex of [topIndex, bottomIndex]) {
+      normals.setXYZ(skirtVertex,
+        normals.getX(sourceIndex),
+        normals.getY(sourceIndex),
+        normals.getZ(sourceIndex));
+    }
+  }
   geometry.computeBoundingSphere();
   const normalAttribute = geometry.getAttribute("normal");
   const boundaryNormals = new Float32Array(perimeter.length * 3);
