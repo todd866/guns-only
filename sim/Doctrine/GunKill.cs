@@ -15,9 +15,16 @@ public sealed record GunHeatConfig(
     public static GunHeatConfig PlayerInfiniteAmmo { get; } = new();
 }
 
-/// One deterministic .50-calibre round in world space. Velocity includes the firing aircraft's
-/// translational velocity; gravity is integrated by GunKill while the round is alive.
-public readonly record struct GunRound(int Id, Vec3D Position, Vec3D Velocity, double AgeSeconds);
+/// One deterministic gun round in world space. Velocity includes the firing aircraft's
+/// translational velocity; gravity is integrated by GunKill while the round is alive. The impact
+/// radius is fixed at trigger time so a round cannot gain rear-quarter forgiveness after a
+/// high-aspect launch.
+public readonly record struct GunRound(
+    int Id,
+    Vec3D Position,
+    Vec3D Velocity,
+    double AgeSeconds,
+    double EffectiveHitRadiusM);
 
 /// Deterministic fixed-gun ballistics and fight damage. Nothing here knows about wall-clock time,
 /// rendering, input devices, or the old camera cone: only a round/target intersection can do damage.
@@ -30,6 +37,12 @@ public sealed class GunKill {
     // covering the fighter silhouette and the small six-gun beaten-zone/aim error that made a
     // real 100 m burst miss a 6 m point sphere.
     public const double DefaultHitRadiusM = 8.0;
+    // Keyboard pilots cannot trim away a final one-degree sight error. Inside an earned,
+    // low-aspect tail chase this 12 m beaten zone covers that residual at roughly 600 m without
+    // steering the projectile or changing damage. The radius is selected only at trigger time.
+    public const double TailChaseHitRadiusM = 12.0;
+    public const double TailChaseMaximumRangeM = 650.0;
+    public const double TailChaseAspectLimitDeg = 30.0;
     public const double MaxFlightSeconds = 1.75;
     public const double GravityMps2 = 9.80665;
     // Physical muzzle station: rounds leave 4 m ahead of the aircraft reference point on the gun line.
@@ -65,7 +78,9 @@ public sealed class GunKill {
             || !double.IsFinite(_profile.MaximumFlightSeconds)
             || _profile.MaximumFlightSeconds <= 0.0
             || !double.IsFinite(_profile.EffectiveHitRadiusM)
-            || _profile.EffectiveHitRadiusM <= 0.0)
+            || _profile.EffectiveHitRadiusM <= 0.0
+            || !double.IsFinite(_profile.TailChaseEffectiveHitRadiusM)
+            || _profile.TailChaseEffectiveHitRadiusM < 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(profile));
         double selectedHitRadius = profile is not null && hitRadiusM == DefaultHitRadiusM
             ? profile.EffectiveHitRadiusM
@@ -189,7 +204,8 @@ public sealed class GunKill {
         if (!double.IsFinite(dt) || dt < 0.0) throw new System.ArgumentOutOfRangeException(nameof(dt));
         HitsThisStep = 0;
         FiredThisStep = false;
-        UpdateLead(own, bandit, dt);
+        double firingHitRadiusM = EffectiveHitRadius(own, bandit);
+        UpdateLead(own, bandit, firingHitRadiusM, dt);
         bool barrelAllowsFire = StepBarrelHeat(
             triggerHeld && Outcome == FightOutcome.Flying && AmmoRemaining > 0, dt);
         if (Outcome != FightOutcome.Flying) return Outcome;
@@ -229,7 +245,8 @@ public sealed class GunKill {
             }
 
             var firingPosition = own.Position + ownVelocity * elapsed + gunForward * MuzzleOffsetM;
-            Fire(firingPosition, ownVelocity + gunForward * _profile.MuzzleVelocityMps);
+            Fire(firingPosition, ownVelocity + gunForward * _profile.MuzzleVelocityMps,
+                firingHitRadiusM);
             _secondsToNextShot = 1.0 / _profile.RoundsPerSecond;
 
             // Avoid firing at t=dt and again at the next step's t=0. The shot at this boundary is
@@ -246,8 +263,9 @@ public sealed class GunKill {
         return Outcome;
     }
 
-    void Fire(in Vec3D position, in Vec3D velocity) {
-        _rounds.Add(new GunRound(_nextRoundId++, position, velocity, 0.0));
+    void Fire(in Vec3D position, in Vec3D velocity, double effectiveHitRadiusM) {
+        _rounds.Add(new GunRound(
+            _nextRoundId++, position, velocity, 0.0, effectiveHitRadiusM));
         if (!HasInfiniteAmmo) AmmoRemaining--;
         RoundsFired++;
         FiredThisStep = true;
@@ -303,7 +321,8 @@ public sealed class GunKill {
                 ? 0.0
                 : System.Math.Clamp(-relativeStart.Dot(relativeDelta) / relativeDeltaSq, 0.0, 1.0);
             var closest = relativeStart + relativeDelta * fraction;
-            if (closest.Dot(closest) <= _hitRadiusM * _hitRadiusM) {
+            if (closest.Dot(closest)
+                <= round.EffectiveHitRadiusM * round.EffectiveHitRadiusM) {
                 _rounds.RemoveAt(i);
                 HitCount++;
                 HitsThisStep++;
@@ -320,7 +339,8 @@ public sealed class GunKill {
         }
     }
 
-    void UpdateLead(in AircraftState own, in AircraftState bandit, double dt) {
+    void UpdateLead(in AircraftState own, in AircraftState bandit,
+        double effectiveHitRadiusM, double dt) {
         var gunForward = GunDirection(own);
         var muzzle = own.Position + gunForward * MuzzleOffsetM;
         var relativePosition = bandit.Position - muzzle;
@@ -332,10 +352,28 @@ public sealed class GunKill {
         double range = relativePosition.Length;
         LeadPipper = muzzle + LeadDirection * System.Math.Max(range, 1.0);
 
-        double angularRadius = System.Math.Atan2(_hitRadiusM, System.Math.Max(range, 1.0));
+        double angularRadius = System.Math.Atan2(
+            effectiveHitRadiusM, System.Math.Max(range, 1.0));
         InstantaneousGunSolution = HasLeadSolution
             && gunForward.Dot(LeadDirection) >= System.Math.Cos(angularRadius);
         UpdateQualifiedGunSolution(InstantaneousGunSolution, dt);
+    }
+
+    double EffectiveHitRadius(in AircraftState own, in AircraftState bandit) {
+        double tailRadius = _profile.TailChaseEffectiveHitRadiusM;
+        if (tailRadius <= _hitRadiusM) return _hitRadiusM;
+
+        Vec3D ownToBandit = bandit.Position - own.Position;
+        double range = ownToBandit.Length;
+        if (!double.IsFinite(range) || range < 1e-6 || range > TailChaseMaximumRangeM)
+            return _hitRadiusM;
+
+        Vec3D lineOfSight = ownToBandit * (1.0 / range);
+        double minimumTailAlignment = System.Math.Cos(
+            TailChaseAspectLimitDeg * System.Math.PI / 180.0);
+        return bandit.ForwardDir().Dot(lineOfSight) >= minimumTailAlignment
+            ? tailRadius
+            : _hitRadiusM;
     }
 
     void UpdateQualifiedGunSolution(bool instantaneous, double dt) {
