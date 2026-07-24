@@ -1296,7 +1296,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         for (int i = 0; i < candidates.Length; i++) {
             if (!available[i]) continue;
             double s = ScoreCandidate(candidates[i], player)
-                + DoctrineOpenerBias(i)
+                + DoctrineOpenerBias(i, player)
                 + TailContestBias(i, player);
             scores[i] = s;
             if (s > bestScore) {
@@ -1336,15 +1336,20 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         return bestCommand;
     }
 
-    double DoctrineOpenerBias(int candidateIndex) {
-        if (_doctrine == 0 || T >= 2.0) return 0.0;
+    double DoctrineOpenerBias(int candidateIndex, in ActorObservation player) {
+        if (_doctrine == 0 || T >= 2.0 || IsGunThreat(player)) return 0.0;
         double fade = 1.0 - T / 2.0;
+        // Ace/Machine lead scoring measures sub-degree ballistic error in cone widths, so their
+        // established two-second opener needs the same score scale to remain observable. Veteran
+        // uses ordinary LOS scoring and keeps the historical light touch: a large energy-opener
+        // bias there would override its honest response to an attacker already on its tail.
+        double scale = Skill is PilotSkill.Ace or PilotSkill.Machine ? 60.0 : 1.0;
         return _doctrine switch {
             // One-circle / energy opener: favour the sustainable pull and the historical unload.
-            1 when candidateIndex == 1 => 1.00 * fade,
-            1 when candidateIndex == 4 => 3.00 * fade,
+            1 when candidateIndex == 1 => scale * fade,
+            1 when candidateIndex == 4 => 3.0 * scale * fade,
             // Vertical entry: favour the existing high-yo-yo candidate.
-            2 when candidateIndex == 2 => 4.00 * fade,
+            2 when candidateIndex == 2 => 4.0 * scale * fade,
             _ => 0.0
         };
     }

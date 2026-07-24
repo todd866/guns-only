@@ -151,6 +151,7 @@ public static class SeededCombatBatchRunner {
     const double OpeningConfirmationSeconds = 0.20;
     const double RearQuarterRangeM = 1500.0;
     const double RearQuarterAspectDot = -0.45;
+    const double FleetingConversionOpportunitySeconds = 12.0;
 
     /// <summary>
     /// Run the same seeded firing-opportunity and tail-ingress engagements at each human opponent
@@ -197,12 +198,20 @@ public static class SeededCombatBatchRunner {
                 CombatTrainingScenario scenario = (engagementIndex & 1) == 0
                     ? SeededBanditFiringOpportunity(seedGeometry, engagementNumber)
                     : SeededPlayerTailIngress(seedGeometry, engagementNumber);
+                // The final, hardest perch is a fleeting conversion check, not another full
+                // dogfight: the Ace has time to finish earning and convert the sight picture,
+                // while a slower tier cannot turn a late eventual solution into equal damage.
+                double maximumSeconds = engagementNumber == 4
+                    ? System.Math.Min(
+                        selected.MaximumSecondsPerEngagement,
+                        FleetingConversionOpportunitySeconds)
+                    : selected.MaximumSecondsPerEngagement;
                 CombatEpisode episode = RunEpisode(
                     engagementIndex,
                     scenario,
                     selected.PlayerSkill,
                     skill,
-                    selected.MaximumSecondsPerEngagement,
+                    maximumSeconds,
                     cancellationToken: cancellationToken,
                     engagementNumber: engagementNumber);
 
