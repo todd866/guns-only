@@ -12,7 +12,8 @@ public sealed record GunProfile(
     double MaximumFlightSeconds,
     double EffectiveHitRadiusM,
     bool PublicDataSurrogate = false,
-    string PublicSourceUrl = "");
+    string PublicSourceUrl = "",
+    double TailChaseEffectiveHitRadiusM = 0.0);
 
 public static class GunProfiles {
     public static GunProfile SixM3FiftyCal { get; } = new(
@@ -20,7 +21,8 @@ public static class GunProfiles {
         GunKill.MuzzleVelocityMps,
         GunKill.RoundsPerSecond,
         GunKill.MaxFlightSeconds,
-        GunKill.DefaultHitRadiusM);
+        GunKill.DefaultHitRadiusM,
+        TailChaseEffectiveHitRadiusM: GunKill.TailChaseHitRadiusM);
 
     // The USAF identifies the F-22 installation as an internal 20 mm M61A2 with 480 rounds.
     // Rate and velocity are intentionally rounded public-data surrogates: this thin slice makes
@@ -34,7 +36,8 @@ public static class GunProfiles {
         EffectiveHitRadiusM: 7.0,
         PublicDataSurrogate: true,
         PublicSourceUrl:
-            "https://www.holloman.af.mil/News/Photos/igphoto/2000165167/");
+            "https://www.holloman.af.mil/News/Photos/igphoto/2000165167/",
+        TailChaseEffectiveHitRadiusM: GunKill.TailChaseHitRadiusM);
 
     // The Ukrainian state export catalogue is the public anchor for the Su-27 family and its
     // installed 30 mm gun. Ballistic values are deliberately rounded surrogates; no classified or
@@ -48,5 +51,6 @@ public static class GunProfiles {
         EffectiveHitRadiusM: 8.0,
         PublicDataSurrogate: true,
         PublicSourceUrl:
-            "https://www.ukrspecexport.com/uploads/files/Categories/pdf_1/a205b8.pdf");
+            "https://www.ukrspecexport.com/uploads/files/Categories/pdf_1/a205b8.pdf",
+        TailChaseEffectiveHitRadiusM: GunKill.TailChaseHitRadiusM);
 }

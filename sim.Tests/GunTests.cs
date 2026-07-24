@@ -111,6 +111,85 @@ public class GunTests {
     }
 
     [Fact]
+    public void StabilisedTailChaseBurstAtFiveHundredMetresHasUsefulNonLaserHitRate() {
+        GunProfile profile = GunProfiles.M61A2PublicDataSurrogate;
+        var gun = new GunKill(ammo: 500, hitsToKill: 500,
+            hitRadiusM: profile.EffectiveHitRadiusM, profile: profile);
+        var sight = new GunKill(ammo: 0, hitsToKill: 1,
+            hitRadiusM: profile.EffectiveHitRadiusM, profile: profile);
+        var own = State(new Vec3D(0.0, 3000.0, 0.0), speed: 220.0);
+        var bandit = State(new Vec3D(0.0, 3000.0, 500.0), speed: 200.0);
+        int burstTicks = (int)(0.6 * AircraftSim.TickHz);
+        const double TargetTurnRateRadPerSecond = 0.4;
+
+        for (int tick = 0; tick < burstTicks + 2 * AircraftSim.TickHz; tick++) {
+            // The sight picture is stabilised on the exact ballistic lead direction. A small,
+            // deterministic sub-degree lateral residual represents the correction granularity of
+            // keyboard roll/yaw input. The bandit holds a steady turn, exposing the real
+            // firing-time-lead versus projectile-arrival motion that the forgiving tail-chase
+            // beaten zone has to cover; neither aim error nor target motion is random.
+            sight.Step(false, own, bandit, 0.0);
+            double phase = ((tick * 37) % 71) / 70.0;
+            double residualRad = phase * Math.PI / 180.0;
+            Vec3D lead = sight.LeadDirection;
+            Vec3D right = new Vec3D(0.0, 1.0, 0.0).Cross(lead).Normalized();
+            Vec3D gunLine = (lead * Math.Cos(residualRad)
+                - right * Math.Sin(residualRad)).Normalized();
+            own = own with { BodyAttitude = AimAttitude(gunLine) };
+
+            gun.Step(tick < burstTicks, own, bandit, Dt);
+            own = own with { Position = own.Position + own.VelocityVector() * Dt };
+            double nextHeading = bandit.Chi + TargetTurnRateRadPerSecond * Dt;
+            double turnRadiusM = bandit.Speed / TargetTurnRateRadPerSecond;
+            Vec3D nextBanditPosition = bandit.Position + new Vec3D(
+                turnRadiusM * (Math.Cos(bandit.Chi) - Math.Cos(nextHeading)),
+                0.0,
+                turnRadiusM * (Math.Sin(nextHeading) - Math.Sin(bandit.Chi)));
+            bandit = bandit with { Position = nextBanditPosition, Chi = nextHeading };
+        }
+
+        double hitRate = (double)gun.HitCount / gun.RoundsFired;
+        Console.WriteLine(
+            $"500 m tail-chase burst: {gun.HitCount}/{gun.RoundsFired} = {hitRate:P1}");
+        Assert.True(gun.HitCount >= GunKill.DefaultHitsToKill,
+            $"the burst produced only {gun.HitCount} hits from {gun.RoundsFired} rounds");
+        Assert.InRange(hitRate, 0.20, 0.40);
+    }
+
+    [Fact]
+    public void TailChaseForgivenessDoesNotWidenHighAspectHeadOnOrLongRangeShots() {
+        GunProfile profile = GunProfiles.M61A2PublicDataSurrogate;
+
+        int HitsFromOneDegreeMiss(double targetHeadingRad, double rangeM = 500.0) {
+            var own = State(Vec3D.Zero);
+            var target = State(new Vec3D(0.0, 0.0, rangeM), chi: targetHeadingRad);
+            var sight = new GunKill(ammo: 0, hitsToKill: 1,
+                hitRadiusM: profile.EffectiveHitRadiusM, profile: profile);
+            sight.Step(false, own, target, 0.0);
+
+            const double ResidualDeg = 1.0;
+            double residualRad = ResidualDeg * Math.PI / 180.0;
+            Vec3D lead = sight.LeadDirection;
+            Vec3D right = new Vec3D(0.0, 1.0, 0.0).Cross(lead).Normalized();
+            Vec3D gunLine = (lead * Math.Cos(residualRad)
+                + right * Math.Sin(residualRad)).Normalized();
+            own = own with { BodyAttitude = AimAttitude(gunLine) };
+
+            var gun = new GunKill(ammo: 1, hitsToKill: 1,
+                hitRadiusM: profile.EffectiveHitRadiusM, profile: profile);
+            gun.Step(true, own, target, 0.0);
+            for (int tick = 0; tick <= profile.MaximumFlightSeconds * AircraftSim.TickHz; tick++)
+                gun.Step(false, own, target, Dt);
+            return gun.HitCount;
+        }
+
+        Assert.Equal(1, HitsFromOneDegreeMiss(targetHeadingRad: 0.0));
+        Assert.Equal(0, HitsFromOneDegreeMiss(targetHeadingRad: Math.PI / 2.0));
+        Assert.Equal(0, HitsFromOneDegreeMiss(targetHeadingRad: Math.PI));
+        Assert.Equal(0, HitsFromOneDegreeMiss(targetHeadingRad: 0.0, rangeM: 700.0));
+    }
+
+    [Fact]
     public void HeldTriggerUsesDeclaredCadenceWithoutSolutionGate() {
         var gun = new GunKill(ammo: 100, hitsToKill: 100);
         var own = State(Vec3D.Zero);
