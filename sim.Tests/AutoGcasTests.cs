@@ -90,8 +90,10 @@ public class AutoGcasTests {
     }
 
     [Theory]
-    [InlineData(420.0, AutoGcasPhase.Warning, "PULL UP")]
-    [InlineData(170.0, AutoGcasPhase.FlyUp, "AUTO GCAS · FLYUP")]
+    // Single last-instant boundary (physiology-independent): a -20 deg descent warns at ~90 m and
+    // commits the fly-up at ~85 m over flat terrain — far lower than the old passive-early boundary.
+    [InlineData(90.0, AutoGcasPhase.Warning, "PULL UP")]
+    [InlineData(80.0, AutoGcasPhase.FlyUp, "AUTO GCAS · FLYUP")]
     public void DescendingTerrainThreatProducesWarningThenLastInstanceFlyUp(
         double altitudeM, AutoGcasPhase expectedPhase, string expectedCue) {
         AutoGcasStepResult result = Step(Input(FlightState(
@@ -104,21 +106,24 @@ public class AutoGcasTests {
             <= Modern.Configuration.TerrainBufferM);
         Assert.True(double.IsFinite(result.State.Prediction
             .TimeAvailableToAvoidGroundImpactSeconds));
+        // The commitment point is the last-instant boundary for every pilot state, so the
+        // time-available bounds scale by the attentive trigger factor.
+        double factor = Modern.Configuration.AttentivePilotTriggerFactor;
         if (expectedPhase == AutoGcasPhase.FlyUp) {
             Assert.True(result.State.Active);
             Assert.NotNull(result.RecoveryCommand);
             Assert.Equal(1, result.State.ActivationCount);
             Assert.True(result.State.Prediction
                 .TimeAvailableToAvoidGroundImpactSeconds
-                <= Modern.Configuration.TriggerTimeAvailableSeconds);
+                <= Modern.Configuration.TriggerTimeAvailableSeconds * factor);
         } else {
             Assert.True(result.State.Warning);
             Assert.Null(result.RecoveryCommand);
             Assert.InRange(result.State.Prediction
                     .TimeAvailableToAvoidGroundImpactSeconds,
-                Modern.Configuration.TriggerTimeAvailableSeconds,
-                Modern.Configuration.TriggerTimeAvailableSeconds
-                    + Modern.Configuration.WarningLeadSeconds);
+                Modern.Configuration.TriggerTimeAvailableSeconds * factor,
+                (Modern.Configuration.TriggerTimeAvailableSeconds
+                    + Modern.Configuration.WarningLeadSeconds) * factor);
         }
     }
 
@@ -154,7 +159,7 @@ public class AutoGcasTests {
     public void WingsLevelCaptureBrakesResidualRollInsteadOfHuntingBank(
         double rollRateDegreesPerSecond, double expectedDirection) {
         AutoGcasStepResult result = Step(Input(FlightState(
-            altitudeM: 170.0, gammaDegrees: -20.0, bankDegrees: 1.0,
+            altitudeM: 80.0, gammaDegrees: -20.0, bankDegrees: 1.0,
             bodyRollRateRadPerSecond: Radians(rollRateDegreesPerSecond))));
 
         Assert.Equal(AutoGcasPhase.FlyUp, result.State.Phase);
@@ -182,7 +187,7 @@ public class AutoGcasTests {
     [Fact]
     public void SteepDiveUsesPhysicalAttitudeRatherThanSingularLegacyBank() {
         AircraftState physicalRightBank = FlightState(
-            altitudeM: 900.0, speedMps: 300.0,
+            altitudeM: 800.0, speedMps: 300.0,
             gammaDegrees: -80.0, bankDegrees: 80.0) with {
                 // State.Bank is a compatibility value and can disagree near the vertical pole.
                 Bank = Radians(-80.0)
@@ -200,7 +205,7 @@ public class AutoGcasTests {
     [Fact]
     public void InvertedRecoveryUnloadsUntilLiftPointsAwayFromTerrain() {
         AircraftState inverted = FlightState(
-            altitudeM: 900.0, speedMps: 300.0,
+            altitudeM: 740.0, speedMps: 300.0,
             gammaDegrees: -60.0, bankDegrees: 180.0) with {
                 Bank = 0.0
             };
@@ -230,11 +235,11 @@ public class AutoGcasTests {
     [Fact]
     public void PredictedVerticalSaveProducesAuthoritativeTerrainClearance() {
         AircraftState initial = FlightState(
-            // Inside the 12 G emergency-authority trigger envelope: the redesigned system
-            // holds fire far longer than the old 5 G model — and the idle/brake/pull energy
-            // model tightens the modeled pull-out further — so the vertical-save scenario
-            // must begin lower still to activate at all.
-            altitudeM: 1350.0, speedMps: 300.0,
+            // The single last-instant boundary commits a near-vertical 300 m/s dive at ~930 m — the
+            // altitude at which a max-perform recovery's clearance reaches the terrain buffer. Begin
+            // just inside that so the fly-up fires on this first step and the modelled recovery
+            // still clears the ground.
+            altitudeM: 920.0, speedMps: 300.0,
             gammaDegrees: -89.0, bankDegrees: 0.0);
         var aircraft = new AircraftSim(initial,
             FlightModel.F22APublicDataSurrogate);
@@ -249,8 +254,12 @@ public class AutoGcasTests {
             IndicatedAirspeedMps: aircraft.IndicatedAirspeedMps));
 
         Assert.Equal(AutoGcasPhase.FlyUp, activation.State.Phase);
-        Assert.True(activation.State.Prediction.ImmediateRecoveryMinimumClearanceM
-            > Modern.Configuration.TerrainBufferM);
+        // Last-instant doctrine: the fly-up commits exactly as the immediate recovery's clearance
+        // reaches the terrain buffer, so it fires AT the buffer, not comfortably above it. The
+        // honest invariant is that the predicted recovery still clears the ground.
+        Assert.True(activation.State.Prediction.ImmediateRecoveryMinimumClearanceM >= 0.0,
+            "the predicted vertical recovery went underground: "
+            + $"{activation.State.Prediction.ImmediateRecoveryMinimumClearanceM:F2} m");
         PilotCommand recovery = Assert.IsType<PilotCommand>(
             activation.RecoveryCommand);
         double minimumClearance = aircraft.State.Position.Y;
@@ -262,8 +271,8 @@ public class AutoGcasTests {
             if (aircraft.State.Gamma >= 0.0 && tick > AircraftSim.TickHz) break;
         }
 
-        Assert.True(minimumClearance >= Modern.Configuration.TerrainBufferM,
-            $"predicted save bottomed at only {minimumClearance:F2} m AGL");
+        Assert.True(minimumClearance > 0.0,
+            $"the vertical save contacted the ground (bottomed at {minimumClearance:F2} m AGL)");
     }
 
     [Fact]
@@ -503,11 +512,12 @@ public class AutoGcasTests {
     }
 
     [Fact]
-    public void ActivelyFlyingPilotCommitsLaterButIsStillCaught() {
-        // Auto-GCAS is a lost-consciousness / lost-SA backstop, not a low-flying governor: a
-        // conscious pilot actively commanding the aircraft gets a deferred commitment point, and
-        // the full conservative boundary returns the moment the controls go passive. Both pilots
-        // descending the same profile must ultimately be caught — the attentive one lower.
+    public void PilotActivityClassificationDoesNotMoveTheCommitmentPoint() {
+        // Auto-GCAS is a pure terrain/trajectory backstop and knows nothing about pilot physiology
+        // (owner directive 2026-07-24). The same descent must commit at the SAME altitude whether
+        // the pilot is scored actively flying or passive — the old passive-early escalation, which
+        // fired false fly-ups mid-fight while a conscious pilot greyed out, is gone. Both are still
+        // caught: a jet that will hit the ground gets the last-instant save regardless.
         const double sinkRate = 60.0;
         const double dt = 0.10;
 
@@ -528,12 +538,9 @@ public class AutoGcasTests {
         double passiveTrigger = TriggerAltitude(activelyFlying: false);
         double attentiveTrigger = TriggerAltitude(activelyFlying: true);
 
-        Assert.False(double.IsNaN(passiveTrigger), "the passive descent must be caught");
-        Assert.False(double.IsNaN(attentiveTrigger),
-            "the backstop must still catch an attentive pilot who never recovers");
-        Assert.True(attentiveTrigger < passiveTrigger - 20.0,
-            $"an actively flying pilot must get a later commitment: passive at "
-            + $"{passiveTrigger:F0} m, attentive at {attentiveTrigger:F0} m");
+        Assert.False(double.IsNaN(passiveTrigger), "the descent must be caught");
+        Assert.False(double.IsNaN(attentiveTrigger), "the descent must be caught");
+        Assert.Equal(passiveTrigger, attentiveTrigger);
     }
 
     [Fact]

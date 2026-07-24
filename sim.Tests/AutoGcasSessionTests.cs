@@ -58,13 +58,18 @@ public class AutoGcasSessionTests {
     }
 
     static SimulationSession ThreatSession(
-        PilotPhysiologyProfile? physiology = null) {
+        PilotPhysiologyProfile? physiology = null, double altitudeM = 170.0) {
         var session = new SimulationSession();
         session.StartBeat(() => ModernTestBeat(
-            ModernState(170.0, gammaDegrees: -20.0), physiology));
+            ModernState(altitudeM, gammaDegrees: -20.0), physiology));
         session.SetTerrainSurface(FlatTerrain());
         return session;
     }
+
+    // Auto-GCAS now commits at the last-instant boundary for every pilot state, so a -20 deg descent
+    // over flat terrain fires ~85 m up rather than the old passive-early ~170 m. Tests that assert
+    // behaviour on the activating tick begin just inside that boundary so the fly-up fires at once.
+    const double ImmediateThreatAltitudeM = 80.0;
 
     [Fact]
     public void AircraftCapabilityMakesAutoGcasModernOnly() {
@@ -79,7 +84,7 @@ public class AutoGcasSessionTests {
 
     [Fact]
     public void PredictedTerrainThreatOverridesActuatorsAndInhibitsGuns() {
-        var session = ThreatSession();
+        var session = ThreatSession(altitudeM: ImmediateThreatAltitudeM);
         session.Begin();
         session.FeedKey(GKey.Trigger, true);
 
@@ -149,7 +154,7 @@ public class AutoGcasSessionTests {
 
     [Fact]
     public void ProtectionTransitionsAreRetainedAtTheExactAuthorityTick() {
-        var session = ThreatSession();
+        var session = ThreatSession(altitudeM: ImmediateThreatAltitudeM);
         session.Begin();
 
         session.StepFixed();
@@ -196,7 +201,7 @@ public class AutoGcasSessionTests {
 
     [Fact]
     public void PilotPaddleIsARealHeldOverrideAndIsCounted() {
-        var session = ThreatSession();
+        var session = ThreatSession(altitudeM: ImmediateThreatAltitudeM);
         session.Begin();
         session.StepFixed();
         Assert.True(session.AutoGcas.Active);
@@ -216,7 +221,7 @@ public class AutoGcasSessionTests {
     [Fact]
     public void SustainedControlInputCancelsAnActiveFlyUp() {
         // Pilot rule: any control input held longer than 0.2 s during a fly-up IS the paddle.
-        var session = ThreatSession();
+        var session = ThreatSession(altitudeM: ImmediateThreatAltitudeM);
         session.Begin();
         session.StepFixed();
         Assert.True(session.AutoGcas.Active);
@@ -235,7 +240,7 @@ public class AutoGcasSessionTests {
     public void EnvelopeOverrideCommitGestureAlsoRefusesAutoGcas() {
         // Holding Space through a deliberate valley run is the max-perform declaration; the
         // system must not fight it while the pilot is conscious with control authority.
-        var session = ThreatSession();
+        var session = ThreatSession(altitudeM: ImmediateThreatAltitudeM);
         session.Begin();
         session.StepFixed();
         Assert.True(session.AutoGcas.Active);
