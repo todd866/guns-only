@@ -641,8 +641,25 @@ public static class AutoGcasController {
             // A half-second of increasing terrain clearance establishes that the predicted
             // trajectory has passed its real minimum. World vertical speed alone is insufficient
             // over rising ground.
-            if (recoveryClearanceGainSeconds >= 0.5
-                && time + dt >= threatEvaluationSeconds) {
+            //
+            // This test deliberately does NOT wait for the far end of the completion horizon.
+            // Requiring "still gaining clearance at t = 20 s" asked whether the ground SIX TO SEVEN
+            // KILOMETRES downrange happened to slope down, which has nothing to do with whether
+            // the pull-out succeeded. Over the real Korea grid that answer flickers from frame to
+            // frame, so a recovery that had already bottomed out and climbed a kilometre clear was
+            // intermittently floored at the buffer by the clamp below, time-available read zero,
+            // and the system fired. Production Build 95 telemetry (2026-07-24, session
+            // web-1784876619376): recovery_min alternating between ~1,400 m and exactly 30.48 m on
+            // consecutive frames, three fly-ups triggered at 6,990-7,798 ft AGL that bottomed out
+            // 4,372-7,797 ft above the ground. Flat-terrain suites could never see it, because on
+            // flat ground a climbing jet gains clearance monotonically forever.
+            //
+            // Stopping here also bounds the recovery evaluation to the PULL-OUT, which is the
+            // manoeuvre Auto-GCAS actually commands. Terrain beyond the point where the jet is
+            // established in a climb is a fresh threat for the next evaluation 50 ms later, not a
+            // failure of this pull-out — and a ridge the jet cannot out-climb is not survivable by
+            // pulling up, which is the only thing this system can do about it.
+            if (recoveryClearanceGainSeconds >= 0.5) {
                 recoveryClimbEstablished = true;
                 break;
             }
