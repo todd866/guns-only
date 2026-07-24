@@ -23,7 +23,7 @@ const DEFAULT_MAX_FRAME_MS = 100;
 const DEFAULT_MAX_LONG_FRAME_PERCENT = 1;
 const DEFAULT_MIN_FRAMES = 600;
 const DEFAULT_HIGH_AGL_FT = 9_000;
-const DEFAULT_LOW_AGL_FT = 2_000;
+const DEFAULT_LOW_AGL_FT = 2_600;
 const FIXED_BEAT = 7;
 const FIXED_SEED = 7;
 const ROUTE_MIME = Object.freeze({
@@ -379,6 +379,7 @@ function summarizeLeg(raw) {
     longFrames,
     longFramePercent: longFrames / raw.deltas.length * 100,
     radarAltitudeFt: agl,
+    terrainHeightFt: summarize(raw.terrainHeightsFt ?? []),
     trueAirspeedKts: speed,
     distanceM,
     before: raw.before,
@@ -402,7 +403,8 @@ function formatLeg(leg) {
       + `(${leg.longFramePercent.toFixed(3)}%)`,
     `  flight: median AGL=${leg.radarAltitudeFt.p50.toFixed(0)} ft `
       + `median TAS=${leg.trueAirspeedKts.p50.toFixed(0)} kt `
-      + `distance=${(leg.distanceM / 1000).toFixed(1)} km`,
+      + `distance=${(leg.distanceM / 1000).toFixed(1)} km `
+      + `median ground=${leg.terrainHeightFt ? leg.terrainHeightFt.p50.toFixed(0) : "?"} ft MSL`,
     `  terrain: requests=${terrainRequests >= 0 ? "+" : ""}${terrainRequests} `
       + `residentChunks=${leg.terrainBefore?.residentChunks ?? "?"}`
       + `->${leg.terrainAfter?.residentChunks ?? "?"}`,
@@ -436,7 +438,10 @@ function profileValidation(legs, options) {
       `high-altitude control median AGL was ${high.radarAltitudeFt.p50.toFixed(0)} ft`,
     );
   }
-  if (low.radarAltitudeFt.p50 < 1_500 || low.radarAltitudeFt.p50 > 2_500) {
+  // Band, not a setpoint. Production hitch windows had a MEDIAN radar altitude of 2,667 ft, so
+  // anything in roughly 1,500-3,200 ft is the condition being reproduced; demanding tighter than
+  // that just fails valid runs, because a banked turn over real relief moves the ground underneath.
+  if (low.radarAltitudeFt.p50 < 1_500 || low.radarAltitudeFt.p50 > 3_200) {
     failures.push(
       `low-level terrain median AGL was ${low.radarAltitudeFt.p50.toFixed(0)} ft`,
     );
@@ -552,6 +557,10 @@ async function flyProfile(page, options) {
         trueAirspeedKts: Number(state?.true_airspeed_kts),
         verticalSpeedFpm: Number(state?.vertical_speed_fpm),
         terminal: state?.player_terminal_state ?? null,
+        // alt_ft is MSL and radar_alt_ft is AGL, so their difference is the ground beneath.
+        // A leg flown over sea reports ~0 here and streams almost no terrain — which makes the
+        // whole measurement worthless, so it must be visible rather than silently averaged away.
+        terrainHeightFt: Number(state?.alt_ft) - Number(state?.radar_alt_ft),
       };
     };
     const foregroundFailure = () => {
@@ -581,6 +590,8 @@ async function flyProfile(page, options) {
       const simS = Number(globalThis.__gunsState?.t) || 0;
       if (next === activePitchKey) return;
       if (activePitchKey !== null) bridge.FeedKey(activePitchKey, false);
+      if (activeRollKey !== null) bridge.FeedKey(activeRollKey, false);
+      if (activeThrottleKey !== null) bridge.FeedKey(activeThrottleKey, false);
       if (next !== null) bridge.FeedKey(next, true);
       activePitchKey = next;
       lastCommandChangeSimS = simS;
@@ -601,38 +612,106 @@ async function flyProfile(page, options) {
       );
       const verticalSpeedError = desiredVerticalSpeedFpm - verticalSpeed;
       let next = null;
-      if (Math.abs(errorFt) <= 180 && Math.abs(verticalSpeed) <= 700) next = null;
-      else if (verticalSpeedError > 650) next = PULL_UP;
-      else if (verticalSpeedError < -650) next = PUSH_DOWN;
+      if (Math.abs(errorFt) <= 260 && Math.abs(verticalSpeed) <= 1_100) next = null;
+      else if (verticalSpeedError > 1_100) next = PULL_UP;
+      else if (verticalSpeedError < -1_100) next = PUSH_DOWN;
       setPitchKey(next);
+    };
+    // Straight-and-level flight keeps a stable ring of resident chunks (measured: residentChunks
+    // 64->64, only 18 requests in 60 s), so it never exercises the chunk BUILD path that produced
+    // every production hitch. A sustained turn continuously brings new chunks over the horizon and
+    // keeps the aircraft inside the +/-65,536 m terrain grid instead of flying off the map.
+    const ROLL_RIGHT = 2;
+    // 25 degrees, not 42: a 42-degree bank at low level with a bang-bang pitch loop and Auto-GCAS
+    // disabled flew the aircraft into the ground. This still churns chunks continuously.
+    const TARGET_BANK_DEG = 25;
+    let activeRollKey = null;
+    const setRollKey = (next) => {
+      if (next === activeRollKey) return;
+      if (activeRollKey !== null) bridge.FeedKey(activeRollKey, false);
+      if (activeThrottleKey !== null) bridge.FeedKey(activeThrottleKey, false);
+      activeRollKey = next;
+      if (next !== null) bridge.FeedKey(next, true);
+    };
+    const holdTurn = () => {
+      const bank = Number(globalThis.__gunsState?.bank_deg);
+      if (!Number.isFinite(bank)) return;
+      setRollKey(bank < TARGET_BANK_DEG ? ROLL_RIGHT : null);
+    };
+    // Hold ~550 kt, the median airspeed of the production hitch windows. Everything above is
+    // uncontrollable with bang-bang keyboard input: at ~700 kt the pitch loop oscillated between
+    // -800 and -6,400 fpm and the altitude hold collapsed inside a banked turn. FeedDirectThrottle
+    // did not reduce speed on its own, so drive the throttle keys.
+    const THROTTLE_UP = 6;
+    const THROTTLE_DOWN = 7;
+    const TARGET_TAS_KTS = 550;
+    let activeThrottleKey = null;
+    const setThrottleKey = (next) => {
+      if (next === activeThrottleKey) return;
+      if (activeThrottleKey !== null) bridge.FeedKey(activeThrottleKey, false);
+      activeThrottleKey = next;
+      if (next !== null) bridge.FeedKey(next, true);
+    };
+    const controlSpeed = () => {
+      const tas = Number(globalThis.__gunsState?.true_airspeed_kts);
+      if (!Number.isFinite(tas)) return;
+      if (tas > TARGET_TAS_KTS + 40) setThrottleKey(THROTTLE_DOWN);
+      else if (tas < TARGET_TAS_KTS - 40) setThrottleKey(THROTTLE_UP);
+      else setThrottleKey(null);
     };
     const nextFrame = () => new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
     const reachAltitude = async (targetAglFt, label) => {
+      // Off for the descent: a fast descent to the measurement altitude is exactly the profile
+      // Auto-GCAS exists to interrupt, and with it enabled the altitude hold never converges.
+      bridge.SetAutoGcasEnabled(false);
       const startedAtSimS = Number(globalThis.__gunsState?.t);
       let stableSinceSimS = null;
+      let lastDiagS = -1;
+      const diagnostics = [];
       while (true) {
         await nextFrame();
         assertFlight();
         controlAltitude(targetAglFt);
+        controlSpeed();
         const state = snapshotState();
-        const stable = Math.abs(state.radarAltitudeFt - targetAglFt) <= 450
-          && Math.abs(state.verticalSpeedFpm) <= 1_200;
+        const stable = Math.abs(state.radarAltitudeFt - targetAglFt) <= 700
+          && Math.abs(state.verticalSpeedFpm) <= 2_200;
         stableSinceSimS = stable ? (stableSinceSimS ?? state.t) : null;
         if (stableSinceSimS !== null && state.t - stableSinceSimS >= 5) {
           setPitchKey(null);
           return state;
         }
+        if (Math.floor(state.t) % 3 === 0 && Math.floor(state.t) !== lastDiagS) {
+          lastDiagS = Math.floor(state.t);
+          diagnostics.push({
+            t: Math.round(state.t), agl: Math.round(state.radarAltitudeFt),
+            vs: Math.round(state.verticalSpeedFpm), tas: Math.round(state.trueAirspeedKts),
+            key: activePitchKey, pitch: globalThis.__gunsState?.pitch_deg,
+            gamma: globalThis.__gunsState?.gamma_deg, gcmd: globalThis.__gunsState?.g_cmd,
+            gact: globalThis.__gunsState?.g_actual,
+          });
+        }
         if (state.t - startedAtSimS > 240) {
           throw new Error(
-            `${label} did not stabilize at ${targetAglFt} ft AGL within 240 sim seconds; `
-            + `last state=${JSON.stringify(state)}`,
+            `${label} did not stabilize at ${targetAglFt} ft AGL; `
+            + `DIAG=${JSON.stringify(diagnostics.slice(-14))}`,
           );
         }
       }
     };
-    const measureLeg = async (name, targetAglFt) => {
+    // Only the LOW leg turns. The turn exists to churn terrain chunks, which is the thing being
+    // measured; the high leg is a contrast control and just needs to be clean and stable. Banking
+    // it as well made altitude unholdable there — in a bank, pulling tightens the turn instead of
+    // climbing, so the control leg sank from 9,000 ft to 3,678 ft and destroyed the separation.
+    const measureLeg = async (name, targetAglFt, turning = false) => {
+      // Back ON for measurement. The bang-bang pitch loop cannot hold a banked turn at low level
+      // unaided (it flew into the ground twice), and during a level leg Auto-GCAS is a floor that
+      // never fires rather than a controller that fights. Terrain streaming is unaffected either
+      // way, and a fly-up would show up in the leg statistics as an altitude excursion.
+      bridge.SetAutoGcasEnabled(true);
       const deltas = [];
       const radarAltitudesFt = [];
+      const terrainHeightsFt = [];
       const trueAirspeedsKts = [];
       const before = snapshotState();
       const terrainBefore = snapshotTerrain();
@@ -642,11 +721,14 @@ async function flyProfile(page, options) {
         const timestamp = await nextFrame();
         assertFlight();
         controlAltitude(targetAglFt);
+        controlSpeed();
+        if (turning) holdTurn(); else setRollKey(null);
         const state = snapshotState();
         if (firstTimestamp === null) firstTimestamp = timestamp;
         if (previousTimestamp !== null) {
           deltas.push(timestamp - previousTimestamp);
           radarAltitudesFt.push(state.radarAltitudeFt);
+          terrainHeightsFt.push(state.terrainHeightFt);
           trueAirspeedsKts.push(state.trueAirspeedKts);
         }
         previousTimestamp = timestamp;
@@ -656,6 +738,7 @@ async function flyProfile(page, options) {
             name,
             deltas,
             radarAltitudesFt,
+            terrainHeightsFt,
             trueAirspeedsKts,
             before,
             after: snapshotState(),
@@ -682,20 +765,32 @@ async function flyProfile(page, options) {
     try {
       assertFlight();
       bridge.SetAssistedFlight(false);
-      bridge.SetAutoGcasEnabled(true);
+      // Auto-GCAS OFF. This harness measures FRAME TIME, not terrain safety, and the two fight
+      // each other: a fast descent to the 2,000 ft AGL measurement leg is exactly the profile
+      // Auto-GCAS exists to interrupt, so with it enabled the harness pushes down, GCAS commands
+      // a fly-up, and the altitude hold never converges (observed: stalled at 3,194 ft AGL
+      // climbing at +1,126 fpm against a 2,000 ft target). The same interaction already broke
+      // tools/perf/terrain_frame_probe.mjs. Terrain streaming — the thing being measured — is
+      // identical either way.
+      bridge.SetAutoGcasEnabled(false);
       bridge.SetAnalogRollControl(0);
-      bridge.FeedDirectThrottle(true, true);
+      // Cruise power, NOT full afterburner. At 733 KTAS the bang-bang pitch controller cannot
+      // settle (measured: vertical speed oscillating -800 to -6,400 fpm), and 733 kt is not the
+      // condition being reproduced anyway — production hitch windows sat at 554 kt.
+      bridge.FeedDirectThrottle(true, false);
 
       await reachAltitude(config.highAglFt, "high-altitude control");
       const high = await measureLeg("high-altitude control", config.highAglFt);
       await reachAltitude(config.lowAglFt, "low-level terrain");
-      const low = await measureLeg("low-level terrain", config.lowAglFt);
+      const low = await measureLeg("low-level terrain", config.lowAglFt, true);
       return [high, low];
     } finally {
       clearTimeout(watchdog);
       document.removeEventListener("visibilitychange", markHidden);
       window.removeEventListener("blur", markBlurred);
       if (activePitchKey !== null) bridge.FeedKey(activePitchKey, false);
+      if (activeRollKey !== null) bridge.FeedKey(activeRollKey, false);
+      if (activeThrottleKey !== null) bridge.FeedKey(activeThrottleKey, false);
       bridge.FeedDirectThrottle(true, false);
       bridge.SetAnalogRollControl(0);
     }
