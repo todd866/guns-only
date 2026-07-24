@@ -174,12 +174,12 @@ public class CombatTrainingTests {
         string firstJson = CombatDatasetJsonLines.Serialize(first);
         string secondJson = CombatDatasetJsonLines.Serialize(second);
         Assert.Equal(firstJson, secondJson);
-        // The pinned hash moves ONLY with deliberate kernel-trajectory changes (Build 72 alpha
-        // model; Build 74 F-22 lateral authority + the bandit pushover guard). The serializer,
-        // schema, and same-seed bit-equality above are the real invariants. Print-and-update via
-        // the assertion message when a labelled flight-model change lands.
+        // The pinned hash moves ONLY with deliberate kernel/policy trajectory changes (Build 72
+        // alpha model; Build 74 F-22 lateral authority + pushover guard; Build 97 opportunity-keyed
+        // trigger and six-denial policy). The serializer, schema, and same-seed bit-equality above
+        // are the real invariants. Print-and-update via the assertion when a labelled change lands.
         Assert.Equal(
-            "58F613D308B70E6F02916517217BA4D8F26F38D9B6352D5C36CAC4B2DC6A9ED4",
+            "5FE4F29DDF845380CA54F810BAC6F2069875C393A8F49E59B6BD577A571F4B52",
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(firstJson))));
         string[] lines = firstJson.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(1 + first.Episodes.Count + first.TransitionCount, lines.Length);
@@ -426,5 +426,61 @@ public class CombatTrainingTests {
             Assert.False(transition.RewardComponents.OpponentDestroyed);
             Assert.False(transition.RewardComponents.OwnshipDestroyed);
         });
+    }
+
+    [Fact]
+    public void SeededThreatEngagementsMeasureOpponentFireDamageAndSkillSeparation() {
+        IReadOnlyList<SeededSkillTierMeasurement> first =
+            SeededCombatBatchRunner.MeasureSkillTiers(
+                new SeededSkillTierEvaluationConfig(
+                    FirstSeed: 0xB4AD_1700UL,
+                    EngagementsPerTier: 4,
+                    MaximumSecondsPerEngagement: 25.0,
+                    PlayerSkill: PilotSkill.Competent));
+        IReadOnlyList<SeededSkillTierMeasurement> second =
+            SeededCombatBatchRunner.MeasureSkillTiers(
+                new SeededSkillTierEvaluationConfig(
+                    FirstSeed: 0xB4AD_1700UL,
+                    EngagementsPerTier: 4,
+                    MaximumSecondsPerEngagement: 25.0,
+                    PlayerSkill: PilotSkill.Competent));
+
+        Assert.Equal(first, second);
+        Assert.Equal(
+            new[] {
+                PilotSkill.Novice,
+                PilotSkill.Competent,
+                PilotSkill.Veteran,
+                PilotSkill.Ace
+            },
+            first.Select(measurement => measurement.Skill));
+        SeededSkillTierMeasurement novice = first[0];
+        SeededSkillTierMeasurement ace = first[3];
+        string report = string.Join(
+            System.Environment.NewLine,
+            first.Select(measurement => FormattableString.Invariant(
+                $"{measurement.Skill}: rounds/eng={measurement.BanditRoundsPerEngagement:F2}, rear-quarter/eng={measurement.PlayerRearQuarterSecondsPerEngagement:F2}s, player-damage-hits={measurement.PlayerDamageHits}, fire-engagements={measurement.EngagementsWithBanditFire}/{measurement.Engagements}, damage-engagements={measurement.EngagementsWithPlayerDamage}/{measurement.Engagements}")));
+
+        foreach (SeededSkillTierMeasurement capable in first.Skip(1)) {
+            Assert.True(
+                capable.EngagementsWithBanditFire >= 2,
+                $"{capable.Skill} must fire in a meaningful fraction of engagements."
+                + $"{System.Environment.NewLine}{report}");
+            Assert.True(
+                capable.PlayerDamageHits > 0,
+                $"zero-damage {capable.Skill} batches are the production bug."
+                + $"{System.Environment.NewLine}{report}");
+        }
+        Assert.True(
+            ace.PlayerRearQuarterSecondsPerEngagement
+                < novice.PlayerRearQuarterSecondsPerEngagement,
+            $"Ace must deny its rear quarter more effectively than Novice.{System.Environment.NewLine}{report}");
+        Assert.NotEqual(
+            novice.BanditRoundsFired,
+            ace.BanditRoundsFired);
+        Assert.NotEqual(
+            novice.PlayerDamageHits,
+            ace.PlayerDamageHits);
+        Assert.NotEqual(novice, ace);
     }
 }

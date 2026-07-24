@@ -33,6 +33,12 @@ public static class BanditFireControl {
     public const double MaximumNoseErrorRad = 3.0 * System.Math.PI / 180.0;
     public const double BurstSeconds = 0.35;
     public const double BurstCycleSeconds = 1.25;
+    // The current armed reactive opponents use the GSh-301 surrogate (860 m/s); the Korea six-.50
+    // profile is 870 m/s, close enough that the same belief-limited sight is honest for both. This
+    // is fire-control prediction only. GunKill consumes the mission's actual GunProfile and remains
+    // the projectile/hit authority.
+    public const double ReferenceMuzzleVelocityMps = 860.0;
+    public const double ReferenceMaximumFlightSeconds = 2.0;
 
     public static bool WantsToFire(in AircraftState own, in ActorObservation player,
         double engagementSeconds, double? noseErrorGateRad = null) {
@@ -64,6 +70,54 @@ public static class BanditFireControl {
         if (!double.IsFinite(range) || range < 1e-9) return 0.0;
         double dot = GunKill.GunDirection(own).Dot(line * (1.0 / range));
         return System.Math.Acos(System.Math.Clamp(dot, -1.0, 1.0));
+    }
+
+    /// <summary>A deterministic ballistic lead derived only from the observed contact
+    /// position/velocity and ownship state.</summary>
+    public static Vec3D LeadDirection(
+        in AircraftState own, in ActorObservation player) {
+        Vec3D relativePosition = player.Position - own.Position;
+        double rangeM = relativePosition.Length;
+        if (!double.IsFinite(rangeM) || rangeM < 1e-9)
+            return GunKill.GunDirection(own);
+        Vec3D relativeVelocity =
+            player.VelocityVector() - own.VelocityVector();
+        double timeOfFlight = System.Math.Clamp(
+            rangeM / ReferenceMuzzleVelocityMps,
+            0.0,
+            ReferenceMaximumFlightSeconds);
+        Vec3D required = relativePosition;
+        for (int iteration = 0; iteration < 5; iteration++) {
+            required = relativePosition
+                + relativeVelocity * timeOfFlight
+                + new Vec3D(0.0,
+                    0.5 * GunKill.GravityMps2 * timeOfFlight * timeOfFlight,
+                    0.0);
+            timeOfFlight = System.Math.Clamp(
+                required.Length / ReferenceMuzzleVelocityMps,
+                0.0,
+                ReferenceMaximumFlightSeconds);
+        }
+        return required.Normalized();
+    }
+
+    /// <summary>Angular error between the physical gun axis and a deterministic ballistic lead
+    /// derived only from the observed contact position/velocity and ownship state.</summary>
+    public static double LeadNoseErrorRad(
+        in AircraftState own, in ActorObservation player) {
+        double dot = GunKill.GunDirection(own).Dot(
+            LeadDirection(own, player));
+        return System.Math.Acos(System.Math.Clamp(dot, -1.0, 1.0));
+    }
+
+    public static bool InLeadFiringEnvelope(
+        in AircraftState own, in ActorObservation player, double leadErrorGateRad) {
+        Vec3D line = player.Position - own.Position;
+        double rangeM = line.Length;
+        return double.IsFinite(rangeM)
+            && rangeM >= MinimumRangeM
+            && rangeM <= MaximumRangeM
+            && LeadNoseErrorRad(own, player) <= leadErrorGateRad;
     }
 }
 
@@ -124,6 +178,9 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     bool _lowAttackActive;
     double _lowAttackEndAt = double.NegativeInfinity;
     double _lowAttackRecommitAt = double.NegativeInfinity;
+    double _fireBurstUntil = double.NegativeInfinity;
+    double _nextFireBurstAt = double.NegativeInfinity;
+    bool _terrainRecoveryActive;
 
     // Lookahead decision cache. Rolling a small candidate set forward over the horizon every
     // tick is wasteful, so the choice is recomputed on a fixed deterministic cadence and held
@@ -139,12 +196,16 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     public ReactiveBandit(AircraftState initial, AircraftParams parameters,
         PilotSkill skill = PilotSkill.Competent,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
-        int engagementNumber = 1, BanditSkillProfile? profile = null) {
+        int engagementNumber = 1, BanditSkillProfile? profile = null,
+        int? doctrineIndex = null) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         Skill = skill;
         _profile = profile ?? BanditSkillProfile.For(skill);
-        _doctrine = (engagementNumber - 1) % System.Math.Max(1, _profile.DoctrineCount);
+        int doctrineCount = System.Math.Max(1, _profile.DoctrineCount);
+        if (doctrineIndex is < 0 || doctrineIndex >= doctrineCount)
+            throw new System.ArgumentOutOfRangeException(nameof(doctrineIndex));
+        _doctrine = doctrineIndex ?? (engagementNumber - 1) % doctrineCount;
         _parameters = parameters;
         _terrain = terrain;
         _sim = new AircraftSim(initial, parameters);
@@ -175,7 +236,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         AircraftParams parameters, int engagementNumber,
         double speedMps = 180.0, PilotSkill skill = PilotSkill.Competent,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
-        BanditSkillProfile? profile = null) {
+        BanditSkillProfile? profile = null, int? doctrineIndex = null) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         if (!double.IsFinite(speedMps) || speedMps <= 0.0)
@@ -229,7 +290,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double gamma = System.Math.Atan2(toMerge.Y, System.Math.Max(1.0, horizontalM));
         var initial = new AircraftState(position, speedMps, gamma, chi, 0.0, parameters.MassKg);
         return new ReactiveBandit(
-            initial, parameters, skill, terrain, engagementNumber, profile);
+            initial, parameters, skill, terrain, engagementNumber, profile,
+            doctrineIndex);
     }
 
     static double SurfaceHeightM(GunsOnly.Sim.Environment.ITerrainSurface? terrain,
@@ -459,9 +521,26 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     public void UpdateTerrain(GunsOnly.Sim.Environment.ITerrainSurface? terrain) =>
         _terrain = terrain;
 
-    public bool WantsToFire(in ActorObservation player) => !CatastrophicallyDamaged
-        && Tactic == BanditTactic.Acquire
-        && BanditFireControl.WantsToFire(State, player, T, EffectiveFireConeRad);
+    public bool WantsToFire(in ActorObservation player) {
+        if (CatastrophicallyDamaged || _terrainRecoveryActive
+            || (!BanditFireControl.InFiringEnvelope(
+                    State, player, EffectiveFireConeRad)
+                && !BanditFireControl.InLeadFiringEnvelope(
+                    State, player, EffectiveLeadFireConeRad)))
+            return false;
+
+        // Start the burst when a usable opportunity actually appears. The historical absolute
+        // engagement clock discarded short post-merge windows whenever they happened to arrive
+        // during its arbitrary 0.9-second "off" phase, which made a physically nose-on bandit
+        // decline the only shot of an engagement. This state is driven only by deterministic sim
+        // time and still enforces the same burst length/cycle; GunKill remains cadence, ammunition,
+        // projectile, hit, and damage authority.
+        if (T >= _nextFireBurstAt) {
+            _fireBurstUntil = T + BanditFireControl.BurstSeconds;
+            _nextFireBurstAt = T + BanditFireControl.BurstCycleSeconds;
+        }
+        return T < _fireBurstUntil;
+    }
 
     /// A committed boss shoots with the standard Ace gate; a stalking boss holds its raised
     /// quality bar. Every other tier reads its profile cone unchanged.
@@ -470,6 +549,12 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         : _profile.IsBoss
             ? BanditSkillProfile.For(PilotSkill.Ace).FireConeRad
             : _profile.FireConeRad;
+
+    double EffectiveLeadFireConeRad => _profile.IsBoss && !BossCommitted
+        ? _profile.LeadFireConeRad * 0.75
+        : _profile.IsBoss
+            ? BanditSkillProfile.For(PilotSkill.Ace).LeadFireConeRad
+            : _profile.LeadFireConeRad;
 
     /// Latched roll-in state for the boss overlay. Deterministic and observation-only: the
     /// trigger reads exactly the player observation every bandit gets.
@@ -553,6 +638,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             return;
         }
 
+        _terrainRecoveryActive = false;
         bool lowTarget = IsLowTarget(player);
         if (!lowTarget) _lowAttackActive = false;
         bool hasLowAttackPlan = TryLowAttackPlan(player, out LowAttackPlan lowAttackPlan);
@@ -577,10 +663,37 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // High-skill tiers replace the flat-turn state machine with a short-horizon lookahead: roll
         // candidate maneuvers forward in the deterministic kernel and fly the one that best improves
         // the future firing position. The vertical fight emerges from the score, it is not scripted.
-        // Novice/Competent keep LookaheadHorizonTicks == 0 and the state machine below UNCHANGED.
+        // Novice keeps LookaheadHorizonTicks == 0 and the state machine below.
         if (_profile.IsBoss && !BossCommitted) UpdateBossCommitment(player, dt);
 
         if (_profile.LookaheadHorizonTicks > 0) {
+            // Competent retains the deliberately staged boom-and-zoom low-block doctrine. Its
+            // lookahead is for BFM conversion and tail denial, not permission to turn the middle
+            // rung into the Ace's continuous valley hunt.
+            if (Skill == PilotSkill.Competent && lowTarget) {
+                LastCommand = CompetentLowBlockCommand(
+                    player, hasLowAttackPlan, lowAttackPlan);
+                Tactic = BanditTactic.Acquire;
+                RecordSingleCandidateDecision(LastCommand);
+                _sim.Step(LastCommand, dt);
+                T += dt;
+                return;
+            }
+            // Lookahead owns maneuver selection, not energy amnesty. Earlier high-skill controllers
+            // could keep optimizing after speed collapsed. Honor the same low-energy gate as the
+            // simple pilot; the rollout's terrain/ceiling score continues to own fight-volume
+            // shaping so an arbitrary spawn-centre Return does not interrupt a live engagement.
+            if (!lowTarget) {
+                SelectTactic(player);
+                if (Tactic == BanditTactic.Energy
+                    && Skill != PilotSkill.Machine) {
+                    LastCommand = EnergyCommand(player);
+                    RecordSingleCandidateDecision(LastCommand);
+                    _sim.Step(LastCommand, dt);
+                    T += dt;
+                    return;
+                }
+            }
             if (lowTarget && hasLowAttackPlan) {
                 _lowAttackActive = true;
                 if (ownClearanceM <= LowBlockCaptureClearanceM) {
@@ -596,8 +709,11 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
                 Tactic = BanditTactic.Return;
                 RecordSingleCandidateDecision(LastCommand);
             } else {
+                bool defending = Tactic == BanditTactic.Defend;
                 LastCommand = LookaheadCommand(player);
-                Tactic = BanditTactic.Acquire;
+                Tactic = defending
+                    ? BanditTactic.Defend
+                    : BanditTactic.Acquire;
             }
             _sim.Step(LastCommand, dt);
             T += dt;
@@ -606,7 +722,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
 
         SelectTactic(player);
         LastCommand = Tactic switch {
-            BanditTactic.Defend => DefendCommand(),
+            BanditTactic.Defend => DefendCommand(player),
             BanditTactic.Energy => EnergyCommand(player),
             BanditTactic.Return => ReturnCommand(),
             _ when _profile.LowBlockDoctrine == LowBlockDoctrine.BoomAndZoom && lowTarget
@@ -620,6 +736,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
 
     void FlyTerrainRecovery(double dt) {
         _lowAttackActive = false;
+        _terrainRecoveryActive = true;
         _lowAttackRecommitAt = System.Math.Max(_lowAttackRecommitAt,
             T + _profile.LowBlockRecommitSeconds);
         _lookaheadHoldTicks = 0;
@@ -641,11 +758,6 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             _nextJinkAt = double.PositiveInfinity;
         }
 
-        if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
-            Tactic = BanditTactic.Return;
-            return;
-        }
-
         // Deny the stratosphere plink. A player camping above the believable combat ceiling turns
         // a ceiling-limited bandit into a stationary target; real BFM answers that by unloading,
         // extending away, and rebuilding energy below — dragging the fight back down instead of
@@ -662,6 +774,15 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             return;
         }
 
+        // Energy state outranks arena housekeeping. Previously a slow bandit outside the return
+        // radius stayed in Return's nose-high 2.8 G turn instead of unloading, decelerated into a
+        // deep stall, and wallowed for the rest of the engagement. Rebuild honest flying energy
+        // first; Return can bend the recovered aircraft back into the fight on a later tick.
+        if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
+            Tactic = BanditTactic.Return;
+            return;
+        }
+
         if (T >= _defendCooldownUntil && IsGunThreat(player)) {
             EnterDefence(player);
             return;
@@ -674,14 +795,27 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         var own = State;
         var ownToPlayer = player.Position - own.Position;
         double range = ownToPlayer.Length;
-        if (range < 1.0 || range > ThreatRangeM) return false;
+        double threatRangeM = Skill == PilotSkill.Novice
+            ? 1050.0
+            : ThreatRangeM + 300.0;
+        if (range < 1.0 || range > threatRangeM) return false;
 
         var toPlayer = ownToPlayer * (1.0 / range);
         var playerToOwn = toPlayer * -1.0;
         double rearAspect = own.ForwardDir().Dot(toPlayer);
         double attackerAngle = player.ForwardDir().Dot(playerToOwn);
         double closing = (player.VelocityVector() - own.VelocityVector()).Dot(playerToOwn);
-        return rearAspect < -0.45 && attackerAngle > 0.91 && closing > -5.0;
+        if (Skill == PilotSkill.Novice)
+            return rearAspect < -0.60
+                && attackerAngle > 0.94
+                && closing > 0.0;
+
+        // A competent pilot contests the ATTEMPT to enter the saddle instead of waiting for the
+        // attacker's pipper to stabilize. The wider positional/nose gates still require a real
+        // rear-quarter attacker; they do not grant omniscient reactions to beam or forward contacts.
+        return rearAspect < -0.20
+            && attackerAngle > 0.60
+            && closing > -20.0;
     }
 
     void EnterDefence(in ActorObservation player) {
@@ -872,7 +1006,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         return new PilotCommand(g, bank, throttle, 0.0);
     }
 
-    PilotCommand DefendCommand() {
+    PilotCommand DefendCommand(in ActorObservation player) {
         while (T >= _nextJinkAt && T < _defendUntil) {
             _jinkIndex = (_jinkIndex + 1) % JinkDurations.Length;
             _nextJinkAt += JinkDurations[_jinkIndex];
@@ -880,7 +1014,44 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
 
         int direction = _breakSign * JinkDirections[_jinkIndex];
         double bank = direction * 1.18;
-        double g = JinkG[_jinkIndex];
+        double g = System.Math.Min(
+            JinkG[_jinkIndex],
+            AvailableAcquireG(safetyReserve: false));
+        double throttle = _defensivePower;
+
+        if (Skill != PilotSkill.Novice) {
+            // Put the lift vector out of the attack plane and alternate the across component with
+            // the deterministic jink sequence. This produces a break/reverse with real vertical
+            // displacement, while the ordinary AircraftSim still decides the G and energy actually
+            // available. A closing attacker gets a brief honest power chop to force the overshoot;
+            // once closure is gone the normal defensive power schedule rebuilds energy.
+            Vec3D attackerLos = player.Position - State.Position;
+            double rangeM = attackerLos.Length;
+            Vec3D attackerLosDir = rangeM > 1.0
+                ? attackerLos * (1.0 / rangeM)
+                : State.ForwardDir() * -1.0;
+            Vec3D across = new Vec3D(0.0, 1.0, 0.0).Cross(attackerLosDir);
+            if (across.Length < 1e-6)
+                across = new Vec3D(1.0, 0.0, 0.0);
+            else
+                across = across.Normalized();
+            Vec3D breakDirection =
+                new Vec3D(0.0, 0.75, 0.0) + across * direction;
+            breakDirection -= attackerLosDir
+                * breakDirection.Dot(attackerLosDir);
+            if (breakDirection.Length > 1e-6) {
+                Vec3D breakAim = State.Position
+                    + breakDirection.Normalized() * System.Math.Max(900.0, rangeM);
+                bank = System.Math.Clamp(
+                    Geometry.BankToPlaceLiftVectorOn(State, breakAim),
+                    -1.35, 1.35);
+            }
+            Vec3D playerToOwn = attackerLosDir * -1.0;
+            double closureMps = (player.VelocityVector()
+                - State.VelocityVector()).Dot(playerToOwn);
+            if (closureMps > 25.0)
+                throttle = System.Math.Min(_maximumThrottle, 0.35);
+        }
 
         // Near the surface, keep the hard turn but bias it upward rather than pulling into the
         // ground. The floor is the LOCAL one: sample both here and along the escape direction so
@@ -895,7 +1066,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             bank = LimitedBankTo(safe, 0.92);
             g = 2.35;
         }
-        return new PilotCommand(g, bank, _defensivePower, direction * 0.10);
+        return new PilotCommand(g, bank, throttle, direction * 0.10);
     }
 
     PilotCommand EnergyCommand(in ActorObservation player) {
@@ -1083,7 +1254,9 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         scores.Clear();
         for (int i = 0; i < candidates.Length; i++) {
             if (!available[i]) continue;
-            double s = ScoreCandidate(candidates[i], player) + DoctrineOpenerBias(i);
+            double s = ScoreCandidate(candidates[i], player)
+                + DoctrineOpenerBias(i)
+                + TailContestBias(i, player);
             scores[i] = s;
             if (s > bestScore) {
                 bestScore = s;
@@ -1133,6 +1306,24 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             2 when candidateIndex == 2 => 4.00 * fade,
             _ => 0.0
         };
+    }
+
+    double TailContestBias(int candidateIndex, in ActorObservation player) {
+        if (Skill == PilotSkill.Machine
+            || !_profile.ForcesOvershoot
+            || !IsGunThreat(player))
+            return 0.0;
+
+        // Contest entry to the saddle before the attacker's three-degree solution exists. Waiting
+        // for the rollout's gun-window penalty alone reacts only after the player is already
+        // stabilized. Alternate the two honest out-of-plane candidates on deterministic sim time,
+        // so the defender breaks and reverses instead of settling into a predictable orbit.
+        int preferred = ((int)System.Math.Floor(T / 0.85) & 1) == 0 ? 6 : 7;
+        if (candidateIndex == preferred) return 22.0;
+        if (candidateIndex is 6 or 7) return 17.0;
+        if (candidateIndex == 5) return 7.0;
+        if (candidateIndex == 8 && _profile.DisengagesWhenLosing) return 9.0;
+        return 0.0;
     }
 
     void RecordSingleCandidateDecision(in PilotCommand command) {

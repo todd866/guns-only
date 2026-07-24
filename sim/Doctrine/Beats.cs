@@ -244,7 +244,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         AircraftState initial = ReferenceEquals(air, BanditAir)
             ? Bandit : Bandit with { Mass = air.MassKg };
         return new ReactiveBandit(initial, air, skill, terrain,
-            profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null);
+            profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
+            doctrineIndex: spec?.DoctrineIndex);
     }
 
     /// Deterministic merge factory for a continuous-operations ruleset. Successor aircraft inherit
@@ -265,7 +266,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             speedMps: replacementSpeedMps,
             skill: skill,
             terrain: terrain,
-            profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null);
+            profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
+            doctrineIndex: spec?.DoctrineIndex);
     }
 }
 

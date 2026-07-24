@@ -31,4 +31,49 @@ public class EnergyZoomRepro {
         Assert.True(gammaAfter10s < 0.40,
             $"nose still {gammaAfter10s * 57.3:F0} deg high after 10 s");
     }
+
+    [Fact]
+    public void SlowBanditOutsideFightRadiusMustRebuildEnergyBeforeReturning() {
+        AircraftParams air = FlightModel.Su27SPublicDataSurrogate;
+        var bandit = new ReactiveBandit(
+            new AircraftState(
+                new Vec3D(0.0, 3200.0, 0.0),
+                180.0, 0.0, 0.0, 0.0, air.MassKg),
+            air,
+            PilotSkill.Competent,
+            profile: BanditSkillProfile.For(PilotSkill.Competent) with {
+                LookaheadHorizonTicks = 0
+            });
+        var player = new AircraftSim(
+            new AircraftState(
+                new Vec3D(0.0, 3200.0, 1800.0),
+                95.0, 0.0, 0.0, 0.0, air.MassKg),
+            air);
+        double dt = 1.0 / AircraftSim.TickHz;
+        bool sawReturn = false;
+        double minimumSpeedDuringReturnMps = double.PositiveInfinity;
+        double maximumAltitudeM = bandit.State.Position.Y;
+
+        for (int tick = 0; tick < 90 * AircraftSim.TickHz; tick++) {
+            AircraftState playerState = player.State;
+            bandit.Step(ActorObservation.Capture(playerState, tick), dt);
+            player.Step(new PilotCommand(1.0, 0.0, 0.22, 0.0), dt);
+            maximumAltitudeM = System.Math.Max(
+                maximumAltitudeM, bandit.State.Position.Y);
+            if (bandit.Tactic == BanditTactic.Return) {
+                sawReturn = true;
+                minimumSpeedDuringReturnMps = System.Math.Min(
+                    minimumSpeedDuringReturnMps, bandit.State.Speed);
+            }
+        }
+
+        Assert.True(sawReturn, "the chase never exercised the Return tactic");
+        // One integration tick may cross the entry threshold after Return was selected. It must
+        // hand off immediately instead of continuing the high-G turn into the documented ~28 m/s
+        // deep-stall wallow.
+        Assert.True(minimumSpeedDuringReturnMps > 105.0,
+            $"Return continued into low energy; "
+            + $"minimum {minimumSpeedDuringReturnMps:F1} m/s, "
+            + $"maximum altitude {maximumAltitudeM:F0} m");
+    }
 }

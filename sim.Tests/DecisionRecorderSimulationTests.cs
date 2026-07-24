@@ -47,9 +47,15 @@ public class DecisionRecorderSimulationTests {
         Assert.Equal(0, uncaptured.Decisions.Count);
         DecisionReadBatch records = captured.Decisions.ReadDecisionsAfter(
             0, DecisionRecorder.MaximumReadCount);
-        Assert.All(records.Records, record => Assert.True(record.ManeuverSelected));
-        Assert.All(records.Records,
-            record => Assert.Equal(1, record.ManeuverTrace.CandidateCount));
+        Assert.Equal(
+            Enumerable.Range(0, 20).Select(index => (long)(index * 12)),
+            records.Records
+                .Where(record => record.ManeuverSelected)
+                .Select(record => record.Observation.Tick));
+        Assert.All(records.Records.Where(record => record.ManeuverSelected),
+            record => Assert.Equal(9, record.ManeuverTrace.CandidateCount));
+        Assert.All(records.Records.Where(record => !record.ManeuverSelected),
+            record => Assert.Equal(0, record.ManeuverTrace.CandidateCount));
     }
 
     [Fact]
