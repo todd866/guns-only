@@ -10,7 +10,11 @@
 
 ## Global Constraints
 
-- **Build stamp ritual.** `web/wwwroot/render/release/tests/release_identity.test.mjs` fails if any production `web/wwwroot/**` file (tests excluded) changes without `web/wwwroot/index.html` changing in the same worktree, and fails in CI if a committed production change reuses a build number. **Every task below that touches `web/wwwroot/**` must bump all three stamps in its commit.** Current build is **86**; tasks 1–4 ship as 87, 88, 89, 90.
+- **Build stamp ritual.** `web/wwwroot/render/release/tests/release_identity.test.mjs` fails if any production `web/wwwroot/**` file (tests excluded) changes without `web/wwwroot/index.html` changing in the same worktree, and fails in CI if a committed production change reuses a build number. **Every task below that touches `web/wwwroot/**` must bump all three stamps in its commit.**
+  **Do not hardcode the number — concurrent agents claim builds in this repo continuously.** Task 1 was planned as 87 and had to ship as 89 because two other commits took 87 and 88 mid-task. Immediately before committing, determine the live ceiling and take the next unclaimed number:
+  ```sh
+  git log --all --oneline --grep="Stamp Build\|Ship Build" -8
+  ```
   - `web/wwwroot/render/release/release_identity.js:1` — `export const RELEASE_BUILD = "NN";`
   - `web/wwwroot/api/build-info.js:4` — `const RELEASE_BUILD = "NN";`
   - `web/wwwroot/index.html:2251` — `Build NN · verifying`, and `:2306` — `./app.js?v=NN`
@@ -392,9 +396,9 @@ Run: `node --test web/wwwroot/render/environment/tests/korea_terrain.test.mjs`
 
 Expected: PASS.
 
-- [ ] **Step 8: Bump the build stamp to 88**
+- [ ] **Step 8: Bump the build stamp**
 
-Same four edits as Task 1 step 8, with `88`.
+Same four edits as Task 1 step 8, using the next unclaimed build number (see Global Constraints — do not assume).
 
 - [ ] **Step 9: Run the full gate**
 
@@ -508,9 +512,9 @@ Run: `node --test web/wwwroot/render/environment/tests/korea_terrain.test.mjs`
 
 Expected: PASS.
 
-- [ ] **Step 6: Bump the build stamp to 89**
+- [ ] **Step 6: Bump the build stamp**
 
-Same four edits as Task 1 step 8, with `89`.
+Same four edits as Task 1 step 8, using the next unclaimed build number (see Global Constraints — do not assume).
 
 - [ ] **Step 7: Run the full gate**
 
@@ -699,9 +703,9 @@ node tools/assets/build-assets.mjs stage \
 
 Expected: validation passes; the dry run lists only `visual-profile.json` as changed.
 
-- [ ] **Step 8: Bump the build stamp to 90**
+- [ ] **Step 8: Bump the build stamp**
 
-Same four edits as Task 1 step 8, with `90`.
+Same four edits as Task 1 step 8, using the next unclaimed build number (see Global Constraints — do not assume).
 
 - [ ] **Step 9: Run the full gate**
 

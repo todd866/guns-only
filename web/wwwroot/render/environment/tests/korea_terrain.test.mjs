@@ -3,6 +3,7 @@ import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
 import {
   createTerrainGeometry,
+  createTerrainMaterial,
   decodeTerrainRecord,
   loadKoreaTerrain,
   reconstructWaterHeights,
@@ -181,6 +182,108 @@ test("reconstructs bank-height water without sea-level slot trenches", () => {
   assert.equal(waterBuilt.triangleCount, 8,
     "an all-water chunk must not add underwater skirts");
   waterBuilt.geometry.dispose();
+});
+
+test("bakes a concavity attribute so valley floors read as enclosed", () => {
+  // Heights are decimetres (metresPerUnit 0.1): a 100 m plateau with a single
+  // 0 m pit at the centre. The pit is the most concave sample in the grid.
+  const values = new Int16Array([
+    1000, 1000, 1000,
+    1000, 0, 1000,
+    1000, 1000, 1000,
+  ]);
+  const record = manifest().chunks[0].lods[0];
+  const decoded = decodeTerrainRecord(values.buffer, record, quantization);
+  const built = createTerrainGeometry(THREE, manifest().chunks[0], decoded);
+
+  const concavity = built.geometry.getAttribute("concavity");
+  assert.ok(concavity, "terrain geometry must carry a baked concavity attribute");
+  assert.equal(concavity.itemSize, 1);
+  assert.equal(concavity.count, built.geometry.getAttribute("position").count,
+    "every vertex, skirts included, needs a concavity value");
+  assert.ok(concavity.getX(4) < 0.5,
+    "the pit at the centre must read as concave");
+  for (let index = 0; index < concavity.count; index++) {
+    const value = concavity.getX(index);
+    assert.ok(value >= 0 && value <= 1, `concavity ${value} must stay in [0, 1]`);
+  }
+  built.geometry.dispose();
+});
+
+test("concavity fades to neutral at chunk edges so neighbours cannot seam", () => {
+  // Each chunk can only see its own samples, so a clamped neighbourhood at the boundary would
+  // give the SAME world position a different value in each of the two chunks that share it —
+  // painting a visible grid of seams every 16 km. Forcing the boundary to exactly 0.5 makes both
+  // sides agree by construction.
+  const values = new Int16Array([
+    1000, 1000, 1000,
+    1000, 0, 1000,
+    1000, 1000, 1000,
+  ]);
+  const record = manifest().chunks[0].lods[0];
+  const decoded = decodeTerrainRecord(values.buffer, record, quantization);
+  const built = createTerrainGeometry(THREE, manifest().chunks[0], decoded);
+  const concavity = built.geometry.getAttribute("concavity");
+
+  // Every perimeter sample of the 3x3 grid sits on the chunk boundary.
+  for (const index of [0, 1, 2, 3, 5, 6, 7, 8]) {
+    assert.equal(concavity.getX(index), 0.5,
+      `boundary sample ${index} must be exactly neutral`);
+  }
+  built.geometry.dispose();
+});
+
+test("skirt vertices inherit their source surface normal so they never shade as black walls", () => {
+  // Skirts are near-vertical crack-hiding curtains dropped below each perimeter vertex. Their own
+  // wall normals have dot(N, sun) ~= 0, so once the shadow floor dropped from 0.43 to 0.12 they
+  // render as near-black slabs, most visibly at waterlines. computeVertexNormals() assigns those
+  // wall normals; this asserts they are overwritten with the top-surface normal, which makes the
+  // skirt shade as a continuation of the terrain edge and vanish.
+  // A flat plateau: every surface normal is exactly (0, 1, 0), while computeVertexNormals() would
+  // give each vertical skirt wall a ~horizontal normal. So an inherited-vs-wall normal is an
+  // unambiguous difference, and the RED run confirmed the walls start out un-inherited.
+  const values = new Int16Array([
+    500, 500, 500,
+    500, 500, 500,
+    500, 500, 500,
+  ]);
+  const record = manifest().chunks[0].lods[0];
+  const decoded = decodeTerrainRecord(values.buffer, record, quantization);
+  const built = createTerrainGeometry(THREE, manifest().chunks[0], decoded);
+  const normal = built.geometry.getAttribute("normal");
+
+  // 3x3 grid: baseVertexCount 9 is skirtStart. Perimeter order is the same one the builder walks:
+  // top row, right column, bottom row (reversed), left column (reversed).
+  const perimeter = [0, 1, 2, 5, 8, 7, 6, 3];
+  for (let i = 0; i < perimeter.length; i++) {
+    const source = perimeter[i];
+    for (const skirtVertex of [9 + i * 2, 9 + i * 2 + 1]) {
+      assert.ok(
+        Math.abs(normal.getX(skirtVertex) - normal.getX(source)) < 1e-6
+        && Math.abs(normal.getY(skirtVertex) - normal.getY(source)) < 1e-6
+        && Math.abs(normal.getZ(skirtVertex) - normal.getZ(source)) < 1e-6,
+        `skirt vertex ${skirtVertex} must carry source vertex ${source}'s normal`);
+    }
+  }
+  // The source normals must be genuinely surface-facing (mostly +Y), not the ~horizontal wall
+  // normals — otherwise the assertion above would pass trivially on two equal wrong values.
+  assert.ok(normal.getY(0) > 0.5, "a perimeter surface vertex must face upward");
+  built.geometry.dispose();
+});
+
+test("concavity is deterministic across repeated builds", () => {
+  const values = new Int16Array([1000, 400, 1000, 250, 0, 250, 1000, 400, 1000]);
+  const record = manifest().chunks[0].lods[0];
+  const first = createTerrainGeometry(THREE, manifest().chunks[0],
+    decodeTerrainRecord(values.buffer, record, quantization));
+  const second = createTerrainGeometry(THREE, manifest().chunks[0],
+    decodeTerrainRecord(values.buffer, record, quantization));
+  assert.deepEqual(
+    Array.from(first.geometry.getAttribute("concavity").array),
+    Array.from(second.geometry.getAttribute("concavity").array),
+  );
+  first.geometry.dispose();
+  second.geometry.dispose();
 });
 
 test("selects progressively coarser LODs with tier-specific distance", () => {
@@ -492,4 +595,52 @@ test("reconciles same-LOD boundary normals and restores them across LOD swaps", 
   const eastFineEdge = 3;
   assertVectorNear(normalAt(west, westFineEdge), normalAt(east, eastFineEdge));
   terrain.dispose();
+});
+
+test("terrain shading consumes baked occlusion and opens the value range", () => {
+  const period = createTerrainMaterial(THREE, { sceneryEra: "period", qualityTier: "desktop" });
+  const modern = createTerrainMaterial(THREE, { sceneryEra: "modern", qualityTier: "desktop" });
+
+  assert.match(period.vertexShader, /attribute float concavity;/,
+    "the vertex shader must declare the baked occlusion attribute");
+  assert.match(period.vertexShader, /vConcavity = concavity;/);
+  assert.match(period.fragmentShader, /varying float vConcavity;/);
+
+  // Era is a compile-time #define, so both materials share one fragmentShader string. Asserting
+  // against both is deliberate: it catches an accidental split into two sources.
+  assert.match(period.fragmentShader, /uOcclusionRange/);
+  assert.ok(period.uniforms.uOcclusionRange, "occlusion range must be a uniform");
+  assert.ok(period.uniforms.uShadowFloor, "shadow floor must be a uniform");
+
+  // The floors that crushed relief into the top 60% of value must be gone.
+  assert.doesNotMatch(period.fragmentShader, /0\.43 \+ 0\.57 \*/,
+    "the period diffuse floor of 0.43 must be replaced by the uShadowFloor uniform");
+  assert.doesNotMatch(modern.fragmentShader, /toneRamp = 0\.40 \+/,
+    "the modern tone-ramp floor of 0.40 must be replaced by the uShadowFloor uniform");
+
+  assert.ok(period.uniforms.uShadowFloor.value <= 0.2,
+    "a legible hillshade needs the darkest slope well below 40% lit");
+
+  period.dispose();
+  modern.dispose();
+});
+
+test("aerial perspective is banded so ridgelines separate in value", () => {
+  const material = createTerrainMaterial(THREE, { sceneryEra: "modern", qualityTier: "desktop" });
+
+  assert.ok(material.uniforms.uHazeBands, "band count must be a uniform");
+  assert.ok(material.uniforms.uHazeBandBlend, "band blend must be a uniform");
+  assert.match(material.fragmentShader, /floor\(aerial \* uHazeBands\) \/ uHazeBands/,
+    "haze must be quantised into discrete distance planes");
+  assert.ok(material.uniforms.uHazeBands.value >= 3,
+    "fewer than three planes cannot separate stacked ridges");
+
+  // Banding must degrade to the old smooth wash when disabled, not divide by zero.
+  const off = createTerrainMaterial(THREE, { sceneryEra: "modern", hazeBands: 0 });
+  assert.equal(off.uniforms.uHazeBands.value, 0);
+  assert.match(off.fragmentShader, /uHazeBands > 0\.5/,
+    "the shader must guard the divide when banding is disabled");
+
+  material.dispose();
+  off.dispose();
 });

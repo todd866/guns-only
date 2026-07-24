@@ -27,6 +27,14 @@ const MAX_STREAM_LOOK_AHEAD_METRES = 24_000;
 export const TERRAIN_CURVATURE_START_M = 12_000;
 export const TERRAIN_EARTH_RADIUS_M = 6_371_000;
 
+// Baked terrain occlusion. The sampling radius is expressed in METRES and converted to samples
+// per LOD, so a valley reads with the same enclosure at 64 m and at 256 m spacing and does not
+// pop across an LOD change. 300 m is about the floor width of a Korean central-highland valley.
+export const TERRAIN_CONCAVITY_RADIUS_M = 300;
+// Relief that saturates the attribute. Height differences beyond this clamp, so a 1,500 m ridge
+// wall does not crush every lesser fold to black.
+export const TERRAIN_CONCAVITY_RELIEF_M = 120;
+
 export function terrainCurvatureDropM(radialDistanceM) {
   const curvedRadialM = Math.max(finite(radialDistanceM) - TERRAIN_CURVATURE_START_M, 0);
   return curvedRadialM * curvedRadialM / (2 * TERRAIN_EARTH_RADIUS_M);
@@ -40,6 +48,8 @@ varying vec3 vTerrainNormal;
 varying vec3 vTerrainWorldPosition;
 varying float vTerrainHeight;
 varying float vTerrainWater;
+attribute float concavity;
+varying float vConcavity;
 #include <common>
 #include <logdepthbuf_pars_vertex>
 
@@ -56,6 +66,7 @@ void main() {
   vTerrainWorldPosition = world.xyz;
   vTerrainHeight = position.y;
   vTerrainWater = terrainWater;
+  vConcavity = concavity;
   gl_Position = projectionMatrix * viewMatrix * world;
   #include <logdepthbuf_vertex>
 }
@@ -67,6 +78,11 @@ uniform vec3 uFogColor;
 uniform float uFogDensity;
 uniform float uModernScenery;
 uniform float uParcelTint;
+uniform float uShadowFloor;
+uniform vec2 uOcclusionRange;
+uniform float uHazeBands;
+uniform float uHazeBandBlend;
+varying float vConcavity;
 varying vec3 vTerrainNormal;
 varying vec3 vTerrainWorldPosition;
 varying float vTerrainHeight;
@@ -109,7 +125,8 @@ void main() {
       lowland * (0.16 + parcels * 0.20));
   }
 
-  float diffuse = 0.43 + 0.57 * max(dot(normal, normalize(uSunDirection)), 0.0);
+  float diffuse = uShadowFloor
+    + (1.0 - uShadowFloor) * max(dot(normal, normalize(uSunDirection)), 0.0);
   vec3 lit = albedo * diffuse;
 
   #else
@@ -136,8 +153,9 @@ void main() {
   sAlbedo = mix(sAlbedo, sRidge, highRidge * (0.35 + steepness * 0.45));
   float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
   halfLambert *= halfLambert;
-  float toneRamp = 0.40 + 0.30 * smoothstep(0.24, 0.50, halfLambert)
-    + 0.20 * smoothstep(0.52, 0.82, halfLambert);
+  float toneRamp = uShadowFloor
+    + (1.0 - uShadowFloor) * (0.42 * smoothstep(0.26, 0.40, halfLambert)
+      + 0.58 * smoothstep(0.58, 0.76, halfLambert));
   vec3 viewDirection = normalize(cameraPosition - vTerrainWorldPosition);
   float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
   vec3 stylizedLit = sAlbedo * toneRamp
@@ -145,6 +163,11 @@ void main() {
 
   vec3 lit = stylizedLit;
   #endif
+
+  // Baked enclosure darkens valley floors and lets ridge crests catch light. This is the term the
+  // renderer was missing relative to the source hillshade in central-front-preview.png. Applied to
+  // the terrain BEFORE water is composited, so open water keeps its own analytic shading.
+  lit *= mix(uOcclusionRange.x, uOcclusionRange.y, clamp(vConcavity, 0.0, 1.0));
 
   // Inland source-water samples share the same analytic language as the shipped ocean: cool
   // blue-green body colour, grazing-angle sky reflection, restrained sun glint and metre-scale
@@ -181,6 +204,10 @@ void main() {
   float distanceToCamera = length(cameraPosition - vTerrainWorldPosition);
   float aerial = 1.0 - exp(-fogDensity * fogDensity
     * distanceToCamera * distanceToCamera);
+  if (uHazeBands > 0.5) {
+    float banded = floor(aerial * uHazeBands) / uHazeBands;
+    aerial = mix(aerial, banded, uHazeBandBlend);
+  }
   vec3 color = mix(lit, hazeColor, clamp(aerial, 0.0, 1.0));
   gl_FragColor = vec4(color, 1.0);
   #include <logdepthbuf_fragment>
@@ -430,6 +457,47 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
       waterValues[index] = water[index];
     }
   }
+  // Baked ambient occlusion: each sample against the mean of its ring neighbours. Negative means
+  // the sample sits below its surroundings (enclosed valley floor); positive means it stands proud
+  // (ridge crest). This is the term that makes dissected terrain legible, and baking it here keeps
+  // the fragment shader free of neighbourhood sampling.
+  const spacingM = Math.max(spacingEast, spacingNorth);
+  const ringSamples = Math.max(1, Math.min(
+    Math.floor((sampleCount - 1) / 2),
+    Math.round(TERRAIN_CONCAVITY_RADIUS_M / spacingM),
+  ));
+  const concavity = new Float32Array(baseVertexCount + skirtVertexCount);
+  for (let north = 0; north < sampleCount; north++) {
+    for (let east = 0; east < sampleCount; east++) {
+      const index = north * sampleCount + east;
+      let total = 0;
+      let count = 0;
+      for (let northStep = -1; northStep <= 1; northStep++) {
+        for (let eastStep = -1; eastStep <= 1; eastStep++) {
+          if (northStep === 0 && eastStep === 0) continue;
+          const sampleNorth = Math.min(sampleCount - 1,
+            Math.max(0, north + northStep * ringSamples));
+          const sampleEast = Math.min(sampleCount - 1,
+            Math.max(0, east + eastStep * ringSamples));
+          total += surfaceHeights[sampleNorth * sampleCount + sampleEast];
+          count++;
+        }
+      }
+      const relative = surfaceHeights[index] - total / count;
+      const raw = Math.min(1, Math.max(0,
+        relative / TERRAIN_CONCAVITY_RELIEF_M * 0.5 + 0.5));
+      // A chunk can only see its own samples, so a clamped neighbourhood at the boundary would
+      // give the SAME world position different occlusion in each of the two chunks sharing it —
+      // a visible seam grid every tile span. Fading to exactly 0.5 over the ring width makes both
+      // sides agree by construction, at the cost of occlusion in a band that is a few percent of
+      // the tile. Do not replace this with cross-chunk sampling: it would make geometry depend on
+      // neighbour load order and break determinism.
+      const edgeDistance = Math.min(east, north,
+        sampleCount - 1 - east, sampleCount - 1 - north);
+      const edgeFade = Math.min(1, edgeDistance / ringSamples);
+      concavity[index] = 0.5 + (raw - 0.5) * edgeFade;
+    }
+  }
   const indices = [];
   for (let north = 0; north < sampleCount - 1; north++) {
     for (let east = 0; east < sampleCount - 1; east++) {
@@ -457,6 +525,8 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
     positions[bottomIndex * 3 + 2] = positions[sourceIndex * 3 + 2];
     waterValues[topIndex] = water[sourceIndex];
     waterValues[bottomIndex] = water[sourceIndex];
+    concavity[topIndex] = concavity[sourceIndex];
+    concavity[bottomIndex] = concavity[sourceIndex];
   }
   for (let perimeterIndex = 0; perimeterIndex < perimeter.length; perimeterIndex++) {
     const next = (perimeterIndex + 1) % perimeter.length;
@@ -470,6 +540,7 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("terrainWater", new THREE.BufferAttribute(waterValues, 1));
+  geometry.setAttribute("concavity", new THREE.BufferAttribute(concavity, 1));
   geometry.setIndex(indices);
   // Two material groups so the flat top surface can render single-sided (THREE.FrontSide halves
   // its fragment work — this is where the "face-full of ground" fill cost lives) while the thin
@@ -488,6 +559,24 @@ export function createTerrainGeometry(THREE, chunk, decoded) {
   smoothSurfaceNormals(
     geometry, surfaceHeights, water, sampleCount, spacingEast, spacingNorth,
   );
+  // computeVertexNormals() gives each skirt vertex the ~horizontal normal of its vertical wall, so
+  // dot(N, sun) ~= 0 and the skirt renders near-black at the current shadow floor. Overwrite every
+  // skirt vertex with its source (top-surface) normal — which smoothSurfaceNormals has just
+  // refined — so the curtain shades as a continuation of the terrain edge it hides and never reads
+  // as a black slab. Runs over the perimeter only (a few hundred vertices), after the smoothing so
+  // skirts inherit the same smoothed normal as the surface edge they hang from.
+  const normals = geometry.getAttribute("normal");
+  for (let perimeterIndex = 0; perimeterIndex < perimeter.length; perimeterIndex++) {
+    const sourceIndex = perimeter[perimeterIndex];
+    const topIndex = skirtStart + perimeterIndex * 2;
+    const bottomIndex = topIndex + 1;
+    for (const skirtVertex of [topIndex, bottomIndex]) {
+      normals.setXYZ(skirtVertex,
+        normals.getX(sourceIndex),
+        normals.getY(sourceIndex),
+        normals.getZ(sourceIndex));
+    }
+  }
   geometry.computeBoundingSphere();
   const normalAttribute = geometry.getAttribute("normal");
   const boundaryNormals = new Float32Array(perimeter.length * 3);
@@ -609,7 +698,7 @@ export class TerrainBundleReader {
   }
 }
 
-function createTerrainMaterial(THREE, options = {}) {
+export function createTerrainMaterial(THREE, options = {}) {
   return new THREE.ShaderMaterial({
     name: "MAT_KOREA_CENTRAL_FRONT_TERRAIN",
     vertexShader: TERRAIN_VERTEX,
@@ -633,6 +722,21 @@ function createTerrainMaterial(THREE, options = {}) {
       uParcelTint: {
         value: options.qualityTier === "desktop" && options.sceneryEra !== "modern" ? 1 : 0,
       },
+      // Darkest-slope lighting. The old 0.43 / 0.40 floors put every slope in the world inside the
+      // top 60% of the value range, which is why densely dissected Korean terrain rendered as a
+      // flat wash. Legibility now comes from value, and hue separation keeps dark slopes readable.
+      uShadowFloor: { value: finite(options.shadowFloor, 0.12) },
+      // Baked-occlusion multiplier at fully concave (x) and fully convex (y).
+      uOcclusionRange: {
+        value: new THREE.Vector2(
+          finite(options.occlusionMin, 0.55),
+          finite(options.occlusionMax, 1.12),
+        ),
+      },
+      // Discrete aerial-perspective planes. Stacked ridges each land on their own value step,
+      // which is what makes receding terrain read as depth rather than as fade.
+      uHazeBands: { value: finite(options.hazeBands, 6) },
+      uHazeBandBlend: { value: finite(options.hazeBandBlend, 0.65) },
     },
   });
 }
