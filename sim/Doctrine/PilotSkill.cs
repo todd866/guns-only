@@ -60,14 +60,14 @@ public readonly record struct BanditSkillProfile(
             LowBlockDoctrine: LowBlockDoctrine.Hunt,
             LowBlockClearanceM: 180.0,
             LowBlockRecommitSeconds: 1.8,
-            LeadFireConeDeg: 1.35),
+            LeadFireConeDeg: 0.45),
         PilotSkill.Ace => new(
             9.00, 2.20, true, true, 3, 150,
             FireConeDeg: 3.5,
             LowBlockDoctrine: LowBlockDoctrine.Hunt,
             LowBlockClearanceM: 105.0,
             LowBlockRecommitSeconds: 0.35,
-            LeadFireConeDeg: 1.60),
+            LeadFireConeDeg: 0.35),
         // The robot (docs/robot-airframe-design.md): airframe-limited G, machine trigger
         // discipline, the longest lookahead on the ladder — and a personality that fights FAST.
         // Its 15 G structural ceiling only towers over humans at high dynamic pressure (slow,

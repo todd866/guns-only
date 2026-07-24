@@ -675,7 +675,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
                     player, hasLowAttackPlan, lowAttackPlan);
                 Tactic = BanditTactic.Acquire;
                 RecordSingleCandidateDecision(LastCommand);
-                FlyTacticalCommand(player, dt);
+                _sim.Step(LastCommand, dt);
+                T += dt;
                 return;
             }
             // Lookahead owns maneuver selection, not energy amnesty. Earlier high-skill controllers
@@ -688,7 +689,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
                     && Skill != PilotSkill.Machine) {
                     LastCommand = EnergyCommand(player);
                     RecordSingleCandidateDecision(LastCommand);
-                    FlyTacticalCommand(player, dt);
+                    _sim.Step(LastCommand, dt);
+                    T += dt;
                     return;
                 }
             }
@@ -713,7 +715,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
                     ? BanditTactic.Defend
                     : BanditTactic.Acquire;
             }
-            FlyTacticalCommand(player, dt);
+            _sim.Step(LastCommand, dt);
+            T += dt;
             return;
         }
 
@@ -727,121 +730,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             _ => AcquireCommand(player)
         };
         RecordSingleCandidateDecision(LastCommand);
-        FlyTacticalCommand(player, dt);
-    }
-
-    void FlyTacticalCommand(in ActorObservation player, double dt) {
-        LastCommand = ApplySkillGunneryTracking(LastCommand, player);
         _sim.Step(LastCommand, dt);
         T += dt;
-    }
-
-    /// <summary>
-    /// A high-skill pilot's final sight-picture correction. This is bounded command augmentation,
-    /// not hit assistance: it reads only the observed contact, asks the shared gunnery convergence
-    /// law for a protected-G correction, and rolls the same aircraft toward the ballistic lead.
-    /// AircraftSim still owns achieved G, roll rate, energy loss, and every projectile trajectory.
-    /// </summary>
-    PilotCommand ApplySkillGunneryTracking(
-        in PilotCommand tacticalCommand, in ActorObservation player) {
-        bool enabled = (Skill is PilotSkill.Veteran or PilotSkill.Ace or PilotSkill.Machine)
-            && (!_profile.IsBoss || BossCommitted);
-        if (!enabled || IsGunThreat(player)) return tacticalCommand;
-
-        Vec3D line = player.Position - State.Position;
-        double rangeM = line.Length;
-        if (!double.IsFinite(rangeM)
-            || rangeM < BanditFireControl.MinimumRangeM
-            || rangeM > BanditFireControl.MaximumRangeM)
-            return tacticalCommand;
-
-        Vec3D ballisticLead = BanditFireControl.LeadDirection(State, player);
-        double captureAngleRad = Skill switch {
-            PilotSkill.Machine => 16.0 * System.Math.PI / 180.0,
-            PilotSkill.Ace => 14.0 * System.Math.PI / 180.0,
-            _ => 14.0 * System.Math.PI / 180.0
-        };
-        double leadErrorRad = System.Math.Acos(System.Math.Clamp(
-            GunKill.GunDirection(State).Dot(ballisticLead), -1.0, 1.0));
-        if (leadErrorRad > captureAngleRad) return tacticalCommand;
-
-        double maximumRateRad = Skill switch {
-            PilotSkill.Machine => 0.34,
-            PilotSkill.Ace => 0.30,
-            _ => 0.30
-        };
-        double maximumCorrectionG = Skill switch {
-            PilotSkill.Machine => 4.0,
-            PilotSkill.Ace => 3.5,
-            _ => 3.5
-        };
-        AircraftParams trackingLimits = _parameters with {
-            GunneryPitchAssistMaxRateRad = maximumRateRad,
-            GunneryPitchAssistCaptureAngleRad = captureAngleRad,
-            GunneryPitchAssistMaxRangeM = BanditFireControl.MaximumRangeM,
-            GunneryPitchAssistGainPerSecond = 2.2,
-            GunneryPitchAssistMaxCorrectionG = maximumCorrectionG,
-            GunneryLateralAssistRollGain = 0.0,
-            GunneryLateralAssistMaxRoll = 0.0,
-            GunneryLateralAssistYawGain = 0.0,
-            GunneryLateralAssistMaxYaw = 0.0
-        };
-        double closureMps = rangeM > 1e-9
-            ? -(player.VelocityVector() - State.VelocityVector())
-                .Dot(line * (1.0 / rangeM))
-            : 0.0;
-        GunneryPitchAssistResult pitchTracking = GunneryPitchAssist.Apply(
-            tacticalCommand,
-            State,
-            trackingLimits,
-            _sim.AirspeedMps,
-            _sim.AtmosphereModel,
-            ballisticLead,
-            hasBallisticLead: true,
-            rangeM,
-            enabled: true,
-            lateralRollEnabled: false,
-            closureMps);
-
-        Vec3D leadAim = State.Position + ballisticLead * rangeM;
-        double leadBank = Geometry.BankToPlaceLiftVectorOn(State, leadAim);
-        double bankDelta = System.Math.Atan2(
-            System.Math.Sin(leadBank - tacticalCommand.BankTarget),
-            System.Math.Cos(leadBank - tacticalCommand.BankTarget));
-        double maximumBankBlend = Skill switch {
-            PilotSkill.Machine => 1.0,
-            PilotSkill.Ace => 0.90,
-            _ => 0.90
-        };
-        // Once the gun line is nearly settled, retain the BFM command's turn plane instead of
-        // chasing the numerically noisy "bank toward" solution of an almost straight-ahead point.
-        double bankBlend = maximumBankBlend * System.Math.Clamp(
-            leadErrorRad / (3.0 * System.Math.PI / 180.0), 0.0, 1.0);
-        double trackedBank = System.Math.Atan2(
-            System.Math.Sin(tacticalCommand.BankTarget + bankBlend * bankDelta),
-            System.Math.Cos(tacticalCommand.BankTarget + bankBlend * bankDelta));
-
-        QuaternionD attitude = State.BodyAttitude.Normalized();
-        Vec3D bodyForward = attitude.Rotate(new Vec3D(0.0, 0.0, 1.0));
-        Vec3D bodyRight = attitude.Rotate(new Vec3D(1.0, 0.0, 0.0));
-        double lateralErrorRad = System.Math.Atan2(
-            ballisticLead.Dot(bodyRight),
-            ballisticLead.Dot(bodyForward));
-        double rudderLimit = Skill switch {
-            PilotSkill.Machine => 0.30,
-            PilotSkill.Ace => 0.24,
-            _ => 0.24
-        };
-        double trackedRudder = System.Math.Clamp(
-            tacticalCommand.Rudder + lateralErrorRad * 1.6,
-            -rudderLimit, rudderLimit);
-
-        return pitchTracking.Command with {
-            GDemand = System.Math.Min(
-                pitchTracking.Command.GDemand, _profile.MaxAcquireG),
-            BankTarget = trackedBank,
-            Rudder = trackedRudder
-        };
     }
 
     void FlyTerrainRecovery(double dt) {
@@ -1460,9 +1350,6 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     double ScoreCandidate(in PilotCommand command, in ActorObservation player) {
         const double dt = 1.0 / AircraftSim.TickHz;
         const double threatWeight = 26.0;
-        bool prioritizeBallisticLead =
-            (Skill is PilotSkill.Ace or PilotSkill.Machine)
-            && !IsGunThreat(player);
         // Optimize the envelope the trigger can ACTUALLY use. The old 12-degree camera window made
         // the lookahead tests look threatening while first-pass-safe production fights never fired:
         // every selected "solution" remained outside BanditFireControl's real 3-degree gate. The
@@ -1537,11 +1424,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             // Reward exactly the envelope the trigger can use. Counting any nose-on sample below
             // maximum range also rewarded geometry inside the no-fire minimum range, so a close
             // overshoot could outscore a genuinely usable solution.
-            bool projectedGunWindow = prioritizeBallisticLead
-                ? BanditFireControl.InLeadFiringEnvelope(
-                    probeState, predictedPlayer, EffectiveLeadFireConeRad)
-                : BanditFireControl.InFiringEnvelope(probeState, predictedPlayer);
-            if (projectedGunWindow)
+            if (BanditFireControl.InFiringEnvelope(probeState, predictedPlayer))
                 windowSeconds += dt;
             // Score the same geometry from the attacker's side. The predicted player direction
             // and position come only from ActorObservation; the probe is this candidate's honest
@@ -1567,19 +1450,14 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             System.Math.Sin(predGamma),
             System.Math.Cos(predChi) * System.Math.Cos(predGamma)) * predSpeed;
         double termRange = Geometry.Range(terminal, terminalPlayer);
-        double termAngle = prioritizeBallisticLead
-            ? BanditFireControl.LeadNoseErrorRad(terminal, terminalPlayer)
-            : GunAngleOff(terminal, terminalPlayer);
+        double termAngle = GunAngleOff(terminal, terminalPlayer);
         const double idealRangeM = 450.0; // centre of the gun band: pull the fight inside firing range
 
         // Nose-on shaping is expressed in physical gun-cone widths. The previous per-radian
         // penalty was almost flat around a three-degree solution (only ~0.2 score at the edge),
         // so range management dominated and the controller happily orbited just outside the
         // trigger gate. Keep a smooth gradient toward the real envelope without widening it.
-        double shapingConeRad = prioritizeBallisticLead
-            ? 0.35 * System.Math.PI / 180.0
-            : gunConeRad;
-        double coneErrors = termAngle / shapingConeRad;
+        double coneErrors = termAngle / gunConeRad;
         double score = -0.75 * coneErrors;
         // Direct conversion reward: seconds of gun window accrued over the rollout.
         score += 10.0 * windowSeconds;
