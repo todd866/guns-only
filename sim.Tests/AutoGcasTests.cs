@@ -263,14 +263,22 @@ public class AutoGcasTests {
         PilotCommand recovery = Assert.IsType<PilotCommand>(
             activation.RecoveryCommand);
         double minimumClearance = aircraft.State.Position.Y;
+        bool arrestedDescent = false;
         for (int tick = 0; tick < 20 * AircraftSim.TickHz; tick++) {
             aircraft.Step(recovery, TickSeconds);
             minimumClearance = Math.Min(minimumClearance,
                 aircraft.State.Position.Y);
             if (aircraft.State.Position.Y <= 0.0) break;
-            if (aircraft.State.Gamma >= 0.0 && tick > AircraftSim.TickHz) break;
+            if (aircraft.State.Gamma >= 0.0 && tick > AircraftSim.TickHz) {
+                arrestedDescent = true;
+                break;
+            }
         }
 
+        // Non-vacuous: the near-vertical dive must actually PULL OUT (reach level flight), not
+        // merely avoid the ground for 20 s, and it must never contact terrain doing so.
+        Assert.True(arrestedDescent,
+            "the vertical save never arrested the descent to level flight");
         Assert.True(minimumClearance > 0.0,
             $"the vertical save contacted the ground (bottomed at {minimumClearance:F2} m AGL)");
     }
