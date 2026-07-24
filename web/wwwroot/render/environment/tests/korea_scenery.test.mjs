@@ -159,3 +159,42 @@ test("renders modern transport and power batches as instanced closest-LOD geomet
   assert.ok(group.children.every((child) => child.isInstancedMesh));
   runtime.dispose();
 });
+
+// Field rows and road markings derive their Y from the very slab they decorate, so they sit a
+// fixed 7.5 mm above its top face on every terrain. The production camera (near 0.06, far 680000)
+// resolves 8.9 cm at 300 m and 99 cm at 1 km, so past ~90 m that pair is inside a single depth
+// LSB and shimmers. The stacking order has to be asserted in depth-bias units, not in millimetres.
+test("layers coplanar with their own parent slab carry a depth bias", () => {
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "modern",
+    qualityTier: "mobile",
+  });
+  const group = runtime.createTile({
+    id: "e0000-n0000",
+    eastIndex: 0,
+    northIndex: 0,
+    boundsLocalM: [0, 0, 8_192, 8_192],
+    generation: { seed: 1, landFraction: 1 },
+  }, flatDecodedFixture(), 0);
+  const decals = ["PROCEDURAL_FIELD_ROWS", "PROCEDURAL_ROAD_MARKINGS"];
+  let checked = 0;
+  for (const node of group.children) {
+    if (!node.material || !node.name) continue;
+    if (decals.includes(node.name)) {
+      assert.equal(node.material.polygonOffset, true,
+        `${node.name} must be depth-biased against the slab it decorates`);
+      assert.ok(node.material.polygonOffsetUnits < 0,
+        `${node.name} must be biased toward the viewer, not away`);
+      checked++;
+    }
+    // The slabs themselves sit metres from the terrain by construction (mean of a footprint that
+    // tolerates 13-21 m of relief), so biasing them would push buried slabs through hillsides.
+    if (node.name === "PROCEDURAL_MODERN_ROADS" || node.name === "PROCEDURAL_FIELDS") {
+      assert.notEqual(node.material.polygonOffset, true,
+        `${node.name} must NOT be biased — its terrain separation is intersection, not precision`);
+    }
+  }
+  assert.equal(checked, decals.length,
+    "the fixture must produce both coplanar decal layers");
+  runtime.dispose?.();
+});

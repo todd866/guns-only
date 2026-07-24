@@ -688,14 +688,38 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     emissive: color,
     emissiveIntensity: 0.14,
   });
+  // Two of these layers are coplanar with their own parent slab BY CONSTRUCTION, not by terrain
+  // accident: field rows take their Y from the same `field.y` mean the field slab uses, and road
+  // markings reuse the road segment's own endpoints. Both end up 7.5 mm above the top face of the
+  // slab they decorate, on every terrain, forever.
+  //
+  // 7.5 mm does not survive this depth buffer. With near = 0.06 and far = 680000 (app.js), a
+  // 24-bit depth buffer resolves z² · (1/n - 1/f) / 2²⁴ — 8.9 cm at 300 m, 25 cm at 500 m, 99 cm
+  // at 1 km. So past roughly 90 m the marking and its road are inside one depth LSB of each other,
+  // the per-pixel comparison flips with sub-LSB phase as the aircraft moves, and the pair shimmers.
+  //
+  // Assert the stacking order in depth-bias units instead, which is fixed-function raster state
+  // and costs no fill. Same fix, same reason, as depthBiasDeckMaterial in scene_builders.js
+  // ("near-coplanar deck layers lost depth precision and shimmered on approach").
+  //
+  // Deliberately NOT applied to the field/road/runway/rail slabs themselves. Those sit at the mean
+  // of a 5-sample footprint that tolerates 13-21 m of relief, so their separation from the terrain
+  // is metres of genuine intersection, not a precision problem — biasing them toward the eye would
+  // punch buried slabs out through hillsides.
+  const decalOf = (material, order) => {
+    material.polygonOffset = true;
+    material.polygonOffsetFactor = -1;   // slope-scaled: these are grazing-angle surfaces
+    material.polygonOffsetUnits = -order;
+    return material;
+  };
   const crownMaterial = litMaterial(profile.crownColor);
   const trunkMaterial = litMaterial(profile.trunkColor);
   const buildingMaterial = litMaterial(profile.buildingColor);
   const fieldMaterial = litMaterial(profile.fieldColor);
-  const fieldRowMaterial = litMaterial(profile.fieldRowColor);
+  const fieldRowMaterial = decalOf(litMaterial(profile.fieldRowColor), 1);
   const roadMaterial = litMaterial(profile.roadColor);
   const roadMarkingMaterial = profile.roadMarkingColor === null ? null
-    : new THREE.MeshBasicMaterial({ color: profile.roadMarkingColor });
+    : decalOf(new THREE.MeshBasicMaterial({ color: profile.roadMarkingColor }), 1);
   const railBedMaterial = litMaterial(profile.railBedColor);
   const railMaterial = litMaterial(profile.railColor);
   const runwayMaterial = litMaterial(profile.runwayColor);
