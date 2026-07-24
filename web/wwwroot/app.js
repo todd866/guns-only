@@ -13,10 +13,6 @@ import {
   advancePadlockGimbal,
   PADLOCK_LIMITS,
 } from "./render/camera/padlock_controller.js";
-import {
-  GcasSaveCameraController,
-  gcasSaveCameraFraming,
-} from "./render/camera/gcas_save_camera.js";
 import { sortieResultCopy } from "./render/debrief/sortie_result.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -1138,8 +1134,8 @@ function renderPilotPhysiology(state) {
   syncMobileControlProfile(state);
   if (!pilotPhysiology) return;
   const presentation = gTolerancePresentation(state);
-  // The physiology remains authoritative, but an external camera is not looking through the
-  // pilot's eyes. Do not paint first-person retinal occlusion over replay or the GCAS save cam.
+  // The physiology remains authoritative, but a replay chase/deck camera is not looking through
+  // the pilot's eyes. Do not paint first-person retinal occlusion over a third-person replay.
   const externalCamera = activeView?.externalCameraActive === true;
   const presentationVisible = presentation.active && !externalCamera;
   pilotPhysiology.hidden = !presentationVisible;
@@ -3142,7 +3138,7 @@ class PresentationAssetManager {
       : null;
   }
 
-  sync(state, { gcasSaveCamExternal = false } = {}) {
+  sync(state) {
     this.lastState = state;
     this.requested.playerEntityId = projectedId(state.player_entity_id);
     this.requested.playerPresentationId = projectedId(state.player_presentation_id);
@@ -3190,10 +3186,9 @@ class PresentationAssetManager {
     const replayExternal = state.replay_external === true;
     this.cockpitSlot.root.visible = PRODUCTION_AUTHORED_COCKPIT_ENABLED
       && !replayExternal
-      && !gcasSaveCamExternal
       && this.requested.cockpitPresentationId !== "";
-    this.playerExteriorSlot.root.visible = gcasSaveCamExternal
-      || (replayExternal && String(state.replay_camera || "CHASE") !== "COCKPIT");
+    this.playerExteriorSlot.root.visible = replayExternal
+      && String(state.replay_camera || "CHASE") !== "COCKPIT";
     this.targetSlot.root.visible = state.opponent_body_present !== false;
     this.carrierSlot.root.visible = state.carrier === true;
     // A hidden decorative escort must not even enter asset resolution: visibility here is the
@@ -3631,10 +3626,7 @@ class FlightView {
     this.opponentMuzzleLeftPosition = new THREE.Vector3();
     this.opponentMuzzleRightPosition = new THREE.Vector3();
     this.playerQuaternion = new THREE.Quaternion();
-    this.gcasSaveCamera = new GcasSaveCameraController();
-    this.gcasSaveCamExternal = false;
     this.externalCameraActive = false;
-    this.gcasSaveCamTarget = new THREE.Vector3();
     this.banditPosition = new THREE.Vector3();
     this.carrierPosition = new THREE.Vector3();
     this.carrierPadlockPosition = new THREE.Vector3();
@@ -4500,11 +4492,8 @@ class FlightView {
 
     const replayExternal = state.replay_external === true;
     const replayCamera = String(state.replay_camera || "CHASE");
-    const gcasSaveCamExternal = this.gcasSaveCamera.update(state, dt);
-    this.gcasSaveCamExternal = gcasSaveCamExternal;
-    this.externalCameraActive = gcasSaveCamExternal
-      || (replayExternal && replayCamera !== "COCKPIT");
-    this.presentationAssets.sync(state, { gcasSaveCamExternal });
+    this.externalCameraActive = replayExternal && replayCamera !== "COCKPIT";
+    this.presentationAssets.sync(state);
     this.ensureVisualRuntime();
     const cockpitRoot = this.presentationAssets.cockpitSlot.root;
     const playerExteriorRoot = this.presentationAssets.playerExteriorSlot.root;
@@ -4556,24 +4545,6 @@ class FlightView {
         this.camera.up.set(0, 1, 0);
         this.camera.lookAt(this.localTarget);
       }
-    } else if (gcasSaveCamExternal) {
-      const framing = gcasSaveCameraFraming({
-        position: this.playerPosition,
-        forward: this.playerForward,
-        radarAltitudeFt: state.radar_alt_ft,
-      });
-      this.camera.position.set(
-        framing.camera.x,
-        framing.camera.y,
-        framing.camera.z,
-      );
-      this.gcasSaveCamTarget.set(
-        framing.target.x,
-        framing.target.y,
-        framing.target.z,
-      );
-      this.camera.up.set(0, 1, 0);
-      this.camera.lookAt(this.gcasSaveCamTarget);
     } else {
       this.updateGimbal(dt);
       const cockpitCamera = cockpitRoot.visible
@@ -4600,7 +4571,7 @@ class FlightView {
     }
     // Padlock is an orientation aid, not a cinematic camera. Applying buffet/head-lag after the
     // target solve makes the contact and every view-relative cue wander by a degree or two.
-    if (replayExternal || gcasSaveCamExternal || padlock) this.cockpitHead.reset(state);
+    if (replayExternal || padlock) this.cockpitHead.reset(state);
     else this.cockpitHead.update(this.camera, state, dt);
     this.camera.updateMatrixWorld(true);
     const gunsightPresentation = this.periodGunsight.update(this.camera, state, dt);
@@ -4783,8 +4754,7 @@ class FlightView {
         deltaSeconds: dt,
         elapsedSeconds: nowSeconds,
         frameTimeMs: dt * 1000,
-        mode: replayExternal || gcasSaveCamExternal
-          ? "replay" : isCarrier ? "carrier" : "combat",
+        mode: replayExternal ? "replay" : isCarrier ? "carrier" : "combat",
         shadowFocus,
       });
       this.visualRuntime.render(dt);

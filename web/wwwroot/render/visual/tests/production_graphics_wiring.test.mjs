@@ -273,3 +273,21 @@ test("replay stream changes clear transients and baseline cumulative weapon coun
     /lastOpponentRoundsFired = Number\(state\.opponent_rounds_fired\) \|\| 0/);
   assert.match(source, /lastHitCount = Number\(state\.hits\) \|\| 0/);
 });
+
+// Owner directive 2026-07-24: "ditch the 3rd person view". The Auto-GCAS save camera pulled the
+// player out to a distant side/chase shot mid-fly-up, which read as confusing rather than
+// dramatic. It is deleted, not disabled — historical replay stays the only authority that may
+// take the camera out of the cockpit.
+test("an Auto-GCAS fly-up never leaves the cockpit view", async () => {
+  const source = await readFile(appUrl, "utf8");
+  assert.doesNotMatch(source, /gcas_save_camera|GcasSaveCamera|gcasSaveCam/,
+    "the third-person Auto-GCAS save camera is deleted, not merely disabled");
+  assert.doesNotMatch(source, /GCAS save cam/i,
+    "the save camera must not survive as a concept in prose either");
+  assert.match(source,
+    /this\.externalCameraActive = replayExternal && replayCamera !== "COCKPIT";/,
+    "historical replay is the only authority that may take the camera out of the cockpit");
+  assert.match(source,
+    /this\.playerExteriorSlot\.root\.visible = replayExternal\s*\n\s*&& String\(state\.replay_camera \|\| "CHASE"\) !== "COCKPIT";/,
+    "the ownship exterior model is replay-only; a fly-up must never reveal it");
+});
