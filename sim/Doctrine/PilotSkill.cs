@@ -11,18 +11,16 @@ public enum LowBlockDoctrine {
     Hunt
 }
 
-/// Skill-gated knobs read by ReactiveBandit. Competent reproduces the historical hard-coded
-/// bandit (g = 1.15 + angle*1.45, capped 3.20; no overshoot/disengage/doctrine variety) within
-/// the historical envelope; higher tiers unlock capability. DELIBERATE departures from strict
-/// tick-for-tick legacy parity, applied to every tier since Build 69: floors are measured above
-/// real terrain rather than sea level, a last-instance terrain-recovery reflex pre-empts the
+/// Skill-gated knobs read by ReactiveBandit. Novice retains the deliberately soft introductory
+/// opponent. Competent and above use progressively more of the same honest aerodynamic/physiology
+/// envelope so the middle rung is no longer a predictable 3.2 G pursuit curve. Floors are measured
+/// above real terrain rather than sea level, a last-instance terrain-recovery reflex pre-empts the
 /// tactical layers at low altitude, and a bandit pinned at its ceiling by a player camping above
-/// extends away instead of hovering. Over open water in the historical altitude band, behaviour
-/// remains bit-identical.
+/// extends away instead of hovering.
 ///
-/// LookaheadHorizonTicks gates the short-horizon lookahead BFM decision layer: 0 keeps the tier on
-/// the flat-turn state machine EXACTLY (Novice, Competent), while a bounded positive value lets
-/// Veteran/Ace roll candidate maneuvers forward in the deterministic kernel and fly the one that
+/// LookaheadHorizonTicks gates the short-horizon lookahead BFM decision layer: 0 keeps Novice on
+/// the simple state machine, while a bounded positive value lets Competent and above roll
+/// candidate maneuvers forward in the deterministic kernel and fly the one that
 /// best improves the future firing position (at 120 Hz, ~90 ticks ~= 0.75 s, ~150 ticks ~= 1.25 s).
 public readonly record struct BanditSkillProfile(
     double MaxAcquireG, double AcquireGGain, bool ForcesOvershoot,
@@ -33,33 +31,43 @@ public readonly record struct BanditSkillProfile(
     double LowBlockRecommitSeconds = 0.0,
     bool IsBoss = false,
     double CommitDominanceSeconds = 8.0,
-    double EnergyRetentionWeight = 1.0) {
-    /// Trigger nose-error gate in radians. Novice/Competent keep the historical 3-degree
-    /// discipline exactly. The Veteran deliberately shoots a WIDER gate: with honest ballistics a
-    /// wide-gate burst is tracer pressure and near misses — the mid-ladder player finally gets
-    /// shot AT without the hit probability of an ace. The Ace stays nearly disciplined.
+    double EnergyRetentionWeight = 1.0,
+    double LeadFireConeDeg = 0.45) {
+    /// Trigger nose-error gate in radians. The Veteran deliberately shoots a WIDER gate: with
+    /// honest ballistics a wide-gate burst is tracer pressure and near misses — the mid-ladder
+    /// player finally gets shot AT without the hit probability of an ace. The Ace stays nearly
+    /// disciplined.
     public double FireConeRad => FireConeDeg * System.Math.PI / 180.0;
+    /// Tight body-axis tolerance around the observation-derived ballistic lead. This is pilot
+    /// tracking quality, not projectile dispersion or an enlarged target: GunKill remains the
+    /// only hit authority.
+    public double LeadFireConeRad => LeadFireConeDeg * System.Math.PI / 180.0;
 
     public static BanditSkillProfile For(PilotSkill skill) => skill switch {
         PilotSkill.Novice => new(
-            2.40, 1.00, false, false, 1, 0),
+            2.40, 1.00, false, false, 1, 0,
+            LeadFireConeDeg: 0.25),
         PilotSkill.Competent => new(
-            3.20, 1.45, false, false, 1, 0,
+            4.80, 1.80, true, false, 1, 100,
+            FireConeDeg: 3.5,
             LowBlockDoctrine: LowBlockDoctrine.BoomAndZoom,
-            LowBlockClearanceM: 180.0,
-            LowBlockRecommitSeconds: 5.0),
+            LowBlockClearanceM: 260.0,
+            LowBlockRecommitSeconds: 5.0,
+            LeadFireConeDeg: 0.40),
         PilotSkill.Veteran => new(
             5.50, 1.80, false, true, 2, 90,
             FireConeDeg: 5.0,
             LowBlockDoctrine: LowBlockDoctrine.Hunt,
             LowBlockClearanceM: 180.0,
-            LowBlockRecommitSeconds: 1.8),
+            LowBlockRecommitSeconds: 1.8,
+            LeadFireConeDeg: 0.45),
         PilotSkill.Ace => new(
             9.00, 2.20, true, true, 3, 150,
             FireConeDeg: 3.5,
             LowBlockDoctrine: LowBlockDoctrine.Hunt,
             LowBlockClearanceM: 105.0,
-            LowBlockRecommitSeconds: 0.35),
+            LowBlockRecommitSeconds: 0.35,
+            LeadFireConeDeg: 0.35),
         // The robot (docs/robot-airframe-design.md): airframe-limited G, machine trigger
         // discipline, the longest lookahead on the ladder — and a personality that fights FAST.
         // Its 15 G structural ceiling only towers over humans at high dynamic pressure (slow,

@@ -77,6 +77,33 @@ public sealed record CombatTrainingBatchConfig(
     CombatRewardWeights? RewardWeights = null);
 
 /// <summary>
+/// Per-tier production-geometry threat facts from a deterministic seeded engagement set. "Rear
+/// quarter" is the tactically relevant 1,500 m threat volume behind the bandit's 3/9 line using
+/// the controller's own -0.45 rear-aspect boundary. PlayerDamageHits are physical GunKill hits
+/// scored by the bandit; no burst proxy, camera cone, or fabricated damage enters this report.
+/// </summary>
+public readonly record struct SeededSkillTierMeasurement(
+    PilotSkill Skill,
+    int Engagements,
+    int EngagementsWithBanditFire,
+    int EngagementsWithPlayerDamage,
+    int BanditRoundsFired,
+    int PlayerDamageHits,
+    double PlayerRearQuarterSeconds) {
+
+    public double BanditRoundsPerEngagement =>
+        Engagements > 0 ? (double)BanditRoundsFired / Engagements : 0.0;
+    public double PlayerRearQuarterSecondsPerEngagement =>
+        Engagements > 0 ? PlayerRearQuarterSeconds / Engagements : 0.0;
+}
+
+public sealed record SeededSkillTierEvaluationConfig(
+    ulong FirstSeed = 0xB4AD_1700UL,
+    int EngagementsPerTier = 4,
+    double MaximumSecondsPerEngagement = 40.0,
+    PilotSkill PlayerSkill = PilotSkill.Competent);
+
+/// <summary>
 /// A factory-authenticated seeded-offset-merge batch. Construction stays inside the simulation
 /// assembly so the JSON exporter cannot be handed arbitrary episodes while claiming the runner's
 /// seed-to-geometry provenance.
@@ -122,6 +149,137 @@ public static class SeededCombatBatchRunner {
     const double Dt = SimulationSession.FixedDeltaSeconds;
     const double MergeGateM = 900.0;
     const double OpeningConfirmationSeconds = 0.20;
+    const double RearQuarterRangeM = 1500.0;
+    const double RearQuarterAspectDot = -0.45;
+
+    /// <summary>
+    /// Run the same seeded firing-opportunity and tail-ingress engagements at each human opponent
+    /// tier. This is deliberately separate from the long-range learning scenario: that scenario's
+    /// first-pass safety consumes its only close pass inside the current controlled horizon, making
+    /// it a useful transition contract but a degenerate opponent-threat probe.
+    /// </summary>
+    public static IReadOnlyList<SeededSkillTierMeasurement> MeasureSkillTiers(
+        SeededSkillTierEvaluationConfig? config = null,
+        CancellationToken cancellationToken = default) {
+        SeededSkillTierEvaluationConfig selected =
+            config ?? new SeededSkillTierEvaluationConfig();
+        if (selected.EngagementsPerTier is < 1 or > 100)
+            throw new ArgumentOutOfRangeException(nameof(config));
+        if (!double.IsFinite(selected.MaximumSecondsPerEngagement)
+            || selected.MaximumSecondsPerEngagement <= 0.0
+            || selected.MaximumSecondsPerEngagement > MaximumSupportedEpisodeSeconds)
+            throw new ArgumentOutOfRangeException(nameof(config));
+        cancellationToken.ThrowIfCancellationRequested();
+
+        PilotSkill[] tiers = {
+            PilotSkill.Novice,
+            PilotSkill.Competent,
+            PilotSkill.Veteran,
+            PilotSkill.Ace
+        };
+        var measurements = new SeededSkillTierMeasurement[tiers.Length];
+        for (int tierIndex = 0; tierIndex < tiers.Length; tierIndex++) {
+            PilotSkill skill = tiers[tierIndex];
+            int rounds = 0;
+            int damageHits = 0;
+            int engagementsWithFire = 0;
+            int engagementsWithDamage = 0;
+            double rearQuarterSeconds = 0.0;
+            for (int engagementIndex = 0;
+                engagementIndex < selected.EngagementsPerTier;
+                engagementIndex++) {
+                cancellationToken.ThrowIfCancellationRequested();
+                ulong seed = unchecked(
+                    selected.FirstSeed + (ulong)engagementIndex);
+                CombatTrainingScenario seedGeometry =
+                    CombatTrainingScenarioFactory.SeededOffsetMerge(seed);
+                int engagementNumber = engagementIndex + 1;
+                CombatTrainingScenario scenario = (engagementIndex & 1) == 0
+                    ? SeededBanditFiringOpportunity(seedGeometry, engagementNumber)
+                    : SeededPlayerTailIngress(seedGeometry, engagementNumber);
+                CombatEpisode episode = RunEpisode(
+                    engagementIndex,
+                    scenario,
+                    selected.PlayerSkill,
+                    skill,
+                    selected.MaximumSecondsPerEngagement,
+                    cancellationToken: cancellationToken,
+                    engagementNumber: engagementNumber);
+
+                rounds += episode.RoundsFired;
+                damageHits += episode.HitsScored;
+                if (episode.RoundsFired > 0) engagementsWithFire++;
+                if (episode.HitsScored > 0) engagementsWithDamage++;
+                rearQuarterSeconds += episode.Transitions.Count(
+                    transition => PlayerInBanditRearQuarter(
+                        transition.Observation)) * Dt;
+            }
+
+            measurements[tierIndex] = new SeededSkillTierMeasurement(
+                skill,
+                selected.EngagementsPerTier,
+                engagementsWithFire,
+                engagementsWithDamage,
+                rounds,
+                damageHits,
+                rearQuarterSeconds);
+        }
+        return Array.AsReadOnly(measurements);
+    }
+
+    static CombatTrainingScenario SeededBanditFiringOpportunity(
+        in CombatTrainingScenario seedGeometry, int engagementNumber) {
+        AircraftParams playerAir = FlightModel.F22APublicDataSurrogate;
+        AircraftParams banditAir = FlightModel.Su27SPublicDataSurrogate;
+        double side = seedGeometry.ReferenceStart.Position.X < 0.0 ? -1.0 : 1.0;
+        double altitudeM = seedGeometry.ReferenceStart.Position.Y;
+        // An earned but not mathematically perfect offensive perch: the bandit begins inside gun
+        // range with small seeded lateral/vertical errors and modest closure. The player is already
+        // free to break; the opponent still has to press and track the fleeting opportunity.
+        var player = new AircraftState(
+            new Vec3D(
+                side * (22.0 + System.Math.Abs(
+                    seedGeometry.ReferenceStart.Position.X) * 0.03),
+                altitudeM + 12.0,
+                620.0),
+            258.0 + (seedGeometry.ReferenceStart.Speed - 300.0) * 0.10,
+            0.0, 0.0, 0.0, playerAir.MassKg);
+        var bandit = new AircraftState(
+            new Vec3D(0.0, altitudeM, 0.0),
+            278.0 + (seedGeometry.LearningFighterStart.Speed - 290.0) * 0.08,
+            0.0, 0.0, 0.0, banditAir.MassKg);
+        return new CombatTrainingScenario(
+            $"seeded-bandit-firing-opportunity-{seedGeometry.Seed:x16}-{engagementNumber}",
+            seedGeometry.Seed,
+            player,
+            bandit,
+            FirstPassSafe: false);
+    }
+
+    static CombatTrainingScenario SeededPlayerTailIngress(
+        in CombatTrainingScenario seedGeometry, int engagementNumber) {
+        AircraftParams playerAir = FlightModel.F22APublicDataSurrogate;
+        AircraftParams banditAir = FlightModel.Su27SPublicDataSurrogate;
+        double side = seedGeometry.ReferenceStart.Position.X < 0.0 ? -1.0 : 1.0;
+        double altitudeM = seedGeometry.ReferenceStart.Position.Y;
+        // The player begins just outside the measured rear-quarter volume, faster and offset, and
+        // tries to enter it under the same reference policy at every tier. This measures denial of
+        // the saddle rather than survival after the saddle is already stabilized.
+        var player = new AircraftState(
+            new Vec3D(side * 550.0, altitudeM + 60.0, -1450.0),
+            282.0 + (seedGeometry.ReferenceStart.Speed - 300.0) * 0.10,
+            0.0, 0.0, 0.0, playerAir.MassKg);
+        var bandit = new AircraftState(
+            new Vec3D(0.0, altitudeM, 0.0),
+            248.0 + (seedGeometry.LearningFighterStart.Speed - 290.0) * 0.08,
+            0.0, 0.0, 0.0, banditAir.MassKg);
+        return new CombatTrainingScenario(
+            $"seeded-player-tail-ingress-{seedGeometry.Seed:x16}-{engagementNumber}",
+            seedGeometry.Seed,
+            player,
+            bandit,
+            FirstPassSafe: false);
+    }
 
     public static CombatTrainingBatch Run(CombatTrainingBatchConfig? config = null,
         CancellationToken cancellationToken = default) {
@@ -151,8 +309,11 @@ public static class SeededCombatBatchRunner {
         PilotSkill behaviorSkill,
         double maximumSeconds,
         CombatRewardWeights? rewardWeights = null,
-        CancellationToken cancellationToken = default) {
+        CancellationToken cancellationToken = default,
+        int engagementNumber = 1) {
         if (episodeIndex < 0) throw new ArgumentOutOfRangeException(nameof(episodeIndex));
+        if (engagementNumber < 1)
+            throw new ArgumentOutOfRangeException(nameof(engagementNumber));
         if (string.IsNullOrWhiteSpace(scenario.Id))
             throw new ArgumentException("A scenario id is required.", nameof(scenario));
         if (!double.IsFinite(maximumSeconds) || maximumSeconds <= 0.0)
@@ -176,14 +337,16 @@ public static class SeededCombatBatchRunner {
             ? FlightModel.UcavInterceptorSurrogate
             : FlightModel.Su27SPublicDataSurrogate;
         var reference = new ReactiveBandit(
-            scenario.ReferenceStart, referenceAir, referenceSkill);
+            scenario.ReferenceStart, referenceAir, referenceSkill,
+            engagementNumber: engagementNumber);
         // Scenario factories stage skill-agnostic states; a machine episode restages the
         // learning fighter at UCAV mass so the airframe it flies is the airframe it weighs.
         var learning = new ReactiveBandit(
             behaviorSkill == PilotSkill.Machine
                 ? scenario.LearningFighterStart with { Mass = learningAir.MassKg }
                 : scenario.LearningFighterStart,
-            learningAir, behaviorSkill);
+            learningAir, behaviorSkill,
+            engagementNumber: engagementNumber);
         CombatConfig combat = CombatConfig.ModernVisualMerge;
         var referenceGun = new GunKill(
             combat.PlayerAmmo,
@@ -383,6 +546,18 @@ public static class SeededCombatBatchRunner {
         && gun.AmmoRemaining > 0
         && gun.TargetAlive;
 
+    static bool PlayerInBanditRearQuarter(
+        in CombatPolicyObservation observation) {
+        Vec3D toPlayer = observation.Contact.Position
+            - observation.Ownship.Position;
+        double rangeM = toPlayer.Length;
+        return observation.WeaponsAuthorized
+            && rangeM > 1.0
+            && rangeM <= RearQuarterRangeM
+            && observation.Ownship.ForwardDir()
+                .Dot(toPlayer * (1.0 / rangeM)) < RearQuarterAspectDot;
+    }
+
     static void ValidateSupportedStart(in AircraftState state, string parameterName) {
         if (!state.Position.IsFinite
             || !double.IsFinite(state.Speed) || state.Speed < 0.0
@@ -402,6 +577,7 @@ public static class SeededCombatBatchRunner {
         throw new InvalidOperationException(
             $"Scenario '{scenarioId}' moved the {actor} actor outside the controlled-policy "
             + "runner's supported flight volume. Add explicit crash/out-of-bounds terminals "
-            + "before using learned controls here.");
+            + $"before using learned controls here. position={state.Position}, "
+            + $"speed={state.Speed:F1} m/s");
     }
 }

@@ -13,6 +13,15 @@ public class ReactiveBanditTests {
     static AircraftState State(double x, double y, double z, double speed, double chi = 0.0) =>
         new(new Vec3D(x, y, z), speed, 0.0, chi, 0.0, FlightModel.Sabre.MassKg);
 
+    static QuaternionD PointBodyAt(in Vec3D direction) {
+        Vec3D forward = direction.Normalized();
+        Vec3D right = new Vec3D(0.0, 1.0, 0.0).Cross(forward);
+        if (right.Length < 1e-6) right = new Vec3D(1.0, 0.0, 0.0);
+        else right = right.Normalized();
+        Vec3D up = forward.Cross(right).Normalized();
+        return QuaternionD.FromFrame(right, up, forward);
+    }
+
     [Fact]
     public void CarrierQualificationKeepsCombatOutOfTheRecoveryAuthority() {
         var beat = Beats.CarrierApproach();
@@ -229,7 +238,7 @@ public class ReactiveBanditTests {
         var initialBandit = State(0.0, 1000.0, 0.0, 165.0);
         var first = new ReactiveBandit(initialBandit, FlightModel.Sabre);
         var second = new ReactiveBandit(initialBandit, FlightModel.Sabre);
-        bool sawDefend = false, sawLeft = false, sawRight = false;
+        bool sawDefend = false, sawBreak = false, sawReverse = false;
         double maxBankCommand = 0.0, minG = double.PositiveInfinity, maxG = double.NegativeInfinity;
 
         for (int i = 0; i < 4 * AircraftSim.TickHz; i++) {
@@ -242,8 +251,8 @@ public class ReactiveBanditTests {
             Assert.Equal(first.Tactic, second.Tactic);
             Assert.Equal(first.LastCommand, second.LastCommand);
             sawDefend |= first.Tactic == BanditTactic.Defend;
-            sawLeft |= first.LastCommand.BankTarget < -1.0;
-            sawRight |= first.LastCommand.BankTarget > 1.0;
+            sawBreak |= first.DecisionTrace.SelectedCandidateIndex == 6;
+            sawReverse |= first.DecisionTrace.SelectedCandidateIndex == 7;
             maxBankCommand = Math.Max(maxBankCommand, Math.Abs(first.LastCommand.BankTarget));
             minG = Math.Min(minG, first.LastCommand.GDemand);
             maxG = Math.Max(maxG, first.LastCommand.GDemand);
@@ -251,8 +260,9 @@ public class ReactiveBanditTests {
 
         Assert.True(sawDefend, "a close, closing attacker on the six must trigger defence");
         Assert.True(maxBankCommand > 1.1, $"break was not hard: max bank command={maxBankCommand:F2} rad");
-        Assert.True(sawLeft && sawRight, "the deterministic jink must reverse its break bank");
-        Assert.True(maxG - minG > 0.4, $"the jink must vary G: {minG:F2}..{maxG:F2}");
+        Assert.True(sawBreak && sawReverse,
+            "the deterministic defence must alternate its break and orthogonal reverse");
+        Assert.True(maxG - minG > 0.25, $"the jink must vary G: {minG:F2}..{maxG:F2}");
         Assert.True(Math.Abs(first.State.Chi - initialBandit.Chi) > 0.10,
             $"defender stayed effectively straight: chi={first.State.Chi:F3}");
     }
@@ -291,9 +301,14 @@ public class ReactiveBanditTests {
             new Vec3D(0.0, 5486.4, 0.0), 300.0, 0.0, 0.0, 0.0, air.MassKg);
         var contact = new AircraftState(
             new Vec3D(0.0, 5486.4, rangeM), 300.0, 0.0, 0.0, 0.0, air.MassKg);
+        ActorObservation observation = ActorObservation.Capture(contact, 0);
+        own = own with {
+            BodyAttitude = PointBodyAt(
+                BanditFireControl.LeadDirection(own, observation))
+        };
         var bandit = new ReactiveBandit(own, air, PilotSkill.Ace);
 
-        bandit.Step(ActorObservation.Capture(contact, 0), Dt);
+        bandit.Step(observation, Dt);
 
         BanditDecisionTrace trace = bandit.DecisionTrace;
         Assert.Equal(9, trace.CandidateCount);
@@ -304,7 +319,7 @@ public class ReactiveBanditTests {
             best = Math.Max(best, candidate.Score);
         }
         if (windowExpected)
-            Assert.True(best > 8.0,
+            Assert.True(best > 5.5,
                 $"an in-envelope hold must earn the window reward: best={best:F2}");
         else
             Assert.True(best < 5.0,
@@ -454,7 +469,48 @@ public class ReactiveBanditTests {
             "the Veteran's 5-degree gate must accept a 4-degree snapshot");
         Assert.Equal(3.0 * Math.PI / 180.0,
             BanditSkillProfile.For(PilotSkill.Novice).FireConeRad, 12);
-        Assert.Equal(3.0 * Math.PI / 180.0,
+        Assert.Equal(3.5 * Math.PI / 180.0,
             BanditSkillProfile.For(PilotSkill.Competent).FireConeRad, 12);
+    }
+
+    [Fact]
+    public void ReactiveBanditStartsABurstWhenTheFiringOpportunityAppears() {
+        AircraftState own = State(0.0, 3000.0, 0.0, 200.0);
+        var bandit = new ReactiveBandit(
+            own, FlightModel.Sabre, PilotSkill.Competent);
+        ActorObservation offAxis = ActorObservation.Capture(
+            State(500.0, 3000.0, 0.0, 200.0), 0);
+        for (int tick = 0; tick < 70; tick++) {
+            Assert.False(bandit.WantsToFire(offAxis));
+            bandit.Step(offAxis, Dt);
+        }
+
+        // t ~= 0.58 s sits in the historical absolute clock's off phase. A newly earned physical
+        // gun line must start its own deterministic burst instead of being discarded.
+        Vec3D gunLine = GunKill.GunDirection(bandit.State);
+        ActorObservation aligned = ActorObservation.Capture(
+            State(0.0, 3000.0, 500.0, 200.0) with {
+                Position = bandit.State.Position + gunLine * 500.0
+            },
+            70);
+        Assert.True(bandit.WantsToFire(aligned));
+    }
+
+    [Fact]
+    public void ReactiveBanditTakesAnObservedBallisticLeadOpportunity() {
+        AircraftState own = State(0.0, 3000.0, 0.0, 220.0);
+        var crossing = State(0.0, 3000.0, 600.0, 220.0, chi: Math.PI / 2.0);
+        ActorObservation observation = ActorObservation.Capture(crossing, 0);
+        own = own with {
+            BodyAttitude = PointBodyAt(
+                BanditFireControl.LeadDirection(own, observation))
+        };
+        var bandit = new ReactiveBandit(
+            own, FlightModel.Sabre, PilotSkill.Competent);
+
+        Assert.True(
+            BanditFireControl.LeadNoseErrorRad(own, observation)
+                < BanditSkillProfile.For(PilotSkill.Competent).LeadFireConeRad);
+        Assert.True(bandit.WantsToFire(observation));
     }
 }
