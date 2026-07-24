@@ -40,7 +40,10 @@ public class EnergyZoomRepro {
                 new Vec3D(0.0, 3200.0, 0.0),
                 180.0, 0.0, 0.0, 0.0, air.MassKg),
             air,
-            PilotSkill.Competent);
+            PilotSkill.Competent,
+            profile: BanditSkillProfile.For(PilotSkill.Competent) with {
+                LookaheadHorizonTicks = 0
+            });
         var player = new AircraftSim(
             new AircraftState(
                 new Vec3D(0.0, 3200.0, 1800.0),
