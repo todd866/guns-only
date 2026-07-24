@@ -455,11 +455,13 @@ public class CombatTrainingTests {
             },
             first.Select(measurement => measurement.Skill));
         SeededSkillTierMeasurement novice = first[0];
+        SeededSkillTierMeasurement competent = first[1];
+        SeededSkillTierMeasurement veteran = first[2];
         SeededSkillTierMeasurement ace = first[3];
         string report = string.Join(
             System.Environment.NewLine,
             first.Select(measurement => FormattableString.Invariant(
-                $"{measurement.Skill}: rounds/eng={measurement.BanditRoundsPerEngagement:F2}, rear-quarter/eng={measurement.PlayerRearQuarterSecondsPerEngagement:F2}s, player-damage-hits={measurement.PlayerDamageHits}, fire-engagements={measurement.EngagementsWithBanditFire}/{measurement.Engagements}, damage-engagements={measurement.EngagementsWithPlayerDamage}/{measurement.Engagements}")));
+                $"{measurement.Skill}: rounds/eng={measurement.BanditRoundsPerEngagement:F2}, rear-quarter/eng={measurement.PlayerRearQuarterSecondsPerEngagement:F2}s, player-damage-hits={measurement.PlayerDamageHits}, fire-engagements={measurement.EngagementsWithBanditFire}/{measurement.Engagements}, damage-engagements={measurement.EngagementsWithPlayerDamage}/{measurement.Engagements}, player-destroyed={measurement.EngagementsWithPlayerDestroyed}/{measurement.Engagements}")));
 
         foreach (SeededSkillTierMeasurement capable in first.Skip(1)) {
             Assert.True(
@@ -471,16 +473,32 @@ public class CombatTrainingTests {
                 $"zero-damage {capable.Skill} batches are the production bug."
                 + $"{System.Environment.NewLine}{report}");
         }
+        SeededSkillTierMeasurement[] ascending = {
+            novice,
+            competent,
+            veteran,
+            ace
+        };
+        for (int index = 1; index < ascending.Length; index++) {
+            SeededSkillTierMeasurement lower = ascending[index - 1];
+            SeededSkillTierMeasurement higher = ascending[index];
+            Assert.True(
+                higher.PlayerRearQuarterSecondsPerEngagement
+                    < lower.PlayerRearQuarterSecondsPerEngagement,
+                $"{higher.Skill} must deny its rear quarter more effectively than "
+                + $"{lower.Skill}.{System.Environment.NewLine}{report}");
+            Assert.True(
+                higher.PlayerDamageHits > lower.PlayerDamageHits,
+                $"{higher.Skill} must damage the player more than {lower.Skill}."
+                + $"{System.Environment.NewLine}{report}");
+        }
         Assert.True(
-            ace.PlayerRearQuarterSecondsPerEngagement
-                < novice.PlayerRearQuarterSecondsPerEngagement,
-            $"Ace must deny its rear quarter more effectively than Novice.{System.Environment.NewLine}{report}");
-        Assert.NotEqual(
-            novice.BanditRoundsFired,
-            ace.BanditRoundsFired);
-        Assert.NotEqual(
-            novice.PlayerDamageHits,
-            ace.PlayerDamageHits);
-        Assert.NotEqual(novice, ace);
+            ace.EngagementsWithPlayerDestroyed > 0,
+            $"Ace must win a non-zero fraction of seeded engagements."
+            + $"{System.Environment.NewLine}{report}");
+        Assert.True(
+            ace.EngagementsWithPlayerDestroyed < ace.Engagements,
+            $"Ace must remain beatable in the seeded engagement set."
+            + $"{System.Environment.NewLine}{report}");
     }
 }
