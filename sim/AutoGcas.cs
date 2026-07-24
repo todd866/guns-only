@@ -113,6 +113,10 @@ public readonly record struct AutoGcasInput(
     bool ConfigurationPermitsRecovery = true,
     bool PilotOverrideHeld = false,
     double? IndicatedAirspeedMps = null,
+    // DEAD as of 2026-07-24: Auto-GCAS no longer knows pilot physiology (owner directive). The
+    // trigger commits at the last-instant boundary for every pilot state, so this flag is read by
+    // nothing. Do NOT re-couple it — the passive escalation it drove fired false fly-ups mid-fight.
+    // Retained only to avoid churning callers during the safety-critical fix; remove in follow-up.
     bool PilotActivelyFlying = false,
     bool LowLevelStandby = false);
 
@@ -339,20 +343,19 @@ public static class AutoGcasController {
         }
 
         bool collisionThreat = pilot.MinimumClearanceM <= effectiveConfig.TerrainBufferM;
-        // Auto-GCAS is a lost-consciousness / lost-SA backstop, not a low-flying governor. While
-        // the pilot is demonstrably flying the aircraft — conscious with control authority and
-        // actively commanding through the HUMAN input path — the commitment point defers toward
-        // the true last instant so deliberate low-level flight is never interrupted. The full
-        // conservative boundary returns the moment the pilot goes passive (G-LOC releases the
-        // controls, a fixated hands-off padlock turn), which is exactly the case the system
-        // exists to save. Only the caller-supplied flag defers: the credited-recovery estimate is
-        // computed from the EFFECTIVE command, which aircraft-owned assists contribute to, so
-        // using it here would let autonomous gunnery G masquerade as pilot attention. The warning
-        // boundary scales too — deliberately: a Warning resets the padlock roll assist, so early
-        // warning chatter during intentional low flight is real control interference, not merely
-        // noise.
-        double boundaryFactor = input.PilotActivelyFlying
-            ? config.AttentivePilotTriggerFactor : 1.0;
+        // Auto-GCAS is a pure terrain/trajectory backstop and knows NOTHING about pilot physiology.
+        // (Owner directive 2026-07-24: "only trigger if the jet will crash otherwise, autogcas
+        // doesn't know pilot physiology.") It commits at the true last instant an automated recovery
+        // still clears — for EVERY pilot state alike. The earlier design escalated to a 50x-earlier
+        // boundary the moment the pilot was scored "passive", but a conscious pilot pulling hard in
+        // a fight greys out (control authority falls below the session's 0.55 gate) and was scored
+        // passive while still flying, which fired a fly-up mid-dive with thousands of feet of air
+        // below — the reported false save (see sim.Tests/AutoGcasActivationSearch: 433 passive-only
+        // activations). An unconscious pilot is still saved: their path is a collision threat too,
+        // so this same last-instant commit fires for them. The commitment point is the already-
+        // validated attentive boundary; the passive escalation and its PilotActivelyFlying input are
+        // gone.
+        double boundaryFactor = config.AttentivePilotTriggerFactor;
         bool trigger = collisionThreat
             && timeAvailable <= config.TriggerTimeAvailableSeconds * boundaryFactor;
         if (trigger) {
