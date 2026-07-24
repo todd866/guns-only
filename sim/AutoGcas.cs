@@ -654,15 +654,14 @@ public static class AutoGcasController {
             // 4,372-7,797 ft above the ground. Flat-terrain suites could never see it, because on
             // flat ground a climbing jet gains clearance monotonically forever.
             //
-            // Stopping here also bounds the recovery evaluation to the PULL-OUT, which is the
-            // manoeuvre Auto-GCAS actually commands. Terrain beyond the point where the jet is
-            // established in a climb is a fresh threat for the next evaluation 50 ms later, not a
-            // failure of this pull-out — and a ridge the jet cannot out-climb is not survivable by
-            // pulling up, which is the only thing this system can do about it.
-            if (recoveryClearanceGainSeconds >= 0.5) {
-                recoveryClimbEstablished = true;
-                break;
-            }
+            // It also must NOT stop the integration. Bounding the evaluation to the pull-out was
+            // tried and measured: over the Korea grid it let one more hands-off steep entry fly
+            // into rising ground (36-case closed-loop sweep, 1 impact -> 2), because a recovery
+            // that clears the valley floor and then meets a ridge inside the horizon has to keep
+            // being looked at. Recording the flag while continuing to sweep terrain is strictly
+            // safer than either the old code or an early break: the clamp stops lying, and
+            // minimumClearance stays the true minimum over the whole predicted path.
+            if (recoveryClearanceGainSeconds >= 0.5) recoveryClimbEstablished = true;
         }
         if (automatedRecoveryDelaySeconds.HasValue
             && !recoveryClimbEstablished) {

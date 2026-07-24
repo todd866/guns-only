@@ -273,6 +273,73 @@ public class AutoGcasKoreaTerrainTriggerTests {
     }
 
     /// <summary>
+    /// The safety question the trigger fix has to answer, asked of the REAL aircraft rather than of
+    /// the predictor: bounding the recovery evaluation to the pull-out means the prediction stops
+    /// looking once the jet is established in a climb, so does anything now die that used to live?
+    ///
+    /// Comparing the two predictors would only compare two models. This flies the actual 6DOF
+    /// airframe, hands off, from a spread of steep low-altitude entries across the real Korea grid,
+    /// and asks the only question that matters: does the aircraft hit the ground.
+    /// </summary>
+    [Fact]
+    public void NoSteepLowLevelEntryOverKoreaEndsInTheGround() {
+        ITerrainSurface terrain = Korea();
+        TerrainBounds bounds = terrain.Bounds;
+        double eastSpan = bounds.MaximumEastM - bounds.MinimumEastM;
+        double northSpan = bounds.MaximumNorthM - bounds.MinimumNorthM;
+        var crashes = new List<string>();
+        int flown = 0;
+
+        for (int ix = 1; ix <= 3; ix++) {
+            for (int iz = 1; iz <= 3; iz++) {
+                double east = bounds.MinimumEastM + eastSpan * ix / 4.0;
+                double north = bounds.MinimumNorthM + northSpan * iz / 4.0;
+                if (!terrain.TrySample(east, north, out TerrainSample surface)) continue;
+                foreach ((double aglM, double gammaDeg, double speedMps) in new[] {
+                    (900.0, -60.0, 330.0), (1400.0, -75.0, 376.0),
+                    (600.0, -45.0, 280.0), (1800.0, -85.0, 350.0),
+                }) {
+                    var player = Diving(new Vec3D(east, surface.HeightM + aglM, north),
+                        speedMps, gammaDeg, headingDeg: 45.0, bankDeg: 0.0);
+                    var session = new SimulationSession();
+                    session.StartBeat(() => Beat(player));
+                    session.SetTerrainSurface(terrain);
+                    session.Begin();   // hands off: no assisted flight, no pilot input at all
+                    flown++;
+                    double minimumAgl = double.PositiveInfinity;
+                    for (int tick = 0; tick < 30 * AircraftSim.TickHz; tick++) {
+                        session.StepFixed();
+                        if (session.PlayerTerminalState != AircraftTerminalState.Flying) break;
+                        Vec3D position = session.Player.State.Position;
+                        if (!terrain.TrySample(position.X, position.Z, out TerrainSample below))
+                            break;
+                        minimumAgl = Math.Min(minimumAgl, position.Y - below.HeightM);
+                    }
+                    if (session.PlayerTerminalState != AircraftTerminalState.Flying)
+                        crashes.Add($"ground={surface.HeightM:F0} agl={aglM} gamma={gammaDeg} " +
+                            $"v={speedMps}: {session.PlayerTerminalState} " +
+                            $"(min {minimumAgl:F0} m)");
+                }
+            }
+        }
+
+        _output.WriteLine($"flown={flown} crashes={crashes.Count}");
+        foreach (string crash in crashes) _output.WriteLine("  " + crash);
+        Assert.True(flown >= 30, $"the sweep must actually fly (flown {flown})");
+        // One entry in this sweep is not saved, and was not saved before the trigger fix either:
+        // a hands-off 75-degree dive at 376 m/s pointed into the 859 m massif. It was measured on
+        // BOTH predictors (pre-fix 1 impact, post-fix 1 impact) so it is a pre-existing limit of
+        // the recovery envelope, not a regression — from that entry the pull-out needs more
+        // altitude than the mountain leaves. It is pinned here rather than asserted away so that
+        // any future change which makes the number grow fails loudly.
+        const int KnownUnsavedSteepMountainEntries = 1;
+        Assert.True(crashes.Count <= KnownUnsavedSteepMountainEntries,
+            $"{crashes.Count}/{flown} hands-off steep entries flew into the ground, above the " +
+            $"known baseline of {KnownUnsavedSteepMountainEntries}: " + string.Join(" | ", crashes));
+        Assert.All(crashes, crash => Assert.Contains("ground=859", crash));
+    }
+
+    /// <summary>
     /// The clamp must still do its job. A dive that genuinely cannot be recovered has to read as
     /// unrecoverable, so the last-instant boundary is a real boundary and not merely a disabled one.
     /// </summary>
