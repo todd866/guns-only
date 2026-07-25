@@ -6387,4 +6387,14 @@ async function boot() {
   requestAnimationFrame(tick);
 }
 
+// Offline support for an installed copy. Registered AFTER boot so a worker problem can never
+// prevent the game from starting: the sortie is the product, offline is an enhancement.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js").catch((error) => {
+      console.warn("Offline support unavailable.", error);
+    });
+  });
+}
+
 boot().catch(showFatal);

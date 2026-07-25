@@ -228,6 +228,22 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         if (doctrineIndex is < 0 || doctrineIndex >= doctrineCount)
             throw new System.ArgumentOutOfRangeException(nameof(doctrineIndex));
         _doctrine = doctrineIndex ?? (engagementNumber - 1) % doctrineCount;
+        // FORMATION MEMBERS MUST NOT THINK ON THE SAME TICK.
+        //
+        // The lookahead recomputes on a fixed 12-tick cadence and holds between recomputes, so a
+        // whole 9-candidate rollout lands inside ONE tick. Every bandit used to start that counter
+        // at zero, which put every member of a formation permanently in phase: a pair of Aces
+        // therefore put both rollouts in the same tick, and production telemetry attributed 60.4 ms
+        // of an average sub-36 fps frame to the kernel against 2.99 ms for everything else combined.
+        // Measured natively over terrain with real relief, one Ace decision tick costs 24.1 ms and a
+        // synchronised pair costs 44.6 ms — three frames of work inside one frame.
+        //
+        // Staggering the START of the counter changes WHICH tick each aircraft decides on and
+        // nothing about how it decides: the rollout, its horizon and its result are untouched. The
+        // multiplier is 5 rather than 1 because the session stages a wingman at engagementNumber + 1
+        // (WingmanSpawnStride), and a one-tick separation still lands both inside a single rendered
+        // frame at 60 fps, where the sim advances about two ticks per frame.
+        _lookaheadHoldTicks = (engagementNumber - 1) * 5 % LookaheadDecisionCadenceTicks;
         _parameters = parameters;
         _terrain = terrain;
         _sim = new AircraftSim(initial, parameters);
