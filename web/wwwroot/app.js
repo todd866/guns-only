@@ -456,6 +456,26 @@ function newTelemetryBatchId() {
   return `batch-${unique}`.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 128);
 }
 
+// Renderer/scene counters for the 0.2 Hz perf row. Frame deltas say a stall HAPPENED; these say
+// what was accumulating when it did. `geometries`/`textures` are the leak detector — they are
+// live GPU resource counts, so a monotone rise across a sortie is a leak rather than load.
+// Sampled once per closed 5 s window, never per frame; `activeView` is null before the first
+// sortie stages, which is why every read is optional.
+function sampleSceneCounters() {
+  const info = activeView?.renderer?.info;
+  if (!info) return null;
+  let sceneObjects = 0;
+  activeView.scene?.traverse?.(() => { sceneObjects += 1; });
+  return {
+    draw_calls: info.render?.calls ?? 0,
+    triangles: info.render?.triangles ?? 0,
+    geometries: info.memory?.geometries ?? 0,
+    textures: info.memory?.textures ?? 0,
+    programs: info.programs?.length ?? 0,
+    scene_objects: sceneObjects,
+  };
+}
+
 const recorder = {
   session: `web-${TELEMETRY_SESSION_STARTED_AT}-${Math.floor(Math.random() * 1e6)}`,
   build: BUILD,
@@ -477,7 +497,7 @@ const recorder = {
   _lastContext: new Map(),
   _stateEncoder: new TelemetryStateEncoder(),
   _sampleScheduler: new TelemetrySampleScheduler({ strideTicks: TELEMETRY_TICK_STRIDE }),
-  _framePerf: createFramePerfAggregator(),
+  _framePerf: createFramePerfAggregator({ sampleScene: () => sampleSceneCounters() }),
   _sortieSequence: 0,
   _sortie: null,
   _lastSessionPhase: null,

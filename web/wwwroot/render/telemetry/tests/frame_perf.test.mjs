@@ -96,7 +96,13 @@ test("exported defaults match the documented perf-row contract", () => {
 test("the browser recorder feeds raw render deltas and never displaces state rows", async () => {
   const app = await readFile(appUrl, "utf8");
 
-  assert.match(app, /_framePerf: createFramePerfAggregator\(\)/);
+  assert.match(app,
+    /_framePerf: createFramePerfAggregator\(\{ sampleScene: \(\) => sampleSceneCounters\(\) \}\)/);
+  // The counters must come off the LIVE renderer, and geometries/textures must be among them:
+  // those are the live GPU resource counts that tell a leak apart from load.
+  assert.match(app, /function sampleSceneCounters\(\) \{[\s\S]*?activeView\?\.renderer\?\.info/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?geometries: info\.memory\?\.geometries/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?textures: info\.memory\?\.textures/);
   // The render loop hands the recorder the raw delta before the simulation-advance clamp.
   assert.match(app, /recorder\.observeFrameDelta\(now - previous\);[\s\S]{0,300}?clamp\(\(now - previous\) \/ 1000, 0, 0\.25\)/);
   // Backpressure discipline: a full bounded queue skips the perf row rather than letting the
@@ -104,4 +110,58 @@ test("the browser recorder feeds raw render deltas and never displaces state row
   assert.match(app, /observeFrameDelta\(deltaMs\) \{[\s\S]*?if \(this\.buf\.length >= TELEMETRY_BUFFER_LIMIT\) return;[\s\S]*?k: "perf"/);
   // Perf rows share the time base of every other recorder row.
   assert.match(app, /\{ k: "perf", t: Math\.round\(performance\.now\(\)\), \.\.\.summary \}/);
+});
+
+test("scene counters are sampled once per closed window and merged into the summary", () => {
+  let samples = 0;
+  const aggregator = createFramePerfAggregator({
+    intervalMs: 100,
+    sampleScene: () => {
+      samples += 1;
+      return { draw_calls: 120 + samples, geometries: 900, textures: 40.4, programs: 12 };
+    },
+  });
+
+  // Frames inside the window must not sample: a scene traversal per frame would be the very
+  // cost this row exists to find.
+  assert.equal(aggregator.observe(16, 0), null);
+  assert.equal(aggregator.observe(16, 50), null);
+  assert.equal(samples, 0);
+
+  const summary = aggregator.observe(16, 100);
+  assert.equal(samples, 1);
+  assert.equal(summary.draw_calls, 121);
+  assert.equal(summary.geometries, 900);
+  assert.equal(summary.textures, 40);      // rounded to an integer count
+  assert.equal(summary.programs, 12);
+  assert.equal(summary.frames, 3);
+});
+
+test("a throwing or non-numeric scene sampler cannot disturb frame accounting", () => {
+  const throwing = createFramePerfAggregator({
+    intervalMs: 100,
+    sampleScene: () => { throw new Error("renderer disposed mid-window"); },
+  });
+  throwing.observe(16, 0);
+  const summary = throwing.observe(16, 100);
+  assert.equal(summary.frames, 2);
+  assert.equal(summary.draw_calls, undefined);
+
+  const garbage = createFramePerfAggregator({
+    intervalMs: 100,
+    sampleScene: () => ({ draw_calls: "lots", triangles: NaN, geometries: 7 }),
+  });
+  garbage.observe(16, 0);
+  const kept = garbage.observe(16, 100);
+  assert.equal(kept.draw_calls, undefined);
+  assert.equal(kept.triangles, undefined);
+  assert.equal(kept.geometries, 7);
+});
+
+test("no sampler leaves the row exactly as it was before instrumentation", () => {
+  const plain = createFramePerfAggregator({ intervalMs: 100 });
+  plain.observe(16, 0);
+  const summary = plain.observe(16, 100);
+  assert.deepEqual(Object.keys(summary).sort(),
+    ["frame_ms_max", "frame_ms_p50", "frame_ms_p95", "frames", "long_frames"]);
 });

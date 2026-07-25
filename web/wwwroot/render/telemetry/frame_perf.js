@@ -29,6 +29,14 @@ export function createFramePerfAggregator({
   intervalMs = FRAME_PERF_INTERVAL_MS,
   longFrameMs = FRAME_PERF_LONG_FRAME_MS,
   maxWindowSamples = FRAME_PERF_MAX_WINDOW_SAMPLES,
+  // Optional () => ({name: number}) of renderer/scene counters, sampled ONCE per closed window
+  // rather than per frame, so a scene traversal costs 0.2 Hz and never enters the frame budget.
+  //
+  // Frame deltas alone cannot localise a stall. Build 103's tape showed p50 pinned at 16.7 ms
+  // while p95 stepped to exactly 50.0 ms — missed vsync intervals, degrading with each kill and
+  // never recovering — and there was no way to tell accumulating geometry from accumulating draw
+  // calls from terrain streaming, because the row carried no counters. These are that fix.
+  sampleScene = null,
 } = {}) {
   let windowStartedAt = null;
   let deltas = [];
@@ -56,6 +64,19 @@ export function createFramePerfAggregator({
         long_frames: longFrames,
         frames,
       };
+      if (sampleScene) {
+        // Guarded exactly like the rest of the recorder: diagnostics must never be able to
+        // disturb — or crash — the render loop.
+        try {
+          const counters = sampleScene();
+          if (counters && typeof counters === "object") {
+            for (const [name, value] of Object.entries(counters)) {
+              const numeric = Number(value);
+              if (Number.isFinite(numeric)) summary[name] = Math.round(numeric);
+            }
+          }
+        } catch { /* a broken counter must not cost a frame */ }
+      }
       windowStartedAt = now;
       deltas = [];
       frames = 0;
