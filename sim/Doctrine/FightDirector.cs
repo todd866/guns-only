@@ -286,13 +286,16 @@ public sealed class FightDirector {
     /// excellent one — it is the classic real answer, and it is the pilot's own idea.
     ///
     /// Same doctrine as everything else: open hard, ease on evidence. The opening wave is a pair,
-    /// and it stays a pair while the player keeps beating it. When numbers are eventually returned
-    /// they go BEFORE the tier or the jet — being outnumbered is the harshest of the three axes.
+    /// and it stays a pair while the player keeps beating it.
     ///
-    /// It takes TWO consecutive losses, not one. A single death is the expected cost of a target
-    /// somewhere near a 4:1 win rate, and stripping the wave the moment it finally lands makes the
-    /// whole fight easier exactly when the pilot has just proved it was correctly pitched. The
-    /// pilot noticed immediately — killed once, and the next wave was a 1v1.
+    /// Numbers are the LAST axis eased, not the first. That is a deliberate reversal: it takes two
+    /// consecutive losses to lose the wingman, while the tier steps down on every single one, so a
+    /// struggling pilot meets 2x Veteran before they ever meet 1x anything. The reasoning is that a
+    /// pair is the most INTERESTING shape on offer — splitting a formation is a different problem
+    /// from out-turning one jet — and interest is what the ladder exists to protect. Difficulty can
+    /// come off the pilot tier and the airframe without making the fight duller. The pilot settled
+    /// it by complaining about the old order: one death and "it's back to 1v1", which read as the
+    /// game taking the good fight away at the exact moment it had proved correctly pitched.
     const int OpeningFormationSize = 2;
     const int ConsecutiveLossesBeforeNumbersEase = 2;
 

@@ -53,9 +53,9 @@ public class FormationCombatTests {
     }
 
     /// One death is the expected cost of a fight pitched near a 4:1 win rate, and the pilot noticed
-    /// the moment it was over-rewarded: "when I restart after dying it's back to 1v1". The wave
-    /// survives a single loss and eases on the second — and when numbers DO go, they go before the
-    /// tier or the jet, because being outnumbered is the harshest of the three axes.
+    /// the moment it was over-rewarded: "when I restart after dying it's back to 1v1". The pair is
+    /// the most interesting shape the ladder can serve, so it is the LAST thing surrendered — the
+    /// tier steps down on every loss while the wingman survives the first one.
     [Fact]
     public void NumbersSurviveOneLossAndEaseOnTheSecond() {
         var director = new FightDirector();
@@ -73,14 +73,20 @@ public class FormationCombatTests {
         director.Observe(in first);
         SpawnSpec afterOne = director.NextSpawn(2);
         Assert.Equal(2, afterOne.FormationSize);
+        // The first death buys relief on the tier, not on the shape of the fight.
+        Assert.True(afterOne.Skill < opening.Skill,
+            "a defeat must ease something; the tier is what moves first");
+        Assert.True(afterOne.Skill >= PilotSkill.Veteran,
+            $"one loss stepped the tier too far: {afterOne.Skill}");
 
         EngagementReport second = Loss(2, afterOne.Skill);
         director.Observe(in second);
         SpawnSpec afterTwo = director.NextSpawn(3);
         Assert.Equal(1, afterTwo.FormationSize);
-        // Numbers go first: two defeats should not also strip the tier back to a warm-up.
-        Assert.True(afterTwo.Skill >= PilotSkill.Veteran,
-            $"the numbers ease stripped too much at once: {afterTwo.Skill}");
+        // Two losses is genuine trouble and the ladder is allowed to give real ground, but it must
+        // still be a ladder: never a free-fall straight back to the warm-up rung.
+        Assert.True(afterTwo.Skill >= PilotSkill.Competent,
+            $"two losses collapsed the ladder instead of stepping it: {afterTwo.Skill}");
     }
 
     [Fact]
