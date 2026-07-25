@@ -970,6 +970,47 @@ class CombatHud {
     ctx.restore();
   }
 
+  /// Symbology for the second aircraft of a formation. Deliberately a SMALLER, thinner bracket in
+  /// the same green: the pilot must be able to tell at a glance which contact the HUD's range,
+  /// closure and gun cues refer to (always the primary) and which one is merely also out there.
+  /// It goes amber only when the pilot has actually padlocked it with V.
+  drawWingman(frame) {
+    const { state, camera } = frame;
+    if (frame.wingmanPresent !== true) return;
+    if (frame.padlock && frame.padlockTarget === "carrier") return;
+    if (!isFightHudActive(state)) return;
+    const projection = this.project(frame.wingmanPosition, camera);
+    if (projection.behind === true) return;
+    const inside = projection.x > 8 && projection.x < this.width - 8
+      && projection.y > 8 && projection.y < this.height - 8;
+    if (!inside) return;
+
+    const padlocked = frame.padlock && frame.padlockTarget === "wingman";
+    const color = padlocked ? AMBER : GREEN;
+    const ctx = this.ctx;
+    const size = padlocked ? 26 : 20;
+    const corner = 6;
+    this.setLine(color, padlocked ? 1.5 : 1.05);
+    ctx.shadowColor = padlocked
+      ? "rgba(255, 176, 32, 0.40)" : "rgba(77, 255, 136, 0.26)";
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.moveTo(projection.x - size, projection.y - size + corner);
+    ctx.lineTo(projection.x - size, projection.y - size);
+    ctx.lineTo(projection.x - size + corner, projection.y - size);
+    ctx.moveTo(projection.x + size - corner, projection.y - size);
+    ctx.lineTo(projection.x + size, projection.y - size);
+    ctx.lineTo(projection.x + size, projection.y - size + corner);
+    ctx.moveTo(projection.x + size, projection.y + size - corner);
+    ctx.lineTo(projection.x + size, projection.y + size);
+    ctx.lineTo(projection.x + size - corner, projection.y + size);
+    ctx.moveTo(projection.x - size + corner, projection.y + size);
+    ctx.lineTo(projection.x - size, projection.y + size);
+    ctx.lineTo(projection.x - size, projection.y + size - corner);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
   drawBandit(frame) {
     const { state, camera, banditPosition } = frame;
     if (frame.padlock && frame.padlockTarget === "carrier") return;
@@ -3379,6 +3420,7 @@ class CombatHud {
     this.drawGunSight(frame, noseAnchor);
     this.drawAimPoint(frame, noseAnchor, directorAnchor);
     this.drawBandit(frame);
+    this.drawWingman(frame);
     this.drawHeadingTape(frame.state, { headingDeg: display.headingDeg, headingDigits: display.headingDigits, padlock: frame.padlock });
     this.drawRtbCue(frame.state);
 

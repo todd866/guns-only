@@ -3872,6 +3872,10 @@ class FlightView {
       playerRight: this.playerRight,
       banditPosition: this.banditPosition,
       banditForward: this.banditFrame.forward,
+      // The second aircraft of a formation wave. The HUD needs its own symbology: a pilot who
+      // cannot see where the other one is cannot fight two of them.
+      wingmanPosition: this.wingmanPosition,
+      wingmanPresent: latestState?.w1_present === 1 && latestState?.w1_alive === 1,
       leadPipper: this.leadPipper,
       aimPoint: null,
       directorPoint: null,
