@@ -456,6 +456,76 @@ function newTelemetryBatchId() {
   return `batch-${unique}`.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 128);
 }
 
+// Closed-loop frame governor. The pilot's requirement is "rock solid 60fps", and their explicit
+// trade: "I'd rather fight up in the clouds with zero scenery if that's what it takes."
+//
+// Fixed quality tiers are chosen once at load from deviceMemory, which cannot know what a
+// particular fight costs — and a 1v2 costs materially more than a duel, because each additional
+// lookahead pilot adds a synchronous decision burst on the main thread. So this watches actual
+// delivered frames and sheds work until the budget is met, worst-looking-thing-last:
+//
+//   1  shadows        largest single fill-rate saving, and the least missed in a dogfight
+//   2  pixel ratio    resolution before geometry — blur is survivable, stutter is not
+//   3  scenery        trees, fields, roads: the pilot's own nominated sacrifice
+//
+// It only ever steps DOWN within a sortie. Stepping back up on a quiet moment is how governors
+// oscillate, and an oscillating frame rate reads worse than a consistently lower one.
+const FRAME_GOVERNOR_WINDOW_MS = 1000;
+const FRAME_GOVERNOR_LONG_FRAME_MS = 20;   // ~1.2 display intervals at 60 Hz
+const FRAME_GOVERNOR_TRIP_COUNT = 6;       // long frames in one window before shedding
+
+const frameGovernor = {
+  level: 0,
+  windowStartedAt: 0,
+  longFrames: 0,
+  applied: new Set(),
+
+  observe(deltaMs, nowMs, view) {
+    if (!Number.isFinite(deltaMs) || !view) return;
+    if (deltaMs > FRAME_GOVERNOR_LONG_FRAME_MS) this.longFrames += 1;
+    if (nowMs - this.windowStartedAt < FRAME_GOVERNOR_WINDOW_MS) return;
+    const tripped = this.longFrames >= FRAME_GOVERNOR_TRIP_COUNT;
+    this.windowStartedAt = nowMs;
+    this.longFrames = 0;
+    if (tripped && this.level < 3) this.shed(this.level + 1, view);
+  },
+
+  shed(level, view) {
+    this.level = level;
+    if (this.applied.has(level)) return;
+    this.applied.add(level);
+    try {
+      if (level === 1) {
+        view.renderer.shadowMap.enabled = false;
+        view.scene?.traverse?.((object) => { object.castShadow = false; });
+        announceGovernor("Shadows off · holding 60");
+      } else if (level === 2) {
+        view.renderer.setPixelRatio(Math.min(view.renderer.getPixelRatio(), 1));
+        announceGovernor("Resolution reduced · holding 60");
+      } else if (level === 3) {
+        void view.terrainPresentation?.setSceneryEra?.(null);
+        announceGovernor("Scenery off · holding 60");
+      }
+    } catch (error) {
+      console.warn("Frame governor could not shed load.", error);
+    }
+    recorder.event("perf", "FrameGovernor", { level });
+  },
+
+  reset() {
+    // A new sortie re-earns its quality: the previous fight's worst moment should not permanently
+    // downgrade a session.
+    this.level = 0;
+    this.longFrames = 0;
+    this.windowStartedAt = 0;
+    this.applied.clear();
+  },
+};
+
+function announceGovernor(message) {
+  if (viewStatus) viewStatus.textContent = message;
+}
+
 // The fight director's pacing estimate, persisted across page loads.
 //
 // The gauntlet cold-started at the 2.4 G Novice warm-up every time the page was reloaded, so a
@@ -1666,6 +1736,7 @@ function releasePadlock(reason = "manual", { announce = true, record = true } = 
 }
 
 function resetMissionPresentation() {
+  frameGovernor.reset();
   clearFlightInput("mission-reset");
   incidentReplay?.stop();
   renderIncidentReplay(null);
@@ -1708,9 +1779,18 @@ function togglePadlock() {
   }
   padlock = true;
   padlockTarget = contextualPadlockTarget(latestState);
-  padlockEntityId = padlockTarget === "bandit"
-    ? projectedId(latestState?.bandit_entity_id)
-    : "carrier";
+  // The pilot shot the leader down and pressed V expecting to look at the survivor — "he should
+  // still be there", and he is. The primary slot holds the DEAD leader until promotion fires a
+  // couple of seconds later, and a dead aircraft is not padlock-eligible, so acquisition used to
+  // silently fail in exactly the moment the pilot most wants to find the other one.
+  if (padlockTarget === "bandit" && !padlockTargetValid(latestState, "bandit")
+      && wingmanPadlockAvailable()) {
+    padlockTarget = "wingman";
+  }
+  padlockEntityId = padlockTarget === "carrier" ? "carrier"
+    : padlockTarget === "wingman"
+      ? `${projectedId(latestState?.bandit_entity_id)}.wingman`
+      : projectedId(latestState?.bandit_entity_id);
   padlockPhase = manualLookActive() ? "SLEW" : "ACQUIRE";
   padlockTrackEstablished = false;
   gimbalReturnFast = false;
@@ -6056,6 +6136,7 @@ async function boot() {
       // Raw (unclamped) render-frame delta: the perf telemetry must see the true stall length,
       // not the 0.25 s simulation-advance cap.
       recorder.observeFrameDelta(now - previous);
+      frameGovernor.observe(now - previous, now, activeView);
       const dt = clamp((now - previous) / 1000, 0, 0.25);
       previous = now;
       if (pauseReasons.size === 0) bridge.Advance(dt);

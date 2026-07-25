@@ -121,4 +121,42 @@ public class BanditStepCostTests {
                 + $"({worst * 5.0,6:F1} ms at a 5x WASM penalty)");
         }
     }
+    /// A FORMATION's worst frame, which is what the pilot actually feels now that waves are pairs.
+    /// Two lookahead pilots that recompute on the same tick put both bursts in one rendered frame.
+    [Fact]
+    public void ReportWorstTickForAFormationOfTwo() {
+        const double Dt = 1.0 / AircraftSim.TickHz;
+        var terrain = RidgedTerrain();
+        foreach (PilotSkill tier in new[] { PilotSkill.Ace, PilotSkill.Machine }) {
+            var ticks = new List<double>();
+            for (int repeat = 0; repeat < 2; repeat++) {
+                ticks.Clear();
+                var player = new AircraftState(
+                    new Vec3D(0.0, 3000.0, 0.0), 250.0, 0.0, 0.0, 0.0,
+                    FlightModel.F22APublicDataSurrogate.MassKg);
+                // Engagement numbers as the session stages them: leader N, wingman N+1.
+                var leader = new ReactiveBandit(
+                    new AircraftState(new Vec3D(300.0, 3100.0, -700.0), 250.0, 0.0, 0.2, 0.0,
+                        FlightModel.Su27SPublicDataSurrogate.MassKg),
+                    FlightModel.Su27SPublicDataSurrogate, tier, terrain, engagementNumber: 4);
+                var wingman = new ReactiveBandit(
+                    new AircraftState(new Vec3D(-400.0, 3050.0, -900.0), 250.0, 0.0, -0.1, 0.0,
+                        FlightModel.Su27SPublicDataSurrogate.MassKg),
+                    FlightModel.Su27SPublicDataSurrogate, tier, terrain, engagementNumber: 5);
+                for (int tick = 0; tick < AircraftSim.TickHz * 3; tick++) {
+                    var observation = ActorObservation.Capture(player, tick);
+                    long start = Stopwatch.GetTimestamp();
+                    leader.Step(observation, Dt);
+                    wingman.Step(observation, Dt);
+                    ticks.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+                }
+            }
+            ticks.Sort();
+            _out.WriteLine(
+                $"PAIR {tier,-9} median {ticks[ticks.Count / 2],6:F3} ms  "
+                + $"p99 {ticks[(int)(ticks.Count * 0.99)],7:F3} ms  WORST {ticks[^1],7:F3} ms  "
+                + $"=> {ticks[^1] * 5.0,6:F1} ms at a 5x WASM penalty");
+        }
+    }
+
 }

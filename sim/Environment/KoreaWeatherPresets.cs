@@ -51,12 +51,18 @@ public static class KoreaWeatherPresets {
         Wind((3.0, 2.0), (12.0, 6.0), (24.0, 12.0)),
         new LayeredCloudField(
         [
-            // Deliberately bracketed to the fight: the merge stages at 3,048 m, 248 m above this
-            // base, so the engagement volume is BROKEN cloud you weave through and a dive for the
-            // deck breaks you out the bottom into clear air over the terrain. The 2.6 km cell
-            // scale (was 5.9 km) is what makes it puffs rather than one slab — a run-in now
-            // crosses several cells instead of sitting inside a single one.
-            Layer(2_800.0, 4_500.0, 0.42, 2_600.0, 0.016,
+            // Bracketed to the fight: the merge stages at 3,048 m, 248 m above this base, so the
+            // engagement volume is cloud you weave through and a dive for the deck breaks you out
+            // the bottom into clear air over the terrain. That part is free — it is just where the
+            // layer sits.
+            //
+            // The CELL SCALE is not free. Build 101 shrank it from 5.9 km to 2.6 km to make the
+            // run-in cross several cells, and cell count goes as the inverse square: that single
+            // change multiplied the number of rendered cloud cells by 5.1x, and every build after
+            // it paid the frame cost. The pilot's requirement is rock-solid 60, so the scale goes
+            // back. The deck still brackets the fight, so you still fly through it — the masses
+            // are simply larger and fewer, which is what a real cumulus field looks like anyway.
+            Layer(2_800.0, 4_500.0, 0.42, 5_900.0, 0.016,
                 liquid: 0.00024, ice: 0.00016, turbulence: 1.8,
                 verticalAir: 0.55, icing: 0.12, windEast: 17.0, windNorth: 9.0),
             Layer(8_200.0, 10_600.0, 0.22, 8_500.0, 0.006,

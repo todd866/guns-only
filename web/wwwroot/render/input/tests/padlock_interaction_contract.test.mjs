@@ -115,9 +115,17 @@ test("ending a trackpad or pointer look quickly returns to the selected referenc
 
 test("padlock owns a specific contact and exposes an honest accessible lifecycle", () => {
   const toggle = balancedBlock(appSource, "function togglePadlock()");
+  // Selection binds to a SPECIFIC contact rather than silently following the next one. Now that a
+  // wave can be a formation the binding is three-way — primary, wingman, or boat — and the wingman
+  // id is derived from the primary's so a promoted survivor cannot inherit a stale lock.
   assert.match(toggle,
-    /padlockEntityId = padlockTarget === "bandit"[\s\S]*?projectedId\(latestState\?\.bandit_entity_id\)[\s\S]*?: "carrier"/,
+    /padlockEntityId = padlockTarget === "carrier" \? "carrier"[\s\S]*?padlockTarget === "wingman"[\s\S]*?\.wingman`[\s\S]*?projectedId\(latestState\?\.bandit_entity_id\)/,
     "selection must bind to the current contact instead of silently following the next one");
+  // The pilot shoots the leader and presses V expecting the survivor: acquisition must fall
+  // through to the wingman while the primary slot still holds the dead leader.
+  assert.match(toggle,
+    /!padlockTargetValid\(latestState, "bandit"\)[\s\S]*?wingmanPadlockAvailable\(\)[\s\S]*?padlockTarget = "wingman"/,
+    "a dead primary must not block acquiring the surviving wingman");
   assert.match(appSource,
     /padlockEntityId[\s\S]*?nextBanditEntityId !== padlockEntityId[\s\S]*?releasePadlock\("target changed"\)/,
     "replacement/despawned contacts must explicitly break the old padlock");

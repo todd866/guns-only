@@ -556,12 +556,19 @@ public class ModernVisualMergeTests {
         Assert.True(clouds.Sample(merge, 0.0).VisibilityM > 50_000.0,
             "the first pass must be visual, not a blind merge in cloud");
 
-        int inCloud = 0;
-        for (double fraction = 0.0; fraction <= 1.0; fraction += 1.0 / 64.0) {
-            var at = start + (merge - start) * fraction;
-            if (clouds.Sample(at, 0.0).VisibilityM < 5_000.0) inCloud++;
-        }
-        Assert.True(inCloud >= 6,
-            $"the run-in only spends {inCloud}/65 samples in cloud — nothing to fly through");
+        // The deck must still BRACKET the fight — you fly into cloud during the engagement, and a
+        // dive for the deck breaks you out the bottom. That is free: it is only where the layer
+        // sits.
+        var layer = Assert.IsType<GunsOnly.Sim.Environment.LayeredCloudField>(clouds).Layers[0];
+        Assert.True(layer.BaseAltitudeM < start.Y && layer.TopAltitudeM > start.Y,
+            $"the deck no longer brackets the fight: {layer.BaseAltitudeM:F0}-"
+            + $"{layer.TopAltitudeM:F0} m against a {start.Y:F0} m merge");
+
+        // Deliberately NOT asserted any more: that the run-in itself crosses cloud. Getting that
+        // shape needed a 2.6 km cell scale, and cell count goes as the inverse square — it
+        // multiplied rendered cloud cells by 5.1x and cost frames in every build after 101. The
+        // pilot's requirement is rock-solid 60 and their explicit trade was "I'd rather fight up in
+        // the clouds with zero scenery if that's what it takes", so the cheap scale wins and the
+        // cloud you fly through is the deck around the fight rather than a staged run-in.
     }
 }
