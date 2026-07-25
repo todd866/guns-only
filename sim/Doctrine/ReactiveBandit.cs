@@ -101,6 +101,25 @@ public static class BanditFireControl {
         return required.Normalized();
     }
 
+    /// <summary>
+    /// The world point the gun must be pointed AT for the rounds to arrive — the same ballistic
+    /// solution <see cref="LeadDirection"/> expresses as a direction.
+    ///
+    /// Guidance MUST steer to this. It previously steered to a kinematic
+    /// `player.Position + player.VelocityVector() * clamp(range/900, 0.35, 1.35)`, which uses the
+    /// target's ABSOLUTE velocity, while fire control judged the shot against a lead built from
+    /// RELATIVE velocity and true time of flight. The pilot therefore flew to one aim point and was
+    /// scored against another: it parked its nose near the target, satisfied the wide body-axis
+    /// gate, fired pressure bursts, and its actual ballistic solution was tens of degrees away.
+    /// Measured on Build 100 — the Ace cleared its lead gate for 0.9 s out of 47.3 s in range and
+    /// put 58 rounds into empty sky. One solution, shared, is the fix.
+    /// </summary>
+    public static Vec3D LeadPoint(in AircraftState own, in ActorObservation player) {
+        double rangeM = (player.Position - own.Position).Length;
+        if (!double.IsFinite(rangeM) || rangeM < 1e-9) return player.Position;
+        return own.Position + LeadDirection(own, player) * rangeM;
+    }
+
     /// <summary>Angular error between the physical gun axis and a deterministic ballistic lead
     /// derived only from the observed contact position/velocity and ownship state.</summary>
     public static double LeadNoseErrorRad(
@@ -1161,9 +1180,11 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         _lookaheadHoldTicks = LookaheadDecisionCadenceTicks - 1;
 
         double range = (player.Position - State.Position).Length;
-        double leadSeconds = System.Math.Clamp(range / 900.0, 0.35, 1.35);
+        // Steer to the SAME ballistic solution fire control scores the shot against. The low-attack
+        // plan keeps its own aim point: that one is a terrain-certified descent path, not a gun
+        // solution, and overriding it here would fly the bandit into the ground.
         var leadPoint = lowAttackPlan?.AimPoint
-            ?? player.Position + player.VelocityVector() * leadSeconds;
+            ?? BanditFireControl.LeadPoint(State, player);
 
         // Throttle schedule mirrors the acquire law's energy management so lookahead never
         // manufactures thrust the airframe cannot deliver.
