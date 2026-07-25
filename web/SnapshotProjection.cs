@@ -309,6 +309,7 @@ internal static class SnapshotProjection {
             + $"\"bx\":{b.Position.X:F3},\"by\":{b.Position.Y:F3},\"bz\":{b.Position.Z:F3},"
             + $"\"bfx\":{bf.X:F5},\"bfy\":{bf.Y:F5},\"bfz\":{bf.Z:F5},"
             + $"\"blx\":{bl.X:F5},\"bly\":{bl.Y:F5},\"blz\":{bl.Z:F5},"
+            + WingmanJson()
             + $"\"buffet_pitch_deg\":{_player.PitchBuffetRad * 57.2958:F3},\"buffet_roll_deg\":{_player.RollBuffetRad * 57.2958:F3},\"buffet_yaw_deg\":{_player.YawBuffetRad * 57.2958:F3},"
             + $"\"indicated_airspeed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
             // The current pitot/static model has no aircraft-specific indication-error card, so
@@ -790,6 +791,33 @@ internal static class SnapshotProjection {
     /// Session-owned spawn sequences yield a fresh entity ID on the exact snapshot where a logical
     /// vehicle replaces the prior one, including restart and crash respawn. This keeps render-
     /// instance lifetime out of display names, coordinates, and resettable mission counters.
+    /// The second aircraft of a formation wave. Mirrors SnapshotHotFrame's w1_* block field for
+    /// field — the two wire formats are parity-checked against each other, and the renderer reads
+    /// whichever one it was handed.
+    static string WingmanJson() {
+        GunsOnly.Sim.Doctrine.Wingman? wingman =
+            Session.Wingmen.Count > 0 ? Session.Wingmen[0] : null;
+        if (wingman is null)
+            return "\"w1_present\":0,\"w1x\":0.000,\"w1y\":0.000,\"w1z\":0.000,"
+                + "\"w1fx\":0.00000,\"w1fy\":1.00000,\"w1fz\":0.00000,"
+                + "\"w1lx\":0.00000,\"w1ly\":1.00000,\"w1lz\":0.00000,\"w1_alive\":0,";
+        AircraftState state = wingman.Bandit.State;
+        Vec3D forward = state.ForwardDir();
+        Vec3D lift = wingman.Bandit.LiftDir;
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        return "\"w1_present\":1,"
+            + $"\"w1x\":{state.Position.X.ToString("F3", invariant)},"
+            + $"\"w1y\":{state.Position.Y.ToString("F3", invariant)},"
+            + $"\"w1z\":{state.Position.Z.ToString("F3", invariant)},"
+            + $"\"w1fx\":{forward.X.ToString("F5", invariant)},"
+            + $"\"w1fy\":{forward.Y.ToString("F5", invariant)},"
+            + $"\"w1fz\":{forward.Z.ToString("F5", invariant)},"
+            + $"\"w1lx\":{lift.X.ToString("F5", invariant)},"
+            + $"\"w1ly\":{lift.Y.ToString("F5", invariant)},"
+            + $"\"w1lz\":{lift.Z.ToString("F5", invariant)},"
+            + $"\"w1_alive\":{(wingman.StillFighting ? 1 : 0)},";
+    }
+
     static string PresentationContractJson(bool hasCarrier) {
         MissionContract mission = Session.Beat.MissionIdentity;
         AircraftCapability player = Session.Beat.PlayerAircraft;

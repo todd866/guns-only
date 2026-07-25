@@ -107,6 +107,16 @@ internal static class SnapshotHotFrame {
         Num("bx", 3); Num("by", 3); Num("bz", 3);
         Num("bfx", 5); Num("bfy", 5); Num("bfz", 5);
         Num("blx", 5); Num("bly", 5); Num("blz", 5);
+        // Wingman: the second aircraft of a formation wave. The KERNEL carries any number of
+        // opponents; this hot wire format currently reserves slots for one, which is what a 1v2
+        // needs. w1_present is 0 when the wave is a single aircraft, and the renderer simply does
+        // not draw the contact. Widening to a variable-length array means moving these off the
+        // fixed-schema hot path, which is a bigger change than a playable 1v2 required.
+        Num("w1_present", RawInteger);
+        Num("w1x", 3); Num("w1y", 3); Num("w1z", 3);
+        Num("w1fx", 5); Num("w1fy", 5); Num("w1fz", 5);
+        Num("w1lx", 5); Num("w1ly", 5); Num("w1lz", 5);
+        Num("w1_alive", RawInteger);
         Num("buffet_pitch_deg", 3); Num("buffet_roll_deg", 3); Num("buffet_yaw_deg", 3);
         Num("indicated_airspeed_kts", 2);
         Num("calibrated_airspeed_kts", 2);
@@ -553,6 +563,26 @@ internal static class SnapshotHotFrame {
         w.Num("bx", b.Position.X, 3); w.Num("by", b.Position.Y, 3); w.Num("bz", b.Position.Z, 3);
         w.Num("bfx", bf.X, 5); w.Num("bfy", bf.Y, 5); w.Num("bfz", bf.Z, 5);
         w.Num("blx", bl.X, 5); w.Num("bly", bl.Y, 5); w.Num("blz", bl.Z, 5);
+        GunsOnly.Sim.Doctrine.Wingman? wingman =
+            session.Wingmen.Count > 0 ? session.Wingmen[0] : null;
+        if (wingman is null) {
+            w.Num("w1_present", 0, RawInteger);
+            w.Num("w1x", 0.0, 3); w.Num("w1y", 0.0, 3); w.Num("w1z", 0.0, 3);
+            w.Num("w1fx", 0.0, 5); w.Num("w1fy", 1.0, 5); w.Num("w1fz", 0.0, 5);
+            w.Num("w1lx", 0.0, 5); w.Num("w1ly", 1.0, 5); w.Num("w1lz", 0.0, 5);
+            w.Num("w1_alive", 0, RawInteger);
+        } else {
+            AircraftState wingmanState = wingman.Bandit.State;
+            Vec3D wf = wingmanState.ForwardDir();
+            Vec3D wl = wingman.Bandit.LiftDir;
+            w.Num("w1_present", 1, RawInteger);
+            w.Num("w1x", wingmanState.Position.X, 3);
+            w.Num("w1y", wingmanState.Position.Y, 3);
+            w.Num("w1z", wingmanState.Position.Z, 3);
+            w.Num("w1fx", wf.X, 5); w.Num("w1fy", wf.Y, 5); w.Num("w1fz", wf.Z, 5);
+            w.Num("w1lx", wl.X, 5); w.Num("w1ly", wl.Y, 5); w.Num("w1lz", wl.Z, 5);
+            w.Num("w1_alive", wingman.StillFighting ? 1 : 0, RawInteger);
+        }
         w.Num("buffet_pitch_deg", player.PitchBuffetRad * 57.2958, 3);
         w.Num("buffet_roll_deg", player.RollBuffetRad * 57.2958, 3);
         w.Num("buffet_yaw_deg", player.YawBuffetRad * 57.2958, 3);

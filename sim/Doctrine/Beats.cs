@@ -186,7 +186,12 @@ public enum MaintenanceScenarioKind {
 /// </summary>
 public sealed record ContinuousCombatConfig(
     double ReplacementDelaySeconds = 2.5,
-    double? ReplacementSpeedMps = null);
+    double? ReplacementSpeedMps = null,
+    /// How many aircraft a single wave may field. Content decides whether a mission fights in
+    /// formations at all; the director decides how many WITHIN that ceiling, on the same evidence
+    /// it uses for tier and airframe. A fixture that wants to exercise the replacement contract
+    /// rather than formation behaviour sets this to 1.
+    int MaximumFormationSize = 2);
 
 public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit, IExecutionLaw Law,
     List<(double T, PilotCommand Cmd)> BanditTimeline,

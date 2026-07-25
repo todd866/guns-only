@@ -2726,12 +2726,16 @@ class PresentationAssetManager {
     this.playerExteriorSlot = this.createSlot("player-exterior", DEFAULT_PLAYER_PRESENTATION_ID,
       createDrone);
     this.targetSlot = this.createSlot("target", DEFAULT_TARGET_PRESENTATION_ID, createDrone);
+    // The second aircraft of a formation wave. Same presentation as the primary — it is the same
+    // kind of jet — but its own slot so both can be drawn at once.
+    this.wingmanSlot = this.createSlot("wingman", DEFAULT_TARGET_PRESENTATION_ID, createDrone);
     this.carrierSlot = this.createSlot("carrier", DEFAULT_CARRIER_PRESENTATION_ID, createCarrier);
     this.escortSlot = this.createSlot("escort", DEFAULT_ESCORT_PRESENTATION_ID,
       createHiddenPresentation);
     this.cockpitSlot.root.visible = false;
     this.playerExteriorSlot.root.visible = false;
     this.targetSlot.root.visible = false;
+    this.wingmanSlot.root.visible = false;
     this.carrierSlot.root.visible = false;
     this.escortSlot.root.visible = false;
 
@@ -2976,6 +2980,7 @@ class PresentationAssetManager {
       this.cockpitSlot,
       this.playerExteriorSlot,
       this.targetSlot,
+      this.wingmanSlot,
       this.carrierSlot,
       this.escortSlot,
       ...this.dynamicSlots,
@@ -3188,6 +3193,7 @@ class PresentationAssetManager {
     this.resolveSlot(this.playerExteriorSlot, { preload: true });
     this.resolveSlot(this.cockpitSlot);
     this.resolveSlot(this.targetSlot);
+    if (this.wingmanSlot.root.visible) this.resolveSlot(this.wingmanSlot);
     this.resolveSlot(this.carrierSlot);
     this.resolveSlot(this.escortSlot);
     for (const slot of this.dynamicSlots) {
@@ -3239,6 +3245,11 @@ class PresentationAssetManager {
       this.requested.banditEntityId,
     );
     this.setPresentation(
+      this.wingmanSlot,
+      this.requested.banditPresentationId,
+      `${this.requested.banditEntityId}.wingman`,
+    );
+    this.setPresentation(
       this.carrierSlot,
       this.requested.carrierPresentationId,
       this.requested.carrierEntityId,
@@ -3255,6 +3266,9 @@ class PresentationAssetManager {
     this.playerExteriorSlot.root.visible = replayExternal
       && String(state.replay_camera || "CHASE") !== "COCKPIT";
     this.targetSlot.root.visible = state.opponent_body_present !== false;
+    // Admission gate for asset resolution, not merely a draw toggle: a 1v1 wave must not pay for
+    // a second aircraft's assets at all.
+    this.wingmanSlot.root.visible = state.w1_present === 1;
     this.carrierSlot.root.visible = state.carrier === true;
     // A hidden decorative escort must not even enter asset resolution: visibility here is the
     // resolver's admission gate, not merely a later draw toggle in FlightView.update().
@@ -3311,6 +3325,7 @@ class PresentationAssetManager {
       this.cockpitSlot,
       this.playerExteriorSlot,
       this.targetSlot,
+      this.wingmanSlot,
       this.carrierSlot,
       this.escortSlot,
       ...this.dynamicSlots,
@@ -3706,8 +3721,11 @@ class FlightView {
     this.effectNormal = new THREE.Vector3(0, 1, 0);
     this.leadPipper = new THREE.Vector3();
     this.banditQuaternion = new THREE.Quaternion();
+    this.wingmanPosition = new THREE.Vector3();
+    this.wingmanQuaternion = new THREE.Quaternion();
     this.playerFrame = this.createAttitudeFrame();
     this.banditFrame = this.createAttitudeFrame();
+    this.wingmanFrame = this.createAttitudeFrame();
     this.banditEntityId = "";
     this.playerEntityId = "";
     this.banditWasAlive = true;
@@ -4568,6 +4586,13 @@ class FlightView {
       }
     }
     this.banditQuaternion.copy(banditFrame.quaternion);
+    if (state.w1_present === 1) {
+      this.wingmanPosition.set(state.w1x, state.w1y, -state.w1z);
+      // The hot-frame wingman fields deliberately follow the same ${prefix}fx/${prefix}lx naming
+      // as the player and primary, so the existing attitude helper reads them unchanged.
+      this.wingmanQuaternion.copy(
+        this.frameFromState(state, "w1", this.wingmanFrame).quaternion);
+    }
     if (state.lead_valid === true && Number.isFinite(state.lead_x)
       && Number.isFinite(state.lead_y) && Number.isFinite(state.lead_z)) {
       this.leadPipper.set(state.lead_x, state.lead_y, -state.lead_z);
@@ -4810,6 +4835,15 @@ class FlightView {
 
     targetRoot.position.copy(this.banditPosition);
     targetRoot.quaternion.copy(this.banditQuaternion);
+    const wingmanRoot = this.presentationAssets.wingmanSlot.root;
+    const wingmanPresent = state.w1_present === 1 && state.w1_alive === 1;
+    wingmanRoot.visible = wingmanPresent;
+    if (wingmanPresent) {
+      wingmanRoot.position.copy(this.wingmanPosition);
+      wingmanRoot.quaternion.copy(this.wingmanQuaternion);
+      wingmanRoot.scale.setScalar(1);
+      wingmanRoot.updateMatrixWorld(true);
+    }
     // Keep authored geometry at physical scale. A separate depth-tested contact owns the exact
     // 8–14 px readability floor and fades with hysteresis at the mesh hand-off.
     targetRoot.scale.setScalar(1);

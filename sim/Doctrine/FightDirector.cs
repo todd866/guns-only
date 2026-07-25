@@ -26,7 +26,8 @@ public enum BanditMount {
 /// debrief/telemetry — it explains the pick, it never affects behaviour.
 public readonly record struct SpawnSpec(
     PilotSkill Skill, int DoctrineIndex, bool Boss, string Reason,
-    bool Machine = false, BanditMount Mount = BanditMount.Baseline);
+    bool Machine = false, BanditMount Mount = BanditMount.Baseline,
+    int FormationSize = 1);
 
 /// Session-scale pacing for infinite-spawn continuous combat: CALM → BUILD → BOSS → RELEASE.
 /// Owns a LearnerModel and turns its banded estimate into the next spawn's tier/doctrine, with
@@ -276,7 +277,25 @@ public sealed class FightDirector {
             1, BanditSkillProfile.For(skill).DoctrineCount);
         return new SpawnSpec(
             skill, (engagementNumber - 1) % doctrineCount, boss, reason,
-            Mount: MountFor(skill));
+            Mount: MountFor(skill), FormationSize: FormationSizeFor(skill, boss));
+    }
+
+    /// How many aircraft arrive. Numbers are the third escalation axis, alongside pilot tier and
+    /// airframe, and they answer the one thing neither of the others can: a capability mismatch the
+    /// player simply out-flies. Two average opponents is a genuinely different problem from one
+    /// excellent one — it is the classic real answer, and it is the pilot's own idea.
+    ///
+    /// Same doctrine as everything else: open hard, ease on evidence. The opening wave is a pair,
+    /// and it stays a pair while the player keeps beating it. Losing drops back to a single
+    /// opponent BEFORE the tier or the jet is touched — being outnumbered is the harshest of the
+    /// three axes, so it is the first one returned.
+    const int OpeningFormationSize = 2;
+
+    internal int FormationSizeFor(PilotSkill skill, bool boss) {
+        // The ceiling demonstration is a duel with a named opponent; it does not bring friends.
+        if (boss || skill == PilotSkill.Machine) return 1;
+        if (_learner.LossStreak >= 1) return 1;
+        return OpeningFormationSize;
     }
 
     /// The jet is escalated on the SAME evidence as the pilot, and eased on the same evidence too:

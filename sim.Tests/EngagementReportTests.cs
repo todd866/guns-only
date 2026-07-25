@@ -43,7 +43,7 @@ public class EngagementReportTests {
             OpponentGun: GunProfiles.GSh301PublicDataSurrogate with {
                 Id = "test-wide-lethality", EffectiveHitRadiusM = 90.0,
                 PublicDataSurrogate = false, PublicSourceUrl = "" }),
-        ContinuousCombat: new ContinuousCombatConfig(0.05, 400.0),
+        ContinuousCombat: new ContinuousCombatConfig(0.05, 400.0, MaximumFormationSize: 1),
         InitialThrottle: 0.30);
 
     [Fact]

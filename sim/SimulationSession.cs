@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Training;
@@ -120,6 +122,12 @@ public sealed class SimulationSession {
     DetentLayer _detents = null!;
     GunKill _gunKill = null!;
     GunKill _opponentGun = null!;
+    // Opponents beyond the primary. Empty for a 1v1; the pilot's cues always track the primary,
+    // which is re-elected from this list when it dies.
+    readonly List<Wingman> _wingmen = new();
+    // Two shooters, one player: hits are POOLED here rather than each opponent gun independently
+    // concluding it has killed the pilot.
+    int _wingmanHitsOnPlayer;
     FuelModel _fuel = null!;
     AirframeSystems _systems = null!;
     PilotPhysiologyModel _pilotPhysiology = null!;
@@ -264,6 +272,14 @@ public sealed class SimulationSession {
     public DetentLayer Controls => _detents;
     public GunKill PlayerGun => _gunKill;
     public GunKill OpponentGun => _opponentGun;
+    /// Opponents beyond the primary — the 1v2 and beyond.
+    public IReadOnlyList<Wingman> Wingmen => _wingmen;
+    /// Every opponent still fighting, primary first. One entry for an ordinary duel.
+    public int LiveOpponentCount =>
+        (_opponentTerminalState == AircraftTerminalState.Flying ? 1 : 0)
+        + _wingmen.Count(static wingman => wingman.StillFighting);
+    /// Total rounds the player has absorbed from ALL opponents.
+    public int PlayerHitsTaken => _opponentGun.HitCount + _wingmanHitsOnPlayer;
     public FuelModel PlayerFuel => _fuel;
     public AirframeSystems PlayerSystems => _systems;
     public PilotPhysiologyModel PilotPhysiology => _pilotPhysiology;
@@ -1091,6 +1107,12 @@ public sealed class SimulationSession {
             ? _fightDirector.NextSpawn(1)
             : null;
         _bandit = _beat.CreateBandit(_terrainSurface, openingSpawn);
+        ClearWingmen();
+        // The opening wave is a formation too — the pilot's own call: "first fight is 1v2 and if I
+        // win that it stays that way." A cold start has no director decision yet, so ask the
+        // director what an opening looks like rather than hard-coding a number here.
+        if (_beat.ContinuousCombat is not null)
+            StageWingmen(openingSpawn ?? _fightDirector.NextSpawn(1), 1);
         _playerSpawnSequence++;
         _banditSpawnSequence++;
         if (_carrier is not null) _carrierSpawnSequence++;
@@ -1414,6 +1436,112 @@ public sealed class SimulationSession {
         return double.IsFinite(trim) && trim > 0.0 ? trim : _beat.InitialThrottle;
     }
 
+    /// Take the primary out of the fight without needing a gun solution. Test seam only — it
+    /// drives the same path a real gun kill does, so promotion and wave staging are exercised
+    /// rather than simulated.
+    public void ForceOpponentDefeatForTest() {
+        if (_opponentTerminalState != AircraftTerminalState.Flying) return;
+        _killCount++;
+        BeginCatastrophicDamage(CombatRole.Opponent, CombatRole.Player);
+    }
+
+    /// Stage the rest of the formation alongside the primary. Each gets its own controller, its
+    /// own magazine, and a merge position offset from the leader so they arrive as a pair rather
+    /// than a single contact — a formation the pilot has to split, which is the entire point.
+    void StageWingmen(in SpawnSpec spec, int engagementNumber) {
+        ClearWingmen();
+        if (_beat.ContinuousCombat is null) return;
+        int ceiling = System.Math.Max(1, _beat.ContinuousCombat.MaximumFormationSize);
+        int extra = System.Math.Max(0,
+            System.Math.Min(spec.FormationSize, ceiling) - 1);
+        if (extra == 0) return;
+
+        CombatConfig combat = _beat.CombatRules;
+        AircraftParams air = _beat.BanditAirForMount(spec.Skill, spec.Mount);
+        for (int index = 0; index < extra; index++) {
+            // Offset by engagement number AND wingman index so the pair never stacks, and so the
+            // whole staging stays a pure function of the engagement (the determinism contract).
+            IBandit wing = _beat.CreateNextBandit(
+                _player.State, engagementNumber + WingmanSpawnStride * (index + 1),
+                _terrainSurface, spec);
+            wing.Wind = _player.Wind;
+            wing.Atmosphere = _player.AtmosphereModel;
+            var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
+                combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
+            _wingmen.Add(new Wingman(wing, gun, spec.Skill));
+        }
+    }
+
+    /// SpawnForMerge varies its geometry with the engagement number; stepping by more than the
+    /// doctrine cycle keeps a wingman from landing on top of its leader.
+    const int WingmanSpawnStride = 1;
+
+    void ClearWingmen() {
+        _wingmen.Clear();
+        _wingmanHitsOnPlayer = 0;
+    }
+
+    /// Fly every additional opponent and let each shoot at the player independently. Their hits
+    /// land in the SHARED pool (PlayerHitsTaken): two aircraft putting rounds into one pilot must
+    /// kill them together, not each need a full magazine of their own.
+    void StepWingmen(in AircraftState playerState) {
+        if (_wingmen.Count == 0) return;
+        ActorObservation observation = ObservePlayer(playerState);
+        bool weaponsReleased = !WeaponsInhibited && !TerminalPhaseActive
+            && _playerTerminalState == AircraftTerminalState.Flying;
+        foreach (Wingman wingman in _wingmen) {
+            if (!wingman.StillFighting) {
+                // Keep the wreck falling, but it is no longer a combatant.
+                wingman.Bandit.Step(observation, FixedDeltaSeconds);
+                continue;
+            }
+            AircraftState wingmanState = wingman.Bandit.State;
+            bool trigger = weaponsReleased
+                && wingman.Gun.AmmoRemaining > 0
+                && wingman.Gun.TargetAlive
+                && !wingman.Bandit.CatastrophicallyDamaged
+                && wingman.Bandit.WantsToFire(observation);
+            wingman.TriggerDown = trigger;
+            wingman.Gun.Step(trigger, wingmanState, playerState, FixedDeltaSeconds);
+            if (wingman.Gun.HitsThisStep > 0) {
+                _wingmanHitsOnPlayer += wingman.Gun.HitsThisStep;
+                EmitEvent(SessionEventType.Hit, CombatRole.Opponent, CombatRole.Player,
+                    wingman.Gun.HitsThisStep);
+            }
+            wingman.Bandit.Step(observation, FixedDeltaSeconds);
+        }
+    }
+
+    /// When the aircraft the pilot is fighting goes down but its formation has not, promote the
+    /// nearest survivor so every cue keeps tracking a live threat instead of a wreck.
+    bool TryPromoteWingmanToPrimary() {
+        Wingman? next = null;
+        double nearest = double.PositiveInfinity;
+        foreach (Wingman wingman in _wingmen) {
+            if (!wingman.StillFighting) continue;
+            double rangeM = Geometry.Range(_player.State, wingman.Bandit.State);
+            if (rangeM >= nearest) continue;
+            nearest = rangeM;
+            next = wingman;
+        }
+        if (next is null) return false;
+
+        _wingmen.Remove(next);
+        // The retiring primary keeps falling as a detached wreck exactly as it would in a duel.
+        DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
+        _bandit = next.Bandit;
+        _opponentGun = next.Gun;
+        _opponentTerminalState = AircraftTerminalState.Flying;
+        _opponentImpactSurface = ImpactSurface.None;
+        _opponentTriggerDown = next.TriggerDown;
+        _banditSpawnSequence++;
+        _lastRange = Geometry.Range(_player.State, _bandit.State);
+        _closureKts = _closureSmooth = 0.0;
+        _padlockRollAssist.Reset();
+        ShowTransition("WINGMAN ENGAGED · V PADLOCK", 2200.0);
+        return true;
+    }
+
     void StepWeapons(in AircraftState playerState, in AircraftState opponentState,
         bool playerTriggerHeld, bool allowNewFire = true) {
         bool weaponsReleased = allowNewFire && !WeaponsInhibited;
@@ -1457,7 +1585,7 @@ public sealed class SimulationSession {
                 BeginCatastrophicDamage(CombatRole.Opponent, CombatRole.Player);
             }
         }
-        if (_opponentGun.Outcome == FightOutcome.Splash
+        if (PlayerHitsTaken >= _beat.CombatRules.PlayerHitsToDefeat
             && _playerTerminalState == AircraftTerminalState.Flying) {
             if (_recoveryAttemptActive) _attemptHadSetback = true;
             BeginCatastrophicDamage(CombatRole.Player, CombatRole.Opponent);
@@ -1841,6 +1969,16 @@ public sealed class SimulationSession {
         if (!OpponentReplacementPending || completedTimeMs < _nextOpponentSpawnAtMs)
             return false;
 
+        // A formation is not beaten because its leader is: promote a survivor and keep the SAME
+        // engagement running. Only when the last of them is down does a replacement wave stage,
+        // so a 1v2 counts as one fight and one entry in the pilot's record.
+        if (_wingmen.Any(static wingman => wingman.StillFighting)) {
+            if (TryPromoteWingmanToPrimary()) {
+                _nextOpponentSpawnAtMs = double.NegativeInfinity;
+                return true;
+            }
+        }
+
         int nextEngagement = _engagementNumber + 1;
         CompleteEngagementIfEnded();
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
@@ -1848,6 +1986,7 @@ public sealed class SimulationSession {
         LastDirectorSpawn = directorSpawn;
         _bandit = _beat.CreateNextBandit(
             _player.State, nextEngagement, _terrainSurface, directorSpawn);
+        StageWingmen(directorSpawn, nextEngagement);
         // Spike opponents of either flavour (cat or machine) carry the report quarantine: an
         // expected loss to one must not crater the ordinary-fight skill estimate.
         bool spikeOpponent = directorSpawn.Boss || directorSpawn.Machine;
@@ -2978,6 +3117,7 @@ public sealed class SimulationSession {
         StepPilotPhysiologyFromAircraft();
 
         _bandit.Step(ObservePlayer(previousPlayer), FixedDeltaSeconds);
+        StepWingmen(previousPlayer);
         _carrier?.Step(FixedDeltaSeconds);
         ObserveCombatDamage();
 
@@ -3077,6 +3217,7 @@ public sealed class SimulationSession {
             ConsumeFuelAndStepSystems(catapultState, catapultAirVelocity.Length,
                 weightOnWheels: true);
             _bandit.Step(ObservePlayer(catapultState), FixedDeltaSeconds);
+            StepWingmen(catapultState);
             _carrier.Step(FixedDeltaSeconds);
             _catapult.Step(_carrier, FixedDeltaSeconds);
             _player.AdoptExternalKinematics(_catapult.State);
@@ -3116,6 +3257,7 @@ public sealed class SimulationSession {
             ConsumeFuelAndStepSystems(playerState, _player.AirspeedMps,
                 weightOnWheels: true);
             _bandit.Step(ObservePlayer(playerState), FixedDeltaSeconds);
+            StepWingmen(playerState);
             _carrier.Step(FixedDeltaSeconds);
             _arrestment.Step(_carrier, FixedDeltaSeconds);
             _player.AdoptExternalKinematics(CurrentArrestmentState());
@@ -3213,6 +3355,7 @@ public sealed class SimulationSession {
         // Both aircraft receive the same beginning-of-tick world snapshot. Giving the bandit the
         // already-integrated player leaked one fixed tick of future ownship motion into its law.
         _bandit.Step(ObservePlayer(previousPlayerState), FixedDeltaSeconds);
+        StepWingmen(previousPlayerState);
         _visualMergeEvaluation?.Step(_player.State, _bandit.State,
             _player.AtmosphereModel, FixedDeltaSeconds, _player.AirspeedMps);
 

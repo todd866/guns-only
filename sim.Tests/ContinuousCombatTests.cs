@@ -23,7 +23,7 @@ public class ContinuousCombatTests {
                 OpponentHitsToDefeat: 1,
                 PlayerGun: GunProfiles.M61A2PublicDataSurrogate,
                 OpponentGun: GunProfiles.GSh301PublicDataSurrogate),
-            ContinuousCombat = new ContinuousCombatConfig(replacementDelaySeconds)
+            ContinuousCombat = new ContinuousCombatConfig(replacementDelaySeconds, MaximumFormationSize: 1)
         };
     }
 
@@ -126,7 +126,7 @@ public class ContinuousCombatTests {
                 OpponentAmmo: 20,
                 PlayerHitsToDefeat: 2,
                 OpponentHitsToDefeat: 2),
-            ContinuousCombat: new ContinuousCombatConfig(0.25));
+            ContinuousCombat: new ContinuousCombatConfig(0.25, MaximumFormationSize: 1));
         var session = new SimulationSession();
         session.StartBeat(() => setup);
         long firstSpawnSequence = session.BanditSpawnSequence;
