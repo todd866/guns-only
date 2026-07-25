@@ -231,6 +231,10 @@ export function resolveGlobalRoomUrl({
 }
 
 export class GlobalRoomClient {
+  /// A connection must stay welcomed this long before it counts as stable enough to
+  /// reset the reconnect backoff.
+  static StableConnectionMs = 15_000;
+
   constructor({
     url = resolveGlobalRoomUrl(),
     WebSocketImpl = globalThis.WebSocket,
@@ -264,6 +268,7 @@ export class GlobalRoomClient {
     this.lastCadence = null;
     this.lastServerTimeMs = Number.NEGATIVE_INFINITY;
     this.reconnectDelayMs = 500;
+    this.welcomedAtMs = Number.NEGATIVE_INFINITY;
     this.reconnectTimer = null;
     this.started = false;
     this.phase = url ? "idle" : "off";
@@ -330,6 +335,13 @@ export class GlobalRoomClient {
   scheduleReconnect() {
     if (!this.started || this.reconnectTimer !== null) return;
     this.setStatus("reconnecting");
+    // Only a connection that actually SURVIVED counts as success. Resetting the backoff on the
+    // welcome message instead let a socket that welcomed and died a second later look healthy, so
+    // the backoff never grew and the client hammered the room forever: one tab left open on Build
+    // 98 logged 13,048 phase transitions over 7.3 hours, a reconnect every ~800 ms, which is real
+    // money against the Worker's request quota.
+    if (this.now() - this.welcomedAtMs >= GlobalRoomClient.StableConnectionMs)
+      this.reconnectDelayMs = 500;
     const delay = this.reconnectDelayMs;
     this.reconnectDelayMs = Math.min(10_000, this.reconnectDelayMs * 2);
     this.reconnectTimer = this.setTimer(() => {
@@ -407,7 +419,7 @@ export class GlobalRoomClient {
       this.lastSentAt = Number.NEGATIVE_INFINITY;
       this.lastPublishedTransition = "";
       this.lastCadence = null;
-      this.reconnectDelayMs = 500;
+      this.welcomedAtMs = this.now();
       this.lastError = null;
       this.setStatus("online");
       return;

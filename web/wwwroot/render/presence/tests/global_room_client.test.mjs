@@ -407,3 +407,72 @@ test("epoch mismatch clears contacts and closes instead of mixing two worlds", (
   assert.equal(snapshots.at(-1).clearedBecause, "world-epoch-mismatch");
   assert.equal(socket.closedWith.code, 1008);
 });
+
+// Regression: a socket that welcomes and immediately dies must NOT reset the reconnect backoff.
+// Resetting on the welcome message let a flapping connection look healthy forever — one tab left
+// open on Build 98 logged 13,048 phase transitions in 7.3 hours, roughly a reconnect every 800 ms,
+// which is real money against the Cloudflare Worker's daily request quota.
+test("a connection that welcomes then immediately dies still backs off", () => {
+  let clock = 0;
+  let socket;
+  const delays = [];
+  const client = new GlobalRoomClient({
+    url: "ws://localhost:5080/room",
+    WebSocketImpl: class extends FakeSocket {
+      constructor(url) { super(url); socket = this; }
+    },
+    now: () => clock,
+    setTimer: (callback, ms) => { delays.push(ms); return delays.length; },
+    clearTimer: () => {},
+    pilotKey: "browser-1234567890",
+  });
+  client.start();
+
+  // Five welcome-then-drop cycles, each lasting well under the stability threshold.
+  for (let cycle = 0; cycle < 5; cycle++) {
+    socket.readyState = 1;
+    socket.emit("open");
+    welcome(socket, { serverTimeMs: clock + 1 });
+    clock += 900;               // dies after 0.9 s — never stable
+    socket.emit("close", { code: 1006 });
+    client.reconnectTimer = null;
+    client.connect();
+  }
+
+  assert.deepEqual(delays, [500, 1000, 2000, 4000, 8000],
+    `backoff must grow across flapping reconnects, got ${delays.join(",")}`);
+});
+
+test("a connection that survives the stability window resets the backoff", () => {
+  let clock = 0;
+  let socket;
+  const delays = [];
+  const client = new GlobalRoomClient({
+    url: "ws://localhost:5080/room",
+    WebSocketImpl: class extends FakeSocket {
+      constructor(url) { super(url); socket = this; }
+    },
+    now: () => clock,
+    setTimer: (callback, ms) => { delays.push(ms); return delays.length; },
+    clearTimer: () => {},
+    pilotKey: "browser-1234567890",
+  });
+  client.start();
+
+  socket.readyState = 1;
+  socket.emit("open");
+  welcome(socket, { serverTimeMs: 1 });
+  clock += 900;
+  socket.emit("close", { code: 1006 });
+  client.reconnectTimer = null;
+  client.connect();
+
+  socket.readyState = 1;
+  socket.emit("open");
+  welcome(socket, { serverTimeMs: clock + 1 });
+  clock += GlobalRoomClient.StableConnectionMs + 1_000;   // a genuinely healthy session
+  socket.emit("close", { code: 1006 });
+
+  assert.deepEqual(delays, [500, 500],
+    `a stable session must earn a fresh 500 ms backoff, got ${delays.join(",")}`);
+});

@@ -67,17 +67,17 @@ public class FightDirectorTests {
         }
     }
 
-    // A win that took real time is a CONTESTED win: the player earned it but the tier was a
-    // genuine test, so the ladder still climbs one polite rung. Duration is the only difference
-    // from StrongReport — with SolutionSecondsConceded at zero the skill bands score identically,
-    // so these two helpers isolate the walkover rule and nothing else.
+    // A CONTESTED win is one the player was genuinely in danger during: the bandit held a gun
+    // solution on them for several seconds even though they took no hits. The ladder still climbs
+    // one polite rung for these. Note this is deliberately NOT "a long fight" — a long fight the
+    // bandit never threatened you in is still a walkover, which is the lesson from Build 102.
     static EngagementReport ContestedWin(
         int engagementNumber,
         PilotSkill opponentSkill,
         SortieOutcome outcome = SortieOutcome.Victory,
         bool boss = false) =>
         StrongReport(engagementNumber, opponentSkill, outcome, boss,
-            durationSeconds: 90.0);
+            durationSeconds: 90.0) with { SolutionSecondsConceded = 1.5 };
 
     [Fact]
     public void BuildMovesOnlyOneTierPerContestedEngagement() {
@@ -110,10 +110,10 @@ public class FightDirectorTests {
         Assert.Equal(0, climbing.WalkoverStreak);
     }
 
-    // The pilot complaint this exists for: "I had a really easy time killing everybody." Quick,
+    // The pilot complaint this exists for: "I had a really easy time killing everybody." Untouched,
     // untouched kills must stop the ladder from walking up one rung at a time behind the player.
     [Fact]
-    public void QuickUntouchedWinsPressTheLadderFasterThanOneRungPerFight() {
+    public void UntouchedUnthreatenedWinsPressTheLadderFasterThanOneRungPerFight() {
         var director = new FightDirector();
 
         // Fight 1 is still the forgiving warm-up: a cold start has no evidence to act on.
@@ -208,20 +208,34 @@ public class FightDirectorTests {
 
         for (int engagement = 1; engagement <= 3; engagement++) {
             SpawnSpec ordinary = director.NextSpawn(engagement);
-            EngagementReport win = StrongReport(
-                engagement,
-                ordinary.Skill,
-                durationSeconds: 80.0);
+            EngagementReport win = ContestedWin(engagement, ordinary.Skill);
             director.Observe(in win);
         }
 
         SpawnSpec fourth = director.NextSpawn(4);
         Assert.False(fourth.Boss);
 
-        EngagementReport fourthWin = StrongReport(
-            4, fourth.Skill, durationSeconds: 1.0);
+        EngagementReport fourthWin = ContestedWin(4, fourth.Skill);
         director.Observe(in fourthWin);
         Assert.True(director.NextSpawn(5).Boss);
+    }
+
+    // The other half of the cooldown contract: a player who is never threatened does not wait four
+    // fights for the ceiling demonstration.
+    [Fact]
+    public void WalkoversShortenTheBossCooldown() {
+        var director = new FightDirector();
+        for (int engagement = 1; engagement <= 3; engagement++) {
+            SpawnSpec ordinary = director.NextSpawn(engagement);
+            // Untouched AND never in his sights, but slow — duration must not matter.
+            EngagementReport walkover = StrongReport(
+                engagement, ordinary.Skill, durationSeconds: 95.0);
+            director.Observe(in walkover);
+        }
+
+        Assert.Equal(3, director.WalkoverStreak);
+        Assert.True(director.NextSpawn(4).Boss,
+            "three untouched, unthreatened wins must bring the boss forward");
     }
 
     [Fact]
@@ -321,18 +335,19 @@ public class FightDirectorTests {
             durationSeconds: 20.0);
         director.Observe(in bossVictory);
 
+        // Contested wins: this test is about the four-engagement COUNT, so the fights must not
+        // also trip the shortened walkover cooldown and bring the boss forward for a different
+        // reason (WalkoversShortenTheBossCooldown covers that path).
         for (int engagement = 6; engagement <= 8; engagement++) {
             SpawnSpec ordinary = director.NextSpawn(engagement);
             Assert.False(ordinary.Boss);
-            EngagementReport win = StrongReport(
-                engagement, ordinary.Skill, durationSeconds: 80.0);
+            EngagementReport win = ContestedWin(engagement, ordinary.Skill);
             director.Observe(in win);
         }
 
         SpawnSpec fourthSinceBoss = director.NextSpawn(9);
         Assert.False(fourthSinceBoss.Boss);
-        EngagementReport fourthWin = StrongReport(
-            9, fourthSinceBoss.Skill, durationSeconds: 80.0);
+        EngagementReport fourthWin = ContestedWin(9, fourthSinceBoss.Skill);
         director.Observe(in fourthWin);
 
         Assert.True(director.NextSpawn(10).Boss);

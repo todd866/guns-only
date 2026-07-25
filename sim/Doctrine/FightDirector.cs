@@ -23,13 +23,19 @@ public sealed class FightDirector {
     const int ReleaseAfterBossLoss = 2;
     const int ReleaseAfterBossWin = 1;
 
-    // A fight won QUICKLY and WITHOUT being touched is not a close-run thing the ladder should
-    // reward with one polite rung. It is the player saying the tier is beneath them. These three
-    // constants are the whole "earned ladder": how fast counts as a walkover, how many walkovers
-    // commit the ladder to the player's estimated band, and how many put the ceiling on the table
-    // directly (the band estimator moves only one step per fight by design, so on a genuinely
-    // dominant run it LAGS the evidence and must be overridden rather than waited for).
-    const double WalkoverSeconds = 45.0;
+    // A walkover is a fight the player was never in DANGER in — not a fight they won quickly.
+    //
+    // This was originally a duration test (< 45 s) and it failed in production for an instructive
+    // reason: Build 102 improved the bandit's tracking, so fights got LONGER (97/63/34/46/41/67 s),
+    // so fewer of them tripped the clock, so a pilot who took zero hits in six straight fights
+    // never registered a single walkover and the ladder crawled Novice -> Competent -> Veteran ->
+    // Veteran -> Veteran -> Ace. Measuring dominance with a stopwatch punishes the player for the
+    // opponent surviving longer, which is backwards.
+    //
+    // SolutionSecondsConceded is how long the bandit's gun actually held a solution on the player,
+    // fired or not. Zero hits AND essentially no time in his sights means the tier never threatened
+    // them, however long it took to finish. Roughly two burst lengths of grace.
+    const double WalkoverSolutionSecondsConceded = 0.75;
     const int WalkoversToCommitToBand = 2;
     const int WalkoversToPressTheCeiling = 3;
     // Cooldown before the ceiling demonstration may reappear, shortened while the player is
@@ -67,7 +73,7 @@ public sealed class FightDirector {
 
         bool walkover = report.Outcome == SortieOutcome.Victory
             && report.HitsTaken == 0
-            && report.DurationSeconds < WalkoverSeconds;
+            && report.SolutionSecondsConceded <= WalkoverSolutionSecondsConceded;
         _walkoverStreak = walkover ? _walkoverStreak + 1 : 0;
 
         if (report.OpponentWasBoss) {
