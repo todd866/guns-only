@@ -349,6 +349,66 @@ the player spending their winnings to automate themselves out of relevance — p
 individually-correct upgrade at a time. That is the platform's entire thesis expressed as a
 progression system rather than as a theme.
 
+### Why the man is in the jet — and what actually happens when he gets there
+
+> "You put the man in the jet because he's smarter than AI, you give him aim assist because it's a
+> tough flight profile... realistically it doesn't happen. More like, you get into a turning fight
+> that rapidly descends then you're fighting for your life waiting for your buddy to make a diving
+> attack. Big furballs."
+
+**Plan versus reality is the dramatic engine.** Every air doctrine in history has had this gap —
+BVR theory promised clean intercepts, Vietnam delivered turning fights. The design should make the
+planned profile genuinely attractive AND the degeneration genuinely likely, because the space
+between them is the game. It also makes the fatigue economy bite precisely when it hurts: you
+budgeted one big pull, you are on your fourth, you are spending an airframe you cannot afford, and
+the only exit is somebody else's energy.
+
+**The buddy dive gives asymmetric roles that SWAP rather than being assigned.** One aircraft is low,
+turning, bleeding energy and structure; the other is high with potential energy and one pass in
+reserve. Real doctrinal lineage (Thach Weave, loose deuce, drag-and-bag) and it maps exactly onto the
+economy — the low one is spending, the high one is preserving. Who is bait is decided by whoever got
+committed, not by a role slot.
+
+### Fibre-optic drones from the loiter, and the tether as a mechanic
+
+> "You can throw drones out from up high on a fibre reel... EW is too strong for remote control."
+
+Documented rather than speculative: both sides in Ukraine field fibre-optic FPV drones specifically
+because a spooled fibre cannot be jammed, at ranges of tens of kilometres. Air-launching them from a
+loitering aircraft is a clean extrapolation.
+
+**The tether is the mechanic.** While flying the drone the parent aircraft is anchored to a volume:
+it cannot manoeuvre freely, cannot leave, and the line can part. The loiter stops being the safe
+phase and becomes a commitment — which is what makes the descent into the furball feel like a
+consequence rather than an accident.
+
+### The human as trust anchor — the real justification
+
+> "There's fully automated drones but they're not necessarily smart enough to fully defeat
+> human-powered stuff. Like, I can fuck with AI. There's no AI that can fully defeat a prompt
+> injection."
+
+This is the load-bearing argument for a crewed aircraft in a world that does not need pilots, and it
+is stronger than "he's smarter". Prompt injection is not an unsolved problem, it is a **structural**
+one: language models have no reliable trust boundary between instruction and data — everything
+arrives as text and the separation is a convention rather than an architecture. Mitigations are
+procedural (treat tool output as data, surface anything that tries to instruct you), which is
+discipline, not a guarantee.
+
+The military analogue already exists: adversarial examples against classifiers, decoys shaped to
+exploit decision boundaries, sensor and IFF spoofing. An automatic target recogniser can be fooled by
+things that would not fool a person for a second.
+
+**So the man is not aboard because he flies better** — he demonstrably does not, which is why he is
+reclined at 20 G with aim assist. He is aboard because the machine can be *lied to* and he is the one
+component that can notice something is wrong in a way that generalises out of distribution. He is the
+trust anchor, not the pilot.
+
+**And this closes the loop on the AI-designed airspace.** If a machine authored the corridors, blocks
+and procedures, then poisoning that authorship is itself an attack vector — corrupted airspace data
+that routes you somewhere convenient for someone else, spoofed clearances, decoys built for the
+recogniser rather than the eye. The human is the one link in the kill chain that cannot be prompted.
+
 ---
 
 ## Why these two ideas belong in the same note
