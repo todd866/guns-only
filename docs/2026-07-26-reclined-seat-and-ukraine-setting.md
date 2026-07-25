@@ -269,6 +269,46 @@ Worth taking seriously, for reasons that are mostly about evidence rather than n
 - The existing Korea work is not wasted either way: it can stay as the speculative theatre while
   Ukraine becomes the evidenced one, which is a stronger pairing than either alone.
 
+### The points economy — and why it is the keystone
+
+> "Ukraine's been doing a quasi-economic thing with their military so you can literally turn this
+> into something that comes out of your paycheque."
+
+Ukraine operates a real points system: units earn credit for verified strikes, verification by drone
+footage, and spend that credit through a catalogue to re-equip. Gamified logistics inside a live war.
+**Specifics UNSOURCED here and must be checked before any of it becomes a rate card** — but the
+existence and rough shape of the mechanism is the point.
+
+It does three things nothing else in this design can:
+
+1. **It makes the economics first-person.** Every constraint so far — guns because missiles cost too
+   much, fatigue billed per pull, attritable airframes — has been economics at the *briefing* level.
+   A points economy makes the player pay. You never have to tell them that a million-dollar missile
+   against a fifty-thousand-dollar drone is a losing trade; they run out of money and work it out.
+2. **It answers the debrief problem.** At the attrition rung, scoring on kills is scoring the wrong
+   thing — a pilot who splashes two and loses the jet has lost the exchange. A points economy IS the
+   correct scoring function, and it is one that can be *cited* rather than defended. That matters for
+   a platform whose claim is honesty about its own abstractions.
+3. **It creates the decision the whole aircraft exists for.** Spend a fortieth of an airframe you
+   paid for, to earn points you need, on a target that may not be worth it — a live return-on-
+   investment calculation under G. Precisely the calculation an automation does better than a human,
+   which is the thesis again, now with money attached.
+
+**And the sharpest version is the critical one: points systems distort behaviour, and the distortion
+is the material.** A rate card paying the same for an easy target as a hard one sends you after easy
+ones. Verification-by-footage rewards what films well. Anything countable gets gamed, and the people
+gaming it are usually right to — they are optimising what they were told to optimise. That friction
+is real and currently argued about.
+
+Which makes it the right final layer for a platform whose moral argument is about honest abstraction.
+The game does not have to tell the player the incentives are wrong. It can let them notice they have
+spent three sorties hunting cheap targets because that is what pays, while the thing that mattered
+drove past unmolested.
+
+This is also the strongest argument for **Ukraine over Korea**: the economy is evidenced rather than
+invented, and it is the one part of the design that cannot be honestly extrapolated from first
+principles.
+
 ---
 
 ## Why these two ideas belong in the same note
