@@ -30,6 +30,22 @@ public static partial class WebBridge {
         index, KoreaWeatherPresets.ForBeat(index), TerrainForBeat(index), _deckConfiguration);
 
     /// <summary>
+    /// Fly again after dying WITHOUT throwing away the gauntlet's pacing memory. StartBeat resets
+    /// the FightDirector — correct when the pilot picks a mission, wrong when they are respawning
+    /// into the same infinite duel, because it sends a player who had fought their way up to Ace
+    /// back to the Novice warm-up. The director is explicitly built to carry its estimate across a
+    /// death into the next life (see its HasHistory gate); this is the entry point that lets it.
+    /// Returns false if the requested mission is not the one already staged, so the caller falls
+    /// back to a full StartBeat rather than silently restarting something else.
+    /// </summary>
+    [JSExport]
+    public static bool RestartSortie(int index) {
+        if (index != Session.BeatIndex) return false;
+        Session.Restart();
+        return true;
+    }
+
+    /// <summary>
     /// Anchor mission-local coordinates to the persistent room's X=east/Z=north origin. The room
     /// transports local poses plus this same origin; translating the terrain by its inverse makes
     /// AGL/collision truth and every observer's rendered substrate agree. Carrier qualifications

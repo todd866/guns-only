@@ -551,14 +551,23 @@ public static class Beats {
                 FlightModel.F22APublicDataSurrogate, AltitudeM) / AirData.MpsToKnots,
             AltitudeM);
         return new BeatSetup("Visual merge — F-22A surrogate vs Su-27S surrogate",
-            // Closer staging (pilot spec): at corner-speed opening energy the old 6.4 km split
-            // meant a quarter-minute of transit before anything happened.
+            // 9 km opening split, ~17 s of run-in (pilot spec: "the first fight needs to start a
+            // bit further away"). This deliberately reverses the earlier "closer staging" note —
+            // that call was made before there was weather worth flying through. The staging box
+            // sits at x ~= 1.4 km because that is where the seeded ModernHigh deck puts a cloud
+            // bank across the first half of the run-in while leaving BOTH the start point and the
+            // merge itself visual: you launch clear, fly through cloud, break out, and there he
+            // is. Verified in ModernVisualMergeTests; the seed, deck and this origin are one
+            // tuned set — moving any of them alone breaks the shape.
+            //
+            // ONLY the opening is long. Continuous replacements still merge at ~2.2 km
+            // (ReactiveBandit.SpawnForMerge), so the sortie does not pay transit per kill.
             Player: new AircraftState(
-                new Vec3D(-120.0, AltitudeM, -2000.0),
+                new Vec3D(1280.0, AltitudeM, -4500.0),
                 playerCornerTasMps, 0.0, 0.0, 0.0,
                 FlightModel.F22APublicDataSurrogate.MassKg),
             Bandit: new AircraftState(
-                new Vec3D(120.0, AltitudeM + 60.0, 2000.0),
+                new Vec3D(1520.0, AltitudeM + 60.0, 4500.0),
                 285.0, 0.0, Math.PI, 0.0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),

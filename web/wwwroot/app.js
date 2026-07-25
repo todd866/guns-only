@@ -2048,7 +2048,14 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
       && bridge.GetDeckConfiguration() !== selectedDeckConfiguration) {
       bridge.SetDeckConfiguration(selectedDeckConfiguration);
     }
-    bridge.StartBeat(selectedBeat);
+    // Respawning into the SAME gauntlet keeps the fight director's pacing memory: a pilot who
+    // fought their way up to Ace and died must not be sent back to the Novice warm-up. StartBeat
+    // resets that memory (correct when picking a mission), so prefer RestartSortie when the staged
+    // mission is unchanged and fall back only when it actually differs.
+    const sameSortie = stagedBeat === selectedBeat
+      && stagedDeckConfiguration === selectedDeckConfiguration
+      && bridge.RestartSortie?.(selectedBeat);
+    if (!sameSortie) bridge.StartBeat(selectedBeat);
     stagedBeat = selectedBeat;
     stagedDeckConfiguration = selectedDeckConfiguration;
     recorder.event("lifecycle", "sortie_staged", {
