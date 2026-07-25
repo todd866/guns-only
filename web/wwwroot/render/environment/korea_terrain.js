@@ -1364,6 +1364,29 @@ class KoreaTerrainAtlasPresentation {
     this.group.position.set(this.worldEastM, 0, -this.worldNorthM);
   }
 
+  /// Shrink or restore the streaming radius at runtime.
+  ///
+  /// Terrain chunk builds are the dominant frame cost in a real sortie: the scheduler already
+  /// limits itself to ONE chunk per animation frame, but a single LOD0 chunk costs roughly 9.5 ms
+  /// to build synchronously — 57% of a 60 fps budget — so a burst of streaming turns into a run of
+  /// 33-50 ms frames no matter how few triangles are on screen. Measured in production: a window
+  /// where live geometries jumped 88 -> 126 is exactly where the long frames began, while draw
+  /// calls and triangle counts were indistinguishable between a 60 fps window and an 11 fps one.
+  ///
+  /// Fewer chunks in flight is therefore the lever that actually works, and shedding view distance
+  /// before pixels is the right order: blur and haze are survivable, stutter is not.
+  setStreamingRadiusM(loadRadiusM) {
+    if (this.disposed || !Number.isFinite(loadRadiusM) || loadRadiusM <= 0) return false;
+    const previous = this.chunkLoadRadiusM;
+    this.chunkLoadRadiusM = Math.max(0, loadRadiusM);
+    // Keep eviction outside loading or chunks would be dropped the instant they arrive and
+    // rebuilt immediately — the worst possible outcome for the cost this exists to avoid.
+    this.chunkEvictRadiusM = Math.max(
+      this.chunkLoadRadiusM + 8_000, this.chunkLoadRadiusM * 1.25);
+    this.pageLoadRadiusM = Math.max(this.pageLoadRadiusM, this.chunkLoadRadiusM);
+    this.pageEvictRadiusM = Math.max(this.pageEvictRadiusM, this.chunkEvictRadiusM + 8_000);
+    return this.chunkLoadRadiusM !== previous;
+  }
   setSceneryEra(era) {
     if (this.disposed || era === this.sceneryEra) return Promise.resolve([]);
     const runtime = era ? createKoreaSceneryRuntime(this.THREE, {

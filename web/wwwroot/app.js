@@ -471,54 +471,67 @@ function newTelemetryBatchId() {
 // It only ever steps DOWN within a sortie. Stepping back up on a quiet moment is how governors
 // oscillate, and an oscillating frame rate reads worse than a consistently lower one.
 const FRAME_GOVERNOR_WINDOW_MS = 1000;
-const FRAME_GOVERNOR_LONG_FRAME_MS = 20;   // ~1.2 display intervals at 60 Hz
-const FRAME_GOVERNOR_TRIP_COUNT = 6;       // long frames in one window before shedding
+// One missed display interval, not a 50 ms stall. The original threshold was 50 ms, which is why
+// production tapes reported ~0 long frames while p95 sat at 33 ms: the pilot was feeling 30 fps
+// and the counter was blind to it.
+const FRAME_GOVERNOR_LATE_FRAME_MS = 22;
+const FRAME_GOVERNOR_TRIP_FRACTION = 0.08;   // 8% of a window's frames arriving late
+
+// Streaming radii to fall back through, in metres. Terrain chunk builds are the dominant cost —
+// one LOD0 chunk is ~9.5 ms of synchronous main-thread work, 57% of a 60 fps budget — so the only
+// lever that reliably buys frames is having fewer chunks in flight.
+const FRAME_GOVERNOR_RADII_M = [26_000, 18_000, 12_000];
 
 const frameGovernor = {
   level: 0,
   windowStartedAt: 0,
-  longFrames: 0,
-  applied: new Set(),
+  lateFrames: 0,
+  windowFrames: 0,
 
   observe(deltaMs, nowMs, view) {
     if (!Number.isFinite(deltaMs) || !view) return;
-    if (deltaMs > FRAME_GOVERNOR_LONG_FRAME_MS) this.longFrames += 1;
+    this.windowFrames += 1;
+    if (deltaMs > FRAME_GOVERNOR_LATE_FRAME_MS) this.lateFrames += 1;
     if (nowMs - this.windowStartedAt < FRAME_GOVERNOR_WINDOW_MS) return;
-    const tripped = this.longFrames >= FRAME_GOVERNOR_TRIP_COUNT;
+    const late = this.windowFrames > 0 ? this.lateFrames / this.windowFrames : 0;
     this.windowStartedAt = nowMs;
-    this.longFrames = 0;
-    if (tripped && this.level < 3) this.shed(this.level + 1, view);
+    this.lateFrames = 0;
+    this.windowFrames = 0;
+    if (late >= FRAME_GOVERNOR_TRIP_FRACTION) this.shed(view);
   },
 
-  shed(level, view) {
-    this.level = level;
-    if (this.applied.has(level)) return;
-    this.applied.add(level);
+  // Ordered by what actually costs frames, measured — NOT by what looks most expendable. Shadows
+  // and resolution were the original first moves and they were the wrong ones: a production tape
+  // showed an 11 fps window drawing 2.98M triangles in 78 calls and a 60 fps window drawing 2.91M
+  // in 72. Shedding pixels against a CPU-bound chunk-build stall buys nothing.
+  shed(view) {
+    if (this.level >= 4) return;
+    this.level += 1;
     try {
-      if (level === 1) {
+      if (this.level <= FRAME_GOVERNOR_RADII_M.length) {
+        const radiusM = FRAME_GOVERNOR_RADII_M[this.level - 1];
+        const changed = view.terrainPresentation?.setStreamingRadiusM?.(radiusM);
+        announceGovernor(`View distance ${Math.round(radiusM / 1000)} km · holding 60`);
+        if (changed === false && this.level < FRAME_GOVERNOR_RADII_M.length) return;
+      } else {
+        // Only once distance is exhausted does the picture itself start going.
         view.renderer.shadowMap.enabled = false;
         view.scene?.traverse?.((object) => { object.castShadow = false; });
-        announceGovernor("Shadows off · holding 60");
-      } else if (level === 2) {
-        view.renderer.setPixelRatio(Math.min(view.renderer.getPixelRatio(), 1));
-        announceGovernor("Resolution reduced · holding 60");
-      } else if (level === 3) {
         void view.terrainPresentation?.setSceneryEra?.(null);
-        announceGovernor("Scenery off · holding 60");
+        announceGovernor("Shadows and scenery off · holding 60");
       }
     } catch (error) {
       console.warn("Frame governor could not shed load.", error);
     }
-    recorder.event("perf", "FrameGovernor", { level });
+    recorder.event("perf", "FrameGovernor", { level: this.level });
   },
 
   reset() {
-    // A new sortie re-earns its quality: the previous fight's worst moment should not permanently
-    // downgrade a session.
+    // A new sortie re-earns its quality: one bad moment should not permanently downgrade a session.
     this.level = 0;
-    this.longFrames = 0;
+    this.lateFrames = 0;
+    this.windowFrames = 0;
     this.windowStartedAt = 0;
-    this.applied.clear();
   },
 };
 
@@ -3875,7 +3888,10 @@ class FlightView {
       // The second aircraft of a formation wave. The HUD needs its own symbology: a pilot who
       // cannot see where the other one is cannot fight two of them.
       wingmanPosition: this.wingmanPosition,
-      wingmanPresent: latestState?.w1_present === 1 && latestState?.w1_alive === 1,
+      // Refreshed every frame below. This is only the initial value: the constructor runs before
+      // any snapshot exists, and a boolean captured here would stay false forever — which is
+      // exactly what hid the wingman's bracket and stopped V falling through to it.
+      wingmanPresent: false,
       leadPipper: this.leadPipper,
       aimPoint: null,
       directorPoint: null,
@@ -5020,6 +5036,7 @@ class FlightView {
     hudFrame.lookPitch = padlock ? 0 : sensorPitch;
     hudFrame.padlock = padlock;
     hudFrame.padlockTarget = padlockTarget;
+    hudFrame.wingmanPresent = state.w1_present === 1 && state.w1_alive === 1;
     hudFrame.padlockPhase = padlockPhase;
     hudFrame.manualLookActive = manualLookActive();
     hudFrame.periodGunsightVisible = gunsightPresentation.visible;
