@@ -498,6 +498,51 @@ problem relocated to the spectrum: **your own EW triggers them**, and so would a
 transponder. Tactically excellent, and precisely the kind of horror the abstract-entities doctrine
 handles better than gore could — nobody is rendered, and the weapon is still appalling.
 
+### It lands on controls that already exist
+
+> "We can record how much fatigue lifespan we think the jet has based on its history, *and* we can
+> put a confidence interval on that. You might be in a fight and you know that if you hit that
+> spacebar the wings might come off. And then you *only* need the keyboard for control because the
+> AI does the fine-tuning aim-assist."
+
+**Space is already that key.** Today it is `limitOverride` — high-q G-limit release, low-q high-alpha
+authority, the deliberate max-perform commit. No new binding is required; the same key acquires a new
+meaning: *release the limiter, and I am not certain the wing holds.* An enormous upgrade to an
+existing control at essentially zero interface cost.
+
+And the drama is the right shape: **you die from your own decision rather than from the enemy.**
+Being shot down is bad luck; pulling the wings off is authorship.
+
+**The model is tractable and stays deterministic.** Load factor is already available per tick.
+Peak-detect cycles, accumulate damage as a power of amplitude (Miner's rule, or proper rainflow
+counting for rigour), carry a running total. None of that requires randomness.
+
+**The confidence interval is EPISTEMIC, not aleatory** — this is the whole trick. The kernel knows
+the true accumulated damage and the true current limit exactly. The PILOT receives an estimate with a
+band, widened by everything the airframe cannot sense: composite delamination, barely-visible impact
+damage, uncertainty in the exponent itself. So when Space is pressed the wing either holds or it does
+not, and it was always going to go that way given the aircraft's history. The pilot simply did not
+know which side of their own band they were standing on.
+
+No RNG in a tick, and more frightening than a probability would be — because it is knowledge they
+lack rather than luck they are owed.
+
+**Where it lands in code:** `PositiveStructuralLimitG` stops being a constant and becomes a function
+of accumulated damage; the fatigue accumulator is a new deterministic model alongside
+`AirframeSystems`; the HUD G meter already has the structure to show a moving limit and a band.
+
+### The keyboard retro-justifies itself
+
+The browser-and-keyboard constraint has always been pragmatic. It is not any more. **A pilot reclined
+at 20 G is not working a HOTAS** — they are issuing coarse intent while the machine does fine
+control, and coarse commands plus AI aim assist is exactly what a keyboard is.
+
+The platform limitation and the fiction are now the same thing, which is the strongest position a
+design constraint can occupy. It also promotes the existing two-axis gunnery assist and FBW bank-hold
+from "honest augmentation for keyboard players" to **the actual aircraft**. See
+[[complexity-ladder-doctrine]]: assists were always meant to be honest pilots rather than crutches,
+and this is that idea arriving at its destination.
+
 ---
 
 ## Why these two ideas belong in the same note
