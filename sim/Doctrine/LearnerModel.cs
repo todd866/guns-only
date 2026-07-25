@@ -74,6 +74,25 @@ public sealed class LearnerModel {
             MoveOneBand(_bands.DefensiveBfm, defensiveScore, hasDefensiveEvidence));
     }
 
+    /// <summary>
+    /// Seed the estimate directly, without replaying an evidence window. Used to carry a pilot's
+    /// demonstrated competence across a browser session so a page reload does not hand someone who
+    /// has been beating Aces the 2.4 G Novice warm-up again. The evidence window itself is NOT
+    /// restored — it refills from the next four fights — so a restored estimate is a starting
+    /// point that live evidence immediately begins correcting, never a permanent verdict.
+    /// </summary>
+    public void RestoreEstimate(LearnerBands bands, int winStreak, int lossStreak,
+        double secondsSinceLastDefeat) {
+        Array.Clear(_window);
+        _windowCount = 0;
+        _nextWindowIndex = 0;
+        _bands = bands;
+        WinStreak = Math.Max(0, winStreak);
+        LossStreak = Math.Max(0, lossStreak);
+        SecondsSinceLastDefeat = double.IsFinite(secondsSinceLastDefeat)
+            && secondsSinceLastDefeat > 0.0 ? secondsSinceLastDefeat : 0.0;
+    }
+
     public void Reset() {
         Array.Clear(_window);
         _windowCount = 0;

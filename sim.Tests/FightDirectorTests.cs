@@ -110,37 +110,50 @@ public class FightDirectorTests {
         Assert.Equal(0, climbing.WalkoverStreak);
     }
 
-    // The pilot complaint this exists for: "I had a really easy time killing everybody." Untouched,
-    // untouched kills must stop the ladder from walking up one rung at a time behind the player.
+    // The opening fight is now the HARDEST one, on the pilot's instruction: "the first bad guy
+    // should always default to really hard and then once he guns your brains out we can make
+    // things easier." The old ramp opened against a 2.40 G Novice with no lookahead, which could
+    // not turn with a pilot pulling 8-12 G and never fired a round.
     [Fact]
-    public void UntouchedUnthreatenedWinsPressTheLadderFasterThanOneRungPerFight() {
+    public void TheOpeningFightIsTheHardestAndUntouchedWinsHoldItThere() {
         var director = new FightDirector();
 
-        // Fight 1 is still the forgiving warm-up: a cold start has no evidence to act on.
-        Assert.Equal(PilotSkill.Novice, director.NextSpawn(1).Skill);
-        EngagementReport first = StrongReport(
-            1, PilotSkill.Novice, durationSeconds: 20.0);
-        director.Observe(in first);
+        SpawnSpec opening = director.NextSpawn(1);
+        Assert.Equal(PilotSkill.Ace, opening.Skill);
+        Assert.Equal(BanditMount.Uprated, opening.Mount);
+
+        // Walking over it must not relax anything.
+        EngagementReport walkover = StrongReport(
+            1, opening.Skill, durationSeconds: 20.0);
+        director.Observe(in walkover);
         Assert.Equal(1, director.WalkoverStreak);
+        Assert.Equal(PilotSkill.Ace, director.NextSpawn(2).Skill);
+    }
 
-        // One walkover is not yet evidence — the ladder still steps.
-        Assert.Equal(PilotSkill.Competent, director.NextSpawn(2).Skill);
-        EngagementReport second = StrongReport(
-            2, PilotSkill.Competent, durationSeconds: 20.0);
-        director.Observe(in second);
+    // The other half of the pilot's rule: getting your brains gunned out makes it easier, one rung
+    // per defeat, and the jet steps back down with the pilot.
+    [Fact]
+    public void RepeatedDefeatsWalkTheLadderAndTheJetBackDown() {
+        var director = new FightDirector();
+        var served = new List<PilotSkill>();
+        var mounts = new List<BanditMount>();
 
-        // Two: commit straight to the player's estimated band instead of stepping toward it. Two
-        // flawless fights already carry the band to Dominant, so this IS the ceiling — the player
-        // meets an Ace on fight three rather than fight four, and only after proving they earned it.
-        SpawnSpec pressed = director.NextSpawn(3);
-        Assert.Equal(PilotSkill.Ace, pressed.Skill);
-        Assert.Contains("walkover", pressed.Reason, StringComparison.OrdinalIgnoreCase);
-        EngagementReport third = StrongReport(
-            3, pressed.Skill, durationSeconds: 20.0);
-        director.Observe(in third);
+        for (int engagement = 1; engagement <= 5; engagement++) {
+            SpawnSpec spawn = director.NextSpawn(engagement);
+            served.Add(spawn.Skill);
+            mounts.Add(spawn.Mount);
+            EngagementReport loss = WeakReport(engagement, spawn.Skill);
+            director.Observe(in loss);
+        }
 
-        // Three: the ceiling stays on the table; the ladder does not relax behind a dominant run.
-        Assert.Equal(PilotSkill.Ace, director.NextSpawn(4).Skill);
+        Assert.Equal(PilotSkill.Ace, served[0]);
+        Assert.True(served[^1] < served[0],
+            $"losing every fight must ease the ladder: {string.Join(" -> ", served)}");
+        // Monotone: a pilot being beaten never gets a HARDER opponent than the one before.
+        for (int i = 1; i < served.Count; i++)
+            Assert.True(served[i] <= served[i - 1],
+                $"ladder went back up while losing: {string.Join(" -> ", served)}");
+        Assert.Equal(BanditMount.Baseline, mounts[^1]);
     }
 
     [Fact]

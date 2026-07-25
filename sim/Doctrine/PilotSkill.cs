@@ -91,18 +91,25 @@ public readonly record struct BanditSkillProfile(
     public static BanditSkillProfile Boss() =>
         For(PilotSkill.Ace) with { FireConeDeg = 1.8, IsBoss = true };
 
-    /// Deterministic per-wave escalation curve for the flagship continuous-combat gauntlet: a pure
-    /// function of the 1-based engagement number, with NO RNG, wall clock, or date. The very first
-    /// fight is a gentle warm-up and it hardens toward the climax.
+    /// Deterministic per-wave curve for the flagship continuous-combat gauntlet: a pure function of
+    /// the 1-based engagement number, with NO RNG, wall clock, or date.
     ///
-    /// INTERIM / TUNABLE CURVE: engagement 1 fields a Novice, 2 a Competent, 3 a Veteran, and 4+ an
-    /// Ace. This is a deliberately beatable ramp so the opening merge is forgiving; a later
-    /// performance-based curve (scaling to how the player is actually doing) replaces it. Until then,
-    /// reshape the ramp by editing only this mapping.
-    public static PilotSkill ForEngagement(int engagementNumber) => engagementNumber switch {
-        <= 1 => PilotSkill.Novice,
-        2 => PilotSkill.Competent,
-        3 => PilotSkill.Veteran,
-        _ => PilotSkill.Ace,
-    };
+    /// THE OPENING FIGHT IS THE HARDEST ONE. This deliberately reverses the old forgiving ramp
+    /// (1 Novice, 2 Competent, 3 Veteran, 4+ Ace) on the pilot's instruction: "the first bad guy
+    /// should always default to really hard and then once he guns your brains out we can make
+    /// things easier."
+    ///
+    /// The old ramp failed in a way that was invisible until the tapes showed it. A cold start
+    /// opened against a Novice — capped at 2.40 G with no lookahead at all, against a pilot pulling
+    /// 8-12 G — so the opening opponent could not turn, could not convert, and never fired. Every
+    /// page load restarted there, and a short sortie meant the warm-up was the ONLY opponent the
+    /// pilot ever met. Successive difficulty builds kept improving fights that were rarely reached.
+    ///
+    /// Easing is now the director's job rather than a scripted ramp, and it is EVIDENCE-driven:
+    /// FightDirector drops a tier per fight while the player is losing (Ace -> Veteran ->
+    /// Competent -> Novice across four straight defeats), and the mount steps back down with it.
+    /// A pilot who is genuinely new finds the floor within a couple of fights; a pilot who can
+    /// hold their own never sees it.
+    public static PilotSkill ForEngagement(int engagementNumber) =>
+        engagementNumber >= 1 ? PilotSkill.Ace : PilotSkill.Ace;
 }

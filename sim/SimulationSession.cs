@@ -351,6 +351,10 @@ public sealed class SimulationSession {
     public BanditMount CurrentBanditMount =>
         LastDirectorSpawn?.Mount ?? BanditMount.Baseline;
     public int DirectorWalkoverStreak => _fightDirector.WalkoverStreak;
+    /// Carry the pacing estimate across a page reload. See FightDirector.ExportState.
+    public string ExportDirectorState() => _fightDirector.ExportState();
+    public bool TryImportDirectorState(string? state) =>
+        _fightDirector.TryImportState(state);
     public bool OpponentReplacementPending => ContinuousCombat
         && Lifecycle == LifecycleState.Active
         && _playerTerminalState == AircraftTerminalState.Flying

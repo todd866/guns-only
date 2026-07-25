@@ -170,14 +170,85 @@ public sealed class FightDirector {
 
         if (_walkoverStreak >= WalkoversToPressTheCeiling) target = PilotSkill.Ace;
         if (_walkoverStreak >= WalkoversToCommitToBand)
-            return WithDoctrine(target, engagementNumber, boss: false,
+            return WithDoctrine(NeverEasierAfterAWin(target), engagementNumber, boss: false,
                 FormattableString.Invariant(
                     $"press: {_walkoverStreak} straight untouched walkovers"));
 
-        PilotSkill build = OneStepToward(_lastOpponent, target);
+        PilotSkill build = NeverEasierAfterAWin(OneStepToward(_lastOpponent, target));
         return WithDoctrine(build, engagementNumber, boss: false,
             FormattableString.Invariant(
                 $"build: overall {_learner.Bands.Overall}"));
+    }
+
+    /// <summary>
+    /// A compact, versioned snapshot of the pacing estimate — everything NextSpawn reads, and
+    /// nothing else. Deterministic and human-readable so a stored value can be inspected.
+    ///
+    /// This exists because the gauntlet cold-started at the 2.4 G Novice warm-up on every page
+    /// load: a pilot who had fought their way to walking over Aces was handed an opponent capped
+    /// at 2.4 G (against their 8-12) every time they reloaded, and a short sortie meant the
+    /// warm-up was the ONLY opponent they ever met.
+    /// </summary>
+    public string ExportState() {
+        LearnerBands bands = _learner.Bands;
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        return string.Join('|', new[] {
+            "v1",
+            ((int)bands.Gunnery).ToString(invariant),
+            ((int)bands.Energy).ToString(invariant),
+            ((int)bands.DefensiveBfm).ToString(invariant),
+            _learner.WinStreak.ToString(invariant),
+            _learner.LossStreak.ToString(invariant),
+            _learner.SecondsSinceLastDefeat.ToString("F1", invariant),
+            ((int)_phase).ToString(invariant),
+            _walkoverStreak.ToString(invariant),
+            _engagementsSinceBoss.ToString(invariant),
+            ((int)_lastOpponent).ToString(invariant),
+            ((int)_lastOrdinaryOpponent).ToString(invariant),
+            _releaseRemaining.ToString(invariant),
+            ((int)_releaseTier).ToString(invariant),
+            _anyObserved ? "1" : "0",
+        });
+    }
+
+    /// <summary>Restore a snapshot. Returns false and changes NOTHING on anything malformed or
+    /// from another version — a corrupt stored value must open a normal cold sortie, never a
+    /// half-applied one.</summary>
+    public bool TryImportState(string? state) {
+        if (string.IsNullOrWhiteSpace(state)) return false;
+        string[] parts = state.Split('|');
+        if (parts.Length != 15 || parts[0] != "v1") return false;
+        var numbers = new int[13];
+        for (int i = 0; i < 13; i++) {
+            int index = i < 5 ? i + 1 : i + 2;
+            if (!int.TryParse(parts[index], System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out numbers[i])) return false;
+        }
+        if (!double.TryParse(parts[6], System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out double unbeaten)
+            || !double.IsFinite(unbeaten) || unbeaten < 0.0) return false;
+
+        static bool InBand(int value) => value is >= 0 and <= (int)SkillBand.Dominant;
+        static bool InSkill(int value) => value is >= 0 and <= (int)PilotSkill.Machine;
+        if (!InBand(numbers[0]) || !InBand(numbers[1]) || !InBand(numbers[2])) return false;
+        if (numbers[3] < 0 || numbers[4] < 0 || numbers[6] < 0 || numbers[7] < 0
+            || numbers[9] < 0) return false;
+        if (numbers[5] is < 0 or > (int)DirectorPhase.Release) return false;
+        if (!InSkill(numbers[8]) || !InSkill(numbers[10])) return false;
+
+        _learner.RestoreEstimate(
+            new LearnerBands((SkillBand)numbers[0], (SkillBand)numbers[1],
+                (SkillBand)numbers[2]),
+            numbers[3], numbers[4], unbeaten);
+        _phase = (DirectorPhase)numbers[5];
+        _walkoverStreak = numbers[6];
+        _engagementsSinceBoss = numbers[7];
+        _lastOpponent = (PilotSkill)numbers[8];
+        _releaseRemaining = numbers[9];
+        _lastOrdinaryOpponent = (PilotSkill)numbers[10];
+        _releaseTier = (PilotSkill)numbers[11];
+        _anyObserved = numbers[12] != 0;
+        return true;
     }
 
     public void Reset() {
@@ -240,6 +311,14 @@ public sealed class FightDirector {
 
     static PilotSkill TwoTiersBelow(PilotSkill tier) =>
         OneTierBelow(OneTierBelow(tier));
+
+    /// Winning never makes the game easier. The band estimator starts at Steady and climbs one
+    /// step per fight, so it LAGS a pilot who is already beating the ceiling — and now that the
+    /// gauntlet opens at the ceiling, following the estimate downward would walk a winning pilot
+    /// straight back down the ladder they just proved they are above. The ladder comes down when
+    /// the player is beaten (the LossStreak ease branch above), not while they are winning.
+    PilotSkill NeverEasierAfterAWin(PilotSkill candidate) =>
+        _learner.WinStreak > 0 && candidate < _lastOpponent ? _lastOpponent : candidate;
 
     static PilotSkill OneStepToward(PilotSkill from, PilotSkill target) =>
         target > from ? from + 1

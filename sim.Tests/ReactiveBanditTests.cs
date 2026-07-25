@@ -50,13 +50,15 @@ public class ReactiveBanditTests {
             "the new fighter must spawn outside the immediate gun envelope");
     }
 
+    // The opening fight is now the hardest one and the ladder eases on DEFEAT rather than ramping
+    // up from a warm-up. The old 2.40 G Novice opener could not turn with the player at all.
     [Theory]
-    [InlineData(1, PilotSkill.Novice)]
-    [InlineData(2, PilotSkill.Competent)]
-    [InlineData(3, PilotSkill.Veteran)]
+    [InlineData(1, PilotSkill.Ace)]
+    [InlineData(2, PilotSkill.Ace)]
+    [InlineData(3, PilotSkill.Ace)]
     [InlineData(4, PilotSkill.Ace)]
     [InlineData(5, PilotSkill.Ace)]
-    public void ForEngagementIsADeterministicNoviceThroughAceRamp(int engagement, PilotSkill expected) {
+    public void ForEngagementOpensAtTheCeilingRatherThanRampingUp(int engagement, PilotSkill expected) {
         Assert.Equal(expected, BanditSkillProfile.ForEngagement(engagement));
         // Pure function of the int: repeated calls agree.
         Assert.Equal(expected, BanditSkillProfile.ForEngagement(engagement));
@@ -74,25 +76,28 @@ public class ReactiveBanditTests {
             ReactiveBandit.SpawnForMerge(player, FlightModel.Sabre, 1).Skill);
     }
 
+    // Without a director decision the interim curve applies, and it now opens at the ceiling.
     [Theory]
-    [InlineData(1, PilotSkill.Novice)]
-    [InlineData(2, PilotSkill.Competent)]
-    [InlineData(3, PilotSkill.Veteran)]
+    [InlineData(1, PilotSkill.Ace)]
+    [InlineData(2, PilotSkill.Ace)]
+    [InlineData(3, PilotSkill.Ace)]
     [InlineData(4, PilotSkill.Ace)]
-    public void FlagshipContinuousSuccessorEscalatesByEngagementNumber(int engagement, PilotSkill expected) {
+    public void FlagshipContinuousSuccessorOpensAtTheCeiling(int engagement, PilotSkill expected) {
         var player = State(0.0, 5486.4, 0.0, 300.0);
         var successor = Assert.IsType<ReactiveBandit>(
             Beats.ModernVisualMerge().CreateNextBandit(player, engagement));
         Assert.Equal(expected, successor.Skill);
     }
 
+    // Every rung of the interim curve is now the Ace, so the uprated airframe comes with it from
+    // the opening merge.
     [Theory]
-    [InlineData(1, false)]
-    [InlineData(2, false)]
-    [InlineData(3, false)]
+    [InlineData(1, true)]
+    [InlineData(2, true)]
+    [InlineData(3, true)]
     [InlineData(4, true)]
     [InlineData(5, true)]
-    public void FlagshipAirframeEscalationKeepsSu27UntilTheAceRung(
+    public void FlagshipAirframeEscalationFieldsTheUpratedJetFromTheOpeningMerge(
         int engagement, bool expectsSu35) {
         BeatSetup beat = Beats.ModernVisualMerge();
         var player = State(0.0, 3048.0, 0.0, 300.0);
@@ -130,15 +135,15 @@ public class ReactiveBanditTests {
     }
 
     [Fact]
-    public void FlagshipOpeningNeutralMergeIsBriefedAsANoviceAndHandsOffToOne() {
+    public void FlagshipOpeningNeutralMergeIsBriefedAtTheCeilingAndHandsOffToIt() {
         var beat = Beats.ModernVisualMerge();
-        Assert.Equal(PilotSkill.Novice, beat.BanditSkill);
+        Assert.Equal(PilotSkill.Ace, beat.BanditSkill);
         var merge = Assert.IsType<NeutralMergeBandit>(beat.CreateBandit());
-        Assert.Equal(PilotSkill.Novice, merge.BriefedSkill);
+        Assert.Equal(PilotSkill.Ace, merge.BriefedSkill);
 
         // Fly the production merge geometry until the neutral pass completes and the fight is handed
-        // to the reactive pilot; the tier the opener actually fields must be the briefed Novice
-        // warm-up (the interim ForEngagement ramp makes fight 1 the gentlest wave).
+        // to the reactive pilot; the tier the opener actually fields must be the briefed one. The
+        // opening fight is now the HARDEST wave, not a warm-up.
         var playerSim = new AircraftSim(beat.Player, beat.PlayerAir);
         var straight = new PilotCommand(1.0, 0.0, 1.0, 0.0);
         for (int tick = 0; tick < 40 * AircraftSim.TickHz && !merge.FirstPassComplete; tick++) {
@@ -147,7 +152,7 @@ public class ReactiveBanditTests {
             playerSim.Step(straight, Dt);
         }
         Assert.True(merge.FirstPassComplete, "production merge geometry must complete its neutral pass");
-        Assert.Equal(PilotSkill.Novice, merge.FightSkill);
+        Assert.Equal(PilotSkill.Ace, merge.FightSkill);
     }
 
     [Fact]

@@ -38,6 +38,21 @@ public static partial class WebBridge {
     /// Returns false if the requested mission is not the one already staged, so the caller falls
     /// back to a full StartBeat rather than silently restarting something else.
     /// </summary>
+    /// <summary>
+    /// The gauntlet cold-started at the 2.4 G Novice warm-up on every page load, so a pilot who
+    /// had been walking over Aces met an opponent capped at 2.4 G — against their 8-12 — each time
+    /// they reloaded, and a short sortie meant the warm-up was the only opponent they ever saw.
+    /// The browser persists this opaque string and hands it back at startup.
+    /// </summary>
+    [JSExport]
+    public static string ExportDirectorState() => Session.ExportDirectorState();
+
+    /// <summary>Restore a persisted estimate. Returns false on anything malformed, in which case
+    /// the sortie opens cold exactly as before.</summary>
+    [JSExport]
+    public static bool ImportDirectorState(string state) =>
+        Session.TryImportDirectorState(state);
+
     [JSExport]
     public static bool RestartSortie(int index) {
         if (index != Session.BeatIndex) return false;

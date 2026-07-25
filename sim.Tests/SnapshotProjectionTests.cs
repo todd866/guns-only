@@ -95,7 +95,7 @@ public class SnapshotProjectionTests {
         Assert.True(cornerBandMin < cornerKias && cornerKias < cornerBandMax);
         // Fielded AI tier: doctrine pilots project their tier, scripted rail actors project null.
         JsonElement banditSkill = root.GetProperty("bandit_skill");
-        if (beatIndex == 7) Assert.Equal("NOVICE", banditSkill.GetString());
+        if (beatIndex == 7) Assert.Equal("ACE", banditSkill.GetString());
         else Assert.Equal(JsonValueKind.Null, banditSkill.ValueKind);
         Assert.InRange(Math.Abs(root.GetProperty("fuel_flow_lb_min").GetDouble() * 60.0
             - root.GetProperty("fuel_flow_pph").GetDouble()), 0.0, 0.31);

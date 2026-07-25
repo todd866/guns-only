@@ -456,6 +456,37 @@ function newTelemetryBatchId() {
   return `batch-${unique}`.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 128);
 }
 
+// The fight director's pacing estimate, persisted across page loads.
+//
+// The gauntlet cold-started at the 2.4 G Novice warm-up every time the page was reloaded, so a
+// pilot who had fought their way up to walking over Aces was handed an opponent physically capped
+// at 2.4 G — against the 8-12 G they pull — on every fresh session. A short sortie meant the
+// warm-up was the ONLY opponent they ever met, which is why successive difficulty builds kept
+// feeling like nothing had changed: they were improving fights that were rarely reached.
+//
+// The payload is opaque to this layer and self-validating on the far side: anything malformed is
+// rejected wholesale and the sortie opens cold, so a corrupt value can never half-apply.
+const DIRECTOR_STATE_STORAGE = "guns-only.fight-director.v1";
+
+function loadDirectorState() {
+  try { return globalThis.localStorage?.getItem(DIRECTOR_STATE_STORAGE) || ""; }
+  catch { return ""; }
+}
+
+function saveDirectorState() {
+  try {
+    const state = bridge?.ExportDirectorState?.();
+    if (state) globalThis.localStorage?.setItem(DIRECTOR_STATE_STORAGE, state);
+  } catch { /* persistence must never be able to disturb a sortie */ }
+}
+
+function restoreDirectorState() {
+  try {
+    const saved = loadDirectorState();
+    if (saved) bridge?.ImportDirectorState?.(saved);
+  } catch { /* a bad stored value opens a normal cold sortie */ }
+}
+
 // Renderer/scene counters for the 0.2 Hz perf row. Frame deltas say a stall HAPPENED; these say
 // what was accumulating when it did. `geometries`/`textures` are the leak detector — they are
 // live GPU resource counts, so a monotone rise across a sortie is a leak rather than load.
@@ -2075,7 +2106,12 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
     const sameSortie = stagedBeat === selectedBeat
       && stagedDeckConfiguration === selectedDeckConfiguration
       && bridge.RestartSortie?.(selectedBeat);
-    if (!sameSortie) bridge.StartBeat(selectedBeat);
+    if (!sameSortie) {
+      bridge.StartBeat(selectedBeat);
+      // StartBeat resets the director by design (picking a mission is not a respawn), so the
+      // persisted estimate has to be reapplied AFTER it.
+      restoreDirectorState();
+    }
     stagedBeat = selectedBeat;
     stagedDeckConfiguration = selectedDeckConfiguration;
     recorder.event("lifecycle", "sortie_staged", {
