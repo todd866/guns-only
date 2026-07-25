@@ -446,6 +446,58 @@ jets, but the war is won by killing tankers, the economy is paying the player to
 thing.** The pilot who works that out, and eats the financial hit to go hunting enablers anyway, is
 the one having the interesting experience — and the game never has to say a word about it.
 
+### Drone carriers, and passive munitions that invert the spectrum
+
+> "Big, slow drone carriers trying to stealthily bring in mass quantities of fully automated drones.
+> Especially if you can litter the battlespace with passive drones that wait for an EW signal and
+> kill it."
+
+**The carrier and the small fighter are natural predator and prey — derived, not designed.** Big and
+slow and low-observable is coherent: large flying wings are the efficient LO shape, and slow permits
+an economical high-bypass engine. But such an aircraft concentrates enormous value into one airframe.
+It is simultaneously what makes drone mass possible AND the highest-value target in the sky — which
+is precisely what the small, high, patient enabler-killer described above exists to hunt. The
+matchup fell out of the constraints rather than being authored.
+
+**Passive anti-EW munitions invert the electromagnetic spectrum.** The lineage is real — loitering
+anti-radiation weapons have existed since the Harpy in the 1990s — but *dormant until emission*
+changes the character entirely: it is a minefield for the spectrum.
+
+The consequence is large. EW was established above as too strong for remote control, which is why
+fibre exists. Now **jamming announces you and gets you killed**, so EW stops being a default posture
+and becomes a last resort switched on in full knowledge of the cost. Fibre becomes more valuable
+again, because it neither requires EW to be defeated nor emits anything itself.
+
+### The spine: every advantage is billed at the moment of use
+
+Writing this down because the design has converged on it from six independent directions:
+
+> **Every advantage in this world is paid for when it is used, and the currency is usually visibility
+> or attrition.**
+
+| capability | what using it costs |
+|---|---|
+| high G | airframe fatigue life |
+| electronic warfare | your position, to anything listening |
+| missiles | money you do not have |
+| flying a fibre drone | tethered in place, cannot manoeuvre or leave |
+| loitering high where you are safe | out of the regime where your G exists |
+| **guns** | **nothing** |
+
+**That is the complete answer to why the project is called guns-only.** It is not a restriction and
+not an arcade simplification — the gun is the one capability in the entire design that does not bill
+you at the moment of use. Everything else is a consumable disguised as a feature.
+
+Any future mechanic should be checked against this rule. If it grants an advantage that costs
+nothing, it is probably wrong.
+
+### One to build deliberately rather than discover
+
+A dormant munition that wakes on emission does not care whose emitter it is. That is the landmine
+problem relocated to the spectrum: **your own EW triggers them**, and so would a civilian
+transponder. Tactically excellent, and precisely the kind of horror the abstract-entities doctrine
+handles better than gore could — nobody is rendered, and the weapon is still appalling.
+
 ---
 
 ## Why these two ideas belong in the same note
