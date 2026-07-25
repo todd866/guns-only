@@ -493,6 +493,40 @@ export const SCENARIOS = [
       speed_brake: 0.45,
     },
   },
+  {
+    name: "splash-banner-kill-cam",
+    about: "SPLASH during the kill cam, padlocked on the aircraft the pilot just shot down. The banner must sit in the TOP band and leave the gunsight and the dying bandit unobscured — it used to land a quarter of the way down the screen, squarely over both.",
+    player: { headingDeg: 95, pitchDeg: -3, bankDeg: 22, altFt: 11000 },
+    bandit: { azimuthDeg: 18, elevationDeg: -9, rangeM: 540 },
+    lead: null,
+    view: { padlock: true, padlockPhase: "SPLASH", sensor: "auto" },
+    state: {
+      splash_cue: true,
+      bandit_alive: false,
+      kill_count: 1,
+      engagement_number: 1,
+      opponent_replacement_pending: true,
+      opponent_replacement_s: 2.1,
+      range_m: 540,
+      closure_kts: 60,
+    },
+  },
+  {
+    name: "splash-banner-with-transition",
+    about: "Both annunciations up at once — SPLASH plus the WINGMAN ENGAGED promotion cue that follows a beat later. They must STACK in the top band rather than overprint each other or the sight.",
+    player: { headingDeg: 140, pitchDeg: 2, bankDeg: -35, altFt: 9800 },
+    bandit: { azimuthDeg: -30, elevationDeg: 6, rangeM: 900 },
+    lead: null,
+    view: { padlock: true, padlockPhase: "ACQUIRE", sensor: "auto" },
+    state: {
+      splash_cue: true,
+      transition_cue: "WINGMAN ENGAGED · V PADLOCK",
+      kill_count: 1,
+      engagement_number: 1,
+      range_m: 900,
+      closure_kts: 20,
+    },
+  },
 ];
 
 export function scenarioByName(name) {

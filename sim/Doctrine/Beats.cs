@@ -185,7 +185,12 @@ public enum MaintenanceScenarioKind {
 /// short, deterministic dwell.
 /// </summary>
 public sealed record ContinuousCombatConfig(
-    double ReplacementDelaySeconds = 2.5,
+    /// The beat between a kill and the next opponent. It is also the KILL CAM window: the client
+    /// holds the padlock on the aircraft it just shot down for exactly this long before jumping to
+    /// the survivor, so the pilot sees the result of their own gunnery instead of the camera
+    /// snapping forward the instant the rounds land. 3.5 s sits inside the "3-5 s" the pilot asked
+    /// for and still reads as a beat rather than a pause.
+    double ReplacementDelaySeconds = 3.5,
     double? ReplacementSpeedMps = null,
     /// How many aircraft a single wave may field. Content decides whether a mission fights in
     /// formations at all; the director decides how many WITHIN that ceiling, on the same evidence

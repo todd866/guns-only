@@ -1402,20 +1402,26 @@ class CombatHud {
     }
 
     if (!raid && state.splash_cue === true && state.finished !== true) {
-      const width = Math.min(310, this.width - 34);
-      const height = 63;
+      const width = Math.min(330, this.width - 34);
+      const height = CombatHud.ANNUNCIATION_ROW;
       const cueX = (this.width - width) / 2;
-      const cueY = state.rtb === true
-        ? Math.max(this.safeInsets.top + 258, this.height * 0.31)
-        : Math.max(this.safeInsets.top + 225, this.height * 0.27);
+      // TOP of the screen, not a quarter of the way down it. These banners were landing squarely
+      // over the gunsight and the aircraft the pilot had just shot — "these banners don't need to
+      // be in the middle of the screen", and they especially do not need to be there during the
+      // kill cam, which exists precisely so the pilot can watch that aircraft come apart. The top
+      // band is free: the multiplayer badge holds the left corner and GUN TEMP the right.
+      const cueY = this.annunciationTop();
       this.glassPanel(cueX, cueY, width, height, GREEN);
       ctx.fillStyle = GREEN;
       ctx.shadowColor = "rgba(77, 255, 136, 0.62)";
       ctx.shadowBlur = 12;
-      ctx.font = "800 24px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText("SPLASH", this.width / 2, cueY + 23);
+      ctx.font = "800 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText("SPLASH", cueX + 12, cueY + height / 2);
       ctx.shadowBlur = 0;
       ctx.fillStyle = GREEN_DIM;
+      ctx.textAlign = "right";
       ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       const replacementPending = state.opponent_replacement_pending === true;
       const replacementSeconds = Math.max(0,
@@ -1425,7 +1431,7 @@ class CombatHud {
       const detail = replacementPending
         ? `BANDIT ${nextEngagement} IN ${replacementSeconds.toFixed(1)} SEC · KILLS ${kills}`
         : `IMPACT PHYSICS RUNNING · KILLS ${kills}`;
-      ctx.fillText(detail, this.width / 2, cueY + 47);
+      ctx.fillText(detail, cueX + width - 12, cueY + height / 2);
     }
     ctx.restore();
   }
@@ -2084,9 +2090,12 @@ class CombatHud {
     const accent = respawn ? RED : trapped || ready ? GREEN : AMBER;
     ctx.save();
     const w = Math.min(360, this.width - 34);
-    const h = 48;
+    const h = CombatHud.ANNUNCIATION_ROW;
     const x = (this.width - w) / 2;
-    const y = Math.max(this.safeInsets.top + 188, this.height * 0.24);
+    // Stacks UNDER the splash banner when both are up, which they routinely are: a kill raises
+    // SPLASH and the promotion that follows raises WINGMAN ENGAGED a beat later.
+    const splashUp = state.splash_cue === true && state.finished !== true;
+    const y = this.annunciationTop() + (splashUp ? CombatHud.ANNUNCIATION_ROW + 4 : 0);
     this.glassPanel(x, y, w, h, accent);
 
     ctx.textAlign = "center";
@@ -2567,7 +2576,7 @@ class CombatHud {
         padlockCtx.font = "800 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
         const directiveWidth = Math.min(right - left,
           Math.max(94, padlockCtx.measureText(text).width + 24));
-        const directiveY = top + 2;
+        const directiveY = Math.max(top + 2, this.annunciationBottom(frame.state));
         this.glassPanel(centreX - directiveWidth / 2, directiveY,
           directiveWidth, 24, accent);
         padlockCtx.fillStyle = accent;
@@ -3293,6 +3302,33 @@ class CombatHud {
     ctx.textBaseline = "middle";
     ctx.fillText(text, x + width / 2, y + 10);
     ctx.restore();
+  }
+
+  /// Top of the annunciation stack. Banners used to land a quarter of the way down the screen —
+  /// squarely over the gunsight and over the aircraft the pilot had just shot, which is the one
+  /// thing the kill cam exists to show them. They now sit in the band between the bottom of the
+  /// heading tape and the top of the target/padlock region, both of which the layout publishes, so
+  /// this cannot drift when the tape moves for touch mode or a short viewport.
+  annunciationTop() {
+    return this.getLayout().heading.bottom + 6;
+  }
+
+  /// Row pitch for stacked annunciations. Both banners are deliberately SHORT: the free band is
+  /// about 67 px on a desktop viewport and two cues are routinely up together, because a kill
+  /// raises SPLASH and the promotion that follows raises WINGMAN ENGAGED a beat later.
+  static get ANNUNCIATION_ROW() { return 34; }
+
+  /// Where the annunciation stack ends for this frame. Persistent status — the padlock directive —
+  /// gets out of the way of transient banners rather than being overprinted by them: a cue the
+  /// pilot cannot read is worse than a cue that has moved.
+  annunciationBottom(state) {
+    const splash = state?.splash_cue === true && state?.finished !== true;
+    const title = (typeof state?.transition_cue === "string" && state.transition_cue)
+      || (typeof state?.configuration_cue === "string" && state.configuration_cue);
+    const rows = (splash ? 1 : 0) + (title ? 1 : 0);
+    if (!rows) return 0;
+    return this.annunciationTop()
+      + rows * CombatHud.ANNUNCIATION_ROW + (rows - 1) * 4 + 6;
   }
 
   drawLegend(frame) {

@@ -1047,6 +1047,32 @@ let padlockTarget = "bandit";
 let padlockEntityId = "";
 let padlockPhase = "OFF";
 let padlockTrackEstablished = false;
+/// KILL CAM. Shooting an aircraft down used to drop the padlock on the same frame the rounds
+/// landed — the camera snapped forward and the pilot never saw the result of their own gunnery,
+/// which is the single most satisfying thing in the sortie. The lock is now HELD on the aircraft
+/// that just died, and when the fight moves on it JUMPS to whoever is left rather than dumping the
+/// pilot into the forward view to go and find them again.
+///
+/// The kernel already had the window: ContinuousCombatConfig.ReplacementDelaySeconds is the pause
+/// between a kill and the next opponent, and promotion of a surviving wingman happens at the end of
+/// it. This is a client-side timer rather than a new wire field because it is a CAMERA decision,
+/// not simulation truth — the fight does not care where the pilot is looking.
+const PADLOCK_KILL_CAM_MS = 3_500;
+/// ...but the beat is CUT SHORT the moment the survivor starts converting on the player. "I don't
+/// wanna linger if he's about to start shooting me" — a kill cam that keeps the pilot's eyes on a
+/// falling wreck while the other one closes to guns is a camera that gets them killed. The floor
+/// exists so the SPLASH still registers rather than flickering past.
+const PADLOCK_KILL_CAM_MINIMUM_MS = 900;
+/// What counts as "about to start shooting": inside a mile and a half with his nose inside a
+/// quarter-turn of the player. This is deliberately WIDER than the bandit's actual firing gate
+/// (120-900 m, 3-5 degrees of nose error) because the camera has to leave BEFORE the shot, not
+/// react to it.
+const PADLOCK_KILL_CAM_THREAT_RANGE_M = 1_800;
+const PADLOCK_KILL_CAM_THREAT_COS = Math.cos(25 * DEG);
+let padlockKillCamUntilMs = 0;
+/// The engagement the current lock belongs to. A promoted wingman is the SAME fight and the camera
+/// should follow it; a replacement wave is a new tally and must be acquired deliberately.
+let padlockEngagement = null;
 let appliedBanditPadlockRollAssist = null;
 let dragging = false;
 let activePointer = null;
@@ -1759,6 +1785,8 @@ function releasePadlock(reason = "manual", { announce = true, record = true } = 
   padlock = false;
   padlockTarget = "bandit";
   padlockEntityId = "";
+  padlockKillCamUntilMs = 0;
+  padlockEngagement = null;
   padlockPhase = "RETURN";
   padlockTrackEstablished = false;
   gimbalReturnFast = true;
@@ -1808,6 +1836,8 @@ function acquirePadlock(target, reason) {
   padlockPhase = manualLookActive() ? "SLEW" : "ACQUIRE";
   padlockTrackEstablished = false;
   gimbalReturnFast = false;
+  padlockKillCamUntilMs = 0;
+  padlockEngagement = Number(latestState?.engagement_number);
   syncBanditPadlockRollAssist();
   syncPadlockUi(`${padlockLabel()} padlock on`);
   recorder.event("view", "Padlock", {
@@ -1816,6 +1846,32 @@ function acquirePadlock(target, reason) {
     entity_id: padlockEntityId,
     reason,
   });
+}
+
+/// The contact to jump to when the padlocked one dies: whichever of the pair is still fighting.
+function survivingPadlockTarget(state) {
+  if (padlockTarget !== "wingman" && wingmanPadlockAvailable(state)) return "wingman";
+  if (padlockTarget !== "bandit" && padlockTargetValid(state, "bandit")) return "bandit";
+  return null;
+}
+
+/// Is `target` converting on the player right now? Pure geometry off the hot frame — position and
+/// the body forward axis, both in the kernel's east/up/north frame, which is why nothing here
+/// negates Z the way the renderer does.
+function contactThreateningPlayer(state, target) {
+  const prefix = target === "wingman" ? "w1" : "b";
+  const toPlayerX = Number(state.px) - Number(state[`${prefix}x`]);
+  const toPlayerY = Number(state.py) - Number(state[`${prefix}y`]);
+  const toPlayerZ = Number(state.pz) - Number(state[`${prefix}z`]);
+  const rangeM = Math.hypot(toPlayerX, toPlayerY, toPlayerZ);
+  if (!Number.isFinite(rangeM) || rangeM <= 0
+    || rangeM > PADLOCK_KILL_CAM_THREAT_RANGE_M) return false;
+  const noseAlignment = (
+    Number(state[`${prefix}fx`]) * toPlayerX
+    + Number(state[`${prefix}fy`]) * toPlayerY
+    + Number(state[`${prefix}fz`]) * toPlayerZ
+  ) / rangeM;
+  return Number.isFinite(noseAlignment) && noseAlignment >= PADLOCK_KILL_CAM_THREAT_COS;
 }
 
 /// The contact V should acquire from cold: whatever the situation makes obvious, except that a
@@ -4735,11 +4791,37 @@ class FlightView {
     } else if (padlock && padlockTarget === "carrier"
         && carrierPadlockSupersededByCombat(state)) {
       releasePadlock("combat task");
-    } else if (padlock && !padlockTargetValid(state, padlockTarget)) {
-      releasePadlock("target unavailable");
     } else if (padlock && padlockTarget === "bandit" && padlockEntityId
         && nextBanditEntityId !== padlockEntityId) {
-      releasePadlock("target changed");
+      // The primary slot changed under the lock. A promoted wingman is the SAME engagement still
+      // running, and making the pilot re-find it by hand is exactly the complaint; a replacement
+      // WAVE is a new tally and must still be acquired deliberately, which is the contract that
+      // stops a lock silently transferring to an aircraft the pilot never saw arrive.
+      if (Number(state.engagement_number) === padlockEngagement
+        && padlockTargetValid(state, "bandit")) {
+        acquirePadlock("bandit", "auto-jump");
+        syncPadlockUi("BANDIT padlock · wingman engaged");
+      } else {
+        releasePadlock("target changed");
+      }
+    } else if (padlock && !padlockTargetValid(state, padlockTarget)) {
+      // KILL CAM: the lock survives the death of the thing it was locked to, for a beat.
+      const nowMs = nowSeconds * 1000;
+      if (!padlockKillCamUntilMs) padlockKillCamUntilMs = nowMs + PADLOCK_KILL_CAM_MS;
+      const survivor = survivingPadlockTarget(state);
+      const heldMs = PADLOCK_KILL_CAM_MS - (padlockKillCamUntilMs - nowMs);
+      const cutShort = heldMs >= PADLOCK_KILL_CAM_MINIMUM_MS
+        && survivor !== null && contactThreateningPlayer(state, survivor);
+      if (nowMs < padlockKillCamUntilMs && !cutShort) {
+        padlockPhase = "SPLASH";
+      } else if (survivor) {
+        acquirePadlock(survivor, cutShort ? "threat" : "auto-jump");
+        if (cutShort) syncPadlockUi(`${padlockLabel()} padlock · THREAT`);
+      } else {
+        releasePadlock("target unavailable");
+      }
+    } else if (padlock) {
+      padlockKillCamUntilMs = 0;
     }
     const playerFrame = this.frameFromState(state, "p", this.playerFrame);
     const banditFrame = this.frameFromState(state, "b", this.banditFrame);
