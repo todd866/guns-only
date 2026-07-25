@@ -96,7 +96,7 @@ const BRIDGE_ACTIONS = Object.freeze([
   // Padlock selection and camera motion remain presentation actions. Once bandit tracking is
   // established, app.js sends a separate semantic transition to the fixed-tick roll augmentation;
   // it never turns camera pixels or RAF timing into aircraft input.
-  { id: "padlock", bindingAction: "padlock", code: "KeyV", gkey: "Padlock", behavior: "momentary", help: "TARGET / BOAT PADLOCK", uiConsumer: /contextualPadlockTarget\(latestState\)/, uiObservable: /hudFrame\.padlockTarget = padlockTarget/ },
+  { id: "padlock", bindingAction: "padlock", code: "KeyV", gkey: "Padlock", behavior: "momentary", help: "PADLOCK ON / OFF", uiConsumer: /contextualPadlockTarget\(latestState\)/, uiObservable: /hudFrame\.padlockTarget = padlockTarget/ },
   { id: "restart", code: "KeyR", gkey: "Restart", behavior: "momentary", help: "R RESTART", consumer: /key == GKey\.Restart/, uiConsumer: /restartMission\(\)/ },
   { id: "limit-override", bindingAction: "limitOverride", code: "Space", gkey: "Override", behavior: "hold", help: "LIMIT OVERRIDE", consumer: /GKey\.Override/, observable: /requested_g_cmd/ },
   { id: "auto-gcas-paddle", bindingAction: "gcasOverride", code: "KeyK", gkey: "AutoGcasOverride", behavior: "hold", help: "AGCAS PADDLE", consumer: /GKey\.AutoGcasOverride/, observable: /auto_gcas_override_held/ },
@@ -398,9 +398,20 @@ test("phone throttle is one spring-loaded rocker on the existing W/S grammar", (
     "pause, freeze, visibility, and mission resets must spring the rocker neutral");
 });
 
-test("phone chrome uses distinct vertical anchors", () => {
-  const pauseTop = Number(indexSource.match(
-    /#pause-button\s*\{[\s\S]*?top:\s*calc\(var\(--safe-top\) \+ (\d+)px\)/,
+test("screen chrome never covers a flight instrument or another tap target", () => {
+  // The top-RIGHT column belongs to the HUD. The canvas draws GUN TEMP at safe-top + 8..25 px, and
+  // it was invisible behind a pause button parked at safe-top + 12 — a primary gunnery instrument
+  // hidden by chrome. Anything anchored top-right must start below that band.
+  const GUN_TEMP_BOTTOM_PX = 25;
+  const pauseBlock = indexSource.match(/#pause-button\s*\{[\s\S]*?\}/)?.[0] ?? "";
+  assert.match(pauseBlock, /left:\s*calc\(var\(--safe-left\)/,
+    "the pause button belongs on the left; the right column is instrument space");
+  assert.doesNotMatch(pauseBlock, /right:\s*calc\(/,
+    "a right-anchored pause button sits on top of the GUN TEMP bar");
+
+  const pauseTop = Number(pauseBlock.match(/top:\s*calc\(var\(--safe-top\) \+ (\d+)px\)/)?.[1]);
+  const multiplayerTop = Number(indexSource.match(
+    /#multiplayer-status\s*\{[\s\S]*?top:\s*calc\(var\(--safe-top\) \+ (\d+)px\)/,
   )?.[1]);
   const tiltTop = Number(indexSource.match(
     /#tilt-status\s*\{[\s\S]*?top:\s*calc\(env\(safe-area-inset-top, 0px\) \+ (\d+)px\)/,
@@ -408,12 +419,20 @@ test("phone chrome uses distinct vertical anchors", () => {
   const consoleTop = Number(indexSource.match(
     /\.touch-mode #test-flight-console\s*\{[\s\S]*?top:\s*calc\(var\(--safe-top\) \+ (\d+)px\)/,
   )?.[1]);
+  const desktopConsoleTop = Number(indexSource.match(
+    /#test-flight-console\s*\{[\s\S]*?top:\s*calc\(var\(--safe-top\) \+ (\d+)px\)/,
+  )?.[1]);
 
-  assert.ok(Number.isFinite(pauseTop) && Number.isFinite(tiltTop) && Number.isFinite(consoleTop));
-  assert.ok(tiltTop >= pauseTop + 44,
-    "the tilt recenter target must sit below the 44px pause target");
+  assert.ok([pauseTop, multiplayerTop, tiltTop, consoleTop, desktopConsoleTop]
+    .every(Number.isFinite));
+  assert.ok(pauseTop >= multiplayerTop + 18,
+    "the pause target must clear the multiplayer badge it now shares a column with");
+  assert.ok(tiltTop >= GUN_TEMP_BOTTOM_PX,
+    "the tilt recenter target must clear the GUN TEMP instrument");
   assert.ok(consoleTop >= tiltTop + 44,
-    "the contextual action console must sit below the tilt target");
+    "the action console must sit below the 44px tilt target");
+  assert.ok(desktopConsoleTop >= GUN_TEMP_BOTTOM_PX,
+    "the always-available systems console must clear the GUN TEMP instrument");
 });
 
 test("fresh players launch directly into the first F-22 merge", () => {

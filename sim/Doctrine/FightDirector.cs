@@ -286,15 +286,20 @@ public sealed class FightDirector {
     /// excellent one — it is the classic real answer, and it is the pilot's own idea.
     ///
     /// Same doctrine as everything else: open hard, ease on evidence. The opening wave is a pair,
-    /// and it stays a pair while the player keeps beating it. Losing drops back to a single
-    /// opponent BEFORE the tier or the jet is touched — being outnumbered is the harshest of the
-    /// three axes, so it is the first one returned.
+    /// and it stays a pair while the player keeps beating it. When numbers are eventually returned
+    /// they go BEFORE the tier or the jet — being outnumbered is the harshest of the three axes.
+    ///
+    /// It takes TWO consecutive losses, not one. A single death is the expected cost of a target
+    /// somewhere near a 4:1 win rate, and stripping the wave the moment it finally lands makes the
+    /// whole fight easier exactly when the pilot has just proved it was correctly pitched. The
+    /// pilot noticed immediately — killed once, and the next wave was a 1v1.
     const int OpeningFormationSize = 2;
+    const int ConsecutiveLossesBeforeNumbersEase = 2;
 
     internal int FormationSizeFor(PilotSkill skill, bool boss) {
         // The ceiling demonstration is a duel with a named opponent; it does not bring friends.
         if (boss || skill == PilotSkill.Machine) return 1;
-        if (_learner.LossStreak >= 1) return 1;
+        if (_learner.LossStreak >= ConsecutiveLossesBeforeNumbersEase) return 1;
         return OpeningFormationSize;
     }
 

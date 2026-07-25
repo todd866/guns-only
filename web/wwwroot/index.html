@@ -790,7 +790,8 @@
     #test-flight-console {
       position: fixed;
       z-index: 11;
-      top: calc(var(--safe-top) + 10px);
+      /* Clears the GUN TEMP bar, which the HUD canvas draws at safe-top + 8..25 px. */
+      top: calc(var(--safe-top) + 34px);
       right: calc(var(--safe-right) + 10px);
       width: min(340px, calc(100vw - var(--safe-left) - var(--safe-right) - 20px));
       overflow: hidden;
@@ -1052,7 +1053,7 @@
     }
 
     @media (max-width: 620px) {
-      #test-flight-console { width: min(292px, calc(100vw - 16px)); top: calc(var(--safe-top) + 8px); right: calc(var(--safe-right) + 8px); }
+      #test-flight-console { width: min(292px, calc(100vw - 16px)); top: calc(var(--safe-top) + 32px); right: calc(var(--safe-right) + 8px); }
       #test-flight-console > summary { min-height: 36px; padding-block: 7px; }
     }
 
@@ -1481,11 +1482,14 @@
 
     .ready-secondary-actions button[hidden] { display: none; }
 
+    /* Top-LEFT, under the multiplayer badge. The top-right corner belongs to the GUN TEMP
+       instrument and the aircraft-systems console; this chrome was sitting on top of the
+       temperature bar and hiding a primary gunnery instrument behind a pause button. */
     #pause-button {
       position: fixed;
       z-index: 9;
-      top: calc(var(--safe-top) + 12px);
-      right: calc(var(--safe-right) + 12px);
+      top: calc(var(--safe-top) + 38px);
+      left: calc(var(--safe-left) + 11px);
       min-width: 76px;
       min-height: 44px;
       border: 1px solid rgba(77, 255, 136, .35);

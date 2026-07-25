@@ -102,8 +102,14 @@ export function carrierPadlockEligible(state = {}, radiusM = CARRIER_PADLOCK_RAD
 
 function banditPadlockEligible(state = {}) {
   if (!state || typeof state !== "object" || state.replay_external === true
-      || state.finished === true || state.terminal_phase_active === true
-      || token(state.mode) === "TERMINAL") return false;
+      || state.finished === true || token(state.mode) === "TERMINAL") return false;
+  // NOT gated on terminal_phase_active. That flag is SESSION scope — it is true whenever anyone
+  // in the sortie is in a terminal state — and in a formation fight the leader dying sets it while
+  // a wingman is still shooting at you. Gating on it invalidated every padlock the moment the
+  // pilot got their first kill: press V, acquire, and the next frame released it as "target
+  // unavailable". That is the "after splash I can't cycle to the remaining dude" report.
+  //
+  // Liveness is per-contact and already on the wire, so ask about THIS contact instead.
   return [state.bx, state.by, state.bz].every((value) => finite(value) !== null)
     && state.opponent_body_present !== false
     && state.bandit_alive !== false
@@ -132,9 +138,10 @@ export function contextualPadlockTarget(state = {}) {
 }
 
 export function padlockTargetValid(state = {}, target = "bandit") {
+  // See banditPadlockEligible: terminal_phase_active is session scope and must not decide whether
+  // a specific, living contact can be tracked.
   if (!state || typeof state !== "object" || state.replay_external === true
-      || state.finished === true || state.terminal_phase_active === true
-      || token(state.mode) === "TERMINAL") return false;
+      || state.finished === true || token(state.mode) === "TERMINAL") return false;
   // Acquisition remains the deliberate 12 NM gate. Once selected, one mile of release
   // hysteresis prevents normal ship/aircraft motion at the boundary from chattering the view.
   // A recovery-selected boat must not survive the authoritative transition back to combat when

@@ -3274,10 +3274,12 @@ class CombatHud {
     ctx.fillText(cue.call, this.width / 2, y);
   }
 
-  // Until the pilot opens the legend once, a quiet persistent chip teaches that it exists —
-  // the single highest-value control fact a new player can learn.
+  // A quiet persistent chip teaching that the legend exists — the single highest-value control
+  // fact a new player can learn. It used to retire itself the first time H was pressed, on the
+  // theory that the lesson had landed; in practice the binding is exactly the one a pilot forgets
+  // between sessions, and a dim 20 px chip is cheap. It stays.
   drawLegendHint() {
-    if (!this.showLegendHint || this.legendVisible || this.touchMode) return;
+    if (this.legendVisible || this.touchMode) return;
     const ctx = this.ctx;
     ctx.save();
     const text = "H \u00B7 CONTROLS";
@@ -3322,7 +3324,7 @@ class CombatHud {
 
     const wideLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
-      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${binding("fire", "KeyF")}  GUNS   ·   ${binding("padlock", "KeyV")}  TARGET / BOAT PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK`,
+      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${binding("fire", "KeyF")}  GUNS   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
       `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE`,
     ];
     const compactLines = [
@@ -3330,7 +3332,7 @@ class CombatHud {
       `${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
       `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${binding("fire", "KeyF")}  GUNS   ·   M  SOUND`,
-      `${binding("padlock", "KeyV")}  PADLOCK   ·   DRAG LOOK / 2-FINGER TEMP LOOK   ·   R  RESTART   ·   H  HIDE`,
+      `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   R  RESTART   ·   H  HIDE`,
     ];
     if (gcasAvailable) {
       wideLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE AN ACTIVE FLY-UP)`);

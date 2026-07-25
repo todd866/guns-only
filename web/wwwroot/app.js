@@ -715,6 +715,12 @@ const recorder = {
   // sim-tick-scheduled and cannot see render stalls. Perf rows are diagnostic garnish — when the
   // bounded queue is already full it is the perf row that is skipped, never a state row that the
   // enqueue overflow trim would displace from the head of the queue.
+  /// Attribute a block of main-thread milliseconds to a named phase of the render loop. Guarded
+  /// like everything else here: instrumentation must never be able to cost a frame or kill one.
+  observeFramePhase(name, milliseconds) {
+    try { this._framePerf.observePhase(name, milliseconds); }
+    catch (e) { this.errors++; this.lastError = String(e); }
+  },
   observeFrameDelta(deltaMs) {
     try {
       const summary = this._framePerf.observe(deltaMs, performance.now());
@@ -1533,20 +1539,24 @@ function setTestFlightValue(node, text, state = null) {
 function renderTestFlightConsole(state) {
   if (!testFlightUi) return;
   const projected = projectTestFlightState(state);
-  const relevant = state.ready !== true && state.paused !== true && state.finished !== true
-    && testFlightConsoleRelevant(projected);
+  const airborneSortie = state.ready !== true && state.paused !== true && state.finished !== true;
+  // AVAILABLE vs RELEVANT. The console reads engine, bus, hydraulics and gear, and a pilot may
+  // want any of those at any moment — so the collapsed tab is present for the whole sortie and the
+  // pilot opens it when they choose. Relevance still drives data-relevance, which is what makes it
+  // shout during a maintenance beat or an abnormal indication rather than sitting there as decor.
+  const relevant = airborneSortie && testFlightConsoleRelevant(projected);
   if (testFlightConsole) {
     const wasHidden = testFlightConsole.hidden;
-    testFlightConsole.hidden = !relevant;
+    testFlightConsole.hidden = !airborneSortie;
     testFlightConsole.dataset.relevance = projected.maintenance.active
       ? "maintenance"
       : projected.warnings.length ? "abnormal" : relevant ? "transition" : "none";
-    if (!relevant && !wasHidden) {
+    if (!airborneSortie && !wasHidden) {
       testFlightConsole.open = false;
       testFlightActionController?.releaseAll();
     }
   }
-  if (!relevant) return;
+  if (!airborneSortie) return;
 
   setTestFlightValue(testFlightUi.engineRpm, projected.engine.rpmText, projected.engine.state);
   setTestFlightValue(testFlightUi.engineRunning,
@@ -6222,9 +6232,15 @@ async function boot() {
       frameGovernor.observe(now - previous, now, activeView);
       const dt = clamp((now - previous) / 1000, 0, SIM_CATCHUP_CAP_SECONDS);
       previous = now;
+      // Phase probes. A frame delta proves a stall happened; only these say where. Each is a pair
+      // of performance.now() reads around a block that could plausibly own a hundred milliseconds.
+      const phaseStart = performance.now();
       if (pauseReasons.size === 0) bridge.Advance(dt);
       else bridge.RefreshHotFrame();
+      const afterSim = performance.now();
+      recorder.observeFramePhase("sim", afterSim - phaseStart);
       const state = snapshotSource.frame(now);
+      recorder.observeFramePhase("snap", performance.now() - afterSim);
       latestState = state;
       const replayPresentation = advanceIncidentReplay(incidentReplay, state, now);
       const replayFrame = replayPresentation.frame;
@@ -6233,21 +6249,31 @@ async function boot() {
         recordCampaignQualification(state);
         reconcileBridgeLifecycle(state);
       }
+      const beforeMultiplayer = performance.now();
       multiplayer?.publish(state);
+      recorder.observeFramePhase("mp", performance.now() - beforeMultiplayer);
       // Debug/QA hook: lets browser automation inspect live control response, session lifecycle,
       // and state that a screenshot cannot establish. Keep this projection read-only; production
       // gameplay authority remains in SimulationSession.
       globalThis.__gunsState = state;
       globalThis.__gunsBridge = bridge;
       setMobileFrozen(state.frozen || replayActive);
+      const beforeTelemetry = performance.now();
       recorder.sample(state);
+      const afterTelemetry = performance.now();
+      recorder.observeFramePhase("tele", afterTelemetry - beforeTelemetry);
       renderTestFlightConsole(state);
       announceFlightState(state);
       const presentedState = replayPresentation.presentedState;
+      const beforeView = performance.now();
+      recorder.observeFramePhase("dom", beforeView - afterTelemetry);
       view.update(presentedState, replayActive ? dt : pauseReasons.size > 0 ? 0 : dt, now / 1000);
+      const afterView = performance.now();
+      recorder.observeFramePhase("view", afterView - beforeView);
       renderPilotPhysiology(presentedState);
       renderIncidentReplay(replayFrame);
       renderPauseUi(state);
+      recorder.observeFramePhase("ui", performance.now() - afterView);
       if (firstFrame) {
         firstFrame = false;
         bootScreen.classList.add("ready");

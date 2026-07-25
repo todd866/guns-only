@@ -338,9 +338,16 @@ test("production shell installs, updates, and safely labels the test-flight cons
   assert.match(appSource, /document\.addEventListener\("visibilitychange"/);
   assert.match(indexSource, /id="test-flight-console" hidden data-relevance="none"/);
   assert.match(indexSource, /#test-flight-console\[hidden\] \{ display: none; \}/);
-  assert.match(appSource, /testFlightConsole\.hidden = !relevant/);
+  // Visibility follows AVAILABILITY (are we flying), not RELEVANCE (is something wrong). The pilot
+  // asked for the tab to be there so they can read engine, bus, hydraulics and gear whenever they
+  // want; relevance still drives data-relevance, which is what makes it shout when it matters.
+  assert.match(appSource, /testFlightConsole\.hidden = !airborneSortie/);
   assert.match(appSource,
-    /state\.ready !== true && state\.paused !== true && state\.finished !== true[\s\S]*?testFlightConsoleRelevant\(projected\)/);
+    /const airborneSortie = state\.ready !== true && state\.paused !== true && state\.finished !== true/);
+  assert.match(appSource,
+    /const relevant = airborneSortie && testFlightConsoleRelevant\(projected\)/);
+  assert.match(appSource, /: projected\.warnings\.length \? "abnormal" : relevant \? "transition" : "none"/,
+    "an always-present console must still distinguish routine from abnormal");
   assert.doesNotMatch(indexSource, /<details id="test-flight-console" open>/,
     "test instrumentation must not cover the default flying view");
   assert.match(indexSource,

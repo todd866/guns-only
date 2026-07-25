@@ -52,25 +52,35 @@ public class FormationCombatTests {
             session.PlayerHitsTaken);
     }
 
+    /// One death is the expected cost of a fight pitched near a 4:1 win rate, and the pilot noticed
+    /// the moment it was over-rewarded: "when I restart after dying it's back to 1v1". The wave
+    /// survives a single loss and eases on the second — and when numbers DO go, they go before the
+    /// tier or the jet, because being outnumbered is the harshest of the three axes.
     [Fact]
-    public void LosingReturnsToASingleOpponentBeforeTheTierOrTheJet() {
+    public void NumbersSurviveOneLossAndEaseOnTheSecond() {
         var director = new FightDirector();
         SpawnSpec opening = director.NextSpawn(1);
         Assert.Equal(2, opening.FormationSize);
         Assert.Equal(PilotSkill.Ace, opening.Skill);
 
-        EngagementReport loss = new(
-            1, opening.Skill, OpponentWasBoss: false, SortieOutcome.Defeat,
+        static EngagementReport Loss(int engagement, PilotSkill skill) => new(
+            engagement, skill, OpponentWasBoss: false, SortieOutcome.Defeat,
             DurationSeconds: 40.0, SolutionSecondsConceded: 12.0, HitsTaken: 3,
             ShotsTotal: 8, ShotsInWindow: 1, Overshoots: 2,
             MinimumEnergyKias: 180.0, GcasActivations: 0);
-        director.Observe(in loss);
 
-        SpawnSpec afterLoss = director.NextSpawn(2);
-        Assert.Equal(1, afterLoss.FormationSize);
-        // Numbers go first: one defeat should not also strip the tier back to a warm-up.
-        Assert.True(afterLoss.Skill >= PilotSkill.Veteran,
-            $"one loss stripped too much at once: {afterLoss.Skill}");
+        EngagementReport first = Loss(1, opening.Skill);
+        director.Observe(in first);
+        SpawnSpec afterOne = director.NextSpawn(2);
+        Assert.Equal(2, afterOne.FormationSize);
+
+        EngagementReport second = Loss(2, afterOne.Skill);
+        director.Observe(in second);
+        SpawnSpec afterTwo = director.NextSpawn(3);
+        Assert.Equal(1, afterTwo.FormationSize);
+        // Numbers go first: two defeats should not also strip the tier back to a warm-up.
+        Assert.True(afterTwo.Skill >= PilotSkill.Veteran,
+            $"the numbers ease stripped too much at once: {afterTwo.Skill}");
     }
 
     [Fact]
