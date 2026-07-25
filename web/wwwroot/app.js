@@ -501,6 +501,10 @@ const FRAME_GOVERNOR_TRIP_FRACTION = 0.08;   // 8% of a window's frames arriving
 // one LOD0 chunk is ~9.5 ms of synchronous main-thread work, 57% of a 60 fps budget — so the only
 // lever that reliably buys frames is having fewer chunks in flight.
 const FRAME_GOVERNOR_RADII_M = [26_000, 18_000, 12_000];
+/// How far inside the streamed world edge the haze must close. Fog reaches 2% transmission at the
+/// visibility figure, so matching visibility exactly to the radius still leaves the boundary
+/// faintly drawn; 0.85 puts the last of the terrain behind effectively opaque air.
+const WORLD_EDGE_VISIBILITY_FRACTION = 0.85;
 
 const frameGovernor = {
   level: 0,
@@ -4971,8 +4975,22 @@ class FlightView {
       fogDensity = 1 / Math.max(1, Number(this.scene.fog?.far) || 56000);
     } else {
       const atmosphereMix = smoothstep(1800, 14000, cameraAltitude);
+      // Visibility is weather truth, but it may never exceed the distance at which the world
+      // actually stops. Streamed radius and fog are ONE knob: a 12 km world under 100 km
+      // visibility draws terrain that ends at a dead-straight chunk boundary in clear air. The
+      // pilot filed that as "still getting some z buffer issues I think" — it is not a depth
+      // artefact, it is the edge of the map with no haze over it, and the frame governor created
+      // it in Build 114 by shedding view distance without closing the visibility behind it.
+      const worldRadiusM = Number(this.terrainPresentation?.streamingRadiusM);
       const reportedVisibilityM = clamp(
-        Number(state.visibility_m) || CLEAR_AIR_VISIBILITY_M,
+        Math.min(
+          Number(state.visibility_m) || CLEAR_AIR_VISIBILITY_M,
+          Number.isFinite(worldRadiusM) && worldRadiusM > 0
+            // Fog reaches 2% transmission at the reported visibility, so closing it slightly
+            // INSIDE the geometric edge is what actually hides the boundary rather than tinting it.
+            ? worldRadiusM * WORLD_EDGE_VISIBILITY_FRACTION
+            : Number.POSITIVE_INFINITY,
+        ),
         150,
         200_000,
       );

@@ -20,6 +20,8 @@ build looked like at that moment. If the media moves to external storage later, 
 | `dev-2026-07-24-112629.mov` | 24 Jul 2026, 11:26 | 272 MiB | Immediately after the previous one — same session, same build. |
 | `dev-2026-07-25-153405.mov` | 25 Jul 2026, 15:34 | 379 MiB | **Build 114.** The sortie where the ladder finally bit: 1v2 opening wave against Aces, and the pilot was gunned down for the first time. Also the tape behind the frame-rate diagnosis — the matching telemetry session `web-1784957280750-142586` has windows whose MEDIAN frame is 166 ms and 283 ms. |
 | `dev-2026-07-25-153921.mov` | 25 Jul 2026, 15:39 | 19 MiB | Build 114, five minutes later. Recorded specifically to show the frame rate: "it's really bad for immersion". |
+| `dev-2026-07-25-160042.mov` | 25 Jul 2026, 16:00 | 344 MiB | Build 114/115. The target-aft BFM problem: "when it's target aft it becomes very difficult to tell where am I supposed to roll to pull to the enemy". |
+| `dev-2026-07-25-163933.mov` | 25 Jul 2026, 16:39 | 344 MiB | **Build 116** — first tape with the relocated pause button and the always-available AIRCRAFT SYSTEMS console. Filed as "still getting some z buffer issues I think"; it is not a depth artefact but the edge of the terrain dataset at 21,000 ft, which led to the world-edge fog coupling and the far-field terrain question. |
 
 ## If you want these in version control properly
 

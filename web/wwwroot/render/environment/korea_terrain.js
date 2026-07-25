@@ -829,6 +829,8 @@ class KoreaTerrainPresentation {
     this.ownsMeshWorkers = !options.terrainMeshWorkers;
     this.chunkLoadRadiusM = Number.isFinite(options.chunkLoadRadiusM)
       ? Math.max(0, options.chunkLoadRadiusM) : Number.POSITIVE_INFINITY;
+    // Same contract as the atlas: the renderer clamps visibility to the world edge, and a
+    // presentation that could not answer would silently opt out of that and show the boundary.
     this.chunkEvictRadiusM = Number.isFinite(options.chunkEvictRadiusM)
       ? Math.max(this.chunkLoadRadiusM, options.chunkEvictRadiusM)
       : Number.POSITIVE_INFINITY;
@@ -915,6 +917,10 @@ class KoreaTerrainPresentation {
     }
     if (disposePrevious) previousRuntime?.dispose();
     return Promise.all(replacements);
+  }
+
+  get streamingRadiusM() {
+    return this.chunkLoadRadiusM;
   }
 
   setSceneryEra(era) {
@@ -1274,6 +1280,15 @@ class KoreaTerrainAtlasPresentation {
   ///
   /// Fewer chunks in flight is therefore the lever that actually works, and shedding view distance
   /// before pixels is the right order: blur and haze are survivable, stutter is not.
+  /// How far the world actually extends right now. The renderer needs this to keep FOG honest:
+  /// visibility and streamed radius are ONE knob, not two. Shedding the radius without closing the
+  /// haze leaves the terrain ending at a dead-straight chunk boundary in clear air — the pilot
+  /// filed it as "still getting some z buffer issues I think", and it is not a depth artefact at
+  /// all, it is the edge of the loaded world with nothing drawn over it.
+  get streamingRadiusM() {
+    return this.chunkLoadRadiusM;
+  }
+
   setStreamingRadiusM(loadRadiusM) {
     if (this.disposed || !Number.isFinite(loadRadiusM) || loadRadiusM <= 0) return false;
     const previous = this.chunkLoadRadiusM;
