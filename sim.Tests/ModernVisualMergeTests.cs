@@ -523,4 +523,41 @@ public class ModernVisualMergeTests {
         Assert.Equal(GunProfiles.M61A2PublicDataSurrogate, gun.Profile);
         Assert.InRange(gun.RoundsFired, 5, 6);
     }
+
+    // Pilot spec: the OPENING fight starts far enough out to fly the weather on the way in.
+    // Continuous replacements are unaffected — they still merge at ~2.2 km.
+    [Fact]
+    public void OpeningMergeGivesRealRunInWithoutLengtheningReplacementMerges() {
+        BeatSetup beat = Beats.ModernVisualMerge();
+
+        double separationM = (beat.Bandit.Position - beat.Player.Position).Length;
+        Assert.InRange(separationM, 8_000.0, 11_000.0);
+
+        // Closure is the sum of the staged speeds; the run-in must be worth flying but must not
+        // become the quarter-minute-of-nothing the earlier close staging was fixing.
+        double closureMps = beat.Player.Speed + beat.Bandit.Speed;
+        Assert.InRange(separationM / closureMps, 12.0, 25.0);
+    }
+
+    [Fact]
+    public void OpeningRunInLaunchesClearCrossesCloudAndMergesVisual() {
+        BeatSetup beat = Beats.ModernVisualMerge();
+        var clouds = GunsOnly.Sim.Environment.KoreaWeatherPresets.ForBeat(7).Clouds;
+        var start = beat.Player.Position;
+        // The merge happens where the two closing tracks meet, i.e. midway along the split.
+        var merge = (beat.Player.Position + beat.Bandit.Position) * 0.5;
+
+        Assert.True(clouds.Sample(start, 0.0).VisibilityM > 50_000.0,
+            "the sortie must not begin inside cloud");
+        Assert.True(clouds.Sample(merge, 0.0).VisibilityM > 50_000.0,
+            "the first pass must be visual, not a blind merge in cloud");
+
+        int inCloud = 0;
+        for (double fraction = 0.0; fraction <= 1.0; fraction += 1.0 / 64.0) {
+            var at = start + (merge - start) * fraction;
+            if (clouds.Sample(at, 0.0).VisibilityM < 5_000.0) inCloud++;
+        }
+        Assert.True(inCloud >= 6,
+            $"the run-in only spends {inCloud}/65 samples in cloud — nothing to fly through");
+    }
 }

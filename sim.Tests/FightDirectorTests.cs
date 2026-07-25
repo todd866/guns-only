@@ -67,8 +67,20 @@ public class FightDirectorTests {
         }
     }
 
+    // A win that took real time is a CONTESTED win: the player earned it but the tier was a
+    // genuine test, so the ladder still climbs one polite rung. Duration is the only difference
+    // from StrongReport — with SolutionSecondsConceded at zero the skill bands score identically,
+    // so these two helpers isolate the walkover rule and nothing else.
+    static EngagementReport ContestedWin(
+        int engagementNumber,
+        PilotSkill opponentSkill,
+        SortieOutcome outcome = SortieOutcome.Victory,
+        bool boss = false) =>
+        StrongReport(engagementNumber, opponentSkill, outcome, boss,
+            durationSeconds: 90.0);
+
     [Fact]
-    public void BuildMovesOnlyOneTierPerCompletedEngagement() {
+    public void BuildMovesOnlyOneTierPerContestedEngagement() {
         var descending = new FightDirector();
         EngagementReport firstLoss = WeakReport(1, PilotSkill.Ace);
         descending.Observe(in firstLoss);
@@ -83,21 +95,73 @@ public class FightDirectorTests {
         Assert.Equal(PilotSkill.Novice, descending.NextSpawn(4).Skill);
 
         var climbing = new FightDirector();
-        EngagementReport noviceWin = StrongReport(
-            1, PilotSkill.Novice, durationSeconds: 10.0);
+        EngagementReport noviceWin = ContestedWin(1, PilotSkill.Novice);
         climbing.Observe(in noviceWin);
         Assert.Equal(PilotSkill.Competent, climbing.NextSpawn(2).Skill);
 
-        EngagementReport competentWin = StrongReport(
-            2, PilotSkill.Competent, durationSeconds: 10.0);
+        EngagementReport competentWin = ContestedWin(2, PilotSkill.Competent);
         climbing.Observe(in competentWin);
         Assert.Equal(PilotSkill.Veteran, climbing.NextSpawn(3).Skill);
 
-        EngagementReport veteranWin = StrongReport(
-            3, PilotSkill.Veteran, durationSeconds: 10.0);
+        EngagementReport veteranWin = ContestedWin(3, PilotSkill.Veteran);
         climbing.Observe(in veteranWin);
         Assert.Equal(PilotSkill.Ace, climbing.NextSpawn(4).Skill);
         Assert.Equal(DirectorPhase.Build, climbing.Phase);
+        Assert.Equal(0, climbing.WalkoverStreak);
+    }
+
+    // The pilot complaint this exists for: "I had a really easy time killing everybody." Quick,
+    // untouched kills must stop the ladder from walking up one rung at a time behind the player.
+    [Fact]
+    public void QuickUntouchedWinsPressTheLadderFasterThanOneRungPerFight() {
+        var director = new FightDirector();
+
+        // Fight 1 is still the forgiving warm-up: a cold start has no evidence to act on.
+        Assert.Equal(PilotSkill.Novice, director.NextSpawn(1).Skill);
+        EngagementReport first = StrongReport(
+            1, PilotSkill.Novice, durationSeconds: 20.0);
+        director.Observe(in first);
+        Assert.Equal(1, director.WalkoverStreak);
+
+        // One walkover is not yet evidence — the ladder still steps.
+        Assert.Equal(PilotSkill.Competent, director.NextSpawn(2).Skill);
+        EngagementReport second = StrongReport(
+            2, PilotSkill.Competent, durationSeconds: 20.0);
+        director.Observe(in second);
+
+        // Two: commit straight to the player's estimated band instead of stepping toward it. Two
+        // flawless fights already carry the band to Dominant, so this IS the ceiling — the player
+        // meets an Ace on fight three rather than fight four, and only after proving they earned it.
+        SpawnSpec pressed = director.NextSpawn(3);
+        Assert.Equal(PilotSkill.Ace, pressed.Skill);
+        Assert.Contains("walkover", pressed.Reason, StringComparison.OrdinalIgnoreCase);
+        EngagementReport third = StrongReport(
+            3, pressed.Skill, durationSeconds: 20.0);
+        director.Observe(in third);
+
+        // Three: the ceiling stays on the table; the ladder does not relax behind a dominant run.
+        Assert.Equal(PilotSkill.Ace, director.NextSpawn(4).Skill);
+    }
+
+    [Fact]
+    public void OneHitTakenEndsTheWalkoverStreakAndRestoresTheGentleRamp() {
+        var director = new FightDirector();
+        for (int engagement = 1; engagement <= 2; engagement++) {
+            SpawnSpec spawn = director.NextSpawn(engagement);
+            EngagementReport walkover = StrongReport(
+                engagement, spawn.Skill, durationSeconds: 20.0);
+            director.Observe(in walkover);
+        }
+        Assert.Equal(2, director.WalkoverStreak);
+
+        SpawnSpec pressed = director.NextSpawn(3);
+        EngagementReport bloodied = StrongReport(
+            3, pressed.Skill, durationSeconds: 20.0) with { HitsTaken = 1 };
+        director.Observe(in bloodied);
+
+        Assert.Equal(0, director.WalkoverStreak);
+        SpawnSpec next = director.NextSpawn(4);
+        Assert.Contains("build", next.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -180,42 +244,69 @@ public class FightDirectorTests {
         Assert.False(firstRelease.Boss);
         Assert.Contains("release", firstRelease.Reason,
             StringComparison.OrdinalIgnoreCase);
-        EngagementReport firstReleaseWin = StrongReport(
-            6, firstRelease.Skill, durationSeconds: 20.0);
+        // Contested release wins: this test is about the DEFEAT release schedule, so it must not
+        // also trip the walkover press and change the tier it asserts on the way out.
+        EngagementReport firstReleaseWin = ContestedWin(6, firstRelease.Skill);
         director.Observe(in firstReleaseWin);
         Assert.Equal(DirectorPhase.Release, director.Phase);
 
         SpawnSpec secondRelease = director.NextSpawn(7);
         Assert.Equal(PilotSkill.Competent, secondRelease.Skill);
-        EngagementReport secondReleaseWin = StrongReport(
-            7, secondRelease.Skill, durationSeconds: 20.0);
+        EngagementReport secondReleaseWin = ContestedWin(7, secondRelease.Skill);
         director.Observe(in secondReleaseWin);
 
         Assert.Equal(DirectorPhase.Build, director.Phase);
         Assert.Equal(PilotSkill.Veteran, director.NextSpawn(8).Skill);
     }
 
+    // Regression for the sawtooth caught in the Build 100 production sortie: the player beat the
+    // boss and the director then served COMPETENT and VETERAN. Beating the hardest thing in the
+    // game must never be the reason the next fights get easier.
     [Fact]
-    public void BeatingTheBossShortensReleaseToOneEngagement() {
+    public void WalkingOverTheBossEarnsNoPressureReleaseAtAll() {
         var director = new FightDirector();
         SpawnSpec boss = DriveToBoss(director);
 
-        EngagementReport bossVictory = StrongReport(
+        EngagementReport bossWalkover = StrongReport(
             5,
             boss.Skill,
             outcome: SortieOutcome.Victory,
             boss: true,
             durationSeconds: 20.0);
-        director.Observe(in bossVictory);
-
-        SpawnSpec release = director.NextSpawn(6);
-        Assert.Equal(PilotSkill.Competent, release.Skill);
-        EngagementReport releaseWin = StrongReport(
-            6, release.Skill, durationSeconds: 80.0);
-        director.Observe(in releaseWin);
+        director.Observe(in bossWalkover);
 
         Assert.Equal(DirectorPhase.Build, director.Phase);
-        Assert.Equal(PilotSkill.Veteran, director.NextSpawn(7).Skill);
+        SpawnSpec next = director.NextSpawn(6);
+        Assert.False(next.Boss);
+        Assert.DoesNotContain("release", next.Reason, StringComparison.OrdinalIgnoreCase);
+        // The old rule served Competent here — two tiers below the last ordinary opponent.
+        Assert.True(next.Skill >= PilotSkill.Veteran,
+            $"beating the boss must not soften the ladder; got {next.Skill}");
+    }
+
+    [Fact]
+    public void ABossWinThatCostSomethingEarnsOneReleaseFightOneTierDown() {
+        var director = new FightDirector();
+        SpawnSpec boss = DriveToBoss(director);
+
+        // Won, but the player was hit and it took real time: that earns decompression.
+        EngagementReport costlyVictory = StrongReport(
+            5,
+            boss.Skill,
+            outcome: SortieOutcome.Victory,
+            boss: true,
+            durationSeconds: 95.0) with { HitsTaken = 2 };
+        director.Observe(in costlyVictory);
+
+        Assert.Equal(DirectorPhase.Release, director.Phase);
+        SpawnSpec release = director.NextSpawn(6);
+        // ONE tier below the last ordinary opponent (Ace), not the two that gave Competent.
+        Assert.Equal(PilotSkill.Veteran, release.Skill);
+        Assert.Contains("release", release.Reason, StringComparison.OrdinalIgnoreCase);
+
+        EngagementReport releaseWin = ContestedWin(6, release.Skill);
+        director.Observe(in releaseWin);
+        Assert.Equal(DirectorPhase.Build, director.Phase);
     }
 
     [Fact]

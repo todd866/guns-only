@@ -23,6 +23,19 @@ public sealed class FightDirector {
     const int ReleaseAfterBossLoss = 2;
     const int ReleaseAfterBossWin = 1;
 
+    // A fight won QUICKLY and WITHOUT being touched is not a close-run thing the ladder should
+    // reward with one polite rung. It is the player saying the tier is beneath them. These three
+    // constants are the whole "earned ladder": how fast counts as a walkover, how many walkovers
+    // commit the ladder to the player's estimated band, and how many put the ceiling on the table
+    // directly (the band estimator moves only one step per fight by design, so on a genuinely
+    // dominant run it LAGS the evidence and must be overridden rather than waited for).
+    const double WalkoverSeconds = 45.0;
+    const int WalkoversToCommitToBand = 2;
+    const int WalkoversToPressTheCeiling = 3;
+    // Cooldown before the ceiling demonstration may reappear, shortened while the player is
+    // walking over the ladder so the boss is not held back by bookkeeping.
+    const int WalkoverBossCooldownEngagements = 2;
+
     readonly LearnerModel _learner = new();
     DirectorPhase _phase = DirectorPhase.Calm;
     bool _anyObserved;
@@ -34,8 +47,14 @@ public sealed class FightDirector {
     PilotSkill _lastOrdinaryOpponent = PilotSkill.Novice;
     int _releaseRemaining;
     PilotSkill _releaseTier = PilotSkill.Novice;
+    // Consecutive engagements — boss fights included, because this is pacing and not the skill
+    // estimate — won quickly and without conceding a hit.
+    int _walkoverStreak;
 
     public DirectorPhase Phase => _phase;
+    /// How many consecutive fights the player has won quickly and untouched. Exposed for debrief
+    /// and telemetry; it explains an aggressive ladder jump rather than causing one.
+    public int WalkoverStreak => _walkoverStreak;
     public LearnerBands Bands => _learner.Bands;
     /// True once any engagement has been observed — the gate for consulting the director on a
     /// sortie's OPENING spawn, so pacing memory (a boss loss, an easing streak) survives the
@@ -46,13 +65,31 @@ public sealed class FightDirector {
         _learner.Observe(in report);
         _lastOpponent = report.OpponentSkill;
 
+        bool walkover = report.Outcome == SortieOutcome.Victory
+            && report.HitsTaken == 0
+            && report.DurationSeconds < WalkoverSeconds;
+        _walkoverStreak = walkover ? _walkoverStreak + 1 : 0;
+
         if (report.OpponentWasBoss) {
-            // The ceiling demonstration is over either way: serve the pressure-release fights,
-            // shortened when the player actually took the boss down.
-            _releaseRemaining = report.Outcome == SortieOutcome.Victory
-                ? ReleaseAfterBossWin : ReleaseAfterBossLoss;
-            _releaseTier = TwoTiersBelow(_lastOrdinaryOpponent);
             _engagementsSinceBoss = 0;
+            // Beating the ceiling must never make the game easier. Walking over the boss earns NO
+            // pressure release — the player has just proved they do not need one, and serving them
+            // two tiers down was the sawtooth that made a dominant run get progressively softer.
+            // A boss win that actually cost something still earns one decompression fight, but one
+            // tier down rather than two. Only a boss DEFEAT gets the full two-tier, two-fight
+            // release: that is the case pressure relief exists for.
+            if (report.Outcome == SortieOutcome.Victory) {
+                if (walkover) {
+                    _releaseRemaining = 0;
+                    _phase = DirectorPhase.Build;
+                    return;
+                }
+                _releaseRemaining = ReleaseAfterBossWin;
+                _releaseTier = OneTierBelow(_lastOrdinaryOpponent);
+            } else {
+                _releaseRemaining = ReleaseAfterBossLoss;
+                _releaseTier = TwoTiersBelow(_lastOrdinaryOpponent);
+            }
             _phase = DirectorPhase.Release;
             return;
         }
@@ -95,6 +132,8 @@ public sealed class FightDirector {
 
         _phase = DirectorPhase.Build;
         PilotSkill target = BandTier(_learner.Bands.Overall);
+        // Easing a player who is genuinely losing comes FIRST and is unconditional: a loss streak
+        // resets the walkover streak anyway, so these two can never contend.
         if (_learner.LossStreak >= 2) {
             PilotSkill eased = OneTierBelow(target);
             PilotSkill spawn = OneStepToward(_lastOpponent, eased);
@@ -102,6 +141,12 @@ public sealed class FightDirector {
                 FormattableString.Invariant(
                     $"ease: {_learner.LossStreak} straight losses"));
         }
+
+        if (_walkoverStreak >= WalkoversToPressTheCeiling) target = PilotSkill.Ace;
+        if (_walkoverStreak >= WalkoversToCommitToBand)
+            return WithDoctrine(target, engagementNumber, boss: false,
+                FormattableString.Invariant(
+                    $"press: {_walkoverStreak} straight untouched walkovers"));
 
         PilotSkill build = OneStepToward(_lastOpponent, target);
         return WithDoctrine(build, engagementNumber, boss: false,
@@ -118,13 +163,15 @@ public sealed class FightDirector {
         _lastOrdinaryOpponent = PilotSkill.Novice;
         _releaseRemaining = 0;
         _releaseTier = PilotSkill.Novice;
+        _walkoverStreak = 0;
     }
 
     bool BossTriggerHolds() =>
         _learner.WinStreak >= BossWinStreak
         && _learner.SecondsSinceLastDefeat >= BossUnbeatenSeconds
         && _learner.Bands.Overall >= SkillBand.Sharp
-        && _engagementsSinceBoss >= BossCooldownEngagements;
+        && _engagementsSinceBoss >= (_walkoverStreak >= WalkoversToCommitToBand
+            ? WalkoverBossCooldownEngagements : BossCooldownEngagements);
 
     static SpawnSpec WithDoctrine(
         PilotSkill skill, int engagementNumber, bool boss, string reason) {
