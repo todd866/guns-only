@@ -123,9 +123,14 @@ test("padlock owns a specific contact and exposes an honest accessible lifecycle
     "selection must bind to the current contact instead of silently following the next one");
   // The pilot shoots the leader and presses V expecting the survivor: acquisition must fall
   // through to the wingman while the primary slot still holds the dead leader.
-  assert.match(toggle,
-    /!padlockTargetValid\(latestState, "bandit"\)[\s\S]*?wingmanPadlockAvailable\(\)[\s\S]*?padlockTarget = "wingman"/,
+  const defaultTarget = balancedBlock(appSource, "function defaultPadlockTarget()");
+  assert.match(defaultTarget,
+    /!padlockTargetValid\(latestState, "bandit"\)[\s\S]*?wingmanPadlockAvailable\(\)[\s\S]*?return "wingman"/,
     "a dead primary must not block acquiring the surviving wingman");
+  // V is a VIEW toggle and nothing more. Folding target selection into it meant the only route
+  // from one bandit to the other ran through the forward view, which in a 1v2 costs sight of both.
+  assert.doesNotMatch(toggle, /padlockTarget = "wingman"/,
+    "V must not cycle contacts — that is Tab's job, and cycling via OFF loses the tally");
   assert.match(appSource,
     /padlockEntityId[\s\S]*?nextBanditEntityId !== padlockEntityId[\s\S]*?releasePadlock\("target changed"\)/,
     "replacement/despawned contacts must explicitly break the old padlock");
@@ -282,4 +287,31 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
     "range and closure belong beside the tracked target even in padlock");
   assert.match(bandit, /targetRangeReadout\(state\.range_m\)/);
   assert.match(bandit, /targetClosureReadout\(state\.closure_kts\)/);
+});
+
+test("Tab swaps the padlocked contact without passing through the forward view", () => {
+  const cycle = balancedBlock(appSource, "function cyclePadlockTarget()");
+  // Cold press: Tab acquires rather than doing nothing, so a pilot who reaches for it first still
+  // gets a tally.
+  assert.match(cycle, /if \(!padlock\)[\s\S]*?acquirePadlock\(defaultPadlockTarget\(\), "cycle"\)/,
+    "Tab from the forward view must acquire the obvious contact");
+  // The whole point: swap targets while STILL padlocked. A release would centre the gimbal and
+  // cost the pilot sight of both aircraft for the seconds it takes to come back.
+  assert.doesNotMatch(cycle, /releasePadlock\(/,
+    "cycling must never let go of the padlock");
+  assert.match(cycle,
+    /acquirePadlock\(padlockTarget === "bandit" \? "wingman" : "bandit", "cycle"\)/,
+    "Tab must alternate between the live contacts");
+  // A key that appears to do nothing reads as a bug. Say why instead.
+  assert.match(cycle, /!wingmanPadlockAvailable\(\)[\s\S]*?no other contact/,
+    "a lone bandit must announce that there is nothing to cycle to");
+
+  // Anchor on installInput: there are several keydown listeners in app.js and only the flight one
+  // may claim Tab.
+  const keydown = balancedBlock(appSource, "function installInput(view)");
+  assert.match(keydown,
+    /event\.code === "Tab"[\s\S]*?readyScreen\.classList\.contains\("visible"\)[\s\S]*?settingsScreen\?\.classList\.contains\("visible"\)[\s\S]*?return/,
+    "the menus keep their own Tab focus traps — flight must not steal Tab from them");
+  assert.match(keydown, /event\.code === "Tab"[\s\S]*?event\.preventDefault\(\)[\s\S]*?cyclePadlockTarget\(\)/,
+    "in flight Tab must cycle targets and not walk browser focus out of the canvas");
 });

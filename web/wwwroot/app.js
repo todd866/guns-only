@@ -474,6 +474,26 @@ const FRAME_GOVERNOR_WINDOW_MS = 1000;
 // One missed display interval, not a 50 ms stall. The original threshold was 50 ms, which is why
 // production tapes reported ~0 long frames while p95 sat at 33 ms: the pilot was feeling 30 fps
 // and the counter was blind to it.
+// How much simulated time one rendered frame may ever catch up. This is a SPIRAL BRAKE, not a
+// performance tuning knob.
+//
+// The kernel runs 120 Hz fixed ticks, so a 60 fps frame owes it 2 ticks. The old cap was 0.25 s —
+// THIRTY ticks in a single frame, each one stepping the player, every bandit's lookahead, and the
+// terrain queries underneath them. That turns any one-off hitch into a self-sustaining stall: the
+// long frame runs a huge catch-up, the catch-up makes the next frame long, and it feeds itself
+// until the scene happens to get cheaper. A Build 114 tape shows exactly that signature — windows
+// where the MEDIAN frame sat at 166 ms and 283 ms for five seconds straight (6 fps and 3.6 fps),
+// with geometries, programs and scene objects all flat, so nothing was being built or compiled. It
+// was the loop eating itself.
+//
+// Ten ticks recovers an ordinary five-frame hitch inside one frame and still leaves 5x headroom
+// over the 2 ticks a healthy frame needs. Past that the simulation deliberately loses wall-clock
+// time rather than chase it. Slight slow motion during a stall is the correct trade: the pilot
+// keeps control authority and the frame rate recovers, instead of both being surrendered for
+// several seconds. It also removes a quarter-second window in which the pilot's stick was frozen
+// while the aircraft flew on — which is how a low-altitude fight ends in a smoking hole.
+const SIM_CATCHUP_CAP_SECONDS = 10 / 120;
+
 const FRAME_GOVERNOR_LATE_FRAME_MS = 22;
 const FRAME_GOVERNOR_TRIP_FRACTION = 0.08;   // 8% of a window's frames arriving late
 
@@ -1321,7 +1341,7 @@ const MISSION_BRIEFS = Object.freeze({
     configuration: "F-86F-30 · guns hot · high-six perch",
     card: "Start high at the bandit's six and convert the perch into a gun solution.",
     brief: "Convert altitude and position into a controlled gun solution. Stay in plane, manage closure, and do not trade the perch for an overshoot.",
-    controls: "Arrows fly · W/S power · F guns · V padlock\nSpace releases the G limiter · H opens controls",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace releases the G limiter · H opens controls",
   },
   2: {
     activity: "dogfight",
@@ -1331,7 +1351,7 @@ const MISSION_BRIEFS = Object.freeze({
     configuration: "F-86F-30 · guns hot · bandit high six",
     card: "A bandit begins at your high six. Survive, then reverse the fight.",
     brief: "Survive the opening break, preserve energy, and reverse the geometry when the attacker spends too much nose authority.",
-    controls: "Arrows fly · W/S power · F guns · V padlock\nSpace releases the G limiter · H opens controls",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace releases the G limiter · H opens controls",
   },
   3: {
     activity: "gunnery",
@@ -1341,7 +1361,7 @@ const MISSION_BRIEFS = Object.freeze({
     configuration: "F-86F-30 · guns hot · tracking start",
     card: "Track a weaving target and fire only from a stable gun solution.",
     brief: "Settle behind the target, control angle-off and closure, then fire only when the lead solution stabilises inside the gun envelope.",
-    controls: "Arrows fly · W/S power · F guns · V padlock\nFire only after the lead solution settles",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nFire only after the lead solution settles",
   },
   4: {
     activity: "gunnery",
@@ -1351,7 +1371,7 @@ const MISSION_BRIEFS = Object.freeze({
     configuration: "Engine-less glider · 50 rounds · one pass",
     card: "Trade a finite altitude budget for one engine-less attack on an AWACS.",
     brief: "You are already in the terminal geometry with no engine. Dispose of excess altitude in a controlled dive, protect enough IAS for one gun solution, and do not plan a second attack.",
-    controls: "Arrows fly · F guns · V padlock\nNo engine: altitude is the complete energy budget",
+    controls: "Arrows fly · F guns · V padlock · Tab target\nNo engine: altitude is the complete energy budget",
   },
   5: {
     activity: "carrier",
@@ -1380,7 +1400,7 @@ const MISSION_BRIEFS = Object.freeze({
     configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     card: "Splash successive Su-27 surrogates; each replacement enters through a fresh neutral merge.",
     brief: "Each splash stages another offset Su-27 visual merge after a short destruction dwell. Fuel, ammunition, ownship damage, and kill count persist, so burst discipline matters; every new opponent starts guns-safe through the first pass. Fight for the rear quarter, preserve energy, and manage both G onset and duration: 9 G is available, but vision and consciousness are physiological state. Auto-GCAS responds only to predicted terrain collision; hold K to paddle an active fly-up. No missiles or unmodelled modern sensors.",
-    controls: "Arrows fly · W/S power · F guns · V padlock\nSpace releases the G limiter · hold K only to paddle an active Auto-GCAS fly-up",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace releases the G limiter · hold K only to paddle an active Auto-GCAS fly-up",
   },
   8: {
     activity: "defence",
@@ -1390,7 +1410,7 @@ const MISSION_BRIEFS = Object.freeze({
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 5,500 LB · Bingo 3,500 LB · Auto-GCAS armed · one authoritative target at a time",
     card: "Stop four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring.",
     brief: "This is a four-raider sequential stream: one target is authoritative at a time, and the next enters only after the current raider is killed or leaks. Fly cutoff geometry, take the first valid gun solution, and protect ammunition; the score rewards zero leakers, quick neutralizations, and rounds per kill. Auto-GCAS is terrain-triggered and K is its held paddle override.",
-    controls: "Arrows fly · W/S power · F guns · V padlock\n480 rounds for four raiders · hold K only during an active Auto-GCAS fly-up",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\n480 rounds for four raiders · hold K only during an active Auto-GCAS fly-up",
   },
 });
 
@@ -1401,7 +1421,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "F-22A vs Su-27S · guns only · first pass safe",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     brief: "You are already at the visual merge. Survive the first pass, fight into the rear quarter, and splash one Su-27 surrogate. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
-    controls: "Arrows fly · W/S power · F guns · V padlock\nSplash one bandit to qualify · Space releases the G limiter",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash one bandit to qualify · Space releases the G limiter",
   }),
   "raid-defence": Object.freeze({
     ...MISSION_BRIEFS[8],
@@ -1416,7 +1436,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Endurance Merge",
     sortie: "Successive visual merges · persistent fuel, ammunition, and damage",
     brief: "Two splashes earn carrier conversion. Each replacement Su-27 enters through a fresh neutral merge while fuel, ammunition, damage, and your kill count persist. Burst discipline and G management now matter across the whole sortie, not just one fight.",
-    controls: "Arrows fly · W/S power · F guns · V padlock\nSplash two bandits in one sortie to qualify",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash two bandits in one sortie to qualify",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -1424,7 +1444,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "F-22A vs Su-27S ace · lone guns-only duel · first pass safe",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     brief: "The programme's final exam: one merge, one bandit, flown by the best pilot the ladder can field. This Su-27 surrogate reads the fight a manoeuvre ahead—it converts the merge and takes it into the vertical. Survive the first pass, then out-fly a genuine ace for the rear quarter and splash it. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
-    controls: "Arrows fly · W/S power · F guns · V padlock\nSplash the ace to complete the programme · Space releases the G limiter",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash the ace to complete the programme · Space releases the G limiter",
   }),
 });
 
@@ -1766,40 +1786,69 @@ function resetMissionPresentation() {
   activeView?.hud.setLegendVisible?.(false);
 }
 
-function togglePadlock() {
-  // With a formation there is more than one thing worth looking at, so V CYCLES the contacts that
-  // exist rather than being a plain on/off: off -> primary -> wingman -> off. A 1v1 wave has no
-  // wingman, so it collapses back to the original two-state toggle.
-  if (padlock && padlockTarget === "bandit" && wingmanPadlockAvailable()) {
-    padlockTarget = "wingman";
-    padlockEntityId = `${projectedId(latestState?.bandit_entity_id)}.wingman`;
-    padlockPhase = manualLookActive() ? "SLEW" : "ACQUIRE";
-    padlockTrackEstablished = false;
-    gimbalReturnFast = false;
-    syncBanditPadlockRollAssist();
-    syncPadlockUi(`${padlockLabel()} padlock on`);
-    recorder.event("view", "Padlock", {
-      selected: true,
-      target: padlockTarget,
-      entity_id: padlockEntityId,
-      reason: "cycle",
-    });
+/// Point the padlock at `target` without passing through the forward view. Used both by V when it
+/// first acquires and by Tab when it swaps contacts mid-fight.
+function acquirePadlock(target, reason) {
+  padlock = true;
+  padlockTarget = target;
+  padlockEntityId = target === "carrier" ? "carrier"
+    : target === "wingman"
+      ? `${projectedId(latestState?.bandit_entity_id)}.wingman`
+      : projectedId(latestState?.bandit_entity_id);
+  padlockPhase = manualLookActive() ? "SLEW" : "ACQUIRE";
+  padlockTrackEstablished = false;
+  gimbalReturnFast = false;
+  syncBanditPadlockRollAssist();
+  syncPadlockUi(`${padlockLabel()} padlock on`);
+  recorder.event("view", "Padlock", {
+    selected: true,
+    target: padlockTarget,
+    entity_id: padlockEntityId,
+    reason,
+  });
+}
+
+/// The contact V should acquire from cold: whatever the situation makes obvious, except that a
+/// just-shot leader still occupying the primary slot hands off to the survivor.
+function defaultPadlockTarget() {
+  const target = contextualPadlockTarget(latestState);
+  // The pilot shot the leader down and pressed V expecting to look at the survivor — "he should
+  // still be there", and he is. The primary slot holds the DEAD leader until promotion fires a
+  // couple of seconds later, and a dead aircraft is not padlock-eligible, so acquisition used to
+  // silently fail in exactly the moment the pilot most wants to find the other one.
+  if (target === "bandit" && !padlockTargetValid(latestState, "bandit")
+      && wingmanPadlockAvailable()) {
+    return "wingman";
+  }
+  return target;
+}
+
+/// TAB — swap which contact the padlock holds, WITHOUT letting go of it. Cycling used to be folded
+/// into V, which meant the only way from one bandit to the other was through the forward view: the
+/// pilot lost sight of both aircraft for the two seconds the gimbal took to centre and come back.
+/// In a 1v2 that is the whole fight. V is now purely "am I padlocked", Tab is purely "at whom".
+function cyclePadlockTarget() {
+  if (!padlock) {
+    acquirePadlock(defaultPadlockTarget(), "cycle");
     return;
   }
+  if (!wingmanPadlockAvailable()) {
+    // Nothing to cycle to. Say so rather than silently doing nothing to a pressed key.
+    syncPadlockUi(`${padlockLabel()} padlock · no other contact`);
+    return;
+  }
+  acquirePadlock(padlockTarget === "bandit" ? "wingman" : "bandit", "cycle");
+}
+
+/// V — padlock on or off. It keeps the contact Tab last selected, so V is a view toggle and
+/// nothing else.
+function togglePadlock() {
   if (padlock) {
     releasePadlock("manual");
     return;
   }
   padlock = true;
-  padlockTarget = contextualPadlockTarget(latestState);
-  // The pilot shot the leader down and pressed V expecting to look at the survivor — "he should
-  // still be there", and he is. The primary slot holds the DEAD leader until promotion fires a
-  // couple of seconds later, and a dead aircraft is not padlock-eligible, so acquisition used to
-  // silently fail in exactly the moment the pilot most wants to find the other one.
-  if (padlockTarget === "bandit" && !padlockTargetValid(latestState, "bandit")
-      && wingmanPadlockAvailable()) {
-    padlockTarget = "wingman";
-  }
+  padlockTarget = defaultPadlockTarget();
   padlockEntityId = padlockTarget === "carrier" ? "carrier"
     : padlockTarget === "wingman"
       ? `${projectedId(latestState?.bandit_entity_id)}.wingman`
@@ -2147,7 +2196,7 @@ function renderPauseUi(state = latestState) {
         ? "Maintenance profile · axial deck"
         : brief.configuration || "Guns hot · air start";
     if (readyControls) readyControls.textContent = brief.controls
-      || "Arrows fly · W/S power · F guns · V padlock\nH opens controls · R restarts";
+      || "Arrows fly · W/S power · F guns · V padlock · Tab target\nH opens controls · R restarts";
     readyStart.textContent = `Fly ${brief.title}`;
     readyHint.textContent = background ? "Return to the game to fly" : "Press Enter to fly";
   } else {
@@ -5919,6 +5968,19 @@ function installInput(view) {
       return;
     }
 
+    // Tab cycles which contact the padlock holds. It is deliberately NOT a mapped game key: it
+    // carries no held state and must never reach the kernel's key grammar. preventDefault is
+    // essential — the browser default would walk focus out of the canvas mid-fight.
+    if (event.code === "Tab") {
+      // The ready and settings screens run their own Tab focus traps. Leave those alone: hijacking
+      // Tab in a menu would make the menu unreachable by keyboard.
+      if (readyScreen.classList.contains("visible")
+        || settingsScreen?.classList.contains("visible")) return;
+      event.preventDefault();
+      cyclePadlockTarget();
+      return;
+    }
+
     const gkey = keyMap.get(event.code);
     if (gkey === undefined) return;
     if (!pressMappedKey(event.code, "keyboard")) return;
@@ -6158,7 +6220,7 @@ async function boot() {
       // not the 0.25 s simulation-advance cap.
       recorder.observeFrameDelta(now - previous);
       frameGovernor.observe(now - previous, now, activeView);
-      const dt = clamp((now - previous) / 1000, 0, 0.25);
+      const dt = clamp((now - previous) / 1000, 0, SIM_CATCHUP_CAP_SECONDS);
       previous = now;
       if (pauseReasons.size === 0) bridge.Advance(dt);
       else bridge.RefreshHotFrame();

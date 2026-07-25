@@ -103,8 +103,19 @@ test("the browser recorder feeds raw render deltas and never displaces state row
   assert.match(app, /function sampleSceneCounters\(\) \{[\s\S]*?activeView\?\.renderer\?\.info/);
   assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?geometries: info\.memory\?\.geometries/);
   assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?textures: info\.memory\?\.textures/);
-  // The render loop hands the recorder the raw delta before the simulation-advance clamp.
-  assert.match(app, /recorder\.observeFrameDelta\(now - previous\);[\s\S]{0,300}?clamp\(\(now - previous\) \/ 1000, 0, 0\.25\)/);
+  // The render loop hands the recorder the raw delta before the simulation-advance clamp, so a
+  // stall is measured at its true length rather than at the length the kernel was willing to run.
+  assert.match(app,
+    /recorder\.observeFrameDelta\(now - previous\);[\s\S]{0,300}?clamp\(\(now - previous\) \/ 1000, 0, SIM_CATCHUP_CAP_SECONDS\)/);
+  // That cap is a spiral brake. At 120 Hz a healthy 60 fps frame owes the kernel 2 ticks; letting
+  // one frame catch up 0.25 s meant THIRTY, so a single hitch bought its own successor and the tape
+  // showed five-second windows with a 166 ms and a 283 ms MEDIAN frame. Keep it within a handful of
+  // ticks — if this ever climbs back toward 0.25 s the death spiral comes with it.
+  const cap = app.match(/const SIM_CATCHUP_CAP_SECONDS = ([^;]+);/)?.[1];
+  assert.ok(cap, "the simulation catch-up cap must stay a named, documented constant");
+  const capSeconds = Number(new Function(`return ${cap}`)());
+  assert.ok(capSeconds > 2 / 120 && capSeconds <= 12 / 120,
+    `catch-up cap must recover an ordinary hitch without spiralling, got ${capSeconds}s`);
   // Backpressure discipline: a full bounded queue skips the perf row rather than letting the
   // enqueue overflow trim displace a state row.
   assert.match(app, /observeFrameDelta\(deltaMs\) \{[\s\S]*?if \(this\.buf\.length >= TELEMETRY_BUFFER_LIMIT\) return;[\s\S]*?k: "perf"/);

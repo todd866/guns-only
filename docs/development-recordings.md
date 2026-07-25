@@ -18,6 +18,8 @@ build looked like at that moment. If the media moves to external storage later, 
 | `dev-2026-07-23-100532.mov` | 23 Jul 2026, 10:05 | 457 MiB | Morning of the day that ended with the **Fight Director** landing — low-block hunting and the Su-35S ace rung merged that evening (`a8adb8d`), followed by the 15 G machine spike (`1eefec3`). |
 | `dev-2026-07-24-112315.mov` | 24 Jul 2026, 11:23 | 183 MiB | **Build 97** era, before that evening's terrain performance work (chunk-build time-slicing `5abdd06` and analytic terrain normals `0e5ff22`). |
 | `dev-2026-07-24-112629.mov` | 24 Jul 2026, 11:26 | 272 MiB | Immediately after the previous one — same session, same build. |
+| `dev-2026-07-25-153405.mov` | 25 Jul 2026, 15:34 | 379 MiB | **Build 114.** The sortie where the ladder finally bit: 1v2 opening wave against Aces, and the pilot was gunned down for the first time. Also the tape behind the frame-rate diagnosis — the matching telemetry session `web-1784957280750-142586` has windows whose MEDIAN frame is 166 ms and 283 ms. |
+| `dev-2026-07-25-153921.mov` | 25 Jul 2026, 15:39 | 19 MiB | Build 114, five minutes later. Recorded specifically to show the frame rate: "it's really bad for immersion". |
 
 ## If you want these in version control properly
 

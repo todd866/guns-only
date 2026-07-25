@@ -344,8 +344,10 @@ test("production shell installs, updates, and safely labels the test-flight cons
   assert.doesNotMatch(indexSource, /<details id="test-flight-console" open>/,
     "test instrumentation must not cover the default flying view");
   assert.match(indexSource,
-    /<summary role="button" aria-expanded="false" aria-label="Toggle test-flight action console">/);
-  assert.match(indexSource, />TEST FLIGHT</);
+    /<summary role="button" aria-expanded="false" aria-label="Toggle aircraft systems action console">/);
+  assert.match(indexSource, />AIRCRAFT SYSTEMS</,
+    "the console reads engine, bus, hydraulics and gear on every sortie — it is the aircraft "
+    + "systems panel, and calling it TEST FLIGHT described only one of the beats that use it");
   assert.match(indexSource, /data-test-action="emergencyGearRelease"/);
   assert.match(indexSource, /data-test-action="confirmGearFailure"/);
   assert.match(indexSource, /data-test-action="inspectGearDownlocks"/);

@@ -588,9 +588,15 @@ public sealed class SimulationSession {
         _droneRaidEvaluation?.Begin(TimeSeconds, _gunKill.RoundsFired);
         _droneRaidEvaluation?.Step(TimeSeconds, _player.State, _bandit.State,
             _gunKill.GunSolution, _gunKill.RoundsFired);
-        if (_carrier is null && _beat.PlayerAir.ThrustMaxN > 0.0
-            && _beat.InitialThrottle >= 0.995)
-            ShowTransition("MIL SET · FIGHT", 1800.0);
+        // Announce the power the lever is ACTUALLY on, not the beat's authored setting. A beat that
+        // opts into StageAtTrimThrottle arrives at the setting that holds its staged fighting speed
+        // — typically well below MIL — so reading InitialThrottle here told the pilot "MIL SET"
+        // while the jet sat at a low cruise power. The cue exists to save them a setup, which it
+        // can only do if it is true.
+        if (_carrier is null && _beat.PlayerAir.ThrustMaxN > 0.0) {
+            if (_detents.Throttle >= 0.995) ShowTransition("MIL SET · FIGHT", 1800.0);
+            else if (_beat.StageAtTrimThrottle) ShowTransition("PWR SET · FIGHT", 1800.0);
+        }
         Lifecycle = LifecycleState.Active;
     }
 

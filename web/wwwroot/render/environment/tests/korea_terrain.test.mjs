@@ -13,6 +13,7 @@ import {
   validateTerrainAtlasManifest,
   validateTerrainManifest,
 } from "../korea_terrain.js";
+import { buildTerrainMeshArrays } from "../terrain_mesh_builder.js";
 
 const quantization = {
   storage: "little-endian-signed-int16",
@@ -856,4 +857,136 @@ test("aerial perspective is banded so ridgelines separate in value", () => {
 
   material.dispose();
   off.dispose();
+});
+
+// --- Off-thread chunk meshing -------------------------------------------------------------
+//
+// Building one LOD0 chunk is ~9.5 ms of array arithmetic, which is 57% of a 60 fps frame, and it
+// used to run on the render thread. A Build 112 tape caught the consequence: `geometries` 88 -> 126
+// in one five second window with frame_ms_max 217-400 ms, while triangles and draw calls barely
+// moved. These tests hold the two properties that make moving it to a Worker safe — the off-thread
+// mesh must be IDENTICAL to the synchronous one, and a worker that dies must cost a frame, not a
+// chunk.
+
+/// A Worker stand-in that runs the real builder in-process. Node has no Worker constructor, so
+/// without this the pool would simply report itself unavailable and the worker path would never be
+/// exercised by a test at all.
+function stubMeshWorkers(behaviour = "build") {
+  const created = [];
+  const factory = () => {
+    if (behaviour === "unconstructable") throw new Error("worker blocked");
+    const worker = {
+      onmessage: null,
+      onerror: null,
+      onmessageerror: null,
+      terminated: false,
+      postMessage(request) {
+        if (request?.type !== "build") return;
+        queueMicrotask(() => {
+          if (behaviour === "fail") {
+            worker.onmessage?.({ data: { type: "failed", id: request.id, message: "nope" } });
+            return;
+          }
+          // Structured-clone the payload the way a real postMessage would, so a test can never
+          // pass by sharing an array the browser would have copied.
+          const payload = structuredClone({
+            heights: request.heights,
+            water: request.water,
+            sampleCount: request.sampleCount,
+          });
+          const built = buildTerrainMeshArrays(request.boundsLocalM, payload);
+          worker.onmessage?.({ data: { type: "built", id: request.id, built } });
+        });
+      },
+      terminate() {
+        worker.terminated = true;
+      },
+    };
+    created.push(worker);
+    queueMicrotask(() => worker.onmessage?.({ data: { type: "ready" } }));
+    return worker;
+  };
+  return { factory, created };
+}
+
+async function loadSingleChunkTerrain(values, options = {}) {
+  const source = manifest();
+  return loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/central-front.manifest.json",
+    fetch: async (url, requestOptions = {}) => {
+      if (!requestOptions.headers?.Range) {
+        return { ok: true, status: 200, json: async () => source };
+      }
+      return { ok: true, status: 206, arrayBuffer: async () => values.buffer.slice(0) };
+    },
+    ...options,
+  });
+}
+
+test("meshes terrain chunks in a worker and matches the synchronous build exactly", async () => {
+  const values = new Int16Array([
+    -32768, -32768, 100,
+    -32768, 1400, 200,
+    300, 400, 500,
+  ]);
+  const workers = stubMeshWorkers();
+  const terrain = await loadSingleChunkTerrain(values, {
+    createTerrainMeshWorker: workers.factory,
+    terrainMeshWorkerCount: 1,
+  });
+  await terrain.whenIdle();
+
+  const mesh = terrain.entries.get("e00-n00").mesh;
+  assert.ok(mesh, "the worker path must still produce a chunk mesh");
+  assert.ok(workers.created.length >= 1, "the pool must have constructed a worker");
+
+  const reference = createTerrainGeometry(THREE, manifest().chunks[0],
+    decodeTerrainRecord(values.buffer.slice(0), manifest().chunks[0].lods[0], quantization));
+  for (const name of ["position", "normal", "terrainWater", "concavity"]) {
+    assert.deepEqual(
+      [...mesh.geometry.getAttribute(name).array],
+      [...reference.geometry.getAttribute(name).array],
+      `worker-built ${name} must be identical to the synchronous build`);
+  }
+  assert.deepEqual([...mesh.geometry.getIndex().array], [...reference.geometry.getIndex().array]);
+  assert.deepEqual(mesh.geometry.groups, reference.geometry.groups,
+    "the single-sided surface / double-sided skirt split must survive the worker boundary");
+  assert.equal(mesh.geometry.boundingSphere.radius, reference.geometry.boundingSphere.radius,
+    "a worker-supplied bounding sphere must match the one THREE would have computed");
+  // Frustum culling reads this on every frame; a null sphere silently draws every chunk.
+  assert.ok(Number.isFinite(mesh.geometry.boundingSphere.radius));
+  reference.geometry.dispose();
+  terrain.dispose();
+});
+
+test("falls back to synchronous meshing when the terrain workers are unusable", async () => {
+  const values = new Int16Array([100, 200, 300, 400, 500, 600, 700, 800, 900]);
+  for (const behaviour of ["fail", "unconstructable"]) {
+    const workers = stubMeshWorkers(behaviour);
+    const terrain = await loadSingleChunkTerrain(values, {
+      createTerrainMeshWorker: workers.factory,
+      terrainMeshWorkerCount: 1,
+    });
+    await terrain.whenIdle();
+    assert.ok(terrain.entries.get("e00-n00").mesh,
+      `a ${behaviour} worker must cost a frame, never a chunk`);
+    if (behaviour === "fail") {
+      assert.ok(workers.created[0].terminated,
+        "a worker that reports a failed build must be retired rather than retried forever");
+    }
+    terrain.dispose();
+  }
+});
+
+test("terrain worker teardown terminates its workers", async () => {
+  const values = new Int16Array([100, 200, 300, 400, 500, 600, 700, 800, 900]);
+  const workers = stubMeshWorkers();
+  const terrain = await loadSingleChunkTerrain(values, {
+    createTerrainMeshWorker: workers.factory,
+    terrainMeshWorkerCount: 1,
+  });
+  await terrain.whenIdle();
+  terrain.dispose();
+  assert.ok(workers.created.every((worker) => worker.terminated),
+    "disposing the terrain must not leak worker threads");
 });
