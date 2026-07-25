@@ -192,6 +192,54 @@ against an instantaneous 20. That **4:1 gap is the whole aircraft** — an F-22 
 6.5. Enormous one-shot pointing authority, no ability to hold it, and every use billed to a life
 counter. Cheap airframe, cheap engine, expensive decisions.
 
+### What 20 G does to the engine, and why that makes it a diving interceptor
+
+> "What's 20G gonna do to a jet engine? Presumably you can't easily put a big motor through that,
+> you might be back to cheap turbojets, but now you can go really high."
+
+Both halves are right, and they pull against each other — which is what gives the aircraft its
+tactical character.
+
+**The engine constraint.** Bearing side-loads scale with rotor mass times G; a 1,500 kg engine at
+20 G puts roughly 300 kN into its mounts. The tighter limit is **rotor deflection**: modern engines
+hold blade-tip clearances of fractions of a millimetre for efficiency, and a rotor that bends under
+load rubs its casing. **Gyroscopic** loads may bite harder still — at the 40-56 deg/s turn rates
+this airframe can generate, a spinning rotor resisting reorientation produces large bearing moments
+independent of the G itself.
+
+So a big turbofan is the wrong engine: a fan is a large-diameter heavy rotor at the very front, the
+worst possible mass on a long bending shaft. A **turbojet** has a smaller, lighter, shorter, stiffer
+rotor — single spool, fewer bearings, far less deflection — and is cheap, which the attritable
+premise wants anyway.
+
+**The altitude coupling, and the tension.** Turbojets favour high and fast (the Concorde / MiG-25 /
+SR-71 lineage: bypass wins at low speed, straight jets win at high Mach and low density). But load
+factor needs dynamic pressure, and density collapses with altitude. For a light, low-wing-loading
+airframe, very roughly:
+
+| altitude | speed required to reach 20 G |
+|---|---|
+| sea level | ~285 m/s (~555 kt) — easy |
+| 30,000 ft | ~Mach 1.5 |
+| 50,000 ft | ~Mach 2.5 — not on a cheap turbojet |
+
+**The engine wants to live high; the airframe can only fight low.** That makes this a *diving
+interceptor*: cruise high where the cheap jet is efficient, trade altitude for the dynamic pressure
+where 20 G actually exists, take one enormous pull, and be unable to climb back because the engine
+is poor.
+
+A one-shot attack profile — which lands on every other constraint already set. Guns-only rewards the
+decisive close pass; fatigue billing means there was only one big pull available; attritable means
+the aircraft may not have been coming home anyway. It is the zoom-climb interceptor archetype
+(Me 163, F-104 in the interceptor role) arrived at from first principles rather than nostalgia.
+
+**A failure mode worth building deliberately:** a cheap fixed inlet at high alpha and high G is a
+compressor-stall machine. Engine-face distortion under hard manoeuvre is a classic cause, the
+AIRCRAFT SYSTEMS console already exists to show it, and "pull too hard too slow too high and the
+engine quits" is a far better punishment than a damage number.
+
+(All numbers above UNSOURCED and illustrative — same bar as the rest of this note.)
+
 ---
 
 ## 2. 2030s Ukraine instead of (or alongside) Korea
