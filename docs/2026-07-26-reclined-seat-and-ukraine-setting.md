@@ -309,6 +309,46 @@ This is also the strongest argument for **Ukraine over Korea**: the economy is e
 invented, and it is the one part of the design that cannot be honestly extrapolated from first
 principles.
 
+### The loop, and it is DERIVED rather than authored
+
+> "So now you're a one-shot attack profile, loiter up high, diving attacks, AI-aim-assist, you get
+> paid for downing jets but you gotta buy a new jet."
+
+Every element of that loop traces to a constraint rather than to a design preference:
+
+| element | the constraint it falls out of |
+|---|---|
+| loiter high | cheap turbojet's efficiency altitude |
+| diving attack | 20 G needs dynamic pressure that only exists low |
+| one shot | fatigue billing — there was one big pull in the airframe |
+| guns | cost-per-kill below the cost of the target |
+| AI aim assist | the reclined occupant is not flying the aircraft |
+| get paid / must re-buy | the points economy |
+
+**That derivation is the quality bar to protect.** If a future mechanic cannot be traced back to a
+physical or economic constraint, it is decoration and should be treated as such.
+
+**Three design traps, cheap to avoid now:**
+
+1. **The economy and the FightDirector will compound.** The director already eases on evidence and
+   adjusts the OPPONENT; an economy adjusts the PLAYER. Point both at the same evidence and a bad run
+   makes the enemy easier *and* leaves you in a worse jet — runaway in both directions. They must be
+   one system aware of both sides of the ledger, not two independent reactors. Architectural, and
+   painful to retrofit.
+2. **Disengagement finally has teeth — use them.** The design principles already say the player
+   chooses when to leave, but nothing ever made leaving rational. Bringing a repairable airframe home
+   is now income protection, so running is a financial decision rather than a failure state.
+3. **The loiter IS the game, which changes the UX.** If the attack is a single dive, the interesting
+   part is choosing the moment: which target, from what altitude, at what fatigue price, for what
+   payout. Long deliberation, one violent commitment, live-or-die consequence — a tempo much closer
+   to a submarine sim than a dogfighter. The high phase must be dense with information and decisions,
+   not a loading screen with clouds.
+
+**And the arc that falls out of it:** if aim assist and automation are purchasable, the campaign is
+the player spending their winnings to automate themselves out of relevance — pilot to passenger, one
+individually-correct upgrade at a time. That is the platform's entire thesis expressed as a
+progression system rather than as a theme.
+
 ---
 
 ## Why these two ideas belong in the same note
