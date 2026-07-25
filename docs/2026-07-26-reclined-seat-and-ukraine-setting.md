@@ -409,6 +409,43 @@ and procedures, then poisoning that authorship is itself an attack vector — co
 that routes you somewhere convenient for someone else, spoofed clearances, decoys built for the
 recogniser rather than the eye. The human is the one link in the kill chain that cannot be prompted.
 
+### The airframe: small, low-observable, composite, turbojet, high
+
+> "A small, stealthy, turbojet high altitude composite fighter could really do some damage."
+
+Coherent — and the composite choice quietly improves the fatigue mechanic.
+
+**Composite does double duty.** The obvious reason is specific strength: it is what allows building
+to 20 G without the structure consuming the payload. The less obvious one is that **composites do not
+fatigue like metals.** There is no clean S-N knockdown; carbon is often *better* in fatigue than
+aluminium. But it fails differently and far less legibly — delamination, barely-visible impact
+damage, sudden loss of compressive strength with no crack to find and no easy inspection.
+
+That is a gift to the mechanic, and it resolves the determinism problem elegantly. **The pilot cannot
+know their own remaining strength.** So the instrument shows a *conservative estimate with a
+confidence band* while the true limit remains deterministic and hidden in the kernel. Real
+uncertainty about your own airframe, no dice, physically honest. A metal jet knows how tired it is;
+a composite one is guessing, and so are you.
+
+**Call it low-observable, not stealthy.** A turbojet fights you here: high exhaust temperature and
+velocity is an infrared beacon, and a small airframe has no room for the serpentine ducting that
+hides a compressor face from radar. You buy frontal-sector radar reduction and pay in IR — which is
+exactly right for a cheap aircraft. The goal is being hard to find FIRST, not being invisible.
+
+**The profile stacks like everything else here:** safe and hard to find high, lethal and exposed low.
+The dive is a one-way door out of the regime where you survive and into the one where your G exists.
+
+### What it is actually FOR — and the incentive problem made concrete
+
+Small, quiet, high, patient, armed with guns and air-launched fibre drones: this is not a
+fighter-killer, it is an **enabler-killer**. Tankers, AEW&C, transports, ISR. Historically that is
+what decides air campaigns — kill the tankers and the fighters cannot reach the fight.
+
+Which lands directly on the incentive distortion recorded above: **if the rate card pays for downing
+jets, but the war is won by killing tankers, the economy is paying the player to do the wrong
+thing.** The pilot who works that out, and eats the financial hit to go hunting enablers anyway, is
+the one having the interesting experience — and the game never has to say a word about it.
+
 ---
 
 ## Why these two ideas belong in the same note
