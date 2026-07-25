@@ -68,7 +68,13 @@ public class ContinuousCombatTests {
         Assert.False(session.TerminalPhaseActive);
         Assert.Equal(SortieOutcome.None, session.PendingOutcome);
         Assert.IsType<ReactiveBandit>(session.Bandit);
-        Assert.Equal(285.0, session.Bandit.State.Speed, 8);
+        // Replacements now arrive at the corner speed of whatever airframe they are flying,
+        // instead of inheriting the beat's staged 285 m/s regardless — that constant was 37.6%
+        // above the Flanker's corner and handed the player the first turn at every merge.
+        Assert.Equal(
+            BeatSetup.CornerTrueAirspeedMps(
+                FlightModel.Su27SPublicDataSurrogate, session.Player.State.Position.Y),
+            session.Bandit.State.Speed, 6);
         Assert.InRange(Geometry.Range(session.Player.State, session.Bandit.State),
             2000.0, 2800.0);
         Assert.False(CameraSolver.GunWindow(session.Player.State, session.Bandit.State));

@@ -127,10 +127,14 @@ public class ModernVisualMergeTests {
     public void PlayerCanHoldThrottleUpThroughMilitaryPowerIntoAfterburner() {
         var session = new SimulationSession(7);
         session.Begin();
-        Assert.Equal(1.0, session.Controls.Throttle, 10);
+        // Mission 7 now stages the pilot TRIMMED for its corner-speed opening rather than at
+        // military power, so they arrive configured instead of pulling power every sortie. The
+        // point of this test is unchanged: holding throttle up must still run all the way through
+        // military into afterburner.
+        Assert.InRange(session.Controls.Throttle, 0.05, 0.85);
 
         session.FeedKey(GKey.ThrottleUp, true);
-        for (int tick = 0; tick < 2 * AircraftSim.TickHz; tick++) session.StepFixed();
+        for (int tick = 0; tick < 8 * AircraftSim.TickHz; tick++) session.StepFixed();
 
         Assert.Equal(FlightModel.F22APublicDataSurrogate.MaxThrustFraction,
             session.Controls.Throttle, 10);

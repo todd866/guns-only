@@ -195,6 +195,10 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     CombatConfig? Combat = null, FuelConfig? Fuel = null,
     MaintenanceScenarioKind MaintenanceScenario = MaintenanceScenarioKind.None,
     double InitialThrottle = 0.85,
+    /// Stage the pilot already TRIMMED for the staged speed rather than at InitialThrottle.
+    /// A fight staged at corner speed but full military thrust accelerates straight off
+    /// corner, so the pilot has to pull power before every single engagement.
+    bool StageAtTrimThrottle = false,
     MissionContract? Mission = null,
     AircraftCapability? PlayerCapability = null,
     AircraftCapability? BanditCapability = null,
@@ -290,17 +294,31 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     /// the mission's staged opponent speed rather than falling back to a Korea-era constant. The
     /// terrain surface, when supplied, keeps replacement merges and the bandit's own floor sense
     /// honest over real ground instead of a sea-level constant.
+    /// The true airspeed at which this airframe's INSTANTANEOUS turn rate peaks, at the altitude
+    /// it is being staged into. Corner is where a first-turn merge is decided.
+    public static double CornerTrueAirspeedMps(AircraftParams air, double altitudeM) =>
+        AirData.TrueAirspeedForCalibratedAirspeedMps(
+            AirData.PositiveCornerSpeedKiasAtAltitude(air.MassKg, air, altitudeM)
+                / AirData.MpsToKnots,
+            altitudeM);
+
     public IBandit CreateNextBandit(in AircraftState player, int engagementNumber,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null, SpawnSpec? spec = null) {
-        double replacementSpeedMps = ContinuousCombat is { } continuous
-            ? continuous.ReplacementSpeedMps ?? Bandit.Speed
-            : 180.0;
         // Without a director decision the interim per-engagement ladder still applies (the
         // director's own cold start reproduces it, so the two paths cannot diverge silently).
         PilotSkill skill = spec?.Skill ?? BanditSkillProfile.ForEngagement(engagementNumber);
         AircraftParams air = spec is { } staged
             ? BanditAirForMount(skill, staged.Mount)
             : BanditAirForSkill(skill);
+        // Arrive at the speed THIS airframe fights best at — the same courtesy the player's
+        // staging has always had. Every replacement previously inherited the beat's staged 285 m/s
+        // regardless of what it was flying, which is 37.6% above the Flanker's corner: it turned up
+        // to every merge 137 knots fast and could not pull its own peak rate on the first turn.
+        // The mount axis makes this doubly necessary — a spawn speed constant cannot be right for
+        // two different airframes.
+        double replacementSpeedMps = ContinuousCombat is { } continuous
+            ? continuous.ReplacementSpeedMps ?? CornerTrueAirspeedMps(air, player.Position.Y)
+            : 180.0;
         return ReactiveBandit.SpawnForMerge(
             player, air,
             engagementNumber: engagementNumber,
@@ -607,9 +625,17 @@ public static class Beats {
                 new Vec3D(1280.0, AltitudeM, -4500.0),
                 playerCornerTasMps, 0.0, 0.0, 0.0,
                 FlightModel.F22APublicDataSurrogate.MassKg),
+            // The bandit gets the SAME courtesy as the player: staged at the speed its own jet
+            // fights best at. It used to arrive at 285 m/s — 37.6% above the Flanker's 207 m/s
+            // corner, 137 knots fast — so it could not pull its peak turn rate on the opening
+            // merge. At its own corner the Su-27S actually out-turns the F-22A instantaneously
+            // (24.3 vs 23.4 deg/s: higher CLmax, lower mass); staged fast it manages 17.6 deg/s
+            // and hands the player 2.5 seconds over 180 degrees of turn. That gift, not the
+            // airframe and not the AI, is why the first turn was decided before it began.
             Bandit: new AircraftState(
                 new Vec3D(1520.0, AltitudeM + 60.0, 4500.0),
-                285.0, 0.0, Math.PI, 0.0,
+                BeatSetup.CornerTrueAirspeedMps(FlightModel.Su27SPublicDataSurrogate, AltitudeM),
+                0.0, Math.PI, 0.0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() {
@@ -631,6 +657,7 @@ public static class Beats {
                 MinimumFuelThresholdLb: 2100.0,
                 EmergencyFuelThresholdLb: 1200.0),
             InitialThrottle: 1.0,
+            StageAtTrimThrottle: true,
             Mission: new MissionContract(
                 "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,

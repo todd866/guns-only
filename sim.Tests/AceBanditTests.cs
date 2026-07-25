@@ -142,10 +142,20 @@ public class AceBanditTests {
         var beat = Beats.ModernVisualMerge();
         var player = new AircraftState(new Vec3D(0.0, 3000.0, 0.0),
             240.0, 0.0, 0.0, 0.0, FlightModel.F22APublicDataSurrogate.MassKg);
-        var ace = Assert.IsType<ReactiveBandit>(beat.CreateNextBandit(player, engagementNumber: 4));
-        Assert.Equal(PilotSkill.Ace, ace.Skill);
-        // A Competent flown from the identical spawned start is the control.
-        var competent = new ReactiveBandit(ace.State, beat.BanditAir, PilotSkill.Competent);
+        var spawned = Assert.IsType<ReactiveBandit>(
+            beat.CreateNextBandit(player, engagementNumber: 4));
+        Assert.Equal(PilotSkill.Ace, spawned.Skill);
+
+        // This is a PURSUIT probe, not a merge: the reference is already 1.6 km displaced and
+        // turning away, so converting it needs overtake energy. The production spawn speed is now
+        // the airframe's CORNER (merge-optimised, and 3.3x better against a modelled human first
+        // turn) rather than the old blanket 285 m/s, which is co-speed with this reference and
+        // cannot close it. Probe the BFM from the spawn-path POSITION with an explicit pursuit
+        // energy state, so this test measures the Ace's conversion and not the spawn constant.
+        var pursuitStart = spawned.State with { Speed = 285.0 };
+        var ace = new ReactiveBandit(pursuitStart, beat.BanditAir, PilotSkill.Ace);
+        // A Competent flown from the identical start is the control.
+        var competent = new ReactiveBandit(pursuitStart, beat.BanditAir, PilotSkill.Competent);
 
         double aceSol = SolutionSecondsAgainstSteadyTurnAheadOfNose(ace, 30.0);
         double competentSol = SolutionSecondsAgainstSteadyTurnAheadOfNose(competent, 30.0);

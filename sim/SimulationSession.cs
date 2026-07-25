@@ -1107,7 +1107,9 @@ public sealed class SimulationSession {
             AerodynamicConfiguration = PlayerAerodynamicConfiguration,
             AtmosphereModel = _player.AtmosphereModel
         };
-        _detents.ConfigureFor(_beat.PlayerAir, _beat.InitialThrottle);
+        // Arrive configured: for a beat staged at a deliberate fighting speed, hand the pilot the
+        // power setting that HOLDS it instead of an arbitrary one they must correct every sortie.
+        _detents.ConfigureFor(_beat.PlayerAir, StagedThrottle());
         _pilotPhysiology = new PilotPhysiologyModel(_beat.PlayerPilotPhysiology);
         _autoGcasState = AutoGcasState.Initial(PlayerAutoGcasCapability.Available);
         _autoGcasRecoveryCommand = null;
@@ -1397,6 +1399,16 @@ public sealed class SimulationSession {
         && _opponentGun.AmmoRemaining > 0
         && _opponentGun.TargetAlive
         && !_bandit.CatastrophicallyDamaged;
+
+    /// The throttle a sortie should open on. Beats that stage a deliberate fighting speed opt into
+    /// arriving trimmed for it; everything else keeps its authored setting.
+    double StagedThrottle() {
+        if (!_beat.StageAtTrimThrottle || _carrier is not null) return _beat.InitialThrottle;
+        double trim = DetentLayer.LevelFlightTrimThrottle(
+            _player.State, _beat.PlayerAir, _player.AirspeedMps,
+            PlayerAerodynamicConfiguration, _player.AtmosphereModel);
+        return double.IsFinite(trim) && trim > 0.0 ? trim : _beat.InitialThrottle;
+    }
 
     void StepWeapons(in AircraftState playerState, in AircraftState opponentState,
         bool playerTriggerHeld, bool allowNewFire = true) {

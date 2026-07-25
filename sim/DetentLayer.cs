@@ -557,6 +557,19 @@ public sealed class DetentLayer {
         double measuredSpeedMps) =>
             trimThrottle + 0.026 * (targetSpeedMps - measuredSpeedMps);
 
+    /// <summary>
+    /// The throttle that HOLDS the current speed in the reference flight condition — thrust equal
+    /// to drag. Exposed so a beat can stage the pilot already trimmed instead of at an arbitrary
+    /// power setting: staging at corner SPEED but full military thrust means the jet immediately
+    /// accelerates off corner and the pilot has to pull power before every single fight.
+    /// </summary>
+    public static double LevelFlightTrimThrottle(in AircraftState state,
+        in AircraftParams parameters, double trueAirspeedMps,
+        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) =>
+        SpeedHoldPowerFeedForward(state, parameters, trueAirspeedMps,
+            referenceLoadFactorG: 1.0, referenceFlightPathRad: 0.0,
+            configuration, atmosphere);
+
     static double SpeedHoldPowerFeedForward(in AircraftState state,
         in AircraftParams parameters, double trueAirspeedMps,
         double referenceLoadFactorG, double referenceFlightPathRad,

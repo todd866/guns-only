@@ -23,3 +23,7 @@ testrig/scenarios/_replay.json
 .accuracy-runner/
 .test-runner/
 .vercel
+
+# Development screen recordings: 1.9 GB of .mov, every file over GitHub's 100 MB limit.
+# The tracked record of what they are lives in docs/development-recordings.md.
+recordings/
