@@ -151,6 +151,47 @@ along one body axis. Reclined, a pull is mostly +Gx — but roll and sideslip pu
 their own, much lower, tolerances. A recline model that only resolves the pull will flatter the
 design. The physiology step should take a load *vector* in pilot-body axes, not a scalar.
 
+### Fatigue life as the real cost of G — the mechanic this all exists for
+
+> "If you can suddenly pull 20G in a cheap disposable structure with a shitty engine, but it's a big
+> chunk of the fatigue lifespan, it's a whole new ballgame in terms of strategy and tactics."
+
+This is the payoff, and it converts G from a **capability** into a **consumable**.
+
+Fatigue damage accumulates as a power of stress amplitude — for aluminium alloys the S-N exponent is
+typically in the 3-6 band — so a 20 G pull against a 9 G pull is not 2.2 times the damage but 2.2 to
+the fourth or fifth: **roughly twenty to fifty times**. Real fleets already live this way, with
+fatigue-index counters and airframes retired on accumulated G exposure rather than calendar life. The
+mechanic is not invented; it is how structures actually die. (Exponent and ratios UNSOURCED — same
+bar as everything else in this note.)
+
+**Tactical consequences, roughly in order of how much they change:**
+
+1. **G becomes ammunition, with a magazine measured per airframe rather than per sortie.** The
+   question stops being "can I pull 20" and becomes "is this worth a fortieth of the jet". It is a
+   second, slower-burning resource alongside energy — and unlike energy, you cannot trade altitude
+   to get it back.
+2. **It inverts classic energy logic.** Normal BFM preserves energy because energy is what you have.
+   Here a hard pull spends energy *and* structure, and the structural cost outlives the sortie. So
+   the cheapest way to win becomes making the OTHER aircraft pull. Forcing an opponent to spend
+   airframe is itself an attack — you can bankrupt someone without ever taking a shot.
+3. **The aircraft becomes a depreciating asset inside the campaign**, which is exactly the attrition
+   rung. A jet at 15% remaining life is a different instrument from a fresh one, and "send the tired
+   one, it is nearly written off anyway" is a real command decision with real moral texture.
+4. **It favours the automation.** A machine computing "this pull costs 3.1% of remaining life for a
+   40% chance of a gun solution" makes that trade better than a human greying out at 18 G. The
+   machine's edge is not flying, it is asset management under fire — the thesis again.
+
+**Do not make failure random.** The kernel has no RNG and must not acquire one. Model accumulated
+damage as *lowering the current structural limit*: a fresh airframe pulls 20, a well-used one pulls
+14, and the number is on the instrument. Deterministic, legible, and it produces escalating dread
+without dice — the pilot watches their own envelope closing and chose every millimetre of it.
+
+**The engine completes the character.** Poor thrust-to-weight gives sustained G of perhaps 4-5
+against an instantaneous 20. That **4:1 gap is the whole aircraft** — an F-22 sits nearer 9 against
+6.5. Enormous one-shot pointing authority, no ability to hold it, and every use billed to a life
+counter. Cheap airframe, cheap engine, expensive decisions.
+
 ---
 
 ## 2. 2030s Ukraine instead of (or alongside) Korea
