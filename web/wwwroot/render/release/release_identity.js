@@ -1,4 +1,4 @@
-export const RELEASE_BUILD = "101";
+export const RELEASE_BUILD = "102";
 export const CANONICAL_PRODUCTION_ORIGIN = "https://guns-only.vercel.app";
 export const BUILD_INFO_PATH = "/api/build-info";
 
