@@ -1618,7 +1618,13 @@ function syncBanditPadlockRollAssist() {
 }
 
 function padlockLabel(target = padlockTarget) {
-  return target === "carrier" ? "BOAT" : "BANDIT";
+  return target === "carrier" ? "BOAT" : target === "wingman" ? "WINGMAN" : "BANDIT";
+}
+
+/// True when the wave has a second aircraft to look at. Padlock cycles through the contacts that
+/// actually exist, so a 1v1 keeps its plain on/off toggle.
+function wingmanPadlockAvailable(state = latestState) {
+  return state?.w1_present === 1 && state?.w1_alive === 1;
 }
 
 function syncPadlockUi(announcement = null) {
@@ -1677,6 +1683,25 @@ function resetMissionPresentation() {
 }
 
 function togglePadlock() {
+  // With a formation there is more than one thing worth looking at, so V CYCLES the contacts that
+  // exist rather than being a plain on/off: off -> primary -> wingman -> off. A 1v1 wave has no
+  // wingman, so it collapses back to the original two-state toggle.
+  if (padlock && padlockTarget === "bandit" && wingmanPadlockAvailable()) {
+    padlockTarget = "wingman";
+    padlockEntityId = `${projectedId(latestState?.bandit_entity_id)}.wingman`;
+    padlockPhase = manualLookActive() ? "SLEW" : "ACQUIRE";
+    padlockTrackEstablished = false;
+    gimbalReturnFast = false;
+    syncBanditPadlockRollAssist();
+    syncPadlockUi(`${padlockLabel()} padlock on`);
+    recorder.event("view", "Padlock", {
+      selected: true,
+      target: padlockTarget,
+      entity_id: padlockEntityId,
+      reason: "cycle",
+    });
+    return;
+  }
   if (padlock) {
     releasePadlock("manual");
     return;
@@ -4096,6 +4121,7 @@ class FlightView {
     if (padlock) {
       const trackedPosition = padlockTarget === "carrier"
         ? this.carrierPadlockPosition
+        : padlockTarget === "wingman" ? this.wingmanPosition
         : this.banditPosition;
       this.localTarget.copy(trackedPosition).sub(this.playerPosition).normalize();
       this.inversePlayerQuaternion.copy(this.playerQuaternion).invert();

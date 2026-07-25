@@ -318,3 +318,14 @@ test("pattern qualifier rejects short phase pulses and gives lineup correction h
   assert.equal(qualifier.update({ ...finalState, deck_cross: 9 }, 0.02).lineup, "COME LEFT");
   assert.equal(qualifier.update({ ...finalState, deck_cross: 4 }, 0.02).lineup, "HOLD LINEUP");
 });
+
+test("a wingman padlock is valid only while the second aircraft is alive and present", () => {
+  const twoShip = { mode: "ACTIVE", w1_present: 1, w1_alive: 1 };
+  assert.equal(padlockTargetValid(twoShip, "wingman"), true);
+  // Shot down, or promoted into the primary slot after the leader died: the lock releases and the
+  // pilot reacquires deliberately.
+  assert.equal(padlockTargetValid({ ...twoShip, w1_alive: 0 }, "wingman"), false);
+  assert.equal(padlockTargetValid({ ...twoShip, w1_present: 0 }, "wingman"), false);
+  // A 1v1 wave never offers one.
+  assert.equal(padlockTargetValid({ mode: "ACTIVE" }, "wingman"), false);
+});

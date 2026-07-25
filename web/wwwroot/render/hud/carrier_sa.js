@@ -143,6 +143,10 @@ export function padlockTargetValid(state = {}, target = "bandit") {
     return carrierPadlockEligible(state, CARRIER_PADLOCK_RELEASE_RADIUS_M)
       && !carrierPadlockSupersededByCombat(state);
   }
+  // A formation's second aircraft is only a valid lock while it is actually out there and alive.
+  // When it is shot down — or promoted into the primary slot after the leader dies — the lock
+  // releases and the pilot reacquires deliberately, exactly as it works for the primary.
+  if (target === "wingman") return state.w1_present === 1 && state.w1_alive === 1;
   return banditPadlockEligible(state);
 }
 
