@@ -111,9 +111,10 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
     }
 
     public void ApplySurfaceImpact(ImpactSurface surface, in Vec3D surfaceVelocity,
-        double surfaceHeightM, Carrier? carrier = null) {
+        double surfaceHeightM, Carrier? carrier = null,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
         BeginFight();
-        _fight!.ApplySurfaceImpact(surface, surfaceVelocity, surfaceHeightM, carrier);
+        _fight!.ApplySurfaceImpact(surface, surfaceVelocity, surfaceHeightM, carrier, terrain);
     }
 
     /// <summary>Follow a session terrain replacement through to the active fight controller.</summary>

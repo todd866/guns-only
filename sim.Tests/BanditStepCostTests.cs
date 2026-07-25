@@ -34,8 +34,13 @@ public class BanditStepCostTests {
             heights[north, east] = 400.0
                 + 380.0 * System.Math.Sin(east * 0.21)
                 * System.Math.Cos(north * 0.17);
+        // ORIGIN + SPACING, not bounds. This previously passed the half-extent as the spacing,
+        // which built a 4,200 km grid at 32 km resolution — so the lookahead's swept-clearance
+        // queries ran over terrain that was flat at any scale the fight occupies, and the "WITH
+        // terrain" column was measuring almost none of the cost it claimed to.
+        const double SpacingM = 2.0 * HalfExtentM / (Cells - 1);
         return new GunsOnly.Sim.Environment.BilinearHeightGrid(
-            -HalfExtentM, -HalfExtentM, HalfExtentM, HalfExtentM, heights);
+            -HalfExtentM, -HalfExtentM, SpacingM, SpacingM, heights);
     }
 
     [Fact]

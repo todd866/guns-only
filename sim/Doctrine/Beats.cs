@@ -404,11 +404,12 @@ public sealed class RailBandit : IBandit {
             AirframeAerodynamicState.Clean, _damageHandedness);
     }
     public void ApplySurfaceImpact(ImpactSurface surface, in Vec3D surfaceVelocity,
-        double surfaceHeightM, Carrier? carrier = null) {
+        double surfaceHeightM, Carrier? carrier = null,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
         if (_wreckMotion is not null) return;
         ApplyCatastrophicDamage(_damageHandedness);
         _wreckMotion = new WreckContactMotion(_sim.State, surface,
-            surfaceVelocity, surfaceHeightM, carrier);
+            surfaceVelocity, surfaceHeightM, carrier, terrain: terrain);
         _sim.AdoptExternalKinematics(_wreckMotion.State);
     }
 }

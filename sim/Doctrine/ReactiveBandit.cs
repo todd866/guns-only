@@ -19,8 +19,11 @@ public interface IBandit {
     /// Irreversible combat-damage boundary. Subsequent Step calls still integrate the same entity,
     /// but through its failed engine and damaged aerodynamic state rather than its tactical law.
     void ApplyCatastrophicDamage(int handedness);
+    /// `terrain` is what lets a downed opponent come to rest on the hillside under it instead of
+    /// sliding for kilometres on an invisible plane pinned to the altitude it was hit at.
     void ApplySurfaceImpact(ImpactSurface surface, in Vec3D surfaceVelocity,
-        double surfaceHeightM, Carrier? carrier = null);
+        double surfaceHeightM, Carrier? carrier = null,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null);
     void Step(in ActorObservation player, double dt);
 }
 
@@ -629,11 +632,12 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     }
 
     public void ApplySurfaceImpact(ImpactSurface surface, in Vec3D surfaceVelocity,
-        double surfaceHeightM, Carrier? carrier = null) {
+        double surfaceHeightM, Carrier? carrier = null,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
         if (_wreckMotion is not null) return;
         ApplyCatastrophicDamage(_damageHandedness);
         _wreckMotion = new WreckContactMotion(_sim.State, surface,
-            surfaceVelocity, surfaceHeightM, carrier);
+            surfaceVelocity, surfaceHeightM, carrier, terrain: terrain ?? _terrain);
         _sim.AdoptExternalKinematics(_wreckMotion.State);
     }
 

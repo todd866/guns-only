@@ -1835,13 +1835,15 @@ public sealed class SimulationSession {
             _playerWreckMotion = new WreckContactMotion(_player.State, surface,
                 surfaceVelocity, surfaceHeightM, contactCarrier,
                 tangentialImpulseAlreadyResolved,
-                ResolvePlayerCarrierSolid(surface, carrierSolid));
+                ResolvePlayerCarrierSolid(surface, carrierSolid),
+                _terrainSurface);
             _playerCarrierSolid = _playerWreckMotion.CarrierSolid;
             _player.AdoptExternalKinematics(_playerWreckMotion.State);
         } else {
             _opponentTerminalState = AircraftTerminalState.Impacted;
             _opponentImpactSurface = surface;
-            _bandit.ApplySurfaceImpact(surface, surfaceVelocity, surfaceHeightM, contactCarrier);
+            _bandit.ApplySurfaceImpact(surface, surfaceVelocity, surfaceHeightM, contactCarrier,
+                _terrainSurface);
         }
     }
 
@@ -1900,7 +1902,7 @@ public sealed class SimulationSession {
                     Carrier? contactCarrier = contact.surface is ImpactSurface.FlightDeck
                         or ImpactSurface.CarrierStructure ? _carrier : null;
                     wreck.Actor.ApplySurfaceImpact(contact.surface,
-                        contact.velocity, contact.height, contactCarrier);
+                        contact.velocity, contact.height, contactCarrier, _terrainSurface);
                     wreck.TerminalState = AircraftTerminalState.Impacted;
                     wreck.ImpactSurface = contact.surface;
                 }

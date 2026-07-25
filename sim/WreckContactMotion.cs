@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using GunsOnly.Sim.Environment;
 
 [assembly: InternalsVisibleTo("GunsOnly.Sim.Tests")]
 
@@ -12,7 +13,7 @@ namespace GunsOnly.Sim;
 /// render animation.
 /// </summary>
 internal sealed class WreckContactMotion {
-    enum ContactMode { Deck, DebrisAirborne, Water }
+    enum ContactMode { Deck, Ground, DebrisAirborne, Water }
 
     // Provisional phenomenological coefficients. They preserve momentum/energy ordering and are
     // isolated for calibration against type-specific structural and impact-test evidence; they are
@@ -23,11 +24,23 @@ internal sealed class WreckContactMotion {
     const double StructureRestitution = 0.18;
     const double StructureTangentialRetention = 0.42;
     const double SecondaryDeckTangentialRetention = 0.55;
+    // Terrain, as distinct from a steel deck: a broken airframe ploughing soil and rock sheds
+    // speed harder and bounces less than one skidding along a flight deck.
+    const double GroundRestitution = 0.10;
+    const double GroundFrictionMps2 = 7.4;
+    const double GroundTangentialRetention = 0.55;
 
     ContactMode _mode;
     Vec3D _surfaceVelocity;
     double _surfaceHeightM;
     readonly Carrier? _carrier;
+    /// Terrain truth, so a wreck on the ground is supported by the ACTUAL hillside under it rather
+    /// than by the altitude it happened to hit at. Without this the model froze _surfaceHeightM at
+    /// the impact point and every later clamp tested against that one number — an infinite flat
+    /// plane pinned to the summit it struck. A ridge strike then slid the wreck kilometres at
+    /// constant altitude, straight through everything in the way, which is exactly the "crashing
+    /// noclips through the terrain" the pilot filed.
+    readonly ITerrainSurface? _terrain;
     double _quietSeconds;
     Carrier.SolidCollision _suppressedCarrierSolid;
 
@@ -42,23 +55,29 @@ internal sealed class WreckContactMotion {
     /// True only while the wreck is actually supported by the flight deck. Debris beyond an edge
     /// and a wreck in water are not weight-on-wheels states; a deck bounce also unloads the switch
     /// until the point mass returns to the contact plane.
-    public bool HasWeightBearingContact => _mode == ContactMode.Deck
+    public bool HasWeightBearingContact => (_mode == ContactMode.Deck || _mode == ContactMode.Ground)
         && State.Position.Y <= _surfaceHeightM + 0.05
-        && (_carrier is null || _carrier.WithinDeckFootprint(State.Position));
+        && (_mode == ContactMode.Ground
+            || _carrier is null || _carrier.WithinDeckFootprint(State.Position));
 
     public WreckContactMotion(in AircraftState impactState, ImpactSurface surface,
         in Vec3D surfaceVelocity, double surfaceHeightM, Carrier? carrier = null,
         bool tangentialImpulseAlreadyResolved = false,
-        Carrier.SolidCollision carrierSolid = Carrier.SolidCollision.None) {
+        Carrier.SolidCollision carrierSolid = Carrier.SolidCollision.None,
+        ITerrainSurface? terrain = null) {
         if (surface is ImpactSurface.None or ImpactSurface.SimulationBoundary)
             throw new ArgumentOutOfRangeException(nameof(surface));
         Surface = surface;
         _surfaceVelocity = surfaceVelocity;
         _surfaceHeightM = surfaceHeightM;
         _carrier = carrier;
+        _terrain = terrain;
         _mode = surface switch {
             ImpactSurface.Water => ContactMode.Water,
-            ImpactSurface.FlightDeck or ImpactSurface.Ground => ContactMode.Deck,
+            ImpactSurface.FlightDeck => ContactMode.Deck,
+            // Terrain is a sloped static heightfield; a deck is a moving rigid plane with a
+            // footprint. Sharing one mode was the defect, not a simplification.
+            ImpactSurface.Ground => ContactMode.Ground,
             _ => ContactMode.DebrisAirborne
         };
         CarrierSolid = surface == ImpactSurface.FlightDeck
@@ -70,7 +89,12 @@ internal sealed class WreckContactMotion {
 
         Vec3D relative = impactState.VelocityVector() - surfaceVelocity;
         Vec3D position = impactState.Position;
-        if (_mode == ContactMode.Deck) {
+        if (_mode == ContactMode.Ground) {
+            relative = new Vec3D(relative.X * GroundTangentialRetention,
+                Math.Max(0.0, -relative.Y * GroundRestitution),
+                relative.Z * GroundTangentialRetention);
+            position = position with { Y = Math.Max(position.Y, surfaceHeightM) };
+        } else if (_mode == ContactMode.Deck) {
             // Normal collision impulse plus a lossy tangential impulse. The remaining motion is
             // integrated below against the moving deck rather than discarded at the contact edge.
             // An arresting-engine failure hands us velocity after the wire's force/work integration;
@@ -119,6 +143,9 @@ internal sealed class WreckContactMotion {
         switch (_mode) {
             case ContactMode.Deck:
                 StepDeck(dt);
+                break;
+            case ContactMode.Ground:
+                StepGround(dt);
                 break;
             case ContactMode.DebrisAirborne:
                 StepDebris(dt);
@@ -176,6 +203,76 @@ internal sealed class WreckContactMotion {
         if (_quietSeconds >= 0.75) Settle();
     }
 
+    /// A wreck sliding over real terrain. The ground height is re-sampled EVERY step at the
+    /// wreck's own position, so it climbs, drops and finally stops on the shape that is actually
+    /// there. Leaving the terrain bounds hands the wreck back to the ballistic phase rather than
+    /// inventing ground beyond the data.
+    void StepGround(double dt) {
+        Vec3D relative = State.VelocityVector();
+        double nextVertical = relative.Y - FlightModel.G0 * dt;
+        Vec3D horizontal = new(relative.X, 0.0, relative.Z);
+        double horizontalSpeed = horizontal.Length;
+        if (horizontalSpeed > 0.0) {
+            double nextSpeed = Math.Max(0.0, horizontalSpeed - GroundFrictionMps2 * dt);
+            horizontal *= nextSpeed / horizontalSpeed;
+        }
+        Vec3D velocity = horizontal + new Vec3D(0.0, nextVertical, 0.0);
+        Vec3D position = State.Position + velocity * dt;
+
+        if (!TrySurfaceUnder(position, out double groundHeightM, out bool isWater)) {
+            // Off the edge of terrain truth. Do not manufacture a surface: fall ballistically and
+            // let StepDebris resolve whatever is actually below.
+            _mode = ContactMode.DebrisAirborne;
+            Adopt(position, velocity, dt, angularDamping: 0.32);
+            return;
+        }
+        if (isWater) {
+            EnterWaterAt(groundHeightM);
+            return;
+        }
+        _surfaceHeightM = groundHeightM;
+        if (position.Y <= groundHeightM) {
+            position = position with { Y = groundHeightM };
+            // A shallow slide keeps its speed; a real vertical arrival bounces once and loses most
+            // of it. Same shape as the deck response, harder coefficients.
+            nextVertical = nextVertical < -0.35 ? -nextVertical * GroundRestitution : 0.0;
+            velocity = horizontal + new Vec3D(0.0, nextVertical, 0.0);
+        }
+        Adopt(position, velocity, dt, angularDamping: 1.25);
+
+        bool quiet = horizontal.Length < 0.8 && Math.Abs(nextVertical) < 0.25;
+        _quietSeconds = quiet ? _quietSeconds + dt : 0.0;
+        if (_quietSeconds >= 0.75) Settle();
+    }
+
+    /// The one place this model asks what is underneath a point. It mirrors
+    /// SimulationSession.DetectNaturalSurface deliberately: two different answers to "what is below
+    /// this position" is how a wreck ends up resting inside a hill.
+    bool TrySurfaceUnder(in Vec3D position, out double heightM, out bool isWater) {
+        if (_terrain?.TrySample(position.X, position.Z, out TerrainSample sample) == true) {
+            heightM = sample.HeightM;
+            isWater = sample.Kind == TerrainSurfaceKind.Water;
+            return true;
+        }
+        heightM = 0.0;
+        isWater = true;
+        return false;
+    }
+
+    void EnterWaterAt(double surfaceHeightM) {
+        _mode = ContactMode.Water;
+        Surface = ImpactSurface.Water;
+        SurfaceChangedThisStep = true;
+        _surfaceVelocity = Vec3D.Zero;
+        _surfaceHeightM = surfaceHeightM;
+        Vec3D entry = State.VelocityVector();
+        entry = new Vec3D(entry.X * 0.45,
+            Math.Clamp(entry.Y * 0.22, -18.0, 1.0),
+            entry.Z * 0.45);
+        State = WithKinematics(State, State.Position with { Y = surfaceHeightM }, entry,
+            State.BodyAttitude, State.BodyRates);
+    }
+
     void StepDebris(double dt) {
         Vec3D velocity = State.VelocityVector();
         // Quadratic-ish air resistance on a broken, high-drag shape plus gravity.
@@ -188,19 +285,28 @@ internal sealed class WreckContactMotion {
             return;
         }
         Adopt(position, velocity, dt, angularDamping: 0.32);
-        if (position.Y <= 0.0) {
-            _mode = ContactMode.Water;
-            Surface = ImpactSurface.Water;
+        // Debris shed over land used to test against a hard-coded y <= 0 and therefore fell
+        // THROUGH the mountains to sea level, arriving as a water impact on top of a ridge.
+        if (TrySurfaceUnder(position, out double groundHeightM, out bool isWater)) {
+            if (position.Y > groundHeightM) return;
+            if (isWater) {
+                EnterWaterAt(groundHeightM);
+                return;
+            }
+            _mode = ContactMode.Ground;
+            Surface = ImpactSurface.Ground;
             SurfaceChangedThisStep = true;
             _surfaceVelocity = Vec3D.Zero;
-            _surfaceHeightM = 0.0;
-            Vec3D waterEntry = State.VelocityVector();
-            waterEntry = new Vec3D(waterEntry.X * 0.45,
-                Math.Clamp(waterEntry.Y * 0.22, -18.0, 1.0),
-                waterEntry.Z * 0.45);
-            State = WithKinematics(State, State.Position with { Y = 0.0 }, waterEntry,
+            _surfaceHeightM = groundHeightM;
+            Vec3D arrival = State.VelocityVector();
+            arrival = new Vec3D(arrival.X * GroundTangentialRetention,
+                Math.Max(0.0, -arrival.Y * GroundRestitution),
+                arrival.Z * GroundTangentialRetention);
+            State = WithKinematics(State, State.Position with { Y = groundHeightM }, arrival,
                 State.BodyAttitude, State.BodyRates);
+            return;
         }
+        if (position.Y <= 0.0) EnterWaterAt(0.0);
     }
 
     void StepWater(double dt) {
@@ -371,7 +477,14 @@ internal sealed class WreckContactMotion {
     void Settle() {
         Settled = true;
         Vec3D position = State.Position;
-        if (_mode == ContactMode.Deck) position = position with { Y = _surfaceHeightM };
+        // Ground re-samples rather than trusting a stored height: a wreck must come to rest on the
+        // hillside beneath it, not at the altitude of the ridge it first struck.
+        if (_mode == ContactMode.Ground)
+            position = position with {
+                Y = TrySurfaceUnder(position, out double restHeightM, out _)
+                    ? restHeightM : _surfaceHeightM
+            };
+        else if (_mode == ContactMode.Deck) position = position with { Y = _surfaceHeightM };
         else if (_mode == ContactMode.Water)
             position = position with { Y = WaterEquilibriumDepthM };
         State = WithKinematics(State, position, _surfaceVelocity,
