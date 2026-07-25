@@ -62,7 +62,8 @@ public static class GunConversionFunnel {
         PilotSkill enemyTier,
         PilotSkill referenceTier = PilotSkill.Veteran,
         int engagements = 6,
-        double maximumSecondsPerEngagement = 45.0) {
+        double maximumSecondsPerEngagement = 45.0,
+        AircraftParams? enemyAir = null) {
         BanditSkillProfile profile = BanditSkillProfile.For(enemyTier);
         double flown = 0.0, inRange = 0.0, coarse = 0.0, body = 0.0, lead = 0.0;
         double eligible = 0.0, blocked = 0.0, trigger = 0.0, maxContinuous = 0.0;
@@ -74,10 +75,11 @@ public static class GunConversionFunnel {
             ProductionCombatScenario scenario =
                 ProductionCombatScenario.OffsetNeutralMerge(engagement);
             AircraftParams referenceAir = FlightModel.F22APublicDataSurrogate;
-            AircraftParams enemyAir = FlightModel.Su27SPublicDataSurrogate;
+            AircraftParams enemyParams =
+                enemyAir ?? FlightModel.Su27SPublicDataSurrogate;
             var reference = new ReactiveBandit(
                 scenario.ReferenceStart, referenceAir, referenceTier);
-            var enemy = new ReactiveBandit(scenario.EnemyStart, enemyAir, enemyTier);
+            var enemy = new ReactiveBandit(scenario.EnemyStart, enemyParams, enemyTier);
             CombatConfig combat = CombatConfig.ModernVisualMerge;
             var referenceGun = new GunKill(
                 combat.PlayerAmmo, combat.OpponentHitsToDefeat,

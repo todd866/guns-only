@@ -20,4 +20,18 @@ public class GunConversionFunnelTests {
             _out.WriteLine(result.ToString());
         }
     }
+    // The airframe question, measured: does putting the SAME pilot in the uprated jet change the
+    // fight? Pilot skill is held constant so the only variable is the aircraft.
+    [Fact]
+    public void TheUpratedJetChangesTheFightWithTheSamePilotFlyingIt() {
+        foreach (PilotSkill tier in new[] { PilotSkill.Veteran, PilotSkill.Ace }) {
+            GunConversionFunnelResult baseline = GunConversionFunnel.MeasureEnemy(
+                tier, enemyAir: FlightModel.Su27SPublicDataSurrogate);
+            GunConversionFunnelResult uprated = GunConversionFunnel.MeasureEnemy(
+                tier, enemyAir: FlightModel.Su35SPublicDataSurrogate);
+            _out.WriteLine($"{tier} baseline : {baseline}");
+            _out.WriteLine($"{tier} UPRATED  : {uprated}");
+        }
+    }
+
 }

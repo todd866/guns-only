@@ -210,6 +210,13 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         skill == PilotSkill.Ace
         && ContinuousCombat is not null
         && BanditAircraft.Id == AircraftCapability.Su27SSurrogate.Id;
+    /// True when this beat's staged opponent is the Flanker family, so the uprated/prototype
+    /// mounts have something coherent to escalate INTO. A Korea-era or drone-raid beat keeps its
+    /// staged airframe whatever the director asks for: the mount axis is continuous-combat
+    /// escalation, not a licence to field a Su-35S in a 1950s sortie.
+    bool MountEscalationAvailable =>
+        ContinuousCombat is not null
+        && BanditAircraft.Id == AircraftCapability.Su27SSurrogate.Id;
     public AircraftParams BanditAirForSkill(PilotSkill skill) =>
         skill == PilotSkill.Machine
             ? FlightModel.UcavInterceptorSurrogate
@@ -220,6 +227,22 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         UsesSu35SAtAceRung(skill)
             ? AircraftCapability.Su35SSurrogate
             : BanditAircraft;
+
+    /// The director's chosen jet. Falls back to the skill-keyed selection whenever this beat has
+    /// nothing to escalate into, so every caller without a director decision behaves exactly as
+    /// before.
+    public AircraftParams BanditAirForMount(PilotSkill skill, BanditMount mount) =>
+        !MountEscalationAvailable || skill == PilotSkill.Machine
+            ? BanditAirForSkill(skill)
+            : mount == BanditMount.Uprated
+                ? FlightModel.Su35SPublicDataSurrogate
+                : BanditAir;
+    public AircraftCapability BanditAircraftForMount(PilotSkill skill, BanditMount mount) =>
+        !MountEscalationAvailable || skill == PilotSkill.Machine
+            ? BanditAircraftForSkill(skill)
+            : mount == BanditMount.Uprated
+                ? AircraftCapability.Su35SSurrogate
+                : BanditAircraft;
     public AircraftParams BanditAirForEngagement(int engagementNumber) =>
         BanditAirForSkill(BanditSkillProfile.ForEngagement(engagementNumber));
     public AircraftCapability BanditAircraftForEngagement(int engagementNumber) =>
@@ -240,7 +263,9 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         // airframe differs from the beat's staged one — a machine spike surviving a restart
         // must fly the UCAV at UCAV mass, not the staged airframe with a 15 G label.
         PilotSkill skill = spec?.Skill ?? BanditSkill;
-        AircraftParams air = BanditAirForSkill(skill);
+        AircraftParams air = spec is { } opening
+            ? BanditAirForMount(skill, opening.Mount)
+            : BanditAirForSkill(skill);
         AircraftState initial = ReferenceEquals(air, BanditAir)
             ? Bandit : Bandit with { Mass = air.MassKg };
         return new ReactiveBandit(initial, air, skill, terrain,
@@ -260,8 +285,11 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         // Without a director decision the interim per-engagement ladder still applies (the
         // director's own cold start reproduces it, so the two paths cannot diverge silently).
         PilotSkill skill = spec?.Skill ?? BanditSkillProfile.ForEngagement(engagementNumber);
+        AircraftParams air = spec is { } staged
+            ? BanditAirForMount(skill, staged.Mount)
+            : BanditAirForSkill(skill);
         return ReactiveBandit.SpawnForMerge(
-            player, BanditAirForSkill(skill),
+            player, air,
             engagementNumber: engagementNumber,
             speedMps: replacementSpeedMps,
             skill: skill,

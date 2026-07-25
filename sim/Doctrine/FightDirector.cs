@@ -2,11 +2,31 @@ namespace GunsOnly.Sim.Doctrine;
 
 public enum DirectorPhase { Calm, Build, Boss, Release }
 
+/// Which JET the director puts the opponent in, escalated independently of who is flying it.
+///
+/// Pilot skill was the only difficulty axis, and against an airframe the player simply out-rates
+/// that axis saturates: an F-22A surrogate sustains 11.4 G at fight speed against the Su-27S's
+/// 9.2 G, and the player is limited to ~9 G by their own neck rather than by the jet — so they can
+/// hold a 9 G turn indefinitely while the Su-27S cannot. No pilot model recovers from that — which
+/// is why three builds of AI work moved tracking a long way and never moved the win rate. The
+/// Su-35S sustains 10.2 G and CAN stay with a 9 G player, so this is the axis that actually changes
+/// who wins.
+public enum BanditMount {
+    /// The mission's staged airframe (Su-27S surrogate on the modern visual merge).
+    Baseline,
+    /// Uprated Flanker: sustains above the player's pilot G limit.
+    Uprated,
+    // A third rung (the light high-alpha prototype, 216 kg/m2 wing loading) is deliberately absent:
+    // its aerodynamic surrogate exists but no governed aircraft IDENTITY does, and labelling an
+    // interceptor as the one-way attack drone would be a false presentation. Add the rung when the
+    // capability token and render model land, not before.
+}
+
 /// The next engagement the director wants staged. Reason is a short human-readable line for
 /// debrief/telemetry — it explains the pick, it never affects behaviour.
 public readonly record struct SpawnSpec(
     PilotSkill Skill, int DoctrineIndex, bool Boss, string Reason,
-    bool Machine = false);
+    bool Machine = false, BanditMount Mount = BanditMount.Baseline);
 
 /// Session-scale pacing for infinite-spawn continuous combat: CALM → BUILD → BOSS → RELEASE.
 /// Owns a LearnerModel and turns its banded estimate into the next spawn's tier/doctrine, with
@@ -179,12 +199,33 @@ public sealed class FightDirector {
         && _engagementsSinceBoss >= (_walkoverStreak >= WalkoversToCommitToBand
             ? WalkoverBossCooldownEngagements : BossCooldownEngagements);
 
-    static SpawnSpec WithDoctrine(
+    SpawnSpec WithDoctrine(
         PilotSkill skill, int engagementNumber, bool boss, string reason) {
         int doctrineCount = System.Math.Max(
             1, BanditSkillProfile.For(skill).DoctrineCount);
         return new SpawnSpec(
-            skill, (engagementNumber - 1) % doctrineCount, boss, reason);
+            skill, (engagementNumber - 1) % doctrineCount, boss, reason,
+            Mount: MountFor(skill));
+    }
+
+    /// The jet is escalated on the SAME evidence as the pilot, and eased on the same evidence too:
+    /// walk over the opposition and a better airframe turns up; lose twice in a row and it goes
+    /// away again. Pilot skill and mount are deliberately separate axes — a Veteran in an uprated
+    /// jet is a different fight from an Ace in the baseline one, which is variety rather than
+    /// merely more difficulty.
+    ///
+    /// The warm-up rung is never uprated: fight one has to stay a fight one.
+    internal BanditMount MountFor(PilotSkill skill) {
+        // The machine spike already owns its own airframe through the skill path.
+        if (skill is PilotSkill.Machine or PilotSkill.Novice) return BanditMount.Baseline;
+
+        // Veteran and above start in the uprated jet — that is the rung at which the baseline
+        // airframe stops being able to hold the player's sustained turn at all.
+        int level = skill >= PilotSkill.Veteran ? 1 : 0;
+        if (_walkoverStreak >= WalkoversToCommitToBand) level++;
+        // The pilot's own rule: "if the player keeps losing then we can make it easier."
+        if (_learner.LossStreak >= 2) level--;
+        return (BanditMount)System.Math.Clamp(level, 0, (int)BanditMount.Uprated);
     }
 
     static PilotSkill BandTier(SkillBand overall) => overall switch {

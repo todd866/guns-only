@@ -441,4 +441,45 @@ public class FightDirectorTests {
             Assert.False(spawn.Boss);
         }
     }
+    // The pilot's own call: "why don't we give the enemy a better jet? and if the player keeps
+    // losing *then* we can make it easier." Airframe is escalated on the same evidence as pilot
+    // skill, and eased on the same evidence too.
+    [Fact]
+    public void TheJetEscalatesWithWalkoversAndEasesAfterRepeatedLosses() {
+        var director = new FightDirector();
+
+        // The warm-up rung never gets a better jet — fight one has to stay fight one.
+        Assert.Equal(BanditMount.Baseline, director.MountFor(PilotSkill.Novice));
+        // Veteran and above start uprated: that is where the baseline airframe stops being able to
+        // hold the player's sustained turn at all.
+        Assert.Equal(BanditMount.Uprated, director.MountFor(PilotSkill.Veteran));
+        Assert.Equal(BanditMount.Baseline, director.MountFor(PilotSkill.Competent));
+
+        // Two untouched, unthreatened wins and even the mid rung gets the better jet.
+        for (int engagement = 1; engagement <= 2; engagement++) {
+            SpawnSpec spawn = director.NextSpawn(engagement);
+            EngagementReport walkover = StrongReport(
+                engagement, spawn.Skill, durationSeconds: 30.0);
+            director.Observe(in walkover);
+        }
+        Assert.Equal(2, director.WalkoverStreak);
+        Assert.Equal(BanditMount.Uprated, director.MountFor(PilotSkill.Competent));
+        Assert.Equal(BanditMount.Uprated, director.NextSpawn(3).Mount);
+
+        // Now lose twice: the jet is handed back before the pilot tier is.
+        var losing = new FightDirector();
+        for (int engagement = 1; engagement <= 2; engagement++) {
+            EngagementReport loss = WeakReport(engagement, PilotSkill.Veteran);
+            losing.Observe(in loss);
+        }
+        Assert.Equal(BanditMount.Baseline, losing.MountFor(PilotSkill.Veteran));
+        Assert.Equal(BanditMount.Baseline, losing.NextSpawn(3).Mount);
+    }
+
+    [Fact]
+    public void TheMachineSpikeKeepsItsOwnAirframeRatherThanAMount() {
+        var director = new FightDirector();
+        Assert.Equal(BanditMount.Baseline, director.MountFor(PilotSkill.Machine));
+    }
+
 }
