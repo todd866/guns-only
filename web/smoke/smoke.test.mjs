@@ -276,6 +276,11 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             pause: rect("#pause-button"),
             tilt: rect("#tilt-status"),
             console: rect("#test-flight-console"),
+            pauseOverlapsTilt: overlaps(rect("#pause-button"), rect("#tilt-status")),
+            pauseOverlapsConsole:
+              overlaps(rect("#pause-button"), rect("#test-flight-console")),
+            tiltOverlapsConsole:
+              overlaps(rect("#tilt-status"), rect("#test-flight-console")),
             viewport: { width: innerWidth, height: innerHeight },
           };
         });
@@ -316,9 +321,15 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           assert.ok(target.left >= 0 && target.right <= phoneState.viewport.width);
           assert.ok(target.top >= 0 && target.bottom <= phoneState.viewport.height);
         }
-        assert.ok(phoneState.pause.bottom <= phoneState.tilt.top,
+        // Genuine rect overlap, not a single-column vertical ordering. The chrome no longer sits in
+        // one stack: pause moved to the LEFT so the top-right column could stay clear for the HUD's
+        // GUN TEMP instrument, which a right-anchored pause button had been covering. What matters
+        // is that no two tap targets share pixels, whichever column they are in.
+        assert.equal(phoneState.pauseOverlapsTilt, false,
           `${viewport.width}x${viewport.height}: pause overlaps tilt recenter`);
-        assert.ok(phoneState.tilt.bottom <= phoneState.console.top,
+        assert.equal(phoneState.pauseOverlapsConsole, false,
+          `${viewport.width}x${viewport.height}: pause overlaps the action console`);
+        assert.equal(phoneState.tiltOverlapsConsole, false,
           `${viewport.width}x${viewport.height}: tilt recenter overlaps the action console`);
 
         const stick = page.locator("#fallback-stick");
