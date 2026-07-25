@@ -1368,8 +1368,26 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     /// predicting the player by a coordinated-turn extension of the OBSERVED state (belief-limited and
     /// honest: no hidden opponent internals are read). Higher return is a better future firing
     /// position. Pure function of the two passed states — no wall clock, RNG, or hidden truth.
+    /// How many authority ticks each PREDICTION step covers. The lookahead is a forecast, not the
+    /// authoritative sim, and it does not need 120 Hz fidelity to decide which of nine manoeuvres
+    /// ends up with the better sight picture a second from now.
+    ///
+    /// This is a frame-pacing fix, not a tuning knob. The decision fires on one tick in twelve and
+    /// holds for the other eleven, so the whole 9-candidate rollout detonates inside a SINGLE tick —
+    /// and therefore a single rendered frame, on the browser's main thread. Measured: median tick
+    /// 0.002 ms, worst tick 2.76 ms for the Ace — a 1,400x spike, roughly a whole 16.7 ms frame
+    /// budget once WASM's penalty is applied. Production tapes show exactly that: p95 stepping
+    /// 17 -> 33 -> 50 ms with Novice -> Competent -> Ace, and snapping back to 16.9 ms the instant
+    /// the bandit dies. Coarser prediction steps cut the PEAK without touching decision cadence,
+    /// command freshness, or the horizon in seconds.
+    ///
+    /// Terrain safety is unaffected: the swept clearance query below samples each segment at
+    /// maximumHorizontalStepM regardless of how long the segment is, so a longer step still checks
+    /// every intervening grid cell rather than skipping over a ridge.
+    const int LookaheadPredictionSubstepTicks = 2;
+
     double ScoreCandidate(in PilotCommand command, in ActorObservation player) {
-        const double dt = 1.0 / AircraftSim.TickHz;
+        const double dt = LookaheadPredictionSubstepTicks / (double)AircraftSim.TickHz;
         const double threatWeight = 26.0;
         // Optimize the envelope the trigger can ACTUALLY use. The old 12-degree camera window made
         // the lookahead tests look threatening while first-pass-safe production fights never fired:
@@ -1411,7 +1429,10 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             - SurfaceHeightM(_terrain, State.Position.X, State.Position.Z);
         double maxY = State.Position.Y;
         var previousProbePosition = State.Position;
-        int horizon = _profile.LookaheadHorizonTicks;
+        // Same horizon in SECONDS, fewer prediction steps to cover it. Rounded up so no tier's
+        // lookahead silently shortens.
+        int horizon = (_profile.LookaheadHorizonTicks + LookaheadPredictionSubstepTicks - 1)
+            / LookaheadPredictionSubstepTicks;
         for (int t = 0; t < horizon; t++) {
             probe.Step(command, dt);
             predChi += predTurnRate * dt;

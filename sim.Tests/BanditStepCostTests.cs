@@ -20,33 +20,105 @@ public class BanditStepCostTests {
     readonly ITestOutputHelper _out;
     public BanditStepCostTests(ITestOutputHelper output) => _out = output;
 
+    /// A ridged heightfield over the real world extent, so the lookahead's per-rollout terrain
+    /// sampling and swept-clearance queries do the work they do in production. The FIRST version of
+    /// this benchmark passed no terrain at all and therefore measured a lookahead that never
+    /// touched the ground — which is exactly why it wrongly exonerated the AI for the Build 103
+    /// frame stalls.
+    static GunsOnly.Sim.Environment.ITerrainSurface RidgedTerrain() {
+        const int Cells = 257;
+        const double HalfExtentM = 65_536.0;
+        var heights = new double[Cells, Cells];
+        for (int north = 0; north < Cells; north++)
+        for (int east = 0; east < Cells; east++)
+            heights[north, east] = 400.0
+                + 380.0 * System.Math.Sin(east * 0.21)
+                * System.Math.Cos(north * 0.17);
+        return new GunsOnly.Sim.Environment.BilinearHeightGrid(
+            -HalfExtentM, -HalfExtentM, HalfExtentM, HalfExtentM, heights);
+    }
+
     [Fact]
     public void ReportPerTierStepCost() {
         const double Dt = 1.0 / AircraftSim.TickHz;
-        _out.WriteLine($"cadence={12} ticks, 9 candidates; sim tick = {Dt * 1000.0:F2} ms");
+        _out.WriteLine($"cadence=12 ticks, 9 candidates; sim tick = {Dt * 1000.0:F2} ms");
+        _out.WriteLine("cost of ONE SECOND of bandit thinking, and what that is per 60fps frame:");
+        var terrain = RidgedTerrain();
         foreach (PilotSkill tier in new[] {
             PilotSkill.Novice, PilotSkill.Competent, PilotSkill.Veteran,
             PilotSkill.Ace, PilotSkill.Machine }) {
             BanditSkillProfile profile = BanditSkillProfile.For(tier);
-            // Warm up, then time a full simulated second of bandit decision-making.
+            double withoutMs = 0.0, withMs = 0.0;
+            foreach (bool withTerrain in new[] { false, true }) {
+                // Warm up, then time a full simulated second of bandit decision-making.
+                for (int repeat = 0; repeat < 2; repeat++) {
+                    var player = new AircraftState(
+                        new Vec3D(0.0, 3000.0, 0.0), 250.0, 0.0, 0.0, 0.0,
+                        FlightModel.F22APublicDataSurrogate.MassKg);
+                    var bandit = new ReactiveBandit(
+                        new AircraftState(new Vec3D(300.0, 3100.0, -700.0), 250.0, 0.0, 0.2, 0.0,
+                            FlightModel.Su27SPublicDataSurrogate.MassKg),
+                        FlightModel.Su27SPublicDataSurrogate, tier,
+                        withTerrain ? terrain : null);
+                    var watch = Stopwatch.StartNew();
+                    for (int tick = 0; tick < AircraftSim.TickHz; tick++)
+                        bandit.Step(ActorObservation.Capture(player, tick), Dt);
+                    watch.Stop();
+                    if (repeat == 1) {
+                        if (withTerrain) withMs = watch.Elapsed.TotalMilliseconds;
+                        else withoutMs = watch.Elapsed.TotalMilliseconds;
+                    }
+                }
+            }
+            _out.WriteLine(
+                $"{tier,-10} horizon={profile.LookaheadHorizonTicks,4}  "
+                + $"no terrain {withoutMs,7:F2} ms ({withoutMs / 60.0,5:F2} ms/frame)  "
+                + $"WITH terrain {withMs,8:F2} ms ({withMs / 60.0,6:F2} ms/frame)  "
+                + $"=> {(withoutMs > 0 ? withMs / withoutMs : 0),5:F1}x");
+        }
+    }
+
+    /// The number that actually matters for frame pacing. The lookahead does NOT spread its work
+    /// evenly: it decides on one tick in twelve and holds that command for the other eleven, so a
+    /// whole 9-candidate rollout lands inside a SINGLE tick — and therefore inside a single
+    /// rendered frame, on the browser's main thread. A per-second average divides that burst by 120
+    /// and makes it look free, which is exactly the mistake that wrongly exonerated the AI earlier.
+    [Fact]
+    public void ReportWorstSingleTickCost() {
+        const double Dt = 1.0 / AircraftSim.TickHz;
+        var terrain = RidgedTerrain();
+        _out.WriteLine("worst SINGLE tick (the decision tick) vs the median tick:");
+        foreach (PilotSkill tier in new[] {
+            PilotSkill.Novice, PilotSkill.Competent, PilotSkill.Veteran,
+            PilotSkill.Ace, PilotSkill.Machine }) {
+            BanditSkillProfile profile = BanditSkillProfile.For(tier);
+            var ticks = new List<double>();
             for (int repeat = 0; repeat < 2; repeat++) {
+                ticks.Clear();
                 var player = new AircraftState(
                     new Vec3D(0.0, 3000.0, 0.0), 250.0, 0.0, 0.0, 0.0,
                     FlightModel.F22APublicDataSurrogate.MassKg);
                 var bandit = new ReactiveBandit(
                     new AircraftState(new Vec3D(300.0, 3100.0, -700.0), 250.0, 0.0, 0.2, 0.0,
                         FlightModel.Su27SPublicDataSurrogate.MassKg),
-                    FlightModel.Su27SPublicDataSurrogate, tier);
-                var watch = Stopwatch.StartNew();
-                for (int tick = 0; tick < AircraftSim.TickHz; tick++)
-                    bandit.Step(ActorObservation.Capture(player, tick), Dt);
-                watch.Stop();
-                if (repeat == 1)
-                    _out.WriteLine(
-                        $"{tier,-10} horizon={profile.LookaheadHorizonTicks,4} ticks  "
-                        + $"1.0 s of flight costs {watch.Elapsed.TotalMilliseconds,7:F2} ms CPU  "
-                        + $"=> {watch.Elapsed.TotalMilliseconds / 60.0,6:F2} ms per 60fps frame");
+                    FlightModel.Su27SPublicDataSurrogate, tier, terrain);
+                for (int tick = 0; tick < AircraftSim.TickHz * 3; tick++) {
+                    var observation = ActorObservation.Capture(player, tick);
+                    long start = Stopwatch.GetTimestamp();
+                    bandit.Step(observation, Dt);
+                    ticks.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+                }
             }
+            ticks.Sort();
+            double median = ticks[ticks.Count / 2];
+            double p99 = ticks[(int)(ticks.Count * 0.99)];
+            double worst = ticks[^1];
+            // At 60 fps the sim advances ~2 ticks per frame, so a decision burst hits one frame.
+            _out.WriteLine(
+                $"{tier,-10} horizon={profile.LookaheadHorizonTicks,4}  "
+                + $"median tick {median,6:F3} ms  p99 {p99,7:F3} ms  WORST {worst,7:F3} ms  "
+                + $"=> worst frame contribution {worst,6:F2} ms native "
+                + $"({worst * 5.0,6:F1} ms at a 5x WASM penalty)");
         }
     }
 }
