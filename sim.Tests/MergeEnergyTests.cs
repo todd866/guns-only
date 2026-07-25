@@ -177,4 +177,100 @@ public class MergeEnergyTests {
         }
     }
 
+    /// Where the Ace actually loses the fight against the modelled human turn. Prints the angular
+    /// history rather than a single summary number: a gross positional failure (never near the
+    /// nose) and a fine-tracking failure (near but never inside the gate) demand opposite fixes,
+    /// and every previous attempt guessed which one it was.
+    [Fact]
+    public void TraceWhereTheAceLosesTheModelledHumanFight() {
+        const double Dt = 1.0 / AircraftSim.TickHz;
+        BeatSetup beat = Beats.ModernVisualMerge();
+        var player = new ScriptedMergePlayer(beat.Player, FlightModel.F22APublicDataSurrogate);
+        var bandit = new ReactiveBandit(
+            beat.Bandit, FlightModel.Su35SPublicDataSurrogate, PilotSkill.Ace);
+        BanditSkillProfile profile = BanditSkillProfile.For(PilotSkill.Ace);
+
+        _out.WriteLine($"{"t",6} {"range",6} {"banditErr",10} {"leadErr",8} {"playerErr",10} {"tactic",-8}");
+        double bestBody = 180.0, bestLead = 180.0, inBand = 0.0, inBody = 0.0;
+        for (int tick = 0; tick < AircraftSim.TickHz * 45; tick++) {
+            var playerState = player.State;
+            var banditState = bandit.State;
+            var playerObs = ActorObservation.Capture(playerState, tick);
+            var banditObs = ActorObservation.Capture(banditState, tick);
+            double rangeM = Geometry.Range(playerState, banditState);
+            double bodyDeg =
+                BanditFireControl.NoseErrorRad(banditState, playerObs) * 180.0 / Math.PI;
+            double leadDeg =
+                BanditFireControl.LeadNoseErrorRad(banditState, playerObs) * 180.0 / Math.PI;
+            double playerDeg =
+                BanditFireControl.NoseErrorRad(playerState, banditObs) * 180.0 / Math.PI;
+            bool band = rangeM >= BanditFireControl.MinimumRangeM
+                && rangeM <= BanditFireControl.MaximumRangeM;
+            if (band) {
+                inBand += Dt;
+                bestBody = Math.Min(bestBody, bodyDeg);
+                bestLead = Math.Min(bestLead, leadDeg);
+                if (bodyDeg <= profile.FireConeDeg) inBody += Dt;
+            }
+            if (tick % (AircraftSim.TickHz / 2) == 0 && tick < AircraftSim.TickHz * 30)
+                _out.WriteLine(
+                    $"{tick * Dt,6:F1} {rangeM,6:F0} {bodyDeg,10:F1} {leadDeg,8:F1} "
+                    + $"{playerDeg,10:F1} {bandit.Tactic,-8}");
+            player.Step(banditState, Dt);
+            bandit.Step(playerObs, Dt);
+        }
+        _out.WriteLine(
+            $"SUMMARY in-band {inBand:F1}s | inside its {profile.FireConeDeg:F1} deg body gate "
+            + $"{inBody:F2}s | best body {bestBody:F1} deg | best lead {bestLead:F1} deg");
+    }
+
+    /// Is the Ace's failure MYOPIA? It evaluates 1.25 s of future to choose a manoeuvre whose
+    /// payoff is 6-10 s away, so a post-merge break — which costs the nose immediately and repays
+    /// much later — can never score well. Sweep the horizon and watch the post-merge recovery.
+    [Fact]
+    public void SweepTheLookaheadHorizonAgainstTheModelledHuman() {
+        const double Dt = 1.0 / AircraftSim.TickHz;
+        BeatSetup beat = Beats.ModernVisualMerge();
+        _out.WriteLine($"{"horizon",8} {"seconds",8} {"inBand",7} {"inGate",7} {"bestBody",9} "
+            + $"{"errAt+6s",9} {"errAt+10s",10}");
+        foreach (int horizonTicks in new[] { 150, 300, 600, 900, 1200 }) {
+            var player = new ScriptedMergePlayer(beat.Player, FlightModel.F22APublicDataSurrogate);
+            BanditSkillProfile profile = BanditSkillProfile.For(PilotSkill.Ace)
+                with { LookaheadHorizonTicks = horizonTicks };
+            var bandit = new ReactiveBandit(
+                beat.Bandit, FlightModel.Su35SPublicDataSurrogate, PilotSkill.Ace,
+                terrain: null, profile: profile);
+            double inBand = 0.0, inGate = 0.0, best = 180.0;
+            double mergeAt = double.NaN, errPlus6 = double.NaN, errPlus10 = double.NaN;
+            double previousRange = double.PositiveInfinity;
+            for (int tick = 0; tick < AircraftSim.TickHz * 45; tick++) {
+                var playerState = player.State;
+                var banditState = bandit.State;
+                var playerObs = ActorObservation.Capture(playerState, tick);
+                double rangeM = Geometry.Range(playerState, banditState);
+                double bodyDeg =
+                    BanditFireControl.NoseErrorRad(banditState, playerObs) * 180.0 / Math.PI;
+                double now = tick * Dt;
+                if (double.IsNaN(mergeAt) && rangeM > previousRange && previousRange < 400.0)
+                    mergeAt = now;
+                previousRange = rangeM;
+                if (!double.IsNaN(mergeAt)) {
+                    if (double.IsNaN(errPlus6) && now >= mergeAt + 6.0) errPlus6 = bodyDeg;
+                    if (double.IsNaN(errPlus10) && now >= mergeAt + 10.0) errPlus10 = bodyDeg;
+                }
+                if (rangeM >= BanditFireControl.MinimumRangeM
+                    && rangeM <= BanditFireControl.MaximumRangeM) {
+                    inBand += Dt;
+                    best = Math.Min(best, bodyDeg);
+                    if (bodyDeg <= profile.FireConeDeg) inGate += Dt;
+                }
+                player.Step(banditState, Dt);
+                bandit.Step(playerObs, Dt);
+            }
+            _out.WriteLine(
+                $"{horizonTicks,8} {horizonTicks / 120.0,8:F2} {inBand,7:F2} {inGate,7:F2} "
+                + $"{best,9:F1} {errPlus6,9:F1} {errPlus10,10:F1}");
+        }
+    }
+
 }
