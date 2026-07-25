@@ -109,6 +109,17 @@ public sealed record AircraftCapability(
         "aircraft.one-way-attack-drone.prototype.v1", "One-way attack drone prototype",
         "presentation.vehicle.one-way-attack-drone.prototype.v1",
         "systems.uncrewed-prototype.not-simulated.v1", false);
+    /// The machine spike's airframe finally gets its own identity. It flew
+    /// FlightModel.UcavInterceptorSurrogate — 15 G structural, half the player's wing loading —
+    /// while presentation reported the beat's staged Su-27S, so the pilot was told they were
+    /// fighting a Flanker by the hardest opponent in the game. Explicitly fictional: no public
+    /// source is claimed and PublicDataSurrogate stays false. It reuses the drone prototype's
+    /// visual until a separately governed uncrewed-interceptor asset exists — the same precedent
+    /// the Su-35S sets by reusing the Su-27S family's presentation.
+    public static AircraftCapability UcavInterceptorPrototype { get; } = new(
+        "aircraft.ucav-interceptor.prototype.v1", "UCAV interceptor prototype",
+        "presentation.vehicle.one-way-attack-drone.prototype.v1",
+        "systems.uncrewed-prototype.not-simulated.v1", false);
 }
 
 public enum MissionContentFamily {
@@ -224,9 +235,11 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
                 ? FlightModel.Su35SPublicDataSurrogate
                 : BanditAir;
     public AircraftCapability BanditAircraftForSkill(PilotSkill skill) =>
-        UsesSu35SAtAceRung(skill)
-            ? AircraftCapability.Su35SSurrogate
-            : BanditAircraft;
+        skill == PilotSkill.Machine && ContinuousCombat is not null
+            ? AircraftCapability.UcavInterceptorPrototype
+            : UsesSu35SAtAceRung(skill)
+                ? AircraftCapability.Su35SSurrogate
+                : BanditAircraft;
 
     /// The director's chosen jet. Falls back to the skill-keyed selection whenever this beat has
     /// nothing to escalate into, so every caller without a director decision behaves exactly as

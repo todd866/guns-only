@@ -482,4 +482,39 @@ public class FightDirectorTests {
         Assert.Equal(BanditMount.Baseline, director.MountFor(PilotSkill.Machine));
     }
 
+    // The gap this closes: Build 106 shipped mount escalation and the production tape still
+    // reported "Su-27S public-data surrogate" for three straight Aces, because presentation read
+    // the beat's STATIC staged capability. The physics and the label must agree.
+    [Fact]
+    public void TheStagedMountReachesBothTheAirframeAndItsPresentedIdentity() {
+        BeatSetup beat = Beats.ModernVisualMerge();
+
+        AircraftParams baselineAir = beat.BanditAirForMount(
+            PilotSkill.Veteran, BanditMount.Baseline);
+        AircraftParams upratedAir = beat.BanditAirForMount(
+            PilotSkill.Veteran, BanditMount.Uprated);
+        Assert.Equal(FlightModel.Su27SPublicDataSurrogate.ThrustMaxN, baselineAir.ThrustMaxN, 3);
+        Assert.Equal(FlightModel.Su35SPublicDataSurrogate.ThrustMaxN, upratedAir.ThrustMaxN, 3);
+        Assert.True(upratedAir.ThrustMaxN > baselineAir.ThrustMaxN,
+            "the uprated mount must actually be a better jet, not just a different label");
+
+        Assert.Equal(AircraftCapability.Su27SSurrogate.Id,
+            beat.BanditAircraftForMount(PilotSkill.Veteran, BanditMount.Baseline).Id);
+        Assert.Equal(AircraftCapability.Su35SSurrogate.Id,
+            beat.BanditAircraftForMount(PilotSkill.Veteran, BanditMount.Uprated).Id);
+    }
+
+    // A beat with nothing coherent to escalate into keeps its staged airframe whatever the
+    // director asks for: the mount axis must not field a Su-35S in a 1950s sortie.
+    [Fact]
+    public void AMountRequestCannotChangeABeatWithNothingToEscalateInto() {
+        BeatSetup korea = Beats.Perch();
+        Assert.Equal(
+            korea.BanditAirForSkill(PilotSkill.Veteran).ThrustMaxN,
+            korea.BanditAirForMount(PilotSkill.Veteran, BanditMount.Uprated).ThrustMaxN, 3);
+        Assert.Equal(
+            korea.BanditAircraftForSkill(PilotSkill.Veteran).Id,
+            korea.BanditAircraftForMount(PilotSkill.Veteran, BanditMount.Uprated).Id);
+    }
+
 }

@@ -793,7 +793,10 @@ internal static class SnapshotProjection {
     static string PresentationContractJson(bool hasCarrier) {
         MissionContract mission = Session.Beat.MissionIdentity;
         AircraftCapability player = Session.Beat.PlayerAircraft;
-        AircraftCapability bandit = Session.Beat.BanditAircraft;
+        // The aircraft ACTUALLY flying, not the one the beat staged: the Ace rung, a
+        // director-uprated mount and the machine spike all field something other than the
+        // staged Su-27S, and the pilot is entitled to know what is shooting at them.
+        AircraftCapability bandit = Session.CurrentBanditCapability;
         // Content family expresses the world/era; presentation follows the actual vehicle stack.
         // Both 2030s missions share a family, but the balloon glider and F-22 drone-defence
         // surrogate must not advertise one another's compatibility profile.
@@ -861,6 +864,13 @@ internal static class SnapshotProjection {
             + $"\"bandit_entity_id\":\"entity.bandit.{Session.BanditSpawnSequence}\","
             + $"\"bandit_presentation_id\":{JsonString(bandit.PresentationId)},"
             + $"\"bandit_skill\":{banditSkillJson},"
+            // Director decision, so a production tape can PROVE what was staged instead of
+            // leaving it to be inferred. bandit_mount is the airframe rung; the walkover
+            // streak is the evidence that drove both the tier and the mount.
+            + $"\"bandit_mount\":{JsonString(Session.CurrentBanditMount.ToString())},"
+            + $"\"director_phase\":{JsonString(Session.DirectorPhase.ToString())},"
+            + $"\"director_walkover_streak\":{Session.DirectorWalkoverStreak},"
+            + $"\"director_reason\":{JsonString(Session.LastDirectorSpawn?.Reason ?? "")},"
             + $"\"carrier_entity_id\":{carrierEntityJson},"
             + $"\"carrier_presentation_id\":{carrierPresentationJson},";
     }

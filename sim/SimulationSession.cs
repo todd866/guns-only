@@ -338,6 +338,19 @@ public sealed class SimulationSession {
     public DirectorPhase DirectorPhase => _fightDirector.Phase;
     public LearnerBands LearnerBands => _fightDirector.Bands;
     public SpawnSpec? LastDirectorSpawn { get; private set; }
+    /// The capability of the aircraft ACTUALLY FLYING, not the one the beat staged. Presentation
+    /// read Beat.BanditAircraft directly, so the HUD and telemetry reported a Su-27S no matter what
+    /// was really out there — the Su-35S at the Ace rung, a director-uprated mount, or the 15 G
+    /// machine spike. That is a lie to the pilot about the thing trying to kill them, and it also
+    /// made the mount escalation impossible to verify from a production tape.
+    public AircraftCapability CurrentBanditCapability =>
+        LastDirectorSpawn is { } spawn
+            ? _beat.BanditAircraftForMount(spawn.Skill, spawn.Mount)
+            : _beat.BanditAircraftForSkill(_beat.BanditSkill);
+    /// The mount the director last staged, for debrief and telemetry.
+    public BanditMount CurrentBanditMount =>
+        LastDirectorSpawn?.Mount ?? BanditMount.Baseline;
+    public int DirectorWalkoverStreak => _fightDirector.WalkoverStreak;
     public bool OpponentReplacementPending => ContinuousCombat
         && Lifecycle == LifecycleState.Active
         && _playerTerminalState == AircraftTerminalState.Flying
