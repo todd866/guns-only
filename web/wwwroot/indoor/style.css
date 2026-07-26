@@ -457,6 +457,34 @@ body[data-video="lost"] #viewport {
   text-align: right;
 }
 
+#combat-block {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 3px 8px;
+  margin: 8px -5px -5px;
+  padding: 10px;
+  border: 1px solid rgba(255, 92, 104, .32);
+  background: rgba(70, 8, 16, .18);
+}
+#combat-block[hidden] { display: none; }
+#combat-block span {
+  color: rgba(255, 92, 104, .62);
+  font-size: 6px;
+  letter-spacing: .11em;
+}
+#combat-block strong {
+  color: var(--red);
+  font-size: 17px;
+}
+#combat-block small {
+  grid-column: 1 / -1;
+  color: rgba(255, 122, 132, .68);
+  font-size: 6px;
+  letter-spacing: .1em;
+  text-align: right;
+}
+
 #objective-panel {
   top: calc(78px + var(--safe-top));
   right: calc(16px + var(--safe-right));
@@ -744,8 +772,8 @@ body[data-video="lost"] #viewport {
   font-size: 7px;
 }
 
-body[data-link="rf"] #detach-panel,
-body[data-link="lost"] #detach-panel { display: none; }
+body[data-link="rf"] #detach-button,
+body[data-link="lost"] #detach-button { display: none; }
 body[data-link="rf"] .readout strong,
 body[data-link="rf"] .readout small { color: var(--amber); }
 body[data-link="lost"] .readout strong,
@@ -911,6 +939,65 @@ body[data-autonomy="active"] #relay-block small {
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.survey-mission-set {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 16px 0 4px;
+}
+
+.survey-mission {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+  padding: 9px;
+  border-color: rgba(120, 255, 195, .14);
+  color: rgba(226, 245, 235, .58);
+  background: rgba(3, 15, 13, .58);
+  text-align: left;
+}
+
+.survey-mission:hover,
+.survey-mission:focus-visible {
+  border-color: rgba(98, 234, 255, .44);
+  color: rgba(239, 255, 247, .86);
+}
+
+.survey-mission.selected {
+  border-color: rgba(98, 234, 255, .58);
+  background: rgba(8, 45, 50, .42);
+  box-shadow: inset 0 0 0 1px rgba(98, 234, 255, .08);
+}
+
+.survey-mission > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+  color: var(--cyan);
+  font-size: 6px;
+  letter-spacing: .08em;
+}
+
+.survey-mission > span i {
+  color: rgba(226, 245, 235, .4);
+  font-style: normal;
+}
+
+.survey-mission > strong {
+  overflow: hidden;
+  color: rgba(239, 255, 247, .86);
+  font-size: 8px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+}
+
+.survey-mission > small {
+  color: rgba(220, 239, 229, .46);
+  font-size: 6px;
+  line-height: 1.35;
 }
 
 .mission-doctrine {
@@ -1109,6 +1196,7 @@ button.primary {
 }
 .touch-height button,
 #touch-fire,
+#touch-return,
 #touch-detach {
   min-width: 48px;
   min-height: 44px;
@@ -1136,6 +1224,16 @@ button.primary {
   border-color: rgba(98, 234, 255, .4);
   color: var(--cyan);
 }
+#touch-return {
+  position: absolute;
+  left: calc(99px + var(--safe-left));
+  bottom: calc(146px + var(--safe-bottom));
+  width: 68px;
+  border-color: rgba(120, 255, 195, .4);
+  color: var(--green);
+}
+#touch-return[hidden],
+#return-button[hidden] { display: none; }
 body[data-link="rf"] #touch-detach,
 body[data-link="lost"] #touch-detach { display: none; }
 
@@ -1290,6 +1388,8 @@ body.large-text .hud-actions button {
   .mission-art { min-height: 128px; }
   .mission-copy { padding: 20px; }
   .mission-copy .lede { font-size: 11px; line-height: 1.5; }
+  .survey-mission-set { grid-template-columns: 1fr; }
+  .survey-mission { padding: 7px 9px; }
   .mission-doctrine { margin: 12px 0; gap: 2px; }
   .mission-doctrine > div { padding: 5px 0; }
   .mission-doctrine span { font-size: 7px; }

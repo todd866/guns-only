@@ -1,5 +1,6 @@
 import {
   FACILITY,
+  SURVEY_PROFILES,
   createIndoorMission,
   missionSnapshot,
   stepIndoorMission,
@@ -27,6 +28,9 @@ const ui = {
   fatal: byId("fatal"),
   fatalCopy: byId("fatal-copy"),
   briefing: byId("briefing"),
+  briefingTitle: byId("briefing-title"),
+  missionBrief: byId("mission-brief"),
+  missionSet: byId("survey-mission-set"),
   begin: byId("begin-button"),
   pause: byId("pause-screen"),
   pauseToggle: byId("pause-toggle"),
@@ -55,6 +59,11 @@ const ui = {
   relayBlock: byId("relay-block"),
   relayTime: byId("relay-time"),
   relayState: byId("relay-state"),
+  combatBlock: byId("combat-block"),
+  combatTime: byId("combat-time"),
+  combatState: byId("combat-state"),
+  missionDoctrine: byId("mission-doctrine"),
+  missionObjectiveTitle: byId("mission-objective-title"),
   objectiveList: byId("objective-list"),
   missionClock: byId("mission-clock").querySelector("output"),
   map: byId("minimap"),
@@ -66,7 +75,9 @@ const ui = {
   subtitle: byId("subtitle"),
   detachKicker: byId("detach-kicker"),
   detachCopy: byId("detach-copy"),
+  detachPanel: byId("detach-panel"),
   detach: byId("detach-button"),
+  returnHome: byId("return-button"),
   signalNoise: byId("signal-noise"),
   hitFlash: byId("hit-flash"),
   announcer: byId("announcer"),
@@ -81,6 +92,7 @@ const ui = {
   touchLook: byId("look-pad"),
   touchFire: byId("touch-fire"),
   touchDetach: byId("touch-detach"),
+  touchReturn: byId("touch-return"),
 };
 
 const preferences = loadIndoorPreferences();
@@ -89,7 +101,8 @@ document.body.classList.toggle("high-contrast", preferences.highContrast);
 document.body.classList.toggle("large-text", preferences.largeText);
 document.body.classList.toggle("reduced-motion", preferences.reducedMotion);
 
-let mission = createIndoorMission();
+let selectedMissionId = "attack-site";
+let mission = createIndoorMission({ missionId: selectedMissionId });
 let snapshot = missionSnapshot(mission);
 let presentation = null;
 let audio = new IndoorAudio(preferences.audio);
@@ -111,6 +124,7 @@ let lastSafeNoticeAt = -Infinity;
 let subtitleUntil = 0;
 let eventCueUntil = 0;
 let detachQueued = false;
+let returnQueued = false;
 let mouseFire = false;
 let pendingYawRadians = 0;
 let pendingPitchRadians = 0;
@@ -203,6 +217,51 @@ function phaseState() {
   return "ingress";
 }
 
+const PROFILE_BRIEFING = Object.freeze({
+  "attack-site": {
+    doctrine: "STEALTH MANDATORY",
+    copy: "Survey tomorrow's attack site without announcing the route. Keep the fibre attached, inspect the marked rooms, then let the onboard controller retrace the quiet path home.",
+    begin: "LAUNCH QUIET SURVEY",
+  },
+  "discretionary-site": {
+    doctrine: "DISCRETION",
+    copy: "Inspect the abandoned service block and decide in the air: return silently if the site stays quiet, or break away and defend the drone if an investigator appears.",
+    begin: "LAUNCH DISCRETIONARY SURVEY",
+  },
+  "diversion-site": {
+    doctrine: "PROVOCATION REQUIRED",
+    copy: "Survey tomorrow's diversion site, then broadcast deliberately. Draw out the investigator drone, open the gunfight, and make the response force look the wrong way.",
+    begin: "LAUNCH DIVERSION SURVEY",
+  },
+});
+
+function selectedProfile() {
+  return SURVEY_PROFILES[selectedMissionId] ?? null;
+}
+
+function updateMissionBriefing() {
+  const profile = selectedProfile();
+  const copy = PROFILE_BRIEFING[selectedMissionId];
+  if (!profile || !copy) return;
+  for (const button of ui.missionSet.querySelectorAll("[data-mission-id]")) {
+    const selected = button.dataset.missionId === selectedMissionId;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-checked", String(selected));
+  }
+  ui.missionBrief.textContent = copy.copy;
+  ui.begin.textContent = copy.begin;
+  ui.missionDoctrine.textContent = `MISSION / ${copy.doctrine}`;
+  ui.missionObjectiveTitle.textContent = profile.label;
+  document.body.dataset.profile = selectedMissionId;
+}
+
+function selectMissionProfile(missionId) {
+  if (!SURVEY_PROFILES[missionId] || started) return false;
+  selectedMissionId = missionId;
+  resetMission({ start: false });
+  return true;
+}
+
 function updatePhaseStrip() {
   const phase = phaseState();
   const order = ["ingress", "detach", "action"];
@@ -216,27 +275,137 @@ function updatePhaseStrip() {
 }
 
 function updateObjectives() {
+  const survey = snapshot.survey;
+  let states;
+  if (survey) {
+    const scans = survey.objectives.scan;
+    const returning = survey.returnRequested;
+    const returnComplete = survey.objectives.return.complete;
+    if (survey.doctrine === "noisy-provocation") {
+      states = [
+        {
+          label: `Survey marked rooms · ${scans.completed}/${scans.total}`,
+          complete: scans.complete,
+          active: !scans.complete,
+          status: scans.complete ? "DONE" : survey.scanning ? "SCANNING" : "ACTIVE",
+        },
+        {
+          label: "Broadcast a deliberate RF signature",
+          complete: survey.objectives.broadcast.complete,
+          active: scans.complete && !survey.objectives.broadcast.complete,
+          status: survey.objectives.broadcast.complete ? "LOUD" : scans.complete ? "TRANSMIT" : "LOCKED",
+        },
+        {
+          label: "Draw out the investigator drone",
+          complete: survey.objectives.investigator.complete,
+          active: survey.investigator.summoned && !survey.investigator.arrived,
+          status: survey.investigator.arrived ? "ON SITE" : survey.investigator.summoned ? "INBOUND" : "LOCKED",
+        },
+        {
+          label: "Open the drone fight",
+          complete: survey.objectives.combat.complete,
+          active: survey.investigator.arrived && !survey.combat.active,
+          status: survey.combat.active ? "CLOCK LIVE" : survey.investigator.arrived ? "ENGAGE" : "LOCKED",
+        },
+        {
+          label: "Return through the ingress",
+          complete: returnComplete,
+          active: survey.combat.active && !returnComplete,
+          status: returnComplete ? "HOME" : returning ? "AUTO" : survey.combat.active ? "READY" : "LOCKED",
+        },
+      ];
+    } else if (survey.doctrine === "stealth-mandatory") {
+      states = [
+        {
+          label: `Survey marked rooms · ${scans.completed}/${scans.total}`,
+          complete: scans.complete,
+          active: !scans.complete,
+          status: scans.complete ? "DONE" : survey.scanning ? "SCANNING" : "ACTIVE",
+        },
+        {
+          label: "Maintain zero radio emissions",
+          complete: returnComplete,
+          active: !survey.breach,
+          status: survey.breach ? "BREACHED" : "QUIET",
+        },
+        {
+          label: "Avoid investigator detection",
+          complete: returnComplete,
+          active: !survey.breach,
+          status: survey.breach ? "SEEN" : "UNSEEN",
+        },
+        {
+          label: "Silent autonomous return",
+          complete: returnComplete,
+          active: scans.complete && !returnComplete,
+          status: returnComplete ? "HOME" : returning ? "AUTO" : scans.complete ? "READY" : "LOCKED",
+        },
+      ];
+    } else {
+      const choiceMade = returning || survey.broadcastSeconds > 0;
+      states = [
+        {
+          label: `Survey marked rooms · ${scans.completed}/${scans.total}`,
+          complete: scans.complete,
+          active: !scans.complete,
+          status: scans.complete ? "DONE" : survey.scanning ? "SCANNING" : "ACTIVE",
+        },
+        {
+          label: "Choose silent return or radio",
+          complete: choiceMade,
+          active: scans.complete && !choiceMade,
+          status: returning ? "RETURN" : survey.broadcastSeconds > 0 ? "RADIO" : scans.complete ? "CHOOSE" : "LOCKED",
+        },
+        {
+          label: "Defend if investigated",
+          complete: survey.combat.active,
+          active: survey.investigator.arrived && !survey.combat.active,
+          status: survey.combat.active ? "ENGAGED" : survey.investigator.arrived ? "CONTACT" : "OPTIONAL",
+        },
+        {
+          label: "Return through the ingress",
+          complete: returnComplete,
+          active: scans.complete && !returnComplete,
+          status: returnComplete ? "HOME" : returning ? "AUTO" : scans.complete ? "READY" : "LOCKED",
+        },
+      ];
+    }
+  } else {
+    states = [
+      {
+        label: snapshot.checkpoint.label,
+        complete: snapshot.checkpoint.reached,
+        active: !snapshot.checkpoint.reached,
+        status: snapshot.checkpoint.reached ? "DONE" : "ACTIVE",
+      },
+      ...snapshot.objectives.map((objective, index) => {
+        const previousComplete = index === 0
+          ? snapshot.checkpoint.reached
+          : snapshot.objectives[index - 1].destroyed;
+        return {
+          label: objective.label,
+          complete: objective.destroyed,
+          active: !objective.destroyed && previousComplete,
+          status: objective.destroyed ? "DOWN" : previousComplete ? "ACTIVE" : "LOCKED",
+        };
+      }),
+    ];
+  }
+
+  while (ui.objectiveList.children.length < states.length) {
+    const row = document.createElement("li");
+    row.innerHTML = "<b></b><span></span><i></i>";
+    ui.objectiveList.append(row);
+  }
+  while (ui.objectiveList.children.length > states.length) {
+    ui.objectiveList.lastElementChild?.remove();
+  }
   const rows = [...ui.objectiveList.querySelectorAll("li")];
-  const states = [
-    {
-      complete: snapshot.checkpoint.reached,
-      active: !snapshot.checkpoint.reached,
-      status: snapshot.checkpoint.reached ? "DONE" : "ACTIVE",
-    },
-    ...snapshot.objectives.map((objective, index) => {
-      const previousComplete = index === 0
-        ? snapshot.checkpoint.reached
-        : snapshot.objectives[index - 1].destroyed;
-      return {
-        complete: objective.destroyed,
-        active: !objective.destroyed && previousComplete,
-        status: objective.destroyed ? "DOWN" : previousComplete ? "ACTIVE" : "LOCKED",
-      };
-    }),
-  ];
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
     const state = states[index] ?? { complete: false, active: false, status: "LOCKED" };
+    row.querySelector("b").textContent = String(index + 1).padStart(2, "0");
+    row.querySelector("span").textContent = state.label;
     row.classList.toggle("complete", state.complete);
     row.classList.toggle("active", state.active);
     const status = row.querySelector("i");

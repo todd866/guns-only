@@ -151,6 +151,98 @@ export const FACILITY = deepFreeze({
   ],
 });
 
+/**
+ * Fictional, unmanned survey sites. Distance affects how quickly a deliberate
+ * RF/EW transmission attracts an investigator; doctrine changes what counts
+ * as a successful sortie.
+ */
+export const SURVEY_PROFILES = deepFreeze({
+  "attack-site": {
+    id: "attack-site",
+    label: "Bracken Pump House",
+    distanceBand: "near",
+    distanceFromBaseKm: 0.65,
+    siteRole: "tomorrows-attack-site",
+    doctrine: "stealth-mandatory",
+    attentionThreshold: 0.32,
+    broadcastRequiredSeconds: 0,
+    investigatorDelay: 4.8,
+    reinforcementDelay: 8,
+    scanPoints: [
+      {
+        id: "bracken-intake",
+        label: "Intake manifold",
+        position: { x: 0, y: 2, z: 8.1 },
+        radius: 0.9,
+        dwellRequired: 0.65,
+      },
+      {
+        id: "bracken-overlook",
+        label: "Pump hall overlook",
+        position: { x: 0, y: 4.35, z: 0.2 },
+        radius: 0.95,
+        dwellRequired: 0.8,
+      },
+    ],
+  },
+  "discretionary-site": {
+    id: "discretionary-site",
+    label: "Morrow Service Block",
+    distanceBand: "mid",
+    distanceFromBaseKm: 1.05,
+    siteRole: "discretionary-survey",
+    doctrine: "discretionary",
+    attentionThreshold: 0.32,
+    broadcastRequiredSeconds: 0,
+    investigatorDelay: 3.8,
+    reinforcementDelay: 6,
+    scanPoints: [
+      {
+        id: "morrow-switchgear",
+        label: "Abandoned switchgear",
+        position: { x: 0, y: 4.35, z: 0.2 },
+        radius: 0.95,
+        dwellRequired: 0.75,
+      },
+      {
+        id: "morrow-service-bay",
+        label: "Service bay",
+        position: { x: 0, y: 2.6, z: -4.1 },
+        radius: 0.9,
+        dwellRequired: 0.85,
+      },
+    ],
+  },
+  "diversion-site": {
+    id: "diversion-site",
+    label: "Cinder Tram Depot",
+    distanceBand: "far",
+    distanceFromBaseKm: 1.65,
+    siteRole: "tomorrows-diversion-site",
+    doctrine: "noisy-provocation",
+    attentionThreshold: 0.32,
+    broadcastRequiredSeconds: 0.75,
+    investigatorDelay: 2.8,
+    reinforcementDelay: 4.5,
+    scanPoints: [
+      {
+        id: "cinder-concourse",
+        label: "Empty concourse",
+        position: { x: 0, y: 4.35, z: 0.2 },
+        radius: 0.95,
+        dwellRequired: 0.7,
+      },
+      {
+        id: "cinder-control-room",
+        label: "Derelict control room",
+        position: { x: 0, y: 2, z: -11.4 },
+        radius: 0.95,
+        dwellRequired: 0.9,
+      },
+    ],
+  },
+});
+
 function copyVector(vector) {
   return { x: vector.x, y: vector.y, z: vector.z };
 }
@@ -209,6 +301,23 @@ function cloneState(state) {
       position: copyVector(projectile.position),
       velocity: copyVector(projectile.velocity),
     })),
+    survey: state.survey ? {
+      ...state.survey,
+      extractionPosition: copyVector(state.survey.extractionPosition),
+      scanPoints: state.survey.scanPoints.map((point) => ({
+        ...point,
+        position: copyVector(point.position),
+      })),
+      investigator: { ...state.survey.investigator },
+      combat: { ...state.survey.combat },
+      objectives: {
+        scan: { ...state.survey.objectives.scan },
+        broadcast: { ...state.survey.objectives.broadcast },
+        investigator: { ...state.survey.objectives.investigator },
+        combat: { ...state.survey.objectives.combat },
+        return: { ...state.survey.objectives.return },
+      },
+    } : null,
     events: state.events.map(cloneEvent),
   };
 }
@@ -390,6 +499,10 @@ function setFailure(state, reason) {
   state.success = false;
   state.failure = true;
   state.failureReason = reason;
+  if (state.survey) {
+    state.survey.status = "failure";
+    state.survey.phase = "failed";
+  }
   pushEvent(state, "mission-failed", { reason });
 }
 
@@ -399,6 +512,10 @@ function setSuccess(state) {
   state.success = true;
   state.failure = false;
   state.failureReason = null;
+  if (state.survey) {
+    state.survey.status = "success";
+    state.survey.phase = "complete";
+  }
   pushEvent(state, "mission-complete");
 }
 
@@ -417,6 +534,9 @@ function applyDetach(state, reason) {
     reason: detachReason,
     position: copyVector(state.drone.position),
   });
+  if (state.survey?.doctrine === "stealth-mandatory") {
+    setSurveyStealthBreach(state, "rf-detach");
+  }
   updateRfTelemetry(state);
   return state;
 }
@@ -457,6 +577,49 @@ function nextLiveObjective(state) {
     ?? null;
 }
 
+function surveyRequirementsComplete(state, includeReturn = false) {
+  if (!state.survey) return false;
+  const objectives = state.survey.objectives;
+  const required = [
+    objectives.scan,
+    objectives.broadcast,
+    objectives.investigator,
+    objectives.combat,
+  ];
+  if (includeReturn) required.push(objectives.return);
+  return required.every((objective) => !objective.required || objective.complete);
+}
+
+function nextSurveyTarget(state) {
+  const survey = state.survey;
+  if (!survey) return null;
+  if (state.link.mode === "lost" || survey.returnRequested) {
+    return {
+      id: "extraction",
+      label: "Extraction",
+      position: survey.extractionPosition,
+      radius: survey.extractionRadius,
+      kind: "return",
+    };
+  }
+  const pendingScan = survey.scanPoints.find((point) => !point.complete);
+  if (pendingScan) return { ...pendingScan, kind: "scan" };
+  if (surveyRequirementsComplete(state)) {
+    return {
+      id: "extraction",
+      label: "Extraction",
+      position: survey.extractionPosition,
+      radius: survey.extractionRadius,
+      kind: "return",
+    };
+  }
+  return null;
+}
+
+function nextAutonomyTarget(state) {
+  return state.survey ? nextSurveyTarget(state) : nextLiveObjective(state);
+}
+
 function signalSeverity(value) {
   return {
     optical: -1,
@@ -481,11 +644,12 @@ function updateRfTelemetry(state) {
   const signal = state.link.mode === "lost" ? 0 : clamp(rf.signal, 0, 1);
   const nextSignalState = signalState(signal);
   const quality = clamp(signal, 0, 1);
-  const authority = state.link.mode === "lost"
+  const forcedSurveyReturn = Boolean(state.survey?.returnRequested);
+  const authority = state.link.mode === "lost" || forcedSurveyReturn
     ? 0
     : smoothstep(0.06, 0.82, signal);
   const automationLevel = 1 - authority;
-  const target = nextLiveObjective(state);
+  const target = nextAutonomyTarget(state);
 
   rf.signal = signal;
   rf.signalState = nextSignalState;
@@ -495,7 +659,9 @@ function updateRfTelemetry(state) {
   state.drone.autonomy.level = automationLevel;
   state.drone.autonomy.active = automationLevel >= RF_AUTONOMY_ENGAGE_LEVEL;
   state.drone.autonomy.mode = state.drone.autonomy.active
-    ? (target ? "objective-pursuit" : "stabilize")
+    ? (target?.kind === "return"
+      ? "return-home"
+      : (target ? "objective-pursuit" : "stabilize"))
     : "standby";
   state.drone.autonomy.targetId = target?.id ?? null;
 
@@ -544,6 +710,7 @@ function loseRfLink(state, reason) {
   state.link.rf.active = false;
   state.link.rf.signal = 0;
   state.link.rf.lossReason = reason;
+  if (state.survey) requestSurveyReturn(state, "lost-link");
   updateRfTelemetry(state);
 }
 
@@ -567,11 +734,169 @@ function refreshRfLink(state) {
 /**
  * Create a fresh, fully serializable indoor mission.
  */
-export function createIndoorMission() {
+export function createIndoorMission(options = {}) {
+  const requestedMissionId = typeof options === "string"
+    ? options
+    : options?.missionId;
+  const missionId = requestedMissionId ?? "control-loop";
+  const surveyProfile = SURVEY_PROFILES[missionId] ?? null;
+  if (missionId !== "control-loop" && !surveyProfile) {
+    throw new RangeError(`Unknown indoor mission profile: ${missionId}`);
+  }
+
   const initialFiberLength = distance(FACILITY.relayPosition, FACILITY.startPosition);
+  const survey = surveyProfile ? {
+    profileId: surveyProfile.id,
+    label: surveyProfile.label,
+    distanceBand: surveyProfile.distanceBand,
+    distanceFromBaseKm: surveyProfile.distanceFromBaseKm,
+    siteRole: surveyProfile.siteRole,
+    doctrine: surveyProfile.doctrine,
+    status: "active",
+    phase: "survey",
+    breach: null,
+    extractionPosition: copyVector(FACILITY.extractionPosition),
+    extractionRadius: 0.9,
+    returnRequested: false,
+    returnedHome: false,
+    silentReturn: false,
+    scanning: false,
+    currentScanId: null,
+    scanPoints: surveyProfile.scanPoints.map((point) => ({
+      ...point,
+      position: copyVector(point.position),
+      dwell: 0,
+      complete: false,
+    })),
+    attention: 0,
+    attentionState: "quiet",
+    broadcasting: false,
+    broadcastSeconds: 0,
+    investigator: {
+      summoned: false,
+      arrived: false,
+      arrivalTimer: null,
+      delay: surveyProfile.investigatorDelay,
+      hostileId: "investigator-drone",
+    },
+    combat: {
+      active: false,
+      reason: null,
+      startedAt: null,
+      reinforcementClockActive: false,
+      reinforcementRemaining: surveyProfile.reinforcementDelay,
+      reinforcementDuration: surveyProfile.reinforcementDelay,
+      reinforcementArrived: false,
+      hostileId: "reinforcement-drone",
+    },
+    objectives: {
+      scan: {
+        id: "survey-scans",
+        label: "Complete site scans",
+        required: true,
+        complete: false,
+        completed: 0,
+        total: surveyProfile.scanPoints.length,
+      },
+      broadcast: {
+        id: "deliberate-broadcast",
+        label: "Transmit deliberate RF/EW signature",
+        required: surveyProfile.doctrine === "noisy-provocation",
+        complete: false,
+        progress: 0,
+        requiredSeconds: surveyProfile.broadcastRequiredSeconds,
+      },
+      investigator: {
+        id: "draw-investigator",
+        label: "Draw an investigator drone",
+        required: surveyProfile.doctrine === "noisy-provocation",
+        complete: false,
+      },
+      combat: {
+        id: "start-combat-clock",
+        label: "Engage and start reinforcement clock",
+        required: surveyProfile.doctrine === "noisy-provocation",
+        complete: false,
+      },
+      return: {
+        id: "return-to-extraction",
+        label: surveyProfile.doctrine === "stealth-mandatory"
+          ? "Silent autonomous return"
+          : "Return to extraction",
+        required: true,
+        complete: false,
+        silentRequired: surveyProfile.doctrine === "stealth-mandatory",
+        started: false,
+      },
+    },
+  } : null;
+
+  const hostiles = surveyProfile
+    ? [
+      {
+        id: "investigator-drone",
+        role: "investigator",
+        position: { x: 3.8, y: 2.45, z: 10.2 },
+        home: { x: 3.8, y: 2.45, z: 10.2 },
+        velocity: { x: 0, y: 0, z: 0 },
+        radius: 0.38,
+        health: 2,
+        maxHealth: 2,
+        alive: true,
+        active: false,
+        present: false,
+        engaged: false,
+        patrolAxis: { x: 1, y: 0.16, z: 0 },
+        patrolAmplitude: 1.1,
+        patrolSpeed: 0.56,
+        patrolPhase: 0.7,
+        fireCooldown: 0.7,
+      },
+      {
+        id: "reinforcement-drone",
+        role: "reinforcement",
+        position: { x: -4.2, y: 2.75, z: 9.4 },
+        home: { x: -4.2, y: 2.75, z: 9.4 },
+        velocity: { x: 0, y: 0, z: 0 },
+        radius: 0.4,
+        health: 3,
+        maxHealth: 3,
+        alive: true,
+        active: false,
+        present: false,
+        engaged: false,
+        patrolAxis: { x: 0.35, y: 0.12, z: 1 },
+        patrolAmplitude: 1.2,
+        patrolSpeed: 0.62,
+        patrolPhase: 1.9,
+        fireCooldown: 0.45,
+      },
+    ]
+    : FACILITY.sentryDrones.map((sentry, index) => ({
+      id: sentry.id,
+      role: "sentry",
+      position: copyVector(sentry.position),
+      home: copyVector(sentry.position),
+      velocity: { x: 0, y: 0, z: 0 },
+      radius: sentry.radius,
+      health: sentry.health,
+      maxHealth: sentry.health,
+      alive: true,
+      active: true,
+      present: true,
+      engaged: true,
+      patrolAxis: copyVector(sentry.patrolAxis),
+      patrolAmplitude: sentry.patrolAmplitude,
+      patrolSpeed: sentry.patrolSpeed,
+      patrolPhase: sentry.patrolPhase,
+      fireCooldown: 1.2 + index * 0.35,
+    }));
+
   return {
     version: 1,
     facilityId: FACILITY.id,
+    missionId,
+    missionType: surveyProfile ? "survey" : "control-loop",
     tick: 0,
     time: 0,
     status: "active",
@@ -608,27 +933,13 @@ export function createIndoorMission() {
       position: copyVector(FACILITY.checkpoint.position),
       reached: false,
     },
-    objectives: FACILITY.objectiveNodes.map((objective) => ({
+    objectives: surveyProfile ? [] : FACILITY.objectiveNodes.map((objective) => ({
       ...objective,
       position: copyVector(objective.position),
       maxIntegrity: objective.integrity,
       destroyed: false,
     })),
-    hostiles: FACILITY.sentryDrones.map((sentry, index) => ({
-      id: sentry.id,
-      position: copyVector(sentry.position),
-      home: copyVector(sentry.position),
-      velocity: { x: 0, y: 0, z: 0 },
-      radius: sentry.radius,
-      health: sentry.health,
-      maxHealth: sentry.health,
-      alive: true,
-      patrolAxis: copyVector(sentry.patrolAxis),
-      patrolAmplitude: sentry.patrolAmplitude,
-      patrolSpeed: sentry.patrolSpeed,
-      patrolPhase: sentry.patrolPhase,
-      fireCooldown: 1.2 + index * 0.35,
-    })),
+    hostiles,
     link: {
       mode: "fiber",
       fiber: {
@@ -669,8 +980,16 @@ export function createIndoorMission() {
     },
     nextProjectileId: 1,
     projectiles: [],
+    survey,
     events: [],
   };
+}
+
+/**
+ * Create one of the authored fictional survey sorties.
+ */
+export function createSurveyMission(missionId) {
+  return createIndoorMission({ missionId });
 }
 
 /**
@@ -787,7 +1106,7 @@ function autonomyAxes(state) {
   };
   if (!state.drone.autonomy.active) return result;
 
-  const objective = nextLiveObjective(state);
+  const objective = nextAutonomyTarget(state);
   if (!objective) {
     result.worldX = clamp(-state.drone.velocity.x / DRONE_MAX_SPEED, -1, 1);
     result.worldY = clamp(-state.drone.velocity.y / DRONE_MAX_SPEED, -1, 1);
@@ -866,7 +1185,9 @@ function tryAutonomyDoorInteraction(state) {
 }
 
 function shouldAutonomyFire(state) {
-  if (!state.drone.autonomy.active || !state.drone.autonomy.targetId) return false;
+  if (state.survey
+    || !state.drone.autonomy.active
+    || !state.drone.autonomy.targetId) return false;
   const target = state.objectives.find(
     (objective) => objective.id === state.drone.autonomy.targetId
       && !objective.destroyed,
@@ -909,6 +1230,221 @@ function tryDoorInteraction(state, input) {
   if (selected) {
     selected.open = true;
     pushEvent(state, "door-opened", { doorId: selected.id });
+  }
+}
+
+function setSurveyStealthBreach(state, breach) {
+  if (!state.survey
+    || state.survey.doctrine !== "stealth-mandatory"
+    || state.survey.breach) return;
+  const failureReasons = {
+    "rf-detach": "stealth-rf-breach",
+    broadcast: "stealth-broadcast-breach",
+    firing: "stealth-fire-breach",
+    detection: "stealth-detection-breach",
+  };
+  state.survey.breach = breach;
+  pushEvent(state, "survey-stealth-breached", { breach });
+  setFailure(state, failureReasons[breach] ?? "stealth-doctrine-breach");
+}
+
+function requestSurveyReturn(state, source = "operator") {
+  const survey = state.survey;
+  if (!survey || survey.returnRequested) return;
+  survey.returnRequested = true;
+  survey.phase = "returning";
+  survey.objectives.return.started = true;
+  survey.silentReturn = source === "operator"
+    && state.link.mode === "fiber"
+    && !survey.broadcasting
+    && survey.broadcastSeconds <= EPSILON
+    && !survey.combat.active
+    && !survey.breach;
+  state.drone.autonomy.active = true;
+  state.drone.autonomy.authority = 0;
+  state.drone.autonomy.level = 1;
+  state.drone.autonomy.mode = "return-home";
+  state.drone.autonomy.targetId = "extraction";
+  pushEvent(state, "survey-return-started", {
+    source,
+    silent: survey.silentReturn,
+  });
+}
+
+function startSurveyCombat(state, reason, hostileId = null) {
+  const survey = state.survey;
+  if (!survey || survey.combat.active) return;
+  if (survey.doctrine === "stealth-mandatory") {
+    setSurveyStealthBreach(state, reason === "player-fire" ? "firing" : "detection");
+    return;
+  }
+
+  survey.combat.active = true;
+  survey.combat.reason = reason;
+  survey.combat.startedAt = state.time;
+  survey.combat.reinforcementClockActive = true;
+  survey.combat.reinforcementRemaining = survey.combat.reinforcementDuration;
+  survey.objectives.combat.complete = true;
+  if (!survey.returnRequested) survey.phase = "combat";
+  for (const hostile of state.hostiles) {
+    if (hostile.active) hostile.engaged = true;
+  }
+  pushEvent(state, "survey-combat-started", {
+    reason,
+    hostileId,
+    reinforcementSeconds: survey.combat.reinforcementDuration,
+  });
+}
+
+function surveyAttentionState(survey) {
+  if (survey.combat.active) return "combat";
+  if (survey.investigator.arrived) return "investigating";
+  if (survey.investigator.summoned) return "summoned";
+  if (survey.attention >= 0.1) return "noticed";
+  return "quiet";
+}
+
+function updateSurveyMission(state, input, dt) {
+  const survey = state.survey;
+  if (!survey || state.status !== "active") return;
+  const profile = SURVEY_PROFILES[survey.profileId];
+  const broadcastRequested = Boolean(input?.broadcast || input?.ewBroadcast)
+    && !survey.returnRequested;
+  survey.broadcasting = broadcastRequested;
+
+  if (broadcastRequested) {
+    const attentionRate = 0.12 + profile.distanceFromBaseKm * 0.22;
+    survey.attention = clamp(survey.attention + attentionRate * dt, 0, 1);
+    survey.broadcastSeconds += dt;
+    survey.objectives.broadcast.progress = clamp(
+      survey.broadcastSeconds / Math.max(
+        EPSILON,
+        survey.objectives.broadcast.requiredSeconds || 1,
+      ),
+      0,
+      1,
+    );
+    if (survey.broadcastSeconds <= dt + EPSILON) {
+      pushEvent(state, "survey-broadcast-started", {
+        distanceFromBaseKm: profile.distanceFromBaseKm,
+      });
+    }
+    if (survey.doctrine === "stealth-mandatory") {
+      setSurveyStealthBreach(state, "broadcast");
+      return;
+    }
+    if (!survey.objectives.broadcast.complete
+      && survey.broadcastSeconds + EPSILON
+        >= survey.objectives.broadcast.requiredSeconds) {
+      survey.objectives.broadcast.complete = true;
+      pushEvent(state, "survey-broadcast-complete");
+    }
+  } else if (!survey.investigator.summoned && !survey.combat.active) {
+    survey.attention = Math.max(0, survey.attention - dt * 0.012);
+  }
+
+  if (!survey.investigator.summoned
+    && survey.attention + EPSILON >= profile.attentionThreshold) {
+    survey.investigator.summoned = true;
+    survey.investigator.arrivalTimer = survey.investigator.delay;
+    pushEvent(state, "investigator-summoned", {
+      arrivalSeconds: survey.investigator.delay,
+    });
+  }
+
+  if (survey.investigator.summoned && !survey.investigator.arrived) {
+    survey.investigator.arrivalTimer = Math.max(
+      0,
+      survey.investigator.arrivalTimer - dt,
+    );
+    if (survey.investigator.arrivalTimer <= EPSILON) {
+      survey.investigator.arrived = true;
+      survey.objectives.investigator.complete = true;
+      const investigator = state.hostiles.find(
+        (hostile) => hostile.id === survey.investigator.hostileId,
+      );
+      if (investigator) {
+        investigator.active = true;
+        investigator.present = true;
+      }
+      if (!survey.returnRequested) survey.phase = "investigating";
+      pushEvent(state, "investigator-arrived", {
+        hostileId: survey.investigator.hostileId,
+      });
+    }
+  }
+
+  if (survey.combat.reinforcementClockActive
+    && !survey.combat.reinforcementArrived) {
+    survey.combat.reinforcementRemaining = Math.max(
+      0,
+      survey.combat.reinforcementRemaining - dt,
+    );
+    if (survey.combat.reinforcementRemaining <= EPSILON) {
+      survey.combat.reinforcementArrived = true;
+      survey.combat.reinforcementClockActive = false;
+      const reinforcement = state.hostiles.find(
+        (hostile) => hostile.id === survey.combat.hostileId,
+      );
+      if (reinforcement) {
+        reinforcement.active = true;
+        reinforcement.present = true;
+        reinforcement.engaged = true;
+      }
+      pushEvent(state, "reinforcement-arrived", {
+        hostileId: survey.combat.hostileId,
+      });
+    }
+  }
+
+  survey.scanning = false;
+  survey.currentScanId = null;
+  if (!survey.returnRequested) {
+    const scan = survey.scanPoints.find(
+      (point) => !point.complete
+        && distance(state.drone.position, point.position) <= point.radius,
+    );
+    if (scan) {
+      survey.scanning = true;
+      survey.currentScanId = scan.id;
+      const wasEmpty = scan.dwell <= EPSILON;
+      scan.dwell = Math.min(scan.dwellRequired, scan.dwell + dt);
+      if (wasEmpty) pushEvent(state, "survey-scan-started", { scanId: scan.id });
+      if (!scan.complete && scan.dwell + EPSILON >= scan.dwellRequired) {
+        scan.complete = true;
+        pushEvent(state, "survey-scan-complete", { scanId: scan.id });
+      }
+    }
+  }
+
+  const scansCompleted = survey.scanPoints.filter((point) => point.complete).length;
+  survey.objectives.scan.completed = scansCompleted;
+  survey.objectives.scan.complete = scansCompleted === survey.scanPoints.length;
+  if (survey.objectives.scan.complete
+    && !survey.returnRequested
+    && survey.phase === "survey") {
+    survey.phase = surveyRequirementsComplete(state) ? "return-ready" : "requirements";
+  }
+
+  survey.attentionState = surveyAttentionState(survey);
+  const atExtraction = distance(
+    state.drone.position,
+    survey.extractionPosition,
+  ) <= survey.extractionRadius;
+  const silentReturnSatisfied = !survey.objectives.return.silentRequired
+    || (survey.returnRequested
+      && survey.silentReturn
+      && state.link.mode === "fiber");
+  if (atExtraction
+    && surveyRequirementsComplete(state)
+    && silentReturnSatisfied) {
+    survey.returnedHome = true;
+    survey.objectives.return.complete = true;
+    pushEvent(state, "survey-complete", {
+      profileId: survey.profileId,
+      doctrine: survey.doctrine,
+    });
+    setSuccess(state);
   }
 }
 
@@ -1028,13 +1564,15 @@ function spawnHostileProjectile(state, hostile, target, targetType) {
 
 function updateHostiles(state, dt) {
   let detected = false;
-  const securityAwake = state.checkpoint.reached
+  let detectorId = null;
+  const securityAwake = Boolean(state.survey)
+    || state.checkpoint.reached
     || state.link.mode !== "fiber"
     || state.alert > 0.01
     || state.gun.shots > 0;
   for (let index = 0; index < state.hostiles.length; index += 1) {
     const hostile = state.hostiles[index];
-    if (!hostile.alive) continue;
+    if (!hostile.alive || !hostile.active) continue;
     const previous = copyVector(hostile.position);
     const phase = state.time * hostile.patrolSpeed + hostile.patrolPhase;
     const offset = Math.sin(phase) * hostile.patrolAmplitude;
@@ -1051,7 +1589,12 @@ function updateHostiles(state, dt) {
       && droneDistance <= 9.5
       && hasLineOfSight(state, hostile.position, state.drone.position)) {
       detected = true;
+      detectorId ??= hostile.id;
     }
+  }
+
+  if (detected && state.survey && !state.survey.combat.active) {
+    startSurveyCombat(state, "detected", detectorId);
   }
 
   state.alert = clamp(
@@ -1063,7 +1606,10 @@ function updateHostiles(state, dt) {
   if (state.alert < 0.42) return;
   for (let index = 0; index < state.hostiles.length; index += 1) {
     const hostile = state.hostiles[index];
-    if (!hostile.alive || hostile.fireCooldown > 0) continue;
+    if (!hostile.alive
+      || !hostile.active
+      || !hostile.engaged
+      || hostile.fireCooldown > 0) continue;
 
     let target = state.drone.position;
     let targetType = "drone";
@@ -1101,7 +1647,7 @@ function projectileCollision(state, projectile, start, end) {
 
   if (projectile.owner === "player") {
     for (const hostile of state.hostiles) {
-      if (!hostile.alive) continue;
+      if (!hostile.alive || !hostile.active) continue;
       consider(
         segmentSphere(start, end, hostile.position, hostile.radius),
         "hostile",
@@ -1154,6 +1700,9 @@ function resolveProjectileHit(state, projectile, hit) {
 
   if (projectile.owner === "player") state.gun.hits += 1;
   if (hit.kind === "hostile") {
+    if (state.survey) {
+      startSurveyCombat(state, "player-fire", hit.target.id);
+    }
     hit.target.health = Math.max(0, hit.target.health - projectile.damage);
     if (hit.target.health <= 0) {
       hit.target.alive = false;
@@ -1235,6 +1784,9 @@ function stepSubstep(state, input, dt, allowOneShotInput) {
   state.time += dt;
 
   refreshRfLink(state);
+  if (allowOneShotInput && input?.returnHome) {
+    requestSurveyReturn(state, "operator");
+  }
   const playerAxes = inputAxes(input);
   const automation = autonomyAxes(state);
   const axes = blendAxes(
@@ -1289,9 +1841,13 @@ function stepSubstep(state, input, dt, allowOneShotInput) {
   if (allowOneShotInput && (input?.detach || input?.detachFiber)) {
     applyDetach(state, "manual");
   }
+  if (state.status !== "active") return;
   updateFiber(state, previousPosition, collisions, axes, dt);
+  if (state.status !== "active") return;
   if (allowOneShotInput) tryDoorInteraction(state, input);
   tryAutonomyDoorInteraction(state);
+  updateSurveyMission(state, input, dt);
+  if (state.status !== "active") return;
 
   const movementLoad = Math.min(1, speed / DRONE_MAX_SPEED);
   const linkLoad = state.link.mode === "rf"
@@ -1307,6 +1863,10 @@ function stepSubstep(state, input, dt, allowOneShotInput) {
   const playerFire = allowOneShotInput
     && input?.fire
     && state.drone.autonomy.authority > EPSILON;
+  if (playerFire && state.survey?.doctrine === "stealth-mandatory") {
+    setSurveyStealthBreach(state, "firing");
+    return;
+  }
   if ((playerFire || autonomyFire)
     && state.link.mode !== "fiber"
     && state.gun.cooldown <= EPSILON
@@ -1333,7 +1893,8 @@ function stepSubstep(state, input, dt, allowOneShotInput) {
 
 /**
  * Advance a mission. Inputs are local axes in [-1, 1]:
- * { forward, right, up, yaw, pitch, fire, interact, detachFiber }.
+ * { forward, right, up, yaw, pitch, fire, interact, detachFiber,
+ *   returnHome, broadcast }.
  * `thrust`, `move`, `look`, and `worldMove` aliases are also accepted.
  *
  * Large dt values are deterministically subdivided; fixed 1/60 updates avoid
@@ -1375,6 +1936,8 @@ export function missionSnapshot(state) {
   return rounded({
     version: state.version,
     facilityId: state.facilityId,
+    missionId: state.missionId,
+    missionType: state.missionType,
     tick: state.tick,
     time: state.time,
     status: state.status,
@@ -1390,6 +1953,7 @@ export function missionSnapshot(state) {
     alert: state.alert,
     gun: state.gun,
     projectiles: state.projectiles,
+    survey: state.survey,
     events: state.events,
   });
 }

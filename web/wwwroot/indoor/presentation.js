@@ -14,6 +14,7 @@ const COLORS = Object.freeze({
 });
 
 const vector = (value) => new THREE.Vector3(value.x, value.y, value.z);
+const clamp01 = (value) => Math.max(0, Math.min(1, Number(value) || 0));
 
 function boxSize(box) {
   return new THREE.Vector3(
@@ -192,13 +193,13 @@ function createObjectiveModel(materials, index) {
   return group;
 }
 
-function createSentryModel(materials, index) {
+function createSentryModel(materials, index, role = "sentry") {
   const group = new THREE.Group();
   group.name = `sentry-${index}`;
 
   const body = new THREE.Mesh(
     new THREE.IcosahedronGeometry(0.29, 1),
-    materials.hostile,
+    role === "investigator" ? materials.amber : materials.hostile,
   );
   body.scale.set(1.35, 0.75, 1);
   group.add(body);
@@ -236,6 +237,62 @@ function createSentryModel(materials, index) {
   group.add(gun);
 
   return group;
+}
+
+function createSurveyMarker(materials) {
+  const group = new THREE.Group();
+  group.name = "survey-marker";
+  group.visible = false;
+
+  const outerMaterial = materials.cyan.clone();
+  outerMaterial.transparent = true;
+  outerMaterial.opacity = 0.56;
+  const outer = new THREE.Mesh(
+    new THREE.TorusGeometry(0.68, 0.026, 5, 36),
+    outerMaterial,
+  );
+  outer.name = "scan-ring";
+  outer.rotation.x = Math.PI / 2;
+  group.add(outer);
+
+  const hoopMaterial = materials.cyan.clone();
+  hoopMaterial.transparent = true;
+  hoopMaterial.opacity = 0.3;
+  const hoop = new THREE.Mesh(
+    new THREE.TorusGeometry(0.46, 0.018, 5, 28),
+    hoopMaterial,
+  );
+  hoop.name = "scan-hoop";
+  group.add(hoop);
+
+  const progressMaterial = materials.green.clone();
+  progressMaterial.transparent = true;
+  progressMaterial.opacity = 0.44;
+  const progress = new THREE.Mesh(
+    new THREE.TorusGeometry(0.33, 0.024, 5, 28),
+    progressMaterial,
+  );
+  progress.name = "scan-progress";
+  progress.rotation.x = Math.PI / 2;
+  group.add(progress);
+
+  const beaconMaterial = materials.cyan.clone();
+  beaconMaterial.transparent = true;
+  beaconMaterial.opacity = 0.72;
+  const beacon = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.09, 0),
+    beaconMaterial,
+  );
+  beacon.name = "scan-beacon";
+  group.add(beacon);
+
+  return group;
+}
+
+function hostileIsPresent(hostile) {
+  return hostile?.alive === true
+    && hostile.active === true
+    && hostile.present === true;
 }
 
 function createDroneFrame(materials) {
@@ -390,6 +447,8 @@ export class IndoorPresentation {
     this.doorMeshes = new Map();
     this.objectiveModels = new Map();
     this.hostileModels = new Map();
+    this.surveyModels = new Map();
+    this.visibleHostileIds = new Set();
     this.projectileModels = new Map();
     this.routeRings = [];
     this.sparks = [];
@@ -399,6 +458,7 @@ export class IndoorPresentation {
     this.shake = 0;
     this.hitPulse = 0;
     this.targetInfo = null;
+    this.surveyTargetInfo = null;
 
     this.buildFacility();
     this.fiberGeometry = new THREE.BufferGeometry();
@@ -511,6 +571,7 @@ export class IndoorPresentation {
       const sentry = this.facility.sentryDrones[index];
       const model = createSentryModel(this.materials, index);
       model.position.copy(vector(sentry.position));
+      model.visible = false;
       model.userData.kind = "hostile";
       model.userData.id = sentry.id;
       model.traverse((child) => {
@@ -664,6 +725,9 @@ export class IndoorPresentation {
   }
 
   updateObjectives(snapshot, elapsed) {
+    for (const model of this.objectiveModels.values()) model.visible = false;
+    if (snapshot.survey) return;
+
     for (let index = 0; index < snapshot.objectives.length; index += 1) {
       const objective = snapshot.objectives[index];
       const model = this.objectiveModels.get(objective.id);
@@ -688,12 +752,110 @@ export class IndoorPresentation {
     }
   }
 
+  ensureSurveyMarker(point) {
+    let model = this.surveyModels.get(point.id);
+    if (model) return model;
+
+    model = createSurveyMarker(this.materials);
+    model.userData.id = point.id;
+    model.userData.label = point.label;
+    model.userData.phase = this.surveyModels.size * 1.73;
+    this.surveyModels.set(point.id, model);
+    this.world.add(model);
+    return model;
+  }
+
+  updateSurvey(snapshot, elapsed) {
+    for (const model of this.surveyModels.values()) model.visible = false;
+    this.surveyTargetInfo = null;
+    const survey = snapshot.survey;
+    if (!survey) return;
+
+    const doctrineColor = survey.doctrine === "noisy-provocation"
+      ? COLORS.amber
+      : survey.doctrine === "discretionary" ? COLORS.green : COLORS.cyan;
+
+    for (const point of survey.scanPoints ?? []) {
+      const model = this.ensureSurveyMarker(point);
+      const progress = clamp01(point.dwell / Math.max(0.001, point.dwellRequired));
+      const current = survey.currentScanId === point.id;
+      const color = point.complete ? COLORS.green : doctrineColor;
+      const radiusScale = Math.max(0.65, (Number(point.radius) || 0.9) / 0.9);
+      const pulse = this.reducedMotion
+        ? 1
+        : 1 + Math.sin(elapsed * (current ? 2.1 : 1.1) + model.userData.phase)
+          * (current ? 0.035 : 0.016);
+
+      model.visible = true;
+      model.position.copy(vector(point.position));
+      model.scale.setScalar(radiusScale * pulse);
+      model.rotation.y = this.reducedMotion
+        ? 0
+        : elapsed * (current ? 0.42 : 0.12) + model.userData.phase;
+      model.userData.label = point.label;
+
+      const outer = model.getObjectByName("scan-ring");
+      const hoop = model.getObjectByName("scan-hoop");
+      const progressRing = model.getObjectByName("scan-progress");
+      const beacon = model.getObjectByName("scan-beacon");
+      for (const part of [outer, hoop, beacon]) part?.material?.color?.setHex(color);
+      if (outer) outer.material.opacity = point.complete ? 0.22 : current ? 0.88 : 0.52;
+      if (hoop) hoop.material.opacity = point.complete ? 0.12 : current ? 0.5 : 0.26;
+      if (progressRing) {
+        progressRing.visible = !point.complete;
+        progressRing.scale.setScalar(0.52 + progress * 0.48);
+        progressRing.material.opacity = 0.22 + progress * 0.64;
+      }
+      if (beacon) {
+        beacon.material.opacity = point.complete ? 0.3 : current ? 0.94 : 0.66;
+        beacon.scale.setScalar(point.complete ? 0.72 : 0.86 + progress * 0.28);
+      }
+
+      if (current) {
+        this.surveyTargetInfo = {
+          id: point.id,
+          label: point.label,
+          progress,
+          complete: point.complete,
+        };
+      }
+    }
+  }
+
+  ensureHostileModel(hostile) {
+    let model = this.hostileModels.get(hostile.id);
+    if (model) return model;
+
+    model = createSentryModel(
+      this.materials,
+      this.hostileModels.size,
+      hostile.role,
+    );
+    model.position.copy(vector(hostile.position));
+    model.visible = false;
+    model.userData.kind = "hostile";
+    model.userData.id = hostile.id;
+    model.userData.role = hostile.role;
+    model.traverse((child) => {
+      if (!child.isMesh) return;
+      child.userData.kind = "hostile";
+      child.userData.id = hostile.id;
+    });
+    setShadow(model, !this.touch);
+    this.hostileModels.set(hostile.id, model);
+    this.world.add(model);
+    return model;
+  }
+
   updateHostiles(snapshot, elapsed) {
+    this.visibleHostileIds.clear();
+    for (const model of this.hostileModels.values()) model.visible = false;
+
     for (const hostile of snapshot.hostiles) {
-      const model = this.hostileModels.get(hostile.id);
-      if (!model) continue;
-      model.visible = hostile.alive;
-      if (!hostile.alive) continue;
+      if (!hostileIsPresent(hostile)) continue;
+      const model = this.ensureHostileModel(hostile);
+      model.visible = true;
+      this.visibleHostileIds.add(hostile.id);
       model.position.copy(vector(hostile.position));
       const toDrone = vector(snapshot.drone.position).sub(model.position);
       if (toDrone.lengthSq() > 0.001) {
@@ -797,9 +959,11 @@ export class IndoorPresentation {
       if (model) targets.push(...model.children.filter((child) => child.isMesh && child.visible));
     }
     for (const hostile of snapshot.hostiles) {
-      if (!hostile.alive) continue;
+      if (!this.visibleHostileIds.has(hostile.id)) continue;
       const model = this.hostileModels.get(hostile.id);
-      if (model) targets.push(...model.children.filter((child) => child.isMesh && child.visible));
+      if (model?.visible) {
+        targets.push(...model.children.filter((child) => child.isMesh && child.visible));
+      }
     }
     const hit = this.raycaster.intersectObjects([...targets, ...this.occluderMeshes], false)[0]
       ?? null;
@@ -836,6 +1000,7 @@ export class IndoorPresentation {
     this.updateFiber(snapshot);
     this.updateDoors(snapshot, dt);
     this.updateObjectives(snapshot, elapsed);
+    this.updateSurvey(snapshot, elapsed);
     this.updateHostiles(snapshot, elapsed);
     this.updateProjectiles(snapshot);
     this.updateRoute(snapshot, elapsed);

@@ -1056,11 +1056,31 @@ export function createRapierDispersedStrip(context = {}) {
       box(segment, { x: 0.12, y: 0.12, z: length },
         new THREE.Vector3(side * 0.42, 0.005, 0), rail);
     }
-    // The ramp is a built earth-and-concrete structure: it has to be held up.
-    box(segment, { x: 13, y: Math.max(0.6, (y0 + y1) / 2), z: length },
-      new THREE.Vector3(0, -(y0 + y1) / 4 - 0.1, 0), shoulder);
     group.add(segment);
   }
+
+  // The ramp body: ONE solid wedge whose top face follows the arc. Built as an extruded profile
+  // rather than a box per segment — stacking rotated boxes produces a row of disconnected leaning
+  // plates, which is what the first attempt actually rendered as. Profile X runs along the ramp and
+  // profile Y is height; rotating the mesh +90 degrees about Y maps profile X onto world -Z and the
+  // extrusion depth onto world X, so the wedge lies along the launch axis at the rail's width.
+  const rampWidthM = 15;
+  const rampProfile = new THREE.Shape();
+  rampProfile.moveTo(0, -0.6);
+  for (let i = 0; i <= ARC_SEGMENTS; i++) {
+    const d = flatLengthM + arcLengthM * i / ARC_SEGMENTS;
+    rampProfile.lineTo(arcRadiusM * Math.sin(railAngleAt(d)), railHeightAt(d));
+  }
+  rampProfile.lineTo(arcRadiusM * Math.sin(rampAngleRad), -0.6);
+  rampProfile.closePath();
+  const rampBody = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(rampProfile, { depth: rampWidthM, bevelEnabled: false }),
+    shoulder,
+  );
+  rampBody.name = "LAUNCH_RAMP_BODY";
+  rampBody.rotation.y = Math.PI / 2;
+  rampBody.position.set(catapultX - rampWidthM / 2, 0, railStartZ - flatLengthM);
+  group.add(rampBody);
 
   // COVERED ACCELERATION GALLERY. Ukrainian steppe is flat, so nothing hides a launcher and
   // nothing supplies a launch angle. Roofing the flat run answers the first — a dispersed launcher
