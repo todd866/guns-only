@@ -599,6 +599,87 @@ The seam is clean: one branch in `AircraftSim.UpdateEngine` (sim/AircraftSim.cs:
 is a pure deterministic function of Mach and density with no state — exactly the shape the kernel
 wants.
 
+### The stainless ramjet dive fighter, sized
+
+Owner's decision, overriding the thermal objection: *"I want a high altitude ramjet dive fighter with
+catshot and arrested landing and ejection seats. I don't care if it's super dangerous, we're
+simulating WWIII."* Plus: steel only where the heat is, composite elsewhere; no windscreen; an
+escape POD rather than a seat, because the controls are simple enough that there is almost nothing
+to enclose.
+
+**The sortie:**
+
+| | phase | where |
+|---|---|---|
+| 1 | catapult launch, 85-88 m/s, ~3 G, ~29 MJ | ground |
+| 2 | turbojet climb at M0.75-0.85 | to 16 km, **18-24 min** |
+| 3 | push over into a 50-55 degree dive | from 16 km |
+| 4 | **light the solid rocket at M1.30-1.35** | still at 11-12 km |
+| 5 | ramjet lights ~M1.60, builds to M1.7-1.8 | 9-10 km |
+| 6 | shallow 2-3 G recovery, accelerate through M2, climb | to 21-22 km |
+| 7 | cruise M2.5-2.6, 18-22 min | 21-22 km |
+| 8 | attack dive, bottoming M1.6-1.8 | 7-9 km |
+| 9 | **full 15 G available — for 3-5 SECONDS** | bottom |
+| 10 | exit M0.9-1.2, ramjet unstarted, recover on the turbojet | home |
+
+7,400 kg at catshot (4,700 fuel-free), 18 m2 wing at AR 3.0, 411 kg/m2, 600-700 km combat radius,
+**$8-11M flyaway**.
+
+**THE DIVE ALONE DOES NOT CLOSE.** It will ignite a permissive ramjet around M1.4-1.5, but by then
+the altitude is spent and there is not enough ramjet excess thrust to pull out and climb — it
+asymptotes near M1.5-1.6 and sinks. The ~290 kg rocket (240 kg propellant, 50 kg hardware) does not
+buy Mach, it buys **Mach EARLY, while altitude is still in hand**. Climbing higher first does not
+help: the small turbojet is already near its subsonic ceiling and the extra potential energy goes
+straight into transonic drag.
+
+Two consequences that are pure game mechanic:
+- **The transition is a one-shot irreversible commitment taken mid-dive.** One rocket. Push over,
+  wait for M1.3, light it — and from that moment you are going to Mach 2.5 or you are going home.
+- **The turbojet is flight-critical, not auxiliary.** The exit has no rocket and no ramjet, so the
+  small climb engine is the only way back. Lose it over the target and the arrested landing becomes
+  a very heavy glide.
+
+**Corrections worth keeping:**
+- "Stainless is cheap" is half true. Feedstock and some welding are; thin heat-resistant sheet,
+  weld-distortion control, honeycomb brazing and NDI are not. It still saves $1-2M against titanium
+  but costs 450-700 kg.
+- Launch and recovery infrastructure is **tens of millions per operating lane** and must not be
+  hidden inside aircraft flyaway cost.
+- **The checked-in catapult and arrestor cannot take this aircraft.** The algorithms transfer; the
+  capability profiles do not. Carrier.cs is a fixed 62 m/s / 75 m launch — below safe speed for
+  411 kg/m2, which wants 85-88 m/s over 125-135 m. ArrestmentCapabilityProfile is rated 10.8 MJ
+  against a 12-15 MJ recovery. Both need explicit new profiles.
+
+**Why the pod works, and the tension it creates.** Above about Mach 2 open ejection is lethal — blast
+and stagnation heating do the killing, which is why the B-58, XB-70 and F-111 all used capsules.
+Those were enormous because they had to enclose a COCKPIT. Here the controls are a keyboard and a
+display, so there is almost nothing to enclose: automation is what makes Mach 3 escape light enough
+to carry. Deleting the windscreen removes a Mach 3 transparency problem (the SR-71 needed fused
+quartz) and a major radar return at the same time, and the pod can be a composite eggshell because it
+lives inside the steel and never sees the heat. Best of all the pressure cabin and the escape capsule
+become the SAME OBJECT — no clamshell to close, no sealing failure mode, just separation.
+
+And the tension that lands the whole thesis: the pilot is sealed in an opaque shell, reclined, with a
+keyboard, and **his only view of the world is whatever the machine chooses to show him.** He is
+aboard precisely because he is the one link that cannot be prompt-injected — and every input he
+receives has already passed through the system he is there to doubt.
+
+### Built: a ramjet propulsion model
+
+`sim/Propulsion/RamjetPerformanceMap.cs`. None of the three existing propulsion models could be a
+ramjet — they all put peak thrust at low Mach and lapse with altitude, and a ramjet is the inverse.
+The model is textbook ideal-cycle specific thrust, mass flow times (sqrt(tauLambda/tauRam) - 1), with
+MIL-E-5008B inlet recovery pulling the peak down from the ideal M4 to a realistic M3, and a hard
+light-up floor at M1.6 below which it returns exactly zero. That floor is what makes the dive-to-start
+a real manoeuvre instead of a stylistic choice.
+
+Note that `ThrustMaxN` means net thrust AT THE DESIGN POINT for this model, not static sea-level
+thrust — a ramjet has none of the latter.
+
+**Still missing: mode gating.** This aircraft has three propulsion states (turbojet climb, rocket
+bridge, ramjet cruise) and flies on a different engine in each. The map covers the ramjet phase only.
+That is a state machine, and it is the real remaining work.
+
 ---
 
 ## Why these two ideas belong in the same note

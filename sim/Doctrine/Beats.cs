@@ -84,6 +84,20 @@ public sealed record AircraftCapability(
         "systems.modern-airborne.not-simulated.v1", false, true,
         "https://www.af.mil/About-Us/Fact-Sheets/Display/Article/104506/f-22-raptor/",
         AutoGcasCapabilityProfile.ModernCrewedPublicDataSurrogate);
+    /// The 2030s cheap high-altitude interceptor. Steel where the heat is, composite elsewhere, no
+    /// windscreen — the occupant is reclined behind sensors in a composite escape pod — catapult
+    /// launched from deep rear basing and recovered on a hook. Systems ARE simulated because the
+    /// aircraft's whole character lives in what its engine can and cannot do at a given Mach.
+    public static AircraftCapability RapierSurrogate { get; } = new(
+        "aircraft.rapier.public-data-surrogate.v1",
+        "Rapier high-altitude interceptor (surrogate)",
+        // No authored model yet. Deliberately reuses the SHIPPING player presentation rather than
+        // inventing an id: the visual profile publishes only player and bandit vehicle ids, and a
+        // capability naming one that does not resolve fails to render rather than falling back.
+        // Flyable before beautiful.
+        "presentation.vehicle.player.v1",
+        "systems.carrier-recovery.generic-surrogate.v1", true, true);
+
     public static AircraftCapability F35CCarrierSurrogate { get; } = new(
         "aircraft.f35c.public-data-carrier-surrogate.v1",
         "F-35C public-data carrier surrogate",
@@ -209,6 +223,15 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     /// A fight staged at corner speed but full military thrust accelerates straight off
     /// corner, so the pilot has to pull power before every single engagement.
     bool StageAtTrimThrottle = false,
+    /// The launcher this beat's aircraft actually has. A 1950s deck catapult ends at 62 m/s, which
+    /// is below flying speed for a high-wing-loading jet; a land-based electromagnetic launcher runs
+    /// a longer stroke to a higher end speed. Null keeps the deck default.
+    /// Launch the sortie ON the catapult rather than airborne. Until now the catapult only ever
+    /// fired on a RELAUNCH after a trap, so a mission that begins with a catshot had no way to say
+    /// so — which is the first item in "catshot, climb, cruise, descend and trap".
+    bool StartsOnCatapult = false,
+    double? CatapultStrokeM = null,
+    double? CatapultEndSpeedMps = null,
     MissionContract? Mission = null,
     AircraftCapability? PlayerCapability = null,
     AircraftCapability? BanditCapability = null,
@@ -562,6 +585,71 @@ public static class Beats {
                 RulesOfEngagement: "RECOVERY_ONLY",
                 Era: "MODERN_PUBLIC_DATA_EXERCISE"),
             PlayerCapability: AircraftCapability.F35CCarrierSurrogate,
+            PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
+            RecoveryCompletesSortie: true);
+    }
+
+    /// <summary>
+    /// RAPIER INTERCEPT — the complete 2030s sortie: catapult launch from deep rear basing,
+    /// climb on the turbine core, accelerate into ram cruise very high and very fast, dive on the
+    /// contact, and recover on the hook.
+    ///
+    /// Every phase exists because the aircraft forces it. Basing is far behind the front because
+    /// forward airfields get cratered, which is only survivable if the aircraft is fast enough to
+    /// still arrive; the climb is long because the turbine is small; the fight is brief because
+    /// instantaneous G comes from structure and sustained G comes from thrust, and this aircraft has
+    /// far more of the former. It can point at anything once.
+    ///
+    /// The launcher is declared explicitly: a 1950s deck catapult ends at 62 m/s, which is below
+    /// flying speed at 436 kg/m2 — an aircraft launched on the default would sink off the bow.
+    /// </summary>
+    public static BeatSetup RapierIntercept(
+        GunsOnly.Sim.Carrier.DeckConfiguration configuration =
+            GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
+        // A land-based dispersed strip rather than a ship: no deck motion, and the "deck" is the
+        // runway. Modelled with the carrier machinery because catapult and arrestment physics are
+        // the same problem, which is exactly why the repo already had both.
+        var carrier = new GunsOnly.Sim.Carrier(
+            deckCentre: new Vec3D(0, 20, 0), headingRad: 0, speedMps: 0,
+            deckAltM: 20, deckLengthM: 300, deckWidthM: 40,
+            configuration: configuration);
+        return new BeatSetup(
+            Name: "Rapier intercept",
+            Player: new AircraftState(new Vec3D(0, 20, 0), 0.0, 0, 0, 0,
+                FlightModel.RapierPublicDataSurrogate.MassKg),
+            // A contact high and slow ahead: the thing this aircraft was built to kill is an
+            // enabler, not a fighter.
+            Bandit: new AircraftState(new Vec3D(6_000, 12_000, 90_000), 210, 0, Math.PI, 0,
+                FlightModel.Su27SPublicDataSurrogate.MassKg),
+            Law: new PurePursuitLaw(),
+            BanditTimeline: new() { (0.0, new PilotCommand(1.0, 0.0, 0.55, 0.0)) },
+            PlayerParams: FlightModel.RapierPublicDataSurrogate,
+            BanditParams: FlightModel.Su27SPublicDataSurrogate,
+            Carrier: carrier,
+            UsesReactiveBandit: true,
+            Combat: CombatConfig.ModernVisualMerge,
+            Fuel: new FuelConfig(
+                CapacityLb: 5_950.0,          // 2,700 kg of fuel
+                InitialFuelLb: 5_950.0,
+                BingoThresholdLb: 1_600.0,
+                ConsumesFuel: true,
+                JokerThresholdLb: 2_400.0,
+                MinimumFuelThresholdLb: 900.0,
+                EmergencyFuelThresholdLb: 550.0),
+            InitialThrottle: 1.0,
+            StartsOnCatapult: true,
+            // Electromagnetic launcher: 88 m/s over a 130 m stroke, about 3 G and 30 MJ into a
+            // 7.85 t aircraft. The deck default of 62 m/s over 75 m cannot fly this wing.
+            CatapultStrokeM: 130.0,
+            CatapultEndSpeedMps: 88.0,
+            Mission: new MissionContract(
+                "mission.modern.rapier-intercept.public-data-surrogate.v1",
+                MissionContentFamily.ModernPublicDataSurrogate,
+                PublicDataSurrogate: true,
+                RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE",
+                Era: "MODERN_PUBLIC_DATA_EXERCISE"),
+            PlayerCapability: AircraftCapability.RapierSurrogate,
+            BanditCapability: AircraftCapability.Su27SSurrogate,
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
             RecoveryCompletesSortie: true);
     }

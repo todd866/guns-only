@@ -590,16 +590,39 @@ public sealed class Carrier {
 public sealed class CatapultLaunchModel {
     public enum LaunchPhase { None, Stroke, Airborne }
 
+    /// Default deck-catapult geometry. A land-based electromagnetic launcher for a high-wing-loading
+    /// aircraft needs a longer stroke and a higher end speed than a 1950s deck catapult — 62 m/s is
+    /// below flying speed at 400 kg/m2, so an aircraft launched on the default would sink off the
+    /// bow. Both are per-instance so a beat can declare the launcher it actually has.
     public const double StrokeDistanceM = 75.0;
     public const double EndDeckRelativeSpeedMps = 62.0;
+
+    readonly double _strokeDistanceM;
+    readonly double _endRelativeSpeedMps;
+
+    public CatapultLaunchModel(double strokeDistanceM = StrokeDistanceM,
+        double endRelativeSpeedMps = EndDeckRelativeSpeedMps) {
+        if (!double.IsFinite(strokeDistanceM) || strokeDistanceM <= 0.0)
+            throw new System.ArgumentOutOfRangeException(nameof(strokeDistanceM));
+        if (!double.IsFinite(endRelativeSpeedMps) || endRelativeSpeedMps <= 0.0)
+            throw new System.ArgumentOutOfRangeException(nameof(endRelativeSpeedMps));
+        _strokeDistanceM = strokeDistanceM;
+        _endRelativeSpeedMps = endRelativeSpeedMps;
+    }
+
+    public double StrokeM => _strokeDistanceM;
+    public double EndSpeedMps => _endRelativeSpeedMps;
+    /// Constant-acceleration stroke, so the energy delivered is 0.5 m v^2 and the g-load is fixed by
+    /// the geometry rather than by the aircraft.
+    double AccelerationForStroke =>
+        _endRelativeSpeedMps * _endRelativeSpeedMps / (2.0 * _strokeDistanceM);
     public const double StartAlongM = 20.0;
     public const double CatapultCrossM = -7.0;
     public const double AirborneHeightM = 4.0;
     public const double LaunchClimbMps = 6.0;
     const double ParkedNosePitchRad = 0.8 * System.Math.PI / 180.0;
     const double LaunchNosePitchRad = 9.0 * System.Math.PI / 180.0;
-    const double AccelerationMps2 = EndDeckRelativeSpeedMps * EndDeckRelativeSpeedMps
-        / (2.0 * StrokeDistanceM);
+
 
     double _massKg;
     double _distanceM;
@@ -626,24 +649,24 @@ public sealed class CatapultLaunchModel {
     public void Step(Carrier carrier, double dt) {
         if (Phase != LaunchPhase.Stroke || dt <= 0.0) return;
 
-        double nextSpeed = System.Math.Min(EndDeckRelativeSpeedMps,
-            RelativeSpeedMps + AccelerationMps2 * dt);
+        double nextSpeed = System.Math.Min(_endRelativeSpeedMps,
+            RelativeSpeedMps + AccelerationForStroke * dt);
         _distanceM += 0.5 * (RelativeSpeedMps + nextSpeed) * dt;
         RelativeSpeedMps = nextSpeed;
         ElapsedSeconds += dt;
 
-        if (_distanceM + 1e-12 < StrokeDistanceM) {
+        if (_distanceM + 1e-12 < _strokeDistanceM) {
             State = StrokeState(carrier, ParkedNosePitchRad);
             return;
         }
 
-        _distanceM = StrokeDistanceM;
-        RelativeSpeedMps = EndDeckRelativeSpeedMps;
+        _distanceM = _strokeDistanceM;
+        RelativeSpeedMps = _endRelativeSpeedMps;
         var velocity = carrier.DeckVelocityWorld
-            + carrier.Fwd * EndDeckRelativeSpeedMps
+            + carrier.Fwd * _endRelativeSpeedMps
             + new Vec3D(0.0, LaunchClimbMps, 0.0);
         State = Carrier.StateFromVelocity(
-            carrier.ShipPoint(StartAlongM + StrokeDistanceM, CatapultCrossM, AirborneHeightM),
+            carrier.ShipPoint(StartAlongM + _strokeDistanceM, CatapultCrossM, AirborneHeightM),
             velocity, _massKg, Attitude(carrier, LaunchNosePitchRad));
         Phase = LaunchPhase.Airborne;
     }

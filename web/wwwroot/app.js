@@ -1474,6 +1474,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     brief: "Two splashes earn carrier conversion. Each replacement Su-27 enters through a fresh neutral merge while fuel, ammunition, damage, and your kill count persist. Burst discipline and G management now matter across the whole sortie, not just one fight.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash two bandits in one sortie to qualify",
   }),
+  "rapier-intercept": Object.freeze({
+    kicker: "2030s · deep-rear basing",
+    title: "Rapier Intercept",
+    sortie: "Rapier turbo-ramjet interceptor · catapult launch · guns only · hook recovery",
+    configuration: "Rapier public-data surrogate · 12 G structural, 15 G on override · no afterburner below M2 · electromagnetic launcher 88 m/s",
+    brief: "You launch from a dispersed strip a long way behind the front, because forward airfields do not survive. Climb on the turbine core, let the ram side take over past Mach 2, and cruise very high and very fast to the contact. Then dive. The Rapier carries enormous instantaneous G and almost no sustained G — it can point at anything once, for three to five seconds, and afterwards it is slow, low and out of ideas. Make the pass count, then recover on the hook.",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace releases the G limiter to 15 G · one pass, then get out",
+  }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
     title: "Ace Duel",

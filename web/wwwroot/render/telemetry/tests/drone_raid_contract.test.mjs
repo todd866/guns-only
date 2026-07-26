@@ -20,7 +20,8 @@ const [bridgeSource, sessionSource, beatsSource] = await Promise.all([
 
 test("stable beat eight selects the Korea 2030s staged drone raid without renumbering", () => {
   assert.match(sessionSource, /7 => Beats\.ModernVisualMerge,\s*8 => Beats\.DroneRaidDefense,/);
-  assert.match(sessionSource, /index is < 1 or > 9/);
+  // The ceiling moves as beats are added; what must not move is beat EIGHT being the drone raid.
+  assert.match(sessionSource, /index is < 1 or > \d+/);
   assert.match(beatsSource,
     /mission\.korea-2030s\.drone-raid-defence\.prototype\.v1/);
   assert.match(beatsSource, /Era: "KOREA_2030S_PROXY"/);

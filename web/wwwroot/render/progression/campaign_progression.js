@@ -38,6 +38,18 @@ export const CAMPAIGN_NODES = Object.freeze([
     shortObjective: "Win a lone guns-only duel against a forced Ace bandit.",
     qualification: "SPLASH THE ACE",
   }),
+  // A different aircraft in a different decade, so it sits AFTER the Raptor programme rather than
+  // inside it. The Rapier is not a better F-22; it is a one-pass interceptor that flies a completely
+  // different sortie and is beaten in completely different ways.
+  Object.freeze({
+    id: "rapier-intercept",
+    mission: 10,
+    sequence: 5,
+    aircraft: "Rapier",
+    title: "Rapier Intercept",
+    shortObjective: "Catapult out, climb, cruise high and fast, dive on the contact, recover.",
+    qualification: "SPLASH THE CONTACT AND TRAP",
+  }),
 ]);
 
 const NODE_BY_ID = new Map(CAMPAIGN_NODES.map((node) => [node.id, node]));

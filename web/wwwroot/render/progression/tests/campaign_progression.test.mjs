@@ -19,6 +19,9 @@ test("the Raptor program is linear and the ace duel sits behind three qualificat
     { id: "raid-defence", mission: 8, aircraft: "F-22A" },
     { id: "endurance-merge", mission: 7, aircraft: "F-22A" },
     { id: "ace-duel", mission: 9, aircraft: "F-22A" },
+    // The Rapier sits after the programme, not inside it: a different aircraft, a different decade,
+    // and a sortie shaped by the airframe rather than by the ladder.
+    { id: "rapier-intercept", mission: 10, aircraft: "Rapier" },
   ]);
   const fresh = createCampaignProfile();
   assert.equal(recommendedCampaignNode(fresh).id, "first-merge");
@@ -89,7 +92,12 @@ test("the ace-duel capstone requires one splash of the forced Ace bandit", () =>
     kill_count: 1,
   }, 4);
   assert.equal(result.newlyQualified, true);
-  assert.equal(nextCampaignNode(result.profile, "ace-duel"), null);
+  // The ace duel is no longer the end of the line: beating it opens the Rapier, which is a
+  // different aircraft rather than a harder F-22.
+  assert.equal(nextCampaignNode(result.profile, "ace-duel")?.id, "rapier-intercept");
+  // nextCampaignNode returns the node ITSELF while it is still unqualified, so the meaningful
+  // assertion is that the Rapier is what comes next — not that nothing does.
+  assert.equal(nextCampaignNode(result.profile, "rapier-intercept")?.id, "rapier-intercept");
 });
 
 test("anonymous progress survives storage failures and malformed saved data", () => {

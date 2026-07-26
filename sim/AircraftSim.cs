@@ -519,6 +519,25 @@ public sealed class AircraftSim {
             return;
         }
 
+        if (_p.PropulsionModel == PropulsionModelKind.TurboRamjetPublicDataSurrogate) {
+            LastEngineOperatingPoint = TurboRamjetPerformanceMap.Evaluate(_thrustFrac,
+                _p.ThrustMaxN, mach, atmosphericState.TemperatureK, atmosphericState.DensityKgM3,
+                _p.GenericIdleFuelFlowLbPerMinute, _p.GenericMilitaryFuelFlowLbPerMinute,
+                _p.GenericAfterburnerFuelFlowLbPerMinute, _p.MaxThrustFraction);
+            return;
+        }
+
+        if (_p.PropulsionModel == PropulsionModelKind.RamjetPublicDataSurrogate) {
+            // A ramjet's only compressor is the shock system in its own inlet, so thrust is a
+            // function of how fast the airframe already is. Below light-up it produces nothing at
+            // all — which is the physical fact that makes the dive-to-start profile a real
+            // manoeuvre rather than a stylistic choice.
+            LastEngineOperatingPoint = RamjetPerformanceMap.Evaluate(_thrustFrac,
+                _p.ThrustMaxN, mach, atmosphericState.TemperatureK, atmosphericState.DensityKgM3,
+                _p.GenericIdleFuelFlowLbPerMinute, _p.GenericMilitaryFuelFlowLbPerMinute);
+            return;
+        }
+
         double densityRatio = atmosphericState.DensityKgM3 / AirData.SeaLevelDensityKgM3;
         // Transparent generic afterburning-turbofan surrogate: gross thrust lapses approximately
         // with sqrt(density ratio), while bounded inlet ram recovery grows with Mach. This avoids

@@ -239,7 +239,7 @@ public sealed class SimulationSession {
     Carrier.TouchdownResult _touchdown = Carrier.TouchdownResult.Flying;
     readonly CarrierPassRecorder _carrierPass = new();
     readonly ArrestmentModel _arrestment = new();
-    readonly CatapultLaunchModel _catapult = new();
+    CatapultLaunchModel _catapult = new();
     BurbleField? _burble;
     Carrier.DeckConfiguration _deckConfiguration;
     bool _waveOffArmed;
@@ -495,7 +495,7 @@ public sealed class SimulationSession {
     /// <summary>Construct and stage one of the built-in beats. Physics remains held in Ready.</summary>
     public void StartBeat(int index,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial) {
-        if (index is < 1 or > 9) index = 1;
+        if (index is < 1 or > 10) index = 1;
         _prechargeSystemsOnStage = true;
         _beatIndex = index;
         _deckConfiguration = deckConfiguration;
@@ -508,6 +508,7 @@ public sealed class SimulationSession {
             7 => Beats.ModernVisualMerge,
             8 => Beats.DroneRaidDefense,
             9 => Beats.ModernAceDuel,
+            10 => () => Beats.RapierIntercept(deckConfiguration),
             _ => Beats.Perch
         };
         _fightDirector.Reset();
@@ -583,6 +584,13 @@ public sealed class SimulationSession {
             _difficulty = _recoveryProgress.BeginAttempt();
             _carrier.ApplyDifficulty(_difficulty);
             _recoveryAttemptActive = true;
+        }
+        // A catapult start belongs at the clock-release edge for the same reason the recovery
+        // attempt does: Ready must be able to render the aircraft sitting on the deck without the
+        // stroke having begun.
+        if (_carrier is not null && _beat.StartsOnCatapult && !_catapult.IsActive) {
+            _catapult.Begin(_carrier, _player.State.Mass);
+            _detents.ApproachMode = false;
         }
         _maintenanceScenario?.Begin(TimeSeconds);
         _droneRaidEvaluation?.Begin(TimeSeconds, _gunKill.RoundsFired);
@@ -1141,6 +1149,9 @@ public sealed class SimulationSession {
         };
         // Arrive configured: for a beat staged at a deliberate fighting speed, hand the pilot the
         // power setting that HOLDS it instead of an arbitrary one they must correct every sortie.
+        _catapult = new CatapultLaunchModel(
+            _beat.CatapultStrokeM ?? CatapultLaunchModel.StrokeDistanceM,
+            _beat.CatapultEndSpeedMps ?? CatapultLaunchModel.EndDeckRelativeSpeedMps);
         _detents.ConfigureFor(_beat.PlayerAir, StagedThrottle());
         _pilotPhysiology = new PilotPhysiologyModel(_beat.PlayerPilotPhysiology);
         _autoGcasState = AutoGcasState.Initial(PlayerAutoGcasCapability.Available);

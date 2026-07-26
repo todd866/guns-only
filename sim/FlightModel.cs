@@ -5,7 +5,15 @@ namespace GunsOnly.Sim;
 public enum PropulsionModelKind {
     GenericDensityScaled,
     J47Ge27,
-    AfterburningTurbofanPublicDataSurrogate
+    AfterburningTurbofanPublicDataSurrogate,
+    /// Fixed-geometry ramjet. NOTE that for this model ThrustMaxN is net thrust at the DESIGN POINT
+    /// (see RamjetPerformanceMap), not static sea-level thrust — a ramjet makes none of the latter,
+    /// which is exactly why it needs its own model rather than a retuned turbojet.
+    RamjetPublicDataSurrogate,
+    /// Core-bypass turbo-ramjet. ThrustMaxN is SEA-LEVEL STATIC DRY thrust of the turbine core; the
+    /// ram contribution grows continuously with Mach on top of it. See TurboRamjetPerformanceMap for
+    /// why this is one curve rather than two engines and a handover.
+    TurboRamjetPublicDataSurrogate
 }
 
 public enum HighAlphaModelKind {
@@ -38,6 +46,10 @@ public readonly record struct PullLimitStatus(PullLimitReason Reason) {
 public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN,
     double CD0, double InducedK, double CLMax, double CLMin, double RollRateMaxRad, double BankTau,
     double MCrit = 0.85, double WaveDragK = 8.0,
+    /// Mach at which the transonic drag rise stops growing. Infinite (the default) reproduces the
+    /// original unbounded quadratic exactly; a supersonic airframe declares its peak so the law
+    /// stops charging it more drag the faster it goes.
+    double WaveDragPeakMach = double.PositiveInfinity,
     double SpoolUpTau = 2.5, double SpoolDownTau = 1.4,
     // Lift-curve slope, per radian. Governs how hard a gust bumps you: a vertical gust changes
     // the effective AoA by (gust/V) and lift by q·S·CLα·Δα. ~2π·AR/(AR+2): Sabre AR≈4.5 → ~4.5.
@@ -295,7 +307,7 @@ public static class FlightModel {
     /// AfterburningTurbofanPublicDataSurrogate lapse is used because it is the least-wrong checked-in
     /// approximation for a small F107/F112-class engine at altitude. MaxThrustFraction = 1.0 means
     /// this aircraft has no afterburner.
-    public static readonly AircraftParams CheapHighAltitudeInterceptorPublicDataSurrogate = new(
+    public static readonly AircraftParams CheapRapierPublicDataSurrogate = new(
         MassKg: 2100.0,                       // 1,450 kg fuel-free + 650 kg internal fuel
         WingAreaM2: 8.20,                     // 256 kg/m2 at takeoff: cruise wins over low-speed G
         ThrustMaxN: 4000.0,                   // one upper-F107/F112-class dry engine surrogate
@@ -425,6 +437,102 @@ public static class FlightModel {
         GenericIdleFuelFlowLbPerMinute: 0.80,
         GenericMilitaryFuelFlowLbPerMinute: 6.00,
         GenericAfterburnerFuelFlowLbPerMinute: 0.00);
+
+    /// RAPIER — the 2030s cheap high-altitude turbo-ramjet interceptor, public-data surrogate.
+    ///
+    /// Named for a thrusting weapon rather than a slashing one: it commits to a single lunge and
+    /// spends the rest of the engagement recovering. That is the doctrine, not a limitation.
+    ///
+    /// Steel where the heat is, composite everywhere else, no windscreen, a reclined occupant in a
+    /// composite escape pod, catapult launched from deep rear basing and recovered on a hook. It
+    /// climbs on a ceramic-hot-section turbine core, blends continuously into ram combustion past
+    /// Mach 2, cruises very high and very fast, and dives to attack.
+    ///
+    /// SIZED FOR THE FIGHT IT PICKS, NOT FOR SUSTAINED COMBAT. Wing loading is high because cruise
+    /// beats low-speed manoeuvre for this mission, so its enormous instantaneous G exists only in a
+    /// fast, low box at the bottom of a dive. Everything about it is a single decisive pass: it can
+    /// point at anything once, and then it is slow, low and out of ideas. That is the design, not a
+    /// shortfall — an opponent flying one is beaten by surviving the pass and then hunting it.
+    ///
+    /// ThrustMaxN is SEA-LEVEL STATIC DRY thrust of the turbine core. TurboRamjetPerformanceMap adds
+    /// the ram contribution on top as Mach rises; MaxThrustFraction is the augmentor lever stop.
+    ///
+    /// Mass, polar, inertias, derivatives and the engine are transparent mission surrogates, not
+    /// claims about any real aircraft or engine. Numbers derive from a Codex sizing pass and are
+    /// PREDICTIONS until measured against AircraftSim.
+    public static readonly AircraftParams RapierPublicDataSurrogate = new(
+        MassKg: 7850.0,                       // 5,150 kg fuel-free + 2,700 kg fuel
+        WingAreaM2: 18.0,                     // 436 kg/m2 at catshot mass: cruise beats low-speed G
+        ThrustMaxN: 42_000.0,                 // sea-level static DRY, turbine core
+        CD0: 0.0205, InducedK: 0.125,         // AR 3.0, span efficiency ~0.85
+        CLMax: 1.35, CLMin: -0.60,
+        RollRateMaxRad: 2.60, BankTau: 0.22,
+        // Thin sharp supersonic wing: the rise is real but it is meant to be pushed through, not
+        // stopped at. Contrast the subsonic sibling, which is deliberately walled at M0.85.
+        // Peaks just past M1.1 and holds: this wing is meant to be pushed THROUGH the rise, not
+        // stopped by it. K=38 gives roughly a 3x zero-lift drag penalty at the peak.
+        MCrit: 0.92, WaveDragK: 38.0, WaveDragPeakMach: 1.15,
+        SpoolUpTau: 1.40, SpoolDownTau: 0.90,
+        CLAlpha: 3.60,                        // low aspect ratio
+        PitchModeFreq: 3.4, PitchModeDamp: 0.46,
+        YawModeFreq: 1.7, YawModeDamp: 0.26,
+        RollModeFreq: 4.4, RollModeDamp: 0.70,
+        BuffetGain: 0.45,
+        // Geometry-derived for a ~13 m long, 7.3 m span, 7.85 t aircraft.
+        IxxKgM2: 9_500.0, IyyKgM2: 62_000.0, IzzKgM2: 68_000.0,
+        RollStiffnessNmRad: 320_000.0, PitchStiffnessNmRad: 900_000.0,
+        YawStiffnessNmRad: 260_000.0,
+        RollDampingNms: 105_000.0, PitchDampingNms: 380_000.0, YawDampingNms: 160_000.0,
+        RollMomentMaxNm: 380_000.0, PitchMomentMaxNm: 980_000.0, YawMomentMaxNm: 320_000.0,
+        ApproachPitchStiffnessNmRad: 700_000.0, ApproachPitchMomentMaxNm: 700_000.0,
+        CYBeta: 0.60,
+        ClBeta: -0.048, ClP: -0.480, ClR: 0.085,
+        ClDeltaA: 0.135, ClDeltaR: 0.026,
+        LateralDerivativeProfileId: "high-altitude-interceptor-public-data-surrogate-v1",
+        ManualPitchRateMaxRad: 0.70, ManualPitchAngleTau: 0.50,
+        FightRollRateMaxRad: 2.90,
+        CompatibilityRollRateMaxRad: 2.40, CompatibilityBankTau: 0.22,
+        YawBetaStiffnessNmRad: 240_000.0, RollHoldDampingNms: 0.0,
+        // AUTOMATION IS WHAT MAKES THIS FLYABLE ON A KEYBOARD, and it is also the fiction: the
+        // occupant is reclined behind no windscreen issuing coarse intent while the machine does the
+        // fine control. A firm bank hold is the single biggest contributor to that — the pilot sets
+        // a bank and the aircraft keeps it through a hard pull without constant correction.
+        RollHoldRateGainNms: 620_000.0, RollHoldDeadband: 0.05,
+        // Structure binds, not the pilot — the reclined occupant can use all of it. 12 G is the
+        // qualified limit against an 18 G article; Space releases to 15 G, which is knowingly eating
+        // margin on the SAME structure rather than pretending a stronger aircraft exists.
+        PositiveStructuralLimitG: 12.0, MaxPerformFraction: 1.0,
+        NormalPullUsesMaxPerformance: true,
+        PositiveOverrideLimitG: 15.0,
+        DynamicPressureScheduledPostStallOverride: true,
+        MaxThrustFraction: 1.55,              // augmentor lever stop
+        // No thrust vectoring: hot actuators, mass, maintenance and cost.
+        PitchThrustVectorMaxRad: 0.0, PitchThrustVectorMomentArmM: 0.0,
+        PitchThrustVectorAlphaGain: 0.0, PitchThrustVectorRateGainSeconds: 0.0,
+        PitchThrustVectorNozzleRateRadPerSecond: 0.0,
+        // The gun director is the other half of "flyable on a keyboard". It corrects aim inside a
+        // narrow gate; it never creates lift, thrust, closure or hits.
+        GunneryPitchAssistMaxRateRad: 0.26,
+        GunneryPitchAssistCaptureAngleRad: 0.209439510239320,
+        GunneryPitchAssistMaxRangeM: 900.0,
+        GunneryPitchAssistGainPerSecond: 2.2,
+        GunneryPitchAssistMaxCorrectionG: 2.5,
+        GunneryLateralAssistRollGain: 1.9,
+        GunneryLateralAssistMaxRoll: 0.55,
+        GunneryLateralAssistYawGain: 1.6,
+        GunneryLateralAssistMaxYaw: 0.35,
+        HighLiftDragOnsetFraction: 0.88, HighLiftDragK: 3.80,
+        WingSpanM: 7.35,                      // sqrt(AR 3.0 * 18 m2)
+        PostStallAlphaCommandRad: 0.42,
+        PostStallDragMax: 0.95,
+        StallRollCoupling: 0.18, StallYawCoupling: 0.28,
+        StallPitchBreakNm: 60_000.0,
+        HighAlphaModel: HighAlphaModelKind.Generic,
+        PropulsionModel: PropulsionModelKind.TurboRamjetPublicDataSurrogate,
+        FuelFreeMassKg: 5150.0,
+        GenericIdleFuelFlowLbPerMinute: 3.0,
+        GenericMilitaryFuelFlowLbPerMinute: 42.0,
+        GenericAfterburnerFuelFlowLbPerMinute: 132.0);
 
     public static readonly AircraftParams F22APublicDataSurrogate = new(
         MassKg: 27700.0,
@@ -693,8 +801,17 @@ public static class FlightModel {
     /// near M0.65-0.70 and HARD — that wing physically cannot go fast, which is why a steep
     /// dive from a 60k balloon drop must be managed rather than pointed. A swept fighter wing
     /// holds to ~M0.85 with a gentler rise. Was a single global 0.85/8.0 every airframe inherited.
-    static double MachDragFactor(double mach, in AircraftParams p) =>
-        mach < p.MCrit ? 1.0 : 1.0 + p.WaveDragK * (mach - p.MCrit) * (mach - p.MCrit);
+    /// The quadratic rise is a TRANSONIC law and it grows without bound, which is correct for every
+    /// airframe here that is walled below M1 and catastrophically wrong for one that is meant to
+    /// cruise supersonically: at M2.6 an MCrit of 0.92 with K=30 multiplies CD0 by 85. Real
+    /// zero-lift drag peaks a little above M1 and then FALLS BACK as the shock system stabilises.
+    /// WaveDragPeakMach is where the rise stops; above it the factor is held. Default is infinite,
+    /// so every existing airframe keeps its previous drag bit-for-bit.
+    static double MachDragFactor(double mach, in AircraftParams p) {
+        if (mach < p.MCrit) return 1.0;
+        double excess = System.Math.Min(mach, p.WaveDragPeakMach) - p.MCrit;
+        return 1.0 + p.WaveDragK * excess * excess;
+    }
 
     internal static double BankRate(double bank, double target, in AircraftParams p) {
         double err = System.Math.IEEERemainder(target - bank, 2 * System.Math.PI); // shortest-way signed error

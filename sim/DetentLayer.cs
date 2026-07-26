@@ -594,9 +594,11 @@ public sealed class DetentLayer {
             totalCl - configuration.LiftCoefficientIncrement,
             parameters.CLMin, parameters.CLMax);
         double mach = speed / System.Math.Max(atmosphericState.SpeedOfSoundMps, 1e-6);
+        // Must match FlightModel.MachDragFactor exactly, including the supersonic peak clamp —
+        // two different drag laws would make the limit annunciation disagree with the physics.
+        double machExcess = System.Math.Min(mach, parameters.WaveDragPeakMach) - parameters.MCrit;
         double machDragFactor = mach < parameters.MCrit ? 1.0
-            : 1.0 + parameters.WaveDragK
-                * (mach - parameters.MCrit) * (mach - parameters.MCrit);
+            : 1.0 + parameters.WaveDragK * machExcess * machExcess;
         double highLiftFraction = System.Math.Abs(cleanCl)
             / System.Math.Max(System.Math.Abs(parameters.CLMax), 1e-6);
         double highLiftExcess = System.Math.Max(0.0,
