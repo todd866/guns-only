@@ -311,6 +311,9 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     double? CatapultEndSpeedMps = null,
     /// Upward ramp at the end of the stroke. Zero is a flat deck.
     double? CatapultRampAngleRad = null,
+    /// Gear/flap architecture and limits. Null keeps the Sabre research basis, which is correct for
+    /// every 1950s beat and badly wrong for anything launched above 185 KIAS.
+    AirframeSystemsProfile? SystemsProfile = null,
     MissionContract? Mission = null,
     AircraftCapability? PlayerCapability = null,
     AircraftCapability? BanditCapability = null,
@@ -746,6 +749,8 @@ public static class Beats {
             // airframe. The rise costs 1.29 MJ of an 88.3 MJ launch — 1.5%, the same order as the
             // air the aircraft pushes down the gallery.
             CatapultRampAngleRad: 12.0 * Math.PI / 180.0,
+            // Gear and flaps qualified past the 291 KIAS the launcher hands over at.
+            SystemsProfile: AirframeSystemsProfile.RapierSurrogate,
             Mission: new MissionContract(
                 "mission.modern.rapier-intercept.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,

@@ -126,6 +126,44 @@ public sealed record AirframeSystemsProfile(
         // configuration polar rather than being disguised as clean-airframe CD0.
         FullFlapLiftCoefficientIncrement: 0.30,
         FullFlapDragCoefficientIncrement: 0.085);
+
+    /// <summary>
+    /// Rapier surrogate. The limits are not a balance knob — they are forced by the launcher.
+    ///
+    /// The catapult releases at 150 m/s, and at the strip's ~89 m elevation that is about 291 KIAS
+    /// with the gear still down and the flaps still out, because nothing can retract during a 6.9 s
+    /// stroke. An aircraft designed around that launcher therefore has gear and flaps qualified
+    /// well past it, or it breaks itself on every single sortie. The Sabre's 185 KIAS limit tripped
+    /// an overspeed the instant the aircraft left the rail.
+    ///
+    /// 350 KIAS gear and flap is 59 knots of margin over the launch, which is the smallest number
+    /// that survives a hot day, a heavy load and a launcher running fast. It costs weight in the
+    /// legs, doors and flap tracks — real cost, and it belongs in the cost layer rather than being
+    /// waved away. Emergency extension stays lower at 300 KIAS: the blow-down bottle drives the
+    /// legs against the airstream and has no reserve to fight the hinge moment at full launch speed.
+    ///
+    /// Retraction is quick because it has to be. The aircraft leaves the ramp already accelerating
+    /// through its own gear limit's neighbourhood, so a ten-second Sabre cycle would hold the
+    /// configuration open across the fastest part of the climb.
+    /// </summary>
+    public static readonly AirframeSystemsProfile RapierSurrogate = new(
+        Id: "rapier-public-data-surrogate-v1",
+        GearExtensionSeconds: 6.0,
+        GearRetractionSeconds: 4.5,
+        EmergencyGearExtensionSeconds: 8.0,
+        GearDoorTravelSeconds: 0.9,
+        GearAndFlapLimitKias: 350.0,
+        EmergencyGearExtensionMaxKias: 300.0,
+        // Modest flap: at 436 kg/m2 the recovery is flown fast and caught by the wire, so this
+        // wing is not trying to be slow — it only has to be catchable.
+        FullFlapDegrees: 30.0,
+        FullFlapTravelSeconds: 4.0,
+        GeneratorCutInRpmPercent: 45.0,
+        GearHornRpmPercent: 73.0,
+        UtilityHydraulicNominalPsi: 4000.0,
+        FullGearDragCoefficientIncrement: 0.032,
+        FullFlapLiftCoefficientIncrement: 0.26,
+        FullFlapDragCoefficientIncrement: 0.070);
 }
 
 /// <summary>

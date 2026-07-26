@@ -1234,12 +1234,17 @@ public sealed class SimulationSession {
         return player;
     }
 
+    AirframeSystemsProfile PlayerSystemsProfile =>
+        _beat.SystemsProfile ?? AirframeSystemsProfile.F86FResearchBasis;
+
     AirframeSystems CreatePlayerSystems(bool onApproach,
         bool prechargeUtilityHydraulics) => new(
+        // The beat's own airframe when it declares one. A beat launched off a 150 m/s catapult
+        // needs gear and flap limits qualified for that, and inheriting the Sabre's 185 KIAS
+        // tripped an overspeed the instant the aircraft left the rail.
+        profile: PlayerSystemsProfile,
         initialGear: onApproach ? LandingGearHandle.Down : LandingGearHandle.Up,
-        initialFlapDegrees: onApproach
-            ? AirframeSystemsProfile.F86FResearchBasis.FullFlapDegrees
-            : 0.0,
+        initialFlapDegrees: onApproach ? PlayerSystemsProfile.FullFlapDegrees : 0.0,
         // Every current beat starts with an already-running airborne jet. Prime the normal system
         // to that steady state instead of flashing a fictitious pump failure during the first
         // numerical time constant. The maintenance beat deliberately starts unpressurised because
