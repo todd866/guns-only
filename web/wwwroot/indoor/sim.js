@@ -1593,8 +1593,10 @@ function updateHostiles(state, dt) {
     }
   }
 
-  if (detected && state.survey && !state.survey.combat.active) {
-    startSurveyCombat(state, "detected", detectorId);
+  if (detected
+    && state.survey?.doctrine === "stealth-mandatory"
+    && !state.survey.combat.active) {
+    setSurveyStealthBreach(state, "detection");
   }
 
   state.alert = clamp(

@@ -88,16 +88,29 @@ test("the published Indoor route boots its Three.js facility and transitions opt
       canvasHeight: document.querySelector("#viewport")?.height,
       fatal: document.querySelector("#fatal")?.classList.contains("visible"),
       briefing: document.querySelector("#briefing")?.classList.contains("visible"),
-      cores: globalThis.__gunsIndoor.state?.objectives?.length,
+      profiles: globalThis.__gunsIndoor.profiles,
+      selectedMissionId: globalThis.__gunsIndoor.selectedMissionId,
+      scans: globalThis.__gunsIndoor.state?.survey?.scanPoints?.length,
     }));
     assert.equal(ready.phase, "briefing");
     assert.equal(ready.link, "fiber");
-    assert.equal(ready.cores, 3);
+    assert.deepEqual(ready.profiles, [
+      "attack-site",
+      "discretionary-site",
+      "diversion-site",
+    ]);
+    assert.equal(ready.selectedMissionId, "attack-site");
+    assert.equal(ready.scans, 2);
     assert.equal(ready.fatal, false);
     assert.equal(ready.briefing, true);
     assert.ok(ready.canvasWidth > 0 && ready.canvasHeight > 0,
       `Indoor WebGL canvas did not size: ${JSON.stringify(ready)}`);
 
+    await page.locator('[data-mission-id="discretionary-site"]').click();
+    await page.waitForFunction(
+      () => globalThis.__gunsIndoor.selectedMissionId === "discretionary-site"
+        && globalThis.__gunsIndoor.state?.survey?.profileId === "discretionary-site",
+    );
     await page.locator("#begin-button").click();
     await page.waitForFunction(() => document.body.dataset.phase === "active");
     const controlsBefore = await page.evaluate(() => ({

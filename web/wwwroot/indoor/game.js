@@ -78,6 +78,7 @@ const ui = {
   detachPanel: byId("detach-panel"),
   detach: byId("detach-button"),
   returnHome: byId("return-button"),
+  broadcast: byId("broadcast-button"),
   signalNoise: byId("signal-noise"),
   hitFlash: byId("hit-flash"),
   announcer: byId("announcer"),
@@ -93,6 +94,7 @@ const ui = {
   touchFire: byId("touch-fire"),
   touchDetach: byId("touch-detach"),
   touchReturn: byId("touch-return"),
+  touchBroadcast: byId("touch-broadcast"),
 };
 
 const preferences = loadIndoorPreferences();
@@ -125,6 +127,7 @@ let subtitleUntil = 0;
 let eventCueUntil = 0;
 let detachQueued = false;
 let returnQueued = false;
+let broadcastHeld = false;
 let mouseFire = false;
 let pendingYawRadians = 0;
 let pendingPitchRadians = 0;
@@ -212,6 +215,8 @@ function announce(message) {
 
 function phaseState() {
   if (snapshot.status === "success") return "complete";
+  if (snapshot.survey?.returnRequested || snapshot.survey?.combat.active) return "action";
+  if (snapshot.survey?.objectives.scan.complete) return "detach";
   if (snapshot.link.mode !== "fiber") return "action";
   if (snapshot.checkpoint.reached) return "detach";
   return "ingress";
@@ -556,6 +561,32 @@ function updateHud() {
       ? "Route is clear. X starts the RF clock."
       : tension > 0.66 ? "Automatic release is imminent" : "X detaches fibre at any time";
   }
+  if (snapshot.survey) {
+    const scansComplete = snapshot.survey.objectives.scan.complete;
+    const returning = snapshot.survey.returnRequested;
+    ui.returnHome.hidden = !scansComplete || returning;
+    ui.touchReturn.hidden = !scansComplete || returning;
+    const broadcastAvailable = snapshot.link.mode !== "fiber"
+      && !returning
+      && snapshot.survey.doctrine !== "stealth-mandatory";
+    ui.broadcast.hidden = !broadcastAvailable;
+    ui.touchBroadcast.hidden = !broadcastAvailable;
+    ui.broadcast.classList.toggle("active", broadcastHeld);
+    ui.touchBroadcast.classList.toggle("active", broadcastHeld);
+    ui.detach.hidden = snapshot.link.mode !== "fiber";
+    ui.touchDetach.hidden = snapshot.link.mode !== "fiber";
+    if (returning) {
+      ui.detachKicker.textContent = snapshot.survey.silentReturn
+        ? "SILENT AUTONOMOUS RETURN" : "AUTONOMOUS RETURN";
+      ui.detachCopy.textContent = "Onboard navigation owns the retrace.";
+    } else if (scansComplete) {
+      ui.detachKicker.textContent = snapshot.survey.doctrine === "noisy-provocation"
+        ? "PROVOCATION PHASE" : "SURVEY CAPTURED";
+      ui.detachCopy.textContent = snapshot.survey.doctrine === "noisy-provocation"
+        ? "Detach, then hold B to broadcast."
+        : "R returns dark; X exposes the radio.";
+    }
+  }
 
   const hitOpacity = presentation?.hitPulse ?? 0;
   ui.hitFlash.style.opacity = String(clamp(hitOpacity * 0.62));
@@ -764,6 +795,77 @@ function processEvent(event) {
     case "autonomy-disengaged":
       announce("Direct control restored.");
       break;
+    case "survey-scan-started": {
+      const scan = snapshot.survey?.scanPoints.find((point) => point.id === event.scanId);
+      showEventCue("SURVEY HOLD");
+      showSubtitle(`Hold station on ${scan?.label ?? "the observation point"}.`, 1800);
+      audio.tone(410, 0.08, 0.025, "sine");
+      break;
+    }
+    case "survey-scan-complete": {
+      const scan = snapshot.survey?.scanPoints.find((point) => point.id === event.scanId);
+      showEventCue("SURVEY CAPTURED");
+      showSubtitle(`${scan?.label ?? "Observation"} recorded. Continue the route.`, 2300);
+      audio.objective();
+      announce(`${scan?.label ?? "Observation"} recorded.`);
+      break;
+    }
+    case "survey-broadcast-started":
+      showEventCue("EW SIGNATURE OPEN");
+      showSubtitle("The site can hear you now. Hold B to make the provocation unmistakable.", 3200);
+      audio.handoff();
+      announce("Deliberate radio signature transmitting.");
+      break;
+    case "survey-broadcast-complete":
+      showEventCue("SIGNATURE CONFIRMED");
+      showSubtitle("They have the transmission. Expect an investigator.", 2500);
+      audio.objective();
+      break;
+    case "investigator-summoned":
+      showEventCue("ATTENTION DRAWN");
+      showSubtitle(`Investigator estimated in ${event.arrivalSeconds?.toFixed?.(1) ?? "a few"} seconds.`, 2600);
+      audio.tone(330, 0.14, 0.04, "square");
+      break;
+    case "investigator-arrived":
+      showEventCue("INVESTIGATOR ON SITE");
+      showSubtitle("Contact is checking the transmission. Engage only if doctrine permits.", 3300);
+      announce("Investigator drone on site.");
+      audio.tone(230, 0.18, 0.05, "sawtooth");
+      break;
+    case "survey-combat-started":
+      showEventCue("RESPONSE CLOCK LIVE", 2200);
+      showSubtitle(`The first shot started the clock. Reinforcements in ${event.reinforcementSeconds?.toFixed?.(1) ?? "seconds"}.`, 3500);
+      announce("Drone combat started. Reinforcement clock is live.");
+      audio.handoff();
+      break;
+    case "reinforcement-arrived":
+      showEventCue("SECOND DRONE ARRIVED", 2200);
+      showSubtitle("The response force is here. Finish the fight or get the airframe home.", 3200);
+      announce("Reinforcement drone has entered the facility.");
+      audio.failure();
+      break;
+    case "survey-return-started":
+      showEventCue(event.silent ? "SILENT RETURN" : "AUTONOMOUS RETURN");
+      showSubtitle(
+        event.silent
+          ? "No emissions. MIDGE-03 is retracing the fibre path on onboard navigation."
+          : "Return route committed. The onboard controller has the aircraft.",
+        3500,
+      );
+      announce(event.silent ? "Silent autonomous return started." : "Autonomous return started.");
+      audio.objective();
+      break;
+    case "survey-stealth-breached":
+      showEventCue("STEALTH BREACHED", 2400);
+      showSubtitle("Tomorrow's attack route is compromised. This sortie is over.", 3600);
+      announce("Stealth doctrine breached.");
+      audio.failure();
+      break;
+    case "survey-complete":
+      showEventCue("SURVEY AIRFRAME HOME", 2300);
+      audio.success();
+      announce("Survey complete. Drone recovered.");
+      break;
     case "mission-complete":
       showEventCue("CONTROL LOOP SEVERED", 2300);
       audio.success();
@@ -808,13 +910,22 @@ function showResult() {
   ui.result.setAttribute("aria-hidden", "false");
 
   if (snapshot.success) {
-    ui.resultKicker.textContent = "FACILITY NINE / MISSION COMPLETE";
-    ui.resultTitle.textContent = "Control loop severed";
-    ui.resultCopy.textContent = snapshot.link.mode === "fiber"
-      ? "A completely optical run. The station never had to reveal itself."
-      : snapshot.link.mode === "lost"
-        ? "The command channel collapsed, but MIDGE-03 completed the last task on onboard automation."
-        : `The relay held with ${Math.max(0, snapshot.link.rf.survivalTimer).toFixed(1)} seconds remaining.`;
+    if (snapshot.survey) {
+      const quiet = snapshot.survey.silentReturn;
+      ui.resultKicker.textContent = `${snapshot.survey.label.toUpperCase()} / SURVEY COMPLETE`;
+      ui.resultTitle.textContent = quiet ? "Route stayed dark" : "Provocation complete";
+      ui.resultCopy.textContent = quiet
+        ? "MIDGE-03 recorded the site and retraced the optical ingress without exposing the relay."
+        : `The site reacted, the drone fight drew attention, and the airframe made it home with ${Math.round(snapshot.drone.integrity)}% integrity.`;
+    } else {
+      ui.resultKicker.textContent = "FACILITY NINE / MISSION COMPLETE";
+      ui.resultTitle.textContent = "Control loop severed";
+      ui.resultCopy.textContent = snapshot.link.mode === "fiber"
+        ? "A completely optical run. The station never had to reveal itself."
+        : snapshot.link.mode === "lost"
+          ? "The command channel collapsed, but MIDGE-03 completed the last task on onboard automation."
+          : `The relay held with ${Math.max(0, snapshot.link.rf.survivalTimer).toFixed(1)} seconds remaining.`;
+    }
   } else {
     const [title, copy] = outcomeCopy(snapshot.failureReason);
     ui.resultKicker.textContent = "FACILITY NINE / LINK CLOSED";
@@ -877,7 +988,9 @@ function buildInput() {
   }
 
   const detach = detachQueued;
+  const returnHome = returnQueued;
   detachQueued = false;
+  returnQueued = false;
   return {
     forward: clamp(keyboardForward + touchForward + gamepad.forward, -1, 1),
     right: clamp(keyboardRight + touchRight + gamepad.right, -1, 1),
@@ -886,6 +999,8 @@ function buildInput() {
     pitch: clamp(mousePitch.value + touchPitch + gamepad.pitch + keyboardPitch, -1, 1),
     fire: weaponArmed && requestedFire,
     detachFiber: detach,
+    returnHome,
+    broadcast: broadcastHeld,
     // Facility shutters authenticate automatically at close range so the same mission remains
     // playable on keyboard, touch, and gamepad without a hidden fourth control surface.
     interact: true,
@@ -903,6 +1018,8 @@ function resetInput() {
   touchPitch = 0;
   touchUp = 0;
   detachQueued = false;
+  returnQueued = false;
+  broadcastHeld = false;
 }
 
 function requestControl() {
@@ -959,7 +1076,7 @@ function beginMission() {
   ui.briefing.setAttribute("aria-hidden", "true");
   ui.canvas.focus({ preventScroll: true });
   void audio.start();
-  showSubtitle("Follow the cyan rings. The fibre is quiet; speed and hard corners build tension.", 4200);
+  showSubtitle("Follow the cyan survey markers. Hold each observation point; the fibre keeps the route quiet.", 4200);
   announce("Indoor mission started. Optical link clean.");
   lastFrameAt = performance.now();
   lastVideoFrameAt = lastFrameAt;
@@ -967,7 +1084,7 @@ function beginMission() {
 }
 
 function resetMission({ start = true } = {}) {
-  mission = createIndoorMission();
+  mission = createIndoorMission({ missionId: selectedMissionId });
   snapshot = missionSnapshot(mission);
   accumulator = 0;
   lastEventId = 0;
@@ -992,6 +1109,8 @@ function resetMission({ start = true } = {}) {
     showSubtitle("New airframe. Optical link clean.", 2200);
   } else {
     ui.briefing.classList.add("visible");
+    ui.briefing.setAttribute("aria-hidden", "false");
+    updateMissionBriefing();
     ui.begin.focus({ preventScroll: true });
   }
   lastVideoFrameAt = performance.now();
@@ -1064,7 +1183,7 @@ function installHoldButton(button, pressed, released) {
 
 function installInput() {
   window.addEventListener("keydown", (event) => {
-    if (["KeyH", "Escape", "KeyR", "KeyX", "Space"].includes(event.code)) event.preventDefault();
+    if (["KeyH", "Escape", "KeyR", "KeyX", "KeyB", "Space"].includes(event.code)) event.preventDefault();
     if (event.repeat && ["KeyH", "Escape", "KeyR", "KeyX"].includes(event.code)) return;
     if (event.code === "KeyH") {
       if (ui.help.classList.contains("visible")) closeHelp();
@@ -1076,17 +1195,25 @@ function installInput() {
       else togglePause();
       return;
     }
-    if (event.code === "KeyR" && resultShown) {
-      resetMission({ start: true });
+    if (event.code === "KeyR") {
+      if (resultShown) resetMission({ start: true });
+      else if (started && !paused && snapshot.survey) returnQueued = true;
       return;
     }
     if (event.code === "KeyX" && started && !paused && snapshot.link.mode === "fiber") {
       detachQueued = true;
       return;
     }
+    if (event.code === "KeyB" && started && !paused && snapshot.survey) {
+      broadcastHeld = true;
+      return;
+    }
     heldKeys.add(event.code);
   });
-  window.addEventListener("keyup", (event) => heldKeys.delete(event.code));
+  window.addEventListener("keyup", (event) => {
+    heldKeys.delete(event.code);
+    if (event.code === "KeyB") broadcastHeld = false;
+  });
   window.addEventListener("blur", resetInput);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && started && !resultShown) setPaused(true, false);
@@ -1128,9 +1255,22 @@ function installInput() {
     event.preventDefault();
     detachQueued = true;
   });
+  installHoldButton(
+    ui.touchReturn,
+    () => { returnQueued = true; },
+    () => {},
+  );
+  installHoldButton(
+    ui.touchBroadcast,
+    () => { broadcastHeld = true; },
+    () => { broadcastHeld = false; },
+  );
 }
 
 function bindUi() {
+  for (const button of ui.missionSet.querySelectorAll("[data-mission-id]")) {
+    button.addEventListener("click", () => selectMissionProfile(button.dataset.missionId));
+  }
   ui.begin.addEventListener("click", beginMission);
   ui.pauseToggle.addEventListener("click", togglePause);
   ui.resume.addEventListener("click", () => setPaused(false));
@@ -1139,6 +1279,12 @@ function bindUi() {
   ui.helpClose.addEventListener("click", closeHelp);
   ui.flyAgain.addEventListener("click", () => resetMission({ start: true }));
   ui.detach.addEventListener("click", () => { detachQueued = true; });
+  ui.returnHome.addEventListener("click", () => { returnQueued = true; });
+  installHoldButton(
+    ui.broadcast,
+    () => { broadcastHeld = true; },
+    () => { broadcastHeld = false; },
+  );
   ui.audioToggle.addEventListener("click", () => {
     audio.setEnabled(!audio.enabled);
     ui.audioToggle.textContent = audio.enabled ? "AUDIO ON" : "AUDIO OFF";
@@ -1220,9 +1366,13 @@ function exposeDiagnostics() {
     get paused() { return paused; },
     get videoState() { return videoFeedState(snapshot); },
     get controlState() { return commandControlState(snapshot); },
+    get selectedMissionId() { return selectedMissionId; },
+    get profiles() { return Object.keys(SURVEY_PROFILES); },
     begin: beginMission,
     restart: () => resetMission({ start: true }),
     detach: () => { detachQueued = true; },
+    returnHome: () => { returnQueued = true; },
+    selectMission: selectMissionProfile,
   };
   globalThis.__gunsIndoor = diagnostics;
 }

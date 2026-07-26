@@ -37,6 +37,8 @@ complete first run without copying a real building or system.
 | Climb / descend | **Space / Left Shift** |
 | Gun | **F** or primary pointer |
 | Fibre breakaway | **X** |
+| Deliberate RF / EW signature | **Hold B** |
+| Commit autonomous return | **R** |
 
 Mouse look is optional rather than captured at launch. Touch uses separate move/look pads with
 height, fire and detach controls; gamepad uses the same translation/look split.
@@ -52,6 +54,24 @@ occlusion, walls, doors and the local map.
 The main catalogue links to `/indoor/` as a fourth experience. It deliberately has no
 `data-program-node` or numeric beat, so the established aircraft mission lifecycle stays intact.
 
+## Survey mission set
+
+The facility now supports three doctrine variants over the same deterministic flight truth:
+
+- **Bracken Pump House — stealth mandatory.** Hold the marked observation points, remain on fibre,
+  and command a silent autonomous retrace. Detaching, broadcasting, firing, or being detected
+  compromises tomorrow's attack route and ends the sortie.
+- **Morrow Service Block — discretion.** Survey first, then either recover quietly or detach,
+  transmit, and defend the airframe if an investigator appears.
+- **Cinder Tram Depot — provocation required.** Survey tomorrow's diversion site, deliberately
+  broadcast an EW signature, wait for the investigator, and fire the first shot. That shot starts
+  a visible reinforcement clock and turns the surveillance run into drone-on-drone combat.
+
+Distance from the relay is an authored mission property. The same transmission accumulates enemy
+attention faster at the farther site. Radio only degrades the operator view and authority; the
+fixed-step mission keeps running, and a return commitment hands all flight control to the onboard
+controller.
+
 ## What the first slice includes
 
 - deterministic 3D movement, sliding collision and projectiles;
@@ -62,6 +82,8 @@ The main catalogue links to `/indoor/` as a fourth experience. It deliberately h
 - route rings, live fibre, link/battery/integrity instruments and local geometry map;
 - synthesized motor, reel, handoff, gun, hit, alarm and outcome audio;
 - keyboard, pointer, touch and gamepad controls;
+- quiet, discretionary and deliberately noisy survey doctrines with investigator and reinforcement
+  responses;
 - success/failure debrief and automated kernel/browser contracts.
 
 ## Honest deferrals

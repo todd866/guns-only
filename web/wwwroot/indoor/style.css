@@ -1197,6 +1197,7 @@ button.primary {
 .touch-height button,
 #touch-fire,
 #touch-return,
+#touch-broadcast,
 #touch-detach {
   min-width: 48px;
   min-height: 44px;
@@ -1232,7 +1233,14 @@ button.primary {
   border-color: rgba(120, 255, 195, .4);
   color: var(--green);
 }
+
+#touch-broadcast {
+  right: 174px;
+  border-color: rgba(255, 183, 88, .5);
+}
 #touch-return[hidden],
+#touch-broadcast[hidden],
+#broadcast-button[hidden],
 #return-button[hidden] { display: none; }
 body[data-link="rf"] #touch-detach,
 body[data-link="lost"] #touch-detach { display: none; }
