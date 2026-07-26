@@ -66,26 +66,58 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.ok(webProject.includes(
     `Condition="'$(EmbedKoreaTerrainTruth)' != 'false'"`,
   ), "production must embed terrain truth unless a constrained build explicitly opts out");
+  assert.ok(webProject.includes(
+    `Condition="'$(EmbedUkraineTerrainTruth)' != 'false'"`,
+  ), "production must embed the selected Ukraine truth unless a constrained build opts out");
   assert.match(source,
-    /this\.terrainPresentationPromise = null;[\s\S]*ensureTerrainPresentation\(\)/,
+    /this\.terrainPresentationPromise = null;[\s\S]*ensureTerrainPresentation\(state = null\)/,
     "constructing FlightView must not start terrain network work");
   assert.match(source,
-    /if \(state\?\.ready !== true && state\?\.terrain_present === true\) void this\.ensureTerrainPresentation\(\)/,
+    /if \(state\?\.ready !== true && state\?\.terrain_present === true\) \{[\s\S]*?this\.ensureTerrainPresentation\(state\)/,
     "a non-Ready frame with terrain present should start the retained terrain single flight");
   assert.match(source,
-    /if \(this\.terrainPresentation\) \{[\s\S]*return this\.terrainSceneryEraPromise\?\.then[\s\S]*if \(this\.terrainPresentationPromise\) return this\.terrainPresentationPromise/,
+    /if \(this\.terrainPresentation\) \{[\s\S]*return this\.terrainSceneryEraPromise\?\.then[\s\S]*if \(this\.terrainPresentationPromise\) \{[\s\S]*terrainPresentationRequestedKey === terrainKey/,
     "repeated gameplay frames must reuse one terrain load");
   assert.match(source,
-    /const sceneryEra = terrainPackId\.includes\("modern"\) \|\| selectedBeat === 7 \|\| selectedBeat === 8[\s\S]*\? "modern" : "1950s"/,
-    "the F-22 and drone missions must select the 2030s profile without duplicating terrain bytes");
+    /const ukraineTrainingSector = state\?\.terrain_profile_id[\s\S]*?selectedBeat === 8/);
+  assert.match(source,
+    /const sceneryEra = ukraineTrainingSector[\s\S]*?\? "ukraine-modern"/,
+    "the low-level mission must select its regional stylized scenery profile");
+  assert.match(source,
+    /const UKRAINE_TRAINING_TERRAIN_MANIFEST_URL = new URL\([\s\S]*?soniachne-steppe\.manifest\.json/);
+  assert.match(source,
+    /const terrainKey = ukraineTrainingSector[\s\S]*?terrain\.ukraine\.soniachne-training\.v1/,
+    "switching theatres must replace the retained terrain instead of recolouring Korea");
   assert.match(source,
     /presentation\.setSceneryEra\(sceneryEra\)/,
     "restaging across eras must replace scenery without rebuilding the retained terrain atlas");
+  assert.match(source,
+    /terrainDiagnostics\?\.terrainId === "terrain\.ukraine\.soniachne-training\.v1"[\s\S]*terrainDiagnostics\?\.sceneryEra === "ukraine-modern"[\s\S]*if \(!lowLevelSceneryRequired\) \{[\s\S]*setSceneryEra\?\.\(null\)/,
+    "the last-resort frame governor may drop shadows but must retain mission-essential low-level scenery");
+  assert.match(source,
+    /Shadows off · low-level scenery retained · holding 60/,
+    "the performance status must disclose that essential scenery remains active");
+  assert.match(source,
+    /const detailedUkraineTerrainLoaded =[\s\S]*terrain\.ukraine\.soniachne-training\.v1[\s\S]*this\.sea\.mesh\.visible = !detailedUkraineTerrainLoaded/,
+    "the ocean fallback must remain visible if the inland terrain product itself fails to load");
+  assert.match(source,
+    /terrainPresentationFailureKey === terrainKey[\s\S]*terrainPresentationRetryAtMs[\s\S]*return Promise\.resolve\(null\)/,
+    "a failed terrain product must back off instead of refetching on every animation frame");
+  assert.match(source,
+    /terrainPresentationRetryAtMs = performance\.now\(\) \+ 15_000/,
+    "terrain failures should remain retryable after a bounded delay");
+  assert.match(source,
+    /function prepareMissionTerrain\(index\)[\s\S]*setPauseReason\("terrain", true\)[\s\S]*warmTerrainAroundReadyAircraft[\s\S]*setPauseReason\("terrain", false\)/,
+    "the low-level sortie must warm nearby terrain before releasing the flight clock");
+  assert.match(source,
+    /await terrain\.ready[\s\S]*requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)[\s\S]*await terrain\.whenIdle\?\.\(\)/,
+    "terrain warmup must include the near-LOD and instanced-scenery work requested by the paused camera");
   assert.match(source, /const DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL = null;/,
     "an unqualified peninsula atlas must remain unreachable from the production browser");
   assert.doesNotMatch(source, /peninsula-r2|pub-[a-z0-9]+\.r2\.dev/,
     "production source must not expose the temporary atlas host or a query-string bypass");
-  assert.match(source, /manifestUrl: DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL/);
+  assert.match(source,
+    /const manifestUrl = ukraineTrainingSector[\s\S]*?UKRAINE_TRAINING_TERRAIN_MANIFEST_URL[\s\S]*?DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL/);
   assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
     "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
@@ -109,9 +141,11 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /placementEastM: state\.carrier === true \? 100_000 : 0/,
     "the old mission-local placement would disagree with shared-world coordinates");
   assert.match(bridgeSource,
-    /TerrainPlacementEastM\(int index\)[\s\S]*\? -_worldOriginEastM/,
+    /TerrainPlacementEastM\(int index\)[\s\S]*?8 => 0\.0,[\s\S]*?_ => -_worldOriginEastM/,
     "simulation terrain must use the inverse room-origin transform");
   for (const field of [
+    "terrain_profile_id",
+    "terrain_scenery_profile",
     "terrain_placement_east_m",
     "terrain_placement_north_m",
     "multiplayer_terrain_shared",
@@ -126,9 +160,10 @@ test("environment lab exercises the production terrain manifest and exposes the 
   assert.match(source,
     /import \{ loadKoreaTerrain \} from "\.\.\/render\/environment\/korea_terrain\.js"/);
   const loadCall = source.match(/terrain = await loadKoreaTerrain\(THREE, \{([\s\S]*?)\n  \}\);/);
-  assert.ok(loadCall, "environment lab must construct the real Korea terrain presentation");
-  assert.doesNotMatch(loadCall[1], /manifestUrl/,
-    "the source lab must use korea_terrain.js's production-default manifest URL");
+  assert.ok(loadCall, "environment lab must construct the real terrain presentation");
+  assert.match(loadCall[1], /manifestUrl: siteConfig\.manifestUrl/,
+    "the lab must exercise both the production-default Korea pack and selectable Ukraine pack");
+  assert.match(source, /SITE_CONFIGURATIONS[\s\S]*?sceneryEra: "ukraine-modern"/);
   assert.match(source, /await terrain\.ready/);
   assert.match(source, /window\.__terrainLookReady = terrain\.diagnostics\(\)/);
   assert.match(source, /terrainState\.errors > 0 \|\| terrainState\.residentChunks === 0/,
@@ -192,7 +227,7 @@ test("bridge publishes authoritative local weather instead of renderer-owned dec
   }
   assert.match(source,
     /StartBeatWithEnvironment\([\s\S]*KoreaWeatherPresets\.ForBeat\(index\)/,
-    "built-in sorties must stage deterministic Korea weather alongside terrain");
+    "built-in sorties must stage deterministic mission weather alongside terrain");
 });
 
 test("hidden replay exterior is preloaded and obsolete pack runtimes are disposed", async () => {

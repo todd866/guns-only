@@ -69,6 +69,11 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     buildingLimitScale: 0.35,
     fieldLimitScale: 1,
     settlementClusters: 3,
+    settlementSpread01: 0.038,
+    shelterbeltBands: 0,
+    shelterbeltRowChance: 0,
+    shelterbeltColumnChance: 0,
+    shelterbeltSpacingM: 95,
     maximumTreeSlope: 0.78,
     maximumBuildingSlope: 0.16,
     maximumFieldSlope: 0.085,
@@ -107,6 +112,7 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     buildingColor: 0x8a806b,
     buildingColors: Object.freeze([0x817762, 0x9a8e72, 0x706b5c]),
     roofColor: 0x4b4033,
+    roofColors: Object.freeze([0x4b4033, 0x55483a, 0x3d3832]),
     fieldColor: 0x62683c,
     fieldColors: Object.freeze([0x62683c, 0x777342, 0x4f6036, 0x817646]),
     fieldRowColor: 0x3f482a,
@@ -129,6 +135,11 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     buildingLimitScale: 1,
     fieldLimitScale: 0.82,
     settlementClusters: 6,
+    settlementSpread01: 0.065,
+    shelterbeltBands: 0,
+    shelterbeltRowChance: 0,
+    shelterbeltColumnChance: 0,
+    shelterbeltSpacingM: 105,
     maximumTreeSlope: 0.92,
     maximumBuildingSlope: 0.12,
     maximumFieldSlope: 0.075,
@@ -167,6 +178,7 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     buildingColor: 0xa9aaa3,
     buildingColors: Object.freeze([0x969993, 0xb3afa4, 0x8d9697, 0xc0b59e]),
     roofColor: 0x515962,
+    roofColors: Object.freeze([0x515962, 0x5d514b, 0x46545c]),
     fieldColor: 0x657748,
     fieldColors: Object.freeze([0x657748, 0x7b8047, 0x536f3d, 0x85804d]),
     fieldRowColor: 0x4f623b,
@@ -177,6 +189,80 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     runwayColor: 0x303337,
     powerPoleColor: 0x686d70,
     powerWireColor: 0x666d70,
+  }),
+  "ukraine-modern": Object.freeze({
+    id: "ukraine-modern",
+    theatre: "ukraine",
+    period: "fictional-modern-training-sector",
+    trainingSector: true,
+    seedSalt: 0x26_07_0001,
+    // Ukraine's lowland read comes from large cultivated parcels, road-aligned villages and
+    // shelterbelts rather than a generic forest scatter. Counts remain bounded by the same mobile
+    // budgets as Korea; the profile changes composition, not the renderer contract.
+    treeDensityPerKm2: 24,
+    buildingDensityPerKm2: 9.5,
+    fieldDensityPerKm2: 9.2,
+    treeLimitScale: 0.82,
+    buildingLimitScale: 1,
+    fieldLimitScale: 1,
+    settlementClusters: 5,
+    settlementSpread01: 0.043,
+    shelterbeltBands: 2,
+    shelterbeltRowChance: 0.90,
+    shelterbeltColumnChance: 0.75,
+    shelterbeltSpacingM: 82,
+    maximumTreeSlope: 0.42,
+    maximumBuildingSlope: 0.095,
+    maximumFieldSlope: 0.065,
+    maximumRoadSlope: 0.18,
+    maximumRoadGrade: 0.11,
+    maximumRailSlope: 0.10,
+    maximumRailGrade: 0.045,
+    maximumSettlementHeightM: 360,
+    maximumFieldHeightM: 320,
+    treeHeightM: [7, 18],
+    buildingWidthM: [7, 22],
+    buildingDepthM: [6, 24],
+    buildingHeightM: [3.1, 9.5],
+    fieldWidthM: [240, 720],
+    fieldDepthM: [320, 980],
+    fieldRowSpacingM: 18,
+    fieldRowWidthM: 3.4,
+    roadWidthM: [5.5, 10.5],
+    roadSegmentM: 105,
+    roadRowChance: 0.56,
+    roadColumnChance: 0.46,
+    railSegmentM: 145,
+    railRowChance: 0.22,
+    railColumnChance: 0.16,
+    powerRowChance: 0.46,
+    powerColumnChance: 0.38,
+    powerPoleSpacingM: 145,
+    powerPoleHeightM: [12, 24],
+    airfieldChance: 0.009,
+    runwayLengthM: [1_100, 2_400],
+    runwayWidthM: [30, 48],
+    highRiseChance: 0.025,
+    toonSteps: Object.freeze([48, 104, 172, 236]),
+    crownColor: 0x42613b,
+    crownColors: Object.freeze([0x254a2e, 0x315d37, 0x497047, 0x1f3d27]),
+    trunkColor: 0x5c4938,
+    buildingColor: 0xb4aa96,
+    buildingColors: Object.freeze([0xb9aa8e, 0xd0c4aa, 0x9fa79e, 0xc1b19f]),
+    roofColor: 0x6d4438,
+    // Red sheet metal, weathered grey and the occasional blue roof make a village readable from
+    // treetop height without leaning on flags, labels or real-world target imagery.
+    roofColors: Object.freeze([0x7e4336, 0x4e5960, 0x426886, 0x675247]),
+    fieldColor: 0x8a7b3f,
+    fieldColors: Object.freeze([0xb48c3d, 0x7c873d, 0x6a793a, 0x9a6d35, 0x4f6b35]),
+    fieldRowColor: 0x5d5531,
+    roadColor: 0x55565a,
+    roadMarkingColor: 0xd8d0ad,
+    railBedColor: 0x4b4a47,
+    railColor: 0x777a7c,
+    runwayColor: 0x34373b,
+    powerPoleColor: 0x5d6265,
+    powerWireColor: 0x373b3d,
   }),
 });
 
@@ -437,13 +523,7 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
   const fieldTarget = candidateCount(profile.fieldDensityPerKm2, areaKm2, landFraction,
     Math.round(quality.fieldLimit * profile.fieldLimitScale), quality.density);
 
-  let attempts = 0;
-  while (trees.length < treeTarget && attempts++ < treeTarget * 8 + 32) {
-    const east01 = random();
-    const north01 = random();
-    const surface = surfaceSample(decoded, east01, north01, spanEastM, spanNorthM);
-    if (!surface || surface.slope > profile.maximumTreeSlope) continue;
-    const variation = random();
+  const addTree = (surface, variation) => {
     trees.push({
       ...surface,
       yaw: variation * Math.PI * 2,
@@ -452,6 +532,59 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
       widthScale: 0.72 + fraction(variation * 7.123) * 0.62,
       crownVariant: Math.floor(fraction(variation * 11.417) * profile.crownColors.length),
     });
+  };
+
+  // Ukrainian agricultural shelterbelts are structural navigation cues, not generic tree noise.
+  // Their deterministic row/column keys continue across chunk edges, while the ordinary scatter
+  // below fills only the remaining profile budget.
+  const shelterbeltRoutes = [];
+  const shelterbeltBands = Math.max(0, Math.round(profile.shelterbeltBands ?? 1));
+  for (let band = 0; band < shelterbeltBands; band++) {
+    shelterbeltRoutes.push(...axisRoutes(
+      chunk,
+      profile,
+      `shelterbelt-${band}`,
+      profile.shelterbeltRowChance ?? 0,
+      profile.shelterbeltColumnChance ?? 0,
+    ));
+  }
+  for (let routeIndex = 0; routeIndex < shelterbeltRoutes.length
+    && trees.length < treeTarget; routeIndex++) {
+    const route = shelterbeltRoutes[routeIndex];
+    const deltaEastM = (route.end.east01 - route.start.east01) * spanEastM;
+    const deltaNorthM = (route.end.north01 - route.start.north01) * spanNorthM;
+    const lengthM = Math.hypot(deltaEastM, deltaNorthM);
+    const remainingRoutes = shelterbeltRoutes.length - routeIndex;
+    const routeBudget = Math.max(1, Math.floor((treeTarget - trees.length) / remainingRoutes));
+    const count = Math.min(
+      routeBudget,
+      Math.max(1, Math.ceil(lengthM / Math.max(20, profile.shelterbeltSpacingM ?? 95))),
+    );
+    const perpendicularEast = lengthM > 0 ? -deltaNorthM / lengthM : 0;
+    const perpendicularNorth = lengthM > 0 ? deltaEastM / lengthM : 0;
+    for (let index = 0; index < count && trees.length < treeTarget; index++) {
+      const along = (index + 0.5) / count;
+      const variation = hashUnit(`${route.key}:${chunk.id}:tree:${index}`);
+      const jitterM = (fraction(variation * 17.313) - 0.5) * 18;
+      const east01 = route.start.east01
+        + (route.end.east01 - route.start.east01) * along
+        + perpendicularEast * jitterM / spanEastM;
+      const north01 = route.start.north01
+        + (route.end.north01 - route.start.north01) * along
+        + perpendicularNorth * jitterM / spanNorthM;
+      const surface = surfaceSample(decoded, east01, north01, spanEastM, spanNorthM);
+      if (!surface || surface.slope > profile.maximumTreeSlope) continue;
+      addTree(surface, variation);
+    }
+  }
+
+  let attempts = 0;
+  while (trees.length < treeTarget && attempts++ < treeTarget * 8 + 32) {
+    const east01 = random();
+    const north01 = random();
+    const surface = surfaceSample(decoded, east01, north01, spanEastM, spanNorthM);
+    if (!surface || surface.slope > profile.maximumTreeSlope) continue;
+    addTree(surface, random());
   }
 
   const centres = [];
@@ -482,7 +615,7 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
     && attempts++ < buildingTarget * 14 + 64) {
     const settlementIndex = Math.floor(random() * centres.length);
     const centre = centres[settlementIndex];
-    const spread = profile.id === "modern" ? 0.065 : 0.038;
+    const spread = profile.settlementSpread01;
     const east01 = clamp(centre.east01 + (random() + random() - 1) * spread, 0.01, 0.99);
     const north01 = clamp(centre.north01 + (random() + random() - 1) * spread, 0.01, 0.99);
     const surface = surfaceSample(decoded, east01, north01, spanEastM, spanNorthM);
@@ -491,8 +624,16 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
     const style = random();
     const highRise = style < profile.highRiseChance;
     const quarterTurn = fraction(style * 3.719) < 0.34 ? Math.PI * 0.5 : 0;
+    const buildingIndex = buildings.length;
+    const buildingKind = highRise
+      ? "apartment"
+      : fraction(style * 5.317) < 0.3 ? "agricultural" : "house";
     buildings.push({
       ...surface,
+      entityId: `scenery.${profile.id}.${chunk.id}.building.${buildingIndex}`,
+      role: "ambient",
+      targetable: false,
+      kind: buildingKind,
       settlementIndex,
       yaw: centre.corridorYaw + quarterTurn + (fraction(style * 9.137) - 0.5) * 0.24,
       widthM: between(random, profile.buildingWidthM) * (highRise ? 1.25 : 1),
@@ -639,7 +780,7 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
           toX: point.x,
           toY: point.y + poleHeightM * 0.92,
           toZ: point.z,
-          widthM: profile.id === "modern" ? 0.12 : 0.085,
+          widthM: profile.id === "1950s" ? 0.085 : 0.12,
         });
       }
       prior = point;
@@ -771,6 +912,10 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const profile = KOREA_SCENERY_PROFILES[era];
   if (!profile) throw new TypeError(`Unknown Korea scenery era: ${era}.`);
   const qualityTier = options.qualityTier ?? "balanced";
+  // Mobile and balanced terrain deliberately floor at LOD1 to cap heightfield cost. Restricting
+  // scenery to literal LOD0 therefore made every building, tree and road disappear on those tiers.
+  // Permit their nearest selectable LOD while still avoiding duplicate dressing on farther rings.
+  const maximumSceneryLevel = qualityTier === "desktop" ? 0 : 1;
   const crownPrimitive = new THREE.ConeGeometry(1, 1, 7, 1);
   crownPrimitive.translate(0, 0.5, 0);
   const trunkPrimitive = new THREE.CylinderGeometry(0.12, 0.18, 1, 5, 1);
@@ -791,14 +936,37 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const segmentGeometry = new THREE.BoxGeometry(1, 1, 1);
   const poleGeometry = new THREE.CylinderGeometry(0.08, 0.13, 1, 6, 1);
   poleGeometry.translate(0, 0.5, 0);
+  const toonGradient = profile.toonSteps
+    ? new THREE.DataTexture(
+      Uint8Array.from(profile.toonSteps),
+      profile.toonSteps.length,
+      1,
+      THREE.RedFormat,
+      THREE.UnsignedByteType,
+    )
+    : null;
+  if (toonGradient) {
+    toonGradient.minFilter = THREE.NearestFilter;
+    toonGradient.magFilter = THREE.NearestFilter;
+    toonGradient.generateMipmaps = false;
+    toonGradient.colorSpace = THREE.NoColorSpace;
+    toonGradient.needsUpdate = true;
+  }
   // A restrained material-local sky fill keeps sub-pixel procedural instances legible even if a
   // diagnostic scene momentarily stages them before its production lights. It is not a glow: the
   // shipped hemisphere and sun still provide nearly all of the final Lambert response.
-  const litMaterial = (color, emissive = color) => new THREE.MeshLambertMaterial({
-    color,
-    emissive,
-    emissiveIntensity: 0.14,
-  });
+  const litMaterial = (color, emissive = color) => toonGradient
+    ? new THREE.MeshToonMaterial({
+      color,
+      emissive,
+      emissiveIntensity: 0.1,
+      gradientMap: toonGradient,
+    })
+    : new THREE.MeshLambertMaterial({
+      color,
+      emissive,
+      emissiveIntensity: 0.14,
+    });
   // Two of these layers are coplanar with their own parent slab BY CONSTRUCTION, not by terrain
   // accident: field rows take their Y from the same `field.y` mean the field slab uses, and road
   // markings reuse the road segment's own endpoints. Both end up 7.5 mm above the top face of the
@@ -826,7 +994,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const crownMaterial = litMaterial(0xffffff, profile.crownColor);
   const trunkMaterial = litMaterial(profile.trunkColor);
   const buildingMaterial = litMaterial(0xffffff, profile.buildingColor);
-  const roofMaterial = litMaterial(profile.roofColor);
+  const roofMaterial = litMaterial(0xffffff, profile.roofColor);
   const fieldMaterial = litMaterial(0xffffff, profile.fieldColor);
   const fieldRowMaterial = decalOf(litMaterial(profile.fieldRowColor), 1);
   const roadMaterial = litMaterial(profile.roadColor);
@@ -839,6 +1007,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const powerWireMaterial = new THREE.MeshBasicMaterial({ color: profile.powerWireColor });
   const crownPalette = profile.crownColors.map((color) => new THREE.Color(color));
   const buildingPalette = profile.buildingColors.map((color) => new THREE.Color(color));
+  const roofPalette = profile.roofColors.map((color) => new THREE.Color(color));
   const fieldPalette = profile.fieldColors.map((color) => new THREE.Color(color));
   const geometries = [
     crownGeometry, trunkGeometry, buildingGeometry, roofGeometry,
@@ -855,7 +1024,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     era,
     disposeTile: disposeKoreaSceneryTile,
     createTile(chunk, decoded, level = 0) {
-      if (disposed || level !== 0) return null;
+      if (disposed || level < 0 || level > maximumSceneryLevel) return null;
       const plan = planKoreaScenery(chunk, decoded, { era, qualityTier });
       if (!plan.trees.length && !plan.buildings.length && !plan.fields.length
         && !plan.roads.length && !plan.railSegments.length && !plan.runways.length
@@ -906,6 +1075,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
         );
         const roofs = new THREE.InstancedMesh(roofGeometry, roofMaterial, plan.buildings.length);
         const buildingColors = new Float32Array(plan.buildings.length * 3);
+        const roofColors = new Float32Array(plan.buildings.length * 3);
         buildings.name = `PROCEDURAL_${era.toUpperCase()}_BUILDINGS`;
         roofs.name = `PROCEDURAL_${era.toUpperCase()}_ROOFS`;
         for (let index = 0; index < plan.buildings.length; index++) {
@@ -915,6 +1085,8 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
           scale.set(building.widthM, building.heightM, building.depthM);
           setMatrix(THREE, buildings, index, position, quaternion, scale, matrix);
           setPaletteColor(buildingColors, index, buildingPalette[building.colorVariant]);
+          setPaletteColor(roofColors, index,
+            roofPalette[building.colorVariant % roofPalette.length]);
           position.y += building.heightM;
           scale.set(
             building.widthM,
@@ -924,9 +1096,11 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
           setMatrix(THREE, roofs, index, position, quaternion, scale, matrix);
         }
         buildings.instanceColor = new THREE.InstancedBufferAttribute(buildingColors, 3);
+        roofs.instanceColor = new THREE.InstancedBufferAttribute(roofColors, 3);
         buildings.instanceMatrix.needsUpdate = true;
         buildings.instanceColor.needsUpdate = true;
         roofs.instanceMatrix.needsUpdate = true;
+        roofs.instanceColor.needsUpdate = true;
         group.add(buildings, roofs);
       }
       if (plan.fields.length) {
@@ -989,7 +1163,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
           const pole = plan.powerPoles[index];
           quaternion.identity();
           position.set(pole.x, pole.y, pole.z);
-          const baseWidthM = era === "modern" ? 0.34 : 0.24;
+          const baseWidthM = era === "1950s" ? 0.24 : 0.34;
           scale.set(baseWidthM, pole.heightM, baseWidthM);
           setMatrix(THREE, poles, index, position, quaternion, scale, matrix);
         }
@@ -1002,6 +1176,8 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
       );
       group.userData.scenery = Object.freeze({
         era,
+        theatre: profile.theatre ?? "korea",
+        trainingSector: profile.trainingSector === true,
         period: profile.period,
         seed: plan.seed,
         trees: plan.trees.length,
@@ -1024,6 +1200,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
       disposed = true;
       for (const geometry of geometries) geometry.dispose();
       for (const material of materials) material.dispose();
+      toonGradient?.dispose();
     },
   });
 }

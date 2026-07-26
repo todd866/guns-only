@@ -1,0 +1,295 @@
+{
+  "schemaVersion": "1.0.0",
+  "terrainId": "terrain.ukraine.soniachne-training.v1",
+  "terrainVersion": "soniachne-synthetic-v1",
+  "displayName": "Soniachne Steppe \u2014 fictional Ukraine training sector",
+  "horizontalCrs": "LOCAL_METRES_EAST_NORTH",
+  "verticalCrs": "LOCAL_TRAINING_DATUM",
+  "boundsLocalM": [
+    -8192.0,
+    -8192.0,
+    8192.0,
+    8192.0
+  ],
+  "tileSpanM": 8192.0,
+  "referenceOrigin": {
+    "kind": "fictional-local-grid",
+    "eastM": 0.0,
+    "northM": 0.0
+  },
+  "source": {
+    "kind": "synthetic-fictional-composite",
+    "suitableFor": [
+      "renderer integration",
+      "collision and Auto-GCAS integration",
+      "fictional training missions"
+    ],
+    "notSuitableFor": [
+      "navigation",
+      "real-world tactical use",
+      "claims about a real Ukrainian locality"
+    ]
+  },
+  "build": {
+    "builder": "tools/terrain/build_ukraine_training_sector.py",
+    "builderVersion": 1,
+    "pythonVersion": "3.14.4"
+  },
+  "quantization": {
+    "storage": "little-endian-signed-int16",
+    "rowOrder": "south-to-north",
+    "metresPerUnit": 0.1,
+    "waterSentinel": -32768
+  },
+  "bundle": {
+    "uri": "soniachne-steppe.terrain",
+    "byteLength": 704032,
+    "recordCount": 16,
+    "sha256": "145b0623f04e7188219e42c175bbb33d56ce12c92183a1029f8fc607a64c8669"
+  },
+  "simulationTruth": {
+    "uri": "soniachne-steppe.truth",
+    "byteLength": 526402,
+    "sha256": "705e782609d4e1bac280ee0631ced57c5cda0556d8f0ad419e97f5221fa64a8b",
+    "spacingM": 32.0,
+    "pointCount": [
+      513,
+      513
+    ]
+  },
+  "preview": {
+    "uri": "soniachne-steppe-preview.png",
+    "byteLength": 115336,
+    "sha256": "9590755623e617e38d0210c6a8b9eb634ee5fbdec95307f00d97ddf5924488d0"
+  },
+  "chunks": [
+    {
+      "id": "e00-n00",
+      "eastIndex": 0,
+      "northIndex": 0,
+      "boundsLocalM": [
+        -8192.0,
+        -8192.0,
+        0.0,
+        0.0
+      ],
+      "generation": {
+        "seed": 3615784745,
+        "landFraction": 1.0
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 32.0,
+          "byteOffset": 0,
+          "byteLength": 132098,
+          "sha256": "17f5d66d984090f1ad4ee1a294c8403dadd2d3603ec289d5ad3ed13074b84196",
+          "minimumHeightM": 85.60000000000001,
+          "maximumHeightM": 118.60000000000001
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 64.0,
+          "byteOffset": 132098,
+          "byteLength": 33282,
+          "sha256": "885b162bc608e76bc7acc767bfb37c39bbab545971e540a8cbd8c641902ca85f",
+          "minimumHeightM": 85.60000000000001,
+          "maximumHeightM": 118.60000000000001
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 128.0,
+          "byteOffset": 165380,
+          "byteLength": 8450,
+          "sha256": "46ff9a3a079001f7f607f33e27f6971acea1ea641db9b5e59c388e41908a90b5",
+          "minimumHeightM": 85.7,
+          "maximumHeightM": 118.60000000000001
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 256.0,
+          "byteOffset": 173830,
+          "byteLength": 2178,
+          "sha256": "1d3fec7974d17c3ad40345485162961267a7b20763dd1f230ebe9f9385b04018",
+          "minimumHeightM": 85.7,
+          "maximumHeightM": 118.60000000000001
+        }
+      ]
+    },
+    {
+      "id": "e01-n00",
+      "eastIndex": 1,
+      "northIndex": 0,
+      "boundsLocalM": [
+        0.0,
+        -8192.0,
+        8192.0,
+        0.0
+      ],
+      "generation": {
+        "seed": 3865890414,
+        "landFraction": 1.0
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 32.0,
+          "byteOffset": 176008,
+          "byteLength": 132098,
+          "sha256": "08322cbd9fa60807292ff2005110f852fde05cc1d3a154429e83f286730bcc81",
+          "minimumHeightM": 111.80000000000001,
+          "maximumHeightM": 155.20000000000002
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 64.0,
+          "byteOffset": 308106,
+          "byteLength": 33282,
+          "sha256": "94124b89dcc9b340342ce01be9fab34325b1d4b7685a472c90621d5ac8ac65fd",
+          "minimumHeightM": 111.80000000000001,
+          "maximumHeightM": 155.20000000000002
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 128.0,
+          "byteOffset": 341388,
+          "byteLength": 8450,
+          "sha256": "89b53b623b6c07118e5ad77a0d62e7110aa9871e299d976c6dacb21afbb3f056",
+          "minimumHeightM": 111.80000000000001,
+          "maximumHeightM": 155.20000000000002
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 256.0,
+          "byteOffset": 349838,
+          "byteLength": 2178,
+          "sha256": "33abfc0ca1f82d9b2ac3ff75f7a78c1594a5bc70869ef77d8d5b5b8d73df93ea",
+          "minimumHeightM": 111.80000000000001,
+          "maximumHeightM": 155.20000000000002
+        }
+      ]
+    },
+    {
+      "id": "e00-n01",
+      "eastIndex": 0,
+      "northIndex": 1,
+      "boundsLocalM": [
+        -8192.0,
+        0.0,
+        0.0,
+        8192.0
+      ],
+      "generation": {
+        "seed": 2022174639,
+        "landFraction": 1.0
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 32.0,
+          "byteOffset": 352016,
+          "byteLength": 132098,
+          "sha256": "e4ec2f9abc8019b3ebe82925d3313d1ef31a4f06c561097721d587da339897f3",
+          "minimumHeightM": 88.0,
+          "maximumHeightM": 121.0
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 64.0,
+          "byteOffset": 484114,
+          "byteLength": 33282,
+          "sha256": "63c3b3ff8896ecc5ff72d7a4b422a94e727875f95dcdfd7f0ee76eb2055528b1",
+          "minimumHeightM": 88.0,
+          "maximumHeightM": 121.0
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 128.0,
+          "byteOffset": 517396,
+          "byteLength": 8450,
+          "sha256": "823555c88e029619176433dae45f16a1d2e7c1e02fd7deca63ae2112750af94b",
+          "minimumHeightM": 88.10000000000001,
+          "maximumHeightM": 121.0
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 256.0,
+          "byteOffset": 525846,
+          "byteLength": 2178,
+          "sha256": "c84d15715b21f249f9a261192f3235b4defb6871c50d96fe1f1ed316d0b8de09",
+          "minimumHeightM": 88.10000000000001,
+          "maximumHeightM": 121.0
+        }
+      ]
+    },
+    {
+      "id": "e01-n01",
+      "eastIndex": 1,
+      "northIndex": 1,
+      "boundsLocalM": [
+        0.0,
+        0.0,
+        8192.0,
+        8192.0
+      ],
+      "generation": {
+        "seed": 1274320948,
+        "landFraction": 1.0
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 32.0,
+          "byteOffset": 528024,
+          "byteLength": 132098,
+          "sha256": "5e67498426c23ff889a7a532ca084fcca08a2cacd5dc437d811909d3540b22ab",
+          "minimumHeightM": 112.0,
+          "maximumHeightM": 158.4
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 64.0,
+          "byteOffset": 660122,
+          "byteLength": 33282,
+          "sha256": "78fbfeabce274dcb30e5c750f5a78c10692e0b59168859a8c3f40d1aeef3fc92",
+          "minimumHeightM": 112.0,
+          "maximumHeightM": 158.4
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 128.0,
+          "byteOffset": 693404,
+          "byteLength": 8450,
+          "sha256": "55b449d0e91390a218f0ceda76994cec187d40768e9e49f8385876667408e1f4",
+          "minimumHeightM": 112.0,
+          "maximumHeightM": 158.4
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 256.0,
+          "byteOffset": 701854,
+          "byteLength": 2178,
+          "sha256": "860fc69425855fccc68db877faa381a0b4a5f400b661ace57196d47122c512c6",
+          "minimumHeightM": 112.0,
+          "maximumHeightM": 158.4
+        }
+      ]
+    }
+  ]
+}

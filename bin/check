@@ -31,6 +31,16 @@ trap 'rm -rf "$scratch_dir"' EXIT HUP INT TERM
 node tools/assets/build-assets.mjs stage \
   --pack content/packs/korea-1950s/pack.json \
   --output "$staged_content_dir"
+# The Soniachne slice is terrain-only until the first authoritative Ukraine feature/vehicle pack
+# exists. Stage its four generated runtime products explicitly so source and wwwroot cannot drift
+# while avoiding a fake asset/presentation manifest around ambient procedural scenery.
+ukraine_source_dir="content/packs/ukraine-modern/environment/terrain"
+ukraine_stage_dir="$staged_content_dir/packs/ukraine-modern/environment/terrain"
+mkdir -p "$ukraine_stage_dir"
+cp "$ukraine_source_dir/soniachne-steppe.manifest.json" "$ukraine_stage_dir/"
+cp "$ukraine_source_dir/soniachne-steppe.terrain" "$ukraine_stage_dir/"
+cp "$ukraine_source_dir/soniachne-steppe.truth" "$ukraine_stage_dir/"
+cp "$ukraine_source_dir/soniachne-steppe-preview.png" "$ukraine_stage_dir/"
 diff -qr "$staged_content_dir" web/wwwroot/content
 
 "$dotnet_cli" restore GunsOnly.sln --nologo --ignore-failed-sources \
@@ -51,6 +61,8 @@ diff -qr "$staged_content_dir" web/wwwroot/content
 test -f "$publish_dir/wwwroot/index.html"
 test -f "$publish_dir/wwwroot/_framework/blazor.webassembly.js"
 test -f "$publish_dir/wwwroot/content/packs/korea-1950s/pack.json"
+test -f "$publish_dir/wwwroot/content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json"
+test -f "$publish_dir/wwwroot/content/packs/ukraine-modern/environment/terrain/soniachne-steppe.terrain"
 test -f "$publish_dir/wwwroot/render/assets/asset_registry.js"
 test -f "$publish_dir/wwwroot/render/presence/global_room_client.js"
 test -f "$publish_dir/wwwroot/multiplayer-config.js"

@@ -17,10 +17,10 @@ on production and preview deployments, and caps the declared, streamed, row-coun
 payload sizes. A hidden/pagehide event makes a best-effort immediate tail upload; browsers still do
 not guarantee ordinary fetch delivery during final teardown.
 
-The release number is declared in `render/release/release_identity.js` and `api/build-info.js`; the
-`?v=` value on the `app.js` entry in `index.html` is an independent cache key used to detect a
-mixed shell/module graph. Keep all three values equal and monotonically increasing across
-production releases. Production telemetry adds the Vercel revision and deployment identity, so
+The release number is declared in `render/release/release_identity.js`, `api/build-info.js`, and
+`service-worker.js`; the `?v=` value on the `app.js` entry in `index.html` is an independent cache
+key used to detect a mixed shell/module graph. Keep all four values equal and monotonically
+increasing across production releases. Production telemetry adds the Vercel revision and deployment identity, so
 two deployments of the same human-facing build can still be distinguished. The briefing/debrief
 surface warns about a stale or mixed tab and blocks only the next sortie until it is reloaded.
 

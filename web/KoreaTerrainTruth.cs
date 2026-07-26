@@ -4,22 +4,41 @@ using GunsOnly.Sim.Environment;
 
 namespace GunsOnly.Web;
 
-/// <summary>Loads the pack-derived 128 m Korea grid without coupling the simulation library to it.</summary>
+/// <summary>Compatibility entry point for the pack-derived 128 m Korea grid.</summary>
 internal static class KoreaTerrainTruth {
     const string ResourceName = "GunsOnly.Web.Data.KoreaCentralFront.truth";
-    static readonly byte[] ExpectedMagic = "GOKTRN1\0"u8.ToArray();
 
     /// Returns null only when a constrained build explicitly sets EmbedKoreaTerrainTruth=false.
     /// Production includes the grid so physics and presentation share the same terrain substrate;
     /// an opted-out build deliberately falls back to sea level.
-    public static ITerrainSurface? Load() {
+    public static ITerrainSurface? Load() =>
+        PackedTerrainTruth.Load(ResourceName, "Korea central-front");
+}
+
+/// <summary>Fictional Ukraine training-sector truth shared with the browser terrain product.</summary>
+internal static class UkraineTerrainTruth {
+    const string ResourceName = "GunsOnly.Web.Data.UkraineSoniachne.truth";
+
+    public static ITerrainSurface? Load() =>
+        PackedTerrainTruth.Load(ResourceName, "Ukraine Soniachne training-sector");
+}
+
+/// <summary>
+/// Reads the small immutable quantized-grid contract used by terrain content packs. Keeping the
+/// decoder regional-name-free lets a mission select a theatre without duplicating interpolation,
+/// normals, validation or water semantics.
+/// </summary>
+internal static class PackedTerrainTruth {
+    static readonly byte[] ExpectedMagic = "GOKTRN1\0"u8.ToArray();
+
+    public static ITerrainSurface? Load(string resourceName, string displayName) {
         using Stream? stream = Assembly.GetExecutingAssembly()
-            .GetManifestResourceStream(ResourceName);
+            .GetManifestResourceStream(resourceName);
         if (stream is null) return null;
         using var reader = new BinaryReader(stream);
         byte[] magic = reader.ReadBytes(8);
         if (!magic.SequenceEqual(ExpectedMagic))
-            throw new InvalidDataException("Korea terrain truth has an invalid magic header");
+            throw new InvalidDataException($"{displayName} terrain truth has an invalid magic header");
         int version = checked((int)reader.ReadUInt32());
         int width = checked((int)reader.ReadUInt32());
         int height = checked((int)reader.ReadUInt32());
@@ -33,11 +52,11 @@ internal static class KoreaTerrainTruth {
             || !double.IsFinite(spacingM) || spacingM <= 0.0
             || !double.IsFinite(originEastM) || !double.IsFinite(originNorthM)
             || !double.IsFinite(metresPerUnit) || metresPerUnit <= 0.0)
-            throw new InvalidDataException("Korea terrain truth header is invalid");
+            throw new InvalidDataException($"{displayName} terrain truth header is invalid");
         long expectedLength = 64L + checked((long)width * height * sizeof(short));
         if (stream.Length != expectedLength)
             throw new InvalidDataException(
-                $"Korea terrain truth length {stream.Length} does not match {expectedLength}");
+                $"{displayName} terrain truth length {stream.Length} does not match {expectedLength}");
         var samples = new short[checked(width * height)];
         for (int index = 0; index < samples.Length; index++)
             samples[index] = reader.ReadInt16();
@@ -114,5 +133,70 @@ internal static class KoreaTerrainTruth {
         }
         static double Lerp(double a, double b, double fraction) =>
             a + (b - a) * fraction;
+    }
+}
+
+/// <summary>
+/// Coarse, explicitly non-authored safety apron around a compact training grid. The source remains
+/// authoritative inside its bounds; outside, edge height/normal blend into a flat datum so AGL,
+/// impact and Auto-GCAS do not silently fall back to sea level the instant a fast aircraft crosses
+/// the detailed cell. The apron is not suitable for targets, navigation or landing-zone decisions.
+/// </summary>
+internal sealed class TrainingTerrainApronSurface : ITerrainSurface {
+    readonly ITerrainSurface _source;
+    readonly double _flatHeightM;
+    readonly double _transitionM;
+
+    public TerrainBounds Bounds { get; }
+    public double HorizontalResolutionM => _source.HorizontalResolutionM;
+
+    public TrainingTerrainApronSurface(ITerrainSurface source, double marginM,
+        double flatHeightM, double transitionM) {
+        _source = source ?? throw new ArgumentNullException(nameof(source));
+        if (!double.IsFinite(marginM) || marginM <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(marginM));
+        if (!double.IsFinite(flatHeightM))
+            throw new ArgumentOutOfRangeException(nameof(flatHeightM));
+        if (!double.IsFinite(transitionM) || transitionM <= 0.0 || transitionM > marginM)
+            throw new ArgumentOutOfRangeException(nameof(transitionM));
+        _flatHeightM = flatHeightM;
+        _transitionM = transitionM;
+        Bounds = new TerrainBounds(
+            source.Bounds.MinimumEastM - marginM,
+            source.Bounds.MaximumEastM + marginM,
+            source.Bounds.MinimumNorthM - marginM,
+            source.Bounds.MaximumNorthM + marginM);
+    }
+
+    public bool TrySample(double eastM, double northM, out TerrainSample sample) {
+        if (!Bounds.Contains(eastM, northM)) {
+            sample = default;
+            return false;
+        }
+        if (_source.TrySample(eastM, northM, out sample)) return true;
+
+        double sourceEastM = Math.Clamp(eastM,
+            _source.Bounds.MinimumEastM, _source.Bounds.MaximumEastM);
+        double sourceNorthM = Math.Clamp(northM,
+            _source.Bounds.MinimumNorthM, _source.Bounds.MaximumNorthM);
+        if (!_source.TrySample(sourceEastM, sourceNorthM, out TerrainSample edge)) {
+            sample = default;
+            return false;
+        }
+        double eastOutsideM = eastM - sourceEastM;
+        double northOutsideM = northM - sourceNorthM;
+        double distanceOutsideM = Math.Sqrt(
+            eastOutsideM * eastOutsideM + northOutsideM * northOutsideM);
+        double fraction = Math.Clamp(distanceOutsideM / _transitionM, 0.0, 1.0);
+        fraction = fraction * fraction * (3.0 - 2.0 * fraction);
+        Vec3D blendedNormal = new(
+            edge.UpNormal.X * (1.0 - fraction),
+            edge.UpNormal.Y * (1.0 - fraction) + fraction,
+            edge.UpNormal.Z * (1.0 - fraction));
+        sample = new TerrainSample(
+            edge.HeightM + (_flatHeightM - edge.HeightM) * fraction,
+            blendedNormal.Normalized(),
+            TerrainSurfaceKind.Land);
+        return true;
     }
 }

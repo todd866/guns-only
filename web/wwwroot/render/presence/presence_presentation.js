@@ -22,7 +22,6 @@ const SHARED_KOREA_TERRAIN_MISSIONS = new Set([
   "mission.saddle-tracking.v1",
   "mission.korea-2030s.balloon-strike.prototype.v1",
   "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
-  "mission.korea-2030s.drone-raid-defence.prototype.v1",
 ]);
 
 /**

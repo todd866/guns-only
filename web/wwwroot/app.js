@@ -164,6 +164,10 @@ const PRODUCTION_KOREA_TERRAIN_ENABLED = true;
 // browser-reachable until its source lock, pack manifest, licence closure, and custom-host delivery
 // have passed the same release gate as the rest of the pack.
 const DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL = null;
+const UKRAINE_TRAINING_TERRAIN_MANIFEST_URL = new URL(
+  "./content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json",
+  import.meta.url,
+).href;
 
 const sceneCanvas = document.querySelector("#scene");
 const hudCanvas = document.querySelector("#hud");
@@ -464,9 +468,13 @@ function newTelemetryBatchId() {
 // lookahead pilot adds a synchronous decision burst on the main thread. So this watches actual
 // delivered frames and sheds work until the budget is met, worst-looking-thing-last:
 //
-//   1  shadows        largest single fill-rate saving, and the least missed in a dogfight
-//   2  pixel ratio    resolution before geometry — blur is survivable, stutter is not
-//   3  scenery        trees, fields, roads: the pilot's own nominated sacrifice
+//   1  view distance  bounds synchronous terrain streaming and closes the haze with it
+//   2  shadows        removes the largest remaining fill-rate cost
+//   3  scenery        ordinary high-altitude sorties may shed it as the final fallback
+//
+// The fictional Ukraine low-level programme is the deliberate exception to step 3: its fields,
+// shelterbelts, wires, roads and settlement silhouettes are mission-essential orientation cues.
+// That bounded instanced layer stays while shadows still go.
 //
 // It only ever steps DOWN within a sortie. Stepping back up on a quiet moment is how governors
 // oscillate, and an oscillating frame rate reads worse than a consistently lower one.
@@ -541,8 +549,16 @@ const frameGovernor = {
         // Only once distance is exhausted does the picture itself start going.
         view.renderer.shadowMap.enabled = false;
         view.scene?.traverse?.((object) => { object.castShadow = false; });
-        void view.terrainPresentation?.setSceneryEra?.(null);
-        announceGovernor("Shadows and scenery off · holding 60");
+        const terrainDiagnostics = view.terrainPresentation?.diagnostics?.();
+        const lowLevelSceneryRequired =
+          terrainDiagnostics?.terrainId === "terrain.ukraine.soniachne-training.v1"
+          || terrainDiagnostics?.sceneryEra === "ukraine-modern";
+        if (!lowLevelSceneryRequired) {
+          void view.terrainPresentation?.setSceneryEra?.(null);
+        }
+        announceGovernor(lowLevelSceneryRequired
+          ? "Shadows off · low-level scenery retained · holding 60"
+          : "Shadows and scenery off · holding 60");
       }
     } catch (error) {
       console.warn("Frame governor could not shed load.", error);
@@ -1100,11 +1116,9 @@ const initialProgramNode = requestedProgramNode
   && campaignNodeUnlocked(campaignProfile, requestedProgramNode.id)
   ? requestedProgramNode : recommendedCampaignNode(campaignProfile);
 let selectedProgramNodeId = initialProgramNode.id;
-// The front door is INFINITE ENEMIES on every platform ("this idea that the sortie ends after
-// certain criteria and there's a menu of sorties... it's not fun"): mission 7 is the
-// continuous-combat gauntlet with per-engagement escalation. The exercise menu stays reachable
-// through the ready screen and number keys; it is no longer the entry experience.
-let selectedBeat = 7;
+// The recommended front door remains the mission-7 infinite gauntlet, while an explicit programme
+// deep link must launch the card it highlights rather than silently staging a different mission.
+let selectedBeat = initialProgramNode.mission;
 let stagedBeat = selectedBeat;
 let selectedDeckConfiguration = 1;
 let stagedDeckConfiguration = selectedDeckConfiguration;
@@ -1116,6 +1130,8 @@ let incidentReplay = null;
 let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
 let autoLaunchPending = true;
+let terrainLaunchWarmupPromise = null;
+let terrainLaunchWarmupFailedKey = null;
 let settingsReturnFocus = null;
 let bindingCaptureAction = null;
 let lastAccessibilityAnnouncement = "";
@@ -1440,12 +1456,12 @@ const MISSION_BRIEFS = Object.freeze({
   },
   8: {
     activity: "defence",
-    kicker: "Air defence · mission 08",
-    title: "Drone Raid Defence",
-    sortie: "Defensive intercept · four sequential raiders",
-    configuration: "F-22 public-data surrogate · 480 rounds · Joker 5,500 LB · Bingo 3,500 LB · Auto-GCAS armed · one authoritative target at a time",
-    card: "Stop four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring.",
-    brief: "This is a four-raider sequential stream: one target is authoritative at a time, and the next enters only after the current raider is killed or leaks. Fly cutoff geometry, take the first valid gun solution, and protect ammunition; the score rewards zero leakers, quick neutralizations, and rounds per kill. Auto-GCAS is terrain-triggered and K is its held paddle override.",
+    kicker: "Ukraine training sector · mission 08",
+    title: "Low-Level Drone Intercept",
+    sortie: "Fictional Soniachne sector · four sequential raiders · guns only",
+    configuration: "F-22 public-data surrogate · 480 rounds · low-level VMC · Auto-GCAS armed · one authoritative target at a time",
+    card: "Intercept four low-flying fictional raiders over a stylized Ukrainian rural training sector.",
+    brief: "This is the first low-altitude scenery slice: a fictional Ukrainian lowland, true-scale terrain, and four sequential airborne raiders. One target is authoritative at a time, and the next enters only after the current raider is killed or leaks. Fly cutoff geometry, use the terrain as a real flight reference, take the first valid gun solution, and protect ammunition. Buildings are ambient scenery in this slice—not ground targets or collision truth. Auto-GCAS is terrain-triggered and K is its held paddle override.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\n480 rounds for four raiders · hold K only during an active Auto-GCAS fly-up",
   },
 });
@@ -1459,12 +1475,12 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     brief: "You are already at the visual merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going — the fight director watches how you actually flew and moves the pilot tier, the opponent's jet and the number of aircraft you face. Win and it stays hard. Lose twice and it eases. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace releases the G limiter · H opens controls",
   }),
-  "raid-defence": Object.freeze({
+  "low-level-drone": Object.freeze({
     ...MISSION_BRIEFS[8],
-    kicker: "Raptor programme · qualification 02",
-    title: "Raid Defence",
-    sortie: "F-22A defensive intercept · four staged raiders",
-    configuration: "F-22 public-data surrogate · 480 rounds · Joker 5,500 LB · Bingo 3,500 LB · Auto-GCAS armed",
+    kicker: "Ukraine · fictional training sector",
+    title: "Low-Level Drone Intercept",
+    sortie: "F-22A defensive intercept · four staged low-flying raiders · guns only",
+    configuration: "F-22 public-data surrogate · 480 rounds · true-scale lowland terrain · Auto-GCAS armed",
   }),
   "endurance-merge": Object.freeze({
     ...MISSION_BRIEFS[7],
@@ -2029,8 +2045,8 @@ function renderIncidentReplay(frame) {
 }
 
 function renderCampaignProgress() {
-  // Two missions, both always available. No counter, no locks, no status chips — the menu's whole
-  // job is to let the pilot pick an aircraft and go.
+  // Every mission is always available. No counter, locks or status chips: the menu's whole job is
+  // to let the pilot pick an aircraft and environment, then go.
   if (readyProgramProgress) readyProgramProgress.textContent = "";
   for (const button of readyProgramButtons) {
     const nodeId = button.dataset.programNode;
@@ -2157,6 +2173,7 @@ function renderPauseUi(state = latestState) {
   const finished = pauseReasons.has("finished");
   const help = pauseReasons.has("help");
   const calibrating = pauseReasons.has("calibration");
+  const terrainLoading = pauseReasons.has("terrain");
   const background = pauseReasons.has("background");
   const sessionPaused = pauseReasons.has("session");
   const settingsPaused = pauseReasons.has("settings");
@@ -2281,6 +2298,8 @@ function renderPauseUi(state = latestState) {
     readyHint.textContent = "Older or mixed build detected · reload the current release";
   } else if (buildIdentity.state === "checking" && ready) {
     readyHint.textContent = "Verifying current release…";
+  } else if (terrainLoading && ready) {
+    readyHint.textContent = "Loading nearby terrain and low-level scenery…";
   }
 
   // Ready cannot be dismissed while another safety interlock is still active. The relevant
@@ -2384,6 +2403,10 @@ function launchMission(index = selectedBeat) {
   if (!pauseReasons.has("ready") || stagedBeat !== selectedBeat || deckChanged) {
     enterReady({ resetBridge: true, focus: false });
   }
+  if (prepareMissionTerrain(index)) {
+    autoLaunchPending = true;
+    return false;
+  }
   activeView?.hud.armAudio();
   return beginFlight();
 }
@@ -2409,6 +2432,69 @@ function tryAutoLaunch() {
   if (blockers.length) return false;
   autoLaunchPending = false;
   return launchMission(selectedBeat);
+}
+
+function lowLevelTerrainReady(index) {
+  if (Number(index) !== 8) return true;
+  const terrain = activeView?.presentationDiagnostics?.().terrain;
+  return terrain?.terrainId === "terrain.ukraine.soniachne-training.v1"
+    && terrain?.sceneryEra === "ukraine-modern"
+    && Number(terrain?.residentChunks) > 0;
+}
+
+async function warmTerrainAroundReadyAircraft(terrain) {
+  if (!terrain) return false;
+  await terrain.ready;
+  // The paused render loop positions the camera from the staged aircraft and requests its near
+  // LODs. Give it two frames to enqueue that work, then wait for both geometry and instanced
+  // scenery to settle before releasing the deterministic flight clock.
+  await new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await terrain.whenIdle?.();
+  const diagnostics = terrain.diagnostics?.();
+  return diagnostics?.terrainId === "terrain.ukraine.soniachne-training.v1"
+    && diagnostics?.sceneryEra === "ukraine-modern"
+    && Number(diagnostics?.residentChunks) > 0;
+}
+
+function prepareMissionTerrain(index) {
+  const terrainKey = Number(index) === 8
+    ? "terrain.ukraine.soniachne-training.v1" : null;
+  if (!terrainKey || lowLevelTerrainReady(index)
+    || terrainLaunchWarmupFailedKey === terrainKey) return false;
+  if (terrainLaunchWarmupPromise) return true;
+  const stagedState = snapshotSource?.frame?.(performance.now());
+  if (!activeView || !stagedState) return false;
+
+  setPauseReason("terrain", true);
+  if (viewStatus) viewStatus.textContent = "Loading low-level terrain and scenery…";
+  const work = Promise.resolve(activeView.ensureTerrainPresentation(stagedState))
+    .then((terrain) => warmTerrainAroundReadyAircraft(terrain))
+    .catch(() => false);
+  const deadline = new Promise((resolve) => {
+    window.setTimeout(() => resolve(false), 15_000);
+  });
+  terrainLaunchWarmupPromise = Promise.race([work, deadline]).then((ready) => {
+    if (!ready) {
+      terrainLaunchWarmupFailedKey = terrainKey;
+      if (viewStatus) {
+        viewStatus.textContent = "Detailed terrain unavailable · presentation fallback active";
+      }
+    } else {
+      terrainLaunchWarmupFailedKey = null;
+    }
+  }).finally(() => {
+    terrainLaunchWarmupPromise = null;
+    if (selectedBeat === Number(index)) {
+      setPauseReason("terrain", false);
+    } else {
+      pauseReasons.delete("terrain");
+      autoLaunchPending = false;
+      applyBridgePause();
+      renderPauseUi();
+    }
+  });
+  return true;
 }
 
 function toggleSessionPause() {
@@ -4024,7 +4110,11 @@ class FlightView {
     this.terrainPresentation = null;
     this.terrainPresentationError = null;
     this.terrainPresentationPromise = null;
+    this.terrainPresentationKey = null;
+    this.terrainPresentationRequestedKey = null;
     this.terrainSceneryEraPromise = null;
+    this.terrainPresentationFailureKey = null;
+    this.terrainPresentationRetryAtMs = 0;
     this.resize();
   }
 
@@ -4041,14 +4131,40 @@ class FlightView {
     this.cloudBreakActive = false;
   }
 
-  ensureTerrainPresentation() {
+  ensureTerrainPresentation(state = null) {
+    const ukraineTrainingSector = state?.terrain_profile_id
+      === "terrain.ukraine.soniachne-training.v1" || selectedBeat === 8;
     const terrainPackId = this.presentationAssets.requested.packId
       || this.presentationAssets.activePack?.id || "korea-1950s";
-    const sceneryEra = terrainPackId.includes("modern") || selectedBeat === 7 || selectedBeat === 8
-      || selectedBeat === 9
-      ? "modern" : "1950s";
+    const sceneryEra = ukraineTrainingSector
+      ? "ukraine-modern"
+      : (state?.terrain_scenery_profile
+        || (terrainPackId.includes("modern") || selectedBeat === 7 || selectedBeat === 9
+          || selectedBeat === 10 ? "modern" : "1950s"));
+    const terrainKey = ukraineTrainingSector
+      ? "terrain.ukraine.soniachne-training.v1"
+      : "terrain.korea.central-front.v2";
+    const manifestUrl = ukraineTrainingSector
+      ? UKRAINE_TRAINING_TERRAIN_MANIFEST_URL
+      : DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL;
     if (!PRODUCTION_KOREA_TERRAIN_ENABLED || this.disposed) {
       return Promise.resolve(this.terrainPresentation);
+    }
+    if (this.terrainPresentationFailureKey
+      && this.terrainPresentationFailureKey !== terrainKey) {
+      this.terrainPresentationFailureKey = null;
+      this.terrainPresentationRetryAtMs = 0;
+    }
+    if (this.terrainPresentationFailureKey === terrainKey
+      && performance.now() < this.terrainPresentationRetryAtMs) {
+      return Promise.resolve(null);
+    }
+    if (this.terrainPresentation && this.terrainPresentationKey !== terrainKey) {
+      this.terrainPresentation.dispose();
+      this.terrainPresentation = null;
+      this.terrainPresentationPromise = null;
+      this.terrainPresentationKey = null;
+      this.terrainSceneryEraPromise = null;
     }
     if (this.terrainPresentation) {
       if (this.terrainPresentation.diagnostics().sceneryEra !== sceneryEra
@@ -4070,10 +4186,16 @@ class FlightView {
       return this.terrainSceneryEraPromise?.then(() => this.terrainPresentation)
         ?? Promise.resolve(this.terrainPresentation);
     }
-    if (this.terrainPresentationPromise) return this.terrainPresentationPromise;
+    if (this.terrainPresentationPromise) {
+      if (this.terrainPresentationRequestedKey === terrainKey) {
+        return this.terrainPresentationPromise;
+      }
+      return this.terrainPresentationPromise.then(() => this.ensureTerrainPresentation(state));
+    }
     this.terrainPresentationError = null;
-    this.terrainPresentationPromise = loadKoreaTerrain(THREE, {
-      manifestUrl: DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL,
+    this.terrainPresentationRequestedKey = terrainKey;
+    const request = loadKoreaTerrain(THREE, {
+      manifestUrl,
       qualityTier: VISUAL_QUALITY.tier,
       maximumConcurrentLoads: VISUAL_QUALITY.tier === "mobile" ? 3 : 6,
       sceneryEra,
@@ -4084,16 +4206,25 @@ class FlightView {
         return null;
       }
       this.terrainPresentation = terrain;
+      this.terrainPresentationKey = terrainKey;
+      this.terrainPresentationFailureKey = null;
+      this.terrainPresentationRetryAtMs = 0;
       this.scene.add(terrain.group);
       return terrain;
     }).catch((error) => {
       if (!this.disposed) {
         this.terrainPresentationError = String(error?.message ?? error);
+        this.terrainPresentationFailureKey = terrainKey;
+        this.terrainPresentationRetryAtMs = performance.now() + 15_000;
         console.warn("Korea terrain unavailable; ocean presentation retained.", error);
       }
       return null;
     });
-    return this.terrainPresentationPromise;
+    this.terrainPresentationPromise = request;
+    void request.finally(() => {
+      if (this.terrainPresentationPromise === request) this.terrainPresentationPromise = null;
+    });
+    return request;
   }
 
   resize() {
@@ -4779,7 +4910,9 @@ class FlightView {
     // actually begun, then retain the single shared presentation across pause/replay/restage.
     // Only fetch the multi-megabyte visual terrain when the sim actually has a terrain surface.
     // Constrained builds can explicitly omit terrain truth and retain the sea-level fallback.
-    if (state?.ready !== true && state?.terrain_present === true) void this.ensureTerrainPresentation();
+    if (state?.ready !== true && state?.terrain_present === true) {
+      void this.ensureTerrainPresentation(state);
+    }
     const nextBanditEntityId = projectedId(state.bandit_entity_id);
     // Padlock is bound to a specific visual tally. It may not silently transfer to a replacement
     // drone/bandit, survive loss of consciousness, or keep tracking stale/replay geometry.
@@ -5032,6 +5165,7 @@ class FlightView {
     const terrainPlacementNorthM = Number(state.terrain_placement_north_m);
     this.terrainPresentation?.update({
       cameraPosition: this.camera.position,
+      deltaSeconds: dt,
       fogColor: this.fogColor,
       fogDensity,
       sunDirection: SUN_DIRECTION,
@@ -5144,6 +5278,12 @@ class FlightView {
 
     this.sky.mesh.position.copy(this.camera.position);
     this.sky.uniforms.uAltitude.value = cameraAltitude;
+    if (!this.packEnvironmentAdapter) {
+      const detailedUkraineTerrainLoaded =
+        this.terrainPresentation?.diagnostics?.().terrainId
+        === "terrain.ukraine.soniachne-training.v1";
+      this.sea.mesh.visible = !detailedUkraineTerrainLoaded;
+    }
     this.sea.mesh.position.set(this.camera.position.x, 0, this.camera.position.z);
     this.sea.uniforms.uAltitude.value = cameraAltitude;
     this.sea.uniforms.uFogColor.value.copy(this.fogColor);
@@ -5228,6 +5368,10 @@ class FlightView {
     this.visualRuntimeEpoch += 1;
     this.terrainPresentation?.dispose();
     this.terrainPresentation = null;
+    this.terrainPresentationKey = null;
+    this.terrainPresentationRequestedKey = null;
+    this.terrainPresentationFailureKey = null;
+    this.terrainPresentationRetryAtMs = 0;
     await this.terrainPresentationPromise?.catch(() => undefined);
     await this.terrainSceneryEraPromise?.catch(() => undefined);
     await this.visualRuntimeTransitions.idle();

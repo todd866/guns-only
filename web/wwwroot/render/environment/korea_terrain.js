@@ -155,17 +155,36 @@ void main() {
     + smoothstep(0.75, 0.88, elevation) * 0.33;
   // Sage/olive lowlands, umber slopes and cool-grey ridges form the authored modern-era bands.
   // Values stay deliberately below the old pale-bone range so ACES preserves colour separation.
+  #ifdef UKRAINE_SCENERY
+  // Fictional Ukrainian training-sector palette: broad ochre/green agricultural planes, dark
+  // shelterbelt country and low blue-grey relief. This is a regional visual grammar over
+  // metre-true synthetic terrain, not live-war imagery or a claim about a real locality.
+  vec3 sValley = vec3(0.29, 0.31, 0.085);
+  vec3 sFoothill = vec3(0.16, 0.22, 0.060);
+  vec3 sUpland = vec3(0.11, 0.16, 0.055);
+  vec3 sRock = vec3(0.30, 0.21, 0.095);
+  vec3 sRidge = vec3(0.28, 0.30, 0.27);
+  #else
   vec3 sValley = vec3(0.15, 0.24, 0.055);
   vec3 sFoothill = vec3(0.070, 0.13, 0.032);
   vec3 sUpland = vec3(0.040, 0.075, 0.030);
   vec3 sRock = vec3(0.25, 0.15, 0.060);
   vec3 sRidge = vec3(0.31, 0.29, 0.23);
+  #endif
   vec3 sAlbedo = mix(sValley, sFoothill, bandStep);
   sAlbedo = mix(sAlbedo, sUpland, upperSlope * 0.76);
+  #ifdef UKRAINE_SCENERY
+  float parcelEast = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.00042);
+  float parcelNorth = 0.5 + 0.5 * sin(vTerrainWorldPosition.z * 0.00031 + 1.1);
+  float patchwork = smoothstep(0.26, 0.74, parcelEast * 0.58 + parcelNorth * 0.42);
+  vec3 cultivation = mix(vec3(0.20, 0.31, 0.075), vec3(0.45, 0.32, 0.085),
+    patchwork);
+  #else
   float patchwork = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.00023
     + sin(vTerrainWorldPosition.z * 0.00017) * 2.3);
   vec3 cultivation = mix(vec3(0.17, 0.25, 0.050), vec3(0.32, 0.29, 0.075),
     smoothstep(0.32, 0.68, patchwork));
+  #endif
   sAlbedo = mix(sAlbedo, cultivation, valleyFloor * (0.34 + patchwork * 0.30));
   sAlbedo = mix(sAlbedo, sRock, slopeFace * (0.24 + upperSlope * 0.56));
   sAlbedo = mix(sAlbedo, sRidge, max(highRidge * 0.68, exposedFace * 0.78));
@@ -491,6 +510,9 @@ export class TerrainBundleReader {
 }
 
 export function createTerrainMaterial(THREE, options = {}) {
+  const illustrative = options.sceneryEra === "modern"
+    || options.sceneryEra === "ukraine-modern";
+  const ukraine = options.sceneryEra === "ukraine-modern";
   return new THREE.ShaderMaterial({
     name: "MAT_KOREA_CENTRAL_FRONT_TERRAIN",
     vertexShader: TERRAIN_VERTEX,
@@ -499,7 +521,10 @@ export function createTerrainMaterial(THREE, options = {}) {
     // comment above), so single-siding it halves the dominant terrain fragment cost. The seam
     // skirts keep their own double-sided material via a geometry group.
     side: THREE.FrontSide,
-    defines: options.sceneryEra === "modern" ? { MODERN_SCENERY: 1 } : {},
+    defines: {
+      ...(illustrative ? { MODERN_SCENERY: 1 } : {}),
+      ...(ukraine ? { UKRAINE_SCENERY: 1 } : {}),
+    },
     uniforms: {
       uEarthRadiusM: { value: TERRAIN_EARTH_RADIUS_M },
       uCurvatureStartM: { value: TERRAIN_CURVATURE_START_M },
@@ -508,11 +533,11 @@ export function createTerrainMaterial(THREE, options = {}) {
       },
       uFogColor: { value: new THREE.Color(options.fogColor ?? 0x6f8790) },
       uFogDensity: { value: finite(options.fogDensity, 0.000055) },
-      uModernScenery: { value: options.sceneryEra === "modern" ? 1 : 0 },
+      uModernScenery: { value: illustrative ? 1 : 0 },
       // Full-detail parcel/cultivation tint only affects the period desktop treatment. Modern
       // shading discards periodLit, so skip its four otherwise invisible sin() calls there too.
       uParcelTint: {
-        value: options.qualityTier === "desktop" && options.sceneryEra !== "modern" ? 1 : 0,
+        value: options.qualityTier === "desktop" && !illustrative ? 1 : 0,
       },
       // Darkest-slope lighting. The old 0.43 / 0.40 floors put every slope in the world inside the
       // top 60% of the value range, which is why densely dissected Korean terrain rendered as a
@@ -548,11 +573,16 @@ function createTerrainSkirtMaterial(THREE, surfaceMaterial) {
 }
 
 function setTerrainMaterialEra(material, era) {
-  const modern = era === "modern";
+  const modern = era === "modern" || era === "ukraine-modern";
+  const ukraine = era === "ukraine-modern";
   const wasModern = material.defines?.MODERN_SCENERY === 1;
+  const wasUkraine = material.defines?.UKRAINE_SCENERY === 1;
   material.uniforms.uModernScenery.value = modern ? 1 : 0;
-  if (modern === wasModern) return;
-  material.defines = modern ? { ...material.defines, MODERN_SCENERY: 1 } : {};
+  if (modern === wasModern && ukraine === wasUkraine) return;
+  material.defines = {
+    ...(modern ? { MODERN_SCENERY: 1 } : {}),
+    ...(ukraine ? { UKRAINE_SCENERY: 1 } : {}),
+  };
   material.needsUpdate = true;
 }
 
@@ -794,7 +824,33 @@ class KoreaTerrainPresentation {
     this.reader = reader;
     this.qualityTier = options.qualityTier ?? "balanced";
     this.group = new THREE.Group();
-    this.group.name = options.groupName ?? "KOREA_CENTRAL_FRONT_TERRAIN";
+    const ukraineTrainingSector = manifest.terrainId
+      === "terrain.ukraine.soniachne-training.v1";
+    this.group.name = options.groupName ?? (ukraineTrainingSector
+      ? "UKRAINE_SONIACHNE_TRAINING_TERRAIN"
+      : "KOREA_CENTRAL_FRONT_TERRAIN");
+    // The detailed truth cell is deliberately compact. A single low-cost land apron carries the
+    // same 78 m datum as WebBridge's coarse safety terrain so the cell edge does not open onto an
+    // ocean/void inside a 300 m AGL horizon. It is presentation-only and explicitly owns no
+    // targets, obstacles or LZ truth; all authored mission geometry stays inside the detailed cell.
+    this.horizonApron = ukraineTrainingSector
+      ? new THREE.Mesh(
+        new THREE.PlaneGeometry(200_000, 200_000, 1, 1).rotateX(-Math.PI * 0.5),
+        new THREE.MeshLambertMaterial({ color: 0x59652b }),
+      )
+      : null;
+    if (this.horizonApron) {
+      this.horizonApron.name = "FICTIONAL_UKRAINE_PRESENTATION_ONLY_LAND_APRON";
+      this.horizonApron.position.y = 78.0;
+      this.horizonApron.receiveShadow = false;
+      this.horizonApron.userData.terrain = Object.freeze({
+        authoritative: false,
+        collision: false,
+        targetable: false,
+        purpose: "visual-horizon-apron",
+      });
+      this.group.add(this.horizonApron);
+    }
     this.material = options.material ?? createTerrainMaterial(THREE, options);
     this.ownsMaterial = !options.material;
     this.skirtMaterial = options.skirtMaterial
@@ -897,7 +953,7 @@ class KoreaTerrainPresentation {
       const level = entry.level;
       if (!mesh || !Number.isInteger(level)) continue;
       disposeMeshScenery(mesh);
-      if (!runtime || level !== 0) continue;
+      if (!runtime) continue;
       const record = entry.chunk.lods[level];
       replacements.push(this.reader.read(record).then((buffer) => {
         if (this.disposed || this.sceneryRuntime !== runtime
@@ -923,6 +979,22 @@ class KoreaTerrainPresentation {
     return this.chunkLoadRadiusM;
   }
 
+  setStreamingRadiusM(loadRadiusM) {
+    if (this.disposed || !Number.isFinite(loadRadiusM) || loadRadiusM <= 0) return false;
+    const previous = this.chunkLoadRadiusM;
+    this.chunkLoadRadiusM = Math.max(0, loadRadiusM);
+    const representativeSpanM = Math.max(1, ...this.manifest.chunks.map((chunk) =>
+      Math.max(
+        chunk.boundsLocalM[2] - chunk.boundsLocalM[0],
+        chunk.boundsLocalM[3] - chunk.boundsLocalM[1],
+      )));
+    this.chunkEvictRadiusM = Math.max(
+      this.chunkLoadRadiusM + representativeSpanM,
+      this.chunkLoadRadiusM * 1.25,
+    );
+    return this.chunkLoadRadiusM !== previous;
+  }
+
   setSceneryEra(era) {
     if (this.disposed || era === this.sceneryRuntime?.era) return Promise.resolve([]);
     const runtime = era ? createKoreaSceneryRuntime(this.THREE, {
@@ -932,7 +1004,7 @@ class KoreaTerrainPresentation {
     setTerrainMaterialEra(this.material, era);
     setTerrainMaterialEra(this.skirtMaterial, era);
     this.material.uniforms.uParcelTint.value =
-      this.qualityTier === "desktop" && era !== "modern" ? 1 : 0;
+      this.qualityTier === "desktop" && !["modern", "ukraine-modern"].includes(era) ? 1 : 0;
     return this.replaceSceneryRuntime(runtime, runtime !== null);
   }
 
@@ -1162,6 +1234,7 @@ class KoreaTerrainPresentation {
       queuedBuilds: this.pendingBuilds,
       loadedBytes: this.loadedBytes,
       transfer: this.reader.diagnostics(),
+      horizonApron: this.horizonApron !== null,
       errors,
       disposed: this.disposed,
     });
@@ -1186,6 +1259,9 @@ class KoreaTerrainPresentation {
     if (this.ownsSkirtMaterial) this.skirtMaterial.dispose();
     if (this.ownsBuildScheduler) this.buildScheduler.dispose();
     if (this.ownsMeshWorkers) this.meshWorkers.dispose();
+    this.horizonApron?.geometry.dispose();
+    this.horizonApron?.material.dispose();
+    this.horizonApron = null;
     this.group.removeFromParent();
   }
 }
@@ -1313,7 +1389,7 @@ class KoreaTerrainAtlasPresentation {
     setTerrainMaterialEra(this.material, era);
     setTerrainMaterialEra(this.skirtMaterial, era);
     this.material.uniforms.uParcelTint.value =
-      this.qualityTier === "desktop" && era !== "modern" ? 1 : 0;
+      this.qualityTier === "desktop" && !["modern", "ukraine-modern"].includes(era) ? 1 : 0;
     const replacements = [];
     for (const state of this.pages.values()) {
       if (state.presentation) {

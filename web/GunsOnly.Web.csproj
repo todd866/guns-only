@@ -20,6 +20,11 @@
       Link="Data/central-front.truth"
       LogicalName="GunsOnly.Web.Data.KoreaCentralFront.truth"
       Condition="'$(EmbedKoreaTerrainTruth)' != 'false'" />
+    <EmbeddedResource
+      Include="../content/packs/ukraine-modern/environment/terrain/soniachne-steppe.truth"
+      Link="Data/soniachne-steppe.truth"
+      LogicalName="GunsOnly.Web.Data.UkraineSoniachne.truth"
+      Condition="'$(EmbedUkraineTerrainTruth)' != 'false'" />
   </ItemGroup>
   <ItemGroup>
     <!-- Keep source-only QA and the unused Blazor-template Bootstrap tree out of the static

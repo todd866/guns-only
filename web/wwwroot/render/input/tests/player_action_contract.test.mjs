@@ -440,7 +440,8 @@ test("fresh players launch directly into the first F-22 merge", () => {
     /initialProgramNode = requestedProgramNode[\s\S]*?recommendedCampaignNode\(campaignProfile\)/);
   // Build 78 front door: INFINITE ENEMIES — every platform boots the continuous-combat
   // gauntlet (mission 7); the exercise menu remains reachable but is not the entry.
-  assert.match(appSource, /let selectedBeat = 7/);
+  assert.match(appSource, /let selectedBeat = initialProgramNode\.mission/,
+    "the default remains mission 7, while an explicit programme deep link stages its own card");
   assert.match(bridgeSource, /static readonly SimulationSession Session = new\(7,/,
     "the bridge fallback and browser must agree on the F-22 first experience");
   assert.match(appSource, /let autoLaunchPending = true/);
@@ -450,9 +451,7 @@ test("fresh players launch directly into the first F-22 merge", () => {
   const buttons = htmlButtons(indexSource);
   const nodeIds = buttons.filter((button) => button.attributes["data-program-node"] !== undefined)
     .map((button) => button.attributes["data-program-node"]);
-  // TWO missions. The graded ladder was cut deliberately: it stood between the pilot and the
-  // aircraft they wanted to fly.
-  assert.deepEqual(nodeIds, ["first-merge", "rapier-intercept"]);
+  assert.deepEqual(nodeIds, ["first-merge", "low-level-drone", "rapier-intercept"]);
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
   assert.match(indexSource, /\.ready-selector,[\s\S]*?touch-action:\s*pan-y/);
@@ -464,7 +463,7 @@ test("nothing in the menu is gated behind anything else", () => {
   // this was a programme of exercises; both aircraft are now available from a cold start, with no
   // qualification, no sequence gate and no LOCKED state to render.
   assert.match(progressionSource,
-    /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "rapier-intercept"[\s\S]*?mission: 10/);
+    /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "low-level-drone"[\s\S]*?mission: 8[\s\S]*?id: "rapier-intercept"[\s\S]*?mission: 10/);
   assert.match(progressionSource,
     /function campaignNodeUnlocked[\s\S]*?return Boolean\(campaignNode\(nodeId\)\)/,
     "availability must depend on the node existing, not on what the pilot has flown");
@@ -508,13 +507,13 @@ test("the engine-less balloon mission briefing teaches the actual diving energy 
 });
 
 test("drone-raid coaching is mission-gated and carries live efficiency truth into debrief", () => {
-  const mission = appSource.match(/8:\s*\{[\s\S]*?title: "Drone Raid Defence"([\s\S]*?)\n\s*\},/)?.[1];
+  const mission = appSource.match(/8:\s*\{[\s\S]*?title: "Low-Level Drone Intercept"([\s\S]*?)\n\s*\},/)?.[1];
   assert.ok(mission, "Mission 8 needs an explicit briefing");
   assert.match(mission,
-    /four-raider sequential stream:[^\"]*one target is authoritative at a time[^\"]*next enters only after the current raider is killed or leaks/i,
+    /four sequential airborne raiders[^\"]*one target is authoritative at a time[^\"]*next enters only after the current raider is killed or leaks/i,
     "the menu must disclose the sequential one-opponent kernel instead of implying four simultaneous targets");
-  // The raid no longer has a menu card — the menu is two aircraft — but the BRIEFING must still
-  // disclose the staged-stream limitation wherever the mission is reachable from.
+  assert.match(indexSource, /data-program-node="low-level-drone"[\s\S]*NO GROUND TARGETS YET/,
+    "the first scenery slice must not imply that ambient buildings are authoritative targets");
   assert.match(hudSource,
     /const raid = state\.drone_raid_evaluation === true;[\s\S]*?drone_raid_active_target[\s\S]*?drone_raid_time_to_leak_s[\s\S]*?drone_raid_rounds_per_kill[\s\S]*?drone_raid_cue/,
     "the raid HUD must derive its teaching cue and efficiency data from authoritative mission state");

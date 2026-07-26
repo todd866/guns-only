@@ -12,9 +12,18 @@ export const CAMPAIGN_NODES = Object.freeze([
     qualification: "",
   }),
   Object.freeze({
+    id: "low-level-drone",
+    mission: 8,
+    sequence: 2,
+    aircraft: "F-22A",
+    title: "Low-Level Drone Intercept",
+    shortObjective: "Stop four low-flying raiders over a fictional Ukrainian training sector.",
+    qualification: "",
+  }),
+  Object.freeze({
     id: "rapier-intercept",
     mission: 10,
-    sequence: 2,
+    sequence: 3,
     aircraft: "Rapier",
     title: "Rapier Intercept",
     shortObjective: "Catapult out, climb, cruise high and fast, dive on the contact, recover.",
@@ -72,8 +81,8 @@ export function campaignNode(nodeId) {
 
 export function campaignNodeUnlocked(profile, nodeId) {
   // EVERYTHING IS AVAILABLE. The qualification ladder was scaffolding from when the game was a
-  // programme of exercises; it is now two missions and locking one behind the other only stands
-  // between the pilot and the aircraft they wanted to fly.
+  // programme of exercises; every shipping mission is now available, and locking one behind
+  // another only stands between the pilot and the aircraft or environment they wanted to fly.
   return Boolean(campaignNode(nodeId));
 }
 
@@ -101,7 +110,7 @@ export function campaignNodeSatisfied(nodeId, state) {
   switch (nodeId) {
     case "first-merge":
       return state?.visual_merge_evaluation === true && kills >= 1;
-    case "raid-defence":
+    case "low-level-drone":
       return state?.drone_raid_evaluation === true
         && state?.drone_raid_finished === true
         && Number(state?.drone_raid_score) >= 65
@@ -123,9 +132,9 @@ export function qualifyCampaignNode(profile, nodeId, state, qualifiedAt = Date.n
     || !campaignNodeSatisfied(nodeId, state)) {
     return Object.freeze({ profile: current, newlyQualified: false });
   }
-  const score = nodeId === "raid-defence"
+  const score = nodeId === "low-level-drone"
     ? Number(state?.drone_raid_score) : Number(state?.visual_merge_score);
-  const kills = nodeId === "raid-defence"
+  const kills = nodeId === "low-level-drone"
     ? Number(state?.drone_raid_kills) : Number(state?.kill_count);
   const next = createCampaignProfile({
     ...current,

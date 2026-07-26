@@ -18,13 +18,13 @@ const [bridgeSource, sessionSource, beatsSource] = await Promise.all([
   readFile(beatsUrl, "utf8"),
 ]);
 
-test("stable beat eight selects the Korea 2030s staged drone raid without renumbering", () => {
+test("stable beat eight selects the fictional Ukraine low-level staged raid without renumbering", () => {
   assert.match(sessionSource, /7 => Beats\.ModernVisualMerge,\s*8 => Beats\.DroneRaidDefense,/);
   // The ceiling moves as beats are added; what must not move is beat EIGHT being the drone raid.
   assert.match(sessionSource, /index is < 1 or > \d+/);
   assert.match(beatsSource,
-    /mission\.korea-2030s\.drone-raid-defence\.prototype\.v1/);
-  assert.match(beatsSource, /Era: "KOREA_2030S_PROXY"/);
+    /mission\.ukraine-training\.low-level-drone-intercept\.prototype\.v1/);
+  assert.match(beatsSource, /Era: "UKRAINE_FICTIONAL_TRAINING_SECTOR"/);
   assert.match(beatsSource, /RulesOfEngagement: "GUNS_ONLY_DEFENSIVE_INTERCEPT"/);
   assert.match(beatsSource, /DroneRaid: raid/);
 });
@@ -58,6 +58,6 @@ test("snapshot exposes decision score components and the honest staged-stream mo
     /bool modernSurrogate = mission\.ContentFamily[\s\S]*?\|\| player\.Id == AircraftCapability\.F22ASurrogate\.Id/,
     "the drone-defence F-22 must use the modern surrogate presentation contract, not the balloon profile");
   assert.match(beatsSource,
-    /mission\.korea-2030s\.drone-raid-defence\.prototype\.v1[\s\S]*?PublicDataSurrogate: true/,
+    /mission\.ukraine-training\.low-level-drone-intercept\.prototype\.v1[\s\S]*?PublicDataSurrogate: true/,
     "the authoritative snapshot must identify Beat 8 as a public-data gameplay surrogate");
 });

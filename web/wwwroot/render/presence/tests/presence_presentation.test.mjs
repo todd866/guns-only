@@ -126,6 +126,19 @@ test("local carrier training cannot display shared-world aircraft over its insta
   assert.deepEqual(framed.bogeys, []);
 });
 
+test("local Ukraine training terrain cannot display Korea room traffic", () => {
+  const snapshot = {
+    players: [{ playerId: "inland", missionId: "mission.perch-attack.v1" }],
+    bogeys: [{ bogeyId: "world-bogey" }],
+  };
+  const framed = snapshotForTerrainFrame(snapshot, {
+    multiplayer_terrain_shared: false,
+    world_frame_id: "local.ukraine-soniachne-training.v1",
+  });
+  assert.deepEqual(framed.players, []);
+  assert.deepEqual(framed.bogeys, []);
+});
+
 test("room status visibly teaches the browser callsign and assigned world origin", () => {
   const presentation = presenceStatusPresentation({
     phase: "online",

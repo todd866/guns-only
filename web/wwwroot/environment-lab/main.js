@@ -9,6 +9,32 @@ const terrainLookMode = parameters.has("terrain-look");
 if (terrainLookMode) document.documentElement.dataset.terrainLook = "true";
 const PRODUCTION_SUN_DIRECTION = new THREE.Vector3(0.32, 0.78, -0.53).normalize();
 const VISUAL_PROFILE_URL = "../content/packs/korea-1950s/visual-profile.json";
+const SITE_CONFIGURATIONS = Object.freeze({
+  ukraine: Object.freeze({
+    label: "Soniachne Steppe · fictional Ukraine",
+    manifestUrl: new URL(
+      "../content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json",
+      import.meta.url,
+    ).href,
+    sceneryEra: "ukraine-modern",
+    inland: true,
+    weatherId: "weather.ukraine-training.soniachne-broken-cumulus.v1",
+  }),
+  "korea-modern": Object.freeze({
+    label: "Korea central front · modern treatment",
+    manifestUrl: null,
+    sceneryEra: "modern",
+    inland: false,
+    weatherId: "weather.korea-2030s.drone-front-cumulus.v1",
+  }),
+  "korea-1950s": Object.freeze({
+    label: "Korea central front · 1950s treatment",
+    manifestUrl: null,
+    sceneryEra: "1950s",
+    inland: false,
+    weatherId: "weather.korea-1950s.inland-cumulus.v1",
+  }),
+});
 
 function vectorParameter(name) {
   const values = parameters.get(name)?.split(",").map(Number);
@@ -27,6 +53,7 @@ const requestedTerrainLookView = requestedTerrainLookPosition && requestedTerrai
 const canvas = document.querySelector("#scene");
 const viewport = document.querySelector(".viewport");
 const status = document.querySelector("#status");
+const site = document.querySelector("#site");
 const quality = document.querySelector("#quality");
 const altitude = document.querySelector("#altitude");
 const elevation = document.querySelector("#elevation");
@@ -66,10 +93,19 @@ let terrainFogDensity = 1 / 56_000;
 let elapsed = 0;
 let previous = performance.now();
 
+const requestedSite = parameters.get("site");
+site.value = SITE_CONFIGURATIONS[requestedSite] ? requestedSite : "ukraine";
+
+function siteConfiguration() {
+  return SITE_CONFIGURATIONS[site.value] ?? SITE_CONFIGURATIONS.ukraine;
+}
+
 function setCameraView() {
   const height = Number(altitude.value);
-  camera.position.set(480, height, 850);
-  controls.target.set(0, Math.max(20, height * 0.42), -4800);
+  // Mission-like low-level look: from the player start toward the road-aligned settlement east of
+  // the first intercept lane. The old 5 km empty-parcel view made valid scenery read as absent.
+  camera.position.set(-250, height, -450);
+  controls.target.set(-760, Math.max(85, height * 0.28), -1900);
   controls.update();
   document.querySelector("#altitude-value").value = `${Math.round(height).toLocaleString()} m`;
 }
@@ -127,9 +163,10 @@ function applyProductionProfile(profile) {
   terrainFogDensity = 1 / Math.max(1, Number(fog.farMetres) || 56_000);
 }
 
-function terrainFrame() {
+function terrainFrame(deltaSeconds = 0) {
   return {
     cameraPosition: camera.position,
+    deltaSeconds,
     fogColor: terrainFogColor,
     fogDensity: terrainFogDensity,
     sunDirection: sunDirection(),
@@ -137,6 +174,8 @@ function terrainFrame() {
 }
 
 async function rebuild() {
+  const siteConfig = siteConfiguration();
+  site.disabled = true;
   quality.disabled = true;
   status.lastChild.textContent = " Loading environment…";
   environment?.dispose();
@@ -148,12 +187,14 @@ async function rebuild() {
   ]);
   applyProductionProfile(visualProfile);
   scene.add(environment.group);
-  // Production loads terrain separately from the ocean/atmosphere adapter. Keep the lab on the
-  // same default manifest + relative bundle path by deliberately omitting manifestUrl here.
+  environment.ocean.visible = !siteConfig.inland;
+  // Production loads terrain separately from the atmosphere adapter. A null manifest keeps the
+  // validated Korea default; the Ukraine option exercises its own local content-pack product.
   terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: siteConfig.manifestUrl,
     qualityTier: quality.value,
     maximumConcurrentLoads: quality.value === "mobile" ? 3 : 6,
-    sceneryEra: "modern",
+    sceneryEra: siteConfig.sceneryEra,
     sunDirection: sunDirection(),
     fogColor: terrainFogColor,
     fogDensity: terrainFogDensity,
@@ -165,31 +206,31 @@ async function rebuild() {
   for (const cloud of environment.clouds) cloud.visible = false;
   tacticalClouds = createTacticalCloudField(THREE, { qualityTier: quality.value });
   tacticalClouds.configure({
-    id: "weather.korea-2030s.drone-front-cumulus.v1",
-    seed: "20300915d20e0001",
+    id: siteConfig.weatherId,
+    seed: site.value === "ukraine" ? "2030082450a10008" : "20300915d20e0001",
     layers: [{
-      base_m: 1150,
-      top_m: 2850,
-      coverage_01: 0.44,
-      scale_m: 4500,
-      extinction_per_m: 0.018,
-      wind_east_mps: 11,
+      base_m: site.value === "ukraine" ? 1050 : 1150,
+      top_m: site.value === "ukraine" ? 2250 : 2850,
+      coverage_01: site.value === "ukraine" ? 0.38 : 0.44,
+      scale_m: site.value === "ukraine" ? 6200 : 4500,
+      extinction_per_m: site.value === "ukraine" ? 0.014 : 0.018,
+      wind_east_mps: site.value === "ukraine" ? 12 : 11,
       wind_north_mps: 4,
     }],
     cells: [{
-      east_m: 5600,
-      north_m: 4800,
+      east_m: site.value === "ukraine" ? -5100 : 5600,
+      north_m: site.value === "ukraine" ? 5800 : 4800,
       base_m: 850,
-      top_m: 5500,
-      radius_east_m: 2700,
-      radius_north_m: 2200,
+      top_m: site.value === "ukraine" ? 3900 : 5500,
+      radius_east_m: site.value === "ukraine" ? 2500 : 2700,
+      radius_north_m: site.value === "ukraine" ? 2000 : 2200,
       start_s: 0,
       lifetime_s: 900,
       transition_s: 20,
-      wind_east_mps: 12,
-      wind_north_mps: 5,
+      wind_east_mps: site.value === "ukraine" ? 13 : 12,
+      wind_north_mps: site.value === "ukraine" ? 4 : 5,
       coverage_01: 1,
-      extinction_per_m: 0.022,
+      extinction_per_m: site.value === "ukraine" ? 0.018 : 0.022,
     }],
   });
   tacticalClouds.group.visible = clouds.checked && !terrainLookMode;
@@ -199,10 +240,11 @@ async function rebuild() {
   metrics();
   const terrainState = terrain.diagnostics();
   if (terrainState.errors > 0 || terrainState.residentChunks === 0) {
-    throw new Error(`Korea terrain loaded with ${terrainState.errors} errors and `
+    throw new Error(`${siteConfig.label} loaded with ${terrainState.errors} errors and `
       + `${terrainState.residentChunks} resident chunks`);
   }
-  status.lastChild.textContent = ` ${terrainState.terrainId} · ${quality.value}`;
+  status.lastChild.textContent = ` ${siteConfig.label} · ${quality.value}`;
+  site.disabled = false;
   quality.disabled = false;
 }
 
@@ -228,7 +270,7 @@ function animate(now) {
   sun.position.copy(sunTarget.position).addScaledVector(sunDirection(), 1600);
   sunTarget.updateMatrixWorld();
   environment?.update({ timeSeconds: elapsed, cameraPosition: camera.position, sunDirection: sunDirection() });
-  terrain?.update(terrainFrame());
+  terrain?.update(terrainFrame(delta));
   if (tacticalClouds) {
     tacticalClouds.group.visible = clouds.checked && !terrainLookMode;
     tacticalClouds.update(camera.position, elapsed, new THREE.Color(0x7898a0),
@@ -238,6 +280,7 @@ function animate(now) {
 }
 
 quality.addEventListener("change", () => rebuild().catch(showError));
+site.addEventListener("change", () => rebuild().catch(showError));
 altitude.addEventListener("input", setCameraView);
 elevation.addEventListener("input", updateLabels);
 bearing.addEventListener("input", updateLabels);
@@ -251,11 +294,13 @@ new ResizeObserver(resize).observe(viewport);
 function showError(error) {
   console.error(error);
   status.lastChild.textContent = ` ${error.message}`;
+  site.disabled = false;
+  quality.disabled = false;
   window.__terrainLookError = error.message;
 }
 
 async function setTerrainLookView(view) {
-  if (!terrain) throw new Error("Korea terrain is not loaded");
+  if (!terrain) throw new Error("Terrain is not loaded");
   camera.position.fromArray(view.position);
   controls.target.fromArray(view.target);
   controls.update();

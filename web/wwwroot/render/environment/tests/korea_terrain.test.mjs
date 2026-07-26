@@ -759,6 +759,45 @@ test("swaps 1950s and 2030s scenery in place without refetching retained terrain
   terrain.dispose();
 });
 
+test("Ukraine terrain selects its toon palette and retains a non-authoritative land horizon apron", async () => {
+  const source = manifest();
+  source.terrainId = "terrain.ukraine.soniachne-training.v1";
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/soniachne.manifest.json",
+    sceneryEra: "ukraine-modern",
+    qualityTier: "balanced",
+    fetch: async (_url, options = {}) => {
+      if (!options.headers?.Range) {
+        return { ok: true, status: 200, json: async () => source };
+      }
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => new ArrayBuffer(18),
+      };
+    },
+  });
+  await terrain.ready;
+
+  assert.equal(terrain.material.defines.MODERN_SCENERY, 1);
+  assert.equal(terrain.material.defines.UKRAINE_SCENERY, 1);
+  assert.equal(terrain.diagnostics().horizonApron, true);
+  const apron = terrain.group.getObjectByName(
+    "FICTIONAL_UKRAINE_PRESENTATION_ONLY_LAND_APRON",
+  );
+  assert.ok(apron);
+  assert.equal(apron.position.y, 78);
+  assert.equal(apron.userData.terrain.authoritative, false);
+  assert.equal(apron.userData.terrain.collision, false);
+  assert.equal(apron.userData.terrain.targetable, false);
+  assert.equal(terrain.streamingRadiusM, Number.POSITIVE_INFINITY);
+  assert.equal(terrain.setStreamingRadiusM(12_000), true);
+  assert.equal(terrain.streamingRadiusM, 12_000);
+  assert.equal(terrain.setStreamingRadiusM(12_000), false);
+  assert.equal(terrain.setStreamingRadiusM(Number.NaN), false);
+  terrain.dispose();
+});
+
 test("reconciles same-LOD boundary normals and restores them across LOD swaps", async () => {
   const fixture = adjacentTerrainFixture();
   const terrain = await loadKoreaTerrain(THREE, {
@@ -806,6 +845,9 @@ test("reconciles same-LOD boundary normals and restores them across LOD swaps", 
 test("terrain shading consumes baked occlusion and opens the value range", () => {
   const period = createTerrainMaterial(THREE, { sceneryEra: "period", qualityTier: "desktop" });
   const modern = createTerrainMaterial(THREE, { sceneryEra: "modern", qualityTier: "desktop" });
+  const ukraine = createTerrainMaterial(
+    THREE, { sceneryEra: "ukraine-modern", qualityTier: "desktop" },
+  );
 
   assert.match(period.vertexShader, /attribute float concavity;/,
     "the vertex shader must declare the baked occlusion attribute");
@@ -829,6 +871,9 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(modern.fragmentShader, /float valleyFloor =/);
   assert.match(modern.fragmentShader, /float slopeFace =/);
   assert.match(modern.fragmentShader, /float exposedFace =/);
+  assert.equal(ukraine.defines.MODERN_SCENERY, 1);
+  assert.equal(ukraine.defines.UKRAINE_SCENERY, 1);
+  assert.match(ukraine.fragmentShader, /fictional Ukrainian training-sector palette/i);
   assert.ok(
     modern.fragmentShader.indexOf("lit *= mix(uOcclusionRange.x")
       < modern.fragmentShader.indexOf("lit = mix(lit, waterLit, waterMask)"),
@@ -837,6 +882,7 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
 
   period.dispose();
   modern.dispose();
+  ukraine.dispose();
 });
 
 test("aerial perspective is banded so ridgelines separate in value", () => {

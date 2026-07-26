@@ -122,7 +122,7 @@ test("creates instanced, disposable scenery only for the closest terrain LOD", (
     era: "1950s",
     qualityTier: "mobile",
   });
-  assert.equal(runtime.createTile(chunkFixture(), decodedFixture(), 1), null);
+  assert.equal(runtime.createTile(chunkFixture(), decodedFixture(), 2), null);
   const group = runtime.createTile(chunkFixture(), decodedFixture(), 0);
   assert.ok(group);
   assert.equal(group.userData.scenery.era, "1950s");
@@ -137,6 +137,7 @@ test("creates instanced, disposable scenery only for the closest terrain LOD", (
   const roofs = group.children.find((child) => child.name === "PROCEDURAL_1950S_ROOFS");
   assert.ok(crowns.instanceColor, "tree-stand colour variation must stay in one instance batch");
   assert.ok(roofs?.isInstancedMesh, "settlement roof silhouettes must be instanced");
+  assert.ok(roofs.instanceColor, "roof palette variation must stay in one instance batch");
   assert.ok(crowns.geometry.getAttribute("position").count > 7 * 10,
     "one chunk-time tree matrix must expand to a compound stand in shared geometry");
   let disposedInstances = 0;
@@ -149,6 +150,50 @@ test("creates instanced, disposable scenery only for the closest terrain LOD", (
   runtime.dispose();
   runtime.dispose();
   assert.equal(runtime.createTile(chunkFixture(), decodedFixture(), 0), null);
+});
+
+test("keeps scenery on the nearest selectable mobile and balanced terrain LOD", () => {
+  for (const qualityTier of ["mobile", "balanced"]) {
+    const runtime = createKoreaSceneryRuntime(THREE, {
+      era: "ukraine-modern",
+      qualityTier,
+    });
+    const group = runtime.createTile(chunkFixture(), decodedFixture(), 1);
+    assert.ok(group, `${qualityTier} LOD1 must retain low-level scenery`);
+    assert.equal(group.userData.scenery.theatre, "ukraine");
+    assert.equal(group.userData.scenery.trainingSector, true);
+    runtime.disposeTile(group);
+    runtime.dispose();
+  }
+});
+
+test("plans a distinct Ukraine lowland grammar with ambient, non-targetable buildings", () => {
+  const chunk = {
+    id: "e0000-n0000",
+    eastIndex: 0,
+    northIndex: 0,
+    boundsLocalM: [0, 0, 8_192, 8_192],
+    generation: { seed: 17, landFraction: 1 },
+  };
+  const first = planKoreaScenery(chunk, flatDecodedFixture(), {
+    era: "ukraine-modern",
+    qualityTier: "desktop",
+  });
+  const repeated = planKoreaScenery(chunk, flatDecodedFixture(), {
+    era: "ukraine-modern",
+    qualityTier: "desktop",
+  });
+  assert.deepEqual(first, repeated);
+  assert.ok(first.fields.length > 0);
+  assert.ok(first.fields.every((field) => field.widthM >= 240 && field.depthM >= 320));
+  assert.ok(first.buildings.length > 0);
+  assert.ok(first.buildings.every((building, index) =>
+    building.entityId === `scenery.ukraine-modern.${chunk.id}.building.${index}`
+      && building.role === "ambient"
+      && building.targetable === false));
+  assert.ok(first.trees.length > 0);
+  assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].theatre, "ukraine");
+  assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].toonSteps.length >= 3);
 });
 
 test("renders modern transport and power batches as instanced closest-LOD geometry", () => {

@@ -14,12 +14,13 @@ import {
 } from "../campaign_progression.js";
 
 // The qualification ladder is GONE. It was scaffolding from when this was a programme of graded
-// exercises; the game is now two missions, and locking one behind the other only stood between the
-// pilot and the aircraft they wanted to fly. These tests exist to stop it growing back.
+// exercises; every shipping mission is available immediately. These tests stop the gate from
+// growing back as new mission types and environments are added.
 
-test("the menu is two missions and both are always available", () => {
+test("the menu is three missions and all are always available", () => {
   assert.deepEqual(CAMPAIGN_NODES.map(({ id, mission, aircraft }) => ({ id, mission, aircraft })), [
     { id: "first-merge", mission: 7, aircraft: "F-22A" },
+    { id: "low-level-drone", mission: 8, aircraft: "F-22A" },
     { id: "rapier-intercept", mission: 10, aircraft: "Rapier" },
   ]);
 
@@ -40,13 +41,17 @@ test("nothing is locked, nothing is qualified, and unknown ids are still rejecte
   assert.equal(campaignNode("carrier-conversion"), null);
 });
 
-test("the two missions are genuinely different aircraft and different fights", () => {
+test("the missions are genuinely different fights and expose their aircraft honestly", () => {
   const guns = campaignNode("first-merge");
+  const drone = campaignNode("low-level-drone");
   const rapier = campaignNode("rapier-intercept");
+  assert.notEqual(guns.mission, drone.mission);
+  assert.notEqual(drone.mission, rapier.mission);
   assert.notEqual(guns.mission, rapier.mission);
   assert.notEqual(guns.aircraft, rapier.aircraft);
-  // Neither advertises a qualification: there is nothing to earn.
+  // None advertises a qualification: there is nothing to earn.
   assert.equal(guns.qualification, "");
+  assert.equal(drone.qualification, "");
   assert.equal(rapier.qualification, "");
 });
 
