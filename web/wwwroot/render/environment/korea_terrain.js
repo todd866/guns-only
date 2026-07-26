@@ -184,7 +184,18 @@ function createUkraineTrainingHorizonApron(THREE) {
   }
   root.add(transition);
 
-  const flatMaterial = new THREE.MeshLambertMaterial({ color: 0x59652b });
+  // The flat apron must LOSE every depth tie rather than fight one. It is presentation-only
+  // filler; wherever any real ground is also drawn, that ground should win outright. Without this
+  // the apron and the other ground surface were coplanar over the whole visible field and
+  // z-fought into a shattered speckle across the entire terrain — which is what "the flickery
+  // terrain is still everywhere" actually was. transitionMaterial already yielded this way; the
+  // flat patches were the ones left tying, and extending them to 560 km made it cover the screen.
+  const flatMaterial = new THREE.MeshLambertMaterial({
+    color: 0x59652b,
+    polygonOffset: true,
+    polygonOffsetFactor: 2,
+    polygonOffsetUnits: 2,
+  });
   const horizon = UKRAINE_TRAINING_HORIZON_HALF_SPAN_M;
   const flatPatches = [
     [-horizon, outer, horizon, horizon],
