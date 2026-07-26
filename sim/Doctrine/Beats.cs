@@ -736,7 +736,7 @@ public static class Beats {
                 FlightModel.RapierPublicDataSurrogate.MassKg),
             // A contact high and slow ahead: the thing this aircraft was built to kill is an
             // enabler, not a fighter.
-            // 420 km out. This is deliberately BEYOND the 262 km regional truth, and that is the
+            // 680 km out. This is deliberately BEYOND the 262 km regional truth, and that is the
             // call: a realistic deep intercept matters more than staying inside the authored cell.
             // The aircraft exists because basing sits far enough back that cratering the field is
             // impractical, and at 90 or even 118 km the pilot never spends the climb or the ram
@@ -748,7 +748,7 @@ public static class Beats {
             // The far half of the route is over presentation apron rather than authored terrain.
             // At 21 km cruise that is invisible; it would matter if the fight went low, and it is
             // the reason the parked ukraine-theatre branch wanted a bigger cell.
-            Bandit: new AircraftState(new Vec3D(18_000, 12_000, 420_000), 210, 0, Math.PI, 0,
+            Bandit: new AircraftState(new Vec3D(18_000, 18_000, 680_000), 210, 0, Math.PI, 0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() { (0.0, new PilotCommand(1.0, 0.0, 0.55, 0.0)) },
@@ -764,14 +764,14 @@ public static class Beats {
             Fuel: new FuelConfig(
                 CapacityLb: 5_950.0,          // 2,700 kg of fuel
                 // The interceptor can carry 2,700 kg, but this authored alert launch carries only
-                // 1,880 kg. The M4 outbound dash, M4 escape, and powered recovery leave a narrow
+                // 1,406 kg. The M4 outbound dash, M4 escape, and powered recovery leave a narrow
                 // trap reserve instead of turning the last act into a consequence-free cruise.
-                InitialFuelLb: 4_140.0,
-                BingoThresholdLb: 1_600.0,
+                InitialFuelLb: 3_100.0,
+                BingoThresholdLb: 1_000.0,
                 ConsumesFuel: true,
-                JokerThresholdLb: 2_400.0,
-                MinimumFuelThresholdLb: 900.0,
-                EmergencyFuelThresholdLb: 550.0),
+                JokerThresholdLb: 1_200.0,
+                MinimumFuelThresholdLb: 600.0,
+                EmergencyFuelThresholdLb: 300.0),
             // FULL AUGMENTED POWER on the stroke. 1.0 is the dry lever stop, and a 7.85 t aircraft
             // leaving a ramp on dry thrust decays below stall while it is still climbing away —
             // nobody launches a heavy jet at military power.

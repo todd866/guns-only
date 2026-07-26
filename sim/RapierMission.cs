@@ -44,8 +44,8 @@ public sealed record ScriptedInterceptConfig(
 /// <summary>
 /// Deterministic mission director for the Rapier public-data surrogate. The director commands the
 /// same PilotCommand path as a human, so propulsion, fuel, G, physiology, terrain and recovery
-/// remain ordinary kernel truth. Pilot input temporarily takes authority without erasing the
-/// script; the machine can resume after the takeover window.
+/// remain ordinary kernel truth. Any pilot input takes authority without erasing the script; only
+/// an explicit automation command hands the aircraft back to the director.
 /// </summary>
 public sealed class RapierMissionDirector {
     const double ClimbTopM = 56_000.0 * 0.3048;
@@ -62,14 +62,23 @@ public sealed class RapierMissionDirector {
         Math.IEEERemainder(value, 2.0 * Math.PI);
 
     static PilotCommand CommandToward(in AircraftState player, in Vec3D waypoint,
-        double desiredGamma, double throttle) {
+        double desiredGamma, double throttle, double maximumBankDegrees,
+        double gammaGain, double minimumG, double maximumG) {
         Vec3D delta = waypoint - player.Position;
         double desiredHeading = Math.Atan2(delta.X, delta.Z);
         double headingError = WrapAngle(desiredHeading - player.Chi);
+        double maximumBankRad = maximumBankDegrees * Math.PI / 180.0;
         double bankTarget = Math.Clamp(headingError * 1.35,
-            -42.0 * Math.PI / 180.0, 42.0 * Math.PI / 180.0);
+            -maximumBankRad, maximumBankRad);
         double gammaError = desiredGamma - player.Gamma;
-        double gDemand = Math.Clamp(1.0 + gammaError * 8.0, 0.35, 3.2);
+        // Normal load required to hold a flight path rises as the aircraft banks. The old flat
+        // 1.0-G baseline lost height in every turn, then chased that error with a 3.2-G pull. This
+        // coordinated-flight estimate keeps the director on the same ordinary lift model as the
+        // pilot and makes altitude corrections progressively rather than ballistically.
+        double coordinatedHoldG = Math.Cos(desiredGamma)
+            / Math.Max(0.75, Math.Cos(bankTarget));
+        double gDemand = Math.Clamp(
+            coordinatedHoldG + gammaError * gammaGain, minimumG, maximumG);
         return new PilotCommand(
             GDemand: gDemand,
             BankTarget: bankTarget,
@@ -82,6 +91,20 @@ public sealed class RapierMissionDirector {
             SasRollControl: 0.0,
             DirectLateralControl: false);
     }
+
+    static double AltitudeCaptureGamma(double targetAltitudeM,
+        in AircraftState player, double trueAirspeedMps,
+        double captureSeconds, double minimumGamma, double maximumGamma) {
+        double distanceForCaptureM = Math.Max(1.0,
+            Math.Max(80.0, trueAirspeedMps) * captureSeconds);
+        return Math.Clamp(Math.Atan2(
+            targetAltitudeM - player.Position.Y, distanceForCaptureM),
+            minimumGamma, maximumGamma);
+    }
+
+    static double ThrottleForMach(double targetMach, double mach,
+        double trimLever, double gain, double maximumLever = 1.55) =>
+        Math.Clamp(trimLever + (targetMach - mach) * gain, 0.0, maximumLever);
 
     public RapierMissionGuidance Step(
         in AircraftState player,
@@ -112,10 +135,11 @@ public sealed class RapierMissionDirector {
         } else if (pursuitActive) {
             _phase = RapierMissionPhase.Escape;
         } else if (liveOpponentCount <= 0) {
-            // Begin the recovery setup far enough out to shed Mach 1.5 and descend from FL380.
-            // Waiting until the base was 24 km away left neither energy nor geometry for the
-            // opposite-direction final.
-            _phase = homeRangeM <= 220_000.0
+            // Remain on the M2/FL450 return until 90 km. The recovery marshal lies beyond the
+            // strip, leaving about 136 km to decelerate, descend and reverse onto final. That is
+            // still a real energy-management problem without turning the trip home into half an
+            // hour of low-speed transit.
+            _phase = homeRangeM <= 90_000.0
                 ? RapierMissionPhase.Recovery
                 : RapierMissionPhase.ReturnToBase;
         } else if (catapultActive) {
@@ -129,7 +153,7 @@ public sealed class RapierMissionDirector {
             } else if (mach < 2.2
                 && (int)_phase <= (int)RapierMissionPhase.Accelerate) {
                 _phase = RapierMissionPhase.Accelerate;
-            } else if (player.Position.Y < CruiseAltitudeM
+            } else if (player.Position.Y < CruiseAltitudeM - 40.0
                 && (int)_phase <= (int)RapierMissionPhase.RamClimb) {
                 _phase = RapierMissionPhase.RamClimb;
             } else {
@@ -158,12 +182,14 @@ public sealed class RapierMissionDirector {
             case RapierMissionPhase.Climb:
                 targetMach = 0.9;
                 targetAltitudeFt = 56_000.0;
-                targetGamma = Math.Clamp(0.12 + 0.62 * (mach - 0.90), 0.015, 0.34);
+                targetGamma = AltitudeCaptureGamma(ClimbTopM, player,
+                    trueAirspeedMps, captureSeconds: 60.0,
+                    minimumGamma: -0.02, maximumGamma: 0.27);
                 // The uprated engine has enough excess thrust to run through the inlet schedule
                 // during the climb. Spend that energy on height instead: the computer rolls power
                 // back above the M0.9 target, then restores full augmentation on the FL560 shelf.
-                throttle = Math.Clamp(1.55 - Math.Max(0.0, mach - 0.88) * 3.0,
-                    0.72, 1.55);
+                throttle = ThrottleForMach(targetMach, mach,
+                    trimLever: 0.62, gain: 1.10);
                 waypoint = contact.Position;
                 cue = $"AUTO CLIMB · HOLD M0.90 · M{mach:F2} · "
                     + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL560";
@@ -171,29 +197,33 @@ public sealed class RapierMissionDirector {
             case RapierMissionPhase.Accelerate:
                 targetMach = 2.2;
                 targetAltitudeFt = 56_000.0;
-                targetGamma = 0.0;
-                throttle = 1.55;
+                targetGamma = AltitudeCaptureGamma(ClimbTopM, player,
+                    trueAirspeedMps, captureSeconds: 90.0,
+                    minimumGamma: -0.035, maximumGamma: 0.035);
+                throttle = ThrottleForMach(targetMach, mach,
+                    trimLever: 1.20, gain: 0.45);
                 waypoint = contact.Position;
                 cue = $"AUTO LEVEL ACCEL · M{mach:F2} → M2.20 · HOLD FL560";
                 break;
             case RapierMissionPhase.RamClimb:
                 targetMach = 4.0;
                 targetAltitudeFt = 70_000.0;
-                targetGamma = Math.Clamp(0.075 + 0.45 * (mach - 2.20), 0.01, 0.16);
-                throttle = 1.55;
+                targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
+                    trueAirspeedMps, captureSeconds: 150.0,
+                    minimumGamma: -0.025, maximumGamma: 0.070);
+                throttle = ThrottleForMach(targetMach, mach,
+                    trimLever: 1.08, gain: 0.42);
                 waypoint = contact.Position;
                 cue = $"AUTO RAM CLIMB · M{mach:F2} · FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL700";
                 break;
             case RapierMissionPhase.Intercept:
                 targetMach = 4.0;
                 targetAltitudeFt = 70_000.0;
-                targetGamma = Math.Clamp(
-                    Math.Atan2(contact.Position.Y - player.Position.Y,
-                        Math.Max(1.0, Math.Sqrt(
-                            Math.Pow(contact.Position.X - player.Position.X, 2.0)
-                            + Math.Pow(contact.Position.Z - player.Position.Z, 2.0)))),
-                    -0.12, 0.08);
-                throttle = mach < 3.95 ? 1.55 : 1.18;
+                targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
+                    trueAirspeedMps, captureSeconds: 120.0,
+                    minimumGamma: -0.040, maximumGamma: 0.040);
+                throttle = ThrottleForMach(targetMach, mach,
+                    trimLever: 1.08, gain: 0.42);
                 waypoint = contact.Position;
                 string eta = double.IsFinite(interceptEtaSeconds)
                     ? $"{Math.Floor(interceptEtaSeconds / 60.0):F0}:"
@@ -203,15 +233,13 @@ public sealed class RapierMissionDirector {
                     + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · M4.0 / FL700";
                 break;
             case RapierMissionPhase.Attack:
-                targetMach = 1.2;
-                targetAltitudeFt = contact.Position.Y * FeetPerMetre;
-                targetGamma = Math.Clamp(
-                    Math.Atan2(contact.Position.Y - player.Position.Y,
-                        Math.Max(1.0, Math.Sqrt(
-                            Math.Pow(contact.Position.X - player.Position.X, 2.0)
-                            + Math.Pow(contact.Position.Z - player.Position.Z, 2.0)))),
-                    -0.35, 0.22);
-                throttle = 1.1;
+                targetMach = 3.2;
+                targetAltitudeFt = (contact.Position.Y + 600.0) * FeetPerMetre;
+                targetGamma = AltitudeCaptureGamma(contact.Position.Y + 600.0,
+                    player, trueAirspeedMps, captureSeconds: 75.0,
+                    minimumGamma: -0.075, maximumGamma: 0.050);
+                throttle = ThrottleForMach(targetMach, mach,
+                    trimLever: 0.96, gain: 0.40, maximumLever: 1.35);
                 waypoint = contact.Position;
                 cue = $"FORMATION IN RANGE · {liveOpponentCount} CONTACTS · "
                     + "PRESS F TO RELEASE GUN-DRONE SWARM";
@@ -219,25 +247,25 @@ public sealed class RapierMissionDirector {
             case RapierMissionPhase.Escape:
                 targetMach = 4.0;
                 targetAltitudeFt = 70_000.0;
-                targetGamma = Math.Clamp(
-                    Math.Atan2(CruiseAltitudeM - player.Position.Y,
-                        Math.Max(1.0, homeRangeM)),
-                    -0.08, 0.10);
-                throttle = mach < 3.95 ? 1.55 : 1.18;
+                targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
+                    trueAirspeedMps, captureSeconds: 120.0,
+                    minimumGamma: -0.050, maximumGamma: 0.050);
+                throttle = ThrottleForMach(targetMach, mach,
+                    trimLever: 1.08, gain: 0.42);
                 waypoint = recoveryInitial;
-                cue = $"ESCAPE · {pursuerCount} PURSUERS · "
+                cue = $"FORMATION DESTROYED · EGRESS HOME · {pursuerCount} PURSUERS · "
                     + $"{pursuitRangeM / 1000.0:F0} KM SEPARATION · DASH M4.0";
                 break;
             case RapierMissionPhase.ReturnToBase:
-                targetMach = 1.5;
-                targetAltitudeFt = 38_000.0;
-                targetGamma = Math.Clamp(
-                    Math.Atan2(38_000.0 * 0.3048 - player.Position.Y,
-                        Math.Max(1.0, homeRangeM)),
-                    -0.10, 0.08);
-                throttle = mach < 1.45 ? 1.25 : 0.82;
+                targetMach = 2.0;
+                targetAltitudeFt = 45_000.0;
+                targetGamma = AltitudeCaptureGamma(45_000.0 * 0.3048,
+                    player, trueAirspeedMps, captureSeconds: 150.0,
+                    minimumGamma: -0.060, maximumGamma: 0.025);
+                throttle = ThrottleForMach(targetMach, mach,
+                    trimLever: 0.80, gain: 0.58, maximumLever: 1.35);
                 waypoint = recoveryInitial;
-                cue = $"AUTO RTB · BASE {homeRangeM / 1000.0:F0} KM · DESCEND FL380 / M1.5";
+                cue = $"RETURN HOME · BASE {homeRangeM / 1000.0:F0} KM · M2.0 / FL450";
                 break;
             case RapierMissionPhase.Recovery:
                 targetMach = 0.30;
@@ -253,7 +281,20 @@ public sealed class RapierMissionDirector {
                 Vec3D recoveryLineup = recoveryInitial - runwayForward * 10_000.0
                     + new Vec3D(0.0, 1_200.0, 0.0);
                 double lineupRangeM = (recoveryLineup - player.Position).Length;
-                if (_recoveryMarshalReached && lineupRangeM <= 1_500.0)
+                double runwayHeadingError = Math.Abs(WrapAngle(
+                    Math.Atan2(runwayForward.X, runwayForward.Z) - player.Chi));
+                Vec3D toLineup = recoveryLineup - player.Position;
+                double lineupAlongM = toLineup.Dot(runwayForward);
+                double lineupHorizontalSquared = toLineup.X * toLineup.X
+                    + toLineup.Z * toLineup.Z;
+                double lineupCrossTrackM = Math.Sqrt(Math.Max(0.0,
+                    lineupHorizontalSquared - lineupAlongM * lineupAlongM));
+                if (_recoveryMarshalReached
+                    && lineupAlongM <= 2_500.0
+                    && lineupAlongM >= -5_000.0
+                    && lineupCrossTrackM <= 1_500.0
+                    && Math.Abs(toLineup.Y) <= 1_000.0
+                    && runwayHeadingError <= 45.0 * Math.PI / 180.0)
                     _recoveryLineupReached = true;
                 Vec3D physicalTouchdown = home - runwayForward * 240.0
                     + new Vec3D(0.0, 1.5, 0.0);
@@ -263,8 +304,6 @@ public sealed class RapierMissionDirector {
                 // groove with nearly two kilometres of cross-track error. Position alone also let
                 // an aircraft crossing the point backwards arm the final. Make the machine earn
                 // the groove: marshal behind the strip, then cross initial on runway heading.
-                double runwayHeadingError = Math.Abs(WrapAngle(
-                    Math.Atan2(runwayForward.X, runwayForward.Z) - player.Chi));
                 double alongToInitialM = toInitial.Dot(runwayForward);
                 double initialHorizontalSquared = toInitial.X * toInitial.X
                     + toInitial.Z * toInitial.Z;
@@ -317,8 +356,15 @@ public sealed class RapierMissionDirector {
                         : physicalTouchdown + runwayForward * 50_000.0
                     : _recoveryMarshalReached
                         ? _recoveryLineupReached
-                            ? physicalTouchdown + runwayForward * 2_000.0
-                            : gatePoint
+                            // Look five kilometres through INITIAL. That is far enough to remove
+                            // the zero-range bearing singularity, but close enough to converge a
+                            // long-return arrival onto the centreline before the square is crossed.
+                            ? recoveryInitial + runwayForward * 5_000.0
+                            // Fly through LINEUP on the runway heading rather than steering at a
+                            // zero-range point. The preceding marshal turn can arrive from either
+                            // side; this short virtual extension makes it establish the inbound
+                            // centreline before the state machine advances.
+                            : recoveryLineup + runwayForward * 5_000.0
                         : gatePoint;
                 double horizontalRangeM = Math.Max(1.0, Math.Sqrt(
                     Math.Pow(gatePoint.X - player.Position.X, 2.0)
@@ -327,22 +373,27 @@ public sealed class RapierMissionDirector {
                 // same commanded flight path. Schedule the last two gates by actual landing mass
                 // so both the authored low-reserve return and a deliberately lighter recovery
                 // card aim the hook at wire three.
-                double referenceLandingMassKg = 5_850.0 + 10.0 * Math.Clamp(
-                    (player.Mass - 5_700.0) / 172.0, 0.0, 1.0);
+                const double ReferenceLandingMassKg = 5_700.0;
                 double landingMassGammaCorrection = Math.Clamp(
-                    (referenceLandingMassKg - player.Mass) * 0.000002,
-                    -0.001, 0.001);
-                double recoveryMinimumGamma = _recoveryFinal && recoveryGate <= 2
-                    ? -0.067
-                    : _recoveryFinal
-                        ? -0.06845 + landingMassGammaCorrection
-                        : -0.16;
+                    (ReferenceLandingMassKg - player.Mass) * 0.00000878,
+                    -0.005, 0.001);
+                // The first squares are capture gates, so permit a high initial arrival to
+                // converge onto the published 3.5-degree line instead of preserving its error all
+                // the way to the strip. The last two gates then tighten to the mass-scheduled
+                // touchdown cap which places the trailing hook at wire three.
+                double recoveryMinimumGamma = _recoveryFinal
+                    ? recoveryGate switch {
+                        1 => -0.12,
+                        2 => -0.09,
+                        _ => -0.06425 + landingMassGammaCorrection
+                    }
+                    : -0.16;
                 targetGamma = Math.Clamp(
                     Math.Atan2(gatePoint.Y - player.Position.Y, horizontalRangeM),
                     recoveryMinimumGamma,
                     0.035);
-                // Recovery is still a flown energy profile, not a 220 km low-speed crawl. The
-                // director sheds the M1.5 return in three generous shelves, arriving at the first
+                // Recovery is still a flown energy profile, not a long low-speed crawl. The
+                // director sheds the M2 return in three generous shelves, arriving at the first
                 // square configured and on speed. A pilot can take any shelf and fly it manually.
                 double setupRangeM = !_recoveryMarshalReached ? marshalRangeM
                     : !_recoveryLineupReached ? lineupRangeM
@@ -353,8 +404,7 @@ public sealed class RapierMissionDirector {
                 } else if (!_recoveryMarshalReached) {
                     approachSpeedMps = setupRangeM > 100_000.0 ? 320.0
                         : setupRangeM > 40_000.0 ? 180.0
-                        : setupRangeM > 15_000.0 ? 120.0
-                        : 88.0;
+                        : 120.0;
                 } else if (!_recoveryLineupReached) {
                     // Marshal establishes the inbound heading; it is not a command to drag
                     // forty kilometres of empty setup leg at landing speed. Hold useful energy
@@ -392,12 +442,31 @@ public sealed class RapierMissionDirector {
                 break;
         }
 
+        double maximumBankDegrees = _phase switch {
+            RapierMissionPhase.Launch => 12.0,
+            RapierMissionPhase.Climb or RapierMissionPhase.Accelerate
+                or RapierMissionPhase.RamClimb => 15.0,
+            RapierMissionPhase.Intercept or RapierMissionPhase.Escape => 18.0,
+            RapierMissionPhase.Attack => 22.0,
+            RapierMissionPhase.ReturnToBase => 25.0,
+            RapierMissionPhase.Recovery => 30.0,
+            _ => 15.0
+        };
+        double maximumG = _phase switch {
+            RapierMissionPhase.Attack => 2.2,
+            RapierMissionPhase.Recovery => 2.0,
+            RapierMissionPhase.ReturnToBase => 1.8,
+            _ => 1.65
+        };
+        double gammaGain = _phase == RapierMissionPhase.Recovery ? 8.0 : 4.0;
+        double minimumG = _phase == RapierMissionPhase.Recovery ? 0.35 : 0.65;
         return new RapierMissionGuidance(
             _phase,
             cue,
             targetMach,
             targetAltitudeFt,
-            CommandToward(player, waypoint, targetGamma, throttle),
+            CommandToward(player, waypoint, targetGamma, throttle,
+                maximumBankDegrees, gammaGain, minimumG, maximumG),
             guidanceWaypoint ?? waypoint,
             recoveryGate);
     }

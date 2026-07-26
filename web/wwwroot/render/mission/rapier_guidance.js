@@ -5,8 +5,8 @@ const PHASE = Object.freeze({
   4: "RAM CLIMB / FL700",
   5: "INTERCEPT M4.00 / FL700",
   6: "ATTACK FORMATION",
-  7: "ESCAPE M4.00 / FL700",
-  8: "RTB M1.50 / FL380",
+  7: "FORMATION DESTROYED · EGRESS HOME M4.00 / FL700",
+  8: "RETURN HOME M2.00 / FL450",
   9: "RECOVERY · FLY THE SQUARES",
   10: "SORTIE COMPLETE",
 });
@@ -22,9 +22,27 @@ export function rapierGuidancePresentation(state) {
   const weapon = phase === 6
     ? ` · F RELEASES GUN-DRONE SWARM · ${drones} DRONES`
     : "";
-  const authority = active ? "AUTO" : enabled ? "PILOT OVERRIDE" : "PILOT";
+  const authority = active ? "AUTO FLYING" : enabled ? "AUTO STANDBY" : "PILOT FLYING";
+  const homeRangeNm = Number(state.rtb_range_nm);
+  const homeBearingDeg = Number(state.rtb_bearing_deg);
+  const homeTurnDeg = Number(state.rtb_turn_deg);
+  const trueAirspeedKts = Math.max(1, Number(state.true_airspeed_kts) || 0);
+  const hasHome = phase >= 7 && phase <= 9
+    && Number.isFinite(homeRangeNm)
+    && Number.isFinite(homeBearingDeg)
+    && Number.isFinite(homeTurnDeg);
+  const turn = Math.abs(homeTurnDeg) < 3
+    ? "STEADY"
+    : `TURN ${homeTurnDeg < 0 ? "L" : "R"} ${Math.round(Math.abs(homeTurnDeg))}°`;
+  const etaMinutes = hasHome
+    ? Math.max(0, Math.round(homeRangeNm / trueAirspeedKts * 60))
+    : 0;
+  const detail = hasHome
+    ? `HOME ${String(Math.round((homeBearingDeg % 360 + 360) % 360)).padStart(3, "0")}° · ${homeRangeNm.toFixed(0)} NM · ETA ${etaMinutes} MIN · ${turn} · ${active ? "AUTOMATION HAS CONTROL" : "FOLLOW HOME CUE · P ENGAGES AUTO"}`
+    : "";
   return Object.freeze({
-    text: `${authority} · ${phaseText}${weapon} · P AUTO`,
+    text: `${authority} · ${phaseText}${weapon} · P TOGGLE AUTO`,
+    detail,
     level: phase === 6 || phase === 7 ? "attack" : active ? "active" : "manual",
   });
 }

@@ -28,7 +28,12 @@ public sealed class Wingman {
     /// Latched once this aircraft is out of the fight, so a dead wingman stops being stepped as a
     /// combatant while its wreck is still falling.
     public bool Defeated { get; set; }
+    /// A terminal wreck which leaves the authored atmosphere is retired at that explicit model
+    /// boundary instead of asking a bounded weather column to invent conditions above its data.
+    public bool SimulationBounded { get; set; }
     public bool TriggerDown { get; set; }
 
-    public bool StillFighting => !Defeated && !Bandit.CatastrophicallyDamaged;
+    public bool StillFighting => !Defeated
+        && !SimulationBounded
+        && !Bandit.CatastrophicallyDamaged;
 }

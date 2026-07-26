@@ -271,7 +271,7 @@ public class RapierTests {
     }
 
     /// This is the propulsion question in its operational form. It starts with the authored
-    /// 1,880 kg alert load on the authored launcher, climbs around M0.90 to FL560, accelerates level
+    /// 1,406 kg alert load on the authored launcher, climbs around M0.90 to FL560, accelerates level
     /// through the turbine/ram overlap, then climbs on ram power to FL700. The controller uses only
     /// SimulationSession's production key-input boundary; no state teleport or AircraftSim-only
     /// sizing calculation is allowed to answer whether the mission works.
@@ -293,8 +293,8 @@ public class RapierTests {
         bool pullHeld = false;
         bool pushHeld = false;
 
-        Assert.Equal(4_140.0, initialFuelLb, precision: 6);
-        Assert.InRange(initialFuelLb * 0.45359237, 1_870.0, 1_890.0);
+        Assert.Equal(3_100.0, initialFuelLb, precision: 6);
+        Assert.InRange(initialFuelLb * 0.45359237, 1_400.0, 1_412.0);
         // Decision records do not feed flight, propulsion, fuel, opponent control, or outcomes.
         // They are intentionally off in this long propulsion card to avoid allocating a combat
         // training row on every one of roughly sixty thousand unrelated transit ticks.

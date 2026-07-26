@@ -17,8 +17,8 @@ test("Rapier guidance names automation, profile target, and takeover control", (
     rapier_mission_phase: 3,
     rapier_gun_drones_remaining: 4,
   });
-  assert.match(cue.text, /AUTO · LEVEL ACCEL \/ M2\.20/);
-  assert.match(cue.text, /P AUTO/);
+  assert.match(cue.text, /AUTO FLYING · LEVEL ACCEL \/ M2\.20/);
+  assert.match(cue.text, /P TOGGLE AUTO/);
   assert.equal(cue.level, "active");
 });
 
@@ -35,15 +35,37 @@ test("attack guidance exposes the single four-ship sweep authorization", () => {
   assert.equal(cue.level, "attack");
 });
 
-test("manual takeover remains explicit without losing the scripted phase", () => {
+test("manual takeover remains explicit and return guidance says exactly how to get home", () => {
+  const cue = rapierGuidancePresentation({
+    rapier_mission_available: true,
+    rapier_automation_enabled: false,
+    rapier_automation_active: false,
+    rapier_mission_phase: 8,
+    rtb_range_nm: 184.4,
+    rtb_bearing_deg: 3.2,
+    rtb_turn_deg: -27.6,
+    true_airspeed_kts: 1180,
+  });
+  assert.match(cue.text, /PILOT FLYING · RETURN HOME M2\.00 \/ FL450/);
+  assert.match(cue.detail, /HOME 003° · 184 NM · ETA 9 MIN · TURN L 28°/);
+  assert.match(cue.detail, /FOLLOW HOME CUE · P ENGAGES AUTO/);
+  assert.equal(cue.level, "manual");
+});
+
+test("weapons release transitions into an unmistakable automated egress", () => {
   const cue = rapierGuidancePresentation({
     rapier_mission_available: true,
     rapier_automation_enabled: true,
-    rapier_automation_active: false,
-    rapier_mission_phase: 8,
+    rapier_automation_active: true,
+    rapier_mission_phase: 7,
+    rtb_range_nm: 320,
+    rtb_bearing_deg: 180,
+    rtb_turn_deg: 172,
+    true_airspeed_kts: 2300,
   });
-  assert.match(cue.text, /PILOT OVERRIDE · RTB M1\.50 \/ FL380/);
-  assert.equal(cue.level, "manual");
+  assert.match(cue.text, /FORMATION DESTROYED · EGRESS HOME/);
+  assert.match(cue.detail, /HOME 180° · 320 NM · ETA 8 MIN · TURN R 172°/);
+  assert.match(cue.detail, /AUTOMATION HAS CONTROL/);
 });
 
 test("engine presentation makes the combined-cycle state and actual thrust explicit", () => {

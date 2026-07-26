@@ -187,6 +187,7 @@ public sealed class SimulationSession {
     double _rapierMissileImpactAtMs = double.PositiveInfinity;
     long _rapierMissileTargetSequence;
     bool _rapierFormationSweepCommitted;
+    bool _rapierFormationSweepRequested;
     bool _rapierPursuitActive;
     double _rapierPursuitRangeM = double.PositiveInfinity;
     bool _timeCompressionPilotEnabled = true;
@@ -726,10 +727,9 @@ public sealed class SimulationSession {
         return RapierAutomationEnabled;
     }
 
-    void ClaimTemporaryRapierControl() {
+    void ClaimRapierControl() {
         if (!RapierAutomationEnabled) return;
-        _rapierManualOverrideUntilMs = Math.Max(
-            _rapierManualOverrideUntilMs, _simTimeMs + 5000.0);
+        SetRapierAutomationEnabled(false);
     }
 
     public void SetVariant(ValleyVariant variant) {
@@ -821,9 +821,13 @@ public sealed class SimulationSession {
             or GKey.RudderLeft or GKey.RudderRight
             or GKey.ThrottleUp or GKey.ThrottleDown
             or GKey.Override or GKey.AutoGcasOverride)
-            ClaimTemporaryRapierControl();
+            ClaimRapierControl();
         bool newPress = pressed && _keys.PhaseAt(key, _simTimeMs) == KeyPhase.Idle;
         _keys.Feed(key, pressed, _simTimeMs);
+        // Weapon release is an edge-triggered cockpit action. Latch a deliberate Rapier F tap so
+        // a very short browser key-down/key-up pair cannot fall entirely between fixed ticks.
+        if (key == GKey.Trigger && newPress && RapierPhase == RapierMissionPhase.Attack)
+            _rapierFormationSweepRequested = true;
         if (key == GKey.Trigger) Trigger(pressed);
         // A browser may repeat key-down while G remains held. Configuration selectors respond to
         // the physical rising edge, not to the host's keyboard repeat cadence.
@@ -873,8 +877,10 @@ public sealed class SimulationSession {
         // Same G-LOC ownership boundary as FeedKey: releases pass through so held controls can
         // cross the required neutral boundary, but no new press is accepted while interlocked.
         if (pressed && _pilotControlInterlocked) return;
-        if (pressed)
+        if (pressed) {
             DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
+            ClaimRapierControl();
+        }
         _keys.FeedDirect(increase ? GKey.ThrottleUp : GKey.ThrottleDown,
             pressed, _simTimeMs);
     }
@@ -889,8 +895,10 @@ public sealed class SimulationSession {
             _detents.ClearAnalogRollControl();
             return;
         }
-        if (Math.Abs(value) > 0.02)
+        if (Math.Abs(value) > 0.02) {
             DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
+            ClaimRapierControl();
+        }
         _detents.SetAnalogRollControl(value);
     }
 
@@ -1316,10 +1324,19 @@ public sealed class SimulationSession {
         _decisionFireIntentEvaluatedThisTick = false;
         _decisionFireIntentConsumedThisTick = false;
         _decisionFireAuthorizedThisTick = false;
+        // Weather soundings are intentionally finite data products. Catch an ownship trajectory
+        // approaching that explicit model edge before guidance, air-data or RK4 asks for an
+        // invented sample. This is a terminal simulation-boundary result, never a kernel fault.
+        if (_playerTerminalState == AircraftTerminalState.Flying
+            && AtmosphereBoundaryReached(_player.State, _player.AtmosphereModel,
+                integrationMarginM: 250.0))
+            ForceTerminalLimit(CombatRole.Player, includeFlying: true);
         StepDetachedOpponentWrecks();
         StepRapierMissile();
-        StepRapierPursuit();
-        UpdateRapierMissionGuidance();
+        if (_playerTerminalState == AircraftTerminalState.Flying) {
+            StepRapierPursuit();
+            UpdateRapierMissionGuidance();
+        }
         StepCore();
         if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
         StepPendingTerminalDecision();
@@ -1747,6 +1764,7 @@ public sealed class SimulationSession {
         _rapierMissileImpactAtMs = double.PositiveInfinity;
         _rapierMissileTargetSequence = 0;
         _rapierFormationSweepCommitted = false;
+        _rapierFormationSweepRequested = false;
         _rapierPursuitActive = false;
         _rapierPursuitRangeM = double.PositiveInfinity;
         _lastRange = Geometry.Range(_player.State, _bandit.State);
@@ -2061,6 +2079,12 @@ public sealed class SimulationSession {
         bool weaponsReleased = !WeaponsInhibited && !TerminalPhaseActive
             && _playerTerminalState == AircraftTerminalState.Flying;
         foreach (Wingman wingman in _wingmen) {
+            if (wingman.SimulationBounded) continue;
+            if (AtmosphereBoundaryReached(
+                    wingman.Bandit.State, wingman.Bandit.Atmosphere)) {
+                wingman.SimulationBounded = true;
+                continue;
+            }
             if (!wingman.StillFighting) {
                 // Keep the wreck falling, but it is no longer a combatant.
                 wingman.Bandit.Step(observation, FixedDeltaSeconds);
@@ -2081,6 +2105,19 @@ public sealed class SimulationSession {
             }
             wingman.Bandit.Step(observation, FixedDeltaSeconds);
         }
+    }
+
+    static bool AtmosphereBoundaryReached(in AircraftState state,
+        IAtmosphereModel atmosphere, double integrationMarginM = 2.0) {
+        if (atmosphere is not HydrostaticAtmosphereColumn bounded) return false;
+        double verticalSpeedMps = state.VelocityVector().Y;
+        double predictedAltitudeM = state.Position.Y
+            + verticalSpeedMps * FixedDeltaSeconds * 1.5;
+        double marginM = Math.Max(2.0, integrationMarginM);
+        return state.Position.Y <= bounded.MinimumGeometricAltitudeM + marginM
+            || state.Position.Y >= bounded.MaximumGeometricAltitudeM - marginM
+            || predictedAltitudeM <= bounded.MinimumGeometricAltitudeM + marginM
+            || predictedAltitudeM >= bounded.MaximumGeometricAltitudeM - marginM;
     }
 
     /// When the aircraft the pilot is fighting goes down but its formation has not, promote the
@@ -2467,6 +2504,16 @@ public sealed class SimulationSession {
                 continue;
 
             AircraftState previous = wreck.Actor.State;
+            if (AtmosphereBoundaryReached(previous, wreck.Actor.Atmosphere)) {
+                wreck.TerminalState = AircraftTerminalState.SimulationBounded;
+                wreck.ImpactSurface = ImpactSurface.SimulationBoundary;
+                EmitEvent(SessionEventType.TerminalLimitReached,
+                    CombatRole.None, CombatRole.Opponent,
+                    surface: ImpactSurface.SimulationBoundary,
+                    entitySequence: wreck.SpawnSequence,
+                    kinematics: previous);
+                continue;
+            }
             wreck.Actor.Step(ObservePlayer(_player.State), FixedDeltaSeconds);
             AircraftState current = wreck.Actor.State;
             if (wreck.TerminalState == AircraftTerminalState.Flying
@@ -2711,11 +2758,13 @@ public sealed class SimulationSession {
         }
     }
 
-    void ForceTerminalLimit(CombatRole target) {
+    void ForceTerminalLimit(CombatRole target, bool includeFlying = false) {
         AircraftTerminalState state = target == CombatRole.Player
             ? _playerTerminalState : _opponentTerminalState;
-        if (state is AircraftTerminalState.Flying or AircraftTerminalState.Settled
-            or AircraftTerminalState.SimulationBounded) return;
+        if ((!includeFlying && state == AircraftTerminalState.Flying)
+            || state is AircraftTerminalState.Settled
+                or AircraftTerminalState.SimulationBounded)
+            return;
         EmitEvent(SessionEventType.TerminalLimitReached, CombatRole.None, target,
             surface: ImpactSurface.SimulationBoundary);
         if (target == CombatRole.Player) {
@@ -3768,7 +3817,11 @@ public sealed class SimulationSession {
 
         StepPilotPhysiologyFromAircraft();
 
-        _bandit.Step(ObservePlayer(previousPlayer), FixedDeltaSeconds);
+        if (_opponentTerminalState != AircraftTerminalState.SimulationBounded
+            && AtmosphereBoundaryReached(_bandit.State, _bandit.Atmosphere))
+            ForceTerminalLimit(CombatRole.Opponent, includeFlying: true);
+        if (_opponentTerminalState != AircraftTerminalState.SimulationBounded)
+            _bandit.Step(ObservePlayer(previousPlayer), FixedDeltaSeconds);
         StepWingmen(previousPlayer);
         _carrier?.Step(FixedDeltaSeconds);
         ObserveCombatDamage();
@@ -4005,7 +4058,9 @@ public sealed class SimulationSession {
         PilotCommand padlockAssistedCommand = ApplyBanditPadlockRollAssist(
             effectiveCommand, _detents.Command.RollControl);
         PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
-        bool formationSweep = _triggerDown && ExecuteRapierFormationSweep();
+        bool formationSweep = (_triggerDown || _rapierFormationSweepRequested)
+            && ExecuteRapierFormationSweep();
+        if (formationSweep) _rapierFormationSweepRequested = false;
         bool assistedTrigger = _assistedFlight && _gunKill.GunSolution;
         StepWeapons(previousPlayerState, previousOpponentState,
             !formationSweep && (_triggerDown || assistedTrigger));

@@ -125,9 +125,9 @@ public class SnapshotProjectionTests {
             Assert.Equal(2100.0, minimumThreshold.GetDouble());
             Assert.Equal(1200.0, emergencyThreshold.GetDouble());
         } else if (beatIndex == 10) {
-            Assert.Equal(2400.0, jokerThreshold.GetDouble());
-            Assert.Equal(900.0, minimumThreshold.GetDouble());
-            Assert.Equal(550.0, emergencyThreshold.GetDouble());
+            Assert.Equal(1200.0, jokerThreshold.GetDouble());
+            Assert.Equal(600.0, minimumThreshold.GetDouble());
+            Assert.Equal(300.0, emergencyThreshold.GetDouble());
         } else {
             Assert.Equal(JsonValueKind.Null, jokerThreshold.ValueKind);
             Assert.Equal(JsonValueKind.Null, minimumThreshold.ValueKind);

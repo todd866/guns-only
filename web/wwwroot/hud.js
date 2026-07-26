@@ -3398,17 +3398,24 @@ class CombatHud {
     const x = (this.width - width) / 2;
     const occupied = this.annunciationBottom(frame.state);
     const y = Math.max(this.getLayout().heading.bottom + 8, occupied + 2);
-    this.glassPanel(x, y, width, engine ? 68 : 24, accent);
+    const detailOffset = presentation.detail ? 14 : 0;
+    this.glassPanel(x, y, width, engine ? 68 + detailOffset : 24 + detailOffset, accent);
     ctx.fillStyle = accent;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(this.fitText(presentation.text, width - 18),
       this.width / 2, y + (engine ? 10 : 12));
+    if (presentation.detail) {
+      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = presentation.level === "attack" ? AMBER : GREEN;
+      ctx.fillText(this.fitText(presentation.detail, width - 18),
+        this.width / 2, y + 24);
+    }
     if (engine) {
       ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillStyle = engine.level === "ram" ? AMBER : GREEN;
       ctx.fillText(this.fitText(engine.text, width - 18),
-        this.width / 2, y + 28);
+        this.width / 2, y + 28 + detailOffset);
       const channelMaxKn = Math.max(
         100,
         ...engine.channels.map((channel) => channel.thrustKn),
@@ -3418,7 +3425,7 @@ class CombatHud {
       const meterWidth = Math.max(48, width - (meterX - x) - 122);
       const valueX = x + width - 9;
       engine.channels.forEach((channel, index) => {
-        const channelY = y + 43 + index * 13;
+        const channelY = y + 43 + detailOffset + index * 13;
         const channelColor = index === 0 ? GREEN : AMBER;
         ctx.textAlign = "left";
         ctx.fillStyle = channelColor;
