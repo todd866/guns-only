@@ -1051,10 +1051,11 @@ export function createRapierDispersedStrip(context = {}) {
     const segment = new THREE.Group();
     segment.position.set(catapultX, (y0 + y1) / 2 + 0.10, (z0 + z1) / 2);
     segment.rotation.x = -midAngle;
-    box(segment, { x: 0.28, y: 0.10, z: length }, new THREE.Vector3(0, 0, 0), rail);
+    box(segment, { x: 0.28, y: 0.10, z: length }, new THREE.Vector3(0, 0, 0), rail)
+      .userData.noShadow = true;
     for (const side of [-1, 1]) {
       box(segment, { x: 0.12, y: 0.12, z: length },
-        new THREE.Vector3(side * 0.42, 0.005, 0), rail);
+        new THREE.Vector3(side * 0.42, 0.005, 0), rail).userData.noShadow = true;
     }
     group.add(segment);
   }
@@ -1120,7 +1121,8 @@ export function createRapierDispersedStrip(context = {}) {
   // speed cue in an enclosed run - without them the acceleration reads as motionless.
   for (let z = railStartZ - 10; z > galleryEndZ; z -= 10) {
     box(gallery, { x: galleryHalfWidth * 2, y: 0.5, z: 0.5 },
-      new THREE.Vector3(catapultX, galleryHeight - 0.4, z), concrete);
+      new THREE.Vector3(catapultX, galleryHeight - 0.4, z), concrete)
+      .userData.noShadow = true;
     const ribLamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 4), lamp);
     ribLamp.position.set(catapultX, galleryHeight - 1.0, z);
     ribLamp.userData.noShadow = true;
@@ -1131,7 +1133,7 @@ export function createRapierDispersedStrip(context = {}) {
     for (const side of [-1, 1]) {
       box(gallery, { x: 2.0, y: 1.8, z: 3.0 },
         new THREE.Vector3(catapultX + side * (galleryHalfWidth + 0.9), galleryHeight - 1.6, z),
-        rail);
+        rail).userData.noShadow = true;
     }
   }
   // Portal headwall at the foot of the ramp, where the cover ends and the jump begins.
