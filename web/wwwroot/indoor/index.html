@@ -24,7 +24,7 @@
     <header class="hud-top">
       <div class="brand-block">
         <a class="brand" href="../" aria-label="Return to Guns Only mission catalogue">Guns Only</a>
-        <span>INDOOR / FACILITY NINE</span>
+        <span>INDOOR / NO-MAN'S-LAND SURVEY</span>
       </div>
       <div id="phase-strip">
         <span class="phase-step active" data-phase-step="ingress"><b>01</b> INGRESS</span>
@@ -73,11 +73,16 @@
         <strong id="relay-time">00:45</strong>
         <small id="relay-state">STATION HOLDING</small>
       </div>
+      <div id="combat-block" hidden>
+        <span>RESPONSE CLOCK</span>
+        <strong id="combat-time">--:--</strong>
+        <small id="combat-state">NO INVESTIGATOR</small>
+      </div>
     </section>
 
     <section id="objective-panel" aria-label="Mission objectives">
-      <div class="eyebrow">MISSION / QUIET ENTRY</div>
-      <h1>Sever the facility control loop</h1>
+      <div id="mission-doctrine" class="eyebrow">MISSION / STEALTH MANDATORY</div>
+      <h1 id="mission-objective-title">Survey the abandoned site</h1>
       <ol id="objective-list">
         <li data-objective="0" class="active"><b>01</b><span>Reach the interior checkpoint</span><i>ACTIVE</i></li>
         <li data-objective="1"><b>02</b><span>Disable security core A</span><i>LOCKED</i></li>
@@ -131,14 +136,32 @@
         <div class="mission-mark">NINE<br><small>B1</small></div>
       </div>
       <div class="mission-copy">
-        <div class="eyebrow">2030s / ATTRITABLE SYSTEMS / EXPERIMENTAL</div>
+        <div class="eyebrow">2030s / ATTRITABLE SURVEY SYSTEMS / EXPERIMENTAL</div>
         <h1 id="briefing-title">Indoor</h1>
-        <p class="lede">Fly the fibre-protected route into Facility Nine. Stay quiet as long as you can. If the line catches—or when you choose—shed it cleanly and finish over radio. If the picture breaks up, the onboard controller will keep flying.</p>
+        <p id="mission-brief" class="lede">Survey tomorrow's attack site without announcing the route. Keep the fibre attached, inspect the marked rooms, then let the onboard controller retrace the quiet path home.</p>
+
+        <div id="survey-mission-set" class="survey-mission-set" role="radiogroup" aria-label="Survey mission">
+          <button class="survey-mission selected" type="button" role="radio" aria-checked="true" data-mission-id="attack-site">
+            <span><b>QUIET</b><i>0.65 KM</i></span>
+            <strong>Bracken Pump House</strong>
+            <small>Tomorrow's attack site · stealth mandatory</small>
+          </button>
+          <button class="survey-mission" type="button" role="radio" aria-checked="false" data-mission-id="discretionary-site">
+            <span><b>DISCRETION</b><i>1.05 KM</i></span>
+            <strong>Morrow Service Block</strong>
+            <small>Uncertain contact · return quiet or defend yourself</small>
+          </button>
+          <button class="survey-mission" type="button" role="radio" aria-checked="false" data-mission-id="diversion-site">
+            <span><b>PROVOKE</b><i>1.65 KM</i></span>
+            <strong>Cinder Tram Depot</strong>
+            <small>Tomorrow's diversion · make them react</small>
+          </button>
+        </div>
 
         <div class="mission-doctrine">
-          <div><b>01</b><span><strong>Protected ingress</strong>Follow the cyan route. Fibre ignores jamming but dislikes corners.</span></div>
-          <div><b>02</b><span><strong>Smooth breakaway</strong>Detach deliberately, or let the coupler release under tension.</span></div>
-          <div><b>03</b><span><strong>Contested finish</strong>Three control cores. Thirty-six rounds. Weak signal steals command authority; onboard automation does its best.</span></div>
+          <div><b>01</b><span><strong>Survey</strong>Follow the fibre-protected route and hold each observation point.</span></div>
+          <div><b>02</b><span><strong>Choose emissions</strong>Stay dark for a silent return, or detach and announce yourself.</span></div>
+          <div><b>03</b><span><strong>Drone response</strong>An investigator may emerge. Firing starts the response clock.</span></div>
         </div>
 
         <div class="control-summary" aria-label="Controls">
@@ -146,12 +169,13 @@
           <span><kbd>A / D</kbd> STRAFE</span>
           <span><kbd>ARROWS</kbd> LOOK / TURN</span>
           <span><kbd>SPACE / L⇧</kbd> UP / DOWN</span>
-          <span><kbd>F / CLICK</kbd> FIRE</span>
+          <span><kbd>F / CLICK</kbd> FIRE / RF ONLY</span>
           <span><kbd>X</kbd> DETACH</span>
+          <span><kbd>R</kbd> SILENT RETURN</span>
         </div>
 
         <div class="mission-actions">
-          <button id="begin-button" class="primary" type="button">BEGIN INGRESS</button>
+          <button id="begin-button" class="primary" type="button">LAUNCH QUIET SURVEY</button>
           <a href="../">MISSION CATALOGUE</a>
         </div>
         <p class="mission-note">Fictional systems and facility. Illustrative operator presentation.</p>
