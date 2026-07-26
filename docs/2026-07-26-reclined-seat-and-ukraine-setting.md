@@ -680,6 +680,44 @@ thrust — a ramjet has none of the latter.
 bridge, ramjet cruise) and flies on a different engine in each. The map covers the ramjet phase only.
 That is a state machine, and it is the real remaining work.
 
+### Costing: what every sortie actually spends
+
+> "Make sure everything's costed, because remember there's the cost layer to the whole sim."
+
+Nothing is costed in the KERNEL yet — the numbers below live in this note and in the Codex sizing
+passes, and none of them has reached `AircraftParams` or a debrief. Recording them here so the cost
+layer has something to consume.
+
+| item | cost | source |
+|---|---:|---|
+| Rapier flyaway | **$8-11M** | Codex sizing, several hundred aircraft |
+| cheap subsonic interceptor flyaway | $4-6M | Codex sizing |
+| launcher + arrestor installation | tens of millions per operating LANE | infrastructure, amortised, NOT per-sortie |
+| 20 mm round | order $30 | provisional |
+| a 100-round burst | order **$3,000** | 100 x above |
+| Rapier fuel load (2,700 kg) | order $2,000-3,000 | provisional |
+| **2% of structural life in one hard pull** | order **$160,000-220,000** | 2% of flyaway |
+
+**THE PUNCHLINE, AND IT INVERTS THE USUAL INTUITION: G IS THE EXPENSIVE CONSUMABLE, NOT AMMUNITION.**
+A single hard pull that eats a couple of percent of the airframe's fatigue life costs roughly FIFTY
+TIMES a full gun burst. Shooting is nearly free; the manoeuvring you did to get into position is
+what bankrupts you.
+
+That is the cost layer agreeing with the spine from the other direction. It also says something
+about how the debrief should read: a pilot who splashed a target with two long bursts and three 15 G
+pulls spent about half a million dollars of airframe to fire nine thousand dollars of ammunition.
+
+**What needs to exist for this to be real:**
+- `AircraftParams` (or a sibling record) carrying flyaway cost and a structural-life budget, so
+  fatigue consumed can be priced as depreciation rather than displayed as an abstract percentage.
+- Per-sortie accounting of rounds, fuel and life consumed — the first two are already tracked, the
+  third does not exist yet because the fatigue model does not exist yet.
+- Infrastructure kept OUT of the sortie bill. A launcher is not chargeable to the flight that used
+  it, and folding it in would make dispersed basing look irrational when it is the reason the
+  aircraft survives on the ground.
+- Airframe loss charged at full flyaway, which is what makes "punch out rather than attempt a
+  recovery above trap weight" a priced decision instead of a free one.
+
 ---
 
 ## Why these two ideas belong in the same note
