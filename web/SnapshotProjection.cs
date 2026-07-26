@@ -24,8 +24,11 @@ internal static class SnapshotProjection {
     static string? _weatherRenderJson;
 
     const double CarrierTerrainPlacementEastM = 100_000.0;
-    const string SharedTerrainFrameId = "world.korea-central-front.v1";
+    const string KoreaSharedTerrainFrameId = "world.korea-central-front.v1";
+    const string UkraineTrainingTerrainFrameId = "local.ukraine-soniachne-training.v1";
     const string CarrierTrainingFrameId = "local.carrier-training.v1";
+    const string KoreaTerrainProfileId = "terrain.korea.central-front.v2";
+    const string UkraineTrainingTerrainProfileId = "terrain.ukraine.soniachne-training.v1";
 
 
     // Stable presentation IDs are copied from the staged Korea pack contract. The bridge projects
@@ -35,7 +38,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.12.0";
+    const string SnapshotSchemaVersion = "1.13.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -280,6 +283,8 @@ internal static class SnapshotProjection {
         return "{"
             + PresentationContractJson(_carrier is not null)
             + $"\"world_frame_id\":\"{WorldFrameId(Session.BeatIndex)}\","
+            + $"\"terrain_profile_id\":\"{TerrainProfileId(Session.BeatIndex)}\","
+            + $"\"terrain_scenery_profile\":\"{TerrainSceneryProfile(Session.BeatIndex)}\","
             + $"\"world_origin_configured\":{(WorldOriginConfigured ? "true" : "false")},"
             + $"\"world_origin_east_m\":{WorldOriginEastM:F1},\"world_origin_north_m\":{WorldOriginNorthM:F1},"
             + $"\"terrain_placement_east_m\":{TerrainPlacementEastM(Session.BeatIndex):F1},\"terrain_placement_north_m\":{TerrainPlacementNorthM(Session.BeatIndex):F1},"
@@ -826,8 +831,8 @@ internal static class SnapshotProjection {
         // staged Su-27S, and the pilot is entitled to know what is shooting at them.
         AircraftCapability bandit = Session.CurrentBanditCapability;
         // Content family expresses the world/era; presentation follows the actual vehicle stack.
-        // Both 2030s missions share a family, but the balloon glider and F-22 drone-defence
-        // surrogate must not advertise one another's compatibility profile.
+        // The balloon glider and F-22 low-level-drone surrogate must not advertise one another's
+        // compatibility profile even though both use explicitly fictional mission content.
         bool balloonPrototype = player.Id == AircraftCapability.BalloonGliderPrototype.Id;
         bool modernSurrogate = mission.ContentFamily
             == MissionContentFamily.ModernPublicDataSurrogate
@@ -1014,13 +1019,28 @@ internal static class SnapshotProjection {
         _ => "NONE"
     };
 
-    static bool HasSharedTerrainFrame(int index) => index is not (5 or 6);
+    static bool HasSharedTerrainFrame(int index) => index is not (5 or 6 or 8);
 
-    static string WorldFrameId(int index) => HasSharedTerrainFrame(index)
-        ? SharedTerrainFrameId : CarrierTrainingFrameId;
+    static string WorldFrameId(int index) => index switch {
+        5 or 6 => CarrierTrainingFrameId,
+        8 => UkraineTrainingTerrainFrameId,
+        _ => KoreaSharedTerrainFrameId
+    };
 
-    static double TerrainPlacementEastM(int index) => HasSharedTerrainFrame(index)
-        ? -WorldOriginEastM : CarrierTerrainPlacementEastM;
+    static string TerrainProfileId(int index) => index == 8
+        ? UkraineTrainingTerrainProfileId : KoreaTerrainProfileId;
+
+    static string TerrainSceneryProfile(int index) => index switch {
+        8 => "ukraine-modern",
+        7 or 9 or 10 => "modern",
+        _ => "1950s"
+    };
+
+    static double TerrainPlacementEastM(int index) => index switch {
+        5 or 6 => CarrierTerrainPlacementEastM,
+        8 => 0.0,
+        _ => -WorldOriginEastM
+    };
 
     static double TerrainPlacementNorthM(int index) => HasSharedTerrainFrame(index)
         ? -WorldOriginNorthM : 0.0;

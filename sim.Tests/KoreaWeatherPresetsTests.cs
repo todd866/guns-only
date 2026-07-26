@@ -13,7 +13,8 @@ public class KoreaWeatherPresetsTests {
             var clouds = Assert.IsType<LayeredCloudField>(first.Clouds);
 
             Assert.Same(first, replay);
-            Assert.StartsWith("weather.korea-", first.Id);
+            Assert.StartsWith(beat == 8
+                ? "weather.ukraine-training." : "weather.korea-", first.Id);
             Assert.NotEmpty(clouds.Layers);
             Assert.InRange(clouds.ClearAirVisibilityM, 50_000.0, 150_000.0);
         }
@@ -30,7 +31,12 @@ public class KoreaWeatherPresetsTests {
             > 50_000.0);
         Assert.True(droneWeather.Clouds.Sample(drone.Player.Position, 0.0).VisibilityM
             > 50_000.0);
-        Assert.True(droneWeather.Clouds.Sample(new Vec3D(3_500.0, 2_200.0, 0.0),
+        Assert.All(drone.DroneRaid!.Targets, target =>
+            Assert.True(droneWeather.Clouds.Sample(target.Position, 0.0).VisibilityM
+                > 50_000.0));
+        Assert.Equal("weather.ukraine-training.soniachne-broken-cumulus.v1",
+            droneWeather.Id);
+        Assert.True(droneWeather.Clouds.Sample(new Vec3D(-5_100.0, 1_700.0, 5_800.0),
             0.0).VisibilityM < 1_000.0);
 
         // Mission 7's deck is deliberately BROKEN at the fight altitude rather than a slab or a

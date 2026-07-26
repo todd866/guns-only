@@ -599,16 +599,28 @@ public sealed class CatapultLaunchModel {
 
     readonly double _strokeDistanceM;
     readonly double _endRelativeSpeedMps;
+    readonly double _rampAngleRad;
 
     public CatapultLaunchModel(double strokeDistanceM = StrokeDistanceM,
-        double endRelativeSpeedMps = EndDeckRelativeSpeedMps) {
+        double endRelativeSpeedMps = EndDeckRelativeSpeedMps,
+        double rampAngleRad = 0.0) {
         if (!double.IsFinite(strokeDistanceM) || strokeDistanceM <= 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(strokeDistanceM));
         if (!double.IsFinite(endRelativeSpeedMps) || endRelativeSpeedMps <= 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(endRelativeSpeedMps));
+        if (!double.IsFinite(rampAngleRad) || rampAngleRad < 0.0
+            || rampAngleRad > 30.0 * System.Math.PI / 180.0)
+            throw new System.ArgumentOutOfRangeException(nameof(rampAngleRad));
         _strokeDistanceM = strokeDistanceM;
         _endRelativeSpeedMps = endRelativeSpeedMps;
+        _rampAngleRad = rampAngleRad;
     }
+
+    /// Upward ramp angle at the end of the stroke. A flat deck shot is zero; a land installation
+    /// can afford to build a hill, and a ski jump is why STOBAR carriers launch heavy aircraft off
+    /// short decks at all — it converts some of the stroke into a ballistic arc, buying seconds of
+    /// climb while the aircraft accelerates to flying speed instead of settling toward the ground.
+    public double RampAngleRad => _rampAngleRad;
 
     public double StrokeM => _strokeDistanceM;
     public double EndSpeedMps => _endRelativeSpeedMps;
@@ -662,12 +674,19 @@ public sealed class CatapultLaunchModel {
 
         _distanceM = _strokeDistanceM;
         RelativeSpeedMps = _endRelativeSpeedMps;
+        // Split the end speed along the ramp rather than adding a token climb rate on top: the
+        // energy comes from the stroke, and the ramp only decides where it points.
+        double alongMps = _endRelativeSpeedMps * System.Math.Cos(_rampAngleRad);
+        double upMps = _rampAngleRad > 0.0
+            ? _endRelativeSpeedMps * System.Math.Sin(_rampAngleRad)
+            : LaunchClimbMps;
         var velocity = carrier.DeckVelocityWorld
-            + carrier.Fwd * _endRelativeSpeedMps
-            + new Vec3D(0.0, LaunchClimbMps, 0.0);
+            + carrier.Fwd * alongMps
+            + new Vec3D(0.0, upMps, 0.0);
         State = Carrier.StateFromVelocity(
             carrier.ShipPoint(StartAlongM + _strokeDistanceM, CatapultCrossM, AirborneHeightM),
-            velocity, _massKg, Attitude(carrier, LaunchNosePitchRad));
+            velocity, _massKg,
+            Attitude(carrier, System.Math.Max(LaunchNosePitchRad, _rampAngleRad)));
         Phase = LaunchPhase.Airborne;
     }
 

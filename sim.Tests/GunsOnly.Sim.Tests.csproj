@@ -30,6 +30,10 @@
       Include="..\content\packs\korea-1950s\environment\terrain\central-front.truth"
       Link="Data\central-front.truth"
       LogicalName="GunsOnly.Web.Data.KoreaCentralFront.truth" />
+    <EmbeddedResource
+      Include="..\content\packs\ukraine-modern\environment\terrain\soniachne-steppe.truth"
+      Link="Data\soniachne-steppe.truth"
+      LogicalName="GunsOnly.Web.Data.UkraineSoniachne.truth" />
   </ItemGroup>
 
 </Project>

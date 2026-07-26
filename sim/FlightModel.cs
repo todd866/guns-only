@@ -264,7 +264,7 @@ public static class FlightModel {
         MCrit: 0.60, WaveDragK: 90.0,
         MaxThrustFraction: 1.0);
 
-    /// Korea-2030s one-way attack-drone PROTOTYPE. These rounded values define a transparent
+    /// Fictional one-way attack-drone PROTOTYPE. These rounded values define a transparent
     /// mission surrogate, not an extant Chinese or American system: a 500 kg, subsonic powered
     /// airframe that holds one straight inbound track while the player learns defensive cutoff
     /// geometry. It has no speculative sensors, autonomy, datalink, countermeasures, or weapon.

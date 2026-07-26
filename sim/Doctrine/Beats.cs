@@ -140,7 +140,8 @@ public enum MissionContentFamily {
     Korea1950s,
     Korea2030sPrototype,
     ModernPublicDataSurrogate,
-    Custom
+    Custom,
+    UkraineTrainingPrototype
 }
 
 /// <summary>Stable mission identity lives with content, not a bridge switch over menu indexes.</summary>
@@ -232,6 +233,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     bool StartsOnCatapult = false,
     double? CatapultStrokeM = null,
     double? CatapultEndSpeedMps = null,
+    /// Upward ramp at the end of the stroke. Zero is a flat deck.
+    double? CatapultRampAngleRad = null,
     MissionContract? Mission = null,
     AircraftCapability? PlayerCapability = null,
     AircraftCapability? BanditCapability = null,
@@ -636,12 +639,23 @@ public static class Beats {
                 JokerThresholdLb: 2_400.0,
                 MinimumFuelThresholdLb: 900.0,
                 EmergencyFuelThresholdLb: 550.0),
-            InitialThrottle: 1.0,
+            // FULL AUGMENTED POWER on the stroke. 1.0 is the dry lever stop, and a 7.85 t aircraft
+            // leaving a ramp on dry thrust decays below stall while it is still climbing away —
+            // nobody launches a heavy jet at military power.
+            InitialThrottle: 1.55,
             StartsOnCatapult: true,
             // Electromagnetic launcher: 88 m/s over a 130 m stroke, about 3 G and 30 MJ into a
             // 7.85 t aircraft. The deck default of 62 m/s over 75 m cannot fly this wing.
-            CatapultStrokeM: 130.0,
-            CatapultEndSpeedMps: 88.0,
+            // A LAND installation is not constrained by a deck. 520 m of track is shorter than any
+            // runway, costs 2.2 G to the pilot, and delivers 150 m/s — about 2.1 times this wing's
+            // stall speed, where the aircraft is genuinely flying rather than clinging on. Launch
+            // speed is the cheapest safety margin available: the ramp then converts it into climb.
+            CatapultStrokeM: 520.0,
+            CatapultEndSpeedMps: 150.0,
+            // Not a ski jump — a hill. 12 degrees was sized for an aircraft leaving marginally
+            // above stall; at 150 m/s it is already flying, so the ramp only has to point it
+            // upward and hand it to the wing. Seven degrees is terrain you could drive a track up.
+            CatapultRampAngleRad: 7.0 * Math.PI / 180.0,
             Mission: new MissionContract(
                 "mission.modern.rapier-intercept.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,
@@ -797,34 +811,36 @@ public static class Beats {
     };
 
     /// <summary>
-    /// KOREA 2030s PROXY WAR — a public-data F-22 flight surrogate defends a fixed inner ring
-    /// against four explicitly fictional one-way attack-drone prototypes. The current kernel owns
-    /// one opponent, so the raid is an honest staged stream rather than four visually concurrent
-    /// targets with only one physically authoritative. Each target flies a straight inbound track;
-    /// the scored decision is cutoff geometry, first-valid-shot timing, and burst discipline.
+    /// FICTIONAL UKRAINE TRAINING SECTOR — a public-data F-22 flight surrogate defends a fixed
+    /// low-level inner ring against four explicitly fictional one-way attack-drone prototypes.
+    /// The current kernel owns one opponent, so the raid is an honest staged stream rather than
+    /// four visually concurrent targets with only one physically authoritative. Each target flies
+    /// a straight inbound track over the synthetic Soniachne lowlands; the scored decision is
+    /// cutoff geometry, first-valid-shot timing, and burst discipline.
     /// </summary>
     public static BeatSetup DroneRaidDefense() {
-        const double AltitudeM = 2200.0;
+        const double DroneAltitudeM = 300.0;
+        const double PlayerAltitudeM = 460.0;
         const double DroneSpeedMps = 115.0;
         const double DroneMassKg = 500.0;
         static AircraftState Inbound(double x, double z) => new(
-            new Vec3D(x, AltitudeM, z),
+            new Vec3D(x, DroneAltitudeM, z),
             DroneSpeedMps, 0.0, Math.Atan2(-x, -z), 0.0, DroneMassKg);
 
         AircraftState[] targets = {
-            Inbound(0.0, 8500.0),
-            Inbound(4200.0, 7800.0),
-            Inbound(-4800.0, 7600.0),
-            Inbound(2600.0, 9000.0),
+            Inbound(0.0, 6_200.0),
+            Inbound(2_800.0, 5_600.0),
+            Inbound(-3_200.0, 5_900.0),
+            Inbound(1_900.0, 6_800.0),
         };
         var raid = new DroneRaidScenarioDefinition(
             defendedPoint: new Vec3D(0.0, 0.0, 0.0),
             defendedRadiusM: 750.0,
             targets: targets);
 
-        return new BeatSetup("Drone raid defence — staged stream",
+        return new BeatSetup("Low-level drone intercept — fictional Ukraine training sector",
             Player: new AircraftState(
-                new Vec3D(0.0, AltitudeM + 250.0, -2200.0),
+                new Vec3D(0.0, PlayerAltitudeM, -2_200.0),
                 250.0, 0.0, 0.0, 0.0,
                 FlightModel.F22APublicDataSurrogate.MassKg),
             Bandit: targets[0],
@@ -845,11 +861,11 @@ public static class Beats {
                 EmergencyFuelThresholdLb: 1200.0),
             InitialThrottle: 1.0,
             Mission: new MissionContract(
-                "mission.korea-2030s.drone-raid-defence.prototype.v1",
-                MissionContentFamily.Korea2030sPrototype,
+                "mission.ukraine-training.low-level-drone-intercept.prototype.v1",
+                MissionContentFamily.UkraineTrainingPrototype,
                 PublicDataSurrogate: true,
                 RulesOfEngagement: "GUNS_ONLY_DEFENSIVE_INTERCEPT",
-                Era: "KOREA_2030S_PROXY"),
+                Era: "UKRAINE_FICTIONAL_TRAINING_SECTOR"),
             PlayerCapability: AircraftCapability.F22ASurrogate,
             BanditCapability: AircraftCapability.OneWayAttackDronePrototype,
             DroneRaid: raid,

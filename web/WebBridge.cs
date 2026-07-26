@@ -15,6 +15,11 @@ namespace GunsOnly.Web;
 [SupportedOSPlatform("browser")]
 public static partial class WebBridge {
     static readonly ITerrainSurface? CentralFrontTerrain = KoreaTerrainTruth.Load();
+    static readonly ITerrainSurface? SoniachneTrainingTerrain =
+        UkraineTerrainTruth.Load() is { } soniachneCore
+            ? new TrainingTerrainApronSurface(soniachneCore,
+                marginM: 92_000.0, flatHeightM: 78.0, transitionM: 4_000.0)
+            : null;
     static readonly SimulationSession Session = new(7, Carrier.DeckConfiguration.Angled,
         KoreaWeatherPresets.ForBeat(7));
     static Carrier.DeckConfiguration _deckConfiguration = Carrier.DeckConfiguration.Angled;
@@ -64,7 +69,7 @@ public static partial class WebBridge {
     /// Anchor mission-local coordinates to the persistent room's X=east/Z=north origin. The room
     /// transports local poses plus this same origin; translating the terrain by its inverse makes
     /// AGL/collision truth and every observer's rendered substrate agree. Carrier qualifications
-    /// remain explicitly local instances because each sortie owns a carrier at local zero.
+    /// and the compact Soniachne sector remain explicitly local rather than inheriting that origin.
     /// </summary>
     [JSExport]
     public static bool SetWorldOrigin(double eastM, double northM) {
@@ -191,20 +196,31 @@ public static partial class WebBridge {
     [JSExport]
     public static string GetState() => SnapshotProjection.BuildState(
         Session, _deckConfiguration, _worldOriginEastM, _worldOriginNorthM,
-        _worldOriginConfigured, CentralFrontTerrain);
+        _worldOriginConfigured, BaseTerrainForBeat(Session.BeatIndex));
 
-    static bool HasSharedTerrainFrame(int index) => index is not (5 or 6);
+    // 5/6 are carrier decks and 8 is its own training range; 10 is the Rapier's dispersed strip.
+    // The strip cannot share the land frame: the world origin comes from the multiplayer spawn, so
+    // the ground under a fixed-altitude strip differs every session and the aircraft launches
+    // INSIDE a hill. Its own frame puts the strip on a coastal shelf at a known elevation.
+    static bool HasSharedTerrainFrame(int index) => index is not (5 or 6 or 8 or 10);
 
-    static double TerrainPlacementEastM(int index) => HasSharedTerrainFrame(index)
-        ? -_worldOriginEastM : CarrierTerrainPlacementEastM;
+    static double TerrainPlacementEastM(int index) => index switch {
+        5 or 6 or 10 => CarrierTerrainPlacementEastM,
+        8 => 0.0,
+        _ => -_worldOriginEastM
+    };
 
-    static double TerrainPlacementNorthM(int index) => HasSharedTerrainFrame(index)
-        ? -_worldOriginNorthM : 0.0;
+    static double TerrainPlacementNorthM(int index) =>
+        HasSharedTerrainFrame(index) ? -_worldOriginNorthM : 0.0;
 
-    // Null only when a constrained build explicitly opts out of the embedded Korea terrain. The
-    // session and projection treat that as sea level; the browser then skips the multi-megabyte
-    // visual-terrain fetch because the snapshot reports terrain_present=false.
-    static ITerrainSurface? TerrainForBeat(int index) => CentralFrontTerrain is null ? null
-        : new TranslatedTerrainSurface(CentralFrontTerrain,
-            TerrainPlacementEastM(index), TerrainPlacementNorthM(index));
+    static ITerrainSurface? BaseTerrainForBeat(int index) =>
+        index == 8 ? SoniachneTrainingTerrain : CentralFrontTerrain;
+
+    // Null only when a constrained build explicitly opts out of the selected embedded terrain.
+    // The session and projection treat that as sea level; the browser then skips the visual
+    // terrain fetch because the snapshot reports terrain_present=false.
+    static ITerrainSurface? TerrainForBeat(int index) => BaseTerrainForBeat(index) is { } terrain
+        ? new TranslatedTerrainSurface(terrain,
+            TerrainPlacementEastM(index), TerrainPlacementNorthM(index))
+        : null;
 }

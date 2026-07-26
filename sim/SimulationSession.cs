@@ -1151,7 +1151,8 @@ public sealed class SimulationSession {
         // power setting that HOLDS it instead of an arbitrary one they must correct every sortie.
         _catapult = new CatapultLaunchModel(
             _beat.CatapultStrokeM ?? CatapultLaunchModel.StrokeDistanceM,
-            _beat.CatapultEndSpeedMps ?? CatapultLaunchModel.EndDeckRelativeSpeedMps);
+            _beat.CatapultEndSpeedMps ?? CatapultLaunchModel.EndDeckRelativeSpeedMps,
+            _beat.CatapultRampAngleRad ?? 0.0);
         _detents.ConfigureFor(_beat.PlayerAir, StagedThrottle());
         _pilotPhysiology = new PilotPhysiologyModel(_beat.PlayerPilotPhysiology);
         _autoGcasState = AutoGcasState.Initial(PlayerAutoGcasCapability.Available);
@@ -2229,7 +2230,13 @@ public sealed class SimulationSession {
 
     void CompleteRelaunch() {
         AircraftState launchState = _catapult.State;
+        // The ENGINE's spooled fraction (physical, saturates at 1.0) and the pilot's LEVER position
+        // (can sit in augmentation above 1.0) are different quantities. Seeding the new engine from
+        // the old spool is right; resetting the LEVER from it is not — it silently pulled any
+        // afterburning aircraft back to military power at the exact moment it left the catapult,
+        // which never showed because every previous deck aircraft stops at 1.0 anyway.
         double retainedEnginePower = _player.ThrustFraction;
+        double retainedLever = _detents.Throttle;
         if (_carrier is not null) {
             // A completed deck cycle starts the next recovery attempt. Select its deterministic
             // conditions now, between passes, and give every aircraft the same new wind field.
@@ -2245,7 +2252,7 @@ public sealed class SimulationSession {
         _recovery = Carrier.Recovery.Flying;
         _touchdown = Carrier.TouchdownResult.Flying;
         _carrierPass.Reset();
-        ResetFlightControls(approachMode: false, initialThrottle: retainedEnginePower);
+        ResetFlightControls(approachMode: false, initialThrottle: retainedLever);
         SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
         _recoveryAttemptActive = _carrier is not null;
         _attemptHadSetback = false;

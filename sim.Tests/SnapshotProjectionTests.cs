@@ -42,6 +42,7 @@ public class SnapshotProjectionTests {
 
     [Theory]
     [InlineData(7, 12)]   // F-22 modern visual-merge beat
+    [InlineData(8, 12)]   // fictional Ukraine low-level drone intercept
     [InlineData(5, 30)]   // carrier recovery beat
     [InlineData(1, 8)]    // grammar/physics slice beat
     public void BuildStateEmitsParseableFiniteJson(int beatIndex, int ticks) {
@@ -66,7 +67,7 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.12.0",
+        Assert.Equal("1.13.0",
             root.GetProperty("snapshot_schema_version").GetString());
         // The automatic speed brake is an F-22 surrogate surface: beats 7/8/9 carry it, the F-86
         // and carrier beats project a hard 0.0 with the capability off, so the HUD shows no dead
@@ -108,6 +109,10 @@ public class SnapshotProjectionTests {
         Assert.True(root.TryGetProperty("fuel_emergency", out _));
         if (beatIndex == 7) {
             Assert.Equal(6000.0, jokerThreshold.GetDouble());
+            Assert.Equal(2100.0, minimumThreshold.GetDouble());
+            Assert.Equal(1200.0, emergencyThreshold.GetDouble());
+        } else if (beatIndex == 8) {
+            Assert.Equal(5500.0, jokerThreshold.GetDouble());
             Assert.Equal(2100.0, minimumThreshold.GetDouble());
             Assert.Equal(1200.0, emergencyThreshold.GetDouble());
         } else {
@@ -194,5 +199,28 @@ public class SnapshotProjectionTests {
         Assert.DoesNotContain("NaN", json);
         Assert.DoesNotContain("Infinity", json);
         Assert.True(document.RootElement.GetProperty("terrain_present").GetBoolean());
+    }
+
+    [Fact]
+    public void BeatEightPublishesALocalUkraineTerrainFrameIndependentOfRoomOrigin() {
+        var session = new SimulationSession(8, Carrier.DeckConfiguration.Angled,
+            KoreaWeatherPresets.ForBeat(8));
+        session.SetTerrainSurface(new FlatTerrain(90.0));
+        session.Begin();
+
+        string json = SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Angled,
+            40_000.0, 80_000.0, true, session.Terrain);
+
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+        Assert.Equal("local.ukraine-soniachne-training.v1",
+            root.GetProperty("world_frame_id").GetString());
+        Assert.Equal("terrain.ukraine.soniachne-training.v1",
+            root.GetProperty("terrain_profile_id").GetString());
+        Assert.Equal("ukraine-modern",
+            root.GetProperty("terrain_scenery_profile").GetString());
+        Assert.Equal(0.0, root.GetProperty("terrain_placement_east_m").GetDouble());
+        Assert.Equal(0.0, root.GetProperty("terrain_placement_north_m").GetDouble());
+        Assert.False(root.GetProperty("multiplayer_terrain_shared").GetBoolean());
     }
 }

@@ -20,12 +20,12 @@ public class DroneRaidEvaluationTests {
         BeatSetup beat = Beats.DroneRaidDefense();
         var session = new SimulationSession(8);
 
-        Assert.Equal("mission.korea-2030s.drone-raid-defence.prototype.v1",
+        Assert.Equal("mission.ukraine-training.low-level-drone-intercept.prototype.v1",
             beat.MissionIdentity.Id);
-        Assert.Equal(MissionContentFamily.Korea2030sPrototype,
+        Assert.Equal(MissionContentFamily.UkraineTrainingPrototype,
             beat.MissionIdentity.ContentFamily);
         Assert.True(beat.MissionIdentity.PublicDataSurrogate);
-        Assert.Equal("KOREA_2030S_PROXY", beat.MissionIdentity.Era);
+        Assert.Equal("UKRAINE_FICTIONAL_TRAINING_SECTOR", beat.MissionIdentity.Era);
         Assert.Equal("GUNS_ONLY_DEFENSIVE_INTERCEPT",
             beat.MissionIdentity.RulesOfEngagement);
         Assert.Equal("aircraft.f22a.public-data-surrogate.v1",
@@ -35,6 +35,12 @@ public class DroneRaidEvaluationTests {
         Assert.Equal(DroneRaidScenarioDefinition.ResolutionMode,
             "STAGED_STREAM_MISSION_KILL");
         Assert.Equal(4, beat.DroneRaid!.Targets.Count);
+        Assert.Equal(460.0, beat.Player.Position.Y);
+        Assert.All(beat.DroneRaid.Targets, target => {
+            Assert.Equal(300.0, target.Position.Y);
+            Assert.InRange(target.Position.X, -8_192.0, 8_192.0);
+            Assert.InRange(target.Position.Z, -8_192.0, 8_192.0);
+        });
         Assert.Equal(480, session.PlayerGun.AmmoRemaining);
         Assert.Equal("gun.m61a2.public-data-surrogate.v1",
             session.PlayerGun.Profile.Id);

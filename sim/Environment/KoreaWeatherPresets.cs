@@ -18,6 +18,19 @@ public static class KoreaWeatherPresets {
         new TemperatureSoundingPoint(32_000.0, 228.7)
     ], anchorPressurePa: 101_180.0);
 
+    // The class retains its historical name because it is the public scenario-weather entry point.
+    // This separate column prevents the fictional Ukraine slice from silently inheriting a Korean
+    // atmosphere while the weather system is generalized in a later content-pack pass.
+    static readonly IAtmosphereModel UkraineTemperateColumn = new HydrostaticAtmosphereColumn(
+    [
+        new TemperatureSoundingPoint(-1_000.0, 297.8),
+        new TemperatureSoundingPoint(0.0, 291.4),
+        new TemperatureSoundingPoint(3_000.0, 271.2),
+        new TemperatureSoundingPoint(10_000.0, 224.2),
+        new TemperatureSoundingPoint(20_000.0, 216.6),
+        new TemperatureSoundingPoint(32_000.0, 228.2)
+    ], anchorPressurePa: 100_920.0);
+
     static readonly WeatherProfile HistoricalInland = new(
         SummerColumn,
         Wind((4.0, 1.0), (8.0, 3.0), (15.0, 7.0)),
@@ -93,6 +106,24 @@ public static class KoreaWeatherPresets {
         ], seed: 0x2030_0915_d20e_0001UL, clearAirVisibilityM: 88_000.0),
         id: "weather.korea-2030s.drone-front-cumulus.v1");
 
+    static readonly WeatherProfile UkraineLowLevel = new(
+        UkraineTemperateColumn,
+        Wind((6.0, 2.0), (11.0, 4.0), (21.0, 8.0)),
+        new LayeredCloudField(
+        [
+            // The low-level interception volume remains VMC below a broad broken layer. These are
+            // deterministic training conditions, not a reconstructed observation from the war.
+            Layer(1_050.0, 2_250.0, 0.38, 6_200.0, 0.014,
+                liquid: 0.00031, precipitation: 0.15, turbulence: 0.9,
+                verticalAir: 0.25, windEast: 12.0, windNorth: 4.0)
+        ],
+        [
+            Cell(-5_100.0, 5_800.0, 850.0, 3_900.0, 2_500.0, 2_000.0,
+                13.0, 4.0, extinction: 0.018, liquid: 0.00052,
+                precipitation: 1.8, turbulence: 2.4, verticalAir: 1.5)
+        ], seed: 0x2030_0824_50a1_0008UL, clearAirVisibilityM: 92_000.0),
+        id: "weather.ukraine-training.soniachne-broken-cumulus.v1");
+
     static readonly WeatherProfile ModernCirrus = new(
         SummerColumn,
         Wind((2.0, 0.0), (9.0, 4.0), (23.0, 11.0)),
@@ -107,7 +138,7 @@ public static class KoreaWeatherPresets {
         4 => ModernCirrus,
         5 or 6 => HistoricalMaritime,
         7 => ModernHigh,
-        8 => ModernDrone,
+        8 => UkraineLowLevel,
         _ => HistoricalInland
     };
 
