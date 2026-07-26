@@ -172,6 +172,8 @@ public sealed class SimulationSession {
     double _closureKts;
     double _closureSmooth;
     string _transitionCue = "";
+    // Highest ram cue already announced: 0 none, 1 light-up, 2 full ram, 3 turbine gone.
+    int _ramCueStage;
     double _transitionCueUntilMs = double.NegativeInfinity;
     double _splashCueUntilMs = double.NegativeInfinity;
     int _shotsTotal;
@@ -2177,6 +2179,28 @@ public sealed class SimulationSession {
         _recoveryProgress.RecordRecoveredTrap(_touchdown.Grade);
     }
 
+    /// The turbo-ramjet's handover is the single most characteristic thing this aircraft does, and
+    /// until now nothing told the pilot it had happened — thrust simply stopped behaving like a
+    /// turbojet somewhere around M1.6 and there was no way to know why. These are announcements of
+    /// a transition that ALREADY happened in the propulsion map; they change no physics and they
+    /// only ever count upward, so a decelerating aircraft does not strobe the banner at a boundary.
+    void UpdateRamTransitionCue() {
+        if (_beat.PlayerAir.PropulsionModel
+            != PropulsionModelKind.TurboRamjetPublicDataSurrogate) return;
+        double mach = AirData.MachNumber(_player.State.Speed, _player.State.Position.Y);
+        int stage = mach >= Propulsion.TurboRamjetPerformanceMap.TurbineGoneMach ? 3
+            : mach >= Propulsion.TurboRamjetPerformanceMap.FullRamMach ? 2
+            : mach >= Propulsion.TurboRamjetPerformanceMap.RamFadeStartMach ? 1
+            : 0;
+        if (stage <= _ramCueStage) return;
+        _ramCueStage = stage;
+        ShowTransition(stage switch {
+            1 => "RAM LIGHT · M1.6",
+            2 => "FULL RAM · M2.2",
+            _ => "TURBINE OFFLINE · RAM ONLY"
+        }, 2600.0);
+    }
+
     void ShowTransition(string cue, double milliseconds = 2200.0) {
         _transitionCue = cue;
         _transitionCueUntilMs = _simTimeMs + milliseconds;
@@ -2764,6 +2788,7 @@ public sealed class SimulationSession {
 
     void ConsumeFuelAndStepSystems(in AircraftState kinematicState,
         double trueAirspeedMps, bool weightOnWheels) {
+        UpdateRamTransitionCue();
         _fuel.Step(FixedDeltaSeconds,
             _player.LastEngineOperatingPoint.FuelFlowLbPerMinute);
         RefreshPlayerMass();
