@@ -37,6 +37,7 @@ import {
   gunFunnelEnvelope,
   gunFunnelUsable,
 } from "./render/hud/gun_funnel.js";
+import { timeCompressionHudPresentation } from "./render/telemetry/time_compression.js";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -3322,6 +3323,24 @@ class CombatHud {
     ctx.restore();
   }
 
+  drawTimeCompression(frame) {
+    const presentation = timeCompressionHudPresentation(frame.state);
+    if (!presentation) return;
+    const ctx = this.ctx;
+    const accent = presentation.level === "active" ? AMBER : GREEN_DIM;
+    ctx.save();
+    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const width = ctx.measureText(presentation.text).width + 22;
+    const x = (this.width - width) / 2;
+    const y = this.height - this.safeInsets.bottom - (this.touchMode ? 146 : 65);
+    this.glassPanel(x, y, width, 23, accent);
+    ctx.fillStyle = accent;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(presentation.text, this.width / 2, y + 11.5);
+    ctx.restore();
+  }
+
   /// Top of the annunciation stack. Banners used to land a quarter of the way down the screen —
   /// squarely over the gunsight and over the aircraft the pilot had just shot, which is the one
   /// thing the kill cam exists to show them. They now sit in the band between the bottom of the
@@ -3355,7 +3374,7 @@ class CombatHud {
     const panelWidth = Math.min(930, this.width - 34);
     const compact = this.width < 760;
     const gcasAvailable = frame.state.auto_gcas_available === true;
-    const panelHeight = compact ? (gcasAvailable ? 229 : 202) : (gcasAvailable ? 195 : 164);
+    const panelHeight = compact ? (gcasAvailable ? 256 : 229) : (gcasAvailable ? 222 : 191);
     const x = (this.width - panelWidth) / 2;
     const y = (this.height - panelHeight) / 2;
 
@@ -3380,6 +3399,7 @@ class CombatHud {
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${binding("fire", "KeyF")}  GUNS   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
       `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE`,
+      "T  TIME COMPRESSION ON / OFF",
     ];
     const compactLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL`,
@@ -3387,6 +3407,7 @@ class CombatHud {
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
       `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${binding("fire", "KeyF")}  GUNS   ·   M  SOUND`,
       `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   R  RESTART   ·   H  HIDE`,
+      "T  TIME COMPRESSION ON / OFF",
     ];
     if (gcasAvailable) {
       wideLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE AN ACTIVE FLY-UP)`);
@@ -3518,6 +3539,7 @@ class CombatHud {
     this.drawSortieStatus(frame);
     this.drawVisualMergeWeaponsCue(frame);
     this.drawFooter(frame);
+    this.drawTimeCompression(frame);
     this.drawLegendHint();
     this.drawLegend(frame);
     this.drawModeCue(frame);

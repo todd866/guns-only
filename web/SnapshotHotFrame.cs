@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 3;
+    public const int LayoutVersion = 4;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -99,6 +99,10 @@ internal static class SnapshotHotFrame {
 
         Num("t", 4);
         Num("tick", RawInteger);
+        Bool("time_compression_available");
+        Bool("time_compression_enabled");
+        Bool("time_compression_eligible");
+        Num("time_compression_factor", RawInteger);
         Num("px", 3); Num("py", 3); Num("pz", 3);
         // World-frame ground velocity: the HUD projects the flight-path marker (FPV) from this
         // exact vector every frame, so it must ride the hot path (Build 64 reconciliation).
@@ -560,6 +564,10 @@ internal static class SnapshotHotFrame {
         w.Num("cold_version", _coldVersion, RawInteger);
         w.Num("t", simTimeMs / 1000.0, 4);
         w.Num("tick", session.Tick, RawInteger);
+        w.Bool("time_compression_available", session.TimeCompressionAvailable);
+        w.Bool("time_compression_enabled", session.TimeCompressionPilotEnabled);
+        w.Bool("time_compression_eligible", session.TimeCompressionEligible);
+        w.Num("time_compression_factor", session.TimeCompressionFactor, RawInteger);
         w.Num("px", playerPosition.X, 3); w.Num("py", playerPosition.Y, 3); w.Num("pz", playerPosition.Z, 3);
         w.Num("vx", groundVelocity.X, 3); w.Num("vy", groundVelocity.Y, 3); w.Num("vz", groundVelocity.Z, 3);
         w.Num("pfx", pf.X, 5); w.Num("pfy", pf.Y, 5); w.Num("pfz", pf.Z, 5);
@@ -1162,6 +1170,7 @@ internal static class SnapshotHotFrame {
         AutoGcasPhase GcasPhase,
         AutoGcasInhibitReason GcasInhibit,
         string? GcasCue,
+        TimeCompressionInhibitReason TimeCompressionInhibit,
         LandingGearHandle GearHandle,
         LandingGearIndication GearNose,
         LandingGearIndication GearLeft,
@@ -1261,6 +1270,7 @@ internal static class SnapshotHotFrame {
                 gcas.Phase,
                 gcas.InhibitReason,
                 gcas.Cue,
+                session.TimeCompressionInhibitReason,
                 systems.GearHandle,
                 systems.NoseGearIndication,
                 systems.LeftMainGearIndication,

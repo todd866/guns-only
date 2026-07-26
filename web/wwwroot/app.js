@@ -92,6 +92,7 @@ import {
   saveCampaignProfile,
 } from "./render/progression/campaign_progression.js";
 import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
+import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainNewestTelemetryRows,
@@ -506,6 +507,7 @@ const FRAME_GOVERNOR_WINDOW_MS = 1000;
 // several seconds. It also removes a quarter-second window in which the pilot's stick was frozen
 // while the aircraft flew on — which is how a low-altitude fight ends in a smoking hole.
 const SIM_CATCHUP_CAP_SECONDS = 10 / 120;
+const timeCompressionBudget = new MeasuredTimeCompressionBudget();
 
 const FRAME_GOVERNOR_LATE_FRAME_MS = 22;
 const FRAME_GOVERNOR_TRIP_FRACTION = 0.08;   // 8% of a window's frames arriving late
@@ -781,6 +783,10 @@ const recorder = {
   /// like everything else here: instrumentation must never be able to cost a frame or kill one.
   observeFramePhase(name, milliseconds) {
     try { this._framePerf.observePhase(name, milliseconds); }
+    catch (e) { this.errors++; this.lastError = String(e); }
+  },
+  observeTimeCompression(plan) {
+    try { this._framePerf.observeTimeCompression(plan); }
     catch (e) { this.errors++; this.lastError = String(e); }
   },
   observeFrameDelta(deltaMs) {
@@ -6400,7 +6406,7 @@ function installInput(view) {
     // dialog's mission buttons from leaking into flight shortcuts or launching the previous card.
     if (nativeInteractiveOwnsKey(event)) return;
     if (keyMap.has(event.code)
-      || ["BracketLeft", "BracketRight", "F1", "Enter", "NumpadEnter", "Escape"].includes(event.code)) {
+      || ["BracketLeft", "BracketRight", "F1", "Enter", "NumpadEnter", "Escape", "KeyT"].includes(event.code)) {
       event.preventDefault();
     }
     if (event.repeat || !bridge) return;
@@ -6419,6 +6425,12 @@ function installInput(view) {
 
     if (event.code === "F1") {
       bridge.SetVariant(bridge.GetVariant() === 0 ? 1 : 0);
+      return;
+    }
+
+    if (event.code === "KeyT") {
+      const enabled = bridge.ToggleTimeCompression();
+      recorder.event("time-compression", enabled ? "enabled" : "disabled");
       return;
     }
 
@@ -6698,15 +6710,37 @@ async function boot() {
       const renderDeltaMs = now - previous;
       recorder.observeFrameDelta(renderDeltaMs);
       const dt = clamp(renderDeltaMs / 1000, 0, SIM_CATCHUP_CAP_SECONDS);
+      const compressionPlan = timeCompressionBudget.plan(
+        renderDeltaMs, SIM_CATCHUP_CAP_SECONDS,
+      );
       previous = now;
       // Phase probes. A frame delta proves a stall happened; only these say where. Each is a pair
       // of performance.now() reads around a block that could plausibly own a hundred milliseconds.
       const phaseStart = performance.now();
-      if (pauseReasons.size === 0) bridge.Advance(dt);
+      const tickBeforeAdvance = Number(latestState?.tick) || 0;
+      let kernelSelectedCompressionFactor = 1;
+      if (pauseReasons.size === 0) {
+        kernelSelectedCompressionFactor = bridge.Advance(
+          dt, compressionPlan.maximumFactor,
+        );
+      }
       else bridge.RefreshHotFrame();
       const afterSim = performance.now();
-      recorder.observeFramePhase("sim", afterSim - phaseStart);
+      const simPhaseMilliseconds = afterSim - phaseStart;
+      recorder.observeFramePhase("sim", simPhaseMilliseconds);
       const state = snapshotSource.frame(now);
+      const executedTicks = Math.max(0,
+        (Number(state.tick) || 0) - tickBeforeAdvance);
+      timeCompressionBudget.observeSimPhase(simPhaseMilliseconds, executedTicks);
+      recorder.observeTimeCompression({
+        requestedTicks: kernelSelectedCompressionFactor > 1
+          ? compressionPlan.requestedTicks : compressionPlan.baseTicks,
+        executedTicks,
+        costDroppedTicks: kernelSelectedCompressionFactor > 1
+          ? compressionPlan.droppedTicks : 0,
+        factor: Math.max(kernelSelectedCompressionFactor,
+          Number(state.time_compression_factor) || 1),
+      });
       recorder.observeFramePhase("snap", performance.now() - afterSim);
       latestState = state;
       const replayPresentation = advanceIncidentReplay(incidentReplay, state, now);

@@ -176,6 +176,12 @@ public sealed class SimulationSession {
     int _ramCueStage;
     double _transitionCueUntilMs = double.NegativeInfinity;
     double _splashCueUntilMs = double.NegativeInfinity;
+    bool _timeCompressionPilotEnabled = true;
+    int _timeCompressionHostMaximumFactor = 1;
+    int _timeCompressionFactor = 1;
+    double _timeCompressionAccumulatorSeconds;
+    TimeCompressionInhibitReason _timeCompressionInhibitReason =
+        TimeCompressionInhibitReason.SessionInactive;
     int _shotsTotal;
     int _shotsInWindow;
     int _killCount;
@@ -267,6 +273,16 @@ public sealed class SimulationSession {
     public double TimeMilliseconds => _simTimeMs;
     public double TimeSeconds => _simTimeMs / 1000.0;
     public long Tick => _tick;
+    public bool TimeCompressionAvailable =>
+        _beatIndex == 10
+        || _beat.MissionIdentity.Id
+            == "mission.modern.rapier-intercept.public-data-surrogate.v1";
+    public bool TimeCompressionPilotEnabled => _timeCompressionPilotEnabled;
+    public bool TimeCompressionEligible =>
+        _timeCompressionInhibitReason == TimeCompressionInhibitReason.None;
+    public int TimeCompressionFactor => _timeCompressionFactor;
+    public TimeCompressionInhibitReason TimeCompressionInhibitReason =>
+        _timeCompressionInhibitReason;
     public AircraftSim Player => _player;
     public IBandit Bandit => _bandit;
     public BeatSetup Beat => _beat;
@@ -597,6 +613,7 @@ public sealed class SimulationSession {
             else if (_beat.StageAtTrimThrottle) ShowTransition("PWR SET · FIGHT", 1800.0);
         }
         Lifecycle = LifecycleState.Active;
+        UpdateTimeCompressionDecision();
     }
 
     /// <summary>Pause or resume an active sortie. Ready remains Ready until Begin is explicit.</summary>
@@ -607,6 +624,22 @@ public sealed class SimulationSession {
         } else if (!paused && Lifecycle == LifecycleState.Paused) {
             Lifecycle = LifecycleState.Active;
         }
+        UpdateTimeCompressionDecision();
+    }
+
+    /// <summary>
+    /// Pilot authority over automatic transit compression. Disabling is an immediate kernel
+    /// boundary: any unspent fast-time credit is discarded before another fixed tick can run.
+    /// </summary>
+    public void SetTimeCompressionEnabled(bool enabled) {
+        _timeCompressionPilotEnabled = enabled;
+        if (!enabled) _timeCompressionAccumulatorSeconds = 0.0;
+        UpdateTimeCompressionDecision();
+    }
+
+    public bool ToggleTimeCompression() {
+        SetTimeCompressionEnabled(!_timeCompressionPilotEnabled);
+        return _timeCompressionPilotEnabled;
     }
 
     public void SetVariant(ValleyVariant variant) {
@@ -657,6 +690,8 @@ public sealed class SimulationSession {
         // simulated undercarriage, flap, hydraulic or inspection system, so accepting these keys
         // would create hidden F-86 configuration drag while the HUD correctly showed no system.
         if (!PlayerSystemsSimulated && IsPlayerSystemsAction(key)) return;
+        if (pressed && IsPilotActuatedAction(key))
+            DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
         bool newPress = pressed && _keys.PhaseAt(key, _simTimeMs) == KeyPhase.Idle;
         _keys.Feed(key, pressed, _simTimeMs);
         if (key == GKey.Trigger) Trigger(pressed);
@@ -708,6 +743,8 @@ public sealed class SimulationSession {
         // Same G-LOC ownership boundary as FeedKey: releases pass through so held controls can
         // cross the required neutral boundary, but no new press is accepted while interlocked.
         if (pressed && _pilotControlInterlocked) return;
+        if (pressed)
+            DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
         _keys.FeedDirect(increase ? GKey.ThrottleUp : GKey.ThrottleDown,
             pressed, _simTimeMs);
     }
@@ -722,6 +759,8 @@ public sealed class SimulationSession {
             _detents.ClearAnalogRollControl();
             return;
         }
+        if (Math.Abs(value) > 0.02)
+            DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
         _detents.SetAnalogRollControl(value);
     }
 
@@ -738,6 +777,7 @@ public sealed class SimulationSession {
             _padlockRollAssist.Reset();
             return;
         }
+        DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
         if (!_banditPadlockRollAssistSelected) {
             _banditPadlockRollAssistTargetSequence = _banditSpawnSequence;
             _padlockRollAssist.Reset();
@@ -756,6 +796,182 @@ public sealed class SimulationSession {
         or GKey.ThrottleUp or GKey.ThrottleDown or GKey.Trigger
         or GKey.Override or GKey.AutoGcasOverride
         || IsPlayerSystemsAction(key);
+
+    bool KeyActive(GKey key) =>
+        _keys.PhaseAt(key, _simTimeMs) != KeyPhase.Idle;
+
+    bool HasControlInputBeyondTrim() {
+        PilotCommand command = _detents.Command;
+        return KeyActive(GKey.PullUp)
+            || KeyActive(GKey.PushDown)
+            || KeyActive(GKey.RollLeft)
+            || KeyActive(GKey.RollRight)
+            || KeyActive(GKey.RudderLeft)
+            || KeyActive(GKey.RudderRight)
+            || KeyActive(GKey.ThrottleUp)
+            || KeyActive(GKey.ThrottleDown)
+            || KeyActive(GKey.Trigger)
+            || KeyActive(GKey.Override)
+            || KeyActive(GKey.AutoGcasOverride)
+            || KeyActive(GKey.GearToggle)
+            || KeyActive(GKey.FlapUp)
+            || KeyActive(GKey.FlapDown)
+            || KeyActive(GKey.EmergencyGearRelease)
+            || _triggerDown
+            || _assistedFlight
+            || _banditPadlockRollAssistSelected
+            || _padlockRollAssist.State.Active
+            || _gunneryPitchAssistState.Active
+            || command.EnvelopeOverride
+            || command.DirectLateralControl
+            || Math.Abs(command.GDemand - 1.0) > 0.03
+            || Math.Abs(command.RollControl) > 0.02
+            || Math.Abs(command.Rudder) > 0.02
+            || double.IsFinite(command.CommandedPitchRad)
+            || double.IsFinite(command.CommandedAlphaRad);
+    }
+
+    bool ContactInsideLedThreatRange(in AircraftState contact) {
+        AircraftState player = _player.State;
+        Vec3D separation = contact.Position - player.Position;
+        double rangeM = separation.Length;
+        if (!double.IsFinite(rangeM) || rangeM < 1e-6) return true;
+        Vec3D relativeVelocity = contact.VelocityVector() - player.VelocityVector();
+        double closingMps = -separation.Dot(relativeVelocity) / rangeM;
+        double ledRangeM = TimeCompressionPolicy.ThreatRangeM
+            + Math.Max(0.0, closingMps) * TimeCompressionPolicy.BoundaryLeadSeconds;
+        return rangeM <= ledRangeM;
+    }
+
+    bool HasContactThreat() {
+        if (_opponentTerminalState == AircraftTerminalState.Flying
+            && ContactInsideLedThreatRange(_bandit.State))
+            return true;
+        foreach (Wingman wingman in _wingmen) {
+            if (wingman.StillFighting
+                && ContactInsideLedThreatRange(wingman.Bandit.State))
+                return true;
+        }
+        return false;
+    }
+
+    bool HasFuelThresholdOrLead() {
+        if (!_fuel.ConsumesFuel) return false;
+        if (_fuel.IsJoker || _fuel.IsBingo
+            || _fuel.IsMinimumFuel || _fuel.IsEmergencyFuel)
+            return true;
+        double leadBurnLb = Math.Max(0.0, _fuel.BurnLbPerMinute)
+            * TimeCompressionPolicy.BoundaryLeadSeconds / 60.0;
+        bool AtOrNear(double? threshold) => threshold is { } value
+            && _fuel.FuelLb <= value + leadBurnLb;
+        return AtOrNear(_fuel.JokerThresholdLb)
+            || AtOrNear(_fuel.BingoThresholdLb)
+            || AtOrNear(_fuel.MinimumFuelThresholdLb)
+            || AtOrNear(_fuel.EmergencyFuelThresholdLb);
+    }
+
+    bool HasAutoGcasActivityOrLead() {
+        if (_autoGcasState.Active || _autoGcasState.Warning) return true;
+        AutoGcasPrediction prediction = _autoGcasState.Prediction;
+        return prediction.Valid
+            && (prediction.TimeAvailableToAvoidGroundImpactSeconds
+                    <= TimeCompressionPolicy.BoundaryLeadSeconds
+                || prediction.PilotViolationTimeSeconds
+                    <= TimeCompressionPolicy.BoundaryLeadSeconds);
+    }
+
+    bool HasRamTransitionLead() {
+        if (_beat.PlayerAir.PropulsionModel
+            != PropulsionModelKind.TurboRamjetPublicDataSurrogate)
+            return false;
+        if (TransitionCueActive
+            && (_transitionCue.StartsWith("RAM ", StringComparison.Ordinal)
+                || _transitionCue.StartsWith("FULL RAM", StringComparison.Ordinal)
+                || _transitionCue.StartsWith("TURBINE ", StringComparison.Ordinal)))
+            return true;
+        double mach = _player.AirspeedMps
+            / _player.AtmosphereModel.Sample(_player.State.Position.Y).SpeedOfSoundMps;
+        double nextBoundary = _ramCueStage switch {
+            0 => Propulsion.TurboRamjetPerformanceMap.RamFadeStartMach,
+            1 => Propulsion.TurboRamjetPerformanceMap.FullRamMach,
+            2 => Propulsion.TurboRamjetPerformanceMap.TurbineGoneMach,
+            _ => double.PositiveInfinity
+        };
+        return mach >= nextBoundary - TimeCompressionPolicy.RamBoundaryLeadMach;
+    }
+
+    bool IsEstablishedTransit() {
+        AircraftState state = _player.State;
+        double clearanceM = state.Position.Y;
+        if (_terrainSurface is not null && _terrainSurface.TrySample(
+            state.Position.X, state.Position.Z, out TerrainSample terrain))
+            clearanceM -= terrain.HeightM;
+        double mach = _player.AirspeedMps
+            / _player.AtmosphereModel.Sample(state.Position.Y).SpeedOfSoundMps;
+        bool stableAttitude = Math.Abs(state.Bank) <= 12.0 * Math.PI / 180.0
+            && Math.Abs(state.BodyRates.P) <= 3.0 * Math.PI / 180.0
+            && Math.Abs(state.BodyRates.Q) <= 3.0 * Math.PI / 180.0
+            && Math.Abs(state.BodyRates.R) <= 3.0 * Math.PI / 180.0;
+        bool establishedClimb = state.Gamma >= 0.5 * Math.PI / 180.0
+            && state.Gamma <= 35.0 * Math.PI / 180.0
+            && clearanceM >= 250.0
+            && _player.AirspeedMps >= 120.0;
+        bool establishedCruise = Math.Abs(state.Gamma) <= 6.0 * Math.PI / 180.0
+            && clearanceM >= 2_500.0
+            && mach >= 1.2;
+        return stableAttitude && !_detents.ApproachMode
+            && (establishedClimb || establishedCruise);
+    }
+
+    TimeCompressionSafetyState CaptureTimeCompressionSafety() => new(
+        PilotEnabled: _timeCompressionPilotEnabled,
+        SupportedSortie: TimeCompressionAvailable,
+        SessionActive: Lifecycle == LifecycleState.Active
+            && !TerminalPhaseActive,
+        EstablishedTransit: IsEstablishedTransit(),
+        CatapultOrConfigurationTransition: _catapult.IsActive
+            || ConfigurationTransitionActive,
+        ContactInsideLedThreatRange: HasContactThreat(),
+        GunSolutionInEitherDirection: _gunKill.GunSolution
+            || _gunKill.InstantaneousGunSolution
+            || _opponentGun.GunSolution
+            || _opponentGun.InstantaneousGunSolution
+            || _gunKill.RoundsInFlight.Count > 0
+            || _opponentGun.RoundsInFlight.Count > 0,
+        AutoGcasActivityOrLead: HasAutoGcasActivityOrLead(),
+        DamagePresent: PlayerHitsTaken > 0
+            || _gunKill.HitCount > 0
+            || _bandit.CatastrophicallyDamaged
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _opponentTerminalState != AircraftTerminalState.Flying,
+        FuelThresholdOrLead: HasFuelThresholdOrLead(),
+        ControlInputBeyondTrim: HasControlInputBeyondTrim(),
+        RamTransitionLead: HasRamTransitionLead());
+
+    void UpdateTimeCompressionDecision() {
+        if (_beat is null || _player is null || _bandit is null
+            || _fuel is null || _keys is null || _detents is null) {
+            _timeCompressionFactor = 1;
+            _timeCompressionInhibitReason =
+                TimeCompressionInhibitReason.SessionInactive;
+            return;
+        }
+        _timeCompressionInhibitReason =
+            TimeCompressionPolicy.Evaluate(CaptureTimeCompressionSafety());
+        _timeCompressionFactor =
+            _timeCompressionInhibitReason == TimeCompressionInhibitReason.None
+                ? Math.Clamp(_timeCompressionHostMaximumFactor,
+                    1, TimeCompressionPolicy.MaximumFactor)
+                : 1;
+        if (_timeCompressionFactor == 1)
+            _timeCompressionAccumulatorSeconds = 0.0;
+    }
+
+    void DisengageTimeCompression(TimeCompressionInhibitReason reason) {
+        _timeCompressionFactor = 1;
+        _timeCompressionInhibitReason = reason;
+        _timeCompressionAccumulatorSeconds = 0.0;
+    }
 
     void ReleaseSpringLoadedPilotActuators() {
         _detents.ClearAnalogRollControl();
@@ -786,23 +1002,63 @@ public sealed class SimulationSession {
     /// Advance by real elapsed seconds, using the production 120 Hz fixed tick. A returning browser
     /// tab can catch up by at most 250 ms.
     /// </summary>
-    public void Advance(double elapsedSeconds) {
+    public void Advance(double elapsedSeconds) => Advance(elapsedSeconds, 1);
+
+    /// <summary>
+    /// Advance from real elapsed time while allowing the presentation host to offer a measured-cost
+    /// compression ceiling. The host cannot engage compression: the kernel evaluates safety and
+    /// owns the reported factor. Fast time is additional production ticks at FixedDeltaSeconds,
+    /// never a larger dt. Safety is re-evaluated after every tick and unused fast-time credit is
+    /// discarded on the first hand-back boundary.
+    /// </summary>
+    /// <returns>The kernel-selected factor at the start of this call.</returns>
+    public int Advance(double elapsedSeconds, int maximumCompressionFactor) {
         if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0.0)
             throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
-        if (Lifecycle != LifecycleState.Active) return;
+        if (maximumCompressionFactor < 1)
+            throw new ArgumentOutOfRangeException(nameof(maximumCompressionFactor));
+        _timeCompressionHostMaximumFactor = Math.Clamp(
+            maximumCompressionFactor, 1, TimeCompressionPolicy.MaximumFactor);
+        UpdateTimeCompressionDecision();
+        int selectedFactor = _timeCompressionFactor;
+        if (Lifecycle != LifecycleState.Active) return selectedFactor;
 
         _accumulatorSeconds = Math.Min(_accumulatorSeconds + elapsedSeconds, 0.25);
+        if (selectedFactor > 1)
+            _timeCompressionAccumulatorSeconds += elapsedSeconds * (selectedFactor - 1);
         while (_accumulatorSeconds >= FixedDeltaSeconds
             && Lifecycle == LifecycleState.Active) {
             _accumulatorSeconds -= FixedDeltaSeconds;
             RunFixedTick();
         }
-        if (Lifecycle != LifecycleState.Active) _accumulatorSeconds = 0.0;
+        while (_timeCompressionAccumulatorSeconds >= FixedDeltaSeconds
+            && Lifecycle == LifecycleState.Active
+            && _timeCompressionFactor > 1) {
+            _timeCompressionAccumulatorSeconds -= FixedDeltaSeconds;
+            RunFixedTick();
+        }
+        if (Lifecycle != LifecycleState.Active) {
+            _accumulatorSeconds = 0.0;
+            _timeCompressionAccumulatorSeconds = 0.0;
+        } else if (_timeCompressionFactor == 1) {
+            _timeCompressionAccumulatorSeconds = 0.0;
+        }
+        return selectedFactor;
     }
 
     /// <summary>Run exactly one production tick when Active. Ready and Paused are stable holds.</summary>
     public void StepFixed() {
         if (Lifecycle == LifecycleState.Active) RunFixedTick();
+    }
+
+    /// <summary>
+    /// Run an exact number of ordinary production ticks in one call. This is the batch seam used
+    /// by determinism verification: it deliberately delegates to the identical RunFixedTick path.
+    /// </summary>
+    public void StepFixed(int tickCount) {
+        if (tickCount < 0) throw new ArgumentOutOfRangeException(nameof(tickCount));
+        for (int i = 0; i < tickCount && Lifecycle == LifecycleState.Active; i++)
+            RunFixedTick();
     }
 
     void RunFixedTick() {
@@ -816,6 +1072,7 @@ public sealed class SimulationSession {
         StepPendingTerminalDecision();
         _tick++;
         CaptureIncidentReplaySample();
+        UpdateTimeCompressionDecision();
     }
 
     readonly record struct DecisionTickCapture(
@@ -1186,6 +1443,12 @@ public sealed class SimulationSession {
         _triggerDown = false;
         _opponentTriggerDown = false;
         _accumulatorSeconds = 0.0;
+        _timeCompressionAccumulatorSeconds = 0.0;
+        _timeCompressionHostMaximumFactor = 1;
+        _timeCompressionFactor = 1;
+        _timeCompressionInhibitReason =
+            TimeCompressionInhibitReason.SessionInactive;
+        _ramCueStage = 0;
         _shotsTotal = 0;
         _shotsInWindow = 0;
         _killCount = 0;

@@ -45,6 +45,10 @@ export function createFramePerfAggregator({
   let maxDelta = 0;
   // name -> { sum, count, max } of main-thread milliseconds. See observePhase.
   let phases = new Map();
+  let compressionRequestedTicks = 0;
+  let compressionExecutedTicks = 0;
+  let compressionCostDroppedTicks = 0;
+  let compressionMaximumFactor = 1;
 
   function resetPhases() {
     if (phases.size) phases = new Map();
@@ -75,6 +79,26 @@ export function createFramePerfAggregator({
         entry.count += 1;
         if (value > entry.max) entry.max = value;
       }
+    },
+
+    /**
+     * Record compression backpressure explicitly. A measured-cost cap is allowed to decline work;
+     * hiding that truncation would make a slow machine's replay look like the kernel chose ×1.
+     */
+    observeTimeCompression({
+      requestedTicks = 0,
+      executedTicks = 0,
+      costDroppedTicks = 0,
+      factor = 1,
+    } = {}) {
+      const requested = Math.max(0, Math.floor(Number(requestedTicks) || 0));
+      const executed = Math.max(0, Math.floor(Number(executedTicks) || 0));
+      const dropped = Math.max(0, Math.floor(Number(costDroppedTicks) || 0));
+      const selectedFactor = Math.max(1, Math.floor(Number(factor) || 1));
+      compressionRequestedTicks += requested;
+      compressionExecutedTicks += executed;
+      compressionCostDroppedTicks += dropped;
+      compressionMaximumFactor = Math.max(compressionMaximumFactor, selectedFactor);
     },
 
     observe(deltaMs, nowMs) {
@@ -113,11 +137,21 @@ export function createFramePerfAggregator({
         summary[`${name}_ms_avg`] = rounded(entry.sum / entry.count);
         summary[`${name}_ms_max`] = rounded(entry.max);
       }
+      if (compressionRequestedTicks > 0) {
+        summary.time_compression_requested_ticks = compressionRequestedTicks;
+        summary.time_compression_executed_ticks = compressionExecutedTicks;
+        summary.time_compression_cost_dropped_ticks = compressionCostDroppedTicks;
+        summary.time_compression_factor_max = compressionMaximumFactor;
+      }
       windowStartedAt = now;
       deltas = [];
       frames = 0;
       longFrames = 0;
       maxDelta = 0;
+      compressionRequestedTicks = 0;
+      compressionExecutedTicks = 0;
+      compressionCostDroppedTicks = 0;
+      compressionMaximumFactor = 1;
       resetPhases();
       return summary;
     },

@@ -70,8 +70,12 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.14.0",
+        Assert.Equal("1.15.0",
             root.GetProperty("snapshot_schema_version").GetString());
+        Assert.True(root.TryGetProperty("time_compression_factor",
+            out JsonElement timeCompressionFactor));
+        Assert.InRange(timeCompressionFactor.GetInt32(), 1, 16);
+        Assert.True(root.TryGetProperty("time_compression_inhibit_reason", out _));
         // The automatic speed brake is an F-22 surrogate surface: beats 7/8/9 carry it, the F-86
         // and carrier beats project a hard 0.0 with the capability off, so the HUD shows no dead
         // instrument. This block is a [Theory] over beats 7, 5 and 1 — assert per beat, not flat.

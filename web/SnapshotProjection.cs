@@ -30,7 +30,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.14.0";
+    const string SnapshotSchemaVersion = "1.15.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -294,6 +294,11 @@ internal static class SnapshotProjection {
             + $"\"terrain_present\":{(Session.Terrain is not null ? "true" : "false")},"
             + $"\"t\":{_simTimeMs / 1000.0:F4},"
             + $"\"tick\":{Session.Tick},"
+            + $"\"time_compression_available\":{(Session.TimeCompressionAvailable ? "true" : "false")},"
+            + $"\"time_compression_enabled\":{(Session.TimeCompressionPilotEnabled ? "true" : "false")},"
+            + $"\"time_compression_eligible\":{(Session.TimeCompressionEligible ? "true" : "false")},"
+            + $"\"time_compression_factor\":{Session.TimeCompressionFactor},"
+            + $"\"time_compression_inhibit_reason\":\"{TimeCompressionInhibitToken(Session.TimeCompressionInhibitReason)}\","
             + $"\"ready\":{(ready ? "true" : "false")},\"paused\":{(paused ? "true" : "false")},"
             + $"\"finished\":{(finished ? "true" : "false")},\"session_phase\":\"{sessionPhase}\","
             + $"\"sortie_outcome\":\"{SortieOutcomeToken(Session.Outcome)}\","
@@ -691,6 +696,25 @@ internal static class SnapshotProjection {
         AutoGcasInhibitReason.PilotOverride => "PILOT_OVERRIDE",
         AutoGcasInhibitReason.LowLevelStandby => "LOW_LEVEL_STANDBY",
         _ => "NONE"
+    };
+
+    static string TimeCompressionInhibitToken(
+        TimeCompressionInhibitReason reason) => reason switch {
+        TimeCompressionInhibitReason.None => "NONE",
+        TimeCompressionInhibitReason.PilotDisabled => "PILOT_DISABLED",
+        TimeCompressionInhibitReason.UnsupportedSortie => "UNSUPPORTED_SORTIE",
+        TimeCompressionInhibitReason.SessionInactive => "SESSION_INACTIVE",
+        TimeCompressionInhibitReason.TransitNotEstablished => "TRANSIT_NOT_ESTABLISHED",
+        TimeCompressionInhibitReason.CatapultOrConfiguration =>
+            "CATAPULT_OR_CONFIGURATION",
+        TimeCompressionInhibitReason.ContactThreat => "CONTACT_THREAT",
+        TimeCompressionInhibitReason.GunSolution => "GUN_SOLUTION",
+        TimeCompressionInhibitReason.AutoGcas => "AUTO_GCAS",
+        TimeCompressionInhibitReason.Damage => "DAMAGE",
+        TimeCompressionInhibitReason.FuelThreshold => "FUEL_THRESHOLD",
+        TimeCompressionInhibitReason.ControlInput => "CONTROL_INPUT",
+        TimeCompressionInhibitReason.RamTransition => "RAM_TRANSITION",
+        _ => "UNKNOWN"
     };
 
     static string GearHandleToken(LandingGearHandle handle) => handle switch {

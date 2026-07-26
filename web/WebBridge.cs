@@ -95,6 +95,9 @@ public static partial class WebBridge {
         Session.SetAssistedFlight(enabled);
 
     [JSExport]
+    public static bool ToggleTimeCompression() => Session.ToggleTimeCompression();
+
+    [JSExport]
     public static void NudgeAssistedSpeed(int direction) =>
         Session.NudgeAssistedSpeed(direction);
 
@@ -153,10 +156,11 @@ public static partial class WebBridge {
     static readonly double[] HotFrameBuffer = new double[SnapshotHotFrame.SlotCount];
 
     [JSExport]
-    public static void Advance(double deltaSeconds) {
-        Session.Advance(deltaSeconds);
+    public static int Advance(double deltaSeconds, int maximumCompressionFactor) {
+        int selectedFactor = Session.Advance(deltaSeconds, maximumCompressionFactor);
         SnapshotHotFrame.Fill(HotFrameBuffer, Session,
             _worldOriginEastM, _worldOriginNorthM, _worldOriginConfigured);
+        return selectedFactor;
     }
 
     /// Refill the hot frame without stepping the simulation — the JS loop calls this on frames
