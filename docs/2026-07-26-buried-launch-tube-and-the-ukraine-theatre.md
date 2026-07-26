@@ -63,50 +63,71 @@ portal into an open cutting. It removes the terrain dependency completely, and i
 answer to the premise that created this aircraft. Forward airfields get cratered, which is why the
 basing is deep. A buried launcher cannot be cratered, and you can dig another one anywhere.
 
-### The kernel decides the shape, and it decides against the elegant version
+### The kernel decided the shape — until it was told to decide differently
 
-The obvious design is a flat run with a curved pull-up at the end, because a straight 7 degree
-incline puts the breech 63 m underground while a curve needs almost nothing:
+`CatapultLaunchModel.StrokeState` held the aircraft at constant deck height, pitch 0.8 degrees, with
+no vertical motion, for the *entire* stroke, going airborne only at the end at
+`AirborneHeightM = 4.0` with velocity split along the ramp angle.
+
+That fact produced two wrong answers before it produced a right one.
+
+**The parallel session's answer** was a 32 m, seven-degree terminal ramp on the rail, "which rises
+almost exactly the projected four-metre handoff height". It does not: the aircraft stayed level and
+flew straight through the last 32 m of its own rail.
+
+**My answer** was to make the rail dead flat to match, and call the seven degrees a "departure
+angle". That was rationalising a limitation instead of fixing it, and it was correctly called out:
+*"give it a reasonable launch angle, don't be lazy about designing it properly."*
+
+**The right answer** was to fix the kernel. `StrokeState` now models the ramp as a constant-radius
+arc and flies the aircraft along it — height, attitude and velocity direction all follow the rail.
+`RampNormalG = 3.0` sets the radius from the launch speed, so the geometry is derived rather than
+authored, and `RampRiseM` is zero for a flat deck, which keeps every carrier beat bit-for-bit
+identical. All 62 carrier and catapult tests passed unchanged.
+
+The rule still holds, just pointed the other way: *the presentation is not free to be more correct
+than the kernel — so if the better physics is worth having, put it in the kernel.*
+
+### Choosing the angle from the aircraft, not from the terrain
+
+Once the ramp is a built structure rather than a hill, the angle should be chosen by what the
+aircraft and the pilot can take. At 150 m/s this jet **sustains a 47.7 degree climb**:
 
 | | |
 |---|---|
-| Pull-up radius at 150 m/s, 3 G | 765 m |
-| Arc to reach 7 degrees | 93 m |
-| Depth below grade | **5.7 m** |
+| Thrust (42 kN dry × 1.55 augmentor stop) | 65 kN |
+| Drag at C_L 0.310 | 8.1 kN |
+| Weight | 77 kN |
+| **Sustainable climb angle** | **47.7°** |
 
-Eleven times less excavation. It is the right engineering answer and it is **wrong for this
-simulator**, because `CatapultLaunchModel.StrokeState` (`sim/Carrier.cs:710`) holds the aircraft at
-constant deck height, pitch 0.8 degrees, with no vertical motion, for the *entire* stroke. Only at
-stroke end does it go airborne at `AirborneHeightM = 4.0` with velocity split along the ramp angle.
+So the jet was never the limit — the arc is. **Twelve degrees**, the same angle Kuznetsov and
+Invincible use:
 
-There is no curve in the physics. Drawing one would put the aircraft visibly above or below its own
-rail. **The rail must be dead flat**, and the 7 degrees exists only as the departure path after the
-portal. The renderer test now pins this: every rail vertex shares a y, and no rail node carries an
-x-rotation, so a future inclined ramp fails loudly rather than quietly floating the aircraft.
-
-This is the general rule the episode illustrates: *the presentation is not free to be more correct
-than the kernel.* If the curve is worth having, it belongs in `CatapultLaunchModel` first.
+| | |
+|---|---|
+| Arc radius at 3 G normal | 765 m |
+| Arc length / horizontal extent | 160 m / 159 m |
+| Rise | **16.7 m** |
+| Flat run before the arc | 360 m |
+| Combined pilot load √(2.21² + 3²) | **3.73 G** (airframe rated 12) |
+| Potential energy gained | 1.29 MJ of 88.3 MJ = 1.5% |
 
 ### Final geometry
 
-All of it derived from kernel constants rather than invented:
-
 | | |
 |---|---|
-| Rail | flat, y = 0, cross −7 m, 560 m |
-| Stroke | 520 m from +20 m along |
+| Stroke | 520 m from +20 m along, cross −7 m |
 | Acceleration | 21.63 m/s² = **2.21 G** |
-| Duration | **6.93 s** |
-| Natural grade | +12 m above the rail |
-| Tube bore | 14 × 8 m internal |
-| Aircraft span (AR 3.0, S 18 m²) | 7.35 m |
-| Earth cover over roof | ~3 m |
-| Portal | 560 m, roofed for the full length |
-| Open cutting beyond | 150 m (7° clears the 12 m grade at 98 m) |
+| Duration | **6.93 s** total, **5.8 s** of it enclosed |
+| Rail | 360 m flat, then a 160 m arc to 12° |
+| Gallery | roofs the **flat run only** — the ramp is ridden in the open |
+| Gallery bore | 14 × 8 m internal, berm crest +10 m |
+| Aircraft span (AR 3.0, S 18 m²) | 7.35 m → **2.7% blockage** |
+| Interior ribs / vents | every 10 m / every 40 m |
+| Handoff | ramp top, `AirborneHeightM + RampRiseM` = 20.7 m |
 
-Excavation is roughly 520 × 12 × 8 m ≈ 50,000 m³. In Ukrainian chernozem and loess — some of the
-easiest digging anywhere — that is well under a million dollars of earthworks against a
-multi-million-dollar airframe. It costs into the cost layer properly.
+Roofing only the flat section is both the better reveal — dark, strobing, then daylight at the foot
+of the jump — and far easier to build than roofing a curve.
 
 ---
 
