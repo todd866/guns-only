@@ -713,17 +713,19 @@ public static class Beats {
                 FlightModel.RapierPublicDataSurrogate.MassKg),
             // A contact high and slow ahead: the thing this aircraft was built to kill is an
             // enabler, not a fighter.
-            // 260 km out. This is deliberately BEYOND the 262 km regional truth, and that is the
+            // 420 km out. This is deliberately BEYOND the 262 km regional truth, and that is the
             // call: a realistic deep intercept matters more than staying inside the authored cell.
             // The aircraft exists because basing sits far enough back that cratering the field is
             // impractical, and at 90 or even 118 km the pilot never spends the climb or the ram
             // acceleration that justify any of it. With the contact closing at 210 m/s the merge
-            // still falls near 200 km, inside the ~300 km radius the fuel fraction buys.
+            // still falls near 330 km. At 260 km the pilot kept arriving with closure to spare and
+            // running past the contact before the geometry was set up; the transit has to be long
+            // enough to finish the climb AND the acceleration AND still have the merge ahead.
             //
             // The far half of the route is over presentation apron rather than authored terrain.
             // At 21 km cruise that is invisible; it would matter if the fight went low, and it is
             // the reason the parked ukraine-theatre branch wanted a bigger cell.
-            Bandit: new AircraftState(new Vec3D(12_000, 12_000, 260_000), 210, 0, Math.PI, 0,
+            Bandit: new AircraftState(new Vec3D(18_000, 12_000, 420_000), 210, 0, Math.PI, 0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() { (0.0, new PilotCommand(1.0, 0.0, 0.55, 0.0)) },
