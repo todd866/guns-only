@@ -15,6 +15,16 @@ function token(value) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
 
+// `carrier` is the legacy maritime-presence flag. New recovery sites publish the shared
+// `recovery_platform` contract and use `carrier` only to distinguish a ship from a fixed strip.
+export function recoveryPlatformAvailable(state = {}) {
+  return state?.recovery_platform === true || state?.carrier === true;
+}
+
+export function recoveryPlatformIsMaritime(state = {}) {
+  return state?.carrier === true || token(state?.platform_kind) === "SHIP";
+}
+
 function indicationDown(value, position) {
   const indication = token(value);
   if (indication.includes("DOWN") || indication === "DN") return true;
@@ -28,13 +38,14 @@ function phaseCue(phase, state, details = {}) {
   const iasKts = details.iasKts;
   const configured = details.configured === true;
   const lineup = details.lineup ?? "HOLD LINEUP";
+  const maritime = recoveryPlatformIsMaritime(state);
 
   if (phase === "FINAL") {
     const extended = (finite(state?.deck_along) ?? 0) < -3000;
     return {
       phase,
       lineup,
-      title: extended ? "EXTENDED FINAL" : "FINAL · BALL",
+      title: extended ? "EXTENDED FINAL" : maritime ? "FINAL · BALL" : "FINAL · STRIP",
       instruction: `${lineup} · ON-SPEED AOA · NO FLARE`,
     };
   }
@@ -52,10 +63,15 @@ function phaseCue(phase, state, details = {}) {
     else if (altitudeFt !== null && altitudeFt > 700) instruction = "DESCEND 600 FT · HOLD 140 KIAS";
     else if (altitudeFt !== null && altitudeFt < 500) instruction = "CLIMB 600 FT · HOLD 140 KIAS";
     else if (iasKts !== null && iasKts > 155) instruction = "SLOW 140 KIAS · HOLD 600 FT";
-    return { phase, lineup: null, title: "PORT DOWNWIND", instruction };
+    return {
+      phase,
+      lineup: null,
+      title: maritime ? "PORT DOWNWIND" : "LEFT DOWNWIND",
+      instruction,
+    };
   }
   if (phase === "INITIAL") {
-    let instruction = "800 FT · 350 KIAS · BREAK LEFT ABM BOW";
+    let instruction = `800 FT · 350 KIAS · BREAK LEFT ABM ${maritime ? "BOW" : "THRESHOLD"}`;
     if (altitudeFt !== null && altitudeFt > 950) instruction = "DESCEND 800 FT · HOLD 350 KIAS";
     else if (altitudeFt !== null && altitudeFt < 650) instruction = "CLIMB 800 FT · HOLD 350 KIAS";
     else if (iasKts !== null && iasKts < 325) instruction = "ACCELERATE 350 KIAS · HOLD 800 FT";
@@ -75,7 +91,7 @@ function phaseCue(phase, state, details = {}) {
   return {
     phase: "JOIN",
     lineup: null,
-    title: "JOIN PORT PATTERN",
+    title: maritime ? "JOIN PORT PATTERN" : "JOIN LEFT PATTERN",
     instruction: `${side ? `${side} · ` : ""}INTERCEPT INITIAL · 800 FT · 350 KIAS`,
   };
 }
@@ -93,7 +109,7 @@ export function carrierDistanceM(state = {}) {
 }
 
 export function carrierPadlockEligible(state = {}, radiusM = CARRIER_PADLOCK_RADIUS_M) {
-  if (!state || typeof state !== "object" || state.carrier !== true) return false;
+  if (!state || typeof state !== "object" || !recoveryPlatformAvailable(state)) return false;
   if (state.replay_external === true || state.finished === true
       || state.terminal_phase_active === true || token(state.mode) === "TERMINAL") return false;
   const distanceM = carrierDistanceM(state);
@@ -144,7 +160,7 @@ export function padlockTargetValid(state = {}, target = "bandit") {
       || state.finished === true || token(state.mode) === "TERMINAL") return false;
   // Acquisition remains the deliberate 12 NM gate. Once selected, one mile of release
   // hysteresis prevents normal ship/aircraft motion at the boundary from chattering the view.
-  // A recovery-selected boat must not survive the authoritative transition back to combat when
+  // A selected recovery platform must not survive the authoritative transition back to combat when
   // a live bandit is available: release it, then let the pilot deliberately reacquire the threat.
   if (target === "carrier") {
     return carrierPadlockEligible(state, CARRIER_PADLOCK_RELEASE_RADIUS_M)

@@ -8,10 +8,13 @@ test("offline terrain cache primes every theatre bundle independently and retrie
   const source = await readFile(workerUrl, "utf8");
   assert.match(source, /const terrainBundlesPrimed = new Set\(\)/);
   assert.match(source,
-    /if \(terrainBundlesPrimed\.has\(bare\.href\)\) return;[\s\S]*terrainBundlesPrimed\.add\(bare\.href\)/,
+    /if \(terrainBundlesPrimed\.has\(bare\.href\)\) return Promise\.resolve\(\);[\s\S]*terrainBundlesPrimed\.add\(bare\.href\)/,
     "terrain priming must be keyed by the bare bundle URL");
   assert.match(source,
     /response\.ok && response\.status === 200[\s\S]*terrainBundlesPrimed\.delete\(bare\.href\)[\s\S]*catch[\s\S]*terrainBundlesPrimed\.delete\(bare\.href\)/,
     "a failed background fill must not permanently suppress a later online retry");
+  assert.match(source,
+    /if \(TERRAIN_BUNDLE\.test\(url\.pathname\)\) \{[\s\S]*event\.waitUntil\(primeTerrainBundle\(request\.url\)\)[\s\S]*event\.respondWith/,
+    "the fetch event must stay alive until its full-bundle offline cache write settles");
   assert.doesNotMatch(source, /let terrainBundlePrimed = false/);
 });

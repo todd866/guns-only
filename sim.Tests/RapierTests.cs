@@ -1,4 +1,6 @@
 using GunsOnly.Sim;
+using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -20,6 +22,15 @@ public class RapierTests {
     static AircraftSim At(double altitudeM, double speedMps, double gammaRad = 0.0) => new(
         new AircraftState(new Vec3D(0.0, altitudeM, 0.0), speedMps, gammaRad, 0.0, 0.0, Jet.MassKg),
         Jet, StandardAtmosphere1976.Instance);
+
+    static ITerrainSurface FlatLand(double heightM) =>
+        new BilinearHeightGrid(-10_000.0, -10_000.0, 10_000.0, 10_000.0,
+            new double[,]
+            {
+                { heightM, heightM, heightM },
+                { heightM, heightM, heightM },
+                { heightM, heightM, heightM }
+            });
 
     [Fact]
     public void TheTurbineCarriesItLowAndTheRamCarriesItHigh() {
@@ -158,6 +169,12 @@ public class RapierTests {
         var session = new SimulationSession(10);
         Assert.Equal("Rapier intercept", session.Beat.Name);
         Assert.Same(FlightModel.RapierPublicDataSurrogate, session.Beat.PlayerAir);
+        Assert.Equal(Carrier.PlatformKind.FixedArrestingStrip, session.Carrier!.Kind);
+        Assert.False(session.Carrier.IsMaritime);
+        Assert.Equal(1_200.0, session.Carrier.DeckLengthM, precision: 6);
+        Assert.Equal(48.0, session.Carrier.DeckHalfWidthM * 2.0, precision: 6);
+        Assert.Equal(120.5, session.Carrier.Position.Y, precision: 6);
+        Assert.Equal(Vec3D.Zero, session.Carrier.SteadyWindWorld);
 
         // The declared launcher, not the 62 m/s deck default — which is below flying speed here.
         Assert.Equal(150.0, session.Catapult.EndSpeedMps, precision: 6);
@@ -188,7 +205,7 @@ public class RapierTests {
             + $"{session.Player.State.Position.Y:F0} m");
 
         Assert.True(launchSpeed > 140.0,
-            $"never exceeded {launchSpeed:F0} m/s — the declared 88 m/s launcher did not deliver");
+            $"never exceeded {launchSpeed:F0} m/s — the declared 150 m/s launcher did not deliver");
 
         // Now fly it: full lever, hold a climb, and confirm it is going up rather than mushing.
         double startAltitude = session.Player.State.Position.Y;
@@ -209,5 +226,128 @@ public class RapierTests {
             $"only climbed {climbed:F0} m in 60 s — the launch is not working");
         Assert.True(session.Player.State.Position.Y > 20.0,
             "the aircraft went into the ground off the catapult");
+    }
+
+    [Fact]
+    public void FixedStripNeverInheritsShipMotionBurbleOrSolidGeometry() {
+        BeatSetup beat = Beats.RapierIntercept(Carrier.DeckConfiguration.Angled);
+        Carrier strip = Assert.IsType<Carrier>(beat.Carrier);
+
+        Assert.Equal(Carrier.PlatformKind.FixedArrestingStrip, strip.Kind);
+        Assert.Equal(Carrier.DeckConfiguration.Axial, strip.Configuration);
+        Assert.False(strip.IsMaritime);
+        Assert.Equal(Vec3D.Zero, strip.SteadyWindWorld);
+
+        strip.ApplyDifficulty(DifficultyModel.ForLevel(4));
+        for (int tick = 0; tick < AircraftSim.TickHz * 30; tick++)
+            strip.Step(1.0 / AircraftSim.TickHz);
+        Assert.Equal(120.5, strip.Position.Y, precision: 10);
+        Assert.Equal(0.0, strip.DeckPitchRad, precision: 10);
+        Assert.Equal(0.0, strip.DeckHeaveM, precision: 10);
+        Assert.Equal(0.0, strip.DeckVerticalVelocityMps, precision: 10);
+
+        Vec3D aboveFormerIsland = strip.ShipPoint(25.0, 10.0, 20.0);
+        Vec3D belowFormerIsland = strip.ShipPoint(25.0, 10.0, 3.0);
+        Assert.Equal(Carrier.SolidCollision.None,
+            strip.SweptSolidCollision(aboveFormerIsland, belowFormerIsland));
+        Vec3D belowFormerHull = strip.ShipPoint(0.0, 0.0, -20.0);
+        Vec3D fartherBelowFormerHull = strip.ShipPoint(0.0, 0.0, -30.0);
+        Assert.Equal(Carrier.SolidCollision.None,
+            strip.SweptSolidCollision(belowFormerHull, fartherBelowFormerHull));
+
+        var session = new SimulationSession(10);
+        Assert.Null(session.Burble);
+        Assert.Equal(0, session.Difficulty.Level);
+    }
+
+    [Fact]
+    public void OffStripTerrainRemainsAuthoritativeDuringTerminalResolution() {
+        BeatSetup baseline = Beats.RapierIntercept();
+        Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
+        AircraftState player = new(
+            strip.LandingPoint(along: 0.0, cross: strip.DeckHalfWidthM + 75.0,
+                height: 118.01 - strip.Position.Y),
+            Speed: 0.0, Gamma: 0.0, Chi: strip.LandingHeadingRad,
+            Bank: 0.0, Mass: Jet.MassKg);
+        AircraftState opponent = baseline.Bandit with {
+            Position = new Vec3D(1_000.0, 116.0, 1_000.0),
+            Speed = 0.0,
+            Gamma = 0.0
+        };
+        BeatSetup setup = baseline with {
+            Player = player,
+            Bandit = opponent,
+            StartsOnCatapult = false,
+            UsesReactiveBandit = false
+        };
+        var session = new SimulationSession();
+        session.SetTerrainSurface(FlatLand(117.0));
+        session.StartBeat(() => setup);
+        session.Begin();
+
+        // The opponent impacts first, putting subsequent ownship integration through
+        // StepTerminalPhase — the path which used to omit natural terrain for carrier sorties.
+        session.StepFixed();
+        Assert.NotEqual(AircraftTerminalState.Flying, session.OpponentTerminalState);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+
+        session.SetTerrainSurface(FlatLand(118.0));
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && session.PlayerTerminalState == AircraftTerminalState.Flying; tick++)
+            session.StepFixed();
+
+        Assert.Equal(AircraftTerminalState.Impacted, session.PlayerTerminalState);
+        Assert.Equal(ImpactSurface.Ground, session.PlayerImpactSurface);
+        Assert.Single(session.RecentEvents, e => e.Type == SessionEventType.Impact
+            && e.Target == CombatRole.Player && e.Surface == ImpactSurface.Ground);
+        Assert.DoesNotContain(session.RecentEvents, e => e.Type == SessionEventType.Impact
+            && e.Target == CombatRole.Player && e.Surface is ImpactSurface.Water
+                or ImpactSurface.FlightDeck);
+    }
+
+    [Fact]
+    public void FixedStripDeckContactStillUsesRecoveryInsteadOfTerrainImpact() {
+        BeatSetup baseline = Beats.RapierIntercept();
+        Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
+        AircraftState player = new(
+            strip.LandingPoint(
+                strip.WireAlongM(3) + Carrier.HookToMainGearM,
+                height: 0.02),
+            Speed: 70.0, Gamma: -0.06, Chi: strip.LandingHeadingRad,
+            Bank: 0.0, Mass: Jet.MassKg);
+        BeatSetup setup = baseline with {
+            Player = player,
+            StartsOnCatapult = false,
+            UsesReactiveBandit = false
+        };
+        var session = new SimulationSession();
+        session.SetTerrainSurface(FlatLand(118.0));
+        session.StartBeat(() => setup);
+        session.Begin();
+
+        session.StepFixed();
+
+        Assert.Equal(Carrier.Recovery.Trap, session.Touchdown.Recovery);
+        Assert.True(session.Arrestment.IsActive);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+        Assert.Equal(ImpactSurface.None, session.PlayerImpactSurface);
+        Assert.DoesNotContain(session.RecentEvents, e => e.Type == SessionEventType.Impact
+            && e.Target == CombatRole.Player);
+    }
+
+    [Fact]
+    public void RapierMissionUsesTheSharedUkraineTheatreIdentity() {
+        BeatSetup beat = Beats.RapierIntercept();
+
+        Assert.Equal(Ukraine2030sTheatre.TheatreId,
+            beat.EnvironmentIdentity.TheatreId);
+        Assert.Equal(Ukraine2030sTheatre.WorldFrameId,
+            beat.EnvironmentIdentity.WorldFrameId);
+        Assert.Equal(Ukraine2030sTheatre.TerrainProfileId,
+            beat.EnvironmentIdentity.TerrainProfileId);
+        Assert.Equal(MissionEnvironmentFrameKind.LocalRegionalCorridor,
+            beat.EnvironmentIdentity.FrameKind);
+        Assert.Equal("presentation.vehicle.rapier.public-data-surrogate.v1",
+            beat.PlayerAircraft.PresentationId);
     }
 }

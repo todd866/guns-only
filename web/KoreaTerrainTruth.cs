@@ -15,12 +15,60 @@ internal static class KoreaTerrainTruth {
         PackedTerrainTruth.Load(ResourceName, "Korea central-front");
 }
 
-/// <summary>Fictional Ukraine training-sector truth shared with the browser terrain product.</summary>
+/// <summary>
+/// Fictional Ukraine theatre truth shared with the browser terrain product. The 32 m Soniachne
+/// detail cell overrides a 256 m regional surface in one coordinate frame.
+/// </summary>
 internal static class UkraineTerrainTruth {
-    const string ResourceName = "GunsOnly.Web.Data.UkraineSoniachne.truth";
+    const string DetailResourceName = "GunsOnly.Web.Data.UkraineSoniachne.truth";
+    const string RegionalResourceName = "GunsOnly.Web.Data.UkraineSoniachneRegion.truth";
 
-    public static ITerrainSurface? Load() =>
-        PackedTerrainTruth.Load(ResourceName, "Ukraine Soniachne training-sector");
+    public static ITerrainSurface? Load() {
+        ITerrainSurface? detail = PackedTerrainTruth.Load(
+            DetailResourceName, "Ukraine Soniachne detail cell");
+        ITerrainSurface? regional = PackedTerrainTruth.Load(
+            RegionalResourceName, "Ukraine Soniachne regional theatre");
+        if (detail is null || regional is null) return null;
+        return new NestedTerrainSurface(regional, detail);
+    }
+}
+
+/// <summary>
+/// A broad low-resolution surface with one or more higher-resolution overrides. Queries inside an
+/// override never touch the base, so collision, Auto-GCAS and rendering can add future medevac
+/// hero cells without changing the theatre frame.
+/// </summary>
+internal sealed class NestedTerrainSurface : ITerrainSurface {
+    readonly ITerrainSurface _base;
+    readonly ITerrainSurface[] _overrides;
+
+    public TerrainBounds Bounds => _base.Bounds;
+    public double HorizontalResolutionM { get; }
+
+    public NestedTerrainSurface(ITerrainSurface baseSurface,
+        params ITerrainSurface[] overrides) {
+        _base = baseSurface ?? throw new ArgumentNullException(nameof(baseSurface));
+        _overrides = overrides ?? throw new ArgumentNullException(nameof(overrides));
+        if (_overrides.Any(surface => surface is null))
+            throw new ArgumentException("terrain overrides cannot contain null", nameof(overrides));
+        if (_overrides.Any(surface =>
+            !_base.Bounds.Contains(surface.Bounds.MinimumEastM, surface.Bounds.MinimumNorthM)
+            || !_base.Bounds.Contains(surface.Bounds.MaximumEastM, surface.Bounds.MaximumNorthM)))
+            throw new ArgumentException("terrain overrides must lie inside the base surface",
+                nameof(overrides));
+        HorizontalResolutionM = Math.Min(_base.HorizontalResolutionM,
+            _overrides.Length == 0
+                ? _base.HorizontalResolutionM
+                : _overrides.Min(surface => surface.HorizontalResolutionM));
+    }
+
+    public bool TrySample(double eastM, double northM, out TerrainSample sample) {
+        // Last override wins so adding a 1 m LZ patch over the 32 m cell remains deterministic.
+        for (int index = _overrides.Length - 1; index >= 0; index--) {
+            if (_overrides[index].TrySample(eastM, northM, out sample)) return true;
+        }
+        return _base.TrySample(eastM, northM, out sample);
+    }
 }
 
 /// <summary>

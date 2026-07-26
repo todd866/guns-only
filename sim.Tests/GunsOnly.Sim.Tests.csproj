@@ -34,6 +34,10 @@
       Include="..\content\packs\ukraine-modern\environment\terrain\soniachne-steppe.truth"
       Link="Data\soniachne-steppe.truth"
       LogicalName="GunsOnly.Web.Data.UkraineSoniachne.truth" />
+    <EmbeddedResource
+      Include="..\content\packs\ukraine-modern\environment\terrain\soniachne-region.truth"
+      Link="Data\soniachne-region.truth"
+      LogicalName="GunsOnly.Web.Data.UkraineSoniachneRegion.truth" />
   </ItemGroup>
 
 </Project>

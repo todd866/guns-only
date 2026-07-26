@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Security.Cryptography;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Web;
@@ -6,13 +8,13 @@ namespace GunsOnly.Sim.Tests;
 
 public class UkraineTerrainTruthTests {
     [Fact]
-    public void SoniachneCoreIsDeterministicTrueScaleAndContainsEveryAuthoredRaidTrack() {
+    public void NestedTheatreIsDeterministicAndContainsEveryAuthoredRaidTrack() {
         ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
         ITerrainSurface replay = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
 
-        Assert.Equal(new TerrainBounds(-8_192.0, 8_192.0, -8_192.0, 8_192.0),
+        Assert.Equal(new TerrainBounds(-131_072.0, 131_072.0, -131_072.0, 131_072.0),
             terrain.Bounds);
         Assert.Equal(32.0, terrain.HorizontalResolutionM);
 
@@ -40,18 +42,82 @@ public class UkraineTerrainTruthTests {
     }
 
     [Fact]
-    public void CoarseSafetyApronKeepsAglTruthBeyondTheDetailedCellWithoutClaimingLzDetail() {
-        ITerrainSurface core = Assert.IsAssignableFrom<ITerrainSurface>(
+    public void RegionalTruthContainsTheCompleteRapierRouteAndFictionalCoast() {
+        ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
-        var apron = new TrainingTerrainApronSurface(core,
-            marginM: 92_000.0, flatHeightM: 78.0, transitionM: 4_000.0);
+        BeatSetup beat = Beats.RapierIntercept();
+        Carrier strip = Assert.IsType<Carrier>(beat.Carrier);
 
-        Assert.True(apron.TrySample(0.0, 0.0, out TerrainSample centre));
-        Assert.True(core.TrySample(0.0, 0.0, out TerrainSample coreCentre));
-        Assert.Equal(coreCentre, centre);
-        Assert.True(apron.TrySample(20_000.0, 0.0, out TerrainSample outside));
-        Assert.Equal(78.0, outside.HeightM, 8);
-        Assert.Equal(TerrainSurfaceKind.Land, outside.Kind);
-        Assert.False(core.TrySample(20_000.0, 0.0, out _));
+        Assert.True(terrain.TrySample(beat.Player.Position.X, beat.Player.Position.Z,
+            out TerrainSample launchGround));
+        Assert.Equal(TerrainSurfaceKind.Land, launchGround.Kind);
+        Assert.Equal(2.5, strip.Position.Y - launchGround.HeightM, precision: 6);
+
+        Vec3D launcherStart = strip.ShipPoint(
+            CatapultLaunchModel.StartAlongM, CatapultLaunchModel.CatapultCrossM);
+        Vec3D launcherEnd = strip.ShipPoint(
+            CatapultLaunchModel.StartAlongM + 520.0,
+            CatapultLaunchModel.CatapultCrossM);
+        Assert.True(terrain.TrySample(launcherStart.X, launcherStart.Z,
+            out TerrainSample launcherStartGround));
+        Assert.True(terrain.TrySample(launcherEnd.X, launcherEnd.Z,
+            out TerrainSample launcherEndGround));
+        Assert.Equal(TerrainSurfaceKind.Land, launcherStartGround.Kind);
+        Assert.Equal(TerrainSurfaceKind.Land, launcherEndGround.Kind);
+        Assert.True(strip.Position.Y > launcherStartGround.HeightM);
+        Assert.True(strip.Position.Y > launcherEndGround.HeightM);
+
+        for (double northM = 0.0; northM <= beat.Bandit.Position.Z; northM += 5_000.0) {
+            Assert.True(terrain.TrySample(
+                beat.Bandit.Position.X * northM / beat.Bandit.Position.Z,
+                northM, out TerrainSample routeGround));
+            Assert.Equal(TerrainSurfaceKind.Land, routeGround.Kind);
+            Assert.True(beat.Bandit.Position.Y - routeGround.HeightM > 11_000.0);
+        }
+        Assert.True(terrain.TrySample(beat.Bandit.Position.X, beat.Bandit.Position.Z,
+            out TerrainSample targetGround));
+        Assert.Equal(TerrainSurfaceKind.Land, targetGround.Kind);
+
+        Assert.True(terrain.TrySample(20_000.0, 0.0, out TerrainSample regionalGround));
+        Assert.NotEqual(78.0, regionalGround.HeightM);
+        Assert.True(terrain.TrySample(-100_000.0, -100_000.0,
+            out TerrainSample coastalWater));
+        Assert.Equal(TerrainSurfaceKind.Water, coastalWater.Kind);
+        Assert.Equal(0.0, coastalWater.HeightM);
+        Assert.False(terrain.TrySample(150_000.0, 0.0, out _));
+    }
+
+    [Fact]
+    public void DetailCellRemainsByteStableAndMeetsRegionalTruthWithoutASeam() {
+        const string DetailResource = "GunsOnly.Web.Data.UkraineSoniachne.truth";
+        const string RegionalResource = "GunsOnly.Web.Data.UkraineSoniachneRegion.truth";
+        ITerrainSurface detail = Assert.IsAssignableFrom<ITerrainSurface>(
+            PackedTerrainTruth.Load(DetailResource, "Soniachne detail"));
+        ITerrainSurface regional = Assert.IsAssignableFrom<ITerrainSurface>(
+            PackedTerrainTruth.Load(RegionalResource, "Soniachne regional"));
+
+        using Stream stream = Assert.IsAssignableFrom<Stream>(
+            Assembly.GetExecutingAssembly().GetManifestResourceStream(DetailResource));
+        string digest = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        Assert.Equal(
+            "705e782609d4e1bac280ee0631ced57c5cda0556d8f0ad419e97f5221fa64a8b",
+            digest);
+
+        foreach (double edgeM in new[] { -8_192.0, 8_192.0 })
+        foreach (double alongM in Enumerable.Range(0, 65)
+            .Select(index => -8_192.0 + index * 256.0)) {
+            AssertTerrainSeam(detail, regional, edgeM, alongM);
+            AssertTerrainSeam(detail, regional, alongM, edgeM);
+        }
+    }
+
+    static void AssertTerrainSeam(ITerrainSurface detail, ITerrainSurface regional,
+        double eastM, double northM) {
+        Assert.True(detail.TrySample(eastM, northM, out TerrainSample detailSample));
+        Assert.True(regional.TrySample(eastM, northM, out TerrainSample regionalSample));
+        Assert.Equal(detailSample.HeightM, regionalSample.HeightM, precision: 8);
+        Assert.True(detailSample.UpNormal.Dot(regionalSample.UpNormal) > 0.9999,
+            $"normal seam at ({eastM:F0}, {northM:F0}) was "
+            + $"{detailSample.UpNormal.Dot(regionalSample.UpNormal):F6}");
     }
 }

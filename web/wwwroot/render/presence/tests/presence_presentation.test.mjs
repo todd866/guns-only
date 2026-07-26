@@ -95,7 +95,7 @@ test("legacy peers use mission identity for discontinuity and alive for body pre
   assert.equal(next.bodyPresent, false);
 });
 
-test("shared Korea terrain shows only contacts which use the same global substrate", () => {
+test("protocol v2 cannot opt remote contacts into a local instance with a shared-theatre bit", () => {
   const snapshot = {
     players: [
       { playerId: "inland", missionId: "mission.perch-attack.v1" },
@@ -106,10 +106,10 @@ test("shared Korea terrain shows only contacts which use the same global substra
   };
   const framed = snapshotForTerrainFrame(snapshot, {
     multiplayer_terrain_shared: true,
-    world_frame_id: "world.korea-central-front.v1",
+    world_frame_id: "world.ukraine.soniachne-2030s.v1",
   });
-  assert.deepEqual(framed.players.map((player) => player.playerId), ["inland"]);
-  assert.equal(framed.bogeys.length, 1);
+  assert.deepEqual(framed.players, []);
+  assert.deepEqual(framed.bogeys, []);
   assert.equal(snapshot.players.length, 3, "projection must not mutate the room snapshot");
 });
 
@@ -126,14 +126,14 @@ test("local carrier training cannot display shared-world aircraft over its insta
   assert.deepEqual(framed.bogeys, []);
 });
 
-test("local Ukraine training terrain cannot display Korea room traffic", () => {
+test("local Ukraine hero cell cannot display regional room traffic from the same theatre", () => {
   const snapshot = {
     players: [{ playerId: "inland", missionId: "mission.perch-attack.v1" }],
     bogeys: [{ bogeyId: "world-bogey" }],
   };
   const framed = snapshotForTerrainFrame(snapshot, {
     multiplayer_terrain_shared: false,
-    world_frame_id: "local.ukraine-soniachne-training.v1",
+    world_frame_id: "world.ukraine.soniachne-2030s.v1",
   });
   assert.deepEqual(framed.players, []);
   assert.deepEqual(framed.bogeys, []);

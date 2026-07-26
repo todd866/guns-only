@@ -139,6 +139,9 @@ import {
   createGunEffects,
   createHiddenPresentation,
   createLitEnvironment,
+  createOneWayAttackDrone,
+  createRapier,
+  createRapierDispersedStrip,
 } from "./render/scene/scene_builders.js";
 
 const DEG = Math.PI / 180;
@@ -164,6 +167,7 @@ const PRODUCTION_KOREA_TERRAIN_ENABLED = true;
 // browser-reachable until its source lock, pack manifest, licence closure, and custom-host delivery
 // have passed the same release gate as the rest of the pack.
 const DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL = null;
+const UKRAINE_2030S_TERRAIN_ID = "terrain.ukraine.soniachne-theatre.v2";
 const UKRAINE_TRAINING_TERRAIN_MANIFEST_URL = new URL(
   "./content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json",
   import.meta.url,
@@ -509,6 +513,10 @@ const FRAME_GOVERNOR_TRIP_FRACTION = 0.08;   // 8% of a window's frames arriving
 // one LOD0 chunk is ~9.5 ms of synchronous main-thread work, 57% of a 60 fps budget — so the only
 // lever that reliably buys frames is having fewer chunks in flight.
 const FRAME_GOVERNOR_RADII_M = [26_000, 18_000, 12_000];
+// Terrain starts lazy at a local radius so Ready waits only for the aircraft's neighborhood.
+// Once that cell is resident, the mission contract expands streaming to its normal flight radius
+// in the background (32 km for the hero cell, 112 km for Rapier's regional corridor).
+const TERRAIN_INITIAL_WARMUP_RADIUS_M = 12_000;
 /// How far inside the streamed world edge the haze must close. Fog reaches 2% transmission at the
 /// visibility figure, so matching visibility exactly to the radius still leaves the boundary
 /// faintly drawn; 0.85 puts the last of the terrain behind effectively opaque air.
@@ -532,6 +540,14 @@ const frameGovernor = {
     if (late >= FRAME_GOVERNOR_TRIP_FRACTION) this.shed(view);
   },
 
+  idle(nowMs) {
+    // Ready, pause and replay frames include loading/UI work that says nothing about sortie
+    // performance. Keep the earned quality level, but begin a fresh observation window on resume.
+    this.windowStartedAt = Number.isFinite(nowMs) ? nowMs : 0;
+    this.lateFrames = 0;
+    this.windowFrames = 0;
+  },
+
   // Ordered by what actually costs frames, measured — NOT by what looks most expendable. Shadows
   // and resolution were the original first moves and they were the wrong ones: a production tape
   // showed an 11 fps window drawing 2.98M triangles in 78 calls and a 60 fps window drawing 2.91M
@@ -547,14 +563,22 @@ const frameGovernor = {
         if (changed === false && this.level < FRAME_GOVERNOR_RADII_M.length) return;
       } else {
         // Only once distance is exhausted does the picture itself start going.
+        const shadowCasters = [];
+        view.scene?.traverse?.((object) => {
+          if (object.castShadow === true) {
+            shadowCasters.push(object);
+            object.castShadow = false;
+          }
+        });
+        view.frameGovernorShadowState = {
+          enabled: view.renderer.shadowMap.enabled,
+          casters: shadowCasters,
+        };
         view.renderer.shadowMap.enabled = false;
-        view.scene?.traverse?.((object) => { object.castShadow = false; });
-        const terrainDiagnostics = view.terrainPresentation?.diagnostics?.();
-        const lowLevelSceneryRequired =
-          terrainDiagnostics?.terrainId === "terrain.ukraine.soniachne-training.v1"
-          || terrainDiagnostics?.sceneryEra === "ukraine-modern";
+        const lowLevelSceneryRequired = view.terrainMicroRequired === true;
         if (!lowLevelSceneryRequired) {
-          void view.terrainPresentation?.setSceneryEra?.(null);
+          view.terrainGovernorSuppressesAmbientScenery = true;
+          void view.terrainPresentation?.disableAmbientScenery?.();
         }
         announceGovernor(lowLevelSceneryRequired
           ? "Shadows off · low-level scenery retained · holding 60"
@@ -566,12 +590,29 @@ const frameGovernor = {
     recorder.event("perf", "FrameGovernor", { level: this.level });
   },
 
-  reset() {
+  reset(view = null) {
     // A new sortie re-earns its quality: one bad moment should not permanently downgrade a session.
     this.level = 0;
     this.lateFrames = 0;
     this.windowFrames = 0;
     this.windowStartedAt = 0;
+    if (!view) return;
+    const shadowState = view.frameGovernorShadowState;
+    if (shadowState) {
+      view.renderer.shadowMap.enabled = shadowState.enabled;
+      for (const object of shadowState.casters) {
+        if (object) object.castShadow = true;
+      }
+      view.frameGovernorShadowState = null;
+    }
+    view.terrainGovernorSuppressesAmbientScenery = false;
+    if (Number.isFinite(view.terrainNominalStreamingRadiusM)) {
+      view.terrainPresentation?.setStreamingRadiusM?.(
+        view.terrainNominalStreamingRadiusM);
+    }
+    if (view.terrainMicroRequired === true) {
+      void view.terrainPresentation?.enableAmbientScenery?.();
+    }
   },
 };
 
@@ -1446,7 +1487,7 @@ const MISSION_BRIEFS = Object.freeze({
   },
   7: {
     activity: "dogfight",
-    kicker: "Visual fight · mission 07",
+    kicker: "2030s Ukraine theatre · mission 07",
     title: "F-22A vs Su-27S",
     sortie: "Continuous visual merges · public-data surrogates · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
@@ -1456,7 +1497,7 @@ const MISSION_BRIEFS = Object.freeze({
   },
   8: {
     activity: "defence",
-    kicker: "Ukraine training sector · mission 08",
+    kicker: "2030s Ukraine · Soniachne detail cell · mission 08",
     title: "Low-Level Drone Intercept",
     sortie: "Fictional Soniachne sector · four sequential raiders · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds · low-level VMC · Auto-GCAS armed · one authoritative target at a time",
@@ -1468,7 +1509,7 @@ const MISSION_BRIEFS = Object.freeze({
 
 const CAMPAIGN_BRIEFS = Object.freeze({
   "first-merge": Object.freeze({
-    kicker: "F-22A · endless",
+    kicker: "2030s Ukraine · F-22A · endless",
     title: "Guns Only",
     sortie: "F-22A vs escalating opposition · guns only · first pass safe",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
@@ -1477,7 +1518,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   }),
   "low-level-drone": Object.freeze({
     ...MISSION_BRIEFS[8],
-    kicker: "Ukraine · fictional training sector",
+    kicker: "2030s Ukraine · fictional Soniachne detail cell",
     title: "Low-Level Drone Intercept",
     sortie: "F-22A defensive intercept · four staged low-flying raiders · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds · true-scale lowland terrain · Auto-GCAS armed",
@@ -1491,10 +1532,10 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash two bandits in one sortie to qualify",
   }),
   "rapier-intercept": Object.freeze({
-    kicker: "2030s · deep-rear basing",
+    kicker: "2030s Ukraine · deep-rear dispersed basing",
     title: "Rapier Intercept",
     sortie: "Rapier turbo-ramjet interceptor · catapult launch · guns only · hook recovery",
-    configuration: "Rapier public-data surrogate · 12 G structural, 15 G on override · no afterburner below M2 · electromagnetic launcher 88 m/s",
+    configuration: "Rapier public-data surrogate · 12 G structural, 15 G on override · no afterburner below M2 · 520 m electromagnetic launcher to 150 m/s",
     brief: "You launch from a dispersed strip a long way behind the front, because forward airfields do not survive. Climb on the turbine core, let the ram side take over past Mach 2, and cruise very high and very fast to the contact. Then dive. The Rapier carries enormous instantaneous G and almost no sustained G — it can point at anything once, for three to five seconds, and afterwards it is slow, low and out of ideas. Make the pass count, then recover on the hook.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace releases the G limiter to 15 G · one pass, then get out",
   }),
@@ -1835,7 +1876,8 @@ function releasePadlock(reason = "manual", { announce = true, record = true } = 
 }
 
 function resetMissionPresentation() {
-  frameGovernor.reset();
+  frameGovernor.reset(activeView);
+  terrainLaunchWarmupFailedKey = null;
   clearFlightInput("mission-reset");
   incidentReplay?.stop();
   renderIncidentReplay(null);
@@ -2434,15 +2476,44 @@ function tryAutoLaunch() {
   return launchMission(selectedBeat);
 }
 
-function lowLevelTerrainReady(index) {
-  if (Number(index) !== 8) return true;
-  const terrain = activeView?.presentationDiagnostics?.().terrain;
-  return terrain?.terrainId === "terrain.ukraine.soniachne-training.v1"
-    && terrain?.sceneryEra === "ukraine-modern"
-    && Number(terrain?.residentChunks) > 0;
+function terrainWarmupKey(state) {
+  if (state?.terrain_present !== true || !state?.terrain_profile_id) return null;
+  const eastM = Number(state.terrain_placement_east_m) || 0;
+  const northM = Number(state.terrain_placement_north_m) || 0;
+  return [
+    state.terrain_profile_id,
+    eastM.toFixed(1),
+    northM.toFixed(1),
+    state.terrain_micro_required === true ? "micro" : "macro",
+  ].join(":");
 }
 
-async function warmTerrainAroundReadyAircraft(terrain) {
+function terrainDiagnosticsCoverStagedAircraft(terrain, state) {
+  if (terrain?.terrainId !== state?.terrain_profile_id) return false;
+  const expectedEastM = Number(state?.terrain_placement_east_m) || 0;
+  const expectedNorthM = Number(state?.terrain_placement_north_m) || 0;
+  if (Number.isFinite(Number(terrain?.placementEastM))
+      && Math.abs(Number(terrain.placementEastM) - expectedEastM) > 0.5) return false;
+  if (Number.isFinite(Number(terrain?.placementNorthM))
+      && Math.abs(Number(terrain.placementNorthM) - expectedNorthM) > 0.5) return false;
+  const residentChunks = Number.isFinite(Number(terrain?.localResidentChunks))
+    ? Number(terrain.localResidentChunks) : Number(terrain?.residentChunks);
+  if (residentChunks <= 0) return false;
+  if (state?.terrain_micro_required !== true) return true;
+  const sceneryChunks = Number.isFinite(Number(terrain?.localSceneryChunks))
+    ? Number(terrain.localSceneryChunks) : Number(terrain?.sceneryChunks);
+  return terrain?.sceneryEra === state?.terrain_scenery_profile
+    && terrain?.ambientSceneryEnabled !== false
+    && sceneryChunks > 0;
+}
+
+function missionTerrainReady(state) {
+  if (state?.terrain_present !== true) return true;
+  const terrain = activeView?.presentationDiagnostics?.().terrain;
+  return terrainDiagnosticsCoverStagedAircraft(terrain, state);
+}
+
+async function warmTerrainAroundReadyAircraft(terrain, state, view) {
   if (!terrain) return false;
   await terrain.ready;
   // The paused render loop positions the camera from the staged aircraft and requests its near
@@ -2452,31 +2523,45 @@ async function warmTerrainAroundReadyAircraft(terrain) {
     requestAnimationFrame(() => requestAnimationFrame(resolve)));
   await terrain.whenIdle?.();
   const diagnostics = terrain.diagnostics?.();
-  return diagnostics?.terrainId === "terrain.ukraine.soniachne-training.v1"
-    && diagnostics?.sceneryEra === "ukraine-modern"
-    && Number(diagnostics?.residentChunks) > 0;
+  if (!terrainDiagnosticsCoverStagedAircraft(diagnostics, state)) return false;
+  view?.applyTerrainFlightPolicy?.();
+  return true;
 }
 
 function prepareMissionTerrain(index) {
-  const terrainKey = Number(index) === 8
-    ? "terrain.ukraine.soniachne-training.v1" : null;
-  if (!terrainKey || lowLevelTerrainReady(index)
-    || terrainLaunchWarmupFailedKey === terrainKey) return false;
-  if (terrainLaunchWarmupPromise) return true;
   const stagedState = snapshotSource?.frame?.(performance.now());
+  const terrainKey = stagedState?.terrain_present === true
+    ? stagedState?.terrain_profile_id : null;
+  const warmupKey = terrainWarmupKey(stagedState);
+  activeView?.configureTerrainMission?.(stagedState);
+  if (!terrainKey || missionTerrainReady(stagedState)) {
+    activeView?.applyTerrainFlightPolicy?.();
+    return false;
+  }
+  if (terrainLaunchWarmupFailedKey === warmupKey) return false;
+  if (terrainLaunchWarmupPromise) return true;
   if (!activeView || !stagedState) return false;
 
   setPauseReason("terrain", true);
-  if (viewStatus) viewStatus.textContent = "Loading low-level terrain and scenery…";
-  const work = Promise.resolve(activeView.ensureTerrainPresentation(stagedState))
-    .then((terrain) => warmTerrainAroundReadyAircraft(terrain))
+  if (viewStatus) {
+    viewStatus.textContent = stagedState.terrain_micro_required === true
+      ? "Loading low-level terrain and scenery…"
+      : "Loading Ukraine theatre terrain…";
+  }
+  const warmupView = activeView;
+  const work = Promise.resolve(warmupView.ensureTerrainPresentation(stagedState))
+    .then((terrain) => warmTerrainAroundReadyAircraft(terrain, stagedState, warmupView))
     .catch(() => false);
+  let deadlineTimer = 0;
   const deadline = new Promise((resolve) => {
-    window.setTimeout(() => resolve(false), 15_000);
+    deadlineTimer = window.setTimeout(() => {
+      warmupView.cancelTerrainPresentationRequest(terrainKey);
+      resolve(false);
+    }, 15_000);
   });
   terrainLaunchWarmupPromise = Promise.race([work, deadline]).then((ready) => {
     if (!ready) {
-      terrainLaunchWarmupFailedKey = terrainKey;
+      terrainLaunchWarmupFailedKey = warmupKey;
       if (viewStatus) {
         viewStatus.textContent = "Detailed terrain unavailable · presentation fallback active";
       }
@@ -2484,6 +2569,7 @@ function prepareMissionTerrain(index) {
       terrainLaunchWarmupFailedKey = null;
     }
   }).finally(() => {
+    if (deadlineTimer) window.clearTimeout(deadlineTimer);
     terrainLaunchWarmupPromise = null;
     if (selectedBeat === Number(index)) {
       setPauseReason("terrain", false);
@@ -2550,6 +2636,9 @@ function beginFlight() {
       .catch(() => {});
   }
   bridge.Begin();
+  // Ready/warmup frames are deliberately excluded from the performance sample, and every sortie
+  // starts from its mission-authored terrain radius and restored shadow/scenery policy.
+  frameGovernor.reset(activeView);
   activeView?.beginCloudBreakEntry();
   pauseReasons.delete("ready");
   bridgePauseApplied = false;
@@ -2766,8 +2855,30 @@ function updateCarrierWaterPresentation(presentation, state, nowSeconds, fogColo
   presentation.sprayUniforms.uFogDensity.value = fogDensity;
 }
 
-function updateCarrierRecoveryOverlay(presentation, state, scaleGroup = true) {
-  const { scaleX, scaleZ } = carrierPresentationScale(state);
+function updateRecoveryWireHighlight(presentation, state) {
+  const caughtWire = state.arrest_phase === "ARRESTED" || state.arrest_phase === "STOPPED"
+    ? Math.max(0, Math.min(4, Number(state.wire) || 0)) : 0;
+  if (caughtWire === presentation.highlightedWire) return;
+  presentation.highlightedWire = caughtWire;
+  for (let i = 0; i < presentation.wires.length; i++) {
+    const caught = i + 1 === caughtWire;
+    presentation.wires[i].material.color.setHex(caught ? 0xffd060 : 0xc9b47a);
+    presentation.wires[i].material.emissive.setHex(caught ? 0x5a2b00 : 0x000000);
+  }
+}
+
+function updateCarrierRecoveryOverlay(
+  presentation,
+  state,
+  scaleGroup = true,
+  fixedLongitudinalSpacing = false,
+) {
+  const deckScale = carrierPresentationScale(state);
+  // Ship recovery markings scale with the authored 250 x 30 m compatibility deck. A fixed
+  // arresting strip still needs the projected runway width, but scaling its live fallback by
+  // 1,200 / 250 longitudinally would turn the physical 5.2 m wire spacing into 24.96 m.
+  const scaleX = deckScale.scaleX;
+  const scaleZ = fixedLongitudinalSpacing ? 1 : deckScale.scaleZ;
   if (scaleGroup) presentation.group.scale.set(scaleX, 1, scaleZ);
 
   // Resolve the kernel touchdown point into the established carrier-local frame. This keeps the
@@ -2800,16 +2911,7 @@ function updateCarrierRecoveryOverlay(presentation, state, scaleGroup = true) {
       || state.lso_severity === "WAVEOFF";
     presentation.ols.ball.visible = !presentation.ols.waveOff.visible;
   }
-  const caughtWire = state.arrest_phase === "ARRESTED" || state.arrest_phase === "STOPPED"
-    ? Math.max(0, Math.min(4, Number(state.wire) || 0)) : 0;
-  if (caughtWire !== presentation.highlightedWire) {
-    presentation.highlightedWire = caughtWire;
-    for (let i = 0; i < presentation.wires.length; i++) {
-      const caught = i + 1 === caughtWire;
-      presentation.wires[i].material.color.setHex(caught ? 0xffd060 : 0xc9b47a);
-      presentation.wires[i].material.emissive.setHex(caught ? 0x5a2b00 : 0x000000);
-    }
-  }
+  updateRecoveryWireHighlight(presentation, state);
 }
 
 function updateCarrierVisual(carrier, state, nowSeconds, fogColor, fogDensity, worldY = carrier.position.y) {
@@ -2832,7 +2934,10 @@ function hideAuthoredCarrierRecoveryNodes(carrier) {
 }
 
 function updateCarrierRuntimePresentation(runtime, carrier, state, nowSeconds, fogColor, fogDensity) {
-  if (!state.carrier) {
+  const recoveryPlatform = state.recovery_platform === true || state.carrier === true;
+  const maritime = state.carrier === true;
+  const fixedStrip = state.platform_kind === "FIXED_ARRESTING_STRIP";
+  if (!recoveryPlatform) {
     runtime.recovery.group.visible = false;
     runtime.water.group.visible = false;
     return;
@@ -2840,12 +2945,35 @@ function updateCarrierRuntimePresentation(runtime, carrier, state, nowSeconds, f
 
   // The water rig is scene-owned and persists across compatibility/GLB swaps. It shares only XZ
   // position and heading, so simulated deck pitch and heave can never tip or lift the ocean foam.
-  runtime.water.group.visible = true;
-  applyCarrierRootPose(THREE, runtime.water.group, state, {
-    seaLevel: true,
-    scratch: runtime.poseScratch,
-  });
-  updateCarrierWaterPresentation(runtime.water, state, nowSeconds, fogColor, fogDensity);
+  runtime.water.group.visible = maritime;
+  if (maritime) {
+    applyCarrierRootPose(THREE, runtime.water.group, state, {
+      seaLevel: true,
+      scratch: runtime.poseScratch,
+    });
+    updateCarrierWaterPresentation(runtime.water, state, nowSeconds, fogColor, fogDensity);
+  }
+
+  // The procedural fixed strip owns a metre-authored recovery zone. Reuse those exact wires for
+  // live caught-wire highlighting and suppress the scene-level carrier overlay, avoiding duplicate
+  // paint and preserving the simulation's 5.2 m spacing. During an asset swap (or for an authored
+  // strip without exposed wire nodes), retain one physical-scale fallback instead.
+  if (fixedStrip) {
+    const fixedStripRecovery = carrier?.userData?.fixedStripRecoveryPresentation;
+    if (fixedStripRecovery) {
+      runtime.recovery.group.visible = false;
+      updateRecoveryWireHighlight(fixedStripRecovery, state);
+      return;
+    }
+    runtime.recovery.group.visible = true;
+    hideAuthoredCarrierRecoveryNodes(carrier);
+    applyCarrierRootPose(THREE, runtime.recovery.group, state, {
+      followPitch: true,
+      scratch: runtime.poseScratch,
+    });
+    updateCarrierRecoveryOverlay(runtime.recovery, state, true, true);
+    return;
+  }
 
   // Procedural compatibility carriers already own this exact recovery layer. Authored GLBs retain
   // their hull/island and trade only their fixed wire/centreline nodes for the live kernel overlay.
@@ -2978,8 +3106,11 @@ const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
   // visibility aid for a guns-only visual fight, not a claim to an F-22 or Su-27 exterior model.
   ["presentation.vehicle.f22a.public-data-surrogate.v1", createDrone],
   ["presentation.vehicle.su27s.public-data-surrogate.v1", createDrone],
+  ["presentation.vehicle.one-way-attack-drone.prototype.v1", createOneWayAttackDrone],
+  ["presentation.vehicle.rapier.public-data-surrogate.v1", createRapier],
   [DEFAULT_COCKPIT_PRESENTATION_ID, createHiddenPresentation],
   ["presentation.platform.carrier.v1", createCarrier],
+  ["presentation.platform.rapier-dispersed-strip.v1", createRapierDispersedStrip],
   [DEFAULT_ESCORT_PRESENTATION_ID, createHiddenPresentation],
 ]);
 const ABSTRACT_ONLY_PRESENTATION_IDS = new Set([
@@ -3224,6 +3355,16 @@ class PresentationAssetManager {
     slot.failedKey = "";
     slot.error = null;
     slot.root.add(slot.object);
+    // Runtime platform updates pose the stable slot root, while compatibility factories attach
+    // their authored interaction hooks to the object placed inside it. Mirror the fixed-strip
+    // recovery hook onto the stable root so live wire highlighting reaches the exact procedural
+    // 5.2 m meshes instead of falling back to a second overlay.
+    if (slot.object.userData?.fixedStripRecoveryPresentation) {
+      slot.root.userData.fixedStripRecoveryPresentation =
+        slot.object.userData.fixedStripRecoveryPresentation;
+    } else {
+      delete slot.root.userData.fixedStripRecoveryPresentation;
+    }
     if (previousObject !== slot.object) this.releaseDetached(previousInstance, previousObject);
   }
 
@@ -3585,7 +3726,7 @@ class PresentationAssetManager {
     // Admission gate for asset resolution, not merely a draw toggle: a 1v1 wave must not pay for
     // a second aircraft's assets at all.
     this.wingmanSlot.root.visible = state.w1_present === 1;
-    this.carrierSlot.root.visible = state.carrier === true;
+    this.carrierSlot.root.visible = state.recovery_platform === true;
     // A hidden decorative escort must not even enter asset resolution: visibility here is the
     // resolver's admission gate, not merely a later draw toggle in FlightView.update().
     this.escortSlot.root.visible = PRODUCTION_ESCORT_PRESENTATION_ENABLED
@@ -4115,6 +4256,12 @@ class FlightView {
     this.terrainSceneryEraPromise = null;
     this.terrainPresentationFailureKey = null;
     this.terrainPresentationRetryAtMs = 0;
+    this.terrainPresentationRequestEpoch = 0;
+    this.terrainPresentationAbortController = null;
+    this.terrainMicroRequired = false;
+    this.terrainNominalStreamingRadiusM = 64_000;
+    this.terrainGovernorSuppressesAmbientScenery = false;
+    this.frameGovernorShadowState = null;
     this.resize();
   }
 
@@ -4131,20 +4278,35 @@ class FlightView {
     this.cloudBreakActive = false;
   }
 
+  configureTerrainMission(state = null) {
+    this.terrainMicroRequired = state?.terrain_micro_required === true;
+    const radiusM = Number(state?.terrain_streaming_radius_m);
+    if (Number.isFinite(radiusM) && radiusM >= TERRAIN_INITIAL_WARMUP_RADIUS_M) {
+      this.terrainNominalStreamingRadiusM = radiusM;
+    }
+  }
+
+  applyTerrainFlightPolicy() {
+    if (!this.terrainPresentation
+        || !Number.isFinite(this.terrainNominalStreamingRadiusM)) return false;
+    return this.terrainPresentation.setStreamingRadiusM?.(
+      this.terrainNominalStreamingRadiusM) ?? false;
+  }
+
   ensureTerrainPresentation(state = null) {
-    const ukraineTrainingSector = state?.terrain_profile_id
-      === "terrain.ukraine.soniachne-training.v1" || selectedBeat === 8;
+    this.configureTerrainMission(state);
+    const ukraineTheatre = state?.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID;
     const terrainPackId = this.presentationAssets.requested.packId
       || this.presentationAssets.activePack?.id || "korea-1950s";
-    const sceneryEra = ukraineTrainingSector
-      ? "ukraine-modern"
+    const sceneryEra = ukraineTheatre
+      ? (state?.terrain_scenery_profile || "ukraine-modern")
       : (state?.terrain_scenery_profile
         || (terrainPackId.includes("modern") || selectedBeat === 7 || selectedBeat === 9
           || selectedBeat === 10 ? "modern" : "1950s"));
-    const terrainKey = ukraineTrainingSector
-      ? "terrain.ukraine.soniachne-training.v1"
+    const terrainKey = ukraineTheatre
+      ? UKRAINE_2030S_TERRAIN_ID
       : "terrain.korea.central-front.v2";
-    const manifestUrl = ukraineTrainingSector
+    const manifestUrl = ukraineTheatre
       ? UKRAINE_TRAINING_TERRAIN_MANIFEST_URL
       : DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL;
     if (!PRODUCTION_KOREA_TERRAIN_ENABLED || this.disposed) {
@@ -4160,6 +4322,9 @@ class FlightView {
       return Promise.resolve(null);
     }
     if (this.terrainPresentation && this.terrainPresentationKey !== terrainKey) {
+      this.terrainPresentationRequestEpoch += 1;
+      this.terrainPresentationAbortController?.abort();
+      this.terrainPresentationAbortController = null;
       this.terrainPresentation.dispose();
       this.terrainPresentation = null;
       this.terrainPresentationPromise = null;
@@ -4167,11 +4332,17 @@ class FlightView {
       this.terrainSceneryEraPromise = null;
     }
     if (this.terrainPresentation) {
-      if (this.terrainPresentation.diagnostics().sceneryEra !== sceneryEra
+      const terrainDiagnostics = this.terrainPresentation.diagnostics();
+      const needsAmbientScenery = state?.terrain_micro_required === true
+        && this.terrainGovernorSuppressesAmbientScenery !== true
+        && terrainDiagnostics.ambientSceneryEnabled === false;
+      if ((terrainDiagnostics.sceneryEra !== sceneryEra || needsAmbientScenery)
         && !this.terrainSceneryEraPromise) {
         const presentation = this.terrainPresentation;
         this.terrainSceneryEraPromise = Promise.resolve(
-          presentation.setSceneryEra(sceneryEra),
+          terrainDiagnostics.sceneryEra !== sceneryEra
+            ? presentation.setSceneryEra(sceneryEra)
+            : presentation.enableAmbientScenery?.(),
         ).catch((error) => {
           if (!this.disposed) {
             this.terrainPresentationError = String(error?.message ?? error);
@@ -4194,14 +4365,24 @@ class FlightView {
     }
     this.terrainPresentationError = null;
     this.terrainPresentationRequestedKey = terrainKey;
+    const requestEpoch = ++this.terrainPresentationRequestEpoch;
+    const abortController = new AbortController();
+    this.terrainPresentationAbortController = abortController;
     const request = loadKoreaTerrain(THREE, {
       manifestUrl,
       qualityTier: VISUAL_QUALITY.tier,
       maximumConcurrentLoads: VISUAL_QUALITY.tier === "mobile" ? 3 : 6,
+      lazyChunks: true,
+      chunkLoadRadiusM: TERRAIN_INITIAL_WARMUP_RADIUS_M,
+      chunkEvictRadiusM: TERRAIN_INITIAL_WARMUP_RADIUS_M + 16_000,
       sceneryEra,
       sunDirection: SUN_DIRECTION,
+      fetch: (input, init = {}) => fetch(input, {
+        ...init,
+        signal: abortController.signal,
+      }),
     }).then((terrain) => {
-      if (this.disposed) {
+      if (this.disposed || requestEpoch !== this.terrainPresentationRequestEpoch) {
         terrain.dispose();
         return null;
       }
@@ -4212,7 +4393,7 @@ class FlightView {
       this.scene.add(terrain.group);
       return terrain;
     }).catch((error) => {
-      if (!this.disposed) {
+      if (!this.disposed && requestEpoch === this.terrainPresentationRequestEpoch) {
         this.terrainPresentationError = String(error?.message ?? error);
         this.terrainPresentationFailureKey = terrainKey;
         this.terrainPresentationRetryAtMs = performance.now() + 15_000;
@@ -4225,6 +4406,29 @@ class FlightView {
       if (this.terrainPresentationPromise === request) this.terrainPresentationPromise = null;
     });
     return request;
+  }
+
+  cancelTerrainPresentationRequest(terrainKey) {
+    // A requested theatre can be chained behind the previous theatre's still-pending load. The
+    // warmup deadline belongs to the requested theatre, but it must cancel whichever fetch is
+    // actually blocking that request rather than requiring both keys to match.
+    const hasInFlightRequest = this.terrainPresentationPromise !== null;
+    const ownsPresentation = this.terrainPresentationKey === terrainKey;
+    if ((!hasInFlightRequest && !ownsPresentation) || this.disposed) return false;
+    this.terrainPresentationRequestEpoch += 1;
+    this.terrainPresentationAbortController?.abort();
+    this.terrainPresentationAbortController = null;
+    if (this.terrainPresentationKey === terrainKey) {
+      this.terrainPresentation?.dispose();
+      this.terrainPresentation = null;
+      this.terrainPresentationKey = null;
+    }
+    this.terrainPresentationPromise = null;
+    this.terrainPresentationRequestedKey = null;
+    this.terrainPresentationFailureKey = terrainKey;
+    this.terrainPresentationRetryAtMs = performance.now() + 15_000;
+    this.terrainPresentationError = "Terrain warmup timed out.";
+    return true;
   }
 
   resize() {
@@ -4906,12 +5110,24 @@ class FlightView {
   }
 
   update(state, dt, nowSeconds) {
+    this.configureTerrainMission(state);
     // The sortie chooser owns Ready. Defer the manifest and all height ranges until gameplay has
     // actually begun, then retain the single shared presentation across pause/replay/restage.
     // Only fetch the multi-megabyte visual terrain when the sim actually has a terrain surface.
     // Constrained builds can explicitly omit terrain truth and retain the sea-level fallback.
     if (state?.ready !== true && state?.terrain_present === true) {
       void this.ensureTerrainPresentation(state);
+    }
+    const terrainDiagnostics = this.terrainPresentation?.diagnostics?.();
+    const radarAltitudeFt = Number(state?.radar_altitude_ft);
+    if (state?.terrain_micro_required !== true && Number.isFinite(radarAltitudeFt)) {
+      if (radarAltitudeFt >= 12_000 && terrainDiagnostics?.ambientSceneryEnabled === true) {
+        void this.terrainPresentation.disableAmbientScenery?.();
+      } else if (radarAltitudeFt <= 6_000
+        && this.terrainGovernorSuppressesAmbientScenery !== true
+        && terrainDiagnostics?.ambientSceneryEnabled === false) {
+        void this.terrainPresentation.enableAmbientScenery?.();
+      }
     }
     const nextBanditEntityId = projectedId(state.bandit_entity_id);
     // Padlock is bound to a specific visual tally. It may not silently transfer to a replacement
@@ -4973,7 +5189,7 @@ class FlightView {
     this.playerRight.copy(playerFrame.right);
     this.playerQuaternion.copy(playerFrame.quaternion);
     this.banditPosition.set(state.bx, state.by, -state.bz);
-    if (state.carrier === true && Number.isFinite(state.cx)
+    if (state.recovery_platform === true && Number.isFinite(state.cx)
         && Number.isFinite(state.cy) && Number.isFinite(state.cz)) {
       this.carrierPosition.set(state.cx, state.cy, -state.cz);
       if (Number.isFinite(state.tx) && Number.isFinite(state.ty) && Number.isFinite(state.tz)) {
@@ -5159,8 +5375,8 @@ class FlightView {
     }
 
     // The bridge owns the one terrain-frame transform used by both physics and presentation.
-    // Shared-world sorties apply the inverse room origin; local carrier training retains its
-    // explicit offshore placement and is excluded from remote-aircraft presentation.
+    // Shared-world sorties apply the inverse room origin; authored hero/coastal/Rapier cells use
+    // their mission contract's fixed source anchor and remain excluded from remote presentation.
     const terrainPlacementEastM = Number(state.terrain_placement_east_m);
     const terrainPlacementNorthM = Number(state.terrain_placement_north_m);
     this.terrainPresentation?.update({
@@ -5174,6 +5390,7 @@ class FlightView {
     });
 
     const isCarrier = state.carrier === true;
+    const isRecoveryPlatform = state.recovery_platform === true;
     const banditAlive = aircraftAlive(state, "opponent_terminal_state",
       state.bandit_alive !== false && state.fight !== "Splash");
     const banditBodyPresent = state.opponent_body_present !== false;
@@ -5181,9 +5398,9 @@ class FlightView {
     const carrierRoot = this.presentationAssets.carrierSlot.root;
     const escortRoot = this.presentationAssets.escortSlot.root;
     targetRoot.visible = banditBodyPresent;
-    carrierRoot.visible = isCarrier;
+    carrierRoot.visible = isRecoveryPlatform;
     escortRoot.visible = isCarrier && PRODUCTION_ESCORT_PRESENTATION_ENABLED;
-    if (isCarrier) {
+    if (isRecoveryPlatform) {
       // Sim frame X=east, Y=up, Z=north; render flips Z. Deck-centre origin at deck height.
       // The hull follows the moving deck's bow-up pitch; water effects use a separate level root.
       applyCarrierRootPose(THREE, carrierRoot, state, {
@@ -5192,14 +5409,16 @@ class FlightView {
       });
       // Presentation formation is derived only from the projected carrier frame. The model origin
       // sits five metres above its waterline socket; formation truth remains outside the renderer.
-      applyEscortFormationPose(THREE, escortRoot, state, {
-        station: "starboard-quarter",
-        alongMetres: -760,
-        crossMetres: 460,
-        waterlineY: 5,
-      });
+      if (isCarrier) {
+        applyEscortFormationPose(THREE, escortRoot, state, {
+          station: "starboard-quarter",
+          alongMetres: -760,
+          crossMetres: 460,
+          waterlineY: 5,
+        });
+      }
       const carrierVisual = this.presentationAssets.carrierSlot.object;
-      if (carrierVisual?.userData.structure) {
+      if (isCarrier && carrierVisual?.userData.structure) {
         updateCarrierVisual(
           carrierVisual,
           state,
@@ -5279,10 +5498,9 @@ class FlightView {
     this.sky.mesh.position.copy(this.camera.position);
     this.sky.uniforms.uAltitude.value = cameraAltitude;
     if (!this.packEnvironmentAdapter) {
-      const detailedUkraineTerrainLoaded =
-        this.terrainPresentation?.diagnostics?.().terrainId
-        === "terrain.ukraine.soniachne-training.v1";
-      this.sea.mesh.visible = !detailedUkraineTerrainLoaded;
+      const terrainId = this.terrainPresentation?.diagnostics?.().terrainId;
+      const coastalUkraineTheatre = terrainId === UKRAINE_2030S_TERRAIN_ID;
+      this.sea.mesh.visible = coastalUkraineTheatre || !terrainId;
     }
     this.sea.mesh.position.set(this.camera.position.x, 0, this.camera.position.z);
     this.sea.uniforms.uAltitude.value = cameraAltitude;
@@ -5296,7 +5514,7 @@ class FlightView {
     this.sea.uniforms.uWind.value.y += (windTargetZ - this.sea.uniforms.uWind.value.y) * windBlend;
     this.sea.uniforms.uWindSpeed.value = this.sea.uniforms.uWind.value.length();
 
-    const shadowFocus = isCarrier ? carrierRoot.position : this.playerPosition;
+    const shadowFocus = isRecoveryPlatform ? carrierRoot.position : this.playerPosition;
     if (this.visualRuntime?.initialized) {
       // Establish the authored sun direction first; the shared runtime then owns shadow-map
       // bounds, texel snapping, adaptive resolution, post-processing and the final color transform.
@@ -5306,19 +5524,19 @@ class FlightView {
         deltaSeconds: dt,
         elapsedSeconds: nowSeconds,
         frameTimeMs: dt * 1000,
-        mode: replayExternal ? "replay" : isCarrier ? "carrier" : "combat",
+        mode: replayExternal ? "replay" : isRecoveryPlatform ? "carrier" : "combat",
         shadowFocus,
       });
       this.visualRuntime.render(dt);
     } else {
-      this.updateSunAndShadows(isCarrier, carrierRoot);
+      this.updateSunAndShadows(isRecoveryPlatform, carrierRoot);
       this.renderer.render(this.scene, this.camera);
     }
     const hudFrame = this.hudFrame;
     hudFrame.state = state;
-    hudFrame.aimPoint = isCarrier ? this.aimPoint : null; // HUD gates approach-only symbology from mode
-    hudFrame.directorPoint = isCarrier ? this.approachDirectorPoint : null;
-    hudFrame.flightPathPoint = isCarrier ? this.deckFlightPathPoint : null;
+    hudFrame.aimPoint = isRecoveryPlatform ? this.aimPoint : null;
+    hudFrame.directorPoint = isRecoveryPlatform ? this.approachDirectorPoint : null;
+    hudFrame.flightPathPoint = isRecoveryPlatform ? this.deckFlightPathPoint : null;
     hudFrame.sensorYaw = sensorYaw;
     hudFrame.sensorPitch = sensorPitch;
     // The HUD frame carries the same current eye-line offsets that orient the render camera.
@@ -5366,6 +5584,9 @@ class FlightView {
     if (this.disposed) return;
     this.disposed = true;
     this.visualRuntimeEpoch += 1;
+    this.terrainPresentationRequestEpoch += 1;
+    this.terrainPresentationAbortController?.abort();
+    this.terrainPresentationAbortController = null;
     this.terrainPresentation?.dispose();
     this.terrainPresentation = null;
     this.terrainPresentationKey = null;
@@ -6465,9 +6686,9 @@ async function boot() {
     try {
       // Raw (unclamped) render-frame delta: the perf telemetry must see the true stall length,
       // not the 0.25 s simulation-advance cap.
-      recorder.observeFrameDelta(now - previous);
-      frameGovernor.observe(now - previous, now, activeView);
-      const dt = clamp((now - previous) / 1000, 0, SIM_CATCHUP_CAP_SECONDS);
+      const renderDeltaMs = now - previous;
+      recorder.observeFrameDelta(renderDeltaMs);
+      const dt = clamp(renderDeltaMs / 1000, 0, SIM_CATCHUP_CAP_SECONDS);
       previous = now;
       // Phase probes. A frame delta proves a stall happened; only these say where. Each is a pair
       // of performance.now() reads around a block that could plausibly own a hundred milliseconds.
@@ -6482,6 +6703,11 @@ async function boot() {
       const replayPresentation = advanceIncidentReplay(incidentReplay, state, now);
       const replayFrame = replayPresentation.frame;
       const replayActive = replayPresentation.active;
+      if (!replayActive && pauseReasons.size === 0 && state.session_phase === "ACTIVE") {
+        frameGovernor.observe(renderDeltaMs, now, activeView);
+      } else {
+        frameGovernor.idle(now);
+      }
       if (!replayActive) {
         recordCampaignQualification(state);
         reconcileBridgeLifecycle(state);

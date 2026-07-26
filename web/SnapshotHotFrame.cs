@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
@@ -18,8 +19,8 @@ namespace GunsOnly.Web;
 /// - Every slot carries exactly the value the JSON field would parse to: numbers are rounded to the
 ///   same fixed-decimal precision the JSON format string uses, booleans are 1/0, and null-able
 ///   numbers use NaN as the wire sentinel for JSON null.
-/// - Conditionally emitted field groups (the carrier block, merge/drone detail) are guarded by
-///   presence slots so the browser can preserve key-absence semantics exactly.
+/// - Conditionally emitted field groups (the recovery-platform block, merge/drone detail) are
+///   guarded by presence slots so the browser can preserve key-absence semantics exactly.
 /// - The value derivations intentionally duplicate BuildState's prologue (position/airspeed/attitude
 ///   source switching, carrier latching) rather than restructuring the shipped JSON path; the golden
 ///   tests are the drift guard. Keep the two in lockstep when either changes.
@@ -38,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 2;
+    public const int LayoutVersion = 3;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -366,9 +367,10 @@ internal static class SnapshotHotFrame {
         OpenBlock("approach_mode", -1);
         Bool("approach");
         Bool("wave_off");
-        // The carrier block's first slot is the "carrier" flag itself and doubles as presence:
-        // when the beat has no carrier the whole ~55-key group is absent from the JSON.
-        OpenBlock("carrier", slots.Count);
+        // Recovery-platform presence is distinct from the maritime-only carrier flag. Rapier's
+        // fixed arresting strip emits the full recovery group with carrier=false.
+        OpenBlock("recovery_platform", slots.Count);
+        Bool("recovery_platform");
         Bool("carrier");
         Num("cx", 2); Num("cy", 2); Num("cz", 2);
         Num("cheading", 5);
@@ -470,14 +472,16 @@ internal static class SnapshotHotFrame {
         Vec3D airVelocity;
         if (catapulting) {
             groundVelocity = s.VelocityVector();
-            airVelocity = carrier is null
-                ? groundVelocity
-                : groundVelocity - carrier.SteadyWindWorld;
+            airVelocity = carrier?.IsMaritime == true
+                ? groundVelocity - carrier.SteadyWindWorld
+                : player.AirVelocity;
         } else if (arrested && carrier is not null) {
             groundVelocity = carrier.DeckVelocityWorld
                 + carrier.LandingFwd * arrestment.RelativeSpeedMps
                 + new Vec3D(0.0, carrier.DeckVerticalVelocityMps, 0.0);
-            airVelocity = groundVelocity - carrier.SteadyWindWorld;
+            airVelocity = carrier.IsMaritime
+                ? groundVelocity - carrier.SteadyWindWorld
+                : player.AirVelocity;
         } else {
             groundVelocity = s.VelocityVector();
             airVelocity = player.AirVelocity;
@@ -876,7 +880,7 @@ internal static class SnapshotHotFrame {
         w.Bool("approach", detents.ApproachMode);
         w.Bool("wave_off", waveOff);
 
-        if (w.OpenBlock("carrier", carrier is not null)) {
+        if (w.OpenBlock("recovery_platform", carrier is not null)) {
             Carrier c = carrier!;
             RecoveryDifficulty difficulty = session.Difficulty;
             CarrierPassResult pass = session.CarrierPass;
@@ -894,7 +898,8 @@ internal static class SnapshotHotFrame {
             double inClose = burble?.InCloseStrength(player.State.Position) ?? 0.0;
             int wire = arrestment.CaughtWire != 0 ? arrestment.CaughtWire : touchdown.Wire;
 
-            w.Bool("carrier", true);
+            w.Bool("recovery_platform", true);
+            w.Bool("carrier", c.IsMaritime);
             w.Num("cx", c.Position.X, 2); w.Num("cy", c.Position.Y, 2); w.Num("cz", c.Position.Z, 2);
             w.Num("cheading", c.HeadingRad, 5);
             w.Num("tx", c.TouchdownPoint.X, 2); w.Num("ty", c.TouchdownPoint.Y, 2);
@@ -955,7 +960,15 @@ internal static class SnapshotHotFrame {
     /// exact numbers JSON.parse would have produced. RawInteger passes the value through untouched.
     static double Quantize(double value, int decimals) {
         if (decimals == RawInteger || !double.IsFinite(value)) return value;
-        return Math.Round(value, decimals, MidpointRounding.AwayFromZero);
+        double away = Math.Round(value, decimals, MidpointRounding.AwayFromZero);
+        double even = Math.Round(value, decimals, MidpointRounding.ToEven);
+        if (away.Equals(even)) return away;
+
+        // Fixed-point formatting resolves exact decimal midpoints from the original binary value;
+        // Math.Round first scales and can lose that distinction (for example 0.025 versus 2.1205).
+        // Only the rare midpoint path pays for formatting so the per-frame hot path stays numeric.
+        string formatted = value.ToString($"F{decimals}", CultureInfo.InvariantCulture);
+        return double.Parse(formatted, CultureInfo.InvariantCulture);
     }
 
     /// Positional writer with name assertions against the static layout. Debug builds (and thus

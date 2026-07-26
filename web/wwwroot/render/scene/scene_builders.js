@@ -973,6 +973,194 @@ export function createCarrier(context = {}) {
   return group;
 }
 
+/// Fixed land launch/recovery installation for the Rapier mission. It shares the carrier pose
+/// convention (local -Z is launch direction, y=0 is the operating surface) but contains no hull,
+/// island, wake, sea or ship motion. The visible track covers the full 520 m stroke.
+export function createRapierDispersedStrip(context = {}) {
+  const group = new THREE.Group();
+  group.name = "RAPIER_FIXED_DISPERSED_ARRESTING_STRIP";
+  const concrete = makeMaterial(0x4d514e, 0.86, 0.025, 0x010101,
+    { grain: 0.15, grainScale: 0.45 });
+  const shoulder = makeMaterial(0x6f704e, 0.94, 0.015, 0x010100,
+    { grain: 0.12, grainScale: 0.35 });
+  const rail = makeMaterial(0x20262a, 0.38, 0.18, 0x010202,
+    { grain: 0.04, grainScale: 2.4 });
+  const paint = depthBiasDeckMaterial(makeMaterial(0xd7c88e, 0.66, 0.03));
+  const orange = makeMaterial(0xb95b2d, 0.61, 0.035, 0x060201);
+  const lamp = new THREE.MeshBasicMaterial({ color: 0xf0d38d, toneMapped: false });
+
+  box(group, { x: 72, y: 0.28, z: 1_200 }, new THREE.Vector3(0, -0.36, 0), shoulder);
+  box(group, { x: 48, y: 0.50, z: 1_200 }, new THREE.Vector3(0, -0.25, 0), concrete);
+  // Recovery centreline and threshold bars. The touchdown datum is 240 m behind local origin.
+  box(group, { x: 0.34, y: 0.035, z: 520 }, new THREE.Vector3(0, 0.04, 210), paint);
+  for (const z of [112, 120, 128]) {
+    box(group, { x: 33, y: 0.045, z: 0.55 }, new THREE.Vector3(0, 0.05, z), paint);
+  }
+  const recoveryWires = [];
+  for (let wire = 1; wire <= 4; wire++) {
+    const wireMaterial = makeMaterial(0xc9b47a, 0.38, 0.72, 0x000000,
+      { grain: 0.035, grainScale: 8, specularIntensity: 0.9, envMapIntensity: 1.0 });
+    const z = 240 - (wire - 3) * 5.2;
+    const recoveryWire = box(
+      group,
+      { x: 42, y: 0.07, z: 0.10 },
+      new THREE.Vector3(0, 0.12, z),
+      wireMaterial,
+    );
+    recoveryWire.name = `ARRESTING_WIRE_${wire}`;
+    recoveryWires.push(recoveryWire);
+  }
+
+  // Electromagnetic launcher: 360 m of flat rail, then a 160 m constant-radius arc rising 16.7 m
+  // to a twelve-degree lip. This MIRRORS CatapultLaunchModel exactly — RampNormalG 3.0 gives a
+  // 765 m radius at the 150 m/s end speed, and the kernel now flies the aircraft along this same
+  // curve rather than holding it level and applying an angle at release. If either side changes,
+  // both must: the aircraft rides this rail, so a mismatch is a visible float.
+  const catapultX = -7;
+  const strokeM = 520;
+  const railStartZ = -20;
+  const rampAngleRad = 12 * Math.PI / 180;
+  const arcRadiusM = 150 * 150 / (3.0 * 9.80665);
+  const arcLengthM = rampAngleRad * arcRadiusM;
+  const flatLengthM = strokeM - arcLengthM;
+  const railAngleAt = (d) => d <= flatLengthM
+    ? 0 : Math.min(rampAngleRad, (d - flatLengthM) / arcRadiusM);
+  const railHeightAt = (d) => d <= flatLengthM
+    ? 0 : arcRadiusM * (1 - Math.cos(railAngleAt(d)));
+  const railZAt = (d) => d <= flatLengthM
+    ? railStartZ - d
+    : railStartZ - flatLengthM - arcRadiusM * Math.sin(railAngleAt(d));
+  const portalZ = railZAt(strokeM);
+  const rampRiseM = railHeightAt(strokeM);
+
+  // Flat section, then the arc as short chords so the rail reads as a curve rather than a kink.
+  box(group, { x: 0.28, y: 0.10, z: flatLengthM },
+    new THREE.Vector3(catapultX, 0.10, railStartZ - flatLengthM / 2), rail);
+  for (const side of [-1, 1]) {
+    box(group, { x: 0.12, y: 0.12, z: flatLengthM },
+      new THREE.Vector3(catapultX + side * 0.42, 0.105, railStartZ - flatLengthM / 2), rail);
+  }
+  const ARC_SEGMENTS = 12;
+  for (let i = 0; i < ARC_SEGMENTS; i++) {
+    const d0 = flatLengthM + arcLengthM * i / ARC_SEGMENTS;
+    const d1 = flatLengthM + arcLengthM * (i + 1) / ARC_SEGMENTS;
+    const midAngle = (railAngleAt(d0) + railAngleAt(d1)) / 2;
+    const z0 = railZAt(d0), z1 = railZAt(d1);
+    const y0 = railHeightAt(d0), y1 = railHeightAt(d1);
+    const length = Math.hypot(z1 - z0, y1 - y0);
+    const segment = new THREE.Group();
+    segment.position.set(catapultX, (y0 + y1) / 2 + 0.10, (z0 + z1) / 2);
+    segment.rotation.x = -midAngle;
+    box(segment, { x: 0.28, y: 0.10, z: length }, new THREE.Vector3(0, 0, 0), rail);
+    for (const side of [-1, 1]) {
+      box(segment, { x: 0.12, y: 0.12, z: length },
+        new THREE.Vector3(side * 0.42, 0.005, 0), rail);
+    }
+    // The ramp is a built earth-and-concrete structure: it has to be held up.
+    box(segment, { x: 13, y: Math.max(0.6, (y0 + y1) / 2), z: length },
+      new THREE.Vector3(0, -(y0 + y1) / 4 - 0.1, 0), shoulder);
+    group.add(segment);
+  }
+
+  // COVERED ACCELERATION GALLERY. Ukrainian steppe is flat, so nothing hides a launcher and
+  // nothing supplies a launch angle. Roofing the flat run answers the first — a dispersed launcher
+  // survives by not being visible or crater-able — and the ski jump beyond answers the second.
+  // The gallery covers the FLAT 360 m only; the aircraft bursts into daylight at the foot of the
+  // ramp and rides the last 160 m of arc in the open, which is both the better reveal and far
+  // easier to build than roofing a curve.
+  //
+  // It occupies the -Z third of the strip; the arresting wires sit at +240 m, so the recovery
+  // runway stays clear. The bore is generously sized on purpose — a close-fitting tube would have
+  // to accelerate a share of the air ahead of it, which is the real loss here. Evacuating it is
+  // not: the air costs 1.32 MJ of an 88.3 MJ launch, against the 10-15% a linear motor already
+  // loses to itself. Vents relieve it for almost nothing.
+  const galleryHalfWidth = 7;
+  const galleryHeight = 8;
+  const bermCrest = 10;
+  const galleryEndZ = railStartZ - flatLengthM;
+  const gallery = new THREE.Group();
+  gallery.name = "LAUNCH_GALLERY";
+  const galleryMidZ = railStartZ - flatLengthM / 2;
+  for (const side of [-1, 1]) {
+    box(gallery, { x: 1.6, y: galleryHeight, z: flatLengthM },
+      new THREE.Vector3(catapultX + side * galleryHalfWidth, galleryHeight / 2, galleryMidZ),
+      concrete);
+    // Earth berm battered over the walls: spoil from the site's own earthworks, and the reason the
+    // whole thing reads as a low mound rather than a building.
+    box(gallery, { x: 9, y: bermCrest, z: flatLengthM },
+      new THREE.Vector3(catapultX + side * (galleryHalfWidth + 5), bermCrest / 2, galleryMidZ),
+      shoulder);
+  }
+  box(gallery, { x: galleryHalfWidth * 2 + 3.2, y: 1.4, z: flatLengthM },
+    new THREE.Vector3(catapultX, galleryHeight + 0.7, galleryMidZ), concrete);
+  box(gallery, { x: galleryHalfWidth * 2 + 12, y: 2.2, z: flatLengthM },
+    new THREE.Vector3(catapultX, galleryHeight + 2.4, galleryMidZ), shoulder);
+
+  // Interior ribs every 10 m. At 150 m/s these strobe rather than blur, and they are the only
+  // speed cue in an enclosed run - without them the acceleration reads as motionless.
+  for (let z = railStartZ - 10; z > galleryEndZ; z -= 10) {
+    box(gallery, { x: galleryHalfWidth * 2, y: 0.5, z: 0.5 },
+      new THREE.Vector3(catapultX, galleryHeight - 0.4, z), concrete);
+    const ribLamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 4), lamp);
+    ribLamp.position.set(catapultX, galleryHeight - 1.0, z);
+    ribLamp.userData.noShadow = true;
+    gallery.add(ribLamp);
+  }
+  // Vent apertures relieve the air the aircraft displaces ahead of it.
+  for (let z = railStartZ - 40; z > galleryEndZ; z -= 40) {
+    for (const side of [-1, 1]) {
+      box(gallery, { x: 2.0, y: 1.8, z: 3.0 },
+        new THREE.Vector3(catapultX + side * (galleryHalfWidth + 0.9), galleryHeight - 1.6, z),
+        rail);
+    }
+  }
+  // Portal headwall at the foot of the ramp, where the cover ends and the jump begins.
+  for (const side of [-1, 1]) {
+    box(gallery, { x: 5, y: bermCrest + 2.6, z: 3 },
+      new THREE.Vector3(catapultX + side * (galleryHalfWidth + 2), (bermCrest + 2.6) / 2,
+        galleryEndZ - 1.5), concrete);
+  }
+  group.add(gallery);
+
+  // Dispersed revetments and chunky value blocks establish the illustrative 2030s silhouette
+  // without implying a real airfield plan.
+  for (const side of [-1, 1]) {
+    box(group, { x: 7, y: 2.6, z: 38 },
+      new THREE.Vector3(side * 31, 1.1, 365), shoulder);
+    box(group, { x: 2.2, y: 1.6, z: 12 },
+      new THREE.Vector3(side * 26, 0.8, -440), orange);
+    for (let index = 0; index < 18; index++) {
+      const edgeLamp = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), lamp);
+      edgeLamp.position.set(side * 23.3, 0.18, -540 + index * 62);
+      edgeLamp.userData.noShadow = true;
+      group.add(edgeLamp);
+    }
+  }
+
+  const sockets = Object.freeze({
+    deckOrigin: addSemanticSocket(group, "SOCKET_DECK_ORIGIN", 0, 0, 0),
+    recoveryThreshold: addSemanticSocket(group, "SOCKET_RECOVERY_THRESHOLD", 0, 0.2, 112),
+    // The handoff point: top of the ramp, matching CatapultLaunchModel's
+    // AirborneHeightM + RampRiseM rather than a flat-deck 4 m.
+    bowReference: addSemanticSocket(group, "SOCKET_LAUNCH_END",
+      catapultX, 4.0 + rampRiseM, portalZ),
+  });
+  group.traverse((object) => {
+    if (!object.isMesh) return;
+    object.castShadow = object.userData.noShadow !== true;
+    object.receiveShadow = true;
+  });
+  group.userData.sockets = sockets;
+  group.userData.platformKind = "FIXED_ARRESTING_STRIP";
+  group.userData.launchStrokeM = 520;
+  group.userData.fixedStripRecoveryPresentation = {
+    wires: recoveryWires,
+    highlightedWire: 0,
+  };
+  annotateProceduralFallback(group, context);
+  return group;
+}
+
 export function createCarrierRuntimePresentation() {
   const recovery = createCarrierRecoveryOverlay(createCarrierRecoveryMaterials());
   const water = createCarrierWaterPresentation();
@@ -1225,6 +1413,198 @@ export function createDrone(context = {}) {
     object.receiveShadow = true;
   });
   group.userData.sockets = sockets;
+  annotateProceduralFallback(group, context);
+  return group;
+}
+
+/// Procedural compatibility model for the fictional Rapier public-data surrogate. Dimensions match
+/// the reduced-order flight model's 13 m length and 7.35 m span; the opaque sensor nose/escape-pod
+/// spine deliberately has no glass canopy, and one blended propulsion tunnel distinguishes it from
+/// the twin-engine compatibility fighter.
+export function createRapier(context = {}) {
+  const group = new THREE.Group();
+  group.name = "RAPIER_HIGH_ALTITUDE_INTERCEPTOR_SURROGATE";
+
+  const upper = makeMaterial(0x596b73, 0.50, 0.07, 0x010304,
+    { grain: 0.10, grainScale: 2.4, panels: 0.03, panelScale: 0.72 });
+  const lower = makeMaterial(0x26343a, 0.67, 0.045, 0x000101,
+    { grain: 0.08, grainScale: 2.8 });
+  const hot = makeMaterial(0x765244, 0.42, 0.16, 0x080201,
+    { grain: 0.05, grainScale: 3.1 });
+  const sensor = makeMaterial(0x11191d, 0.74, 0.035, 0x000101,
+    { grain: 0.03, grainScale: 4.0 });
+  const accent = makeMaterial(0xb85e32, 0.58, 0.04, 0x070201,
+    { grain: 0.06, grainScale: 2.0 });
+
+  const wing = new THREE.Mesh(createPlanformGeometry([
+    [0, -3.8], [-0.74, -3.1], [-3.675, 0.05], [-3.48, 0.92],
+    [-1.04, 0.46], [-0.72, 3.5], [0, 4.05], [0.72, 3.5],
+    [1.04, 0.46], [3.48, 0.92], [3.675, 0.05], [0.74, -3.1],
+  ], 0.16, 0.044), [upper, lower]);
+  wing.name = "RAPIER_7P35M_PLANFORM";
+  wing.position.y = 0.02;
+  group.add(wing);
+
+  const body = new THREE.Mesh(createLoftGeometry([
+    { z: -6.5, rx: 0.03, ry: 0.03, y: 0.03 },
+    { z: -5.65, rx: 0.34, ry: 0.30, y: 0.05 },
+    { z: -3.6, rx: 0.60, ry: 0.52, y: 0.08 },
+    { z: -0.6, rx: 0.76, ry: 0.66, y: 0.08 },
+    { z: 2.9, rx: 0.72, ry: 0.60, y: 0.06 },
+    { z: 5.55, rx: 0.48, ry: 0.40, y: 0.05 },
+    { z: 6.5, rx: 0.24, ry: 0.22, y: 0.04 },
+  ], 12), upper);
+  body.name = "RAPIER_13M_SENSOR_FUSELAGE";
+  group.add(body);
+
+  // Opaque reclined crew/sensor spine: a hard silhouette, explicitly not a transparent canopy.
+  const spine = new THREE.Mesh(createLoftGeometry([
+    { z: -3.95, rx: 0.12, ry: 0.08, y: 0.48 },
+    { z: -2.75, rx: 0.43, ry: 0.30, y: 0.56 },
+    { z: -0.35, rx: 0.48, ry: 0.34, y: 0.58 },
+    { z: 1.05, rx: 0.24, ry: 0.16, y: 0.48 },
+  ], 10), sensor);
+  spine.name = "RAPIER_OPAQUE_ESCAPE_POD_SPINE";
+  group.add(spine);
+
+  const intake = new THREE.Mesh(new THREE.RingGeometry(0.29, 0.55, 14), sensor);
+  intake.name = "RAPIER_SINGLE_BLENDED_INTAKE";
+  intake.scale.y = 0.72;
+  intake.position.set(0, -0.22, -3.72);
+  intake.rotation.y = Math.PI;
+  group.add(intake);
+  const propulsionTunnel = new THREE.Mesh(createLoftGeometry([
+    { z: -3.68, rx: 0.50, ry: 0.34, y: -0.20 },
+    { z: -1.9, rx: 0.58, ry: 0.40, y: -0.18 },
+    { z: 4.9, rx: 0.52, ry: 0.36, y: -0.14 },
+    { z: 6.1, rx: 0.34, ry: 0.28, y: -0.10 },
+  ], 12), lower);
+  propulsionTunnel.name = "RAPIER_TURBO_RAMJET_TUNNEL";
+  group.add(propulsionTunnel);
+  const exhaust = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.07, 7, 16), hot);
+  exhaust.position.set(0, -0.10, 6.12);
+  exhaust.name = "RAPIER_SINGLE_EXHAUST";
+  group.add(exhaust);
+
+  const finGeometry = createFinGeometry([
+    [2.2, 0], [5.72, 0], [5.1, 1.82], [4.24, 2.22], [3.15, 0.28],
+  ], 0.11);
+  for (const side of [-1, 1]) {
+    const fin = new THREE.Mesh(finGeometry, [upper, lower]);
+    fin.position.set(side * 0.58, 0.24, 0);
+    fin.rotation.z = side * -0.08;
+    group.add(fin);
+    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.035, 1.55), accent);
+    tip.position.set(side * 2.92, 0.15, 0.32);
+    tip.rotation.y = side * -0.16;
+    group.add(tip);
+  }
+
+  const sockets = Object.freeze({
+    cockpitCamera: addSemanticSocket(group, "SOCKET_CAMERA_COCKPIT", 0, 0.62, -2.2),
+    muzzleLeft: addSemanticSocket(group, "SOCKET_MUZZLE_LEFT", -0.32, -0.08, -5.55),
+    muzzleRight: addSemanticSocket(group, "SOCKET_MUZZLE_RIGHT", 0.32, -0.08, -5.55),
+  });
+  group.traverse((object) => {
+    if (!object.isMesh) return;
+    object.castShadow = object.userData.noShadow !== true;
+    object.receiveShadow = true;
+  });
+  group.userData.sockets = sockets;
+  group.userData.dimensionsM = Object.freeze({ length: 13, span: 7.35 });
+  annotateProceduralFallback(group, context);
+  return group;
+}
+
+/// Purpose-built visual surrogate for Mission 8's fictional one-way attack drone. Its 5.5 m
+/// wingspan is the same public snapshot value used by the flight model and gunsight, so the
+/// silhouette never makes the target twice as large as the authority thinks it is. Chunky colour
+/// blocks and a deliberately canopy-free, single-engine body carry the illustrative training look
+/// without copying an extant weapon.
+export function createOneWayAttackDrone(context = {}) {
+  const group = new THREE.Group();
+  group.name = "FICTIONAL_ONE_WAY_ATTACK_DRONE_TRAINING_SURROGATE";
+
+  const ochre = makeMaterial(0xb85f32, 0.64, 0.025, 0x090201,
+    { grain: 0.08, grainScale: 2.2, panels: 0.035, panelScale: 0.8 });
+  const cream = makeMaterial(0xd8bc78, 0.72, 0.018, 0x050301,
+    { grain: 0.07, grainScale: 2.6, panels: 0.025, panelScale: 0.7 });
+  const dark = makeMaterial(0x27312e, 0.74, 0.035, 0x000000,
+    { grain: 0.04, grainScale: 3.0 });
+  const accent = new THREE.MeshBasicMaterial({ color: 0xf0a33b, toneMapped: false });
+
+  const wingPoints = [
+    [0, -1.22], [-0.46, -1.02], [-2.75, -0.05], [-2.68, 0.58],
+    [-0.62, 0.42], [0, 0.78], [0.62, 0.42], [2.68, 0.58],
+    [2.75, -0.05], [0.46, -1.02],
+  ];
+  const wing = new THREE.Mesh(createPlanformGeometry(wingPoints, 0.13, 0.035),
+    [cream, ochre]);
+  wing.name = "TRAINING_DRONE_5P5M_WING";
+  wing.position.y = 0.02;
+  group.add(wing);
+
+  const body = new THREE.Mesh(createLoftGeometry([
+    { z: -2.30, rx: 0.035, ry: 0.035, y: 0.04 },
+    { z: -1.72, rx: 0.28, ry: 0.25, y: 0.07 },
+    { z: -0.72, rx: 0.38, ry: 0.34, y: 0.10 },
+    { z: 0.92, rx: 0.35, ry: 0.31, y: 0.09 },
+    { z: 1.92, rx: 0.24, ry: 0.22, y: 0.08 },
+    { z: 2.18, rx: 0.19, ry: 0.18, y: 0.08 },
+  ], 14), ochre);
+  body.name = "TRAINING_DRONE_SINGLE_ENGINE_BODY";
+  group.add(body);
+
+  const tailPoints = [
+    [0, 1.20], [-0.35, 1.25], [-1.12, 1.76], [-1.05, 2.08],
+    [0, 1.86], [1.05, 2.08], [1.12, 1.76], [0.35, 1.25],
+  ];
+  const tailplane = new THREE.Mesh(createPlanformGeometry(tailPoints, 0.10, 0.026),
+    [ochre, dark]);
+  tailplane.name = "TRAINING_DRONE_TAILPLANE";
+  tailplane.position.y = 0.13;
+  group.add(tailplane);
+
+  const finGeometry = createFinGeometry([
+    [1.12, 0.0], [2.08, 0.0], [1.83, 0.92], [1.48, 1.18],
+  ], 0.09);
+  const fin = new THREE.Mesh(finGeometry, [ochre, dark]);
+  fin.name = "TRAINING_DRONE_FIN";
+  fin.position.y = 0.18;
+  group.add(fin);
+
+  // Exaggerated training-orange wing panels remain readable against fields without changing the
+  // physical outline used by the range cue.
+  for (const side of [-1, 1]) {
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.025, 1.18), accent);
+    stripe.name = `TRAINING_DRONE_ORANGE_PANEL_${side < 0 ? "LEFT" : "RIGHT"}`;
+    stripe.position.set(side * 1.72, 0.115, -0.06);
+    stripe.rotation.y = side * -0.13;
+    stripe.userData.noShadow = true;
+    group.add(stripe);
+  }
+
+  const exhaust = new THREE.Mesh(new THREE.CircleGeometry(0.15, 14), dark);
+  exhaust.name = "TRAINING_DRONE_SINGLE_EXHAUST";
+  exhaust.position.set(0, 0.08, 2.185);
+  group.add(exhaust);
+  const exhaustRing = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.035, 6, 14), ochre);
+  exhaustRing.name = "TRAINING_DRONE_EXHAUST_RING";
+  exhaustRing.position.copy(exhaust.position);
+  group.add(exhaustRing);
+
+  group.traverse((object) => {
+    if (!object.isMesh) return;
+    object.castShadow = object.userData.noShadow !== true;
+    object.receiveShadow = true;
+  });
+  group.userData.trainingTarget = Object.freeze({
+    fictional: true,
+    crewed: false,
+    engineCount: 1,
+    wingSpanM: 5.5,
+    carriesGroundWeapon: false,
+  });
   annotateProceduralFallback(group, context);
   return group;
 }

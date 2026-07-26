@@ -17,6 +17,8 @@ import {
   carrierDistanceM,
   carrierRelativeMotion,
   CarrierPatternCueQualifier,
+  recoveryPlatformAvailable,
+  recoveryPlatformIsMaritime,
 } from "./render/hud/carrier_sa.js";
 import {
   padlockLiftPlaneModel,
@@ -148,6 +150,7 @@ function gunCue(state, hitFlash, solution = hasGunSolution(state)) {
 }
 
 function isApproachMode(state) {
+  if (!recoveryPlatformAvailable(state)) return false;
   const mode = hudMode(state);
   return mode === "APPROACH" || mode === "WAVE-OFF";
 }
@@ -162,7 +165,8 @@ function hasGunSolution(state) {
 
 function isFightHudActive(state) {
   if (!banditIsAlive(state)) return false;
-  return state.carrier !== true || hudMode(state) === "FREE" || hudMode(state) === "WAVE-OFF";
+  return !recoveryPlatformAvailable(state)
+    || hudMode(state) === "FREE" || hudMode(state) === "WAVE-OFF";
 }
 
 // Single source of truth for "the padlock view is genuinely looking away from the nose".
@@ -1521,7 +1525,7 @@ class CombatHud {
 
   drawDifficulty(frame) {
     const { state } = frame;
-    if (state.carrier !== true) return;
+    if (!recoveryPlatformAvailable(state)) return;
     const level = clamp(Math.round(Number(state.difficulty_level) || 0), 0, 5);
     if (this._lastDifficulty === null) {
       this._lastDifficulty = level;
@@ -1549,7 +1553,7 @@ class CombatHud {
   }
 
   drawAoAIndexer(state, dt = 0) {
-    if (state.carrier !== true || !isApproachMode(state)) {
+    if (!isApproachMode(state)) {
       this._aoaIndexerCue.reset();
       return;
     }
@@ -2443,6 +2447,11 @@ class CombatHud {
       this._padlockTrackEstablished = false;
       return;
     }
+    if (frame.padlockTarget === "carrier"
+        && !recoveryPlatformAvailable(frame.state)) {
+      this._carrierPatternCue.reset();
+      return;
+    }
 
     const padlockCtx = this.ctx;
     const padlockCamera = frame.camera;
@@ -2461,7 +2470,8 @@ class CombatHud {
     });
 
     const isBanditPadlock = frame.padlockTarget !== "carrier";
-    const targetLabel = isBanditPadlock ? "BANDIT" : "BOAT";
+    const targetLabel = isBanditPadlock ? "BANDIT"
+      : recoveryPlatformIsMaritime(frame.state) ? "BOAT" : "STRIP";
     if (isBanditPadlock) {
       const captureEntityId = String(frame.state.bandit_entity_id ?? "legacy");
       if (captureEntityId !== this._padlockCaptureEntityId) {
@@ -2509,7 +2519,8 @@ class CombatHud {
     padlockCtx.fillText(this.fitText(modeStatus, modeWidth - 12), this.width / 2, modeY + 20);
 
     // Combat padlock always owns its director and locator, including near the forward-view
-    // threshold. Boat padlock only needs this compact SA when the pilot deliberately looks away.
+    // threshold. Recovery-platform padlock needs this compact SA only when the pilot deliberately
+    // looks away.
     const dedicatedSa = isBanditPadlock || padlockLooksOffAxis(frame);
     if (dedicatedSa) {
       const state = frame.state;
@@ -2747,8 +2758,8 @@ class CombatHud {
     padlockCtx.restore();
 
     if (frame.padlockTarget === "carrier") {
-      // The pattern map solves recovery geometry when tracking the boat, but it should not cover
-      // the world while the pilot is deliberately slewing their head away from it.
+      // The pattern map solves recovery geometry while tracking the platform, but it should not
+      // cover the world while the pilot is deliberately slewing their head away from it.
       if (!frame.manualLookActive) this.drawCarrierPadlockSa(frame, systems);
       return;
     }
@@ -3029,6 +3040,7 @@ class CombatHud {
 
   drawCarrierPadlockSa(frame, systems = null) {
     const state = frame.state;
+    const maritime = recoveryPlatformIsMaritime(state);
     const ctx = this.ctx;
     const sideMargin = 12;
     const availableWidth = Math.max(1,
@@ -3158,17 +3170,19 @@ class CombatHud {
     ctx.font = "650 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText("DECK UP", mapLeft + 5, mapTop + 7);
+    ctx.fillText(maritime ? "DECK UP" : "STRIP UP", mapLeft + 5, mapTop + 7);
     ctx.fillText("INITIAL", clamp(initial.x + 4, mapLeft + 3, mapRight - 38),
       clamp(initial.y, mapTop + 6, mapBottom - 6));
     ctx.fillText("180", clamp(downwind180.x - 17, mapLeft + 3, mapRight - 18),
       clamp(downwind180.y, mapTop + 6, mapBottom - 6));
     ctx.fillText("FINAL", clamp(finalTurn.x + 4, mapLeft + 3, mapRight - 31),
       clamp(finalTurn.y - 6, mapTop + 6, mapBottom - 6));
-    ctx.fillStyle = AMBER;
-    const wodText = `WOD ${Math.round(Number(state.wod_kts) || 0)}`;
-    ctx.fillText(wodText, clamp(deckCentre.x + 18, mapLeft + 3, mapRight - 42),
-      clamp(deckCentre.y + 3, mapTop + 6, mapBottom - 6));
+    if (maritime) {
+      ctx.fillStyle = AMBER;
+      const wodText = `WOD ${Math.round(Number(state.wod_kts) || 0)}`;
+      ctx.fillText(wodText, clamp(deckCentre.x + 18, mapLeft + 3, mapRight - 42),
+        clamp(deckCentre.y + 3, mapTop + 6, mapBottom - 6));
+    }
 
     const dataLeft = mapRight + (compact ? 9 : 15);
     const dataRight = x + width - inset;
@@ -3213,8 +3227,11 @@ class CombatHud {
       ? `${Math.round(displayAltitude)} FT` : "--- FT";
     drawFit(`${speedText} · ${altitudeText}${aoaText}`,
       2, aoaState === "SLOW" ? RED : aoaState === "FAST" ? AMBER : GREEN_DIM);
-    drawFit(`BOAT ${distanceM === null ? "---" : (distanceM / 1852).toFixed(1)} NM · BRC ${String(Math.round(brc)).padStart(3, "0")}° · FNL ${String(Math.round(finalCourse)).padStart(3, "0")}°`,
-      3, GREEN_DIM);
+    const distanceText = `${distanceM === null ? "---" : (distanceM / 1852).toFixed(1)} NM`;
+    const headingText = maritime
+      ? `BRC ${String(Math.round(brc)).padStart(3, "0")}° · FNL ${String(Math.round(finalCourse)).padStart(3, "0")}°`
+      : `FINAL COURSE ${String(Math.round(finalCourse)).padStart(3, "0")}°`;
+    drawFit(`${maritime ? "BOAT" : "STRIP"} ${distanceText} · ${headingText}`, 3, GREEN_DIM);
     drawFit(`REL ${Number.isFinite(along) ? Math.round(along) : "---"} M · XTK ${Number.isFinite(cross) ? formatSigned(cross) : "---"} M · TRK ${Number.isFinite(relativeMotion.trackRad) ? `${formatSigned(relativeMotion.trackRad * RAD_TO_DEG)}°` : "---"}`,
       4, GREEN_DIM);
     drawFit(configuration.gearText, 5,
@@ -3256,7 +3273,8 @@ class CombatHud {
   drawFooter(frame) {
     const state = frame.state;
     const mode = hudMode(state);
-    if (state.carrier !== true || (mode !== "APPROACH" && mode !== "WAVE-OFF")) {
+    if (!recoveryPlatformAvailable(state)
+        || (mode !== "APPROACH" && mode !== "WAVE-OFF")) {
       this._lsoDisplayCue.reset();
       return;
     }

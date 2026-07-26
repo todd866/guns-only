@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
 import {
@@ -10,6 +11,8 @@ import {
   selectTerrainLod,
   terrainCurvatureDropM,
   TerrainBundleReader,
+  ukraineTrainingApronHeightM,
+  ukraineTrainingSourceHeightM,
   validateTerrainAtlasManifest,
   validateTerrainManifest,
 } from "../korea_terrain.js";
@@ -36,6 +39,53 @@ function manifest() {
   };
 }
 
+test("Ukraine visual apron edge source stays byte-aligned with the shipped truth grid", async () => {
+  const payload = await readFile(new URL(
+    "../../../content/packs/ukraine-modern/environment/terrain/soniachne-steppe.truth",
+    import.meta.url,
+  ));
+  const gridOffset = 64;
+  const pointCount = 513;
+  const truthHeightM = (eastM, northM) => {
+    const eastIndex = Math.round((eastM + 8_192) / 32);
+    const northIndex = Math.round((northM + 8_192) / 32);
+    const index = northIndex * pointCount + eastIndex;
+    return payload.readInt16LE(gridOffset + index * 2) * 0.1;
+  };
+  for (let alongEdgeM = -8_192; alongEdgeM <= 8_192; alongEdgeM += 32) {
+    for (const [eastM, northM] of [
+      [alongEdgeM, -8_192], [alongEdgeM, 8_192],
+      [-8_192, alongEdgeM], [8_192, alongEdgeM],
+    ]) {
+      assert.equal(Math.round(ukraineTrainingSourceHeightM(eastM, northM) * 10),
+        Math.round(truthHeightM(eastM, northM) * 10));
+    }
+  }
+});
+
+test("shipped Ukraine terrain manifest exposes one v2 theatre with nested fidelity bands", async () => {
+  const source = JSON.parse(await readFile(new URL(
+    "../../../content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json",
+    import.meta.url,
+  ), "utf8"));
+  assert.equal(source.terrainId, "terrain.ukraine.soniachne-theatre.v2");
+  assert.deepEqual(source.boundsLocalM, [-131_072, -131_072, 131_072, 131_072]);
+  assert.deepEqual(source.fidelityBands.map((band) => [
+    band.id, band.simulationSpacingM,
+  ]), [
+    ["theatre-macro", 256],
+    ["soniachne-detail", 32],
+  ]);
+  assert.equal(source.simulationTruth.spacingM, 32);
+  assert.equal(source.regionalSimulationTruth.spacingM, 256);
+  assert.equal(source.chunks.filter(
+    (chunk) => chunk.generation.fidelityBand === "detail",
+  ).length, 4);
+  assert.equal(source.chunks.filter(
+    (chunk) => chunk.generation.fidelityBand === "macro",
+  ).length, 24);
+});
+
 function streamingManifest() {
   const chunks = [
     { id: "far", boundsLocalM: [40, 0, 42, 2] },
@@ -57,6 +107,30 @@ function streamingManifest() {
     boundsLocalM: [0, 0, 42, 2],
     quantization,
     bundle: { uri: "streaming.terrain", byteLength: 54, sha256: "c".repeat(64) },
+    chunks,
+  };
+}
+
+function macroStreamingManifest() {
+  const chunks = [
+    { id: "macro-under-aircraft", boundsLocalM: [0, 0, 65_536, 65_536] },
+    { id: "macro-remote", boundsLocalM: [131_072, 0, 196_608, 65_536] },
+  ].map((chunk, index) => ({
+    ...chunk,
+    lods: [{
+      level: 0,
+      sampleCount: 3,
+      byteOffset: index * 18,
+      byteLength: 18,
+      spacingM: 32_768,
+    }],
+  }));
+  return {
+    schemaVersion: "1.0.0",
+    terrainId: "terrain.macro-streaming-test.v1",
+    boundsLocalM: [0, 0, 196_608, 65_536],
+    quantization,
+    bundle: { uri: "macro.terrain", byteLength: 36, sha256: "d".repeat(64) },
     chunks,
   };
 }
@@ -597,6 +671,96 @@ test("builds at most one nearest terrain chunk per frame and drains queued build
     "teardown must drain queued geometry work");
 });
 
+test("lazy streaming loads and retains a large macro chunk by footprint distance", async () => {
+  const source = macroStreamingManifest();
+  const ranges = [];
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/macro-streaming.manifest.json",
+    lazyChunks: true,
+    chunkLoadRadiusM: 12_000,
+    chunkEvictRadiusM: 14_000,
+    maximumConcurrentLoads: 1,
+    fetch: async (_url, options = {}) => {
+      if (!options.headers?.Range) {
+        return { ok: true, status: 200, json: async () => source };
+      }
+      ranges.push(options.headers.Range);
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => new ArrayBuffer(18),
+      };
+    },
+  });
+  await terrain.ready;
+  assert.equal(ranges.length, 0,
+    "lazy construction must not fetch the whole theatre before mission-local warmup");
+  assert.equal(terrain.diagnostics().residentChunks, 0);
+  assert.equal(terrain.diagnostics().localResidentChunks, 0);
+
+  const placementEastM = 100_000;
+  const placementNorthM = -20_000;
+  const worldPosition = (localEastM, localNorthM) => new THREE.Vector3(
+    placementEastM + localEastM,
+    500,
+    -(placementNorthM + localNorthM),
+  );
+  terrain.update({
+    cameraPosition: worldPosition(1, 32_768),
+    placementEastM,
+    placementNorthM,
+  });
+  await terrain.whenIdle();
+  let diagnostics = terrain.diagnostics();
+  assert.equal(ranges.length, 1);
+  assert.ok(terrain.entries.get("macro-under-aircraft").mesh,
+    "a camera inside the chunk must load it even when its centre is beyond the radius");
+  assert.equal(terrain.entries.get("macro-remote").mesh, null);
+  assert.equal(diagnostics.placementEastM, placementEastM);
+  assert.equal(diagnostics.placementNorthM, placementNorthM);
+  assert.equal(diagnostics.residentChunks, 1);
+  assert.equal(diagnostics.localResidentChunks, 1);
+
+  terrain.update({
+    placementEastM: placementEastM + 250_000,
+    placementNorthM,
+  });
+  diagnostics = terrain.diagnostics();
+  assert.equal(diagnostics.residentChunks, 1);
+  assert.equal(diagnostics.localResidentChunks, 0,
+    "changing mission placement without a new camera update must invalidate local warmth");
+  assert.equal(diagnostics.placementEastM, placementEastM + 250_000);
+
+  terrain.update({
+    cameraPosition: worldPosition(1, 32_768),
+    placementEastM,
+    placementNorthM,
+  });
+  assert.equal(terrain.diagnostics().localResidentChunks, 1);
+
+  terrain.update({ cameraPosition: worldPosition(-13_000, 32_768) });
+  diagnostics = terrain.diagnostics();
+  assert.equal(diagnostics.residentChunks, 1,
+    "the eviction hysteresis ring must retain the already-built macro chunk");
+  assert.equal(diagnostics.localResidentChunks, 0,
+    "a retained chunk outside the load footprint must not satisfy local warmup");
+
+  terrain.update({ cameraPosition: worldPosition(-15_000, 32_768) });
+  assert.equal(terrain.diagnostics().residentChunks, 0,
+    "the chunk must evict once distance from its nearest bound exceeds the eviction radius");
+
+  terrain.update({
+    cameraPosition: worldPosition(-15_000, 32_768),
+    streamPosition: worldPosition(1, 32_768),
+  });
+  await terrain.whenIdle();
+  diagnostics = terrain.diagnostics();
+  assert.equal(diagnostics.residentChunks, 1,
+    "look-ahead coverage inside the footprint must request the macro chunk");
+  assert.equal(diagnostics.localResidentChunks, 1);
+  terrain.dispose();
+});
+
 test("streams atlas pages around the aircraft and evicts pages behind it", async () => {
   const pageManifest = (id, minimumEastM) => ({
     schemaVersion: "1.0.0",
@@ -665,10 +829,13 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
   await terrain.whenIdle();
   assert.equal(terrain.diagnostics().residentPages, 1);
   assert.equal(terrain.diagnostics().residentChunks, 1);
+  assert.equal(terrain.diagnostics().localResidentChunks, 1);
+  assert.equal(terrain.diagnostics().localSceneryChunks, 0);
   terrain.update({ cameraPosition: new THREE.Vector3(15, 500, -4), deltaSeconds: 1 });
   await terrain.whenIdle();
   assert.equal(terrain.diagnostics().residentPages, 1);
   assert.equal(terrain.diagnostics().residentChunks, 1);
+  assert.equal(terrain.diagnostics().localResidentChunks, 1);
   assert.equal(terrain.pages.get("west").presentation, null);
   assert.ok(terrain.pages.get("east").presentation);
   assert.equal(requested.filter((request) => request.range).length, 2);
@@ -759,7 +926,56 @@ test("swaps 1950s and 2030s scenery in place without refetching retained terrain
   terrain.dispose();
 });
 
-test("Ukraine terrain selects its toon palette and retains a non-authoritative land horizon apron", async () => {
+test("unified Ukraine v2 terrain retains its palette while ambient micro scenery is shed", async () => {
+  const source = manifest();
+  source.terrainId = "terrain.ukraine.soniachne-theatre.v2";
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/soniachne-v2.manifest.json",
+    sceneryEra: "ukraine-modern",
+    qualityTier: "balanced",
+    fetch: async (_url, options = {}) => {
+      if (!options.headers?.Range) {
+        return { ok: true, status: 200, json: async () => source };
+      }
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => new ArrayBuffer(18),
+      };
+    },
+  });
+  await terrain.ready;
+
+  assert.equal(terrain.group.name, "UKRAINE_SONIACHNE_2030S_TERRAIN");
+  assert.equal(terrain.material.defines.MODERN_SCENERY, 1);
+  assert.equal(terrain.material.defines.UKRAINE_SCENERY, 1);
+  assert.equal(terrain.diagnostics().horizonApron, false,
+    "the regional v2 product supplies its own macro horizon");
+  assert.equal(terrain.diagnostics().ambientSceneryEnabled, true);
+  assert.equal(terrain.diagnostics().sceneryChunks, 1);
+  assert.equal(terrain.diagnostics().localSceneryChunks, 0,
+    "resident scenery is not locally warm until a camera coverage update");
+
+  terrain.update({ cameraPosition: new THREE.Vector3(1, 500, -1) });
+  assert.equal(terrain.diagnostics().localResidentChunks, 1);
+  assert.equal(terrain.diagnostics().localSceneryChunks, 1);
+
+  await terrain.disableAmbientScenery();
+  assert.equal(terrain.diagnostics().sceneryEra, "ukraine-modern",
+    "shedding micro instances must not recolour the shared theatre");
+  assert.equal(terrain.diagnostics().ambientSceneryEnabled, false);
+  assert.equal(terrain.diagnostics().sceneryChunks, 0);
+  assert.equal(terrain.diagnostics().localSceneryChunks, 0);
+  assert.equal(terrain.material.defines.UKRAINE_SCENERY, 1);
+
+  await terrain.enableAmbientScenery();
+  assert.equal(terrain.diagnostics().ambientSceneryEnabled, true);
+  assert.equal(terrain.diagnostics().sceneryChunks, 1);
+  assert.equal(terrain.diagnostics().localSceneryChunks, 1);
+  terrain.dispose();
+});
+
+test("legacy compact Ukraine v1 terrain retains a non-authoritative land horizon apron", async () => {
   const source = manifest();
   source.terrainId = "terrain.ukraine.soniachne-training.v1";
   const terrain = await loadKoreaTerrain(THREE, {
@@ -782,6 +998,8 @@ test("Ukraine terrain selects its toon palette and retains a non-authoritative l
   assert.equal(terrain.material.defines.MODERN_SCENERY, 1);
   assert.equal(terrain.material.defines.UKRAINE_SCENERY, 1);
   assert.equal(terrain.diagnostics().horizonApron, true);
+  assert.equal(terrain.diagnostics().sceneryChunks, 1,
+    "warmup diagnostics must distinguish scenery-bearing near LODs from coarse terrain");
   const apron = terrain.group.getObjectByName(
     "FICTIONAL_UKRAINE_PRESENTATION_ONLY_LAND_APRON",
   );
@@ -790,6 +1008,38 @@ test("Ukraine terrain selects its toon palette and retains a non-authoritative l
   assert.equal(apron.userData.terrain.authoritative, false);
   assert.equal(apron.userData.terrain.collision, false);
   assert.equal(apron.userData.terrain.targetable, false);
+  assert.equal(apron.userData.terrain.transitionM, 4_000);
+  const transition = terrain.group.getObjectByName(
+    "FICTIONAL_UKRAINE_PRESENTATION_TRANSITION_RING",
+  );
+  assert.ok(transition);
+  assert.equal(transition.children.length, 4);
+  const transitionNormals = transition.children[0].geometry.getAttribute("normal");
+  assert.ok(transitionNormals.getY(0) > 0,
+    "transition apron vertices must face upward for lighting and back-face culling");
+  for (const strip of transition.children) {
+    const positions = strip.geometry.getAttribute("position");
+    for (let index = 0; index < positions.count; index++) {
+      const eastM = positions.getX(index);
+      const northM = -positions.getZ(index);
+      const onEastWestSeam = Math.abs(Math.abs(eastM) - 8_192) <= 1e-6
+        && Math.abs(northM) <= 8_192;
+      const onNorthSouthSeam = Math.abs(Math.abs(northM) - 8_192) <= 1e-6
+        && Math.abs(eastM) <= 8_192;
+      if (!onEastWestSeam && !onNorthSouthSeam) continue;
+      assert.equal(Math.round(positions.getY(index) * 10),
+        Math.round(ukraineTrainingSourceHeightM(
+          Math.max(-8_192, Math.min(8_192, eastM)),
+          Math.max(-8_192, Math.min(8_192, northM)),
+        ) * 10), "every detailed-cell seam vertex must match packed truth");
+    }
+  }
+  const edgeHeight = ukraineTrainingSourceHeightM(8_192, 0);
+  assert.equal(ukraineTrainingApronHeightM(8_192, 0), edgeHeight);
+  assert.ok(Math.abs(
+    ukraineTrainingApronHeightM(10_192, 0) - (edgeHeight + 78) * 0.5,
+  ) < 1e-9, "the 2 km midpoint must match the physics smoothstep blend");
+  assert.equal(ukraineTrainingApronHeightM(12_192, 0), 78);
   assert.equal(terrain.streamingRadiusM, Number.POSITIVE_INFINITY);
   assert.equal(terrain.setStreamingRadiusM(12_000), true);
   assert.equal(terrain.streamingRadiusM, 12_000);
@@ -874,6 +1124,25 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.equal(ukraine.defines.MODERN_SCENERY, 1);
   assert.equal(ukraine.defines.UKRAINE_SCENERY, 1);
   assert.match(ukraine.fragmentShader, /fictional Ukrainian training-sector palette/i);
+  assert.match(ukraine.fragmentShader,
+    /float ukraineElevationBand = smoothstep\(22\.0, 40\.0, vTerrainHeight\)/,
+    "the low-relief theatre needs a Ukraine-scale height ramp at macro LOD");
+  assert.match(ukraine.fragmentShader,
+    /vec2 macroParcelCell = floor\(macroParcelPosition \/ vec2\(4400\.0, 3100\.0\)\)/);
+  assert.match(ukraine.fragmentShader,
+    /float parcelHash = fract\(sin\(dot\(macroParcelCell,/);
+  assert.match(ukraine.fragmentShader,
+    /cultivation = mix\(cultivation, vec3\(0\.085, 0\.145, 0\.045\), parcelBoundary \* 0\.32\)/,
+    "macro parcel borders must remain a cheap terrain-albedo cue, not instanced scenery");
+  assert.match(ukraine.fragmentShader,
+    /macroArable \* \(0\.58 \+ \(1\.0 - ukraineElevationBand\) \* 0\.16\)/,
+    "kilometre-scale crop values must remain part of terrain albedo without ambient instances");
+  assert.match(ukraine.fragmentShader,
+    /sAlbedo \*= mix\(1\.07, 0\.84, ukraineElevationBand\)/,
+    "the crop palette must retain the regional height value structure");
+  assert.match(ukraine.fragmentShader,
+    /dot\(normal\.xz, regionalSunDirection\) \* 12\.0/,
+    "coarse lowland normals need a bounded directional relief cue");
   assert.ok(
     modern.fragmentShader.indexOf("lit *= mix(uOcclusionRange.x")
       < modern.fragmentShader.indexOf("lit = mix(lit, waterLit, waterMask)"),

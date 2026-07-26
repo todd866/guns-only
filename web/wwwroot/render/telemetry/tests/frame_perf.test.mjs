@@ -106,7 +106,7 @@ test("the browser recorder feeds raw render deltas and never displaces state row
   // The render loop hands the recorder the raw delta before the simulation-advance clamp, so a
   // stall is measured at its true length rather than at the length the kernel was willing to run.
   assert.match(app,
-    /recorder\.observeFrameDelta\(now - previous\);[\s\S]{0,300}?clamp\(\(now - previous\) \/ 1000, 0, SIM_CATCHUP_CAP_SECONDS\)/);
+    /const renderDeltaMs = now - previous;[\s\S]{0,300}?recorder\.observeFrameDelta\(renderDeltaMs\);[\s\S]{0,300}?clamp\(renderDeltaMs \/ 1000, 0, SIM_CATCHUP_CAP_SECONDS\)/);
   // That cap is a spiral brake. At 120 Hz a healthy 60 fps frame owes the kernel 2 ticks; letting
   // one frame catch up 0.25 s meant THIRTY, so a single hitch bought its own successor and the tape
   // showed five-second windows with a 166 ms and a 283 ms MEDIAN frame. Keep it within a handful of

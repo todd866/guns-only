@@ -1255,10 +1255,13 @@
     }
 
     .sortie-choice {
+      display: block;
+      width: 100%;
       min-width: 0;
       min-height: 78px;
       padding: 10px 12px;
       text-align: left;
+      text-decoration: none;
     }
 
     .sortie-number {
@@ -2172,8 +2175,8 @@
       <header class="ready-menu-header">
         <div class="ready-menu-brand">Guns Only</div>
         <div>
-          <h1 id="ready-menu-title">Pick an aircraft</h1>
-          <p id="ready-menu-help">Both are available. Fly whichever you feel like.</p>
+          <h1 id="ready-menu-title">Pick a mission</h1>
+          <p id="ready-menu-help">Every experience is available. Fly whichever you feel like.</p>
         </div>
       </header>
 
@@ -2182,7 +2185,7 @@
           <div class="ready-group-heading ready-program-heading">
             <div>
               <h2>Missions</h2>
-              <p>Three guns-only sorties, including the first low-altitude Ukraine scenery slice.</p>
+              <p>Four guns-only experiences in one fictional 2030s theatre, from facility corridors to the stratosphere.</p>
             </div>
             <output id="ready-program-progress"></output>
           </div>
@@ -2191,7 +2194,7 @@
               <button type="button" class="sortie-choice" data-program-node="first-merge" aria-pressed="true">
                 <span class="sortie-number">F-22A <b data-program-status="first-merge"></b></span>
                 <strong>Guns Only</strong>
-                <span>Endless guns-only dogfight against a reactive bandit. The wave escalates while you keep winning and eases when you do not.</span>
+                <span>Endless guns-only dogfight over the regional Ukraine world. The wave escalates while you keep winning and eases when you do not.</span>
                 <small>NO MISSILES · NO RADAR GAME · ANGLES AND ENERGY</small>
               </button>
             </div>
@@ -2199,7 +2202,7 @@
               <button type="button" class="sortie-choice" data-program-node="low-level-drone" aria-pressed="false">
                 <span class="sortie-number">UKRAINE <b data-program-status="low-level-drone"></b></span>
                 <strong>Low-Level Drone Intercept</strong>
-                <span>Stop four low-flying fictional raiders over a stylized Ukrainian rural training sector.</span>
+                <span>Stop four low-flying fictional raiders over the detailed Soniachne low-level cell.</span>
                 <small>GUNS ONLY · TRUE-SCALE TERRAIN · NO GROUND TARGETS YET</small>
               </button>
             </div>
@@ -2207,9 +2210,17 @@
               <button type="button" class="sortie-choice" data-program-node="rapier-intercept" aria-pressed="false">
                 <span class="sortie-number">RAPIER <b data-program-status="rapier-intercept"></b></span>
                 <strong>Rapier Intercept</strong>
-                <span>2030s turbo-ramjet interceptor. Catapult off a dispersed strip, climb, cruise very high and very fast, dive on the contact, recover on the hook.</span>
+                <span>Turbo-ramjet interceptor across the same Ukraine theatre. Launch from a fixed dispersed strip, climb, dive on the contact, then recover on the hook.</span>
                 <small>ONE PASS · 12 G STRUCTURAL, 15 G ON OVERRIDE · HOOK RECOVERY</small>
               </button>
+            </div>
+            <div class="sortie-option" data-program-state="available">
+              <a class="sortie-choice" href="/indoor/" data-experience="indoor">
+                <span class="sortie-number">MIDGE-03 · FACILITY NINE</span>
+                <strong>Indoor</strong>
+                <span>Fly a microdrone along a fibre-protected route, shed the line cleanly, then finish over contested radio. If the feed collapses, onboard automation keeps pursuing the task.</span>
+                <small>SIX DEGREES · FIBRE INGRESS · CHOPPY DOWNLINK · BEST-EFFORT AUTONOMY</small>
+              </a>
             </div>
           </div>
         </section>
@@ -2241,7 +2252,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 123 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 124 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
@@ -2296,7 +2307,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
   </div>
 
   <script src="./multiplayer-config.js"></script>
-  <script type="module" src="./app.js?v=123"></script>
+  <script type="module" src="./app.js?v=124"></script>
   <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
 </body>
 </html>

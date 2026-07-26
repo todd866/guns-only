@@ -94,6 +94,15 @@ test("stall awareness and corner marker use the calibrated-airdata contract", ()
   }).unit, "KIAS", "older recordings retain an honest legacy label");
 });
 
+test("fixed recovery strips suppress combat speed markers just like maritime decks", () => {
+  assert.deepEqual(speedTapeMarkers({
+    recovery_platform: true,
+    carrier: false,
+    mode: "APPROACH",
+    corner_speed_kcas: 314.79,
+  }), []);
+});
+
 test("corner marker carries the kernel's turn-rate band and degrades to a point without it", () => {
   assert.deepEqual(speedTapeMarkers({
     corner_speed_kcas: 314.79,
@@ -445,6 +454,12 @@ test("normal systems stay latent while recovery, transitions, and failures surfa
     mode: "APPROACH",
     gear_handle: "DOWN",
   }).relevant, true);
+  assert.equal(systemsReadout({
+    recovery_platform: true,
+    carrier: false,
+    mode: "APPROACH",
+    gear_handle: "DOWN",
+  }).relevant, true);
 
   const hydraulicFailure = systemsReadout({
     utility_hydraulic_pressure_psi: 0,
@@ -600,4 +615,23 @@ test("production HUD consumes stabilized KIAS plus physical corner and fuel read
     "abstract health must not masquerade as an airframe condition indication");
   assert.doesNotMatch(source, /this\.drawFrameWash\(\)/,
     "scanlines and vignette have no decision-support role");
+});
+
+test("production HUD gates recovery guidance on the shared platform contract", async () => {
+  const source = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
+  assert.match(source,
+    /if \(!recoveryPlatformAvailable\(state\)\) return false;[\s\S]*?mode === "APPROACH"/,
+    "approach geometry must work for fixed strips and legacy carriers");
+  assert.match(source,
+    /if \(!recoveryPlatformAvailable\(state\)\) return;/,
+    "recovery difficulty cues must accept the shared platform contract");
+  assert.match(source,
+    /if \(!recoveryPlatformAvailable\(state\)[\s\S]*?mode !== "APPROACH"[\s\S]*?mode !== "WAVE-OFF"/,
+    "LSO calls must accept the shared platform contract");
+  assert.match(source, /recoveryPlatformIsMaritime\(frame\.state\) \? "BOAT" : "STRIP"/);
+  assert.match(source, /maritime \? "DECK UP" : "STRIP UP"/);
+  assert.match(source, /if \(maritime\) \{[\s\S]*?`WOD /,
+    "wind-over-deck remains maritime-only");
+  assert.match(source, /maritime[\s\S]*?`BRC [\s\S]*?: `FINAL COURSE /,
+    "BRC remains maritime while a fixed strip receives a neutral final course");
 });

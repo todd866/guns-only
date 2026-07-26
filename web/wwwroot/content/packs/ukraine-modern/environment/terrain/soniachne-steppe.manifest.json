@@ -1,38 +1,72 @@
 {
   "schemaVersion": "1.0.0",
-  "terrainId": "terrain.ukraine.soniachne-training.v1",
-  "terrainVersion": "soniachne-synthetic-v1",
-  "displayName": "Soniachne Steppe \u2014 fictional Ukraine training sector",
+  "terrainId": "terrain.ukraine.soniachne-theatre.v2",
+  "terrainVersion": "soniachne-synthetic-theatre-v2",
+  "displayName": "Soniachne 2030s \u2014 fictional Ukraine theatre",
   "horizontalCrs": "LOCAL_METRES_EAST_NORTH",
-  "verticalCrs": "LOCAL_TRAINING_DATUM",
+  "verticalCrs": "LOCAL_FICTIONAL_DATUM",
   "boundsLocalM": [
-    -8192.0,
-    -8192.0,
-    8192.0,
-    8192.0
+    -131072.0,
+    -131072.0,
+    131072.0,
+    131072.0
   ],
-  "tileSpanM": 8192.0,
+  "tileSpanM": 65536.0,
   "referenceOrigin": {
     "kind": "fictional-local-grid",
     "eastM": 0.0,
     "northM": 0.0
   },
+  "fidelityBands": [
+    {
+      "id": "theatre-macro",
+      "boundsLocalM": [
+        -131072.0,
+        -131072.0,
+        131072.0,
+        131072.0
+      ],
+      "simulationSpacingM": 256.0,
+      "suitableFor": [
+        "high-altitude scenery continuity",
+        "collision and Auto-GCAS continuity",
+        "Rapier mission routing"
+      ]
+    },
+    {
+      "id": "soniachne-detail",
+      "boundsLocalM": [
+        -8192.0,
+        -8192.0,
+        8192.0,
+        8192.0
+      ],
+      "simulationSpacingM": 32.0,
+      "suitableFor": [
+        "low-level fixed-wing missions",
+        "authored target routes"
+      ],
+      "notSuitableFor": [
+        "medevac landing-zone assessment"
+      ]
+    }
+  ],
   "source": {
     "kind": "synthetic-fictional-composite",
     "suitableFor": [
       "renderer integration",
       "collision and Auto-GCAS integration",
-      "fictional training missions"
+      "fictional entertainment and training missions"
     ],
     "notSuitableFor": [
-      "navigation",
+      "real navigation",
       "real-world tactical use",
       "claims about a real Ukrainian locality"
     ]
   },
   "build": {
     "builder": "tools/terrain/build_ukraine_training_sector.py",
-    "builderVersion": 1,
+    "builderVersion": 2,
     "pythonVersion": "3.14.4"
   },
   "quantization": {
@@ -43,9 +77,9 @@
   },
   "bundle": {
     "uri": "soniachne-steppe.terrain",
-    "byteLength": 704032,
-    "recordCount": 16,
-    "sha256": "145b0623f04e7188219e42c175bbb33d56ce12c92183a1029f8fc607a64c8669"
+    "byteLength": 4928224,
+    "recordCount": 112,
+    "sha256": "ccf03215f5619cd901b163010e6b49acf0f8655a147667d046235a2631efb049"
   },
   "simulationTruth": {
     "uri": "soniachne-steppe.truth",
@@ -57,10 +91,25 @@
       513
     ]
   },
+  "regionalSimulationTruth": {
+    "uri": "soniachne-region.truth",
+    "byteLength": 2101314,
+    "sha256": "9db5cc26c3cefb55783978c2cec87d249fbac9fa005fa7d172a1dd5e1afda35a",
+    "spacingM": 256.0,
+    "pointCount": [
+      1025,
+      1025
+    ]
+  },
   "preview": {
     "uri": "soniachne-steppe-preview.png",
     "byteLength": 115336,
     "sha256": "9590755623e617e38d0210c6a8b9eb634ee5fbdec95307f00d97ddf5924488d0"
+  },
+  "regionalPreview": {
+    "uri": "soniachne-theatre-preview.png",
+    "byteLength": 368534,
+    "sha256": "2bf53fd8d68f1a125992089731d34976f50bcd7811e4fffb59e1cfd27030bc93"
   },
   "chunks": [
     {
@@ -74,8 +123,9 @@
         0.0
       ],
       "generation": {
-        "seed": 3615784745,
-        "landFraction": 1.0
+        "seed": 3618367425,
+        "landFraction": 1.0,
+        "fidelityBand": "detail"
       },
       "lods": [
         {
@@ -131,8 +181,9 @@
         0.0
       ],
       "generation": {
-        "seed": 3865890414,
-        "landFraction": 1.0
+        "seed": 2159011245,
+        "landFraction": 1.0,
+        "fidelityBand": "detail"
       },
       "lods": [
         {
@@ -188,8 +239,9 @@
         8192.0
       ],
       "generation": {
-        "seed": 2022174639,
-        "landFraction": 1.0
+        "seed": 4280426098,
+        "landFraction": 1.0,
+        "fidelityBand": "detail"
       },
       "lods": [
         {
@@ -245,8 +297,9 @@
         8192.0
       ],
       "generation": {
-        "seed": 1274320948,
-        "landFraction": 1.0
+        "seed": 2288292884,
+        "landFraction": 1.0,
+        "fidelityBand": "detail"
       },
       "lods": [
         {
@@ -288,6 +341,1398 @@
           "sha256": "860fc69425855fccc68db877faa381a0b4a5f400b661ace57196d47122c512c6",
           "minimumHeightM": 112.0,
           "maximumHeightM": 158.4
+        }
+      ]
+    },
+    {
+      "id": "macro-e00-n00",
+      "eastIndex": 0,
+      "northIndex": 0,
+      "boundsLocalM": [
+        -131072.0,
+        -131072.0,
+        -65536.0,
+        -65536.0
+      ],
+      "generation": {
+        "seed": 3686808786,
+        "landFraction": 0.051961422580205606,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 704032,
+          "byteLength": 132098,
+          "sha256": "f05dee5a89b1a46393a7303d387b3d99f4d3298770ed0b09930aecf572694bc7",
+          "minimumHeightM": 37.1,
+          "maximumHeightM": 52.400000000000006
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 836130,
+          "byteLength": 33282,
+          "sha256": "37423c883fb105873c2277e84de7188af87a0f077fa5f7988474be29c592bfa9",
+          "minimumHeightM": 37.300000000000004,
+          "maximumHeightM": 52.400000000000006
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 869412,
+          "byteLength": 8450,
+          "sha256": "5417c333fdbbaa5ec9d50a89ccec3a682179d59826d417dac9a5981a3728bbdb",
+          "minimumHeightM": 37.300000000000004,
+          "maximumHeightM": 52.400000000000006
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 877862,
+          "byteLength": 2178,
+          "sha256": "24e78905a2d8935027866a9312b28933af153f4cc21d72a3c43ff7e2c79dfd5c",
+          "minimumHeightM": 37.300000000000004,
+          "maximumHeightM": 52.400000000000006
+        }
+      ]
+    },
+    {
+      "id": "macro-e01-n00",
+      "eastIndex": 1,
+      "northIndex": 0,
+      "boundsLocalM": [
+        -65536.0,
+        -131072.0,
+        -8192.0,
+        -65536.0
+      ],
+      "generation": {
+        "seed": 1827542762,
+        "landFraction": 0.37771957183303306,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 880040,
+          "byteLength": 132098,
+          "sha256": "c9baa6eab9e84cc7fbeca3f660f598e6645ee35c3ff0f9eea9c37b2f3343d8d0",
+          "minimumHeightM": 21.200000000000003,
+          "maximumHeightM": 53.2
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 1012138,
+          "byteLength": 33282,
+          "sha256": "9937042f758d2421e5ccd4f5eb86a8f0f3cddfa22dfbca5e8f12e458a14b55b2",
+          "minimumHeightM": 21.3,
+          "maximumHeightM": 53.2
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 1045420,
+          "byteLength": 8450,
+          "sha256": "22f1d4fe782f8594542760b7868e84ae483d5dd0da5d5ba40bcf2d384cf740ea",
+          "minimumHeightM": 21.400000000000002,
+          "maximumHeightM": 53.2
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 1053870,
+          "byteLength": 2178,
+          "sha256": "2dc4856f50570ed958f2e1e18b0a5c664ca110ff28bf3be2f9cd9f9830907aa1",
+          "minimumHeightM": 21.900000000000002,
+          "maximumHeightM": 53.2
+        }
+      ]
+    },
+    {
+      "id": "macro-e02-n00",
+      "eastIndex": 2,
+      "northIndex": 0,
+      "boundsLocalM": [
+        -8192.0,
+        -131072.0,
+        8192.0,
+        -65536.0
+      ],
+      "generation": {
+        "seed": 2470583977,
+        "landFraction": 0.6017350754742691,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 1056048,
+          "byteLength": 132098,
+          "sha256": "56ae269c28900aa1b802f2e314dca0f41f0e6056444aa602aa1dfdf764033a2f",
+          "minimumHeightM": 21.200000000000003,
+          "maximumHeightM": 42.900000000000006
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 1188146,
+          "byteLength": 33282,
+          "sha256": "ffd6827ad6326a4176d7a6bfaf4c6ca251abdbea435ce0f3b58282de9d73f3b2",
+          "minimumHeightM": 21.3,
+          "maximumHeightM": 42.900000000000006
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 1221428,
+          "byteLength": 8450,
+          "sha256": "185c969e4c4e9542476d40a050bcea600eaf03e80ce7e248eef12af2081c6fee",
+          "minimumHeightM": 21.400000000000002,
+          "maximumHeightM": 42.900000000000006
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 1229878,
+          "byteLength": 2178,
+          "sha256": "29a944c4e1e84586cbd51b839a1be4bf45d16f53cbee7b5e627ebf3ec3fef460",
+          "minimumHeightM": 21.8,
+          "maximumHeightM": 42.900000000000006
+        }
+      ]
+    },
+    {
+      "id": "macro-e03-n00",
+      "eastIndex": 3,
+      "northIndex": 0,
+      "boundsLocalM": [
+        8192.0,
+        -131072.0,
+        65536.0,
+        -65536.0
+      ],
+      "generation": {
+        "seed": 2420219046,
+        "landFraction": 0.8259776832351738,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 1232056,
+          "byteLength": 132098,
+          "sha256": "381cb608d897db24995bd3f4a7f4d5bad0509edf4a08ae32e7ebe6fde1345292",
+          "minimumHeightM": 5.0,
+          "maximumHeightM": 72.3
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 1364154,
+          "byteLength": 33282,
+          "sha256": "871b0cc168c80edfc57419c05f2801cd38e30666d5802a2971b51b734fe2bf63",
+          "minimumHeightM": 5.0,
+          "maximumHeightM": 72.3
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 1397436,
+          "byteLength": 8450,
+          "sha256": "c9b91cd05b65e2eca0c8c3ea71eaf137af2561409fa2f52c5b63e06042b0c13b",
+          "minimumHeightM": 5.0,
+          "maximumHeightM": 72.3
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 1405886,
+          "byteLength": 2178,
+          "sha256": "eb01e8f193463b62fbdadf2fed3d66e9b3d7318fec853db5c0549e22e862458f",
+          "minimumHeightM": 5.300000000000001,
+          "maximumHeightM": 72.3
+        }
+      ]
+    },
+    {
+      "id": "macro-e04-n00",
+      "eastIndex": 4,
+      "northIndex": 0,
+      "boundsLocalM": [
+        65536.0,
+        -131072.0,
+        131072.0,
+        -65536.0
+      ],
+      "generation": {
+        "seed": 1896170724,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 1408064,
+          "byteLength": 132098,
+          "sha256": "9637f7c01cc2bb4ebb7b716f908fcef7b38c049da7ac954de2c8a45d994751ef",
+          "minimumHeightM": 8.8,
+          "maximumHeightM": 81.10000000000001
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 1540162,
+          "byteLength": 33282,
+          "sha256": "8b6234eff0b5965b7ff99d87296453e79b6a4f1bba8d61f039df248ec04bf984",
+          "minimumHeightM": 8.8,
+          "maximumHeightM": 81.10000000000001
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 1573444,
+          "byteLength": 8450,
+          "sha256": "1090c83a28778b80e1216146145fa4bb21b6c6bcda3c813feeb75dc67e63257e",
+          "minimumHeightM": 8.8,
+          "maximumHeightM": 81.10000000000001
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 1581894,
+          "byteLength": 2178,
+          "sha256": "68e23a2d6e3289f0d20ca178c1864671b4e5991e20213b0b248d83573e29adac",
+          "minimumHeightM": 8.8,
+          "maximumHeightM": 81.10000000000001
+        }
+      ]
+    },
+    {
+      "id": "macro-e00-n01",
+      "eastIndex": 0,
+      "northIndex": 1,
+      "boundsLocalM": [
+        -131072.0,
+        -65536.0,
+        -65536.0,
+        -8192.0
+      ],
+      "generation": {
+        "seed": 2782308708,
+        "landFraction": 0.9431331284349498,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 1584072,
+          "byteLength": 132098,
+          "sha256": "036d6bcc43c90ca8f1360763f3056c9529b6dd95c872949e1626d606f865a5d5",
+          "minimumHeightM": 26.3,
+          "maximumHeightM": 60.900000000000006
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 1716170,
+          "byteLength": 33282,
+          "sha256": "5c44e4df4275cd9693eaa9141f6339132e9c24fcf388b1aa2d4076074cca97cb",
+          "minimumHeightM": 26.3,
+          "maximumHeightM": 60.900000000000006
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 1749452,
+          "byteLength": 8450,
+          "sha256": "a3abf37b726c716eec7cc2dc3c7d6b53bf8e539ef97ccfbecf04ca1495c87733",
+          "minimumHeightM": 26.6,
+          "maximumHeightM": 60.900000000000006
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 1757902,
+          "byteLength": 2178,
+          "sha256": "5641073e8b2474798b0c97f84807a0731c49b10d387c1dc31bb91828a902e3d3",
+          "minimumHeightM": 26.8,
+          "maximumHeightM": 60.900000000000006
+        }
+      ]
+    },
+    {
+      "id": "macro-e01-n01",
+      "eastIndex": 1,
+      "northIndex": 1,
+      "boundsLocalM": [
+        -65536.0,
+        -65536.0,
+        -8192.0,
+        -8192.0
+      ],
+      "generation": {
+        "seed": 3718197589,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 224.0,
+          "byteOffset": 1760080,
+          "byteLength": 132098,
+          "sha256": "e716975a8fa10d6f3f4954c963646ff375ee547392e7405cef043c622c40e055",
+          "minimumHeightM": 31.700000000000003,
+          "maximumHeightM": 116.60000000000001
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 448.0,
+          "byteOffset": 1892178,
+          "byteLength": 33282,
+          "sha256": "99c8d7b987fefa4c85ccb1c869000a2cfb64fe7b3c23671a79c2d2b6c56aef98",
+          "minimumHeightM": 31.700000000000003,
+          "maximumHeightM": 116.60000000000001
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 896.0,
+          "byteOffset": 1925460,
+          "byteLength": 8450,
+          "sha256": "e9813af25d1d1a83fa90ac42bac6f406605589a23f4a81cc208bc1e1f70b35a4",
+          "minimumHeightM": 31.8,
+          "maximumHeightM": 116.60000000000001
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 1792.0,
+          "byteOffset": 1933910,
+          "byteLength": 2178,
+          "sha256": "58afa8aa47d60a173e802dce1f11493dc43116dc667a5c6067bb01db7c56e4d9",
+          "minimumHeightM": 31.8,
+          "maximumHeightM": 116.60000000000001
+        }
+      ]
+    },
+    {
+      "id": "macro-e02-n01",
+      "eastIndex": 2,
+      "northIndex": 1,
+      "boundsLocalM": [
+        -8192.0,
+        -65536.0,
+        8192.0,
+        -8192.0
+      ],
+      "generation": {
+        "seed": 1264900709,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 224.0,
+          "byteOffset": 1936088,
+          "byteLength": 132098,
+          "sha256": "fea8fb6d13389376cd3028dbb01eedd052f14b480b209e5a5f97e2d1e0063729",
+          "minimumHeightM": 40.0,
+          "maximumHeightM": 129.8
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 448.0,
+          "byteOffset": 2068186,
+          "byteLength": 33282,
+          "sha256": "bd169adcd5b657ef954193b4d3ebfc4999c3ea6c1db1adb42ea2ad7b0dc17cc0",
+          "minimumHeightM": 40.0,
+          "maximumHeightM": 129.8
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 896.0,
+          "byteOffset": 2101468,
+          "byteLength": 8450,
+          "sha256": "f3d6258c066160b4934c45bf7d251fccc2077639a3fd90f320bf97bedb4f3147",
+          "minimumHeightM": 40.0,
+          "maximumHeightM": 129.8
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 1792.0,
+          "byteOffset": 2109918,
+          "byteLength": 2178,
+          "sha256": "641bf8ca75e916049b7d67e9e3766e6c6ef2a04613ec2d1e8c518f9496e2341b",
+          "minimumHeightM": 40.0,
+          "maximumHeightM": 129.70000000000002
+        }
+      ]
+    },
+    {
+      "id": "macro-e03-n01",
+      "eastIndex": 3,
+      "northIndex": 1,
+      "boundsLocalM": [
+        8192.0,
+        -65536.0,
+        65536.0,
+        -8192.0
+      ],
+      "generation": {
+        "seed": 1916395779,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 224.0,
+          "byteOffset": 2112096,
+          "byteLength": 132098,
+          "sha256": "1d05d1bd3592135db0dfce90446ef64a762641607292f0256e25a3f18f267b7b",
+          "minimumHeightM": 42.900000000000006,
+          "maximumHeightM": 125.0
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 448.0,
+          "byteOffset": 2244194,
+          "byteLength": 33282,
+          "sha256": "bbf3dcd047ad153292d4ad04e097185b96e9becbf97490436ba10891b29f5cd3",
+          "minimumHeightM": 42.900000000000006,
+          "maximumHeightM": 125.0
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 896.0,
+          "byteOffset": 2277476,
+          "byteLength": 8450,
+          "sha256": "badc526d2a4930614a0ce37e4e694b03283ff41e31da28dbc004a15eed384ac4",
+          "minimumHeightM": 42.900000000000006,
+          "maximumHeightM": 125.0
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 1792.0,
+          "byteOffset": 2285926,
+          "byteLength": 2178,
+          "sha256": "0b13c2b1edcaac07e6db24594c51b3fdc9307f16f7f6537576ff16f93c42bcc5",
+          "minimumHeightM": 42.900000000000006,
+          "maximumHeightM": 125.0
+        }
+      ]
+    },
+    {
+      "id": "macro-e04-n01",
+      "eastIndex": 4,
+      "northIndex": 1,
+      "boundsLocalM": [
+        65536.0,
+        -65536.0,
+        131072.0,
+        -8192.0
+      ],
+      "generation": {
+        "seed": 2122623156,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 2288104,
+          "byteLength": 132098,
+          "sha256": "5144b6da3c003d2ab72a42cc02eb9f756037675365c2733e105a9cf236df11aa",
+          "minimumHeightM": 72.3,
+          "maximumHeightM": 113.80000000000001
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 2420202,
+          "byteLength": 33282,
+          "sha256": "e1001c7ee00e9dc97b66b5a22cf317b90a883b063a6866f85137caae3a3eba69",
+          "minimumHeightM": 72.3,
+          "maximumHeightM": 113.80000000000001
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 2453484,
+          "byteLength": 8450,
+          "sha256": "ab0109a9792c259bad3ad40640317d19548d8465c86b6e45de3b2762d6177b3f",
+          "minimumHeightM": 72.3,
+          "maximumHeightM": 113.80000000000001
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 2461934,
+          "byteLength": 2178,
+          "sha256": "5cc0b7ad02b164c6443e412b9b6862576f7a0a554360ca2d502c8d458ea8b77e",
+          "minimumHeightM": 72.3,
+          "maximumHeightM": 113.80000000000001
+        }
+      ]
+    },
+    {
+      "id": "macro-e00-n02",
+      "eastIndex": 0,
+      "northIndex": 2,
+      "boundsLocalM": [
+        -131072.0,
+        -8192.0,
+        -65536.0,
+        8192.0
+      ],
+      "generation": {
+        "seed": 2451583734,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 2464112,
+          "byteLength": 132098,
+          "sha256": "b8aac635f59175ee5a9f3431aa50ec4197f4dbb0fd4f3c2e978553beabaef762",
+          "minimumHeightM": 49.0,
+          "maximumHeightM": 71.9
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 2596210,
+          "byteLength": 33282,
+          "sha256": "a9eca8e64c4703111f9295e03921954a5b4c2188c558a2121a501603e63a632d",
+          "minimumHeightM": 49.0,
+          "maximumHeightM": 71.9
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 2629492,
+          "byteLength": 8450,
+          "sha256": "ce6e19badc13fce2ae9d2d099b7079c39d27f10116b3d7c7d72d969a73dfec6f",
+          "minimumHeightM": 49.0,
+          "maximumHeightM": 71.9
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 2637942,
+          "byteLength": 2178,
+          "sha256": "b4ae60ab936cf4af727a5b8fc943ed7810c2c87804da33b16257d0f27e8e6fa4",
+          "minimumHeightM": 49.0,
+          "maximumHeightM": 71.9
+        }
+      ]
+    },
+    {
+      "id": "macro-e01-n02",
+      "eastIndex": 1,
+      "northIndex": 2,
+      "boundsLocalM": [
+        -65536.0,
+        -8192.0,
+        -8192.0,
+        8192.0
+      ],
+      "generation": {
+        "seed": 3365547934,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 224.0,
+          "byteOffset": 2640120,
+          "byteLength": 132098,
+          "sha256": "dd5024c74699274632cd5950476c6197f244bfdc82b1b3d46f371c49a18601cc",
+          "minimumHeightM": 48.400000000000006,
+          "maximumHeightM": 117.5
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 448.0,
+          "byteOffset": 2772218,
+          "byteLength": 33282,
+          "sha256": "6fcbbb3fc70a9e5bc4eddb405eec2c2a1bc7ce2a9bda907066ddf5ed8d648e35",
+          "minimumHeightM": 48.400000000000006,
+          "maximumHeightM": 117.5
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 896.0,
+          "byteOffset": 2805500,
+          "byteLength": 8450,
+          "sha256": "e8b42a4bcc56f0c37ef3682d49611c47d1b0c201d14a52162a7a7cd5286678e9",
+          "minimumHeightM": 48.400000000000006,
+          "maximumHeightM": 117.5
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 1792.0,
+          "byteOffset": 2813950,
+          "byteLength": 2178,
+          "sha256": "732c10aaa0a79f1391c92262780708561d602241b08dc019ba2deb55d98798e6",
+          "minimumHeightM": 48.400000000000006,
+          "maximumHeightM": 117.5
+        }
+      ]
+    },
+    {
+      "id": "macro-e03-n02",
+      "eastIndex": 3,
+      "northIndex": 2,
+      "boundsLocalM": [
+        8192.0,
+        -8192.0,
+        65536.0,
+        8192.0
+      ],
+      "generation": {
+        "seed": 1327188700,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 224.0,
+          "byteOffset": 2816128,
+          "byteLength": 132098,
+          "sha256": "5323979d3d3be65e69825aca237428db7fd1a0eb8e481b6c9390c21bc3c0f6f8",
+          "minimumHeightM": 108.0,
+          "maximumHeightM": 150.5
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 448.0,
+          "byteOffset": 2948226,
+          "byteLength": 33282,
+          "sha256": "d5416128362d37dfabacd55536c48005985c59fd3ae714d35a204efa4435b895",
+          "minimumHeightM": 108.0,
+          "maximumHeightM": 150.5
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 896.0,
+          "byteOffset": 2981508,
+          "byteLength": 8450,
+          "sha256": "0a4101d288d43faa0311034e8d51cd7d3e57e95f459d10af0b9b6c29445899c3",
+          "minimumHeightM": 108.0,
+          "maximumHeightM": 150.5
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 1792.0,
+          "byteOffset": 2989958,
+          "byteLength": 2178,
+          "sha256": "0805310477a687613c6a82ae08f30598bbc410fcbb40b9826de8dfade1d97501",
+          "minimumHeightM": 108.0,
+          "maximumHeightM": 150.5
+        }
+      ]
+    },
+    {
+      "id": "macro-e04-n02",
+      "eastIndex": 4,
+      "northIndex": 2,
+      "boundsLocalM": [
+        65536.0,
+        -8192.0,
+        131072.0,
+        8192.0
+      ],
+      "generation": {
+        "seed": 3386126873,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 2992136,
+          "byteLength": 132098,
+          "sha256": "1a4ad9215d95e3ebcd2e8a1d223920865ba5df386c8a6cab6db2f9a4f69c9aa9",
+          "minimumHeightM": 82.5,
+          "maximumHeightM": 117.80000000000001
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 3124234,
+          "byteLength": 33282,
+          "sha256": "8a83eec25f41432b43e1cd144124f18aface6603d4ebefec5c2016f207014d6c",
+          "minimumHeightM": 82.5,
+          "maximumHeightM": 117.80000000000001
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 3157516,
+          "byteLength": 8450,
+          "sha256": "5bbb22de0008956a8bfb8f2b0264505b289d63eb4fbc9e904c309d6ae45b775f",
+          "minimumHeightM": 82.5,
+          "maximumHeightM": 117.80000000000001
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 3165966,
+          "byteLength": 2178,
+          "sha256": "cacf3d248ccd3a24cfd60826bf36567b11a1fa1f8a53d47568bba1aa21f9d64b",
+          "minimumHeightM": 82.5,
+          "maximumHeightM": 117.80000000000001
+        }
+      ]
+    },
+    {
+      "id": "macro-e00-n03",
+      "eastIndex": 0,
+      "northIndex": 3,
+      "boundsLocalM": [
+        -131072.0,
+        8192.0,
+        -65536.0,
+        65536.0
+      ],
+      "generation": {
+        "seed": 2496125653,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 3168144,
+          "byteLength": 132098,
+          "sha256": "9096397f1e53c4d44c70fd23596540f3dacc692bf30e3069faaca19177d20ff5",
+          "minimumHeightM": 50.6,
+          "maximumHeightM": 94.2
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 3300242,
+          "byteLength": 33282,
+          "sha256": "16237b644b5105d50b985d6693b439778b384d851bce2abd2a682b3c9a1454c8",
+          "minimumHeightM": 50.6,
+          "maximumHeightM": 94.2
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 3333524,
+          "byteLength": 8450,
+          "sha256": "f0b1565f1c454344bec353ac3d7baa65ae5f4fda029d05cc6901e468538a10fb",
+          "minimumHeightM": 50.6,
+          "maximumHeightM": 94.2
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 3341974,
+          "byteLength": 2178,
+          "sha256": "8addd70cec28a0e61f3a40f128dd3a2768c8a81bb751f7b8537a17e537ce9c7d",
+          "minimumHeightM": 50.6,
+          "maximumHeightM": 94.2
+        }
+      ]
+    },
+    {
+      "id": "macro-e01-n03",
+      "eastIndex": 1,
+      "northIndex": 3,
+      "boundsLocalM": [
+        -65536.0,
+        8192.0,
+        -8192.0,
+        65536.0
+      ],
+      "generation": {
+        "seed": 33875947,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 224.0,
+          "byteOffset": 3344152,
+          "byteLength": 132098,
+          "sha256": "4915555a192d89ff660bde73f6b3ecc788f0a59900cbba4d65a3bd66f0486fbe",
+          "minimumHeightM": 50.6,
+          "maximumHeightM": 126.7
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 448.0,
+          "byteOffset": 3476250,
+          "byteLength": 33282,
+          "sha256": "54a69ce230d689909f8bbd93a16805318ac0b5571598ef27b58ec46dff64da6a",
+          "minimumHeightM": 50.6,
+          "maximumHeightM": 126.7
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 896.0,
+          "byteOffset": 3509532,
+          "byteLength": 8450,
+          "sha256": "ddacbb98cf614fda4671a707f4d3c0be66e182371cf0acab998248abf244924e",
+          "minimumHeightM": 50.6,
+          "maximumHeightM": 126.7
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 1792.0,
+          "byteOffset": 3517982,
+          "byteLength": 2178,
+          "sha256": "da20a93243a4574e87314059d8e935b3971498dbd53c5f70a5eea1f34536ee76",
+          "minimumHeightM": 50.6,
+          "maximumHeightM": 126.7
+        }
+      ]
+    },
+    {
+      "id": "macro-e02-n03",
+      "eastIndex": 2,
+      "northIndex": 3,
+      "boundsLocalM": [
+        -8192.0,
+        8192.0,
+        8192.0,
+        65536.0
+      ],
+      "generation": {
+        "seed": 438065623,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 224.0,
+          "byteOffset": 3520160,
+          "byteLength": 132098,
+          "sha256": "b805e7676992c7e2e87516d3c9a01d0982fd5fefd651e3c2c5fb0450b5fea0d8",
+          "minimumHeightM": 92.9,
+          "maximumHeightM": 134.0
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 448.0,
+          "byteOffset": 3652258,
+          "byteLength": 33282,
+          "sha256": "9744fa93181b5f1e3589e4710cface91c0a55cefe20f40d4ddf7005abadc982a",
+          "minimumHeightM": 92.9,
+          "maximumHeightM": 134.0
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 896.0,
+          "byteOffset": 3685540,
+          "byteLength": 8450,
+          "sha256": "025efa8a8473a51ccff8d22024f3c253c6e8a1cdf26475bdea59839ff20f6983",
+          "minimumHeightM": 92.9,
+          "maximumHeightM": 134.0
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 1792.0,
+          "byteOffset": 3693990,
+          "byteLength": 2178,
+          "sha256": "d63596895251c475b6023b263043b57e7ca2768fbfd9651dbee72e5a40fafaab",
+          "minimumHeightM": 92.9,
+          "maximumHeightM": 134.0
+        }
+      ]
+    },
+    {
+      "id": "macro-e03-n03",
+      "eastIndex": 3,
+      "northIndex": 3,
+      "boundsLocalM": [
+        8192.0,
+        8192.0,
+        65536.0,
+        65536.0
+      ],
+      "generation": {
+        "seed": 2637257951,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 224.0,
+          "byteOffset": 3696168,
+          "byteLength": 132098,
+          "sha256": "2c5f981ef3f36b801aeab8a04c39e71765a1b3b9c7bcc033ed1cea5bddf52a4b",
+          "minimumHeightM": 114.10000000000001,
+          "maximumHeightM": 132.0
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 448.0,
+          "byteOffset": 3828266,
+          "byteLength": 33282,
+          "sha256": "512915aba1fb5f6f1c1795a38fe90115012b333c6cb04ecf6ff99e7d7cd11b70",
+          "minimumHeightM": 114.10000000000001,
+          "maximumHeightM": 132.0
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 896.0,
+          "byteOffset": 3861548,
+          "byteLength": 8450,
+          "sha256": "fa368979a194eb4cd39ae998ea4cea2823bf4ee5d8f7e77f5d6302824364fef3",
+          "minimumHeightM": 114.10000000000001,
+          "maximumHeightM": 132.0
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 1792.0,
+          "byteOffset": 3869998,
+          "byteLength": 2178,
+          "sha256": "8cfaa3c741b7c451f926a66c3673c3c7b2a210aab9964ec480f93b4f35f295ff",
+          "minimumHeightM": 114.10000000000001,
+          "maximumHeightM": 132.0
+        }
+      ]
+    },
+    {
+      "id": "macro-e04-n03",
+      "eastIndex": 4,
+      "northIndex": 3,
+      "boundsLocalM": [
+        65536.0,
+        8192.0,
+        131072.0,
+        65536.0
+      ],
+      "generation": {
+        "seed": 3728835822,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 3872176,
+          "byteLength": 132098,
+          "sha256": "11b4f03e8173e37112d3af16acbd285b1e7698caeea1f35ad1e201c4bc2af50f",
+          "minimumHeightM": 91.9,
+          "maximumHeightM": 125.2
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 4004274,
+          "byteLength": 33282,
+          "sha256": "454e599ac5a4534660dce05108873a965be2cd23d3803bc4289dcc633109c834",
+          "minimumHeightM": 91.9,
+          "maximumHeightM": 125.2
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 4037556,
+          "byteLength": 8450,
+          "sha256": "d033124a8a990262213536d063976d9750c488b6e29afcec739dd3c4eae9206f",
+          "minimumHeightM": 91.9,
+          "maximumHeightM": 125.2
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 4046006,
+          "byteLength": 2178,
+          "sha256": "31c4f6cdd1dc898191a13bd6bed46e69a65699a39057b81b88ebecfed434b9a5",
+          "minimumHeightM": 91.9,
+          "maximumHeightM": 125.2
+        }
+      ]
+    },
+    {
+      "id": "macro-e00-n04",
+      "eastIndex": 0,
+      "northIndex": 4,
+      "boundsLocalM": [
+        -131072.0,
+        65536.0,
+        -65536.0,
+        131072.0
+      ],
+      "generation": {
+        "seed": 103071952,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 4048184,
+          "byteLength": 132098,
+          "sha256": "effde877aa76aa899fdc46b3b3952602cfa6aeec0a6253875c8934ca5a244962",
+          "minimumHeightM": 81.9,
+          "maximumHeightM": 146.5
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 4180282,
+          "byteLength": 33282,
+          "sha256": "6c77aaf905a5b37b8126a377b6337e628ce57cf144e55976d35abdfdc1203402",
+          "minimumHeightM": 81.9,
+          "maximumHeightM": 146.5
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 4213564,
+          "byteLength": 8450,
+          "sha256": "2b057a0e6d6898d3e50d1320c02d61cbb061e54dc112ac4f7dd7eb453bd714f4",
+          "minimumHeightM": 81.9,
+          "maximumHeightM": 146.5
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 4222014,
+          "byteLength": 2178,
+          "sha256": "7d64f5ad392aa961a722983b66393c96bd09c28f36fd95cbe863a5131f63b227",
+          "minimumHeightM": 81.9,
+          "maximumHeightM": 146.5
+        }
+      ]
+    },
+    {
+      "id": "macro-e01-n04",
+      "eastIndex": 1,
+      "northIndex": 4,
+      "boundsLocalM": [
+        -65536.0,
+        65536.0,
+        -8192.0,
+        131072.0
+      ],
+      "generation": {
+        "seed": 2245853927,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 4224192,
+          "byteLength": 132098,
+          "sha256": "fa641330c790c7b1cf19b28242f892b36e914a70272944151db33983b16c8fa2",
+          "minimumHeightM": 89.4,
+          "maximumHeightM": 146.5
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 4356290,
+          "byteLength": 33282,
+          "sha256": "baa927e0972f600c93eb546d7a677cbeb5fd59157bb1e532ed597bb72233c465",
+          "minimumHeightM": 89.4,
+          "maximumHeightM": 146.5
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 4389572,
+          "byteLength": 8450,
+          "sha256": "3f2f7aaeae3399bfc267bb9f9c969946bc8e3b25f36d7dfb10f2c4b556fef04e",
+          "minimumHeightM": 89.4,
+          "maximumHeightM": 146.5
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 4398022,
+          "byteLength": 2178,
+          "sha256": "065b9e15259095be4ae97a7b95e20db261b19d33302ad0348d8b2557d09f3982",
+          "minimumHeightM": 89.4,
+          "maximumHeightM": 146.5
+        }
+      ]
+    },
+    {
+      "id": "macro-e02-n04",
+      "eastIndex": 2,
+      "northIndex": 4,
+      "boundsLocalM": [
+        -8192.0,
+        65536.0,
+        8192.0,
+        131072.0
+      ],
+      "generation": {
+        "seed": 1549982669,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 4400200,
+          "byteLength": 132098,
+          "sha256": "df05558d44484efbbc41473ce71b8ff581a918caa7061cb55d5dd410a0d09fc1",
+          "minimumHeightM": 96.30000000000001,
+          "maximumHeightM": 130.4
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 4532298,
+          "byteLength": 33282,
+          "sha256": "7b305c37da5113e5450ce40268dbe06fb6e61b9e068591fa874f3ddf04e50dcf",
+          "minimumHeightM": 96.30000000000001,
+          "maximumHeightM": 130.4
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 4565580,
+          "byteLength": 8450,
+          "sha256": "59046f5c3687feabe6aa17554b32278404401bfeea7926cd1b8af0ca045ed319",
+          "minimumHeightM": 96.30000000000001,
+          "maximumHeightM": 130.4
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 4574030,
+          "byteLength": 2178,
+          "sha256": "83bc0621ef603e7932a534cd0ee57efbfc27803cefaac10d8ba82f9339a8d469",
+          "minimumHeightM": 96.30000000000001,
+          "maximumHeightM": 130.4
+        }
+      ]
+    },
+    {
+      "id": "macro-e03-n04",
+      "eastIndex": 3,
+      "northIndex": 4,
+      "boundsLocalM": [
+        8192.0,
+        65536.0,
+        65536.0,
+        131072.0
+      ],
+      "generation": {
+        "seed": 1287491425,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 4576208,
+          "byteLength": 132098,
+          "sha256": "6c24e80c90f8949801a1da9cd37658919cb306e2b2f9eef7f4876c139c9b54e7",
+          "minimumHeightM": 82.7,
+          "maximumHeightM": 127.0
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 4708306,
+          "byteLength": 33282,
+          "sha256": "c758292173c56c921e7e30e11a60167c40ffa66d1f89fb3e9e8e40075e0da903",
+          "minimumHeightM": 82.7,
+          "maximumHeightM": 127.0
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 4741588,
+          "byteLength": 8450,
+          "sha256": "0ab8c3e3c437f6ea968443993b91eb971b019cb00ad6733b98be062c10b87619",
+          "minimumHeightM": 82.80000000000001,
+          "maximumHeightM": 127.0
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 4750038,
+          "byteLength": 2178,
+          "sha256": "91c5f6da9ba7ffd359515b290fe95e1b0e5b5a1fd74604f6df54393c41ff27b2",
+          "minimumHeightM": 82.80000000000001,
+          "maximumHeightM": 127.0
+        }
+      ]
+    },
+    {
+      "id": "macro-e04-n04",
+      "eastIndex": 4,
+      "northIndex": 4,
+      "boundsLocalM": [
+        65536.0,
+        65536.0,
+        131072.0,
+        131072.0
+      ],
+      "generation": {
+        "seed": 2200239330,
+        "landFraction": 1.0,
+        "fidelityBand": "macro"
+      },
+      "lods": [
+        {
+          "level": 0,
+          "sampleCount": 257,
+          "spacingM": 256.0,
+          "byteOffset": 4752216,
+          "byteLength": 132098,
+          "sha256": "3c23d404a0774ec56b4737264686dbe961a41127d83ebc801a88d258e6aa7749",
+          "minimumHeightM": 108.30000000000001,
+          "maximumHeightM": 135.8
+        },
+        {
+          "level": 1,
+          "sampleCount": 129,
+          "spacingM": 512.0,
+          "byteOffset": 4884314,
+          "byteLength": 33282,
+          "sha256": "a0727181a7a2e25d25a38d62f6cddfda10660c7d7aeb7d021cfa139e7dcfdba9",
+          "minimumHeightM": 108.30000000000001,
+          "maximumHeightM": 135.8
+        },
+        {
+          "level": 2,
+          "sampleCount": 65,
+          "spacingM": 1024.0,
+          "byteOffset": 4917596,
+          "byteLength": 8450,
+          "sha256": "ae8b354407e43ab85918a14a829678955567d9abc12419aa7a6d4870deee78e5",
+          "minimumHeightM": 108.30000000000001,
+          "maximumHeightM": 135.8
+        },
+        {
+          "level": 3,
+          "sampleCount": 33,
+          "spacingM": 2048.0,
+          "byteOffset": 4926046,
+          "byteLength": 2178,
+          "sha256": "ff0e2e3aff1d78a7e03f0aa07401cbe6868ff55e55c6d90c4f27ac84cd587ac3",
+          "minimumHeightM": 108.30000000000001,
+          "maximumHeightM": 135.8
         }
       ]
     }

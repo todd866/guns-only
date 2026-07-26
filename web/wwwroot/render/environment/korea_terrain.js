@@ -29,9 +29,14 @@ const TIER_STREAMING = Object.freeze({
   desktop: Object.freeze({ lookAheadSeconds: 28, pageLoads: 3 }),
 });
 const MAX_STREAM_LOOK_AHEAD_METRES = 24_000;
+const TERRAIN_ALTITUDE_LOD_WEIGHT = 4;
 
 export const TERRAIN_CURVATURE_START_M = 12_000;
 export const TERRAIN_EARTH_RADIUS_M = 6_371_000;
+const UKRAINE_TRAINING_CORE_HALF_SPAN_M = 8_192;
+const UKRAINE_TRAINING_APRON_TRANSITION_M = 4_000;
+const UKRAINE_TRAINING_APRON_HEIGHT_M = 78;
+const UKRAINE_TRAINING_HORIZON_HALF_SPAN_M = 100_000;
 
 // Baked terrain occlusion. The sampling radius is expressed in METRES and converted to samples
 // per LOD, so a valley reads with the same enclosure at 64 m and at 256 m spacing and does not
@@ -45,6 +50,164 @@ export { TERRAIN_CONCAVITY_RADIUS_M, TERRAIN_CONCAVITY_RELIEF_M, reconstructWate
 export function terrainCurvatureDropM(radialDistanceM) {
   const curvedRadialM = Math.max(finite(radialDistanceM) - TERRAIN_CURVATURE_START_M, 0);
   return curvedRadialM * curvedRadialM / (2 * TERRAIN_EARTH_RADIUS_M);
+}
+
+// This is the exact analytic source used by build_ukraine_training_sector.py, rounded onto the
+// same 0.1 m storage lattice as the embedded 32 m truth grid. It is used only to continue the four
+// synthetic cell edges through the 4 km presentation ring; detailed in-cell rendering still comes
+// exclusively from the packed terrain product.
+export function ukraineTrainingSourceHeightM(eastM, northM) {
+  const macroRoll = 13.5 * Math.sin(eastM / 7_600 + 0.35)
+    * Math.cos(northM / 9_800);
+  const diagonalRoll = 8 * Math.sin((eastM + northM) / 4_900 - 0.8);
+  const fieldScaleRelief = 3.8 * Math.cos((eastM - 1.7 * northM) / 2_650);
+  let drainageEastM = -2_500 + 1_650 * Math.sin(northM / 6_400);
+  drainageEastM += 420 * Math.sin(northM / 1_900 + 0.6);
+  const drainageDistanceM = Math.abs(eastM - drainageEastM);
+  const drainage = -19 * Math.exp(-((drainageDistanceM / 920) ** 2));
+  const floodplain = -6.5 * Math.exp(-((drainageDistanceM / 2_900) ** 4));
+  const easternEscarpment = 25 * Math.exp(
+    -(((eastM - 5_600) / 3_500) ** 2)
+    - (((northM + 1_200) / 7_200) ** 2),
+  );
+  const heightM = Math.min(188, Math.max(72,
+    118 + macroRoll + diagonalRoll + fieldScaleRelief
+      + drainage + floodplain + easternEscarpment));
+  return Math.round(heightM * 10) / 10;
+}
+
+export function ukraineTrainingApronHeightM(eastM, northM) {
+  const sourceEastM = Math.max(-UKRAINE_TRAINING_CORE_HALF_SPAN_M,
+    Math.min(UKRAINE_TRAINING_CORE_HALF_SPAN_M, finite(eastM)));
+  const sourceNorthM = Math.max(-UKRAINE_TRAINING_CORE_HALF_SPAN_M,
+    Math.min(UKRAINE_TRAINING_CORE_HALF_SPAN_M, finite(northM)));
+  const eastOutsideM = finite(eastM) - sourceEastM;
+  const northOutsideM = finite(northM) - sourceNorthM;
+  const distanceOutsideM = Math.hypot(eastOutsideM, northOutsideM);
+  let fraction = Math.max(0, Math.min(1,
+    distanceOutsideM / UKRAINE_TRAINING_APRON_TRANSITION_M));
+  fraction = fraction * fraction * (3 - 2 * fraction);
+  const edgeHeightM = ukraineTrainingSourceHeightM(sourceEastM, sourceNorthM);
+  return edgeHeightM
+    + (UKRAINE_TRAINING_APRON_HEIGHT_M - edgeHeightM) * fraction;
+}
+
+function createUkraineApronStripGeometry(THREE, bounds, targetSpacingM = 256) {
+  const [minimumEastM, minimumNorthM, maximumEastM, maximumNorthM] = bounds;
+  const eastSpanM = maximumEastM - minimumEastM;
+  const northSpanM = maximumNorthM - minimumNorthM;
+  // The strip's long/tangential axis meets the detailed terrain edge. Keep it on the packed
+  // truth grid's 32 m lattice so every inner-ring vertex is byte-identical to collision/AGL truth;
+  // the shorter/radial axis can stay coarse because it only presents the 4 km safety blend.
+  const eastSpacingM = eastSpanM > northSpanM ? 32 : targetSpacingM;
+  const northSpacingM = northSpanM > eastSpanM ? 32 : targetSpacingM;
+  const eastSegments = Math.max(1,
+    Math.ceil(eastSpanM / eastSpacingM));
+  const northSegments = Math.max(1,
+    Math.ceil(northSpanM / northSpacingM));
+  const columns = eastSegments + 1;
+  const rows = northSegments + 1;
+  const positions = new Float32Array(columns * rows * 3);
+  const indices = [];
+  let offset = 0;
+  for (let row = 0; row < rows; row++) {
+    const northM = minimumNorthM
+      + (maximumNorthM - minimumNorthM) * row / northSegments;
+    for (let column = 0; column < columns; column++) {
+      const eastM = minimumEastM
+        + (maximumEastM - minimumEastM) * column / eastSegments;
+      positions[offset++] = eastM;
+      positions[offset++] = ukraineTrainingApronHeightM(eastM, northM);
+      positions[offset++] = -northM;
+    }
+  }
+  for (let row = 0; row < northSegments; row++) {
+    for (let column = 0; column < eastSegments; column++) {
+      const southwest = row * columns + column;
+      const southeast = southwest + 1;
+      const northwest = southwest + columns;
+      const northeast = northwest + 1;
+      indices.push(southwest, southeast, northwest, southeast, northeast, northwest);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function createUkraineTrainingHorizonApron(THREE) {
+  const root = new THREE.Group();
+  root.name = "FICTIONAL_UKRAINE_PRESENTATION_APRON_SYSTEM";
+  const metadata = Object.freeze({
+    authoritative: false,
+    collision: false,
+    targetable: false,
+    purpose: "visual-horizon-apron-with-physics-matched-transition",
+    transitionM: UKRAINE_TRAINING_APRON_TRANSITION_M,
+  });
+  root.userData.terrain = metadata;
+
+  const transitionMaterial = new THREE.MeshLambertMaterial({
+    color: 0x7c8b52,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+  const outer = UKRAINE_TRAINING_CORE_HALF_SPAN_M
+    + UKRAINE_TRAINING_APRON_TRANSITION_M;
+  const transitionBounds = [
+    [-outer, UKRAINE_TRAINING_CORE_HALF_SPAN_M, outer, outer],
+    [-outer, -outer, outer, -UKRAINE_TRAINING_CORE_HALF_SPAN_M],
+    [UKRAINE_TRAINING_CORE_HALF_SPAN_M, -UKRAINE_TRAINING_CORE_HALF_SPAN_M,
+      outer, UKRAINE_TRAINING_CORE_HALF_SPAN_M],
+    [-outer, -UKRAINE_TRAINING_CORE_HALF_SPAN_M,
+      -UKRAINE_TRAINING_CORE_HALF_SPAN_M, UKRAINE_TRAINING_CORE_HALF_SPAN_M],
+  ];
+  const transition = new THREE.Group();
+  transition.name = "FICTIONAL_UKRAINE_PRESENTATION_TRANSITION_RING";
+  for (const [index, bounds] of transitionBounds.entries()) {
+    const mesh = new THREE.Mesh(
+      createUkraineApronStripGeometry(THREE, bounds),
+      transitionMaterial,
+    );
+    mesh.name = `FICTIONAL_UKRAINE_TRANSITION_STRIP_${index + 1}`;
+    mesh.receiveShadow = false;
+    mesh.userData.terrain = metadata;
+    transition.add(mesh);
+  }
+  root.add(transition);
+
+  const flatMaterial = new THREE.MeshLambertMaterial({ color: 0x59652b });
+  const horizon = UKRAINE_TRAINING_HORIZON_HALF_SPAN_M;
+  const flatPatches = [
+    [-horizon, outer, horizon, horizon],
+    [-horizon, -horizon, horizon, -outer],
+    [outer, -outer, horizon, outer],
+    [-horizon, -outer, -outer, outer],
+  ];
+  for (const [index, bounds] of flatPatches.entries()) {
+    const [minEast, minNorth, maxEast, maxNorth] = bounds;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(maxEast - minEast, maxNorth - minNorth, 1, 1)
+        .rotateX(-Math.PI * 0.5),
+      flatMaterial,
+    );
+    mesh.name = index === 0
+      ? "FICTIONAL_UKRAINE_PRESENTATION_ONLY_LAND_APRON"
+      : `FICTIONAL_UKRAINE_PRESENTATION_ONLY_LAND_APRON_${index + 1}`;
+    mesh.position.set(
+      (minEast + maxEast) * 0.5,
+      UKRAINE_TRAINING_APRON_HEIGHT_M,
+      -(minNorth + maxNorth) * 0.5,
+    );
+    mesh.receiveShadow = false;
+    mesh.userData.terrain = metadata;
+    root.add(mesh);
+  }
+  return root;
 }
 
 const TERRAIN_VERTEX = /* glsl */ `
@@ -174,18 +337,58 @@ void main() {
   vec3 sAlbedo = mix(sValley, sFoothill, bandStep);
   sAlbedo = mix(sAlbedo, sUpland, upperSlope * 0.76);
   #ifdef UKRAINE_SCENERY
-  float parcelEast = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.00042);
-  float parcelNorth = 0.5 + 0.5 * sin(vTerrainWorldPosition.z * 0.00031 + 1.1);
-  float patchwork = smoothstep(0.26, 0.74, parcelEast * 0.58 + parcelNorth * 0.42);
-  vec3 cultivation = mix(vec3(0.20, 0.31, 0.075), vec3(0.45, 0.32, 0.085),
-    patchwork);
+  // Ukraine's 5–160 m theatre cannot use the Korean 70–1,500 m elevation ramp: at Rapier
+  // altitude that put almost every regional vertex in one olive band. Three broad local-height
+  // steps preserve drainage, rolling ground and the eastern rise even at the coarse macro LOD.
+  float ukraineElevationBand = smoothstep(22.0, 40.0, vTerrainHeight) * 0.20
+    + smoothstep(58.0, 82.0, vTerrainHeight) * 0.31
+    + smoothstep(105.0, 138.0, vTerrainHeight) * 0.49;
+  sAlbedo = mix(sValley, sFoothill, ukraineElevationBand * 0.78);
+  sAlbedo = mix(sAlbedo, sUpland,
+    smoothstep(128.0, 158.0, vTerrainHeight) * 0.24);
+
+  // A rotated, kilometre-scale cadastral grid gives the theatre a stable agricultural identity
+  // after ambient trees and buildings are shed. One deterministic cell hash selects among four
+  // painterly crop values; the old broad wash used two sin() calls and still averaged to olive.
+  // These 4.4 km x 3.1 km aggregate parcels stay above a Rapier pixel footprint and below theatre
+  // scale. Every third row is offset so the result reads as districts, not a checkerboard.
+  float macroFieldEastM = vTerrainWorldPosition.x * 0.940
+    + vTerrainWorldPosition.z * 0.342;
+  float macroFieldNorthM = vTerrainWorldPosition.z * 0.940
+    - vTerrainWorldPosition.x * 0.342;
+  float macroDistrictRow = floor(macroFieldNorthM / 9300.0);
+  vec2 macroParcelPosition = vec2(
+    macroFieldEastM + macroDistrictRow * 1150.0,
+    macroFieldNorthM);
+  vec2 macroParcelCell = floor(macroParcelPosition / vec2(4400.0, 3100.0));
+  vec2 macroParcelLocal = fract(macroParcelPosition / vec2(4400.0, 3100.0));
+  float parcelHash = fract(sin(dot(macroParcelCell, vec2(127.1, 311.7))) * 43758.5453);
+  float parcelEdgeDistance = min(
+    min(macroParcelLocal.x, 1.0 - macroParcelLocal.x),
+    min(macroParcelLocal.y, 1.0 - macroParcelLocal.y));
+  float parcelBoundary = 1.0 - smoothstep(0.018, 0.065, parcelEdgeDistance);
+  vec3 cultivation = mix(vec3(0.105, 0.215, 0.055), vec3(0.205, 0.325, 0.075),
+    smoothstep(0.10, 0.38, parcelHash));
+  cultivation = mix(cultivation, vec3(0.315, 0.205, 0.060),
+    smoothstep(0.43, 0.64, parcelHash));
+  cultivation = mix(cultivation, vec3(0.49, 0.355, 0.090),
+    smoothstep(0.70, 0.90, parcelHash));
+  cultivation = mix(cultivation, vec3(0.085, 0.145, 0.045), parcelBoundary * 0.32);
+  float macroArable = (1.0 - smoothstep(0.025, 0.14, steepness))
+    * (1.0 - smoothstep(138.0, 158.0, vTerrainHeight));
   #else
   float patchwork = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.00023
     + sin(vTerrainWorldPosition.z * 0.00017) * 2.3);
   vec3 cultivation = mix(vec3(0.17, 0.25, 0.050), vec3(0.32, 0.29, 0.075),
     smoothstep(0.32, 0.68, patchwork));
   #endif
+  #ifdef UKRAINE_SCENERY
+  sAlbedo = mix(sAlbedo, cultivation,
+    macroArable * (0.58 + (1.0 - ukraineElevationBand) * 0.16));
+  sAlbedo *= mix(1.07, 0.84, ukraineElevationBand);
+  #else
   sAlbedo = mix(sAlbedo, cultivation, valleyFloor * (0.34 + patchwork * 0.30));
+  #endif
   sAlbedo = mix(sAlbedo, sRock, slopeFace * (0.24 + upperSlope * 0.56));
   sAlbedo = mix(sAlbedo, sRidge, max(highRidge * 0.68, exposedFace * 0.78));
   float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
@@ -197,6 +400,17 @@ void main() {
   float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
   vec3 stylizedLit = sAlbedo * toneRamp
     + rim * vec3(0.055, 0.075, 0.11) * (0.4 + 0.6 * clamp(normal.y, 0.0, 1.0));
+  #ifdef UKRAINE_SCENERY
+  // Low-relief macro normals otherwise all land on the bright step of the toon ramp. A bounded
+  // horizontal-normal term restores sun-facing versus lee-facing terrain separation without
+  // adding geometry, textures, draw calls, or any micro-scenery at altitude.
+  vec2 regionalSunDirection = normalize(uSunDirection.xz + vec2(0.0001));
+  float regionalReliefLight = clamp(
+    0.94 + dot(normal.xz, regionalSunDirection) * 12.0,
+    0.76,
+    1.08);
+  stylizedLit *= regionalReliefLight;
+  #endif
 
   vec3 lit = stylizedLit;
   #endif
@@ -824,31 +1038,20 @@ class KoreaTerrainPresentation {
     this.reader = reader;
     this.qualityTier = options.qualityTier ?? "balanced";
     this.group = new THREE.Group();
-    const ukraineTrainingSector = manifest.terrainId
-      === "terrain.ukraine.soniachne-training.v1";
-    this.group.name = options.groupName ?? (ukraineTrainingSector
-      ? "UKRAINE_SONIACHNE_TRAINING_TERRAIN"
+    const ukraineTheatre = manifest.terrainId
+      === "terrain.ukraine.soniachne-theatre.v2"
+      || manifest.terrainId === "terrain.ukraine.soniachne-training.v1";
+    this.group.name = options.groupName ?? (ukraineTheatre
+      ? "UKRAINE_SONIACHNE_2030S_TERRAIN"
       : "KOREA_CENTRAL_FRONT_TERRAIN");
-    // The detailed truth cell is deliberately compact. A single low-cost land apron carries the
-    // same 78 m datum as WebBridge's coarse safety terrain so the cell edge does not open onto an
-    // ocean/void inside a 300 m AGL horizon. It is presentation-only and explicitly owns no
-    // targets, obstacles or LZ truth; all authored mission geometry stays inside the detailed cell.
-    this.horizonApron = ukraineTrainingSector
-      ? new THREE.Mesh(
-        new THREE.PlaneGeometry(200_000, 200_000, 1, 1).rotateX(-Math.PI * 0.5),
-        new THREE.MeshLambertMaterial({ color: 0x59652b }),
-      )
+    // The detailed truth cell is deliberately compact. A bounded 4 km ring follows the exact
+    // synthetic edge source and the same smooth blend as TrainingTerrainApronSurface before
+    // reaching the 78 m far datum. It remains presentation-only and explicitly owns no targets,
+    // obstacles or LZ truth; all authored mission geometry stays inside the detailed cell.
+    this.horizonApron = manifest.terrainId === "terrain.ukraine.soniachne-training.v1"
+      ? createUkraineTrainingHorizonApron(THREE)
       : null;
     if (this.horizonApron) {
-      this.horizonApron.name = "FICTIONAL_UKRAINE_PRESENTATION_ONLY_LAND_APRON";
-      this.horizonApron.position.y = 78.0;
-      this.horizonApron.receiveShadow = false;
-      this.horizonApron.userData.terrain = Object.freeze({
-        authoritative: false,
-        collision: false,
-        targetable: false,
-        purpose: "visual-horizon-apron",
-      });
       this.group.add(this.horizonApron);
     }
     this.material = options.material ?? createTerrainMaterial(THREE, options);
@@ -856,9 +1059,11 @@ class KoreaTerrainPresentation {
     this.skirtMaterial = options.skirtMaterial
       ?? createTerrainSkirtMaterial(THREE, this.material);
     this.ownsSkirtMaterial = !options.skirtMaterial;
+    this.sceneryEra = options.sceneryEra ?? null;
+    this.ambientSceneryEnabled = this.sceneryEra !== null;
     this.sceneryRuntime = options.sceneryRuntime
-      ?? (options.sceneryEra ? createKoreaSceneryRuntime(THREE, {
-        era: options.sceneryEra,
+      ?? (this.sceneryEra ? createKoreaSceneryRuntime(THREE, {
+        era: this.sceneryEra,
         qualityTier: this.qualityTier,
       }) : null);
     this.ownsSceneryRuntime = !options.sceneryRuntime && this.sceneryRuntime !== null;
@@ -872,6 +1077,7 @@ class KoreaTerrainPresentation {
       normalBoundary: null,
       buildWork: null,
       priorityDistance: Number.POSITIVE_INFINITY,
+      coverageDistance: Number.POSITIVE_INFINITY,
     }]));
     this.queue = [];
     this.activeLoads = 0;
@@ -893,6 +1099,7 @@ class KoreaTerrainPresentation {
     this.disposed = false;
     this.worldEastM = 0;
     this.worldNorthM = 0;
+    this.hasLocalCoverage = false;
     this.loadedBytes = 0;
     this.idleWaiters = [];
     this.ready = options.lazyChunks === true
@@ -996,7 +1203,9 @@ class KoreaTerrainPresentation {
   }
 
   setSceneryEra(era) {
-    if (this.disposed || era === this.sceneryRuntime?.era) return Promise.resolve([]);
+    if (this.disposed || era === this.sceneryEra) return Promise.resolve([]);
+    this.sceneryEra = era;
+    this.ambientSceneryEnabled = era !== null;
     const runtime = era ? createKoreaSceneryRuntime(this.THREE, {
       era,
       qualityTier: this.qualityTier,
@@ -1006,6 +1215,25 @@ class KoreaTerrainPresentation {
     this.material.uniforms.uParcelTint.value =
       this.qualityTier === "desktop" && !["modern", "ukraine-modern"].includes(era) ? 1 : 0;
     return this.replaceSceneryRuntime(runtime, runtime !== null);
+  }
+
+  // High-altitude sorties retain the Ukraine material's macro fields and relief while shedding
+  // individual ambient trees/buildings/lines. This is intentionally separate from setSceneryEra:
+  // changing the era would recolour the theatre back into a different world.
+  disableAmbientScenery() {
+    if (this.disposed || !this.sceneryRuntime) return Promise.resolve([]);
+    this.ambientSceneryEnabled = false;
+    return this.replaceSceneryRuntime(null, false);
+  }
+
+  enableAmbientScenery() {
+    if (this.disposed || this.sceneryRuntime || !this.sceneryEra) return Promise.resolve([]);
+    this.ambientSceneryEnabled = true;
+    const runtime = createKoreaSceneryRuntime(this.THREE, {
+      era: this.sceneryEra,
+      qualityTier: this.qualityTier,
+    });
+    return this.replaceSceneryRuntime(runtime, true);
   }
 
   async load(work) {
@@ -1169,8 +1397,15 @@ class KoreaTerrainPresentation {
   }
 
   setPlacement(eastM = 0, northM = 0) {
-    this.worldEastM = finite(eastM);
-    this.worldNorthM = finite(northM);
+    const nextEastM = finite(eastM);
+    const nextNorthM = finite(northM);
+    if (nextEastM !== this.worldEastM || nextNorthM !== this.worldNorthM) {
+      // Until update supplies a camera in the new placement, resident chunks describe the old
+      // mission's coverage and must not make a location-local warmup look complete.
+      this.hasLocalCoverage = false;
+    }
+    this.worldEastM = nextEastM;
+    this.worldNorthM = nextNorthM;
     this.group.position.set(this.worldEastM, 0, -this.worldNorthM);
   }
 
@@ -1187,22 +1422,33 @@ class KoreaTerrainPresentation {
 
     const requests = [];
     const priorityPosition = streamPosition ?? cameraPosition;
+    const cameraEastM = cameraPosition.x - this.worldEastM;
+    const cameraNorthM = -cameraPosition.z - this.worldNorthM;
+    const streamEastM = priorityPosition.x - this.worldEastM;
+    const streamNorthM = -priorityPosition.z - this.worldNorthM;
     for (const entry of this.entries.values()) {
       const bounds = entry.chunk.boundsLocalM;
-      const centreEast = this.worldEastM + (bounds[0] + bounds[2]) * 0.5;
-      const centreRenderNorth = -(this.worldNorthM + (bounds[1] + bounds[3]) * 0.5);
-      const cameraDistance = Math.hypot(cameraPosition.x - centreEast,
-        cameraPosition.z - centreRenderNorth);
-      const streamDistance = Math.hypot(priorityPosition.x - centreEast,
-        priorityPosition.z - centreRenderNorth);
+      // Residency is distance to the tile footprint, not its centre. Macro chunks are up to
+      // 65.5 km wide, so a 12 km streaming radius must still load the chunk directly under the
+      // aircraft even when its centre is tens of kilometres away.
+      const cameraDistance = distanceToBounds(cameraEastM, cameraNorthM, bounds);
+      const streamDistance = distanceToBounds(streamEastM, streamNorthM, bounds);
       const distance = Math.min(cameraDistance, streamDistance);
       entry.priorityDistance = distance;
+      entry.coverageDistance = distance;
       if (distance > this.chunkEvictRadiusM) {
         this.evictEntry(entry);
         continue;
       }
       if (distance > this.chunkLoadRadiusM) continue;
-      const level = selectTerrainLod(distance, this.qualityTier,
+      // Screen-space terrain error depends on slant range, not only the camera's ground
+      // projection. Weight altitude so a Rapier at 12-22 km does not draw the 32 m hero mesh while
+      // the macro theatre underneath is hundreds of kilometres wide.
+      const lodDistance = Math.hypot(
+        distance,
+        Math.max(0, finite(cameraPosition.y)) * TERRAIN_ALTITUDE_LOD_WEIGHT,
+      );
+      const level = selectTerrainLod(lodDistance, this.qualityTier,
         entry.chunk.lods.length, entry.level);
       if (level !== entry.level && level !== entry.requestedLevel) {
         requests.push({ entry, level, distance });
@@ -1210,24 +1456,40 @@ class KoreaTerrainPresentation {
     }
     requests.sort((left, right) => left.distance - right.distance);
     for (const request of requests) this.requestLevel(request.entry, request.level);
+    this.hasLocalCoverage = true;
   }
 
   diagnostics() {
     const levels = {};
     let errors = 0;
     let residentChunks = 0;
+    let sceneryChunks = 0;
+    let localResidentChunks = 0;
+    let localSceneryChunks = 0;
     for (const entry of this.entries.values()) {
       const key = entry.level === null ? "pending" : `lod${entry.level}`;
       levels[key] = (levels[key] ?? 0) + 1;
       if (entry.mesh) residentChunks++;
+      if (entry.mesh?.userData?.scenery) sceneryChunks++;
+      const locallyCovered = this.hasLocalCoverage
+        && Number.isFinite(entry.coverageDistance)
+        && entry.coverageDistance <= this.chunkLoadRadiusM;
+      if (entry.mesh && locallyCovered) localResidentChunks++;
+      if (entry.mesh?.userData?.scenery && locallyCovered) localSceneryChunks++;
       if (entry.error) errors++;
     }
     return Object.freeze({
       terrainId: this.manifest.terrainId,
       qualityTier: this.qualityTier,
-      sceneryEra: this.sceneryRuntime?.era ?? null,
+      sceneryEra: this.sceneryEra,
+      ambientSceneryEnabled: this.ambientSceneryEnabled,
+      placementEastM: this.worldEastM,
+      placementNorthM: this.worldNorthM,
       chunks: this.entries.size,
       residentChunks,
+      sceneryChunks,
+      localResidentChunks,
+      localSceneryChunks,
       levels: Object.freeze(levels),
       activeLoads: this.activeLoads,
       queuedLoads: this.queue.length,
@@ -1259,8 +1521,15 @@ class KoreaTerrainPresentation {
     if (this.ownsSkirtMaterial) this.skirtMaterial.dispose();
     if (this.ownsBuildScheduler) this.buildScheduler.dispose();
     if (this.ownsMeshWorkers) this.meshWorkers.dispose();
-    this.horizonApron?.geometry.dispose();
-    this.horizonApron?.material.dispose();
+    const apronGeometries = new Set();
+    const apronMaterials = new Set();
+    this.horizonApron?.traverse?.((object) => {
+      if (object.geometry) apronGeometries.add(object.geometry);
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) if (material) apronMaterials.add(material);
+    });
+    for (const geometry of apronGeometries) geometry.dispose();
+    for (const material of apronMaterials) material.dispose();
     this.horizonApron = null;
     this.group.removeFromParent();
   }
@@ -1309,6 +1578,7 @@ class KoreaTerrainAtlasPresentation {
     // single render thread to protect, so pooling them here matches the build scheduler.
     this.meshWorkers = new TerrainMeshWorkerPool(options);
     this.sceneryEra = options.sceneryEra ?? manifest.scenery?.defaultProfile ?? null;
+    this.ambientSceneryEnabled = this.sceneryEra !== null;
     this.group = new THREE.Group();
     this.group.name = "KOREA_PENINSULA_TERRAIN_ATLAS";
     this.material = createTerrainMaterial(THREE, { ...options, sceneryEra: this.sceneryEra });
@@ -1333,6 +1603,7 @@ class KoreaTerrainAtlasPresentation {
     this.disposed = false;
     this.worldEastM = 0;
     this.worldNorthM = 0;
+    this.hasLocalCoverage = false;
     this.previousCameraLocal = null;
     this.lastUpdate = null;
     this.loadedPageManifests = 0;
@@ -1340,8 +1611,15 @@ class KoreaTerrainAtlasPresentation {
   }
 
   setPlacement(eastM = 0, northM = 0) {
-    this.worldEastM = finite(eastM);
-    this.worldNorthM = finite(northM);
+    const nextEastM = finite(eastM);
+    const nextNorthM = finite(northM);
+    if (nextEastM !== this.worldEastM || nextNorthM !== this.worldNorthM) {
+      this.hasLocalCoverage = false;
+      this.previousCameraLocal = null;
+      this.lastUpdate = null;
+    }
+    this.worldEastM = nextEastM;
+    this.worldNorthM = nextNorthM;
     this.group.position.set(this.worldEastM, 0, -this.worldNorthM);
   }
 
@@ -1385,6 +1663,7 @@ class KoreaTerrainAtlasPresentation {
     }) : null;
     const previousRuntime = this.sceneryRuntime;
     this.sceneryEra = era;
+    this.ambientSceneryEnabled = era !== null;
     this.sceneryRuntime = runtime;
     setTerrainMaterialEra(this.material, era);
     setTerrainMaterialEra(this.skirtMaterial, era);
@@ -1397,6 +1676,38 @@ class KoreaTerrainAtlasPresentation {
       }
     }
     previousRuntime?.dispose();
+    return Promise.all(replacements);
+  }
+
+  disableAmbientScenery() {
+    if (this.disposed || !this.sceneryRuntime) return Promise.resolve([]);
+    this.ambientSceneryEnabled = false;
+    const previousRuntime = this.sceneryRuntime;
+    this.sceneryRuntime = null;
+    const replacements = [];
+    for (const state of this.pages.values()) {
+      if (state.presentation) {
+        replacements.push(state.presentation.replaceSceneryRuntime(null, false));
+      }
+    }
+    previousRuntime.dispose();
+    return Promise.all(replacements);
+  }
+
+  enableAmbientScenery() {
+    if (this.disposed || this.sceneryRuntime || !this.sceneryEra) return Promise.resolve([]);
+    const runtime = createKoreaSceneryRuntime(this.THREE, {
+      era: this.sceneryEra,
+      qualityTier: this.qualityTier,
+    });
+    this.sceneryRuntime = runtime;
+    this.ambientSceneryEnabled = true;
+    const replacements = [];
+    for (const state of this.pages.values()) {
+      if (state.presentation) {
+        replacements.push(state.presentation.replaceSceneryRuntime(runtime, false));
+      }
+    }
     return Promise.all(replacements);
   }
 
@@ -1558,11 +1869,15 @@ class KoreaTerrainAtlasPresentation {
     }
     requested.sort((left, right) => left.distance - right.distance);
     for (const request of requested) this.requestPage(request.state, request.distance);
+    this.hasLocalCoverage = true;
   }
 
   diagnostics() {
     let residentPages = 0;
     let residentChunks = 0;
+    let sceneryChunks = 0;
+    let localResidentChunks = 0;
+    let localSceneryChunks = 0;
     let errors = 0;
     let networkRequests = 0;
     let networkBytes = 0;
@@ -1571,6 +1886,9 @@ class KoreaTerrainAtlasPresentation {
         residentPages++;
         const page = state.presentation.diagnostics();
         residentChunks += page.residentChunks;
+        sceneryChunks += Number(page.sceneryChunks) || 0;
+        localResidentChunks += Number(page.localResidentChunks) || 0;
+        localSceneryChunks += Number(page.localSceneryChunks) || 0;
         networkRequests += page.transfer.networkRequests;
         networkBytes += page.transfer.networkBytes;
       }
@@ -1580,9 +1898,15 @@ class KoreaTerrainAtlasPresentation {
       terrainId: this.manifest.terrainId,
       qualityTier: this.qualityTier,
       sceneryEra: this.sceneryEra,
+      ambientSceneryEnabled: this.ambientSceneryEnabled,
+      placementEastM: this.worldEastM,
+      placementNorthM: this.worldNorthM,
       pages: this.pages.size,
       residentPages,
       residentChunks,
+      sceneryChunks,
+      localResidentChunks: this.hasLocalCoverage ? localResidentChunks : 0,
+      localSceneryChunks: this.hasLocalCoverage ? localSceneryChunks : 0,
       activePageLoads: this.activePageLoads,
       queuedPageLoads: this.pageQueue.length,
       loadedPageManifests: this.loadedPageManifests,

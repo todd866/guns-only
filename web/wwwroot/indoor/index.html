@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#07100f">
+  <meta name="color-scheme" content="dark">
+  <title>Indoor — Guns Only</title>
+  <link rel="icon" type="image/png" href="../favicon.png">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body data-phase="briefing" data-link="fiber" data-video="clear" data-autonomy="off">
+  <canvas id="viewport" tabindex="0" aria-label="Indoor microdrone view"></canvas>
+
+  <div id="screen-effects" aria-hidden="true">
+    <div class="screen-vignette"></div>
+    <div class="screen-scanlines"></div>
+    <div id="hit-flash"></div>
+    <div id="signal-noise"></div>
+    <div id="video-tear"></div>
+  </div>
+
+  <main id="flight-ui" aria-label="Microdrone instruments">
+    <header class="hud-top">
+      <div class="brand-block">
+        <a class="brand" href="../" aria-label="Return to Guns Only mission catalogue">Guns Only</a>
+        <span>INDOOR / FACILITY NINE</span>
+      </div>
+      <div id="phase-strip">
+        <span class="phase-step active" data-phase-step="ingress"><b>01</b> INGRESS</span>
+        <span class="phase-line"></span>
+        <span class="phase-step" data-phase-step="detach"><b>02</b> BREAKAWAY</span>
+        <span class="phase-line"></span>
+        <span class="phase-step" data-phase-step="action"><b>03</b> ACTION</span>
+      </div>
+      <div class="hud-actions">
+        <button id="audio-toggle" type="button" aria-pressed="true" title="Toggle sound">AUDIO ON</button>
+        <button id="help-open" type="button" title="Show controls">CONTROLS · H</button>
+        <button id="pause-toggle" type="button" title="Pause">PAUSE · ESC</button>
+      </div>
+    </header>
+
+    <section class="telemetry-panel" aria-label="Drone telemetry">
+      <div class="eyebrow">AIRFRAME / MIDGE-03</div>
+      <div class="readout prominent">
+        <span>LINK</span>
+        <strong id="link-mode">OPTICAL</strong>
+        <small id="link-detail">JAM RESISTANT</small>
+      </div>
+      <div id="feed-state" data-state="clear" aria-label="Video and flight-control state">
+        <span>VIDEO</span>
+        <strong id="feed-quality">FULL RATE</strong>
+        <small id="control-authority">DIRECT CONTROL</small>
+      </div>
+      <div class="bar-readout">
+        <span><b id="fibre-label">FIBRE</b><output id="fibre-value">0 M</output></span>
+        <i><b id="fibre-bar"></b></i>
+      </div>
+      <div class="bar-readout">
+        <span><b>BATTERY</b><output id="battery-value">100%</output></span>
+        <i><b id="battery-bar"></b></i>
+      </div>
+      <div class="bar-readout">
+        <span><b>INTEGRITY</b><output id="integrity-value">100%</output></span>
+        <i><b id="integrity-bar"></b></i>
+      </div>
+      <div class="split-readout">
+        <div><span>ROUNDS</span><strong id="ammo-value">36</strong></div>
+        <div><span>ALERT</span><strong id="alert-value">LOW</strong></div>
+      </div>
+      <div id="relay-block" hidden>
+        <span>RELAY WINDOW</span>
+        <strong id="relay-time">00:45</strong>
+        <small id="relay-state">STATION HOLDING</small>
+      </div>
+    </section>
+
+    <section id="objective-panel" aria-label="Mission objectives">
+      <div class="eyebrow">MISSION / QUIET ENTRY</div>
+      <h1>Sever the facility control loop</h1>
+      <ol id="objective-list">
+        <li data-objective="0" class="active"><b>01</b><span>Reach the interior checkpoint</span><i>ACTIVE</i></li>
+        <li data-objective="1"><b>02</b><span>Disable security core A</span><i>LOCKED</i></li>
+        <li data-objective="2"><b>03</b><span>Disable security core B</span><i>LOCKED</i></li>
+        <li data-objective="3"><b>04</b><span>Disable the command core</span><i>LOCKED</i></li>
+      </ol>
+      <div id="mission-clock"><span>ELAPSED</span><output>00:00.0</output></div>
+    </section>
+
+    <section id="map-panel" aria-label="Facility map">
+      <header><span>LOCAL GEOMETRY</span><output id="map-floor">B1</output></header>
+      <canvas id="minimap" width="420" height="250" aria-label="Top-down map of explored facility"></canvas>
+      <div class="map-legend"><i class="self"></i> MIDGE-03 <i class="route"></i> PRECLEARED <i class="hostile"></i> HOSTILE</div>
+    </section>
+
+    <div id="reticle" aria-hidden="true">
+      <span class="reticle-left"></span>
+      <span class="reticle-right"></span>
+      <span class="reticle-top"></span>
+      <span class="reticle-bottom"></span>
+      <i></i>
+      <output id="range-readout"></output>
+    </div>
+
+    <div id="velocity-vector" aria-hidden="true"></div>
+    <div id="interaction-cue" hidden><span></span><b></b></div>
+    <div id="event-cue" role="status" aria-live="polite"></div>
+    <div id="subtitle" role="status" aria-live="polite"></div>
+
+    <div id="detach-panel">
+      <div>
+        <span id="detach-kicker">BREAKAWAY ARMED</span>
+        <strong id="detach-copy">X detaches fibre</strong>
+      </div>
+      <button id="detach-button" type="button">DETACH · X</button>
+    </div>
+  </main>
+
+  <section id="briefing" class="modal-layer visible" role="dialog" aria-modal="true" aria-labelledby="briefing-title">
+    <div class="mission-card">
+      <div class="mission-art" aria-hidden="true">
+        <div class="facility-grid"></div>
+        <div class="route-diagram">
+          <span class="station-node">RELAY</span>
+          <i class="route-segment one"></i>
+          <i class="route-segment two"></i>
+          <i class="route-segment three"></i>
+          <b class="drone-node"></b>
+          <span class="target-node">CORE</span>
+        </div>
+        <div class="mission-mark">NINE<br><small>B1</small></div>
+      </div>
+      <div class="mission-copy">
+        <div class="eyebrow">2030s / ATTRITABLE SYSTEMS / EXPERIMENTAL</div>
+        <h1 id="briefing-title">Indoor</h1>
+        <p class="lede">Fly the fibre-protected route into Facility Nine. Stay quiet as long as you can. If the line catches—or when you choose—shed it cleanly and finish over radio. If the picture breaks up, the onboard controller will keep flying.</p>
+
+        <div class="mission-doctrine">
+          <div><b>01</b><span><strong>Protected ingress</strong>Follow the cyan route. Fibre ignores jamming but dislikes corners.</span></div>
+          <div><b>02</b><span><strong>Smooth breakaway</strong>Detach deliberately, or let the coupler release under tension.</span></div>
+          <div><b>03</b><span><strong>Contested finish</strong>Three control cores. Thirty-six rounds. Weak signal steals command authority; onboard automation does its best.</span></div>
+        </div>
+
+        <div class="control-summary" aria-label="Controls">
+          <span><kbd>W / S</kbd> FORWARD / BACK</span>
+          <span><kbd>A / D</kbd> STRAFE</span>
+          <span><kbd>ARROWS</kbd> LOOK / TURN</span>
+          <span><kbd>SPACE / L⇧</kbd> UP / DOWN</span>
+          <span><kbd>F / CLICK</kbd> FIRE</span>
+          <span><kbd>X</kbd> DETACH</span>
+        </div>
+
+        <div class="mission-actions">
+          <button id="begin-button" class="primary" type="button">BEGIN INGRESS</button>
+          <a href="../">MISSION CATALOGUE</a>
+        </div>
+        <p class="mission-note">Fictional systems and facility. Illustrative operator presentation.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="pause-screen" class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="pause-title" aria-hidden="true">
+    <div class="compact-card">
+      <div class="eyebrow">MIDGE-03 / CONTROL HELD</div>
+      <h2 id="pause-title">Paused</h2>
+      <p>The simulation is stopped. Resume to recapture the mouse.</p>
+      <button id="resume-button" class="primary" type="button">RESUME</button>
+      <button id="restart-button" type="button">RESTART MISSION</button>
+      <a href="../">MISSION CATALOGUE</a>
+    </div>
+  </section>
+
+  <section id="help-screen" class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="help-title" aria-hidden="true">
+    <div class="compact-card help-card">
+      <div class="eyebrow">CONTROL QUICKLOOK</div>
+      <h2 id="help-title">Six degrees, simple hands</h2>
+      <div class="help-grid">
+        <div><kbd>W / S</kbd><span>Forward / back</span></div>
+        <div><kbd>A / D</kbd><span>Strafe left / right</span></div>
+        <div><kbd>← / →</kbd><span>Turn left / right</span></div>
+        <div><kbd>↑ / ↓</kbd><span>Look up / down</span></div>
+        <div><kbd>SPACE</kbd><span>Climb</span></div>
+        <div><kbd>L-SHIFT</kbd><span>Descend</span></div>
+        <div><kbd>F / CLICK</kbd><span>Fire</span></div>
+        <div><kbd>X</kbd><span>Detach fibre</span></div>
+        <div><kbd>MOUSE</kbd><span>Optional mouselook</span></div>
+        <div><kbd>R</kbd><span>Restart after finish</span></div>
+      </div>
+      <p>On touch screens, the left pad translates and the right side looks. UP/DN control height.</p>
+      <button id="help-close" class="primary" type="button">DONE · H</button>
+    </div>
+  </section>
+
+  <section id="result-screen" class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="result-title" aria-hidden="true">
+    <div class="result-card">
+      <div id="result-kicker" class="eyebrow">FACILITY NINE / MISSION COMPLETE</div>
+      <h2 id="result-title">Control loop severed</h2>
+      <p id="result-copy">The station held long enough. The facility is blind.</p>
+      <div class="result-grid">
+        <div><span>TIME</span><strong id="result-time">00:00</strong></div>
+        <div><span>LINK</span><strong id="result-link">OPTICAL</strong></div>
+        <div><span>ROUNDS</span><strong id="result-rounds">0 / 36</strong></div>
+        <div><span>ALERT</span><strong id="result-alert">LOW</strong></div>
+      </div>
+      <div class="mission-actions">
+        <button id="fly-again" class="primary" type="button">FLY AGAIN · R</button>
+        <a href="../">MISSION CATALOGUE</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="touch-controls" aria-label="Touch flight controls">
+    <div id="move-pad" class="touch-pad" aria-label="Translation control"><i></i><span>MOVE</span></div>
+    <div id="look-pad" class="touch-pad" aria-label="Look control"><i></i><span>LOOK</span></div>
+    <div class="touch-height">
+      <button type="button" data-touch-hold="up">UP</button>
+      <button type="button" data-touch-hold="down">DN</button>
+    </div>
+    <button id="touch-fire" type="button">FIRE</button>
+    <button id="touch-detach" type="button">DETACH</button>
+  </section>
+
+  <div id="boot-status" role="status" aria-live="polite">BUILDING FACILITY</div>
+  <div id="fatal" class="modal-layer" role="alert" aria-hidden="true">
+    <div class="compact-card">
+      <div class="eyebrow">PRESENTATION OFFLINE</div>
+      <h2>Indoor could not start</h2>
+      <p id="fatal-copy">Reload the page to try again.</p>
+      <button type="button" onclick="location.reload()">RELOAD</button>
+      <a href="../">MISSION CATALOGUE</a>
+    </div>
+  </div>
+  <p id="announcer" class="visually-hidden" aria-live="assertive"></p>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

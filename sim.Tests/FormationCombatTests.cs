@@ -115,5 +115,45 @@ public class FormationCombatTests {
         // Still ONE fight: a 1v2 is a single engagement and a single entry in the record.
         Assert.Equal(1, session.EngagementNumber);
         Assert.Equal(1, session.LiveOpponentCount);
+        Assert.Null(session.LastEngagementReport);
+    }
+
+    [Fact]
+    public void RealGunSplashDoesNotCarryOntoThePromotedWingman() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        IBandit leader = session.Bandit;
+        IBandit wingman = session.Wingmen[0].Bandit;
+
+        // Produce the same latched Splash state as a real ballistic kill. The synthetic geometry
+        // keeps this regression deterministic while damage observation and promotion still travel
+        // through the production fixed-tick lifecycle.
+        var own = new AircraftState(
+            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0, FlightModel.F22APublicDataSurrogate.MassKg,
+            QuaternionD.Identity);
+        var target = own with { Position = new Vec3D(0.0, 0.0, 100.0) };
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && session.PlayerGun.TargetAlive; tick++)
+            session.PlayerGun.Step(true, own, target, SimulationSession.FixedDeltaSeconds);
+        Assert.Equal(FightOutcome.Splash, session.PlayerGun.Outcome);
+
+        session.StepFixed();
+        Assert.True(leader.CatastrophicallyDamaged);
+        for (int tick = 0; tick < 6 * AircraftSim.TickHz
+            && ReferenceEquals(session.Bandit, leader); tick++)
+            session.StepFixed();
+
+        Assert.Same(wingman, session.Bandit);
+        Assert.Equal(FightOutcome.Flying, session.PlayerGun.Outcome);
+        Assert.Equal(AircraftTerminalState.Flying, session.OpponentTerminalState);
+
+        // The stale Splash used to kill the promoted aircraft on this first ordinary combat tick.
+        session.StepFixed();
+
+        Assert.False(wingman.CatastrophicallyDamaged);
+        Assert.Equal(AircraftTerminalState.Flying, session.OpponentTerminalState);
+        Assert.Equal(1, session.KillCount);
+        Assert.Equal(1, session.LiveOpponentCount);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
     }
 }

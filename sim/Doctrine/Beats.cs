@@ -91,11 +91,7 @@ public sealed record AircraftCapability(
     public static AircraftCapability RapierSurrogate { get; } = new(
         "aircraft.rapier.public-data-surrogate.v1",
         "Rapier high-altitude interceptor (surrogate)",
-        // No authored model yet. Deliberately reuses the SHIPPING player presentation rather than
-        // inventing an id: the visual profile publishes only player and bandit vehicle ids, and a
-        // capability naming one that does not resolve fails to render rather than falling back.
-        // Flyable before beautiful.
-        "presentation.vehicle.player.v1",
+        "presentation.vehicle.rapier.public-data-surrogate.v1",
         "systems.carrier-recovery.generic-surrogate.v1", true, true);
 
     public static AircraftCapability F35CCarrierSurrogate { get; } = new(
@@ -141,7 +137,87 @@ public enum MissionContentFamily {
     Korea2030sPrototype,
     ModernPublicDataSurrogate,
     Custom,
-    UkraineTrainingPrototype
+    UkraineTrainingPrototype,
+    Ukraine2030sTheatre
+}
+
+public enum MissionEnvironmentFrameKind {
+    SharedTheatre,
+    LocalHeroCell,
+    LocalCoastalCell,
+    LocalRegionalCorridor
+}
+
+/// <summary>
+/// The environment a mission occupies is independent of the aircraft/content compatibility pack.
+/// A Sabre, F-22, balloon glider and Rapier can therefore share one fictional 2030s Ukraine world
+/// without lying about their vehicle presentation or public-data status.
+/// </summary>
+public sealed record MissionEnvironmentContract(
+    string TheatreId,
+    string LocationId,
+    string WorldFrameId,
+    string TerrainProfileId,
+    string MacroSceneryProfile,
+    string MicroSceneryProfile,
+    MissionEnvironmentFrameKind FrameKind,
+    double TerrainSourceAnchorEastM = 0.0,
+    double TerrainSourceAnchorNorthM = 0.0,
+    double PreferredTerrainStreamingRadiusM = 64_000.0,
+    bool AcceptsMultiplayerWorldOrigin = false) {
+    public bool MultiplayerTerrainShared =>
+        FrameKind == MissionEnvironmentFrameKind.SharedTheatre
+        && AcceptsMultiplayerWorldOrigin;
+}
+
+/// <summary>
+/// One synthetic 2030s Ukraine theatre with nested fidelity bands. It carries no real coordinates:
+/// the regional corridor is for high-altitude continuity, Soniachne is the current 32 m hero cell,
+/// and the coastal cell gives recovery sorties a sea surface in the same fictional world.
+/// </summary>
+public static class Ukraine2030sTheatre {
+    public const string TheatreId = "theatre.ukraine.soniachne-2030s.v1";
+    public const string WorldFrameId = "world.ukraine.soniachne-2030s.v1";
+    public const string TerrainProfileId = "terrain.ukraine.soniachne-theatre.v2";
+    public const string MacroSceneryProfile = "ukraine-2030s-macro";
+    public const string MicroSceneryProfile = "ukraine-modern";
+
+    // The physical theatre is shared by every mission, but current multiplayer sectors can extend
+    // beyond this finite regional product and the v2 presence protocol carries no frame/instance
+    // identity. Keep room-origin translation disabled until assignment is terrain-aware; otherwise
+    // a high-index pilot can launch over an unrendered edge while physics samples the safety apron.
+    public static MissionEnvironmentContract Shared { get; } = new(
+        TheatreId,
+        "location.ukraine.soniachne-regional.v1",
+        WorldFrameId,
+        TerrainProfileId,
+        MacroSceneryProfile,
+        MicroSceneryProfile,
+        MissionEnvironmentFrameKind.SharedTheatre);
+
+    public static MissionEnvironmentContract HeroCell { get; } = Shared with {
+        LocationId = "location.ukraine.soniachne-hero-cell.v1",
+        FrameKind = MissionEnvironmentFrameKind.LocalHeroCell,
+        PreferredTerrainStreamingRadiusM = 32_000.0
+    };
+
+    // The source coordinate (-100 km, -100 km) lies in the synthetic coastal water cell. Positive
+    // placement moves that source point to mission-local zero without changing the theatre datum.
+    public static MissionEnvironmentContract CoastalCell { get; } = Shared with {
+        LocationId = "location.ukraine.soniachne-coastal-cell.v1",
+        FrameKind = MissionEnvironmentFrameKind.LocalCoastalCell,
+        TerrainSourceAnchorEastM = -100_000.0,
+        TerrainSourceAnchorNorthM = -100_000.0,
+        PreferredTerrainStreamingRadiusM = 56_000.0
+    };
+
+    public static MissionEnvironmentContract RapierCorridor { get; } = Shared with {
+        LocationId = "location.ukraine.soniachne-rapier-corridor.v1",
+        FrameKind = MissionEnvironmentFrameKind.LocalRegionalCorridor,
+        // Target staging is 90 km from the strip. Keep that complete route inside the normal
+        // high-altitude presentation radius, while warmup still loads only the local chunk.
+        PreferredTerrainStreamingRadiusM = 112_000.0
+    };
 }
 
 /// <summary>Stable mission identity lives with content, not a bridge switch over menu indexes.</summary>
@@ -244,12 +320,15 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     PilotPhysiologyProfile? PlayerPhysiologyProfile = null,
     bool RecoveryCompletesSortie = false,
     ContinuousCombatConfig? ContinuousCombat = null,
-    PilotSkill BanditSkill = PilotSkill.Competent) {
+    PilotSkill BanditSkill = PilotSkill.Competent,
+    MissionEnvironmentContract? Environment = null) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
     public FuelConfig FuelLoadout => Fuel ?? FuelConfig.PoweredJet;
     public MissionContract MissionIdentity => Mission ?? MissionContract.Custom;
+    public MissionEnvironmentContract EnvironmentIdentity =>
+        Environment ?? Ukraine2030sTheatre.Shared;
     public AircraftCapability PlayerAircraft => PlayerCapability ?? AircraftCapability.F86F30;
     public AircraftCapability BanditAircraft => BanditCapability
         ?? AircraftCapability.F86F30Bandit;
@@ -544,7 +623,8 @@ public static class Beats {
         UsesReactiveBandit: false,
         Combat: CombatConfig.CarrierRecoveryOnly,
         Mission: KoreaMission("mission.carrier-qualification.v1"),
-        RecoveryCompletesSortie: true);
+        RecoveryCompletesSortie: true,
+        Environment: Ukraine2030sTheatre.CoastalCell);
     }
 
     /// <summary>
@@ -589,7 +669,8 @@ public static class Beats {
                 Era: "MODERN_PUBLIC_DATA_EXERCISE"),
             PlayerCapability: AircraftCapability.F35CCarrierSurrogate,
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
-            RecoveryCompletesSortie: true);
+            RecoveryCompletesSortie: true,
+            Environment: Ukraine2030sTheatre.CoastalCell);
     }
 
     /// <summary>
@@ -609,16 +690,17 @@ public static class Beats {
     public static BeatSetup RapierIntercept(
         GunsOnly.Sim.Carrier.DeckConfiguration configuration =
             GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
-        // A land-based dispersed strip rather than a ship: no deck motion, and the "deck" is the
-        // runway. Modelled with the carrier machinery because catapult and arrestment physics are
-        // the same problem, which is exactly why the repo already had both.
+        // A fixed land installation reuses the catapult/arrestment geometry but explicitly opts out
+        // of ship wind, burble, heave, hull and island. Its 120.5 m datum sits 2.5 m above the
+        // packed Soniachne terrain at local origin (118.0 m after 0.1 m quantization).
         var carrier = new GunsOnly.Sim.Carrier(
-            deckCentre: new Vec3D(0, 20, 0), headingRad: 0, speedMps: 0,
-            deckAltM: 20, deckLengthM: 300, deckWidthM: 40,
-            configuration: configuration);
+            deckCentre: new Vec3D(0, 120.5, 0), headingRad: 0, speedMps: 0,
+            deckAltM: 120.5, deckLengthM: 1_200, deckWidthM: 48,
+            configuration: GunsOnly.Sim.Carrier.DeckConfiguration.Axial,
+            kind: GunsOnly.Sim.Carrier.PlatformKind.FixedArrestingStrip);
         return new BeatSetup(
             Name: "Rapier intercept",
-            Player: new AircraftState(new Vec3D(0, 20, 0), 0.0, 0, 0, 0,
+            Player: new AircraftState(new Vec3D(0, 120.5, 0), 0.0, 0, 0, 0,
                 FlightModel.RapierPublicDataSurrogate.MassKg),
             // A contact high and slow ahead: the thing this aircraft was built to kill is an
             // enabler, not a fighter.
@@ -644,18 +726,26 @@ public static class Beats {
             // nobody launches a heavy jet at military power.
             InitialThrottle: 1.55,
             StartsOnCatapult: true,
-            // Electromagnetic launcher: 88 m/s over a 130 m stroke, about 3 G and 30 MJ into a
-            // 7.85 t aircraft. The deck default of 62 m/s over 75 m cannot fly this wing.
-            // A LAND installation is not constrained by a deck. 520 m of track is shorter than any
+            // The deck default of 62 m/s over 75 m cannot fly this wing. A LAND installation is
+            // not constrained by a deck. 520 m of electromagnetic track is shorter than any
             // runway, costs 2.2 G to the pilot, and delivers 150 m/s — about 2.1 times this wing's
             // stall speed, where the aircraft is genuinely flying rather than clinging on. Launch
             // speed is the cheapest safety margin available: the ramp then converts it into climb.
             CatapultStrokeM: 520.0,
             CatapultEndSpeedMps: 150.0,
-            // Not a ski jump — a hill. 12 degrees was sized for an aircraft leaving marginally
-            // above stall; at 150 m/s it is already flying, so the ramp only has to point it
-            // upward and hand it to the wing. Seven degrees is terrain you could drive a track up.
-            CatapultRampAngleRad: 7.0 * Math.PI / 180.0,
+            // A real ski jump, and the earlier seven degrees was an excuse rather than a design.
+            // The steppe is flat, so the ramp is built either way; once you are building it, the
+            // angle should be chosen by what the aircraft and the pilot can take, not by what
+            // terrain might have offered.
+            //
+            // At 150 m/s this aircraft can SUSTAIN a 47.7 degree climb — thrust 65 kN against
+            // 8.1 kN of drag and 77 kN of weight. So the jet is nowhere near the limit; the arc is.
+            // Twelve degrees is the same angle Kuznetsov and Invincible use, and at 3 G normal it
+            // needs a 765 m radius: a 160 m arc rising 16.7 m, with 360 m of flat run before it.
+            // The pilot sees sqrt(2.21^2 + 3^2) = 3.73 G combined, reclined, against a 12 G
+            // airframe. The rise costs 1.29 MJ of an 88.3 MJ launch — 1.5%, the same order as the
+            // air the aircraft pushes down the gallery.
+            CatapultRampAngleRad: 12.0 * Math.PI / 180.0,
             Mission: new MissionContract(
                 "mission.modern.rapier-intercept.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,
@@ -665,7 +755,8 @@ public static class Beats {
             PlayerCapability: AircraftCapability.RapierSurrogate,
             BanditCapability: AircraftCapability.Su27SSurrogate,
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
-            RecoveryCompletesSortie: true);
+            RecoveryCompletesSortie: true,
+            Environment: Ukraine2030sTheatre.RapierCorridor);
     }
 
     /// <summary>
@@ -698,7 +789,8 @@ public static class Beats {
             Carrier: carrier,
             Combat: CombatConfig.CarrierQualification,
             MaintenanceScenario: MaintenanceScenarioKind.F86EmergencyGearRecovery,
-            Mission: KoreaMission("mission.f86f.degraded-gear-recovery.v1"));
+            Mission: KoreaMission("mission.f86f.degraded-gear-recovery.v1"),
+            Environment: Ukraine2030sTheatre.CoastalCell);
     }
 
     /// <summary>
@@ -869,7 +961,8 @@ public static class Beats {
             PlayerCapability: AircraftCapability.F22ASurrogate,
             BanditCapability: AircraftCapability.OneWayAttackDronePrototype,
             DroneRaid: raid,
-            PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference);
+            PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
+            Environment: Ukraine2030sTheatre.HeroCell);
     }
 
     public static BeatSetup Saddle() => new("Saddle + shot",
@@ -888,4 +981,24 @@ public static class Beats {
         Fuel: FuelConfig.FighterEngagement,
         InitialThrottle: 1.0,
         Mission: KoreaMission("mission.saddle-tracking.v1"));
+
+    /// <summary>
+    /// Single built-in catalogue used by simulation staging and environment selection. Stable beat
+    /// indices remain the public ABI; keeping the factory here prevents bridge/projection switches
+    /// from independently forgetting a new mission's world contract.
+    /// </summary>
+    public static BeatSetup BuiltIn(int index,
+        GunsOnly.Sim.Carrier.DeckConfiguration deckConfiguration =
+            GunsOnly.Sim.Carrier.DeckConfiguration.Axial) => index switch {
+        2 => BreakDefense(),
+        3 => Saddle(),
+        4 => BalloonStrike(),
+        5 => F35CCarrierApproach(deckConfiguration),
+        6 => EmergencyGearRecovery(deckConfiguration),
+        7 => ModernVisualMerge(),
+        8 => DroneRaidDefense(),
+        9 => ModernAceDuel(),
+        10 => RapierIntercept(deckConfiguration),
+        _ => Perch()
+    };
 }

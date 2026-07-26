@@ -62,6 +62,131 @@ async function serveStatic(root) {
   };
 }
 
+test("the published Indoor route boots its Three.js facility and transitions optical to radio", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+    await page.goto(`${site.url}indoor/`, { waitUntil: "load", timeout: 30000 });
+    await page.waitForFunction(
+      () => globalThis.__gunsIndoor?.ready === true,
+      undefined,
+      { timeout: 15000 },
+    );
+
+    const ready = await page.evaluate(() => ({
+      phase: document.body.dataset.phase,
+      link: globalThis.__gunsIndoor.state?.link?.mode,
+      canvasWidth: document.querySelector("#viewport")?.width,
+      canvasHeight: document.querySelector("#viewport")?.height,
+      fatal: document.querySelector("#fatal")?.classList.contains("visible"),
+      briefing: document.querySelector("#briefing")?.classList.contains("visible"),
+      cores: globalThis.__gunsIndoor.state?.objectives?.length,
+    }));
+    assert.equal(ready.phase, "briefing");
+    assert.equal(ready.link, "fiber");
+    assert.equal(ready.cores, 3);
+    assert.equal(ready.fatal, false);
+    assert.equal(ready.briefing, true);
+    assert.ok(ready.canvasWidth > 0 && ready.canvasHeight > 0,
+      `Indoor WebGL canvas did not size: ${JSON.stringify(ready)}`);
+
+    await page.locator("#begin-button").click();
+    await page.waitForFunction(() => document.body.dataset.phase === "active");
+    const controlsBefore = await page.evaluate(() => ({
+      x: globalThis.__gunsIndoor.state.drone.position.x,
+      z: globalThis.__gunsIndoor.state.drone.position.z,
+      yaw: globalThis.__gunsIndoor.state.drone.yaw,
+    }));
+    await page.keyboard.down("w");
+    await page.waitForFunction(
+      (startZ) => globalThis.__gunsIndoor.state.drone.position.z < startZ - 0.1,
+      controlsBefore.z,
+      { timeout: 10000 },
+    );
+    await page.keyboard.up("w");
+    await page.keyboard.down("d");
+    await page.waitForFunction(
+      (startX) => globalThis.__gunsIndoor.state.drone.position.x > startX + 0.1,
+      controlsBefore.x,
+      { timeout: 10000 },
+    );
+    await page.keyboard.up("d");
+    await page.keyboard.down("ArrowRight");
+    await page.waitForFunction(
+      (startYaw) => globalThis.__gunsIndoor.state.drone.yaw > startYaw + 0.1,
+      controlsBefore.yaw,
+      { timeout: 10000 },
+    );
+    await page.keyboard.up("ArrowRight");
+    const controlsAfter = await page.evaluate(() => ({
+      x: globalThis.__gunsIndoor.state.drone.position.x,
+      z: globalThis.__gunsIndoor.state.drone.position.z,
+      yaw: globalThis.__gunsIndoor.state.drone.yaw,
+    }));
+    assert.ok(controlsAfter.z < controlsBefore.z - 0.1,
+      `W did not move the drone forward: ${JSON.stringify({ controlsBefore, controlsAfter })}`);
+    assert.ok(controlsAfter.x > controlsBefore.x + 0.1,
+      `D did not strafe the drone right: ${JSON.stringify({ controlsBefore, controlsAfter })}`);
+    assert.ok(controlsAfter.yaw > controlsBefore.yaw + 0.1,
+      `ArrowRight did not rotate the view: ${JSON.stringify({ controlsBefore, controlsAfter })}`);
+
+    const verticalBefore = await page.evaluate(
+      () => globalThis.__gunsIndoor.state.drone.position.y,
+    );
+    await page.keyboard.down("Space");
+    await page.waitForFunction(
+      (startY) => globalThis.__gunsIndoor.state.drone.position.y > startY + 0.1,
+      verticalBefore,
+      { timeout: 10000 },
+    );
+    await page.keyboard.up("Space");
+    const verticalHigh = await page.evaluate(
+      () => globalThis.__gunsIndoor.state.drone.position.y,
+    );
+    await page.keyboard.down("Shift");
+    await page.waitForFunction(
+      (highY) => globalThis.__gunsIndoor.state.drone.position.y < highY - 0.1,
+      verticalHigh,
+      { timeout: 10000 },
+    );
+    await page.keyboard.up("Shift");
+
+    await page.evaluate(() => globalThis.__gunsIndoor.detach());
+    await page.waitForFunction(
+      () => globalThis.__gunsIndoor.state?.link?.mode === "rf",
+      undefined,
+      { timeout: 3000 },
+    );
+    const handoff = await page.evaluate(() => ({
+      phase: document.body.dataset.phase,
+      link: globalThis.__gunsIndoor.state.link.mode,
+      relay: globalThis.__gunsIndoor.state.link.rf.survivalTimer,
+      bodyLink: document.body.dataset.link,
+      video: document.body.dataset.video,
+      control: globalThis.__gunsIndoor.controlState,
+    }));
+    assert.equal(handoff.phase, "active");
+    assert.equal(handoff.link, "rf");
+    assert.equal(handoff.bodyLink, "rf");
+    assert.equal(handoff.video, "clear");
+    assert.equal(handoff.control, "direct");
+    assert.ok(handoff.relay > 43 && handoff.relay <= 45,
+      `RF handoff did not start the 45-second relay window: ${JSON.stringify(handoff)}`);
+    assert.deepEqual(pageErrors, [], `uncaught Indoor page errors:\n${pageErrors.join("\n")}`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
 test("the published web app boots to a running flight kernel (no fatal render error)", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 

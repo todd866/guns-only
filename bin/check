@@ -9,6 +9,10 @@ sh -n bin/deploy-web
 node --check web/wwwroot/app.js
 node --check web/wwwroot/hud.js
 node --check web/wwwroot/multiplayer-config.js
+node --check web/wwwroot/indoor/audio.js
+node --check web/wwwroot/indoor/game.js
+node --check web/wwwroot/indoor/presentation.js
+node --check web/wwwroot/indoor/sim.js
 node --check web/wwwroot/api/telemetry.js
 node tools/assets/validate-manifests.mjs --strict
 node tools/content/validate-governance.mjs --strict
@@ -59,6 +63,9 @@ diff -qr "$staged_content_dir" web/wwwroot/content
   --artifacts-path "$dotnet_artifacts_dir"
 
 test -f "$publish_dir/wwwroot/index.html"
+test -f "$publish_dir/wwwroot/indoor/index.html"
+test -f "$publish_dir/wwwroot/indoor/game.js"
+test -f "$publish_dir/wwwroot/indoor/sim.js"
 test -f "$publish_dir/wwwroot/_framework/blazor.webassembly.js"
 test -f "$publish_dir/wwwroot/content/packs/korea-1950s/pack.json"
 test -f "$publish_dir/wwwroot/content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json"

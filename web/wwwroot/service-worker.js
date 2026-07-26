@@ -15,7 +15,7 @@
 // The cache name carries the release build, so shipping a new build orphans the old cache and
 // activate() deletes it. That reuses the existing stamp ritual rather than inventing a second
 // versioning scheme — see web/wwwroot/render/release/release_identity.js.
-const RELEASE_BUILD = "123";
+const RELEASE_BUILD = "124";
 const CACHE = `guns-only-${RELEASE_BUILD}`;
 
 // Never cached: telemetry and the multiplayer room are live services, and a cached reply would be
@@ -53,9 +53,9 @@ const terrainBundlesPrimed = new Set();
 function primeTerrainBundle(url) {
   const bare = new URL(url);
   bare.search = "";
-  if (terrainBundlesPrimed.has(bare.href)) return;
+  if (terrainBundlesPrimed.has(bare.href)) return Promise.resolve();
   terrainBundlesPrimed.add(bare.href);
-  void (async () => {
+  return (async () => {
     try {
       const response = await fetch(bare.href, { cache: "no-store" });
       if (response.ok && response.status === 200) {
@@ -84,8 +84,10 @@ self.addEventListener("fetch", (event) => {
   if (NEVER_CACHE.some((pattern) => pattern.test(url.pathname))) return;
 
   if (TERRAIN_BUNDLE.test(url.pathname)) {
+    // A service worker may be terminated as soon as the response settles. Extend this fetch event
+    // through the full-bundle cache write so "fly once online" is a reliable offline contract.
+    event.waitUntil(primeTerrainBundle(request.url));
     event.respondWith((async () => {
-      primeTerrainBundle(request.url);
       try {
         return await fetch(request);
       } catch (error) {

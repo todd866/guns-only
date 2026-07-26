@@ -8,6 +8,7 @@ namespace GunsOnly.Sim;
 /// Frame: sim world is X=east, Y=up, Z=north; heading chi 0 = +Z (north), like AircraftState.Chi.
 public sealed class Carrier {
     public enum DeckConfiguration { Axial, Angled }
+    public enum PlatformKind { Ship, FixedArrestingStrip }
 
     public enum TouchdownQuality { None, Soft, Nominal, Hard, Blown }
     public enum TouchdownGrade { None, Ok, Fair, NoGrade, Cut }
@@ -115,6 +116,8 @@ public sealed class Carrier {
     public double DeckLengthM { get; }
     public double DeckHalfWidthM { get; }
     public DeckConfiguration Configuration { get; }
+    public PlatformKind Kind { get; }
+    public bool IsMaritime => Kind == PlatformKind.Ship;
 
     readonly double _meanDeckCentreY;
     RecoveryDifficulty _difficulty = DifficultyModel.ForLevel(0);
@@ -130,17 +133,21 @@ public sealed class Carrier {
 
     public Carrier(Vec3D deckCentre, double headingRad, double speedMps,
                    double deckAltM, double deckLengthM, double deckWidthM,
-                   DeckConfiguration configuration = DeckConfiguration.Axial) {
+                   DeckConfiguration configuration = DeckConfiguration.Axial,
+                   PlatformKind kind = PlatformKind.Ship) {
         Position = deckCentre; HeadingRad = headingRad; SpeedMps = speedMps;
         DeckAltM = deckAltM; DeckLengthM = deckLengthM; DeckHalfWidthM = deckWidthM * 0.5;
         Configuration = configuration;
+        Kind = kind;
         _meanDeckCentreY = deckCentre.Y;
     }
 
     /// Apply the earned level to this attempt. SimulationSession calls this on a fresh carrier;
     /// resetting phase to zero makes restarts replay-identical for the same level.
     public void ApplyDifficulty(in RecoveryDifficulty difficulty) {
-        _difficulty = difficulty;
+        // A fixed land installation has no sea-state motion or ship burble. It reuses only the
+        // catapult/arresting geometry and always retains the deterministic baseline surface.
+        _difficulty = IsMaritime ? difficulty : DifficultyModel.ForLevel(0);
         _motionTimeSeconds = 0.0;
         _deckVerticalVelocityMps = 0.0;
         Position = new Vec3D(Position.X, _meanDeckCentreY, Position.Z);
@@ -186,7 +193,9 @@ public sealed class Carrier {
     /// Steady world-air velocity which makes the flow over the active landing area exactly 30 kt
     /// down the deck toward the stern: wind - deckVelocity = -LandingFwd * WOD. On an angled deck
     /// this also supplies the small crosswind needed to keep the relative wind on the landing line.
-    public Vec3D SteadyWindWorld => DeckVelocityWorld - LandingFwd * WindOverDeckMps;
+    public Vec3D SteadyWindWorld => IsMaritime
+        ? DeckVelocityWorld - LandingFwd * WindOverDeckMps
+        : Vec3D.Zero;
 
     public Vec3D AirVelocity(in AircraftState s) => s.VelocityVector() - SteadyWindWorld;
     public double AirspeedMps(in AircraftState s) => AirVelocity(s).Length;
@@ -315,7 +324,8 @@ public sealed class Carrier {
         var a = DeckFrame(previous);
         var b = DeckFrame(current);
 
-        if (SegmentIntersectsBox(a.along, a.cross, a.height, b.along, b.cross, b.height,
+        if (IsMaritime && SegmentIntersectsBox(
+            a.along, a.cross, a.height, b.along, b.cross, b.height,
             IslandMinAlongM, IslandMaxAlongM, IslandMinCrossM, IslandMaxCrossM,
             0.0, IslandHeightM))
             return SolidCollision.Island;
@@ -328,7 +338,8 @@ public sealed class Carrier {
 
         // The hull sides taper visually, but the full deck-width prism is intentionally the
         // conservative solid proxy: clipping a sponson or deck edge is still hitting the ship.
-        if (SegmentIntersectsBox(a.along, a.cross, a.height, b.along, b.cross, b.height,
+        if (IsMaritime && SegmentIntersectsBox(
+            a.along, a.cross, a.height, b.along, b.cross, b.height,
             -halfLength, halfLength, -DeckHalfWidthM, DeckHalfWidthM,
             -DeckAltM, -FlightDeckThicknessM))
             return SolidCollision.Hull;
@@ -683,8 +694,11 @@ public sealed class CatapultLaunchModel {
         var velocity = carrier.DeckVelocityWorld
             + carrier.Fwd * alongMps
             + new Vec3D(0.0, upMps, 0.0);
+        // Hand off from the TOP of the ramp, not from deck level. RampRiseM is zero for every flat
+        // deck catapult, so this stays bit-for-bit identical for the carrier beats.
         State = Carrier.StateFromVelocity(
-            carrier.ShipPoint(StartAlongM + _strokeDistanceM, CatapultCrossM, AirborneHeightM),
+            carrier.ShipPoint(StartAlongM + _strokeDistanceM, CatapultCrossM,
+                AirborneHeightM + RampRiseM),
             velocity, _massKg,
             Attitude(carrier, System.Math.Max(LaunchNosePitchRad, _rampAngleRad)));
         Phase = LaunchPhase.Airborne;
@@ -696,11 +710,54 @@ public sealed class CatapultLaunchModel {
         _massKg = _distanceM = RelativeSpeedMps = ElapsedSeconds = 0.0;
     }
 
+    /// Normal acceleration the ramp arc pulls on the aircraft, on top of the along-rail stroke.
+    /// A ski jump is a constant-radius arc, not a kink: the rail has to turn the aircraft's
+    /// velocity vector, and how hard it turns it is the design choice. 3 G is comfortable — the
+    /// pilot sees sqrt(2.21^2 + 3^2) = 3.73 G combined against a 12 G airframe, reclined.
+    public const double RampNormalG = 3.0;
+
+    /// Arc radius that turns the launch velocity through the ramp angle at RampNormalG.
+    public double RampArcRadiusM =>
+        _endRelativeSpeedMps * _endRelativeSpeedMps / (RampNormalG * 9.80665);
+
+    /// Length of rail spent in the arc, and the flat run that precedes it. The flat section is
+    /// where nearly all the acceleration happens; the arc only points the result.
+    public double RampArcLengthM => _rampAngleRad * RampArcRadiusM;
+    public double RampFlatLengthM => System.Math.Max(0.0, _strokeDistanceM - RampArcLengthM);
+
+    /// Height the ramp lifts the aircraft by the end of the stroke.
+    public double RampRiseM =>
+        RampArcRadiusM * (1.0 - System.Math.Cos(RailAngleAt(_strokeDistanceM)));
+
+    /// Rail inclination at a distance along the stroke. Flat until the arc begins, then opening
+    /// linearly with arc length as a constant-radius curve does, and never past the ramp angle.
+    public double RailAngleAt(double distanceM) {
+        if (_rampAngleRad <= 0.0 || distanceM <= RampFlatLengthM) return 0.0;
+        double radius = RampArcRadiusM;
+        if (radius <= 0.0) return _rampAngleRad;
+        return System.Math.Min(_rampAngleRad, (distanceM - RampFlatLengthM) / radius);
+    }
+
+    /// Height of the rail above the deck plane at a distance along the stroke.
+    public double RailHeightAt(double distanceM) =>
+        _rampAngleRad <= 0.0 || distanceM <= RampFlatLengthM
+            ? 0.0
+            : RampArcRadiusM * (1.0 - System.Math.Cos(RailAngleAt(distanceM)));
+
     AircraftState StrokeState(Carrier carrier, double pitchRad) {
-        var velocity = carrier.DeckVelocityWorld + carrier.Fwd * RelativeSpeedMps;
-        return Carrier.StateFromVelocity(
-            carrier.ShipPoint(StartAlongM + _distanceM, CatapultCrossM),
-            velocity, _massKg, Attitude(carrier, pitchRad));
+        // The aircraft RIDES the rail: on the arc its height, its attitude and the direction of
+        // its velocity all follow the rail rather than staying level until the end. A flat stroke
+        // with an angle applied only at release would leave the aircraft flying through its own
+        // ramp for the whole arc, which is what a level-until-handoff model actually looks like.
+        double railAngle = RailAngleAt(_distanceM);
+        var up = new Vec3D(0.0, 1.0, 0.0);
+        var alongRail = carrier.Fwd * System.Math.Cos(railAngle) + up * System.Math.Sin(railAngle);
+        var velocity = carrier.DeckVelocityWorld + alongRail * RelativeSpeedMps;
+        var position = carrier.ShipPoint(StartAlongM + _distanceM, CatapultCrossM)
+            + up * RailHeightAt(_distanceM);
+        // Nose-up on the arc is the rail's doing, not the pilot's; the parked sit adds to it.
+        return Carrier.StateFromVelocity(position, velocity, _massKg,
+            Attitude(carrier, pitchRad + railAngle));
     }
 
     static QuaternionD Attitude(Carrier carrier, double pitchRad) {

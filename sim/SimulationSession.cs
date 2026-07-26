@@ -499,18 +499,7 @@ public sealed class SimulationSession {
         _prechargeSystemsOnStage = true;
         _beatIndex = index;
         _deckConfiguration = deckConfiguration;
-        _beatFactory = index switch {
-            2 => Beats.BreakDefense,
-            3 => Beats.Saddle,
-            4 => Beats.BalloonStrike,
-            5 => () => Beats.F35CCarrierApproach(deckConfiguration),
-            6 => () => Beats.EmergencyGearRecovery(deckConfiguration),
-            7 => Beats.ModernVisualMerge,
-            8 => Beats.DroneRaidDefense,
-            9 => Beats.ModernAceDuel,
-            10 => () => Beats.RapierIntercept(deckConfiguration),
-            _ => Beats.Perch
-        };
+        _beatFactory = () => Beats.BuiltIn(index, deckConfiguration);
         _fightDirector.Reset();
         StageBeat(_beatFactory());
     }
@@ -1091,7 +1080,9 @@ public sealed class SimulationSession {
         _configurationWasReady = ConfigurationReady;
         _configurationReadyCueUntilMs = double.NegativeInfinity;
         if (_carrier is not null) {
-            _difficulty = _recoveryProgress.PreviewNextAttempt();
+            _difficulty = _carrier.IsMaritime
+                ? _recoveryProgress.PreviewNextAttempt()
+                : DifficultyModel.ForLevel(0);
             _carrier.ApplyDifficulty(_difficulty);
             double configuredOnSpeedAoa = DetentLayer.OnSpeedAoARad
                 - PlayerAerodynamicConfiguration.LiftCoefficientIncrement
@@ -1109,8 +1100,9 @@ public sealed class SimulationSession {
         _catapult.Reset();
         _waveOffArmed = _carrier is not null;
         _waveOffUntilMs = double.NegativeInfinity;
-        _burble = _carrier is null ? null : CreateBurble(_carrier, _difficulty,
-            _weatherProfile?.Wind);
+        _burble = _carrier is { IsMaritime: true }
+            ? CreateBurble(_carrier, _difficulty, _weatherProfile?.Wind)
+            : null;
         _player = CreatePlayer(_beat.Player);
         // Pacing memory survives the pilot: when the director has observed history and this beat
         // fields a skill-driven continuous-combat opponent, the OPENING spawn is a director
@@ -1231,7 +1223,7 @@ public sealed class SimulationSession {
     AircraftSim CreatePlayer(in AircraftState state) {
         var player = new AircraftSim(WithCurrentFuelMass(state), _beat.PlayerAir,
             _weatherProfile?.Atmosphere) {
-            Wind = _carrier is not null
+            Wind = _carrier is { IsMaritime: true }
                 ? _burble
                 : _weatherProfile?.Wind
                     ?? new TurbulenceField(intensityMps: 1.2, outerScaleM: 130.0,
@@ -1547,6 +1539,14 @@ public sealed class SimulationSession {
         _wingmen.Remove(next);
         // The retiring primary keeps falling as a detached wreck exactly as it would in a duel.
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
+        // Damage belongs to the aircraft, not to the primary slot. A real gun kill leaves this gun
+        // latched at Splash; carrying that latch onto the promoted wingman would destroy it on the
+        // very next damage observation. GunKill stops advancing rounds after Splash, so by the time
+        // the kill-cam dwell promotes the survivor those trajectories are stale; discard them rather
+        // than teleporting frozen leader-bound fire onto the new target.
+        _gunKill = _gunKill.Outcome == FightOutcome.Splash
+            ? _gunKill.CreateForStagedNextTarget()
+            : _gunKill.CreateForRetargetedTarget();
         _bandit = next.Bandit;
         _opponentGun = next.Gun;
         _opponentTerminalState = AircraftTerminalState.Flying;
@@ -1760,6 +1760,15 @@ public sealed class SimulationSession {
         }
         return state.Position.Y <= 0.0
             ? (ImpactSurface.Water, 0.0) : (ImpactSurface.None, 0.0);
+    }
+
+    bool RegisterPlayerNaturalSurfaceImpact() {
+        if (_playerTerminalState != AircraftTerminalState.Flying) return false;
+        var contact = DetectNaturalSurface(_player.State);
+        if (contact.surface == ImpactSurface.None) return false;
+        RegisterUndamagedCrash(CombatRole.Player, contact.surface,
+            Vec3D.Zero, contact.height);
+        return true;
     }
 
     void RegisterAirborneImpact(CombatRole target, ImpactSurface surface,
@@ -2072,7 +2081,8 @@ public sealed class SimulationSession {
     void CompleteEngagementIfEnded() {
         if (!_engagementCounters.Active) return;
         bool playerLost = _playerTerminalState != AircraftTerminalState.Flying;
-        bool opponentLost = _opponentTerminalState != AircraftTerminalState.Flying;
+        bool opponentLost = _opponentTerminalState != AircraftTerminalState.Flying
+            && !_wingmen.Any(static wingman => wingman.StillFighting);
         if (!playerLost && !opponentLost) return;
 
         SortieOutcome outcome = playerLost && opponentLost ? SortieOutcome.Draw
@@ -2237,7 +2247,7 @@ public sealed class SimulationSession {
         // which never showed because every previous deck aircraft stops at 1.0 anyway.
         double retainedEnginePower = _player.ThrustFraction;
         double retainedLever = _detents.Throttle;
-        if (_carrier is not null) {
+        if (_carrier is { IsMaritime: true }) {
             // A completed deck cycle starts the next recovery attempt. Select its deterministic
             // conditions now, between passes, and give every aircraft the same new wind field.
             _difficulty = _recoveryProgress.BeginAttempt();
@@ -3007,6 +3017,16 @@ public sealed class SimulationSession {
         bool validRecoveryContact = solid == Carrier.SolidCollision.FlightDeck
             && topDeckContact
             && _systems.AllGearDownAndLocked;
+        // The recovery platform owns its deck, round-down and other solid contacts. Away from that
+        // geometry, however, a land strip must not inherit the carrier classifier's sea-level
+        // fallback: streamed terrain is authoritative for both land and water. Resolve this here
+        // because terminal-phase carrier sorties do not pass through the free-flight collision
+        // branch below.
+        bool naturalSurfaceOwnsContact = solid == Carrier.SolidCollision.None
+            && contact is Carrier.Recovery.Flying or Carrier.Recovery.InTheWater
+            && !_carrier.WithinDeckFootprint(_player.State.Position);
+        if (naturalSurfaceOwnsContact && RegisterPlayerNaturalSurfaceImpact()) return;
+
         if (solid != Carrier.SolidCollision.None && !validRecoveryContact) {
             _attemptHadSetback = true;
             ImpactSurface surface = SurfaceFor(solid);
@@ -3431,10 +3451,7 @@ public sealed class SimulationSession {
             return;
         }
 
-        var playerNaturalContact = DetectNaturalSurface(_player.State);
-        if (playerNaturalContact.surface != ImpactSurface.None) {
-            RegisterUndamagedCrash(CombatRole.Player, playerNaturalContact.surface,
-                Vec3D.Zero, playerNaturalContact.height);
+        if (_carrier is null && RegisterPlayerNaturalSurfaceImpact()) {
             _simTimeMs += FixedDeltaSeconds * 1000.0;
             return;
         }

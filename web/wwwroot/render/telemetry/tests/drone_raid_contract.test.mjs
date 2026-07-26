@@ -19,7 +19,8 @@ const [bridgeSource, sessionSource, beatsSource] = await Promise.all([
 ]);
 
 test("stable beat eight selects the fictional Ukraine low-level staged raid without renumbering", () => {
-  assert.match(sessionSource, /7 => Beats\.ModernVisualMerge,\s*8 => Beats\.DroneRaidDefense,/);
+  assert.match(sessionSource, /_beatFactory = \(\) => Beats\.BuiltIn\(index, deckConfiguration\);/);
+  assert.match(beatsSource, /7 => ModernVisualMerge\(\),\s*8 => DroneRaidDefense\(\),/);
   // The ceiling moves as beats are added; what must not move is beat EIGHT being the drone raid.
   assert.match(sessionSource, /index is < 1 or > \d+/);
   assert.match(beatsSource,

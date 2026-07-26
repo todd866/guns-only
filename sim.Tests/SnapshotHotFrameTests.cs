@@ -7,7 +7,7 @@ namespace GunsOnly.Sim.Tests;
 /// <summary>
 /// Golden agreement between the per-frame hot buffer and the authoritative JSON snapshot. The hot
 /// path intentionally duplicates BuildState's derivation prologue, and these tests are the drift
-/// guard: for real sessions across beats (including the carrier block and live tracer rounds),
+/// guard: for real sessions across beats (including the recovery-platform block and live tracers),
 /// every layout slot must carry exactly the value the parsed JSON field carries — booleans as 1/0,
 /// JSON null as NaN, conditional blocks matching key presence, tracer regions element-wise equal.
 /// Runs in the same collection as SnapshotProjectionTests because both drive SnapshotProjection's
@@ -130,6 +130,7 @@ public class SnapshotHotFrameTests {
     [InlineData(6, false)]  // emergency-gear maintenance beat: maintenance block present
     [InlineData(8, false)]  // drone-raid defense: drone_detail block present
     [InlineData(9, false)]  // modern ace duel capstone
+    [InlineData(10, false)] // Rapier fixed strip: recovery present, maritime carrier false
     [InlineData(7, true)]   // terrain surface drives radar_alt/below_ground paths
     public void HotFrameAgreesWithJsonAcrossBeatsAndSteps(int beatIndex, bool withTerrain) {
         SimulationSession session = StartSession(beatIndex,
@@ -138,6 +139,35 @@ public class SnapshotHotFrameTests {
             for (int tick = 0; tick < steps; tick++) session.StepFixed();
             var (root, buffer, document) = Project(session);
             using (document) AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    [Fact]
+    public void FixedStripHotFramePublishesRecoveryPlatformWithoutMaritimeCarrier() {
+        SimulationSession session = StartSession(10, null);
+        for (int tick = 0; tick < 30; tick++) session.StepFixed();
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            Assert.True(root.GetProperty("recovery_platform").GetBoolean());
+            Assert.False(root.GetProperty("carrier").GetBoolean());
+            Assert.Equal("FIXED_ARRESTING_STRIP",
+                root.GetProperty("platform_kind").GetString());
+
+            using JsonDocument layoutDocument =
+                JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
+            JsonElement recoveryBlock = layoutDocument.RootElement.GetProperty("blocks")
+                .EnumerateArray()
+                .Single(block =>
+                    block.GetProperty("name").GetString() == "recovery_platform");
+            int presenceIndex = recoveryBlock.GetProperty("presence_index").GetInt32();
+            Assert.Equal(1.0, buffer[presenceIndex]);
+
+            int SlotIndex(string name) => recoveryBlock.GetProperty("slots").EnumerateArray()
+                .Single(slot => slot.GetProperty("name").GetString() == name)
+                .GetProperty("index").GetInt32();
+            Assert.Equal(1.0, buffer[SlotIndex("recovery_platform")]);
+            Assert.Equal(0.0, buffer[SlotIndex("carrier")]);
+            AssertHotFrameMatchesJson(root, buffer);
         }
     }
 

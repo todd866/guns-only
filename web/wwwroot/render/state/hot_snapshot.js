@@ -20,6 +20,9 @@
 export function parseHotLayout(layoutJson) {
   const raw = JSON.parse(layoutJson);
   return Object.freeze({
+    // Decoding is layout-driven: legacy v2 carrier-as-presence layouts and the v3
+    // recovery-platform-as-presence layout both remain valid.
+    layoutVersion: Number.isInteger(raw.layout_version) ? raw.layout_version : 1,
     slotCount: raw.slot_count,
     coldVersionIndex: raw.cold_version_index,
     blocks: raw.blocks.map((block) => Object.freeze({

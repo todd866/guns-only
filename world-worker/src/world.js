@@ -148,6 +148,7 @@ const PLAYER_PRESENTATION_IDS = new Set([
   "presentation.vehicle.player.v1",
   "presentation.vehicle.glider-strike.v1",
   "presentation.vehicle.f22a.public-data-surrogate.v1",
+  "presentation.vehicle.rapier.public-data-surrogate.v1",
 ]);
 
 function normalisePlayerPresentationId(value) {

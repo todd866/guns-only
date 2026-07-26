@@ -1,3 +1,5 @@
+import { recoveryPlatformAvailable } from "./carrier_sa.js";
+
 const DEFAULT_FUEL_CAPACITY_LB = 2826;
 const DEFAULT_BINGO_FUEL_LB = 800;
 
@@ -86,7 +88,7 @@ export function stallAwareness(state = {}) {
 }
 
 export function speedTapeMarkers(state = {}) {
-  if (state.carrier === true && state.mode !== "FREE") return [];
+  if (recoveryPlatformAvailable(state) && state.mode !== "FREE") return [];
   const cornerKcas = finiteNumber(state.corner_speed_kcas);
   const cornerKts = cornerKcas ?? finiteNumber(state.corner_speed_kias);
   if (cornerKts === null || cornerKts <= 0) return [];
@@ -424,7 +426,7 @@ export function systemsReadout(state = {}) {
     || (flapAvailable && flapLever !== "--" && flapLever !== "HOLD");
   // The landing scan remains present in the groove. After a wave-off/bolter it earns its space
   // only until the configuration is clean or while a real transition/failure remains.
-  const recoveryRelevant = state.carrier === true
+  const recoveryRelevant = recoveryPlatformAvailable(state)
     && (configurationTarget === "RECOVERY" || mode === "APPROACH");
   const relevant = state.maintenance_scenario === true || warnings.length > 0
     || transitionActive || configurationTransition || recoveryRelevant

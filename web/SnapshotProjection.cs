@@ -23,14 +23,6 @@ internal static class SnapshotProjection {
     static WeatherProfile? _weatherRenderProfile;
     static string? _weatherRenderJson;
 
-    const double CarrierTerrainPlacementEastM = 100_000.0;
-    const string KoreaSharedTerrainFrameId = "world.korea-central-front.v1";
-    const string UkraineTrainingTerrainFrameId = "local.ukraine-soniachne-training.v1";
-    const string CarrierTrainingFrameId = "local.carrier-training.v1";
-    const string KoreaTerrainProfileId = "terrain.korea.central-front.v2";
-    const string UkraineTrainingTerrainProfileId = "terrain.ukraine.soniachne-training.v1";
-
-
     // Stable presentation IDs are copied from the staged Korea pack contract. The bridge projects
     // semantic bindings only; the renderer/AssetRegistry resolves them to authored or procedural
     // assets. Beat 4 predates that pack and therefore advertises an explicit, unstaged compatibility
@@ -38,7 +30,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.13.0";
+    const string SnapshotSchemaVersion = "1.14.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -52,6 +44,8 @@ internal static class SnapshotProjection {
     const string PlayerCockpitPresentationId = "presentation.cockpit.player.v1";
     const string BanditPresentationId = "presentation.vehicle.bandit.v1";
     const string CarrierPresentationId = "presentation.platform.carrier.v1";
+    const string FixedStripPresentationId =
+        "presentation.platform.rapier-dispersed-strip.v1";
 
     const string BalloonPackId = "korea-2030s-prototype";
     const string BalloonPackVersion = "0.0.0-prototype";
@@ -149,14 +143,16 @@ internal static class SnapshotProjection {
         Vec3D airVelocity;
         if (catapulting) {
             groundVelocity = s.VelocityVector();
-            airVelocity = _carrier is null
-                ? groundVelocity
-                : groundVelocity - _carrier.SteadyWindWorld;
+            airVelocity = _carrier?.IsMaritime == true
+                ? groundVelocity - _carrier.SteadyWindWorld
+                : _player.AirVelocity;
         } else if (arrested && _carrier is not null) {
             groundVelocity = _carrier.DeckVelocityWorld
                 + _carrier.LandingFwd * _arrestment.RelativeSpeedMps
                 + new Vec3D(0.0, _carrier.DeckVerticalVelocityMps, 0.0);
-            airVelocity = groundVelocity - _carrier.SteadyWindWorld;
+            airVelocity = _carrier.IsMaritime
+                ? groundVelocity - _carrier.SteadyWindWorld
+                : _player.AirVelocity;
         } else {
             groundVelocity = s.VelocityVector();
             airVelocity = _player.AirVelocity;
@@ -282,13 +278,19 @@ internal static class SnapshotProjection {
         // Hand-built JSON: no serializer, no reflection, trim-safe, allocation-cheap.
         return "{"
             + PresentationContractJson(_carrier is not null)
-            + $"\"world_frame_id\":\"{WorldFrameId(Session.BeatIndex)}\","
-            + $"\"terrain_profile_id\":\"{TerrainProfileId(Session.BeatIndex)}\","
-            + $"\"terrain_scenery_profile\":\"{TerrainSceneryProfile(Session.BeatIndex)}\","
+            + $"\"theatre_id\":\"{Environment.TheatreId}\","
+            + $"\"location_id\":\"{Environment.LocationId}\","
+            + $"\"world_frame_id\":\"{Environment.WorldFrameId}\","
+            + $"\"terrain_profile_id\":\"{Environment.TerrainProfileId}\","
+            + $"\"terrain_macro_scenery_profile\":\"{Environment.MacroSceneryProfile}\","
+            + $"\"terrain_scenery_profile\":\"{Environment.MicroSceneryProfile}\","
+            + "\"terrain_macro_required\":true,"
+            + $"\"terrain_micro_required\":{(Environment.FrameKind == MissionEnvironmentFrameKind.LocalHeroCell ? "true" : "false")},"
+            + $"\"terrain_streaming_radius_m\":{Environment.PreferredTerrainStreamingRadiusM:F1},"
             + $"\"world_origin_configured\":{(WorldOriginConfigured ? "true" : "false")},"
             + $"\"world_origin_east_m\":{WorldOriginEastM:F1},\"world_origin_north_m\":{WorldOriginNorthM:F1},"
-            + $"\"terrain_placement_east_m\":{TerrainPlacementEastM(Session.BeatIndex):F1},\"terrain_placement_north_m\":{TerrainPlacementNorthM(Session.BeatIndex):F1},"
-            + $"\"multiplayer_terrain_shared\":{(WorldOriginConfigured && HasSharedTerrainFrame(Session.BeatIndex) ? "true" : "false")},"
+            + $"\"terrain_placement_east_m\":{TerrainPlacementEastM():F1},\"terrain_placement_north_m\":{TerrainPlacementNorthM():F1},"
+            + $"\"multiplayer_terrain_shared\":{(WorldOriginConfigured && Environment.MultiplayerTerrainShared ? "true" : "false")},"
             + $"\"terrain_present\":{(Session.Terrain is not null ? "true" : "false")},"
             + $"\"t\":{_simTimeMs / 1000.0:F4},"
             + $"\"tick\":{Session.Tick},"
@@ -859,7 +861,10 @@ internal static class SnapshotProjection {
             ? "null" : $"\"{PlayerCockpitPresentationId}\"";
         string carrierEntityJson = hasCarrier
             ? $"\"entity.carrier.{Session.CarrierSpawnSequence}\"" : "null";
-        string carrierPresentationJson = hasCarrier ? $"\"{CarrierPresentationId}\"" : "null";
+        string carrierPresentationJson = hasCarrier
+            ? $"\"{(Session.Carrier?.IsMaritime == true
+                ? CarrierPresentationId : FixedStripPresentationId)}\""
+            : "null";
         // Production telemetry must know which AI tier a fight was against. Skill exists only on
         // the two doctrine pilots; scripted rail/wreck actors project null, never a fake tier.
         string banditSkillJson = Session.Bandit switch {
@@ -905,7 +910,9 @@ internal static class SnapshotProjection {
             + $"\"director_walkover_streak\":{Session.DirectorWalkoverStreak},"
             + $"\"director_reason\":{JsonString(Session.LastDirectorSpawn?.Reason ?? "")},"
             + $"\"carrier_entity_id\":{carrierEntityJson},"
-            + $"\"carrier_presentation_id\":{carrierPresentationJson},";
+            + $"\"carrier_presentation_id\":{carrierPresentationJson},"
+            + $"\"platform_entity_id\":{carrierEntityJson},"
+            + $"\"platform_presentation_id\":{carrierPresentationJson},";
     }
 
     /// <summary>
@@ -1019,31 +1026,16 @@ internal static class SnapshotProjection {
         _ => "NONE"
     };
 
-    static bool HasSharedTerrainFrame(int index) => index is not (5 or 6 or 8);
+    static MissionEnvironmentContract Environment =>
+        Session.Beat.EnvironmentIdentity;
 
-    static string WorldFrameId(int index) => index switch {
-        5 or 6 => CarrierTrainingFrameId,
-        8 => UkraineTrainingTerrainFrameId,
-        _ => KoreaSharedTerrainFrameId
-    };
+    static double TerrainPlacementEastM() => Environment.MultiplayerTerrainShared
+        ? -WorldOriginEastM
+        : -Environment.TerrainSourceAnchorEastM;
 
-    static string TerrainProfileId(int index) => index == 8
-        ? UkraineTrainingTerrainProfileId : KoreaTerrainProfileId;
-
-    static string TerrainSceneryProfile(int index) => index switch {
-        8 => "ukraine-modern",
-        7 or 9 or 10 => "modern",
-        _ => "1950s"
-    };
-
-    static double TerrainPlacementEastM(int index) => index switch {
-        5 or 6 => CarrierTerrainPlacementEastM,
-        8 => 0.0,
-        _ => -WorldOriginEastM
-    };
-
-    static double TerrainPlacementNorthM(int index) => HasSharedTerrainFrame(index)
-        ? -WorldOriginNorthM : 0.0;
+    static double TerrainPlacementNorthM() => Environment.MultiplayerTerrainShared
+        ? -WorldOriginNorthM
+        : -Environment.TerrainSourceAnchorNorthM;
 
     static string CombatRoleToken(CombatRole role) => role switch {
         CombatRole.Player => "PLAYER",
@@ -1167,7 +1159,11 @@ internal static class SnapshotProjection {
             Carrier.TouchdownCorrection.MeetAdaptiveTarget => "MEET TRAINING TARGET",
             _ => "NONE"
         };
-        return $"\"carrier\":true,"
+        bool maritime = c.IsMaritime;
+        string platformKind = maritime ? "SHIP" : "FIXED_ARRESTING_STRIP";
+        return $"\"carrier\":{(maritime ? "true" : "false")},"
+            + "\"recovery_platform\":true,"
+            + $"\"platform_kind\":\"{platformKind}\","
             + $"\"cx\":{c.Position.X:F2},\"cy\":{c.Position.Y:F2},\"cz\":{c.Position.Z:F2},"
             + $"\"cheading\":{c.HeadingRad:F5},\"deck_len\":{c.DeckLengthM:F1},\"deck_w\":{c.DeckHalfWidthM * 2:F1},\"deck_alt\":{c.DeckAltM:F1},"
             + $"\"landing_heading\":{c.LandingHeadingRad:F5},\"deck_config\":\"{config}\","
@@ -1183,7 +1179,7 @@ internal static class SnapshotProjection {
             + $"\"difficulty_eased\":{(difficulty.IsEased ? "true" : "false")},"
             + $"\"difficulty_spike\":{(difficulty.IsSpike ? "true" : "false")},\"clean_traps\":{Session.RecoveryProgress.CleanTrapCount},"
             + $"\"deck_pitch_deg\":{c.DeckPitchRad * 57.2958:F3},\"deck_heave_m\":{c.DeckHeaveM:F3},"
-            + $"\"wod_kts\":{Carrier.WindOverDeckKts:F1},"
+            + $"\"wod_kts\":{(maritime ? Carrier.WindOverDeckKts : 0.0):F1},"
             + $"\"approach_airspeed_kts\":{airspeed * 1.94384:F2},\"deck_closure_kts\":{closure * 1.94384:F2},"
             + $"\"sink_rate_mps\":{sink:F3},\"sink_rate_fpm\":{sink * 196.8504:F1},"
             + $"\"in_close_burble\":{inClose:F3},\"in_close\":{(inClose > 0.20 ? "true" : "false")},"

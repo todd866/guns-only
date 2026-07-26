@@ -3,7 +3,9 @@ using GunsOnly.Sim.Turbulence;
 namespace GunsOnly.Sim.Environment;
 
 /// <summary>
-/// Deterministic, scenario-authored Korea weather days. These are playable meteorological
+/// Deterministic, scenario-authored mission weather days. The compatibility class name remains
+/// public, but every built-in now occupies the fictional 2030s Ukraine theatre. These are playable
+/// meteorological
 /// designs rather than claims of a reconstructed historical observation: layer geometry,
 /// microphysics and hazards remain explicit and reproducible for replay and presentation.
 /// </summary>
@@ -32,7 +34,7 @@ public static class KoreaWeatherPresets {
     ], anchorPressurePa: 100_920.0);
 
     static readonly WeatherProfile HistoricalInland = new(
-        SummerColumn,
+        UkraineTemperateColumn,
         Wind((4.0, 1.0), (8.0, 3.0), (15.0, 7.0)),
         new LayeredCloudField(
         [
@@ -45,10 +47,10 @@ public static class KoreaWeatherPresets {
                 6.5, 2.5, extinction: 0.019, liquid: 0.00062,
                 precipitation: 1.2, turbulence: 2.2, verticalAir: 1.4)
         ], seed: 0x1950_0727_4b31_2101UL, clearAirVisibilityM: 95_000.0),
-        id: "weather.korea-1950s.inland-cumulus.v1");
+        id: "weather.ukraine-2030s.inland-cumulus.v1");
 
     static readonly WeatherProfile HistoricalMaritime = new(
-        SummerColumn,
+        UkraineTemperateColumn,
         Wind((6.0, -2.0), (9.0, -1.0), (14.0, 4.0)),
         new LayeredCloudField(
         [
@@ -57,10 +59,10 @@ public static class KoreaWeatherPresets {
             Layer(720.0, 1_650.0, 0.52, 4_800.0, 0.014,
                 liquid: 0.00031, turbulence: 0.65, windEast: 9.0, windNorth: -1.0)
         ], seed: 0x1950_0727_5ea0_2102UL, clearAirVisibilityM: 78_000.0),
-        id: "weather.korea-1950s.maritime-stratocumulus.v1");
+        id: "weather.ukraine-2030s.coastal-stratocumulus.v1");
 
     static readonly WeatherProfile ModernHigh = new(
-        SummerColumn,
+        UkraineTemperateColumn,
         Wind((3.0, 2.0), (12.0, 6.0), (24.0, 12.0)),
         new LayeredCloudField(
         [
@@ -87,10 +89,10 @@ public static class KoreaWeatherPresets {
                 precipitation: 2.4, turbulence: 3.2, verticalAir: 2.2,
                 icing: 0.18, lightning: 0.03)
         ], seed: 0x2030_0915_f22a_0007UL, clearAirVisibilityM: 110_000.0),
-        id: "weather.korea-2030s.high-broken-cumulus.v1");
+        id: "weather.ukraine-2030s.high-broken-cumulus.v1");
 
     static readonly WeatherProfile ModernDrone = new(
-        SummerColumn,
+        UkraineTemperateColumn,
         Wind((5.0, 1.0), (10.0, 4.0), (19.0, 9.0)),
         new LayeredCloudField(
         [
@@ -104,7 +106,7 @@ public static class KoreaWeatherPresets {
                 precipitation: 5.5, turbulence: 3.8, verticalAir: 2.8,
                 icing: 0.05, lightning: 0.08)
         ], seed: 0x2030_0915_d20e_0001UL, clearAirVisibilityM: 88_000.0),
-        id: "weather.korea-2030s.drone-front-cumulus.v1");
+        id: "weather.ukraine-2030s.drone-front-cumulus.v1");
 
     static readonly WeatherProfile UkraineLowLevel = new(
         UkraineTemperateColumn,
@@ -122,23 +124,36 @@ public static class KoreaWeatherPresets {
                 13.0, 4.0, extinction: 0.018, liquid: 0.00052,
                 precipitation: 1.8, turbulence: 2.4, verticalAir: 1.5)
         ], seed: 0x2030_0824_50a1_0008UL, clearAirVisibilityM: 92_000.0),
-        id: "weather.ukraine-training.soniachne-broken-cumulus.v1");
+        id: "weather.ukraine-2030s.soniachne-low-level.v1");
 
     static readonly WeatherProfile ModernCirrus = new(
-        SummerColumn,
+        UkraineTemperateColumn,
         Wind((2.0, 0.0), (9.0, 4.0), (23.0, 11.0)),
         new LayeredCloudField(
         [
             Layer(7_600.0, 10_900.0, 0.26, 9_200.0, 0.006,
                 ice: 0.00010, windEast: 23.0, windNorth: 11.0)
         ], seed: 0x2030_0915_ba11_0004UL, clearAirVisibilityM: 120_000.0),
-        id: "weather.korea-2030s.balloon-cirrus.v1");
+        id: "weather.ukraine-2030s.balloon-cirrus.v1");
+
+    static readonly WeatherProfile RapierHighAltitude = new(
+        UkraineTemperateColumn,
+        Wind((5.0, 1.0), (15.0, 6.0), (31.0, 14.0)),
+        new LayeredCloudField(
+        [
+            // A sparse high deck keeps the 12-22 km climb readable without pretending the
+            // deterministic day is an observation from the real conflict.
+            Layer(8_600.0, 11_400.0, 0.18, 11_500.0, 0.0045,
+                ice: 0.00007, windEast: 31.0, windNorth: 14.0)
+        ], seed: 0x2030_0824_a11e_0010UL, clearAirVisibilityM: 115_000.0),
+        id: "weather.ukraine-2030s.rapier-high-altitude.v1");
 
     public static WeatherProfile ForBeat(int beatIndex) => beatIndex switch {
         4 => ModernCirrus,
         5 or 6 => HistoricalMaritime,
-        7 => ModernHigh,
+        7 or 9 => ModernHigh,
         8 => UkraineLowLevel,
+        10 => RapierHighAltitude,
         _ => HistoricalInland
     };
 

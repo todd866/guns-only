@@ -14,6 +14,8 @@ import {
   CARRIER_PADLOCK_RADIUS_M,
   CARRIER_PADLOCK_RELEASE_RADIUS_M,
   padlockTargetValid,
+  recoveryPlatformAvailable,
+  recoveryPlatformIsMaritime,
 } from "../carrier_sa.js";
 import { systemsReadout } from "../hud_readouts.js";
 
@@ -56,6 +58,30 @@ test("carrier padlock is contextual, null-safe, lifecycle-safe, and range bounde
   assert.equal(carrierPadlockEligible({ carrier: true }), false);
   assert.equal(carrierPadlockEligible(null), false);
   assert.equal(carrierDistanceM(null), null);
+});
+
+test("fixed arresting strips share recovery padlock eligibility without becoming ships", () => {
+  const strip = {
+    recovery_platform: true,
+    carrier: false,
+    platform_kind: "FIXED_ARRESTING_STRIP",
+    px: 0, py: 1000, pz: 0,
+    cx: 0, cy: 120, cz: 9000,
+    approach: true,
+    bx: 10, by: 100, bz: 500,
+    opponent_body_present: true,
+  };
+  assert.equal(recoveryPlatformAvailable(strip), true);
+  assert.equal(recoveryPlatformIsMaritime(strip), false);
+  assert.equal(carrierPadlockEligible(strip), true);
+  assert.equal(contextualPadlockTarget(strip), "carrier",
+    "the legacy target token selects any recovery platform while approach intent is active");
+  assert.equal(padlockTargetValid(strip, "carrier"), true);
+
+  const legacyShip = { ...strip, recovery_platform: false, carrier: true, platform_kind: undefined };
+  assert.equal(recoveryPlatformAvailable(legacyShip), true);
+  assert.equal(recoveryPlatformIsMaritime(legacyShip), true);
+  assert.equal(carrierPadlockEligible(legacyShip), true);
 });
 
 test("padlock validity releases stale boat/replay geometry and preserves combat fallback", () => {
@@ -180,6 +206,16 @@ test("pattern coach distinguishes astern initial from final using energy, mode, 
 
   const final = carrierPatternCue(pattern({ mode: "APPROACH", approach: true }));
   assert.equal(final.phase, "FINAL");
+  assert.equal(final.title, "FINAL · BALL");
+  const stripFinal = carrierPatternCue(pattern({
+    recovery_platform: true,
+    carrier: false,
+    platform_kind: "FIXED_ARRESTING_STRIP",
+    mode: "APPROACH",
+    approach: true,
+  }));
+  assert.equal(stripFinal.phase, "FINAL");
+  assert.equal(stripFinal.title, "FINAL · STRIP");
   const rightOfLine = carrierPatternCue(pattern({
     mode: "APPROACH", approach: true, deck_cross: 45,
   }));
@@ -259,6 +295,42 @@ test("pattern coach classifies port downwind, the 180, and waveoff from relative
     deck_vz: -25,
   })).phase, "180");
   assert.equal(carrierPatternCue(pattern({ mode: "WAVE-OFF" })).phase, "WAVE-OFF");
+});
+
+test("fixed-strip pattern guidance avoids maritime-only terminology", () => {
+  const strip = {
+    recovery_platform: true,
+    carrier: false,
+    platform_kind: "FIXED_ARRESTING_STRIP",
+  };
+  const initial = carrierPatternCue(pattern({
+    ...strip,
+    deck_along: -5556,
+    deck_cross: 320,
+    deck_height: 244,
+    deck_vz: 175,
+    indicated_airspeed_kts: 350,
+    gear_handle: "UP",
+    gear_nose_indication: "UP_LOCKED",
+    gear_left_indication: "UP_LOCKED",
+    gear_right_indication: "UP_LOCKED",
+    gear_nose: 0,
+    gear_left: 0,
+    gear_right: 0,
+    flap_left_deg: 0,
+    flap_right_deg: 0,
+  }));
+  assert.equal(initial.phase, "INITIAL");
+  assert.match(initial.instruction, /ABM THRESHOLD/);
+  assert.doesNotMatch(initial.instruction, /BOW/);
+
+  const downwind = carrierPatternCue(pattern({
+    ...strip,
+    deck_along: 200,
+    deck_cross: -900,
+    deck_vz: -70,
+  }));
+  assert.equal(downwind.title, "LEFT DOWNWIND");
 });
 
 test("on-speed AoA guidance appears only on recovery legs", () => {

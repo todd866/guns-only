@@ -16,32 +16,16 @@ const TERMINAL_STATES = new Set([
 const IMPACT_SURFACES = new Set([
   "NONE", "WATER", "GROUND", "FLIGHT_DECK", "CARRIER_STRUCTURE", "SIMULATION_BOUNDARY",
 ]);
-const SHARED_KOREA_TERRAIN_MISSIONS = new Set([
-  "mission.perch-attack.v1",
-  "mission.break-defense.v1",
-  "mission.saddle-tracking.v1",
-  "mission.korea-2030s.balloon-strike.prototype.v1",
-  "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
-]);
-
 /**
- * Keep presence from silently combining an instanced carrier sortie with the globally anchored
- * Korea substrate. Inland sorties share the room frame; carrier sorties each own a boat at local
- * zero and therefore show no remote aircraft. An inland observer admits only the known missions
- * bound to this substrate; local-carrier and unknown/legacy frames remain omitted until the server
- * carries first-class world-frame and carrier-instance identity.
+ * Keep presence from silently combining separate mission instances merely because they use the
+ * same physical Ukraine theatre. Protocol v2 does not carry a first-class world frame plus mission
+ * instance on every remote contact, and room assignment is not terrain-aware. Fail closed for all
+ * remote bodies and bogeys until protocol v3 supplies both contracts; the room status can still
+ * report connection health without placing unverifiable traffic in the flight scene.
  */
 export function snapshotForTerrainFrame(snapshot, localState) {
-  const shared = localState?.multiplayer_terrain_shared === true
-    && localState?.world_frame_id === "world.korea-central-front.v1";
-  if (!shared) return { ...snapshot, players: [], bogeys: [] };
-  return {
-    ...snapshot,
-    players: (snapshot?.players ?? []).filter(
-      (player) => SHARED_KOREA_TERRAIN_MISSIONS.has(cleanLabel(player?.missionId, 96)),
-    ),
-    bogeys: snapshot?.bogeys ?? [],
-  };
+  void localState;
+  return { ...snapshot, players: [], bogeys: [] };
 }
 
 /**

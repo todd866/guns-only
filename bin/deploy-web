@@ -63,6 +63,9 @@ require_file() {
 
 require_file index.html
 require_file app.js
+require_file indoor/index.html
+require_file indoor/game.js
+require_file indoor/sim.js
 require_file _framework/blazor.webassembly.js
 require_file _framework/blazor.boot.json
 require_file api/build-info.js

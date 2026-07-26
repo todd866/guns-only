@@ -7,14 +7,13 @@ namespace GunsOnly.Sim.Tests;
 public class KoreaWeatherPresetsTests {
     [Fact]
     public void EveryBuiltInBeatReceivesAStableLayeredWeatherDay() {
-        for (int beat = 1; beat <= 8; beat++) {
+        for (int beat = 1; beat <= 10; beat++) {
             WeatherProfile first = KoreaWeatherPresets.ForBeat(beat);
             WeatherProfile replay = KoreaWeatherPresets.ForBeat(beat);
             var clouds = Assert.IsType<LayeredCloudField>(first.Clouds);
 
             Assert.Same(first, replay);
-            Assert.StartsWith(beat == 8
-                ? "weather.ukraine-training." : "weather.korea-", first.Id);
+            Assert.StartsWith("weather.ukraine-2030s.", first.Id);
             Assert.NotEmpty(clouds.Layers);
             Assert.InRange(clouds.ClearAirVisibilityM, 50_000.0, 150_000.0);
         }
@@ -34,7 +33,7 @@ public class KoreaWeatherPresetsTests {
         Assert.All(drone.DroneRaid!.Targets, target =>
             Assert.True(droneWeather.Clouds.Sample(target.Position, 0.0).VisibilityM
                 > 50_000.0));
-        Assert.Equal("weather.ukraine-training.soniachne-broken-cumulus.v1",
+        Assert.Equal("weather.ukraine-2030s.soniachne-low-level.v1",
             droneWeather.Id);
         Assert.True(droneWeather.Clouds.Sample(new Vec3D(-5_100.0, 1_700.0, 5_800.0),
             0.0).VisibilityM < 1_000.0);
@@ -55,6 +54,19 @@ public class KoreaWeatherPresetsTests {
             $"merge altitude is too clear to fly through: {cloud} cloud / {clear} clear");
         Assert.True(clear > 0.15 * (cloud + clear),
             $"merge altitude is solid IMC, not broken: {cloud} cloud / {clear} clear");
+    }
+
+    [Fact]
+    public void RapierReceivesTheUkraineHighAltitudeColumn() {
+        WeatherProfile rapier = KoreaWeatherPresets.ForBeat(10);
+        WeatherProfile inland = KoreaWeatherPresets.ForBeat(1);
+
+        Assert.Equal("weather.ukraine-2030s.rapier-high-altitude.v1", rapier.Id);
+        Assert.Same(rapier.Atmosphere, inland.Atmosphere);
+        Assert.True(rapier.Clouds.Sample(new Vec3D(0.0, 21_500.0, 0.0), 0.0)
+            .VisibilityM > 50_000.0);
+        Assert.True(rapier.Wind.Sample(new Vec3D(0.0, 21_500.0, 0.0)).Length
+            > rapier.Wind.Sample(new Vec3D(0.0, 500.0, 0.0)).Length);
     }
 
     [Fact]

@@ -9,6 +9,7 @@ const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
 const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
 const webProjectUrl = new URL("../../../../GunsOnly.Web.csproj", import.meta.url);
 const environmentLabUrl = new URL("../../../environment-lab/main.js", import.meta.url);
+const environmentLabIndexUrl = new URL("../../../environment-lab/index.html", import.meta.url);
 // The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
 // SnapshotProjection; the contract scan reads both so a field is found wherever it now lives.
 const readBridgeContract = () =>
@@ -54,6 +55,33 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /emitPackEffect\("event\.weapon\.gun-fire\.v1"/);
   assert.match(source, /emitPackEffect\("event\.weapon\.gun-impact\.v1"/);
   assert.match(source, /emitPackEffect\("event\.vehicle\.destroyed\.v1"/);
+  assert.match(source,
+    /\["presentation\.vehicle\.one-way-attack-drone\.prototype\.v1", createOneWayAttackDrone\]/,
+    "the 5.5 m raid truth must use its own reviewed silhouette instead of the fighter fallback");
+  assert.match(source,
+    /\["presentation\.vehicle\.rapier\.public-data-surrogate\.v1", createRapier\]/,
+    "Rapier must resolve to its unique 13 m interceptor silhouette instead of the fighter fallback");
+  assert.match(source,
+    /\["presentation\.platform\.rapier-dispersed-strip\.v1", createRapierDispersedStrip\]/,
+    "the land-based Rapier recovery contract must resolve to the fixed dispersed strip");
+  assert.match(source,
+    /this\.carrierSlot\.root\.visible = state\.recovery_platform === true/,
+    "fixed strips and ships must enter platform resolution through the shared recovery contract");
+  assert.match(source,
+    /const recoveryPlatform = state\.recovery_platform === true \|\| state\.carrier === true;[\s\S]*?runtime\.water\.group\.visible = maritime/,
+    "fixed strips must enter recovery presentation without inheriting maritime water");
+  assert.match(source,
+    /const fixedStrip = state\.platform_kind === "FIXED_ARRESTING_STRIP";[\s\S]*?fixedStripRecoveryPresentation[\s\S]*?runtime\.recovery\.group\.visible = false;[\s\S]*?updateRecoveryWireHighlight\(fixedStripRecovery, state\)/,
+    "the procedural strip must highlight its embedded physical wires and suppress the duplicate carrier overlay");
+  assert.match(source,
+    /if \(slot\.object\.userData\?\.fixedStripRecoveryPresentation\) \{[\s\S]*?slot\.root\.userData\.fixedStripRecoveryPresentation =[\s\S]*?slot\.object\.userData\.fixedStripRecoveryPresentation/,
+    "the stable platform slot must retain the resolved strip's embedded recovery hook");
+  assert.match(source,
+    /if \(fixedStrip\)[\s\S]*?updateCarrierRecoveryOverlay\(runtime\.recovery, state, true, true\);/,
+    "a fixed-strip asset without exposed wires must retain exactly one longitudinally unscaled recovery fallback");
+  assert.match(source,
+    /const scaleX = deckScale\.scaleX;[\s\S]*?const scaleZ = fixedLongitudinalSpacing \? 1 : deckScale\.scaleZ;/,
+    "the fixed-strip fallback may match runway width but must preserve 5.2 m longitudinal wire spacing");
 });
 
 test("terrain ships by default, stays lazy through Ready, and shares the ocean curvature contract", async () => {
@@ -79,27 +107,30 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /if \(this\.terrainPresentation\) \{[\s\S]*return this\.terrainSceneryEraPromise\?\.then[\s\S]*if \(this\.terrainPresentationPromise\) \{[\s\S]*terrainPresentationRequestedKey === terrainKey/,
     "repeated gameplay frames must reuse one terrain load");
   assert.match(source,
-    /const ukraineTrainingSector = state\?\.terrain_profile_id[\s\S]*?selectedBeat === 8/);
+    /const UKRAINE_2030S_TERRAIN_ID = "terrain\.ukraine\.soniachne-theatre\.v2"/,
+    "all 2030s Ukraine missions must select one stable theatre substrate");
   assert.match(source,
-    /const sceneryEra = ukraineTrainingSector[\s\S]*?\? "ukraine-modern"/,
-    "the low-level mission must select its regional stylized scenery profile");
+    /const ukraineTheatre = state\?\.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID/);
+  assert.match(source,
+    /const sceneryEra = ukraineTheatre[\s\S]*?state\?\.terrain_scenery_profile \|\| "ukraine-modern"/,
+    "the shared theatre must retain its regional stylized scenery profile");
   assert.match(source,
     /const UKRAINE_TRAINING_TERRAIN_MANIFEST_URL = new URL\([\s\S]*?soniachne-steppe\.manifest\.json/);
   assert.match(source,
-    /const terrainKey = ukraineTrainingSector[\s\S]*?terrain\.ukraine\.soniachne-training\.v1/,
-    "switching theatres must replace the retained terrain instead of recolouring Korea");
+    /const terrainKey = ukraineTheatre[\s\S]*?UKRAINE_2030S_TERRAIN_ID/,
+    "all Ukraine fidelity bands must retain the same v2 terrain identity");
   assert.match(source,
     /presentation\.setSceneryEra\(sceneryEra\)/,
     "restaging across eras must replace scenery without rebuilding the retained terrain atlas");
   assert.match(source,
-    /terrainDiagnostics\?\.terrainId === "terrain\.ukraine\.soniachne-training\.v1"[\s\S]*terrainDiagnostics\?\.sceneryEra === "ukraine-modern"[\s\S]*if \(!lowLevelSceneryRequired\) \{[\s\S]*setSceneryEra\?\.\(null\)/,
-    "the last-resort frame governor may drop shadows but must retain mission-essential low-level scenery");
+    /const lowLevelSceneryRequired = view\.terrainMicroRequired === true;[\s\S]*if \(!lowLevelSceneryRequired\) \{[\s\S]*disableAmbientScenery\?\.\(\)/,
+    "the frame governor may shed ambient instances at altitude but must retain required micro scenery");
   assert.match(source,
     /Shadows off · low-level scenery retained · holding 60/,
     "the performance status must disclose that essential scenery remains active");
   assert.match(source,
-    /const detailedUkraineTerrainLoaded =[\s\S]*terrain\.ukraine\.soniachne-training\.v1[\s\S]*this\.sea\.mesh\.visible = !detailedUkraineTerrainLoaded/,
-    "the ocean fallback must remain visible if the inland terrain product itself fails to load");
+    /const coastalUkraineTheatre = terrainId === UKRAINE_2030S_TERRAIN_ID;[\s\S]*this\.sea\.mesh\.visible = coastalUkraineTheatre \|\| !terrainId/,
+    "the unified theatre must keep its coastal water substrate while retaining the no-terrain fallback");
   assert.match(source,
     /terrainPresentationFailureKey === terrainKey[\s\S]*terrainPresentationRetryAtMs[\s\S]*return Promise\.resolve\(null\)/,
     "a failed terrain product must back off instead of refetching on every animation frame");
@@ -112,12 +143,48 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source,
     /await terrain\.ready[\s\S]*requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)[\s\S]*await terrain\.whenIdle\?\.\(\)/,
     "terrain warmup must include the near-LOD and instanced-scenery work requested by the paused camera");
+  assert.match(source,
+    /function terrainDiagnosticsCoverStagedAircraft[\s\S]*?localResidentChunks[\s\S]*?residentChunks <= 0\) return false;[\s\S]*?localSceneryChunks[\s\S]*?sceneryChunks > 0/,
+    "coarse terrain alone must not release a low-level sortie before scenery is resident");
+  assert.match(source,
+    /if \(state\?\.terrain_micro_required !== true\) return true;[\s\S]*terrain\?\.sceneryEra === state\?\.terrain_scenery_profile/,
+    "macro-only sorties must warm terrain without making low-level instances a launch dependency");
+  assert.match(source,
+    /function terrainWarmupKey\(state\)[\s\S]*?terrain_placement_east_m[\s\S]*?terrain_placement_north_m[\s\S]*?terrain_micro_required/,
+    "warmup failures and readiness must be scoped to the staged placement and fidelity band");
+  assert.match(source,
+    /lazyChunks: true,[\s\S]*?chunkLoadRadiusM: TERRAIN_INITIAL_WARMUP_RADIUS_M/,
+    "the unified theatre must warm only the local neighborhood before expanding in flight");
+  assert.match(source,
+    /applyTerrainFlightPolicy\(\)[\s\S]*?terrainNominalStreamingRadiusM/,
+    "mission-authored flight radius must expand after local warmup");
+  assert.match(source,
+    /deadlineTimer = window\.setTimeout\(\(\) => \{[\s\S]*cancelTerrainPresentationRequest\(terrainKey\)[\s\S]*15_000/,
+    "a bounded warmup must actively cancel a hung terrain request rather than only racing it");
+  assert.match(source,
+    /cancelTerrainPresentationRequest\(terrainKey\)[\s\S]*terrainPresentationRequestEpoch \+= 1[\s\S]*terrainPresentationAbortController\?\.abort\(\)[\s\S]*terrainPresentationPromise = null/,
+    "cancelling terrain must invalidate stale completion and leave a later retry possible");
+  assert.match(source,
+    /cancelTerrainPresentationRequest\(terrainKey\)[\s\S]*const hasInFlightRequest = this\.terrainPresentationPromise !== null;[\s\S]*if \(\(!hasInFlightRequest && !ownsPresentation\)/,
+    "a requested theatre must be able to cancel the previous theatre load blocking its warmup");
+  assert.match(source,
+    /fetch: \(input, init = \{\}\) => fetch\(input, \{[\s\S]*signal: abortController\.signal/,
+    "the manifest and bundle fetches must share the warmup abort signal");
+  assert.match(source,
+    /!replayActive && pauseReasons\.size === 0 && state\.session_phase === "ACTIVE"[\s\S]*?frameGovernor\.observe/,
+    "Ready, warmup, pause, and replay frames must not spend the sortie frame budget");
+  assert.match(source,
+    /frameGovernor\.reset\(activeView\)[\s\S]*?bridge\.Begin\(\);[\s\S]*?frameGovernor\.reset\(activeView\)/,
+    "restaging and launch must restore mission radius, shadows, and scenery policy");
+  assert.match(source,
+    /terrainGovernorSuppressesAmbientScenery = true[\s\S]*?disableAmbientScenery[\s\S]*?terrainGovernorSuppressesAmbientScenery !== true[\s\S]*?enableAmbientScenery/,
+    "terminal governor shedding must stay latched until the next sortie reset");
   assert.match(source, /const DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL = null;/,
     "an unqualified peninsula atlas must remain unreachable from the production browser");
   assert.doesNotMatch(source, /peninsula-r2|pub-[a-z0-9]+\.r2\.dev/,
     "production source must not expose the temporary atlas host or a query-string bypass");
   assert.match(source,
-    /const manifestUrl = ukraineTrainingSector[\s\S]*?UKRAINE_TRAINING_TERRAIN_MANIFEST_URL[\s\S]*?DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL/);
+    /const manifestUrl = ukraineTheatre[\s\S]*?UKRAINE_TRAINING_TERRAIN_MANIFEST_URL[\s\S]*?DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL/);
   assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
     "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
@@ -141,11 +208,20 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /placementEastM: state\.carrier === true \? 100_000 : 0/,
     "the old mission-local placement would disagree with shared-world coordinates");
   assert.match(bridgeSource,
-    /TerrainPlacementEastM\(int index\)[\s\S]*?8 => 0\.0,[\s\S]*?_ => -_worldOriginEastM/,
-    "simulation terrain must use the inverse room-origin transform");
+    /TerrainPlacementEastM\(int index\)[\s\S]*?environment\.MultiplayerTerrainShared[\s\S]*?-_worldOriginEastM[\s\S]*?-environment\.TerrainSourceAnchorEastM/,
+    "shared sorties must use the inverse room origin while local fidelity cells use source anchors");
+  assert.match(bridgeSource,
+    /FixedStripPresentationId[\s\S]*presentation\.platform\.rapier-dispersed-strip\.v1[\s\S]*Session\.Carrier\?\.IsMaritime == true[\s\S]*CarrierPresentationId : FixedStripPresentationId/,
+    "non-maritime recovery must project the fixed-strip presentation rather than a carrier");
   for (const field of [
+    "theatre_id",
+    "location_id",
+    "world_frame_id",
     "terrain_profile_id",
+    "terrain_macro_scenery_profile",
     "terrain_scenery_profile",
+    "terrain_macro_required",
+    "terrain_micro_required",
     "terrain_placement_east_m",
     "terrain_placement_north_m",
     "multiplayer_terrain_shared",
@@ -156,7 +232,10 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
 });
 
 test("environment lab exercises the production terrain manifest and exposes the look gate", async () => {
-  const source = await readFile(environmentLabUrl, "utf8");
+  const [source, index] = await Promise.all([
+    readFile(environmentLabUrl, "utf8"),
+    readFile(environmentLabIndexUrl, "utf8"),
+  ]);
   assert.match(source,
     /import \{ loadKoreaTerrain \} from "\.\.\/render\/environment\/korea_terrain\.js"/);
   const loadCall = source.match(/terrain = await loadKoreaTerrain\(THREE, \{([\s\S]*?)\n  \}\);/);
@@ -175,6 +254,8 @@ test("environment lab exercises the production terrain manifest and exposes the 
   assert.match(source, /loadVisualProfile\(\)/);
   assert.match(source, /terrainFogDensity = 1 \/ Math\.max\(1, Number\(fog\.farMetres\)/,
     "terrain look fog must derive from the active production pack profile");
+  assert.match(index, /id="altitude"[^>]*max="22000"/,
+    "the look gate must reach Rapier's 21.5 km cruise altitude");
 });
 
 test("decision-support ocean and warnings carry truth without presentation flicker", async () => {

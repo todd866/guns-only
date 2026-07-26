@@ -32,7 +32,8 @@ public static class PresenceProtocol {
     static readonly HashSet<string> PlayerPresentationIds = [
         "presentation.vehicle.player.v1",
         "presentation.vehicle.glider-strike.v1",
-        "presentation.vehicle.f22a.public-data-surrogate.v1"
+        "presentation.vehicle.f22a.public-data-surrogate.v1",
+        "presentation.vehicle.rapier.public-data-surrogate.v1"
     ];
 
     public static bool IsAllowedOrigin(string? requestOrigin, string? configuredOrigins) {

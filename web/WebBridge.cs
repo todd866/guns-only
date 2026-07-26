@@ -14,11 +14,10 @@ namespace GunsOnly.Web;
 /// </summary>
 [SupportedOSPlatform("browser")]
 public static partial class WebBridge {
-    static readonly ITerrainSurface? CentralFrontTerrain = KoreaTerrainTruth.Load();
-    static readonly ITerrainSurface? SoniachneTrainingTerrain =
-        UkraineTerrainTruth.Load() is { } soniachneCore
-            ? new TrainingTerrainApronSurface(soniachneCore,
-                marginM: 92_000.0, flatHeightM: 78.0, transitionM: 4_000.0)
+    static readonly ITerrainSurface? UkraineTheatreTerrain =
+        UkraineTerrainTruth.Load() is { } theatre
+            ? new TrainingTerrainApronSurface(theatre,
+                marginM: 400_000.0, flatHeightM: 78.0, transitionM: 8_000.0)
             : null;
     static readonly SimulationSession Session = new(7, Carrier.DeckConfiguration.Angled,
         KoreaWeatherPresets.ForBeat(7));
@@ -27,7 +26,6 @@ public static partial class WebBridge {
     static double _worldOriginNorthM;
     static bool _worldOriginConfigured;
 
-    const double CarrierTerrainPlacementEastM = 100_000.0;
     const double MaximumWorldOriginMagnitudeM = 10_000_000.0;
 
     [JSExport]
@@ -68,8 +66,8 @@ public static partial class WebBridge {
     /// <summary>
     /// Anchor mission-local coordinates to the persistent room's X=east/Z=north origin. The room
     /// transports local poses plus this same origin; translating the terrain by its inverse makes
-    /// AGL/collision truth and every observer's rendered substrate agree. Carrier qualifications
-    /// and the compact Soniachne sector remain explicitly local rather than inheriting that origin.
+    /// AGL/collision truth and every observer's rendered substrate agree. Authored hero, coastal
+    /// and Rapier cells remain local instances, but all publish the same Ukraine theatre identity.
     /// </summary>
     [JSExport]
     public static bool SetWorldOrigin(double eastM, double northM) {
@@ -198,23 +196,24 @@ public static partial class WebBridge {
         Session, _deckConfiguration, _worldOriginEastM, _worldOriginNorthM,
         _worldOriginConfigured, BaseTerrainForBeat(Session.BeatIndex));
 
-    // 5/6 are carrier decks and 8 is its own training range; 10 is the Rapier's dispersed strip.
-    // The strip cannot share the land frame: the world origin comes from the multiplayer spawn, so
-    // the ground under a fixed-altitude strip differs every session and the aircraft launches
-    // INSIDE a hill. Its own frame puts the strip on a coastal shelf at a known elevation.
-    static bool HasSharedTerrainFrame(int index) => index is not (5 or 6 or 8 or 10);
+    static MissionEnvironmentContract EnvironmentForBeat(int index) =>
+        Beats.BuiltIn(index, _deckConfiguration).EnvironmentIdentity;
 
-    static double TerrainPlacementEastM(int index) => index switch {
-        5 or 6 or 10 => CarrierTerrainPlacementEastM,
-        8 => 0.0,
-        _ => -_worldOriginEastM
-    };
+    static double TerrainPlacementEastM(int index) {
+        MissionEnvironmentContract environment = EnvironmentForBeat(index);
+        return environment.MultiplayerTerrainShared
+            ? -_worldOriginEastM
+            : -environment.TerrainSourceAnchorEastM;
+    }
 
-    static double TerrainPlacementNorthM(int index) =>
-        HasSharedTerrainFrame(index) ? -_worldOriginNorthM : 0.0;
+    static double TerrainPlacementNorthM(int index) {
+        MissionEnvironmentContract environment = EnvironmentForBeat(index);
+        return environment.MultiplayerTerrainShared
+            ? -_worldOriginNorthM
+            : -environment.TerrainSourceAnchorNorthM;
+    }
 
-    static ITerrainSurface? BaseTerrainForBeat(int index) =>
-        index == 8 ? SoniachneTrainingTerrain : CentralFrontTerrain;
+    static ITerrainSurface? BaseTerrainForBeat(int index) => UkraineTheatreTerrain;
 
     // Null only when a constrained build explicitly opts out of the selected embedded terrain.
     // The session and projection treat that as sea level; the browser then skips the visual

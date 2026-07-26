@@ -7,12 +7,12 @@ import {
 } from "../hot_snapshot.js";
 
 // A miniature layout exercising every decode rule: core numbers/booleans/nullables, a
-// presence-guarded block whose flag slot lives inside the block (the carrier pattern), a
+// presence-guarded block whose flag slot lives inside the block (the recovery-platform pattern), a
 // presence slot living outside the block (the merge/drone pattern), a tracer region, and a
 // keyed sample array (the gun_trajectory pattern).
 const LAYOUT_JSON = JSON.stringify({
-  layout_version: 2,
-  slot_count: 24,
+  layout_version: 3,
+  slot_count: 25,
   cold_version_index: 0,
   blocks: [
     {
@@ -31,33 +31,35 @@ const LAYOUT_JSON = JSON.stringify({
       slots: [{ name: "detail", index: 5, kind: "number" }],
     },
     {
-      name: "carrier_like",
+      name: "recovery_platform_like",
       presence_index: 6,
       slots: [
-        { name: "carrier", index: 6, kind: "boolean" },
-        { name: "deck", index: 7, kind: "number" },
+        { name: "recovery_platform", index: 6, kind: "boolean" },
+        { name: "carrier", index: 7, kind: "boolean" },
+        { name: "deck", index: 8, kind: "number" },
       ],
     },
   ],
   tracers: [
-    { field: "tracers", count_index: 8, start: 9, max_rounds: 1, stride: 6 },
+    { field: "tracers", count_index: 9, start: 10, max_rounds: 1, stride: 6 },
   ],
   sample_arrays: [
-    { field: "gun_trajectory", start: 16, samples: 2, keys: ["x", "y", "z", "r"] },
+    { field: "gun_trajectory", start: 17, samples: 2, keys: ["x", "y", "z", "r"] },
   ],
 });
 
 const hotFrame = (overrides = {}) => {
-  const hot = new Float64Array(24);
+  const hot = new Float64Array(25);
   hot[0] = 1;            // cold_version
   hot[1] = 12.5;         // t
   hot[2] = 1;            // paused_like true
   hot[3] = NaN;          // maybe -> null
   hot[4] = 0;            // gate absent
   hot[5] = NaN;          // gated detail (absent fill)
-  hot[6] = 0;            // carrier absent
-  hot[7] = NaN;
-  hot[8] = 0;            // no tracer rounds
+  hot[6] = 0;            // recovery platform absent
+  hot[7] = 0;            // maritime carrier false
+  hot[8] = NaN;
+  hot[9] = 0;            // no tracer rounds
   for (const [index, value] of Object.entries(overrides)) hot[index] = value;
   return hot;
 };
@@ -87,32 +89,42 @@ test("absent blocks leave no keys behind", () => {
   const layout = parseHotLayout(LAYOUT_JSON);
   const state = decodeHotFrame(layout, hotFrame(), {});
   assert.equal("detail" in state, false);
+  assert.equal("recovery_platform" in state, false);
   assert.equal("carrier" in state, false);
   assert.equal("deck" in state, false);
 });
 
-test("present blocks decode, including in-block presence flags (carrier pattern)", () => {
+test("maritime recovery platforms decode both presence and carrier flags", () => {
   const layout = parseHotLayout(LAYOUT_JSON);
   const state = decodeHotFrame(layout,
-    hotFrame({ 4: 1, 5: 7.75, 6: 1, 7: 88.25 }), {});
+    hotFrame({ 4: 1, 5: 7.75, 6: 1, 7: 1, 8: 88.25 }), {});
   assert.equal(state.gate, true);
   assert.equal(state.detail, 7.75);
+  assert.equal(state.recovery_platform, true);
   assert.equal(state.carrier, true);
+  assert.equal(state.deck, 88.25);
+});
+
+test("fixed strips are present recovery platforms without becoming carriers", () => {
+  const layout = parseHotLayout(LAYOUT_JSON);
+  const state = decodeHotFrame(layout, hotFrame({ 6: 1, 7: 0, 8: 88.25 }), {});
+  assert.equal(state.recovery_platform, true);
+  assert.equal(state.carrier, false);
   assert.equal(state.deck, 88.25);
 });
 
 test("tracer regions rebuild the flat [x,y,z,vx,vy,vz] arrays", () => {
   const layout = parseHotLayout(LAYOUT_JSON);
   const state = decodeHotFrame(layout,
-    hotFrame({ 8: 1, 9: 1.5, 10: 2.5, 11: 3.5, 12: -1.5, 13: -2.5, 14: -3.5 }), {});
+    hotFrame({ 9: 1, 10: 1.5, 11: 2.5, 12: 3.5, 13: -1.5, 14: -2.5, 15: -3.5 }), {});
   assert.deepEqual(state.tracers, [[1.5, 2.5, 3.5, -1.5, -2.5, -3.5]]);
 });
 
 test("sample arrays rebuild keyed objects (the gun_trajectory funnel locus)", () => {
   const layout = parseHotLayout(LAYOUT_JSON);
   const state = decodeHotFrame(layout, hotFrame({
-    16: 10.25, 17: 20.5, 18: -30.75, 19: 4.0,
-    20: 110.25, 21: 120.5, 22: -130.75, 23: 250.9,
+    17: 10.25, 18: 20.5, 19: -30.75, 20: 4.0,
+    21: 110.25, 22: 120.5, 23: -130.75, 24: 250.9,
   }), { gun_trajectory: [{ x: 0, y: 0, z: 0, r: 0 }] });
   assert.deepEqual(state.gun_trajectory, [
     { x: 10.25, y: 20.5, z: -30.75, r: 4.0 },
@@ -122,11 +134,38 @@ test("sample arrays rebuild keyed objects (the gun_trajectory funnel locus)", ()
 
 test("layouts without sample arrays still parse (older kernels)", () => {
   const raw = JSON.parse(LAYOUT_JSON);
+  raw.layout_version = 2;
   delete raw.sample_arrays;
   const layout = parseHotLayout(JSON.stringify(raw));
+  assert.equal(layout.layoutVersion, 2);
   assert.deepEqual(layout.sampleArrays, []);
   const state = decodeHotFrame(layout, hotFrame(), { beat: "VALLEY" });
   assert.equal("gun_trajectory" in state, false);
+});
+
+test("legacy v2 carrier-as-presence layouts remain decodable", () => {
+  const legacyLayoutJson = JSON.stringify({
+    layout_version: 2,
+    slot_count: 3,
+    cold_version_index: 0,
+    blocks: [
+      { name: "core", presence_index: -1, slots: [] },
+      {
+        name: "carrier_like",
+        presence_index: 1,
+        slots: [
+          { name: "carrier", index: 1, kind: "boolean" },
+          { name: "deck", index: 2, kind: "number" },
+        ],
+      },
+    ],
+    tracers: [],
+  });
+  const layout = parseHotLayout(legacyLayoutJson);
+  const state = decodeHotFrame(layout, Float64Array.of(1, 1, 72.5), {});
+  assert.equal(layout.layoutVersion, 2);
+  assert.equal(state.carrier, true);
+  assert.equal(state.deck, 72.5);
 });
 
 test("each frame returns a new object so retained snapshots never rewrite history", () => {
