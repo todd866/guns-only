@@ -45,6 +45,11 @@ cp "$ukraine_source_dir/soniachne-steppe.manifest.json" "$ukraine_stage_dir/"
 cp "$ukraine_source_dir/soniachne-steppe.terrain" "$ukraine_stage_dir/"
 cp "$ukraine_source_dir/soniachne-steppe.truth" "$ukraine_stage_dir/"
 cp "$ukraine_source_dir/soniachne-steppe-preview.png" "$ukraine_stage_dir/"
+# The 262 km regional corridor. It is embedded in the WASM payload as
+# GunsOnly.Web.Data.UkraineSoniachneRegion.truth (web/GunsOnly.Web.csproj) and shipped under
+# wwwroot alongside the hero cell, so it has to be staged too or this diff reports it as drift.
+cp "$ukraine_source_dir/soniachne-region.truth" "$ukraine_stage_dir/"
+cp "$ukraine_source_dir/soniachne-theatre-preview.png" "$ukraine_stage_dir/"
 diff -qr "$staged_content_dir" web/wwwroot/content
 
 "$dotnet_cli" restore GunsOnly.sln --nologo --ignore-failed-sources \
