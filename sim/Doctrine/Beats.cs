@@ -707,7 +707,13 @@ public static class Beats {
                 FlightModel.RapierPublicDataSurrogate.MassKg),
             // A contact high and slow ahead: the thing this aircraft was built to kill is an
             // enabler, not a fighter.
-            Bandit: new AircraftState(new Vec3D(6_000, 12_000, 90_000), 210, 0, Math.PI, 0,
+            // 118 km out, not 90. The transit IS the aircraft: it exists because basing sits far
+            // enough back that cratering the field is impractical, and a 90 km hop never made the
+            // pilot spend the climb or the ram acceleration that justify any of it.
+            // The ceiling is the terrain, not the fuel: the regional truth is 262 km square, so the
+            // route has to stay inside +/-131 km or it leaves the map. 210 km did, and
+            // RegionalTruthContainsTheCompleteRapierRouteAndFictionalCoast caught it.
+            Bandit: new AircraftState(new Vec3D(9_000, 12_000, 118_000), 210, 0, Math.PI, 0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() { (0.0, new PilotCommand(1.0, 0.0, 0.55, 0.0)) },
