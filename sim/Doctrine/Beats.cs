@@ -214,9 +214,11 @@ public static class Ukraine2030sTheatre {
     public static MissionEnvironmentContract RapierCorridor { get; } = Shared with {
         LocationId = "location.ukraine.soniachne-rapier-corridor.v1",
         FrameKind = MissionEnvironmentFrameKind.LocalRegionalCorridor,
-        // Target staging is 90 km from the strip. Keep that complete route inside the normal
-        // high-altitude presentation radius, while warmup still loads only the local chunk.
-        PreferredTerrainStreamingRadiusM = 112_000.0
+        // Was 112 km, which asked the streamer for terrain FURTHER OUT than anything that can be
+        // drawn: the authored cell is 16.4 km across and the horizon apron
+        // (UKRAINE_TRAINING_HORIZON_HALF_SPAN_M) stops at 100 km. Requesting past both is the most
+        // likely source of the heavy terrain artefacting on this mission. Clamp to the apron.
+        PreferredTerrainStreamingRadiusM = 96_000.0
     };
 }
 
@@ -707,13 +709,17 @@ public static class Beats {
                 FlightModel.RapierPublicDataSurrogate.MassKg),
             // A contact high and slow ahead: the thing this aircraft was built to kill is an
             // enabler, not a fighter.
-            // 118 km out, not 90. The transit IS the aircraft: it exists because basing sits far
-            // enough back that cratering the field is impractical, and a 90 km hop never made the
-            // pilot spend the climb or the ram acceleration that justify any of it.
-            // The ceiling is the terrain, not the fuel: the regional truth is 262 km square, so the
-            // route has to stay inside +/-131 km or it leaves the map. 210 km did, and
-            // RegionalTruthContainsTheCompleteRapierRouteAndFictionalCoast caught it.
-            Bandit: new AircraftState(new Vec3D(9_000, 12_000, 118_000), 210, 0, Math.PI, 0,
+            // 260 km out. This is deliberately BEYOND the 262 km regional truth, and that is the
+            // call: a realistic deep intercept matters more than staying inside the authored cell.
+            // The aircraft exists because basing sits far enough back that cratering the field is
+            // impractical, and at 90 or even 118 km the pilot never spends the climb or the ram
+            // acceleration that justify any of it. With the contact closing at 210 m/s the merge
+            // still falls near 200 km, inside the ~300 km radius the fuel fraction buys.
+            //
+            // The far half of the route is over presentation apron rather than authored terrain.
+            // At 21 km cruise that is invisible; it would matter if the fight went low, and it is
+            // the reason the parked ukraine-theatre branch wanted a bigger cell.
+            Bandit: new AircraftState(new Vec3D(12_000, 12_000, 260_000), 210, 0, Math.PI, 0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() { (0.0, new PilotCommand(1.0, 0.0, 0.55, 0.0)) },

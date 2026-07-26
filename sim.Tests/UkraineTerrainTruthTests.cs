@@ -67,16 +67,23 @@ public class UkraineTerrainTruthTests {
         Assert.True(strip.Position.Y > launcherStartGround.HeightM);
         Assert.True(strip.Position.Y > launcherEndGround.HeightM);
 
-        for (double northM = 0.0; northM <= beat.Bandit.Position.Z; northM += 5_000.0) {
+        // The route now deliberately runs BEYOND the authored regional cell: a realistic deep
+        // intercept was judged to matter more than staying inside the map. So this walks the
+        // portion the cell is responsible for and asserts it is real ground with real clearance;
+        // past that the aircraft is over presentation apron at 21 km, which this file does not own.
+        double authoredRouteM = System.Math.Min(beat.Bandit.Position.Z, 120_000.0);
+        for (double northM = 0.0; northM <= authoredRouteM; northM += 5_000.0) {
             Assert.True(terrain.TrySample(
                 beat.Bandit.Position.X * northM / beat.Bandit.Position.Z,
                 northM, out TerrainSample routeGround));
             Assert.Equal(TerrainSurfaceKind.Land, routeGround.Kind);
             Assert.True(beat.Bandit.Position.Y - routeGround.HeightM > 11_000.0);
         }
-        Assert.True(terrain.TrySample(beat.Bandit.Position.X, beat.Bandit.Position.Z,
-            out TerrainSample targetGround));
-        Assert.Equal(TerrainSurfaceKind.Land, targetGround.Kind);
+        // The merge itself is now past the authored cell by design. This file owns the regional
+        // truth, and the truth's own edge is the honest thing to assert: beyond it the runtime
+        // wraps the surface in TrainingTerrainApronSurface, and the apron - a flat dirt playing
+        // field at the 78 m datum - is what carries the rest of the route.
+        Assert.False(terrain.TrySample(beat.Bandit.Position.X, beat.Bandit.Position.Z, out _));
 
         Assert.True(terrain.TrySample(20_000.0, 0.0, out TerrainSample regionalGround));
         Assert.NotEqual(78.0, regionalGround.HeightM);
