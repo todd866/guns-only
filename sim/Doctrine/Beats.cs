@@ -219,7 +219,10 @@ public static class Ukraine2030sTheatre {
         // while the pilot sat at 21.5 km looking at a 520 km horizon, which is what made the world
         // read as a small lit patch in murk. A high-altitude sortie has to open the view out, and
         // the apron - now 560 km - is what fills it. Coarse and flat is fine; empty is not.
-        PreferredTerrainStreamingRadiusM = 420_000.0
+        // Back to a sane STREAMING radius. It no longer controls visibility: korea_terrain.js
+        // exposes visibleWorldRadiusM (the 560 km apron) and app.js caps fog on that instead, so
+        // the view stays open while chunk streaming only covers ground that is actually authored.
+        PreferredTerrainStreamingRadiusM = 40_000.0
     };
 }
 

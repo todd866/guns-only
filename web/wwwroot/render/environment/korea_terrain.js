@@ -1190,6 +1190,16 @@ class KoreaTerrainPresentation {
     return this.chunkLoadRadiusM;
   }
 
+  /// Where the world VISUALLY stops, which is not where chunk streaming stops once a horizon apron
+  /// exists. Fog is capped at the world edge to hide a dead-straight chunk boundary in clear air —
+  /// but with the apron present the edge is 560 km away, not at the chunk radius. Tying fog to the
+  /// chunk radius forced the two to move together: opening the view meant streaming a 420 km disc
+  /// of chunks, which cost the frame rate for terrain that does not exist out there anyway (the
+  /// authored cell is 16.4 km). This is the seam that lets them move independently.
+  get visibleWorldRadiusM() {
+    return this.horizonApron ? UKRAINE_TRAINING_HORIZON_HALF_SPAN_M : this.chunkLoadRadiusM;
+  }
+
   setStreamingRadiusM(loadRadiusM) {
     if (this.disposed || !Number.isFinite(loadRadiusM) || loadRadiusM <= 0) return false;
     const previous = this.chunkLoadRadiusM;
@@ -1645,6 +1655,16 @@ class KoreaTerrainAtlasPresentation {
   /// all, it is the edge of the loaded world with nothing drawn over it.
   get streamingRadiusM() {
     return this.chunkLoadRadiusM;
+  }
+
+  /// Where the world VISUALLY stops, which is not where chunk streaming stops once a horizon apron
+  /// exists. Fog is capped at the world edge to hide a dead-straight chunk boundary in clear air —
+  /// but with the apron present the edge is 560 km away, not at the chunk radius. Tying fog to the
+  /// chunk radius forced the two to move together: opening the view meant streaming a 420 km disc
+  /// of chunks, which cost the frame rate for terrain that does not exist out there anyway (the
+  /// authored cell is 16.4 km). This is the seam that lets them move independently.
+  get visibleWorldRadiusM() {
+    return this.horizonApron ? UKRAINE_TRAINING_HORIZON_HALF_SPAN_M : this.chunkLoadRadiusM;
   }
 
   setStreamingRadiusM(loadRadiusM) {

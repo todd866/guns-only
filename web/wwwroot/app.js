@@ -143,6 +143,7 @@ import {
   createRapier,
   createRapierDispersedStrip,
 } from "./render/scene/scene_builders.js";
+import { updateEngineAudio } from "./render/audio/engine_audio.js";
 
 const DEG = Math.PI / 180;
 const MAX_GIMBAL_YAW = PADLOCK_LIMITS.yawRad;
@@ -5323,7 +5324,12 @@ class FlightView {
       // pilot filed that as "still getting some z buffer issues I think" — it is not a depth
       // artefact, it is the edge of the map with no haze over it, and the frame governor created
       // it in Build 114 by shedding view distance without closing the visibility behind it.
-      const worldRadiusM = Number(this.terrainPresentation?.streamingRadiusM);
+      // The VISUAL edge, not the streaming edge. With a horizon apron the world continues far
+      // past the last streamed chunk, so capping fog at the chunk radius needlessly closed the
+      // view — and forcing the radius up to reopen it streamed a huge disc of chunks for terrain
+      // that is not authored out there. Falls back to the streaming radius when there is no apron.
+      const worldRadiusM = Number(this.terrainPresentation?.visibleWorldRadiusM
+        ?? this.terrainPresentation?.streamingRadiusM);
       const reportedVisibilityM = clamp(
         Math.min(
           Number(state.visibility_m) || CLEAR_AIR_VISIBILITY_M,
@@ -5452,6 +5458,9 @@ class FlightView {
           .addScaledVector(this.deckRelativeVelocity.normalize(), 10000);
       }
     }
+    // Fail-silent: engine_audio disables itself permanently on any error rather than
+    // letting an audio problem reach the flight kernel.
+    updateEngineAudio(state);
     updateCarrierRuntimePresentation(
       this.carrierRuntime,
       this.presentationAssets.carrierSlot.object,
