@@ -38,6 +38,10 @@ import {
   gunFunnelUsable,
 } from "./render/hud/gun_funnel.js";
 import { timeCompressionHudPresentation } from "./render/telemetry/time_compression.js";
+import {
+  rapierEnginePresentation,
+  rapierGuidancePresentation,
+} from "./render/mission/rapier_guidance.js";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -3341,6 +3345,100 @@ class CombatHud {
     ctx.restore();
   }
 
+  drawRapierGuidance(frame) {
+    const presentation = rapierGuidancePresentation(frame.state);
+    if (!presentation) return;
+    const engine = rapierEnginePresentation(frame.state);
+    const ctx = this.ctx;
+    const accent = presentation.level === "attack"
+      ? RED : presentation.level === "active" ? AMBER : GREEN_DIM;
+    ctx.save();
+    const gate = Math.max(0,
+      Math.floor(Number(frame.state.rapier_recovery_gate) || 0));
+    if (gate > 0
+        && Number.isFinite(frame.state.rapier_guidance_x)
+        && Number.isFinite(frame.state.rapier_guidance_y)
+        && Number.isFinite(frame.state.rapier_guidance_z)) {
+      this.worldPoint.set(
+        frame.state.rapier_guidance_x,
+        frame.state.rapier_guidance_y,
+        -frame.state.rapier_guidance_z,
+      );
+      const projectedGate = this.project(this.worldPoint, frame.camera, this.projectionA);
+      if (!projectedGate.behind) {
+        const half = [0, 76, 64, 54, 44][Math.min(4, gate)];
+        const x0 = projectedGate.x - half;
+        const x1 = projectedGate.x + half;
+        const y0 = projectedGate.y - half;
+        const y1 = projectedGate.y + half;
+        const corner = Math.max(13, half * 0.34);
+        ctx.strokeStyle = AMBER;
+        ctx.fillStyle = AMBER;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = "rgba(255, 176, 32, 0.62)";
+        ctx.shadowBlur = 9;
+        ctx.beginPath();
+        ctx.moveTo(x0 + corner, y0); ctx.lineTo(x0, y0); ctx.lineTo(x0, y0 + corner);
+        ctx.moveTo(x1 - corner, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + corner);
+        ctx.moveTo(x0, y1 - corner); ctx.lineTo(x0, y1); ctx.lineTo(x0 + corner, y1);
+        ctx.moveTo(x1, y1 - corner); ctx.lineTo(x1, y1); ctx.lineTo(x1 - corner, y1);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.font = "900 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(`GATE ${gate}/4 · FLY THROUGH`, projectedGate.x, y0 - 7);
+      }
+    }
+    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const width = Math.min(
+      this.width - this.safeInsets.left - this.safeInsets.right - 24,
+      ctx.measureText(presentation.text).width + 24,
+    );
+    const x = (this.width - width) / 2;
+    const occupied = this.annunciationBottom(frame.state);
+    const y = Math.max(this.getLayout().heading.bottom + 8, occupied + 2);
+    this.glassPanel(x, y, width, engine ? 68 : 24, accent);
+    ctx.fillStyle = accent;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(this.fitText(presentation.text, width - 18),
+      this.width / 2, y + (engine ? 10 : 12));
+    if (engine) {
+      ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = engine.level === "ram" ? AMBER : GREEN;
+      ctx.fillText(this.fitText(engine.text, width - 18),
+        this.width / 2, y + 28);
+      const channelMaxKn = Math.max(
+        100,
+        ...engine.channels.map((channel) => channel.thrustKn),
+      );
+      const labelX = x + 10;
+      const meterX = x + Math.min(112, width * 0.31);
+      const meterWidth = Math.max(48, width - (meterX - x) - 122);
+      const valueX = x + width - 9;
+      engine.channels.forEach((channel, index) => {
+        const channelY = y + 43 + index * 13;
+        const channelColor = index === 0 ? GREEN : AMBER;
+        ctx.textAlign = "left";
+        ctx.fillStyle = channelColor;
+        ctx.fillText(channel.label, labelX, channelY);
+        ctx.fillStyle = "rgba(255,255,255,0.10)";
+        ctx.fillRect(meterX, channelY - 4, meterWidth, 5);
+        ctx.fillStyle = channelColor;
+        ctx.fillRect(meterX, channelY - 4,
+          meterWidth * clamp(channel.thrustKn / channelMaxKn, 0, 1), 5);
+        ctx.textAlign = "right";
+        ctx.fillText(
+          `${channel.thrustKn.toFixed(0)} KN · ${channel.fuelPpm.toFixed(0)} LB/M`,
+          valueX,
+          channelY,
+        );
+      });
+    }
+    ctx.restore();
+  }
+
   /// Top of the annunciation stack. Banners used to land a quarter of the way down the screen —
   /// squarely over the gunsight and over the aircraft the pilot had just shot, which is the one
   /// thing the kill cam exists to show them. They now sit in the band between the bottom of the
@@ -3400,6 +3498,7 @@ class CombatHud {
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${binding("fire", "KeyF")}  GUNS   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
       `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE`,
       "T  TIME COMPRESSION ON / OFF",
+      "P  RAPIER MISSION AUTOMATION   ·   Z  SHORT-RANGE MISSILE",
     ];
     const compactLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL`,
@@ -3540,6 +3639,7 @@ class CombatHud {
     this.drawVisualMergeWeaponsCue(frame);
     this.drawFooter(frame);
     this.drawTimeCompression(frame);
+    this.drawRapierGuidance(frame);
     this.drawLegendHint();
     this.drawLegend(frame);
     this.drawModeCue(frame);

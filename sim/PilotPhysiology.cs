@@ -82,6 +82,16 @@ public sealed record PilotProtectionEquipmentProfile(
 
     public static readonly PilotProtectionEquipmentProfile ModernFastJetSurrogate = new(
         "equipment.modern-fast-jet-g-protection.surrogate.v1", 1.5, 0.20, 2.5);
+
+    /// Rapier puts the occupant nearly supine in a pressure-supported escape couch. The geometry
+    /// substantially shortens the hydrostatic head-to-heart column, while the couch and pressure
+    /// garment blunt rapid onset. This is intentionally aircraft equipment, not a superhuman
+    /// constitution: negative-G response and recovery remain those of the reference pilot.
+    public static readonly PilotProtectionEquipmentProfile RapierReclinedCouchSurrogate = new(
+        "equipment.rapier-reclined-pressure-couch.surrogate.v1",
+        ThresholdBenefitG: 8.0,
+        RapidOnsetAttenuation01: 0.85,
+        ResourceDepletionTimeMultiplier: 6.0);
 }
 
 /// <summary>
@@ -175,6 +185,13 @@ public sealed record PilotPhysiologyProfile(
         PilotConstitutionProfile.ReferenceTrainedFastJet,
         PilotProtectionEquipmentProfile.ModernFastJetSurrogate,
         PilotTechniqueProfile.TrainedAgsmSurrogate,
+        PilotImpairmentResponseProfile.Reference);
+
+    public static readonly PilotPhysiologyProfile RapierReclinedInterceptor = new(
+        "physiology.rapier-reclined-interceptor.surrogate.v1",
+        PilotConstitutionProfile.ReferenceTrainedFastJet,
+        PilotProtectionEquipmentProfile.RapierReclinedCouchSurrogate,
+        PilotTechniqueProfile.Unstrained,
         PilotImpairmentResponseProfile.Reference);
 }
 

@@ -59,6 +59,22 @@ public sealed record ArrestmentCapabilityProfile {
         maximumLineLoadN: 180_000.0,
         maximumWireDeflectionM: 3.0);
 
+    /// <summary>
+    /// Provisional high-energy gear for Rapier's purpose-built fixed arresting strip. The longer
+    /// payout and heavier machinery are credible costs paid by the ground installation; they are
+    /// not silently granted to the shorter carrier deck or inferred from the arriving aircraft.
+    /// </summary>
+    public static ArrestmentCapabilityProfile ProvisionalRapierLandStrip { get; } = new(
+        id: "PROVISIONAL_RAPIER_LAND_STRIP_V1",
+        runoutDistanceM: 180.0,
+        initialForceN: 100_000.0,
+        peakForceN: 300_000.0,
+        finalForceN: 160_000.0,
+        peakPayoutFraction: 0.55,
+        ratedEnergyJ: 35_000_000.0,
+        maximumLineLoadN: 350_000.0,
+        maximumWireDeflectionM: 4.5);
+
     /// <summary>Fixed effective braking force at a given engine payout.</summary>
     public double ForceAtPayoutN(double payoutM) {
         double u = Math.Clamp(payoutM / RunoutDistanceM, 0.0, 1.0);

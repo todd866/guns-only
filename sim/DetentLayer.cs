@@ -413,7 +413,12 @@ public sealed class DetentLayer {
                 _bankTarget = bodyBank;
                 _bankTargetInitialized = true;
             }
-            _bankTarget = bodyBank;
+            // While the pilot is rolling, let the capture target follow the aircraft. On the
+            // first centred-stick tick it remains at the last deliberately set attitude, giving
+            // the FBW attitude term a real reference instead of the old rate-only slow drift.
+            if (p.RollHoldAttitudeGainNmRad <= 0.0
+                || System.Math.Abs(requestedRollControl) >= p.RollHoldDeadband)
+                _bankTarget = bodyBank;
         } else {
             // Compatibility for synthetic command-only callers which do not carry BodyAttitude.
             // Keep their legacy integration semantics; flown AircraftSim states use the rate law above.

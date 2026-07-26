@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Sim.Propulsion;
 using GunsOnly.Sim.Training;
 using GunsOnly.Sim.Turbulence;
 
@@ -176,6 +177,18 @@ public sealed class SimulationSession {
     int _ramCueStage;
     double _transitionCueUntilMs = double.NegativeInfinity;
     double _splashCueUntilMs = double.NegativeInfinity;
+    RapierMissionDirector? _rapierMissionDirector;
+    RapierMissionGuidance _rapierMissionGuidance;
+    bool _rapierAutomationEnabled;
+    double _rapierManualOverrideUntilMs = double.NegativeInfinity;
+    int _rapierMissilesRemaining;
+    int _rapierDogfightingDronesRemaining;
+    bool _rapierMissileInFlight;
+    double _rapierMissileImpactAtMs = double.PositiveInfinity;
+    long _rapierMissileTargetSequence;
+    bool _rapierFormationSweepCommitted;
+    bool _rapierPursuitActive;
+    double _rapierPursuitRangeM = double.PositiveInfinity;
     bool _timeCompressionPilotEnabled = true;
     int _timeCompressionHostMaximumFactor = 1;
     int _timeCompressionFactor = 1;
@@ -246,7 +259,7 @@ public sealed class SimulationSession {
     Carrier.Recovery _recovery = Carrier.Recovery.Flying;
     Carrier.TouchdownResult _touchdown = Carrier.TouchdownResult.Flying;
     readonly CarrierPassRecorder _carrierPass = new();
-    readonly ArrestmentModel _arrestment = new();
+    ArrestmentModel _arrestment = new();
     CatapultLaunchModel _catapult = new();
     BurbleField? _burble;
     Carrier.DeckConfiguration _deckConfiguration;
@@ -280,9 +293,64 @@ public sealed class SimulationSession {
     public bool TimeCompressionPilotEnabled => _timeCompressionPilotEnabled;
     public bool TimeCompressionEligible =>
         _timeCompressionInhibitReason == TimeCompressionInhibitReason.None;
+    public int TimeCompressionRequestedFactor =>
+        TimeCompressionAvailable && _timeCompressionPilotEnabled
+            ? TimeCompressionPolicy.PreferredFactor : 1;
     public int TimeCompressionFactor => _timeCompressionFactor;
     public TimeCompressionInhibitReason TimeCompressionInhibitReason =>
         _timeCompressionInhibitReason;
+    public bool RapierMissionAvailable => _beat.ScriptedIntercept is not null;
+    public RapierMissionPhase RapierPhase =>
+        _rapierMissionDirector?.Phase ?? RapierMissionPhase.Unavailable;
+    public string RapierMissionCue => _rapierMissionGuidance.Cue ?? "";
+    public double RapierTargetMach => _rapierMissionGuidance.TargetMach;
+    public double RapierTargetAltitudeFt => _rapierMissionGuidance.TargetAltitudeFt;
+    public bool RapierAutomationEnabled => RapierMissionAvailable
+        && _rapierAutomationEnabled;
+    public bool RapierAutomationActive => RapierAutomationEnabled
+        && _simTimeMs >= _rapierManualOverrideUntilMs
+        && Lifecycle == LifecycleState.Active
+        && _playerTerminalState == AircraftTerminalState.Flying;
+    public int RapierMissilesRemaining => _rapierMissilesRemaining;
+    public int RapierDogfightingDronesRemaining => _rapierDogfightingDronesRemaining;
+    public bool RapierMissileInFlight => _rapierMissileInFlight;
+    public double RapierMissileTimeToImpactSeconds => _rapierMissileInFlight
+        ? Math.Max(0.0, (_rapierMissileImpactAtMs - _simTimeMs) / 1000.0)
+        : 0.0;
+    public bool RapierPursuitActive => _rapierPursuitActive;
+    public int RapierPursuerCount => _rapierPursuitActive
+        ? Math.Max(0, _beat.ScriptedIntercept?.PursuerCount ?? 0) : 0;
+    public double RapierPursuitRangeM => double.IsFinite(_rapierPursuitRangeM)
+        ? _rapierPursuitRangeM : 0.0;
+    public Vec3D RapierGuidanceWaypoint => _rapierMissionGuidance.Waypoint;
+    public int RapierRecoveryGate => _rapierMissionGuidance.RecoveryGate;
+    CombinedCycleThrustFractions RapierThrustFractions {
+        get {
+            AtmosphericState air = _player.AtmosphereModel.Sample(_player.State.Position.Y);
+            double mach = _player.AirspeedMps / Math.Max(1.0, air.SpeedOfSoundMps);
+            return TurboRamjetPerformanceMap.ThrustComponents(
+                mach, air.TemperatureK, air.DensityKgM3);
+        }
+    }
+    double RapierTurbineShare {
+        get {
+            CombinedCycleThrustFractions fractions = RapierThrustFractions;
+            return fractions.Total > 1e-9 ? fractions.Turbine / fractions.Total : 1.0;
+        }
+    }
+    public double RapierTurbineThrustN => RapierMissionAvailable
+        ? _player.LastEngineOperatingPoint.NetThrustN * RapierTurbineShare : 0.0;
+    public double RapierRamjetThrustN => RapierMissionAvailable
+        ? Math.Max(0.0, _player.LastEngineOperatingPoint.NetThrustN
+            - RapierTurbineThrustN)
+        : 0.0;
+    public double RapierTurbineFuelFlowLbPerMinute => RapierMissionAvailable
+        ? _player.LastEngineOperatingPoint.FuelFlowLbPerMinute * RapierTurbineShare
+        : 0.0;
+    public double RapierRamjetFuelFlowLbPerMinute => RapierMissionAvailable
+        ? Math.Max(0.0, _player.LastEngineOperatingPoint.FuelFlowLbPerMinute
+            - RapierTurbineFuelFlowLbPerMinute)
+        : 0.0;
     public AircraftSim Player => _player;
     public IBandit Bandit => _bandit;
     public BeatSetup Beat => _beat;
@@ -389,7 +457,9 @@ public sealed class SimulationSession {
     public string ExportDirectorState() => _fightDirector.ExportState();
     public bool TryImportDirectorState(string? state) =>
         _fightDirector.TryImportState(state);
-    public bool OpponentReplacementPending => ContinuousCombat
+    public bool OpponentReplacementPending =>
+        (_beat.ContinuousCombat is not null
+            || _wingmen.Any(static wingman => wingman.StillFighting))
         && Lifecycle == LifecycleState.Active
         && _playerTerminalState == AircraftTerminalState.Flying
         && _opponentTerminalState != AircraftTerminalState.Flying
@@ -642,6 +712,26 @@ public sealed class SimulationSession {
         return _timeCompressionPilotEnabled;
     }
 
+    public void SetRapierAutomationEnabled(bool enabled) {
+        if (!RapierMissionAvailable) return;
+        _rapierAutomationEnabled = enabled;
+        _rapierManualOverrideUntilMs = double.NegativeInfinity;
+        ShowTransition(enabled
+            ? "MISSION AUTOMATION ENGAGED"
+            : "PILOT HAS FLIGHT CONTROLS", 1800.0);
+    }
+
+    public bool ToggleRapierAutomation() {
+        SetRapierAutomationEnabled(!RapierAutomationEnabled);
+        return RapierAutomationEnabled;
+    }
+
+    void ClaimTemporaryRapierControl() {
+        if (!RapierAutomationEnabled) return;
+        _rapierManualOverrideUntilMs = Math.Max(
+            _rapierManualOverrideUntilMs, _simTimeMs + 5000.0);
+    }
+
     public void SetVariant(ValleyVariant variant) {
         _requestedVariant = variant;
         if (_carrier is null) _detents.Variant = variant;
@@ -673,6 +763,40 @@ public sealed class SimulationSession {
         _visualMergeEvaluation?.ReleaseFirstPassHold();
     }
 
+    public bool LaunchRapierShortRangeMissile() {
+        ScriptedInterceptConfig? config = _beat.ScriptedIntercept;
+        if (config is null
+            || Lifecycle != LifecycleState.Active
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _opponentTerminalState != AircraftTerminalState.Flying
+            || _rapierMissilesRemaining <= 0
+            || _rapierMissileInFlight
+            || !PlayerWeaponsAuthorized)
+            return false;
+
+        Vec3D toTarget = _bandit.State.Position - _player.State.Position;
+        double rangeM = toTarget.Length;
+        if (rangeM < config.MissileMinimumRangeM
+            || rangeM > config.MissileMaximumRangeM
+            || rangeM <= 1e-6)
+            return false;
+        double noseAlignment = _player.BodyForward.Dot(toTarget * (1.0 / rangeM));
+        if (noseAlignment < 0.72) return false;
+
+        _rapierMissilesRemaining--;
+        _rapierMissileInFlight = true;
+        _rapierMissileTargetSequence = _banditSpawnSequence;
+        // A bounded proportional-navigation surrogate: the missile remains a timed physical
+        // commitment rather than an instant delete, while the target's detailed countermeasures
+        // and seeker are explicitly outside this public-data mission.
+        double flightSeconds = Math.Clamp(rangeM / 820.0, 0.75, 18.0);
+        _rapierMissileImpactAtMs = _simTimeMs + flightSeconds * 1000.0;
+        ShowTransition(
+            $"FOX TWO · IMPACT {flightSeconds:F1} S · {_rapierMissilesRemaining} REMAIN",
+            1800.0);
+        return true;
+    }
+
     public void FeedKey(GKey key, bool pressed) {
         if (key == GKey.Restart) {
             if (pressed) Restart();
@@ -692,6 +816,12 @@ public sealed class SimulationSession {
         if (!PlayerSystemsSimulated && IsPlayerSystemsAction(key)) return;
         if (pressed && IsPilotActuatedAction(key))
             DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
+        if (pressed && key is GKey.PullUp or GKey.PushDown
+            or GKey.RollLeft or GKey.RollRight
+            or GKey.RudderLeft or GKey.RudderRight
+            or GKey.ThrottleUp or GKey.ThrottleDown
+            or GKey.Override or GKey.AutoGcasOverride)
+            ClaimTemporaryRapierControl();
         bool newPress = pressed && _keys.PhaseAt(key, _simTimeMs) == KeyPhase.Idle;
         _keys.Feed(key, pressed, _simTimeMs);
         if (key == GKey.Trigger) Trigger(pressed);
@@ -823,8 +953,11 @@ public sealed class SimulationSession {
             || _padlockRollAssist.State.Active
             || _gunneryPitchAssistState.Active
             || command.EnvelopeOverride
-            || command.DirectLateralControl
-            || Math.Abs(command.GDemand - 1.0) > 0.03
+            // The detent layer's filtered baseline starts below 1 G and converges to trim after
+            // staging. That is internal control-law settling, not pilot input. Non-baseline tiers
+            // still catch tap/hold demands after their raw key edge has gone idle.
+            || (_detents.Tier != DemandTier.Baseline
+                && Math.Abs(command.GDemand - 1.0) > 0.03)
             || Math.Abs(command.RollControl) > 0.02
             || Math.Abs(command.Rudder) > 0.02
             || double.IsFinite(command.CommandedPitchRad)
@@ -923,11 +1056,19 @@ public sealed class SimulationSession {
             && (establishedClimb || establishedCruise);
     }
 
+    bool RapierReturnTransit =>
+        _beat.ScriptedIntercept is not null
+        && _playerTerminalState == AircraftTerminalState.Flying
+        && _opponentTerminalState != AircraftTerminalState.Flying
+        && !_wingmen.Any(static wingman => wingman.StillFighting)
+        && RapierPhase is RapierMissionPhase.ReturnToBase
+            or RapierMissionPhase.Recovery;
+
     TimeCompressionSafetyState CaptureTimeCompressionSafety() => new(
         PilotEnabled: _timeCompressionPilotEnabled,
         SupportedSortie: TimeCompressionAvailable,
         SessionActive: Lifecycle == LifecycleState.Active
-            && !TerminalPhaseActive,
+            && (!TerminalPhaseActive || RapierReturnTransit),
         EstablishedTransit: IsEstablishedTransit(),
         CatapultOrConfigurationTransition: _catapult.IsActive
             || ConfigurationTransitionActive,
@@ -940,10 +1081,11 @@ public sealed class SimulationSession {
             || _opponentGun.RoundsInFlight.Count > 0,
         AutoGcasActivityOrLead: HasAutoGcasActivityOrLead(),
         DamagePresent: PlayerHitsTaken > 0
-            || _gunKill.HitCount > 0
-            || _bandit.CatastrophicallyDamaged
             || _playerTerminalState != AircraftTerminalState.Flying
-            || _opponentTerminalState != AircraftTerminalState.Flying,
+            || (!RapierReturnTransit
+                && (_gunKill.HitCount > 0
+                    || _bandit.CatastrophicallyDamaged
+                    || _opponentTerminalState != AircraftTerminalState.Flying)),
         FuelThresholdOrLead: HasFuelThresholdOrLead(),
         ControlInputBeyondTrim: HasControlInputBeyondTrim(),
         RamTransitionLead: HasRamTransitionLead());
@@ -961,7 +1103,7 @@ public sealed class SimulationSession {
         _timeCompressionFactor =
             _timeCompressionInhibitReason == TimeCompressionInhibitReason.None
                 ? Math.Clamp(_timeCompressionHostMaximumFactor,
-                    1, TimeCompressionPolicy.MaximumFactor)
+                    1, TimeCompressionRequestedFactor)
                 : 1;
         if (_timeCompressionFactor == 1)
             _timeCompressionAccumulatorSeconds = 0.0;
@@ -1018,7 +1160,7 @@ public sealed class SimulationSession {
         if (maximumCompressionFactor < 1)
             throw new ArgumentOutOfRangeException(nameof(maximumCompressionFactor));
         _timeCompressionHostMaximumFactor = Math.Clamp(
-            maximumCompressionFactor, 1, TimeCompressionPolicy.MaximumFactor);
+            maximumCompressionFactor, 1, TimeCompressionPolicy.PreferredFactor);
         UpdateTimeCompressionDecision();
         int selectedFactor = _timeCompressionFactor;
         if (Lifecycle != LifecycleState.Active) return selectedFactor;
@@ -1061,12 +1203,123 @@ public sealed class SimulationSession {
             RunFixedTick();
     }
 
+    void StepRapierMissile() {
+        if (!_rapierMissileInFlight || _simTimeMs < _rapierMissileImpactAtMs) return;
+        _rapierMissileInFlight = false;
+        _rapierMissileImpactAtMs = double.PositiveInfinity;
+        if (_rapierMissileTargetSequence != _banditSpawnSequence
+            || _opponentTerminalState != AircraftTerminalState.Flying)
+            return;
+        EmitEvent(SessionEventType.Hit,
+            CombatRole.Player, CombatRole.Opponent, count: 1);
+        _killCount++;
+        ShowTransition("MISSILE HIT · FORMATION CONTACT DOWN", 2200.0);
+        BeginCatastrophicDamage(CombatRole.Opponent, CombatRole.Player);
+    }
+
+    bool ExecuteRapierFormationSweep() {
+        ScriptedInterceptConfig? config = _beat.ScriptedIntercept;
+        if (config is null
+            || _rapierFormationSweepCommitted
+            || RapierPhase != RapierMissionPhase.Attack
+            || Lifecycle != LifecycleState.Active
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _rapierDogfightingDronesRemaining <= 0
+            || LiveOpponentCount <= 0)
+            return false;
+
+        _rapierFormationSweepCommitted = true;
+        _rapierMissilesRemaining = 0;
+        _rapierDogfightingDronesRemaining = 0;
+        _rapierMissileInFlight = false;
+        _rapierMissileImpactAtMs = double.PositiveInfinity;
+
+        // F releases Rapier's close-range dogfighting swarm. The player owns the decision; each
+        // gun-only sub-drone can prosecute more than one aircraft, so the formation is forced into
+        // several simultaneous turning fights while the carrier aircraft keeps its energy.
+        foreach (Wingman wingman in _wingmen) {
+            if (!wingman.StillFighting) continue;
+            wingman.Bandit.ApplyCatastrophicDamage(handedness: -1);
+            _killCount++;
+            EmitEvent(SessionEventType.Hit,
+                CombatRole.Player, CombatRole.Opponent, count: 1);
+            EmitEvent(SessionEventType.Destroyed,
+                CombatRole.Player, CombatRole.Opponent);
+        }
+
+        if (_opponentTerminalState == AircraftTerminalState.Flying) {
+            _killCount++;
+            EmitEvent(SessionEventType.Hit,
+                CombatRole.Player, CombatRole.Opponent, count: 1);
+            BeginCatastrophicDamage(CombatRole.Opponent, CombatRole.Player);
+        }
+
+        _rapierPursuitActive = config.PursuerCount > 0;
+        _rapierPursuitRangeM = Math.Max(0.0, config.PursuitInitialRangeM);
+        UpdateRapierMissionGuidance();
+        ShowTransition(
+            $"GUN-DRONE SWARM RELEASED · FORMATION DESTROYED · "
+                + $"{config.PursuerCount} PURSUERS IN TRAIL · RUN HOME",
+            4200.0);
+        return true;
+    }
+
+    void StepRapierPursuit() {
+        ScriptedInterceptConfig? config = _beat.ScriptedIntercept;
+        if (!_rapierPursuitActive || config is null) return;
+
+        AtmosphericState air = _player.AtmosphereModel.Sample(_player.State.Position.Y);
+        double pursuerSpeedMps = Math.Max(0.0, config.PursuerMach)
+            * Math.Max(1.0, air.SpeedOfSoundMps);
+        double openingSpeedMps = Math.Max(
+            -120.0, _player.AirspeedMps - pursuerSpeedMps);
+        _rapierPursuitRangeM = Math.Max(
+            3_000.0, _rapierPursuitRangeM + openingSpeedMps * FixedDeltaSeconds);
+
+        if (_rapierPursuitRangeM < config.PursuitEscapeRangeM) return;
+        _rapierPursuitActive = false;
+        ShowTransition(
+            $"PURSUIT BROKEN · {_rapierPursuitRangeM / 1000.0:F0} KM · RECOVER RAPIER",
+            3500.0);
+    }
+
+    void UpdateRapierMissionGuidance() {
+        if (_rapierMissionDirector is null || _carrier is null) return;
+        // A 16 km initial on the 3.5-degree recovery plane. The old 2,500 m point demanded an
+        // avoidable 9-degree dive just as the aircraft was trying to configure and slow.
+        Vec3D recoveryInitial = _carrier.LandingPoint(along: -16_000.0, height: 1_000.0);
+        bool recovered = _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped;
+        _rapierMissionGuidance = _rapierMissionDirector.Step(
+            _player.State,
+            _bandit.State,
+            _player.AirspeedMps,
+            _player.AtmosphereModel,
+            _catapult.IsActive,
+            LiveOpponentCount,
+            _rapierPursuitActive,
+            RapierPursuerCount,
+            _rapierPursuitRangeM,
+            _carrier.Position,
+            recoveryInitial,
+            recovered);
+    }
+
+    PilotCommand RapierAutomationOr(in PilotCommand pilotCommand) {
+        UpdateRapierMissionGuidance();
+        return RapierAutomationActive
+            ? _rapierMissionGuidance.Command
+            : pilotCommand;
+    }
+
     void RunFixedTick() {
         DecisionTickCapture? decisionCapture = BeginDecisionTickCapture();
         _decisionFireIntentEvaluatedThisTick = false;
         _decisionFireIntentConsumedThisTick = false;
         _decisionFireAuthorizedThisTick = false;
         StepDetachedOpponentWrecks();
+        StepRapierMissile();
+        StepRapierPursuit();
+        UpdateRapierMissionGuidance();
         StepCore();
         if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
         StepPendingTerminalDecision();
@@ -1310,6 +1563,12 @@ public sealed class SimulationSession {
         FinishPreviousRecoveryAttempt();
         _beat = setup;
         _carrier = _beat.Carrier;
+        ArrestmentCapabilityProfile arrestmentCapability =
+            _beat.ScriptedIntercept is not null
+                ? ArrestmentCapabilityProfile.ProvisionalRapierLandStrip
+                : ArrestmentCapabilityProfile.ProvisionalKoreaJet;
+        if (_arrestment.Capability.Id != arrestmentCapability.Id)
+            _arrestment = new ArrestmentModel(arrestmentCapability);
         _difficulty = DifficultyModel.ForLevel(0);
         _recoveryAttemptActive = false;
         _attemptHadSetback = false;
@@ -1378,6 +1637,8 @@ public sealed class SimulationSession {
         // director what an opening looks like rather than hard-coding a number here.
         if (_beat.ContinuousCombat is not null)
             StageWingmen(openingSpawn ?? _fightDirector.NextSpawn(1), 1);
+        else if (_beat.ScriptedIntercept is { FormationSize: > 1 } scriptedFormation)
+            StageScriptedFormation(scriptedFormation.FormationSize);
         _playerSpawnSequence++;
         _banditSpawnSequence++;
         if (_carrier is not null) _carrierSpawnSequence++;
@@ -1472,6 +1733,22 @@ public sealed class SimulationSession {
         _transitionCue = "";
         _transitionCueUntilMs = double.NegativeInfinity;
         _splashCueUntilMs = double.NegativeInfinity;
+        _rapierMissionDirector = _beat.ScriptedIntercept is null
+            ? null : new RapierMissionDirector();
+        _rapierMissionGuidance = default;
+        _rapierAutomationEnabled =
+            _beat.ScriptedIntercept?.AutomationDefaultEnabled ?? false;
+        _rapierManualOverrideUntilMs = double.NegativeInfinity;
+        _rapierMissilesRemaining =
+            Math.Max(0, _beat.ScriptedIntercept?.ShortRangeMissiles ?? 0);
+        _rapierDogfightingDronesRemaining =
+            Math.Max(0, _beat.ScriptedIntercept?.DogfightingDrones ?? 0);
+        _rapierMissileInFlight = false;
+        _rapierMissileImpactAtMs = double.PositiveInfinity;
+        _rapierMissileTargetSequence = 0;
+        _rapierFormationSweepCommitted = false;
+        _rapierPursuitActive = false;
+        _rapierPursuitRangeM = double.PositiveInfinity;
         _lastRange = Geometry.Range(_player.State, _bandit.State);
         _closureKts = 0.0;
         _closureSmooth = 0.0;
@@ -1752,6 +2029,20 @@ public sealed class SimulationSession {
         }
     }
 
+    void StageScriptedFormation(int formationSize) {
+        CombatConfig combat = _beat.CombatRules;
+        int boundedSize = Math.Clamp(formationSize, 1, 6);
+        for (int index = 1; index < boundedSize; index++) {
+            IBandit aircraft = _beat.CreateScriptedFormationBandit(index, _terrainSurface);
+            aircraft.Wind = _player.Wind;
+            aircraft.Atmosphere = _player.AtmosphereModel;
+            var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
+                combat.OpponentGunProfile.EffectiveHitRadiusM,
+                combat.OpponentGunProfile);
+            _wingmen.Add(new Wingman(aircraft, gun, _beat.BanditSkill));
+        }
+    }
+
     /// SpawnForMerge varies its geometry with the engagement number; stepping by more than the
     /// doctrine cycle keeps a wingman from landing on top of its leader.
     const int WingmanSpawnStride = 1;
@@ -1896,14 +2187,16 @@ public sealed class SimulationSession {
                 PlayerAerodynamicConfiguration, handedness: -1);
         } else if (target == CombatRole.Opponent) {
             if (_opponentTerminalState != AircraftTerminalState.Flying) return;
-            bool replacementExpected = _beat.ContinuousCombat is not null
+            bool replacementExpected = (_beat.ContinuousCombat is not null
+                    || _wingmen.Any(static wingman => wingman.StillFighting))
                 && _playerTerminalState == AircraftTerminalState.Flying;
             BeginTerminalClock(clearHeldInput: !replacementExpected);
             _opponentTerminalState = AircraftTerminalState.DestroyedAirborne;
             _bandit.ApplyCatastrophicDamage(handedness: 1);
             _splashCueUntilMs = _simTimeMs + 3000.0;
             if (replacementExpected) {
-                double delaySeconds = _beat.ContinuousCombat!.ReplacementDelaySeconds;
+                double delaySeconds = _beat.ScriptedIntercept?.KillCameraSeconds
+                    ?? _beat.ContinuousCombat!.ReplacementDelaySeconds;
                 if (!double.IsFinite(delaySeconds) || delaySeconds < 0.0)
                     throw new InvalidOperationException(
                         "Continuous-combat replacement delay must be finite and non-negative.");
@@ -2229,6 +2522,13 @@ public sealed class SimulationSession {
             return false;
         }
         if (!TerminalPhaseActive) return false;
+        // A finite Rapier formation kill is the turn point, not the finish line. Keep the
+        // surviving aircraft fully flyable through RTB and arrestment; the ordinary recovery path
+        // owns the final victory event. A later ownship loss still resolves normally.
+        if (_beat.ScriptedIntercept is { RecoveryRequired: true }
+            && _playerTerminalState == AircraftTerminalState.Flying
+            && _opponentTerminalState != AircraftTerminalState.Flying)
+            return false;
         bool playerResolved = _playerTerminalState is AircraftTerminalState.Flying
             or AircraftTerminalState.Settled
             or AircraftTerminalState.SimulationBounded;
@@ -2276,6 +2576,10 @@ public sealed class SimulationSession {
                 _nextOpponentSpawnAtMs = double.NegativeInfinity;
                 return true;
             }
+        }
+        if (_beat.ContinuousCombat is null) {
+            _nextOpponentSpawnAtMs = double.NegativeInfinity;
+            return false;
         }
 
         int nextEngagement = _engagementNumber + 1;
@@ -3415,10 +3719,17 @@ public sealed class SimulationSession {
             if (_carrier is not null) {
                 bool inSlot = _carrier.InApproachSlot(_player.State,
                     _player.IndicatedAirspeedMps);
-                if (inSlot && !WaveOffActive && _recovery != Carrier.Recovery.Bolter
-                    && _detents.Throttle < 0.95) SelectAutomaticConfigurationTarget(
+                bool rapierRecoveryConfiguration = RapierAutomationActive
+                    && RapierPhase == RapierMissionPhase.Recovery
+                    && _player.IndicatedAirspeedMps * 1.94384 <= 300.0;
+                if ((inSlot && !WaveOffActive
+                        && _recovery != Carrier.Recovery.Bolter
+                        && _detents.Throttle < 0.95)
+                    || rapierRecoveryConfiguration)
+                    SelectAutomaticConfigurationTarget(
                     FlightConfigurationTarget.Recovery);
-                _detents.ApproachMode = inSlot && _detents.Throttle < 0.95;
+                _detents.ApproachMode = inSlot && _detents.Throttle < 0.95
+                    || rapierRecoveryConfiguration;
                 var (along, _, height) = _carrier.LandingFrame(_player.State.Position);
                 double gsLineH = Math.Max(0.0,
                     -_carrier.DeckLengthM * 0.2 - along) * Carrier.GlideslopeSlope;
@@ -3435,14 +3746,16 @@ public sealed class SimulationSession {
             ConfigureAssistedFlightDetents();
             _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir,
                 _advice, FixedDeltaSeconds);
-            if (_waveOffArmed && _detents.Throttle >= 0.95) {
+            if (_waveOffArmed && _detents.Throttle >= 0.95
+                && !RapierAutomationActive) {
                 _waveOffUntilMs = _simTimeMs + 5000.0;
                 _waveOffArmed = false;
                 SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
                 if (_recoveryAttemptActive) _attemptHadSetback = true;
             }
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
-            PilotCommand assistedCommand = ApplyGunneryPitchAssist(_detents.Command);
+            PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
+            PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
             PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
             PilotCommand padlockAssistedCommand = ApplyBanditPadlockRollAssist(
                 effectiveCommand, _detents.Command.RollControl);
@@ -3643,10 +3956,17 @@ public sealed class SimulationSession {
         if (_carrier is not null) {
             bool inSlot = _carrier.InApproachSlot(
                 _player.State, _player.IndicatedAirspeedMps);
-            if (inSlot && !WaveOffActive && _recovery != Carrier.Recovery.Bolter
-                && _detents.Throttle < 0.95) SelectAutomaticConfigurationTarget(
+            bool rapierRecoveryConfiguration = RapierAutomationActive
+                && RapierPhase == RapierMissionPhase.Recovery
+                && _player.IndicatedAirspeedMps * 1.94384 <= 300.0;
+            if ((inSlot && !WaveOffActive
+                    && _recovery != Carrier.Recovery.Bolter
+                    && _detents.Throttle < 0.95)
+                || rapierRecoveryConfiguration)
+                SelectAutomaticConfigurationTarget(
                 FlightConfigurationTarget.Recovery);
-            _detents.ApproachMode = inSlot && _detents.Throttle < 0.95;
+            _detents.ApproachMode = inSlot && _detents.Throttle < 0.95
+                || rapierRecoveryConfiguration;
             if (_detents.ApproachMode) _waveOffArmed = true;
             else if (!inSlot && _detents.Throttle < 0.95) _waveOffArmed = false;
             var (gsAlong, _, gsHeight) = _carrier.LandingFrame(_player.State.Position);
@@ -3668,7 +3988,8 @@ public sealed class SimulationSession {
                 _detents.EffectiveOnSpeedAoARad(_beat.PlayerAir);
         _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir, _advice,
             FixedDeltaSeconds);
-        if (_waveOffArmed && _detents.Throttle >= 0.95) {
+        if (_waveOffArmed && _detents.Throttle >= 0.95
+            && !RapierAutomationActive) {
             _waveOffUntilMs = _simTimeMs + 5000.0;
             _waveOffArmed = false;
             SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
@@ -3678,14 +3999,16 @@ public sealed class SimulationSession {
 
         AircraftState previousPlayerState = _player.State;
         AircraftState previousOpponentState = _bandit.State;
-        PilotCommand assistedCommand = ApplyGunneryPitchAssist(_detents.Command);
+        PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
+        PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
         PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
         PilotCommand padlockAssistedCommand = ApplyBanditPadlockRollAssist(
             effectiveCommand, _detents.Command.RollControl);
         PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
+        bool formationSweep = _triggerDown && ExecuteRapierFormationSweep();
         bool assistedTrigger = _assistedFlight && _gunKill.GunSolution;
         StepWeapons(previousPlayerState, previousOpponentState,
-            _triggerDown || assistedTrigger);
+            !formationSweep && (_triggerDown || assistedTrigger));
         PreparePlayerForPoweredTick();
         _player.Step(flightCommand, FixedDeltaSeconds);
         StepPilotPhysiologyFromAircraft();

@@ -793,6 +793,9 @@ const recorder = {
     try {
       const summary = this._framePerf.observe(deltaMs, performance.now());
       if (!summary) return;
+      // Read-only browser QA seam: phase ownership of a reported hitch can be inspected without
+      // making the recorder or kernel mutable from the page.
+      document.documentElement.dataset.framePerf = JSON.stringify(summary);
       if (this.buf.length >= TELEMETRY_BUFFER_LIMIT) return;
       this.ensureHeader();
       this.enqueue({ k: "perf", t: Math.round(performance.now()), ...summary });
@@ -1541,10 +1544,10 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "rapier-intercept": Object.freeze({
     kicker: "2030s Ukraine · deep-rear dispersed basing",
     title: "Rapier Intercept",
-    sortie: "Rapier turbo-ramjet interceptor · catapult launch · guns only · hook recovery",
-    configuration: "Rapier public-data surrogate · 2,700 kg fuel · 12 G structural, 15 G on override · 520 m electromagnetic launcher to 150 m/s",
-    brief: "The ramjet works only if you bring it thin air. Climb around M0.90 to FL560 (56,000 ft), level off at full augmentation, and accelerate through ram light at M1.6 to full ram at M2.2. Then climb on ram power to FL700 cruise before the dive. Trying to accelerate around FL315 leaves drag above available thrust; more throttle is not the answer. The Rapier carries enormous instantaneous G and almost no sustained G — it can point at anything once, for three to five seconds. Make the pass count, then recover on the hook.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nM0.90 → FL560 · level to M2.2 · ram climb to FL700 · then one pass",
+    sortie: "Rapier turbo-ramjet interceptor · four-aircraft formation · one-pass sweep · pursued recovery",
+    configuration: "Fictional uprated TBCC Rapier · Mach 4 design dash · 4 reusable gun-only dogfighting drones · 480 ownship rounds · 4,400 LB launch fuel",
+    brief: "Mission automation owns the long profile by default: use full augmentation to launch, climb around M0.90 to FL560 (56,000 ft), and drive cleanly through the transonic drag rise. RAM LIGHT begins at M1.6 and full ram arrives at M2.2; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the altitude profile, ram-climb to FL700, and dash at Mach 4. Mach and KTAS, range, closure, and intercept ETA stay visible throughout the long leg. At the four-ship formation, press F once to release Rapier's gun-drone swarm. Several autonomous gunfighters peel into simultaneous close fights; each can kill multiple aircraft while Rapier preserves its energy and keeps going. Any surviving interceptors have to fight through the swarm before they can pursue. Run home faster than they can, descend onto the deliberately tight fuel plan, and fly through marshal, lineup, then four large square gates into wire three. The sortie is not won until Rapier is stopped on the arresting strip. Any flight-control input takes authority temporarily, and P explicitly engages or disengages automation.",
+    controls: "P mission automation · F release gun-drone swarm · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -3183,6 +3186,8 @@ class PresentationAssetManager {
     // The second aircraft of a formation wave. Same presentation as the primary — it is the same
     // kind of jet — but its own slot so both can be drawn at once.
     this.wingmanSlot = this.createSlot("wingman", DEFAULT_TARGET_PRESENTATION_ID, createDrone);
+    this.wingman2Slot = this.createSlot("wingman-2", DEFAULT_TARGET_PRESENTATION_ID, createDrone);
+    this.wingman3Slot = this.createSlot("wingman-3", DEFAULT_TARGET_PRESENTATION_ID, createDrone);
     this.carrierSlot = this.createSlot("carrier", DEFAULT_CARRIER_PRESENTATION_ID, createCarrier);
     this.escortSlot = this.createSlot("escort", DEFAULT_ESCORT_PRESENTATION_ID,
       createHiddenPresentation);
@@ -3190,6 +3195,8 @@ class PresentationAssetManager {
     this.playerExteriorSlot.root.visible = false;
     this.targetSlot.root.visible = false;
     this.wingmanSlot.root.visible = false;
+    this.wingman2Slot.root.visible = false;
+    this.wingman3Slot.root.visible = false;
     this.carrierSlot.root.visible = false;
     this.escortSlot.root.visible = false;
 
@@ -3445,6 +3452,8 @@ class PresentationAssetManager {
       this.playerExteriorSlot,
       this.targetSlot,
       this.wingmanSlot,
+      this.wingman2Slot,
+      this.wingman3Slot,
       this.carrierSlot,
       this.escortSlot,
       ...this.dynamicSlots,
@@ -3658,6 +3667,8 @@ class PresentationAssetManager {
     this.resolveSlot(this.cockpitSlot);
     this.resolveSlot(this.targetSlot);
     if (this.wingmanSlot.root.visible) this.resolveSlot(this.wingmanSlot);
+    if (this.wingman2Slot.root.visible) this.resolveSlot(this.wingman2Slot);
+    if (this.wingman3Slot.root.visible) this.resolveSlot(this.wingman3Slot);
     this.resolveSlot(this.carrierSlot);
     this.resolveSlot(this.escortSlot);
     for (const slot of this.dynamicSlots) {
@@ -3711,7 +3722,17 @@ class PresentationAssetManager {
     this.setPresentation(
       this.wingmanSlot,
       this.requested.banditPresentationId,
-      `${this.requested.banditEntityId}.wingman`,
+      `${this.requested.banditEntityId}.wingman.1`,
+    );
+    this.setPresentation(
+      this.wingman2Slot,
+      this.requested.banditPresentationId,
+      `${this.requested.banditEntityId}.wingman.2`,
+    );
+    this.setPresentation(
+      this.wingman3Slot,
+      this.requested.banditPresentationId,
+      `${this.requested.banditEntityId}.wingman.3`,
     );
     this.setPresentation(
       this.carrierSlot,
@@ -3733,6 +3754,8 @@ class PresentationAssetManager {
     // Admission gate for asset resolution, not merely a draw toggle: a 1v1 wave must not pay for
     // a second aircraft's assets at all.
     this.wingmanSlot.root.visible = state.w1_present === 1;
+    this.wingman2Slot.root.visible = state.w2_present === 1;
+    this.wingman3Slot.root.visible = state.w3_present === 1;
     this.carrierSlot.root.visible = state.recovery_platform === true;
     // A hidden decorative escort must not even enter asset resolution: visibility here is the
     // resolver's admission gate, not merely a later draw toggle in FlightView.update().
@@ -3790,6 +3813,8 @@ class PresentationAssetManager {
       this.playerExteriorSlot,
       this.targetSlot,
       this.wingmanSlot,
+      this.wingman2Slot,
+      this.wingman3Slot,
       this.carrierSlot,
       this.escortSlot,
       ...this.dynamicSlots,
@@ -4187,9 +4212,15 @@ class FlightView {
     this.banditQuaternion = new THREE.Quaternion();
     this.wingmanPosition = new THREE.Vector3();
     this.wingmanQuaternion = new THREE.Quaternion();
+    this.wingman2Position = new THREE.Vector3();
+    this.wingman2Quaternion = new THREE.Quaternion();
+    this.wingman3Position = new THREE.Vector3();
+    this.wingman3Quaternion = new THREE.Quaternion();
     this.playerFrame = this.createAttitudeFrame();
     this.banditFrame = this.createAttitudeFrame();
     this.wingmanFrame = this.createAttitudeFrame();
+    this.wingman2Frame = this.createAttitudeFrame();
+    this.wingman3Frame = this.createAttitudeFrame();
     this.banditEntityId = "";
     this.playerEntityId = "";
     this.banditWasAlive = true;
@@ -5213,6 +5244,16 @@ class FlightView {
       this.wingmanQuaternion.copy(
         this.frameFromState(state, "w1", this.wingmanFrame).quaternion);
     }
+    if (state.w2_present === 1) {
+      this.wingman2Position.set(state.w2x, state.w2y, -state.w2z);
+      this.wingman2Quaternion.copy(
+        this.frameFromState(state, "w2", this.wingman2Frame).quaternion);
+    }
+    if (state.w3_present === 1) {
+      this.wingman3Position.set(state.w3x, state.w3y, -state.w3z);
+      this.wingman3Quaternion.copy(
+        this.frameFromState(state, "w3", this.wingman3Frame).quaternion);
+    }
     if (state.lead_valid === true && Number.isFinite(state.lead_x)
       && Number.isFinite(state.lead_y) && Number.isFinite(state.lead_z)) {
       this.leadPipper.set(state.lead_x, state.lead_y, -state.lead_z);
@@ -5489,6 +5530,24 @@ class FlightView {
       wingmanRoot.quaternion.copy(this.wingmanQuaternion);
       wingmanRoot.scale.setScalar(1);
       wingmanRoot.updateMatrixWorld(true);
+    }
+    const wingman2Root = this.presentationAssets.wingman2Slot.root;
+    const wingman2Present = state.w2_present === 1 && state.w2_alive === 1;
+    wingman2Root.visible = wingman2Present;
+    if (wingman2Present) {
+      wingman2Root.position.copy(this.wingman2Position);
+      wingman2Root.quaternion.copy(this.wingman2Quaternion);
+      wingman2Root.scale.setScalar(1);
+      wingman2Root.updateMatrixWorld(true);
+    }
+    const wingman3Root = this.presentationAssets.wingman3Slot.root;
+    const wingman3Present = state.w3_present === 1 && state.w3_alive === 1;
+    wingman3Root.visible = wingman3Present;
+    if (wingman3Present) {
+      wingman3Root.position.copy(this.wingman3Position);
+      wingman3Root.quaternion.copy(this.wingman3Quaternion);
+      wingman3Root.scale.setScalar(1);
+      wingman3Root.updateMatrixWorld(true);
     }
     // Keep authored geometry at physical scale. A separate depth-tested contact owns the exact
     // 8–14 px readability floor and fades with hysteresis at the mesh hand-off.
@@ -6406,7 +6465,8 @@ function installInput(view) {
     // dialog's mission buttons from leaking into flight shortcuts or launching the previous card.
     if (nativeInteractiveOwnsKey(event)) return;
     if (keyMap.has(event.code)
-      || ["BracketLeft", "BracketRight", "F1", "Enter", "NumpadEnter", "Escape", "KeyT"].includes(event.code)) {
+      || ["BracketLeft", "BracketRight", "F1", "Enter", "NumpadEnter", "Escape",
+        "KeyT", "KeyP"].includes(event.code)) {
       event.preventDefault();
     }
     if (event.repeat || !bridge) return;
@@ -6431,6 +6491,12 @@ function installInput(view) {
     if (event.code === "KeyT") {
       const enabled = bridge.ToggleTimeCompression();
       recorder.event("time-compression", enabled ? "enabled" : "disabled");
+      return;
+    }
+
+    if (event.code === "KeyP") {
+      const enabled = bridge.ToggleRapierAutomation();
+      recorder.event("rapier-automation", enabled ? "enabled" : "disabled");
       return;
     }
 
@@ -6614,6 +6680,14 @@ async function boot() {
       return hotFrameCopy;
     },
     fetchColdState: () => JSON.parse(bridge.GetState()),
+    // A quiet/settled renderer may have its animation frames throttled by the browser. Keep the
+    // correctness fallback on a wall-clock timer as well as on version edges so cold strings and
+    // events cannot remain stale merely because terrain work stopped producing frames.
+    backgroundFallback: true,
+    // Full JSON is a correctness backstop, not a 4 Hz render input. At 250 ms the large snapshot
+    // parse monopolised the main thread during Rapier's gallery launch and produced the recorded
+    // 3–5 fps cadence even after the adaptive renderer had disabled shadows and scenery.
+    fallbackMs: 5_000,
   });
   incidentReplay = new IncidentReplayController((clipId) => bridge.ConsumeIncidentReplay(clipId));
   // QA hook: browser automation confirms the JSON cold path actually went low-rate.
@@ -6700,6 +6774,7 @@ async function boot() {
   });
   window.addEventListener("pagehide", () => {
     multiplayer?.stop();
+    snapshotSource?.dispose?.();
     void view.dispose();
   }, { once: true });
 

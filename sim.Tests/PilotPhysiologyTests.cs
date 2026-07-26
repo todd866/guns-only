@@ -49,6 +49,21 @@ public class PilotPhysiologyTests {
     }
 
     [Fact]
+    public void RapierReclinedCouchKeepsThePilotConsciousThroughStructuralLimitWork() {
+        var model = new PilotPhysiologyModel(
+            PilotPhysiologyProfile.RapierReclinedInterceptor);
+
+        PilotPhysiologyState state = Hold(model, 12.0, 15.0);
+
+        Assert.Equal(0.0, state.AbsoluteIncapacitationRemainingSeconds);
+        Assert.True(state.Consciousness01 > 0.99);
+        Assert.True(state.ControlAuthority01 > 0.95);
+        Assert.NotEqual(PilotVisualImpairment.Blackout, state.VisualImpairment);
+        Assert.Equal(PilotControlImpairment.Normal, state.ControlImpairment);
+        Assert.Equal(13.4, state.EffectivePositiveLossOfConsciousnessG, 12);
+    }
+
+    [Fact]
     public void PositiveGProgressivelyConsumesVisionThenControlAndIntegratesDose() {
         var model = new PilotPhysiologyModel(
             PilotPhysiologyProfile.UnprotectedReference);

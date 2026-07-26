@@ -24,13 +24,17 @@ public class TimeCompressionTests {
         BeatSetup cruise = baseline with {
             Player = baseline.Player with {
                 Position = new Vec3D(0.0, 15_000.0, 0.0),
-                Speed = 800.0,
+                // M1.35-ish is established supersonic transit but is not inside the M1.6
+                // ram-light handover lead. A fixture at M2.7 accidentally tested transition
+                // protection instead of uneventful cruise.
+                Speed = 400.0,
                 Gamma = 0.0,
                 Chi = 0.0,
                 Bank = 0.0
             },
             Carrier = null,
-            StartsOnCatapult = false
+            StartsOnCatapult = false,
+            ScriptedIntercept = null
         };
         var session = new SimulationSession();
         session.StartBeat(() => cruise);
@@ -44,8 +48,11 @@ public class TimeCompressionTests {
 
         int selected = session.Advance(SimulationSession.FixedDeltaSeconds, 8);
 
-        Assert.Equal(8, selected);
-        Assert.Equal(8, session.TimeCompressionFactor);
+        Assert.True(selected == 8,
+            $"expected 8x, got {selected}x: {session.TimeCompressionInhibitReason}");
+        Assert.True(session.TimeCompressionFactor == 8,
+            $"compression handed back during quiet transit: "
+                + session.TimeCompressionInhibitReason);
         Assert.True(session.TimeCompressionEligible);
         Assert.Equal(8, session.Tick);
     }

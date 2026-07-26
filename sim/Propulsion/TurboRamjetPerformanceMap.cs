@@ -1,7 +1,8 @@
 namespace GunsOnly.Sim.Propulsion;
 
 /// <summary>
-/// Core-bypass turbo-ramjet: one inlet, one nozzle, a turbine core that keeps running while
+/// Variable-geometry turbine-based combined-cycle engine: one inlet, one nozzle, a turbine core
+/// that keeps running while
 /// progressively more inlet air is bypassed around it into a ram combustor. Broadly the J58
 /// operating principle, smaller and with a ceramic-matrix hot section assumed.
 ///
@@ -18,20 +19,31 @@ namespace GunsOnly.Sim.Propulsion;
 ///
 /// Provisional surrogate. The fade schedules, capture ceiling and ram ratio are transparent
 /// stand-ins for an engine deck, not a claim about the J58 or any other engine.
-internal static class TurboRamjetPerformanceMap {
+public readonly record struct CombinedCycleThrustFractions(double Turbine, double Ramjet) {
+    public double Total => Turbine + Ramjet;
+}
+
+public static class TurboRamjetPerformanceMap {
     /// Turbine contribution begins fading once ram compression starts heating the inlet air beyond
     /// what a ceramic hot section wants to see, and is gone by the time the ram duct owns the flow.
     public const double TurbineFadeStartMach = 1.9;
-    public const double TurbineGoneMach = 2.7;
+    public const double TurbineGoneMach = 3.0;
     /// Ram combustion becomes worth lighting here and owns the flow by FullRamMach. Deliberately
     /// OVERLAPS the turbine fade — that overlap is the repeatability.
     public const double RamFadeStartMach = 1.6;
     public const double FullRamMach = 2.2;
     /// Net ram-mode thrust at the design point, as a fraction of sea-level static dry turbine thrust.
-    public const double RamDesignThrustRatio = 0.42;
-    public const double DesignMach = 2.6;
-    public const double DesignAltitudeM = 21_500.0;
-    public const double BurnerTemperatureK = 2200.0;
+    public const double RamDesignThrustRatio = 1.05;
+    public const double DesignMach = 4.0;
+    public const double DesignAltitudeM = 24_000.0;
+    public const double BurnerTemperatureK = 3000.0;
+
+    /// The translating inlet does not offer the ram duct full capture area in dense air. Below the
+    /// launch climb it stays substantially spilled to keep diffuser pressure and hot-section load
+    /// inside limits; the schedule opens between roughly FL300 and FL500. This is what makes
+    /// "climb before accelerating" a real aircraft constraint instead of briefing prose.
+    public const double RamCaptureLockedDensityRatio = 0.38;
+    public const double RamCaptureFullDensityRatio = 0.20;
 
     /// A FIXED-GEOMETRY INLET CANNOT SWALLOW UNLIMITED AIR. Captured mass flow scales with density
     /// and Mach only until the duct chokes; past that the excess is spilled around the cowl and does
@@ -59,11 +71,14 @@ internal static class TurboRamjetPerformanceMap {
         return mach * mach * (System.Math.Sqrt(ratio) - 1.0) * InletRecovery(mach);
     }
 
-    /// Total available thrust as a fraction of sea-level static dry thrust.
-    public static double ThrustFraction(double mach, double ambientTemperatureK,
+    /// Available turbine and ramjet thrust as fractions of sea-level static dry thrust.
+    public static CombinedCycleThrustFractions ThrustComponents(
+        double mach, double ambientTemperatureK,
         double ambientDensityKgM3) {
-        if (!double.IsFinite(mach) || mach < 0.0) return 0.0;
-        if (!double.IsFinite(ambientTemperatureK) || !double.IsFinite(ambientDensityKgM3)) return 0.0;
+        if (!double.IsFinite(mach) || mach < 0.0)
+            return new CombinedCycleThrustFractions();
+        if (!double.IsFinite(ambientTemperatureK) || !double.IsFinite(ambientDensityKgM3))
+            return new CombinedCycleThrustFractions();
         double densityRatio = ambientDensityKgM3 / AirData.SeaLevelDensityKgM3;
 
         // Turbine: the existing house lapse (sqrt density, bounded ram recovery), faded out as the
@@ -81,11 +96,28 @@ internal static class TurboRamjetPerformanceMap {
         if (designGroup > 0.0) {
             double capturedDensityRatio = System.Math.Min(densityRatio,
                 designDensityRatio * CaptureDensityCeiling);
+            double captureSchedule = Fade(
+                RamCaptureLockedDensityRatio - densityRatio,
+                0.0,
+                RamCaptureLockedDensityRatio - RamCaptureFullDensityRatio);
             ram = RamGroup(mach, ambientTemperatureK) * capturedDensityRatio / designGroup
-                * RamDesignThrustRatio * Fade(mach, RamFadeStartMach, FullRamMach);
+                * RamDesignThrustRatio
+                * captureSchedule
+                * Fade(mach, RamFadeStartMach, FullRamMach);
+            // The translating inlet is scheduled around one design dash, not an unlimited
+            // accelerator. Past M4 it progressively spills the captured stream to hold diffuser
+            // temperature and keep the fictional aircraft near its plot speed even at full lever.
+            ram *= 1.0 - Fade(mach, DesignMach, DesignMach + 0.18);
         }
-        return System.Math.Max(0.0, turbine + ram);
+        return new CombinedCycleThrustFractions(
+            System.Math.Max(0.0, turbine),
+            System.Math.Max(0.0, ram));
     }
+
+    /// Total available thrust as a fraction of sea-level static dry thrust.
+    public static double ThrustFraction(double mach, double ambientTemperatureK,
+        double ambientDensityKgM3) =>
+        ThrustComponents(mach, ambientTemperatureK, ambientDensityKgM3).Total;
 
     public static EngineOperatingPoint Evaluate(double commandedFraction, double staticThrustN,
         double mach, double ambientTemperatureK, double ambientDensityKgM3,
@@ -103,8 +135,11 @@ internal static class TurboRamjetPerformanceMap {
                 afterburnerFuelFlowLbPerMinute - militaryFuelFlowLbPerMinute) * augmented;
         }
         return new EngineOperatingPoint(
-            Rpm: 100.0 * core,
-            RpmPercent: 100.0 * core,
+            // Lever zero is ground/flight idle, not a stopped core. Keeping the turbine above the
+            // generator and hydraulic cut-in is what lets a powered Rapier extend its recovery
+            // configuration while the thrust command is near idle.
+            Rpm: 55.0 + 45.0 * core,
+            RpmPercent: 55.0 + 45.0 * core,
             NetThrustN: thrustN,
             NetThrustLbf: thrustN / J47PerformanceMap.NewtonsPerPoundForce,
             FuelFlowLbPerMinute: System.Math.Max(0.0, fuelFlow),

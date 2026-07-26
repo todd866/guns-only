@@ -101,12 +101,40 @@ export function createHotSnapshotSource({
   readHotFrame,
   fetchColdState,
   fallbackMs = 250,
+  backgroundFallback = false,
 }) {
   const layout = parseHotLayout(layoutJson);
   let coldBase = null;
   let coldVersion = null;
   let coldAtMs = -Infinity;
   let coldFetches = 0;
+  let fallbackTimer = 0;
+
+  const clockNow = () => globalThis.performance?.now?.() ?? Date.now();
+  const armFallback = () => {
+    if (!backgroundFallback || !(fallbackMs > 0)) return;
+    if (fallbackTimer) globalThis.clearTimeout(fallbackTimer);
+    fallbackTimer = globalThis.setTimeout(() => {
+      fallbackTimer = 0;
+      const hot = readHotFrame();
+      coldBase = fetchColdState();
+      coldVersion = hot[layout.coldVersionIndex];
+      coldAtMs = clockNow();
+      coldFetches += 1;
+      armFallback();
+    }, fallbackMs);
+    // Node's timer object supports unref; browsers return a numeric handle. This keeps pure-module
+    // tests from being held open if a caller forgets to dispose a background source.
+    fallbackTimer?.unref?.();
+  };
+
+  const refreshCold = (hot, version, nowMs) => {
+    coldBase = fetchColdState();
+    coldVersion = version;
+    coldAtMs = nowMs;
+    coldFetches += 1;
+    armFallback();
+  };
 
   return {
     layout,
@@ -115,16 +143,17 @@ export function createHotSnapshotSource({
       const version = hot[layout.coldVersionIndex];
       if (coldBase === null || version !== coldVersion
         || !(nowMs - coldAtMs < fallbackMs)) {
-        coldBase = fetchColdState();
-        coldVersion = version;
-        coldAtMs = nowMs;
-        coldFetches += 1;
+        refreshCold(hot, version, nowMs);
       }
       return decodeHotFrame(layout, hot, coldBase);
     },
     // QA/diagnostics only — lets browser automation confirm the cold path went low-rate.
     diagnostics() {
       return { coldFetches, coldVersion, coldAtMs, slotCount: layout.slotCount };
+    },
+    dispose() {
+      if (fallbackTimer) globalThis.clearTimeout(fallbackTimer);
+      fallbackTimer = 0;
     },
   };
 }

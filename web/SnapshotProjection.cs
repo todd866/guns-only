@@ -165,6 +165,9 @@ internal static class SnapshotProjection {
         double equivalentAirspeedMps = AirData.EquivalentAirspeedMps(
             trueAirspeedMps, playerPosition.Y, atmosphere);
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
+        double rapierStagnationTempC =
+            atmosphericState.TemperatureK * (1.0 + 0.2 * mach * mach) - 273.15;
+        const double RapierThermalLimitC = 900.0;
         Vec3D localWindVelocity = groundVelocity - airVelocity;
         CloudSample localCloud = (Session.Weather?.Clouds ?? ClearCloudField.Instance)
             .Sample(playerPosition, _simTimeMs / 1000.0);
@@ -297,8 +300,34 @@ internal static class SnapshotProjection {
             + $"\"time_compression_available\":{(Session.TimeCompressionAvailable ? "true" : "false")},"
             + $"\"time_compression_enabled\":{(Session.TimeCompressionPilotEnabled ? "true" : "false")},"
             + $"\"time_compression_eligible\":{(Session.TimeCompressionEligible ? "true" : "false")},"
+            + $"\"time_compression_requested_factor\":{Session.TimeCompressionRequestedFactor},"
             + $"\"time_compression_factor\":{Session.TimeCompressionFactor},"
             + $"\"time_compression_inhibit_reason\":\"{TimeCompressionInhibitToken(Session.TimeCompressionInhibitReason)}\","
+            + $"\"rapier_mission_available\":{(Session.RapierMissionAvailable ? "true" : "false")},"
+            + $"\"rapier_automation_enabled\":{(Session.RapierAutomationEnabled ? "true" : "false")},"
+            + $"\"rapier_automation_active\":{(Session.RapierAutomationActive ? "true" : "false")},"
+            + $"\"rapier_mission_phase\":{(int)Session.RapierPhase},"
+            + $"\"rapier_mission_phase_name\":\"{Session.RapierPhase.ToString().ToUpperInvariant()}\","
+            + $"\"rapier_mission_cue\":{JsonString(Session.RapierMissionCue)},"
+            + $"\"rapier_target_mach\":{Session.RapierTargetMach:F2},"
+            + $"\"rapier_target_altitude_ft\":{Session.RapierTargetAltitudeFt:F0},"
+            + $"\"rapier_missiles_remaining\":{Session.RapierMissilesRemaining},"
+            + $"\"rapier_gun_drones_remaining\":{Session.RapierDogfightingDronesRemaining},"
+            + $"\"rapier_missile_in_flight\":{(Session.RapierMissileInFlight ? "true" : "false")},"
+            + $"\"rapier_missile_tti_s\":{Session.RapierMissileTimeToImpactSeconds:F2},"
+            + $"\"rapier_pursuit_active\":{(Session.RapierPursuitActive ? "true" : "false")},"
+            + $"\"rapier_pursuer_count\":{Session.RapierPursuerCount},"
+            + $"\"rapier_pursuit_range_m\":{Session.RapierPursuitRangeM:F1},"
+            + $"\"rapier_guidance_x\":{Session.RapierGuidanceWaypoint.X:F3},"
+            + $"\"rapier_guidance_y\":{Session.RapierGuidanceWaypoint.Y:F3},"
+            + $"\"rapier_guidance_z\":{Session.RapierGuidanceWaypoint.Z:F3},"
+            + $"\"rapier_recovery_gate\":{Session.RapierRecoveryGate},"
+            + $"\"rapier_turbine_thrust_kn\":{Session.RapierTurbineThrustN / 1000.0:F2},"
+            + $"\"rapier_ramjet_thrust_kn\":{Session.RapierRamjetThrustN / 1000.0:F2},"
+            + $"\"rapier_turbine_fuel_ppm\":{Session.RapierTurbineFuelFlowLbPerMinute:F2},"
+            + $"\"rapier_ramjet_fuel_ppm\":{Session.RapierRamjetFuelFlowLbPerMinute:F2},"
+            + $"\"rapier_stagnation_temp_c\":{rapierStagnationTempC:F0},"
+            + $"\"rapier_thermal_margin_c\":{RapierThermalLimitC - rapierStagnationTempC:F0},"
             + $"\"ready\":{(ready ? "true" : "false")},\"paused\":{(paused ? "true" : "false")},"
             + $"\"finished\":{(finished ? "true" : "false")},\"session_phase\":\"{sessionPhase}\","
             + $"\"sortie_outcome\":\"{SortieOutcomeToken(Session.Outcome)}\","
@@ -321,7 +350,9 @@ internal static class SnapshotProjection {
             + $"\"bx\":{b.Position.X:F3},\"by\":{b.Position.Y:F3},\"bz\":{b.Position.Z:F3},"
             + $"\"bfx\":{bf.X:F5},\"bfy\":{bf.Y:F5},\"bfz\":{bf.Z:F5},"
             + $"\"blx\":{bl.X:F5},\"bly\":{bl.Y:F5},\"blz\":{bl.Z:F5},"
-            + WingmanJson()
+            + WingmanJson(0, "w1")
+            + WingmanJson(1, "w2")
+            + WingmanJson(2, "w3")
             + $"\"buffet_pitch_deg\":{_player.PitchBuffetRad * 57.2958:F3},\"buffet_roll_deg\":{_player.RollBuffetRad * 57.2958:F3},\"buffet_yaw_deg\":{_player.YawBuffetRad * 57.2958:F3},"
             + $"\"indicated_airspeed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
             // The current pitot/static model has no aircraft-specific indication-error card, so
@@ -822,31 +853,34 @@ internal static class SnapshotProjection {
     /// Session-owned spawn sequences yield a fresh entity ID on the exact snapshot where a logical
     /// vehicle replaces the prior one, including restart and crash respawn. This keeps render-
     /// instance lifetime out of display names, coordinates, and resettable mission counters.
-    /// The second aircraft of a formation wave. Mirrors SnapshotHotFrame's w1_* block field for
-    /// field — the two wire formats are parity-checked against each other, and the renderer reads
-    /// whichever one it was handed.
-    static string WingmanJson() {
+    /// An additional aircraft of a formation wave. Mirrors SnapshotHotFrame's fixed w1..w3 slots
+    /// field for field — the two wire formats are parity-checked against each other, and the
+    /// renderer reads whichever one it was handed.
+    static string WingmanJson(int index, string prefix) {
         GunsOnly.Sim.Doctrine.Wingman? wingman =
-            Session.Wingmen.Count > 0 ? Session.Wingmen[0] : null;
+            Session.Wingmen.Count > index ? Session.Wingmen[index] : null;
         if (wingman is null)
-            return "\"w1_present\":0,\"w1x\":0.000,\"w1y\":0.000,\"w1z\":0.000,"
-                + "\"w1fx\":0.00000,\"w1fy\":1.00000,\"w1fz\":0.00000,"
-                + "\"w1lx\":0.00000,\"w1ly\":1.00000,\"w1lz\":0.00000,\"w1_alive\":0,";
+            return $"\"{prefix}_present\":0,\"{prefix}x\":0.000,"
+                + $"\"{prefix}y\":0.000,\"{prefix}z\":0.000,"
+                + $"\"{prefix}fx\":0.00000,\"{prefix}fy\":1.00000,"
+                + $"\"{prefix}fz\":0.00000,\"{prefix}lx\":0.00000,"
+                + $"\"{prefix}ly\":1.00000,\"{prefix}lz\":0.00000,"
+                + $"\"{prefix}_alive\":0,";
         AircraftState state = wingman.Bandit.State;
         Vec3D forward = state.ForwardDir();
         Vec3D lift = wingman.Bandit.LiftDir;
         var invariant = System.Globalization.CultureInfo.InvariantCulture;
-        return "\"w1_present\":1,"
-            + $"\"w1x\":{state.Position.X.ToString("F3", invariant)},"
-            + $"\"w1y\":{state.Position.Y.ToString("F3", invariant)},"
-            + $"\"w1z\":{state.Position.Z.ToString("F3", invariant)},"
-            + $"\"w1fx\":{forward.X.ToString("F5", invariant)},"
-            + $"\"w1fy\":{forward.Y.ToString("F5", invariant)},"
-            + $"\"w1fz\":{forward.Z.ToString("F5", invariant)},"
-            + $"\"w1lx\":{lift.X.ToString("F5", invariant)},"
-            + $"\"w1ly\":{lift.Y.ToString("F5", invariant)},"
-            + $"\"w1lz\":{lift.Z.ToString("F5", invariant)},"
-            + $"\"w1_alive\":{(wingman.StillFighting ? 1 : 0)},";
+        return $"\"{prefix}_present\":1,"
+            + $"\"{prefix}x\":{state.Position.X.ToString("F3", invariant)},"
+            + $"\"{prefix}y\":{state.Position.Y.ToString("F3", invariant)},"
+            + $"\"{prefix}z\":{state.Position.Z.ToString("F3", invariant)},"
+            + $"\"{prefix}fx\":{forward.X.ToString("F5", invariant)},"
+            + $"\"{prefix}fy\":{forward.Y.ToString("F5", invariant)},"
+            + $"\"{prefix}fz\":{forward.Z.ToString("F5", invariant)},"
+            + $"\"{prefix}lx\":{lift.X.ToString("F5", invariant)},"
+            + $"\"{prefix}ly\":{lift.Y.ToString("F5", invariant)},"
+            + $"\"{prefix}lz\":{lift.Z.ToString("F5", invariant)},"
+            + $"\"{prefix}_alive\":{(wingman.StillFighting ? 1 : 0)},";
     }
 
     static string PresentationContractJson(bool hasCarrier) {

@@ -98,6 +98,13 @@ public static partial class WebBridge {
     public static bool ToggleTimeCompression() => Session.ToggleTimeCompression();
 
     [JSExport]
+    public static bool ToggleRapierAutomation() => Session.ToggleRapierAutomation();
+
+    [JSExport]
+    public static bool LaunchRapierShortRangeMissile() =>
+        Session.LaunchRapierShortRangeMissile();
+
+    [JSExport]
     public static void NudgeAssistedSpeed(int direction) =>
         Session.NudgeAssistedSpeed(direction);
 

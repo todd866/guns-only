@@ -101,11 +101,13 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     // hold, lower it for a looser one); the applied moment is clamped to the aileron authority
     // (RollMomentMaxNm) so it stays physically bounded. RollHoldDeadband is the |RollControl| below
     // which the hold is active; it fades to zero the instant the pilot commands a deliberate roll so
-    // it never fights a commanded roll. Zero gain (the default, and every non-FBW airframe such as
-    // the Sabre and the balloon glider) disables it and reproduces the old bare-aileron behaviour
-    // bit-for-bit. The law is deterministic: a pure function of the measured body roll rate and the
-    // lateral command, with no captured target attitude, integrator, RNG or wall-clock.
+    // it never fights a commanded roll. The optional attitude gain closes the steady-state error
+    // left by a rate-only damper: BankTarget is captured by the input layer when the stick centres,
+    // so a standing asymmetric moment cannot create an endless slow drift. Zero gains (the
+    // default, and every non-FBW airframe such as the Sabre and balloon glider) preserve the bare
+    // aileron path bit-for-bit.
     double RollHoldRateGainNms = 0.0, double RollHoldDeadband = 0.05,
+    double RollHoldAttitudeGainNmRad = 0.0,
     // Airframe envelope limits. Defaults preserve the existing unmanned/afterburning aircraft;
     // the F-86 overrides these with its piloted structural limit and dry-thrust-only J47.
     // The three control-law fields are explicit gameplay-surrogate policy, not hidden aircraft
@@ -438,15 +440,16 @@ public static class FlightModel {
         GenericMilitaryFuelFlowLbPerMinute: 6.00,
         GenericAfterburnerFuelFlowLbPerMinute: 0.00);
 
-    /// RAPIER — the 2030s cheap high-altitude turbo-ramjet interceptor, public-data surrogate.
+    /// RAPIER — the 2030s high-altitude turbine-based combined-cycle interceptor, fictional
+    /// public-data surrogate.
     ///
     /// Named for a thrusting weapon rather than a slashing one: it commits to a single lunge and
     /// spends the rest of the engagement recovering. That is the doctrine, not a limitation.
     ///
     /// Steel where the heat is, composite everywhere else, no windscreen, a reclined occupant in a
     /// composite escape pod, catapult launched from deep rear basing and recovered on a hook. It
-    /// climbs on a ceramic-hot-section turbine core, blends continuously into ram combustion past
-    /// Mach 2, cruises very high and very fast, and dives to attack.
+    /// climbs on a ceramic-matrix turbine core, blends continuously into a variable-geometry ram
+    /// duct past Mach 2, dashes at Mach 4 in thin air, and dives to attack.
     ///
     /// SIZED FOR THE FIGHT IT PICKS, NOT FOR SUSTAINED COMBAT. Wing loading is high because cruise
     /// beats low-speed manoeuvre for this mission, so its enormous instantaneous G exists only in a
@@ -463,15 +466,19 @@ public static class FlightModel {
     public static readonly AircraftParams RapierPublicDataSurrogate = new(
         MassKg: 7850.0,                       // 5,150 kg fuel-free + 2,700 kg fuel
         WingAreaM2: 18.0,                     // 436 kg/m2 at catshot mass: cruise beats low-speed G
-        ThrustMaxN: 42_000.0,                 // sea-level static DRY, turbine core
-        CD0: 0.0205, InducedK: 0.125,         // AR 3.0, span efficiency ~0.85
+        // The initial 65 kN core left a player-flown aircraft sitting on the M1.3-M1.5 drag
+        // shoulder whenever the climb was even slightly untidy. This is an alert interceptor, not
+        // a throttle-management exam: the enlarged 85 kN turbine pulls decisively through the
+        // transonic rise, while the inlet schedule still requires height for the M4 ram dash.
+        ThrustMaxN: 85_000.0,                 // sea-level static DRY, uprated turbine core
+        CD0: 0.0175, InducedK: 0.105,         // area-ruled body, small high-speed wing
         CLMax: 1.35, CLMin: -0.60,
         RollRateMaxRad: 2.60, BankTau: 0.22,
         // Thin sharp supersonic wing: the rise is real but it is meant to be pushed through, not
         // stopped at. Contrast the subsonic sibling, which is deliberately walled at M0.85.
         // Peaks just past M1.1 and holds: this wing is meant to be pushed THROUGH the rise, not
         // stopped by it. K=38 gives roughly a 3x zero-lift drag penalty at the peak.
-        MCrit: 0.92, WaveDragK: 38.0, WaveDragPeakMach: 1.15,
+        MCrit: 0.94, WaveDragK: 20.0, WaveDragPeakMach: 1.18,
         SpoolUpTau: 1.40, SpoolDownTau: 0.90,
         CLAlpha: 3.60,                        // low aspect ratio
         PitchModeFreq: 3.4, PitchModeDamp: 0.46,
@@ -488,7 +495,7 @@ public static class FlightModel {
         CYBeta: 0.60,
         ClBeta: -0.048, ClP: -0.480, ClR: 0.085,
         ClDeltaA: 0.135, ClDeltaR: 0.026,
-        LateralDerivativeProfileId: "high-altitude-interceptor-public-data-surrogate-v1",
+        LateralDerivativeProfileId: "high-altitude-interceptor-fictional-tbcc-v2",
         ManualPitchRateMaxRad: 0.70, ManualPitchAngleTau: 0.50,
         FightRollRateMaxRad: 2.90,
         CompatibilityRollRateMaxRad: 2.40, CompatibilityBankTau: 0.22,
@@ -498,6 +505,7 @@ public static class FlightModel {
         // fine control. A firm bank hold is the single biggest contributor to that — the pilot sets
         // a bank and the aircraft keeps it through a hard pull without constant correction.
         RollHoldRateGainNms: 620_000.0, RollHoldDeadband: 0.05,
+        RollHoldAttitudeGainNmRad: 1_200_000.0,
         // Structure binds, not the pilot — the reclined occupant can use all of it. 12 G is the
         // qualified limit against an 18 G article; Space releases to 15 G, which is knowingly eating
         // margin on the SAME structure rather than pretending a stronger aircraft exists.
@@ -530,9 +538,13 @@ public static class FlightModel {
         HighAlphaModel: HighAlphaModelKind.Generic,
         PropulsionModel: PropulsionModelKind.TurboRamjetPublicDataSurrogate,
         FuelFreeMassKg: 5150.0,
-        GenericIdleFuelFlowLbPerMinute: 3.0,
-        GenericMilitaryFuelFlowLbPerMinute: 42.0,
-        GenericAfterburnerFuelFlowLbPerMinute: 132.0);
+        // The first mission calibration returned with 2,682 lb from a 4,400 lb alert load: the
+        // profile was tactically free. These effective anchors double that measured burn and put
+        // the authored Mach-4 sortie near its 900 lb minimum reserve at the trap. They remain a
+        // transparent surrogate until a component engine deck replaces the whole map.
+        GenericIdleFuelFlowLbPerMinute: 6.0,
+        GenericMilitaryFuelFlowLbPerMinute: 86.0,
+        GenericAfterburnerFuelFlowLbPerMinute: 270.0);
 
     public static readonly AircraftParams F22APublicDataSurrogate = new(
         MassKg: 27700.0,
@@ -1524,7 +1536,9 @@ public static class FlightModel {
             double holdEngage = 1.0 - System.Math.Clamp(
                 lateralCommand / System.Math.Max(p.RollHoldDeadband, 1e-6), 0.0, 1.0);
             if (holdEngage > 0.0) {
-                double holdMoment = System.Math.Clamp(-p.RollHoldRateGainNms * rates.P,
+                double holdMoment = System.Math.Clamp(
+                    p.RollHoldAttitudeGainNmRad * errP
+                        - p.RollHoldRateGainNms * rates.P,
                     -p.RollMomentMaxNm, p.RollMomentMaxNm);
                 rollMoment += holdMoment * holdEngage * (1.0 - wingSeparation);
             }

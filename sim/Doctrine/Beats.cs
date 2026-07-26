@@ -330,7 +330,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     bool RecoveryCompletesSortie = false,
     ContinuousCombatConfig? ContinuousCombat = null,
     PilotSkill BanditSkill = PilotSkill.Competent,
-    MissionEnvironmentContract? Environment = null) {
+    MissionEnvironmentContract? Environment = null,
+    ScriptedInterceptConfig? ScriptedIntercept = null) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
@@ -412,6 +413,28 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         return new ReactiveBandit(initial, air, skill, terrain,
             profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
             doctrineIndex: spec?.DoctrineIndex);
+    }
+
+    /// <summary>
+    /// Place the rest of a finite scripted formation around the authored leader. Unlike the
+    /// continuous-fight spawn factory, this preserves the 420 km intercept geometry instead of
+    /// teleporting a replacement merge beside the launcher.
+    /// </summary>
+    public IBandit CreateScriptedFormationBandit(int formationIndex,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
+        if (formationIndex < 1)
+            throw new ArgumentOutOfRangeException(nameof(formationIndex));
+        double side = formationIndex % 2 == 1 ? 1.0 : -1.0;
+        double rank = (formationIndex + 1) / 2.0;
+        AircraftState initial = Bandit with {
+            Position = Bandit.Position + new Vec3D(
+                side * 1_100.0 * rank,
+                (formationIndex % 3 - 1) * 180.0,
+                -520.0 * rank)
+        };
+        return UsesReactiveBandit
+            ? new ReactiveBandit(initial, BanditAir, BanditSkill, terrain)
+            : new RailBandit(initial, BanditAir, BanditTimeline);
     }
 
     /// Deterministic merge factory for a continuous-operations ruleset. Successor aircraft inherit
@@ -732,11 +755,18 @@ public static class Beats {
             PlayerParams: FlightModel.RapierPublicDataSurrogate,
             BanditParams: FlightModel.Su27SPublicDataSurrogate,
             Carrier: carrier,
-            UsesReactiveBandit: true,
+            // This is a scripted four-ship intercept, not four simultaneous 120 Hz BFM thinkers.
+            // Rail controllers preserve the authored closing formation until the pilot releases
+            // the swarm. Running four full reactive doctrine searches during the buried launch
+            // cost roughly 2.8 seconds per browser frame while changing no player-facing decision.
+            UsesReactiveBandit: false,
             Combat: CombatConfig.ModernVisualMerge,
             Fuel: new FuelConfig(
                 CapacityLb: 5_950.0,          // 2,700 kg of fuel
-                InitialFuelLb: 5_950.0,
+                // The interceptor can carry 2,700 kg, but this authored alert launch carries only
+                // 1,880 kg. The M4 outbound dash, M4 escape, and powered recovery leave a narrow
+                // trap reserve instead of turning the last act into a consequence-free cruise.
+                InitialFuelLb: 4_140.0,
                 BingoThresholdLb: 1_600.0,
                 ConsumesFuel: true,
                 JokerThresholdLb: 2_400.0,
@@ -777,9 +807,10 @@ public static class Beats {
                 Era: "MODERN_PUBLIC_DATA_EXERCISE"),
             PlayerCapability: AircraftCapability.RapierSurrogate,
             BanditCapability: AircraftCapability.Su27SSurrogate,
-            PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
+            PlayerPhysiologyProfile: PilotPhysiologyProfile.RapierReclinedInterceptor,
             RecoveryCompletesSortie: true,
-            Environment: Ukraine2030sTheatre.RapierCorridor);
+            Environment: Ukraine2030sTheatre.RapierCorridor,
+            ScriptedIntercept: new ScriptedInterceptConfig());
     }
 
     /// <summary>

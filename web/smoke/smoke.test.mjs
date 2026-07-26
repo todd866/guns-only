@@ -242,21 +242,22 @@ test("the published web app boots to a running flight kernel (no fatal render er
       `uncaught page errors during boot:\n${pageErrors.join("\n")}`,
     );
 
-    // The per-frame path must ride the hot buffer: over a one-second window the full JSON
-    // snapshot should be fetched only on cold_version edges + the ~250 ms fallback, never
-    // per frame (~60+/s). This catches a silent regression to JSON-per-frame.
+    // The per-frame path must ride the hot buffer: over a 5.5-second window the full JSON
+    // snapshot should be fetched only on cold_version edges + the five-second fallback, never
+    // per frame (~60+/s). This catches a silent regression to JSON-per-frame while still proving
+    // the low-rate correctness fallback remains alive.
     const snapshotWindow = await page.evaluate(async () => {
       const diagnostics = () => globalThis.__gunsSnapshotBridge?.diagnostics() ?? null;
       const first = diagnostics();
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 5500));
       return { first, second: diagnostics() };
     });
     assert.ok(snapshotWindow.first && snapshotWindow.second,
       "hot snapshot bridge diagnostics unavailable");
-    const coldFetchesPerSecond =
+    const coldFetchesInWindow =
       snapshotWindow.second.coldFetches - snapshotWindow.first.coldFetches;
-    assert.ok(coldFetchesPerSecond >= 1 && coldFetchesPerSecond <= 15,
-      `cold JSON fetch rate out of band: ${coldFetchesPerSecond}/s`);
+    assert.ok(coldFetchesInWindow >= 1 && coldFetchesInWindow <= 2,
+      `cold JSON fetch cadence out of band: ${coldFetchesInWindow}/5.5s`);
   } finally {
     await browser.close();
     await site.close();

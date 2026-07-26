@@ -35,7 +35,7 @@ public class RapierTests {
     [Fact]
     public void TheTurbineCarriesItLowAndTheRamCarriesItHigh() {
         _out.WriteLine("thrust fraction of sea-level static dry, by Mach and altitude:");
-        _out.WriteLine("  (turbine fades 1.9->2.7, ram fades in 1.6->2.2; they OVERLAP on purpose)");
+        _out.WriteLine("  (turbine fades 1.9->3.0, ram fades in 1.6->2.2; they OVERLAP on purpose)");
         foreach (double altitudeM in new[] { 0.0, 11_000.0, 21_500.0 }) {
             AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
             var row = new System.Text.StringBuilder($"  {altitudeM,7:F0} m:");
@@ -67,6 +67,24 @@ public class RapierTests {
         _out.WriteLine($"  low-dive M2.6 at 9,000 m = {diveFraction:F2} of static");
         Assert.True(diveFraction < 1.6,
             $"inlet capture ceiling is not holding: {diveFraction:F2}x static thrust in a dive");
+    }
+
+    [Fact]
+    public void PropulsionChannelsMakeTheTurbineToRamjetHandoffUnambiguous() {
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(21_500.0);
+        var turbine = Propulsion.TurboRamjetPerformanceMap.ThrustComponents(
+            1.4, air.TemperatureK, air.DensityKgM3);
+        var overlap = Propulsion.TurboRamjetPerformanceMap.ThrustComponents(
+            2.1, air.TemperatureK, air.DensityKgM3);
+        var ramjet = Propulsion.TurboRamjetPerformanceMap.ThrustComponents(
+            4.0, air.TemperatureK, air.DensityKgM3);
+
+        Assert.True(turbine.Turbine > 0.0);
+        Assert.Equal(0.0, turbine.Ramjet, precision: 9);
+        Assert.True(overlap.Turbine > 0.0);
+        Assert.True(overlap.Ramjet > 0.0);
+        Assert.Equal(0.0, ramjet.Turbine, precision: 9);
+        Assert.True(ramjet.Ramjet > 0.0);
     }
 
     [Fact]
@@ -112,6 +130,30 @@ public class RapierTests {
             + $"{sim.State.Position.Y:F0} m (lowest M{lowestMach:F2})");
         Assert.True(lowestMach > 2.3,
             $"decayed to M{lowestMach:F2} — it cannot hold its own design cruise");
+    }
+
+    [Fact]
+    public void UpgradedCombinedCycleEngineCanHoldTheMach4DesignDash() {
+        const double DashAltitudeM = 24_000.0;
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(DashAltitudeM);
+        var sim = At(DashAltitudeM, 4.0 * air.SpeedOfSoundMps);
+        var command = new PilotCommand(1.0, 0.0, Jet.MaxThrustFraction, 0.0);
+        sim.SeedEnginePowerFraction(Jet.MaxThrustFraction);
+        double lowestMach = 4.0;
+        for (int tick = 0; tick < AircraftSim.TickHz * 45; tick++) {
+            sim.Step(command, 1.0 / AircraftSim.TickHz);
+            AtmosphericState current = StandardAtmosphere1976.Instance.Sample(
+                sim.State.Position.Y);
+            lowestMach = Math.Min(lowestMach,
+                sim.AirspeedMps / current.SpeedOfSoundMps);
+        }
+        AtmosphericState finalAir = StandardAtmosphere1976.Instance.Sample(
+            sim.State.Position.Y);
+        double finalMach = sim.AirspeedMps / finalAir.SpeedOfSoundMps;
+        _out.WriteLine($"Mach-4 dash hold: lowest M{lowestMach:F2}, final M{finalMach:F2}, "
+            + $"{sim.LastEngineOperatingPoint.NetThrustN / 1000.0:F1} kN");
+        Assert.True(lowestMach >= 3.85,
+            $"the upgraded TBCC decayed below a credible Mach-4 dash: M{lowestMach:F2}");
     }
 
     [Fact]
@@ -229,7 +271,7 @@ public class RapierTests {
     }
 
     /// This is the propulsion question in its operational form. It starts with the authored
-    /// 2,700 kg load on the authored launcher, climbs around M0.90 to FL560, accelerates level
+    /// 1,880 kg alert load on the authored launcher, climbs around M0.90 to FL560, accelerates level
     /// through the turbine/ram overlap, then climbs on ram power to FL700. The controller uses only
     /// SimulationSession's production key-input boundary; no state teleport or AircraftSim-only
     /// sizing calculation is allowed to answer whether the mission works.
@@ -251,14 +293,15 @@ public class RapierTests {
         bool pullHeld = false;
         bool pushHeld = false;
 
-        Assert.Equal(5_950.0, initialFuelLb, precision: 6);
-        Assert.InRange(initialFuelLb * 0.45359237, 2_695.0, 2_705.0);
+        Assert.Equal(4_140.0, initialFuelLb, precision: 6);
+        Assert.InRange(initialFuelLb * 0.45359237, 1_870.0, 1_890.0);
         // Decision records do not feed flight, propulsion, fuel, opponent control, or outcomes.
         // They are intentionally off in this long propulsion card to avoid allocating a combat
         // training row on every one of roughly sixty thousand unrelated transit ticks.
         session.DecisionCaptureEnabled = false;
         session.Begin();
         Assert.True(session.Catapult.IsActive);
+        Assert.False(session.ToggleRapierAutomation());
 
         int maximumTicks = (int)(MaximumProfileSeconds * AircraftSim.TickHz);
         for (int tick = 0; tick < maximumTicks; tick++) {
@@ -378,7 +421,10 @@ public class RapierTests {
             $"only reached M{maxMach:F3} from the catapult in {session.TimeSeconds:F1} s");
         Assert.True(fuelAtMach22Lb > 0.0,
             $"the full {initialFuelLb:F0} lb load was exhausted before M2.2");
-        Assert.InRange(altitudeAtMach22M!.Value, ClimbTopM - 250.0, ClimbTopM + 500.0);
+        // The uprated translating inlet begins opening below the conservative FL560 mission
+        // shelf. A manually firewalled energy climb may therefore cross M2.2 from roughly FL310;
+        // the scripted director separately holds M0.9 to FL560 before commanding the dash.
+        Assert.InRange(altitudeAtMach22M!.Value, 9_500.0, ClimbTopM + 500.0);
         Assert.True(session.Player.State.Position.Y >= CruiseAltitudeM,
             $"ram climb ended at only {finalAltitudeFt:F0} ft");
         Assert.True(finalMach >= 2.15,
@@ -409,6 +455,7 @@ public class RapierTests {
                 StartsOnCatapult = false,
                 UsesReactiveBandit = false,
                 Combat = CombatConfig.CarrierRecoveryOnly,
+                ScriptedIntercept = null,
                 Fuel = source.FuelLoadout with {
                     CapacityLb = fuelLb,
                     InitialFuelLb = fuelLb
@@ -439,10 +486,13 @@ public class RapierTests {
             + $"at {TestMassKg:F0} kg: FL315 -> M{lowMach:F3}, "
             + $"FL560 -> M{highMach:F3}");
 
-        Assert.True(lowMach < InitialMach - 0.02,
-            $"FL315 unexpectedly accelerated from M{InitialMach:F1} to M{lowMach:F3}");
-        Assert.True(highMach > InitialMach + 0.02,
-            $"FL560 failed to accelerate from M{InitialMach:F1}: M{highMach:F3}");
+        Assert.True(lowMach < 2.7,
+            $"FL315 transonic turbine pull became an unrestricted low-level dash: M{lowMach:F3}");
+        Assert.True(highMach >= 3.8,
+            $"FL560 failed to enter the Mach-4 acceleration corridor: M{highMach:F3}");
+        Assert.True(highMach > lowMach + 1.0,
+            $"the inlet altitude schedule is not operationally meaningful: "
+                + $"FL315 M{lowMach:F3}, FL560 M{highMach:F3}");
     }
 
     [Fact]

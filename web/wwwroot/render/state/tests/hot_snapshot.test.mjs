@@ -212,3 +212,21 @@ test("source survives a non-finite clock without wedging the cold base", () => {
   // NaN comparisons must not permanently disable the fallback re-fetch
   assert.equal(source.frame(NaN).fetchedAt, 2);
 });
+
+test("background fallback refreshes cold state even when no render frame runs", async () => {
+  let fetches = 0;
+  const source = createHotSnapshotSource({
+    layoutJson: LAYOUT_JSON,
+    readHotFrame: () => hotFrame(),
+    fetchColdState: () => ({ fetchedAt: ++fetches }),
+    fallbackMs: 10,
+    backgroundFallback: true,
+  });
+  try {
+    source.frame(performance.now());
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    assert.ok(source.diagnostics().coldFetches >= 2);
+  } finally {
+    source.dispose();
+  }
+});

@@ -26,7 +26,7 @@ export const CAMPAIGN_NODES = Object.freeze([
     sequence: 3,
     aircraft: "Rapier",
     title: "Rapier Intercept",
-    shortObjective: "Catapult out; climb M0.90 to FL560, level to M2.2, then ram-climb to FL700.",
+    shortObjective: "Hold M0.90 to FL560, accelerate through M2.2, ram-climb to FL700, release four gun-only dogfighters, then recover.",
     qualification: "",
   }),
 ]);

@@ -1041,24 +1041,51 @@ export function createRapierDispersedStrip(context = {}) {
       new THREE.Vector3(catapultX + side * 0.42, 0.105, railStartZ - flatLengthM / 2), rail);
   }
   const ARC_SEGMENTS = 12;
+  const arcChordLength = 2 * arcRadiusM
+    * Math.sin((arcLengthM / ARC_SEGMENTS) / (2 * arcRadiusM));
+  const centreArcRail = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.28, 0.10, arcChordLength),
+    rail,
+    ARC_SEGMENTS,
+  );
+  centreArcRail.name = "LAUNCH_ARC_CENTRE_RAIL";
+  const sideArcRails = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.12, 0.12, arcChordLength),
+    rail,
+    ARC_SEGMENTS * 2,
+  );
+  sideArcRails.name = "LAUNCH_ARC_SIDE_RAILS";
+  const railTransform = new THREE.Object3D();
   for (let i = 0; i < ARC_SEGMENTS; i++) {
     const d0 = flatLengthM + arcLengthM * i / ARC_SEGMENTS;
     const d1 = flatLengthM + arcLengthM * (i + 1) / ARC_SEGMENTS;
     const midAngle = (railAngleAt(d0) + railAngleAt(d1)) / 2;
     const z0 = railZAt(d0), z1 = railZAt(d1);
     const y0 = railHeightAt(d0), y1 = railHeightAt(d1);
-    const length = Math.hypot(z1 - z0, y1 - y0);
-    const segment = new THREE.Group();
-    segment.position.set(catapultX, (y0 + y1) / 2 + 0.10, (z0 + z1) / 2);
-    segment.rotation.x = -midAngle;
-    box(segment, { x: 0.28, y: 0.10, z: length }, new THREE.Vector3(0, 0, 0), rail)
-      .userData.noShadow = true;
+    // Forward is local -Z, so a positive X rotation raises the forward end. The old negative sign
+    // made the back halves of all three rail chords stand into the camera like black spears as the
+    // aircraft cleared the portal.
+    railTransform.position.set(
+      catapultX,
+      (y0 + y1) / 2 + 0.10,
+      (z0 + z1) / 2,
+    );
+    railTransform.rotation.set(midAngle, 0, 0);
+    railTransform.updateMatrix();
+    centreArcRail.setMatrixAt(i, railTransform.matrix);
     for (const side of [-1, 1]) {
-      box(segment, { x: 0.12, y: 0.12, z: length },
-        new THREE.Vector3(side * 0.42, 0.005, 0), rail).userData.noShadow = true;
+      railTransform.position.set(
+        catapultX + side * 0.42,
+        (y0 + y1) / 2 + 0.105,
+        (z0 + z1) / 2,
+      );
+      railTransform.updateMatrix();
+      sideArcRails.setMatrixAt(i * 2 + (side > 0 ? 1 : 0), railTransform.matrix);
     }
-    group.add(segment);
   }
+  centreArcRail.userData.noShadow = true;
+  sideArcRails.userData.noShadow = true;
+  group.add(centreArcRail, sideArcRails);
 
   // The ramp body: ONE solid wedge whose top face follows the arc. Built as an extruded profile
   // rather than a box per segment — stacking rotated boxes produces a row of disconnected leaning
@@ -1119,15 +1146,34 @@ export function createRapierDispersedStrip(context = {}) {
 
   // Interior ribs every 10 m. At 150 m/s these strobe rather than blur, and they are the only
   // speed cue in an enclosed run - without them the acceleration reads as motionless.
+  const ribLampPositions = [];
+  const ribPositions = [];
   for (let z = railStartZ - 10; z > galleryEndZ; z -= 10) {
-    box(gallery, { x: galleryHalfWidth * 2, y: 0.5, z: 0.5 },
-      new THREE.Vector3(catapultX, galleryHeight - 0.4, z), concrete)
-      .userData.noShadow = true;
-    const ribLamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 4), lamp);
-    ribLamp.position.set(catapultX, galleryHeight - 1.0, z);
-    ribLamp.userData.noShadow = true;
-    gallery.add(ribLamp);
+    ribPositions.push(new THREE.Vector3(catapultX, galleryHeight - 0.4, z));
+    ribLampPositions.push(new THREE.Vector3(catapultX, galleryHeight - 1.0, z));
   }
+  const ribs = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(galleryHalfWidth * 2, 0.5, 0.5),
+    concrete,
+    ribPositions.length,
+  );
+  ribs.name = "LAUNCH_GALLERY_RIBS";
+  const ribLamps = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(0.16, 6, 4), lamp, ribLampPositions.length,
+  );
+  ribLamps.name = "LAUNCH_GALLERY_RIB_LAMPS";
+  const lampTransform = new THREE.Object3D();
+  for (let index = 0; index < ribLampPositions.length; index++) {
+    lampTransform.position.copy(ribPositions[index]);
+    lampTransform.updateMatrix();
+    ribs.setMatrixAt(index, lampTransform.matrix);
+    lampTransform.position.copy(ribLampPositions[index]);
+    lampTransform.updateMatrix();
+    ribLamps.setMatrixAt(index, lampTransform.matrix);
+  }
+  ribs.userData.noShadow = true;
+  ribLamps.userData.noShadow = true;
+  gallery.add(ribs, ribLamps);
   // Vent apertures relieve the air the aircraft displaces ahead of it.
   for (let z = railStartZ - 40; z > galleryEndZ; z -= 40) {
     for (const side of [-1, 1]) {
@@ -1146,18 +1192,29 @@ export function createRapierDispersedStrip(context = {}) {
 
   // Dispersed revetments and chunky value blocks establish the illustrative 2030s silhouette
   // without implying a real airfield plan.
+  const edgeLampPositions = [];
   for (const side of [-1, 1]) {
     box(group, { x: 7, y: 2.6, z: 38 },
       new THREE.Vector3(side * 31, 1.1, 365), shoulder);
     box(group, { x: 2.2, y: 1.6, z: 12 },
       new THREE.Vector3(side * 26, 0.8, -440), orange);
     for (let index = 0; index < 18; index++) {
-      const edgeLamp = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), lamp);
-      edgeLamp.position.set(side * 23.3, 0.18, -540 + index * 62);
-      edgeLamp.userData.noShadow = true;
-      group.add(edgeLamp);
+      edgeLampPositions.push(new THREE.Vector3(
+        side * 23.3, 0.18, -540 + index * 62,
+      ));
     }
   }
+  const edgeLamps = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(0.12, 6, 4), lamp, edgeLampPositions.length,
+  );
+  edgeLamps.name = "RAPIER_STRIP_EDGE_LAMPS";
+  for (let index = 0; index < edgeLampPositions.length; index++) {
+    lampTransform.position.copy(edgeLampPositions[index]);
+    lampTransform.updateMatrix();
+    edgeLamps.setMatrixAt(index, lampTransform.matrix);
+  }
+  edgeLamps.userData.noShadow = true;
+  group.add(edgeLamps);
 
   const sockets = Object.freeze({
     deckOrigin: addSemanticSocket(group, "SOCKET_DECK_ORIGIN", 0, 0, 0),

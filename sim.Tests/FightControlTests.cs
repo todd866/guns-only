@@ -243,6 +243,34 @@ public class FightControlTests {
     }
 
     [Fact]
+    public void RapierAttitudeHoldRejectsAStandingAsymmetryInsteadOfSlowlyDrifting() {
+        static double Fly(AircraftParams parameters) {
+            var sim = new AircraftSim(new AircraftState(
+                new Vec3D(0.0, 6_000.0, 0.0), 250.0, 0.0, 0.0, 0.0,
+                parameters.MassKg), parameters) {
+                AerodynamicConfiguration = new AirframeAerodynamicState(
+                    0.0, 0.0, 0.0, 0.0,
+                    PersistentLateralLiftCoefficientDifference: 0.004)
+            };
+            var centred = new PilotCommand(1.0, 0.0, 1.0, 0.0,
+                RollControl: 0.0, DirectLateralControl: true);
+            for (int tick = 0; tick < 20 * AircraftSim.TickHz; tick++)
+                sim.Step(centred, Dt);
+            return sim.BodyRollRad;
+        }
+
+        AircraftParams rapier = FlightModel.RapierPublicDataSurrogate;
+        double heldBank = Fly(rapier);
+        double rateOnlyBank = Fly(rapier with { RollHoldAttitudeGainNmRad = 0.0 });
+
+        Assert.True(Math.Abs(heldBank) * Deg < 2.0,
+            $"attitude hold drifted to {heldBank * Deg:F1} deg under standing moment");
+        Assert.True(Math.Abs(rateOnlyBank) > Math.Abs(heldBank) * 4.0,
+            $"attitude term did not materially improve rate-only drift: "
+                + $"{heldBank * Deg:F1} vs {rateOnlyBank * Deg:F1} deg");
+    }
+
+    [Fact]
     public void ManualAileronAuthorityScalesWithDynamicPressure() {
         static AircraftSim Rig(double speedMps) => new(new AircraftState(
             new Vec3D(0, 3000, 0), speedMps, 0.0, 0.0, 0.0,

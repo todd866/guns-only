@@ -18,5 +18,6 @@ test("the Rapier briefing teaches the kernel-verified altitude-gated ram profile
   assert.match(rapierBrief, /M1\.6/);
   assert.match(rapierBrief, /M2\.2/);
   assert.match(rapierBrief, /FL700/);
-  assert.match(rapierBrief, /FL315 leaves drag above available thrust/);
+  assert.match(rapierBrief, /at FL315 the aircraft can gather speed but cannot cross into full ram/);
+  assert.match(rapierBrief, /Mach and KTAS/);
 });

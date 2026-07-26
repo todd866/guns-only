@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 4;
+    public const int LayoutVersion = 6;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -102,7 +102,31 @@ internal static class SnapshotHotFrame {
         Bool("time_compression_available");
         Bool("time_compression_enabled");
         Bool("time_compression_eligible");
+        Num("time_compression_requested_factor", RawInteger);
         Num("time_compression_factor", RawInteger);
+        Bool("rapier_mission_available");
+        Bool("rapier_automation_enabled");
+        Bool("rapier_automation_active");
+        Num("rapier_mission_phase", RawInteger);
+        Num("rapier_target_mach", 2);
+        Num("rapier_target_altitude_ft", 0);
+        Num("rapier_missiles_remaining", RawInteger);
+        Num("rapier_gun_drones_remaining", RawInteger);
+        Bool("rapier_missile_in_flight");
+        Num("rapier_missile_tti_s", 2);
+        Bool("rapier_pursuit_active");
+        Num("rapier_pursuer_count", RawInteger);
+        Num("rapier_pursuit_range_m", 1);
+        Num("rapier_guidance_x", 3);
+        Num("rapier_guidance_y", 3);
+        Num("rapier_guidance_z", 3);
+        Num("rapier_recovery_gate", RawInteger);
+        Num("rapier_turbine_thrust_kn", 2);
+        Num("rapier_ramjet_thrust_kn", 2);
+        Num("rapier_turbine_fuel_ppm", 2);
+        Num("rapier_ramjet_fuel_ppm", 2);
+        Num("rapier_stagnation_temp_c", 0);
+        Num("rapier_thermal_margin_c", 0);
         Num("px", 3); Num("py", 3); Num("pz", 3);
         // World-frame ground velocity: the HUD projects the flight-path marker (FPV) from this
         // exact vector every frame, so it must ride the hot path (Build 64 reconciliation).
@@ -112,16 +136,15 @@ internal static class SnapshotHotFrame {
         Num("bx", 3); Num("by", 3); Num("bz", 3);
         Num("bfx", 5); Num("bfy", 5); Num("bfz", 5);
         Num("blx", 5); Num("bly", 5); Num("blz", 5);
-        // Wingman: the second aircraft of a formation wave. The KERNEL carries any number of
-        // opponents; this hot wire format currently reserves slots for one, which is what a 1v2
-        // needs. w1_present is 0 when the wave is a single aircraft, and the renderer simply does
-        // not draw the contact. Widening to a variable-length array means moving these off the
-        // fixed-schema hot path, which is a bigger change than a playable 1v2 required.
-        Num("w1_present", RawInteger);
-        Num("w1x", 3); Num("w1y", 3); Num("w1z", 3);
-        Num("w1fx", 5); Num("w1fy", 5); Num("w1fz", 5);
-        Num("w1lx", 5); Num("w1ly", 5); Num("w1lz", 5);
-        Num("w1_alive", RawInteger);
+        // Three fixed additional-aircraft blocks keep the hot path allocation-free while exposing
+        // the complete four-ship formation authored for Rapier.
+        foreach (string prefix in new[] { "w1", "w2", "w3" }) {
+            Num($"{prefix}_present", RawInteger);
+            Num($"{prefix}x", 3); Num($"{prefix}y", 3); Num($"{prefix}z", 3);
+            Num($"{prefix}fx", 5); Num($"{prefix}fy", 5); Num($"{prefix}fz", 5);
+            Num($"{prefix}lx", 5); Num($"{prefix}ly", 5); Num($"{prefix}lz", 5);
+            Num($"{prefix}_alive", RawInteger);
+        }
         Num("buffet_pitch_deg", 3); Num("buffet_roll_deg", 3); Num("buffet_yaw_deg", 3);
         Num("indicated_airspeed_kts", 2);
         Num("calibrated_airspeed_kts", 2);
@@ -498,6 +521,9 @@ internal static class SnapshotHotFrame {
         double equivalentAirspeedMps = AirData.EquivalentAirspeedMps(
             trueAirspeedMps, playerPosition.Y, atmosphere);
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
+        double rapierStagnationTempC =
+            atmosphericState.TemperatureK * (1.0 + 0.2 * mach * mach) - 273.15;
+        const double RapierThermalLimitC = 900.0;
         Vec3D localWindVelocity = groundVelocity - airVelocity;
         CloudSample localCloud = (session.Weather?.Clouds ?? ClearCloudField.Instance)
             .Sample(playerPosition, simTimeMs / 1000.0);
@@ -567,7 +593,34 @@ internal static class SnapshotHotFrame {
         w.Bool("time_compression_available", session.TimeCompressionAvailable);
         w.Bool("time_compression_enabled", session.TimeCompressionPilotEnabled);
         w.Bool("time_compression_eligible", session.TimeCompressionEligible);
+        w.Num("time_compression_requested_factor",
+            session.TimeCompressionRequestedFactor, RawInteger);
         w.Num("time_compression_factor", session.TimeCompressionFactor, RawInteger);
+        w.Bool("rapier_mission_available", session.RapierMissionAvailable);
+        w.Bool("rapier_automation_enabled", session.RapierAutomationEnabled);
+        w.Bool("rapier_automation_active", session.RapierAutomationActive);
+        w.Num("rapier_mission_phase", (int)session.RapierPhase, RawInteger);
+        w.Num("rapier_target_mach", session.RapierTargetMach, 2);
+        w.Num("rapier_target_altitude_ft", session.RapierTargetAltitudeFt, 0);
+        w.Num("rapier_missiles_remaining", session.RapierMissilesRemaining, RawInteger);
+        w.Num("rapier_gun_drones_remaining",
+            session.RapierDogfightingDronesRemaining, RawInteger);
+        w.Bool("rapier_missile_in_flight", session.RapierMissileInFlight);
+        w.Num("rapier_missile_tti_s", session.RapierMissileTimeToImpactSeconds, 2);
+        w.Bool("rapier_pursuit_active", session.RapierPursuitActive);
+        w.Num("rapier_pursuer_count", session.RapierPursuerCount, RawInteger);
+        w.Num("rapier_pursuit_range_m", session.RapierPursuitRangeM, 1);
+        w.Num("rapier_guidance_x", session.RapierGuidanceWaypoint.X, 3);
+        w.Num("rapier_guidance_y", session.RapierGuidanceWaypoint.Y, 3);
+        w.Num("rapier_guidance_z", session.RapierGuidanceWaypoint.Z, 3);
+        w.Num("rapier_recovery_gate", session.RapierRecoveryGate, RawInteger);
+        w.Num("rapier_turbine_thrust_kn", session.RapierTurbineThrustN / 1000.0, 2);
+        w.Num("rapier_ramjet_thrust_kn", session.RapierRamjetThrustN / 1000.0, 2);
+        w.Num("rapier_turbine_fuel_ppm", session.RapierTurbineFuelFlowLbPerMinute, 2);
+        w.Num("rapier_ramjet_fuel_ppm", session.RapierRamjetFuelFlowLbPerMinute, 2);
+        w.Num("rapier_stagnation_temp_c", rapierStagnationTempC, 0);
+        w.Num("rapier_thermal_margin_c",
+            RapierThermalLimitC - rapierStagnationTempC, 0);
         w.Num("px", playerPosition.X, 3); w.Num("py", playerPosition.Y, 3); w.Num("pz", playerPosition.Z, 3);
         w.Num("vx", groundVelocity.X, 3); w.Num("vy", groundVelocity.Y, 3); w.Num("vz", groundVelocity.Z, 3);
         w.Num("pfx", pf.X, 5); w.Num("pfy", pf.Y, 5); w.Num("pfz", pf.Z, 5);
@@ -575,26 +628,9 @@ internal static class SnapshotHotFrame {
         w.Num("bx", b.Position.X, 3); w.Num("by", b.Position.Y, 3); w.Num("bz", b.Position.Z, 3);
         w.Num("bfx", bf.X, 5); w.Num("bfy", bf.Y, 5); w.Num("bfz", bf.Z, 5);
         w.Num("blx", bl.X, 5); w.Num("bly", bl.Y, 5); w.Num("blz", bl.Z, 5);
-        GunsOnly.Sim.Doctrine.Wingman? wingman =
-            session.Wingmen.Count > 0 ? session.Wingmen[0] : null;
-        if (wingman is null) {
-            w.Num("w1_present", 0, RawInteger);
-            w.Num("w1x", 0.0, 3); w.Num("w1y", 0.0, 3); w.Num("w1z", 0.0, 3);
-            w.Num("w1fx", 0.0, 5); w.Num("w1fy", 1.0, 5); w.Num("w1fz", 0.0, 5);
-            w.Num("w1lx", 0.0, 5); w.Num("w1ly", 1.0, 5); w.Num("w1lz", 0.0, 5);
-            w.Num("w1_alive", 0, RawInteger);
-        } else {
-            AircraftState wingmanState = wingman.Bandit.State;
-            Vec3D wf = wingmanState.ForwardDir();
-            Vec3D wl = wingman.Bandit.LiftDir;
-            w.Num("w1_present", 1, RawInteger);
-            w.Num("w1x", wingmanState.Position.X, 3);
-            w.Num("w1y", wingmanState.Position.Y, 3);
-            w.Num("w1z", wingmanState.Position.Z, 3);
-            w.Num("w1fx", wf.X, 5); w.Num("w1fy", wf.Y, 5); w.Num("w1fz", wf.Z, 5);
-            w.Num("w1lx", wl.X, 5); w.Num("w1ly", wl.Y, 5); w.Num("w1lz", wl.Z, 5);
-            w.Num("w1_alive", wingman.StillFighting ? 1 : 0, RawInteger);
-        }
+        WriteWingman(ref w, session, 0, "w1");
+        WriteWingman(ref w, session, 1, "w2");
+        WriteWingman(ref w, session, 2, "w3");
         w.Num("buffet_pitch_deg", player.PitchBuffetRad * 57.2958, 3);
         w.Num("buffet_roll_deg", player.RollBuffetRad * 57.2958, 3);
         w.Num("buffet_yaw_deg", player.YawBuffetRad * 57.2958, 3);
@@ -982,6 +1018,41 @@ internal static class SnapshotHotFrame {
     /// Positional writer with name assertions against the static layout. Debug builds (and thus
     /// dotnet test) verify every write lands on the slot the layout declares; release publishes
     /// skip the checks. OpenBlock(false) zero/NaN-fills an absent block and skips past it.
+    static void WriteWingman(ref Writer writer, SimulationSession session,
+        int index, string prefix) {
+        GunsOnly.Sim.Doctrine.Wingman? wingman =
+            session.Wingmen.Count > index ? session.Wingmen[index] : null;
+        if (wingman is null) {
+            writer.Num($"{prefix}_present", 0, RawInteger);
+            writer.Num($"{prefix}x", 0.0, 3);
+            writer.Num($"{prefix}y", 0.0, 3);
+            writer.Num($"{prefix}z", 0.0, 3);
+            writer.Num($"{prefix}fx", 0.0, 5);
+            writer.Num($"{prefix}fy", 1.0, 5);
+            writer.Num($"{prefix}fz", 0.0, 5);
+            writer.Num($"{prefix}lx", 0.0, 5);
+            writer.Num($"{prefix}ly", 1.0, 5);
+            writer.Num($"{prefix}lz", 0.0, 5);
+            writer.Num($"{prefix}_alive", 0, RawInteger);
+            return;
+        }
+
+        AircraftState state = wingman.Bandit.State;
+        Vec3D forward = state.ForwardDir();
+        Vec3D lift = wingman.Bandit.LiftDir;
+        writer.Num($"{prefix}_present", 1, RawInteger);
+        writer.Num($"{prefix}x", state.Position.X, 3);
+        writer.Num($"{prefix}y", state.Position.Y, 3);
+        writer.Num($"{prefix}z", state.Position.Z, 3);
+        writer.Num($"{prefix}fx", forward.X, 5);
+        writer.Num($"{prefix}fy", forward.Y, 5);
+        writer.Num($"{prefix}fz", forward.Z, 5);
+        writer.Num($"{prefix}lx", lift.X, 5);
+        writer.Num($"{prefix}ly", lift.Y, 5);
+        writer.Num($"{prefix}lz", lift.Z, 5);
+        writer.Num($"{prefix}_alive", wingman.StillFighting ? 1 : 0, RawInteger);
+    }
+
     struct Writer {
         readonly double[] _buffer;
         int _index;

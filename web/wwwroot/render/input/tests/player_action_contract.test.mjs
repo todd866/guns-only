@@ -125,8 +125,8 @@ test("bandit padlock roll hold stays a fixed-tick, safety-preemptible augmentati
     /SetBanditPadlockRollAssist\(bool selected\)[\s\S]*?Session\.SetBanditPadlockRollAssist\(selected\)/,
     "the browser may send only the discrete selected/tracked state");
   assert.match(sessionSource,
-    /ApplyGunneryPitchAssist\(_detents\.Command\)[\s\S]*?ApplyPilotPhysiology\(assistedCommand\)[\s\S]*?ApplyBanditPadlockRollAssist\([\s\S]*?ApplyAutoGcas\(padlockAssistedCommand\)/,
-    "padlock SAS must follow the effective human path and remain below Auto-GCAS priority");
+    /RapierAutomationOr\(_detents\.Command\)[\s\S]*?ApplyGunneryPitchAssist\(directedCommand\)[\s\S]*?ApplyPilotPhysiology\(assistedCommand\)[\s\S]*?ApplyBanditPadlockRollAssist\([\s\S]*?ApplyAutoGcas\(padlockAssistedCommand\)/,
+    "padlock SAS must follow the effective human or Rapier-directed path and remain below Auto-GCAS priority");
   assert.match(sessionSource,
     /_banditPadlockRollAssistTargetSequence == _banditSpawnSequence/,
     "a replacement opponent must not inherit the old capture latch");

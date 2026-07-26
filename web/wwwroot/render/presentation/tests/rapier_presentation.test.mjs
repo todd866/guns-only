@@ -81,4 +81,26 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   }
   assert.equal(strip.getObjectByName("CarrierRecoveryOverlay"), undefined,
     "the fixed strip must not embed a second carrier-scaled recovery overlay");
+  const ribLamps = strip.getObjectByName("LAUNCH_GALLERY_RIB_LAMPS");
+  const ribs = strip.getObjectByName("LAUNCH_GALLERY_RIBS");
+  const edgeLamps = strip.getObjectByName("RAPIER_STRIP_EDGE_LAMPS");
+  const centreArcRail = strip.getObjectByName("LAUNCH_ARC_CENTRE_RAIL");
+  const sideArcRails = strip.getObjectByName("LAUNCH_ARC_SIDE_RAILS");
+  assert.ok(ribs?.isInstancedMesh);
+  assert.equal(ribs.count, 35);
+  assert.ok(ribLamps?.isInstancedMesh);
+  assert.equal(ribLamps.count, 35);
+  assert.ok(edgeLamps?.isInstancedMesh);
+  assert.equal(edgeLamps.count, 36);
+  assert.ok(centreArcRail?.isInstancedMesh);
+  assert.equal(centreArcRail.count, 12);
+  assert.ok(sideArcRails?.isInstancedMesh);
+  assert.equal(sideArcRails.count, 24);
+  const lastRailMatrix = new THREE.Matrix4();
+  centreArcRail.getMatrixAt(centreArcRail.count - 1, lastRailMatrix);
+  const halfChord = centreArcRail.geometry.parameters.depth / 2;
+  const forwardEnd = new THREE.Vector3(0, 0, -halfChord).applyMatrix4(lastRailMatrix);
+  const aftEnd = new THREE.Vector3(0, 0, halfChord).applyMatrix4(lastRailMatrix);
+  assert.ok(forwardEnd.y > aftEnd.y,
+    "the -Z launch end of every ski-jump chord must rise, never spear downward/back into camera");
 });
