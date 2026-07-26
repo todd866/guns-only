@@ -15,7 +15,7 @@
 // The cache name carries the release build, so shipping a new build orphans the old cache and
 // activate() deletes it. That reuses the existing stamp ritual rather than inventing a second
 // versioning scheme — see web/wwwroot/render/release/release_identity.js.
-const RELEASE_BUILD = "121";
+const RELEASE_BUILD = "122";
 const CACHE = `guns-only-${RELEASE_BUILD}`;
 
 // Never cached: telemetry and the multiplayer room are live services, and a cached reply would be
@@ -43,24 +43,29 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
-let terrainBundlePrimed = false;
+const terrainBundlesPrimed = new Set();
 
-/// Pull the whole terrain bundle into the cache once, in the background, the first time the app
-/// asks for a piece of it. Doing it lazily rather than on install means a pilot who never flies
-/// never pays the download, and one who does pays it while already streaming terrain anyway.
+/// Pull each whole terrain bundle into the cache once, in the background, the first time the app
+/// asks for a piece of it. Korea and the fictional Ukraine training sector are separate products,
+/// so this is keyed by bare bundle URL rather than one global latch. Doing it lazily rather than on
+/// install means a pilot who never flies never pays the download, and one who does pays it while
+/// already streaming terrain anyway.
 function primeTerrainBundle(url) {
-  if (terrainBundlePrimed) return;
-  terrainBundlePrimed = true;
   const bare = new URL(url);
   bare.search = "";
+  if (terrainBundlesPrimed.has(bare.href)) return;
+  terrainBundlesPrimed.add(bare.href);
   void (async () => {
     try {
       const response = await fetch(bare.href, { cache: "no-store" });
       if (response.ok && response.status === 200) {
         await (await caches.open(CACHE)).put(bare.href, response.clone());
+      } else {
+        terrainBundlesPrimed.delete(bare.href);
       }
     } catch {
-      // Offline, or the bundle moved. The next online session will try again.
+      // Offline, or the bundle moved. A later online request must be allowed to try again.
+      terrainBundlesPrimed.delete(bare.href);
     }
   })();
 }
