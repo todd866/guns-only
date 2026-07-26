@@ -283,6 +283,149 @@ public static class FlightModel {
     /// two-dimensional pitch-thrust-vectoring capability is represented by an explicitly bounded
     /// reduced-order force/moment allocator.
     /// https://www.af.mil/About-Us/Fact-Sheets/Display/Article/104506/f-22-raptor/
+
+    /// CHEAP HIGH-ALTITUDE INTERCEPTOR PUBLIC-DATA SURROGATE.
+    ///
+    /// This represents a recoverable, crewed, gun-armed aircraft built around one approximately
+    /// 4 kN cruise-missile-class dry engine. It is deliberately a high-subsonic aircraft: gravity,
+    /// not installed thrust or afterburning, buys its brief transonic attack condition.
+    ///
+    /// Mass, polar, inertias, derivatives, engine lapse and fuel flow are transparent mission
+    /// surrogates, not claims about an extant aircraft or an OEM engine deck. The existing
+    /// AfterburningTurbofanPublicDataSurrogate lapse is used because it is the least-wrong checked-in
+    /// approximation for a small F107/F112-class engine at altitude. MaxThrustFraction = 1.0 means
+    /// this aircraft has no afterburner.
+    public static readonly AircraftParams CheapHighAltitudeInterceptorPublicDataSurrogate = new(
+        MassKg: 2100.0,                       // 1,450 kg fuel-free + 650 kg internal fuel
+        WingAreaM2: 8.20,                     // 256 kg/m2 at takeoff: cruise wins over low-speed G
+        ThrustMaxN: 4000.0,                   // one upper-F107/F112-class dry engine surrogate
+        CD0: 0.0210,                          // clean internal stores, but not boutique VLO finish
+        InducedK: 0.0750,                     // AR 5.2, effective span efficiency about 0.82
+        CLMax: 1.25,                          // simple clean wing; no expensive combat high-lift system
+        CLMin: -0.60,
+        RollRateMaxRad: 2.60,
+        BankTau: 0.24,
+
+        // Thin moderately swept high-subsonic wing. The rise is intentionally strong enough that
+        // level flight stops near M0.85 and a powered dive only pushes briefly through M1.
+        MCrit: 0.82,
+        WaveDragK: 85.0,
+
+        // Small rotating group responds faster than a large fighter turbofan, but does not teleport.
+        SpoolUpTau: 1.20,
+        SpoolDownTau: 0.70,
+        CLAlpha: 4.50,
+
+        PitchModeFreq: 3.6,
+        PitchModeDamp: 0.48,
+        YawModeFreq: 1.8,
+        YawModeDamp: 0.28,
+        RollModeFreq: 4.8,
+        RollModeDamp: 0.72,
+        BuffetGain: 0.45,
+
+        // Geometry-derived provisional inertias for a roughly 7.5 m long, 6.5 m span, 2.1 t jet.
+        // These prevent the small aircraft from inheriting multi-tonne-fighter default inertias.
+        IxxKgM2: 3300.0,
+        IyyKgM2: 9000.0,
+        IzzKgM2: 11500.0,
+
+        // Explicit reduced-order FBW attitude demand and damping moments, scaled from airframe size.
+        RollStiffnessNmRad: 95000.0,
+        PitchStiffnessNmRad: 240000.0,
+        YawStiffnessNmRad: 70000.0,
+        RollDampingNms: 30000.0,
+        PitchDampingNms: 95000.0,
+        YawDampingNms: 42000.0,
+        RollMomentMaxNm: 110000.0,
+        PitchMomentMaxNm: 260000.0,
+        YawMomentMaxNm: 90000.0,
+        ApproachPitchStiffnessNmRad: 190000.0,
+        ApproachPitchMomentMaxNm: 190000.0,
+
+        CYBeta: 0.60,
+
+        // Provisional attached-flow derivative set for a moderately swept, naturally stable wing.
+        ClBeta: -0.050,
+        ClP: -0.500,
+        ClR: 0.090,
+        ClDeltaA: 0.120,
+        ClDeltaR: 0.026,
+        MaxAileronDeflectionRad: 0.349065850398866, // +/-20 deg effective stop
+        MaxRudderDeflectionRad: 0.436332312998582,  // +/-25 deg effective stop
+        LateralDerivativeProfileId:
+            "cheap-high-altitude-interceptor-public-data-surrogate-v1",
+
+        ManualPitchRateMaxRad: 0.75,
+        ManualPitchAngleTau: 0.48,
+        FightRollRateMaxRad: 3.00,
+        CompatibilityRollRateMaxRad: 2.40,
+        CompatibilityBankTau: 0.24,
+
+        YawBetaStiffnessNmRad: 65000.0,
+        RollHoldDampingNms: 30000.0,
+        RollHoldErrorRad: 0.10,
+
+        // AI/FBW bank hold, bounded by the declared aileron authority.
+        RollHoldRateGainNms: 200000.0,
+        RollHoldDeadband: 0.05,
+
+        // Twelve G is already expensive for a reusable crewed composite structure. Twenty G would
+        // require roughly a 30 G ultimate-load article under a conventional 1.5 safety factor and
+        // would contradict "cheap first." Full pull reaches the honest structural boundary.
+        PositiveStructuralLimitG: 12.0,
+        MaxPerformFraction: 1.0,
+        NormalPullUsesMaxPerformance: true,
+        PositiveOverrideLimitG: -1.0,
+        DynamicPressureScheduledPostStallOverride: false,
+
+        MaxThrustFraction: 1.0,                // dry thrust only; no afterburner
+
+        // Fixed nozzle: TVC would add hot actuators, mass, maintenance and cost.
+        PitchThrustVectorMaxRad: 0.0,
+        PitchThrustVectorMomentArmM: 0.0,
+        PitchThrustVectorAlphaGain: 0.0,
+        PitchThrustVectorRateGainSeconds: 0.0,
+        PitchThrustVectorNozzleRateRadPerSecond: 0.0,
+
+        // Explicit gameplay-surrogate gun director. It corrects aim inside a narrow gate but does
+        // not create lift, thrust, closure or hits; a zeroed set may be substituted independently
+        // if the aircraft is introduced before its sensor/assist package.
+        GunneryPitchAssistMaxRateRad: 0.24,
+        GunneryPitchAssistCaptureAngleRad: 0.209439510239320, // 12 deg
+        GunneryPitchAssistMaxRangeM: 900.0,
+        GunneryPitchAssistGainPerSecond: 2.0,
+        GunneryPitchAssistMaxCorrectionG: 2.0,
+        GunneryLateralAssistRollGain: 1.8,
+        GunneryLateralAssistMaxRoll: 0.50,
+        GunneryLateralAssistYawGain: 1.6,
+        GunneryLateralAssistMaxYaw: 0.35,
+
+        // Separation drag closes the energy bill near CLmax; this is not a sustained-turn aircraft.
+        HighLiftDragOnsetFraction: 0.90,
+        HighLiftDragK: 3.50,
+
+        WingSpanM: 6.53,                       // sqrt(AR 5.2 * 8.2 m2)
+        PostStallAlphaCommandRad: 0.50,
+        PostStallDragMax: 0.95,
+        StallRollCoupling: 0.16,
+        StallYawCoupling: 0.25,
+        StallPitchBreakNm: 20000.0,
+        HighAlphaModel: HighAlphaModelKind.Generic,
+
+        // F107/F112 are small turbofans, not turbojets. This existing map has the closest
+        // high-altitude lapse, while the 1.0 lever stop positively prevents afterburning.
+        PropulsionModel:
+            PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
+
+        FuelFreeMassKg: 1450.0,
+
+        // Effective mission anchors, not an OEM deck. The generic model does not vary fuel flow
+        // with altitude, so range remains provisional until a small-engine performance map exists.
+        GenericIdleFuelFlowLbPerMinute: 0.80,
+        GenericMilitaryFuelFlowLbPerMinute: 6.00,
+        GenericAfterburnerFuelFlowLbPerMinute: 0.00);
+
     public static readonly AircraftParams F22APublicDataSurrogate = new(
         MassKg: 27700.0,
         WingAreaM2: 78.04,

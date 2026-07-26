@@ -543,6 +543,62 @@ from "honest augmentation for keyboard players" to **the actual aircraft**. See
 [[complexity-ladder-doctrine]]: assists were always meant to be honest pilots rather than crutches,
 and this is that idea arriving at its destination.
 
+### Adjudicated: the safety factor, and what Space actually commands
+
+Claude argued that 1.5 is a civil/peacetime factor that a wartime attritable aircraft could drop to
+1.15. **That was wrong, and Codex corrected it with the standard.** JSSG-2006 gives 1.5 for MANNED
+MILITARY aircraft, 1.25 for unmanned and 1.4 for crewed spacecraft — and it explicitly recommends
+INCREASING the factor where new materials or limited inspection add uncertainty, which is exactly the
+cheap-composite case. "Wartime" does not license 1.15 as a design basis.
+
+The resolution is better than either starting position, because it makes Space a wager against the
+SAME structure rather than pretending a different aircraft exists:
+
+| | interpretation of one 18 G ultimate article |
+|---|---|
+| **12 G** | qualified/protected limit at the 1.5 factor |
+| **15 G** | the deliberate override — 1.20 margin, knowingly eating into it |
+| 15.65 G | the 1.15 point; too precise and too close to uncertainty for a control law |
+| 20 G | needs 23-24 G ultimate — 28-33% MORE structure, not a reinterpretation |
+
+So `PositiveOverrideLimitG: 15.0` is the Space-bar number, `PositiveStructuralLimitG` stays 12.0, and
+20 G is off the table for this airframe at this price.
+
+**Implementation order matters and is easy to get wrong:** setting the override to 15 G BEFORE the
+residual-strength/fatigue model exists yields free, repeatable 15 G. The codebase today has an
+override cap and no failure mechanic. Build the fatigue model first, then enable the override.
+
+### Adjudicated: the ramjet is a separate aircraft
+
+Corrections to Claude's analysis, from Codex:
+
+- "Nothing below Mach 2" was too absolute — ramjets make appreciable thrust near M1, badly;
+  purpose-built low-Mach designs become useful around M1.5-2; typical takeover is M2-2.5.
+- The 2.1 t composite aircraft's dive **cannot** light one: it peaks near M1.01 and its drag law is
+  prohibitive above MCrit 0.82.
+- **A 60-second Mach 3 sprint is NOT automatically safe for epoxy composite.** Thin skins, inlet
+  lips, leading edges and adhesives heat substantially within SECONDS. That needs hot structure or
+  thermal protection, not modest insulation.
+- For a one-minute dash, a plain expendable rocket pack is simpler than carrying a booster AND a
+  ramjet. Turbo-ramjet is the most expensive option, not the cheap one.
+
+**The owner's answer to the thermal wall was stainless steel** — heavy, but cheap, weldable, no
+autoclave, no exotic resins, and it takes Mach 3 stagnation temperature. Real precedent: MiG-25,
+Republic XF-103 (stainless/titanium turbo-ramjet interceptor), Bristol 188, XB-70. That turns the
+ramjet fighter into a separate, viable programme rather than an impossible variant, and it is being
+sized separately.
+
+### Known blocker: there is no ramjet in the propulsion model
+
+`PropulsionModelKind` has three members — `GenericDensityScaled`, `J47Ge27` and
+`AfterburningTurbofanPublicDataSurrogate` — and **all three have thrust highest at low Mach, lapsing
+with altitude.** A ramjet is the inverse: no thrust until it is moving fast, rising steeply with
+Mach, peaking near M3. This is not a parameter-tuning problem; it needs a new model.
+
+The seam is clean: one branch in `AircraftSim.UpdateEngine` (sim/AircraftSim.cs:512), and the model
+is a pure deterministic function of Mach and density with no state — exactly the shape the kernel
+wants.
+
 ---
 
 ## Why these two ideas belong in the same note
