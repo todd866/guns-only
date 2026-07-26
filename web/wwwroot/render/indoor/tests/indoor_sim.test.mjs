@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   FACILITY,
+  SURVEY_PROFILES,
   createIndoorMission,
   detachFiber,
   missionSnapshot,
@@ -18,6 +19,16 @@ function advance(state, frames, input = {}) {
       typeof input === "function" ? input(frame) : input,
       DT,
     );
+  }
+  return next;
+}
+
+function completeSurveyScans(state) {
+  let next = state;
+  for (const scan of next.survey.scanPoints) {
+    next.drone.position = { ...scan.position };
+    next.drone.velocity = { x: 0, y: 0, z: 0 };
+    next = advance(next, Math.ceil((scan.dwellRequired + 0.05) / DT));
   }
   return next;
 }
@@ -304,4 +315,168 @@ test("an exhausted RF window or disabled relay hands the mission to onboard auto
   assert.equal(state.status, "success");
   assert.equal(state.objectives[0].destroyed, true);
   assert.ok(state.gun.shots > 0);
+});
+
+test("survey profiles are immutable doctrine and produce independent mission state", () => {
+  assert.equal(Object.isFrozen(SURVEY_PROFILES), true);
+  assert.deepEqual(Object.keys(SURVEY_PROFILES), [
+    "attack-site",
+    "discretionary-site",
+    "diversion-site",
+  ]);
+
+  const attack = createIndoorMission({ missionId: "attack-site" });
+  const diversion = createIndoorMission({ missionId: "diversion-site" });
+  assert.equal(attack.missionType, "survey");
+  assert.equal(attack.survey.doctrine, "stealth-mandatory");
+  assert.equal(diversion.survey.doctrine, "noisy-provocation");
+  assert.ok(attack.survey.distanceFromBaseKm < diversion.survey.distanceFromBaseKm);
+  attack.survey.scanPoints[0].complete = true;
+  assert.equal(diversion.survey.scanPoints[0].complete, false);
+  assert.throws(
+    () => createIndoorMission({ missionId: "not-a-site" }),
+    /Unknown indoor mission profile/,
+  );
+});
+
+test("survey observations require a dwell, complete once, and expose return readiness", () => {
+  let state = createIndoorMission({ missionId: "attack-site" });
+  const first = state.survey.scanPoints[0];
+  state.drone.position = { ...first.position };
+  state.drone.velocity = { x: 0, y: 0, z: 0 };
+
+  state = advance(state, Math.floor(first.dwellRequired / DT) - 1);
+  assert.equal(state.survey.scanPoints[0].complete, false);
+  assert.equal(state.survey.scanning, true);
+  state = advance(state, 3);
+  assert.equal(state.survey.scanPoints[0].complete, true);
+  assert.equal(
+    state.events.filter((event) => event.type === "survey-scan-complete"
+      && event.scanId === first.id).length,
+    1,
+  );
+
+  state = completeSurveyScans(state);
+  assert.equal(state.survey.objectives.scan.complete, true);
+  assert.equal(state.survey.objectives.scan.completed, state.survey.scanPoints.length);
+  assert.equal(state.survey.phase, "return-ready");
+});
+
+test("tomorrow's attack-site sortie succeeds only as a dark survey and silent return", () => {
+  const breachCases = [
+    [{ detachFiber: true }, "stealth-rf-breach"],
+    [{ broadcast: true }, "stealth-broadcast-breach"],
+    [{ fire: true }, "stealth-fire-breach"],
+  ];
+  for (const [input, reason] of breachCases) {
+    const breached = stepIndoorMission(
+      createIndoorMission({ missionId: "attack-site" }),
+      input,
+      DT,
+    );
+    assert.equal(breached.status, "failure");
+    assert.equal(breached.failureReason, reason);
+  }
+
+  let state = completeSurveyScans(createIndoorMission({ missionId: "attack-site" }));
+  state = stepIndoorMission(state, { returnHome: true }, DT);
+  assert.equal(state.survey.returnRequested, true);
+  assert.equal(state.survey.silentReturn, true);
+  assert.equal(state.drone.autonomy.mode, "return-home");
+  assert.equal(state.drone.autonomy.authority, 0);
+  state.drone.position = { ...state.survey.extractionPosition };
+  state.drone.velocity = { x: 0, y: 0, z: 0 };
+  state = stepIndoorMission(state, {}, DT);
+  assert.equal(state.status, "success");
+  assert.equal(state.survey.objectives.return.complete, true);
+  assert.equal(state.link.mode, "fiber");
+});
+
+test("the same broadcast draws more attention as survey distance from base increases", () => {
+  const attention = Object.keys(SURVEY_PROFILES).map((missionId) => {
+    const state = stepIndoorMission(
+      createIndoorMission({ missionId }),
+      { broadcast: true },
+      DT,
+    );
+    return state.survey.attention;
+  });
+  assert.ok(attention[0] < attention[1]);
+  assert.ok(attention[1] < attention[2]);
+});
+
+test("diversion doctrine requires a deliberate signature, investigator, and first shot", () => {
+  let state = completeSurveyScans(createIndoorMission({ missionId: "diversion-site" }));
+  state = stepIndoorMission(state, { returnHome: true }, DT);
+  assert.equal(state.survey.returnRequested, true);
+  assert.equal(state.status, "active",
+    "an early return may be requested but cannot complete before provocation requirements");
+
+  state = completeSurveyScans(createIndoorMission({ missionId: "diversion-site" }));
+  state = stepIndoorMission(state, { detachFiber: true }, DT);
+  state = advance(state, 60, { broadcast: true });
+  assert.equal(state.survey.objectives.broadcast.complete, true);
+  assert.equal(state.survey.investigator.summoned, true);
+  state = advance(state, Math.ceil((state.survey.investigator.delay + 0.1) / DT));
+  assert.equal(state.survey.investigator.arrived, true);
+  assert.equal(state.survey.combat.active, false,
+    "being observed does not start the reinforcement clock before the player fires");
+
+  const investigator = state.hostiles.find((hostile) => hostile.id === "investigator-drone");
+  state.drone.position = {
+    x: investigator.position.x,
+    y: investigator.position.y,
+    z: investigator.position.z + 2,
+  };
+  state.drone.velocity = { x: 0, y: 0, z: 0 };
+  state.drone.yaw = 0;
+  state.drone.pitch = 0;
+  state = stepIndoorMission(state, { fire: true }, DT);
+  state = advance(state, 12);
+  assert.equal(state.survey.combat.active, true);
+  assert.equal(state.survey.objectives.combat.complete, true);
+  assert.ok(state.survey.combat.reinforcementRemaining
+    < state.survey.combat.reinforcementDuration);
+});
+
+test("reinforcement arrival has an exact clock boundary and activates drone-v-drone combat", () => {
+  let state = createIndoorMission({ missionId: "diversion-site" });
+  state.survey.combat.active = true;
+  state.survey.combat.reinforcementClockActive = true;
+  state.survey.combat.reinforcementRemaining = DT * 2;
+  state.survey.combat.reinforcementArrived = false;
+  state.survey.objectives.combat.complete = true;
+
+  state = stepIndoorMission(state, {}, DT);
+  assert.equal(state.survey.combat.reinforcementArrived, false);
+  state = stepIndoorMission(state, {}, DT);
+  assert.equal(state.survey.combat.reinforcementArrived, true);
+  const reinforcement = state.hostiles.find(
+    (hostile) => hostile.id === "reinforcement-drone",
+  );
+  assert.equal(reinforcement.active, true);
+  assert.equal(reinforcement.engaged, true);
+  assert.ok(state.events.some((event) => event.type === "reinforcement-arrived"));
+});
+
+test("discretionary survey supports both a quiet recovery and a defended radio branch", () => {
+  let quiet = completeSurveyScans(
+    createIndoorMission({ missionId: "discretionary-site" }),
+  );
+  quiet = stepIndoorMission(quiet, { returnHome: true }, DT);
+  quiet.drone.position = { ...quiet.survey.extractionPosition };
+  quiet.drone.velocity = { x: 0, y: 0, z: 0 };
+  quiet = stepIndoorMission(quiet, {}, DT);
+  assert.equal(quiet.status, "success");
+  assert.equal(quiet.survey.silentReturn, true);
+
+  let noisy = completeSurveyScans(
+    createIndoorMission({ missionId: "discretionary-site" }),
+  );
+  noisy = stepIndoorMission(noisy, { detachFiber: true }, DT);
+  noisy = advance(noisy, 130, { broadcast: true });
+  assert.equal(noisy.status, "active");
+  assert.equal(noisy.survey.investigator.summoned, true);
+  assert.equal(noisy.survey.breach, null);
+  assert.equal(noisy.link.mode, "rf");
 });

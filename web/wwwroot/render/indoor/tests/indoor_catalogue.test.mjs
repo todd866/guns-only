@@ -29,6 +29,9 @@ test("Indoor entrypoint advertises its complete control and mission contract", (
     "viewport",
     "begin-button",
     "detach-button",
+    "broadcast-button",
+    "return-button",
+    "survey-mission-set",
     "objective-list",
     "minimap",
     "result-screen",
@@ -42,6 +45,10 @@ test("Indoor entrypoint advertises its complete control and mission contract", (
   assert.match(indoor, /W \/ S/);
   assert.match(indoor, /ARROWS/);
   assert.match(indoor, /X detaches fibre/);
+  assert.match(indoor, /HOLD B/);
+  for (const missionId of ["attack-site", "discretionary-site", "diversion-site"]) {
+    assert.match(indoor, new RegExp(`data-mission-id="${missionId}"`));
+  }
   assert.match(indoor, /Fictional systems and facility/);
   assert.match(indoor, /type="module" src="\.\/game\.js"/);
 });
@@ -64,6 +71,10 @@ test("Indoor keeps the Guns-Only keyboard grammar while remapping aircraft axes 
     "Space and Left Shift must own climb and descent");
   assert.match(game, /event\.code === "KeyX"[\s\S]*detachQueued = true/,
     "X must own the deliberate fibre breakaway");
+  assert.match(game, /event\.code === "KeyB"[\s\S]*broadcastHeld = true/,
+    "B must own the deliberate RF/EW signature");
+  assert.match(game, /returnHome,[\s\S]*broadcast: broadcastHeld/,
+    "the UI must send return and broadcast doctrine choices into the kernel");
 });
 
 test("Indoor makes downlink loss visible while keeping simulation cadence independent", () => {
