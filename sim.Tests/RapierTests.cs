@@ -228,6 +228,223 @@ public class RapierTests {
             "the aircraft went into the ground off the catapult");
     }
 
+    /// This is the propulsion question in its operational form. It starts with the authored
+    /// 2,700 kg load on the authored launcher, climbs around M0.90 to FL560, accelerates level
+    /// through the turbine/ram overlap, then climbs on ram power to FL700. The controller uses only
+    /// SimulationSession's production key-input boundary; no state teleport or AircraftSim-only
+    /// sizing calculation is allowed to answer whether the mission works.
+    [Fact]
+    public void TheCatapultMissionCanReachRamCruiseOnTheAuthoredFuelLoad() {
+        const double ClimbTopM = 56_000.0 * 0.3048;
+        const double CruiseAltitudeM = 70_000.0 * 0.3048;
+        const double MaximumProfileSeconds = 15.0 * 60.0;
+        var session = new SimulationSession(10);
+        double initialFuelLb = session.PlayerFuel.FuelLb;
+        double maxMach = 0.0;
+        double? timeToMach22Seconds = null;
+        double? fuelAtMach22Lb = null;
+        double? climbTopTimeSeconds = null;
+        double? fuelAtClimbTopLb = null;
+        double? altitudeAtMach22M = null;
+        double accelerationMinimumAltitudeM = double.PositiveInfinity;
+        double accelerationMaximumAltitudeM = double.NegativeInfinity;
+        bool pullHeld = false;
+        bool pushHeld = false;
+
+        Assert.Equal(5_950.0, initialFuelLb, precision: 6);
+        Assert.InRange(initialFuelLb * 0.45359237, 2_695.0, 2_705.0);
+        // Decision records do not feed flight, propulsion, fuel, opponent control, or outcomes.
+        // They are intentionally off in this long propulsion card to avoid allocating a combat
+        // training row on every one of roughly sixty thousand unrelated transit ticks.
+        session.DecisionCaptureEnabled = false;
+        session.Begin();
+        Assert.True(session.Catapult.IsActive);
+
+        int maximumTicks = (int)(MaximumProfileSeconds * AircraftSim.TickHz);
+        for (int tick = 0; tick < maximumTicks; tick++) {
+            double altitudeM = session.Player.State.Position.Y;
+            AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
+            double mach = session.Player.AirspeedMps / air.SpeedOfSoundMps;
+            maxMach = System.Math.Max(maxMach, mach);
+
+            if (timeToMach22Seconds is null && mach >= 2.2) {
+                timeToMach22Seconds = session.TimeSeconds;
+                fuelAtMach22Lb = session.PlayerFuel.FuelLb;
+                altitudeAtMach22M = altitudeM;
+            }
+            if (climbTopTimeSeconds is null && altitudeM >= ClimbTopM - 40.0) {
+                climbTopTimeSeconds = session.TimeSeconds;
+                fuelAtClimbTopLb = session.PlayerFuel.FuelLb;
+            }
+            if (climbTopTimeSeconds is not null && timeToMach22Seconds is null) {
+                accelerationMinimumAltitudeM = System.Math.Min(
+                    accelerationMinimumAltitudeM, altitudeM);
+                accelerationMaximumAltitudeM = System.Math.Max(
+                    accelerationMaximumAltitudeM, altitudeM);
+            }
+            if (timeToMach22Seconds is not null
+                && altitudeM >= CruiseAltitudeM
+                && mach >= 2.15)
+                break;
+            if (session.PlayerTerminalState != AircraftTerminalState.Flying
+                || session.Lifecycle != SimulationSession.LifecycleState.Active)
+                break;
+
+            double targetGamma;
+            if (session.Catapult.IsActive) {
+                // The launcher owns the flight path until handoff.
+                targetGamma = session.Player.State.Gamma;
+            } else if (altitudeM < ClimbTopM - 40.0 && timeToMach22Seconds is null) {
+                // Energy climb: shallow while the aircraft accelerates to M0.90, then exchange
+                // further excess power for height. The clamp prevents either a mush or a zoom.
+                targetGamma = System.Math.Clamp(
+                    0.12 + 0.55 * (mach - 0.90), 0.015, 0.24);
+            } else if (timeToMach22Seconds is null) {
+                // Neutral 1 G holds the established path. Correct the climb flight path to level,
+                // then leave it alone through the wave-drag rise; chasing a few metres of altitude
+                // with the keyboard's 12 G / -1 G endpoints would manufacture induced drag.
+                targetGamma = 0.0;
+            } else {
+                // Once established on ram power, hold about M2.2 while spending the renewed excess
+                // power on the climb to the 70,000 ft cruise level.
+                targetGamma = System.Math.Clamp(
+                    0.075 + 0.45 * (mach - 2.20), 0.01, 0.16);
+            }
+
+            double gammaError = targetGamma - session.Player.State.Gamma;
+            bool levelAcceleration = timeToMach22Seconds is null
+                && altitudeM >= ClimbTopM - 40.0;
+            double gammaDeadband = levelAcceleration ? 0.0035 : 0.006;
+            // Pull and push are endpoint commands, not an analogue autopilot seam. A one-tick pulse
+            // every 0.1 s changes the flight path without holding 12 G long enough to dominate the
+            // propulsion measurement with induced drag. The one exception is the initial level
+            // capture: a sustained push above 1.5 degrees promptly removes the climb instead of
+            // spending tens of seconds and thousands of feet easing onto the acceleration line.
+            bool coarseLevelCapture = levelAcceleration
+                && session.Player.State.Gamma > 0.026;
+            bool correctionTick = coarseLevelCapture
+                || tick % (AircraftSim.TickHz / 10) == 0;
+            bool pull = correctionTick && !session.Catapult.IsActive
+                && gammaError > gammaDeadband;
+            bool push = correctionTick && !session.Catapult.IsActive
+                && gammaError < -gammaDeadband;
+            if (pull != pullHeld) {
+                session.FeedKey(GKey.PullUp, pull);
+                pullHeld = pull;
+            }
+            if (push != pushHeld) {
+                session.FeedKey(GKey.PushDown, push);
+                pushHeld = push;
+            }
+            session.StepFixed();
+        }
+        if (pullHeld) session.FeedKey(GKey.PullUp, false);
+        if (pushHeld) session.FeedKey(GKey.PushDown, false);
+
+        double finalAltitudeFt = session.Player.State.Position.Y / 0.3048;
+        double finalMach = session.Player.AirspeedMps
+            / StandardAtmosphere1976.Instance.Sample(
+                session.Player.State.Position.Y).SpeedOfSoundMps;
+        double fuelUsedToMach22Lb = timeToMach22Seconds is null
+            ? double.NaN : initialFuelLb - fuelAtMach22Lb!.Value;
+        double accelerationSeconds = timeToMach22Seconds is null
+            || climbTopTimeSeconds is null
+            ? double.NaN : timeToMach22Seconds.Value - climbTopTimeSeconds.Value;
+        double accelerationFuelLb = timeToMach22Seconds is null
+            || fuelAtClimbTopLb is null
+            ? double.NaN : fuelAtClimbTopLb.Value - fuelAtMach22Lb!.Value;
+        _out.WriteLine($"real-kernel catapult profile: max M{maxMach:F3}; "
+            + (climbTopTimeSeconds is { } climbTime
+                ? $"FL560 at {climbTime:F1} s; "
+                : "FL560 NOT REACHED; ")
+            + (timeToMach22Seconds is { } time
+                ? $"M2.2 at {time:F1} s using {fuelUsedToMach22Lb:F1} lb "
+                    + $"({fuelUsedToMach22Lb * 0.45359237:F1} kg) total; "
+                    + $"level acceleration {accelerationSeconds:F1} s / "
+                    + $"{accelerationFuelLb:F1} lb "
+                    + $"({accelerationFuelLb * 0.45359237:F1} kg), "
+                    + $"FL{accelerationMinimumAltitudeM / 30.48:F0}"
+                    + $"..{accelerationMaximumAltitudeM / 30.48:F0}; "
+                : "M2.2 NOT REACHED; ")
+            + $"final M{finalMach:F3} at FL{finalAltitudeFt / 100.0:F0}; "
+            + $"{session.PlayerFuel.FuelLb:F1} lb remains; "
+            + $"lever {session.Controls.Throttle:F2}, "
+            + $"thrust {session.Player.LastEngineOperatingPoint.NetThrustN / 1000.0:F1} kN, "
+            + $"Nz {session.Player.LastNz:F2}");
+
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+        Assert.True(timeToMach22Seconds.HasValue,
+            $"only reached M{maxMach:F3} from the catapult in {session.TimeSeconds:F1} s");
+        Assert.True(fuelAtMach22Lb > 0.0,
+            $"the full {initialFuelLb:F0} lb load was exhausted before M2.2");
+        Assert.InRange(altitudeAtMach22M!.Value, ClimbTopM - 250.0, ClimbTopM + 500.0);
+        Assert.True(session.Player.State.Position.Y >= CruiseAltitudeM,
+            $"ram climb ended at only {finalAltitudeFt:F0} ft");
+        Assert.True(finalMach >= 2.15,
+            $"arrived at FL700 too slow for ram cruise: M{finalMach:F3}");
+    }
+
+    [Fact]
+    public void Mach16AccelerationIsAltitudeGatedInTheRealSession() {
+        const double TestMassKg = 6_800.0;
+        const double InitialMach = 1.6;
+        const int MeasureSeconds = 45;
+
+        static SimulationSession LevelAt(double altitudeFt) {
+            const double FuelFreeMassKg = 5_150.0;
+            double altitudeM = altitudeFt * 0.3048;
+            double fuelLb = (TestMassKg - FuelFreeMassKg) / 0.45359237;
+            AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
+            BeatSetup source = Beats.RapierIntercept();
+            BeatSetup levelCard = source with {
+                Player = new AircraftState(
+                    new Vec3D(0.0, altitudeM, 0.0),
+                    InitialMach * air.SpeedOfSoundMps,
+                    Gamma: 0.0, Chi: 0.0, Bank: 0.0, Mass: TestMassKg),
+                Bandit = source.Bandit with {
+                    Position = new Vec3D(500_000.0, altitudeM, 500_000.0)
+                },
+                Carrier = null,
+                StartsOnCatapult = false,
+                UsesReactiveBandit = false,
+                Combat = CombatConfig.CarrierRecoveryOnly,
+                Fuel = source.FuelLoadout with {
+                    CapacityLb = fuelLb,
+                    InitialFuelLb = fuelLb
+                },
+                InitialThrottle = Jet.MaxThrustFraction
+            };
+            var session = new SimulationSession();
+            session.StartBeat(() => levelCard);
+            session.DecisionCaptureEnabled = false;
+            session.Begin();
+            return session;
+        }
+
+        static double Mach(SimulationSession session) =>
+            session.Player.AirspeedMps
+            / StandardAtmosphere1976.Instance.Sample(
+                session.Player.State.Position.Y).SpeedOfSoundMps;
+
+        var low = LevelAt(31_500.0);
+        var high = LevelAt(56_000.0);
+        for (int tick = 0; tick < MeasureSeconds * AircraftSim.TickHz; tick++) {
+            low.StepFixed();
+            high.StepFixed();
+        }
+        double lowMach = Mach(low);
+        double highMach = Mach(high);
+        _out.WriteLine($"real-kernel {MeasureSeconds} s level acceleration from M1.6 "
+            + $"at {TestMassKg:F0} kg: FL315 -> M{lowMach:F3}, "
+            + $"FL560 -> M{highMach:F3}");
+
+        Assert.True(lowMach < InitialMach - 0.02,
+            $"FL315 unexpectedly accelerated from M{InitialMach:F1} to M{lowMach:F3}");
+        Assert.True(highMach > InitialMach + 0.02,
+            $"FL560 failed to accelerate from M{InitialMach:F1}: M{highMach:F3}");
+    }
+
     [Fact]
     public void FixedStripNeverInheritsShipMotionBurbleOrSolidGeometry() {
         BeatSetup beat = Beats.RapierIntercept(Carrier.DeckConfiguration.Angled);

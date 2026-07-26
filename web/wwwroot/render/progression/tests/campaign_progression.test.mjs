@@ -49,6 +49,8 @@ test("the missions are genuinely different fights and expose their aircraft hone
   assert.notEqual(drone.mission, rapier.mission);
   assert.notEqual(guns.mission, rapier.mission);
   assert.notEqual(guns.aircraft, rapier.aircraft);
+  assert.match(rapier.shortObjective, /M0\.90.*FL560.*M2\.2.*FL700/,
+    "the Rapier card must teach the altitude-gated ram acceleration profile");
   // None advertises a qualification: there is nothing to earn.
   assert.equal(guns.qualification, "");
   assert.equal(drone.qualification, "");

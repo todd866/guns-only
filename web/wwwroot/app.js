@@ -1536,9 +1536,9 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     kicker: "2030s Ukraine · deep-rear dispersed basing",
     title: "Rapier Intercept",
     sortie: "Rapier turbo-ramjet interceptor · catapult launch · guns only · hook recovery",
-    configuration: "Rapier public-data surrogate · 12 G structural, 15 G on override · no afterburner below M2 · 520 m electromagnetic launcher to 150 m/s",
-    brief: "You launch from a dispersed strip a long way behind the front, because forward airfields do not survive. Climb on the turbine core, let the ram side take over past Mach 2, and cruise very high and very fast to the contact. Then dive. The Rapier carries enormous instantaneous G and almost no sustained G — it can point at anything once, for three to five seconds, and afterwards it is slow, low and out of ideas. Make the pass count, then recover on the hook.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace releases the G limiter to 15 G · one pass, then get out",
+    configuration: "Rapier public-data surrogate · 2,700 kg fuel · 12 G structural, 15 G on override · 520 m electromagnetic launcher to 150 m/s",
+    brief: "The ramjet works only if you bring it thin air. Climb around M0.90 to FL560 (56,000 ft), level off at full augmentation, and accelerate through ram light at M1.6 to full ram at M2.2. Then climb on ram power to FL700 cruise before the dive. Trying to accelerate around FL315 leaves drag above available thrust; more throttle is not the answer. The Rapier carries enormous instantaneous G and almost no sustained G — it can point at anything once, for three to five seconds. Make the pass count, then recover on the hook.",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nM0.90 → FL560 · level to M2.2 · ram climb to FL700 · then one pass",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
