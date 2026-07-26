@@ -36,7 +36,11 @@ export const TERRAIN_EARTH_RADIUS_M = 6_371_000;
 const UKRAINE_TRAINING_CORE_HALF_SPAN_M = 8_192;
 const UKRAINE_TRAINING_APRON_TRANSITION_M = 4_000;
 const UKRAINE_TRAINING_APRON_HEIGHT_M = 78;
-const UKRAINE_TRAINING_HORIZON_HALF_SPAN_M = 100_000;
+// At the Rapier's 21.5 km cruise the true horizon is about 520 km (3.57*sqrt(h) km), so a 100 km
+// apron left the pilot looking at a small disc of ground ringed by void. These patches are
+// PlaneGeometry(w, h, 1, 1) - two triangles each - so reaching past the horizon costs four quads
+// and nothing else. Detail out here is explicitly not wanted; presence is.
+const UKRAINE_TRAINING_HORIZON_HALF_SPAN_M = 560_000;
 
 // Baked terrain occlusion. The sampling radius is expressed in METRES and converted to samples
 // per LOD, so a valley reads with the same enclosure at 64 m and at 256 m spacing and does not

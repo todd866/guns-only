@@ -214,11 +214,12 @@ public static class Ukraine2030sTheatre {
     public static MissionEnvironmentContract RapierCorridor { get; } = Shared with {
         LocationId = "location.ukraine.soniachne-rapier-corridor.v1",
         FrameKind = MissionEnvironmentFrameKind.LocalRegionalCorridor,
-        // Was 112 km, which asked the streamer for terrain FURTHER OUT than anything that can be
-        // drawn: the authored cell is 16.4 km across and the horizon apron
-        // (UKRAINE_TRAINING_HORIZON_HALF_SPAN_M) stops at 100 km. Requesting past both is the most
-        // likely source of the heavy terrain artefacting on this mission. Clamp to the apron.
-        PreferredTerrainStreamingRadiusM = 96_000.0
+        // This is a VISIBILITY knob, not just a streaming one: app.js derives the fog wall from it
+        // (radius * WORLD_EDGE_VISIBILITY_FRACTION). Clamping it to 96 km put the fog at 82 km
+        // while the pilot sat at 21.5 km looking at a 520 km horizon, which is what made the world
+        // read as a small lit patch in murk. A high-altitude sortie has to open the view out, and
+        // the apron - now 560 km - is what fills it. Coarse and flat is fine; empty is not.
+        PreferredTerrainStreamingRadiusM = 420_000.0
     };
 }
 
