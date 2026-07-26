@@ -1243,8 +1243,6 @@
       box-shadow: inset 3px 0 0 #4dff88;
     }
 
-    .sortie-option[data-program-state="qualified"] { border-color: rgba(77, 255, 136, .28); }
-    .sortie-option[data-program-state="locked"] { opacity: .46; }
     .sortie-choice:disabled { cursor: not-allowed; }
 
     .sortie-choice {
@@ -1297,7 +1295,6 @@
     }
 
     .sortie-number b { float: right; color: rgba(217, 255, 229, .42); }
-    .sortie-option[data-program-state="qualified"] .sortie-number b { color: #4dff88; }
 
     #ready-kicker {
       margin-bottom: 10px;
@@ -2175,51 +2172,35 @@
       <header class="ready-menu-header">
         <div class="ready-menu-brand">Guns Only</div>
         <div>
-          <h1 id="ready-menu-title">Raptor program</h1>
-          <p id="ready-menu-help">Performance unlocks the next assignment. Carrier conversion follows three F-22 qualifications.</p>
+          <h1 id="ready-menu-title">Pick an aircraft</h1>
+          <p id="ready-menu-help">Both are available. Fly whichever you feel like.</p>
         </div>
       </header>
 
       <div class="ready-layout">
-        <section id="ready-selector" class="ready-selector" aria-label="Raptor program progression">
+        <section id="ready-selector" class="ready-selector" aria-label="Mission selection">
           <div class="ready-group-heading ready-program-heading">
             <div>
-              <h2>Qualification track</h2>
-              <p>Old prototypes stay out of the player path. Fly well to move forward.</p>
+              <h2>Missions</h2>
+              <p>Two aircraft, two completely different fights.</p>
             </div>
-            <output id="ready-program-progress">0 / 4 QUALIFIED</output>
+            <output id="ready-program-progress"></output>
           </div>
           <div class="ready-mission-groups">
             <div class="sortie-option" data-selected="true" data-program-state="available">
               <button type="button" class="sortie-choice" data-program-node="first-merge" aria-pressed="true">
-                <span class="sortie-number">01 · F-22A <b data-program-status="first-merge">AVAILABLE</b></span>
-                <strong>First Merge</strong>
-                <span>Win one guns-only visual engagement.</span>
-                <small>SPLASH ONE BANDIT</small>
+                <span class="sortie-number">F-22A <b data-program-status="first-merge"></b></span>
+                <strong>Guns Only</strong>
+                <span>Endless guns-only dogfight against a reactive bandit. The wave escalates while you keep winning and eases when you do not.</span>
+                <small>NO MISSILES · NO RADAR GAME · ANGLES AND ENERGY</small>
               </button>
             </div>
-            <div class="sortie-option" data-selected="false" data-program-state="locked">
-              <button type="button" class="sortie-choice" data-program-node="raid-defence" aria-pressed="false" disabled>
-                <span class="sortie-number">02 · F-22A <b data-program-status="raid-defence">LOCKED</b></span>
-                <strong>Raid Defence</strong>
-                <span>Stop four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring.</span>
-                <small>65+ SCORE · 3 KILLS · MAX 1 LEAKER</small>
-              </button>
-            </div>
-            <div class="sortie-option" data-selected="false" data-program-state="locked">
-              <button type="button" class="sortie-choice" data-program-node="endurance-merge" aria-pressed="false" disabled>
-                <span class="sortie-number">03 · F-22A <b data-program-status="endurance-merge">LOCKED</b></span>
-                <strong>Endurance Merge</strong>
-                <span>Survive successive neutral merges and score twice.</span>
-                <small>SPLASH TWO BANDITS IN ONE SORTIE</small>
-              </button>
-            </div>
-            <div class="sortie-option" data-selected="false" data-program-state="locked">
-              <button type="button" class="sortie-choice" data-program-node="ace-duel" aria-pressed="false" disabled>
-                <span class="sortie-number">04 · F-22A <b data-program-status="ace-duel">LOCKED</b></span>
-                <strong>Ace Duel</strong>
-                <span>Win a lone guns-only duel against a forced Ace bandit.</span>
-                <small>REQUIRES THREE RAPTOR QUALIFICATIONS</small>
+            <div class="sortie-option" data-selected="false" data-program-state="available">
+              <button type="button" class="sortie-choice" data-program-node="rapier-intercept" aria-pressed="false">
+                <span class="sortie-number">RAPIER <b data-program-status="rapier-intercept"></b></span>
+                <strong>Rapier Intercept</strong>
+                <span>2030s turbo-ramjet interceptor. Catapult off a dispersed strip, climb, cruise very high and very fast, dive on the contact, recover on the hook.</span>
+                <small>ONE PASS · 12 G STRUCTURAL, 15 G ON OVERRIDE · HOOK RECOVERY</small>
               </button>
             </div>
           </div>

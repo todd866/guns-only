@@ -450,28 +450,28 @@ test("fresh players launch directly into the first F-22 merge", () => {
   const buttons = htmlButtons(indexSource);
   const nodeIds = buttons.filter((button) => button.attributes["data-program-node"] !== undefined)
     .map((button) => button.attributes["data-program-node"]);
-  assert.deepEqual(nodeIds, [
-    "first-merge", "raid-defence", "endurance-merge", "ace-duel",
-  ]);
+  // TWO missions. The graded ladder was cut deliberately: it stood between the pilot and the
+  // aircraft they wanted to fly.
+  assert.deepEqual(nodeIds, ["first-merge", "rapier-intercept"]);
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
   assert.match(indexSource, /\.ready-selector,[\s\S]*?touch-action:\s*pan-y/);
   assert.match(indexSource, /\.sortie-choice\s*\{[\s\S]*?min-height:\s*78px/);
 });
 
-test("the player-facing program is linear and performance-gated", () => {
+test("nothing in the menu is gated behind anything else", () => {
+  // The INVERSE of the contract this test used to hold. The graded ladder was scaffolding from when
+  // this was a programme of exercises; both aircraft are now available from a cold start, with no
+  // qualification, no sequence gate and no LOCKED state to render.
   assert.match(progressionSource,
-    /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "raid-defence"[\s\S]*?mission: 8[\s\S]*?id: "endurance-merge"[\s\S]*?mission: 7[\s\S]*?id: "ace-duel"[\s\S]*?mission: 9/);
+    /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "rapier-intercept"[\s\S]*?mission: 10/);
   assert.match(progressionSource,
-    /case "first-merge":[\s\S]*?kills >= 1[\s\S]*?case "raid-defence":[\s\S]*?drone_raid_score\) >= 65[\s\S]*?case "endurance-merge":[\s\S]*?kills >= 2/);
-  assert.match(progressionSource,
-    /function campaignNodeUnlocked[\s\S]*?CAMPAIGN_NODES\[node\.sequence - 2\][\s\S]*?qualifications/);
+    /function campaignNodeUnlocked[\s\S]*?return Boolean\(campaignNode\(nodeId\)\)/,
+    "availability must depend on the node existing, not on what the pilot has flown");
+  assert.doesNotMatch(indexSource, /data-program-state="locked"/,
+    "no sortie card may render as locked");
   assert.match(appSource,
-    /function recordCampaignQualification[\s\S]*?qualifyCampaignNode[\s\S]*?saveCampaignProfile/);
-  assert.match(appSource,
-    /function selectCampaignNode[\s\S]*?campaignNodeUnlocked[\s\S]*?selectedBeat = node\.mission/);
-  assert.match(appSource,
-    /searchParams\.delete\("mission"\)[\s\S]*?searchParams\.set\("program", selectedProgramNodeId\)[\s\S]*?history\.replaceState/);
+    /function selectCampaignNode[\s\S]*?selectedBeat = node\.mission/);
 });
 
 test("program modal behavior cannot leak into flight shortcuts", () => {
@@ -513,9 +513,8 @@ test("drone-raid coaching is mission-gated and carries live efficiency truth int
   assert.match(mission,
     /four-raider sequential stream:[^\"]*one target is authoritative at a time[^\"]*next enters only after the current raider is killed or leaks/i,
     "the menu must disclose the sequential one-opponent kernel instead of implying four simultaneous targets");
-  assert.match(indexSource,
-    /four sequentially staged one-way raiders—one authoritative target at a time—before they cross the defended ring/i,
-    "the sortie card must make the staged-stream limitation visible before launch");
+  // The raid no longer has a menu card — the menu is two aircraft — but the BRIEFING must still
+  // disclose the staged-stream limitation wherever the mission is reachable from.
   assert.match(hudSource,
     /const raid = state\.drone_raid_evaluation === true;[\s\S]*?drone_raid_active_target[\s\S]*?drone_raid_time_to_leak_s[\s\S]*?drone_raid_rounds_per_kill[\s\S]*?drone_raid_cue/,
     "the raid HUD must derive its teaching cue and efficiency data from authoritative mission state");

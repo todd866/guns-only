@@ -7,48 +7,18 @@ export const CAMPAIGN_NODES = Object.freeze([
     mission: 7,
     sequence: 1,
     aircraft: "F-22A",
-    title: "First Merge",
-    shortObjective: "Win one guns-only visual engagement.",
-    qualification: "SPLASH ONE BANDIT",
+    title: "Guns Only",
+    shortObjective: "Endless guns-only dogfight. The wave escalates while you keep winning.",
+    qualification: "",
   }),
-  Object.freeze({
-    id: "raid-defence",
-    mission: 8,
-    sequence: 2,
-    aircraft: "F-22A",
-    title: "Raid Defence",
-    shortObjective: "Stop the staged drone stream with disciplined fire.",
-    qualification: "65+ SCORE · 3 KILLS · MAX 1 LEAKER",
-  }),
-  Object.freeze({
-    id: "endurance-merge",
-    mission: 7,
-    sequence: 3,
-    aircraft: "F-22A",
-    title: "Endurance Merge",
-    shortObjective: "Survive successive neutral merges and score twice.",
-    qualification: "SPLASH TWO BANDITS IN ONE SORTIE",
-  }),
-  Object.freeze({
-    id: "ace-duel",
-    mission: 9,
-    sequence: 4,
-    aircraft: "F-22A",
-    title: "Ace Duel",
-    shortObjective: "Win a lone guns-only duel against a forced Ace bandit.",
-    qualification: "SPLASH THE ACE",
-  }),
-  // A different aircraft in a different decade, so it sits AFTER the Raptor programme rather than
-  // inside it. The Rapier is not a better F-22; it is a one-pass interceptor that flies a completely
-  // different sortie and is beaten in completely different ways.
   Object.freeze({
     id: "rapier-intercept",
     mission: 10,
-    sequence: 5,
+    sequence: 2,
     aircraft: "Rapier",
     title: "Rapier Intercept",
     shortObjective: "Catapult out, climb, cruise high and fast, dive on the contact, recover.",
-    qualification: "SPLASH THE CONTACT AND TRAP",
+    qualification: "",
   }),
 ]);
 
@@ -101,15 +71,15 @@ export function campaignNode(nodeId) {
 }
 
 export function campaignNodeUnlocked(profile, nodeId) {
-  const node = campaignNode(nodeId);
-  if (!node) return false;
-  if (node.sequence === 1) return true;
-  const previous = CAMPAIGN_NODES[node.sequence - 2];
-  return Boolean(profile?.qualifications?.[previous.id]);
+  // EVERYTHING IS AVAILABLE. The qualification ladder was scaffolding from when the game was a
+  // programme of exercises; it is now two missions and locking one behind the other only stands
+  // between the pilot and the aircraft they wanted to fly.
+  return Boolean(campaignNode(nodeId));
 }
 
-export function campaignNodeQualified(profile, nodeId) {
-  return Boolean(profile?.qualifications?.[String(nodeId || "")]);
+export function campaignNodeQualified() {
+  // Retained as a no-op so callers keep compiling; there is no qualification any more.
+  return false;
 }
 
 export function recommendedCampaignNode(profile) {

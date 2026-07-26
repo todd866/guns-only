@@ -1452,12 +1452,12 @@ const MISSION_BRIEFS = Object.freeze({
 
 const CAMPAIGN_BRIEFS = Object.freeze({
   "first-merge": Object.freeze({
-    kicker: "Raptor programme · qualification 01",
-    title: "First Merge",
-    sortie: "F-22A vs Su-27S · guns only · first pass safe",
+    kicker: "F-22A · endless",
+    title: "Guns Only",
+    sortie: "F-22A vs escalating opposition · guns only · first pass safe",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
-    brief: "You are already at the visual merge. Survive the first pass, fight into the rear quarter, and splash one Su-27 surrogate. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash one bandit to qualify · Space releases the G limiter",
+    brief: "You are already at the visual merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going — the fight director watches how you actually flew and moves the pilot tier, the opponent's jet and the number of aircraft you face. Win and it stays hard. Lose twice and it eases. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace releases the G limiter · H opens controls",
   }),
   "raid-defence": Object.freeze({
     ...MISSION_BRIEFS[8],
@@ -2029,30 +2029,20 @@ function renderIncidentReplay(frame) {
 }
 
 function renderCampaignProgress() {
-  const qualifiedCount = CAMPAIGN_NODES.filter((node) =>
-    campaignNodeQualified(campaignProfile, node.id)).length;
-  if (readyProgramProgress) {
-    readyProgramProgress.textContent = `${qualifiedCount} / ${CAMPAIGN_NODES.length} QUALIFIED`;
-  }
+  // Two missions, both always available. No counter, no locks, no status chips — the menu's whole
+  // job is to let the pilot pick an aircraft and go.
+  if (readyProgramProgress) readyProgramProgress.textContent = "";
   for (const button of readyProgramButtons) {
     const nodeId = button.dataset.programNode;
     const selected = nodeId === selectedProgramNodeId;
-    const qualified = campaignNodeQualified(campaignProfile, nodeId);
-    const unlocked = campaignNodeUnlocked(campaignProfile, nodeId);
-    button.disabled = !unlocked;
+    button.disabled = false;
     button.setAttribute("aria-pressed", String(selected));
     button.closest(".sortie-option")?.setAttribute("data-selected", String(selected));
-    button.closest(".sortie-option")?.setAttribute(
-      "data-program-state", qualified ? "qualified" : unlocked ? "available" : "locked",
-    );
+    button.closest(".sortie-option")?.setAttribute("data-program-state", "available");
     if (selected) button.setAttribute("aria-current", "step");
     else button.removeAttribute("aria-current");
   }
-  for (const status of readyProgramStatuses) {
-    const nodeId = status.dataset.programStatus;
-    status.textContent = campaignNodeQualified(campaignProfile, nodeId)
-      ? "QUALIFIED" : campaignNodeUnlocked(campaignProfile, nodeId) ? "AVAILABLE" : "LOCKED";
-  }
+  for (const status of readyProgramStatuses) status.textContent = "";
   if (readyDeckConfig) readyDeckConfig.hidden = true;
   for (const button of readyDeckButtons) {
     button.setAttribute("aria-pressed", String(
@@ -2182,13 +2172,13 @@ function renderPauseUi(state = latestState) {
   if (ready) renderCampaignProgress();
   if (readyMenuTitle) {
     readyMenuTitle.textContent = ready
-      ? "Raptor program" : finished ? "Sortie complete" : "Flight paused";
+      ? "Pick an aircraft" : finished ? "Sortie complete" : "Flight paused";
   }
   if (readyMenuHelp) {
     readyMenuHelp.textContent = (ready
-      ? "Performance unlocks the next assignment. Carrier conversion follows three F-22 qualifications."
+      ? "Both are available. Fly whichever you feel like."
       : finished
-        ? "Review the result, continue when qualified, or fly the assignment again."
+        ? "Review the result, or go again."
         : "The deterministic flight clock is stopped and all controls are neutralised.")
       + (ready ? iosFullscreenHint : "");
   }
@@ -2246,20 +2236,15 @@ function renderPauseUi(state = latestState) {
               ? `Sim touchdown ${replayAnalysis.touchdownAssessment.grade === "NONE" ? "not graded" : replayAnalysis.touchdownAssessment.grade} · ${replayAnalysis.touchdownAssessment.profile} v${replayAnalysis.touchdownAssessment.version} · replay cached · causal review is not an LSO grade`
               : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
     readyReplay.hidden = !incidentReplay?.clip;
-    const nextNode = nextCampaignNode(campaignProfile, selectedProgramNodeId);
-    readyStart.textContent = nextNode
-      ? `Continue: ${nextNode.title}`
-      : campaignNodeQualified(campaignProfile, selectedProgramNodeId)
-        ? "Fly again" : "Retry qualification";
+    // No qualification, so the debrief offers the only two things that make sense: go again, or
+    // pick the other aircraft.
+    readyStart.textContent = "Fly again";
     if (readyControls) readyControls.textContent = carrierQualification
       ? `Full-pass primary · ${carrierFacts.passCorrection}\nTouchdown assessment · ${carrierFacts.touchdown}\nTouchdown primary · ${carrierFacts.touchdownCorrection}`
-      : campaignNodeQualified(campaignProfile, selectedProgramNodeId)
-        ? "Qualification earned · the next assignment is available"
-        : `Qualification incomplete · ${campaignNode(selectedProgramNodeId)?.qualification || "fly again"}`;
+      : "Fly again, or open the mission list to take the other aircraft up";
     readyHint.textContent = background
       ? "Return to the game to restage"
-      : nextNode ? "Press Enter to continue · R flies this assignment again"
-        : "Press Enter to fly again";
+      : "Press Enter to fly again";
   } else if (ready) {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = "Configuration";
