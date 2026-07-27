@@ -31,7 +31,6 @@ public sealed class DetentLayer {
     int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
     bool _bankTargetInitialized;
-    bool _bankCaptureArmed;
     const double Tau = 0.07, StickyStepG = 0.5;
     readonly HashSet<int> _sampledRollRightPresses = new();
     readonly HashSet<int> _sampledRollLeftPresses = new();
@@ -397,7 +396,14 @@ public sealed class DetentLayer {
             - (rollLeftPhase == KeyPhase.DoubleHeld ? 1 : 0));
         // Approach uses a reduced stick/aileron fraction for fine lineup corrections. FREE/FIGHT
         // exposes full lateral travel; q and the derivative law determine the resulting roll rate.
-        double aileronAuthority = ApproachMode ? 0.40 : 1.0;
+        // FBW airframes get a REDUCED pilot aileron share, and it is not a nerf — it is what makes
+        // the attitude hold work at all. The hold moment is clamped to RollMomentMaxNm, so if the
+        // pilot can command a roll rate the ailerons cannot arrest within that clamp, releasing the
+        // stick leaves the aircraft rolling while the hold saturates. Raising the hold gains does
+        // nothing once saturated, which is exactly what measuring them showed. Capping the
+        // commanded rate instead means the aircraft can always stop where it was left.
+        double fbwRollShare = p.RollHoldAttitudeGainNmRad > 0.0 ? 0.38 : 1.0;
+        double aileronAuthority = (ApproachMode ? 0.40 : 1.0) * fbwRollShare;
         int rollDirection = (rollRight ? 1 : 0) - (rollLeft ? 1 : 0);
         int tapDirection = rollDirection == 0 && _pendingRollTapPulses.Count > 0
             ? _pendingRollTapPulses.Dequeue() : 0;
@@ -417,29 +423,14 @@ public sealed class DetentLayer {
             // While the pilot is rolling, let the capture target follow the aircraft. On the
             // first centred-stick tick it remains at the last deliberately set attitude, giving
             // the FBW attitude term a real reference instead of the old rate-only slow drift.
-            bool rollCommanded = System.Math.Abs(requestedRollControl) >= p.RollHoldDeadband;
-            if (p.RollHoldAttitudeGainNmRad <= 0.0 || rollCommanded) {
-                // While rolling, the capture follows the aircraft.
+            // Reverted: a release-edge capture with rate lead was tried here and made the roll
+            // WORSE in the pilot's hands — leading the capture by the damper's time constant
+            // overshoots, so the aircraft settles past where the stick was released. Back to the
+            // plain freeze until the real behaviour is measured from a flown recording rather than
+            // reasoned about.
+            if (p.RollHoldAttitudeGainNmRad <= 0.0
+                || System.Math.Abs(requestedRollControl) >= p.RollHoldDeadband)
                 _bankTarget = bodyBank;
-                _bankCaptureArmed = true;
-            } else if (_bankCaptureArmed) {
-                // RELEASE EDGE. Capture where the aircraft will SETTLE, not where it is.
-                //
-                // A fast FBW roll carries real rate at the moment the stick centres, and the roll
-                // takes time to stop. Freezing the instantaneous bank therefore captured a target
-                // the aircraft had not reached yet, so it kept rolling toward it after release —
-                // the reported "it keeps rolling". Subtracting the rate the damper still has to
-                // wash out captures the attitude the pilot actually asked for.
-                //
-                // The lead is how long the hold needs to wash the rate out: roll authority against
-                // the rate gain gives the damper's own time constant. Bounded so a weak airframe
-                // cannot ask for an absurd lead, and so a hard roll cannot overshoot wildly.
-                double lead = System.Math.Clamp(
-                    p.RollMomentMaxNm / System.Math.Max(1.0, p.RollHoldRateGainNms) * 0.5,
-                    0.0, 0.35);
-                _bankTarget = bodyBank + s.BodyRates.P * lead;
-                _bankCaptureArmed = false;
-            }
         } else {
             // Compatibility for synthetic command-only callers which do not carry BodyAttitude.
             // Keep their legacy integration semantics; flown AircraftSim states use the rate law above.

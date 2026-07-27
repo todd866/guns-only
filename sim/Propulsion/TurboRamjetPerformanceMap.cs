@@ -157,13 +157,35 @@ public static class TurboRamjetPerformanceMap {
         double thrustN = lever * ThrustFraction(mach, ambientTemperatureK, ambientDensityKgM3)
             * staticThrustN;
         double core = System.Math.Clamp(lever, 0.0, 1.0);
-        double fuelFlow = idleFuelFlowLbPerMinute
+
+        // FUEL FOLLOWS THRUST, not the lever.
+        //
+        // This used to interpolate the three published flows on lever position alone, so the engine
+        // burned full augmented fuel whether it was making 61 kN or 23 kN — the flow readout never
+        // moved as thrust decayed with altitude and Mach, which is both wrong and unflyable: the
+        // pilot could not trade speed for endurance because the trade did not exist.
+        //
+        // The published flows are still the anchor. They define a specific fuel consumption at the
+        // sea-level static rating, and flow is then that SFC applied to the thrust actually being
+        // produced, with an idle floor for the fuel a running core burns regardless.
+        double leverFlow = idleFuelFlowLbPerMinute
             + System.Math.Max(0.0, militaryFuelFlowLbPerMinute - idleFuelFlowLbPerMinute) * core;
+        double ratedThrustFraction = core;
         if (lever > 1.0 && leverStop > 1.0) {
             double augmented = System.Math.Clamp((lever - 1.0) / (leverStop - 1.0), 0.0, 1.0);
-            fuelFlow += System.Math.Max(0.0,
+            leverFlow += System.Math.Max(0.0,
                 afterburnerFuelFlowLbPerMinute - militaryFuelFlowLbPerMinute) * augmented;
+            // The augmentor's own thrust boost, so SFC is referenced to what the lever is really
+            // asking the engine for rather than to dry rating alone.
+            ratedThrustFraction = 1.0 + augmented * (System.Math.Max(1.0, leverStop) - 1.0);
         }
+        // Specific fuel consumption implied by the published pairing at this lever, then charged
+        // against delivered thrust. Sea-level static is the reference point where the two agree.
+        double ratedThrustN = System.Math.Max(1.0, ratedThrustFraction * staticThrustN);
+        double specificFuel = leverFlow / ratedThrustN;
+        double fuelFlow = System.Math.Max(
+            idleFuelFlowLbPerMinute * (0.35 + 0.65 * core),
+            specificFuel * thrustN);
         return new EngineOperatingPoint(
             // Lever zero is ground/flight idle, not a stopped core. Keeping the turbine above the
             // generator and hydraulic cut-in is what lets a powered Rapier extend its recovery

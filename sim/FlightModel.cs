@@ -519,7 +519,7 @@ public static class FlightModel {
         // occupant is reclined behind no windscreen issuing coarse intent while the machine does the
         // fine control. A firm bank hold is the single biggest contributor to that — the pilot sets
         // a bank and the aircraft keeps it through a hard pull without constant correction.
-        RollHoldRateGainNms: 620_000.0, RollHoldDeadband: 0.05,
+        RollHoldRateGainNms: 1_200_000.0, RollHoldDeadband: 0.05,
         RollHoldAttitudeGainNmRad: 1_200_000.0,
         // Structure binds, not the pilot — the reclined occupant can use all of it. 12 G is the
         // qualified limit against an 18 G article; Space releases to 15 G, which is knowingly eating

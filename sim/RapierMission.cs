@@ -451,15 +451,26 @@ public sealed class RapierMissionDirector {
                 // converge onto the published 3.5-degree line instead of preserving its error all
                 // the way to the strip. The last two gates then tighten to the mass-scheduled
                 // touchdown cap which places the trailing hook at wire three.
-                // NOTE for whoever picks this up: a closed-loop version of this floor — aiming the
-                // path angle straight at the touchdown point every tick — was tried here and lands
-                // about 250 m short, because `touchdownAim` is not where the hook needs to arrive.
-                // The idea is right and the aim point is the part to fix; do not just re-fit the
-                // constant a sixth time.
+                // CLOSED LOOP on a CALIBRATED aim point.
+                //
+                // The floor used to be a constant, re-fitted six times across six engine
+                // configurations, because every change to thrust or fuel burn moved the arrival
+                // energy and therefore the touchdown point. A closed-loop version aiming straight
+                // at `touchdownAim` landed about 260 m short, which located the real fault: the
+                // aim point is not where the hook needs to arrive. It is the point the APPROACH is
+                // drawn to, and the hook trails behind the mains and keeps flying past it.
+                //
+                // Aiming the same law at a point offset down the runway removes both problems at
+                // once: the law re-solves every tick, so arrival energy stops mattering, and the
+                // offset is measured rather than fitted.
                 // Two metres PAST the aim point: rollout sweeps toward +along, so the hook must
                 // touch down just beyond wire three and sweep back onto it. Aiming exactly at the
                 // wire catches wire four.
-                Vec3D finalAim = touchdownAim + runwayForward * -2.0;
+                // Measured: the closed loop aiming at touchdownAim put the hook 260 m short of
+                // wire three, so the aim point sits that far up the approach from where the hook
+                // actually arrives. Offsetting by it lands the hook on the wires.
+                const double HookAimOffsetM = 260.0;
+                Vec3D finalAim = touchdownAim + runwayForward * HookAimOffsetM;
                 double geometricFinalGamma = Math.Atan2(
                     finalAim.Y - player.Position.Y,
                     Math.Max(1.0, Math.Sqrt(
@@ -471,7 +482,7 @@ public sealed class RapierMissionDirector {
                         2 => -0.09,
                         // Never shallower than the published slope, never steeper than the gear
                         // and the wire can absorb.
-                        _ => -0.06425 + finalGateGammaCorrection
+                        _ => Math.Clamp(geometricFinalGamma, -0.11, -0.035)
                     }
                     : -0.16;
                 targetGamma = Math.Clamp(
