@@ -28,7 +28,7 @@ export const CAMPAIGN_NODES = Object.freeze([
     sequence: 3,
     aircraft: "Rapier",
     title: "Rapier Circuits",
-    shortObjective: "Eastern strip: launch west, fly the pattern, trap. No contact — repeat until the hook is easy.",
+    shortObjective: "Launch west, fly the pattern, trap. Repeat until the hook is easy.",
     qualification: "",
   }),
   Object.freeze({
@@ -37,7 +37,7 @@ export const CAMPAIGN_NODES = Object.freeze([
     sequence: 4,
     aircraft: "Rapier",
     title: "Rapier Intercept",
-    shortObjective: "Eastern corridor guns-only: M0.90 to FL560, through M2.2, ram-climb to FL700, release the swarm, recover to the eastern strip.",
+    shortObjective: "Climb, ram dash, release the swarm, recover.",
     qualification: "",
   }),
 ]);

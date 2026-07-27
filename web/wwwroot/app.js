@@ -1688,17 +1688,17 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "rapier-circuits": Object.freeze({
     kicker: "Eastern corridor · pattern only",
     title: "Rapier Circuits",
-    sortie: "Eastern strip · launch · pattern · trap · repeat",
-    configuration: "Fictional TBCC Rapier · full tanks · no contact · real thermal limit · real arrestor",
-    brief: "Allocation posted for pattern work only. Launch west from the eastern strip, climb to the recovery shelf, fly the gates, and trap. Bolters and go-arounds stay in the exercise — the sortie does not end on the wire. Automation owns the profile until you take the controls.",
+    sortie: "Launch · pattern · trap · repeat",
+    configuration: "Rapier · full fuel · no contact",
+    brief: "Launch west, fly the pattern, trap. Repeat until the hook is easy.",
     controls: "P mission automation · arrows/W/S pilot takeover\nT safe time compression · fly every recovery square · trap, then go again",
   }),
   "rapier-intercept": Object.freeze({
     kicker: "Eastern corridor · guns-only",
     title: "Rapier Intercept",
-    sortie: "Eastern strip · turbo-ramjet interceptor · four-ship sweep · mandatory recovery",
-    configuration: "Fictional uprated TBCC Rapier · Mach 4 design dash · 4 reusable gun-only dogfighting drones · 480 ownship rounds · 3,100 LB alert fuel",
-    brief: "Home plate is the eastern strip; outbound is west into the theatre. Automation owns the long profile by default: full augmentation to launch, climb around M0.90 to FL560, accelerate through M2.2, ram-climb to FL700, and dash. At the four-ship formation, press F once to release the gun-drone swarm. After weapons release the director posts FORMATION DESTROYED / EGRESS HOME. Escape at M4, return at M2 / FL450, then marshal, lineup, and four gates into wire three. The asset is not returned until Rapier is stopped on the strip. Any flight-control input takes persistent authority; P hands the aircraft back to automation.",
+    sortie: "Climb · ram dash · swarm release · recover",
+    configuration: "Rapier · Mach 4 · gun-drone swarm · alert fuel",
+    brief: "Climb, ram to FL700, release the swarm once, recover on the strip.",
     controls: "P mission automation · F release gun-drone swarm · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
   }),
   "ace-duel": Object.freeze({
