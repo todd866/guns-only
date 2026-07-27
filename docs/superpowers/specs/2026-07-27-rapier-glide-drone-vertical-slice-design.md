@@ -61,7 +61,7 @@ the pair into a releasable band. Do not silently spawn melting airframes.
 
 ## Release and director coupling
 
-- Gate: `RapierMissionPhase.Attack`, drones remaining &gt; 0, not already committed this slice.
+- Gate: `RapierMissionPhase.Attack`, drones remaining > 0, not already committed this slice.
 - Replace `ExecuteRapierFormationSweep`’s instant wipe as the default path.
 - Keep a **dev-only** deterministic wipe flag (default off once slice is green) for regression of
   older egress tests if needed.
