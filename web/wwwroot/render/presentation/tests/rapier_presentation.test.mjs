@@ -49,7 +49,7 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   // level. Both numbers below are derived the same way CatapultLaunchModel derives them, so this
   // fails if the renderer and the kernel ever stop agreeing about the shape of the rail — which is
   // a silent visual float, not a crash.
-  const arcRadiusM = 150 * 150 / (3.0 * 9.80665);        // CatapultLaunchModel.RampNormalG
+  const arcRadiusM = 110 * 110 / (3.0 * 9.80665);        // CatapultLaunchModel.RampNormalG
   const rampAngleRad = 12 * Math.PI / 180;               // Beats: CatapultRampAngleRad
   const rampRiseM = arcRadiusM * (1 - Math.cos(rampAngleRad));
   const rampHorizontalM = arcRadiusM * Math.sin(rampAngleRad);

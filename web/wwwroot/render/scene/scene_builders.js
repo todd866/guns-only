@@ -1020,7 +1020,7 @@ export function createRapierDispersedStrip(context = {}) {
   const strokeM = 520;
   const railStartZ = -20;
   const rampAngleRad = 12 * Math.PI / 180;
-  const arcRadiusM = 150 * 150 / (3.0 * 9.80665);
+  const arcRadiusM = 110 * 110 / (3.0 * 9.80665);
   const arcLengthM = rampAngleRad * arcRadiusM;
   const flatLengthM = strokeM - arcLengthM;
   const railAngleAt = (d) => d <= flatLengthM

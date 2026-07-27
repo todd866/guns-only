@@ -219,7 +219,9 @@ public class RapierTests {
         Assert.Equal(Vec3D.Zero, session.Carrier.SteadyWindWorld);
 
         // The declared launcher, not the 62 m/s deck default — which is below flying speed here.
-        Assert.Equal(150.0, session.Catapult.EndSpeedMps, precision: 6);
+        // 110 m/s is 1.67 x stall at launch mass. It was 150, which is 2.28 Vs — about double a
+        // carrier cat shot, and the reason the launch and climbout read as frantic.
+        Assert.Equal(110.0, session.Catapult.EndSpeedMps, precision: 6);
         Assert.Equal(520.0, session.Catapult.StrokeM, precision: 6);
         // And it points UP. A flat shot at 436 kg/m2 leaves the aircraft settling off the end with
         // nothing but a 6 m/s token climb rate; the ramp turns the stroke into a climb.
@@ -235,8 +237,8 @@ public class RapierTests {
 
         // Track the fastest the aircraft gets during and just after the stroke. Sampling only the
         // single tick the phase flips is fragile — the handoff state lands a tick later.
-        // A 520 m stroke to 150 m/s takes about 7 s at 2.2 G — far longer than a deck shot, which
-        // is the point. Measure past the end of it.
+        // A 520 m stroke to 110 m/s takes about 9.5 s at 1.19 G — far longer and far gentler than
+        // a deck shot, which is the point. Measure past the end of it.
         double launchSpeed = 0.0;
         for (int tick = 0; tick < AircraftSim.TickHz * 12; tick++) {
             session.StepFixed();
@@ -246,8 +248,8 @@ public class RapierTests {
             + $"({launchSpeed / 0.514444:F0} kt), climbing through "
             + $"{session.Player.State.Position.Y:F0} m");
 
-        Assert.True(launchSpeed > 140.0,
-            $"never exceeded {launchSpeed:F0} m/s — the declared 150 m/s launcher did not deliver");
+        Assert.True(launchSpeed > 105.0,
+            $"never exceeded {launchSpeed:F0} m/s — the declared 110 m/s launcher did not deliver");
 
         // Now fly it: full lever, hold a climb, and confirm it is going up rather than mushing.
         double startAltitude = session.Player.State.Position.Y;

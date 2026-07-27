@@ -783,7 +783,16 @@ public static class Beats {
             // stall speed, where the aircraft is genuinely flying rather than clinging on. Launch
             // speed is the cheapest safety margin available: the ramp then converts it into climb.
             CatapultStrokeM: 520.0,
-            CatapultEndSpeedMps: 150.0,
+            // 110 m/s, not 150. Stall at launch mass with flaps is 66 m/s, so 150 left the rail at
+            // 2.28 Vs -- roughly double a carrier cat shot, which is why the launch and climbout
+            // read as frantic. It also forced everything around it: 88.3 MJ of launcher energy at
+            // 25.5 MW peak, a 2.2 g stroke, a 16.7 m ski jump, and gear/flap limits invented at
+            // 350 KIAS purely to survive our own catapult.
+            //
+            // 110 m/s is 1.67 Vs -- still a healthier margin than a carrier gives -- and halves the
+            // launcher to 47.5 MJ at 10.0 MW, gentles the stroke to 1.19 g, and lets the gear and
+            // flap limits come back to an ordinary fast-jet number.
+            CatapultEndSpeedMps: 110.0,
             // A real ski jump, and the earlier seven degrees was an excuse rather than a design.
             // The steppe is flat, so the ramp is built either way; once you are building it, the
             // angle should be chosen by what the aircraft and the pilot can take, not by what

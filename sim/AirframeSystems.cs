@@ -130,17 +130,18 @@ public sealed record AirframeSystemsProfile(
     /// <summary>
     /// Rapier surrogate. The limits are not a balance knob — they are forced by the launcher.
     ///
-    /// The catapult releases at 150 m/s, and at the strip's ~89 m elevation that is about 291 KIAS
-    /// with the gear still down and the flaps still out, because nothing can retract during a 6.9 s
-    /// stroke. An aircraft designed around that launcher therefore has gear and flaps qualified
-    /// well past it, or it breaks itself on every single sortie. The Sabre's 185 KIAS limit tripped
-    /// an overspeed the instant the aircraft left the rail.
+    /// The catapult releases at 110 m/s — about 214 KIAS — with the gear still down and the flaps
+    /// still out, because nothing can retract during the stroke. An aircraft designed around that
+    /// launcher therefore has gear and flaps qualified past it, or it breaks itself on every
+    /// sortie. The Sabre's 185 KIAS limit tripped an overspeed the instant the aircraft left the
+    /// rail, which is what this profile exists to fix.
     ///
-    /// 350 KIAS gear and flap is 59 knots of margin over the launch, which is the smallest number
-    /// that survives a hot day, a heavy load and a launcher running fast. It costs weight in the
-    /// legs, doors and flap tracks — real cost, and it belongs in the cost layer rather than being
-    /// waved away. Emergency extension stays lower at 300 KIAS: the blow-down bottle drives the
-    /// legs against the airstream and has no reserve to fight the hinge moment at full launch speed.
+    /// 250 KIAS gear and flap, against a 214 KIAS launch. This used to be 350, which existed only
+    /// because the catapult threw the aircraft off at 292 KIAS — a number invented to survive
+    /// another invented number. Slowing the launcher to 110 m/s brought the requirement back to an
+    /// ordinary fast-jet limit, and took real weight out of the legs, doors and flap tracks with
+    /// it. Emergency extension stays lower at 220 KIAS: the blow-down bottle drives the legs
+    /// against the airstream and has no reserve to fight the hinge moment at launch speed.
     ///
     /// Retraction is quick because it has to be. The aircraft leaves the ramp already accelerating
     /// through its own gear limit's neighbourhood, so a ten-second Sabre cycle would hold the
@@ -152,8 +153,8 @@ public sealed record AirframeSystemsProfile(
         GearRetractionSeconds: 4.5,
         EmergencyGearExtensionSeconds: 8.0,
         GearDoorTravelSeconds: 0.9,
-        GearAndFlapLimitKias: 350.0,
-        EmergencyGearExtensionMaxKias: 300.0,
+        GearAndFlapLimitKias: 250.0,
+        EmergencyGearExtensionMaxKias: 220.0,
         // Modest flap: at 436 kg/m2 the recovery is flown fast and caught by the wire, so this
         // wing is not trying to be slow — it only has to be catchable.
         FullFlapDegrees: 30.0,
