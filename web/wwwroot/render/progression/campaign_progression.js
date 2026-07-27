@@ -28,7 +28,7 @@ export const CAMPAIGN_NODES = Object.freeze([
     sequence: 3,
     aircraft: "Rapier",
     title: "Rapier Circuits",
-    shortObjective: "Launch, fly the pattern, trap. No contact, no bingo pressure — repeat until the hook is easy.",
+    shortObjective: "Eastern strip: launch west, fly the pattern, trap. No contact — repeat until the hook is easy.",
     qualification: "",
   }),
   Object.freeze({
@@ -37,7 +37,7 @@ export const CAMPAIGN_NODES = Object.freeze([
     sequence: 4,
     aircraft: "Rapier",
     title: "Rapier Intercept",
-    shortObjective: "Hold M0.90 to FL560, accelerate through M2.2, ram-climb to FL700, release four gun-only dogfighters, then recover.",
+    shortObjective: "Eastern corridor guns-only: M0.90 to FL560, through M2.2, ram-climb to FL700, release the swarm, recover to the eastern strip.",
     qualification: "",
   }),
 ]);
@@ -63,6 +63,7 @@ export function createCampaignProfile(value = null) {
   }
   return Object.freeze({
     version: CAMPAIGN_PROFILE_VERSION,
+    pointsBalance: Math.trunc(Number(source.pointsBalance) || 0),
     qualifications: Object.freeze(qualifications),
   });
 }

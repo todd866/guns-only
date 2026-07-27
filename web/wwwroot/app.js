@@ -14,6 +14,7 @@ import {
   PADLOCK_LIMITS,
 } from "./render/camera/padlock_controller.js";
 import { sortieResultCopy } from "./render/debrief/sortie_result.js";
+import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
 import { loadKoreaTerrain } from "./render/environment/korea_terrain.js";
@@ -1302,6 +1303,7 @@ let setMobileFrozen = () => {};
 let activeView = null;
 let latestState = null;
 let campaignProfile = loadCampaignProfile();
+let pointsLedgerAppliedKey = "";
 const requestedProgramNode = campaignNode(
   new URLSearchParams(window.location.search).get("program"),
 );
@@ -1683,12 +1685,20 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     brief: "Two splashes earn carrier conversion. Each replacement Su-27 enters through a fresh neutral merge while fuel, ammunition, damage, and your kill count persist. Burst discipline and G management now matter across the whole sortie, not just one fight.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash two bandits in one sortie to qualify",
   }),
+  "rapier-circuits": Object.freeze({
+    kicker: "Eastern corridor · pattern only",
+    title: "Rapier Circuits",
+    sortie: "Eastern strip · launch · pattern · trap · repeat",
+    configuration: "Fictional TBCC Rapier · full tanks · no contact · real thermal limit · real arrestor",
+    brief: "Allocation posted for pattern work only. Launch west from the eastern strip, climb to the recovery shelf, fly the gates, and trap. Bolters and go-arounds stay in the exercise — the sortie does not end on the wire. Automation owns the profile until you take the controls.",
+    controls: "P mission automation · arrows/W/S pilot takeover\nT safe time compression · fly every recovery square · trap, then go again",
+  }),
   "rapier-intercept": Object.freeze({
-    kicker: "2030s Ukraine · deep-rear dispersed basing",
+    kicker: "Eastern corridor · guns-only",
     title: "Rapier Intercept",
-    sortie: "Rapier turbo-ramjet interceptor · four-aircraft formation · one-pass sweep · pursued recovery",
+    sortie: "Eastern strip · turbo-ramjet interceptor · four-ship sweep · mandatory recovery",
     configuration: "Fictional uprated TBCC Rapier · Mach 4 design dash · 4 reusable gun-only dogfighting drones · 480 ownship rounds · 3,100 LB alert fuel",
-    brief: "Mission automation owns the long profile by default: use full augmentation to launch, climb around M0.90 to FL560 (56,000 ft), and drive cleanly through the transonic drag rise. RAM LIGHT begins at M1.6 and full ram arrives at M2.2; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the altitude profile, ram-climb to FL700, and dash at Mach 4. Mach and KTAS, range, closure, and intercept ETA stay visible throughout the long leg. At the four-ship formation, press F once to release Rapier's gun-drone swarm. Several autonomous gunfighters peel into simultaneous close fights; each can kill multiple aircraft while Rapier preserves its energy and keeps going. Weapons release immediately changes the director to FORMATION DESTROYED / EGRESS HOME and keeps home bearing, distance, ETA, turn, and control authority visible. The aircraft escapes at M4, returns at M2 / FL450, then sheds energy for marshal, lineup, and four large square gates into wire three. The sortie is not won until Rapier is stopped on the arresting strip. Any flight-control input gives the pilot persistent authority; P explicitly hands the aircraft back to automation or disengages it again.",
+    brief: "Home plate is the eastern strip; outbound is west into the theatre. Automation owns the long profile by default: full augmentation to launch, climb around M0.90 to FL560, accelerate through M2.2, ram-climb to FL700, and dash. At the four-ship formation, press F once to release the gun-drone swarm. After weapons release the director posts FORMATION DESTROYED / EGRESS HOME. Escape at M4, return at M2 / FL450, then marshal, lineup, and four gates into wire three. The asset is not returned until Rapier is stopped on the strip. Any flight-control input takes persistent authority; P hands the aircraft back to automation.",
     controls: "P mission automation · F release gun-drone swarm · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
   }),
   "ace-duel": Object.freeze({
@@ -2425,15 +2435,37 @@ function renderPauseUi(state = latestState) {
     const carrierQualification = isCarrierQualificationState(state);
     const carrierFacts = carrierQualification
       ? carrierQualificationDebriefFacts(state) : null;
-    readyKicker.textContent = result.kicker;
+    const ledgerMission = String(state?.mission_definition_id || "").toLowerCase();
+    const ledgerIsRapier = ledgerMission.includes("rapier");
+    const ledgerNet = Math.trunc(Number(state?.points_sortie_net) || 0);
+    const ledgerApplyKey = [
+      ledgerMission,
+      String(state?.sortie_outcome || ""),
+      String(ledgerNet),
+    ].join("|");
+    const ledgerAlreadyApplied = ledgerApplyKey === pointsLedgerAppliedKey;
+    const ledgerBalanceBefore = ledgerAlreadyApplied
+      ? Math.trunc(Number(campaignProfile.pointsBalance) || 0) - ledgerNet
+      : Math.trunc(Number(campaignProfile.pointsBalance) || 0);
+    const ledger = pointsLedgerPresentation(state, ledgerBalanceBefore);
+    if (ledger && ledgerIsRapier && !ledgerAlreadyApplied) {
+      pointsLedgerAppliedKey = ledgerApplyKey;
+      campaignProfile = saveCampaignProfile({
+        ...campaignProfile,
+        pointsBalance: ledger.balanceAfter,
+      });
+    }
+    readyKicker.textContent = ledger?.kicker || result.kicker;
     readyTitle.textContent = result.title;
     readyBrief.textContent = replayAnalysis
       ? `${result.brief} ${replayAnalysis.physicalOutcome}. Next pass: ${replayAnalysis.correction}`
-      : result.brief;
+      : ledger
+        ? `${result.brief} ${ledger.clearanceText}.`
+        : result.brief;
     if (readySortieLabel) readySortieLabel.textContent = carrierQualification
       ? "Physical outcome" : "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = carrierQualification
-      ? "Full-pass assessment" : "Result";
+      ? "Full-pass assessment" : ledger ? "Allocation" : "Result";
     readySortie.textContent = carrierQualification
       ? `${carrierQualificationPhysicalOutcome(state)}${Number(state?.wire) > 0 ? ` · wire ${Math.round(Number(state.wire))}` : ""}`
       : `${brief.title} · ${String(state?.sortie_outcome || "complete").toLowerCase()}`;
@@ -2446,7 +2478,9 @@ function renderPauseUi(state = latestState) {
           : carrierQualification
             ? [carrierFacts.passGrade, carrierFacts.waveOff, carrierFacts.phases]
               .filter(Boolean).join(" · ")
-            : replayAnalysis
+            : ledger
+              ? `${ledger.netText} · ${ledger.balanceText} · ${ledger.clearanceText}`
+              : replayAnalysis
               ? `Sim touchdown ${replayAnalysis.touchdownAssessment.grade === "NONE" ? "not graded" : replayAnalysis.touchdownAssessment.grade} · ${replayAnalysis.touchdownAssessment.profile} v${replayAnalysis.touchdownAssessment.version} · replay cached · causal review is not an LSO grade`
               : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
     readyReplay.hidden = !incidentReplay?.clip;
@@ -2455,10 +2489,14 @@ function renderPauseUi(state = latestState) {
     readyStart.textContent = "Fly again";
     if (readyControls) readyControls.textContent = carrierQualification
       ? `Full-pass primary · ${carrierFacts.passCorrection}\nTouchdown assessment · ${carrierFacts.touchdown}\nTouchdown primary · ${carrierFacts.touchdownCorrection}`
-      : "Fly again, or open the mission list to take the other aircraft up";
+      : ledger
+        ? `${ledger.lines.map((line) => `${line.label} · ${line.pointsText}`).join("\n") || "No lines"}\n${ledger.clearanceText}`
+        : "Fly again, or open the mission list to take the other aircraft up";
     readyHint.textContent = background
       ? "Return to the game to restage"
-      : "Press Enter to fly again";
+      : ledger?.clearance === "GROUNDED"
+        ? "Exception denied · grounded pending allocation — Press Enter to fly again"
+        : "Press Enter to fly again";
   } else if (ready) {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = "Configuration";
@@ -2535,6 +2573,7 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
   const preserveCalibration = pauseReasons.has("calibration");
   const preserveBackground = pauseReasons.has("background");
   if (resetBridge) recorder.endSortie("restaged", latestState);
+  pointsLedgerAppliedKey = "";
   resetMissionPresentation();
   pauseReasons.clear();
   pauseReasons.add("ready");

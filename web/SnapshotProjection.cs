@@ -352,6 +352,7 @@ internal static class SnapshotProjection {
             + $"\"finished\":{(finished ? "true" : "false")},\"session_phase\":\"{sessionPhase}\","
             + $"\"sortie_outcome\":\"{SortieOutcomeToken(Session.Outcome)}\","
             + $"\"pending_sortie_outcome\":\"{SortieOutcomeToken(Session.PendingOutcome)}\","
+            + PointsLedgerJson(finished)
             + $"\"terminal_phase_active\":{(Session.TerminalPhaseActive ? "true" : "false")},"
             + $"\"player_terminal_state\":\"{TerminalStateToken(Session.PlayerTerminalState)}\","
             + $"\"opponent_terminal_state\":\"{TerminalStateToken(Session.OpponentTerminalState)}\","
@@ -1061,6 +1062,42 @@ internal static class SnapshotProjection {
         SortieOutcome.Draw => "DRAW",
         _ => "NONE"
     };
+
+    static string PointsLedgerJson(bool finished) {
+        double initialFuelLb = Session.Beat.FuelLoadout.InitialFuelLb;
+        double burnedLb = Math.Max(0.0, initialFuelLb - Session.PlayerFuel.FuelLb);
+        bool playerLost = Session.Outcome == SortieOutcome.Defeat
+            || Session.PlayerTerminalState != AircraftTerminalState.Flying;
+        bool playerAlive = Session.OpponentGun.TargetAlive && !playerLost;
+        bool banditDestroyed = !Session.PlayerGun.BanditAlive;
+        bool cleanRecovery = Session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped
+            || Session.Recovery == Carrier.Recovery.Trap;
+        PointsLedgerSlip slip = PointsLedger.Evaluate(
+            new SortieLedgerFacts(
+                Finished: finished,
+                PlayerAlive: playerAlive,
+                BanditDestroyed: banditDestroyed,
+                CleanRecovery: cleanRecovery,
+                FuelBurnedLb: burnedLb,
+                PlayerLost: playerLost),
+            balanceBefore: 0);
+        var lines = new System.Text.StringBuilder();
+        lines.Append('[');
+        for (int i = 0; i < slip.Lines.Count; i++) {
+            if (i > 0) lines.Append(',');
+            LedgerLine line = slip.Lines[i];
+            lines.Append('{')
+                .Append("\"code\":").Append(JsonString(line.Code))
+                .Append(",\"label\":").Append(JsonString(line.Label))
+                .Append(",\"points\":").Append(line.Points)
+                .Append('}');
+        }
+        lines.Append(']');
+        return $"\"fuel_initial_lb\":{initialFuelLb:F1},"
+            + $"\"points_sortie_net\":{slip.SortieNet},"
+            + $"\"points_lines\":{lines},"
+            + $"\"points_clearance_sortie\":\"{slip.Clearance.ToString().ToUpperInvariant()}\",";
+    }
 
     static string EventTypeToken(SessionEventType type) => type switch {
         SessionEventType.Hit => "HIT",
