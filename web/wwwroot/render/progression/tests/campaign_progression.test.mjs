@@ -17,10 +17,13 @@ import {
 // exercises; every shipping mission is available immediately. These tests stop the gate from
 // growing back as new mission types and environments are added.
 
-test("the menu is three missions and all are always available", () => {
+test("the menu is four missions and all are always available", () => {
   assert.deepEqual(CAMPAIGN_NODES.map(({ id, mission, aircraft }) => ({ id, mission, aircraft })), [
     { id: "first-merge", mission: 7, aircraft: "F-22A" },
     { id: "low-level-drone", mission: 8, aircraft: "F-22A" },
+    // Circuits sits before the intercept: the trap is the hardest thing the aircraft asks for and
+    // the intercept gives exactly one attempt at it, far from home and low on fuel.
+    { id: "rapier-circuits", mission: 11, aircraft: "Rapier" },
     { id: "rapier-intercept", mission: 10, aircraft: "Rapier" },
   ]);
 

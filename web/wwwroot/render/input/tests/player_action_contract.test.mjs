@@ -451,7 +451,8 @@ test("fresh players launch directly into the first F-22 merge", () => {
   const buttons = htmlButtons(indexSource);
   const nodeIds = buttons.filter((button) => button.attributes["data-program-node"] !== undefined)
     .map((button) => button.attributes["data-program-node"]);
-  assert.deepEqual(nodeIds, ["first-merge", "low-level-drone", "rapier-intercept"]);
+  assert.deepEqual(nodeIds,
+    ["first-merge", "low-level-drone", "rapier-circuits", "rapier-intercept"]);
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
   assert.match(indexSource, /\.ready-selector,[\s\S]*?touch-action:\s*pan-y/);
