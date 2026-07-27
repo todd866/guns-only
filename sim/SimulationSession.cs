@@ -370,7 +370,9 @@ public sealed class SimulationSession {
     double RapierTurbineShare {
         get {
             CombinedCycleThrustFractions fractions = RapierThrustFractions;
-            return fractions.Total > 1e-9 ? fractions.Turbine / fractions.Total : 1.0;
+            // When both streams are dead (exo coast), do not default the residual to "turbine" —
+            // that is how idle fuel kept reading as a live core at 100 kft+.
+            return fractions.Total > 1e-9 ? fractions.Turbine / fractions.Total : 0.0;
         }
     }
     public double RapierTurbineThrustN => RapierMissionAvailable

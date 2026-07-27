@@ -28,6 +28,12 @@ public static class TurboRamjetPerformanceMap {
     /// what a ceramic hot section wants to see, and is gone by the time the ram duct owns the flow.
     public const double TurbineFadeStartMach = 1.9;
     public const double TurbineGoneMach = 3.0;
+    /// Compressor mass flow collapses with density. Sqrt-density alone still left ~12% of SLS at
+    /// FL1000, so a ZoomCoast (throttle 0, RCS only) kept attributing idle fuel and spool to a
+    /// core that cannot breathe. Fade the turbine out on density as well as Mach — independent of
+    /// Mach, gone by ~100 kft, while the FL560 climb shelf stays fully lit.
+    public const double TurbineFadeStartDensityRatio = 0.05; // ~FL720
+    public const double TurbineGoneDensityRatio = 0.015;     // ~FL990
     /// Ram combustion becomes worth lighting here and owns the flow by FullRamMach. Deliberately
     /// OVERLAPS the turbine fade — that overlap is the repeatability.
     // Narrowed from 1.6-2.2 to 1.85-2.15. The handover is the aircraft's defining moment and a
@@ -140,10 +146,12 @@ public static class TurboRamjetPerformanceMap {
         double densityRatio = ambientDensityKgM3 / AirData.SeaLevelDensityKgM3;
 
         // Turbine: the existing house lapse (sqrt density, bounded ram recovery), faded out as the
-        // core hands its air to the ram duct.
+        // core hands its air to the ram duct, and starved outright when ambient density cannot
+        // support a compressor — Mach fade alone does not kill the core on an exo coast.
         double turbine = System.Math.Sqrt(System.Math.Max(0.0, densityRatio))
             * (1.0 + 0.10 * System.Math.Clamp(mach, 0.0, 1.5))
-            * (1.0 - Fade(mach, TurbineFadeStartMach, TurbineGoneMach));
+            * (1.0 - Fade(mach, TurbineFadeStartMach, TurbineGoneMach))
+            * Fade(densityRatio, TurbineGoneDensityRatio, TurbineFadeStartDensityRatio);
 
         // Ram: normalised so the design point yields exactly RamDesignThrustRatio.
         GunsOnly.Sim.AtmosphericState design =
@@ -187,9 +195,14 @@ public static class TurboRamjetPerformanceMap {
         double idleFuelFlowLbPerMinute, double militaryFuelFlowLbPerMinute,
         double afterburnerFuelFlowLbPerMinute, double leverStop) {
         double lever = System.Math.Clamp(commandedFraction, 0.0, System.Math.Max(1.0, leverStop));
-        double thrustN = lever * ThrustFraction(mach, ambientTemperatureK, ambientDensityKgM3)
-            * staticThrustN;
+        CombinedCycleThrustFractions parts = ThrustComponents(
+            mach, ambientTemperatureK, ambientDensityKgM3);
+        double thrustN = lever * parts.Total * staticThrustN;
         double core = System.Math.Clamp(lever, 0.0, 1.0);
+        // A density- or Mach-dead turbine is not "idle" — it is out. Idle floor and spool only
+        // apply while the core can still breathe; ram-only thrust then burns purely against
+        // delivered newtons (and ZoomCoast at exo burns nothing).
+        bool coreLit = parts.Turbine > 1e-9;
 
         // FUEL FOLLOWS THRUST, not the lever.
         //
@@ -216,18 +229,21 @@ public static class TurboRamjetPerformanceMap {
         // against delivered thrust. Sea-level static is the reference point where the two agree.
         double ratedThrustN = System.Math.Max(1.0, ratedThrustFraction * staticThrustN);
         double specificFuel = leverFlow / ratedThrustN;
-        double fuelFlow = System.Math.Max(
-            idleFuelFlowLbPerMinute * (0.35 + 0.65 * core),
-            specificFuel * thrustN);
+        double idleFloor = coreLit
+            ? idleFuelFlowLbPerMinute * (0.35 + 0.65 * core)
+            : 0.0;
+        double fuelFlow = System.Math.Max(idleFloor, specificFuel * thrustN);
+        double rpm = coreLit ? 55.0 + 45.0 * core : 0.0;
         return new EngineOperatingPoint(
-            // Lever zero is ground/flight idle, not a stopped core. Keeping the turbine above the
-            // generator and hydraulic cut-in is what lets a powered Rapier extend its recovery
-            // configuration while the thrust command is near idle.
-            Rpm: 55.0 + 45.0 * core,
-            RpmPercent: 55.0 + 45.0 * core,
+            // Lever zero is ground/flight idle, not a stopped core — but only while density still
+            // supports combustion. Keeping the turbine above the generator and hydraulic cut-in
+            // is what lets a powered Rapier extend its recovery configuration near idle; at exo
+            // the core is dead and cold-gas RCS owns attitude.
+            Rpm: rpm,
+            RpmPercent: rpm,
             NetThrustN: thrustN,
             NetThrustLbf: thrustN / J47PerformanceMap.NewtonsPerPoundForce,
             FuelFlowLbPerMinute: System.Math.Max(0.0, fuelFlow),
-            Running: true);
+            Running: parts.Total > 1e-9 || coreLit);
     }
 }
