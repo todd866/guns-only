@@ -440,6 +440,7 @@ function assertGunHeat(data) {
 // "no capability" branch and turn this whole assertion green-but-vacuous. main() requires at least
 // one real observation.
 let speedBrakeVisibleObservations = 0;
+let rapierMissionObservations = 0;
 
 function assertSpeedBrake(data) {
   const { name, geometry, state, viewport } = data;
@@ -509,6 +510,72 @@ function assertSpeedBrake(data) {
     `y=${brake.y}; height=${brake.height}; viewportHeight=${viewport.height}`);
 }
 
+function assertRapierMission(data) {
+  const { name, geometry, state, viewport } = data;
+  if (state.rapier_mission_available !== true) return;
+  rapierMissionObservations += 1;
+
+  const line = geometry.rapierModeLine;
+  check(name, "Rapier quiet mode line is drawn", Boolean(line?.text),
+    line?.text ? line.text : "missing");
+  if (!line) return;
+
+  check(name, "Rapier mode line has empty detail (no triad essay)",
+    line.detail === "" || line.detail == null,
+    `detail=${JSON.stringify(line.detail)}`);
+  check(name, "Rapier mode line stays inside the canvas",
+    line.x >= 0 && line.y >= 0
+      && line.x + line.width <= viewport.width
+      && line.y + line.height <= viewport.height,
+    `box=${line.x},${line.y} ${line.width}x${line.height}`);
+
+  const phase = Math.floor(Number(state.rapier_mission_phase) || 0);
+  const drones = Math.floor(Number(state.rapier_gun_drones_remaining) || 0);
+  const gate = Math.floor(Number(state.rapier_recovery_gate) || 0);
+
+  if (phase === 6) {
+    check(name, "attack mode line authorizes F swarm release",
+      /F RELEASES SWARM/i.test(line.text) && line.text.includes(String(drones)),
+      line.text);
+    check(name, "attack level is attack (not buried under propulsion essay)",
+      line.level === "attack", `level=${line.level}`);
+  }
+  if (phase === 7) {
+    check(name, "egress mode line is short EGRESS · HOME",
+      /EGRESS/.test(line.text) && /HOME/.test(line.text) && !/NEED/.test(line.text),
+      line.text);
+  }
+  if (phase === 9) {
+    check(name, "recovery mode line carries gate index",
+      line.text.includes(`GATE ${gate}/4`),
+      line.text);
+  }
+
+  const panel = geometry.limitsPanel;
+  check(name, "Rapier Limits Panel is drawn (nav to strip)",
+    panel?.profile === "nav" && Array.isArray(panel.rows) && panel.rows.length === 4,
+    panel ? `${panel.profile} rows=${panel.rows?.length}` : "missing");
+  if (!panel || panel.profile !== "nav") return;
+
+  check(name, "Limits nav slots are NM/MIN · LB/MIN · LB/NM · RESERVE",
+    panel.rows[0].label === "NM/MIN"
+      && panel.rows[1].label === "LB/MIN"
+      && panel.rows[2].label === "LB/NM"
+      && panel.rows[3].label === "RESERVE",
+    panel.rows.map((row) => row.label).join(" · "));
+  check(name, "Limits panel stays inside the canvas",
+    panel.x >= 0 && panel.y >= 0
+      && panel.x + panel.width <= viewport.width
+      && panel.y + panel.height <= viewport.height,
+    `box=${panel.x},${panel.y} ${panel.width}x${panel.height}`);
+
+  if (name.includes("rapier-escape-fuel-triad")) {
+    check(name, "escape reserve is fault when closure starves the ETA",
+      panel.accent === "fault" && Number(panel.rows[3].value) < 0,
+      `accent=${panel.accent}; reserve=${panel.rows[3].value}`);
+  }
+}
+
 // The portrait assisted mode is a first-class experience, so a phone-portrait pass runs the
 // core scenarios through the SAME geometry contract at 430x860. The full battery stays on the
 // landscape pass to bound gate time.
@@ -519,6 +586,7 @@ const PORTRAIT_SCENARIOS = new Set([
   "funnel-level-mid", "padlock-bandit-right-high", "padlock-bandit-behind",
   "padlock-aft-right-high",
   "idle-speed-brake-out", "idle-speed-brake-transit",
+  "rapier-attack-authorize", "rapier-escape-fuel-triad",
 ]);
 
 async function runViewport(site, browser, { label, width, height, subset }) {
@@ -557,6 +625,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     assertBasicJobs(data);
     assertGunHeat(data);
     assertSpeedBrake(data);
+    assertRapierMission(data);
     assertFunnelContainsTarget(data);
     assertWarningLine(data);
   }
@@ -583,6 +652,12 @@ async function main() {
     failures.push(
       "speed-brake assertions never saw a drawn indicator: the harness state allowlist or the "
       + "F-22 speed-brake scenarios are broken, so those checks passed vacuously",
+    );
+  }
+  if (rapierMissionObservations === 0) {
+    failures.push(
+      "Rapier assertions never saw a mission scenario: harness state allowlist or the "
+      + "P0 Rapier scenarios are broken, so those checks passed vacuously",
     );
   }
 

@@ -575,7 +575,7 @@ test("engine-less vehicles do not inherit fighter warnings or systems relevance"
   assert.deepEqual(readout.warnings, []);
 });
 
-test("production HUD consumes stabilized KIAS plus physical corner and fuel readouts", async () => {
+test("production HUD consumes stabilized KIAS plus physical corner and limits panel", async () => {
   const source = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
   assert.match(source, /this\._signals\.update\(frame\.state, frame\.dt\)/);
   assert.match(source, /const spd = display\.indicatedKts/);
@@ -590,6 +590,8 @@ test("production HUD consumes stabilized KIAS plus physical corner and fuel read
   assert.doesNotMatch(source, /if \(!frame\.padlock\)\s*\{\s*const tapeInset/,
     "padlock must retain the physical IAS/stall/corner tape instead of a duplicate card");
   assert.match(source, /fuelReadout\(state\)/);
+  assert.match(source, /limitsPanelPresentation/);
+  assert.match(source, /this\.drawLimitsPanel\(frame\.state\)/);
   assert.match(source, /systemsReadout\(frame\.state\)/);
   assert.match(source, /speedBrakeReadout\(state\)/,
     "the idle-commanded speed brake annunciates on the unconditionally drawn PWR rail");
@@ -605,8 +607,10 @@ test("production HUD consumes stabilized KIAS plus physical corner and fuel read
   assert.match(source, /case "TERMINAL":/);
   assert.match(source, /display\.indicatedRateKtsPerSecond \* 6/);
   assert.match(source, /const trendAlpha = valueValid && Number\.isFinite\(trend\)/);
-  assert.match(source, /ctx\.fillText\(readout\.quantityText/);
-  assert.match(source, /ctx\.fillText\(readout\.flowText/);
+  assert.match(source, /panel\.rows\.length/);
+  assert.match(source, /entry\.label/);
+  assert.doesNotMatch(source, /GATE \$\{gate\}\/4 · FLY THROUGH/);
+  assert.doesNotMatch(source, /rapierEnginePresentation\(frame\.state\)/);
   assert.doesNotMatch(source, /READABLE_VERTICAL_SPEED_FPM/,
     "vertical speed must never be silently under-reported");
   assert.doesNotMatch(source, /Number\(state\.kill_progress\)/,

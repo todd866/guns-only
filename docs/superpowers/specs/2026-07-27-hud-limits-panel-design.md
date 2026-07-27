@@ -118,7 +118,9 @@ limitsPanelPresentation(state) → {
 ```
 
 Inputs already exist on the snapshot (`fuel_lb`, `fuel_flow_pph`, `ground_speed_kts`, `rtb_*`,
-`rapier_mission_*`, closure via `vx`/`vz`). No kernel change required for the first ship unless a
+`rapier_mission_*`, closure via `vx`/`vz` or published `rtb_closure_kts`). Prefer
+`rtb_closure_kts` when present so harness / teaching snapshots can pin weak home progress without
+fighting the FPV↔α geometry contract. No kernel change required for the first ship unless a
 scenario lacks a destination flag — then presentation infers `nav` vs `fuel` from
 `rtb_steer` / Rapier phase / Circuits gate state.
 

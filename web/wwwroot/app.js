@@ -302,15 +302,16 @@ function updateNavConsole(state) {
   const ktas = Math.max(1, num("true_airspeed_kts") || 0);
   const homeKnown = finite(rangeNm) && finite(bearing);
 
-  // Destination follows the PHASE. It read "HOME" for the whole sortie, which is wrong outbound:
-  // on the run-in the aircraft is navigating to the contact, and showing home there tells the pilot
-  // their destination is behind them while the guidance square is ahead. Home is only the
-  // destination once the mission turns for base.
+  // Destination follows the PHASE. Home is only the destination once the mission turns for base.
+  // Circuits / outbound intercept navigate to the contact or next gate — showing HOME there tells
+  // the pilot their destination is behind them while the guidance square is ahead.
   const phase = Math.floor(Number(state?.rapier_mission_phase) || 0);
   const outbound = phase >= 1 && phase <= 6;
+  const gate = Math.max(0, Math.floor(Number(state?.rapier_recovery_gate) || 0));
   set(navUi.destination,
     !homeKnown && !outbound ? "--"
-      : outbound ? "CONTACT · INTERCEPT"
+      : outbound
+        ? (gate > 0 ? `GATE ${gate}/4` : "CONTACT · INTERCEPT")
         : "DISPERSED STRIP · HOME",
     "normal");
   set(navUi.bearing, homeKnown
@@ -371,7 +372,7 @@ function updateNavConsole(state) {
   set(navUi.lbPerNm, Number.isFinite(lbPerNm) ? `${lbPerNm.toFixed(2)} LB/NM` : "--",
     Number.isFinite(lbPerNm) ? "normal" : "unknown");
   set(navUi.groundspeed, finite(groundKts)
-    ? `${Math.round(groundKts).toLocaleString("en-US")} KT\n${Math.round(groundKts * 1.852).toLocaleString("en-US")} KM/H`
+    ? `${Math.round(groundKts).toLocaleString("en-US")} KT`
     : "--", finite(groundKts) ? "normal" : "unknown");
 
   const grossLb = num("player_gross_lb");
@@ -1925,6 +1926,8 @@ function installTestFlightConsole() {
   const syncConsoleDisclosure = () => {
     consoleSummary?.setAttribute("aria-expanded", String(testFlightConsole.open));
     if (!testFlightConsole.open) releaseConsoleActions();
+    // Limits teaching: Systems and Nav are diagnostic — never both open.
+    if (testFlightConsole.open && navConsole?.open) navConsole.open = false;
   };
   consoleSummary?.addEventListener("click", (event) => {
     event.preventDefault();
@@ -6649,6 +6652,11 @@ function installInput(view) {
 
     if (event.code === "KeyN" && navConsole && !navConsole.hidden) {
       navConsole.open = !navConsole.open;
+      if (navConsole.open && testFlightConsole?.open) {
+        testFlightConsole.open = false;
+        testFlightConsole.querySelector("summary")
+          ?.setAttribute("aria-expanded", "false");
+      }
       recorder.event("nav-console", navConsole.open ? "open" : "closed");
       return;
     }

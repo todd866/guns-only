@@ -39,9 +39,9 @@ import {
 } from "./render/hud/gun_funnel.js";
 import { timeCompressionHudPresentation } from "./render/telemetry/time_compression.js";
 import {
-  rapierEnginePresentation,
   rapierGuidancePresentation,
 } from "./render/mission/rapier_guidance.js";
+import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -2290,81 +2290,82 @@ class CombatHud {
     }
   }
 
-  drawFuel(state) {
-    if (!Number.isFinite(Number(state.fuel_lb))) return;
-    const readout = fuelReadout(state);
-    const fuel = readout.fuelLb;
-    const trend = Math.min(0, Number(state.fuel_trend_lb_min) || 0);
-    const capacity = readout.capacityLb;
-    const bingoThreshold = readout.bingoThresholdLb;
-    const advisory = readout.statusText !== null;
-    const accent = readout.critical ? RED : advisory ? AMBER : GREEN;
+  drawLimitsPanel(state) {
+    const panel = limitsPanelPresentation(state);
+    if (!panel) {
+      if (this._debug) this._debug.limitsPanel = null;
+      return;
+    }
+    const accent = panel.accent === "fault" ? RED
+      : panel.accent === "caution" ? AMBER : GREEN;
     const ctx = this.ctx;
     const layout = this.getLayout();
-    const width = Math.min(176,
+    const width = Math.min(168,
       this.width - this.safeInsets.left - this.safeInsets.right - 36);
-    const height = 42;
+    const rowPitch = 13;
+    const height = 10 + panel.rows.length * rowPitch + 8;
     const x = this.width - this.safeInsets.right - width - 18;
     const y = layout.secondaryBottom - height;
-    const barX = x + 9;
-    const barY = y + 36;
-    const barWidth = width - 18;
-    const fuelRatio = capacity > 0 ? clamp(fuel / capacity, 0, 1) : 0;
-    const currentX = barX + barWidth * fuelRatio;
-    const projectedRatio = capacity > 0 ? clamp((fuel + trend * 5) / capacity, 0, 1) : 0;
-    const projectedX = barX + barWidth * projectedRatio;
+
+    if (this._debug) {
+      this._debug.limitsPanel = {
+        profile: panel.profile,
+        accent: panel.accent,
+        heroIndex: panel.heroIndex,
+        rows: panel.rows.map((entry) => ({
+          label: entry.label,
+          value: entry.value,
+          unit: entry.unit,
+        })),
+        x,
+        y,
+        width,
+        height,
+        reserveMin: panel.reserveMin ?? null,
+        etaMinutes: panel.etaMinutes ?? null,
+      };
+    }
 
     ctx.save();
     roundedRect(ctx, x, y, width, height, 4);
-    ctx.fillStyle = "rgba(1, 9, 14, 0.38)";
+    ctx.fillStyle = "rgba(1, 9, 14, 0.42)";
     ctx.fill();
-    ctx.strokeStyle = advisory ? accent : "rgba(77, 255, 136, 0.20)";
+    ctx.strokeStyle = panel.accent === "normal"
+      ? "rgba(77, 255, 136, 0.20)" : accent;
     ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = accent;
-    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "left";
-    ctx.fillText(readout.quantityText, x + 9, y + 10);
-    ctx.fillStyle = advisory ? accent : GREEN;
-    ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "right";
-    ctx.fillText(readout.flowText, x + width - 9, y + 10);
-    ctx.fillStyle = advisory ? accent : GREEN_DIM;
-    ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "left";
-    ctx.fillText(readout.decisionDisplayText, x + 9, y + 25);
 
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < panel.rows.length; i += 1) {
+      const entry = panel.rows[i];
+      const rowY = y + 10 + i * rowPitch;
+      const hero = i === panel.heroIndex;
+      ctx.fillStyle = hero ? accent : (panel.accent === "normal" ? GREEN_DIM : accent);
+      ctx.font = hero
+        ? "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        : "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "left";
+      ctx.fillText(entry.label, x + 8, rowY);
+      ctx.textAlign = "right";
+      const valueText = entry.unit ? `${entry.value} ${entry.unit}` : entry.value;
+      ctx.fillText(valueText, x + width - 8, rowY);
+    }
+
+    const barX = x + 8;
+    const barY = y + height - 6;
+    const barWidth = width - 16;
     ctx.fillStyle = "rgba(77, 255, 136, 0.12)";
-    ctx.fillRect(barX, barY, barWidth, 3);
+    ctx.fillRect(barX, barY, barWidth, 2);
     ctx.fillStyle = accent;
-    ctx.fillRect(barX, barY, barWidth * fuelRatio, 3);
-    if (readout.consumesFuel && capacity > 0) {
-      const bingoX = barX + barWidth * clamp(bingoThreshold / capacity, 0, 1);
+    ctx.fillRect(barX, barY, barWidth * clamp(panel.fuelRatio ?? 0, 0, 1), 2);
+    if ((panel.bingoRatio ?? 0) > 0) {
+      const bingoX = barX + barWidth * clamp(panel.bingoRatio, 0, 1);
       ctx.strokeStyle = AMBER;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(bingoX, barY - 2);
-      ctx.lineTo(bingoX, barY + 5);
+      ctx.lineTo(bingoX, barY + 4);
       ctx.stroke();
-    }
-
-    // Five-minute fuel trend: the vector points from current quantity to projected quantity.
-    if (readout.consumesFuel && currentX - projectedX > 1.5) {
-      const vectorY = barY - 5;
-      ctx.strokeStyle = accent;
-      ctx.fillStyle = accent;
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.moveTo(currentX, vectorY);
-      ctx.lineTo(projectedX, vectorY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(projectedX, vectorY);
-      ctx.lineTo(projectedX + 5, vectorY - 3);
-      ctx.lineTo(projectedX + 5, vectorY + 3);
-      ctx.closePath();
-      ctx.fill();
     }
     ctx.restore();
   }
@@ -3348,7 +3349,6 @@ class CombatHud {
   drawRapierGuidance(frame) {
     const presentation = rapierGuidancePresentation(frame.state);
     if (!presentation) return;
-    const engine = rapierEnginePresentation(frame.state);
     const ctx = this.ctx;
     const accent = presentation.level === "attack"
       ? RED : presentation.level === "active" ? AMBER : GREEN_DIM;
@@ -3359,9 +3359,6 @@ class CombatHud {
     // is heading home, so there is always something to aim at that is the RUNWAY rather than the
     // next intermediate gate. The gate squares move; this one does not, which is what makes it
     // usable as the thing you padlock with V and fly toward.
-    //
-    // tx/ty/tz is the kernel's touchdown point and is exactly what the carrier padlock already
-    // tracks, so looking at it with V and flying at this square are the same target.
     const missionPhase = Math.floor(Number(frame.state.rapier_mission_phase) || 0);
     if (missionPhase >= 7
         && Number.isFinite(frame.state.tx)
@@ -3370,8 +3367,6 @@ class CombatHud {
       this.worldPoint.set(frame.state.tx, frame.state.ty, -frame.state.tz);
       const threshold = this.project(this.worldPoint, frame.camera, this.projectionA);
       if (!threshold.behind) {
-        // Deliberately a different shape from the gate squares: an open diamond reads as a PLACE
-        // rather than a gate to fly through, so the two never get confused on short final.
         const r = 26;
         ctx.strokeStyle = accent;
         ctx.lineWidth = 2;
@@ -3389,10 +3384,7 @@ class CombatHud {
       }
     }
 
-    // Paint the square for EVERY phase that publishes a waypoint, not just recovery. The whole of
-    // RTB is navigationally the same problem — fly through the square — and the waypoint was already
-    // being published the entire sortie; only the recovery gates ever drew it. A pilot on the egress
-    // had bearing and range as text and nothing to actually fly at.
+    // Geometry only — no GATE essay over the sight. Gate index lives on the quiet mode line.
     if (Number.isFinite(frame.state.rapier_guidance_x)
         && Number.isFinite(frame.state.rapier_guidance_y)
         && Number.isFinite(frame.state.rapier_guidance_z)) {
@@ -3403,8 +3395,6 @@ class CombatHud {
       );
       const projectedGate = this.project(this.worldPoint, frame.camera, this.projectionA);
       if (!projectedGate.behind) {
-        // Gate zero is the en-route square: biggest, because it is a long way off and only has
-        // to say "this way". The recovery gates tighten as the aircraft closes.
         const half = [88, 76, 64, 54, 44][Math.min(4, gate)];
         const x0 = projectedGate.x - half;
         const x1 = projectedGate.x + half;
@@ -3412,7 +3402,6 @@ class CombatHud {
         const y1 = projectedGate.y + half;
         const corner = Math.max(13, half * 0.34);
         ctx.strokeStyle = AMBER;
-        ctx.fillStyle = AMBER;
         ctx.lineWidth = 3;
         ctx.shadowColor = "rgba(255, 176, 32, 0.62)";
         ctx.shadowBlur = 9;
@@ -3423,12 +3412,10 @@ class CombatHud {
         ctx.moveTo(x1, y1 - corner); ctx.lineTo(x1, y1); ctx.lineTo(x1 - corner, y1);
         ctx.stroke();
         ctx.shadowBlur = 0;
-        ctx.font = "900 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(`GATE ${gate}/4 · FLY THROUGH`, projectedGate.x, y0 - 7);
       }
     }
+
+    // Quiet mode line — one short row under the heading tape. Engine bars and triad essays are gone.
     ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const width = Math.min(
       this.width - this.safeInsets.left - this.safeInsets.right - 24,
@@ -3437,51 +3424,25 @@ class CombatHud {
     const x = (this.width - width) / 2;
     const occupied = this.annunciationBottom(frame.state);
     const y = Math.max(this.getLayout().heading.bottom + 8, occupied + 2);
-    const detailOffset = presentation.detail ? 14 : 0;
-    this.glassPanel(x, y, width, engine ? 68 + detailOffset : 24 + detailOffset, accent);
+    if (this._debug) {
+      this._debug.rapierModeLine = {
+        text: presentation.text,
+        detail: presentation.detail ?? "",
+        level: presentation.level,
+        x,
+        y,
+        width,
+        height: 22,
+        gate,
+        phase: missionPhase,
+      };
+    }
+    this.glassPanel(x, y, width, 22, accent);
     ctx.fillStyle = accent;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(this.fitText(presentation.text, width - 18),
-      this.width / 2, y + (engine ? 10 : 12));
-    if (presentation.detail) {
-      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillStyle = presentation.level === "attack" ? AMBER : GREEN;
-      ctx.fillText(this.fitText(presentation.detail, width - 18),
-        this.width / 2, y + 24);
-    }
-    if (engine) {
-      ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillStyle = engine.level === "ram" ? AMBER : GREEN;
-      ctx.fillText(this.fitText(engine.text, width - 18),
-        this.width / 2, y + 28 + detailOffset);
-      const channelMaxKn = Math.max(
-        100,
-        ...engine.channels.map((channel) => channel.thrustKn),
-      );
-      const labelX = x + 10;
-      const meterX = x + Math.min(112, width * 0.31);
-      const meterWidth = Math.max(48, width - (meterX - x) - 122);
-      const valueX = x + width - 9;
-      engine.channels.forEach((channel, index) => {
-        const channelY = y + 43 + detailOffset + index * 13;
-        const channelColor = index === 0 ? GREEN : AMBER;
-        ctx.textAlign = "left";
-        ctx.fillStyle = channelColor;
-        ctx.fillText(channel.label, labelX, channelY);
-        ctx.fillStyle = "rgba(255,255,255,0.10)";
-        ctx.fillRect(meterX, channelY - 4, meterWidth, 5);
-        ctx.fillStyle = channelColor;
-        ctx.fillRect(meterX, channelY - 4,
-          meterWidth * clamp(channel.thrustKn / channelMaxKn, 0, 1), 5);
-        ctx.textAlign = "right";
-        ctx.fillText(
-          `${channel.thrustKn.toFixed(0)} KN · ${channel.fuelPpm.toFixed(0)} LB/M`,
-          valueX,
-          channelY,
-        );
-      });
-    }
+      this.width / 2, y + 11);
     ctx.restore();
   }
 
@@ -3674,7 +3635,7 @@ class CombatHud {
     });
     if (isFightHudActive(frame.state)) this.drawGTape(frame.state);
     this.drawThrottle(frame.state);
-    this.drawFuel(frame.state);
+    this.drawLimitsPanel(frame.state);
     this.drawWarnings(frame, systems);
     if (!carrierPadlock) {
       this.drawSystemsPanel(systems);
