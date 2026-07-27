@@ -189,7 +189,7 @@ public class RapierMissionTests {
                 }
             }
             if (!sawRecoveryGate
-                && session.RapierMissionCue.StartsWith("GATE ",
+                && session.RapierMissionCue.StartsWith("FINAL · SQUARE ",
                     StringComparison.Ordinal)) {
                 sawRecoveryGate = true;
                 finalEntry = $"({session.Player.State.Position.X:F0},"
@@ -279,7 +279,7 @@ public class RapierMissionTests {
         Assert.Equal(RapierMissionPhase.Recovery, session.RapierPhase);
         Assert.True(session.TerminalPhaseActive);
         Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
-        Assert.Contains("AUTO RECOVERY", session.RapierMissionCue);
+        Assert.Contains("RECOVERY", session.RapierMissionCue);
     }
 
     // The final gate is now closed-loop on a calibrated aim point rather than an open-loop floor,

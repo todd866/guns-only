@@ -3355,6 +3355,40 @@ class CombatHud {
     ctx.save();
     const gate = Math.max(0,
       Math.floor(Number(frame.state.rapier_recovery_gate) || 0));
+    // THRESHOLD SQUARE. A fixed marker on the touchdown point itself, drawn whenever the mission
+    // is heading home, so there is always something to aim at that is the RUNWAY rather than the
+    // next intermediate gate. The gate squares move; this one does not, which is what makes it
+    // usable as the thing you padlock with V and fly toward.
+    //
+    // tx/ty/tz is the kernel's touchdown point and is exactly what the carrier padlock already
+    // tracks, so looking at it with V and flying at this square are the same target.
+    const missionPhase = Math.floor(Number(frame.state.rapier_mission_phase) || 0);
+    if (missionPhase >= 7
+        && Number.isFinite(frame.state.tx)
+        && Number.isFinite(frame.state.ty)
+        && Number.isFinite(frame.state.tz)) {
+      this.worldPoint.set(frame.state.tx, frame.state.ty, -frame.state.tz);
+      const threshold = this.project(this.worldPoint, frame.camera, this.projectionA);
+      if (!threshold.behind) {
+        // Deliberately a different shape from the gate squares: an open diamond reads as a PLACE
+        // rather than a gate to fly through, so the two never get confused on short final.
+        const r = 26;
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(threshold.x, threshold.y - r);
+        ctx.lineTo(threshold.x + r, threshold.y);
+        ctx.lineTo(threshold.x, threshold.y + r);
+        ctx.lineTo(threshold.x - r, threshold.y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.font = "600 11px ui-monospace, monospace";
+        ctx.textAlign = "center";
+        ctx.fillStyle = accent;
+        ctx.fillText("THRESHOLD", threshold.x, threshold.y + r + 14);
+      }
+    }
+
     // Paint the square for EVERY phase that publishes a waypoint, not just recovery. The whole of
     // RTB is navigationally the same problem — fly through the square — and the waypoint was already
     // being published the entire sortie; only the recovery gates ever drew it. A pilot on the egress

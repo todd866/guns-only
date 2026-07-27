@@ -521,13 +521,26 @@ public sealed class RapierMissionDirector {
                         + (approachSpeedMps - trueAirspeedMps) * 0.012,
                     0.0, approachSpeedMps > 250.0 ? 1.25 : 0.72);
                 targetAltitudeFt = gatePoint.Y * FeetPerMetre;
+                // INSTRUCTIONS, not status. This used to report which gate the aircraft was at and
+                // how fast it was going, which tells a pilot where they are and nothing about what
+                // to do. Each phase now names the one action that matters, the speed to fly, and
+                // the fact that P will fly the whole approach — because "I'm not sure how to get
+                // home and land" is a guidance failure, not a pilot failure.
+                double targetKtas = approachSpeedMps * 1.94384;
+                double currentKtas = trueAirspeedMps * 1.94384;
+                string speedCall = currentKtas > targetKtas + 25.0 ? "SLOW"
+                    : currentKtas < targetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
                 cue = !_recoveryFinal
-                    ? $"AUTO RECOVERY {(!_recoveryMarshalReached ? "MARSHAL"
-                        : !_recoveryLineupReached ? "LINEUP" : "INITIAL")} · "
-                        + $"{setupRangeM / 1000.0:F1} KM · "
-                        + $"{approachSpeedMps * 1.94384:F0} KTAS"
-                    : $"GATE {recoveryGate}/4 · WIRE 3 · "
-                        + $"{trueAirspeedMps * 1.94384:F0} KTAS · FLY THROUGH THE SQUARE";
+                    ? !_recoveryMarshalReached
+                        ? $"RECOVERY · MARSHAL {setupRangeM / 1000.0:F0} KM · "
+                            + $"SLOW TO {targetKtas:F0} KT, DESCEND · P FLIES THE APPROACH"
+                        : !_recoveryLineupReached
+                            ? $"RECOVERY · TURN ONTO FINAL · {targetKtas:F0} KT · {speedCall} · "
+                                + "P FLIES THE APPROACH"
+                            : $"RECOVERY · GEAR AND HOOK DOWN · {targetKtas:F0} KT · {speedCall} · "
+                                + "P FLIES THE APPROACH"
+                    : $"FINAL · SQUARE {recoveryGate}/4 · {targetKtas:F0} KT · {speedCall} · "
+                        + "FLY THROUGH THE SQUARE, HOLD IT ALL THE WAY TO THE WIRE";
                 break;
             default:
                 targetMach = 0.0;
