@@ -19,9 +19,10 @@ public class TimeCompressionTests {
         ControlInputBeyondTrim: false,
         RamTransitionLead: false);
 
-    static SimulationSession EstablishedRapierCruise() {
+    /// The beat both compression tests fly: established supersonic transit, nothing eventful.
+    static BeatSetup RapierCruiseBeat() {
         BeatSetup baseline = Beats.RapierIntercept();
-        BeatSetup cruise = baseline with {
+        return baseline with {
             Player = baseline.Player with {
                 Position = new Vec3D(0.0, 15_000.0, 0.0),
                 // M1.35-ish is established supersonic transit but is not inside the M1.6
@@ -36,10 +37,30 @@ public class TimeCompressionTests {
             StartsOnCatapult = false,
             ScriptedIntercept = null
         };
+    }
+
+    static SimulationSession EstablishedRapierCruise() {
+        BeatSetup cruise = RapierCruiseBeat();
         var session = new SimulationSession();
         session.StartBeat(() => cruise);
         session.Begin();
+        // Compression is opt-in: the pilot asks, and the eligibility rules then decide whether the
+        // request is honoured. These tests are about that gating, so they ask explicitly. The
+        // default itself is pinned by DefaultsToOffSoItNeverTakesTheAircraftUnasked below.
+        session.SetTimeCompressionEnabled(true);
         return session;
+    }
+
+    [Fact]
+    public void DefaultsToOffSoItNeverTakesTheAircraftUnasked() {
+        var cruise = RapierCruiseBeat();
+        var session = new SimulationSession();
+        session.StartBeat(() => cruise);
+        session.Begin();
+
+        Assert.False(session.TimeCompressionPilotEnabled);
+        Assert.Equal(1, session.Advance(SimulationSession.FixedDeltaSeconds, 8));
+        Assert.Equal(1, session.TimeCompressionFactor);
     }
 
     [Fact]
