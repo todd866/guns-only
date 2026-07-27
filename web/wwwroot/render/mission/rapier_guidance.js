@@ -34,8 +34,22 @@ export function rapierGuidancePresentation(state) {
   const turn = Math.abs(homeTurnDeg) < 3
     ? "STEADY"
     : `TURN ${homeTurnDeg < 0 ? "L" : "R"} ${Math.round(Math.abs(homeTurnDeg))}°`;
+  // CLOSURE, not true airspeed. TAS is total speed through the air, and on a ballistic lob a large
+  // part of that is vertical — climbing steeply the aircraft can be doing M4 while barely closing on
+  // home, and diving the reverse. Dividing range by TAS therefore read optimistic on the way up and
+  // pessimistic on the way down, and fuel-to-home inherited the error because it is ETA x flow.
+  //
+  // Projecting ground velocity onto the bearing home gives the rate the distance is ACTUALLY
+  // shrinking, which is what a time-to-run means. It falls out correct for a steady cruise too.
+  const bearingRad = (Number(state.rtb_bearing_deg) || 0) * Math.PI / 180;
+  const eastMps = Number(state.vx) || 0;
+  const northMps = Number(state.vz) || 0;
+  const closureKts = (eastMps * Math.sin(bearingRad) + northMps * Math.cos(bearingRad)) * 1.94384;
+  // Below a knot of closure the arc is not making progress home; fall back to TAS so the readout
+  // degrades to the old behaviour rather than dividing by zero.
+  const closingKts = closureKts > 1 ? closureKts : trueAirspeedKts;
   const etaMinutes = hasHome
-    ? Math.max(0, Math.round(homeRangeNm / trueAirspeedKts * 60))
+    ? Math.max(0, Math.round(homeRangeNm / closingKts * 60))
     : 0;
   // CAN I GET HOME? The cue gave bearing, range and ETA but never answered the only question that
   // matters on the egress. A pilot at 637 lb with 234 NM to run and 14,185 PPH flowing is already

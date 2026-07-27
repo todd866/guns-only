@@ -307,7 +307,14 @@ function updateNavConsole(state) {
   set(navUi.range, homeKnown ? `${Math.round(rangeNm)} NM` : "--",
     homeKnown ? "normal" : "unknown");
 
-  const minutesToRun = homeKnown ? rangeNm / ktas * 60 : Number.NaN;
+  // Time to run uses CLOSURE toward home, not true airspeed. On a ballistic lob much of TAS is
+  // vertical, so range/TAS reads optimistic climbing and pessimistic descending — and fuel required
+  // is time-to-run times flow, so the error propagates straight into the decision number.
+  const bearingRad = (finite(bearing) ? bearing : 0) * Math.PI / 180;
+  const closureKts = ((num("vx") || 0) * Math.sin(bearingRad)
+    + (num("vz") || 0) * Math.cos(bearingRad)) * 1.94384;
+  const closingKts = closureKts > 1 ? closureKts : ktas;
+  const minutesToRun = homeKnown ? rangeNm / closingKts * 60 : Number.NaN;
   set(navUi.eta, finite(minutesToRun) ? `${Math.max(0, Math.round(minutesToRun))} MIN` : "--",
     finite(minutesToRun) ? "normal" : "unknown");
   set(navUi.turn, finite(turnDeg)
