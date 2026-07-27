@@ -151,3 +151,65 @@ aircraft, but a different and much more expensive one, and the cost layer has no
 Whichever is chosen, `docs/2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md` and the
 reclined-seat setting record both still describe a M2.6 stainless aircraft and will be wrong until
 this is settled.
+
+## The turbo-ramjet's whole point is not modelled: fuel is lever-only
+
+`TurboRamjetPerformanceMap.Evaluate` computes fuel as `idle + (mil-idle)*core + (AB-mil)*augmented`
+— purely lever-driven, identical whether thrust comes from the turbine or the ram duct. So the
+turbine charges full military fuel at M2.8 while `TurbineGoneMach` says it contributes nothing.
+
+This kills the concept the aircraft exists for: idle the turbojet and cruise fast on the duct, the
+way the J58 largely did at M3.2. You cannot express it, so the pilot is never rewarded for it.
+
+It is also why specific range looks unimpressive. In the nav triad the pilot thinks in:
+
+| condition | lb/min | nm/min | lb/nm |
+|---|---|---|---|
+| subsonic cruise MIL | 42 | 8.6 | 4.88 |
+| transonic accel AB | 132 | 12.4 | 10.62 (worst in the envelope) |
+| ram cruise M2.5 AB | 132 | 23.9 | 5.52 |
+| ram cruise M2.5 ~1.2 lever | 75 | 23.9 | 3.13 |
+
+Ram cruise at full augmentation is barely better than subsonic. It should be dramatically better.
+
+**Fix: per-stream fuel.** Turbine fuel tied to its thrust share so it falls to idle as
+`Fade(M, TurbineFadeStartMach, TurbineGoneMach)` unloads the core; ram fuel with its own (worse)
+TSFC, bought at 24 nm/min instead of 8.6. The handover then reads on the instruments as FUEL FLOW
+DROPPING as the turbine unloads — far more legible than a thrust bump, and instrument-true.
+
+⚠️ Build 137 added "separate turbine/ramjet fuel-flow presentation". The THRUST split is real (the
+map computes both terms). The FUEL split is not in the model, so any per-stream fuel figure on the
+HUD is derived rather than simulated — a number the kernel does not own. Verify before trusting it.
+
+## Nav panel (requested)
+
+Pilot teaches navigation in lb/nm, lb/min, nm/min. Show that triad live, plus the two derived
+figures that turn it into a decision: range remaining at current lb/nm, and fuel-to-home versus
+fuel-remaining. That last pair is what gives the recovery its stakes — the margin visibly shrinking
+during the fight rather than being discovered on the egress. Pairs with the Joker/Bingo/Minimum/
+Emergency thresholds already in the beat.
+
+## Branch `engine-physical-limits` — ready except for one retune
+
+Burner 3000 -> 2300 K (chemistry, not balance), RamDesignThrustRatio 1.05 -> 0.70, fade band
+1.6-2.2 -> 1.85-2.15, time compression default OFF. Three tests fail and the diagnosis matters:
+the two TimeCompression ones assert auto-engagement (the rejected behaviour — make them request
+compression explicitly, do NOT restore the default), and the sortie test fails at the TRAP, not the
+transit. The automation flew the whole profile and arrived with 883 lb, just under the 900 lb
+Minimum, missing the wires by ~171 m. The recovery was tuned to the buffed engine's energy budget.
+Retune the approach; do NOT re-buff the engine.
+
+## Engine instrumentation (requested): one throttle, two engines visible
+
+Pilot does not want two sets of engine controls — one lever — but wants to SEE the engine
+configuration and what it is doing to performance. That argues for the per-stream fuel model above,
+because without it the display has nothing real to show. Suggested indications:
+
+- turbine share vs ram share of current thrust (the map already computes both terms)
+- fuel flow attributable to each stream (NEEDS the per-stream model; currently fabricated)
+- the nav triad: lb/min, nm/min, lb/nm
+- range remaining at current lb/nm, and fuel-to-home vs fuel-remaining
+
+The payoff is that the handover becomes legible on instruments: as the turbine unloads past M1.85
+its share falls, its fuel falls to idle, and lb/nm drops sharply. That single readout teaches the
+whole aircraft without a word of briefing.
