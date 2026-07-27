@@ -305,6 +305,46 @@ public static class FlightModel {
         MaxPerformFraction: 0.8,
         MaxThrustFraction: 1.0);
 
+    /// Rapier reusable gun-drone PUBLIC-DATA SURROGATE (vertical slice).
+    ///
+    /// Energy-glider with a cheap turbine and a gun: released from Rapier, rides inherited kinetic
+    /// energy into the fight, then lights a small turbojet for loiter / RTB to intermittent pickup.
+    /// Masses and the 1.8 kN thrust card are transparent mission surrogates — not an extant type.
+    /// Spec: docs/superpowers/specs/2026-07-27-rapier-glide-drone-vertical-slice-design.md
+    public static readonly AircraftParams RapierGunDroneSurrogate = new(
+        MassKg: 360.0,                        // 280 kg fuel-free + 80 kg fuel
+        WingAreaM2: 4.0,
+        ThrustMaxN: 1800.0,                   // small turbojet when armed; AI holds lever at 0 until gate
+        CD0: 0.024,
+        InducedK: 0.055,
+        CLMax: 1.35,
+        CLMin: -0.55,
+        RollRateMaxRad: 2.2,
+        BankTau: 0.32,
+        MCrit: 0.78,
+        WaveDragK: 100.0,
+        SpoolUpTau: 0.9,
+        SpoolDownTau: 0.55,
+        CLAlpha: 4.4,
+        IxxKgM2: 420.0,
+        IyyKgM2: 780.0,
+        IzzKgM2: 980.0,
+        RollStiffnessNmRad: 12_000.0,
+        PitchStiffnessNmRad: 16_000.0,
+        YawStiffnessNmRad: 11_000.0,
+        RollDampingNms: 5_000.0,
+        PitchDampingNms: 7_500.0,
+        YawDampingNms: 5_500.0,
+        RollMomentMaxNm: 9_000.0,
+        PitchMomentMaxNm: 14_000.0,
+        YawMomentMaxNm: 8_000.0,
+        WingSpanM: 5.5,
+        PositiveStructuralLimitG: 6.0,
+        MaxPerformFraction: 0.9,
+        MaxThrustFraction: 1.0,
+        SkinTemperatureLimitK: 593.15,        // 320 C cheap structure
+        FuelFreeMassKg: 280.0);
+
     /// F-22A PUBLIC-DATA SURROGATE for a visual, guns-only merge. Public anchors are the USAF
     /// fact sheet's 840 ft2 wing, 43,340 lb empty weight, 18,000 lb internal fuel, +9 G limit,
     /// and two engines in the 35,000 lb-thrust class. The military/afterburner split, drag polar,
