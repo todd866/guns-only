@@ -86,10 +86,14 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   const edgeLamps = strip.getObjectByName("RAPIER_STRIP_EDGE_LAMPS");
   const centreArcRail = strip.getObjectByName("LAUNCH_ARC_CENTRE_RAIL");
   const sideArcRails = strip.getObjectByName("LAUNCH_ARC_SIDE_RAILS");
+  // Derived, not hardcoded: the gallery roofs the FLAT run, so its length is the stroke minus the
+  // ramp arc. Shortening the launcher lengthens the gallery, and a literal here just breaks.
+  const flatLengthM = 520 - rampAngleRad * arcRadiusM;
+  const expectedRibs = Math.floor((flatLengthM - 10) / 10) + 1;
   assert.ok(ribs?.isInstancedMesh);
-  assert.equal(ribs.count, 35);
+  assert.equal(ribs.count, expectedRibs);
   assert.ok(ribLamps?.isInstancedMesh);
-  assert.equal(ribLamps.count, 35);
+  assert.equal(ribLamps.count, expectedRibs);
   assert.ok(edgeLamps?.isInstancedMesh);
   assert.equal(edgeLamps.count, 36);
   assert.ok(centreArcRail?.isInstancedMesh);
