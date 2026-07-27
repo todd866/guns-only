@@ -323,25 +323,24 @@ void main() {
   vec3 lit = albedo * diffuse;
 
   #else
-  // 2030s illustrative treatment (docs/art-direction.md): Team Fortress 2-lineage shading —
-  // half-Lambert so shadowed valley walls never crush to black, a soft-edged two-step tone
-  // ramp for the painterly value structure, a saturated banded palette so elevation reads as
-  // contour bands at combat speed, and a cool sky rim on upward-facing slopes. The 1950s era
-  // keeps the sourced-realism lean above; the doctrine contrast is deliberate.
+  // 2030s stylized treatment (docs/art-direction.md / ADR-0003). Korea-modern keeps a harder
+  // illustrative tone ramp for silhouette readability; Ukraine uses a Ghibli-adjacent soft world
+  // (warmer agricultural planes, continuous lighting, warm atmospheric haze) while instruments
+  // stay cold. The 1950s era keeps the sourced-realism lean above.
   float bandStep = smoothstep(0.12, 0.22, elevation) * 0.34
     + smoothstep(0.42, 0.55, elevation) * 0.33
     + smoothstep(0.75, 0.88, elevation) * 0.33;
   // Sage/olive lowlands, umber slopes and cool-grey ridges form the authored modern-era bands.
   // Values stay deliberately below the old pale-bone range so ACES preserves colour separation.
   #ifdef UKRAINE_SCENERY
-  // Fictional Ukrainian training-sector palette: broad ochre/green agricultural planes, dark
-  // shelterbelt country and low blue-grey relief. This is a regional visual grammar over
-  // metre-true synthetic terrain, not live-war imagery or a claim about a real locality.
-  vec3 sValley = vec3(0.29, 0.31, 0.085);
-  vec3 sFoothill = vec3(0.16, 0.22, 0.060);
-  vec3 sUpland = vec3(0.11, 0.16, 0.055);
-  vec3 sRock = vec3(0.30, 0.21, 0.095);
-  vec3 sRidge = vec3(0.28, 0.30, 0.27);
+  // Fictional Ukrainian training-sector palette (ADR-0003 soft world): sunlit wheat/grass planes,
+  // dark shelterbelt country, and warm low relief. Regional visual grammar over metre-true
+  // synthetic terrain — not live-war imagery or a claim about a real locality.
+  vec3 sValley = vec3(0.36, 0.38, 0.12);
+  vec3 sFoothill = vec3(0.24, 0.30, 0.095);
+  vec3 sUpland = vec3(0.18, 0.24, 0.090);
+  vec3 sRock = vec3(0.38, 0.30, 0.18);
+  vec3 sRidge = vec3(0.40, 0.38, 0.32);
   #else
   vec3 sValley = vec3(0.15, 0.24, 0.055);
   vec3 sFoothill = vec3(0.070, 0.13, 0.032);
@@ -382,13 +381,14 @@ void main() {
     min(macroParcelLocal.x, 1.0 - macroParcelLocal.x),
     min(macroParcelLocal.y, 1.0 - macroParcelLocal.y));
   float parcelBoundary = 1.0 - smoothstep(0.018, 0.065, parcelEdgeDistance);
-  vec3 cultivation = mix(vec3(0.105, 0.215, 0.055), vec3(0.205, 0.325, 0.075),
+  // Soft-world crops: young green, ripe wheat, sunflower gold, dark shelterbelt edge.
+  vec3 cultivation = mix(vec3(0.16, 0.28, 0.075), vec3(0.28, 0.36, 0.095),
     smoothstep(0.10, 0.38, parcelHash));
-  cultivation = mix(cultivation, vec3(0.315, 0.205, 0.060),
+  cultivation = mix(cultivation, vec3(0.42, 0.30, 0.080),
     smoothstep(0.43, 0.64, parcelHash));
-  cultivation = mix(cultivation, vec3(0.49, 0.355, 0.090),
+  cultivation = mix(cultivation, vec3(0.58, 0.44, 0.11),
     smoothstep(0.70, 0.90, parcelHash));
-  cultivation = mix(cultivation, vec3(0.085, 0.145, 0.045), parcelBoundary * 0.32);
+  cultivation = mix(cultivation, vec3(0.12, 0.18, 0.065), parcelBoundary * 0.28);
   float macroArable = (1.0 - smoothstep(0.025, 0.14, steepness))
     * (1.0 - smoothstep(138.0, 158.0, vTerrainHeight));
   #else
@@ -408,22 +408,29 @@ void main() {
   sAlbedo = mix(sAlbedo, sRidge, max(highRidge * 0.68, exposedFace * 0.78));
   float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
   halfLambert *= halfLambert;
+  #ifdef UKRAINE_SCENERY
+  // Continuous soft lighting — painterly value without the hard two-step toon posterization.
+  float toneRamp = uShadowFloor
+    + (1.0 - uShadowFloor) * mix(0.52, 1.0, halfLambert);
+  vec3 rimTint = vec3(0.14, 0.10, 0.055);
+  #else
   float toneRamp = uShadowFloor
     + (1.0 - uShadowFloor) * (0.42 * smoothstep(0.26, 0.40, halfLambert)
       + 0.58 * smoothstep(0.58, 0.76, halfLambert));
+  vec3 rimTint = vec3(0.055, 0.075, 0.11);
+  #endif
   vec3 viewDirection = normalize(cameraPosition - vTerrainWorldPosition);
   float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
   vec3 stylizedLit = sAlbedo * toneRamp
-    + rim * vec3(0.055, 0.075, 0.11) * (0.4 + 0.6 * clamp(normal.y, 0.0, 1.0));
+    + rim * rimTint * (0.4 + 0.6 * clamp(normal.y, 0.0, 1.0));
   #ifdef UKRAINE_SCENERY
-  // Low-relief macro normals otherwise all land on the bright step of the toon ramp. A bounded
-  // horizontal-normal term restores sun-facing versus lee-facing terrain separation without
-  // adding geometry, textures, draw calls, or any micro-scenery at altitude.
+  // Low-relief macro normals need a bounded directional cue so sun-facing versus lee-facing
+  // terrain still separates without hard toon steps, textures, or micro-scenery at altitude.
   vec2 regionalSunDirection = normalize(uSunDirection.xz + vec2(0.0001));
   float regionalReliefLight = clamp(
-    0.94 + dot(normal.xz, regionalSunDirection) * 12.0,
-    0.76,
-    1.08);
+    0.94 + dot(normal.xz, regionalSunDirection) * 10.0,
+    0.80,
+    1.06);
   stylizedLit *= regionalReliefLight;
   #endif
 
@@ -457,12 +464,17 @@ void main() {
   float waterMask = smoothstep(0.18, 0.82, vTerrainWater);
   lit = mix(lit, waterLit, waterMask);
 
-  // Illustrative atmosphere: the period haze whites the world out from altitude, which is
-  // period-honest but buries the 2030s palette entirely. The modern era thins the density and
-  // hazes toward a saturated sky blue instead of white — distance stays readable as COLOR.
+  // Aerial perspective: period haze whites the world out from altitude. Korea-modern thins
+  // density toward cool sky blue. Ukraine soft-world (ADR-0003) hazes warm and dusty so distance
+  // reads as atmosphere rather than a blue poster wash.
   #ifdef MODERN_SCENERY
+  #ifdef UKRAINE_SCENERY
+  float fogDensity = uFogDensity * 0.36;
+  vec3 hazeColor = mix(uFogColor, vec3(0.72, 0.66, 0.54), 0.55);
+  #else
   float fogDensity = uFogDensity * 0.45;
   vec3 hazeColor = vec3(0.36, 0.52, 0.68);
+  #endif
   #else
   float fogDensity = uFogDensity;
   vec3 hazeColor = uFogColor;
@@ -760,8 +772,10 @@ export function createTerrainMaterial(THREE, options = {}) {
       uSunDirection: {
         value: (options.sunDirection ?? new THREE.Vector3(0.32, 0.78, -0.53)).clone().normalize(),
       },
-      uFogColor: { value: new THREE.Color(options.fogColor ?? 0x6f8790) },
-      uFogDensity: { value: finite(options.fogDensity, 0.000055) },
+      uFogColor: {
+        value: new THREE.Color(options.fogColor ?? (ukraine ? 0xc4b59a : 0x6f8790)),
+      },
+      uFogDensity: { value: finite(options.fogDensity, ukraine ? 0.000048 : 0.000055) },
       uModernScenery: { value: illustrative ? 1 : 0 },
       // Full-detail parcel/cultivation tint only affects the period desktop treatment. Modern
       // shading discards periodLit, so skip its four otherwise invisible sin() calls there too.
@@ -771,18 +785,19 @@ export function createTerrainMaterial(THREE, options = {}) {
       // Darkest-slope lighting. The old 0.43 / 0.40 floors put every slope in the world inside the
       // top 60% of the value range, which is why densely dissected Korean terrain rendered as a
       // flat wash. Legibility now comes from value, and hue separation keeps dark slopes readable.
-      uShadowFloor: { value: finite(options.shadowFloor, 0.12) },
+      // Ukraine soft-world lifts the floor slightly so lee slopes stay painterly rather than crushed.
+      uShadowFloor: { value: finite(options.shadowFloor, ukraine ? 0.16 : 0.12) },
       // Baked-occlusion multiplier at fully concave (x) and fully convex (y).
       uOcclusionRange: {
         value: new THREE.Vector2(
-          finite(options.occlusionMin, 0.55),
+          finite(options.occlusionMin, ukraine ? 0.62 : 0.55),
           finite(options.occlusionMax, 1.12),
         ),
       },
-      // Discrete aerial-perspective planes. Stacked ridges each land on their own value step,
-      // which is what makes receding terrain read as depth rather than as fade.
-      uHazeBands: { value: finite(options.hazeBands, 6) },
-      uHazeBandBlend: { value: finite(options.hazeBandBlend, 0.65) },
+      // Discrete aerial-perspective planes. Korea-modern keeps stronger banding; Ukraine softens
+      // the posterization so distance reads as continuous atmosphere (ADR-0003).
+      uHazeBands: { value: finite(options.hazeBands, ukraine ? 4 : 6) },
+      uHazeBandBlend: { value: finite(options.hazeBandBlend, ukraine ? 0.28 : 0.65) },
     },
   });
 }

@@ -1125,6 +1125,7 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.equal(ukraine.defines.MODERN_SCENERY, 1);
   assert.equal(ukraine.defines.UKRAINE_SCENERY, 1);
   assert.match(ukraine.fragmentShader, /fictional Ukrainian training-sector palette/i);
+  assert.match(ukraine.fragmentShader, /ADR-0003 soft world/i);
   assert.match(ukraine.fragmentShader,
     /float ukraineElevationBand = smoothstep\(22\.0, 40\.0, vTerrainHeight\)/,
     "the low-relief theatre needs a Ukraine-scale height ramp at macro LOD");
@@ -1133,7 +1134,7 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(ukraine.fragmentShader,
     /float parcelHash = fract\(sin\(dot\(macroParcelCell,/);
   assert.match(ukraine.fragmentShader,
-    /cultivation = mix\(cultivation, vec3\(0\.085, 0\.145, 0\.045\), parcelBoundary \* 0\.32\)/,
+    /cultivation = mix\(cultivation, vec3\(0\.12, 0\.18, 0\.065\), parcelBoundary \* 0\.28\)/,
     "macro parcel borders must remain a cheap terrain-albedo cue, not instanced scenery");
   assert.match(ukraine.fragmentShader,
     /macroArable \* \(0\.58 \+ \(1\.0 - ukraineElevationBand\) \* 0\.16\)/,
@@ -1142,8 +1143,18 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
     /sAlbedo \*= mix\(1\.07, 0\.84, ukraineElevationBand\)/,
     "the crop palette must retain the regional height value structure");
   assert.match(ukraine.fragmentShader,
-    /dot\(normal\.xz, regionalSunDirection\) \* 12\.0/,
+    /mix\(0\.52, 1\.0, halfLambert\)/,
+    "Ukraine soft-world lighting must be continuous, not a hard two-step toon ramp");
+  assert.match(ukraine.fragmentShader,
+    /dot\(normal\.xz, regionalSunDirection\) \* 10\.0/,
     "coarse lowland normals need a bounded directional relief cue");
+  assert.ok(ukraine.uniforms.uShadowFloor.value >= 0.15,
+    "Ukraine soft-world should lift the shadow floor for painterly lee slopes");
+  assert.ok(ukraine.uniforms.uHazeBandBlend.value <= 0.35,
+    "Ukraine soft-world should soften aerial haze banding");
+  assert.match(ukraine.fragmentShader,
+    /mix\(uFogColor, vec3\(0\.72, 0\.66, 0\.54\), 0\.55\)/,
+    "Ukraine distance haze must lean warm rather than cool poster blue");
   assert.ok(
     modern.fragmentShader.indexOf("lit *= mix(uOcclusionRange.x")
       < modern.fragmentShader.indexOf("lit = mix(lit, waterLit, waterMask)"),

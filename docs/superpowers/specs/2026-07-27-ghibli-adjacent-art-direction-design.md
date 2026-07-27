@@ -69,10 +69,10 @@ cartoon stylization of destruction.
 - [x] ADR-0003 accepted and filed
 - [x] Rewrite living `docs/art-direction.md`
 - [x] Patch TF2-as-canon wording in Ukraine scenery and drone-war docs
-- [ ] First engine pass: terrain palette + atmosphere
+- [x] First engine pass: terrain palette + atmosphere (Ukraine soft-world shader + scenery colors)
 - [ ] Parallel: AI mood board for Soniachne / clinic / Rapier strip
 - [ ] Aircraft and effects restyle after vibe lock
-- [ ] HUD harness remains green (world-only changes)
+- [x] HUD harness remains green (world-only changes; terrain/scenery unit tests pass)
 
 ## Success criteria
 
