@@ -2,33 +2,37 @@
 
 ← [90 — Failure modes](90-failure-modes.md) · Back to [README](README.md)
 
-*Systems chapter — consequence of the CMC hot structure and duct-dominated body chosen in
-[20](20-thermal-and-materials.md) and [30](30-propulsion-and-inlet.md).*
+*Consequence of CMC hot structure ([20](20-thermal-and-materials.md)) and duct-dominated body
+([30](30-propulsion-and-inlet.md)). Numbers are **surrogate order-of-magnitude**, not a bid.*
 
-## What is closed
+## Flyaway (surrogate)
 
-Flyaway assumes the CMC premium, not a stainless counterfactual: the airframe class comment in
-`FlightModel.RapierPublicDataSurrogate` puts the aircraft at roughly a **$9M-class** flyaway once CMC
-hot structure is priced in (~2% structural life at ~$180k premium contributes to that figure — see
-[20 — Thermal and materials](20-thermal-and-materials.md)). **Stainless is a "aircraft we refused"
-counterfactual row, not the product** — do not cost this airframe as if it were the retired stainless
-story.
+| Line | Order | Basis |
+| --- | --- | --- |
+| Structure (CMC hot + composite cold) | ~$5–6M | CMC premium vs stainless counterfactual |
+| TBCC core + duct + inlet | ~$2–3M | single stream, no TVC |
+| Avionics / opaque sensor spine / FBW | ~$0.8–1.2M | reclined capsule, no HUD glass boat |
+| Escape pod / seat / life support | ~$0.4–0.6M | |
+| **Flyaway class** | **~$9M** | Matches `FlightModel` class comment |
 
-## What is not closed
+**Stainless counterfactual (refused):** ~$4–5M flyaway class, dies at M4-class stagnation — incoherent
+with the CMC freeze. Do not cost the product as stainless.
 
-> **provisional — Phase 2 closes this table.** There is no itemised flyaway breakdown (airframe
-> structure, engine, avionics/sensor spine, escape pod, CMC hot-section premium as its own line),
-> no per-sortie consumable costing (fuel, ammunition, structural-life consumption from a hard pull),
-> and no infrastructure ledger (launch tube earthworks, catapult, arrestor installation — these are
-> per-lane infrastructure, not per-sortie or per-airframe cost, per
-> [80 — Basing and ground](80-basing-and-ground.md)). Do not publish a per-round, per-pull, or
-> per-sortie dollar figure in this chapter until it is derived from `AircraftParams` or a sibling
-> cost record, not asserted here first.
+## Consumables / life (provisional)
+
+| Item | Note |
+| --- | --- |
+| Fuel | Alert ~3,100 LB; ram burn still lever-modelled (open finding) |
+| Ownship ammo | 480 rounds — negligible $ vs fuel |
+| Structural life | Hard 12/15 G pulls eat CMC life; ~2% life @ ~$180k was the comment's pricing sketch |
+| Gun-drone attrition | Four × attritable fighterettes; reuse only if quiet-strip pickup closes |
+
+## Infrastructure (per lane, not per airframe)
+
+Buried gallery earthworks, 520 m strip, 35 MJ arrestor, catapult — **per basing lane**. Amortise
+across the alert inventory, not into flyaway.
 
 ## Epistemic
 
-The ~$9M-class flyaway order of magnitude and the "CMC not stainless" cost story are **surrogate**
-(grounded in the airframe-class comment in `FlightModel.cs`). An itemised ledger, per-sortie
-consumable costing, and infrastructure amortisation are **open findings** — Phase 2 work, not
-Phase 1.
-
+~$9M flyaway class **surrogate**. Itemised rows above are Phase 2 sketch for planning — not a
+contract cost. Per-sortie $ remains open until fuel model is instrument-true.

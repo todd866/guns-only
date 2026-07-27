@@ -2,9 +2,9 @@
 
 ← [50 — Crew, escape, FBW](50-crew-escape-fbw.md) · Next: [70 — Landing gear, arrest](70-landing-gear-arrest.md)
 
-*Systems chapter. Constraints below come from the area-ruled body ([10](10-geometry.md)) and thermal
-limits ([20](20-thermal-and-materials.md)); this chapter does not re-derive geometry or thermal
-freezes.*
+*Systems chapter. Constraints from area-ruled body ([10](10-geometry.md)) and thermal
+([20](20-thermal-and-materials.md)). Packaging trade below is **provisional** — preferred geometry
+for fiction-compatible carriage, not a closed OEM bay design.*
 
 ## Ownship guns (closed)
 
@@ -12,37 +12,72 @@ Guns-only, **480 rounds** (`CombatConfig.ModernVisualMerge` / `ModernDroneDefens
 `PlayerAmmo: 480`) — one pass, not a magazine war. Ammunition mass is small relative to fuel and is
 not tracked as a first-order CG term (see [40 — Mass and CG](40-mass-and-cg.md)).
 
-## Gun-drones — gameplay load is closed, physical packaging is not
+## Gun-drone airframe (surrogate, closed as params)
 
-Four reusable gun-drones are the **gameplay** load (`ScriptedInterceptConfig.DogfightingDrones`,
-`docs/rapier-gun-drone-system.md`). That number is a mission/gameplay commitment, not yet an
-engineering claim about what physically fits inside the aircraft. **Physical packaging (cells,
-doors, thermal soak, CG, release envelope at dash Mach) remains the open SE trade.**
+Each drone uses `FlightModel.RapierGunDroneSurrogate`:
 
-Constraints inherited from earlier chapters that any packaging solution must respect:
+| Quantity | Value | Tag |
+| --- | --- | --- |
+| Mass gross / fuel-free / fuel | 360 / 280 / 80 kg | surrogate |
+| Wing area / span | 4.0 m² / 5.5 m | surrogate |
+| Skin limit | 593.15 K (~320 °C) | surrogate — **far below** Rapier CMC |
+| Structural G | 6 G | surrogate |
 
-- Cells must live inside the area-ruled body ([10](10-geometry.md)) without wrecking wave drag.
-- Release Mach/altitude must respect **drone** skin limits, not only Rapier's CMC limit
-  (`RapierGunDroneSurrogate.SkinTemperatureLimitK = 593.15`, i.e. ~320 °C — far below Rapier's
-  1473.15 K). Do not release a drone into a thermal environment its own skin cannot survive.
-- Pickup is off Rapier's arresting strip, per the glide-drone vertical-slice design — Rapier does not
-  recover drones in flight.
+Release must respect **drone** skin, not Rapier's. Do not lob a stainless-class article into a CMC
+dash soak.
 
-## What is not closed here
+## Packaging trade (provisional — preferred option selected)
 
-> **provisional / open finding.** Packaged mass, volume, CG travel, cell count (2 vs 3 vs 4), doors,
-> release-speed envelope, gun calibre/ammo/recoil for the drones themselves, drone propulsion and
-> endurance, sensor apertures, datalink topology, and swarm coordination are all explicitly open —
-> see `docs/rapier-gun-drone-system.md` §"Questions that remain open" for the full list. **Do not
-> invent a closed drone mass, cell dimension, or release-speed number in this chapter or in the JSON
-> Airframe Definition to make the packaging trade look finished.** The vertical slice
-> (`docs/superpowers/specs/2026-07-27-rapier-glide-drone-vertical-slice-design.md`) owns proving the
-> first physical drone; this bible owns the geometry envelope constraint the packaging trade must
-> satisfy.
+Cell volume is bounded by the area-ruled belly under the propulsion tunnel (stations z≈−0.6…+2.9,
+half-width ≈0.6–0.7 m). A 5.5 m span drone does **not** fit unfolded; cells hold a **folded /
+stowed** article with wings deploying after clear.
+
+| Option | Cells | Stow mass (4×360 if full) | Fit in belly envelope | Mission fit | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| A · Two cells | 2 | 720 kg | Comfortable; deeper doors | Under-matches 4-ship + egress screen | Reject for gameplay load |
+| B · Three cells | 3 | 1080 kg | Tight but plausible | Awkward vs four-ship script | Hold as fallback |
+| **C · Four cells** | **4** | **1440 kg** | **Tight; 2×2 belly grid** | Matches authored load | **Preferred (provisional)** |
+
+**Preferred: C — four belly cells in a 2×2 grid** at definition sockets
+`(±0.55, −0.35, 0.5)` and `(±0.55, −0.35, 1.8)` m (frame `threejs-createRapier-v1`). Lateral
+spacing keeps doors clear of the 1.2 m² duct; longitudinal pair keeps CG travel under ~0.4 m when
+all four leave (order-of-magnitude, provisional).
+
+### Mass / CG consequences (provisional)
+
+| State | Approx mass | Notes |
+| --- | --- | --- |
+| Alert Rapier alone (today's params) | 6556 kg class | Fuel partially filled |
+| + 4 stowed drones | **+1440 kg** | **Not yet in `AircraftParams.MassKg`** — open binding gap |
+| After full release | −1440 kg | CG shifts forward/up as aft-belly mass leaves |
+
+Until the flight model carries drone mass, the intercept OFT is **optimistic** on climb and dash.
+Track as overperformance sibling to wet T/W.
+
+### Release envelope (provisional)
+
+| Gate | Bound | Why |
+| --- | --- | --- |
+| Max release Mach | ≤ **M1.6** (RAM LIGHT cue) | Drone skin 320 °C; avoid full-ram soak |
+| Min altitude | Pattern / attack window only | Separation + pickup geometry |
+| Doors | Bottom-hinge, positive retention | Density at FL700 forbids casual open |
+
+Pickup remains off Rapier's arresting strip (`rapier-glide-drone` vertical slice) — no in-flight
+recovery.
+
+## What remains open
+
+Gun calibre/ammo/recoil on the drone, datalink EMCON, swarm allocation, turnaround labour, and
+whether “reusable” survives landing-gear mass — see `docs/rapier-gun-drone-system.md`. Cell
+coordinates may move when a vertical-slice mesh proves separation; bump `rapier.v1.json` revision
+when they do.
 
 ## Epistemic
 
-Ownship round count is **closed**. The four-drone gameplay load is **closed as a mission
-commitment** but **provisional as an engineering fact** — see `icds/gun-drone-carriage.md` for the
-carrier/drone interface boundary.
-
+| Claim | Tag |
+| --- | --- |
+| Ownship 480 rounds | closed |
+| Four-drone gameplay load | closed (mission) |
+| Four-cell belly geometry | **provisional** (preferred trade) |
+| Drone 360 kg params | surrogate |
+| Carrier mass includes drones | **open finding** (not in FlightModel yet) |

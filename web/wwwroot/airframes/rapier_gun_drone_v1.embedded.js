@@ -1,0 +1,105 @@
+// AUTO-SYNC from airframes/rapier-gun-drone.v1.json
+export default {
+  "schema": "guns-only.airframe-definition.v1",
+  "id": "rapier-gun-drone.public-data-surrogate.v1",
+  "revision": "1.0.0",
+  "presentationId": "presentation.vehicle.rapier-gun-drone.public-data-surrogate.v1",
+  "flightModelBinding": "FlightModel.RapierGunDroneSurrogate",
+  "frameConvention": "threejs-createRapier-v1",
+  "epistemic": "surrogate",
+  "displayName": "RAPIER_GUN_DRONE",
+  "dimensionsM": {
+    "length": 3.2,
+    "span": 5.5,
+    "height": 0.9
+  },
+  "wing": {
+    "areaM2": 4.0,
+    "aspectRatio": 7.5625,
+    "thickness": 0.08,
+    "bevel": 0.02,
+    "planform": [
+      [0, -1.4],
+      [-0.4, -1.1],
+      [-2.75, 0.05],
+      [-2.5, 0.55],
+      [-0.5, 0.25],
+      [-0.35, 1.2],
+      [0, 1.4],
+      [0.35, 1.2],
+      [0.5, 0.25],
+      [2.5, 0.55],
+      [2.75, 0.05],
+      [0.4, -1.1]
+    ]
+  },
+  "fuselage": {
+    "stations": [
+      { "z": -1.6, "rx": 0.04, "ry": 0.04, "y": 0.02 },
+      { "z": -0.8, "rx": 0.22, "ry": 0.18, "y": 0.04 },
+      { "z": 0.2, "rx": 0.28, "ry": 0.22, "y": 0.04 },
+      { "z": 1.2, "rx": 0.18, "ry": 0.14, "y": 0.03 },
+      { "z": 1.6, "rx": 0.08, "ry": 0.07, "y": 0.02 }
+    ]
+  },
+  "intake": {
+    "innerR": 0.08,
+    "outerR": 0.16,
+    "scaleY": 0.8,
+    "position": [0, -0.08, -0.9]
+  },
+  "exhaust": {
+    "radius": 0.12,
+    "tube": 0.03,
+    "position": [0, -0.04, 1.45]
+  },
+  "propulsionTunnel": {
+    "stations": [
+      { "z": -0.85, "rx": 0.18, "ry": 0.12, "y": -0.08 },
+      { "z": 1.35, "rx": 0.14, "ry": 0.1, "y": -0.05 }
+    ]
+  },
+  "fins": [
+    {
+      "planform": [[0.6, 0], [1.4, 0], [1.25, 0.55], [1.0, 0.7], [0.75, 0.1]],
+      "thickness": 0.06,
+      "sideX": 0.2,
+      "y": 0.12,
+      "rotZ": -0.1
+    }
+  ],
+  "accents": [],
+  "sockets": {
+    "cockpitCamera": { "x": 0, "y": 0.2, "z": -0.4, "epistemic": "surrogate" },
+    "muzzleLeft": { "x": -0.1, "y": -0.05, "z": -1.4, "epistemic": "surrogate" },
+    "muzzleRight": { "x": 0.1, "y": -0.05, "z": -1.4, "epistemic": "surrogate" }
+  },
+  "materialZones": [
+    { "id": "airframe", "material": "aluminium-steel", "thermalClass": "warm" }
+  ],
+  "palette": {
+    "upper": "0x6a7378",
+    "lower": "0x2a3236",
+    "hot": "0x765244",
+    "sensor": "0x11191d",
+    "accent": "0xb85e32"
+  },
+  "massKg": { "fuelFree": 280, "fuelCapacity": 80, "gross": 360 },
+  "propulsion": {
+    "thrustMaxN": 1800,
+    "maxThrustFraction": 1.0,
+    "epistemic": "surrogate"
+  },
+  "thermal": {
+    "skinTemperatureLimitK": 593.15,
+    "epistemic": "surrogate"
+  },
+  "performanceClaims": {
+    "designDashMach": {
+      "value": 0.85,
+      "epistemic": "surrogate",
+      "notes": "High-subsonic fighterette"
+    }
+  },
+  "notes": "Second airframe under the jet kit. Simplified OML for kit proof — not closed drone CAD."
+};

@@ -1,27 +1,23 @@
-# 90 — Failure modes
+# 90 — Failure modes (FMECA-lite)
 
 ← [80 — Basing and ground](80-basing-and-ground.md) · Next: [95 — Cost ledger](95-cost-ledger.md)
 
-*Systems chapter — a seed FMECA (Failure Mode, Effects, and Criticality Analysis) list, not a closed
-analysis. Each row points back to the chapter that explains why the regime makes this failure
-consequential.*
+Seed FMECA expanded from OFT / open findings. **Provisional** — detection and mitigation are
+directionally right, not certified procedures.
 
-## Failure modes that matter because of the regime (provisional seed list)
-
-| Failure | Why first-principles care | See |
-| --- | --- | --- |
-| Inlet unstart / spill | TBCC in thin air; spill band M3.3–3.8 dumps captured flow deliberately, but an *uncommanded* unstart at dash Mach is a thrust-loss event in the worst possible regime | [30 — Propulsion and inlet](30-propulsion-and-inlet.md) |
-| Thrust hole in handover | Turbine fade (M1.9–3.0) and ram light-to-full (M2.0–2.8) overlap deliberately, but a mistimed handover is the aircraft's defining vulnerable moment | [30 — Propulsion and inlet](30-propulsion-and-inlet.md) |
-| Skin overtemp in dive | CMC margin exists relative to the thrust-first ceiling, not without limit — see the thermal-vs-thrust table | [00](00-mission-and-ops.md), [20](20-thermal-and-materials.md) |
-| Bank-hold loss | The reclined occupant cannot hand-fly the thesis; losing FBW bank-hold removes the interface that makes a keyboard cockpit plausible | [50 — Crew, escape, FBW](50-crew-escape-fbw.md) |
-| Drone bay hang | Asymmetric release + release inhibit; packaging is provisional so failure geometry is doubly unclosed | [60 — Armament and drones](60-armament-and-drones.md) |
-| Hook miss / bolter | The 47% fuel fraction assumes a trap on the first or near-first pass; a bolter spends reserve fuel the mission profile did not budget for | [40](40-mass-and-cg.md), [70](70-landing-gear-arrest.md) |
-| RCS empty on lob | Elevons are dead at low dynamic pressure (exo coast / zoom lob); cold-gas RCS is the only authority left, and its budget is small | [30 — Propulsion and inlet](30-propulsion-and-inlet.md) |
+| ID | Failure | Effect | Detection | Mitigation / note | Sev |
+| --- | --- | --- | --- | --- | --- |
+| P1 | Inlet unstart / spill | Thrust collapse in dash | Mach/q, duct sensors (fiction UI) | Spill band M3.3–3.8 is *commanded*; uncommanded = abort dash | 1 |
+| P2 | TBCC handover hole | Stuck on turbine shoulder | Turbine/ram thrust share (needs per-stream fuel) | Hold altitude; do not rush Mach at FL315 | 1 |
+| P3 | Skin overtemp dive | Structure eat / abort | Lagged skin HUD vs 1473 K | Pull up / shed Mach; CMC is not infinite | 1 |
+| P4 | Bank-hold loss | Occupant cannot hand-fly thesis | FBW health | Automate recovery / punch out | 1 |
+| P5 | Drone bay hang | Asymmetric mass / drag | Bay status | Inhibit further release; land heavy | 2 |
+| P6 | Hook miss / bolter | Reserve fuel burn | Wire gates | Bingo logic; Circuits trains the trap | 2 |
+| P7 | RCS empty on lob | No attitude at collapsed q | Gas remaining | Limit lob duration; don't exo-coast dry | 2 |
+| P8 | Lever-only fuel lie | Pilot trusts false ram economy | (none today) | **Open finding** — per-stream fuel | 2 |
+| P9 | Optimistic mass (no drones) | Climb/dash too easy | (none) | Add 4×360 kg when stowed | 2 |
+| P10 | Wet T/W overbuff | Unrealistic accel | Identity ≤1.20 vs ~1.39 | Retune core / lever — don't buff again | 2 |
 
 ## Epistemic
 
-This is a **provisional seed list**, not a closed FMECA. It names the failure modes the regime makes
-important so Phase 2 can expand each row with effects, detection, and mitigation. Do not treat the
-absence of a row here as evidence a failure mode has been ruled out — only the modes visibly implied
-by chapters 00–60 are listed.
-
+Provisional seed. Absence of a row ≠ ruled out. Expand when OFT cards name new failure signatures.

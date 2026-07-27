@@ -17,11 +17,13 @@ Geometry numbers must match the JSON. If the definition revision bumps, regenera
 | 03 Loft stations | [plate-03-loft-stations.md](plate-03-loft-stations.md) | `fuselage` / `escapePodSpine` / `propulsionTunnel` stations |
 | 04 Inlet · duct · nozzle | [plate-04-inlet-duct-nozzle.svg](plate-04-inlet-duct-nozzle.svg) | `intake`, `exhaust`, `propulsionTunnel`, `propulsion.ramCaptureAreaM2` |
 | 05 Escape-pod spine | [plate-05-escape-spine.svg](plate-05-escape-spine.svg) | `escapePodSpine`, `sockets.cockpitCamera` |
+| 06 Drone bay | [plate-06-drone-bay.svg](plate-06-drone-bay.svg) | `sockets.droneBay` · trade C 2×2 |
+| 07 Systems arrangement | [plate-07-systems-arrangement.svg](plate-07-systems-arrangement.svg) | spine · duct · bays · fuel · hook |
 | 08 Thermal zones | [plate-08-thermal-zones.svg](plate-08-thermal-zones.svg) | `materialZones`, `thermal`, `palette` |
 | 09 Performance envelope | [plate-09-performance-envelope.svg](plate-09-performance-envelope.svg) | OFT peak Mach · T/W · fiction M4 · open fuel |
 | 10 Basing interface | [plate-10-basing-interface.svg](plate-10-basing-interface.svg) | `dimensionsM.span` + bible §70/§80 gallery (14×8 m, ~2.7%, 12° ramp) |
 
-Plates 06–07 (drone bay / systems arrangement) remain Phase 2.
+Current definition revision: **1.1.0**.
 
 ## Epistemic labels
 

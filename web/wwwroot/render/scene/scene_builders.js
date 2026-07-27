@@ -1608,6 +1608,10 @@ export function createOneWayAttackDrone(context = {}) {
 /// Purpose-built visual surrogate for Rapier's reusable glide gun-drone. Same 5.5 m span as the
 /// flight-model surrogate, but cooler grey/green training colours, twin cheek gun pods, and no
 /// canopy distinguish it from the ochre one-way attack drone and the full-size Rapier interceptor.
+///
+/// Jet-kit geometry-of-record for this article: `airframes/rapier-gun-drone.v1.json` (builds via
+/// `createAirframeFromDefinition`). This function remains the gameplay mesh because cheek gun pods
+/// are outside the loft schema — exception noted in the airframe SE plan Task 10.
 export function createRapierGunDrone(context = {}) {
   const group = new THREE.Group();
   group.name = "RAPIER_GLIDE_GUN_DRONE_TRAINING_SURROGATE";

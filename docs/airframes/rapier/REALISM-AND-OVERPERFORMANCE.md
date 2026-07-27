@@ -25,6 +25,7 @@ the issues below are closed or deliberately accepted as fiction.
 | **Lever-only fuel** | Turbine can charge MIL fuel while thrust share is zero. Ram cruise economy / “idle the core” unteachable. | Per-stream fuel in map + instruments. | open finding |
 | **12 / 15 G structure** | Params; reclined thesis. Extreme for a crewed interceptor. | Cost/fatigue ledger or lower qualified G. | provisional |
 | **CMC 1200 °C** | Credible 2030s materials trajectory; does **not** make M4 historical. Distinguishes thermal ceiling (~M5.7) from thrust ceiling (~M4.5). | Keep CMC as materials claim; pair with honest dash Mach. | surrogate |
+| **Stowed drone mass missing** | 4 × 360 kg = **1440 kg** preferred packaging (trade C) is **not** in `RapierPublicDataSurrogate.MassKg`. Climb/dash OFTs are optimistic. | Fold drone mass into alert/gross when bays loaded; or publish two mass configs. | open finding |
 
 ## Implications for CMC / Mach-4 story
 

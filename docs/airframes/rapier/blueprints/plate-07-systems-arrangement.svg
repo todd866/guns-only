@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" width="720" height="400" font-family="IBM Plex Mono, ui-monospace, monospace">
+  <rect width="100%" height="100%" fill="#f7f4ef"/>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 07  Systems arrangement (side) · rapier.public-data-surrogate.v1 @ 1.1.0</text>
+  <text x="24" y="48" font-size="10" fill="#555">Nose left (Z). Zones schematic  not a wiring harness. Epistemic: surrogate / provisional mix.</text>
+  <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
+
+  <!-- side fuselage -->
+  <path d="M 60,180 L 100,160 L 200,150 L 360,145 L 520,155 L 620,170 L 640,185 L 640,220 L 620,235 L 520,245 L 360,250 L 200,245 L 100,230 L 60,210 Z" fill="#596b73" fill-opacity="0.2" stroke="#222"/>
+
+  <rect x="120" y="155" width="90" height="40" fill="#11191d" fill-opacity="0.7"/>
+  <text x="165" y="180" text-anchor="middle" font-size="9" fill="#fff">escape spine</text>
+
+  <rect x="230" y="200" width="200" height="35" fill="#765244" fill-opacity="0.45" stroke="#765244"/>
+  <text x="330" y="222" text-anchor="middle" font-size="9">TBCC duct · capture 1.2 m²</text>
+
+  <rect x="280" y="245" width="50" height="28" fill="#c45c48" fill-opacity="0.4" stroke="#844"/>
+  <rect x="350" y="245" width="50" height="28" fill="#c45c48" fill-opacity="0.4" stroke="#844"/>
+  <text x="340" y="290" text-anchor="middle" font-size="9" fill="#844">drone bays (belly)</text>
+
+  <circle cx="90" cy="200" r="8" fill="#3d9b7a"/>
+  <text x="90" y="220" text-anchor="middle" font-size="8">gun</text>
+
+  <rect x="480" y="130" width="70" height="50" fill="#c4a35a" fill-opacity="0.35" stroke="#8a6210"/>
+  <text x="515" y="160" text-anchor="middle" font-size="9">fuel</text>
+
+  <rect x="40" y="320" width="640" height="60" fill="#fff" stroke="#999"/>
+  <text x="50" y="340" font-size="10" font-weight="700">ORDER (nose’tail)</text>
+  <text x="50" y="358" font-size="9">sensors/gun ’ opaque crew spine ’ TBCC tunnel + belly drone 2×2 ’ fuel ’ nozzle / RCS bottles</text>
+  <text x="50" y="372" font-size="9">Hook ~z=+4.2 provisional · RCS 40 kg peroxide-class · no TVC</text>
+</svg>

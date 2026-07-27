@@ -1,8 +1,8 @@
-// AUTO-GENERATED from rapier.v1.json — regenerate when the Airframe Definition changes.
+// AUTO-SYNC from airframes/rapier.v1.json — do not hand-edit.
 export default {
   "schema": "guns-only.airframe-definition.v1",
   "id": "rapier.public-data-surrogate.v1",
-  "revision": "1.0.0",
+  "revision": "1.1.0",
   "displayName": "Rapier",
   "role": "dispersed TBCC interceptor",
   "presentationId": "presentation.vehicle.rapier.public-data-surrogate.v1",
@@ -267,25 +267,49 @@ export default {
         "x": -0.55,
         "y": -0.35,
         "z": 0.5,
-        "epistemic": "provisional"
+        "epistemic": "provisional",
+        "cellClearM": {
+          "width": 1.0,
+          "height": 0.55,
+          "length": 1.1
+        },
+        "notes": "Preferred 2x2 belly trade; folded stow"
       },
       {
         "x": 0.55,
         "y": -0.35,
         "z": 0.5,
-        "epistemic": "provisional"
+        "epistemic": "provisional",
+        "cellClearM": {
+          "width": 1.0,
+          "height": 0.55,
+          "length": 1.1
+        },
+        "notes": "Preferred 2x2 belly trade; folded stow"
       },
       {
         "x": -0.55,
         "y": -0.35,
         "z": 1.8,
-        "epistemic": "provisional"
+        "epistemic": "provisional",
+        "cellClearM": {
+          "width": 1.0,
+          "height": 0.55,
+          "length": 1.1
+        },
+        "notes": "Preferred 2x2 belly trade; folded stow"
       },
       {
         "x": 0.55,
         "y": -0.35,
         "z": 1.8,
-        "epistemic": "provisional"
+        "epistemic": "provisional",
+        "cellClearM": {
+          "width": 1.0,
+          "height": 0.55,
+          "length": 1.1
+        },
+        "notes": "Preferred 2x2 belly trade; folded stow"
       }
     ]
   },
@@ -361,7 +385,12 @@ export default {
       "value": 1.39,
       "epistemic": "provisional",
       "notes": "Improbably high vs Identity \u22641.20"
+    },
+    "stowedDroneMassKg": {
+      "value": 1440,
+      "epistemic": "provisional",
+      "notes": "4 x RapierGunDroneSurrogate 360 kg; NOT yet in FlightModel.MassKg"
     }
   },
-  "notes": "Geometry 1:1 from createRapier. Performance claims tagged honestly per realism audit. Four droneBay sockets provisional."
+  "notes": "Geometry 1:1 from createRapier. Performance claims tagged honestly. Four droneBay sockets provisional preferred packaging (trade C). Revision 1.1.0 adds cell clear boxes + stowed mass claim."
 };

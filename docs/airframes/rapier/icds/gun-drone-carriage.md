@@ -1,35 +1,31 @@
 # ICD — Carrier ↔ drone cell
 
-Interface control between the Rapier airframe and the (currently provisional) gun-drone carriage
-system ([60 — Armament and drones](../60-armament-and-drones.md), `docs/rapier-gun-drone-system.md`).
+Interface control between the Rapier airframe and gun-drone carriage
+([60 — Armament and drones](../60-armament-and-drones.md), `docs/rapier-gun-drone-system.md`).
 
-## Closed interface points
+## Closed / preferred interface points
 
-| Interface | Value | Owner chapter |
-| --- | --- | --- |
-| Gameplay load | four reusable gun-drones | [60](../60-armament-and-drones.md) |
-| Drone skin thermal limit | 593.15 K (~320 °C), far below Rapier's 1473.15 K | [60](../60-armament-and-drones.md), [20](../20-thermal-and-materials.md) |
-| Body volume constraint | cells must fit inside the area-ruled OML without wrecking wave drag | [10](../10-geometry.md) |
-| Recovery | off Rapier's arresting strip (glide-drone design), not in-flight recovery to Rapier | `docs/rapier-gun-drone-system.md` |
+| Interface | Value | Tag | Owner |
+| --- | --- | --- | --- |
+| Gameplay load | four reusable gun-drones | closed (mission) | [60](../60-armament-and-drones.md) |
+| Preferred cell count | **4** in 2×2 belly grid | provisional | [60](../60-armament-and-drones.md) |
+| Socket positions | `(±0.55, −0.35, 0.5)` / `(±0.55, −0.35, 1.8)` m | provisional | `airframes/rapier.v1.json` |
+| Cell clear box (stowed) | ~1.0 × 0.55 × 1.1 m per cell | provisional | plate-06 |
+| Drone skin limit | 593.15 K | surrogate | `RapierGunDroneSurrogate` |
+| Max release Mach | ≤ M1.6 | provisional | [60](../60-armament-and-drones.md) |
+| Body volume constraint | inside area-ruled OML | closed geometry constraint | [10](../10-geometry.md) |
+| Recovery | quiet strip pickup, not Rapier | closed (doctrine) | glide-drone slice |
 
-The carrier provides protected carriage, electrical/thermal conditioning, mission data, release
-authority, and initial separation — it does not provide in-flight drone recovery, mid-mission
-rearming, or drone flight control once released.
+Carrier owns: retention, conditioning, mission data, release authority, separation.
+Carrier does **not** own: in-flight recovery, rearm, post-release flight control.
 
-## Open findings at this boundary — do not close prematurely
+## Open findings
 
-> **provisional / open.** Cell count (2 vs 3 vs 4), door mechanism, packaged mass and volume, CG
-> travel on release, and release-speed/altitude envelope relative to Rapier's own dash Mach are all
-> unclosed. **No closed drone mass, cell dimension, or release-Mach number should be written into
-> this ICD, the SE bible, or the forthcoming JSON Airframe Definition's `droneBay` sockets until the
-> packaging trade (Phase 2, see `docs/rapier-gun-drone-system.md`) closes them.** The Airframe
-> Definition JSON does not exist yet as of this bible (Task 1 is documentation-only); when it is
-> authored (Task 2), it is planned to carry four `droneBay` sockets as placeholders, explicitly
-> tagged `"epistemic": "provisional"` — not as closed engineering commitments.
+- Drone mass **not** yet added to `FlightModel.RapierPublicDataSurrogate.MassKg` (+1440 kg if four stowed)
+- Door kinematics, ejector impulse, inlet-interaction CFD
+- Gun/ammo package on the drone; datalink EMCON; swarm FMECA
 
 ## Epistemic
 
-Gameplay load count and thermal-limit mismatch are **closed** facts about the current system.
-Everything about physical packaging is **provisional**, per
-[60 — Armament and drones](../60-armament-and-drones.md).
-
+Preferred four-cell geometry is **provisional**. Gameplay load and thermal mismatch are **closed**
+facts about the current system.

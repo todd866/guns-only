@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 480" width="720" height="480" font-family="IBM Plex Mono, ui-monospace, monospace">
+  <rect width="100%" height="100%" fill="#f7f4ef"/>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 06  Drone bay (preferred 2×2) · rapier.public-data-surrogate.v1 @ 1.1.0</text>
+  <text x="24" y="48" font-size="10" fill="#555">Source: airframes/rapier.v1.json sockets.droneBay · epistemic: provisional · trade: docs/airframes/rapier/60-armament-and-drones.md</text>
+  <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
+
+  <text x="40" y="90" font-size="12" font-weight="700">BELLY VIEW (Y) · nose left (Z) · metres</text>
+  <!-- fuselage outline approx -->
+  <ellipse cx="360" cy="240" rx="280" ry="70" fill="#596b73" fill-opacity="0.15" stroke="#222"/>
+  <text x="360" y="160" text-anchor="middle" font-size="10">propulsion tunnel / duct keeps centreline</text>
+
+  <!-- 4 cells -->
+  <rect x="250" y="200" width="70" height="45" fill="#c45c48" fill-opacity="0.35" stroke="#844"/>
+  <text x="285" y="227" text-anchor="middle" font-size="9">L-fwd</text>
+  <text x="285" y="240" text-anchor="middle" font-size="8">0.55,0.5</text>
+
+  <rect x="400" y="200" width="70" height="45" fill="#c45c48" fill-opacity="0.35" stroke="#844"/>
+  <text x="435" y="227" text-anchor="middle" font-size="9">R-fwd</text>
+  <text x="435" y="240" text-anchor="middle" font-size="8">+0.55,0.5</text>
+
+  <rect x="250" y="265" width="70" height="45" fill="#c45c48" fill-opacity="0.35" stroke="#844"/>
+  <text x="285" y="292" text-anchor="middle" font-size="9">L-aft</text>
+  <text x="285" y="305" text-anchor="middle" font-size="8">0.55,1.8</text>
+
+  <rect x="400" y="265" width="70" height="45" fill="#c45c48" fill-opacity="0.35" stroke="#844"/>
+  <text x="435" y="292" text-anchor="middle" font-size="9">R-aft</text>
+  <text x="435" y="305" text-anchor="middle" font-size="8">+0.55,1.8</text>
+
+  <rect x="40" y="360" width="300" height="90" fill="#fff" stroke="#844"/>
+  <text x="50" y="380" font-size="10" font-weight="700" fill="#844">PROVISIONAL</text>
+  <text x="50" y="396" font-size="9">4 cells · ~1.0×0.55×1.1 m clear each</text>
+  <text x="50" y="412" font-size="9">Stow mass 4×360 kg = 1440 kg</text>
+  <text x="50" y="428" font-size="9">Release d M1.6 (drone skin 320 °C)</text>
+  <text x="50" y="444" font-size="9">Not yet in Rapier FlightModel mass</text>
+
+  <rect x="360" y="360" width="320" height="90" fill="#fff" stroke="#3d9b7a"/>
+  <text x="370" y="380" font-size="10" font-weight="700" fill="#3d9b7a">PREFERRED TRADE = C</text>
+  <text x="370" y="396" font-size="9">A=2 cells rejected (mission load)</text>
+  <text x="370" y="412" font-size="9">B=3 cells hold as fallback</text>
+  <text x="370" y="428" font-size="9">C=4 cells 2×2 belly  fiction-compatible</text>
+</svg>

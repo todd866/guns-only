@@ -361,25 +361,25 @@ Expected: PASS both files. Fix tolerances only if bevel/span drift is from share
 
 **Files:** `docs/airframes/rapier/60-armament-and-drones.md`, `icds/gun-drone-carriage.md`, `airframes/rapier.v1.json` (bump `revision`), plates 06–07, companion `docs/rapier-gun-drone-system.md`
 
-- [ ] **Step 1:** Tabulate 2 vs 3 vs 4 cell mass/volume/CG options; pick preferred geometry for fiction-compatible packaging (may still be provisional physics).
-- [ ] **Step 2:** Update `droneBay` positions; bump revision; regenerate affected plates; update embedded JSON copy.
-- [ ] **Step 3:** Tests — definition revision asserted; mesh still within silhouette contract.
-- [ ] **Step 4:** Commit (if permitted) `docs(airframes): Rapier drone bay packaging trade v1.1`
+- [x] **Step 1:** Tabulate 2 vs 3 vs 4 cell mass/volume/CG options; pick preferred geometry for fiction-compatible packaging (may still be provisional physics).
+- [x] **Step 2:** Update `droneBay` positions; bump revision; regenerate affected plates; update embedded JSON copy.
+- [x] **Step 3:** Tests — definition revision asserted; mesh still within silhouette contract.
+- [x] **Step 4:** Commit (Build 160) drone bay packaging trade v1.1
 
 ### Task 8: Binding tests (definition ↔ FlightModel)
 
 **Files:** Create `sim.Tests/AirframeDefinitionBindingTests.cs` (or node test reading both if C# JSON parse is heavier)
 
-- [ ] **Step 1:** Failing test — span 7.35, area 18, skin 1473.15, fuel-free 5150 match definition file checked into repo.
-- [ ] **Step 2:** Implement reader + asserts.
-- [ ] **Step 3:** Commit (if permitted) `test: bind Rapier definition to FlightModel envelope`
+- [x] **Step 1:** Failing test — span 7.35, area 18, skin 1473.15, fuel-free 5150 match definition file checked into repo.
+- [x] **Step 2:** Implement reader + asserts.
+- [x] **Step 3:** Commit (Build 160) bind Rapier definition to FlightModel envelope
 
 ### Task 9: Cost ledger + power budget + FMECA expansion
 
 **Files:** `95-cost-ledger.md`, `40`/`50` extensions, `90-failure-modes.md`
 
-- [ ] Fill CMC vs stainless counterfactual, qualitative→watt table, expand FMECA from OFT notes.
-- [ ] Commit (if permitted) when chapters close.
+- [x] Fill CMC vs stainless counterfactual, qualitative→watt table, expand FMECA from OFT notes.
+- [x] Commit (Build 160) when chapters close.
 
 ---
 
@@ -389,9 +389,9 @@ Expected: PASS both files. Fix tolerances only if bevel/span drift is from share
 
 **Files:** `docs/airframes/<name>/`, `airframes/<name>.v1.json`, presentation registration
 
-- [ ] Prefer Rapier gun-drone or one-way attack drone as the second subject (smaller OML).
-- [ ] Prove Part I → JSON → `createAirframeFromDefinition` path without bespoke mesh function (exception only if loft schema insufficient).
-- [ ] Commit (if permitted).
+- [x] Prefer Rapier gun-drone or one-way attack drone as the second subject (smaller OML).
+- [x] Prove Part I → JSON → `createAirframeFromDefinition` path without bespoke mesh function (exception only if loft schema insufficient).
+- [x] Commit (Build 160).
 
 ### Task 11 (optional): Plate generator
 
