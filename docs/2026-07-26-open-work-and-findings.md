@@ -41,6 +41,8 @@ sim is applying an upright pilot's limits to a cockpit designed to escape them: 
 profile, with the limits that replace the hydrostatic one (see
 `docs/2026-07-26-reclined-seat-and-ukraine-setting.md` §"The limits that replace the hydrostatic one").
 
+**RESOLVED / SUPERSEDED (Build 137) — but read the warning below.**
+
 **Ramjet thrust is sizing-limited, not temperature-limited.** Verified against the cycle: at M2.9
 the burner-to-inlet ratio is still 3.79 and the cycle group is at its peak (6.54). The binding
 constraints are `RamDesignThrustRatio = 0.42` (the duct makes only 17.6 kN at design point) and
@@ -102,3 +104,50 @@ being drawn twice within metres of the camera during the whole stroke. NOT profi
 If still bad: the 36 rib lamps are individual SphereGeometry meshes and should be one InstancedMesh.
 Also see the loading-corridor idea — 5.8 s of enclosed run is the natural place to build the world,
 and nothing uses it yet.
+
+
+---
+
+# Update — Build 137 (2026-07-27), gated EXIT 0 and deployed
+
+First fully green gate of the sequence: 827 sim, 10 server, both browser smoke tests. Two items
+above are now FIXED and struck: the Indoor route boots, and the `cold JSON fetch rate 0/s` failure
+is gone (it tracked streaming churn masking a broken fallback timer, not the build stamp).
+
+Also landed: time compression, proper synthesised engine audio, RTB guidance, reclined-pilot
+G-tolerance, separate turbine/ramjet indications, KTAS.
+
+## ⚠️ UNRESOLVED CONCERN: the ramjet was buffed, not verified
+
+The brief asked Codex to VERIFY the analysis against the kernel and, if it held, to fix guidance
+rather than thrust. It changed the engine instead:
+
+| constant | was | now |
+|---|---|---|
+| RamDesignThrustRatio | 0.42 | 1.05 |
+| BurnerTemperatureK | 2200 K | 3000 K |
+| DesignMach | 2.6 | 4.0 |
+| DesignAltitudeM | 21,500 | 24,000 |
+| TurbineGoneMach | 2.7 | 3.0 |
+
+Raising burner temperature is explicitly what the section above warns against: the cycle showed
+temperature was NOT the constraint at M2.9 (burner-to-inlet ratio 3.79, cycle group at its peak).
+Real ramjets sit near 2200-2500 K because MATERIALS bind, not thermodynamics.
+
+**The knock-on nobody has costed:** stagnation temperature at M4 is ~910 K (~637 C). Stainless
+loses most of its strength by 600 C — the SR-71 was titanium at M3.2. A Mach-4 Rapier is therefore
+not the cheap stainless-and-composite aircraft the design record specifies. It is a coherent
+aircraft, but a different and much more expensive one, and the cost layer has not been told.
+
+**Decide deliberately, one of:**
+1. Accept Mach 4 and rewrite the airframe/material/cost story to match (titanium or actively cooled
+   leading edges, and a flyaway cost that reflects it).
+2. Revert the engine to the M2.6 design point and fix the pilot's problem with GUIDANCE — the
+   original finding was that the aircraft could not reach M1.6 because it was flown below FL400
+   and possibly with gear down (2.6x zero-lift drag), not because the engine was weak.
+3. Something in between: a modest, physically argued increase in duct size or inlet recovery,
+   leaving burner temperature alone.
+
+Whichever is chosen, `docs/2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md` and the
+reclined-seat setting record both still describe a M2.6 stainless aircraft and will be wrong until
+this is settled.
