@@ -3438,7 +3438,7 @@ class CombatHud {
     // next intermediate gate. The gate squares move; this one does not, which is what makes it
     // usable as the thing you padlock with V and fly toward.
     const missionPhase = Math.floor(Number(frame.state.rapier_mission_phase) || 0);
-    if (missionPhase >= 7
+    if (missionPhase >= 11
         && Number.isFinite(frame.state.tx)
         && Number.isFinite(frame.state.ty)
         && Number.isFinite(frame.state.tz)) {

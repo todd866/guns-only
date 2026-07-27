@@ -306,7 +306,7 @@ function updateNavConsole(state) {
   // Circuits / outbound intercept navigate to the contact or next gate — showing HOME there tells
   // the pilot their destination is behind them while the guidance square is ahead.
   const phase = Math.floor(Number(state?.rapier_mission_phase) || 0);
-  const outbound = phase >= 1 && phase <= 6;
+  const outbound = phase >= 1 && phase <= 10;
   const gate = Math.max(0, Math.floor(Number(state?.rapier_recovery_gate) || 0));
   set(navUi.destination,
     !homeKnown && !outbound ? "--"

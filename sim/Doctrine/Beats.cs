@@ -883,6 +883,77 @@ public static class Beats {
     }
 
     /// <summary>
+    /// GO FLY THE RAPIER — one entry beat that deals a random long-range job on the zoom-lob
+    /// profile (balloon, AWACS, transport, or swarm lob). Player is not the Russian side:
+    /// AWACS kills draw F-22-class pursuers on egress.
+    /// </summary>
+    public static BeatSetup RapierGoFly(
+        int jobSeed = 0,
+        GunsOnly.Sim.Carrier.DeckConfiguration configuration =
+            GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
+        RapierJobKind job = DealRapierJob(jobSeed);
+        BeatSetup sortie = RapierIntercept(configuration);
+        AircraftState contact = job switch {
+            RapierJobKind.Balloon => new AircraftState(
+                new Vec3D(12_000, 18_500, 420_000), 40.0, 0.0, Math.PI, 0.0,
+                FlightModel.GliderStrike.MassKg),
+            RapierJobKind.Awacs => new AircraftState(
+                new Vec3D(8_000, 9_144, 380_000), 130.0, 0.0, Math.PI, 0.0,
+                FlightModel.AwacsTarget.MassKg),
+            RapierJobKind.Transport => new AircraftState(
+                new Vec3D(6_000, 3_500, 360_000), 160.0, 0.0, Math.PI, 0.0,
+                FlightModel.Su27SPublicDataSurrogate.MassKg),
+            RapierJobKind.SwarmLob => new AircraftState(
+                new Vec3D(10_000, 16_000, 400_000), 180.0, 0.0, Math.PI, 0.0,
+                FlightModel.Su27SPublicDataSurrogate.MassKg),
+            _ => sortie.Bandit
+        };
+        AircraftParams banditParams = job switch {
+            RapierJobKind.Balloon => FlightModel.GliderStrike,
+            RapierJobKind.Awacs => FlightModel.AwacsTarget,
+            _ => FlightModel.Su27SPublicDataSurrogate
+        };
+        AircraftCapability banditCapability = job switch {
+            RapierJobKind.Balloon => AircraftCapability.BalloonGliderPrototype,
+            RapierJobKind.Awacs => AircraftCapability.AwacsTargetPrototype,
+            _ => AircraftCapability.Su27SSurrogate
+        };
+        // AWACS / enabler kill: F-22-class pursuers home — Escape path already models them.
+        int pursuers = job is RapierJobKind.Awacs or RapierJobKind.Balloon ? 2 : 1;
+        return sortie with {
+            Name = $"Go fly the Rapier — {job}",
+            Bandit = contact,
+            BanditParams = banditParams,
+            BanditCapability = banditCapability,
+            ScriptedIntercept = new ScriptedInterceptConfig(
+                FormationSize: job == RapierJobKind.FormationIntercept ? 4 : 1,
+                ShortRangeMissiles: 0,
+                DogfightingDrones: job == RapierJobKind.SwarmLob ? 4 : 2,
+                PursuerCount: pursuers,
+                PursuerMach: 2.2,
+                AutomationDefaultEnabled: true,
+                RecoveryRequired: true,
+                ZoomLobProfile: true,
+                Job: job),
+            Mission = new MissionContract(
+                "mission.modern.rapier-go-fly.public-data-surrogate.v1",
+                MissionContentFamily.ModernPublicDataSurrogate,
+                PublicDataSurrogate: true,
+                RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE",
+                Era: "MODERN_PUBLIC_DATA_EXERCISE")
+        };
+    }
+
+    static RapierJobKind DealRapierJob(int seed) {
+        // Stable deal: seed 0 rotates with wall-clock seconds so each session differs; explicit
+        // seeds stay deterministic for tests and OFT cards.
+        int pick = seed != 0
+            ? Math.Abs(seed)
+            : (int)(DateTime.UtcNow.Ticks / TimeSpan.TicksPerSecond);
+        return (RapierJobKind)(1 + (pick % 4)); // Balloon..SwarmLob (skip FormationIntercept)
+    }
+
+    /// <summary>
     /// MAINTENANCE TEST FLIGHT — airborne utility-hydraulic loss followed by an evidence-driven
     /// emergency-gear procedure and carrier recovery. The fault identity remains scenario-private;
     /// the pilot receives only pressure, handle, and independent leg indications.
@@ -1123,6 +1194,7 @@ public static class Beats {
         9 => ModernAceDuel(),
         10 => RapierIntercept(deckConfiguration),
         11 => RapierCircuits(deckConfiguration),
+        12 => RapierGoFly(jobSeed: 0, deckConfiguration),
         _ => Perch()
     };
 }

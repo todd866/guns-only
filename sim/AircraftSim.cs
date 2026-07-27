@@ -119,6 +119,20 @@ public sealed class AircraftSim {
     bool _spoolInit;
     double _thrustFrac;      // engine's actual spool state, 0..1 — lags the throttle lever
     double _pitchThrustVectorAngleRad; // deterministic per-aircraft nozzle actuator state
+    double _coldGasKg;
+    /// <summary>Remaining cold-gas RCS propellant (kg). Zero when the airframe has no RCS.</summary>
+    public double ColdGasRcsGasKg => _coldGasKg;
+    /// <summary>Fraction of published RCS tank remaining, or 0 when unequipped.</summary>
+    public double ColdGasRcsGasFraction =>
+        _p.ColdGasRcsGasCapacityKg > 1e-9
+            ? System.Math.Clamp(_coldGasKg / _p.ColdGasRcsGasCapacityKg, 0.0, 1.0)
+            : 0.0;
+    /// <summary>Current RCS authority share (0..1) from q and remaining gas.</summary>
+    public double ColdGasRcsAuthority { get; private set; }
+    /// <summary>Degrees between body forward and air-relative velocity (coast reentry cue).</summary>
+    public double NoseOnVelocityErrorDeg { get; private set; }
+    /// <summary>Peak RCS moment magnitude commanded on the latest aero tick.</summary>
+    public double LastRcsMomentMagnitudeNm { get; private set; }
     /// What the ENGINE is actually delivering, 0..1, as opposed to where the lever is. The gap
     /// between the two is the whole difficulty of flying the back side of the power curve.
     public double ThrustFraction => _thrustFrac;
@@ -174,6 +188,7 @@ public sealed class AircraftSim {
         _atmosphereModel = atmosphere ?? StandardAtmosphere1976.Instance;
         _airVelocity = initial.VelocityVector();
         _buffet = new GunsOnly.Sim.Turbulence.RotationalBuffet(p);
+        _coldGasKg = System.Math.Max(0.0, p.ColdGasRcsGasCapacityKg);
         InitFrame(initial.ForwardDir());
         if (!initial.BodyAttitude.IsFinite || initial.BodyAttitude.LengthSquared < 1e-12) {
             double q = 0.5 * AtmosphereModel.Sample(initial.Position.Y).DensityKgM3
@@ -310,14 +325,15 @@ public sealed class AircraftSim {
                 _pitchThrustVectorAngleRad, nozzleTarget, dt, _p);
             appliedPitchThrustVectorAngle = _pitchThrustVectorAngleRad;
         }
+        double gas = _coldGasKg;
         var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef, gust, thrustN,
-            configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
+            configuration, AtmosphereModel, appliedPitchThrustVectorAngle, gas);
         var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), spooled, _p, _liftRef, gust,
-            thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
+            thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle, gas);
         var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), spooled, _p, _liftRef, gust,
-            thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
+            thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle, gas);
         var k4 = FlightModel.Derivatives(Apply(r, k3, dt), spooled, _p, _liftRef, gust,
-            thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
+            thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle, gas);
         var pos = r.Pos + (k1.DPos + (k2.DPos + k3.DPos) * 2 + k4.DPos) * (dt / 6);
         var vel = r.Vel + (k1.DVel + (k2.DVel + k3.DVel) * 2 + k4.DVel) * (dt / 6);
         _bank = WrapPi(r.Bank + (k1.DBank + 2 * (k2.DBank + k3.DBank) + k4.DBank) * (dt / 6));
@@ -325,6 +341,15 @@ public sealed class AircraftSim {
         var bodyRates = r.BodyRates + (k1.DBodyRates + (k2.DBodyRates + k3.DBodyRates) * 2 + k4.DBodyRates) * (dt / 6);
         LastRollMomentNm = (k1.RollMomentNm + 2.0 * (k2.RollMomentNm + k3.RollMomentNm)
             + k4.RollMomentNm) / 6.0;
+        LastRcsMomentMagnitudeNm = (k1.RcsMomentMagnitudeNm
+            + 2.0 * (k2.RcsMomentMagnitudeNm + k3.RcsMomentMagnitudeNm)
+            + k4.RcsMomentMagnitudeNm) / 6.0;
+        if (_p.ColdGasRcsMaxMomentNm > 0.0) {
+            _coldGasKg = ColdGasRcs.ConsumeGas(
+                _coldGasKg, LastRcsMomentMagnitudeNm, dt,
+                _p.ColdGasRcsMaxMomentNm, _p.ColdGasRcsGasCapacityKg,
+                _p.ColdGasRcsBurnKgPerFullSecond);
+        }
 
         double speed = vel.Length;
         // Translational state is never rewritten to a minimum flying speed. At the exact zero-vector
@@ -374,6 +399,11 @@ public sealed class AircraftSim {
         LastNz = aero.Nz;
         LastPitchThrustVectorAngleRad = aero.PitchThrustVectorAngleRad;
         LastPitchThrustVectorMomentNm = aero.PitchThrustVectorMomentNm;
+        ColdGasRcsAuthority = _p.ColdGasRcsMaxMomentNm > 0.0
+            ? ColdGasRcs.RcsAuthority(aero.DynamicPressure, _coldGasKg)
+            : 0.0;
+        NoseOnVelocityErrorDeg = ColdGasRcs.NoseOnVelocityErrorDeg(
+            attitude.Rotate(new Vec3D(0, 0, 1)), _airVelocity);
         PullLimit = FlightModel.EvaluatePullLimit(finalRaw, spooled, _p, _liftRef, gust,
             thrustN, aero.PitchThrustVectorAngleRad, configuration, AtmosphereModel);
         var nonGravitationalAcceleration = aero.Accel + new Vec3D(0.0, FlightModel.G0, 0.0);

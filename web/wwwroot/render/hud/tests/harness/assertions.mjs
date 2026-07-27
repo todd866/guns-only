@@ -533,19 +533,19 @@ function assertRapierMission(data) {
   const drones = Math.floor(Number(state.rapier_gun_drones_remaining) || 0);
   const gate = Math.floor(Number(state.rapier_recovery_gate) || 0);
 
-  if (phase === 6) {
+  if (phase === 10) {
     check(name, "attack mode line authorizes F swarm release",
       /F RELEASES SWARM/i.test(line.text) && line.text.includes(String(drones)),
       line.text);
     check(name, "attack level is attack (not buried under propulsion essay)",
       line.level === "attack", `level=${line.level}`);
   }
-  if (phase === 7) {
+  if (phase === 11) {
     check(name, "egress mode line is short EGRESS · HOME",
       /EGRESS/.test(line.text) && /HOME/.test(line.text) && !/NEED/.test(line.text),
       line.text);
   }
-  if (phase === 9) {
+  if (phase === 13) {
     check(name, "recovery mode line carries gate index",
       line.text.includes(`GATE ${gate}/4`),
       line.text);

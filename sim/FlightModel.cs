@@ -171,7 +171,16 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     // pretending that the kernel owns an OEM engine deck. Zero preserves legacy generic aircraft.
     double GenericIdleFuelFlowLbPerMinute = 0.0,
     double GenericMilitaryFuelFlowLbPerMinute = 0.0,
-    double GenericAfterburnerFuelFlowLbPerMinute = 0.0);
+    double GenericAfterburnerFuelFlowLbPerMinute = 0.0,
+    /// <summary>
+    /// Peak cold-gas RCS body moment (Nm). Zero disables RCS and preserves legacy control moments
+    /// bit-for-bit. When positive, aero attitude moments fade with q and thrusters fill the gap.
+    /// </summary>
+    double ColdGasRcsMaxMomentNm = 0.0,
+    /// <summary>Usable cold-gas propellant mass (kg). Zero with a nonzero moment max means empty.</summary>
+    double ColdGasRcsGasCapacityKg = 0.0,
+    /// <summary>Gas burned by holding full RCS moment for one second.</summary>
+    double ColdGasRcsBurnKgPerFullSecond = 0.35);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -179,7 +188,8 @@ public readonly record struct RawState(Vec3D Pos, Vec3D Vel, double Bank, double
     QuaternionD Attitude, BodyRates BodyRates);
 
 public readonly record struct StateDeriv(Vec3D DPos, Vec3D DVel, double DBank,
-    QuaternionD DAttitude, BodyRates DBodyRates, double RollMomentNm);
+    QuaternionD DAttitude, BodyRates DBodyRates, double RollMomentNm,
+    double RcsMomentMagnitudeNm = 0.0);
 
 internal readonly record struct AeroResult(Vec3D Accel, Vec3D LiftDir, Vec3D AirVelocity,
     double Alpha, double Beta, double Nz, double DynamicPressure,
@@ -549,6 +559,12 @@ public static class FlightModel {
         PitchThrustVectorMaxRad: 0.0, PitchThrustVectorMomentArmM: 0.0,
         PitchThrustVectorAlphaGain: 0.0, PitchThrustVectorRateGainSeconds: 0.0,
         PitchThrustVectorNozzleRateRadPerSecond: 0.0,
+        // Cold-gas RCS for exo coast: elevons die when q collapses; same stick drives thrusters.
+        // ~40 kg peroxide-class budget is enough for a few attitude corrections per lob, not a
+        // free-flying spaceplane session.
+        ColdGasRcsMaxMomentNm: 220_000.0,
+        ColdGasRcsGasCapacityKg: 40.0,
+        ColdGasRcsBurnKgPerFullSecond: 0.40,
         // The gun director is the other half of "flyable on a keyboard". It corrects aim inside a
         // narrow gate; it never creates lift, thrust, closure or hits.
         GunneryPitchAssistMaxRateRad: 0.26,
@@ -1096,7 +1112,8 @@ public static class FlightModel {
     internal static StateDeriv Derivatives(in RawState r, in PilotCommand c,
         in AircraftParams p, in Vec3D liftRef, in Vec3D wind, double netThrustN,
         in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere,
-        double pitchThrustVectorAngleRad = double.NaN) {
+        double pitchThrustVectorAngleRad = double.NaN,
+        double coldGasRemainingKg = 0.0) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         // Aerodynamics acts on the AIR, and the air may be moving: true airspeed = ground
         // velocity − wind. Everything aero (dynamic pressure, the lift/drag/thrust frame) is
@@ -1113,11 +1130,11 @@ public static class FlightModel {
         double q = 0.5 * rho * speed * speed;
         var aero = Aerodynamics(r, c, p, wind, netThrustN, configuration, atmosphere,
             pitchThrustVectorAngleRad);
-        var (dAttitude, dRates, rollMomentNm) = RotationalDerivatives(r, c, p, liftRef,
-            controlVhat, q, speed, netThrustN, configuration, atmosphere,
-            pitchThrustVectorAngleRad);
+        var (dAttitude, dRates, rollMomentNm, rcsMomentNm) = RotationalDerivatives(r, c, p,
+            liftRef, controlVhat, q, speed, netThrustN, configuration, atmosphere,
+            pitchThrustVectorAngleRad, coldGasRemainingKg);
         return new StateDeriv(r.Vel, aero.Accel, BankRate(r.Bank, c.BankTarget, p),
-            dAttitude, dRates, rollMomentNm);
+            dAttitude, dRates, rollMomentNm, rcsMomentNm);
     }
 
     internal static AeroResult Aerodynamics(in RawState r, in PilotCommand c,
@@ -1392,11 +1409,12 @@ public static class FlightModel {
         return PullLimitStatus.None;
     }
 
-    static (QuaternionD dAttitude, BodyRates dRates, double rollMomentNm) RotationalDerivatives(in RawState r,
+    static (QuaternionD dAttitude, BodyRates dRates, double rollMomentNm, double rcsMomentNm)
+        RotationalDerivatives(in RawState r,
         in PilotCommand c, in AircraftParams p, in Vec3D liftRef, in Vec3D vhat,
         double dynamicPressure, double speed, double netThrustN,
         in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere,
-        double pitchThrustVectorAngleRad) {
+        double pitchThrustVectorAngleRad, double coldGasRemainingKg = 0.0) {
         var attitude = r.Attitude.Normalized();
         var target = TargetAttitude(r, c, p, liftRef, vhat, dynamicPressure, configuration);
         var error = attitude.Conjugate() * target;
@@ -1620,11 +1638,39 @@ public static class FlightModel {
                 F22YawAeroMomentAvailableNm(alpha, dynamicPressure, p))
             : System.Math.Clamp(yawDemand, -p.YawMomentMaxNm, p.YawMomentMaxNm);
 
+        // Cold-gas RCS: fade non-q FCS moments when dynamic pressure dies, and fill with thrusters
+        // while gas remains. Attached aileron moments already scale with q and are left alone.
+        double rcsMomentMagnitude = 0.0;
+        if (p.ColdGasRcsMaxMomentNm > 0.0) {
+            double aeroAuth = ColdGasRcs.AeroControlAuthority(dynamicPressure);
+            double rcsAuth = ColdGasRcs.RcsAuthority(dynamicPressure, coldGasRemainingKg);
+            double demandPitch = pitchMoment;
+            double demandYaw = yawMoment;
+            double demandLegacyRoll = legacyRollMoment;
+            pitchMoment = ColdGasRcs.ScaleControlMoment(demandPitch, aeroAuth)
+                + ColdGasRcs.RcsMomentForDemand(demandPitch, rcsAuth, p.ColdGasRcsMaxMomentNm);
+            yawMoment = ColdGasRcs.ScaleControlMoment(demandYaw, aeroAuth)
+                + ColdGasRcs.RcsMomentForDemand(demandYaw, rcsAuth, p.ColdGasRcsMaxMomentNm);
+            if (!c.DirectLateralControl) {
+                double rcsRoll = ColdGasRcs.RcsMomentForDemand(
+                    demandLegacyRoll, rcsAuth, p.ColdGasRcsMaxMomentNm);
+                rollMoment = rollMoment - demandLegacyRoll
+                    + ColdGasRcs.ScaleControlMoment(demandLegacyRoll, aeroAuth)
+                    + rcsRoll;
+            }
+            rcsMomentMagnitude =
+                System.Math.Abs(ColdGasRcs.RcsMomentForDemand(
+                    demandPitch, rcsAuth, p.ColdGasRcsMaxMomentNm))
+                + System.Math.Abs(ColdGasRcs.RcsMomentForDemand(
+                    demandYaw, rcsAuth, p.ColdGasRcsMaxMomentNm));
+        }
+
         double pDot = (rollMoment + (p.IyyKgM2 - p.IzzKgM2) * rates.Q * rates.R) / p.IxxKgM2;
         double qDot = (pitchMoment + (p.IzzKgM2 - p.IxxKgM2) * rates.R * rates.P) / p.IyyKgM2;
         double rDot = (yawMoment + (p.IxxKgM2 - p.IyyKgM2) * rates.P * rates.Q) / p.IzzKgM2;
         var omega = new QuaternionD(0, -rates.Q, rates.R, -rates.P);
-        return ((attitude * omega) * 0.5, new BodyRates(pDot, qDot, rDot), rollMoment);
+        return ((attitude * omega) * 0.5, new BodyRates(pDot, qDot, rDot), rollMoment,
+            rcsMomentMagnitude);
     }
 
     static QuaternionD TargetAttitude(in RawState r, in PilotCommand c, in AircraftParams p,

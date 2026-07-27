@@ -3,20 +3,29 @@ const PHASE = Object.freeze({
   2: "CLIMB · FL560",
   3: "LEVEL ACCEL · M2.20",
   4: "RAM CLIMB · FL700",
-  5: "INTERCEPT · FL700",
-  6: "ATTACK",
-  7: "EGRESS · HOME",
-  8: "RETURN · HOME",
-  9: "RECOVERY",
-  10: "COMPLETE",
+  5: "ZOOM PULL",
+  6: "ZOOM COAST",
+  7: "REENTER · NOSE→V",
+  8: "DIP RELIGHT",
+  9: "INTERCEPT · FL700",
+  10: "ATTACK",
+  11: "EGRESS · HOME",
+  12: "RETURN · HOME",
+  13: "RECOVERY",
+  14: "COMPLETE",
 });
 
 const CIRCUITS_PHASE = Object.freeze({
   1: "CIRCUITS · DEPART",
   2: "CIRCUITS · DEPART",
-  9: "CIRCUITS",
-  10: "COMPLETE",
+  13: "CIRCUITS",
+  14: "COMPLETE",
 });
+
+const PHASE_ATTACK = 10;
+const PHASE_EGRESS = 11;
+const PHASE_RECOVERY = 13;
+const PHASE_INTERCEPT = 9;
 
 const CIRCUIT_LEG_LABEL = Object.freeze({
   DEPART: "DEPART",
@@ -100,13 +109,13 @@ export function rapierGuidancePresentation(state) {
   const drones = Math.max(0,
     Math.floor(Number(state.rapier_gun_drones_remaining) || 0));
   const gate = Math.max(0, Math.floor(Number(state.rapier_recovery_gate) || 0));
-  if (!patternOnly && phase === 9) {
+  if (!patternOnly && phase === PHASE_RECOVERY) {
     phaseText = `RECOVERY · GATE ${gate}/4`;
-  } else if (!patternOnly && gate > 0 && phase >= 1 && phase <= 5) {
+  } else if (!patternOnly && gate > 0 && phase >= 1 && phase <= PHASE_INTERCEPT) {
     phaseText = `${phaseText} · GATE ${gate}/4`;
   }
 
-  const weapon = phase === 6 && !patternOnly
+  const weapon = phase === PHASE_ATTACK && !patternOnly
     ? ` · F RELEASES SWARM · ${drones}`
     : "";
   let patternAction = "";
@@ -139,7 +148,8 @@ export function rapierGuidancePresentation(state) {
     level = skin?.level === "caution"
       ? "active"
       : patternOnly ? (active ? "active" : "manual")
-        : phase === 6 || phase === 7 ? "attack" : active ? "active" : "manual";
+        : phase === PHASE_ATTACK || phase === PHASE_EGRESS ? "attack"
+          : active ? "active" : "manual";
   }
 
   return Object.freeze({
@@ -149,7 +159,7 @@ export function rapierGuidancePresentation(state) {
     circuitLeg: leg,
     boxLabel: patternOnly
       ? (legLabel || "")
-      : (phase === 9 && gate > 0 ? `GATE ${gate}/4` : ""),
+      : (phase === PHASE_RECOVERY && gate > 0 ? `GATE ${gate}/4` : ""),
     skinC: finiteNumber(state.rapier_stagnation_temp_c),
     marginC: finiteNumber(state.rapier_thermal_margin_c),
   });

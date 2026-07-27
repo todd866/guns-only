@@ -332,6 +332,11 @@ public sealed class SimulationSession {
     public string RapierCircuitLeg => _rapierMissionGuidance.CircuitLeg ?? "";
     public double RapierFdBankDeg => _rapierMissionGuidance.FdBankDeg;
     public double RapierFdTargetKtas => _rapierMissionGuidance.FdTargetKtas;
+    public double RapierNoseOnVelocityErrorDeg =>
+        _rapierMissionGuidance.NoseOnVelocityErrorDeg;
+    public string RapierJobToken => _rapierMissionGuidance.JobToken ?? "";
+    public double RapierRcsGasFraction => _player.ColdGasRcsGasFraction;
+    public double RapierRcsAuthority => _player.ColdGasRcsAuthority;
     public double RapierCommandedMach => _rapierMissionGuidance.CommandedMach;
     public double RapierAuthoredTargetMach => _rapierMissionGuidance.AuthoredTargetMach;
     public double RapierSkinMachLimit => _rapierMissionGuidance.SkinMachLimit;
@@ -1322,7 +1327,10 @@ public sealed class SimulationSession {
             _carrier.Position,
             recoveryInitial,
             recovered,
-            patternOnly: _beat.ScriptedIntercept?.PatternOnly == true);
+            patternOnly: _beat.ScriptedIntercept?.PatternOnly == true,
+            zoomLobProfile: _beat.ScriptedIntercept?.ZoomLobProfile == true,
+            job: _beat.ScriptedIntercept?.Job ?? RapierJobKind.FormationIntercept,
+            noseOnVelocityErrorDeg: _player.NoseOnVelocityErrorDeg);
     }
 
     PilotCommand RapierAutomationOr(in PilotCommand pilotCommand) {
