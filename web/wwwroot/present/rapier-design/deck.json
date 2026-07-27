@@ -309,6 +309,18 @@
       "page": "13"
     },
     {
+      "id": "drone-packaging",
+      "layout": "figure",
+      "eyebrow": "06 \u00b7 Armament",
+      "heading": "Four belly cells \u2014 preferred, provisional.",
+      "subhead": "Trade C: 2\u00d72 grid. Stow 4\u00d7360 kg = 1440 kg not yet in FlightModel mass. Release \u2264 M1.6 for drone skin.",
+      "figure": "plates/plate-06-drone-bay.svg",
+      "figureCaption": "Plate 06 \u2014 drone bay packaging trade",
+      "bottomLine": "Gameplay load is four. Engineering packaging is provisional. Missing mass makes OFTs optimistic.",
+      "footer": "60-armament-and-drones.md \u00b7 revision 1.1.0",
+      "page": "14"
+    },
+    {
       "id": "basing",
       "layout": "figure",
       "eyebrow": "06 \u00b7 Basing",
@@ -318,7 +330,7 @@
       "figureCaption": "Plate 10 \u2014 basing interface \u00b7 14\u00d78 gallery \u00b7 12\u00b0 \u00b7 520 m \u00b7 35 MJ",
       "bottomLine": "Airframe span 7.35 m from JSON; gallery clearance from bible \u00a7\u00a770\u201380.",
       "footer": "2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md",
-      "page": "14"
+      "page": "15"
     },
     {
       "id": "mood",
@@ -330,7 +342,7 @@
       "figureCaption": "Fiction mood ref \u00b7 provenance in analysis/art-refs/rapier/index.json",
       "bottomLine": "Weathered mechanical honesty. Sealed capsule vs warm earth. No kill-porn.",
       "footer": "ADR-0003 \u00b7 analysis/art-refs/rapier/",
-      "page": "15"
+      "page": "16"
     },
     {
       "id": "kit",
@@ -367,7 +379,7 @@
       ],
       "bottomLine": "Rapier is jet #1 under the kit. Infrastructure captures first principles \u2014 it does not invent them.",
       "footer": "docs/airframes/README.md",
-      "page": "16"
+      "page": "17"
     },
     {
       "id": "close",
@@ -377,7 +389,7 @@
       "subtitle": "High loading \u00b7 CMC hot \u00b7 continuous TBCC \u00b7 trap light \u00b7 measure the dash you actually get.",
       "thanks": "Bible \u00b7 blueprints \u00b7 definition \u00b7 lagged skin \u00b7 this deck.\nOpen: per-stream fuel \u00b7 T/W retune \u00b7 drone packaging \u00b7 honest dash Mach.",
       "footer": "docs/airframes/rapier/",
-      "page": "17"
+      "page": "18"
     }
   ]
 }
