@@ -1,59 +1,71 @@
-# Art direction: illustrative, TF2-lineage, in-universe
+# Art direction: Ghibli-adjacent soft world, cold instruments
 
-*2026-07-23. Owner direction: "I don't mind if we make this slightly cartoony… I'm a big fan of
-Team Fortress 2 graphics for this. Should help make the low-level stuff doable within our
-limitations." And the canon frame: future militaries render kills abstractly as a psychological
-safety doctrine.*
+*Living look bible under [ADR-0003](adr-0003-ghibli-adjacent-world-presentation.md).  
+Supersedes the 2026-07-23 TF2-lineage note. Design detail:
+[superpowers/specs/2026-07-27-ghibli-adjacent-art-direction-design.md](superpowers/specs/2026-07-27-ghibli-adjacent-art-direction-design.md).*
 
 ## The look
 
-Illustrative rendering in the Team Fortress 2 lineage (Valve, NPAR 2007 — the published
-technique set: warped/gradient-mapped diffuse ramps, dedicated rim lighting, painterly value
-gradients, silhouette-first detail hierarchy). Applied here:
+**Soft world.** Painterly light, lived-in Ukraine-steppe landscape (fields, shelterbelts, soft
+atmospheric distance), weathered mechanical airframes with silhouette-first readability, and quiet
+aftermath over celebratory combat VFX. Tone target: Studio Ghibli–adjacent aviation paradox — awe
+for craft without romance for war. Influence is lighting, landscape, pace, and `ma`; not pastiche of
+specific films or characters.
 
-- **Terrain**: banded elevation palettes and painterly slope shading — stylized valley walls
-  read speed, distance, and closure better at our polygon/texture budget than mid-fidelity
-  realism, which is precisely what carved-valley low flying needs (docs/low-level-playground.md).
-- **Aircraft**: chunky, silhouette-readable shapes with team-readable palettes; identification
-  at a glance beats surface detail.
-- **Effects**: exaggerated, clean, readable — the explosions already lean this way; lean in.
-- **Obstacles** (bridges, wires): bold silhouettes and marker spheres; readability is safety.
+**Cold instruments.** Combat HUD, capsule/SVS, and medical telemetry stay clinical (phosphor/amber)
+and projectively true. World stylization never warps flight-critical geometry.
 
-## The two-era thesis: two kinds of moral distance
+Applied here:
 
-*Owner direction: "make 1950s Korea as realistic and gory as possible, but from jet height you
-can't see much; meanwhile 2030s Korea looks like TF2 but actually is a bit horrific BECAUSE
-it's so cartoony."*
+- **Terrain**: warmer painterly value and slope banding for speed, distance, and closure at low
+  level (same readability job the older TF2 banding served).
+- **Aircraft**: silhouette-readable shapes; weathered materials over tacticool clutter.
+- **Effects**: atmosphere-first smoke and dust; impacts readable, not firework porn.
+- **Obstacles** (bridges, wires): bold silhouettes remain — readability is safety.
+- **Settlements**: quiet human presence (roofs, compounds, traces of life) without tourist kitsch.
 
-- **1950s Korea — protected by physics.** The ground war is rendered as realistically and
-  unsparingly as the platform can manage: burning villages, wrecked columns, the human ruin of
-  that war. The mercy is ALTITUDE: from jet height it resolves to smoke smudges and texture.
-  Mechanically this is detail-by-altitude LOD as a moral instrument — descend low enough and
-  the war stops being abstract. The F-86 pilot's clean war was clean because of distance, and
-  the sim makes that distance literal.
-- **2030s Korea — protected by interface.** Illustrative, TF2-lineage, deliberately clean: the
-  psychological-safety rendering doctrine is total. Kills are tidy, stylized events at every
-  altitude, and that totality is the point — the cartoon IS the horror, because nothing the
-  operator does ever looks like anything. Written into the world docs as doctrine, not
-  omission: the sim shows exactly what a 2030s crew station would show.
+## Moral thesis
 
-Both eras teach the same human-factors truth from opposite directions: air warfare's emotional
-distance is manufactured — by physics in one era, by rendering doctrine in the other — and an
-educational platform about operator interfaces should let the pilot feel the manufacturing.
+Air warfare’s emotional distance is manufactured by the **sealed machine**. The soft world outside
+the canopy is warm and wounded; the instruments inside are cold and exact. Descending into the
+air littoral — or punching out into a village — is the reveal. Kills are sparse and factual in
+symbology and telemetry, not tidy cartoons and not Hollywood spectacle.
+
+Historical-era packs (if revived) may use different presentation rules under their own decisions.
+This document owns the 2030s Ukraine programme look.
+
+## AI image generation
+
+Allowed for mood boards, palette locks, lighting studies, and briefing stills. Generated images are
+**not** runtime mesh/texture source of truth. Retain provenance (prompt nudges, model, date) with
+epistemic label `fiction`. Prefer `analysis/art-refs/` for binaries and a tracked index for cards.
+Promotion path: ref → human/engine art pass → versioned presentation pack.
+
+Steering nudges for refs: soft world / cold instruments; steppe grammar (not Japanese pastoral
+pastiche); no identifiable real people or units; no Ghibli character clones.
 
 ## Hard boundaries
 
-- **The HUD stays an instrument.** Symbology remains projectively true (the 600+ assertion
-  contract); stylization applies to the WORLD, never to flight-critical geometry.
-- **The kernel is untouched.** Art direction is presentation-layer only; ballistics, damage,
-  and terrain truth do not become cartoons.
-- **Determinism and the content-pack boundary hold**: the look ships as shader/palette work in
-  the versioned presentation layer.
+- **The HUD stays an instrument.** Symbology remains projectively true; stylization applies to the
+  WORLD, never to flight-critical geometry.
+- **The kernel is untouched.** Art direction is presentation-layer only.
+- **No IP copying** of Studio Ghibli or Valve TF2 assets.
+- **Live-war care** from ADR-0002 and content governance: no identifiable real casualties;
+  speculative material labeled fiction.
+- **Determinism and the content-pack boundary hold**: the look ships as shader/palette/content-pack
+  work in the versioned presentation layer.
 
 ## Order
 
-The 2030s illustrative look adopts with the carved-valley terrain build (palette/ramp shaders
-land with the new heightfield), then sweeps aircraft/effects. The 1950s ground-war realism
-lands with the historical campaign content: authored vignette sites with altitude-resolved
-detail, sub-perceptible from cruise, unmistakable from the weeds. Reference: Mitchell, Francke,
-Eng — "Illustrative Rendering in Team Fortress 2."
+1. Terrain palette + atmosphere (largest vibe win).
+2. Aircraft and effects restyle after vibe lock.
+3. Clinic / briefing stills via AI refs in parallel, promotion gated.
+
+HUD harness remains the regression gate for instruments; world changes are reviewed visually
+against this bible and ADR-0003.
+
+## History
+
+The prior TF2 / NPAR 2007 illustrative approach (Mitchell, Francke, Eng) is superseded as canon. It
+remains useful as a historical note on silhouette readability and ramp lighting techniques that
+informed the first low-level prototypes.

@@ -76,10 +76,11 @@ ground kills, or real-world target locations.
 
 ## Art direction
 
-Use an original stylized military-animation language with the readability principles associated
-with Team Fortress 2: strong silhouettes, restrained material families, broad value blocks,
-half-Lambert/toon lighting, warm cultivated lowlands, dark shelterbelts and cool atmospheric
-distance. Do not copy Valve characters, textures or props.
+Use the Ghibli-adjacent soft-world / cold-instruments language from
+[ADR-0003](adr-0003-ghibli-adjacent-world-presentation.md) and [art-direction.md](art-direction.md):
+painterly light, warm cultivated lowlands, dark shelterbelts, soft atmospheric distance, and
+strong silhouettes for safety. Instruments stay clinical. Do not copy Studio Ghibli or Valve
+characters, textures or props.
 
 The regional grammar is:
 
@@ -111,7 +112,7 @@ Implement these in order:
 6. Add authored damaged/destroyed visual states, dust, tracers and impact evidence driven only by
    simulation events.
 
-This produces the requested drone-on-cartoon-enemy mission without creating a renderer-only
+This produces the requested drone-on-soft-world-enemy mission without creating a renderer-only
 shooting gallery, a second Ukraine theatre, or contaminated medical truth.
 
 ## Medium-term integrated roadmap

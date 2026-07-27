@@ -3,7 +3,7 @@
 *2026-07-23. Owner direction: "start thinking about low-level drone attacks and how that's
 gonna work." Anchors: docs/low-level-playground.md (carved valleys, wires),
 docs/world-backstory-research.md (the 2030s drone proxy war), docs/robot-airframe-design.md
-(the Machine tier), docs/art-direction.md (TF2-clean 2030s).*
+(the Machine tier), docs/art-direction.md (Ghibli-adjacent soft world, cold instruments).*
 
 ## The mode: valley intercept
 
@@ -36,9 +36,9 @@ flying is the terrain the enemy uses.
 3. **Waves live in the continuous-combat frame**: the infinite-enemies front door alternates
    air-to-air merges with inbound raid waves as escalation proceeds — one session, one fight,
    varied prey.
-4. **Presentation**: 2030s illustrative rules apply — clean stylized kills at every altitude
-   (the doctrine IS the horror), wire/pylon silhouettes bold, drone silhouettes chunky and
-   team-readable.
+4. **Presentation**: 2030s soft-world / cold-instrument rules apply — sparse factual kill cues,
+   painterly terrain, wire/pylon silhouettes bold, drone silhouettes chunky and team-readable
+   (see docs/art-direction.md / ADR-0003).
 
 ## Build order
 
