@@ -100,4 +100,32 @@ public class RapierMissionDirectorTests {
         Assert.Equal(RapierMissionPhase.Climb, guidance.Phase);
         Assert.Equal("pattern_climb_to_shelf", guidance.PhaseReason);
     }
+    [Fact]
+    public void PatternOnlyRecoveryPublishesInitialLegAtPatternAltitude() {
+        var director = new RapierMissionDirector();
+        Vec3D home = new(0.0, 120.0, 0.0);
+        Vec3D recoveryInitial = new(0.0, 1_120.0, -16_000.0);
+        // Above the 550 m Circuits shelf, still inbound to INITIAL (not yet captured).
+        AircraftState player = StateAt(home.Y + 600.0, 154.0, chi: 0.0);
+        player = player with { Position = new Vec3D(0.0, home.Y + 600.0, -8_000.0) };
+        AircraftState contact = StateAt(24_000.0, 200.0);
+        contact = contact with { Position = new Vec3D(0.0, 24_000.0, -400_000.0) };
+
+        RapierMissionGuidance guidance = default;
+        for (int i = 0; i < 4; i++) {
+            guidance = director.Step(
+                player, contact, 154.0, StandardAtmosphere1976.Instance,
+                FlightModel.RapierPublicDataSurrogate,
+                catapultActive: false, liveOpponentCount: 0, pursuitActive: false,
+                pursuerCount: 0, pursuitRangeM: 0.0, home, recoveryInitial,
+                recovered: false, patternOnly: true);
+        }
+
+        Assert.Equal(RapierMissionPhase.Recovery, guidance.Phase);
+        Assert.Equal("INITIAL", guidance.CircuitLeg);
+        Assert.True(guidance.FdTargetKtas > 250.0 && guidance.FdTargetKtas < 320.0,
+            $"expected ~300 KT pattern speed, got {guidance.FdTargetKtas:F0}");
+        Assert.Contains("INITIAL", guidance.Cue);
+    }
+
 }

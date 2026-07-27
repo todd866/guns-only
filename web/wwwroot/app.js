@@ -50,6 +50,7 @@ import {
 import {
   carrierPadlockSupersededByCombat,
   contextualPadlockTarget,
+  circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
 import {
@@ -144,6 +145,7 @@ import {
   createOneWayAttackDrone,
   createRapier,
   createRapierDispersedStrip,
+  createRapierGunDrone,
 } from "./render/scene/scene_builders.js";
 import { updateEngineAudio } from "./render/audio/engine_audio.js";
 
@@ -302,25 +304,46 @@ function updateNavConsole(state) {
   const turnDeg = num("rtb_turn_deg");
   const ktas = Math.max(1, num("true_airspeed_kts") || 0);
   const homeKnown = finite(rangeNm) && finite(bearing);
+  const patternOnly = state?.rapier_pattern_only === true;
+  const legRaw = typeof state?.rapier_circuit_leg === "string" ? state.rapier_circuit_leg : "";
+  const legLabel = legRaw ? legRaw.replaceAll("_", " ") : "";
+  const patternAltFt = finite(num("rapier_target_altitude_ft"))
+    ? Math.round(num("rapier_target_altitude_ft")) : null;
+  const patternSpeedKt = finite(num("rapier_fd_target_ktas"))
+    ? Math.round(num("rapier_fd_target_ktas")) : null;
 
-  // Destination follows the PHASE. Home is only the destination once the mission turns for base.
-  // Circuits / outbound intercept navigate to the contact or next gate — showing HOME there tells
-  // the pilot their destination is behind them while the guidance square is ahead.
+  // Destination follows the PHASE. Circuits never shows CONTACT · INTERCEPT.
   const phase = Math.floor(Number(state?.rapier_mission_phase) || 0);
-  const outbound = phase >= 1 && phase <= 10;
+  const outbound = !patternOnly && phase >= 1 && phase <= 10;
   const gate = Math.max(0, Math.floor(Number(state?.rapier_recovery_gate) || 0));
+  const guidanceRangeM = Math.hypot(
+    (num("rapier_guidance_x") || 0) - (num("px") || 0),
+    (num("rapier_guidance_y") || 0) - (num("py") || 0),
+    (num("rapier_guidance_z") || 0) - (num("pz") || 0),
+  );
+  const boxNm = Number.isFinite(guidanceRangeM) ? guidanceRangeM / 1852 : Number.NaN;
   set(navUi.destination,
-    !homeKnown && !outbound ? "--"
-      : outbound
-        ? (gate > 0 ? `GATE ${gate}/4` : "CONTACT · INTERCEPT")
-        : "DISPERSED STRIP · HOME",
+    patternOnly
+      ? (legLabel
+        ? (gate > 0 ? `CIRCUITS · ${legLabel} · BOX ${gate}/4` : `CIRCUITS · ${legLabel}`)
+        : "CIRCUITS · PATTERN")
+      : !homeKnown && !outbound ? "--"
+        : outbound
+          ? (gate > 0 ? `GATE ${gate}/4` : "CONTACT · INTERCEPT")
+          : "DISPERSED STRIP · HOME",
     "normal");
   set(navUi.bearing, homeKnown
     ? `${String(Math.round((bearing % 360 + 360) % 360)).padStart(3, "0")}°` : "--",
     homeKnown ? "normal" : "unknown");
   const contactNm = num("range_m") / 1852;
-  const shownRangeNm = outbound && Number.isFinite(contactNm) ? contactNm : rangeNm;
-  set(navUi.range, Number.isFinite(shownRangeNm) ? `${Math.round(shownRangeNm)} NM` : "--",
+  const shownRangeNm = patternOnly && Number.isFinite(boxNm) ? boxNm
+    : outbound && Number.isFinite(contactNm) ? contactNm
+      : rangeNm;
+  set(navUi.range, Number.isFinite(shownRangeNm)
+    ? (patternOnly && shownRangeNm < 10
+      ? `${shownRangeNm.toFixed(1)} NM`
+      : `${Math.round(shownRangeNm)} NM`)
+    : "--",
     Number.isFinite(shownRangeNm) ? "normal" : "unknown");
 
   // Time to run uses CLOSURE toward home, not true airspeed. On a ballistic lob much of TAS is
@@ -330,7 +353,9 @@ function updateNavConsole(state) {
   const closureKts = ((num("vx") || 0) * Math.sin(bearingRad)
     + (num("vz") || 0) * Math.cos(bearingRad)) * 1.94384;
   const closingKts = closureKts > 1 ? closureKts : ktas;
-  const minutesToRun = homeKnown ? rangeNm / closingKts * 60 : Number.NaN;
+  const minutesToRun = patternOnly && Number.isFinite(boxNm)
+    ? boxNm / Math.max(1, ktas) * 60
+    : homeKnown ? rangeNm / closingKts * 60 : Number.NaN;
   set(navUi.eta, finite(minutesToRun) ? `${Math.max(0, Math.round(minutesToRun))} MIN` : "--",
     finite(minutesToRun) ? "normal" : "unknown");
   set(navUi.turn, finite(turnDeg)
@@ -392,17 +417,139 @@ function updateNavConsole(state) {
     !finite(marginC) ? "unknown" : marginC < 0 ? "fault" : marginC < 40 ? "caution" : "normal");
 
   const contactRangeM = num("range_m");
-  set(navUi.contactRange, finite(contactRangeM)
-    ? `${(contactRangeM / 1852).toFixed(0)} NM` : "--",
-    finite(contactRangeM) ? "normal" : "unknown");
-  // Negative means the kernel judged it meaningless — inside 20 km, or no closure.
-  const etiMin = num("rapier_intercept_eti_min");
-  set(navUi.contactEti, finite(etiMin) && etiMin >= 0
-    ? `${etiMin.toFixed(1)} MIN` : "MERGE",
-    finite(etiMin) && etiMin >= 0 ? "normal" : "unknown");
+  const rangeLabel = document.querySelector("#nav-contact-range")
+    ?.closest(".tf-indication")?.querySelector(".tf-label");
+  const etiLabel = document.querySelector("#nav-contact-eti")
+    ?.closest(".tf-indication")?.querySelector(".tf-label");
+  if (patternOnly) {
+    if (rangeLabel) rangeLabel.textContent = "Pattern alt";
+    if (etiLabel) etiLabel.textContent = "Pattern speed";
+    const call = typeof state?.rapier_circuit_comms === "string" ? state.rapier_circuit_comms : "";
+    set(navUi.contactRange, patternAltFt !== null ? `${patternAltFt} FT` : "--",
+      patternAltFt !== null ? "normal" : "unknown");
+    set(navUi.contactEti, patternSpeedKt !== null
+      ? `${patternSpeedKt} KT${call ? ` · ${call}` : ""}`
+      : (call || "PATTERN"),
+      "normal");
+  } else {
+    if (rangeLabel) rangeLabel.textContent = "Contact range";
+    if (etiLabel) etiLabel.textContent = "Time to intercept";
+    set(navUi.contactRange, finite(contactRangeM)
+      ? `${(contactRangeM / 1852).toFixed(0)} NM` : "--",
+      finite(contactRangeM) ? "normal" : "unknown");
+    // Negative means the kernel judged it meaningless — inside 20 km, or no closure.
+    const etiMin = num("rapier_intercept_eti_min");
+    set(navUi.contactEti, finite(etiMin) && etiMin >= 0
+      ? `${etiMin.toFixed(1)} MIN` : "MERGE",
+      finite(etiMin) && etiMin >= 0 ? "normal" : "unknown");
+  }
+}
+
+
+
+function bindCircuitsSystemsActions() {
+  for (const button of document.querySelectorAll("[data-circuits-action]")) {
+    button.addEventListener("click", () => {
+      const action = button.getAttribute("data-circuits-action");
+      if (action === "toggleClean" && typeof bridge?.SetCircuitsCleanMode === "function") {
+        const next = latestState?.rapier_circuits_clean !== true;
+        bridge.SetCircuitsCleanMode(next);
+        if (viewStatus) viewStatus.textContent = next
+          ? "Circuits clean mode on · no random faults"
+          : "Circuits attrition armed";
+      } else if (action === "induceFault" && typeof bridge?.InduceCircuitsUtilityFault === "function") {
+        bridge.InduceCircuitsUtilityFault();
+      }
+    });
+  }
+}
+
+const CONSOLE_LAYOUT_STORAGE = "guns-only.console-layout.v1";
+function loadConsoleLayout() {
+  try {
+    return JSON.parse(localStorage.getItem(CONSOLE_LAYOUT_STORAGE) || "{}") || {};
+  } catch {
+    return {};
+  }
+}
+function saveConsoleLayout(layout) {
+  try {
+    localStorage.setItem(CONSOLE_LAYOUT_STORAGE, JSON.stringify(layout));
+  } catch {
+    /* ignore quota */
+  }
+}
+function enableDraggableConsole(panel) {
+  if (!panel) return;
+  const summary = panel.querySelector(":scope > summary");
+  if (!summary) return;
+  const layout = loadConsoleLayout();
+  const saved = layout[panel.id];
+  if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+    panel.style.left = `${saved.left}px`;
+    panel.style.top = `${saved.top}px`;
+    panel.style.right = "auto";
+  }
+  let drag = null;
+  summary.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    // Ignore clicks on the collapse affordance region near the right edge.
+    const rect = summary.getBoundingClientRect();
+    if (event.clientX > rect.right - 48) return;
+    drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      origLeft: panel.getBoundingClientRect().left,
+      origTop: panel.getBoundingClientRect().top,
+      moved: false,
+    };
+    summary.setPointerCapture(event.pointerId);
+  });
+  summary.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    drag.moved = true;
+    event.preventDefault();
+    const left = Math.min(window.innerWidth - 80, Math.max(8, drag.origLeft + dx));
+    const top = Math.min(window.innerHeight - 48, Math.max(8, drag.origTop + dy));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.right = "auto";
+  });
+  const endDrag = (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (drag.moved) {
+      event.preventDefault();
+      const next = loadConsoleLayout();
+      next[panel.id] = {
+        left: panel.getBoundingClientRect().left,
+        top: panel.getBoundingClientRect().top,
+      };
+      saveConsoleLayout(next);
+    }
+    drag = null;
+  };
+  summary.addEventListener("pointerup", endDrag);
+  summary.addEventListener("pointercancel", endDrag);
+  summary.addEventListener("click", (event) => {
+    // After a drag, suppress the details toggle once.
+    if (summary.dataset.dragSuppressClick === "1") {
+      event.preventDefault();
+      delete summary.dataset.dragSuppressClick;
+    }
+  });
+  summary.addEventListener("pointerup", (event) => {
+    if (event.pointerId === undefined) return;
+  }, true);
 }
 
 const testFlightConsole = document.querySelector("#test-flight-console");
+enableDraggableConsole(navConsole);
+enableDraggableConsole(testFlightConsole);
+bindCircuitsSystemsActions();
 const testFlightUi = testFlightConsole ? Object.freeze({
   engineRpm: document.querySelector("#tf-engine-rpm"),
   engineRunning: document.querySelector("#tf-engine-running"),
@@ -1686,20 +1833,20 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash two bandits in one sortie to qualify",
   }),
   "rapier-circuits": Object.freeze({
-    kicker: "Eastern corridor · pattern only",
+    kicker: "2030s Ukraine · overhead circuit practice",
     title: "Rapier Circuits",
-    sortie: "Launch · pattern · trap · repeat",
-    configuration: "Rapier · full fuel · no contact",
+    sortie: "Ski-jump · overhead pattern · touch-and-go · trap",
+    configuration: "Attritable Rapier brick · full fuel · hook down · no contact",
     brief: "Launch west, fly the pattern, trap. Repeat until the hook is easy.",
-    controls: "P mission automation · arrows/W/S pilot takeover\nT safe time compression · fly every recovery square · trap, then go again",
+    controls: "P mission automation · arrows/W/S pilot takeover · T time compression\nV padlocks threshold · Tab cycles threshold / circuit traffic · N navigation · fly the boxes · trap on the wire",
   }),
   "rapier-intercept": Object.freeze({
     kicker: "Eastern corridor · guns-only",
     title: "Rapier Intercept",
-    sortie: "Climb · ram dash · swarm release · recover",
-    configuration: "Rapier · Mach 4 · gun-drone swarm · alert fuel",
-    brief: "Climb, ram to FL700, release the swarm once, recover on the strip.",
-    controls: "P mission automation · F release gun-drone swarm · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
+    sortie: "Climb · ram dash · glide gun-drone · recover",
+    configuration: "Rapier · Mach 4 · reusable gun-drones · alert fuel",
+    brief: "Climb and ram to FL700. At the four-ship formation, press F once to release one reusable glide gun-drone; the other drones stay loaded on Rapier. Bandits react while Rapier egresses; the drone fights with its guns, then RTBs to intermittent pickup on the quiet strip.",
+    controls: "P mission automation · F release one glide gun-drone · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -1991,6 +2138,13 @@ function syncBanditPadlockRollAssist() {
 }
 
 function padlockLabel(target = padlockTarget) {
+  if (latestState?.rapier_pattern_only === true) {
+    if (target === "carrier") return "THRESHOLD";
+    if (target === "wingman") return "TRAFFIC 2";
+    if (target === "traffic2") return "TRAFFIC 3";
+    if (target === "traffic3") return "TRAFFIC 4";
+    return "THRESHOLD";
+  }
   return target === "carrier" ? "BOAT" : target === "wingman" ? "WINGMAN" : "BANDIT";
 }
 
@@ -2065,6 +2219,8 @@ function acquirePadlock(target, reason) {
   padlock = true;
   padlockTarget = target;
   padlockEntityId = target === "carrier" ? "carrier"
+    : target === "traffic2" ? "traffic2"
+    : target === "traffic3" ? "traffic3"
     : target === "wingman"
       ? `${projectedId(latestState?.bandit_entity_id)}.wingman`
       : projectedId(latestState?.bandit_entity_id);
@@ -2133,6 +2289,16 @@ function cyclePadlockTarget() {
     acquirePadlock(defaultPadlockTarget(), "cycle");
     return;
   }
+  if (latestState?.rapier_pattern_only === true) {
+    const order = circuitsPadlockTargets(latestState);
+    if (order.length < 2) {
+      syncPadlockUi(`${padlockLabel()} padlock · no other traffic`);
+      return;
+    }
+    const index = Math.max(0, order.indexOf(padlockTarget));
+    acquirePadlock(order[(index + 1) % order.length], "cycle");
+    return;
+  }
   if (!wingmanPadlockAvailable()) {
     // Nothing to cycle to. Say so rather than silently doing nothing to a pressed key.
     syncPadlockUi(`${padlockLabel()} padlock · no other contact`);
@@ -2151,6 +2317,8 @@ function togglePadlock() {
   padlock = true;
   padlockTarget = defaultPadlockTarget();
   padlockEntityId = padlockTarget === "carrier" ? "carrier"
+    : padlockTarget === "traffic2" ? "traffic2"
+    : padlockTarget === "traffic3" ? "traffic3"
     : padlockTarget === "wingman"
       ? `${projectedId(latestState?.bandit_entity_id)}.wingman`
       : projectedId(latestState?.bandit_entity_id);
@@ -3283,6 +3451,8 @@ const DEFAULT_TARGET_PRESENTATION_ID = "presentation.vehicle.bandit.v1";
 const DEFAULT_COCKPIT_PRESENTATION_ID = "presentation.cockpit.player.v1";
 const DEFAULT_CARRIER_PRESENTATION_ID = "presentation.platform.carrier.v1";
 const DEFAULT_ESCORT_PRESENTATION_ID = "presentation.platform.escort.v1";
+const RAPIER_GUN_DRONE_PRESENTATION_ID =
+  "presentation.vehicle.rapier-gun-drone.prototype.v1";
 
 // The current cockpit GLB is an authoring/reference asset, not an acceptable production view: its
 // opaque slabs and oversized canopy structure obscure the exact airdata and energy cues this sim
@@ -3302,6 +3472,7 @@ const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
   ["presentation.vehicle.su27s.public-data-surrogate.v1", createDrone],
   ["presentation.vehicle.one-way-attack-drone.prototype.v1", createOneWayAttackDrone],
   ["presentation.vehicle.rapier.public-data-surrogate.v1", createRapier],
+  [RAPIER_GUN_DRONE_PRESENTATION_ID, createRapierGunDrone],
   [DEFAULT_COCKPIT_PRESENTATION_ID, createHiddenPresentation],
   ["presentation.platform.carrier.v1", createCarrier],
   ["presentation.platform.rapier-dispersed-strip.v1", createRapierDispersedStrip],
@@ -3372,6 +3543,8 @@ class PresentationAssetManager {
     this.wingmanSlot = this.createSlot("wingman", DEFAULT_TARGET_PRESENTATION_ID, createDrone);
     this.wingman2Slot = this.createSlot("wingman-2", DEFAULT_TARGET_PRESENTATION_ID, createDrone);
     this.wingman3Slot = this.createSlot("wingman-3", DEFAULT_TARGET_PRESENTATION_ID, createDrone);
+    this.rapierGunDroneSlot = this.createSlot("rapier-gun-drone",
+      RAPIER_GUN_DRONE_PRESENTATION_ID, createRapierGunDrone);
     this.carrierSlot = this.createSlot("carrier", DEFAULT_CARRIER_PRESENTATION_ID, createCarrier);
     this.escortSlot = this.createSlot("escort", DEFAULT_ESCORT_PRESENTATION_ID,
       createHiddenPresentation);
@@ -3381,6 +3554,7 @@ class PresentationAssetManager {
     this.wingmanSlot.root.visible = false;
     this.wingman2Slot.root.visible = false;
     this.wingman3Slot.root.visible = false;
+    this.rapierGunDroneSlot.root.visible = false;
     this.carrierSlot.root.visible = false;
     this.escortSlot.root.visible = false;
 
@@ -3638,6 +3812,7 @@ class PresentationAssetManager {
       this.wingmanSlot,
       this.wingman2Slot,
       this.wingman3Slot,
+      this.rapierGunDroneSlot,
       this.carrierSlot,
       this.escortSlot,
       ...this.dynamicSlots,
@@ -3853,6 +4028,7 @@ class PresentationAssetManager {
     if (this.wingmanSlot.root.visible) this.resolveSlot(this.wingmanSlot);
     if (this.wingman2Slot.root.visible) this.resolveSlot(this.wingman2Slot);
     if (this.wingman3Slot.root.visible) this.resolveSlot(this.wingman3Slot);
+    if (this.rapierGunDroneSlot.root.visible) this.resolveSlot(this.rapierGunDroneSlot);
     this.resolveSlot(this.carrierSlot);
     this.resolveSlot(this.escortSlot);
     for (const slot of this.dynamicSlots) {
@@ -3919,6 +4095,11 @@ class PresentationAssetManager {
       `${this.requested.banditEntityId}.wingman.3`,
     );
     this.setPresentation(
+      this.rapierGunDroneSlot,
+      RAPIER_GUN_DRONE_PRESENTATION_ID,
+      `${this.requested.playerEntityId || "entity.player"}.gun-drone.1`,
+    );
+    this.setPresentation(
       this.carrierSlot,
       this.requested.carrierPresentationId,
       this.requested.carrierEntityId,
@@ -3940,6 +4121,7 @@ class PresentationAssetManager {
     this.wingmanSlot.root.visible = state.w1_present === 1;
     this.wingman2Slot.root.visible = state.w2_present === 1;
     this.wingman3Slot.root.visible = state.w3_present === 1;
+    this.rapierGunDroneSlot.root.visible = state.rd1_present === 1;
     this.carrierSlot.root.visible = state.recovery_platform === true;
     // A hidden decorative escort must not even enter asset resolution: visibility here is the
     // resolver's admission gate, not merely a later draw toggle in FlightView.update().
@@ -3999,6 +4181,7 @@ class PresentationAssetManager {
       this.wingmanSlot,
       this.wingman2Slot,
       this.wingman3Slot,
+      this.rapierGunDroneSlot,
       this.carrierSlot,
       this.escortSlot,
       ...this.dynamicSlots,
@@ -4406,11 +4589,14 @@ class FlightView {
     this.wingman2Quaternion = new THREE.Quaternion();
     this.wingman3Position = new THREE.Vector3();
     this.wingman3Quaternion = new THREE.Quaternion();
+    this.rapierGunDronePosition = new THREE.Vector3();
+    this.rapierGunDroneQuaternion = new THREE.Quaternion();
     this.playerFrame = this.createAttitudeFrame();
     this.banditFrame = this.createAttitudeFrame();
     this.wingmanFrame = this.createAttitudeFrame();
     this.wingman2Frame = this.createAttitudeFrame();
     this.wingman3Frame = this.createAttitudeFrame();
+    this.rapierGunDroneFrame = this.createAttitudeFrame();
     this.banditEntityId = "";
     this.playerEntityId = "";
     this.banditWasAlive = true;
@@ -4896,6 +5082,8 @@ class FlightView {
     if (padlock) {
       const trackedPosition = padlockTarget === "carrier"
         ? this.carrierPadlockPosition
+        : padlockTarget === "traffic2" ? this.wingman2Position
+        : padlockTarget === "traffic3" ? this.wingman3Position
         : padlockTarget === "wingman" ? this.wingmanPosition
         : this.banditPosition;
       this.localTarget.copy(trackedPosition).sub(this.playerPosition).normalize();
@@ -5444,6 +5632,11 @@ class FlightView {
       this.wingman3Quaternion.copy(
         this.frameFromState(state, "w3", this.wingman3Frame).quaternion);
     }
+    if (state.rd1_present === 1) {
+      this.rapierGunDronePosition.set(state.rd1x, state.rd1y, -state.rd1z);
+      this.rapierGunDroneQuaternion.copy(
+        this.frameFromState(state, "rd1", this.rapierGunDroneFrame).quaternion);
+    }
     if (state.lead_valid === true && Number.isFinite(state.lead_x)
       && Number.isFinite(state.lead_y) && Number.isFinite(state.lead_z)) {
       this.leadPipper.set(state.lead_x, state.lead_y, -state.lead_z);
@@ -5738,6 +5931,15 @@ class FlightView {
       wingman3Root.quaternion.copy(this.wingman3Quaternion);
       wingman3Root.scale.setScalar(1);
       wingman3Root.updateMatrixWorld(true);
+    }
+    const rapierGunDroneRoot = this.presentationAssets.rapierGunDroneSlot.root;
+    const rapierGunDronePresent = state.rd1_present === 1 && state.rd1_alive === 1;
+    rapierGunDroneRoot.visible = rapierGunDronePresent;
+    if (rapierGunDronePresent) {
+      rapierGunDroneRoot.position.copy(this.rapierGunDronePosition);
+      rapierGunDroneRoot.quaternion.copy(this.rapierGunDroneQuaternion);
+      rapierGunDroneRoot.scale.setScalar(1);
+      rapierGunDroneRoot.updateMatrixWorld(true);
     }
     // Keep authored geometry at physical scale. A separate depth-tested contact owns the exact
     // 8–14 px readability floor and fades with hysteresis at the mesh hand-off.

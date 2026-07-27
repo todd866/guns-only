@@ -335,6 +335,8 @@ internal static class SnapshotProjection {
             + $"\"rapier_recovery_gate\":{Session.RapierRecoveryGate},"
             + $"\"rapier_circuit_leg\":{JsonString(Session.RapierCircuitLeg)},"
             + $"\"rapier_circuit_leg_code\":{CircuitLegCode(Session.RapierCircuitLeg)},"
+            + $"\"rapier_circuit_comms\":{JsonString(Session.CircuitComms)},"
+            + $"\"rapier_circuits_clean\":{(Session.CircuitsCleanMode ? "true" : "false")},"
             + $"\"rapier_fd_bank_deg\":{Session.RapierFdBankDeg:F1},"
             + $"\"rapier_fd_target_ktas\":{Session.RapierFdTargetKtas:F0},"
             + $"\"rapier_nose_on_v_err_deg\":{Session.RapierNoseOnVelocityErrorDeg:F1},"
@@ -381,6 +383,7 @@ internal static class SnapshotProjection {
             + WingmanJson(0, "w1")
             + WingmanJson(1, "w2")
             + WingmanJson(2, "w3")
+            + RapierGunDroneJson("rd1")
             + $"\"buffet_pitch_deg\":{_player.PitchBuffetRad * 57.2958:F3},\"buffet_roll_deg\":{_player.RollBuffetRad * 57.2958:F3},\"buffet_yaw_deg\":{_player.YawBuffetRad * 57.2958:F3},"
             + $"\"indicated_airspeed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
             // The current pitot/static model has no aircraft-specific indication-error card, so
@@ -887,6 +890,24 @@ internal static class SnapshotProjection {
     static string WingmanJson(int index, string prefix) {
         GunsOnly.Sim.Doctrine.Wingman? wingman =
             Session.Wingmen.Count > index ? Session.Wingmen[index] : null;
+        if (wingman is null
+            && Session.Beat.ScriptedIntercept?.PatternOnly == true
+            && index < Session.CircuitTraffic.Count
+            && Session.CircuitTraffic[index].Present) {
+            var traffic = Session.CircuitTraffic[index];
+            double fx = Math.Sin(traffic.Chi);
+            double fz = Math.Cos(traffic.Chi);
+            var culture = System.Globalization.CultureInfo.InvariantCulture;
+            return $"\"{prefix}_present\":1,"
+                + $"\"{prefix}x\":{traffic.X.ToString("F3", culture)},"
+                + $"\"{prefix}y\":{traffic.Y.ToString("F3", culture)},"
+                + $"\"{prefix}z\":{traffic.Z.ToString("F3", culture)},"
+                + $"\"{prefix}fx\":{fx.ToString("F5", culture)},"
+                + $"\"{prefix}fy\":0.00000,"
+                + $"\"{prefix}fz\":{fz.ToString("F5", culture)},"
+                + $"\"{prefix}lx\":0.00000,\"{prefix}ly\":1.00000,"
+                + $"\"{prefix}lz\":0.00000,\"{prefix}_alive\":1,";
+        }
         if (wingman is null)
             return $"\"{prefix}_present\":0,\"{prefix}x\":0.000,"
                 + $"\"{prefix}y\":0.000,\"{prefix}z\":0.000,"
@@ -909,6 +930,37 @@ internal static class SnapshotProjection {
             + $"\"{prefix}ly\":{lift.Y.ToString("F5", invariant)},"
             + $"\"{prefix}lz\":{lift.Z.ToString("F5", invariant)},"
             + $"\"{prefix}_alive\":{(wingman.StillFighting ? 1 : 0)},";
+    }
+
+    /// Released Rapier reusable gun-drone while it remains active. Mirrors SnapshotHotFrame's rd1
+    /// block field-for-field so golden tests can keep JSON and the hot buffer in lockstep.
+    static string RapierGunDroneJson(string prefix) {
+        RapierGunDrone? drone = Session.ActiveRapierGunDrone;
+        if (drone is null)
+            return $"\"{prefix}_present\":0,\"{prefix}x\":0.000,"
+                + $"\"{prefix}y\":0.000,\"{prefix}z\":0.000,"
+                + $"\"{prefix}fx\":0.00000,\"{prefix}fy\":1.00000,"
+                + $"\"{prefix}fz\":0.00000,\"{prefix}lx\":0.00000,"
+                + $"\"{prefix}ly\":1.00000,\"{prefix}lz\":0.00000,"
+                + $"\"{prefix}_alive\":0,\"{prefix}_phase\":0,"
+                + $"\"{prefix}_turbine_armed\":false,";
+        AircraftState state = drone.Sim.State;
+        Vec3D forward = state.ForwardDir();
+        Vec3D lift = drone.Sim.LiftDir;
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        return $"\"{prefix}_present\":1,"
+            + $"\"{prefix}x\":{state.Position.X.ToString("F3", invariant)},"
+            + $"\"{prefix}y\":{state.Position.Y.ToString("F3", invariant)},"
+            + $"\"{prefix}z\":{state.Position.Z.ToString("F3", invariant)},"
+            + $"\"{prefix}fx\":{forward.X.ToString("F5", invariant)},"
+            + $"\"{prefix}fy\":{forward.Y.ToString("F5", invariant)},"
+            + $"\"{prefix}fz\":{forward.Z.ToString("F5", invariant)},"
+            + $"\"{prefix}lx\":{lift.X.ToString("F5", invariant)},"
+            + $"\"{prefix}ly\":{lift.Y.ToString("F5", invariant)},"
+            + $"\"{prefix}lz\":{lift.Z.ToString("F5", invariant)},"
+            + $"\"{prefix}_alive\":1,"
+            + $"\"{prefix}_phase\":{(int)drone.Phase},"
+            + $"\"{prefix}_turbine_armed\":{(drone.TurbineArmed ? "true" : "false")},";
     }
 
     static string PresentationContractJson(bool hasCarrier) {
@@ -1352,11 +1404,13 @@ internal static class SnapshotProjection {
 
     static int CircuitLegCode(string? leg) => leg switch {
         "DEPART" => 1,
-        "DOWNWIND" => 2,
-        "BASE" => 3,
-        "SHORT_FINAL" => 4,
-        "WIRE_FINAL" => 5,
-        "COMPLETE" => 6,
+        "INITIAL" => 2,
+        "BREAK" => 3,
+        "DOWNWIND" => 4,
+        "BASE" => 5,
+        "SHORT_FINAL" => 6,
+        "WIRE_FINAL" => 7,
+        "COMPLETE" => 8,
         _ => 0,
     };
 }

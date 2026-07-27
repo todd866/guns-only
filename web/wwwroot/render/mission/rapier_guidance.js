@@ -29,6 +29,8 @@ const PHASE_INTERCEPT = 9;
 
 const CIRCUIT_LEG_LABEL = Object.freeze({
   DEPART: "DEPART",
+  INITIAL: "INITIAL",
+  BREAK: "BREAK",
   DOWNWIND: "DOWNWIND",
   BASE: "BASE",
   SHORT_FINAL: "SHORT FINAL",
@@ -38,11 +40,13 @@ const CIRCUIT_LEG_LABEL = Object.freeze({
 
 const CIRCUIT_LEG_FROM_CODE = Object.freeze({
   1: "DEPART",
-  2: "DOWNWIND",
-  3: "BASE",
-  4: "SHORT_FINAL",
-  5: "WIRE_FINAL",
-  6: "COMPLETE",
+  2: "INITIAL",
+  3: "BREAK",
+  4: "DOWNWIND",
+  5: "BASE",
+  6: "SHORT_FINAL",
+  7: "WIRE_FINAL",
+  8: "COMPLETE",
 });
 
 // Honest combined-cycle band (matches TurboRamjetPerformanceMap teaching schedule).
@@ -128,6 +132,8 @@ export function rapierGuidancePresentation(state) {
   if (patternOnly) {
     if (leg === "SHORT_FINAL") patternAction = " · GO AROUND BEFORE GEAR";
     else if (leg === "WIRE_FINAL") patternAction = " · ACCEPT WIRE · HOOK DOWN";
+    else if (leg === "INITIAL") patternAction = " · BREAK LEFT ABM";
+    else if (leg === "BREAK") patternAction = " · TO DOWNWIND";
     else if (leg === "BASE" || leg === "DOWNWIND") patternAction = " · HOOK DOWN";
     else if (leg === "DEPART") patternAction = " · TO PATTERN";
   }

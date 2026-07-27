@@ -1,6 +1,17 @@
 # Rapier gun-drone system
 
-Status: gameplay contract implemented; physical system architecture provisional.
+Status: **vertical slice shipped** for one physical drone (separate → commit → RTB pickup). System
+architecture and four-drone scale remain provisional. Deterministic formation wipe is **no longer**
+the default Attack contract — opt in via `DeterministicSwarmWipe` on `ScriptedInterceptConfig`
+for legacy egress cards only.
+
+Design spec:
+[`docs/superpowers/specs/2026-07-27-rapier-glide-drone-vertical-slice-design.md`](superpowers/specs/2026-07-27-rapier-glide-drone-vertical-slice-design.md)
+
+Implementation plan:
+[`docs/superpowers/plans/2026-07-27-rapier-glide-drone-vertical-slice.md`](superpowers/plans/2026-07-27-rapier-glide-drone-vertical-slice.md)
+
+Agent OFT: `analysis/glide-drone-oft/` (`guns-only.glide-drone-oft.v1`).
 
 ## Current authored contract
 
@@ -9,16 +20,22 @@ engineering claim about what fits inside the aircraft. It sits at the upper end 
 two-to-four range because the first scripted target is a four-aircraft formation and the swarm
 must also complicate pursuit during egress.
 
-The pilot retains the consequential decision. Mission automation flies the long intercept profile,
-but it does not release the swarm. Inside the attack window, one press of `F` commits all four
-drones. They split into simultaneous close fights, can each service more than one aircraft, and
-leave pursuers spending time and geometry on the swarm while Rapier keeps its Mach-4 egress.
+**Briefing honesty:** the live slice releases **one** physical drone per `F` press. Each release
+consumes one of the authored four-drone load, spawns a real `RapierGunDrone` actor (own sim, gun,
+phase AI), and promotes threatened bandits to reactive inside a threat volume. The pilot still
+chooses when to release; mission automation does not. Scale to four coordinated drones comes
+**after** this slice is green — do not brief or present as if four independent airframes are already
+in the sim.
 
-The current simulation represents that outcome deterministically: release consumes the four-drone
-load, defeats the staged four-ship formation, and starts a two-pursuer separation problem. It does
-not yet simulate individual sub-drone kinematics, gun ammunition, damage, recovery, or a physical
-launch transient. Presentation and briefing must not imply that those unimplemented details have
-already been solved.
+The pilot retains the consequential decision. Mission automation flies the long intercept profile,
+but it does not release the swarm. Inside the attack window, one press of `F` commits **one**
+drone (today). That drone glides on inherited energy, may employ the gun under ordinary hit rules,
+lights a cheap turbine below a Mach/altitude gate, and RTBs to an intermittent pickup point — not
+Rapier's arresting strip. Rapier may continue Escape while the drone fights or flies home.
+
+What is **not** yet simulated: four-drone coordinator, screen assignment, datalink-denied modes,
+landing on Rapier wires, perfect CFD separation. Presentation and briefing must not imply those
+details are finished.
 
 ## System boundary to engineer
 
@@ -60,8 +77,8 @@ be unreasonable to perform from a keyboard cockpit.
 
 ## Next implementation acceptance
 
-Before individual drones replace the deterministic sweep, a vertical slice should prove one
-physical launch from Rapier, autonomous separation, target assignment, a same-flight-model gun
-engagement, pursuit-screen behaviour, datalink-loss behaviour, and a bounded end state. Only after
-that slice should the load be balanced between two, three, and four drones. Until then, four remains
-the clear authored gameplay load and every physical number remains provisional.
+The one-drone vertical slice proves physical launch from Rapier, autonomous separation, target
+assignment, same-flight-model gun engagement, bandit reaction, turbine-gated RTB, and a bounded
+end state (pickup volume or RTB progress). Only after that slice stays green should the load be
+balanced between two, three, and four drones with a thin coordinator. Until then, four remains the
+clear authored gameplay load and every physical number remains provisional.

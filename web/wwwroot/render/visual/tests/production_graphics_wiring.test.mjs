@@ -59,6 +59,9 @@ test("production admits only state-bearing environment visuals and event-bearing
     /\["presentation\.vehicle\.one-way-attack-drone\.prototype\.v1", createOneWayAttackDrone\]/,
     "the 5.5 m raid truth must use its own reviewed silhouette instead of the fighter fallback");
   assert.match(source,
+    /\["presentation\.vehicle\.rapier-gun-drone\.prototype\.v1", createRapierGunDrone\]/,
+    "Rapier's reusable glide gun-drone must use its own 5.5 m silhouette");
+  assert.match(source,
     /\["presentation\.vehicle\.rapier\.public-data-surrogate\.v1", createRapier\]/,
     "Rapier must resolve to its unique 13 m interceptor silhouette instead of the fighter fallback");
   assert.match(source,

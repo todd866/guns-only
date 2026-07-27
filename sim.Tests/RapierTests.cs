@@ -91,6 +91,42 @@ public class RapierTests {
     }
 
     [Fact]
+    public void TurbineCoreIsDeadByOneHundredThousandFeetRegardlessOfMach() {
+        // Sqrt-density alone left ~12% of SLS at FL1000, so ZoomCoast (throttle 0) still
+        // attributed idle fuel / spool to a "turbine" that cannot breathe. Density must kill
+        // the core well below 100 kft; Mach fade alone is not enough on a ballistic coast.
+        const double ExoAltitudeM = 100_000.0 * 0.3048; // 30_480 m
+        AtmosphericState exo = StandardAtmosphere1976.Instance.Sample(ExoAltitudeM);
+        AtmosphericState shelf = StandardAtmosphere1976.Instance.Sample(17_000.0);
+
+        foreach (double mach in new[] { 0.9, 1.5, 2.2, 2.8 }) {
+            var exoParts = Propulsion.TurboRamjetPerformanceMap.ThrustComponents(
+                mach, exo.TemperatureK, exo.DensityKgM3);
+            _out.WriteLine($"FL1000 M{mach:F1}: turb {exoParts.Turbine:F5} ram {exoParts.Ramjet:F5}");
+            Assert.True(exoParts.Turbine < 1e-6,
+                $"turbine still {exoParts.Turbine:F5} of SLS at FL1000 / M{mach:F1}");
+
+            var idle = Propulsion.TurboRamjetPerformanceMap.Evaluate(
+                commandedFraction: 0.0,
+                staticThrustN: Jet.ThrustMaxN,
+                mach, exo.TemperatureK, exo.DensityKgM3,
+                Jet.GenericIdleFuelFlowLbPerMinute,
+                Jet.GenericMilitaryFuelFlowLbPerMinute,
+                Jet.GenericAfterburnerFuelFlowLbPerMinute,
+                Jet.MaxThrustFraction);
+            Assert.Equal(0.0, idle.NetThrustN, precision: 9);
+            Assert.True(idle.FuelFlowLbPerMinute < 1e-6,
+                $"idle still burns {idle.FuelFlowLbPerMinute:F3} lb/min at FL1000 / M{mach:F1}");
+        }
+
+        // Mission shelf must keep a breathing core — density cutoff is exo, not FL560.
+        var shelfParts = Propulsion.TurboRamjetPerformanceMap.ThrustComponents(
+            0.9, shelf.TemperatureK, shelf.DensityKgM3);
+        Assert.True(shelfParts.Turbine > 0.20,
+            $"density cutoff killed the climb turbine early: {shelfParts.Turbine:F3}");
+    }
+
+    [Fact]
     public void ItAcceleratesHardEnoughToBeWorthFlying() {
         // "Enough power that it's fun to get it up to speed" is a real requirement, so it gets a
         // real test. Level acceleration at low altitude on the augmentor.

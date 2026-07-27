@@ -1690,6 +1690,109 @@ export function createOneWayAttackDrone(context = {}) {
   return group;
 }
 
+/// Purpose-built visual surrogate for Rapier's reusable glide gun-drone. Same 5.5 m span as the
+/// flight-model surrogate, but cooler grey/green training colours, twin cheek gun pods, and no
+/// canopy distinguish it from the ochre one-way attack drone and the full-size Rapier interceptor.
+export function createRapierGunDrone(context = {}) {
+  const group = new THREE.Group();
+  group.name = "RAPIER_GLIDE_GUN_DRONE_TRAINING_SURROGATE";
+
+  const greyGreen = makeMaterial(0x5c6b64, 0.62, 0.028, 0x040605,
+    { grain: 0.09, grainScale: 2.4, panels: 0.03, panelScale: 0.75 });
+  const pale = makeMaterial(0x8fa295, 0.70, 0.020, 0x030504,
+    { grain: 0.07, grainScale: 2.8, panels: 0.025, panelScale: 0.68 });
+  const dark = makeMaterial(0x1e2824, 0.76, 0.035, 0x000000,
+    { grain: 0.04, grainScale: 3.1 });
+  const gunPod = makeMaterial(0x3a4540, 0.78, 0.04, 0x000000,
+    { grain: 0.05, grainScale: 2.6 });
+
+  const wingPoints = [
+    [0, -1.22], [-0.46, -1.02], [-2.75, -0.05], [-2.68, 0.58],
+    [-0.62, 0.42], [0, 0.78], [0.62, 0.42], [2.68, 0.58],
+    [2.75, -0.05], [0.46, -1.02],
+  ];
+  const wing = new THREE.Mesh(createPlanformGeometry(wingPoints, 0.12, 0.034),
+    [pale, greyGreen]);
+  wing.name = "RAPIER_GUN_DRONE_5P5M_WING";
+  wing.position.y = 0.02;
+  group.add(wing);
+
+  const body = new THREE.Mesh(createLoftGeometry([
+    { z: -2.05, rx: 0.035, ry: 0.035, y: 0.04 },
+    { z: -1.55, rx: 0.26, ry: 0.23, y: 0.07 },
+    { z: -0.62, rx: 0.34, ry: 0.30, y: 0.09 },
+    { z: 0.82, rx: 0.31, ry: 0.28, y: 0.08 },
+    { z: 1.72, rx: 0.22, ry: 0.20, y: 0.07 },
+    { z: 1.98, rx: 0.17, ry: 0.16, y: 0.07 },
+  ], 14), greyGreen);
+  body.name = "RAPIER_GUN_DRONE_CANOPY_FREE_BODY";
+  group.add(body);
+
+  const tailPoints = [
+    [0, 1.08], [-0.32, 1.12], [-1.02, 1.58], [-0.95, 1.86],
+    [0, 1.66], [0.95, 1.86], [1.02, 1.58], [0.32, 1.12],
+  ];
+  const tailplane = new THREE.Mesh(createPlanformGeometry(tailPoints, 0.09, 0.024),
+    [greyGreen, dark]);
+  tailplane.name = "RAPIER_GUN_DRONE_TAILPLANE";
+  tailplane.position.y = 0.12;
+  group.add(tailplane);
+
+  const finGeometry = createFinGeometry([
+    [1.02, 0.0], [1.92, 0.0], [1.68, 0.84], [1.36, 1.08],
+  ], 0.08);
+  const fin = new THREE.Mesh(finGeometry, [greyGreen, dark]);
+  fin.name = "RAPIER_GUN_DRONE_FIN";
+  fin.position.y = 0.16;
+  group.add(fin);
+
+  // Twin cheek gun pods suggest the reusable gun-drone role without copying the full Rapier.
+  for (const side of [-1, 1]) {
+    const pod = new THREE.Mesh(createLoftGeometry([
+      { z: -0.18, rx: 0.08, ry: 0.06, y: -0.04 },
+      { z: 0.52, rx: 0.10, ry: 0.08, y: -0.05 },
+      { z: 1.08, rx: 0.09, ry: 0.07, y: -0.05 },
+      { z: 1.22, rx: 0.05, ry: 0.04, y: -0.04 },
+    ], 8), gunPod);
+    pod.name = `RAPIER_GUN_DRONE_CHEEK_POD_${side < 0 ? "LEFT" : "RIGHT"}`;
+    pod.position.set(side * 0.38, -0.06, -0.28);
+    pod.rotation.y = side * 0.08;
+    group.add(pod);
+    const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.14, 8), dark);
+    muzzle.name = `RAPIER_GUN_DRONE_MUZZLE_${side < 0 ? "LEFT" : "RIGHT"}`;
+    muzzle.rotation.x = Math.PI / 2;
+    muzzle.position.set(side * 0.38, -0.07, -1.42);
+    group.add(muzzle);
+  }
+
+  const exhaust = new THREE.Mesh(new THREE.CircleGeometry(0.13, 14), dark);
+  exhaust.name = "RAPIER_GUN_DRONE_TURBINE_EXHAUST";
+  exhaust.position.set(0, 0.07, 1.985);
+  group.add(exhaust);
+
+  const sockets = Object.freeze({
+    muzzleLeft: addSemanticSocket(group, "SOCKET_MUZZLE_LEFT", -0.38, -0.07, -1.42),
+    muzzleRight: addSemanticSocket(group, "SOCKET_MUZZLE_RIGHT", 0.38, -0.07, -1.42),
+  });
+  group.traverse((object) => {
+    if (!object.isMesh) return;
+    object.castShadow = object.userData.noShadow !== true;
+    object.receiveShadow = true;
+  });
+  group.userData.sockets = sockets;
+  group.userData.dimensionsM = Object.freeze({ length: 4.5, span: 5.5 });
+  group.userData.trainingTarget = Object.freeze({
+    fictional: true,
+    crewed: false,
+    engineCount: 1,
+    wingSpanM: 5.5,
+    carriesGroundWeapon: false,
+    reusableGunDrone: true,
+  });
+  annotateProceduralFallback(group, context);
+  return group;
+}
+
 export function createFireballMaterial(coreColor, edgeColor) {
   return new THREE.ShaderMaterial({
     uniforms: {

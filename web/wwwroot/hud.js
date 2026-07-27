@@ -2553,9 +2553,16 @@ class CombatHud {
       sensorPitchRad: frame.sensorPitch,
     });
 
+    const patternOnly = frame.state?.rapier_pattern_only === true;
     const isBanditPadlock = frame.padlockTarget !== "carrier";
-    const targetLabel = isBanditPadlock ? "BANDIT"
-      : recoveryPlatformIsMaritime(frame.state) ? "BOAT" : "STRIP";
+    const targetLabel = patternOnly
+      ? (frame.padlockTarget === "carrier" ? "THRESHOLD"
+        : frame.padlockTarget === "wingman" ? "TRAFFIC 2"
+        : frame.padlockTarget === "traffic2" ? "TRAFFIC 3"
+        : frame.padlockTarget === "traffic3" ? "TRAFFIC 4"
+        : "THRESHOLD")
+      : isBanditPadlock ? "BANDIT"
+        : recoveryPlatformIsMaritime(frame.state) ? "BOAT" : "STRIP";
     if (isBanditPadlock) {
       const captureEntityId = String(frame.state.bandit_entity_id ?? "legacy");
       if (captureEntityId !== this._padlockCaptureEntityId) {
@@ -2687,7 +2694,7 @@ class CombatHud {
       if (!steeringAvailable) this._padlockLiftCaptured = false;
       if (isBanditPadlock && !this._padlockTrackEstablished && !frame.manualLookActive
           && !groundDanger && !centralPullUp) {
-        statusDirective("ACQUIRING BANDIT", AMBER);
+        statusDirective(patternOnly ? "ACQUIRING" : "ACQUIRING BANDIT", AMBER);
       }
 
       // === STEERING TRUTH: kernel-first physical roll error; the drawing lives in the

@@ -202,6 +202,19 @@ public static partial class WebBridge {
 
     /// One flat state blob per frame. Sim frame is X=east, Y=up, Z=north; the JS side flips Z
     /// for three.js. All aliases below are read-only projection handles from SimulationSession.
+
+    [JSExport]
+    public static void SetCircuitsCleanMode(bool clean) =>
+        Session.SetCircuitsCleanMode(clean);
+
+    [JSExport]
+    public static void SetCircuitsFaultArmed(bool armed) =>
+        Session.SetCircuitsFaultArmed(armed);
+
+    [JSExport]
+    public static void InduceCircuitsUtilityFault() =>
+        Session.InduceCircuitsUtilityFault();
+
     [JSExport]
     public static string GetState() => SnapshotProjection.BuildState(
         Session, _deckConfiguration, _worldOriginEastM, _worldOriginNorthM,

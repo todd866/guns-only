@@ -29,9 +29,10 @@ testrig/scenarios/_replay.json
 recordings/
 .worktrees/
 
-# Circuit / intercept OFT run tapes (agent-facing). Keep analysis/*/README.md tracked.
+# Circuit / intercept / glide-drone OFT run tapes (agent-facing). Keep analysis/*/README.md tracked.
 analysis/circuit-oft/*/
 analysis/intercept-oft/*/
+analysis/glide-drone-oft/*/
 
 # Local scenery debug frames/probes. Keep README if present.
 analysis/desktop-captures/scenery-flicker/*

@@ -141,12 +141,34 @@ function carrierRecoveryIntent(state = {}) {
 }
 
 export function carrierPadlockSupersededByCombat(state = {}) {
+  if (circuitsPatternOnly(state)) return false;
   return carrierPadlockEligible(state, CARRIER_PADLOCK_RELEASE_RADIUS_M)
     && banditPadlockEligible(state)
     && !carrierRecoveryIntent(state);
 }
 
+export function circuitsPatternOnly(state = {}) {
+  return state?.rapier_pattern_only === true;
+}
+
+export function circuitsPadlockTargets(state = {}) {
+  const targets = ["carrier"];
+  if (state?.w1_present === 1 && state?.w1_alive === 1) targets.push("wingman");
+  if (state?.w2_present === 1 && state?.w2_alive === 1) targets.push("traffic2");
+  if (state?.w3_present === 1 && state?.w3_alive === 1) targets.push("traffic3");
+  return targets;
+}
+
+/// Slot 1 → wingman/w1, slot 2 → traffic2/w2, slot 3 → traffic3/w3.
+export function circuitTrafficPadlockAvailable(state = {}, slot = 1) {
+  if (slot === 1) return state?.w1_present === 1 && state?.w1_alive === 1;
+  if (slot === 2) return state?.w2_present === 1 && state?.w2_alive === 1;
+  if (slot === 3) return state?.w3_present === 1 && state?.w3_alive === 1;
+  return false;
+}
+
 export function contextualPadlockTarget(state = {}) {
+  if (circuitsPatternOnly(state) && carrierPadlockEligible(state)) return "carrier";
   const carrierAvailable = carrierPadlockEligible(state);
   const banditAvailable = banditPadlockEligible(state);
   return carrierAvailable && (carrierRecoveryIntent(state) || !banditAvailable)
@@ -163,6 +185,9 @@ export function padlockTargetValid(state = {}, target = "bandit") {
   // A selected recovery platform must not survive the authoritative transition back to combat when
   // a live bandit is available: release it, then let the pilot deliberately reacquire the threat.
   if (target === "carrier") {
+    if (circuitsPatternOnly(state)) {
+      return carrierPadlockEligible(state, CARRIER_PADLOCK_RELEASE_RADIUS_M);
+    }
     return carrierPadlockEligible(state, CARRIER_PADLOCK_RELEASE_RADIUS_M)
       && !carrierPadlockSupersededByCombat(state);
   }
@@ -170,6 +195,9 @@ export function padlockTargetValid(state = {}, target = "bandit") {
   // When it is shot down — or promoted into the primary slot after the leader dies — the lock
   // releases and the pilot reacquires deliberately, exactly as it works for the primary.
   if (target === "wingman") return state.w1_present === 1 && state.w1_alive === 1;
+  if (target === "traffic2") return state.w2_present === 1 && state.w2_alive === 1;
+  if (target === "traffic3") return state.w3_present === 1 && state.w3_alive === 1;
+  if (circuitsPatternOnly(state)) return false;
   return banditPadlockEligible(state);
 }
 

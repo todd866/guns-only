@@ -4,7 +4,7 @@ using GunsOnly.Sim.Environment;
 namespace GunsOnly.Sim.Tests;
 
 public class RapierMissionTests {
-    static BeatSetup AirborneAttackCard(int formationSize = 2, double startNorthM = 0.0) {
+    static BeatSetup AirborneAttackCard(int formationSize = 2, double startNorthM = 300_000.0) {
         BeatSetup baseline = Beats.RapierIntercept();
         const double altitudeM = 12_000.0;
         return baseline with {
@@ -26,7 +26,8 @@ public class RapierMissionTests {
             StartsOnCatapult = false,
             Combat = baseline.CombatRules with { OpponentAmmo = 0 },
             ScriptedIntercept = new ScriptedInterceptConfig(
-                FormationSize: formationSize)
+                FormationSize: formationSize,
+                DeterministicSwarmWipe: false)
         };
     }
 
@@ -124,20 +125,30 @@ public class RapierMissionTests {
         session.FeedKey(GKey.Trigger, false);
         session.StepFixed();
 
-        Assert.Equal(4, session.KillCount);
-        Assert.Equal(0, session.LiveOpponentCount);
-        Assert.True(session.RapierPursuitActive);
-        Assert.Equal(2, session.RapierPursuerCount);
+        Assert.Equal(3, session.RapierDogfightingDronesRemaining);
+        Assert.NotNull(session.ActiveRapierGunDrone);
+        Assert.True(session.ActiveRapierGunDrone!.StillActive);
+        Assert.Equal(4, session.LiveOpponentCount);
+        Assert.Equal(0, session.KillCount);
+        Assert.False(session.RapierPursuitActive);
         Assert.Equal(RapierMissionPhase.Escape, session.RapierPhase);
-        Assert.Equal(0, session.RapierMissilesRemaining);
-        Assert.Equal(0, session.RapierDogfightingDronesRemaining);
+        Assert.Contains("DRONE", session.TransitionCue, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("FORMATION DESTROYED", session.TransitionCue,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void AutomationCanFlyTheWholeAuthoredSortieButLeavesTheAttackDecisionToThePilot() {
-        var session = new SimulationSession(10,
-            weather: KoreaWeatherPresets.ForBeat(10));
+        var session = new SimulationSession();
         session.DecisionCaptureEnabled = false;
+        session.StartBeat(() => {
+            BeatSetup beat = Beats.RapierIntercept();
+            return beat with {
+                ScriptedIntercept = beat.ScriptedIntercept! with {
+                    DeterministicSwarmWipe = true
+                }
+            };
+        }, KoreaWeatherPresets.ForBeat(10));
         session.Begin();
 
         bool releasedSwarm = false;

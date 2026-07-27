@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 8;
+    public const int LayoutVersion = 9;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -160,6 +160,14 @@ internal static class SnapshotHotFrame {
             Num($"{prefix}lx", 5); Num($"{prefix}ly", 5); Num($"{prefix}lz", 5);
             Num($"{prefix}_alive", RawInteger);
         }
+        // One released Rapier reusable gun-drone rides the hot path while it is still active.
+        Num("rd1_present", RawInteger);
+        Num("rd1x", 3); Num("rd1y", 3); Num("rd1z", 3);
+        Num("rd1fx", 5); Num("rd1fy", 5); Num("rd1fz", 5);
+        Num("rd1lx", 5); Num("rd1ly", 5); Num("rd1lz", 5);
+        Num("rd1_alive", RawInteger);
+        Num("rd1_phase", RawInteger);
+        Bool("rd1_turbine_armed");
         Num("buffet_pitch_deg", 3); Num("buffet_roll_deg", 3); Num("buffet_yaw_deg", 3);
         Num("indicated_airspeed_kts", 2);
         Num("calibrated_airspeed_kts", 2);
@@ -681,6 +689,7 @@ internal static class SnapshotHotFrame {
         WriteWingman(ref w, session, 0, "w1");
         WriteWingman(ref w, session, 1, "w2");
         WriteWingman(ref w, session, 2, "w3");
+        WriteRapierGunDrone(ref w, session);
         w.Num("buffet_pitch_deg", player.PitchBuffetRad * 57.2958, 3);
         w.Num("buffet_roll_deg", player.RollBuffetRad * 57.2958, 3);
         w.Num("buffet_yaw_deg", player.YawBuffetRad * 57.2958, 3);
@@ -1054,11 +1063,13 @@ internal static class SnapshotHotFrame {
     /// exact numbers JSON.parse would have produced. RawInteger passes the value through untouched.
     static int CircuitLegCode(string? leg) => leg switch {
         "DEPART" => 1,
-        "DOWNWIND" => 2,
-        "BASE" => 3,
-        "SHORT_FINAL" => 4,
-        "WIRE_FINAL" => 5,
-        "COMPLETE" => 6,
+        "INITIAL" => 2,
+        "BREAK" => 3,
+        "DOWNWIND" => 4,
+        "BASE" => 5,
+        "SHORT_FINAL" => 6,
+        "WIRE_FINAL" => 7,
+        "COMPLETE" => 8,
         _ => 0,
     };
 
@@ -1082,6 +1093,26 @@ internal static class SnapshotHotFrame {
         int index, string prefix) {
         GunsOnly.Sim.Doctrine.Wingman? wingman =
             session.Wingmen.Count > index ? session.Wingmen[index] : null;
+        if (wingman is null
+            && session.Beat.ScriptedIntercept?.PatternOnly == true
+            && index < session.CircuitTraffic.Count
+            && session.CircuitTraffic[index].Present) {
+            CircuitTrafficShip traffic = session.CircuitTraffic[index];
+            double fx = Math.Sin(traffic.Chi);
+            double fz = Math.Cos(traffic.Chi);
+            writer.Num($"{prefix}_present", 1, RawInteger);
+            writer.Num($"{prefix}x", traffic.X, 3);
+            writer.Num($"{prefix}y", traffic.Y, 3);
+            writer.Num($"{prefix}z", traffic.Z, 3);
+            writer.Num($"{prefix}fx", fx, 5);
+            writer.Num($"{prefix}fy", 0.0, 5);
+            writer.Num($"{prefix}fz", fz, 5);
+            writer.Num($"{prefix}lx", 0.0, 5);
+            writer.Num($"{prefix}ly", 1.0, 5);
+            writer.Num($"{prefix}lz", 0.0, 5);
+            writer.Num($"{prefix}_alive", 1, RawInteger);
+            return;
+        }
         if (wingman is null) {
             writer.Num($"{prefix}_present", 0, RawInteger);
             writer.Num($"{prefix}x", 0.0, 3);
@@ -1111,6 +1142,43 @@ internal static class SnapshotHotFrame {
         writer.Num($"{prefix}ly", lift.Y, 5);
         writer.Num($"{prefix}lz", lift.Z, 5);
         writer.Num($"{prefix}_alive", wingman.StillFighting ? 1 : 0, RawInteger);
+    }
+
+    static void WriteRapierGunDrone(ref Writer writer, SimulationSession session) {
+        RapierGunDrone? drone = session.ActiveRapierGunDrone;
+        if (drone is null) {
+            writer.Num("rd1_present", 0, RawInteger);
+            writer.Num("rd1x", 0.0, 3);
+            writer.Num("rd1y", 0.0, 3);
+            writer.Num("rd1z", 0.0, 3);
+            writer.Num("rd1fx", 0.0, 5);
+            writer.Num("rd1fy", 1.0, 5);
+            writer.Num("rd1fz", 0.0, 5);
+            writer.Num("rd1lx", 0.0, 5);
+            writer.Num("rd1ly", 1.0, 5);
+            writer.Num("rd1lz", 0.0, 5);
+            writer.Num("rd1_alive", 0, RawInteger);
+            writer.Num("rd1_phase", 0, RawInteger);
+            writer.Bool("rd1_turbine_armed", false);
+            return;
+        }
+
+        AircraftState state = drone.Sim.State;
+        Vec3D forward = state.ForwardDir();
+        Vec3D lift = drone.Sim.LiftDir;
+        writer.Num("rd1_present", 1, RawInteger);
+        writer.Num("rd1x", state.Position.X, 3);
+        writer.Num("rd1y", state.Position.Y, 3);
+        writer.Num("rd1z", state.Position.Z, 3);
+        writer.Num("rd1fx", forward.X, 5);
+        writer.Num("rd1fy", forward.Y, 5);
+        writer.Num("rd1fz", forward.Z, 5);
+        writer.Num("rd1lx", lift.X, 5);
+        writer.Num("rd1ly", lift.Y, 5);
+        writer.Num("rd1lz", lift.Z, 5);
+        writer.Num("rd1_alive", 1, RawInteger);
+        writer.Num("rd1_phase", (int)drone.Phase, RawInteger);
+        writer.Bool("rd1_turbine_armed", drone.TurbineArmed);
     }
 
     struct Writer {
