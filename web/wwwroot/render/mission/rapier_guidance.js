@@ -94,9 +94,34 @@ function skinFragment(state) {
   });
 }
 
+function circuitsConfigFragment(leg, state) {
+  const targetKtas = finiteNumber(state.rapier_fd_target_ktas);
+  const targetAltFt = finiteNumber(state.rapier_target_altitude_ft);
+  const config = leg === "WIRE_FINAL"
+    ? "HOOK DOWN · GEAR DOWN · FLAPS DOWN"
+    : "HOOK DOWN · GEAR UP · FLAPS UP";
+  const speed = targetKtas !== null ? ` · ${Math.round(targetKtas)} KT` : "";
+  const alt = targetAltFt !== null && targetAltFt > 0
+    ? ` · ${Math.round(targetAltFt)} FT`
+    : "";
+  let action = "";
+  if (leg === "SHORT_FINAL") action = " · GO AROUND BEFORE GEAR";
+  else if (leg === "WIRE_FINAL") action = " · ACCEPT WIRE";
+  else if (leg === "INITIAL") action = " · BREAK LEFT ABM";
+  else if (leg === "BREAK") action = " · TO DOWNWIND";
+  else if (leg === "DEPART") action = " · CLIMB TO PATTERN";
+  return `${config}${speed}${alt}${action}`;
+}
+
+function circuitsCoach(state) {
+  if (state.rapier_automation_active === true) return "DEMO";
+  if (state.rapier_automation_enabled === true) return "DIRECT";
+  return "MONITOR";
+}
+
 /// Quiet mode line under the heading tape. Spec:
 /// docs/superpowers/specs/2026-07-27-hud-limits-panel-design.md
-/// Skin temperature is always on this line for Rapier — the teaching limit that binds the dash.
+/// Skin temperature is Intercept teaching chrome — never on Circuits.
 export function rapierGuidancePresentation(state) {
   if (state?.rapier_mission_available !== true) return null;
   const phase = Math.floor(Number(state.rapier_mission_phase) || 0);
@@ -128,20 +153,13 @@ export function rapierGuidancePresentation(state) {
         ? " · GUNS · ONE SLASH"
         : ` · F RELEASES SWARM · ${drones}`)
     : "";
-  let patternAction = "";
-  if (patternOnly) {
-    if (leg === "SHORT_FINAL") patternAction = " · GO AROUND BEFORE GEAR";
-    else if (leg === "WIRE_FINAL") patternAction = " · ACCEPT WIRE · HOOK DOWN";
-    else if (leg === "INITIAL") patternAction = " · BREAK LEFT ABM";
-    else if (leg === "BREAK") patternAction = " · TO DOWNWIND";
-    else if (leg === "BASE" || leg === "DOWNWIND") patternAction = " · HOOK DOWN";
-    else if (leg === "DEPART") patternAction = " · TO PATTERN";
-  }
   const coastAlign = !patternOnly && (phase === 6 || phase === 7) && noseErr !== null
     ? (noseErr <= 8 ? " · ON V" : ` · NOSE→V ${Math.round(noseErr)}°`)
     : "";
-  const authority = active ? "AUTO" : enabled ? "AUTO STBY" : "PILOT";
-  const skin = skinFragment(state);
+  const authority = patternOnly
+    ? circuitsCoach(state)
+    : (active ? "AUTO" : enabled ? "AUTO STBY" : "PILOT");
+  const skin = patternOnly ? null : skinFragment(state);
   const commanded = finiteNumber(state.rapier_commanded_mach);
   const authored = finiteNumber(state.rapier_authored_target_mach);
   const skinLimit = finiteNumber(state.rapier_skin_mach_limit);
@@ -153,18 +171,21 @@ export function rapierGuidancePresentation(state) {
 
   let text;
   let level;
-  if (skin?.level === "attack") {
+  if (patternOnly) {
+    const config = circuitsConfigFragment(leg, state);
+    text = `${authority} · ${phaseText} · ${config} · P DEMO/DIRECT/MONITOR`;
+    level = active ? "active" : "manual";
+  } else if (skin?.level === "attack") {
     text = `${authority} · ${skin.text} · P TOGGLE AUTO`;
     level = "attack";
   } else {
     text = skin
-      ? `${authority} · ${phaseText}${patternAction}${coastAlign}${weapon}${machClampNote} · ${skin.text} · P TOGGLE AUTO`
-      : `${authority} · ${phaseText}${patternAction}${coastAlign}${weapon}${machClampNote} · P TOGGLE AUTO`;
+      ? `${authority} · ${phaseText}${coastAlign}${weapon}${machClampNote} · ${skin.text} · P TOGGLE AUTO`
+      : `${authority} · ${phaseText}${coastAlign}${weapon}${machClampNote} · P TOGGLE AUTO`;
     level = skin?.level === "caution"
       ? "active"
-      : patternOnly ? (active ? "active" : "manual")
-        : phase === PHASE_ATTACK || phase === PHASE_EGRESS ? "attack"
-          : active ? "active" : "manual";
+      : phase === PHASE_ATTACK || phase === PHASE_EGRESS ? "attack"
+        : active ? "active" : "manual";
   }
 
   return Object.freeze({
@@ -178,8 +199,8 @@ export function rapierGuidancePresentation(state) {
         : (!patternOnly && (phase === 6 || phase === 7)
           ? (noseErr !== null && noseErr <= 8 ? "ON V" : "NOSE→V")
           : "")),
-    skinC: finiteNumber(state.rapier_stagnation_temp_c),
-    marginC: finiteNumber(state.rapier_thermal_margin_c),
+    skinC: patternOnly ? null : finiteNumber(state.rapier_stagnation_temp_c),
+    marginC: patternOnly ? null : finiteNumber(state.rapier_thermal_margin_c),
   });
 }
 
@@ -245,8 +266,13 @@ function cycleExplainer(mode) {
 }
 
 /// Always-on teaching presentation for the combined-cycle motor + skin limit.
+/// Circuits is pattern school — hide Intercept TBCC/skin chrome there.
 export function rapierCycleTeachPresentation(state) {
   if (state?.rapier_mission_available !== true) return null;
+  const patternOnly = state.rapier_pattern_only === true
+    || (typeof state.rapier_mission_cue === "string"
+      && state.rapier_mission_cue.startsWith("CIRCUITS"));
+  if (patternOnly) return null;
   const mach = Math.max(0, finiteNumber(state.mach) ?? 0);
   const turbineKn = Math.max(0, finiteNumber(state.rapier_turbine_thrust_kn) ?? 0);
   const ramKn = Math.max(0, finiteNumber(state.rapier_ramjet_thrust_kn) ?? 0);
@@ -282,7 +308,11 @@ export function rapierCycleTeachPresentation(state) {
 /// Diagnostic engine state for the Aircraft Systems console / tests — not drawn on the HUD ladder.
 export function rapierEnginePresentation(state) {
   if (state?.rapier_mission_available !== true) return null;
-  const teach = rapierCycleTeachPresentation(state);
+  // Systems console still wants cycle truth on Circuits even when the HUD teach panel is gated.
+  const teach = rapierCycleTeachPresentation({
+    ...state,
+    rapier_pattern_only: false,
+  });
   if (!teach) return null;
   const trueAirspeedKts = Math.max(0, Number(state.true_airspeed_kts) || 0);
   const thrustKn = Math.max(0,

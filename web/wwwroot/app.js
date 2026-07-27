@@ -1837,8 +1837,8 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Rapier Circuits",
     sortie: "Ski-jump · overhead pattern · touch-and-go · trap",
     configuration: "Attritable Rapier brick · full fuel · hook down · no contact",
-    brief: "Launch west, fly the pattern, trap. Repeat until the hook is easy.",
-    controls: "P mission automation · arrows/W/S pilot takeover · T time compression\nV padlocks threshold · Tab cycles threshold / circuit traffic · N navigation · fly the boxes · trap on the wire",
+    brief: "Military overhead: climb to ~1,800 ft AGL, ~300 KT initial/downwind, ~180 KT final. Fly the labeled boxes (INITIAL → BREAK → DOWNWIND → BASE → SHORT FINAL → WIRE). Coaching: DEMO = auto on (P), DIRECT = touch stick while DEMO (FD/boxes stay), MONITOR = P off. No Mach dash.",
+    controls: "P DEMO ↔ MONITOR · stick takeover = DIRECT · arrows/W/S · T time compression\nV padlocks threshold · Tab cycles threshold / circuit traffic · N navigation · fly the boxes · trap on the wire",
   }),
   "rapier-intercept": Object.freeze({
     kicker: "Eastern corridor · guns-only",

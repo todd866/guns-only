@@ -100,6 +100,42 @@ public class RapierMissionDirectorTests {
         Assert.Equal(RapierMissionPhase.Climb, guidance.Phase);
         Assert.Equal("pattern_climb_to_shelf", guidance.PhaseReason);
     }
+
+    [Fact]
+    public void PatternOnlyClimbCommandsPatternBandNotMachDash() {
+        var director = new RapierMissionDirector();
+        AircraftState player = StateAt(280.0, 130.0);
+        AircraftState contact = StateAt(24_000.0, 200.0);
+        contact = contact with { Position = new Vec3D(0.0, 24_000.0, -400_000.0) };
+        Vec3D home = new(0.0, 120.0, 0.0);
+        Vec3D recoveryInitial = new(0.0, 1_120.0, -16_000.0);
+
+        RapierMissionGuidance guidance = director.Step(
+            player, contact, 130.0, StandardAtmosphere1976.Instance,
+            FlightModel.RapierPublicDataSurrogate,
+            catapultActive: false, liveOpponentCount: 0, pursuitActive: false,
+            pursuerCount: 0, pursuitRangeM: 0.0, home, recoveryInitial,
+            recovered: false, patternOnly: true);
+
+        Assert.Equal(RapierMissionPhase.Climb, guidance.Phase);
+        Assert.Equal("DEPART", guidance.CircuitLeg);
+        Assert.True(guidance.FdTargetKtas > 250.0 && guidance.FdTargetKtas < 320.0,
+            $"DEPART must command ~300 KT pattern band, got {guidance.FdTargetKtas:F0} KT");
+        Assert.True(guidance.AuthoredTargetMach < 0.52,
+            $"DEPART must stay subsonic pattern energy, got M{guidance.AuthoredTargetMach:F2}");
+        Assert.True(guidance.CommandedMach < 0.52,
+            $"DEPART must not chase Mach dash, got M{guidance.CommandedMach:F2}");
+        Assert.Contains("HOOK DOWN", guidance.Cue);
+        Assert.Contains("GEAR UP", guidance.Cue);
+        Assert.Contains("300 KT", guidance.Cue);
+        // Flythrough box aims at INITIAL, not the strip centre / FL560 phantom.
+        Assert.True(guidance.Waypoint.Y > home.Y + 400.0,
+            "DEPART box must sit near pattern shelf height");
+        Assert.True(Math.Abs(guidance.Waypoint.Z) > 500.0
+            || Math.Abs(guidance.Waypoint.X) > 500.0,
+            "DEPART box must be offset toward INITIAL, not home origin");
+    }
+
     [Fact]
     public void PatternOnlyRecoveryPublishesInitialLegAtPatternAltitude() {
         var director = new RapierMissionDirector();
@@ -126,6 +162,32 @@ public class RapierMissionDirectorTests {
         Assert.True(guidance.FdTargetKtas > 250.0 && guidance.FdTargetKtas < 320.0,
             $"expected ~300 KT pattern speed, got {guidance.FdTargetKtas:F0}");
         Assert.Contains("INITIAL", guidance.Cue);
+        Assert.Contains("HOOK DOWN", guidance.Cue);
+        Assert.Contains("GEAR UP", guidance.Cue);
+    }
+
+    [Fact]
+    public void PatternOnlyLaunchStaysInPatternBand() {
+        var director = new RapierMissionDirector();
+        AircraftState player = StateAt(130.0, 90.0);
+        AircraftState contact = StateAt(24_000.0, 200.0);
+        contact = contact with { Position = new Vec3D(0.0, 24_000.0, -400_000.0) };
+        Vec3D home = new(0.0, 120.0, 0.0);
+        Vec3D recoveryInitial = new(0.0, 1_120.0, -16_000.0);
+
+        RapierMissionGuidance guidance = director.Step(
+            player, contact, 90.0, StandardAtmosphere1976.Instance,
+            FlightModel.RapierPublicDataSurrogate,
+            catapultActive: true, liveOpponentCount: 0, pursuitActive: false,
+            pursuerCount: 0, pursuitRangeM: 0.0, home, recoveryInitial,
+            recovered: false, patternOnly: true);
+
+        Assert.Equal(RapierMissionPhase.Launch, guidance.Phase);
+        Assert.Equal("DEPART", guidance.CircuitLeg);
+        Assert.True(guidance.AuthoredTargetMach < 0.52,
+            $"pattern launch must not author M0.9 dash, got M{guidance.AuthoredTargetMach:F2}");
+        Assert.True(guidance.FdTargetKtas > 250.0 && guidance.FdTargetKtas < 320.0,
+            $"pattern launch FD must be ~300 KT, got {guidance.FdTargetKtas:F0}");
     }
 
 }

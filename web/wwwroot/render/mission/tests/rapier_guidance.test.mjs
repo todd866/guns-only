@@ -192,12 +192,52 @@ test("Circuits mode line names the pattern leg without Intercept attack chrome",
     rapier_mission_phase: 13,
     rapier_circuit_leg: "SHORT_FINAL",
     rapier_gun_drones_remaining: 4,
+    rapier_fd_target_ktas: 180,
+    rapier_target_altitude_ft: 400,
     rapier_stagnation_temp_c: 90,
     rapier_thermal_margin_c: 1110,
   });
-  assert.match(cue.text, /AUTO STBY · CIRCUITS · SHORT FINAL · GO AROUND BEFORE GEAR/);
-  assert.doesNotMatch(cue.text, /SWARM|ATTACK|FL700/);
+  assert.match(cue.text, /DIRECT · CIRCUITS · SHORT FINAL/);
+  assert.match(cue.text, /HOOK DOWN · GEAR UP · FLAPS UP · 180 KT/);
+  assert.match(cue.text, /GO AROUND BEFORE GEAR/);
+  assert.doesNotMatch(cue.text, /SWARM|ATTACK|FL700|SKIN/);
   assert.equal(cue.boxLabel, "SHORT FINAL");
+});
+
+test("Circuits DEMO strips skin and publishes leg config", () => {
+  const cue = rapierGuidancePresentation({
+    rapier_mission_available: true,
+    rapier_pattern_only: true,
+    rapier_automation_enabled: true,
+    rapier_automation_active: true,
+    rapier_mission_phase: 2,
+    rapier_circuit_leg: "DEPART",
+    rapier_fd_target_ktas: 300,
+    rapier_target_altitude_ft: 1800,
+    rapier_stagnation_temp_c: 90,
+    rapier_thermal_margin_c: 1110,
+  });
+  assert.match(cue.text, /DEMO · CIRCUITS · DEPART/);
+  assert.match(cue.text, /HOOK DOWN · GEAR UP · FLAPS UP · 300 KT · 1800 FT/);
+  assert.doesNotMatch(cue.text, /SKIN|TBCC|RAM|AUTO ·/);
+  assert.equal(cue.boxLabel, "DEPART");
+});
+
+test("Circuits MONITOR posture when automation is off", () => {
+  const cue = rapierGuidancePresentation({
+    rapier_mission_available: true,
+    rapier_pattern_only: true,
+    rapier_automation_enabled: false,
+    rapier_automation_active: false,
+    rapier_mission_phase: 13,
+    rapier_circuit_leg: "DOWNWIND",
+    rapier_fd_target_ktas: 300,
+    rapier_target_altitude_ft: 1800,
+    rapier_stagnation_temp_c: 120,
+    rapier_thermal_margin_c: 1080,
+  });
+  assert.match(cue.text, /MONITOR · CIRCUITS · DOWNWIND/);
+  assert.doesNotMatch(cue.text, /SKIN/);
 });
 
 test("Circuits wire final asks for the arrest", () => {
@@ -209,11 +249,40 @@ test("Circuits wire final asks for the arrest", () => {
     rapier_mission_phase: 13,
     rapier_circuit_leg: "WIRE_FINAL",
     rapier_recovery_gate: 2,
+    rapier_fd_target_ktas: 171,
+    rapier_target_altitude_ft: 200,
     rapier_stagnation_temp_c: 90,
     rapier_thermal_margin_c: 1110,
   });
-  assert.match(cue.text, /AUTO · CIRCUITS · WIRE FINAL · ACCEPT WIRE · HOOK DOWN/);
+  assert.match(cue.text, /DEMO · CIRCUITS · WIRE FINAL/);
+  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · FLAPS DOWN/);
+  assert.match(cue.text, /ACCEPT WIRE/);
+  assert.doesNotMatch(cue.text, /SKIN/);
   assert.equal(cue.boxLabel, "WIRE FINAL");
+});
+
+test("cycle teach stays available for Intercept but Circuits HUD gates it off", () => {
+  const intercept = rapierCycleTeachPresentation({
+    rapier_mission_available: true,
+    rapier_pattern_only: false,
+    mach: 1.88,
+    rapier_turbine_thrust_kn: 23,
+    rapier_ramjet_thrust_kn: 0,
+    rapier_stagnation_temp_c: 90,
+    rapier_thermal_margin_c: 1110,
+  });
+  assert.ok(intercept);
+
+  const circuits = rapierCycleTeachPresentation({
+    rapier_mission_available: true,
+    rapier_pattern_only: true,
+    mach: 0.45,
+    rapier_turbine_thrust_kn: 40,
+    rapier_ramjet_thrust_kn: 0,
+    rapier_stagnation_temp_c: 40,
+    rapier_thermal_margin_c: 1160,
+  });
+  assert.equal(circuits, null);
 });
 
 test("engine presentation remains available for Systems / diagnostics", () => {

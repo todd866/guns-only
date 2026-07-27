@@ -213,6 +213,49 @@ public class RapierCircuitOftTests {
     }
 
     [Fact]
+    public void OftLaunchClimb_StaysInPatternEnergyBand() {
+        using var telemetry = new CircuitOftTelemetry("launch-energy");
+        var session = new SimulationSession(11,
+            weather: KoreaWeatherPresets.ForBeat(11));
+        session.DecisionCaptureEnabled = true;
+        session.Begin();
+
+        double maxMach = 0.0;
+        double maxCommandedMach = 0.0;
+        bool sawDepart = false;
+        bool sawRecovery = false;
+        int maximumTicks = checked((int)(2 * 60 * AircraftSim.TickHz));
+        for (int tick = 0; tick < maximumTicks; tick++) {
+            session.StepFixed();
+            telemetry.Observe(session, tick);
+            double tas = session.Player.AirspeedMps;
+            double sound = StandardAtmosphere1976.Instance
+                .Sample(session.Player.State.Position.Y).SpeedOfSoundMps;
+            double mach = tas / Math.Max(1.0, sound);
+            if (mach > maxMach) maxMach = mach;
+            if (session.RapierCommandedMach > maxCommandedMach)
+                maxCommandedMach = session.RapierCommandedMach;
+            if (session.RapierCircuitLeg == "DEPART") sawDepart = true;
+            if (session.RapierPhase == RapierMissionPhase.Recovery) {
+                sawRecovery = true;
+                if (tick > AircraftSim.TickHz * 20) break;
+            }
+            if (session.PlayerTerminalState != AircraftTerminalState.Flying) break;
+        }
+
+        bool ok = sawDepart
+            && maxMach < 0.70
+            && maxCommandedMach < 0.52
+            && session.PlayerTerminalState == AircraftTerminalState.Flying;
+        string detail = $"depart={sawDepart} recovery={sawRecovery} "
+            + $"maxMach={maxMach:F3} maxCmd={maxCommandedMach:F3} "
+            + $"leg={session.RapierCircuitLeg} alt={session.Player.State.Position.Y:F0} "
+            + $"ktas={session.Player.AirspeedMps * 1.94384:F0} cue={session.RapierMissionCue}";
+        telemetry.Finish(ok ? "PASS" : "ABORT", detail);
+        Assert.True(ok, detail);
+    }
+
+    [Fact]
     public void OftLaunchClear_CatapultHandsAircraftToClimb() {
         using var telemetry = new CircuitOftTelemetry("launch-clear");
         var session = new SimulationSession(11,

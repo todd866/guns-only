@@ -120,6 +120,15 @@ public sealed class RapierMissionDirector {
     const double CircuitResetHeightM = 300.0;
     /// Circuits pattern altitude AGL — Mirage/F-104 class overhead, not Intercept marshal FL120.
     const double CircuitShelfHeightM = 550.0;
+    /// Overhead pattern KTAS (INITIAL / DOWNWIND / DEPART). Not an Intercept Mach dash.
+    const double CircuitPatternKtas = 300.0;
+    const double CircuitBaseKtas = 220.0;
+    const double CircuitFinalKtas = 180.0;
+    const double CircuitWireKtas = 170.0;
+    const double CircuitPatternSpeedMps = CircuitPatternKtas / 1.94384;
+    const double CircuitBaseSpeedMps = CircuitBaseKtas / 1.94384;
+    const double CircuitFinalSpeedMps = CircuitFinalKtas / 1.94384;
+    const double CircuitWireSpeedMps = CircuitWireKtas / 1.94384;
     /// Left-hand downwind offset for a brick jet at ~300 KT / ~45° bank (~2.25 NM).
     const double CircuitDownwindOffsetM = 2.25 * 1852.0;
     /// Initial / short-final distance before threshold along the runway axis.
@@ -193,6 +202,59 @@ public sealed class RapierMissionDirector {
     };
 
     /// <summary>
+    /// Runway-axis frame for the Circuits overhead: forward along landing, left for downwind.
+    /// </summary>
+    static void PatternRunwayFrame(
+        in Vec3D home, in Vec3D recoveryInitial,
+        out Vec3D runwayForward, out Vec3D runwayLeft, out Vec3D threshold) {
+        Vec3D runwayForwardRaw = new(
+            home.X - recoveryInitial.X, 0.0,
+            home.Z - recoveryInitial.Z);
+        runwayForward = runwayForwardRaw.Length > 1.0
+            ? runwayForwardRaw.Normalized() : new Vec3D(0.0, 0.0, 1.0);
+        runwayLeft = new(-runwayForward.Z, 0.0, runwayForward.X);
+        if (runwayLeft.Length > 1e-6) runwayLeft = runwayLeft.Normalized();
+        else runwayLeft = new Vec3D(1.0, 0.0, 0.0);
+        threshold = home - runwayForward * 240.0 + new Vec3D(0.0, 1.5, 0.0);
+    }
+
+    /// <summary>INITIAL flythrough box at pattern shelf — DEPART aims here.</summary>
+    static Vec3D PatternInitialPoint(in Vec3D home, in Vec3D recoveryInitial) {
+        PatternRunwayFrame(home, recoveryInitial,
+            out Vec3D runwayForward, out _, out Vec3D threshold);
+        double patternY = home.Y + CircuitShelfHeightM;
+        return threshold - runwayForward * CircuitInitialAlongM
+            + new Vec3D(0.0, patternY - threshold.Y, 0.0);
+    }
+
+    static string PatternLegConfigCue(
+        string circuitLeg, double targetKtas, double targetAltFt, string speedCall,
+        int recoveryGate = 0) {
+        // Gear stays up through short final (T&G / go-around before midfield gear). Wire final
+        // accepts the trap configured for landing.
+        string config = circuitLeg switch {
+            "WIRE_FINAL" => "HOOK DOWN · GEAR DOWN · FLAPS DOWN",
+            _ => "HOOK DOWN · GEAR UP · FLAPS UP"
+        };
+        string legLabel = circuitLeg.Replace('_', ' ');
+        if (circuitLeg == "WIRE_FINAL" && recoveryGate > 0)
+            legLabel = $"{legLabel} · BOX {recoveryGate}/4";
+        string action = circuitLeg switch {
+            "DEPART" => "CLIMB TO PATTERN",
+            "INITIAL" => "BREAK LEFT ABM",
+            "BREAK" => "~45° TO DOWNWIND",
+            "DOWNWIND" => "ABEAM",
+            "BASE" => "TURN TO FINAL",
+            "SHORT_FINAL" => "GO AROUND BEFORE GEAR",
+            "WIRE_FINAL" => "ACCEPT WIRE",
+            _ => ""
+        };
+        string actionBit = string.IsNullOrEmpty(action) ? "" : $" · {action}";
+        return $"CIRCUITS · {legLabel} · {config} · "
+            + $"{targetKtas:F0} KT · {targetAltFt:F0} FT · {speedCall}{actionBit}";
+    }
+
+    /// <summary>
     /// Military overhead circuit for PatternOnly (Mirage/F-104 brick). Replaces the Intercept
     /// 30 km marshal corridor so traffic and Tab SA share a real pattern.
     /// </summary>
@@ -208,16 +270,8 @@ public sealed class RapierMissionDirector {
         out double approachSpeedMps,
         out int recoveryGate,
         out double targetGamma) {
-        Vec3D runwayForwardRaw = new(
-            home.X - recoveryInitial.X, 0.0,
-            home.Z - recoveryInitial.Z);
-        Vec3D runwayForward = runwayForwardRaw.Length > 1.0
-            ? runwayForwardRaw.Normalized() : new Vec3D(0.0, 0.0, 1.0);
-        Vec3D runwayLeft = new(-runwayForward.Z, 0.0, runwayForward.X);
-        if (runwayLeft.Length > 1e-6) runwayLeft = runwayLeft.Normalized();
-        else runwayLeft = new Vec3D(1.0, 0.0, 0.0);
-
-        Vec3D threshold = home - runwayForward * 240.0 + new Vec3D(0.0, 1.5, 0.0);
+        PatternRunwayFrame(home, recoveryInitial,
+            out Vec3D runwayForward, out Vec3D runwayLeft, out Vec3D threshold);
         double patternY = home.Y + CircuitShelfHeightM;
         Vec3D initialPoint = threshold - runwayForward * CircuitInitialAlongM
             + new Vec3D(0.0, patternY - threshold.Y, 0.0);
@@ -300,37 +354,37 @@ public sealed class RapierMissionDirector {
             waypoint = distanceToWireM > 0.0
                 ? threshold
                 : threshold + runwayForward * 50_000.0;
-            approachSpeedMps = 88.0;
+            approachSpeedMps = CircuitWireSpeedMps;
             circuitLeg = "WIRE_FINAL";
         } else if (!_circuitInitialReached) {
             recoveryGate = 0;
             gatePoint = initialPoint;
             waypoint = initialPoint + runwayForward * 4_000.0;
-            approachSpeedMps = 154.0;
+            approachSpeedMps = CircuitPatternSpeedMps;
             circuitLeg = "INITIAL";
         } else if (!_circuitBreakReached) {
             recoveryGate = 0;
             gatePoint = downwindEntry;
             waypoint = downwindEntry;
-            approachSpeedMps = 154.0;
+            approachSpeedMps = CircuitPatternSpeedMps;
             circuitLeg = "BREAK";
         } else if (!_circuitDownwindReached) {
             recoveryGate = 0;
             gatePoint = downwindAbeam;
             waypoint = downwindAbeam + runwayForward * -3_000.0;
-            approachSpeedMps = 154.0;
+            approachSpeedMps = CircuitPatternSpeedMps;
             circuitLeg = "DOWNWIND";
         } else if (!_circuitBaseReached) {
             recoveryGate = 0;
             gatePoint = basePoint;
             waypoint = basePoint;
-            approachSpeedMps = 115.0;
+            approachSpeedMps = CircuitBaseSpeedMps;
             circuitLeg = "BASE";
         } else {
             recoveryGate = 0;
             gatePoint = shortFinal;
             waypoint = shortFinal + runwayForward * 3_000.0;
-            approachSpeedMps = 93.0;
+            approachSpeedMps = CircuitFinalSpeedMps;
             circuitLeg = "SHORT_FINAL";
         }
 
@@ -349,21 +403,19 @@ public sealed class RapierMissionDirector {
             recoveryMinimumGamma,
             0.06);
 
-        double targetKtas = approachSpeedMps * 1.94384;
+        double targetKtas = circuitLeg switch {
+            "INITIAL" or "BREAK" or "DOWNWIND" => CircuitPatternKtas,
+            "BASE" => CircuitBaseKtas,
+            "SHORT_FINAL" => CircuitFinalKtas,
+            "WIRE_FINAL" => CircuitWireKtas,
+            _ => Math.Round(approachSpeedMps * 1.94384)
+        };
         double currentKtas = trueAirspeedMps * 1.94384;
         string speedCall = currentKtas > targetKtas + 25.0 ? "SLOW"
             : currentKtas < targetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
-        cue = circuitLeg switch {
-            "INITIAL" => $"CIRCUITS · INITIAL · {targetKtas:F0} KT · {speedCall} · HOOK DOWN · BREAK LEFT ABM",
-            "BREAK" => $"CIRCUITS · BREAK · ~45° · {targetKtas:F0} KT · {speedCall} · HOOK DOWN",
-            "DOWNWIND" => $"CIRCUITS · DOWNWIND · {targetKtas:F0} KT · {speedCall} · HOOK DOWN",
-            "BASE" => $"CIRCUITS · BASE · TURN TO FINAL · {targetKtas:F0} KT · {speedCall} · HOOK DOWN",
-            "SHORT_FINAL" => $"CIRCUITS · SHORT FINAL · {targetKtas:F0} KT · {speedCall} · "
-                + "GO AROUND BEFORE GEAR · HOOK DOWN",
-            "WIRE_FINAL" => $"CIRCUITS · WIRE FINAL · BOX {recoveryGate}/4 · {targetKtas:F0} KT · "
-                + $"{speedCall} · ACCEPT WIRE · HOOK DOWN",
-            _ => $"CIRCUITS · {circuitLeg} · {targetKtas:F0} KT · {speedCall}"
-        };
+        double targetAltFt = gatePoint.Y * FeetPerMetre;
+        cue = PatternLegConfigCue(
+            circuitLeg, targetKtas, targetAltFt, speedCall, recoveryGate);
     }
 
     /// <summary>
@@ -567,46 +619,70 @@ public sealed class RapierMissionDirector {
 
         switch (_phase) {
             case RapierMissionPhase.Launch:
-                targetMach = 0.9;
-                targetAltitudeFt = patternOnly
-                    ? (home.Y + CircuitShelfHeightM) * FeetPerMetre
-                    : 56_000.0;
-                targetGamma = player.Gamma;
-                throttle = 1.55;
-                waypoint = patternOnly
-                    ? new Vec3D(home.X, home.Y + CircuitShelfHeightM, home.Z)
-                    : contact.Position;
                 if (patternOnly) {
+                    // Ski-jump stroke still needs punch, but never author an Intercept M0.9 dash.
+                    double patternMach = CircuitPatternSpeedMps
+                        / Math.Max(1.0, air.SpeedOfSoundMps);
+                    targetMach = Math.Min(0.48, patternMach);
+                    targetAltitudeFt = (home.Y + CircuitShelfHeightM) * FeetPerMetre;
+                    targetGamma = player.Gamma;
+                    throttle = 1.20;
+                    Vec3D departBox = PatternInitialPoint(home, recoveryInitial);
+                    waypoint = departBox;
+                    guidanceWaypoint = departBox;
                     circuitLeg = "DEPART";
-                    cue = "CIRCUITS · DEPART · LAUNCH · TRACK OWNS THE AIRCRAFT";
+                    fdTargetKtas = CircuitPatternKtas;
+                    cue = PatternLegConfigCue(
+                        "DEPART", fdTargetKtas, targetAltitudeFt, "LAUNCH");
                 } else {
+                    targetMach = 0.9;
+                    targetAltitudeFt = 56_000.0;
+                    targetGamma = player.Gamma;
+                    throttle = 1.55;
+                    waypoint = contact.Position;
                     cue = "AUTO LAUNCH · TRACK OWNS THE AIRCRAFT";
                 }
                 break;
             case RapierMissionPhase.Climb:
-                targetMach = patternOnly ? 0.55 : 0.9;
-                targetAltitudeFt = patternOnly
-                    ? (home.Y + CircuitShelfHeightM) * FeetPerMetre
-                    : 56_000.0;
-                targetGamma = AltitudeCaptureGamma(
-                    patternOnly ? home.Y + CircuitShelfHeightM : ClimbTopM,
-                    player,
-                    trueAirspeedMps,
-                    captureSeconds: patternOnly ? 45.0 : 60.0,
-                    minimumGamma: -0.02,
-                    maximumGamma: patternOnly ? 0.18 : 0.27);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                    trimLever: patternOnly ? 0.85 : 0.62, gain: 1.10);
-                waypoint = patternOnly
-                    ? new Vec3D(home.X, home.Y + CircuitShelfHeightM, home.Z)
-                    : contact.Position;
                 if (patternOnly) {
-                    double aglFt = Math.Max(0.0, (player.Position.Y - home.Y) * FeetPerMetre);
-                    double patternAglFt = CircuitShelfHeightM * FeetPerMetre;
+                    double patternMach = CircuitPatternSpeedMps
+                        / Math.Max(1.0, air.SpeedOfSoundMps);
+                    targetMach = Math.Min(0.48, patternMach);
+                    targetAltitudeFt = (home.Y + CircuitShelfHeightM) * FeetPerMetre;
+                    targetGamma = AltitudeCaptureGamma(
+                        home.Y + CircuitShelfHeightM,
+                        player,
+                        trueAirspeedMps,
+                        captureSeconds: 45.0,
+                        minimumGamma: -0.02,
+                        maximumGamma: 0.18);
+                    // Speed-error throttle in the pattern band — not ThrottleForMach chasing a dash.
+                    throttle = Math.Clamp(
+                        0.58 + (CircuitPatternSpeedMps - trueAirspeedMps) * 0.010,
+                        0.20, 0.95);
+                    Vec3D departBox = PatternInitialPoint(home, recoveryInitial);
+                    waypoint = departBox;
+                    guidanceWaypoint = departBox;
                     circuitLeg = "DEPART";
-                    cue = $"CIRCUITS · DEPART · CLIMB TO PATTERN · "
-                        + $"{aglFt:F0} FT AGL → {patternAglFt:F0} FT AGL";
+                    fdTargetKtas = CircuitPatternKtas;
+                    double departKtas = trueAirspeedMps * 1.94384;
+                    string departSpeedCall = departKtas > fdTargetKtas + 25.0 ? "SLOW"
+                        : departKtas < fdTargetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
+                    cue = PatternLegConfigCue(
+                        "DEPART", fdTargetKtas, targetAltitudeFt, departSpeedCall);
                 } else {
+                    targetMach = 0.9;
+                    targetAltitudeFt = 56_000.0;
+                    targetGamma = AltitudeCaptureGamma(
+                        ClimbTopM,
+                        player,
+                        trueAirspeedMps,
+                        captureSeconds: 60.0,
+                        minimumGamma: -0.02,
+                        maximumGamma: 0.27);
+                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                        trimLever: 0.62, gain: 1.10);
+                    waypoint = contact.Position;
                     cue = $"AUTO CLIMB · HOLD M0.90 · M{mach:F2} · "
                         + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL560";
                 }
@@ -798,7 +874,16 @@ public sealed class RapierMissionDirector {
                             + (patternSpeedMps - trueAirspeedMps) * 0.012,
                         0.0, patternSpeedMps > 140.0 ? 1.15 : 0.72);
                     targetAltitudeFt = patternGate.Y * FeetPerMetre;
-                    fdTargetKtas = patternSpeedMps * 1.94384;
+                    fdTargetKtas = circuitLeg switch {
+                        "INITIAL" or "BREAK" or "DOWNWIND" => CircuitPatternKtas,
+                        "BASE" => CircuitBaseKtas,
+                        "SHORT_FINAL" => CircuitFinalKtas,
+                        "WIRE_FINAL" => CircuitWireKtas,
+                        _ => patternSpeedMps * 1.94384
+                    };
+                    // Authored Mach stays in the pattern band so automation never chases Intercept energy.
+                    targetMach = Math.Min(0.48,
+                        patternSpeedMps / Math.Max(1.0, air.SpeedOfSoundMps));
                     break;
                 }
                 Vec3D runwayForwardRaw = new(
@@ -998,9 +1083,9 @@ public sealed class RapierMissionDirector {
         }
 
         double maximumBankDegrees = _phase switch {
-            RapierMissionPhase.Launch => 12.0,
+            RapierMissionPhase.Launch => patternOnly ? 25.0 : 12.0,
             RapierMissionPhase.Climb or RapierMissionPhase.Accelerate
-                or RapierMissionPhase.RamClimb => 15.0,
+                or RapierMissionPhase.RamClimb => patternOnly ? 30.0 : 15.0,
             RapierMissionPhase.ZoomPull => 12.0,
             RapierMissionPhase.ZoomCoast or RapierMissionPhase.ReenterAlign => 20.0,
             RapierMissionPhase.DipRelight => 15.0,

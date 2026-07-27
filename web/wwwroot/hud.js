@@ -2377,6 +2377,8 @@ class CombatHud {
   /// Always-on combined-cycle lesson + skin callout for Rapier. Lives left of the Limits
   /// panel so skin temperature is readable without opening Nav/Systems.
   drawRapierCycleTeach(state) {
+    // Circuits is overhead-pattern school — no Intercept TBCC / skin teach panel.
+    if (state?.rapier_pattern_only === true) return;
     const teach = rapierCycleTeachPresentation(state);
     if (!teach) return;
     const ctx = this.ctx;
