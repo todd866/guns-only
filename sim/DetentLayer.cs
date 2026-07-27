@@ -31,6 +31,7 @@ public sealed class DetentLayer {
     int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
     bool _bankTargetInitialized;
+    bool _bankCaptureArmed;
     const double Tau = 0.07, StickyStepG = 0.5;
     readonly HashSet<int> _sampledRollRightPresses = new();
     readonly HashSet<int> _sampledRollLeftPresses = new();
@@ -416,9 +417,29 @@ public sealed class DetentLayer {
             // While the pilot is rolling, let the capture target follow the aircraft. On the
             // first centred-stick tick it remains at the last deliberately set attitude, giving
             // the FBW attitude term a real reference instead of the old rate-only slow drift.
-            if (p.RollHoldAttitudeGainNmRad <= 0.0
-                || System.Math.Abs(requestedRollControl) >= p.RollHoldDeadband)
+            bool rollCommanded = System.Math.Abs(requestedRollControl) >= p.RollHoldDeadband;
+            if (p.RollHoldAttitudeGainNmRad <= 0.0 || rollCommanded) {
+                // While rolling, the capture follows the aircraft.
                 _bankTarget = bodyBank;
+                _bankCaptureArmed = true;
+            } else if (_bankCaptureArmed) {
+                // RELEASE EDGE. Capture where the aircraft will SETTLE, not where it is.
+                //
+                // A fast FBW roll carries real rate at the moment the stick centres, and the roll
+                // takes time to stop. Freezing the instantaneous bank therefore captured a target
+                // the aircraft had not reached yet, so it kept rolling toward it after release —
+                // the reported "it keeps rolling". Subtracting the rate the damper still has to
+                // wash out captures the attitude the pilot actually asked for.
+                //
+                // The lead is how long the hold needs to wash the rate out: roll authority against
+                // the rate gain gives the damper's own time constant. Bounded so a weak airframe
+                // cannot ask for an absurd lead, and so a hard roll cannot overshoot wildly.
+                double lead = System.Math.Clamp(
+                    p.RollMomentMaxNm / System.Math.Max(1.0, p.RollHoldRateGainNms) * 0.5,
+                    0.0, 0.35);
+                _bankTarget = bodyBank + s.BodyRates.P * lead;
+                _bankCaptureArmed = false;
+            }
         } else {
             // Compatibility for synthetic command-only callers which do not carry BodyAttitude.
             // Keep their legacy integration semantics; flown AircraftSim states use the rate law above.

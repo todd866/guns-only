@@ -806,9 +806,11 @@
       touch-action: manipulation;
     }
 
-    #test-flight-console, #nav-console[hidden] { display: none; }
+    #test-flight-console[hidden] { display: none; }
+    #nav-console[hidden] { display: none; }
 
-    #test-flight-console, #nav-console > summary {
+    #test-flight-console > summary,
+    #nav-console > summary {
       display: flex;
       min-height: 39px;
       align-items: center;
@@ -821,7 +823,8 @@
       list-style: none;
     }
 
-    #test-flight-console, #nav-console > summary::-webkit-details-marker { display: none; }
+    #test-flight-console > summary::-webkit-details-marker,
+    #nav-console > summary::-webkit-details-marker { display: none; }
 
     #test-flight-console, #nav-console > summary:focus-visible {
       outline: 2px solid #8ef5e7;

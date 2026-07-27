@@ -83,7 +83,7 @@ test("engine presentation makes the combined-cycle state and actual thrust expli
   });
   assert.equal(
     cue.text,
-    "PROPULSION MACH-4 RAM · 100 KN · LEVER 1.55 · M3.64 · 2,174 KTAS · T0 612°C",
+    "PROPULSION RAM ONLY · 100 KN · LEVER 1.55 · M3.64 · 2,174 KTAS · T0 612°C",
   );
   assert.equal(cue.level, "ram");
   assert.deepEqual(cue.channels, [
