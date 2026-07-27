@@ -29,5 +29,6 @@ testrig/scenarios/_replay.json
 recordings/
 .worktrees/
 
-# Circuit OFT run tapes (agent-facing). Keep analysis/circuit-oft/README.md tracked.
+# Circuit / intercept OFT run tapes (agent-facing). Keep analysis/*/README.md tracked.
 analysis/circuit-oft/*/
+analysis/intercept-oft/*/
