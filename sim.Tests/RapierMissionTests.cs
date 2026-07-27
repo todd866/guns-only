@@ -54,7 +54,9 @@ public class RapierMissionTests {
         double rangeAtMach4CorridorM = double.NaN;
         var phaseTimeline = new List<string>();
         RapierMissionPhase lastPhase = RapierMissionPhase.Unavailable;
-        int maximumTicks = checked((int)(12 * 60 * AircraftSim.TickHz));
+        // Eastern outbound (west) is the same energy ladder as the old north route, but the
+        // asymptotic FL700 capture can burn the last tens of seconds of a 12-minute budget.
+        int maximumTicks = checked((int)(15 * 60 * AircraftSim.TickHz));
         for (int tick = 0; tick < maximumTicks; tick++) {
             session.StepFixed();
             double mach = session.Player.AirspeedMps
