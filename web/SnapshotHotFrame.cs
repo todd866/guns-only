@@ -127,6 +127,8 @@ internal static class SnapshotHotFrame {
         Num("rapier_ramjet_fuel_ppm", 2);
         Num("rapier_stagnation_temp_c", 0);
         Num("rapier_thermal_margin_c", 0);
+        Num("player_gross_lb", 0);
+        Num("rapier_intercept_eti_min", 1);
         Num("px", 3); Num("py", 3); Num("pz", 3);
         // World-frame ground velocity: the HUD projects the flight-path marker (FPV) from this
         // exact vector every frame, so it must ride the hot path (Build 64 reconciliation).
@@ -522,8 +524,24 @@ internal static class SnapshotHotFrame {
             trueAirspeedMps, playerPosition.Y, atmosphere);
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
         double rapierStagnationTempC =
-            atmosphericState.TemperatureK * (1.0 + 0.2 * mach * mach) - 273.15;
-        const double RapierThermalLimitC = 900.0;
+            AirData.SkinTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
+        // The airframe's real limit, matching FlightModel.RapierPublicDataSurrogate's
+        // SkinTemperatureLimitK of 593.15 K. It was 900 C, which belonged to the Mach-4 engine and
+        // told the pilot they had 600 C of margin they do not have.
+        const double RapierThermalLimitC = 320.0;
+        // Minutes to the contact at present closure; negative means "do not show". Inside 20 km
+        // the geometry is a fight rather than a transit and the number churns uselessly.
+        double interceptEtiMinutes = -1.0;
+        {
+            Vec3D etiDelta = session.Bandit.State.Position - session.Player.State.Position;
+            double etiRangeM = etiDelta.Length;
+            if (etiRangeM >= 20_000.0) {
+                Vec3D etiRelative = session.Player.State.VelocityVector()
+                    - session.Bandit.State.VelocityVector();
+                double etiClosure = etiRelative.Dot(etiDelta) / Math.Max(1.0, etiRangeM);
+                if (etiClosure > 1.0) interceptEtiMinutes = etiRangeM / etiClosure / 60.0;
+            }
+        }
         Vec3D localWindVelocity = groundVelocity - airVelocity;
         CloudSample localCloud = (session.Weather?.Clouds ?? ClearCloudField.Instance)
             .Sample(playerPosition, simTimeMs / 1000.0);
@@ -621,6 +639,8 @@ internal static class SnapshotHotFrame {
         w.Num("rapier_stagnation_temp_c", rapierStagnationTempC, 0);
         w.Num("rapier_thermal_margin_c",
             RapierThermalLimitC - rapierStagnationTempC, 0);
+        w.Num("player_gross_lb", session.Player.State.Mass * 2.20462262, 0);
+        w.Num("rapier_intercept_eti_min", interceptEtiMinutes, 1);
         w.Num("px", playerPosition.X, 3); w.Num("py", playerPosition.Y, 3); w.Num("pz", playerPosition.Z, 3);
         w.Num("vx", groundVelocity.X, 3); w.Num("vy", groundVelocity.Y, 3); w.Num("vz", groundVelocity.Z, 3);
         w.Num("pfx", pf.X, 5); w.Num("pfy", pf.Y, 5); w.Num("pfz", pf.Z, 5);

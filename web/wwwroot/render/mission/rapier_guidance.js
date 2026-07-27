@@ -37,8 +37,27 @@ export function rapierGuidancePresentation(state) {
   const etaMinutes = hasHome
     ? Math.max(0, Math.round(homeRangeNm / trueAirspeedKts * 60))
     : 0;
+  // CAN I GET HOME? The cue gave bearing, range and ETA but never answered the only question that
+  // matters on the egress. A pilot at 637 lb with 234 NM to run and 14,185 PPH flowing is already
+  // out of options and nothing on the HUD said so. Fuel required is ETA at the CURRENT flow, which
+  // is the honest estimate: it prices the speed being flown right now, so slowing down visibly
+  // improves it.
+  const fuelLb = Math.max(0, Number(state.fuel_lb) || 0);
+  const fuelFlowPph = Math.max(0, Number(state.fuel_flow_pph) || 0);
+  const fuelToHomeLb = hasHome && fuelFlowPph > 0
+    ? fuelFlowPph * (etaMinutes / 60) : Number.NaN;
+  const fuelMarginLb = fuelLb - fuelToHomeLb;
+  // Ten per cent of the requirement is the reserve line: inside it, a headwind or one extra turn
+  // costs the aircraft, so it reads as marginal rather than safe.
+  const fuelVerdict = !Number.isFinite(fuelToHomeLb) ? ""
+    : fuelMarginLb < 0 ? `SHORT ${Math.round(-fuelMarginLb)} LB`
+      : fuelMarginLb < fuelToHomeLb * 0.10 ? `MARGINAL +${Math.round(fuelMarginLb)} LB`
+        : `OK +${Math.round(fuelMarginLb)} LB`;
+  const fuelCue = Number.isFinite(fuelToHomeLb)
+    ? ` · NEED ${Math.round(fuelToHomeLb)} LB · HAVE ${Math.round(fuelLb)} LB · ${fuelVerdict}`
+    : "";
   const detail = hasHome
-    ? `HOME ${String(Math.round((homeBearingDeg % 360 + 360) % 360)).padStart(3, "0")}° · ${homeRangeNm.toFixed(0)} NM · ETA ${etaMinutes} MIN · ${turn} · ${active ? "AUTOMATION HAS CONTROL" : "FOLLOW HOME CUE · P ENGAGES AUTO"}`
+    ? `HOME ${String(Math.round((homeBearingDeg % 360 + 360) % 360)).padStart(3, "0")}° · ${homeRangeNm.toFixed(0)} NM · ETA ${etaMinutes} MIN · ${turn}${fuelCue} · ${active ? "AUTOMATION HAS CONTROL" : "FOLLOW HOME CUE · P ENGAGES AUTO"}`
     : "";
   return Object.freeze({
     text: `${authority} · ${phaseText}${weapon} · P TOGGLE AUTO`,

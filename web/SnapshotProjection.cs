@@ -166,8 +166,11 @@ internal static class SnapshotProjection {
             trueAirspeedMps, playerPosition.Y, atmosphere);
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
         double rapierStagnationTempC =
-            atmosphericState.TemperatureK * (1.0 + 0.2 * mach * mach) - 273.15;
-        const double RapierThermalLimitC = 900.0;
+            AirData.SkinTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
+        // The airframe's real limit, matching FlightModel.RapierPublicDataSurrogate's
+        // SkinTemperatureLimitK of 593.15 K. It was 900 C, which belonged to the Mach-4 engine and
+        // told the pilot they had 600 C of margin they do not have.
+        const double RapierThermalLimitC = 320.0;
         Vec3D localWindVelocity = groundVelocity - airVelocity;
         CloudSample localCloud = (Session.Weather?.Clouds ?? ClearCloudField.Instance)
             .Sample(playerPosition, _simTimeMs / 1000.0);
@@ -328,6 +331,11 @@ internal static class SnapshotProjection {
             + $"\"rapier_ramjet_fuel_ppm\":{Session.RapierRamjetFuelFlowLbPerMinute:F2},"
             + $"\"rapier_stagnation_temp_c\":{rapierStagnationTempC:F0},"
             + $"\"rapier_thermal_margin_c\":{RapierThermalLimitC - rapierStagnationTempC:F0},"
+            // Gross weight in pounds, and time-to-intercept in minutes. ETI is only meaningful on a
+            // long-range run-in: inside the merge the number churns every tick and means nothing, so
+            // it is published as -1 below 20 km or with no closure, and the HUD hides it.
+            + $"\"player_gross_lb\":{Session.Player.State.Mass * 2.20462262:F0},"
+            + $"\"rapier_intercept_eti_min\":{RapierInterceptEtiMinutes:F1},"
             + $"\"ready\":{(ready ? "true" : "false")},\"paused\":{(paused ? "true" : "false")},"
             + $"\"finished\":{(finished ? "true" : "false")},\"session_phase\":\"{sessionPhase}\","
             + $"\"sortie_outcome\":\"{SortieOutcomeToken(Session.Outcome)}\","
@@ -1094,6 +1102,21 @@ internal static class SnapshotProjection {
     static double TerrainPlacementNorthM() => Environment.MultiplayerTerrainShared
         ? -WorldOriginNorthM
         : -Environment.TerrainSourceAnchorNorthM;
+
+    /// Minutes to the contact at present closure. Negative when it should not be shown: inside
+    /// 20 km the geometry is a fight rather than a transit, and a receding contact has no ETI.
+    static double RapierInterceptEtiMinutes {
+        get {
+            Vec3D delta = Session.Bandit.State.Position - Session.Player.State.Position;
+            double rangeM = delta.Length;
+            if (rangeM < 20_000.0) return -1.0;
+            Vec3D relativeVelocity =
+                Session.Player.State.VelocityVector() - Session.Bandit.State.VelocityVector();
+            double closureMps = relativeVelocity.Dot(delta) / System.Math.Max(1.0, rangeM);
+            if (closureMps <= 1.0) return -1.0;
+            return rangeM / closureMps / 60.0;
+        }
+    }
 
     static string CombatRoleToken(CombatRole role) => role switch {
         CombatRole.Player => "PLAYER",
