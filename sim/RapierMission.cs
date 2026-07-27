@@ -409,18 +409,27 @@ public sealed class RapierMissionDirector {
                 targetGamma = player.Gamma;
                 throttle = 0.0; // ballistic — fuel truth is the lob's point
                 waypoint = contact.Position;
-                cue = $"ZOOM COAST · {jobToken} · BALLISTIC · RCS · "
-                    + $"NOSE→V {noseOnVelocityErrorDeg:F0}° · GAS ATTITUDE";
+                if (job == RapierJobKind.SwarmLob
+                    && player.VelocityVector().Y < 40.0
+                    && player.Position.Y > 28_000.0) {
+                    cue = $"SWARM LOB · APEX WINDOW · F RELEASES SWARM · "
+                        + $"NOSE→V {noseOnVelocityErrorDeg:F0}° · RCS";
+                } else {
+                    cue = $"ZOOM COAST · {jobToken} · BALLISTIC · RCS · "
+                        + $"NOSE→V {noseOnVelocityErrorDeg:F0}° · ALIGN";
+                }
                 break;
             case RapierMissionPhase.ReenterAlign:
                 targetMach = 0.0;
                 targetAltitudeFt = player.Position.Y * FeetPerMetre;
-                // Command gamma toward the velocity vector (zero α): hold current path angle.
+                // Hold path; FD cue is nose-on-V error — pilot/RCS closes it.
                 targetGamma = player.Gamma;
                 throttle = 0.0;
                 waypoint = contact.Position;
-                cue = $"REENTER · {jobToken} · ALIGN NOSE ON V · "
-                    + $"ERR {noseOnVelocityErrorDeg:F0}° · RCS · THEN DIP";
+                cue = noseOnVelocityErrorDeg <= 8.0
+                    ? $"REENTER · {jobToken} · ON V · HOLD · THEN DIP"
+                    : $"REENTER · {jobToken} · ALIGN NOSE ON V · "
+                        + $"ERR {noseOnVelocityErrorDeg:F0}° · RCS";
                 break;
             case RapierMissionPhase.DipRelight:
                 targetMach = 3.2;
@@ -451,16 +460,53 @@ public sealed class RapierMissionDirector {
                     + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · M{skinMachLimit:F1} / FL700";
                 break;
             case RapierMissionPhase.Attack:
-                targetMach = 3.2;
-                targetAltitudeFt = (contact.Position.Y + 600.0) * FeetPerMetre;
-                targetGamma = AltitudeCaptureGamma(contact.Position.Y + 600.0,
-                    player, trueAirspeedMps, captureSeconds: 75.0,
-                    minimumGamma: -0.075, maximumGamma: 0.050);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                    trimLever: 0.96, gain: 0.40, maximumLever: 1.35);
                 waypoint = contact.Position;
-                cue = $"FORMATION IN RANGE · {liveOpponentCount} CONTACTS · "
-                    + "PRESS F TO RELEASE GUN-DRONE SWARM";
+                if (job == RapierJobKind.Transport) {
+                    // Dive onto a low transport after the lob — commit altitude for the pass.
+                    targetMach = 2.4;
+                    targetAltitudeFt = Math.Max(
+                        (contact.Position.Y + 200.0) * FeetPerMetre, 8_000.0);
+                    targetGamma = AltitudeCaptureGamma(contact.Position.Y + 200.0,
+                        player, trueAirspeedMps, captureSeconds: 50.0,
+                        minimumGamma: -0.18, maximumGamma: 0.020);
+                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                        trimLever: 0.90, gain: 0.40, maximumLever: 1.35);
+                    cue = $"TRANSPORT DIVE · {contactRangeM / 1000.0:F0} KM · "
+                        + "ONE PASS · GUNS · THEN ESCAPE";
+                } else if (job == RapierJobKind.SwarmLob) {
+                    targetMach = 3.0;
+                    targetAltitudeFt = (contact.Position.Y + 800.0) * FeetPerMetre;
+                    targetGamma = AltitudeCaptureGamma(contact.Position.Y + 800.0,
+                        player, trueAirspeedMps, captureSeconds: 70.0,
+                        minimumGamma: -0.080, maximumGamma: 0.040);
+                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                        trimLever: 0.96, gain: 0.40, maximumLever: 1.35);
+                    cue = $"SWARM RELEASE · {liveOpponentCount} CONTACTS · "
+                        + "PRESS F · HIGH PASS · DO NOT FOLLOW DOWN";
+                } else if (job == RapierJobKind.Balloon) {
+                    targetMach = 2.8;
+                    targetAltitudeFt = (contact.Position.Y + 400.0) * FeetPerMetre;
+                    targetGamma = AltitudeCaptureGamma(contact.Position.Y + 400.0,
+                        player, trueAirspeedMps, captureSeconds: 60.0,
+                        minimumGamma: -0.090, maximumGamma: 0.040);
+                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                        trimLever: 0.92, gain: 0.40, maximumLever: 1.30);
+                    cue = $"BALLOON · {contactRangeM / 1000.0:F0} KM · "
+                        + "SOFT TARGET · GUNS · ONE SLASH";
+                } else {
+                    targetMach = 3.2;
+                    targetAltitudeFt = (contact.Position.Y + 600.0) * FeetPerMetre;
+                    targetGamma = AltitudeCaptureGamma(contact.Position.Y + 600.0,
+                        player, trueAirspeedMps, captureSeconds: 75.0,
+                        minimumGamma: -0.075, maximumGamma: 0.050);
+                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                        trimLever: 0.96, gain: 0.40, maximumLever: 1.35);
+                    cue = job == RapierJobKind.Awacs
+                        ? $"AWACS · {liveOpponentCount} CONTACTS · "
+                            + "PRESS F TO RELEASE GUN-DRONE SWARM · PURSUERS COMING"
+                        : $"CONTACT IN RANGE · {liveOpponentCount} CONTACTS · "
+                            + "PRESS F TO RELEASE GUN-DRONE SWARM";
+                }
                 break;
             case RapierMissionPhase.Escape:
                 targetMach = 4.0;

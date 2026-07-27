@@ -73,4 +73,30 @@ public class RapierZoomLobDirectorTests {
         Assert.True(a.ScriptedIntercept.ZoomLobProfile);
         Assert.StartsWith("Go fly the Rapier", a.Name);
     }
+
+    [Fact]
+    public void TransportAttackCueIsDivePass() {
+        var director = new RapierMissionDirector();
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(8_000.0);
+        double speed = 2.2 * air.SpeedOfSoundMps;
+        AircraftState player = StateAt(8_000.0, speed, -0.1);
+        AircraftState contact = StateAt(2_200.0, 145.0);
+        contact = contact with { Position = new Vec3D(0.0, 2_200.0, 20_000.0) };
+        RapierMissionGuidance g = default;
+        for (int i = 0; i < 6; i++) {
+            g = director.Step(
+                player, contact, speed, StandardAtmosphere1976.Instance,
+                FlightModel.RapierPublicDataSurrogate,
+                catapultActive: false, liveOpponentCount: 1,
+                pursuitActive: false, pursuerCount: 0, pursuitRangeM: 0.0,
+                home: new Vec3D(0.0, 120.0, -50_000.0),
+                recoveryInitial: new Vec3D(0.0, 1_120.0, -16_000.0),
+                recovered: false, patternOnly: false,
+                // Job cues apply on Attack regardless of whether the lob already ran.
+                zoomLobProfile: false,
+                job: RapierJobKind.Transport, noseOnVelocityErrorDeg: 4.0);
+        }
+        Assert.Equal(RapierMissionPhase.Attack, g.Phase);
+        Assert.Contains("TRANSPORT DIVE", g.Cue);
+    }
 }

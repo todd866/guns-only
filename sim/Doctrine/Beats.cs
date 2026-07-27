@@ -901,10 +901,12 @@ public static class Beats {
                 new Vec3D(8_000, 9_144, 380_000), 130.0, 0.0, Math.PI, 0.0,
                 FlightModel.AwacsTarget.MassKg),
             RapierJobKind.Transport => new AircraftState(
-                new Vec3D(6_000, 3_500, 360_000), 160.0, 0.0, Math.PI, 0.0,
+                // Low and slow after the lob — the dive is the job.
+                new Vec3D(4_000, 2_200, 340_000), 145.0, 0.0, Math.PI, 0.0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             RapierJobKind.SwarmLob => new AircraftState(
-                new Vec3D(10_000, 16_000, 400_000), 180.0, 0.0, Math.PI, 0.0,
+                // High formation: apex release window, then leave.
+                new Vec3D(10_000, 18_500, 390_000), 200.0, 0.0, Math.PI, 0.0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             _ => sortie.Bandit
         };

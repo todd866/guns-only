@@ -94,3 +94,9 @@ Publish (names indicative):
 3. Go Fly beat deals one of four jobs; AWACS egress can activate pursuers.
 4. Director/FD tests green; RCS unit tests green; `./bin/check` or documented subset green.
 5. Design lives at this path; implementation follows.
+
+## Follow-ups landed
+
+- Fuel OFT: `RapierLobFuelOftTests` — ballistic coast beats FL700 cruise on lb/100 nm.
+- FD: `rapier_nose_on_v_err_deg` drives quiet `NOSE→V` / `ON V` on coast/reenter.
+- Job attack geometry: Transport dive, Swarm apex/high pass, Balloon slash, AWACS swarm + pursuers.

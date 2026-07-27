@@ -154,6 +154,35 @@ test("flight director exposes bank/altitude/speed bugs from snapshot targets", (
   assert.equal(fd.targetKtas, 450);
 });
 
+test("zoom coast FD publishes nose-on-V call without speed bug", () => {
+  const fd = rapierFlightDirectorPresentation({
+    rapier_mission_available: true,
+    rapier_zoom_lob: true,
+    rapier_mission_phase: 6,
+    rapier_nose_on_v_err_deg: 22,
+    rapier_fd_bank_deg: 0,
+    bank_deg: 0,
+  });
+  assert.equal(fd.noseCall, "ALIGN NOSE→V");
+  assert.equal(fd.boxLabel, "NOSE→V");
+  assert.equal(fd.noseOnVErrorDeg, 22);
+});
+
+test("coast mode line carries nose→V align cue", () => {
+  const cue = rapierGuidancePresentation({
+    rapier_mission_available: true,
+    rapier_zoom_lob: true,
+    rapier_automation_enabled: true,
+    rapier_automation_active: false,
+    rapier_mission_phase: 7,
+    rapier_nose_on_v_err_deg: 18,
+    rapier_stagnation_temp_c: 90,
+    rapier_thermal_margin_c: 1110,
+  });
+  assert.match(cue.text, /NOSE→V 18/);
+  assert.equal(cue.boxLabel, "NOSE→V");
+});
+
 test("Circuits mode line names the pattern leg without Intercept attack chrome", () => {
   const cue = rapierGuidancePresentation({
     rapier_mission_available: true,

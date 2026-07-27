@@ -115,8 +115,14 @@ export function rapierGuidancePresentation(state) {
     phaseText = `${phaseText} · GATE ${gate}/4`;
   }
 
+  const job = typeof state.rapier_job === "string" ? state.rapier_job : "";
+  const noseErr = finiteNumber(state.rapier_nose_on_v_err_deg);
   const weapon = phase === PHASE_ATTACK && !patternOnly
-    ? ` · F RELEASES SWARM · ${drones}`
+    ? (job === "TRANSPORT"
+      ? " · GUNS · ONE PASS"
+      : job === "BALLOON"
+        ? " · GUNS · ONE SLASH"
+        : ` · F RELEASES SWARM · ${drones}`)
     : "";
   let patternAction = "";
   if (patternOnly) {
@@ -125,6 +131,9 @@ export function rapierGuidancePresentation(state) {
     else if (leg === "BASE" || leg === "DOWNWIND") patternAction = " · HOOK DOWN";
     else if (leg === "DEPART") patternAction = " · TO PATTERN";
   }
+  const coastAlign = !patternOnly && (phase === 6 || phase === 7) && noseErr !== null
+    ? (noseErr <= 8 ? " · ON V" : ` · NOSE→V ${Math.round(noseErr)}°`)
+    : "";
   const authority = active ? "AUTO" : enabled ? "AUTO STBY" : "PILOT";
   const skin = skinFragment(state);
   const commanded = finiteNumber(state.rapier_commanded_mach);
@@ -143,8 +152,8 @@ export function rapierGuidancePresentation(state) {
     level = "attack";
   } else {
     text = skin
-      ? `${authority} · ${phaseText}${patternAction}${weapon}${machClampNote} · ${skin.text} · P TOGGLE AUTO`
-      : `${authority} · ${phaseText}${patternAction}${weapon}${machClampNote} · P TOGGLE AUTO`;
+      ? `${authority} · ${phaseText}${patternAction}${coastAlign}${weapon}${machClampNote} · ${skin.text} · P TOGGLE AUTO`
+      : `${authority} · ${phaseText}${patternAction}${coastAlign}${weapon}${machClampNote} · P TOGGLE AUTO`;
     level = skin?.level === "caution"
       ? "active"
       : patternOnly ? (active ? "active" : "manual")
@@ -159,18 +168,27 @@ export function rapierGuidancePresentation(state) {
     circuitLeg: leg,
     boxLabel: patternOnly
       ? (legLabel || "")
-      : (phase === PHASE_RECOVERY && gate > 0 ? `GATE ${gate}/4` : ""),
+      : (phase === PHASE_RECOVERY && gate > 0 ? `GATE ${gate}/4`
+        : (!patternOnly && (phase === 6 || phase === 7)
+          ? (noseErr !== null && noseErr <= 8 ? "ON V" : "NOSE→V")
+          : "")),
     skinC: finiteNumber(state.rapier_stagnation_temp_c),
     marginC: finiteNumber(state.rapier_thermal_margin_c),
   });
 }
 
-/// Circuits / recovery flight-director bugs from kernel-published targets.
+/// Circuits / recovery / zoom-coast flight-director bugs from kernel-published targets.
 export function rapierFlightDirectorPresentation(state) {
   if (state?.rapier_mission_available !== true) return null;
   const targetKtas = finiteNumber(state.rapier_fd_target_ktas) ?? 0;
   const targetAltFt = finiteNumber(state.rapier_target_altitude_ft) ?? 0;
-  if (targetKtas <= 0 && targetAltFt <= 0) return null;
+  const noseErr = finiteNumber(state.rapier_nose_on_v_err_deg);
+  const zoomLob = state.rapier_zoom_lob === true;
+  const phase = Math.floor(Number(state.rapier_mission_phase) || 0);
+  const coastPhase = phase === 6 || phase === 7;
+  if (targetKtas <= 0 && targetAltFt <= 0 && !(zoomLob && coastPhase && noseErr !== null)) {
+    return null;
+  }
   const fdBankDeg = finiteNumber(state.rapier_fd_bank_deg) ?? 0;
   const bankDeg = finiteNumber(state.bank_deg) ?? 0;
   const altFt = finiteNumber(state.alt_ft)
@@ -182,12 +200,19 @@ export function rapierFlightDirectorPresentation(state) {
     speedCall = currentKtas > targetKtas + 25.0 ? "SLOW"
       : currentKtas < targetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
   }
+  let noseCall = "";
+  if (noseErr !== null && (zoomLob || coastPhase)) {
+    noseCall = noseErr <= 8.0 ? "ON V" : "ALIGN NOSE→V";
+  }
   return Object.freeze({
     bankErrorDeg: fdBankDeg - bankDeg,
     altErrorFt: targetAltFt - altFt,
     speedCall,
     targetKtas,
-    boxLabel: circuitLegLabel(circuitLegFromState(state)),
+    noseOnVErrorDeg: noseErr,
+    noseCall,
+    boxLabel: circuitLegLabel(circuitLegFromState(state))
+      || (noseCall === "ON V" ? "ON V" : noseCall === "ALIGN NOSE→V" ? "NOSE→V" : ""),
   });
 }
 
