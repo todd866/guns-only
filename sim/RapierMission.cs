@@ -373,10 +373,33 @@ public sealed class RapierMissionDirector {
                 // same commanded flight path. Schedule the last two gates by actual landing mass
                 // so both the authored low-reserve return and a deliberately lighter recovery
                 // card aim the hook at wire three.
-                const double ReferenceLandingMassKg = 5_700.0;
-                double landingMassGammaCorrection = Math.Clamp(
-                    (ReferenceLandingMassKg - player.Mass) * 0.00000878,
-                    -0.005, 0.001);
+                // Final-gate path angle, measured rather than scheduled.
+                //
+                // This was a mass-scheduled correction against a 5,700 kg reference. Measurement
+                // says the schedule was the problem: the two recoveries this sortie actually
+                // produces arrive at 5,551 kg and 5,646 kg, and BOTH want the same correction of
+                // about +0.00046 rad. A linear mass term cannot give two different masses the same
+                // answer, so it was pushing the lighter arrival roughly 100 m long — which is how
+                // the automation ended up missing the wires entirely once the physically limited
+                // engine made the return burn more fuel.
+                //
+                // Measured sensitivity is about 110 m of hook position per 0.001 rad. Wire three
+                // sits at TouchdownAlongM = -DeckLengthM * 0.2 = -240 m, and rollout sweeps toward
+                // +along, so the hook must touch down just PAST wire three and sweep back onto it:
+                // aiming at exactly -240 m catches wire four. The aim is -242 m.
+                //
+                // If a future recovery card arrives far outside 5,500-5,700 kg, re-measure before
+                // reintroducing a mass term — do not assume the old gain was right.
+                // Fitted to the two recoveries this sortie actually produces:
+                //   5,646 kg wants ~0.00046   (measured: passes, hook inside the wire-three window)
+                //   5,551 kg wants ~0.00042   (measured: 0.00046 lands 3.9 m long onto wire four)
+                // which is a slope of about -4.2e-7 per kg referenced at 5,646 kg. That is a FIT TO
+                // TWO POINTS over a 95 kg range, not a physical law — if a future recovery card
+                // arrives outside roughly 5,500-5,700 kg, re-measure rather than extrapolating.
+                const double FitReferenceMassKg = 5_646.0;
+                double finalGateGammaCorrection = Math.Clamp(
+                    0.00046 - 0.000000421 * (FitReferenceMassKg - player.Mass),
+                    0.00030, 0.00060);
                 // The first squares are capture gates, so permit a high initial arrival to
                 // converge onto the published 3.5-degree line instead of preserving its error all
                 // the way to the strip. The last two gates then tighten to the mass-scheduled
@@ -385,7 +408,7 @@ public sealed class RapierMissionDirector {
                     ? recoveryGate switch {
                         1 => -0.12,
                         2 => -0.09,
-                        _ => -0.06425 + landingMassGammaCorrection
+                        _ => -0.06425 + finalGateGammaCorrection
                     }
                     : -0.16;
                 targetGamma = Math.Clamp(

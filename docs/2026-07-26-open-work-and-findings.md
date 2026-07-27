@@ -213,3 +213,37 @@ because without it the display has nothing real to show. Suggested indications:
 The payoff is that the handover becomes legible on instruments: as the turbine unloads past M1.85
 its share falls, its fuel falls to idle, and lb/nm drops sharply. That single readout teaches the
 whole aircraft without a word of briefing.
+## Recovery as a decision ladder (design, 2026-07-27)
+
+CORRECTION to earlier entries: the "arrestor rated 10.8 MJ against 12-15 MJ needed" figure repeated
+through this document is STALE — it is the carrier gear's number. The Rapier strip currently traps
+successfully at 19.3 MJ. Check `ArrestmentCapabilityProfile.RatedEnergyJ` for the real value before
+quoting it again.
+
+The energy limit IS modelled: `ArrestmentFailureReason.EnergyCapacityExceeded` and
+`EffectiveEnergyCapacityJ = Min(RatedEnergyJ, ForceCurveWorkJ)`. So this builds on real machinery.
+
+Arrival at 162 kt / 5,551 kg is 19.3 MJ. Aerobraking down the strip first sheds it fast (0.35 g):
+
+| roll before wire | speed at wire | energy |
+|---|---|---|
+| 0 m (approach-end) | 162 kt | 19.3 MJ |
+| 400 m | 126 kt | 11.7 MJ |
+| 600 m | 103 kt | 7.8 MJ |
+| 800 m | 74 kt | 4.0 MJ |
+
+Touchdown 240 m in leaves ~960 m usable, so a departure-end engagement after 600 m of aerobraking
+cuts wire energy by 60%. That is real USAF land-arrestment procedure, not an invention, and it lets
+the strip carry a modest cheap arrestor instead of a huge one.
+
+**Build it as a ladder, not alternatives.** Each rung costs something different, which is what makes
+it a mechanic rather than a cutscene:
+
+1. Approach-end engagement — normal, lowest workload, highest arrestor demand
+2. Departure-end — land early, aerobrake, take the wire slow. Costs runway and nerve
+3. Hook release + brake to a stop — over-energy. ~19 MJ into the brakes is a hot stop: fuse plugs,
+   possible fire, brake pack replacement. Belongs in the cost ledger with fatigue life
+4. Eject — no strip left
+
+The pilot chooses with fuel and energy in hand. Pairs with the nav panel (fuel-to-home vs
+fuel-remaining) and the fatigue accounting.

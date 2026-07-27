@@ -190,7 +190,11 @@ public sealed class SimulationSession {
     bool _rapierFormationSweepRequested;
     bool _rapierPursuitActive;
     double _rapierPursuitRangeM = double.PositiveInfinity;
-    bool _timeCompressionPilotEnabled = true;
+    // OFF until the pilot asks for it. Compression that engages by itself takes the aircraft away
+    // without being asked, which reads as the sim jumping rather than the pilot skipping — the
+    // pilot's words were "should be player-driven not auto fast forward". The eligibility rules
+    // still gate it; they now decide whether a REQUEST is honoured, not whether one is made.
+    bool _timeCompressionPilotEnabled;
     int _timeCompressionHostMaximumFactor = 1;
     int _timeCompressionFactor = 1;
     double _timeCompressionAccumulatorSeconds;
