@@ -277,3 +277,46 @@ WHY IT FITS: the beat already targets "an enabler, not a fighter". In a drone wa
 enablers are the ISR and comms satellites. A cheap attritable interceptor flying from a buried,
 dispersed, un-craterable launcher that can reach into LEO is a strategic capability on a $9M
 airframe — and it explains why anyone fields a fleet of these.
+
+## THE primary mission profile: the exo-atmospheric lob (2026-07-27)
+
+The pilot's framing, and it should drive the mission set: *"the key mission parameter is really this
+out-of-atmosphere lob, that's what gives you the efficiency. And it's really hard to chase me."*
+
+Both halves check out.
+
+**Efficiency.** Density at 200 kft is 1/298 of ram cruise, and 1/2,414 at 262 kft. Lifting to 61 km
+costs 0.60 MJ/kg of potential energy while the aircraft already holds 0.88 MJ/kg of kinetic at M4.5,
+so it is trading energy it has for a regime where it stops spending any. A full zoom from M4.5
+apogees at 93-102 km, so arcs are shaped flatter deliberately; each ballistic arc covers 116-180 km
+depending on release angle. String them together — boost, coast above the air, dip back in to
+relight the ram — and that is the Sanger skip-glide profile.
+
+**Un-chaseability, and it is a REGIME CHANGE rather than a speed advantage.** Speed required merely
+to hold altitude at 1 g:
+
+| altitude | speed to sustain |
+|---|---|
+| 70 kft | M0.95 |
+| 131 kft | M3.81 |
+| 164 kft | M7.27 |
+| 200 kft | M13.8 |
+
+Above roughly 40 km nothing air-breathing can sustain flight. The Rapier is ballistic up there and
+so is any pursuer, so interception stops being a fighter problem and becomes a missile problem —
+one that needs the missile already positioned with the right energy. About 131 s per arc is spent
+above 40 km, unreachable throughout. This is the SR-71's actual protection: not raw speed, but an
+altitude where the intercept geometry stops closing.
+
+**What it needs built:**
+- COLD-GAS RCS. At 200 kft dynamic pressure is 1/300, so aero surfaces do nothing. The X-15 carried
+  peroxide thrusters for exactly this. A finite gas budget makes pointing the aircraft a resource.
+- RAM RELIGHT on the way down, so the descent is a decision rather than a formality.
+- The windowless composite pod is a genuine ENABLER here, not a cost compromise: over the top the
+  aircraft is near-zero-g, possibly inverted, with no horizon and dead controls. A pilot at a canopy
+  would be disoriented; one reclined behind sensors with automation flying is not.
+
+**Do not confuse suborbital reach with orbit.** Orbit needs 7,780 m/s horizontal against the
+aircraft's 1,328, and delta-v is exponential. Reaching up and hitting things is proven (ASM-135 from
+an F-15 at M1.22/11 km killed a satellite at 555 km). Putting things IN orbit is a two-stage launch
+vehicle that would outmass the aircraft.
