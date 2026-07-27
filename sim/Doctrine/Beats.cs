@@ -214,15 +214,12 @@ public static class Ukraine2030sTheatre {
     public static MissionEnvironmentContract RapierCorridor { get; } = Shared with {
         LocationId = "location.ukraine.soniachne-rapier-corridor.v1",
         FrameKind = MissionEnvironmentFrameKind.LocalRegionalCorridor,
-        // This is a VISIBILITY knob, not just a streaming one: app.js derives the fog wall from it
-        // (radius * WORLD_EDGE_VISIBILITY_FRACTION). Clamping it to 96 km put the fog at 82 km
-        // while the pilot sat at 21.5 km looking at a 520 km horizon, which is what made the world
-        // read as a small lit patch in murk. A high-altitude sortie has to open the view out, and
-        // the apron - now 560 km - is what fills it. Coarse and flat is fine; empty is not.
-        // Back to a sane STREAMING radius. It no longer controls visibility: korea_terrain.js
-        // exposes visibleWorldRadiusM (the 560 km apron) and app.js caps fog on that instead, so
-        // the view stays open while chunk streaming only covers ground that is actually authored.
-        PreferredTerrainStreamingRadiusM = 40_000.0
+        // Visibility (fog) follows visibleWorldRadiusM / the 560 km apron, not this number.
+        // Streaming must still reach the apron inner edge (±131 km theatre + 4 km transition): a
+        // 40 km disc left a sky hole between the last chunk and the apron, which read as flicker
+        // when the nose swept across that ring. ~145 km covers the theatre with margin while
+        // staying far below the old 420 km "stream the horizon" cost.
+        PreferredTerrainStreamingRadiusM = 145_000.0
     };
 }
 

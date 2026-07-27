@@ -4229,6 +4229,11 @@ class FlightView {
       canvas: sceneCanvas,
       antialias: true,
       powerPreference: "high-performance",
+      // Rapier/Ukraine need this. With near=0.06 and far=680 km a 24-bit linear depth buffer's
+      // world-space LSB is ~400 m at 20 km slant and ~2.5 km at 50 km — larger than the 78 m
+      // horizon apron height — so apron/terrain/sea depth-tie into the shattered flicker on tape.
+      // Log depth costs early-Z; the high-altitude presentation cost of turning it off is worse.
+      logarithmicDepthBuffer: true,
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -4238,7 +4243,8 @@ class FlightView {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // The authored eye point sits inside a 1.5 m-wide cockpit, so the near plane must stay inside
-    // the canopy rails and instrument coaming. The far plane retains the full ocean horizon.
+    // the canopy rails and instrument coaming. Logarithmic depth keeps the ocean/apron horizon
+    // stable across that clip range.
     this.camera = new THREE.PerspectiveCamera(66, 1, 0.06, 680000);
     this.camera.rotation.order = "YXZ";
 
@@ -5312,6 +5318,53 @@ class FlightView {
         void this.terrainPresentation.enableAmbientScenery?.();
       }
     }
+    // #region agent log
+    {
+      const nowMs = (Number.isFinite(nowSeconds) ? nowSeconds : 0) * 1000;
+      if (!this._dbgSceneryLastMs || nowMs - this._dbgSceneryLastMs >= 1000) {
+        this._dbgSceneryLastMs = nowMs;
+        const cam = this.camera;
+        const near = Number(cam?.near) || 0.06;
+        const far = Number(cam?.far) || 680000;
+        const camY = Number(cam?.position?.y) || 0;
+        const slantM = Math.hypot(
+          Math.hypot(Number(cam?.position?.x) || 0, Number(cam?.position?.z) || 0),
+          Math.abs(camY),
+        );
+        const depthLsbM = (slantM * slantM * (1 / near - 1 / far)) / (1 << 24);
+        const payload = {
+          sessionId: "1e1137",
+          runId: "scenery-post-deploy",
+          hypothesisId: "B",
+          location: "app.js:FlightView.update",
+          message: "scenery depth probe",
+          data: {
+            altFt: Number(state?.altitude_ft),
+            radarAltFt: radarAltitudeFt,
+            slantM: Math.round(slantM),
+            depthLsbM: Math.round(depthLsbM * 100) / 100,
+            logDepth: this.renderer?.capabilities?.logarithmicDepthBuffer === true,
+            horizonApron: terrainDiagnostics?.horizonApron === true,
+            streamingRadiusM: Number(state?.terrain_streaming_radius_m),
+            terrainId: terrainDiagnostics?.terrainId ?? null,
+            residentChunks: terrainDiagnostics?.residentChunks ?? null,
+          },
+          timestamp: Date.now(),
+        };
+        const sink = (globalThis.__dbgSceneryLogs ??= []);
+        sink.push(payload);
+        if (sink.length > 30) sink.shift();
+        fetch("http://127.0.0.1:7885/ingest/36067a55-a7b2-443b-978b-00ffc8c7a719", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "1e1137",
+          },
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+      }
+    }
+    // #endregion
     const nextBanditEntityId = projectedId(state.bandit_entity_id);
     // Padlock is bound to a specific visual tally. It may not silently transfer to a replacement
     // drone/bandit, survive loss of consciousness, or keep tracking stale/replay geometry.

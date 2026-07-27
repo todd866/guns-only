@@ -263,6 +263,8 @@ test("decision-support ocean and warnings carry truth without presentation flick
     readFile(appUrl, "utf8"),
     readFile(hudUrl, "utf8"),
   ]);
+  assert.match(appSource, /new THREE\.WebGLRenderer\(\{[\s\S]*?logarithmicDepthBuffer:\s*true/,
+    "production clip range needs log depth so the Ukraine apron cannot z-fight at Rapier slant");
   assert.match(appSource, /uWindSpeed/);
   assert.match(appSource, /Number\(state\.wind_x_mps\)/);
   assert.match(appSource, /const windBlend = expStep/,

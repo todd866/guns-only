@@ -269,7 +269,7 @@ public class SnapshotProjectionTests {
             root.GetProperty("terrain_profile_id").GetString());
         Assert.True(root.GetProperty("terrain_macro_required").GetBoolean());
         Assert.False(root.GetProperty("terrain_micro_required").GetBoolean());
-        Assert.Equal(40_000.0,
+        Assert.Equal(145_000.0,
             root.GetProperty("terrain_streaming_radius_m").GetDouble());
         Assert.Equal(0.0, root.GetProperty("terrain_placement_east_m").GetDouble());
         Assert.Equal(0.0, root.GetProperty("terrain_placement_north_m").GetDouble());

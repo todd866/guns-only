@@ -929,6 +929,7 @@ test("swaps 1950s and 2030s scenery in place without refetching retained terrain
 test("unified Ukraine v2 terrain retains its palette while ambient micro scenery is shed", async () => {
   const source = manifest();
   source.terrainId = "terrain.ukraine.soniachne-theatre.v2";
+  source.boundsLocalM = [-131_072, -131_072, 131_072, 131_072];
   const terrain = await loadKoreaTerrain(THREE, {
     manifestUrl: "https://game.test/content/soniachne-v2.manifest.json",
     sceneryEra: "ukraine-modern",
@@ -952,6 +953,12 @@ test("unified Ukraine v2 terrain retains its palette while ambient micro scenery
   assert.equal(terrain.diagnostics().horizonApron, true,
     "the v2 product still needs a horizon apron: it is 262 km across and the horizon at FL700 is "
     + "about 520 km, so without one the world simply stops and the sky shows through");
+  const apronRoot = terrain.group.getObjectByName(
+    "FICTIONAL_UKRAINE_PRESENTATION_APRON_SYSTEM",
+  );
+  assert.ok(apronRoot);
+  assert.equal(apronRoot.userData.terrain.coreHalfSpanM, 131_072,
+    "theatre apron must start outside the authored ±131 km bounds, not the old 8.2 km training cell");
   assert.equal(terrain.diagnostics().ambientSceneryEnabled, true);
   assert.equal(terrain.diagnostics().sceneryChunks, 1);
   assert.equal(terrain.diagnostics().localSceneryChunks, 0,
@@ -979,6 +986,7 @@ test("unified Ukraine v2 terrain retains its palette while ambient micro scenery
 test("legacy compact Ukraine v1 terrain retains a non-authoritative land horizon apron", async () => {
   const source = manifest();
   source.terrainId = "terrain.ukraine.soniachne-training.v1";
+  source.boundsLocalM = [-8_192, -8_192, 8_192, 8_192];
   const terrain = await loadKoreaTerrain(THREE, {
     manifestUrl: "https://game.test/content/soniachne.manifest.json",
     sceneryEra: "ukraine-modern",
@@ -1010,6 +1018,8 @@ test("legacy compact Ukraine v1 terrain retains a non-authoritative land horizon
   assert.equal(apron.userData.terrain.collision, false);
   assert.equal(apron.userData.terrain.targetable, false);
   assert.equal(apron.userData.terrain.transitionM, 4_000);
+  assert.equal(apron.userData.terrain.coreHalfSpanM, 8_192,
+    "legacy training apron keeps the compact 16.4 km core");
   const transition = terrain.group.getObjectByName(
     "FICTIONAL_UKRAINE_PRESENTATION_TRANSITION_RING",
   );

@@ -80,31 +80,50 @@ export function ukraineTrainingSourceHeightM(eastM, northM) {
   return Math.round(heightM * 10) / 10;
 }
 
-export function ukraineTrainingApronHeightM(eastM, northM) {
-  const sourceEastM = Math.max(-UKRAINE_TRAINING_CORE_HALF_SPAN_M,
-    Math.min(UKRAINE_TRAINING_CORE_HALF_SPAN_M, finite(eastM)));
-  const sourceNorthM = Math.max(-UKRAINE_TRAINING_CORE_HALF_SPAN_M,
-    Math.min(UKRAINE_TRAINING_CORE_HALF_SPAN_M, finite(northM)));
+export function ukraineCoreHalfSpanFromManifest(manifest) {
+  const bounds = manifest?.boundsLocalM;
+  if (!Array.isArray(bounds) || bounds.length !== 4
+      || !bounds.every((value) => Number.isFinite(Number(value)))) {
+    return UKRAINE_TRAINING_CORE_HALF_SPAN_M;
+  }
+  const halfEast = Math.max(Math.abs(Number(bounds[0])), Math.abs(Number(bounds[2])));
+  const halfNorth = Math.max(Math.abs(Number(bounds[1])), Math.abs(Number(bounds[3])));
+  const halfSpanM = Math.max(halfEast, halfNorth);
+  return halfSpanM > 0 ? halfSpanM : UKRAINE_TRAINING_CORE_HALF_SPAN_M;
+}
+
+export function ukraineTrainingApronHeightM(eastM, northM,
+  coreHalfSpanM = UKRAINE_TRAINING_CORE_HALF_SPAN_M) {
+  const core = Math.max(1, finite(coreHalfSpanM, UKRAINE_TRAINING_CORE_HALF_SPAN_M));
+  const sourceEastM = Math.max(-core, Math.min(core, finite(eastM)));
+  const sourceNorthM = Math.max(-core, Math.min(core, finite(northM)));
   const eastOutsideM = finite(eastM) - sourceEastM;
   const northOutsideM = finite(northM) - sourceNorthM;
   const distanceOutsideM = Math.hypot(eastOutsideM, northOutsideM);
   let fraction = Math.max(0, Math.min(1,
     distanceOutsideM / UKRAINE_TRAINING_APRON_TRANSITION_M));
   fraction = fraction * fraction * (3 - 2 * fraction);
-  const edgeHeightM = ukraineTrainingSourceHeightM(sourceEastM, sourceNorthM);
+  // The analytic training height field only describes the compact 16 km cell. Theatre-scale
+  // cores blend from the flat far datum instead of inventing kilometres of fake relief.
+  const edgeHeightM = core <= UKRAINE_TRAINING_CORE_HALF_SPAN_M * 1.5
+    ? ukraineTrainingSourceHeightM(sourceEastM, sourceNorthM)
+    : UKRAINE_TRAINING_APRON_HEIGHT_M;
   return edgeHeightM
     + (UKRAINE_TRAINING_APRON_HEIGHT_M - edgeHeightM) * fraction;
 }
 
-function createUkraineApronStripGeometry(THREE, bounds, targetSpacingM = 256) {
+function createUkraineApronStripGeometry(THREE, bounds, targetSpacingM = 256,
+  coreHalfSpanM = UKRAINE_TRAINING_CORE_HALF_SPAN_M) {
   const [minimumEastM, minimumNorthM, maximumEastM, maximumNorthM] = bounds;
   const eastSpanM = maximumEastM - minimumEastM;
   const northSpanM = maximumNorthM - minimumNorthM;
   // The strip's long/tangential axis meets the detailed terrain edge. Keep it on the packed
   // truth grid's 32 m lattice so every inner-ring vertex is byte-identical to collision/AGL truth;
   // the shorter/radial axis can stay coarse because it only presents the 4 km safety blend.
-  const eastSpacingM = eastSpanM > northSpanM ? 32 : targetSpacingM;
-  const northSpacingM = northSpanM > eastSpanM ? 32 : targetSpacingM;
+  // Theatre-scale edges cannot afford a 32 m lattice (hundreds of km × 32 m → millions of verts).
+  const longSpacingM = coreHalfSpanM > UKRAINE_TRAINING_CORE_HALF_SPAN_M * 1.5 ? 2_048 : 32;
+  const eastSpacingM = eastSpanM > northSpanM ? longSpacingM : targetSpacingM;
+  const northSpacingM = northSpanM > eastSpanM ? longSpacingM : targetSpacingM;
   const eastSegments = Math.max(1,
     Math.ceil(eastSpanM / eastSpacingM));
   const northSegments = Math.max(1,
@@ -121,7 +140,7 @@ function createUkraineApronStripGeometry(THREE, bounds, targetSpacingM = 256) {
       const eastM = minimumEastM
         + (maximumEastM - minimumEastM) * column / eastSegments;
       positions[offset++] = eastM;
-      positions[offset++] = ukraineTrainingApronHeightM(eastM, northM);
+      positions[offset++] = ukraineTrainingApronHeightM(eastM, northM, coreHalfSpanM);
       positions[offset++] = -northM;
     }
   }
@@ -142,7 +161,9 @@ function createUkraineApronStripGeometry(THREE, bounds, targetSpacingM = 256) {
   return geometry;
 }
 
-function createUkraineTrainingHorizonApron(THREE) {
+function createUkraineTrainingHorizonApron(THREE,
+  coreHalfSpanM = UKRAINE_TRAINING_CORE_HALF_SPAN_M) {
+  const core = Math.max(1, finite(coreHalfSpanM, UKRAINE_TRAINING_CORE_HALF_SPAN_M));
   const root = new THREE.Group();
   root.name = "FICTIONAL_UKRAINE_PRESENTATION_APRON_SYSTEM";
   const metadata = Object.freeze({
@@ -151,6 +172,11 @@ function createUkraineTrainingHorizonApron(THREE) {
     targetable: false,
     purpose: "visual-horizon-apron-with-physics-matched-transition",
     transitionM: UKRAINE_TRAINING_APRON_TRANSITION_M,
+    // Inner edge of the apron must sit outside authored terrain. The compact training cell is
+    // 16.4 km; theatre.v2 is 262 km. Using the training constant against the theatre made the
+    // flat apron overlap every streamed chunk inside ~12–40 km, and at Rapier slant ranges a
+    // 24-bit linear depth buffer cannot separate the 78 m apron from real ground.
+    coreHalfSpanM: core,
   });
   root.userData.terrain = metadata;
 
@@ -160,21 +186,18 @@ function createUkraineTrainingHorizonApron(THREE) {
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 1,
   });
-  const outer = UKRAINE_TRAINING_CORE_HALF_SPAN_M
-    + UKRAINE_TRAINING_APRON_TRANSITION_M;
+  const outer = core + UKRAINE_TRAINING_APRON_TRANSITION_M;
   const transitionBounds = [
-    [-outer, UKRAINE_TRAINING_CORE_HALF_SPAN_M, outer, outer],
-    [-outer, -outer, outer, -UKRAINE_TRAINING_CORE_HALF_SPAN_M],
-    [UKRAINE_TRAINING_CORE_HALF_SPAN_M, -UKRAINE_TRAINING_CORE_HALF_SPAN_M,
-      outer, UKRAINE_TRAINING_CORE_HALF_SPAN_M],
-    [-outer, -UKRAINE_TRAINING_CORE_HALF_SPAN_M,
-      -UKRAINE_TRAINING_CORE_HALF_SPAN_M, UKRAINE_TRAINING_CORE_HALF_SPAN_M],
+    [-outer, core, outer, outer],
+    [-outer, -outer, outer, -core],
+    [core, -core, outer, core],
+    [-outer, -core, -core, core],
   ];
   const transition = new THREE.Group();
   transition.name = "FICTIONAL_UKRAINE_PRESENTATION_TRANSITION_RING";
   for (const [index, bounds] of transitionBounds.entries()) {
     const mesh = new THREE.Mesh(
-      createUkraineApronStripGeometry(THREE, bounds),
+      createUkraineApronStripGeometry(THREE, bounds, 256, core),
       transitionMaterial,
     );
     mesh.name = `FICTIONAL_UKRAINE_TRANSITION_STRIP_${index + 1}`;
@@ -1085,8 +1108,11 @@ class KoreaTerrainPresentation {
     // to 34 km, and beyond the streamed square there is simply no geometry — which is the reported
     // "flickering terrain with blue beyond the square". The blue was the sky showing through where
     // the ground should have been.
+    //
+    // Size the apron from the manifest bounds. Theatre.v2 is ±131 km; the old training constant
+    // (±8.2 km) left the flat apron overlapping every streamed chunk and z-fighting at altitude.
     this.horizonApron = /^terrain\.ukraine\./.test(String(manifest.terrainId ?? ""))
-      ? createUkraineTrainingHorizonApron(THREE)
+      ? createUkraineTrainingHorizonApron(THREE, ukraineCoreHalfSpanFromManifest(manifest))
       : null;
     if (this.horizonApron) {
       this.group.add(this.horizonApron);
