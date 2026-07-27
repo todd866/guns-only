@@ -27,7 +27,11 @@ public sealed record FlightTestReport(
     string ProgramVersion,
     bool Passed,
     AirframeIdentity Identity,
-    IReadOnlyList<FlightTestFinding> Findings) {
+    IReadOnlyList<FlightTestFinding> Findings,
+    ClimbHoldResult? Climb = null,
+    EngineDeckSample? EngineSampleSeaLevelAb = null,
+    double? EnergyAeroMaxG = null,
+    double? EnergySustainedG = null) {
     public string ToMarkdown() => ReportMarkdown.Render(this);
 }
 

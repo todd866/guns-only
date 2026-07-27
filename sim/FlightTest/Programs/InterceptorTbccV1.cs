@@ -26,6 +26,11 @@ public static class InterceptorTbccV1 {
             new("identity-tw-augmented", true, "Augmented T/W within 5% of Identity"),
             new("identity-skin", true, "Skin temperature limit matches Identity exactly"),
             new("tw-augmented-gross", true, "Measured augmented T/W at gross ≤ 1.20"),
+            new("energy-game-gap", true, "AeroMaxG − SustainedG ≥ Identity gap at 10k ft corner band"),
+            new("ram-light-band", true, "At M1.5 / FL400, ram share of available thrust < 0.1"),
+            new("ab-climb-through-m1", true, "Max γ while accelerating through M∈[0.9,1.3] ≤ Identity cap"),
         },
-        Points: Array.Empty<FlightTestPoint>());
+        Points: new FlightTestPoint[] {
+            new("ab-climb-through-m1", "Full-AB climb hold through Mach 1"),
+        });
 }
