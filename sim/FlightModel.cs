@@ -535,6 +535,10 @@ public static class FlightModel {
         // The weight is affordable because every landing is an automation-assisted trap: the
         // aircraft launches heavy off a catapult and arrives light, so the gear and the wire only
         // ever see recovery weight. 110 m/s off the rail is still 1.51 times stall at gross.
+        //
+        // Preferred four-drone belly load adds ~1,440 kg when stowed (4 × RapierGunDroneSurrogate)
+        // — NOT included here yet; OFT climb/dash are therefore optimistic. See
+        // docs/airframes/rapier/60-armament-and-drones.md trade C.
         MassKg: 9650.0,
         WingAreaM2: 18.0,                     // 436 kg/m2 at catshot mass: cruise beats low-speed G
         // The initial 65 kN core left a player-flown aircraft sitting on the M1.3-M1.5 drag
