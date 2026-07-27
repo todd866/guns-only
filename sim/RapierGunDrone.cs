@@ -104,7 +104,7 @@ public sealed class RapierGunDrone {
                 Phase = RapierGunDronePhase.Rtb;
         }
 
-        if (Phase is RapierGunDronePhase.Commit or RapierGunDronePhase.Screen
+        if ((Phase is RapierGunDronePhase.Commit or RapierGunDronePhase.Screen)
             && !targetAlive) {
             Phase = RapierGunDronePhase.Rtb;
         }

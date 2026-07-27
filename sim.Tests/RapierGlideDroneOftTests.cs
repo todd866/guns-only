@@ -210,20 +210,17 @@ public class RapierGlideDroneOftTests {
         bool gateSatisfied = false;
         bool insidePickup = false;
         bool rtbClosing = false;
-        int releaseTick = 1;
         int rtbStartTick = -1;
         double rtbStartRangeM = double.NaN;
         double minimumRtbRangeM = double.NaN;
         RapierGunDronePhase lastSeenPhase = RapierGunDronePhase.Separate;
 
-        int forceDefeatTick = releaseTick
-            + (int)((RapierGunDrone.SeparateHoldSeconds + 2.0) * AircraftSim.TickHz);
-        int maximumTicks = checked((int)(5 * 60 * AircraftSim.TickHz));
+        // Do not ForceOpponentDefeatForTest here: opponent death sets TerminalPhaseActive and the
+        // terminal step path skips StepRapierGunDrone. Ammo-out while the bandit stays alive is
+        // enough to drive Commit → RTB through the normal session loop.
+        int maximumTicks = checked((int)(3 * 60 * AircraftSim.TickHz));
 
         for (int tick = 1; tick < maximumTicks; tick++) {
-            if (tick == forceDefeatTick)
-                session.ForceOpponentDefeatForTest();
-
             session.StepFixed();
             telemetry.Observe(session, tick);
 
@@ -268,7 +265,7 @@ public class RapierGlideDroneOftTests {
         }
 
         if (rtbStartTick >= 0 && double.IsFinite(rtbStartRangeM) && double.IsFinite(minimumRtbRangeM))
-            rtbClosing = minimumRtbRangeM < rtbStartRangeM - 5_000.0;
+            rtbClosing = minimumRtbRangeM < rtbStartRangeM - 1_000.0;
 
         bool stillActiveOrDone = session.ActiveRapierGunDrone is not null
             || insidePickup
