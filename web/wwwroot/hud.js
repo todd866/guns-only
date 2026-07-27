@@ -2305,7 +2305,9 @@ class CombatHud {
     const rowPitch = 13;
     const height = 10 + panel.rows.length * rowPitch + 8;
     const x = this.width - this.safeInsets.right - width - 18;
-    const y = layout.secondaryBottom - height;
+    // Keep clear of the persistent H · CONTROLS chip in the same corner.
+    const legendReserve = (!this.legendVisible && !this.touchMode) ? 28 : 0;
+    const y = layout.secondaryBottom - height - legendReserve;
 
     if (this._debug) {
       this._debug.limitsPanel = {
