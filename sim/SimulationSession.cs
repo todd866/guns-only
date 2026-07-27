@@ -588,7 +588,7 @@ public sealed class SimulationSession {
     /// <summary>Construct and stage one of the built-in beats. Physics remains held in Ready.</summary>
     public void StartBeat(int index,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial) {
-        if (index is < 1 or > 10) index = 1;
+        if (index is < 1 or > 11) index = 1;
         _prechargeSystemsOnStage = true;
         _beatIndex = index;
         _deckConfiguration = deckConfiguration;
@@ -2818,9 +2818,11 @@ public sealed class SimulationSession {
             : 0;
         if (stage <= _ramCueStage) return;
         _ramCueStage = stage;
+        // Formatted from the constants, never hardcoded. These said M1.6 / M2.2 after the fade band
+        // moved to 1.85-2.15, so the banner announced a handover at a Mach it no longer happened at.
         ShowTransition(stage switch {
-            1 => "RAM LIGHT · M1.6",
-            2 => "FULL RAM · M2.2",
+            1 => $"RAM LIGHT · M{Propulsion.TurboRamjetPerformanceMap.RamFadeStartMach:F2}",
+            2 => $"FULL RAM · M{Propulsion.TurboRamjetPerformanceMap.FullRamMach:F2}",
             _ => "TURBINE OFFLINE · RAM ONLY"
         }, 2600.0);
     }

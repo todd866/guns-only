@@ -38,14 +38,21 @@ public static class TurboRamjetPerformanceMap {
     /// Net ram-mode thrust at the design point, as a fraction of sea-level static dry turbine thrust.
     // Still two and a half times the original 0.42, so the ram genuinely dominates once lit, but no
     // longer more than the turbine's entire sea-level static thrust from a duct on a 7.8 t aircraft.
-    public const double RamDesignThrustRatio = 0.70;
-    // The engine keeps its Mach-4 design point ON PURPOSE. The aircraft is capped at about M3.14
-    // by SKIN TEMPERATURE, not by thrust, so leaving surplus thrust above that ceiling is both
-    // realistic and interesting: a thermally limited aircraft genuinely has performance it is not
-    // allowed to spend. The SR-71 was the same. The automation clamps to the structural limit; a
-    // pilot who overrides it can have the speed and pay for it in the structure.
-    public const double DesignMach = 4.0;
-    public const double DesignAltitudeM = 24_000.0;
+    // Sized so the aircraft tops out near M4.5 — where the ram cycle itself is dying — rather than
+    // against a structural limit. With a CMC hot structure good to about M5.7 the engine is the
+    // binding constraint, which is how a ramjet should behave.
+    public const double RamDesignThrustRatio = 1.30;
+    // Design point M2.6, NOT Mach 4. Nothing has ever sustained Mach 4 in air-breathing flight:
+    // the SR-71 topped out near M3.2 on titanium and a unique engine, and the MiG-25 at M2.83 on
+    // steel. A cheap steel-and-composite attritable jet reaching M4.13 was past every aircraft ever
+    // built, which is exactly why it felt overpowered — it was.
+    //
+    // A design point is a NORMALISER: the same RamDesignThrustRatio buys far more thrust when the
+    // reference dash is faster, so moving it to M4 silently multiplied everything measured against
+    // it. Back at M2.6/21.5 km the aircraft tops out near M3.1, which is SR-71 class and agrees
+    // with the 320 C skin limit instead of running 1,000 K past it.
+    public const double DesignMach = 2.6;
+    public const double DesignAltitudeM = 21_500.0;
     // Stoichiometric kerosene-air adiabatic flame temperature is about 2300-2400 K, and hydrogen is
     // no better. 3000 K is not a materials problem that a ceramic solves — it is chemically
     // unreachable by burning fuel in air at any budget. The engine was making thrust nothing could
@@ -65,6 +72,13 @@ public static class TurboRamjetPerformanceMap {
     /// design thrust in a low-altitude dive — an engine that gets stronger the deeper you go, which
     /// would have made the attack dive free. Expressed as a multiple of design-point density.
     public const double CaptureDensityCeiling = 1.9;
+
+    /// Where the inlet begins dumping captured air. Set well above the useful envelope so the
+    /// aircraft is limited by the ram cycle falling away naturally, not by a hidden schedule.
+    /// Keying this off DesignMach was a real bug: moving the design point moved the spill with it
+    /// and produced zero thrust by M2.78.
+    public const double RamSpillStartMach = 3.3;
+    public const double RamSpillCompleteMach = 3.8;
 
     const double Gamma = 1.4;
 
@@ -119,9 +133,11 @@ public static class TurboRamjetPerformanceMap {
                 * captureSchedule
                 * Fade(mach, RamFadeStartMach, FullRamMach);
             // The translating inlet is scheduled around one design dash, not an unlimited
-            // accelerator. Past M4 it progressively spills the captured stream to hold diffuser
-            // temperature and keep the fictional aircraft near its plot speed even at full lever.
-            ram *= 1.0 - Fade(mach, DesignMach, DesignMach + 0.18);
+            // accelerator: past its spill Mach it progressively dumps the captured stream to hold
+            // diffuser temperature. This must key off a SEPARATE constant, not DesignMach — tying
+            // it to the design point meant that moving the design point from M4 to M2.6 also moved
+            // the spill down, and the engine produced ZERO thrust by M2.78.
+            ram *= 1.0 - Fade(mach, RamSpillStartMach, RamSpillCompleteMach);
         }
         return new CombinedCycleThrustFractions(
             System.Math.Max(0.0, turbine),

@@ -77,8 +77,11 @@ public class RapierTests {
         var overlap = Propulsion.TurboRamjetPerformanceMap.ThrustComponents(
             2.1, air.TemperatureK, air.DensityKgM3);
         var ramjet = Propulsion.TurboRamjetPerformanceMap.ThrustComponents(
-            4.0, air.TemperatureK, air.DensityKgM3);
+            3.0, air.TemperatureK, air.DensityKgM3);
 
+        _out.WriteLine($"M1.4 turb {turbine.Turbine:F4} ram {turbine.Ramjet:F4} | "
+            + $"M2.1 turb {overlap.Turbine:F4} ram {overlap.Ramjet:F4} | "
+            + $"M3.0 turb {ramjet.Turbine:F4} ram {ramjet.Ramjet:F4}");
         Assert.True(turbine.Turbine > 0.0);
         Assert.Equal(0.0, turbine.Ramjet, precision: 9);
         Assert.True(overlap.Turbine > 0.0);
@@ -133,16 +136,17 @@ public class RapierTests {
     }
 
     [Fact]
-    public void UpgradedCombinedCycleEngineCanHoldTheMach4DesignDash() {
-        // The ENGINE can hold Mach 4. The AIRFRAME may not fly there: skin temperature caps the
-        // aircraft near M3.14 and the mission automation clamps to it. Surplus thrust above the
-        // structural ceiling is deliberate — see TurboRamjetPerformanceMap.DesignMach.
-        const double DashAltitudeM = 24_000.0;
+    public void CombinedCycleEngineHoldsTheDashItsStructureAllows() {
+        // Was a Mach-4 dash. Nothing has ever sustained Mach 4 in air-breathing flight — the SR-71
+        // topped near M3.2 on titanium, the MiG-25 at M2.83 on steel — so a cheap attritable jet
+        // doing M4.13 was past every aircraft ever built. The design point is back at M2.6 and the
+        // dash is flown just under the 320 C skin limit, which is about M3.14.
+        const double DashAltitudeM = 21_500.0;
         AtmosphericState air = StandardAtmosphere1976.Instance.Sample(DashAltitudeM);
-        var sim = At(DashAltitudeM, 4.0 * air.SpeedOfSoundMps);
+        var sim = At(DashAltitudeM, 2.9 * air.SpeedOfSoundMps);
         var command = new PilotCommand(1.0, 0.0, Jet.MaxThrustFraction, 0.0);
         sim.SeedEnginePowerFraction(Jet.MaxThrustFraction);
-        double lowestMach = 4.0;
+        double lowestMach = 2.9;
         for (int tick = 0; tick < AircraftSim.TickHz * 45; tick++) {
             sim.Step(command, 1.0 / AircraftSim.TickHz);
             AtmosphericState current = StandardAtmosphere1976.Instance.Sample(
@@ -153,10 +157,10 @@ public class RapierTests {
         AtmosphericState finalAir = StandardAtmosphere1976.Instance.Sample(
             sim.State.Position.Y);
         double finalMach = sim.AirspeedMps / finalAir.SpeedOfSoundMps;
-        _out.WriteLine($"Mach-4 dash hold: lowest M{lowestMach:F2}, final M{finalMach:F2}, "
+        _out.WriteLine($"structural dash hold: lowest M{lowestMach:F2}, final M{finalMach:F2}, "
             + $"{sim.LastEngineOperatingPoint.NetThrustN / 1000.0:F1} kN");
-        Assert.True(lowestMach >= 3.85,
-            $"the upgraded TBCC decayed below a credible Mach-4 dash: M{lowestMach:F2}");
+        Assert.True(lowestMach >= 2.70,
+            $"the TBCC decayed below its own structural dash: M{lowestMach:F2}");
     }
 
     [Fact]
@@ -493,9 +497,12 @@ public class RapierTests {
 
         Assert.True(lowMach < 2.7,
             $"FL315 transonic turbine pull became an unrestricted low-level dash: M{lowMach:F3}");
-        Assert.True(highMach >= 3.8,
+        Assert.True(highMach >= 2.6,
             $"FL560 failed to enter the supersonic acceleration corridor: M{highMach:F3}");
-        Assert.True(highMach > lowMach + 1.0,
+        // Half a Mach, not a whole one. With the engine sized for a realistic M3-class ceiling
+        // rather than Mach 4 the altitude gate is narrower in absolute terms while gating exactly
+        // as hard in kind: the aircraft still cannot have the high-altitude corridor down low.
+        Assert.True(highMach > lowMach + 0.4,
             $"the inlet altitude schedule is not operationally meaningful: "
                 + $"FL315 M{lowMach:F3}, FL560 M{highMach:F3}");
     }

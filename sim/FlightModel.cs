@@ -470,7 +470,16 @@ public static class FlightModel {
     /// claims about any real aircraft or engine. Numbers derive from a Codex sizing pass and are
     /// PREDICTIONS until measured against AircraftSim.
     public static readonly AircraftParams RapierPublicDataSurrogate = new(
-        MassKg: 7850.0,                       // 5,150 kg fuel-free + 2,700 kg fuel
+        // 5,150 kg fuel-free + 4,500 kg fuel. The fuel fraction was 34 percent, which is a
+        // FIGHTER's fraction on an aircraft asked to do a strategic-interceptor job: at ram cruise
+        // it burns about 270 lb/min, so 5,950 lb was under 22 minutes total and the pilot was
+        // turning for home before reaching the contact. 47 percent is still well short of the
+        // SR-71's 59, and it is the fraction this mission profile actually needs.
+        //
+        // The weight is affordable because every landing is an automation-assisted trap: the
+        // aircraft launches heavy off a catapult and arrives light, so the gear and the wire only
+        // ever see recovery weight. 110 m/s off the rail is still 1.51 times stall at gross.
+        MassKg: 9650.0,
         WingAreaM2: 18.0,                     // 436 kg/m2 at catshot mass: cruise beats low-speed G
         // The initial 65 kN core left a player-flown aircraft sitting on the M1.3-M1.5 drag
         // shoulder whenever the climb was even slightly untidy. This is an alert interceptor, not
@@ -520,12 +529,22 @@ public static class FlightModel {
         PositiveOverrideLimitG: 15.0,
         DynamicPressureScheduledPostStallOverride: true,
         MaxThrustFraction: 1.55,              // augmentor lever stop
-        // 320 C sustained. Steel where the heat is, BMI composite everywhere else, at roughly
-        // 45 percent steel by structural mass — the MiG-25 trade, chosen because steel is cheap
-        // and weldable rather than because it is the best material. That is about M3.14 in the
-        // stratosphere, and it is the aircraft's real ceiling: the engine is now sized to sit just
-        // above it so the STRUCTURE decides how fast this thing goes, not a detuned duct.
-        SkinTemperatureLimitK: 593.15,
+        // 1200 C sustained: a PROPER HOT STRUCTURE. Additively manufactured SiC/SiC ceramic matrix
+        // composite where the heat is, ordinary composite everywhere else. This is extrapolation
+        // rather than invention — GE already flies CMC shrouds in the LEAP engine, so printed CMC
+        // hot structure is a credible 2030s trajectory, and CMC is good to about 1300 C sustained
+        // with 1200 taken here for margin.
+        //
+        // It buys about M5.7 thermally, which the ENGINE cannot reach: the ram cycle group peaks
+        // near M3.0 and has fallen by a third at M5, so the aircraft tops out around M4.5 on
+        // thrust. That is the right way round for a ramjet — you run out of engine, not airframe —
+        // and it leaves the thermal gauge as a live warning in a dive rather than a permanent cap.
+        //
+        // Steel was the previous answer at 320 C and M3.14. It was cheap and weldable, the MiG-25
+        // trade, but it made an aircraft nobody would be impressed by. CMC costs more; the cost
+        // layer already assumed it, since 2 percent of structural life at 180,000 dollars implies a
+        // roughly 9 million dollar airframe.
+        SkinTemperatureLimitK: 1473.15,
         // No thrust vectoring: hot actuators, mass, maintenance and cost.
         PitchThrustVectorMaxRad: 0.0, PitchThrustVectorMomentArmM: 0.0,
         PitchThrustVectorAlphaGain: 0.0, PitchThrustVectorRateGainSeconds: 0.0,

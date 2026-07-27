@@ -766,7 +766,7 @@ public static class Beats {
             UsesReactiveBandit: false,
             Combat: CombatConfig.ModernVisualMerge,
             Fuel: new FuelConfig(
-                CapacityLb: 5_950.0,          // 2,700 kg of fuel
+                CapacityLb: 9_920.0,          // 4,500 kg of fuel
                 // The interceptor can carry 2,700 kg, but this authored alert launch carries only
                 // 1,406 kg. The M4 outbound dash, M4 escape, and powered recovery leave a narrow
                 // trap reserve instead of turning the last act into a consequence-free cruise.
@@ -824,6 +824,49 @@ public static class Beats {
             RecoveryCompletesSortie: true,
             Environment: Ukraine2030sTheatre.RapierCorridor,
             ScriptedIntercept: new ScriptedInterceptConfig());
+    }
+
+    /// <summary>
+    /// RAPIER CIRCUITS — the same aircraft, the same launcher, the same strip, and nothing else.
+    ///
+    /// The trap is the hardest thing this aircraft asks of a pilot and the intercept gives exactly
+    /// one attempt at it, 240 km from home and low on fuel. That is the wrong place to learn.
+    /// Circuits removes the transit, the contact and the fuel pressure so the launch, the ram
+    /// handover, the pattern and the hook can be flown over and over.
+    ///
+    /// Deliberately NOT a stripped mission: it keeps the full launcher, the real thermal limit and
+    /// the real arrestor. What it removes is the reasons to be somewhere else.
+    /// </summary>
+    public static BeatSetup RapierCircuits(
+        GunsOnly.Sim.Carrier.DeckConfiguration configuration =
+            GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
+        BeatSetup sortie = RapierIntercept(configuration);
+        return sortie with {
+            Name = "Rapier circuits",
+            // No contact. The bandit slot still needs a state, so it is parked far above and behind
+            // where it can never become a merge, and combat is disarmed below.
+            Bandit = sortie.Bandit with {
+                Position = new Vec3D(0.0, 24_000.0, -400_000.0), Speed = 200.0
+            },
+            UsesReactiveBandit = false,
+            ScriptedIntercept = null,
+            Combat = CombatConfig.CarrierRecoveryOnly,
+            // Full tanks and no bingo pressure: the point is repetition, not endurance. A circuit
+            // costs a few hundred pounds, so this is roughly a dozen patterns before fuel matters.
+            Fuel = sortie.Fuel with {
+                InitialFuelLb = 9_920.0,
+                BingoThresholdLb = 800.0,
+                JokerThresholdLb = 1_400.0
+            },
+            // A bolter or a go-around must NOT end the session — that is the whole exercise.
+            RecoveryCompletesSortie = false,
+            Mission = new MissionContract(
+                "mission.modern.rapier-circuits.public-data-surrogate.v1",
+                MissionContentFamily.ModernPublicDataSurrogate,
+                PublicDataSurrogate: true,
+                RulesOfEngagement: "NO_ENGAGEMENT_PATTERN_ONLY",
+                Era: "MODERN_PUBLIC_DATA_EXERCISE")
+        };
     }
 
     /// <summary>
@@ -1066,6 +1109,7 @@ public static class Beats {
         8 => DroneRaidDefense(),
         9 => ModernAceDuel(),
         10 => RapierIntercept(deckConfiguration),
+        11 => RapierCircuits(deckConfiguration),
         _ => Perch()
     };
 }

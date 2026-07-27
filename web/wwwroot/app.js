@@ -259,6 +259,112 @@ const settingsTiltSensitivityValue = document.querySelector("#setting-tilt-sensi
 const settingsKeyboardBindings = document.querySelector("#settings-keyboard-bindings");
 const settingsBindings = document.querySelector("#settings-bindings");
 const settingsResetBindings = document.querySelector("#settings-reset-bindings");
+const navConsole = document.querySelector("#nav-console");
+const navUi = navConsole ? Object.freeze({
+  destination: document.querySelector("#nav-destination"),
+  bearing: document.querySelector("#nav-bearing"),
+  range: document.querySelector("#nav-range"),
+  eta: document.querySelector("#nav-eta"),
+  turn: document.querySelector("#nav-turn"),
+  fuelNeed: document.querySelector("#nav-fuel-need"),
+  fuelHave: document.querySelector("#nav-fuel-have"),
+  fuelMargin: document.querySelector("#nav-fuel-margin"),
+  groundspeed: document.querySelector("#nav-groundspeed"),
+  gross: document.querySelector("#nav-gross"),
+  thrust: document.querySelector("#nav-thrust"),
+  skin: document.querySelector("#nav-skin"),
+  contactRange: document.querySelector("#nav-contact-range"),
+  contactEti: document.querySelector("#nav-contact-eti"),
+}) : null;
+
+/// Populate the navigation console. Every figure here already existed somewhere in the snapshot;
+/// what was missing was one place to read them together, and the fuel comparison that turns them
+/// into a decision rather than trivia.
+function updateNavConsole(state) {
+  if (!navConsole || !navUi) return;
+  const relevant = state?.rapier_mission_available === true;
+  navConsole.hidden = !relevant;
+  if (!relevant) return;
+  const set = (node, text, condition) => {
+    if (!node) return;
+    node.textContent = text;
+    node.dataset.state = condition;
+  };
+  const num = (key) => Number(state?.[key]);
+  const finite = (value) => Number.isFinite(value);
+
+  const rangeNm = num("rtb_range_nm");
+  const bearing = num("rtb_bearing_deg");
+  const turnDeg = num("rtb_turn_deg");
+  const ktas = Math.max(1, num("true_airspeed_kts") || 0);
+  const homeKnown = finite(rangeNm) && finite(bearing);
+
+  set(navUi.destination, homeKnown ? "DISPERSED STRIP · HOME" : "--",
+    homeKnown ? "normal" : "unknown");
+  set(navUi.bearing, homeKnown
+    ? `${String(Math.round((bearing % 360 + 360) % 360)).padStart(3, "0")}°` : "--",
+    homeKnown ? "normal" : "unknown");
+  set(navUi.range, homeKnown ? `${Math.round(rangeNm)} NM` : "--",
+    homeKnown ? "normal" : "unknown");
+
+  const minutesToRun = homeKnown ? rangeNm / ktas * 60 : Number.NaN;
+  set(navUi.eta, finite(minutesToRun) ? `${Math.max(0, Math.round(minutesToRun))} MIN` : "--",
+    finite(minutesToRun) ? "normal" : "unknown");
+  set(navUi.turn, finite(turnDeg)
+    ? (Math.abs(turnDeg) < 3 ? "STEADY"
+      : `${turnDeg < 0 ? "LEFT" : "RIGHT"} ${Math.round(Math.abs(turnDeg))}°`) : "--",
+    finite(turnDeg) ? "normal" : "unknown");
+
+  // The decision number. Required fuel is priced at the CURRENT flow, so a pilot who pulls the
+  // lever back watches it improve — which is exactly the trade the egress is about.
+  const fuelLb = num("fuel_lb");
+  const flowPph = num("fuel_flow_pph");
+  const needLb = finite(minutesToRun) && finite(flowPph) ? flowPph * minutesToRun / 60 : Number.NaN;
+  const marginLb = fuelLb - needLb;
+  set(navUi.fuelNeed, finite(needLb) ? `${Math.round(needLb)} LB` : "--",
+    finite(needLb) ? "normal" : "unknown");
+  set(navUi.fuelHave, finite(fuelLb) ? `${Math.round(fuelLb)} LB` : "--",
+    finite(fuelLb) ? "normal" : "unknown");
+  set(navUi.fuelMargin,
+    finite(marginLb)
+      ? (marginLb < 0 ? `SHORT ${Math.round(-marginLb)} LB`
+        : `+${Math.round(marginLb)} LB`)
+      : "--",
+    !finite(marginLb) ? "unknown"
+      : marginLb < 0 ? "fault"
+        : marginLb < needLb * 0.10 ? "caution" : "normal");
+
+  const groundKts = num("ground_speed_kts");
+  set(navUi.groundspeed, finite(groundKts)
+    ? `${Math.round(groundKts).toLocaleString("en-US")} KT · ${Math.round(groundKts * 1.852).toLocaleString("en-US")} KM/H`
+    : "--", finite(groundKts) ? "normal" : "unknown");
+
+  const grossLb = num("player_gross_lb");
+  set(navUi.gross, finite(grossLb) ? `${Math.round(grossLb).toLocaleString("en-US")} LB` : "--",
+    finite(grossLb) ? "normal" : "unknown");
+  const thrustLbf = num("engine_net_thrust_lbf");
+  set(navUi.thrust, finite(thrustLbf)
+    ? `${Math.round(thrustLbf).toLocaleString("en-US")} LBF` : "--",
+    finite(thrustLbf) ? "normal" : "unknown");
+
+  const skinC = num("rapier_stagnation_temp_c");
+  const marginC = num("rapier_thermal_margin_c");
+  set(navUi.skin, finite(skinC)
+    ? `${Math.round(skinC)}°C · ${finite(marginC) ? (marginC >= 0 ? `${Math.round(marginC)}°C MARGIN` : `${Math.round(-marginC)}°C OVER`) : "--"}`
+    : "--",
+    !finite(marginC) ? "unknown" : marginC < 0 ? "fault" : marginC < 40 ? "caution" : "normal");
+
+  const contactRangeM = num("range_m");
+  set(navUi.contactRange, finite(contactRangeM)
+    ? `${(contactRangeM / 1852).toFixed(0)} NM` : "--",
+    finite(contactRangeM) ? "normal" : "unknown");
+  // Negative means the kernel judged it meaningless — inside 20 km, or no closure.
+  const etiMin = num("rapier_intercept_eti_min");
+  set(navUi.contactEti, finite(etiMin) && etiMin >= 0
+    ? `${etiMin.toFixed(1)} MIN` : "MERGE",
+    finite(etiMin) && etiMin >= 0 ? "normal" : "unknown");
+}
+
 const testFlightConsole = document.querySelector("#test-flight-console");
 const testFlightUi = testFlightConsole ? Object.freeze({
   engineRpm: document.querySelector("#tf-engine-rpm"),
@@ -1645,6 +1751,7 @@ function renderTestFlightConsole(state) {
   if (!testFlightUi) return;
   const projected = projectTestFlightState(state);
   const airborneSortie = state.ready !== true && state.paused !== true && state.finished !== true;
+  updateNavConsole(airborneSortie ? state : null);
   // AVAILABLE vs RELEVANT. The console reads engine, bus, hydraulics and gear, and a pilot may
   // want any of those at any moment — so the collapsed tab is present for the whole sortie and the
   // pilot opens it when they choose. Relevance still drives data-relevance, which is what makes it
@@ -6502,6 +6609,12 @@ function installInput(view) {
 
     if (event.code === "KeyC") {
       toggleDeckAndReady();
+      return;
+    }
+
+    if (event.code === "KeyN" && navConsole && !navConsole.hidden) {
+      navConsole.open = !navConsole.open;
+      recorder.event("nav-console", navConsole.open ? "open" : "closed");
       return;
     }
 

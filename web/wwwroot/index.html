@@ -787,7 +787,7 @@
 
     .touch-mode #ready-screen { z-index: 13; }
 
-    #test-flight-console {
+    #test-flight-console, #nav-console {
       position: fixed;
       z-index: 11;
       /* Clears the GUN TEMP bar, which the HUD canvas draws at safe-top + 8..25 px. */
@@ -806,9 +806,9 @@
       touch-action: manipulation;
     }
 
-    #test-flight-console[hidden] { display: none; }
+    #test-flight-console, #nav-console[hidden] { display: none; }
 
-    #test-flight-console > summary {
+    #test-flight-console, #nav-console > summary {
       display: flex;
       min-height: 39px;
       align-items: center;
@@ -821,9 +821,9 @@
       list-style: none;
     }
 
-    #test-flight-console > summary::-webkit-details-marker { display: none; }
+    #test-flight-console, #nav-console > summary::-webkit-details-marker { display: none; }
 
-    #test-flight-console > summary:focus-visible {
+    #test-flight-console, #nav-console > summary:focus-visible {
       outline: 2px solid #8ef5e7;
       outline-offset: -2px;
     }
@@ -849,8 +849,8 @@
       font-size: 8px;
     }
 
-    #test-flight-console[open] .tf-collapse-cue::before { content: "CLOSE ▲"; }
-    #test-flight-console:not([open]) .tf-collapse-cue::before { content: "OPEN ▼"; }
+    #test-flight-console, #nav-console[open] .tf-collapse-cue::before { content: "CLOSE ▲"; }
+    #test-flight-console, #nav-console:not([open]) .tf-collapse-cue::before { content: "OPEN ▼"; }
 
     .tf-body {
       max-height: calc(100vh - var(--safe-top) - var(--safe-bottom) - 62px);
@@ -1046,15 +1046,15 @@
     }
 
     @media (max-height: 560px) {
-      #test-flight-console { width: min(310px, calc(100vw - 20px)); }
+      #test-flight-console, #nav-console { width: min(310px, calc(100vw - 20px)); }
       .tf-body { padding: 7px; }
       .tf-indication { padding-block: 5px; }
       .tf-note { display: none; }
     }
 
     @media (max-width: 620px) {
-      #test-flight-console { width: min(292px, calc(100vw - 16px)); top: calc(var(--safe-top) + 32px); right: calc(var(--safe-right) + 8px); }
-      #test-flight-console > summary { min-height: 36px; padding-block: 7px; }
+      #test-flight-console, #nav-console { width: min(292px, calc(100vw - 16px)); top: calc(var(--safe-top) + 32px); right: calc(var(--safe-right) + 8px); }
+      #test-flight-console, #nav-console > summary { min-height: 36px; padding-block: 7px; }
     }
 
     .ready-card {
@@ -2118,6 +2118,84 @@
         <button class="tf-action emergency" type="button" data-test-action="emergencyGearRelease" data-maintenance-only="true">E · Hold emergency<br>gear release</button>
       </div>
       <p class="tf-note">TEST INSTRUMENTATION · COMMANDS MOVE CONTROLS; INDICATIONS REPORT RESULTS. RELEASE OR POINTER LOSS RETURNS SPRING-LOADED CONTROLS SAFE. HOLD E + PRESS I TO VERIFY DOWNLOCKS.</p>
+    </div>
+  </details>
+
+  <!-- NAV CONSOLE. Same idiom as AIRCRAFT SYSTEMS deliberately: the pilot already knows how that
+       panel behaves, so navigation gets a console rather than more cue text crowding the HUD.
+       It answers the four questions the cue could not — where am I going, how far, how long, and
+       can I get there on the fuel aboard. -->
+  <details id="nav-console" hidden data-relevance="none">
+    <summary role="button" aria-expanded="false" aria-label="Toggle navigation console">
+      <span class="tf-title">NAVIGATION</span>
+      <span class="tf-collapse-cue" aria-hidden="true"></span>
+    </summary>
+    <div class="tf-body">
+      <div class="tf-indications" aria-label="Destination">
+        <div class="tf-indication wide">
+          <span class="tf-label">Destination</span>
+          <output id="nav-destination" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Bearing</span>
+          <output id="nav-bearing" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Range</span>
+          <output id="nav-range" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Time to run</span>
+          <output id="nav-eta" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Turn</span>
+          <output id="nav-turn" class="tf-value" data-state="unknown">--</output>
+        </div>
+      </div>
+      <div class="tf-indications" aria-label="Fuel to destination">
+        <div class="tf-indication">
+          <span class="tf-label">Fuel required</span>
+          <output id="nav-fuel-need" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Fuel aboard</span>
+          <output id="nav-fuel-have" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication wide">
+          <span class="tf-label">Margin</span>
+          <output id="nav-fuel-margin" class="tf-value" data-state="unknown">--</output>
+        </div>
+      </div>
+      <div class="tf-indications" aria-label="Performance">
+        <div class="tf-indication">
+          <span class="tf-label">Groundspeed</span>
+          <output id="nav-groundspeed" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Gross weight</span>
+          <output id="nav-gross" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Thrust</span>
+          <output id="nav-thrust" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication wide">
+          <span class="tf-label">Skin temp</span>
+          <output id="nav-skin" class="tf-value" data-state="unknown">--</output>
+        </div>
+      </div>
+      <div class="tf-indications" aria-label="Contact">
+        <div class="tf-indication">
+          <span class="tf-label">Contact range</span>
+          <output id="nav-contact-range" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Time to intercept</span>
+          <output id="nav-contact-eti" class="tf-value" data-state="unknown">--</output>
+        </div>
+      </div>
+      <p class="tf-note">NAVIGATION CONSOLE · N TOGGLES · FUEL REQUIRED IS TIME TO RUN AT THE CURRENT FLOW, SO SLOWING DOWN IMPROVES IT.</p>
     </div>
   </details>
 

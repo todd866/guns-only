@@ -78,13 +78,18 @@ export function rapierEnginePresentation(state) {
   const ramjetThrustKn = Math.max(0, Number(state.rapier_ramjet_thrust_kn) || 0);
   const turbineFuelPpm = Math.max(0, Number(state.rapier_turbine_fuel_ppm) || 0);
   const ramjetFuelPpm = Math.max(0, Number(state.rapier_ramjet_fuel_ppm) || 0);
-  const mode = mach < 1.6 ? "TURBINE"
-    : mach < 2.2 ? "RAM LIGHT"
-      : mach < 3.0 ? "FULL RAM"
-        : "MACH-4 RAM";
+  // Thresholds mirror TurboRamjetPerformanceMap's fade band. They were 1.6 / 2.2 / 3.0 after the
+  // band moved to 1.85 / 2.15, so the readout named a mode the engine was not in yet.
+  const RAM_FADE_START = 1.85;
+  const FULL_RAM = 2.15;
+  const TURBINE_GONE = 3.0;
+  const mode = mach < RAM_FADE_START ? "TURBINE"
+    : mach < FULL_RAM ? "RAM LIGHT"
+      : mach < TURBINE_GONE ? "FULL RAM"
+        : "RAM ONLY";
   return Object.freeze({
     text: `PROPULSION ${mode} · ${thrustKn.toFixed(0)} KN · LEVER ${lever.toFixed(2)} · M${mach.toFixed(2)} · ${Math.round(trueAirspeedKts).toLocaleString("en-US")} KTAS${Number.isFinite(stagnationC) ? ` · T0 ${Math.round(stagnationC)}°C` : ""}`,
-    level: mach >= 2.2 ? "ram" : mach >= 1.6 ? "transition" : "turbine",
+    level: mach >= FULL_RAM ? "ram" : mach >= RAM_FADE_START ? "transition" : "turbine",
     channels: Object.freeze([
       Object.freeze({
         label: "TURBINE / A-B",

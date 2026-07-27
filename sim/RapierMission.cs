@@ -55,6 +55,11 @@ public sealed class RapierMissionDirector {
     bool _recoveryMarshalReached;
     bool _recoveryLineupReached;
     bool _recoveryFinal;
+    int _circuitsFlown;
+    /// Height above the strip that counts as "going around" rather than still landing. 300 m is
+    /// above any bounce and below pattern altitude, so a touch-and-go re-arms but a long float
+    /// down the runway does not.
+    const double CircuitResetHeightM = 300.0;
 
     public RapierMissionPhase Phase => _phase;
 
@@ -130,6 +135,22 @@ public sealed class RapierMissionDirector {
         double interceptEtaSeconds = closureMps > 1.0
             ? contactRangeM / closureMps : double.PositiveInfinity;
         double homeRangeM = (home - player.Position).Length;
+
+        // CIRCUITS. Climbing back through pattern altitude with the final gates already set means
+        // the aircraft bolted, went around, or did a touch-and-go — so re-arm the pattern and fly
+        // it again rather than leaving the pilot on a completed approach with nowhere to go. This
+        // is what makes repetition possible, and repetition is the entire point of circuits: the
+        // trap is the hardest thing this aircraft asks for and the intercept offers exactly one
+        // attempt at it, 240 km from home and low on fuel.
+        if (_recoveryFinal
+            && player.Position.Y - home.Y > CircuitResetHeightM
+            && player.VelocityVector().Y > 2.0) {
+            _recoveryMarshalReached = false;
+            _recoveryLineupReached = false;
+            _recoveryFinal = false;
+
+            _circuitsFlown++;
+        }
 
         if (recovered) {
             _phase = RapierMissionPhase.Complete;
@@ -238,7 +259,7 @@ public sealed class RapierMissionDirector {
                         + $"{interceptEtaSeconds % 60.0:00}"
                     : "--:--";
                 cue = $"AUTO INTERCEPT · {contactRangeM / 1000.0:F0} KM · "
-                    + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · M4.0 / FL700";
+                    + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · M{skinMachLimit:F1} / FL700";
                 break;
             case RapierMissionPhase.Attack:
                 targetMach = 3.2;
@@ -414,16 +435,43 @@ public sealed class RapierMissionDirector {
                 //
                 // PROPER FIX, not done here: close the loop on touchdown point instead of aiming a
                 // gate open-loop. Then arrival energy stops mattering and this constant disappears.
-                const double FinalGateGammaCorrection = 0.00043;
+                // It has now been re-fitted FOUR times against four different engine configurations,
+                // which is the clearest possible argument that the open-loop aim is the defect.
+                // Fitted to the two recoveries this sortie produces, now that the engine has stopped moving:
+                //   5,339 kg wants about -0.00021
+                //   5,646 kg wants about -0.00010
+                // A single constant cannot serve both — the lighter arrival flies further — which is
+                // why the earlier constant kept missing one or the other. Slope is 3.6e-7 per kg.
+                // Sensitivity here is roughly 228 m of hook position per 0.001 rad.
+                const double FitReferenceMassKg = 5_646.0;
+                double finalGateGammaCorrection = Math.Clamp(
+                    0.00026 + 0.00000065 * (player.Mass - FitReferenceMassKg),
+                    -0.00030, 0.00030);
                 // The first squares are capture gates, so permit a high initial arrival to
                 // converge onto the published 3.5-degree line instead of preserving its error all
                 // the way to the strip. The last two gates then tighten to the mass-scheduled
                 // touchdown cap which places the trailing hook at wire three.
+                // NOTE for whoever picks this up: a closed-loop version of this floor — aiming the
+                // path angle straight at the touchdown point every tick — was tried here and lands
+                // about 250 m short, because `touchdownAim` is not where the hook needs to arrive.
+                // The idea is right and the aim point is the part to fix; do not just re-fit the
+                // constant a sixth time.
+                // Two metres PAST the aim point: rollout sweeps toward +along, so the hook must
+                // touch down just beyond wire three and sweep back onto it. Aiming exactly at the
+                // wire catches wire four.
+                Vec3D finalAim = touchdownAim + runwayForward * -2.0;
+                double geometricFinalGamma = Math.Atan2(
+                    finalAim.Y - player.Position.Y,
+                    Math.Max(1.0, Math.Sqrt(
+                        Math.Pow(finalAim.X - player.Position.X, 2.0)
+                        + Math.Pow(finalAim.Z - player.Position.Z, 2.0))));
                 double recoveryMinimumGamma = _recoveryFinal
                     ? recoveryGate switch {
                         1 => -0.12,
                         2 => -0.09,
-                        _ => -0.06425 + FinalGateGammaCorrection
+                        // Never shallower than the published slope, never steeper than the gear
+                        // and the wire can absorb.
+                        _ => -0.06425 + finalGateGammaCorrection
                     }
                     : -0.16;
                 targetGamma = Math.Clamp(
