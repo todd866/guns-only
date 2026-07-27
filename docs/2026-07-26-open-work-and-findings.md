@@ -25,10 +25,16 @@ Everything below is COMMITTED on its own branch. Nothing is lost if the scratchp
 
 ## Open, in priority order
 
-1. **The Rapier launch is unflown.** Kernel and renderer agree on the ramp geometry, and 62 carrier/catapult tests pass, but no one has flown the whole launch in a session.
-2. **The trap is unverified.** Arrestor rated 10.8 MJ against 12–15 MJ needed.
-3. **Loading corridor is designed but unwired.** 5.8 s of enclosed run, ~4,300 chunk builds of worker time, nothing uses it. Hard rule: the stroke must never wait on the loader.
-4. Ejection (Shift+E), the two BFM cues, the player-ground-impact effect, clouds rotating with roll.
+1. **Flight-test harness (teaching physics contract).** Spec/plan:
+   `docs/superpowers/specs/2026-07-27-flight-test-harness-design.md` and
+   `docs/superpowers/plans/2026-07-27-flight-test-harness.md`. Branch
+   `feature/flight-test-harness`. Under aspirational Identity, Rapier fails family
+   augmented T/W (≤1.20) and AB climb γ through M1 (≤40°) until Identity or the motor
+   is deliberately retuned — do not buff propulsion to green the report.
+2. **The Rapier launch is unflown.** Kernel and renderer agree on the ramp geometry, and 62 carrier/catapult tests pass, but no one has flown the whole launch in a session.
+3. **The trap is unverified.** Arrestor rated 10.8 MJ against 12–15 MJ needed.
+4. **Loading corridor is designed but unwired.** 5.8 s of enclosed run, ~4,300 chunk builds of worker time, nothing uses it. Hard rule: the stroke must never wait on the loader.
+5. Ejection (Shift+E), the two BFM cues, the player-ground-impact effect, clouds rotating with roll.
 
 ## Found 2026-07-26, not yet fixed
 
