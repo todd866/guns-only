@@ -67,9 +67,19 @@ export function rapierGuidancePresentation(state) {
     : fuelMarginLb < 0 ? `SHORT ${Math.round(-fuelMarginLb)} LB`
       : fuelMarginLb < fuelToHomeLb * 0.10 ? `MARGINAL +${Math.round(fuelMarginLb)} LB`
         : `OK +${Math.round(fuelMarginLb)} LB`;
-  const fuelCue = Number.isFinite(fuelToHomeLb)
-    ? ` · NEED ${Math.round(fuelToHomeLb)} LB · HAVE ${Math.round(fuelLb)} LB · ${fuelVerdict}`
+  // The nav triad on the cue as well as the console: nm/min, lb/min, lb/nm is how the pilot reads
+  // navigation, and lb/nm is the only figure that improves when they slow down.
+  const groundKts = Math.max(0, Number(state.ground_speed_kts) || 0);
+  const nmPerMin = groundKts / 60;
+  const lbPerMin = fuelFlowPph / 60;
+  const lbPerNm = nmPerMin > 0.01 ? lbPerMin / nmPerMin : Number.NaN;
+  const rateCue = nmPerMin > 0.01
+    ? ` · ${nmPerMin.toFixed(1)} NM/MIN · ${Math.round(lbPerMin)} LB/MIN`
+      + `${Number.isFinite(lbPerNm) ? ` · ${lbPerNm.toFixed(2)} LB/NM` : ""}`
     : "";
+  const fuelCue = Number.isFinite(fuelToHomeLb)
+    ? `${rateCue} · NEED ${Math.round(fuelToHomeLb)} LB · HAVE ${Math.round(fuelLb)} LB · ${fuelVerdict}`
+    : rateCue;
   const detail = hasHome
     ? `HOME ${String(Math.round((homeBearingDeg % 360 + 360) % 360)).padStart(3, "0")}° · ${homeRangeNm.toFixed(0)} NM · ETA ${etaMinutes} MIN · ${turn}${fuelCue} · ${active ? "AUTOMATION HAS CONTROL" : "FOLLOW HOME CUE · P ENGAGES AUTO"}`
     : "";

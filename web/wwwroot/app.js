@@ -269,6 +269,9 @@ const navUi = navConsole ? Object.freeze({
   fuelNeed: document.querySelector("#nav-fuel-need"),
   fuelHave: document.querySelector("#nav-fuel-have"),
   fuelMargin: document.querySelector("#nav-fuel-margin"),
+  nmPerMin: document.querySelector("#nav-nm-per-min"),
+  lbPerMin: document.querySelector("#nav-lb-per-min"),
+  lbPerNm: document.querySelector("#nav-lb-per-nm"),
   groundspeed: document.querySelector("#nav-groundspeed"),
   gross: document.querySelector("#nav-gross"),
   thrust: document.querySelector("#nav-thrust"),
@@ -352,7 +355,21 @@ function updateNavConsole(state) {
       : marginLb < 0 ? "fault"
         : marginLb < needLb * 0.10 ? "caution" : "normal");
 
+  // THE NAV TRIAD, and it leads the console because it is how the pilot actually thinks:
+  // miles per minute, pounds per minute, pounds per mile. Everything else on this panel is
+  // derived from these three, and lb/nm is the one that decides whether a speed is affordable —
+  // it is the only figure that improves when you slow down.
   const groundKts = num("ground_speed_kts");
+  const nmPerMin = Number.isFinite(groundKts) ? groundKts / 60 : Number.NaN;
+  const lbPerMin = Number.isFinite(flowPph) ? flowPph / 60 : Number.NaN;
+  const lbPerNm = Number.isFinite(lbPerMin) && nmPerMin > 0.01
+    ? lbPerMin / nmPerMin : Number.NaN;
+  set(navUi.nmPerMin, Number.isFinite(nmPerMin) ? `${nmPerMin.toFixed(1)} NM/MIN` : "--",
+    Number.isFinite(nmPerMin) ? "normal" : "unknown");
+  set(navUi.lbPerMin, Number.isFinite(lbPerMin) ? `${Math.round(lbPerMin)} LB/MIN` : "--",
+    Number.isFinite(lbPerMin) ? "normal" : "unknown");
+  set(navUi.lbPerNm, Number.isFinite(lbPerNm) ? `${lbPerNm.toFixed(2)} LB/NM` : "--",
+    Number.isFinite(lbPerNm) ? "normal" : "unknown");
   set(navUi.groundspeed, finite(groundKts)
     ? `${Math.round(groundKts).toLocaleString("en-US")} KT\n${Math.round(groundKts * 1.852).toLocaleString("en-US")} KM/H`
     : "--", finite(groundKts) ? "normal" : "unknown");
