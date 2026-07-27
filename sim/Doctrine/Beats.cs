@@ -741,9 +741,13 @@ public static class Beats {
             // The aircraft exists because basing sits far enough back that cratering the field is
             // impractical, and at 90 or even 118 km the pilot never spends the climb or the ram
             // acceleration that justify any of it. With the contact closing at 210 m/s the merge
-            // still falls near 330 km. At 260 km the pilot kept arriving with closure to spare and
-            // running past the contact before the geometry was set up; the transit has to be long
-            // enough to finish the climb AND the acceleration AND still have the merge ahead.
+            // still falls near 190 km. 420 km was too far the other way: the pilot ran out of fuel
+            // at the attack point, because the transit plus a fight plus a 420 km egress does not
+            // fit 5,950 lb. 240 km still forces the full climb and the ram acceleration — the ram
+            // corridor alone needs about 90 km at altitude — while leaving fuel for the fight and
+            // the trap. Reach is what this aircraft is FOR, so this is the number to revisit once
+            // per-stream fuel stops charging military flow for a turbine that is contributing
+            // nothing above M2.7.
             //
             // The far half of the route is over presentation apron rather than authored terrain.
             // At 21 km cruise that is invisible; it would matter if the fight went low, and it is
