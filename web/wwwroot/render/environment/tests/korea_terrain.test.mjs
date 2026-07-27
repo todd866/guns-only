@@ -949,8 +949,9 @@ test("unified Ukraine v2 terrain retains its palette while ambient micro scenery
   assert.equal(terrain.group.name, "UKRAINE_SONIACHNE_2030S_TERRAIN");
   assert.equal(terrain.material.defines.MODERN_SCENERY, 1);
   assert.equal(terrain.material.defines.UKRAINE_SCENERY, 1);
-  assert.equal(terrain.diagnostics().horizonApron, false,
-    "the regional v2 product supplies its own macro horizon");
+  assert.equal(terrain.diagnostics().horizonApron, true,
+    "the v2 product still needs a horizon apron: it is 262 km across and the horizon at FL700 is "
+    + "about 520 km, so without one the world simply stops and the sky shows through");
   assert.equal(terrain.diagnostics().ambientSceneryEnabled, true);
   assert.equal(terrain.diagnostics().sceneryChunks, 1);
   assert.equal(terrain.diagnostics().localSceneryChunks, 0,

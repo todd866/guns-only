@@ -1063,7 +1063,14 @@ class KoreaTerrainPresentation {
     // synthetic edge source and the same smooth blend as TrainingTerrainApronSurface before
     // reaching the 78 m far datum. It remains presentation-only and explicitly owns no targets,
     // obstacles or LZ truth; all authored mission geometry stays inside the detailed cell.
-    this.horizonApron = manifest.terrainId === "terrain.ukraine.soniachne-training.v1"
+    // Match the Ukraine terrain FAMILY, not one exact id. This was pinned to
+    // "terrain.ukraine.soniachne-training.v1"; the product was later renamed to
+    // "...soniachne-theatre.v2" and this silently stopped matching, so the horizon apron was never
+    // built at all. Without it visibleWorldRadiusM falls back to the 40 km chunk radius, fog closes
+    // to 34 km, and beyond the streamed square there is simply no geometry — which is the reported
+    // "flickering terrain with blue beyond the square". The blue was the sky showing through where
+    // the ground should have been.
+    this.horizonApron = /^terrain\.ukraine\./.test(String(manifest.terrainId ?? ""))
       ? createUkraineTrainingHorizonApron(THREE)
       : null;
     if (this.horizonApron) {
