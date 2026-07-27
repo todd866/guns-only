@@ -858,7 +858,14 @@ public static class Beats {
                 Position = new Vec3D(0.0, 24_000.0, -400_000.0), Speed = 200.0
             },
             UsesReactiveBandit = false,
-            ScriptedIntercept = null,
+            ScriptedIntercept = new ScriptedInterceptConfig(
+                FormationSize: 0,
+                ShortRangeMissiles: 0,
+                DogfightingDrones: 0,
+                PursuerCount: 0,
+                PatternOnly: true,
+                AutomationDefaultEnabled: true,
+                RecoveryRequired: true),
             Combat = CombatConfig.CarrierRecoveryOnly,
             // Full tanks and no bingo pressure: the point is repetition, not endurance. A circuit
             // costs a few hundred pounds, so this is roughly a dozen patterns before fuel matters.

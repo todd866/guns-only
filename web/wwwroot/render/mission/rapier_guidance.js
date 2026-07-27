@@ -11,13 +11,25 @@ const PHASE = Object.freeze({
   10: "COMPLETE",
 });
 
+const CIRCUITS_PHASE = Object.freeze({
+  1: "CIRCUITS · LAUNCH",
+  2: "CIRCUITS · CLIMB",
+  9: "RECOVERY",
+  10: "COMPLETE",
+});
+
 /// Quiet mode line under the heading tape. Spec:
 /// docs/superpowers/specs/2026-07-27-hud-limits-panel-design.md
 /// Nav numbers live in the Limits Panel; engine bars live in Systems.
 export function rapierGuidancePresentation(state) {
   if (state?.rapier_mission_available !== true) return null;
   const phase = Math.floor(Number(state.rapier_mission_phase) || 0);
-  let phaseText = PHASE[phase] ?? "MISSION";
+  const patternOnly = state.rapier_pattern_only === true
+    || (typeof state.rapier_mission_cue === "string"
+      && state.rapier_mission_cue.startsWith("CIRCUITS"));
+  let phaseText = (patternOnly ? CIRCUITS_PHASE[phase] : null)
+    ?? PHASE[phase]
+    ?? "MISSION";
   const enabled = state.rapier_automation_enabled === true;
   const active = state.rapier_automation_active === true;
   const drones = Math.max(0,
@@ -29,12 +41,11 @@ export function rapierGuidancePresentation(state) {
     phaseText = `${phaseText} · GATE ${gate}/4`;
   }
 
-  const weapon = phase === 6
+  const weapon = phase === 6 && !patternOnly
     ? ` · F RELEASES SWARM · ${drones}`
     : "";
   const authority = active ? "AUTO" : enabled ? "AUTO STBY" : "PILOT";
 
-  // Thermal OVER replaces the mode fragment until clear — Limits accent also goes fault.
   const marginC = Number(state.rapier_thermal_margin_c);
   const thermalOver = Number.isFinite(marginC) && marginC < 0;
   const text = thermalOver

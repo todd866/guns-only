@@ -310,6 +310,7 @@ internal static class SnapshotProjection {
             + $"\"time_compression_factor\":{Session.TimeCompressionFactor},"
             + $"\"time_compression_inhibit_reason\":\"{TimeCompressionInhibitToken(Session.TimeCompressionInhibitReason)}\","
             + $"\"rapier_mission_available\":{(Session.RapierMissionAvailable ? "true" : "false")},"
+            + $"\"rapier_pattern_only\":{(Session.Beat.ScriptedIntercept?.PatternOnly == true ? "true" : "false")},"
             + $"\"rapier_automation_enabled\":{(Session.RapierAutomationEnabled ? "true" : "false")},"
             + $"\"rapier_automation_active\":{(Session.RapierAutomationActive ? "true" : "false")},"
             + $"\"rapier_mission_phase\":{(int)Session.RapierPhase},"

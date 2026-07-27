@@ -39,7 +39,13 @@ public sealed record ScriptedInterceptConfig(
     double PursuitEscapeRangeM = 80_000.0,
     double PursuerMach = 3.0,
     bool AutomationDefaultEnabled = true,
-    bool RecoveryRequired = true);
+    bool RecoveryRequired = true,
+    /// <summary>
+    /// Circuits / pattern-only: launch, climb to the recovery shelf, trap, repeat. No contact,
+    /// no egress dash — the director must not treat a zero-opponent count as "go recover from
+    /// FL700" during the catapult stroke, and must not chase a parked phantom bandit.
+    /// </summary>
+    bool PatternOnly = false);
 
 /// <summary>
 /// Deterministic mission director for the Rapier public-data surrogate. The director commands the
@@ -56,10 +62,14 @@ public sealed class RapierMissionDirector {
     bool _recoveryLineupReached;
     bool _recoveryFinal;
     int _circuitsFlown;
+    bool _circuitShelfReached;
     /// Height above the strip that counts as "going around" rather than still landing. 300 m is
     /// above any bounce and below pattern altitude, so a touch-and-go re-arms but a long float
     /// down the runway does not.
     const double CircuitResetHeightM = 300.0;
+    /// Circuits climb shelf — approximately marshal height AGL so the pattern is reachable without
+    /// a full FL700 intercept climb.
+    const double CircuitShelfHeightM = 3_700.0;
 
     public RapierMissionPhase Phase => _phase;
 
@@ -124,7 +134,8 @@ public sealed class RapierMissionDirector {
         double pursuitRangeM,
         in Vec3D home,
         in Vec3D recoveryInitial,
-        bool recovered) {
+        bool recovered,
+        bool patternOnly = false) {
         AtmosphericState air = atmosphere.Sample(player.Position.Y);
         double mach = trueAirspeedMps / Math.Max(1.0, air.SpeedOfSoundMps);
         Vec3D contactDelta = contact.Position - player.Position;
@@ -138,17 +149,13 @@ public sealed class RapierMissionDirector {
 
         // CIRCUITS. Climbing back through pattern altitude with the final gates already set means
         // the aircraft bolted, went around, or did a touch-and-go — so re-arm the pattern and fly
-        // it again rather than leaving the pilot on a completed approach with nowhere to go. This
-        // is what makes repetition possible, and repetition is the entire point of circuits: the
-        // trap is the hardest thing this aircraft asks for and the intercept offers exactly one
-        // attempt at it, 240 km from home and low on fuel.
+        // it again rather than leaving the pilot on a completed approach with nowhere to go.
         if (_recoveryFinal
             && player.Position.Y - home.Y > CircuitResetHeightM
             && player.VelocityVector().Y > 2.0) {
             _recoveryMarshalReached = false;
             _recoveryLineupReached = false;
             _recoveryFinal = false;
-
             _circuitsFlown++;
         }
 
@@ -156,11 +163,22 @@ public sealed class RapierMissionDirector {
             _phase = RapierMissionPhase.Complete;
         } else if (pursuitActive) {
             _phase = RapierMissionPhase.Escape;
+        } else if (patternOnly) {
+            // Pattern-only must not treat "no kill yet" as RTB during the stroke, and must not
+            // chase the parked phantom contact used to satisfy BeatSetup's bandit slot.
+            if (catapultActive) {
+                _phase = RapierMissionPhase.Launch;
+                _circuitShelfReached = false;
+            } else if (!_circuitShelfReached
+                && player.Position.Y < home.Y + CircuitShelfHeightM - 40.0) {
+                _phase = RapierMissionPhase.Climb;
+            } else {
+                _circuitShelfReached = true;
+                _phase = RapierMissionPhase.Recovery;
+            }
         } else if (liveOpponentCount <= 0) {
             // Remain on the M2/FL450 return until 90 km. The recovery marshal lies beyond the
-            // strip, leaving about 136 km to decelerate, descend and reverse onto final. That is
-            // still a real energy-management problem without turning the trip home into half an
-            // hour of low-speed transit.
+            // strip, leaving about 136 km to decelerate, descend and reverse onto final.
             _phase = homeRangeM <= 90_000.0
                 ? RapierMissionPhase.Recovery
                 : RapierMissionPhase.ReturnToBase;
@@ -202,26 +220,37 @@ public sealed class RapierMissionDirector {
         switch (_phase) {
             case RapierMissionPhase.Launch:
                 targetMach = 0.9;
-                targetAltitudeFt = 56_000.0;
+                targetAltitudeFt = patternOnly
+                    ? (home.Y + CircuitShelfHeightM) * FeetPerMetre
+                    : 56_000.0;
                 targetGamma = player.Gamma;
                 throttle = 1.55;
-                waypoint = contact.Position;
-                cue = "AUTO LAUNCH · TRACK OWNS THE AIRCRAFT";
+                waypoint = patternOnly ? recoveryInitial : contact.Position;
+                cue = patternOnly
+                    ? "CIRCUITS · LAUNCH · TRACK OWNS THE AIRCRAFT"
+                    : "AUTO LAUNCH · TRACK OWNS THE AIRCRAFT";
                 break;
             case RapierMissionPhase.Climb:
-                targetMach = 0.9;
-                targetAltitudeFt = 56_000.0;
-                targetGamma = AltitudeCaptureGamma(ClimbTopM, player,
-                    trueAirspeedMps, captureSeconds: 60.0,
-                    minimumGamma: -0.02, maximumGamma: 0.27);
-                // The uprated engine has enough excess thrust to run through the inlet schedule
-                // during the climb. Spend that energy on height instead: the computer rolls power
-                // back above the M0.9 target, then restores full augmentation on the FL560 shelf.
+                targetMach = patternOnly ? 0.55 : 0.9;
+                targetAltitudeFt = patternOnly
+                    ? (home.Y + CircuitShelfHeightM) * FeetPerMetre
+                    : 56_000.0;
+                targetGamma = AltitudeCaptureGamma(
+                    patternOnly ? home.Y + CircuitShelfHeightM : ClimbTopM,
+                    player,
+                    trueAirspeedMps,
+                    captureSeconds: patternOnly ? 45.0 : 60.0,
+                    minimumGamma: -0.02,
+                    maximumGamma: patternOnly ? 0.18 : 0.27);
                 throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                    trimLever: 0.62, gain: 1.10);
-                waypoint = contact.Position;
-                cue = $"AUTO CLIMB · HOLD M0.90 · M{mach:F2} · "
-                    + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL560";
+                    trimLever: patternOnly ? 0.85 : 0.62, gain: 1.10);
+                waypoint = patternOnly ? recoveryInitial : contact.Position;
+                cue = patternOnly
+                    ? $"CIRCUITS · CLIMB TO PATTERN · M{mach:F2} · "
+                        + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → "
+                        + $"FL{(home.Y + CircuitShelfHeightM) * FeetPerMetre / 100.0:F0}"
+                    : $"AUTO CLIMB · HOLD M0.90 · M{mach:F2} · "
+                        + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL560";
                 break;
             case RapierMissionPhase.Accelerate:
                 targetMach = 2.2;

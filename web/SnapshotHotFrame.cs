@@ -105,6 +105,7 @@ internal static class SnapshotHotFrame {
         Num("time_compression_requested_factor", RawInteger);
         Num("time_compression_factor", RawInteger);
         Bool("rapier_mission_available");
+        Bool("rapier_pattern_only");
         Bool("rapier_automation_enabled");
         Bool("rapier_automation_active");
         Num("rapier_mission_phase", RawInteger);
@@ -618,6 +619,7 @@ internal static class SnapshotHotFrame {
             session.TimeCompressionRequestedFactor, RawInteger);
         w.Num("time_compression_factor", session.TimeCompressionFactor, RawInteger);
         w.Bool("rapier_mission_available", session.RapierMissionAvailable);
+        w.Bool("rapier_pattern_only", session.Beat.ScriptedIntercept?.PatternOnly == true);
         w.Bool("rapier_automation_enabled", session.RapierAutomationEnabled);
         w.Bool("rapier_automation_active", session.RapierAutomationActive);
         w.Num("rapier_mission_phase", (int)session.RapierPhase, RawInteger);

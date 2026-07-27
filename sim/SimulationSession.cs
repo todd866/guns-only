@@ -1314,7 +1314,8 @@ public sealed class SimulationSession {
             _rapierPursuitRangeM,
             _carrier.Position,
             recoveryInitial,
-            recovered);
+            recovered,
+            patternOnly: _beat.ScriptedIntercept?.PatternOnly == true);
     }
 
     PilotCommand RapierAutomationOr(in PilotCommand pilotCommand) {
