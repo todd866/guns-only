@@ -44,6 +44,10 @@ import {
   rapierGuidancePresentation,
 } from "./render/mission/rapier_guidance.js";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
+import {
+  armFlightAudio,
+  setFlightAudioEnabled,
+} from "./render/audio/flight_audio.js";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -333,50 +337,8 @@ class CombatHud {
   }
 
   armAudio() {
-    if (!this.audioEnabled) return;
-    if (!this._audioCtx) {
-      const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
-      if (!AudioContextClass) return;
-      const audio = new AudioContextClass();
-      const master = audio.createGain();
-      const filter = audio.createBiquadFilter();
-      const oscillator = audio.createOscillator();
-      const gcasOscillator = audio.createOscillator();
-      const gcasGain = audio.createGain();
-      const noise = audio.createBufferSource();
-      const buffer = audio.createBuffer(1, 4096, audio.sampleRate);
-      const samples = buffer.getChannelData(0);
-      let seed = 0x47554e53;
-      for (let i = 0; i < samples.length; i++) {
-        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-        samples[i] = ((seed / 0xffffffff) * 2 - 1) * 0.24;
-      }
-      oscillator.type = "sawtooth";
-      oscillator.frequency.value = 63;
-      gcasOscillator.type = "square";
-      gcasOscillator.frequency.value = 760;
-      gcasGain.gain.value = 0;
-      noise.buffer = buffer;
-      noise.loop = true;
-      filter.type = "lowpass";
-      filter.frequency.value = 820;
-      filter.Q.value = 0.72;
-      master.gain.value = 0;
-      oscillator.connect(filter);
-      noise.connect(filter);
-      filter.connect(master);
-      master.connect(audio.destination);
-      gcasOscillator.connect(gcasGain);
-      gcasGain.connect(audio.destination);
-      oscillator.start();
-      noise.start();
-      gcasOscillator.start();
-      this._audioCtx = audio;
-      this._gunAudioGain = master;
-      this._gcasAudioGain = gcasGain;
-      this._gcasAudioOscillator = gcasOscillator;
-    }
-    if (this._audioCtx.state === "suspended") this._audioCtx.resume().catch(() => {});
+    // Shared flight bus owns unlock; keep this as the gesture entry from controls / ready.
+    armFlightAudio();
   }
 
   toggleAudio() {
@@ -385,46 +347,16 @@ class CombatHud {
 
   setAudioEnabled(enabled) {
     this.audioEnabled = Boolean(enabled);
-    this._gunAudioFiring = false;
-    if (!this.audioEnabled && this._gunAudioGain && this._audioCtx)
-      this._gunAudioGain.gain.setTargetAtTime(0, this._audioCtx.currentTime, 0.012);
-    if (!this.audioEnabled && this._gcasAudioGain && this._audioCtx)
-      this._gcasAudioGain.gain.setTargetAtTime(0, this._audioCtx.currentTime, 0.012);
-    this._gcasAudioLevel = -1;
+    setFlightAudioEnabled(this.audioEnabled);
     return this.audioEnabled;
   }
 
-  updateGunAudio(frame) {
-    const firing = this.audioEnabled && frame.triggerHeld && frame.state.gun_firing === true
-      && frame.state.gun_overheat !== true;
-    if (firing && !this._audioCtx) this.armAudio();
-    if (!this._gunAudioGain || !this._audioCtx) return;
-    if (firing === this._gunAudioFiring) return;
-    this._gunAudioFiring = firing;
-    const target = firing ? 0.028 : 0;
-    this._gunAudioGain.gain.setTargetAtTime(target, this._audioCtx.currentTime, firing ? 0.008 : 0.018);
+  updateGunAudio(_frame) {
+    // Gun reports live on the shared flight bus (updateFlightAudio).
   }
 
-  updateGcasAudio(frame) {
-    const active = frame.state.auto_gcas_active === true;
-    const warning = frame.state.auto_gcas_warning === true;
-    // A conscious pilot receives an aural attention getter. During actual G-LOC the model does
-    // not grant the player an impossible auditory channel; recovery remains visible in telemetry
-    // and the debrief after consciousness returns.
-    const conscious = frame.state.pilot_conscious !== false;
-    const rateHz = active ? 6 : warning ? 3 : 0;
-    const phaseOn = rateHz > 0
-      && Math.floor((Number(frame.now) || 0) * rateHz * 2) % 2 === 0;
-    const level = this.audioEnabled && conscious && phaseOn
-      ? active ? 0.024 : 0.014 : 0;
-    if (level > 0 && !this._audioCtx) this.armAudio();
-    if (!this._gcasAudioGain || !this._gcasAudioOscillator || !this._audioCtx) return;
-    if (level === this._gcasAudioLevel) return;
-    this._gcasAudioLevel = level;
-    this._gcasAudioOscillator.frequency.setTargetAtTime(
-      active ? 920 : 760, this._audioCtx.currentTime, 0.006,
-    );
-    this._gcasAudioGain.gain.setTargetAtTime(level, this._audioCtx.currentTime, 0.008);
+  updateGcasAudio(_frame) {
+    // GCAS aural lives on the shared flight bus (updateFlightAudio).
   }
 
   project(world, camera, out = this.projectionA) {

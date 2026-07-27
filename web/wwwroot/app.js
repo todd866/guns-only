@@ -147,7 +147,10 @@ import {
   createRapierDispersedStrip,
   createRapierGunDrone,
 } from "./render/scene/scene_builders.js";
-import { updateEngineAudio } from "./render/audio/engine_audio.js";
+import {
+  setFlightAudioEnabled,
+  updateFlightAudio,
+} from "./render/audio/flight_audio.js";
 
 const DEG = Math.PI / 180;
 const MAX_GIMBAL_YAW = PADLOCK_LIMITS.yawRad;
@@ -172,9 +175,9 @@ const PRODUCTION_KOREA_TERRAIN_ENABLED = true;
 // browser-reachable until its source lock, pack manifest, licence closure, and custom-host delivery
 // have passed the same release gate as the rest of the pack.
 const DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL = null;
-const UKRAINE_2030S_TERRAIN_ID = "terrain.ukraine.soniachne-theatre.v2";
+const UKRAINE_2030S_TERRAIN_ID = "terrain.ukraine.rapier-range.atlas.v1";
 const UKRAINE_TRAINING_TERRAIN_MANIFEST_URL = new URL(
-  "./content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json",
+  "./content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json",
   import.meta.url,
 ).href;
 
@@ -1504,6 +1507,7 @@ function applyPlayerSettings() {
   document.documentElement.classList.toggle("high-contrast", playerSettings.highContrast);
   document.documentElement.classList.toggle("forced-reduced-motion", playerSettings.reducedMotion);
   document.documentElement.classList.toggle("large-interface-text", playerSettings.largeText);
+  setFlightAudioEnabled(playerSettings.audio);
   activeView?.hud.setAudioEnabled(playerSettings.audio);
   activeView?.hud.setControlBindings?.(playerSettings.bindings);
   if (settingsAudio) settingsAudio.checked = playerSettings.audio;
@@ -5888,9 +5892,13 @@ class FlightView {
           .addScaledVector(this.deckRelativeVelocity.normalize(), 10000);
       }
     }
-    // Fail-silent: engine_audio disables itself permanently on any error rather than
-    // letting an audio problem reach the flight kernel.
-    updateEngineAudio(state);
+    // Fail-silent: flight_audio disables itself permanently on any error rather than
+    // letting an audio problem reach the flight kernel. Mute follows player settings.
+    updateFlightAudio(state, {
+      muted: !playerSettings.audio,
+      triggerHeld: isGkeyHeld(8),
+      nowSeconds,
+    });
     updateCarrierRuntimePresentation(
       this.carrierRuntime,
       this.presentationAssets.carrierSlot.object,

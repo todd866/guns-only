@@ -1,13 +1,27 @@
 # Better sound — presentation audio bus and Rapier regimes (design)
 
-Status: Recommended for implementation · 2026-07-28 · Investigation-backed; not yet flown as a feel gate.
+Status: Phase 0–1 feel gate implemented · 2026-07-28 · Investigation-backed; flown mute + layered jet path in code.
 
 Builds on: `docs/superpowers/specs/2026-07-16-guns-only-design.md` §12 (“Sound is half the physics feel”),
 `docs/research/2026-07-16-prior-art-survey.md` (AC7 stylization lesson), existing
-`web/wwwroot/render/audio/engine_audio.js`, `web/wwwroot/hud.js` gun/GCAS paths, indoor
+`web/wwwroot/render/audio/engine_audio.js` / `flight_audio.js`, `web/wwwroot/hud.js` gun/GCAS paths, indoor
 `web/wwwroot/indoor/audio.js`, and Rapier regime docs
 (`docs/airframes/rapier/30-propulsion-and-inlet.md`,
 `docs/superpowers/specs/2026-07-27-rapier-zoom-lob-design.md`).
+
+## Research synthesis (what “sounds like a jet” requires)
+
+Authoritative / practitioner sources consulted for the Phase 1 voice stack (not vibes):
+
+| Source | Takeaway used |
+| --- | --- |
+| NASA / system-noise auralization (fan forward/aft, core, jet; broadband subtractive + additive R–S tones) | Separate **tonal fan/compressor**, **core**, and **jet exhaust** layers; do not rely on one filtered-noise bed |
+| Chalmers turbofan decomposition (fan dominates approach; jet + fan at takeoff; Heidmann-style fan/compressor) | Fan tip / BPF **whine** is identity; exhaust roar tracks power |
+| Sound.SE jet synthesis thread (harmonics + LF body; lowpass with resonance beats thin bandpass-only hiss) | Additive partials + **resonant lowpass exhaust**; keep bottom end |
+| Andy Farnell / Red Blob Games motor notes (noise through resonant filters; Q as character) | Narrow high-Q bandpass for fan whine; shared pink field shaped per layer |
+| MDN Web Audio best practices (`setTargetAtTime`, gesture `resume`) | Continuous gains via `setTargetAtTime`; fail-silent suspended contexts |
+
+**Cockpit / ownship stack chosen (Approach A, procedural):** compressor partial stack + fan-whine BP + core BP + jet LP roar + ram BP + q-driven rush, density-scaled, coast-gated. No sample packs.
 
 ## Thesis
 
@@ -23,39 +37,31 @@ bend the flight model to make audio interesting.
 
 ## Current state (2026-07-28)
 
-### What exists
+### What exists (post Phase 0–1)
 
 | Surface | Location | Mechanism | Works? |
 | --- | --- | --- | --- |
-| Engine / airframe loop | `web/wwwroot/render/audio/engine_audio.js` | Web Audio: 6 sine turbine partials, shared pink core/ram, separate q-driven rush; equal-power turbine→ram M1.6–M2.7; spool rate limits; fail-silent disable | Yes — unit-tested; audible; already Rapier-aware for ram handover |
-| Gun continuous report | `web/wwwroot/hud.js` `armAudio` / `updateGunAudio` | **Separate** `AudioContext`: sawtooth + white-ish noise through lowpass; gain toggled on `gun_firing` | Weak — continuous hiss, not a gun; ignores distance/overheat nuance beyond mute of overheat |
-| GCAS aural | `hud.js` `updateGcasAudio` | Square beep gated by warning/active + consciousness | Works as attention getter |
-| Buffet | HUD visual only (`buffet`, `buffet_*_deg`) | No audio | Missing — Project Wingman lesson: stalls feel empty without it |
-| Indoor microdrone | `web/wwwroot/indoor/audio.js` | Class with shared bus + compressor + one-shots | Better structure than flight path; pattern to steal |
-| Profile ID | Snapshot `audio_profile_id` / pack `audioProfileId` | Published as `"audio.fixed-wing.jet.v1"` for Korea; `null` for modern surrogate | **Unused by client** — dead contract |
-| Sample assets | under `web/wwwroot` | None (no `.mp3`/`.ogg`/`.wav` in tree) | N/A by design today |
-| Howler / Tone.js | dependencies | Not present | N/A |
+| Flight façade | `web/wwwroot/render/audio/flight_audio.js` | Shared `AudioContext` + master + DynamicsCompressor; mute; drives engine/events/warnings | Yes — unit-tested |
+| Engine / airframe loop | `engine_audio.js` | Partials + fan whine + core + jet exhaust + ram + q rush; density + coast gate; M1.6–M2.7 handover | Yes — deepened |
+| Gun reports | `event_audio.js` | Cyclic short noise+square reports while `gun_firing` | Yes — replaces continuous bed |
+| Buffet rumble | `event_audio.js` | Lowpass pink from `buffet` + buffet angle magnitude | Yes |
+| GCAS aural | `warning_audio.js` | Square beep on shared bus | Yes — same semantics |
+| HUD audio | `hud.js` | Delegates arm/enable to façade; no private context | Mute unified |
+| Indoor microdrone | `indoor/audio.js` | Unchanged; pattern source for bus/compressor | Isolated |
 
 Call sites:
 
-- `app.js` → `updateEngineAudio(state)` every render frame (**never passes `muted`**).
-- `app.js` → `hud.setAudioEnabled(playerSettings.audio)` only affects HUD gun/GCAS.
-- User gesture arms HUD audio (`armAudio`); engine context resumes itself when suspended.
+- `app.js` → `updateFlightAudio(state, { muted: !playerSettings.audio, triggerHeld, nowSeconds })` every frame.
+- `app.js` / HUD → `setFlightAudioEnabled` / `armFlightAudio` for settings + gesture unlock.
 
-### What does not work / gaps
+### What does not work / remaining gaps
 
-1. **Two AudioContexts** — engine and HUD never share a master, compressor, or mute. Settings audio
-   toggle silences guns/GCAS but leaves the engine running.
-2. **Engine mute bug** — `updateEngineAudio` supports `{ muted }` but production never sets it.
-3. **No feel layer** — buffet rumble, hit/impact, destruction, ranging ticks (Type 1), bandit gun at
-   distance — absent in the flight client.
-4. **Regime blindness beyond Mach handover** — zoom-coast silence, RCS thruster, reentry, catapult,
-   and trap are first-class Rapier stories in docs/sim (`rapier_rcs_*`, `arrest_phase`, catapult
-   mode, `rapier_turbine_thrust_kn` / `rapier_ramjet_thrust_kn`) but unused by audio.
-5. **Gun is a loop, not a report** — design prose wants “gunfire with distance-appropriate report”;
-   current voice is a thin continuous bed.
-6. **Profile ID is aspirational** — schemas and Korea pack advertise an audio profile; renderer
-   ignores it. Rapier modern surrogate publishes `null`.
+1. ~~Two AudioContexts~~ — **fixed** in Phase 0–1 (shared façade).
+2. ~~Engine mute bug~~ — **fixed** (`muted: !playerSettings.audio`).
+3. Hit/impact, destruction, ranging ticks — still absent.
+4. Full Rapier Phase 2 polish (RCS ticks, reentry character, catapult/trap one-shots) — coast silence + density are in; remaining cues deferred.
+5. ~~Gun is a loop~~ — **fixed** (cyclic reports).
+6. Profile ID is aspirational — schemas advertise an audio profile; renderer still ignores pack mapping.
 
 ### Constraints (hard)
 
@@ -270,8 +276,8 @@ trap.
 
 ## Implementation plan pointer
 
-After approval, write `docs/superpowers/plans/2026-07-28-better-sound.md` with task-sized steps
-starting at Phase 0–1. Do not implement Phase 2 regime polish until Phase 1 is flown.
+Plan: `docs/superpowers/plans/2026-07-28-better-sound.md`. Phase 0–1 feel-gate slice is in code;
+do not implement remaining Phase 2 regime polish until that slice is flown.
 
 ## Open questions (do not block Phase 0–1)
 

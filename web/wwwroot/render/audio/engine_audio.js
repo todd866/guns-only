@@ -1,99 +1,125 @@
 // Synthesised Rapier engine and airframe sound. There are no samples to license or fail to load:
-// the turbine, core, ram duct, and boundary-layer rush are built from Web Audio primitives.
+// the fan/compressor stack, core, jet exhaust, ram duct, and boundary-layer rush are built from
+// Web Audio primitives.
 //
-// The compressor is an additive stack rather than a raw oscillator. The core and ram voices use
-// deterministic pink noise, while a separately generated pink bed represents airframe rush and is
-// driven only by dynamic pressure. Across M1.6..M2.7 the tonal turbine voice gives way to the broad
-// ram voice on an equal-power curve, making the aircraft's defining propulsion transition audible.
+// Research-backed layering (cockpit / ownship perspective):
+// - Fan / compressor: additive slightly-inharmonic partials (NASA auralization / Chalmers turbofan
+//   decomposition — discrete tones + broadband, not white noise alone).
+// - Fan tip whine: narrow high bandpass on the shared pink field (rotor-stator character).
+// - Core + jet exhaust: pink through mid bandpass and resonant lowpass (LF energy; Sound.SE /
+//   Farnell subtractive roar — jets need bottom end, not a thin hiss).
+// - Airframe rush: independent pink bed driven only by dynamic pressure.
+// - Atmosphere: density scales propulsion loudness; thin air + low thrust (+ RCS authority) collapses
+//   toward coast near-silence. Turbine→ram equal-power handover remains M1.6..M2.7.
 //
 // EVERYTHING here is failure-tolerant on purpose. Audio runs at boot, browsers block it until a
 // gesture, and context support varies. A thrown exception anywhere disables audio permanently and
-// silently rather than taking the flight kernel down with it — a game that boots without sound is
-// a minor disappointment; a game that does not boot is not a game.
+// silently rather than taking the flight kernel down with it.
 const PARTIAL_RATIOS = Object.freeze([1.0, 2.01, 3.0, 4.98, 7.02, 9.96]);
 const PARTIAL_LEVELS = Object.freeze([1.0, 0.46, 0.27, 0.16, 0.095, 0.055]);
-const SPOOL_UP_PER_SECOND = 0.20;   // five seconds from stopped to governed RPM
+const SPOOL_UP_PER_SECOND = 0.20;
 const SPOOL_DOWN_PER_SECOND = 0.32;
 const MAX_CONTROL_STEP_SECONDS = 0.25;
 const KNOTS_TO_MPS = 0.514444;
+const SEA_LEVEL_DENSITY = 1.225;
+/** Rough full-power thrust for normalizing published kN into a 0..1 energy cue. */
+const THRUST_REF_KN = 140;
 
 let context = null;
 let voices = null;
 let disabled = false;
 
-function build() {
-  const Ctor = globalThis.AudioContext ?? globalThis.webkitAudioContext;
-  if (!Ctor) return false;
-  context = new Ctor();
+/// Build the continuous propulsion / rush graph into `destination` (bus or context.destination).
+/// When `includeMaster` is true, a local master gain sits between the voices and destination so
+/// standalone callers (and unit tests) can mute without a façade.
+export function createEngineVoices(audioContext, destination, { includeMaster = true } = {}) {
+  const master = includeMaster ? audioContext.createGain() : null;
+  if (master) {
+    master.gain.value = 0;
+    master.connect(destination);
+  }
+  const output = master ?? destination;
 
-  const master = context.createGain();
-  master.gain.value = 0;
-  master.connect(context.destination);
-
-  // Compressor / turbine: slightly inharmonic sine partials with a steeply falling envelope. The
-  // tiny offsets from integer ratios keep the stack alive without the brittle edge of a sawtooth.
-  const compressorGain = context.createGain();
+  // Compressor / turbine: slightly inharmonic sine partials with a steeply falling envelope.
+  const compressorGain = audioContext.createGain();
   compressorGain.gain.value = 0;
-  const compressorFilter = context.createBiquadFilter();
+  const compressorFilter = audioContext.createBiquadFilter();
   compressorFilter.type = "lowpass";
   compressorFilter.frequency.value = 1200;
   compressorFilter.Q.value = 0.65;
-  compressorGain.connect(compressorFilter).connect(master);
+  compressorGain.connect(compressorFilter).connect(output);
 
   const partials = PARTIAL_RATIOS.map((ratio, index) => {
-    const oscillator = context.createOscillator();
+    const oscillator = audioContext.createOscillator();
     oscillator.type = "sine";
     oscillator.frequency.value = 64 * ratio;
-    const gain = context.createGain();
+    const gain = audioContext.createGain();
     gain.gain.value = PARTIAL_LEVELS[index];
     oscillator.connect(gain).connect(compressorGain);
     oscillator.start();
     return { oscillator, ratio };
   });
 
-  // Core and ram duct share one deterministic pink-pressure field but shape it independently. This
-  // preserves continuity through the bypass transition instead of crossfading unrelated noise.
-  const coreBuffer = pinkNoiseBuffer(context, 22695477);
-  const engineNoise = context.createBufferSource();
+  // Shared deterministic pink field for core / ram / jet / fan-whine shaping.
+  const coreBuffer = pinkNoiseBuffer(audioContext, 22695477);
+  const engineNoise = audioContext.createBufferSource();
   engineNoise.buffer = coreBuffer;
   engineNoise.loop = true;
 
-  const coreFilter = context.createBiquadFilter();
+  const coreFilter = audioContext.createBiquadFilter();
   coreFilter.type = "bandpass";
   coreFilter.frequency.value = 360;
   coreFilter.Q.value = 0.72;
-  const coreGain = context.createGain();
+  const coreGain = audioContext.createGain();
   coreGain.gain.value = 0;
-  engineNoise.connect(coreFilter).connect(coreGain).connect(master);
+  engineNoise.connect(coreFilter).connect(coreGain).connect(output);
 
-  const ramFilter = context.createBiquadFilter();
+  const ramFilter = audioContext.createBiquadFilter();
   ramFilter.type = "bandpass";
   ramFilter.frequency.value = 360;
   ramFilter.Q.value = 0.62;
-  const ramGain = context.createGain();
+  const ramGain = audioContext.createGain();
   ramGain.gain.value = 0;
-  engineNoise.connect(ramFilter).connect(ramGain).connect(master);
+  engineNoise.connect(ramFilter).connect(ramGain).connect(output);
 
-  // Boundary-layer / airframe rush has its own deterministic pressure field and signal path. It is
-  // deliberately independent of the throttle: only live q changes this voice.
-  const airframeNoise = context.createBufferSource();
-  airframeNoise.buffer = pinkNoiseBuffer(context, 0x051f15e);
+  // Jet exhaust roar: resonant lowpass keeps the LF body that bandpass alone strips away.
+  const jetFilter = audioContext.createBiquadFilter();
+  jetFilter.type = "lowpass";
+  jetFilter.frequency.value = 420;
+  jetFilter.Q.value = 1.15;
+  const jetGain = audioContext.createGain();
+  jetGain.gain.value = 0;
+  engineNoise.connect(jetFilter).connect(jetGain).connect(output);
+
+  // Fan tip / BPF whine: narrow high bandpass — audible spool identity without a sample loop.
+  const fanFilter = audioContext.createBiquadFilter();
+  fanFilter.type = "bandpass";
+  fanFilter.frequency.value = 2400;
+  fanFilter.Q.value = 6.5;
+  const fanGain = audioContext.createGain();
+  fanGain.gain.value = 0;
+  engineNoise.connect(fanFilter).connect(fanGain).connect(output);
+
+  // Boundary-layer / airframe rush — independent pressure field, q-only.
+  const airframeNoise = audioContext.createBufferSource();
+  airframeNoise.buffer = pinkNoiseBuffer(audioContext, 0x051f15e);
   airframeNoise.loop = true;
-  const rushHighpass = context.createBiquadFilter();
+  const rushHighpass = audioContext.createBiquadFilter();
   rushHighpass.type = "highpass";
   rushHighpass.frequency.value = 90;
   rushHighpass.Q.value = 0.45;
-  const rushLowpass = context.createBiquadFilter();
+  const rushLowpass = audioContext.createBiquadFilter();
   rushLowpass.type = "lowpass";
   rushLowpass.frequency.value = 900;
   rushLowpass.Q.value = 0.55;
-  const rushGain = context.createGain();
+  const rushGain = audioContext.createGain();
   rushGain.gain.value = 0;
-  airframeNoise.connect(rushHighpass).connect(rushLowpass).connect(rushGain).connect(master);
+  airframeNoise.connect(rushHighpass).connect(rushLowpass).connect(rushGain).connect(output);
 
   engineNoise.start();
   airframeNoise.start();
-  voices = {
+
+  return {
     master,
     compressorGain,
     compressorFilter,
@@ -102,22 +128,32 @@ function build() {
     coreGain,
     ramFilter,
     ramGain,
+    jetFilter,
+    jetGain,
+    fanFilter,
+    fanGain,
     rushHighpass,
     rushLowpass,
     rushGain,
     spoolRpm: 0,
-    lastControlTime: context.currentTime,
+    lastControlTime: audioContext.currentTime,
   };
+}
+
+function buildStandalone() {
+  const Ctor = globalThis.AudioContext ?? globalThis.webkitAudioContext;
+  if (!Ctor) return false;
+  context = new Ctor();
+  voices = createEngineVoices(context, context.destination, { includeMaster: true });
   return true;
 }
 
-function pinkNoiseBuffer(audioContext, initialSeed) {
+export function pinkNoiseBuffer(audioContext, initialSeed) {
   const frames = Math.max(1, Math.floor(audioContext.sampleRate * 4));
   const buffer = audioContext.createBuffer(1, frames, audioContext.sampleRate);
   const channel = buffer.getChannelData(0);
 
-  // Paul Kellet's seven-pole approximation, fed by the same seeded LCG on every build. Math.imul
-  // keeps the 32-bit recurrence exact across JS engines; there is no Math.random anywhere here.
+  // Paul Kellet's seven-pole approximation, fed by the same seeded LCG on every build.
   let seed = initialSeed & 0x7fffffff;
   let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
   for (let i = 0; i < frames; i++) {
@@ -135,12 +171,85 @@ function pinkNoiseBuffer(audioContext, initialSeed) {
   return buffer;
 }
 
-/// Drive the voices from the flat snapshot. Safe to call every frame and before any user gesture:
-/// a suspended context remains silent until the browser allows it.
+/// Drive an existing voice graph. Safe every frame; uses audio-clock spool rate limits.
+export function updateEngineVoices(voiceGraph, audioContext, state, { muted = false } = {}) {
+  if (!voiceGraph || !audioContext) return;
+
+  const throttle = clamp01((finiteNumber(state?.applied_throttle) ?? 0) / 1.55);
+  const targetRpm = clamp01((finiteNumber(state?.engine_rpm_pct) ?? 0) / 100);
+  const mach = Math.max(0, finiteNumber(state?.mach) ?? 0);
+  const now = audioContext.currentTime;
+  const elapsed = Math.min(MAX_CONTROL_STEP_SECONDS,
+    Math.max(0, now - voiceGraph.lastControlTime));
+  voiceGraph.lastControlTime = now;
+  const spoolRate = targetRpm >= voiceGraph.spoolRpm
+    ? SPOOL_UP_PER_SECOND : SPOOL_DOWN_PER_SECOND;
+  voiceGraph.spoolRpm = moveTowards(voiceGraph.spoolRpm, targetRpm, spoolRate * elapsed);
+
+  const handover = smoothstep(clamp01((mach - 1.6) / (2.7 - 1.6)));
+  const turbineShare = Math.cos(handover * Math.PI / 2);
+  const ramShare = Math.sin(handover * Math.PI / 2);
+  const q01 = dynamicPressureFraction(state);
+  const rpm = voiceGraph.spoolRpm;
+  const density = atmosphereDensity(state);
+  const densityScale = 0.14 + 0.86 * Math.pow(clamp01(density / SEA_LEVEL_DENSITY), 0.55);
+  const thrustFrac = thrustFraction(state, throttle, rpm);
+  const rcsAuthority = clamp01(finiteNumber(state?.rapier_rcs_authority) ?? 0);
+  // Zoom-coast / exo: thin air, collapsed thrust, and RCS authority → near silence.
+  const coastGate = densityScale < 0.28 && thrustFrac < 0.14 && (q01 < 0.12 || rcsAuthority > 0.45)
+    ? 0.035 + 0.04 * thrustFrac
+    : 1;
+  const propulsionPresence = densityScale * coastGate;
+  const rushPresence = Math.max(coastGate, 0.12 + 0.88 * densityScale);
+
+  const baseFrequency = 64 + rpm * 250;
+  const nowRamp = (param, value, timeConstant = 0.12) =>
+    param.setTargetAtTime(value, now, timeConstant);
+  for (const partial of voiceGraph.partials) {
+    nowRamp(partial.oscillator.frequency, baseFrequency * partial.ratio, 0.16);
+  }
+
+  nowRamp(voiceGraph.compressorFilter.frequency, 1200 + rpm * 3900 + throttle * 600, 0.18);
+  nowRamp(voiceGraph.compressorGain.gain,
+    (0.008 + 0.118 * Math.pow(rpm, 1.25)) * turbineShare * propulsionPresence, 0.16);
+
+  nowRamp(voiceGraph.coreFilter.frequency, 240 + rpm * 720 + throttle * 480, 0.18);
+  nowRamp(voiceGraph.coreFilter.Q, 0.78 - handover * 0.24, 0.20);
+  nowRamp(voiceGraph.coreGain.gain,
+    (0.012 + 0.11 * Math.sqrt(rpm) * (0.30 + throttle * 0.70))
+      * (1 - handover * 0.55) * propulsionPresence, 0.20);
+
+  nowRamp(voiceGraph.ramFilter.frequency, 330 + handover * 1480 + throttle * 220, 0.22);
+  nowRamp(voiceGraph.ramFilter.Q, 0.62 - handover * 0.31, 0.22);
+  nowRamp(voiceGraph.ramGain.gain,
+    ramShare * (0.022 + throttle * 0.165) * (0.18 + rpm * 0.82) * propulsionPresence, 0.22);
+
+  // Exhaust roar tracks power and density; fades as ram broadband owns the mix.
+  nowRamp(voiceGraph.jetFilter.frequency, 280 + rpm * 520 + throttle * 380, 0.20);
+  nowRamp(voiceGraph.jetFilter.Q, 1.25 - throttle * 0.35, 0.20);
+  nowRamp(voiceGraph.jetGain.gain,
+    (0.02 + 0.155 * Math.pow(throttle * rpm, 0.85))
+      * (0.55 + 0.45 * turbineShare) * propulsionPresence, 0.18);
+
+  nowRamp(voiceGraph.fanFilter.frequency, 1600 + rpm * 3200 + throttle * 900, 0.16);
+  nowRamp(voiceGraph.fanFilter.Q, 5.8 + rpm * 2.4, 0.18);
+  nowRamp(voiceGraph.fanGain.gain,
+    (0.004 + 0.055 * Math.pow(rpm, 1.35)) * turbineShare * propulsionPresence, 0.16);
+
+  nowRamp(voiceGraph.rushHighpass.frequency, 90 + q01 * 260, 0.18);
+  nowRamp(voiceGraph.rushLowpass.frequency, 850 + q01 * 5450, 0.18);
+  nowRamp(voiceGraph.rushGain.gain, 0.125 * Math.pow(q01, 0.72) * rushPresence, 0.18);
+
+  if (voiceGraph.master) {
+    nowRamp(voiceGraph.master.gain, muted ? 0 : 0.58, muted ? 0.02 : 0.20);
+  }
+}
+
+/// Standalone entry: owns its own context/master. Prefer updateFlightAudio in production.
 export function updateEngineAudio(state, { muted = false } = {}) {
   if (disabled) return;
   try {
-    if (!context && !build()) {
+    if (!context && !buildStandalone()) {
       disabled = true;
       return;
     }
@@ -149,65 +258,30 @@ export function updateEngineAudio(state, { muted = false } = {}) {
       resume?.catch?.(() => {});
       return;
     }
-
-    const throttle = clamp01((finiteNumber(state?.applied_throttle) ?? 0) / 1.55);
-    const targetRpm = clamp01((finiteNumber(state?.engine_rpm_pct) ?? 0) / 100);
-    const mach = Math.max(0, finiteNumber(state?.mach) ?? 0);
-    const now = context.currentTime;
-    const elapsed = Math.min(MAX_CONTROL_STEP_SECONDS,
-      Math.max(0, now - voices.lastControlTime));
-    voices.lastControlTime = now;
-    const spoolRate = targetRpm >= voices.spoolRpm
-      ? SPOOL_UP_PER_SECOND : SPOOL_DOWN_PER_SECOND;
-    voices.spoolRpm = moveTowards(voices.spoolRpm, targetRpm, spoolRate * elapsed);
-
-    // Equal-power crossfade: no energy hole in the middle, but the recognizable turbine whine is
-    // completely absent once the ram duct owns the flow at M2.7.
-    const handover = smoothstep(clamp01((mach - 1.6) / (2.7 - 1.6)));
-    const turbineShare = Math.cos(handover * Math.PI / 2);
-    const ramShare = Math.sin(handover * Math.PI / 2);
-    const q01 = dynamicPressureFraction(state);
-    const rpm = voices.spoolRpm;
-
-    const baseFrequency = 64 + rpm * 250;
-    const nowRamp = (param, value, timeConstant = 0.12) =>
-      param.setTargetAtTime(value, now, timeConstant);
-    for (const partial of voices.partials) {
-      nowRamp(partial.oscillator.frequency, baseFrequency * partial.ratio, 0.16);
-    }
-
-    nowRamp(voices.compressorFilter.frequency, 1200 + rpm * 3900, 0.18);
-    nowRamp(voices.compressorGain.gain,
-      (0.006 + 0.098 * Math.pow(rpm, 1.25)) * turbineShare, 0.16);
-
-    // The turbine core retains a subdued combustion bed after bypass, while the ram path opens,
-    // drops in resonance, and becomes the broad dominant voice.
-    nowRamp(voices.coreFilter.frequency, 260 + rpm * 680 + throttle * 420, 0.18);
-    nowRamp(voices.coreFilter.Q, 0.78 - handover * 0.24, 0.20);
-    nowRamp(voices.coreGain.gain,
-      (0.008 + 0.086 * Math.sqrt(rpm) * (0.35 + throttle * 0.65))
-        * (1 - handover * 0.58), 0.20);
-    nowRamp(voices.ramFilter.frequency, 330 + handover * 1370, 0.22);
-    nowRamp(voices.ramFilter.Q, 0.62 - handover * 0.31, 0.22);
-    nowRamp(voices.ramGain.gain,
-      ramShare * (0.018 + throttle * 0.145) * (0.20 + rpm * 0.80), 0.22);
-
-    // q, not throttle, owns the wind voice. Its band widens and brightens as the boundary layer
-    // gains energy, so a high-speed idle descent still sounds fast.
-    nowRamp(voices.rushHighpass.frequency, 90 + q01 * 260, 0.18);
-    nowRamp(voices.rushLowpass.frequency, 850 + q01 * 5450, 0.18);
-    nowRamp(voices.rushGain.gain, 0.115 * Math.pow(q01, 0.72), 0.18);
-    nowRamp(voices.master.gain, muted ? 0 : 0.52, muted ? 0.02 : 0.20);
+    updateEngineVoices(voices, context, state, { muted });
   } catch {
     disabled = true;
   }
 }
 
+function thrustFraction(state, throttle, rpm) {
+  const turbineKn = finiteNumber(state?.rapier_turbine_thrust_kn);
+  const ramKn = finiteNumber(state?.rapier_ramjet_thrust_kn);
+  if (turbineKn != null || ramKn != null) {
+    return clamp01(((turbineKn ?? 0) + (ramKn ?? 0)) / THRUST_REF_KN);
+  }
+  return clamp01(throttle * (0.35 + rpm * 0.65));
+}
+
+function atmosphereDensity(state) {
+  const altitudeM = finiteNumber(state?.altitude_m, state?.py) ?? 0;
+  return finiteNumber(state?.air_density_kg_m3) ?? isaDensity(altitudeM);
+}
+
 function dynamicPressureFraction(state) {
   const speedMps = finiteNumber(state?.true_airspeed_mps)
     ?? ((finiteNumber(state?.true_airspeed_kts) ?? 0) * KNOTS_TO_MPS);
-  const altitudeM = finiteNumber(state?.altitude_m, state?.py) ?? 0;
-  const density = finiteNumber(state?.air_density_kg_m3) ?? isaDensity(altitudeM);
+  const density = atmosphereDensity(state);
   const dynamicPressurePa = 0.5 * Math.max(0, density) * Math.max(0, speedMps) ** 2;
   return smoothstep(clamp01((dynamicPressurePa - 750) / (45_000 - 750)));
 }
