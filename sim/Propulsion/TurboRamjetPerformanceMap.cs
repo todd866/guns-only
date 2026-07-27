@@ -30,13 +30,22 @@ public static class TurboRamjetPerformanceMap {
     public const double TurbineGoneMach = 3.0;
     /// Ram combustion becomes worth lighting here and owns the flow by FullRamMach. Deliberately
     /// OVERLAPS the turbine fade — that overlap is the repeatability.
-    public const double RamFadeStartMach = 1.6;
-    public const double FullRamMach = 2.2;
+    // Narrowed from 1.6-2.2 to 1.85-2.15. The handover is the aircraft's defining moment and a
+    // 0.6-Mach blend made it a slow swell; 0.3 makes it a shove. This is perceptual, not a buff —
+    // the same thrust arrives, it just arrives decisively.
+    public const double RamFadeStartMach = 1.85;
+    public const double FullRamMach = 2.15;
     /// Net ram-mode thrust at the design point, as a fraction of sea-level static dry turbine thrust.
-    public const double RamDesignThrustRatio = 1.05;
+    // Still two and a half times the original 0.42, so the ram genuinely dominates once lit, but no
+    // longer more than the turbine's entire sea-level static thrust from a duct on a 7.8 t aircraft.
+    public const double RamDesignThrustRatio = 0.70;
     public const double DesignMach = 4.0;
     public const double DesignAltitudeM = 24_000.0;
-    public const double BurnerTemperatureK = 3000.0;
+    // Stoichiometric kerosene-air adiabatic flame temperature is about 2300-2400 K, and hydrogen is
+    // no better. 3000 K is not a materials problem that a ceramic solves — it is chemically
+    // unreachable by burning fuel in air at any budget. The engine was making thrust nothing could
+    // actually produce, which is why the aircraft leapt out of the atmosphere.
+    public const double BurnerTemperatureK = 2300.0;
 
     /// The translating inlet does not offer the ram duct full capture area in dense air. Below the
     /// launch climb it stays substantially spilled to keep diffuser pressure and hot-section load
