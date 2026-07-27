@@ -14,12 +14,15 @@ public class RapierZoomLobDirectorTests {
         double altitudeM,
         double mach,
         double gamma,
-        double noseErrDeg) {
+        double noseErrDeg,
+        double contactRangeM = 200_000.0,
+        double fuelLb = 2_400.0,
+        double reserveFuelLb = 1_200.0) {
         AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
         double speed = mach * air.SpeedOfSoundMps;
         AircraftState player = StateAt(altitudeM, speed, gamma);
         AircraftState contact = StateAt(altitudeM, 200.0);
-        contact = contact with { Position = new Vec3D(0.0, altitudeM, 200_000.0) };
+        contact = contact with { Position = new Vec3D(0.0, altitudeM, contactRangeM) };
         return director.Step(
             player, contact, speed, StandardAtmosphere1976.Instance,
             FlightModel.RapierPublicDataSurrogate,
@@ -34,7 +37,29 @@ public class RapierZoomLobDirectorTests {
             patternOnly: false,
             zoomLobProfile: true,
             job: RapierJobKind.Awacs,
-            noseOnVelocityErrorDeg: noseErrDeg);
+            noseOnVelocityErrorDeg: noseErrDeg,
+            fuelLb: fuelLb,
+            reserveFuelLb: reserveFuelLb);
+    }
+
+    static RapierMissionGuidance WalkToDipRelight(RapierMissionDirector director) {
+        RapierMissionGuidance g = default;
+        for (int i = 0; i < 4; i++) {
+            g = Step(director, altitudeM: 21_500.0, mach: 3.5, gamma: 0.05,
+                noseErrDeg: 5.0);
+        }
+        Assert.Equal(RapierMissionPhase.ZoomPull, g.Phase);
+        Assert.Equal(1, g.LobSkip);
+        g = Step(director, altitudeM: 30_000.0, mach: 3.2,
+            gamma: 40.0 * Math.PI / 180.0, noseErrDeg: 8.0);
+        Assert.Equal(RapierMissionPhase.ZoomCoast, g.Phase);
+        g = Step(director, altitudeM: 32_000.0, mach: 2.8,
+            gamma: -5.0 * Math.PI / 180.0, noseErrDeg: 20.0);
+        Assert.Equal(RapierMissionPhase.ReenterAlign, g.Phase);
+        g = Step(director, altitudeM: 22_000.0, mach: 2.5,
+            gamma: -8.0 * Math.PI / 180.0, noseErrDeg: 6.0);
+        Assert.Equal(RapierMissionPhase.DipRelight, g.Phase);
+        return g;
     }
 
     [Fact]
@@ -47,7 +72,10 @@ public class RapierZoomLobDirectorTests {
         }
         Assert.Equal(RapierMissionPhase.ZoomPull, g.Phase);
         Assert.Contains("ZOOM PULL", g.Cue);
+        Assert.Contains("SKIP 1/3", g.Cue);
         Assert.Equal("AWACS", g.JobToken);
+        Assert.Equal(1, g.LobSkip);
+        Assert.Equal(3, g.LobSkipMax);
     }
 
     [Fact]
@@ -63,6 +91,39 @@ public class RapierZoomLobDirectorTests {
         Assert.Equal(RapierMissionPhase.ZoomCoast, g.Phase);
         Assert.Equal(0.0, g.Command.Throttle, 6);
         Assert.Contains("NOSE→V", g.Cue);
+        Assert.Contains("SKIP 1/3", g.Cue);
+    }
+
+    [Fact]
+    public void DipRelightOpensAnotherSkipWhenContactIsStillFar() {
+        var director = new RapierMissionDirector();
+        WalkToDipRelight(director);
+        RapierMissionGuidance g = Step(director, altitudeM: 21_336.0, mach: 2.5,
+            gamma: 0.02, noseErrDeg: 4.0, contactRangeM: 180_000.0, fuelLb: 2_200.0);
+        Assert.Equal(RapierMissionPhase.ZoomPull, g.Phase);
+        Assert.Equal(2, g.LobSkip);
+        Assert.Contains("SKIP 2/3", g.Cue);
+        Assert.Equal("zoom_pull_skip_2", g.PhaseReason);
+    }
+
+    [Fact]
+    public void DipRelightGoesInterceptWhenContactIsClose() {
+        var director = new RapierMissionDirector();
+        WalkToDipRelight(director);
+        RapierMissionGuidance g = Step(director, altitudeM: 21_336.0, mach: 2.5,
+            gamma: 0.02, noseErrDeg: 4.0, contactRangeM: 60_000.0, fuelLb: 2_200.0);
+        Assert.Equal(RapierMissionPhase.Intercept, g.Phase);
+        Assert.Equal("post_lob_intercept", g.PhaseReason);
+    }
+
+    [Fact]
+    public void DipRelightGoesInterceptWhenFuelIsAtReserve() {
+        var director = new RapierMissionDirector();
+        WalkToDipRelight(director);
+        RapierMissionGuidance g = Step(director, altitudeM: 21_336.0, mach: 2.5,
+            gamma: 0.02, noseErrDeg: 4.0, contactRangeM: 180_000.0,
+            fuelLb: 1_200.0, reserveFuelLb: 1_200.0);
+        Assert.Equal(RapierMissionPhase.Intercept, g.Phase);
     }
 
     [Fact]
@@ -92,7 +153,6 @@ public class RapierZoomLobDirectorTests {
                 home: new Vec3D(0.0, 120.0, -50_000.0),
                 recoveryInitial: new Vec3D(0.0, 1_120.0, -16_000.0),
                 recovered: false, patternOnly: false,
-                // Job cues apply on Attack regardless of whether the lob already ran.
                 zoomLobProfile: false,
                 job: RapierJobKind.Transport, noseOnVelocityErrorDeg: 4.0);
         }

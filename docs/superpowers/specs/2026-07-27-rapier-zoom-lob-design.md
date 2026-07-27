@@ -81,7 +81,6 @@ Publish (names indicative):
 
 ## Non-goals
 
-- Multi-skip Sänger automation loop
 - Career / clinic / Ghibli / AI-governance fiction
 - Rocket stage at apex / orbit claims
 - Separate RCS stick mode
@@ -100,3 +99,6 @@ Publish (names indicative):
 - Fuel OFT: `RapierLobFuelOftTests` — ballistic coast beats FL700 cruise on lb/100 nm.
 - FD: `rapier_nose_on_v_err_deg` drives quiet `NOSE→V` / `ON V` on coast/reenter.
 - Job attack geometry: Transport dive, Swarm apex/high pass, Balloon slash, AWACS swarm + pursuers.
+- **Multi-skip Sänger** (2026-07-27): after `DipRelight`, if contact still beyond ~90 km,
+  fuel above reserve, Mach ≥ 2.2, and skip count < 3, re-enter `ZoomPull` for another
+  boost→coast→reenter→dip. FD cues carry `SKIP n/3`. No orbit / rocket-at-apex.

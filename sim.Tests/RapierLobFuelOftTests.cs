@@ -69,4 +69,37 @@ public class RapierLobFuelOftTests {
         Assert.True(coastLbPer100Nm < cruiseLbPer100Nm * 0.35,
             $"coast {coastLbPer100Nm:F1} lb/100nm should beat cruise {cruiseLbPer100Nm:F1}");
     }
+
+    [Fact]
+    public void TwoCoastArcsBeatContinuousCruiseOverSameSampleWindow() {
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(CruiseAltM);
+        double cruiseSpeed = 3.5 * air.SpeedOfSoundMps;
+        var cruiseStart = new AircraftState(
+            new Vec3D(0, CruiseAltM, 0), cruiseSpeed, 0.0, 0.0, 0.0,
+            FlightModel.RapierPublicDataSurrogate.MassKg);
+        var cruiseCmd = new PilotCommand(
+            GDemand: 1.0, BankTarget: 0.0, Throttle: 1.08, Rudder: 0.0);
+
+        int halfTicks = (int)((SampleSeconds * 0.5) / Dt);
+        int fullTicks = halfTicks * 2;
+        var (cruiseBurn, cruiseNm) = Fly(cruiseStart, cruiseCmd, fullTicks);
+
+        double coastAltM = 45_000.0;
+        AtmosphericState coastAir = StandardAtmosphere1976.Instance.Sample(coastAltM);
+        double coastSpeed = 3.0 * coastAir.SpeedOfSoundMps;
+        var coastStart = new AircraftState(
+            new Vec3D(0, coastAltM, 0), coastSpeed, 35.0 * Math.PI / 180.0, 0.0, 0.0,
+            FlightModel.RapierPublicDataSurrogate.MassKg);
+        var coastCmd = new PilotCommand(
+            GDemand: 1.0, BankTarget: 0.0, Throttle: 0.0, Rudder: 0.0);
+        var (coast1Burn, coast1Nm) = Fly(coastStart, coastCmd, halfTicks);
+        var (coast2Burn, coast2Nm) = Fly(coastStart, coastCmd, halfTicks);
+        double skipBurn = coast1Burn + coast2Burn;
+        double skipNm = coast1Nm + coast2Nm;
+
+        Assert.True(skipNm > cruiseNm * 0.6,
+            $"two coasts should cover meaningful ground ({skipNm:F1} nm vs cruise {cruiseNm:F1})");
+        Assert.True(skipBurn < cruiseBurn * 0.30,
+            $"two coasts burn {skipBurn:F1} lb should beat cruise {cruiseBurn:F1} lb");
+    }
 }

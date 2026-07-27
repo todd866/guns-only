@@ -126,6 +126,8 @@ internal static class SnapshotHotFrame {
         Num("rapier_fd_bank_deg", 1);
         Num("rapier_fd_target_ktas", 0);
         Num("rapier_nose_on_v_err_deg", 1);
+        Num("rapier_lob_skip", RawInteger);
+        Num("rapier_lob_skip_max", RawInteger);
         Num("rapier_rcs_gas_frac", 3);
         Num("rapier_rcs_authority", 3);
         Bool("rapier_zoom_lob");
@@ -651,6 +653,8 @@ internal static class SnapshotHotFrame {
         w.Num("rapier_fd_bank_deg", session.RapierFdBankDeg, 1);
         w.Num("rapier_fd_target_ktas", session.RapierFdTargetKtas, 0);
         w.Num("rapier_nose_on_v_err_deg", session.RapierNoseOnVelocityErrorDeg, 1);
+        w.Num("rapier_lob_skip", session.RapierLobSkip, RawInteger);
+        w.Num("rapier_lob_skip_max", session.RapierLobSkipMax, RawInteger);
         w.Num("rapier_rcs_gas_frac", session.RapierRcsGasFraction, 3);
         w.Num("rapier_rcs_authority", session.RapierRcsAuthority, 3);
         w.Bool("rapier_zoom_lob", session.Beat.ScriptedIntercept?.ZoomLobProfile == true);

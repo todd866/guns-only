@@ -339,6 +339,8 @@ internal static class SnapshotProjection {
             + $"\"rapier_fd_target_ktas\":{Session.RapierFdTargetKtas:F0},"
             + $"\"rapier_nose_on_v_err_deg\":{Session.RapierNoseOnVelocityErrorDeg:F1},"
             + $"\"rapier_job\":{JsonString(Session.RapierJobToken)},"
+            + $"\"rapier_lob_skip\":{Session.RapierLobSkip},"
+            + $"\"rapier_lob_skip_max\":{Session.RapierLobSkipMax},"
             + $"\"rapier_rcs_gas_frac\":{Session.RapierRcsGasFraction:F3},"
             + $"\"rapier_rcs_authority\":{Session.RapierRcsAuthority:F3},"
             + $"\"rapier_zoom_lob\":{(Session.Beat.ScriptedIntercept?.ZoomLobProfile == true ? "true" : "false")},"

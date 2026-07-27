@@ -57,7 +57,11 @@ public readonly record struct RapierMissionGuidance(
     /// <summary>Degrees between nose and velocity — coast reentry FD cue.</summary>
     double NoseOnVelocityErrorDeg = 0.0,
     /// <summary>Dealt job token for Go Fly / zoom-lob sorties.</summary>
-    string JobToken = "");
+    string JobToken = "",
+    /// <summary>Current Sänger skip index (1-based) while on the zoom-lob profile.</summary>
+    int LobSkip = 0,
+    /// <summary>Authored skip cap for this profile (0 when not zoom-lobbing).</summary>
+    int LobSkipMax = 0);
 
 public sealed record ScriptedInterceptConfig(
     int FormationSize = 4,
@@ -108,8 +112,15 @@ public sealed class RapierMissionDirector {
     /// Circuits climb shelf — approximately marshal height AGL so the pattern is reachable without
     /// a full FL700 intercept climb.
     const double CircuitShelfHeightM = 3_700.0;
+    /// Sänger skip-glide: boost → coast → reenter → dip, then maybe another skip. Cap keeps the
+    /// profile finite; each skip buys ~100+ km of near-zero-burn coast when energy and fuel allow.
+    const int MaxLobSkips = 3;
+    /// Still worth another lob when contact is beyond attack geometry and fuel has fight room.
+    const double AnotherSkipContactRangeM = 90_000.0;
+    int _lobSkip;
 
     public RapierMissionPhase Phase => _phase;
+    public int LobSkip => _lobSkip;
 
     void EnterPhase(RapierMissionPhase next, string reason) {
         if (_phase == next && _phaseReason == reason) return;
@@ -171,16 +182,19 @@ public sealed class RapierMissionDirector {
 
     /// <summary>
     /// Progressive low-α pull → ballistic coast → nose-on-V reentry → ram dip/relight.
+    /// After dip, another skip may open when range and fuel still warrant it (Sänger multi-skip).
     /// Entry is FL500–FL600 / high Mach after the ram climb shelf.
     /// </summary>
     void UpdateZoomLobPhase(
-        in AircraftState player, double mach, double qPa, double noseOnVelocityErrorDeg) {
+        in AircraftState player, double mach, double qPa, double noseOnVelocityErrorDeg,
+        double contactRangeM, double fuelLb, double reserveFuelLb) {
         const double PullGammaRad = 40.0 * Math.PI / 180.0;
         const double CoastEntryAltM = 28_000.0; // ~FL920 — q collapsing
         const double ReenterAltM = 24_000.0;    // start aligning on the way down
         const double RelightQPa = 4_000.0;
 
         if ((int)_phase < (int)RapierMissionPhase.ZoomPull) {
+            if (_lobSkip <= 0) _lobSkip = 1;
             EnterPhase(RapierMissionPhase.ZoomPull, "zoom_pull_entry");
             return;
         }
@@ -210,11 +224,22 @@ public sealed class RapierMissionDirector {
         }
 
         if (_phase == RapierMissionPhase.DipRelight) {
-            if (mach >= 2.2 && qPa >= RelightQPa) {
+            if (mach < 2.2 || qPa < RelightQPa) return;
+            if (ShouldAnotherLobSkip(contactRangeM, fuelLb, reserveFuelLb, mach)) {
+                _lobSkip++;
+                EnterPhase(RapierMissionPhase.ZoomPull, $"zoom_pull_skip_{_lobSkip}");
+            } else {
                 EnterPhase(RapierMissionPhase.Intercept, "post_lob_intercept");
             }
         }
     }
+
+    bool ShouldAnotherLobSkip(
+        double contactRangeM, double fuelLb, double reserveFuelLb, double mach) =>
+        _lobSkip < MaxLobSkips
+        && contactRangeM > AnotherSkipContactRangeM
+        && mach >= 2.2
+        && fuelLb > reserveFuelLb;
 
     static double ThrottleForMach(double targetMach, double mach,
         double trimLever, double gain, double maximumLever = 1.55) =>
@@ -237,7 +262,9 @@ public sealed class RapierMissionDirector {
         bool patternOnly = false,
         bool zoomLobProfile = false,
         RapierJobKind job = RapierJobKind.FormationIntercept,
-        double noseOnVelocityErrorDeg = 0.0) {
+        double noseOnVelocityErrorDeg = 0.0,
+        double fuelLb = double.PositiveInfinity,
+        double reserveFuelLb = 1_200.0) {
         AtmosphericState air = atmosphere.Sample(player.Position.Y);
         double mach = trueAirspeedMps / Math.Max(1.0, air.SpeedOfSoundMps);
         double qPa = 0.5 * air.DensityKgM3 * trueAirspeedMps * trueAirspeedMps;
@@ -305,11 +332,17 @@ public sealed class RapierMissionDirector {
                 && (int)_phase < (int)RapierMissionPhase.ZoomPull) {
                 EnterPhase(RapierMissionPhase.RamClimb, "ram_climb_to_fl700");
             } else if (zoomLobProfile) {
-                UpdateZoomLobPhase(player, mach, qPa, noseOnVelocityErrorDeg);
+                UpdateZoomLobPhase(player, mach, qPa, noseOnVelocityErrorDeg,
+                    contactRangeM, fuelLb, reserveFuelLb);
             } else {
                 EnterPhase(RapierMissionPhase.Intercept, "intercept_dash");
             }
         }
+
+        int lobSkipMax = zoomLobProfile ? MaxLobSkips : 0;
+        string skipCue = zoomLobProfile && _lobSkip > 0
+            ? $"SKIP {_lobSkip}/{MaxLobSkips} · "
+            : "";
 
         // The airframe's own ceiling. Every commanded Mach below is clamped to this, so the
         // automation never asks for a speed that cooks the structure — and the phase cues that
@@ -400,7 +433,7 @@ public sealed class RapierMissionDirector {
                 throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
                     trimLever: 1.05, gain: 0.35);
                 waypoint = contact.Position;
-                cue = $"ZOOM PULL · {jobToken} · γ→40° · α LOW · M{mach:F2} · "
+                cue = $"ZOOM PULL · {skipCue}{jobToken} · γ→40° · α LOW · M{mach:F2} · "
                     + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0}";
                 break;
             case RapierMissionPhase.ZoomCoast:
@@ -412,10 +445,10 @@ public sealed class RapierMissionDirector {
                 if (job == RapierJobKind.SwarmLob
                     && player.VelocityVector().Y < 40.0
                     && player.Position.Y > 28_000.0) {
-                    cue = $"SWARM LOB · APEX WINDOW · F RELEASES SWARM · "
+                    cue = $"SWARM LOB · {skipCue}APEX WINDOW · F RELEASES SWARM · "
                         + $"NOSE→V {noseOnVelocityErrorDeg:F0}° · RCS";
                 } else {
-                    cue = $"ZOOM COAST · {jobToken} · BALLISTIC · RCS · "
+                    cue = $"ZOOM COAST · {skipCue}{jobToken} · BALLISTIC · RCS · "
                         + $"NOSE→V {noseOnVelocityErrorDeg:F0}° · ALIGN";
                 }
                 break;
@@ -427,8 +460,8 @@ public sealed class RapierMissionDirector {
                 throttle = 0.0;
                 waypoint = contact.Position;
                 cue = noseOnVelocityErrorDeg <= 8.0
-                    ? $"REENTER · {jobToken} · ON V · HOLD · THEN DIP"
-                    : $"REENTER · {jobToken} · ALIGN NOSE ON V · "
+                    ? $"REENTER · {skipCue}{jobToken} · ON V · HOLD · THEN DIP"
+                    : $"REENTER · {skipCue}{jobToken} · ALIGN NOSE ON V · "
                         + $"ERR {noseOnVelocityErrorDeg:F0}° · RCS";
                 break;
             case RapierMissionPhase.DipRelight:
@@ -440,7 +473,7 @@ public sealed class RapierMissionDirector {
                 throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
                     trimLever: 1.05, gain: 0.40);
                 waypoint = contact.Position;
-                cue = $"DIP RELIGHT · {jobToken} · RAM ON · M{mach:F2} · "
+                cue = $"DIP RELIGHT · {skipCue}{jobToken} · RAM ON · M{mach:F2} · "
                     + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0}";
                 break;
             case RapierMissionPhase.Intercept:
@@ -795,6 +828,8 @@ public sealed class RapierMissionDirector {
             FdBankDeg: command.BankTarget * (180.0 / Math.PI),
             FdTargetKtas: fdTargetKtas,
             NoseOnVelocityErrorDeg: noseOnVelocityErrorDeg,
-            JobToken: jobToken);
+            JobToken: jobToken,
+            LobSkip: zoomLobProfile ? _lobSkip : 0,
+            LobSkipMax: lobSkipMax);
     }
 }
