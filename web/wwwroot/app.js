@@ -221,6 +221,11 @@ const readyConfigLabel = document.querySelector("#ready-config-label");
 const readyControls = document.querySelector("#ready-controls");
 const readyDeckConfig = document.querySelector("#ready-deck-config");
 const readyDeckButtons = [...document.querySelectorAll("[data-deck-configuration]")];
+const readyCircuitsPreflight = document.querySelector("#ready-circuits-preflight");
+const readyCircuitsLegs = document.querySelector("#ready-circuits-legs");
+const readyCircuitsCue = document.querySelector("#ready-circuits-cue");
+const readyCircuitsModes = document.querySelector("#ready-circuits-modes");
+const readyCircuitsConfigBody = document.querySelector("#ready-circuits-config-body");
 const readyMenuTitle = document.querySelector("#ready-menu-title");
 const readyMenuHelp = document.querySelector("#ready-menu-help");
 const readySelector = document.querySelector("#ready-selector");
@@ -468,6 +473,82 @@ function bindCircuitsSystemsActions() {
 }
 
 const CONSOLE_LAYOUT_STORAGE = "guns-only.console-layout.v1";
+const CIRCUITS_PREFLIGHT_STORAGE = "guns-only.circuits-preflight-open.v1";
+
+function circuitsPreflightOpenPreference() {
+  try {
+    const stored = globalThis.localStorage?.getItem(CIRCUITS_PREFLIGHT_STORAGE);
+    if (stored === null || stored === undefined) return true; // first Circuits visit: open
+    return stored === "1";
+  } catch {
+    return true;
+  }
+}
+
+function saveCircuitsPreflightOpenPreference(open) {
+  try {
+    globalThis.localStorage?.setItem(CIRCUITS_PREFLIGHT_STORAGE, open ? "1" : "0");
+  } catch {
+    // Ignore quota / private-mode failures; disclosure still works for the session.
+  }
+}
+
+let circuitsPreflightRenderedFor = "";
+
+function renderCircuitsPreflight(brief) {
+  if (!readyCircuitsPreflight) return;
+  const legs = brief?.preflightLegs;
+  const modes = brief?.preflightModes;
+  const show = selectedProgramNodeId === "rapier-circuits"
+    && Array.isArray(legs) && legs.length > 0
+    && Array.isArray(modes) && modes.length > 0;
+  readyCircuitsPreflight.hidden = !show;
+  if (!show) {
+    circuitsPreflightRenderedFor = "";
+    return;
+  }
+  if (circuitsPreflightRenderedFor === selectedProgramNodeId) return;
+
+  if (readyCircuitsLegs) {
+    readyCircuitsLegs.replaceChildren(...legs.map((leg) => {
+      const item = document.createElement("li");
+      item.textContent = leg.label;
+      item.title = `${leg.intent} · ${leg.cue}`;
+      return item;
+    }));
+  }
+  if (readyCircuitsCue) {
+    readyCircuitsCue.textContent = brief.preflightCue
+      || "INITIAL / DOWNWIND ~300 KT · FINAL ~180 KT · hook down always";
+  }
+  if (readyCircuitsModes) {
+    readyCircuitsModes.replaceChildren(...modes.map((mode) => {
+      const chip = document.createElement("div");
+      chip.className = "ready-circuits-mode";
+      chip.setAttribute("role", "listitem");
+      const label = document.createElement("strong");
+      label.textContent = mode.label;
+      const detail = document.createElement("span");
+      detail.textContent = mode.detail;
+      chip.append(label, detail);
+      return chip;
+    }));
+  }
+  if (readyCircuitsConfigBody) {
+    readyCircuitsConfigBody.replaceChildren(...legs.map((leg) => {
+      const row = document.createElement("tr");
+      const name = document.createElement("th");
+      name.scope = "row";
+      name.textContent = leg.label;
+      const cue = document.createElement("td");
+      cue.textContent = `${leg.intent} · ${leg.cue}`;
+      row.append(name, cue);
+      return row;
+    }));
+  }
+  readyCircuitsPreflight.open = circuitsPreflightOpenPreference();
+  circuitsPreflightRenderedFor = selectedProgramNodeId;
+}
 function loadConsoleLayout() {
   try {
     return JSON.parse(localStorage.getItem(CONSOLE_LAYOUT_STORAGE) || "{}") || {};
@@ -1841,8 +1922,23 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Rapier Circuits",
     sortie: "Ski-jump · overhead pattern · touch-and-go · trap",
     configuration: "Attritable Rapier brick · full fuel · hook down · no contact",
-    brief: "Military overhead: climb to ~1,800 ft AGL, ~300 KT initial/downwind, ~180 KT final. Fly the labeled boxes (INITIAL → BREAK → DOWNWIND → BASE → SHORT FINAL → WIRE). Coaching: DEMO = auto on (P), DIRECT = touch stick while DEMO (FD/boxes stay), MONITOR = P off. No Mach dash.",
-    controls: "P DEMO ↔ MONITOR · stick takeover = DIRECT · arrows/W/S · T time compression\nV padlocks threshold · Tab cycles threshold / circuit traffic · N navigation · fly the boxes · trap on the wire",
+    brief: "Military overhead · ~1,800 ft AGL · 300 KT initial/downwind · 180 KT final · fly the boxes · trap the wire. P = DEMO; touch stick = DIRECT; P off = MONITOR. No Mach dash.",
+    controls: "P DEMO ↔ MONITOR · stick takeover = DIRECT · arrows/W/S · T time · V threshold · Tab traffic\nFly the boxes · trap the wire",
+    preflightCue: "INITIAL / DOWNWIND ~300 KT · FINAL ~180 KT · hook down always",
+    preflightLegs: Object.freeze([
+      Object.freeze({ id: "DEPART", label: "DEPART", intent: "Ski-jump → climb → join INITIAL", cue: "Pattern alt ~1,500–2,000 ft AGL" }),
+      Object.freeze({ id: "INITIAL", label: "INITIAL", intent: "Runway heading, midfield", cue: "~300 KT · hook down" }),
+      Object.freeze({ id: "BREAK", label: "BREAK", intent: "~180° to downwind", cue: "~45° bank" }),
+      Object.freeze({ id: "DOWNWIND", label: "DOWNWIND", intent: "Opposite parallel, abeam", cue: "~2–2.5 NM offset · ~300 KT" }),
+      Object.freeze({ id: "BASE", label: "BASE", intent: "Continuous turn to final", cue: "Shed toward ~220 KT" }),
+      Object.freeze({ id: "SHORT_FINAL", label: "SHORT FINAL", intent: "T&G / go-around before midfield gear", cue: "~180 KT" }),
+      Object.freeze({ id: "WIRE_FINAL", label: "WIRE", intent: "Accept trap; aerobrake → wire", cue: "~170–180 KT" }),
+    ]),
+    preflightModes: Object.freeze([
+      Object.freeze({ id: "DEMO", label: "DEMO (P)", detail: "Auto on · watch the boxes" }),
+      Object.freeze({ id: "DIRECT", label: "DIRECT", detail: "Touch stick · FD/boxes stay" }),
+      Object.freeze({ id: "MONITOR", label: "MONITOR", detail: "P off · you own it" }),
+    ]),
   }),
   "rapier-intercept": Object.freeze({
     kicker: "Eastern corridor · guns-only",
@@ -2439,6 +2535,7 @@ function renderCampaignProgress() {
   }
   for (const status of readyProgramStatuses) status.textContent = "";
   if (readyDeckConfig) readyDeckConfig.hidden = true;
+  renderCircuitsPreflight(missionBrief());
   for (const button of readyDeckButtons) {
     button.setAttribute("aria-pressed", String(
       Number(button.dataset.deckConfiguration) === selectedDeckConfiguration,
@@ -2565,6 +2662,7 @@ function renderPauseUi(state = latestState) {
   readyScreen.dataset.mode = ready ? "program" : finished ? "debrief" : "pause";
   if (readySelector) readySelector.hidden = !ready;
   if (readyDeckConfig && !ready) readyDeckConfig.hidden = true;
+  if (readyCircuitsPreflight && !ready) readyCircuitsPreflight.hidden = true;
   if (ready) renderCampaignProgress();
   if (readyMenuTitle) {
     readyMenuTitle.textContent = ready
@@ -3074,6 +3172,11 @@ readySelector?.addEventListener("click", (event) => {
 readyDeckConfig?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-deck-configuration]");
   if (button) selectDeckConfiguration(Number(button.dataset.deckConfiguration));
+});
+
+readyCircuitsPreflight?.addEventListener("toggle", () => {
+  if (readyCircuitsPreflight.hidden) return;
+  saveCircuitsPreflightOpenPreference(readyCircuitsPreflight.open);
 });
 
 readyScreen.addEventListener("keydown", (event) => {

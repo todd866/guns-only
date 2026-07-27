@@ -1405,6 +1405,164 @@
       line-height: 1.45;
     }
 
+    .ready-circuits-preflight {
+      margin: -7px 0 18px;
+      padding: 0;
+      border: 1px solid rgba(77, 255, 136, .14);
+      border-radius: 6px;
+      background: rgba(77, 255, 136, .035);
+    }
+
+    .ready-circuits-preflight[hidden] { display: none; }
+
+    .ready-circuits-preflight > summary {
+      display: flex;
+      min-height: 44px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 12px;
+      color: rgba(217, 255, 229, .62);
+      cursor: pointer;
+      font-size: 9px;
+      font-weight: 750;
+      letter-spacing: .14em;
+      list-style: none;
+      text-transform: uppercase;
+      touch-action: manipulation;
+    }
+
+    .ready-circuits-preflight > summary::-webkit-details-marker { display: none; }
+    .ready-circuits-preflight > summary::after {
+      content: "Open";
+      font-size: 8px;
+      font-weight: 650;
+      letter-spacing: .1em;
+      opacity: .58;
+    }
+    .ready-circuits-preflight[open] > summary::after { content: "Hide"; }
+
+    .ready-circuits-body {
+      padding: 0 12px 12px;
+      border-top: 1px solid rgba(77, 255, 136, .1);
+    }
+
+    .ready-circuits-legs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 0;
+      margin: 10px 0 8px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .ready-circuits-legs li {
+      display: inline-flex;
+      align-items: center;
+      color: #dffff0;
+      font: 800 8px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .ready-circuits-legs li + li::before {
+      content: "→";
+      margin: 0 6px 0 5px;
+      color: rgba(77, 255, 136, .45);
+      font-weight: 650;
+    }
+
+    .ready-circuits-cue {
+      margin: 0 0 10px;
+      color: rgba(217, 255, 229, .42);
+      font-size: 8px;
+      line-height: 1.45;
+      letter-spacing: .04em;
+    }
+
+    .ready-circuits-modes {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+      margin: 0;
+    }
+
+    .ready-circuits-mode {
+      min-width: 0;
+      padding: 8px 7px;
+      border: 1px solid rgba(77, 255, 136, .18);
+      border-radius: 4px;
+      background: rgba(0, 0, 0, .14);
+    }
+
+    .ready-circuits-mode strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #4dff88;
+      font: 800 8px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .ready-circuits-mode span {
+      display: block;
+      color: rgba(217, 255, 229, .55);
+      font-size: 8px;
+      line-height: 1.35;
+    }
+
+    .ready-circuits-config {
+      margin-top: 10px;
+      border-top: 1px solid rgba(77, 255, 136, .1);
+    }
+
+    .ready-circuits-config > summary {
+      display: flex;
+      min-height: 36px;
+      align-items: center;
+      justify-content: space-between;
+      color: rgba(217, 255, 229, .48);
+      cursor: pointer;
+      font-size: 8px;
+      letter-spacing: .12em;
+      list-style: none;
+      text-transform: uppercase;
+      touch-action: manipulation;
+    }
+
+    .ready-circuits-config > summary::-webkit-details-marker { display: none; }
+    .ready-circuits-config > summary::after {
+      content: "Open";
+      font-size: 7px;
+      opacity: .55;
+    }
+    .ready-circuits-config[open] > summary::after { content: "Hide"; }
+
+    .ready-circuits-config-table {
+      width: 100%;
+      margin: 0 0 2px;
+      border-collapse: collapse;
+    }
+
+    .ready-circuits-config-table th,
+    .ready-circuits-config-table td {
+      padding: 5px 4px;
+      border-top: 1px solid rgba(77, 255, 136, .1);
+      color: rgba(217, 255, 229, .62);
+      font-size: 8px;
+      line-height: 1.35;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .ready-circuits-config-table th {
+      width: 7.5rem;
+      color: #dffff0;
+      font: 800 8px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
     .ready-controls {
       margin: 0 0 22px;
       color: rgba(217, 255, 229, .48);
@@ -1639,6 +1797,8 @@
       .ready-activity-nav button { min-height: 46px; padding-inline: 3px; }
       .ready-facts { grid-template-columns: 1fr; }
       .ready-fact + .ready-fact { padding-left: 4px; border-top: 1px solid rgba(77, 255, 136, .12); border-left: 0; }
+      .ready-circuits-modes { grid-template-columns: 1fr; }
+      .ready-circuits-config-table th { width: 6.5rem; }
     }
 
     @media (max-height: 500px) and (orientation: landscape) {
@@ -2345,6 +2505,20 @@
             </div>
             <p>This changes the complete landing centreline, wire, rollout, and starting geometry.</p>
           </div>
+          <details id="ready-circuits-preflight" class="ready-circuits-preflight" hidden>
+            <summary>Preflight · pattern</summary>
+            <div class="ready-circuits-body">
+              <ol id="ready-circuits-legs" class="ready-circuits-legs" aria-label="Overhead circuit legs"></ol>
+              <p id="ready-circuits-cue" class="ready-circuits-cue"></p>
+              <div id="ready-circuits-modes" class="ready-circuits-modes" role="list" aria-label="Coaching modes"></div>
+              <details id="ready-circuits-config" class="ready-circuits-config">
+                <summary>Config by leg</summary>
+                <table class="ready-circuits-config-table">
+                  <tbody id="ready-circuits-config-body"></tbody>
+                </table>
+              </details>
+            </div>
+          </details>
           <p id="ready-controls" class="ready-controls">Arrows fly · W/S power · F guns · V padlock · Tab target
 Splash one bandit to qualify · H controls · R restarts</p>
           <button id="ready-start" type="button">Fly First Merge</button>
@@ -2411,7 +2585,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
   </div>
 
   <script src="./multiplayer-config.js"></script>
-  <script type="module" src="./app.js?v=157"></script>
+  <script type="module" src="./app.js?v=158"></script>
   <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
 </body>
 </html>
