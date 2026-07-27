@@ -1306,6 +1306,7 @@ public sealed class SimulationSession {
             _bandit.State,
             _player.AirspeedMps,
             _player.AtmosphereModel,
+            _beat.PlayerAir,
             _catapult.IsActive,
             LiveOpponentCount,
             _rapierPursuitActive,
@@ -2118,10 +2119,13 @@ public sealed class SimulationSession {
         double predictedAltitudeM = state.Position.Y
             + verticalSpeedMps * FixedDeltaSeconds * 1.5;
         double marginM = Math.Max(2.0, integrationMarginM);
+        // ONLY the lower edge is terminal, and only because below the sounding is below the
+        // ground. The upper edge is not a physical boundary at all — the column now continues on
+        // a scaled standard atmosphere above its top level, so climbing out of the data is no
+        // longer an event. Killing the aircraft for it was the single dumbest failure mode in the
+        // sortie: you did not die of altitude, you died of an array running out.
         return state.Position.Y <= bounded.MinimumGeometricAltitudeM + marginM
-            || state.Position.Y >= bounded.MaximumGeometricAltitudeM - marginM
-            || predictedAltitudeM <= bounded.MinimumGeometricAltitudeM + marginM
-            || predictedAltitudeM >= bounded.MaximumGeometricAltitudeM - marginM;
+            || predictedAltitudeM <= bounded.MinimumGeometricAltitudeM + marginM;
     }
 
     /// When the aircraft the pilot is fighting goes down but its formation has not, promote the

@@ -39,6 +39,11 @@ public static class TurboRamjetPerformanceMap {
     // Still two and a half times the original 0.42, so the ram genuinely dominates once lit, but no
     // longer more than the turbine's entire sea-level static thrust from a duct on a 7.8 t aircraft.
     public const double RamDesignThrustRatio = 0.70;
+    // The engine keeps its Mach-4 design point ON PURPOSE. The aircraft is capped at about M3.14
+    // by SKIN TEMPERATURE, not by thrust, so leaving surplus thrust above that ceiling is both
+    // realistic and interesting: a thermally limited aircraft genuinely has performance it is not
+    // allowed to spend. The SR-71 was the same. The automation clamps to the structural limit; a
+    // pilot who overrides it can have the speed and pay for it in the structure.
     public const double DesignMach = 4.0;
     public const double DesignAltitudeM = 24_000.0;
     // Stoichiometric kerosene-air adiabatic flame temperature is about 2300-2400 K, and hydrogen is

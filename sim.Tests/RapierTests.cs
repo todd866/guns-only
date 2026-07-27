@@ -134,6 +134,9 @@ public class RapierTests {
 
     [Fact]
     public void UpgradedCombinedCycleEngineCanHoldTheMach4DesignDash() {
+        // The ENGINE can hold Mach 4. The AIRFRAME may not fly there: skin temperature caps the
+        // aircraft near M3.14 and the mission automation clamps to it. Surplus thrust above the
+        // structural ceiling is deliberate — see TurboRamjetPerformanceMap.DesignMach.
         const double DashAltitudeM = 24_000.0;
         AtmosphericState air = StandardAtmosphere1976.Instance.Sample(DashAltitudeM);
         var sim = At(DashAltitudeM, 4.0 * air.SpeedOfSoundMps);
@@ -491,7 +494,7 @@ public class RapierTests {
         Assert.True(lowMach < 2.7,
             $"FL315 transonic turbine pull became an unrestricted low-level dash: M{lowMach:F3}");
         Assert.True(highMach >= 3.8,
-            $"FL560 failed to enter the Mach-4 acceleration corridor: M{highMach:F3}");
+            $"FL560 failed to enter the supersonic acceleration corridor: M{highMach:F3}");
         Assert.True(highMach > lowMach + 1.0,
             $"the inlet altitude schedule is not operationally meaningful: "
                 + $"FL315 M{lowMach:F3}, FL560 M{highMach:F3}");

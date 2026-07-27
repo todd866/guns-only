@@ -95,6 +95,42 @@ public sealed class HydrostaticAtmosphereColumn : IAtmosphereModel {
     }
 
     public AtmosphericState Sample(double geometricAltitudeM) {
+        // A weather sounding is a finite data product, and flying off the top of it is a DATA
+        // limit, not a physical one. This used to throw, and the session pre-empted the throw by
+        // declaring the aircraft lost — so climbing high killed you because an array ran out.
+        //
+        // Above the sounding, continue on the standard atmosphere, scaled to match the sounding
+        // exactly at its own top level. Scaling rather than switching keeps pressure, density and
+        // temperature continuous across the seam, so the aircraft feels nothing crossing it; the
+        // sounding's departure from standard is simply carried upward, which is the honest
+        // extrapolation when there is no more data.
+        if (double.IsFinite(geometricAltitudeM)
+            && geometricAltitudeM > MaximumGeometricAltitudeM) {
+            AtmosphericState top = SampleWithinColumn(MaximumGeometricAltitudeM);
+            AtmosphericState standardTop =
+                StandardAtmosphere1976.Instance.Sample(MaximumGeometricAltitudeM);
+            AtmosphericState standard =
+                StandardAtmosphere1976.Instance.Sample(geometricAltitudeM);
+            double temperatureRatio = standardTop.TemperatureK > 0.0
+                ? top.TemperatureK / standardTop.TemperatureK : 1.0;
+            double densityRatio = standardTop.DensityKgM3 > 0.0
+                ? top.DensityKgM3 / standardTop.DensityKgM3 : 1.0;
+            double pressureRatio = standardTop.PressurePa > 0.0
+                ? top.PressurePa / standardTop.PressurePa : 1.0;
+            double temperatureK = standard.TemperatureK * temperatureRatio;
+            return new AtmosphericState(
+                standard.GeometricAltitudeM,
+                standard.GeopotentialAltitudeM,
+                temperatureK,
+                standard.PressurePa * pressureRatio,
+                standard.DensityKgM3 * densityRatio,
+                Math.Sqrt(Atmosphere.RatioOfSpecificHeats
+                    * Atmosphere.SpecificGasConstantDryAir * temperatureK));
+        }
+        return SampleWithinColumn(geometricAltitudeM);
+    }
+
+    AtmosphericState SampleWithinColumn(double geometricAltitudeM) {
         ValidateSampleAltitude(geometricAltitudeM);
 
         int layer = LayerFor(geometricAltitudeM);

@@ -121,6 +121,12 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     bool NormalPullUsesMaxPerformance = false, double PositiveOverrideLimitG = -1.0,
     bool DynamicPressureScheduledPostStallOverride = false,
     double MaxThrustFraction = 1.35,
+    // Sustained skin-temperature limit, kelvin. Zero means unlimited, which is right for every
+    // aircraft here that cannot reach a speed where kinetic heating binds. For one that can, THIS
+    // is the real ceiling — Concorde was held to M2.02 by nose temperature and the SR-71 by
+    // compressor inlet temperature, not by thrust. Capping an aircraft by detuning its engine
+    // instead is how you end up with an invented number propping up three others.
+    double SkinTemperatureLimitK = 0.0,
     // Optional integrated pitch-thrust-vectoring control. Zero preserves an ordinary fixed nozzle.
     // MaxRad is the thrust-force vector limit; MomentArmM is a reduced-order CG-to-resultant-nozzle
     // lever arm. Alpha/rate gains belong to the transparent control-law surrogate, not an OEM law.
@@ -514,6 +520,12 @@ public static class FlightModel {
         PositiveOverrideLimitG: 15.0,
         DynamicPressureScheduledPostStallOverride: true,
         MaxThrustFraction: 1.55,              // augmentor lever stop
+        // 320 C sustained. Steel where the heat is, BMI composite everywhere else, at roughly
+        // 45 percent steel by structural mass — the MiG-25 trade, chosen because steel is cheap
+        // and weldable rather than because it is the best material. That is about M3.14 in the
+        // stratosphere, and it is the aircraft's real ceiling: the engine is now sized to sit just
+        // above it so the STRUCTURE decides how fast this thing goes, not a detuned duct.
+        SkinTemperatureLimitK: 593.15,
         // No thrust vectoring: hot actuators, mass, maintenance and cost.
         PitchThrustVectorMaxRad: 0.0, PitchThrustVectorMomentArmM: 0.0,
         PitchThrustVectorAlphaGain: 0.0, PitchThrustVectorRateGainSeconds: 0.0,

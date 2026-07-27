@@ -40,6 +40,36 @@ public static class AirData {
             * equivalentAirspeedMps * equivalentAirspeedMps;
     }
 
+    /// <summary>
+    /// Recovery factor for a turbulent boundary layer on a flat surface. Only a stagnation point
+    /// sees the full total temperature; the skin either side of it recovers about 88 percent of
+    /// the rise, which is worth several tenths of a Mach at these speeds and is the difference
+    /// between a leading-edge limit and a skin limit.
+    /// </summary>
+    public const double TurbulentRecoveryFactor = 0.88;
+
+    /// <summary>Recovery (skin) temperature from Mach and ambient static temperature.</summary>
+    public static double SkinTemperatureK(double mach, double ambientTemperatureK) =>
+        ambientTemperatureK <= 0.0 || !double.IsFinite(mach) || mach <= 0.0
+            ? System.Math.Max(0.0, ambientTemperatureK)
+            : ambientTemperatureK
+                * (1.0 + 0.5 * (Gamma - 1.0)
+                    * TurbulentRecoveryFactor * mach * mach);
+
+    /// <summary>
+    /// Highest Mach whose recovery temperature stays inside a structural limit. Returns positive
+    /// infinity when the airframe declares no limit, so an unlimited aircraft is never clamped.
+    /// </summary>
+    public static double MachLimitForSkinTemperature(
+        double skinTemperatureLimitK, double ambientTemperatureK) {
+        if (!(skinTemperatureLimitK > 0.0)) return double.PositiveInfinity;
+        if (!(ambientTemperatureK > 0.0)) return double.PositiveInfinity;
+        double rise = skinTemperatureLimitK / ambientTemperatureK - 1.0;
+        if (rise <= 0.0) return 0.0;
+        return System.Math.Sqrt(rise
+            / (0.5 * (Gamma - 1.0) * TurbulentRecoveryFactor));
+    }
+
     /// <summary>Local Mach number from TAS and the scenario's thermodynamic state.</summary>
     public static double MachNumber(double trueAirspeedMps, double altitudeM,
         IAtmosphereModel? atmosphere = null) {

@@ -94,7 +94,14 @@ public class WeatherProfileTests {
 
         var bounded = Column(288.0, 223.0);
         Assert.Throws<ArgumentOutOfRangeException>(() => bounded.Sample(-0.01));
-        Assert.Throws<ArgumentOutOfRangeException>(() => bounded.Sample(10_000.01));
+        // Above the top level is no longer an error: the column continues on a scaled standard
+        // atmosphere so that flying off the top of a finite sounding is not a fatal event. It must
+        // stay CONTINUOUS across that seam, which is the property worth asserting.
+        AtmosphericState top = bounded.Sample(10_000.0);
+        AtmosphericState justAbove = bounded.Sample(10_000.01);
+        Assert.True(Math.Abs(justAbove.TemperatureK - top.TemperatureK) < 0.05);
+        Assert.True(Math.Abs(justAbove.DensityKgM3 - top.DensityKgM3) < 1e-4);
+        Assert.True(bounded.Sample(30_000.0).DensityKgM3 < top.DensityKgM3);
         Assert.Throws<ArgumentOutOfRangeException>(() => bounded.Sample(double.NaN));
     }
 

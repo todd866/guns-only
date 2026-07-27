@@ -111,6 +111,7 @@ public sealed class RapierMissionDirector {
         in AircraftState contact,
         double trueAirspeedMps,
         IAtmosphereModel atmosphere,
+        in AircraftParams playerAircraft,
         bool catapultActive,
         int liveOpponentCount,
         bool pursuitActive,
@@ -161,6 +162,13 @@ public sealed class RapierMissionDirector {
             }
         }
 
+        // The airframe's own ceiling. Every commanded Mach below is clamped to this, so the
+        // automation never asks for a speed that cooks the structure — and the phase cues that
+        // used to command M4.00 now command whatever the skin actually allows. Infinity for any
+        // airframe that declares no limit, so nothing else in the game is touched.
+        double skinMachLimit = AirData.MachLimitForSkinTemperature(
+            playerAircraft.SkinTemperatureLimitK, air.TemperatureK);
+
         double targetMach;
         double targetAltitudeFt;
         double targetGamma;
@@ -188,7 +196,7 @@ public sealed class RapierMissionDirector {
                 // The uprated engine has enough excess thrust to run through the inlet schedule
                 // during the climb. Spend that energy on height instead: the computer rolls power
                 // back above the M0.9 target, then restores full augmentation on the FL560 shelf.
-                throttle = ThrottleForMach(targetMach, mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
                     trimLever: 0.62, gain: 1.10);
                 waypoint = contact.Position;
                 cue = $"AUTO CLIMB · HOLD M0.90 · M{mach:F2} · "
@@ -200,7 +208,7 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(ClimbTopM, player,
                     trueAirspeedMps, captureSeconds: 90.0,
                     minimumGamma: -0.035, maximumGamma: 0.035);
-                throttle = ThrottleForMach(targetMach, mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
                     trimLever: 1.20, gain: 0.45);
                 waypoint = contact.Position;
                 cue = $"AUTO LEVEL ACCEL · M{mach:F2} → M2.20 · HOLD FL560";
@@ -211,7 +219,7 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 150.0,
                     minimumGamma: -0.025, maximumGamma: 0.070);
-                throttle = ThrottleForMach(targetMach, mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
                     trimLever: 1.08, gain: 0.42);
                 waypoint = contact.Position;
                 cue = $"AUTO RAM CLIMB · M{mach:F2} · FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL700";
@@ -222,7 +230,7 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 120.0,
                     minimumGamma: -0.040, maximumGamma: 0.040);
-                throttle = ThrottleForMach(targetMach, mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
                     trimLever: 1.08, gain: 0.42);
                 waypoint = contact.Position;
                 string eta = double.IsFinite(interceptEtaSeconds)
@@ -238,7 +246,7 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(contact.Position.Y + 600.0,
                     player, trueAirspeedMps, captureSeconds: 75.0,
                     minimumGamma: -0.075, maximumGamma: 0.050);
-                throttle = ThrottleForMach(targetMach, mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
                     trimLever: 0.96, gain: 0.40, maximumLever: 1.35);
                 waypoint = contact.Position;
                 cue = $"FORMATION IN RANGE · {liveOpponentCount} CONTACTS · "
@@ -250,7 +258,7 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 120.0,
                     minimumGamma: -0.050, maximumGamma: 0.050);
-                throttle = ThrottleForMach(targetMach, mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
                     trimLever: 1.08, gain: 0.42);
                 waypoint = recoveryInitial;
                 cue = $"FORMATION DESTROYED · EGRESS HOME · {pursuerCount} PURSUERS · "
@@ -262,7 +270,7 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(45_000.0 * 0.3048,
                     player, trueAirspeedMps, captureSeconds: 150.0,
                     minimumGamma: -0.060, maximumGamma: 0.025);
-                throttle = ThrottleForMach(targetMach, mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
                     trimLever: 0.80, gain: 0.58, maximumLever: 1.35);
                 waypoint = recoveryInitial;
                 cue = $"RETURN HOME · BASE {homeRangeM / 1000.0:F0} KM · M2.0 / FL450";
@@ -390,16 +398,23 @@ public sealed class RapierMissionDirector {
                 //
                 // If a future recovery card arrives far outside 5,500-5,700 kg, re-measure before
                 // reintroducing a mass term — do not assume the old gain was right.
-                // Fitted to the two recoveries this sortie actually produces:
-                //   5,646 kg wants ~0.00046   (measured: passes, hook inside the wire-three window)
-                //   5,551 kg wants ~0.00042   (measured: 0.00046 lands 3.9 m long onto wire four)
-                // which is a slope of about -4.2e-7 per kg referenced at 5,646 kg. That is a FIT TO
-                // TWO POINTS over a 95 kg range, not a physical law — if a future recovery card
-                // arrives outside roughly 5,500-5,700 kg, re-measure rather than extrapolating.
-                const double FitReferenceMassKg = 5_646.0;
-                double finalGateGammaCorrection = Math.Clamp(
-                    0.00046 - 0.000000421 * (FitReferenceMassKg - player.Mass),
-                    0.00030, 0.00060);
+                // Final-gate path-angle trim, a single constant rather than a mass schedule.
+                //
+                // This was scheduled off landing mass. Three successive refits produced mutually
+                // inconsistent slopes across 5,551 / 5,646 / 5,688 kg, which is the signature of
+                // fitting noise: mass was standing in for arrival ENERGY, and energy moves whenever
+                // thrust, fuel burn or the thermal clamp move. A schedule fitted to that is a
+                // schedule that breaks on the next physics change, and it broke on three of them.
+                //
+                // Measured sensitivity is about 110 m of hook position per 0.001 rad, and LARGER
+                // correction moves the hook LONGER (toward +along), which is the opposite of what
+                // it looks like. Wire three sits at TouchdownAlongM = -DeckLengthM * 0.2 = -240 m,
+                // wires span -250.4 to -234.8, and rollout sweeps forward, so the aim is about
+                // -242 m: touch down just past wire three and sweep back onto it.
+                //
+                // PROPER FIX, not done here: close the loop on touchdown point instead of aiming a
+                // gate open-loop. Then arrival energy stops mattering and this constant disappears.
+                const double FinalGateGammaCorrection = 0.00043;
                 // The first squares are capture gates, so permit a high initial arrival to
                 // converge onto the published 3.5-degree line instead of preserving its error all
                 // the way to the strip. The last two gates then tighten to the mass-scheduled
@@ -408,7 +423,7 @@ public sealed class RapierMissionDirector {
                     ? recoveryGate switch {
                         1 => -0.12,
                         2 => -0.09,
-                        _ => -0.06425 + finalGateGammaCorrection
+                        _ => -0.06425 + FinalGateGammaCorrection
                     }
                     : -0.16;
                 targetGamma = Math.Clamp(
