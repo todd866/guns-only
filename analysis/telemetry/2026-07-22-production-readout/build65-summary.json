@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "generated_at": "2026-07-22T14:43:49.731Z",
+  "scope": {
+    "requested_chunk_limit": 20,
+    "auto_paginated": false,
+    "has_more": false,
+    "next_cursor": null,
+    "partial": false
+  },
+  "coverage": {
+    "chunks_listed": 14,
+    "chunks_read": 14,
+    "chunks_failed": 0,
+    "chunks_skipped_by_budget": 0,
+    "chunks_unsupported_format": 0,
+    "compressed_bytes_read": 845577,
+    "uncompressed_bytes_read": 3674942,
+    "rows_read": 1704,
+    "first_upload_at": "2026-07-22T14:01:46.000Z",
+    "last_upload_at": "2026-07-22T14:02:49.000Z"
+  },
+  "sessions": {
+    "observed": 2,
+    "builds": {
+      "65+dep.dpl_XMg2hYP61X5H4TxnSBHo14kSQPtC": 2
+    }
+  },
+  "sorties": {
+    "observed": 2,
+    "started_events": 2,
+    "finished": 1,
+    "ended_events": 1,
+    "completion_rate": 0.5,
+    "completion_denominator": 2,
+    "outcomes": {
+      "NONE": 1,
+      "DEFEAT": 1
+    },
+    "end_reasons": {
+      "finished": 1
+    }
+  },
+  "combat": {
+    "rounds_fired": 0,
+    "hits": 0,
+    "hit_rate": null,
+    "kills": 0,
+    "player_deaths": 0,
+    "opponent_deaths": 0,
+    "shots_total": 3,
+    "shots_in_window": 0,
+    "gun_window_share": 0,
+    "median_time_to_first_shot_seconds": null,
+    "sorties_with_first_shot_timing": 0
+  },
+  "privacy": {
+    "raw_rows_returned": false,
+    "identifiers_returned": false,
+    "user_agents_returned": false
+  }
+}

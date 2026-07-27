@@ -1,0 +1,88 @@
+{
+  "as_of_utc": "2026-07-22T14:02:47.842Z",
+  "audience": "product stakeholders",
+  "question": "How are Guns Only production usage, telemetry, and the Vercel build looking after recent play sessions?",
+  "deployment": {
+    "project": "guns-only",
+    "canonical_url": "https://guns-only.vercel.app/",
+    "deployment_id": "dpl_XMg2hYP61X5H4TxnSBHo14kSQPtC",
+    "release_build": "65",
+    "created_at_utc": "2026-07-22T11:43:17.381Z",
+    "ready_at_utc": "2026-07-22T11:43:26.457Z",
+    "created_to_ready_ms": 9076,
+    "vercel_build_stage_ms": 438,
+    "state": "READY",
+    "serverless_functions": 3,
+    "node_runtime": "24.x",
+    "live_asset_commit": "a0caeecd84580cdefca3a490ed471d7a9fb4eea8",
+    "live_asset_commit_subject": "Ship Build 65: disable simulated cloud field (performance)",
+    "git_revision_exposed_by_build_info": null,
+    "github_connection_present": false
+  },
+  "browser_smoke": {
+    "boot_ready": true,
+    "fatal_visible": false,
+    "pause_control_visible": true,
+    "ready_screen_visible": false,
+    "build_label": "BUILD 65 · DEP dpl_XMg2hYP6",
+    "console_warning_or_error_count": 0
+  },
+  "runtime_log_slice": {
+    "source": "Vercel production runtime logs",
+    "window_start_utc": "2026-07-22T13:47:28.159Z",
+    "window_end_utc": "2026-07-22T14:02:47.842Z",
+    "unique_requests": 50,
+    "telemetry_posts": 42,
+    "telemetry_successes_204": 42,
+    "build_info_gets": 8,
+    "build_info_successes_200": 8,
+    "telemetry_posts_by_minute": [
+      {"minute_utc": "2026-07-22T13:47:00Z", "posts": 4},
+      {"minute_utc": "2026-07-22T13:48:00Z", "posts": 12},
+      {"minute_utc": "2026-07-22T13:51:00Z", "posts": 12},
+      {"minute_utc": "2026-07-22T14:01:00Z", "posts": 1},
+      {"minute_utc": "2026-07-22T14:02:00Z", "posts": 13}
+    ],
+    "adjacent_telemetry_gap_ms": {
+      "count": 41,
+      "minimum": 191,
+      "p10": 306,
+      "median": 684,
+      "p90": 25627,
+      "maximum": 618581,
+      "under_1_second": 27,
+      "under_5_seconds": 34,
+      "over_20_seconds": 5
+    },
+    "limitations": [
+      "Runtime logs do not expose telemetry session IDs, request bodies, user identity, or chunk sizes.",
+      "The CLI repeated rows, so requests were deduplicated by Vercel log event ID before aggregation.",
+      "This short accessible log window is an ingestion-health sample, not a visitor or session census."
+    ]
+  },
+  "vercel_web_analytics": {
+    "visitor_count_displayed": 0,
+    "tracking_installed": false,
+    "analytics_script_present_in_source": false,
+    "interpretation": "The zero is missing instrumentation, not evidence of zero visitors."
+  },
+  "production_telemetry_access": {
+    "writer_active": true,
+    "raw_chunks_reviewed": 0,
+    "bounded_list_attempted": true,
+    "bounded_list_succeeded": false,
+    "blocker": "TELEMETRY_ADMIN_TOKEN and BLOB_READ_WRITE_TOKEN are Vercel-sensitive and redacted to local CLI sessions.",
+    "behavioral_metrics_available": false
+  },
+  "telemetry_capability": {
+    "current_production_stream": "20 Hz state snapshots plus input, context, and lifecycle events in immutable gzip chunks",
+    "decision_transition_transport_status": "pending",
+    "decision_transition_interpretation": "Per-decision transition telemetry exists in the simulation foundation but is not yet drained and durably transported by the browser."
+  },
+  "local_contract_tests": {
+    "tests_run": 39,
+    "tests_passed": 39,
+    "tests_failed": 0,
+    "scope": "telemetry writer, operator gate, bounded list/download retrieval"
+  }
+}
