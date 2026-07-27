@@ -247,3 +247,33 @@ it a mechanic rather than a cutscene:
 
 The pilot chooses with fuel and energy in hand. Pairs with the nav panel (fuel-to-home vs
 fuel-remaining) and the fatigue accounting.
+
+## Latent capability: zoom-climb lob, and why it is an ASAT not a launcher (2026-07-27)
+
+A M3.0 cruise at FL700 converts to a ~55 km apogee (M2.6 gives 46.8 km). That is above essentially
+all the atmosphere, reached with energy the transit already paid for.
+
+ALTITUDE is cheap from there; VELOCITY is not:
+
+| from 55 km | delta-v |
+|---|---|
+| 100 km (space) | 939 m/s |
+| 400 km | 2,601 m/s |
+| 1,000 km | 4,305 m/s |
+
+A plain 3:1 solid at Isp 290 gives 3,124 m/s, so a modest rocket reaches most of the LEO altitude
+band with a payload in the tens of kg. Unpowered, a release at apogee still lobs ~80 km.
+
+PRECEDENT: the ASM-135 ASAT (1985) was released from an F-15 zoom at 11.6 km / M1.22 and killed
+Solwind P78-1 at 555 km. This aircraft releases 21 km higher and 525 m/s faster, above the air that
+missile had to burn through. It is a strictly better platform than the one that actually did it.
+
+ORBIT REMAINS OUT OF REACH and the reason matters: orbital velocity is 7,780 m/s HORIZONTAL, the
+zoom converts all speed into height so apogee arrives at ~zero, and delta-v is exponential. Getting
+high is a sounding-rocket problem; getting to orbit needs a two-stage vehicle that would outmass the
+aircraft. Do not let a future feature blur the two.
+
+WHY IT FITS: the beat already targets "an enabler, not a fighter". In a drone war the ultimate
+enablers are the ISR and comms satellites. A cheap attritable interceptor flying from a buried,
+dispersed, un-craterable launcher that can reach into LEO is a strategic capability on a $9M
+airframe — and it explains why anyone fields a fleet of these.
