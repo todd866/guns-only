@@ -167,10 +167,13 @@ internal static class SnapshotProjection {
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
         double rapierStagnationTempC =
             AirData.SkinTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
-        // The airframe's real limit, matching FlightModel.RapierPublicDataSurrogate's
-        // SkinTemperatureLimitK of 593.15 K. It was 900 C, which belonged to the Mach-4 engine and
-        // told the pilot they had 600 C of margin they do not have.
-        const double RapierThermalLimitC = 320.0;
+        // Read from the AIRFRAME, never hardcoded. This was 900 C (the Mach-4 engine's number),
+        // then 320 C (steel), while the aircraft moved to a 1200 C CMC hot structure — so the HUD
+        // reported the pilot 150 C over a limit they were nowhere near. A displayed limit that does
+        // not come from the thing it is limiting will always drift out of date.
+        double rapierThermalLimitC =
+            (Session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
+                ? Session.Beat.PlayerAir.SkinTemperatureLimitK : 593.15) - 273.15;
         Vec3D localWindVelocity = groundVelocity - airVelocity;
         CloudSample localCloud = (Session.Weather?.Clouds ?? ClearCloudField.Instance)
             .Sample(playerPosition, _simTimeMs / 1000.0);
@@ -330,7 +333,7 @@ internal static class SnapshotProjection {
             + $"\"rapier_turbine_fuel_ppm\":{Session.RapierTurbineFuelFlowLbPerMinute:F2},"
             + $"\"rapier_ramjet_fuel_ppm\":{Session.RapierRamjetFuelFlowLbPerMinute:F2},"
             + $"\"rapier_stagnation_temp_c\":{rapierStagnationTempC:F0},"
-            + $"\"rapier_thermal_margin_c\":{RapierThermalLimitC - rapierStagnationTempC:F0},"
+            + $"\"rapier_thermal_margin_c\":{rapierThermalLimitC - rapierStagnationTempC:F0},"
             // Gross weight in pounds, and time-to-intercept in minutes. ETI is only meaningful on a
             // long-range run-in: inside the merge the number churns every tick and means nothing, so
             // it is published as -1 below 20 km or with no closure, and the HUD hides it.

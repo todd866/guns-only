@@ -525,10 +525,13 @@ internal static class SnapshotHotFrame {
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
         double rapierStagnationTempC =
             AirData.SkinTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
-        // The airframe's real limit, matching FlightModel.RapierPublicDataSurrogate's
-        // SkinTemperatureLimitK of 593.15 K. It was 900 C, which belonged to the Mach-4 engine and
-        // told the pilot they had 600 C of margin they do not have.
-        const double RapierThermalLimitC = 320.0;
+        // Read from the AIRFRAME, never hardcoded. This was 900 C (the Mach-4 engine's number),
+        // then 320 C (steel), while the aircraft moved to a 1200 C CMC hot structure — so the HUD
+        // reported the pilot 150 C over a limit they were nowhere near. A displayed limit that does
+        // not come from the thing it is limiting will always drift out of date.
+        double rapierThermalLimitC =
+            (session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
+                ? session.Beat.PlayerAir.SkinTemperatureLimitK : 593.15) - 273.15;
         // Minutes to the contact at present closure; negative means "do not show". Inside 20 km
         // the geometry is a fight rather than a transit and the number churns uselessly.
         double interceptEtiMinutes = -1.0;
@@ -638,7 +641,7 @@ internal static class SnapshotHotFrame {
         w.Num("rapier_ramjet_fuel_ppm", session.RapierRamjetFuelFlowLbPerMinute, 2);
         w.Num("rapier_stagnation_temp_c", rapierStagnationTempC, 0);
         w.Num("rapier_thermal_margin_c",
-            RapierThermalLimitC - rapierStagnationTempC, 0);
+            rapierThermalLimitC - rapierStagnationTempC, 0);
         w.Num("player_gross_lb", session.Player.State.Mass * 2.20462262, 0);
         w.Num("rapier_intercept_eti_min", interceptEtiMinutes, 1);
         w.Num("px", playerPosition.X, 3); w.Num("py", playerPosition.Y, 3); w.Num("pz", playerPosition.Z, 3);

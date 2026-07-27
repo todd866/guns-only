@@ -299,13 +299,24 @@ function updateNavConsole(state) {
   const ktas = Math.max(1, num("true_airspeed_kts") || 0);
   const homeKnown = finite(rangeNm) && finite(bearing);
 
-  set(navUi.destination, homeKnown ? "DISPERSED STRIP · HOME" : "--",
-    homeKnown ? "normal" : "unknown");
+  // Destination follows the PHASE. It read "HOME" for the whole sortie, which is wrong outbound:
+  // on the run-in the aircraft is navigating to the contact, and showing home there tells the pilot
+  // their destination is behind them while the guidance square is ahead. Home is only the
+  // destination once the mission turns for base.
+  const phase = Math.floor(Number(state?.rapier_mission_phase) || 0);
+  const outbound = phase >= 1 && phase <= 6;
+  set(navUi.destination,
+    !homeKnown && !outbound ? "--"
+      : outbound ? "CONTACT · INTERCEPT"
+        : "DISPERSED STRIP · HOME",
+    "normal");
   set(navUi.bearing, homeKnown
     ? `${String(Math.round((bearing % 360 + 360) % 360)).padStart(3, "0")}°` : "--",
     homeKnown ? "normal" : "unknown");
-  set(navUi.range, homeKnown ? `${Math.round(rangeNm)} NM` : "--",
-    homeKnown ? "normal" : "unknown");
+  const contactNm = num("range_m") / 1852;
+  const shownRangeNm = outbound && Number.isFinite(contactNm) ? contactNm : rangeNm;
+  set(navUi.range, Number.isFinite(shownRangeNm) ? `${Math.round(shownRangeNm)} NM` : "--",
+    Number.isFinite(shownRangeNm) ? "normal" : "unknown");
 
   // Time to run uses CLOSURE toward home, not true airspeed. On a ballistic lob much of TAS is
   // vertical, so range/TAS reads optimistic climbing and pessimistic descending — and fuel required
@@ -343,7 +354,7 @@ function updateNavConsole(state) {
 
   const groundKts = num("ground_speed_kts");
   set(navUi.groundspeed, finite(groundKts)
-    ? `${Math.round(groundKts).toLocaleString("en-US")} KT · ${Math.round(groundKts * 1.852).toLocaleString("en-US")} KM/H`
+    ? `${Math.round(groundKts).toLocaleString("en-US")} KT\n${Math.round(groundKts * 1.852).toLocaleString("en-US")} KM/H`
     : "--", finite(groundKts) ? "normal" : "unknown");
 
   const grossLb = num("player_gross_lb");

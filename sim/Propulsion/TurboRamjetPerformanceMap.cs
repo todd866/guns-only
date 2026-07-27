@@ -33,8 +33,12 @@ public static class TurboRamjetPerformanceMap {
     // Narrowed from 1.6-2.2 to 1.85-2.15. The handover is the aircraft's defining moment and a
     // 0.6-Mach blend made it a slow swell; 0.3 makes it a shove. This is perceptual, not a buff —
     // the same thrust arrives, it just arrives decisively.
-    public const double RamFadeStartMach = 1.85;
-    public const double FullRamMach = 2.15;
+    // Real ramjets are not useful much below M2 — pressure recovery is too low to make useful
+    // thrust, which is why every one ever flown needed a booster or a host engine. 1.85 was
+    // optimistic; 2.0 to 2.8 is the honest band and it puts a genuine thrust bucket between the
+    // fading turbine and the rising ram, exactly as a combined cycle really has.
+    public const double RamFadeStartMach = 2.0;
+    public const double FullRamMach = 2.8;
     /// Net ram-mode thrust at the design point, as a fraction of sea-level static dry turbine thrust.
     // Still two and a half times the original 0.42, so the ram genuinely dominates once lit, but no
     // longer more than the turbine's entire sea-level static thrust from a duct on a 7.8 t aircraft.
@@ -90,6 +94,32 @@ public static class TurboRamjetPerformanceMap {
         ? 1.0
         : System.Math.Clamp(1.0 - 0.075 * System.Math.Pow(mach - 1.0, 1.35), 0.05, 1.0);
 
+    /// Physical capture area of the ram duct, square metres. This REPLACES a normalised thrust
+    /// ratio, which was the least honest number in the model: it was chosen to land the top speed
+    /// where the design wanted it, so the engine was defined by its answer rather than its
+    /// geometry. A 1.24 m duct on a 13 m airframe is large — this aircraft is substantially duct,
+    /// exactly as the D-21 was — and thrust now falls out of the ideal cycle rather than a fit.
+    public const double RamCaptureAreaM2 = 1.2;
+
+    /// The rating the fraction-based engine interface is measured against: the Rapier's sea-level
+    /// static dry thrust. Used only to convert physical newtons back into the fraction callers
+    /// expect, so the ram term can be real thrust while the interface stays unchanged.
+    public const double StaticThrustReferenceN = 42_000.0;
+
+    /// Ram thrust in NEWTONS from the ideal cycle: F = rho V0^2 Ac (sqrt(Tb/T_inlet) - 1) eta.
+    /// Nothing here is normalised against a design point; the only free parameter is the duct.
+    public static double RamThrustN(double mach, double ambientTemperatureK,
+        double ambientDensityKgM3) {
+        if (!(mach > 0.0) || !(ambientTemperatureK > 0.0) || !(ambientDensityKgM3 > 0.0)) return 0.0;
+        double inletTotalK = ambientTemperatureK * (1.0 + (Gamma - 1.0) / 2.0 * mach * mach);
+        if (BurnerTemperatureK <= inletTotalK) return 0.0;   // no temperature ratio left to burn into
+        double speedOfSound = System.Math.Sqrt(Gamma * 287.05287 * ambientTemperatureK);
+        double velocity = mach * speedOfSound;
+        return ambientDensityKgM3 * velocity * velocity * RamCaptureAreaM2
+            * (System.Math.Sqrt(BurnerTemperatureK / inletTotalK) - 1.0)
+            * InletRecovery(mach);
+    }
+
     /// Ideal-cycle ram specific thrust group, without the density term.
     static double RamGroup(double mach, double ambientTemperatureK) {
         if (!(mach > 0.0) || !(ambientTemperatureK > 0.0)) return 0.0;
@@ -128,8 +158,11 @@ public static class TurboRamjetPerformanceMap {
                 RamCaptureLockedDensityRatio - densityRatio,
                 0.0,
                 RamCaptureLockedDensityRatio - RamCaptureFullDensityRatio);
-            ram = RamGroup(mach, ambientTemperatureK) * capturedDensityRatio / designGroup
-                * RamDesignThrustRatio
+            // Physical thrust, expressed as a fraction of static rating so the rest of the engine
+            // interface is unchanged. The capture schedule still models the inlet not swallowing
+            // usefully in dense air, and the fade models light-up.
+            ram = RamThrustN(mach, ambientTemperatureK, ambientDensityKgM3)
+                / StaticThrustReferenceN
                 * captureSchedule
                 * Fade(mach, RamFadeStartMach, FullRamMach);
             // The translating inlet is scheduled around one design dash, not an unlimited
