@@ -317,6 +317,10 @@ internal static class SnapshotProjection {
             + $"\"rapier_mission_phase_name\":\"{Session.RapierPhase.ToString().ToUpperInvariant()}\","
             + $"\"rapier_mission_cue\":{JsonString(Session.RapierMissionCue)},"
             + $"\"rapier_target_mach\":{Session.RapierTargetMach:F2},"
+            + $"\"rapier_commanded_mach\":{Session.RapierCommandedMach:F2},"
+            + $"\"rapier_authored_target_mach\":{Session.RapierAuthoredTargetMach:F2},"
+            + $"\"rapier_skin_mach_limit\":{(double.IsFinite(Session.RapierSkinMachLimit) ? Session.RapierSkinMachLimit.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
+            + $"\"rapier_phase_reason\":{JsonString(Session.RapierPhaseReason)},"
             + $"\"rapier_target_altitude_ft\":{Session.RapierTargetAltitudeFt:F0},"
             + $"\"rapier_missiles_remaining\":{Session.RapierMissilesRemaining},"
             + $"\"rapier_gun_drones_remaining\":{Session.RapierDogfightingDronesRemaining},"
@@ -329,6 +333,10 @@ internal static class SnapshotProjection {
             + $"\"rapier_guidance_y\":{Session.RapierGuidanceWaypoint.Y:F3},"
             + $"\"rapier_guidance_z\":{Session.RapierGuidanceWaypoint.Z:F3},"
             + $"\"rapier_recovery_gate\":{Session.RapierRecoveryGate},"
+            + $"\"rapier_circuit_leg\":{JsonString(Session.RapierCircuitLeg)},"
+            + $"\"rapier_circuit_leg_code\":{CircuitLegCode(Session.RapierCircuitLeg)},"
+            + $"\"rapier_fd_bank_deg\":{Session.RapierFdBankDeg:F1},"
+            + $"\"rapier_fd_target_ktas\":{Session.RapierFdTargetKtas:F0},"
             + $"\"rapier_turbine_thrust_kn\":{Session.RapierTurbineThrustN / 1000.0:F2},"
             + $"\"rapier_ramjet_thrust_kn\":{Session.RapierRamjetThrustN / 1000.0:F2},"
             + $"\"rapier_turbine_fuel_ppm\":{Session.RapierTurbineFuelFlowLbPerMinute:F2},"
@@ -1297,4 +1305,14 @@ internal static class SnapshotProjection {
             + $"\"arrest_residual_speed_kts\":{arrestment.ResidualSpeedMps * AirData.MpsToKnots:F2},"
             + $"\"arrest_initial_closure_kts\":{arrestment.InitialRelativeSpeedMps * AirData.MpsToKnots:F2},";
     }
+
+    static int CircuitLegCode(string? leg) => leg switch {
+        "DEPART" => 1,
+        "DOWNWIND" => 2,
+        "BASE" => 3,
+        "SHORT_FINAL" => 4,
+        "WIRE_FINAL" => 5,
+        "COMPLETE" => 6,
+        _ => 0,
+    };
 }

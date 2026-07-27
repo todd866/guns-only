@@ -1,0 +1,5 @@
+{"k":"gate","t":0.008333333333333333,"from_phase":"Unavailable","to_phase":"Launch","reason":"catapult_active","mach":0.022,"commanded_mach":0.9,"alt_ft":395}
+{"k":"gate","t":9.46666666666664,"from_phase":"Launch","to_phase":"Climb","reason":"climb_to_fl560","mach":0.319,"commanded_mach":0.9,"alt_ft":439}
+{"k":"gate","t":324.53333333331017,"from_phase":"Climb","to_phase":"Accelerate","reason":"accel_to_m2.2","mach":1.194,"commanded_mach":2.2,"alt_ft":55869}
+{"k":"gate","t":382.4583333331753,"from_phase":"Accelerate","to_phase":"RamClimb","reason":"ram_climb_to_fl700","mach":2.211,"commanded_mach":4,"alt_ft":56807}
+{"k":"gate","t":669.4166666668542,"from_phase":"RamClimb","to_phase":"Intercept","reason":"intercept_dash","mach":3.68,"commanded_mach":4,"alt_ft":69869}

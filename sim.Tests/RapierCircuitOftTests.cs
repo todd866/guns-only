@@ -69,12 +69,17 @@ public class RapierCircuitOftTests {
                 ["t"] = session.TimeSeconds,
                 ["tick"] = tick,
                 ["phase"] = session.RapierPhase.ToString(),
+                ["phase_reason"] = session.RapierPhaseReason,
                 ["gate"] = session.RapierRecoveryGate,
                 ["cue"] = session.RapierMissionCue,
                 ["x"] = s.Position.X,
                 ["y"] = s.Position.Y,
                 ["z"] = s.Position.Z,
                 ["mach"] = Math.Round(mach, 3),
+                ["commanded_mach"] = Math.Round(session.RapierCommandedMach, 3),
+                ["authored_mach"] = Math.Round(session.RapierAuthoredTargetMach, 3),
+                ["skin_mach_limit"] = double.IsFinite(session.RapierSkinMachLimit)
+                    ? Math.Round(session.RapierSkinMachLimit, 3) : null,
                 ["ktas"] = Math.Round(tas * 1.94384, 1),
                 ["alt_ft"] = Math.Round(s.Position.Y / 0.3048, 0),
                 ["fuel_lb"] = Math.Round(session.PlayerFuel.FuelLb, 1),
@@ -96,10 +101,12 @@ public class RapierCircuitOftTests {
                     ["tick"] = tick,
                     ["from_phase"] = _lastPhase.ToString(),
                     ["to_phase"] = session.RapierPhase.ToString(),
+                    ["reason"] = session.RapierPhaseReason,
                     ["from_gate"] = _lastGate,
                     ["to_gate"] = session.RapierRecoveryGate,
                     ["cue"] = session.RapierMissionCue,
                     ["mach"] = Math.Round(mach, 3),
+                    ["commanded_mach"] = Math.Round(session.RapierCommandedMach, 3),
                     ["ktas"] = Math.Round(tas * 1.94384, 1),
                     ["alt_ft"] = Math.Round(s.Position.Y / 0.3048, 0),
                     ["fuel_lb"] = Math.Round(session.PlayerFuel.FuelLb, 1),
@@ -235,5 +242,191 @@ public class RapierCircuitOftTests {
         telemetry.Finish(ok ? "PASS" : "ABORT", detail);
         Assert.True(ok, detail);
         Assert.Contains("CIRCUITS", session.RapierMissionCue);
+    }
+
+    [Fact]
+    public void OftMarshal_NearShelfHoldsRecoveryGateZero() {
+        BeatSetup baseline = Beats.RapierCircuits();
+        Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
+        Vec3D marshal = strip.LandingPoint(along: -46_000.0, height: 3_700.0);
+        BeatSetup card = baseline with {
+            Player = baseline.Player with {
+                Position = marshal + new Vec3D(0.0, 200.0, 0.0),
+                Speed = 160.0,
+                Gamma = -0.04,
+                Chi = strip.LandingHeadingRad,
+                Bank = 0.0
+            },
+            StartsOnCatapult = false,
+            Fuel = baseline.FuelLoadout with { InitialFuelLb = 6_000.0 },
+        };
+
+        using var telemetry = new CircuitOftTelemetry("marshal");
+        var session = new SimulationSession(weather: KoreaWeatherPresets.ForBeat(11));
+        session.StartBeat(() => card);
+        session.Begin();
+
+        bool sawRecovery = false;
+        string? reason = null;
+        int maximumTicks = checked((int)(90 * AircraftSim.TickHz));
+        for (int tick = 0; tick < maximumTicks; tick++) {
+            session.StepFixed();
+            telemetry.Observe(session, tick);
+            if (session.RapierPhase == RapierMissionPhase.Recovery) {
+                sawRecovery = true;
+                reason = session.RapierPhaseReason;
+                if (session.RapierRecoveryGate == 0
+                    && session.Player.State.Position.Y > 2_000.0)
+                    break;
+            }
+            if (session.PlayerTerminalState != AircraftTerminalState.Flying) break;
+        }
+
+        bool ok = sawRecovery && session.RapierRecoveryGate == 0
+            && session.PlayerTerminalState == AircraftTerminalState.Flying;
+        string detail = $"phase {session.RapierPhase} gate {session.RapierRecoveryGate} "
+            + $"reason {reason} cue {session.RapierMissionCue}";
+        telemetry.Finish(ok ? "PASS" : "ABORT", detail);
+        Assert.True(ok, detail);
+        Assert.Equal("pattern_recovery", reason);
+    }
+
+    [Fact]
+    public void OftLineup_EarnsInboundHeadingAfterMarshal() {
+        BeatSetup baseline = Beats.RapierCircuits();
+        Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
+        // Start just inside marshal capture so the director advances toward lineup.
+        Vec3D nearMarshal = strip.LandingPoint(along: -40_000.0, height: 3_500.0);
+        BeatSetup card = baseline with {
+            Player = baseline.Player with {
+                Position = nearMarshal,
+                Speed = 140.0,
+                Gamma = -0.05,
+                Chi = strip.LandingHeadingRad,
+                Bank = 0.0
+            },
+            StartsOnCatapult = false,
+            Fuel = baseline.FuelLoadout with { InitialFuelLb = 6_000.0 },
+        };
+
+        using var telemetry = new CircuitOftTelemetry("lineup");
+        var session = new SimulationSession(weather: KoreaWeatherPresets.ForBeat(11));
+        session.StartBeat(() => card);
+        session.Begin();
+
+        bool sawBaseOrLineupCue = false;
+        int maximumTicks = checked((int)(8 * 60 * AircraftSim.TickHz));
+        for (int tick = 0; tick < maximumTicks; tick++) {
+            session.StepFixed();
+            telemetry.Observe(session, tick);
+            string cue = session.RapierMissionCue;
+            if (cue.Contains("BASE", StringComparison.Ordinal)
+                || cue.Contains("TURN ONTO FINAL", StringComparison.Ordinal)
+                || cue.Contains("SHORT FINAL", StringComparison.Ordinal)
+                || cue.Contains("GEAR AND HOOK", StringComparison.Ordinal)) {
+                sawBaseOrLineupCue = true;
+                break;
+            }
+            if (session.PlayerTerminalState != AircraftTerminalState.Flying) break;
+        }
+
+        telemetry.Finish(sawBaseOrLineupCue ? "PASS" : "ABORT", session.RapierMissionCue);
+        Assert.True(sawBaseOrLineupCue, session.RapierMissionCue);
+    }
+
+    [Fact]
+    public void OftFinal2_OnSpeedInsideGateTwoBand() {
+        BeatSetup baseline = Beats.RapierCircuits();
+        Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
+        // Earn gates honestly: start at marshal like the wire card.
+        Vec3D marshal = strip.LandingPoint(along: -46_000.0, height: 3_700.0);
+        BeatSetup card = baseline with {
+            Player = baseline.Player with {
+                Position = marshal,
+                Speed = 180.0,
+                Gamma = -3.5 * Math.PI / 180.0,
+                Chi = strip.LandingHeadingRad,
+                Bank = 0.0
+            },
+            StartsOnCatapult = false,
+            Fuel = baseline.FuelLoadout with { InitialFuelLb = 6_000.0 },
+        };
+
+        using var telemetry = new CircuitOftTelemetry("final-2");
+        var session = new SimulationSession(weather: KoreaWeatherPresets.ForBeat(11));
+        session.StartBeat(() => card);
+        session.Begin();
+
+        bool sawFinalBand = false;
+        int maximumTicks = checked((int)(12 * 60 * AircraftSim.TickHz));
+        for (int tick = 0; tick < maximumTicks; tick++) {
+            session.StepFixed();
+            telemetry.Observe(session, tick);
+            double ktas = session.Player.AirspeedMps * 1.94384;
+            if (session.RapierRecoveryGate >= 2
+                && ktas > 140.0 && ktas < 200.0
+                && session.RapierPhase == RapierMissionPhase.Recovery) {
+                sawFinalBand = true;
+                break;
+            }
+            if (session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped) {
+                sawFinalBand = true;
+                break;
+            }
+            if (session.PlayerTerminalState != AircraftTerminalState.Flying) break;
+        }
+
+        string detail = $"gate {session.RapierRecoveryGate} "
+            + $"ktas {session.Player.AirspeedMps * 1.94384:F0} cue {session.RapierMissionCue}";
+        telemetry.Finish(sawFinalBand ? "PASS" : "ABORT", detail);
+        Assert.True(sawFinalBand, detail);
+    }
+
+    [Fact]
+    public void OftBolterRearm_ClimbAfterFinalReopensPattern() {
+        BeatSetup baseline = Beats.RapierCircuits();
+        Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
+        Vec3D marshal = strip.LandingPoint(along: -46_000.0, height: 3_700.0);
+        BeatSetup card = baseline with {
+            Player = baseline.Player with {
+                Position = marshal,
+                Speed = 180.0,
+                Gamma = -3.5 * Math.PI / 180.0,
+                Chi = strip.LandingHeadingRad,
+                Bank = 0.0
+            },
+            StartsOnCatapult = false,
+            Fuel = baseline.FuelLoadout with { InitialFuelLb = 6_000.0 },
+        };
+
+        using var telemetry = new CircuitOftTelemetry("bolter-rearm");
+        var session = new SimulationSession(weather: KoreaWeatherPresets.ForBeat(11));
+        session.StartBeat(() => card);
+        session.Begin();
+
+        bool sawWireFinal = false;
+        bool sawRearm = false;
+        int maximumTicks = checked((int)(18 * 60 * AircraftSim.TickHz));
+        for (int tick = 0; tick < maximumTicks; tick++) {
+            session.StepFixed();
+            telemetry.Observe(session, tick);
+            if (session.RapierRecoveryGate >= 1) sawWireFinal = true;
+
+            if (sawWireFinal && session.RapierRecoveryGate == 0
+                && session.RapierPhase == RapierMissionPhase.Recovery
+                && session.Player.State.Position.Y > 250.0) {
+                sawRearm = true;
+                break;
+            }
+            if (session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped) break;
+            if (session.PlayerTerminalState != AircraftTerminalState.Flying) break;
+        }
+
+        bool trapped = session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped;
+        bool ok = sawRearm || (sawWireFinal && trapped);
+        string detail = $"rearm={sawRearm} wireFinal={sawWireFinal} trapped={trapped} "
+            + $"gate={session.RapierRecoveryGate} cue={session.RapierMissionCue}";
+        telemetry.Finish(ok ? "PASS" : "ABORT", detail);
+        Assert.True(ok, detail);
     }
 }

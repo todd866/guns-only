@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 6;
+    public const int LayoutVersion = 8;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -122,6 +122,12 @@ internal static class SnapshotHotFrame {
         Num("rapier_guidance_y", 3);
         Num("rapier_guidance_z", 3);
         Num("rapier_recovery_gate", RawInteger);
+        Num("rapier_circuit_leg_code", RawInteger);
+        Num("rapier_fd_bank_deg", 1);
+        Num("rapier_fd_target_ktas", 0);
+        Num("rapier_commanded_mach", 2);
+        Num("rapier_skin_mach_limit", 2);
+        Num("rapier_authored_target_mach", 2);
         Num("rapier_turbine_thrust_kn", 2);
         Num("rapier_ramjet_thrust_kn", 2);
         Num("rapier_turbine_fuel_ppm", 2);
@@ -637,6 +643,13 @@ internal static class SnapshotHotFrame {
         w.Num("rapier_guidance_y", session.RapierGuidanceWaypoint.Y, 3);
         w.Num("rapier_guidance_z", session.RapierGuidanceWaypoint.Z, 3);
         w.Num("rapier_recovery_gate", session.RapierRecoveryGate, RawInteger);
+        w.Num("rapier_circuit_leg_code", CircuitLegCode(session.RapierCircuitLeg), RawInteger);
+        w.Num("rapier_fd_bank_deg", session.RapierFdBankDeg, 1);
+        w.Num("rapier_fd_target_ktas", session.RapierFdTargetKtas, 0);
+        w.Num("rapier_commanded_mach", session.RapierCommandedMach, 2);
+        w.Num("rapier_skin_mach_limit",
+            double.IsFinite(session.RapierSkinMachLimit) ? session.RapierSkinMachLimit : 0.0, 2);
+        w.Num("rapier_authored_target_mach", session.RapierAuthoredTargetMach, 2);
         w.Num("rapier_turbine_thrust_kn", session.RapierTurbineThrustN / 1000.0, 2);
         w.Num("rapier_ramjet_thrust_kn", session.RapierRamjetThrustN / 1000.0, 2);
         w.Num("rapier_turbine_fuel_ppm", session.RapierTurbineFuelFlowLbPerMinute, 2);
@@ -1027,6 +1040,16 @@ internal static class SnapshotHotFrame {
 
     /// Round to the same fixed-decimal precision the JSON's F-format uses, so the browser sees the
     /// exact numbers JSON.parse would have produced. RawInteger passes the value through untouched.
+    static int CircuitLegCode(string? leg) => leg switch {
+        "DEPART" => 1,
+        "DOWNWIND" => 2,
+        "BASE" => 3,
+        "SHORT_FINAL" => 4,
+        "WIRE_FINAL" => 5,
+        "COMPLETE" => 6,
+        _ => 0,
+    };
+
     static double Quantize(double value, int decimals) {
         if (decimals == RawInteger || !double.IsFinite(value)) return value;
         double away = Math.Round(value, decimals, MidpointRounding.AwayFromZero);

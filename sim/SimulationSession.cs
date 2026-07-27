@@ -329,6 +329,13 @@ public sealed class SimulationSession {
         ? _rapierPursuitRangeM : 0.0;
     public Vec3D RapierGuidanceWaypoint => _rapierMissionGuidance.Waypoint;
     public int RapierRecoveryGate => _rapierMissionGuidance.RecoveryGate;
+    public string RapierCircuitLeg => _rapierMissionGuidance.CircuitLeg ?? "";
+    public double RapierFdBankDeg => _rapierMissionGuidance.FdBankDeg;
+    public double RapierFdTargetKtas => _rapierMissionGuidance.FdTargetKtas;
+    public double RapierCommandedMach => _rapierMissionGuidance.CommandedMach;
+    public double RapierAuthoredTargetMach => _rapierMissionGuidance.AuthoredTargetMach;
+    public double RapierSkinMachLimit => _rapierMissionGuidance.SkinMachLimit;
+    public string RapierPhaseReason => _rapierMissionGuidance.PhaseReason ?? "";
     CombinedCycleThrustFractions RapierThrustFractions {
         get {
             AtmosphericState air = _player.AtmosphereModel.Sample(_player.State.Position.Y);

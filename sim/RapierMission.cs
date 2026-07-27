@@ -21,11 +21,26 @@ public enum RapierMissionPhase {
 public readonly record struct RapierMissionGuidance(
     RapierMissionPhase Phase,
     string Cue,
+    /// <summary>Mach the director actually commands this tick (authored, skin-clamped).</summary>
     double TargetMach,
     double TargetAltitudeFt,
     PilotCommand Command,
     Vec3D Waypoint,
-    int RecoveryGate);
+    int RecoveryGate,
+    /// <summary>Profile Mach before skin clamp. Equals TargetMach when the structure allows it.</summary>
+    double AuthoredTargetMach = 0.0,
+    /// <summary>Highest Mach the airframe skin allows at the current ambient.</summary>
+    double SkinMachLimit = double.PositiveInfinity,
+    /// <summary>Mach after Min(authored, skin). Same as TargetMach; named for snapshot clarity.</summary>
+    double CommandedMach = 0.0,
+    /// <summary>Stable token for why the current phase was entered (OFT gate rows).</summary>
+    string PhaseReason = "",
+    /// <summary>Circuits pattern leg token: DEPART, DOWNWIND, BASE, SHORT_FINAL, WIRE_FINAL.</summary>
+    string CircuitLeg = "",
+    /// <summary>Director bank target in degrees for the Circuits flight director.</summary>
+    double FdBankDeg = 0.0,
+    /// <summary>Director target KTAS for the Circuits flight director speed bug.</summary>
+    double FdTargetKtas = 0.0);
 
 public sealed record ScriptedInterceptConfig(
     int FormationSize = 4,
@@ -58,6 +73,7 @@ public sealed class RapierMissionDirector {
     const double CruiseAltitudeM = 70_000.0 * 0.3048;
     const double FeetPerMetre = 1.0 / 0.3048;
     RapierMissionPhase _phase = RapierMissionPhase.Launch;
+    string _phaseReason = "launch";
     bool _recoveryMarshalReached;
     bool _recoveryLineupReached;
     bool _recoveryFinal;
@@ -72,6 +88,12 @@ public sealed class RapierMissionDirector {
     const double CircuitShelfHeightM = 3_700.0;
 
     public RapierMissionPhase Phase => _phase;
+
+    void EnterPhase(RapierMissionPhase next, string reason) {
+        if (_phase == next && _phaseReason == reason) return;
+        _phase = next;
+        _phaseReason = reason;
+    }
 
     static double WrapAngle(double value) =>
         Math.IEEERemainder(value, 2.0 * Math.PI);
@@ -160,44 +182,45 @@ public sealed class RapierMissionDirector {
         }
 
         if (recovered) {
-            _phase = RapierMissionPhase.Complete;
+            EnterPhase(RapierMissionPhase.Complete, "recovered");
         } else if (pursuitActive) {
-            _phase = RapierMissionPhase.Escape;
+            EnterPhase(RapierMissionPhase.Escape, "pursuit_active");
         } else if (patternOnly) {
             // Pattern-only must not treat "no kill yet" as RTB during the stroke, and must not
             // chase the parked phantom contact used to satisfy BeatSetup's bandit slot.
             if (catapultActive) {
-                _phase = RapierMissionPhase.Launch;
                 _circuitShelfReached = false;
+                EnterPhase(RapierMissionPhase.Launch, "pattern_catapult");
             } else if (!_circuitShelfReached
                 && player.Position.Y < home.Y + CircuitShelfHeightM - 40.0) {
-                _phase = RapierMissionPhase.Climb;
+                EnterPhase(RapierMissionPhase.Climb, "pattern_climb_to_shelf");
             } else {
                 _circuitShelfReached = true;
-                _phase = RapierMissionPhase.Recovery;
+                EnterPhase(RapierMissionPhase.Recovery, "pattern_recovery");
             }
         } else if (liveOpponentCount <= 0) {
             // Remain on the M2/FL450 return until 90 km. The recovery marshal lies beyond the
             // strip, leaving about 136 km to decelerate, descend and reverse onto final.
-            _phase = homeRangeM <= 90_000.0
-                ? RapierMissionPhase.Recovery
-                : RapierMissionPhase.ReturnToBase;
+            if (homeRangeM <= 90_000.0)
+                EnterPhase(RapierMissionPhase.Recovery, "home_leq_90km");
+            else
+                EnterPhase(RapierMissionPhase.ReturnToBase, "no_opponents_rtb");
         } else if (catapultActive) {
-            _phase = RapierMissionPhase.Launch;
+            EnterPhase(RapierMissionPhase.Launch, "catapult_active");
         } else if ((int)_phase < (int)RapierMissionPhase.Attack) {
             if (contactRangeM <= 30_000.0) {
-                _phase = RapierMissionPhase.Attack;
+                EnterPhase(RapierMissionPhase.Attack, "contact_leq_30km");
             } else if (player.Position.Y < ClimbTopM - 40.0
                 && (int)_phase <= (int)RapierMissionPhase.Climb) {
-                _phase = RapierMissionPhase.Climb;
+                EnterPhase(RapierMissionPhase.Climb, "climb_to_fl560");
             } else if (mach < 2.2
                 && (int)_phase <= (int)RapierMissionPhase.Accelerate) {
-                _phase = RapierMissionPhase.Accelerate;
+                EnterPhase(RapierMissionPhase.Accelerate, "accel_to_m2.2");
             } else if (player.Position.Y < CruiseAltitudeM - 40.0
                 && (int)_phase <= (int)RapierMissionPhase.RamClimb) {
-                _phase = RapierMissionPhase.RamClimb;
+                EnterPhase(RapierMissionPhase.RamClimb, "ram_climb_to_fl700");
             } else {
-                _phase = RapierMissionPhase.Intercept;
+                EnterPhase(RapierMissionPhase.Intercept, "intercept_dash");
             }
         }
 
@@ -216,6 +239,8 @@ public sealed class RapierMissionDirector {
         Vec3D? guidanceWaypoint = null;
         string cue;
         int recoveryGate = 0;
+        string circuitLeg = "";
+        double fdTargetKtas = 0.0;
 
         switch (_phase) {
             case RapierMissionPhase.Launch:
@@ -226,9 +251,12 @@ public sealed class RapierMissionDirector {
                 targetGamma = player.Gamma;
                 throttle = 1.55;
                 waypoint = patternOnly ? recoveryInitial : contact.Position;
-                cue = patternOnly
-                    ? "CIRCUITS · LAUNCH · TRACK OWNS THE AIRCRAFT"
-                    : "AUTO LAUNCH · TRACK OWNS THE AIRCRAFT";
+                if (patternOnly) {
+                    circuitLeg = "DEPART";
+                    cue = "CIRCUITS · DEPART · LAUNCH · TRACK OWNS THE AIRCRAFT";
+                } else {
+                    cue = "AUTO LAUNCH · TRACK OWNS THE AIRCRAFT";
+                }
                 break;
             case RapierMissionPhase.Climb:
                 targetMach = patternOnly ? 0.55 : 0.9;
@@ -245,12 +273,15 @@ public sealed class RapierMissionDirector {
                 throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
                     trimLever: patternOnly ? 0.85 : 0.62, gain: 1.10);
                 waypoint = patternOnly ? recoveryInitial : contact.Position;
-                cue = patternOnly
-                    ? $"CIRCUITS · CLIMB TO PATTERN · M{mach:F2} · "
+                if (patternOnly) {
+                    circuitLeg = "DEPART";
+                    cue = $"CIRCUITS · DEPART · CLIMB TO PATTERN · "
                         + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → "
-                        + $"FL{(home.Y + CircuitShelfHeightM) * FeetPerMetre / 100.0:F0}"
-                    : $"AUTO CLIMB · HOLD M0.90 · M{mach:F2} · "
+                        + $"FL{(home.Y + CircuitShelfHeightM) * FeetPerMetre / 100.0:F0}";
+                } else {
+                    cue = $"AUTO CLIMB · HOLD M0.90 · M{mach:F2} · "
                         + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL560";
+                }
                 break;
             case RapierMissionPhase.Accelerate:
                 targetMach = 2.2;
@@ -312,7 +343,7 @@ public sealed class RapierMissionDirector {
                     trimLever: 1.08, gain: 0.42);
                 waypoint = recoveryInitial;
                 cue = $"FORMATION DESTROYED · EGRESS HOME · {pursuerCount} PURSUERS · "
-                    + $"{pursuitRangeM / 1000.0:F0} KM SEPARATION · DASH M4.0";
+                    + $"{pursuitRangeM / 1000.0:F0} KM SEPARATION · DASH M{Math.Min(4.0, skinMachLimit):F1}";
                 break;
             case RapierMissionPhase.ReturnToBase:
                 targetMach = 2.0;
@@ -427,77 +458,15 @@ public sealed class RapierMissionDirector {
                 double horizontalRangeM = Math.Max(1.0, Math.Sqrt(
                     Math.Pow(gatePoint.X - player.Position.X, 2.0)
                     + Math.Pow(gatePoint.Z - player.Position.Z, 2.0)));
-                // The reduced-order pitch law lands a light aircraft a little earlier for the
-                // same commanded flight path. Schedule the last two gates by actual landing mass
-                // so both the authored low-reserve return and a deliberately lighter recovery
-                // card aim the hook at wire three.
-                // Final-gate path angle, measured rather than scheduled.
+                // Closed-loop gamma to a CALIBRATED aim point.
                 //
-                // This was a mass-scheduled correction against a 5,700 kg reference. Measurement
-                // says the schedule was the problem: the two recoveries this sortie actually
-                // produces arrive at 5,551 kg and 5,646 kg, and BOTH want the same correction of
-                // about +0.00046 rad. A linear mass term cannot give two different masses the same
-                // answer, so it was pushing the lighter arrival roughly 100 m long — which is how
-                // the automation ended up missing the wires entirely once the physically limited
-                // engine made the return burn more fuel.
-                //
-                // Measured sensitivity is about 110 m of hook position per 0.001 rad. Wire three
-                // sits at TouchdownAlongM = -DeckLengthM * 0.2 = -240 m, and rollout sweeps toward
-                // +along, so the hook must touch down just PAST wire three and sweep back onto it:
-                // aiming at exactly -240 m catches wire four. The aim is -242 m.
-                //
-                // If a future recovery card arrives far outside 5,500-5,700 kg, re-measure before
-                // reintroducing a mass term — do not assume the old gain was right.
-                // Final-gate path-angle trim, a single constant rather than a mass schedule.
-                //
-                // This was scheduled off landing mass. Three successive refits produced mutually
-                // inconsistent slopes across 5,551 / 5,646 / 5,688 kg, which is the signature of
-                // fitting noise: mass was standing in for arrival ENERGY, and energy moves whenever
-                // thrust, fuel burn or the thermal clamp move. A schedule fitted to that is a
-                // schedule that breaks on the next physics change, and it broke on three of them.
-                //
-                // Measured sensitivity is about 110 m of hook position per 0.001 rad, and LARGER
-                // correction moves the hook LONGER (toward +along), which is the opposite of what
-                // it looks like. Wire three sits at TouchdownAlongM = -DeckLengthM * 0.2 = -240 m,
-                // wires span -250.4 to -234.8, and rollout sweeps forward, so the aim is about
-                // -242 m: touch down just past wire three and sweep back onto it.
-                //
-                // PROPER FIX, not done here: close the loop on touchdown point instead of aiming a
-                // gate open-loop. Then arrival energy stops mattering and this constant disappears.
-                // It has now been re-fitted FOUR times against four different engine configurations,
-                // which is the clearest possible argument that the open-loop aim is the defect.
-                // Fitted to the two recoveries this sortie produces, now that the engine has stopped moving:
-                //   5,339 kg wants about -0.00021
-                //   5,646 kg wants about -0.00010
-                // A single constant cannot serve both — the lighter arrival flies further — which is
-                // why the earlier constant kept missing one or the other. Slope is 3.6e-7 per kg.
-                // Sensitivity here is roughly 228 m of hook position per 0.001 rad.
-                const double FitReferenceMassKg = 5_646.0;
-                double finalGateGammaCorrection = Math.Clamp(
-                    0.00026 + 0.00000065 * (player.Mass - FitReferenceMassKg),
-                    -0.00030, 0.00030);
-                // The first squares are capture gates, so permit a high initial arrival to
-                // converge onto the published 3.5-degree line instead of preserving its error all
-                // the way to the strip. The last two gates then tighten to the mass-scheduled
-                // touchdown cap which places the trailing hook at wire three.
-                // CLOSED LOOP on a CALIBRATED aim point.
-                //
-                // The floor used to be a constant, re-fitted six times across six engine
-                // configurations, because every change to thrust or fuel burn moved the arrival
-                // energy and therefore the touchdown point. A closed-loop version aiming straight
-                // at `touchdownAim` landed about 260 m short, which located the real fault: the
-                // aim point is not where the hook needs to arrive. It is the point the APPROACH is
-                // drawn to, and the hook trails behind the mains and keeps flying past it.
-                //
-                // Aiming the same law at a point offset down the runway removes both problems at
-                // once: the law re-solves every tick, so arrival energy stops mattering, and the
-                // offset is measured rather than fitted.
-                // Two metres PAST the aim point: rollout sweeps toward +along, so the hook must
-                // touch down just beyond wire three and sweep back onto it. Aiming exactly at the
-                // wire catches wire four.
-                // Measured: the closed loop aiming at touchdownAim put the hook 260 m short of
-                // wire three, so the aim point sits that far up the approach from where the hook
-                // actually arrives. Offsetting by it lands the hook on the wires.
+                // Predicting deck intersection from the instantaneous flight-path angle and trimming
+                // gamma (tried 2026-07-27) boltered the wire card: reduced-order pitch lag means
+                // the aircraft does not fly the predicted path. HookAimOffsetM is not hook trail
+                // (Carrier.HookToMainGearM = 6 m) — it is measured pitch-response compensation so
+                // the approach aim sits where the hook actually arrives. Dead mass-scheduled gamma
+                // trim was removed; the proper next step is a predictive model of the pitch law,
+                // not another energy-fitted constant.
                 const double HookAimOffsetM = 260.0;
                 Vec3D finalAim = touchdownAim + runwayForward * HookAimOffsetM;
                 double geometricFinalGamma = Math.Atan2(
@@ -509,8 +478,6 @@ public sealed class RapierMissionDirector {
                     ? recoveryGate switch {
                         1 => -0.12,
                         2 => -0.09,
-                        // Never shallower than the published slope, never steeper than the gear
-                        // and the wire can absorb.
                         _ => Math.Clamp(geometricFinalGamma, -0.11, -0.035)
                     }
                     : -0.16;
@@ -559,17 +526,40 @@ public sealed class RapierMissionDirector {
                 double currentKtas = trueAirspeedMps * 1.94384;
                 string speedCall = currentKtas > targetKtas + 25.0 ? "SLOW"
                     : currentKtas < targetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
-                cue = !_recoveryFinal
-                    ? !_recoveryMarshalReached
-                        ? $"RECOVERY · MARSHAL {setupRangeM / 1000.0:F0} KM · "
-                            + $"SLOW TO {targetKtas:F0} KT, DESCEND · P FLIES THE APPROACH"
-                        : !_recoveryLineupReached
-                            ? $"RECOVERY · TURN ONTO FINAL · {targetKtas:F0} KT · {speedCall} · "
-                                + "P FLIES THE APPROACH"
-                            : $"RECOVERY · GEAR AND HOOK DOWN · {targetKtas:F0} KT · {speedCall} · "
-                                + "P FLIES THE APPROACH"
-                    : $"FINAL · SQUARE {recoveryGate}/4 · {targetKtas:F0} KT · {speedCall} · "
-                        + "FLY THROUGH THE SQUARE, HOLD IT ALL THE WAY TO THE WIRE";
+                fdTargetKtas = targetKtas;
+                if (patternOnly) {
+                    if (!_recoveryFinal) {
+                        if (!_recoveryMarshalReached) {
+                            circuitLeg = "DOWNWIND";
+                            cue = $"CIRCUITS · DOWNWIND · {setupRangeM / 1000.0:F0} KM · "
+                                + $"{targetKtas:F0} KT · {speedCall} · HOOK DOWN";
+                        } else if (!_recoveryLineupReached) {
+                            circuitLeg = "BASE";
+                            cue = $"CIRCUITS · BASE · TURN TO RUNWAY · {targetKtas:F0} KT · "
+                                + $"{speedCall} · HOOK DOWN";
+                        } else {
+                            circuitLeg = "SHORT_FINAL";
+                            cue = $"CIRCUITS · SHORT FINAL · {targetKtas:F0} KT · {speedCall} · "
+                                + "GO AROUND BEFORE GEAR · HOOK DOWN";
+                        }
+                    } else {
+                        circuitLeg = "WIRE_FINAL";
+                        cue = $"CIRCUITS · WIRE FINAL · BOX {recoveryGate}/4 · "
+                            + $"{targetKtas:F0} KT · {speedCall} · ACCEPT WIRE · HOOK DOWN";
+                    }
+                } else {
+                    cue = !_recoveryFinal
+                        ? !_recoveryMarshalReached
+                            ? $"RECOVERY · MARSHAL {setupRangeM / 1000.0:F0} KM · "
+                                + $"SLOW TO {targetKtas:F0} KT, DESCEND · P FLIES THE APPROACH"
+                            : !_recoveryLineupReached
+                                ? $"RECOVERY · TURN ONTO FINAL · {targetKtas:F0} KT · {speedCall} · "
+                                    + "P FLIES THE APPROACH"
+                                : $"RECOVERY · GEAR AND HOOK DOWN · {targetKtas:F0} KT · {speedCall} · "
+                                    + "P FLIES THE APPROACH"
+                        : $"FINAL · SQUARE {recoveryGate}/4 · {targetKtas:F0} KT · {speedCall} · "
+                            + "FLY THROUGH THE SQUARE, HOLD IT ALL THE WAY TO THE WIRE";
+                }
                 break;
             default:
                 targetMach = 0.0;
@@ -577,7 +567,12 @@ public sealed class RapierMissionDirector {
                 targetGamma = 0.0;
                 throttle = 0.0;
                 waypoint = home;
-                cue = "RAPIER RECOVERED · SORTIE COMPLETE";
+                if (patternOnly) {
+                    circuitLeg = "COMPLETE";
+                    cue = "CIRCUITS · COMPLETE · RAPIER RECOVERED";
+                } else {
+                    cue = "RAPIER RECOVERED · SORTIE COMPLETE";
+                }
                 break;
         }
 
@@ -599,14 +594,26 @@ public sealed class RapierMissionDirector {
         };
         double gammaGain = _phase == RapierMissionPhase.Recovery ? 8.0 : 4.0;
         double minimumG = _phase == RapierMissionPhase.Recovery ? 0.35 : 0.65;
+        PilotCommand command = CommandToward(player, waypoint, targetGamma, throttle,
+            maximumBankDegrees, gammaGain, minimumG, maximumG);
+        double commandedMach = Math.Min(targetMach, skinMachLimit);
+        if (fdTargetKtas <= 0.0 && commandedMach > 0.0) {
+            fdTargetKtas = commandedMach * air.SpeedOfSoundMps * 1.94384;
+        }
         return new RapierMissionGuidance(
             _phase,
             cue,
-            targetMach,
+            commandedMach,
             targetAltitudeFt,
-            CommandToward(player, waypoint, targetGamma, throttle,
-                maximumBankDegrees, gammaGain, minimumG, maximumG),
+            command,
             guidanceWaypoint ?? waypoint,
-            recoveryGate);
+            recoveryGate,
+            AuthoredTargetMach: targetMach,
+            SkinMachLimit: skinMachLimit,
+            CommandedMach: commandedMach,
+            PhaseReason: _phaseReason,
+            CircuitLeg: circuitLeg,
+            FdBankDeg: command.BankTarget * (180.0 / Math.PI),
+            FdTargetKtas: fdTargetKtas);
     }
 }

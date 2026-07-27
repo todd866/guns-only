@@ -39,6 +39,8 @@ import {
 } from "./render/hud/gun_funnel.js";
 import { timeCompressionHudPresentation } from "./render/telemetry/time_compression.js";
 import {
+  rapierCycleTeachPresentation,
+  rapierFlightDirectorPresentation,
   rapierGuidancePresentation,
 } from "./render/mission/rapier_guidance.js";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
@@ -2372,6 +2374,80 @@ class CombatHud {
     ctx.restore();
   }
 
+  /// Always-on combined-cycle lesson + skin callout for Rapier. Lives left of the Limits
+  /// panel so skin temperature is readable without opening Nav/Systems.
+  drawRapierCycleTeach(state) {
+    const teach = rapierCycleTeachPresentation(state);
+    if (!teach) return;
+    const ctx = this.ctx;
+    const width = Math.min(214,
+      this.width - this.safeInsets.left - this.safeInsets.right - 36);
+    const height = 88;
+    const x = this.safeInsets.left + 18;
+    const legendReserve = (!this.legendVisible && !this.touchMode) ? 28 : 0;
+    const y = this.getLayout().secondaryBottom - height - legendReserve;
+    const thermalAccent = teach.thermalLevel === "fault" ? RED
+      : teach.thermalLevel === "caution" ? AMBER : GREEN;
+    const modeAccent = teach.mode === "HANDOVER" ? AMBER
+      : teach.mode === "TURBINE" ? GREEN : AMBER;
+
+    if (this._debug) {
+      this._debug.rapierCycleTeach = {
+        mode: teach.mode,
+        skinText: teach.skinText,
+        explainer: teach.explainer,
+        mach: teach.mach,
+        turbineKn: teach.turbineKn,
+        ramKn: teach.ramKn,
+        x,
+        y,
+        width,
+        height,
+      };
+    }
+
+    ctx.save();
+    roundedRect(ctx, x, y, width, height, 4);
+    ctx.fillStyle = "rgba(1, 9, 14, 0.48)";
+    ctx.fill();
+    ctx.strokeStyle = teach.thermalLevel === "normal"
+      ? "rgba(77, 255, 136, 0.22)" : thermalAccent;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillStyle = modeAccent;
+    ctx.fillText(`CYCLE ${teach.mode} · M${teach.mach.toFixed(2)}`, x + 8, y + 11);
+
+    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillStyle = thermalAccent;
+    ctx.fillText(teach.skinText, x + 8, y + 26);
+
+    ctx.font = "600 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillStyle = GREEN_DIM;
+    ctx.fillText(this.fitText(teach.explainer, width - 16), x + 8, y + 40);
+
+    const barX = x + 8;
+    const barWidth = width - 16;
+    const drawShare = (label, share, kn, rowY, color) => {
+      ctx.fillStyle = GREEN_FAINT;
+      ctx.fillRect(barX, rowY, barWidth, 5);
+      ctx.fillStyle = color;
+      ctx.fillRect(barX, rowY, barWidth * clamp(share, 0, 1), 5);
+      ctx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = color;
+      ctx.textAlign = "left";
+      ctx.fillText(label, barX, rowY - 5);
+      ctx.textAlign = "right";
+      ctx.fillText(`${kn.toFixed(0)} kN`, barX + barWidth, rowY - 5);
+    };
+    drawShare("TURBINE/AB", teach.turbineShare, teach.turbineKn, y + 60, GREEN);
+    drawShare("RAMJET", teach.ramShare, teach.ramKn, y + 76, AMBER);
+    ctx.restore();
+  }
+
   drawSystemsPanel(systems) {
     if (!systems?.available || !systems.relevant) return;
     const ctx = this.ctx;
@@ -3414,6 +3490,47 @@ class CombatHud {
         ctx.moveTo(x1, y1 - corner); ctx.lineTo(x1, y1); ctx.lineTo(x1 - corner, y1);
         ctx.stroke();
         ctx.shadowBlur = 0;
+        if (presentation.boxLabel) {
+          ctx.font = "700 11px ui-monospace, monospace";
+          ctx.fillStyle = AMBER;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.fillText(presentation.boxLabel, projectedGate.x, y1 + 8);
+        }
+      }
+    }
+
+    const fd = rapierFlightDirectorPresentation(frame.state);
+    if (fd) {
+      const cx = this.width * 0.5;
+      const cy = this.height * 0.52;
+      const bankClamp = Math.max(-35, Math.min(35, fd.bankErrorDeg));
+      const pitchClamp = Math.max(-25, Math.min(25, fd.altErrorFt / 80));
+      ctx.strokeStyle = GREEN;
+      ctx.fillStyle = GREEN;
+      ctx.lineWidth = 2;
+      // Bank caret — moves laterally with director bank error.
+      ctx.beginPath();
+      ctx.moveTo(cx + bankClamp * 2.2, cy - 52);
+      ctx.lineTo(cx + bankClamp * 2.2 - 7, cy - 40);
+      ctx.lineTo(cx + bankClamp * 2.2 + 7, cy - 40);
+      ctx.closePath();
+      ctx.stroke();
+      // Pitch caret — moves vertically with altitude error to target.
+      ctx.beginPath();
+      ctx.moveTo(cx + 58, cy - pitchClamp);
+      ctx.lineTo(cx + 46, cy - pitchClamp - 7);
+      ctx.lineTo(cx + 46, cy - pitchClamp + 7);
+      ctx.closePath();
+      ctx.stroke();
+      if (fd.speedCall || fd.targetKtas > 0) {
+        ctx.font = "700 10px ui-monospace, monospace";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        const speedText = fd.speedCall
+          ? `${fd.speedCall} · ${Math.round(fd.targetKtas)} KT`
+          : `${Math.round(fd.targetKtas)} KT`;
+        ctx.fillText(speedText, cx + 64, cy - pitchClamp);
       }
     }
 
@@ -3638,6 +3755,7 @@ class CombatHud {
     if (isFightHudActive(frame.state)) this.drawGTape(frame.state);
     this.drawThrottle(frame.state);
     this.drawLimitsPanel(frame.state);
+    this.drawRapierCycleTeach(frame.state);
     this.drawWarnings(frame, systems);
     if (!carrierPadlock) {
       this.drawSystemsPanel(systems);

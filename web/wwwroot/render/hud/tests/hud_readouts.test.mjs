@@ -610,6 +610,8 @@ test("production HUD consumes stabilized KIAS plus physical corner and limits pa
   assert.match(source, /panel\.rows\.length/);
   assert.match(source, /entry\.label/);
   assert.doesNotMatch(source, /GATE \$\{gate\}\/4 · FLY THROUGH/);
+  assert.match(source, /rapierCycleTeachPresentation/);
+  assert.match(source, /this\.drawRapierCycleTeach\(frame\.state\)/);
   assert.doesNotMatch(source, /rapierEnginePresentation\(frame\.state\)/);
   assert.doesNotMatch(source, /READABLE_VERTICAL_SPEED_FPM/,
     "vertical speed must never be silently under-reported");

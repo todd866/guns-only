@@ -1,0 +1,157 @@
+using System.Globalization;
+using System.Text.Json;
+using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
+
+namespace GunsOnly.Sim.Tests;
+
+/// <summary>
+/// Agent-facing OFT for the Rapier intercept energy ladder. Mirrors Circuits JSONL shape so
+/// agents can verify Launch→Climb→Accelerate→RamClimb→Intercept without a human pilot.
+/// Schema: guns-only.intercept-oft.v1
+/// </summary>
+public class RapierInterceptOftTests {
+    static string OftRoot {
+        get {
+            string root = Path.GetFullPath(Path.Combine(
+                AppContext.BaseDirectory, "..", "..", "..", "..", "analysis", "intercept-oft"));
+            Directory.CreateDirectory(root);
+            return root;
+        }
+    }
+
+    sealed class InterceptOftTelemetry : IDisposable {
+        readonly StreamWriter _ticks;
+        readonly StreamWriter _gates;
+        RapierMissionPhase _lastPhase = RapierMissionPhase.Unavailable;
+        string _lastReason = "";
+
+        public InterceptOftTelemetry(string cardId) {
+            string runId = $"{DateTime.UtcNow:yyyyMMddTHHmmssZ}-{cardId}";
+            DirectoryPath = Path.Combine(OftRoot, runId);
+            Directory.CreateDirectory(DirectoryPath);
+            File.WriteAllText(Path.Combine(DirectoryPath, "hdr.json"), JsonSerializer.Serialize(new {
+                schema = "guns-only.intercept-oft.v1",
+                card = cardId,
+                beat = "mission.modern.rapier-intercept.public-data-surrogate.v1",
+                started_utc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
+            }));
+            _ticks = new StreamWriter(Path.Combine(DirectoryPath, "ticks.jsonl"), append: false) {
+                AutoFlush = true
+            };
+            _gates = new StreamWriter(Path.Combine(DirectoryPath, "gates.jsonl"), append: false) {
+                AutoFlush = true
+            };
+        }
+
+        public string DirectoryPath { get; }
+
+        public void Observe(SimulationSession session, int tick) {
+            if (tick % 12 != 0 && session.RapierPhase == _lastPhase
+                && session.RapierPhaseReason == _lastReason)
+                return;
+
+            AircraftState s = session.Player.State;
+            double tas = session.Player.AirspeedMps;
+            double sound = StandardAtmosphere1976.Instance
+                .Sample(s.Position.Y).SpeedOfSoundMps;
+            double mach = tas / Math.Max(1.0, sound);
+            var row = new Dictionary<string, object?> {
+                ["k"] = "tick",
+                ["t"] = session.TimeSeconds,
+                ["tick"] = tick,
+                ["phase"] = session.RapierPhase.ToString(),
+                ["phase_reason"] = session.RapierPhaseReason,
+                ["cue"] = session.RapierMissionCue,
+                ["mach"] = Math.Round(mach, 3),
+                ["commanded_mach"] = Math.Round(session.RapierCommandedMach, 3),
+                ["authored_mach"] = Math.Round(session.RapierAuthoredTargetMach, 3),
+                ["skin_mach_limit"] = double.IsFinite(session.RapierSkinMachLimit)
+                    ? Math.Round(session.RapierSkinMachLimit, 3) : null,
+                ["ktas"] = Math.Round(tas * 1.94384, 1),
+                ["alt_ft"] = Math.Round(s.Position.Y / 0.3048, 0),
+                ["fuel_lb"] = Math.Round(session.PlayerFuel.FuelLb, 1),
+                ["automation"] = session.RapierAutomationActive,
+            };
+            _ticks.WriteLine(JsonSerializer.Serialize(row));
+
+            if (session.RapierPhase != _lastPhase
+                || session.RapierPhaseReason != _lastReason) {
+                _gates.WriteLine(JsonSerializer.Serialize(new Dictionary<string, object?> {
+                    ["k"] = "gate",
+                    ["t"] = session.TimeSeconds,
+                    ["from_phase"] = _lastPhase.ToString(),
+                    ["to_phase"] = session.RapierPhase.ToString(),
+                    ["reason"] = session.RapierPhaseReason,
+                    ["mach"] = Math.Round(mach, 3),
+                    ["commanded_mach"] = Math.Round(session.RapierCommandedMach, 3),
+                    ["alt_ft"] = Math.Round(s.Position.Y / 0.3048, 0),
+                }));
+                _lastPhase = session.RapierPhase;
+                _lastReason = session.RapierPhaseReason;
+            }
+        }
+
+        public void Finish(string verdict, string detail) {
+            File.WriteAllText(Path.Combine(DirectoryPath, "result.json"), JsonSerializer.Serialize(new {
+                k = "result",
+                verdict,
+                detail,
+                finished_utc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
+            }));
+        }
+
+        public void Dispose() {
+            _ticks.Dispose();
+            _gates.Dispose();
+        }
+    }
+
+    [Fact]
+    public void OftEnergyLadder_ReachesInterceptWithFightingRoom() {
+        using var telemetry = new InterceptOftTelemetry("energy-ladder");
+        var session = new SimulationSession(10,
+            weather: KoreaWeatherPresets.ForBeat(10));
+        session.DecisionCaptureEnabled = false;
+        session.Begin();
+
+        var phases = new HashSet<RapierMissionPhase>();
+        var reasons = new HashSet<string>();
+        double rangeAtDashM = double.NaN;
+        int maximumTicks = checked((int)(12 * 60 * AircraftSim.TickHz));
+        for (int tick = 0; tick < maximumTicks; tick++) {
+            session.StepFixed();
+            telemetry.Observe(session, tick);
+            phases.Add(session.RapierPhase);
+            if (!string.IsNullOrEmpty(session.RapierPhaseReason))
+                reasons.Add(session.RapierPhaseReason);
+
+            double mach = session.Player.AirspeedMps
+                / StandardAtmosphere1976.Instance.Sample(
+                    session.Player.State.Position.Y).SpeedOfSoundMps;
+            if (session.RapierPhase == RapierMissionPhase.Intercept && mach >= 2.7) {
+                rangeAtDashM = (session.Bandit.State.Position
+                    - session.Player.State.Position).Length;
+                break;
+            }
+            if (session.PlayerTerminalState != AircraftTerminalState.Flying) break;
+        }
+
+        bool ok = phases.Contains(RapierMissionPhase.Accelerate)
+            && phases.Contains(RapierMissionPhase.RamClimb)
+            && phases.Contains(RapierMissionPhase.Intercept)
+            && rangeAtDashM > 40_000.0
+            && reasons.Contains("intercept_dash");
+        string detail = ok
+            ? $"range {rangeAtDashM / 1000.0:F0} km · phases {string.Join(',', phases)} · "
+                + $"reasons {string.Join(',', reasons)}"
+            : $"phases {string.Join(',', phases)} range={rangeAtDashM} "
+                + $"path={telemetry.DirectoryPath}";
+        telemetry.Finish(ok ? "PASS" : "ABORT", detail);
+        Assert.True(ok, detail);
+        Assert.True(File.Exists(Path.Combine(telemetry.DirectoryPath, "ticks.jsonl")));
+        Assert.True(File.Exists(Path.Combine(telemetry.DirectoryPath, "gates.jsonl")));
+        string gates = File.ReadAllText(Path.Combine(telemetry.DirectoryPath, "gates.jsonl"));
+        Assert.Contains("\"reason\"", gates);
+    }
+}
