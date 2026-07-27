@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" width="720" height="420" font-family="IBM Plex Mono, ui-monospace, monospace">
+  <rect width="100%" height="100%" fill="#f7f4ef"/>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 04 — Inlet · duct · nozzle · rapier.public-data-surrogate.v1 @ 1.0.0</text>
+  <text x="24" y="48" font-size="10" fill="#555">Source: airframes/rapier.v1.json · frame: threejs-createRapier-v1 (+Z aft) · epistemic: surrogate</text>
+  <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
+
+  <text x="24" y="78" font-size="11" fill="#333">propulsion.ramCaptureAreaM2 = 1.2  · epistemic: provisional</text>
+  <text x="24" y="94" font-size="10" fill="#666">Wet T/W and M4 dash overperformance — see docs/airframes/rapier/REALISM-AND-OVERPERFORMANCE.md</text>
+
+  <path d="M 92.8,274.4 L 164.0,271.2 L 436.0,271.2 L 484.0,272.8 L 484.0,295.2 L 436.0,300.0 L 164.0,303.2 L 92.8,301.6 Z" fill="#765244" fill-opacity="0.35" stroke="#1a1a1a" stroke-width="1.4"/>
+  <!-- intake ring -->
+  <ellipse cx="91.2" cy="288.8" rx="22.0" ry="15.8" fill="none" stroke="#c45c26" stroke-width="2"/>
+  <ellipse cx="91.2" cy="288.8" rx="11.6" ry="8.4" fill="#1a1a1a" fill-opacity="0.5"/>
+  <text x="91.2" y="328.8" text-anchor="middle" font-size="10">intake outerR=0.55 innerR=0.29 scaleY=0.72</text>
+  <text x="91.2" y="342.8" text-anchor="middle" font-size="10">pos [0, -0.22, -3.72]</text>
+
+  <circle cx="484.8" cy="284.0" r="13.6" fill="none" stroke="#333" stroke-width="2"/>
+  <circle cx="484.8" cy="284.0" r="10.8" fill="#111" fill-opacity="0.4"/>
+  <text x="484.8" y="315.6" text-anchor="middle" font-size="10">exhaust r=0.34 tube=0.07</text>
+  <text x="484.8" y="329.6" text-anchor="middle" font-size="10">pos [0, -0.1, 6.12]</text>
+
+  <!-- capture area callout -->
+  <rect x="480" y="120" width="210" height="130" fill="#fff" stroke="#222"/>
+  <text x="492" y="142" font-size="11" font-weight="700">RAM CAPTURE (closed)</text>
+  <text x="492" y="162" font-size="14" font-weight="700">A = 1.2 m²</text>
+  <text x="492" y="180" font-size="10">equiv circle r ≈ 0.618 m</text>
+  <text x="492" y="198" font-size="10">thrustMaxN 85000</text>
+  <text x="492" y="214" font-size="10">maxThrustFraction 1.55</text>
+  <text x="492" y="230" font-size="10">DesignMach normaliser 2.6</text>
+  <text x="492" y="246" font-size="9" fill="#844">propulsion epistemic: provisional</text>
+
+  <text x="24" y="360" font-size="10" fill="#555">Tunnel stations from propulsionTunnel (z, rx, ry, y):</text>
+  <text x="24" y="376" font-size="9" fill="#444">(-3.68, 0.5, 0.34, -0.2)  (-1.9, 0.58, 0.4, -0.18)  (4.9, 0.52, 0.36, -0.14)  (6.1, 0.34, 0.28, -0.1)</text>
+
+  <line x1="24" y1="380" x2="696" y2="380" stroke="#222" stroke-width="0.5"/>
+  <text x="24" y="398" font-size="9" fill="#666">Capture area is FlightModel.RamCaptureAreaM2 SoT; intake mesh radii are presentation geometry.</text>
+</svg>

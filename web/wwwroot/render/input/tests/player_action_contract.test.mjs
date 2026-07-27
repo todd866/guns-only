@@ -200,6 +200,8 @@ test("every visible HTML button is wired through one auditable action surface", 
       "data-program-node", "data-deck-configuration",
       // Build 75 portrait-assist speed nudges; wired in app.js via [data-assist-nudge].
       "data-assist-nudge",
+      // Circuits OFT harness actions; wired in app.js via [data-circuits-action].
+      "data-circuits-action",
     ]
       .filter((name) => attrs[name] !== undefined);
     if (attrs.id && explicitButtons.has(attrs.id)) {

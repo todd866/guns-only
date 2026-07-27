@@ -48,13 +48,58 @@ public static class AirData {
     /// </summary>
     public const double TurbulentRecoveryFactor = 0.88;
 
-    /// <summary>Recovery (skin) temperature from Mach and ambient static temperature.</summary>
+    /// <summary>
+    /// Heat-up time constant for lagged structural skin temperature toward adiabatic wall
+    /// temperature. Heating soaks faster than cooling in the surrogate (hot flow arrives;
+    /// the article does not dump heat instantly when Mach falls).
+    /// </summary>
+    public const double SkinHeatTauSeconds = 12.0;
+
+    /// <summary>
+    /// Cool-down time constant. Sized so a short decelerating dive from a hot soak cannot erase
+    /// hundreds of kelvin on the HUD — the previous instantaneous model did exactly that.
+    /// </summary>
+    public const double SkinCoolTauSeconds = 180.0;
+
+    /// <summary>
+    /// Instantaneous adiabatic wall / recovery temperature from Mach and ambient static
+    /// temperature. This is freestream thermodynamics, not structural skin with heat capacity.
+    /// HUD "skin" must not publish this directly through a decelerating dive.
+    /// </summary>
     public static double SkinTemperatureK(double mach, double ambientTemperatureK) =>
+        AdiabaticWallTemperatureK(mach, ambientTemperatureK);
+
+    /// <summary>Alias for <see cref="SkinTemperatureK"/> — freestream recovery, not lagged metal.</summary>
+    public static double AdiabaticWallTemperatureK(double mach, double ambientTemperatureK) =>
         ambientTemperatureK <= 0.0 || !double.IsFinite(mach) || mach <= 0.0
             ? System.Math.Max(0.0, ambientTemperatureK)
             : ambientTemperatureK
                 * (1.0 + 0.5 * (Gamma - 1.0)
                     * TurbulentRecoveryFactor * mach * mach);
+
+    /// <summary>
+    /// First-order lag of structural skin temperature toward the current adiabatic wall
+    /// temperature. Uses <see cref="SkinHeatTauSeconds"/> when heating and
+    /// <see cref="SkinCoolTauSeconds"/> when cooling.
+    /// </summary>
+    public static double StepLaggedSkinTemperatureK(
+        double currentSkinTemperatureK, double adiabaticWallTemperatureK, double dtSeconds,
+        double heatTauSeconds = SkinHeatTauSeconds,
+        double coolTauSeconds = SkinCoolTauSeconds) {
+        if (!double.IsFinite(currentSkinTemperatureK) || currentSkinTemperatureK < 0.0)
+            return System.Math.Max(0.0, adiabaticWallTemperatureK);
+        if (!double.IsFinite(adiabaticWallTemperatureK) || adiabaticWallTemperatureK < 0.0)
+            return currentSkinTemperatureK;
+        if (!double.IsFinite(dtSeconds) || dtSeconds <= 0.0)
+            return currentSkinTemperatureK;
+        double tau = adiabaticWallTemperatureK >= currentSkinTemperatureK
+            ? heatTauSeconds : coolTauSeconds;
+        if (!(tau > 0.0) || !double.IsFinite(tau))
+            return adiabaticWallTemperatureK;
+        double alpha = 1.0 - System.Math.Exp(-dtSeconds / tau);
+        return currentSkinTemperatureK
+            + (adiabaticWallTemperatureK - currentSkinTemperatureK) * alpha;
+    }
 
     /// <summary>
     /// Highest Mach whose recovery temperature stays inside a structural limit. Returns positive

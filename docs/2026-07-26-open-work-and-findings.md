@@ -25,6 +25,10 @@ Everything below is COMMITTED on its own branch. Nothing is lost if the scratchp
 
 ## Open, in priority order
 
+0. **Rapier skin HUD cooled on dive (FIXED 2026-07-27).** Instantaneous adiabatic recovery was
+   published as skin temp with no thermal mass. Lagged skin now on `AircraftSim`; see
+   `docs/airframes/rapier/REALISM-AND-OVERPERFORMANCE.md`. Lag taus remain provisional.
+
 1. **Flight-test harness (teaching physics contract).** Spec/plan:
    `docs/superpowers/specs/2026-07-27-flight-test-harness-design.md` and
    `docs/superpowers/plans/2026-07-27-flight-test-harness.md`. Branch
@@ -142,21 +146,30 @@ Real ramjets sit near 2200-2500 K because MATERIALS bind, not thermodynamics.
 
 **The knock-on nobody has costed:** stagnation temperature at M4 is ~910 K (~637 C). Stainless
 loses most of its strength by 600 C — the SR-71 was titanium at M3.2. A Mach-4 Rapier is therefore
-not the cheap stainless-and-composite aircraft the design record specifies. It is a coherent
-aircraft, but a different and much more expensive one, and the cost layer has not been told.
+not the cheap stainless-and-composite aircraft older setting prose described. It is a coherent
+*materials* problem (hot structure), but sustained air-breathing Mach 4 is a separate, weaker claim.
 
-**Decide deliberately, one of:**
-1. Accept Mach 4 and rewrite the airframe/material/cost story to match (titanium or actively cooled
-   leading edges, and a flyaway cost that reflects it).
-2. Revert the engine to the M2.6 design point and fix the pilot's problem with GUIDANCE — the
-   original finding was that the aircraft could not reach M1.6 because it was flown below FL400
-   and possibly with gear down (2.6x zero-lift drag), not because the engine was weak.
-3. Something in between: a modest, physically argued increase in duct size or inlet recovery,
-   leaving burner temperature alone.
+### LOCKED DECISION (2026-07-27 airframe SE)
 
-Whichever is chosen, `docs/2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md` and the
-reclined-seat setting record both still describe a M2.6 stainless aircraft and will be wrong until
-this is settled.
+Per `docs/superpowers/specs/2026-07-27-rapier-airframe-se-and-jet-kit-design.md` and the durable
+bible at `docs/airframes/rapier/` (esp. `REALISM-AND-OVERPERFORMANCE.md` + `airframes/rapier.v1.json`):
+
+1. **CMC hot structure** (`SkinTemperatureLimitK = 1473.15`) is the accepted **materials** freeze.
+   The stainless / “cheap heat” airframe story is **superseded**.
+2. **Mach-4 thin-air dash** remains **mission branding / aspirational fiction**, not proven closed
+   engineering. Intercept OFT energy-ladder peaks ~**M3.69**; do not re-harden Mach 4 as measured.
+3. **`TurboRamjetPerformanceMap.DesignMach = 2.6`** stays a **cycle normaliser only**, not a dash
+   claim. Prefer guidance / profile fixes over further engine buffs when the aircraft under-performs
+   in the hands of a pilot.
+
+Older buried-tube / reclined-seat prose that still reads as “M2.6 stainless” should be read as
+historical session notes; the SE bible and FlightModel docstring are authoritative for materials
+and epistemic tags going forward.
+
+**Historical fork (pre-decision; kept for context):** accept M4+exotic materials; revert map and
+fix guidance; or modest duct/inlet changes without touching burner temperature. Option 1’s
+*materials* half is what locked (CMC); the *sustained M4 performance* half did **not** lock as
+proven — see the realism audit.
 
 ## The turbo-ramjet's whole point is not modelled: fuel is lever-only
 

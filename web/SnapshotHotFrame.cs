@@ -544,8 +544,12 @@ internal static class SnapshotHotFrame {
         double equivalentAirspeedMps = AirData.EquivalentAirspeedMps(
             trueAirspeedMps, playerPosition.Y, atmosphere);
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
-        double rapierStagnationTempC =
-            AirData.SkinTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
+        // Lagged structural skin (heat capacity). Instantaneous adiabatic wall temperature falls on
+        // a decelerating dive; publishing that as "skin" made the HUD cool from 100 kft to sea
+        // level. Limit schedules still use AirData.AdiabaticWallTemperatureK / MachLimit.
+        double rapierStagnationTempC = player.SkinTemperatureK > 0.0
+            ? player.SkinTemperatureK - 273.15
+            : AirData.AdiabaticWallTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
         // Read from the AIRFRAME, never hardcoded. This was 900 C (the Mach-4 engine's number),
         // then 320 C (steel), while the aircraft moved to a 1200 C CMC hot structure — so the HUD
         // reported the pilot 150 C over a limit they were nowhere near. A displayed limit that does

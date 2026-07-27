@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "guns-only.airframe-definition.v1",
+  "title": "Guns Only Airframe Definition",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "revision",
+    "presentationId",
+    "flightModelBinding",
+    "epistemic",
+    "frameConvention",
+    "dimensionsM",
+    "wing",
+    "fuselage",
+    "massKg",
+    "propulsion",
+    "thermal"
+  ],
+  "properties": {
+    "schema": {
+      "const": "guns-only.airframe-definition.v1"
+    },
+    "id": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "string"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string"
+    },
+    "presentationId": {
+      "type": "string"
+    },
+    "flightModelBinding": {
+      "type": "string"
+    },
+    "epistemic": {
+      "enum": [
+        "measured",
+        "surrogate",
+        "provisional",
+        "fiction"
+      ]
+    },
+    "frameConvention": {
+      "type": "string"
+    },
+    "dimensionsM": {
+      "type": "object",
+      "required": [
+        "length",
+        "span"
+      ],
+      "properties": {
+        "length": {
+          "type": "number"
+        },
+        "span": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      }
+    },
+    "wing": {
+      "type": "object",
+      "required": [
+        "areaM2",
+        "aspectRatio",
+        "planform"
+      ],
+      "properties": {
+        "areaM2": {
+          "type": "number"
+        },
+        "aspectRatio": {
+          "type": "number"
+        },
+        "thickness": {
+          "type": "number"
+        },
+        "bevel": {
+          "type": "number"
+        },
+        "planform": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "fuselage": {
+      "type": "object",
+      "required": [
+        "stations"
+      ],
+      "properties": {
+        "stations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "z",
+              "rx",
+              "ry",
+              "y"
+            ],
+            "properties": {
+              "z": {
+                "type": "number"
+              },
+              "rx": {
+                "type": "number"
+              },
+              "ry": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "escapePodSpine": {
+      "type": "object"
+    },
+    "propulsionTunnel": {
+      "type": "object"
+    },
+    "intake": {
+      "type": "object"
+    },
+    "exhaust": {
+      "type": "object"
+    },
+    "fins": {
+      "type": "array"
+    },
+    "accents": {
+      "type": "array"
+    },
+    "sockets": {
+      "type": "object"
+    },
+    "materialZones": {
+      "type": "array"
+    },
+    "palette": {
+      "type": "object"
+    },
+    "massKg": {
+      "type": "object",
+      "required": [
+        "fuelFree",
+        "fuelCapacity",
+        "gross"
+      ],
+      "properties": {
+        "fuelFree": {
+          "type": "number"
+        },
+        "fuelCapacity": {
+          "type": "number"
+        },
+        "gross": {
+          "type": "number"
+        }
+      }
+    },
+    "propulsion": {
+      "type": "object",
+      "required": [
+        "ramCaptureAreaM2"
+      ],
+      "properties": {
+        "ramCaptureAreaM2": {
+          "type": "number"
+        },
+        "thrustMaxN": {
+          "type": "number"
+        },
+        "maxThrustFraction": {
+          "type": "number"
+        },
+        "designMachNormaliser": {
+          "type": "number"
+        },
+        "epistemic": {
+          "type": "string"
+        }
+      }
+    },
+    "thermal": {
+      "type": "object",
+      "required": [
+        "skinTemperatureLimitK"
+      ],
+      "properties": {
+        "skinTemperatureLimitK": {
+          "type": "number"
+        },
+        "epistemic": {
+          "type": "string"
+        }
+      }
+    },
+    "performanceClaims": {
+      "type": "object"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "sePackagePath": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

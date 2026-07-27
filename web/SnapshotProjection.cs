@@ -165,8 +165,9 @@ internal static class SnapshotProjection {
         double equivalentAirspeedMps = AirData.EquivalentAirspeedMps(
             trueAirspeedMps, playerPosition.Y, atmosphere);
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
-        double rapierStagnationTempC =
-            AirData.SkinTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
+        double rapierStagnationTempC = Session.Player.SkinTemperatureK > 0.0
+            ? Session.Player.SkinTemperatureK - 273.15
+            : AirData.AdiabaticWallTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
         // Read from the AIRFRAME, never hardcoded. This was 900 C (the Mach-4 engine's number),
         // then 320 C (steel), while the aircraft moved to a 1200 C CMC hot structure — so the HUD
         // reported the pilot 150 C over a limit they were nowhere near. A displayed limit that does

@@ -1,0 +1,366 @@
+{
+  "schema": "guns-only.airframe-definition.v1",
+  "id": "rapier.public-data-surrogate.v1",
+  "revision": "1.0.0",
+  "displayName": "Rapier",
+  "role": "dispersed TBCC interceptor",
+  "presentationId": "presentation.vehicle.rapier.public-data-surrogate.v1",
+  "flightModelBinding": "FlightModel.RapierPublicDataSurrogate",
+  "epistemic": "surrogate",
+  "frameConvention": "threejs-createRapier-v1",
+  "sePackagePath": "docs/airframes/rapier/",
+  "dimensionsM": {
+    "length": 13,
+    "span": 7.35,
+    "height": 2.5
+  },
+  "wing": {
+    "areaM2": 18,
+    "aspectRatio": 3,
+    "thickness": 0.16,
+    "bevel": 0.044,
+    "planform": [
+      [
+        0,
+        -3.8
+      ],
+      [
+        -0.74,
+        -3.1
+      ],
+      [
+        -3.675,
+        0.05
+      ],
+      [
+        -3.48,
+        0.92
+      ],
+      [
+        -1.04,
+        0.46
+      ],
+      [
+        -0.72,
+        3.5
+      ],
+      [
+        0,
+        4.05
+      ],
+      [
+        0.72,
+        3.5
+      ],
+      [
+        1.04,
+        0.46
+      ],
+      [
+        3.48,
+        0.92
+      ],
+      [
+        3.675,
+        0.05
+      ],
+      [
+        0.74,
+        -3.1
+      ]
+    ]
+  },
+  "fuselage": {
+    "stations": [
+      {
+        "z": -6.5,
+        "rx": 0.03,
+        "ry": 0.03,
+        "y": 0.03
+      },
+      {
+        "z": -5.65,
+        "rx": 0.34,
+        "ry": 0.3,
+        "y": 0.05
+      },
+      {
+        "z": -3.6,
+        "rx": 0.6,
+        "ry": 0.52,
+        "y": 0.08
+      },
+      {
+        "z": -0.6,
+        "rx": 0.76,
+        "ry": 0.66,
+        "y": 0.08
+      },
+      {
+        "z": 2.9,
+        "rx": 0.72,
+        "ry": 0.6,
+        "y": 0.06
+      },
+      {
+        "z": 5.55,
+        "rx": 0.48,
+        "ry": 0.4,
+        "y": 0.05
+      },
+      {
+        "z": 6.5,
+        "rx": 0.24,
+        "ry": 0.22,
+        "y": 0.04
+      }
+    ]
+  },
+  "escapePodSpine": {
+    "stations": [
+      {
+        "z": -3.95,
+        "rx": 0.12,
+        "ry": 0.08,
+        "y": 0.48
+      },
+      {
+        "z": -2.75,
+        "rx": 0.43,
+        "ry": 0.3,
+        "y": 0.56
+      },
+      {
+        "z": -0.35,
+        "rx": 0.48,
+        "ry": 0.34,
+        "y": 0.58
+      },
+      {
+        "z": 1.05,
+        "rx": 0.24,
+        "ry": 0.16,
+        "y": 0.48
+      }
+    ]
+  },
+  "propulsionTunnel": {
+    "stations": [
+      {
+        "z": -3.68,
+        "rx": 0.5,
+        "ry": 0.34,
+        "y": -0.2
+      },
+      {
+        "z": -1.9,
+        "rx": 0.58,
+        "ry": 0.4,
+        "y": -0.18
+      },
+      {
+        "z": 4.9,
+        "rx": 0.52,
+        "ry": 0.36,
+        "y": -0.14
+      },
+      {
+        "z": 6.1,
+        "rx": 0.34,
+        "ry": 0.28,
+        "y": -0.1
+      }
+    ]
+  },
+  "intake": {
+    "innerR": 0.29,
+    "outerR": 0.55,
+    "scaleY": 0.72,
+    "position": [
+      0,
+      -0.22,
+      -3.72
+    ]
+  },
+  "exhaust": {
+    "radius": 0.34,
+    "tube": 0.07,
+    "position": [
+      0,
+      -0.1,
+      6.12
+    ]
+  },
+  "fins": [
+    {
+      "planform": [
+        [
+          2.2,
+          0
+        ],
+        [
+          5.72,
+          0
+        ],
+        [
+          5.1,
+          1.82
+        ],
+        [
+          4.24,
+          2.22
+        ],
+        [
+          3.15,
+          0.28
+        ]
+      ],
+      "thickness": 0.11,
+      "sideX": 0.58,
+      "y": 0.24,
+      "rotZ": -0.08
+    }
+  ],
+  "accents": [
+    {
+      "size": [
+        0.18,
+        0.035,
+        1.55
+      ],
+      "position": [
+        2.92,
+        0.15,
+        0.32
+      ],
+      "rotY": -0.16
+    }
+  ],
+  "sockets": {
+    "cockpitCamera": {
+      "x": 0,
+      "y": 0.62,
+      "z": -2.2,
+      "epistemic": "surrogate"
+    },
+    "muzzleLeft": {
+      "x": -0.32,
+      "y": -0.08,
+      "z": -5.55,
+      "epistemic": "surrogate"
+    },
+    "muzzleRight": {
+      "x": 0.32,
+      "y": -0.08,
+      "z": -5.55,
+      "epistemic": "surrogate"
+    },
+    "hook": {
+      "x": 0,
+      "y": -0.55,
+      "z": 4.2,
+      "epistemic": "provisional"
+    },
+    "droneBay": [
+      {
+        "x": -0.55,
+        "y": -0.35,
+        "z": 0.5,
+        "epistemic": "provisional"
+      },
+      {
+        "x": 0.55,
+        "y": -0.35,
+        "z": 0.5,
+        "epistemic": "provisional"
+      },
+      {
+        "x": -0.55,
+        "y": -0.35,
+        "z": 1.8,
+        "epistemic": "provisional"
+      },
+      {
+        "x": 0.55,
+        "y": -0.35,
+        "z": 1.8,
+        "epistemic": "provisional"
+      }
+    ]
+  },
+  "materialZones": [
+    {
+      "id": "leadingEdges",
+      "material": "cmc",
+      "thermalClass": "hot"
+    },
+    {
+      "id": "hotSectionFairing",
+      "material": "cmc",
+      "thermalClass": "hot"
+    },
+    {
+      "id": "upperAirframe",
+      "material": "composite",
+      "thermalClass": "warm"
+    },
+    {
+      "id": "lowerAirframe",
+      "material": "composite",
+      "thermalClass": "warm"
+    },
+    {
+      "id": "sensorSpine",
+      "material": "composite-opaque",
+      "thermalClass": "warm"
+    },
+    {
+      "id": "accentTips",
+      "material": "paint",
+      "thermalClass": "cool"
+    }
+  ],
+  "palette": {
+    "upper": "0x596b73",
+    "lower": "0x26343a",
+    "hot": "0x765244",
+    "sensor": "0x11191d",
+    "accent": "0xb85e32"
+  },
+  "massKg": {
+    "fuelFree": 5150,
+    "fuelCapacity": 4500,
+    "gross": 9650
+  },
+  "propulsion": {
+    "ramCaptureAreaM2": 1.2,
+    "thrustMaxN": 85000,
+    "maxThrustFraction": 1.55,
+    "designMachNormaliser": 2.6,
+    "epistemic": "provisional",
+    "notes": "Wet T/W and M4 dash overperformance \u2014 see docs/airframes/rapier/REALISM-AND-OVERPERFORMANCE.md"
+  },
+  "thermal": {
+    "skinTemperatureLimitK": 1473.15,
+    "epistemic": "surrogate",
+    "notes": "CMC materials freeze; lag taus for HUD skin are provisional"
+  },
+  "performanceClaims": {
+    "designDashMach": {
+      "value": 4.0,
+      "epistemic": "fiction",
+      "notes": "Mission branding; OFT peak ~M3.69"
+    },
+    "measuredOftPeakMach": {
+      "value": 3.69,
+      "epistemic": "measured",
+      "notes": "analysis/intercept-oft energy-ladder"
+    },
+    "wetThrustWeightGross": {
+      "value": 1.39,
+      "epistemic": "provisional",
+      "notes": "Improbably high vs Identity \u22641.20"
+    }
+  },
+  "notes": "Geometry 1:1 from createRapier. Performance claims tagged honestly per realism audit. Four droneBay sockets provisional."
+}

@@ -50,6 +50,13 @@ cp "$ukraine_source_dir/soniachne-steppe-preview.png" "$ukraine_stage_dir/"
 # wwwroot alongside the hero cell, so it has to be staged too or this diff reports it as drift.
 cp "$ukraine_source_dir/soniachne-region.truth" "$ukraine_stage_dir/"
 cp "$ukraine_source_dir/soniachne-theatre-preview.png" "$ukraine_stage_dir/"
+# Rapier-range atlas (eastern corridor). Source of truth under content/; wwwroot is a staged copy.
+ukraine_atlas_source="content/packs/ukraine-modern/environment/terrain-atlas"
+ukraine_atlas_stage="$staged_content_dir/packs/ukraine-modern/environment/terrain-atlas"
+if [ -d "$ukraine_atlas_source" ]; then
+  mkdir -p "$ukraine_atlas_stage"
+  cp -R "$ukraine_atlas_source/." "$ukraine_atlas_stage/"
+fi
 diff -qr "$staged_content_dir" web/wwwroot/content
 
 "$dotnet_cli" restore GunsOnly.sln --nologo --ignore-failed-sources \

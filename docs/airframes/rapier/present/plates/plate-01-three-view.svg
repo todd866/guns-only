@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 640" width="720" height="640" font-family="IBM Plex Mono, ui-monospace, monospace">
+  <rect width="100%" height="100%" fill="#f7f4ef"/>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 01 — Three-view · rapier.public-data-surrogate.v1 @ 1.0.0</text>
+  <text x="24" y="48" font-size="10" fill="#555">Source: airframes/rapier.v1.json · frame: threejs-createRapier-v1 (+Z aft) · epistemic: surrogate</text>
+  <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
+
+  <text x="24" y="78" font-size="12" fill="#222">dimensionsM: length 13 m · span 7.35 m · height 2.5 m (envelope)</text>
+  <text x="24" y="94" font-size="10" fill="#666">massKg fuelFree 5150 / fuel 4500 / gross 9650 · epistemic: surrogate</text>
+
+  <!-- TOP -->
+  <text x="40" y="118" font-size="11" font-weight="700" fill="#111">TOP (−Y)</text>
+  <path d="M 200.0,170.4 L 183.7,185.8 L 119.2,255.1 L 123.4,274.2 L 177.1,264.1 L 184.2,331.0 L 200.0,343.1 L 215.8,331.0 L 222.9,264.1 L 276.6,274.2 L 280.9,255.1 L 216.3,185.8 Z" fill="#596b73" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.2"/>
+  <!-- fuselage centreline box approx from max rx -->
+  <ellipse cx="200" cy="111.0" rx="0.7" ry="2" fill="#26343a" fill-opacity="0.35"/>
+<ellipse cx="200" cy="129.7" rx="7.5" ry="2" fill="#26343a" fill-opacity="0.35"/>
+<ellipse cx="200" cy="174.8" rx="13.2" ry="2" fill="#26343a" fill-opacity="0.35"/>
+<ellipse cx="200" cy="240.8" rx="16.7" ry="2" fill="#26343a" fill-opacity="0.35"/>
+<ellipse cx="200" cy="317.8" rx="15.8" ry="2" fill="#26343a" fill-opacity="0.35"/>
+<ellipse cx="200" cy="376.1" rx="10.6" ry="2" fill="#26343a" fill-opacity="0.35"/>
+<ellipse cx="200" cy="397.0" rx="5.3" ry="2" fill="#26343a" fill-opacity="0.35"/>
+  <line x1="119.2" y1="430" x2="280.9" y2="430" stroke="#222"/>
+  <text x="200" y="446" text-anchor="middle" font-size="11">span 7.35 m</text>
+  <line x1="40" y1="111.0" x2="40" y2="397.0" stroke="#222"/>
+  <text x="52" y="254.0" font-size="11" transform="rotate(-90 52 254.0)">length 13 m</text>
+
+  <!-- SIDE -->
+  <text x="40" y="470" font-size="11" font-weight="700" fill="#111">SIDE (+X) · nose left (−Z)</text>
+  <path d="M 80.0,518.7 L 98.7,512.3 L 143.8,506.8 L 209.8,503.7 L 286.8,505.5 L 345.1,510.1 L 366.0,514.3 L 366.0,524.0 L 345.1,527.7 L 286.8,531.9 L 209.8,532.8 L 143.8,529.7 L 98.7,525.5 L 80.0,520.0 Z" fill="#596b73" fill-opacity="0.35" stroke="#1a1a1a" stroke-width="1.2"/>
+  <path d="M 136.1,507.7 L 162.5,501.1 L 215.3,499.8 L 246.1,505.9 L 246.1,513.0 L 215.3,514.7 L 162.5,514.3 L 136.1,511.2 Z" fill="#11191d" fill-opacity="0.7" stroke="#111" stroke-width="1"/>
+  <!-- length bar -->
+  <line x1="80" y1="580" x2="366" y2="580" stroke="#222"/>
+  <text x="223" y="596" text-anchor="middle" font-size="11">length 13 m (fuselage stations z=−6.5 … +6.5)</text>
+  <text x="141.16" y="500" font-size="9" fill="#765244">intake z=-3.72</text>
+  <text x="357.64000000000004" y="500" font-size="9" fill="#765244">exhaust z=6.12</text>
+
+  <!-- FRONT -->
+  <text x="480" y="118" font-size="11" font-weight="700" fill="#111">FRONT (−Z)</text>
+  <ellipse cx="520" cy="200" rx="16.7" ry="14.5" fill="#596b73" fill-opacity="0.4" stroke="#1a1a1a"/>
+  <line x1="439.1" y1="198.2" x2="600.9" y2="198.2" stroke="#1a1a1a" stroke-width="3"/>
+  <text x="520" y="280" text-anchor="middle" font-size="10">mid station z=-0.6: rx=0.76 ry=0.66</text>
+  <text x="520" y="296" text-anchor="middle" font-size="10">span 7.35 m</text>
+
+  <rect x="480" y="320" width="200" height="90" fill="#fff" stroke="#999"/>
+  <text x="490" y="340" font-size="10" font-weight="700">CLOSED (geometry)</text>
+  <text x="490" y="356" font-size="9">length 13 · span 7.35</text>
+  <text x="490" y="370" font-size="9">S=18 m² · AR=3</text>
+  <text x="490" y="386" font-size="9" fill="#844">FICTION: designDashMach 4</text>
+  <text x="490" y="400" font-size="9" fill="#844">MEASURED OFT peak ~3.69</text>
+
+  <line x1="24" y1="600" x2="696" y2="600" stroke="#222" stroke-width="0.5"/>
+  <text x="24" y="618" font-size="9" fill="#666">Do not invent OML — regenerate from JSON when revision bumps. Drone bays provisional (not drawn).</text>
+</svg>

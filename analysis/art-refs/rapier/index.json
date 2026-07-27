@@ -1,0 +1,19 @@
+{
+  "airframeId": "rapier.public-data-surrogate.v1",
+  "definitionPath": "airframes/rapier.v1.json",
+  "biblePath": "docs/airframes/rapier/",
+  "adr": "docs/adr-0003-ghibli-adjacent-world-presentation.md",
+  "presentDeck": "docs/airframes/rapier/present/deck.json",
+  "refs": [
+    {
+      "id": "rapier-ghibli-strip-v1",
+      "file": "rapier-ghibli-strip.png",
+      "date": "2026-07-28",
+      "epistemic": "fiction",
+      "promptNudges": "Ghibli-adjacent soft pastoral Ukraine steppe; opaque escape spine; weathered TBCC interceptor; no logos; no people faces",
+      "runtimeSoT": false,
+      "note": "Mood still for present deck title panel. Not a mesh or HUD source of truth."
+    }
+  ],
+  "notes": "ADR-0003: fiction stills are not runtime SoT. Prefer gitignored binaries under analysis/art-refs/; tracked copies may live under docs/.../present/ and web/wwwroot/present/ for the teaching deck."
+}

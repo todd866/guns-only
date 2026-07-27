@@ -1943,10 +1943,10 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "rapier-intercept": Object.freeze({
     kicker: "Eastern corridor · guns-only",
     title: "Rapier Intercept",
-    sortie: "Climb · ram dash · glide gun-drone · recover",
-    configuration: "Rapier · Mach 4 · reusable gun-drones · alert fuel",
-    brief: "Climb and ram to FL700. At the four-ship formation, press F once to release one reusable glide gun-drone; the other drones stay loaded on Rapier. Bandits react while Rapier egresses; the drone fights with its guns, then RTBs to intermittent pickup on the quiet strip.",
-    controls: "P mission automation · F release one glide gun-drone · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
+    sortie: "Rapier turbo-ramjet interceptor · guns-only · one-pass sweep · pursued recovery",
+    configuration: "Fictional TBCC Rapier · design dash M4 (fiction) · OFT peak ~M3.7 · CMC hot structure · reusable gun-drones · 3,100 LB alert fuel",
+    brief: "Mission automation owns the long profile by default: use full augmentation to launch, climb around M0.90 to FL560 (56,000 ft), and drive cleanly through the transonic drag rise. RAM LIGHT begins at M1.6 and full ram arrives at M2.2; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the altitude profile, ram-climb to FL700, and dash. Mach and KTAS, range, closure, and intercept ETA stay visible throughout the long leg. Treat briefing Mach 4 as aspirational — measured energy-ladder peaks near M3.7. At the formation, press F to release the gun-drone load; Rapier egresses while drones fight. Return, shed energy for marshal, lineup, and four large square gates into wire three.",
+    controls: "P mission automation · F release gun-drones · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",

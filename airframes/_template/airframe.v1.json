@@ -1,0 +1,34 @@
+{
+  "schema": "guns-only.airframe-definition.v1",
+  "id": "",
+  "revision": "0.0.0",
+  "presentationId": "",
+  "flightModelBinding": "",
+  "epistemic": "provisional",
+  "frameConvention": "threejs-createRapier-v1",
+  "dimensionsM": {
+    "length": 0,
+    "span": 0
+  },
+  "wing": {
+    "areaM2": 0,
+    "aspectRatio": 0,
+    "planform": []
+  },
+  "fuselage": {
+    "stations": []
+  },
+  "sockets": {},
+  "massKg": {
+    "fuelFree": 0,
+    "fuelCapacity": 0,
+    "gross": 0
+  },
+  "propulsion": {
+    "ramCaptureAreaM2": 0
+  },
+  "thermal": {
+    "skinTemperatureLimitK": 0
+  },
+  "notes": "Fill Part I engineering before geometry."
+}

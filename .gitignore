@@ -37,3 +37,17 @@ analysis/glide-drone-oft/*/
 # Local scenery debug frames/probes. Keep README if present.
 analysis/desktop-captures/scenery-flicker/*
 !analysis/desktop-captures/scenery-flicker/README.md
+
+# ADR-0003 AI mood refs: track index.json only; binaries stay local.
+analysis/art-refs/**/*.png
+analysis/art-refs/**/*.jpg
+analysis/art-refs/**/*.jpeg
+analysis/art-refs/**/*.webp
+analysis/art-refs/**/*.gif
+
+# Local Copernicus DEM cache (immutable objects; lock JSON is committed)
+.cache/
+
+# Ukraine geodetic atlas page bundles (~400 MiB); rebuild from locked Copernicus cache.
+content/packs/ukraine-modern/environment/terrain-atlas/pages/
+web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas/pages/

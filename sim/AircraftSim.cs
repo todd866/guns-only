@@ -117,9 +117,11 @@ public sealed class AircraftSim {
     double _reportedBank;    // horizon-referenced compatibility value for State.Bank
     bool _init;
     bool _spoolInit;
+    bool _skinInit;
     double _thrustFrac;      // engine's actual spool state, 0..1 — lags the throttle lever
     double _pitchThrustVectorAngleRad; // deterministic per-aircraft nozzle actuator state
     double _coldGasKg;
+    double _skinTemperatureK;
     /// <summary>Remaining cold-gas RCS propellant (kg). Zero when the airframe has no RCS.</summary>
     public double ColdGasRcsGasKg => _coldGasKg;
     /// <summary>Fraction of published RCS tank remaining, or 0 when unequipped.</summary>
@@ -129,6 +131,14 @@ public sealed class AircraftSim {
             : 0.0;
     /// <summary>Current RCS authority share (0..1) from q and remaining gas.</summary>
     public double ColdGasRcsAuthority { get; private set; }
+    /// <summary>
+    /// Lagged structural skin temperature (kelvin). Tracks adiabatic wall temperature with heat
+    /// capacity so a decelerating dive cannot instantly cool the HUD the way freestream recovery
+    /// does. Limit schedules still use instantaneous <see cref="AirData.AdiabaticWallTemperatureK"/>.
+    /// </summary>
+    public double SkinTemperatureK => _skinTemperatureK;
+    /// <summary>Instantaneous freestream recovery / adiabatic wall temperature (kelvin).</summary>
+    public double AdiabaticWallTemperatureK { get; private set; }
     /// <summary>Degrees between body forward and air-relative velocity (coast reentry cue).</summary>
     public double NoseOnVelocityErrorDeg { get; private set; }
     /// <summary>Peak RCS moment magnitude commanded on the latest aero tick.</summary>
@@ -281,6 +291,7 @@ public sealed class AircraftSim {
         _pitchThrustVectorAngleRad = 0.0;
         PullLimit = PullLimitStatus.None;
         AdvanceEngine(throttle, dt);
+        AdvanceSkinTemperature(dt);
     }
 
     void InitFrame(in Vec3D vhat) {
@@ -411,6 +422,7 @@ public sealed class AircraftSim {
             / FlightModel.G0;
         HasValidPilotNormalAcceleration = true;
         LiftDir = aero.LiftDir;
+        AdvanceSkinTemperature(dt);
         var (_, nzMax, nzMin) = FlightModel.ClampNz(State, cmd, _p, AirspeedMps,
             configuration, AtmosphereModel);
         UpdateBuffetCue(cmd.GDemand, nzMax, nzMin, dt);
@@ -510,6 +522,19 @@ public sealed class AircraftSim {
         if (_buffetTransitionSeconds < dwell) return;
         Buffet = desired;
         _buffetTransitionSeconds = 0.0;
+    }
+
+    void AdvanceSkinTemperature(double dt) {
+        AtmosphericState air = AtmosphereModel.Sample(State.Position.Y);
+        double mach = AirspeedMps / System.Math.Max(air.SpeedOfSoundMps, 1e-6);
+        AdiabaticWallTemperatureK = AirData.AdiabaticWallTemperatureK(mach, air.TemperatureK);
+        if (!_skinInit || !double.IsFinite(_skinTemperatureK) || _skinTemperatureK <= 0.0) {
+            _skinTemperatureK = AdiabaticWallTemperatureK;
+            _skinInit = true;
+            return;
+        }
+        _skinTemperatureK = AirData.StepLaggedSkinTemperatureK(
+            _skinTemperatureK, AdiabaticWallTemperatureK, dt);
     }
 
     void AdvanceEngine(double throttle, double dt) {

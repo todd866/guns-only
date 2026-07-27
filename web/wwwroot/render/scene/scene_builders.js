@@ -3,6 +3,8 @@ import {
   TERRAIN_CURVATURE_START_M,
   TERRAIN_EARTH_RADIUS_M,
 } from "../environment/korea_terrain.js";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js";
+import rapierV1Definition from "../../airframes/rapier_v1.embedded.js";
 
 // Pure Three.js scene/model builders extracted verbatim from app.js. Runtime-derived configuration
 // is owned by app.js and injected once via configureSceneBuilders() before any builder runs, so
@@ -1501,101 +1503,14 @@ export function createDrone(context = {}) {
 /// Procedural compatibility model for the fictional Rapier public-data surrogate. Dimensions match
 /// the reduced-order flight model's 13 m length and 7.35 m span; the opaque sensor nose/escape-pod
 /// spine deliberately has no glass canopy, and one blended propulsion tunnel distinguishes it from
-/// the twin-engine compatibility fighter.
+/// the twin-engine compatibility fighter. OML is loaded from the Airframe Definition (embedded sync
+/// copy of airframes/rapier.v1.json) — do not reintroduce a second hand-authored mesh path.
 export function createRapier(context = {}) {
-  const group = new THREE.Group();
-  group.name = "RAPIER_HIGH_ALTITUDE_INTERCEPTOR_SURROGATE";
-
-  const upper = makeMaterial(0x596b73, 0.50, 0.07, 0x010304,
-    { grain: 0.10, grainScale: 2.4, panels: 0.03, panelScale: 0.72 });
-  const lower = makeMaterial(0x26343a, 0.67, 0.045, 0x000101,
-    { grain: 0.08, grainScale: 2.8 });
-  const hot = makeMaterial(0x765244, 0.42, 0.16, 0x080201,
-    { grain: 0.05, grainScale: 3.1 });
-  const sensor = makeMaterial(0x11191d, 0.74, 0.035, 0x000101,
-    { grain: 0.03, grainScale: 4.0 });
-  const accent = makeMaterial(0xb85e32, 0.58, 0.04, 0x070201,
-    { grain: 0.06, grainScale: 2.0 });
-
-  const wing = new THREE.Mesh(createPlanformGeometry([
-    [0, -3.8], [-0.74, -3.1], [-3.675, 0.05], [-3.48, 0.92],
-    [-1.04, 0.46], [-0.72, 3.5], [0, 4.05], [0.72, 3.5],
-    [1.04, 0.46], [3.48, 0.92], [3.675, 0.05], [0.74, -3.1],
-  ], 0.16, 0.044), [upper, lower]);
-  wing.name = "RAPIER_7P35M_PLANFORM";
-  wing.position.y = 0.02;
-  group.add(wing);
-
-  const body = new THREE.Mesh(createLoftGeometry([
-    { z: -6.5, rx: 0.03, ry: 0.03, y: 0.03 },
-    { z: -5.65, rx: 0.34, ry: 0.30, y: 0.05 },
-    { z: -3.6, rx: 0.60, ry: 0.52, y: 0.08 },
-    { z: -0.6, rx: 0.76, ry: 0.66, y: 0.08 },
-    { z: 2.9, rx: 0.72, ry: 0.60, y: 0.06 },
-    { z: 5.55, rx: 0.48, ry: 0.40, y: 0.05 },
-    { z: 6.5, rx: 0.24, ry: 0.22, y: 0.04 },
-  ], 12), upper);
-  body.name = "RAPIER_13M_SENSOR_FUSELAGE";
-  group.add(body);
-
-  // Opaque reclined crew/sensor spine: a hard silhouette, explicitly not a transparent canopy.
-  const spine = new THREE.Mesh(createLoftGeometry([
-    { z: -3.95, rx: 0.12, ry: 0.08, y: 0.48 },
-    { z: -2.75, rx: 0.43, ry: 0.30, y: 0.56 },
-    { z: -0.35, rx: 0.48, ry: 0.34, y: 0.58 },
-    { z: 1.05, rx: 0.24, ry: 0.16, y: 0.48 },
-  ], 10), sensor);
-  spine.name = "RAPIER_OPAQUE_ESCAPE_POD_SPINE";
-  group.add(spine);
-
-  const intake = new THREE.Mesh(new THREE.RingGeometry(0.29, 0.55, 14), sensor);
-  intake.name = "RAPIER_SINGLE_BLENDED_INTAKE";
-  intake.scale.y = 0.72;
-  intake.position.set(0, -0.22, -3.72);
-  intake.rotation.y = Math.PI;
-  group.add(intake);
-  const propulsionTunnel = new THREE.Mesh(createLoftGeometry([
-    { z: -3.68, rx: 0.50, ry: 0.34, y: -0.20 },
-    { z: -1.9, rx: 0.58, ry: 0.40, y: -0.18 },
-    { z: 4.9, rx: 0.52, ry: 0.36, y: -0.14 },
-    { z: 6.1, rx: 0.34, ry: 0.28, y: -0.10 },
-  ], 12), lower);
-  propulsionTunnel.name = "RAPIER_TURBO_RAMJET_TUNNEL";
-  group.add(propulsionTunnel);
-  const exhaust = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.07, 7, 16), hot);
-  exhaust.position.set(0, -0.10, 6.12);
-  exhaust.name = "RAPIER_SINGLE_EXHAUST";
-  group.add(exhaust);
-
-  const finGeometry = createFinGeometry([
-    [2.2, 0], [5.72, 0], [5.1, 1.82], [4.24, 2.22], [3.15, 0.28],
-  ], 0.11);
-  for (const side of [-1, 1]) {
-    const fin = new THREE.Mesh(finGeometry, [upper, lower]);
-    fin.position.set(side * 0.58, 0.24, 0);
-    fin.rotation.z = side * -0.08;
-    group.add(fin);
-    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.035, 1.55), accent);
-    tip.position.set(side * 2.92, 0.15, 0.32);
-    tip.rotation.y = side * -0.16;
-    group.add(tip);
-  }
-
-  const sockets = Object.freeze({
-    cockpitCamera: addSemanticSocket(group, "SOCKET_CAMERA_COCKPIT", 0, 0.62, -2.2),
-    muzzleLeft: addSemanticSocket(group, "SOCKET_MUZZLE_LEFT", -0.32, -0.08, -5.55),
-    muzzleRight: addSemanticSocket(group, "SOCKET_MUZZLE_RIGHT", 0.32, -0.08, -5.55),
-  });
-  group.traverse((object) => {
-    if (!object.isMesh) return;
-    object.castShadow = object.userData.noShadow !== true;
-    object.receiveShadow = true;
-  });
-  group.userData.sockets = sockets;
-  group.userData.dimensionsM = Object.freeze({ length: 13, span: 7.35 });
-  annotateProceduralFallback(group, context);
-  return group;
+  const def = context.definition ?? rapierV1Definition;
+  return createAirframeFromDefinition(def, context);
 }
+
+export { createAirframeFromDefinition };
 
 /// Purpose-built visual surrogate for Mission 8's fictional one-way attack drone. Its 5.5 m
 /// wingspan is the same public snapshot value used by the flight model and gunsight, so the

@@ -192,4 +192,54 @@ public class AirDataTests {
         Assert.True(highStall > seaLevelStall);
         Assert.True(highCorner > seaLevelCorner);
     }
+
+    [Fact]
+    public void InstantaneousRecoveryTemperatureFallsOnADeceleratingDive() {
+        // 100 kft ≈ 30 480 m. ISA ambient is colder aloft; a pull that bleeds Mach into the
+        // denser column can drop adiabatic wall temperature even as static temperature rises.
+        // That is correct for freestream recovery — and is exactly the HUD bug when published
+        // as "skin" with no thermal mass.
+        const double highAltM = 30_480.0;
+        double tHigh = StandardAtmosphere1976.Instance.Sample(highAltM).TemperatureK;
+        double tSea = StandardAtmosphere1976.Instance.Sample(0.0).TemperatureK;
+        double hotRecovery = AirData.SkinTemperatureK(mach: 3.5, ambientTemperatureK: tHigh);
+        double coolRecovery = AirData.SkinTemperatureK(mach: 1.2, ambientTemperatureK: tSea);
+
+        Assert.True(tSea > tHigh + 40.0, "ambient must warm toward sea level");
+        Assert.True(coolRecovery < hotRecovery - 150.0,
+            $"instantaneous recovery fell {hotRecovery - coolRecovery:F0} K on the decelerating dive "
+            + $"(hot {hotRecovery:F0} K → cool {coolRecovery:F0} K); this is the telemetry symptom");
+    }
+
+    [Fact]
+    public void LaggedSkinRetainsHeatThroughAShortDeceleratingDive() {
+        const double highAltM = 30_480.0;
+        double tHigh = StandardAtmosphere1976.Instance.Sample(highAltM).TemperatureK;
+        double tSea = StandardAtmosphere1976.Instance.Sample(0.0).TemperatureK;
+        double hotRecovery = AirData.SkinTemperatureK(3.5, tHigh);
+        double coolRecovery = AirData.SkinTemperatureK(1.2, tSea);
+
+        double skin = hotRecovery;
+        // ~20 s of 120 Hz integration toward the cool recovery — a real pull length, not soak time.
+        const double dt = 1.0 / 120.0;
+        for (int i = 0; i < 2_400; i++)
+            skin = AirData.StepLaggedSkinTemperatureK(skin, coolRecovery, dt);
+
+        Assert.True(coolRecovery < hotRecovery - 150.0);
+        Assert.True(skin > coolRecovery + 100.0,
+            $"lagged skin {skin:F0} K must stay well above instantaneous recovery {coolRecovery:F0} K "
+            + $"after a short dive from {hotRecovery:F0} K soak");
+        Assert.True(skin > hotRecovery - 80.0,
+            $"lagged skin {skin:F0} K must not dump most of the {hotRecovery:F0} K soak in 20 s");
+    }
+
+    [Fact]
+    public void ConstantMachDiveRaisesInstantaneousRecoveryWithAmbient() {
+        const double highAltM = 30_480.0;
+        double tHigh = StandardAtmosphere1976.Instance.Sample(highAltM).TemperatureK;
+        double tSea = StandardAtmosphere1976.Instance.Sample(0.0).TemperatureK;
+        double high = AirData.SkinTemperatureK(3.0, tHigh);
+        double sea = AirData.SkinTemperatureK(3.0, tSea);
+        Assert.True(sea > high + 50.0);
+    }
 }

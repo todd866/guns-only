@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 480" width="720" height="480" font-family="IBM Plex Mono, ui-monospace, monospace">
+  <rect width="100%" height="100%" fill="#f7f4ef"/>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 08 — Thermal / material zones · rapier.public-data-surrogate.v1 @ 1.0.0</text>
+  <text x="24" y="48" font-size="10" fill="#555">Source: airframes/rapier.v1.json · frame: threejs-createRapier-v1 (+Z aft) · epistemic: surrogate</text>
+  <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
+
+  <text x="24" y="78" font-size="11">thermal.skinTemperatureLimitK = 1473.15 · epistemic: surrogate</text>
+  <text x="24" y="94" font-size="10" fill="#666">CMC materials freeze; lag taus for HUD skin are provisional</text>
+
+  <!-- base airframe warm composite -->
+  <path d="M 200.0,164.0 L 185.2,178.0 L 126.5,241.0 L 130.4,258.4 L 179.2,249.2 L 185.6,310.0 L 200.0,321.0 L 214.4,310.0 L 220.8,249.2 L 269.6,258.4 L 273.5,241.0 L 214.8,178.0 Z" fill="#596b73" fill-opacity="0.45" stroke="#1a1a1a"/>
+  <!-- LE hot CMC band (forward third approx from planform nose) -->
+  <path d="M 200.0,164.0
+           L 185.2,178.0
+           L 126.5,241.0
+           L 273.5,241.0
+           L 214.8,178.0 Z"
+        fill="#765244" fill-opacity="0.75" stroke="#5a2e1e"/>
+  <text x="200" y="176.0" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">CMC LE</text>
+
+  <!-- hot section fairing aft -->
+  <rect x="160.0" y="330.0" width="80" height="40" fill="#765244" fill-opacity="0.7" stroke="#5a2e1e"/>
+  <text x="200" y="346.0" text-anchor="middle" font-size="9" fill="#fff">CMC hot fairing</text>
+
+  <!-- spine overlay -->
+  <ellipse cx="200" cy="210.0" rx="28" ry="55" fill="#11191d" fill-opacity="0.8"/>
+  <text x="200" y="210.0" text-anchor="middle" font-size="9" fill="#ccc">sensor spine</text>
+
+  <rect x="480" y="120" width="210" height="280" fill="#fff" stroke="#222"/>
+  <text x="490" y="142" font-size="11" font-weight="700">materialZones</text>
+  <rect x="490" y="158" width="14" height="14" fill="#765244"/>
+    <text x="512" y="170" font-size="9">leadingEdges: cmc (hot)</text>
+<rect x="490" y="194" width="14" height="14" fill="#765244"/>
+    <text x="512" y="206" font-size="9">hotSectionFairing: cmc (hot)</text>
+<rect x="490" y="230" width="14" height="14" fill="#596b73"/>
+    <text x="512" y="242" font-size="9">upperAirframe: composite (warm)</text>
+<rect x="490" y="266" width="14" height="14" fill="#596b73"/>
+    <text x="512" y="278" font-size="9">lowerAirframe: composite (warm)</text>
+<rect x="490" y="302" width="14" height="14" fill="#11191d"/>
+    <text x="512" y="314" font-size="9">sensorSpine: composite-opaque (warm)</text>
+<rect x="490" y="338" width="14" height="14" fill="#b85e32"/>
+    <text x="512" y="350" font-size="9">accentTips: paint (cool)</text>
+  <text x="490" y="390" font-size="9" fill="#844">CMC materials freeze; Mach-4 dash is fiction</text>
+  <text x="490" y="404" font-size="9">palette hot 0x765244 · upper 0x596b73</text>
+
+  <line x1="24" y1="440" x2="696" y2="440" stroke="#222" stroke-width="0.5"/>
+  <text x="24" y="458" font-size="9" fill="#666">Zone map is definition materialZones + schematic LE/fairing placement — not a CFD contour.</text>
+</svg>

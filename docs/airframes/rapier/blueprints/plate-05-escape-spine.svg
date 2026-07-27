@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 520" width="640" height="520" font-family="IBM Plex Mono, ui-monospace, monospace">
+  <rect width="100%" height="100%" fill="#f7f4ef"/>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 05 — Escape-pod spine · rapier.public-data-surrogate.v1 @ 1.0.0</text>
+  <text x="24" y="48" font-size="10" fill="#555">Source: airframes/rapier.v1.json · frame: threejs-createRapier-v1 (+Z aft) · epistemic: surrogate</text>
+  <line x1="24" y1="58" x2="616" y2="58" stroke="#222" stroke-width="1"/>
+
+  <text x="24" y="78" font-size="11" fill="#333">Opaque escape-pod / sensor spine — no glass canopy (presentation contract)</text>
+  <text x="24" y="94" font-size="10" fill="#666">materialZones.sensorSpine → composite-opaque · palette.sensor 0x11191d</text>
+
+  <text x="40" y="120" font-size="11" font-weight="700">SIDE</text>
+  <path d="M 112.0,233.1 L 169.6,218.7 L 284.8,215.8 L 352.0,229.3 L 352.0,244.6 L 284.8,248.5 L 169.6,247.5 L 112.0,240.8 Z" fill="#11191d" fill-opacity="0.85" stroke="#000" stroke-width="1.2"/>
+  <line x1="112.0" y1="233.1" x2="112.0" y2="240.8" stroke="#c45c26" stroke-dasharray="3 2"/>
+    <text x="112.0" y="225.1" text-anchor="middle" font-size="8">z=-3.95</text>
+<line x1="169.6" y1="218.7" x2="169.6" y2="247.5" stroke="#c45c26" stroke-dasharray="3 2"/>
+    <text x="169.6" y="210.7" text-anchor="middle" font-size="8">z=-2.75</text>
+<line x1="284.8" y1="215.8" x2="284.8" y2="248.5" stroke="#c45c26" stroke-dasharray="3 2"/>
+    <text x="284.8" y="207.8" text-anchor="middle" font-size="8">z=-0.35</text>
+<line x1="352.0" y1="229.3" x2="352.0" y2="244.6" stroke="#c45c26" stroke-dasharray="3 2"/>
+    <text x="352.0" y="221.3" text-anchor="middle" font-size="8">z=1.05</text>
+  <circle cx="196.0" cy="230.2" r="4" fill="#f0a33b"/>
+  <text x="206.0" y="230.2" font-size="9">cockpitCamera [0,0.62,-2.2] (surrogate)</text>
+
+  <text x="40" y="400" font-size="11" font-weight="700">TOP (half-width rx)</text>
+  <path d="M 112.0,414.2 L 169.6,399.4 L 284.8,397.0 L 352.0,408.5 L 352.0,431.5 L 284.8,443.0 L 169.6,440.6 L 112.0,425.8 Z" fill="#11191d" fill-opacity="0.5" stroke="#000"/>
+
+  <rect x="420" y="120" width="190" height="160" fill="#fff" stroke="#999"/>
+  <text x="430" y="140" font-size="10" font-weight="700">escapePodSpine.stations</text>
+  <text x="430" y="160" font-size="9">[0] z=-3.95 rx=0.12 ry=0.08 y=0.48</text>
+<text x="430" y="182" font-size="9">[1] z=-2.75 rx=0.43 ry=0.3 y=0.56</text>
+<text x="430" y="204" font-size="9">[2] z=-0.35 rx=0.48 ry=0.34 y=0.58</text>
+<text x="430" y="226" font-size="9">[3] z=1.05 rx=0.24 ry=0.16 y=0.48</text>
+
+  <line x1="24" y1="480" x2="616" y2="480" stroke="#222" stroke-width="0.5"/>
+  <text x="24" y="498" font-size="9" fill="#666">Spine geometry 1:1 from definition; canopy-free silhouette is a closed presentation contract.</text>
+</svg>

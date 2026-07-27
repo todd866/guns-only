@@ -499,13 +499,19 @@ public static class FlightModel {
     /// RAPIER — the 2030s high-altitude turbine-based combined-cycle interceptor, fictional
     /// public-data surrogate.
     ///
+    /// Geometry-of-record: airframes/rapier.v1.json · bible: docs/airframes/rapier/ ·
+    /// realism audit: docs/airframes/rapier/REALISM-AND-OVERPERFORMANCE.md
+    ///
     /// Named for a thrusting weapon rather than a slashing one: it commits to a single lunge and
     /// spends the rest of the engagement recovering. That is the doctrine, not a limitation.
     ///
-    /// Steel where the heat is, composite everywhere else, no windscreen, a reclined occupant in a
-    /// composite escape pod, catapult launched from deep rear basing and recovered on a hook. It
-    /// climbs on a ceramic-matrix turbine core, blends continuously into a variable-geometry ram
-    /// duct past Mach 2, dashes at Mach 4 in thin air, and dives to attack.
+    /// CMC where the heat is (SkinTemperatureLimitK = 1473.15; SiC/SiC hot structure), ordinary
+    /// composite everywhere else — stainless + Mach-4 is a superseded airframe story. No windscreen;
+    /// reclined occupant in an opaque escape pod; catapult from deep rear basing; hook recovery.
+    /// Climbs on a ceramic-matrix turbine core and blends into a variable-geometry ram duct past
+    /// Mach 2. Mission branding still says a thin-air Mach-4 dash; treat that as aspirational
+    /// fiction until propulsion is retuned — OFT energy-ladder peaks ~M3.69; map DesignMach = 2.6
+    /// is a cycle normaliser only (see TurboRamjetPerformanceMap).
     ///
     /// SIZED FOR THE FIGHT IT PICKS, NOT FOR SUSTAINED COMBAT. Wing loading is high because cruise
     /// beats low-speed manoeuvre for this mission, so its enormous instantaneous G exists only in a
@@ -534,7 +540,8 @@ public static class FlightModel {
         // The initial 65 kN core left a player-flown aircraft sitting on the M1.3-M1.5 drag
         // shoulder whenever the climb was even slightly untidy. This is an alert interceptor, not
         // a throttle-management exam: the enlarged 85 kN turbine pulls decisively through the
-        // transonic rise, while the inlet schedule still requires height for the M4 ram dash.
+        // transonic rise, while the inlet schedule still requires height for the authored thin-air
+        // ram dash (Mach-4 branding is fiction; see REALISM-AND-OVERPERFORMANCE).
         ThrustMaxN: 85_000.0,                 // sea-level static DRY, uprated turbine core
         CD0: 0.0175, InducedK: 0.105,         // area-ruled body, small high-speed wing
         CLMax: 1.35, CLMin: -0.60,
@@ -586,9 +593,11 @@ public static class FlightModel {
         // with 1200 taken here for margin.
         //
         // It buys about M5.7 thermally, which the ENGINE cannot reach: the ram cycle group peaks
-        // near M3.0 and has fallen by a third at M5, so the aircraft tops out around M4.5 on
-        // thrust. That is the right way round for a ramjet — you run out of engine, not airframe —
-        // and it leaves the thermal gauge as a live warning in a dive rather than a permanent cap.
+        // near M3.0 and has fallen by a third at M5, so the map's thrust curve still has margin past
+        // mission branding — do not read that as a proven sustained-M4 article (REALISM audit /
+        // OFT ~M3.69 peak). That is the right way round for a ramjet story — you run out of engine,
+        // not airframe — and it leaves the thermal gauge as a live warning in a dive rather than a
+        // permanent cap.
         //
         // Steel was the previous answer at 320 C and M3.14. It was cheap and weldable, the MiG-25
         // trade, but it made an aircraft nobody would be impressed by. CMC costs more; the cost

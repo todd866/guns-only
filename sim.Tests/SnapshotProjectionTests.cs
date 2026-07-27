@@ -232,7 +232,7 @@ public class SnapshotProjectionTests {
             root.GetProperty("location_id").GetString());
         Assert.Equal("world.ukraine.soniachne-2030s.v1",
             root.GetProperty("world_frame_id").GetString());
-        Assert.Equal("terrain.ukraine.soniachne-theatre.v2",
+        Assert.Equal("terrain.ukraine.rapier-range.atlas.v1",
             root.GetProperty("terrain_profile_id").GetString());
         Assert.Equal("ukraine-2030s-macro",
             root.GetProperty("terrain_macro_scenery_profile").GetString());
@@ -265,7 +265,7 @@ public class SnapshotProjectionTests {
             root.GetProperty("location_id").GetString());
         Assert.Equal("world.ukraine.soniachne-2030s.v1",
             root.GetProperty("world_frame_id").GetString());
-        Assert.Equal("terrain.ukraine.soniachne-theatre.v2",
+        Assert.Equal("terrain.ukraine.rapier-range.atlas.v1",
             root.GetProperty("terrain_profile_id").GetString());
         Assert.True(root.GetProperty("terrain_macro_required").GetBoolean());
         Assert.False(root.GetProperty("terrain_micro_required").GetBoolean());

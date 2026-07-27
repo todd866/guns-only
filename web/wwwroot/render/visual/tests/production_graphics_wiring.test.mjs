@@ -110,7 +110,7 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /if \(this\.terrainPresentation\) \{[\s\S]*return this\.terrainSceneryEraPromise\?\.then[\s\S]*if \(this\.terrainPresentationPromise\) \{[\s\S]*terrainPresentationRequestedKey === terrainKey/,
     "repeated gameplay frames must reuse one terrain load");
   assert.match(source,
-    /const UKRAINE_2030S_TERRAIN_ID = "terrain\.ukraine\.soniachne-theatre\.v2"/,
+    /const UKRAINE_2030S_TERRAIN_ID = "terrain\.ukraine\.rapier-range\.atlas\.v1"/,
     "all 2030s Ukraine missions must select one stable theatre substrate");
   assert.match(source,
     /const ukraineTheatre = state\?\.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID/);
@@ -118,10 +118,10 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /const sceneryEra = ukraineTheatre[\s\S]*?state\?\.terrain_scenery_profile \|\| "ukraine-modern"/,
     "the shared theatre must retain its regional stylized scenery profile");
   assert.match(source,
-    /const UKRAINE_TRAINING_TERRAIN_MANIFEST_URL = new URL\([\s\S]*?soniachne-steppe\.manifest\.json/);
+    /const UKRAINE_TRAINING_TERRAIN_MANIFEST_URL = new URL\([\s\S]*?rapier-range\.atlas\.manifest\.json/);
   assert.match(source,
     /const terrainKey = ukraineTheatre[\s\S]*?UKRAINE_2030S_TERRAIN_ID/,
-    "all Ukraine fidelity bands must retain the same v2 terrain identity");
+    "all Ukraine fidelity bands must retain the same theatre terrain identity");
   assert.match(source,
     /presentation\.setSceneryEra\(sceneryEra\)/,
     "restaging across eras must replace scenery without rebuilding the retained terrain atlas");
@@ -132,8 +132,8 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /Shadows off · low-level scenery retained · holding 60/,
     "the performance status must disclose that essential scenery remains active");
   assert.match(source,
-    /const coastalUkraineTheatre = terrainId === UKRAINE_2030S_TERRAIN_ID;[\s\S]*this\.sea\.mesh\.visible = coastalUkraineTheatre \|\| !terrainId/,
-    "the unified theatre must keep its coastal water substrate while retaining the no-terrain fallback");
+    /Far field over Ukraine[\s\S]*this\.sea\.mesh\.visible = !terrainId/,
+    "Ukraine / land theatres hide the decision-support sea when terrain is present; sea remains the no-terrain fallback");
   assert.match(source,
     /terrainPresentationFailureKey === terrainKey[\s\S]*terrainPresentationRetryAtMs[\s\S]*return Promise\.resolve\(null\)/,
     "a failed terrain product must back off instead of refetching on every animation frame");

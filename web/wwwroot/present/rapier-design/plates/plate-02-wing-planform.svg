@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 420" width="560" height="420" font-family="IBM Plex Mono, ui-monospace, monospace">
+  <rect width="100%" height="100%" fill="#f7f4ef"/>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 02 — Wing planform · rapier.public-data-surrogate.v1 @ 1.0.0</text>
+  <text x="24" y="48" font-size="10" fill="#555">Source: airframes/rapier.v1.json · frame: threejs-createRapier-v1 (+Z aft) · epistemic: surrogate</text>
+  <line x1="24" y1="58" x2="536" y2="58" stroke="#222" stroke-width="1"/>
+
+  <text x="24" y="78" font-size="11" fill="#333">wing.planform [x, z] metres · area 18 m² · AR 3 · thickness 0.16 m · bevel 0.044 m</text>
+  <g>
+    <path d="M 280.00,94.40 L 253.36,119.60 L 147.70,233.00 L 154.72,264.32 L 242.56,247.76 L 254.08,357.20 L 280.00,377.00 L 305.92,357.20 L 317.44,247.76 L 405.28,264.32 L 412.30,233.00 L 306.64,119.60 Z" fill="#596b73" fill-opacity="0.25" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="280.00" cy="94.40" r="2.5" fill="#c45c26"/><text x="286.00" y="97.40" font-size="8" fill="#844">0, -3.8</text>
+<circle cx="253.36" cy="119.60" r="2.5" fill="#c45c26"/><text x="259.36" y="122.60" font-size="8" fill="#844">-0.74, -3.1</text>
+<circle cx="147.70" cy="233.00" r="2.5" fill="#c45c26"/><text x="153.70" y="236.00" font-size="8" fill="#844">-3.675, 0.05</text>
+<circle cx="154.72" cy="264.32" r="2.5" fill="#c45c26"/><text x="160.72" y="267.32" font-size="8" fill="#844">-3.48, 0.92</text>
+<circle cx="242.56" cy="247.76" r="2.5" fill="#c45c26"/><text x="248.56" y="250.76" font-size="8" fill="#844">-1.04, 0.46</text>
+<circle cx="254.08" cy="357.20" r="2.5" fill="#c45c26"/><text x="260.08" y="360.20" font-size="8" fill="#844">-0.72, 3.5</text>
+<circle cx="280.00" cy="377.00" r="2.5" fill="#c45c26"/><text x="286.00" y="380.00" font-size="8" fill="#844">0, 4.05</text>
+<circle cx="305.92" cy="357.20" r="2.5" fill="#c45c26"/><text x="311.92" y="360.20" font-size="8" fill="#844">0.72, 3.5</text>
+<circle cx="317.44" cy="247.76" r="2.5" fill="#c45c26"/><text x="323.44" y="250.76" font-size="8" fill="#844">1.04, 0.46</text>
+<circle cx="405.28" cy="264.32" r="2.5" fill="#c45c26"/><text x="411.28" y="267.32" font-size="8" fill="#844">3.48, 0.92</text>
+<circle cx="412.30" cy="233.00" r="2.5" fill="#c45c26"/><text x="418.30" y="236.00" font-size="8" fill="#844">3.675, 0.05</text>
+<circle cx="306.64" cy="119.60" r="2.5" fill="#c45c26"/><text x="312.64" y="122.60" font-size="8" fill="#844">0.74, -3.1</text>
+
+    <!-- span dimension -->
+    <line x1="147.70" y1="380" x2="412.30" y2="380" stroke="#222" stroke-width="1"/>
+    <text x="280" y="396" text-anchor="middle" font-size="11" fill="#111">span = 7.35 m (tip-to-tip from planform ±3.675 m)</text>
+    <text x="24" y="110" font-size="10" fill="#555">Nose toward top (−Z). +X right. Frame threejs-createRapier-v1.</text>
+  </g>
+
+  <line x1="24" y1="380" x2="536" y2="380" stroke="#222" stroke-width="0.5"/>
+  <text x="24" y="398" font-size="9" fill="#666">Closed geometry from definition. Presentation: presentation.vehicle.rapier.public-data-surrogate.v1</text>
+</svg>

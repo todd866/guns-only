@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rapier — first-principles jet design</title>
+<style>
+  :root {
+    --bg: #0c1210;
+    --stage: #121a17;
+    --ink: #e8f0ea;
+    --muted: #8aa094;
+    --teal: #3d9b7a;
+    --teal-dim: #1e3d32;
+    --gold: #c4a35a;
+    --gold-dim: #3a3220;
+    --red: #c45c48;
+    --red-dim: #3a221e;
+    --line: #24302b;
+    --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); }
+  body { display: grid; place-items: center; min-height: 100%; }
+  .wrap { width: min(100vw, 177.78vh); aspect-ratio: 16 / 9; position: relative; }
+  .stage {
+    width: 100%; height: 100%; background: var(--stage); container-type: size;
+    position: relative; overflow: hidden; box-shadow: 0 12px 48px rgba(0,0,0,.55);
+    padding: 4.2cqw 4.2cqw 3.4cqw; display: flex; flex-direction: column;
+    border: 1px solid var(--line);
+    animation: in .32s ease both;
+  }
+  @keyframes in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .eyebrow { font-size: 1.05cqw; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--teal); }
+  .heading { font-size: 2.8cqw; font-weight: 750; margin: .6cqh 0 0; letter-spacing: -.02em; line-height: 1.15; }
+  .subhead { font-size: 1.35cqw; color: var(--muted); margin: 1cqh 0 0; max-width: 92%; line-height: 1.35; }
+  .bottomline {
+    margin-top: auto; padding-top: 1.6cqh; border-top: 1px solid var(--line);
+    font-size: 1.25cqw; font-weight: 650; color: var(--gold); line-height: 1.35;
+  }
+  .footer { position: absolute; left: 4.2cqw; bottom: 1.6cqh; font-size: .85cqw; color: var(--muted); font-family: var(--mono); }
+  .page { position: absolute; right: 4.2cqw; bottom: 1.6cqh; font-size: .9cqw; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* title */
+  .l-title { margin: -4.2cqw; height: calc(100% + 8.4cqw); display: grid; grid-template-columns: 1.15fr .85fr; }
+  .t-panel { background: linear-gradient(160deg, #15221c 0%, #0e1613 100%); padding: 6cqh 4cqw; display: flex; flex-direction: column; }
+  .t-mood { background: #0a100e center/cover no-repeat; border-left: 1px solid var(--line); }
+  .t-eyebrow { font-size: 1.1cqw; letter-spacing: .14em; color: var(--teal); font-weight: 700; }
+  .t-title { font-size: 4.2cqw; font-weight: 800; margin: 2cqh 0 0; line-height: 1.05; letter-spacing: -.03em; }
+  .t-sub { font-size: 1.4cqw; color: var(--muted); margin: 1.6cqh 0 0; line-height: 1.4; }
+  .t-chips { display: flex; flex-wrap: wrap; gap: .6cqw; margin-top: 2.4cqh; }
+  .chip { font-size: .95cqw; font-weight: 650; padding: .55cqh 1cqw; border-radius: 999px; border: 1px solid var(--line); background: var(--teal-dim); color: var(--ink); }
+  .chip.gold { background: var(--gold-dim); }
+  .thesis { margin-top: 3cqh; padding: 1.6cqh 1.4cqw; background: rgba(61,155,122,.12); border-left: 3px solid var(--teal); }
+  .thesis-t { font-size: .9cqw; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--teal); }
+  .thesis-b { font-size: 1.35cqw; margin-top: .8cqh; line-height: 1.4; }
+  .t-author { margin-top: auto; font-size: 1.05cqw; color: var(--muted); white-space: pre-line; font-family: var(--mono); }
+
+  /* hook */
+  .l-hook { display: grid; grid-template-columns: 1fr 1fr; gap: 2cqw; margin: 3cqh 0; flex: 1; align-content: center; }
+  .stat { padding: 3cqh 2cqw; border: 1px solid var(--line); border-radius: .6cqw; background: #0e1613; }
+  .stat-v { font-size: 5cqw; font-weight: 800; line-height: 1; color: var(--teal); font-variant-numeric: tabular-nums; }
+  .stat.gold .stat-v { color: var(--gold); }
+  .stat-l { margin-top: 1.4cqh; font-size: 1.2cqw; color: var(--muted); line-height: 1.35; }
+
+  /* table */
+  .l-table { margin: 2.4cqh 0; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: .7cqh; }
+  .trow { display: grid; grid-template-columns: 18% 1fr; gap: 1.4cqw; align-items: center; padding: 1.4cqh 1.4cqw; background: #0e1613; border: 1px solid var(--line); }
+  .tlabel { font-size: 1.35cqw; font-weight: 750; color: var(--teal); }
+  .tlabel.gold { color: var(--gold); }
+  .tlabel.red { color: var(--red); }
+  .tdetail { font-size: 1.25cqw; color: var(--ink); line-height: 1.35; }
+
+  /* timeline */
+  .l-time { margin: 2.2cqh 0; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 1.6cqh; }
+  .tbar { display: flex; align-items: center; gap: 1.2cqw; }
+  .tbar-v { font-size: 2.2cqw; font-weight: 800; color: var(--gold); }
+  .tbar-l { font-size: 1.1cqw; color: var(--muted); }
+  .stops { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1cqw; }
+  .stop { padding: 1.6cqh 1.2cqw; border: 1px solid var(--line); background: #0e1613; cursor: pointer; min-height: 18cqh; transition: border-color .15s; }
+  .stop:hover, .stop.on { border-color: var(--teal); }
+  .stop-l { font-size: 1.15cqw; font-weight: 750; white-space: pre-line; color: var(--ink); }
+  .stop-b { margin-top: 1cqh; font-size: 1.05cqw; color: var(--muted); line-height: 1.35; }
+  .subdeck { margin-top: 1cqh; padding: 1.2cqh 1.2cqw; border-left: 2px solid var(--teal); background: var(--teal-dim); font-size: 1.05cqw; line-height: 1.4; }
+  .subdeck b { color: var(--teal); display: block; margin-bottom: .4cqh; }
+
+  /* figure */
+  .l-figure { margin: 1.6cqh 0; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1cqh; }
+  .figure-img { max-width: 100%; max-height: 52cqh; object-fit: contain; background: #f7f4ef; border: 1px solid var(--line); }
+  .figure-cap { font-size: 1cqw; color: var(--muted); font-family: var(--mono); }
+
+  /* close */
+  .l-close { margin: -4.2cqw; height: calc(100% + 8.4cqw); display: flex; flex-direction: column; justify-content: center; padding: 6cqh 5cqw; background: linear-gradient(145deg, #1a2e26, #0c1210 60%); }
+  .close-h { font-size: 4.4cqw; font-weight: 800; margin: 0; letter-spacing: -.03em; }
+  .close-sub { font-size: 1.6cqw; color: var(--muted); margin: 1.6cqh 0 0; max-width: 70%; line-height: 1.4; }
+  .thanks { margin-top: 4cqh; padding: 2cqh 1.6cqw; border: 1px solid var(--line); max-width: 70%; white-space: pre-line; font-size: 1.2cqw; color: var(--ink); line-height: 1.5; }
+
+  .nav { position: fixed; bottom: 1.1rem; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: .8rem; background: rgba(0,0,0,.65); padding: .35rem .85rem; border-radius: 2rem; z-index: 20; border: 1px solid #333; }
+  .nav button { background: none; border: 0; color: #fff; font-size: 1.4rem; cursor: pointer; padding: 0 .25rem; }
+  .nav button:disabled { opacity: .3; }
+  .counter { color: #ccc; font-size: .85rem; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+  .hint { position: fixed; top: .8rem; right: 1rem; color: #6a7a72; font-size: .75rem; font-family: var(--mono); }
+  .err { color: var(--red); padding: 2rem; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="hint">← → · Space · F fullscreen · click timeline stops</div>
+<div class="wrap"><div id="root" class="stage"></div></div>
+<nav class="nav" aria-label="Slides">
+  <button type="button" id="prev" aria-label="Previous">‹</button>
+  <span class="counter" id="counter">1 / 1</span>
+  <button type="button" id="next" aria-label="Next">›</button>
+  <button type="button" id="fs" aria-label="Fullscreen" title="Fullscreen">⛶</button>
+</nav>
+<script>
+const ACCENT = { teal: "teal", gold: "gold", red: "red" };
+
+async function loadDeck() {
+  const res = await fetch("./deck.json", { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load deck.json");
+  return res.json();
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+}
+function nl(s) { return esc(s).replace(/\n/g, "<br>"); }
+
+function renderBody(s, subIdx) {
+  switch (s.layout) {
+    case "title": {
+      const chips = (s.chips || []).map(c =>
+        `<span class="chip ${c.accent === "gold" ? "gold" : ""}">${esc(c.text)}</span>`).join("");
+      return `<div class="l-title">
+        <div class="t-panel">
+          <div class="t-eyebrow">${esc(s.eyebrow)}</div>
+          <h1 class="t-title">${nl(s.title)}</h1>
+          <p class="t-sub">${esc(s.subtitle)}</p>
+          <div class="t-chips">${chips}</div>
+          <div class="thesis"><div class="thesis-t">Thesis</div><div class="thesis-b">${esc(s.thesis)}</div></div>
+          <div class="t-author">${nl(s.author)}</div>
+        </div>
+        <div class="t-mood" style="background-image:url('rapier-ghibli-strip.png')"></div>
+      </div>`;
+    }
+    case "hook": {
+      return `<div class="headwrap"><div class="eyebrow">${esc(s.eyebrow)}</div>
+        <h1 class="heading">${esc(s.heading)}</h1>
+        <p class="subhead">${esc(s.subhead)}</p></div>
+        <div class="l-hook">
+          <div class="stat"><div class="stat-v">${esc(s.statBig.value)}</div><div class="stat-l">${esc(s.statBig.label)}</div></div>
+          <div class="stat gold"><div class="stat-v">${esc(s.statWeekly.value)}</div><div class="stat-l">${esc(s.statWeekly.label)}</div></div>
+        </div>
+        <div class="bottomline">${esc(s.bottomLine)}</div>`;
+    }
+    case "table": {
+      const rows = (s.rows || []).map(r =>
+        `<div class="trow"><div class="tlabel ${ACCENT[r.accent] || "teal"}">${esc(r.label)}</div>
+         <div class="tdetail">${esc(r.detail)}</div></div>`).join("");
+      return `<div class="headwrap"><div class="eyebrow">${esc(s.eyebrow)}</div>
+        <h1 class="heading">${esc(s.heading)}</h1>
+        <p class="subhead">${esc(s.subhead)}</p></div>
+        <div class="l-table">${rows}</div>
+        <div class="bottomline">${esc(s.bottomLine)}</div>`;
+    }
+    case "timeline": {
+      const stops = s.stops || [];
+      const i = Math.min(Math.max(subIdx || 0, 0), Math.max(stops.length - 1, 0));
+      const stop = stops[i];
+      const cards = (stop?.deck || []).map(d =>
+        `<div class="subdeck"><b>${esc(d.title)}</b>${esc(d.body)}</div>`).join("");
+      const stopHtml = stops.map((st, k) =>
+        `<button type="button" class="stop ${k === i ? "on" : ""}" data-stop="${k}">
+          <div class="stop-l">${nl(st.label)}</div>
+          <div class="stop-b">${k === i ? "open" : "click"}</div>
+        </button>`).join("");
+      return `<div class="headwrap"><div class="eyebrow">${esc(s.eyebrow)}</div>
+        <h1 class="heading">${esc(s.heading)}</h1>
+        <p class="subhead">${esc(s.subhead)}</p></div>
+        <div class="l-time">
+          <div class="tbar"><div class="tbar-v">${esc(s.barValue)}</div><div class="tbar-l">${esc(s.barLabel)}</div></div>
+          <div class="stops">${stopHtml}</div>
+          ${cards}
+        </div>
+        <div class="bottomline">${esc(s.bottomLine)}</div>`;
+    }
+    case "figure": {
+      return `<div class="headwrap"><div class="eyebrow">${esc(s.eyebrow)}</div>
+        <h1 class="heading">${esc(s.heading)}</h1>
+        <p class="subhead">${esc(s.subhead)}</p></div>
+        <div class="l-figure">
+          <img class="figure-img" src="${esc(s.figure)}" alt="">
+          <div class="figure-cap">${esc(s.figureCaption)}</div>
+        </div>
+        <div class="bottomline">${esc(s.bottomLine)}</div>`;
+    }
+    case "close": {
+      return `<div class="l-close">
+        <div class="eyebrow">${esc(s.eyebrow)}</div>
+        <h1 class="close-h">${esc(s.title)}</h1>
+        <p class="close-sub">${esc(s.subtitle)}</p>
+        <div class="thanks">${nl(s.thanks)}</div>
+      </div>`;
+    }
+    default:
+      return `<div class="err">Unknown layout: ${esc(s.layout)}</div>`;
+  }
+}
+
+function chrome(s, body) {
+  const hideFoot = s.layout === "title" || s.layout === "close";
+  return `${body}
+    ${hideFoot ? "" : `<div class="footer">${esc(s.footer || "")}</div>`}
+    <div class="page">${esc(s.page || "")}</div>`;
+}
+
+(async () => {
+  const root = document.getElementById("root");
+  let deck;
+  try { deck = await loadDeck(); }
+  catch (e) {
+    root.innerHTML = `<div class="err">${esc(e.message)}. Serve this folder over HTTP (file:// fetch may fail).</div>`;
+    return;
+  }
+  document.title = deck.meta?.docTitle || document.title;
+  let i = 0;
+  let sub = 0;
+  const slides = deck.slides;
+
+  function paint() {
+    const s = slides[i];
+    root.innerHTML = chrome(s, renderBody(s, sub));
+    document.getElementById("counter").textContent = `${i + 1} / ${slides.length}`;
+    document.getElementById("prev").disabled = i === 0;
+    document.getElementById("next").disabled = i === slides.length - 1;
+    root.querySelectorAll("[data-stop]").forEach(btn => {
+      btn.addEventListener("click", () => { sub = Number(btn.dataset.stop); paint(); });
+    });
+  }
+
+  function go(d) {
+    const n = i + d;
+    if (n < 0 || n >= slides.length) return;
+    i = n; sub = 0; paint();
+  }
+
+  document.getElementById("prev").onclick = () => go(-1);
+  document.getElementById("next").onclick = () => go(1);
+  document.getElementById("fs").onclick = () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  };
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); go(1); }
+    if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); go(-1); }
+    if (e.key === "f" || e.key === "F") document.getElementById("fs").click();
+    if (e.key === "Home") { i = 0; sub = 0; paint(); }
+    if (e.key === "End") { i = slides.length - 1; sub = 0; paint(); }
+  });
+  paint();
+})();
+</script>
+</body>
+</html>

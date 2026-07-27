@@ -48,15 +48,18 @@ test("bridge projects authoritative Auto-GCAS state without JSON non-finite valu
 });
 
 test("Auto-GCAS presentation is demand-driven and G-LOC grants no aural channel", async () => {
-  const source = await readFile(hudUrl, "utf8");
+  const [source, warningAudio] = await Promise.all([
+    readFile(hudUrl, "utf8"),
+    readFile(new URL("../../audio/warning_audio.js", import.meta.url), "utf8"),
+  ]);
   assert.match(source,
     /gcasActive \|\| gcasWarning \|\| gcasLowEnergy \|\| gcasTerrainUnavailable/,
     "there must be no permanent Auto-GCAS annunciator");
   assert.match(source,
     /state\.auto_gcas_available !== true[\s\S]*?radarAltFt < 500/,
     "modern Auto-GCAS and the legacy proximity warning must not duplicate PULL UP");
-  assert.match(source,
-    /const conscious = frame\.state\.pilot_conscious !== false;[\s\S]*?this\.audioEnabled && conscious/,
+  assert.match(warningAudio,
+    /const conscious = state\?\.pilot_conscious !== false;[\s\S]*?enabled && conscious/,
     "an unconscious pilot must not receive impossible audio information");
   assert.match(source,
     /if \(gcasAvailable\)[\s\S]*?binding\("gcasOverride", "KeyK"\)[\s\S]*?AGCAS PADDLE/,
