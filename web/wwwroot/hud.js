@@ -3355,8 +3355,11 @@ class CombatHud {
     ctx.save();
     const gate = Math.max(0,
       Math.floor(Number(frame.state.rapier_recovery_gate) || 0));
-    if (gate > 0
-        && Number.isFinite(frame.state.rapier_guidance_x)
+    // Paint the square for EVERY phase that publishes a waypoint, not just recovery. The whole of
+    // RTB is navigationally the same problem — fly through the square — and the waypoint was already
+    // being published the entire sortie; only the recovery gates ever drew it. A pilot on the egress
+    // had bearing and range as text and nothing to actually fly at.
+    if (Number.isFinite(frame.state.rapier_guidance_x)
         && Number.isFinite(frame.state.rapier_guidance_y)
         && Number.isFinite(frame.state.rapier_guidance_z)) {
       this.worldPoint.set(
@@ -3366,7 +3369,9 @@ class CombatHud {
       );
       const projectedGate = this.project(this.worldPoint, frame.camera, this.projectionA);
       if (!projectedGate.behind) {
-        const half = [0, 76, 64, 54, 44][Math.min(4, gate)];
+        // Gate zero is the en-route square: biggest, because it is a long way off and only has
+        // to say "this way". The recovery gates tighten as the aircraft closes.
+        const half = [88, 76, 64, 54, 44][Math.min(4, gate)];
         const x0 = projectedGate.x - half;
         const x1 = projectedGate.x + half;
         const y0 = projectedGate.y - half;
