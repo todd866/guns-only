@@ -611,10 +611,18 @@ public sealed class CatapultLaunchModel {
     readonly double _strokeDistanceM;
     readonly double _endRelativeSpeedMps;
     readonly double _rampAngleRad;
+    /// Lateral offset of the launch track from the recovery centreline.
+    ///
+    /// A carrier shares one deck between catapult and arrestment because it has no room not to. A
+    /// dispersed land site has all the room in the world, and MUST use it: the launch gallery is an
+    /// eight-metre roofed structure under a ten-metre berm, so leaving it on the recovery
+    /// centreline puts a mound in the touchdown zone and an aircraft on short final flies into it.
+    readonly double _crossOffsetM = CatapultCrossM;
 
     public CatapultLaunchModel(double strokeDistanceM = StrokeDistanceM,
         double endRelativeSpeedMps = EndDeckRelativeSpeedMps,
-        double rampAngleRad = 0.0) {
+        double rampAngleRad = 0.0,
+        double crossOffsetM = CatapultCrossM) {
         if (!double.IsFinite(strokeDistanceM) || strokeDistanceM <= 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(strokeDistanceM));
         if (!double.IsFinite(endRelativeSpeedMps) || endRelativeSpeedMps <= 0.0)
@@ -625,7 +633,12 @@ public sealed class CatapultLaunchModel {
         _strokeDistanceM = strokeDistanceM;
         _endRelativeSpeedMps = endRelativeSpeedMps;
         _rampAngleRad = rampAngleRad;
+        if (!double.IsFinite(crossOffsetM))
+            throw new System.ArgumentOutOfRangeException(nameof(crossOffsetM));
+        _crossOffsetM = crossOffsetM;
     }
+
+    public double CrossOffsetM => _crossOffsetM;
 
     /// Upward ramp angle at the end of the stroke. A flat deck shot is zero; a land installation
     /// can afford to build a hill, and a ski jump is why STOBAR carriers launch heavy aircraft off
@@ -640,6 +653,8 @@ public sealed class CatapultLaunchModel {
     double AccelerationForStroke =>
         _endRelativeSpeedMps * _endRelativeSpeedMps / (2.0 * _strokeDistanceM);
     public const double StartAlongM = 20.0;
+    /// Deck default: a catapult track seven metres off the ship's centreline. A LAND site is not
+    /// a deck and must not reuse this — see _crossOffsetM.
     public const double CatapultCrossM = -7.0;
     public const double AirborneHeightM = 4.0;
     public const double LaunchClimbMps = 6.0;
@@ -697,7 +712,7 @@ public sealed class CatapultLaunchModel {
         // Hand off from the TOP of the ramp, not from deck level. RampRiseM is zero for every flat
         // deck catapult, so this stays bit-for-bit identical for the carrier beats.
         State = Carrier.StateFromVelocity(
-            carrier.ShipPoint(StartAlongM + _strokeDistanceM, CatapultCrossM,
+            carrier.ShipPoint(StartAlongM + _strokeDistanceM, _crossOffsetM,
                 AirborneHeightM + RampRiseM),
             velocity, _massKg,
             Attitude(carrier, System.Math.Max(LaunchNosePitchRad, _rampAngleRad)));
@@ -753,7 +768,7 @@ public sealed class CatapultLaunchModel {
         var up = new Vec3D(0.0, 1.0, 0.0);
         var alongRail = carrier.Fwd * System.Math.Cos(railAngle) + up * System.Math.Sin(railAngle);
         var velocity = carrier.DeckVelocityWorld + alongRail * RelativeSpeedMps;
-        var position = carrier.ShipPoint(StartAlongM + _distanceM, CatapultCrossM)
+        var position = carrier.ShipPoint(StartAlongM + _distanceM, _crossOffsetM)
             + up * RailHeightAt(_distanceM);
         // Nose-up on the arc is the rail's doing, not the pilot's; the parked sit adds to it.
         return Carrier.StateFromVelocity(position, velocity, _massKg,

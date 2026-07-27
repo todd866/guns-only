@@ -1016,7 +1016,9 @@ export function createRapierDispersedStrip(context = {}) {
   // 765 m radius at the 150 m/s end speed, and the kernel now flies the aircraft along this same
   // curve rather than holding it level and applying an angle at release. If either side changes,
   // both must: the aircraft rides this rail, so a mismatch is a visible float.
-  const catapultX = -7;
+  // Matches CatapultLaunchModel's cross offset for this beat. It was -7 m — the DECK default —
+  // which put an 8 m gallery under a 10 m berm directly on the 48 m strip's touchdown zone.
+  const catapultX = -70;
   const strokeM = 520;
   const railStartZ = -20;
   const rampAngleRad = 12 * Math.PI / 180;

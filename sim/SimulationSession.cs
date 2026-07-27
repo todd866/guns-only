@@ -1686,7 +1686,8 @@ public sealed class SimulationSession {
         _catapult = new CatapultLaunchModel(
             _beat.CatapultStrokeM ?? CatapultLaunchModel.StrokeDistanceM,
             _beat.CatapultEndSpeedMps ?? CatapultLaunchModel.EndDeckRelativeSpeedMps,
-            _beat.CatapultRampAngleRad ?? 0.0);
+            _beat.CatapultRampAngleRad ?? 0.0,
+            _beat.CatapultCrossOffsetM ?? CatapultLaunchModel.CatapultCrossM);
         _detents.ConfigureFor(_beat.PlayerAir, StagedThrottle());
         _pilotPhysiology = new PilotPhysiologyModel(_beat.PlayerPilotPhysiology);
         _autoGcasState = AutoGcasState.Initial(PlayerAutoGcasCapability.Available);

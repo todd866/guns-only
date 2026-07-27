@@ -317,6 +317,9 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     double? CatapultEndSpeedMps = null,
     /// Upward ramp at the end of the stroke. Zero is a flat deck.
     double? CatapultRampAngleRad = null,
+    /// Lateral offset of the launch track from the recovery centreline. Null keeps the deck default
+    /// of -7 m, which is right for a ship and wrong for a land site with room to separate them.
+    double? CatapultCrossOffsetM = null,
     /// Gear/flap architecture and limits. Null keeps the Sabre research basis, which is correct for
     /// every 1950s beat and badly wrong for anything launched above 185 KIAS.
     AirframeSystemsProfile? SystemsProfile = null,
@@ -810,6 +813,12 @@ public static class Beats {
             // airframe. The rise costs 1.29 MJ of an 88.3 MJ launch — 1.5%, the same order as the
             // air the aircraft pushes down the gallery.
             CatapultRampAngleRad: 12.0 * Math.PI / 180.0,
+            // The launch lane is 70 m off the recovery centreline. A carrier shares one deck
+            // because it has no choice; a dispersed land site has room and must use it. The launch
+            // gallery is an 8 m roofed structure under a 10 m berm, so at the deck default of -7 m
+            // it sat squarely in the touchdown zone of a 48 m strip — an aircraft on short final
+            // would fly into it. 70 m clears the strip edge by nearly 40 m.
+            CatapultCrossOffsetM: -70.0,
             // Gear and flaps qualified past the 291 KIAS the launcher hands over at.
             SystemsProfile: AirframeSystemsProfile.RapierSurrogate,
             Mission: new MissionContract(
