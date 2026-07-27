@@ -68,14 +68,15 @@ public class UkraineTerrainTruthTests {
         Assert.True(strip.Position.Y > launcherEndGround.HeightM);
 
         // The route now deliberately runs BEYOND the authored regional cell: a realistic deep
-        // intercept was judged to matter more than staying inside the map. So this walks the
-        // portion the cell is responsible for and asserts it is real ground with real clearance;
-        // past that the aircraft is over presentation apron at 21 km, which this file does not own.
-        double authoredRouteM = System.Math.Min(beat.Bandit.Position.Z, 120_000.0);
-        for (double northM = 0.0; northM <= authoredRouteM; northM += 5_000.0) {
-            Assert.True(terrain.TrySample(
-                beat.Bandit.Position.X * northM / beat.Bandit.Position.Z,
-                northM, out TerrainSample routeGround));
+        // intercept was judged to matter more than staying inside the map. Walk the portion the
+        // cell is responsible for along the strip outbound axis (west for eastern home plate).
+        Vec3D outbound = strip.Fwd;
+        double contactAlongM = (beat.Bandit.Position - strip.Position).Dot(outbound);
+        double authoredRouteM = System.Math.Min(System.Math.Max(0.0, contactAlongM), 120_000.0);
+        for (double alongM = 0.0; alongM <= authoredRouteM; alongM += 5_000.0) {
+            double eastM = strip.Position.X + outbound.X * alongM;
+            double northM = strip.Position.Z + outbound.Z * alongM;
+            Assert.True(terrain.TrySample(eastM, northM, out TerrainSample routeGround));
             Assert.Equal(TerrainSurfaceKind.Land, routeGround.Kind);
             Assert.True(beat.Bandit.Position.Y - routeGround.HeightM > 11_000.0);
         }

@@ -725,17 +725,18 @@ public static class Beats {
         // A fixed land installation reuses the catapult/arrestment geometry but explicitly opts out
         // of ship wind, burble, heave, hull and island. Its 120.5 m datum sits 2.5 m above the
         // packed Soniachne terrain at local origin (118.0 m after 0.1 m quantization).
+        // Eastern home plate: strip faces west (−π/2) so climb-out runs into the theatre.
         var carrier = new GunsOnly.Sim.Carrier(
-            deckCentre: new Vec3D(0, 120.5, 0), headingRad: 0, speedMps: 0,
+            deckCentre: new Vec3D(0, 120.5, 0), headingRad: -Math.PI / 2, speedMps: 0,
             deckAltM: 120.5, deckLengthM: 1_200, deckWidthM: 48,
             configuration: GunsOnly.Sim.Carrier.DeckConfiguration.Axial,
             kind: GunsOnly.Sim.Carrier.PlatformKind.FixedArrestingStrip);
         return new BeatSetup(
             Name: "Rapier intercept",
-            Player: new AircraftState(new Vec3D(0, 120.5, 0), 0.0, 0, 0, 0,
+            Player: new AircraftState(new Vec3D(0, 120.5, 0), 0.0, 0, -Math.PI / 2, 0,
                 FlightModel.RapierPublicDataSurrogate.MassKg),
-            // A contact high and slow ahead: the thing this aircraft was built to kill is an
-            // enabler, not a fighter.
+            // A contact high and slow west of home: the thing this aircraft was built to kill is an
+            // enabler, not a fighter. Eastbound closing toward the eastern strip.
             // 680 km out. This is deliberately BEYOND the 262 km regional truth, and that is the
             // call: a realistic deep intercept matters more than staying inside the authored cell.
             // The aircraft exists because basing sits far enough back that cratering the field is
@@ -752,7 +753,7 @@ public static class Beats {
             // The far half of the route is over presentation apron rather than authored terrain.
             // At 21 km cruise that is invisible; it would matter if the fight went low, and it is
             // the reason the parked ukraine-theatre branch wanted a bigger cell.
-            Bandit: new AircraftState(new Vec3D(18_000, 18_000, 680_000), 210, 0, Math.PI, 0,
+            Bandit: new AircraftState(new Vec3D(-680_000, 18_000, 18_000), 210, 0, Math.PI / 2, 0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() { (0.0, new PilotCommand(1.0, 0.0, 0.55, 0.0)) },
@@ -849,10 +850,10 @@ public static class Beats {
         BeatSetup sortie = RapierIntercept(configuration);
         return sortie with {
             Name = "Rapier circuits",
-            // No contact. The bandit slot still needs a state, so it is parked far above and behind
+            // No contact. The bandit slot still needs a state, so it is parked far west of home
             // where it can never become a merge, and combat is disarmed below.
             Bandit = sortie.Bandit with {
-                Position = new Vec3D(0.0, 24_000.0, -400_000.0), Speed = 200.0
+                Position = new Vec3D(-400_000.0, 24_000.0, 0.0), Speed = 200.0
             },
             UsesReactiveBandit = false,
             ScriptedIntercept = new ScriptedInterceptConfig(
