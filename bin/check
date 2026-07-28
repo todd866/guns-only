@@ -86,10 +86,10 @@ if [ "${GUNS_TEST_IN_PROCESS:-0}" = "1" ]; then
   GUNS_TEST_CONFIGURATION=Release "$repo_dir/bin/test-in-process"
   GUNS_TEST_CONFIGURATION=Release "$repo_dir/bin/test-in-process" --server
 else
-  "$dotnet_cli" test sim.Tests/GunsOnly.Sim.Tests.csproj \
+  GUNS_REPO_ROOT="$repo_dir" "$dotnet_cli" test sim.Tests/GunsOnly.Sim.Tests.csproj \
     --configuration Release --no-build --nologo \
     --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
-  "$dotnet_cli" test server.Tests/GunsOnly.Server.Tests.csproj \
+  GUNS_REPO_ROOT="$repo_dir" "$dotnet_cli" test server.Tests/GunsOnly.Server.Tests.csproj \
     --configuration Release --no-build --nologo \
     --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
 fi

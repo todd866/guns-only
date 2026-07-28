@@ -3,6 +3,9 @@ set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$repo_dir"
+# The test host runs assemblies from the (possibly out-of-repo) artifacts directory with the
+# assembly directory as CWD, so repo-reading tests cannot find the root by walking. Hand it over.
+export GUNS_REPO_ROOT="$repo_dir"
 . "$repo_dir/bin/dotnet-env"
 
 configuration=${GUNS_TEST_CONFIGURATION:-Debug}

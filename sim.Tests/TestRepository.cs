@@ -6,9 +6,14 @@ internal static class TestRepository {
     public static string Root => RootValue.Value;
 
     static string FindRoot() {
-        // bin/check builds with --artifacts-path in a scratch directory OUTSIDE the repo, so the
-        // assembly location alone cannot anchor the walk; the gate always runs from the repo, so
-        // the working directory covers it, and BaseDirectory covers in-tree dotnet test / IDEs.
+        // bin/check builds with --artifacts-path in a scratch directory OUTSIDE the repo, and the
+        // test host sets its working directory to the assembly's directory, so under the gate no
+        // walk can reach the repo — the gate scripts export GUNS_REPO_ROOT for exactly this case.
+        // The walks cover in-tree dotnet test and IDE runs.
+        string? exported = System.Environment.GetEnvironmentVariable("GUNS_REPO_ROOT");
+        if (exported is not null
+            && File.Exists(Path.Combine(exported, "GunsOnly.sln")))
+            return exported;
         foreach (string start in new[] {
             AppContext.BaseDirectory, Directory.GetCurrentDirectory()
         }) {
