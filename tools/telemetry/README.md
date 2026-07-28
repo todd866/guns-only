@@ -192,3 +192,32 @@ Run the focused suite with:
 ```sh
 node --test tools/telemetry/test/*.test.mjs
 ```
+
+## Offline Rapier flight reconstruction
+
+Once the selected immutable chunks are on disk, reconstruct a sortie locally without network,
+credential, or browser access:
+
+```sh
+node tools/telemetry/rapier_reconstruct_cli.mjs \
+  --input '/tmp/guns-only-telemetry/CHUNK-A.jsonl.gz' \
+  --input '/tmp/guns-only-telemetry/CHUNK-B.jsonl.gz' \
+  --sortie-id 'sortie-1700000000000-1' \
+  --output '/tmp/guns-only-telemetry/rapier-reconstruction.json' \
+  --csv '/tmp/guns-only-telemetry/rapier-track.csv' \
+  --video-start-epoch-ms 1700000000000 \
+  --video-duration-s 253.223
+```
+
+The reconstructor accepts only explicit local `.jsonl` or `.jsonl.gz` paths. It reuses the
+production `TelemetryStateDecoder`, merges out-of-order inputs, suppresses duplicate rows, rejects
+mixed sessions, records coverage intervals and missing sequences, and never invents state across a
+gap. The JSON output includes a compact track, numeric phase and propulsion events, extrema,
+observed control/phase dwell, video alignment, performance samples, and SHA-256 hashes of the exact
+source files. The optional CSV is intended for plots and notebooks.
+
+Mission-phase event labels come from the numeric hot-state phase code. The independently recorded
+cold text label and phase reason remain in the evidence so a transition-time UI lag is visible
+instead of silently becoming the reconstruction's ground truth. Recording alignment uses
+`header.t0 + row.t`; pass the recording's actual epoch metadata rather than inferring it from the
+filename.
