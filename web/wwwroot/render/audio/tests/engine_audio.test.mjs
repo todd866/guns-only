@@ -146,6 +146,7 @@ class FakeAudioContext {
     this.waveShapers = [];
     this.delays = [];
     this.constants = [];
+    this.resumeCalls = 0;
     FakeAudioContext.instances.push(this);
   }
 
@@ -205,6 +206,7 @@ class FakeAudioContext {
   }
 
   resume() {
+    this.resumeCalls += 1;
     this.state = "running";
     return Promise.resolve();
   }
@@ -545,6 +547,87 @@ test("flight façade shares one compressor bus, honors mute, and schedules gun r
   }
 });
 
+test("gesture enable from a preference-disabled startup resumes and becomes audible", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = class extends FakeAudioContext {
+      constructor() {
+        super();
+        this.state = "suspended";
+      }
+    };
+    const {
+      armFlightAudio,
+      setFlightAudioEnabled,
+      updateFlightAudio,
+    } = await freshModule("../flight_audio.js", "disabled-lazy-build");
+
+    setFlightAudioEnabled(false);
+    updateFlightAudio({ engine_rpm_pct: 90 });
+    assert.equal(FakeAudioContext.instances.length, 0,
+      "the render loop must not build a graph while sound is disabled");
+
+    // Mirrors commitAudioPreferenceFromGesture: enable first, then arm inside the same UI event.
+    setFlightAudioEnabled(true);
+    assert.equal(armFlightAudio(), true);
+    assert.equal(FakeAudioContext.instances.length, 1,
+      "the enabling gesture builds the graph immediately");
+    const audio = FakeAudioContext.instances.at(-1);
+    assert.equal(audio.resumeCalls, 1);
+    assert.equal(audio.state, "running", "the user gesture owns AudioContext.resume()");
+
+    updateFlightAudio({
+      applied_throttle: 0.9,
+      engine_spool_fraction: 0.9,
+      engine_rpm_pct: 90,
+      true_airspeed_kts: 420,
+      air_density_kg_m3: 0.9,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    });
+    assert.equal(latest(audio.gains[0].gain), 0.55,
+      "the next live frame reaches the audible shared-master target");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("only gesture arming resumes a suspended flight graph and suspended updates stay muted", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = class extends FakeAudioContext {
+      constructor() {
+        super();
+        this.state = "suspended";
+      }
+
+      resume() {
+        this.resumeCalls += 1;
+        return new Promise(() => {});
+      }
+    };
+    const {
+      armFlightAudio,
+      updateFlightAudio,
+    } = await freshModule("../flight_audio.js", "suspended-lifecycle");
+
+    assert.equal(armFlightAudio(), true);
+    assert.equal(armFlightAudio(), true);
+    const audio = FakeAudioContext.instances.at(-1);
+    assert.equal(audio.resumeCalls, 1, "one in-flight resume attempt per user gesture burst");
+
+    audio.gains[0].gain.value = 0.8;
+    updateFlightAudio({ engine_rpm_pct: 90 }, { muted: false });
+    updateFlightAudio({ engine_rpm_pct: 90 }, { muted: true });
+    assert.equal(audio.resumeCalls, 1, "animation frames never retry AudioContext.resume()");
+    assert.equal(latest(audio.gains[0].gain), 0,
+      "a suspended graph cannot retain a previously audible master gain");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
 test("flight façade re-projects recorded external replay instead of leaking final-live cues", async () => {
   const {
     projectFlightAudioState,
@@ -572,6 +655,8 @@ test("flight façade re-projects recorded external replay instead of leaking fin
     bandit_aircraft_id: "aircraft.su27s.public-data-surrogate.v1",
     bandit_entity_id: "entity.bandit.8",
     selected_player_gun_target_slot: 2,
+    w2_present: 1,
+    w2_alive: 1,
     w2x: 22,
     w2y: 33,
     w2z: 44,
@@ -606,9 +691,34 @@ test("flight façade re-projects recorded external replay instead of leaking fin
     "an authored exterior state is not mistaken for compact incident replay");
 });
 
+test("recorded replay atmosphere remains physical through a 200k-ft ballistic apex", async () => {
+  const { projectFlightAudioState } = await freshModule(
+    "../flight_audio.js",
+    "replay-high-atmosphere",
+  );
+  const projected = projectFlightAudioState({
+    replay_external: true,
+    suppress_unrecorded_combat_transients: true,
+    py: 60_960,
+    indicated_airspeed_kts: 10,
+    throttle: 0.2,
+    engine: 0.2,
+    g_actual: 0.1,
+  });
+  assert.ok(
+    projected.air_density_kg_m3 > 0.00027
+      && projected.air_density_kg_m3 < 0.00028,
+    "200k-ft replay uses the upper 1976 atmosphere instead of the old 32km clamp",
+  );
+  assert.ok(projected.true_airspeed_kts > 650 && projected.true_airspeed_kts < 700);
+  assert.ok(projected.mach > 1 && projected.mach < 1.2);
+});
+
 test("flight façade derives bounded closure for unselected formation traffic", async () => {
   const {
     projectFormationContactAudioState,
+    projectSelectedContactAudioState,
+    projectSupplementalContactAudioState,
   } = await freshModule("../flight_audio.js", "formation-projection");
   const state = {
     px: 0,
@@ -656,6 +766,96 @@ test("flight façade derives bounded closure for unselected formation traffic", 
     selected_player_gun_target_slot: 1,
   }, 1);
   assert.equal(selected.audible, false, "selected target is owned by the authoritative graph");
+  assert.equal(projectFormationContactAudioState({ ...state, px: null }, 1).audible, false,
+    "missing geometry is not coerced into a valid world-space zero");
+
+  const selectedState = {
+    ...state,
+    selected_player_gun_target_slot: 1,
+    bx: -800,
+    by: 1100,
+    bz: 250,
+    bandit_alive: true,
+    opponent_alive: true,
+    opponent_body_present: true,
+  };
+  const authoritative = projectSelectedContactAudioState(selectedState);
+  assert.deepEqual(
+    [authoritative.bx, authoritative.by, authoritative.bz],
+    [1000, 1000, 0],
+    "the authoritative graph follows the selected wingman",
+  );
+  const displacedPrimary = projectSupplementalContactAudioState(selectedState, 1);
+  assert.equal(displacedPrimary.audible, true);
+  assert.match(displacedPrimary.identity, /:primary$/);
+  assert.deepEqual(
+    [displacedPrimary.state.bx, displacedPrimary.state.by, displacedPrimary.state.bz],
+    [-800, 1100, 250],
+    "the selected slot's supplemental graph retains the original primary",
+  );
+
+  const incompleteSelectedState = {
+    ...selectedState,
+    w1z: null,
+  };
+  const incompleteAuthoritative = projectSelectedContactAudioState(
+    incompleteSelectedState,
+  );
+  assert.equal(incompleteAuthoritative.bandit_audio_class, "silent",
+    "incomplete selected geometry fails quiet instead of reusing the primary position");
+  assert.equal(incompleteAuthoritative.opponent_body_present, false);
+  assert.deepEqual(
+    [
+      incompleteAuthoritative.bx,
+      incompleteAuthoritative.by,
+      incompleteAuthoritative.bz,
+    ],
+    [null, null, null],
+    "the selected projection clears stale primary coordinates while it is incomplete",
+  );
+  const primaryDuringIncompleteSelection = projectSupplementalContactAudioState(
+    incompleteSelectedState,
+    1,
+  );
+  assert.equal(primaryDuringIncompleteSelection.audible, true,
+    "the displaced primary remains on the supplemental graph during a partial selected frame");
+  assert.match(primaryDuringIncompleteSelection.identity, /:primary$/);
+  assert.deepEqual(
+    [
+      primaryDuringIncompleteSelection.state.bx,
+      primaryDuringIncompleteSelection.state.by,
+      primaryDuringIncompleteSelection.state.bz,
+    ],
+    [-800, 1100, 250],
+  );
+
+  const deadSelectedState = {
+    ...selectedState,
+    w1_alive: 0,
+  };
+  assert.equal(projectSelectedContactAudioState(deadSelectedState).opponent_alive, false,
+    "the authoritative selected graph owns and silences the dead formation body");
+  const primaryBesideDeadSelection = projectSupplementalContactAudioState(
+    deadSelectedState,
+    1,
+  );
+  assert.equal(primaryBesideDeadSelection.audible, true,
+    "a dead-but-present selected body must not make the living primary disappear");
+  assert.match(primaryBesideDeadSelection.identity, /:primary$/);
+
+  const selectedAfterPrimarySettles = projectSelectedContactAudioState({
+    ...selectedState,
+    bandit_alive: false,
+    opponent_body_present: false,
+  });
+  assert.equal(selectedAfterPrimarySettles.opponent_alive, true,
+    "primary terminal state cannot silence a selected surviving wingman");
+  assert.notEqual(selectedAfterPrimarySettles.bandit_audio_class, "silent");
+  assert.equal(projectSupplementalContactAudioState({
+    ...selectedState,
+    bandit_alive: false,
+    opponent_body_present: false,
+  }, 1).audible, false, "the displaced primary stops when its own body is gone");
 
   const pattern = projectFormationContactAudioState({
     ...state,
@@ -963,6 +1163,35 @@ test("crackle impulse buffer is sparse and seeded", async () => {
   }
 });
 
+test("deterministic long-noise beds are shared within an AudioContext", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      pinkNoiseBuffer,
+      whiteNoiseBuffer,
+    } = await freshModule("../engine_audio.js", "shared-noise-beds");
+    const audio = new FakeAudioContext();
+    const pink = pinkNoiseBuffer(audio, 0x1234);
+    const white = whiteNoiseBuffer(audio, 0x5678);
+
+    assert.equal(pinkNoiseBuffer(audio, 0x1234), pink);
+    assert.equal(whiteNoiseBuffer(audio, 0x5678), white);
+    assert.equal(audio.buffers.length, 2,
+      "same-context consumers reuse immutable multi-second buffers");
+    assert.notEqual(pinkNoiseBuffer(audio, 0x1235), pink,
+      "different authored seeds retain distinct noise character");
+    assert.equal(audio.buffers.length, 3);
+
+    const otherAudio = new FakeAudioContext();
+    assert.notEqual(pinkNoiseBuffer(otherAudio, 0x1234), pink,
+      "AudioBuffers are never shared across contexts");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
 test("F-22 sealed cockpit: dark body, muted tip whine, no ram", async () => {
   const previous = globalThis.AudioContext;
   try {
@@ -993,6 +1222,87 @@ test("F-22 sealed cockpit: dark body, muted tip whine, no ram", async () => {
       "structure-borne RPM trace survives the sealed cabin");
     assert.ok(latest(voices.ramGain.gain) < 1e-6, "no ram duct on F-22");
     assert.ok(latest(voices.ramHowlGain.gain) < 1e-6, "no ram howl on F-22");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("F-22 altitude mix sheds airborne bed and grit while retaining structure and ECS", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      attachJetSampleBeds,
+      createEngineVoices,
+      updateEngineVoices,
+    } = await freshModule("../engine_audio.js", "f22-altitude");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const bed = audio.createBuffer(1, 64);
+    attachJetSampleBeds(
+      voices,
+      audio,
+      { idle: bed, mil: bed, grit: bed },
+      { character: "f22" },
+    );
+    const stateAtDensity = (density, altitudeM) => {
+      const trueAirspeedMps = Math.sqrt(2 * 16_000 / density);
+      return {
+        applied_throttle: 0.8,
+        engine_spool_fraction: 0.8,
+        max_thrust_fraction: 1.35,
+        engine_rpm_pct: 80,
+        engine_running: true,
+        altitude_m: altitudeM,
+        air_density_kg_m3: density,
+        true_airspeed_mps: trueAirspeedMps,
+        true_airspeed_kts: trueAirspeedMps * 1.9438444924406,
+        player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+      };
+    };
+    const low = stateAtDensity(1.055584657, 1_524);
+    spoolToGoverned(
+      (state) => updateEngineVoices(voices, audio, state),
+      audio,
+      low,
+    );
+    const lowAirborne = latest(voices.sampleAirborneGain.gain);
+    const lowStructure = latest(voices.sampleStructureGain.gain);
+    const lowGrit = latest(voices.sampleGritGain.gain);
+    const lowCutoff = latest(voices.sampleLp.frequency);
+    const lowEcs = latest(voices.ecsGain.gain);
+
+    const high = stateAtDensity(0.147667759, 16_764);
+    audio.currentTime += 0.25;
+    updateEngineVoices(voices, audio, high, { snap: true });
+    const highAirborne = latest(voices.sampleAirborneGain.gain);
+    const highStructure = latest(voices.sampleStructureGain.gain);
+    assert.ok(highAirborne < lowAirborne * 0.3,
+      "55k-ft airborne bed falls much harder than its low-altitude reference");
+    assert.ok(highStructure < lowStructure && highStructure > highAirborne,
+      "low structure remains after airborne energy falls away");
+    assert.ok(latest(voices.sampleGritGain.gain) < lowGrit * 0.4,
+      "thin air removes composite-bed grit");
+    assert.ok(latest(voices.sampleLp.frequency) < lowCutoff - 1_000,
+      "the surviving bed becomes materially darker");
+    assert.ok(latest(voices.ecsGain.gain) > lowEcs,
+      "pressurized-cabin airflow becomes relatively more legible");
+
+    audio.currentTime += 0.25;
+    updateEngineVoices(voices, audio, {
+      ...high,
+      altitude_m: 60_960,
+      air_density_kg_m3: undefined,
+      true_airspeed_mps: 620,
+      true_airspeed_kts: 1_205.183584,
+    }, { snap: true });
+    assert.ok(latest(voices.sampleAirborneGain.gain) < 0.01,
+      "the 1976-atmosphere fallback nearly removes airborne bed at 200k ft");
+    assert.ok(latest(voices.sampleStructureGain.gain) > 0.15,
+      "mount/shell vibration retains a quiet floor");
+    assert.equal(latest(voices.rushGain.gain), 0);
+    assert.equal(latest(voices.canopyFlowGain.gain), 0);
   } finally {
     globalThis.AudioContext = previous;
   }
@@ -1260,6 +1570,47 @@ test("gun voice follows the published weapon cadence and varies clustered report
     }, { enabled: true, triggerHeld: false });
     assert.equal(latest(voices.gunBodyGain.gain), 0, "gun body releases");
     assert.equal(latest(voices.gunGasGain.gain), 0, "gas tail releases");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("M61 report cadence warms a bounded short-noise pool instead of allocating forever", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEventVoices,
+      fireGunReports,
+    } = await freshModule("../event_audio.js", "gun-noise-pool");
+    const audio = new FakeAudioContext();
+    const voices = createEventVoices(audio, audio.destination);
+    const state = {
+      gun_firing: true,
+      player_gun_profile_id: "gun.m61a2.public-data-surrogate.v1",
+      rounds_fired: 0,
+    };
+
+    audio.currentTime = 0.1;
+    fireGunReports(voices, audio, state, { enabled: true, triggerHeld: true });
+    audio.currentTime += 0.25;
+    fireGunReports(voices, audio, state, { enabled: true, triggerHeld: true });
+    audio.currentTime += 0.25;
+    fireGunReports(voices, audio, state, { enabled: true, triggerHeld: true });
+    const warmedBufferCount = audio.buffers.length;
+    const warmedSourceCount = audio.sources.length;
+    assert.equal(voices.gunReportNoiseBuffers.filter(Boolean).length, 12,
+      "the bounded pool has one deterministic buffer per variation slot");
+
+    for (let burst = 0; burst < 8; burst += 1) {
+      audio.currentTime += 0.25;
+      fireGunReports(voices, audio, state, { enabled: true, triggerHeld: true });
+    }
+    assert.equal(audio.buffers.length, warmedBufferCount,
+      "sustained fire schedules reports without further AudioBuffer allocation");
+    assert.ok(audio.sources.length > warmedSourceCount,
+      "pooled sample data still feeds new one-shot source nodes");
   } finally {
     globalThis.AudioContext = previous;
   }

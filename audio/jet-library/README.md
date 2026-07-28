@@ -65,9 +65,10 @@ python3 -m http.server 8765 --directory analysis/jet-audio-library
 also writes hashes and ffprobe output into the ignored local vault. Use the
 lowest video resolution that preserves HUD/control/manoeuvre evidence; audio is
 kept at the best available stream quality. The default fetch ceiling is 480p
-and is verified after download because some providers omit format-height
-metadata; pass `--max-video-height 720` for a source whose cockpit evidence
-genuinely needs more detail, or `0` to retain the fetched resolution.
+for both the yt-dlp format selector and a post-download height check (some
+providers omit format-height metadata); pass `--max-video-height 720` for a
+source whose cockpit evidence genuinely needs more detail, or `0` to leave
+resolution unconstrained.
 
 `review-index` builds `analysis/jet-audio-library/review.html`, a searchable
 local gallery with synchronized video playback and a segment-annotation
@@ -76,7 +77,9 @@ mark IN/OUT against the picture, label engine/q/G/evidence and events, then use
 **Export annotations**. The page keeps drafts in browser local storage and never
 embeds or copies media into tracked files.
 
-Merge the exported file through the validator rather than hand-editing timecodes:
+Merge the exported file through the validator rather than hand-editing timecodes.
+`apply-annotations` rejects duplicate segment ids in the export before merging, so
+a colliding draft cannot silently overwrite another row:
 
 ```bash
 python3 tools/audio/jet_library.py apply-annotations \

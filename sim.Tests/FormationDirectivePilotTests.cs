@@ -145,4 +145,81 @@ public class FormationDirectivePilotTests {
             FormationTacticalRole.Bracket,
             bracket.FormationDirective.Role);
     }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(7)]
+    [InlineData(11)]
+    [InlineData(17)]
+    public void AbsoluteLanesStayDephasedAcrossLateNeutralHandoff(int handoffTick) {
+        static (int[] SupportTicks, int[] NeutralTicks,
+            AircraftState SupportState, AircraftState NeutralState) Run(int handoff) {
+            AircraftState initial = State(0.0, 2_500.0, 0.0, speed: 185.0);
+            AircraftState playerState = State(
+                0.0, 2_500.0, 1_200.0, speed: 175.0, chi: Math.PI);
+            BanditSkillProfile compactAce =
+                BanditSkillProfile.For(PilotSkill.Ace) with {
+                    LookaheadHorizonTicks = 8
+                };
+            var support = new ReactiveBandit(
+                initial,
+                FlightModel.Sabre,
+                PilotSkill.Ace,
+                profile: compactAce);
+            // This controller begins only at the handoff tick, matching a NeutralMergeBandit's
+            // late construction of its reactive pilot.
+            var neutralFight = new ReactiveBandit(
+                initial,
+                FlightModel.Sabre,
+                PilotSkill.Ace,
+                profile: compactAce);
+            support.ConfigureLookaheadCadencePhase(0);
+            neutralFight.ConfigureLookaheadCadencePhase(5);
+            var supportTicks = new List<int>();
+            var neutralTicks = new List<int>();
+            long supportSequence = 0;
+            long neutralSequence = 0;
+
+            for (int tick = 0; tick < 72; tick++) {
+                ActorObservation player =
+                    ActorObservation.Capture(playerState, sourceTick: tick);
+                support.Step(player, Dt);
+                long currentSupportSequence =
+                    support.DecisionTrace.SelectionSequence;
+                if (currentSupportSequence != supportSequence
+                    && support.DecisionTrace.CandidateCount > 1) {
+                    supportTicks.Add(tick);
+                }
+                supportSequence = currentSupportSequence;
+
+                if (tick < handoff) continue;
+                neutralFight.Step(player, Dt);
+                long currentNeutralSequence =
+                    neutralFight.DecisionTrace.SelectionSequence;
+                if (currentNeutralSequence != neutralSequence
+                    && neutralFight.DecisionTrace.CandidateCount > 1) {
+                    neutralTicks.Add(tick);
+                }
+                neutralSequence = currentNeutralSequence;
+            }
+
+            return (
+                supportTicks.ToArray(),
+                neutralTicks.ToArray(),
+                support.State,
+                neutralFight.State);
+        }
+
+        var first = Run(handoffTick);
+        var replay = Run(handoffTick);
+
+        Assert.NotEmpty(first.SupportTicks);
+        Assert.NotEmpty(first.NeutralTicks);
+        Assert.Empty(first.SupportTicks.Intersect(first.NeutralTicks));
+        Assert.Equal(first.SupportTicks, replay.SupportTicks);
+        Assert.Equal(first.NeutralTicks, replay.NeutralTicks);
+        Assert.Equal(first.SupportState, replay.SupportState);
+        Assert.Equal(first.NeutralState, replay.NeutralState);
+    }
 }

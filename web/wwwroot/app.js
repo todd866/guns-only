@@ -1458,11 +1458,15 @@ function resolveBuildIdentity({ force = false } = {}) {
       // The first matching production response identifies the deployment this app started on.
       // Later lookups are comparisons against that immutable baseline, including BFCache restores.
       if (!runningBuildInfo
+        && runningUrl === currentUrl
         && ENTRYPOINT_BUILD === current.build && current.build === buildIdentity.releaseBuild) {
         runningBuildInfo = current;
       }
       lastKnownBuildInfo = current;
-      buildIdentityLookupSucceeded = true;
+      // A preview whose same-origin metadata failed must not borrow the canonical deployment's
+      // revision and deployment id. Its production comparison is still useful, but its own
+      // provenance remains explicitly unverified until the same-origin endpoint succeeds.
+      buildIdentityLookupSucceeded = runningUrl === currentUrl || Boolean(runningBuildInfo);
       applyBuildIdentity(resolvedBuildIdentity());
     } catch {
       // A transient metadata failure must not erase a previously verified stale/current decision.
@@ -1668,6 +1672,14 @@ function commitPlayerSettings(next) {
   });
 }
 
+function commitAudioPreferenceFromGesture(nextEnabled) {
+  const audio = Boolean(nextEnabled);
+  commitPlayerSettings({ ...playerSettings, audio });
+  // AudioContext.resume() must remain in the checkbox/key event's user-activation stack. A render
+  // frame may build the graph, but browsers will not let that non-gesture frame unlock it.
+  if (audio) activeView?.hud.armAudio();
+}
+
 function settingsFocusables() {
   return [...settingsScreen.querySelectorAll(
     'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -1757,9 +1769,9 @@ for (const button of [settingsClose, settingsCloseBottom])
 settingsAutoGcas?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, autoGcas: settingsAutoGcas.checked,
 }));
-settingsAudio?.addEventListener("change", () => commitPlayerSettings({
-  ...playerSettings, audio: settingsAudio.checked,
-}));
+settingsAudio?.addEventListener("change", () => {
+  commitAudioPreferenceFromGesture(settingsAudio.checked);
+});
 settingsHighContrast?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, highContrast: settingsHighContrast.checked,
 }));
@@ -7135,7 +7147,9 @@ function installInput(view) {
     }
 
     if (event.code === "KeyM") {
+      const enablingAudio = !playerSettings.audio;
       commitPlayerSettings({ ...playerSettings, audio: !playerSettings.audio });
+      if (enablingAudio) view.hud.armAudio();
       return;
     }
 
@@ -7402,6 +7416,11 @@ async function boot() {
 
   function tick(now) {
     try {
+      // Replay state has consumers near the start of the frame (performance policy) as well as
+      // after the fresh snapshot is projected. Initialise it before either region so moving a
+      // consumer upward cannot create a temporal-dead-zone crash that freezes every flight
+      // control on the first live frame. The projection below refreshes this value for rendering.
+      let replayActive = incidentReplay?.active === true;
       // Raw (unclamped) render-frame delta: the perf telemetry must see the true stall length,
       // not the 0.25 s simulation-advance cap.
       const renderDeltaMs = now - previous;
@@ -7445,7 +7464,7 @@ async function boot() {
       syncPlayerGunTarget();
       const replayPresentation = advanceIncidentReplay(incidentReplay, state, now);
       const replayFrame = replayPresentation.frame;
-      const replayActive = replayPresentation.active;
+      replayActive = replayPresentation.active;
       if (!replayActive && pauseReasons.size === 0 && state.session_phase === "ACTIVE") {
         frameGovernor.observe(renderDeltaMs, now, activeView);
       } else {

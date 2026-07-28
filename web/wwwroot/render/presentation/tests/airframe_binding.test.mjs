@@ -3,6 +3,8 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import embeddedRapier from "../../../airframes/rapier_v1.embedded.js";
+import embeddedGunDrone from "../../../airframes/rapier_gun_drone_v1.embedded.js";
 
 const wwwroot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const repoAirframes = join(wwwroot, "../../airframes");
@@ -15,6 +17,23 @@ function extractRapierBlock() {
   assert.ok(end > start, "Rapier block end not found");
   return flightModel.slice(start, end);
 }
+
+test("embedded and staged Rapier definitions stay fully synchronized with source", () => {
+  const pairs = [
+    ["rapier.v1.json", embeddedRapier],
+    ["rapier-gun-drone.v1.json", embeddedGunDrone],
+  ];
+  for (const [fileName, embedded] of pairs) {
+    const canonical = JSON.parse(
+      readFileSync(join(repoAirframes, fileName), "utf8"),
+    );
+    const staged = JSON.parse(
+      readFileSync(join(wwwroot, "airframes", fileName), "utf8"),
+    );
+    assert.deepEqual(staged, canonical, `${fileName} staged JSON drifted from source`);
+    assert.deepEqual(embedded, canonical, `${fileName} embedded runtime data drifted from source`);
+  }
+});
 
 test("Rapier definition envelope binds to FlightModel.RapierPublicDataSurrogate", () => {
   const def = JSON.parse(readFileSync(join(wwwroot, "airframes/rapier.v1.json"), "utf8"));

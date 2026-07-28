@@ -304,10 +304,23 @@ function assertPadlockInsetAndLocator(data) {
   check(name, "inset ADI bank == ownship bank",
     Math.abs(inset.bankDeg - bankDeg) <= 1e-9, `${inset.bankDeg} vs ${bankDeg}`);
   const pitchDeg = Number(data.state.pitch_deg) || 0;
-  check(name, "inset horizon offset finite and pitch-signed",
+  const expectedHorizonOffset = pitchDeg * inset.ballRadius / 35;
+  check(name, "inset horizon uses the full body pitch without shallow-attitude clamping",
     Number.isFinite(inset.horizonOffsetPx)
-      && (pitchDeg === 0 || Math.sign(inset.horizonOffsetPx) === Math.sign(pitchDeg)),
-    `offset ${inset.horizonOffsetPx?.toFixed?.(2)} px for pitch ${pitchDeg} deg`);
+      && Math.abs(inset.horizonOffsetPx - expectedHorizonOffset) <= 1e-9,
+    `offset ${inset.horizonOffsetPx?.toFixed?.(2)} px vs `
+      + `${expectedHorizonOffset.toFixed(2)} px for pitch ${pitchDeg} deg`);
+  if (Math.abs(pitchDeg) > 35) {
+    check(name, "steep attitude lets the true horizon leave the ball",
+      Math.abs(inset.horizonOffsetPx) > inset.ballRadius,
+      `|offset| ${Math.abs(inset.horizonOffsetPx).toFixed(2)} px > `
+        + `radius ${inset.ballRadius.toFixed(2)} px`);
+  }
+  const expectedBankPointer = -Math.PI / 2 + bankDeg * DEG;
+  check(name, "bank pointer follows ownship bank on the fixed scale",
+    Math.abs(inset.bankPointerAngleRad - expectedBankPointer) <= 1e-9,
+    `${(inset.bankPointerAngleRad * RAD).toFixed(3)} deg vs `
+      + `${(expectedBankPointer * RAD).toFixed(3)} deg`);
 
   // The gate is the signed BODY-FRAME roll error, never mirrored by camera azimuth or target
   // hemisphere. Chevrons therefore always mean keyboard roll direction.

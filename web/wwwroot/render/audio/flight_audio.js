@@ -10,6 +10,7 @@ import {
   updateEngineVoices,
 } from "./engine_audio.js";
 import { resolvePropulsionCharacter } from "./audio_character.js";
+import { standardAtmosphereState } from "./atmosphere_audio.js";
 import {
   createContactAcousticVoices,
   createEventVoices,
@@ -40,6 +41,7 @@ let sampleLoad = null;
 let lastCharacter = null;
 let sampleLoadGeneration = 0;
 let lastCombatLifecycleKey = "";
+let resumePending = null;
 const sampleBedCache = new Map();
 const MPS_TO_KNOTS = 1.9438444924406;
 const KNOTS_TO_MPS = 0.5144444444444;
@@ -124,6 +126,7 @@ function ensureJetSamples(state) {
 
 function finiteNumber(...values) {
   for (const value of values) {
+    if (value == null || value === "") continue;
     const number = Number(value);
     if (Number.isFinite(number)) return number;
   }
@@ -138,36 +141,6 @@ function nonEmptyText(...values) {
   return "";
 }
 
-function isaState(altitudeM) {
-  const altitude = Math.max(-500, Math.min(32_000, finiteNumber(altitudeM) ?? 0));
-  const gravity = 9.80665;
-  const gasConstant = 287.05287;
-  let temperature;
-  let pressure;
-  if (altitude <= 11_000) {
-    temperature = 288.15 - 0.0065 * altitude;
-    pressure = 101325 * Math.pow(
-      temperature / 288.15,
-      gravity / (gasConstant * 0.0065),
-    );
-  } else if (altitude <= 20_000) {
-    temperature = 216.65;
-    pressure = 22632.06
-      * Math.exp(-gravity * (altitude - 11_000) / (gasConstant * temperature));
-  } else {
-    temperature = 216.65 + 0.001 * (altitude - 20_000);
-    const pressure20 = 5474.889;
-    pressure = pressure20 * Math.pow(
-      temperature / 216.65,
-      -gravity / (gasConstant * 0.001),
-    );
-  }
-  return {
-    density: pressure / (gasConstant * temperature),
-    speedOfSoundMps: Math.sqrt(1.4 * gasConstant * temperature),
-  };
-}
-
 /// Incident replay deliberately overlays a compact recorded frame onto the final live snapshot.
 /// Re-project the audio-owned continuous fields so final-live RPM, q, G, speed-brake, RCS and GCAS
 /// state cannot leak into the historical external pass. Ordinary live/external preview snapshots
@@ -179,7 +152,7 @@ export function projectFlightAudioState(state) {
   if (!recordedReplay) return state;
 
   const altitudeM = finiteNumber(state.py, state.altitude_m) ?? 0;
-  const atmosphere = isaState(altitudeM);
+  const atmosphere = standardAtmosphereState(altitudeM);
   const indicatedKts = Math.max(0,
     finiteNumber(state.indicated_airspeed_kts, state.speed_kts, state.ground_speed_kts) ?? 0);
   // The carrier recorder stores KIAS, not TAS. Recover the no-wind standard-atmosphere TAS which
@@ -230,27 +203,137 @@ export function projectSelectedContactAudioState(state) {
   const selectedZ = selectedPrefix ? finiteNumber(state[`${selectedPrefix}z`]) : null;
   const selectedPositionValid = [selectedX, selectedY, selectedZ]
     .every((value) => value != null);
+  const selectedPresent = selectedPrefix
+    ? state[`${selectedPrefix}_present`] === 1
+      || state[`${selectedPrefix}_present`] === true
+    : state.opponent_body_present !== false;
+  const selectedAlive = selectedPrefix
+    ? selectedPresent && (
+      state[`${selectedPrefix}_alive`] === 1
+      || state[`${selectedPrefix}_alive`] === true
+    )
+    : state.opponent_alive !== false;
+  // The kernel's scalar range follows the selected slot before all three world-space
+  // coordinates necessarily arrive. Never let stale primary bx/by/bz localize that selected
+  // aircraft. Keep the authoritative graph quiet until the position is complete; the matching
+  // supplemental graph can still carry the displaced primary.
+  const selectedGeometryReady = !selectedPrefix || selectedPositionValid;
+  const selectedAcousticallyPresent = selectedPresent && selectedGeometryReady;
   const aircraftId = nonEmptyText(
     state.bandit_aircraft_id,
     state.bandit_audio_class,
     state.bandit_presentation_id,
   );
   const entityId = nonEmptyText(state.bandit_entity_id, "entity.bandit");
-  const absent = state.opponent_body_present === false;
+  const absent = !selectedAcousticallyPresent;
+  const unrecordedReplay = state.replay_external === true
+    && state.suppress_unrecorded_combat_transients === true;
   if (!aircraftId && !absent) return state;
   return {
     ...state,
     ...(aircraftId
       ? { bandit_aircraft_id: `${aircraftId}#${entityId}:slot-${selectedSlot}` }
       : {}),
-    ...(selectedPositionValid
-      ? { bx: selectedX, by: selectedY, bz: selectedZ }
+    ...(selectedPrefix
+      ? {
+        bx: selectedPositionValid ? selectedX : null,
+        by: selectedPositionValid ? selectedY : null,
+        bz: selectedPositionValid ? selectedZ : null,
+      }
       : {}),
+    opponent_body_present: selectedAcousticallyPresent,
+    opponent_alive: selectedAlive && selectedGeometryReady,
     air_temperature_c: finiteNumber(
       state.air_temperature_c,
       state.static_temperature_c,
     ) ?? 15,
-    ...(absent ? { bandit_audio_class: "silent" } : {}),
+    ...(absent || unrecordedReplay ? { bandit_audio_class: "silent" } : {}),
+  };
+}
+
+/// When a formation slot owns the authoritative selected-contact graph, reuse that slot's
+/// supplemental graph for the original primary. This keeps all four aircraft audible without
+/// allocating a fifth contact graph.
+export function projectPrimaryContactAudioState(
+  state,
+  { previousRangeM = null, elapsedSeconds = null, smoothedClosureKts = 0 } = {},
+) {
+  if (!state || typeof state !== "object") return null;
+  const selectedSlot = Math.max(
+    0,
+    Math.trunc(finiteNumber(state.selected_player_gun_target_slot) ?? 0),
+  );
+  if (selectedSlot < 1 || selectedSlot > 3) return null;
+
+  const present = state.opponent_body_present !== false;
+  const alive = state.bandit_alive !== false;
+  const px = finiteNumber(state.px);
+  const py = finiteNumber(state.py);
+  const pz = finiteNumber(state.pz);
+  const x = finiteNumber(state.bx);
+  const y = finiteNumber(state.by);
+  const z = finiteNumber(state.bz);
+  const positionValid = [px, py, pz, x, y, z].every((value) => value != null);
+  const rangeM = present && positionValid
+    ? Math.hypot(x - px, y - py, z - pz)
+    : Infinity;
+  const dt = finiteNumber(elapsedSeconds);
+  const priorRange = finiteNumber(previousRangeM);
+  const derivativeKts = Number.isFinite(rangeM)
+    && priorRange != null
+    && dt != null
+    && dt >= 1 / 240
+    && dt <= 1
+    ? Math.max(-1200, Math.min(1200, (priorRange - rangeM) / dt * MPS_TO_KNOTS))
+    : 0;
+  const closureKts = (finiteNumber(smoothedClosureKts) ?? 0) * 0.68
+    + derivativeKts * 0.32;
+  const aircraftId = nonEmptyText(
+    state.bandit_aircraft_id,
+    state.bandit_audio_class,
+    state.bandit_presentation_id,
+    "aircraft.fighter-jet",
+  );
+  const entityId = nonEmptyText(state.bandit_entity_id, "entity.bandit");
+  const identity = `${aircraftId}#${entityId}:primary`;
+  const unrecordedReplay = state.replay_external === true
+    && state.suppress_unrecorded_combat_transients === true;
+
+  return {
+    audible: present && alive && positionValid && !unrecordedReplay,
+    identity,
+    rangeM,
+    closureKts,
+    state: {
+      bandit_aircraft_id: identity,
+      bandit_audio_class: state.bandit_audio_class,
+      opponent_alive: present && alive,
+      opponent_body_present: present,
+      range_m: rangeM,
+      closure_kts: closureKts,
+      player_aircraft_id: state.player_aircraft_id,
+      audio_profile_id: state.audio_profile_id,
+      audio_perspective: state.audio_perspective,
+      camera_perspective: state.camera_perspective,
+      replay_external: state.replay_external,
+      replay_camera: state.replay_camera,
+      px,
+      py,
+      pz,
+      bx: x,
+      by: y,
+      bz: z,
+      pfx: state.pfx,
+      pfy: state.pfy,
+      pfz: state.pfz,
+      plx: state.plx,
+      ply: state.ply,
+      plz: state.plz,
+      air_temperature_c: finiteNumber(
+        state.air_temperature_c,
+        state.static_temperature_c,
+      ) ?? 15,
+    },
   };
 }
 
@@ -345,19 +428,36 @@ export function projectFormationContactAudioState(
   };
 }
 
+/// Select the object assigned to a supplemental graph. Ordinarily it is w1..w3; for the currently
+/// selected live wingman, the authoritative graph owns that wingman and this graph carries the
+/// displaced primary instead.
+export function projectSupplementalContactAudioState(state, slot, tracking = {}) {
+  const formation = projectFormationContactAudioState(state, slot, tracking);
+  if (!formation) return null;
+  const selectedSlot = Math.max(
+    0,
+    Math.trunc(finiteNumber(state?.selected_player_gun_target_slot) ?? 0),
+  );
+  const prefix = `w${slot}`;
+  const selectedOwnsAuthoritativeGraph = selectedSlot === slot
+    && (state?.[`${prefix}_present`] === 1 || state?.[`${prefix}_present`] === true);
+  if (!selectedOwnsAuthoritativeGraph) return formation;
+  return projectPrimaryContactAudioState(state, tracking) ?? formation;
+}
+
 function updateFormationContacts(state, live) {
   const now = context.currentTime;
   for (let index = 0; index < formationContactVoices.length; index++) {
     const track = formationContactTracks[index];
     const elapsedSeconds = track.at == null ? null : now - track.at;
-    let projected = projectFormationContactAudioState(state, index + 1, {
+    let projected = projectSupplementalContactAudioState(state, index + 1, {
       previousRangeM: track.rangeM,
       elapsedSeconds,
       smoothedClosureKts: track.closureKts,
     });
     if (!projected) continue;
     if (track.identity && projected.identity !== track.identity) {
-      projected = projectFormationContactAudioState(state, index + 1);
+      projected = projectSupplementalContactAudioState(state, index + 1);
     }
     updateContactAcousticVoices(
       formationContactVoices[index],
@@ -402,8 +502,16 @@ export function armFlightAudio(state = null) {
       disabled = true;
       return false;
     }
-    if (context.state === "suspended") {
-      context.resume()?.catch?.(() => {});
+    if (context.state === "suspended" && !resumePending) {
+      const attempt = context.resume();
+      if (attempt?.then) {
+        const pending = Promise.resolve(attempt)
+          .catch(() => {})
+          .finally(() => {
+            if (resumePending === pending) resumePending = null;
+          });
+        resumePending = pending;
+      }
     }
     ensureJetSamples(state);
     return true;
@@ -436,12 +544,16 @@ export function updateFlightAudio(state, {
 } = {}) {
   if (disabled) return;
   try {
+    // Preference-off audio stays allocation-free until the user explicitly enables it.
+    if (!enabled && !context) return;
     if (!context && !build()) {
       disabled = true;
       return;
     }
     if (context.state === "suspended") {
-      context.resume()?.catch?.(() => {});
+      // Updates run every animation frame and are not a reliable user gesture. Keep the graph
+      // inaudible here; armFlightAudio owns the single in-flight resume attempt.
+      master.gain.setTargetAtTime(0, context.currentTime, 0.02);
       return;
     }
 

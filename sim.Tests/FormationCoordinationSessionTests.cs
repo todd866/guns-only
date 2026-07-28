@@ -108,6 +108,61 @@ public class FormationCoordinationSessionTests {
     }
 
     [Fact]
+    public void PlayerDestructionClearsThePairOnTheTerminalTransition() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        session.StepFixed();
+
+        Assert.NotNull(session.FormationCoordinationAgeSeconds);
+        Assert.NotEqual(
+            FormationTacticalRole.Independent,
+            session.PrimaryFormationRole);
+        Assert.NotEqual(
+            FormationTacticalRole.Independent,
+            session.WingmanFormationRole(0));
+
+        session.RecordPlayerHitsForTest(
+            session.Beat.CombatRules.PlayerHitsToDefeat);
+        session.StepFixed();
+
+        Assert.NotEqual(
+            AircraftTerminalState.Flying,
+            session.PlayerTerminalState);
+        Assert.Null(session.FormationCoordinationAgeSeconds);
+        Assert.False(session.FormationCoordinationStale);
+        Assert.Equal(
+            FormationTacticalRole.Independent,
+            session.PrimaryFormationRole);
+        Assert.Equal(
+            FormationTacticalRole.Independent,
+            session.WingmanFormationRole(0));
+    }
+
+    [Fact]
+    public void ProductionTickCadenceExposesAndRefreshesTheStaleWindow() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        bool observedStaleWindow = false;
+        bool observedRadioRefresh = false;
+
+        for (int tick = 0; tick < 260; tick++) {
+            session.StepFixed();
+            observedStaleWindow |= session.FormationCoordinationStale;
+            if (observedStaleWindow
+                && !session.FormationCoordinationStale
+                && session.FormationCoordinationAgeSeconds is not null) {
+                observedRadioRefresh = true;
+                break;
+            }
+        }
+
+        Assert.True(observedStaleWindow,
+            "ordinary SimulationSession stepping never reached the conservative fallback");
+        Assert.True(observedRadioRefresh,
+            "the delayed collection did not restore a fresh shared picture");
+    }
+
+    [Fact]
     public void ModernAceDuelRemainsIndependent() {
         var session = new SimulationSession(9);
         session.Begin();
@@ -125,6 +180,16 @@ public class FormationCoordinationSessionTests {
     public void CoordinatedOpeningStillCompletesTheNeutralMerge() {
         var session = new SimulationSession(7);
         var merge = Assert.IsType<NeutralMergeBandit>(session.Bandit);
+        var support = Assert.IsType<ReactiveBandit>(
+            Assert.Single(session.Wingmen).Bandit);
+        int primaryPhase = Assert.IsType<int>(merge.LookaheadCadencePhase);
+        int supportPhase = Assert.IsType<int>(support.LookaheadCadencePhase);
+        int phaseSeparation = Math.Abs(primaryPhase - supportPhase);
+        phaseSeparation = Math.Min(
+            phaseSeparation,
+            ReactiveBandit.LookaheadDecisionCadenceTicks - phaseSeparation);
+        Assert.True(phaseSeparation > 2,
+            $"formation lookahead lanes are only {phaseSeparation} ticks apart");
         session.Begin();
 
         for (int tick = 0;
@@ -134,5 +199,6 @@ public class FormationCoordinationSessionTests {
 
         Assert.True(merge.FirstPassComplete,
             "formation coordination prevented the authored neutral-merge handoff");
+        Assert.Equal(primaryPhase, merge.LookaheadCadencePhase);
     }
 }

@@ -278,4 +278,51 @@ public class FormationCoordinationTests {
         Assert.True(stale.SharedContact.Confidence
             < fresh.SharedContact.Confidence);
     }
+
+    [Fact]
+    public void OrdinaryTickCadenceFallsBackWhileTheNextRadioSampleIsInFlight() {
+        var coordinator = new EnemyPairCoordinator();
+        AircraftState primary = State(-350.0, -1_100.0, chi: 0.0);
+        AircraftState support = State(420.0, -1_250.0, chi: 0.0);
+        var pilot = new ReactiveBandit(
+            primary,
+            FlightModel.Su27SPublicDataSurrogate,
+            PilotSkill.Novice);
+
+        for (long tick = 0;
+            tick <= EnemyPairCoordinator.EvaluationIntervalTicks
+                + EnemyPairCoordinator.MessageDelayTicks;
+            tick++) {
+            coordinator.Step(
+                tick,
+                Contact(tick),
+                Primary(primary),
+                Support(support));
+            pilot.AcceptFormationDirective(
+                coordinator.DirectiveFor(PrimaryId, tick));
+
+            if (tick == EnemyPairCoordinator.SharedContactStaleAfterTicks) {
+                Assert.False(coordinator.SharedContactStale);
+                Assert.Equal(
+                    FormationTacticalRole.Pressure,
+                    pilot.PolicyMemory.FormationRole);
+            } else if (tick
+                == EnemyPairCoordinator.SharedContactStaleAfterTicks + 1L) {
+                Assert.True(coordinator.SharedContactStale);
+                Assert.Equal(
+                    FormationTacticalRole.Independent,
+                    pilot.PolicyMemory.FormationRole);
+            }
+        }
+
+        // Tick 222 delivers the sample collected at tick 180. The fallback is temporary and the
+        // held pressure assignment becomes usable again as soon as that real radio update arrives.
+        Assert.False(coordinator.SharedContactStale);
+        Assert.Equal(
+            EnemyPairCoordinator.MessageDelayTicks,
+            coordinator.SharedContactAgeTicks);
+        Assert.Equal(
+            FormationTacticalRole.Pressure,
+            pilot.PolicyMemory.FormationRole);
+    }
 }

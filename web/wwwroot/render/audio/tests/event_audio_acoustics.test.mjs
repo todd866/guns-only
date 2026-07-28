@@ -277,6 +277,35 @@ test("speedbrake roar follows dynamic pressure and edge mechanisms remain audibl
   assert.ok(latest(voices.brakeFlutterDepth.gain) > 0.01, "q drives shallow flutter");
 });
 
+test("aged F-22 canopy flex cannot whistle on high TAS without dynamic pressure", async () => {
+  const {
+    createEventVoices,
+    updateAirframeCueVoices,
+  } = await freshEventAudio("canopy-q-gate");
+  const audio = new FakeAudioContext();
+  const voices = createEventVoices(audio, audio.destination);
+  const base = {
+    player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    pilot_gz: 6.5,
+    true_airspeed_kts: 1_200,
+  };
+
+  updateAirframeCueVoices(voices, audio, {
+    ...base,
+    air_density_kg_m3: 0.000274593,
+  });
+  assert.equal(latest(voices.canopyGain.gain), 0);
+  assert.equal(latest(voices.canopy2Gain.gain), 0);
+
+  audio.currentTime = 0.1;
+  updateAirframeCueVoices(voices, audio, {
+    ...base,
+    air_density_kg_m3: 0.5,
+  });
+  assert.ok(latest(voices.canopyGain.gain) > 0.04);
+  assert.ok(latest(voices.canopy2Gain.gain) > 0.02);
+});
+
 test("contact classifier recognizes fighter, AWACS, Tu-95, and silent airframes", async () => {
   const { resolveContactAcousticClass } = await freshEventAudio("classification");
   assert.equal(resolveContactAcousticClass({

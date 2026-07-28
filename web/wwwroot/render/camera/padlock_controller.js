@@ -195,6 +195,28 @@ export function padlockOrientationModel({
 }
 
 /**
+ * Body-fixed attitude geometry for the compact padlock ADI. Thirty-five degrees moves the true
+ * horizon to the edge of the ball, so a genuinely steep climb/descent can show all sky/all ground
+ * instead of pinning a misleading horizon inside the instrument. Bank remains a wrapped physical
+ * ownship angle; it is never derived from the off-axis camera.
+ */
+export function padlockAttitudeModel({
+  pitchDeg = 0,
+  bankDeg = 0,
+  radius = 55,
+} = {}) {
+  const ballRadius = clamp(finite(radius, 55), 20, 120);
+  const boundedPitchDeg = clamp(finite(pitchDeg), -90, 90);
+  const pixelsPerDegree = ballRadius / 35;
+  return {
+    pitchDeg: boundedPitchDeg,
+    bankRad: wrapAngle(finite(bankDeg) * DEG),
+    pixelsPerDegree,
+    horizonOffsetPx: boundedPitchDeg * pixelsPerDegree,
+  };
+}
+
+/**
  * Resolve the physical roll needed to put positive body lift in the target plane. targetRight and
  * targetUp are components of the normalized target direction in the aircraft body frame. Unlike a
  * screen-space target offset, this error is independent of where the padlock camera points: a

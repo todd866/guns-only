@@ -19,6 +19,7 @@ public sealed class NeutralMergeBandit :
     readonly PilotSkill _skill;
     readonly BanditSkillProfile _profile;
     readonly int? _doctrineIndex;
+    int? _lookaheadCadencePhase;
     GunsOnly.Sim.Environment.ITerrainSurface? _terrain;
     ReactiveBandit? _fight;
     IWindField? _wind;
@@ -75,6 +76,8 @@ public sealed class NeutralMergeBandit :
     /// opening does not revert to the beat's authored mount when the reactive pilot takes over.
     public AircraftParams BriefedAircraftParameters => _parameters;
     public AircraftParams? FightAircraftParameters => _fight?.AircraftParameters;
+    internal int? LookaheadCadencePhase => _fight?.LookaheadCadencePhase
+        ?? _lookaheadCadencePhase;
     /// The tier this actor fields across both phases: the scripted merge is briefed at the same
     /// tier its post-pass ReactiveBandit fights at, so snapshot consumers read one stable value.
     public PilotSkill Skill => _skill;
@@ -101,6 +104,14 @@ public sealed class NeutralMergeBandit :
     public void AcceptFormationDirective(in FormationDirective directive) {
         _formationDirective = directive;
         _fight?.AcceptFormationDirective(directive);
+    }
+
+    /// Cache the actor's absolute lookahead lane across the authored neutral-pass handoff.
+    internal void ConfigureLookaheadCadencePhase(int phase) {
+        if (phase < 0 || phase >= ReactiveBandit.LookaheadDecisionCadenceTicks)
+            throw new System.ArgumentOutOfRangeException(nameof(phase));
+        _lookaheadCadencePhase = phase;
+        _fight?.ConfigureLookaheadCadencePhase(phase);
     }
 
     public bool WantsToFire(in ActorObservation player) =>
@@ -159,6 +170,8 @@ public sealed class NeutralMergeBandit :
             Wind = _wind,
             Atmosphere = _atmosphere
         };
+        if (_lookaheadCadencePhase is int phase)
+            fight.ConfigureLookaheadCadencePhase(phase);
         fight.SeedEnginePowerFraction(_mergeSim.ThrustFraction);
         fight.AcceptFormationDirective(_formationDirective);
         _fight = fight;

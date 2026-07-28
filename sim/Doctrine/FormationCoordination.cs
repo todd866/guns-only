@@ -46,7 +46,11 @@ public sealed class EnemyPairCoordinator {
     public const int EvaluationIntervalTicks = 180;
     public const int MessageDelayTicks = 42;
     public const int MinimumRoleDwellTicks = 360;
-    public const int SharedContactStaleAfterTicks = 240;
+    // A delivered picture is trusted for one collection interval. The next sample still spends
+    // MessageDelayTicks in the radio path, so ordinary one-tick-at-a-time session stepping now has
+    // a short, honest stale window before each refresh instead of making the stale fallback
+    // reachable only by skipping hundreds of coordinator ticks in one call.
+    public const int SharedContactStaleAfterTicks = EvaluationIntervalTicks;
     public const double ExtendPairSeparationM = 850.0;
 
     readonly record struct PendingAssignment(

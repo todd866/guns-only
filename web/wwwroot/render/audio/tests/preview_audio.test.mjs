@@ -21,6 +21,11 @@ test("cue matrix exposes every controlled F-22 and traffic comparison", () => {
     "f22_power_augmented",
     "f22_q_low",
     "f22_q_high",
+    "f22_altitude_5k",
+    "f22_altitude_30k",
+    "f22_altitude_55k",
+    "f22_altitude_200k",
+    "f22_altitude_sweep",
     "f22_g_3",
     "f22_g_6",
     "f22_g_negative_2",
@@ -63,6 +68,25 @@ test("dynamic-pressure comparison holds F-22 engine controls constant", () => {
   assert.equal(low.engine_rpm_pct, high.engine_rpm_pct);
   assert.equal(low.engine_spool_fraction, high.engine_spool_fraction);
   assert.ok(dynamicPressurePa(high) > dynamicPressurePa(low) * 6);
+});
+
+test("altitude comparison isolates density before the ballistic-apex reference", () => {
+  const controlled = ["5k", "30k", "55k"]
+    .map((altitude) => cueStateAt(`f22_altitude_${altitude}`));
+  const referenceQ = dynamicPressurePa(controlled[0]);
+  for (const state of controlled) {
+    assert.equal(state.applied_throttle, controlled[0].applied_throttle);
+    assert.equal(state.engine_rpm_pct, controlled[0].engine_rpm_pct);
+    assert.ok(Math.abs(dynamicPressurePa(state) - referenceQ) < 0.01);
+  }
+  assert.ok(controlled[0].air_density_kg_m3 > controlled[1].air_density_kg_m3);
+  assert.ok(controlled[1].air_density_kg_m3 > controlled[2].air_density_kg_m3);
+
+  const apex = cueStateAt("f22_altitude_200k");
+  assert.equal(apex.altitude_m, 60_960);
+  assert.ok(apex.air_density_kg_m3 < 0.0003);
+  assert.ok(dynamicPressurePa(apex) < 100);
+  assert.equal(cueStateAt("f22_altitude_sweep", 9).altitude_m, 60_960);
 });
 
 test("signed-G references hold engine and air state constant", () => {

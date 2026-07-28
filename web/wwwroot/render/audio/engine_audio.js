@@ -11,6 +11,7 @@
 // See audio_character.js + samples/jet/SOURCES.md.
 
 import { resolvePropulsionCharacter } from "./audio_character.js";
+import { standardAtmosphereDensity } from "./atmosphere_audio.js";
 
 const FAN_ORDER_RATIOS = Object.freeze([
   1.0, 1.97, 2.99, 4.03, 4.96, 6.02, 7.05, 8.11,
@@ -44,6 +45,11 @@ const DEFAULT_SAMPLE_BASE = new URL("./samples/jet/", import.meta.url).href;
 let context = null;
 let voices = null;
 let disabled = false;
+// AudioBuffers are immutable sample data and may safely feed multiple BufferSource nodes. Keep
+// one deterministic long-noise bed per context/seed instead of rebuilding multi-second buffers
+// for every contact voice in a formation.
+const pinkNoiseBuffers = new WeakMap();
+const whiteNoiseBuffers = new WeakMap();
 
 function makeDistortionCurve(amount = 28) {
   const samples = 2048;
@@ -95,8 +101,9 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
   }
   propBus.connect(cabinLp).connect(liveVca).connect(output);
 
-  // Sample bed bus — real jet loops bypass the aggressive cabin darkening (they already have
-  // the right spectrum). HP cuts rumble that reads as blade-pass; mild LP kills decode hiss.
+  // Sample bed bus. F-22 references are a composite cockpit recording, so split them into a
+  // low structure path that survives thin air and an airborne/mid-high path that does not.
+  // Rapier retains its original single filtered path through sampleAirborneGain.
   const sampleBus = audioContext.createGain();
   sampleBus.gain.value = 1;
   const sampleHp = audioContext.createBiquadFilter();
@@ -107,7 +114,23 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
   sampleLp.type = "lowpass";
   sampleLp.frequency.value = 12000;
   sampleLp.Q.value = 0.5;
-  sampleBus.connect(sampleHp).connect(sampleLp).connect(liveVca);
+  const sampleAirborneGain = audioContext.createGain();
+  sampleAirborneGain.gain.value = 0;
+  sampleBus
+    .connect(sampleHp)
+    .connect(sampleLp)
+    .connect(sampleAirborneGain)
+    .connect(liveVca);
+  const sampleStructureLp = audioContext.createBiquadFilter();
+  sampleStructureLp.type = "lowpass";
+  sampleStructureLp.frequency.value = 680;
+  sampleStructureLp.Q.value = 0.55;
+  const sampleStructureGain = audioContext.createGain();
+  sampleStructureGain.gain.value = 0;
+  sampleBus
+    .connect(sampleStructureLp)
+    .connect(sampleStructureGain)
+    .connect(liveVca);
 
   const sampleIdleGain = audioContext.createGain();
   sampleIdleGain.gain.value = 0;
@@ -512,6 +535,9 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
     sampleBus,
     sampleHp,
     sampleLp,
+    sampleAirborneGain,
+    sampleStructureLp,
+    sampleStructureGain,
     sampleIdleGain,
     sampleMilGain,
     sampleGritGain,
@@ -742,10 +768,19 @@ function buildStandalone() {
 }
 
 export function pinkNoiseBuffer(audioContext, initialSeed) {
+  const seedKey = initialSeed | 0;
+  let buffers = pinkNoiseBuffers.get(audioContext);
+  if (!buffers) {
+    buffers = new Map();
+    pinkNoiseBuffers.set(audioContext, buffers);
+  }
+  const cached = buffers.get(seedKey);
+  if (cached) return cached;
+
   const frames = Math.max(1, Math.floor(audioContext.sampleRate * 4));
   const buffer = audioContext.createBuffer(1, frames, audioContext.sampleRate);
   const channel = buffer.getChannelData(0);
-  let seed = initialSeed & 0x7fffffff;
+  let seed = seedKey & 0x7fffffff;
   let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
   for (let i = 0; i < frames; i++) {
     seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
@@ -759,18 +794,29 @@ export function pinkNoiseBuffer(audioContext, initialSeed) {
     channel[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
     b6 = white * 0.115926;
   }
+  buffers.set(seedKey, buffer);
   return buffer;
 }
 
 export function whiteNoiseBuffer(audioContext, initialSeed) {
+  const seedKey = initialSeed | 0;
+  let buffers = whiteNoiseBuffers.get(audioContext);
+  if (!buffers) {
+    buffers = new Map();
+    whiteNoiseBuffers.set(audioContext, buffers);
+  }
+  const cached = buffers.get(seedKey);
+  if (cached) return cached;
+
   const frames = Math.max(1, Math.floor(audioContext.sampleRate * 2));
   const buffer = audioContext.createBuffer(1, frames, audioContext.sampleRate);
   const channel = buffer.getChannelData(0);
-  let seed = initialSeed & 0x7fffffff;
+  let seed = seedKey & 0x7fffffff;
   for (let i = 0; i < frames; i++) {
     seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
     channel[i] = seed / 0x3fffffff - 1;
   }
+  buffers.set(seedKey, buffer);
   return buffer;
 }
 
@@ -895,13 +941,21 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   voiceGraph.lastQ01 = q01;
   const rpm = voiceGraph.spoolRpm;
   const density = atmosphereDensity(state);
-  const densityScale = 0.14 + 0.86 * Math.pow(clamp01(density / SEA_LEVEL_DENSITY), 0.55);
+  const densityRatio = clamp01(density / SEA_LEVEL_DENSITY);
+  const densityScale = 0.14 + 0.86 * Math.pow(densityRatio, 0.55);
+  // A sealed cockpit receives two different physical paths. Exterior/exhaust energy collapses
+  // with mass flow; mounts and the pressure shell retain a quiet vibration floor.
+  const f22AirbornePresence = Math.pow(densityRatio, 0.72);
+  const f22StructurePresence = 0.22 + 0.78 * Math.pow(densityRatio, 0.35);
+  const f22ThinAir = 1 - f22AirbornePresence;
   const thrustFrac = thrustFraction(state, deliveredPower, rpm);
   const rcsAuthority = clamp01(finiteNumber(state?.rapier_rcs_authority) ?? 0);
   const coastGate = densityScale < 0.28 && thrustFrac < 0.14 && (q01 < 0.12 || rcsAuthority > 0.45)
     ? 0.035 + 0.04 * thrustFrac
     : 1;
   const propulsionPresence = densityScale * coastGate;
+  const airbornePresence = sealedF22 ? f22AirbornePresence * coastGate : propulsionPresence;
+  const structurePresence = sealedF22 ? f22StructurePresence * coastGate : propulsionPresence;
   // Thin air still carries ram + rush; turbine beds collapse harder than duct voice.
   const thinAir = 1 - densityScale;
   const rushPresence = Math.max(coastGate, 0.12 + 0.88 * densityScale);
@@ -996,8 +1050,16 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     }
     // Turbine beds fade with handover; thin air ducks them further.
     // F-22 has no ram share — full bed presence across Mach.
-    const bedPresence = turbineShare * propulsionPresence * samplePresence
-      * (isF22 ? (0.75 + 0.25 * densityScale) : (0.55 + 0.45 * densityScale));
+    const bedPresence = turbineShare * samplePresence
+      * (isF22
+        ? 1
+        : propulsionPresence * (0.55 + 0.45 * densityScale));
+    nowRamp(voiceGraph.sampleAirborneGain.gain,
+      isF22 ? 0.82 * f22AirbornePresence * coastGate : 1, 0.24);
+    nowRamp(voiceGraph.sampleStructureGain.gain,
+      isF22 ? 0.72 * f22StructurePresence * coastGate : 0, 0.3);
+    nowRamp(voiceGraph.sampleStructureLp.frequency,
+      isF22 ? 520 + power * 180 + f22StructurePresence * 120 : 680, 0.3);
     nowRamp(voiceGraph.sampleIdleGain.gain,
       (0.14 + 0.32 * (1 - power)) * (0.55 + 0.45 * turbineShare) * bedPresence
         * (isF22 ? 1.35 : 1), 0.16);
@@ -1007,21 +1069,27 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     nowRamp(voiceGraph.sampleGritGain.gain,
       ((0.05 + 0.6 * Math.pow(power, 1.25)) * turbineShare
         + accent * 0.35 * turbineShare)
-        * bedPresence * (isF22 ? 0.85 : 1), 0.08);
+        * bedPresence
+        * (isF22 ? 0.85 * (0.08 + 0.92 * f22AirbornePresence) : 1), 0.08);
     if (voiceGraph.sampleHp) {
-      // F-22 cockpit beds need the sub thump — keep HP near infrasonic.
-      // Rapier: cut rumble that reads as blade-pass; rise with ram handover.
+      // F-22 sub-thump now lives on sampleStructureLp. Keep only airborne/mid-high content here.
+      // Rapier still cuts rumble that reads as blade-pass and rises with ram handover.
       nowRamp(voiceGraph.sampleHp.frequency,
-        isF22 ? 22 + power * 8 : 90 + power * 35 + handover * 420, 0.22);
+        isF22
+          ? 260 + f22ThinAir * 180 + power * 30
+          : 90 + power * 35 + handover * 420,
+        0.22);
     }
     nowRamp(voiceGraph.sampleLp.frequency,
       isF22
-        ? 2800 + power * 900 + q01 * 400
+        ? 1200 + f22AirbornePresence * (1600 + power * 900 + q01 * 400)
         : 9500 + power * 4000 - handover * 3500 - thinAir * 1200, 0.22);
   } else {
     nowRamp(voiceGraph.sampleIdleGain.gain, 0, 0.05);
     nowRamp(voiceGraph.sampleMilGain.gain, 0, 0.05);
     nowRamp(voiceGraph.sampleGritGain.gain, 0, 0.05);
+    nowRamp(voiceGraph.sampleAirborneGain.gain, 0, 0.05);
+    nowRamp(voiceGraph.sampleStructureGain.gain, 0, 0.05);
   }
 
   // ECS / inverter stay deliberately subtle. They are most legible at idle and zoom-coast,
@@ -1029,10 +1097,12 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   const equipmentLive = targetRpm > 0.08 || state?.engine_running === true;
   const equipment = equipmentLive ? 1 : 0.18;
   const cabinSeal = sealedF22 ? 1.35 : isF22 ? 0.18 : isRapier ? 0.92 : 1;
+  const pressurizationLift = sealedF22 ? 1 + 0.32 * f22ThinAir : 1;
   nowRamp(voiceGraph.ecsHighpass.frequency, 150 + power * 120 + q01 * 80, 0.35);
   nowRamp(voiceGraph.ecsBandpass.frequency, 610 + power * 380 + q01 * 260, 0.35);
   nowRamp(voiceGraph.ecsGain.gain,
-    (0.009 + 0.013 * rpm + 0.006 * (1 - power)) * equipment * cabinSeal, 0.45);
+    (0.009 + 0.013 * rpm + 0.006 * (1 - power))
+      * equipment * cabinSeal * pressurizationLift, 0.45);
   nowRamp(voiceGraph.inverterOsc.frequency, 400, 0.8);
   nowRamp(voiceGraph.inverterFilter.frequency, 400, 0.8);
   nowRamp(voiceGraph.inverterGain.gain,
@@ -1045,7 +1115,7 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   nowRamp(voiceGraph.compressorTraceGain.gain,
     isF22
       ? (0.0025 + rpm * 0.0075 + power * 0.006)
-        * propulsionPresence * (sealedF22 ? (sampled ? 1.3 : 0.8) : 1.6)
+        * structurePresence * (sealedF22 ? (sampled ? 1.3 : 0.8) : 1.6)
       : 0,
     0.16);
 
@@ -1059,7 +1129,7 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     isF22
       ? ((sealedF22 ? 0.055 : 0.14) * augmentationDrive
         + augmentationKick * (sealedF22 ? 0.026 : 0.055))
-        * propulsionPresence
+        * structurePresence
       : 0,
     0.09);
   const augmentationPulseHz = 39 + augmentation * 23;
@@ -1068,14 +1138,14 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   nowRamp(voiceGraph.augmentationPulseFilter.Q, sealedF22 ? 2.5 : 1.7, 0.16);
   nowRamp(voiceGraph.augmentationPulseGain.gain,
     isF22
-      ? (sealedF22 ? 0.014 : 0.034) * augmentationDrive * propulsionPresence
+      ? (sealedF22 ? 0.014 : 0.034) * augmentationDrive * structurePresence
       : 0,
     0.1);
 
   nowRamp(voiceGraph.shaftOsc.frequency, shaftHz, 0.16);
   nowRamp(voiceGraph.shaftFilter.frequency, 280 + rpm * 220 + power * 160, 0.18);
   nowRamp(voiceGraph.shaftGain.gain,
-    (0.025 + 0.09 * Math.pow(rpm, 1.1)) * turbineShare * propulsionPresence
+    (0.025 + 0.09 * Math.pow(rpm, 1.1)) * turbineShare * structurePresence
       * tonalMute * shaftBoost, 0.14);
 
   for (const order of voiceGraph.fanOrders) {
@@ -1085,43 +1155,44 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
 
   // Breath AM on liveVca hits the sample bus too — mute it under beds.
   nowRamp(voiceGraph.breathDepth.gain,
-    (0.35 + 0.85 * power) * propulsionPresence * tonalMute, 0.12);
+    (0.35 + 0.85 * power) * airbornePresence * tonalMute, 0.12);
   nowRamp(voiceGraph.shimmerDepth.gain,
-    (0.03 + 0.1 * rpm) * turbineShare * propulsionPresence * tonalMute, 0.18);
+    (0.03 + 0.1 * rpm) * turbineShare * airbornePresence * tonalMute, 0.18);
   nowRamp(voiceGraph.crackleModDepth.gain,
-    (0.1 + 0.4 * power + accent * 0.35) * propulsionPresence * synthDuck * turbineShare, 0.12);
+    (0.1 + 0.4 * power + accent * 0.35)
+      * airbornePresence * synthDuck * turbineShare, 0.12);
 
   nowRamp(voiceGraph.coreFilter.frequency, 360 + rpm * 580 + throttle * 480, 0.16);
   nowRamp(voiceGraph.coreFilter.Q, 0.85 - handover * 0.2, 0.18);
   nowRamp(voiceGraph.coreGain.gain,
     (0.06 + 0.28 * Math.sqrt(rpm) * (0.25 + throttle * 0.75))
-      * (1 - handover * 0.45) * propulsionPresence * synthDuck, 0.16);
+      * (1 - handover * 0.45) * airbornePresence * synthDuck, 0.16);
 
   nowRamp(voiceGraph.jetBodyFilter.frequency,
     (isF22 ? 90 : 140) + power * (isF22 ? 220 : 380) + rpm * (isF22 ? 40 : 80), 0.16);
   nowRamp(voiceGraph.jetBodyFilter.Q, 1.65 - power * 0.5, 0.16);
   nowRamp(voiceGraph.jetBodyGain.gain,
     ((isF22 ? 0.7 : 0.4) + (isF22 ? 1.15 : 0.95) * power)
-      * (0.65 + 0.35 * turbineShare) * propulsionPresence * synthDuck,
+      * (0.65 + 0.35 * turbineShare) * airbornePresence * synthDuck,
     0.14);
 
   nowRamp(voiceGraph.jetGritFilter.frequency, 600 + power * 1200 + rpm * 180, 0.14);
   nowRamp(voiceGraph.jetGritFilter.Q, 0.55 + power * 0.4, 0.14);
   nowRamp(voiceGraph.jetGritPre.gain,
     (0.12 + 0.78 * Math.pow(power, 1.1) + accent * 0.45) * (0.5 + 0.5 * turbineShare)
-      * propulsionPresence * synthDuck,
+      * airbornePresence * synthDuck,
     0.08);
 
   nowRamp(voiceGraph.jetGritHiFilter.frequency, 1400 + power * 1000 + rpm * 180, 0.14);
   nowRamp(voiceGraph.jetGritHiPre.gain,
     (0.05 + 0.38 * Math.pow(power, 1.25) + accent * 0.28) * (0.4 + 0.6 * turbineShare)
-      * propulsionPresence * synthDuck,
+      * airbornePresence * synthDuck,
     0.08);
 
   nowRamp(voiceGraph.crackleLfo.frequency, 11 + power * 28 + rpm * 10, 0.2);
   nowRamp(voiceGraph.crackleDepth.gain, 0.22 + power * 0.5 + accent * 0.35, 0.18);
   nowRamp(voiceGraph.crackleImpulseGain.gain,
-    (0.04 + 0.35 * Math.pow(power, 1.45) + accent * 0.4) * propulsionPresence
+    (0.04 + 0.35 * Math.pow(power, 1.45) + accent * 0.4) * airbornePresence
       * (0.55 + 0.45 * turbineShare) * (sampled ? 0.25 : 1),
     0.06);
   nowRamp(voiceGraph.jetOut.gain, (0.85 + power * 0.35) * (sampled ? 0.35 : 1), 0.16);
@@ -1129,22 +1200,23 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   nowRamp(voiceGraph.exhaustDelay.delayTime, 0.007 + (1 - power) * 0.012, 0.25);
   nowRamp(voiceGraph.exhaustFeedback.gain, 0.24 + power * 0.32, 0.2);
   nowRamp(voiceGraph.exhaustOut.gain,
-    (0.08 + 0.28 * power) * propulsionPresence * (0.55 + 0.45 * turbineShare) * synthDuck,
+    (0.08 + 0.28 * power) * airbornePresence
+      * (0.55 + 0.45 * turbineShare) * synthDuck,
     0.16);
 
   nowRamp(voiceGraph.fanOrderLp.frequency, 2000 + rpm * 800 + throttle * 250, 0.18);
   nowRamp(voiceGraph.fanOrderGain.gain,
-    (0.004 + 0.025 * Math.pow(rpm, 1.15)) * turbineShare * propulsionPresence
+    (0.004 + 0.025 * Math.pow(rpm, 1.15)) * turbineShare * structurePresence
       * tonalMute * fanBoost, 0.14);
 
   nowRamp(voiceGraph.fanWhineFilter.frequency, 1700 + rpm * 1600 + throttle * 350, 0.14);
   nowRamp(voiceGraph.fanWhineFilter.Q, 10 + rpm * 4, 0.16);
   nowRamp(voiceGraph.fanWhineGain.gain,
-    (0.004 + 0.028 * Math.pow(rpm, 1.35)) * turbineShare * propulsionPresence
+    (0.004 + 0.028 * Math.pow(rpm, 1.35)) * turbineShare * structurePresence
       * tonalMute * fanBoost, 0.14);
   nowRamp(voiceGraph.fanWhine2Filter.frequency, 3000 + rpm * 1800 + throttle * 250, 0.14);
   nowRamp(voiceGraph.fanWhine2Gain.gain,
-    (0.001 + 0.008 * Math.pow(rpm, 1.4)) * turbineShare * propulsionPresence
+    (0.001 + 0.008 * Math.pow(rpm, 1.4)) * turbineShare * structurePresence
       * tonalMute * fanBoost, 0.14);
 
   // Cabin darkens hard for synth path; sample path bypasses this (beds are pre-shaped).
@@ -1226,7 +1298,7 @@ function thrustFraction(state, throttle, rpm) {
 
 function atmosphereDensity(state) {
   const altitudeM = finiteNumber(state?.altitude_m, state?.py) ?? 0;
-  return finiteNumber(state?.air_density_kg_m3) ?? isaDensity(altitudeM);
+  return finiteNumber(state?.air_density_kg_m3) ?? standardAtmosphereDensity(altitudeM);
 }
 
 function dynamicPressureFraction(state) {
@@ -1244,32 +1316,9 @@ export function isExternalAudioPerspective(state) {
   return state?.replay_external === true;
 }
 
-function isaDensity(altitudeM) {
-  const altitude = Math.max(-500, Math.min(32_000, altitudeM));
-  const gravity = 9.80665;
-  const gasConstant = 287.05287;
-  if (altitude <= 11_000) {
-    const temperature = 288.15 - 0.0065 * altitude;
-    const pressure = 101325 * Math.pow(temperature / 288.15,
-      gravity / (gasConstant * 0.0065));
-    return pressure / (gasConstant * temperature);
-  }
-  const pressure11 = 22632.06;
-  if (altitude <= 20_000) {
-    const temperature = 216.65;
-    const pressure = pressure11
-      * Math.exp(-gravity * (altitude - 11_000) / (gasConstant * temperature));
-    return pressure / (gasConstant * temperature);
-  }
-  const temperature = 216.65 + 0.001 * (altitude - 20_000);
-  const pressure20 = 5474.889;
-  const pressure = pressure20 * Math.pow(temperature / 216.65,
-    -gravity / (gasConstant * 0.001));
-  return pressure / (gasConstant * temperature);
-}
-
 function finiteNumber(...values) {
   for (const value of values) {
+    if (value == null || value === "") continue;
     const number = Number(value);
     if (Number.isFinite(number)) return number;
   }

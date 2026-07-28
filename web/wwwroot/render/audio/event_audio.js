@@ -6,6 +6,7 @@
 import { pinkNoiseBuffer, whiteNoiseBuffer } from "./engine_audio.js";
 import { isAgedF22, resolvePropulsionCharacter } from "./audio_character.js";
 
+const GUN_REPORT_NOISE_POOL_SIZE = 12;
 const GUN_SOUND_PROFILES = Object.freeze({
   m61: Object.freeze({
     roundsPerSecond: 100,
@@ -376,6 +377,9 @@ export function createEventVoices(audioContext, destination) {
     lastOpponentAlive: true,
     lastRcsPulseAt: -Infinity,
     gunShotIndex: 0,
+    // Lazily filled and then reused. The filter/tone envelopes still vary per report, but the
+    // 25 Hz M61 cadence no longer allocates a fresh AudioBuffer for every scheduled shot.
+    gunReportNoiseBuffers: Array(GUN_REPORT_NOISE_POOL_SIZE),
     lastGearPosition: null,
     lastFlapDegrees: null,
     lastConfigurationAt: audioContext.currentTime,
@@ -945,10 +949,11 @@ export function updateAirframeCueVoices(voices, audioContext, state, { enabled =
   );
 
   const aged = isAgedF22(state);
-  // Late-2030s canopy seals leak under load — high-G flex is the tell, q just brightens it.
+  // Late-2030s canopy seals leak under aerodynamic load. TAS may color the whistle, but cannot
+  // keep it alive in near-vacuum when dynamic pressure has collapsed.
   const canopyG = clamp01((Math.max(1, Math.abs(g)) - 2.1) / 4.8);
   const canopyDrive = aged
-    ? canopyG * (0.55 + 0.45 * Math.max(q01, speed01))
+    ? canopyG * Math.pow(q01, 0.58)
     : 0;
   voices.canopyFilter.frequency.setTargetAtTime(
     3600 + canopyG * 1800 + q01 * 1600 + speed01 * 600, now, 0.14);
@@ -1494,7 +1499,7 @@ export function fireGunReports(voices, audioContext, state, {
     voices.lastGunAt += reportInterval;
     scheduleGunReport(
       audioContext,
-      voices.destination,
+      voices,
       voices.lastGunAt,
       profile,
       voices.gunShotIndex++,
@@ -1520,11 +1525,11 @@ function resolveGunSoundProfile(state) {
     : GUN_SOUND_PROFILES.sixM3;
 }
 
-function scheduleGunReport(audioContext, destination, at, profile, shotIndex) {
+function scheduleGunReport(audioContext, voices, at, profile, shotIndex) {
+  const destination = voices.destination;
   const variation = deterministicUnit(shotIndex + 1);
-  const seed = (0x47554E31 ^ Math.imul(shotIndex + 1, 0x45d9f3b)) & 0x7fffffff;
   const noise = audioContext.createBufferSource();
-  noise.buffer = shortNoiseBuffer(audioContext, seed, 0.085);
+  noise.buffer = gunReportNoiseBuffer(audioContext, voices, shotIndex);
   const filter = audioContext.createBiquadFilter();
   filter.type = "bandpass";
   filter.frequency.value = 620 + profile.reportLevel * 2600 + variation * 460;
@@ -1552,6 +1557,17 @@ function scheduleGunReport(audioContext, destination, at, profile, shotIndex) {
   noise.stop(at + 0.07);
   tone.start(at);
   tone.stop(at + 0.045);
+}
+
+function gunReportNoiseBuffer(audioContext, voices, shotIndex) {
+  const slot = ((shotIndex % GUN_REPORT_NOISE_POOL_SIZE)
+    + GUN_REPORT_NOISE_POOL_SIZE) % GUN_REPORT_NOISE_POOL_SIZE;
+  let buffer = voices.gunReportNoiseBuffers[slot];
+  if (buffer) return buffer;
+  const seed = (0x47554E31 ^ Math.imul(slot + 1, 0x45d9f3b)) & 0x7fffffff;
+  buffer = shortNoiseBuffer(audioContext, seed, 0.085);
+  voices.gunReportNoiseBuffers[slot] = buffer;
+  return buffer;
 }
 
 function deterministicUnit(value) {
@@ -1703,6 +1719,7 @@ function stableContactVariation(contactId) {
 
 function finiteNumber(...values) {
   for (const value of values) {
+    if (value == null || value === "") continue;
     const number = Number(value);
     if (Number.isFinite(number)) return number;
   }

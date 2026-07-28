@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 from scipy.io import wavfile
@@ -14,6 +15,22 @@ from scipy.io import wavfile
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import jet_library  # noqa: E402
+
+
+def _minimal_catalog_source(source_id: str = "test.source", segments: list | None = None) -> dict:
+    return {
+        "schema_version": jet_library.CATALOG_VERSION,
+        "sources": [{
+            "id": source_id,
+            "title": "Test source",
+            "url": "https://example.test/video",
+            "provider": "test",
+            "distribution": {"tier": "reference_local"},
+            "subject": {"perspective": "cockpit_airframe"},
+            "tags": ["cockpit"],
+            "segments": segments if segments is not None else [],
+        }],
+    }
 
 
 class JetLibraryTests(unittest.TestCase):
@@ -137,23 +154,11 @@ class JetLibraryTests(unittest.TestCase):
         self.assertNotIn("data:video", page)
 
     def test_annotation_export_merges_by_segment_id_and_validates(self) -> None:
-        catalog = {
-            "schema_version": jet_library.CATALOG_VERSION,
-            "sources": [{
-                "id": "test.source",
-                "title": "Test source",
-                "url": "https://example.test/video",
-                "provider": "test",
-                "distribution": {"tier": "reference_local"},
-                "subject": {"perspective": "cockpit_airframe"},
-                "tags": ["cockpit"],
-                "segments": [{
-                    "id": "test.source.old",
-                    "start_s": 1,
-                    "end_s": 2,
-                }],
-            }],
-        }
+        catalog = _minimal_catalog_source(segments=[{
+            "id": "test.source.old",
+            "start_s": 1,
+            "end_s": 2,
+        }])
         exported = {
             "schema_version": jet_library.ANNOTATION_EXPORT_VERSION,
             "sources": [{
@@ -183,24 +188,228 @@ class JetLibraryTests(unittest.TestCase):
         self.assertEqual(catalog["sources"][0]["segments"][0]["id"], "test.source.old")
 
     def test_annotation_export_rejects_unknown_source(self) -> None:
-        catalog = {
-            "schema_version": jet_library.CATALOG_VERSION,
-            "sources": [{
-                "id": "test.source",
-                "title": "Test source",
-                "url": "https://example.test/video",
-                "provider": "test",
-                "distribution": {"tier": "reference_local"},
-                "subject": {"perspective": "cockpit_airframe"},
-                "tags": ["cockpit"],
-                "segments": [],
-            }],
-        }
+        catalog = _minimal_catalog_source()
         with self.assertRaisesRegex(ValueError, "unknown source"):
             jet_library.merge_annotation_export(catalog, {
                 "schema_version": jet_library.ANNOTATION_EXPORT_VERSION,
                 "sources": [{"id": "missing.source", "segments": []}],
             })
+
+    def test_annotation_export_rejects_duplicate_segment_ids_before_merge(self) -> None:
+        """Duplicate IDs must fail closed — never dict-overwrite into one survivor."""
+        catalog = _minimal_catalog_source(segments=[{
+            "id": "test.source.tracked",
+            "start_s": 0,
+            "end_s": 1,
+        }])
+        duplicate = {
+            "id": "test.source.military-01",
+            "start_s": 1.0,
+            "end_s": 2.0,
+            "states": {
+                "engine_power": "military",
+                "dynamic_pressure": "high",
+                "g_load": "one-g",
+            },
+            "events": [],
+            "evidence": {"kind": "visible_hud", "confidence": 0.7},
+            "contaminants": [],
+        }
+        overwritten = {
+            **duplicate,
+            "start_s": 3.0,
+            "end_s": 4.0,
+            "states": {
+                "engine_power": "afterburner",
+                "dynamic_pressure": "high",
+                "g_load": "positive-high",
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "duplicate segment id"):
+            jet_library.merge_annotation_export(catalog, {
+                "schema_version": jet_library.ANNOTATION_EXPORT_VERSION,
+                "sources": [{
+                    "id": "test.source",
+                    "segments": [duplicate, overwritten],
+                }],
+            })
+        self.assertEqual(
+            [segment["id"] for segment in catalog["sources"][0]["segments"]],
+            ["test.source.tracked"],
+        )
+
+    def test_annotation_export_changed_count_two_does_not_silently_keep_one(self) -> None:
+        """Regression: two payload rows with one id must not report changed=2 and keep one."""
+        catalog = _minimal_catalog_source()
+        first = {
+            "id": "test.source.pass-01",
+            "start_s": 1.0,
+            "end_s": 2.0,
+            "states": {
+                "engine_power": "military",
+                "dynamic_pressure": "medium",
+                "g_load": "one-g",
+            },
+            "events": ["pass"],
+            "evidence": {"kind": "visible_manoeuvre", "confidence": 0.6},
+            "contaminants": [],
+        }
+        second = {
+            **first,
+            "start_s": 5.0,
+            "end_s": 6.5,
+            "events": ["flyby"],
+        }
+        with self.assertRaisesRegex(ValueError, "duplicate segment id"):
+            jet_library.merge_annotation_export(catalog, {
+                "schema_version": jet_library.ANNOTATION_EXPORT_VERSION,
+                "sources": [{"id": "test.source", "segments": [first, second]}],
+            })
+        self.assertEqual(catalog["sources"][0]["segments"], [])
+
+    def test_next_annotation_segment_id_stays_unique_after_deletion(self) -> None:
+        # Tracked already owns -01; a length-based draft counter would collide.
+        self.assertEqual(
+            jet_library.next_annotation_segment_id(
+                "test.source",
+                "military",
+                {"test.source.military-01"},
+            ),
+            "test.source.military-02",
+        )
+        # After deleting draft -01 while -02 remains, length+1 would reuse -02.
+        # Occupied-set allocation must skip the surviving id (may reuse freed -01).
+        allocated = jet_library.next_annotation_segment_id(
+            "test.source",
+            "military",
+            {"test.source.military-02", "test.source.tracked-01"},
+        )
+        self.assertNotEqual(allocated, "test.source.military-02")
+        self.assertNotIn(allocated, {
+            "test.source.military-02",
+            "test.source.tracked-01",
+        })
+        self.assertEqual(allocated, "test.source.military-01")
+
+    def test_review_index_avoids_length_based_segment_id_reuse(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            vault = Path(scratch) / "vault"
+            vault.mkdir()
+            catalog = {
+                "sources": [{
+                    "id": "test.source",
+                    "title": "Test",
+                    "url": "https://example.test/video",
+                    "distribution": {"tier": "reference_local"},
+                    "subject": {"perspective": "cockpit_airframe"},
+                    "tags": ["cockpit"],
+                    "segments": [{
+                        "id": "test.source.military-01",
+                        "start_s": 1,
+                        "end_s": 2,
+                    }],
+                    "notes": "",
+                }],
+            }
+            output = vault / "review.html"
+            jet_library.generate_review_index(catalog, vault, output)
+            page = output.read_text(encoding="utf-8")
+        self.assertIn("occupiedIds", page)
+        self.assertIn("tracked", page)
+        self.assertNotIn(
+            "const sequence = (draft[sourceId] || []).length + 1;",
+            page,
+        )
+
+    def test_yt_dlp_format_selector_respects_max_video_height(self) -> None:
+        self.assertEqual(
+            jet_library.yt_dlp_format_selector(480),
+            "bv*[height<=480]+ba/b[height<=480]/b",
+        )
+        self.assertEqual(
+            jet_library.yt_dlp_format_selector(720),
+            "bv*[height<=720]+ba/b[height<=720]/b",
+        )
+        self.assertEqual(jet_library.yt_dlp_format_selector(0), "bv*+ba/b")
+        self.assertEqual(jet_library.yt_dlp_format_selector(-1), "bv*+ba/b")
+
+    def test_fetch_source_passes_max_video_height_into_yt_dlp_format(self) -> None:
+        source = {
+            "id": "test.source",
+            "title": "Test",
+            "url": "https://example.test/video",
+            "provider": "youtube",
+            "distribution": {"tier": "reference_local"},
+        }
+        captured: list[list[str]] = []
+
+        def fake_run(command: list[str]) -> None:
+            captured.append(command)
+
+        with tempfile.TemporaryDirectory() as scratch:
+            vault = Path(scratch)
+            media = vault / "media" / "test.source.mp4"
+            media.parent.mkdir(parents=True)
+            media.write_bytes(b"fake")
+            inventory = {
+                "schema_version": "guns-only.jet-audio-local-inventory.v1",
+                "source_id": "test.source",
+                "media": {"path": str(media), "sha256": "x", "bytes": 4, "probe": {}},
+                "analysis_audio": None,
+            }
+            with mock.patch.object(jet_library, "run_checked", side_effect=fake_run), \
+                 mock.patch.object(jet_library, "find_media", side_effect=[None, media]), \
+                 mock.patch.object(
+                     jet_library, "normalize_fetched_video_height", return_value=media
+                 ), \
+                 mock.patch.object(jet_library, "extract_analysis_audio"), \
+                 mock.patch.object(jet_library, "write_inventory", return_value=inventory):
+                jet_library.fetch_source(
+                    source, vault, force=False, maximum_video_height=720
+                )
+        self.assertTrue(captured)
+        format_index = captured[0].index("--format")
+        self.assertEqual(
+            captured[0][format_index + 1],
+            "bv*[height<=720]+ba/b[height<=720]/b",
+        )
+
+    def test_fetch_source_zero_height_uses_unconstrained_yt_dlp_format(self) -> None:
+        source = {
+            "id": "test.source",
+            "title": "Test",
+            "url": "https://example.test/video",
+            "provider": "youtube",
+            "distribution": {"tier": "reference_local"},
+        }
+        captured: list[list[str]] = []
+
+        def fake_run(command: list[str]) -> None:
+            captured.append(command)
+
+        with tempfile.TemporaryDirectory() as scratch:
+            vault = Path(scratch)
+            media = vault / "media" / "test.source.mp4"
+            media.parent.mkdir(parents=True)
+            media.write_bytes(b"fake")
+            inventory = {
+                "schema_version": "guns-only.jet-audio-local-inventory.v1",
+                "source_id": "test.source",
+                "media": {"path": str(media), "sha256": "x", "bytes": 4, "probe": {}},
+                "analysis_audio": None,
+            }
+            with mock.patch.object(jet_library, "run_checked", side_effect=fake_run), \
+                 mock.patch.object(jet_library, "find_media", side_effect=[None, media]), \
+                 mock.patch.object(
+                     jet_library, "normalize_fetched_video_height", return_value=media
+                 ), \
+                 mock.patch.object(jet_library, "extract_analysis_audio"), \
+                 mock.patch.object(jet_library, "write_inventory", return_value=inventory):
+                jet_library.fetch_source(
+                    source, vault, force=False, maximum_video_height=0
+                )
+        format_index = captured[0].index("--format")
+        self.assertEqual(captured[0][format_index + 1], "bv*+ba/b")
 
     def test_video_height_check_does_not_trust_missing_provider_metadata(self) -> None:
         self.assertEqual(jet_library.maximum_video_height({

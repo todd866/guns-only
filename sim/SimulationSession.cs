@@ -1618,6 +1618,7 @@ public sealed class SimulationSession {
         bool eligibleBeat = _beat.ContinuousCombat is not null
             && (_beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit);
         if (!eligibleBeat
+            || _playerTerminalState != AircraftTerminalState.Flying
             || _opponentTerminalState != AircraftTerminalState.Flying
             || _bandit.CatastrophicallyDamaged
             || _bandit is not IFormationDirectiveSink primarySink) {
@@ -1997,6 +1998,7 @@ public sealed class SimulationSession {
             StageWingmen(openingSpawn ?? _fightDirector.NextSpawn(1), 1);
         else if (_beat.ScriptedIntercept is { FormationSize: > 1 } scriptedFormation)
             StageScriptedFormation(scriptedFormation.FormationSize);
+        ConfigureFormationLookaheadCadence();
         _playerSpawnSequence++;
         _banditSpawnSequence++;
         if (_carrier is not null) _carrierSpawnSequence++;
@@ -2468,6 +2470,30 @@ public sealed class SimulationSession {
     /// doctrine cycle keeps a wingman from landing on top of its leader.
     const int WingmanSpawnStride = 1;
 
+    void ConfigureFormationLookaheadCadence() {
+        if (_beat.ContinuousCombat is null || _wingmen.Count != 1) return;
+        ConfigureLookaheadCadence(_bandit, _primaryOpponentGunTargetId);
+        ConfigureLookaheadCadence(
+            _wingmen[0].Bandit,
+            _wingmen[0].PlayerGunTargetId);
+    }
+
+    static void ConfigureLookaheadCadence(IBandit bandit, long actorId) {
+        int cadence = ReactiveBandit.LookaheadDecisionCadenceTicks;
+        int actorLane = (int)(actorId % cadence);
+        // Five ticks keeps adjacent formation IDs off the same two-tick render frame while
+        // remaining coprime to the twelve-tick cadence, so every actor ID maps deterministically.
+        int phase = actorLane * 5 % cadence;
+        switch (bandit) {
+            case NeutralMergeBandit merge:
+                merge.ConfigureLookaheadCadencePhase(phase);
+                break;
+            case ReactiveBandit reactive:
+                reactive.ConfigureLookaheadCadencePhase(phase);
+                break;
+        }
+    }
+
     void ClearWingmen() {
         ClearFormationCoordination();
         foreach (Wingman wingman in _wingmen) {
@@ -2857,6 +2883,10 @@ public sealed class SimulationSession {
             _player.EngineCombustionAvailable = false;
             _player.AerodynamicConfiguration = TerminalFlightDynamics.Configuration(
                 PlayerAerodynamicConfiguration, handedness: -1);
+            // Terminal ownship is no longer a tactical contact. Clear both the coordinator and
+            // every held directive on the destruction edge, not one tick later (and never continue
+            // radio updates against the falling wreck).
+            ClearFormationCoordination();
         } else if (target == CombatRole.Opponent) {
             if (_opponentTerminalState != AircraftTerminalState.Flying) return;
             bool replacementExpected = (_beat.ContinuousCombat is not null
@@ -3288,6 +3318,7 @@ public sealed class SimulationSession {
         _primaryOpponentGunTargetId = AllocateOpponentGunTargetId();
         _selectedPlayerGunTargetId = _primaryOpponentGunTargetId;
         StageWingmen(directorSpawn, nextEngagement);
+        ConfigureFormationLookaheadCadence();
         // Spike opponents of either flavour (cat or machine) carry the report quarantine: an
         // expected loss to one must not crater the ordinary-fight skill estimate.
         bool spikeOpponent = directorSpawn.Boss || directorSpawn.Machine;

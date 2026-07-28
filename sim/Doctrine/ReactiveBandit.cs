@@ -210,14 +210,17 @@ public sealed class ReactiveBandit :
     // Lookahead decision cache. Rolling a small candidate set forward over the horizon every
     // tick is wasteful, so the choice is recomputed on a fixed deterministic cadence and held
     // between recomputes. The cadence counts real ticks (never wall-clock), keeping determinism.
-    const int LookaheadDecisionCadenceTicks = 12; // ~0.1 s at 120 Hz
+    internal const int LookaheadDecisionCadenceTicks = 12; // ~0.1 s at 120 Hz
     PilotCommand _lookaheadCommand = new(1.0, 0.0, 0.85, 0.0);
     int _lookaheadHoldTicks;
+    int? _absoluteLookaheadCadencePhase;
+    long _lastAbsoluteLookaheadDecisionTick = long.MinValue;
     long _selectionSequence;
     FormationDirective _formationDirective;
 
     public PilotSkill Skill { get; }
     public AircraftParams AircraftParameters => _parameters;
+    internal int? LookaheadCadencePhase => _absoluteLookaheadCadencePhase;
 
     public ReactiveBandit(AircraftState initial, AircraftParams parameters,
         PilotSkill skill = PilotSkill.Competent,
@@ -574,6 +577,19 @@ public sealed class ReactiveBandit :
                 "An active formation directive requires a finite shared contact.",
                 nameof(directive));
         _formationDirective = directive;
+    }
+
+    /// <summary>
+    /// Anchor expensive formation lookahead to an actor-specific lane on the authoritative
+    /// observation tick. A neutral-merge controller may begin many seconds after its wingman, and
+    /// local countdowns can therefore coincide for some merge/input timing. Absolute lanes keep
+    /// the pair dephased without reading wall time or changing deterministic replay.
+    /// </summary>
+    internal void ConfigureLookaheadCadencePhase(int phase) {
+        if (phase < 0 || phase >= LookaheadDecisionCadenceTicks)
+            throw new System.ArgumentOutOfRangeException(nameof(phase));
+        _absoluteLookaheadCadencePhase = phase;
+        _lastAbsoluteLookaheadDecisionTick = long.MinValue;
     }
 
     FormationTacticalRole EffectiveFormationRole =>
@@ -1316,11 +1332,8 @@ public sealed class ReactiveBandit :
     /// recomputes so the rollout cost stays bounded and the whole layer stays deterministic.
     PilotCommand LookaheadCommand(in ActorObservation player,
         LowAttackPlan? lowAttackPlan = null) {
-        if (_lookaheadHoldTicks > 0) {
-            _lookaheadHoldTicks--;
+        if (!LookaheadDecisionDue(player.SourceTick))
             return _lookaheadCommand;
-        }
-        _lookaheadHoldTicks = LookaheadDecisionCadenceTicks - 1;
 
         double range = (player.Position - State.Position).Length;
         // Steer to the SAME ballistic solution fire control scores the shot against. The low-attack
@@ -1469,6 +1482,35 @@ public sealed class ReactiveBandit :
                 8, candidates[8], scores[8],
                 HasScore: available[8], Available: available[8]));
         return bestCommand;
+    }
+
+    bool LookaheadDecisionDue(long sourceTick) {
+        if (_absoluteLookaheadCadencePhase is int absolutePhase) {
+            int observedPhase = (int)(sourceTick % LookaheadDecisionCadenceTicks);
+            int ticksUntilDecision =
+                (absolutePhase - observedPhase + LookaheadDecisionCadenceTicks)
+                % LookaheadDecisionCadenceTicks;
+            bool due = ticksUntilDecision == 0
+                && _lastAbsoluteLookaheadDecisionTick != sourceTick;
+            if (due) {
+                _lastAbsoluteLookaheadDecisionTick = sourceTick;
+                _lookaheadHoldTicks = LookaheadDecisionCadenceTicks - 1;
+                return true;
+            }
+
+            // Preserve the telemetry meaning: held decision ticks remaining after this tick.
+            _lookaheadHoldTicks = ticksUntilDecision == 0
+                ? LookaheadDecisionCadenceTicks - 1
+                : ticksUntilDecision - 1;
+            return false;
+        }
+
+        if (_lookaheadHoldTicks > 0) {
+            _lookaheadHoldTicks--;
+            return false;
+        }
+        _lookaheadHoldTicks = LookaheadDecisionCadenceTicks - 1;
+        return true;
     }
 
     double FormationRoleBias(

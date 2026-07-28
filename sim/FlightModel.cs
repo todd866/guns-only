@@ -654,7 +654,11 @@ public static class FlightModel {
         ThrustMaxN: 233600.0,
         CD0: 0.0175, InducedK: 0.045, CLMax: 1.50, CLMin: -0.75,
         RollRateMaxRad: 2.8, BankTau: 0.20,
-        MCrit: 0.95, WaveDragK: 70.0,
+        // The quadratic is only the transonic rise. Letting it grow past that rise walled this
+        // explicitly supersonic airframe at M1.20 in MIL / M1.24 in full augmentation at FL450.
+        // Holding the peak at M1.11 preserves the original polar through the rise, then restores
+        // the public-data fit targets: >M1.5 dry supercruise and Mach-two-class augmented flight.
+        MCrit: 0.95, WaveDragK: 70.0, WaveDragPeakMach: 1.11,
         SpoolUpTau: 1.2, SpoolDownTau: 0.8,
         CLAlpha: 4.8,
         IxxKgM2: 55000.0, IyyKgM2: 280000.0, IzzKgM2: 315000.0,

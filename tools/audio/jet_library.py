@@ -143,6 +143,31 @@ def source_by_id(catalog: dict[str, Any], source_id: str) -> dict[str, Any]:
     raise KeyError(f"unknown source id: {source_id}")
 
 
+def next_annotation_segment_id(
+    source_id: str,
+    hint: str,
+    occupied_ids: set[str],
+) -> str:
+    """Allocate a stable segment id that does not collide with tracked or draft ids."""
+    slug = re.sub(r"[^a-z0-9]+", "-", hint.lower()).strip("-")[:36] or "segment"
+    sequence = 1
+    while True:
+        candidate = f"{source_id}.{slug}-{sequence:02d}"
+        if candidate not in occupied_ids:
+            return candidate
+        sequence += 1
+
+
+def yt_dlp_format_selector(maximum_video_height: int) -> str:
+    """Build a yt-dlp format string; height <= 0 leaves resolution unconstrained."""
+    if maximum_video_height <= 0:
+        return "bv*+ba/b"
+    return (
+        f"bv*[height<={maximum_video_height}]+ba/"
+        f"b[height<={maximum_video_height}]/b"
+    )
+
+
 def merge_annotation_export(
     catalog: dict[str, Any],
     annotation_export: dict[str, Any],
@@ -173,6 +198,17 @@ def merge_annotation_export(
         if not isinstance(segments, list):
             raise ValueError(f"{source_id} annotation segments must be an array")
 
+        seen_segment_ids: set[str] = set()
+        for segment in segments:
+            if not isinstance(segment, dict) or not isinstance(segment.get("id"), str):
+                raise ValueError(f"{source_id} contains an invalid segment")
+            segment_id = segment["id"]
+            if segment_id in seen_segment_ids:
+                raise ValueError(
+                    f"{source_id} annotation repeats duplicate segment id: {segment_id}"
+                )
+            seen_segment_ids.add(segment_id)
+
         source = known[source_id]
         existing = {
             segment["id"]: segment
@@ -180,8 +216,6 @@ def merge_annotation_export(
             if isinstance(segment, dict) and isinstance(segment.get("id"), str)
         }
         for segment in segments:
-            if not isinstance(segment, dict) or not isinstance(segment.get("id"), str):
-                raise ValueError(f"{source_id} contains an invalid segment")
             existing[segment["id"]] = segment
             changed += 1
         source["segments"] = sorted(
@@ -390,7 +424,7 @@ def fetch_source(
             "--write-info-json",
             "--write-thumbnail",
             "--convert-thumbnails", "jpg",
-            "--format", "bv*[height<=480]+ba/b[height<=480]/b",
+            "--format", yt_dlp_format_selector(maximum_video_height),
             "--merge-output-format", "mp4",
             "--output", str(paths["output_template"]),
         ]
@@ -887,10 +921,20 @@ def generate_review_index(
         }}
         const sourceId = card.dataset.sourceId;
         const events = splitTags(card.querySelector('[data-field="events"]').value);
-        const sequence = (draft[sourceId] || []).length + 1;
         const hint = events[0] || card.querySelector('[data-field="engine"]').value;
+        const tracked = JSON.parse(card.dataset.segments || "[]");
+        const occupiedIds = new Set([
+          ...tracked.map(segment => segment.id),
+          ...(draft[sourceId] || []).map(segment => segment.id),
+        ]);
+        let sequence = 1;
+        let segmentId;
+        do {{
+          segmentId = `${{sourceId}}.${{slug(hint)}}-${{String(sequence).padStart(2, "0")}}`;
+          sequence += 1;
+        }} while (occupiedIds.has(segmentId));
         const segment = {{
-          id: `${{sourceId}}.${{slug(hint)}}-${{String(sequence).padStart(2, "0")}}`,
+          id: segmentId,
           start_s: Number(start.toFixed(3)),
           end_s: Number(end.toFixed(3)),
           states: {{
@@ -998,7 +1042,7 @@ def parser() -> argparse.ArgumentParser:
         "--max-video-height",
         type=int,
         default=480,
-        help="post-download video ceiling; 0 disables normalization (default: 480)",
+        help="yt-dlp and post-download height ceiling; 0 leaves resolution unconstrained (default: 480)",
     )
     fetch.set_defaults(func=command_fetch)
 

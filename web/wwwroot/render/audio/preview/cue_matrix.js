@@ -92,6 +92,43 @@ const Q_HIGH = f22State({
   altitude_m: 1_300,
 });
 
+const ALTITUDE_Q_PA = 16_000;
+function controlledAltitudeState({ altitudeM, density, speedOfSoundMps }) {
+  const trueAirspeedMps = Math.sqrt(2 * ALTITUDE_Q_PA / density);
+  return f22State({
+    altitude_m: altitudeM,
+    air_density_kg_m3: density,
+    true_airspeed_mps: trueAirspeedMps,
+    true_airspeed_kts: trueAirspeedMps * 1.9438444924406,
+    mach: trueAirspeedMps / speedOfSoundMps,
+  });
+}
+
+const ALTITUDE_5K_FT = controlledAltitudeState({
+  altitudeM: 1_524,
+  density: 1.055584657,
+  speedOfSoundMps: 334.389,
+});
+const ALTITUDE_30K_FT = controlledAltitudeState({
+  altitudeM: 9_144,
+  density: 0.459040532,
+  speedOfSoundMps: 303.171,
+});
+const ALTITUDE_55K_FT = controlledAltitudeState({
+  altitudeM: 16_764,
+  density: 0.147667759,
+  speedOfSoundMps: 295.069,
+});
+// Deliberately an acoustic-limit reference, not an F-22 performance claim. At this ballistic apex
+// q has collapsed, exposing the pressurized-cabin and structure floor.
+const ALTITUDE_200K_FT = f22State({
+  altitude_m: 60_960,
+  air_density_kg_m3: 0.000274593,
+  true_airspeed_mps: 620,
+  true_airspeed_kts: 1_205.183584,
+  mach: 1.96,
+});
+
 const G_ONE = f22State();
 const G_THREE = f22State({
   pilot_gz: 3,
@@ -146,6 +183,29 @@ export const CUE_GROUPS = Object.freeze([
         "Alternates the two fixed-power states every three seconds.",
         "dynamic-pressure",
         6,
+      ),
+    ]),
+  }),
+  Object.freeze({
+    id: "altitude",
+    label: "Altitude / density · fixed power",
+    description: "The first three references hold engine power and 16 kPa q constant; the 200k-ft acoustic limit lets q collapse.",
+    cues: Object.freeze([
+      fixedCue("f22_altitude_5k", "5,000 ft", "Dense-air cockpit reference at controlled q.", ALTITUDE_5K_FT),
+      fixedCue("f22_altitude_30k", "30,000 ft", "Mid-altitude reference at the same power and q.", ALTITUDE_30K_FT),
+      fixedCue("f22_altitude_55k", "55,000 ft", "Thin-air reference at the same power and q.", ALTITUDE_55K_FT),
+      fixedCue(
+        "f22_altitude_200k",
+        "200,000 ft acoustic limit",
+        "Near-vacuum ballistic reference; equipment and low structure should remain.",
+        ALTITUDE_200K_FT,
+      ),
+      animatedCue(
+        "f22_altitude_sweep",
+        "Auto: 5k → 30k → 55k → 200k ft",
+        "Loops through density references every three seconds.",
+        "altitude",
+        12,
       ),
     ]),
   }),
@@ -209,6 +269,12 @@ export const CUE_PRESET_BY_ID = Object.freeze(Object.fromEntries(
 ));
 
 const POWER_STATES = Object.freeze([POWER_60, POWER_80, POWER_100, POWER_AUGMENTED]);
+const ALTITUDE_STATES = Object.freeze([
+  ALTITUDE_5K_FT,
+  ALTITUDE_30K_FT,
+  ALTITUDE_55K_FT,
+  ALTITUDE_200K_FT,
+]);
 const G_STATES = Object.freeze([G_ONE, G_THREE, G_SIX, G_NEGATIVE_TWO]);
 
 function loopingProgress(elapsedSeconds, durationSeconds) {
@@ -267,6 +333,9 @@ export function cueStateAt(cueOrId, elapsedSeconds = 0) {
   }
   if (cue.animation === "dynamic-pressure") {
     return { ...stepState([Q_LOW, Q_HIGH], elapsedSeconds, 3) };
+  }
+  if (cue.animation === "altitude") {
+    return { ...stepState(ALTITUDE_STATES, elapsedSeconds, 3) };
   }
   if (cue.animation === "g-load") {
     return { ...stepState(G_STATES, elapsedSeconds, 3) };

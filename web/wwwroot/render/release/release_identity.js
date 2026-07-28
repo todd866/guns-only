@@ -1,4 +1,4 @@
-export const RELEASE_BUILD = "171";
+export const RELEASE_BUILD = "172";
 export const CANONICAL_PRODUCTION_ORIGIN = "https://guns-only.vercel.app";
 export const BUILD_INFO_PATH = "/api/build-info";
 
@@ -42,17 +42,23 @@ export function createReleaseIdentity({
   running = null,
   current = null,
   lookup = "checking",
+  locationLike = globalThis.location,
 } = {}) {
   const entrypoint = cleanToken(entrypointBuild, 32) || "dev";
   const runningInfo = normalizeBuildInfo(running);
   const currentBuild = normalizeBuildInfo(current);
+  const hostname = String(locationLike?.hostname || "").toLowerCase();
+  const previewDeployment = hostname.endsWith(".vercel.app")
+    && hostname !== new URL(CANONICAL_PRODUCTION_ORIGIN).hostname;
   const mixedEntrypoint = entrypoint !== "dev" && entrypoint !== RELEASE_BUILD;
   const superseded = Boolean(currentBuild && currentBuild.build !== RELEASE_BUILD);
-  const runningBuildMismatch = Boolean(runningInfo && (
+  const localRuntimeMismatch = Boolean(runningInfo && (
     runningInfo.build !== RELEASE_BUILD
     || (entrypoint !== "dev" && runningInfo.build !== entrypoint)
-    || (currentBuild && runningInfo.build !== currentBuild.build)
   ));
+  const productionBuildMismatch = Boolean(
+    runningInfo && currentBuild && runningInfo.build !== currentBuild.build,
+  );
   const revisionChanged = Boolean(
     runningInfo?.revision && currentBuild?.revision
     && runningInfo.revision !== currentBuild.revision,
@@ -66,7 +72,13 @@ export function createReleaseIdentity({
     && runningInfo.build === currentBuild.build
     && (revisionChanged || deploymentChanged),
   );
-  const stale = mixedEntrypoint || superseded || runningBuildMismatch || changedProvenance;
+  const productionDiffers = superseded || productionBuildMismatch || changedProvenance;
+  // An immutable Vercel candidate is expected to differ from the public alias while it is being
+  // tested. Keep genuine mixed-shell/runtime failures blocking everywhere, but make the
+  // candidate-versus-production comparison an explicit warning until that deployment is promoted.
+  const stale = mixedEntrypoint || localRuntimeMismatch
+    || (!previewDeployment && productionDiffers);
+  const candidate = previewDeployment && productionDiffers && !stale;
   const revision = runningInfo?.revision || null;
   const deployment = runningInfo?.deployment || null;
   const discriminator = [
@@ -77,6 +89,7 @@ export function createReleaseIdentity({
     ? `${RELEASE_BUILD}+${discriminator}`
     : RELEASE_BUILD;
   const state = stale ? "stale"
+    : candidate ? "candidate"
     : lookup === "complete" ? "current"
       : lookup === "unverified" ? "unverified" : "checking";
   const visibleDetail = visibleProvenance(runningInfo);
@@ -86,6 +99,8 @@ export function createReleaseIdentity({
   const currentDetail = currentProvenance ? ` · ${currentProvenance}` : "";
   const label = stale
     ? `UPDATE AVAILABLE · RUNNING BUILD ${runningBuild}${visibleDetail ? ` · ${visibleDetail}` : ""} · CURRENT BUILD ${expectedBuild}${currentDetail}`
+    : candidate
+      ? `PREVIEW CANDIDATE · BUILD ${runningBuild}${visibleDetail ? ` · ${visibleDetail}` : ""} · PRODUCTION BUILD ${expectedBuild}${currentDetail}`
     : `BUILD ${RELEASE_BUILD}${visibleDetail ? ` · ${visibleDetail}` : ""}${state === "checking" ? " · VERIFYING" : state === "unverified" ? " · UNVERIFIED" : ""}`;
 
   return Object.freeze({
@@ -96,6 +111,7 @@ export function createReleaseIdentity({
     deployment,
     telemetryBuild,
     stale,
+    candidate,
     state,
     label,
     telemetry: Object.freeze({
@@ -107,6 +123,7 @@ export function createReleaseIdentity({
       current_revision: currentBuild?.revision || null,
       current_deployment: currentBuild?.deployment || null,
       stale,
+      candidate,
     }),
   });
 }

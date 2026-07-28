@@ -190,6 +190,18 @@ test("keyboard dispatch is edge-safe and every held action has a release path", 
   }
 });
 
+test("the live frame initialises replay state before any early-frame consumer", () => {
+  const tick = appSource.match(/function tick\(now\)\s*\{([\s\S]*?)\n\s*requestAnimationFrame\(tick\)/)?.[1]
+    ?? "";
+  assert.ok(tick, "the render loop must remain inspectable");
+  const initialiser = tick.indexOf("let replayActive = incidentReplay?.active === true");
+  const projectionRefresh = tick.indexOf("replayActive = replayPresentation.active");
+  assert.ok(initialiser >= 0 && projectionRefresh > initialiser,
+    "replay activity needs a safe early-frame value and a fresh post-snapshot refresh");
+  assert.equal(tick.slice(0, initialiser).includes("replayActive"), false,
+    "an early replay consumer would recreate the first-frame TDZ that froze every flight control");
+});
+
 test("every visible HTML button is wired through one auditable action surface", () => {
   const explicitButtons = new Map([
     ["pause-button", /pauseButton\?\.addEventListener\("click", toggleSessionPause\)/],

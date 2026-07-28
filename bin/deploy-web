@@ -30,6 +30,14 @@ command -v node >/dev/null 2>&1 || {
     echo "deploy-web: Node.js is unavailable" >&2
     exit 1
 }
+command -v python3 >/dev/null 2>&1 || {
+    echo "deploy-web: Python 3 is unavailable" >&2
+    exit 1
+}
+command -v rsync >/dev/null 2>&1 || {
+    echo "deploy-web: rsync is unavailable" >&2
+    exit 1
+}
 
 worktree_is_dirty() {
     ! git diff --quiet || ! git diff --cached --quiet \
@@ -60,6 +68,28 @@ fi
 release_revision=$(git rev-parse --verify HEAD)
 release_ref=$(git symbolic-ref --quiet --short HEAD || true)
 
+# The regional Ukraine atlas is intentionally gitignored because its page bundles are hundreds of
+# MiB. A green repository checkout therefore does not prove that a release machine has the data,
+# and deploying without it produces a valid-looking build with empty Rapier terrain. Resolve the
+# source once, then fail closed on every deployment before spending time on the release gate.
+content_atlas="$repo_dir/content/packs/ukraine-modern/environment/terrain-atlas"
+web_atlas="$repo_dir/web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas"
+atlas_src="$content_atlas"
+if [ ! -d "$content_atlas/pages" ] || [ ! -f "$content_atlas/rapier-range.atlas.manifest.json" ]; then
+    atlas_src="$web_atlas"
+fi
+atlas_manifest="$atlas_src/rapier-range.atlas.manifest.json"
+if [ ! -d "$atlas_src/pages" ] || [ ! -f "$atlas_manifest" ]; then
+    echo "deploy-web: Ukraine jet-range terrain atlas is missing" >&2
+    echo "expected a manifest and pages under $atlas_src" >&2
+    exit 1
+fi
+echo "deploy-web: verifying Ukraine jet-range terrain atlas"
+if ! python3 "$repo_dir/tools/terrain/verify_korea_atlas.py" "$atlas_manifest"; then
+    echo "deploy-web: Ukraine jet-range terrain atlas failed verification" >&2
+    exit 1
+fi
+
 # Production must be built from the exact tree which passed the repository gate. bin/check only
 # syntax-checks this script, so invoking it here does not recurse. Smoke-test bypasses are cleared:
 # a production candidate is not "fully gated" if its real browser boot was skipped.
@@ -83,22 +113,17 @@ trap 'rm -rf "$scratch_dir"' EXIT HUP INT TERM
 
 deploy_root="$publish_dir/wwwroot"
 
-# Geodetic Ukraine atlas pages are gitignored (hundreds of MiB). Stage them into the publish tree
-# from the local content pack so production flight gets the real DEM, not an empty sky.
-atlas_src="$repo_dir/content/packs/ukraine-modern/environment/terrain-atlas"
+# Geodetic Ukraine atlas pages are gitignored (hundreds of MiB). Stage the verified source into the
+# publish tree so production flight gets the real DEM, not an empty sky.
 atlas_dst="$deploy_root/content/packs/ukraine-modern/environment/terrain-atlas"
-if [ -d "$atlas_src/pages" ] && [ -f "$atlas_src/rapier-range.atlas.manifest.json" ]; then
-    echo "deploy-web: staging Ukraine jet-range atlas into publish tree"
-    mkdir -p "$atlas_dst"
-    rsync -a --delete "$atlas_src/" "$atlas_dst/"
-elif [ -d "$repo_dir/web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas/pages" ]; then
-    echo "deploy-web: staging Ukraine atlas from web/wwwroot"
-    mkdir -p "$atlas_dst"
-    rsync -a --delete \
-        "$repo_dir/web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas/" \
-        "$atlas_dst/"
-else
-    echo "deploy-web: WARNING — Ukraine atlas pages missing; Rapier theatre may render empty" >&2
+echo "deploy-web: staging Ukraine jet-range atlas into publish tree"
+mkdir -p "$atlas_dst"
+rsync -a --delete "$atlas_src/" "$atlas_dst/"
+staged_atlas_manifest="$atlas_dst/rapier-range.atlas.manifest.json"
+echo "deploy-web: verifying staged Ukraine jet-range terrain atlas"
+if ! python3 "$repo_dir/tools/terrain/verify_korea_atlas.py" "$staged_atlas_manifest"; then
+    echo "deploy-web: staged Ukraine jet-range terrain atlas failed verification" >&2
+    exit 1
 fi
 
 # Soft-world atmosphere for the Ukraine lab / future pack wiring.
@@ -125,6 +150,7 @@ require_file _framework/blazor.boot.json
 require_file api/build-info.js
 require_file api/telemetry.js
 require_file vercel.json
+require_file content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json
 
 if [ -f "$deploy_root/api/telemetry.test.js" ] \
     || [ -d "$deploy_root/render/telemetry/tests" ]; then

@@ -7,6 +7,7 @@ import {
   angleNearestReference,
   desiredPadlockAngles,
   PADLOCK_LIMITS,
+  padlockAttitudeModel,
   padlockLiftPlaneModel,
   padlockOrientationModel,
   targetLookAngles,
@@ -155,6 +156,21 @@ test("view-relative SA points to nose, lift and gravity without aft reversal", (
   });
   assert.equal(vertical.horizonValid, false, "undefined horizon projection must be hidden, not flipped");
   assert.equal(vertical.liftValid, false, "a lift vector along the view axis must not invent pull direction");
+});
+
+test("body-fixed padlock attitude ball preserves steep pitch and conventional bank sense", () => {
+  const radius = 56;
+  const noseUp = padlockAttitudeModel({ pitchDeg: 45, bankDeg: 30, radius });
+  const noseDown = padlockAttitudeModel({ pitchDeg: -45, bankDeg: -30, radius });
+
+  assert.ok(noseUp.horizonOffsetPx > radius,
+    "at +45 degrees the horizon must leave the ball instead of pinning a false shallow attitude");
+  assert.ok(noseDown.horizonOffsetPx < -radius,
+    "at -45 degrees the horizon must leave the ball in the opposite direction");
+  close(noseUp.bankRad, 30 * DEG);
+  close(noseDown.bankRad, -30 * DEG);
+  close(padlockAttitudeModel({ pitchDeg: 10, radius }).horizonOffsetPx,
+    10 * radius / 35);
 });
 
 test("padlock steering uses physical lift-plane geometry, not camera screen offset", () => {

@@ -21,6 +21,7 @@ import {
   recoveryPlatformIsMaritime,
 } from "./render/hud/carrier_sa.js";
 import {
+  padlockAttitudeModel,
   padlockLiftPlaneModel,
   padlockOrientationModel,
 } from "./render/camera/padlock_controller.js";
@@ -2835,7 +2836,17 @@ class CombatHud {
     function centreY0(topPx, bottomPx) {
       return topPx + (bottomPx - topPx) * 0.5 + 118;
     }
-    const bankRad = (Number(state.bank_deg) || 0) * DEG;
+    // Reserve the outside of the instrument for steering. The attitude ball and its bank scale
+    // remain a self-contained conventional instrument; amber/green director marks cannot be
+    // mistaken for the horizon or the aircraft's actual bank.
+    const ballRadius = radius - 6;
+    const directorRadius = radius + 2;
+    const attitude = padlockAttitudeModel({
+      pitchDeg,
+      bankDeg: Number(state.bank_deg) || 0,
+      radius: ballRadius,
+    });
+    const bankRad = attitude.bankRad;
     const now = Number(frame.now) || 0;
     const rimColor = groundDanger ? RED : GREEN_DIM;
 
@@ -2868,9 +2879,11 @@ class CombatHud {
       ctx.fillText(aftLabel, cx, cy - radius - 14);
     }
 
-    // Backing disc + rim.
+    // Conventional attitude ball. A strong sky/earth split is deliberately used here rather than
+    // another transparent HUD line: with the pilot's eyes off-boresight, the inset must answer
+    // "which way is up?" before any steering interpretation begins.
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.arc(cx, cy, ballRadius + 3, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(3, 13, 20, 0.55)";
     ctx.fill();
     ctx.strokeStyle = rimColor;
@@ -2882,58 +2895,137 @@ class CombatHud {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // True ADI: rotate by -bank so a right bank raises the horizon's right end, exactly like a
-    // real attitude indicator; pitch displaces the line along the rotated vertical (nose up
-    // pushes the horizon down). All from ownship attitude — valid at every camera angle,
-    // including straight up and straight down where the old camera-projected horizon vanished.
+    // The ball moves behind a fixed miniature aircraft: right bank raises the horizon's right end;
+    // nose-up moves the horizon down. Unlike the old clamped line, the true horizon is allowed to
+    // leave the window beyond about 35 degrees, producing honest all-sky/all-earth steep attitudes.
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cx, cy, radius - 2, 0, Math.PI * 2);
+    ctx.arc(cx, cy, ballRadius, 0, Math.PI * 2);
     ctx.clip();
     ctx.translate(cx, cy);
     ctx.rotate(-bankRad);
-    const horizonOffsetPx = clamp(pitchDeg * (radius / 45), -radius * 0.72, radius * 0.72);
-    const horizonColor = groundDanger ? RED : GREEN_DIM;
-    ctx.strokeStyle = horizonColor;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-radius, horizonOffsetPx);
-    ctx.lineTo(radius, horizonOffsetPx);
-    ctx.stroke();
-    // Ground-side hatching: short strokes into the earth half.
-    ctx.lineWidth = 1;
-    for (const t of [-0.72, -0.36, 0, 0.36, 0.72]) {
+    const horizonOffsetPx = attitude.horizonOffsetPx;
+    const fillSpan = ballRadius * 4;
+    ctx.fillStyle = "rgba(34, 112, 151, 0.72)";
+    ctx.fillRect(-fillSpan, -fillSpan, fillSpan * 2, fillSpan + horizonOffsetPx);
+    ctx.fillStyle = groundDanger
+      ? "rgba(132, 38, 43, 0.82)" : "rgba(117, 76, 43, 0.78)";
+    ctx.fillRect(-fillSpan, horizonOffsetPx, fillSpan * 2, fillSpan * 2);
+
+    // Ten-degree pitch ladder carried by the sphere. The rung matching current pitch crosses the
+    // fixed aircraft; negative attitudes use dashed marks, matching the forward HUD vocabulary.
+    ctx.font = "700 6px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let rung = -80; rung <= 80; rung += 10) {
+      const y = (attitude.pitchDeg - rung) * attitude.pixelsPerDegree;
+      if (Math.abs(y) > ballRadius + 5) continue;
+      const horizon = rung === 0;
+      const halfWidth = horizon ? ballRadius : rung % 20 === 0 ? 18 : 12;
+      const centreGap = horizon ? 0 : 5;
+      const color = groundDanger && horizon ? RED
+        : horizon ? "rgba(236, 255, 241, 0.98)" : "rgba(224, 255, 235, 0.84)";
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = horizon ? 1.8 : 1.0;
+      ctx.setLineDash(rung < 0 ? [4, 3] : []);
       ctx.beginPath();
-      ctx.moveTo(t * radius, horizonOffsetPx);
-      ctx.lineTo(t * radius - 4, horizonOffsetPx + 7);
+      if (horizon) {
+        ctx.moveTo(-halfWidth, y);
+        ctx.lineTo(halfWidth, y);
+      } else {
+        ctx.moveTo(-halfWidth, y);
+        ctx.lineTo(-centreGap, y);
+        ctx.moveTo(centreGap, y);
+        ctx.lineTo(halfWidth, y);
+      }
       ctx.stroke();
+      ctx.setLineDash([]);
+      if (!horizon && rung % 20 === 0) {
+        const label = String(Math.abs(rung));
+        ctx.fillText(label, -halfWidth - 6, y);
+        ctx.fillText(label, halfWidth + 6, y);
+      }
     }
-    // Sky tick above the horizon at the rotated zenith side.
-    ctx.fillStyle = horizonColor;
-    ctx.beginPath();
-    ctx.moveTo(0, horizonOffsetPx - 10);
-    ctx.lineTo(-4, horizonOffsetPx - 3);
-    ctx.lineTo(4, horizonOffsetPx - 3);
-    ctx.closePath();
-    ctx.fill();
+    ctx.setLineDash([]);
     ctx.restore();
 
-    // Fixed waterline aircraft symbol: the thing being flown, never rotating in its own
-    // instrument. Wings, centre dot, fin along positive lift.
-    ctx.strokeStyle = GREEN;
-    ctx.lineWidth = 2;
+    // Fixed bank scale with a moving bank pointer. This is intentionally distinct from the outer
+    // lift-plane gate: the pilot can read actual bank without decoding the director.
+    ctx.strokeStyle = "rgba(224, 255, 235, 0.82)";
+    ctx.fillStyle = "rgba(236, 255, 241, 0.96)";
+    ctx.lineWidth = 1;
+    for (const bankTickDeg of [-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60]) {
+      const angle = -Math.PI / 2 + bankTickDeg * DEG;
+      const major = bankTickDeg === 0 || Math.abs(bankTickDeg) === 30
+        || Math.abs(bankTickDeg) === 60;
+      const outer = ballRadius - 2;
+      const inner = outer - (major ? 6 : 3.5);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner);
+      ctx.lineTo(cx + Math.cos(angle) * outer, cy + Math.sin(angle) * outer);
+      ctx.stroke();
+    }
+    const bankPointerAngle = -Math.PI / 2 + bankRad;
+    const pointerTipRadius = ballRadius - 9;
+    const pointerBaseRadius = ballRadius - 3;
+    const pointerHalfAngle = 4 * DEG;
+    ctx.beginPath();
+    ctx.moveTo(
+      cx + Math.cos(bankPointerAngle) * pointerTipRadius,
+      cy + Math.sin(bankPointerAngle) * pointerTipRadius,
+    );
+    ctx.lineTo(
+      cx + Math.cos(bankPointerAngle - pointerHalfAngle) * pointerBaseRadius,
+      cy + Math.sin(bankPointerAngle - pointerHalfAngle) * pointerBaseRadius,
+    );
+    ctx.lineTo(
+      cx + Math.cos(bankPointerAngle + pointerHalfAngle) * pointerBaseRadius,
+      cy + Math.sin(bankPointerAngle + pointerHalfAngle) * pointerBaseRadius,
+    );
+    ctx.closePath();
+    ctx.fill();
+
+    // Reassert the true horizon over the filled ball. At shallow attitudes this is the fastest
+    // reference; at steep attitudes the sky/earth field and pitch ladder carry the picture.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, ballRadius, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.translate(cx, cy);
+    ctx.rotate(-bankRad);
+    const horizonColor = groundDanger ? RED : "rgba(236, 255, 241, 0.98)";
+    ctx.strokeStyle = horizonColor;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(-ballRadius, horizonOffsetPx);
+    ctx.lineTo(ballRadius, horizonOffsetPx);
+    ctx.stroke();
+    ctx.restore();
+
+    // Fixed miniature aircraft: bright and backed by a dark under-stroke so it remains the
+    // unmistakable stationary reference over either hemisphere.
+    ctx.strokeStyle = "rgba(2, 10, 14, 0.88)";
+    ctx.lineWidth = 4;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(cx - 15, cy);
+    ctx.moveTo(cx - 17, cy);
     ctx.lineTo(cx - 5, cy);
     ctx.moveTo(cx + 5, cy);
-    ctx.lineTo(cx + 15, cy);
+    ctx.lineTo(cx + 17, cy);
     ctx.moveTo(cx, cy - 4);
-    ctx.lineTo(cx, cy - 9);
+    ctx.lineTo(cx, cy - 10);
     ctx.stroke();
+    ctx.strokeStyle = GREEN;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "rgba(2, 10, 14, 0.88)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3.2, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = GREEN;
     ctx.beginPath();
-    ctx.arc(cx, cy, 1.8, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 1.7, 0, Math.PI * 2);
     ctx.fill();
 
     // Steering layer.
@@ -2945,41 +3037,42 @@ class CombatHud {
     let gateAngleFromUpRad = null;
 
     if (neutral) {
-      // Dead six: every plane works. A calm dashed ring plus PULL — never an invented roll cue.
+      // Dead six: every plane works. A calm outer ring plus PULL — never an invented roll cue.
       ctx.strokeStyle = "#7dffb0";
       ctx.lineWidth = 1.6;
       ctx.setLineDash([5, 6]);
       ctx.beginPath();
-      ctx.arc(cx, cy, radius - 8, 0, Math.PI * 2);
+      ctx.arc(cx, cy, directorRadius, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = "#7dffb0";
       ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("PULL", cx, cy + radius * 0.55);
+      ctx.fillText("PULL", cx, cy + ballRadius * 0.52);
       gateAngleFromUpRad = 0;
     } else if (steering?.valid === true && rollErrorRad !== null) {
       gateAngleFromUpRad = captured ? 0 : rollErrorRad;
       const gateAngle = upAngle + gateAngleFromUpRad;
       const gateColor = captured ? "#7dffb0" : AMBER;
-      const gateRadius = radius - 8;
+      const gateRadius = directorRadius;
 
-      // Lift line: from the waterline symbol straight up — where a pull throws the nose.
+      // Current lift datum lives on the OUTER director ring. Keeping it off the attitude ball
+      // prevents steering symbology from masquerading as actual bank or pitch.
       const liftColor = captured ? "#7dffb0" : GREEN_DIM;
       ctx.strokeStyle = liftColor;
       ctx.fillStyle = liftColor;
-      ctx.lineWidth = captured ? 3 : 1.8;
+      ctx.lineWidth = captured ? 2.8 : 1.8;
       ctx.shadowColor = captured ? "rgba(77, 255, 136, 0.8)" : "transparent";
       ctx.shadowBlur = captured ? 10 : 0;
       ctx.beginPath();
-      ctx.moveTo(cx, cy - 12);
-      ctx.lineTo(cx, cy - gateRadius + 6);
+      ctx.moveTo(cx, cy - gateRadius + 7);
+      ctx.lineTo(cx, cy - gateRadius - 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(cx, cy - gateRadius + 1);
-      ctx.lineTo(cx - 4, cy - gateRadius + 8);
-      ctx.lineTo(cx + 4, cy - gateRadius + 8);
+      ctx.moveTo(cx, cy - gateRadius - 5);
+      ctx.lineTo(cx - 4.5, cy - gateRadius + 3);
+      ctx.lineTo(cx + 4.5, cy - gateRadius + 3);
       ctx.closePath();
       ctx.fill();
       ctx.shadowBlur = 0;
@@ -2998,8 +3091,8 @@ class CombatHud {
       }
 
       if (!captured) {
-        // Animated chevrons along the shortest arc from up toward the gate; their travel
-        // direction IS the keyboard roll direction.
+        // Animated chevrons stay outside the ball along the shortest arc from the lift datum to
+        // the gate; their travel direction IS the keyboard roll direction.
         const chevronCount = Math.abs(gateAngleFromUpRad) > 70 * DEG ? 3 : 2;
         const phase = (now * 0.55) % 1;
         for (let index = 0; index < chevronCount; index += 1) {
@@ -3023,11 +3116,17 @@ class CombatHud {
           ctx.restore();
         }
       } else {
-        // Captured: streaming pull-flow chevrons up the lift line.
+        // Captured: the roll task has ended. A short, unmistakable pull director may now enter the
+        // ball, but it does not rotate and cannot be confused with the moving attitude sphere.
+        ctx.fillStyle = "#7dffb0";
+        ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("PULL", cx, cy + ballRadius * 0.52);
         const phase = (now * 0.7) % 1;
         for (let index = 0; index < 3; index += 1) {
           const fraction = ((index / 3) + phase) % 1;
-          const y = cy - 14 - fraction * (gateRadius - 22);
+          const y = cy - 13 - fraction * (ballRadius * 0.48);
           ctx.globalAlpha = 0.5 + fraction * 0.5;
           ctx.fillStyle = "#7dffb0";
           ctx.beginPath();
@@ -3054,10 +3153,20 @@ class CombatHud {
     const vsText = Number.isFinite(sinkFpm) && Math.abs(sinkFpm) >= 100
       ? `${sinkFpm >= 0 ? "\u2191" : "\u2193"} ${(Math.abs(sinkFpm) / 1000).toFixed(1)}K` : "";
     ctx.fillText(vsText ? `${raglText}   ${vsText}` : raglText, cx, readoutY);
-    // Pitch numeral beside the disc so attitude reads without decoding the ADI.
+    // Compact digital cross-checks flank the ball; they verify, rather than substitute for, the
+    // now fully readable attitude picture.
     ctx.textAlign = "left";
-    ctx.fillText(`${pitchDeg >= 0 ? "+" : ""}${Math.round(pitchDeg)}\u00B0`,
+    ctx.fillText(`P ${pitchDeg >= 0 ? "+" : ""}${Math.round(pitchDeg)}\u00B0`,
       cx + radius + 8, cy);
+    const bankDeg = Number(state.bank_deg) || 0;
+    ctx.textAlign = "right";
+    ctx.fillText(
+      Math.abs(bankDeg) < 0.5
+        ? "B 0\u00B0"
+        : `B ${bankDeg > 0 ? "R" : "L"}${Math.round(Math.abs(bankDeg))}\u00B0`,
+      cx - radius - 8,
+      cy,
+    );
 
     if (groundDanger && blink && !centralPullUp) {
       ctx.fillStyle = RED;
@@ -3078,9 +3187,11 @@ class CombatHud {
         gateAngleFromUpRad,
         neutral,
         captured,
-        bankDeg: Number(state.bank_deg) || 0,
-        pitchDeg,
-        horizonOffsetPx: clamp(pitchDeg * (radius / 45), -radius * 0.72, radius * 0.72),
+        bankDeg,
+        pitchDeg: attitude.pitchDeg,
+        ballRadius,
+        bankPointerAngleRad: bankPointerAngle,
+        horizonOffsetPx: attitude.horizonOffsetPx,
         aftLabel,
       };
     }

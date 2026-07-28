@@ -73,6 +73,7 @@ test("release identity detects mixed shell and superseded production builds", ()
     running: { build: RELEASE_BUILD, revision: "aaaaaaaa11111111" },
     current: { build: RELEASE_BUILD, revision: "bbbbbbbb22222222" },
     lookup: "complete",
+    locationLike: { hostname: "guns-only.vercel.app" },
   });
   assert.equal(redeployed.stale, true);
   assert.match(redeployed.label,
@@ -89,6 +90,32 @@ test("release identity detects mixed shell and superseded production builds", ()
   assert.equal(sameRevisionNewDeployment.stale, true,
     "a deployment change remains meaningful even when Git revision is unchanged");
   assert.match(sameRevisionNewDeployment.telemetryBuild, /rev\.same-sha\.dep\.dpl_old/);
+
+  const previewCandidate = createReleaseIdentity({
+    entrypointBuild: RELEASE_BUILD,
+    running: { build: RELEASE_BUILD, revision: "candidate-sha", deployment: "dpl_candidate" },
+    current: { build: nextBuild, revision: "production-sha", deployment: "dpl_production" },
+    lookup: "complete",
+    locationLike: { hostname: "guns-only-git-pivot-hardening.vercel.app" },
+  });
+  assert.equal(previewCandidate.stale, false,
+    "an immutable preview which differs from production must remain flyable");
+  assert.equal(previewCandidate.candidate, true);
+  assert.equal(previewCandidate.state, "candidate");
+  assert.match(previewCandidate.label, /PREVIEW CANDIDATE/);
+  assert.match(previewCandidate.label, new RegExp(`PRODUCTION BUILD ${nextBuild}`));
+  assert.equal(previewCandidate.telemetry.candidate, true);
+
+  const brokenPreviewRuntime = createReleaseIdentity({
+    entrypointBuild: RELEASE_BUILD,
+    running: { build: "47", revision: "mixed-preview-runtime" },
+    current: { build: RELEASE_BUILD, revision: "production-runtime" },
+    lookup: "complete",
+    locationLike: { hostname: "guns-only-git-pivot-hardening.vercel.app" },
+  });
+  assert.equal(brokenPreviewRuntime.stale, true,
+    "preview leniency must not bless a mixed local shell/runtime");
+  assert.equal(brokenPreviewRuntime.candidate, false);
 
   const mixedRuntimeTuple = createReleaseIdentity({
     entrypointBuild: RELEASE_BUILD,
@@ -126,15 +153,29 @@ test("build lookup uses canonical production from Vercel deployments but stays o
   assert.equal(buildInfoUrl({ hostname: "localhost" }), null);
 });
 
-test("shell, browser module, and deployment endpoint share one release number", async () => {
-  const [index, app] = await Promise.all([
+test("shell, browser module, service worker, and deployment endpoint share one release number", async () => {
+  const [index, app, serviceWorker, deployScript] = await Promise.all([
     readFile(new URL("index.html", WEB_ROOT), "utf8"),
     readFile(new URL("app.js", WEB_ROOT), "utf8"),
+    readFile(new URL("service-worker.js", WEB_ROOT), "utf8"),
+    readFile(new URL("../../../../../bin/deploy-web", import.meta.url), "utf8"),
   ]);
   const entrypoint = index.match(/<script type="module" src="\.\/app\.js\?v=([^"]+)"/);
+  const worker = serviceWorker.match(/const RELEASE_BUILD = "([^"]+)"/);
   assert.ok(entrypoint, "index must cache-bust the application entrypoint");
+  assert.ok(worker, "service worker must carry the release cache stamp");
   assert.equal(entrypoint[1], RELEASE_BUILD, "index and canonical release must advance together");
+  assert.equal(worker[1], RELEASE_BUILD,
+    "service-worker cache and canonical release must advance together");
   assert.equal(buildInfo.RELEASE_BUILD, RELEASE_BUILD, "endpoint and canonical release must match");
+  assert.match(deployScript,
+    /verify_korea_atlas\.py" "\$atlas_manifest"/,
+    "deployments must verify the gitignored terrain atlas before publishing");
+  assert.match(deployScript,
+    /rsync[\s\S]*?verify_korea_atlas\.py" "\$staged_atlas_manifest"/,
+    "deployments must verify the exact staged atlas bytes after copying");
+  assert.doesNotMatch(deployScript, /Ukraine atlas pages missing; Rapier theatre may render empty/,
+    "a missing deployment atlas must be fatal, not a warning");
   assert.match(app, /from "\.\/render\/release\/release_identity\.js"/);
   assert.doesNotMatch(app, /const BUILD = new URL\(import\.meta\.url\)/);
   assert.match(app, /BUILD_IDENTITY_REVALIDATE_MS = 60_000/);
@@ -147,6 +188,9 @@ test("shell, browser module, and deployment endpoint share one release number", 
   assert.match(app,
     /runningBuildInfo = await fetchBuildInfo\(runningUrl, controller\.signal\)[\s\S]*?const current = await fetchBuildInfo\(currentUrl, controller\.signal\)/,
     "direct deployments must read running provenance before canonical current provenance");
+  assert.match(app,
+    /!runningBuildInfo[\s\S]*?runningUrl === currentUrl[\s\S]*?runningBuildInfo = current/,
+    "a preview must never borrow canonical production metadata as its running provenance");
   assert.match(app, /event\.persisted\) void resolveBuildIdentity\(\{ force: true \}\)/);
   assert.match(app, /!document\.hidden\) void resolveBuildIdentity\(\)/);
   assert.match(app, /window\.addEventListener\("focus", \(\) => void resolveBuildIdentity\(\)\)/);

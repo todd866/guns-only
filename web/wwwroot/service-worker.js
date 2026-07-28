@@ -15,7 +15,7 @@
 // The cache name carries the release build, so shipping a new build orphans the old cache and
 // activate() deletes it. That reuses the existing stamp ritual rather than inventing a second
 // versioning scheme — see web/wwwroot/render/release/release_identity.js.
-const RELEASE_BUILD = "171";
+const RELEASE_BUILD = "172";
 const CACHE = `guns-only-${RELEASE_BUILD}`;
 
 // Never cached: telemetry and the multiplayer room are live services, and a cached reply would be
@@ -76,6 +76,19 @@ async function cachedTerrainBundle(url) {
   return (await caches.open(CACHE)).match(bare.href);
 }
 
+function fetchWithCacheWrite(request, { basicOnly = false } = {}) {
+  return fetch(request).then((response) => {
+    let cacheWrite = Promise.resolve();
+    if (response.ok && response.status === 200 && (!basicOnly || response.type === "basic")) {
+      // Clone while the body is unquestionably unused. The response can then be returned
+      // immediately while waitUntil() keeps the asynchronous Cache API write alive.
+      const copy = response.clone();
+      cacheWrite = caches.open(CACHE).then((cache) => cache.put(request, copy));
+    }
+    return { response, cacheWrite };
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
@@ -104,32 +117,28 @@ self.addEventListener("fetch", (event) => {
   // A navigation must never be answered from a stale cache while online — that is how a PWA gets
   // permanently stuck on an old build — but it must still open when there is no network at all.
   if (request.mode === "navigate") {
-    event.respondWith((async () => {
-      try {
-        const response = await fetch(request);
-        (await caches.open(CACHE)).put(request, response.clone());
-        return response;
-      } catch (error) {
+    const network = fetchWithCacheWrite(request);
+    event.waitUntil(network.then(({ cacheWrite }) => cacheWrite).catch(() => undefined));
+    event.respondWith(
+      network.then(({ response }) => response).catch(async (error) => {
         const cached = await caches.match(request)
           ?? await caches.match("index.html")
           ?? await caches.match("/");
         if (cached) return cached;
         throw error;
-      }
-    })());
+      }),
+    );
     return;
   }
 
   // Everything else is content-addressed in practice: app.js carries ?v=BUILD, the WASM runtime and
   // vendor tree are versioned by path, and the cache is dropped wholesale on a new build. Cache
   // first is therefore both correct and the reason a cold offline start is fast.
-  event.respondWith((async () => {
+  const responseRecord = (async () => {
     const cached = await caches.match(request);
-    if (cached) return cached;
-    const response = await fetch(request);
-    if (response.ok && response.status === 200 && response.type === "basic") {
-      (await caches.open(CACHE)).put(request, response.clone());
-    }
-    return response;
-  })());
+    if (cached) return { response: cached, cacheWrite: Promise.resolve() };
+    return fetchWithCacheWrite(request, { basicOnly: true });
+  })();
+  event.waitUntil(responseRecord.then(({ cacheWrite }) => cacheWrite).catch(() => undefined));
+  event.respondWith(responseRecord.then(({ response }) => response));
 });

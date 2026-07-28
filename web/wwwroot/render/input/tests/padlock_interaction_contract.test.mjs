@@ -284,10 +284,9 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
     "ordinary camera-servo lag after first acquisition must not blank physical steering");
   assert.match(padlockSa, /CAMERA SETTLING/,
     "camera lag may be reported but must not masquerade as loss of physical steering");
-  // Build 71 rebuild: the roll director lives in ONE body-fixed locator inset (a true ADI +
-  // fixed waterline + the gate at the signed body-frame roll error), replacing the old
-  // camera-projected arc whose frames stopped agreeing the moment the target crossed the wing
-  // line. The contract now pins the inset's invariants instead of the old drawing internals.
+  // The roll director lives outside a body-fixed locator ADI: a moving sky/earth ball and bank
+  // pointer carry actual attitude, while the gate carries only signed body-frame roll error.
+  // This keeps camera-relative steering from being mistaken for ownship bank or pitch.
   // The method definition's BODY brace: the destructured parameter list has its own braces, so
   // anchor past the signature's closing "})" (4-space indent is unique to the definition).
   const inset = balancedBlock(hudSource, "sinkFpm,\n  })");
@@ -299,8 +298,9 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
     "the shortest roll arc needs repeated directional chevrons, not a text instruction");
   assert.match(inset, /TARGET AFT/,
     "aft-hemisphere geometry must be named, not left for the pilot to infer");
-  assert.match(inset, /pullPhase|captured: streaming|fraction \* \(gateRadius/,
-    "capture must become an outward graphical pull flow along the lift vector");
+  assert.match(inset,
+    /Captured: the roll task has ended[\s\S]*?fraction \* \(ballRadius \* 0\.48\)/,
+    "capture must become an unmistakable graphical pull flow inside the attitude ball");
   assert.doesNotMatch(padlockSa, /ROLL LEFT|ROLL RIGHT|`ROLL \$\{/,
     "tracked padlock steering must not depend on reading left/right command text");
   assert.match(padlockSa, /RELEASE LOOK TO REACQUIRE/,

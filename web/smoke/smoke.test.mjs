@@ -242,6 +242,42 @@ test("the published web app boots to a running flight kernel (no fatal render er
       `uncaught page errors during boot:\n${pageErrors.join("\n")}`,
     );
 
+    // A rendered ready card is not enough: Build 172 once reached that card, then the first live
+    // frame hit a replay-state temporal-dead-zone error. The scene remained visible but every
+    // fixed-tick control—including F—was frozen. Enter the actual default F-22 sortie and prove
+    // the browser KeyF path reaches authoritative gun state.
+    await page.waitForFunction(() => {
+      const active = globalThis.__gunsState?.session_phase === "ACTIVE"
+        && !document.documentElement.classList.contains("run-paused");
+      const start = document.querySelector("#ready-start");
+      const resumable = document.querySelector("#ready-screen")?.classList.contains("visible")
+        && start?.disabled === false;
+      return active || resumable;
+    }, undefined, { timeout: 45000 });
+    const alreadyActive = await page.evaluate(() =>
+      globalThis.__gunsState?.session_phase === "ACTIVE"
+        && !document.documentElement.classList.contains("run-paused"));
+    if (!alreadyActive) await page.locator("#ready-start").click();
+    await page.waitForFunction(() =>
+      globalThis.__gunsState?.session_phase === "ACTIVE"
+        && globalThis.__gunsState?.player_terminal_state === "FLYING"
+        && !document.documentElement.classList.contains("run-paused"),
+    undefined, { timeout: 45000 });
+    await page.evaluate(() => globalThis.__gunsBridge.ReleaseWeaponsHold());
+    await page.waitForFunction(() => globalThis.__gunsState?.weapons_inhibited === false);
+    const roundsBeforeTrigger = await page.evaluate(
+      () => Number(globalThis.__gunsState?.rounds_fired) || 0,
+    );
+    await page.keyboard.down("f");
+    try {
+      await page.waitForFunction((roundsBefore) =>
+        globalThis.__gunsState?.gun_firing === true
+          && Number(globalThis.__gunsState?.rounds_fired) > roundsBefore,
+      roundsBeforeTrigger, { timeout: 5000 });
+    } finally {
+      await page.keyboard.up("f");
+    }
+
     // The per-frame path must ride the hot buffer: over a 5.5-second window the full JSON
     // snapshot should be fetched only on cold_version edges + the five-second fallback, never
     // per frame (~60+/s). This catches a silent regression to JSON-per-frame while still proving
@@ -662,7 +698,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         await increasedThrottleHandle.dispose();
         assert.equal(increasedThrottle.direction, "up");
         assert.ok(increasedThrottle.y < 0);
-        assert.ok(increasedThrottle.value > decreasedThrottle.value);
+        assert.ok(increasedThrottle.value > steadyThrottle + 0.025,
+          `${viewport.width}x${viewport.height}: upward rocker motion did not increase throttle`);
 
         await throttleRocker.dispatchEvent(viewport.width <= 700 ? "pointercancel" : "pointerup", {
           pointerId: throttlePointerId,
