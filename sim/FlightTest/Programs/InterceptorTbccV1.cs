@@ -3,13 +3,16 @@ namespace GunsOnly.Sim.FlightTest.Programs;
 public static class InterceptorTbccV1 {
     public const double FamilyAugmentedTwCap = 1.20;
 
-    static double RapierDesignGrossKg => FlightModel.RapierPublicDataSurrogate.MassKg;
-    static double RapierDesignFuelFreeKg => FlightModel.RapierPublicDataSurrogate.FuelFreeMassKg;
-    static double RapierDryTw =>
-        FlightModel.RapierPublicDataSurrogate.ThrustMaxN
-            / (RapierDesignGrossKg * 9.80665);
-    static double RapierAugTw =>
-        RapierDryTw * FlightModel.RapierPublicDataSurrogate.MaxThrustFraction;
+    // Deliberately NOT derived from FlightModel.RapierPublicDataSurrogate: the Identity gates
+    // exist to catch the flight model drifting off the reviewed design point (buff creep), which
+    // a self-referential anchor can never do. Pinned 2026-07-29 to the reviewed design numbers:
+    // 5,150 kg airframe + 4 x 360 kg stowed gun-drones, 4,500 kg internal fuel, 84 kN dry core,
+    // 1.55 augmentor lever stop. A real design revision must re-pin these in the same commit
+    // that changes FlightModel, and say so in the design doc.
+    const double RapierDesignFuelFreeKg = 6_590.0;
+    const double RapierDesignGrossKg = 11_090.0;
+    const double RapierDryTw = 84_000.0 / (RapierDesignGrossKg * 9.80665);
+    const double RapierAugTw = RapierDryTw * 1.55;
 
     public static AirframeIdentity RapierAspirationalIdentity { get; } = new(
         Role: "dispersed TBCC interceptor",

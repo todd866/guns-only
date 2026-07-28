@@ -4,6 +4,14 @@ using GunsOnly.Sim.FlightTest.Programs;
 
 namespace GunsOnly.Sim.Tests.FlightTest;
 
+/// <summary>
+/// ASPIRATIONAL PINS, NOT REGRESSIONS. These tests assert that today's Rapier surrogate FAILS the
+/// harness's dynamic gates (the transonic climb exceeds the 40-degree family gamma cap, so
+/// Evaluate reports Passed=false). They pin the known-bad physics so the harness's red verdict is
+/// itself protected. When the wave-drag/transonic model is corrected and the gate genuinely
+/// passes, these assertions MUST be flipped in the same commit — a failure here after a physics
+/// fix means the fix worked, not that it broke something.
+/// </summary>
 public class DynamicHoldTests {
     [Fact]
     public void RapierAbClimbThroughMach1ExceedsFamilyGammaCap() {
