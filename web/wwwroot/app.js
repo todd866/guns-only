@@ -1454,13 +1454,41 @@ function resolveBuildIdentity({ force = false } = {}) {
   return buildIdentityLookup;
 }
 
-function reloadCurrentBuild() {
-  const destination = buildIdentity.stale
-    ? new URL(window.location.pathname, CANONICAL_PRODUCTION_ORIGIN)
-    : new URL(window.location.href);
+async function reloadCurrentBuild() {
+  // Cache-first service-worker responses pin app.js?v=N and unversioned modules until the
+  // cache name changes. A plain navigation to the same release therefore keeps serving the
+  // stale shell — the "Reload current build" button looked dead. Drop the worker and its
+  // caches first, then hard-navigate to the canonical production origin.
+  try {
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+    if (typeof caches !== "undefined") {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((key) => key.startsWith("guns-only-"))
+          .map((key) => caches.delete(key)),
+      );
+    }
+  } catch (error) {
+    console.warn("Could not clear offline caches before reload.", error);
+  }
+
+  const destination = new URL(
+    window.location.pathname || "/",
+    CANONICAL_PRODUCTION_ORIGIN,
+  );
   destination.searchParams.delete("mission");
-  destination.searchParams.set("program", selectedProgramNodeId);
-  destination.searchParams.set("build", buildIdentity.currentBuild || buildIdentity.releaseBuild);
+  if (selectedProgramNodeId) {
+    destination.searchParams.set("program", selectedProgramNodeId);
+  }
+  destination.searchParams.set(
+    "build",
+    buildIdentity.currentBuild || buildIdentity.releaseBuild,
+  );
+  destination.searchParams.set("_reload", String(Date.now()));
   window.location.replace(destination.href);
 }
 
