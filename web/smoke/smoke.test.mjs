@@ -645,17 +645,21 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           clientX: throttleCentre.x,
           clientY: throttleCentre.y - throttleBox.height * 0.44,
         });
-        await page.waitForFunction((initialThrottle) =>
-          Number(globalThis.__gunsState?.requested_throttle) > initialThrottle + 0.025,
-        steadyThrottle, { timeout: 5000 });
-        const increasedThrottle = await page.evaluate(() => {
+        const increasedThrottleHandle = await page.waitForFunction((initialThrottle) => {
+          const value = Number(globalThis.__gunsState?.requested_throttle);
+          if (!(value > initialThrottle + 0.025)) return false;
           const element = document.querySelector("#touch-throttle-rocker");
           return {
-            value: Number(globalThis.__gunsState?.requested_throttle),
+            value,
             direction: element.dataset.direction,
             y: Number.parseFloat(element.style.getPropertyValue("--throttle-y")),
           };
-        });
+        }, steadyThrottle, { timeout: 5000 });
+        // Capture the exact animation frame which satisfied the motion predicate. A separate
+        // evaluate() can race the flight automation on slower CI runners and observe a later
+        // throttle value even though the rocker already proved it moved upward.
+        const increasedThrottle = await increasedThrottleHandle.jsonValue();
+        await increasedThrottleHandle.dispose();
         assert.equal(increasedThrottle.direction, "up");
         assert.ok(increasedThrottle.y < 0);
         assert.ok(increasedThrottle.value > decreasedThrottle.value);
