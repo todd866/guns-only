@@ -292,8 +292,11 @@ test("finished Medevac screen uses disposition and four independent axes", () =>
     /if \(casevac\) readySortieLabel\.textContent = "Disposition"/);
   assert.match(source,
     /if \(casevac\) readyConfigLabel\.textContent = "Independent assessment"/);
+  // The ready chain gained combat-handoff custody ahead of CASEVAC when the slice merged into
+  // pivot-hardening; handoff and casevac never co-occur, so casevac states still land on
+  // disposition + axes.
   assert.match(source,
-    /readyConfig\.textContent = state\?\.maintenance_scenario[\s\S]*: casevac[\s\S]*\? casevacFacts\.axes/);
+    /readyConfig\.textContent = result\.handoff[\s\S]*: state\?\.maintenance_scenario[\s\S]*: casevac[\s\S]*\? casevacFacts\.axes/);
   assert.match(source,
-    /readyControls\.textContent = casevac[\s\S]*Primary correction · \$\{casevacFacts\.correction\}/);
+    /readyControls\.textContent = result\.handoff[\s\S]*: casevac[\s\S]*Primary correction · \$\{casevacFacts\.correction\}/);
 });

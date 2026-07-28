@@ -21,7 +21,7 @@ const readBridgeContract = () =>
 test("snapshot 1.19 projects the authoritative pilot physiology contract", async () => {
   const source = await readBridgeContract();
 
-  assert.match(source, /const string SnapshotSchemaVersion = "1\.19\.0";/);
+  assert.match(source, /const string SnapshotSchemaVersion = "1\.20\.0";/);
   assert.match(source,
     /PilotPhysiologyState pilotPhysiology = Session\.PilotPhysiologyState;/);
   assert.match(source,
