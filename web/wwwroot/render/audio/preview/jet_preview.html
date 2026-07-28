@@ -2,67 +2,155 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Rapier jet audio preview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jet cockpit audio cue lab</title>
   <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d2524;
+      --muted: #5f6965;
+      --paper: #f3efe5;
+      --panel: #fffdf6;
+      --line: #a9aaa3;
+      --active: #244f45;
+      --active-ink: #fffdf6;
+    }
+    * { box-sizing: border-box; }
     body {
       font: 15px/1.45 ui-sans-serif, system-ui, sans-serif;
-      max-width: 42rem;
+      max-width: 72rem;
       margin: 2rem auto;
-      padding: 0 1rem;
-      color: #1a1a1a;
-      background: #f4f1ea;
+      padding: 0 1rem 3rem;
+      color: var(--ink);
+      background: var(--paper);
     }
-    h1 { font-size: 1.35rem; margin-bottom: 0.35rem; }
-    p { margin: 0.5rem 0 1rem; color: #444; }
+    h1 { font-size: 1.55rem; margin: 0 0 0.35rem; }
+    h2 { font-size: 1rem; margin: 0; }
+    p { margin: 0.45rem 0 1rem; color: var(--muted); }
+    code { font-size: 0.92em; }
+    #cue-matrix {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+      gap: 0.8rem;
+      margin: 1.25rem 0;
+    }
+    .cue-group {
+      border: 1px solid var(--line);
+      border-radius: 0.35rem;
+      background: var(--panel);
+      padding: 0.85rem;
+    }
+    .cue-group p { min-height: 2.65rem; margin: 0.25rem 0 0.7rem; font-size: 0.87rem; }
+    .cue-buttons { display: grid; gap: 0.4rem; }
     button {
-      display: block;
       width: 100%;
-      margin: 0.4rem 0;
-      padding: 0.7rem 0.9rem;
+      padding: 0.65rem 0.75rem;
       font: inherit;
       text-align: left;
-      border: 1px solid #222;
+      color: inherit;
+      border: 1px solid #656a67;
+      border-radius: 0.25rem;
       background: #fff;
       cursor: pointer;
     }
-    button:hover { background: #e8e4dc; }
-    .hint { font-size: 0.9rem; color: #666; margin-top: 1.25rem; }
+    button:hover { background: #ece9df; }
+    button[aria-pressed="true"] {
+      color: var(--active-ink);
+      border-color: var(--active);
+      background: var(--active);
+    }
+    button small { display: block; margin-top: 0.18rem; color: #69716e; }
+    button[aria-pressed="true"] small { color: #d8e7e1; }
+    #telemetry {
+      position: sticky;
+      bottom: 0.5rem;
+      z-index: 1;
+      min-height: 3.1rem;
+      margin: 1rem 0;
+      padding: 0.65rem 0.8rem;
+      color: #e9f3ef;
+      border-radius: 0.3rem;
+      background: rgba(24, 42, 38, 0.96);
+      font: 0.86rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+    }
+    details {
+      margin-top: 1.2rem;
+      padding: 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: 0.35rem;
+      background: var(--panel);
+    }
+    summary { cursor: pointer; font-weight: 650; }
+    .legacy {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+      gap: 0.4rem;
+      margin-top: 0.7rem;
+    }
+    .stop { margin-top: 1rem; border-color: #8c3f31; color: #772e23; }
+    .hint { font-size: 0.9rem; }
   </style>
 </head>
 <body>
-  <h1>Jet voice preview</h1>
+  <h1>Jet audio cue lab</h1>
   <p>
-    Click once to unlock audio, then hold a regime. Uses the hybrid engine graph
-    (real jet sample beds when present under <code>samples/jet/</code>, plus procedural
-    accents). Compare idle vs MIL — MIL should read as a jet, not a synth pad.
+    Controlled A/B checks for the F-22 cockpit mix. Within each card, the named variable changes
+    while the other major controls stay fixed. “Auto” checks loop until stopped.
   </p>
-  <button type="button" data-regime="idle">Idle / taxi (low RPM, dense air)</button>
-  <button type="button" data-regime="mil">Military power (dense air)</button>
-  <button type="button" data-regime="f22_idle">F-22 cockpit idle</button>
-  <button type="button" data-regime="f22_mil">F-22 cockpit MIL</button>
-  <button type="button" data-regime="slam">Throttle slam → MIL</button>
-  <button type="button" data-regime="catshot">Maglev catshot (buried tube)</button>
-  <button type="button" data-regime="handover">Mach 2.2 mid-handover</button>
-  <button type="button" data-regime="mach">Mach 2.6 ram dash</button>
-  <button type="button" data-regime="coast">Zoom coast / thin air</button>
-  <button type="button" data-regime="stop">Stop</button>
+  <main id="cue-matrix" aria-label="Controlled audio cue comparisons"></main>
+  <div id="telemetry" role="status" aria-live="polite">Select a cue to unlock audio.</div>
+  <button class="stop" type="button" data-regime="stop">Stop all audio</button>
+
+  <details>
+    <summary>Mechanism, gun, and Rapier regression demos</summary>
+    <div class="legacy">
+      <button type="button" data-regime="gun">F-22 / M61 cockpit burst</button>
+      <button type="button" data-regime="gear">F-22 gear extension</button>
+      <button type="button" data-regime="slam">Rapier throttle slam → MIL</button>
+      <button type="button" data-regime="catshot">Rapier maglev catshot</button>
+      <button type="button" data-regime="handover">Rapier Mach 2.2 handover</button>
+      <button type="button" data-regime="mach">Rapier Mach 2.6 ram dash</button>
+      <button type="button" data-regime="coast">Rapier zoom coast / thin air</button>
+    </div>
+  </details>
   <p class="hint">
-    Open via the local web server, e.g.
-    <code>…/render/audio/preview/jet_preview.html</code>
+    Serve this tree locally and open
+    <code>…/render/audio/preview/jet_preview.html</code>. The graph uses the same engine master,
+    shared dynamics compressor, and event update functions as flight audio.
   </p>
+
   <script type="module">
+    import {
+      CUE_GROUPS,
+      CUE_PRESET_BY_ID,
+      cueStateAt,
+      dynamicPressurePa,
+    } from "./cue_matrix.js";
     import {
       attachJetSampleBeds,
       createEngineVoices,
       loadJetSampleBeds,
+      replaceJetSampleBeds,
       updateEngineVoices,
     } from "../engine_audio.js";
     import {
+      createContactAcousticVoices,
       createEventVoices,
+      fireGunReports,
+      updateAirframeCueVoices,
+      updateBuffetVoice,
       updateCatapultVoice,
+      updateCombatCueVoices,
+      updateConfigurationVoices,
+      updateContactAcousticVoices,
+      updateRcsVoice,
+      updateTrapVoice,
     } from "../event_audio.js";
 
-    const regimes = {
+    const RAPIER_ID = "aircraft.rapier.public-data-surrogate.v1";
+    const RAPIER_AUDIO_ID = "audio.rapier.turbo-ram.v1";
+    const legacyRegimes = {
       idle: {
         applied_throttle: 0.35,
         engine_rpm_pct: 55,
@@ -71,8 +159,8 @@
         air_density_kg_m3: 1.15,
         rapier_turbine_thrust_kn: 25,
         rapier_ramjet_thrust_kn: 0,
-        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
-        audio_profile_id: "audio.rapier.turbo-ram.v1",
+        player_aircraft_id: RAPIER_ID,
+        audio_profile_id: RAPIER_AUDIO_ID,
       },
       mil: {
         applied_throttle: 1.55,
@@ -82,37 +170,8 @@
         air_density_kg_m3: 0.9,
         rapier_turbine_thrust_kn: 95,
         rapier_ramjet_thrust_kn: 0,
-        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
-        audio_profile_id: "audio.rapier.turbo-ram.v1",
-      },
-      f22_idle: {
-        applied_throttle: 0.4,
-        engine_rpm_pct: 60,
-        mach: 0.35,
-        true_airspeed_kts: 220,
-        air_density_kg_m3: 1.1,
-        player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
-        audio_profile_id: "audio.f22a.aged-twin-fan.v1",
-      },
-      f22_mil: {
-        applied_throttle: 1.55,
-        engine_rpm_pct: 100,
-        mach: 0.9,
-        true_airspeed_kts: 540,
-        air_density_kg_m3: 0.95,
-        player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
-        audio_profile_id: "audio.f22a.aged-twin-fan.v1",
-      },
-      slam: {
-        applied_throttle: 1.55,
-        engine_rpm_pct: 100,
-        mach: 0.85,
-        true_airspeed_kts: 520,
-        air_density_kg_m3: 0.9,
-        rapier_turbine_thrust_kn: 95,
-        rapier_ramjet_thrust_kn: 0,
-        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
-        audio_profile_id: "audio.rapier.turbo-ram.v1",
+        player_aircraft_id: RAPIER_ID,
+        audio_profile_id: RAPIER_AUDIO_ID,
       },
       handover: {
         applied_throttle: 1.5,
@@ -122,8 +181,8 @@
         air_density_kg_m3: 0.28,
         rapier_turbine_thrust_kn: 35,
         rapier_ramjet_thrust_kn: 45,
-        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
-        audio_profile_id: "audio.rapier.turbo-ram.v1",
+        player_aircraft_id: RAPIER_ID,
+        audio_profile_id: RAPIER_AUDIO_ID,
       },
       mach: {
         applied_throttle: 1.45,
@@ -133,8 +192,8 @@
         air_density_kg_m3: 0.22,
         rapier_turbine_thrust_kn: 5,
         rapier_ramjet_thrust_kn: 78,
-        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
-        audio_profile_id: "audio.rapier.turbo-ram.v1",
+        player_aircraft_id: RAPIER_ID,
+        audio_profile_id: RAPIER_AUDIO_ID,
       },
       coast: {
         applied_throttle: 0,
@@ -145,43 +204,133 @@
         rapier_turbine_thrust_kn: 0,
         rapier_ramjet_thrust_kn: 0,
         rapier_rcs_authority: 0.85,
-        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
-        audio_profile_id: "audio.rapier.turbo-ram.v1",
+        player_aircraft_id: RAPIER_ID,
+        audio_profile_id: RAPIER_AUDIO_ID,
       },
     };
 
+    const matrix = document.getElementById("cue-matrix");
+    const telemetry = document.getElementById("telemetry");
+    for (const group of CUE_GROUPS) {
+      const section = document.createElement("section");
+      section.className = "cue-group";
+      section.dataset.cueGroup = group.id;
+      const heading = document.createElement("h2");
+      heading.textContent = group.label;
+      const description = document.createElement("p");
+      description.textContent = group.description;
+      const buttons = document.createElement("div");
+      buttons.className = "cue-buttons";
+      for (const cue of group.cues) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.cue = cue.id;
+        button.setAttribute("aria-pressed", "false");
+        button.append(document.createTextNode(cue.label));
+        const detail = document.createElement("small");
+        detail.textContent = cue.description;
+        button.append(detail);
+        buttons.append(button);
+      }
+      section.append(heading, description, buttons);
+      matrix.append(section);
+    }
+
     let context = null;
+    let previewMaster = null;
+    let previewCompressor = null;
+    let previewBus = null;
     let voices = null;
     let events = null;
+    let contacts = null;
     let timer = 0;
     let slamTimer = 0;
+    let cueStartedAt = 0;
     let catshotStart = 0;
-    let state = regimes.idle;
-
+    let demoStart = 0;
+    let activeCue = null;
+    let activeButton = null;
+    let state = cueStateAt("f22_power_60");
     let bedCharacter = null;
+    let bedLoadGeneration = 0;
 
-    function ensure(character = "rapier") {
+    function ensure(character = "f22") {
       const Ctor = window.AudioContext || window.webkitAudioContext;
-      if (!context) context = new Ctor();
+      if (!context) {
+        context = new Ctor();
+        previewMaster = context.createGain();
+        previewMaster.gain.value = 0;
+        previewMaster.connect(context.destination);
+
+        previewCompressor = context.createDynamicsCompressor();
+        previewCompressor.threshold.value = -18;
+        previewCompressor.knee.value = 12;
+        previewCompressor.ratio.value = 4.5;
+        previewCompressor.attack.value = 0.005;
+        previewCompressor.release.value = 0.18;
+        previewCompressor.connect(previewMaster);
+        previewBus = previewCompressor;
+
+        voices = createEngineVoices(context, previewBus, { includeMaster: true });
+        events = createEventVoices(context, previewBus);
+        contacts = createContactAcousticVoices(context, previewBus);
+      }
       if (bedCharacter !== character) {
-        voices = createEngineVoices(context, context.destination, { includeMaster: true });
-        events = createEventVoices(context, context.destination);
         bedCharacter = character;
+        const generation = ++bedLoadGeneration;
         loadJetSampleBeds(context, { character }).then((beds) => {
-          const ok = attachJetSampleBeds(voices, context, beds, { character });
+          if (generation !== bedLoadGeneration || character !== bedCharacter) return;
+          const ok = voices.hasSampleBeds
+            ? replaceJetSampleBeds(voices, context, beds, { character })
+            : attachJetSampleBeds(voices, context, beds, { character });
           console.info(ok ? `${character} sample beds attached` : "procedural fallback (no beds)");
         });
       }
     }
 
+    function updateProductionEvents(nextState, enabled) {
+      updateBuffetVoice(events, context, nextState, { enabled });
+      updateAirframeCueVoices(events, context, nextState, { enabled });
+      updateConfigurationVoices(events, context, nextState, { enabled });
+      updateCatapultVoice(events, context, nextState, { enabled });
+      updateRcsVoice(events, context, nextState, { enabled });
+      updateTrapVoice(events, context, nextState, { enabled });
+      updateCombatCueVoices(events, context, nextState, { enabled });
+      updateContactAcousticVoices(contacts, context, nextState, { enabled });
+      fireGunReports(events, context, nextState, {
+        enabled,
+        triggerHeld: nextState?.gun_firing === true,
+      });
+    }
+
+    function updateTelemetry(nextState) {
+      const qKpa = dynamicPressurePa(nextState) / 1000;
+      const parts = [
+        activeCue?.label || "Regression demo",
+        `power ${Number(nextState.applied_throttle ?? 0).toFixed(2)}`,
+        `RPM ${Number(nextState.engine_rpm_pct ?? 0).toFixed(0)}%`,
+        `q ${qKpa.toFixed(1)} kPa`,
+        `G ${Number(nextState.pilot_gz ?? nextState.g_actual ?? 1).toFixed(1)}`,
+        `view ${nextState.audio_perspective || "cockpit"}`,
+      ];
+      if (Number.isFinite(Number(nextState.range_m))) {
+        parts.push(
+          `contact ${(Number(nextState.range_m) / 1000).toFixed(2)} km`,
+          `closure ${Number(nextState.closure_kts).toFixed(0)} kt`,
+        );
+      }
+      telemetry.textContent = parts.join(" · ");
+    }
+
     function tick(nowMs) {
-      if (!context || !voices) return;
-      if (state?._catshot) {
+      if (!context || !voices || !events || !contacts) return;
+      if (activeCue) {
+        state = cueStateAt(activeCue, (nowMs - cueStartedAt) / 1000);
+      } else if (state?._catshot) {
         const t = Math.min(1, (nowMs - catshotStart) / 4200);
         const speed01 = Math.sqrt(t);
         state = {
-          ...regimes.mil,
-          applied_throttle: 1.55,
+          ...legacyRegimes.mil,
           catapult_active: t < 1,
           catapult_progress: t,
           catapult_speed_kts: speed01 * 214,
@@ -191,47 +340,107 @@
           recovery: t < 1 ? "CATAPULT" : "FREE",
           _catshot: t < 1,
         };
+      } else if (state?._gun) {
+        const t = (nowMs - demoStart) / 1000;
+        state = {
+          ...cueStateAt("f22_power_100"),
+          gun_firing: t < 1.6,
+          player_gun_profile_id: "gun.m61a2.public-data-surrogate.v1",
+          rounds_fired: Math.max(0, Math.floor(t * 100)),
+          _gun: t < 2.2,
+        };
+      } else if (state?._gear) {
+        const t = Math.min(1, (nowMs - demoStart) / 3200);
+        const position = t * t * (3 - 2 * t);
+        state = {
+          ...cueStateAt("f22_power_60"),
+          gear_nose: position,
+          gear_left: position,
+          gear_right: position,
+          flap_left_deg: 0,
+          flap_right_deg: 0,
+          _gear: t < 1,
+        };
       }
       updateEngineVoices(voices, context, state, { muted: false });
-      updateCatapultVoice(events, context, state, { enabled: true });
+      updateProductionEvents(state, true);
+      updateTelemetry(state);
       timer = requestAnimationFrame(tick);
     }
 
-    function play(regime) {
-      const next = regimes[regime] || regimes.idle;
-      const character = String(next.audio_profile_id || "").includes("f22") ? "f22" : "rapier";
+    function setActiveButton(button) {
+      if (activeButton) activeButton.setAttribute("aria-pressed", "false");
+      activeButton = button;
+      if (activeButton) activeButton.setAttribute("aria-pressed", "true");
+    }
+
+    function start(nextState, button) {
+      const character = String(nextState.audio_profile_id || "").includes("f22") ? "f22" : "rapier";
       ensure(character);
       context.resume();
+      previewMaster.gain.setTargetAtTime(0.55, context.currentTime, 0.18);
       clearTimeout(slamTimer);
+      setActiveButton(button);
+      cancelAnimationFrame(timer);
+      timer = requestAnimationFrame(tick);
+    }
+
+    function playCue(id, button) {
+      const cue = CUE_PRESET_BY_ID[id];
+      if (!cue) return;
+      activeCue = cue;
+      cueStartedAt = performance.now();
+      state = cueStateAt(cue, 0);
+      start(state, button);
+    }
+
+    function stop() {
+      if (!context) return;
+      activeCue = null;
+      clearTimeout(slamTimer);
+      cancelAnimationFrame(timer);
+      previewMaster.gain.setTargetAtTime(0, context.currentTime, 0.015);
+      updateEngineVoices(voices, context, state, { muted: true });
+      updateProductionEvents({}, false);
+      setActiveButton(null);
+      telemetry.textContent = "Audio stopped.";
+    }
+
+    function playLegacy(regime, button) {
       if (regime === "stop") {
-        cancelAnimationFrame(timer);
-        updateEngineVoices(voices, context, state, { muted: true });
-        updateCatapultVoice(events, context, { catapult_active: false }, { enabled: false });
+        stop();
         return;
       }
+      activeCue = null;
+      let next = legacyRegimes[regime] || legacyRegimes.idle;
+      if (regime === "gun") next = cueStateAt("f22_power_100");
+      if (regime === "gear") next = cueStateAt("f22_power_60");
+      start(next, button);
       if (regime === "slam") {
-        state = { ...regimes.idle, engine_rpm_pct: 70 };
-        cancelAnimationFrame(timer);
-        timer = requestAnimationFrame(tick);
+        state = { ...legacyRegimes.idle, engine_rpm_pct: 70 };
         slamTimer = setTimeout(() => {
-          state = regimes.slam;
+          state = legacyRegimes.mil;
         }, 700);
         return;
       }
       if (regime === "catshot") {
         catshotStart = performance.now();
         state = { _catshot: true };
-        cancelAnimationFrame(timer);
-        timer = requestAnimationFrame(tick);
+        return;
+      }
+      if (regime === "gun" || regime === "gear") {
+        demoStart = performance.now();
+        state = regime === "gun" ? { _gun: true } : { _gear: true };
         return;
       }
       state = next;
-      cancelAnimationFrame(timer);
-      timer = requestAnimationFrame(tick);
     }
 
+    for (const button of document.querySelectorAll("button[data-cue]")) {
+      button.addEventListener("click", () => playCue(button.dataset.cue, button));
+    }
     for (const button of document.querySelectorAll("button[data-regime]")) {
-      button.addEventListener("click", () => play(button.dataset.regime));
+      button.addEventListener("click", () => playLegacy(button.dataset.regime, button));
     }
   </script>
 </body>

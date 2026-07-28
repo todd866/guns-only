@@ -207,7 +207,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     // Lookahead decision cache. Rolling a small candidate set forward over the horizon every
     // tick is wasteful, so the choice is recomputed on a fixed deterministic cadence and held
     // between recomputes. The cadence counts real ticks (never wall-clock), keeping determinism.
-    const int LookaheadDecisionCadenceTicks = 48; // ~0.4 s at 120 Hz
+    const int LookaheadDecisionCadenceTicks = 12; // ~0.1 s at 120 Hz
     PilotCommand _lookaheadCommand = new(1.0, 0.0, 0.85, 0.0);
     int _lookaheadHoldTicks;
     long _selectionSequence;
@@ -239,10 +239,11 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // synchronised pair costs 44.6 ms — three frames of work inside one frame.
         //
         // Staggering the START of the counter changes WHICH tick each aircraft decides on and
-        // nothing about how it decides: the rollout, its horizon and its result are untouched. With
-        // a 36-tick cadence, stride 12 keeps wingmen off the same rendered frame when the sim
-        // advances ~2 ticks per 60 fps frame (session stages wingmen at engagementNumber + 1).
-        _lookaheadHoldTicks = (engagementNumber - 1) * 12 % LookaheadDecisionCadenceTicks;
+        // nothing about how it decides: the rollout, its horizon and its result are untouched. The
+        // multiplier is 5 rather than 1 because the session stages a wingman at engagementNumber + 1
+        // (WingmanSpawnStride), and a one-tick separation still lands both inside a single rendered
+        // frame at 60 fps, where the sim advances about two ticks per frame.
+        _lookaheadHoldTicks = (engagementNumber - 1) * 5 % LookaheadDecisionCadenceTicks;
         _parameters = parameters;
         _terrain = terrain;
         _sim = new AircraftSim(initial, parameters);
@@ -1408,13 +1409,13 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     /// Terrain safety is unaffected: the swept clearance query below samples each segment at
     /// maximumHorizontalStepM regardless of how long the segment is, so a longer step still checks
     /// every intervening grid cell rather than skipping over a ridge.
-    /// Coarser prediction steps cut the PEAK without touching decision cadence,
-    /// command freshness, or the horizon in seconds. Raised to 12 after beat-7 Metal
-    /// tapes still showed Ace decision bursts owning sim_ms_max past a 22 ms frame.
-    const int LookaheadPredictionSubstepTicks = 12;
+    // Integrate the forecast at 30 Hz while retaining the established 120 Hz command cadence and
+    // full horizon in seconds. Four authoritative ticks is the smallest divisor that materially
+    // reduces the synchronous candidate burst; the combat-contract suite guards the resulting
+    // approximation across firing geometry, terrain hunting, lethality and tier ordering.
+    const int LookaheadPredictionSubstepTicks = 4;
 
     double ScoreCandidate(in PilotCommand command, in ActorObservation player) {
-        const double dt = LookaheadPredictionSubstepTicks / (double)AircraftSim.TickHz;
         const double threatWeight = 26.0;
         // Optimize the envelope the trigger can ACTUALLY use. The old 12-degree camera window made
         // the lookahead tests look threatening while first-pass-safe production fights never fired:
@@ -1456,11 +1457,14 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             - SurfaceHeightM(_terrain, State.Position.X, State.Position.Z);
         double maxY = State.Position.Y;
         var previousProbePosition = State.Position;
-        // Same horizon in SECONDS, fewer prediction steps to cover it. Rounded up so no tier's
-        // lookahead silently shortens.
-        int horizon = (_profile.LookaheadHorizonTicks + LookaheadPredictionSubstepTicks - 1)
-            / LookaheadPredictionSubstepTicks;
-        for (int t = 0; t < horizon; t++) {
+        // Same horizon in SECONDS, fewer prediction steps to cover it. The last step is shortened
+        // when a tier's exact horizon is not divisible by four (Veteran 90, Ace 150), rather than
+        // silently extending those forecasts by two authoritative ticks.
+        for (int elapsedTicks = 0; elapsedTicks < _profile.LookaheadHorizonTicks;) {
+            int stepTicks = System.Math.Min(
+                LookaheadPredictionSubstepTicks,
+                _profile.LookaheadHorizonTicks - elapsedTicks);
+            double dt = stepTicks / (double)AircraftSim.TickHz;
             probe.Step(command, dt);
             predChi += predTurnRate * dt;
             var predVel = new Vec3D(
@@ -1510,6 +1514,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
                 if (playerNoseErrorRad < 12.0 * System.Math.PI / 180.0)
                     threatSeconds += dt;
             }
+            elapsedTicks += stepTicks;
         }
 
         var terminal = probe.State;

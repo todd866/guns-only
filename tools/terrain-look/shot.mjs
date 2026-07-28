@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-// Deterministic carved-terrain visual gate. The page is served from source, and environment-lab
-// loads the exact default manifest + relative range bundle used by production's
-// loadKoreaTerrain() call. Every capture is rejected unless the real Korea heightfield is
-// resident without loader errors.
+// Deterministic Ukraine soft-world visual gate. The page is served from source, and
+// environment-lab loads the exact jet-range atlas + relative range bundles used by production.
+// Every capture is rejected unless the Ukraine terrain is resident without loader errors.
 //
 // Usage:
 //   node tools/terrain-look/shot.mjs
@@ -21,6 +20,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const WWWROOT = resolve(SCRIPT_DIR, "../../web/wwwroot");
 const OUT_DIR = resolve(process.env.TERRAIN_LOOK_DIR ?? join(SCRIPT_DIR, "shots"));
 const MIN_PNG_BYTES = 50 * 1024;
+const EXPECTED_TERRAIN_ID = "terrain.ukraine.rapier-range.atlas.v1";
 const MIME = Object.freeze({
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -30,18 +30,18 @@ const MIME = Object.freeze({
   ".png": "image/png",
 });
 
-// Three renderer-space views: +X east, +Y altitude, -Z north. These numbers are part of the
-// acceptance contract; change them only when the labelled terrain version changes.
+// Three renderer-space views: +X east, +Y altitude, -Z north. They cover the low-level meadow
+// layer, the middle-distance shelterbelt grammar, and the country-scale atmospheric read.
 const VIEWS = Object.freeze([
   Object.freeze({
-    name: "valley-floor",
-    position: Object.freeze([17_800, 390, -11_700]),
-    target: Object.freeze([7_200, 300, 360]),
+    name: "steppe-low",
+    position: Object.freeze([-2_400, 240, 3_200]),
+    target: Object.freeze([-6_500, 80, -1_200]),
   }),
   Object.freeze({
-    name: "ridge-crossing",
-    position: Object.freeze([19_500, 980, -4_000]),
-    target: Object.freeze([7_200, 275, 360]),
+    name: "corridor-mid",
+    position: Object.freeze([-12_000, 1_800, 18_000]),
+    target: Object.freeze([-40_000, 180, -8_000]),
   }),
   Object.freeze({
     name: "high-oblique",
@@ -50,11 +50,14 @@ const VIEWS = Object.freeze([
   }),
 ]);
 
-function assertTerrain(diagnostics, label) {
-  if (diagnostics?.terrainId !== "terrain.korea.central-front.v2"
+function assertTerrain(diagnostics, label, { requireLocalScenery = false } = {}) {
+  if (diagnostics?.terrainId !== EXPECTED_TERRAIN_ID
     || diagnostics.residentChunks <= 0
+    || diagnostics.localResidentChunks <= 0
+    || requireLocalScenery && diagnostics.localSceneryChunks <= 0
+    || diagnostics.ambientSceneryEnabled !== true
     || diagnostics.errors !== 0) {
-    throw new Error(`${label}: real Korea terrain is not healthy: `
+    throw new Error(`${label}: Ukraine jet-range terrain is not healthy: `
       + JSON.stringify(diagnostics));
   }
 }
@@ -136,14 +139,31 @@ async function main() {
       `${request.method()} ${request.url()}: ${request.failure()?.errorText ?? "failed"}`,
     ));
 
-    await page.goto(`${site.url}environment-lab/?terrain-look=1`, {
+    await page.goto(`${site.url}environment-lab/?terrain-look=1&site=ukraine`, {
       waitUntil: "load",
       timeout: 30_000,
     });
-    await page.waitForFunction(
-      () => window.__terrainLookReady || window.__terrainLookError,
-      { timeout: 60_000 },
-    );
+    try {
+      await page.waitForFunction(
+        () => window.__terrainLookReady || window.__terrainLookError,
+        null,
+        { timeout: 120_000 },
+      );
+    } catch (error) {
+      const stalled = await page.evaluate(() => ({
+        ready: window.__terrainLookReady ?? null,
+        error: window.__terrainLookError ?? null,
+        diagnostics: window.__terrainLookProbe?.() ?? null,
+        documentReadyState: document.readyState,
+        marker: document.documentElement.dataset.terrainLookReady ?? null,
+      })).catch(() => null);
+      throw new Error(
+        `${error.message}; environment state=${JSON.stringify(stalled)}; `
+        + `pageErrors=${JSON.stringify(pageErrors)}; `
+        + `requestFailures=${JSON.stringify(requestFailures)}`,
+        { cause: error },
+      );
+    }
     const initial = await page.evaluate(() => ({
       ready: window.__terrainLookReady,
       error: window.__terrainLookError,
@@ -156,7 +176,9 @@ async function main() {
         (nextView) => window.__terrainLookSetView(nextView),
         view,
       );
-      assertTerrain(diagnostics, view.name);
+      assertTerrain(diagnostics, view.name, {
+        requireLocalScenery: view.name === "steppe-low",
+      });
       const filePath = join(OUT_DIR, `${view.name}.png`);
       await page.screenshot({ path: filePath, type: "png" });
       const size = (await stat(filePath)).size;

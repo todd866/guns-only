@@ -14,6 +14,8 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
     readonly AircraftParams _parameters;
     readonly AircraftSim _mergeSim;
     readonly PilotSkill _skill;
+    readonly BanditSkillProfile _profile;
+    readonly int? _doctrineIndex;
     GunsOnly.Sim.Environment.ITerrainSurface? _terrain;
     ReactiveBandit? _fight;
     IWindField? _wind;
@@ -24,9 +26,16 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
 
     public NeutralMergeBandit(AircraftState initial, AircraftParams parameters,
         PilotSkill skill = PilotSkill.Competent,
-        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
+        BanditSkillProfile? profile = null,
+        int? doctrineIndex = null) {
         _parameters = parameters;
         _skill = skill;
+        _profile = profile ?? BanditSkillProfile.For(skill);
+        int doctrineCount = System.Math.Max(1, _profile.DoctrineCount);
+        if (doctrineIndex is < 0 || doctrineIndex >= doctrineCount)
+            throw new System.ArgumentOutOfRangeException(nameof(doctrineIndex));
+        _doctrineIndex = doctrineIndex;
         _terrain = terrain;
         _mergeSim = new AircraftSim(initial, parameters);
         _atmosphere = _mergeSim.AtmosphereModel;
@@ -58,6 +67,10 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
     /// an honest inspection seam for verifying the flagship opener fields the intended tier.
     public PilotSkill BriefedSkill => _skill;
     public PilotSkill? FightSkill => _fight?.Skill;
+    /// The selected aircraft belongs to both phases. These seams verify that a director-staged
+    /// opening does not revert to the beat's authored mount when the reactive pilot takes over.
+    public AircraftParams BriefedAircraftParameters => _parameters;
+    public AircraftParams? FightAircraftParameters => _fight?.AircraftParameters;
     /// The tier this actor fields across both phases: the scripted merge is briefed at the same
     /// tier its post-pass ReactiveBandit fights at, so snapshot consumers read one stable value.
     public PilotSkill Skill => _skill;
@@ -125,7 +138,9 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
 
     void BeginFight() {
         if (_fight is not null) return;
-        var fight = new ReactiveBandit(_mergeSim.State, _parameters, _skill, _terrain) {
+        var fight = new ReactiveBandit(
+            _mergeSim.State, _parameters, _skill, _terrain,
+            profile: _profile, doctrineIndex: _doctrineIndex) {
             Wind = _wind,
             Atmosphere = _atmosphere
         };

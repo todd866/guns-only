@@ -512,6 +512,10 @@ test("selects progressively coarser LODs with tier-specific distance", () => {
   // Desktop retains full near-ground detail at LOD0.
   assert.equal(selectTerrainLod(5_000, "desktop", 4), 0);
   assert.equal(selectTerrainLod(12_000, "desktop", 4), 0);
+  // Broad, low-relief Ukraine keeps a tight LOD0 ring instead of paying Korea's mountain budget.
+  assert.equal(selectTerrainLod(5_000, "ukraine-desktop", 4), 0);
+  assert.equal(selectTerrainLod(13_000, "ukraine-desktop", 4), 1);
+  assert.equal(selectTerrainLod(40_000, "ukraine-desktop", 4), 2);
   // The floor is clamped to the chunk's coarsest level, so a single-LOD chunk is unaffected.
   assert.equal(selectTerrainLod(0, "balanced", 1), 0);
   // Hysteresis retains the current LOD across a small threshold crossing (desktop keeps LOD0).
@@ -836,6 +840,18 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
   assert.equal(terrain.diagnostics().residentChunks, 1);
   assert.equal(terrain.diagnostics().localResidentChunks, 1);
   assert.equal(terrain.diagnostics().localSceneryChunks, 0);
+  const westPresentation = terrain.pages.get("west").presentation;
+  assert.equal(westPresentation.streamingRadiusM, 6);
+  assert.equal(terrain.setStreamingRadiusM(3), true);
+  assert.equal(terrain.streamingRadiusM, 3);
+  assert.equal(terrain.pageLoadRadiusM, 3,
+    "atlas page loading must shrink with the public streaming radius");
+  assert.equal(westPresentation.streamingRadiusM, 3,
+    "already-loaded page presentations must obey governor radius changes");
+  assert.ok(westPresentation.chunkEvictRadiusM >= westPresentation.streamingRadiusM);
+  assert.equal(terrain.setStreamingRadiusM(6), true);
+  assert.equal(westPresentation.streamingRadiusM, 6,
+    "restoring the atlas radius must restore child page streaming too");
   terrain.update({ cameraPosition: new THREE.Vector3(15, 500, -4), deltaSeconds: 1 });
   await terrain.whenIdle();
   assert.equal(terrain.diagnostics().residentPages, 1);

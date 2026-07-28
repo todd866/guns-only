@@ -45,8 +45,15 @@ bend the flight model to make audio interesting.
 | --- | --- | --- | --- |
 | Flight façade | `web/wwwroot/render/audio/flight_audio.js` | Shared `AudioContext` + master + DynamicsCompressor; mute; drives engine/events/warnings | Yes — unit-tested |
 | Engine / airframe loop | `engine_audio.js` | Partials + fan whine + core + jet exhaust + ram + q rush; density + coast gate; M1.6–M2.7 handover | Yes — deepened |
-| Gun reports | `event_audio.js` | Cyclic short noise+square reports while `gun_firing` | Yes — replaces continuous bed |
-| Buffet rumble | `event_audio.js` | Lowpass pink from `buffet` + buffet angle magnitude | Yes |
+| Gun reports | `event_audio.js` | Weapon-rate body/gas/mechanism bed + varied clustered reports while `gun_firing` | Yes — profile-driven |
+| Buffet rumble | `event_audio.js` | Boolean floor plus progressive measured angular disturbance / AoA | Yes |
+| Cockpit palette | `engine_audio.js` + `samples/jet/` | Independent F-22/Rapier interior alternates with slow time-only crossfade | Yes — Build 170 |
+| Cabin floor | `engine_audio.js` | ECS airflow + 400 Hz electrical bed outside propulsion coast gate | Yes — restrained |
+| F-22 state cues | `engine_audio.js` | Published lever stop/spool power, structure-borne RPM trace, dedicated q-band canopy flow | Yes — independent axes |
+| Pilot load | `event_audio.js` | Positive-G suit/harness/structure versus negative-G unload/strap voice | Yes — signed G + onset |
+| Other aircraft | `event_audio.js` | Occluded fighter pass plus heavy-turboprop and long-range Tu-95 contra-prop classes | Yes — range/closure driven |
+| Internal gun character | `event_audio.js` | M61/GSh-301/M3 cadence profiles; persistent cyclic body + varied clustered reports | Yes — snapshot-profile driven |
+| Configuration mechanisms | `event_audio.js` | Gear/flap motion, hydraulic bed, door and lock edges | Yes |
 | GCAS aural | `warning_audio.js` | Square beep on shared bus | Yes — same semantics |
 | HUD audio | `hud.js` | Delegates arm/enable to façade; no private context | Mute unified |
 | Indoor microdrone | `indoor/audio.js` | Unchanged; pattern source for bus/compressor | Isolated |
@@ -60,10 +67,22 @@ Call sites:
 
 1. ~~Two AudioContexts~~ — **fixed** in Phase 0–1 (shared façade).
 2. ~~Engine mute bug~~ — **fixed** (`muted: !playerSettings.audio`).
-3. Hit/impact, destruction, ranging ticks — still absent.
-4. Full Rapier Phase 2 polish (RCS ticks, reentry character, catapult/trap one-shots) — coast silence + density are in; remaining cues deferred.
-5. ~~Gun is a loop~~ — **fixed** (cyclic reports).
+3. Ranging ticks — still absent. Hit/destruction are present and now range-attenuated.
+4. Full Rapier Phase 2 polish — RCS ticks, catapult, trap, coast silence, and density are in;
+   a dedicated re-entry character remains deferred.
+5. ~~Gun is a loop / fixed cadence~~ — **fixed** (published weapon cadence + clustered reports).
 6. Profile ID is aspirational — schemas advertise an audio profile; renderer still ignores pack mapping.
+
+### Research corpus
+
+The tracked catalogue is `audio/jet-library/catalog.json`; synchronized raw video, extracted
+analysis WAV, provider metadata, hashes, and the local review gallery live under the gitignored
+`analysis/jet-audio-library/`. Reference-only media never crosses into `web/wwwroot`.
+
+Sources are classified by microphone perspective before aircraft type. Timecoded analysis labels
+engine power, dynamic pressure, and signed G independently; recording loudness is never treated as
+a throttle label. The local gallery keeps video attached because HUD, controls, manoeuvre, camera
+mount, clipping, and edits are often the only evidence for what the sound represents.
 
 ### Constraints (hard)
 

@@ -117,7 +117,10 @@ export function gunFunnelRail(points, {
 // owns the vector geometry.
 export function gunFunnelUsable(state = {}, envelope) {
   const env = envelope || gunFunnelEnvelope(gunFunnelProfile(state));
-  if (state.bandit_alive !== true) return false;
+  const selectedAlive = typeof state.opponent_alive === "boolean"
+    ? state.opponent_alive
+    : state.bandit_alive === true;
+  if (!selectedAlive) return false;
   if (state.lead_valid !== true) return false;
   if (!(positive(state.target_wingspan_m, 0) > 0)) return false;
   const range = Number(state.range_m);

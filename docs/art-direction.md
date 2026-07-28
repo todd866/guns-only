@@ -12,6 +12,12 @@ aftermath over celebratory combat VFX. Tone target: Studio Ghibli–adjacent avi
 for craft without romance for war. Influence is lighting, landscape, pace, and `ma`; not pastiche of
 specific films or characters.
 
+The late-2030s no-man's-land is an **accidental reserve**, not a brown wasteland. Grass, wetlands,
+orchards, and canopy return across a country-scale human exclusion zone while edge villages and
+cleared corridors remain precariously inhabited. The beauty is real and the cause is tragic:
+machine-enforced access rules exclude people far more effectively than wildlife. See
+[no-man's-land canon](no-mans-land-canon.md).
+
 **Cold instruments.** Combat HUD, capsule/SVS, and medical telemetry stay clinical (phosphor/amber)
 and projectively true. World stylization never warps flight-critical geometry.
 
@@ -23,6 +29,10 @@ Applied here:
 - **Effects**: atmosphere-first smoke and dust; impacts readable, not firework porn.
 - **Obstacles** (bridges, wires): bold silhouettes remain — readability is safety.
 - **Settlements**: quiet human presence (roofs, compounds, traces of life) without tourist kitsch.
+- **Vegetation**: coherent wind travels through near grass, trees, smoke, and weather; motion is a
+  world-state cue, not decorative noise.
+- **Reserve detail**: drowned roads, feral orchards, young growth through hardstand, and rare
+  maintained machine infrastructure. Do not cover every frame in ruins or fire.
 
 ## Moral thesis
 
@@ -30,6 +40,10 @@ Air warfare’s emotional distance is manufactured by the **sealed machine**. Th
 the canopy is warm and wounded; the instruments inside are cold and exact. Descending into the
 air littoral — or punching out into a village — is the reveal. Kills are sparse and factual in
 symbology and telemetry, not tidy cartoons and not Hollywood spectacle.
+
+The player should be allowed to enjoy the recovering landscape. The presentation then makes the
+price of that recovery legible without turning every view into an accusation. Nature healing and
+human tragedy coexist; neither cancels the other.
 
 Historical-era packs (if revived) may use different presentation rules under their own decisions.
 This document owns the 2030s Ukraine programme look.

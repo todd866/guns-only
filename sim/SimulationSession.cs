@@ -126,9 +126,22 @@ public sealed class SimulationSession {
     // Opponents beyond the primary. Empty for a 1v1; the pilot's cues always track the primary,
     // which is re-elected from this list when it dies.
     readonly List<Wingman> _wingmen = new();
-    // Two shooters, one player: hits are POOLED here rather than each opponent gun independently
-    // concluding it has killed the pilot.
-    int _wingmanHitsOnPlayer;
+    readonly List<RetiredOpponentGun> _retiredOpponentGuns = new();
+    // One GunKill owns the player's real magazine, heat, cadence, and airborne rounds. Stable
+    // actor IDs keep per-aircraft damage attached to the aircraft when the primary slot changes.
+    GunTarget[] _playerGunTargets = new GunTarget[4];
+    readonly List<GunRound> _formationOpponentRoundsInFlight = new(96);
+    // Keep gun-target/event identities session-monotonic across restarts and away from the
+    // primary actor's small spawn-sequence namespace.
+    long _nextOpponentGunTargetId = 1_000_000;
+    long _primaryOpponentGunTargetId;
+    long _selectedPlayerGunTargetId;
+    // One monotonic damage ledger for the player. Individual enemy guns still own their physical
+    // rounds and per-shooter evidence, but promotion or formation-list maintenance must never make
+    // an already-landed hit disappear or count it a second time.
+    int _playerHitsTaken;
+
+    sealed record RetiredOpponentGun(IBandit Shooter, GunKill Gun);
     FuelModel _fuel = null!;
     AirframeSystems _systems = null!;
     PilotPhysiologyModel _pilotPhysiology = null!;
@@ -256,7 +269,7 @@ public sealed class SimulationSession {
         public bool OpponentWasBoss;
         public double DurationSeconds;
         public double SolutionSecondsConceded;
-        public int HitsTakenAtStart;
+        public int PlayerHitsTakenAtStart;
         public int ShotsTotalAtStart;
         public int ShotsInWindowAtStart;
         public int OvershootsAtStart;
@@ -401,14 +414,58 @@ public sealed class SimulationSession {
     public DetentLayer Controls => _detents;
     public GunKill PlayerGun => _gunKill;
     public GunKill OpponentGun => _opponentGun;
+    public IReadOnlyList<GunRound> FormationOpponentRoundsInFlight {
+        get {
+            _formationOpponentRoundsInFlight.Clear();
+            _formationOpponentRoundsInFlight.AddRange(_opponentGun.RoundsInFlight);
+            foreach (Wingman wingman in _wingmen)
+                _formationOpponentRoundsInFlight.AddRange(wingman.Gun.RoundsInFlight);
+            foreach (RetiredOpponentGun retired in _retiredOpponentGuns)
+                _formationOpponentRoundsInFlight.AddRange(retired.Gun.RoundsInFlight);
+            return _formationOpponentRoundsInFlight;
+        }
+    }
     /// Opponents beyond the primary — the 1v2 and beyond.
     public IReadOnlyList<Wingman> Wingmen => _wingmen;
+    /// Formation slot selected for the player's gun sight: 0 is the primary and 1..N are the
+    /// additional contacts in their stable browser/render order.
+    public int SelectedPlayerGunTargetSlot {
+        get {
+            if (_selectedPlayerGunTargetId == _primaryOpponentGunTargetId) return 0;
+            int index = _wingmen.FindIndex(wingman =>
+                wingman.PlayerGunTargetId == _selectedPlayerGunTargetId);
+            return index < 0 ? 0 : index + 1;
+        }
+    }
+    public AircraftState SelectedOpponentState {
+        get {
+            Wingman? wingman = _wingmen.FirstOrDefault(wingman =>
+                wingman.PlayerGunTargetId == _selectedPlayerGunTargetId);
+            return wingman?.Bandit.State ?? _bandit.State;
+        }
+    }
+    public bool SelectedOpponentAlive => IsPlayerGunTargetLive(
+        _selectedPlayerGunTargetId);
+    public double SelectedOpponentHealth =>
+        _gunKill.TargetHealthFor(_selectedPlayerGunTargetId);
+    public bool PrimaryOpponentAlive =>
+        _opponentTerminalState == AircraftTerminalState.Flying
+        && _gunKill.DamageFor(_primaryOpponentGunTargetId).TargetAlive;
+    public double PrimaryOpponentHealth =>
+        _gunKill.TargetHealthFor(_primaryOpponentGunTargetId);
     /// Every opponent still fighting, primary first. One entry for an ordinary duel.
     public int LiveOpponentCount =>
         (_opponentTerminalState == AircraftTerminalState.Flying ? 1 : 0)
         + _wingmen.Count(static wingman => wingman.StillFighting);
-    /// Total rounds the player has absorbed from ALL opponents.
-    public int PlayerHitsTaken => _opponentGun.HitCount + _wingmanHitsOnPlayer;
+    /// Total rounds the player has absorbed from ALL opponents in this sortie.
+    public int PlayerHitsTaken => _playerHitsTaken;
+    public double PlayerHealth => 1.0 - Math.Clamp(
+        (double)_playerHitsTaken / Math.Max(1, _beat.CombatRules.PlayerHitsToDefeat),
+        0.0,
+        1.0);
+    public bool PlayerAlive =>
+        _playerTerminalState == AircraftTerminalState.Flying
+        && _playerHitsTaken < _beat.CombatRules.PlayerHitsToDefeat;
     public FuelModel PlayerFuel => _fuel;
     public AirframeSystems PlayerSystems => _systems;
     public PilotPhysiologyModel PilotPhysiology => _pilotPhysiology;
@@ -945,6 +1002,31 @@ public sealed class SimulationSession {
     }
 
     /// <summary>
+    /// Select which concurrent opponent owns the player's lead solution. This changes sighting
+    /// only: the physical gun, heat, cadence, magazine, and every round in flight remain one
+    /// continuous weapon. Slot zero is the primary; slots one onward mirror Wingmen order.
+    /// </summary>
+    public bool SetPlayerGunTargetSlot(int slot) {
+        if (slot < 0) return false;
+
+        long requestedId;
+        if (slot == 0) {
+            requestedId = _primaryOpponentGunTargetId;
+        } else {
+            int wingmanIndex = slot - 1;
+            if (wingmanIndex >= _wingmen.Count) return false;
+            requestedId = _wingmen[wingmanIndex].PlayerGunTargetId;
+        }
+
+        if (!IsPlayerGunTargetLive(requestedId)) {
+            EnsureSelectedPlayerGunTarget();
+            return false;
+        }
+        SelectPlayerGunTarget(requestedId);
+        return true;
+    }
+
+    /// <summary>
     /// Select the current local opponent for the low-authority padlock lift-plane hold. The browser
     /// supplies only this discrete semantic transition; geometry and actuator demand remain owned
     /// by the deterministic 120 Hz simulation. Capturing the spawn sequence prevents a replacement
@@ -1128,12 +1210,18 @@ public sealed class SimulationSession {
             || _opponentGun.GunSolution
             || _opponentGun.InstantaneousGunSolution
             || _gunKill.RoundsInFlight.Count > 0
-            || _opponentGun.RoundsInFlight.Count > 0,
+            || _opponentGun.RoundsInFlight.Count > 0
+            || _retiredOpponentGuns.Any(static retired =>
+                retired.Gun.RoundsInFlight.Count > 0)
+            || _wingmen.Any(static wingman =>
+                wingman.Gun.GunSolution
+                || wingman.Gun.InstantaneousGunSolution
+                || wingman.Gun.RoundsInFlight.Count > 0),
         AutoGcasActivityOrLead: HasAutoGcasActivityOrLead(),
         DamagePresent: PlayerHitsTaken > 0
             || _playerTerminalState != AircraftTerminalState.Flying
             || (!RapierReturnTransit
-                && (_gunKill.HitCount > 0
+                && (_gunKill.TotalHitCount > 0
                     || _bandit.CatastrophicallyDamaged
                     || _opponentTerminalState != AircraftTerminalState.Flying)),
         FuelThresholdOrLead: HasFuelThresholdOrLead(),
@@ -1512,6 +1600,7 @@ public sealed class SimulationSession {
         double ElapsedSeconds,
         GunKill ActorGun,
         GunKill PlayerGun,
+        long PlayerGunTargetId,
         int ActorAmmo,
         int ActorRounds,
         int ActorHits,
@@ -1537,10 +1626,11 @@ public sealed class SimulationSession {
             TimeSeconds,
             _opponentGun,
             _gunKill,
+            _primaryOpponentGunTargetId,
             _opponentGun.AmmoRemaining,
             _opponentGun.RoundsFired,
             _opponentGun.HitCount,
-            _gunKill.HitCount,
+            _gunKill.DamageFor(_primaryOpponentGunTargetId).HitCount,
             _eventSequence,
             OpponentWeaponsAuthorized());
     }
@@ -1558,6 +1648,7 @@ public sealed class SimulationSession {
         IBandit Actor,
         GunKill ActorGun,
         GunKill PlayerGun,
+        long PlayerGunTargetId,
         int ActorHitsBaseline,
         int PlayerHitsBaseline,
         long EventSequenceBase);
@@ -1609,7 +1700,9 @@ public sealed class SimulationSession {
             FiringEnvelopeSeconds: inEnvelope ? FixedDeltaSeconds : 0.0,
             RoundsFired: capture.ActorGun.RoundsFired - capture.ActorRounds,
             HitsScored: capture.ActorGun.HitCount - capture.ActorHits,
-            HitsReceived: capture.PlayerGun.HitCount - capture.PlayerHits,
+            HitsReceived: capture.PlayerGun.DamageFor(
+                    capture.PlayerGunTargetId).HitCount
+                - capture.PlayerHits,
             OpponentDestroyed: opponentDestroyed,
             OwnshipDestroyed: actorDestroyed);
         bool hasEvents = _eventSequence > capture.EventSequence;
@@ -1659,11 +1752,13 @@ public sealed class SimulationSession {
             && (actorDestroyed
                 ? capture.ActorGun.TargetAlive
                     && capture.ActorGun.RoundsInFlight.Count > 0
-                : capture.PlayerGun.TargetAlive
+                : capture.PlayerGun.DamageFor(
+                        capture.PlayerGunTargetId).TargetAlive
                     && capture.PlayerGun.RoundsInFlight.Count > 0);
         if (terminalOutcomeStillOpen) {
             _decisionPendingTerminal = new PendingTerminalDecision(
                 record, capture.Actor, capture.ActorGun, capture.PlayerGun,
+                capture.PlayerGunTargetId,
                 capture.ActorHits, capture.PlayerHits, capture.EventSequence);
         } else {
             _decisionRecorder.Append(record);
@@ -1687,7 +1782,8 @@ public sealed class SimulationSession {
             && (actorDestroyed
                 ? pending.ActorGun.TargetAlive
                     && pending.ActorGun.RoundsInFlight.Count > 0
-                : pending.PlayerGun.TargetAlive
+                : pending.PlayerGun.DamageFor(
+                        pending.PlayerGunTargetId).TargetAlive
                     && pending.PlayerGun.RoundsInFlight.Count > 0);
         if (!outcomeStillOpen) FinalizePendingTerminalDecision();
     }
@@ -1706,7 +1802,9 @@ public sealed class SimulationSession {
         _decisionRecorder.Append(pending.Record with {
             OutcomeComponents = pending.Record.OutcomeComponents with {
                 HitsScored = pending.ActorGun.HitCount - pending.ActorHitsBaseline,
-                HitsReceived = pending.PlayerGun.HitCount - pending.PlayerHitsBaseline,
+                HitsReceived = pending.PlayerGun.DamageFor(
+                        pending.PlayerGunTargetId).HitCount
+                    - pending.PlayerHitsBaseline,
                 OpponentDestroyed = opponentDestroyed,
                 OwnshipDestroyed = actorDestroyed
             },
@@ -1810,6 +1908,9 @@ public sealed class SimulationSession {
             : null;
         _bandit = _beat.CreateBandit(_terrainSurface, openingSpawn);
         ClearWingmen();
+        _retiredOpponentGuns.Clear();
+        _primaryOpponentGunTargetId = AllocateOpponentGunTargetId();
+        _selectedPlayerGunTargetId = _primaryOpponentGunTargetId;
         // The opening wave is a formation too — the pilot's own call: "first fight is 1v2 and if I
         // win that it stays that way." A cold start has no director decision yet, so ask the
         // director what an opening looks like rather than hard-coding a number here.
@@ -1826,6 +1927,8 @@ public sealed class SimulationSession {
         _gunKill = new GunKill(combat.PlayerAmmo, combat.OpponentHitsToDefeat,
             combat.PlayerGunProfile.EffectiveHitRadiusM, combat.PlayerGunProfile,
             combat.PlayerGunEnabled ? GunHeatConfig.PlayerInfiniteAmmo : null);
+        RegisterFormationGunTargets();
+        _gunKill.SelectTarget(_selectedPlayerGunTargetId);
         _opponentGun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
             combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
         _visualMergeEvaluation?.Step(_player.State, _bandit.State,
@@ -1892,6 +1995,7 @@ public sealed class SimulationSession {
         _shotsTotal = 0;
         _shotsInWindow = 0;
         _killCount = 0;
+        _playerHitsTaken = 0;
         _engagementNumber = 1;
         _engagementCounters = default;
         _engagementReports.Clear();
@@ -1932,7 +2036,7 @@ public sealed class SimulationSession {
         _rapierGunDroneThreatReactive = false;
         _rapierPursuitActive = false;
         _rapierPursuitRangeM = double.PositiveInfinity;
-        _lastRange = Geometry.Range(_player.State, _bandit.State);
+        _lastRange = Geometry.Range(_player.State, SelectedOpponentState);
         _closureKts = 0.0;
         _closureSmooth = 0.0;
         // Drone raids score through DroneRaidEvaluation; a dogfight engagement report for a
@@ -2141,7 +2245,11 @@ public sealed class SimulationSession {
     void Trigger(bool down) {
         if (down && !_triggerDown) {
             _shotsTotal++;
-            if (CameraSolver.GunWindow(_player.State, _bandit.State)) _shotsInWindow++;
+            AircraftState selectedTarget = SelectedOpponentState;
+            if (CameraSolver.GunWindow(_player.State, selectedTarget)) _shotsInWindow++;
+            // VisualMergeEvaluation is an actor-specific primary-opponent rubric. The selected
+            // contact owns the actual shot-window count, but feeding a wingman's trigger geometry
+            // into the primary-only projectile/overshoot state would mix two aircraft.
             _visualMergeEvaluation?.ObserveTriggerPressed(_player.State, _bandit.State);
         }
         if (!down) {
@@ -2257,7 +2365,8 @@ public sealed class SimulationSession {
             wing.Atmosphere = _player.AtmosphereModel;
             var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
                 combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
-            _wingmen.Add(new Wingman(wing, gun, spec.Skill));
+            _wingmen.Add(new Wingman(
+                wing, gun, spec.Skill, AllocateOpponentGunTargetId()));
         }
     }
 
@@ -2271,7 +2380,8 @@ public sealed class SimulationSession {
             var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
                 combat.OpponentGunProfile.EffectiveHitRadiusM,
                 combat.OpponentGunProfile);
-            _wingmen.Add(new Wingman(aircraft, gun, _beat.BanditSkill));
+            _wingmen.Add(new Wingman(
+                aircraft, gun, _beat.BanditSkill, AllocateOpponentGunTargetId()));
         }
     }
 
@@ -2280,9 +2390,126 @@ public sealed class SimulationSession {
     const int WingmanSpawnStride = 1;
 
     void ClearWingmen() {
+        foreach (Wingman wingman in _wingmen) {
+            if (wingman.Gun.RoundsInFlight.Count > 0)
+                _retiredOpponentGuns.Add(
+                    new RetiredOpponentGun(wingman.Bandit, wingman.Gun));
+
+            AircraftTerminalState terminalState = wingman.TerminalState;
+            if (terminalState == AircraftTerminalState.Flying
+                && wingman.Bandit.CatastrophicallyDamaged)
+                terminalState = AircraftTerminalState.DestroyedAirborne;
+            if (terminalState == AircraftTerminalState.Flying) continue;
+            _detachedOpponentWrecks.Add(new DetachedOpponentWreck(
+                wingman.Bandit,
+                wingman.PlayerGunTargetId,
+                terminalState,
+                wingman.ImpactSurface));
+        }
+        while (_detachedOpponentWrecks.Count > 8) {
+            int settledIndex = _detachedOpponentWrecks.FindIndex(
+                static wreck => wreck.TerminalState is AircraftTerminalState.Settled
+                    or AircraftTerminalState.SimulationBounded);
+            if (settledIndex < 0) break;
+            _detachedOpponentWrecks.RemoveAt(settledIndex);
+        }
         _wingmen.Clear();
-        _wingmanHitsOnPlayer = 0;
     }
+
+    long AllocateOpponentGunTargetId() => _nextOpponentGunTargetId++;
+
+    void RegisterFormationGunTargets() {
+        _gunKill.RegisterTarget(_primaryOpponentGunTargetId);
+        foreach (Wingman wingman in _wingmen)
+            _gunKill.RegisterTarget(wingman.PlayerGunTargetId);
+    }
+
+    bool IsPlayerGunTargetLive(long targetId) {
+        if (targetId == _primaryOpponentGunTargetId)
+            return _opponentTerminalState == AircraftTerminalState.Flying
+                && _gunKill.DamageFor(targetId).TargetAlive;
+        Wingman? wingman = _wingmen.FirstOrDefault(candidate =>
+            candidate.PlayerGunTargetId == targetId);
+        return wingman is not null
+            && wingman.StillFighting
+            && _gunKill.DamageFor(targetId).TargetAlive;
+    }
+
+    void SelectPlayerGunTarget(long targetId) {
+        if (_selectedPlayerGunTargetId == targetId
+            && _gunKill.SelectedTargetId == targetId)
+            return;
+        _selectedPlayerGunTargetId = targetId;
+        _gunKill.SelectTarget(targetId);
+        _lastRange = Geometry.Range(_player.State, SelectedOpponentState);
+        _closureKts = _closureSmooth = 0.0;
+        _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
+    }
+
+    void EnsureSelectedPlayerGunTarget() {
+        if (IsPlayerGunTargetLive(_selectedPlayerGunTargetId)) {
+            _gunKill.SelectTarget(_selectedPlayerGunTargetId);
+            return;
+        }
+        if (IsPlayerGunTargetLive(_primaryOpponentGunTargetId)) {
+            SelectPlayerGunTarget(_primaryOpponentGunTargetId);
+            return;
+        }
+        Wingman? liveWingman = _wingmen.FirstOrDefault(wingman =>
+            IsPlayerGunTargetLive(wingman.PlayerGunTargetId));
+        if (liveWingman is not null) {
+            SelectPlayerGunTarget(liveWingman.PlayerGunTargetId);
+            return;
+        }
+
+        // Keep a deterministic actor selected while the last kill resolves. It remains
+        // non-damageable, but old rounds can still be advanced against any other supplied actor.
+        SelectPlayerGunTarget(_primaryOpponentGunTargetId);
+    }
+
+    void UpdateSelectedTargetClosure() {
+        double range = Geometry.Range(_player.State, SelectedOpponentState);
+        _closureKts = (_lastRange - range) / FixedDeltaSeconds * 1.94384;
+        _closureKts = _closureSmooth = _closureSmooth * 0.9 + _closureKts * 0.1;
+        _lastRange = range;
+    }
+
+    int CapturePlayerGunTargets(in AircraftState primaryState) {
+        int count = 1 + _wingmen.Count;
+        if (_playerGunTargets.Length < count)
+            Array.Resize(ref _playerGunTargets, Math.Max(count, _playerGunTargets.Length * 2));
+        _playerGunTargets[0] = new GunTarget(
+            _primaryOpponentGunTargetId,
+            primaryState,
+            Damageable: _opponentTerminalState == AircraftTerminalState.Flying);
+        for (int index = 0; index < _wingmen.Count; index++) {
+            Wingman wingman = _wingmen[index];
+            _playerGunTargets[index + 1] = new GunTarget(
+                wingman.PlayerGunTargetId,
+                wingman.Bandit.State,
+                Damageable: wingman.StillFighting);
+        }
+        return count;
+    }
+
+    (AircraftState State, long EntitySequence) PlayerGunTargetEventContext(
+        long targetId) {
+        if (targetId == _primaryOpponentGunTargetId)
+            return (_bandit.State, _banditSpawnSequence);
+        Wingman? wingman = _wingmen.FirstOrDefault(candidate =>
+            candidate.PlayerGunTargetId == targetId);
+        return wingman is null
+            ? (_bandit.State, _banditSpawnSequence)
+            : (wingman.Bandit.State, targetId);
+    }
+
+    void RecordHitsOnPlayer(int hits) {
+        if (hits <= 0) return;
+        _playerHitsTaken += hits;
+        EmitEvent(SessionEventType.Hit, CombatRole.Opponent, CombatRole.Player, hits);
+    }
+
+    internal void RecordPlayerHitsForTest(int hits) => RecordHitsOnPlayer(hits);
 
     /// Fly every additional opponent and let each shoot at the player independently. Their hits
     /// land in the SHARED pool (PlayerHitsTaken): two aircraft putting rounds into one pilot must
@@ -2292,33 +2519,88 @@ public sealed class SimulationSession {
         bool weaponsReleased = !WeaponsInhibited && !TerminalPhaseActive
             && _playerTerminalState == AircraftTerminalState.Flying;
         foreach (Wingman wingman in _wingmen) {
-            if (wingman.SimulationBounded) continue;
-            if (AtmosphereBoundaryReached(
-                    wingman.Bandit.State, wingman.Bandit.Atmosphere)) {
-                wingman.SimulationBounded = true;
-                continue;
-            }
-            ActorObservation observation = ThreatObservationFor(
-                playerState, wingman.Bandit.State);
-            if (!wingman.StillFighting) {
-                // Keep the wreck falling, but it is no longer a combatant.
-                wingman.Bandit.Step(observation, FixedDeltaSeconds);
-                continue;
-            }
             AircraftState wingmanState = wingman.Bandit.State;
-            bool trigger = weaponsReleased
+            if (wingman.TerminalState == AircraftTerminalState.Flying
+                && wingman.Bandit.CatastrophicallyDamaged) {
+                wingman.Defeated = true;
+                wingman.TerminalState = AircraftTerminalState.DestroyedAirborne;
+            }
+            if (wingman.TerminalState is not AircraftTerminalState.Settled
+                    and not AircraftTerminalState.SimulationBounded
+                && AtmosphereBoundaryReached(
+                    wingmanState, wingman.Bandit.Atmosphere)) {
+                wingman.Defeated = true;
+                wingman.SimulationBounded = true;
+                wingman.TerminalState = AircraftTerminalState.SimulationBounded;
+                wingman.ImpactSurface = ImpactSurface.SimulationBoundary;
+                wingman.TriggerDown = false;
+                EmitEvent(SessionEventType.TerminalLimitReached,
+                    CombatRole.None, CombatRole.Opponent,
+                    surface: ImpactSurface.SimulationBoundary,
+                    entitySequence: wingman.PlayerGunTargetId,
+                    kinematics: wingmanState);
+            }
+
+            ActorObservation observation = ThreatObservationFor(
+                playerState, wingmanState);
+            bool trigger = wingman.StillFighting
+                && weaponsReleased
                 && wingman.Gun.AmmoRemaining > 0
                 && wingman.Gun.TargetAlive
                 && !wingman.Bandit.CatastrophicallyDamaged
                 && wingman.Bandit.WantsToFire(observation);
             wingman.TriggerDown = trigger;
+            // A destroyed shooter cannot launch another round, but every round it already fired
+            // remains physical. Stepping the gun on every tick also clears per-step hit evidence,
+            // so a terminal aircraft cannot accidentally report the same hit twice.
             wingman.Gun.Step(trigger, wingmanState, playerState, FixedDeltaSeconds);
-            if (wingman.Gun.HitsThisStep > 0) {
-                _wingmanHitsOnPlayer += wingman.Gun.HitsThisStep;
-                EmitEvent(SessionEventType.Hit, CombatRole.Opponent, CombatRole.Player,
-                    wingman.Gun.HitsThisStep);
-            }
+            RecordHitsOnPlayer(wingman.Gun.HitsThisStep);
+
+            if (wingman.TerminalState is AircraftTerminalState.Settled
+                or AircraftTerminalState.SimulationBounded)
+                continue;
+
             wingman.Bandit.Step(observation, FixedDeltaSeconds);
+            ObserveWingmanTerminalPhysics(wingman, wingmanState);
+        }
+    }
+
+    void ObserveWingmanTerminalPhysics(
+        Wingman wingman, in AircraftState previousState) {
+        AircraftState currentState = wingman.Bandit.State;
+        if (wingman.TerminalState == AircraftTerminalState.DestroyedAirborne) {
+            var contact = DetectImpact(previousState, currentState);
+            if (contact.surface != ImpactSurface.None) {
+                EmitEvent(SessionEventType.Impact,
+                    CombatRole.None, CombatRole.Opponent,
+                    surface: contact.surface,
+                    entitySequence: wingman.PlayerGunTargetId,
+                    kinematics: currentState);
+                Carrier? contactCarrier = contact.surface is ImpactSurface.FlightDeck
+                    or ImpactSurface.CarrierStructure ? _carrier : null;
+                wingman.Bandit.ApplySurfaceImpact(contact.surface,
+                    contact.velocity, contact.height, contactCarrier, _terrainSurface);
+                wingman.TerminalState = AircraftTerminalState.Impacted;
+                wingman.ImpactSurface = contact.surface;
+            }
+        }
+        if (wingman.TerminalState == AircraftTerminalState.Impacted
+            && wingman.Bandit.WreckSurfaceChangedThisStep) {
+            wingman.ImpactSurface = wingman.Bandit.WreckSurface;
+            EmitEvent(SessionEventType.Impact,
+                CombatRole.None, CombatRole.Opponent,
+                surface: wingman.ImpactSurface,
+                entitySequence: wingman.PlayerGunTargetId,
+                kinematics: wingman.Bandit.State);
+        }
+        if (wingman.TerminalState == AircraftTerminalState.Impacted
+            && wingman.Bandit.WreckSettled) {
+            wingman.TerminalState = AircraftTerminalState.Settled;
+            EmitEvent(SessionEventType.Settled,
+                CombatRole.None, CombatRole.Opponent,
+                surface: wingman.ImpactSurface,
+                entitySequence: wingman.PlayerGunTargetId,
+                kinematics: wingman.Bandit.State);
         }
     }
 
@@ -2341,6 +2623,7 @@ public sealed class SimulationSession {
     /// When the aircraft the pilot is fighting goes down but its formation has not, promote the
     /// nearest survivor so every cue keeps tracking a live threat instead of a wreck.
     bool TryPromoteWingmanToPrimary() {
+        if (_opponentTerminalState == AircraftTerminalState.Flying) return false;
         Wingman? next = null;
         double nearest = double.PositiveInfinity;
         foreach (Wingman wingman in _wingmen) {
@@ -2352,25 +2635,29 @@ public sealed class SimulationSession {
         }
         if (next is null) return false;
 
+        long previousSelection = _selectedPlayerGunTargetId;
+        GunKill retiringGun = _opponentGun;
+        IBandit retiringBandit = _bandit;
         _wingmen.Remove(next);
+        if (retiringGun.RoundsInFlight.Count > 0)
+            _retiredOpponentGuns.Add(
+                new RetiredOpponentGun(retiringBandit, retiringGun));
         // The retiring primary keeps falling as a detached wreck exactly as it would in a duel.
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
-        // Damage belongs to the aircraft, not to the primary slot. A real gun kill leaves this gun
-        // latched at Splash; carrying that latch onto the promoted wingman would destroy it on the
-        // very next damage observation. GunKill stops advancing rounds after Splash, so by the time
-        // the kill-cam dwell promotes the survivor those trajectories are stale; discard them rather
-        // than teleporting frozen leader-bound fire onto the new target.
-        _gunKill = _gunKill.Outcome == FightOutcome.Splash
-            ? _gunKill.CreateForStagedNextTarget()
-            : _gunKill.CreateForRetargetedTarget();
         _bandit = next.Bandit;
         _opponentGun = next.Gun;
+        _primaryOpponentGunTargetId = next.PlayerGunTargetId;
         _opponentTerminalState = AircraftTerminalState.Flying;
         _opponentImpactSurface = ImpactSurface.None;
         _opponentTriggerDown = next.TriggerDown;
+        _nextOpponentSpawnAtMs = double.NegativeInfinity;
+        _terminalStartedAtMs = double.PositiveInfinity;
+        _pendingOutcome = SortieOutcome.None;
+        if (IsPlayerGunTargetLive(previousSelection))
+            SelectPlayerGunTarget(previousSelection);
+        else
+            SelectPlayerGunTarget(_primaryOpponentGunTargetId);
         _banditSpawnSequence++;
-        _lastRange = Geometry.Range(_player.State, _bandit.State);
-        _closureKts = _closureSmooth = 0.0;
         _padlockRollAssist.Reset();
         ShowTransition("WINGMAN ENGAGED · V PADLOCK", 2200.0);
         return true;
@@ -2393,23 +2680,62 @@ public sealed class SimulationSession {
         // Both weapons receive the same beginning-of-tick world snapshot. Neither combatant gets
         // to observe the other's already-integrated future position or suppress same-tick return
         // fire by resolving its own hit first.
+        EnsureSelectedPlayerGunTarget();
+        int playerGunTargetCount = CapturePlayerGunTargets(opponentState);
         _gunKill.Step(playerWeaponsAuthorized && playerTriggerHeld,
-            playerState, opponentState, FixedDeltaSeconds);
+            playerState,
+            _selectedPlayerGunTargetId,
+            _playerGunTargets.AsSpan(0, playerGunTargetCount),
+            FixedDeltaSeconds);
         _opponentGun.Step(_opponentTriggerDown, opponentState, playerState, FixedDeltaSeconds);
+        StepRetiredOpponentGuns(playerState);
         _visualMergeEvaluation?.ObserveProjectileState(
-            _gunKill.RoundsFired, _gunKill.HitCount);
+            _gunKill.RoundsFired,
+            _gunKill.DamageFor(_primaryOpponentGunTargetId).HitCount);
 
-        if (_gunKill.HitsThisStep > 0)
+        foreach (IGrouping<long, GunImpact> impacts in
+            _gunKill.ImpactsThisStep.GroupBy(static impact => impact.TargetId)) {
+            var context = PlayerGunTargetEventContext(impacts.Key);
             EmitEvent(SessionEventType.Hit, CombatRole.Player, CombatRole.Opponent,
-                _gunKill.HitsThisStep);
-        if (_opponentGun.HitsThisStep > 0)
-            EmitEvent(SessionEventType.Hit, CombatRole.Opponent, CombatRole.Player,
-                _opponentGun.HitsThisStep);
-        AccumulateEngagementCounters();
+                impacts.Count(),
+                entitySequence: context.EntitySequence,
+                kinematics: context.State);
+        }
+        RecordHitsOnPlayer(_opponentGun.HitsThisStep);
+    }
+
+    void StepRetiredOpponentGuns(in AircraftState playerState) {
+        for (int index = _retiredOpponentGuns.Count - 1; index >= 0; index--) {
+            RetiredOpponentGun retired = _retiredOpponentGuns[index];
+            retired.Gun.Step(
+                false, retired.Shooter.State, playerState, FixedDeltaSeconds);
+            RecordHitsOnPlayer(retired.Gun.HitsThisStep);
+            if (retired.Gun.RoundsInFlight.Count == 0)
+                _retiredOpponentGuns.RemoveAt(index);
+        }
     }
 
     void ObserveCombatDamage() {
-        if (_gunKill.Outcome == FightOutcome.Splash
+        foreach (Wingman wingman in _wingmen) {
+            if (!wingman.StillFighting
+                || _gunKill.DamageFor(wingman.PlayerGunTargetId).Outcome
+                    != FightOutcome.Splash)
+                continue;
+            wingman.Defeated = true;
+            wingman.TriggerDown = false;
+            wingman.TerminalState = AircraftTerminalState.DestroyedAirborne;
+            wingman.ImpactSurface = ImpactSurface.None;
+            wingman.Bandit.ApplyCatastrophicDamage(handedness: -1);
+            _killCount++;
+            _splashCueUntilMs = _simTimeMs + 3000.0;
+            EmitEvent(SessionEventType.Destroyed,
+                CombatRole.Player, CombatRole.Opponent,
+                entitySequence: wingman.PlayerGunTargetId,
+                kinematics: wingman.Bandit.State);
+        }
+
+        if (_gunKill.DamageFor(_primaryOpponentGunTargetId).Outcome
+                == FightOutcome.Splash
             && _opponentTerminalState == AircraftTerminalState.Flying) {
             if (_droneRaidEvaluation is { Finished: false }) {
                 ResolveDroneRaidTarget(neutralized: true,
@@ -2419,6 +2745,7 @@ public sealed class SimulationSession {
                 BeginCatastrophicDamage(CombatRole.Opponent, CombatRole.Player);
             }
         }
+        EnsureSelectedPlayerGunTarget();
         if (PlayerHitsTaken >= _beat.CombatRules.PlayerHitsToDefeat
             && _playerTerminalState == AircraftTerminalState.Flying) {
             if (_recoveryAttemptActive) _attemptHadSetback = true;
@@ -2428,7 +2755,10 @@ public sealed class SimulationSession {
         CompleteEngagementIfEnded();
     }
 
-    void BeginCatastrophicDamage(CombatRole target, CombatRole source) {
+    void BeginCatastrophicDamage(
+        CombatRole target,
+        CombatRole source,
+        bool promoteFormationSurvivor = true) {
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
         _padlockRollAssist.Reset();
         if (target == CombatRole.Player) {
@@ -2459,6 +2789,10 @@ public sealed class SimulationSession {
             }
         } else return;
         EmitEvent(SessionEventType.Destroyed, source, target);
+        if (target == CombatRole.Opponent
+            && promoteFormationSurvivor
+            && _playerTerminalState == AircraftTerminalState.Flying)
+            TryPromoteWingmanToPrimary();
     }
 
     void ObserveDroneRaidTarget(double completedTimeSeconds) {
@@ -2510,11 +2844,15 @@ public sealed class SimulationSession {
         _gunKill = neutralized
             ? _gunKill.CreateForStagedNextTarget()
             : _gunKill.CreateForRetargetedTarget();
+        _primaryOpponentGunTargetId = AllocateOpponentGunTargetId();
+        _selectedPlayerGunTargetId = _primaryOpponentGunTargetId;
+        RegisterFormationGunTargets();
+        _gunKill.SelectTarget(_selectedPlayerGunTargetId);
         _opponentTerminalState = AircraftTerminalState.Flying;
         _opponentImpactSurface = ImpactSurface.None;
         _banditSpawnSequence++;
         _padlockRollAssist.Reset();
-        _lastRange = Geometry.Range(_player.State, _bandit.State);
+        _lastRange = Geometry.Range(_player.State, SelectedOpponentState);
         _closureKts = _closureSmooth = 0.0;
         ShowTransition(evaluation.Cue, 2200.0);
     }
@@ -2617,7 +2955,8 @@ public sealed class SimulationSession {
         // For a collision-caused loss, physical contact precedes the damage declaration. Keeping
         // both durable events preserves that causal difference from an airborne gun kill.
         bool replacementExpected = target == CombatRole.Opponent
-            && _beat.ContinuousCombat is not null
+            && (_beat.ContinuousCombat is not null
+                || _wingmen.Any(static wingman => wingman.StillFighting))
             && _playerTerminalState == AircraftTerminalState.Flying;
         BeginTerminalClock(clearHeldInput: !replacementExpected);
         if (target == CombatRole.Player)
@@ -2638,9 +2977,13 @@ public sealed class SimulationSession {
                 || _beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit);
         if (maneuverKill) _killCount++;
         BeginCatastrophicDamage(target,
-            maneuverKill ? CombatRole.Player : CombatRole.None);
+            maneuverKill ? CombatRole.Player : CombatRole.None,
+            promoteFormationSurvivor: false);
         StartWreckContact(target, surface, surfaceVelocity, surfaceHeightM,
             tangentialImpulseAlreadyResolved, carrierSolid);
+        if (target == CombatRole.Opponent
+            && _playerTerminalState == AircraftTerminalState.Flying)
+            TryPromoteWingmanToPrimary();
         UpdatePendingOutcome();
         CompleteEngagementIfEnded();
     }
@@ -2854,6 +3197,8 @@ public sealed class SimulationSession {
         LastDirectorSpawn = directorSpawn;
         _bandit = _beat.CreateNextBandit(
             _player.State, nextEngagement, _terrainSurface, directorSpawn);
+        _primaryOpponentGunTargetId = AllocateOpponentGunTargetId();
+        _selectedPlayerGunTargetId = _primaryOpponentGunTargetId;
         StageWingmen(directorSpawn, nextEngagement);
         // Spike opponents of either flavour (cat or machine) carry the report quarantine: an
         // expected loss to one must not crater the ordinary-fight skill estimate.
@@ -2863,6 +3208,8 @@ public sealed class SimulationSession {
         _gunKill = _gunKill.Outcome == FightOutcome.Splash
             ? _gunKill.CreateForStagedNextTarget()
             : _gunKill.CreateForRetargetedTarget();
+        RegisterFormationGunTargets();
+        _gunKill.SelectTarget(_selectedPlayerGunTargetId);
         CombatConfig combat = _beat.CombatRules;
         _opponentGun = _opponentGun.CreateForFreshShooterAgainstSameTarget(
             combat.OpponentAmmo,
@@ -2887,7 +3234,7 @@ public sealed class SimulationSession {
         StartEngagementCounters(directorSpawn.Skill, spikeOpponent);
         _banditSpawnSequence++;
         _padlockRollAssist.Reset();
-        _lastRange = Geometry.Range(_player.State, _bandit.State);
+        _lastRange = Geometry.Range(_player.State, SelectedOpponentState);
         _closureKts = _closureSmooth = 0.0;
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
         EmitEvent(SessionEventType.OpponentSpawned,
@@ -2902,7 +3249,7 @@ public sealed class SimulationSession {
             EngagementNumber = _engagementNumber,
             OpponentSkill = opponentSkill,
             OpponentWasBoss = opponentWasBoss,
-            HitsTakenAtStart = _opponentGun.HitCount,
+            PlayerHitsTakenAtStart = PlayerHitsTaken,
             ShotsTotalAtStart = _shotsTotal,
             ShotsInWindowAtStart = _shotsInWindow,
             OvershootsAtStart = _visualMergeEvaluation?.Overshoots ?? 0,
@@ -2913,7 +3260,10 @@ public sealed class SimulationSession {
     void AccumulateEngagementCounters() {
         if (!_engagementCounters.Active) return;
         _engagementCounters.DurationSeconds += FixedDeltaSeconds;
-        if (_opponentGun.GunSolution)
+        if ((_opponentTerminalState == AircraftTerminalState.Flying
+                && _opponentGun.GunSolution)
+            || _wingmen.Any(static wingman =>
+                wingman.StillFighting && wingman.Gun.GunSolution))
             _engagementCounters.SolutionSecondsConceded += FixedDeltaSeconds;
     }
 
@@ -2934,7 +3284,8 @@ public sealed class SimulationSession {
             outcome,
             _engagementCounters.DurationSeconds,
             _engagementCounters.SolutionSecondsConceded,
-            Math.Max(0, _opponentGun.HitCount - _engagementCounters.HitsTakenAtStart),
+            Math.Max(0,
+                PlayerHitsTaken - _engagementCounters.PlayerHitsTakenAtStart),
             Math.Max(0, _shotsTotal - _engagementCounters.ShotsTotalAtStart),
             Math.Max(0, _shotsInWindow - _engagementCounters.ShotsInWindowAtStart),
             Math.Max(0, (_visualMergeEvaluation?.Overshoots ?? 0)
@@ -3132,7 +3483,7 @@ public sealed class SimulationSession {
         _recoveryAttemptActive = _carrier is not null;
         _attemptHadSetback = false;
         _attemptCleanRecorded = false;
-        _lastRange = Geometry.Range(_player.State, _bandit.State);
+        _lastRange = Geometry.Range(_player.State, SelectedOpponentState);
         _closureKts = _closureSmooth = 0.0;
         ShowTransition("AIRBORNE · NEXT PASS", 1400.0);
     }
@@ -3479,11 +3830,11 @@ public sealed class SimulationSession {
     }
 
     PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {
+        AircraftState selectedTarget = SelectedOpponentState;
         bool enabled = PlayerWeaponsAuthorized
             && _beat.CombatRules.PlayerGunEnabled
             && _playerTerminalState == AircraftTerminalState.Flying
-            && _opponentTerminalState == AircraftTerminalState.Flying
-            && _gunKill.TargetAlive
+            && SelectedOpponentAlive
             && !_detents.ApproachMode
             && !_detents.HighAlphaRecoveryActive
             && !_pilotControlInterlocked;
@@ -3510,7 +3861,7 @@ public sealed class SimulationSession {
             _player.AtmosphereModel,
             _gunKill.LeadDirection,
             _gunKill.HasLeadSolution,
-            Geometry.Range(_player.State, _bandit.State),
+            Geometry.Range(_player.State, selectedTarget),
             enabled,
             lateralRollEnabled: !padlockOwnsRollPlane,
             closureMps: _closureKts / 1.94384);
@@ -3539,10 +3890,10 @@ public sealed class SimulationSession {
         _detents.AssistedTargetCalibratedAirspeedMps =
             (cornerKias + AssistedSpeedBiasKts) / AirData.MpsToKnots;
 
-        Vec3D toTarget = _bandit.State.Position - _player.State.Position;
+        AircraftState selectedTarget = SelectedOpponentState;
+        Vec3D toTarget = selectedTarget.Position - _player.State.Position;
         double rangeSquared = toTarget.Dot(toTarget);
-        bool targetValid = _opponentTerminalState == AircraftTerminalState.Flying
-            && _gunKill.TargetAlive
+        bool targetValid = SelectedOpponentAlive
             && rangeSquared > 1e-12;
         double noseDot = targetValid
             ? _player.BodyForward.Dot(toTarget * (1.0 / Math.Sqrt(rangeSquared)))
@@ -4033,6 +4384,7 @@ public sealed class SimulationSession {
         if (_opponentTerminalState != AircraftTerminalState.SimulationBounded)
             _bandit.Step(ObservePlayer(previousPlayer), FixedDeltaSeconds);
         StepWingmen(previousPlayer);
+        AccumulateEngagementCounters();
         _carrier?.Step(FixedDeltaSeconds);
         ObserveCombatDamage();
 
@@ -4071,10 +4423,7 @@ public sealed class SimulationSession {
         }
 
         ObserveSettledWrecks();
-        double range = Geometry.Range(_player.State, _bandit.State);
-        _closureKts = (_lastRange - range) / FixedDeltaSeconds * 1.94384;
-        _closureKts = _closureSmooth = _closureSmooth * 0.9 + _closureKts * 0.1;
-        _lastRange = range;
+        UpdateSelectedTargetClosure();
         double completedTimeMs = _simTimeMs + FixedDeltaSeconds * 1000.0;
         FinishTerminalIfResolved(completedTimeMs);
         _simTimeMs = completedTimeMs;
@@ -4107,10 +4456,7 @@ public sealed class SimulationSession {
             }
 
             ObserveSettledWrecks();
-            double range = Geometry.Range(_player.State, _bandit.State);
-            _closureKts = (_lastRange - range) / FixedDeltaSeconds * 1.94384;
-            _closureKts = _closureSmooth = _closureSmooth * 0.9 + _closureKts * 0.1;
-            _lastRange = range;
+            UpdateSelectedTargetClosure();
             FinishTerminalIfResolved(completedTimeMs);
         }
         _simTimeMs = completedTimeMs;
@@ -4137,6 +4483,7 @@ public sealed class SimulationSession {
                 ThreatObservationFor(catapultState, opponentState),
                 FixedDeltaSeconds);
             StepWingmen(catapultState);
+            AccumulateEngagementCounters();
             _carrier.Step(FixedDeltaSeconds);
             _catapult.Step(_carrier, FixedDeltaSeconds);
             _player.AdoptExternalKinematics(_catapult.State);
@@ -4181,6 +4528,7 @@ public sealed class SimulationSession {
                 ThreatObservationFor(playerState, opponentState),
                 FixedDeltaSeconds);
             StepWingmen(playerState);
+            AccumulateEngagementCounters();
             _carrier.Step(FixedDeltaSeconds);
             _arrestment.Step(_carrier, FixedDeltaSeconds);
             _player.AdoptExternalKinematics(CurrentArrestmentState());
@@ -4285,6 +4633,7 @@ public sealed class SimulationSession {
             ThreatObservationFor(previousPlayerState, previousOpponentState),
             FixedDeltaSeconds);
         StepWingmen(previousPlayerState);
+        AccumulateEngagementCounters();
         _visualMergeEvaluation?.Step(_player.State, _bandit.State,
             _player.AtmosphereModel, FixedDeltaSeconds, _player.AirspeedMps);
 
@@ -4346,10 +4695,7 @@ public sealed class SimulationSession {
             return;
         }
 
-        double range = Geometry.Range(_player.State, _bandit.State);
-        _closureKts = (_lastRange - range) / FixedDeltaSeconds * 1.94384;
-        _closureKts = _closureSmooth = _closureSmooth * 0.9 + _closureKts * 0.1;
-        _lastRange = range;
+        UpdateSelectedTargetClosure();
         _simTimeMs += FixedDeltaSeconds * 1000.0;
     }
 }

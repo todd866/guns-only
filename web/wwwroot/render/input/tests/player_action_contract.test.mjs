@@ -10,7 +10,8 @@ import { CONTROL_BINDINGS } from "../../settings/player_settings.js";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../");
 
 const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
-  sessionSource, webBridgeSource, progressionSource, projectionSource] = await Promise.all([
+  sessionSource, webBridgeSource, progressionSource, projectionSource,
+  playerGunTargetSource] = await Promise.all([
   "web/wwwroot/app.js",
   "web/wwwroot/hud.js",
   "web/wwwroot/index.html",
@@ -20,6 +21,7 @@ const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
   "web/WebBridge.cs",
   "web/wwwroot/render/progression/campaign_progression.js",
   "web/SnapshotProjection.cs",
+  "web/wwwroot/render/input/player_gun_target.js",
 ].map((relativePath) => readFile(path.join(ROOT, relativePath), "utf8")));
 
 // The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
@@ -133,6 +135,18 @@ test("bandit padlock roll hold stays a fixed-tick, safety-preemptible augmentati
   assert.match(projectionSource,
     /padlock_roll_assist_active[\s\S]*?padlock_roll_error_deg[\s\S]*?padlock_roll_assist_aileron/,
     "the applied augmentation needs distinct observable telemetry");
+});
+
+test("padlock target selection crosses the bridge as a discrete gun-target slot", () => {
+  assert.match(webBridgeSource,
+    /SetPlayerGunTargetSlot\(int slot\)[\s\S]*?Session\.SetPlayerGunTargetSlot\(slot\)/,
+    "the browser target choice must cross a thin bridge into simulation authority");
+  assert.match(appSource,
+    /function syncPlayerGunTarget\(\)[\s\S]*?syncPlayerGunTargetSelection\(/,
+    "the presentation must delegate target reconciliation to the bounded slot helper");
+  assert.match(playerGunTargetSource,
+    /function syncPlayerGunTargetSelection\([\s\S]*?SetPlayerGunTargetSlot\(desiredSlot\)/,
+    "the presentation must publish the selected combat slot without sending aim geometry");
 });
 
 test("every advertised bridge action has help copy, a runtime consumer, and observable truth", () => {

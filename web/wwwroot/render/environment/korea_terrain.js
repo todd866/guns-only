@@ -21,6 +21,10 @@ const TIER_DISTANCE_METRES = Object.freeze({
   // grid resident through the first two tile rings prevents the authored 40–60 degree walls from
   // collapsing into visible 128 m contour shelves in low-altitude desktop views.
   desktop: Object.freeze([40_000, 76_000, 128_000]),
+  // Ukraine is broad low-relief country. Its authored close detail matters around the aircraft,
+  // but holding LOD0 (and its soft-world scenery) for 40 km spends millions of nearly identical
+  // canopy vertices. Preserve a 12 km low-level detail ring and hand the rest to macro terrain.
+  "ukraine-desktop": Object.freeze([12_000, 36_000, 88_000]),
 });
 
 const TIER_STREAMING = Object.freeze({
@@ -609,7 +613,9 @@ export function selectTerrainLod(distanceM, tier = "balanced", lodCount = 4,
   // (nor its LOD0-only near-chunk tree/building scenery) even at the surface, capping fill-rate and
   // overdraw where it hurts most. Desktop retains full LOD0 detail. Clamped to the chunk's coarsest
   // available level so a single-LOD chunk is unaffected.
-  const minimumLevel = tier === "desktop" ? 0 : Math.min(1, maximumLevel);
+  const minimumLevel = tier === "desktop" || tier === "ukraine-desktop"
+    ? 0
+    : Math.min(1, maximumLevel);
   let selected = thresholds.findIndex((threshold) => distance < threshold);
   if (selected < 0) selected = thresholds.length;
   selected = Math.min(maximumLevel, Math.max(minimumLevel, selected));
@@ -1133,7 +1139,10 @@ class KoreaTerrainPresentation {
     this.skirtMaterial = options.skirtMaterial
       ?? createTerrainSkirtMaterial(THREE, this.material);
     this.ownsSkirtMaterial = !options.skirtMaterial;
-    this.sceneryEra = options.sceneryEra ?? null;
+    // Atlas pages share the parent's scenery runtime. Preserve its era when the child is created
+    // so theatre-specific LOD policy (notably Ukraine's tight desktop LOD0 ring) is not silently
+    // lost at the page boundary.
+    this.sceneryEra = options.sceneryEra ?? options.sceneryRuntime?.era ?? null;
     this.ambientSceneryEnabled = this.sceneryEra !== null;
     this.sceneryRuntime = options.sceneryRuntime
       ?? (this.sceneryEra ? createKoreaSceneryRuntime(THREE, {
@@ -1141,6 +1150,7 @@ class KoreaTerrainPresentation {
         qualityTier: this.qualityTier,
       }) : null);
     this.ownsSceneryRuntime = !options.sceneryRuntime && this.sceneryRuntime !== null;
+    this.updatesSceneryRuntime = options.updateSceneryRuntime !== false;
     this.entries = new Map(manifest.chunks.map((chunk) => [chunk.id, {
       chunk,
       mesh: null,
@@ -1497,11 +1507,21 @@ class KoreaTerrainPresentation {
     this.group.position.set(this.worldEastM, 0, -this.worldNorthM);
   }
 
-  update({ cameraPosition, streamPosition, fogColor, fogDensity, sunDirection, placementEastM,
-    placementNorthM } = {}) {
+  update({ cameraPosition, streamPosition, elapsedSeconds, windX, windZ, fogColor, fogDensity,
+    sunDirection, placementEastM, placementNorthM } = {}) {
     if (this.disposed) return;
     if (placementEastM !== undefined || placementNorthM !== undefined) {
       this.setPlacement(placementEastM ?? this.worldEastM, placementNorthM ?? this.worldNorthM);
+    }
+    if (this.updatesSceneryRuntime) {
+      this.sceneryRuntime?.update({
+        elapsedSeconds,
+        windX,
+        windZ,
+        cameraPosition,
+        placementEastM: this.worldEastM,
+        placementNorthM: this.worldNorthM,
+      });
     }
     if (fogColor) this.material.uniforms.uFogColor.value.copy(fogColor);
     if (Number.isFinite(fogDensity)) this.material.uniforms.uFogDensity.value = fogDensity;
@@ -1539,7 +1559,10 @@ class KoreaTerrainPresentation {
         distance,
         Math.max(0, finite(cameraPosition.y)) * TERRAIN_ALTITUDE_LOD_WEIGHT,
       );
-      const level = selectTerrainLod(lodDistance, this.qualityTier,
+      const lodTier = this.qualityTier === "desktop" && this.sceneryEra === "ukraine-modern"
+        ? "ukraine-desktop"
+        : this.qualityTier;
+      const level = selectTerrainLod(lodDistance, lodTier,
         entry.chunk.lods.length, entry.level);
       if (level !== entry.level && level !== entry.requestedLevel) {
         requests.push({ entry, level, distance });
@@ -1658,6 +1681,12 @@ class KoreaTerrainAtlasPresentation {
     this.pageEvictRadiusM = Math.max(this.pageLoadRadiusM,
       finite(options.pageEvictRadiusM,
         manifest.streaming?.pageEvictRadiusM ?? this.chunkEvictRadiusM + 32_000));
+    // Preserve the atlas author's prefetch/eviction hysteresis when the public radius changes.
+    // These are relative margins, not absolute floors: an adaptive 12 km radius must not leave
+    // page loading pinned to a prior 112 km mission radius.
+    this.chunkEvictLeadM = Math.max(0, this.chunkEvictRadiusM - this.chunkLoadRadiusM);
+    this.pageLoadLeadM = Math.max(0, this.pageLoadRadiusM - this.chunkLoadRadiusM);
+    this.pageEvictLeadM = Math.max(0, this.pageEvictRadiusM - this.pageLoadRadiusM);
     this.lookAheadSeconds = Math.max(0,
       finite(options.lookAheadSeconds,
         manifest.streaming?.lookAheadSeconds ?? tierStreaming.lookAheadSeconds));
@@ -1759,9 +1788,17 @@ class KoreaTerrainAtlasPresentation {
     // Keep eviction outside loading or chunks would be dropped the instant they arrive and
     // rebuilt immediately — the worst possible outcome for the cost this exists to avoid.
     this.chunkEvictRadiusM = Math.max(
-      this.chunkLoadRadiusM + 8_000, this.chunkLoadRadiusM * 1.25);
-    this.pageLoadRadiusM = Math.max(this.pageLoadRadiusM, this.chunkLoadRadiusM);
-    this.pageEvictRadiusM = Math.max(this.pageEvictRadiusM, this.chunkEvictRadiusM + 8_000);
+      this.chunkLoadRadiusM + this.chunkEvictLeadM,
+      this.chunkLoadRadiusM * 1.25,
+    );
+    // Page and child radii must move with the public atlas radius. The previous monotonic `max`
+    // made the frame governor cosmetic after a page had loaded: the atlas reported 12 km while
+    // its page presentations kept streaming and drawing the old 48–112 km disc.
+    this.pageLoadRadiusM = this.chunkLoadRadiusM + this.pageLoadLeadM;
+    this.pageEvictRadiusM = this.pageLoadRadiusM + this.pageEvictLeadM;
+    for (const state of this.pages.values()) {
+      state.presentation?.setStreamingRadiusM(this.chunkLoadRadiusM);
+    }
     return this.chunkLoadRadiusM !== previous;
   }
   setSceneryEra(era) {
@@ -1869,7 +1906,9 @@ class KoreaTerrainAtlasPresentation {
         lazyChunks: true,
         material: this.material,
         skirtMaterial: this.skirtMaterial,
+        sceneryEra: this.sceneryEra,
         sceneryRuntime: this.sceneryRuntime,
+        updateSceneryRuntime: false,
         chunkBuildScheduler: this.buildScheduler,
         terrainMeshWorkers: this.meshWorkers,
         groupName: `KOREA_TERRAIN_PAGE_${descriptor.id.toUpperCase()}`,
@@ -1912,12 +1951,20 @@ class KoreaTerrainAtlasPresentation {
       .map((state) => state.presentation?.whenIdle()).filter(Boolean));
   }
 
-  update({ cameraPosition, streamPosition, deltaSeconds, fogColor, fogDensity, sunDirection,
-    placementEastM, placementNorthM } = {}) {
+  update({ cameraPosition, streamPosition, deltaSeconds, elapsedSeconds, windX, windZ, fogColor,
+    fogDensity, sunDirection, placementEastM, placementNorthM } = {}) {
     if (this.disposed) return;
     if (placementEastM !== undefined || placementNorthM !== undefined) {
       this.setPlacement(placementEastM ?? this.worldEastM, placementNorthM ?? this.worldNorthM);
     }
+    this.sceneryRuntime?.update({
+      elapsedSeconds,
+      windX,
+      windZ,
+      cameraPosition,
+      placementEastM: this.worldEastM,
+      placementNorthM: this.worldNorthM,
+    });
     if (fogColor) this.material.uniforms.uFogColor.value.copy(fogColor);
     if (Number.isFinite(fogDensity)) this.material.uniforms.uFogDensity.value = fogDensity;
     if (Number.isFinite(this.visibleWorldRadiusM) && this.visibleWorldRadiusM > 0) {
@@ -1954,6 +2001,9 @@ class KoreaTerrainAtlasPresentation {
     this.lastUpdate = {
       cameraPosition: cameraLocal,
       streamPosition: streamLocal,
+      elapsedSeconds,
+      windX,
+      windZ,
       fogColor,
       fogDensity,
       sunDirection,

@@ -7,6 +7,7 @@ import { createTacticalCloudField } from "../render/environment/tactical_clouds.
 const parameters = new URLSearchParams(location.search);
 const terrainLookMode = parameters.has("terrain-look");
 if (terrainLookMode) document.documentElement.dataset.terrainLook = "true";
+const TERRAIN_LOOK_STREAM_RADIUS_M = 28_000;
 const PRODUCTION_SUN_DIRECTION = new THREE.Vector3(0.32, 0.78, -0.53).normalize();
 const VISUAL_PROFILE_URL = "../content/packs/korea-1950s/visual-profile.json";
 const SITE_CONFIGURATIONS = Object.freeze({
@@ -98,6 +99,7 @@ const terrainFogColor = new THREE.Color(0xd2c4a8);
 let terrainFogDensity = 1 / 48_000;
 let elapsed = 0;
 let previous = performance.now();
+let previousMetricsSample = 0;
 
 const requestedSite = parameters.get("site");
 site.value = SITE_CONFIGURATIONS[requestedSite] ? requestedSite : "ukraine";
@@ -141,22 +143,15 @@ function resize() {
 }
 
 function metrics() {
-  let triangles = 0;
-  let draws = 0;
-  const roots = [environment?.group, terrain?.group, tacticalClouds?.group].filter(Boolean);
-  for (const root of roots) root.traverse((object) => {
-    if (!object.isMesh) return;
-    draws++;
-    const geometry = object.geometry;
-    const perInstance = geometry.index ? geometry.index.count / 3
-      : geometry.attributes.position.count / 3;
-    triangles += perInstance * Math.max(1, object.isInstancedMesh ? object.count : 1);
-  });
-  document.querySelector("#triangles").textContent = Math.round(triangles).toLocaleString();
+  // Report what the renderer actually submitted in the latest frame. Traversing every resident
+  // streamed tile counted off-screen and frustum-culled geometry, which made the lab claim tens of
+  // millions of triangles even when only a small foreground wedge reached the GPU.
+  document.querySelector("#triangles").textContent =
+    Math.round(renderer.info.render.triangles).toLocaleString();
   document.querySelector("#layers").textContent = String(
     tacticalClouds?.descriptors.filter((cloud) => cloud.present).length ?? 0,
   );
-  document.querySelector("#draws").textContent = String(draws);
+  document.querySelector("#draws").textContent = String(renderer.info.render.calls);
 }
 
 async function loadVisualProfile() {
@@ -192,6 +187,9 @@ function terrainFrame(deltaSeconds = 0) {
   return {
     cameraPosition: camera.position,
     deltaSeconds,
+    elapsedSeconds: elapsed,
+    windX: site.value === "ukraine" ? 12 : 11,
+    windZ: site.value === "ukraine" ? -4 : -5,
     fogColor: terrainFogColor,
     fogDensity: terrainFogDensity,
     sunDirection: sunDirection(),
@@ -225,6 +223,13 @@ async function rebuild() {
     manifestUrl: siteConfig.manifestUrl,
     qualityTier: quality.value,
     maximumConcurrentLoads: quality.value === "mobile" ? 3 : 6,
+    ...(terrainLookMode ? {
+      chunkLoadRadiusM: TERRAIN_LOOK_STREAM_RADIUS_M,
+      chunkEvictRadiusM: TERRAIN_LOOK_STREAM_RADIUS_M + 12_000,
+      pageLoadRadiusM: TERRAIN_LOOK_STREAM_RADIUS_M,
+      pageEvictRadiusM: TERRAIN_LOOK_STREAM_RADIUS_M + 20_000,
+      lookAheadSeconds: 0,
+    } : {}),
     sceneryEra: siteConfig.sceneryEra,
     sunDirection: sunDirection(),
     fogColor: terrainFogColor,
@@ -232,6 +237,9 @@ async function rebuild() {
   });
   await terrain.ready;
   scene.add(terrain.group);
+  if (terrainLookMode) {
+    window.__terrainLookProbe = () => terrain?.diagnostics?.() ?? null;
+  }
   // Atlas pages stream after the first camera update. The compact Soniachne product embeds
   // chunks in `ready`; the geodetic atlas would otherwise fail the residentChunks gate with an
   // empty skybox.
@@ -321,6 +329,10 @@ function animate(now) {
       site.value === "ukraine" ? 0.000048 : 0.000055, sunDirection());
   }
   renderer.render(scene, camera);
+  if (now - previousMetricsSample >= 500) {
+    previousMetricsSample = now;
+    metrics();
+  }
 }
 
 quality.addEventListener("change", () => rebuild().catch(showError));

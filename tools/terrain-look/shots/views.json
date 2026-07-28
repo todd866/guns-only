@@ -1,0 +1,116 @@
+{
+  "viewport": [
+    1440,
+    900
+  ],
+  "captures": [
+    {
+      "name": "steppe-low",
+      "position": [
+        -2400,
+        520,
+        3200
+      ],
+      "target": [
+        -6500,
+        90,
+        -1200
+      ],
+      "filePath": "/Users/iantodd/Projects/guns-only/tools/terrain-look/shots/steppe-low.png",
+      "size": 281802,
+      "diagnostics": {
+        "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+        "qualityTier": "desktop",
+        "sceneryEra": "ukraine-modern",
+        "ambientSceneryEnabled": true,
+        "placementEastM": 0,
+        "placementNorthM": 0,
+        "pages": 16,
+        "residentPages": 4,
+        "residentChunks": 66,
+        "sceneryChunks": 12,
+        "localResidentChunks": 51,
+        "localSceneryChunks": 12,
+        "activePageLoads": 0,
+        "queuedPageLoads": 0,
+        "loadedPageManifests": 4,
+        "networkRequests": 83,
+        "networkBytes": 3948198,
+        "errors": 0,
+        "disposed": false
+      }
+    },
+    {
+      "name": "corridor-mid",
+      "position": [
+        -12000,
+        1800,
+        18000
+      ],
+      "target": [
+        -40000,
+        180,
+        -8000
+      ],
+      "filePath": "/Users/iantodd/Projects/guns-only/tools/terrain-look/shots/corridor-mid.png",
+      "size": 346268,
+      "diagnostics": {
+        "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+        "qualityTier": "desktop",
+        "sceneryEra": "ukraine-modern",
+        "ambientSceneryEnabled": true,
+        "placementEastM": 0,
+        "placementNorthM": 0,
+        "pages": 16,
+        "residentPages": 4,
+        "residentChunks": 69,
+        "sceneryChunks": 14,
+        "localResidentChunks": 54,
+        "localSceneryChunks": 11,
+        "activePageLoads": 0,
+        "queuedPageLoads": 0,
+        "loadedPageManifests": 4,
+        "networkRequests": 104,
+        "networkBytes": 5437648,
+        "errors": 0,
+        "disposed": false
+      }
+    },
+    {
+      "name": "high-oblique",
+      "position": [
+        -34000,
+        7800,
+        34000
+      ],
+      "target": [
+        -4000,
+        180,
+        10000
+      ],
+      "filePath": "/Users/iantodd/Projects/guns-only/tools/terrain-look/shots/high-oblique.png",
+      "size": 221101,
+      "diagnostics": {
+        "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+        "qualityTier": "desktop",
+        "sceneryEra": "ukraine-modern",
+        "ambientSceneryEnabled": true,
+        "placementEastM": 0,
+        "placementNorthM": 0,
+        "pages": 16,
+        "residentPages": 4,
+        "residentChunks": 73,
+        "sceneryChunks": 3,
+        "localResidentChunks": 53,
+        "localSceneryChunks": 0,
+        "activePageLoads": 0,
+        "queuedPageLoads": 0,
+        "loadedPageManifests": 4,
+        "networkRequests": 131,
+        "networkBytes": 6336262,
+        "errors": 0,
+        "disposed": false
+      }
+    }
+  ]
+}

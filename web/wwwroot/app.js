@@ -58,6 +58,10 @@ import {
   trackpadLookDelta,
 } from "./render/input/look_gesture.js";
 import { mobileControlProfile } from "./render/input/mobile_control_profile.js";
+import {
+  syncPlayerGunTargetSelection,
+  wingmanPadlockPromotedToPrimary,
+} from "./render/input/player_gun_target.js";
 import { mobileThrottleRockerState } from "./render/input/mobile_throttle_rocker.js";
 import {
   mobileRollCommand,
@@ -985,12 +989,13 @@ const frameGovernor = {
       }
       view.frameGovernorShadowState = null;
     }
+    const sceneryWasSuppressed = view.terrainGovernorSuppressesAmbientScenery === true;
     view.terrainGovernorSuppressesAmbientScenery = false;
     if (Number.isFinite(view.terrainNominalStreamingRadiusM)) {
       view.terrainPresentation?.setStreamingRadiusM?.(
         view.terrainNominalStreamingRadiusM);
     }
-    if (view.terrainMicroRequired === true) {
+    if (sceneryWasSuppressed || view.terrainMicroRequired === true) {
       void view.terrainPresentation?.enableAmbientScenery?.();
     }
   },
@@ -1565,6 +1570,7 @@ let padlockKillCamUntilMs = 0;
 /// should follow it; a replacement wave is a new tally and must be acquired deliberately.
 let padlockEngagement = null;
 let appliedBanditPadlockRollAssist = null;
+let appliedPlayerGunTargetSlot = null;
 let dragging = false;
 let activePointer = null;
 let lastPointerX = 0;
@@ -2283,6 +2289,21 @@ function syncBanditPadlockRollAssist() {
   appliedBanditPadlockRollAssist = selected;
 }
 
+// The camera can look at carriers and circuit traffic, but the gun may only solve against combat
+// contacts. In a two-ship fight the padlocked wingman is slot 1; every other view state, including
+// forward view and Rapier traffic, safely selects the primary combat slot.
+function syncPlayerGunTarget() {
+  const result = syncPlayerGunTargetSelection({
+    bridge,
+    state: latestState,
+    padlock,
+    padlockTarget,
+    appliedSlot: appliedPlayerGunTargetSlot,
+  });
+  appliedPlayerGunTargetSlot = result.appliedSlot;
+  return result.accepted;
+}
+
 function padlockLabel(target = padlockTarget) {
   if (latestState?.rapier_pattern_only === true) {
     if (target === "carrier") return "THRESHOLD";
@@ -2324,6 +2345,7 @@ function releasePadlock(reason = "manual", { announce = true, record = true } = 
   padlockPhase = "RETURN";
   padlockTrackEstablished = false;
   gimbalReturnFast = true;
+  syncPlayerGunTarget();
   syncBanditPadlockRollAssist();
   const message = reason === "manual"
     ? "Padlock off · forward view"
@@ -2354,6 +2376,8 @@ function resetMissionPresentation() {
   padlockTrackEstablished = false;
   appliedBanditPadlockRollAssist = null;
   syncBanditPadlockRollAssist();
+  appliedPlayerGunTargetSlot = null;
+  syncPlayerGunTarget();
   gimbalReturnFast = false;
   activeView?.cancelCloudBreakEntry();
   activeView?.hud.setLegendVisible?.(false);
@@ -2375,6 +2399,7 @@ function acquirePadlock(target, reason) {
   gimbalReturnFast = false;
   padlockKillCamUntilMs = 0;
   padlockEngagement = Number(latestState?.engagement_number);
+  syncPlayerGunTarget();
   syncBanditPadlockRollAssist();
   syncPadlockUi(`${padlockLabel()} padlock on`);
   recorder.event("view", "Padlock", {
@@ -2471,6 +2496,7 @@ function togglePadlock() {
   padlockPhase = manualLookActive() ? "SLEW" : "ACQUIRE";
   padlockTrackEstablished = false;
   gimbalReturnFast = false;
+  syncPlayerGunTarget();
   syncBanditPadlockRollAssist();
   syncPadlockUi(`${padlockLabel()} padlock on`);
   recorder.event("view", "Padlock", {
@@ -5350,7 +5376,7 @@ class FlightView {
     }
     if (forceSplash) {
       this.banditSplashTime = nowSeconds;
-      this.banditDestructionForcedUntil = nowSeconds + 4.8;
+      this.banditDestructionForcedUntil = nowSeconds + 6.2;
       this.banditWasAlive = true;
       effect.position.copy(eventPosition ?? this.banditPosition);
       effect.visible = true;
@@ -5374,29 +5400,24 @@ class FlightView {
     else if (!forced) this.banditWasAlive = false;
 
     const age = nowSeconds - this.banditSplashTime;
-    if (age >= 4.8) {
+    if (age >= 6.2) {
       this.banditDestructionForcedUntil = -1;
       effect.visible = false;
       return;
     }
 
     effect.visible = true;
-    const burst = clamp(age / 0.72, 0, 1);
-    data.outer.scale.setScalar(1.5 + burst * 12.5);
-    data.inner.scale.setScalar(0.9 + burst * 7.0);
-    data.outer.material.uniforms.uAlpha.value = Math.max(0, 0.92 * (1 - age / 1.15));
-    data.inner.material.uniforms.uAlpha.value = Math.max(0, 1 - age / 0.72);
+    const burst = clamp(age / 0.36, 0, 1);
+    data.outer.scale.setScalar(1.2 + burst * 5.0);
+    data.inner.scale.setScalar(0.7 + burst * 2.7);
+    data.outer.material.uniforms.uAlpha.value = Math.max(0, 0.78 * (1 - age / 0.62));
+    data.inner.material.uniforms.uAlpha.value = Math.max(0, 0.9 * (1 - age / 0.38));
     data.outer.material.uniforms.uAge.value = age;
     data.inner.material.uniforms.uAge.value = age;
-    data.flash.intensity = Math.max(0, 68 * (1 - age / 0.48));
+    data.flash.intensity = Math.max(0, 24 * (1 - age / 0.18));
 
-    const shockActive = age < 1.05;
-    data.shockwave.visible = shockActive;
-    if (shockActive) {
-      data.shockwave.quaternion.copy(this.camera.quaternion);
-      data.shockwave.scale.setScalar(1.5 + age * 19.0);
-      data.shockwave.material.opacity = Math.max(0, 0.82 * (1 - age / 1.05));
-    }
+    // A factual aircraft loss needs a brief flash and persistent smoke, not an arcade score ring.
+    data.shockwave.visible = false;
 
     const debrisActive = age < 2.4;
     data.debris.visible = debrisActive;
@@ -5410,7 +5431,7 @@ class FlightView {
         debrisPositions[i + 2] = debrisDirections[i + 2] * age * speed;
       }
       data.debris.geometry.attributes.position.needsUpdate = true;
-      data.debris.material.opacity = Math.max(0, 1 - age / 2.4);
+      data.debris.material.opacity = Math.max(0, 0.62 * (1 - age / 2.4));
     } else {
       data.debris.material.opacity = 0;
     }
@@ -5423,12 +5444,12 @@ class FlightView {
         continue;
       }
       puff.visible = true;
-      puff.position.copy(puff.userData.direction).multiplyScalar(puffAge * (4.8 + i * 0.45));
-      puff.position.y += puffAge * 4.6;
-      puff.scale.setScalar(2.2 + puffAge * (3.3 + i * 0.12));
+      puff.position.copy(puff.userData.direction).multiplyScalar(puffAge * (3.2 + i * 0.32));
+      puff.position.y += puffAge * 3.0;
+      puff.scale.setScalar(1.8 + puffAge * (2.4 + i * 0.09));
       puff.material.uniforms.uAge.value = puffAge;
       puff.material.uniforms.uAlpha.value = Math.max(
-        0, Math.min(0.58, puffAge * 1.4) * (1 - age / 4.8),
+        0, Math.min(0.46, puffAge * 1.2) * (1 - age / 6.2),
       );
     }
   }
@@ -5724,6 +5745,17 @@ class FlightView {
     } else if (padlock && padlockTarget === "carrier"
         && carrierPadlockSupersededByCombat(state)) {
       releasePadlock("combat task");
+    } else if (wingmanPadlockPromotedToPrimary({
+      padlock,
+      padlockTarget,
+      padlockEntityId,
+      padlockEngagement,
+      state,
+    }) && padlockTargetValid(state, "bandit")) {
+      // Promotion changes formation slots, not the identity of the aircraft in the pilot's tally.
+      // Rebind immediately rather than showing a second, false kill cam at stale w1 coordinates.
+      acquirePadlock("bandit", "promotion");
+      syncPadlockUi("BANDIT padlock · wingman promoted");
     } else if (padlock && padlockTarget === "bandit" && padlockEntityId
         && nextBanditEntityId !== padlockEntityId) {
       // The primary slot changed under the lock. A promoted wingman is the SAME engagement still
@@ -5986,9 +6018,15 @@ class FlightView {
     // their mission contract's fixed source anchor and remain excluded from remote presentation.
     const terrainPlacementEastM = Number(state.terrain_placement_east_m);
     const terrainPlacementNorthM = Number(state.terrain_placement_north_m);
+    const terrainWindX = Number(state.wind_x_mps) || 0;
+    // Simulation +Z is north while the renderer mirrors Z.
+    const terrainWindZ = -(Number(state.wind_z_mps) || 0);
     this.terrainPresentation?.update({
       cameraPosition: this.camera.position,
       deltaSeconds: dt,
+      elapsedSeconds: nowSeconds,
+      windX: terrainWindX,
+      windZ: terrainWindZ,
       fogColor: this.fogColor,
       fogDensity,
       sunDirection: SUN_DIRECTION,
@@ -6153,8 +6191,8 @@ class FlightView {
     this.sea.uniforms.uFogColor.value.copy(this.fogColor);
     this.sea.uniforms.uFogDensity.value = fogDensity;
     this.sea.uniforms.uTime.value = nowSeconds;
-    const windTargetX = Number(state.wind_x_mps) || 0;
-    const windTargetZ = -(Number(state.wind_z_mps) || 0); // simulation Z is negated in render space
+    const windTargetX = terrainWindX;
+    const windTargetZ = terrainWindZ;
     const windBlend = expStep(0.55, dt); // weather/turbulence changes must not rotate the sea frame-to-frame
     this.sea.uniforms.uWind.value.x += (windTargetX - this.sea.uniforms.uWind.value.x) * windBlend;
     this.sea.uniforms.uWind.value.y += (windTargetZ - this.sea.uniforms.uWind.value.y) * windBlend;
@@ -7279,6 +7317,7 @@ async function boot() {
     value: Object.freeze({ diagnostics: () => snapshotSource.diagnostics() }),
   });
   bridge.StartBeat(selectedBeat);   // initialise the sortie; Begin is the explicit clock release
+  syncPlayerGunTarget();
   bridgePauseApplied = true;
 
   setBootStatus("CALIBRATING SENSOR…");
@@ -7401,6 +7440,9 @@ async function boot() {
       });
       recorder.observeFramePhase("snap", performance.now() - afterSim);
       latestState = state;
+      // The kernel can retarget after a kill or promotion without a browser input edge. Reconcile
+      // the cached request from the hot slot every frame; matching states do not cross the bridge.
+      syncPlayerGunTarget();
       const replayPresentation = advanceIncidentReplay(incidentReplay, state, now);
       const replayFrame = replayPresentation.frame;
       const replayActive = replayPresentation.active;

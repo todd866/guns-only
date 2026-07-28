@@ -6,6 +6,11 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 import { serveStatic } from "../../web/wwwroot/render/hud/tests/harness/static_server.mjs";
+import {
+  DEFAULT_LEG_WARMUP_MS,
+  measuredFrameWindow,
+  totalLegCaptureDurationMs,
+} from "./flight_frame_metrics.mjs";
 
 const requireFromSmoke = createRequire(
   new URL("../../web/smoke/package.json", import.meta.url),
@@ -24,7 +29,7 @@ const ANALYSIS_PERF_DIRECTORY = resolve(REPO_ROOT, "analysis/perf");
 const DEFAULT_LEG_DURATION_MS = 60_000;
 // Discard the opening of each measured leg: Ace decision bursts and terrain settle dominate the
 // first seconds after altitude capture and must not poison the steady-state 60 fps gate.
-const LEG_WARMUP_MS = 15_000;
+const LEG_WARMUP_MS = DEFAULT_LEG_WARMUP_MS;
 const DEFAULT_MAX_FRAME_MS = 100;
 const DEFAULT_MAX_LONG_FRAME_PERCENT = 1;
 const DEFAULT_MIN_FRAMES = 600;
@@ -59,12 +64,12 @@ function usage() {
     "Usage: node tools/perf/flight_frame_harness.mjs [options]",
     "",
     `  --wwwroot PATH              Published wwwroot (default: ${DEFAULT_WWWROOT})`,
-    "  --leg-duration-ms N         Duration of EACH measured leg; minimum 60000",
+    "  --leg-duration-ms N         Measured duration AFTER a 15 s warmup; minimum 60000",
     `                              (default: ${DEFAULT_LEG_DURATION_MS})`,
     `  --max-frame-ms N            MAX gate for each leg (default: ${DEFAULT_MAX_FRAME_MS})`,
     "  --max-long-frame-pct N      >22 ms percentage gate for each leg",
     `                              (default: ${DEFAULT_MAX_LONG_FRAME_PERCENT})`,
-    `  --min-frames N              Minimum RAF deltas required per leg (default: ${DEFAULT_MIN_FRAMES})`,
+    `  --min-frames N              Minimum RAF deltas in each measured window (default: ${DEFAULT_MIN_FRAMES})`,
     "  -h, --help                  Show this help",
     "",
     "Environment equivalents:",
@@ -75,7 +80,7 @@ function usage() {
     `  ${ENVIRONMENT.minFrames}`,
     "",
     "The profile is intentionally fixed at beat 7 / seed 7, 9,000 ft AGL control,",
-    "then 2,000 ft AGL low level. Profile targets are not CLI-tunable.",
+    "then 2,600 ft AGL low level. Profile targets are not CLI-tunable.",
     "Writes analysis/perf/<iso>-beat7-flight.json (+ .md) for agent post-flight triage.",
   ].join("\n");
 }
@@ -368,13 +373,8 @@ function summarize(values) {
 
 function summarizeLeg(raw) {
   const warmupMs = Number.isFinite(raw.warmupMs) ? raw.warmupMs : LEG_WARMUP_MS;
-  let elapsed = 0;
-  let firstMeasured = 0;
-  while (firstMeasured < raw.deltas.length && elapsed < warmupMs) {
-    elapsed += raw.deltas[firstMeasured];
-    firstMeasured += 1;
-  }
-  const measuredDeltas = raw.deltas.slice(firstMeasured);
+  const window = measuredFrameWindow(raw.deltas, warmupMs);
+  const { firstMeasured, measuredDeltas } = window;
   const measuredRadar = (raw.radarAltitudesFt ?? []).slice(firstMeasured);
   const measuredTerrain = (raw.terrainHeightsFt ?? []).slice(firstMeasured);
   const measuredTas = (raw.trueAirspeedsKts ?? []).slice(firstMeasured);
@@ -395,6 +395,7 @@ function summarizeLeg(raw) {
     frames: measuredDeltas.length,
     capturedFrames: raw.deltas.length,
     warmupMs,
+    warmupSampledMs: window.warmupSampledMs,
     sampledMs: measuredDeltas.reduce((sum, delta) => sum + delta, 0),
     p50Ms: timing.p50,
     p95Ms: timing.p95,
@@ -481,6 +482,10 @@ async function writeFlightReport(result) {
     legs: result.legs.map((leg) => ({
       name: leg.name,
       frames: leg.frames,
+      capturedFrames: leg.capturedFrames,
+      warmupMs: leg.warmupMs,
+      warmupSampledMs: leg.warmupSampledMs,
+      sampledMs: leg.sampledMs,
       p50Ms: leg.p50Ms,
       p95Ms: leg.p95Ms,
       p99Ms: leg.p99Ms,
@@ -881,6 +886,7 @@ async function flyProfile(page, options) {
       const terrainBefore = snapshotTerrain();
       let firstTimestamp = null;
       let previousTimestamp = null;
+      let measurementStartedAt = null;
       while (true) {
         const timestamp = await nextFrame();
         await assertFlight();
@@ -905,10 +911,19 @@ async function flyProfile(page, options) {
           }
         }
         previousTimestamp = timestamp;
-        if (timestamp - firstTimestamp >= config.legDurationMs) {
+        if (measurementStartedAt === null
+          && timestamp - firstTimestamp >= config.warmupMs) {
+          // Start the measurement on an RAF boundary after the full warmup. The old implementation
+          // stopped at warmup + duration from the first RAF, then discarded the boundary-crossing
+          // frame; that quietly shortened the measured window by up to one frame.
+          measurementStartedAt = timestamp;
+        }
+        if (measurementStartedAt !== null
+          && timestamp - measurementStartedAt >= config.legDurationMs) {
           setPitchKey(null);
           return {
             name,
+            warmupMs: config.warmupMs,
             deltas,
             radarAltitudesFt,
             terrainHeightsFt,
@@ -940,10 +955,10 @@ async function flyProfile(page, options) {
       await assertFlight();
       bridge.SetAssistedFlight(false);
       // Auto-GCAS OFF. This harness measures FRAME TIME, not terrain safety, and the two fight
-      // each other: a fast descent to the 2,000 ft AGL measurement leg is exactly the profile
+      // each other: a fast descent to the 2,600 ft AGL measurement leg is exactly the profile
       // Auto-GCAS exists to interrupt, so with it enabled the harness pushes down, GCAS commands
       // a fly-up, and the altitude hold never converges (observed: stalled at 3,194 ft AGL
-      // climbing at +1,126 fpm against a 2,000 ft target). The same interaction already broke
+      // climbing at +1,126 fpm against a low-level target). The same interaction already broke
       // tools/perf/terrain_frame_probe.mjs. Terrain streaming — the thing being measured — is
       // identical either way.
       bridge.SetAutoGcasEnabled(false);
@@ -970,6 +985,7 @@ async function flyProfile(page, options) {
     }
   }, {
     legDurationMs: options.legDurationMs,
+    warmupMs: LEG_WARMUP_MS,
     highAglFt: DEFAULT_HIGH_AGL_FT,
     lowAglFt: DEFAULT_LOW_AGL_FT,
     beat: FIXED_BEAT,
@@ -1000,7 +1016,8 @@ export async function run(options) {
       console.log(
         `Profile: fixed beat=${FIXED_BEAT} seed=${FIXED_SEED}; `
         + `${DEFAULT_HIGH_AGL_FT} ft AGL then ${DEFAULT_LOW_AGL_FT} ft AGL; `
-        + `${options.legDurationMs / 1000}s per leg`,
+        + `${LEG_WARMUP_MS / 1000}s warmup + `
+        + `${options.legDurationMs / 1000}s measured per leg`,
       );
 
       const rawLegs = await flyProfile(page, options);
@@ -1049,6 +1066,12 @@ export async function run(options) {
           seed: FIXED_SEED,
           highAglFt: DEFAULT_HIGH_AGL_FT,
           lowAglFt: DEFAULT_LOW_AGL_FT,
+          legWarmupMs: LEG_WARMUP_MS,
+          legMeasuredDurationMs: options.legDurationMs,
+          minimumLegCaptureDurationMs: totalLegCaptureDurationMs(
+            options.legDurationMs,
+            LEG_WARMUP_MS,
+          ),
         },
         legs,
         lowMinusHigh: {

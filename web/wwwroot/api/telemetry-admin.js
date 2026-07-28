@@ -415,7 +415,10 @@ function applyStateToSortie(state, row, session, sorties) {
   }
   if (state.finished === true) sortie.finished = true;
   if (state.player_alive === false) sortie.playerDead = true;
-  if (state.opponent_alive === false || state.bandit_alive === false) sortie.opponentDead = true;
+  const selectedOpponentAlive = typeof state.opponent_alive === "boolean"
+    ? state.opponent_alive
+    : state.bandit_alive;
+  if (selectedOpponentAlive === false) sortie.opponentDead = true;
   const outcome = String(state.sortie_outcome || "NONE").toUpperCase();
   if (outcome !== "NONE" && outcome !== "UNKNOWN") sortie.outcome = outcome.slice(0, 80);
 }

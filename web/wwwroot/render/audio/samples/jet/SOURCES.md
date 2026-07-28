@@ -15,6 +15,12 @@ Mirror used for acquisition: Creazilla public-domain copy of the same recording.
 | `mil_loop.wav` | Engine run-up | Military / power bed |
 | `grit_loop.wav` | Afterburner-derived HP grit | Combustor edge under power |
 
+`rapier_{idle,mil,grit}_cockpit_loop.wav` are original synthesized interior-body alternates.
+Their aggregate spectral target comes from the public-domain U.S. Air Force
+[158th FW F-16 cockpit footage](https://www.dvidshub.net/video/669814/158th-fw-aerial-f-16-footage)
+hosted by DVIDS. No DVIDS PCM is shipped. The F-16 profile contributes pressurized-cabin
+80–800 Hz body while the CC0 F-4 beds retain Rapier's fictional turbo/ram identity.
+
 ## F-22 (cockpit) — License
 
 `f22_{idle,mil,grit}_loop.wav` are **original synthesized** mono 44.1 kHz loops.
@@ -28,6 +34,20 @@ EQ targets were measured from the full ~19 min cockpit demo
 | `f22_mil_loop.wav` | Mid power | Cruise / mil cockpit rumble |
 | `f22_grit_loop.wav` | Louder tercile | High-power cabin thump |
 
+`f22_{idle,mil,grit}_alt_loop.wav` are a second independently seeded set generated from the
+tracked aggregate `f22_palette_profile.json`. Runtime equal-power crossfades the two sets.
+
+## Aggregate profiles and rejected references
+
+- `f22_palette_profile.json` — band fractions/centroid/rolloff from the F-22 demo reference.
+- `rapier_cockpit_profile.json` — aggregate cockpit spectrum from DVIDS video 669814.
+- DVIDS [F-22 cockpit B-roll 845172](https://www.dvidshub.net/video/845172/f-22-raptor-demo-team-cockpit-b-roll)
+  was evaluated and rejected: its embedded audio is effectively digital silence.
+- The tracked research index is `audio/jet-library/catalog.json`.
+- New synchronized reference video/audio, hashes, and review metadata stay under gitignored
+  `analysis/jet-audio-library/`; the earlier one-off pulls remain in `analysis/audio-refs/`.
+- Reference-only media cannot be promoted into this production directory.
+
 ## Rebuild
 
 ```bash
@@ -35,7 +55,42 @@ EQ targets were measured from the full ~19 min cockpit demo
 ffmpeg -i stoney_f4.flac -ac 1 -ar 44100 f4_mono.wav
 # then cut/normalize segments per engine_audio hybrid pipeline notes
 
-# F-22 — re-measure full demo WAV then run analysis/audio-refs spectral match script
+# F-22 / Rapier cockpit alternates — measure aggregate profiles, then synthesize original beds
+python3 -m pip install -r tools/audio/requirements.txt
+python3 tools/audio/cockpit_palette.py self-test
+python3 -m unittest tools/audio/test_cockpit_palette.py
+
+python3 tools/audio/cockpit_palette.py analyze \
+  --input analysis/audio-refs/f22-cockpit-full.wav \
+  --output web/wwwroot/render/audio/samples/jet/f22_palette_profile.json \
+  --source-id youtube.NWxtuDEyK9g \
+  --source-url 'https://www.youtube.com/watch?v=NWxtuDEyK9g'
+
+python3 tools/audio/cockpit_palette.py analyze \
+  --input analysis/audio-refs/dvids-f16-cockpit-669814.wav \
+  --output web/wwwroot/render/audio/samples/jet/rapier_cockpit_profile.json \
+  --source-id dvids.669814 \
+  --source-url 'https://www.dvidshub.net/video/669814/158th-fw-aerial-f-16-footage'
+
+python3 tools/audio/cockpit_palette.py synthesize \
+  --profile web/wwwroot/render/audio/samples/jet/f22_palette_profile.json \
+  --output-dir web/wwwroot/render/audio/samples/jet \
+  --prefix f22 --suffix alt --seconds 6 --seed 20260728 \
+  --target-rms-dbfs=-16,-14.5,-13.5
+
+python3 tools/audio/cockpit_palette.py synthesize \
+  --profile web/wwwroot/render/audio/samples/jet/rapier_cockpit_profile.json \
+  --output-dir web/wwwroot/render/audio/samples/jet \
+  --prefix rapier --suffix cockpit --seconds 6 --seed 20260729 \
+  --target-rms-dbfs=-30,-30,-22
+
+# Final deterministic conditioning for the six primary beds. This removes hard PCM wraps with an
+# idempotent 80 ms equal-power overlap; rerunning on an already conditioned bed is byte-preserving.
+for bed in idle_loop mil_loop grit_loop f22_idle_loop f22_mil_loop f22_grit_loop; do
+  python3 tools/audio/cockpit_palette.py condition-loop \
+    --input "web/wwwroot/render/audio/samples/jet/${bed}.wav" \
+    --output "web/wwwroot/render/audio/samples/jet/${bed}.wav"
+done
 ```
 
 If loops are missing at runtime, `engine_audio.js` falls back to the procedural stack.

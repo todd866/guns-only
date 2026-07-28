@@ -398,8 +398,22 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     public IBandit CreateBandit(
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
         SpawnSpec? spec = null) {
-        if (UsesNeutralMergeBandit)
-            return new NeutralMergeBandit(Bandit, BanditAir, spec?.Skill ?? BanditSkill, terrain);
+        if (UsesNeutralMergeBandit) {
+            // A director-staged opening must change the whole actor, not just the skill label.
+            // Keep the authored no-spec opening byte-for-byte compatible, while a persisted
+            // director decision may select a different mount (or the machine's own airframe),
+            // boss overlay and opener doctrine before the neutral pass begins.
+            PilotSkill mergeSkill = spec?.Skill ?? BanditSkill;
+            AircraftParams mergeAir = spec is { } mergeOpening
+                ? BanditAirForMount(mergeSkill, mergeOpening.Mount)
+                : BanditAir;
+            AircraftState mergeInitial = ReferenceEquals(mergeAir, BanditAir)
+                ? Bandit : Bandit with { Mass = mergeAir.MassKg };
+            return new NeutralMergeBandit(
+                mergeInitial, mergeAir, mergeSkill, terrain,
+                profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
+                doctrineIndex: spec?.DoctrineIndex);
+        }
         if (!UsesReactiveBandit)
             return new RailBandit(Bandit, BanditAir, BanditTimeline);
         // A director-staged opening (post-restart pacing memory) may resolve a skill whose
@@ -869,7 +883,7 @@ public static class Beats {
             Combat = CombatConfig.CarrierRecoveryOnly,
             // Full tanks and no bingo pressure: the point is repetition, not endurance. A circuit
             // costs a few hundred pounds, so this is roughly a dozen patterns before fuel matters.
-            Fuel = sortie.Fuel with {
+            Fuel = sortie.FuelLoadout with {
                 InitialFuelLb = 9_920.0,
                 BingoThresholdLb = 800.0,
                 JokerThresholdLb = 1_400.0

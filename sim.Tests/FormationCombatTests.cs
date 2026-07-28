@@ -47,9 +47,25 @@ public class FormationCombatTests {
 
         // Two shooters must KILL the player together rather than each needing a full magazine's
         // worth of hits of their own.
-        Assert.Equal(
-            session.OpponentGun.HitCount + session.Wingmen[0].Gun.HitCount,
-            session.PlayerHitsTaken);
+        int hitsToDefeat = session.Beat.CombatRules.PlayerHitsToDefeat;
+        for (int hit = 0; hit < hitsToDefeat - 1; hit++) {
+            int before = session.OpponentGun.HitCount;
+            ScoreOneSyntheticHit(session.OpponentGun);
+            session.RecordPlayerHitsForTest(session.OpponentGun.HitCount - before);
+        }
+        Assert.True(session.PlayerAlive);
+        Assert.Equal(1.0 / hitsToDefeat, session.PlayerHealth, 12);
+
+        GunKill wingmanGun = session.Wingmen[0].Gun;
+        int wingmanHitsBefore = wingmanGun.HitCount;
+        ScoreOneSyntheticHit(wingmanGun);
+        session.RecordPlayerHitsForTest(wingmanGun.HitCount - wingmanHitsBefore);
+        session.StepFixed();
+
+        Assert.Equal(hitsToDefeat, session.PlayerHitsTaken);
+        Assert.Equal(0.0, session.PlayerHealth);
+        Assert.False(session.PlayerAlive);
+        Assert.NotEqual(AircraftTerminalState.Flying, session.PlayerTerminalState);
     }
 
     /// One death is the expected cost of a fight pitched near a 4:1 win rate, and the pilot noticed
@@ -119,6 +135,79 @@ public class FormationCombatTests {
     }
 
     [Fact]
+    public void ForcedLeaderDefeatPromotesSurvivorImmediatelyWithoutTerminalDelay() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        IBandit leader = session.Bandit;
+        IBandit survivor = session.Wingmen[0].Bandit;
+
+        session.ForceOpponentDefeatForTest();
+
+        Assert.NotSame(leader, session.Bandit);
+        Assert.Same(survivor, session.Bandit);
+        Assert.Empty(session.Wingmen);
+        Assert.Equal(AircraftTerminalState.Flying, session.OpponentTerminalState);
+        Assert.False(session.TerminalPhaseActive);
+        Assert.False(session.OpponentReplacementPending);
+        Assert.Equal(0.0, session.OpponentReplacementSeconds);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+    }
+
+    [Fact]
+    public void RetiringLeaderRoundSurvivesImmediatePromotionAndAdvancesNextTick() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        GunKill retiringGun = session.OpponentGun;
+        GunRound launched = LaunchSyntheticMiss(retiringGun);
+
+        Assert.Contains(launched, session.FormationOpponentRoundsInFlight);
+        session.ForceOpponentDefeatForTest();
+
+        Assert.NotSame(retiringGun, session.OpponentGun);
+        Assert.False(session.TerminalPhaseActive);
+        Assert.Contains(launched, session.FormationOpponentRoundsInFlight);
+        Assert.Equal(launched, Assert.Single(retiringGun.RoundsInFlight));
+
+        session.StepFixed();
+
+        GunRound advanced = Assert.Single(retiringGun.RoundsInFlight);
+        Assert.Equal(launched.Id, advanced.Id);
+        Assert.Equal(
+            launched.AgeSeconds + SimulationSession.FixedDeltaSeconds,
+            advanced.AgeSeconds,
+            12);
+        Assert.True((advanced.Position - launched.Position).Length > 1.0);
+        Assert.Contains(advanced, session.FormationOpponentRoundsInFlight);
+    }
+
+    [Fact]
+    public void DestroyedWingmanRoundContinuesAdvancingAfterShooterIsLost() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        Wingman wingman = session.Wingmen[0];
+        GunRound launched = LaunchSyntheticMiss(wingman.Gun);
+
+        wingman.Bandit.ApplyCatastrophicDamage(handedness: -1);
+        Assert.True(wingman.Bandit.CatastrophicallyDamaged);
+        Assert.Contains(launched, session.FormationOpponentRoundsInFlight);
+
+        session.StepFixed();
+
+        Assert.True(wingman.Defeated);
+        Assert.Equal(
+            AircraftTerminalState.DestroyedAirborne,
+            wingman.TerminalState);
+        GunRound advanced = Assert.Single(wingman.Gun.RoundsInFlight);
+        Assert.Equal(launched.Id, advanced.Id);
+        Assert.Equal(
+            launched.AgeSeconds + SimulationSession.FixedDeltaSeconds,
+            advanced.AgeSeconds,
+            12);
+        Assert.True((advanced.Position - launched.Position).Length > 1.0);
+        Assert.Contains(advanced, session.FormationOpponentRoundsInFlight);
+    }
+
+    [Fact]
     public void RealGunSplashDoesNotCarryOntoThePromotedWingman() {
         var session = new SimulationSession(7);
         session.Begin();
@@ -132,9 +221,14 @@ public class FormationCombatTests {
             Vec3D.Zero, 0.0, 0.0, 0.0, 0.0, FlightModel.F22APublicDataSurrogate.MassKg,
             QuaternionD.Identity);
         var target = own with { Position = new Vec3D(0.0, 0.0, 100.0) };
+        Assert.True(session.SetPlayerGunTargetSlot(0));
+        long leaderTargetId = session.PlayerGun.SelectedTargetId;
+        var targets = new[] { new GunTarget(leaderTargetId, target) };
         for (int tick = 0; tick < AircraftSim.TickHz
             && session.PlayerGun.TargetAlive; tick++)
-            session.PlayerGun.Step(true, own, target, SimulationSession.FixedDeltaSeconds);
+            session.PlayerGun.Step(
+                true, own, leaderTargetId, targets,
+                SimulationSession.FixedDeltaSeconds);
         Assert.Equal(FightOutcome.Splash, session.PlayerGun.Outcome);
 
         session.StepFixed();
@@ -155,5 +249,157 @@ public class FormationCombatTests {
         Assert.Equal(1, session.KillCount);
         Assert.Equal(1, session.LiveOpponentCount);
         Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+    }
+
+    [Fact]
+    public void PlayerCanKillTheWingmanFirstWithoutDestroyingTheLeader() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        IBandit leader = session.Bandit;
+        Wingman wingman = session.Wingmen[0];
+
+        Assert.True(session.SetPlayerGunTargetSlot(1));
+        Assert.Equal(1, session.SelectedPlayerGunTargetSlot);
+        long wingmanTargetId = session.PlayerGun.SelectedTargetId;
+        var own = new AircraftState(
+            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            FlightModel.F22APublicDataSurrogate.MassKg,
+            QuaternionD.Identity);
+        var target = own with { Position = new Vec3D(0.0, 0.0, 100.0) };
+        var targets = new[] { new GunTarget(wingmanTargetId, target) };
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && session.PlayerGun.DamageFor(wingmanTargetId).TargetAlive; tick++)
+            session.PlayerGun.Step(
+                true, own, wingmanTargetId, targets,
+                SimulationSession.FixedDeltaSeconds);
+
+        Assert.Equal(
+            FightOutcome.Splash,
+            session.PlayerGun.DamageFor(wingmanTargetId).Outcome);
+        session.StepFixed();
+
+        Assert.True(wingman.Bandit.CatastrophicallyDamaged);
+        Assert.False(leader.CatastrophicallyDamaged);
+        Assert.Equal(AircraftTerminalState.Flying, session.OpponentTerminalState);
+        Assert.Equal(1, session.LiveOpponentCount);
+        Assert.Equal(1, session.KillCount);
+        Assert.Equal(0, session.SelectedPlayerGunTargetSlot);
+        Assert.Equal(FightOutcome.Flying, session.PlayerGun.Outcome);
+    }
+
+    [Fact]
+    public void PromotedWingmanKeepsItsExistingDamageAndTheSamePhysicalGun() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        GunKill physicalGun = session.PlayerGun;
+        IBandit leader = session.Bandit;
+        IBandit survivor = session.Wingmen[0].Bandit;
+
+        Assert.True(session.SetPlayerGunTargetSlot(1));
+        long survivorTargetId = physicalGun.SelectedTargetId;
+        var own = new AircraftState(
+            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            FlightModel.F22APublicDataSurrogate.MassKg,
+            QuaternionD.Identity);
+        var target = own with { Position = new Vec3D(0.0, 0.0, 100.0) };
+        var targets = new[] { new GunTarget(survivorTargetId, target) };
+        physicalGun.Step(
+            true, own, survivorTargetId, targets,
+            SimulationSession.FixedDeltaSeconds);
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && physicalGun.DamageFor(survivorTargetId).HitCount == 0; tick++)
+            physicalGun.Step(
+                false, own, survivorTargetId, targets,
+                SimulationSession.FixedDeltaSeconds);
+        Assert.Equal(1, physicalGun.DamageFor(survivorTargetId).HitCount);
+        Assert.Equal(FightOutcome.Flying, physicalGun.DamageFor(survivorTargetId).Outcome);
+
+        session.ForceOpponentDefeatForTest();
+        for (int tick = 0; tick < 6 * AircraftSim.TickHz
+            && ReferenceEquals(session.Bandit, leader); tick++)
+            session.StepFixed();
+
+        Assert.Same(survivor, session.Bandit);
+        Assert.Same(physicalGun, session.PlayerGun);
+        Assert.Equal(survivorTargetId, session.PlayerGun.SelectedTargetId);
+        Assert.Equal(1, session.PlayerGun.HitCount);
+        Assert.Equal(FightOutcome.Flying, session.PlayerGun.Outcome);
+    }
+
+    [Fact]
+    public void PromotedWingmanHitsAreNotCountedTwiceAgainstThePlayer() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        IBandit leader = session.Bandit;
+        Wingman wingman = session.Wingmen[0];
+
+        ScoreOneSyntheticHit(wingman.Gun);
+        Assert.Equal(1, wingman.Gun.HitCount);
+        session.RecordPlayerHitsForTest(1);
+        session.ForceOpponentDefeatForTest();
+        for (int tick = 0; tick < 6 * AircraftSim.TickHz
+            && ReferenceEquals(session.Bandit, leader); tick++)
+            session.StepFixed();
+
+        Assert.Same(wingman.Gun, session.OpponentGun);
+        int recordedHitEvents = session.RecentEvents
+            .Where(e => e.Type == SessionEventType.Hit
+                && e.Source == CombatRole.Opponent
+                && e.Target == CombatRole.Player)
+            .Sum(e => e.Count);
+        Assert.Equal(recordedHitEvents, session.PlayerHitsTaken);
+    }
+
+    [Fact]
+    public void LeaderHitsRemainInThePlayerLedgerAfterPromotion() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        IBandit leader = session.Bandit;
+
+        ScoreOneSyntheticHit(session.OpponentGun);
+        Assert.Equal(1, session.OpponentGun.HitCount);
+        session.RecordPlayerHitsForTest(1);
+        session.ForceOpponentDefeatForTest();
+        for (int tick = 0; tick < 6 * AircraftSim.TickHz
+            && ReferenceEquals(session.Bandit, leader); tick++)
+            session.StepFixed();
+
+        int recordedHitEvents = session.RecentEvents
+            .Where(e => e.Type == SessionEventType.Hit
+                && e.Source == CombatRole.Opponent
+                && e.Target == CombatRole.Player)
+            .Sum(e => e.Count);
+        Assert.Equal(recordedHitEvents, session.PlayerHitsTaken);
+        Assert.True(session.PlayerHitsTaken >= 1);
+    }
+
+    static GunRound LaunchSyntheticMiss(GunKill gun) {
+        var shooter = new AircraftState(
+            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            FlightModel.F22APublicDataSurrogate.MassKg,
+            QuaternionD.Identity);
+        var offAxisTarget = shooter with {
+            Position = new Vec3D(1000.0, 0.0, 2500.0)
+        };
+        int roundsBefore = gun.RoundsInFlight.Count;
+
+        gun.Step(true, shooter, offAxisTarget, 0.0);
+
+        Assert.Equal(roundsBefore + 1, gun.RoundsInFlight.Count);
+        return gun.RoundsInFlight[^1];
+    }
+
+    static void ScoreOneSyntheticHit(GunKill gun) {
+        int hitsBefore = gun.HitCount;
+        var shooter = new AircraftState(
+            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            FlightModel.F22APublicDataSurrogate.MassKg,
+            QuaternionD.Identity);
+        var target = shooter with { Position = new Vec3D(0.0, 0.0, 100.0) };
+        gun.Step(true, shooter, target, SimulationSession.FixedDeltaSeconds);
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && gun.HitCount == hitsBefore; tick++)
+            gun.Step(false, shooter, target, SimulationSession.FixedDeltaSeconds);
+        Assert.Equal(hitsBefore + 1, gun.HitCount);
     }
 }

@@ -414,6 +414,7 @@ window.__debugScenario = async (name) => {
       lead_valid: frame.state.lead_valid,
       gun_solution: frame.state.gun_solution,
       bandit_alive: frame.state.bandit_alive,
+      opponent_alive: frame.state.opponent_alive,
       auto_gcas_active: frame.state.auto_gcas_active,
       auto_gcas_warning: frame.state.auto_gcas_warning,
       auto_gcas_inhibit_reason: frame.state.auto_gcas_inhibit_reason,

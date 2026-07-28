@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "kind": "aggregate-cockpit-spectral-profile",
+  "source": {
+    "id": "dvids.669814",
+    "url": "https://www.dvidshub.net/video/669814/158th-fw-aerial-f-16-footage",
+    "usage": "aggregate spectral reference only; no source PCM is shipped",
+    "production_pcm_contains_source_audio": false
+  },
+  "analysis": {
+    "sample_rate_hz": 22050,
+    "duration_seconds": 143.685,
+    "frame_seconds": 0.249977,
+    "hop_seconds": 0.124989,
+    "rms_dbfs_quantiles": {
+      "0.1": -22.07,
+      "0.25": -21.754,
+      "0.5": -21.399,
+      "0.75": -21.011,
+      "0.9": -20.5
+    }
+  },
+  "bands_hz": [
+    [
+      20.0,
+      80.0
+    ],
+    [
+      80.0,
+      250.0
+    ],
+    [
+      250.0,
+      800.0
+    ],
+    [
+      800.0,
+      2500.0
+    ],
+    [
+      2500.0,
+      8000.0
+    ]
+  ],
+  "regimes": {
+    "idle": {
+      "rms_dbfs": -21.818,
+      "spectral_centroid_hz": 482.73,
+      "rolloff_85_hz": 756.35,
+      "band_energy_fraction": [
+        0.0234163,
+        0.4734522,
+        0.3640921,
+        0.113278,
+        0.0257614
+      ],
+      "band_energy_db": [
+        -16.305,
+        -3.247,
+        -4.388,
+        -9.459,
+        -15.89
+      ],
+      "dominant_low_peaks_hz": [
+        209.9,
+        110.4,
+        142.7,
+        191.1
+      ],
+      "frame_count": 270
+    },
+    "mil": {
+      "rms_dbfs": -21.337,
+      "spectral_centroid_hz": 461.01,
+      "rolloff_85_hz": 737.51,
+      "band_energy_fraction": [
+        0.0185542,
+        0.5080743,
+        0.3511065,
+        0.0995419,
+        0.0227231
+      ],
+      "band_energy_db": [
+        -17.316,
+        -2.941,
+        -4.546,
+        -10.02,
+        -16.435
+      ],
+      "dominant_low_peaks_hz": [
+        207.3,
+        142.7,
+        110.4,
+        188.4
+      ],
+      "frame_count": 337
+    },
+    "grit": {
+      "rms_dbfs": -20.705,
+      "spectral_centroid_hz": 378.0,
+      "rolloff_85_hz": 584.09,
+      "band_energy_fraction": [
+        0.0213582,
+        0.6167333,
+        0.2720521,
+        0.0767674,
+        0.0130891
+      ],
+      "band_energy_db": [
+        -16.704,
+        -2.099,
+        -5.653,
+        -11.148,
+        -18.831
+      ],
+      "dominant_low_peaks_hz": [
+        209.9,
+        110.4,
+        142.7,
+        191.1
+      ],
+      "frame_count": 225
+    }
+  }
+}

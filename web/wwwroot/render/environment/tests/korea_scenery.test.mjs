@@ -4,6 +4,7 @@ import * as THREE from "../../../vendor/three.module.js";
 import {
   createKoreaSceneryRuntime,
   KOREA_TREE_STAND_SIZE,
+  SOFT_WORLD_GRASS_BLADES_PER_PATCH,
   UKRAINE_MID_RING_STAND_SIZE,
   KOREA_SCENERY_PROFILES,
   planKoreaScenery,
@@ -35,6 +36,19 @@ function chunkFixture() {
     boundsLocalM: [0, 0, 1_000, 1_000],
     generation: { seed: 123456789, landFraction: 1 },
   };
+}
+
+function localHorizontalOffset(matrix, worldEast, worldNorth) {
+  const elements = matrix.elements;
+  const a = elements[0];
+  const b = elements[8];
+  const c = elements[2];
+  const d = elements[10];
+  const determinant = a * d - b * c;
+  return new THREE.Vector2(
+    (d * worldEast - b * worldNorth) / determinant,
+    (-c * worldEast + a * worldNorth) / determinant,
+  );
 }
 
 test("plans deterministic scenery while keeping eras materially distinct", () => {
@@ -109,6 +123,7 @@ test("never scatters scenery onto an all-water terrain tile", () => {
   assert.equal(plan.trees.length, 0);
   assert.equal(plan.buildings.length, 0);
   assert.equal(plan.fields.length, 0);
+  assert.equal(plan.grass.length, 0);
   assert.equal(plan.fieldRows.length, 0);
   assert.equal(plan.roads.length, 0);
   assert.equal(plan.railSegments.length, 0);
@@ -187,6 +202,8 @@ test("plans a distinct Ukraine rewild grammar with sparse ambient compounds", ()
   assert.deepEqual(first, repeated);
   assert.ok(first.trees.length > first.buildings.length,
     "rewild canopy should dominate rare compounds");
+  assert.ok(first.grassPatchCapacity > 0,
+    "the close rewild layer should reserve a deterministic camera-local meadow pool");
   assert.ok(first.buildings.every((building, index) =>
     building.entityId === `scenery.ukraine-modern.${chunk.id}.building.${index}`
       && building.role === "ambient"
@@ -197,7 +214,148 @@ test("plans a distinct Ukraine rewild grammar with sparse ambient compounds", ()
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].treeDensityPerKm2 > 40);
   assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].crownShape, "soft-canopy");
   assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].softLit, true);
+  assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].grassPatchDensityPerKm2 > 100);
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].toonSteps.length >= 3);
+});
+
+test("Ukraine meadow clumps batch real blades and share the authoritative wind field", () => {
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+  });
+  const group = runtime.createTile(chunkFixture(), flatDecodedFixture(), 0);
+  assert.equal(group.getObjectByName("PROCEDURAL_SOFT_WORLD_GRASS"), undefined,
+    "the camera-local pool should be allocated lazily, not during every terrain tile build");
+  group.traverse((child) => {
+    if (child.isInstancedMesh) {
+      assert.ok(child.boundingSphere,
+        `${child.name} should carry a precomputed chunk bound before its first render`);
+      assert.ok(child.boundingSphere.radius > Math.SQRT2 * 500 + 300,
+        `${child.name} bound must include horizontal object footprints past the tile centre`);
+    }
+  });
+  runtime.update({
+    elapsedSeconds: 12.5,
+    windX: 7,
+    windZ: -3,
+    cameraPosition: new THREE.Vector3(500, 120, -500),
+  });
+  const grass = group.getObjectByName("PROCEDURAL_SOFT_WORLD_GRASS");
+  assert.ok(grass?.isInstancedMesh);
+  assert.equal(grass.instanceMatrix.count, group.userData.scenery.grassPatchCapacity);
+  assert.equal(
+    group.userData.scenery.grassBladeCapacity,
+    grass.instanceMatrix.count * SOFT_WORLD_GRASS_BLADES_PER_PATCH,
+  );
+  assert.ok(grass.geometry.attributes.position.count
+    >= SOFT_WORLD_GRASS_BLADES_PER_PATCH * 5);
+  assert.equal(grass.material.type, "MeshBasicMaterial",
+    "foreground grass should keep its authored palette without dark Lambert aliasing");
+  assert.ok(grass.count > 0);
+  assert.ok(grass.count <= KOREA_SCENERY_PROFILES["ukraine-modern"].localGrassUpdatesPerFrame,
+    "the first visible frame must obey the camera-grass matrix update budget");
+  assert.ok(grass.count <= group.userData.scenery.grassPatchCapacity);
+  assert.equal(group.userData.scenery.grassPatches, grass.count);
+  assert.equal(
+    group.userData.scenery.grassBlades,
+    grass.count * SOFT_WORLD_GRASS_BLADES_PER_PATCH,
+  );
+  const shader = {
+    uniforms: {},
+    vertexShader: "#include <common>\nvoid main(){\n#include <begin_vertex>\n}",
+  };
+  grass.material.onBeforeCompile(shader);
+  assert.equal(shader.uniforms.uSoftWorldTime.value, 12.5);
+  assert.deepEqual(shader.uniforms.uSoftWorldWind.value.toArray(), [7, -3]);
+  assert.match(shader.vertexShader, /travellingWave/);
+  assert.match(shader.vertexShader, /softWorldDeterminant/);
+  assert.doesNotMatch(shader.vertexShader, /0\.70710678/);
+  runtime.disposeTile(group);
+  runtime.dispose();
+});
+
+test("camera-local Ukraine grass preserves overlapping placements across adjacent snaps", () => {
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+  });
+  const group = runtime.createTile(chunkFixture(), flatDecodedFixture(), 0);
+  const matricesByPosition = (mesh) => {
+    const matrix = new THREE.Matrix4();
+    const result = new Map();
+    for (let index = 0; index < mesh.count; index++) {
+      mesh.getMatrixAt(index, matrix);
+      const elements = Array.from(matrix.elements);
+      const key = `${elements[12].toFixed(5)}:${elements[14].toFixed(5)}`;
+      result.set(key, elements);
+    }
+    return result;
+  };
+
+  for (let frame = 0; frame < 8; frame++) {
+    runtime.update({
+      cameraPosition: new THREE.Vector3(504, 120, -504),
+    });
+  }
+  const grass = group.getObjectByName("PROCEDURAL_SOFT_WORLD_GRASS");
+  const before = matricesByPosition(grass);
+  assert.ok(before.size > 0);
+
+  // One exact 42 m camera-cell step east. Grass still inside the new 270 m disc must retain the
+  // same world transform; only the strip leaving/entering the disc is allowed to change.
+  for (let frame = 0; frame < 8; frame++) {
+    runtime.update({
+      cameraPosition: new THREE.Vector3(546, 120, -504),
+    });
+  }
+  const after = matricesByPosition(grass);
+  const newCentreX = 546 - 500;
+  const newCentreZ = -(504 - 500);
+  const expectedOverlap = [...before.entries()].filter(([, elements]) =>
+    Math.hypot(elements[12] - newCentreX, elements[14] - newCentreZ) <= 270);
+
+  assert.ok(expectedOverlap.length > before.size * 0.7,
+    "adjacent camera cells should share most of the meadow");
+  for (const [key, matrix] of expectedOverlap) {
+    assert.deepEqual(after.get(key), matrix,
+      `overlapping world placement ${key} must not be reseeded`);
+  }
+  assert.ok([...before.keys()].some((key) => !after.has(key)),
+    "the trailing edge should leave the bounded pool");
+  const entering = [...after.entries()].filter(([key]) => !before.has(key));
+  assert.ok(entering.length > 0,
+    "the leading edge should fill the bounded pool");
+  const priorCentreX = 504 - 500;
+  const priorCentreZ = -(504 - 500);
+  assert.ok(entering.every(([, elements]) =>
+    Math.hypot(elements[12] - priorCentreX, elements[14] - priorCentreZ) >= 269.999),
+  "new instances should appear only across the leading edge, not pop into the overlap");
+  assert.ok(grass.count <= grass.instanceMatrix.count,
+    "camera motion must not grow the fixed quality-tier instance allocation");
+
+  runtime.disposeTile(group);
+  runtime.dispose();
+});
+
+test("soft-world bending preserves authoritative world direction across yaw and scale", () => {
+  const worldOffset = new THREE.Vector2(0.36, -0.18);
+  for (const [yaw, radius] of [[0, 4], [Math.PI / 2, 9]]) {
+    const matrix = new THREE.Matrix4().compose(
+      new THREE.Vector3(12, 3, -8),
+      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw),
+      new THREE.Vector3(radius, 1.2, radius),
+    );
+    const local = localHorizontalOffset(matrix, worldOffset.x, worldOffset.y);
+    const origin = new THREE.Vector3(0, 0, 0).applyMatrix4(matrix);
+    const displaced = new THREE.Vector3(local.x, 0, local.y).applyMatrix4(matrix);
+    const recovered = displaced.sub(origin);
+    assert.ok(Math.abs(recovered.x - worldOffset.x) < 1e-9);
+    assert.ok(Math.abs(recovered.z - worldOffset.y) < 1e-9);
+  }
+  assert.deepEqual(
+    localHorizontalOffset(new THREE.Matrix4(), 0, 0).toArray(),
+    [0, 0],
+  );
 });
 
 test("Ukraine soft-canopy stands use rounded crown geometry and Lambert lighting", () => {
@@ -209,10 +367,24 @@ test("Ukraine soft-canopy stands use rounded crown geometry and Lambert lighting
   assert.ok(group);
   const crowns = group.getObjectByName("PROCEDURAL_TREE_CROWNS");
   assert.ok(crowns?.isInstancedMesh);
-  assert.ok(crowns.geometry.attributes.position.count > 400,
-    "soft canopy stands should be rounded spheres, not 7-sided fir cones");
+  const crownTriangles = crowns.geometry.index.count / 3;
+  assert.ok(crownTriangles >= KOREA_TREE_STAND_SIZE * 40,
+    "soft canopy stands should retain enough surface for a rounded silhouette");
+  assert.ok(crownTriangles <= KOREA_TREE_STAND_SIZE * 60,
+    "softness must come from the clump silhouette, not excessive sphere tessellation");
   assert.equal(crowns.material.type, "MeshLambertMaterial",
     "Ukraine soft-world crowns must not use hard toon posterization");
+  runtime.update({ elapsedSeconds: 8, windX: 5, windZ: 2 });
+  const shader = {
+    uniforms: {},
+    vertexShader: "#include <common>\nvoid main(){\n#include <begin_vertex>\n}",
+  };
+  crowns.material.onBeforeCompile(shader);
+  assert.equal(shader.uniforms.uSoftWorldTime.value, 8);
+  assert.deepEqual(shader.uniforms.uSoftWorldWind.value.toArray(), [5, 2]);
+  assert.match(shader.vertexShader, /canopyWeight/);
+  assert.match(shader.vertexShader, /softWorldDeterminant/);
+  assert.doesNotMatch(shader.vertexShader, /0\.70710678/);
   runtime.disposeTile(group);
   runtime.dispose();
 });
@@ -240,6 +412,9 @@ test("Ukraine mid-ring scenery uses thinner stands and lower density than the ne
   assert.ok(mid.trees.length < near.trees.length,
     "mid ring must keep fewer tree instances than the near ring under the same tier cap");
   assert.ok(mid.trees.length <= Math.ceil(near.trees.length * 0.55) + 1);
+  assert.ok(near.grassPatchCapacity > 0);
+  assert.equal(mid.grassPatchCapacity, 0,
+    "individual grass blades belong only to the closest scenery ring");
 
   const runtime = createKoreaSceneryRuntime(THREE, {
     era: "ukraine-modern",
@@ -264,6 +439,58 @@ test("Ukraine mid-ring scenery uses thinner stands and lower density than the ne
     < nearCrowns.geometry.attributes.position.count,
     "mid-ring stand geometry must be cheaper than the near-ring full stand");
   runtime.disposeTile(nearTile);
+  runtime.disposeTile(midTile);
+  runtime.dispose();
+});
+
+test("Ukraine desktop scenery stops at LOD0 instead of dressing the whole terrain disc", () => {
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "desktop",
+  });
+  const chunk = chunkFixture();
+  const decoded = flatDecodedFixture();
+  const nearTile = runtime.createTile(chunk, decoded, 0);
+  assert.ok(nearTile);
+  assert.equal(runtime.createTile(chunk, decoded, 1), null);
+  runtime.disposeTile(nearTile);
+  runtime.dispose();
+});
+
+test("Korea LOD1 retains the established density and full tree stands", () => {
+  const chunk = {
+    id: "e0002-n0003",
+    eastIndex: 2,
+    northIndex: 3,
+    boundsLocalM: [0, 0, 8_192, 8_192],
+    generation: { seed: 42, landFraction: 1 },
+  };
+  const decoded = flatDecodedFixture();
+  const near = planKoreaScenery(chunk, decoded, {
+    era: "1950s",
+    qualityTier: "balanced",
+    ring: "near",
+  });
+  const mid = planKoreaScenery(chunk, decoded, {
+    era: "1950s",
+    qualityTier: "balanced",
+    ring: "mid",
+  });
+  assert.equal(mid.trees.length, near.trees.length);
+  assert.equal(mid.buildings.length, near.buildings.length);
+  assert.equal(mid.fields.length, near.fields.length);
+
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "1950s",
+    qualityTier: "balanced",
+  });
+  const midTile = runtime.createTile(chunk, decoded, 1);
+  assert.equal(
+    midTile.userData.scenery.treeSilhouettes,
+    midTile.userData.scenery.trees * KOREA_TREE_STAND_SIZE,
+  );
+  const crowns = midTile.getObjectByName("PROCEDURAL_TREE_CROWNS");
+  assert.ok(crowns.geometry.attributes.position.count > KOREA_TREE_STAND_SIZE * 10);
   runtime.disposeTile(midTile);
   runtime.dispose();
 });

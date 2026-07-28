@@ -16,12 +16,8 @@ esac
 repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$repo_dir"
 
-dotnet_cli=${GUNS_DOTNET_CLI:-dotnet}
+. "$repo_dir/bin/dotnet-env"
 vercel_cli=${GUNS_VERCEL_CLI:-vercel}
-command -v "$dotnet_cli" >/dev/null 2>&1 || {
-    echo "deploy-web: dotnet CLI is unavailable" >&2
-    exit 1
-}
 command -v "$vercel_cli" >/dev/null 2>&1 || {
     echo "deploy-web: Vercel CLI is unavailable" >&2
     exit 1
@@ -30,12 +26,27 @@ command -v curl >/dev/null 2>&1 || {
     echo "deploy-web: curl is unavailable" >&2
     exit 1
 }
+command -v node >/dev/null 2>&1 || {
+    echo "deploy-web: Node.js is unavailable" >&2
+    exit 1
+}
 
-if [ "${GUNS_ALLOW_DIRTY_DEPLOY:-0}" != "1" ]; then
-    if ! git diff --quiet || ! git diff --cached --quiet \
-        || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+worktree_is_dirty() {
+    ! git diff --quiet || ! git diff --cached --quiet \
+        || [ -n "$(git ls-files --others --exclude-standard)" ]
+}
+
+worktree_dirty=0
+if worktree_is_dirty; then
+    worktree_dirty=1
+    if [ "$target" = "--prod" ]; then
+        echo "deploy-web: refusing to deploy a dirty worktree to production" >&2
+        echo "production provenance must identify an exact tested commit" >&2
+        exit 1
+    fi
+    if [ "${GUNS_ALLOW_DIRTY_DEPLOY:-0}" != "1" ]; then
         echo "deploy-web: refusing to deploy a dirty worktree" >&2
-        echo "commit the intended release or set GUNS_ALLOW_DIRTY_DEPLOY=1 deliberately" >&2
+        echo "commit the intended release or set GUNS_ALLOW_DIRTY_DEPLOY=1 for a preview" >&2
         exit 1
     fi
 fi
@@ -46,12 +57,29 @@ if [ ! -f "$project_link" ]; then
     exit 1
 fi
 
+release_revision=$(git rev-parse --verify HEAD)
+release_ref=$(git symbolic-ref --quiet --short HEAD || true)
+
+# Production must be built from the exact tree which passed the repository gate. bin/check only
+# syntax-checks this script, so invoking it here does not recurse. Smoke-test bypasses are cleared:
+# a production candidate is not "fully gated" if its real browser boot was skipped.
+if [ "$target" = "--prod" ]; then
+    echo "deploy-web: running full repository gate for $release_revision"
+    GUNS_DOTNET_CLI="$dotnet_cli" GUNS_SKIP_SMOKE='' "$repo_dir/bin/check"
+    if [ "$(git rev-parse --verify HEAD)" != "$release_revision" ] || worktree_is_dirty; then
+        echo "deploy-web: repository changed while the production gate was running" >&2
+        echo "rerun the deployment from a stable, clean commit" >&2
+        exit 1
+    fi
+fi
+
 scratch_dir=$(mktemp -d)
 publish_dir="$scratch_dir/publish"
 trap 'rm -rf "$scratch_dir"' EXIT HUP INT TERM
 
 "$dotnet_cli" publish web/GunsOnly.Web.csproj \
-    --configuration Release --nologo --output "$publish_dir"
+    --configuration Release --nologo --output "$publish_dir" \
+    -m:1 /nodeReuse:false
 
 deploy_root="$publish_dir/wwwroot"
 
@@ -113,12 +141,30 @@ fi
 mkdir -p "$deploy_root/.vercel"
 cp "$project_link" "$deploy_root/.vercel/project.json"
 
-cd "$deploy_root"
-if [ "$target" = "--prod" ]; then
-    deployment_output=$("$vercel_cli" deploy --prod --skip-domain --yes)
-else
-    deployment_output=$("$vercel_cli" deploy --yes)
+# A clean CLI deployment carries the same Git metadata as a Git-triggered deployment. In
+# particular, build-info.js can then read VERCEL_GIT_COMMIT_SHA instead of reporting revision:null.
+# githubDeployment=1 is required by Vercel for the github* metadata keys to be interpreted.
+set -- deploy "$deploy_root" --yes
+if [ "$worktree_dirty" = "0" ] \
+    && { [ "$(git rev-parse --verify HEAD)" != "$release_revision" ] || worktree_is_dirty; }; then
+    echo "deploy-web: repository changed while the deployment artifact was built" >&2
+    echo "refusing to attach incorrect Git provenance" >&2
+    exit 1
 fi
+if [ "$target" = "--prod" ]; then
+    set -- "$@" --prod --skip-domain
+fi
+expected_revision=
+if [ "$worktree_dirty" = "0" ]; then
+    set -- "$@" \
+        --meta "githubDeployment=1" \
+        --meta "githubCommitSha=$release_revision"
+    if [ -n "$release_ref" ]; then
+        set -- "$@" --meta "githubCommitRef=$release_ref"
+    fi
+    expected_revision=$release_revision
+fi
+deployment_output=$("$vercel_cli" "$@")
 printf '%s\n' "$deployment_output"
 deployment_url=$(printf '%s\n' "$deployment_output" \
     | awk '
@@ -138,30 +184,53 @@ fi
 
 verify_candidate() {
     deployment=$1
+    expected=$2
     "$vercel_cli" curl /_framework/blazor.webassembly.js \
         --deployment "$deployment" -- \
         --fail --silent --show-error --output /dev/null
     "$vercel_cli" curl /_framework/blazor.boot.json \
         --deployment "$deployment" -- \
         --fail --silent --show-error --output /dev/null
+    if [ -n "$expected" ]; then
+        candidate_info=$("$vercel_cli" curl /api/build-info \
+            --deployment "$deployment" -- \
+            --fail --silent --show-error)
+        candidate_revision=$(printf '%s' "$candidate_info" \
+            | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).revision || ""')
+        if [ "$candidate_revision" != "$expected" ]; then
+            echo "deploy-web: candidate revision mismatch" >&2
+            echo "expected $expected, received ${candidate_revision:-null}" >&2
+            exit 1
+        fi
+    fi
 }
 
 verify_public() {
     base_url=$1
+    expected=$2
     curl --fail --silent --show-error --location \
         "$base_url/_framework/blazor.webassembly.js" --output /dev/null
     curl --fail --silent --show-error --location \
         "$base_url/_framework/blazor.boot.json" --output /dev/null
+    public_info=$(curl --fail --silent --show-error --location \
+        "$base_url/api/build-info")
+    public_revision=$(printf '%s' "$public_info" \
+        | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).revision || ""')
+    if [ "$public_revision" != "$expected" ]; then
+        echo "deploy-web: promoted revision mismatch at $base_url" >&2
+        echo "expected $expected, received ${public_revision:-null}" >&2
+        exit 1
+    fi
 }
 
 # Production is created without touching the public aliases. Only a deployment which serves both
 # stable Blazor bootstrap assets is eligible for promotion. `vercel curl` supplies the authenticated
 # protection bypass which current Vercel deployments require before they own a public alias.
-verify_candidate "$deployment_url"
+verify_candidate "$deployment_url" "$expected_revision"
 
 if [ "$target" = "--prod" ]; then
     "$vercel_cli" promote "$deployment_url" --yes
-    verify_public "https://guns-only.vercel.app"
+    verify_public "https://guns-only.vercel.app" "$release_revision"
 fi
 
 echo "deploy-web: verified $deployment_url"

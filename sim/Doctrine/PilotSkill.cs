@@ -62,7 +62,7 @@ public readonly record struct BanditSkillProfile(
             LowBlockRecommitSeconds: 1.8,
             LeadFireConeDeg: 0.45),
         PilotSkill.Ace => new(
-            9.00, 2.20, true, true, 3, 48,
+            9.00, 2.20, true, true, 3, 150,
             FireConeDeg: 3.5,
             LowBlockDoctrine: LowBlockDoctrine.Hunt,
             LowBlockClearanceM: 105.0,
@@ -75,7 +75,7 @@ public readonly record struct BanditSkillProfile(
         // regime where its envelope IS the advantage. The counter stays honest physics: every
         // max-perform pull hemorrhages energy — bait the pull, make it burn, kill it slow.
         PilotSkill.Machine => new(
-            15.0, 2.20, true, true, 3, 60,
+            15.0, 2.20, true, true, 3, 180,
             FireConeDeg: 3.0,
             LowBlockDoctrine: LowBlockDoctrine.Hunt,
             LowBlockClearanceM: 105.0,

@@ -184,6 +184,41 @@ test("padlock owns a specific contact and exposes an honest accessible lifecycle
     "the browser must send semantic selection, never a render-derived aileron value");
   assert.doesNotMatch(syncAssist, /sensorYaw|sensorPitch|rollError|SetAnalogRollControl/);
 
+  const syncGunTarget = balancedBlock(appSource, "function syncPlayerGunTarget()");
+  assert.match(syncGunTarget,
+    /syncPlayerGunTargetSelection\(\{[\s\S]*?bridge,[\s\S]*?state: latestState,[\s\S]*?padlock,[\s\S]*?padlockTarget,[\s\S]*?appliedSlot: appliedPlayerGunTargetSlot/,
+    "browser selection state must be reconciled through the tested semantic target helper");
+  assert.match(syncGunTarget,
+    /appliedPlayerGunTargetSlot = result\.appliedSlot/,
+    "the browser must cache only the helper's bridge-verified or kernel-reconciled slot");
+  assert.match(appSource,
+    /latestState = state;[\s\S]*?syncPlayerGunTarget\(\);[\s\S]*?advanceIncidentReplay/,
+    "every hot snapshot must reconcile kernel-side retargeting without waiting for another input edge");
+
+  const release = appSource.slice(
+    appSource.indexOf("function releasePadlock("),
+    appSource.indexOf("function resetMissionPresentation()"),
+  );
+  assert.match(release,
+    /padlock = false[\s\S]*?padlockTarget = "bandit"[\s\S]*?syncPlayerGunTarget\(\)/,
+    "releasing padlock must safely return the gun to the primary slot");
+
+  const acquire = balancedBlock(appSource, "function acquirePadlock(");
+  assert.match(acquire,
+    /padlockTarget = target[\s\S]*?syncPlayerGunTarget\(\)/,
+    "acquiring or cycling padlock must select the same combat target for the gun");
+  assert.match(toggle, /padlockTarget = defaultPadlockTarget\(\)[\s\S]*?syncPlayerGunTarget\(\)/,
+    "manual padlock acquisition must select the same combat target for the gun");
+
+  const update = balancedBlock(appSource, "update(state, dt, nowSeconds)");
+  const promotionIndex = update.indexOf("wingmanPadlockPromotedToPrimary({");
+  const invalidTargetIndex = update.indexOf("!padlockTargetValid(state, padlockTarget)");
+  assert.ok(promotionIndex >= 0 && invalidTargetIndex > promotionIndex,
+    "w1-to-primary promotion must preserve the same tally before generic kill-cam handling");
+  assert.match(update,
+    /wingmanPadlockPromotedToPrimary\(\{[\s\S]*?acquirePadlock\("bandit", "promotion"\)/,
+    "a promoted w1 must rebind directly to the primary render slot");
+
   const updateGimbal = balancedBlock(appSource, "updateGimbal(dt)");
   assert.match(updateGimbal,
     /padlockPhase === "TRACK"[\s\S]*?padlockTrackEstablished = true[\s\S]*?syncBanditPadlockRollAssist\(\)/,

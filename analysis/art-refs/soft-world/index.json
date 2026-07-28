@@ -1,0 +1,23 @@
+{
+  "worldId": "ukraine.late-2030s.accidental-reserve.v1",
+  "canonPath": "docs/no-mans-land-canon.md",
+  "adr": "docs/adr-0003-ghibli-adjacent-world-presentation.md",
+  "refs": [
+    {
+      "id": "no-mans-land-mood-v1",
+      "file": "no-mans-land-mood-v1.png",
+      "date": "2026-07-28",
+      "epistemic": "fiction",
+      "generator": "built-in image generation",
+      "promptNudges": "Original hand-painted animation-background mood; late-2030s Ukraine steppe; rolling green reserve; coherent wind; village traces; distant smoke; sealed cockpit foreground; no gore; no identifiable units or logos",
+      "runtimeSoT": false,
+      "note": "Palette, atmosphere, and emotional-contrast reference only. Not a terrain, mesh, cockpit, or mission source of truth."
+    }
+  ],
+  "userReference": {
+    "date": "2026-07-28",
+    "summary": "User-provided social screenshot emphasizing rolling hills, soft painterly light, dense wind-swept grass, and a single-HTML real-time world.",
+    "copiedIntoRepository": false
+  },
+  "notes": "Original work only. High-level painterly and humanist influences do not authorize copying Studio Ghibli characters, props, layouts, or frames."
+}

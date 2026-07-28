@@ -44,6 +44,22 @@ ukraine-low-level-scenery feature roles).
 | Effects | Atmosphere-first smoke/dust; readable impacts; no celebratory kill porn |
 | Aftermath | Prefer quiet beats over fanfare |
 
+### Altitude detail contract
+
+The career arc is also a rendering hierarchy. Detail increases as the aircraft descends, instead
+of spreading the most expensive assets across the whole theatre:
+
+| Flight band | What carries the image | Runtime rule |
+| --- | --- | --- |
+| High altitude | Landform, broad meadow/woodland values, water, haze and cloud shadow | Terrain shader and coarse geometry only |
+| Low level | Shelterbelts, village spines, roads, rail, roofs and distinct woodland masses | Instanced meso scenery in the closest terrain LOD |
+| Surface / LZ | Wind grass, fences, poles, yard objects, clinic and casualty context | Fixed camera-local pools sampled from terrain truth |
+
+Micro-detail must earn its cost through near-camera parallax or interaction. Animated blades,
+individual props and full canopy stands do not populate the far disc. Distant richness comes from
+composition, palette, atmospheric perspective and macro terrain variation. Every visual pass is
+reviewed with submitted draw/triangle counts and frame-time tails, not resident scene totals.
+
 ### Cold instruments
 
 - Combat HUD, Rapier capsule displays, medical vitals: phosphor/amber clinical language.
@@ -54,6 +70,19 @@ ukraine-low-level-scenery feature roles).
 Sealed cold cockpit vs warm wounded earth. Descending into the low-level cell — or punching out into
 a village — is the emotional reveal. Anti-glorification is that contrast plus quiet aftermath, not
 cartoon stylization of destruction.
+
+### Audio grammar
+
+- Cockpit sound is interior and structure-borne: dark engine body, airframe strain, pumps, latches,
+  seals, ECS and electrical floor. Mechanical detail should feel handled and inhabited.
+- Quiet is authored (`ma`), especially coast, transit and aftermath. Do not wallpaper it with
+  generic combat music.
+- Gun/hit/destroy cues stay physically informative and range-aware, never celebratory.
+- Clinical alarms remain cold, sparse and legible; world/cabin texture may be warmer and imperfect.
+- Future medevac sound should dramatize system state: clean fibre control, degraded autonomous
+  handoff, dangerous dirty-radio return, violent reel/pickup, then acoustic shelter inside the bus.
+- Influence is pacing and contrast only. Do not copy Ghibli/Hisaishi music, melodies, film Foley,
+  or proprietary audio.
 
 ## AI reference pipeline
 

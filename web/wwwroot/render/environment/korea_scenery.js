@@ -7,6 +7,7 @@ export const KOREA_TREE_STAND_SIZE = 7;
 // Mid-ring (terrain LOD1) Ukraine stands: fewer silhouettes per instance so the far ring stays
 // readable without paying the full soft-canopy sphere budget twice.
 export const UKRAINE_MID_RING_STAND_SIZE = 3;
+export const SOFT_WORLD_GRASS_BLADES_PER_PATCH = 24;
 
 const TREE_STAND_LAYOUT = Object.freeze([
   Object.freeze({ x: 0, z: 0, height: 1, radius: 1 }),
@@ -38,6 +39,7 @@ const QUALITY = Object.freeze({
     railSegmentLimit: 12,
     powerPoleLimit: 10,
     runwaySegmentLimit: 6,
+    grassPatchLimit: 240,
     density: 0.34,
   }),
   balanced: Object.freeze({
@@ -49,6 +51,7 @@ const QUALITY = Object.freeze({
     railSegmentLimit: 28,
     powerPoleLimit: 28,
     runwaySegmentLimit: 10,
+    grassPatchLimit: 480,
     density: 0.68,
   }),
   desktop: Object.freeze({
@@ -60,6 +63,7 @@ const QUALITY = Object.freeze({
     railSegmentLimit: 48,
     powerPoleLimit: 52,
     runwaySegmentLimit: 16,
+    grassPatchLimit: 960,
     density: 1,
   }),
 });
@@ -123,6 +127,9 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     fieldColor: 0x62683c,
     fieldColors: Object.freeze([0x62683c, 0x777342, 0x4f6036, 0x817646]),
     fieldRowColor: 0x3f482a,
+    grassPatchDensityPerKm2: 0,
+    grassPatchLimitScale: 0,
+    grassColors: Object.freeze([]),
     roadColor: 0x625b4c,
     roadMarkingColor: null,
     railBedColor: 0x514c42,
@@ -189,6 +196,9 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     fieldColor: 0x657748,
     fieldColors: Object.freeze([0x657748, 0x7b8047, 0x536f3d, 0x85804d]),
     fieldRowColor: 0x4f623b,
+    grassPatchDensityPerKm2: 0,
+    grassPatchLimitScale: 0,
+    grassColors: Object.freeze([]),
     roadColor: 0x505457,
     roadMarkingColor: 0xd2cfad,
     railBedColor: 0x494b4b,
@@ -200,19 +210,23 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
   "ukraine-modern": Object.freeze({
     id: "ukraine-modern",
     theatre: "ukraine",
-    period: "fictional-modern-rewild-zone",
+    period: "late-2030s-accidental-rewild-reserve",
     trainingSector: true,
     seedSalt: 0x26_07_0001,
-    // Stage C rewild: continent-scale human no-go. Sparse canopy and rare compounds; fields are
-    // ghost meadows, not a village map. Settlement remains edge/island work for later bind.
+    // Stage C rewild remains canopy-led, but low-level missions need authored structure rather
+    // than uniform tree noise: woodland masses, shelterbelts, former fields and rare settlement
+    // islands create navigation cues while leaving most of the terrain quiet.
     treeDensityPerKm2: 56,
-    buildingDensityPerKm2: 0.8,
-    fieldDensityPerKm2: 0.35,
-    treeLimitScale: 1.12,
-    buildingLimitScale: 0.35,
-    fieldLimitScale: 0.25,
-    settlementClusters: 2,
-    settlementSpread01: 0.028,
+    buildingDensityPerKm2: 1.4,
+    fieldDensityPerKm2: 1.2,
+    treeLimitScale: 0.55,
+    buildingLimitScale: 0.5,
+    fieldLimitScale: 0.55,
+    settlementClusters: 4,
+    settlementSpread01: 0.042,
+    woodlandClusters: 5,
+    woodlandSpread01: 0.16,
+    woodlandClusterShare: 0.78,
     shelterbeltBands: 1,
     shelterbeltRowChance: 0.55,
     shelterbeltColumnChance: 0.40,
@@ -264,8 +278,19 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     roofColors: Object.freeze([0x8a4e3c, 0x5a6468, 0x725848, 0x6a5850]),
     fieldColor: 0x6a8a48,
     // Soft meadow / scrub scars — not ripe wheat parcels.
-    fieldColors: Object.freeze([0x6e904c, 0x5a7a42, 0x7a8a50, 0x8a8450, 0x4e7040]),
+    fieldColors: Object.freeze([0x8fa866, 0x78955d, 0xa3ad72, 0xaaa06a, 0x6f9258]),
     fieldRowColor: 0x5a6840,
+    // The close rewild layer is not a terrain texture. Deterministic clumps give the low-level
+    // aircraft real parallax and let one authoritative wind field visibly travel across the land.
+    grassPatchDensityPerKm2: 180,
+    grassPatchLimitScale: 1,
+    grassHeightM: [0.45, 1.15],
+    grassRadiusM: [4, 9],
+    localGrassRadiusM: 270,
+    localGrassSnapM: 42,
+    localGrassUpdatesPerFrame: 160,
+    localGrassMaximumCameraAltitudeM: 1_800,
+    grassColors: Object.freeze([0xc8dc7d, 0xaccb68, 0xdbe48e, 0x92b85a, 0xe4d795]),
     roadColor: 0x5c5a56,
     roadMarkingColor: 0xe4d8b8,
     railBedColor: 0x524e48,
@@ -296,6 +321,17 @@ function hashString(value) {
 
 function hashUnit(value) {
   return hashString(value) / 4294967296;
+}
+
+function mixedUint32(value) {
+  let mixed = value >>> 0;
+  mixed = Math.imul(mixed ^ (mixed >>> 16), 0x7feb352d);
+  mixed = Math.imul(mixed ^ (mixed >>> 15), 0x846ca68b);
+  return (mixed ^ (mixed >>> 16)) >>> 0;
+}
+
+function seededUnit(seed, salt) {
+  return mixedUint32(seed ^ salt) / 4294967296;
 }
 
 function randomGenerator(seed) {
@@ -510,9 +546,10 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
   if (!profile) throw new TypeError(`Unknown Korea scenery era: ${options.era}.`);
   const quality = QUALITY[options.qualityTier] ?? QUALITY.balanced;
   const ring = options.ring === "mid" ? "mid" : "near";
-  // Mid ring keeps the same seed and placement grammar but spends ~half the instance budget so
-  // far tiles stay cheaper than the near soft-canopy stands without a second planner.
-  const ringDensity = ring === "mid" ? 0.5 : 1;
+  // Only Ukraine's soft-canopy profile has an authored reduced mid ring. Korea retains its
+  // established density and stand grammar when LOD1 is the closest selectable mobile tier.
+  const reducedMidRing = ring === "mid" && profile.theatre === "ukraine";
+  const ringDensity = reducedMidRing ? 0.5 : 1;
   const [minimumEast, minimumNorth, maximumEast, maximumNorth] = chunk.boundsLocalM;
   const spanEastM = maximumEast - minimumEast;
   const spanNorthM = maximumNorth - minimumNorth;
@@ -526,6 +563,7 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
   const trees = [];
   const buildings = [];
   const fields = [];
+  const grass = [];
   const roads = [];
   const railSegments = [];
   const runways = [];
@@ -540,6 +578,18 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
   const fieldTarget = candidateCount(profile.fieldDensityPerKm2, areaKm2, landFraction,
     Math.round(quality.fieldLimit * profile.fieldLimitScale * ringDensity),
     quality.density * ringDensity);
+  // Individual blades only earn their cost in the closest ring. Distant meadow colour and shape
+  // belong in the terrain material; distributing animated blades through LOD1 was nearly invisible
+  // and multiplied the Ukraine theatre's fill and vertex work.
+  const grassRingDensity = ring === "near" ? 1 : 0;
+  const grassTarget = candidateCount(
+    profile.grassPatchDensityPerKm2 ?? 0,
+    areaKm2,
+    landFraction,
+    Math.round(quality.grassPatchLimit
+      * (profile.grassPatchLimitScale ?? 0) * grassRingDensity),
+    quality.density * grassRingDensity,
+  );
 
   const addTree = (surface, variation) => {
     trees.push({
@@ -596,10 +646,26 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
     }
   }
 
+  const woodlandCentres = [];
+  const woodlandClusterCount = Math.max(0, Math.round(profile.woodlandClusters ?? 0));
+  for (let index = 0; index < woodlandClusterCount; index++) {
+    woodlandCentres.push({
+      east01: 0.06 + random() * 0.88,
+      north01: 0.06 + random() * 0.88,
+    });
+  }
+
   let attempts = 0;
   while (trees.length < treeTarget && attempts++ < treeTarget * 8 + 32) {
-    const east01 = random();
-    const north01 = random();
+    let east01 = random();
+    let north01 = random();
+    if (woodlandCentres.length && random() < (profile.woodlandClusterShare ?? 0)) {
+      const centre = woodlandCentres[Math.floor(random() * woodlandCentres.length)];
+      const angle = random() * Math.PI * 2;
+      const radius = Math.sqrt(random()) * (profile.woodlandSpread01 ?? 0.12);
+      east01 = clamp(centre.east01 + Math.cos(angle) * radius, 0.01, 0.99);
+      north01 = clamp(centre.north01 + Math.sin(angle) * radius, 0.01, 0.99);
+    }
     const surface = surfaceSample(decoded, east01, north01, spanEastM, spanNorthM);
     if (!surface || surface.slope > profile.maximumTreeSlope) continue;
     addTree(surface, random());
@@ -815,6 +881,8 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
     trees: Object.freeze(trees),
     buildings: Object.freeze(buildings),
     fields: Object.freeze(fields),
+    grass: Object.freeze(grass),
+    grassPatchCapacity: grassTarget,
     fieldRows: Object.freeze(fieldRows),
     roads: Object.freeze(roads),
     railSegments: Object.freeze(railSegments),
@@ -885,6 +953,221 @@ function addSegmentMesh(THREE, group, geometry, material, name, segments, option
   return mesh;
 }
 
+function assignInstancedChunkBounds(THREE, group, chunk, decoded, level, profile) {
+  const [minimumEast, minimumNorth, maximumEast, maximumNorth] = chunk.boundsLocalM;
+  const record = chunk.lods?.[level];
+  const fallbackHeightM = finite(decoded.heights?.[0]);
+  const minimumHeightM = finite(record?.minimumHeightM, fallbackHeightM);
+  const maximumHeightM = finite(record?.maximumHeightM, fallbackHeightM);
+  const objectHeightM = Math.max(
+    profile.treeHeightM?.[1] ?? 0,
+    profile.buildingHeightM?.[1] ?? 0,
+    profile.powerPoleHeightM?.[1] ?? 0,
+  ) * 1.5;
+  const horizontalMarginM = Math.max(
+    (profile.treeHeightM?.[1] ?? 0) * 1.5,
+    profile.buildingWidthM?.[1] ?? 0,
+    profile.buildingDepthM?.[1] ?? 0,
+    (profile.fieldWidthM?.[1] ?? 0) * 0.5,
+    (profile.fieldDepthM?.[1] ?? 0) * 0.5,
+    profile.runwayWidthM?.[1] ?? 0,
+    profile.grassRadiusM?.[1] ?? 0,
+  );
+  const bottomM = minimumHeightM - 2;
+  const topM = maximumHeightM + objectHeightM;
+  const centreY = (bottomM + topM) * 0.5;
+  const radiusM = Math.hypot(
+    (maximumEast - minimumEast) * 0.5 + horizontalMarginM,
+    (maximumNorth - minimumNorth) * 0.5 + horizontalMarginM,
+    (topM - bottomM) * 0.5,
+  );
+  const bounds = new THREE.Sphere(new THREE.Vector3(0, centreY, 0), radiusM);
+  // Three otherwise derives an InstancedMesh sphere by walking every instance on first render.
+  // The tile footprint is already authoritative, so install one conservative bound while the
+  // scheduled tile build is in hand and avoid that hidden first-visible-frame scan.
+  group.traverse((child) => {
+    if (child.isInstancedMesh) child.boundingSphere = bounds.clone();
+  });
+}
+
+// Budget one deterministic world cell per visible instance slot across the complete camera disc.
+// Adjacent terrain chunks partition the same cells, so crossing a chunk boundary cannot multiply
+// the global meadow density. Minor lattice-count variation is clamped by the fixed GPU capacity.
+const LOCAL_GRASS_CANDIDATES_PER_SLOT = 1;
+
+function localGrassCandidate(profile, cellEast, cellNorth, cellSizeM) {
+  const key = `${cellEast}:${cellNorth}`;
+  const seed = mixedUint32(
+    (profile.seedSalt ?? hashString(profile.id))
+      ^ Math.imul(cellEast, 0x9e3779b1)
+      ^ Math.imul(cellNorth, 0x85ebca77),
+  );
+  return {
+    key,
+    eastM: (cellEast + 0.1 + seededUnit(seed, 0xa511e9b3) * 0.8) * cellSizeM,
+    northM: (cellNorth + 0.1 + seededUnit(seed, 0x63d83595) * 0.8) * cellSizeM,
+    priority: seededUnit(seed, 0xc2b2ae35),
+    variation: seededUnit(seed, 0x27d4eb2f),
+  };
+}
+
+function writeLocalGrassMatrix(THREE, controller, placement, slot, work) {
+  work.quaternion.setFromAxisAngle(work.yAxis, placement.yaw);
+  work.position.set(placement.x, placement.y, placement.z);
+  work.scale.set(placement.scaleX, placement.scaleY, placement.scaleZ);
+  setMatrix(THREE, controller.mesh, slot, work.position, work.quaternion, work.scale,
+    work.matrix);
+}
+
+function removeLocalGrassPlacement(THREE, controller, key, work) {
+  const placement = controller.placements.get(key);
+  if (!placement) return false;
+  const removedSlot = placement.slot;
+  const lastSlot = controller.slots.length - 1;
+  const lastKey = controller.slots[lastSlot];
+  controller.placements.delete(key);
+  controller.slots.pop();
+  if (removedSlot !== lastSlot) {
+    const lastPlacement = controller.placements.get(lastKey);
+    controller.slots[removedSlot] = lastKey;
+    lastPlacement.slot = removedSlot;
+    writeLocalGrassMatrix(THREE, controller, lastPlacement, removedSlot, work);
+  }
+  return true;
+}
+
+function updateCameraGrassController(
+  THREE,
+  controller,
+  frame,
+  profile,
+  work,
+  ensureMesh,
+  updateBudget,
+) {
+  const camera = frame.cameraPosition;
+  if (!camera || !Number.isFinite(camera.x) || !Number.isFinite(camera.z)) return;
+  const maximumAltitudeM = profile.localGrassMaximumCameraAltitudeM ?? 1_800;
+  if (finite(camera.y) > maximumAltitudeM) {
+    if (controller.mesh) controller.mesh.visible = false;
+    return;
+  }
+  const cameraEastM = camera.x - finite(frame.placementEastM);
+  const cameraNorthM = -camera.z - finite(frame.placementNorthM);
+  const [minimumEast, minimumNorth, maximumEast, maximumNorth] =
+    controller.chunk.boundsLocalM;
+  const deltaEastM = cameraEastM < minimumEast ? minimumEast - cameraEastM
+    : cameraEastM > maximumEast ? cameraEastM - maximumEast : 0;
+  const deltaNorthM = cameraNorthM < minimumNorth ? minimumNorth - cameraNorthM
+    : cameraNorthM > maximumNorth ? cameraNorthM - maximumNorth : 0;
+  const radiusM = profile.localGrassRadiusM ?? 270;
+  if (Math.hypot(deltaEastM, deltaNorthM) > radiusM) {
+    if (controller.mesh) controller.mesh.visible = false;
+    return;
+  }
+
+  // The budget is shared across all nearby terrain tiles. Do not make later tiles allocate a
+  // 960-slot mesh and enumerate/sort their whole candidate disc after an earlier tile has consumed
+  // this frame's allowance; they will initialise on the next frame instead.
+  if (updateBudget.remaining <= 0) return;
+  if (!controller.mesh) ensureMesh(controller);
+  controller.mesh.visible = true;
+  const snapM = Math.max(8, profile.localGrassSnapM ?? 42);
+  const snappedEastM = Math.round(cameraEastM / snapM) * snapM;
+  const snappedNorthM = Math.round(cameraNorthM / snapM) * snapM;
+  const cellKey = `${snappedEastM}:${snappedNorthM}`;
+  const spanEastM = maximumEast - minimumEast;
+  const spanNorthM = maximumNorth - minimumNorth;
+  const [minimumHeightM, maximumHeightM] = profile.grassHeightM ?? [0.5, 1];
+  const [minimumRadiusM, maximumRadiusM] = profile.grassRadiusM ?? [1, 2];
+  const maximumSlope = Math.max(0.18, profile.maximumTreeSlope * 0.86);
+  const radiusSquaredM = radiusM * radiusM;
+
+  if (cellKey !== controller.cellKey) {
+    controller.cellKey = cellKey;
+    controller.pendingRemovals = [];
+    for (const [key, placement] of controller.placements) {
+      const deltaEast = placement.eastM - snappedEastM;
+      const deltaNorth = placement.northM - snappedNorthM;
+      if (deltaEast * deltaEast + deltaNorth * deltaNorth > radiusSquaredM) {
+        controller.pendingRemovals.push(key);
+      }
+    }
+    controller.pendingRemovalIndex = 0;
+
+    const candidates = [];
+    const cellSizeM = controller.candidateCellSizeM;
+    const minimumCellEast = Math.floor((snappedEastM - radiusM) / cellSizeM);
+    const maximumCellEast = Math.floor((snappedEastM + radiusM) / cellSizeM);
+    const minimumCellNorth = Math.floor((snappedNorthM - radiusM) / cellSizeM);
+    const maximumCellNorth = Math.floor((snappedNorthM + radiusM) / cellSizeM);
+    for (let cellNorth = minimumCellNorth; cellNorth <= maximumCellNorth; cellNorth++) {
+      for (let cellEast = minimumCellEast; cellEast <= maximumCellEast; cellEast++) {
+        const candidate = localGrassCandidate(profile, cellEast, cellNorth, cellSizeM);
+        if (controller.placements.has(candidate.key)) continue;
+        const deltaEast = candidate.eastM - snappedEastM;
+        const deltaNorth = candidate.northM - snappedNorthM;
+        if (deltaEast * deltaEast + deltaNorth * deltaNorth > radiusSquaredM) continue;
+        if (candidate.eastM < minimumEast || candidate.eastM > maximumEast
+          || candidate.northM < minimumNorth || candidate.northM > maximumNorth) continue;
+        candidates.push(candidate);
+      }
+    }
+    candidates.sort((left, right) =>
+      left.priority - right.priority || left.key.localeCompare(right.key));
+    controller.pendingCandidates = candidates;
+    controller.pendingCandidateIndex = 0;
+  }
+
+  let changed = false;
+  while (updateBudget.remaining > 0
+    && controller.pendingRemovalIndex < controller.pendingRemovals.length) {
+    const key = controller.pendingRemovals[controller.pendingRemovalIndex++];
+    changed = removeLocalGrassPlacement(THREE, controller, key, work) || changed;
+    updateBudget.remaining--;
+  }
+  while (updateBudget.remaining > 0
+    && controller.pendingCandidateIndex < controller.pendingCandidates.length) {
+    if (controller.placements.size >= controller.capacity) {
+      controller.pendingCandidateIndex = controller.pendingCandidates.length;
+      break;
+    }
+    const candidate = controller.pendingCandidates[controller.pendingCandidateIndex++];
+    updateBudget.remaining--;
+    if (controller.placements.has(candidate.key)) continue;
+    const surface = surfaceSample(
+      controller.decoded,
+      (candidate.eastM - minimumEast) / spanEastM,
+      (candidate.northM - minimumNorth) / spanNorthM,
+      spanEastM,
+      spanNorthM,
+    );
+    if (!surface || surface.slope > maximumSlope) continue;
+    const variation = candidate.variation;
+    const placement = {
+      eastM: candidate.eastM,
+      northM: candidate.northM,
+      x: surface.x,
+      y: surface.y + 0.025,
+      z: surface.z,
+      yaw: variation * Math.PI * 2,
+      scaleX: minimumRadiusM
+        + (maximumRadiusM - minimumRadiusM) * fraction(variation * 5.731),
+      scaleY: minimumHeightM
+        + (maximumHeightM - minimumHeightM) * fraction(variation * 9.173),
+      scaleZ: minimumRadiusM
+        + (maximumRadiusM - minimumRadiusM) * fraction(variation * 7.113),
+      slot: controller.slots.length,
+    };
+    controller.placements.set(candidate.key, placement);
+    controller.slots.push(candidate.key);
+    writeLocalGrassMatrix(THREE, controller, placement, placement.slot, work);
+    changed = true;
+  }
+  controller.mesh.count = controller.slots.length;
+  if (changed) controller.mesh.instanceMatrix.needsUpdate = true;
+}
+
 function mergeLayout(baseGeometry, layout, transform) {
   const parts = layout.map((item) => {
     const part = baseGeometry.clone();
@@ -918,8 +1201,153 @@ function createBuildingCompoundGeometry(buildingPrimitive) {
   });
 }
 
+function createSoftWorldGrassGeometry(THREE) {
+  const positions = [];
+  const indices = [];
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  for (let blade = 0; blade < SOFT_WORLD_GRASS_BLADES_PER_PATCH; blade++) {
+    const fraction = (blade + 0.5) / SOFT_WORLD_GRASS_BLADES_PER_PATCH;
+    const angle = blade * goldenAngle;
+    const centreRadius = Math.sqrt(fraction) * 0.82;
+    const centreX = Math.cos(angle) * centreRadius;
+    const centreZ = Math.sin(angle) * centreRadius;
+    const facing = angle * 1.83 + 0.37;
+    const tangentX = Math.cos(facing);
+    const tangentZ = Math.sin(facing);
+    const width = 0.028 + (blade % 4) * 0.008;
+    const height = 0.68 + (blade % 5) * 0.075;
+    const shoulderHeight = height * 0.72;
+    const shoulderWidth = width * 0.58;
+    const base = positions.length / 3;
+    positions.push(
+      centreX - tangentX * width, 0, centreZ - tangentZ * width,
+      centreX + tangentX * width, 0, centreZ + tangentZ * width,
+      centreX - tangentX * shoulderWidth, shoulderHeight,
+      centreZ - tangentZ * shoulderWidth,
+      centreX + tangentX * shoulderWidth, shoulderHeight,
+      centreZ + tangentZ * shoulderWidth,
+      centreX, height, centreZ,
+    );
+    indices.push(
+      base, base + 1, base + 2,
+      base + 1, base + 3, base + 2,
+      base + 2, base + 3, base + 4,
+    );
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function createSoftWorldGrassMaterial(THREE, uniforms) {
+  // Near grass is small enough that Lambert's dark back-facing response aliases into black
+  // needles. A palette-lit basic material is both cheaper and closer to painted-cel foreground
+  // colour; terrain fog and the shared wind shader still integrate it with the scene.
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xa4bf5e,
+    side: THREE.DoubleSide,
+  });
+  material.name = "SOFT_WORLD_WIND_GRASS";
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uSoftWorldTime = uniforms.time;
+    shader.uniforms.uSoftWorldWind = uniforms.wind;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        uniform float uSoftWorldTime;
+        uniform vec2 uSoftWorldWind;`,
+      )
+      .replace(
+        "#include <begin_vertex>",
+        `vec3 transformed = vec3(position);
+        float grassTip = clamp(position.y / 1.05, 0.0, 1.0);
+        float windSpeed = min(length(uSoftWorldWind), 26.0);
+        vec2 windDirection = windSpeed > 0.01 ? normalize(uSoftWorldWind) : vec2(0.0);
+        mat4 softWorldMatrix = modelMatrix;
+        #ifdef USE_INSTANCING
+          softWorldMatrix = modelMatrix * instanceMatrix;
+        #endif
+        vec3 grassOrigin = (softWorldMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        float travellingWave = 0.55 + 0.45 * sin(
+          dot(grassOrigin.xz, windDirection * 0.038)
+          - uSoftWorldTime * (1.0 + windSpeed * 0.075)
+        );
+        vec2 crossWindDirection = vec2(-windDirection.y, windDirection.x);
+        float fineSway = 0.72 + 0.28 * sin(
+          dot(grassOrigin.xz, crossWindDirection * 0.08) + uSoftWorldTime * 1.37
+        );
+        float bend = grassTip * grassTip
+          * (windSpeed * 0.012)
+          * travellingWave * fineSway;
+        vec2 softWorldOffset = windDirection * bend;
+        float softWorldDeterminant = softWorldMatrix[0][0] * softWorldMatrix[2][2]
+          - softWorldMatrix[2][0] * softWorldMatrix[0][2];
+        if (abs(softWorldDeterminant) > 0.000001) {
+          transformed.xz += vec2(
+            softWorldMatrix[2][2] * softWorldOffset.x
+              - softWorldMatrix[2][0] * softWorldOffset.y,
+            -softWorldMatrix[0][2] * softWorldOffset.x
+              + softWorldMatrix[0][0] * softWorldOffset.y
+          ) / softWorldDeterminant;
+        }`,
+      );
+  };
+  material.customProgramCacheKey = () => "soft-world-wind-grass-v2";
+  return material;
+}
+
+function addSoftWorldCanopyWind(material, uniforms) {
+  material.name = "SOFT_WORLD_WIND_CANOPY";
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uSoftWorldTime = uniforms.time;
+    shader.uniforms.uSoftWorldWind = uniforms.wind;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        uniform float uSoftWorldTime;
+        uniform vec2 uSoftWorldWind;`,
+      )
+      .replace(
+        "#include <begin_vertex>",
+        `vec3 transformed = vec3(position);
+        float windSpeed = min(length(uSoftWorldWind), 26.0);
+        vec2 windDirection = windSpeed > 0.01 ? normalize(uSoftWorldWind) : vec2(0.0);
+        mat4 softWorldMatrix = modelMatrix;
+        #ifdef USE_INSTANCING
+          softWorldMatrix = modelMatrix * instanceMatrix;
+        #endif
+        vec3 canopyOrigin = (softWorldMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        float travellingWave = 0.65 + 0.35 * sin(
+          dot(canopyOrigin.xz, windDirection * 0.009)
+          - uSoftWorldTime * (0.32 + windSpeed * 0.026)
+        );
+        float canopyWeight = smoothstep(0.18, 1.45, position.y);
+        float bend = canopyWeight * (windSpeed * 0.0045) * travellingWave;
+        vec2 softWorldOffset = windDirection * bend;
+        float softWorldDeterminant = softWorldMatrix[0][0] * softWorldMatrix[2][2]
+          - softWorldMatrix[2][0] * softWorldMatrix[0][2];
+        if (abs(softWorldDeterminant) > 0.000001) {
+          transformed.xz += vec2(
+            softWorldMatrix[2][2] * softWorldOffset.x
+              - softWorldMatrix[2][0] * softWorldOffset.y,
+            -softWorldMatrix[0][2] * softWorldOffset.x
+              + softWorldMatrix[0][0] * softWorldOffset.y
+          ) / softWorldDeterminant;
+        }`,
+      );
+  };
+  material.customProgramCacheKey = () => "soft-world-wind-canopy-v2";
+  return material;
+}
+
 export function disposeKoreaSceneryTile(group) {
   if (!group) return;
+  group.userData.sceneryDisposed = true;
   group.traverse((child) => {
     if (child.isInstancedMesh) child.dispose();
   });
@@ -931,22 +1359,23 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const profile = KOREA_SCENERY_PROFILES[era];
   if (!profile) throw new TypeError(`Unknown Korea scenery era: ${era}.`);
   const qualityTier = options.qualityTier ?? "balanced";
+  const quality = QUALITY[qualityTier] ?? QUALITY.balanced;
   // Mobile and balanced terrain deliberately floor at LOD1 to cap heightfield cost. Restricting
   // scenery to literal LOD0 therefore made every building, tree and road disappear on those tiers.
   // Permit their nearest selectable LOD while still avoiding duplicate dressing on farther rings.
-  // Ukraine soft-world also dresses LOD1 with a cheaper mid-ring stand so the far disc stays
-  // populated without the full near-ring soft-canopy sphere budget.
-  const maximumSceneryLevel = (qualityTier === "desktop" && profile.theatre !== "ukraine")
-    ? 0
-    : 1;
+  // Desktop owns a real LOD0 close ring, so all procedural objects stop there. Weak tiers floor
+  // terrain at LOD1 and retain their reduced scenery grammar because LOD0 is never selectable.
+  // Distant Ukraine structure comes from terrain colour/parcel shaping rather than sphere stands.
+  const maximumSceneryLevel = qualityTier === "desktop" ? 0 : 1;
   const softCanopy = profile.crownShape === "soft-canopy";
   // Ukraine soft-world: rounded canopy ellipsoids. Korea eras keep the cheap faceted cone stands.
   // Mid-ring soft canopies use a lower-tessellation sphere so vertex count is strictly cheaper.
   const crownPrimitive = softCanopy
     ? (() => {
-      // 9×6 is still a soft ellipsoid silhouette (>400 verts across a 7-tree stand) while cutting
-      // the old 11×8 sphere budget that dominated Ukraine dogfight fill under 64 km streaming.
-      const geometry = new THREE.SphereGeometry(1, 9, 6);
+      // A 7×5 smooth ellipsoid reads as an intentionally chunky painted canopy at low AGL while
+      // cutting 38% of the former 9×6 crown triangles. Shape design, not sphere tessellation,
+      // carries the seven-lobe stand silhouette.
+      const geometry = new THREE.SphereGeometry(1, 7, 5);
       geometry.scale(1.05, 0.78, 1.05);
       geometry.translate(0, 0.78, 0);
       return geometry;
@@ -1002,6 +1431,13 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const segmentGeometry = new THREE.BoxGeometry(1, 1, 1);
   const poleGeometry = new THREE.CylinderGeometry(0.08, 0.13, 1, 6, 1);
   poleGeometry.translate(0, 0.5, 0);
+  const grassGeometry = profile.grassPatchDensityPerKm2 > 0
+    ? createSoftWorldGrassGeometry(THREE)
+    : null;
+  const grassUniforms = {
+    time: { value: 0 },
+    wind: { value: new THREE.Vector2(0, 0) },
+  };
   const toonGradient = !profile.softLit && profile.toonSteps
     ? new THREE.DataTexture(
       Uint8Array.from(profile.toonSteps),
@@ -1032,7 +1468,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     : new THREE.MeshLambertMaterial({
       color,
       emissive,
-      emissiveIntensity: softLit ? 0.08 : 0.14,
+      emissiveIntensity: softLit ? 0.16 : 0.14,
     });
   // Two of these layers are coplanar with their own parent slab BY CONSTRUCTION, not by terrain
   // accident: field rows take their Y from the same `field.y` mean the field slab uses, and road
@@ -1072,6 +1508,8 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const runwayMaterial = litMaterial(profile.runwayColor);
   const powerPoleMaterial = litMaterial(profile.powerPoleColor);
   const powerWireMaterial = new THREE.MeshBasicMaterial({ color: profile.powerWireColor });
+  const grassMaterial = grassGeometry ? createSoftWorldGrassMaterial(THREE, grassUniforms) : null;
+  if (softCanopy) addSoftWorldCanopyWind(crownMaterial, grassUniforms);
   const crownPalette = profile.crownColors.map((color) => new THREE.Color(color));
   const buildingPalette = profile.buildingColors.map((color) => new THREE.Color(color));
   const roofPalette = profile.roofColors.map((color) => new THREE.Color(color));
@@ -1079,30 +1517,91 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const geometries = [
     crownGeometry, trunkGeometry, midCrownGeometry, midTrunkGeometry,
     buildingGeometry, roofGeometry,
-    surfaceGeometry, segmentGeometry, poleGeometry,
-  ];
+    surfaceGeometry, segmentGeometry, poleGeometry, grassGeometry,
+  ].filter(Boolean);
   const materials = [
     crownMaterial, trunkMaterial, buildingMaterial, roofMaterial, fieldMaterial, fieldRowMaterial,
     roadMaterial, roadMarkingMaterial, railBedMaterial, railMaterial, runwayMaterial,
-    powerPoleMaterial, powerWireMaterial,
+    powerPoleMaterial, powerWireMaterial, grassMaterial,
   ].filter(Boolean);
+  const grassControllers = new Set();
+  const grassWork = {
+    matrix: new THREE.Matrix4(),
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion(),
+    scale: new THREE.Vector3(),
+    yAxis: new THREE.Vector3(0, 1, 0),
+  };
   let disposed = false;
+
+  const ensureGrassMesh = (controller) => {
+    if (controller.mesh || !grassGeometry || !grassMaterial) return controller.mesh;
+    const grass = new THREE.InstancedMesh(
+      grassGeometry, grassMaterial, controller.capacity,
+    );
+    grass.name = "PROCEDURAL_SOFT_WORLD_GRASS";
+    grass.frustumCulled = true;
+    grass.count = 0;
+    controller.mesh = grass;
+    controller.group.add(grass);
+    assignInstancedChunkBounds(
+      THREE,
+      controller.group,
+      controller.chunk,
+      controller.decoded,
+      controller.level,
+      profile,
+    );
+    return grass;
+  };
 
   return Object.freeze({
     era,
     disposeTile: disposeKoreaSceneryTile,
+    update({ elapsedSeconds, windX, windZ, cameraPosition,
+      placementEastM, placementNorthM } = {}) {
+      if (disposed || !grassMaterial) return;
+      if (Number.isFinite(elapsedSeconds)) grassUniforms.time.value = elapsedSeconds;
+      if (Number.isFinite(windX)) grassUniforms.wind.value.x = windX;
+      if (Number.isFinite(windZ)) grassUniforms.wind.value.y = windZ;
+      const updateBudget = {
+        remaining: Math.max(1, Math.round(profile.localGrassUpdatesPerFrame ?? 160)),
+      };
+      for (const controller of grassControllers) {
+        if (controller.group.userData.sceneryDisposed) {
+          grassControllers.delete(controller);
+          continue;
+        }
+        updateCameraGrassController(
+          THREE,
+          controller,
+          { cameraPosition, placementEastM, placementNorthM },
+          profile,
+          grassWork,
+          ensureGrassMesh,
+          updateBudget,
+        );
+      }
+    },
     createTile(chunk, decoded, level = 0) {
       if (disposed || level < 0 || level > maximumSceneryLevel) return null;
       const ring = level >= 1 ? "mid" : "near";
-      const standSize = ring === "mid" ? UKRAINE_MID_RING_STAND_SIZE : KOREA_TREE_STAND_SIZE;
-      const activeCrownGeometry = ring === "mid" ? midCrownGeometry : crownGeometry;
-      const activeTrunkGeometry = ring === "mid" ? midTrunkGeometry : trunkGeometry;
+      const reducedMidRing = ring === "mid" && profile.theatre === "ukraine";
+      const standSize = reducedMidRing ? UKRAINE_MID_RING_STAND_SIZE : KOREA_TREE_STAND_SIZE;
+      const activeCrownGeometry = reducedMidRing ? midCrownGeometry : crownGeometry;
+      const activeTrunkGeometry = reducedMidRing ? midTrunkGeometry : trunkGeometry;
       const plan = planKoreaScenery(chunk, decoded, { era, qualityTier, ring });
+      const grassPatchCapacity = ring === "near" && grassGeometry
+        && plan.grassPatchCapacity > 0
+        ? Math.round(quality.grassPatchLimit * (profile.grassPatchLimitScale ?? 0))
+        : 0;
       if (!plan.trees.length && !plan.buildings.length && !plan.fields.length
+        && !grassPatchCapacity
         && !plan.roads.length && !plan.railSegments.length && !plan.runways.length
         && !plan.powerPoles.length) return null;
       const group = new THREE.Group();
       group.name = `SCENERY_${era.toUpperCase()}_${chunk.id.toUpperCase()}`;
+      let grassController = null;
       const matrix = new THREE.Matrix4();
       const position = new THREE.Vector3();
       const quaternion = new THREE.Quaternion();
@@ -1200,6 +1699,30 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
         fields.instanceColor.needsUpdate = true;
         group.add(fields);
       }
+      if (grassGeometry && grassMaterial && grassPatchCapacity) {
+        const localGrassRadiusM = profile.localGrassRadiusM ?? 270;
+        const candidateCellSizeM = Math.sqrt(
+          Math.PI * localGrassRadiusM * localGrassRadiusM
+            / (grassPatchCapacity * LOCAL_GRASS_CANDIDATES_PER_SLOT),
+        );
+        grassController = {
+          group,
+          mesh: null,
+          chunk,
+          decoded,
+          level,
+          capacity: grassPatchCapacity,
+          candidateCellSizeM,
+          placements: new Map(),
+          slots: [],
+          cellKey: null,
+          pendingRemovals: [],
+          pendingRemovalIndex: 0,
+          pendingCandidates: [],
+          pendingCandidateIndex: 0,
+        };
+        grassControllers.add(grassController);
+      }
       addSegmentMesh(
         THREE, group, segmentGeometry, fieldRowMaterial, "PROCEDURAL_FIELD_ROWS",
         plan.fieldRows, { heightM: 0.025, yOffsetM: 0.09 }, segmentWork,
@@ -1254,6 +1777,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
         THREE, group, segmentGeometry, powerWireMaterial, "PROCEDURAL_POWER_LINES",
         plan.powerLines, { heightM: 0.08, yOffsetM: 0 }, segmentWork,
       );
+      assignInstancedChunkBounds(THREE, group, chunk, decoded, level, profile);
       group.userData.scenery = Object.freeze({
         era,
         theatre: profile.theatre ?? "korea",
@@ -1266,6 +1790,14 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
         buildings: plan.buildings.length,
         buildingSilhouettes: plan.buildings.length * BUILDING_COMPOUND_LAYOUT.length,
         fields: plan.fields.length,
+        get grassPatches() {
+          return grassController?.mesh?.count ?? 0;
+        },
+        grassPatchCapacity,
+        get grassBlades() {
+          return (grassController?.mesh?.count ?? 0) * SOFT_WORLD_GRASS_BLADES_PER_PATCH;
+        },
+        grassBladeCapacity: grassPatchCapacity * SOFT_WORLD_GRASS_BLADES_PER_PATCH,
         fieldRows: plan.fieldRows.length,
         roadSegments: plan.roads.length,
         railSegments: plan.railSegments.length,
@@ -1279,6 +1811,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     dispose() {
       if (disposed) return;
       disposed = true;
+      grassControllers.clear();
       for (const geometry of geometries) geometry.dispose();
       for (const material of materials) material.dispose();
       toonGradient?.dispose();

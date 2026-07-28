@@ -1877,13 +1877,13 @@ export function createBanditDestruction() {
   debrisGeometry.setAttribute("position",
     new THREE.BufferAttribute(debrisPositions, 3).setUsage(THREE.DynamicDrawUsage));
   const debris = new THREE.Points(debrisGeometry, new THREE.PointsMaterial({
-    color: 0xffc260,
-    size: 2.8,
+    color: 0x34393a,
+    size: 1.8,
     sizeAttenuation: true,
     transparent: true,
     opacity: 0,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
   }));
   debris.frustumCulled = false;
   debris.renderOrder = 15;
@@ -1906,7 +1906,7 @@ export function createBanditDestruction() {
     group.add(puff);
   }
 
-  const flash = new THREE.PointLight(0xff6a22, 0, 95, 2);
+  const flash = new THREE.PointLight(0xff8a42, 0, 48, 2);
   group.add(flash);
   group.userData.outer = outer;
   group.userData.inner = inner;

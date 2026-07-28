@@ -24,7 +24,30 @@ public readonly record struct GunRound(
     Vec3D Position,
     Vec3D Velocity,
     double AgeSeconds,
-    double EffectiveHitRadiusM);
+    double EffectiveHitRadiusM,
+    long AimTargetId = 0);
+
+/// One physical actor the gun's airborne rounds may intersect during this fixed step.
+public readonly record struct GunTarget(
+    long Id,
+    AircraftState State,
+    bool Damageable = true);
+
+/// Immutable public view of one target's damage ledger.
+public readonly record struct GunTargetDamage(
+    int HitCount,
+    int HitsThisStep,
+    FightOutcome Outcome) {
+    public bool TargetAlive => Outcome == FightOutcome.Flying;
+    public double KillProgress(int hitsToKill) =>
+        System.Math.Clamp((double)HitCount / System.Math.Max(1, hitsToKill), 0.0, 1.0);
+}
+
+/// A round/actor intersection resolved during the current fixed step.
+public readonly record struct GunImpact(
+    int RoundId,
+    long TargetId,
+    double StepFraction);
 
 /// Deterministic fixed-gun ballistics and fight damage. Nothing here knows about wall-clock time,
 /// rendering, input devices, or the old camera cone: only a round/target intersection can do damage.
@@ -55,9 +78,13 @@ public sealed class GunKill {
     const double GunSolutionReleaseSeconds = 0.12;
     const int LeadSearchSteps = 128;
     const int LeadBisectionSteps = 48;
+    const long LegacyTargetId = 0;
     static readonly Vec3D Gravity = new(0.0, -GravityMps2, 0.0);
 
     readonly List<GunRound> _rounds = new(48);
+    readonly List<GunImpact> _impactsThisStep = new(8);
+    readonly Dictionary<long, TargetDamageState> _targetDamage = new();
+    readonly GunTarget[] _singleTargetBuffer = new GunTarget[1];
     readonly int _hitsToKill;
     readonly double _hitRadiusM;
     readonly GunProfile _profile;
@@ -66,6 +93,13 @@ public sealed class GunKill {
     double _secondsToNextShot;
     double _gunSolutionTransitionSeconds;
     int _nextRoundId = 1;
+    long _selectedTargetId = LegacyTargetId;
+
+    sealed class TargetDamageState {
+        public int HitCount;
+        public int HitsThisStep;
+        public FightOutcome Outcome;
+    }
 
     public GunKill(int ammo = DefaultAmmo, int hitsToKill = DefaultHitsToKill,
         double hitRadiusM = DefaultHitRadiusM, GunProfile? profile = null,
@@ -100,6 +134,7 @@ public sealed class GunKill {
         _hitsToKill = hitsToKill;
         _hitRadiusM = selectedHitRadius;
         _heatConfig = heatConfig;
+        _targetDamage.Add(LegacyTargetId, new TargetDamageState());
     }
 
     public IReadOnlyList<GunRound> RoundsInFlight => _rounds;
@@ -111,17 +146,22 @@ public sealed class GunKill {
     public bool FiredThisStep { get; private set; }
     public double BarrelHeat { get; private set; }
     public bool BarrelOverheated { get; private set; }
-    public int HitCount { get; private set; }
-    public int HitsThisStep { get; private set; }
+    public long SelectedTargetId => _selectedTargetId;
+    public IReadOnlyList<GunImpact> ImpactsThisStep => _impactsThisStep;
+    public int TotalHitCount => _targetDamage.Values.Sum(static damage => damage.HitCount);
+    public int HitCount => SelectedDamage.HitCount;
+    public int HitsThisStep => _impactsThisStep.Count;
     public bool HitThisStep => HitsThisStep != 0;
     public double KillProgress => System.Math.Clamp((double)HitCount / _hitsToKill, 0.0, 1.0);
     public double TargetHealth => 1.0 - KillProgress;
-    public bool TargetAlive => Outcome == FightOutcome.Flying;
+    public bool TargetAlive => SelectedDamage.Outcome == FightOutcome.Flying;
     // Compatibility aliases for the current flat web projection. The kernel itself now uses the
     // generic target names because the same physical gun model can be owned by either combatant.
     public double BanditHealth => TargetHealth;
     public bool BanditAlive => TargetAlive;
-    public FightOutcome Outcome { get; private set; } = FightOutcome.Flying;
+    public FightOutcome Outcome => SelectedDamage.Outcome;
+
+    TargetDamageState SelectedDamage => EnsureTarget(_selectedTargetId);
 
     /// True when a finite ballistic intercept exists inside the round lifetime.
     public bool HasLeadSolution { get; private set; }
@@ -133,6 +173,37 @@ public sealed class GunKill {
     public Vec3D LeadPipper { get; private set; }
     public Vec3D LeadDirection { get; private set; }
     public double LeadTimeOfFlight { get; private set; }
+
+    /// Register a concurrent physical target before it becomes selectable. Re-registering is a
+    /// no-op so staging code can be idempotent.
+    public void RegisterTarget(long targetId) {
+        EnsureTarget(targetId);
+    }
+
+    /// Change which registered target owns lead symbology and the compatibility damage properties.
+    /// Airborne rounds remain untouched and continue to collide with every supplied target.
+    public void SelectTarget(long targetId) {
+        EnsureTarget(targetId);
+        if (_selectedTargetId == targetId) return;
+        _selectedTargetId = targetId;
+        HasLeadSolution = false;
+        GunSolution = false;
+        InstantaneousGunSolution = false;
+        LeadPipper = default;
+        LeadDirection = default;
+        LeadTimeOfFlight = 0.0;
+        _gunSolutionTransitionSeconds = 0.0;
+    }
+
+    public GunTargetDamage DamageFor(long targetId) {
+        TargetDamageState damage = EnsureTarget(targetId);
+        return new GunTargetDamage(damage.HitCount, damage.HitsThisStep, damage.Outcome);
+    }
+
+    public double TargetHealthFor(long targetId) {
+        GunTargetDamage damage = DamageFor(targetId);
+        return 1.0 - damage.KillProgress(_hitsToKill);
+    }
 
     /// Continue this physical gun against a fresh target. Magazine state, rounds already in
     /// flight, shot identity, and held-trigger cadence carry forward; damage and lead solution
@@ -176,10 +247,10 @@ public sealed class GunKill {
         if (Outcome != FightOutcome.Flying)
             throw new System.InvalidOperationException(
                 "A fresh shooter cannot inherit a target which has already been splashed.");
-        var next = new GunKill(ammo, _hitsToKill, hitRadiusM, profile) {
-            HitCount = HitCount,
-            Outcome = Outcome
-        };
+        var next = new GunKill(ammo, _hitsToKill, hitRadiusM, profile);
+        TargetDamageState inherited = next.EnsureTarget(LegacyTargetId);
+        inherited.HitCount = HitCount;
+        inherited.Outcome = Outcome;
         return next;
     }
 
@@ -197,56 +268,97 @@ public sealed class GunKill {
         return next;
     }
 
-    /// Advance rounds and fire at exact deterministic cadence. Ownship and bandit are sampled at
-    /// the beginning of dt; their velocities linearly carry both firing points and target motion
-    /// between any shot events inside the step.
-    public FightOutcome Step(bool triggerHeld, in AircraftState own, in AircraftState bandit, double dt) {
-        if (!double.IsFinite(dt) || dt < 0.0) throw new System.ArgumentOutOfRangeException(nameof(dt));
-        HitsThisStep = 0;
+    /// Advance rounds and fire at exact deterministic cadence. The compatibility overload retains
+    /// the historical single-target contract while sharing the same physical multi-target path.
+    public FightOutcome Step(bool triggerHeld, in AircraftState own,
+        in AircraftState bandit, double dt) {
+        _singleTargetBuffer[0] = new GunTarget(
+            LegacyTargetId, bandit, Damageable: true);
+        return Step(triggerHeld, own, LegacyTargetId, _singleTargetBuffer, dt);
+    }
+
+    /// Advance one physical weapon against every concurrent target. Selection controls only lead
+    /// symbology and which actor a new burst is aimed at; an airborne round remains unguided and is
+    /// swept against all damageable actors, with the earliest intersection winning.
+    public FightOutcome Step(bool triggerHeld, in AircraftState own,
+        long selectedTargetId, ReadOnlySpan<GunTarget> targets, double dt) {
+        if (!double.IsFinite(dt) || dt < 0.0)
+            throw new System.ArgumentOutOfRangeException(nameof(dt));
+        if (targets.IsEmpty)
+            throw new System.ArgumentException(
+                "At least one physical gun target is required.", nameof(targets));
+
+        int selectedIndex = -1;
+        for (int index = 0; index < targets.Length; index++) {
+            EnsureTarget(targets[index].Id);
+            if (targets[index].Id == selectedTargetId) selectedIndex = index;
+            for (int previous = 0; previous < index; previous++) {
+                if (targets[previous].Id == targets[index].Id)
+                    throw new System.ArgumentException(
+                        "Gun target IDs must be unique inside one fixed step.", nameof(targets));
+            }
+        }
+        if (selectedIndex < 0)
+            throw new System.ArgumentOutOfRangeException(
+                nameof(selectedTargetId), "The selected target is not present in this step.");
+
+        SelectTarget(selectedTargetId);
+        foreach (TargetDamageState damage in _targetDamage.Values)
+            damage.HitsThisStep = 0;
+        _impactsThisStep.Clear();
         FiredThisStep = false;
-        double firingHitRadiusM = EffectiveHitRadius(own, bandit);
-        UpdateLead(own, bandit, firingHitRadiusM, dt);
+
+        GunTarget selected = targets[selectedIndex];
+        TargetDamageState selectedDamage = EnsureTarget(selectedTargetId);
+        double firingHitRadiusM = EffectiveHitRadius(own, selected.State);
+        UpdateLead(own, selected.State, firingHitRadiusM, dt);
+        bool selectedMayBeFiredOn =
+            selected.Damageable && selectedDamage.Outcome == FightOutcome.Flying;
         bool barrelAllowsFire = StepBarrelHeat(
-            triggerHeld && Outcome == FightOutcome.Flying && AmmoRemaining > 0, dt);
-        if (Outcome != FightOutcome.Flying) return Outcome;
+            triggerHeld && selectedMayBeFiredOn && AmmoRemaining > 0, dt);
 
         var ownVelocity = own.VelocityVector();
-        var banditVelocity = bandit.VelocityVector();
         var gunForward = GunDirection(own);
         double elapsed = 0.0;
 
-        if (!triggerHeld || AmmoRemaining == 0 || !barrelAllowsFire) {
-            AdvanceRounds(dt, bandit.Position, banditVelocity);
+        if (!triggerHeld || !selectedMayBeFiredOn
+            || AmmoRemaining == 0 || !barrelAllowsFire) {
+            AdvanceRounds(dt, targets, elapsedAtStart: 0.0, fixedStepDuration: dt);
+            SortImpactsThisStep();
             _triggerWasHeld = triggerHeld;
             _secondsToNextShot = 0.0;
-            return Outcome;
+            return selectedDamage.Outcome;
         }
 
         // A trigger press fires immediately. A held trigger retains phase across any dt partition.
         if (!_triggerWasHeld) _secondsToNextShot = 0.0;
-        while (elapsed <= dt && AmmoRemaining > 0 && Outcome == FightOutcome.Flying) {
+        while (elapsed <= dt && AmmoRemaining > 0
+            && selectedDamage.Outcome == FightOutcome.Flying) {
             double untilShot = System.Math.Max(0.0, _secondsToNextShot);
             double remaining = dt - elapsed;
             if (untilShot > remaining + 1e-12) {
-                AdvanceRounds(remaining, bandit.Position + banditVelocity * elapsed, banditVelocity);
-                _secondsToNextShot = System.Math.Max(0.0, _secondsToNextShot - remaining);
+                AdvanceRounds(remaining, targets, elapsed, dt);
+                _secondsToNextShot = System.Math.Max(
+                    0.0, _secondsToNextShot - remaining);
                 elapsed = dt;
                 break;
             }
 
             if (untilShot > 0.0) {
-                AdvanceRounds(untilShot, bandit.Position + banditVelocity * elapsed, banditVelocity);
+                AdvanceRounds(untilShot, targets, elapsed, dt);
                 elapsed += untilShot;
                 // The cadence boundary has elapsed even when an in-flight round splashes the
-                // current target at that boundary. A successor target may therefore take the
-                // shot scheduled at the shared instant without losing a full firing interval.
-                _secondsToNextShot = System.Math.Max(0.0, _secondsToNextShot - untilShot);
-                if (Outcome != FightOutcome.Flying) break;
+                // selected target at that boundary.
+                _secondsToNextShot = System.Math.Max(
+                    0.0, _secondsToNextShot - untilShot);
+                if (selectedDamage.Outcome != FightOutcome.Flying) break;
             }
 
-            var firingPosition = own.Position + ownVelocity * elapsed + gunForward * MuzzleOffsetM;
-            Fire(firingPosition, ownVelocity + gunForward * _profile.MuzzleVelocityMps,
-                firingHitRadiusM);
+            var firingPosition = own.Position + ownVelocity * elapsed
+                + gunForward * MuzzleOffsetM;
+            Fire(firingPosition,
+                ownVelocity + gunForward * _profile.MuzzleVelocityMps,
+                firingHitRadiusM, selectedTargetId);
             _secondsToNextShot = 1.0 / _profile.RoundsPerSecond;
 
             // Avoid firing at t=dt and again at the next step's t=0. The shot at this boundary is
@@ -254,18 +366,31 @@ public sealed class GunKill {
             if (elapsed >= dt - 1e-12) break;
         }
 
-        if (elapsed < dt && Outcome == FightOutcome.Flying) {
+        if (elapsed < dt) {
             double remaining = dt - elapsed;
-            AdvanceRounds(remaining, bandit.Position + banditVelocity * elapsed, banditVelocity);
-            _secondsToNextShot = System.Math.Max(0.0, _secondsToNextShot - remaining);
+            AdvanceRounds(remaining, targets, elapsed, dt);
+            _secondsToNextShot = System.Math.Max(
+                0.0, _secondsToNextShot - remaining);
         }
         _triggerWasHeld = true;
-        return Outcome;
+        SortImpactsThisStep();
+        return selectedDamage.Outcome;
     }
 
-    void Fire(in Vec3D position, in Vec3D velocity, double effectiveHitRadiusM) {
+    void SortImpactsThisStep() {
+        _impactsThisStep.Sort(static (left, right) => {
+            int byTime = left.StepFraction.CompareTo(right.StepFraction);
+            if (byTime != 0) return byTime;
+            int byRound = left.RoundId.CompareTo(right.RoundId);
+            return byRound != 0 ? byRound : left.TargetId.CompareTo(right.TargetId);
+        });
+    }
+
+    void Fire(in Vec3D position, in Vec3D velocity,
+        double effectiveHitRadiusM, long aimTargetId) {
         _rounds.Add(new GunRound(
-            _nextRoundId++, position, velocity, 0.0, effectiveHitRadiusM));
+            _nextRoundId++, position, velocity, 0.0,
+            effectiveHitRadiusM, aimTargetId));
         if (!HasInfiniteAmmo) AmmoRemaining--;
         RoundsFired++;
         FiredThisStep = true;
@@ -301,9 +426,9 @@ public sealed class GunKill {
         return true;
     }
 
-    void AdvanceRounds(double dt, in Vec3D banditStart, in Vec3D banditVelocity) {
+    void AdvanceRounds(double dt, ReadOnlySpan<GunTarget> targets,
+        double elapsedAtStart, double fixedStepDuration) {
         if (dt <= 0.0 || _rounds.Count == 0) return;
-        var banditEnd = banditStart + banditVelocity * dt;
         double halfDtSquared = 0.5 * dt * dt;
 
         for (int i = _rounds.Count - 1; i >= 0; i--) {
@@ -311,22 +436,58 @@ public sealed class GunKill {
             var nextPosition = round.Position + round.Velocity * dt + Gravity * halfDtSquared;
             var nextVelocity = round.Velocity + Gravity * dt;
 
-            // Continuous closest approach between the round chord and the target's moving chord.
-            // At 120 Hz the gravity/chord deviation is under 0.1 mm, while this avoids tunnelling
-            // through an 870 m/s target sphere between ticks.
-            var relativeStart = round.Position - banditStart;
-            var relativeDelta = (nextPosition - banditEnd) - relativeStart;
-            double relativeDeltaSq = relativeDelta.Dot(relativeDelta);
-            double fraction = relativeDeltaSq < 1e-18
-                ? 0.0
-                : System.Math.Clamp(-relativeStart.Dot(relativeDelta) / relativeDeltaSq, 0.0, 1.0);
-            var closest = relativeStart + relativeDelta * fraction;
-            if (closest.Dot(closest)
-                <= round.EffectiveHitRadiusM * round.EffectiveHitRadiusM) {
+            long hitTargetId = long.MaxValue;
+            double hitFraction = double.PositiveInfinity;
+            for (int targetIndex = 0; targetIndex < targets.Length; targetIndex++) {
+                GunTarget target = targets[targetIndex];
+                TargetDamageState damage = EnsureTarget(target.Id);
+                // A target splashed by another round earlier in this processing loop is still a
+                // physical airframe for the rest of the same sweep. Keep testing it so reverse
+                // list iteration cannot let an older round ghost through the wreck into an
+                // aircraft behind it.
+                if (!target.Damageable) continue;
+
+                Vec3D targetVelocity = target.State.VelocityVector();
+                Vec3D targetStart = target.State.Position
+                    + targetVelocity * elapsedAtStart;
+                Vec3D targetEnd = targetStart + targetVelocity * dt;
+
+                // Continuous intersection between the round chord and this target's moving chord.
+                // At 120 Hz the gravity/chord deviation is under 0.1 mm. Resolve the sphere
+                // ENTRY time rather than the time of closest approach so two intersected aircraft
+                // cannot be ordered by their centres after the round has already touched one.
+                Vec3D relativeStart = round.Position - targetStart;
+                Vec3D relativeDelta = (nextPosition - targetEnd) - relativeStart;
+                double hitRadiusM = target.Id == round.AimTargetId
+                    ? round.EffectiveHitRadiusM : _hitRadiusM;
+                if (!TrySweptSphereEntryFraction(
+                        relativeStart, relativeDelta, hitRadiusM, out double fraction))
+                    continue;
+                if (fraction < hitFraction - 1e-12
+                    || (System.Math.Abs(fraction - hitFraction) <= 1e-12
+                        && target.Id < hitTargetId)) {
+                    hitFraction = fraction;
+                    hitTargetId = target.Id;
+                }
+            }
+
+            if (hitTargetId != long.MaxValue) {
                 _rounds.RemoveAt(i);
-                HitCount++;
-                HitsThisStep++;
-                if (HitCount >= _hitsToKill) Outcome = FightOutcome.Splash;
+                TargetDamageState damage = EnsureTarget(hitTargetId);
+                if (damage.Outcome == FightOutcome.Flying) {
+                    damage.HitCount++;
+                    damage.HitsThisStep++;
+                    if (damage.HitCount >= _hitsToKill)
+                        damage.Outcome = FightOutcome.Splash;
+                    double fixedStepFraction = fixedStepDuration > 0.0
+                        ? System.Math.Clamp(
+                            (elapsedAtStart + hitFraction * dt) / fixedStepDuration,
+                            0.0,
+                            1.0)
+                        : 0.0;
+                    _impactsThisStep.Add(new GunImpact(
+                        round.Id, hitTargetId, fixedStepFraction));
+                }
                 continue;
             }
 
@@ -337,6 +498,50 @@ public sealed class GunKill {
             }
             _rounds[i] = round with { Position = nextPosition, Velocity = nextVelocity, AgeSeconds = age };
         }
+    }
+
+    static bool TrySweptSphereEntryFraction(
+        in Vec3D relativeStart,
+        in Vec3D relativeDelta,
+        double radiusM,
+        out double fraction) {
+        double radiusSquared = radiusM * radiusM;
+        double c = relativeStart.Dot(relativeStart) - radiusSquared;
+        if (c <= 0.0) {
+            fraction = 0.0;
+            return true;
+        }
+
+        double a = relativeDelta.Dot(relativeDelta);
+        if (a < 1e-18) {
+            fraction = 0.0;
+            return false;
+        }
+        double b = 2.0 * relativeStart.Dot(relativeDelta);
+        double discriminant = b * b - 4.0 * a * c;
+        if (discriminant < 0.0) {
+            fraction = 0.0;
+            return false;
+        }
+
+        double root = System.Math.Sqrt(discriminant);
+        double inverseTwoA = 0.5 / a;
+        double entry = (-b - root) * inverseTwoA;
+        double exit = (-b + root) * inverseTwoA;
+        if (exit < 0.0 || entry > 1.0) {
+            fraction = 0.0;
+            return false;
+        }
+        fraction = System.Math.Clamp(entry, 0.0, 1.0);
+        return true;
+    }
+
+    TargetDamageState EnsureTarget(long targetId) {
+        if (_targetDamage.TryGetValue(targetId, out TargetDamageState? damage))
+            return damage;
+        damage = new TargetDamageState();
+        _targetDamage.Add(targetId, damage);
+        return damage;
     }
 
     void UpdateLead(in AircraftState own, in AircraftState bandit,

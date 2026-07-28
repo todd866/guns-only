@@ -3,8 +3,9 @@ set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$repo_dir"
-dotnet_cli=${GUNS_DOTNET_CLI:-dotnet}
+. "$repo_dir/bin/dotnet-env"
 
+sh -n bin/dotnet-env
 sh -n bin/deploy-web
 node --check web/wwwroot/app.js
 node --check web/wwwroot/hud.js
@@ -21,6 +22,9 @@ node --test $asset_tests
 content_tests=$(find tools/content -type f -name '*.test.mjs' -print | sort)
 node --test $content_tests
 node --test tools/telemetry/test/*.test.mjs
+node --test tools/perf/*.test.mjs
+python3 tools/audio/cockpit_palette.py self-test
+python3 -m unittest tools/audio/test_cockpit_palette.py tools/audio/test_jet_library.py
 runtime_tests=$(find web/wwwroot/render -type f -path '*/tests/*.test.mjs' -print | sort)
 node --test $runtime_tests
 node --test web/wwwroot/api/*.test.js
@@ -67,19 +71,19 @@ fi
 diff -qr "$staged_content_dir" web/wwwroot/content
 
 "$dotnet_cli" restore GunsOnly.sln --nologo --ignore-failed-sources \
-  --artifacts-path "$dotnet_artifacts_dir"
+  --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
 "$dotnet_cli" build GunsOnly.sln --configuration Release --no-restore --nologo \
-  --artifacts-path "$dotnet_artifacts_dir"
+  --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
 "$dotnet_cli" test sim.Tests/GunsOnly.Sim.Tests.csproj \
   --configuration Release --no-build --nologo \
-  --artifacts-path "$dotnet_artifacts_dir"
+  --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
 "$dotnet_cli" test server.Tests/GunsOnly.Server.Tests.csproj \
   --configuration Release --no-build --nologo \
-  --artifacts-path "$dotnet_artifacts_dir"
+  --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
 
 "$dotnet_cli" publish web/GunsOnly.Web.csproj \
   --configuration Release --no-restore --nologo --output "$publish_dir" \
-  --artifacts-path "$dotnet_artifacts_dir"
+  --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
 
 test -f "$publish_dir/wwwroot/index.html"
 test -f "$publish_dir/wwwroot/indoor/index.html"

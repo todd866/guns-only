@@ -186,6 +186,9 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /frameGovernor\.reset\(activeView\)[\s\S]*?bridge\.Begin\(\);[\s\S]*?frameGovernor\.reset\(activeView\)/,
     "restaging and launch must restore mission radius, shadows, and scenery policy");
   assert.match(source,
+    /const sceneryWasSuppressed = view\.terrainGovernorSuppressesAmbientScenery === true;[\s\S]*?if \(sceneryWasSuppressed \|\| view\.terrainMicroRequired === true\) \{[\s\S]*?enableAmbientScenery/,
+    "a new sortie must restore scenery shed by the governor even when micro scenery is optional");
+  assert.match(source,
     /terrainGovernorSuppressesAmbientScenery = true[\s\S]*?disableAmbientScenery[\s\S]*?terrainGovernorSuppressesAmbientScenery !== true[\s\S]*?enableAmbientScenery/,
     "terminal governor shedding must stay latched until the next sortie reset");
   assert.match(source, /const DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL = null;/,

@@ -135,14 +135,24 @@ test("rail degrades to nothing without a usable projected path", () => {
 test("funnel is usable only with a live target, a valid solution, and range in the envelope", () => {
   const env = gunFunnelEnvelope({ muzzleVelocityMps: 870, maximumFlightSeconds: 1.75 });
   const usable = {
-    bandit_alive: true,
+    opponent_alive: true,
+    // Primary presentation can be terminal while the selected formation survivor is still live.
+    bandit_alive: false,
     lead_valid: true,
     target_wingspan_m: 11.3,
     range_m: 400,
   };
   assert.equal(gunFunnelUsable(usable, env), true);
 
-  assert.equal(gunFunnelUsable({ ...usable, bandit_alive: false }, env), false);
+  assert.equal(gunFunnelUsable({
+    ...usable,
+    opponent_alive: false,
+    bandit_alive: true,
+  }, env), false);
+  const legacyDead = { ...usable, bandit_alive: false };
+  delete legacyDead.opponent_alive;
+  assert.equal(gunFunnelUsable(legacyDead, env), false,
+    "older snapshots still fall back to primary liveness");
   assert.equal(gunFunnelUsable({ ...usable, lead_valid: false }, env), false);
   assert.equal(gunFunnelUsable({ ...usable, target_wingspan_m: 0 }, env), false);
   assert.equal(gunFunnelUsable({ ...usable, range_m: env.farRangeM + 50 }, env), false); // too far
@@ -161,6 +171,9 @@ test("production wires the funnel to authoritative bridge fields and gates on th
   assert.match(hudSource, /this\.drawGunFunnel\(frame, anchor\)/);
   assert.match(hudSource, /gunFunnelRail\(/);
   assert.match(hudSource, /gunFunnelUsable\(/); // visibility gate is wired in
+  assert.match(hudSource,
+    /function selectedOpponentIsAlive\(state\)[\s\S]*?typeof state\.opponent_alive === "boolean"/,
+    "fight HUD liveness must follow the selected target, not the primary render slot");
   // The rails must be drawn from the FIXED wingspan scale, not the measured apparent span —
   // sizing them from what the target currently looks like makes the fit tautological.
   assert.match(hudSource, /\.halfWidthPx/);

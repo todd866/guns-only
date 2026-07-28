@@ -6,16 +6,20 @@ import {
   attachJetSampleBeds,
   createEngineVoices,
   loadJetSampleBeds,
+  replaceJetSampleBeds,
   updateEngineVoices,
 } from "./engine_audio.js";
 import { resolvePropulsionCharacter } from "./audio_character.js";
 import {
+  createContactAcousticVoices,
   createEventVoices,
   fireGunReports,
   updateAirframeCueVoices,
   updateBuffetVoice,
   updateCatapultVoice,
   updateCombatCueVoices,
+  updateConfigurationVoices,
+  updateContactAcousticVoices,
   updateRcsVoice,
   updateTrapVoice,
 } from "./event_audio.js";
@@ -26,11 +30,14 @@ let master = null;
 let bus = null;
 let engineVoices = null;
 let eventVoices = null;
+let contactVoices = null;
 let warningVoices = null;
 let disabled = false;
 let enabled = true;
 let sampleLoad = null;
 let lastCharacter = null;
+let sampleLoadGeneration = 0;
+const sampleBedCache = new Map();
 
 function build() {
   const Ctor = globalThis.AudioContext ?? globalThis.webkitAudioContext;
@@ -50,29 +57,49 @@ function build() {
   compressor.connect(master);
   bus = compressor;
 
-  engineVoices = createEngineVoices(context, bus, { includeMaster: false });
+  // Keep propulsion behind its authored trim before it reaches the shared compressor. Sample
+  // beds otherwise hit the limiter directly and flatten the RPM/power/G distinctions.
+  engineVoices = createEngineVoices(context, bus, { includeMaster: true });
   eventVoices = createEventVoices(context, bus);
+  contactVoices = createContactAcousticVoices(context, bus);
   warningVoices = createWarningVoices(context, bus);
   return true;
 }
 
 function ensureJetSamples(state) {
   const character = resolvePropulsionCharacter(state);
+  if (character !== lastCharacter) {
+    lastCharacter = character;
+    sampleLoadGeneration += 1;
+  }
   if (character !== "rapier" && character !== "f22") return;
-  if (!context || !engineVoices || sampleLoad) return;
+  if (!context || !engineVoices) return;
   // Beds already attached for this character.
   if (engineVoices.hasSampleBeds
     && engineVoices.sampleBedCharacter === character) return;
-  // Wrong character already attached — keep procedural for the new airframe.
-  if (engineVoices.hasSampleBeds) return;
-  sampleLoad = loadJetSampleBeds(context, { character })
+  const cached = sampleBedCache.get(character);
+  if (cached) {
+    replaceJetSampleBeds(engineVoices, context, cached, { character });
+    return;
+  }
+  if (sampleLoad?.character === character) return;
+
+  const generation = sampleLoadGeneration;
+  const promise = loadJetSampleBeds(context, { character });
+  sampleLoad = { character, promise };
+  promise
     .then((beds) => {
-      if (resolvePropulsionCharacter(state) !== character) return;
-      attachJetSampleBeds(engineVoices, context, beds, { character });
+      if (beds?.mil) sampleBedCache.set(character, beds);
+      if (generation !== sampleLoadGeneration || lastCharacter !== character) return;
+      if (engineVoices.hasSampleBeds) {
+        replaceJetSampleBeds(engineVoices, context, beds, { character });
+      } else {
+        attachJetSampleBeds(engineVoices, context, beds, { character });
+      }
     })
     .catch(() => {})
     .finally(() => {
-      sampleLoad = null;
+      if (sampleLoad?.promise === promise) sampleLoad = null;
     });
 }
 
@@ -127,8 +154,6 @@ export function updateFlightAudio(state, {
       return;
     }
 
-    const character = resolvePropulsionCharacter(state);
-    if (character !== lastCharacter) lastCharacter = character;
     ensureJetSamples(state);
 
     const live = enabled && !muted;
@@ -136,6 +161,8 @@ export function updateFlightAudio(state, {
     updateEngineVoices(engineVoices, context, state, { muted: !live });
     updateBuffetVoice(eventVoices, context, state, { enabled: live });
     updateAirframeCueVoices(eventVoices, context, state, { enabled: live });
+    updateConfigurationVoices(eventVoices, context, state, { enabled: live });
+    updateContactAcousticVoices(contactVoices, context, state, { enabled: live });
     updateCatapultVoice(eventVoices, context, state, { enabled: live });
     updateRcsVoice(eventVoices, context, state, { enabled: live });
     updateTrapVoice(eventVoices, context, state, { enabled: live });

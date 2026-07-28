@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 10;
+    public const int LayoutVersion = 11;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -304,6 +304,7 @@ internal static class SnapshotHotFrame {
         Num("roll_rate_dps", 2); Num("pitch_rate_dps", 2); Num("yaw_rate_dps", 2);
         Num("angle_off_deg", 2);
         Num("range_m", 1); Num("closure_kts", 1);
+        Num("selected_player_gun_target_slot", RawInteger);
         Bool("gun_window");
         Bool("gun_solution_raw");
         Bool("gun_solution");
@@ -316,6 +317,7 @@ internal static class SnapshotHotFrame {
         TrajectorySamples("gun_trajectory");
         Num("rounds_fired", RawInteger);
         Num("hits", RawInteger);
+        Num("selected_target_hits", RawInteger);
         Bool("hit");
         Bool("gun_firing");
         Tracers("tracers");
@@ -525,6 +527,7 @@ internal static class SnapshotHotFrame {
         bool catapulting = catapult.IsActive;
         AircraftState s = catapulting ? catapult.State : player.State;
         AircraftState b = bandit.State;
+        AircraftState gunTarget = session.SelectedOpponentState;
         bool arrested = arrestment.IsActive && !catapulting;
         Vec3D simulationPosition = arrested ? arrestment.Position : s.Position;
         Vec3D playerPosition = simulationPosition;
@@ -875,10 +878,13 @@ internal static class SnapshotHotFrame {
         w.Num("roll_rate_dps", s.BodyRates.P * 57.2958, 2);
         w.Num("pitch_rate_dps", s.BodyRates.Q * 57.2958, 2);
         w.Num("yaw_rate_dps", s.BodyRates.R * 57.2958, 2);
-        w.Num("angle_off_deg", Geometry.AngleOff(s, b) * 57.2958, 2);
-        w.Num("range_m", Geometry.Range(s, b), 1);
+        w.Num("angle_off_deg", Geometry.AngleOff(s, gunTarget) * 57.2958, 2);
+        w.Num("range_m", Geometry.Range(s, gunTarget), 1);
         w.Num("closure_kts", session.ClosureKts, 1);
-        w.Bool("gun_window", !session.WeaponsInhibited && CameraSolver.GunWindow(s, b));
+        w.Num("selected_player_gun_target_slot",
+            session.SelectedPlayerGunTargetSlot, RawInteger);
+        w.Bool("gun_window",
+            !session.WeaponsInhibited && CameraSolver.GunWindow(s, gunTarget));
         w.Bool("gun_solution_raw", gunKill.InstantaneousGunSolution);
         w.Bool("gun_solution", !session.WeaponsInhibited && gunKill.GunSolution);
         w.Bool("lead_valid", !session.WeaponsInhibited && gunKill.HasLeadSolution);
@@ -890,7 +896,8 @@ internal static class SnapshotHotFrame {
         w.GunTrajectory("gun_trajectory", playerPosition, groundVelocity, pf, pl,
             s.BodyRates, gunKill.Profile);
         w.Num("rounds_fired", gunKill.RoundsFired, RawInteger);
-        w.Num("hits", gunKill.HitCount, RawInteger);
+        w.Num("hits", gunKill.TotalHitCount, RawInteger);
+        w.Num("selected_target_hits", gunKill.HitCount, RawInteger);
         w.Bool("hit", gunKill.HitThisStep);
         w.Bool("gun_firing", session.TriggerDown && session.PlayerWeaponsAuthorized
             && gunKill.AmmoRemaining > 0 && gunKill.BanditAlive);
@@ -898,17 +905,17 @@ internal static class SnapshotHotFrame {
         w.Num("kill_progress", gunKill.KillProgress, 3);
         w.Num("opponent_health", gunKill.TargetHealth, 3);
         w.Bool("opponent_alive", gunKill.TargetAlive);
-        w.Num("bandit_health", gunKill.BanditHealth, 3);
-        w.Bool("bandit_alive", gunKill.BanditAlive);
-        w.Num("player_health", opponentGun.TargetHealth, 3);
-        w.Bool("player_alive", opponentGun.TargetAlive);
+        w.Num("bandit_health", session.PrimaryOpponentHealth, 3);
+        w.Bool("bandit_alive", session.PrimaryOpponentAlive);
+        w.Num("player_health", session.PlayerHealth, 3);
+        w.Bool("player_alive", session.PlayerAlive);
         w.Num("opponent_ammo", opponentGun.AmmoRemaining, RawInteger);
         w.Num("opponent_rounds_fired", opponentGun.RoundsFired, RawInteger);
-        w.Num("opponent_hits", opponentGun.HitCount, RawInteger);
+        w.Num("opponent_hits", session.PlayerHitsTaken, RawInteger);
         w.Bool("opponent_trigger_down", session.OpponentTriggerDown);
         w.Bool("opponent_gun_firing", session.OpponentTriggerDown
-            && opponentGun.AmmoRemaining > 0 && opponentGun.TargetAlive);
-        w.Tracers("opponent_tracers", opponentGun.RoundsInFlight);
+            && opponentGun.AmmoRemaining > 0 && session.PlayerAlive);
+        w.Tracers("opponent_tracers", session.FormationOpponentRoundsInFlight);
         w.Num("kill_count", session.KillCount, RawInteger);
         w.Num("engagement_number", session.EngagementNumber, RawInteger);
         w.Bool("opponent_replacement_pending", session.OpponentReplacementPending);

@@ -3,6 +3,7 @@
 Date: 2026-07-27  
 Status: accepted (layers after geodetic theatre D0–D2)  
 Related: [ADR-0003](../../adr-0003-ghibli-adjacent-world-presentation.md),
+[no-man's-land canon](../../no-mans-land-canon.md),
 [ukraine geodetic theatre](2026-07-27-ukraine-geodetic-theatre-design.md),
 [art-direction.md](../../art-direction.md),
 [ukraine-low-level-scenery.md](../../ukraine-low-level-scenery.md),
@@ -19,7 +20,7 @@ Ukraine/Russia theatre micro-scenery for two jobs on one engine:
 
 | Decision | Choice |
 | --- | --- |
-| World character | Mostly human no-go + rewilding; settlement at zone edges + rare islands |
+| World character | Late-2030s accidental reserve: huge human no-go + real ecological recovery |
 | Strip | Eastern frontier of the zone |
 | Medevac islands | **A** (clinic/compound in clearing, default) + **B** (road-junction remnant) |
 | Frame dependency | Bind to **geodetic** theatre east metres after country-scale pack ships |
@@ -34,3 +35,10 @@ scenery plan after D3 cutover.
 
 - Inland: rewild, almost no roofs; near strip: quiet frontier compounds.
 - Medevac island A/B readable at low AGL without turning the country into a village map.
+- At low level, grass and rounded canopy motion agree with the simulation wind rather than running
+  independent decorative loops.
+- Human absence reads through overgrown infrastructure and sparse edge habitation, not a universal
+  brown ruin pass.
+- Wildlife, when introduced, remains non-targetable ambient life.
+- The system enforcing the zone may look maintained and effective. Do not use visual decay as a
+  substitute for the canon's steep authority gradient.

@@ -1,0 +1,22 @@
+# Shared .NET CLI discovery for repository scripts.
+#
+# The repository pins .NET 8 in global.json. Some development machines also have a newer
+# system-wide SDK, while the pinned SDK lives in the per-user installation. Source this file after
+# changing to the repository root; it sets dotnet_cli and the runtime environment consistently.
+
+if [ -n "${GUNS_DOTNET_CLI:-}" ]; then
+    dotnet_cli=$GUNS_DOTNET_CLI
+elif [ -n "${HOME:-}" ] && [ -x "$HOME/.dotnet/dotnet" ]; then
+    dotnet_cli="$HOME/.dotnet/dotnet"
+    DOTNET_ROOT=${DOTNET_ROOT:-"$HOME/.dotnet"}
+    DOTNET_MULTILEVEL_LOOKUP=0
+    PATH="$HOME/.dotnet:$PATH"
+    export DOTNET_ROOT DOTNET_MULTILEVEL_LOOKUP PATH
+else
+    dotnet_cli=dotnet
+fi
+
+command -v "$dotnet_cli" >/dev/null 2>&1 || {
+    echo "dotnet CLI is unavailable (tried GUNS_DOTNET_CLI, \$HOME/.dotnet, and PATH)" >&2
+    return 1
+}

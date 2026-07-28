@@ -1,9 +1,12 @@
 name: Verify
 
-# The full gate runs LOCALLY before every ship (bin/check is the deploy precondition), so
-# running it again on every push of an already-gated commit burned ~90% of the monthly Actions
-# quota. CI now covers pull requests and manual dispatch only.
+# Production deployment enforces the full gate locally, and CI independently verifies pushes to
+# the two release-bearing branches so an exact commit cannot appear green only on one workstation.
 on:
+  push:
+    branches:
+      - main
+      - pivot-hardening
   pull_request:
   workflow_dispatch:
 
@@ -32,6 +35,16 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tools/audio/requirements.txt
+
+      - name: Install audio-tool dependencies
+        run: python -m pip install -r tools/audio/requirements.txt
 
       - name: Run repository checks
         run: ./bin/check

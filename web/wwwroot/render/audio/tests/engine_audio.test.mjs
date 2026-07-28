@@ -358,10 +358,13 @@ test("airframe rush follows dynamic pressure, not throttle, and mute remains ava
     };
     updateEngineVoices(voices, audio, { ...flight, applied_throttle: 0 });
     const idleRush = latest(voices.rushGain.gain);
+    const highQCanopy = latest(voices.canopyFlowGain.gain);
 
     audio.currentTime = 0.1;
     updateEngineVoices(voices, audio, { ...flight, applied_throttle: 1.55 });
     assert.equal(latest(voices.rushGain.gain), idleRush);
+    assert.equal(latest(voices.canopyFlowGain.gain), highQCanopy,
+      "canopy flow is independent of throttle");
 
     audio.currentTime = 0.2;
     updateEngineVoices(voices, audio, {
@@ -370,6 +373,7 @@ test("airframe rush follows dynamic pressure, not throttle, and mute remains ava
       true_airspeed_kts: 200,
     }, { muted: true });
     assert.ok(latest(voices.rushGain.gain) < idleRush);
+    assert.ok(latest(voices.canopyFlowGain.gain) < highQCanopy);
     assert.equal(latest(voices.master.gain), 0);
   } finally {
     globalThis.AudioContext = previous;
@@ -507,6 +511,8 @@ test("flight façade shares one compressor bus, honors mute, and schedules gun r
     assert.equal(audio.compressors.length, 1);
     const master = audio.gains[0].gain;
     assert.ok(latest(master) > 0);
+    assert.ok(latest(audio.gains[1].gain) > 0,
+      "propulsion retains its authored submix trim ahead of the shared compressor");
 
     const oscillatorsBefore = audio.oscillators.length;
     audio.currentTime = 0.12;
@@ -588,6 +594,95 @@ test("attachJetSampleBeds ducks synth and opens mil bed under power", async () =
     assert.equal(latest(voices.fanOrderGain.gain), 0, "fan orders muted under beds");
     assert.equal(latest(voices.breathDepth.gain), 0, "breath AM muted under beds");
     assert.ok(Math.abs(latest(voices.sampleMil.playbackRate) - 1) < 1e-6, "bed pitch locked");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("replaceJetSampleBeds retires the previous aircraft palette", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      attachJetSampleBeds,
+      createEngineVoices,
+      replaceJetSampleBeds,
+    } = await freshModule("../engine_audio.js", "sample-replacement");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const rapier = audio.createBuffer(1, 64);
+    const f22 = audio.createBuffer(1, 96);
+    attachJetSampleBeds(
+      voices,
+      audio,
+      { idle: rapier, mil: rapier, grit: rapier },
+      { character: "rapier" },
+    );
+    const retiring = [
+      ...voices.sampleIdleVariants,
+      ...voices.sampleMilVariants,
+      ...voices.sampleGritVariants,
+    ];
+
+    audio.currentTime = 3;
+    assert.equal(replaceJetSampleBeds(
+      voices,
+      audio,
+      { idle: f22, mil: f22, grit: f22 },
+      { character: "f22" },
+    ), true);
+    assert.equal(voices.sampleBedCharacter, "f22");
+    assert.ok(voices.sampleMil?.started);
+    assert.ok(retiring.every((variant) => variant.source.started === false));
+    assert.ok(retiring.every((variant) => latest(variant.gain.gain) === 0));
+    assert.equal(latest(voices.sampleMilVariants[0].gain.gain), 1);
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("alternate F-22 beds equal-power crossfade and cockpit equipment remains alive", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEngineVoices,
+      updateEngineVoices,
+      attachJetSampleBeds,
+    } = await freshModule("../engine_audio.js", "sample-palette");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const primary = audio.createBuffer(1, 64);
+    const alternate = audio.createBuffer(1, 96);
+    attachJetSampleBeds(voices, audio, {
+      idle: primary,
+      mil: primary,
+      grit: primary,
+      idleVariants: [primary, alternate],
+      milVariants: [primary, alternate],
+      gritVariants: [primary, alternate],
+    }, { character: "f22" });
+
+    audio.currentTime = 12;
+    updateEngineVoices(voices, audio, {
+      applied_throttle: 1.3,
+      engine_rpm_pct: 100,
+      mach: 0.9,
+      true_airspeed_kts: 500,
+      air_density_kg_m3: 0.9,
+      pilot_gz: 4.2,
+      audio_profile_id: "audio.f22a.aged-twin-fan.v1",
+    }, { snap: true });
+
+    assert.equal(voices.sampleMilVariants.length, 2);
+    const a = latest(voices.sampleMilVariants[0].gain.gain);
+    const b = latest(voices.sampleMilVariants[1].gain.gain);
+    assert.ok(a > 0 && b > 0, "both independent beds contribute");
+    assert.ok(Math.abs(a * a + b * b - 1) < 1e-6, "equal-power crossfade");
+    assert.ok(latest(voices.ecsGain.gain) > 0, "ECS cabin floor");
+    assert.ok(latest(voices.inverterGain.gain) > 0, "400 Hz electrical floor");
   } finally {
     globalThis.AudioContext = previous;
   }
@@ -716,8 +811,119 @@ test("F-22 sealed cockpit: dark body, muted tip whine, no ram", async () => {
     assert.ok(latest(voices.jetBodyGain.gain) > 0.3, "F-22 cockpit body rumble");
     assert.ok(latest(voices.fanWhineGain.gain) < 0.02, "tip whine ducked in cockpit");
     assert.ok(latest(voices.cabinLp.frequency) < 1600, "sealed cabin ceiling");
+    assert.ok(latest(voices.compressorTraceGain.gain) > 0.008,
+      "structure-borne RPM trace survives the sealed cabin");
     assert.ok(latest(voices.ramGain.gain) < 1e-6, "no ram duct on F-22");
     assert.ok(latest(voices.ramHowlGain.gain) < 1e-6, "no ram howl on F-22");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("F-22 power uses its published lever stop and RPM remains audible under beds", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      attachJetSampleBeds,
+      createEngineVoices,
+      updateEngineVoices,
+    } = await freshModule("../engine_audio.js", "f22-rpm-cue");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const bed = audio.createBuffer(1, 64);
+    attachJetSampleBeds(voices, audio, {
+      idle: bed,
+      mil: bed,
+      grit: bed,
+    }, { character: "f22" });
+    const base = {
+      applied_throttle: 0.8,
+      engine_spool_fraction: 0.8,
+      max_thrust_fraction: 1.35,
+      engine_rpm_pct: 60,
+      mach: 0.7,
+      true_airspeed_kts: 420,
+      air_density_kg_m3: 0.9,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    };
+    spoolToGoverned(
+      (state) => updateEngineVoices(voices, audio, state),
+      audio,
+      base,
+    );
+    const lowRpmHz = latest(voices.compressorTraceOsc.frequency);
+    assert.ok(latest(voices.compressorTraceGain.gain) > 0,
+      "RPM trace remains live while fixed-pitch beds own the body");
+
+    for (let step = 1; step <= 12; step++) {
+      audio.currentTime += 0.25;
+      updateEngineVoices(voices, audio, {
+        ...base,
+        applied_throttle: 1.35,
+        engine_spool_fraction: 1.35,
+        engine_rpm_pct: 100,
+      });
+    }
+    assert.ok(latest(voices.compressorTraceOsc.frequency) > lowRpmHz + 80);
+    assert.equal(latest(voices.sampleMil.playbackRate), 1,
+      "broadband cockpit bed itself stays fixed-pitch");
+
+    audio.currentTime += 0.25;
+    updateEngineVoices(voices, audio, {
+      ...base,
+      applied_throttle: 1.35,
+      engine_spool_fraction: 1.35,
+      engine_rpm_pct: 100,
+    }, { snap: true });
+    assert.ok(voices.powerSlew > 0.99,
+      "F-22's published 1.35 lever stop maps full augmentation to full audio power");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("external F-22 perspective drops cockpit beds and opens the propulsion spectrum", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      attachJetSampleBeds,
+      createEngineVoices,
+      updateEngineVoices,
+    } = await freshModule("../engine_audio.js", "f22-exterior");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const bed = audio.createBuffer(1, 64);
+    attachJetSampleBeds(
+      voices,
+      audio,
+      { idle: bed, mil: bed, grit: bed },
+      { character: "f22" },
+    );
+    const state = {
+      applied_throttle: 1.35,
+      engine_spool_fraction: 1.35,
+      max_thrust_fraction: 1.35,
+      engine_rpm_pct: 100,
+      mach: 0.9,
+      true_airspeed_kts: 560,
+      air_density_kg_m3: 0.9,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+      audio_perspective: "external",
+    };
+    spoolToGoverned(
+      (next) => updateEngineVoices(voices, audio, next),
+      audio,
+      state,
+    );
+    assert.equal(latest(voices.sampleMilGain.gain), 0,
+      "sealed-cockpit reference beds cannot leak into an exterior camera");
+    assert.ok(latest(voices.cabinLp.frequency) > 5000, "exterior spectrum opens");
+    assert.ok(latest(voices.fanWhineGain.gain) > 0.02, "external fan trace is restored");
+    assert.ok(latest(voices.ecsGain.gain) < 0.01, "ECS stays inside the aircraft");
   } finally {
     globalThis.AudioContext = previous;
   }
@@ -771,6 +977,104 @@ test("speed brake, G-on, and aged canopy cues respond to snapshot", async () => 
     assert.equal(latest(voices.brakeGain.gain), 0);
     assert.equal(latest(voices.gGain.gain), 0);
     assert.equal(latest(voices.canopyGain.gain), 0);
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("gun voice follows the published weapon cadence and varies clustered reports", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEventVoices,
+      fireGunReports,
+    } = await freshModule("../event_audio.js", "gun-cadence");
+    const audio = new FakeAudioContext();
+    const voices = createEventVoices(audio, audio.destination);
+
+    audio.currentTime = 0.2;
+    fireGunReports(voices, audio, {
+      gun_firing: true,
+      player_gun_profile_id: "gun.m61a2.public-data-surrogate.v1",
+      rounds_fired: 11,
+    }, { enabled: true, triggerHeld: true });
+    assert.equal(latest(voices.gunBodyOsc.frequency), 100, "M61 cyclic body is 100 Hz");
+    assert.ok(latest(voices.gunBodyGain.gain) > 0);
+    assert.ok(latest(voices.gunGasGain.gain) > 0);
+    assert.ok(voices.gunShotIndex > 11, "cluster report scheduled");
+
+    audio.currentTime = 0.3;
+    fireGunReports(voices, audio, {
+      gun_firing: true,
+      player_gun_profile_id: "gun.gsh301.public-data-surrogate.v1",
+      rounds_fired: 12,
+    }, { enabled: true, triggerHeld: true });
+    assert.equal(latest(voices.gunBodyOsc.frequency), 25, "GSh-301 cyclic body is 25 Hz");
+
+    audio.currentTime = 0.4;
+    fireGunReports(voices, audio, {
+      gun_firing: true,
+      player_gun_profile_id: "gun.six-m3-50cal.v1",
+      rounds_fired: 13,
+    }, { enabled: true, triggerHeld: true });
+    assert.equal(latest(voices.gunBodyOsc.frequency), 15, "six-M3 cyclic body is 15 Hz");
+
+    audio.currentTime = 0.5;
+    fireGunReports(voices, audio, {
+      gun_firing: false,
+      player_gun_profile_id: "gun.m61a2.public-data-surrogate.v1",
+    }, { enabled: true, triggerHeld: false });
+    assert.equal(latest(voices.gunBodyGain.gain), 0, "gun body releases");
+    assert.equal(latest(voices.gunGasGain.gain), 0, "gas tail releases");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("gear and flap movement drive mechanisms with start and stop clunks", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEventVoices,
+      updateConfigurationVoices,
+    } = await freshModule("../event_audio.js", "configuration-audio");
+    const audio = new FakeAudioContext();
+    const voices = createEventVoices(audio, audio.destination);
+    const up = {
+      gear_nose: 0,
+      gear_left: 0,
+      gear_right: 0,
+      flap_left_deg: 0,
+      flap_right_deg: 0,
+    };
+    updateConfigurationVoices(voices, audio, up);
+    const oscillatorsBefore = audio.oscillators.length;
+
+    audio.currentTime = 0.1;
+    updateConfigurationVoices(voices, audio, {
+      ...up,
+      gear_nose: 0.08,
+      gear_left: 0.08,
+      gear_right: 0.08,
+    });
+    assert.ok(latest(voices.mechanismGain.gain) > 0.04, "gear bay/track rumble");
+    assert.ok(latest(voices.hydraulicGain.gain) > 0.01, "hydraulic pump");
+    assert.ok(audio.oscillators.length > oscillatorsBefore, "gear-start body clunk");
+
+    const afterStart = audio.oscillators.length;
+    audio.currentTime = 0.3;
+    updateConfigurationVoices(voices, audio, {
+      ...up,
+      gear_nose: 0.08,
+      gear_left: 0.08,
+      gear_right: 0.08,
+    });
+    assert.equal(latest(voices.mechanismGain.gain), 0, "mechanism stops with surfaces");
+    assert.ok(audio.oscillators.length > afterStart, "gear-stop body clunk");
   } finally {
     globalThis.AudioContext = previous;
   }
@@ -841,7 +1145,9 @@ test("RCS ticks, trap snatch, and combat hit/destroy edges fire", async () => {
     FakeAudioContext.instances.length = 0;
     globalThis.AudioContext = FakeAudioContext;
     const {
+      createContactAcousticVoices,
       createEventVoices,
+      updateContactAcousticVoices,
       updateRcsVoice,
       updateTrapVoice,
       updateCombatCueVoices,
@@ -873,11 +1179,42 @@ test("RCS ticks, trap snatch, and combat hit/destroy edges fire", async () => {
 
     audio.currentTime = 1.1;
     const beforeHit = audio.sources.length;
-    updateCombatCueVoices(voices, audio, { hits: 1, opponent_alive: true });
+    const beforeFalseBoom = audio.oscillators.length;
+    updateCombatCueVoices(voices, audio, {
+      hits: 1,
+      opponent_alive: true,
+      bandit_alive: false,
+    });
     assert.ok(audio.sources.length > beforeHit, "hit impact");
+    assert.equal(audio.oscillators.length, beforeFalseBoom,
+      "a dead primary must not boom while the selected formation survivor is alive");
     const beforeBoom = audio.oscillators.length;
-    updateCombatCueVoices(voices, audio, { hits: 1, opponent_alive: false });
+    updateCombatCueVoices(voices, audio, {
+      hits: 1,
+      opponent_alive: false,
+      bandit_alive: true,
+    });
     assert.ok(audio.oscillators.length > beforeBoom, "destroy boom");
+
+    const contacts = createContactAcousticVoices(audio, audio.destination);
+    const selectedSurvivor = updateContactAcousticVoices(contacts, audio, {
+      bandit_aircraft_id: "aircraft.su27.v1",
+      opponent_alive: true,
+      bandit_alive: false,
+      range_m: 620,
+      closure_kts: 80,
+    });
+    assert.ok(selectedSurvivor.fighterPresence > 0.5,
+      "a selected survivor remains audible while the primary presentation is terminal");
+    const selectedDestroyed = updateContactAcousticVoices(contacts, audio, {
+      bandit_aircraft_id: "aircraft.su27.v1",
+      opponent_alive: false,
+      bandit_alive: true,
+      range_m: 620,
+      closure_kts: 80,
+    });
+    assert.equal(selectedDestroyed.fighterPresence, 0,
+      "selected-target death, not primary liveness, silences the contact");
   } finally {
     globalThis.AudioContext = previous;
   }

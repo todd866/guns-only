@@ -198,7 +198,10 @@ function assertLadder(data) {
 
 function assertFunnel(data) {
   const { name, geometry, probes, state } = data;
-  const usable = state.bandit_alive === true && state.lead_valid === true
+  const selectedAlive = typeof state.opponent_alive === "boolean"
+    ? state.opponent_alive
+    : state.bandit_alive === true;
+  const usable = selectedAlive && state.lead_valid === true
     && Number(state.range_m) >= 150 && Number(state.range_m) <= 783;
   if (!usable) {
     check(name, "funnel absent outside the usable envelope", geometry.funnel === null,

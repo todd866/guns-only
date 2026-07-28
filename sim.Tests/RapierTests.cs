@@ -645,6 +645,8 @@ public class RapierTests {
     public void OffStripTerrainRemainsAuthoritativeDuringTerminalResolution() {
         BeatSetup baseline = Beats.RapierIntercept();
         Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
+        ScriptedInterceptConfig scriptedIntercept =
+            Assert.IsType<ScriptedInterceptConfig>(baseline.ScriptedIntercept);
         AircraftState player = new(
             strip.LandingPoint(along: 0.0, cross: strip.DeckHalfWidthM + 75.0,
                 height: 118.01 - strip.Position.Y),
@@ -659,7 +661,11 @@ public class RapierTests {
             Player = player,
             Bandit = opponent,
             StartsOnCatapult = false,
-            UsesReactiveBandit = false
+            UsesReactiveBandit = false,
+            // This regression isolates terminal terrain resolution. The authored Rapier mission
+            // now launches a four-ship; without narrowing the fixture, a surviving wingman is
+            // correctly promoted and the session remains in its combat phase.
+            ScriptedIntercept = scriptedIntercept with { FormationSize = 1 }
         };
         var session = new SimulationSession();
         session.SetTerrainSurface(FlatLand(117.0));
@@ -669,7 +675,8 @@ public class RapierTests {
         // The opponent impacts first, putting subsequent ownship integration through
         // StepTerminalPhase — the path which used to omit natural terrain for carrier sorties.
         session.StepFixed();
-        Assert.NotEqual(AircraftTerminalState.Flying, session.OpponentTerminalState);
+        Assert.True(session.OpponentTerminalState != AircraftTerminalState.Flying,
+            $"opponent remained flying at {session.Bandit.State.Position}");
         Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
 
         session.SetTerrainSurface(FlatLand(118.0));

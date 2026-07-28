@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Web;
 
@@ -51,6 +52,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
+        Assert.Equal(11, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
 
         foreach (JsonElement block in layout.GetProperty("blocks").EnumerateArray()) {
@@ -187,6 +189,106 @@ public class SnapshotHotFrameTests {
             if (sawRoundsInFlight && burst > 2) break;
         }
         Assert.True(sawRoundsInFlight, "no rounds in flight during 10 s of held trigger");
+    }
+
+    [Fact]
+    public void SlotOneSeparatesSelectedDamageAndAggregatesFormationWeaponTelemetry() {
+        SimulationSession session = StartSession(7, null);
+        Assert.Single(session.Wingmen);
+        Assert.True(session.SetPlayerGunTargetSlot(0));
+
+        GunKill playerGun = session.PlayerGun;
+        long primaryTargetId = playerGun.SelectedTargetId;
+        var shooter = new AircraftState(
+            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            FlightModel.F22APublicDataSurrogate.MassKg,
+            QuaternionD.Identity);
+        var syntheticPrimary = shooter with {
+            Position = new Vec3D(0.0, 0.0, 100.0)
+        };
+        var primaryTargets = new[] {
+            new GunTarget(primaryTargetId, syntheticPrimary)
+        };
+
+        playerGun.Step(true, shooter, primaryTargetId, primaryTargets, 0.0);
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && playerGun.DamageFor(primaryTargetId).HitCount == 0; tick++)
+            playerGun.Step(false, shooter, primaryTargetId, primaryTargets,
+                SimulationSession.FixedDeltaSeconds);
+        Assert.Equal(1, playerGun.DamageFor(primaryTargetId).HitCount);
+
+        Assert.True(session.SetPlayerGunTargetSlot(1));
+        Assert.Equal(0, playerGun.HitCount);
+        Assert.Equal(1, playerGun.TotalHitCount);
+
+        Wingman wingman = session.Wingmen[0];
+        var offAxisPlayer = shooter with {
+            Position = new Vec3D(500.0, 0.0, 500.0)
+        };
+        wingman.Gun.Step(true, shooter, offAxisPlayer, 0.0);
+        Assert.Single(wingman.Gun.RoundsInFlight);
+        Assert.Empty(session.OpponentGun.RoundsInFlight);
+        session.RecordPlayerHitsForTest(1);
+
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            Assert.Equal(1,
+                root.GetProperty("selected_player_gun_target_slot").GetInt32());
+            Assert.Equal(1, root.GetProperty("hits").GetInt32());
+            Assert.Equal(0, root.GetProperty("selected_target_hits").GetInt32());
+            Assert.Equal(1, root.GetProperty("opponent_hits").GetInt32());
+            Assert.Single(root.GetProperty("opponent_tracers").EnumerateArray());
+            Assert.Equal(
+                Geometry.Range(session.Player.State, wingman.Bandit.State),
+                root.GetProperty("range_m").GetDouble(),
+                1);
+
+            using JsonDocument layoutDocument =
+                JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
+            JsonElement layout = layoutDocument.RootElement;
+            Assert.Equal(11, layout.GetProperty("layout_version").GetInt32());
+            JsonElement[] slots = layout.GetProperty("blocks")
+                .EnumerateArray()
+                .SelectMany(block => block.GetProperty("slots").EnumerateArray())
+                .ToArray();
+            int SlotIndex(string name) => slots
+                .Single(slot => slot.GetProperty("name").GetString() == name)
+                .GetProperty("index").GetInt32();
+            Assert.Equal(1.0, buffer[SlotIndex("selected_player_gun_target_slot")]);
+            Assert.Equal(1.0, buffer[SlotIndex("hits")]);
+            Assert.Equal(0.0, buffer[SlotIndex("selected_target_hits")]);
+            Assert.Equal(1.0, buffer[SlotIndex("opponent_hits")]);
+            AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    [Fact]
+    public void SharedFormationDamageDrivesPlayerHealthAndAliveInBothProjections() {
+        SimulationSession session = StartSession(7, null);
+        session.RecordPlayerHitsForTest(session.Beat.CombatRules.PlayerHitsToDefeat);
+        session.StepFixed();
+
+        Assert.Equal(0.0, session.PlayerHealth);
+        Assert.False(session.PlayerAlive);
+        Assert.NotEqual(AircraftTerminalState.Flying, session.PlayerTerminalState);
+
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            Assert.Equal(0.0, root.GetProperty("player_health").GetDouble());
+            Assert.False(root.GetProperty("player_alive").GetBoolean());
+            using JsonDocument layoutDocument =
+                JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
+            JsonElement[] slots = layoutDocument.RootElement.GetProperty("blocks")
+                .EnumerateArray()
+                .SelectMany(block => block.GetProperty("slots").EnumerateArray())
+                .ToArray();
+            int SlotIndex(string name) => slots
+                .Single(slot => slot.GetProperty("name").GetString() == name)
+                .GetProperty("index").GetInt32();
+            Assert.Equal(0.0, buffer[SlotIndex("player_health")]);
+            Assert.Equal(0.0, buffer[SlotIndex("player_alive")]);
+            AssertHotFrameMatchesJson(root, buffer);
+        }
     }
 
     // Build 64 reconciliation: the HUD projects the FPV from vx/vy/vz and the gunsight funnel

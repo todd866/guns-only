@@ -12,18 +12,11 @@ out_dir=${GUNS_PREVIEW_OUT:-/tmp/guns-only-web}
 atlas_src=$repo_dir/web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas
 open_browser=${OPEN:-1}
 
-if [ -x "$HOME/.dotnet/dotnet" ]; then
-    export PATH="$HOME/.dotnet:$PATH"
-    export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
-fi
-dotnet_cli=${GUNS_DOTNET_CLI:-dotnet}
-command -v "$dotnet_cli" >/dev/null 2>&1 || {
-    echo "preview-web: dotnet CLI is unavailable (tried PATH and \$HOME/.dotnet)" >&2
-    exit 1
-}
+. "$repo_dir/bin/dotnet-env"
 
 echo "preview-web: publishing with $($dotnet_cli --version) → $out_dir"
-"$dotnet_cli" publish web/GunsOnly.Web.csproj -c Release -o "$out_dir"
+"$dotnet_cli" publish web/GunsOnly.Web.csproj -c Release -o "$out_dir" \
+    -m:1 /nodeReuse:false
 
 if [ -d "$atlas_src/pages" ] && [ -f "$atlas_src/rapier-range.atlas.manifest.json" ]; then
     echo "preview-web: staging Ukraine jet-range atlas"

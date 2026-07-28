@@ -136,6 +136,10 @@ public static partial class WebBridge {
         Session.SetBanditPadlockRollAssist(selected);
 
     [JSExport]
+    public static bool SetPlayerGunTargetSlot(int slot) =>
+        Session.SetPlayerGunTargetSlot(slot);
+
+    [JSExport]
     public static void SetVariant(int value) => Session.SetVariant(
         value == 1 ? ValleyVariant.PhysicsOnly : ValleyVariant.DoctrineDeep);
 

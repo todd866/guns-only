@@ -75,3 +75,8 @@ web/wwwroot/render/audio/samples/jet/*.flac
 
 # Local F-22 cockpit reference pulls (do not commit)
 analysis/audio-refs/
+
+# Jet-audio research vault. The tracked catalogue and derived profiles live under
+# audio/jet-library; synchronized source video/audio, thumbnails, and provider
+# metadata remain local so reference-only material cannot enter a web build.
+analysis/jet-audio-library/

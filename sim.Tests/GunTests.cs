@@ -16,6 +16,229 @@ public class GunTests {
         return QuaternionD.FromFrame(right, up, forward);
     }
 
+    static AircraftState BallisticTarget(double rangeM) {
+        double timeOfFlight =
+            (rangeM - GunKill.MuzzleOffsetM) / GunKill.MuzzleVelocityMps;
+        return State(new Vec3D(
+            0.0,
+            -0.5 * GunKill.GravityMps2 * timeOfFlight * timeOfFlight,
+            rangeM));
+    }
+
+    [Fact]
+    public void SwitchingSelectedTargetPreservesWeaponStateAndAirborneRounds() {
+        const long TargetA = 101;
+        const long TargetB = 202;
+        var gun = new GunKill(ammo: 9, hitsToKill: 20, hitRadiusM: 0.25,
+            heatConfig: GunHeatConfig.PlayerInfiniteAmmo);
+        var own = State(Vec3D.Zero);
+        var targets = new[] {
+            new GunTarget(TargetA, State(new Vec3D(500.0, 0.0, 2500.0))),
+            new GunTarget(TargetB, State(new Vec3D(-500.0, 0.0, 2500.0))),
+        };
+
+        gun.Step(true, own, TargetA, targets, 0.2);
+        GunRound[] roundsBeforeSwitch = gun.RoundsInFlight.ToArray();
+        int roundsFiredBeforeSwitch = gun.RoundsFired;
+        int ammoBeforeSwitch = gun.AmmoRemaining;
+        double heatBeforeSwitch = gun.BarrelHeat;
+
+        gun.Step(true, own, TargetB, targets, 0.0);
+
+        Assert.Equal(TargetB, gun.SelectedTargetId);
+        Assert.Equal(roundsFiredBeforeSwitch, gun.RoundsFired);
+        Assert.Equal(ammoBeforeSwitch, gun.AmmoRemaining);
+        Assert.Equal(heatBeforeSwitch, gun.BarrelHeat);
+        Assert.Equal(roundsBeforeSwitch, gun.RoundsInFlight.ToArray());
+        Assert.NotEmpty(roundsBeforeSwitch);
+        Assert.All(roundsBeforeSwitch, round => Assert.Equal(TargetA, round.AimTargetId));
+    }
+
+    [Fact]
+    public void ImpactFractionIsRelativeToTheWholeFixedStepAcrossCadenceSegments() {
+        var profile = new GunProfile(
+            "gun.test.step-fraction.v1",
+            MuzzleVelocityMps: 1000.0,
+            RoundsPerSecond: 20.0,
+            MaximumFlightSeconds: 1.0,
+            EffectiveHitRadiusM: 0.25);
+        var gun = new GunKill(
+            ammo: 3,
+            hitsToKill: 1,
+            hitRadiusM: 0.25,
+            profile: profile);
+        var own = State(Vec3D.Zero);
+        const double targetRangeM = 70.0;
+        double timeOfFlight = (targetRangeM - GunKill.MuzzleOffsetM)
+            / profile.MuzzleVelocityMps;
+        var target = State(new Vec3D(
+            0.0,
+            -0.5 * GunKill.GravityMps2 * timeOfFlight * timeOfFlight,
+            targetRangeM));
+
+        gun.Step(true, own, target, 0.0);
+        gun.Step(true, own, target, 0.1);
+
+        GunImpact impact = Assert.Single(gun.ImpactsThisStep);
+        Assert.InRange(impact.StepFraction, 0.64, 0.68);
+    }
+
+    [Fact]
+    public void RoundFiredAtFirstTargetCanHitItAfterSecondTargetIsSelected() {
+        const long TargetA = 301;
+        const long TargetB = 302;
+        var gun = new GunKill(ammo: 1, hitsToKill: 1, hitRadiusM: 0.25);
+        var own = State(Vec3D.Zero);
+        var targets = new[] {
+            new GunTarget(TargetA, BallisticTarget(220.0)),
+            new GunTarget(TargetB, State(new Vec3D(120.0, 0.0, 220.0))),
+        };
+
+        gun.Step(true, own, TargetA, targets, 0.0);
+        Assert.Single(gun.RoundsInFlight);
+        Assert.Equal(TargetA, gun.RoundsInFlight[0].AimTargetId);
+
+        bool sawFirstTargetImpact = false;
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && gun.DamageFor(TargetA).TargetAlive; tick++) {
+            gun.Step(false, own, TargetB, targets, Dt);
+            sawFirstTargetImpact |= gun.ImpactsThisStep.Any(
+                impact => impact.TargetId == TargetA);
+        }
+
+        Assert.Equal(TargetB, gun.SelectedTargetId);
+        Assert.True(sawFirstTargetImpact);
+        Assert.Equal(FightOutcome.Splash, gun.DamageFor(TargetA).Outcome);
+        Assert.Equal(0, gun.DamageFor(TargetB).HitCount);
+        Assert.Equal(FightOutcome.Flying, gun.DamageFor(TargetB).Outcome);
+    }
+
+    [Fact]
+    public void AirborneRoundCanPhysicallyInterceptANonSelectedTarget() {
+        const long SelectedTarget = 401;
+        const long InterceptingTarget = 402;
+        var gun = new GunKill(ammo: 1, hitsToKill: 1, hitRadiusM: 0.25);
+        var own = State(Vec3D.Zero);
+        var targets = new[] {
+            new GunTarget(SelectedTarget, State(new Vec3D(150.0, 0.0, 300.0))),
+            new GunTarget(InterceptingTarget, BallisticTarget(160.0)),
+        };
+
+        gun.Step(true, own, SelectedTarget, targets, 0.0);
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && gun.DamageFor(InterceptingTarget).TargetAlive; tick++)
+            gun.Step(false, own, SelectedTarget, targets, Dt);
+
+        Assert.Equal(SelectedTarget, gun.SelectedTargetId);
+        Assert.Equal(0, gun.DamageFor(SelectedTarget).HitCount);
+        Assert.Equal(FightOutcome.Flying, gun.DamageFor(SelectedTarget).Outcome);
+        Assert.Equal(1, gun.DamageFor(InterceptingTarget).HitCount);
+        Assert.Equal(FightOutcome.Splash, gun.DamageFor(InterceptingTarget).Outcome);
+    }
+
+    [Fact]
+    public void NearestCollinearTargetReceivesOnlyHitIndependentOfTargetArrayOrder() {
+        const long NearTarget = 501;
+        const long FarTarget = 502;
+
+        (GunTargetDamage Near, GunTargetDamage Far, long ImpactTarget)
+            Run(bool reverseOrder) {
+            var gun = new GunKill(ammo: 1, hitsToKill: 1, hitRadiusM: 0.25);
+            var own = State(Vec3D.Zero);
+            var near = new GunTarget(NearTarget, BallisticTarget(140.0));
+            var far = new GunTarget(FarTarget, BallisticTarget(260.0));
+            GunTarget[] targets = reverseOrder ? [far, near] : [near, far];
+            long impactTarget = 0;
+
+            gun.Step(true, own, FarTarget, targets, 0.0);
+            for (int tick = 0; tick < AircraftSim.TickHz
+                && gun.TotalHitCount == 0; tick++) {
+                gun.Step(false, own, FarTarget, targets, Dt);
+                if (gun.ImpactsThisStep.Count != 0)
+                    impactTarget = gun.ImpactsThisStep[0].TargetId;
+            }
+
+            return (gun.DamageFor(NearTarget), gun.DamageFor(FarTarget), impactTarget);
+        }
+
+        var forwardOrder = Run(reverseOrder: false);
+        var reverseOrder = Run(reverseOrder: true);
+
+        Assert.Equal(NearTarget, forwardOrder.ImpactTarget);
+        Assert.Equal(NearTarget, reverseOrder.ImpactTarget);
+        Assert.Equal(1, forwardOrder.Near.HitCount);
+        Assert.Equal(1, reverseOrder.Near.HitCount);
+        Assert.Equal(0, forwardOrder.Far.HitCount);
+        Assert.Equal(0, reverseOrder.Far.HitCount);
+    }
+
+    [Fact]
+    public void LaterProcessedRoundCannotGhostThroughASplashedFrontTarget() {
+        const long FrontTarget = 551;
+        const long RearTarget = 552;
+        var gun = new GunKill(ammo: 2, hitsToKill: 1, hitRadiusM: 0.25);
+        var own = State(Vec3D.Zero);
+        var targets = new[] {
+            new GunTarget(FrontTarget, BallisticTarget(140.0)),
+            new GunTarget(RearTarget, BallisticTarget(260.0)),
+        };
+
+        // Fire one round at t=0 and a second at the cadence boundary. Advance both together far
+        // enough that reverse list iteration encounters the younger round first; once it splashes
+        // the front aircraft, the older round must still collide with that physical airframe.
+        gun.Step(true, own, RearTarget, targets, 1.0 / GunKill.RoundsPerSecond);
+        Assert.Equal(2, gun.RoundsInFlight.Count);
+        gun.Step(false, own, RearTarget, targets, 0.3);
+
+        Assert.Equal(FightOutcome.Splash, gun.DamageFor(FrontTarget).Outcome);
+        Assert.Equal(0, gun.DamageFor(RearTarget).HitCount);
+        Assert.Equal(FightOutcome.Flying, gun.DamageFor(RearTarget).Outcome);
+        Assert.Empty(gun.RoundsInFlight);
+    }
+
+    [Fact]
+    public void MultipleImpactsAreReportedInPhysicalTimeOrder() {
+        const long Target = 575;
+        var gun = new GunKill(ammo: 2, hitsToKill: 10, hitRadiusM: 0.25);
+        var own = State(Vec3D.Zero);
+        var targets = new[] { new GunTarget(Target, BallisticTarget(140.0)) };
+
+        gun.Step(true, own, Target, targets, 1.0 / GunKill.RoundsPerSecond);
+        gun.Step(false, own, Target, targets, 0.3);
+
+        Assert.Equal(2, gun.ImpactsThisStep.Count);
+        Assert.True(
+            gun.ImpactsThisStep[0].StepFraction
+                <= gun.ImpactsThisStep[1].StepFraction,
+            "impact events must follow contact time rather than reverse round-list traversal");
+    }
+
+    [Fact]
+    public void SplashIsScopedToHitTargetAndOtherTargetRemainsAlive() {
+        const long TargetA = 601;
+        const long TargetB = 602;
+        var gun = new GunKill(ammo: 1, hitsToKill: 1, hitRadiusM: 0.25);
+        var own = State(Vec3D.Zero);
+        var targets = new[] {
+            new GunTarget(TargetA, BallisticTarget(180.0)),
+            new GunTarget(TargetB, State(new Vec3D(80.0, 0.0, 180.0))),
+        };
+
+        gun.Step(true, own, TargetA, targets, 0.0);
+        for (int tick = 0; tick < AircraftSim.TickHz
+            && gun.DamageFor(TargetA).TargetAlive; tick++)
+            gun.Step(false, own, TargetA, targets, Dt);
+
+        Assert.Equal(FightOutcome.Splash, gun.DamageFor(TargetA).Outcome);
+        gun.Step(false, own, TargetB, targets, 0.0);
+
+        Assert.Equal(TargetB, gun.SelectedTargetId);
+        Assert.True(gun.TargetAlive);
+        Assert.Equal(FightOutcome.Flying, gun.Outcome);
+        Assert.Equal(1.0, gun.TargetHealth, 12);
+        Assert.Equal(0, gun.DamageFor(TargetB).HitCount);
+    }
+
     [Fact]
     public void LeadSolutionPutsRoundOnCrossingTarget() {
         var gun = new GunKill(ammo: 1, hitsToKill: 1, hitRadiusM: 1.0);

@@ -26,6 +26,7 @@ const HANDOVER_MACH_END = 2.8;
 const POWER_UP_PER_SECOND = 1.8;
 const POWER_DOWN_PER_SECOND = 2.6;
 const ACCENT_DECAY_PER_SECOND = 3.2;
+const Q_ACCENT_DECAY_PER_SECOND = 1.35;
 const MAX_CONTROL_STEP_SECONDS = 0.25;
 const KNOTS_TO_MPS = 0.514444;
 const SEA_LEVEL_DENSITY = 1.225;
@@ -109,6 +110,35 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
   const sampleGritGain = audioContext.createGain();
   sampleGritGain.gain.value = 0;
   sampleGritGain.connect(sampleBus);
+
+  // Cockpit equipment bed. A sealed fighter is never acoustically empty: ECS airflow and the
+  // 400 Hz electrical system remain after the exterior engine/rush drops away. Keep this outside
+  // the propulsion VCA so zoom-coast has a quiet cabin floor rather than digital silence.
+  const ecsSource = audioContext.createBufferSource();
+  ecsSource.buffer = pinkNoiseBuffer(audioContext, 0x45435331);
+  ecsSource.loop = true;
+  const ecsHighpass = audioContext.createBiquadFilter();
+  ecsHighpass.type = "highpass";
+  ecsHighpass.frequency.value = 180;
+  ecsHighpass.Q.value = 0.5;
+  const ecsBandpass = audioContext.createBiquadFilter();
+  ecsBandpass.type = "bandpass";
+  ecsBandpass.frequency.value = 720;
+  ecsBandpass.Q.value = 0.58;
+  const ecsGain = audioContext.createGain();
+  ecsGain.gain.value = 0;
+  ecsSource.connect(ecsHighpass).connect(ecsBandpass).connect(ecsGain).connect(output);
+
+  const inverterOsc = audioContext.createOscillator();
+  inverterOsc.type = "triangle";
+  inverterOsc.frequency.value = 400;
+  const inverterFilter = audioContext.createBiquadFilter();
+  inverterFilter.type = "bandpass";
+  inverterFilter.frequency.value = 400;
+  inverterFilter.Q.value = 7;
+  const inverterGain = audioContext.createGain();
+  inverterGain.gain.value = 0;
+  inverterOsc.connect(inverterFilter).connect(inverterGain).connect(output);
 
   // --- Irregular modulation field ---
   // Pre-baked slow random-walk envelopes beat LP'd white for audible "alive" CV.
@@ -383,6 +413,44 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
   rushGain.gain.value = 0;
   airframeNoise.connect(rushHighpass).connect(rushLowpass).connect(rushGain).connect(output);
 
+  // Dedicated canopy boundary-layer hiss. The broad pink rush says "airframe"; this narrower
+  // white band makes a dynamic-pressure change legible through an already loud cockpit bed.
+  const canopyFlowNoise = audioContext.createBufferSource();
+  canopyFlowNoise.buffer = whiteNoiseBuffer(audioContext, 0x0ca90f1);
+  canopyFlowNoise.loop = true;
+  const canopyFlowHighpass = audioContext.createBiquadFilter();
+  canopyFlowHighpass.type = "highpass";
+  canopyFlowHighpass.frequency.value = 1800;
+  canopyFlowHighpass.Q.value = 0.55;
+  const canopyFlowLowpass = audioContext.createBiquadFilter();
+  canopyFlowLowpass.type = "lowpass";
+  canopyFlowLowpass.frequency.value = 5200;
+  canopyFlowLowpass.Q.value = 0.5;
+  const canopyFlowGain = audioContext.createGain();
+  canopyFlowGain.gain.value = 0;
+  canopyFlowNoise
+    .connect(canopyFlowHighpass)
+    .connect(canopyFlowLowpass)
+    .connect(canopyFlowGain)
+    .connect(output);
+
+  // A restrained structure-borne compressor trace survives beneath fixed-pitch sample beds.
+  // Pitch follows core RPM while level follows delivered power, so the cue does not require
+  // pitching the entire broadband recording (which reads like a propeller).
+  const compressorTraceOsc = audioContext.createOscillator();
+  compressorTraceOsc.type = "triangle";
+  compressorTraceOsc.frequency.value = 260;
+  const compressorTraceFilter = audioContext.createBiquadFilter();
+  compressorTraceFilter.type = "bandpass";
+  compressorTraceFilter.frequency.value = 260;
+  compressorTraceFilter.Q.value = 4.2;
+  const compressorTraceGain = audioContext.createGain();
+  compressorTraceGain.gain.value = 0;
+  compressorTraceOsc
+    .connect(compressorTraceFilter)
+    .connect(compressorTraceGain)
+    .connect(output);
+
   modNoise.start();
   breathSource.start();
   pinkSource.start();
@@ -390,6 +458,10 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
   whiteGritHi.start();
   crackleSource.start();
   airframeNoise.start();
+  canopyFlowNoise.start();
+  compressorTraceOsc.start();
+  ecsSource.start();
+  inverterOsc.start();
 
   return {
     master,
@@ -404,8 +476,17 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
     sampleIdle: null,
     sampleMil: null,
     sampleGrit: null,
+    sampleIdleVariants: [],
+    sampleMilVariants: [],
+    sampleGritVariants: [],
     hasSampleBeds: false,
     sampleBedCharacter: null,
+    ecsHighpass,
+    ecsBandpass,
+    ecsGain,
+    inverterOsc,
+    inverterFilter,
+    inverterGain,
     shaftOsc,
     shaftFilter,
     shaftGain,
@@ -446,9 +527,17 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
     rushHighpass,
     rushLowpass,
     rushGain,
+    canopyFlowHighpass,
+    canopyFlowLowpass,
+    canopyFlowGain,
+    compressorTraceOsc,
+    compressorTraceFilter,
+    compressorTraceGain,
     spoolRpm: 0,
     powerSlew: 0,
     throttleAccent: 0,
+    qAccent: 0,
+    lastQ01: null,
     lastControlTime: audioContext.currentTime,
   };
 }
@@ -461,28 +550,41 @@ export async function loadJetSampleBeds(audioContext, {
 } = {}) {
   if (!audioContext?.decodeAudioData) return {};
   const prefix = character === "f22" ? "f22_" : "";
-  const entries = [
-    ["idle", `${prefix}idle_loop.wav`],
-    ["mil", `${prefix}mil_loop.wav`],
-    ["grit", `${prefix}grit_loop.wav`],
-  ];
+  const filesFor = (regime) => character === "f22"
+    ? [`${prefix}${regime}_loop.wav`, `${prefix}${regime}_alt_loop.wav`]
+    : character === "rapier"
+      ? [`${regime}_loop.wav`, `rapier_${regime}_cockpit_loop.wav`]
+      : [`${prefix}${regime}_loop.wav`];
+  const entries = {
+    idle: filesFor("idle"),
+    mil: filesFor("mil"),
+    grit: filesFor("grit"),
+  };
   const beds = {};
-  await Promise.all(entries.map(async ([key, file]) => {
-    try {
-      const url = new URL(file, baseUrl).href;
-      const response = await fetch(url);
-      if (!response.ok) return;
-      const raw = await response.arrayBuffer();
-      beds[key] = await audioContext.decodeAudioData(raw.slice(0));
-    } catch {
-      // Missing beds are expected in CI / fresh trees.
+  await Promise.all(Object.entries(entries).map(async ([key, files]) => {
+    const variants = [];
+    for (const file of files) {
+      try {
+        const url = new URL(file, baseUrl).href;
+        const response = await fetch(url);
+        if (!response.ok) continue;
+        const raw = await response.arrayBuffer();
+        variants.push(await audioContext.decodeAudioData(raw.slice(0)));
+      } catch {
+        // Missing alternates are expected for profiles that only have one authored bed.
+      }
+    }
+    if (variants.length > 0) {
+      beds[key] = variants[0];
+      beds[`${key}Variants`] = variants;
     }
   }));
   return beds;
 }
 
 /// Wire decoded beds onto an existing voice graph. Safe to call once; no-ops if already attached
-/// or if `mil` is missing (need at least the power bed).
+/// or if `mil` is missing (need at least the power bed). Use `replaceJetSampleBeds` when the
+/// selected aircraft changes without a page reload.
 /// `character` tags which aircraft the beds belong to so the mix path can refuse a mismatch.
 export function attachJetSampleBeds(voiceGraph, audioContext, beds, {
   character = "rapier",
@@ -490,25 +592,95 @@ export function attachJetSampleBeds(voiceGraph, audioContext, beds, {
   if (!voiceGraph || !audioContext || voiceGraph.hasSampleBeds) return false;
   if (!beds?.mil) return false;
 
-  const startBed = (buffer, gainNode) => {
+  const startBed = (buffer, gainNode, gainValue) => {
+    const variantGain = audioContext.createGain();
+    variantGain.gain.value = gainValue;
+    variantGain.connect(gainNode);
     const source = audioContext.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
     source.playbackRate.value = 1;
-    source.connect(gainNode);
+    source.connect(variantGain);
     source.start();
-    return source;
+    return { source, gain: variantGain };
   };
 
-  voiceGraph.sampleMil = startBed(beds.mil, voiceGraph.sampleMilGain);
-  if (beds.idle) {
-    voiceGraph.sampleIdle = startBed(beds.idle, voiceGraph.sampleIdleGain);
-  }
-  if (beds.grit) {
-    voiceGraph.sampleGrit = startBed(beds.grit, voiceGraph.sampleGritGain);
-  }
+  const attachLayer = (key, gainNode) => {
+    const variants = Array.isArray(beds[`${key}Variants`])
+      && beds[`${key}Variants`].length > 0
+      ? beds[`${key}Variants`]
+      : beds[key] ? [beds[key]] : [];
+    return variants.map((buffer, index) => startBed(buffer, gainNode, index === 0 ? 1 : 0));
+  };
+  voiceGraph.sampleIdleVariants = attachLayer("idle", voiceGraph.sampleIdleGain);
+  voiceGraph.sampleMilVariants = attachLayer("mil", voiceGraph.sampleMilGain);
+  voiceGraph.sampleGritVariants = attachLayer("grit", voiceGraph.sampleGritGain);
+  voiceGraph.sampleIdle = voiceGraph.sampleIdleVariants[0]?.source ?? null;
+  voiceGraph.sampleMil = voiceGraph.sampleMilVariants[0]?.source ?? null;
+  voiceGraph.sampleGrit = voiceGraph.sampleGritVariants[0]?.source ?? null;
   voiceGraph.hasSampleBeds = true;
   voiceGraph.sampleBedCharacter = character;
+  return true;
+}
+
+/// Crossfade a voice graph to another aircraft's decoded beds. Old sources are retired only after
+/// the new graph is live, avoiding both a permanently procedural second aircraft and an abrupt
+/// page-lifetime ownership handoff.
+export function replaceJetSampleBeds(voiceGraph, audioContext, beds, {
+  character = "rapier",
+} = {}) {
+  if (!voiceGraph || !audioContext || !beds?.mil) return false;
+  if (!voiceGraph.hasSampleBeds) {
+    return attachJetSampleBeds(voiceGraph, audioContext, beds, { character });
+  }
+  if (voiceGraph.sampleBedCharacter === character) return false;
+
+  const now = Number.isFinite(audioContext.currentTime) ? audioContext.currentTime : 0;
+  const retiring = [
+    ...(voiceGraph.sampleIdleVariants ?? []),
+    ...(voiceGraph.sampleMilVariants ?? []),
+    ...(voiceGraph.sampleGritVariants ?? []),
+  ];
+  for (const variant of retiring) {
+    variant?.gain?.gain?.setTargetAtTime?.(0, now, 0.05);
+  }
+
+  voiceGraph.hasSampleBeds = false;
+  voiceGraph.sampleBedCharacter = null;
+  voiceGraph.sampleIdle = null;
+  voiceGraph.sampleMil = null;
+  voiceGraph.sampleGrit = null;
+  voiceGraph.sampleIdleVariants = [];
+  voiceGraph.sampleMilVariants = [];
+  voiceGraph.sampleGritVariants = [];
+  const attached = attachJetSampleBeds(voiceGraph, audioContext, beds, { character });
+  if (!attached) return false;
+
+  for (const variants of [
+    voiceGraph.sampleIdleVariants,
+    voiceGraph.sampleMilVariants,
+    voiceGraph.sampleGritVariants,
+  ]) {
+    for (let index = 0; index < variants.length; index++) {
+      const parameter = variants[index]?.gain?.gain;
+      if (!parameter) continue;
+      parameter.setValueAtTime?.(0, now);
+      parameter.setTargetAtTime?.(index === 0 ? 1 : 0, now, 0.06);
+    }
+  }
+  for (const variant of retiring) {
+    try {
+      if (variant?.source) {
+        variant.source.onended = () => {
+          variant.source.disconnect?.();
+          variant.gain?.disconnect?.();
+        };
+      }
+      variant?.source?.stop?.(now + 0.35);
+    } catch {
+      // A source may already have ended during teardown; the replacement is still valid.
+    }
+  }
   return true;
 }
 
@@ -603,8 +775,21 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
 } = {}) {
   if (!voiceGraph || !audioContext) return;
 
-  const throttle = clamp01((finiteNumber(state?.applied_throttle) ?? 0) / 1.55);
-  const targetRpm = clamp01((finiteNumber(state?.engine_rpm_pct) ?? 0) / 100);
+  const character = resolvePropulsionCharacter(state);
+  const isRapier = character === "rapier";
+  const isF22 = character === "f22";
+  const externalPerspective = isExternalAudioPerspective(state);
+  const sealedF22 = isF22 && !externalPerspective;
+  const defaultLeverStop = isRapier ? 1.55 : 1.35;
+  const leverStop = Math.max(1,
+    finiteNumber(state?.max_thrust_fraction) ?? defaultLeverStop);
+  const appliedLever = Math.max(0, finiteNumber(state?.applied_throttle) ?? 0);
+  const throttle = clamp01(appliedLever / leverStop);
+  const deliveredLever = Math.max(0,
+    finiteNumber(state?.engine_spool_fraction) ?? appliedLever);
+  const deliveredPower = clamp01(deliveredLever / leverStop);
+  const targetRpm = clamp01(
+    (finiteNumber(state?.engine_rpm_pct) ?? (deliveredPower * 100)) / 100);
   const mach = Math.max(0, finiteNumber(state?.mach) ?? 0);
   const now = audioContext.currentTime;
   const elapsed = Math.min(MAX_CONTROL_STEP_SECONDS,
@@ -614,9 +799,6 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     ? SPOOL_UP_PER_SECOND : SPOOL_DOWN_PER_SECOND;
   voiceGraph.spoolRpm = moveTowards(voiceGraph.spoolRpm, targetRpm, spoolRate * elapsed);
 
-  const character = resolvePropulsionCharacter(state);
-  const isRapier = character === "rapier";
-  const isF22 = character === "f22";
   // Rapier: M1.9–M2.8 turbo→ram. F-22 / generic jet: stay turbine (no duct light-off).
   const handover = isRapier
     ? smoothstep(clamp01(
@@ -625,10 +807,25 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   const turbineShare = Math.cos(handover * Math.PI / 2);
   const ramShare = Math.sin(handover * Math.PI / 2);
   const q01 = dynamicPressureFraction(state);
+  if (voiceGraph.qAccent == null) voiceGraph.qAccent = 0;
+  if (voiceGraph.lastQ01 == null) voiceGraph.lastQ01 = q01;
+  const qRisePerSecond = elapsed > 1e-4
+    ? Math.max(0, q01 - voiceGraph.lastQ01) / elapsed
+    : 0;
+  if (snap) {
+    voiceGraph.qAccent = 0;
+  } else {
+    voiceGraph.qAccent = moveTowards(
+      Math.max(voiceGraph.qAccent, clamp01(qRisePerSecond * 1.25)),
+      0,
+      Q_ACCENT_DECAY_PER_SECOND * elapsed,
+    );
+  }
+  voiceGraph.lastQ01 = q01;
   const rpm = voiceGraph.spoolRpm;
   const density = atmosphereDensity(state);
   const densityScale = 0.14 + 0.86 * Math.pow(clamp01(density / SEA_LEVEL_DENSITY), 0.55);
-  const thrustFrac = thrustFraction(state, throttle, rpm);
+  const thrustFrac = thrustFraction(state, deliveredPower, rpm);
   const rcsAuthority = clamp01(finiteNumber(state?.rapier_rcs_authority) ?? 0);
   const coastGate = densityScale < 0.28 && thrustFrac < 0.14 && (q01 < 0.12 || rcsAuthority > 0.45)
     ? 0.035 + 0.04 * thrustFrac
@@ -637,7 +834,10 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   // Thin air still carries ram + rush; turbine beds collapse harder than duct voice.
   const thinAir = 1 - densityScale;
   const rushPresence = Math.max(coastGate, 0.12 + 0.88 * densityScale);
-  const powerTarget = Math.pow(Math.max(1e-6, throttle * (0.25 + rpm * 0.75)), 0.9);
+  const powerTarget = Math.pow(
+    Math.max(1e-6, deliveredPower * (0.25 + rpm * 0.75)),
+    0.9,
+  );
   if (voiceGraph.powerSlew == null) voiceGraph.powerSlew = 0;
   if (voiceGraph.throttleAccent == null) voiceGraph.throttleAccent = 0;
   const prevPower = voiceGraph.powerSlew;
@@ -667,14 +867,15 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   // Beds only play when they match the resolved character (Rapier F-4 vs F-22 cockpit).
   const sampled = voiceGraph.hasSampleBeds === true
     && voiceGraph.sampleBedCharacter === character
-    && (isRapier || isF22);
+    && (isRapier || isF22)
+    && !externalPerspective;
   const synthDuck = sampled ? (isF22 ? 0.08 : 0.05) : 1;
   const samplePresence = sampled ? 1 : 0;
   // Twin-fan exterior tip whine is wrong for sealed F-22 cockpit — duck hard.
   // Under Rapier beds, tonals mute completely.
   const tonalMute = sampled ? 0 : 1;
-  const fanBoost = isF22 ? 0.28 : 1;
-  const shaftBoost = isF22 ? 0.45 : 1;
+  const fanBoost = sealedF22 ? 0.28 : isF22 ? 1.25 : 1;
+  const shaftBoost = sealedF22 ? 0.45 : isF22 ? 0.72 : 1;
   // Under beds, ram must still read — it's the handover identity, not a synth leftover.
   const ramPresence = sampled && isRapier ? 1.15 : 1;
 
@@ -693,6 +894,29 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     // Lock bed pitch — any RPM slewing makes broadband roar read as a prop.
     for (const bed of [voiceGraph.sampleIdle, voiceGraph.sampleMil, voiceGraph.sampleGrit]) {
       if (bed?.playbackRate) nowRamp(bed.playbackRate, 1, 0.4);
+    }
+    // Two long, independently synthesized cockpit beds drift in an equal-power crossfade.
+    // Timbre drifts on its own clock. Power, q, and G must remain independent audible axes rather
+    // than also jumping the source palette underneath the player.
+    const paletteMotion = 0.5 + 0.5 * Math.sin(now * 0.105 + (isF22 ? 0.35 : 1.1));
+    // F-22 alternates are both sealed-cockpit beds and can trade fully. Rapier's alternate is
+    // specifically an interior mid-body layer under the brighter CC0 F-4-derived identity.
+    const paletteBlend = clamp01(isF22 ? paletteMotion : 0.1 + paletteMotion * 0.24);
+    for (const variants of [
+      voiceGraph.sampleIdleVariants,
+      voiceGraph.sampleMilVariants,
+      voiceGraph.sampleGritVariants,
+    ]) {
+      if (!Array.isArray(variants) || variants.length === 0) continue;
+      if (variants.length === 1) {
+        nowRamp(variants[0].gain.gain, 1, 0.8);
+        continue;
+      }
+      nowRamp(variants[0].gain.gain, Math.cos(paletteBlend * Math.PI / 2), 1.4);
+      nowRamp(variants[1].gain.gain, Math.sin(paletteBlend * Math.PI / 2), 1.4);
+      for (let index = 2; index < variants.length; index++) {
+        nowRamp(variants[index].gain.gain, 0, 0.3);
+      }
     }
     // Turbine beds fade with handover; thin air ducks them further.
     // F-22 has no ram share — full bed presence across Mach.
@@ -723,6 +947,31 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     nowRamp(voiceGraph.sampleMilGain.gain, 0, 0.05);
     nowRamp(voiceGraph.sampleGritGain.gain, 0, 0.05);
   }
+
+  // ECS / inverter stay deliberately subtle. They are most legible at idle and zoom-coast,
+  // then psychoacoustically disappear beneath the engine without being hard-switched.
+  const equipmentLive = targetRpm > 0.08 || state?.engine_running === true;
+  const equipment = equipmentLive ? 1 : 0.18;
+  const cabinSeal = sealedF22 ? 1.35 : isF22 ? 0.18 : isRapier ? 0.92 : 1;
+  nowRamp(voiceGraph.ecsHighpass.frequency, 150 + power * 120 + q01 * 80, 0.35);
+  nowRamp(voiceGraph.ecsBandpass.frequency, 610 + power * 380 + q01 * 260, 0.35);
+  nowRamp(voiceGraph.ecsGain.gain,
+    (0.009 + 0.013 * rpm + 0.006 * (1 - power)) * equipment * cabinSeal, 0.45);
+  nowRamp(voiceGraph.inverterOsc.frequency, 400, 0.8);
+  nowRamp(voiceGraph.inverterFilter.frequency, 400, 0.8);
+  nowRamp(voiceGraph.inverterGain.gain,
+    (0.0012 + 0.001 * (1 - power)) * equipment * cabinSeal, 0.6);
+
+  const compressorTraceHz = 205 + rpm * 310 + power * 55;
+  nowRamp(voiceGraph.compressorTraceOsc.frequency, compressorTraceHz, 0.16);
+  nowRamp(voiceGraph.compressorTraceFilter.frequency, compressorTraceHz, 0.16);
+  nowRamp(voiceGraph.compressorTraceFilter.Q, sealedF22 ? 4.4 : 3.1, 0.24);
+  nowRamp(voiceGraph.compressorTraceGain.gain,
+    isF22
+      ? (0.0025 + rpm * 0.0075 + power * 0.006)
+        * propulsionPresence * (sealedF22 ? (sampled ? 1.3 : 0.8) : 1.6)
+      : 0,
+    0.16);
 
   nowRamp(voiceGraph.shaftOsc.frequency, shaftHz, 0.16);
   nowRamp(voiceGraph.shaftFilter.frequency, 280 + rpm * 220 + power * 160, 0.18);
@@ -802,7 +1051,9 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   // Cabin darkens hard for synth path; sample path bypasses this (beds are pre-shaped).
   // F-22 sealed cockpit: much darker ceiling than open AB exterior beds.
   nowRamp(voiceGraph.cabinLp.frequency,
-    (isF22 ? 650 : 1400) + power * (isF22 ? 550 : 1200) + q01 * (isF22 ? 180 : 350)
+    (sealedF22 ? 650 : isF22 ? 4200 : 1400)
+      + power * (sealedF22 ? 550 : isF22 ? 2600 : 1200)
+      + q01 * (sealedF22 ? 180 : isF22 ? 1200 : 350)
       + handover * 800, 0.22);
 
   // Ram character: hollow duct body + mid howl + HF spit — grows with handover.
@@ -824,11 +1075,24 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   nowRamp(voiceGraph.rushHighpass.frequency, 110 + q01 * 320 + handover * 180, 0.18);
   nowRamp(voiceGraph.rushLowpass.frequency, 900 + q01 * 5600 + handover * 1800, 0.18);
   nowRamp(voiceGraph.rushGain.gain,
-    0.14 * Math.pow(q01, 0.72) * rushPresence * (1 + ramShare * 0.35), 0.18);
+    (externalPerspective ? 0.24 : 0.14) * Math.pow(q01, 0.72)
+      * rushPresence * (1 + ramShare * 0.35), 0.18);
+
+  nowRamp(voiceGraph.canopyFlowHighpass.frequency,
+    (sealedF22 ? 1850 : 1450) + q01 * 850, 0.16);
+  nowRamp(voiceGraph.canopyFlowLowpass.frequency,
+    3900 + q01 * (externalPerspective ? 6100 : 3900), 0.16);
+  nowRamp(voiceGraph.canopyFlowGain.gain,
+    ((sealedF22 ? 0.052 : externalPerspective ? 0.105 : 0.04)
+      * Math.pow(q01, 1.08)
+      + voiceGraph.qAccent * (sealedF22 ? 0.026 : 0.04))
+      * rushPresence,
+    0.12);
 
   if (voiceGraph.master) {
-    const bedMaster = isF22 ? 0.72 : 0.58;
-    nowRamp(voiceGraph.master.gain, muted ? 0 : (sampled ? bedMaster : (isF22 ? 0.52 : 0.42)),
+    const bedMaster = sealedF22 ? 0.72 : 0.58;
+    const synthMaster = externalPerspective && isF22 ? 0.48 : isF22 ? 0.52 : 0.42;
+    nowRamp(voiceGraph.master.gain, muted ? 0 : (sampled ? bedMaster : synthMaster),
       muted ? 0.02 : 0.18);
   }
 }
@@ -872,6 +1136,13 @@ function dynamicPressureFraction(state) {
   const density = atmosphereDensity(state);
   const dynamicPressurePa = 0.5 * Math.max(0, density) * Math.max(0, speedMps) ** 2;
   return smoothstep(clamp01((dynamicPressurePa - 750) / (45_000 - 750)));
+}
+
+export function isExternalAudioPerspective(state) {
+  const explicit = String(state?.audio_perspective ?? "").trim().toLowerCase();
+  if (["external", "exterior", "flyby", "chase"].includes(explicit)) return true;
+  if (["cockpit", "interior"].includes(explicit)) return false;
+  return state?.replay_external === true;
 }
 
 function isaDensity(altitudeM) {

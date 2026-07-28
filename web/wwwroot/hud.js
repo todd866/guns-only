@@ -167,8 +167,11 @@ function isApproachMode(state) {
   return mode === "APPROACH" || mode === "WAVE-OFF";
 }
 
-function banditIsAlive(state) {
-  return state.bandit_alive !== false && state.fight !== "Splash";
+function selectedOpponentIsAlive(state) {
+  const selectedAlive = typeof state.opponent_alive === "boolean"
+    ? state.opponent_alive
+    : state.bandit_alive !== false;
+  return selectedAlive && state.fight !== "Splash";
 }
 
 function hasGunSolution(state) {
@@ -179,7 +182,7 @@ function isFightHudActive(state) {
   // Circuits is pattern school — never paint bandit/gun fight chrome, even though a parked
   // placeholder still occupies the bandit slot far off-station for kernel bookkeeping.
   if (state?.rapier_pattern_only === true) return false;
-  if (!banditIsAlive(state)) return false;
+  if (!selectedOpponentIsAlive(state)) return false;
   return !recoveryPlatformAvailable(state)
     || hudMode(state) === "FREE" || hudMode(state) === "WAVE-OFF";
 }

@@ -9,10 +9,11 @@ node tools/perf/flight_frame_harness.mjs
 
 The harness serves `web/bin/Release/net8.0/publish/wwwroot`; `web/wwwroot` is not a runnable
 Blazor WASM publish. It opens a **headed** Chromium window, foregrounds it, starts fixed beat 7
-(seed 7), holds a 60-second control leg near 9,000 ft AGL, then descends closed-loop and holds a
-60-second high-speed terrain leg near 2,000 ft AGL. It fails if the page becomes hidden or loses
-focus, if either leg captures fewer than 600 animation-frame deltas, if the aircraft leaves the
-profile, or if the low leg does not stream new terrain ranges.
+(seed 7), settles for 15 seconds and then measures a 60-second control leg near 9,000 ft AGL,
+then descends closed-loop, settles for another 15 seconds, and measures a 60-second high-speed
+terrain leg near 2,600 ft AGL. It fails if the page becomes hidden or loses focus, if either
+measured window captures fewer than 600 animation-frame deltas, if the aircraft leaves the profile,
+or if the low leg does not stream new terrain ranges.
 
 Every run prints `UNMASKED_RENDERER_WEBGL`. The harness first tries a real GPU (ANGLE Metal on
 macOS) without `--disable-gpu`. It uses SwiftShader only if the real-GPU launch fails. The first
@@ -53,15 +54,17 @@ Defaults:
 
 - MAX: `100 ms`
 - frames over 22 ms: `1.0%`
-- measured duration: `60,000 ms` per leg (the low leg cannot be shortened below 60 seconds)
-- minimum captured frames: `600` per leg
+- warmup: `15,000 ms` before each leg (discarded)
+- measured duration: `60,000 ms` per leg after warmup (cannot be shortened)
+- wall-clock capture: at least `75,000 ms` per leg with the defaults
+- minimum measured frames: `600` per leg
 
 CLI flags and their environment equivalents:
 
 | CLI | Environment |
 | --- | --- |
 | `--wwwroot PATH` | `GUNS_FLIGHT_WWWROOT` |
-| `--leg-duration-ms N` | `GUNS_FLIGHT_LEG_DURATION_MS` |
+| `--leg-duration-ms N` (measured window after warmup) | `GUNS_FLIGHT_LEG_DURATION_MS` |
 | `--max-frame-ms N` | `GUNS_FLIGHT_MAX_FRAME_MS` |
 | `--max-long-frame-pct N` | `GUNS_FLIGHT_MAX_LONG_FRAME_PCT` |
 | `--min-frames N` | `GUNS_FLIGHT_MIN_FRAMES` |

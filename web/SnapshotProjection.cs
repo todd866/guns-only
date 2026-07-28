@@ -30,7 +30,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.16.0";
+    const string SnapshotSchemaVersion = "1.17.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -135,6 +135,7 @@ internal static class SnapshotProjection {
         bool catapulting = _catapult.IsActive;
         AircraftState s = catapulting ? _catapult.State : _player.State;
         AircraftState b = _bandit.State;
+        AircraftState gunTarget = Session.SelectedOpponentState;
         bool arrested = _arrestment.IsActive && !catapulting;
         Vec3D simulationPosition = arrested ? _arrestment.Position : s.Position;
         Vec3D playerPosition = simulationPosition;
@@ -543,9 +544,10 @@ internal static class SnapshotProjection {
             + $"\"aoa_deg\":{_player.AngleOfAttackRad * 57.2958:F2},\"beta_deg\":{_player.SideslipRad * 57.2958:F2},\"gamma_deg\":{displayGammaRad * 57.2958:F2},"
             + $"\"heading_deg\":{((displayHeadingRad * 57.2958) % 360 + 360) % 360:F2},"
             + $"\"roll_rate_dps\":{s.BodyRates.P * 57.2958:F2},\"pitch_rate_dps\":{s.BodyRates.Q * 57.2958:F2},\"yaw_rate_dps\":{s.BodyRates.R * 57.2958:F2},"
-            + $"\"angle_off_deg\":{Geometry.AngleOff(s, b) * 57.2958:F2},"
-            + $"\"range_m\":{Geometry.Range(s, b):F1},\"closure_kts\":{_closureKts:F1},"
-            + $"\"gun_window\":{(!Session.WeaponsInhibited && CameraSolver.GunWindow(s, b) ? "true" : "false")},"
+            + $"\"angle_off_deg\":{Geometry.AngleOff(s, gunTarget) * 57.2958:F2},"
+            + $"\"range_m\":{Geometry.Range(s, gunTarget):F1},\"closure_kts\":{_closureKts:F1},"
+            + $"\"selected_player_gun_target_slot\":{Session.SelectedPlayerGunTargetSlot},"
+            + $"\"gun_window\":{(!Session.WeaponsInhibited && CameraSolver.GunWindow(s, gunTarget) ? "true" : "false")},"
             + $"\"gun_solution_raw\":{(_gunKill.InstantaneousGunSolution ? "true" : "false")},"
             + $"\"gun_solution\":{(!Session.WeaponsInhibited && _gunKill.GunSolution ? "true" : "false")},"
             + $"\"lead_valid\":{(!Session.WeaponsInhibited && _gunKill.HasLeadSolution ? "true" : "false")},"
@@ -559,21 +561,22 @@ internal static class SnapshotProjection {
             + GunTrajectoryJson(playerPosition, groundVelocity, pf, pl, s.BodyRates,
                 _gunKill.Profile)
             + $"\"player_gun_profile_id\":\"{_gunKill.Profile.Id}\","
-            + $"\"rounds_fired\":{_gunKill.RoundsFired},\"hits\":{_gunKill.HitCount},"
+            + $"\"rounds_fired\":{_gunKill.RoundsFired},\"hits\":{_gunKill.TotalHitCount},"
+            + $"\"selected_target_hits\":{_gunKill.HitCount},"
             + $"\"hit\":{(_gunKill.HitThisStep ? "true" : "false")},"
             + $"\"gun_firing\":{(Session.TriggerDown && Session.PlayerWeaponsAuthorized && _beat.CombatRules.PlayerGunEnabled && !_gunKill.BarrelOverheated && _gunKill.BanditAlive ? "true" : "false")},"
             + TracerJson("tracers", _gunKill.RoundsInFlight)
             + $"\"kill_progress\":{_gunKill.KillProgress:F3},"
             + $"\"opponent_health\":{_gunKill.TargetHealth:F3},\"opponent_alive\":{(_gunKill.TargetAlive ? "true" : "false")},"
-            + $"\"bandit_health\":{_gunKill.BanditHealth:F3},"
-            + $"\"fight\":\"{_gunKill.Outcome}\",\"bandit_alive\":{(_gunKill.BanditAlive ? "true" : "false")},"
-            + $"\"player_health\":{_opponentGun.TargetHealth:F3},\"player_alive\":{(_opponentGun.TargetAlive ? "true" : "false")},"
+            + $"\"bandit_health\":{Session.PrimaryOpponentHealth:F3},"
+            + $"\"fight\":\"{_gunKill.Outcome}\",\"bandit_alive\":{(Session.PrimaryOpponentAlive ? "true" : "false")},"
+            + $"\"player_health\":{Session.PlayerHealth:F3},\"player_alive\":{(Session.PlayerAlive ? "true" : "false")},"
             + $"\"opponent_ammo\":{_opponentGun.AmmoRemaining},"
             + $"\"opponent_gun_profile_id\":\"{_opponentGun.Profile.Id}\","
-            + $"\"opponent_rounds_fired\":{_opponentGun.RoundsFired},\"opponent_hits\":{_opponentGun.HitCount},"
+            + $"\"opponent_rounds_fired\":{_opponentGun.RoundsFired},\"opponent_hits\":{Session.PlayerHitsTaken},"
             + $"\"opponent_trigger_down\":{(Session.OpponentTriggerDown ? "true" : "false")},"
-            + $"\"opponent_gun_firing\":{(Session.OpponentTriggerDown && _opponentGun.AmmoRemaining > 0 && _opponentGun.TargetAlive ? "true" : "false")},"
-            + TracerJson("opponent_tracers", _opponentGun.RoundsInFlight)
+            + $"\"opponent_gun_firing\":{(Session.OpponentTriggerDown && _opponentGun.AmmoRemaining > 0 && Session.PlayerAlive ? "true" : "false")},"
+            + TracerJson("opponent_tracers", Session.FormationOpponentRoundsInFlight)
             + CombatEventsJson()
             + $"\"kill_count\":{Session.KillCount},\"engagement_number\":{Session.EngagementNumber},"
             + $"\"continuous_combat\":{(Session.ContinuousCombat ? "true" : "false")},"
@@ -1143,7 +1146,7 @@ internal static class SnapshotProjection {
         double burnedLb = Math.Max(0.0, initialFuelLb - Session.PlayerFuel.FuelLb);
         bool playerLost = Session.Outcome == SortieOutcome.Defeat
             || Session.PlayerTerminalState != AircraftTerminalState.Flying;
-        bool playerAlive = Session.OpponentGun.TargetAlive && !playerLost;
+        bool playerAlive = Session.PlayerAlive && !playerLost;
         bool banditDestroyed = !Session.PlayerGun.BanditAlive;
         bool cleanRecovery = Session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped
             || Session.Recovery == Carrier.Recovery.Trap;

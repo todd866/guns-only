@@ -38,8 +38,11 @@ bin/deploy-web --prod
 ```
 
 The command publishes to an isolated directory, rejects missing/incomplete Blazor assets and leaked
-test files, verifies the deployment URL, and only then promotes a production deployment. It refuses
-a dirty worktree unless `GUNS_ALLOW_DIRTY_DEPLOY=1` is set deliberately.
+test files, verifies the deployment URL, and only then promotes a production deployment. Production
+always requires a clean commit and runs the complete repository gate, including browser smoke,
+before upload. A dirty tree may be used only for a preview by setting
+`GUNS_ALLOW_DIRTY_DEPLOY=1` deliberately. Clean CLI deployments attach the current Git revision;
+production promotion also verifies that `/api/build-info` reports that exact commit.
 
 ## Layout
 

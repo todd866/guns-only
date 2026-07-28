@@ -1,0 +1,741 @@
+{
+  "schema_version": "guns-only.jet-audio-catalog.v1",
+  "updated_at": "2026-07-28",
+  "local_vault": "analysis/jet-audio-library",
+  "sources": [
+    {
+      "id": "youtube.NWxtuDEyK9g",
+      "title": "Exclusive cockpit view of F-22 Raptor Demo's First Ever Flare Show",
+      "provider": "youtube",
+      "provider_id": "NWxtuDEyK9g",
+      "url": "https://www.youtube.com/watch?v=NWxtuDEyK9g",
+      "distribution": {
+        "tier": "reference_local",
+        "license_expression": "NOASSERTION",
+        "source_claim": "standard YouTube upload"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "engine-power", "dynamic-pressure", "positive-g", "demo"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes",
+      "notes": "Primary user-supplied acoustic reference. Existing local synchronized video and WAV live under analysis/audio-refs."
+    },
+    {
+      "id": "dvids.681055",
+      "title": "F-22 Raptor: Inside the Cockpit",
+      "provider": "dvids",
+      "provider_id": "681055",
+      "url": "https://www.dvidshub.net/video/681055/f-22-raptor-inside-cockpit",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "engine-power", "dynamic-pressure", "positive-g"],
+      "priority": "high",
+      "annotation_status": "pending_screening",
+      "notes": "Edited production; screen for music, narration, and cuts before measuring."
+    },
+    {
+      "id": "dvids.759958",
+      "title": "F-22 Cockpit Max Vertical Climb",
+      "provider": "dvids",
+      "provider_id": "759958",
+      "url": "https://www.dvidshub.net/video/759958/f-22-cockpit-max-vertical-climb",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "takeoff", "spool-up", "afterburner", "acceleration", "positive-g"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes",
+      "notes": "High-value short transition recording: takeoff, vertical acceleration, and manoeuvre onset."
+    },
+    {
+      "id": "dvids.845172",
+      "title": "F-22 Raptor Demo Team Cockpit B-Roll",
+      "provider": "dvids",
+      "provider_id": "845172",
+      "url": "https://www.dvidshub.net/video/845172/f-22-raptor-demo-team-cockpit-b-roll",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "rejected", "silence"],
+      "priority": "rejected",
+      "annotation_status": "rejected",
+      "notes": "Downloaded audio measured about -91 dBFS and was rejected as effectively silent."
+    },
+    {
+      "id": "dvids.478567",
+      "title": "F-22 Take Offs with Full Afterburner",
+      "provider": "dvids",
+      "provider_id": "478567",
+      "url": "https://www.dvidshub.net/video/478567/f-22-take-offs-with-full-afterburner",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "takeoff", "afterburner", "flyby"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "dvids.567085",
+      "title": "F-22, T-38, F-15 Takeoff, Taxi and Landing",
+      "provider": "dvids",
+      "provider_id": "567085",
+      "url": "https://www.dvidshub.net/video/567085/f-22-t-38-f-15-takeoff-taxi-and-landing",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22", "F-15", "T-38"],
+        "propulsion": "turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "taxi", "takeoff", "landing", "state-transition"],
+      "priority": "high",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "dvids.751007",
+      "title": "Launch Out: F-22 Raptor",
+      "provider": "dvids",
+      "provider_id": "751007",
+      "url": "https://www.dvidshub.net/video/751007/launch-out-f-22-raptor",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "official USAF/DVIDS work"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["ground", "start", "idle", "taxi", "mechanisms"],
+      "priority": "high",
+      "annotation_status": "pending_screening"
+    },
+    {
+      "id": "dvids.669814",
+      "title": "158th FW Aerial F-16 Footage",
+      "provider": "dvids",
+      "provider_id": "669814",
+      "url": "https://www.dvidshub.net/video/669814/158th-fw-aerial-f-16-footage",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-16"],
+        "propulsion": "single_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "engine-power", "dynamic-pressure", "manoeuvre"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes",
+      "notes": "Existing local extracted WAV and aggregate profile; synchronized source video should be retained."
+    },
+    {
+      "id": "dvids.890361",
+      "title": "F-16 Viper Demonstration Team Aerial Cockpit Footage",
+      "provider": "dvids",
+      "provider_id": "890361",
+      "url": "https://www.dvidshub.net/video/890361/f-16-viper-demonstration-team-aerial-cockpit-footage",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-16"],
+        "propulsion": "single_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "engine-power", "dynamic-pressure", "positive-g", "demo"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "dvids.818343",
+      "title": "Inside Cockpit View of F-16 Landing at BTV",
+      "provider": "dvids",
+      "provider_id": "818343",
+      "url": "https://www.dvidshub.net/video/818343/inside-cockpit-view-f-16-landing-btv",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-16"],
+        "propulsion": "single_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "landing", "gear", "drag", "touchdown", "spool-down"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "dvids.279714",
+      "title": "124th ASOS JTACs take familiarization flight in F-16",
+      "provider": "dvids",
+      "provider_id": "279714",
+      "url": "https://www.dvidshub.net/video/279714/124th-asos-jtacs-take-familiarization-flight-f-16",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-16"],
+        "propulsion": "single_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "m61", "gun", "strafe", "manoeuvre"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes",
+      "notes": "Description includes airborne strafing runs; screen for onboard gun and impact timing."
+    },
+    {
+      "id": "dvids.743229",
+      "title": "F-15 GoPro B-Roll",
+      "provider": "dvids",
+      "provider_id": "743229",
+      "url": "https://www.dvidshub.net/video/743229/f-15-gopro-b-roll",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-15"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "takeoff", "landing", "engine-power", "dynamic-pressure"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "dvids.533619",
+      "title": "T-38 Cockpit and Aerial Footage",
+      "provider": "dvids",
+      "provider_id": "533619",
+      "url": "https://www.dvidshub.net/video/533619/t-38-cockpit-and-aerial-footage",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["T-38"],
+        "propulsion": "twin_turbojet",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "wind", "airframe", "dynamic-pressure"],
+      "priority": "medium",
+      "annotation_status": "pending_screening"
+    },
+    {
+      "id": "dvids.782272",
+      "title": "Inside the F-35 Cockpit at the 2020 Ocean City Air Show",
+      "provider": "dvids",
+      "provider_id": "782272",
+      "url": "https://www.dvidshub.net/video/782272/inside-f-35-cockpit-2020-ocean-city-air-show",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-35"],
+        "propulsion": "single_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "positive-g", "dynamic-pressure", "demo"],
+      "priority": "high",
+      "annotation_status": "pending_screening"
+    },
+    {
+      "id": "dvids.1003538",
+      "title": "B-Roll and Cockpit Footage of F-35 and F-16s at Luke AFB",
+      "provider": "dvids",
+      "provider_id": "1003538",
+      "url": "https://www.dvidshub.net/video/1003538/b-roll-and-cockpit-footage-f-35-and-f-16s-luke-afb",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-35", "F-16"],
+        "propulsion": "turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "external", "comparison", "long-form"],
+      "priority": "high",
+      "annotation_status": "pending_screening"
+    },
+    {
+      "id": "commons.raf-typhoon-flight",
+      "title": "RAF Typhoon Flight Over the UK",
+      "provider": "wikimedia_commons",
+      "provider_id": "RAF_Typhoon_Flight_Over_the_UK.webm",
+      "url": "https://commons.wikimedia.org/wiki/File:RAF_Typhoon_Flight_Over_the_UK.webm",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "OGL-UK-3.0",
+        "license_url": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        "source_claim": "Wikimedia file page identifies UK Open Government Licence v3.0"
+      },
+      "subject": {
+        "aircraft": ["Eurofighter Typhoon"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "full-flight", "engine-power", "dynamic-pressure", "positive-g", "configuration"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "youtube.aPU8AIqF1l0",
+      "title": "Pull 9.5G's in an US Air Force F-16: In-cockpit Footage and Audio",
+      "provider": "youtube",
+      "provider_id": "aPU8AIqF1l0",
+      "url": "https://www.youtube.com/watch?v=aPU8AIqF1l0",
+      "distribution": {
+        "tier": "reference_local",
+        "license_expression": "NOASSERTION",
+        "source_claim": "standard YouTube upload"
+      },
+      "subject": {
+        "aircraft": ["F-16"],
+        "propulsion": "single_turbofan",
+        "perspective": "helmet_mask"
+      },
+      "tags": ["cockpit", "positive-g", "high-g", "breathing", "g-suit", "harness"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "dvids.975257",
+      "title": "Euro-NATO Joint Jet Pilot Training with 711th Human Performance Wing's Centrifuge",
+      "provider": "dvids",
+      "provider_id": "975257",
+      "url": "https://www.dvidshub.net/video/975257/euro-nato-joint-jet-pilot-training-with-711th-human-performance-wings-centrifuge",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["centrifuge"],
+        "propulsion": "none",
+        "perspective": "helmet_mask"
+      },
+      "tags": ["positive-g", "negative-g", "breathing", "strain", "g-suit", "human"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "dvids.853302",
+      "title": "125th Fighter Wing Strafe Runs",
+      "provider": "dvids",
+      "provider_id": "853302",
+      "url": "https://www.dvidshub.net/video/853302/125th-fighter-wing-strafe-runs",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-15C"],
+        "propulsion": "twin_turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "m61", "gun", "strafe", "cadence", "range-delay"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "dvids.512154",
+      "title": "177th Fighter Wing Gas Turbine Engine Testing",
+      "provider": "dvids",
+      "provider_id": "512154",
+      "url": "https://www.dvidshub.net/video/512154/177th-fighter-wing-gas-turbine-engine-testing",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F110 engine"],
+        "propulsion": "turbofan",
+        "perspective": "test_cell"
+      },
+      "tags": ["engine", "test-cell", "rpm", "spool-up", "military", "afterburner"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "dvids.975275",
+      "title": "South Carolina Air National Guard Engine Test",
+      "provider": "dvids",
+      "provider_id": "975275",
+      "url": "https://www.dvidshub.net/video/975275/south-carolina-air-national-guard-engine-test",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F100-PW-229 engine"],
+        "propulsion": "turbofan",
+        "perspective": "test_cell"
+      },
+      "tags": ["engine", "test-cell", "rpm", "spool-up", "spool-down", "afterburner"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "freesound.322178",
+      "title": "Belgian F-16 startup and idle",
+      "provider": "freesound",
+      "provider_id": "322178",
+      "url": "https://freesound.org/people/ikbenraar/sounds/322178/",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "source_claim": "Freesound item page"
+      },
+      "subject": {
+        "aircraft": ["F-16"],
+        "propulsion": "single_turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "start", "idle", "ground"],
+      "priority": "high",
+      "annotation_status": "pending_screening"
+    },
+    {
+      "id": "freesound.275990",
+      "title": "F-16 takeoff and flyover",
+      "provider": "freesound",
+      "provider_id": "275990",
+      "url": "https://freesound.org/people/Sandermotions/sounds/275990/",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "source_claim": "Freesound item page"
+      },
+      "subject": {
+        "aircraft": ["F-16"],
+        "propulsion": "single_turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "takeoff", "flyby", "doppler"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "freesound.162445",
+      "title": "Jet Fighter Views During Liftoff, Flight and Landing",
+      "provider": "freesound",
+      "provider_id": "162445",
+      "url": "https://freesound.org/people/qubodup/sounds/162445/",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "source_claim": "Freesound item page marks sound CC0"
+      },
+      "subject": {
+        "aircraft": ["F/A-18F"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "external", "takeoff", "flight", "landing", "carrier"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes",
+      "notes": "Audio montage extracted from released U.S. Navy deployment footage; retain original video as the visual evidence source."
+    },
+    {
+      "id": "youtube.nHotDPmAxmw",
+      "title": "F-16 Over the Shoulder Cockpit View - Airshow over South Beach Miami",
+      "provider": "youtube",
+      "provider_id": "nHotDPmAxmw",
+      "url": "https://www.youtube.com/watch?v=nHotDPmAxmw",
+      "distribution": {
+        "tier": "reference_local",
+        "license_expression": "NOASSERTION",
+        "source_claim": "standard YouTube upload"
+      },
+      "subject": {
+        "aircraft": ["F-16"],
+        "propulsion": "single_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "long-form", "engine-power", "dynamic-pressure", "positive-g"],
+      "priority": "high",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "youtube.yYZqW3bAnZs",
+      "title": "Navy Flight Deck Operations from Cockpit of F/A-18 - Original Unedited Audio",
+      "provider": "youtube",
+      "provider_id": "yYZqW3bAnZs",
+      "url": "https://www.youtube.com/watch?v=yYZqW3bAnZs",
+      "distribution": {
+        "tier": "reference_local",
+        "license_expression": "NOASSERTION",
+        "source_claim": "standard YouTube upload"
+      },
+      "subject": {
+        "aircraft": ["F/A-18"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "carrier", "taxi", "catapult", "configuration", "uninterrupted"],
+      "priority": "high",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "youtube.GgG0Xk2izxI",
+      "title": "F-22 Fly By",
+      "provider": "youtube",
+      "provider_id": "GgG0Xk2izxI",
+      "url": "https://www.youtube.com/watch?v=GgG0Xk2izxI",
+      "distribution": {
+        "tier": "reference_local",
+        "license_expression": "NOASSERTION",
+        "source_claim": "standard YouTube upload"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "flyby", "doppler", "afterburner"],
+      "priority": "high",
+      "annotation_status": "pending_screening"
+    },
+    {
+      "id": "youtube.wv7F691TL0U",
+      "title": "Most EVIL sounding F22 EVER!",
+      "provider": "youtube",
+      "provider_id": "wv7F691TL0U",
+      "url": "https://www.youtube.com/watch?v=wv7F691TL0U",
+      "distribution": {
+        "tier": "reference_local",
+        "license_expression": "NOASSERTION",
+        "source_claim": "standard YouTube upload"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "close-pass", "flyby", "power", "camera-overload"],
+      "priority": "high",
+      "annotation_status": "pending_screening"
+    },
+    {
+      "id": "nasa.applied-acoustics-flyover",
+      "title": "NASA Applied Acoustics Aircraft Flyover Simulation Archive",
+      "provider": "nasa",
+      "provider_id": "applied-acoustics-flyover",
+      "url": "https://stabserv.larc.nasa.gov/flyover/",
+      "distribution": {
+        "tier": "collection_index",
+        "license_expression": "NOASSERTION",
+        "source_claim": "NASA data server; inspect individual items"
+      },
+      "subject": {
+        "aircraft": ["multiple"],
+        "propulsion": "multiple",
+        "perspective": "collection"
+      },
+      "tags": ["external", "flyover", "doppler", "propagation", "research-data"],
+      "priority": "seed",
+      "annotation_status": "collection_review"
+    },
+    {
+      "id": "aerosonicdb.8000468",
+      "title": "AeroSonicDB",
+      "provider": "zenodo",
+      "provider_id": "8000468",
+      "url": "https://zenodo.org/records/8000468",
+      "distribution": {
+        "tier": "reference_local",
+        "license_expression": "CC-BY-NC-4.0",
+        "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+        "source_claim": "Zenodo record"
+      },
+      "subject": {
+        "aircraft": ["multiple"],
+        "propulsion": "multiple",
+        "perspective": "external_far"
+      },
+      "tags": ["external", "flyover", "ads-b", "aircraft-identification", "dataset"],
+      "priority": "high",
+      "annotation_status": "collection_review"
+    },
+    {
+      "id": "twz.tu95-growl",
+      "title": "Listen To The Terrifying Mechanical Growl Of A Tu-95 Bear Passing Overhead",
+      "provider": "article",
+      "provider_id": "39104",
+      "url": "https://www.twz.com/39104/listen-to-the-terrifying-mechanical-growl-of-a-tu-95-bear-passing-overhead",
+      "distribution": {
+        "tier": "reference_local",
+        "license_expression": "NOASSERTION",
+        "source_claim": "embedded third-party video and editorial article"
+      },
+      "subject": {
+        "aircraft": ["Tu-95"],
+        "propulsion": "contra_rotating_turboprop",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "tu-95", "contra-rotating", "long-range", "low-frequency", "interaction-tones"],
+      "priority": "seed",
+      "annotation_status": "manual_acquisition",
+      "notes": "Article documents reports of the Bear being audible through intercepting fighters' canopies; preserve embedded source video when identified."
+    },
+    {
+      "id": "dvids.996769",
+      "title": "NORAD intercepted Russian Tu-95 and Su-35 near the Bering Strait",
+      "provider": "dvids",
+      "provider_id": "996769",
+      "url": "https://www.dvidshub.net/video/996769/norad-detected-tracked-and-intercepted-russian-aircraft-near-bering-strait",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["Tu-95", "Su-35", "F-16"],
+        "propulsion": "mixed",
+        "perspective": "chase_aircraft"
+      },
+      "tags": ["tu-95", "intercept", "other-aircraft", "cockpit-occlusion", "formation"],
+      "priority": "seed",
+      "annotation_status": "pending_audio_screening"
+    },
+    {
+      "id": "commons.saab-j35-draken-start",
+      "title": "Saab J35D Draken start engine and taxiing",
+      "provider": "wikimedia_commons",
+      "provider_id": "WWS_SaabJ35DDrakenstartengineandtaxiing.ogg",
+      "url": "https://commons.wikimedia.org/wiki/File:WWS_SaabJ35DDrakenstartengineandtaxiing.ogg",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "CC-BY-4.0",
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "source_claim": "Wikimedia file page"
+      },
+      "subject": {
+        "aircraft": ["Saab J35D Draken"],
+        "propulsion": "single_turbojet",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "start", "idle", "taxi", "vintage-jet"],
+      "priority": "medium",
+      "annotation_status": "pending_timecodes"
+    },
+    {
+      "id": "freesound.craigsmith-vintage-jet-canopy",
+      "title": "Vintage jet and canopy sound pack",
+      "provider": "freesound",
+      "provider_id": "pack.27152",
+      "url": "https://freesound.org/people/craigsmith/packs/27152/",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "source_claim": "Freesound pack page; verify individual items"
+      },
+      "subject": {
+        "aircraft": ["multiple"],
+        "propulsion": "multiple",
+        "perspective": "mechanism_close"
+      },
+      "tags": ["canopy", "servo", "latch", "mechanism", "foley"],
+      "priority": "high",
+      "annotation_status": "collection_review"
+    },
+    {
+      "id": "nasa.small-uas-flyover",
+      "title": "NASA Small UAS Flyover Acoustics Data",
+      "provider": "nasa",
+      "provider_id": "small-uas-flyover-acoustics-data",
+      "url": "https://data.nasa.gov/dataset/small-uas-flyover-acoustics-data",
+      "distribution": {
+        "tier": "collection_index",
+        "license_expression": "NOASSERTION",
+        "source_claim": "NASA open-data catalogue; inspect files and terms"
+      },
+      "subject": {
+        "aircraft": ["small UAS"],
+        "propulsion": "electric_propeller",
+        "perspective": "collection"
+      },
+      "tags": ["external", "flyover", "drone", "medevac", "future"],
+      "priority": "medium",
+      "annotation_status": "collection_review"
+    }
+  ]
+}
