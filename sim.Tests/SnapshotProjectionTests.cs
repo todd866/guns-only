@@ -187,23 +187,23 @@ public class SnapshotProjectionTests {
                 root.GetProperty("recovery_id").GetString());
             Assert.Equal("Soniachne west recovery runway",
                 root.GetProperty("recovery_display_name").GetString());
-            Assert.Equal(-55_000.0,
+            Assert.Equal(-61_952.0,
                 root.GetProperty("runway_threshold_x").GetDouble());
-            Assert.Equal(52.5,
+            Assert.Equal(106.75,
                 root.GetProperty("runway_threshold_y").GetDouble());
-            Assert.Equal(-55_300.0,
+            Assert.Equal(-56_576.0,
                 root.GetProperty("runway_threshold_z").GetDouble());
-            Assert.Equal(0.0,
+            Assert.Equal(90.0,
                 root.GetProperty("runway_heading_deg").GetDouble());
             Assert.Equal(3_000.0,
                 root.GetProperty("runway_length_m").GetDouble());
             Assert.Equal(45.0,
                 root.GetProperty("runway_width_m").GetDouble());
-            Assert.Equal(-55_000.0,
+            Assert.Equal(-61_652.0,
                 root.GetProperty("runway_touchdown_x").GetDouble());
-            Assert.Equal(52.5,
+            Assert.Equal(106.75,
                 root.GetProperty("runway_touchdown_y").GetDouble());
-            Assert.Equal(-55_000.0,
+            Assert.Equal(-56_576.0,
                 root.GetProperty("runway_touchdown_z").GetDouble());
             Assert.True(recoveryClosure.GetDouble() < 0.0,
                 "the opening northbound F-22 is outbound from its southwest runway");

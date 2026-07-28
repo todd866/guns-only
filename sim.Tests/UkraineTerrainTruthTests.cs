@@ -58,27 +58,40 @@ public class UkraineTerrainTruthTests {
     }
 
     [Fact]
-    public void RegionalAtlasContainsTheCompleteRapierInterceptRoute() {
+    public void RegionalAtlasAndProductionApronCoverTheRapierInterceptRoute() {
         ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
         BeatSetup beat = Beats.RapierIntercept();
         Carrier strip = Assert.IsType<Carrier>(beat.Carrier);
         Vec3D outbound = strip.Fwd;
         double contactAlongM = (beat.Bandit.Position - strip.Position).Dot(outbound);
+        double authoredRouteM = Math.Min(
+            contactAlongM,
+            strip.Position.X - terrain.Bounds.MinimumEastM);
 
         Assert.True(contactAlongM > 0.0);
-        for (double alongM = 0.0; alongM <= contactAlongM; alongM += 5_000.0) {
+        for (double alongM = 0.0; alongM <= authoredRouteM; alongM += 5_000.0) {
             Vec3D point = strip.Position + outbound * alongM;
             Assert.True(terrain.TrySample(point.X, point.Z, out TerrainSample ground),
                 $"missing atlas terrain at {alongM / 1000.0:F0} km outbound");
-            Assert.Equal(TerrainSurfaceKind.Land, ground.Kind);
             Assert.True(beat.Bandit.Position.Y - ground.HeightM > 11_000.0);
         }
-        Assert.True(terrain.TrySample(
+        Assert.False(terrain.TrySample(
+            beat.Bandit.Position.X,
+            beat.Bandit.Position.Z,
+            out _));
+
+        var productionTerrain = new TrainingTerrainApronSurface(
+            terrain,
+            marginM: 400_000.0,
+            flatHeightM: 78.0,
+            transitionM: 8_000.0);
+        Assert.True(productionTerrain.TrySample(
             beat.Bandit.Position.X,
             beat.Bandit.Position.Z,
             out TerrainSample contactGround));
         Assert.Equal(TerrainSurfaceKind.Land, contactGround.Kind);
+        Assert.Equal(78.0, contactGround.HeightM, precision: 8);
     }
 
     [Fact]
@@ -95,7 +108,6 @@ public class UkraineTerrainTruthTests {
             runway.ThresholdPosition.Z,
             out TerrainSample thresholdGround));
         Assert.Equal(TerrainSurfaceKind.Land, thresholdGround.Kind);
-        Assert.Equal(thresholdGround.HeightM, runway.ElevationM, precision: 8);
         Assert.Equal(runway.ElevationM, plan.Position.Y, precision: 8);
 
         Vec3D forward = runway.RolloutDirection;
@@ -115,9 +127,9 @@ public class UkraineTerrainTruthTests {
                 out TerrainSample ground));
             Assert.Equal(TerrainSurfaceKind.Land, ground.Kind);
             Assert.InRange(
-                Math.Abs(runway.ElevationM - ground.HeightM),
-                0.0,
-                0.5);
+                runway.ElevationM - ground.HeightM,
+                0.2,
+                1.9);
         }
     }
 

@@ -1109,24 +1109,28 @@ public static class Beats {
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
             ContinuousCombat: new ContinuousCombatConfig(),
-            // Fictional runway inside the shared 262 km theatre, roughly 43 NM southwest of the
-            // merge. Its 52.5 m pavement datum is the embedded regional terrain height at the
-            // threshold; the full strip stays within 0.3 m of that flat datum. The 3,000 lb
+            // Fictional runway inside the shared theatre, roughly 44 NM southwest of the merge.
+            // The old (-55 km, -55 km) strip crossed a 37 m atlas rise and was visibly buried once
+            // simulation terrain and presentation began sharing one authority. The eastbound site
+            // below was surveyed from the same 256 m atlas records: natural terrain under the full
+            // 3,000 x 45 m pavement spans 104.896..106.511 m. A 106.75 m constructed slab therefore
+            // stays above the DEM with 0.24..1.85 m of bounded fill rather than flattening the
+            // surrounding terrain. The 3,000 lb
             // exercise reserve sits 900 lb above declared MIN FUEL and
             // 1,800 lb above EMERGENCY FUEL; it is deliberately below 4,000 lb Bingo, which remains
             // the action threshold for turning home rather than the desired fuel at touchdown.
             RecoveryPlan: new RecoveryPlan(
                 "recovery.f22a.soniachne-west-runway.v1",
                 "Soniachne west recovery runway",
-                new Vec3D(-55_000.0, 52.5, -55_000.0),
+                new Vec3D(-61_652.0, 106.75, -56_576.0),
                 requiredLandingReserveLb: 3_000.0,
-                // Threshold centre is 300 m south of the touchdown aim. Heading zero is +north
-                // in the simulation frame, so the full 3,000 m rollout stays inside the regional
+                // Threshold centre is 300 m west of the touchdown aim. Heading +pi/2 is +east in
+                // the simulation frame, so the full 3,000 m rollout stays inside the regional
                 // theatre. These dimensions match a substantial fast-jet runway without claiming
                 // a real site or an exact F-22 landing-performance requirement.
                 conventionalRunway: new ConventionalRunwayGeometry(
-                    thresholdPosition: new Vec3D(-55_000.0, 52.5, -55_300.0),
-                    landingHeadingRad: 0.0,
+                    thresholdPosition: new Vec3D(-61_952.0, 106.75, -56_576.0),
+                    landingHeadingRad: Math.PI / 2.0,
                     lengthM: 3_000.0,
                     widthM: 45.0)),
             // The opening neutral-merge dogfight is engagement 1: a gentle Novice warm-up under the
@@ -1167,7 +1171,9 @@ public static class Beats {
     /// </summary>
     public static BeatSetup DroneRaidDefense() {
         const double DroneAltitudeM = 300.0;
-        const double PlayerAltitudeM = 460.0;
+        // The real 32 m atlas is 211.35 m beneath the staged player. Five metres restores the
+        // authored >250 m terrain clearance that the old synthetic datum supplied.
+        const double PlayerAltitudeM = 465.0;
         const double DroneSpeedMps = 115.0;
         const double DroneMassKg = 500.0;
         static AircraftState Inbound(double x, double z) => new(
