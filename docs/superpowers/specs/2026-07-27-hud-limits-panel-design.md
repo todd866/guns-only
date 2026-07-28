@@ -2,7 +2,8 @@
 
 Status: Design approved in conversation 2026-07-27 · Evidence from Desktop captures under
 `analysis/desktop-captures/` · Child of the Rapier nav teaching aim ("miles a minute, lbs per mile,
-lbs per minute, minutes of reserve at the destination") and the longer medevac patient-stats aim.
+lbs per minute, minutes of reserve at the destination"). The later CASEVAC transport scope reuses
+the hierarchy without exposing patient statistics.
 
 ## Thesis
 
@@ -19,10 +20,10 @@ silent about everything else:
 1. **Attitude / path** — where am I pointing, where am I going (ladder, FPV, horizon)
 2. **Energy** — how fast / how high (tapes, Mach)
 3. **Contact** — where is the thing that matters (TD / padlock / guidance square)
-4. **Limits** — what binds me next (nav/fuel now; patient later; thermal/G when biting)
+4. **Limits** — what binds me next (navigation, fuel/energy, power, thermal/G)
 
-This is not a widget add. It redefines presentation hierarchy and gives medevac a stable socket
-later without inventing a second UI language.
+This is not a widget add. It redefines presentation hierarchy and gives later vehicle profiles a
+stable socket without inventing a second UI language.
 
 ## Architecture
 
@@ -52,7 +53,14 @@ chrome. Content is a **profile**:
 |---|---|---|---|---|---|
 | `nav` | Recovery point known (`rtb_steer` / Rapier airborne with strip geometry / Circuits) | NM/MIN | LB/MIN | LB/NM | **RESERVE MIN** |
 | `fuel` | No recovery point (Guns Only dogfight, etc.) | Fuel LB | FF PPH | to Joker MIN | to Bingo MIN |
-| `patient` | Medevac (later; out of scope for first ship) | SpO₂ | HR | BP | GCS |
+| `vertical_lift_nav` | CASEVAC after its vehicle model is validated | NM/MIN | PWR MGN | ENDURANCE MIN | **RESERVE MIN** |
+| `patient` | Reserved clinical domain (not CASEVAC; no approved contents) | — | — | — | — |
+
+`vertical_lift_nav` values come from the authoritative vehicle provider: ground-track closure,
+available-minus-required power margin, endurance under the current energy flow, and destination
+reserve. Presentation does not derive them from the fixed-wing fuel equations below. The profile is
+a contract for the CASEVAC vehicle work, not permission to display guessed values before that model
+exists.
 
 **Destination for reserve is always the recovery point (dispersed strip / boat), never the
 contact.** Outbound intercept still uses `nav`: the teaching question is “can I fight and still
@@ -110,10 +118,10 @@ Pure function, testable without canvas:
 
 ```text
 limitsPanelPresentation(state) → {
-  profile: "nav" | "fuel" | "patient",
+  profile: "nav" | "fuel" | "vertical_lift_nav" | "patient",
   rows: [{ label, value, unit }],  // length 4
   accent: "normal" | "caution" | "fault",
-  heroIndex: 3                     // reserve / bingo / GCS
+  heroIndex: 3                     // destination reserve or bingo
 }
 ```
 
@@ -124,8 +132,10 @@ fighting the FPV↔α geometry contract. No kernel change required for the first
 scenario lacks a destination flag — then presentation infers `nav` vs `fuel` from
 `rtb_steer` / Rapier phase / Circuits gate state.
 
-`patient` profile is a typed empty socket in the first ship: the function may return `null` rows for
-that profile until medevac lands. Do not invent vitals.
+`patient` profile is a typed empty socket: the function may return `null` rows for that profile
+until a separately validated clinical domain is approved. The low-level CASEVAC slice does not
+select it. CASEVAC selects `vertical_lift_nav`; phase, custody, and `TIME SINCE CALL` use the quiet
+mode line or its restrained mission strip. Do not invent vitals.
 
 ## Demotions and deletions (first ship)
 
@@ -141,21 +151,22 @@ that profile until medevac lands. Do not invent vitals.
 
 ## Scenario teaching
 
-Briefings and live HUD use the **same four words** (nm/min, lb/min, lb/nm, reserve min).
+Jet briefings and the live jet HUD use the **same four words** (nm/min, lb/min, lb/nm, reserve min).
 
 - **Rapier Intercept** — Limits stays on `nav` from airborne (strip geometry known) through
   recovery. Reserve is always to the strip; amber/red on egress is the lesson.
 - **Rapier Circuits** — soft bingo remains (repetition is the point) but Limits still shows the four
   numbers so the habit forms without pressure.
 - **Guns Only dogfight** — `fuel` profile; no fake destination.
-- **Medevac (later)** — swap profile to `patient`; panel geometry unchanged.
+- **CASEVAC transport** — use authoritative `vertical_lift_nav`; phase, custody, and clock do not
+  displace power/navigation limits.
 
 ## Non-goals (first ship)
 
 - Redesigning tape projective math, EEGS funnel, or padlock (keep; they are the honest core).
 - Per-stream fuel simulation (still derived; HUD must not claim kernel-owned turbine vs ram fuel
   until the map owns it).
-- Building real patient vitals.
+- Building or reserving patient vitals for CASEVAC.
 - Art-direction / terrain fidelity.
 - Replacing the kernel-offline stack-trace modal (separate UX; note only).
 
