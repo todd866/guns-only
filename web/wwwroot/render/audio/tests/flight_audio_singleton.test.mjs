@@ -10,6 +10,7 @@ test("cache-busted and canonical flight-audio imports share one controller", () 
     setEnabled: (enabled) => calls.push(["enabled", enabled]) && enabled,
     isEnabled: () => true,
     diagnostics: () => ({ controller: "owner" }),
+    suspend: (reason) => calls.push(["suspend", reason]) && "suspended",
     update: (state, options) => calls.push(["update", state, options]) && "updated",
   };
   const duplicate = {
@@ -17,6 +18,7 @@ test("cache-busted and canonical flight-audio imports share one controller", () 
     setEnabled: () => assert.fail("duplicate controller must not own mute state"),
     isEnabled: () => false,
     diagnostics: () => assert.fail("duplicate controller must not report graph state"),
+    suspend: () => assert.fail("duplicate controller must not suspend its own graph"),
     update: () => assert.fail("duplicate controller must not drive a second graph"),
   };
 
@@ -26,7 +28,7 @@ test("cache-busted and canonical flight-audio imports share one controller", () 
   );
   const cacheBustedFacade = createSharedFlightAudioFacade(
     duplicate,
-    "https://example.test/render/audio/flight_audio.js?v=174",
+    "https://example.test/render/audio/flight_audio.js?v=175",
   );
   const state = { engine_rpm_pct: 91 };
   const options = { muted: false };
@@ -34,10 +36,12 @@ test("cache-busted and canonical flight-audio imports share one controller", () 
   assert.equal(cacheBustedFacade.arm(state), "armed");
   assert.equal(cacheBustedFacade.setEnabled(true), true);
   assert.equal(cacheBustedFacade.isEnabled(), true);
+  assert.equal(cacheBustedFacade.suspend("qa-complete"), "suspended");
   assert.equal(cacheBustedFacade.update(state, options), "updated");
   assert.deepEqual(calls, [
     ["arm", state],
     ["enabled", true],
+    ["suspend", "qa-complete"],
     ["update", state, options],
   ]);
   assert.equal(canonicalFacade.isEnabled(), true);
@@ -50,6 +54,7 @@ test("non-release module queries remain isolated for deterministic harnesses", (
     setEnabled: (enabled) => enabled,
     isEnabled: () => true,
     diagnostics: () => ({ controller: "first" }),
+    suspend: () => "first",
     update: () => "first",
   }, "https://example.test/render/audio/flight_audio.js?test=first");
   const second = createSharedFlightAudioFacade({
@@ -57,6 +62,7 @@ test("non-release module queries remain isolated for deterministic harnesses", (
     setEnabled: (enabled) => enabled,
     isEnabled: () => false,
     diagnostics: () => ({ controller: "second" }),
+    suspend: () => "second",
     update: () => "second",
   }, "https://example.test/render/audio/flight_audio.js?test=second");
 

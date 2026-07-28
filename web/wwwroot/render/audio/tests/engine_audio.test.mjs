@@ -26,6 +26,10 @@ class FakeAudioParam {
     this.targets.push({ value, time, timeConstant: 0 });
     this.value = value;
   }
+
+  cancelScheduledValues(time) {
+    this.cancelledAt = time;
+  }
 }
 
 class FakeNode {
@@ -147,6 +151,7 @@ class FakeAudioContext {
     this.delays = [];
     this.constants = [];
     this.resumeCalls = 0;
+    this.suspendCalls = 0;
     FakeAudioContext.instances.push(this);
   }
 
@@ -208,6 +213,12 @@ class FakeAudioContext {
   resume() {
     this.resumeCalls += 1;
     this.state = "running";
+    return Promise.resolve();
+  }
+
+  suspend() {
+    this.suspendCalls += 1;
+    this.state = "suspended";
     return Promise.resolve();
   }
 }
@@ -423,6 +434,92 @@ test("thin air and collapsed thrust near-silence the propulsion stack", async ()
     assert.ok(latest(voices.fanOrderGain.gain) < denseFan * 0.2);
     assert.ok(latest(voices.jetBodyGain.gain) < denseJet * 0.2);
     assert.ok(latest(voices.crackleImpulseGain.gain) < 0.02);
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("Rapier exo-atmospheric handover sheds roar but carries a descending turbine whine", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const { createEngineVoices, updateEngineVoices } = await freshModule(
+      "../engine_audio.js",
+      "rapier-exo-spooldown",
+    );
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const turbineFlight = {
+      applied_throttle: 1.3,
+      engine_spool_fraction: 1.3,
+      engine_rpm_pct: 100,
+      mach: 1.6,
+      true_airspeed_kts: 980,
+      air_density_kg_m3: 0.36,
+      rapier_turbine_thrust_kn: 90,
+      rapier_ramjet_thrust_kn: 0,
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+    };
+    for (let step = 1; step <= 24; step++) {
+      audio.currentTime = step * 0.25;
+      updateEngineVoices(voices, audio, turbineFlight);
+    }
+    const atmosphericBody = latest(voices.jetBodyGain.gain);
+    const atmosphericCabinCeiling = latest(voices.cabinLp.frequency);
+
+    audio.currentTime += 0.25;
+    updateEngineVoices(voices, audio, {
+      ...turbineFlight,
+      mach: 3.4,
+      true_airspeed_kts: 2100,
+      air_density_kg_m3: 0.2,
+      rapier_turbine_thrust_kn: 0,
+      rapier_ramjet_thrust_kn: 80,
+    });
+    const atmosphericRam = latest(voices.ramHowlGain.gain);
+
+    const exoFlight = {
+      ...turbineFlight,
+      mach: 3.4,
+      true_airspeed_kts: 3400,
+      air_density_kg_m3: 0.00001,
+      rapier_turbine_thrust_kn: 0,
+      rapier_ramjet_thrust_kn: 0,
+    };
+    audio.currentTime += 0.25;
+    updateEngineVoices(voices, audio, exoFlight);
+    const coastStartHz = latest(voices.turbineCoastOsc.frequency);
+    const coastStartGain = latest(voices.turbineCoastGain.gain);
+    assert.ok(latest(voices.jetBodyGain.gain) < atmosphericBody * 0.01,
+      "near-vacuum removes the broadband propulsion body");
+    const exoRam = latest(voices.ramHowlGain.gain);
+    assert.ok(exoRam < atmosphericRam * 0.02,
+      `ram howl cannot survive without atmospheric mass flow (${exoRam}/${atmosphericRam})`);
+    assert.ok(coastStartGain > 0,
+      "airframe conduction preserves a quiet turbine coast cue after handover");
+    assert.ok(coastStartGain > exoRam,
+      "the conducted spool-down cue, not residual ram roar, owns the near-vacuum transition");
+    assert.ok(latest(voices.cabinLp.frequency) < atmosphericCabinCeiling,
+      "helmet, inserted hearing protection, and the pressure shell darken the exo cockpit mix");
+
+    for (let step = 1; step <= 16; step++) {
+      audio.currentTime += 0.25;
+      updateEngineVoices(voices, audio, exoFlight);
+    }
+    const coastLaterHz = latest(voices.turbineCoastOsc.frequency);
+    const coastLaterGain = latest(voices.turbineCoastGain.gain);
+    assert.ok(coastLaterHz < coastStartHz,
+      "the turbine coast pitch descends as the compressor unwinds");
+    assert.ok(coastLaterGain > 0 && coastLaterGain < coastStartGain,
+      "the conducted whine remains perceptible for several seconds while decaying");
+
+    for (let step = 1; step <= 24; step++) {
+      audio.currentTime += 0.25;
+      updateEngineVoices(voices, audio, exoFlight);
+    }
+    assert.equal(latest(voices.turbineCoastGain.gain), 0,
+      "the turbine coast eventually reaches silence instead of becoming an infinite loop");
   } finally {
     globalThis.AudioContext = previous;
   }
@@ -703,6 +800,106 @@ test("Safari interrupted flight audio resumes only from arming and stays muted m
       "an interrupted graph cannot retain a previously audible master gain");
   } finally {
     globalThis.AudioContext = previous;
+  }
+});
+
+test("silent QA runs the live graph without output and lifecycle events suspend it", async () => {
+  const previousAudio = globalThis.AudioContext;
+  const descriptors = new Map(
+    ["document", "window", "location"].map((key) => [
+      key,
+      Object.getOwnPropertyDescriptor(globalThis, key),
+    ]),
+  );
+  class FakeEventTarget {
+    constructor() {
+      this.listeners = new Map();
+    }
+
+    addEventListener(type, listener) {
+      const listeners = this.listeners.get(type) ?? [];
+      listeners.push(listener);
+      this.listeners.set(type, listeners);
+    }
+
+    dispatch(type) {
+      for (const listener of this.listeners.get(type) ?? []) listener({ type });
+    }
+  }
+  const fakeWindow = new FakeEventTarget();
+  const attributes = new Map();
+  const fakeDocument = new FakeEventTarget();
+  fakeDocument.hidden = false;
+  fakeDocument.documentElement = {
+    setAttribute: (name, value) => attributes.set(name, String(value)),
+  };
+
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: fakeWindow,
+    });
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: fakeDocument,
+    });
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: new URL("https://example.test/?audioQa=silent"),
+    });
+
+    const {
+      armFlightAudio,
+      flightAudioDiagnostics,
+      updateFlightAudio,
+    } = await freshModule("../flight_audio.js", "silent-qa-lifecycle");
+    assert.equal(armFlightAudio(), true);
+    updateFlightAudio({
+      applied_throttle: 1,
+      engine_rpm_pct: 90,
+      true_airspeed_kts: 420,
+      air_density_kg_m3: 0.9,
+    });
+
+    const audio = FakeAudioContext.instances.at(-1);
+    const live = flightAudioDiagnostics();
+    assert.equal(live.contextState, "running");
+    assert.equal(live.signalActive, true,
+      "the production graph still receives a live flight frame");
+    assert.equal(live.silentQa, true);
+    assert.equal(live.outputGainTarget, 0);
+    assert.equal(live.audible, false);
+    assert.equal(live.outputMode, "silent-qa");
+    assert.ok(live.sessionId);
+    assert.equal(attributes.get("data-audio-session-id"), live.sessionId);
+    assert.equal(attributes.get("data-audio-signal-active"), "true");
+    assert.equal(attributes.get("data-audio-output-gain"), "0");
+
+    fakeDocument.hidden = true;
+    fakeDocument.dispatch("visibilitychange");
+    await Promise.resolve();
+    const hidden = flightAudioDiagnostics();
+    assert.equal(audio.suspendCalls, 1);
+    assert.equal(audio.state, "suspended");
+    assert.equal(audio.gains[0].gain.value, 0,
+      "the lifecycle path cuts the master synchronously before suspend settles");
+    assert.equal(hidden.pageState, "background");
+    assert.equal(hidden.stopReason, "visibility-hidden");
+
+    fakeDocument.hidden = false;
+    fakeWindow.dispatch("pageshow");
+    const shown = flightAudioDiagnostics();
+    assert.equal(shown.pageState, "foreground");
+    assert.equal(shown.contextState, "suspended",
+      "foreground lifecycle events never resume outside a trusted pilot gesture");
+  } finally {
+    globalThis.AudioContext = previousAudio;
+    for (const [key, descriptor] of descriptors) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
   }
 });
 

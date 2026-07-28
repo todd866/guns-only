@@ -200,7 +200,7 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
     "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
-    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=174"/,
+    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=175"/,
     "the active ocean builder must be sourced from the scene builder module");
   assert.match(source, /createDecisionSupportSea\(\)/,
     "production must instantiate the decision-support sea");

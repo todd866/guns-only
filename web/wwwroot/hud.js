@@ -49,7 +49,7 @@ import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=174";
+} from "./render/audio/flight_audio.js?v=175";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";

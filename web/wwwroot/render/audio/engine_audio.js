@@ -21,6 +21,8 @@ const FAN_ORDER_LEVELS = Object.freeze([
 ]);
 const SPOOL_UP_PER_SECOND = 0.22;
 const SPOOL_DOWN_PER_SECOND = 0.34;
+const RAPIER_TURBINE_COAST_UP_PER_SECOND = 0.7;
+const RAPIER_TURBINE_COAST_DOWN_PER_SECOND = 0.12;
 // Matches Rapier map overlap (turbine fade / ram light) — teach handover by ear.
 const HANDOVER_MACH_START = 1.9;
 const HANDOVER_MACH_END = 2.8;
@@ -142,9 +144,9 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
   sampleGritGain.gain.value = 0;
   sampleGritGain.connect(sampleBus);
 
-  // Cockpit equipment bed. A sealed fighter is never acoustically empty: ECS airflow and the
-  // 400 Hz electrical system remain after the exterior engine/rush drops away. Keep this outside
-  // the propulsion VCA so zoom-coast has a quiet cabin floor rather than digital silence.
+  // Cockpit equipment bed. A sealed fighter is never acoustically empty: ECS/heater airflow and
+  // the 400 Hz electrical system remain after the exterior engine/rush drops away. Keep this
+  // outside the propulsion VCA so zoom-coast has a quiet cabin floor rather than digital silence.
   const ecsSource = audioContext.createBufferSource();
   ecsSource.buffer = pinkNoiseBuffer(audioContext, 0x45435331);
   ecsSource.loop = true;
@@ -214,6 +216,25 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
   shaftGain.gain.value = 0;
   shaftOsc.connect(shaftFilter).connect(shaftGain).connect(propBus);
   shaftOsc.start();
+
+  // Rapier turbine coast tone. Airborne roar vanishes with mass flow, but the compressor does not
+  // stop instantaneously at handover: a narrowing, descending whine remains structure-borne for
+  // several seconds. Keep it separate from the normal fan stack so sample-bed ducking cannot erase
+  // the transition cue.
+  const turbineCoastOsc = audioContext.createOscillator();
+  turbineCoastOsc.type = "triangle";
+  turbineCoastOsc.frequency.value = 1800;
+  const turbineCoastFilter = audioContext.createBiquadFilter();
+  turbineCoastFilter.type = "bandpass";
+  turbineCoastFilter.frequency.value = 1800;
+  turbineCoastFilter.Q.value = 5.5;
+  const turbineCoastGain = audioContext.createGain();
+  turbineCoastGain.gain.value = 0;
+  turbineCoastOsc
+    .connect(turbineCoastFilter)
+    .connect(turbineCoastGain)
+    .connect(propBus);
+  turbineCoastOsc.start();
 
   // --- Fan / compressor tonal stack ---
   const fanOrderGain = audioContext.createGain();
@@ -558,6 +579,9 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
     shaftOsc,
     shaftFilter,
     shaftGain,
+    turbineCoastOsc,
+    turbineCoastFilter,
+    turbineCoastGain,
     fanOrderGain,
     fanOrderHp,
     fanOrderLp,
@@ -613,6 +637,7 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
     augmentationKick: 0,
     lastAugmentation: null,
     lastQ01: null,
+    rapierTurbineCoastRpm: 0,
     lastControlTime: audioContext.currentTime,
   };
 }
@@ -940,6 +965,31 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   }
   voiceGraph.lastQ01 = q01;
   const rpm = voiceGraph.spoolRpm;
+  const publishedTurbineThrustKn = finiteNumber(state?.rapier_turbine_thrust_kn);
+  const rapierTurbineDemand = isRapier
+    ? publishedTurbineThrustKn == null
+      ? rpm * turbineShare
+      : clamp01(publishedTurbineThrustKn / 90)
+    : 0;
+  if (snap) {
+    voiceGraph.rapierTurbineCoastRpm = rapierTurbineDemand;
+  } else {
+    const turbineCoastRate = rapierTurbineDemand >= voiceGraph.rapierTurbineCoastRpm
+      ? RAPIER_TURBINE_COAST_UP_PER_SECOND
+      : RAPIER_TURBINE_COAST_DOWN_PER_SECOND;
+    voiceGraph.rapierTurbineCoastRpm = moveTowards(
+      voiceGraph.rapierTurbineCoastRpm,
+      rapierTurbineDemand,
+      turbineCoastRate * elapsed,
+    );
+  }
+  const turbineCoastRpm = voiceGraph.rapierTurbineCoastRpm;
+  const turbineCoastAmount = isRapier
+    ? clamp01(
+      Math.max(0, turbineCoastRpm - rapierTurbineDemand) * 3.2
+        + (1 - turbineShare) * turbineCoastRpm * 0.65,
+    )
+    : 0;
   const density = atmosphereDensity(state);
   const densityRatio = clamp01(density / SEA_LEVEL_DENSITY);
   const densityScale = 0.14 + 0.86 * Math.pow(densityRatio, 0.55);
@@ -948,14 +998,29 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   const f22AirbornePresence = Math.pow(densityRatio, 0.72);
   const f22StructurePresence = 0.22 + 0.78 * Math.pow(densityRatio, 0.35);
   const f22ThinAir = 1 - f22AirbornePresence;
+  // Rapier needs the same physical split for a different reason. Ram/exhaust and broadband bed
+  // energy require atmospheric mass flow and must disappear on an exo-atmospheric climb. A small,
+  // low-passed structure path remains for pumps/rocket thrust conducted through the airframe.
+  // The old shared 0.14 density floor kept the whole cockpit/exhaust mix conspicuously loud in
+  // near-vacuum even though dynamic pressure had collapsed.
+  const rapierAirbornePresence = Math.pow(densityRatio, 0.68);
+  const rapierStructurePresence = 0.045 + 0.955 * Math.pow(densityRatio, 0.42);
   const thrustFrac = thrustFraction(state, deliveredPower, rpm);
   const rcsAuthority = clamp01(finiteNumber(state?.rapier_rcs_authority) ?? 0);
   const coastGate = densityScale < 0.28 && thrustFrac < 0.14 && (q01 < 0.12 || rcsAuthority > 0.45)
     ? 0.035 + 0.04 * thrustFrac
     : 1;
   const propulsionPresence = densityScale * coastGate;
-  const airbornePresence = sealedF22 ? f22AirbornePresence * coastGate : propulsionPresence;
-  const structurePresence = sealedF22 ? f22StructurePresence * coastGate : propulsionPresence;
+  const airbornePresence = sealedF22
+    ? f22AirbornePresence * coastGate
+    : isRapier
+      ? rapierAirbornePresence * coastGate
+      : propulsionPresence;
+  const structurePresence = sealedF22
+    ? f22StructurePresence * coastGate
+    : isRapier
+      ? rapierStructurePresence * coastGate
+      : propulsionPresence;
   // Thin air still carries ram + rush; turbine beds collapse harder than duct voice.
   const thinAir = 1 - densityScale;
   const rushPresence = Math.max(coastGate, 0.12 + 0.88 * densityScale);
@@ -1051,13 +1116,21 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     // Turbine beds fade with handover; thin air ducks them further.
     // F-22 has no ram share — full bed presence across Mach.
     const bedPresence = turbineShare * samplePresence
-      * (isF22
-        ? 1
-        : propulsionPresence * (0.55 + 0.45 * densityScale));
+      * (isF22 || isRapier ? 1 : propulsionPresence);
     nowRamp(voiceGraph.sampleAirborneGain.gain,
-      isF22 ? 0.82 * f22AirbornePresence * coastGate : 1, 0.24);
+      isF22
+        ? 0.82 * f22AirbornePresence * coastGate
+        : isRapier
+          ? 0.9 * rapierAirbornePresence * coastGate
+          : 1,
+      0.24);
     nowRamp(voiceGraph.sampleStructureGain.gain,
-      isF22 ? 0.72 * f22StructurePresence * coastGate : 0, 0.3);
+      isF22
+        ? 0.72 * f22StructurePresence * coastGate
+        : isRapier
+          ? 0.1 * rapierStructurePresence * coastGate
+          : 0,
+      0.3);
     nowRamp(voiceGraph.sampleStructureLp.frequency,
       isF22 ? 520 + power * 180 + f22StructurePresence * 120 : 680, 0.3);
     nowRamp(voiceGraph.sampleIdleGain.gain,
@@ -1148,6 +1221,18 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     (0.025 + 0.09 * Math.pow(rpm, 1.1)) * turbineShare * structurePresence
       * tonalMute * shaftBoost, 0.14);
 
+  const turbineCoastHz = 360 + turbineCoastRpm * 1780;
+  nowRamp(voiceGraph.turbineCoastOsc.frequency, turbineCoastHz, 0.18);
+  nowRamp(voiceGraph.turbineCoastFilter.frequency, turbineCoastHz, 0.18);
+  nowRamp(voiceGraph.turbineCoastFilter.Q, 4.2 + turbineCoastRpm * 3.4, 0.22);
+  const turbineCoastStructurePresence = isRapier
+    ? rapierStructurePresence
+    : structurePresence;
+  nowRamp(voiceGraph.turbineCoastGain.gain,
+    0.06 * turbineCoastAmount * Math.pow(turbineCoastRpm, 0.7)
+      * turbineCoastStructurePresence * (sampled ? 1.25 : 1),
+    0.16);
+
   for (const order of voiceGraph.fanOrders) {
     nowRamp(order.oscillator.frequency, orderFundamental * order.ratio, 0.14);
   }
@@ -1220,12 +1305,15 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
       * tonalMute * fanBoost, 0.14);
 
   // Cabin darkens hard for synth path; sample path bypasses this (beds are pre-shaped).
-  // F-22 sealed cockpit: much darker ceiling than open AB exterior beds.
-  nowRamp(voiceGraph.cabinLp.frequency,
-    (sealedF22 ? 650 : isF22 ? 4200 : 1400)
-      + power * (sealedF22 ? 550 : isF22 ? 2600 : 1200)
-      + q01 * (sealedF22 ? 180 : isF22 ? 1200 : 350)
-      + handover * 800, 0.22);
+  // Rapier is heard through a composite pressure shell plus flight helmet and inserted hearing
+  // protection: preserve low/mid structure and the descending coast tone, but do not let the
+  // exo-atmospheric handover open a bright exterior spectrum. Radio is injected elsewhere.
+  const cockpitCeilingHz = isRapier && !externalPerspective
+    ? 980 + power * 520 + q01 * 720 + densityRatio * 900 + handover * 180
+    : (sealedF22 ? 650 : isF22 ? 4200 : 3600)
+      + power * (sealedF22 ? 550 : isF22 ? 2600 : 1500)
+      + q01 * (sealedF22 ? 180 : isF22 ? 1200 : 900);
+  nowRamp(voiceGraph.cabinLp.frequency, cockpitCeilingHz, 0.22);
 
   // Ram character: hollow duct body + mid howl + HF spit — grows with handover.
   nowRamp(voiceGraph.ramFilter.frequency, 520 + handover * 1600 + throttle * 280 + thinAir * 200, 0.18);

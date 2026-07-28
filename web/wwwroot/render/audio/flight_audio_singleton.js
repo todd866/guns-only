@@ -33,6 +33,9 @@ export function createSharedFlightAudioFacade(controller, moduleUrl = "") {
     diagnostics() {
       return owner.diagnostics();
     },
+    suspend(reason) {
+      return owner.suspend(reason);
+    },
     update(state, options) {
       return owner.update(state, options);
     },

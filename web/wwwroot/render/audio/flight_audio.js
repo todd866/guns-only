@@ -45,6 +45,13 @@ let lastCombatLifecycleKey = "";
 let resumePending = null;
 let lastAudibleTarget = false;
 let lastPublishedRuntimeState = "";
+let outputGainTarget = 0;
+let backgrounded = globalThis.document?.hidden === true;
+let silentQa = false;
+let audioSessionId = "";
+let audioSessionCreatedAt = "";
+let lastStopReason = "";
+let lifecycleInstalled = false;
 const sampleBedCache = new Map();
 const MPS_TO_KNOTS = 1.9438444924406;
 const KNOTS_TO_MPS = 0.5144444444444;
@@ -62,17 +69,72 @@ function userActivationAllowsResume() {
   return activation == null || activation.isActive === true;
 }
 
+function isSilentQaRequested() {
+  try {
+    return new URLSearchParams(globalThis.location?.search ?? "")
+      .get("audioQa") === "silent";
+  } catch {
+    return false;
+  }
+}
+
+function createAudioSessionId() {
+  try {
+    if (typeof globalThis.crypto?.randomUUID === "function")
+      return globalThis.crypto.randomUUID();
+  } catch {
+    // Fall through to a local, non-identifying page-instance token.
+  }
+  return `audio-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function setMasterOutput(value, {
+  immediate = false,
+  timeConstant = 0.02,
+} = {}) {
+  outputGainTarget = Math.max(0, Number(value) || 0);
+  if (!master || !context) return;
+  if (immediate) {
+    master.gain.cancelScheduledValues?.(context.currentTime);
+    if (typeof master.gain.setValueAtTime === "function")
+      master.gain.setValueAtTime(outputGainTarget, context.currentTime);
+    else
+      master.gain.value = outputGainTarget;
+    return;
+  }
+  master.gain.setTargetAtTime(outputGainTarget, context.currentTime, timeConstant);
+}
+
+function audioOutputMode() {
+  if (disabled) return "disabled";
+  if (silentQa) return "silent-qa";
+  if (backgrounded) return "background";
+  if (!enabled) return "preference-muted";
+  if (contextNeedsUserResume(context)) return "suspended";
+  if (lastAudibleTarget && outputGainTarget > 0) return "audible";
+  return "idle";
+}
+
 function flightAudioDiagnosticsLocal() {
+  const signalActive = !disabled
+    && enabled
+    && context?.state === "running"
+    && lastAudibleTarget;
   return Object.freeze({
     controller: "shared",
     built: context != null,
     contextState: disabled ? "disabled" : context?.state ?? "unbuilt",
     enabled,
-    audible: !disabled
-      && enabled
-      && context?.state === "running"
-      && lastAudibleTarget,
+    signalActive,
+    audible: signalActive && !silentQa && !backgrounded && outputGainTarget > 0,
     resumePending: resumePending != null,
+    outputGainTarget,
+    outputMode: audioOutputMode(),
+    silentQa,
+    pageState: backgrounded ? "background" : "foreground",
+    sessionId: audioSessionId,
+    createdAt: audioSessionCreatedAt,
+    stopReason: lastStopReason,
   });
 }
 
@@ -84,22 +146,101 @@ function publishFlightAudioRuntimeState() {
     diagnostics.controller,
     diagnostics.contextState,
     diagnostics.enabled,
+    diagnostics.signalActive,
     diagnostics.audible,
     diagnostics.resumePending,
+    diagnostics.outputGainTarget,
+    diagnostics.outputMode,
+    diagnostics.silentQa,
+    diagnostics.pageState,
+    diagnostics.sessionId,
+    diagnostics.createdAt,
+    diagnostics.stopReason,
   ].join("|");
   if (serialized === lastPublishedRuntimeState) return;
   lastPublishedRuntimeState = serialized;
   root.setAttribute("data-audio-controller", diagnostics.controller);
   root.setAttribute("data-audio-context-state", diagnostics.contextState);
   root.setAttribute("data-audio-enabled", String(diagnostics.enabled));
+  root.setAttribute("data-audio-signal-active", String(diagnostics.signalActive));
   root.setAttribute("data-audio-audible", String(diagnostics.audible));
   root.setAttribute("data-audio-resume-pending", String(diagnostics.resumePending));
+  root.setAttribute("data-audio-output-gain", String(diagnostics.outputGainTarget));
+  root.setAttribute("data-audio-output-mode", diagnostics.outputMode);
+  root.setAttribute("data-audio-qa-silent", String(diagnostics.silentQa));
+  root.setAttribute("data-audio-page-state", diagnostics.pageState);
+  root.setAttribute("data-audio-session-id", diagnostics.sessionId);
+  root.setAttribute("data-audio-created-at", diagnostics.createdAt);
+  root.setAttribute("data-audio-stop-reason", diagnostics.stopReason);
+}
+
+function suspendFlightAudioLocal(reason = "manual") {
+  lastAudibleTarget = false;
+  lastStopReason = String(reason || "manual");
+  try {
+    setMasterOutput(0, { immediate: true });
+  } catch {
+    disabled = true;
+  }
+  try {
+    const attempt = context?.suspend?.();
+    attempt?.catch?.(() => {});
+    attempt?.finally?.(() => publishFlightAudioRuntimeState());
+  } catch {
+    // The synchronous master cut above remains the safety boundary.
+  }
+  publishFlightAudioRuntimeState();
+  return context != null;
+}
+
+function installFlightAudioLifecycle() {
+  if (lifecycleInstalled) return;
+  lifecycleInstalled = true;
+  const doc = globalThis.document;
+  const win = globalThis.window;
+  const enterBackground = (reason, { suspend = true } = {}) => {
+    backgrounded = true;
+    if (suspend) {
+      suspendFlightAudioLocal(reason);
+      return;
+    }
+    lastAudibleTarget = false;
+    lastStopReason = reason;
+    try {
+      setMasterOutput(0, { immediate: true });
+    } catch {
+      disabled = true;
+    }
+    publishFlightAudioRuntimeState();
+  };
+  const enterForeground = () => {
+    backgrounded = doc?.hidden === true;
+    lastStopReason = backgrounded ? "visibility-hidden" : "awaiting-foreground-frame";
+    publishFlightAudioRuntimeState();
+  };
+
+  // A hidden RAF cannot be trusted to deliver the normal muted frame. Cut the master directly.
+  // Blur keeps the context resumable without another browser permission gesture; a genuinely
+  // hidden/navigated page is suspended and can only resume through armFlightAudio.
+  win?.addEventListener?.("blur", () => enterBackground("window-blur", { suspend: false }));
+  win?.addEventListener?.("focus", enterForeground);
+  win?.addEventListener?.("pagehide", () => enterBackground("pagehide"));
+  win?.addEventListener?.("pageshow", enterForeground);
+  doc?.addEventListener?.("visibilitychange", () => {
+    if (doc.hidden) enterBackground("visibility-hidden");
+    else enterForeground();
+  });
 }
 
 function build() {
   const Ctor = globalThis.AudioContext ?? globalThis.webkitAudioContext;
   if (!Ctor) return false;
   context = new Ctor();
+  silentQa = isSilentQaRequested();
+  backgrounded = globalThis.document?.hidden === true;
+  audioSessionId = createAudioSessionId();
+  audioSessionCreatedAt = new Date().toISOString();
+  lastStopReason = "";
 
   master = context.createGain();
   master.gain.value = 0;
@@ -133,6 +274,7 @@ function build() {
     at: null,
   }));
   warningVoices = createWarningVoices(context, bus);
+  installFlightAudioLifecycle();
   publishFlightAudioRuntimeState();
   return true;
 }
@@ -552,7 +694,11 @@ function armFlightAudioLocal(state = null) {
       disabled = true;
       return false;
     }
-    if (contextNeedsUserResume(context) && !resumePending && userActivationAllowsResume()) {
+    backgrounded = globalThis.document?.hidden === true;
+    if (!backgrounded
+      && contextNeedsUserResume(context)
+      && !resumePending
+      && userActivationAllowsResume()) {
       const attempt = context.resume();
       if (attempt?.then) {
         const pending = Promise.resolve(attempt)
@@ -582,7 +728,12 @@ function setFlightAudioEnabledLocal(nextEnabled) {
     return enabled;
   }
   try {
-    master.gain.setTargetAtTime(enabled ? 0.55 : 0, context.currentTime, 0.02);
+    const liveOutput = enabled
+      && lastAudibleTarget
+      && !silentQa
+      && !backgrounded
+      && context?.state === "running";
+    setMasterOutput(liveOutput ? 0.55 : 0);
   } catch {
     disabled = true;
   }
@@ -612,7 +763,7 @@ function updateFlightAudioLocal(state, {
       // Updates run every animation frame and are not a reliable user gesture. Keep the graph
       // inaudible here; armFlightAudio owns the single in-flight resume attempt. Safari reports
       // the same user-gesture requirement as "interrupted" after calls, route changes, and sleep.
-      master.gain.setTargetAtTime(0, context.currentTime, 0.02);
+      setMasterOutput(0);
       lastAudibleTarget = false;
       publishFlightAudioRuntimeState();
       return;
@@ -622,7 +773,7 @@ function updateFlightAudioLocal(state, {
     ensureJetSamples(audioState);
     synchronizeCombatLifecycle(audioState);
 
-    const live = enabled && !muted;
+    const live = enabled && !muted && !backgrounded;
     lastAudibleTarget = live;
     // Collapse continuous gains on mute/pause (view loop still ticks while paused).
     updateEngineVoices(engineVoices, context, audioState, { muted: !live });
@@ -645,7 +796,9 @@ function updateFlightAudioLocal(state, {
       enabled: live,
       nowSeconds,
     });
-    master.gain.setTargetAtTime(live ? 0.55 : 0, context.currentTime, live ? 0.18 : 0.02);
+    setMasterOutput(live && !silentQa ? 0.55 : 0, {
+      timeConstant: live && !silentQa ? 0.18 : 0.02,
+    });
     publishFlightAudioRuntimeState();
   } catch {
     disabled = true;
@@ -659,6 +812,7 @@ const sharedFlightAudio = createSharedFlightAudioFacade({
   setEnabled: setFlightAudioEnabledLocal,
   isEnabled: isFlightAudioEnabledLocal,
   diagnostics: flightAudioDiagnosticsLocal,
+  suspend: suspendFlightAudioLocal,
   update: updateFlightAudioLocal,
 }, import.meta.url);
 
@@ -677,6 +831,12 @@ export function isFlightAudioEnabled() {
 
 export function flightAudioDiagnostics() {
   return sharedFlightAudio.diagnostics();
+}
+
+/// Immediate cleanup hook for QA harnesses and lifecycle owners. It always cuts the master before
+/// asking the browser to suspend, so a rejected suspend cannot leave a ghost engine running.
+export function suspendFlightAudio(reason = "manual") {
+  return sharedFlightAudio.suspend(reason);
 }
 
 /// Drive every continuous voice from the flat snapshot. `triggerHeld` gates gun reports.
