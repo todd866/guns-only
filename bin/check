@@ -72,6 +72,14 @@ if [ -d "$ukraine_atlas_source" ]; then
   mkdir -p "$ukraine_atlas_stage"
   cp -R "$ukraine_atlas_source/." "$ukraine_atlas_stage/"
 fi
+# Hero-cell mission feature packs (authored scenery). Source of truth under content/; wwwroot is
+# a staged copy.
+ukraine_hero_source="content/packs/ukraine-modern/environment/hero-cells"
+ukraine_hero_stage="$staged_content_dir/packs/ukraine-modern/environment/hero-cells"
+if [ -d "$ukraine_hero_source" ]; then
+  mkdir -p "$ukraine_hero_stage"
+  cp -R "$ukraine_hero_source/." "$ukraine_hero_stage/"
+fi
 diff -qr "$staged_content_dir" web/wwwroot/content
 
 "$dotnet_cli" restore GunsOnly.sln --nologo --ignore-failed-sources \
