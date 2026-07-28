@@ -30,6 +30,11 @@ public sealed record CombatConfig(
         OpponentAmmo: 0,
         PlayerHitsToDefeat: 4,
         OpponentHitsToDefeat: GunKill.DefaultHitsToKill);
+    public static CombatConfig Casevac { get; } = new(
+        PlayerAmmo: 0,
+        OpponentAmmo: 0,
+        PlayerHitsToDefeat: 1,
+        OpponentHitsToDefeat: 1);
     public static CombatConfig ModernVisualMerge { get; } = new(
         PlayerAmmo: 480,
         OpponentAmmo: 150,
@@ -130,6 +135,12 @@ public sealed record AircraftCapability(
         "aircraft.one-way-attack-drone.prototype.v1", "One-way attack drone prototype",
         "presentation.vehicle.one-way-attack-drone.prototype.v1",
         "systems.uncrewed-prototype.not-simulated.v1", false);
+    public static AircraftCapability CasevacAirAmbulancePrototype { get; } = new(
+        GunsOnly.Sim.Casevac.BuiltInCasevacDefinitions.AircraftId,
+        "Air ambulance prototype",
+        "presentation.vehicle.casevac-air-ambulance.prototype.v1",
+        "systems.casevac-air-ambulance.reduced-order.v1",
+        SystemsSimulated: false);
     /// The machine spike's airframe finally gets its own identity. It flew
     /// FlightModel.UcavInterceptorSurrogate — 15 G structural, half the player's wing loading —
     /// while presentation reported the beat's staged Su-27S, so the pilot was told they were
@@ -247,6 +258,15 @@ public sealed record MissionContract(
 }
 
 /// <summary>
+/// Whether a mission stages an opposing aircraft at all. Present is the compatibility default;
+/// non-combat sorties opt out explicitly instead of inventing an invisible target.
+/// </summary>
+public enum OpponentPresence {
+    Present,
+    None
+}
+
+/// <summary>
 /// The player's fuel loadout for a beat. Capacity and bingo are instance data so future aircraft
 /// can carry different internal loads without teaching FuelModel about airframe identities.
 /// Engine-less aircraft opt out explicitly instead of representing "no fuel" as permanent bingo.
@@ -344,7 +364,10 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     PilotSkill BanditSkill = PilotSkill.Competent,
     MissionEnvironmentContract? Environment = null,
     ScriptedInterceptConfig? ScriptedIntercept = null,
-    RecoveryPlan? RecoveryPlan = null) {
+    RecoveryPlan? RecoveryPlan = null,
+    OpponentPresence OpponentPresence = OpponentPresence.Present,
+    AircraftState? OpponentInitialState = null,
+    GunsOnly.Sim.Casevac.CasevacScenarioDefinition? Casevac = null) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
@@ -355,6 +378,13 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     public AircraftCapability PlayerAircraft => PlayerCapability ?? AircraftCapability.F86F30;
     public AircraftCapability BanditAircraft => BanditCapability
         ?? AircraftCapability.F86F30Bandit;
+    /// <summary>
+    /// Optional opponent kinematics at the staging boundary. Legacy combat beats retain their
+    /// positional Bandit value; no-opponent missions publish null and never construct an actor.
+    /// </summary>
+    public AircraftState? InitialOpponent => OpponentPresence == OpponentPresence.Present
+        ? OpponentInitialState ?? Bandit
+        : null;
     /// The Flanker-plus escalation keys on the SPAWNED SKILL, not the engagement index: with
     /// the FightDirector staging tiers from observed performance, a late-but-eased engagement
     /// must not inherit the Ace airframe, and a director boss must. The engagement-keyed
@@ -410,6 +440,9 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     public IBandit CreateBandit(
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
         SpawnSpec? spec = null) {
+        if (InitialOpponent is not { } authoredBandit)
+            throw new InvalidOperationException(
+                "This mission does not define an opponent actor.");
         if (UsesNeutralMergeBandit) {
             // A director-staged opening must change the whole actor, not just the skill label.
             // Keep the authored no-spec opening byte-for-byte compatible, while a persisted
@@ -420,14 +453,14 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
                 ? BanditAirForMount(mergeSkill, mergeOpening.Mount)
                 : BanditAir;
             AircraftState mergeInitial = ReferenceEquals(mergeAir, BanditAir)
-                ? Bandit : Bandit with { Mass = mergeAir.MassKg };
+                ? authoredBandit : authoredBandit with { Mass = mergeAir.MassKg };
             return new NeutralMergeBandit(
                 mergeInitial, mergeAir, mergeSkill, terrain,
                 profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
                 doctrineIndex: spec?.DoctrineIndex);
         }
         if (!UsesReactiveBandit)
-            return new RailBandit(Bandit, BanditAir, BanditTimeline);
+            return new RailBandit(authoredBandit, BanditAir, BanditTimeline);
         // A director-staged opening (post-restart pacing memory) may resolve a skill whose
         // airframe differs from the beat's staged one — a machine spike surviving a restart
         // must fly the UCAV at UCAV mass, not the staged airframe with a 15 G label.
@@ -436,7 +469,7 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             ? BanditAirForMount(skill, opening.Mount)
             : BanditAirForSkill(skill);
         AircraftState initial = ReferenceEquals(air, BanditAir)
-            ? Bandit : Bandit with { Mass = air.MassKg };
+            ? authoredBandit : authoredBandit with { Mass = air.MassKg };
         return new ReactiveBandit(initial, air, skill, terrain,
             profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
             doctrineIndex: spec?.DoctrineIndex);
@@ -451,10 +484,13 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
         if (formationIndex < 1)
             throw new ArgumentOutOfRangeException(nameof(formationIndex));
+        if (InitialOpponent is not { } authoredBandit)
+            throw new InvalidOperationException(
+                "This mission does not define an opponent formation.");
         double side = formationIndex % 2 == 1 ? 1.0 : -1.0;
         double rank = (formationIndex + 1) / 2.0;
-        AircraftState initial = Bandit with {
-            Position = Bandit.Position + new Vec3D(
+        AircraftState initial = authoredBandit with {
+            Position = authoredBandit.Position + new Vec3D(
                 side * 1_100.0 * rank,
                 (formationIndex % 3 - 1) * 180.0,
                 -520.0 * rank)
@@ -579,6 +615,12 @@ public sealed class RailBandit : IBandit {
 }
 
 public static class Beats {
+    public const int FirstBuiltInIndex = 1;
+    public const int LastBuiltInIndex = 13;
+
+    public static bool IsBuiltInIndex(int index) =>
+        index is >= FirstBuiltInIndex and <= LastBuiltInIndex;
+
     const double Alt = 3000;
     static AircraftState S(double x, double y, double z, double chi, double v) =>
         new(new Vec3D(x, y, z), v, 0, chi, 0, FlightModel.Sabre.MassKg);
@@ -883,11 +925,12 @@ public static class Beats {
         GunsOnly.Sim.Carrier.DeckConfiguration configuration =
             GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
         BeatSetup sortie = RapierIntercept(configuration);
+        AircraftState authoredContact = sortie.Bandit;
         return sortie with {
             Name = "Rapier circuits",
             // No contact. The bandit slot still needs a state, so it is parked far west of home
             // where it can never become a merge, and combat is disarmed below.
-            Bandit = sortie.Bandit with {
+            Bandit = authoredContact with {
                 Position = new Vec3D(-400_000.0, 24_000.0, 0.0), Speed = 200.0
             },
             UsesReactiveBandit = false,
@@ -930,6 +973,7 @@ public static class Beats {
         (RapierJobKind job, RapierComputerFailure computerFailure) =
             DealRapierSortie(jobSeed);
         BeatSetup sortie = RapierIntercept(configuration);
+        AircraftState authoredContact = sortie.Bandit;
         AircraftState contact = job switch {
             RapierJobKind.Balloon => new AircraftState(
                 new Vec3D(12_000, 18_500, 420_000), 40.0, 0.0, Math.PI, 0.0,
@@ -945,7 +989,7 @@ public static class Beats {
                 // High formation: apex release window, then leave.
                 new Vec3D(10_000, 18_500, 390_000), 200.0, 0.0, Math.PI, 0.0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
-            _ => sortie.Bandit
+            _ => authoredContact
         };
         AircraftParams banditParams = job switch {
             RapierJobKind.Balloon => FlightModel.GliderStrike,
@@ -1257,6 +1301,56 @@ public static class Beats {
         Mission: KoreaMission("mission.saddle-tracking.v1"));
 
     /// <summary>
+    /// MEDEVAC — one unopposed low-level lift from an orchard pickup to a clinic receiver.
+    /// The placeholder fixed-wing fields preserve the long-lived BeatSetup ABI; SimulationSession
+    /// stages the dedicated vertical-lift provider and never constructs either placeholder actor.
+    /// </summary>
+    public static BeatSetup Medevac() {
+        GunsOnly.Sim.Casevac.CasevacCourseDefinition course =
+            GunsOnly.Sim.Casevac.BuiltInCasevacDefinitions.Prototype;
+        GunsOnly.Sim.Casevac.CasevacHorizontalPoint start =
+            course.World.StartPosition;
+        GunsOnly.Sim.Casevac.CasevacHorizontalPoint pickup =
+            course.World.Pickup.Centre;
+        double headingRad = Math.Atan2(
+            pickup.XM - start.XM,
+            pickup.ZM - start.ZM);
+        var placeholder = new AircraftState(
+            new Vec3D(
+                start.XM,
+                course.World.StartSurfaceDatumM + course.World.StartAglM,
+                start.ZM),
+            Speed: 0.0,
+            Gamma: 0.0,
+            Chi: headingRad,
+            Bank: 0.0,
+            Mass: 5_850.0);
+        return new BeatSetup(
+            Name: "Medevac",
+            Player: placeholder,
+            Bandit: placeholder,
+            Law: new PurePursuitLaw(),
+            BanditTimeline: new() {
+                (0.0, new PilotCommand(1.0, 0.0, 0.0, 0.0)),
+            },
+            Combat: CombatConfig.Casevac,
+            Fuel: FuelConfig.EngineLess,
+            InitialThrottle: 0.0,
+            Mission: new MissionContract(
+                course.Mission.Id,
+                MissionContentFamily.Ukraine2030sTheatre,
+                RulesOfEngagement: "NO_OPPONENT_CASEVAC",
+                Era: "UKRAINE_2030S_THEATRE"),
+            PlayerCapability: AircraftCapability.CasevacAirAmbulancePrototype,
+            BanditCapability: AircraftCapability.OneWayAttackDronePrototype,
+            PlayerPhysiologyProfile:
+                PilotPhysiologyProfile.ModernFastJetReference,
+            Environment: Ukraine2030sTheatre.HeroCell,
+            OpponentPresence: OpponentPresence.None,
+            Casevac: course.Mission);
+    }
+
+    /// <summary>
     /// Single built-in catalogue used by simulation staging and environment selection. Stable beat
     /// indices remain the public ABI; keeping the factory here prevents bridge/projection switches
     /// from independently forgetting a new mission's world contract.
@@ -1275,6 +1369,7 @@ public static class Beats {
         10 => RapierIntercept(deckConfiguration),
         11 => RapierCircuits(deckConfiguration),
         12 => RapierGoFly(jobSeed: 0, deckConfiguration),
+        13 => Medevac(),
         _ => Perch()
     };
 }

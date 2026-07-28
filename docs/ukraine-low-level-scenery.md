@@ -1,4 +1,4 @@
-# Fictional Ukraine 2030s theatre and medevac foundation
+# Fictional Ukraine 2030s theatre and evacuation foundation
 
 ## Decision
 
@@ -23,7 +23,8 @@ flowchart TD
     B --> C["Future authored hero cells<br/>features, colliders, damage"]
     C --> D["Future LZ patches<br/>1–2 m surfaces and obstacles"]
     C --> E["Guns-only mission entities"]
-    D --> F["Rotorcraft + emergency medicine scenario"]
+    D --> F["Vertical-lift + CASEVAC transport scenario"]
+    F --> I["Optional validated medical domain<br/>deferred"]
     A --> G["Altitude-aware presentation<br/>macro terrain and atmosphere"]
     B --> H["Low-level micro presentation<br/>fields, settlements, utilities"]
     C --> H
@@ -121,38 +122,44 @@ shooting gallery, a second Ukraine theatre, or contaminated medical truth.
 | 1. Regional foundation | guns-only sorties share one 262.144 km theatre | 256 m macro truth, nested 32 m detail, AGL, weather, streaming |
 | 2. Fixed-strip sortie | Rapier launches and recovers from a stationary fictional strip | fixed platform truth, regional route, altitude-aware presentation |
 | 3. Gun-UCAV hero cell | player attacks fictional emplacements in one authored 4 km cell | feature IDs, colliders, damage, exclusion zones |
-| 4. Medevac LZ stage | reconnaissance and LZ assessment in the same hero-cell system | 1–2 m surfaces, obstacles, corridors, access and LZ status |
+| 4. CASEVAC route and sites | two validated fixed sites connected by one authoritative low-level corridor | 1–2 m pad surfaces, route-wide wires/obstacles, approach corridors and site status |
 | 5. Rotorcraft flight model | approach, hover, landing and departure constrained by conditions | mass/CG, rotor/engine maps, wind, density altitude and power margin |
-| 6. Emergency-care model | assess, treat, package and transport a deteriorating casualty | injury state, interventions, contraindications and time-to-care |
-| 7. Integrated missions | aviation decisions change medical outcomes and vice versa | shared scenario clock, event log, debrief and instructor evidence |
+| 6. CASEVAC transport | one opaque load moves from one pickup to one receiver under an authored urgency clock | custody, stable-contact gates, transport clock, event log and flight assessment |
+| 7. Validated medical domain (deferred) | independently reviewed clinical learning, if later approved | physiology, observations, interventions, uncertainty and SME acceptance |
+| 8. Optional integration | validated aviation and medical decisions interact without leaking hidden truth | shared scenario clock, evidence boundary, replay and instructor assessment |
 
 The graphics pipeline follows the same progression. Regional macro terrain carries high-altitude
 continuity; procedural fields and villages provide low-level background in the current detail cell;
-the 4 km combat/medevac hero cells then receive authored modular buildings, vegetation, utilities,
+the 4 km combat/CASEVAC hero cells then receive authored modular buildings, vegetation, utilities,
 surface decals, damaged states and seasonal material variants. Every hero-cell review includes
 cockpit-height, hover-height and ground-level captures plus a frame-time budget. Visual polish
 cannot promote an ambient prop into an obstacle, target, medical facility, or safe landing surface;
 those bindings always originate in simulation truth.
 
-## Medevac fidelity gate
+## CASEVAC physical-fidelity gate
 
 Neither the 256 m regional substrate nor the 32 m Soniachne override is sufficient to select or
-grade an LZ. A medically and aerodynamically credible medevac cell needs:
+grade an LZ. An aerodynamically credible CASEVAC cell needs:
 
 - 1–2 m terrain/surface patches around candidate LZs;
 - slope, local relief, roughness, bearing strength and surface material;
 - individual wires, poles, trees, fences, structures and rotor-clearance volumes;
 - approach/departure corridors, wind exposure, downwash, dust/snow and visibility;
-- road/trail access, extraction distance, lighting and time-to-care;
-- casualty state, injury mechanism, interventions, contraindications and deterioration over time;
+- road/trail access, extraction distance, lighting and the authored handoff-time target;
 - aircraft mass/CG, rotor/engine performance, density altitude, translational lift, vortex-ring and
   settling risks, power margin and one-engine-inoperative limits where applicable.
 
-Medevac detail therefore arrives in stages: regional routing and weather; an authored 4 km hero
-cell; 1–2 m candidate-LZ surfaces; individual obstacle and rotor-clearance truth; then medical
-scenario state. An LZ is eligible only when its high-resolution surface and obstacle set are both
-loaded and validated. Otherwise the mission must label it **unassessed**, never infer safety from a
-macro mesh, the 32 m detail grid, or decorative scenery.
+CASEVAC detail therefore arrives in stages: regional routing and weather; an authored 4 km hero
+cell; two 1–2 m LZ surfaces; individual obstacle and rotor-clearance truth; then the opaque
+pickup/drop-off scenario from the
+[CASEVAC design](superpowers/specs/2026-07-28-casevac-pickup-dropoff-design.md). An LZ is eligible
+only when its high-resolution surface and obstacle set are both loaded and validated. Otherwise the
+mission must label it **unassessed**, never infer safety from a macro mesh, the 32 m detail grid, or
+decorative scenery.
+
+Patient physiology is not part of the first CASEVAC fidelity gate. The first slice owns only opaque
+load custody and an authored handoff clock. Any future clinical model is a separate, optional,
+independently reviewed domain.
 
 ## Acceptance gates
 
@@ -173,7 +180,7 @@ macro mesh, the 32 m detail grid, or decorative scenery.
 - Mission 8 remains a disclosed staged stream with one authoritative airborne target at a time.
 - The next ground-attack slice cannot ship until target, collider and damage identities are
   simulation-owned.
-- A medevac LZ cannot ship until its 1–2 m surface and obstacle truth pass their own validation.
+- A CASEVAC LZ cannot ship until its 1–2 m surface and obstacle truth pass their own validation.
 
 ## Fictionalization and use boundary
 

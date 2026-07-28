@@ -76,6 +76,14 @@ internal static class SnapshotProjection {
         WorldOriginNorthM = worldOriginNorthM;
         WorldOriginConfigured = worldOriginConfigured;
         Terrain = terrain;
+        // A no-opponent vertical-lift mission has no valid legacy Player/Bandit/Gun graph.
+        // Branch before touching any fixed-wing or combat accessor.
+        if (Session.CasevacMission)
+            return CasevacSnapshotProjection.BuildState(
+                Session,
+                WorldOriginEastM,
+                WorldOriginNorthM,
+                WorldOriginConfigured);
         AircraftSim _player = Session.Player;
         IBandit _bandit = Session.Bandit;
         BeatSetup _beat = Session.Beat;

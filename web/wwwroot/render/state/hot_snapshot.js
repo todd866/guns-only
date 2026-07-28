@@ -19,21 +19,26 @@
 
 export function parseHotLayout(layoutJson) {
   const raw = JSON.parse(layoutJson);
+  const parseBlock = (block) => Object.freeze({
+    name: block.name,
+    presenceIndex: block.presence_index,
+    slots: block.slots.map((slot) => Object.freeze({
+      name: slot.name,
+      index: slot.index,
+      kind: slot.kind,
+    })),
+  });
   return Object.freeze({
     // Decoding is layout-driven: legacy v2 carrier-as-presence layouts and the v3
     // recovery-platform-as-presence layout both remain valid.
     layoutVersion: Number.isInteger(raw.layout_version) ? raw.layout_version : 1,
     slotCount: raw.slot_count,
     coldVersionIndex: raw.cold_version_index,
-    blocks: raw.blocks.map((block) => Object.freeze({
-      name: block.name,
-      presenceIndex: block.presence_index,
-      slots: block.slots.map((slot) => Object.freeze({
-        name: slot.name,
-        index: slot.index,
-        kind: slot.kind,
-      })),
-    })),
+    blocks: raw.blocks.map(parseBlock),
+    // CASEVAC deliberately uses a sibling block, not a member of blocks: several commander-safe
+    // fields share names with the combat core, and selecting one projection family prevents either
+    // decoder from manufacturing keys that are absent from its cold schema.
+    casevacBlock: raw.casevac_block ? parseBlock(raw.casevac_block) : null,
     tracers: raw.tracers.map((tracer) => Object.freeze({
       field: tracer.field,
       countIndex: tracer.count_index,
@@ -57,14 +62,28 @@ export function parseHotLayout(layoutJson) {
 // snapshot, and the cold base itself is replaced wholesale on re-fetch.
 export function decodeHotFrame(layout, hot, coldBase) {
   const state = { ...coldBase };
-  for (const block of layout.blocks) {
-    if (block.presenceIndex >= 0 && !hot[block.presenceIndex]) continue;
-    for (const slot of block.slots) {
+  const overlaySlots = (slots) => {
+    for (const slot of slots) {
       const value = hot[slot.index];
       if (slot.kind === "boolean") state[slot.name] = value === 1;
-      else if (slot.kind === "nullable") state[slot.name] = Number.isNaN(value) ? null : value;
-      else state[slot.name] = value;
+      else if (slot.kind === "nullable") {
+        state[slot.name] = Number.isNaN(value) ? null : value;
+      } else state[slot.name] = value;
     }
+  };
+
+  if (coldBase?.casevac_mission === true) {
+    const block = layout.casevacBlock;
+    // Layouts predating the CASEVAC hot block remain valid and intentionally stay cold-only.
+    if (!block
+      || (block.presenceIndex >= 0 && !hot[block.presenceIndex])) return state;
+    overlaySlots(block.slots);
+    return state;
+  }
+
+  for (const block of layout.blocks) {
+    if (block.presenceIndex >= 0 && !hot[block.presenceIndex]) continue;
+    overlaySlots(block.slots);
   }
   for (const tracer of layout.tracers) {
     const count = Math.min(hot[tracer.countIndex] | 0, tracer.maxRounds);

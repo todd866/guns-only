@@ -20,12 +20,21 @@ export const CAMPAIGN_NODES = Object.freeze([
     shortObjective: "Stop four low-flying raiders over a fictional Ukrainian training sector.",
     qualification: "",
   }),
+  Object.freeze({
+    id: "medevac",
+    mission: 13,
+    sequence: 3,
+    aircraft: "Air Ambulance",
+    title: "Medevac",
+    shortObjective: "Fly low to one pickup, secure the capsule, and hand it over at the clinic.",
+    qualification: "",
+  }),
   // Circuits sits BEFORE the intercept deliberately. The trap is the hardest thing the aircraft
   // asks for and the intercept offered exactly one attempt at it, far from home and low on fuel.
   Object.freeze({
     id: "rapier-circuits",
     mission: 11,
-    sequence: 3,
+    sequence: 4,
     aircraft: "Rapier",
     title: "Rapier Circuits",
     shortObjective: "Launch west, fly the pattern, trap. Repeat until the hook is easy.",
@@ -34,7 +43,7 @@ export const CAMPAIGN_NODES = Object.freeze([
   Object.freeze({
     id: "rapier-intercept",
     mission: 10,
-    sequence: 4,
+    sequence: 5,
     aircraft: "Rapier",
     title: "Rapier Intercept",
     shortObjective: "Climb around M0.90 to FL560, cross the live ram handover, ram-climb to FL700, release the swarm, recover.",

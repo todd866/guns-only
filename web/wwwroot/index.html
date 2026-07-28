@@ -584,6 +584,7 @@
     /* Portrait is a first-class assisted mode (Build 75): tilt flies, throttle holds corner,
        guns fire in solution. The old ROTATE TO LANDSCAPE blocker is gone. */
     #portrait-chips { display: none; }
+    #portrait-chips[hidden] { display: none !important; }
     @media (orientation: portrait) {
       .touch-mode #portrait-chips {
         display: flex;
@@ -783,6 +784,13 @@
       opacity: 1;
       visibility: visible;
       pointer-events: auto;
+    }
+
+    /* The rich Medevac assessment owns the completed-sortie dialog. Retain the shared dimmed
+       backdrop, but do not leave the generic result card and its duplicate actions visible behind
+       the topmost evidence panel. */
+    #ready-screen[data-rich-debrief="true"] .ready-card {
+      visibility: hidden;
     }
 
     .touch-mode #ready-screen { z-index: 13; }
@@ -2492,7 +2500,7 @@
           <div class="ready-group-heading ready-program-heading">
             <div>
               <h2>Missions</h2>
-              <p>Four guns-only experiences in one fictional 2030s theatre, from facility corridors to the stratosphere.</p>
+              <p>Five flight experiences in one fictional 2030s theatre, from low-level medical transport to the stratosphere.</p>
             </div>
             <output id="ready-program-progress"></output>
           </div>
@@ -2511,6 +2519,14 @@
                 <strong>Low-Level Drone Intercept</strong>
                 <span>Stop four low-flying fictional raiders over the detailed Soniachne low-level cell.</span>
                 <small>GUNS ONLY · TRUE-SCALE TERRAIN · NO GROUND TARGETS YET</small>
+              </button>
+            </div>
+            <div class="sortie-option" data-selected="false" data-program-state="available">
+              <button type="button" class="sortie-choice" data-program-node="medevac" aria-pressed="false">
+                <span class="sortie-number">AIR AMBULANCE <b data-program-status="medevac"></b></span>
+                <strong>Medevac</strong>
+                <span>Fly low to an orchard pickup, settle the aircraft, secure one opaque casualty capsule, and hand it over at the clinic.</span>
+                <small>NO OPPONENT · STABLE CONTACT · ONE CAPSULE · VISIBLE URGENCY</small>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available">

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using GunsOnly.Sim.Casevac;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Propulsion;
@@ -106,6 +107,7 @@ public sealed class SimulationSession {
 
     public const double FixedDeltaSeconds = 1.0 / AircraftSim.TickHz;
     public const int RecentEventCapacity = 64;
+    const int BuiltInCasevacBeatIndex = 13;
     // Terrain prediction is deliberately a flight-computer-rate task rather than a 120 Hz
     // actuator task. The held recovery command still reaches AircraftSim every fixed tick.
     public const int AutoGcasPredictionIntervalTicks = 6;
@@ -192,6 +194,9 @@ public sealed class SimulationSession {
     ValleyVariant _requestedVariant = ValleyVariant.DoctrineDeep;
     WeatherProfile? _weatherProfile;
     ITerrainSurface? _terrainSurface;
+    CasevacFlightRuntime? _casevacFlight;
+    double _casevacAnalogRight;
+    bool _casevacAbortRequested;
 
     double _accumulatorSeconds;
     double _simTimeMs;
@@ -454,8 +459,32 @@ public sealed class SimulationSession {
     public double RapierRamjetFuelFlowLbPerMinute => RapierMissionAvailable
         ? _player.LastEngineOperatingPoint.RamjetFuelFlowLbPerMinute
         : 0.0;
-    public AircraftSim Player => _player;
-    public IBandit Bandit => _bandit;
+    public AircraftSim Player => _player
+        ?? throw new InvalidOperationException(
+            "The active mission uses a non-fixed-wing player vehicle.");
+    public bool CasevacMission => _casevacFlight is not null;
+    public CasevacFlightRuntime? CasevacFlight => _casevacFlight;
+    /// <summary>
+    /// Complete the built-in Medevac aftermath only after the browser has presented it once.
+    /// This is deliberately unavailable to custom CASEVAC beats and every non-Quiet phase.
+    /// </summary>
+    public bool RequestCasevacQuietSkip() {
+        if (_beatIndex != BuiltInCasevacBeatIndex
+            || _casevacFlight is null
+            || !_casevacFlight.RequestQuietSkip())
+            return false;
+        FinishCasevacLifecycle();
+        UpdateTimeCompressionDecision();
+        return true;
+    }
+
+    public bool OpponentPresent => _beat is not null
+        && _beat.InitialOpponent.HasValue
+        && _bandit is not null;
+    public IBandit Bandit => OpponentPresent
+        ? _bandit
+        : throw new InvalidOperationException(
+            "The active mission does not stage an opponent.");
     public BeatSetup Beat => _beat;
     public AiComputeLevel AiComputeLevel => _aiComputeLevel;
     /// <summary>
@@ -486,6 +515,7 @@ public sealed class SimulationSession {
     public IReadOnlyList<GunRound> FormationOpponentRoundsInFlight {
         get {
             _formationOpponentRoundsInFlight.Clear();
+            if (!OpponentPresent) return _formationOpponentRoundsInFlight;
             if (!_reliefTargetingOpponentGuns.ContainsKey(_primaryOpponentGunTargetId))
                 _formationOpponentRoundsInFlight.AddRange(_opponentGun.RoundsInFlight);
             foreach (Wingman wingman in _wingmen)
@@ -513,23 +543,27 @@ public sealed class SimulationSession {
     }
     public AircraftState SelectedOpponentState {
         get {
+            if (!OpponentPresent)
+                throw new InvalidOperationException(
+                    "The active mission does not stage an opponent.");
             Wingman? wingman = _wingmen.FirstOrDefault(wingman =>
                 wingman.PlayerGunTargetId == _selectedPlayerGunTargetId);
             return wingman?.Bandit.State ?? _bandit.State;
         }
     }
-    public bool SelectedOpponentAlive => IsPlayerGunTargetLive(
-        _selectedPlayerGunTargetId);
+    public bool SelectedOpponentAlive => OpponentPresent
+        && IsPlayerGunTargetLive(_selectedPlayerGunTargetId);
     public double SelectedOpponentHealth =>
-        _gunKill.TargetHealthFor(_selectedPlayerGunTargetId);
+        OpponentPresent ? _gunKill.TargetHealthFor(_selectedPlayerGunTargetId) : 0.0;
     public bool PrimaryOpponentAlive =>
-        _opponentTerminalState == AircraftTerminalState.Flying
+        OpponentPresent
+        && _opponentTerminalState == AircraftTerminalState.Flying
         && _gunKill.DamageFor(_primaryOpponentGunTargetId).TargetAlive;
     public double PrimaryOpponentHealth =>
-        _gunKill.TargetHealthFor(_primaryOpponentGunTargetId);
+        OpponentPresent ? _gunKill.TargetHealthFor(_primaryOpponentGunTargetId) : 0.0;
     /// Every opponent still fighting, primary first. One entry for an ordinary duel.
     public int LiveOpponentCount =>
-        (_opponentTerminalState == AircraftTerminalState.Flying ? 1 : 0)
+        (OpponentPresent && _opponentTerminalState == AircraftTerminalState.Flying ? 1 : 0)
         + _wingmen.Count(static wingman => wingman.StillFighting);
     /// Total rounds the player has absorbed from ALL opponents in this sortie.
     public int PlayerHitsTaken => _playerHitsTaken;
@@ -683,7 +717,8 @@ public sealed class SimulationSession {
     public bool TryImportDirectorState(string? state) =>
         _fightDirector.TryImportState(state);
     public bool OpponentReplacementPending =>
-        !CombatHandoffRequested
+        OpponentPresent
+        && !CombatHandoffRequested
         && (_beat.ContinuousCombat is not null
             || _wingmen.Any(static wingman => wingman.StillFighting))
         && Lifecycle == LifecycleState.Active
@@ -701,14 +736,16 @@ public sealed class SimulationSession {
     /// leaked vehicle is not integrated through the ordinary one-opponent terminal state machine.
     public bool OpponentBodyPresent => _droneRaidEvaluation is {
         Finished: true, OwnshipLost: false
-    } ? false : _opponentTerminalState != AircraftTerminalState.Settled;
+    } ? false : OpponentPresent
+        && _opponentTerminalState != AircraftTerminalState.Settled;
     public ImpactSurface PlayerImpactSurface => _playerImpactSurface;
     public ImpactSurface OpponentImpactSurface => _opponentImpactSurface;
     /// <summary>The last authoritative carrier proxy contacted by the player wreck.</summary>
     public Carrier.SolidCollision PlayerCarrierSolid =>
         _playerWreckMotion?.CarrierSolid ?? _playerCarrierSolid;
     public bool TerminalPhaseActive => _playerTerminalState != AircraftTerminalState.Flying
-        || _opponentTerminalState != AircraftTerminalState.Flying;
+        || (OpponentPresent
+            && _opponentTerminalState != AircraftTerminalState.Flying);
     public IReadOnlyList<SessionEvent> RecentEvents => _recentEvents;
     public IReadOnlyList<DetachedOpponentWreck> DetachedOpponentWrecks =>
         _detachedOpponentWrecks;
@@ -736,9 +773,11 @@ public sealed class SimulationSession {
     public bool OpponentTriggerDown => _opponentTriggerDown;
     public bool AssistedFlight => _assistedFlight;
     public int AssistedSpeedBiasKts => _assistedSpeedBiasIndex * 30;
-    public bool WeaponsInhibited => _visualMergeEvaluation?.WeaponsInhibited ?? false;
+    public bool WeaponsInhibited => !OpponentPresent
+        || (_visualMergeEvaluation?.WeaponsInhibited ?? false);
     public bool PlayerWeaponsAuthorized =>
-        (_visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true)
+        OpponentPresent
+        && (_visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true)
         && !CombatHandoffRequested
         && !_autoGcasState.Active
         && !_pilotTriggerInterlocked
@@ -799,13 +838,21 @@ public sealed class SimulationSession {
     /// </summary>
     public void SetTerrainSurface(ITerrainSurface? terrain) {
         _terrainSurface = terrain;
+        if (_casevacFlight is not null
+            && Lifecycle == LifecycleState.Ready) {
+            // The vertical-lift provider has no second reset/re-anchor lifecycle. Recreate the
+            // staged Ready mission so its immutable pad and obstacle datums bind the new terrain
+            // before the authority clock is released.
+            StageBeat(_beatFactory());
+            return;
+        }
         RefreshLaunchTerrainClearance();
         // Every live opponent captured the previous surface at construction; a world-origin
         // re-anchor must reach the whole formation or a wingman's floor sense silently reads the
         // stale translation. Destroyed/settled actors already fly through their impact-owned
         // WreckContactMotion (or detached-wreck state), and are deliberately not retargeted to a
         // newly translated surface mid-contact.
-        if (!_bandit.CatastrophicallyDamaged)
+        if (OpponentPresent && !_bandit.CatastrophicallyDamaged)
             UpdateLiveBanditTerrain(_bandit, terrain);
         foreach (Wingman wingman in _wingmen) {
             if (wingman.StillFighting)
@@ -856,7 +903,7 @@ public sealed class SimulationSession {
     /// <summary>Construct and stage one of the built-in beats. Physics remains held in Ready.</summary>
     public void StartBeat(int index,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial) {
-        if (index is < 1 or > 11) index = 1;
+        if (!Beats.IsBuiltInIndex(index)) index = Beats.FirstBuiltInIndex;
         _prechargeSystemsOnStage = true;
         _beatIndex = index;
         _deckConfiguration = deckConfiguration;
@@ -936,6 +983,12 @@ public sealed class SimulationSession {
             return;
         }
         ClearHeldInput();
+        if (_casevacFlight is not null) {
+            _casevacFlight.Begin(_tick);
+            Lifecycle = LifecycleState.Active;
+            UpdateTimeCompressionDecision();
+            return;
+        }
         if (_carrier is not null) {
             // StageBeat previews these exact conditions so the aircraft and deck can be rendered in
             // Ready. The attempt is consumed only here, at the authoritative clock-release edge.
@@ -1247,6 +1300,16 @@ public sealed class SimulationSession {
             return;
         }
         if (Lifecycle != LifecycleState.Active) return;
+        if (_casevacFlight is not null) {
+            bool casevacNewPress =
+                pressed
+                && _keys.PhaseAt(key, _simTimeMs)
+                    == KeyPhase.Idle;
+            _keys.Feed(key, pressed, _simTimeMs);
+            if (key == GKey.KnockItOff && casevacNewPress)
+                _casevacAbortRequested = true;
+            return;
+        }
         // Once ownship is physically destroyed, input cannot be allowed to reanimate controls or
         // systems. Restart remains available through the early branch above.
         if (_playerTerminalState != AircraftTerminalState.Flying) return;
@@ -1319,6 +1382,15 @@ public sealed class SimulationSession {
     /// </summary>
     public void FeedDirectThrottle(bool increase, bool pressed) {
         if (Lifecycle != LifecycleState.Active) return;
+        if (_casevacFlight is not null) {
+            _keys.FeedDirect(
+                increase
+                    ? GKey.ThrottleUp
+                    : GKey.ThrottleDown,
+                pressed,
+                _simTimeMs);
+            return;
+        }
         if (_playerTerminalState != AircraftTerminalState.Flying) return;
         // Same G-LOC ownership boundary as FeedKey: releases pass through so held controls can
         // cross the required neutral boundary, but no new press is accepted while interlocked.
@@ -1335,6 +1407,13 @@ public sealed class SimulationSession {
     public void SetAnalogRollControl(double value) {
         if (!double.IsFinite(value))
             throw new ArgumentOutOfRangeException(nameof(value));
+        if (_casevacFlight is not null) {
+            _casevacAnalogRight =
+                Lifecycle == LifecycleState.Active
+                    ? Math.Clamp(value, -1.0, 1.0)
+                    : 0.0;
+            return;
+        }
         if (Lifecycle != LifecycleState.Active
             || _playerTerminalState != AircraftTerminalState.Flying
             || _pilotControlInterlocked) {
@@ -1354,7 +1433,7 @@ public sealed class SimulationSession {
     /// continuous weapon. Slot zero is the primary; slots one onward mirror Wingmen order.
     /// </summary>
     public bool SetPlayerGunTargetSlot(int slot) {
-        if (slot < 0) return false;
+        if (slot < 0 || !OpponentPresent) return false;
 
         long requestedId;
         if (slot == 0) {
@@ -1380,6 +1459,12 @@ public sealed class SimulationSession {
     /// opponent from inheriting the previous contact's assist latch.
     /// </summary>
     public void SetBanditPadlockRollAssist(bool selected) {
+        if (!OpponentPresent) {
+            _banditPadlockRollAssistSelected = false;
+            _banditPadlockRollAssistTargetSequence = 0;
+            _padlockRollAssist.Reset();
+            return;
+        }
         if (!selected) {
             _banditPadlockRollAssistSelected = false;
             _banditPadlockRollAssistTargetSequence = 0;
@@ -1411,6 +1496,37 @@ public sealed class SimulationSession {
 
     bool PilotPitchInputActive() =>
         KeyActive(GKey.PullUp) || KeyActive(GKey.PushDown);
+
+    CasevacFlightControlIntent CaptureCasevacFlightIntent() {
+        static double Axis(bool positive, bool negative) =>
+            positive == negative
+                ? 0.0
+                : positive ? 1.0 : -1.0;
+        double forward = Axis(
+            KeyActive(GKey.PushDown),
+            KeyActive(GKey.PullUp));
+        double right = Math.Clamp(
+            Axis(
+                KeyActive(GKey.RollRight),
+                KeyActive(GKey.RollLeft))
+            + _casevacAnalogRight,
+            -1.0,
+            1.0);
+        double vertical = Axis(
+            KeyActive(GKey.ThrottleUp),
+            KeyActive(GKey.ThrottleDown));
+        double yaw = Axis(
+            KeyActive(GKey.RudderRight),
+            KeyActive(GKey.RudderLeft));
+        return new CasevacFlightControlIntent(
+            forward,
+            right,
+            vertical,
+            yaw,
+            _casevacAbortRequested
+                ? CasevacSemanticCommand.RequestAbort
+                : CasevacSemanticCommand.None);
+    }
 
     bool HasControlInputBeyondTrim() {
         PilotCommand command = _detents.Command;
@@ -1985,7 +2101,27 @@ public sealed class SimulationSession {
             : pilotCommand;
     }
 
+    void FinishCasevacLifecycle() {
+        _outcome = SortieOutcome.None;
+        _pendingOutcome = SortieOutcome.None;
+        Lifecycle = LifecycleState.Finished;
+        _accumulatorSeconds = 0.0;
+    }
+
     void RunFixedTick() {
+        if (_casevacFlight is not null) {
+            long sourceTick = checked(_tick + 1L);
+            _casevacFlight.Advance(
+                sourceTick,
+                CaptureCasevacFlightIntent());
+            _casevacAbortRequested = false;
+            _tick = sourceTick;
+            _simTimeMs += FixedDeltaSeconds * 1000.0;
+            if (_casevacFlight.IsTerminal)
+                FinishCasevacLifecycle();
+            UpdateTimeCompressionDecision();
+            return;
+        }
         AdvanceCombatHandoffAtTickBoundary();
         ConfigureAdaptiveAiPlanning();
         // Formation radio traffic is sampled and delivered at the beginning-of-tick boundary.
@@ -2343,6 +2479,11 @@ public sealed class SimulationSession {
         // first ever Rapier sortie 1,440 kg lighter than every restart.
         _rapierDogfightingDronesRemaining =
             Math.Max(0, _beat.ScriptedIntercept?.DogfightingDrones ?? 0);
+        if (_beat.Casevac is not null) {
+            StageCasevac();
+            return;
+        }
+        _casevacFlight = null;
         _carrier = _beat.Carrier;
         _conventionalRunwayRecovery =
             _beat.RecoveryPlan?.ConventionalRunway is null
@@ -2579,6 +2720,115 @@ public sealed class SimulationSession {
                 openingSpawn is { } opening && (opening.Boss || opening.Machine));
         // Simulation time is deliberately monotonic across restarts because KeyGrammar timestamps
         // all input in this epoch. Only flight-local state and the accumulator reset.
+        Lifecycle = LifecycleState.Ready;
+    }
+
+    void StageCasevac() {
+        CasevacCourseDefinition course =
+            BuiltInCasevacDefinitions.Prototype;
+        if (!StringComparer.Ordinal.Equals(
+                _beat.Casevac!.Id,
+                course.Mission.Id))
+            throw new InvalidOperationException(
+                "The staged CASEVAC mission has no matching authoritative built-in world.");
+
+        _carrier = null;
+        _player = null!;
+        _bandit = null!;
+        ClearWingmen();
+        _retiredOpponentGuns.Clear();
+        _maintenanceScenario = null;
+        _visualMergeEvaluation = null;
+        _droneRaidEvaluation = null;
+        _fuel = CreatePlayerFuel();
+        _systems = CreatePlayerSystems(
+            onApproach: false,
+            prechargeUtilityHydraulics: false);
+        _keys = new KeyGrammar();
+        _detents = new DetentLayer {
+            Variant = _requestedVariant,
+            ApproachMode = false,
+            AerodynamicConfiguration = AirframeAerodynamicState.Clean,
+            AtmosphereModel = _weatherProfile?.Atmosphere
+                ?? StandardAtmosphere1976.Instance
+        };
+        _detents.ConfigureFor(_beat.PlayerAir, 0.0);
+        _pilotPhysiology = new PilotPhysiologyModel(
+            _beat.PlayerPilotPhysiology);
+        _prompts = new PromptTracker();
+        _cue = PromptCue.None;
+        _advice = new DoctrineAdvice(1.0, 0.0, "setup");
+        _casevacFlight = new CasevacFlightRuntime(
+            course,
+            _terrainSurface,
+            _weatherProfile,
+            () => ++_eventSequence);
+        _casevacAnalogRight = 0.0;
+        _casevacAbortRequested = false;
+
+        _playerSpawnSequence++;
+        _playerTerminalState = AircraftTerminalState.Flying;
+        _opponentTerminalState = AircraftTerminalState.Settled;
+        _playerImpactSurface = ImpactSurface.None;
+        _opponentImpactSurface = ImpactSurface.None;
+        _playerCarrierSolid = Carrier.SolidCollision.None;
+        _playerWreckMotion = null;
+        _outcome = SortieOutcome.None;
+        _pendingOutcome = SortieOutcome.None;
+        _triggerDown = false;
+        _opponentTriggerDown = false;
+        _assistedFlight = false;
+        _banditPadlockRollAssistSelected = false;
+        _banditPadlockRollAssistTargetSequence = 0;
+        _padlockRollAssist.Reset();
+        _autoGcasState = AutoGcasState.Initial(available: false);
+        _autoGcasRecoveryCommand = null;
+        _gunneryPitchAssistState =
+            GunneryPitchAssistState.Inactive();
+        _pilotDelayedCommand = _detents.Command;
+        _pilotCommandResponseInitialized = true;
+        _pilotControlInterlocked = false;
+        _pilotTriggerInterlocked = false;
+        _pilotGLocCount = 0;
+        _pilotPeakPositiveG = 1.0;
+        _pilotPeakNegativeG = 0.0;
+        _pilotHeldThrottle = 0.0;
+
+        _configurationAutomationEnabled = false;
+        _configurationTarget = FlightConfigurationTarget.Combat;
+        _configurationWasReady = true;
+        _recovery = Carrier.Recovery.Flying;
+        _touchdown = Carrier.TouchdownResult.Flying;
+        _carrierPass.Reset();
+        _arrestment.Reset();
+        _catapult.Reset();
+        _burble = null;
+        _waveOffArmed = false;
+        _waveOffUntilMs = double.NegativeInfinity;
+        _rapierMissionDirector = null;
+        _rapierMissionGuidance = default;
+        _rapierAutomationEnabled = false;
+        _rapierGunDrone = null;
+        _rapierMissileInFlight = false;
+        _rapierPursuitActive = false;
+        _circuitTraffic = Array.Empty<CircuitTrafficShip>();
+        _circuitComms = "";
+
+        _accumulatorSeconds = 0.0;
+        _timeCompressionAccumulatorSeconds = 0.0;
+        _timeCompressionHostMaximumFactor = 1;
+        _timeCompressionFactor = 1;
+        _timeCompressionInhibitReason =
+            TimeCompressionInhibitReason.SessionInactive;
+        _lastRange = 0.0;
+        _closureKts = 0.0;
+        _closureSmooth = 0.0;
+        _recentEvents.Clear();
+        _detachedOpponentWrecks.Clear();
+        _incidentReplay.Reset();
+        _transitionCue = "";
+        _transitionCueUntilMs = double.NegativeInfinity;
+        _splashCueUntilMs = double.NegativeInfinity;
         Lifecycle = LifecycleState.Ready;
     }
 

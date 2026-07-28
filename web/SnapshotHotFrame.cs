@@ -2,9 +2,11 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using GunsOnly.Sim;
+using GunsOnly.Sim.Casevac;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Turbulence;
+using GunsOnly.Sim.Vehicles;
 
 namespace GunsOnly.Web;
 
@@ -49,15 +51,21 @@ internal static class SnapshotHotFrame {
     static readonly string[] TrajectoryKeys = { "x", "y", "z", "r" };
     static readonly int[] TrajectoryDecimals = { 2, 2, 2, 1 };
     const int RawInteger = -1;
+    const double RadiansToDegrees = 180.0 / Math.PI;
+    const double JoulesPerKilowattHour = 3_600_000.0;
+    const double SecondsPerMinute = 60.0;
+    const double PresentationRainFullScaleMmPerHour = 4.0;
 
     static readonly List<SlotDef> Slots = new();
     static readonly List<BlockDef> Blocks = new();
     static readonly List<TracerDef> TracerRegions = new();
     static readonly List<SampleArrayDef> SampleArrays = new();
+    static readonly BlockDef CasevacBlock;
     public static readonly int SlotCount;
 
     static long _coldVersion = 1;
     static ColdFingerprint? _lastFingerprint;
+    static CasevacColdFingerprint? _lastCasevacFingerprint;
     static string? _layoutJson;
 
     static SnapshotHotFrame() {
@@ -539,6 +547,82 @@ internal static class SnapshotHotFrame {
         Num("catapult_end_speed_kts", 2);
         CloseBlock();
 
+        // CASEVAC has a deliberately separate block. It is not part of Blocks: legacy decoding must
+        // never overlay these duplicate field names, and CASEVAC decoding must never walk the
+        // always-present combat core. The browser selects exactly one projection family from the
+        // cold snapshot's casevac_mission discriminator.
+        int casevacStart = slots.Count;
+        Bool("__casevac_hot_present");
+        Num("t", 4);
+        Num("tick", RawInteger);
+        Num("px", 3); Num("py", 3); Num("pz", 3);
+        Num("vx", 3); Num("vy", 3); Num("vz", 3);
+        Num("pfx", 5); Num("pfy", 5); Num("pfz", 5);
+        Num("plx", 5); Num("ply", 5); Num("plz", 5);
+        Num("pux", 5); Num("puy", 5); Num("puz", 5);
+        Num("casevac_pitch_deg", 3);
+        Num("casevac_bank_deg", 3);
+        Num("casevac_heading_deg", 3);
+        Num("casevac_active_mission_ticks", RawInteger);
+        Bool("casevac_clock_running");
+        Bool("casevac_quiet");
+        Num("casevac_quiet_progress_01", 4);
+        Nul("casevac_target_x", 3);
+        Nul("casevac_target_y", 3);
+        Nul("casevac_target_z", 3);
+        Nul("casevac_target_range_m", 1);
+        Nul("casevac_target_bearing_deg", 2);
+        Nul("casevac_target_relative_bearing_deg", 2);
+        Nul("casevac_target_eta_s", 1);
+        Num("casevac_call_age_s", 3);
+        Bool("casevac_requested_window_passed");
+        Nul("casevac_capsule_secured_call_age_s", 3);
+        Nul("casevac_handoff_call_age_s", 3);
+        Bool("casevac_stable_contact");
+        Bool("casevac_surface_contact");
+        Num("casevac_approach_attempt_id", RawInteger);
+        Num("casevac_stabilization_progress_ticks", RawInteger);
+        Num("casevac_stabilization_required_ticks", RawInteger);
+        Num("casevac_dwell_progress_01", 4);
+        Num("casevac_operation_progress_ticks", RawInteger);
+        Num("casevac_operation_required_ticks", RawInteger);
+        Bool("casevac_vehicle_flyable");
+        Bool("casevac_contact_stable");
+        Num("casevac_agl_m", 3);
+        Num("casevac_gross_mass_kg", 2);
+        Num("casevac_payload_mass_kg", 2);
+        Nul("casevac_power_margin_fraction", 4);
+        Nul("casevac_power_margin_01", 4);
+        Nul("casevac_available_power_w", 1);
+        Nul("casevac_applied_power_w", 1);
+        Num("casevac_energy_remaining_kwh", 4);
+        Num("casevac_energy_remaining_fraction", 6);
+        Num("casevac_energy_planning_endurance_s", 3);
+        Num("casevac_energy_planning_endurance_min", 3);
+        Bool("casevac_energy_depleted");
+        Nul("casevac_destination_energy_transit_s", 3);
+        Nul("casevac_destination_reserve_kwh", 4);
+        Nul("casevac_destination_reserve_fraction", 6);
+        Nul("casevac_destination_reserve_endurance_s", 3);
+        Nul("casevac_destination_reserve_min", 3);
+        Bool("casevac_within_safe_masking_band");
+        Num("casevac_lateral_speed_mps", 3);
+        Num("casevac_vertical_speed_mps", 3);
+        Num("casevac_wind_x_mps", 3);
+        Num("casevac_wind_y_mps", 3);
+        Num("casevac_wind_z_mps", 3);
+        Num("casevac_visibility_m", 1);
+        Num("casevac_precipitation_mm_hr", 3);
+        Num("casevac_precipitation_01", 4);
+        Num("casevac_rotor_wash_intensity_01", 4);
+        Num("casevac_rotor_wash_radius_m", 2);
+        Bool("casevac_show_escape_cue");
+        CasevacBlock = new BlockDef(
+            "casevac",
+            casevacStart,
+            casevacStart,
+            slots.Count - casevacStart);
+
         SlotCount = Slots.Count;
         _ = i; _ = blockStart;
     }
@@ -554,6 +638,17 @@ internal static class SnapshotHotFrame {
             throw new ArgumentException(
                 $"hot frame buffer length {buffer.Length} != layout slot count {SlotCount}");
 
+        if (session.CasevacMission) {
+            FillCasevac(
+                buffer,
+                session,
+                worldOriginEastM,
+                worldOriginNorthM,
+                worldOriginConfigured);
+            return;
+        }
+
+        _lastCasevacFingerprint = null;
         ColdFingerprint fingerprint = ColdFingerprint.Capture(
             session, worldOriginEastM, worldOriginNorthM, worldOriginConfigured);
         if (_lastFingerprint is not { } last || !fingerprint.Equals(last))
@@ -1298,7 +1393,305 @@ internal static class SnapshotHotFrame {
             w.Num("catapult_speed_kts", catapult.RelativeSpeedMps * AirData.MpsToKnots, 2);
             w.Num("catapult_end_speed_kts", catapult.EndSpeedMps * AirData.MpsToKnots, 2);
         }
+        w.OpenCasevacBlock(false);
         w.End();
+    }
+
+    static void FillCasevac(
+        double[] buffer,
+        SimulationSession session,
+        double worldOriginEastM,
+        double worldOriginNorthM,
+        bool worldOriginConfigured) {
+        CasevacFlightRuntime flight = session.CasevacFlight
+            ?? throw new InvalidOperationException(
+                "A CASEVAC hot frame requires a staged CASEVAC flight runtime.");
+        CasevacMissionSnapshot mission = flight.Snapshot;
+        PlayerVehicleState vehicle = flight.VehicleState;
+        PlayerVehicleObservation observation = flight.VehicleObservation;
+        LandingZoneObservation landingZone = flight.LastLandingZone;
+        CasevacTargetGuidance guidance = flight.TargetGuidance;
+        CasevacDestinationEnergyPlan energyPlan =
+            flight.DestinationEnergyPlan;
+        CasevacRotorWashVisual rotorWash =
+            flight.RotorWashVisual;
+
+        CasevacColdFingerprint fingerprint = CasevacColdFingerprint.Capture(
+            session,
+            flight,
+            mission,
+            landingZone,
+            guidance,
+            energyPlan,
+            worldOriginEastM,
+            worldOriginNorthM,
+            worldOriginConfigured);
+        if (_lastCasevacFingerprint is not { } last || !fingerprint.Equals(last))
+            _coldVersion++;
+        _lastCasevacFingerprint = fingerprint;
+        _lastFingerprint = null;
+
+        // Legacy consumers must never see a plausible combat frame while a CASEVAC session is
+        // staged. The browser ignores this region for CASEVAC, but clearing it makes the raw wire
+        // contract fail closed for older or diagnostic readers too.
+        Array.Clear(buffer, 0, CasevacBlock.Start);
+        buffer[ColdVersionIndex] = _coldVersion;
+
+        Vec3D forward = vehicle.BodyAttitude.Rotate(new Vec3D(0.0, 0.0, 1.0));
+        Vec3D up = vehicle.BodyAttitude.Rotate(new Vec3D(0.0, 1.0, 0.0));
+        Vec3D wind = session.Weather?.Wind.Sample(vehicle.PositionWorldM)
+            ?? observation.WindVelocityMps;
+        CloudSample cloud = (session.Weather?.Clouds ?? ClearCloudField.Instance)
+            .Sample(vehicle.PositionWorldM, session.TimeSeconds);
+        double aglM = flight.LastTickObservation?.ClearanceM
+            ?? Math.Max(
+                0.0,
+                vehicle.PositionWorldM.Y - flight.StartLocation.SurfaceElevationM);
+        bool hasTarget = guidance.TargetId is not null;
+        bool powerAssessed =
+            observation.Power.Assessment == VehiclePowerAssessment.Assessed;
+        double dwellProgress01 = mission.Phase switch {
+            CasevacPhase.PickupApproach or CasevacPhase.DropoffApproach =>
+                Fraction(
+                    mission.StabilizationProgressTicks,
+                    flight.Course.Mission.StabilizationDwellTicks),
+            CasevacPhase.Loading or CasevacPhase.Handoff =>
+                Fraction(
+                    mission.OperationProgressTicks,
+                    mission.OperationRequiredTicks),
+            _ => 0.0
+        };
+
+        var w = new Writer(buffer, CasevacBlock.Start);
+        _ = w.OpenCasevacBlock(true);
+        w.Bool("__casevac_hot_present", true);
+        w.Num("t", session.TimeSeconds, 4);
+        w.Num("tick", session.Tick, RawInteger);
+        w.Num("px", vehicle.PositionWorldM.X, 3);
+        w.Num("py", vehicle.PositionWorldM.Y, 3);
+        w.Num("pz", vehicle.PositionWorldM.Z, 3);
+        w.Num("vx", vehicle.GroundVelocityMps.X, 3);
+        w.Num("vy", vehicle.GroundVelocityMps.Y, 3);
+        w.Num("vz", vehicle.GroundVelocityMps.Z, 3);
+        w.Num("pfx", forward.X, 5);
+        w.Num("pfy", forward.Y, 5);
+        w.Num("pfz", forward.Z, 5);
+        w.Num("plx", up.X, 5);
+        w.Num("ply", up.Y, 5);
+        w.Num("plz", up.Z, 5);
+        w.Num("pux", up.X, 5);
+        w.Num("puy", up.Y, 5);
+        w.Num("puz", up.Z, 5);
+        w.Num("casevac_pitch_deg", observation.PitchRad * RadiansToDegrees, 3);
+        w.Num("casevac_bank_deg", observation.RollRad * RadiansToDegrees, 3);
+        w.Num("casevac_heading_deg", PositiveDegrees(observation.YawRad), 3);
+        w.Num(
+            "casevac_active_mission_ticks",
+            mission.ActiveMissionTicks,
+            RawInteger);
+        w.Bool("casevac_clock_running", mission.ClockRunning);
+        w.Bool("casevac_quiet", mission.Phase == CasevacPhase.Quiet);
+        w.Num(
+            "casevac_quiet_progress_01",
+            mission.Phase == CasevacPhase.Quiet
+                ? Fraction(
+                    mission.QuietProgressTicks,
+                    flight.Course.Mission.QuietAftermathTicks)
+                : 0.0,
+            4);
+        w.Nul(
+            "casevac_target_x",
+            hasTarget ? guidance.TargetWorldM.X : null,
+            3);
+        w.Nul(
+            "casevac_target_y",
+            hasTarget ? guidance.TargetWorldM.Y : null,
+            3);
+        w.Nul(
+            "casevac_target_z",
+            hasTarget ? guidance.TargetWorldM.Z : null,
+            3);
+        w.Nul(
+            "casevac_target_range_m",
+            hasTarget ? guidance.HorizontalRangeM : null,
+            1);
+        w.Nul(
+            "casevac_target_bearing_deg",
+            hasTarget ? PositiveDegrees(guidance.AbsoluteBearingRad) : null,
+            2);
+        w.Nul(
+            "casevac_target_relative_bearing_deg",
+            hasTarget ? guidance.RelativeBearingRad * RadiansToDegrees : null,
+            2);
+        w.Nul(
+            "casevac_target_eta_s",
+            hasTarget ? guidance.EstimatedTimeToTargetSeconds : null,
+            1);
+        w.Num("casevac_call_age_s", TicksToSeconds(mission.CallAgeTicks), 3);
+        w.Bool(
+            "casevac_requested_window_passed",
+            mission.RequestedHandoffWindowPassed);
+        w.Nul(
+            "casevac_capsule_secured_call_age_s",
+            TicksToSeconds(mission.CapsuleSecuredCallAgeTicks),
+            3);
+        w.Nul(
+            "casevac_handoff_call_age_s",
+            TicksToSeconds(mission.HandoffCallAgeTicks),
+            3);
+        w.Bool("casevac_stable_contact", mission.StableContact);
+        w.Bool("casevac_surface_contact", landingZone.SurfaceContact);
+        w.Num(
+            "casevac_approach_attempt_id",
+            mission.CurrentApproachAttemptId,
+            RawInteger);
+        w.Num(
+            "casevac_stabilization_progress_ticks",
+            mission.StabilizationProgressTicks,
+            RawInteger);
+        w.Num(
+            "casevac_stabilization_required_ticks",
+            flight.Course.Mission.StabilizationDwellTicks,
+            RawInteger);
+        w.Num("casevac_dwell_progress_01", dwellProgress01, 4);
+        w.Num(
+            "casevac_operation_progress_ticks",
+            mission.OperationProgressTicks,
+            RawInteger);
+        w.Num(
+            "casevac_operation_required_ticks",
+            mission.OperationRequiredTicks,
+            RawInteger);
+        w.Bool("casevac_vehicle_flyable", flight.VehicleFlyable);
+        w.Bool("casevac_contact_stable", observation.Contact.IsStable);
+        w.Num("casevac_agl_m", aglM, 3);
+        w.Num("casevac_gross_mass_kg", observation.GrossMassKg, 2);
+        w.Num("casevac_payload_mass_kg", mission.PayloadMassKg, 2);
+        w.Nul(
+            "casevac_power_margin_fraction",
+            powerAssessed ? observation.Power.HoverPowerMarginFraction : null,
+            4);
+        w.Nul(
+            "casevac_power_margin_01",
+            powerAssessed
+                ? Math.Clamp(
+                    observation.Power.HoverPowerMarginFraction,
+                    0.0,
+                    1.0)
+                : null,
+            4);
+        w.Nul(
+            "casevac_available_power_w",
+            powerAssessed ? observation.Power.AvailablePowerW : null,
+            1);
+        w.Nul(
+            "casevac_applied_power_w",
+            powerAssessed ? observation.Power.AppliedPowerW : null,
+            1);
+        w.Num(
+            "casevac_energy_remaining_kwh",
+            flight.RemainingUsableEnergyJ / JoulesPerKilowattHour,
+            4);
+        w.Num(
+            "casevac_energy_remaining_fraction",
+            flight.RemainingEnergyFraction,
+            6);
+        w.Num(
+            "casevac_energy_planning_endurance_s",
+            flight.PlanningEnduranceSeconds,
+            3);
+        w.Num(
+            "casevac_energy_planning_endurance_min",
+            flight.PlanningEnduranceSeconds / SecondsPerMinute,
+            3);
+        w.Bool("casevac_energy_depleted", flight.EnergyDepleted);
+        bool hasEnergyTarget = energyPlan.TargetId is not null;
+        w.Nul(
+            "casevac_destination_energy_transit_s",
+            hasEnergyTarget ? energyPlan.PlannedTransitSeconds : null,
+            3);
+        w.Nul(
+            "casevac_destination_reserve_kwh",
+            hasEnergyTarget
+                ? energyPlan.ProjectedReserveEnergyJ
+                    / JoulesPerKilowattHour
+                : null,
+            4);
+        w.Nul(
+            "casevac_destination_reserve_fraction",
+            hasEnergyTarget ? energyPlan.ProjectedReserveFraction : null,
+            6);
+        w.Nul(
+            "casevac_destination_reserve_endurance_s",
+            hasEnergyTarget
+                ? energyPlan.ProjectedReserveEnduranceSeconds
+                : null,
+            3);
+        w.Nul(
+            "casevac_destination_reserve_min",
+            hasEnergyTarget
+                ? energyPlan.ProjectedReserveEnduranceSeconds
+                    / SecondsPerMinute
+                : null,
+            3);
+        w.Bool(
+            "casevac_within_safe_masking_band",
+            flight.LastExposure.WithinSafeMaskingBand);
+        w.Num(
+            "casevac_lateral_speed_mps",
+            Math.Sqrt(
+                observation.GroundVelocityMps.X
+                    * observation.GroundVelocityMps.X
+                + observation.GroundVelocityMps.Z
+                    * observation.GroundVelocityMps.Z),
+            3);
+        w.Num(
+            "casevac_vertical_speed_mps",
+            observation.VerticalSpeedMps,
+            3);
+        w.Num("casevac_wind_x_mps", wind.X, 3);
+        w.Num("casevac_wind_y_mps", wind.Y, 3);
+        w.Num("casevac_wind_z_mps", wind.Z, 3);
+        w.Num("casevac_visibility_m", cloud.VisibilityM, 1);
+        w.Num(
+            "casevac_precipitation_mm_hr",
+            cloud.PrecipitationMmPerHour,
+            3);
+        w.Num(
+            "casevac_precipitation_01",
+            Math.Clamp(
+                cloud.PrecipitationMmPerHour
+                    / PresentationRainFullScaleMmPerHour,
+                0.0,
+                1.0),
+            4);
+        w.Num(
+            "casevac_rotor_wash_intensity_01",
+            rotorWash.Intensity01,
+            4);
+        w.Num(
+            "casevac_rotor_wash_radius_m",
+            rotorWash.RadiusM,
+            2);
+        w.Bool(
+            "casevac_show_escape_cue",
+            mission.Phase == CasevacPhase.AbortReturn);
+        w.End();
+    }
+
+    static double Fraction(long value, long required) =>
+        required > 0
+            ? Math.Clamp(value / (double)required, 0.0, 1.0)
+            : 0.0;
+
+    static double TicksToSeconds(long ticks) => ticks / AircraftSim.TickHz;
+
+    static double? TicksToSeconds(long? ticks) =>
+        ticks.HasValue ? TicksToSeconds(ticks.Value) : null;
+
+    static double PositiveDegrees(double angleRad) {
+        double degrees = angleRad * RadiansToDegrees % 360.0;
+        return degrees < 0.0 ? degrees + 360.0 : degrees;
     }
 
     static double? Finite(double value) => double.IsFinite(value) ? value : null;
@@ -1429,7 +1822,10 @@ internal static class SnapshotHotFrame {
         readonly double[] _buffer;
         int _index;
 
-        public Writer(double[] buffer) { _buffer = buffer; _index = 0; }
+        public Writer(double[] buffer, int index = 0) {
+            _buffer = buffer;
+            _index = index;
+        }
 
         void Write(string name, SlotKind kind, double value) {
             Debug.Assert(Slots[_index].Name == name,
@@ -1508,6 +1904,20 @@ internal static class SnapshotHotFrame {
             return false;
         }
 
+        public bool OpenCasevacBlock(bool present) {
+            Debug.Assert(_index == CasevacBlock.Start,
+                $"CASEVAC block: cursor {_index} != declared start {CasevacBlock.Start}");
+            if (present) return true;
+            for (int j = CasevacBlock.Start;
+                j < CasevacBlock.Start + CasevacBlock.Count;
+                j++)
+                _buffer[j] =
+                    Slots[j].Kind == SlotKind.Boolean ? 0.0 : double.NaN;
+            _buffer[CasevacBlock.PresenceIndex] = 0.0;
+            _index = CasevacBlock.Start + CasevacBlock.Count;
+            return false;
+        }
+
         public void End() {
             Debug.Assert(_index == SlotCount,
                 $"fill ended at slot {_index}, layout declares {SlotCount}");
@@ -1578,7 +1988,28 @@ internal static class SnapshotHotFrame {
             }
             json.Append("]}");
         }
-        json.Append("]}");
+        json.Append("],\"casevac_block\":{\"name\":")
+            .Append(SnapshotJson.JsonString(CasevacBlock.Name))
+            .Append(",\"presence_index\":")
+            .Append(CasevacBlock.PresenceIndex)
+            .Append(",\"slots\":[");
+        bool firstCasevacSlot = true;
+        for (int j = CasevacBlock.Start + 1;
+            j < CasevacBlock.Start + CasevacBlock.Count;
+            j++) {
+            SlotDef slot = Slots[j];
+            if (!firstCasevacSlot) json.Append(',');
+            firstCasevacSlot = false;
+            json.Append("{\"name\":")
+                .Append(SnapshotJson.JsonString(slot.Name))
+                .Append(",\"index\":").Append(j)
+                .Append(",\"kind\":\"").Append(slot.Kind switch {
+                    SlotKind.Boolean => "boolean",
+                    SlotKind.NullableNumber => "nullable",
+                    _ => "number"
+                }).Append("\"}");
+        }
+        json.Append("]}}");
         _layoutJson = json.ToString();
         return _layoutJson;
     }
@@ -1589,6 +2020,80 @@ internal static class SnapshotHotFrame {
     /// This is a heuristic to make edges land immediately — the browser's fallback re-fetch
     /// interval remains the correctness backstop for anything not captured here.
     /// </summary>
+    readonly record struct CasevacColdFingerprint(
+        SimulationSession.LifecycleState Lifecycle,
+        int BeatIndex,
+        CasevacFlightRuntime Flight,
+        long PlayerSpawnSequence,
+        long MissionEpochSequence,
+        CasevacPhase Phase,
+        CapsuleCustody Custody,
+        CasevacDisposition Disposition,
+        string? TargetSiteId,
+        string? DestinationEnergyTargetId,
+        bool RequestedHandoffWindowPassed,
+        bool StableContact,
+        bool StabilizationStarted,
+        bool InsideTerminalVolume,
+        LandingZoneGateClass GateClass,
+        string? LandingSiteId,
+        VehicleContactKind ContactKind,
+        string? ContactSurfaceId,
+        VehiclePowerAssessment PowerAssessment,
+        CasevacMaskingState MaskingState,
+        int RecentEventCount,
+        long LatestEventSequence,
+        object? WeatherProfile,
+        object? Terrain,
+        double WorldOriginEastM,
+        double WorldOriginNorthM,
+        bool WorldOriginConfigured) {
+
+        public static CasevacColdFingerprint Capture(
+            SimulationSession session,
+            CasevacFlightRuntime flight,
+            CasevacMissionSnapshot mission,
+            in LandingZoneObservation landingZone,
+            in CasevacTargetGuidance guidance,
+            in CasevacDestinationEnergyPlan energyPlan,
+            double worldOriginEastM,
+            double worldOriginNorthM,
+            bool worldOriginConfigured) {
+            IReadOnlyList<CasevacMissionEventRecord> events =
+                flight.RecentEvents;
+            PlayerVehicleObservation observation =
+                flight.VehicleObservation;
+            return new CasevacColdFingerprint(
+                session.Lifecycle,
+                session.BeatIndex,
+                flight,
+                session.PlayerSpawnSequence,
+                mission.MissionEpochSequence,
+                mission.Phase,
+                mission.Custody,
+                mission.Disposition,
+                guidance.TargetId,
+                energyPlan.TargetId,
+                mission.RequestedHandoffWindowPassed,
+                mission.StableContact,
+                mission.StabilizationProgressTicks > 0,
+                landingZone.InsideTerminalVolume,
+                landingZone.GateClass,
+                landingZone.SiteId,
+                observation.Contact.Kind,
+                observation.Contact.SurfaceId,
+                observation.Power.Assessment,
+                flight.LastExposure.MaskingState,
+                events.Count,
+                events.Count > 0 ? events[^1].Sequence : -1,
+                session.Weather,
+                session.Terrain,
+                worldOriginEastM,
+                worldOriginNorthM,
+                worldOriginConfigured);
+        }
+    }
+
     readonly record struct ColdFingerprint(
         SimulationSession.LifecycleState Lifecycle,
         int BeatIndex,

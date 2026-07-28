@@ -156,6 +156,7 @@ public static class KoreaWeatherPresets {
         // targets stay beneath the deck while typed snow, reduced visibility and snow-covered
         // surface truth remain independently sampleable.
         8 => UkraineWinterWeatherPresets.SnowSquall,
+        13 => UkraineLowLevel,
         10 or 11 => RapierHighAltitude,
         _ => HistoricalInland
     };

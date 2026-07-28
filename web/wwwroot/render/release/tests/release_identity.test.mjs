@@ -247,6 +247,13 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.match(app, /caches\.delete/,
     "reload must delete guns-only-* caches before navigating to the current release");
   assert.match(index, /id="ready-build"/);
+  assert.match(
+    index,
+    new RegExp(
+      `id="ready-build"[^>]*>Build ${RELEASE_BUILD} · verifying<\\/output>`,
+    ),
+    "the static verification placeholder must match the canonical release stamp",
+  );
   assert.match(index, /id="ready-build-reload"/);
 
   const prebootGate = index.indexOf("globalThis.__gunsPrebootReady = (async () =>");

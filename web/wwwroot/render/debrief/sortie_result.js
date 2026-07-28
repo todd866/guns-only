@@ -251,11 +251,77 @@ function combatHandoffCopy(state) {
   }, state);
 }
 
+function casevacAssessmentLine(state) {
+  const items = [
+    ["Safe", state?.casevac_assessment_safe],
+    ["Controlled", state?.casevac_assessment_controlled],
+    ["Masked", state?.casevac_assessment_masked],
+    ["Timely", state?.casevac_assessment_timely],
+  ].map(([label, value]) => `${label}: ${readableToken(value, "not assessed")}`);
+  return items.join(" · ");
+}
+
+function casevacResultCopy(state) {
+  const disposition = token(state?.casevac_disposition);
+  const correction = typeof state?.casevac_primary_correction === "string"
+    && state.casevac_primary_correction.trim()
+    ? state.casevac_primary_correction.trim()
+    : "No primary correction was recorded.";
+  const assessment = casevacAssessmentLine(state);
+  const shared = `${assessment}. ${correction}`;
+
+  switch (disposition) {
+    case "TRANSFERREDONTIME":
+    case "TRANSFERRED_ON_TIME":
+      return {
+        kicker: "Medevac debrief",
+        title: "Handoff Complete",
+        brief: `Capsule custody transferred at the receiver within the requested coordination window. ${shared}`,
+      };
+    case "TRANSFERREDAFTERREQUESTEDTIME":
+    case "TRANSFERRED_AFTER_REQUESTED_TIME":
+      return {
+        kicker: "Medevac debrief",
+        title: "Handoff After Requested Time",
+        brief: `Capsule custody transferred at the receiver after the requested coordination window. ${shared}`,
+      };
+    case "CONTROLLEDABORT":
+    case "CONTROLLED_ABORT":
+      return {
+        kicker: "Medevac debrief",
+        title: "Controlled Abort",
+        brief: `The aircraft reached the authored safe-exit volume and the mission closed without a handoff. ${shared}`,
+      };
+    case "AIRCRAFTLOSTEMPTY":
+    case "AIRCRAFT_LOST_EMPTY":
+      return {
+        kicker: "Medevac debrief",
+        title: "Aircraft Lost",
+        brief: `The aircraft became unflyable before capsule custody transferred aboard. ${shared}`,
+      };
+    case "AIRCRAFTLOSTOCCUPIED":
+    case "AIRCRAFT_LOST_OCCUPIED":
+      return {
+        kicker: "Medevac debrief",
+        title: "Aircraft Lost With Capsule Aboard",
+        brief: `The aircraft became unflyable while capsule custody remained aboard. ${shared}`,
+      };
+    default:
+      return {
+        kicker: "Medevac debrief",
+        title: "Mission Incomplete",
+        brief: `No terminal handoff, controlled abort, or aircraft-loss disposition was recorded. ${shared}`,
+      };
+  }
+}
+
 /**
  * Produce the concise result-card story from authoritative snapshot evidence.
  * Detailed replay analysis is appended separately when the recorded clip is available.
  */
 export function sortieResultCopy(state) {
+  if (state?.casevac_mission === true) return casevacResultCopy(state);
+
   if (state?.drone_raid_evaluation === true) {
     const score = Number.isFinite(Number(state.drone_raid_score))
       ? Math.round(Number(state.drone_raid_score)) : 0;
