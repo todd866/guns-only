@@ -216,6 +216,28 @@ export function circuitGatePresentation(state) {
 /// Skin temperature is Intercept teaching chrome — never on Circuits.
 export function rapierGuidancePresentation(state) {
   if (state?.rapier_mission_available !== true) return null;
+  if (state.rapier_flight_control_computers_available === false) {
+    return Object.freeze({
+      text: "FLIGHT CONTROL COMPUTERS LOST · NO CONTROL PATH · UNCONTROLLED REENTRY",
+      detail: "",
+      level: "attack",
+      circuitLeg: "",
+      boxLabel: "FCS LOST",
+      skinC: finiteNumber(state.rapier_stagnation_temp_c),
+      marginC: finiteNumber(state.rapier_thermal_margin_c),
+    });
+  }
+  if (state.rapier_mission_computer_available === false) {
+    return Object.freeze({
+      text: "MISSION COMPUTER LOST · AUTOMATION / DIRECTOR INOP · FBW + RCS REMAIN · FLY MANUAL",
+      detail: "",
+      level: "attack",
+      circuitLeg: "",
+      boxLabel: "MC FAIL",
+      skinC: finiteNumber(state.rapier_stagnation_temp_c),
+      marginC: finiteNumber(state.rapier_thermal_margin_c),
+    });
+  }
   const phase = Math.floor(Number(state.rapier_mission_phase) || 0);
   const patternOnly = state.rapier_pattern_only === true
     || (typeof state.rapier_mission_cue === "string"
@@ -299,6 +321,8 @@ export function rapierGuidancePresentation(state) {
 /// Circuits / recovery / zoom-coast flight-director bugs from kernel-published targets.
 export function rapierFlightDirectorPresentation(state) {
   if (state?.rapier_mission_available !== true) return null;
+  if (state.rapier_mission_computer_available === false
+    || state.rapier_flight_control_computers_available === false) return null;
   const targetKtas = finiteNumber(state.rapier_fd_target_ktas) ?? 0;
   const targetAltFt = finiteNumber(state.rapier_target_altitude_ft) ?? 0;
   const noseErr = finiteNumber(state.rapier_nose_on_v_err_deg);

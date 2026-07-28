@@ -31,7 +31,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.19.0";
+    const string SnapshotSchemaVersion = "1.20.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -347,6 +347,13 @@ internal static class SnapshotProjection {
             + $"\"rapier_pattern_only\":{(Session.Beat.ScriptedIntercept?.PatternOnly == true ? "true" : "false")},"
             + $"\"rapier_automation_enabled\":{(Session.RapierAutomationEnabled ? "true" : "false")},"
             + $"\"rapier_automation_active\":{(Session.RapierAutomationActive ? "true" : "false")},"
+            + $"\"rapier_computer_failure_plan\":\"{RapierComputerFailureToken(Session.RapierComputerFailurePlan)}\","
+            + $"\"rapier_computer_failure_active\":\"{RapierComputerFailureToken(Session.RapierComputerFailureActive)}\","
+            + $"\"rapier_computer_failure_plan_code\":{(int)Session.RapierComputerFailurePlan},"
+            + $"\"rapier_computer_failure_active_code\":{(int)Session.RapierComputerFailureActive},"
+            + $"\"rapier_mission_computer_available\":{(Session.RapierMissionComputerAvailable ? "true" : "false")},"
+            + $"\"rapier_flight_control_computers_available\":{(Session.RapierFlightControlComputersAvailable ? "true" : "false")},"
+            + $"\"rapier_uncontrolled_reentry\":{(Session.RapierUncontrolledReentry ? "true" : "false")},"
             + $"\"rapier_mission_phase\":{(int)Session.RapierPhase},"
             + $"\"rapier_mission_phase_name\":\"{Session.RapierPhase.ToString().ToUpperInvariant()}\","
             + $"\"rapier_mission_cue\":{JsonString(Session.RapierMissionCue)},"
@@ -1258,6 +1265,13 @@ internal static class SnapshotProjection {
         SessionEventType.AutoGcasTransition => "AUTO_GCAS_TRANSITION",
         _ => "UNKNOWN"
     };
+
+    static string RapierComputerFailureToken(RapierComputerFailure failure) =>
+        failure switch {
+            RapierComputerFailure.MissionComputer => "MISSION_COMPUTER",
+            RapierComputerFailure.FlightControlComputers => "FLIGHT_CONTROL_COMPUTERS",
+            _ => "NONE"
+        };
 
     static string ArrestmentFailureToken(
         ArrestmentModel.ArrestmentFailureReason reason) => reason switch {

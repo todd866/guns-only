@@ -212,6 +212,7 @@ public sealed class SimulationSession {
     bool _circuitsFaultArmed = true;
     double _circuitsNextFaultAtMs = double.PositiveInfinity;
     bool _rapierAutomationEnabled;
+    RapierComputerFailure _rapierComputerFailureActive;
     double _rapierManualOverrideUntilMs = double.NegativeInfinity;
     int _rapierMissilesRemaining;
     int _rapierDogfightingDronesRemaining;
@@ -346,10 +347,29 @@ public sealed class SimulationSession {
     public bool RapierMissionAvailable => _beat.ScriptedIntercept is not null;
     public RapierMissionPhase RapierPhase =>
         _rapierMissionDirector?.Phase ?? RapierMissionPhase.Unavailable;
-    public string RapierMissionCue => _rapierMissionGuidance.Cue ?? "";
+    public RapierComputerFailure RapierComputerFailurePlan =>
+        _beat.ScriptedIntercept?.ComputerFailureAtZoomCoast
+            ?? RapierComputerFailure.None;
+    public RapierComputerFailure RapierComputerFailureActive =>
+        _rapierComputerFailureActive;
+    public bool RapierMissionComputerAvailable =>
+        _rapierComputerFailureActive != RapierComputerFailure.MissionComputer;
+    public bool RapierFlightControlComputersAvailable =>
+        _rapierComputerFailureActive != RapierComputerFailure.FlightControlComputers;
+    public bool RapierUncontrolledReentry =>
+        _rapierComputerFailureActive == RapierComputerFailure.FlightControlComputers;
+    public string RapierMissionCue => _rapierComputerFailureActive switch {
+        RapierComputerFailure.MissionComputer =>
+            "MISSION COMPUTER LOST · AUTOMATION / DIRECTOR INOP · FBW + RCS REMAIN · FLY MANUAL",
+        RapierComputerFailure.FlightControlComputers =>
+            "FLIGHT CONTROL COMPUTERS LOST · NO PILOT-TO-ACTUATOR PATH · UNCONTROLLED REENTRY",
+        _ => _rapierMissionGuidance.Cue ?? ""
+    };
     public double RapierTargetMach => _rapierMissionGuidance.TargetMach;
     public double RapierTargetAltitudeFt => _rapierMissionGuidance.TargetAltitudeFt;
     public bool RapierAutomationEnabled => RapierMissionAvailable
+        && RapierMissionComputerAvailable
+        && RapierFlightControlComputersAvailable
         && _rapierAutomationEnabled;
     public bool RapierAutomationActive => RapierAutomationEnabled
         && _simTimeMs >= _rapierManualOverrideUntilMs
@@ -1079,6 +1099,12 @@ public sealed class SimulationSession {
 
     public void SetRapierAutomationEnabled(bool enabled) {
         if (!RapierMissionAvailable) return;
+        if (enabled && (!RapierMissionComputerAvailable
+            || !RapierFlightControlComputersAvailable)) {
+            _rapierAutomationEnabled = false;
+            ShowTransition("MISSION AUTOMATION INOP · COMPUTER FAILURE", 2200.0);
+            return;
+        }
         _rapierAutomationEnabled = enabled;
         _rapierManualOverrideUntilMs = double.NegativeInfinity;
         ShowTransition(enabled
@@ -1507,6 +1533,7 @@ public sealed class SimulationSession {
         AutoGcasActivityOrLead: HasAutoGcasActivityOrLead(),
         DamagePresent: PlayerHitsTaken > 0
             || _playerTerminalState != AircraftTerminalState.Flying
+            || _rapierComputerFailureActive != RapierComputerFailure.None
             || (!RapierReturnTransit
                 && (_gunKill.TotalHitCount > 0
                     || _bandit.CatastrophicallyDamaged
@@ -1862,6 +1889,56 @@ public sealed class SimulationSession {
         InduceCircuitsUtilityFault();
     }
 
+    /// <summary>
+    /// Inject an authored Rapier computer casualty. Mission-computer loss is a fly-manual problem:
+    /// the keyboard still commands the surviving FBW/RCS layer. Total flight-control-computer loss
+    /// is not. This aircraft has no mechanical reversion, so treating keyboard keys as a secret
+    /// direct cable to the surfaces would manufacture survivability; the loss is terminal and the
+    /// ordinary failed-flight dynamics carry the article through its uncontrolled reentry.
+    /// </summary>
+    public bool InduceRapierComputerFailure(RapierComputerFailure failure) {
+        if (failure == RapierComputerFailure.None
+            || !RapierMissionAvailable
+            || Lifecycle != LifecycleState.Active
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _rapierComputerFailureActive != RapierComputerFailure.None)
+            return false;
+
+        _rapierComputerFailureActive = failure;
+        _rapierAutomationEnabled = false;
+        _rapierManualOverrideUntilMs = double.NegativeInfinity;
+        _assistedFlight = false;
+        _configurationAutomationEnabled = false;
+        _banditPadlockRollAssistSelected = false;
+        _padlockRollAssist.Reset();
+        _autoGcasRecoveryCommand = null;
+        _autoGcasPredictionTicksRemaining = 0;
+        _pilotInputOverrideSeconds = 0.0;
+        DisengageTimeCompression(TimeCompressionInhibitReason.Damage);
+        double altitudeFt = _player.State.Position.Y / 0.3048;
+
+        if (failure == RapierComputerFailure.MissionComputer) {
+            ShowTransition(
+                $"MISSION COMPUTER LOST · {altitudeFt:F0} FT · FBW + RCS REMAIN · FLY MANUAL",
+                6000.0);
+            return true;
+        }
+
+        BeginCatastrophicDamage(CombatRole.Player, CombatRole.None);
+        ShowTransition(
+            $"FLIGHT CONTROL COMPUTERS LOST · {altitudeFt:F0} FT · "
+                + "NO CONTROL PATH · UNCONTROLLED REENTRY",
+            8000.0);
+        return true;
+    }
+
+    void MaybeInjectRapierComputerFailure() {
+        if (_rapierComputerFailureActive != RapierComputerFailure.None
+            || RapierPhase != RapierMissionPhase.ZoomCoast)
+            return;
+        InduceRapierComputerFailure(RapierComputerFailurePlan);
+    }
+
     PilotCommand RapierAutomationOr(in PilotCommand pilotCommand) {
         UpdateRapierMissionGuidance();
         return RapierAutomationActive
@@ -1892,6 +1969,7 @@ public sealed class SimulationSession {
         if (_playerTerminalState == AircraftTerminalState.Flying) {
             StepRapierPursuit();
             UpdateRapierMissionGuidance();
+            MaybeInjectRapierComputerFailure();
         }
         StepCore();
         if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
@@ -2422,6 +2500,7 @@ public sealed class SimulationSession {
         _rapierMissionDirector = _beat.ScriptedIntercept is null
             ? null : new RapierMissionDirector();
         _rapierMissionGuidance = default;
+        _rapierComputerFailureActive = RapierComputerFailure.None;
         _rapierAutomationEnabled =
             _beat.ScriptedIntercept?.AutomationDefaultEnabled ?? false;
         _rapierManualOverrideUntilMs = double.NegativeInfinity;
@@ -4505,7 +4584,8 @@ public sealed class SimulationSession {
                 EffectivePilotCommand: effectivePilotCommand,
                 Terrain: _terrainSurface,
                 FallbackSurfaceElevationM: null,
-                Enabled: _autoGcasEnabled,
+                Enabled: _autoGcasEnabled
+                    && _rapierComputerFailureActive == RapierComputerFailure.None,
                 ConfigurationPermitsRecovery: _carrier is null,
                 PilotOverrideHeld: AutoGcasOverrideHeld || sustainedInputPaddle,
                 IndicatedAirspeedMps: _player.IndicatedAirspeedMps,

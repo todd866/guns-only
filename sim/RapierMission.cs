@@ -31,6 +31,17 @@ public enum RapierJobKind {
     SwarmLob
 }
 
+/// <summary>
+/// Computer casualty dealt with a Rapier sortie. The mission computer owns authored guidance and
+/// automation, while the flight-control computers are the only path from pilot/keyboard commands
+/// to aerodynamic surfaces, thrust-vectoring and cold-gas RCS.
+/// </summary>
+public enum RapierComputerFailure {
+    None,
+    MissionComputer,
+    FlightControlComputers
+}
+
 public readonly record struct RapierMissionGuidance(
     RapierMissionPhase Phase,
     string Cue,
@@ -101,7 +112,13 @@ public sealed record ScriptedInterceptConfig(
     /// Default off — the Attack contract releases one reusable drone per F press.
     /// </summary>
     bool DeterministicSwarmWipe = false,
-    RapierJobKind Job = RapierJobKind.FormationIntercept);
+    RapierJobKind Job = RapierJobKind.FormationIntercept,
+    /// <summary>
+    /// Optional casualty injected on entry to the first ballistic coast. Mission-computer loss
+    /// leaves the digital flight-control/RCS path intact for manual flight. Losing every
+    /// flight-control computer does not: this fly-by-wire article has no mechanical fallback.
+    /// </summary>
+    RapierComputerFailure ComputerFailureAtZoomCoast = RapierComputerFailure.None);
 
 /// <summary>
 /// Deterministic mission director for the Rapier public-data surrogate. The director commands the

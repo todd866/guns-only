@@ -13,6 +13,41 @@ test("Rapier guidance is absent outside the scripted sortie", () => {
   assert.equal(rapierGuidancePresentation({}), null);
 });
 
+test("mission-computer loss removes automation and flight-director promises but keeps manual FBW", () => {
+  const state = {
+    rapier_mission_available: true,
+    rapier_mission_computer_available: false,
+    rapier_flight_control_computers_available: true,
+    rapier_automation_enabled: false,
+    rapier_automation_active: false,
+    rapier_mission_phase: 6,
+  };
+  const cue = rapierGuidancePresentation(state);
+  assert.match(cue.text, /MISSION COMPUTER LOST/);
+  assert.match(cue.text, /FBW \+ RCS REMAIN/);
+  assert.doesNotMatch(cue.text, /P TOGGLE AUTO/);
+  assert.equal(cue.level, "attack");
+  assert.equal(rapierFlightDirectorPresentation(state), null);
+});
+
+test("total flight-control-computer loss declares uncontrolled reentry", () => {
+  const state = {
+    rapier_mission_available: true,
+    rapier_mission_computer_available: true,
+    rapier_flight_control_computers_available: false,
+    rapier_uncontrolled_reentry: true,
+    rapier_automation_enabled: false,
+    rapier_automation_active: false,
+    rapier_mission_phase: 6,
+  };
+  const cue = rapierGuidancePresentation(state);
+  assert.match(cue.text, /FLIGHT CONTROL COMPUTERS LOST/);
+  assert.match(cue.text, /NO CONTROL PATH · UNCONTROLLED REENTRY/);
+  assert.equal(cue.boxLabel, "FCS LOST");
+  assert.equal(cue.level, "attack");
+  assert.equal(rapierFlightDirectorPresentation(state), null);
+});
+
 test("Rapier guidance is a quiet mode line with authority and takeover", () => {
   const cue = rapierGuidancePresentation({
     rapier_mission_available: true,
