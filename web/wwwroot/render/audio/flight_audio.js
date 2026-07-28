@@ -57,13 +57,18 @@ function build() {
 }
 
 function ensureJetSamples(state) {
-  // Rapier turbo-ram beds are the wrong identity for twin-fan F-22s.
-  if (resolvePropulsionCharacter(state) !== "rapier") return;
-  if (!context || !engineVoices || engineVoices.hasSampleBeds || sampleLoad) return;
-  sampleLoad = loadJetSampleBeds(context)
+  const character = resolvePropulsionCharacter(state);
+  if (character !== "rapier" && character !== "f22") return;
+  if (!context || !engineVoices || sampleLoad) return;
+  // Beds already attached for this character.
+  if (engineVoices.hasSampleBeds
+    && engineVoices.sampleBedCharacter === character) return;
+  // Wrong character already attached — keep procedural for the new airframe.
+  if (engineVoices.hasSampleBeds) return;
+  sampleLoad = loadJetSampleBeds(context, { character })
     .then((beds) => {
-      if (resolvePropulsionCharacter(state) !== "rapier") return;
-      attachJetSampleBeds(engineVoices, context, beds);
+      if (resolvePropulsionCharacter(state) !== character) return;
+      attachJetSampleBeds(engineVoices, context, beds, { character });
     })
     .catch(() => {})
     .finally(() => {

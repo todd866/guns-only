@@ -68,4 +68,10 @@ web/wwwroot/render/audio/samples/jet/*.flac
 !web/wwwroot/render/audio/samples/jet/idle_loop.wav
 !web/wwwroot/render/audio/samples/jet/mil_loop.wav
 !web/wwwroot/render/audio/samples/jet/grit_loop.wav
+!web/wwwroot/render/audio/samples/jet/f22_idle_loop.wav
+!web/wwwroot/render/audio/samples/jet/f22_mil_loop.wav
+!web/wwwroot/render/audio/samples/jet/f22_grit_loop.wav
 
+
+# Local F-22 cockpit reference pulls (do not commit)
+analysis/audio-refs/

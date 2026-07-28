@@ -38,6 +38,8 @@
   </p>
   <button type="button" data-regime="idle">Idle / taxi (low RPM, dense air)</button>
   <button type="button" data-regime="mil">Military power (dense air)</button>
+  <button type="button" data-regime="f22_idle">F-22 cockpit idle</button>
+  <button type="button" data-regime="f22_mil">F-22 cockpit MIL</button>
   <button type="button" data-regime="slam">Throttle slam → MIL</button>
   <button type="button" data-regime="catshot">Maglev catshot (buried tube)</button>
   <button type="button" data-regime="handover">Mach 2.2 mid-handover</button>
@@ -82,6 +84,24 @@
         rapier_ramjet_thrust_kn: 0,
         player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
         audio_profile_id: "audio.rapier.turbo-ram.v1",
+      },
+      f22_idle: {
+        applied_throttle: 0.4,
+        engine_rpm_pct: 60,
+        mach: 0.35,
+        true_airspeed_kts: 220,
+        air_density_kg_m3: 1.1,
+        player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+        audio_profile_id: "audio.f22a.aged-twin-fan.v1",
+      },
+      f22_mil: {
+        applied_throttle: 1.55,
+        engine_rpm_pct: 100,
+        mach: 0.9,
+        true_airspeed_kts: 540,
+        air_density_kg_m3: 0.95,
+        player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+        audio_profile_id: "audio.f22a.aged-twin-fan.v1",
       },
       slam: {
         applied_throttle: 1.55,
@@ -138,16 +158,20 @@
     let catshotStart = 0;
     let state = regimes.idle;
 
-    function ensure() {
-      if (context) return;
+    let bedCharacter = null;
+
+    function ensure(character = "rapier") {
       const Ctor = window.AudioContext || window.webkitAudioContext;
-      context = new Ctor();
-      voices = createEngineVoices(context, context.destination, { includeMaster: true });
-      events = createEventVoices(context, context.destination);
-      loadJetSampleBeds(context).then((beds) => {
-        const ok = attachJetSampleBeds(voices, context, beds);
-        console.info(ok ? "jet sample beds attached" : "procedural fallback (no beds)");
-      });
+      if (!context) context = new Ctor();
+      if (bedCharacter !== character) {
+        voices = createEngineVoices(context, context.destination, { includeMaster: true });
+        events = createEventVoices(context, context.destination);
+        bedCharacter = character;
+        loadJetSampleBeds(context, { character }).then((beds) => {
+          const ok = attachJetSampleBeds(voices, context, beds, { character });
+          console.info(ok ? `${character} sample beds attached` : "procedural fallback (no beds)");
+        });
+      }
     }
 
     function tick(nowMs) {
@@ -174,7 +198,9 @@
     }
 
     function play(regime) {
-      ensure();
+      const next = regimes[regime] || regimes.idle;
+      const character = String(next.audio_profile_id || "").includes("f22") ? "f22" : "rapier";
+      ensure(character);
       context.resume();
       clearTimeout(slamTimer);
       if (regime === "stop") {
@@ -199,7 +225,7 @@
         timer = requestAnimationFrame(tick);
         return;
       }
-      state = regimes[regime];
+      state = next;
       cancelAnimationFrame(timer);
       timer = requestAnimationFrame(tick);
     }

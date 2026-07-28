@@ -690,7 +690,7 @@ test("crackle impulse buffer is sparse and seeded", async () => {
   }
 });
 
-test("F-22 keeps twin-fan character with no ram handover at high Mach", async () => {
+test("F-22 sealed cockpit: dark body, muted tip whine, no ram", async () => {
   const previous = globalThis.AudioContext;
   try {
     FakeAudioContext.instances.length = 0;
@@ -713,7 +713,9 @@ test("F-22 keeps twin-fan character with no ram handover at high Mach", async ()
       audio.currentTime = step * 0.25;
       updateEngineVoices(voices, audio, state);
     }
-    assert.ok(latest(voices.fanWhineGain.gain) > 0.01, "F-22 fan whine present");
+    assert.ok(latest(voices.jetBodyGain.gain) > 0.3, "F-22 cockpit body rumble");
+    assert.ok(latest(voices.fanWhineGain.gain) < 0.02, "tip whine ducked in cockpit");
+    assert.ok(latest(voices.cabinLp.frequency) < 1600, "sealed cabin ceiling");
     assert.ok(latest(voices.ramGain.gain) < 1e-6, "no ram duct on F-22");
     assert.ok(latest(voices.ramHowlGain.gain) < 1e-6, "no ram howl on F-22");
   } finally {

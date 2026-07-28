@@ -7,7 +7,8 @@
 //
 // Sample beds are local/dev until replaced with confirmed CC0 / US-gov PD sources
 // (see samples/jet/SOURCES.md). Density / coast gating still applies to everything.
-// F-22s skip Rapier beds and keep twin-fan + no ram handover (see audio_character.js).
+// F-22s use sealed-cockpit beds (spectral-matched to demo cam); Rapier keeps F-4 AB beds.
+// See audio_character.js + samples/jet/SOURCES.md.
 
 import { resolvePropulsionCharacter } from "./audio_character.js";
 
@@ -404,6 +405,7 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
     sampleMil: null,
     sampleGrit: null,
     hasSampleBeds: false,
+    sampleBedCharacter: null,
     shaftOsc,
     shaftFilter,
     shaftGain,
@@ -452,14 +454,17 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
 }
 
 /// Decode idle/mil/grit loops. Fail-soft: missing files → empty object (procedural fallback).
+/// Pass `character: "f22"` for sealed-cockpit beds (`f22_*_loop.wav`).
 export async function loadJetSampleBeds(audioContext, {
   baseUrl = DEFAULT_SAMPLE_BASE,
+  character = "rapier",
 } = {}) {
   if (!audioContext?.decodeAudioData) return {};
+  const prefix = character === "f22" ? "f22_" : "";
   const entries = [
-    ["idle", "idle_loop.wav"],
-    ["mil", "mil_loop.wav"],
-    ["grit", "grit_loop.wav"],
+    ["idle", `${prefix}idle_loop.wav`],
+    ["mil", `${prefix}mil_loop.wav`],
+    ["grit", `${prefix}grit_loop.wav`],
   ];
   const beds = {};
   await Promise.all(entries.map(async ([key, file]) => {
@@ -478,7 +483,10 @@ export async function loadJetSampleBeds(audioContext, {
 
 /// Wire decoded beds onto an existing voice graph. Safe to call once; no-ops if already attached
 /// or if `mil` is missing (need at least the power bed).
-export function attachJetSampleBeds(voiceGraph, audioContext, beds) {
+/// `character` tags which aircraft the beds belong to so the mix path can refuse a mismatch.
+export function attachJetSampleBeds(voiceGraph, audioContext, beds, {
+  character = "rapier",
+} = {}) {
   if (!voiceGraph || !audioContext || voiceGraph.hasSampleBeds) return false;
   if (!beds?.mil) return false;
 
@@ -500,6 +508,7 @@ export function attachJetSampleBeds(voiceGraph, audioContext, beds) {
     voiceGraph.sampleGrit = startBed(beds.grit, voiceGraph.sampleGritGain);
   }
   voiceGraph.hasSampleBeds = true;
+  voiceGraph.sampleBedCharacter = character;
   return true;
 }
 
@@ -655,19 +664,26 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
 
   // When real beds are live, synth exhaust becomes seasoning — not the identity.
   // Prop tells (shaft saw, fan orders, breath AM, pitched playbackRate) mute completely.
-  // F-22 never uses Rapier AB beds — twin-fan procedural owns the mix.
-  const sampled = voiceGraph.hasSampleBeds === true && isRapier;
-  const synthDuck = sampled ? 0.05 : 1;
+  // Beds only play when they match the resolved character (Rapier F-4 vs F-22 cockpit).
+  const sampled = voiceGraph.hasSampleBeds === true
+    && voiceGraph.sampleBedCharacter === character
+    && (isRapier || isF22);
+  const synthDuck = sampled ? (isF22 ? 0.08 : 0.05) : 1;
   const samplePresence = sampled ? 1 : 0;
-  // Twin-fan F-22: keep tonal fan stack audible (not muted like under Rapier beds).
+  // Twin-fan exterior tip whine is wrong for sealed F-22 cockpit — duck hard.
+  // Under Rapier beds, tonals mute completely.
   const tonalMute = sampled ? 0 : 1;
-  const fanBoost = isF22 ? 2.4 : 1;
-  const shaftBoost = isF22 ? 1.35 : 1;
+  const fanBoost = isF22 ? 0.28 : 1;
+  const shaftBoost = isF22 ? 0.45 : 1;
   // Under beds, ram must still read — it's the handover identity, not a synth leftover.
-  const ramPresence = sampled ? 1.15 : 1;
+  const ramPresence = sampled && isRapier ? 1.15 : 1;
 
-  const orderFundamental = 185 + rpm * 480 + throttle * 90;
-  const shaftHz = 72 + rpm * 95 + throttle * 28;
+  const orderFundamental = isF22
+    ? 95 + rpm * 140 + throttle * 35
+    : 185 + rpm * 480 + throttle * 90;
+  const shaftHz = isF22
+    ? 48 + rpm * 55 + throttle * 14
+    : 72 + rpm * 95 + throttle * 28;
   const nowRamp = (param, value, timeConstant = 0.12) => {
     if (snap) param.setValueAtTime(value, now);
     else param.setTargetAtTime(value, now, timeConstant);
@@ -679,22 +695,29 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
       if (bed?.playbackRate) nowRamp(bed.playbackRate, 1, 0.4);
     }
     // Turbine beds fade with handover; thin air ducks them further.
+    // F-22 has no ram share — full bed presence across Mach.
     const bedPresence = turbineShare * propulsionPresence * samplePresence
-      * (0.55 + 0.45 * densityScale);
+      * (isF22 ? (0.75 + 0.25 * densityScale) : (0.55 + 0.45 * densityScale));
     nowRamp(voiceGraph.sampleIdleGain.gain,
-      (0.14 + 0.32 * (1 - power)) * (0.55 + 0.45 * turbineShare) * bedPresence, 0.16);
+      (0.14 + 0.32 * (1 - power)) * (0.55 + 0.45 * turbineShare) * bedPresence
+        * (isF22 ? 1.35 : 1), 0.16);
     nowRamp(voiceGraph.sampleMilGain.gain,
-      (0.22 + 1.1 * power) * (0.55 + 0.45 * turbineShare) * bedPresence, 0.12);
+      (0.22 + 1.1 * power) * (0.55 + 0.45 * turbineShare) * bedPresence
+        * (isF22 ? 1.45 : 1), 0.12);
     nowRamp(voiceGraph.sampleGritGain.gain,
       ((0.05 + 0.6 * Math.pow(power, 1.25)) * turbineShare
         + accent * 0.35 * turbineShare)
-        * bedPresence, 0.08);
+        * bedPresence * (isF22 ? 0.85 : 1), 0.08);
     if (voiceGraph.sampleHp) {
-      // As ram takes over, cut remaining bed body so duct voice owns the mid.
-      nowRamp(voiceGraph.sampleHp.frequency, 90 + power * 35 + handover * 420, 0.22);
+      // F-22 cockpit beds need the sub thump — keep HP near infrasonic.
+      // Rapier: cut rumble that reads as blade-pass; rise with ram handover.
+      nowRamp(voiceGraph.sampleHp.frequency,
+        isF22 ? 22 + power * 8 : 90 + power * 35 + handover * 420, 0.22);
     }
     nowRamp(voiceGraph.sampleLp.frequency,
-      9500 + power * 4000 - handover * 3500 - thinAir * 1200, 0.22);
+      isF22
+        ? 2800 + power * 900 + q01 * 400
+        : 9500 + power * 4000 - handover * 3500 - thinAir * 1200, 0.22);
   } else {
     nowRamp(voiceGraph.sampleIdleGain.gain, 0, 0.05);
     nowRamp(voiceGraph.sampleMilGain.gain, 0, 0.05);
@@ -726,10 +749,12 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     (0.06 + 0.28 * Math.sqrt(rpm) * (0.25 + throttle * 0.75))
       * (1 - handover * 0.45) * propulsionPresence * synthDuck, 0.16);
 
-  nowRamp(voiceGraph.jetBodyFilter.frequency, 140 + power * 380 + rpm * 80, 0.16);
+  nowRamp(voiceGraph.jetBodyFilter.frequency,
+    (isF22 ? 90 : 140) + power * (isF22 ? 220 : 380) + rpm * (isF22 ? 40 : 80), 0.16);
   nowRamp(voiceGraph.jetBodyFilter.Q, 1.65 - power * 0.5, 0.16);
   nowRamp(voiceGraph.jetBodyGain.gain,
-    (0.4 + 0.95 * power) * (0.65 + 0.35 * turbineShare) * propulsionPresence * synthDuck,
+    ((isF22 ? 0.7 : 0.4) + (isF22 ? 1.15 : 0.95) * power)
+      * (0.65 + 0.35 * turbineShare) * propulsionPresence * synthDuck,
     0.14);
 
   nowRamp(voiceGraph.jetGritFilter.frequency, 600 + power * 1200 + rpm * 180, 0.14);
@@ -774,10 +799,11 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     (0.001 + 0.008 * Math.pow(rpm, 1.4)) * turbineShare * propulsionPresence
       * tonalMute * fanBoost, 0.14);
 
-  // Cabin darkens hard for synth path; sample path bypasses this.
-  // Aged F-22 cockpit is a bit darker / more sealed than open AB exterior beds.
+  // Cabin darkens hard for synth path; sample path bypasses this (beds are pre-shaped).
+  // F-22 sealed cockpit: much darker ceiling than open AB exterior beds.
   nowRamp(voiceGraph.cabinLp.frequency,
-    (isF22 ? 1100 : 1400) + power * 1200 + q01 * 350 + handover * 800, 0.22);
+    (isF22 ? 650 : 1400) + power * (isF22 ? 550 : 1200) + q01 * (isF22 ? 180 : 350)
+      + handover * 800, 0.22);
 
   // Ram character: hollow duct body + mid howl + HF spit — grows with handover.
   nowRamp(voiceGraph.ramFilter.frequency, 520 + handover * 1600 + throttle * 280 + thinAir * 200, 0.18);
@@ -801,7 +827,9 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     0.14 * Math.pow(q01, 0.72) * rushPresence * (1 + ramShare * 0.35), 0.18);
 
   if (voiceGraph.master) {
-    nowRamp(voiceGraph.master.gain, muted ? 0 : (sampled ? 0.58 : 0.42), muted ? 0.02 : 0.18);
+    const bedMaster = isF22 ? 0.72 : 0.58;
+    nowRamp(voiceGraph.master.gain, muted ? 0 : (sampled ? bedMaster : (isF22 ? 0.52 : 0.42)),
+      muted ? 0.02 : 0.18);
   }
 }
 
