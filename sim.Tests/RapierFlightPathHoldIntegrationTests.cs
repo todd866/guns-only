@@ -24,7 +24,7 @@ public sealed class RapierFlightPathHoldIntegrationTests {
     }
 
     [Fact]
-    public void RapierNeutralCapturesSteepFlightPathWithoutSelectingAbsolutePitch() {
+    public void RapierNeutralCapturesSteepNoseAttitudeWithoutSelectingAbsolutePitch() {
         AircraftSim sim = RapierAt(gammaDeg: 36.0);
         var detents = new DetentLayer();
 
@@ -34,10 +34,27 @@ public sealed class RapierFlightPathHoldIntegrationTests {
                 tick * Dt * 1000.0);
 
         Assert.True(detents.FlightPathHoldActive);
-        Assert.Equal(sim.State.Gamma, detents.CapturedFlightPathRad, precision: 9);
+        Assert.Equal(sim.BodyPitchRad, detents.CapturedPitchRad, precision: 9);
         Assert.Equal(Math.Cos(sim.State.Gamma),
             detents.Command.GDemand, precision: 2);
         Assert.True(double.IsNaN(detents.Command.CommandedPitchRad));
+    }
+
+    [Fact]
+    public void NearVerticalNeutralCaptureStaysFinite() {
+        AircraftSim sim = RapierAt(gammaDeg: 89.0);
+        var detents = new DetentLayer();
+
+        Tick(detents, new KeyGrammar(), sim,
+            FlightModel.RapierPublicDataSurrogate);
+
+        Assert.True(detents.FlightPathHoldActive);
+        Assert.Equal(sim.BodyPitchRad, detents.CapturedPitchRad, precision: 9);
+        Assert.True(detents.CapturedPitchRad > 88.0 * Math.PI / 180.0);
+        Assert.True(double.IsFinite(detents.Command.GDemand));
+        Assert.InRange(detents.Command.GDemand,
+            FlightPathHoldConfig.Rapier.MinG,
+            FlightPathHoldConfig.Rapier.MaxG);
     }
 
     [Fact]
@@ -110,6 +127,8 @@ public sealed class RapierFlightPathHoldIntegrationTests {
 
         session.FeedKey(GKey.PullUp, true);
         session.StepFixed();
+        Assert.False(session.Controls.FlightPathHoldActive,
+            "manual pitch input must preempt neutral attitude trim immediately");
         Assert.True(session.AutoGcasLowLevelStandby,
             "an actual held pitch key must still claim the low block");
     }

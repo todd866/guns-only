@@ -588,9 +588,10 @@ public static class FlightModel {
         // a bank and the aircraft keeps it through a hard pull without constant correction.
         RollHoldRateGainNms: 1_200_000.0, RollHoldDeadband: 0.05,
         RollHoldAttitudeGainNmRad: 1_200_000.0,
-        // Neutral pitch captures the velocity-vector angle. At the observed 36-degree zoom this
-        // commands about cos(36)=0.81 G instead of the old 1 G, which otherwise keeps bending the
-        // path upward. Signed bank compensation also gives the correct negative-G hold inverted.
+        // Neutral pitch captures the body nose attitude and translates its error through protected
+        // G/AoA control. Gravity feed-forward at a 36-degree zoom is cos(36)=0.81 G rather than the
+        // old 1 G, while attitude feedback prevents speed/AoA changes wandering the nose. Signed
+        // bank compensation also gives the correct negative-G trim inverted.
         NeutralFlightPathHold: FlightPathHoldConfig.Rapier,
         // Structure binds, not the pilot — the reclined occupant can use all of it. 12 G is the
         // qualified limit against an 18 G article; Space releases to 15 G, which is knowingly eating
