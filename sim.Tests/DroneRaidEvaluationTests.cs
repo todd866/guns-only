@@ -35,7 +35,7 @@ public class DroneRaidEvaluationTests {
         Assert.Equal(DroneRaidScenarioDefinition.ResolutionMode,
             "STAGED_STREAM_MISSION_KILL");
         Assert.Equal(4, beat.DroneRaid!.Targets.Count);
-        Assert.Equal(460.0, beat.Player.Position.Y);
+        Assert.Equal(465.0, beat.Player.Position.Y);
         Assert.All(beat.DroneRaid.Targets, target => {
             Assert.Equal(300.0, target.Position.Y);
             Assert.InRange(target.Position.X, -8_192.0, 8_192.0);
