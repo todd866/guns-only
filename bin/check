@@ -26,6 +26,7 @@ node --test tools/telemetry/test/*.test.mjs
 node --test tools/perf/*.test.mjs
 python3 tools/audio/cockpit_palette.py self-test
 python3 -m unittest tools/audio/test_cockpit_palette.py tools/audio/test_jet_library.py
+node --test tools/audio/*.test.mjs
 runtime_tests=$(find web/wwwroot/render -type f -path '*/tests/*.test.mjs' -print | sort)
 node --test $runtime_tests
 node --test web/wwwroot/api/*.test.js

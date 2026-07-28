@@ -191,8 +191,30 @@ test("preview drives every production airframe and contact cue path", async () =
 
 test("preview Stop mutes the shared engine and every event path", async () => {
   const source = await readFile(previewUrl, "utf8");
-  const stopBranch = source.match(/function stop\(\) \{([\s\S]*?)\n    \}/)?.[1] ?? "";
-  assert.match(stopBranch, /previewMaster\.gain\.setTargetAtTime\(0,/);
+  const stopBranch = source.match(
+    /function stop\(\{ suspend = false, reason = "manual" \} = \{\}\) \{([\s\S]*?)\n    \}/,
+  )?.[1] ?? "";
+  assert.match(stopBranch, /previewMaster\.gain\.cancelScheduledValues\?\./);
+  assert.match(stopBranch, /previewMaster\.gain\.setValueAtTime\(0,/);
   assert.match(stopBranch, /updateEngineVoices\([^;]+\{ muted: true \}/);
   assert.match(stopBranch, /updateProductionEvents\(\{\}, false\)/);
+  assert.match(stopBranch, /context\.suspend\?\.\(\)/);
+});
+
+test("preview cannot leave a ghost engine after losing focus or visibility", async () => {
+  const source = await readFile(previewUrl, "utf8");
+  assert.match(
+    source,
+    /window\.addEventListener\("blur", \(\) => stop\(\{ suspend: true, reason: "window-blur" \}\)\)/,
+  );
+  assert.match(
+    source,
+    /window\.addEventListener\("pagehide", \(\) => stop\(\{ suspend: true, reason: "pagehide" \}\)\)/,
+  );
+  assert.match(
+    source,
+    /document\.addEventListener\("visibilitychange", \(\) => \{[\s\S]*?document\.hidden[\s\S]*?stop\(\{ suspend: true, reason: "visibility-hidden" \}\)/,
+  );
+  assert.match(source, /data-audio-session-id/);
+  assert.match(source, /data-audio-preview-active/);
 });

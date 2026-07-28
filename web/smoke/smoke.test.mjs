@@ -214,7 +214,10 @@ test("the published web app boots to a running flight kernel (no fatal render er
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
 
-    await page.goto(site.url, { waitUntil: "load", timeout: 60000 });
+    // The real graph must activate, update and expose diagnostics, but release validation must
+    // never put aircraft audio onto a developer's speakers. `audioQa=silent` leaves Web Audio
+    // running while clamping only the destination master.
+    await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: 60000 });
 
     // #boot gains the "ready" class when boot settles — on success (boot()) AND on a fatal error
     // (showFatal()). Waiting for it makes the assertion below deterministic instead of timing-based.
@@ -278,6 +281,47 @@ test("the published web app boots to a running flight kernel (no fatal render er
       await page.keyboard.up("f");
     }
 
+    await page.waitForFunction(() => {
+      const root = document.documentElement;
+      return root.dataset.audioContextState === "running"
+        && root.dataset.audioSignalActive === "true";
+    }, undefined, { timeout: 5000 });
+    const audioRuntime = await page.evaluate(() => {
+      const root = document.documentElement;
+      return {
+        controller: root.dataset.audioController,
+        contextState: root.dataset.audioContextState,
+        signalActive: root.dataset.audioSignalActive,
+        audible: root.dataset.audioAudible,
+        outputGain: root.dataset.audioOutputGain,
+        outputMode: root.dataset.audioOutputMode,
+        silentQa: root.dataset.audioQaSilent,
+        sessionId: root.dataset.audioSessionId,
+      };
+    });
+    assert.deepEqual(
+      {
+        controller: audioRuntime.controller,
+        contextState: audioRuntime.contextState,
+        signalActive: audioRuntime.signalActive,
+        audible: audioRuntime.audible,
+        outputGain: audioRuntime.outputGain,
+        outputMode: audioRuntime.outputMode,
+        silentQa: audioRuntime.silentQa,
+      },
+      {
+        controller: "shared",
+        contextState: "running",
+        signalActive: "true",
+        audible: "false",
+        outputGain: "0",
+        outputMode: "silent-qa",
+        silentQa: "true",
+      },
+      `silent flight-audio QA contract failed: ${JSON.stringify(audioRuntime)}`,
+    );
+    assert.ok(audioRuntime.sessionId, "audio QA session must be attributable to one page instance");
+
     // The per-frame path must ride the hot buffer: over a 5.5-second window the full JSON
     // snapshot should be fetched only on cold_version edges + the five-second fallback, never
     // per frame (~60+/s). This catches a silent regression to JSON-per-frame while still proving
@@ -294,6 +338,17 @@ test("the published web app boots to a running flight kernel (no fatal render er
       snapshotWindow.second.coldFetches - snapshotWindow.first.coldFetches;
     assert.ok(coldFetchesInWindow >= 1 && coldFetchesInWindow <= 2,
       `cold JSON fetch cadence out of band: ${coldFetchesInWindow}/5.5s`);
+
+    await page.evaluate(async () => {
+      const { suspendFlightAudio } = await import("/render/audio/flight_audio.js");
+      suspendFlightAudio("smoke-complete");
+    });
+    await page.waitForFunction(
+      () => document.documentElement.dataset.audioContextState === "suspended"
+        && document.documentElement.dataset.audioStopReason === "smoke-complete",
+      undefined,
+      { timeout: 5000 },
+    );
   } finally {
     await browser.close();
     await site.close();

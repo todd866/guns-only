@@ -27,6 +27,14 @@ The preview routes engine and event voices through the production-shaped dynamic
 (`-18 dB` threshold, `12 dB` knee, `4.5:1`, `5 ms` attack, `180 ms` release) and the engine's
 own master before the `0.55` preview output gain.
 
+This is intentionally foreground-only tooling. Blur, page hide, or document hide immediately cuts
+the preview master, stops its animation loop, clears the pressed cue, and suspends its AudioContext.
+The page publishes `data-audio-*` ownership/state attributes on `<html>` for browser QA.
+
+For automated production flight checks, use `/?audioQa=silent` instead of this audible lab. That
+mode runs the real flight graph and reports active signal state while holding destination gain at
+zero.
+
 ## Hybrid beds
 
 Loops and aggregate reference profiles live in `../samples/jet/`.

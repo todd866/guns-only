@@ -253,6 +253,22 @@
     let state = cueStateAt("f22_power_60");
     let bedCharacter = null;
     let bedLoadGeneration = 0;
+    const previewSessionId = typeof crypto?.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `preview-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    let previewStopReason = "not-started";
+
+    function publishPreviewState() {
+      const root = document.documentElement;
+      root.setAttribute("data-audio-controller", "jet-preview");
+      root.setAttribute("data-audio-session-id", previewSessionId);
+      root.setAttribute("data-audio-context-state", context?.state || "unbuilt");
+      root.setAttribute("data-audio-preview-active", String(activeButton != null));
+      root.setAttribute("data-audio-audible", String(
+        activeButton != null && context?.state === "running",
+      ));
+      root.setAttribute("data-audio-stop-reason", previewStopReason);
+    }
 
     function ensure(character = "f22") {
       const Ctor = window.AudioContext || window.webkitAudioContext;
@@ -274,6 +290,7 @@
         voices = createEngineVoices(context, previewBus, { includeMaster: true });
         events = createEventVoices(context, previewBus);
         contacts = createContactAcousticVoices(context, previewBus);
+        context.addEventListener?.("statechange", publishPreviewState);
       }
       if (bedCharacter !== character) {
         bedCharacter = character;
@@ -286,6 +303,7 @@
           console.info(ok ? `${character} sample beds attached` : "procedural fallback (no beds)");
         });
       }
+      publishPreviewState();
     }
 
     function updateProductionEvents(nextState, enabled) {
@@ -379,10 +397,12 @@
       ensure(character);
       context.resume();
       previewMaster.gain.setTargetAtTime(0.55, context.currentTime, 0.18);
+      previewStopReason = "";
       clearTimeout(slamTimer);
       setActiveButton(button);
       cancelAnimationFrame(timer);
       timer = requestAnimationFrame(tick);
+      publishPreviewState();
     }
 
     function playCue(id, button) {
@@ -394,16 +414,29 @@
       start(state, button);
     }
 
-    function stop() {
-      if (!context) return;
+    function stop({ suspend = false, reason = "manual" } = {}) {
       activeCue = null;
       clearTimeout(slamTimer);
       cancelAnimationFrame(timer);
-      previewMaster.gain.setTargetAtTime(0, context.currentTime, 0.015);
-      updateEngineVoices(voices, context, state, { muted: true });
-      updateProductionEvents({}, false);
+      previewStopReason = reason;
+      if (context) {
+        // Cut synchronously. A target ramp alone can keep a hidden preview audibly coasting while
+        // its RAF is throttled, and context.suspend() is allowed to reject on some browsers.
+        previewMaster.gain.cancelScheduledValues?.(context.currentTime);
+        previewMaster.gain.setValueAtTime(0, context.currentTime);
+        updateEngineVoices(voices, context, state, { muted: true });
+        updateProductionEvents({}, false);
+        if (suspend) {
+          const attempt = context.suspend?.();
+          attempt?.catch?.(() => {});
+          attempt?.finally?.(publishPreviewState);
+        }
+      }
       setActiveButton(null);
-      telemetry.textContent = "Audio stopped.";
+      telemetry.textContent = reason === "manual"
+        ? "Audio stopped."
+        : `Audio stopped (${reason}).`;
+      publishPreviewState();
     }
 
     function playLegacy(regime, button) {
@@ -442,6 +475,14 @@
     for (const button of document.querySelectorAll("button[data-regime]")) {
       button.addEventListener("click", () => playLegacy(button.dataset.regime, button));
     }
+    // Audio labs are tooling, not ambient applications. Losing focus or visibility is an
+    // unconditional stop so a hidden Codex/browser QA tab cannot become a ghost engine.
+    window.addEventListener("blur", () => stop({ suspend: true, reason: "window-blur" }));
+    window.addEventListener("pagehide", () => stop({ suspend: true, reason: "pagehide" }));
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stop({ suspend: true, reason: "visibility-hidden" });
+    });
+    publishPreviewState();
   </script>
 </body>
 </html>
