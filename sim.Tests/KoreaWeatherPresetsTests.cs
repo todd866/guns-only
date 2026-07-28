@@ -28,15 +28,22 @@ public class KoreaWeatherPresetsTests {
 
         Assert.True(mergeWeather.Clouds.Sample(merge.Player.Position, 0.0).VisibilityM
             > 50_000.0);
-        Assert.True(droneWeather.Clouds.Sample(drone.Player.Position, 0.0).VisibilityM
-            > 50_000.0);
+        Assert.Equal(0.0,
+            droneWeather.Clouds.Sample(drone.Player.Position, 0.0).CloudFraction01);
         Assert.All(drone.DroneRaid!.Targets, target =>
-            Assert.True(droneWeather.Clouds.Sample(target.Position, 0.0).VisibilityM
-                > 50_000.0));
-        Assert.Equal("weather.ukraine-2030s.soniachne-low-level.v1",
+            Assert.Equal(0.0,
+                droneWeather.Clouds.Sample(target.Position, 0.0).CloudFraction01));
+        Assert.Equal("weather.ukraine-2030s.winter-snow-squall.v1",
             droneWeather.Id);
         Assert.True(droneWeather.Clouds.Sample(new Vec3D(-5_100.0, 1_700.0, 5_800.0),
             0.0).VisibilityM < 1_000.0);
+        PrecipitationSample localSnow =
+            droneWeather.Precipitation.Sample(drone.Player.Position, 0.0);
+        Assert.Equal(HydrometeorPhase.Snow, localSnow.Rates.DominantPhase);
+        Assert.True(localSnow.VisibilityM < 1_000.0);
+        Assert.True(droneWeather.SurfaceConditions
+            .Sample(drone.Player.Position.X, drone.Player.Position.Z, 0.0)
+            .SnowDepthM > 0.08);
 
         // Mission 7's deck is deliberately BROKEN at the fight altitude rather than a slab or a
         // decoration parked off in the distance: sweeping the engagement volume must find both

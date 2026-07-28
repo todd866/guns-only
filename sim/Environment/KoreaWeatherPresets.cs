@@ -152,7 +152,10 @@ public static class KoreaWeatherPresets {
         4 => ModernCirrus,
         5 or 6 => HistoricalMaritime,
         7 or 9 => ModernHigh,
-        8 => UkraineLowLevel,
+        // The low-level drone mission is the first end-to-end winter slice: the aircraft and
+        // targets stay beneath the deck while typed snow, reduced visibility and snow-covered
+        // surface truth remain independently sampleable.
+        8 => UkraineWinterWeatherPresets.SnowSquall,
         10 or 11 => RapierHighAltitude,
         _ => HistoricalInland
     };

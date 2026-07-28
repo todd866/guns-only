@@ -28,6 +28,16 @@ public class SnapshotHotFrameTests {
         }
     }
 
+    sealed class FixedCloudField(CloudSample sample) : ICloudField {
+        public CloudSample Sample(in Vec3D worldPositionM, double simulationTimeSeconds) =>
+            sample;
+    }
+
+    sealed class FixedPrecipitationField(PrecipitationSample sample) : IPrecipitationField {
+        public PrecipitationSample Sample(in Vec3D worldPositionM,
+            double simulationTimeSeconds) => sample;
+    }
+
     static SimulationSession StartSession(int beatIndex, ITerrainSurface? terrain) {
         var session = new SimulationSession(beatIndex, Carrier.DeckConfiguration.Angled,
             KoreaWeatherPresets.ForBeat(beatIndex));
@@ -161,6 +171,86 @@ public class SnapshotHotFrameTests {
             for (int tick = 0; tick < steps; tick++) session.StepFixed();
             var (root, buffer, document) = Project(session);
             using (document) AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    [Fact]
+    public void HotAndJsonSnapshotsPublishIndependentPrecipitationAndSurfaceTruth() {
+        WeatherProfile baseline = KoreaWeatherPresets.ForBeat(1);
+        var cloud = new CloudSample(
+            cloudFraction01: 0.6,
+            extinctionPerMetre: 0.001,
+            liquidWaterKgPerM3: 0.0005,
+            iceWaterKgPerM3: 0.0,
+            visibilityM: 4_000.0,
+            precipitationMmPerHour: 1.234,
+            turbulenceVelocityMps: Vec3D.Zero,
+            verticalAirVelocityMps: 0.0,
+            icingHazard01: 0.2,
+            lightningHazard01: 0.0);
+        var rates = new HydrometeorRates(
+            rainMmWaterEquivalentPerHour: 1.111,
+            snowMmWaterEquivalentPerHour: 2.222,
+            freezingDrizzleMmWaterEquivalentPerHour: 0.333,
+            freezingRainMmWaterEquivalentPerHour: 0.444,
+            icePelletsMmWaterEquivalentPerHour: 0.555,
+            graupelMmWaterEquivalentPerHour: 0.666,
+            hailMmWaterEquivalentPerHour: 0.777);
+        var precipitation = new PrecipitationSample(
+            rates,
+            extinctionPerMetre: 0.004321,
+            visibilityM: 1_200.4);
+        var surface = new SurfaceConditionSample(
+            surfaceTemperatureK: 268.15,
+            snowWaterEquivalentM: 0.045,
+            snowDepthM: 0.18,
+            snowDensityKgPerM3: 250.0,
+            snowAgeSeconds: 86_400.0,
+            snowLiquidWaterFraction01: 0.08,
+            snowCrust01: 0.35,
+            surfaceWetness01: 0.2,
+            standingWaterDepthM: 0.003,
+            slushDepthM: 0.012,
+            glazeIceThicknessM: 0.0015,
+            mudDepthM: 0.025,
+            frictionCoefficient: 0.22,
+            brakingFactor01: 0.38);
+        var weather = new WeatherProfile(
+            baseline.Atmosphere,
+            baseline.Wind,
+            new FixedCloudField(cloud),
+            terrain: baseline.Terrain,
+            id: "weather.snapshot-winter-test.v1",
+            precipitation: new FixedPrecipitationField(precipitation),
+            surfaceConditions: new UniformSurfaceConditionField(surface));
+        var session = new SimulationSession(
+            1,
+            Carrier.DeckConfiguration.Angled,
+            weather);
+        session.Begin();
+
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            Assert.Equal(1_200.4, root.GetProperty("visibility_m").GetDouble());
+            Assert.Equal(1.234, root.GetProperty("precipitation_mm_hr").GetDouble());
+            Assert.Equal(6.108, root
+                .GetProperty("precipitation_total_mm_water_equivalent_hr").GetDouble());
+            Assert.Equal(1.111, root
+                .GetProperty("precipitation_rain_mm_water_equivalent_hr").GetDouble());
+            Assert.Equal(2.222, root
+                .GetProperty("precipitation_snow_mm_water_equivalent_hr").GetDouble());
+            Assert.Equal(0.004321, root
+                .GetProperty("precipitation_extinction_per_m").GetDouble());
+            Assert.Equal(1_200.4, root
+                .GetProperty("precipitation_visibility_m").GetDouble());
+            Assert.Equal(268.15, root.GetProperty("surface_temperature_k").GetDouble());
+            Assert.Equal(0.045, root.GetProperty("snow_water_equivalent_m").GetDouble());
+            Assert.Equal(0.18, root.GetProperty("snow_depth_m").GetDouble());
+            Assert.Equal(0.0015, root.GetProperty("glaze_ice_thickness_m").GetDouble());
+            Assert.Equal(0.22, root
+                .GetProperty("surface_friction_coefficient").GetDouble());
+            Assert.Equal(0.38, root.GetProperty("surface_braking_factor_01").GetDouble());
+            AssertHotFrameMatchesJson(root, buffer);
         }
     }
 

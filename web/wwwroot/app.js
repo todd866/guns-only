@@ -21,6 +21,7 @@ import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
 import { loadKoreaTerrain } from "./render/environment/korea_terrain.js";
+import { createWinterPrecipitation } from "./render/environment/winter_precipitation.js";
 import {
   PresentationEventStreams,
   presentationVector,
@@ -4944,7 +4945,16 @@ class FlightView {
     };
     this.tacticalClouds.group.name = "AUTHORITATIVE_WEATHER_CLOUDS";
     this.tacticalClouds.group.visible = PRODUCTION_SIMULATED_CLOUDS_ENABLED;
-    this.scene.add(this.sky.mesh, this.sea.mesh, this.tacticalClouds.group);
+    this.winterPrecipitation = createWinterPrecipitation(THREE, {
+      qualityTier: VISUAL_QUALITY.tier,
+      name: "AUTHORITATIVE_WINTER_PRECIPITATION",
+    });
+    this.scene.add(
+      this.sky.mesh,
+      this.sea.mesh,
+      this.tacticalClouds.group,
+      this.winterPrecipitation.points,
+    );
     this.cloudFogColor = new THREE.Color(0xb8c6c8);
     this.cloudBreakActive = false;
     this.cloudBreakPresentation = this.tacticalClouds.cloudBreakDiagnostics();
@@ -5162,11 +5172,19 @@ class FlightView {
       this.sky.uniforms.uSoftWorld.value = ukraineTheatre ? 1 : 0;
     }
     if (ukraineTheatre) {
-      this.fogLow.set(0xd2c4a8);
-      // Stay in the warm dusty family at altitude — cool fogHigh read as blue ocean past the
-      // streamed disc (ADR-0003 soft world, not Korea poster blue).
-      this.fogHigh.set(0x8a8470);
-      this.cloudFogColor.set(0xd2c4a8);
+      const winterSurface = (Number(state?.snow_depth_m) || 0) > 0.005
+        || (Number(state?.glaze_ice_thickness_m) || 0) > 0.0001;
+      if (winterSurface) {
+        this.fogLow.set(0xcbd3cf);
+        this.fogHigh.set(0x7f9093);
+        this.cloudFogColor.set(0xd7deda);
+      } else {
+        this.fogLow.set(0xd2c4a8);
+        // Stay in the warm dusty family at altitude — cool fogHigh read as blue ocean past the
+        // streamed disc (ADR-0003 soft world, not Korea poster blue).
+        this.fogHigh.set(0x8a8470);
+        this.cloudFogColor.set(0xd2c4a8);
+      }
       if (this.sea?.mesh) this.sea.mesh.visible = false;
     } else {
       this.fogLow.set(0x6f8790);
@@ -6265,8 +6283,8 @@ class FlightView {
           SUN_DIRECTION,
         );
       }
-      // Visibility is the exact LayeredCloudField sample from WASM. The renderer changes the
-      // scattering colour while inside condensate, but must not add a second invented extinction.
+      // Visibility is the authoritative minimum across cloud and falling precipitation from
+      // WASM. The renderer changes scattering colour, but must not add invented extinction.
       const localCloudFraction = clamp(Number(state.cloud_fraction_01) || 0, 0, 1);
       const localExtinction = Math.max(0, Number(state.cloud_extinction_per_m) || 0);
       fogDensity = Math.max(baseFogDensity, cloudBreak.fogDensity || 0);
@@ -6280,6 +6298,18 @@ class FlightView {
       this.scene.fog.density = fogDensity;
     }
 
+    const precipitationConfiguration =
+      this.winterPrecipitation.configureFromSnapshot(state);
+    if (precipitationConfiguration?.active) {
+      this.winterPrecipitation.update({
+        cameraPosition: this.camera.position,
+        simulationTimeSeconds: Number(state.t) || 0,
+        viewportHeight:
+          this.renderer.domElement.clientHeight || this.renderer.domElement.height || 720,
+        pixelRatio: this.renderer.getPixelRatio(),
+      });
+    }
+
     // The bridge owns the one terrain-frame transform used by both physics and presentation.
     // Shared-world sorties apply the inverse room origin; authored hero/coastal/Rapier cells use
     // their mission contract's fixed source anchor and remain excluded from remote presentation.
@@ -6288,6 +6318,24 @@ class FlightView {
     const terrainWindX = Number(state.wind_x_mps) || 0;
     // Simulation +Z is north while the renderer mirrors Z.
     const terrainWindZ = -(Number(state.wind_z_mps) || 0);
+    const snowDepthM = Math.max(0, Number(state.snow_depth_m) || 0);
+    const snowWaterEquivalentM =
+      Math.max(0, Number(state.snow_water_equivalent_m) || 0);
+    const terrainSnowCover01 = clamp(
+      Math.max(snowDepthM / 0.08, snowWaterEquivalentM / 0.015),
+      0,
+      1,
+    );
+    const terrainSnowWetness01 = clamp(
+      Number(state.snow_liquid_water_fraction_01) || 0,
+      0,
+      1,
+    );
+    const terrainGlazeIce01 = clamp(
+      (Number(state.glaze_ice_thickness_m) || 0) / 0.002,
+      0,
+      1,
+    );
     this.terrainPresentation?.update({
       cameraPosition: this.camera.position,
       deltaSeconds: dt,
@@ -6297,6 +6345,9 @@ class FlightView {
       fogColor: this.fogColor,
       fogDensity,
       sunDirection: SUN_DIRECTION,
+      snowCover01: terrainSnowCover01,
+      snowWetness01: terrainSnowWetness01,
+      glazeIce01: terrainGlazeIce01,
       placementEastM: Number.isFinite(terrainPlacementEastM) ? terrainPlacementEastM : 0,
       placementNorthM: Number.isFinite(terrainPlacementNorthM) ? terrainPlacementNorthM : 0,
     });
@@ -6519,6 +6570,7 @@ class FlightView {
       terrain: this.terrainPresentation?.diagnostics() ?? null,
       terrainError: this.terrainPresentationError,
       cloudBreak: this.tacticalClouds.cloudBreakDiagnostics(),
+      winterPrecipitation: this.winterPrecipitation.diagnostics(),
       multiplayer: this.remoteAircraft.diagnostics(),
     });
   }
@@ -6555,6 +6607,7 @@ class FlightView {
     this.banditContact.dispose();
     await this.remoteAircraft.dispose();
     this.tacticalClouds.dispose();
+    this.winterPrecipitation.dispose();
     this.playerDamageSmoke.dispose();
     this.banditDamageSmoke.dispose();
     this.carrierRuntime.recovery.group.removeFromParent();

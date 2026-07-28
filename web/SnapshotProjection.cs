@@ -187,8 +187,18 @@ internal static class SnapshotProjection {
             (Session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
                 ? Session.Beat.PlayerAir.SkinTemperatureLimitK : 593.15) - 273.15;
         Vec3D localWindVelocity = groundVelocity - airVelocity;
+        double simulationTimeSeconds = _simTimeMs / 1000.0;
         CloudSample localCloud = (Session.Weather?.Clouds ?? ClearCloudField.Instance)
-            .Sample(playerPosition, _simTimeMs / 1000.0);
+            .Sample(playerPosition, simulationTimeSeconds);
+        PrecipitationSample localPrecipitation =
+            (Session.Weather?.Precipitation ?? ClearPrecipitationField.Instance)
+                .Sample(playerPosition, simulationTimeSeconds);
+        SurfaceConditionSample localSurface =
+            (Session.Weather?.SurfaceConditions ?? UniformSurfaceConditionField.ClearDry)
+                .Sample(playerPosition.X, playerPosition.Z, simulationTimeSeconds);
+        double localVisibilityM = Math.Min(
+            localCloud.VisibilityM,
+            localPrecipitation.VisibilityM);
         double groundSpeedMps = Math.Sqrt(
             groundVelocity.X * groundVelocity.X + groundVelocity.Z * groundVelocity.Z);
         double positiveLoadFactor = Math.Max(1.0,
@@ -452,8 +462,30 @@ internal static class SnapshotProjection {
             + $"\"static_pressure_hpa\":{atmosphericState.PressurePa / 100.0:F2},"
             + $"\"air_density_kg_m3\":{atmosphericState.DensityKgM3:F6},"
             + $"\"wind_x_mps\":{localWindVelocity.X:F3},\"wind_y_mps\":{localWindVelocity.Y:F3},\"wind_z_mps\":{localWindVelocity.Z:F3},"
-            + $"\"visibility_m\":{localCloud.VisibilityM:F1},\"cloud_fraction_01\":{localCloud.CloudFraction01:F4},"
+            + $"\"visibility_m\":{localVisibilityM:F1},\"cloud_fraction_01\":{localCloud.CloudFraction01:F4},"
             + $"\"cloud_extinction_per_m\":{localCloud.ExtinctionPerMetre:F8},\"precipitation_mm_hr\":{localCloud.PrecipitationMmPerHour:F3},"
+            + $"\"precipitation_total_mm_water_equivalent_hr\":{localPrecipitation.TotalMmWaterEquivalentPerHour:F3},"
+            + $"\"precipitation_rain_mm_water_equivalent_hr\":{localPrecipitation.Rates.RainMmWaterEquivalentPerHour:F3},"
+            + $"\"precipitation_snow_mm_water_equivalent_hr\":{localPrecipitation.Rates.SnowMmWaterEquivalentPerHour:F3},"
+            + $"\"precipitation_freezing_drizzle_mm_water_equivalent_hr\":{localPrecipitation.Rates.FreezingDrizzleMmWaterEquivalentPerHour:F3},"
+            + $"\"precipitation_freezing_rain_mm_water_equivalent_hr\":{localPrecipitation.Rates.FreezingRainMmWaterEquivalentPerHour:F3},"
+            + $"\"precipitation_ice_pellets_mm_water_equivalent_hr\":{localPrecipitation.Rates.IcePelletsMmWaterEquivalentPerHour:F3},"
+            + $"\"precipitation_graupel_mm_water_equivalent_hr\":{localPrecipitation.Rates.GraupelMmWaterEquivalentPerHour:F3},"
+            + $"\"precipitation_hail_mm_water_equivalent_hr\":{localPrecipitation.Rates.HailMmWaterEquivalentPerHour:F3},"
+            + $"\"precipitation_extinction_per_m\":{localPrecipitation.ExtinctionPerMetre:F8},"
+            + $"\"precipitation_visibility_m\":{localPrecipitation.VisibilityM:F1},"
+            + $"\"surface_temperature_k\":{localSurface.SurfaceTemperatureK:F2},"
+            + $"\"snow_water_equivalent_m\":{localSurface.SnowWaterEquivalentM:F4},"
+            + $"\"snow_depth_m\":{localSurface.SnowDepthM:F4},"
+            + $"\"snow_liquid_water_fraction_01\":{localSurface.SnowLiquidWaterFraction01:F4},"
+            + $"\"snow_crust_01\":{localSurface.SnowCrust01:F4},"
+            + $"\"surface_wetness_01\":{localSurface.SurfaceWetness01:F4},"
+            + $"\"standing_water_depth_m\":{localSurface.StandingWaterDepthM:F4},"
+            + $"\"slush_depth_m\":{localSurface.SlushDepthM:F4},"
+            + $"\"glaze_ice_thickness_m\":{localSurface.GlazeIceThicknessM:F4},"
+            + $"\"mud_depth_m\":{localSurface.MudDepthM:F4},"
+            + $"\"surface_friction_coefficient\":{localSurface.FrictionCoefficient:F4},"
+            + $"\"surface_braking_factor_01\":{localSurface.BrakingFactor01:F4},"
             + $"\"cloud_turbulence_x_mps\":{localCloud.TurbulenceVelocityMps.X:F3},\"cloud_turbulence_y_mps\":{localCloud.TurbulenceVelocityMps.Y:F3},\"cloud_turbulence_z_mps\":{localCloud.TurbulenceVelocityMps.Z:F3},"
             + $"\"cloud_vertical_air_mps\":{localCloud.VerticalAirVelocityMps:F3},\"icing_hazard_01\":{localCloud.IcingHazard01:F4},\"lightning_hazard_01\":{localCloud.LightningHazard01:F4},"
             + WeatherRenderJson()

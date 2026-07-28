@@ -43,6 +43,17 @@ test("production admits only state-bearing environment visuals and event-bearing
     "production visibility must come from the scenario weather projection");
   assert.match(source, /this\.tacticalClouds\.configureFromState\(state\)/,
     "production clouds must be reconstructed from the authoritative weather descriptors");
+  assert.match(source, /createWinterPrecipitation\(THREE, \{/,
+    "production winter precipitation must use the bounded GPU batch");
+  assert.match(source,
+    /this\.winterPrecipitation\.configureFromSnapshot\(state\)/,
+    "falling hydrometeors must come from the authoritative typed snapshot rates");
+  assert.match(source,
+    /simulationTimeSeconds: Number\(state\.t\) \|\| 0/,
+    "winter precipitation motion must use deterministic simulation time");
+  assert.match(source,
+    /snowCover01: terrainSnowCover01,[\s\S]*snowWetness01: terrainSnowWetness01,[\s\S]*glazeIce01: terrainGlazeIce01/,
+    "terrain winter shading must consume projected surface-condition truth");
   assert.match(source,
     /createTacticalCloudField\(THREE, \{[\s\S]*?volumetric: false,[\s\S]*?\}\)/,
     "production must use the bounded cloud impostor path until a frame-time governor exists");
@@ -395,6 +406,7 @@ test("FlightView teardown releases pack tasks, inline resources, PMREM, and rend
   assert.match(source, /await this\.visualRuntimeTransitions\.idle\(\)/);
   assert.match(source, /this\.visualRuntimeTransitions\.enqueue\(operation\)/);
   assert.match(source, /disposeSceneResources\(this\.sky\.mesh\)/);
+  assert.match(source, /this\.winterPrecipitation\.dispose\(\)/);
   assert.match(source, /this\.environmentTarget\.dispose\(\)/);
   assert.match(source, /this\.renderer\.dispose\(\)/);
 });

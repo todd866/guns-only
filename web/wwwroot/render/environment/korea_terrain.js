@@ -223,6 +223,10 @@ function createUkraineTrainingHorizonApron(THREE,
     polygonOffsetFactor: 2,
     polygonOffsetUnits: 2,
   });
+  transitionMaterial.userData.clearSurfaceColor = transitionMaterial.color.clone();
+  flatMaterial.userData.clearSurfaceColor = flatMaterial.color.clone();
+  root.userData.THREE = THREE;
+  root.userData.winterSurfaceMaterials = [transitionMaterial, flatMaterial];
   const horizon = UKRAINE_TRAINING_HORIZON_HALF_SPAN_M;
   const flatPatches = [
     [-horizon, outer, horizon, horizon],
@@ -295,6 +299,9 @@ uniform float uShadowFloor;
 uniform vec2 uOcclusionRange;
 uniform float uHazeBands;
 uniform float uHazeBandBlend;
+uniform float uSnowCover01;
+uniform float uSnowWetness01;
+uniform float uGlazeIce01;
 varying float vConcavity;
 varying vec3 vTerrainNormal;
 varying vec3 vTerrainWorldPosition;
@@ -449,6 +456,29 @@ void main() {
   #endif
 
   vec3 lit = stylizedLit;
+  #endif
+
+  #ifdef UKRAINE_SCENERY
+  // Winter state comes from the simulation's surface-condition field. A coherent uniform branch
+  // makes the normal green-world path pay essentially nothing; when active, snow follows broad
+  // ground shape and the already-computed organic succession field rather than a tiled texture.
+  // Water is composited later and therefore remains water rather than turning into painted snow.
+  if (uSnowCover01 > 0.001 || uGlazeIce01 > 0.001) {
+    float snowRetention = 1.0 - smoothstep(0.16, 0.62, steepness);
+    float snowBreakup = mix(0.82, 1.06, succession);
+    float snowMask = clamp(uSnowCover01 * snowRetention * snowBreakup, 0.0, 1.0);
+    float snowLight = mix(0.66, 1.03,
+      max(dot(normal, normalize(uSunDirection)), 0.0));
+    vec3 drySnow = vec3(0.91, 0.90, 0.84);
+    vec3 wetSnow = vec3(0.73, 0.79, 0.80);
+    vec3 snowLit = mix(drySnow, wetSnow, uSnowWetness01) * snowLight;
+    lit = mix(lit, snowLit, snowMask);
+
+    float glazeMask = clamp(uGlazeIce01, 0.0, 1.0)
+      * smoothstep(0.18, 0.92, normal.y) * (1.0 - snowMask * 0.74);
+    vec3 glazeLit = mix(lit, vec3(0.67, 0.79, 0.83) * snowLight, 0.48);
+    lit = mix(lit, glazeLit, glazeMask);
+  }
   #endif
 
   // Baked enclosure darkens valley floors and lets ridge crests catch light. This is the term the
@@ -837,6 +867,10 @@ export function createTerrainMaterial(THREE, options = {}) {
       // the posterization so distance reads as continuous atmosphere (ADR-0003).
       uHazeBands: { value: finite(options.hazeBands, ukraine ? 3 : 6) },
       uHazeBandBlend: { value: finite(options.hazeBandBlend, ukraine ? 0.18 : 0.65) },
+      // Surface truth is opt-in and defaults to the existing snow-free presentation.
+      uSnowCover01: { value: Math.max(0, Math.min(1, finite(options.snowCover01))) },
+      uSnowWetness01: { value: Math.max(0, Math.min(1, finite(options.snowWetness01))) },
+      uGlazeIce01: { value: Math.max(0, Math.min(1, finite(options.glazeIce01))) },
     },
   });
 }
@@ -867,6 +901,37 @@ function setTerrainMaterialEra(material, era) {
     ...(ukraine ? { UKRAINE_SCENERY: 1 } : {}),
   };
   material.needsUpdate = true;
+}
+
+function setTerrainWinterSurface(material, snowCover01, snowWetness01, glazeIce01) {
+  if (Number.isFinite(snowCover01)) {
+    material.uniforms.uSnowCover01.value = Math.max(0, Math.min(1, snowCover01));
+  }
+  if (Number.isFinite(snowWetness01)) {
+    material.uniforms.uSnowWetness01.value = Math.max(0, Math.min(1, snowWetness01));
+  }
+  if (Number.isFinite(glazeIce01)) {
+    material.uniforms.uGlazeIce01.value = Math.max(0, Math.min(1, glazeIce01));
+  }
+}
+
+function setApronWinterSurface(apron, snowCover01, snowWetness01, glazeIce01) {
+  const materials = apron?.userData?.winterSurfaceMaterials;
+  if (!Array.isArray(materials)) return;
+  const snow = Math.max(0, Math.min(1, finite(snowCover01)));
+  const wet = Math.max(0, Math.min(1, finite(snowWetness01)));
+  const glaze = Math.max(0, Math.min(1, finite(glazeIce01)));
+  const key = `${snow.toFixed(4)}:${wet.toFixed(4)}:${glaze.toFixed(4)}`;
+  if (apron.userData.winterSurfaceKey === key) return;
+  apron.userData.winterSurfaceKey = key;
+  const snowColor = new apron.userData.THREE.Color(0xebe8d7)
+    .lerp(new apron.userData.THREE.Color(0xb9c9cc), wet);
+  const glazeColor = new apron.userData.THREE.Color(0xaac8d1);
+  for (const material of materials) {
+    material.color.copy(material.userData.clearSurfaceColor)
+      .lerp(snowColor, snow)
+      .lerp(glazeColor, glaze * (1 - snow * 0.7) * 0.42);
+  }
 }
 
 function disposeMeshScenery(mesh) {
@@ -1508,7 +1573,8 @@ class KoreaTerrainPresentation {
   }
 
   update({ cameraPosition, streamPosition, elapsedSeconds, windX, windZ, fogColor, fogDensity,
-    sunDirection, placementEastM, placementNorthM } = {}) {
+    sunDirection, snowCover01, snowWetness01, glazeIce01,
+    placementEastM, placementNorthM } = {}) {
     if (this.disposed) return;
     if (placementEastM !== undefined || placementNorthM !== undefined) {
       this.setPlacement(placementEastM ?? this.worldEastM, placementNorthM ?? this.worldNorthM);
@@ -1529,6 +1595,8 @@ class KoreaTerrainPresentation {
       this.material.uniforms.uWorldEdgeM.value = this.visibleWorldRadiusM;
     }
     if (sunDirection) this.material.uniforms.uSunDirection.value.copy(sunDirection).normalize();
+    setTerrainWinterSurface(this.material, snowCover01, snowWetness01, glazeIce01);
+    setApronWinterSurface(this.horizonApron, snowCover01, snowWetness01, glazeIce01);
     if (!cameraPosition) return;
 
     const requests = [];
@@ -1952,7 +2020,8 @@ class KoreaTerrainAtlasPresentation {
   }
 
   update({ cameraPosition, streamPosition, deltaSeconds, elapsedSeconds, windX, windZ, fogColor,
-    fogDensity, sunDirection, placementEastM, placementNorthM } = {}) {
+    fogDensity, sunDirection, snowCover01, snowWetness01, glazeIce01,
+    placementEastM, placementNorthM } = {}) {
     if (this.disposed) return;
     if (placementEastM !== undefined || placementNorthM !== undefined) {
       this.setPlacement(placementEastM ?? this.worldEastM, placementNorthM ?? this.worldNorthM);
@@ -1971,6 +2040,7 @@ class KoreaTerrainAtlasPresentation {
       this.material.uniforms.uWorldEdgeM.value = this.visibleWorldRadiusM;
     }
     if (sunDirection) this.material.uniforms.uSunDirection.value.copy(sunDirection).normalize();
+    setTerrainWinterSurface(this.material, snowCover01, snowWetness01, glazeIce01);
     if (!cameraPosition) return;
 
     const cameraLocal = new this.THREE.Vector3(
@@ -2007,6 +2077,9 @@ class KoreaTerrainAtlasPresentation {
       fogColor,
       fogDensity,
       sunDirection,
+      snowCover01,
+      snowWetness01,
+      glazeIce01,
       placementEastM: 0,
       placementNorthM: 0,
     };
