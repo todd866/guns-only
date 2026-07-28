@@ -384,6 +384,22 @@ export function systemsReadout(state = {}) {
     : null;
   const engineRpmPct = finiteNumber(state.engine_rpm_pct);
   const engineRunning = typeof state.engine_running === "boolean" ? state.engine_running : null;
+  const rapierPropulsion = state.rapier_mission_available === true;
+  const flapLabel = rapierPropulsion ? "ELEV" : "FLAP";
+  const inletRecovery = finiteNumber(state.rapier_inlet_recovery);
+  const turbineThrustLbf = finiteNumber(state.rapier_turbine_thrust_lbf)
+    ?? ((finiteNumber(state.rapier_turbine_thrust_kn) ?? 0) * 224.80894387);
+  const ramjetThrustLbf = finiteNumber(state.rapier_ramjet_thrust_lbf)
+    ?? ((finiteNumber(state.rapier_ramjet_thrust_kn) ?? 0) * 224.80894387);
+  const totalStreamThrustLbf = Math.max(0,
+    (turbineThrustLbf ?? 0) + (ramjetThrustLbf ?? 0));
+  const propulsionMode = !rapierPropulsion ? null
+    : ramjetThrustLbf > 10 && turbineThrustLbf <= 10 ? "RAM"
+      : ramjetThrustLbf > 10 && turbineThrustLbf > 10 ? "TBCC"
+        : turbineThrustLbf > 10 ? "TURB" : "PROP";
+  const propulsionText = propulsionMode === null
+    ? null
+    : `${propulsionMode} ${Math.round(totalStreamThrustLbf).toLocaleString("en-US")} LBF`;
   const engineAvailable = hasEngine && (engineRpmPct !== null || engineRunning !== null);
   const electricalAvailable = hasElectricalSystem && primaryBusPowered !== null;
   const hydraulicAvailable = hasUtilityHydraulics && utilityHydraulicPressurePsi !== null;
@@ -391,6 +407,11 @@ export function systemsReadout(state = {}) {
   const warnings = [];
   if (engineAvailable && engineRunning === false) {
     warnings.push({ text: "ENGINE FLAMEOUT", level: "warning" });
+  }
+  if (rapierPropulsion && inletRecovery !== null && inletRecovery < 0.65) {
+    warnings.push({ text: "INLET DISTORTION", level: "warning" });
+  } else if (rapierPropulsion && inletRecovery !== null && inletRecovery < 0.90) {
+    warnings.push({ text: "INLET RECOVERY LOW", level: "caution" });
   }
   if (gearAvailable && state.gear_warning_horn === true) {
     warnings.push({ text: "GEAR WARNING", level: "warning" });
@@ -402,9 +423,11 @@ export function systemsReadout(state = {}) {
     warnings.push({ text: "GEAR UNSAFE", level: "caution" });
   }
   if (flapAvailable && state.flap_limit_exceeded === true) {
-    warnings.push({ text: "FLAP OVERSPEED", level: "warning" });
+    warnings.push({ text: `${flapLabel} OVERSPEED`, level: "warning" });
   }
-  if (flapAvailable && flapSplit) warnings.push({ text: "FLAP SPLIT", level: "warning" });
+  if (flapAvailable && flapSplit) {
+    warnings.push({ text: `${flapLabel} SPLIT`, level: "warning" });
+  }
   if (electricalAvailable && primaryBusPowered === false) {
     warnings.push({ text: "PRIMARY BUS", level: "caution" });
   }
@@ -418,8 +441,11 @@ export function systemsReadout(state = {}) {
     warnings.push({ text: "CLEAN UP GEAR", level: "caution" });
   }
   if (configurationActionable && flapNeedsCleanup
-      && !warnings.some((warning) => warning.text.startsWith("FLAP "))) {
-    warnings.push({ text: "CLEAN UP FLAPS", level: "caution" });
+      && !warnings.some((warning) => warning.text.startsWith(`${flapLabel} `))) {
+    warnings.push({
+      text: rapierPropulsion ? "CLEAN UP ELEVONS" : "CLEAN UP FLAPS",
+      level: "caution",
+    });
   }
 
   const transitionActive = (gearAvailable && gearUnsafe)
@@ -442,6 +468,7 @@ export function systemsReadout(state = {}) {
     gearWarningHorn: state.gear_warning_horn === true,
     gearLimitExceeded: state.gear_limit_exceeded === true,
     flapAvailable,
+    flapLabel,
     flapLever,
     flapLeftDeg,
     flapRightDeg,
@@ -462,6 +489,8 @@ export function systemsReadout(state = {}) {
     engineAvailable,
     engineRpmPct,
     engineRunning,
+    propulsionText,
+    inletRecovery,
     warnings,
   };
 }

@@ -13,19 +13,17 @@ curriculum. Graduating a rung means taking an axis back from the machine.
 
 | Rung | Platform | Pilot owns | Machine owns | Symbology |
 |---|---|---|---|---|
-| 1 · Assisted | Phone, portrait | Roll (tilt), G bias (PULL/EASE), speed bias (±30 kt), when to disengage | Throttle-to-corner, about-right pull, trigger, GCAS | Minimal: bandit, corner state, one attitude cue |
-| 2 · Touch | Phone/tablet, landscape | + pitch (tilt), throttle (rocker), trigger (FIRE) | Widened gunnery assist, GCAS backstop | Standard combat HUD |
-| 2.5 · Gamepad (next) | Xbox-class controller | Analog pitch/roll (sticks), throttle (triggers/bumpers), guns (RT), padlock/GCAS (buttons) | Configurable assist level — THE research rung | Standard combat HUD |
+| 1 · Assisted | Phone, portrait | Left stick: analog roll + G bias. Right stick: look + touch-to-fire. Optional 15% tilt trim | Throttle-to-corner, about-right neutral pull, qualified auto-fire, GCAS | Minimal: bandit, corner state, one attitude cue |
+| 2 · Touch | Phone/tablet, landscape | Same two sticks + throttle/context controls | Widened gunnery assist, GCAS backstop | Standard combat HUD |
+| 2.5 · Gamepad | Xbox-class controller | Left stick pitch/roll, right stick look, bumpers throttle, RT guns, A padlock | Configurable assist level — THE research rung | Standard combat HUD |
 | 3 · Keyboard | Laptop/desktop | + rudder, envelope override, padlock discipline, GCAS refusal | Narrow gunnery assist, bank-hold, GCAS last-instant only | Full: funnel + pipper, padlock locator inset, limit annunciations |
 | 4 · Expert (future) | Stick/HOTAS | Everything; assists opt-in | Nothing by default | Full + declutter options |
 
-Rung 1 exists as of Build 75 (assisted flight: kernel auto-throttle/auto-pull/auto-fire behind
-`SetAssistedFlight`); rungs 2–3 are today's landscape touch and keyboard experiences. Rung 2.5
-is the thesis instrument ("Xbox controllers can be warfighting tools" — docs/ux-lab-thesis.md):
-a commodity gamepad flying the honest kernel with the assist level as the experimental variable.
-It needs a true analog pitch command path in the detent grammar (proportional G demand between
-the push limit and max-perform), analog roll (exists), and gamepad bindings alongside the
-keyboard's rebindable controls.
+Rung 1 began in Build 75 and now uses the same dual-stick semantic axes as rung 2.5. The phone
+is therefore practice for the controller rather than a separate tilt game: left thumb flies,
+right thumb fights, and tilt can only add a bounded roll trim. The gamepad uses the same analog
+pitch command path in the detent grammar (proportional G demand between the push limit and
+max-perform), with the assist level remaining the experimental variable.
 
 ## Rules that keep it one game
 

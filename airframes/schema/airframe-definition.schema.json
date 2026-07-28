@@ -83,6 +83,12 @@
         "aspectRatio": {
           "type": "number"
         },
+        "renderedSolidPlanformAreaM2": {
+          "type": "number"
+        },
+        "bodyOverlapNonReferenceAreaM2": {
+          "type": "number"
+        },
         "thickness": {
           "type": "number"
         },
@@ -135,6 +141,10 @@
           }
         }
       }
+    },
+    "aerodynamics": {
+      "type": "object",
+      "description": "Airframe-specific aerodynamic/control contract. Surrogate schedules must carry epistemic labels."
     },
     "escapePodSpine": {
       "type": "object"

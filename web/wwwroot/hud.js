@@ -215,6 +215,7 @@ class CombatHud {
     this.pixelRatio = 1;
     this.legendVisible = false;
     this.touchMode = false;
+    this.presentationProfile = "standard";
     this.controlBindings = null;
     this.safeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -328,6 +329,11 @@ class CombatHud {
   setTouchMode(enabled) {
     this.touchMode = Boolean(enabled);
     if (this.touchMode) this.legendVisible = false;
+  }
+
+  setPresentationProfile(profile) {
+    this.presentationProfile = String(profile || "standard");
+    if (this.presentationProfile !== "standard") this.legendVisible = false;
   }
 
   setControlBindings(bindings) {
@@ -1809,27 +1815,62 @@ class CombatHud {
     ctx.restore();
   }
 
+  drawPortraitFlightState(state, display = {}) {
+    const ctx = this.ctx;
+    const speed = Number.isFinite(display.indicatedDigits)
+      ? Math.round(display.indicatedDigits) : Math.round(Number(state.ias_kts) || 0);
+    const altitude = Number.isFinite(display.altitudeDigits)
+      ? Math.round(display.altitudeDigits) : Math.round(Number(state.alt_ft) || 0);
+    const bias = Number(state.assisted_speed_bias_kts) || 0;
+    const auto = state.assisted_flight === true
+      ? (bias === 0 ? "AUTO CORNER" : `AUTO COR${bias > 0 ? "+" : ""}${bias}`)
+      : "MANUAL";
+    const top = this.safeInsets.top + 18;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const text = `${speed} KT · ${auto} · ${altitude} FT`;
+    const width = Math.min(this.width - 32, ctx.measureText(text).width + 22);
+    ctx.fillStyle = "rgba(2, 10, 16, 0.68)";
+    roundedRect(ctx, (this.width - width) / 2, top - 10, width, 20, 5);
+    ctx.fill();
+    ctx.fillStyle = state.assisted_flight === true ? AMBER : GREEN;
+    ctx.fillText(text, this.width / 2, top);
+    ctx.restore();
+  }
+
   drawGTape(state) {
     const ctx = this.ctx;
     const layout = this.getLayout();
     const x = this.safeInsets.left + 24;
     const y = layout.secondaryBottom - 9;
     const width = Math.min(166, Math.max(112, this.width * 0.18));
-    const maxG = Math.max(10, Number(state.g_hardmax) || 10);
+    const hardG = Math.max(0, Number(state.g_hardmax) || 0);
+    const overrideG = Math.max(hardG, Number(state.g_override_max) || hardG);
+    const overrideSelected = state.requested_envelope_override === true;
+    const actualG = Number(state.g_actual) || 0;
+    const maxG = Math.max(10, hardG,
+      overrideSelected ? overrideG : 0,
+      Math.abs(actualG));
     const mapG = (g) => x + clamp((Number(g) || 0) / maxG, 0, 1) * width;
-    const tierColor = state.tier === 3 ? AMBER : GREEN;
+    const tierColor = actualG > hardG + 0.05 ? RED
+      : overrideSelected || state.tier === 3 ? AMBER : GREEN;
 
     const wash = ctx.createLinearGradient(x - 6, 0, x + width + 6, 0);
     wash.addColorStop(0, "rgba(1, 9, 14, 0.42)");
     wash.addColorStop(0.72, "rgba(1, 9, 14, 0.20)");
     wash.addColorStop(1, "rgba(1, 9, 14, 0)");
+    if (this._debug) {
+      this._debug.gTape = { x: x - 6, y: y - 27, width: width + 12, height: 50 };
+    }
     ctx.fillStyle = wash;
     ctx.fillRect(x - 6, y - 27, width + 12, 50);
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText("G", x, y - 20);
+    ctx.fillText(overrideSelected ? "G · OVR" : "G", x, y - 20);
     ctx.textAlign = "right";
     ctx.fillStyle = tierColor;
     ctx.fillText((Number(state.g_actual) || 0).toFixed(1), x + width, y - 20);
@@ -1845,7 +1886,8 @@ class CombatHud {
     const markers = [
       ...(Number.isFinite(sustained) && sustained >= 1.0
         ? [[sustained, "S", GREEN_DIM]] : []),
-      [state.g_hardmax, "L", RED],
+      [hardG, "L", RED],
+      ...(overrideG > hardG + 0.05 ? [[overrideG, "X", AMBER]] : []),
     ].map(([g, label, color]) => ({ x: mapG(g), label, color }))
       .sort((a, b) => a.x - b.x);
     const minLabelGap = 17;
@@ -2250,6 +2292,7 @@ class CombatHud {
   drawLimitsPanel(state) {
     const panel = limitsPanelPresentation(state);
     if (!panel) {
+      this._limitsPanelRect = null;
       if (this._debug) this._debug.limitsPanel = null;
       return;
     }
@@ -2265,6 +2308,7 @@ class CombatHud {
     // Keep clear of the persistent H · CONTROLS chip in the same corner.
     const legendReserve = (!this.legendVisible && !this.touchMode) ? 28 : 0;
     const y = layout.secondaryBottom - height - legendReserve;
+    this._limitsPanelRect = { x, y, width, height };
 
     if (this._debug) {
       this._debug.limitsPanel = {
@@ -2339,10 +2383,12 @@ class CombatHud {
     const ctx = this.ctx;
     const width = Math.min(214,
       this.width - this.safeInsets.left - this.safeInsets.right - 36);
-    const height = 88;
+    const height = 72;
     const x = this.safeInsets.left + 18;
     const legendReserve = (!this.legendVisible && !this.touchMode) ? 28 : 0;
-    const y = this.getLayout().secondaryBottom - height - legendReserve;
+    // The G-tape wash begins 36 px above secondaryBottom. Keep an explicit gap instead of sharing
+    // those pixels, which is what drew the green G rail through the old 88 px lesson card.
+    const y = this.getLayout().secondaryBottom - 36 - 8 - height - legendReserve;
     const thermalAccent = teach.thermalLevel === "fault" ? RED
       : teach.thermalLevel === "caution" ? AMBER : GREEN;
     const modeAccent = teach.mode === "HANDOVER" ? AMBER
@@ -2354,8 +2400,8 @@ class CombatHud {
         skinText: teach.skinText,
         explainer: teach.explainer,
         mach: teach.mach,
-        turbineKn: teach.turbineKn,
-        ramKn: teach.ramKn,
+        turbineLbf: teach.turbineLbf,
+        ramLbf: teach.ramLbf,
         x,
         y,
         width,
@@ -2382,13 +2428,15 @@ class CombatHud {
     ctx.fillStyle = thermalAccent;
     ctx.fillText(teach.skinText, x + 8, y + 26);
 
-    ctx.font = "600 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillStyle = GREEN_DIM;
-    ctx.fillText(this.fitText(teach.explainer, width - 16), x + 8, y + 40);
+    if (teach.wallC !== null) {
+      ctx.font = "600 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = GREEN_DIM;
+      ctx.fillText(`ADIABATIC WALL ${Math.round(teach.wallC)}°C`, x + 8, y + 39);
+    }
 
     const barX = x + 8;
     const barWidth = width - 16;
-    const drawShare = (label, share, kn, rowY, color) => {
+    const drawShare = (label, share, lbf, rowY, color) => {
       ctx.fillStyle = GREEN_FAINT;
       ctx.fillRect(barX, rowY, barWidth, 5);
       ctx.fillStyle = color;
@@ -2398,10 +2446,11 @@ class CombatHud {
       ctx.textAlign = "left";
       ctx.fillText(label, barX, rowY - 5);
       ctx.textAlign = "right";
-      ctx.fillText(`${kn.toFixed(0)} kN`, barX + barWidth, rowY - 5);
+      ctx.fillText(`${Math.round(lbf).toLocaleString("en-US")} LBF`,
+        barX + barWidth, rowY - 5);
     };
-    drawShare("TURBINE/AB", teach.turbineShare, teach.turbineKn, y + 60, GREEN);
-    drawShare("RAMJET", teach.ramShare, teach.ramKn, y + 76, AMBER);
+    drawShare("TURBINE/AB", teach.turbineShare, teach.turbineLbf, y + 53, GREEN);
+    drawShare("RAMJET", teach.ramShare, teach.ramLbf, y + 67, AMBER);
     ctx.restore();
   }
 
@@ -2415,7 +2464,11 @@ class CombatHud {
     const height = this.touchMode ? 62 : 72;
     const x = this.width - this.safeInsets.right - width - 18;
     const fuelY = this.getLayout().secondaryBottom - 42;
-    const y = Math.max(this.safeInsets.top + 24, fuelY - height - 8);
+    const lowerPanelTop = this._limitsPanelRect?.y ?? fuelY;
+    const y = Math.max(this.safeInsets.top + 24, lowerPanelTop - height - 8);
+    if (this._debug) {
+      this._debug.systemsPanel = { x, y, width, height };
+    }
     const gearArrow = systems.gearHandle === "DOWN" ? "↓"
       : systems.gearHandle === "UP" ? "↑" : "—";
     const flapLever = systems.flapLever === "DOWN" ? "DN"
@@ -2455,16 +2508,20 @@ class CombatHud {
     ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.fillStyle = systems.flapSplit || systems.flapLimitExceeded ? accent : GREEN;
-    ctx.fillText(`FLAP ${flapLever}`, x + 9, y + 34);
+    ctx.fillText(`${systems.flapLabel ?? "FLAP"} ${flapLever}`, x + 9, y + 34);
     ctx.textAlign = "right";
     ctx.fillText(systems.flapPositionText, x + width - 9, y + 34);
 
     const rpm = systems.engineRpmPct === null ? "RPM --"
       : `RPM ${Math.round(systems.engineRpmPct)}%`;
-    const engineText = systems.engineRunning === false ? `${rpm} OUT` : rpm;
+    const engineText = systems.propulsionText
+      ?? (systems.engineRunning === false ? `${rpm} OUT` : rpm);
     const hydText = systems.utilityHydraulicPressurePsi === null
       ? "HYD --"
       : `HYD ${Math.round(systems.utilityHydraulicPressurePsi)}`;
+    const inletText = systems.inletRecovery === null
+      ? ""
+      : ` · INLET ${Math.round(systems.inletRecovery * 100)}%`;
     const busText = systems.primaryBusPowered === null ? "BUS --"
       : systems.primaryBusPowered ? "BUS ON" : "BUS OFF";
     ctx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -2473,7 +2530,7 @@ class CombatHud {
     ctx.fillText(engineText, x + 9, y + height - 10);
     ctx.fillStyle = GREEN_DIM;
     ctx.textAlign = "center";
-    ctx.fillText(hydText, x + width * 0.59, y + height - 10);
+    ctx.fillText(`${hydText}${inletText}`, x + width * 0.59, y + height - 10);
     ctx.fillStyle = systems.primaryBusPowered === false ? AMBER : GREEN_DIM;
     ctx.textAlign = "right";
     ctx.fillText(busText, x + width - 9, y + height - 10);
@@ -3796,45 +3853,54 @@ class CombatHud {
     const spd = display.indicatedKts;
     const speedTrend = clamp(display.indicatedRateKtsPerSecond * 6, -60, 60);
 
-    const tapeInset = this.getLayout().tapeInset;
-    this.drawVerticalTape({
-      value: spd,
-      displayValue: display.indicatedDigits,
-      x: tapeInset,
-      floor: 0,
-      step: 20,
-      decimals: 0,
-      trend: speedTrend,
-      lowSpeed: stallAwareness(frame.state),
-      fixedMarkers: speedTapeMarkers(frame.state),
-    });
-    this.drawAirdataLabels(frame.state, tapeInset, this.width - tapeInset, display);
-    this.drawVerticalTape({
-      value: display.altitudeFt,
-      displayValue: display.altitudeDigits,
-      x: this.width - tapeInset,
-      floor: 0,
-      step: frame.state.alt_ft > 10000 ? 1000 : 500,
-      decimals: 0,
-    });
-    if (isFightHudActive(frame.state)) this.drawGTape(frame.state);
-    this.drawThrottle(frame.state);
-    this.drawLimitsPanel(frame.state);
-    this.drawRapierCycleTeach(frame.state);
+    const portraitDualStick = this.presentationProfile === "portrait_dual_stick";
+    if (portraitDualStick) {
+      this.drawPortraitFlightState(frame.state, display);
+    } else {
+      const tapeInset = this.getLayout().tapeInset;
+      this.drawVerticalTape({
+        value: spd,
+        displayValue: display.indicatedDigits,
+        x: tapeInset,
+        floor: 0,
+        step: 20,
+        decimals: 0,
+        trend: speedTrend,
+        lowSpeed: stallAwareness(frame.state),
+        fixedMarkers: speedTapeMarkers(frame.state),
+      });
+      this.drawAirdataLabels(frame.state, tapeInset, this.width - tapeInset, display);
+      this.drawVerticalTape({
+        value: display.altitudeFt,
+        displayValue: display.altitudeDigits,
+        x: this.width - tapeInset,
+        floor: 0,
+        step: frame.state.alt_ft > 10000 ? 1000 : 500,
+        decimals: 0,
+      });
+      if (isFightHudActive(frame.state)) this.drawGTape(frame.state);
+      this.drawThrottle(frame.state);
+      this.drawLimitsPanel(frame.state);
+      this.drawRapierCycleTeach(frame.state);
+    }
     this.drawWarnings(frame, systems);
-    if (!carrierPadlock) {
+    if (!portraitDualStick && !carrierPadlock) {
       this.drawSystemsPanel(systems);
       this.drawAoAIndexer(frame.state, frame.dt);
     }
     this.drawPadlockSa(frame, systems, noseAnchor);
-    this.drawSortieStatus(frame);
+    if (!portraitDualStick) this.drawSortieStatus(frame);
     this.drawVisualMergeWeaponsCue(frame);
-    this.drawFooter(frame);
-    this.drawTimeCompression(frame);
+    if (!portraitDualStick) {
+      this.drawFooter(frame);
+      this.drawTimeCompression(frame);
+    }
     this.drawRapierGuidance(frame);
-    this.drawLegendHint();
-    this.drawLegend(frame);
-    this.drawModeCue(frame);
+    if (!portraitDualStick) {
+      this.drawLegendHint();
+      this.drawLegend(frame);
+      this.drawModeCue(frame);
+    }
     this.drawOutcomeCues(frame);
     this.drawDamageFeedback(frame);
     if (this._debug) {

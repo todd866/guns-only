@@ -268,6 +268,54 @@ public class DetentLayerTests {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             d.SetAnalogRollControl(double.NaN));
     }
+    [Fact] public void AnalogPitchIsProgressiveProtectedAndKeyboardRetainsPriority() {
+        var sim = new AircraftSim(Fast, FlightModel.Sabre);
+        var d = new DetentLayer();
+        var g = new KeyGrammar();
+
+        d.SetAnalogPitchControl(0.5);
+        d.Tick(g, 0.0, sim.State, FlightModel.Sabre, Advice, 1.0);
+        double halfPull = d.Command.GDemand;
+        Assert.True(halfPull > 1.0);
+        Assert.True(halfPull < Protection.MaxPerformG(
+            sim.State, FlightModel.Sabre, d.AirspeedMps));
+
+        d.SetAnalogPitchControl(-1.0);
+        d.Tick(g, 10.0, sim.State, FlightModel.Sabre, Advice, 1.0);
+        Assert.True(d.Command.GDemand <= 0.0);
+
+        g.Feed(GKey.PullUp, true, 20.0);
+        d.Tick(g, 20.0, sim.State, FlightModel.Sabre, Advice, 1.0);
+        Assert.True(d.Command.GDemand > 1.0);
+
+        d.ClearAnalogPitchControl();
+        g.Feed(GKey.PullUp, false, 30.0);
+        d.Tick(g, 30.0, sim.State, FlightModel.Sabre, Advice, 1.0);
+        Assert.Equal(1.0, d.Command.GDemand, 10);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            d.SetAnalogPitchControl(double.NaN));
+    }
+    [Fact] public void CenteredAnalogPitchRetainsApproachOnSpeedTrim() {
+        var sim = new AircraftSim(Fast, FlightModel.Sabre);
+        var d = new DetentLayer {
+            ApproachMode = true,
+            ApproachAirspeedMps = 70.0
+        };
+        var g = new KeyGrammar();
+
+        d.Tick(g, 0.0, sim.State, FlightModel.Sabre, Advice, 1.0);
+        double onSpeedPitch = d.Command.CommandedPitchRad;
+
+        d.SetAnalogPitchControl(1.0);
+        d.Tick(g, 10.0, sim.State, FlightModel.Sabre, Advice, 0.5);
+        double raisedPitch = d.Command.CommandedPitchRad;
+        Assert.True(raisedPitch > onSpeedPitch);
+
+        d.SetAnalogPitchControl(0.0);
+        d.Tick(g, 20.0, sim.State, FlightModel.Sabre, Advice, 0.5);
+        Assert.True(System.Math.Abs(d.Command.CommandedPitchRad - onSpeedPitch)
+            < System.Math.Abs(raisedPitch - onSpeedPitch));
+    }
     [Fact] public void DeferredRollTapsReplayOnlyUnseenPressesAndPreserveEveryPulse() {
         var sim = new AircraftSim(Fast, FlightModel.Sabre);
         var d = new DetentLayer();

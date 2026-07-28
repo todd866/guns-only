@@ -139,6 +139,25 @@ test("cycle teach explains turbine-to-ram handoff with live shares and skin", ()
   assert.match(handover.explainer, /thrust bucket/i);
 });
 
+test("cycle teach uses pounds-force and names skin, wall, and structural limit separately", () => {
+  const teach = rapierCycleTeachPresentation({
+    rapier_mission_available: true,
+    mach: 3.5,
+    rapier_turbine_thrust_lbf: 0,
+    rapier_ramjet_thrust_lbf: 18_000,
+    rapier_skin_temp_c: 461,
+    rapier_adiabatic_wall_temp_c: 479,
+    rapier_thermal_limit_c: 1200,
+    rapier_thermal_margin_c: 739,
+  });
+  assert.equal(teach.totalLbf, 18_000);
+  assert.equal(teach.ramLbf, 18_000);
+  assert.equal(teach.turbineLbf, 0);
+  assert.equal(teach.wallC, 479);
+  assert.equal(teach.limitC, 1200);
+  assert.equal(teach.skinText, "SKIN 461 / 1200°C");
+});
+
 test("flight director exposes bank/altitude/speed bugs from snapshot targets", () => {
   const fd = rapierFlightDirectorPresentation({
     rapier_mission_available: true,
@@ -199,7 +218,7 @@ test("Circuits mode line names the pattern leg without Intercept attack chrome",
     rapier_thermal_margin_c: 1110,
   });
   assert.match(cue.text, /DIRECT · CIRCUITS · SHORT FINAL/);
-  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · FLAPS DOWN · 170 KT/);
+  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · ELEVONS DOWN · 170 KT/);
   assert.match(cue.text, /LINE UP · CONFIGURED/);
   assert.doesNotMatch(cue.text, /SWARM|ATTACK|FL700|SKIN/);
   assert.equal(cue.boxLabel, "SHORT FINAL");
@@ -219,7 +238,7 @@ test("Circuits DEMO strips skin and publishes leg config", () => {
     rapier_thermal_margin_c: 1110,
   });
   assert.match(cue.text, /DEMO · CIRCUITS · DEPART/);
-  assert.match(cue.text, /HOOK DOWN · GEAR UP · FLAPS UP · 250 KT · 2500 FT/);
+  assert.match(cue.text, /HOOK DOWN · GEAR UP · ELEVONS UP · 250 KT · 2500 FT/);
   assert.doesNotMatch(cue.text, /SKIN|TBCC|RAM|AUTO ·/);
   assert.equal(cue.boxLabel, "DEPART");
 });
@@ -238,7 +257,7 @@ test("Circuits MONITOR posture when automation is off", () => {
     rapier_thermal_margin_c: 1080,
   });
   assert.match(cue.text, /MONITOR · CIRCUITS · DOWNWIND/);
-  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · FLAPS DOWN/);
+  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · ELEVONS DOWN/);
   assert.doesNotMatch(cue.text, /SKIN/);
 });
 
@@ -257,7 +276,7 @@ test("Circuits wire final asks for the arrest", () => {
     rapier_thermal_margin_c: 1110,
   });
   assert.match(cue.text, /DEMO · CIRCUITS · WIRE FINAL/);
-  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · FLAPS DOWN/);
+  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · ELEVONS DOWN/);
   assert.match(cue.text, /ACCEPT WIRE/);
   assert.doesNotMatch(cue.text, /SKIN/);
   assert.equal(cue.boxLabel, "WIRE FINAL");
@@ -344,6 +363,8 @@ test("engine presentation remains available for Systems / diagnostics", () => {
     rapier_ramjet_fuel_ppm: 270,
   });
   assert.match(cue.text, /PROPULSION RAM ONLY/);
+  assert.match(cue.text, /22,480 LBF/);
+  assert.doesNotMatch(cue.text, /\bKN\b/);
   assert.match(cue.explainer, /Ram only/);
   assert.equal(cue.channels.length, 2);
 });

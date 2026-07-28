@@ -141,6 +141,8 @@ public sealed class AircraftSim {
     public double AdiabaticWallTemperatureK { get; private set; }
     /// <summary>Degrees between body forward and air-relative velocity (coast reentry cue).</summary>
     public double NoseOnVelocityErrorDeg { get; private set; }
+    /// <summary>Authoritative air-relative dynamic pressure from the latest aerodynamic tick.</summary>
+    public double DynamicPressurePa { get; private set; }
     /// <summary>Peak RCS moment magnitude commanded on the latest aero tick.</summary>
     public double LastRcsMomentMagnitudeNm { get; private set; }
     /// What the ENGINE is actually delivering, 0..1, as opposed to where the lever is. The gap
@@ -149,6 +151,12 @@ public sealed class AircraftSim {
     /// <summary>The physical engine point used by every RK stage in the most recent fixed tick.</summary>
     public EngineOperatingPoint LastEngineOperatingPoint { get; private set; } =
         EngineOperatingPoint.Stopped;
+    /// <summary>
+    /// Installed-inlet pressure/thrust recovery after the Rapier's off-design flow-angle
+    /// surrogate. One for every aircraft without that explicit aero/propulsion coupling.
+    /// </summary>
+    public double InletFlowRecovery { get; private set; } = 1.0;
+    public bool InletDistorted => InletFlowRecovery < 0.90;
     /// <summary>Fuel-system and failure models may remove combustion without rewriting controls.</summary>
     public bool EngineFuelAvailable { get; set; } = true;
     public bool EngineCombustionAvailable { get; set; } = true;
@@ -251,6 +259,9 @@ public sealed class AircraftSim {
         LastPilotNormalAccelerationG = pilotNormalAccelerationG ?? 1.0;
         HasValidPilotNormalAcceleration = pilotNormalAccelerationG.HasValue;
         LastRollMomentNm = 0.0;
+        AtmosphericState externalAir = AtmosphereModel.Sample(State.Position.Y);
+        DynamicPressurePa = 0.5 * externalAir.DensityKgM3
+            * _airVelocity.Length * _airVelocity.Length;
         LastPitchThrustVectorAngleRad = 0.0;
         LastPitchThrustVectorMomentNm = 0.0;
         _pitchThrustVectorAngleRad = 0.0;
@@ -407,6 +418,7 @@ public sealed class AircraftSim {
         var aero = FlightModel.Aerodynamics(finalRaw, spooled, _p, gust, thrustN,
             configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
         _airVelocity = aero.AirVelocity;
+        DynamicPressurePa = aero.DynamicPressure;
         LastNz = aero.Nz;
         LastPitchThrustVectorAngleRad = aero.PitchThrustVectorAngleRad;
         LastPitchThrustVectorMomentNm = aero.PitchThrustVectorMomentNm;
@@ -558,12 +570,14 @@ public sealed class AircraftSim {
     void EvaluateEngineOperatingPoint() {
         bool running = EngineFuelAvailable && EngineCombustionAvailable && _p.ThrustMaxN > 0.0;
         if (!running) {
+            InletFlowRecovery = 1.0;
             LastEngineOperatingPoint = EngineOperatingPoint.Stopped;
             return;
         }
 
         AtmosphericState atmosphericState = AtmosphereModel.Sample(State.Position.Y);
         double mach = AirspeedMps / System.Math.Max(atmosphericState.SpeedOfSoundMps, 1e-6);
+        InletFlowRecovery = 1.0;
         if (_p.PropulsionModel == PropulsionModelKind.J47Ge27) {
             // The checked-in J47 map is explicitly a standard-day altitude surface. Local
             // temperature still supplies the physically correct Mach input, but applying an
@@ -575,10 +589,19 @@ public sealed class AircraftSim {
         }
 
         if (_p.PropulsionModel == PropulsionModelKind.TurboRamjetPublicDataSurrogate) {
-            LastEngineOperatingPoint = TurboRamjetPerformanceMap.Evaluate(_thrustFrac,
+            EngineOperatingPoint point = TurboRamjetPerformanceMap.Evaluate(_thrustFrac,
                 _p.ThrustMaxN, mach, atmosphericState.TemperatureK, atmosphericState.DensityKgM3,
                 _p.GenericIdleFuelFlowLbPerMinute, _p.GenericMilitaryFuelFlowLbPerMinute,
                 _p.GenericAfterburnerFuelFlowLbPerMinute, _p.MaxThrustFraction);
+            if (FlightModel.UsesRapierAerodynamics(_p)) {
+                InletFlowRecovery = RapierAerodynamics.InletFlowRecovery(
+                    mach, AngleOfAttackRad, SideslipRad);
+                point = point with {
+                    NetThrustN = point.NetThrustN * InletFlowRecovery,
+                    NetThrustLbf = point.NetThrustLbf * InletFlowRecovery
+                };
+            }
+            LastEngineOperatingPoint = point;
             return;
         }
 

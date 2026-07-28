@@ -115,6 +115,71 @@
       border: 0;
     }
 
+    #rapier-radio {
+      position: fixed;
+      z-index: 7;
+      left: 50%;
+      bottom: calc(var(--safe-bottom) + 24px);
+      width: min(620px, calc(100vw - var(--safe-left) - var(--safe-right) - 32px));
+      transform: translateX(-50%);
+      padding: 9px 12px 8px;
+      border: 1px solid rgba(105, 255, 169, .38);
+      border-radius: 5px;
+      color: #d9ffe7;
+      background: linear-gradient(180deg, rgba(3, 18, 24, .91), rgba(2, 9, 15, .86));
+      box-shadow: 0 7px 30px rgba(0, 0, 0, .38), inset 0 0 20px rgba(42, 255, 132, .035);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      pointer-events: none;
+      text-shadow: 0 1px 3px #000;
+    }
+
+    #rapier-radio[hidden] { display: none; }
+    #rapier-radio[data-priority="2"] {
+      border-color: rgba(255, 118, 88, .78);
+      color: #fff0e9;
+      box-shadow: 0 7px 30px rgba(0, 0, 0, .38), 0 0 18px rgba(255, 75, 43, .14);
+    }
+    #rapier-radio:not([data-active="true"]) { opacity: .68; }
+    .rapier-radio-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 5px;
+      color: rgba(169, 255, 202, .78);
+      font: 700 9px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    #rapier-radio-route { color: #b9ffcf; }
+    #rapier-radio-text {
+      display: block;
+      color: inherit;
+      font: 680 14px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .025em;
+      text-transform: uppercase;
+    }
+    #rapier-radio-history {
+      display: flex;
+      gap: 7px 14px;
+      flex-wrap: wrap;
+      margin: 7px 0 0;
+      padding: 6px 0 0;
+      border-top: 1px solid rgba(137, 255, 180, .14);
+      list-style: none;
+      color: rgba(205, 255, 221, .56);
+      font: 600 8px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-transform: uppercase;
+    }
+    #rapier-radio-disclosure {
+      color: rgba(190, 226, 202, .46);
+      white-space: nowrap;
+    }
+    .touch-mode #rapier-radio {
+      bottom: calc(var(--safe-bottom) + 148px);
+      width: min(540px, calc(100vw - var(--safe-left) - var(--safe-right) - 22px));
+    }
+    .large-interface-text #rapier-radio-text { font-size: 17px; }
+
     #pilot-physiology {
       --pilot-vignette-opacity: 0;
       --pilot-blackout-opacity: 0;
@@ -395,7 +460,8 @@
       font-size: 8px;
     }
 
-    #fallback-stick {
+    #fallback-stick,
+    #target-stick {
       appearance: none;
       position: absolute;
       left: 43%;
@@ -418,31 +484,37 @@
       -webkit-user-select: none;
     }
 
-    .tilt-fallback #fallback-stick { display: block; }
+    .touch-primary #fallback-stick,
+    .touch-primary #target-stick { display: block; }
 
     #fallback-stick::before,
-    #fallback-stick::after {
+    #fallback-stick::after,
+    #target-stick::before,
+    #target-stick::after {
       position: absolute;
       content: "";
       background: rgba(141, 255, 179, .15);
       pointer-events: none;
     }
 
-    #fallback-stick::before {
+    #fallback-stick::before,
+    #target-stick::before {
       top: 50%;
       right: 17px;
       left: 17px;
       height: 1px;
     }
 
-    #fallback-stick::after {
+    #fallback-stick::after,
+    #target-stick::after {
       top: 17px;
       bottom: 17px;
       left: 50%;
       width: 1px;
     }
 
-    #fallback-stick-knob {
+    #fallback-stick-knob,
+    #target-stick-knob {
       position: absolute;
       z-index: 1;
       top: 50%;
@@ -459,16 +531,19 @@
       transition: transform 80ms ease-out;
     }
 
-    #fallback-stick[data-active="true"] {
+    #fallback-stick[data-active="true"],
+    #target-stick[data-active="true"] {
       border-color: rgba(163, 255, 194, .72);
       background: radial-gradient(circle at 50% 50%,
         rgba(40, 108, 76, .46) 0 27%, rgba(2, 11, 17, .68) 29% 100%);
       opacity: 1;
     }
 
-    #fallback-stick[data-active="true"] #fallback-stick-knob { transition: none; }
+    #fallback-stick[data-active="true"] #fallback-stick-knob,
+    #target-stick[data-active="true"] #target-stick-knob { transition: none; }
 
-    #fallback-stick:focus-visible {
+    #fallback-stick:focus-visible,
+    #target-stick:focus-visible {
       outline: 2px solid #8dffb3;
       outline-offset: 2px;
       opacity: 1;
@@ -483,6 +558,27 @@
       letter-spacing: .12em;
       pointer-events: none;
       text-align: center;
+    }
+
+    .touch-mode.touch-primary #fallback-stick {
+      left: calc(env(safe-area-inset-left, 0px) + 12px);
+      transform: none;
+    }
+
+    .touch-mode.touch-primary #target-stick {
+      right: calc(env(safe-area-inset-right, 0px) + 12px);
+      left: auto;
+      border-color: rgba(255, 92, 109, .38);
+      color: rgba(255, 228, 232, .68);
+      background: radial-gradient(circle at 50% 50%,
+        rgba(91, 28, 42, .36) 0 27%, rgba(14, 3, 9, .58) 29% 100%);
+      transform: none;
+    }
+
+    #target-stick-knob {
+      border-color: rgba(255, 158, 170, .7);
+      background: rgba(91, 24, 37, .86);
+      box-shadow: 0 0 18px rgba(255, 70, 93, .22);
     }
 
     #tilt-prompt {
@@ -581,42 +677,16 @@
       letter-spacing: .12em;
     }
 
-    /* Portrait is a first-class assisted mode (Build 75): tilt flies, throttle holds corner,
-       guns fire in solution. The old ROTATE TO LANDSCAPE blocker is gone. */
+    /* Portrait is the two-stick assisted profile: the left thumb flies, the right thumb looks
+       and fires, while the machine holds corner speed. Tilt is optional low-authority trim. */
     #portrait-chips { display: none; }
     @media (orientation: portrait) {
-      .touch-mode #portrait-chips {
-        display: flex;
-        position: fixed;
-        left: 50%;
-        transform: translateX(-50%);
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
-        gap: 10px;
-        z-index: 30;
-      }
-      .touch-mode #portrait-chips .touch-control {
-        min-width: 64px;
-        min-height: 44px;
-        font-size: 11px;
-      }
-      .touch-mode #touch-throttle-rocker,
-      .touch-mode #touch-limit-override { display: none; }
-      /* The trigger stays visible in assisted flight: auto-fire handles the solution, but a
-         fighter without a trigger reads as broken. Manual fire always works; the badge names
-         the contract. */
-      .portrait-assist #touch-fire { position: relative; }
-      .portrait-assist #touch-fire::after {
-        content: "AUTO";
-        position: absolute;
-        top: -7px;
-        right: -6px;
-        font-size: 8px;
-        letter-spacing: 0.08em;
-        color: #ffb020;
-        background: rgba(1, 8, 12, 0.85);
-        border: 1px solid rgba(255, 176, 32, 0.55);
-        border-radius: 3px;
-        padding: 1px 3px;
+      .portrait-assist .touch-left,
+      .portrait-assist .touch-right { display: none; }
+      .touch-mode.touch-primary #fallback-stick,
+      .touch-mode.touch-primary #target-stick {
+        width: min(36vw, 156px);
+        height: min(36vw, 156px);
       }
     }
 
@@ -638,7 +708,8 @@
         height: 104px;
         min-height: 104px;
       }
-      #fallback-stick { width: 104px; height: 104px; }
+      #fallback-stick,
+      #target-stick { width: 104px; height: 104px; }
     }
 
     #boot {
@@ -2181,6 +2252,15 @@
   <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off" hidden>SOLO · ROOM NOT CONFIGURED</div>
   <button id="pause-button" type="button" aria-label="Pause sortie"><span class="pause-desktop">Pause · Esc</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>
   <output id="flight-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></output>
+  <section id="rapier-radio" aria-label="Mission radio" hidden>
+    <div class="rapier-radio-head">
+      <span id="rapier-radio-net">TACTICAL · 251.000 UHF</span>
+      <span id="rapier-radio-route">PACKAGE FREQUENCY</span>
+      <span id="rapier-radio-disclosure">AI-GENERATED TRAINING VOICE</span>
+    </div>
+    <output id="rapier-radio-text" role="status" aria-live="polite" aria-atomic="true"></output>
+    <ol id="rapier-radio-history" aria-label="Recent radio calls" aria-live="off"></ol>
+  </section>
 
   <div id="pilot-physiology" aria-hidden="true" hidden>
     <div id="pilot-physiology-vignette" class="pilot-physiology-layer"></div>
@@ -2250,6 +2330,10 @@
           <span class="tf-label">Utility hydraulic</span>
           <output id="tf-hydraulic-pressure" class="tf-value" data-state="unknown">--</output>
         </div>
+        <div class="tf-indication wide full">
+          <span class="tf-label">Inlet recovery</span>
+          <output id="tf-inlet-recovery" class="tf-value" data-state="unknown">--</output>
+        </div>
       </div>
 
       <div class="tf-gear" aria-label="Landing gear indications">
@@ -2259,8 +2343,8 @@
         <div><span class="tf-label">Right</span><output id="tf-gear-right" class="tf-gear-leg" data-state="unknown">--</output></div>
       </div>
 
-      <div class="tf-flaps" aria-label="Wing-flap indications">
-        <div><span class="tf-label">Flap lever</span><output id="tf-flap-lever" class="tf-value">--</output></div>
+      <div class="tf-flaps" aria-label="Trailing-edge control indications">
+        <div><span id="tf-flap-label" class="tf-label">Flap lever</span><output id="tf-flap-lever" class="tf-value">--</output></div>
         <div><span class="tf-label">Left</span><output id="tf-flap-left" class="tf-value">--</output></div>
         <div><span class="tf-label">Right</span><output id="tf-flap-right" class="tf-value">--</output></div>
       </div>
@@ -2360,7 +2444,7 @@
           <output id="nav-thrust" class="tf-value" data-state="unknown">--</output>
         </div>
         <div class="tf-indication wide">
-          <span class="tf-label">Skin (stagnation)</span>
+          <span class="tf-label">Thermal state</span>
           <output id="nav-skin" class="tf-value" data-state="unknown">--</output>
         </div>
       </div>
@@ -2410,17 +2494,23 @@
       </div>
     </div>
 
-    <button id="fallback-stick" type="button" data-mobile-action="virtual-stick" data-active="false" aria-label="Flight stick" aria-describedby="fallback-stick-help" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight">
+    <button id="fallback-stick" type="button" data-mobile-action="virtual-stick" data-active="false" aria-label="Left flight stick" aria-describedby="fallback-stick-help" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight">
       <span id="fallback-stick-knob" aria-hidden="true"></span>
-      <span class="fallback-stick-label" aria-hidden="true">STICK</span>
-      <span id="fallback-stick-help" class="visually-hidden">Drag in any direction. Down pulls, up pushes. The stick centres when released.</span>
+      <span class="fallback-stick-label" aria-hidden="true">FLY</span>
+      <span id="fallback-stick-help" class="visually-hidden">Left thumb: drag left or right to roll; drag down to pull and up to push. The stick centres when released.</span>
+    </button>
+
+    <button id="target-stick" type="button" data-mobile-action="target-stick" data-active="false" aria-label="Right look and fire stick" aria-describedby="target-stick-help">
+      <span id="target-stick-knob" aria-hidden="true"></span>
+      <span class="fallback-stick-label" aria-hidden="true">LOOK · FIRE</span>
+      <span id="target-stick-help" class="visually-hidden">Right thumb: touch and hold to fire; drag to look around. The view returns when released.</span>
     </button>
 
     <div id="tilt-prompt" role="dialog" aria-modal="true" aria-labelledby="tilt-title">
-      <strong id="tilt-title">TAP TO ENABLE TILT</strong>
-      <p>Hold your comfortable flying angle; this becomes centre. Then tilt forward to push, back to pull, and left/right to roll.</p>
-      <button class="touch-choice" type="button" data-mobile-action="enable-tilt">ENABLE TILT</button>
-      <button class="touch-choice secondary" type="button" data-mobile-action="buttons-only">USE THUMB STICK</button>
+      <strong id="tilt-title">OPTIONAL TILT TRIM</strong>
+      <p>The two sticks always fly. Tilt adds up to 15% roll trim and never blocks the sortie.</p>
+      <button class="touch-choice" type="button" data-mobile-action="enable-tilt">ENABLE TRIM</button>
+      <button class="touch-choice secondary" type="button" data-mobile-action="buttons-only">KEEP TRIM OFF</button>
     </div>
 
     <div id="rotate-hint" hidden></div>
@@ -2547,6 +2637,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
       <p id="settings-copy" class="settings-copy">Preferences apply immediately and stay on this device. Touch controls retain their labelled actions when keyboard bindings change.</p>
       <div class="settings-grid">
         <label class="settings-toggle"><input id="setting-audio" type="checkbox"> Sound</label>
+        <label class="settings-toggle"><input id="setting-radio-voice" type="checkbox"> Radio voices</label>
         <label class="settings-toggle"><input id="setting-autogcas" type="checkbox"> Auto-GCAS backstop</label>
         <label class="settings-toggle"><input id="setting-high-contrast" type="checkbox"> High-contrast HUD</label>
         <label class="settings-toggle"><input id="setting-reduced-motion" type="checkbox"> Reduce motion</label>

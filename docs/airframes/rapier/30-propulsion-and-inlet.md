@@ -26,6 +26,12 @@ failed light-off of a separate ramjet would leave a heavy glider. Continuity *is
 Grounded in `sim/Propulsion/TurboRamjetPerformanceMap.cs` and `FlightModel.RapierPublicDataSurrogate`.
 Measured intercept OFT energy-ladder peak Mach ≈ **3.69** (not 4.0).
 
+Installed thrust is no longer the zero-incidence deck value at every attitude. Above M2, the
+Rapier-only inlet surrogate reduces both reported and applied thrust with combined flow angle
+`sqrt(alpha² + beta²)`. The cockpit publishes inlet recovery and calls low recovery/distortion.
+Fuel flow remains commanded-cycle flow, so an abusive pull can waste fuel while losing net thrust.
+See [12 — Aerodynamics and control allocation](12-aerodynamics-and-controls.md).
+
 ### `DesignMach = 2.6` is a normaliser, not a dash claim
 
 The performance map centres its ideal-cycle group on `DesignMach` to normalise thrust to a sane

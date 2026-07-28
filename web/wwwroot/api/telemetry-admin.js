@@ -392,6 +392,30 @@ function applyLifecycleRow(row, session, sorties) {
   if (outcome !== "NONE" && outcome !== "UNKNOWN") sortie.outcome = outcome.slice(0, 80);
 }
 
+function applyMobileControlRow(row, session, mobile) {
+  if (row?.k !== "in" || row.type !== "mobile_control") return;
+  increment(mobile.events, row.code);
+  if (row.code === "touch_ready") {
+    const profile = String(row.profile || "UNKNOWN").slice(0, 40);
+    let profileSessions = mobile.profileSessions.get(profile);
+    if (!profileSessions) {
+      profileSessions = new Set();
+      mobile.profileSessions.set(profile, profileSessions);
+    }
+    profileSessions.add(session);
+  }
+  if (row.code === "gamepad_connected") mobile.gamepadSessions.add(session);
+  if (row.code !== "gesture_summary") return;
+  mobile.gestures += 1;
+  if (row.cancelled === true) mobile.cancelled += 1;
+  const duration = nonNegativeNumber(row.duration_ms);
+  if (duration !== null) mobile.durations.push(duration);
+  if ((nonNegativeNumber(row.max_tilt_trim) ?? 0) > 0.01) mobile.trimUsed += 1;
+  if ((nonNegativeNumber(row.saturation_share) ?? 0) >= 0.25) {
+    mobile.saturationHeavy += 1;
+  }
+}
+
 function applyStateToSortie(state, row, session, sorties) {
   const sortie = summarySortie(sorties, session, state?.telemetry_sortie_id);
   if (!sortie) return;
@@ -444,7 +468,8 @@ function ratio(numerator, denominator) {
 }
 
 function finishSummary({ page, chunksRead, compressedBytes, uncompressedBytes, rowCount,
-  failedChunks, skippedChunks, unsupportedChunks, sessions, sessionBuilds, sorties, uploadedAt }) {
+  failedChunks, skippedChunks, unsupportedChunks, sessions, sessionBuilds, sorties,
+  mobileControls, uploadedAt }) {
   const outcomeCounts = Object.create(null);
   const endReasonCounts = Object.create(null);
   let started = 0;
@@ -486,6 +511,16 @@ function finishSummary({ page, chunksRead, compressedBytes, uncompressedBytes, r
   const buildCounts = Object.create(null);
   for (const build of sessionBuilds.values()) increment(buildCounts, build || "UNKNOWN");
   const validUploadedTimes = uploadedAt.filter(Number.isFinite).sort((a, b) => a - b);
+  const mobileProfiles = Object.create(null);
+  for (const [profile, profileSessions] of mobileControls.profileSessions) {
+    mobileProfiles[profile] = profileSessions.size;
+  }
+  const gestureDurations = mobileControls.durations.sort((a, b) => a - b);
+  const gestureDurationIndex = Math.floor(gestureDurations.length / 2);
+  const medianGestureDuration = !gestureDurations.length ? null
+    : gestureDurations.length % 2 === 1 ? gestureDurations[gestureDurationIndex]
+      : Number(((gestureDurations[gestureDurationIndex - 1]
+        + gestureDurations[gestureDurationIndex]) / 2).toFixed(1));
   return Buffer.from(JSON.stringify({
     version: 1,
     generated_at: new Date().toISOString(),
@@ -537,6 +572,16 @@ function finishSummary({ page, chunksRead, compressedBytes, uncompressedBytes, r
       median_time_to_first_shot_seconds: medianFirstShot,
       sorties_with_first_shot_timing: firstShotSeconds.length,
     },
+    mobile_controls: {
+      profile_sessions: mobileProfiles,
+      gamepad_sessions: mobileControls.gamepadSessions.size,
+      lifecycle_events: mobileControls.events,
+      left_stick_gestures: mobileControls.gestures,
+      gesture_cancel_rate: ratio(mobileControls.cancelled, mobileControls.gestures),
+      tilt_trim_use_rate: ratio(mobileControls.trimUsed, mobileControls.gestures),
+      saturation_heavy_rate: ratio(mobileControls.saturationHeavy, mobileControls.gestures),
+      median_gesture_duration_ms: medianGestureDuration,
+    },
     privacy: {
       raw_rows_returned: false,
       identifiers_returned: false,
@@ -560,6 +605,16 @@ async function summarizeOnePage(requestUrl) {
   const sessions = new Set();
   const sessionBuilds = new Map();
   const sorties = new Map();
+  const mobileControls = {
+    events: Object.create(null),
+    profileSessions: new Map(),
+    gamepadSessions: new Set(),
+    gestures: 0,
+    cancelled: 0,
+    trimUsed: 0,
+    saturationHeavy: 0,
+    durations: [],
+  };
   const uploadedAt = [];
   let chunksRead = 0;
   let compressedBytes = 0;
@@ -613,6 +668,7 @@ async function summarizeOnePage(requestUrl) {
       let state = null;
       for (const row of rows) {
         applyLifecycleRow(row, session, sorties);
+        applyMobileControlRow(row, session, mobileControls);
         if (row.k !== "st") continue;
         state = applyStateRow(row, state);
         if (state) applyStateToSortie(state, row, session, sorties);
@@ -638,6 +694,7 @@ async function summarizeOnePage(requestUrl) {
     sessions,
     sessionBuilds,
     sorties,
+    mobileControls,
     uploadedAt,
   });
 }

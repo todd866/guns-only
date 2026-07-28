@@ -105,15 +105,15 @@ public static class Protection {
         double qS = 0.5 * atmosphericState.DensityKgM3 * speed * speed * p.WingAreaM2;
         if (qS <= 1e-9 || s.Mass <= 0.0 || p.CLAlpha <= 0.0) return 0.0;
 
-        double configuredClMax = p.CLMax
-            + FlightModel.PositiveLiftCoefficientIncrement(configuration);
+        double mach = speed / System.Math.Max(atmosphericState.SpeedOfSoundMps, 1e-9);
+        double configuredClMax =
+            FlightModel.EffectiveControllableClMax(p, mach, configuration);
         double configuredAeroMax = qS * configuredClMax / (s.Mass * FlightModel.G0);
         double hardMax = System.Math.Min(configuredAeroMax, p.PositiveStructuralLimitG);
         double maxPerform = System.Math.Min(
             System.Math.Max(1.2, p.MaxPerformFraction * configuredAeroMax), hardMax);
         if (maxPerform < 1.0) return 0.0;
 
-        double mach = speed / System.Math.Max(atmosphericState.SpeedOfSoundMps, 1e-9);
         // Local functions cannot close over ref-like `in` parameters. Snapshot the immutable values
         // once; the solver remains allocation-free and every candidate sees one coherent state.
         AircraftState state = s;
@@ -122,11 +122,12 @@ public static class Protection {
         bool CanSustain(double loadFactor) {
             double totalCl = loadFactor * state.Mass * FlightModel.G0 / qS;
             double cleanCl = totalCl - currentConfiguration.LiftCoefficientIncrement;
-            if (cleanCl < parameters.CLMin
-                || cleanCl > parameters.CLMax
+            if (cleanCl < FlightModel.EffectiveClMin(parameters, mach)
+                || cleanCl > FlightModel.EffectiveClMax(parameters, mach)
                     + currentConfiguration.LiftLimitCoefficientIncrement)
                 return false;
-            double alpha = cleanCl / parameters.CLAlpha;
+            double alpha = cleanCl
+                / System.Math.Max(FlightModel.EffectiveClAlpha(parameters, mach), 1e-9);
             double cd = (currentConfiguration.LiftLimitCoefficientIncrement > 0.0
                     ? FlightModel.ProfileDragCoefficient(
                         alpha, mach, parameters, currentConfiguration)
@@ -158,10 +159,11 @@ public static class Protection {
         ArgumentNullException.ThrowIfNull(atmosphere);
         double speed = double.IsFinite(airspeedMps) && airspeedMps >= 0.0
             ? airspeedMps : s.Speed;
-        double q = 0.5 * atmosphere.Sample(s.Position.Y).DensityKgM3
-            * speed * speed;
+        AtmosphericState air = atmosphere.Sample(s.Position.Y);
+        double q = 0.5 * air.DensityKgM3 * speed * speed;
+        double mach = speed / System.Math.Max(air.SpeedOfSoundMps, 1e-9);
         return q * p.WingAreaM2
-            * (p.CLMax + FlightModel.PositiveLiftCoefficientIncrement(configuration))
+            * FlightModel.EffectiveControllableClMax(p, mach, configuration)
             / (s.Mass * FlightModel.G0);
     }
 

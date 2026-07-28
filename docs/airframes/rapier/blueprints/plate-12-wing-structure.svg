@@ -27,6 +27,6 @@
   <text x="40" y="426" font-size="9">Carry-through continuous through FS−1…+1.5 (plate 11)</text>
   <text x="40" y="442" font-size="9">S=18 m² · AR=3 · loading ~436 kg/m² at gross — spar sized for dive 12 G</text>
   <text x="40" y="458" font-size="9">Control: one elevon per side (combined pitch/roll) — no separate flap</text>
-  <text x="40" y="474" font-size="9">Actuator in wing root (plate 15); cold-gas RCS does NOT unload wing at q>0</text>
+  <text x="40" y="474" font-size="9">Root EMA (plate 15); RCS controls attitude in thin air but does not create wing lift</text>
 
 </svg>

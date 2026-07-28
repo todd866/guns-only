@@ -72,7 +72,9 @@ export function circuitLegLabel(leg) {
 }
 
 function skinFragment(state) {
-  const skinC = finiteNumber(state.rapier_stagnation_temp_c);
+  const skinC = finiteNumber(state.rapier_skin_temp_c)
+    ?? finiteNumber(state.rapier_stagnation_temp_c);
+  const limitC = finiteNumber(state.rapier_thermal_limit_c);
   const marginC = finiteNumber(state.rapier_thermal_margin_c);
   if (skinC === null) return null;
   if (marginC !== null && marginC < 0) {
@@ -81,15 +83,19 @@ function skinFragment(state) {
       level: "attack",
     });
   }
-  if (marginC !== null && marginC < 40) {
+  if ((marginC !== null && marginC < 100)
+      || (limitC !== null && limitC > 0 && skinC / limitC >= 0.9)) {
     return Object.freeze({
-      text: `SKIN ${Math.round(skinC)}°C · ${Math.round(marginC)}°C LEFT`,
+      text: limitC === null
+        ? `SKIN ${Math.round(skinC)}°C · ${Math.round(marginC)}°C LEFT`
+        : `SKIN ${Math.round(skinC)} / ${Math.round(limitC)}°C`,
       level: "caution",
     });
   }
-  const marginText = marginC !== null ? ` · +${Math.round(marginC)}°C` : "";
   return Object.freeze({
-    text: `SKIN ${Math.round(skinC)}°C${marginText}`,
+    text: limitC === null
+      ? `SKIN ${Math.round(skinC)}°C`
+      : `SKIN ${Math.round(skinC)} / ${Math.round(limitC)}°C`,
     level: "normal",
   });
 }
@@ -100,8 +106,8 @@ function circuitsConfigFragment(leg, state) {
   const dirty = leg === "DOWNWIND" || leg === "BASE"
     || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
   const config = dirty
-    ? "HOOK DOWN · GEAR DOWN · FLAPS DOWN"
-    : "HOOK DOWN · GEAR UP · FLAPS UP";
+    ? "HOOK DOWN · GEAR DOWN · ELEVONS DOWN"
+    : "HOOK DOWN · GEAR UP · ELEVONS UP";
   const speed = targetKtas !== null ? ` · ${Math.round(targetKtas)} KT` : "";
   const alt = targetAltFt !== null && targetAltFt > 0
     ? ` · ${Math.round(targetAltFt)} FT`
@@ -111,7 +117,7 @@ function circuitsConfigFragment(leg, state) {
   else if (leg === "WIRE_FINAL") action = " · ACCEPT WIRE";
   else if (leg === "INITIAL") action = " · BREAK LEFT ABM";
   else if (leg === "BREAK") action = " · ~60° TO DOWNWIND";
-  else if (leg === "DOWNWIND") action = " · GEAR FLAPS · ABEAM";
+  else if (leg === "DOWNWIND") action = " · GEAR ELEVONS · ABEAM";
   else if (leg === "BASE") action = " · ~45° TO FINAL";
   else if (leg === "DEPART") action = " · CLIMB TO PATTERN";
   return `${config}${speed}${alt}${action}`;
@@ -173,8 +179,8 @@ export function circuitGatePresentation(state) {
   const dirty = leg === "DOWNWIND" || leg === "BASE"
     || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
   const config = dirty
-    ? "HOOK · GEAR · FLAPS DOWN"
-    : "HOOK DOWN · GEAR UP · FLAPS UP";
+    ? "HOOK · GEAR · ELEVONS DOWN"
+    : "HOOK DOWN · GEAR UP · ELEVONS UP";
   const speed = targetKtas !== null ? `${Math.round(targetKtas)} KT` : "";
   return Object.freeze({
     halfM,
@@ -271,7 +277,10 @@ export function rapierGuidancePresentation(state) {
         : (!patternOnly && (phase === 6 || phase === 7)
           ? (noseErr !== null && noseErr <= 8 ? "ON V" : "NOSE→V")
           : "")),
-    skinC: patternOnly ? null : finiteNumber(state.rapier_stagnation_temp_c),
+    skinC: patternOnly ? null : (finiteNumber(state.rapier_skin_temp_c)
+      ?? finiteNumber(state.rapier_stagnation_temp_c)),
+    wallC: patternOnly ? null : finiteNumber(state.rapier_adiabatic_wall_temp_c),
+    limitC: patternOnly ? null : finiteNumber(state.rapier_thermal_limit_c),
     marginC: patternOnly ? null : finiteNumber(state.rapier_thermal_margin_c),
   });
 }
@@ -331,10 +340,19 @@ function cycleExplainer(mode) {
     case "FULL RAM":
       return "Ram owns the dash. Turbine is shutting down as inlet air gets too hot.";
     case "RAM ONLY":
-      return "Ram only — turbine is out. Skin heat is the binding limit now.";
+      return "Ram only — turbine unloaded. Protect inlet alignment, skin margin, and energy.";
     default:
       return "Turbine low, ram high. They hand over around Mach 2.";
   }
+}
+
+const NEWTONS_PER_POUND_FORCE = 4.4482216153;
+
+function streamThrustLbf(state, lbfField, knField) {
+  const direct = finiteNumber(state?.[lbfField]);
+  if (direct !== null) return Math.max(0, direct);
+  const legacyKn = finiteNumber(state?.[knField]);
+  return legacyKn === null ? 0 : Math.max(0, legacyKn * 1000 / NEWTONS_PER_POUND_FORCE);
 }
 
 /// Always-on teaching presentation for the combined-cycle motor + skin limit.
@@ -346,33 +364,48 @@ export function rapierCycleTeachPresentation(state) {
       && state.rapier_mission_cue.startsWith("CIRCUITS"));
   if (patternOnly) return null;
   const mach = Math.max(0, finiteNumber(state.mach) ?? 0);
-  const turbineKn = Math.max(0, finiteNumber(state.rapier_turbine_thrust_kn) ?? 0);
-  const ramKn = Math.max(0, finiteNumber(state.rapier_ramjet_thrust_kn) ?? 0);
-  const totalKn = Math.max(turbineKn + ramKn, 0.01);
-  const skinC = finiteNumber(state.rapier_stagnation_temp_c);
+  const turbineLbf = streamThrustLbf(
+    state, "rapier_turbine_thrust_lbf", "rapier_turbine_thrust_kn");
+  const ramLbf = streamThrustLbf(
+    state, "rapier_ramjet_thrust_lbf", "rapier_ramjet_thrust_kn");
+  const totalLbf = Math.max(turbineLbf + ramLbf, 0.01);
+  const skinC = finiteNumber(state.rapier_skin_temp_c)
+    ?? finiteNumber(state.rapier_stagnation_temp_c);
+  const wallC = finiteNumber(state.rapier_adiabatic_wall_temp_c);
+  const limitC = finiteNumber(state.rapier_thermal_limit_c);
   const marginC = finiteNumber(state.rapier_thermal_margin_c);
   const mode = cycleMode(mach);
   let thermalLevel = "normal";
   if (marginC !== null && marginC < 0) thermalLevel = "fault";
-  else if (marginC !== null && marginC < 40) thermalLevel = "caution";
+  else if ((marginC !== null && marginC < 100)
+      || (skinC !== null && limitC !== null && limitC > 0 && skinC / limitC >= 0.9)) {
+    thermalLevel = "caution";
+  }
 
   return Object.freeze({
     mode,
     explainer: cycleExplainer(mode),
     mach,
-    turbineKn,
-    ramKn,
-    turbineShare: turbineKn / totalKn,
-    ramShare: ramKn / totalKn,
+    turbineLbf,
+    ramLbf,
+    totalLbf,
+    // Legacy engineering values remain available to non-rendering tests/consumers, but every
+    // player-facing string below is pounds-force.
+    turbineKn: turbineLbf * NEWTONS_PER_POUND_FORCE / 1000,
+    ramKn: ramLbf * NEWTONS_PER_POUND_FORCE / 1000,
+    turbineShare: turbineLbf / totalLbf,
+    ramShare: ramLbf / totalLbf,
     skinC,
+    wallC,
+    limitC,
     marginC,
     thermalLevel,
     skinText: skinC === null
       ? "SKIN --"
       : marginC !== null && marginC < 0
         ? `SKIN OVER ${Math.round(skinC)}°C`
-        : marginC !== null
-          ? `SKIN ${Math.round(skinC)}°C · +${Math.round(marginC)}°C TO LIMIT`
+        : limitC !== null
+          ? `SKIN ${Math.round(skinC)} / ${Math.round(limitC)}°C`
           : `SKIN ${Math.round(skinC)}°C`,
   });
 }
@@ -387,24 +420,25 @@ export function rapierEnginePresentation(state) {
   });
   if (!teach) return null;
   const trueAirspeedKts = Math.max(0, Number(state.true_airspeed_kts) || 0);
-  const thrustKn = Math.max(0,
-    (Number(state.engine_net_thrust_lbf) || 0) * 4.4482216153 / 1000);
+  const thrustLbf = Math.max(0, Number(state.engine_net_thrust_lbf) || teach.totalLbf);
   const lever = Math.max(0, Number(state.throttle) || 0);
   const turbineFuelPpm = Math.max(0, Number(state.rapier_turbine_fuel_ppm) || 0);
   const ramjetFuelPpm = Math.max(0, Number(state.rapier_ramjet_fuel_ppm) || 0);
   return Object.freeze({
-    text: `PROPULSION ${teach.mode} · ${thrustKn.toFixed(0)} KN · LEVER ${lever.toFixed(2)} · M${teach.mach.toFixed(2)} · ${Math.round(trueAirspeedKts).toLocaleString("en-US")} KTAS${teach.skinC !== null ? ` · T0 ${Math.round(teach.skinC)}°C` : ""}`,
+    text: `PROPULSION ${teach.mode} · ${Math.round(thrustLbf).toLocaleString("en-US")} LBF · LEVER ${lever.toFixed(2)} · M${teach.mach.toFixed(2)} · ${Math.round(trueAirspeedKts).toLocaleString("en-US")} KTAS${teach.skinC !== null ? ` · SKIN ${Math.round(teach.skinC)}°C` : ""}`,
     explainer: teach.explainer,
     level: teach.mode === "TURBINE" ? "turbine"
       : teach.mode === "HANDOVER" ? "transition" : "ram",
     channels: Object.freeze([
       Object.freeze({
         label: "TURBINE / A-B",
+        thrustLbf: teach.turbineLbf,
         thrustKn: teach.turbineKn,
         fuelPpm: turbineFuelPpm,
       }),
       Object.freeze({
         label: "RAMJET",
+        thrustLbf: teach.ramLbf,
         thrustKn: teach.ramKn,
         fuelPpm: ramjetFuelPpm,
       }),

@@ -40,6 +40,27 @@ public class FlightModelTests {
         Assert.True(FlightModel.NzAeroMax(Level(90), FlightModel.Sabre) < 2.5);
         Assert.True(FlightModel.NzAeroMax(Level(260), FlightModel.Sabre) > 6.0);
     }
+    [Fact] public void RapierDoesNotCarryItsSubsonicLiftCoefficientToMachThreePointFive() {
+        const double altitudeM = 21_945.6; // FL720, the observed build-171 ram-only pull
+        AircraftParams scheduled = FlightModel.RapierPublicDataSurrogate;
+        AircraftParams fixedLift = scheduled with { SupersonicLiftSlopeSchedule = false };
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
+        double speedMps = air.SpeedOfSoundMps * 3.5;
+        var state = new AircraftState(new Vec3D(0, altitudeM, 0), speedMps,
+            0.0, 0.0, 0.0, 7_900.0);
+
+        double expectedScale = 4.0 / Math.Sqrt(3.5 * 3.5 - 1.0) / scheduled.CLAlpha;
+        Assert.Equal(expectedScale, FlightModel.SupersonicLiftScale(3.5, scheduled), 9);
+        Assert.Equal(1.0, FlightModel.SupersonicLiftScale(3.5, FlightModel.Sabre), 9);
+
+        double fixedG = FlightModel.NzAeroMax(state, fixedLift, speedMps,
+            StandardAtmosphere1976.Instance);
+        double scheduledG = FlightModel.NzAeroMax(state, scheduled, speedMps,
+            StandardAtmosphere1976.Instance);
+        Assert.Equal(fixedG * expectedScale, scheduledG, 8);
+        Assert.True(scheduledG < 4.5,
+            $"FL720/M3.5 lift authority should be a few G, not the fixed-CL result {fixedG:F1} G");
+    }
     [Fact] public void BuffetFlagsNearAeroLimit() {
         var sim = new AircraftSim(Level(140), FlightModel.Sabre);
         var hard = new PilotCommand(9.0, 0.0, 1.0, 0.0); // demands far beyond available

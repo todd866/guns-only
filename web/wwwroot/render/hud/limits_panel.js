@@ -52,9 +52,14 @@ function closingKtsTowardHome(state) {
 
 function thermalAccent(state, base) {
   const marginC = finiteNumber(state.rapier_thermal_margin_c);
+  const skinC = finiteNumber(state.rapier_skin_temp_c)
+    ?? finiteNumber(state.rapier_stagnation_temp_c);
+  const limitC = finiteNumber(state.rapier_thermal_limit_c);
   if (marginC === null) return base;
   if (marginC < 0) return "fault";
-  if (marginC < 40 && base === "normal") return "caution";
+  if ((marginC < 100 || (skinC !== null && limitC !== null
+        && limitC > 0 && skinC / limitC >= 0.9))
+      && base === "normal") return "caution";
   return base;
 }
 

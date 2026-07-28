@@ -75,6 +75,10 @@ public readonly record struct RapierMissionGuidance(
 
 public sealed record ScriptedInterceptConfig(
     int FormationSize = 4,
+    /// <summary>
+    /// IR-guided short-range air-to-air weapons. Successful employment is therefore called
+    /// FOX TWO; changing seeker type requires changing both the physical config and radio call.
+    /// </summary>
     int ShortRangeMissiles = 0,
     int DogfightingDrones = 4,
     double MissileMinimumRangeM = 600.0,
@@ -124,6 +128,7 @@ public sealed class RapierMissionDirector {
     bool _circuitBreakReached;
     bool _circuitDownwindReached;
     bool _circuitBaseReached;
+    bool _circuitInitialJoinEstablished;
     /// Height above the strip that counts as "going around" rather than still landing. 300 m is
     /// above any bounce and below pattern altitude, so a touch-and-go re-arms but a long float
     /// down the runway does not.
@@ -134,13 +139,19 @@ public sealed class RapierMissionDirector {
     const double CircuitPatternKtas = 250.0;
     const double CircuitBreakKtas = 230.0;
     const double CircuitBaseKtas = 200.0;
-    const double CircuitFinalKtas = 170.0;
-    const double CircuitWireKtas = 165.0;
+    const double CircuitFinalKtas = 165.0;
+    // Carrier touchdown assessment currently accepts at most 82 m/s (~159 KT). Authoring a
+    // 165–177 KT wire pass made a successful arrest physically impossible even when centred.
+    const double CircuitWireKtas = 155.0;
     const double CircuitPatternSpeedMps = CircuitPatternKtas / 1.94384;
     const double CircuitBreakSpeedMps = CircuitBreakKtas / 1.94384;
     const double CircuitBaseSpeedMps = CircuitBaseKtas / 1.94384;
     const double CircuitFinalSpeedMps = CircuitFinalKtas / 1.94384;
     const double CircuitWireSpeedMps = CircuitWireKtas / 1.94384;
+    // Recovery marshal is 46 km behind the strip. Entering recovery on a 90 km home-radius could
+    // put an arrival on that side of the field only 24 km from marshal while still above 30,000 ft.
+    // A 150 km radius guarantees at least ~104 km of setup from every arrival azimuth.
+    const double RecoveryEntryHomeRangeM = 150_000.0;
     /// Crosswind/break bank: prefer 60°, allow 75°. At 250 KT / 60° R ≈ 0.53 NM.
     const double CircuitBreakBankDeg = 60.0;
     const double CircuitBreakBankMaxDeg = 75.0;
@@ -182,10 +193,11 @@ public sealed class RapierMissionDirector {
     /// Circuits speed hold for a high-T/W brick. Prior schedules left 0.7+ lever at pattern
     /// speed and walked through 330 KT in a shallow bank — that is not a circuit.
     /// </summary>
-    static double PatternHoldThrottle(double targetMps, double currentMps) {
+    static double PatternHoldThrottle(
+        double targetMps, double currentMps, double trimLever = 0.26) {
         double error = targetMps - currentMps;
         if (error < -6.0) return 0.0; // overspeed → idle
-        double lever = 0.26 + error * 0.016;
+        double lever = trimLever + error * 0.016;
         return Math.Clamp(lever, 0.0, 0.52);
     }
 
@@ -219,6 +231,12 @@ public sealed class RapierMissionDirector {
         if (circuitLeg is "DEPART") {
             // Ski-jump join needs more than a 30° crawl or the lap opens a racetrack.
             return Math.Clamp(err * 1.35, -50.0 * Deg, 50.0 * Deg);
+        }
+        if (circuitLeg is "INITIAL" && absErr > 35.0 * Deg) {
+            // The displayed leg is still INITIAL, but an aircraft outside the join station needs
+            // enough bank to acquire it. Holding the straight-leg 30° limit here creates a
+            // three-kilometre turn circle at pattern speed and can orbit the join forever.
+            return Math.Clamp(err * 1.35, -55.0 * Deg, 55.0 * Deg);
         }
         // Straight legs / final — keep it tidy.
         return Math.Clamp(err * 1.35, -30.0 * Deg, 30.0 * Deg);
@@ -389,17 +407,44 @@ public sealed class RapierMissionDirector {
         double patternY = home.Y + CircuitShelfHeightM;
         Vec3D initialPoint = threshold - runwayForward * CircuitInitialAlongM
             + new Vec3D(0.0, patternY - threshold.Y, 0.0);
+        // INITIAL is flown toward the strip on runway heading. A single waypoint projected
+        // through the gate makes an offset aircraft cut directly for the far side, then orbit the
+        // box forever because it never approaches from behind. First acquire a station 2 NM
+        // outside INITIAL; once close, capture the runway axis. The Rapier needs that distance to
+        // settle a 250-knot join from the opposite side of the pattern.
+        Vec3D initialJoin = initialPoint - runwayForward * 3_700.0;
         Vec3D downwindEntry = initialPoint + runwayLeft * CircuitDownwindOffsetM;
-        Vec3D downwindAbeam = threshold + runwayLeft * CircuitDownwindOffsetM
+        const double DownwindRolloutM = 7_000.0;
+        const double BaseTurnLeadM = 4_000.0;
+        double downwindAlongM = CircuitFinalAlongM + DownwindRolloutM;
+        double baseAlongM = CircuitFinalAlongM + BaseTurnLeadM;
+        // Downwind runs reciprocal from the break, then a continuous base turn reverses onto the
+        // three-mile final. The extra rollout is deliberate: at 250 KT the Rapier needs several
+        // kilometres to arrest the 60° break and establish the parallel before the abeam gate.
+        Vec3D downwindAbeam =
+            threshold - runwayForward * downwindAlongM
+            + runwayLeft * CircuitDownwindOffsetM
             + new Vec3D(0.0, patternY - threshold.Y, 0.0);
-        // Base rolls out onto a 3 NM final — not a midfield cut across.
-        double finalStartAltM = home.Y + CircuitFinalAlongM * Math.Tan(3.0 * Math.PI / 180.0);
-        Vec3D basePoint = threshold - runwayForward * CircuitFinalAlongM
+        // Base is an intermediate turning gate, not a midfield cut across. Its altitude joins the
+        // published 3.5-degree final while leaving the final three miles stabilized.
+        double finalStartAltM =
+            threshold.Y + CircuitFinalAlongM * Carrier.GlideslopeSlope;
+        double baseStartAltM =
+            threshold.Y + baseAlongM * Carrier.GlideslopeSlope;
+        Vec3D basePoint = threshold - runwayForward * baseAlongM
             + runwayLeft * (CircuitDownwindOffsetM * 0.50)
-            + new Vec3D(0.0, finalStartAltM + 40.0 - threshold.Y, 0.0);
+            + new Vec3D(0.0, baseStartAltM + 40.0 - threshold.Y, 0.0);
         Vec3D shortFinal = threshold - runwayForward * CircuitFinalAlongM
             + new Vec3D(0.0, finalStartAltM - threshold.Y, 0.0);
-        Vec3D touchdownAim = threshold + new Vec3D(0.0, -20.0, 0.0);
+        // The fixed strip's threshold is wire three. With finite q-scaled pitch response, landing
+        // mass changes where the same path command intersects the slab: the measured 7,807 kg
+        // late-join card needs 25 m aft lead, while the 9,585 kg launched circuit needs ~43 m.
+        // Keep the first-order predictor bounded and horizontal; an underground aim steepens the
+        // last seconds and confounds path response with collision geometry.
+        double touchdownAimAftM = Math.Clamp(
+            25.0 + (player.Mass - 7_807.0) * 0.010,
+            20.0, 50.0);
+        Vec3D touchdownAim = threshold - runwayForward * touchdownAimAftM;
         double runwayHeading = Math.Atan2(runwayForward.X, runwayForward.Z);
         double headingError = Math.Abs(WrapAngle(runwayHeading - player.Chi));
         double downwindHeading = Math.Atan2(-runwayForward.X, -runwayForward.Z);
@@ -412,6 +457,13 @@ public sealed class RapierMissionDirector {
             Vec3D flat = new(along.X, 0.0, along.Z);
             if (flat.Length < 1e-6) return new Vec3D(0.0, 0.0, 1.0);
             return flat.Normalized();
+        }
+
+        static Vec3D LineLookAhead(
+            in Vec3D aircraft, in Vec3D linePoint, in Vec3D track, double lookAheadM) {
+            double alongM = (aircraft - linePoint).Dot(track);
+            Vec3D projection = linePoint + track * alongM;
+            return projection + track * lookAheadM;
         }
 
         bool InsideGate(in Vec3D point, in Vec3D face, double halfM) {
@@ -438,6 +490,19 @@ public sealed class RapierMissionDirector {
         Vec3D baseFace = FaceAlong(baseFaceRaw);
         Vec3D finalFace = initialFace;
 
+        if (!_circuitInitialReached) {
+            double joinRangeM = (initialJoin - playerPosition).Length;
+            // A high-wing-loading jet at 250 KT does not fly through a point before turning.
+            // Crossing the 1.1 NM capture cylinder is enough to establish the inbound join and
+            // leaves roughly 2 NM to settle onto runway heading before INITIAL.
+            if (!_circuitInitialJoinEstablished && joinRangeM <= 2_000.0)
+                _circuitInitialJoinEstablished = true;
+            double initialAlongM = (playerPosition - initialPoint).Dot(runwayForward);
+            if (_circuitInitialJoinEstablished
+                && initialAlongM > CircuitGateDepthM + 1_000.0)
+                _circuitInitialJoinEstablished = false;
+        }
+
         // Soft join for OFT / mid-pattern start — still require energy at the station.
         if (InsideGate(basePoint, baseFace, CircuitGateHalfM * 1.4)
             && EnergyOk(CircuitBaseKtas)) {
@@ -456,8 +521,10 @@ public sealed class RapierMissionDirector {
 
         if (!_circuitInitialReached
             && Earn(initialPoint, initialFace, CircuitPatternKtas, CircuitGateHalfM)
-            && headingError <= 35.0 * Math.PI / 180.0)
+            && headingError <= 35.0 * Math.PI / 180.0) {
             _circuitInitialReached = true;
+            _circuitInitialJoinEstablished = false;
+        }
         if (_circuitInitialReached
             && !_circuitBreakReached
             && Earn(downwindEntry, breakFace, CircuitBreakKtas, CircuitGateHalfM)
@@ -465,7 +532,10 @@ public sealed class RapierMissionDirector {
             _circuitBreakReached = true;
         if (_circuitBreakReached
             && !_circuitDownwindReached
-            && Earn(downwindAbeam, downwindFace, CircuitPatternKtas, CircuitGateHalfM))
+            // A 280 m downwind box is still a visible fly-through volume, but does not turn a
+            // stabilized 250-knot reciprocal pass into a two-metre numerical miss.
+            && Earn(downwindAbeam, downwindFace, CircuitPatternKtas,
+                CircuitGateHalfM * 1.4))
             _circuitDownwindReached = true;
         if (_circuitDownwindReached
             && !_circuitBaseReached
@@ -483,18 +553,24 @@ public sealed class RapierMissionDirector {
             // Four boxes along a 3 NM final — not Intercept's 12 km groove.
             if (distanceToWireM > 4_200.0) {
                 recoveryGate = 1;
-                gatePoint = threshold - runwayForward * 4_800.0
-                    + new Vec3D(0.0, 260.0, 0.0);
+                const double gateDistanceM = 4_800.0;
+                gatePoint = threshold - runwayForward * gateDistanceM
+                    + new Vec3D(0.0,
+                        gateDistanceM * Carrier.GlideslopeSlope, 0.0);
                 gateHalfM = 110.0;
             } else if (distanceToWireM > 2_400.0) {
                 recoveryGate = 2;
-                gatePoint = threshold - runwayForward * 2_800.0
-                    + new Vec3D(0.0, 155.0, 0.0);
+                const double gateDistanceM = 2_800.0;
+                gatePoint = threshold - runwayForward * gateDistanceM
+                    + new Vec3D(0.0,
+                        gateDistanceM * Carrier.GlideslopeSlope, 0.0);
                 gateHalfM = 95.0;
             } else if (distanceToWireM > 1_000.0) {
                 recoveryGate = 3;
-                gatePoint = threshold - runwayForward * 900.0
-                    + new Vec3D(0.0, 55.0, 0.0);
+                const double gateDistanceM = 900.0;
+                gatePoint = threshold - runwayForward * gateDistanceM
+                    + new Vec3D(0.0,
+                        gateDistanceM * Carrier.GlideslopeSlope, 0.0);
                 gateHalfM = 85.0;
             } else {
                 recoveryGate = 4;
@@ -510,7 +586,19 @@ public sealed class RapierMissionDirector {
         } else if (!_circuitInitialReached) {
             recoveryGate = 0;
             gatePoint = initialPoint;
-            waypoint = initialPoint + runwayForward * 4_000.0;
+            if (_circuitInitialJoinEstablished) {
+                // L1-style line capture: project the aircraft onto the inbound runway axis and
+                // keep the steering aim a fixed distance ahead of that projection. A fixed point
+                // beyond INITIAL turns back into a point-pursuit problem as soon as the aircraft
+                // overshoots laterally; this moving look-ahead cannot orbit the gate.
+                // A one-kilometre look-ahead gives roughly 35–50° of intercept for the lateral
+                // errors seen after the join turn. Three kilometres was too shallow: the aircraft
+                // crossed INITIAL still a kilometre abeam and had to re-acquire the join.
+                waypoint = LineLookAhead(
+                    playerPosition, initialPoint, runwayForward, 1_000.0);
+            } else {
+                waypoint = initialJoin;
+            }
             approachSpeedMps = CircuitPatternSpeedMps;
             circuitLeg = "INITIAL";
             gateHalfM = CircuitGateHalfM;
@@ -526,10 +614,11 @@ public sealed class RapierMissionDirector {
         } else if (!_circuitDownwindReached) {
             recoveryGate = 0;
             gatePoint = downwindAbeam;
-            waypoint = downwindAbeam + runwayForward * -3_000.0;
+            waypoint = LineLookAhead(
+                playerPosition, downwindAbeam, runwayForward * -1.0, 1_000.0);
             approachSpeedMps = CircuitPatternSpeedMps;
             circuitLeg = "DOWNWIND";
-            gateHalfM = CircuitGateHalfM;
+            gateHalfM = CircuitGateHalfM * 1.4;
             gateFace = downwindFace;
         } else if (!_circuitBaseReached) {
             recoveryGate = 0;
@@ -542,7 +631,11 @@ public sealed class RapierMissionDirector {
         } else {
             recoveryGate = 0;
             gatePoint = shortFinal;
-            waypoint = shortFinal + runwayForward * 3_000.0;
+            // Capture the centreline itself. A fixed aim beyond the box left a shallow residual
+            // intercept, so the Rapier crossed three-mile final hundreds of metres abeam and
+            // orbited it. The moving look-ahead keeps correcting cross-track all the way in.
+            waypoint = LineLookAhead(
+                playerPosition, shortFinal, runwayForward, 750.0);
             approachSpeedMps = CircuitFinalSpeedMps;
             circuitLeg = "SHORT_FINAL";
             gateHalfM = CircuitGateHalfM;
@@ -570,10 +663,25 @@ public sealed class RapierMissionDirector {
                 _ => -0.08
             }
             : circuitLeg is "BASE" or "SHORT_FINAL" ? -0.12 : -0.04;
-        targetGamma = Math.Clamp(
-            Math.Atan2(gatePoint.Y - playerPosition.Y, horizontalRangeM),
-            recoveryMinimumGamma,
-            0.06);
+        if (_recoveryFinal) {
+            // Hold the published carrier glideslope rather than continuously pitching at the
+            // touchdown point. Point pursuit becomes singular in the final seconds and drove a
+            // nominal pass through 4.2° / >7 m/s sink. Altitude error gently captures the same
+            // 3.5° path used to place the boxes, then vanishes as the aircraft stabilizes.
+            double glideDistanceM = Math.Max(0.0,
+                (touchdownAim - playerPosition).Dot(runwayForward));
+            double desiredGlideAltitudeM =
+                touchdownAim.Y + glideDistanceM * Carrier.GlideslopeSlope;
+            double glideErrorM = desiredGlideAltitudeM - playerPosition.Y;
+            targetGamma = Math.Clamp(
+                -Carrier.GlideslopeRad + Math.Atan2(glideErrorM, 500.0),
+                -0.080, -0.020);
+        } else {
+            targetGamma = Math.Clamp(
+                Math.Atan2(gatePoint.Y - playerPosition.Y, horizontalRangeM),
+                recoveryMinimumGamma,
+                0.06);
+        }
 
         string speedCall = currentKtas > targetKtas + 25.0 ? "SLOW"
             : currentKtas < targetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
@@ -696,6 +804,7 @@ public sealed class RapierMissionDirector {
             _circuitBreakReached = false;
             _circuitDownwindReached = false;
             _circuitBaseReached = false;
+            _circuitInitialJoinEstablished = false;
             _circuitsFlown++;
         }
 
@@ -704,8 +813,8 @@ public sealed class RapierMissionDirector {
         } else if (pursuitActive) {
             EnterPhase(RapierMissionPhase.Escape, "pursuit_active");
         } else if (gunDroneEgress) {
-            if (homeRangeM <= 90_000.0)
-                EnterPhase(RapierMissionPhase.Recovery, "gun_drone_home_leq_90km");
+            if (homeRangeM <= RecoveryEntryHomeRangeM)
+                EnterPhase(RapierMissionPhase.Recovery, "gun_drone_home_leq_150km");
             else if ((int)_phase < (int)RapierMissionPhase.Escape
                 || homeRangeM > 200_000.0)
                 EnterPhase(RapierMissionPhase.Escape, "gun_drone_away");
@@ -720,6 +829,7 @@ public sealed class RapierMissionDirector {
                 _circuitBreakReached = false;
                 _circuitDownwindReached = false;
                 _circuitBaseReached = false;
+                _circuitInitialJoinEstablished = false;
                 EnterPhase(RapierMissionPhase.Launch, "pattern_catapult");
             } else if (!_circuitShelfReached
                 && player.Position.Y < home.Y + CircuitShelfHeightM - 40.0) {
@@ -729,10 +839,10 @@ public sealed class RapierMissionDirector {
                 EnterPhase(RapierMissionPhase.Recovery, "pattern_recovery");
             }
         } else if (liveOpponentCount <= 0) {
-            // Remain on the M2/FL450 return until 90 km. The recovery marshal lies beyond the
-            // strip, leaving about 136 km to decelerate, descend and reverse onto final.
-            if (homeRangeM <= 90_000.0)
-                EnterPhase(RapierMissionPhase.Recovery, "home_leq_90km");
+            // Start setup far enough out that even an arrival already on the marshal side retains
+            // at least ~104 km to decelerate, descend and establish the inbound centreline.
+            if (homeRangeM <= RecoveryEntryHomeRangeM)
+                EnterPhase(RapierMissionPhase.Recovery, "home_leq_150km");
             else
                 EnterPhase(RapierMissionPhase.ReturnToBase, "no_opponents_rtb");
         } else if (catapultActive) {
@@ -979,8 +1089,13 @@ public sealed class RapierMissionDirector {
                     ? $"{Math.Floor(interceptEtaSeconds / 60.0):F0}:"
                         + $"{interceptEtaSeconds % 60.0:00}"
                     : "--:--";
+                double commandedInterceptMach = Math.Min(targetMach, skinMachLimit);
+                string thermalCap = skinMachLimit + 0.05 < targetMach
+                    ? $" · THERM CAP M{skinMachLimit:F1}"
+                    : "";
                 cue = $"AUTO INTERCEPT · {contactRangeM / 1000.0:F0} KM · "
-                    + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · M{skinMachLimit:F1} / FL700";
+                    + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · "
+                    + $"CMD M{commandedInterceptMach:F1} / FL700{thermalCap}";
                 break;
             case RapierMissionPhase.Attack:
                 waypoint = contact.Position;
@@ -1053,8 +1168,14 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(45_000.0 * 0.3048,
                     player, trueAirspeedMps, captureSeconds: 150.0,
                     minimumGamma: -0.060, maximumGamma: 0.025);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                    trimLever: 0.80, gain: 0.58, maximumLever: 1.35);
+                // The ram stream makes substantial installed thrust at a small lever above M2.5.
+                // Feeding the turbine-style 0.80 trim into that regime held the aircraft near M3
+                // for twenty minutes and consumed the landing reserve while the cue claimed M2.
+                // Idle the ram phase through handover, then capture M2 on turbine-biased trim.
+                throttle = mach > 2.25
+                    ? 0.0
+                    : ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                        trimLever: 0.55, gain: 0.80, maximumLever: 1.20);
                 waypoint = recoveryInitial;
                 cue = $"RETURN HOME · BASE {homeRangeM / 1000.0:F0} KM · M2.0 / FL450";
                 break;
@@ -1076,7 +1197,13 @@ public sealed class RapierMissionDirector {
                         out gateEnergyOk);
                     guidanceWaypoint = patternGate;
                     waypoint = patternWaypoint;
-                    throttle = PatternHoldThrottle(patternSpeedMps, trueAirspeedMps);
+                    double patternTrimLever = circuitLeg switch {
+                        "WIRE_FINAL" => 0.14,
+                        "SHORT_FINAL" => 0.20,
+                        _ => 0.26
+                    };
+                    throttle = PatternHoldThrottle(
+                        patternSpeedMps, trueAirspeedMps, patternTrimLever);
                     targetAltitudeFt = patternGate.Y * FeetPerMetre;
                     fdTargetKtas = circuitLeg switch {
                         "INITIAL" or "DOWNWIND" => CircuitPatternKtas,
@@ -1200,8 +1327,15 @@ public sealed class RapierMissionDirector {
                 // the approach aim sits where the hook actually arrives. Dead mass-scheduled gamma
                 // trim was removed; the proper next step is a predictive model of the pitch law,
                 // not another energy-fitted constant.
-                const double HookAimOffsetM = 260.0;
-                Vec3D finalAim = touchdownAim + runwayForward * HookAimOffsetM;
+                // Pitch/path response is mass-sensitive: the same command at the 7,080 kg recovery
+                // card and the 5,660 kg post-sortie article does not intersect the slab at the same
+                // along coordinate. Use a small bounded first-order predictor rather than another
+                // one-mass constant. It changes lead by ~17 m across those measured cases and leaves
+                // the public 290 m reference unchanged at 7,080 kg.
+                double hookAimOffsetM = Math.Clamp(
+                    290.0 + (7_080.0 - player.Mass) * 0.012,
+                    275.0, 315.0);
+                Vec3D finalAim = touchdownAim + runwayForward * hookAimOffsetM;
                 double geometricFinalGamma = Math.Atan2(
                     finalAim.Y - player.Position.Y,
                     Math.Max(1.0, Math.Sqrt(
@@ -1224,18 +1358,27 @@ public sealed class RapierMissionDirector {
                 double setupRangeM = !_recoveryMarshalReached ? marshalRangeM
                     : !_recoveryLineupReached ? lineupRangeM
                     : initialRangeM;
+                double setupAltitudeM = !_recoveryMarshalReached
+                    ? recoveryMarshal.Y
+                    : !_recoveryLineupReached ? recoveryLineup.Y : recoveryInitial.Y;
+                // Range alone is not an energy state. Do not select a low-speed shelf while the
+                // aircraft is still kilometres above its setup altitude: at that density the
+                // installed turbine cannot sustain the selected speed and the delta settles onto
+                // its alpha limit. Descend into the shelf first, then decelerate.
+                bool highAboveSetupShelf =
+                    player.Position.Y > setupAltitudeM + 1_000.0;
                 double approachSpeedMps;
                 if (_recoveryFinal) {
                     approachSpeedMps = 88.0;
                 } else if (!_recoveryMarshalReached) {
                     approachSpeedMps = setupRangeM > 100_000.0 ? 320.0
-                        : setupRangeM > 40_000.0 ? 180.0
+                        : setupRangeM > 40_000.0 || highAboveSetupShelf ? 180.0
                         : 120.0;
                 } else if (!_recoveryLineupReached) {
                     // Marshal establishes the inbound heading; it is not a command to drag
                     // forty kilometres of empty setup leg at landing speed. Hold useful energy
                     // until the lineup capture, then configure while the first square grows.
-                    approachSpeedMps = setupRangeM > 10_000.0 ? 180.0
+                    approachSpeedMps = setupRangeM > 10_000.0 || highAboveSetupShelf ? 180.0
                         : setupRangeM > 3_000.0 ? 120.0
                         : 88.0;
                 } else {
@@ -1245,10 +1388,14 @@ public sealed class RapierMissionDirector {
                     : approachSpeedMps > 150.0 ? 0.52
                     : approachSpeedMps > 100.0 ? 0.22
                     : 0.04;
+                double recoveryMaximumThrottle = approachSpeedMps > 250.0 ? 1.25
+                    : approachSpeedMps > 150.0 ? 1.25
+                    : approachSpeedMps > 100.0 ? 0.95
+                    : 0.72;
                 throttle = Math.Clamp(
                     recoveryBaseThrottle
                         + (approachSpeedMps - trueAirspeedMps) * 0.012,
-                    0.0, approachSpeedMps > 250.0 ? 1.25 : 0.72);
+                    0.0, recoveryMaximumThrottle);
                 targetAltitudeFt = gatePoint.Y * FeetPerMetre;
                 // INSTRUCTIONS, not status. This used to report which gate the aircraft was at and
                 // how fast it was going, which tells a pilot where they are and nothing about what

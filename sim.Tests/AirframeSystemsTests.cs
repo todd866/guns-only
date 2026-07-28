@@ -99,6 +99,43 @@ public sealed class AirframeSystemsTests {
     }
 
     [Fact]
+    public void RapierRamOnlyKeepsUtilityHydraulicsAndDoesNotCallUpLockedGearUnsafe() {
+        var systems = new AirframeSystems(AirframeSystemsProfile.RapierSurrogate,
+            initialUtilityHydraulicPressureFraction: 1.0);
+
+        StepFor(systems, 2.0, rpm: 0.0, ias: 550.0);
+
+        Assert.True(systems.AllGearUpAndLocked);
+        Assert.True(systems.PrimaryBusPowered);
+        Assert.InRange(systems.UtilityHydraulicPressurePsi, 3990.0, 4000.0);
+        Assert.False(systems.GearUnsafeLight);
+        Assert.False(systems.GearWarningHorn);
+    }
+
+    [Fact]
+    public void RapierGearWarningFollowsRecoveryConfigurationInsteadOfTurbineRpm() {
+        var systems = new AirframeSystems(AirframeSystemsProfile.RapierSurrogate,
+            initialUtilityHydraulicPressureFraction: 1.0);
+
+        var recovery = new AirframeSystemsInput(
+            EngineRpmPercent: 0.0,
+            IndicatedAirspeedKnots: 180.0,
+            WeightOnWheels: false,
+            LandingConfigurationExpected: true);
+        systems.Step(Dt, recovery);
+
+        Assert.True(systems.AllGearUpAndLocked);
+        Assert.True(systems.GearWarningHorn);
+        Assert.False(systems.GearUnsafeLight);
+
+        systems.CommandGear(LandingGearHandle.Down);
+        for (int i = 0; i < (int)Math.Ceiling(8.0 / Dt); i++) systems.Step(Dt, recovery);
+        Assert.True(systems.AllGearDownAndLocked);
+        Assert.False(systems.GearWarningHorn);
+        Assert.False(systems.GearUnsafeLight);
+    }
+
+    [Fact]
     public void OneSurvivingFlapMotorDrivesBothThroughInterconnectAtReducedRate() {
         var systems = new AirframeSystems();
         systems.SetFailure(AirframeSystemFailure.RightFlapMotor);
@@ -125,6 +162,37 @@ public sealed class AirframeSystemsTests {
         Assert.True(systems.FlapSplit);
         Assert.True(systems.AerodynamicState.LateralLiftCoefficientDifference > 0.25);
         Assert.True(systems.AerodynamicState.DragCoefficientIncrement > 0.0);
+    }
+
+    [Fact]
+    public void RapierLandingDroopConsumesElevonTravelAndAddsNoseDownTrim() {
+        var systems = new AirframeSystems(AirframeSystemsProfile.RapierSurrogate);
+        systems.SetFlapLever(WingFlapLever.Down);
+
+        StepFor(systems, 4.2);
+
+        AirframeAerodynamicState configuration = systems.AerodynamicState;
+        Assert.InRange(systems.LeftFlapDegrees, 29.9, 30.0);
+        Assert.Equal(systems.LeftFlapDegrees, systems.RightFlapDegrees, 9);
+        Assert.InRange(configuration.LiftCoefficientIncrement, 0.259, 0.261);
+        Assert.InRange(configuration.PitchMomentCoefficientIncrement, -0.056, -0.054);
+        Assert.InRange(configuration.RollControlAuthorityFraction, 0.549, 0.551);
+        Assert.InRange(configuration.PitchControlAuthorityFraction, 0.679, 0.681);
+        Assert.Equal(1.0, configuration.YawControlAuthorityFraction, 9);
+    }
+
+    [Fact]
+    public void RapierIndependentElevonActuatorFailureCreatesSplitWithoutInventedCrossShaft() {
+        var systems = new AirframeSystems(AirframeSystemsProfile.RapierSurrogate);
+        systems.SetFailure(AirframeSystemFailure.RightFlapMotor);
+        systems.SetFlapLever(WingFlapLever.Down);
+
+        StepFor(systems, 4.2);
+
+        Assert.InRange(systems.LeftFlapDegrees, 29.9, 30.0);
+        Assert.Equal(0.0, systems.RightFlapDegrees, 9);
+        Assert.True(systems.FlapSplit);
+        Assert.True(systems.AerodynamicState.LateralLiftCoefficientDifference > 0.25);
     }
 
     [Fact]

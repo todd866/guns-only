@@ -20,7 +20,7 @@ test("Rapier definition envelope binds to FlightModel.RapierPublicDataSurrogate"
   const def = JSON.parse(readFileSync(join(wwwroot, "airframes/rapier.v1.json"), "utf8"));
   const repoDef = JSON.parse(readFileSync(join(repoAirframes, "rapier.v1.json"), "utf8"));
   assert.deepEqual(def.massKg, repoDef.massKg, "wwwroot and repo definitions must match");
-  assert.equal(def.revision, "1.3.0");
+  assert.equal(def.revision, "1.4.0");
 
   const block = extractRapierBlock();
   assert.match(block, /RapierAirframeFuelFreeMassKg\s*\+\s*RapierDesignStowedGunDroneMassKg\s*\+\s*4_500\.0/);
@@ -34,6 +34,12 @@ test("Rapier definition envelope binds to FlightModel.RapierPublicDataSurrogate"
 
   assert.equal(def.dimensionsM.span, 7.35);
   assert.equal(def.wing.areaM2, 18);
+  assert.equal(def.wing.renderedSolidPlanformAreaM2, 24.3173);
+  assert.equal(def.wing.bodyOverlapNonReferenceAreaM2, 6.3173);
+  assert.equal(def.aerodynamics.model, "rapier-cranked-delta-public-data-surrogate.v1");
+  assert.equal(def.aerodynamics.controlMomentCoefficientMax.pitchCm, 0.18);
+  assert.equal(def.aerodynamics.landingElevonDroop.mechanicallyInterconnected, false);
+  assert.equal(def.aerodynamics.inletRecovery.onsetMach, 2);
   assert.equal(def.massKg.fuelFreeAirframe, 5150);
   assert.equal(def.massKg.designStowedGunDrones, 1440);
   assert.equal(def.massKg.fuelFree, 6590);

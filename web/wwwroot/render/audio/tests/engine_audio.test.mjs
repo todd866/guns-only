@@ -426,6 +426,41 @@ test("thin air and collapsed thrust near-silence the propulsion stack", async ()
   }
 });
 
+test("ram-only thrust remains audible at zero turbine RPM and owns the stream mix", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const { createEngineVoices, updateEngineVoices } = await freshModule(
+      "../engine_audio.js",
+      "ram-only-stream",
+    );
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const state = {
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+      applied_throttle: 1.55,
+      max_thrust_fraction: 1.55,
+      engine_rpm_pct: 0,
+      mach: 3.5,
+      true_airspeed_kts: 2_000,
+      air_density_kg_m3: 0.1,
+      rapier_turbine_thrust_lbf: 0,
+      rapier_ramjet_thrust_lbf: 18_000,
+    };
+
+    updateEngineVoices(voices, audio, state, { snap: true });
+
+    assert.ok(latest(voices.ramGain.gain) > 0.05,
+      "live ram thrust must not be multiplied away by zero turbine RPM");
+    assert.ok(latest(voices.ramHowlGain.gain) > 0.02);
+    assert.ok(latest(voices.fanOrderGain.gain) < 1e-9,
+      "turbine tonal layers stay silent when the turbine stream is zero");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
 test("power opens grit and impulse crackle harder than idle", async () => {
   const previous = globalThis.AudioContext;
   try {
@@ -486,7 +521,7 @@ test("unsupported Web Audio disables the module permanently without throwing", a
   }
 });
 
-test("flight façade shares one compressor bus, honors mute, and schedules gun reports", async () => {
+test("flight façade shares one main bus plus radio compressor, honors mute, and schedules gun reports", async () => {
   const previous = globalThis.AudioContext;
   try {
     FakeAudioContext.instances.length = 0;
@@ -508,7 +543,8 @@ test("flight façade shares one compressor bus, honors mute, and schedules gun r
     }, { muted: false, triggerHeld: true, nowSeconds: 1.0 });
 
     const audio = FakeAudioContext.instances.at(-1);
-    assert.equal(audio.compressors.length, 1);
+    assert.equal(audio.compressors.length, 2,
+      "main dynamics bus and band-limited radio dynamics");
     const master = audio.gains[0].gain;
     assert.ok(latest(master) > 0);
     assert.ok(latest(audio.gains[1].gain) > 0,

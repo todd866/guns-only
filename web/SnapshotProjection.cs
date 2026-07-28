@@ -1,6 +1,7 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Sim.Propulsion;
 using GunsOnly.Sim.Turbulence;
 
 namespace GunsOnly.Web;
@@ -30,7 +31,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.17.0";
+    const string SnapshotSchemaVersion = "1.19.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -168,9 +169,11 @@ internal static class SnapshotProjection {
         double equivalentAirspeedMps = AirData.EquivalentAirspeedMps(
             trueAirspeedMps, playerPosition.Y, atmosphere);
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
-        double rapierStagnationTempC = Session.Player.SkinTemperatureK > 0.0
+        double rapierSkinTempC = Session.Player.SkinTemperatureK > 0.0
             ? Session.Player.SkinTemperatureK - 273.15
             : AirData.AdiabaticWallTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
+        double rapierAdiabaticWallTempC =
+            AirData.AdiabaticWallTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
         // Read from the AIRFRAME, never hardcoded. This was 900 C (the Mach-4 engine's number),
         // then 320 C (steel), while the aircraft moved to a 1200 C CMC hot structure — so the HUD
         // reported the pilot 150 C over a limit they were nowhere near. A displayed limit that does
@@ -341,6 +344,31 @@ internal static class SnapshotProjection {
             + $"\"rapier_circuit_leg_code\":{CircuitLegCode(Session.RapierCircuitLeg)},"
             + $"\"rapier_circuit_comms\":{JsonString(Session.CircuitComms)},"
             + $"\"rapier_circuits_clean\":{(Session.CircuitsCleanMode ? "true" : "false")},"
+            + $"\"radio_active\":{(Session.MissionRadio.Active ? "true" : "false")},"
+            + $"\"radio_sequence\":{Session.MissionRadio.Sequence},"
+            + $"\"radio_id\":{JsonString(Session.MissionRadio.Id)},"
+            + $"\"radio_channel\":{JsonString(Session.MissionRadio.ChannelLabel)},"
+            + $"\"radio_frequency\":{JsonString(Session.MissionRadio.FrequencyLabel)},"
+            + $"\"radio_speaker\":{JsonString(Session.MissionRadio.Speaker)},"
+            + $"\"radio_callsign\":{JsonString(Session.MissionRadio.Callsign)},"
+            + $"\"radio_text\":{JsonString(Session.MissionRadio.Text)},"
+            + $"\"radio_voice\":{JsonString(Session.MissionRadio.Voice)},"
+            + $"\"radio_priority\":{(int)Session.MissionRadio.Priority},"
+            + $"\"radio_started_s\":{Session.MissionRadio.StartedAtSeconds:F3},"
+            + $"\"radio_ends_s\":{Session.MissionRadio.EndsAtSeconds:F3},"
+            + $"\"radio_ai_generated\":{(Session.MissionRadio.AiGenerated ? "true" : "false")},"
+            // Compatibility aliases for the first Circuits-only browser contract.
+            + $"\"rapier_radio_active\":{(Session.MissionRadio.Active ? "true" : "false")},"
+            + $"\"rapier_radio_sequence\":{Session.MissionRadio.Sequence},"
+            + $"\"rapier_radio_id\":{JsonString(Session.MissionRadio.Id)},"
+            + $"\"rapier_radio_speaker\":{JsonString(Session.MissionRadio.Speaker)},"
+            + $"\"rapier_radio_callsign\":{JsonString(Session.MissionRadio.Callsign)},"
+            + $"\"rapier_radio_text\":{JsonString(Session.MissionRadio.Text)},"
+            + $"\"rapier_radio_voice\":{JsonString(Session.MissionRadio.Voice)},"
+            + $"\"rapier_radio_priority\":{(int)Session.MissionRadio.Priority},"
+            + $"\"rapier_radio_started_s\":{Session.MissionRadio.StartedAtSeconds:F3},"
+            + $"\"rapier_radio_ends_s\":{Session.MissionRadio.EndsAtSeconds:F3},"
+            + $"\"rapier_radio_ai_generated\":{(Session.MissionRadio.AiGenerated ? "true" : "false")},"
             + $"\"rapier_fd_bank_deg\":{Session.RapierFdBankDeg:F1},"
             + $"\"rapier_fd_target_ktas\":{Session.RapierFdTargetKtas:F0},"
             + $"\"rapier_gate_half_m\":{Session.RapierGateHalfM:F1},"
@@ -355,13 +383,21 @@ internal static class SnapshotProjection {
             + $"\"rapier_lob_skip_max\":{Session.RapierLobSkipMax},"
             + $"\"rapier_rcs_gas_frac\":{Session.RapierRcsGasFraction:F3},"
             + $"\"rapier_rcs_authority\":{Session.RapierRcsAuthority:F3},"
+            + $"\"rapier_inlet_recovery\":{_player.InletFlowRecovery:F3},"
+            + $"\"rapier_inlet_distorted\":{(_player.InletDistorted ? "true" : "false")},"
+            + $"\"rapier_normal_alpha_limit_deg\":{RapierAerodynamics.NormalLawAlphaLimitRad(mach) * 57.29577951308232:F2},"
             + $"\"rapier_zoom_lob\":{(Session.Beat.ScriptedIntercept?.ZoomLobProfile == true ? "true" : "false")},"
+            + $"\"rapier_turbine_thrust_lbf\":{Session.RapierTurbineThrustN / J47PerformanceMap.NewtonsPerPoundForce:F0},"
+            + $"\"rapier_ramjet_thrust_lbf\":{Session.RapierRamjetThrustN / J47PerformanceMap.NewtonsPerPoundForce:F0},"
             + $"\"rapier_turbine_thrust_kn\":{Session.RapierTurbineThrustN / 1000.0:F2},"
             + $"\"rapier_ramjet_thrust_kn\":{Session.RapierRamjetThrustN / 1000.0:F2},"
             + $"\"rapier_turbine_fuel_ppm\":{Session.RapierTurbineFuelFlowLbPerMinute:F2},"
             + $"\"rapier_ramjet_fuel_ppm\":{Session.RapierRamjetFuelFlowLbPerMinute:F2},"
-            + $"\"rapier_stagnation_temp_c\":{rapierStagnationTempC:F0},"
-            + $"\"rapier_thermal_margin_c\":{rapierThermalLimitC - rapierStagnationTempC:F0},"
+            + $"\"rapier_skin_temp_c\":{rapierSkinTempC:F0},"
+            + $"\"rapier_adiabatic_wall_temp_c\":{rapierAdiabaticWallTempC:F0},"
+            + $"\"rapier_thermal_limit_c\":{rapierThermalLimitC:F0},"
+            + $"\"rapier_stagnation_temp_c\":{rapierSkinTempC:F0},"
+            + $"\"rapier_thermal_margin_c\":{rapierThermalLimitC - rapierSkinTempC:F0},"
             // Gross weight in pounds, and time-to-intercept in minutes. ETI is only meaningful on a
             // long-range run-in: inside the merge the number churns every tick and means nothing, so
             // it is published as -1 below 20 km or with no closure, and the HUD hides it.
@@ -533,6 +569,7 @@ internal static class SnapshotProjection {
             + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
             + $"\"g_hardmax\":{Protection.HardMaxG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
             + $"\"g_override_max\":{Protection.OverrideMaxG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
+            + $"\"dynamic_pressure_kpa\":{_player.DynamicPressurePa / 1000.0:F2},"
             + $"\"sustained\":{sustainedG:F3},"
             + $"\"sticky\":{_detents.StickyOffsetG:F2},\"tier\":{(int)_detents.Tier},"
             + $"\"variant\":{GetVariant()},\"buffet\":{(_player.Buffet ? "true" : "false")},"

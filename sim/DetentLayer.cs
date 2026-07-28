@@ -37,6 +37,8 @@ public sealed class DetentLayer {
     readonly Queue<int> _pendingRollTapPulses = new();
     double _analogRollControl;
     bool _analogRollControlActive;
+    double _analogPitchControl;
+    bool _analogPitchControlActive;
 
     /// <summary>
     /// Supply a continuous pilot lateral-stick command. Keyboard/touch-button roll commands retain
@@ -52,6 +54,37 @@ public sealed class DetentLayer {
     public void ClearAnalogRollControl() {
         _analogRollControl = 0.0;
         _analogRollControlActive = false;
+    }
+
+    /// <summary>
+    /// Supply a continuous longitudinal-stick command. Positive means pull and negative means
+    /// push. Keyboard pitch keeps priority, while assisted flight treats this as a smooth bias
+    /// around its hands-off demand so phone and gamepad use the same control law.
+    /// </summary>
+    public void SetAnalogPitchControl(double value) {
+        if (!double.IsFinite(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        _analogPitchControl = System.Math.Clamp(value, -1.0, 1.0);
+        _analogPitchControlActive = true;
+    }
+
+    public void ClearAnalogPitchControl() {
+        _analogPitchControl = 0.0;
+        _analogPitchControlActive = false;
+    }
+
+    double AssistedBaselineTarget(in AircraftState state, double maxPerform) {
+        if (AssistedTargetWithinNoseCone) {
+            double fullPullG = System.Math.Min(4.0, maxPerform);
+            if (double.IsFinite(AssistedTargetNoseAngleRad)) {
+                double offAxis = System.Math.Clamp(
+                    AssistedTargetNoseAngleRad / (System.Math.PI / 3.0), 0.0, 1.0);
+                return 1.4 + (fullPullG - 1.4) * offAxis * offAxis;
+            }
+            return fullPullG;
+        }
+        return System.Math.Clamp(
+            1.0 / System.Math.Max(System.Math.Cos(state.Bank), 0.5), 1.0, 1.35);
     }
 
     // MAGIC CARPET (approach mode). The G-command grammar is wrong for a landing: with the valley
@@ -248,6 +281,8 @@ public sealed class DetentLayer {
             if (_waveOff) _cmdPitch += PitchCmdRate * dt;                      // go-around: rotate up, climb away
             else if (pull != KeyPhase.Idle) _cmdPitch += PitchCmdRate * dt;   // nose up
             else if (push != KeyPhase.Idle) _cmdPitch -= PitchCmdRate * dt;   // nose down
+            else if (_analogPitchControlActive && System.Math.Abs(_analogPitchControl) > 0.001)
+                _cmdPitch += _analogPitchControl * PitchCmdRate * dt;
             else _cmdPitch += ((gamma + onSpeedAoaRad) - _cmdPitch) * System.Math.Min(1.0, AoASpring * dt);  // gentle trim to on-speed
             _cmdPitch = System.Math.Clamp(_cmdPitch, gamma + AoALo, gamma + AoAHi);   // keep the AoA (θ−γ) sane
 
@@ -307,6 +342,22 @@ public sealed class DetentLayer {
                 FlightModel.NzAeroMin(s, p, AirspeedMps, AtmosphereModel), -1.5);
             target = over ? pushFloor : System.Math.Max(pushFloor, -1.0);
         }
+        else if (_analogPitchControlActive) {
+            // A common semantic axis for touch and gamepad. In assisted flight the centred stick
+            // leaves the about-right baseline alone; pulling blends progressively to the protected
+            // limit and pushing blends to the ordinary bunt floor. In manual flight centre is 1 G.
+            double neutral = AssistedFlight
+                ? AssistedBaselineTarget(s, maxPerform) : 1.0;
+            double pushFloor = System.Math.Max(
+                FlightModel.NzAeroMin(s, p, AirspeedMps, AtmosphereModel), -1.0);
+            double pitch = _analogPitchControl;
+            tier = System.Math.Abs(pitch) < 0.001
+                ? DemandTier.Baseline : DemandTier.Valley;
+            StickyOffsetG = 0.0;
+            target = pitch >= 0.0
+                ? neutral + (maxPerform - neutral) * pitch
+                : neutral + (neutral - pushFloor) * pitch;
+        }
         else if (_waveOff) {
             tier = DemandTier.Valley;
             target = System.Math.Min(maxPerform, 1.55);   // smooth hands-off rotation; stick still has full authority
@@ -322,22 +373,8 @@ public sealed class DetentLayer {
             // completely whenever the pilot is touching it.
             tier = DemandTier.Baseline;
             StickyOffsetG = 0.0;
-            if (AssistedTargetWithinNoseCone) {
-                double fullPullG = System.Math.Min(4.0, maxPerform);
-                if (double.IsFinite(AssistedTargetNoseAngleRad)) {
-                    double offAxis = System.Math.Clamp(
-                        AssistedTargetNoseAngleRad / (System.Math.PI / 3.0), 0.0, 1.0);
-                    target = 1.4 + (fullPullG - 1.4) * offAxis * offAxis;
-                } else {
-                    target = fullPullG; // standalone callers without angle keep the old contract
-                }
-            } else {
-                // Bank-compensated path hold: wings level this is exactly 1.0 (no climb-away);
-                // banked it carries the level-turn load so the assisted turn neither balloons
-                // nor sheds the corner-hold drag budget the speed loop is trimmed against.
-                target = System.Math.Clamp(
-                    1.0 / System.Math.Max(System.Math.Cos(s.Bank), 0.5), 1.0, 1.35);
-            }
+            // Bank-compensated path hold outside the cone; an angle-shaped tactical pull inside it.
+            target = AssistedBaselineTarget(s, maxPerform);
         }
         else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; }
         Tier = tier;

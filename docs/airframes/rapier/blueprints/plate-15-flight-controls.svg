@@ -15,18 +15,18 @@
   <path d="M 380,150 L 380,200 L 400,210 L 420,200 L 420,150" fill="#3d9b7a" fill-opacity="0.35" stroke="#3d9b7a"/>
   <text x="380" y="140" text-anchor="middle" font-size="9">twin fins / rudders</text>
   <rect x="40" y="340" width="300" height="140" fill="#fff" stroke="#3d9b7a"/>
-  <text x="50" y="360" font-size="10" font-weight="700" fill="#3d9b7a">AUTHORITY (from params)</text>
-  <text x="50" y="378" font-size="9">RollMomentMax 380 kN·m · Pitch 980 · Yaw 320</text>
+  <text x="50" y="360" font-size="10" font-weight="700" fill="#3d9b7a">DEMAND / ALLOCATION (from params)</text>
+  <text x="50" y="378" font-size="9">Demand stops: roll 380 kN·m · pitch 980 · yaw 320</text>
   <text x="50" y="394" font-size="9">RollHoldRateGain 1.2e6 — bank hold thesis</text>
-  <text x="50" y="410" font-size="9">No TVC — actuators aero only in air</text>
+  <text x="50" y="410" font-size="9">No TVC — delivered aero moment capped by q·S·length·C</text>
   <text x="50" y="426" font-size="9">RCS 220 kN·m · 40 kg gas · exo/lob only</text>
   <text x="50" y="442" font-size="9">Same stick maps to RCS when q collapses</text>
   <rect x="360" y="340" width="320" height="140" fill="#fff" stroke="#844"/>
-  <text x="370" y="360" font-size="10" font-weight="700" fill="#844">PROVISIONAL HARDWARE</text>
-  <text x="370" y="378" font-size="9">Hydraulic vs EMA — prefer EMA (mass/heat)</text>
+  <text x="370" y="360" font-size="10" font-weight="700" fill="#844">SURROGATE HARDWARE</text>
+  <text x="370" y="378" font-size="9">Independent primary-bus EMAs — electronic synchronisation</text>
   <text x="370" y="394" font-size="9">Elevon rate ≥ 40°/s design target</text>
-  <text x="370" y="410" font-size="9">Dual-redundant per surface</text>
+  <text x="370" y="410" font-size="9">Dual-redundant per surface; no mechanical cross-shaft</text>
   <text x="370" y="426" font-size="9">FBW laws in spine computers (plate 16)</text>
-  <text x="370" y="442" font-size="9">Trim: elevon bias, no separate stab</text>
+  <text x="370" y="442" font-size="9">Symmetric landing droop + differential control; no separate flap/stab</text>
 
 </svg>

@@ -28,6 +28,7 @@ const NEVER_CACHE = [/\/telemetry/, /\/api\//, /telemetry-admin/];
 // cached FULL bundle answers a Range request perfectly well, and offline terrain costs one extra
 // background fetch rather than a range-aware cache layer.
 const TERRAIN_BUNDLE = /\.terrain(\?|$)/;
+const MAX_RUNTIME_PRIME_URLS = 768;
 
 self.addEventListener("install", (event) => {
   // Nothing to precache; take over as soon as possible so the first sortie starts filling the cache.
@@ -44,6 +45,47 @@ self.addEventListener("activate", (event) => {
 });
 
 const terrainBundlesPrimed = new Set();
+
+async function primeRuntimeUrls(candidates) {
+  const urls = [];
+  for (const candidate of Array.isArray(candidates) ? candidates : []) {
+    if (urls.length >= MAX_RUNTIME_PRIME_URLS) break;
+    try {
+      const url = new URL(String(candidate), self.location.origin);
+      if (url.origin !== self.location.origin
+        || NEVER_CACHE.some((pattern) => pattern.test(url.pathname))) continue;
+      if (!urls.includes(url.href)) urls.push(url.href);
+    } catch {
+      // Ignore malformed client-provided resource names.
+    }
+  }
+  const cache = await caches.open(CACHE);
+  let cached = 0;
+  let failed = 0;
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok || response.status !== 200 || response.type !== "basic") {
+        failed += 1;
+        continue;
+      }
+      await cache.put(url, response.clone());
+      cached += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { requested: urls.length, cached, failed, build: RELEASE_BUILD };
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "prime-runtime") return;
+  const task = primeRuntimeUrls(event.data.urls).then((result) => {
+    event.ports?.[0]?.postMessage(result);
+    return result;
+  });
+  event.waitUntil(task);
+});
 
 /// Pull each whole terrain bundle into the cache once, in the background, the first time the app
 /// asks for a piece of it. Korea and the fictional Ukraine training sector are separate products,

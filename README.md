@@ -102,11 +102,25 @@ cd /tmp/guns-only-web/wwwroot && python3 -m http.server 8877
 
 Plans, not promises — the dogfight is the first rung.
 
-The near work is a two-era Korean campaign sharing one kernel: the historical 1950s side, and an
-explicitly alternate-history 2030s side built around attritable drones and the **air littoral**. The
-longer arc is simulation as a teaching instrument beyond aviation, eventually including medical
-training — the transferable asset is the honest-kernel-and-honest-instruments discipline, not the
-aircraft.
+The full north star is **Cohort** (`cohort.md`): an open-source educational game world—a DIY MMORPG
+with a realism and hard-science-fiction focus, bring-your-own content, and a coding agent as the
+workshop. Its shorthand is **World of Warcraft structure, Studio Ghibli–adjacent humanity and
+beauty, World War III**. Aviation and medicine are the first connected spine, but the world is the
+curriculum: players can practise a role, build a new discipline, engineer equipment, negotiate its
+supply, or specialise in making the whole system work.
+
+The basic entry point is a teacher and a classroom: bring a lesson or system, use a coding agent to
+make it a sourced scenario, assign students real roles in the open world, run or branch the
+simulation, and debrief what happened.
+
+The first invited career arc runs from high-altitude flyer to medevac pilot, through a clinical
+crossover into doctor and ultimately military commander. It is neither a one-way ladder nor the
+complete profession list: every role remains available as a deep practice discipline, and players
+can add new ones through open, validated content contracts. Paediatrics is the next medical
+practice lane to prepare.
+
+That product direction, its no-copy boundaries, role-progression rules, and planning tests are
+recorded in [docs/product-north-star.md](docs/product-north-star.md).
 
 Deeper background lives in [docs/platform-architecture.md](docs/platform-architecture.md),
 [docs/world-backstory-research.md](docs/world-backstory-research.md) and the dated design records

@@ -19,7 +19,7 @@ regime it forces is closed/surrogate below.)*
 | Transonic push | mid-high | M0.94 → ~M1.2 | wave-drag peak ~M1.18 (`WaveDragK` 20) — push through |
 | Ram light → full | high | M2.0 → M2.8 | continuous TBCC overlap; density-gated inlet |
 | Ram climb / dash | → FL700 (~21+ km) | briefing **M4** (*fiction*); OFT peak **~M3.69** | thin air + ram; inlet forbids low-alt dash |
-| Attack dive | descending | energy into gun/drone window | structure 12 G / override 15; lagged skin thermal |
+| Attack dive | descending | energy into gun/drone window | Mach/q lift authority, then structure 12 G / override 15; lagged skin thermal |
 | Egress | thin air | same dash box as above | drones screen pursuers (*provisional* packaging) |
 | Return / shed | ~FL450 | ~M2 then decelerate | fuel reserve to trap |
 | Marshal / wire | pattern → strip | approach / hook | recovery mass, not cat gross |
@@ -48,7 +48,7 @@ ram ownership by ~M2.2–2.8 in the map; four square gates into wire three.
 | Stagnation temp @ M4 | ~910 K (~637 °C) ambient-total class | Stainless already failed; CMC still has margin |
 | Skin qualified | 1473 K (1200 °C) — **closed**, `SkinTemperatureLimitK` | Airframe thermal headroom |
 | Ram cycle / spill | useful dash ~M4; spill band M3.3–3.8; dead by ~M4.5–5 | **Thrust** |
-| Structure | 12 G qualified / 15 G override — **closed**, `PositiveStructuralLimitG` / `PositiveOverrideLimitG` | Dive pull, not cruise |
+| Structure | 12 G qualified / 15 G override — **closed ceilings**, `PositiveStructuralLimitG` / `PositiveOverrideLimitG` | Dense-air dive pull only after aerodynamic authority reaches them |
 
 **Decision locked:** keep **CMC** hot structure; **do not** revert to stainless. Keep map
 `DesignMach = 2.6` as a normaliser only (see [30 — Propulsion and inlet](30-propulsion-and-inlet.md)).
@@ -61,4 +61,3 @@ Regime boxes and the Mach-4 dash claim are **surrogate** (grounded in mission do
 and the propulsion performance map). Exact OFT altitudes may move with guidance retunes; the *shape*
 of the profile — climb clean, push transonic, overlap TBCC, dash thin, dive to attack, recover light
 — does not.
-

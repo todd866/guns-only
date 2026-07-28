@@ -75,6 +75,29 @@ test("formats engine, gear, flap and overspeed warnings from observable telemetr
   assert.equal(projected.warningLevel, "warning");
 });
 
+test("Rapier console names ram-only propulsion and pounds-force instead of zero RPM running", () => {
+  const projected = projectTestFlightState({
+    rapier_mission_available: true,
+    engine_rpm_pct: 0,
+    engine_running: true,
+    rapier_turbine_thrust_lbf: 0,
+    rapier_ramjet_thrust_lbf: 4_707,
+    rapier_inlet_recovery: 0.72,
+    flap_lever: "HOLD",
+    flap_left_deg: 9,
+    flap_right_deg: 3,
+  });
+
+  assert.equal(projected.engine.rpmText, "4,707 LBF");
+  assert.equal(projected.engine.runningText, "RAM ONLY");
+  assert.equal(projected.engine.state, "nominal");
+  assert.equal(projected.inlet.recoveryText, "72%");
+  assert.equal(projected.inlet.state, "caution");
+  assert.equal(projected.flaps.label, "ELEV");
+  assert.match(projected.warningText, /INLET RECOVERY LOW/);
+  assert.match(projected.warningText, /ELEV SPLIT/);
+});
+
 test("hydraulic truth drives warning state and panel relevance", () => {
   const failed = projectTestFlightState({
     utility_hydraulic_pressure_psi: 0,

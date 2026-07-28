@@ -50,7 +50,10 @@ public enum AirframeSystemFailure {
 public readonly record struct AirframeSystemsInput(
     double EngineRpmPercent,
     double IndicatedAirspeedKnots,
-    bool WeightOnWheels);
+    bool WeightOnWheels,
+    // Modern warning logic is keyed to landing configuration, not to the turbine shaft speed.
+    // This remains false by default so the F-86 research profile keeps its throttle horn.
+    bool LandingConfigurationExpected = false);
 
 /// <summary>
 /// Configuration increments consumed by the flight model. Keeping this unit-explicit seam lets a
@@ -70,7 +73,15 @@ public readonly record struct AirframeAerodynamicState(
     double LandingGearFraction = 0.0,
     // A lift-limit increment moves the positive attached-flow break without adding camber lift at
     // zero alpha. This is distinct from the existing flap LiftCoefficientIncrement by design.
-    double LiftLimitCoefficientIncrement = 0.0) {
+    double LiftLimitCoefficientIncrement = 0.0,
+    // Remaining control authority after the actual configuration consumes surface travel. A
+    // conventional flap need not affect an aileron or tail, so one is the compatibility default.
+    // The Rapier has one elevon per side: symmetric landing droop therefore leaves less differential
+    // roll and pitch travel than the same clean wing. These factors make that systems consequence
+    // explicit instead of allowing the FBW controller to command through a mechanical stop.
+    double RollControlAuthorityFraction = 1.0,
+    double PitchControlAuthorityFraction = 1.0,
+    double YawControlAuthorityFraction = 1.0) {
     public static AirframeAerodynamicState Clean =>
         new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 
@@ -98,7 +109,21 @@ public sealed record AirframeSystemsProfile(
     double UtilityHydraulicNominalPsi,
     double FullGearDragCoefficientIncrement,
     double FullFlapLiftCoefficientIncrement,
-    double FullFlapDragCoefficientIncrement) {
+    double FullFlapDragCoefficientIncrement,
+    // Early jets use an engine-driven utility pump and a throttle-position gear horn. The Rapier
+    // has an electrically driven utility pump and a configuration-aware warning computer because
+    // a ram-only combined-cycle engine quite correctly has zero turbine shaft RPM.
+    bool UtilityHydraulicPumpElectricallyDriven = false,
+    bool GearWarningUsesLandingConfiguration = false,
+    // Conventional separate flaps may be mechanically interconnected. The Rapier's "flap" channel
+    // is symmetric elevon landing droop: independent dual-redundant actuators are synchronized by
+    // FBW, not by a cross-shaft. A single actuator/circuit failure can therefore create a split.
+    bool FlapMechanicalInterconnectInstalled = true,
+    // Configuration aerodynamics. Zero/one defaults preserve the researched F-86 profile; the
+    // Rapier publishes the pitch trim and remaining elevon travel consumed by landing droop.
+    double FullFlapPitchMomentCoefficientIncrement = 0.0,
+    double FullFlapRollAuthorityFraction = 1.0,
+    double FullFlapPitchAuthorityFraction = 1.0) {
 
     /// <summary>
     /// T.O. 1F-86F-1 basis. Gear times, limits, dependencies, warning logic, flap architecture, and
@@ -164,7 +189,16 @@ public sealed record AirframeSystemsProfile(
         UtilityHydraulicNominalPsi: 4000.0,
         FullGearDragCoefficientIncrement: 0.032,
         FullFlapLiftCoefficientIncrement: 0.26,
-        FullFlapDragCoefficientIncrement: 0.070);
+        FullFlapDragCoefficientIncrement: 0.070,
+        UtilityHydraulicPumpElectricallyDriven: true,
+        GearWarningUsesLandingConfiguration: true,
+        FlapMechanicalInterconnectInstalled: false,
+        // Symmetric trailing-edge-down elevon droop adds lift and a nose-down trim moment while
+        // consuming clean-airframe surface travel. These are provisional whole-aircraft
+        // coefficients pending CFD/wind-tunnel data, deliberately isolated from the clean polar.
+        FullFlapPitchMomentCoefficientIncrement: -0.055,
+        FullFlapRollAuthorityFraction: 0.55,
+        FullFlapPitchAuthorityFraction: 0.68);
 }
 
 /// <summary>
@@ -202,6 +236,7 @@ public sealed class AirframeSystems {
     public double UtilityHydraulicPressurePsi =>
         UtilityHydraulicPressureFraction * _profile.UtilityHydraulicNominalPsi;
     public bool WeightOnWheels { get; private set; }
+    public bool LandingConfigurationExpected { get; private set; }
     public double EngineRpmPercent { get; private set; }
     public double IndicatedAirspeedKnots { get; private set; }
 
@@ -259,12 +294,15 @@ public sealed class AirframeSystems {
                     _profile.FullGearDragCoefficientIncrement * gear
                     + _profile.FullFlapDragCoefficientIncrement * flap * flap
                     + 0.020 * Math.Abs(split),
-                // The seam is live now; a sourced F-86/Fury configuration moment surface can be
-                // inserted later without changing the state machine or flight-model contract.
-                PitchMomentCoefficientIncrement: 0.0,
+                PitchMomentCoefficientIncrement:
+                    _profile.FullFlapPitchMomentCoefficientIncrement * flap,
                 LateralLiftCoefficientDifference:
                     _profile.FullFlapLiftCoefficientIncrement * split,
-                LandingGearFraction: gear);
+                LandingGearFraction: gear,
+                RollControlAuthorityFraction: 1.0
+                    - (1.0 - _profile.FullFlapRollAuthorityFraction) * flap,
+                PitchControlAuthorityFraction: 1.0
+                    - (1.0 - _profile.FullFlapPitchAuthorityFraction) * flap);
         }
     }
 
@@ -328,6 +366,7 @@ public sealed class AirframeSystems {
         EngineRpmPercent = input.EngineRpmPercent;
         IndicatedAirspeedKnots = input.IndicatedAirspeedKnots;
         WeightOnWheels = input.WeightOnWheels;
+        LandingConfigurationExpected = input.LandingConfigurationExpected;
 
         StepPowerAndHydraulics(dtSeconds);
         StepGear(dtSeconds);
@@ -343,11 +382,14 @@ public sealed class AirframeSystems {
 
         double targetPressure = 0.0;
         if (!HasFailure(AirframeSystemFailure.UtilityHydraulicPump)) {
-            // An engine-driven variable-volume pump supplies useful pressure at idle and reaches
-            // nominal authority by roughly generator cut-in. Exact transient pump maps remain a
-            // profile concern rather than a binary "hydraulics available" switch.
-            targetPressure = Math.Clamp((EngineRpmPercent - 20.0)
-                / Math.Max(_profile.GeneratorCutInRpmPercent - 20.0, 1.0), 0.0, 1.0);
+            if (_profile.UtilityHydraulicPumpElectricallyDriven) {
+                targetPressure = PrimaryBusPowered ? 1.0 : 0.0;
+            } else {
+                // An engine-driven variable-volume pump supplies useful pressure at idle and
+                // reaches nominal authority by roughly generator cut-in.
+                targetPressure = Math.Clamp((EngineRpmPercent - 20.0)
+                    / Math.Max(_profile.GeneratorCutInRpmPercent - 20.0, 1.0), 0.0, 1.0);
+            }
         }
         if (HasFailure(AirframeSystemFailure.UtilityHydraulicLeak)) targetPressure *= 0.05;
         double tau = targetPressure > UtilityHydraulicPressureFraction ? 0.45 : 0.85;
@@ -436,7 +478,8 @@ public sealed class AirframeSystems {
             && !HasFailure(AirframeSystemFailure.RightFlapCircuit);
         double rate = _profile.FullFlapDegrees / Math.Max(_profile.FullFlapTravelSeconds, 0.1);
 
-        if (!HasFailure(AirframeSystemFailure.FlapMechanicalInterconnect)) {
+        if (_profile.FlapMechanicalInterconnectInstalled
+            && !HasFailure(AirframeSystemFailure.FlapMechanicalInterconnect)) {
             int motors = (leftPowered ? 1 : 0) + (rightPowered ? 1 : 0);
             if (motors == 0) return;
             // One surviving actuator drives both flaps through the mechanical interconnect, with
@@ -454,16 +497,22 @@ public sealed class AirframeSystems {
         bool warningPowered = PrimaryBusPowered
             && !HasFailure(AirframeSystemFailure.GearWarningCircuit);
         bool doorUnlocked = GearDoorPosition > PositionTolerance;
-        bool throttleWarning = !AllGearDownAndLocked
-            && EngineRpmPercent < _profile.GearHornRpmPercent;
-        if (EngineRpmPercent > _profile.GearHornRpmPercent + 3.0)
+        bool landingWarningDemand = _profile.GearWarningUsesLandingConfiguration
+            ? LandingConfigurationExpected
+            : EngineRpmPercent < _profile.GearHornRpmPercent;
+        bool gearWarning = !AllGearDownAndLocked && landingWarningDemand;
+        if ((_profile.GearWarningUsesLandingConfiguration && !LandingConfigurationExpected)
+            || (!_profile.GearWarningUsesLandingConfiguration
+                && EngineRpmPercent > _profile.GearHornRpmPercent + 3.0))
             _gearHornSilenced = false;
 
+        // "UNSAFE" describes command/actual lock state. A separate gear-warning horn may call for
+        // gear while all three legs are safely up; folding that demand into the unsafe lamp is what
+        // produced the impossible RAM ONLY + UP LOCKED + GEAR UNSAFE cockpit seen in build 171.
         GearUnsafeLight = warningPowered && (AnyGearUnsafe
             || (AllGearUpAndLocked && doorUnlocked)
-            || throttleWarning
             || GroundRetractionInterlockActive);
-        GearWarningHorn = warningPowered && throttleWarning && !_gearHornSilenced;
+        GearWarningHorn = warningPowered && gearWarning && !_gearHornSilenced;
 
         if (GearLimitExceeded) GearOverspeedExposureSeconds += dt;
         if (FlapLimitExceeded) FlapOverspeedExposureSeconds += dt;

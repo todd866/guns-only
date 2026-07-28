@@ -24,6 +24,7 @@ import {
   updateTrapVoice,
 } from "./event_audio.js";
 import { createWarningVoices, updateWarningVoices } from "./warning_audio.js";
+import { createRadioVoice, updateRadioVoice } from "./radio_audio.js";
 
 let context = null;
 let master = null;
@@ -32,6 +33,7 @@ let engineVoices = null;
 let eventVoices = null;
 let contactVoices = null;
 let warningVoices = null;
+let radioVoice = null;
 let disabled = false;
 let enabled = true;
 let sampleLoad = null;
@@ -63,6 +65,9 @@ function build() {
   eventVoices = createEventVoices(context, bus);
   contactVoices = createContactAcousticVoices(context, bus);
   warningVoices = createWarningVoices(context, bus);
+  radioVoice = createRadioVoice(context, bus, {
+    engineMaster: engineVoices.master,
+  });
   return true;
 }
 
@@ -141,6 +146,7 @@ export function isFlightAudioEnabled() {
 export function updateFlightAudio(state, {
   muted = false,
   triggerHeld = false,
+  radioVoiceEnabled = true,
   nowSeconds = 0,
 } = {}) {
   if (disabled) return;
@@ -171,6 +177,9 @@ export function updateFlightAudio(state, {
     updateWarningVoices(warningVoices, context, state, {
       enabled: live,
       nowSeconds,
+    });
+    updateRadioVoice(radioVoice, context, state, {
+      enabled: live && radioVoiceEnabled,
     });
     master.gain.setTargetAtTime(live ? 0.55 : 0, context.currentTime, live ? 0.18 : 0.02);
   } catch {

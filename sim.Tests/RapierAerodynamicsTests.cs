@@ -1,0 +1,219 @@
+using GunsOnly.Sim;
+using Xunit;
+
+namespace GunsOnly.Sim.Tests;
+
+/// <summary>
+/// Contract tests for the explicit Rapier aerodynamic design module. These assert geometry
+/// arithmetic and schedule properties; integration behavior is covered by the flight-model tests.
+/// </summary>
+public class RapierAerodynamicsTests {
+    [Fact]
+    public void ReferenceGeometryMatchesClosedRapierSizing() {
+        Assert.Equal(18.0, RapierAerodynamics.ReferenceAreaM2);
+        Assert.Equal(7.35, RapierAerodynamics.SpanM);
+        Assert.Equal(3.00125, RapierAerodynamics.AspectRatio, 12);
+        Assert.Equal(
+            RapierAerodynamics.SpanM * RapierAerodynamics.SpanM
+                / RapierAerodynamics.ReferenceAreaM2,
+            RapierAerodynamics.AspectRatio,
+            12);
+        Assert.Equal(
+            RapierAerodynamics.ReferenceAreaM2 / RapierAerodynamics.SpanM,
+            RapierAerodynamics.MeanReferenceChordM,
+            12);
+    }
+
+    [Fact]
+    public void RenderedPlanformExcessIsNamedBodyOverlapNotLiftArea() {
+        Assert.Equal(24.3173, RapierAerodynamics.RenderedSolidPlanformAreaM2, 4);
+        Assert.Equal(6.3173, RapierAerodynamics.BodyOverlapNonReferenceAreaM2, 4);
+        Assert.Equal(
+            RapierAerodynamics.RenderedSolidPlanformAreaM2
+                - RapierAerodynamics.ReferenceAreaM2,
+            RapierAerodynamics.BodyOverlapNonReferenceAreaM2,
+            12);
+        // Audit distinction: the solid mesh area must not silently become S for lift.
+        Assert.True(
+            RapierAerodynamics.BodyOverlapNonReferenceAreaM2 > 0.0,
+            "body-overlap/non-reference geometry must remain a positive named residual");
+        Assert.True(
+            RapierAerodynamics.ReferenceAreaM2
+                < RapierAerodynamics.RenderedSolidPlanformAreaM2);
+    }
+
+    [Fact]
+    public void NormalLawAlphaLimitIsContinuousAndNonIncreasingAboveTransonic() {
+        // Not physical CLmax — provisional cranked-delta high-speed normal-law schedule.
+        double previous = RapierAerodynamics.NormalLawAlphaLimitRad(0.95);
+        Assert.True(previous > 0.0);
+
+        for (double mach = 0.95; mach <= 3.8; mach += 0.05) {
+            double alpha = RapierAerodynamics.NormalLawAlphaLimitRad(mach);
+            Assert.True(double.IsFinite(alpha), $"non-finite alpha limit at M{mach:F2}");
+            Assert.True(alpha > 0.0, $"alpha limit must stay positive at M{mach:F2}");
+            Assert.True(
+                alpha <= previous + 1e-12,
+                $"normal-law alpha must be non-increasing above transonic: M{mach:F2} rose from {previous} to {alpha}");
+            previous = alpha;
+        }
+
+        // Continuity: small Mach steps must not jump discontinuously.
+        for (double mach = 0.8; mach <= 3.5; mach += 0.1) {
+            double a0 = RapierAerodynamics.NormalLawAlphaLimitRad(mach);
+            double a1 = RapierAerodynamics.NormalLawAlphaLimitRad(mach + 1e-4);
+            Assert.True(
+                Math.Abs(a1 - a0) < 5e-4,
+                $"alpha-limit discontinuity near M{mach:F2}: {a0} -> {a1}");
+        }
+    }
+
+    [Fact]
+    public void ControlEffectivenessRetainsUnitySubsonicAndHalvesNearMach165() {
+        Assert.Equal(1.0, RapierAerodynamics.SupersonicControlEffectiveness(0.0), 6);
+        Assert.Equal(1.0, RapierAerodynamics.SupersonicControlEffectiveness(0.9), 6);
+        Assert.Equal(1.0, RapierAerodynamics.SupersonicControlEffectiveness(1.0), 6);
+
+        // NACA RM L52H14: elevon/control effectiveness near half by about Mach 1.65.
+        double at165 = RapierAerodynamics.SupersonicControlEffectiveness(1.65);
+        Assert.InRange(at165, 0.45, 0.55);
+
+        double previous = RapierAerodynamics.SupersonicControlEffectiveness(1.0);
+        for (double mach = 1.0; mach <= 3.5; mach += 0.05) {
+            double eta = RapierAerodynamics.SupersonicControlEffectiveness(mach);
+            Assert.True(double.IsFinite(eta));
+            Assert.InRange(eta, 0.0, 1.0);
+            Assert.True(
+                eta <= previous + 1e-12,
+                $"control effectiveness must not rise with Mach: M{mach:F2}");
+            previous = eta;
+        }
+
+        // Gentle post-1.65 decline — still positive, not a cliff.
+        double at25 = RapierAerodynamics.SupersonicControlEffectiveness(2.5);
+        Assert.True(at25 < at165);
+        Assert.True(at25 > 0.20);
+        Assert.True(at165 - at25 < 0.35);
+    }
+
+    [Fact]
+    public void ZeroDynamicPressureProducesZeroControlMoments() {
+        Assert.Equal(0.0, RapierAerodynamics.PitchControlMomentCapacityNm(0.0), 12);
+        Assert.Equal(0.0, RapierAerodynamics.YawControlMomentCapacityNm(0.0), 12);
+        Assert.Equal(0.0, RapierAerodynamics.RollControlMomentCapacityNm(0.0), 12);
+    }
+
+    [Fact]
+    public void ControlMomentCapacityScalesWithDynamicPressure() {
+        double q1 = 12_000.0;
+        double q2 = 24_000.0;
+        Assert.Equal(
+            2.0 * RapierAerodynamics.PitchControlMomentCapacityNm(q1),
+            RapierAerodynamics.PitchControlMomentCapacityNm(q2),
+            9);
+        Assert.Equal(
+            2.0 * RapierAerodynamics.YawControlMomentCapacityNm(q1),
+            RapierAerodynamics.YawControlMomentCapacityNm(q2),
+            9);
+        Assert.Equal(
+            2.0 * RapierAerodynamics.RollControlMomentCapacityNm(q1),
+            RapierAerodynamics.RollControlMomentCapacityNm(q2),
+            9);
+
+        // Pitch uses q·S·c; yaw/roll use q·S·b.
+        double pitch = RapierAerodynamics.PitchControlMomentCapacityNm(q1);
+        double yaw = RapierAerodynamics.YawControlMomentCapacityNm(q1);
+        double roll = RapierAerodynamics.RollControlMomentCapacityNm(q1);
+        Assert.Equal(
+            q1 * RapierAerodynamics.ReferenceAreaM2 * RapierAerodynamics.MeanReferenceChordM
+                * RapierAerodynamics.ProvisionalPitchControlMomentCoefficientMax,
+            pitch,
+            9);
+        Assert.Equal(
+            q1 * RapierAerodynamics.ReferenceAreaM2 * RapierAerodynamics.SpanM
+                * RapierAerodynamics.ProvisionalYawControlMomentCoefficientMax,
+            yaw,
+            9);
+        Assert.Equal(
+            q1 * RapierAerodynamics.ReferenceAreaM2 * RapierAerodynamics.SpanM
+                * RapierAerodynamics.ProvisionalRollControlMomentCoefficientMax,
+            roll,
+            9);
+    }
+
+    [Fact]
+    public void ControlMomentCapacityScalesWithConfigurationAuthority() {
+        double q = 15_000.0;
+        Assert.Equal(
+            0.5 * RapierAerodynamics.PitchControlMomentCapacityNm(q),
+            RapierAerodynamics.PitchControlMomentCapacityNm(q, configurationAuthority: 0.5),
+            9);
+        Assert.Equal(
+            0.0,
+            RapierAerodynamics.YawControlMomentCapacityNm(q, configurationAuthority: 0.0),
+            12);
+        Assert.Equal(
+            RapierAerodynamics.RollControlMomentCapacityNm(q),
+            RapierAerodynamics.RollControlMomentCapacityNm(q, configurationAuthority: 1.0),
+            12);
+        // Authority above one does not invent extra aero capacity.
+        Assert.Equal(
+            RapierAerodynamics.PitchControlMomentCapacityNm(q, 1.0),
+            RapierAerodynamics.PitchControlMomentCapacityNm(q, 1.5),
+            12);
+    }
+
+    [Fact]
+    public void SupersonicMomentCapacityUsesThePublishedEffectivenessSchedule() {
+        double q = 20_000.0;
+        double subsonic = RapierAerodynamics.PitchControlMomentCapacityNm(q, mach: 0.9);
+        double earlySupersonic =
+            RapierAerodynamics.PitchControlMomentCapacityNm(q, mach: 1.65);
+        double highSupersonic =
+            RapierAerodynamics.PitchControlMomentCapacityNm(q, mach: 3.5);
+
+        Assert.Equal(0.5 * subsonic, earlySupersonic, 9);
+        Assert.True(highSupersonic < earlySupersonic);
+        Assert.True(highSupersonic > 0.0);
+    }
+
+    [Fact]
+    public void InletFlowRecoveryDependsOnMachAndCombinedFlowAngle() {
+        // Below ram regime the surrogate reports full recovery regardless of incidence.
+        Assert.Equal(1.0, RapierAerodynamics.InletFlowRecovery(0.8, 0.4, 0.3), 6);
+        Assert.Equal(1.0, RapierAerodynamics.InletFlowRecovery(1.5, 0.5, 0.5), 6);
+        Assert.Equal(
+            1.0,
+            RapierAerodynamics.InletFlowRecovery(
+                RapierAerodynamics.RamRegimeStartMach - 1e-6, 0.6, 0.2),
+            6);
+
+        double onDesign = RapierAerodynamics.InletFlowRecovery(2.6, 0.0, 0.0);
+        Assert.Equal(1.0, onDesign, 6);
+
+        double alphaOff = RapierAerodynamics.InletFlowRecovery(2.6, 0.25, 0.0);
+        double betaOff = RapierAerodynamics.InletFlowRecovery(2.6, 0.0, 0.25);
+        double bothOff = RapierAerodynamics.InletFlowRecovery(2.6, 0.25, 0.25);
+        Assert.True(alphaOff < onDesign);
+        Assert.True(betaOff < onDesign);
+        Assert.Equal(alphaOff, betaOff, 9);
+        Assert.True(bothOff < alphaOff);
+
+        // Higher Mach makes the same off-design angle hurt more (continuous degradation).
+        double atRam = RapierAerodynamics.InletFlowRecovery(2.1, 0.20, 0.10);
+        double atHigh = RapierAerodynamics.InletFlowRecovery(3.2, 0.20, 0.10);
+        Assert.True(atHigh < atRam);
+        Assert.True(atHigh > 0.0);
+        Assert.True(atRam <= 1.0);
+
+        double justBelow = RapierAerodynamics.InletFlowRecovery(
+            RapierAerodynamics.RamRegimeStartMach - 1e-6, 0.3, 0.2);
+        double atOnset = RapierAerodynamics.InletFlowRecovery(
+            RapierAerodynamics.RamRegimeStartMach, 0.3, 0.2);
+        double justAbove = RapierAerodynamics.InletFlowRecovery(
+            RapierAerodynamics.RamRegimeStartMach + 1e-6, 0.3, 0.2);
+        Assert.Equal(1.0, justBelow, 9);
+        Assert.Equal(1.0, atOnset, 9);
+        Assert.InRange(Math.Abs(justAbove - atOnset), 0.0, 1e-8);
+    }
+}
