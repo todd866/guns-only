@@ -50,6 +50,13 @@ cp "$ukraine_source_dir/soniachne-steppe-preview.png" "$ukraine_stage_dir/"
 # wwwroot alongside the hero cell, so it has to be staged too or this diff reports it as drift.
 cp "$ukraine_source_dir/soniachne-region.truth" "$ukraine_stage_dir/"
 cp "$ukraine_source_dir/soniachne-theatre-preview.png" "$ukraine_stage_dir/"
+# Soft-world atmosphere (ADR-0003) for Ukraine lab / presentation wiring.
+ukraine_env_dir="content/packs/ukraine-modern/environment"
+ukraine_env_stage="$staged_content_dir/packs/ukraine-modern/environment"
+mkdir -p "$ukraine_env_stage"
+if [ -f "$ukraine_env_dir/atmosphere.material.json" ]; then
+  cp "$ukraine_env_dir/atmosphere.material.json" "$ukraine_env_stage/"
+fi
 # Rapier-range atlas (eastern corridor). Source of truth under content/; wwwroot is a staged copy.
 ukraine_atlas_source="content/packs/ukraine-modern/environment/terrain-atlas"
 ukraine_atlas_stage="$staged_content_dir/packs/ukraine-modern/environment/terrain-atlas"

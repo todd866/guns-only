@@ -410,7 +410,25 @@ class CarvedTerrainSurface:
         return carved, water
 
 
-def wgs84_to_utm(latitude_deg: np.ndarray | float, longitude_deg: np.ndarray | float):
+def central_meridian_radians(central_meridian_deg: float | None = None) -> float:
+    if central_meridian_deg is None:
+        return UTM_CENTRAL_MERIDIAN
+    return math.radians(float(central_meridian_deg))
+
+
+def central_meridian_deg_for_region(region: dict[str, object]) -> float:
+    if region.get("centralMeridianDeg") is not None:
+        return float(region["centralMeridianDeg"])
+    crs = str(region.get("workingCrs", "EPSG:32652"))
+    if crs.startswith("EPSG:326") and crs[8:].isdigit():
+        zone = int(crs[8:])
+        return float(zone * 6 - 183)
+    return float(UTM_ZONE * 6 - 183)
+
+
+def wgs84_to_utm(latitude_deg: np.ndarray | float, longitude_deg: np.ndarray | float,
+                 central_meridian_deg: float | None = None):
+    meridian0 = central_meridian_radians(central_meridian_deg)
     latitude = np.radians(latitude_deg)
     longitude = np.radians(longitude_deg)
     sine = np.sin(latitude)
@@ -419,7 +437,7 @@ def wgs84_to_utm(latitude_deg: np.ndarray | float, longitude_deg: np.ndarray | f
     radius = WGS84_A / np.sqrt(1.0 - WGS84_E2 * sine * sine)
     t = tangent * tangent
     c = WGS84_EP2 * cosine * cosine
-    a = cosine * (longitude - UTM_CENTRAL_MERIDIAN)
+    a = cosine * (longitude - meridian0)
     e4 = WGS84_E2 * WGS84_E2
     e6 = e4 * WGS84_E2
     meridian = WGS84_A * (
@@ -445,7 +463,9 @@ def wgs84_to_utm(latitude_deg: np.ndarray | float, longitude_deg: np.ndarray | f
     return easting, northing
 
 
-def utm_to_wgs84(easting_m: np.ndarray, northing_m: np.ndarray):
+def utm_to_wgs84(easting_m: np.ndarray, northing_m: np.ndarray,
+                 central_meridian_deg: float | None = None):
+    meridian0 = central_meridian_radians(central_meridian_deg)
     e4 = WGS84_E2 * WGS84_E2
     e6 = e4 * WGS84_E2
     meridian = northing_m / UTM_K0
@@ -475,7 +495,7 @@ def utm_to_wgs84(easting_m: np.ndarray, northing_m: np.ndarray):
         + (61.0 + 90.0 * t1 + 298.0 * c1 + 45.0 * t1 * t1
            - 252.0 * WGS84_EP2 - 3.0 * c1 * c1) * d**6 / 720.0
     )
-    longitude = UTM_CENTRAL_MERIDIAN + (
+    longitude = meridian0 + (
         d - (1.0 + 2.0 * t1 + c1) * d**3 / 6.0
         + (5.0 - 2.0 * c1 + 28.0 * t1 - 3.0 * c1 * c1
            + 8.0 * WGS84_EP2 + 24.0 * t1 * t1) * d**5 / 120.0

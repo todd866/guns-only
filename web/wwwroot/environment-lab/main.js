@@ -10,19 +10,24 @@ if (terrainLookMode) document.documentElement.dataset.terrainLook = "true";
 const PRODUCTION_SUN_DIRECTION = new THREE.Vector3(0.32, 0.78, -0.53).normalize();
 const VISUAL_PROFILE_URL = "../content/packs/korea-1950s/visual-profile.json";
 const SITE_CONFIGURATIONS = Object.freeze({
-  ukraine: Object.freeze({
-    label: "Soniachne Steppe · fictional Ukraine",
-    manifestUrl: new URL(
-      "../content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json",
-      import.meta.url,
-    ).href,
-    sceneryEra: "ukraine-modern",
-    inland: true,
-    weatherId: "weather.ukraine-training.soniachne-broken-cumulus.v1",
-  }),
+    ukraine: Object.freeze({
+      label: "Ukraine jet-range · real DEM (fictional strip)",
+      manifestUrl: new URL(
+        "../content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json",
+        import.meta.url,
+      ).href,
+      atmosphereUrl: new URL(
+        "../content/packs/ukraine-modern/environment/atmosphere.material.json",
+        import.meta.url,
+      ).href,
+      sceneryEra: "ukraine-modern",
+      inland: true,
+      weatherId: "weather.ukraine-training.soniachne-broken-cumulus.v1",
+    }),
   "korea-modern": Object.freeze({
     label: "Korea central front · modern treatment",
     manifestUrl: null,
+    atmosphereUrl: null,
     sceneryEra: "modern",
     inland: false,
     weatherId: "weather.korea-2030s.drone-front-cumulus.v1",
@@ -30,6 +35,7 @@ const SITE_CONFIGURATIONS = Object.freeze({
   "korea-1950s": Object.freeze({
     label: "Korea central front · 1950s treatment",
     manifestUrl: null,
+    atmosphereUrl: null,
     sceneryEra: "1950s",
     inland: false,
     weatherId: "weather.korea-1950s.inland-cumulus.v1",
@@ -88,8 +94,8 @@ let environment = null;
 let terrain = null;
 let tacticalClouds = null;
 let visualProfile = null;
-const terrainFogColor = new THREE.Color(0xa8c1cc);
-let terrainFogDensity = 1 / 56_000;
+const terrainFogColor = new THREE.Color(0xd2c4a8);
+let terrainFogDensity = 1 / 48_000;
 let elapsed = 0;
 let previous = performance.now();
 
@@ -102,10 +108,20 @@ function siteConfiguration() {
 
 function setCameraView() {
   const height = Number(altitude.value);
-  // Mission-like low-level look: from the player start toward the road-aligned settlement east of
-  // the first intercept lane. The old 5 km empty-parcel view made valid scenery read as absent.
-  camera.position.set(-250, height, -450);
-  controls.target.set(-760, Math.max(85, height * 0.28), -1900);
+  // High-altitude default reads country relief; drop the slider for low-level soft-world checks.
+  if (height >= 2_500) {
+    camera.position.set(-12_000, height, 18_000);
+    controls.target.set(-40_000, Math.max(120, height * 0.05), -8_000);
+  } else if (site.value === "ukraine") {
+    // Low over the rewild plain: keep the camera above typical DEM (~50–120 m) and look out
+    // across succession country rather than into a near wall of ground.
+    const eye = Math.max(height, 140);
+    camera.position.set(-2_400, eye, 3_200);
+    controls.target.set(-6_500, Math.max(60, eye * 0.18), -1_200);
+  } else {
+    camera.position.set(-250, height, -450);
+    controls.target.set(-760, Math.max(85, height * 0.28), -1_900);
+  }
   controls.update();
   document.querySelector("#altitude-value").value = `${Math.round(height).toLocaleString()} m`;
 }
@@ -159,8 +175,17 @@ function applyProductionProfile(profile) {
   ambient.intensity = Number(lighting.ambientIntensity) || 1.35;
   sun.intensity = Number(lighting.sunIntensity) || 2.4;
   sun.color.set(lighting.sunColor ?? "#FFE3B7");
-  terrainFogColor.set(fog.color ?? "#A8C1CC");
-  terrainFogDensity = 1 / Math.max(1, Number(fog.farMetres) || 56_000);
+  // Ukraine soft-world wants warm dusty distance; the Korea visual profile's cool fog would
+  // wash ADR-0003 back into poster blue.
+  if (site.value === "ukraine") {
+    terrainFogColor.set("#D2C4A8");
+    terrainFogDensity = 1 / Math.max(1, Number(fog.farMetres) || 48_000);
+    renderer.toneMappingExposure = Math.max(renderer.toneMappingExposure, 1.08);
+    ambient.intensity = Math.max(ambient.intensity, 1.45);
+  } else {
+    terrainFogColor.set(fog.color ?? "#A8C1CC");
+    terrainFogDensity = 1 / Math.max(1, Number(fog.farMetres) || 56_000);
+  }
 }
 
 function terrainFrame(deltaSeconds = 0) {
@@ -182,7 +207,13 @@ async function rebuild() {
   terrain?.dispose();
   tacticalClouds?.dispose();
   [environment, visualProfile] = await Promise.all([
-    loadKoreaEnvironment(THREE, { qualityTier: quality.value }),
+    loadKoreaEnvironment(THREE, {
+      qualityTier: quality.value,
+      ...(siteConfig.atmosphereUrl ? { atmosphereUrl: siteConfig.atmosphereUrl } : {}),
+      fogColor: site.value === "ukraine" ? "#D2C4A8" : undefined,
+      fogNear: site.value === "ukraine" ? 7_500 : undefined,
+      fogFar: site.value === "ukraine" ? 48_000 : undefined,
+    }),
     loadVisualProfile(),
   ]);
   applyProductionProfile(visualProfile);
@@ -201,6 +232,16 @@ async function rebuild() {
   });
   await terrain.ready;
   scene.add(terrain.group);
+  // Atlas pages stream after the first camera update. The compact Soniachne product embeds
+  // chunks in `ready`; the geodetic atlas would otherwise fail the residentChunks gate with an
+  // empty skybox.
+  setCameraView();
+  terrain.update(terrainFrame(0));
+  if (typeof terrain.whenIdle === "function") {
+    await terrain.whenIdle();
+    terrain.update(terrainFrame(0));
+    await terrain.whenIdle();
+  }
   // The authored pack clouds remain an art-reference fixture. This lab now exercises the exact
   // authoritative module admitted to FlightView, including the mobile impostor fallback.
   for (const cloud of environment.clouds) cloud.visible = false;
@@ -273,8 +314,11 @@ function animate(now) {
   terrain?.update(terrainFrame(delta));
   if (tacticalClouds) {
     tacticalClouds.group.visible = clouds.checked && !terrainLookMode;
-    tacticalClouds.update(camera.position, elapsed, new THREE.Color(0x7898a0),
-      0.000055, sunDirection());
+    const cloudFog = site.value === "ukraine"
+      ? new THREE.Color(0xd2c4a8)
+      : new THREE.Color(0x7898a0);
+    tacticalClouds.update(camera.position, elapsed, cloudFog,
+      site.value === "ukraine" ? 0.000048 : 0.000055, sunDirection());
   }
   renderer.render(scene, camera);
 }

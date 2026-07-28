@@ -4817,6 +4817,22 @@ class FlightView {
   ensureTerrainPresentation(state = null) {
     this.configureTerrainMission(state);
     const ukraineTheatre = state?.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID;
+    // ADR-0003 soft world: warm dusty atmosphere for the Ukraine theatre without flipping the
+    // Korea pack-environment kill switch. Decision-support sky stays the production path.
+    if (this.sky?.uniforms?.uSoftWorld) {
+      this.sky.uniforms.uSoftWorld.value = ukraineTheatre ? 1 : 0;
+    }
+    if (ukraineTheatre) {
+      this.fogLow.set(0xd2c4a8);
+      this.fogHigh.set(0x5a7088);
+      this.cloudFogColor.set(0xd2c4a8);
+      if (this.sea?.mesh) this.sea.mesh.visible = false;
+    } else {
+      this.fogLow.set(0x6f8790);
+      this.fogHigh.set(0x263d55);
+      this.cloudFogColor.set(0xb8c6c8);
+      if (this.sea?.mesh) this.sea.mesh.visible = true;
+    }
     const terrainPackId = this.presentationAssets.requested.packId
       || this.presentationAssets.activePack?.id || "korea-1950s";
     const sceneryEra = ukraineTheatre

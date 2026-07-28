@@ -356,13 +356,13 @@ void main() {
   // Sage/olive lowlands, umber slopes and cool-grey ridges form the authored modern-era bands.
   // Values stay deliberately below the old pale-bone range so ACES preserves colour separation.
   #ifdef UKRAINE_SCENERY
-  // Fictional Ukrainian training-sector palette (ADR-0003 soft world): sunlit wheat/grass planes,
-  // dark shelterbelt country, and warm low relief. Regional visual grammar over metre-true
-  // synthetic terrain — not live-war imagery or a claim about a real locality.
-  vec3 sValley = vec3(0.36, 0.38, 0.12);
-  vec3 sFoothill = vec3(0.24, 0.30, 0.095);
-  vec3 sUpland = vec3(0.18, 0.24, 0.090);
-  vec3 sRock = vec3(0.38, 0.30, 0.18);
+  // ADR-0003 soft world + Stage C rewild: continent-scale human no-go that reads as succession —
+  // meadow → scrub → young woodland — not a live cadastral crop map. Metre-true DEM underneath;
+  // fictional strip / no identifiable live-war locality.
+  vec3 sValley = vec3(0.38, 0.52, 0.24);
+  vec3 sFoothill = vec3(0.28, 0.42, 0.18);
+  vec3 sUpland = vec3(0.22, 0.34, 0.15);
+  vec3 sRock = vec3(0.36, 0.32, 0.24);
   vec3 sRidge = vec3(0.40, 0.38, 0.32);
   #else
   vec3 sValley = vec3(0.15, 0.24, 0.055);
@@ -380,40 +380,26 @@ void main() {
   float ukraineElevationBand = smoothstep(22.0, 40.0, vTerrainHeight) * 0.20
     + smoothstep(58.0, 82.0, vTerrainHeight) * 0.31
     + smoothstep(105.0, 138.0, vTerrainHeight) * 0.49;
-  sAlbedo = mix(sValley, sFoothill, ukraineElevationBand * 0.78);
+  sAlbedo = mix(sValley, sFoothill, ukraineElevationBand * 0.68);
   sAlbedo = mix(sAlbedo, sUpland,
-    smoothstep(128.0, 158.0, vTerrainHeight) * 0.24);
+    smoothstep(128.0, 158.0, vTerrainHeight) * 0.20);
 
-  // A rotated, kilometre-scale cadastral grid gives the theatre a stable agricultural identity
-  // after ambient trees and buildings are shed. One deterministic cell hash selects among four
-  // painterly crop values; the old broad wash used two sin() calls and still averaged to olive.
-  // These 4.4 km x 3.1 km aggregate parcels stay above a Rapier pixel footprint and below theatre
-  // scale. Every third row is offset so the result reads as districts, not a checkerboard.
-  float macroFieldEastM = vTerrainWorldPosition.x * 0.940
-    + vTerrainWorldPosition.z * 0.342;
-  float macroFieldNorthM = vTerrainWorldPosition.z * 0.940
-    - vTerrainWorldPosition.x * 0.342;
-  float macroDistrictRow = floor(macroFieldNorthM / 9300.0);
-  vec2 macroParcelPosition = vec2(
-    macroFieldEastM + macroDistrictRow * 1150.0,
-    macroFieldNorthM);
-  vec2 macroParcelCell = floor(macroParcelPosition / vec2(4400.0, 3100.0));
-  vec2 macroParcelLocal = fract(macroParcelPosition / vec2(4400.0, 3100.0));
-  float parcelHash = fract(sin(dot(macroParcelCell, vec2(127.1, 311.7))) * 43758.5453);
-  float parcelEdgeDistance = min(
-    min(macroParcelLocal.x, 1.0 - macroParcelLocal.x),
-    min(macroParcelLocal.y, 1.0 - macroParcelLocal.y));
-  float parcelBoundary = 1.0 - smoothstep(0.018, 0.065, parcelEdgeDistance);
-  // Soft-world crops: young green, ripe wheat, sunflower gold, dark shelterbelt edge.
-  vec3 cultivation = mix(vec3(0.16, 0.28, 0.075), vec3(0.28, 0.36, 0.095),
-    smoothstep(0.10, 0.38, parcelHash));
-  cultivation = mix(cultivation, vec3(0.42, 0.30, 0.080),
-    smoothstep(0.43, 0.64, parcelHash));
-  cultivation = mix(cultivation, vec3(0.58, 0.44, 0.11),
-    smoothstep(0.70, 0.90, parcelHash));
-  cultivation = mix(cultivation, vec3(0.12, 0.18, 0.065), parcelBoundary * 0.28);
-  float macroArable = (1.0 - smoothstep(0.025, 0.14, steepness))
-    * (1.0 - smoothstep(138.0, 158.0, vTerrainHeight));
+  // Soft organic rewild wash. Multi-scale noise stays continuous — no parcel lattice, no crop
+  // rectangles. Value drifts meadow → scrub → canopy like a painted countryside, not a map.
+  vec2 rewildUv = vTerrainWorldPosition.xz * vec2(0.000085, 0.000072);
+  float rewildA = 0.5 + 0.5 * sin(rewildUv.x * 4.2 + sin(rewildUv.y * 3.1) * 1.8);
+  float rewildB = 0.5 + 0.5 * sin(rewildUv.y * 5.8 - sin(rewildUv.x * 3.6) * 1.4);
+  float rewildC = 0.5 + 0.5 * sin((rewildUv.x + rewildUv.y) * 8.5
+    + sin(rewildUv.x * 1.7 - rewildUv.y * 1.4) * 2.2);
+  float succession = clamp(
+    rewildA * 0.50 + rewildB * 0.32 + rewildC * 0.18, 0.0, 1.0);
+  // Lush meadow, cooler scrub, deeper woodland canopy — Ghibli-adjacent countryside greens.
+  vec3 rewildCover = mix(vec3(0.42, 0.58, 0.26), vec3(0.28, 0.46, 0.20),
+    smoothstep(0.22, 0.55, succession));
+  rewildCover = mix(rewildCover, vec3(0.16, 0.32, 0.14),
+    smoothstep(0.62, 0.92, succession));
+  float rewildFloor = (1.0 - smoothstep(0.05, 0.20, steepness))
+    * (1.0 - smoothstep(145.0, 165.0, vTerrainHeight));
   #else
   float patchwork = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.00023
     + sin(vTerrainWorldPosition.z * 0.00017) * 2.3);
@@ -421,21 +407,21 @@ void main() {
     smoothstep(0.32, 0.68, patchwork));
   #endif
   #ifdef UKRAINE_SCENERY
-  sAlbedo = mix(sAlbedo, cultivation,
-    macroArable * (0.58 + (1.0 - ukraineElevationBand) * 0.16));
-  sAlbedo *= mix(1.07, 0.84, ukraineElevationBand);
+  sAlbedo = mix(sAlbedo, rewildCover,
+    rewildFloor * (0.72 + (1.0 - ukraineElevationBand) * 0.12));
+  sAlbedo *= mix(1.06, 0.92, ukraineElevationBand);
   #else
   sAlbedo = mix(sAlbedo, cultivation, valleyFloor * (0.34 + patchwork * 0.30));
   #endif
-  sAlbedo = mix(sAlbedo, sRock, slopeFace * (0.24 + upperSlope * 0.56));
-  sAlbedo = mix(sAlbedo, sRidge, max(highRidge * 0.68, exposedFace * 0.78));
+  sAlbedo = mix(sAlbedo, sRock, slopeFace * (0.20 + upperSlope * 0.48));
+  sAlbedo = mix(sAlbedo, sRidge, max(highRidge * 0.55, exposedFace * 0.62));
   float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
   halfLambert *= halfLambert;
   #ifdef UKRAINE_SCENERY
   // Continuous soft lighting — painterly value without the hard two-step toon posterization.
   float toneRamp = uShadowFloor
-    + (1.0 - uShadowFloor) * mix(0.52, 1.0, halfLambert);
-  vec3 rimTint = vec3(0.14, 0.10, 0.055);
+    + (1.0 - uShadowFloor) * mix(0.62, 1.0, halfLambert);
+  vec3 rimTint = vec3(0.18, 0.14, 0.07);
   #else
   float toneRamp = uShadowFloor
     + (1.0 - uShadowFloor) * (0.42 * smoothstep(0.26, 0.40, halfLambert)
@@ -451,9 +437,9 @@ void main() {
   // terrain still separates without hard toon steps, textures, or micro-scenery at altitude.
   vec2 regionalSunDirection = normalize(uSunDirection.xz + vec2(0.0001));
   float regionalReliefLight = clamp(
-    0.94 + dot(normal.xz, regionalSunDirection) * 10.0,
-    0.80,
-    1.06);
+    0.96 + dot(normal.xz, regionalSunDirection) * 7.5,
+    0.86,
+    1.04);
   stylizedLit *= regionalReliefLight;
   #endif
 
@@ -485,6 +471,14 @@ void main() {
   waterLit += vec3(0.88, 0.82, 0.66)
     * pow(max(dot(normal, waterHalf), 0.0), 96.0) * 0.42;
   float waterMask = smoothstep(0.18, 0.82, vTerrainWater);
+  #ifdef UKRAINE_SCENERY
+  // Softer pond/river body — teal glass rather than electric map-blue.
+  waterLit = mix(vec3(0.06, 0.18, 0.20), vec3(0.16, 0.34, 0.36),
+    0.30 + waterFresnel * 0.48);
+  waterLit *= 0.96 + waterRipple * 0.028;
+  waterLit += vec3(0.90, 0.84, 0.68)
+    * pow(max(dot(normal, waterHalf), 0.0), 72.0) * 0.28;
+  #endif
   lit = mix(lit, waterLit, waterMask);
 
   // Aerial perspective: period haze whites the world out from altitude. Korea-modern thins
@@ -492,8 +486,9 @@ void main() {
   // reads as atmosphere rather than a blue poster wash.
   #ifdef MODERN_SCENERY
   #ifdef UKRAINE_SCENERY
-  float fogDensity = uFogDensity * 0.36;
-  vec3 hazeColor = mix(uFogColor, vec3(0.72, 0.66, 0.54), 0.55);
+  float fogDensity = uFogDensity * 0.42;
+  // Warm dusty atmosphere — Ghibli-adjacent distance, not cool poster blue.
+  vec3 hazeColor = mix(uFogColor, vec3(0.78, 0.72, 0.58), 0.62);
   #else
   float fogDensity = uFogDensity * 0.45;
   vec3 hazeColor = vec3(0.36, 0.52, 0.68);
@@ -796,9 +791,9 @@ export function createTerrainMaterial(THREE, options = {}) {
         value: (options.sunDirection ?? new THREE.Vector3(0.32, 0.78, -0.53)).clone().normalize(),
       },
       uFogColor: {
-        value: new THREE.Color(options.fogColor ?? (ukraine ? 0xc4b59a : 0x6f8790)),
+        value: new THREE.Color(options.fogColor ?? (ukraine ? 0xd2c4a8 : 0x6f8790)),
       },
-      uFogDensity: { value: finite(options.fogDensity, ukraine ? 0.000048 : 0.000055) },
+      uFogDensity: { value: finite(options.fogDensity, ukraine ? 0.000052 : 0.000055) },
       uModernScenery: { value: illustrative ? 1 : 0 },
       // Full-detail parcel/cultivation tint only affects the period desktop treatment. Modern
       // shading discards periodLit, so skip its four otherwise invisible sin() calls there too.
@@ -808,19 +803,19 @@ export function createTerrainMaterial(THREE, options = {}) {
       // Darkest-slope lighting. The old 0.43 / 0.40 floors put every slope in the world inside the
       // top 60% of the value range, which is why densely dissected Korean terrain rendered as a
       // flat wash. Legibility now comes from value, and hue separation keeps dark slopes readable.
-      // Ukraine soft-world lifts the floor slightly so lee slopes stay painterly rather than crushed.
-      uShadowFloor: { value: finite(options.shadowFloor, ukraine ? 0.16 : 0.12) },
+      // Ukraine soft-world lifts the floor so lee slopes stay painterly rather than crushed.
+      uShadowFloor: { value: finite(options.shadowFloor, ukraine ? 0.20 : 0.12) },
       // Baked-occlusion multiplier at fully concave (x) and fully convex (y).
       uOcclusionRange: {
         value: new THREE.Vector2(
-          finite(options.occlusionMin, ukraine ? 0.62 : 0.55),
-          finite(options.occlusionMax, 1.12),
+          finite(options.occlusionMin, ukraine ? 0.70 : 0.55),
+          finite(options.occlusionMax, 1.10),
         ),
       },
       // Discrete aerial-perspective planes. Korea-modern keeps stronger banding; Ukraine softens
       // the posterization so distance reads as continuous atmosphere (ADR-0003).
-      uHazeBands: { value: finite(options.hazeBands, ukraine ? 4 : 6) },
-      uHazeBandBlend: { value: finite(options.hazeBandBlend, ukraine ? 0.28 : 0.65) },
+      uHazeBands: { value: finite(options.hazeBands, ukraine ? 3 : 6) },
+      uHazeBandBlend: { value: finite(options.hazeBandBlend, ukraine ? 0.18 : 0.65) },
     },
   });
 }
@@ -1621,7 +1616,10 @@ class KoreaTerrainAtlasPresentation {
     this.THREE = THREE;
     this.manifest = manifest;
     this.manifestUrl = manifestUrl;
-    this.fetch = options.fetch ?? fetch;
+    // Same receiver trap as TerrainBundleReader: `this.fetch(url)` would bind the atlas instance
+    // into native window.fetch and fail every page load with "Illegal invocation".
+    const fetchImpl = options.fetch ?? fetch;
+    this.fetch = (...args) => fetchImpl(...args);
     this.qualityTier = options.qualityTier ?? "balanced";
     const tierStreaming = TIER_STREAMING[this.qualityTier] ?? TIER_STREAMING.balanced;
     const thresholds = TIER_DISTANCE_METRES[this.qualityTier] ?? TIER_DISTANCE_METRES.balanced;
@@ -1653,7 +1651,10 @@ class KoreaTerrainAtlasPresentation {
     this.sceneryEra = options.sceneryEra ?? manifest.scenery?.defaultProfile ?? null;
     this.ambientSceneryEnabled = this.sceneryEra !== null;
     this.group = new THREE.Group();
-    this.group.name = "KOREA_PENINSULA_TERRAIN_ATLAS";
+    const ukraineAtlas = /^terrain\.ukraine\./.test(String(manifest.terrainId ?? ""));
+    this.group.name = ukraineAtlas
+      ? "UKRAINE_RAPIER_RANGE_TERRAIN_ATLAS"
+      : "KOREA_PENINSULA_TERRAIN_ATLAS";
     this.material = createTerrainMaterial(THREE, { ...options, sceneryEra: this.sceneryEra });
     this.skirtMaterial = createTerrainSkirtMaterial(THREE, this.material);
     this.sceneryRuntime = this.sceneryEra

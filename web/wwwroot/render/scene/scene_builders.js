@@ -2158,6 +2158,8 @@ export function createOceanGeometry(radius = 360000, radialSegments = 145, angul
 export function createDecisionSupportSky() {
   const uniforms = {
     uAltitude: { value: 0 },
+    // 0 = cool decision-support blue (Korea / default). 1 = ADR-0003 warm Ukraine soft-world.
+    uSoftWorld: { value: 0 },
   };
   const material = new THREE.ShaderMaterial({
     side: THREE.DoubleSide,
@@ -2175,14 +2177,20 @@ export function createDecisionSupportSky() {
     fragmentShader: /* glsl */ `
       precision highp float;
       uniform float uAltitude;
+      uniform float uSoftWorld;
       varying vec3 vDirection;
 
       void main() {
         vec3 direction = normalize(vDirection);
         float aboveHorizon = max(direction.y, 0.0);
         float altitudeMix = smoothstep(2500.0, 18000.0, max(uAltitude, 0.0));
-        vec3 horizon = mix(vec3(0.34, 0.47, 0.52), vec3(0.18, 0.33, 0.50), altitudeMix);
-        vec3 zenith = mix(vec3(0.035, 0.16, 0.34), vec3(0.006, 0.025, 0.105), altitudeMix);
+        vec3 horizonCool = mix(vec3(0.34, 0.47, 0.52), vec3(0.18, 0.33, 0.50), altitudeMix);
+        vec3 zenithCool = mix(vec3(0.035, 0.16, 0.34), vec3(0.006, 0.025, 0.105), altitudeMix);
+        // Warm dusty horizon, softer grey-blue zenith — Ghibli-adjacent soft world (ADR-0003).
+        vec3 horizonWarm = mix(vec3(0.90, 0.84, 0.72), vec3(0.72, 0.70, 0.62), altitudeMix);
+        vec3 zenithWarm = mix(vec3(0.28, 0.40, 0.52), vec3(0.12, 0.18, 0.28), altitudeMix);
+        vec3 horizon = mix(horizonCool, horizonWarm, uSoftWorld);
+        vec3 zenith = mix(zenithCool, zenithWarm, uSoftWorld);
         float skyCurve = pow(aboveHorizon, mix(0.42, 0.30, altitudeMix));
         vec3 color = mix(horizon, zenith, skyCurve);
 
@@ -2191,7 +2199,9 @@ export function createDecisionSupportSky() {
         float horizonShoulder = exp(-abs(direction.y) * 70.0);
         color = mix(color, horizon * 1.08, horizonShoulder * 0.38);
         if (direction.y < 0.0) {
-          color = mix(vec3(0.022, 0.075, 0.095), horizon, exp(direction.y * 16.0));
+          vec3 belowCool = vec3(0.022, 0.075, 0.095);
+          vec3 belowWarm = vec3(0.12, 0.14, 0.10);
+          color = mix(mix(belowCool, belowWarm, uSoftWorld), horizon, exp(direction.y * 16.0));
         }
 
         gl_FragColor = vec4(color, 1.0);

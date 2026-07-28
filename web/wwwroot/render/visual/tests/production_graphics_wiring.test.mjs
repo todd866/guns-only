@@ -23,6 +23,12 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /const PRODUCTION_ESCORT_PRESENTATION_ENABLED = false/);
   assert.match(source, /const PRODUCTION_NONCOMBAT_WORLD_BOGEYS_VISIBLE = false/);
   assert.match(source, /createDecisionSupportSky\(\)/);
+  assert.match(source, /uSoftWorld/,
+    "decision-support sky must expose the Ukraine soft-world atmosphere switch");
+  assert.match(source, /this\.sky\.uniforms\.uSoftWorld\.value = ukraineTheatre \? 1 : 0/,
+    "Ukraine theatre must warm the production sky without enabling the Korea pack environment");
+  assert.match(source, /this\.fogLow\.set\(0xd2c4a8\)/,
+    "Ukraine soft-world fog must lean warm dusty rather than cool Korea blue");
   assert.match(source, /createDecisionSupportSea\(\)/);
   assert.match(source,
     /const environmentFactory = PRODUCTION_PACK_ENVIRONMENT_ENABLED && isKoreaPack/);

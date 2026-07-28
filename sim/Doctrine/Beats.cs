@@ -178,7 +178,7 @@ public sealed record MissionEnvironmentContract(
 public static class Ukraine2030sTheatre {
     public const string TheatreId = "theatre.ukraine.soniachne-2030s.v1";
     public const string WorldFrameId = "world.ukraine.soniachne-2030s.v1";
-    public const string TerrainProfileId = "terrain.ukraine.soniachne-theatre.v2";
+    public const string TerrainProfileId = "terrain.ukraine.rapier-range.atlas.v1";
     public const string MacroSceneryProfile = "ukraine-2030s-macro";
     public const string MicroSceneryProfile = "ukraine-modern";
 

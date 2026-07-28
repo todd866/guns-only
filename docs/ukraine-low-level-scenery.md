@@ -36,23 +36,22 @@ as medical cover only after a stable feature entity exists in simulation truth.
 
 ## Current terrain contract
 
-- Theatre extent: 262.144 km × 262.144 km in a fictional local frame.
-- Regional truth: 1,025 × 1,025 samples at 256 m, including synthetic inland and coastal surfaces
-  for high-altitude continuity, collision, AGL, Auto-GCAS, and long-route missions.
-- Preserved detail cell: 16.384 km × 16.384 km, 513 × 513 samples at 32 m, nested at the centre of
-  the regional frame. Its original truth bytes and 32/64/128/256 m visual LODs remain unchanged.
-- Nested authority: physics queries use the 32 m override inside Soniachne and regional truth
-  elsewhere. Future finer hero or LZ patches can override both without changing the theatre frame.
-- Rendering: macro terrain is required in every theatre mission. The low-level hero contract also
-  requires micro scenery; regional missions shed ambient micro detail at high altitude and restore
-  it during descent with a wide hysteresis band.
-- Mission placement: the regional band, Soniachne detail cell, coastal recovery cell, and Rapier
-  corridor use explicit content anchors. Every current mission is a local instance and rejects the
-  multiplayer room origin; joining a room cannot move its terrain or simulation sampling.
+- Theatre extent: geodetic **rapier-range** atlas on real Copernicus DEM (`33.0–38.4°E`,
+  `46.6–50.2°N`, ~393 km class), sized for jet range. Fictional eastern strip at reference origin
+  `38.0°E`, `48.5°N`. Country-scale D2 envelope is declared in the Ukraine source lock for expansion.
+- Streamed truth: schema-v2 range-addressable atlas pages (32 m finest LOD); Copernicus water mask
+  supplies coast / lake / river classification.
+- Legacy synthetic Soniachne (`soniachne-steppe.*`) remains on disk for comparison but is not the
+  Rapier / environment-lab default.
+- Nested authority: atlas DEM is flight-continuity and visual truth for regional sorties. Future
+  finer hero / LZ patches can override locally without inventing a second theatre.
+- Rendering: macro/atlas terrain is required. Ambient micro scenery uses `ukraine-modern` and may
+  shed at high altitude with hysteresis.
+- Mission placement: Rapier corridor and other missions are local instances on this geodetic frame;
+  they reject the multiplayer room origin until protocol v3.
 
-The 256 m regional layer is flight-continuity truth, not landing-zone truth. The 32 m detail layer
-supports low-level fixed-wing flight and authored routes, but it is still too coarse to validate a
-rotorcraft landing area.
+The atlas layer is flight-continuity truth, not landing-zone truth. Authored 1–2 m hero cells are
+still required before rotorcraft LZ validation.
 
 Sharing a physical theatre identity does not currently mean sharing one live flight instance.
 Presence protocol v2 does not attach authoritative world-frame and mission-instance identity to

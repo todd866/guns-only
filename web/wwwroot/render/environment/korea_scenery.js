@@ -193,70 +193,72 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
   "ukraine-modern": Object.freeze({
     id: "ukraine-modern",
     theatre: "ukraine",
-    period: "fictional-modern-training-sector",
+    period: "fictional-modern-rewild-zone",
     trainingSector: true,
     seedSalt: 0x26_07_0001,
-    // Ukraine's lowland read comes from large cultivated parcels, road-aligned villages and
-    // shelterbelts rather than a generic forest scatter. Counts remain bounded by the same mobile
-    // budgets as Korea; the profile changes composition, not the renderer contract.
-    treeDensityPerKm2: 24,
-    buildingDensityPerKm2: 9.5,
-    fieldDensityPerKm2: 9.2,
-    treeLimitScale: 0.82,
-    buildingLimitScale: 1,
-    fieldLimitScale: 1,
-    settlementClusters: 5,
-    settlementSpread01: 0.043,
-    shelterbeltBands: 2,
-    shelterbeltRowChance: 0.90,
-    shelterbeltColumnChance: 0.75,
-    shelterbeltSpacingM: 82,
-    maximumTreeSlope: 0.42,
-    maximumBuildingSlope: 0.095,
-    maximumFieldSlope: 0.065,
-    maximumRoadSlope: 0.18,
-    maximumRoadGrade: 0.11,
-    maximumRailSlope: 0.10,
-    maximumRailGrade: 0.045,
-    maximumSettlementHeightM: 360,
-    maximumFieldHeightM: 320,
-    treeHeightM: [7, 18],
-    buildingWidthM: [7, 22],
-    buildingDepthM: [6, 24],
-    buildingHeightM: [3.1, 9.5],
-    fieldWidthM: [240, 720],
-    fieldDepthM: [320, 980],
-    fieldRowSpacingM: 18,
-    fieldRowWidthM: 3.4,
-    roadWidthM: [5.5, 10.5],
-    roadSegmentM: 105,
-    roadRowChance: 0.56,
-    roadColumnChance: 0.46,
-    railSegmentM: 145,
-    railRowChance: 0.22,
-    railColumnChance: 0.16,
-    powerRowChance: 0.46,
-    powerColumnChance: 0.38,
-    powerPoleSpacingM: 145,
-    powerPoleHeightM: [12, 24],
-    airfieldChance: 0.009,
+    // Stage C rewild: continent-scale human no-go. Sparse canopy and rare compounds; fields are
+    // ghost meadows, not a village map. Settlement remains edge/island work for later bind.
+    treeDensityPerKm2: 56,
+    buildingDensityPerKm2: 0.8,
+    fieldDensityPerKm2: 0.35,
+    treeLimitScale: 1.12,
+    buildingLimitScale: 0.35,
+    fieldLimitScale: 0.25,
+    settlementClusters: 2,
+    settlementSpread01: 0.028,
+    shelterbeltBands: 1,
+    shelterbeltRowChance: 0.55,
+    shelterbeltColumnChance: 0.40,
+    shelterbeltSpacingM: 110,
+    maximumTreeSlope: 0.48,
+    maximumBuildingSlope: 0.08,
+    maximumFieldSlope: 0.055,
+    maximumRoadSlope: 0.16,
+    maximumRoadGrade: 0.10,
+    maximumRailSlope: 0.09,
+    maximumRailGrade: 0.04,
+    maximumSettlementHeightM: 340,
+    maximumFieldHeightM: 300,
+    treeHeightM: [8, 22],
+    buildingWidthM: [6, 16],
+    buildingDepthM: [5, 18],
+    buildingHeightM: [2.8, 7.5],
+    fieldWidthM: [180, 520],
+    fieldDepthM: [220, 680],
+    fieldRowSpacingM: 0,
+    fieldRowWidthM: 0,
+    roadWidthM: [4.5, 8.5],
+    roadSegmentM: 130,
+    roadRowChance: 0.28,
+    roadColumnChance: 0.22,
+    railSegmentM: 160,
+    railRowChance: 0.10,
+    railColumnChance: 0.08,
+    powerRowChance: 0.18,
+    powerColumnChance: 0.14,
+    powerPoleSpacingM: 160,
+    powerPoleHeightM: [10, 18],
+    airfieldChance: 0.002,
     runwayLengthM: [1_100, 2_400],
     runwayWidthM: [30, 48],
-    highRiseChance: 0.025,
-    // Softer value steps than Korea-modern toon ramps — soft world, cold instruments (ADR-0003).
-    toonSteps: Object.freeze([64, 118, 178, 232]),
-    crownColor: 0x3f6a3c,
-    crownColors: Object.freeze([0x2a5230, 0x3a6b3c, 0x55824c, 0x244828]),
+    highRiseChance: 0.0,
+    // Soft canopy blobs instead of faceted fir cones — Ghibli-adjacent silhouettes at low AGL.
+    crownShape: "soft-canopy",
+    softLit: true,
+    // Continuous-ish value ladder; softLit uses Lambert so these are a fallback only.
+    toonSteps: Object.freeze([96, 148, 198, 238]),
+    crownColor: 0x3a6a38,
+    crownColors: Object.freeze([0x2a5230, 0x3a6b3c, 0x4e7a48, 0x244828, 0x5a824c, 0x6a8a52]),
     trunkColor: 0x6a5340,
     buildingColor: 0xc4b8a0,
-    buildingColors: Object.freeze([0xc9b89a, 0xddd0b4, 0xaeb4a6, 0xd0c0aa]),
+    buildingColors: Object.freeze([0xc9b89a, 0xd8ccb0, 0xaeb4a6, 0xd0c0aa]),
     roofColor: 0x7a4a3c,
-    // Red sheet metal, weathered grey and the occasional blue roof make a village readable from
-    // treetop height without leaning on flags, labels or real-world target imagery.
-    roofColors: Object.freeze([0x8a4e3c, 0x5a6468, 0x4a7890, 0x725848]),
-    fieldColor: 0xb08a3c,
-    fieldColors: Object.freeze([0xc9a045, 0x8a9848, 0x7a8a42, 0xb07a38, 0x5e7a3c]),
-    fieldRowColor: 0x6a6038,
+    // Quiet weathered roofs — readable at low AGL without tourist kitsch.
+    roofColors: Object.freeze([0x8a4e3c, 0x5a6468, 0x725848, 0x6a5850]),
+    fieldColor: 0x6a8a48,
+    // Soft meadow / scrub scars — not ripe wheat parcels.
+    fieldColors: Object.freeze([0x6e904c, 0x5a7a42, 0x7a8a50, 0x8a8450, 0x4e7040]),
+    fieldRowColor: 0x5a6840,
     roadColor: 0x5c5a56,
     roadMarkingColor: 0xe4d8b8,
     railBedColor: 0x524e48,
@@ -470,6 +472,7 @@ function appendRoutes(target, routes, limit, decoded, spanEastM, spanNorthM, opt
 
 function fieldRowSegments(fields, profile, limit) {
   const rows = [];
+  if (!(profile.fieldRowSpacingM > 0) || !(profile.fieldRowWidthM > 0)) return rows;
   for (let fieldIndex = 0; fieldIndex < fields.length && rows.length < limit; fieldIndex++) {
     const field = fields[fieldIndex];
     const desired = Math.max(1, Math.floor(field.widthM / profile.fieldRowSpacingM) - 1);
@@ -917,9 +920,27 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   // scenery to literal LOD0 therefore made every building, tree and road disappear on those tiers.
   // Permit their nearest selectable LOD while still avoiding duplicate dressing on farther rings.
   const maximumSceneryLevel = qualityTier === "desktop" ? 0 : 1;
-  const crownPrimitive = new THREE.ConeGeometry(1, 1, 7, 1);
-  crownPrimitive.translate(0, 0.5, 0);
-  const trunkPrimitive = new THREE.CylinderGeometry(0.12, 0.18, 1, 5, 1);
+  const softCanopy = profile.crownShape === "soft-canopy";
+  // Ukraine soft-world: rounded canopy ellipsoids. Korea eras keep the cheap faceted cone stands.
+  const crownPrimitive = softCanopy
+    ? (() => {
+      const geometry = new THREE.SphereGeometry(1, 11, 8);
+      geometry.scale(1.05, 0.78, 1.05);
+      geometry.translate(0, 0.78, 0);
+      return geometry;
+    })()
+    : (() => {
+      const geometry = new THREE.ConeGeometry(1, 1, 7, 1);
+      geometry.translate(0, 0.5, 0);
+      return geometry;
+    })();
+  const trunkPrimitive = new THREE.CylinderGeometry(
+    softCanopy ? 0.09 : 0.12,
+    softCanopy ? 0.14 : 0.18,
+    1,
+    softCanopy ? 6 : 5,
+    1,
+  );
   trunkPrimitive.translate(0, 0.5, 0);
   const treeStandGeometry = createTreeStandGeometry(crownPrimitive, trunkPrimitive);
   const crownGeometry = treeStandGeometry.crowns;
@@ -937,7 +958,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const segmentGeometry = new THREE.BoxGeometry(1, 1, 1);
   const poleGeometry = new THREE.CylinderGeometry(0.08, 0.13, 1, 6, 1);
   poleGeometry.translate(0, 0.5, 0);
-  const toonGradient = profile.toonSteps
+  const toonGradient = !profile.softLit && profile.toonSteps
     ? new THREE.DataTexture(
       Uint8Array.from(profile.toonSteps),
       profile.toonSteps.length,
@@ -956,6 +977,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   // A restrained material-local sky fill keeps sub-pixel procedural instances legible even if a
   // diagnostic scene momentarily stages them before its production lights. It is not a glow: the
   // shipped hemisphere and sun still provide nearly all of the final Lambert response.
+  const softLit = profile.softLit === true;
   const litMaterial = (color, emissive = color) => toonGradient
     ? new THREE.MeshToonMaterial({
       color,
@@ -966,7 +988,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     : new THREE.MeshLambertMaterial({
       color,
       emissive,
-      emissiveIntensity: 0.14,
+      emissiveIntensity: softLit ? 0.08 : 0.14,
     });
   // Two of these layers are coplanar with their own parent slab BY CONSTRUCTION, not by terrain
   // accident: field rows take their Y from the same `field.y` mean the field slab uses, and road
@@ -1057,7 +1079,11 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
           const tree = plan.trees[index];
           quaternion.setFromAxisAngle(yAxis, tree.yaw);
           position.set(tree.x, tree.y, tree.z);
-          scale.set(tree.heightM * 0.32 * tree.widthScale, tree.heightM, tree.heightM * 0.32);
+          scale.set(
+            tree.heightM * (softCanopy ? 0.42 : 0.32) * tree.widthScale,
+            tree.heightM * (softCanopy ? 0.92 : 1),
+            tree.heightM * (softCanopy ? 0.42 : 0.32),
+          );
           setMatrix(THREE, crowns, index, position, quaternion, scale, matrix);
           setPaletteColor(crownColors, index, crownPalette[tree.crownVariant]);
         }

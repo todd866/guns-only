@@ -51,3 +51,9 @@ analysis/art-refs/**/*.gif
 # Ukraine geodetic atlas page bundles (~400 MiB); rebuild from locked Copernicus cache.
 content/packs/ukraine-modern/environment/terrain-atlas/pages/
 web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas/pages/
+
+# Local jet-audio listen renders (regenerate via preview/wav_dump_server.mjs)
+web/wwwroot/render/audio/preview/out/
+
+# Local reference cockpit pulls for A/B (not redistributed)
+web/wwwroot/render/audio/preview/ref/

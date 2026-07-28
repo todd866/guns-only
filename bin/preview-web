@@ -1,0 +1,75 @@
+#!/bin/sh
+# Publish the web shell, stage the Ukraine geodetic atlas, and serve a local preview.
+# Prefer: bin/preview-web
+# Optional: PORT=8878 bin/preview-web   OPEN=0 bin/preview-web
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$repo_dir"
+
+port=${PORT:-8877}
+out_dir=${GUNS_PREVIEW_OUT:-/tmp/guns-only-web}
+atlas_src=$repo_dir/web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas
+open_browser=${OPEN:-1}
+
+if [ -x "$HOME/.dotnet/dotnet" ]; then
+    export PATH="$HOME/.dotnet:$PATH"
+    export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
+fi
+dotnet_cli=${GUNS_DOTNET_CLI:-dotnet}
+command -v "$dotnet_cli" >/dev/null 2>&1 || {
+    echo "preview-web: dotnet CLI is unavailable (tried PATH and \$HOME/.dotnet)" >&2
+    exit 1
+}
+
+echo "preview-web: publishing with $($dotnet_cli --version) → $out_dir"
+"$dotnet_cli" publish web/GunsOnly.Web.csproj -c Release -o "$out_dir"
+
+if [ -d "$atlas_src/pages" ] && [ -f "$atlas_src/rapier-range.atlas.manifest.json" ]; then
+    echo "preview-web: staging Ukraine jet-range atlas"
+    mkdir -p "$out_dir/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas"
+    rsync -a --delete "$atlas_src/" \
+        "$out_dir/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas/"
+else
+    echo "preview-web: WARNING — atlas pages missing at $atlas_src" >&2
+    echo "  rebuild with:" >&2
+    echo "  python3 tools/terrain/build_korea_atlas.py \\" >&2
+    echo "    --lock content/sources/ukraine-terrain-source-lock.json \\" >&2
+    echo "    --region rapier-range --cache .cache/copernicus \\" >&2
+    echo "    --output content/packs/ukraine-modern/environment/terrain-atlas" >&2
+    echo "  rsync -a that tree to web/wwwroot/.../terrain-atlas/" >&2
+fi
+
+# Free the port so we are not fighting a stale server on IPv4 vs IPv6.
+# Soft kill first; if something is sticky (common with dual IPv4/IPv6 listeners),
+# fall back to the next free port so preview still comes up without babysitting.
+if command -v lsof >/dev/null 2>&1; then
+    pids=$(lsof -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        echo "preview-web: stopping previous listener(s) on :$port → $pids"
+        # shellcheck disable=SC2086
+        kill $pids 2>/dev/null || true
+        sleep 0.5
+    fi
+    if lsof -t -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+        for candidate in $(seq "$port" $((port + 20))); do
+            if ! lsof -t -iTCP:"$candidate" -sTCP:LISTEN >/dev/null 2>&1; then
+                echo "preview-web: :$port still busy — using :$candidate instead"
+                port=$candidate
+                break
+            fi
+        done
+    fi
+fi
+
+url="http://127.0.0.1:${port}/environment-lab/"
+echo "preview-web: serving $out_dir/wwwroot"
+echo "preview-web: open $url"
+echo "  (use 127.0.0.1 not localhost — avoids IPv4/IPv6 split-brain on :$port)"
+
+if [ "$open_browser" != "0" ] && command -v open >/dev/null 2>&1; then
+    (sleep 0.6 && open "$url") &
+fi
+
+cd "$out_dir/wwwroot"
+exec python3 -m http.server "$port" --bind 127.0.0.1

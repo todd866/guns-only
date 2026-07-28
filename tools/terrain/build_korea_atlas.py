@@ -19,6 +19,7 @@ from scipy.ndimage import map_coordinates
 from build_korea_terrain import (
     QUANTIZATION_METRES,
     WATER_SENTINEL,
+    central_meridian_deg_for_region,
     sha256_bytes,
     sha256_file,
     utm_to_wgs84,
@@ -92,11 +93,16 @@ def region_from_lock(source_lock: dict[str, object], region_id: str) -> dict[str
 
 def projected_region(region: dict[str, object], tile_span_m: float):
     west, south, east, north = region["aoiWgs84"]
+    meridian = central_meridian_deg_for_region(region)
     corner_latitude = np.array([south, south, north, north])
     corner_longitude = np.array([west, east, west, east])
-    corner_east, corner_north = wgs84_to_utm(corner_latitude, corner_longitude)
+    corner_east, corner_north = wgs84_to_utm(
+        corner_latitude, corner_longitude, central_meridian_deg=meridian,
+    )
     reference_longitude, reference_latitude = region["referenceOriginWgs84"]
-    reference_east, reference_north = wgs84_to_utm(reference_latitude, reference_longitude)
+    reference_east, reference_north = wgs84_to_utm(
+        reference_latitude, reference_longitude, central_meridian_deg=meridian,
+    )
     local_bounds = (
         math.floor((float(corner_east.min()) - reference_east) / tile_span_m) * tile_span_m,
         math.floor((float(corner_north.min()) - reference_north) / tile_span_m) * tile_span_m,
@@ -137,6 +143,7 @@ class SourceCellCatalog:
         self.cache_path = cache
         self.maximum_loaded_cells = max(1, maximum_loaded_cells)
         self.loaded: OrderedDict[str, tuple[np.ndarray, np.ndarray]] = OrderedDict()
+        self.central_meridian_deg = central_meridian_deg_for_region(region)
 
     def load_cell(self, cell: str) -> tuple[np.ndarray, np.ndarray]:
         cached = self.loaded.get(cell)
@@ -154,9 +161,13 @@ class SourceCellCatalog:
             if path.stat().st_size != int(entry["bytes"]) or sha256_file(path) != entry["sha256"]:
                 raise ValueError(f"locked source verification failed: {path}")
             array = np.asarray(Image.open(path))
-            if array.shape != (3600, 3600):
+            if array.ndim != 2 or array.shape[0] != 3600 or array.shape[1] < 1:
                 raise ValueError(f"unexpected source raster shape {array.shape}: {path}")
             arrays.append(array)
+        if arrays[0].shape != arrays[1].shape:
+            raise ValueError(
+                f"DEM/WBM shape mismatch for {cell}: {arrays[0].shape} vs {arrays[1].shape}"
+            )
         result = (arrays[0].astype(np.float32, copy=False), arrays[1].astype(np.uint8, copy=False))
         self.loaded[cell] = result
         while len(self.loaded) > self.maximum_loaded_cells:
@@ -164,7 +175,9 @@ class SourceCellCatalog:
         return result
 
     def sample(self, easting: np.ndarray, northing: np.ndarray):
-        latitude, longitude = utm_to_wgs84(easting, northing)
+        latitude, longitude = utm_to_wgs84(
+            easting, northing, central_meridian_deg=self.central_meridian_deg,
+        )
         west, south, east, north = self.aoi_wgs84
         inside = (
             (longitude >= west) & (longitude < east)
@@ -189,7 +202,10 @@ class SourceCellCatalog:
                 water[mask] = True
                 continue
             dem, water_mask = self.load_cell(cell)
-            x = (longitude[mask] - longitude_index) * 3600.0 - 0.5
+            # Latitude is always 3600 samples/degree; longitude width shrinks at higher latitudes
+            # (N50 GLO-30 cells are 3600×2400).
+            longitude_samples = dem.shape[1]
+            x = (longitude[mask] - longitude_index) * longitude_samples - 0.5
             y = (latitude_index + 1.0 - latitude[mask]) * 3600.0 - 0.5
             height[mask] = map_coordinates(
                 dem, (y, x), order=1, mode="nearest", prefilter=False
@@ -382,8 +398,9 @@ def build_atlas(source_lock: dict[str, object], region: dict[str, object], cache
                 output: Path, tile_span_m: float = TILE_SPAN_METRES,
                 page_span_m: float = PAGE_SPAN_METRES,
                 lod_samples: tuple[int, ...] = LOD_SAMPLES):
-    if region["workingCrs"] != "EPSG:32652":
-        raise ValueError("the atlas builder currently implements WGS 84 / UTM zone 52N only")
+    meridian = central_meridian_deg_for_region(region)
+    if not math.isfinite(meridian):
+        raise ValueError("region centralMeridianDeg / workingCrs must resolve to a TM meridian")
     if page_span_m % tile_span_m:
         raise ValueError("page span must be an exact multiple of tile span")
     local_bounds, reference_east, reference_north = projected_region(region, tile_span_m)
@@ -407,15 +424,17 @@ def build_atlas(source_lock: dict[str, object], region: dict[str, object], cache
     if not pages:
         raise ValueError("atlas contains no land-bearing terrain pages")
 
+    theatre = str(source_lock.get("theatre", "korea"))
     reference_longitude, reference_latitude = region["referenceOriginWgs84"]
     root = {
         "schemaVersion": "2.0.0",
-        "terrainId": f"terrain.korea.{region['id']}.atlas.v1",
+        "terrainId": f"terrain.{theatre}.{region['id']}.atlas.v1",
         "displayName": region["displayName"],
         "canonicalCoverageId": source_lock["canonicalCoverage"]["id"],
         "aoiWgs84": region["aoiWgs84"],
         "horizontalCrs": region["workingCrs"],
         "verticalCrs": region["verticalCrs"],
+        "centralMeridianDeg": meridian,
         "referenceOrigin": {
             "latitude": reference_latitude,
             "longitude": reference_longitude,
@@ -432,13 +451,16 @@ def build_atlas(source_lock: dict[str, object], region: dict[str, object], cache
         "scenery": {
             "generator": "korea-procedural-scenery-v1",
             "seedNamespace": f"{source_lock['sourceLockId']}:{region['id']}",
-            "defaultProfile": "1950s",
-            "supportedProfiles": ["1950s", "modern"],
+            "defaultProfile": region.get("defaultSceneryProfile", "1950s"),
+            "supportedProfiles": region.get(
+                "supportedSceneryProfiles", ["1950s", "modern"],
+            ),
             "chunkInputs": "generation",
         },
+        "fictionDisclaimer": region.get("fictionDisclaimer"),
         "build": {
             "builder": "tools/terrain/build_korea_atlas.py",
-            "builderVersion": 1,
+            "builderVersion": 2,
             "numpyVersion": np.__version__,
             "pillowVersion": PIL.__version__,
         },

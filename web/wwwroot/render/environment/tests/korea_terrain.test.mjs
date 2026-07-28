@@ -796,6 +796,7 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
     ],
   };
   const requested = [];
+  let pageFetchReceiver = "not-called";
   const terrain = await loadKoreaTerrain(THREE, {
     manifestUrl: "https://game.test/content/korea.atlas.json",
     qualityTier: "balanced",
@@ -806,7 +807,8 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
     lookAheadSeconds: 0,
     maximumPageLoads: 1,
     maximumConcurrentLoads: 1,
-    fetch: async (url, options = {}) => {
+    fetch: async function (url, options = {}) {
+      pageFetchReceiver = this;
       requested.push({ url: String(url), range: options.headers?.Range ?? null });
       if (String(url).endsWith("korea.atlas.json")) {
         return { ok: true, status: 200, json: async () => atlas };
@@ -825,8 +827,11 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
     },
   });
 
+  pageFetchReceiver = "not-called";
   terrain.update({ cameraPosition: new THREE.Vector3(1, 500, -4), deltaSeconds: 1 });
   await terrain.whenIdle();
+  assert.equal(pageFetchReceiver, undefined,
+    "atlas page/bundle fetch must not bind the atlas presentation as receiver");
   assert.equal(terrain.diagnostics().residentPages, 1);
   assert.equal(terrain.diagnostics().residentChunks, 1);
   assert.equal(terrain.diagnostics().localResidentChunks, 1);
@@ -1134,36 +1139,39 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(modern.fragmentShader, /float exposedFace =/);
   assert.equal(ukraine.defines.MODERN_SCENERY, 1);
   assert.equal(ukraine.defines.UKRAINE_SCENERY, 1);
-  assert.match(ukraine.fragmentShader, /fictional Ukrainian training-sector palette/i);
   assert.match(ukraine.fragmentShader, /ADR-0003 soft world/i);
+  assert.match(ukraine.fragmentShader, /Stage C rewild/i);
   assert.match(ukraine.fragmentShader,
     /float ukraineElevationBand = smoothstep\(22\.0, 40\.0, vTerrainHeight\)/,
     "the low-relief theatre needs a Ukraine-scale height ramp at macro LOD");
   assert.match(ukraine.fragmentShader,
-    /vec2 macroParcelCell = floor\(macroParcelPosition \/ vec2\(4400\.0, 3100\.0\)\)/);
+    /float succession = clamp\(/,
+    "rewild cover must use organic succession noise, not a cadastral parcel lattice");
   assert.match(ukraine.fragmentShader,
-    /float parcelHash = fract\(sin\(dot\(macroParcelCell,/);
+    /vec3 rewildCover = mix\(vec3\(0\.42, 0\.58, 0\.26\)/,
+    "macro albedo must read meadow → scrub → canopy");
   assert.match(ukraine.fragmentShader,
-    /cultivation = mix\(cultivation, vec3\(0\.12, 0\.18, 0\.065\), parcelBoundary \* 0\.28\)/,
-    "macro parcel borders must remain a cheap terrain-albedo cue, not instanced scenery");
+    /rewildFloor \* \(0\.72 \+ \(1\.0 - ukraineElevationBand\) \* 0\.12\)/,
+    "rewild wash remains part of terrain albedo without ambient instances");
   assert.match(ukraine.fragmentShader,
-    /macroArable \* \(0\.58 \+ \(1\.0 - ukraineElevationBand\) \* 0\.16\)/,
-    "kilometre-scale crop values must remain part of terrain albedo without ambient instances");
+    /sAlbedo \*= mix\(1\.06, 0\.92, ukraineElevationBand\)/,
+    "the rewild palette must retain regional height value structure");
+  assert.doesNotMatch(ukraine.fragmentShader, /macroParcelCell/,
+    "cadastral parcel lattice must not return to the Ukraine soft-world path");
+  assert.doesNotMatch(ukraine.fragmentShader, /abandonedScar/,
+    "ghost-agriculture scars must not reintroduce crop blotches at altitude");
   assert.match(ukraine.fragmentShader,
-    /sAlbedo \*= mix\(1\.07, 0\.84, ukraineElevationBand\)/,
-    "the crop palette must retain the regional height value structure");
-  assert.match(ukraine.fragmentShader,
-    /mix\(0\.52, 1\.0, halfLambert\)/,
+    /mix\(0\.62, 1\.0, halfLambert\)/,
     "Ukraine soft-world lighting must be continuous, not a hard two-step toon ramp");
   assert.match(ukraine.fragmentShader,
-    /dot\(normal\.xz, regionalSunDirection\) \* 10\.0/,
+    /dot\(normal\.xz, regionalSunDirection\) \* 7\.5/,
     "coarse lowland normals need a bounded directional relief cue");
-  assert.ok(ukraine.uniforms.uShadowFloor.value >= 0.15,
+  assert.ok(ukraine.uniforms.uShadowFloor.value >= 0.18,
     "Ukraine soft-world should lift the shadow floor for painterly lee slopes");
-  assert.ok(ukraine.uniforms.uHazeBandBlend.value <= 0.35,
+  assert.ok(ukraine.uniforms.uHazeBandBlend.value <= 0.25,
     "Ukraine soft-world should soften aerial haze banding");
   assert.match(ukraine.fragmentShader,
-    /mix\(uFogColor, vec3\(0\.72, 0\.66, 0\.54\), 0\.55\)/,
+    /mix\(uFogColor, vec3\(0\.78, 0\.72, 0\.58\), 0\.62\)/,
     "Ukraine distance haze must lean warm rather than cool poster blue");
   assert.ok(
     modern.fragmentShader.indexOf("lit *= mix(uOcclusionRange.x")

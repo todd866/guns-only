@@ -1,0 +1,290 @@
+{
+  "aoiWgs84": [
+    33.0,
+    46.6,
+    38.4,
+    50.2
+  ],
+  "boundsLocalM": [
+    -376832.0,
+    -212992.0,
+    40960.0,
+    196608.0
+  ],
+  "build": {
+    "builder": "tools/terrain/build_korea_atlas.py",
+    "builderVersion": 2,
+    "numpyVersion": "2.4.1",
+    "pillowVersion": "12.1.0"
+  },
+  "canonicalCoverageId": "ukraine-d2",
+  "centralMeridianDeg": 35.7,
+  "displayName": "Ukraine jet-range theatre \u2014 real DEM, fictional strip",
+  "fictionDisclaimer": "Real Copernicus DEM and water mask at real coordinates. Strip, units, fronts, and installations are fictional. Not for navigation or claims about real facilities.",
+  "horizontalCrs": "TM_WGS84_CM35.7",
+  "pageSpanM": 131072.0,
+  "pages": [
+    {
+      "boundsLocalM": [
+        -376832.0,
+        -212992.0,
+        -262144.0,
+        -131072.0
+      ],
+      "chunkCount": 140,
+      "id": "page-em003-nm002",
+      "manifest": {
+        "byteLength": 255187,
+        "sha256": "0f29fcd07fe6868ec6209203cdab832fb5881e90a93a5ac7e9d7a762565eed41",
+        "uri": "pages/page-em003-nm002.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -262144.0,
+        -212992.0,
+        -131072.0,
+        -131072.0
+      ],
+      "chunkCount": 160,
+      "id": "page-em002-nm002",
+      "manifest": {
+        "byteLength": 292130,
+        "sha256": "5a2fea65d0e4de3b424a6010d583f91e5e96535329ef94a0bdffcdd2f4411ca0",
+        "uri": "pages/page-em002-nm002.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -131072.0,
+        -212992.0,
+        0.0,
+        -131072.0
+      ],
+      "chunkCount": 118,
+      "id": "page-em001-nm002",
+      "manifest": {
+        "byteLength": 216608,
+        "sha256": "5a2d00a20ec7c7688f7bfbbbcb77a3494f4b1d7b9c5e965f0c030e91ac2f3f6b",
+        "uri": "pages/page-em001-nm002.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        -212992.0,
+        40960.0,
+        -131072.0
+      ],
+      "chunkCount": 30,
+      "id": "page-ep000-nm002",
+      "manifest": {
+        "byteLength": 55750,
+        "sha256": "f8977ee5c3df3714ccecfa714999b6fca54edb7eeb5cdcf3d041de82ad1bcb48",
+        "uri": "pages/page-ep000-nm002.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -376832.0,
+        -131072.0,
+        -262144.0,
+        0.0
+      ],
+      "chunkCount": 224,
+      "id": "page-em003-nm001",
+      "manifest": {
+        "byteLength": 410571,
+        "sha256": "a35aaa39d75805a3481e5e74388159e22325c645c207ff678e93e0afcd9b85ef",
+        "uri": "pages/page-em003-nm001.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -262144.0,
+        -131072.0,
+        -131072.0,
+        0.0
+      ],
+      "chunkCount": 254,
+      "id": "page-em002-nm001",
+      "manifest": {
+        "byteLength": 465615,
+        "sha256": "2f749e6d66a6cf09933bfd36e161a0aca511ecde47b8c8b8370719f6e8c639d9",
+        "uri": "pages/page-em002-nm001.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -131072.0,
+        -131072.0,
+        0.0,
+        0.0
+      ],
+      "chunkCount": 256,
+      "id": "page-em001-nm001",
+      "manifest": {
+        "byteLength": 469860,
+        "sha256": "06c45ea68e09fb27b68f186e2896868717714d6eb5538f3621a5180f18056c46",
+        "uri": "pages/page-em001-nm001.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        -131072.0,
+        40960.0,
+        0.0
+      ],
+      "chunkCount": 69,
+      "id": "page-ep000-nm001",
+      "manifest": {
+        "byteLength": 127183,
+        "sha256": "cf2c26e989cf5b049eec196c96651595869e288943187833df21f6e40da09a50",
+        "uri": "pages/page-ep000-nm001.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -376832.0,
+        0.0,
+        -262144.0,
+        131072.0
+      ],
+      "chunkCount": 211,
+      "id": "page-em003-np000",
+      "manifest": {
+        "byteLength": 386503,
+        "sha256": "e12556e1f04f4e6162f8cec846b697936f3ab240eae48359ed7a956f83b54cd0",
+        "uri": "pages/page-em003-np000.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -262144.0,
+        0.0,
+        -131072.0,
+        131072.0
+      ],
+      "chunkCount": 256,
+      "id": "page-em002-np000",
+      "manifest": {
+        "byteLength": 469176,
+        "sha256": "1d973d241430edecc643837d39b728bef12369169bc9a63ba5d1be87848c519c",
+        "uri": "pages/page-em002-np000.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -131072.0,
+        0.0,
+        0.0,
+        131072.0
+      ],
+      "chunkCount": 256,
+      "id": "page-em001-np000",
+      "manifest": {
+        "byteLength": 469091,
+        "sha256": "8445b368a214320641c899adb66f61533bacd1dc632bd66b97c60d45d05f1036",
+        "uri": "pages/page-em001-np000.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        0.0,
+        40960.0,
+        131072.0
+      ],
+      "chunkCount": 64,
+      "id": "page-ep000-np000",
+      "manifest": {
+        "byteLength": 117525,
+        "sha256": "7bc57c6267fadb514de1ce0eaafe613d7d7e9b79d8a86b9c7738e6daa3038189",
+        "uri": "pages/page-ep000-np000.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -376832.0,
+        131072.0,
+        -262144.0,
+        196608.0
+      ],
+      "chunkCount": 98,
+      "id": "page-em003-np001",
+      "manifest": {
+        "byteLength": 180496,
+        "sha256": "0ff40f358011a65ee9d1fd4799ebaea23eb7bdcab1c1f4e9a2b4be62aa868d5d",
+        "uri": "pages/page-em003-np001.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -262144.0,
+        131072.0,
+        -131072.0,
+        196608.0
+      ],
+      "chunkCount": 112,
+      "id": "page-em002-np001",
+      "manifest": {
+        "byteLength": 206248,
+        "sha256": "425a1791f8a0f45ea1704f8f84d9e51f420cc0340b9a5e5d150235846d9350e1",
+        "uri": "pages/page-em002-np001.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        -131072.0,
+        131072.0,
+        0.0,
+        196608.0
+      ],
+      "chunkCount": 116,
+      "id": "page-em001-np001",
+      "manifest": {
+        "byteLength": 213272,
+        "sha256": "15af51cf6e726794af2c9e69e5d25aba41054c3894ea07625f3b67e0bc1c916a",
+        "uri": "pages/page-em001-np001.manifest.json"
+      }
+    },
+    {
+      "boundsLocalM": [
+        0.0,
+        131072.0,
+        40960.0,
+        196608.0
+      ],
+      "chunkCount": 26,
+      "id": "page-ep000-np001",
+      "manifest": {
+        "byteLength": 48623,
+        "sha256": "c03aa103d8a9a384eb2baf720d5b5f2d676af3c627dc5f1aa230985b273c2536",
+        "uri": "pages/page-ep000-np001.manifest.json"
+      }
+    }
+  ],
+  "referenceOrigin": {
+    "eastingM": 669899.74205,
+    "latitude": 48.5,
+    "longitude": 38.0,
+    "northingM": 5374430.243267
+  },
+  "scenery": {
+    "chunkInputs": "generation",
+    "defaultProfile": "ukraine-modern",
+    "generator": "korea-procedural-scenery-v1",
+    "seedNamespace": "source-lock.ukraine-terrain.rapier-range.v1:rapier-range",
+    "supportedProfiles": [
+      "ukraine-modern"
+    ]
+  },
+  "schemaVersion": "2.0.0",
+  "streaming": {
+    "strategy": "velocity-ahead-bounded-window"
+  },
+  "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+  "tileSpanM": 8192.0,
+  "verticalCrs": "EPSG:3855"
+}

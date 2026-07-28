@@ -167,7 +167,7 @@ test("keeps scenery on the nearest selectable mobile and balanced terrain LOD", 
   }
 });
 
-test("plans a distinct Ukraine lowland grammar with ambient, non-targetable buildings", () => {
+test("plans a distinct Ukraine rewild grammar with sparse ambient compounds", () => {
   const chunk = {
     id: "e0000-n0000",
     eastIndex: 0,
@@ -184,16 +184,36 @@ test("plans a distinct Ukraine lowland grammar with ambient, non-targetable buil
     qualityTier: "desktop",
   });
   assert.deepEqual(first, repeated);
-  assert.ok(first.fields.length > 0);
-  assert.ok(first.fields.every((field) => field.widthM >= 240 && field.depthM >= 320));
-  assert.ok(first.buildings.length > 0);
+  assert.ok(first.trees.length > first.buildings.length,
+    "rewild canopy should dominate rare compounds");
   assert.ok(first.buildings.every((building, index) =>
     building.entityId === `scenery.ukraine-modern.${chunk.id}.building.${index}`
       && building.role === "ambient"
       && building.targetable === false));
-  assert.ok(first.trees.length > 0);
   assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].theatre, "ukraine");
+  assert.match(KOREA_SCENERY_PROFILES["ukraine-modern"].period, /rewild/i);
+  assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].buildingDensityPerKm2 < 3);
+  assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].treeDensityPerKm2 > 40);
+  assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].crownShape, "soft-canopy");
+  assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].softLit, true);
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].toonSteps.length >= 3);
+});
+
+test("Ukraine soft-canopy stands use rounded crown geometry and Lambert lighting", () => {
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "desktop",
+  });
+  const group = runtime.createTile(chunkFixture(), flatDecodedFixture(), 0);
+  assert.ok(group);
+  const crowns = group.getObjectByName("PROCEDURAL_TREE_CROWNS");
+  assert.ok(crowns?.isInstancedMesh);
+  assert.ok(crowns.geometry.attributes.position.count > 400,
+    "soft canopy stands should be rounded spheres, not 7-sided fir cones");
+  assert.equal(crowns.material.type, "MeshLambertMaterial",
+    "Ukraine soft-world crowns must not use hard toon posterization");
+  runtime.disposeTile(group);
+  runtime.dispose();
 });
 
 test("renders modern transport and power batches as instanced closest-LOD geometry", () => {

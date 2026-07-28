@@ -54,6 +54,32 @@ trap 'rm -rf "$scratch_dir"' EXIT HUP INT TERM
     --configuration Release --nologo --output "$publish_dir"
 
 deploy_root="$publish_dir/wwwroot"
+
+# Geodetic Ukraine atlas pages are gitignored (hundreds of MiB). Stage them into the publish tree
+# from the local content pack so production flight gets the real DEM, not an empty sky.
+atlas_src="$repo_dir/content/packs/ukraine-modern/environment/terrain-atlas"
+atlas_dst="$deploy_root/content/packs/ukraine-modern/environment/terrain-atlas"
+if [ -d "$atlas_src/pages" ] && [ -f "$atlas_src/rapier-range.atlas.manifest.json" ]; then
+    echo "deploy-web: staging Ukraine jet-range atlas into publish tree"
+    mkdir -p "$atlas_dst"
+    rsync -a --delete "$atlas_src/" "$atlas_dst/"
+elif [ -d "$repo_dir/web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas/pages" ]; then
+    echo "deploy-web: staging Ukraine atlas from web/wwwroot"
+    mkdir -p "$atlas_dst"
+    rsync -a --delete \
+        "$repo_dir/web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas/" \
+        "$atlas_dst/"
+else
+    echo "deploy-web: WARNING — Ukraine atlas pages missing; Rapier theatre may render empty" >&2
+fi
+
+# Soft-world atmosphere for the Ukraine lab / future pack wiring.
+atmosphere_src="$repo_dir/web/wwwroot/content/packs/ukraine-modern/environment/atmosphere.material.json"
+if [ -f "$atmosphere_src" ]; then
+    mkdir -p "$deploy_root/content/packs/ukraine-modern/environment"
+    cp "$atmosphere_src" "$deploy_root/content/packs/ukraine-modern/environment/"
+fi
+
 require_file() {
     if [ ! -f "$deploy_root/$1" ]; then
         echo "deploy-web: publish artifact is missing $1" >&2

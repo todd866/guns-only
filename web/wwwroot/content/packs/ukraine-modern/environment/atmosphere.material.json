@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0.0",
+  "materialId": "material.atmosphere.ukraine-soft-haze.v1",
+  "type": "layered-atmosphere",
+  "textures": {
+    "cloudShape": {
+      "uri": "../../korea-1950s/environment/textures/cloud-shape.png",
+      "colorSpace": "linear",
+      "repeat": [2.8, 1.4]
+    }
+  },
+  "sky": {
+    "zenithColor": "#5A7A98",
+    "upperColor": "#9BB8C8",
+    "horizonColor": "#E6D6B8",
+    "groundHazeColor": "#D4C4A6",
+    "sunColor": "#FFE8C2",
+    "sunAngularRadiusDegrees": 0.48,
+    "sunGlowDegrees": 14,
+    "sunIntensity": 2.6,
+    "horizonHaze": 0.78
+  },
+  "cloudLayers": [
+    {
+      "id": "soft-cumulus",
+      "altitude": 1200,
+      "thickness": 680,
+      "coverage": 0.34,
+      "density": 0.62,
+      "scale": 0.00016,
+      "wind": [6.5, -1.2],
+      "lightColor": "#FFF6E8",
+      "shadowColor": "#8A9590"
+    },
+    {
+      "id": "high-veil",
+      "altitude": 3800,
+      "thickness": 420,
+      "coverage": 0.16,
+      "density": 0.34,
+      "scale": 0.00007,
+      "wind": [14, 2.8],
+      "lightColor": "#FFF8EE",
+      "shadowColor": "#A8B0A8"
+    }
+  ],
+  "geometry": {
+    "skyRadius": 52000,
+    "cloudRadius": 40000,
+    "tiers": {
+      "mobile": { "cloudLayers": 1, "radialSegments": 64 },
+      "balanced": { "cloudLayers": 2, "radialSegments": 96 },
+      "desktop": { "cloudLayers": 2, "radialSegments": 128 }
+    }
+  }
+}
