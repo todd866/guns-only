@@ -13,8 +13,8 @@ namespace GunsOnly.Sim.Tests;
 public class RapierGlideDroneOftTests {
     static string OftRoot {
         get {
-            string root = Path.GetFullPath(Path.Combine(
-                AppContext.BaseDirectory, "..", "..", "..", "..", "analysis", "glide-drone-oft"));
+            string root = Path.Combine(
+                TestRepository.Root, "analysis", "glide-drone-oft");
             Directory.CreateDirectory(root);
             return root;
         }

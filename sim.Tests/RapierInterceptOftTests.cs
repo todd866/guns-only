@@ -13,8 +13,8 @@ namespace GunsOnly.Sim.Tests;
 public class RapierInterceptOftTests {
     static string OftRoot {
         get {
-            string root = Path.GetFullPath(Path.Combine(
-                AppContext.BaseDirectory, "..", "..", "..", "..", "analysis", "intercept-oft"));
+            string root = Path.Combine(
+                TestRepository.Root, "analysis", "intercept-oft");
             Directory.CreateDirectory(root);
             return root;
         }
