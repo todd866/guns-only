@@ -61,7 +61,17 @@ public readonly record struct RapierMissionGuidance(
     /// <summary>Current Sänger skip index (1-based) while on the zoom-lob profile.</summary>
     int LobSkip = 0,
     /// <summary>Authored skip cap for this profile (0 when not zoom-lobbing).</summary>
-    int LobSkipMax = 0);
+    int LobSkipMax = 0,
+    /// <summary>Physical half-extent (m) of the active flythrough box in the sky.</summary>
+    double GateHalfM = 0.0,
+    /// <summary>Unit direction through the gate (flight path the square faces).</summary>
+    double GateFaceX = 0.0,
+    double GateFaceY = 0.0,
+    double GateFaceZ = 1.0,
+    /// <summary>Aircraft is inside the physical gate volume this tick.</summary>
+    bool GateInVolume = false,
+    /// <summary>True airspeed within the gate energy band.</summary>
+    bool GateEnergyOk = false);
 
 public sealed record ScriptedInterceptConfig(
     int FormationSize = 4,
@@ -133,6 +143,12 @@ public sealed class RapierMissionDirector {
     const double CircuitDownwindOffsetM = 2.25 * 1852.0;
     /// Initial / short-final distance before threshold along the runway axis.
     const double CircuitInitialAlongM = 2_000.0;
+    /// Flythrough box half-width/height in metres — a real sky object, not HUD chrome.
+    const double CircuitGateHalfM = 100.0;
+    /// Along-track half-depth for "through the square" capture.
+    const double CircuitGateDepthM = 180.0;
+    /// KTAS band to earn the gate (energy gate).
+    const double CircuitGateSpeedTolKtas = 35.0;
     /// Sänger skip-glide: boost → coast → reenter → dip, then maybe another skip. Cap keeps the
     /// profile finite; each skip buys ~100+ km of near-zero-burn coast when energy and fuel allow.
     const int MaxLobSkips = 3;
@@ -257,6 +273,7 @@ public sealed class RapierMissionDirector {
     /// <summary>
     /// Military overhead circuit for PatternOnly (Mirage/F-104 brick). Replaces the Intercept
     /// 30 km marshal corridor so traffic and Tab SA share a real pattern.
+    /// Gates are physical sky volumes: earn only when through the box on speed.
     /// </summary>
     void StepPatternOverhead(
         in AircraftState player,
@@ -269,7 +286,11 @@ public sealed class RapierMissionDirector {
         out string cue,
         out double approachSpeedMps,
         out int recoveryGate,
-        out double targetGamma) {
+        out double targetGamma,
+        out double gateHalfM,
+        out Vec3D gateFace,
+        out bool gateInVolume,
+        out bool gateEnergyOk) {
         PatternRunwayFrame(home, recoveryInitial,
             out Vec3D runwayForward, out Vec3D runwayLeft, out Vec3D threshold);
         double patternY = home.Y + CircuitShelfHeightM;
@@ -290,47 +311,76 @@ public sealed class RapierMissionDirector {
         double downwindHeadingError = Math.Abs(WrapAngle(downwindHeading - player.Chi));
         Vec3D playerPosition = player.Position;
         double playerBank = player.Bank;
+        double currentKtas = trueAirspeedMps * 1.94384;
 
-        bool Near(in Vec3D point, double radiusM) =>
-            (point - playerPosition).Length <= radiusM;
+        static Vec3D FaceAlong(in Vec3D along) {
+            Vec3D flat = new(along.X, 0.0, along.Z);
+            if (flat.Length < 1e-6) return new Vec3D(0.0, 0.0, 1.0);
+            return flat.Normalized();
+        }
 
-        // Allow OFT / join from mid-pattern: presence at a later station earns earlier legs.
-        // Do NOT treat INITIAL (same runway axis, ~2 km out, pattern alt) as short-final.
-        if (Near(basePoint, 1_600.0)
-            && Math.Abs(playerPosition.Y - basePoint.Y) <= 200.0) {
+        bool InsideGate(in Vec3D point, in Vec3D face, double halfM) {
+            Vec3D delta = playerPosition - point;
+            double along = delta.X * face.X + delta.Z * face.Z;
+            Vec3D right = new(-face.Z, 0.0, face.X);
+            double lateral = delta.X * right.X + delta.Z * right.Z;
+            double vertical = delta.Y;
+            return Math.Abs(along) <= CircuitGateDepthM
+                && Math.Abs(lateral) <= halfM
+                && Math.Abs(vertical) <= halfM;
+        }
+
+        bool EnergyOk(double targetKtas) =>
+            Math.Abs(currentKtas - targetKtas) <= CircuitGateSpeedTolKtas;
+
+        bool Earn(in Vec3D point, in Vec3D face, double targetKtas, double halfM) =>
+            InsideGate(point, face, halfM) && EnergyOk(targetKtas);
+
+        Vec3D initialFace = FaceAlong(runwayForward);
+        Vec3D breakFace = FaceAlong(runwayLeft);
+        Vec3D downwindFace = FaceAlong(runwayForward * -1.0);
+        Vec3D baseFaceRaw = runwayLeft * -0.5 + runwayForward * 0.5;
+        Vec3D baseFace = FaceAlong(baseFaceRaw);
+        Vec3D finalFace = initialFace;
+
+        // Soft join for OFT / mid-pattern start — still require energy at the station.
+        if (InsideGate(basePoint, baseFace, CircuitGateHalfM * 1.4)
+            && EnergyOk(CircuitBaseKtas)) {
             _circuitInitialReached = true;
             _circuitBreakReached = true;
             _circuitDownwindReached = true;
-        } else if (Near(downwindAbeam, 2_000.0)
+        } else if (InsideGate(downwindAbeam, downwindFace, CircuitGateHalfM * 1.4)
+            && EnergyOk(CircuitPatternKtas)
             && downwindHeadingError <= 50.0 * Math.PI / 180.0) {
             _circuitInitialReached = true;
             _circuitBreakReached = true;
-        } else if (Near(downwindEntry, 1_800.0)) {
+        } else if (InsideGate(downwindEntry, breakFace, CircuitGateHalfM * 1.4)
+            && EnergyOk(CircuitPatternKtas)) {
             _circuitInitialReached = true;
         }
 
         if (!_circuitInitialReached
-            && Near(initialPoint, 1_200.0)
-            && headingError <= 25.0 * Math.PI / 180.0)
+            && Earn(initialPoint, initialFace, CircuitPatternKtas, CircuitGateHalfM)
+            && headingError <= 35.0 * Math.PI / 180.0)
             _circuitInitialReached = true;
         if (_circuitInitialReached
             && !_circuitBreakReached
-            && Near(downwindEntry, 1_600.0)
-            && downwindHeadingError <= 40.0 * Math.PI / 180.0)
+            && Earn(downwindEntry, breakFace, CircuitPatternKtas, CircuitGateHalfM)
+            && downwindHeadingError <= 55.0 * Math.PI / 180.0)
             _circuitBreakReached = true;
         if (_circuitBreakReached
             && !_circuitDownwindReached
-            && Near(downwindAbeam, 1_800.0))
+            && Earn(downwindAbeam, downwindFace, CircuitPatternKtas, CircuitGateHalfM))
             _circuitDownwindReached = true;
         if (_circuitDownwindReached
             && !_circuitBaseReached
-            && Near(basePoint, 1_400.0))
+            && Earn(basePoint, baseFace, CircuitBaseKtas, CircuitGateHalfM))
             _circuitBaseReached = true;
         if (_circuitBaseReached
             && !_recoveryFinal
-            && Near(shortFinal, 1_000.0)
-            && headingError <= 12.0 * Math.PI / 180.0
-            && Math.Abs(playerBank) <= 30.0 * Math.PI / 180.0)
+            && Earn(shortFinal, finalFace, CircuitFinalKtas, CircuitGateHalfM)
+            && headingError <= 18.0 * Math.PI / 180.0
+            && Math.Abs(playerBank) <= 35.0 * Math.PI / 180.0)
             _recoveryFinal = true;
 
         double distanceToWireM = (threshold - playerPosition).Dot(runwayForward);
@@ -339,54 +389,79 @@ public sealed class RapierMissionDirector {
                 recoveryGate = 1;
                 gatePoint = threshold - runwayForward * 12_000.0
                     + new Vec3D(0.0, 750.0, 0.0);
+                gateHalfM = 140.0;
             } else if (distanceToWireM > 7_500.0) {
                 recoveryGate = 2;
                 gatePoint = threshold - runwayForward * 7_000.0
                     + new Vec3D(0.0, 430.0, 0.0);
+                gateHalfM = 120.0;
             } else if (distanceToWireM > 3_500.0) {
                 recoveryGate = 3;
                 gatePoint = threshold - runwayForward * 3_000.0
                     + new Vec3D(0.0, 180.0, 0.0);
+                gateHalfM = 100.0;
             } else {
                 recoveryGate = 4;
                 gatePoint = touchdownAim;
+                gateHalfM = 80.0;
             }
             waypoint = distanceToWireM > 0.0
                 ? threshold
                 : threshold + runwayForward * 50_000.0;
             approachSpeedMps = CircuitWireSpeedMps;
             circuitLeg = "WIRE_FINAL";
+            gateFace = finalFace;
         } else if (!_circuitInitialReached) {
             recoveryGate = 0;
             gatePoint = initialPoint;
             waypoint = initialPoint + runwayForward * 4_000.0;
             approachSpeedMps = CircuitPatternSpeedMps;
             circuitLeg = "INITIAL";
+            gateHalfM = CircuitGateHalfM;
+            gateFace = initialFace;
         } else if (!_circuitBreakReached) {
             recoveryGate = 0;
             gatePoint = downwindEntry;
             waypoint = downwindEntry;
             approachSpeedMps = CircuitPatternSpeedMps;
             circuitLeg = "BREAK";
+            gateHalfM = CircuitGateHalfM;
+            gateFace = breakFace;
         } else if (!_circuitDownwindReached) {
             recoveryGate = 0;
             gatePoint = downwindAbeam;
             waypoint = downwindAbeam + runwayForward * -3_000.0;
             approachSpeedMps = CircuitPatternSpeedMps;
             circuitLeg = "DOWNWIND";
+            gateHalfM = CircuitGateHalfM;
+            gateFace = downwindFace;
         } else if (!_circuitBaseReached) {
             recoveryGate = 0;
             gatePoint = basePoint;
             waypoint = basePoint;
             approachSpeedMps = CircuitBaseSpeedMps;
             circuitLeg = "BASE";
+            gateHalfM = CircuitGateHalfM;
+            gateFace = baseFace;
         } else {
             recoveryGate = 0;
             gatePoint = shortFinal;
             waypoint = shortFinal + runwayForward * 3_000.0;
             approachSpeedMps = CircuitFinalSpeedMps;
             circuitLeg = "SHORT_FINAL";
+            gateHalfM = CircuitGateHalfM;
+            gateFace = finalFace;
         }
+
+        double targetKtas = circuitLeg switch {
+            "INITIAL" or "BREAK" or "DOWNWIND" => CircuitPatternKtas,
+            "BASE" => CircuitBaseKtas,
+            "SHORT_FINAL" => CircuitFinalKtas,
+            "WIRE_FINAL" => CircuitWireKtas,
+            _ => Math.Round(approachSpeedMps * 1.94384)
+        };
+        gateInVolume = InsideGate(gatePoint, gateFace, gateHalfM);
+        gateEnergyOk = EnergyOk(targetKtas);
 
         double horizontalRangeM = Math.Max(1.0, Math.Sqrt(
             Math.Pow(gatePoint.X - playerPosition.X, 2.0)
@@ -403,16 +478,10 @@ public sealed class RapierMissionDirector {
             recoveryMinimumGamma,
             0.06);
 
-        double targetKtas = circuitLeg switch {
-            "INITIAL" or "BREAK" or "DOWNWIND" => CircuitPatternKtas,
-            "BASE" => CircuitBaseKtas,
-            "SHORT_FINAL" => CircuitFinalKtas,
-            "WIRE_FINAL" => CircuitWireKtas,
-            _ => Math.Round(approachSpeedMps * 1.94384)
-        };
-        double currentKtas = trueAirspeedMps * 1.94384;
         string speedCall = currentKtas > targetKtas + 25.0 ? "SLOW"
             : currentKtas < targetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
+        if (gateInVolume && gateEnergyOk) speedCall = "GATE OPEN";
+        else if (gateInVolume && !gateEnergyOk) speedCall = "GATE · ENERGY";
         double targetAltFt = gatePoint.Y * FeetPerMetre;
         cue = PatternLegConfigCue(
             circuitLeg, targetKtas, targetAltFt, speedCall, recoveryGate);
@@ -582,7 +651,7 @@ public sealed class RapierMissionDirector {
             } else if (mach < 2.2
                 && (int)_phase <= (int)RapierMissionPhase.Accelerate) {
                 EnterPhase(RapierMissionPhase.Accelerate, "accel_to_m2.2");
-            } else if (player.Position.Y < CruiseAltitudeM - 40.0
+            } else if (player.Position.Y < CruiseAltitudeM - 200.0
                 && (int)_phase <= (int)RapierMissionPhase.RamClimb
                 && (int)_phase < (int)RapierMissionPhase.ZoomPull) {
                 EnterPhase(RapierMissionPhase.RamClimb, "ram_climb_to_fl700");
@@ -616,6 +685,10 @@ public sealed class RapierMissionDirector {
         int recoveryGate = 0;
         string circuitLeg = "";
         double fdTargetKtas = 0.0;
+        double gateHalfM = 0.0;
+        Vec3D gateFace = new(0.0, 0.0, 1.0);
+        bool gateInVolume = false;
+        bool gateEnergyOk = false;
 
         switch (_phase) {
             case RapierMissionPhase.Launch:
@@ -632,8 +705,25 @@ public sealed class RapierMissionDirector {
                     guidanceWaypoint = departBox;
                     circuitLeg = "DEPART";
                     fdTargetKtas = CircuitPatternKtas;
+                    gateHalfM = CircuitGateHalfM;
+                    PatternRunwayFrame(home, recoveryInitial,
+                        out Vec3D rf, out _, out _);
+                    gateFace = new(rf.X, 0.0, rf.Z);
+                    if (gateFace.Length > 1e-6) gateFace = gateFace.Normalized();
+                    double departKtas = trueAirspeedMps * 1.94384;
+                    Vec3D departDelta = player.Position - departBox;
+                    double along = departDelta.X * gateFace.X + departDelta.Z * gateFace.Z;
+                    Vec3D right = new(-gateFace.Z, 0.0, gateFace.X);
+                    double lateral = departDelta.X * right.X + departDelta.Z * right.Z;
+                    gateInVolume = Math.Abs(along) <= CircuitGateDepthM
+                        && Math.Abs(lateral) <= gateHalfM
+                        && Math.Abs(departDelta.Y) <= gateHalfM;
+                    gateEnergyOk = Math.Abs(departKtas - CircuitPatternKtas)
+                        <= CircuitGateSpeedTolKtas;
                     cue = PatternLegConfigCue(
-                        "DEPART", fdTargetKtas, targetAltitudeFt, "LAUNCH");
+                        "DEPART", fdTargetKtas, targetAltitudeFt,
+                        gateInVolume && gateEnergyOk ? "GATE OPEN"
+                            : gateInVolume ? "GATE · ENERGY" : "LAUNCH");
                 } else {
                     targetMach = 0.9;
                     targetAltitudeFt = 56_000.0;
@@ -665,8 +755,24 @@ public sealed class RapierMissionDirector {
                     guidanceWaypoint = departBox;
                     circuitLeg = "DEPART";
                     fdTargetKtas = CircuitPatternKtas;
+                    gateHalfM = CircuitGateHalfM;
+                    PatternRunwayFrame(home, recoveryInitial,
+                        out Vec3D climbRf, out _, out _);
+                    gateFace = new(climbRf.X, 0.0, climbRf.Z);
+                    if (gateFace.Length > 1e-6) gateFace = gateFace.Normalized();
                     double departKtas = trueAirspeedMps * 1.94384;
-                    string departSpeedCall = departKtas > fdTargetKtas + 25.0 ? "SLOW"
+                    Vec3D climbDelta = player.Position - departBox;
+                    double climbAlong = climbDelta.X * gateFace.X + climbDelta.Z * gateFace.Z;
+                    Vec3D climbRight = new(-gateFace.Z, 0.0, gateFace.X);
+                    double climbLat = climbDelta.X * climbRight.X + climbDelta.Z * climbRight.Z;
+                    gateInVolume = Math.Abs(climbAlong) <= CircuitGateDepthM
+                        && Math.Abs(climbLat) <= gateHalfM
+                        && Math.Abs(climbDelta.Y) <= gateHalfM;
+                    gateEnergyOk = Math.Abs(departKtas - CircuitPatternKtas)
+                        <= CircuitGateSpeedTolKtas;
+                    string departSpeedCall = gateInVolume && gateEnergyOk ? "GATE OPEN"
+                        : gateInVolume ? "GATE · ENERGY"
+                        : departKtas > fdTargetKtas + 25.0 ? "SLOW"
                         : departKtas < fdTargetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
                     cue = PatternLegConfigCue(
                         "DEPART", fdTargetKtas, targetAltitudeFt, departSpeedCall);
@@ -699,7 +805,10 @@ public sealed class RapierMissionDirector {
                 cue = $"AUTO LEVEL ACCEL · M{mach:F2} → M2.20 · HOLD FL560";
                 break;
             case RapierMissionPhase.RamClimb:
-                targetMach = 4.0;
+                // Stay below RamSpillStartMach (3.3). Commanding M4 here drove the article into the
+                // spill band with almost no climb thrust left — FL694 forever, never FL700. Climb
+                // on useful ram (~M3.1), then Intercept owns the dash.
+                targetMach = 3.15;
                 targetAltitudeFt = 70_000.0;
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 150.0,
@@ -863,7 +972,11 @@ public sealed class RapierMissionDirector {
                         out cue,
                         out double patternSpeedMps,
                         out recoveryGate,
-                        out targetGamma);
+                        out targetGamma,
+                        out gateHalfM,
+                        out gateFace,
+                        out gateInVolume,
+                        out gateEnergyOk);
                     guidanceWaypoint = patternGate;
                     waypoint = patternWaypoint;
                     double patternBaseThrottle = patternSpeedMps > 140.0 ? 0.72
@@ -1128,6 +1241,12 @@ public sealed class RapierMissionDirector {
             NoseOnVelocityErrorDeg: noseOnVelocityErrorDeg,
             JobToken: jobToken,
             LobSkip: zoomLobProfile ? _lobSkip : 0,
-            LobSkipMax: lobSkipMax);
+            LobSkipMax: lobSkipMax,
+            GateHalfM: gateHalfM,
+            GateFaceX: gateFace.X,
+            GateFaceY: gateFace.Y,
+            GateFaceZ: gateFace.Z,
+            GateInVolume: gateInVolume,
+            GateEnergyOk: gateEnergyOk);
     }
 }

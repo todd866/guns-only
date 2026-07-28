@@ -20,9 +20,9 @@ test("rapier.v1.json publishes closed geometry and identity", () => {
   assert.equal(def.dimensionsM.span, 7.35);
   assert.equal(def.wing.areaM2, 18);
   assert.equal(def.wing.aspectRatio, 3);
-  assert.equal(def.massKg.fuelFree, 5150);
+  assert.equal(def.massKg.fuelFree, 6590);
   assert.equal(def.massKg.fuelCapacity, 4500);
-  assert.equal(def.massKg.gross, 9650);
+  assert.equal(def.massKg.gross, 11090);
   assert.equal(def.propulsion.ramCaptureAreaM2, 1.2);
   assert.equal(def.thermal.skinTemperatureLimitK, 1473.15);
   assert.equal(def.wing.planform.length, 12);
@@ -34,10 +34,11 @@ test("rapier.v1.json publishes closed geometry and identity", () => {
   assert.equal(def.sockets.droneBay[0].epistemic, "provisional");
 });
 
-test("rapier.v1.json tags Mach-4 dash as fiction and wet T/W as provisional", () => {
+test("rapier.v1.json tags Mach-4 dash as fiction and wet T/W as closed at family cap", () => {
   const def = JSON.parse(readFileSync(join(root, "rapier.v1.json"), "utf8"));
   assert.equal(def.performanceClaims.designDashMach.epistemic, "fiction");
-  assert.equal(def.performanceClaims.wetThrustWeightGross.epistemic, "provisional");
+  assert.equal(def.performanceClaims.wetThrustWeightGross.epistemic, "closed");
+  assert.equal(def.performanceClaims.wetThrustWeightGross.value, 1.20);
   assert.equal(def.propulsion.epistemic, "provisional");
 });
 
@@ -62,16 +63,16 @@ test("createRapier thin loader matches definition-built silhouette", () => {
   assert.equal(viaLoader.name, viaDef.name);
   assert.deepEqual(viaLoader.userData.dimensionsM, viaDef.userData.dimensionsM);
   assert.equal(viaLoader.userData.airframeId, "rapier.public-data-surrogate.v1");
-  assert.equal(viaLoader.userData.definitionRevision, "1.2.0");
+  assert.equal(viaLoader.userData.definitionRevision, "1.3.0");
 });
 
-test("rapier revision 1.2.0 publishes provisional drone cell clears and stowed mass", () => {
+test("rapier revision 1.3.0 publishes design bay mass inside FlightModel card", () => {
   const def = JSON.parse(readFileSync(join(root, "rapier.v1.json"), "utf8"));
-  assert.equal(def.revision, "1.2.0");
+  assert.equal(def.revision, "1.3.0");
   assert.equal(def.sockets.droneBay.length, 4);
   assert.equal(def.sockets.droneBay[0].cellClearM.length, 1.1);
   assert.equal(def.performanceClaims.stowedDroneMassKg.value, 1440);
-  assert.equal(def.performanceClaims.stowedDroneMassKg.epistemic, "provisional");
+  assert.equal(def.performanceClaims.stowedDroneMassKg.epistemic, "closed");
 });
 
 test("gun-drone definition builds through the jet kit without a bespoke loft path", () => {

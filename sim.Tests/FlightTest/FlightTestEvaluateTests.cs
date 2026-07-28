@@ -24,15 +24,19 @@ public class FlightTestEvaluateTests {
     }
 
     [Fact]
-    public void EvaluateOnRapierFailsTwAugmentedGross() {
+    public void EvaluateOnRapierPassesTwAugmentedGross() {
         var subject = new AirframeUnderTest(
             "rapier",
             FlightModel.RapierPublicDataSurrogate,
             PropulsionModelKind.TurboRamjetPublicDataSurrogate,
             Identity: InterceptorTbccV1.RapierAspirationalIdentity);
         FlightTestReport report = Evaluator.Evaluate(subject, InterceptorTbccV1.Program);
-        Assert.False(report.Passed);
-        Assert.Contains(report.Findings, f => f.GateId == "tw-augmented-gross" && f.Blocking);
+        Assert.DoesNotContain(report.Findings,
+            f => f.GateId == "tw-augmented-gross" && f.Blocking);
+        AirframeIdentity measured = IdentityMeasurement.FromParams(
+            FlightModel.RapierPublicDataSurrogate, inferred: false);
+        Assert.True(measured.AugmentedThrustToWeight
+            <= InterceptorTbccV1.FamilyAugmentedTwCap + 1e-9);
     }
 
     [Fact]

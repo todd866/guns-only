@@ -109,6 +109,8 @@ internal static class RamjetPerformanceMap {
             NetThrustN: thrustN,
             NetThrustLbf: thrustN / J47PerformanceMap.NewtonsPerPoundForce,
             FuelFlowLbPerMinute: fuelFlow,
-            Running: running);
+            Running: running,
+            TurbineFuelFlowLbPerMinute: 0.0,
+            RamjetFuelFlowLbPerMinute: fuelFlow);
     }
 }

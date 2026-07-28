@@ -127,6 +127,72 @@ public class RapierTests {
     }
 
     [Fact]
+    public void PerStreamFuelIdlesTheCoreOnceRamOwnsTheFlow() {
+        AtmosphericState cruise = StandardAtmosphere1976.Instance.Sample(
+            Propulsion.TurboRamjetPerformanceMap.DesignAltitudeM);
+        // Past TurbineGoneMach the core is out; ram alone carries the bill.
+        const double Mach = 3.05;
+        var point = Propulsion.TurboRamjetPerformanceMap.Evaluate(
+            commandedFraction: 1.20,
+            staticThrustN: Jet.ThrustMaxN,
+            Mach, cruise.TemperatureK, cruise.DensityKgM3,
+            Jet.GenericIdleFuelFlowLbPerMinute,
+            Jet.GenericMilitaryFuelFlowLbPerMinute,
+            Jet.GenericAfterburnerFuelFlowLbPerMinute,
+            Jet.MaxThrustFraction);
+        var parts = Propulsion.TurboRamjetPerformanceMap.ThrustComponents(
+            Mach, cruise.TemperatureK, cruise.DensityKgM3);
+
+        Assert.True(parts.Turbine < 1e-6, $"turbine still {parts.Turbine:F4} at M{Mach}");
+        Assert.True(parts.Ramjet > 0.2, $"ram dead at M{Mach}: {parts.Ramjet:F3}");
+        Assert.True(point.TurbineFuelFlowLbPerMinute < 1e-6,
+            $"turbine still charging {point.TurbineFuelFlowLbPerMinute:F2} lb/min past handover");
+        Assert.True(point.RamjetFuelFlowLbPerMinute > 1.0,
+            "ram stream should own the fuel bill in ram cruise");
+        Assert.Equal(
+            point.FuelFlowLbPerMinute,
+            point.TurbineFuelFlowLbPerMinute + point.RamjetFuelFlowLbPerMinute,
+            precision: 6);
+
+        // Mid-handover: core still lit but unloading — turbine fuel collapses toward idle while
+        // lever stays at military, instead of charging full mil SFC against total thrust.
+        const double HandoverMach = 2.5;
+        var mid = Propulsion.TurboRamjetPerformanceMap.Evaluate(
+            commandedFraction: 1.0,
+            staticThrustN: Jet.ThrustMaxN,
+            HandoverMach, cruise.TemperatureK, cruise.DensityKgM3,
+            Jet.GenericIdleFuelFlowLbPerMinute,
+            Jet.GenericMilitaryFuelFlowLbPerMinute,
+            Jet.GenericAfterburnerFuelFlowLbPerMinute,
+            Jet.MaxThrustFraction);
+        var midParts = Propulsion.TurboRamjetPerformanceMap.ThrustComponents(
+            HandoverMach, cruise.TemperatureK, cruise.DensityKgM3);
+        Assert.True(midParts.Turbine > 1e-6 && midParts.Ramjet > 1e-6,
+            "handover band should light both streams");
+        Assert.True(mid.TurbineFuelFlowLbPerMinute
+                < Jet.GenericMilitaryFuelFlowLbPerMinute * 0.55,
+            $"turbine still near mil ({mid.TurbineFuelFlowLbPerMinute:F1}) while unloading");
+        Assert.True(mid.RamjetFuelFlowLbPerMinute > 0.5,
+            "ram must already be drawing fuel in the handover band");
+    }
+
+    [Fact]
+    public void DesignGrossIncludesFourStowedGunDronesAndFamilyTwCap() {
+        Assert.Equal(
+            FlightModel.RapierAirframeFuelFreeMassKg
+                + FlightModel.RapierDesignStowedGunDroneMassKg,
+            Jet.FuelFreeMassKg,
+            precision: 3);
+        Assert.Equal(1_440.0, FlightModel.RapierDesignStowedGunDroneMassKg, precision: 3);
+        Assert.Equal(
+            Jet.FuelFreeMassKg + 4_500.0,
+            Jet.MassKg,
+            precision: 3);
+        double augTw = Jet.ThrustMaxN * Jet.MaxThrustFraction / (Jet.MassKg * 9.80665);
+        Assert.True(augTw <= 1.20 + 1e-9, $"augmented T/W {augTw:F3} exceeds family 1.20");
+    }
+
+    [Fact]
     public void ItAcceleratesHardEnoughToBeWorthFlying() {
         // "Enough power that it's fun to get it up to speed" is a real requirement, so it gets a
         // real test. Level acceleration at low altitude on the augmentor.
@@ -338,8 +404,8 @@ public class RapierTests {
         bool pullHeld = false;
         bool pushHeld = false;
 
-        Assert.Equal(3_100.0, initialFuelLb, precision: 6);
-        Assert.InRange(initialFuelLb * 0.45359237, 1_400.0, 1_412.0);
+        Assert.Equal(3_600.0, initialFuelLb, precision: 6);
+        Assert.InRange(initialFuelLb * 0.45359237, 1_630.0, 1_635.0);
         // Decision records do not feed flight, propulsion, fuel, opponent control, or outcomes.
         // They are intentionally off in this long propulsion card to avoid allocating a combat
         // training row on every one of roughly sixty thousand unrelated transit ticks.

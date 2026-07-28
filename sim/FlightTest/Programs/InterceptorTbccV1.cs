@@ -3,13 +3,21 @@ namespace GunsOnly.Sim.FlightTest.Programs;
 public static class InterceptorTbccV1 {
     public const double FamilyAugmentedTwCap = 1.20;
 
+    static double RapierDesignGrossKg => FlightModel.RapierPublicDataSurrogate.MassKg;
+    static double RapierDesignFuelFreeKg => FlightModel.RapierPublicDataSurrogate.FuelFreeMassKg;
+    static double RapierDryTw =>
+        FlightModel.RapierPublicDataSurrogate.ThrustMaxN
+            / (RapierDesignGrossKg * 9.80665);
+    static double RapierAugTw =>
+        RapierDryTw * FlightModel.RapierPublicDataSurrogate.MaxThrustFraction;
+
     public static AirframeIdentity RapierAspirationalIdentity { get; } = new(
         Role: "dispersed TBCC interceptor",
-        FuelFreeMassKg: 5150.0,
-        GrossMassKg: 9650.0,
-        WingLoadingKgM2: 9650.0 / 18.0,
-        DryThrustToWeight: 85_000.0 / (9650.0 * 9.80665),
-        AugmentedThrustToWeight: 1.15,
+        FuelFreeMassKg: RapierDesignFuelFreeKg,
+        GrossMassKg: RapierDesignGrossKg,
+        WingLoadingKgM2: RapierDesignGrossKg / 18.0,
+        DryThrustToWeight: RapierDryTw,
+        AugmentedThrustToWeight: RapierAugTw,
         SkinTemperatureLimitK: 1473.15,
         ComparisonFamily: "turbine: F-15-class climb (aug T/W≤1.20); ram: SR-71-class dash claims",
         MaxClimbGammaDegWhileAcceleratingThroughMach1: 40.0,

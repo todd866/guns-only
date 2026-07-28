@@ -39,8 +39,8 @@ make a sustained air-breathing Mach-4 dash closed engineering:
   (`docs/2026-07-26-open-work-and-findings.md` and older setting prose).
 - Engine `DesignMach = 2.6` is a **cycle normaliser only**, not a dash claim — see
   [`30-propulsion-and-inlet.md`](30-propulsion-and-inlet.md).
-- Wet T/W (~1.39 gross / ~2.0 alert) exceeds the flight-test Identity aspiration (≤1.20) —
-  flagged as overperformance in the realism audit, not closed as desirable.
+- Wet T/W at design gross is now **≤ 1.20** (84 kN · 1.55 / 11090 kg) — family Identity matched.
+  Design gross includes the four-drone bay; see realism audit for remaining fiction (M4 dash).
 - Skin HUD previously published instantaneous recovery (dive fake-cooled the gauge); kernel now
   lags structural skin — see realism doc.
 
@@ -72,7 +72,7 @@ mass; systems follow)
 | [10](10-geometry.md) | Geometry | closed envelope |
 | [15](15-structure-and-build.md) | Structure and build | provisional gauges; OML closed |
 | [20](20-thermal-and-materials.md) | Thermal and materials | closed CMC freeze; surrogate zones |
-| [30](30-propulsion-and-inlet.md) | Propulsion and inlet | closed map constants; open finding: per-stream fuel |
+| [30](30-propulsion-and-inlet.md) | Propulsion and inlet | closed map constants + per-stream fuel |
 | [40](40-mass-and-cg.md) | Mass and CG | closed mass statement; provisional CG travel |
 | [50](50-crew-escape-fbw.md) | Crew, escape, FBW | provisional escape jettison; surrogate FBW gains |
 | [60](60-armament-and-drones.md) | Armament and drones | closed ownship gun; provisional drone packaging |

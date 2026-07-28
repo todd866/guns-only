@@ -107,6 +107,16 @@ public static class TurboRamjetPerformanceMap {
     /// exactly as the D-21 was — and thrust now falls out of the ideal cycle rather than a fit.
     public const double RamCaptureAreaM2 = 1.2;
 
+    /// <summary>
+    /// Ram combustor TSFC as a multiple of the published dry-military specific fuel consumption
+    /// (military lb/min ÷ sea-level static dry newtons). Higher than the turbine — ramjets are
+    /// thirsty — but total flow still falls as the core unloads because turbine fuel collapses to
+    /// an idle floor rather than charging military SFC against ram thrust. Kept below the published
+    /// afterburner/military ratio (~3.1) so ram-cruise still teaches better lb/nm than a lever-lie
+    /// AB bill, without starving the authored intercept fuel budget.
+    /// </summary>
+    public const double RamTsfcRelativeToDryMilitary = 1.85;
+
     /// The rating the fraction-based engine interface is measured against: the Rapier's sea-level
     /// static dry thrust. Used only to convert physical newtons back into the fraction callers
     /// expect, so the ram term can be real thrust while the interface stays unchanged.
@@ -198,41 +208,44 @@ public static class TurboRamjetPerformanceMap {
         CombinedCycleThrustFractions parts = ThrustComponents(
             mach, ambientTemperatureK, ambientDensityKgM3);
         double thrustN = lever * parts.Total * staticThrustN;
+        double turbineThrustN = lever * parts.Turbine * staticThrustN;
+        double ramThrustN = lever * parts.Ramjet * staticThrustN;
         double core = System.Math.Clamp(lever, 0.0, 1.0);
         // A density- or Mach-dead turbine is not "idle" — it is out. Idle floor and spool only
         // apply while the core can still breathe; ram-only thrust then burns purely against
         // delivered newtons (and ZoomCoast at exo burns nothing).
         bool coreLit = parts.Turbine > 1e-9;
 
-        // FUEL FOLLOWS THRUST, not the lever.
+        // PER-STREAM FUEL. Turbine and ram have different specific consumptions. Charging one
+        // lever-interpolated SFC against total thrust made the core look "military" while its
+        // thrust share was already gone, and hid the J58 lesson: idle the turbine, cruise on the
+        // duct, watch fuel flow drop on the instruments.
         //
-        // This used to interpolate the three published flows on lever position alone, so the engine
-        // burned full augmented fuel whether it was making 61 kN or 23 kN — the flow readout never
-        // moved as thrust decayed with altitude and Mach, which is both wrong and unflyable: the
-        // pilot could not trade speed for endurance because the trade did not exist.
-        //
-        // The published flows are still the anchor. They define a specific fuel consumption at the
-        // sea-level static rating, and flow is then that SFC applied to the thrust actually being
-        // produced, with an idle floor for the fuel a running core burns regardless.
-        double leverFlow = idleFuelFlowLbPerMinute
+        // Published idle / military / afterburner flows still anchor the TURBINE stream at the
+        // sea-level static rating. Ram uses a worse TSFC relative to dry-military.
+        double turbineLeverFlow = idleFuelFlowLbPerMinute
             + System.Math.Max(0.0, militaryFuelFlowLbPerMinute - idleFuelFlowLbPerMinute) * core;
-        double ratedThrustFraction = core;
+        double ratedTurbineFraction = core;
         if (lever > 1.0 && leverStop > 1.0) {
             double augmented = System.Math.Clamp((lever - 1.0) / (leverStop - 1.0), 0.0, 1.0);
-            leverFlow += System.Math.Max(0.0,
+            turbineLeverFlow += System.Math.Max(0.0,
                 afterburnerFuelFlowLbPerMinute - militaryFuelFlowLbPerMinute) * augmented;
-            // The augmentor's own thrust boost, so SFC is referenced to what the lever is really
-            // asking the engine for rather than to dry rating alone.
-            ratedThrustFraction = 1.0 + augmented * (System.Math.Max(1.0, leverStop) - 1.0);
+            ratedTurbineFraction = 1.0 + augmented * (System.Math.Max(1.0, leverStop) - 1.0);
         }
-        // Specific fuel consumption implied by the published pairing at this lever, then charged
-        // against delivered thrust. Sea-level static is the reference point where the two agree.
-        double ratedThrustN = System.Math.Max(1.0, ratedThrustFraction * staticThrustN);
-        double specificFuel = leverFlow / ratedThrustN;
+        double ratedTurbineThrustN = System.Math.Max(1.0, ratedTurbineFraction * staticThrustN);
+        double turbineSfc = turbineLeverFlow / ratedTurbineThrustN;
         double idleFloor = coreLit
             ? idleFuelFlowLbPerMinute * (0.35 + 0.65 * core)
             : 0.0;
-        double fuelFlow = System.Math.Max(idleFloor, specificFuel * thrustN);
+        double turbineFuel = coreLit
+            ? System.Math.Max(idleFloor, turbineSfc * turbineThrustN)
+            : 0.0;
+
+        double militarySfc = militaryFuelFlowLbPerMinute / System.Math.Max(1.0, staticThrustN);
+        double ramFuel = System.Math.Max(0.0,
+            militarySfc * RamTsfcRelativeToDryMilitary * ramThrustN);
+
+        double fuelFlow = turbineFuel + ramFuel;
         double rpm = coreLit ? 55.0 + 45.0 * core : 0.0;
         return new EngineOperatingPoint(
             // Lever zero is ground/flight idle, not a stopped core — but only while density still
@@ -244,6 +257,8 @@ public static class TurboRamjetPerformanceMap {
             NetThrustN: thrustN,
             NetThrustLbf: thrustN / J47PerformanceMap.NewtonsPerPoundForce,
             FuelFlowLbPerMinute: System.Math.Max(0.0, fuelFlow),
-            Running: parts.Total > 1e-9 || coreLit);
+            Running: parts.Total > 1e-9 || coreLit,
+            TurbineFuelFlowLbPerMinute: System.Math.Max(0.0, turbineFuel),
+            RamjetFuelFlowLbPerMinute: System.Math.Max(0.0, ramFuel));
     }
 }

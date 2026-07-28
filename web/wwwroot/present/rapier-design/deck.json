@@ -1,8 +1,8 @@
 {
   "meta": {
-    "docTitle": "Rapier \u2014 first-principles jet design",
-    "docSubtitle": "Regime, geometry, materials, propulsion, mass \u2014 and what telemetry actually shows",
-    "author": "Guns Only \u00b7 airframe SE",
+    "docTitle": "Rapier — first-principles jet design",
+    "docSubtitle": "Regime, geometry, materials, propulsion, mass — and what telemetry actually shows",
+    "author": "Guns Only · airframe SE",
     "airframeId": "rapier.public-data-surrogate.v1",
     "revision": "1.0.0",
     "note": "Teaching deck. Numbers are tagged closed / surrogate / provisional / fiction / open finding. Mach-4 dash is aspirational fiction; OFT energy-ladder peaks ~M3.69. CMC materials freeze stands. Skin HUD is lagged structure, not instantaneous recovery."
@@ -11,12 +11,12 @@
     {
       "id": "title",
       "layout": "title",
-      "eyebrow": "AIRFRAME SE \u00b7 RAPIER",
+      "eyebrow": "AIRFRAME SE · RAPIER",
       "title": "How this jet is built",
-      "subtitle": "First principles: mission \u2192 geometry \u2192 materials \u2192 propulsion \u2192 mass. Capture kit second.",
+      "subtitle": "First principles: mission → geometry → materials → propulsion → mass. Capture kit second.",
       "chips": [
         {
-          "text": "13 m \u00b7 7.35 m span \u00b7 18 m\u00b2",
+          "text": "13 m · 7.35 m span · 18 m²",
           "accent": "teal"
         },
         {
@@ -30,7 +30,7 @@
       ],
       "thesis": "Design for one decisive pass in thin air. Measure what the sim actually does. Flag what is still too good.",
       "author": "rapier.public-data-surrogate.v1 @ 1.0.0\nGeometry-of-record: airframes/rapier.v1.json",
-      "footer": "Guns Only \u00b7 fiction-labeled interceptor",
+      "footer": "Guns Only · fiction-labeled interceptor",
       "page": "1"
     },
     {
@@ -45,37 +45,37 @@
       },
       "statWeekly": {
         "value": "M4",
-        "label": "briefing / design-dash claim \u2014 fiction until retuned"
+        "label": "briefing / design-dash claim — fiction until retuned"
       },
-      "bottomLine": "CMC at 1200 \u00b0C is a materials freeze. Sustained air-breathing Mach 4 is not proven by that freeze \u2014 or by the map.",
-      "footer": "analysis/intercept-oft/*/ticks.jsonl \u00b7 REALISM-AND-OVERPERFORMANCE.md",
+      "bottomLine": "CMC at 1200 °C is a materials freeze. Sustained air-breathing Mach 4 is not proven by that freeze — or by the map.",
+      "footer": "analysis/intercept-oft/*/ticks.jsonl · REALISM-AND-OVERPERFORMANCE.md",
       "page": "2"
     },
     {
       "id": "mission",
       "layout": "table",
-      "eyebrow": "01 \u00b7 Mission",
+      "eyebrow": "01 · Mission",
       "heading": "A thrust, not a slash.",
-      "subhead": "Dispersed land basing \u2192 climb clean \u2192 overlap TBCC \u2192 dash thin \u2192 one attack \u2192 egress \u2192 trap light.",
+      "subhead": "Dispersed land basing → climb clean → overlap TBCC → dash thin → one attack → egress → trap light.",
       "rows": [
         {
           "label": "Launch",
-          "detail": "Buried gallery \u2192 12\u00b0 ramp \u00b7 ~110 m/s off rail \u00b7 ~1.5 Vs at gross",
+          "detail": "Buried gallery → 12° ramp · ~110 m/s off rail · ~1.5 Vs at gross",
           "accent": "teal"
         },
         {
           "label": "Climb",
-          "detail": "\u2192 FL560 @ ~M0.90 \u00b7 push wave-drag peak ~M1.18 \u00b7 do not sit on the shoulder",
+          "detail": "→ FL560 @ ~M0.90 · push wave-drag peak ~M1.18 · do not sit on the shoulder",
           "accent": "gold"
         },
         {
           "label": "Dash",
-          "detail": "Thin air \u00b7 ram owns thrust \u00b7 density-gated inlet forbids low-alt dash",
+          "detail": "Thin air · ram owns thrust · density-gated inlet forbids low-alt dash",
           "accent": "red"
         },
         {
           "label": "Recover",
-          "detail": "Arrive light \u00b7 hook \u00b7 35 MJ strip \u00b7 pattern school on Circuits",
+          "detail": "Arrive light · hook · 35 MJ strip · pattern school on Circuits",
           "accent": "teal"
         }
       ],
@@ -86,67 +86,67 @@
     {
       "id": "geometry",
       "layout": "figure",
-      "eyebrow": "02 \u00b7 Geometry",
+      "eyebrow": "02 · Geometry",
       "heading": "High wing loading on purpose.",
       "subhead": "Cruise and dash beat sustained low-speed G. Instantaneous G lives only in a fast, low dive box.",
       "figure": "plates/plate-01-three-view.svg",
-      "figureCaption": "Plate 01 \u2014 three-view from airframes/rapier.v1.json",
-      "bottomLine": "13 m \u00b7 7.35 m span \u00b7 18 m\u00b2 \u00b7 AR 3 \u00b7 ~536 kg/m\u00b2 at gross. Closed envelope; do not invent OML.",
-      "footer": "docs/airframes/rapier/10-geometry.md \u00b7 plate-01",
+      "figureCaption": "Plate 01 — three-view from airframes/rapier.v1.json",
+      "bottomLine": "13 m · 7.35 m span · 18 m² · AR 3 · ~536 kg/m² at gross. Closed envelope; do not invent OML.",
+      "footer": "docs/airframes/rapier/10-geometry.md · plate-01",
       "page": "4"
     },
     {
       "id": "planform",
       "layout": "figure",
-      "eyebrow": "02 \u00b7 Geometry",
+      "eyebrow": "02 · Geometry",
       "heading": "Thin sharp planform.",
       "subhead": "Wave-drag peak is meant to be pushed through, not stopped at. Contrast the subsonic sibling walled at M0.85.",
       "figure": "plates/plate-02-wing-planform.svg",
-      "figureCaption": "Plate 02 \u2014 wing planform vertices from definition",
-      "bottomLine": "MCrit 0.94 \u00b7 WaveDragPeakMach 1.18 \u00b7 CLAlpha 3.60 (low aspect ratio).",
+      "figureCaption": "Plate 02 — wing planform vertices from definition",
+      "bottomLine": "MCrit 0.94 · WaveDragPeakMach 1.18 · CLAlpha 3.60 (low aspect ratio).",
       "footer": "FlightModel.RapierPublicDataSurrogate",
       "page": "5"
     },
     {
       "id": "materials",
       "layout": "table",
-      "eyebrow": "03 \u00b7 Materials & thermal",
-      "heading": "Steel where the heat was \u2014 CMC where the heat is.",
-      "subhead": "Stagnation at M4-class flight is ~910 K. Stainless dies near 600 \u00b0C. The old cheap-steel story is superseded.",
+      "eyebrow": "03 · Materials & thermal",
+      "heading": "Steel where the heat was — CMC where the heat is.",
+      "subhead": "Stagnation at M4-class flight is ~910 K. Stainless dies near 600 °C. The old cheap-steel story is superseded.",
       "rows": [
         {
           "label": "Hot structure",
-          "detail": "SiC/SiC CMC \u00b7 SkinTemperatureLimitK = 1473.15 (1200 \u00b0C) \u00b7 closed materials freeze",
+          "detail": "SiC/SiC CMC · SkinTemperatureLimitK = 1473.15 (1200 °C) · closed materials freeze",
           "accent": "gold"
         },
         {
           "label": "Cold structure",
-          "detail": "Ordinary composite elsewhere \u00b7 mass and cost follow the hot zones",
+          "detail": "Ordinary composite elsewhere · mass and cost follow the hot zones",
           "accent": "teal"
         },
         {
           "label": "Thermal vs thrust",
-          "detail": "CMC headroom ~M5.7 thermally \u00b7 engine dies first ~M4.5 on thrust",
+          "detail": "CMC headroom ~M5.7 thermally · engine dies first ~M4.5 on thrust",
           "accent": "red"
         },
         {
           "label": "Skin HUD",
-          "detail": "Lagged structure (heat \u03c4\u224812 s, cool \u03c4\u2248180 s) \u2014 dive no longer fake-cools the gauge",
+          "detail": "Lagged structure (heat τ≈12 s, cool τ≈180 s) — dive no longer fake-cools the gauge",
           "accent": "teal"
         }
       ],
       "bottomLine": "CMC supports a hot dash story. It does not prove sustained Mach 4.",
-      "footer": "docs/airframes/rapier/20-thermal-and-materials.md \u00b7 AirData lagged skin",
+      "footer": "docs/airframes/rapier/20-thermal-and-materials.md · AirData lagged skin",
       "page": "6"
     },
     {
       "id": "thermal-plate",
       "layout": "figure",
-      "eyebrow": "03 \u00b7 Materials & thermal",
+      "eyebrow": "03 · Materials & thermal",
       "heading": "Where the heat lives.",
-      "subhead": "Leading edges, inlet lip, duct, nozzle \u2014 CMC. Capsule spine and outer skins \u2014 cooler composite.",
+      "subhead": "Leading edges, inlet lip, duct, nozzle — CMC. Capsule spine and outer skins — cooler composite.",
       "figure": "plates/plate-08-thermal-zones.svg",
-      "figureCaption": "Plate 08 \u2014 thermal / material zones",
+      "figureCaption": "Plate 08 — thermal / material zones",
       "bottomLine": "If the HUD cools on a decelerating dive, the model is lying. That bug is fixed; taus remain provisional.",
       "footer": "plate-08-thermal-zones.svg",
       "page": "7"
@@ -154,28 +154,28 @@
     {
       "id": "propulsion",
       "layout": "timeline",
-      "eyebrow": "04 \u00b7 Propulsion",
+      "eyebrow": "04 · Propulsion",
       "heading": "One inlet. One nozzle. Continuous TBCC.",
-      "subhead": "Turbine and ram overlap \u2014 no hard engine swap that strands a heavy glider.",
-      "barValue": "M0 \u2192 M3+",
-      "barLabel": "core \u2192 overlap \u2192 ram ownership",
+      "subhead": "Turbine and ram overlap — no hard engine swap that strands a heavy glider.",
+      "barValue": "M0 → M3+",
+      "barLabel": "core → overlap → ram ownership",
       "stops": [
         {
-          "label": "Core\nSLS 85 kN",
+          "label": "Core\nSLS 84 kN",
           "accent": "teal",
           "deck": [
             {
               "title": "Turbine core",
-              "body": "85 kN sea-level static dry.\nRaised from 65 kN so players clear the transonic shoulder."
+              "body": "84 kN sea-level static dry.\nSized for aug T/W ≤1.20 at design gross (four drones)."
             },
             {
               "title": "Caution",
-              "body": "Wet T/W ~1.39 gross / ~2.0 alert.\nIdentity aspiration \u22641.20 \u2014 overperformance flag."
+              "body": "Wet T/W ≤1.20 at design gross (11090 kg).\nFamily / Identity matched — Build 163."
             }
           ]
         },
         {
-          "label": "Fade\nM1.9\u20133.0",
+          "label": "Fade\nM1.9–3.0",
           "accent": "gold",
           "deck": [
             {
@@ -189,12 +189,12 @@
           ]
         },
         {
-          "label": "Ram\nM2.0\u20132.8",
+          "label": "Ram\nM2.0–2.8",
           "accent": "gold",
           "deck": [
             {
-              "title": "Ram light \u2192 full",
-              "body": "Overlaps turbine fade.\nCapture area 1.2 m\u00b2 \u00b7 burner 2300 K."
+              "title": "Ram light → full",
+              "body": "Overlaps turbine fade.\nCapture area 1.2 m² · burner 2300 K."
             }
           ]
         },
@@ -204,44 +204,44 @@
           "deck": [
             {
               "title": "What OFT shows",
-              "body": "Energy-ladder peak Mach \u2248 3.69 @ ~70 kft."
+              "body": "Energy-ladder peak Mach ≈ 3.69 @ ~70 kft."
             },
             {
               "title": "What briefings say",
-              "body": "Mach 4 \u2014 treat as fiction until the map is honest."
+              "body": "Mach 4 — treat as fiction until the map is honest."
             }
           ]
         }
       ],
       "bottomLine": "DesignMach 2.6 is a cycle normaliser, not the aircraft's top speed. Do not re-couple it to spill Mach.",
-      "footer": "TurboRamjetPerformanceMap.cs \u00b7 docs/airframes/rapier/30-propulsion-and-inlet.md",
+      "footer": "TurboRamjetPerformanceMap.cs · docs/airframes/rapier/30-propulsion-and-inlet.md",
       "page": "8"
     },
     {
       "id": "duct",
       "layout": "figure",
-      "eyebrow": "04 \u00b7 Propulsion",
+      "eyebrow": "04 · Propulsion",
       "heading": "Physical duct, not a fitted top speed.",
-      "subhead": "Thrust comes from ideal cycle through a fixed capture area and density schedule \u2014 climb before you accelerate.",
+      "subhead": "Thrust comes from ideal cycle through a fixed capture area and density schedule — climb before you accelerate.",
       "figure": "plates/plate-04-inlet-duct-nozzle.svg",
-      "figureCaption": "Plate 04 \u2014 inlet \u00b7 duct \u00b7 nozzle \u00b7 ramCaptureAreaM2 = 1.2",
+      "figureCaption": "Plate 04 — inlet · duct · nozzle · ramCaptureAreaM2 = 1.2",
       "bottomLine": "No thrust vectoring. Cold-gas RCS (40 kg) for collapsed-q coast only.",
-      "footer": "plate-04 \u00b7 ColdGasRcs* on AircraftParams",
+      "footer": "plate-04 · ColdGasRcs* on AircraftParams",
       "page": "9"
     },
     {
       "id": "mass",
       "layout": "hook",
-      "eyebrow": "05 \u00b7 Mass",
+      "eyebrow": "05 · Mass",
       "heading": "Heavy off the rail. Light on the wire.",
-      "subhead": "Fuel fraction ~47% \u2014 interceptor job, not a day-fighter tanking. Gear and wire only ever see recovery weight.",
+      "subhead": "Fuel fraction ~47% — interceptor job, not a day-fighter tanking. Gear and wire only ever see recovery weight.",
       "statBig": {
-        "value": "9650",
+        "value": "11090",
         "label": "kg gross (5150 empty + 4500 fuel)"
       },
       "statWeekly": {
         "value": "~47%",
-        "label": "fuel fraction \u2014 still short of SR-71's ~59%"
+        "label": "fuel fraction — still short of SR-71's ~59%"
       },
       "bottomLine": "Automation-assisted trap makes the gross mass affordable. CG travel with drone release remains provisional.",
       "footer": "docs/airframes/rapier/40-mass-and-cg.md",
@@ -252,11 +252,11 @@
       "layout": "figure",
       "eyebrow": "Realism audit",
       "heading": "Envelope on one plate.",
-      "subhead": "Climb corridor, TBCC overlap, measured OFT peak, fiction M4 line \u2014 labelled.",
+      "subhead": "Climb corridor, TBCC overlap, measured OFT peak, fiction M4 line — labelled.",
       "figure": "plates/plate-09-performance-envelope.svg",
-      "figureCaption": "Plate 09 \u2014 performance envelope (honest)",
+      "figureCaption": "Plate 09 — performance envelope (honest)",
       "bottomLine": "Prefer retuning propulsion and guidance over buffing the engine again to green an OFT.",
-      "footer": "plate-09 \u00b7 REALISM-AND-OVERPERFORMANCE.md",
+      "footer": "plate-09 · REALISM-AND-OVERPERFORMANCE.md",
       "page": "11"
     },
     {
@@ -268,80 +268,80 @@
       "rows": [
         {
           "label": "Dash Mach",
-          "detail": "Brief M4 \u00b7 OFT ~M3.69 \u00b7 map comments: nothing sustains air-breathing M4",
+          "detail": "Brief M4 · OFT ~M3.69 · map comments: nothing sustains air-breathing M4",
           "accent": "red"
         },
         {
           "label": "Wet T/W",
-          "detail": "~1.39 gross / ~2.0 alert vs Identity \u22641.20 \u00b7 65\u219285 kN was playability",
+          "detail": "≤1.20 at design gross · 84 kN · 11090 kg card (Build 163)",
           "accent": "red"
         },
         {
           "label": "Fuel model",
-          "detail": "Lever-only \u00b7 falsifies ram-cruise economy \u00b7 open finding",
+          "detail": "Lever-only · falsifies ram-cruise economy · open finding",
           "accent": "gold"
         },
         {
           "label": "Structure",
-          "detail": "12 G qualified / 15 G override \u00b7 aggressive for crewed interceptor",
+          "detail": "12 G qualified / 15 G override · aggressive for crewed interceptor",
           "accent": "gold"
         },
         {
           "label": "Skin lag taus",
-          "detail": "12 s heat / 180 s cool \u00b7 provisional soak surrogates, not measured curves",
+          "detail": "12 s heat / 180 s cool · provisional soak surrogates, not measured curves",
           "accent": "teal"
         }
       ],
-      "bottomLine": "CMC yes. Mach 4 no \u2014 not until the map and Identity agree with telemetry.",
+      "bottomLine": "CMC yes. Mach 4 no — not until the map and Identity agree with telemetry.",
       "footer": "docs/airframes/rapier/REALISM-AND-OVERPERFORMANCE.md",
       "page": "12"
     },
     {
       "id": "crew",
       "layout": "figure",
-      "eyebrow": "06 \u00b7 Systems that follow",
+      "eyebrow": "06 · Systems that follow",
       "heading": "No windscreen. Reclined occupant. Opaque escape spine.",
       "subhead": "The pilot issues coarse intent; FBW holds bank and flies the fine control. That is the fiction that makes keyboard flight possible.",
       "figure": "plates/plate-05-escape-spine.svg",
-      "figureCaption": "Plate 05 \u2014 escape-pod spine \u00b7 cockpitCamera socket",
-      "bottomLine": "Ownship gun 480 rounds. Four drone sockets provisional \u2014 packaging not closed.",
-      "footer": "50-crew \u00b7 60-armament \u00b7 plate-05",
+      "figureCaption": "Plate 05 — escape-pod spine · cockpitCamera socket",
+      "bottomLine": "Ownship gun 480 rounds. Four drone sockets provisional — packaging not closed.",
+      "footer": "50-crew · 60-armament · plate-05",
       "page": "13"
     },
     {
       "id": "drone-packaging",
       "layout": "figure",
-      "eyebrow": "06 \u00b7 Armament",
-      "heading": "Four belly cells \u2014 preferred, provisional.",
-      "subhead": "Trade C: 2\u00d72 grid. Stow 4\u00d7360 kg = 1440 kg not yet in FlightModel mass. Release \u2264 M1.6 for drone skin.",
+      "eyebrow": "06 · Armament",
+      "heading": "Four belly cells — preferred, provisional.",
+      "subhead": "Trade C: 2×2 grid. Stow 4×360 kg = 1440 kg in MassKg; shed on release. Release ≤ M1.6 for drone skin.",
       "figure": "plates/plate-06-drone-bay.svg",
-      "figureCaption": "Plate 06 \u2014 drone bay packaging trade",
+      "figureCaption": "Plate 06 — drone bay packaging trade",
       "bottomLine": "Gameplay load is four. Engineering packaging is provisional. Missing mass makes OFTs optimistic.",
-      "footer": "60-armament-and-drones.md \u00b7 revision 1.1.0",
+      "footer": "60-armament-and-drones.md · revision 1.1.0",
       "page": "14"
     },
     {
       "id": "basing",
       "layout": "figure",
-      "eyebrow": "06 \u00b7 Basing",
+      "eyebrow": "06 · Basing",
       "heading": "Buried gallery on flat steppe.",
-      "subhead": "Ukraine does not supply a natural 7\u00b0 hill. The ramp is engineered; the strip is purpose-built.",
+      "subhead": "Ukraine does not supply a natural 7° hill. The ramp is engineered; the strip is purpose-built.",
       "figure": "plates/plate-10-basing-interface.svg",
-      "figureCaption": "Plate 10 \u2014 basing interface \u00b7 14\u00d78 gallery \u00b7 12\u00b0 \u00b7 520 m \u00b7 35 MJ",
-      "bottomLine": "Airframe span 7.35 m from JSON; gallery clearance from bible \u00a7\u00a770\u201380.",
+      "figureCaption": "Plate 10 — basing interface · 14×8 gallery · 12° · 520 m · 35 MJ",
+      "bottomLine": "Airframe span 7.35 m from JSON; gallery clearance from bible §§70–80.",
       "footer": "2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md",
       "page": "15"
     },
     {
       "id": "mood",
       "layout": "figure",
-      "eyebrow": "Presentation \u00b7 ADR-0003",
+      "eyebrow": "Presentation · ADR-0003",
       "heading": "Soft world. Cold instruments.",
-      "subhead": "Ghibli-adjacent stills are fiction mood refs \u2014 not runtime source of truth. HUD stays phosphor/amber clinical.",
+      "subhead": "Ghibli-adjacent stills are fiction mood refs — not runtime source of truth. HUD stays phosphor/amber clinical.",
       "figure": "rapier-ghibli-strip.png",
-      "figureCaption": "Fiction mood ref \u00b7 provenance in analysis/art-refs/rapier/index.json",
+      "figureCaption": "Fiction mood ref · provenance in analysis/art-refs/rapier/index.json",
       "bottomLine": "Weathered mechanical honesty. Sealed capsule vs warm earth. No kill-porn.",
-      "footer": "ADR-0003 \u00b7 analysis/art-refs/rapier/",
+      "footer": "ADR-0003 · analysis/art-refs/rapier/",
       "page": "16"
     },
     {
@@ -352,44 +352,44 @@
       "subhead": "Part I first. Then freeze geometry. Then plates and mesh. Never invent a bespoke createFoo without an exception note.",
       "rows": [
         {
-          "label": "1 \u00b7 Bible",
-          "detail": "docs/airframes/<name>/ \u2014 mission \u2192 geometry \u2192 thermal \u2192 propulsion \u2192 mass",
+          "label": "1 · Bible",
+          "detail": "docs/airframes/<name>/ — mission → geometry → thermal → propulsion → mass",
           "accent": "teal"
         },
         {
-          "label": "2 \u00b7 Definition",
-          "detail": "airframes/<name>.v1.json from schema \u00b7 sync wwwroot + embedded JS",
+          "label": "2 · Definition",
+          "detail": "airframes/<name>.v1.json from schema · sync wwwroot + embedded JS",
           "accent": "teal"
         },
         {
-          "label": "3 \u00b7 Plates",
+          "label": "3 · Plates",
           "detail": "blueprints/ from definition numbers only",
           "accent": "gold"
         },
         {
-          "label": "4 \u00b7 Mesh",
-          "detail": "createAirframeFromDefinition \u2014 thin loader, no silent OML rewrite",
+          "label": "4 · Mesh",
+          "detail": "createAirframeFromDefinition — thin loader, no silent OML rewrite",
           "accent": "gold"
         },
         {
-          "label": "5 \u00b7 Bind",
+          "label": "5 · Bind",
           "detail": "presentation id + FlightModel identity share airframe id",
           "accent": "red"
         }
       ],
-      "bottomLine": "Rapier is jet #1 under the kit. Infrastructure captures first principles \u2014 it does not invent them.",
+      "bottomLine": "Rapier is jet #1 under the kit. Infrastructure captures first principles — it does not invent them.",
       "footer": "docs/airframes/README.md",
       "page": "17"
     },
     {
       "id": "build-bom",
       "layout": "table",
-      "eyebrow": "BUILD \u00b7 00",
+      "eyebrow": "BUILD · 00",
       "heading": "Modules that sum to 5150 kg empty.",
       "subhead": "BOM allocations are provisional; the sum is closed. Stowed drones are a separate +1440 kg state.",
       "rows": [
         {
-          "label": "A\u2013C\u2013F",
+          "label": "A–C–F",
           "detail": "Forward / centre / aft backbone + carry-through",
           "accent": "teal"
         },
@@ -416,25 +416,25 @@
     {
       "id": "build-structure",
       "layout": "figure",
-      "eyebrow": "BUILD \u00b7 11\u201312",
+      "eyebrow": "BUILD · 11–12",
       "heading": "Longerons, frames, spars.",
       "subhead": "Primary structure is provisional but must hit closed loft stations and 12 G dive loads.",
       "figure": "plates/plate-11-primary-structure.svg",
-      "figureCaption": "Plate 11 \u2014 primary structure",
+      "figureCaption": "Plate 11 — primary structure",
       "bottomLine": "Load paths never go through the CMC duct liner.",
-      "footer": "plate-11 \u00b7 plate-12",
+      "footer": "plate-11 · plate-12",
       "page": "19"
     },
     {
       "id": "build-assembly",
       "layout": "figure",
-      "eyebrow": "BUILD \u00b7 19",
+      "eyebrow": "BUILD · 19",
       "heading": "Mate order is the build.",
-      "subhead": "Keel \u2192 duct \u2192 spine \u2192 wings \u2192 systems \u2192 fins. Stop gates refuse Mach-4 / T/W fantasy acceptance.",
+      "subhead": "Keel → duct → spine → wings → systems → fins. Stop gates refuse Mach-4 / T/W fantasy acceptance.",
       "figure": "plates/plate-19-assembly-sequence.svg",
-      "figureCaption": "Plate 19 \u2014 assembly sequence",
-      "bottomLine": "Full blueprints exist. Realism still needs sim mass, T/W, and per-stream fuel \u2014 labelled, not claimed.",
-      "footer": "plate-19 \u00b7 REALISM-AND-OVERPERFORMANCE.md",
+      "figureCaption": "Plate 19 — assembly sequence",
+      "bottomLine": "Blueprints + sim mass/T/W/per-stream fuel closed Build 163. Remaining: honest dash Mach, gauges, inertias.",
+      "footer": "plate-19 · REALISM-AND-OVERPERFORMANCE.md",
       "page": "20"
     },
     {
@@ -442,8 +442,8 @@
       "layout": "close",
       "eyebrow": "BOTTOM LINE",
       "title": "Build for the pass you pick.",
-      "subtitle": "High loading \u00b7 CMC hot \u00b7 continuous TBCC \u00b7 trap light \u00b7 measure the dash you actually get.",
-      "thanks": "Bible \u00b7 blueprints \u00b7 definition \u00b7 lagged skin \u00b7 this deck.\nOpen: per-stream fuel \u00b7 T/W retune \u00b7 drone packaging \u00b7 honest dash Mach.",
+      "subtitle": "High loading · CMC hot · continuous TBCC · trap light · measure the dash you actually get.",
+      "thanks": "Bible · blueprints · definition · lagged skin · this deck.\nOpen: honest dash Mach · structural gauges · inertia rescale.",
       "footer": "docs/airframes/rapier/",
       "page": "21"
     }

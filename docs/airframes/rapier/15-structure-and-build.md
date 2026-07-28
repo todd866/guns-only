@@ -13,8 +13,8 @@ chapter states the build rules.
    FS+2.9/+5.55. Gear → frames → longerons. Never through the CMC duct liner.
 3. **Hot vs cold.** CMC owns LE, lip, duct, nozzle. Composite owns everything else. Isolate fasteners
    across the hot/cold boundary (plate 20).
-4. **Mass.** Module BOM (plate 00) must sum to **5150 kg** fuel-free. Stowed drones (+1440 kg) are a
-   separate load state — not yet in `FlightModel.MassKg`.
+4. **Mass.** Module BOM (plate 00) must sum to **5150 kg** airframe fuel-free. Published
+   `FuelFreeMassKg` / `MassKg` add the design **+1440 kg** bay; session sheds on release.
 5. **Mate order.** Plate 19. Duct sealed before spine; wings after spine; fins last.
 
 ## Primary structure (provisional)

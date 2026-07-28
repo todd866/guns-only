@@ -624,7 +624,9 @@ public sealed class AircraftSim {
             NetThrustN: thrustN,
             NetThrustLbf: thrustN / J47PerformanceMap.NewtonsPerPoundForce,
             FuelFlowLbPerMinute: System.Math.Max(0.0, fuelFlow),
-            Running: true);
+            Running: true,
+            TurbineFuelFlowLbPerMinute: System.Math.Max(0.0, fuelFlow),
+            RamjetFuelFlowLbPerMinute: 0.0);
     }
 
     /// The render attitude WITH the buffet shudder applied: forward and up (canopy) vectors that

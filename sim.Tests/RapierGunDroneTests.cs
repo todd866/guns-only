@@ -126,11 +126,17 @@ public class RapierGunDroneTests {
         Assert.Equal(4, session.LiveOpponentCount);
         Assert.Equal(4, session.RapierDogfightingDronesRemaining);
 
+        double massWithFour = session.Player.State.Mass;
         session.FeedKey(GKey.Trigger, true);
         session.FeedKey(GKey.Trigger, false);
         session.StepFixed();
 
         Assert.Equal(3, session.RapierDogfightingDronesRemaining);
+        double shedKg = massWithFour - session.Player.State.Mass;
+        // One fixed step also burns a few grams of fuel; drone unit is 360 kg.
+        Assert.InRange(shedKg,
+            FlightModel.RapierGunDroneSurrogate.MassKg - 0.05,
+            FlightModel.RapierGunDroneSurrogate.MassKg + 0.05);
         Assert.NotNull(session.ActiveRapierGunDrone);
         Assert.True(session.ActiveRapierGunDrone!.StillActive);
         Assert.Equal(4, session.LiveOpponentCount);

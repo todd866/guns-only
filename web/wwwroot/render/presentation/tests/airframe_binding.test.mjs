@@ -20,22 +20,26 @@ test("Rapier definition envelope binds to FlightModel.RapierPublicDataSurrogate"
   const def = JSON.parse(readFileSync(join(wwwroot, "airframes/rapier.v1.json"), "utf8"));
   const repoDef = JSON.parse(readFileSync(join(repoAirframes, "rapier.v1.json"), "utf8"));
   assert.deepEqual(def.massKg, repoDef.massKg, "wwwroot and repo definitions must match");
-  assert.equal(def.revision, "1.2.0");
+  assert.equal(def.revision, "1.3.0");
 
   const block = extractRapierBlock();
-  assert.match(block, /MassKg:\s*9650\.0/);
+  assert.match(block, /RapierAirframeFuelFreeMassKg\s*\+\s*RapierDesignStowedGunDroneMassKg\s*\+\s*4_500\.0/);
   assert.match(block, /WingAreaM2:\s*18\.0/);
   assert.match(block, /WingSpanM:\s*7\.35/);
-  assert.match(block, /FuelFreeMassKg:\s*5150\.0/);
+  assert.match(block, /FuelFreeMassKg:\s*RapierAirframeFuelFreeMassKg\s*\+\s*RapierDesignStowedGunDroneMassKg/);
   assert.match(block, /SkinTemperatureLimitK:\s*1473\.15/);
-  assert.match(block, /ThrustMaxN:\s*85_000\.0/);
+  assert.match(block, /ThrustMaxN:\s*84_000\.0/);
+  assert.match(flightModel, /RapierAirframeFuelFreeMassKg\s*=\s*5_150\.0/);
+  assert.match(flightModel, /RapierDesignGunDroneCount\s*=\s*4/);
 
   assert.equal(def.dimensionsM.span, 7.35);
   assert.equal(def.wing.areaM2, 18);
-  assert.equal(def.massKg.fuelFree, 5150);
-  assert.equal(def.massKg.gross, 9650);
+  assert.equal(def.massKg.fuelFreeAirframe, 5150);
+  assert.equal(def.massKg.designStowedGunDrones, 1440);
+  assert.equal(def.massKg.fuelFree, 6590);
+  assert.equal(def.massKg.gross, 11090);
   assert.equal(def.thermal.skinTemperatureLimitK, 1473.15);
-  assert.equal(def.propulsion.thrustMaxN, 85000);
+  assert.equal(def.propulsion.thrustMaxN, 84000);
   assert.equal(def.flightModelBinding, "FlightModel.RapierPublicDataSurrogate");
 });
 

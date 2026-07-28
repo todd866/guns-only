@@ -19,9 +19,9 @@ failed light-off of a separate ramjet would leave a heavy glider. Continuity *is
 | Density schedule | locked dense → open thin | **Climb before accelerating** is structural to the inlet |
 | Spill | M3.3 → M3.8 | Translating inlet dumps over-capture |
 | Design point | **M2.6 @ 21.5 km** (`DesignMach`, `DesignAltitudeM`) | **Normaliser only** — see below |
-| Core SLS dry (airframe) | **85 kN** | Pulls through transonic; was 65 kN and stalled on the shoulder |
+| Core SLS dry (airframe) | **84 kN** | Sized so aug T/W ≤ 1.20 at design gross (was 85 kN / clean 9650 kg → ~1.39) |
 | Augmentor stop | 1.55 | Full wet on cat; dry launch decays below stall |
-| Wet T/W (derived) | ~**1.39** gross / ~**2.0** alert | **Overperformance** vs Identity ≤1.20 — do not buff further |
+| Wet T/W (derived) | **≤ 1.20** at design gross | Family / Identity cap; alert (light fuel) still hotter |
 
 Grounded in `sim/Propulsion/TurboRamjetPerformanceMap.cs` and `FlightModel.RapierPublicDataSurrogate`.
 Measured intercept OFT energy-ladder peak Mach ≈ **3.69** (not 4.0).
@@ -47,19 +47,17 @@ lob), **cold-gas RCS** takes the stick:
 | Gas budget | 40 kg peroxide-class |
 | Burn | 0.40 kg/s at full | Enough for a few corrections per lob, not a spaceplane session |
 
-## Known first-principles gap — open finding, do not paper over
+## Fuel accounting (closed in kernel — Build 163)
 
-**Fuel is still lever-only** in the propulsion map: the turbine can charge military fuel while
-contributing no thrust. The aircraft's point — idle the core and cruise on the duct — is **not yet
-instrument-true**. The fix is per-stream fuel accounting (separate work, not part of this bible's
-freeze). This bible must show the *intended* fuel story; the sim's honesty tracks the open finding
-until it is fixed. Do not implement a "fake" per-stream split here or in the JSON capture to make
-this chapter look closed.
+**Per-stream fuel** is owned by `TurboRamjetPerformanceMap.Evaluate`: turbine flow uses the
+published idle/military/afterburner SFC against **turbine** thrust (idle floor while the core can
+breathe); ram flow uses `RamTsfcRelativeToDryMilitary` against **ram** thrust. HUD
+`rapier_turbine_fuel_ppm` / ram counterparts read those kernel fields — not a thrust-share of total.
+The intended story (idle the core, cruise on the duct, watch flow drop) is now instrument-true at
+the map level; mission fuel anchors remain surrogates until a component deck replaces them.
 
 ## Epistemic
 
-The map constants are **closed** — they are the actual constants in
-`TurboRamjetPerformanceMap.cs`, not invented for this bible. The per-stream fuel gap is an **open
-finding**: it is a known place where the sim's fuel model does not yet match the propulsion
-architecture described here.
-
+The map constants and per-stream fuel split are **closed** in
+`TurboRamjetPerformanceMap.cs`. Mission-level burn calibration (alert load → trap reserve) remains
+a **surrogate**.

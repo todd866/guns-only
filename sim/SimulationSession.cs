@@ -340,6 +340,13 @@ public sealed class SimulationSession {
     public string RapierCircuitLeg => _rapierMissionGuidance.CircuitLeg ?? "";
     public double RapierFdBankDeg => _rapierMissionGuidance.FdBankDeg;
     public double RapierFdTargetKtas => _rapierMissionGuidance.FdTargetKtas;
+    public double RapierGateHalfM => _rapierMissionGuidance.GateHalfM;
+    public Vec3D RapierGateFace => new(
+        _rapierMissionGuidance.GateFaceX,
+        _rapierMissionGuidance.GateFaceY,
+        _rapierMissionGuidance.GateFaceZ);
+    public bool RapierGateInVolume => _rapierMissionGuidance.GateInVolume;
+    public bool RapierGateEnergyOk => _rapierMissionGuidance.GateEnergyOk;
     public System.Collections.Generic.IReadOnlyList<CircuitTrafficShip> CircuitTraffic => _circuitTraffic;
     public string CircuitComms => _circuitComms;
     public bool CircuitsCleanMode => _circuitsCleanMode;
@@ -382,11 +389,10 @@ public sealed class SimulationSession {
             - RapierTurbineThrustN)
         : 0.0;
     public double RapierTurbineFuelFlowLbPerMinute => RapierMissionAvailable
-        ? _player.LastEngineOperatingPoint.FuelFlowLbPerMinute * RapierTurbineShare
+        ? _player.LastEngineOperatingPoint.TurbineFuelFlowLbPerMinute
         : 0.0;
     public double RapierRamjetFuelFlowLbPerMinute => RapierMissionAvailable
-        ? Math.Max(0.0, _player.LastEngineOperatingPoint.FuelFlowLbPerMinute
-            - RapierTurbineFuelFlowLbPerMinute)
+        ? _player.LastEngineOperatingPoint.RamjetFuelFlowLbPerMinute
         : 0.0;
     public AircraftSim Player => _player;
     public IBandit Bandit => _bandit;
@@ -1308,6 +1314,7 @@ public sealed class SimulationSession {
                 $"GUN-DRONE SWARM RELEASED · FORMATION DESTROYED · "
                     + $"{config.PursuerCount} PURSUERS IN TRAIL · RUN HOME",
                 4200.0);
+            RefreshPlayerMass();
             return true;
         }
 
@@ -1318,6 +1325,7 @@ public sealed class SimulationSession {
         _rapierGunDroneEgress = true;
         PromoteBanditsAgainstGunDrone();
         UpdateRapierMissionGuidance();
+        RefreshPlayerMass();
         ShowTransition(
             $"GUN-DRONE AWAY · {_rapierDogfightingDronesRemaining} REMAINING · EGRESS HOME",
             4200.0);
@@ -1963,15 +1971,29 @@ public sealed class SimulationSession {
         initialUtilityHydraulicPressureFraction: prechargeUtilityHydraulics ? 1.0 : 0.0);
 
     AircraftState WithCurrentFuelMass(in AircraftState state) {
-        double fuelFreeMass = _beat.PlayerAir.FuelFreeMassKg;
+        double fuelFreeMass = PlayerFuelFreeMassKgWithStores();
         if (fuelFreeMass <= 0.0) return state;
         return state with { Mass = fuelFreeMass + _fuel.FuelLb * 0.45359237 };
     }
 
     void RefreshPlayerMass() {
-        double fuelFreeMass = _beat.PlayerAir.FuelFreeMassKg;
+        double fuelFreeMass = PlayerFuelFreeMassKgWithStores();
         if (fuelFreeMass > 0.0)
             _player.SetMassKg(fuelFreeMass + _fuel.FuelLb * 0.45359237);
+    }
+
+    /// Published Rapier fuel-free includes the design four-drone bay. Actual stowed count may be
+    /// lower (mission config or after release); shed that delta so climb/dash feel the load.
+    double PlayerFuelFreeMassKgWithStores() {
+        double fuelFreeMass = _beat.PlayerAir.FuelFreeMassKg;
+        if (fuelFreeMass <= 0.0) return fuelFreeMass;
+        if (_beat.PlayerAir.PropulsionModel
+            != PropulsionModelKind.TurboRamjetPublicDataSurrogate)
+            return fuelFreeMass;
+        double designStores = FlightModel.RapierDesignStowedGunDroneMassKg;
+        double actualStores = _rapierDogfightingDronesRemaining
+            * FlightModel.RapierGunDroneSurrogate.MassKg;
+        return fuelFreeMass - designStores + actualStores;
     }
 
     FuelModel CreatePlayerFuel() {

@@ -85,7 +85,9 @@ public static class J47PerformanceMap
             NetThrustN: thrustLbf * NewtonsPerPoundForce,
             NetThrustLbf: thrustLbf,
             FuelFlowLbPerMinute: fuelLbPerMinute,
-            Running: true);
+            Running: true,
+            TurbineFuelFlowLbPerMinute: fuelLbPerMinute,
+            RamjetFuelFlowLbPerMinute: 0.0);
     }
 
     static double RpmForSeaLevelPower(double power)

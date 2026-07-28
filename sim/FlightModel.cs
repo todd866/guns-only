@@ -496,6 +496,17 @@ public static class FlightModel {
         GenericMilitaryFuelFlowLbPerMinute: 6.00,
         GenericAfterburnerFuelFlowLbPerMinute: 0.00);
 
+    /// Design bay load for the preferred four-cell gun-drone packaging (trade C).
+    /// <see cref="RapierPublicDataSurrogate"/> fuel-free / gross masses include this count.
+    public const int RapierDesignGunDroneCount = 4;
+
+    public static double RapierDesignStowedGunDroneMassKg =>
+        RapierDesignGunDroneCount * RapierGunDroneSurrogate.MassKg;
+
+    /// Airframe-only fuel-free mass (no stowed drones). Published
+    /// <see cref="RapierPublicDataSurrogate"/> fuel-free adds the design bay load.
+    public const double RapierAirframeFuelFreeMassKg = 5_150.0;
+
     /// RAPIER — the 2030s high-altitude turbine-based combined-cycle interceptor, fictional
     /// public-data surrogate.
     ///
@@ -526,27 +537,18 @@ public static class FlightModel {
     /// claims about any real aircraft or engine. Numbers derive from a Codex sizing pass and are
     /// PREDICTIONS until measured against AircraftSim.
     public static readonly AircraftParams RapierPublicDataSurrogate = new(
-        // 5,150 kg fuel-free + 4,500 kg fuel. The fuel fraction was 34 percent, which is a
-        // FIGHTER's fraction on an aircraft asked to do a strategic-interceptor job: at ram cruise
-        // it burns about 270 lb/min, so 5,950 lb was under 22 minutes total and the pilot was
-        // turning for home before reaching the contact. 47 percent is still well short of the
-        // SR-71's 59, and it is the fraction this mission profile actually needs.
+        // 5,150 kg airframe + 1,440 kg design four-drone bay (4 × RapierGunDroneSurrogate)
+        // + 4,500 kg fuel. Session mass sync sheds drone mass as cells empty / missions that
+        // launch with fewer drones. See docs/airframes/rapier/60-armament-and-drones.md trade C.
         //
         // The weight is affordable because every landing is an automation-assisted trap: the
         // aircraft launches heavy off a catapult and arrives light, so the gear and the wire only
-        // ever see recovery weight. 110 m/s off the rail is still 1.51 times stall at gross.
-        //
-        // Preferred four-drone belly load adds ~1,440 kg when stowed (4 × RapierGunDroneSurrogate)
-        // — NOT included here yet; OFT climb/dash are therefore optimistic. See
-        // docs/airframes/rapier/60-armament-and-drones.md trade C.
-        MassKg: 9650.0,
-        WingAreaM2: 18.0,                     // 436 kg/m2 at catshot mass: cruise beats low-speed G
-        // The initial 65 kN core left a player-flown aircraft sitting on the M1.3-M1.5 drag
-        // shoulder whenever the climb was even slightly untidy. This is an alert interceptor, not
-        // a throttle-management exam: the enlarged 85 kN turbine pulls decisively through the
-        // transonic rise, while the inlet schedule still requires height for the authored thin-air
-        // ram dash (Mach-4 branding is fiction; see REALISM-AND-OVERPERFORMANCE).
-        ThrustMaxN: 85_000.0,                 // sea-level static DRY, uprated turbine core
+        // ever see recovery weight.
+        MassKg: RapierAirframeFuelFreeMassKg + RapierDesignStowedGunDroneMassKg + 4_500.0,
+        WingAreaM2: 18.0,                     // high wing loading: cruise beats low-speed G
+        // 84 kN dry keeps augmented T/W at design gross (four drones) ≤ family cap 1.20.
+        // Prior 85 kN on a clean 9650 kg card read ~1.39 wet — past Identity aspiration.
+        ThrustMaxN: 84_000.0,                 // sea-level static DRY turbine core
         CD0: 0.0175, InducedK: 0.105,         // area-ruled body, small high-speed wing
         CLMax: 1.35, CLMin: -0.60,
         RollRateMaxRad: 2.60, BankTau: 0.22,
@@ -561,7 +563,7 @@ public static class FlightModel {
         YawModeFreq: 1.7, YawModeDamp: 0.26,
         RollModeFreq: 4.4, RollModeDamp: 0.70,
         BuffetGain: 0.45,
-        // Geometry-derived for a ~13 m long, 7.3 m span, 7.85 t aircraft.
+        // Geometry-derived for a ~13 m long, 7.3 m span, ~11 t design-gross article.
         IxxKgM2: 9_500.0, IyyKgM2: 62_000.0, IzzKgM2: 68_000.0,
         RollStiffnessNmRad: 320_000.0, PitchStiffnessNmRad: 900_000.0,
         YawStiffnessNmRad: 260_000.0,
@@ -637,7 +639,7 @@ public static class FlightModel {
         StallPitchBreakNm: 60_000.0,
         HighAlphaModel: HighAlphaModelKind.Generic,
         PropulsionModel: PropulsionModelKind.TurboRamjetPublicDataSurrogate,
-        FuelFreeMassKg: 5150.0,
+        FuelFreeMassKg: RapierAirframeFuelFreeMassKg + RapierDesignStowedGunDroneMassKg,
         // The first mission calibration returned with 2,682 lb from a 4,400 lb alert load: the
         // profile was tactically free. These effective anchors double that measured burn and put
         // the authored Mach-4 sortie near its 900 lb minimum reserve at the trap. They remain a

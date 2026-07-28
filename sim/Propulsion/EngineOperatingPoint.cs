@@ -9,7 +9,11 @@ public readonly record struct EngineOperatingPoint(
     double NetThrustN,
     double NetThrustLbf,
     double FuelFlowLbPerMinute,
-    bool Running)
+    bool Running,
+    /// <summary>Fuel attributable to the turbine/core stream. Equals total for single-stream maps.</summary>
+    double TurbineFuelFlowLbPerMinute = 0.0,
+    /// <summary>Fuel attributable to the ram combustor. Zero for single-stream maps.</summary>
+    double RamjetFuelFlowLbPerMinute = 0.0)
 {
     // Conventional all-caps aliases make the units easy to discover from either C# naming style.
     public double RPM => Rpm;
@@ -21,5 +25,7 @@ public readonly record struct EngineOperatingPoint(
         NetThrustN: 0.0,
         NetThrustLbf: 0.0,
         FuelFlowLbPerMinute: 0.0,
-        Running: false);
+        Running: false,
+        TurbineFuelFlowLbPerMinute: 0.0,
+        RamjetFuelFlowLbPerMinute: 0.0);
 }

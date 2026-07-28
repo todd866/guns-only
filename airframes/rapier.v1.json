@@ -1,7 +1,7 @@
 {
   "schema": "guns-only.airframe-definition.v1",
   "id": "rapier.public-data-surrogate.v1",
-  "revision": "1.2.0",
+  "revision": "1.3.0",
   "displayName": "Rapier",
   "role": "dispersed TBCC interceptor",
   "presentationId": "presentation.vehicle.rapier.public-data-surrogate.v1",
@@ -352,17 +352,20 @@
     "accent": "0xb85e32"
   },
   "massKg": {
-    "fuelFree": 5150,
+    "fuelFreeAirframe": 5150,
+    "designStowedGunDrones": 1440,
+    "fuelFree": 6590,
     "fuelCapacity": 4500,
-    "gross": 9650
+    "gross": 11090,
+    "notes": "fuelFree/gross include design 4×360 kg gun-drone bay; session sheds as cells empty"
   },
   "propulsion": {
     "ramCaptureAreaM2": 1.2,
-    "thrustMaxN": 85000,
+    "thrustMaxN": 84000,
     "maxThrustFraction": 1.55,
     "designMachNormaliser": 2.6,
     "epistemic": "provisional",
-    "notes": "Wet T/W and M4 dash overperformance \u2014 see docs/airframes/rapier/REALISM-AND-OVERPERFORMANCE.md"
+    "notes": "84 kN keeps aug T/W ≤1.20 at design gross; M4 dash still fiction — see REALISM-AND-OVERPERFORMANCE.md"
   },
   "thermal": {
     "skinTemperatureLimitK": 1473.15,
@@ -381,17 +384,17 @@
       "notes": "analysis/intercept-oft energy-ladder"
     },
     "wetThrustWeightGross": {
-      "value": 1.39,
-      "epistemic": "provisional",
-      "notes": "Improbably high vs Identity \u22641.20"
+      "value": 1.20,
+      "epistemic": "closed",
+      "notes": "84 kN \u00d7 1.55 / (11090 kg \u00d7 g) \u2248 1.197; family cap 1.20"
     },
     "stowedDroneMassKg": {
       "value": 1440,
-      "epistemic": "provisional",
-      "notes": "4 x RapierGunDroneSurrogate 360 kg; NOT yet in FlightModel.MassKg"
+      "epistemic": "closed",
+      "notes": "4 x RapierGunDroneSurrogate 360 kg; included in MassKg / FuelFreeMassKg; shed on release"
     }
   },
-  "notes": "Geometry 1:1 from createRapier. Rev 1.2.0 adds provisional structure metadata + full blueprint package plates 00\u201320. Performance honesty unchanged.",
+  "notes": "Geometry 1:1 from createRapier. Rev 1.3.0 closes design-gross mass, family T/W, and per-stream fuel honesty.",
   "structure": {
     "epistemic": "provisional",
     "longerons": "four continuous U/L \u00d7 L/R",

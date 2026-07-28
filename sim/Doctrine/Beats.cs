@@ -768,10 +768,11 @@ public static class Beats {
             Combat: CombatConfig.ModernVisualMerge,
             Fuel: new FuelConfig(
                 CapacityLb: 9_920.0,          // 4,500 kg of fuel
-                // The interceptor can carry 2,700 kg, but this authored alert launch carries only
-                // 1,406 kg. The M4 outbound dash, M4 escape, and powered recovery leave a narrow
-                // trap reserve instead of turning the last act into a consequence-free cruise.
-                InitialFuelLb: 3_100.0,
+                // Design gross now includes the four-drone bay (+1440 kg). The prior 3,100 lb alert
+                // load left the automation short of the square-gate recovery once climb/ram burn
+                // reflected that mass. 3,600 lb restores a narrow trap reserve without making the
+                // profile free again.
+                InitialFuelLb: 3_600.0,
                 BingoThresholdLb: 1_000.0,
                 ConsumesFuel: true,
                 JokerThresholdLb: 1_200.0,

@@ -39,9 +39,10 @@ the article without reading `scene_builders.js`. Not an OEM certified set.
 ## Closed vs soft
 
 **Closed today:** OML, loft stations, capture area, basing gallery/arrest energy, mass statement
-5150/4500/9650, CMC skin limit constant.  
-**Soft until sim catches up:** wet T/W, per-stream fuel, stowed-drone mass in `MassKg`, structural
-gauges, actuator rates — labelled, not papered over.
+5150 airframe + 1440 design drones / 4500 fuel / 11090 gross, 84 kN · aug T/W ≤1.20, CMC skin
+limit, per-stream fuel in the propulsion map.  
+**Still soft:** structural gauges, actuator rates, inertia rescale for 11 t gross, honest dash Mach —
+labelled, not papered over.
 
 ## Regenerate on revision bump
 
