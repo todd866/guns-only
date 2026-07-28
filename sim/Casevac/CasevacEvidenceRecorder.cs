@@ -118,6 +118,11 @@ public sealed class CasevacEvidenceRecorder {
         new long[Enum.GetValues<CasevacPhase>().Length];
     readonly long[] _maskingTicks =
         new long[Enum.GetValues<CasevacMaskingState>().Length];
+    // Masking is an en-route trade, not a reward for sitting on a masked landing pad. Retain an
+    // exact non-dropping route-only aggregate alongside the mission-wide diagnostic so assessment
+    // never has to reconstruct route exposure from bounded samples.
+    readonly long[] _routeMaskingTicks =
+        new long[Enum.GetValues<CasevacMaskingState>().Length];
     readonly long[] _gateTicks = new long[TerminalLegCount * GateClassCount];
     readonly long[] _enterViolationTicks =
         new long[TerminalLegCount * ViolationBitCount];
@@ -214,6 +219,14 @@ public sealed class CasevacEvidenceRecorder {
     public long MaskingNotAssessedTicks =>
         GetMaskingTicks(CasevacMaskingState.NotAssessed);
     public long WithinSafeMaskingBandTicks { get; private set; }
+    public long RouteObservedTicks { get; private set; }
+    public long RouteMaskedTicks =>
+        GetRouteMaskingTicks(CasevacMaskingState.Masked);
+    public long RouteExposedTicks =>
+        GetRouteMaskingTicks(CasevacMaskingState.Exposed);
+    public long RouteMaskingNotAssessedTicks =>
+        GetRouteMaskingTicks(CasevacMaskingState.NotAssessed);
+    public long RouteWithinSafeMaskingBandTicks { get; private set; }
     public long VehicleUnflyableTicks { get; private set; }
     public long ProtectionInterventionActiveTicks { get; private set; }
     public long ProtectionInterventionEdges { get; private set; }
@@ -321,6 +334,12 @@ public sealed class CasevacEvidenceRecorder {
 
         _maskingTicks[(int)observation.MaskingState]++;
         if (observation.WithinSafeMaskingBand) WithinSafeMaskingBandTicks++;
+        if (IsRoutePhase(snapshot.Phase)) {
+            RouteObservedTicks++;
+            _routeMaskingTicks[(int)observation.MaskingState]++;
+            if (observation.WithinSafeMaskingBand)
+                RouteWithinSafeMaskingBandTicks++;
+        }
         if (!observation.VehicleFlyable) VehicleUnflyableTicks++;
         _minimumClearanceM =
             System.Math.Min(_minimumClearanceM, observation.ClearanceM);
@@ -448,6 +467,12 @@ public sealed class CasevacEvidenceRecorder {
         if (!Enum.IsDefined(state))
             throw new ArgumentOutOfRangeException(nameof(state));
         return _maskingTicks[(int)state];
+    }
+
+    public long GetRouteMaskingTicks(CasevacMaskingState state) {
+        if (!Enum.IsDefined(state))
+            throw new ArgumentOutOfRangeException(nameof(state));
+        return _routeMaskingTicks[(int)state];
     }
 
     public long GetEventCount(CasevacEventKind kind) {
@@ -809,6 +834,12 @@ public sealed class CasevacEvidenceRecorder {
             snapshot.StabilizationProgressTicks,
             snapshot.OperationProgressTicks);
     }
+
+    static bool IsRoutePhase(CasevacPhase phase) =>
+        phase is CasevacPhase.Ingress
+            or CasevacPhase.PickupApproach
+            or CasevacPhase.Outbound
+            or CasevacPhase.DropoffApproach;
 
     static void AppendSample(
         CasevacEvidenceSample[] destination,

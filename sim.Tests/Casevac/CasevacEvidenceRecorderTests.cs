@@ -422,6 +422,11 @@ public sealed class CasevacEvidenceRecorderTests {
         Assert.Equal(2, recorder.ExposedTicks);
         Assert.Equal(1, recorder.MaskingNotAssessedTicks);
         Assert.Equal(3, recorder.WithinSafeMaskingBandTicks);
+        Assert.Equal(2, recorder.RouteObservedTicks);
+        Assert.Equal(2, recorder.RouteMaskedTicks);
+        Assert.Equal(0, recorder.RouteExposedTicks);
+        Assert.Equal(0, recorder.RouteMaskingNotAssessedTicks);
+        Assert.Equal(2, recorder.RouteWithinSafeMaskingBandTicks);
         Assert.Equal(1, recorder.VehicleUnflyableTicks);
         Assert.Equal(3, recorder.ProtectionInterventionActiveTicks);
         Assert.Equal(2, recorder.ProtectionInterventionEdges);
@@ -1218,6 +1223,10 @@ public sealed class CasevacEvidenceRecorderTests {
             actual.MaskingNotAssessedTicks);
         Assert.Equal(expected.WithinSafeMaskingBandTicks,
             actual.WithinSafeMaskingBandTicks);
+        Assert.Equal(expected.RouteObservedTicks,
+            actual.RouteObservedTicks);
+        Assert.Equal(expected.RouteWithinSafeMaskingBandTicks,
+            actual.RouteWithinSafeMaskingBandTicks);
         Assert.Equal(expected.VehicleUnflyableTicks,
             actual.VehicleUnflyableTicks);
         Assert.Equal(expected.ProtectionInterventionActiveTicks,
@@ -1237,6 +1246,10 @@ public sealed class CasevacEvidenceRecorderTests {
                  in Enum.GetValues<CasevacMaskingState>())
             Assert.Equal(expected.GetMaskingTicks(state),
                 actual.GetMaskingTicks(state));
+        foreach (CasevacMaskingState state
+                 in Enum.GetValues<CasevacMaskingState>())
+            Assert.Equal(expected.GetRouteMaskingTicks(state),
+                actual.GetRouteMaskingTicks(state));
         foreach (CasevacEventKind kind in Enum.GetValues<CasevacEventKind>()) {
             Assert.Equal(expected.GetEventCount(kind),
                 actual.GetEventCount(kind));

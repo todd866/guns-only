@@ -152,7 +152,7 @@ public static class KoreaWeatherPresets {
         4 => ModernCirrus,
         5 or 6 => HistoricalMaritime,
         7 or 9 => ModernHigh,
-        8 => UkraineLowLevel,
+        8 or 13 => UkraineLowLevel,
         10 or 11 => RapierHighAltitude,
         _ => HistoricalInland
     };
