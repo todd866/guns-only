@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=175";
+import { createHud } from "./hud.js?v=176";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=175";
+} from "./render/debrief/sortie_result.js?v=176";
 import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -44,7 +44,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=175";
+} from "./render/release/release_identity.js?v=176";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -57,7 +57,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=175";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=176";
 import {
   applyLookDelta,
   trackpadLookDelta,
@@ -115,13 +115,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=175";
+} from "./render/telemetry/ai_frame_pressure.js?v=176";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=175";
+} from "./render/telemetry/telemetry_batch.js?v=176";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -130,7 +130,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=175";
+} from "./render/settings/player_settings.js?v=176";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -171,11 +171,11 @@ import {
   createRapierDispersedStrip,
   createRapierGunDrone,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=175";
+} from "./render/scene/scene_builders.js?v=176";
 import {
   setFlightAudioEnabled,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=175";
+} from "./render/audio/flight_audio.js?v=176";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -8974,7 +8974,7 @@ async function boot() {
 // prevent the game from starting: the sortie is the product, offline is an enhancement.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=175").catch((error) => {
+    navigator.serviceWorker.register("service-worker.js?v=176").catch((error) => {
       console.warn("Offline support unavailable.", error);
     });
   });
