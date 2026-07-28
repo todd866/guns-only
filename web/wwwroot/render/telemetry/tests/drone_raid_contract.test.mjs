@@ -21,8 +21,14 @@ const [bridgeSource, sessionSource, beatsSource] = await Promise.all([
 test("stable beat eight selects the fictional Ukraine low-level staged raid without renumbering", () => {
   assert.match(sessionSource, /_beatFactory = \(\) => Beats\.BuiltIn\(index, deckConfiguration\);/);
   assert.match(beatsSource, /7 => ModernVisualMerge\(\),\s*8 => DroneRaidDefense\(\),/);
-  // The ceiling moves as beats are added; what must not move is beat EIGHT being the drone raid.
-  assert.match(sessionSource, /index is < 1 or > \d+/);
+  // The catalogue ceiling can grow, but beat EIGHT must remain the drone raid and the validator
+  // must admit the new Medevac entry instead of silently falling back to the first beat.
+  assert.match(sessionSource,
+    /if \(!Beats\.IsBuiltInIndex\(index\)\) index = Beats\.FirstBuiltInIndex;/);
+  assert.match(beatsSource, /public const int LastBuiltInIndex = 13;/);
+  assert.match(beatsSource,
+    /index is >= FirstBuiltInIndex and <= LastBuiltInIndex;/);
+  assert.match(beatsSource, /13 => Medevac\(\),/);
   assert.match(beatsSource,
     /mission\.ukraine-training\.low-level-drone-intercept\.prototype\.v1/);
   assert.match(beatsSource, /Era: "UKRAINE_FICTIONAL_TRAINING_SECTOR"/);

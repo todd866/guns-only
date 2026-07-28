@@ -19,7 +19,12 @@ namespace GunsOnly.Web;
 /// </summary>
 internal static class CasevacSnapshotProjection {
     public const string SchemaVersion = "casevac.commander.v1";
+    internal const int MaximumProjectedCollisionObstacleCount = 32;
+    internal const int MaximumProjectedRouteCount = 16;
+    internal const int MaximumProjectedRouteControlPointCount = 32;
     const double RadiansToDegrees = 180.0 / Math.PI;
+    const double JoulesPerKilowattHour = 3_600_000.0;
+    const double SecondsPerMinute = 60.0;
     // Presentation-only normalization for the deterministic weather sample. The dimensional
     // mm/hr value remains published beside it and retains simulation truth; 4 mm/hr is the
     // declared full-strength rain visual, not a meteorological severity classification.
@@ -39,6 +44,8 @@ internal static class CasevacSnapshotProjection {
         PlayerVehicleObservation observation = flight.VehicleObservation;
         LandingZoneObservation landingZone = flight.LastLandingZone;
         CasevacTargetGuidance guidance = flight.TargetGuidance;
+        CasevacDestinationEnergyPlan energyPlan =
+            flight.DestinationEnergyPlan;
         MissionEnvironmentContract environment = session.Beat.EnvironmentIdentity;
         WeatherProfile? weather = session.Weather;
 
@@ -256,6 +263,11 @@ internal static class CasevacSnapshotProjection {
         AppendLocation(json, "casevac_pickup", flight.PickupLocation);
         AppendLocation(json, "casevac_receiver", flight.ReceiverLocation);
         AppendLocation(json, "casevac_safe_exit", flight.SafeExitLocation);
+        json.Raw("casevac_collision_obstacles",
+            CollisionObstaclesJson(
+                flight.ResolvedCollisionObstacles));
+        json.Raw("casevac_routes",
+            RoutesJson(flight.ResolvedRoutes));
 
         json.Boolean("casevac_vehicle_flyable", flight.VehicleFlyable);
         json.String("casevac_contact_kind",
@@ -304,6 +316,63 @@ internal static class CasevacSnapshotProjection {
                 ? observation.Power.AppliedPowerW
                 : null,
             1);
+        json.String("casevac_energy_model_id",
+            CasevacFlightRuntime.EnergyModelId);
+        json.Number("casevac_energy_initial_kwh",
+            flight.InitialUsableEnergyJ / JoulesPerKilowattHour,
+            4);
+        json.Number("casevac_energy_remaining_kwh",
+            flight.RemainingUsableEnergyJ / JoulesPerKilowattHour,
+            4);
+        json.Number("casevac_energy_remaining_fraction",
+            flight.RemainingEnergyFraction,
+            6);
+        json.Number("casevac_energy_planning_endurance_s",
+            flight.PlanningEnduranceSeconds,
+            3);
+        json.Number("casevac_energy_planning_endurance_min",
+            flight.PlanningEnduranceSeconds / SecondsPerMinute,
+            3);
+        json.Number("casevac_energy_planning_power_kw",
+            CasevacFlightRuntime.PlanningPowerW / 1_000.0,
+            3);
+        json.Number("casevac_energy_planning_ground_speed_mps",
+            CasevacFlightRuntime.PlanningGroundSpeedMps,
+            3);
+        json.Number("casevac_energy_planning_arrival_allowance_s",
+            CasevacFlightRuntime.PlanningArrivalAllowanceSeconds,
+            3);
+        json.Boolean("casevac_energy_depleted",
+            flight.EnergyDepleted);
+        json.NullableString("casevac_destination_energy_target_id",
+            energyPlan.TargetId);
+        json.NullableNumber("casevac_destination_energy_transit_s",
+            energyPlan.TargetId is null
+                ? null
+                : energyPlan.PlannedTransitSeconds,
+            3);
+        json.NullableNumber("casevac_destination_reserve_kwh",
+            energyPlan.TargetId is null
+                ? null
+                : energyPlan.ProjectedReserveEnergyJ
+                    / JoulesPerKilowattHour,
+            4);
+        json.NullableNumber("casevac_destination_reserve_fraction",
+            energyPlan.TargetId is null
+                ? null
+                : energyPlan.ProjectedReserveFraction,
+            6);
+        json.NullableNumber("casevac_destination_reserve_endurance_s",
+            energyPlan.TargetId is null
+                ? null
+                : energyPlan.ProjectedReserveEnduranceSeconds,
+            3);
+        json.NullableNumber("casevac_destination_reserve_min",
+            energyPlan.TargetId is null
+                ? null
+                : energyPlan.ProjectedReserveEnduranceSeconds
+                    / SecondsPerMinute,
+            3);
         json.String("casevac_masking_state",
             MaskingToken(flight.LastExposure.MaskingState));
         json.Boolean("casevac_within_safe_masking_band",
@@ -467,6 +536,199 @@ internal static class CasevacSnapshotProjection {
                     flight.Course.World.Receiver,
             _ => null
         };
+    }
+
+    static string CollisionObstaclesJson(
+        IReadOnlyList<CasevacResolvedCollisionObstacle> obstacles) {
+        if (obstacles.Count > MaximumProjectedCollisionObstacleCount)
+            throw new InvalidOperationException(
+                "The CASEVAC collision presentation contract exceeded its bounded obstacle capacity.");
+
+        var json = new StringBuilder("[");
+        for (int index = 0; index < obstacles.Count; index++) {
+            if (index > 0) json.Append(',');
+            CasevacResolvedCollisionObstacle obstacle =
+                obstacles[index];
+            var item = new FlatJson();
+            item.String("id", obstacle.Id);
+            item.String("primitive", obstacle.Primitive switch {
+                CasevacCollisionPrimitive.CapsuleSegment =>
+                    "CAPSULE_SEGMENT",
+                CasevacCollisionPrimitive.AxisAlignedBox =>
+                    "AXIS_ALIGNED_BOX",
+                _ => throw new InvalidOperationException(
+                    "Unsupported CASEVAC collision primitive.")
+            });
+            item.Number("radius_m", obstacle.RadiusM, 6);
+            switch (obstacle.Primitive) {
+                case CasevacCollisionPrimitive.CapsuleSegment:
+                    item.Raw("start_world_m",
+                        WorldPointJson(obstacle.FirstWorldM));
+                    item.Raw("end_world_m",
+                        WorldPointJson(obstacle.SecondWorldM));
+                    break;
+                case CasevacCollisionPrimitive.AxisAlignedBox:
+                    item.Raw("minimum_world_m",
+                        WorldPointJson(obstacle.FirstWorldM));
+                    item.Raw("maximum_world_m",
+                        WorldPointJson(obstacle.SecondWorldM));
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        "Unsupported CASEVAC collision primitive.");
+            }
+            json.Append(item.Finish());
+        }
+        return json.Append(']').ToString();
+    }
+
+    static string RoutesJson(
+        IReadOnlyList<CasevacResolvedRoute> routes) {
+        if (routes.Count > MaximumProjectedRouteCount)
+            throw new InvalidOperationException(
+                "The CASEVAC route presentation contract exceeded its bounded route capacity.");
+
+        var json = new StringBuilder("[");
+        for (int routeIndex = 0;
+            routeIndex < routes.Count;
+            routeIndex++) {
+            if (routeIndex > 0) json.Append(',');
+            CasevacResolvedRoute route = routes[routeIndex];
+            if (route.Points.Count
+                > MaximumProjectedRouteControlPointCount)
+                throw new InvalidOperationException(
+                    "A CASEVAC reference route exceeded its bounded control-point capacity.");
+
+            var item = new FlatJson();
+            item.String("id", route.Id);
+            item.String("label", RouteLabel(route));
+            item.String("kind", RouteKind(route));
+            item.String("leg", route.Leg switch {
+                CasevacRouteLeg.Ingress => "INGRESS",
+                CasevacRouteLeg.Outbound => "OUTBOUND",
+                _ => throw new InvalidOperationException(
+                    "Unsupported CASEVAC route leg.")
+            });
+            item.String("start_location_id",
+                route.StartLocationId);
+            item.String("end_location_id",
+                route.EndLocationId);
+            item.Number("horizontal_length_m",
+                route.HorizontalLengthM, 3);
+            item.Number("initial_bearing_deg",
+                InitialRouteBearingDegrees(route), 3);
+            item.Raw("control_points",
+                RouteControlPointsJson(route.Points));
+            json.Append(item.Finish());
+        }
+        return json.Append(']').ToString();
+    }
+
+    static string RouteControlPointsJson(
+        IReadOnlyList<CasevacResolvedRouteControlPoint> points) {
+        var json = new StringBuilder("[");
+        for (int index = 0; index < points.Count; index++) {
+            if (index > 0) json.Append(',');
+            CasevacResolvedRouteControlPoint point =
+                points[index];
+            var item = new FlatJson();
+            item.String("id", point.Id);
+            item.NullableString("landmark_label",
+                ControlPointLandmarkLabel(point.Id));
+            item.Number("east_m", point.EastM, 3);
+            item.Number("surface_elevation_m",
+                point.SurfaceElevationM, 3);
+            item.Number("north_m", point.NorthM, 3);
+            item.Number("target_agl_m", point.TargetAglM, 3);
+            item.Number("corridor_radius_m",
+                point.CorridorRadiusM, 3);
+            json.Append(item.Finish());
+        }
+        return json.Append(']').ToString();
+    }
+
+    static string RouteLabel(CasevacResolvedRoute route) =>
+        route.Id switch {
+            "route.casevac.ingress-direct.v1" =>
+                "Direct pickup",
+            "route.casevac.ingress-masked.v1" =>
+                "Masked pickup",
+            "route.casevac.outbound-direct.v1" =>
+                "Direct handoff",
+            "route.casevac.outbound-masked.v1" =>
+                "Masked handoff",
+            _ => route.Leg == CasevacRouteLeg.Ingress
+                ? "Pickup reference route"
+                : "Handoff reference route"
+        };
+
+    static string RouteKind(CasevacResolvedRoute route) =>
+        route.Id switch {
+            "route.casevac.ingress-direct.v1"
+                or "route.casevac.outbound-direct.v1" =>
+                    "DIRECT",
+            "route.casevac.ingress-masked.v1"
+                or "route.casevac.outbound-masked.v1" =>
+                    "MASKED",
+            _ => "REFERENCE"
+        };
+
+    static string? ControlPointLandmarkLabel(string id) =>
+        id switch {
+            "route-point.casevac.ingress-direct.start.v1" =>
+                "Departure",
+            "route-point.casevac.ingress-direct.orchard-gap.v1" =>
+                "Orchard gap",
+            "route-point.casevac.ingress-direct.pickup.v1" =>
+                "Pickup",
+            "route-point.casevac.ingress-masked.start.v1" =>
+                "Departure",
+            "route-point.casevac.ingress-masked.shelterbelt-west.v1" =>
+                "West shelterbelt",
+            "route-point.casevac.ingress-masked.rail-cut.v1" =>
+                "Rail cut",
+            "route-point.casevac.ingress-masked.orchard-south.v1" =>
+                "South orchard",
+            "route-point.casevac.ingress-masked.pickup.v1" =>
+                "Pickup",
+            "route-point.casevac.outbound-direct.pickup.v1" =>
+                "Pickup",
+            "route-point.casevac.outbound-direct.canal-crossing.v1" =>
+                "Canal crossing",
+            "route-point.casevac.outbound-direct.receiver.v1" =>
+                "Clinic",
+            "route-point.casevac.outbound-masked.pickup.v1" =>
+                "Pickup",
+            "route-point.casevac.outbound-masked.willow-drain.v1" =>
+                "Willow drain",
+            "route-point.casevac.outbound-masked.sunken-road.v1" =>
+                "Sunken road",
+            "route-point.casevac.outbound-masked.factory-wall.v1" =>
+                "Factory wall",
+            "route-point.casevac.outbound-masked.quarry-lip.v1" =>
+                "Quarry lip",
+            "route-point.casevac.outbound-masked.clinic-west.v1" =>
+                "Clinic west",
+            "route-point.casevac.outbound-masked.receiver.v1" =>
+                "Clinic",
+            _ => null
+        };
+
+    static double InitialRouteBearingDegrees(
+        CasevacResolvedRoute route) {
+        CasevacResolvedRouteControlPoint first = route.Points[0];
+        CasevacResolvedRouteControlPoint second = route.Points[1];
+        return PositiveDegrees(Math.Atan2(
+            second.EastM - first.EastM,
+            second.NorthM - first.NorthM));
+    }
+
+    static string WorldPointJson(in Vec3D point) {
+        var json = new FlatJson();
+        json.Number("x", point.X, 6);
+        json.Number("y", point.Y, 6);
+        json.Number("z", point.Z, 6);
+        return json.Finish();
     }
 
     static string RecentEventsJson(

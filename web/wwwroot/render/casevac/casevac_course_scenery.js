@@ -16,20 +16,10 @@ import {
  */
 
 const COLORS = Object.freeze({
-  orchardTrunk: 0x68513d,
-  orchardCanopy: 0x4f7745,
-  receiverCanopy: 0x547a50,
   orchardGround: 0x7c7356,
   receiverGround: 0x777b76,
   padEdge: 0xd4c99d,
-  shed: 0x9b866a,
-  clinic: 0xc4c5b8,
-  clinicRoof: 0x5e6c70,
-  pump: 0x867d6b,
-  awning: 0x8a9997,
-  fence: 0x696051,
   pole: 0x5b5650,
-  wire: 0x353635,
   staff: 0x65716c,
   staffHead: 0xc7a681,
   capsule: 0xb8b59f,
@@ -81,7 +71,6 @@ function validateThree(THREE) {
     "InstancedMesh",
     "BufferGeometry",
     "Float32BufferAttribute",
-    "Vector2",
     "Vector3",
     "Quaternion",
     "Matrix4",
@@ -159,165 +148,6 @@ function createLineGeometry(THREE, owner, segments, yOffset = 0) {
   return geometry;
 }
 
-function createCanopyMaterial(THREE, owner, color, uniforms) {
-  const material = owner.material(new THREE.MeshLambertMaterial({
-    color,
-    emissive: color,
-    emissiveIntensity: 0.1,
-  }));
-  material.name = "CASEVAC_PRESENTATION_WIND_CANOPY";
-  material.userData.casevacWeatherUniforms = uniforms;
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uCasevacSceneryTime = uniforms.time;
-    shader.uniforms.uCasevacSceneryWind = uniforms.wind;
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-        uniform float uCasevacSceneryTime;
-        uniform vec2 uCasevacSceneryWind;`,
-      )
-      .replace(
-        "#include <begin_vertex>",
-        `vec3 transformed = vec3(position);
-        float casevacWindSpeed = min(length(uCasevacSceneryWind), 24.0);
-        vec2 casevacWindDirection = casevacWindSpeed > 0.01
-          ? normalize(uCasevacSceneryWind) : vec2(0.0);
-        mat4 casevacSceneryMatrix = modelMatrix;
-        #ifdef USE_INSTANCING
-          casevacSceneryMatrix = modelMatrix * instanceMatrix;
-        #endif
-        vec3 casevacCanopyOrigin =
-          (casevacSceneryMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-        float casevacWave = sin(
-          dot(casevacCanopyOrigin.xz, casevacWindDirection * 0.018)
-          - uCasevacSceneryTime * (0.45 + casevacWindSpeed * 0.035)
-        );
-        float casevacCanopyWeight = smoothstep(-0.2, 0.8, position.y);
-        transformed.xz += casevacWindDirection
-          * casevacCanopyWeight * casevacWave * casevacWindSpeed * 0.008;`,
-      );
-  };
-  material.customProgramCacheKey = () => "casevac-presentation-canopy-v1";
-  return material;
-}
-
-function createTreeBatch(
-  THREE,
-  owner,
-  trees,
-  siteId,
-  canopyMaterial,
-  trunkMaterial,
-  work,
-) {
-  const group = tagPresentationOnly(
-    new THREE.Group(),
-    "decorative-trees",
-    siteId,
-  );
-  group.name = `CASEVAC_${siteId.includes("pickup") ? "PICKUP" : "RECEIVER"}_TREES`;
-  if (!trees.length) return group;
-
-  const trunkGeometry = owner.geometry(new THREE.CylinderGeometry(
-    0.16, 0.24, 1, 6, 1,
-  ));
-  trunkGeometry.translate(0, 0.5, 0);
-  const crownGeometry = owner.geometry(new THREE.SphereGeometry(1, 8, 6));
-  const trunks = tagPresentationOnly(
-    new THREE.InstancedMesh(trunkGeometry, trunkMaterial, trees.length),
-    "tree-trunks",
-    siteId,
-  );
-  const crowns = tagPresentationOnly(
-    new THREE.InstancedMesh(crownGeometry, canopyMaterial, trees.length),
-    "tree-canopies",
-    siteId,
-  );
-  trunks.name = "CASEVAC_TREE_TRUNKS";
-  crowns.name = "CASEVAC_TREE_CANOPIES";
-  for (let index = 0; index < trees.length; index++) {
-    const tree = trees[index];
-    work.quaternion.setFromAxisAngle(work.yAxis, tree.yaw);
-    work.position.set(tree.position.x, tree.position.y, tree.position.z);
-    work.scale.set(1, tree.heightM * 0.42, 1);
-    setInstance(THREE, trunks, index, work.position, work.quaternion, work.scale, work);
-    work.position.y += tree.heightM * 0.72;
-    work.scale.set(
-      tree.crownRadiusM,
-      tree.heightM * 0.34,
-      tree.crownRadiusM,
-    );
-    setInstance(THREE, crowns, index, work.position, work.quaternion, work.scale, work);
-  }
-  finishInstances(trunks);
-  finishInstances(crowns);
-  group.add(trunks, crowns);
-  return group;
-}
-
-function createStructureBatch(
-  THREE,
-  owner,
-  structures,
-  siteId,
-  materials,
-  work,
-) {
-  const group = tagPresentationOnly(
-    new THREE.Group(),
-    "decorative-structures",
-    siteId,
-  );
-  group.name = `CASEVAC_${siteId.includes("pickup") ? "PICKUP" : "RECEIVER"}_STRUCTURES`;
-  if (!structures.length) return group;
-  const boxGeometry = owner.geometry(new THREE.BoxGeometry(1, 1, 1));
-  boxGeometry.translate(0, 0.5, 0);
-  const roofGeometry = owner.geometry(new THREE.ConeGeometry(0.72, 1, 4, 1));
-  roofGeometry.rotateY(Math.PI * 0.25);
-  roofGeometry.translate(0, 0.5, 0);
-  const boxes = tagPresentationOnly(
-    new THREE.InstancedMesh(boxGeometry, materials.structure, structures.length),
-    "structure-walls",
-    siteId,
-  );
-  const roofs = tagPresentationOnly(
-    new THREE.InstancedMesh(roofGeometry, materials.roof, structures.length),
-    "structure-roofs",
-    siteId,
-  );
-  boxes.name = "CASEVAC_STRUCTURE_WALLS";
-  roofs.name = "CASEVAC_STRUCTURE_ROOFS";
-  for (let index = 0; index < structures.length; index++) {
-    const structure = structures[index];
-    work.quaternion.setFromAxisAngle(work.yAxis, structure.yaw);
-    work.position.set(
-      structure.position.x,
-      structure.position.y,
-      structure.position.z,
-    );
-    const openAwning = structure.kind === "open-awning";
-    work.scale.set(
-      structure.sizeM.x,
-      openAwning ? 0.18 : structure.sizeM.y,
-      structure.sizeM.z,
-    );
-    if (openAwning) work.position.y += structure.sizeM.y - 0.18;
-    setInstance(THREE, boxes, index, work.position, work.quaternion, work.scale, work);
-    work.position.y = structure.position.y + structure.sizeM.y;
-    work.scale.set(
-      structure.sizeM.x,
-      Math.min(structure.sizeM.x, structure.sizeM.z) * 0.18,
-      structure.sizeM.z,
-    );
-    setInstance(THREE, roofs, index, work.position, work.quaternion, work.scale, work);
-  }
-  finishInstances(boxes);
-  finishInstances(roofs);
-  group.add(boxes, roofs);
-  return group;
-}
-
 function createPad(THREE, owner, pad, siteId, materials) {
   const group = tagPresentationOnly(new THREE.Group(), "decorative-pad", siteId);
   group.name = `CASEVAC_${siteId.includes("pickup") ? "PICKUP" : "RECEIVER"}_PAD_VISUAL`;
@@ -349,104 +179,6 @@ function createPad(THREE, owner, pad, siteId, materials) {
   edge.position.set(pad.position.x, pad.position.y + pad.sizeM.y + 0.012,
     pad.position.z);
   group.add(slab, edge);
-  return group;
-}
-
-function createFence(
-  THREE,
-  owner,
-  fences,
-  siteId,
-  materials,
-  work,
-) {
-  const group = tagPresentationOnly(new THREE.Group(), "decorative-fence", siteId);
-  group.name = "CASEVAC_FENCE_VISUALS";
-  const endpoints = new Map();
-  for (const segment of fences) {
-    for (const position of [segment.from, segment.to]) {
-      const key = `${position.x}:${position.z}`;
-      endpoints.set(key, position);
-    }
-  }
-  const postGeometry = owner.geometry(new THREE.CylinderGeometry(
-    0.08, 0.11, 1, 5, 1,
-  ));
-  postGeometry.translate(0, 0.5, 0);
-  const posts = tagPresentationOnly(
-    new THREE.InstancedMesh(postGeometry, materials.fence, endpoints.size),
-    "fence-posts",
-    siteId,
-  );
-  posts.name = "CASEVAC_FENCE_POSTS";
-  let index = 0;
-  for (const position of endpoints.values()) {
-    work.position.set(position.x, position.y, position.z);
-    work.quaternion.identity();
-    work.scale.set(1, 2.2, 1);
-    setInstance(THREE, posts, index++, work.position, work.quaternion, work.scale, work);
-  }
-  finishInstances(posts);
-  const railSegments = fences.flatMap((item) => [0.72, 1.45].map((height) => ({
-    from: { ...item.from, y: item.from.y + height },
-    to: { ...item.to, y: item.to.y + height },
-  })));
-  const rails = tagPresentationOnly(
-    new THREE.LineSegments(
-      createLineGeometry(THREE, owner, railSegments),
-      materials.fenceLine,
-    ),
-    "fence-rails",
-    siteId,
-  );
-  rails.name = "CASEVAC_FENCE_RAILS";
-  group.add(posts, rails);
-  return group;
-}
-
-function createUtilityVisuals(
-  THREE,
-  owner,
-  poles,
-  wires,
-  siteId,
-  materials,
-  work,
-) {
-  const group = tagPresentationOnly(
-    new THREE.Group(),
-    "decorative-utility-line",
-    siteId,
-  );
-  group.name = "CASEVAC_UTILITY_VISUALS";
-  const poleGeometry = owner.geometry(new THREE.CylinderGeometry(
-    0.17, 0.25, 1, 7, 1,
-  ));
-  poleGeometry.translate(0, 0.5, 0);
-  const poleMesh = tagPresentationOnly(
-    new THREE.InstancedMesh(poleGeometry, materials.pole, poles.length),
-    "utility-poles",
-    siteId,
-  );
-  poleMesh.name = "CASEVAC_UTILITY_POLES";
-  for (let index = 0; index < poles.length; index++) {
-    const pole = poles[index];
-    work.position.set(pole.position.x, pole.position.y, pole.position.z);
-    work.quaternion.identity();
-    work.scale.set(1, pole.heightM, 1);
-    setInstance(THREE, poleMesh, index, work.position, work.quaternion, work.scale, work);
-  }
-  finishInstances(poleMesh);
-  const line = tagPresentationOnly(
-    new THREE.LineSegments(
-      createLineGeometry(THREE, owner, wires),
-      materials.wire,
-    ),
-    "utility-wires",
-    siteId,
-  );
-  line.name = "CASEVAC_UTILITY_WIRES";
-  group.add(poleMesh, line);
   return group;
 }
 
@@ -656,7 +388,7 @@ function createCapsule(THREE, owner, materials) {
   return group;
 }
 
-function createMaterials(THREE, owner, uniforms) {
+function createMaterials(THREE, owner) {
   const lambert = (color, options = {}) => {
     const parameters = {
       color,
@@ -682,29 +414,12 @@ function createMaterials(THREE, owner, uniforms) {
     return owner.material(new THREE.MeshBasicMaterial(parameters));
   };
   return {
-    orchardCanopy: createCanopyMaterial(
-      THREE, owner, COLORS.orchardCanopy, uniforms,
-    ),
-    receiverCanopy: createCanopyMaterial(
-      THREE, owner, COLORS.receiverCanopy, uniforms,
-    ),
-    trunk: lambert(COLORS.orchardTrunk),
-    pickupStructure: lambert(COLORS.shed),
-    receiverStructure: lambert(COLORS.clinic),
-    roof: lambert(COLORS.clinicRoof),
     pad: lambert(COLORS.orchardGround),
     receiverPad: lambert(COLORS.receiverGround),
     padEdge: basic(COLORS.padEdge, {
       side: THREE.DoubleSide,
     }),
-    fence: lambert(COLORS.fence),
-    fenceLine: owner.material(new THREE.LineBasicMaterial({
-      color: COLORS.fence,
-    })),
     pole: lambert(COLORS.pole),
-    wire: owner.material(new THREE.LineBasicMaterial({
-      color: COLORS.wire,
-    })),
     staff: lambert(COLORS.staff),
     staffHead: lambert(COLORS.staffHead),
     windsock: lambert(COLORS.capsuleBand, {
@@ -797,7 +512,6 @@ function createSite(
   definition,
   anchor,
   materials,
-  uniforms,
   work,
 ) {
   const group = tagPresentationOnly(
@@ -809,58 +523,15 @@ function createSite(
   group.position.set(anchor.x, anchor.y, anchor.z);
   group.rotation.y = anchor.yaw;
   const siteMaterials = {
-    structure: key === "pickup"
-      ? materials.pickupStructure
-      : materials.receiverStructure,
-    roof: materials.roof,
     pad: key === "pickup" ? materials.pad : materials.receiverPad,
     padEdge: materials.padEdge,
-    fence: materials.fence,
-    fenceLine: materials.fenceLine,
     pole: materials.pole,
-    wire: materials.wire,
     staff: materials.staff,
     staffHead: materials.staffHead,
     windsock: materials.windsock,
   };
   group.add(
     createPad(THREE, owner, definition.pad, definition.id, siteMaterials),
-    createTreeBatch(
-      THREE,
-      owner,
-      definition.trees,
-      definition.id,
-      key === "pickup"
-        ? materials.orchardCanopy
-        : materials.receiverCanopy,
-      materials.trunk,
-      work,
-    ),
-    createStructureBatch(
-      THREE,
-      owner,
-      definition.structures,
-      definition.id,
-      siteMaterials,
-      work,
-    ),
-    createFence(
-      THREE,
-      owner,
-      definition.fences,
-      definition.id,
-      siteMaterials,
-      work,
-    ),
-    createUtilityVisuals(
-      THREE,
-      owner,
-      definition.poles,
-      definition.wires,
-      definition.id,
-      siteMaterials,
-      work,
-    ),
     createStaff(
       THREE,
       owner,
@@ -1003,10 +674,6 @@ export function createCasevacCourseScenery(THREE, options = {}) {
       CASEVAC_DEFAULT_ANCHORS.receiver,
     ),
   });
-  const uniforms = {
-    time: { value: 0 },
-    wind: { value: new THREE.Vector2(0, 0) },
-  };
   const work = {
     matrix: new THREE.Matrix4(),
     position: new THREE.Vector3(),
@@ -1017,7 +684,7 @@ export function createCasevacCourseScenery(THREE, options = {}) {
     yAxis: new THREE.Vector3(0, 1, 0),
     zAxis: new THREE.Vector3(0, 0, 1),
   };
-  const materials = createMaterials(THREE, owner, uniforms);
+  const materials = createMaterials(THREE, owner);
   const sites = {
     pickup: createSite(
       THREE,
@@ -1026,7 +693,6 @@ export function createCasevacCourseScenery(THREE, options = {}) {
       plan.sites.pickup,
       anchors.pickup,
       materials,
-      uniforms,
       work,
     ),
     receiver: createSite(
@@ -1036,7 +702,6 @@ export function createCasevacCourseScenery(THREE, options = {}) {
       plan.sites.receiver,
       anchors.receiver,
       materials,
-      uniforms,
       work,
     ),
   };
@@ -1061,6 +726,7 @@ export function createCasevacCourseScenery(THREE, options = {}) {
     disposed: false,
   };
   let disposed = false;
+  let elapsedSecondsState = 0;
 
   const api = {
     group: root,
@@ -1070,15 +736,14 @@ export function createCasevacCourseScenery(THREE, options = {}) {
       if (disposed) return;
       const elapsedSeconds = finite(
         frame.elapsedSeconds ?? frame.timeSeconds,
-        uniforms.time.value,
+        elapsedSecondsState,
       );
       const windX = finite(frame.windX ?? frame.wind?.x);
       const windZ = finite(frame.windZ ?? frame.wind?.z);
       const precipitation01 = clamp(finite(
         frame.precipitation01 ?? frame.weather?.precipitation01,
       ), 0, 1);
-      uniforms.time.value = elapsedSeconds;
-      uniforms.wind.value.set(windX, windZ);
+      elapsedSecondsState = elapsedSeconds;
       const windAngle = Math.atan2(windX, Math.abs(windZ) + 0.001);
       materials.rain.opacity = precipitation01 * 0.52;
       materials.rain.needsUpdate = true;

@@ -29,12 +29,36 @@ public sealed class CasevacSnapshotProjectionTests {
         }
     }
 
-    static SimulationSession Staged(bool begin = false) {
+    sealed class CoordinateTerrain : ITerrainSurface {
+        public TerrainBounds Bounds =>
+            new(-20_000.0, 20_000.0, -20_000.0, 20_000.0);
+
+        public double HorizontalResolutionM => 4.0;
+
+        public bool TrySample(
+            double eastM,
+            double northM,
+            out TerrainSample sample) {
+            sample = new TerrainSample(
+                HeightAt(eastM, northM),
+                new Vec3D(0.0, 1.0, 0.0));
+            return true;
+        }
+
+        public static double HeightAt(
+            double eastM,
+            double northM) =>
+            50.0 + eastM * 0.001 + northM * 0.002;
+    }
+
+    static SimulationSession Staged(
+        bool begin = false,
+        ITerrainSurface? terrain = null) {
         var session = new SimulationSession(
             13,
             Carrier.DeckConfiguration.Angled,
             KoreaWeatherPresets.ForBeat(13));
-        session.SetTerrainSurface(new FlatTerrain());
+        session.SetTerrainSurface(terrain ?? new FlatTerrain());
         if (begin) {
             session.Begin();
             for (int tick = 0; tick < 12; tick++)
@@ -116,12 +140,30 @@ public sealed class CasevacSnapshotProjectionTests {
             "casevac_receiver_x",
             "casevac_receiver_y",
             "casevac_receiver_z",
+            "casevac_collision_obstacles",
+            "casevac_routes",
             "casevac_gross_mass_kg",
             "casevac_payload_mass_kg",
             "casevac_occupancy",
             "casevac_power_margin_fraction",
             "casevac_power_margin_01",
             "casevac_power_margin_state",
+            "casevac_energy_model_id",
+            "casevac_energy_initial_kwh",
+            "casevac_energy_remaining_kwh",
+            "casevac_energy_remaining_fraction",
+            "casevac_energy_planning_endurance_s",
+            "casevac_energy_planning_endurance_min",
+            "casevac_energy_planning_power_kw",
+            "casevac_energy_planning_ground_speed_mps",
+            "casevac_energy_planning_arrival_allowance_s",
+            "casevac_energy_depleted",
+            "casevac_destination_energy_target_id",
+            "casevac_destination_energy_transit_s",
+            "casevac_destination_reserve_kwh",
+            "casevac_destination_reserve_fraction",
+            "casevac_destination_reserve_endurance_s",
+            "casevac_destination_reserve_min",
             "casevac_agl_m",
             "casevac_limit_safe_band_min_agl_m",
             "casevac_limit_safe_band_max_agl_m",
@@ -274,6 +316,282 @@ public sealed class CasevacSnapshotProjectionTests {
     }
 
     [Fact]
+    public void ProjectsTheFictionalEnergyLedgerAndDeclaredPlanningAssumptions() {
+        SimulationSession session = Staged(begin: true);
+        GunsOnly.Sim.Casevac.CasevacFlightRuntime flight =
+            session.CasevacFlight!;
+        GunsOnly.Sim.Casevac.CasevacDestinationEnergyPlan plan =
+            flight.DestinationEnergyPlan;
+
+        using JsonDocument document = Project(session);
+        JsonElement root = document.RootElement;
+
+        Assert.Equal(
+            GunsOnly.Sim.Casevac.CasevacFlightRuntime.EnergyModelId,
+            root.GetProperty("casevac_energy_model_id").GetString());
+        Assert.Equal(
+            flight.InitialUsableEnergyJ / 3_600_000.0,
+            root.GetProperty("casevac_energy_initial_kwh").GetDouble(),
+            4);
+        Assert.Equal(
+            flight.RemainingUsableEnergyJ / 3_600_000.0,
+            root.GetProperty("casevac_energy_remaining_kwh").GetDouble(),
+            4);
+        Assert.Equal(
+            flight.RemainingEnergyFraction,
+            root.GetProperty(
+                "casevac_energy_remaining_fraction").GetDouble(),
+            6);
+        Assert.Equal(
+            flight.PlanningEnduranceSeconds,
+            root.GetProperty(
+                "casevac_energy_planning_endurance_s").GetDouble(),
+            3);
+        Assert.Equal(
+            flight.PlanningEnduranceSeconds / 60.0,
+            root.GetProperty(
+                "casevac_energy_planning_endurance_min").GetDouble(),
+            3);
+        Assert.Equal(
+            GunsOnly.Sim.Casevac.CasevacFlightRuntime.PlanningPowerW
+                / 1_000.0,
+            root.GetProperty(
+                "casevac_energy_planning_power_kw").GetDouble(),
+            3);
+        Assert.Equal(
+            GunsOnly.Sim.Casevac.CasevacFlightRuntime
+                .PlanningGroundSpeedMps,
+            root.GetProperty(
+                "casevac_energy_planning_ground_speed_mps").GetDouble(),
+            3);
+        Assert.Equal(
+            GunsOnly.Sim.Casevac.CasevacFlightRuntime
+                .PlanningArrivalAllowanceSeconds,
+            root.GetProperty(
+                "casevac_energy_planning_arrival_allowance_s").GetDouble(),
+            3);
+        Assert.False(
+            root.GetProperty("casevac_energy_depleted").GetBoolean());
+        Assert.Equal(
+            plan.TargetId,
+            root.GetProperty(
+                "casevac_destination_energy_target_id").GetString());
+        Assert.Equal(
+            plan.PlannedTransitSeconds,
+            root.GetProperty(
+                "casevac_destination_energy_transit_s").GetDouble(),
+            3);
+        Assert.Equal(
+            plan.ProjectedReserveEnergyJ / 3_600_000.0,
+            root.GetProperty(
+                "casevac_destination_reserve_kwh").GetDouble(),
+            4);
+        Assert.Equal(
+            plan.ProjectedReserveFraction,
+            root.GetProperty(
+                "casevac_destination_reserve_fraction").GetDouble(),
+            6);
+        Assert.Equal(
+            plan.ProjectedReserveEnduranceSeconds,
+            root.GetProperty(
+                "casevac_destination_reserve_endurance_s").GetDouble(),
+            3);
+        Assert.Equal(
+            plan.ProjectedReserveEnduranceSeconds / 60.0,
+            root.GetProperty(
+                "casevac_destination_reserve_min").GetDouble(),
+            3);
+        Assert.True(
+            root.GetProperty(
+                "casevac_energy_remaining_kwh").GetDouble()
+            < root.GetProperty(
+                "casevac_energy_initial_kwh").GetDouble());
+    }
+
+    [Fact]
+    public void ProjectsEveryResolvedCollisionPrimitiveWithoutBrowserInference() {
+        SimulationSession session = Staged(begin: true);
+
+        using JsonDocument document = Project(session);
+        JsonElement root = document.RootElement;
+        JsonElement[] projected = root
+            .GetProperty("casevac_collision_obstacles")
+            .EnumerateArray()
+            .ToArray();
+        IReadOnlyList<GunsOnly.Sim.Casevac.CasevacResolvedCollisionObstacle>
+            expected = session.CasevacFlight!.ResolvedCollisionObstacles;
+
+        Assert.Equal(expected.Count, projected.Length);
+        Assert.InRange(
+            projected.Length,
+            1,
+            CasevacSnapshotProjection
+                .MaximumProjectedCollisionObstacleCount);
+        for (int index = 0; index < projected.Length; index++) {
+            GunsOnly.Sim.Casevac.CasevacResolvedCollisionObstacle obstacle =
+                expected[index];
+            JsonElement item = projected[index];
+            Assert.Equal(
+                obstacle.Id,
+                item.GetProperty("id").GetString());
+            Assert.Equal(
+                obstacle.RadiusM,
+                item.GetProperty("radius_m").GetDouble(),
+                6);
+
+            if (obstacle.Primitive
+                == GunsOnly.Sim.Casevac.CasevacCollisionPrimitive
+                    .CapsuleSegment) {
+                Assert.Equal(
+                    new[] {
+                        "id", "primitive", "radius_m",
+                        "start_world_m", "end_world_m"
+                    },
+                    item.EnumerateObject()
+                        .Select(property => property.Name)
+                        .ToArray());
+                Assert.Equal(
+                    "CAPSULE_SEGMENT",
+                    item.GetProperty("primitive").GetString());
+                AssertProjectedPoint(
+                    item.GetProperty("start_world_m"),
+                    obstacle.FirstWorldM);
+                AssertProjectedPoint(
+                    item.GetProperty("end_world_m"),
+                    obstacle.SecondWorldM);
+            } else {
+                Assert.Equal(
+                    new[] {
+                        "id", "primitive", "radius_m",
+                        "minimum_world_m", "maximum_world_m"
+                    },
+                    item.EnumerateObject()
+                        .Select(property => property.Name)
+                        .ToArray());
+                Assert.Equal(
+                    "AXIS_ALIGNED_BOX",
+                    item.GetProperty("primitive").GetString());
+                AssertProjectedPoint(
+                    item.GetProperty("minimum_world_m"),
+                    obstacle.FirstWorldM);
+                AssertProjectedPoint(
+                    item.GetProperty("maximum_world_m"),
+                    obstacle.SecondWorldM);
+            }
+        }
+    }
+
+    [Fact]
+    public void ProjectsBoundedExactReferenceRoutesWithPresentationLabels() {
+        SimulationSession session = Staged(
+            begin: true,
+            terrain: new CoordinateTerrain());
+
+        using JsonDocument document = Project(session);
+        JsonElement[] projected = document.RootElement
+            .GetProperty("casevac_routes")
+            .EnumerateArray()
+            .ToArray();
+        IReadOnlyList<GunsOnly.Sim.Casevac.CasevacResolvedRoute>
+            expected = session.CasevacFlight!.ResolvedRoutes;
+
+        Assert.Equal(expected.Count, projected.Length);
+        Assert.InRange(
+            projected.Length,
+            1,
+            CasevacSnapshotProjection.MaximumProjectedRouteCount);
+        Assert.Equal(
+            new[] {
+                "Direct pickup",
+                "Masked pickup",
+                "Direct handoff",
+                "Masked handoff"
+            },
+            projected.Select(route =>
+                    route.GetProperty("label").GetString())
+                .ToArray());
+        Assert.Equal(
+            new[] { "DIRECT", "MASKED", "DIRECT", "MASKED" },
+            projected.Select(route =>
+                    route.GetProperty("kind").GetString())
+                .ToArray());
+
+        for (int routeIndex = 0;
+            routeIndex < projected.Length;
+            routeIndex++) {
+            GunsOnly.Sim.Casevac.CasevacResolvedRoute route =
+                expected[routeIndex];
+            JsonElement item = projected[routeIndex];
+            Assert.Equal(route.Id,
+                item.GetProperty("id").GetString());
+            Assert.Equal(route.StartLocationId,
+                item.GetProperty("start_location_id").GetString());
+            Assert.Equal(route.EndLocationId,
+                item.GetProperty("end_location_id").GetString());
+            Assert.Equal(route.HorizontalLengthM,
+                item.GetProperty("horizontal_length_m").GetDouble(),
+                3);
+            double expectedBearing =
+                PositiveDegrees(Math.Atan2(
+                    route.Points[1].EastM
+                        - route.Points[0].EastM,
+                    route.Points[1].NorthM
+                        - route.Points[0].NorthM));
+            Assert.Equal(expectedBearing,
+                item.GetProperty("initial_bearing_deg").GetDouble(),
+                3);
+
+            JsonElement[] points = item
+                .GetProperty("control_points")
+                .EnumerateArray()
+                .ToArray();
+            Assert.Equal(route.Points.Count, points.Length);
+            Assert.InRange(
+                points.Length,
+                2,
+                CasevacSnapshotProjection
+                    .MaximumProjectedRouteControlPointCount);
+            for (int pointIndex = 0;
+                pointIndex < points.Length;
+                pointIndex++) {
+                GunsOnly.Sim.Casevac.CasevacResolvedRouteControlPoint
+                    point = route.Points[pointIndex];
+                JsonElement projectedPoint = points[pointIndex];
+                Assert.Equal(point.Id,
+                    projectedPoint.GetProperty("id").GetString());
+                Assert.False(string.IsNullOrWhiteSpace(
+                    projectedPoint.GetProperty(
+                        "landmark_label").GetString()));
+                Assert.Equal(point.EastM,
+                    projectedPoint.GetProperty("east_m").GetDouble(),
+                    3);
+                Assert.Equal(point.SurfaceElevationM,
+                    projectedPoint.GetProperty(
+                        "surface_elevation_m").GetDouble(),
+                    3);
+                Assert.Equal(
+                    CoordinateTerrain.HeightAt(
+                        point.EastM,
+                        point.NorthM),
+                    projectedPoint.GetProperty(
+                        "surface_elevation_m").GetDouble(),
+                    3);
+                Assert.Equal(point.NorthM,
+                    projectedPoint.GetProperty("north_m").GetDouble(),
+                    3);
+                Assert.Equal(point.TargetAglM,
+                    projectedPoint.GetProperty(
+                        "target_agl_m").GetDouble(),
+                    3);
+                Assert.Equal(point.CorridorRadiusM,
+                    projectedPoint.GetProperty(
+                        "corridor_radius_m").GetDouble(),
+                    3);
+            }
+        }
+    }
+
+    [Fact]
     public void LifecycleFieldsRepresentReadyActiveAndPausedWithoutAdvancingOnPause() {
         SimulationSession session = Staged();
         using (JsonDocument readyDocument = Project(session)) {
@@ -311,26 +629,62 @@ public sealed class CasevacSnapshotProjectionTests {
     }
 
     [Fact]
-    public void CasevacHotFrameIsColdOnlyAndNeverTouchesCombatGraph() {
+    public void CasevacHotFrameUsesDedicatedBlockAndNeverTouchesCombatGraph() {
         SimulationSession session = Staged(begin: true);
         var buffer = new double[SnapshotHotFrame.SlotCount];
+        using JsonDocument layoutDocument =
+            JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
+        JsonElement layout = layoutDocument.RootElement;
+        JsonElement casevacBlock = layout.GetProperty("casevac_block");
+        int casevacPresenceIndex =
+            casevacBlock.GetProperty("presence_index").GetInt32();
 
         SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
         double firstVersion =
             buffer[SnapshotHotFrame.ColdVersionIndex];
         Assert.True(firstVersion > 0.0);
-        Assert.All(
-            buffer.Where((_, index) =>
-                index != SnapshotHotFrame.ColdVersionIndex),
-            value => Assert.Equal(0.0, value));
+        Assert.Equal(1.0, buffer[casevacPresenceIndex]);
+        Assert.Contains(
+            casevacBlock.GetProperty("slots").EnumerateArray(),
+            slot => {
+                int index = slot.GetProperty("index").GetInt32();
+                return buffer[index] != 0.0
+                    && !double.IsNaN(buffer[index]);
+            });
+        foreach (JsonElement block in
+            layout.GetProperty("blocks").EnumerateArray()) {
+            int presenceIndex =
+                block.GetProperty("presence_index").GetInt32();
+            if (presenceIndex >= 0)
+                Assert.Equal(0.0, buffer[presenceIndex]);
+        }
 
         SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
-        Assert.True(
-            buffer[SnapshotHotFrame.ColdVersionIndex] > firstVersion);
-        Assert.All(
-            buffer.Where((_, index) =>
-                index != SnapshotHotFrame.ColdVersionIndex),
-            value => Assert.Equal(0.0, value));
+        Assert.Equal(
+            firstVersion,
+            buffer[SnapshotHotFrame.ColdVersionIndex]);
+        Assert.Equal(1.0, buffer[casevacPresenceIndex]);
+    }
+
+    static void AssertProjectedPoint(
+        JsonElement projected,
+        in GunsOnly.Sim.Vec3D expected) {
+        Assert.Equal(
+            new[] { "x", "y", "z" },
+            projected.EnumerateObject()
+                .Select(property => property.Name)
+                .ToArray());
+        Assert.Equal(expected.X,
+            projected.GetProperty("x").GetDouble(), 6);
+        Assert.Equal(expected.Y,
+            projected.GetProperty("y").GetDouble(), 6);
+        Assert.Equal(expected.Z,
+            projected.GetProperty("z").GetDouble(), 6);
+    }
+
+    static double PositiveDegrees(double angleRad) {
+        double degrees = angleRad * 180.0 / Math.PI % 360.0;
+        return degrees < 0.0 ? degrees + 360.0 : degrees;
     }
 
     [Theory]

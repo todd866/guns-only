@@ -115,6 +115,10 @@ public static partial class WebBridge {
     public static void Begin() => Session.Begin();
 
     [JSExport]
+    public static bool RequestCasevacQuietSkip() =>
+        Session.RequestCasevacQuietSkip();
+
+    [JSExport]
     public static void SetPaused(bool paused) => Session.SetPaused(paused);
 
     [JSExport]

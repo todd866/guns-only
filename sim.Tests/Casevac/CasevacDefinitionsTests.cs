@@ -668,6 +668,30 @@ public class CasevacDefinitionsTests {
             route => route.Id == "route.casevac.outbound-masked.v1");
         Assert.True(maskedOutbound.HorizontalLengthM
             > directOutbound.HorizontalLengthM * 1.2);
+        CasevacRouteDefinition directIngress = Assert.Single(
+            world.Routes,
+            route => route.Id == "route.casevac.ingress-direct.v1");
+        for (int segmentIndex = 1;
+            segmentIndex < directIngress.Points.Count;
+            segmentIndex++) {
+            CasevacRouteControlPointDefinition from =
+                directIngress.Points[segmentIndex - 1];
+            CasevacRouteControlPointDefinition to =
+                directIngress.Points[segmentIndex];
+            for (int sampleIndex = 0; sampleIndex <= 128; sampleIndex++) {
+                double fraction = sampleIndex / 128.0;
+                var centre = new Vec3D(
+                    from.Position.XM
+                        + (to.Position.XM - from.Position.XM) * fraction,
+                    from.TargetAglM
+                        + (to.TargetAglM - from.TargetAglM) * fraction,
+                    from.Position.ZM
+                        + (to.Position.ZM - from.Position.ZM) * fraction);
+                Assert.False(world.CollisionAuthority.IntersectsAnySphere(
+                    centre,
+                    CasevacFlightRuntime.VehicleCollisionRadiusM));
+            }
+        }
         Assert.All(world.Routes, route => {
             Assert.True(route.Points.Count >= 3);
             Assert.All(route.Points,

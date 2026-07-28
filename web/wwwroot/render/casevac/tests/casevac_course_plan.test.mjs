@@ -86,7 +86,7 @@ test("plans a stable fictional pickup and receiver course deterministically", ()
   });
 
   assert.deepEqual(first, repeated);
-  assert.notDeepEqual(first.sites.pickup.trees, alternate.sites.pickup.trees);
+  assert.notDeepEqual(first.sites.pickup.rain, alternate.sites.pickup.rain);
   assert.equal(first.schema, CASEVAC_SCENERY_SCHEMA);
   assert.equal(first.sites.pickup.id, CASEVAC_COURSE_SITE_IDS.pickup);
   assert.equal(first.sites.receiver.id, CASEVAC_COURSE_SITE_IDS.receiver);
@@ -140,28 +140,18 @@ test("keeps every authored point inside a conservative per-site visual envelope"
   }
 });
 
-test("keeps the orchard landing presentation clear of trees and its approach lane", () => {
+test("does not author collision-sized decoration outside projected authority", () => {
   for (let seed = 0; seed < 32; seed++) {
-    const pickup = planCasevacCourseScenery({
+    const plan = planCasevacCourseScenery({
       qualityTier: "desktop",
       seed,
-    }).sites.pickup;
-    for (const tree of pickup.trees) {
-      assert.ok(
-        Math.hypot(tree.position.x, tree.position.z) >= 25,
-        `${tree.id} must not overlap the pad clearance`,
-      );
-      assert.equal(
-        tree.position.z > 22 && Math.abs(tree.position.x) < 13,
-        false,
-        `${tree.id} must not overlap the visible approach lane`,
-      );
-      assert.equal(
-        tree.position.x > 40 && tree.position.x < 76
-          && tree.position.z > 22 && tree.position.z < 62,
-        false,
-        `${tree.id} must not overlap the packing shed`,
-      );
+    });
+    for (const site of Object.values(plan.sites)) {
+      assert.deepEqual(site.trees, []);
+      assert.deepEqual(site.structures, []);
+      assert.deepEqual(site.fences, []);
+      assert.deepEqual(site.poles, []);
+      assert.deepEqual(site.wires, []);
     }
   }
 });
@@ -171,20 +161,16 @@ test("scales only bounded decorative populations across quality tiers", () => {
   const balanced = planCasevacCourseScenery({ qualityTier: "balanced" });
   const desktop = planCasevacCourseScenery({ qualityTier: "desktop" });
 
-  assert.ok(mobile.counts.trees < balanced.counts.trees);
-  assert.ok(balanced.counts.trees < desktop.counts.trees);
   assert.ok(mobile.counts.people < desktop.counts.people);
   assert.ok(mobile.counts.rainStreaks < desktop.counts.rainStreaks);
-  assert.ok(
-    desktop.counts.trees
-      <= CASEVAC_SCENERY_QUALITY.desktop.orchardRows
-        * CASEVAC_SCENERY_QUALITY.desktop.orchardColumns
-        + CASEVAC_SCENERY_QUALITY.desktop.receiverTrees,
-  );
-  assert.equal(desktop.counts.structures, 5);
-  assert.equal(desktop.counts.utilityPoles, 8);
-  assert.equal(desktop.counts.utilityWires, 18);
-  assert.equal(desktop.counts.fenceSegments, 10);
+  assert.equal(desktop.counts.people,
+    CASEVAC_SCENERY_QUALITY.desktop.pickupPeople
+      + CASEVAC_SCENERY_QUALITY.desktop.receiverPeople);
+  assert.equal(desktop.counts.trees, 0);
+  assert.equal(desktop.counts.structures, 0);
+  assert.equal(desktop.counts.utilityPoles, 0);
+  assert.equal(desktop.counts.utilityWires, 0);
+  assert.equal(desktop.counts.fenceSegments, 0);
   assert.throws(
     () => planCasevacCourseScenery({ qualityTier: "cinematic" }),
     /Unknown CASEVAC scenery quality tier/,
@@ -198,10 +184,10 @@ test("describes scenery only, without inventing medical or mission state", () =>
   assert.equal(plan.collisionSource, false);
   assert.equal(plan.sites.pickup.pad.visualOnly, true);
   assert.equal(plan.sites.receiver.pad.visualOnly, true);
-  assert.ok(plan.sites.pickup.poles.length > 0);
-  assert.ok(plan.sites.pickup.wires.length > 0);
-  assert.ok(plan.sites.pickup.fences.length > 0);
-  assert.ok(plan.sites.pickup.structures.length > 0);
+  assert.equal(plan.sites.pickup.poles.length, 0);
+  assert.equal(plan.sites.pickup.wires.length, 0);
+  assert.equal(plan.sites.pickup.fences.length, 0);
+  assert.equal(plan.sites.pickup.structures.length, 0);
   assert.ok(plan.sites.pickup.people.length > 0);
   assert.ok(plan.sites.pickup.approachCue.points.length > 2);
   assert.ok(plan.sites.pickup.escapeCue.points.length > 2);

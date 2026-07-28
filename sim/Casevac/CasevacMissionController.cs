@@ -220,6 +220,24 @@ public sealed class CasevacMissionController {
         }
     }
 
+    /// <summary>
+    /// Completes the non-clinical quiet aftermath after the presentation confirms that the
+    /// player has viewed it. This is an out-of-band presentation acknowledgement, not an
+    /// authority tick: the stopped mission clock, source tick, custody, disposition, evidence,
+    /// and elapsed quiet-tick count remain unchanged.
+    /// </summary>
+    public bool RequestQuietSkip() {
+        if (_phase != CasevacPhase.Quiet) return false;
+
+        BeginMutation();
+        try {
+            _phase = CasevacPhase.Complete;
+            return true;
+        } finally {
+            EndMutation();
+        }
+    }
+
     void AdvanceCore(
         in CasevacTickObservation observation,
         CasevacSemanticCommand command) {

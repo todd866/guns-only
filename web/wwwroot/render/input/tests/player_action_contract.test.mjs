@@ -177,7 +177,7 @@ test("every advertised bridge action has help copy, a runtime consumer, and obse
 test("keyboard dispatch is edge-safe and every held action has a release path", () => {
   assert.match(appSource, /if \(event\.repeat \|\| !bridge\) return;/,
     "OS key repeat must not create extra momentary actions");
-  assert.match(appSource, /pressMappedKey\(event\.code, "keyboard"\)/);
+  assert.match(appSource, /pressMappedKey\(event\.code, "keyboard", gkey\)/);
   assert.match(appSource, /window\.addEventListener\("keyup"[\s\S]*?releaseMappedKey\(event\.code, "keyboard"\)/);
   assert.match(appSource, /bridge\.FeedKey\(gkey, true\)/);
   assert.match(appSource, /bridge\.FeedKey\(gkey, false\)/);
@@ -301,7 +301,7 @@ test("touch pilots retain system commands but the live surface makes them contex
     /querySelectorAll\("\[data-pulse-key\]"\)[\s\S]*?if \(!pressMappedKey\(code, source, gkey\)\) return;[\s\S]*?physicalCode === "KeyV"[\s\S]*?togglePadlock\(\)/,
     "the V pulse must drive contextual presentation only after the bridge accepts the action");
   assert.match(appSource,
-    /const gkey = keyMap\.get\(event\.code\);[\s\S]*?if \(!pressMappedKey\(event\.code, "keyboard"\)\) return;[\s\S]*?gkey === 9[\s\S]*?togglePadlock\(\)/,
+    /const gkey = event\.code === "KeyN" && isCasevacState\(\)[\s\S]*?: keyMap\.get\(event\.code\);[\s\S]*?if \(!pressMappedKey\(event\.code, "keyboard", gkey\)\) return;[\s\S]*?gkey === 9[\s\S]*?togglePadlock\(\)/,
     "a paused or rejected keyboard V press must not change presentation state");
 });
 
@@ -472,7 +472,9 @@ test("fresh players launch directly into the first F-22 merge", () => {
     "the default remains mission 7, while an explicit programme deep link stages its own card");
   assert.match(bridgeSource, /static readonly SimulationSession Session = new\(7,/,
     "the bridge fallback and browser must agree on the F-22 first experience");
-  assert.match(appSource, /let autoLaunchPending = true/);
+  assert.match(appSource,
+    /let autoLaunchPending = requestedProgramNode\?\.id !== "medevac"/,
+    "the combat front door auto-launches, but Medevac holds for its route briefing");
   assert.match(appSource,
     /function tryAutoLaunch\([\s\S]*?pauseReasons\.has\("ready"\)[\s\S]*?return launchMission\(selectedBeat\)/);
 
@@ -480,7 +482,7 @@ test("fresh players launch directly into the first F-22 merge", () => {
   const nodeIds = buttons.filter((button) => button.attributes["data-program-node"] !== undefined)
     .map((button) => button.attributes["data-program-node"]);
   assert.deepEqual(nodeIds,
-    ["first-merge", "low-level-drone", "rapier-circuits", "rapier-intercept"]);
+    ["first-merge", "low-level-drone", "medevac", "rapier-circuits", "rapier-intercept"]);
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
   assert.match(indexSource, /\.ready-selector,[\s\S]*?touch-action:\s*pan-y/);
@@ -516,7 +518,7 @@ test("program modal behavior cannot leak into flight shortcuts", () => {
     /const target = !readyStart\.disabled \? readyStart : selectedMission/,
     "initial modal focus must keep the advertised Enter-to-fly action honest");
   assert.match(appSource,
-    /sceneCanvas\.inert = showScreen[\s\S]*?readyScreen\.contains\(document\.activeElement\)[\s\S]*?focusOwner\?\.focus[\s\S]*?readyScreen\.setAttribute\("aria-hidden"/,
+    /sceneCanvas\.inert = showScreen[\s\S]*?readyScreen\.contains\(document\.activeElement\)[\s\S]*?focusOwner\?\.focus[\s\S]*?readyScreen\.setAttribute\(\s*"aria-hidden"/,
     "focus must leave the dialog before it becomes aria-hidden");
   assert.match(appSource,
     /readyScreen\.addEventListener\("keydown"[\s\S]*?event\.code !== "Tab"[\s\S]*?last\.focus[\s\S]*?first\.focus/,

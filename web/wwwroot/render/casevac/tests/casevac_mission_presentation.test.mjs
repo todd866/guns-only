@@ -339,6 +339,59 @@ test("fails closed when a correction lacks a bounded evidence moment", () => {
   assert.doesNotMatch(JSON.stringify(debrief), /unreviewed/i);
 });
 
+test("keeps nullable abort evidence unassessed instead of fabricating zero facts", () => {
+  const debrief = casevacDebriefModel({
+    disposition: "ControlledAbort",
+    handoffCallAgeSeconds: null,
+    requestedHandoffAgeSeconds: 480,
+    axes: {
+      safe: {
+        status: "NOT_ASSESSED",
+        minimumClearanceM: null,
+        obstacleContacts: null,
+        protectionInterventions: null,
+      },
+      controlled: {
+        status: "NOT_ASSESSED",
+        pickupApproaches: null,
+        handoffApproaches: null,
+        approachDiscontinuations: null,
+        loadingInterruptions: null,
+        handoffInterruptions: null,
+      },
+      masked: {
+        status: "NOT_ASSESSED",
+        safeBandPercent: null,
+        exposedSeconds: null,
+      },
+      timely: {
+        status: "NOT_ASSESSED",
+        callToPickupSeconds: null,
+        pickupToHandoffSeconds: null,
+        totalCallToHandoffSeconds: null,
+      },
+    },
+    correction: {
+      kind: "LoadingStability",
+      atCallAgeSeconds: null,
+      count: null,
+    },
+  });
+
+  assert.equal(debrief.outcome, "CONTROLLED ABORT · PICKUP INCOMPLETE");
+  assert.deepEqual(
+    debrief.axes.map((axis) => axis.evidence),
+    [
+      "Safety evidence was not assessed.",
+      "Terminal-flight evidence was not assessed.",
+      "Masking evidence was not assessed.",
+      "Timing evidence was not assessed.",
+    ],
+  );
+  assert.equal(debrief.correction.available, false);
+  assert.doesNotMatch(JSON.stringify(debrief), /\b0(?:\.0+)?\b/);
+});
+
 test("creates accessible DOM and exposes the exact adapter-facing runtime API", () => {
   const documentLike = new FakeDocument();
   const mount = new FakeElement("main");
@@ -457,10 +510,16 @@ test("orders, deduplicates, bounds, and resets the sparse message queue", () => 
 test("renders quiet and debrief states without taking completion authority", () => {
   const documentLike = new FakeDocument();
   let quietSkipRequests = 0;
+  let flyAgainRequests = 0;
   const presentation = createCasevacMissionPresentation(documentLike, {
     onQuietSkip(request) {
       assert.equal(request.kind, "CASEVAC_QUIET_SKIP_REQUESTED");
       quietSkipRequests++;
+    },
+    onFlyAgain(request) {
+      assert.equal(request.kind, "CASEVAC_FLY_AGAIN_REQUESTED");
+      assert.equal(request.presentationOnly, true);
+      flyAgainRequests++;
     },
   });
   const quiet = oneByAttribute(
@@ -471,8 +530,15 @@ test("renders quiet and debrief states without taking completion authority", () 
   const skip = byAttribute(
     presentation.element,
     "aria-label",
-    "Skip the CASEVAC quiet interval",
+    "Skip the Medevac quiet interval",
   )[0];
+  const flyAgain = oneByAttribute(
+    presentation.element,
+    "aria-label",
+    "Fly Medevac again",
+  );
+  assert.equal(flyAgain.tagName, "BUTTON");
+  assert.equal(flyAgain.getAttribute("type"), "button");
 
   presentation.update({
     quiet: { active: true, skippable: false },
@@ -494,6 +560,8 @@ test("renders quiet and debrief states without taking completion authority", () 
       patientName: "must not render",
     },
   });
+  flyAgain.click();
+  assert.equal(flyAgainRequests, 0);
   assert.equal(
     oneByAttribute(
       presentation.element,
@@ -518,6 +586,21 @@ test("renders quiet and debrief states without taking completion authority", () 
     "debrief",
   );
   assert.equal(debrief.hidden, false);
+  assert.equal(debrief.getAttribute("role"), "dialog");
+  assert.equal(debrief.getAttribute("aria-modal"), "true");
+  assert.equal(
+    debrief.getAttribute("aria-labelledby"),
+    "casevac-debrief-outcome",
+  );
+  assert.equal(
+    presentation.element.getAttribute("data-debrief-visible"),
+    "true",
+  );
+  assert.match(
+    presentation.element.children.find((node) => node.tagName === "STYLE")
+      .textContent,
+    /\[data-casevac-presentation\]\[data-debrief-visible="true"\]\s*\{\s*z-index: 14;/,
+  );
   assert.equal(
     byAttribute(presentation.element, "data-casevac-axis", "safe").length,
     1,
@@ -540,6 +623,8 @@ test("renders quiet and debrief states without taking completion authority", () 
   );
   assert.match(debrief.textContent, /HANDOFF 09:18 · REQUESTED 08:00/);
   assert.match(debrief.textContent, /Begin deceleration before the orchard/);
+  flyAgain.click();
+  assert.equal(flyAgainRequests, 1);
 
   presentation.update({
     strip: null,
@@ -547,6 +632,12 @@ test("renders quiet and debrief states without taking completion authority", () 
     debrief: null,
   });
   assert.equal(presentation.element.hidden, true);
+  assert.equal(
+    presentation.element.getAttribute("data-debrief-visible"),
+    "false",
+  );
+  flyAgain.click();
+  assert.equal(flyAgainRequests, 1);
   presentation.dispose();
 });
 
@@ -554,28 +645,40 @@ test("disposes idempotently and ignores later updates or detached controls", () 
   const documentLike = new FakeDocument();
   const mount = new FakeElement("main");
   let quietSkipRequests = 0;
+  let flyAgainRequests = 0;
   const presentation = createCasevacMissionPresentation(documentLike, {
     mount,
     onQuietSkip() {
       quietSkipRequests++;
     },
+    onFlyAgain() {
+      flyAgainRequests++;
+    },
   });
   presentation.update({
     quiet: { active: true, skippable: true },
+    debrief: completeDebrief(),
   });
   const skip = byAttribute(
     presentation.element,
     "aria-label",
-    "Skip the CASEVAC quiet interval",
+    "Skip the Medevac quiet interval",
   )[0];
+  const flyAgain = oneByAttribute(
+    presentation.element,
+    "aria-label",
+    "Fly Medevac again",
+  );
   presentation.dispose();
   presentation.dispose();
   skip.click();
+  flyAgain.click();
 
   assert.equal(presentation.disposed, true);
   assert.equal(presentation.element.parentNode, null);
   assert.equal(mount.children.length, 0);
   assert.equal(quietSkipRequests, 0);
+  assert.equal(flyAgainRequests, 0);
   assert.equal(presentation.update({
     strip: { phase: "Ingress" },
   }), null);

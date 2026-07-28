@@ -79,8 +79,6 @@ test("builds the complete course as explicitly non-authoritative presentation", 
     "CASEVAC_PICKUP_PAD_VISUAL",
     "CASEVAC_RECEIVER_PAD_VISUAL",
     "CASEVAC_WINDSOCK",
-    "CASEVAC_FENCE_VISUALS",
-    "CASEVAC_UTILITY_VISUALS",
     "CASEVAC_ANONYMOUS_STAFF",
     "CASEVAC_APPROACH_CUE",
     "CASEVAC_ESCAPE_CUE",
@@ -98,7 +96,21 @@ test("builds the complete course as explicitly non-authoritative presentation", 
     assert.equal(tag.collisionSource, false);
     taggedObjects++;
   });
-  assert.ok(taggedObjects > 30);
+  assert.ok(taggedObjects > 20);
+  for (const unbackedObstacle of [
+    "CASEVAC_FENCE_VISUALS",
+    "CASEVAC_UTILITY_VISUALS",
+    "CASEVAC_PICKUP_TREES",
+    "CASEVAC_RECEIVER_TREES",
+    "CASEVAC_PICKUP_STRUCTURES",
+    "CASEVAC_RECEIVER_STRUCTURES",
+  ]) {
+    assert.equal(
+      names.has(unbackedObstacle),
+      false,
+      `${unbackedObstacle} must come from projected collision authority`,
+    );
+  }
   assert.equal(findByKind(scenery.group, "approach-cue")
     .every((cue) => cue.visible === false), true);
   assert.equal(findByKind(scenery.group, "escape-cue")
@@ -124,11 +136,11 @@ test("batches repeated silhouettes and stays within a fixed draw-object budget",
 
   assert.ok(drawables <= 48,
     `fixed course should remain compact, received ${drawables} drawables`);
-  assert.ok(instancedCapacity >= scenery.plan.counts.trees * 2);
+  assert.ok(instancedCapacity >= scenery.plan.counts.people);
   assert.ok(instancedCapacity < 300);
   assert.equal(
     findByKind(scenery.group, "tree-trunks").length,
-    2,
+    0,
   );
   assert.equal(
     findByKind(scenery.group, "staff-bodies").length,
@@ -136,7 +148,7 @@ test("batches repeated silhouettes and stays within a fixed draw-object budget",
   );
   assert.equal(
     findByKind(scenery.group, "utility-poles").length,
-    2,
+    0,
   );
   scenery.dispose();
 });
@@ -182,12 +194,6 @@ test("projects wind, rain, flight cues, and rotor wash without becoming authorit
     "windsock-fabric",
     pickupId,
   )[0];
-  const pickupCanopy = findByKind(
-    scenery.group,
-    "tree-canopies",
-    pickupId,
-  )[0];
-
   scenery.update({
     elapsedSeconds: 12.5,
     windX: 7,
@@ -214,19 +220,6 @@ test("projects wind, rain, flight cues, and rotor wash without becoming authorit
   assert.equal(pickupWash.visible, true);
   assert.equal(receiverWash.visible, false);
   assert.ok(pickupWash.material.opacity > 0);
-
-  const shader = {
-    uniforms: {},
-    vertexShader: "#include <common>\nvoid main(){\n#include <begin_vertex>\n}",
-  };
-  pickupCanopy.material.onBeforeCompile(shader);
-  assert.equal(shader.uniforms.uCasevacSceneryTime.value, 12.5);
-  assert.deepEqual(
-    shader.uniforms.uCasevacSceneryWind.value.toArray(),
-    [7, -3],
-  );
-  assert.match(shader.vertexShader, /casevacWindSpeed/);
-  assert.match(shader.vertexShader, /USE_INSTANCING/);
 
   scenery.update({
     precipitation01: 0,

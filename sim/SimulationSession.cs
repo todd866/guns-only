@@ -107,6 +107,7 @@ public sealed class SimulationSession {
 
     public const double FixedDeltaSeconds = 1.0 / AircraftSim.TickHz;
     public const int RecentEventCapacity = 64;
+    const int BuiltInCasevacBeatIndex = 13;
     // Terrain prediction is deliberately a flight-computer-rate task rather than a 120 Hz
     // actuator task. The held recovery command still reaches AircraftSim every fixed tick.
     public const int AutoGcasPredictionIntervalTicks = 6;
@@ -417,6 +418,20 @@ public sealed class SimulationSession {
             "The active mission uses a non-fixed-wing player vehicle.");
     public bool CasevacMission => _casevacFlight is not null;
     public CasevacFlightRuntime? CasevacFlight => _casevacFlight;
+    /// <summary>
+    /// Complete the built-in Medevac aftermath only after the browser has presented it once.
+    /// This is deliberately unavailable to custom CASEVAC beats and every non-Quiet phase.
+    /// </summary>
+    public bool RequestCasevacQuietSkip() {
+        if (_beatIndex != BuiltInCasevacBeatIndex
+            || _casevacFlight is null
+            || !_casevacFlight.RequestQuietSkip())
+            return false;
+        FinishCasevacLifecycle();
+        UpdateTimeCompressionDecision();
+        return true;
+    }
+
     public bool OpponentPresent => _beat is not null
         && _beat.InitialOpponent.HasValue
         && _bandit is not null;
@@ -1160,8 +1175,8 @@ public sealed class SimulationSession {
                 ? 0.0
                 : positive ? 1.0 : -1.0;
         double forward = Axis(
-            KeyActive(GKey.PullUp),
-            KeyActive(GKey.PushDown));
+            KeyActive(GKey.PushDown),
+            KeyActive(GKey.PullUp));
         double right = Math.Clamp(
             Axis(
                 KeyActive(GKey.RollRight),
@@ -1685,6 +1700,13 @@ public sealed class SimulationSession {
             : pilotCommand;
     }
 
+    void FinishCasevacLifecycle() {
+        _outcome = SortieOutcome.None;
+        _pendingOutcome = SortieOutcome.None;
+        Lifecycle = LifecycleState.Finished;
+        _accumulatorSeconds = 0.0;
+    }
+
     void RunFixedTick() {
         if (_casevacFlight is not null) {
             long sourceTick = checked(_tick + 1L);
@@ -1694,12 +1716,8 @@ public sealed class SimulationSession {
             _casevacAbortRequested = false;
             _tick = sourceTick;
             _simTimeMs += FixedDeltaSeconds * 1000.0;
-            if (_casevacFlight.IsTerminal) {
-                _outcome = SortieOutcome.None;
-                _pendingOutcome = SortieOutcome.None;
-                Lifecycle = LifecycleState.Finished;
-                _accumulatorSeconds = 0.0;
-            }
+            if (_casevacFlight.IsTerminal)
+                FinishCasevacLifecycle();
             UpdateTimeCompressionDecision();
             return;
         }

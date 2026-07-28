@@ -278,7 +278,12 @@ test("decision-support ocean and warnings carry truth without presentation flick
   assert.match(appSource, /new THREE\.WebGLRenderer\(\{[\s\S]*?logarithmicDepthBuffer:\s*true/,
     "production clip range needs log depth so the Ukraine apron cannot z-fight at Rapier slant");
   assert.match(appSource, /uWindSpeed/);
-  assert.match(appSource, /Number\(state\.wind_x_mps\)/);
+  assert.match(appSource,
+    /Number\(\s*casevac \? state\.casevac_wind_x_mps : state\.wind_x_mps,\s*\)/,
+    "terrain wind must select CASEVAC's projected east component without dropping legacy weather");
+  assert.match(appSource,
+    /Number\(\s*casevac \? state\.casevac_wind_z_mps : state\.wind_z_mps,\s*\)/,
+    "terrain wind must select CASEVAC's projected north component without dropping legacy weather");
   assert.match(appSource, /const windBlend = expStep/,
     "surface-wind direction should not rotate with single-frame turbulence");
   assert.doesNotMatch(hudSource, /Math\.sin\(now \* Math\.PI/,

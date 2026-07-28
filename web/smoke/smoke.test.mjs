@@ -663,6 +663,294 @@ test("the published web app boots to a running flight kernel (no fatal render er
   }
 });
 
+test("the published Medevac mission briefs, launches, and accepts commander flight input", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+
+    await page.goto(`${site.url}?program=medevac&server=off`, {
+      waitUntil: "load",
+      timeout: 60000,
+    });
+    try {
+      await page.waitForFunction(
+        () => document.querySelector("#boot")?.classList.contains("ready") === true,
+        undefined,
+        { timeout: 45000 },
+      );
+    } catch (error) {
+      const boot = await page.evaluate(() => ({
+        status: document.querySelector("#boot-status")?.textContent,
+        fatal: document.querySelector("#fatal")?.classList.contains("visible"),
+        fatalMessage: document.querySelector("#fatal-message")?.textContent,
+        state: globalThis.__gunsState ? {
+          sessionPhase: globalThis.__gunsState.session_phase,
+          casevac: globalThis.__gunsState.casevac_mission,
+          casevacPhase: globalThis.__gunsState.casevac_phase,
+          tick: globalThis.__gunsState.tick,
+        } : null,
+        lifecycle: globalThis.__gunsLifecycle
+          ? {
+            reasons: globalThis.__gunsLifecycle.reasons,
+            selectedBeat: globalThis.__gunsLifecycle.selectedBeat,
+            stagedBeat: globalThis.__gunsLifecycle.stagedBeat,
+          }
+          : null,
+      }));
+      throw new Error(`${error.message}\n${JSON.stringify({
+        boot,
+        pageErrors,
+      })}`);
+    }
+    await page.waitForFunction(() => {
+      const routeCard = document.querySelector(
+        '[aria-label="Medevac reference route sketch"]',
+      );
+      return globalThis.__gunsState?.casevac_mission === true
+        && globalThis.__gunsState?.session_phase === "READY"
+        && routeCard?.hidden === false
+        && routeCard.querySelectorAll(".cvr-option").length === 4;
+    }, undefined, { timeout: 15000 });
+
+    const ready = await page.evaluate(() => {
+      const routeCard = document.querySelector(
+        '[aria-label="Medevac reference route sketch"]',
+      );
+      const options = [...routeCard.querySelectorAll(".cvr-option")]
+        .map((element) => element.textContent.replace(/\s+/g, " ").trim());
+      return {
+        startText: document.querySelector("#ready-start")?.textContent?.trim(),
+        routeText: routeCard.textContent.replace(/\s+/g, " ").trim(),
+        options,
+        routes: globalThis.__gunsState.casevac_routes?.length,
+        obstacles: globalThis.__gunsState.casevac_collision_obstacles?.length,
+        opponentPresent: globalThis.__gunsState.opponent_present,
+        fatal: document.querySelector("#fatal")?.classList.contains("visible"),
+      };
+    });
+    assert.equal(ready.startText, "Fly Medevac");
+    assert.equal(ready.routes, 4);
+    assert.equal(ready.obstacles, 5);
+    assert.equal(ready.opponentPresent, false);
+    assert.equal(ready.fatal, false);
+    assert.match(ready.routeText, /REFERENCE ONLY · NO ROUTE HOLD/);
+    assert.equal(ready.options.filter((option) => option.startsWith("DIRECT")).length, 2);
+    assert.equal(ready.options.filter((option) => option.startsWith("MASKED")).length, 2);
+
+    const captureDir = process.env.MEDEVAC_QA_CAPTURE_DIR;
+    if (captureDir) {
+      await page.screenshot({
+        path: join(captureDir, "medevac-ready.png"),
+        fullPage: true,
+      });
+    }
+
+    await page.locator("#ready-start").click();
+    await page.waitForFunction(
+      () => globalThis.__gunsState?.casevac_mission === true
+        && globalThis.__gunsState?.session_phase === "ACTIVE"
+        && globalThis.__gunsState?.casevac_phase === "INGRESS"
+        && !document.documentElement.classList.contains("run-paused")
+        && document.querySelector("[data-casevac-flight-facts]")?.hidden === false,
+      undefined,
+      { timeout: 15000 },
+    );
+
+    const before = await page.evaluate(() => ({
+      px: Number(globalThis.__gunsState.px),
+      py: Number(globalThis.__gunsState.py),
+      pz: Number(globalThis.__gunsState.pz),
+      tick: Number(globalThis.__gunsState.tick),
+      energyKwh: Number(globalThis.__gunsState.casevac_energy_remaining_kwh),
+      pickupX: Number(globalThis.__gunsState.casevac_pickup_x),
+      pickupZ: Number(globalThis.__gunsState.casevac_pickup_z),
+      diagnostics: globalThis.__gunsSnapshotBridge?.diagnostics() ?? null,
+    }));
+    // SwiftShader can render the full terrain at only a few frames per second on a loaded CI
+    // worker. Hold each physical control until the authoritative fixed-tick state proves the
+    // response instead of assuming a wall-clock hold spans enough simulation ticks.
+    await page.keyboard.down("w");
+    try {
+      await page.waitForFunction(
+        ({ startY, startTick }) =>
+          Number(globalThis.__gunsState?.py) > startY + 0.2
+            && Number(globalThis.__gunsState?.tick) > startTick,
+        { startY: before.py, startTick: before.tick },
+        { timeout: 30000 },
+      );
+    } finally {
+      await page.keyboard.up("w");
+    }
+    const pickupRangeBefore = Math.hypot(
+      before.pickupX - before.px,
+      before.pickupZ - before.pz,
+    );
+    await page.keyboard.down("ArrowUp");
+    try {
+      await page.waitForFunction(
+        ({ pickupX, pickupZ, startRange }) => {
+          const x = Number(globalThis.__gunsState?.px);
+          const z = Number(globalThis.__gunsState?.pz);
+          return Math.hypot(pickupX - x, pickupZ - z) < startRange - 0.5;
+        },
+        {
+          pickupX: before.pickupX,
+          pickupZ: before.pickupZ,
+          startRange: pickupRangeBefore,
+        },
+        { timeout: 30000 },
+      );
+    } finally {
+      await page.keyboard.up("ArrowUp");
+    }
+
+    const after = await page.evaluate(() => {
+      const flightFacts = document.querySelector("[data-casevac-flight-facts]");
+      const routeCard = document.querySelector(
+        '[aria-label="Medevac reference route sketch"]',
+      );
+      return {
+        px: Number(globalThis.__gunsState.px),
+        py: Number(globalThis.__gunsState.py),
+        pz: Number(globalThis.__gunsState.pz),
+        tick: Number(globalThis.__gunsState.tick),
+        energyKwh: Number(globalThis.__gunsState.casevac_energy_remaining_kwh),
+        flightFacts: flightFacts.textContent.replace(/\s+/g, " ").trim(),
+        routeCardHidden: routeCard.hidden,
+        hudVisibility: getComputedStyle(document.querySelector("#hud")).visibility,
+        fireHidden: document.querySelector("#touch-fire")?.hidden,
+        limitOverrideHidden:
+          document.querySelector("#touch-limit-override")?.hidden,
+      };
+    });
+    assert.ok(after.py > before.py + 0.2,
+      `vertical command did not climb: ${JSON.stringify({ before, after })}`);
+    const pickupRangeAfter = Math.hypot(
+      before.pickupX - after.px,
+      before.pickupZ - after.pz,
+    );
+    assert.ok(pickupRangeAfter < pickupRangeBefore - 0.5,
+      `forward command did not move toward pickup: ${JSON.stringify({
+        before,
+        after,
+        pickupRangeBefore,
+        pickupRangeAfter,
+      })}`);
+    assert.ok(after.tick > before.tick);
+    assert.ok(after.energyKwh < before.energyKwh,
+      `applied power did not reduce energy: ${JSON.stringify({ before, after })}`);
+    assert.match(after.flightFacts, /ROUTE/);
+    assert.match(after.flightFacts, /ENERGY/);
+    assert.match(after.flightFacts, /CONTACT LIMITS/);
+    assert.equal(after.routeCardHidden, true);
+    assert.equal(after.hudVisibility, "hidden");
+    assert.equal(after.fireHidden, true);
+    assert.equal(after.limitOverrideHidden, true);
+
+    const hotWindow = await page.evaluate(async () => {
+      const diagnostics = () => globalThis.__gunsSnapshotBridge?.diagnostics() ?? null;
+      const first = diagnostics();
+      const firstTick = Number(globalThis.__gunsState?.tick);
+      await new Promise((resolve) => setTimeout(resolve, 2200));
+      return {
+        first,
+        second: diagnostics(),
+        firstTick,
+        secondTick: Number(globalThis.__gunsState?.tick),
+      };
+    });
+    assert.ok(hotWindow.first && hotWindow.second,
+      "CASEVAC hot snapshot diagnostics unavailable");
+    assert.ok(hotWindow.secondTick > hotWindow.firstTick,
+      `CASEVAC authority stopped advancing: ${JSON.stringify(hotWindow)}`);
+    assert.ok(hotWindow.second.coldFetches - hotWindow.first.coldFetches <= 1,
+      `CASEVAC fell back to repeated cold JSON: ${JSON.stringify(hotWindow)}`);
+
+    if (captureDir) {
+      await page.screenshot({
+        path: join(captureDir, "medevac-flight.png"),
+      });
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    const narrow = await page.evaluate(() => {
+      const facts = document.querySelector("[data-casevac-flight-facts]")
+        .getBoundingClientRect();
+      const pause = document.querySelector("#pause-button").getBoundingClientRect();
+      const visibleMissionPanels = [
+        ...document.querySelectorAll("[data-casevac-part]:not([hidden])"),
+        document.querySelector("[data-casevac-flight-facts]"),
+      ].filter(Boolean).map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          part: element.getAttribute("data-casevac-part") ?? "flight-facts",
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+        };
+      });
+      return {
+        viewportWidth: innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        facts: {
+          left: facts.left,
+          right: facts.right,
+          top: facts.top,
+          bottom: facts.bottom,
+        },
+        pause: {
+          left: pause.left,
+          right: pause.right,
+          top: pause.top,
+          bottom: pause.bottom,
+        },
+        visibleMissionPanels,
+      };
+    });
+    assert.ok(narrow.scrollWidth <= narrow.viewportWidth + 1,
+      `Medevac flight UI overflows narrow viewport: ${JSON.stringify(narrow)}`);
+    assert.ok(narrow.facts.left >= 0 && narrow.facts.right <= narrow.viewportWidth);
+    assert.ok(narrow.facts.top >= 0 && narrow.facts.bottom <= 844);
+    for (const panel of narrow.visibleMissionPanels) {
+      const overlaps = narrow.pause.left < panel.right
+        && narrow.pause.right > panel.left
+        && narrow.pause.top < panel.bottom
+        && narrow.pause.bottom > panel.top;
+      assert.equal(overlaps, false,
+        `Medevac pause control overlaps ${panel.part}: ${JSON.stringify(narrow)}`);
+    }
+    if (captureDir) {
+      await page.screenshot({
+        path: join(captureDir, "medevac-flight-narrow.png"),
+      });
+    }
+
+    await page.keyboard.press("n");
+    await page.waitForFunction(
+      () => globalThis.__gunsState?.casevac_phase === "ABORT_RETURN",
+      undefined,
+      { timeout: 15000 },
+    );
+
+    assert.deepEqual(
+      pageErrors,
+      [],
+      `uncaught page errors during Medevac flight:\n${pageErrors.join("\n")}`,
+    );
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
 test("phone combat HUD stays contextual, separated, and scroll-safe", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 

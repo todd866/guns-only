@@ -57,6 +57,14 @@ import {
   applyLookDelta,
   trackpadLookDelta,
 } from "./render/input/look_gesture.js";
+import { createCasevacCourseScenery } from "./render/casevac/casevac_course_scenery.js";
+import {
+  casevacDebriefModel,
+  createCasevacMissionPresentation,
+} from "./render/casevac/casevac_mission_presentation.js";
+import { createCasevacCollisionScenery } from "./render/casevac/casevac_collision_scenery.js";
+import { createCasevacRouteBriefing } from "./render/casevac/casevac_route_briefing.js";
+import { createCasevacRouteLandmarks } from "./render/casevac/casevac_route_landmarks.js";
 import { mobileControlProfile } from "./render/input/mobile_control_profile.js";
 import {
   syncPlayerGunTargetSelection,
@@ -155,6 +163,11 @@ import {
   setFlightAudioEnabled,
   updateFlightAudio,
 } from "./render/audio/flight_audio.js";
+import {
+  primeCasevacAudio,
+  setCasevacAudioEnabled,
+  updateCasevacAudio,
+} from "./render/audio/casevac_audio.js";
 
 const DEG = Math.PI / 180;
 const MAX_GIMBAL_YAW = PADLOCK_LIMITS.yawRad;
@@ -163,6 +176,10 @@ const TRACKPAD_LOOK_RELEASE_MS = 110;
 const MAX_TRACERS = 48;
 const SUN_DIRECTION = new THREE.Vector3(0.32, 0.78, -0.53).normalize();
 const CLEAR_AIR_VISIBILITY_M = 100_000;
+const CASEVAC_PICKUP_SITE_ID = "location.ukraine.casevac-pickup-a.v1";
+const CASEVAC_RECEIVER_SITE_ID = "location.ukraine.casevac-handoff-a.v1";
+const CASEVAC_SCENERY_SEED = 13;
+const CASEVAC_QUIET_SEEN_STORAGE = "guns-only.casevac-quiet-seen.v1";
 
 // Production visuals must carry decision-relevant truth. The generated Korea environment and
 // cockpit remain useful authoring fixtures in their labs, but neither is allowed into the flying
@@ -203,6 +220,9 @@ const touchPadlockButton = touchControls?.querySelector('[data-pulse-key="KeyV"]
 const touchThrottleControls = document.querySelector("#touch-throttle-controls");
 const touchThrottleRocker = touchControls?.querySelector('[data-mobile-action="throttle-rocker"]') ?? null;
 const touchThrottleRockerKnob = document.querySelector("#touch-throttle-rocker-knob");
+const touchThrottleRockerLabel = touchThrottleRockerKnob?.querySelector(".throttle-rocker-label")
+  ?? null;
+const touchThrottleHelp = document.querySelector("#touch-throttle-help");
 const touchWaveOffButton = document.querySelector("#touch-wave-off");
 const touchContextControls = document.querySelector("#touch-context-controls");
 const touchGearButton = document.querySelector("#touch-gear");
@@ -210,8 +230,11 @@ const touchFlapUpButton = document.querySelector("#touch-flap-up");
 const touchFlapDownButton = document.querySelector("#touch-flap-down");
 const touchLimitOverride = document.querySelector("#touch-limit-override");
 const touchFireButton = document.querySelector("#touch-fire");
+const portraitChips = document.querySelector("#portrait-chips");
 const fallbackStick = touchControls?.querySelector('[data-mobile-action="virtual-stick"]') ?? null;
 const fallbackStickKnob = document.querySelector("#fallback-stick-knob");
+const fallbackStickLabel = fallbackStick?.querySelector(".fallback-stick-label") ?? null;
+const fallbackStickHelp = document.querySelector("#fallback-stick-help");
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
 const readyScreen = document.querySelector("#ready-screen");
@@ -244,6 +267,10 @@ const readyReturn = document.querySelector("#ready-return");
 const readyHint = document.querySelector("#ready-hint");
 const readyBuild = document.querySelector("#ready-build");
 const readyBuildReload = document.querySelector("#ready-build-reload");
+const readyCasevacRouteBriefing = createCasevacRouteBriefing(document, {
+  mount: readyBrief?.parentElement ?? document.body,
+  after: readyBrief,
+});
 const incidentReplayOverlay = document.querySelector("#incident-replay-overlay");
 const incidentReplayTitle = incidentReplayOverlay?.querySelector(".replay-title") ?? null;
 const incidentReplayTime = document.querySelector("#incident-replay-time");
@@ -796,6 +823,7 @@ const touchGkeyByDefaultCode = new Map(CONTROL_BINDINGS.map(
 ));
 for (const action of Object.values(TEST_FLIGHT_ACTIONS))
   touchGkeyByDefaultCode.set(action.code, action.gkey);
+touchGkeyByDefaultCode.set("KeyN", 10);
 const keyMap = new Map();
 function rebuildKeyboardMap() {
   keyMap.clear();
@@ -1611,7 +1639,10 @@ let multiplayer = null;
 let incidentReplay = null;
 let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
-let autoLaunchPending = true;
+// The combat front door still launches immediately once its world is warm. Medevac is different:
+// its route card is decision-support, so an explicit deep link must remain at the briefing until
+// the commander chooses to depart.
+let autoLaunchPending = requestedProgramNode?.id !== "medevac";
 let terrainLaunchWarmupPromise = null;
 let terrainLaunchWarmupFailedKey = null;
 let settingsReturnFocus = null;
@@ -1645,6 +1676,7 @@ function applyPlayerSettings() {
   document.documentElement.classList.toggle("forced-reduced-motion", playerSettings.reducedMotion);
   document.documentElement.classList.toggle("large-interface-text", playerSettings.largeText);
   setFlightAudioEnabled(playerSettings.audio);
+  setCasevacAudioEnabled(playerSettings.audio);
   activeView?.hud.setAudioEnabled(playerSettings.audio);
   activeView?.hud.setControlBindings?.(playerSettings.bindings);
   if (settingsAudio) settingsAudio.checked = playerSettings.audio;
@@ -1717,7 +1749,9 @@ function announceFlightState(state) {
   if (!flightAnnouncer || !state) return;
   const urgentLso = ["WAVEOFF", "CORRECTING"].includes(String(state.lso_severity || ""))
     ? String(state.lso || "") : "";
-  const announcement = state.finished === true
+  const announcement = isCasevacState(state) && state.finished === true
+    ? `Medevac complete. ${readableCasevacToken(state.casevac_disposition, "incomplete")}.`
+    : state.finished === true
     ? `Sortie complete. ${String(state.sortie_outcome || "complete").toLowerCase()}.`
     : urgentLso || String(state.transition_cue || "");
   if (!announcement || announcement === lastAccessibilityAnnouncement) return;
@@ -1860,17 +1894,55 @@ function renderPilotPhysiology(state) {
 function syncMobileControlProfile(state) {
   if (!mobileControls || !touchControls) return;
   const profile = mobileControlProfile(state);
-  if (touchThrottleControls) touchThrottleControls.hidden = !profile.throttle;
-  if (touchWaveOffButton) touchWaveOffButton.hidden = !profile.waveOff;
-  if (touchGearButton) touchGearButton.hidden = !profile.gear;
-  if (touchFlapUpButton) touchFlapUpButton.hidden = !profile.flaps;
-  if (touchFlapDownButton) touchFlapDownButton.hidden = !profile.flaps;
-  if (touchPadlockButton) touchPadlockButton.hidden = !profile.padlock;
-  if (touchLimitOverride) touchLimitOverride.hidden = !profile.limitOverride;
-  if (touchFireButton) touchFireButton.hidden = !profile.fire;
-  if (touchGcasPaddle) touchGcasPaddle.hidden = !profile.gcasOverride;
+  const casevac = isCasevacState(state);
+  const casevacActive = casevac && state?.session_phase === "ACTIVE";
+  if (touchThrottleControls) {
+    touchThrottleControls.hidden = casevac
+      ? !casevacActive
+      : !profile.throttle;
+  }
+  if (touchThrottleRockerLabel) {
+    touchThrottleRockerLabel.textContent = casevac ? "VERT" : "PWR";
+  }
+  if (touchThrottleHelp) {
+    touchThrottleHelp.textContent = casevac
+      ? "Drag toward plus to climb or minus to descend. Release commands level flight."
+      : "Drag toward plus to increase power or minus to decrease power. Release stops changing power; the selected power remains set.";
+  }
+  if (touchWaveOffButton) {
+    touchWaveOffButton.hidden = casevac ? !casevacActive : !profile.waveOff;
+    touchWaveOffButton.dataset.holdKey = casevac ? "KeyN" : "KeyW";
+    touchWaveOffButton.innerHTML = casevac ? "ABORT<br>N" : "WAVE<br>OFF";
+    touchWaveOffButton.setAttribute(
+      "aria-label",
+      casevac ? "Request controlled abort before loading" : "Firewall throttle and wave off",
+    );
+  }
+  if (portraitChips) portraitChips.hidden = casevac;
+  if (fallbackStick) {
+    fallbackStick.setAttribute(
+      "aria-label",
+      casevac ? "Horizontal movement control" : "Flight stick",
+    );
+  }
+  if (fallbackStickLabel) fallbackStickLabel.textContent = casevac ? "MOVE" : "STICK";
+  if (fallbackStickHelp) {
+    fallbackStickHelp.textContent = casevac
+      ? "Drag up to move forward, down to reverse, or left and right to translate. The control centres when released."
+      : "Drag in any direction. Down pulls, up pushes. The stick centres when released.";
+  }
+  if (touchGearButton) touchGearButton.hidden = casevac || !profile.gear;
+  if (touchFlapUpButton) touchFlapUpButton.hidden = casevac || !profile.flaps;
+  if (touchFlapDownButton) touchFlapDownButton.hidden = casevac || !profile.flaps;
+  if (touchPadlockButton) touchPadlockButton.hidden = casevac || !profile.padlock;
+  if (touchLimitOverride) touchLimitOverride.hidden = casevac || !profile.limitOverride;
+  if (touchFireButton) touchFireButton.hidden = casevac || !profile.fire;
+  if (touchGcasPaddle) {
+    touchGcasPaddle.hidden = !profile.gcasOverride;
+    if (casevac) touchGcasPaddle.hidden = true;
+  }
   if (touchContextControls) {
-    touchContextControls.hidden = !profile.gear && !profile.flaps;
+    touchContextControls.hidden = casevac || (!profile.gear && !profile.flaps);
   }
   releaseHiddenMobileControls();
 }
@@ -1955,6 +2027,16 @@ const MISSION_BRIEFS = Object.freeze({
     brief: "This is the first low-altitude scenery slice: a fictional Ukrainian lowland, true-scale terrain, and four sequential airborne raiders. One target is authoritative at a time, and the next enters only after the current raider is killed or leaks. Fly cutoff geometry, use the terrain as a real flight reference, take the first valid gun solution, and protect ammunition. Buildings are ambient scenery in this slice—not ground targets or collision truth. Auto-GCAS is terrain-triggered and K is its held paddle override.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\n480 rounds for four raiders · hold K only during an active Auto-GCAS fly-up",
   },
+  13: {
+    activity: "medevac",
+    kicker: "2030s Ukraine · Soniachne low-level cell · mission 13",
+    title: "Medevac",
+    sortie: "One orchard pickup · one clinic handoff · no opponent",
+    configuration: "Fictional automated vertical-lift air ambulance · one opaque casualty capsule · VMC · 12–42 m masking band",
+    card: "Fly the low route, make two stable contacts, and deliver the capsule to the clinic.",
+    brief: "You command a heavily automated air ambulance. The pickup team is preparing one opaque casualty capsule before you arrive; your job is to reach the orchard at the right time, settle inside the marked contact area, hold while the capsule is secured, then fly it to the clinic and hold again through handoff. The shorter line is more exposed and the longer drainage route offers better masking; the assessed safe masking band is 12–42 m AGL. At either pad, enter within 6 m at no more than 0.45 m/s lateral speed and 0.25 m/s vertical speed, keep absolute pitch and bank at or below 5°, then remain stable for 2 seconds. The urgency clock is a coordination target, not a patient death countdown, and there is no clinical diagnosis or treatment simulation in this sortie.",
+    controls: "Arrows command horizontal motion · W/S vertical · A/D yaw\nN requests a controlled abort before loading · contact: R 6 m · H ≤0.45 · |V| ≤0.25 m/s · |pitch/bank| ≤5° · stable 2 s",
+  },
 });
 
 const CAMPAIGN_BRIEFS = Object.freeze({
@@ -1972,6 +2054,13 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Low-Level Drone Intercept",
     sortie: "F-22A defensive intercept · four staged low-flying raiders · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds · true-scale lowland terrain · Auto-GCAS armed",
+  }),
+  "medevac": Object.freeze({
+    ...MISSION_BRIEFS[13],
+    kicker: "2030s Ukraine · fictional Soniachne low-level cell",
+    title: "Medevac",
+    sortie: "Automated air ambulance · orchard pickup · clinic handoff",
+    configuration: "Fictional reduced-order vertical-lift surrogate · one opaque capsule · no opponent",
   }),
   "endurance-merge": Object.freeze({
     ...MISSION_BRIEFS[7],
@@ -2031,6 +2120,10 @@ function pressMappedKey(code, source, gkeyOverride = undefined,
   directThrottleIncrease = undefined) {
   const gkey = gkeyOverride ?? keyMap.get(code);
   if (!bridge || gkey === undefined || pauseReasons.size > 0) return false;
+  // CASEVAC has no weapon or opponent camera authority. Keep these browser edges from crossing the
+  // bridge at all; the kernel also interlocks them, but the presentation must not emit combat
+  // telemetry/audio/UI for keys which have no role in this sortie.
+  if (isCasevacState() && (gkey === 8 || gkey === 9)) return false;
   let owners = keyOwners.get(code);
   if (!owners) {
     owners = new Set();
@@ -2106,7 +2199,19 @@ function setTestFlightValue(node, text, state = null) {
 
 function renderTestFlightConsole(state) {
   if (!testFlightUi) return;
+  if (isCasevacState(state)) {
+    updateNavConsole(null);
+    if (testFlightConsole) {
+      testFlightConsole.hidden = true;
+      testFlightConsole.open = false;
+    }
+    testFlightActionController?.releaseAll();
+    return;
+  }
   const projected = projectTestFlightState(state);
+  // The legacy test-flight console describes fixed-wing propulsion, electrical, hydraulic and
+  // gear state. CASEVAC publishes its own bounded power/contact facts and must not inherit that
+  // incompatible systems panel.
   const airborneSortie = state.ready !== true && state.paused !== true && state.finished !== true;
   updateNavConsole(airborneSortie ? state : null);
   // AVAILABLE vs RELEVANT. The console reads engine, bus, hydraulics and gear, and a pilot may
@@ -2305,6 +2410,10 @@ function syncBanditPadlockRollAssist() {
 // contacts. In a two-ship fight the padlocked wingman is slot 1; every other view state, including
 // forward view and Rapier traffic, safely selects the primary combat slot.
 function syncPlayerGunTarget() {
+  if (!opponentPresentationAllowed()) {
+    appliedPlayerGunTargetSlot = null;
+    return false;
+  }
   const result = syncPlayerGunTargetSelection({
     bridge,
     state: latestState,
@@ -2392,6 +2501,7 @@ function resetMissionPresentation() {
   syncPlayerGunTarget();
   gimbalReturnFast = false;
   activeView?.cancelCloudBreakEntry();
+  activeView?.resetCasevacPresentation();
   activeView?.hud.setLegendVisible?.(false);
 }
 
@@ -2468,6 +2578,7 @@ function defaultPadlockTarget() {
 /// pilot lost sight of both aircraft for the two seconds the gimbal took to centre and come back.
 /// In a 1v2 that is the whole fight. V is now purely "am I padlocked", Tab is purely "at whom".
 function cyclePadlockTarget() {
+  if (!opponentPresentationAllowed()) return;
   if (!padlock) {
     acquirePadlock(defaultPadlockTarget(), "cycle");
     return;
@@ -2493,6 +2604,7 @@ function cyclePadlockTarget() {
 /// V — padlock on or off. It keeps the contact Tab last selected, so V is a view toggle and
 /// nothing else.
 function togglePadlock() {
+  if (!opponentPresentationAllowed()) return;
   if (padlock) {
     releasePadlock("manual");
     return;
@@ -2634,7 +2746,7 @@ function readyScreenFocusables() {
 }
 
 function focusReadyScreen() {
-  if (!readyScreen.classList.contains("visible")) return;
+  if (readyScreen.inert || !readyScreen.classList.contains("visible")) return;
   const selectedMission = readyScreen.querySelector(
     `[data-program-node="${selectedProgramNodeId}"]`,
   );
@@ -2737,24 +2849,31 @@ function renderPauseUi(state = latestState) {
   const background = pauseReasons.has("background");
   const sessionPaused = pauseReasons.has("session");
   const settingsPaused = pauseReasons.has("settings");
+  const richCasevacDebrief = finished && isCasevacState(state);
   const showScreen = !help && !calibrating
     && (ready || finished || background || sessionPaused || settingsPaused);
   const brief = missionBrief();
+  observeCasevacQuietCompletion(state);
   const wasScreenVisible = readyScreen.classList.contains("visible");
   const startWasDisabled = readyStart.disabled;
 
   readyScreen.dataset.mode = ready ? "program" : finished ? "debrief" : "pause";
+  readyScreen.dataset.richDebrief = String(richCasevacDebrief);
   if (readySelector) readySelector.hidden = !ready;
   if (readyDeckConfig && !ready) readyDeckConfig.hidden = true;
   if (readyCircuitsPreflight && !ready) readyCircuitsPreflight.hidden = true;
   if (ready) renderCampaignProgress();
+  readyCasevacRouteBriefing.update({
+    visible: ready && selectedBeat === 13,
+    routes: state?.casevac_routes,
+  });
   if (readyMenuTitle) {
     readyMenuTitle.textContent = ready
       ? "Pick an aircraft" : finished ? "Sortie complete" : "Flight paused";
   }
   if (readyMenuHelp) {
     readyMenuHelp.textContent = (ready
-      ? "Both are available. Fly whichever you feel like."
+      ? "All five missions are available. Fly whichever you feel like."
       : finished
         ? "Review the result, or go again."
         : "The deterministic flight clock is stopped and all controls are neutralised.")
@@ -2772,7 +2891,13 @@ function renderPauseUi(state = latestState) {
     focusOwner?.focus({ preventScroll: true });
   }
   readyScreen.classList.toggle("visible", showScreen);
-  readyScreen.setAttribute("aria-hidden", String(!showScreen));
+  // The richer four-axis CASEVAC debrief is rendered above this generic finished card. Keep the
+  // card as the visual backdrop, but expose only the topmost dialog to focus and assistive tech.
+  readyScreen.inert = richCasevacDebrief;
+  readyScreen.setAttribute(
+    "aria-hidden",
+    String(!showScreen || richCasevacDebrief),
+  );
   if (readySettings) readySettings.hidden = !showScreen;
   if (readyRestart) {
     readyRestart.hidden = ready;
@@ -2785,7 +2910,9 @@ function renderPauseUi(state = latestState) {
 
   if (finished) {
     const result = sortieResultCopy(state);
-    const replayAnalysis = incidentReplay?.clip?.analysis;
+    const casevac = isCasevacState(state);
+    const casevacFacts = casevac ? casevacFinishedFacts(state) : null;
+    const replayAnalysis = casevac ? null : incidentReplay?.clip?.analysis;
     const carrierQualification = isCarrierQualificationState(state);
     const carrierFacts = carrierQualification
       ? carrierQualificationDebriefFacts(state) : null;
@@ -2809,22 +2936,34 @@ function renderPauseUi(state = latestState) {
         pointsBalance: ledger.balanceAfter,
       });
     }
-    readyKicker.textContent = ledger?.kicker || result.kicker;
+    readyKicker.textContent = casevac ? result.kicker : ledger?.kicker || result.kicker;
     readyTitle.textContent = result.title;
     readyBrief.textContent = replayAnalysis
       ? `${result.brief} ${replayAnalysis.physicalOutcome}. Next pass: ${replayAnalysis.correction}`
       : ledger
         ? `${result.brief} ${ledger.clearanceText}.`
         : result.brief;
-    if (readySortieLabel) readySortieLabel.textContent = carrierQualification
-      ? "Physical outcome" : "Sortie";
-    if (readyConfigLabel) readyConfigLabel.textContent = carrierQualification
-      ? "Full-pass assessment" : ledger ? "Allocation" : "Result";
-    readySortie.textContent = carrierQualification
-      ? `${carrierQualificationPhysicalOutcome(state)}${Number(state?.wire) > 0 ? ` · wire ${Math.round(Number(state.wire))}` : ""}`
-      : `${brief.title} · ${String(state?.sortie_outcome || "complete").toLowerCase()}`;
+    if (readySortieLabel) {
+      // Preserve the established carrier-debrief assignment contract, then apply the orthogonal
+      // CASEVAC vocabulary. CASEVAC never inherits a combat-shaped generic "Sortie" label.
+      readySortieLabel.textContent = carrierQualification
+        ? "Physical outcome" : "Sortie";
+      if (casevac) readySortieLabel.textContent = "Disposition";
+    }
+    if (readyConfigLabel) {
+      readyConfigLabel.textContent = carrierQualification
+        ? "Full-pass assessment" : ledger ? "Allocation" : "Result";
+      if (casevac) readyConfigLabel.textContent = "Independent assessment";
+    }
+    readySortie.textContent = casevac
+      ? `${brief.title} · ${casevacFacts.disposition}`
+      : carrierQualification
+        ? `${carrierQualificationPhysicalOutcome(state)}${Number(state?.wire) > 0 ? ` · wire ${Math.round(Number(state.wire))}` : ""}`
+        : `${brief.title} · ${String(state?.sortie_outcome || "complete").toLowerCase()}`;
     readyConfig.textContent = state?.maintenance_scenario === true
       ? `Procedure ${Math.round(Number(state?.maintenance_score) || 0)}/${Math.round(Number(state?.maintenance_max_score) || 100)} · ${Math.round(Number(state?.maintenance_demerits) || 0)} demerits`
+      : casevac
+        ? casevacFacts.axes
       : state?.drone_raid_evaluation === true
         ? droneRaidDebriefFacts(state)
         : state?.visual_merge_evaluation === true
@@ -2837,15 +2976,17 @@ function renderPauseUi(state = latestState) {
               : replayAnalysis
               ? `Sim touchdown ${replayAnalysis.touchdownAssessment.grade === "NONE" ? "not graded" : replayAnalysis.touchdownAssessment.grade} · ${replayAnalysis.touchdownAssessment.profile} v${replayAnalysis.touchdownAssessment.version} · replay cached · causal review is not an LSO grade`
               : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
-    readyReplay.hidden = !incidentReplay?.clip;
+    readyReplay.hidden = casevac || !incidentReplay?.clip;
     // No qualification, so the debrief offers the only two things that make sense: go again, or
     // pick the other aircraft.
     readyStart.textContent = "Fly again";
-    if (readyControls) readyControls.textContent = carrierQualification
-      ? `Full-pass primary · ${carrierFacts.passCorrection}\nTouchdown assessment · ${carrierFacts.touchdown}\nTouchdown primary · ${carrierFacts.touchdownCorrection}`
-      : ledger
-        ? `${ledger.lines.map((line) => `${line.label} · ${line.pointsText}`).join("\n") || "No lines"}\n${ledger.clearanceText}`
-        : "Fly again, or open the mission list to take the other aircraft up";
+    if (readyControls) readyControls.textContent = casevac
+      ? `${casevacFacts.axes}\nPrimary correction · ${casevacFacts.correction}`
+      : carrierQualification
+        ? `Full-pass primary · ${carrierFacts.passCorrection}\nTouchdown assessment · ${carrierFacts.touchdown}\nTouchdown primary · ${carrierFacts.touchdownCorrection}`
+        : ledger
+          ? `${ledger.lines.map((line) => `${line.label} · ${line.pointsText}`).join("\n") || "No lines"}\n${ledger.clearanceText}`
+          : "Fly again, or open the mission list to take the other aircraft up";
     readyHint.textContent = background
       ? "Return to the game to restage"
       : ledger?.clearance === "GROUNDED"
@@ -2999,6 +3140,11 @@ function launchMission(index = selectedBeat) {
   }
   activeView?.hud.armAudio();
   return beginFlight();
+}
+
+function primeSelectedMissionAudio() {
+  activeView?.hud.armAudio();
+  if (selectedBeat === 13) primeCasevacAudio();
 }
 
 function restartMission() {
@@ -3244,7 +3390,7 @@ function reconcileBridgeLifecycle(state) {
 }
 
 readyStart.addEventListener("click", () => {
-  activeView?.hud.armAudio();
+  primeSelectedMissionAudio();
   activateReadyAction();
 });
 
@@ -3676,6 +3822,548 @@ const ABSTRACT_ONLY_PRESENTATION_IDS = new Set([
 
 function projectedId(value, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function isCasevacState(state = latestState) {
+  return state?.casevac_mission === true
+    || (state == null && selectedBeat === 13);
+}
+
+function opponentPresentationAllowed(state = latestState) {
+  return !isCasevacState(state) && state?.opponent_present !== false;
+}
+
+function casevacToken(value) {
+  if (typeof value !== "string") return "";
+  return value.trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+}
+
+function optionalFinite(value) {
+  if (value === null || value === undefined
+    || (typeof value === "string" && value.trim() === "")) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function projectedFinite(state, ...fields) {
+  for (const field of fields) {
+    const value = optionalFinite(state?.[field]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function casevacResolvedAnchors(state) {
+  const pickup = {
+    x: projectedFinite(state, "casevac_pickup_x", "casevac_pickup_east_m"),
+    y: projectedFinite(state, "casevac_pickup_y", "casevac_pickup_surface_m"),
+    z: projectedFinite(state, "casevac_pickup_z", "casevac_pickup_north_m"),
+  };
+  const receiver = {
+    x: projectedFinite(state, "casevac_receiver_x", "casevac_receiver_east_m"),
+    y: projectedFinite(state, "casevac_receiver_y", "casevac_receiver_surface_m"),
+    z: projectedFinite(state, "casevac_receiver_z", "casevac_receiver_north_m"),
+  };
+  if ([...Object.values(pickup), ...Object.values(receiver)]
+    .some((value) => value === null)) return null;
+  // Simulation +Z is north; the production renderer mirrors it exactly once.
+  return Object.freeze({
+    pickup: Object.freeze({ x: pickup.x, y: pickup.y, z: -pickup.z }),
+    receiver: Object.freeze({ x: receiver.x, y: receiver.y, z: -receiver.z }),
+  });
+}
+
+function casevacMissionPresentationKey(state, anchors = null) {
+  const scenario = projectedId(
+    state?.casevac_scenario_id,
+    projectedId(state?.mission_definition_id, "casevac"),
+  );
+  const epoch = Number.isSafeInteger(Number(state?.casevac_mission_epoch_sequence))
+    ? Number(state.casevac_mission_epoch_sequence)
+    : "unversioned";
+  const geometry = anchors
+    ? [
+      anchors.pickup.x, anchors.pickup.y, anchors.pickup.z,
+      anchors.receiver.x, anchors.receiver.y, anchors.receiver.z,
+    ].map((value) => value.toFixed(3)).join(":")
+    : "geometry-unavailable";
+  return `${scenario}:${epoch}:${geometry}`;
+}
+
+function casevacEventStreamId(state) {
+  const projected = projectedId(state?.casevac_event_stream_id);
+  if (projected) return projected;
+  const scenario = projectedId(
+    state?.casevac_scenario_id,
+    projectedId(state?.mission_definition_id, "casevac"),
+  );
+  const epoch = Number.isSafeInteger(Number(state?.casevac_mission_epoch_sequence))
+    ? Number(state.casevac_mission_epoch_sequence)
+    : "unversioned";
+  return `${scenario}:${epoch}`;
+}
+
+function loadCasevacQuietSeen() {
+  try {
+    return globalThis.localStorage?.getItem(CASEVAC_QUIET_SEEN_STORAGE) === "1";
+  } catch {
+    return false;
+  }
+}
+
+let casevacQuietSeen = loadCasevacQuietSeen();
+
+function observeCasevacQuietCompletion(state) {
+  if (casevacQuietSeen || !isCasevacState(state)) return;
+  const complete = casevacToken(state?.casevac_phase) === "COMPLETE"
+    || state?.finished === true;
+  const transferred = casevacToken(state?.casevac_disposition) === "TRANSFERRED"
+    || casevacToken(state?.casevac_custody) === "AT_RECEIVER";
+  if (!complete || !transferred) return;
+  casevacQuietSeen = true;
+  try {
+    globalThis.localStorage?.setItem(CASEVAC_QUIET_SEEN_STORAGE, "1");
+  } catch {
+    // Storage is optional. The full interval remains viewed for this page.
+  }
+}
+
+function casevacObserverEvents(state) {
+  if (!Array.isArray(state?.casevac_recent_events)) return [];
+  return state.casevac_recent_events.flatMap((event) => {
+    const schemaVersion = Number(event?.schemaVersion ?? event?.schema_version);
+    const sequence = Number(event?.sequence);
+    const kind = casevacToken(event?.kind);
+    if (schemaVersion !== 1 || !Number.isSafeInteger(sequence) || !kind) return [];
+    // Deliberately drop all payload/free-form copy. The CASEVAC presentation module owns the
+    // fixed observer-safe line for each recognized semantic event.
+    return [{ schemaVersion, sequence, kind }];
+  });
+}
+
+function casevacMissionStripProjection(state) {
+  return {
+    visible: state?.casevac_strip_visible === true
+      || (state?.casevac_strip_visible !== false
+        && state?.ready !== true
+        && state?.finished !== true),
+    phase: casevacToken(state?.casevac_phase),
+    targetSiteId: projectedId(state?.casevac_target_site_id),
+    rangeM: projectedFinite(state, "casevac_target_range_m"),
+    etaSeconds: projectedFinite(state, "casevac_target_eta_s"),
+    callAgeSeconds: projectedFinite(state, "casevac_call_age_s"),
+    requestedHandoffAgeSeconds: projectedFinite(
+      state,
+      "casevac_requested_handoff_age_s",
+    ),
+    requestedWindowState: casevacToken(state?.casevac_requested_window_state),
+    occupancy: casevacToken(state?.casevac_occupancy),
+    gateState: casevacToken(state?.casevac_gate_state),
+    dwellKind: casevacToken(state?.casevac_dwell_kind),
+    dwellProgress01: projectedFinite(state, "casevac_dwell_progress_01"),
+  };
+}
+
+function casevacCapsuleVisualState(state) {
+  const custody = casevacToken(state?.casevac_custody);
+  return ["AT_PICKUP", "IN_AIRCRAFT", "AT_RECEIVER"].includes(custody)
+    ? custody
+    : null;
+}
+
+function selectedCasevacAxis(source, fields) {
+  const result = {};
+  for (const field of fields) {
+    if (field === "status") {
+      result.status = casevacToken(source?.status);
+      continue;
+    }
+    const value = optionalFinite(source?.[field]);
+    if (value !== null) result[field] = value;
+  }
+  return result;
+}
+
+function casevacDebriefEvidence(state) {
+  const source = state?.casevac_debrief && typeof state.casevac_debrief === "object"
+    ? state.casevac_debrief
+    : {};
+  const axes = source.axes && typeof source.axes === "object" ? source.axes : {};
+  const correction = source.correction && typeof source.correction === "object"
+    ? source.correction
+    : {};
+  return {
+    visible: source.visible === true
+      || (source.visible !== false && state?.finished === true),
+    disposition: casevacToken(source.disposition ?? state?.casevac_disposition),
+    handoffCallAgeSeconds: optionalFinite(source.handoffCallAgeSeconds) !== null
+      ? optionalFinite(source.handoffCallAgeSeconds)
+      : projectedFinite(state, "casevac_handoff_call_age_s"),
+    requestedHandoffAgeSeconds:
+      optionalFinite(source.requestedHandoffAgeSeconds) !== null
+        ? optionalFinite(source.requestedHandoffAgeSeconds)
+        : projectedFinite(state, "casevac_requested_handoff_age_s"),
+    axes: {
+      safe: selectedCasevacAxis(axes.safe, [
+        "status",
+        "minimumClearanceM",
+        "obstacleContacts",
+        "protectionInterventions",
+      ]),
+      controlled: selectedCasevacAxis(axes.controlled, [
+        "status",
+        "pickupApproaches",
+        "handoffApproaches",
+        "approachDiscontinuations",
+        "loadingInterruptions",
+        "handoffInterruptions",
+      ]),
+      masked: selectedCasevacAxis(axes.masked, [
+        "status",
+        "safeBandPercent",
+        "exposedSeconds",
+      ]),
+      timely: selectedCasevacAxis(axes.timely, [
+        "status",
+        "callToPickupSeconds",
+        "pickupToHandoffSeconds",
+        "totalCallToHandoffSeconds",
+      ]),
+    },
+    correction: {
+      kind: casevacToken(correction.kind),
+      atCallAgeSeconds: optionalFinite(correction.atCallAgeSeconds) !== null
+        ? optionalFinite(correction.atCallAgeSeconds)
+        : undefined,
+      intervalSeconds: optionalFinite(correction.intervalSeconds) !== null
+        ? optionalFinite(correction.intervalSeconds)
+        : undefined,
+      count: optionalFinite(correction.count) ?? undefined,
+      marginPercent: optionalFinite(correction.marginPercent) ?? undefined,
+      site: casevacToken(correction.site) || undefined,
+    },
+  };
+}
+
+function readableCasevacToken(value, fallback = "not assessed") {
+  const token = casevacToken(value);
+  if (!token) return fallback;
+  return token.toLowerCase().replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function casevacFinishedFacts(state) {
+  const axes = [
+    ["Safe", state?.casevac_assessment_safe],
+    ["Controlled", state?.casevac_assessment_controlled],
+    ["Masked", state?.casevac_assessment_masked],
+    ["Timely", state?.casevac_assessment_timely],
+  ].map(([label, value]) => `${label} ${readableCasevacToken(value)}`).join(" · ");
+  const correction = typeof state?.casevac_primary_correction === "string"
+    && state.casevac_primary_correction.trim()
+    ? state.casevac_primary_correction.trim()
+    : "No primary correction was published.";
+  return Object.freeze({
+    disposition: readableCasevacToken(state?.casevac_disposition, "Incomplete"),
+    axes,
+    correction,
+  });
+}
+
+function createCasevacCommanderCockpit() {
+  const group = new THREE.Group();
+  group.name = "CASEVAC_COMMANDER_COCKPIT_PRESENTATION_ONLY";
+  group.visible = false;
+  group.userData.casevacCommanderCockpit = Object.freeze({
+    presentationOnly: true,
+    authoritative: false,
+    collisionSource: false,
+    vehicleGeometryClaim: false,
+  });
+  const dark = new THREE.MeshBasicMaterial({ color: 0x151b19 });
+  const trim = new THREE.MeshBasicMaterial({ color: 0x6b775d });
+  dark.toneMapped = false;
+  trim.toneMapped = false;
+  const addBox = (name, size, position, material = dark) => {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(size[0], size[1], size[2]),
+      material,
+    );
+    mesh.name = name;
+    mesh.position.set(position[0], position[1], position[2]);
+    mesh.frustumCulled = false;
+    group.add(mesh);
+  };
+  // A deliberately bounded commander-eye window frame: it establishes the driving-position view
+  // without pretending to be a detailed or authoritative exterior airframe.
+  addBox("CASEVAC_COAMING", [1.55, 0.13, 0.42], [0, -0.61, -0.91]);
+  addBox("CASEVAC_LEFT_PILLAR", [0.075, 1.12, 0.08], [-0.78, -0.02, -1.02]);
+  addBox("CASEVAC_RIGHT_PILLAR", [0.075, 1.12, 0.08], [0.78, -0.02, -1.02]);
+  addBox("CASEVAC_TOP_BEAM", [1.63, 0.075, 0.08], [0, 0.55, -1.02]);
+  addBox("CASEVAC_COAMING_TRIM", [0.72, 0.025, 0.03], [0, -0.535, -1.13], trim);
+  return Object.freeze({
+    group,
+    dispose() {
+      group.removeFromParent();
+      group.traverse((object) => {
+        object.geometry?.dispose?.();
+      });
+      dark.dispose();
+      trim.dispose();
+    },
+  });
+}
+
+function createCasevacFlightFactsPresentation(documentLike, mount = documentLike.body) {
+  const root = documentLike.createElement("aside");
+  root.setAttribute("data-casevac-flight-facts", "");
+  root.setAttribute("aria-label", "Medevac flight guidance");
+  root.innerHTML = `
+    <style>
+      [data-casevac-flight-facts] {
+        position: fixed;
+        z-index: 9;
+        top: max(98px, calc(env(safe-area-inset-top) + 84px));
+        right: max(14px, env(safe-area-inset-right));
+        width: min(350px, calc(100vw - 28px));
+        box-sizing: border-box;
+        padding: 9px 10px;
+        border: 1px solid rgba(191, 233, 228, .22);
+        border-right: 3px solid #92d5a6;
+        background: rgba(6, 15, 18, .82);
+        color: #bfe9e4;
+        font: 700 9px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        letter-spacing: .055em;
+        text-shadow: 0 1px 4px #000;
+        pointer-events: none;
+        backdrop-filter: blur(3px);
+      }
+      [data-casevac-flight-facts] * { box-sizing: border-box; }
+      .cvf-steer {
+        display: block;
+        margin-bottom: 7px;
+        color: #f0fbf8;
+        font-size: 15px;
+        letter-spacing: .1em;
+      }
+      .cvf-primary {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px 10px;
+      }
+      .cvf-label {
+        color: rgba(191, 233, 228, .58);
+        font-size: 7px;
+        letter-spacing: .16em;
+      }
+      .cvf-value { display: block; color: #eefaf7; }
+      .cvf-value[data-state="EXPOSED"],
+      .cvf-value[data-state="OUTSIDE"],
+      .cvf-value[data-state="LOW"] { color: #e3bc72; }
+      .cvf-limits {
+        display: block;
+        margin-top: 7px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(191, 233, 228, .13);
+        color: rgba(191, 233, 228, .68);
+        font-size: 7px;
+        line-height: 1.5;
+      }
+      @media (max-width: 760px) {
+        [data-casevac-flight-facts] {
+          top: auto;
+          right: max(10px, env(safe-area-inset-right));
+          bottom: max(86px, calc(env(safe-area-inset-bottom) + 72px));
+          width: min(330px, calc(100vw - 20px));
+        }
+      }
+    </style>
+    <output class="cvf-steer" data-cvf="steering">STEERING · NOT ASSESSED</output>
+    <div class="cvf-primary">
+      <div><span class="cvf-label">ROUTE</span><output class="cvf-value" data-cvf="route">NOT ASSESSED</output></div>
+      <div><span class="cvf-label">HEIGHT</span><output class="cvf-value" data-cvf="height">NOT ASSESSED</output></div>
+      <div><span class="cvf-label">GROUND SPEED</span><output class="cvf-value" data-cvf="groundspeed">NOT ASSESSED</output></div>
+      <div><span class="cvf-label">WIND VECTOR</span><output class="cvf-value" data-cvf="wind">NOT ASSESSED</output></div>
+      <div><span class="cvf-label">POWER</span><output class="cvf-value" data-cvf="power">NOT ASSESSED</output></div>
+      <div><span class="cvf-label">ENERGY</span><output class="cvf-value" data-cvf="energy">NOT ASSESSED</output></div>
+      <div><span class="cvf-label">DEST RESERVE</span><output class="cvf-value" data-cvf="reserve">NOT ASSESSED</output></div>
+      <div><span class="cvf-label">CONTACT</span><output class="cvf-value" data-cvf="contact">NOT ASSESSED</output></div>
+    </div>
+    <output class="cvf-limits" data-cvf="limits">CONTACT LIMITS · NOT ASSESSED</output>
+    <output class="cvf-limits" data-cvf="energyplan">ENERGY PLAN · NOT ASSESSED</output>
+  `;
+  const fields = Object.fromEntries(
+    [...root.querySelectorAll("[data-cvf]")]
+      .map((node) => [node.dataset.cvf, node]),
+  );
+  mount.appendChild(root);
+  let disposed = false;
+
+  const shown = (value, digits = 1) =>
+    value === null ? "—" : value.toFixed(digits);
+  const update = (state) => {
+    if (disposed) return;
+    const quiet = state?.casevac_quiet === true
+      || state?.casevac_quiet_active === true
+      || casevacToken(state?.casevac_phase) === "QUIET";
+    root.hidden = state?.ready === true || state?.finished === true || quiet;
+    const bearing = projectedFinite(state, "casevac_target_relative_bearing_deg");
+    if (bearing === null) {
+      fields.steering.textContent = "STEERING · NOT ASSESSED";
+    } else {
+      const rounded = Math.round(bearing);
+      fields.steering.textContent = rounded === 0
+        ? "TARGET AHEAD · 000°"
+        : rounded < 0
+          ? `← TARGET LEFT · ${String(Math.abs(rounded)).padStart(3, "0")}°`
+          : `TARGET RIGHT · ${String(rounded).padStart(3, "0")}° →`;
+    }
+
+    const masking = casevacToken(state?.casevac_masking_state);
+    const maskingAssessed = masking === "MASKED" || masking === "EXPOSED";
+    const safeBand = maskingAssessed
+      ? state?.casevac_within_safe_masking_band === true
+        ? "SAFE BAND"
+        : "OUTSIDE BAND"
+      : "BAND NOT ASSESSED";
+    fields.route.textContent = `${readableCasevacToken(masking).toUpperCase()} · ${safeBand}`;
+    fields.route.dataset.state = masking === "EXPOSED"
+      ? "EXPOSED"
+      : safeBand === "OUTSIDE BAND" ? "OUTSIDE" : masking;
+
+    const aglM = projectedFinite(state, "casevac_agl_m");
+    const safeMinM = projectedFinite(state, "casevac_safe_band_min_agl_m");
+    const safeMaxM = projectedFinite(state, "casevac_safe_band_max_agl_m");
+    fields.height.textContent = aglM === null
+      ? "AGL · NOT ASSESSED"
+      : `AGL ${shown(aglM)} M · BAND ${shown(safeMinM, 0)}–${shown(safeMaxM, 0)} M`;
+
+    const powerMargin = projectedFinite(
+      state,
+      "casevac_power_margin_fraction",
+      "casevac_power_margin_01",
+    );
+    const powerState = readableCasevacToken(
+      state?.casevac_power_margin_state,
+    ).toUpperCase();
+    fields.power.textContent = powerMargin === null
+      ? "MARGIN · NOT ASSESSED"
+      : `MARGIN ${(powerMargin * 100).toFixed(0)}% · ${powerState}`;
+    fields.power.dataset.state = casevacToken(state?.casevac_power_margin_state);
+
+    const remainingEnergyKwh = projectedFinite(
+      state,
+      "casevac_energy_remaining_kwh",
+    );
+    const remainingEnergyFraction = projectedFinite(
+      state,
+      "casevac_energy_remaining_fraction",
+    );
+    const planningEnduranceMin = projectedFinite(
+      state,
+      "casevac_energy_planning_endurance_min",
+    );
+    fields.energy.textContent = remainingEnergyKwh === null
+      ? "NOT ASSESSED"
+      : `${shown(remainingEnergyKwh, 0)} KWH · ${shown(
+        remainingEnergyFraction === null ? null : remainingEnergyFraction * 100,
+        0,
+      )}% · ${shown(planningEnduranceMin, 1)} MIN`;
+    fields.energy.dataset.state = state?.casevac_energy_depleted === true
+      ? "LOW"
+      : "";
+
+    const destinationReserveKwh = projectedFinite(
+      state,
+      "casevac_destination_reserve_kwh",
+    );
+    const destinationReserveMin = projectedFinite(
+      state,
+      "casevac_destination_reserve_min",
+    );
+    fields.reserve.textContent = destinationReserveKwh === null
+      ? "NOT ASSESSED"
+      : `${destinationReserveKwh >= 0 ? "+" : "−"}${shown(
+        Math.abs(destinationReserveKwh),
+        0,
+      )} KWH · ${shown(destinationReserveMin, 1)} MIN`;
+    fields.reserve.dataset.state = destinationReserveKwh !== null
+      && destinationReserveKwh < 0
+      ? "LOW"
+      : "";
+
+    const lateral = projectedFinite(state, "casevac_lateral_speed_mps");
+    fields.groundspeed.textContent = lateral === null
+      ? "NOT ASSESSED"
+      : `${shown(lateral, 1)} M/S`;
+    const windEast = projectedFinite(state, "casevac_wind_x_mps");
+    const windNorth = projectedFinite(state, "casevac_wind_z_mps");
+    fields.wind.textContent = windEast === null || windNorth === null
+      ? "NOT ASSESSED"
+      : `E ${windEast >= 0 ? "+" : "−"}${shown(Math.abs(windEast), 1)} · N ${windNorth >= 0 ? "+" : "−"}${shown(Math.abs(windNorth), 1)} M/S`;
+
+    const vertical = projectedFinite(state, "casevac_vertical_speed_mps");
+    const pitch = projectedFinite(state, "casevac_pitch_deg");
+    const bank = projectedFinite(state, "casevac_bank_deg");
+    fields.contact.textContent = [lateral, vertical, pitch, bank]
+      .every((value) => value === null)
+      ? "NOT ASSESSED"
+      : `GS ${shown(lateral, 2)} · V ${shown(vertical, 2)} M/S · P ${shown(pitch)}° · B ${shown(bank)}°`;
+
+    const radius = projectedFinite(state, "casevac_lz_enter_radius_m");
+    const lateralLimit = projectedFinite(
+      state,
+      "casevac_lz_max_lateral_speed_mps",
+    );
+    const verticalLimit = projectedFinite(
+      state,
+      "casevac_lz_max_abs_vertical_speed_mps",
+    );
+    const pitchLimit = projectedFinite(state, "casevac_lz_max_abs_pitch_deg");
+    const bankLimit = projectedFinite(state, "casevac_lz_max_abs_bank_deg");
+    fields.limits.textContent = [
+      radius,
+      lateralLimit,
+      verticalLimit,
+      pitchLimit,
+      bankLimit,
+    ].every((value) => value === null)
+      ? "CONTACT LIMITS · NOT ASSESSED"
+      : `CONTACT LIMITS · R ${shown(radius)} M · GS ≤${shown(lateralLimit, 2)} · |V| ≤${shown(verticalLimit, 2)} M/S · |P| ≤${shown(pitchLimit, 0)}° · |B| ≤${shown(bankLimit, 0)}°`;
+    const planningPowerKw = projectedFinite(
+      state,
+      "casevac_energy_planning_power_kw",
+    );
+    const planningGroundSpeedMps = projectedFinite(
+      state,
+      "casevac_energy_planning_ground_speed_mps",
+    );
+    const planningArrivalAllowanceS = projectedFinite(
+      state,
+      "casevac_energy_planning_arrival_allowance_s",
+    );
+    fields.energyplan.textContent = planningPowerKw === null
+      || planningGroundSpeedMps === null
+      || planningArrivalAllowanceS === null
+      ? "ENERGY PLAN · NOT ASSESSED"
+      : `ENERGY PLAN · ${shown(planningPowerKw, 0)} KW · ${shown(
+        planningGroundSpeedMps,
+        0,
+      )} M/S · +${shown(planningArrivalAllowanceS, 0)} S ARRIVAL`;
+  };
+  return Object.freeze({
+    element: root,
+    update,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      root.remove();
+    },
+  });
 }
 
 function aircraftAlive(state, terminalField, fallback) {
@@ -4306,13 +4994,16 @@ class PresentationAssetManager {
       && this.requested.cockpitPresentationId !== "";
     this.playerExteriorSlot.root.visible = replayExternal
       && String(state.replay_camera || "CHASE") !== "COCKPIT";
-    this.targetSlot.root.visible = state.opponent_body_present !== false;
+    this.targetSlot.root.visible = opponentPresentationAllowed(state)
+      && state.opponent_body_present !== false;
     // Admission gate for asset resolution, not merely a draw toggle: a 1v1 wave must not pay for
     // a second aircraft's assets at all.
-    this.wingmanSlot.root.visible = state.w1_present === 1;
-    this.wingman2Slot.root.visible = state.w2_present === 1;
-    this.wingman3Slot.root.visible = state.w3_present === 1;
-    this.rapierGunDroneSlot.root.visible = state.rd1_present === 1;
+    const opponentAssetsAllowed = opponentPresentationAllowed(state);
+    this.wingmanSlot.root.visible = opponentAssetsAllowed && state.w1_present === 1;
+    this.wingman2Slot.root.visible = opponentAssetsAllowed && state.w2_present === 1;
+    this.wingman3Slot.root.visible = opponentAssetsAllowed && state.w3_present === 1;
+    this.rapierGunDroneSlot.root.visible = !isCasevacState(state)
+      && state.rd1_present === 1;
     this.carrierSlot.root.visible = state.recovery_platform === true;
     // A hidden decorative escort must not even enter asset resolution: visibility here is the
     // resolver's admission gate, not merely a later draw toggle in FlightView.update().
@@ -4662,6 +5353,15 @@ class FlightView {
     this.camera.rotation.order = "YXZ";
 
     this.scene = new THREE.Scene();
+    this.casevacCommanderCockpit = createCasevacCommanderCockpit();
+    this.scene.add(this.camera);
+    this.camera.add(this.casevacCommanderCockpit.group);
+    this.casevacScenery = null;
+    this.casevacCollisionScenery = null;
+    this.casevacRouteLandmarks = null;
+    this.casevacMissionUi = null;
+    this.casevacFlightFacts = null;
+    this.casevacPresentationKey = "";
     this.environmentTarget = createLitEnvironment(this.renderer);
     this.scene.environment = this.environmentTarget.texture;
     this.fogLow = new THREE.Color(0x6f8790);
@@ -4801,6 +5501,7 @@ class FlightView {
     this.hitSparkTime = -1;
     this.lastCombatEventSequence = 0;
     this.combatEventStreams = new PresentationEventStreams();
+    this.combatPresentationSuppressed = false;
     this.combatEventPosition = new THREE.Vector3();
     this.combatEventVelocity = new THREE.Vector3();
     this.aimPoint = new THREE.Vector3();   // published forward recovery cue, distinct from wire three
@@ -5729,8 +6430,146 @@ class FlightView {
     }
   }
 
+  resetCasevacPresentation() {
+    this.casevacScenery?.dispose();
+    this.casevacScenery = null;
+    this.casevacCollisionScenery?.dispose();
+    this.casevacCollisionScenery = null;
+    this.casevacRouteLandmarks?.dispose();
+    this.casevacRouteLandmarks = null;
+    this.casevacMissionUi?.dispose();
+    this.casevacMissionUi = null;
+    this.casevacFlightFacts?.dispose();
+    this.casevacFlightFacts = null;
+    this.casevacPresentationKey = "";
+    this.casevacCommanderCockpit.group.visible = false;
+    hudCanvas.style.visibility = "";
+  }
+
+  syncCasevacPresentation(state) {
+    if (!isCasevacState(state)) {
+      if (this.casevacPresentationKey
+          || this.casevacScenery
+          || this.casevacCollisionScenery
+          || this.casevacRouteLandmarks
+          || this.casevacMissionUi
+          || this.casevacFlightFacts
+          || this.casevacCommanderCockpit.group.visible) {
+        this.resetCasevacPresentation();
+      }
+      return false;
+    }
+
+    const anchors = casevacResolvedAnchors(state);
+    const presentationKey = casevacMissionPresentationKey(state, anchors);
+    if (presentationKey !== this.casevacPresentationKey) {
+      this.resetCasevacPresentation();
+      this.casevacPresentationKey = presentationKey;
+      if (anchors) {
+        this.casevacScenery = createCasevacCourseScenery(THREE, {
+          qualityTier: VISUAL_QUALITY.tier,
+          seed: CASEVAC_SCENERY_SEED,
+          anchors,
+          capsuleCustody: casevacCapsuleVisualState(state),
+        });
+        this.scene.add(this.casevacScenery.group);
+      }
+      if (Array.isArray(state?.casevac_collision_obstacles)) {
+        this.casevacCollisionScenery = createCasevacCollisionScenery(
+          THREE,
+          state.casevac_collision_obstacles,
+        );
+        this.scene.add(this.casevacCollisionScenery.group);
+      }
+      if (anchors && Array.isArray(state?.casevac_routes)) {
+        this.casevacRouteLandmarks = createCasevacRouteLandmarks(
+          THREE,
+          state.casevac_routes,
+        );
+        this.scene.add(this.casevacRouteLandmarks.group);
+      }
+      this.casevacMissionUi = createCasevacMissionPresentation(document, {
+        mount: document.body,
+        maxMessages: 4,
+        onQuietSkip: () => {
+          // The view may request; only an explicitly exposed bridge method can advance authority.
+          if (casevacQuietSeen) bridge?.RequestCasevacQuietSkip?.();
+        },
+        onFlyAgain: () => {
+          primeSelectedMissionAudio();
+          restartMissionNow();
+        },
+      });
+      this.casevacFlightFacts = createCasevacFlightFactsPresentation(document);
+      if (viewStatus) viewStatus.textContent = "Medevac · commander guidance active";
+    }
+
+    this.casevacCommanderCockpit.group.visible = true;
+    // The legacy canvas is combat/recovery symbology. The dedicated DOM strip carries every
+    // projected CASEVAC navigation, clock, gate and occupancy fact without phantom gun cues.
+    hudCanvas.style.visibility = "hidden";
+
+    const phase = casevacToken(state?.casevac_phase);
+    const activeSiteId = projectedId(state?.casevac_target_site_id);
+    const activeCourseSite = [CASEVAC_PICKUP_SITE_ID, CASEVAC_RECEIVER_SITE_ID]
+      .includes(activeSiteId)
+      ? activeSiteId
+      : null;
+    const precipitation01 = projectedFinite(state, "casevac_precipitation_01");
+    const rotorWashIntensity = projectedFinite(
+      state,
+      "casevac_rotor_wash_intensity_01",
+    );
+    const rotorWashRadius = projectedFinite(state, "casevac_rotor_wash_radius_m");
+    const vehicleX = projectedFinite(state, "px");
+    const vehicleY = projectedFinite(state, "py");
+    const vehicleZ = projectedFinite(state, "pz");
+    const rotorWash = rotorWashIntensity !== null
+      && rotorWashRadius !== null
+      && vehicleX !== null
+      && vehicleY !== null
+      && vehicleZ !== null
+      ? {
+        position: { x: vehicleX, y: vehicleY, z: -vehicleZ },
+        radiusM: rotorWashRadius,
+        intensity01: rotorWashIntensity,
+        surfaceContact: state?.casevac_surface_contact === true,
+      }
+      : { intensity01: 0, radiusM: 1 };
+    this.casevacScenery?.update({
+      elapsedSeconds: projectedFinite(state, "t") ?? 0,
+      windX: projectedFinite(state, "casevac_wind_x_mps") ?? 0,
+      windZ: -(projectedFinite(state, "casevac_wind_z_mps") ?? 0),
+      precipitation01: precipitation01 ?? 0,
+      rotorWash,
+      activeSiteId: activeCourseSite,
+      showApproachCue: ["PICKUP_APPROACH", "DROPOFF_APPROACH"].includes(phase),
+      showEscapeCue: state?.casevac_show_escape_cue === true,
+      capsuleCustody: casevacCapsuleVisualState(state),
+    });
+
+    const debrief = state?.finished === true
+      ? casevacDebriefModel(casevacDebriefEvidence(state))
+      : null;
+    this.casevacMissionUi?.update({
+      streamId: casevacEventStreamId(state),
+      strip: casevacMissionStripProjection(state),
+      events: casevacObserverEvents(state),
+      quiet: {
+        active: state?.casevac_quiet === true
+          || state?.casevac_quiet_active === true,
+        skippable: casevacQuietSeen,
+      },
+      debrief,
+    });
+    this.casevacFlightFacts?.update(state);
+    return true;
+  }
+
   update(state, dt, nowSeconds) {
     this.configureTerrainMission(state);
+    const casevac = isCasevacState(state);
+    const opponentPresent = opponentPresentationAllowed(state);
     // The sortie chooser owns Ready. Defer the manifest and all height ranges until gameplay has
     // actually begun, then retain the single shared presentation across pause/replay/restage.
     // Only fetch the multi-megabyte visual terrain when the sim actually has a terrain surface.
@@ -5749,10 +6588,14 @@ class FlightView {
         void this.terrainPresentation.enableAmbientScenery?.();
       }
     }
-    const nextBanditEntityId = projectedId(state.bandit_entity_id);
+    const nextBanditEntityId = opponentPresent
+      ? projectedId(state.bandit_entity_id)
+      : "";
     // Padlock is bound to a specific visual tally. It may not silently transfer to a replacement
     // drone/bandit, survive loss of consciousness, or keep tracking stale/replay geometry.
-    if (padlock && state.pilot_conscious === false) {
+    if (!opponentPresent && padlock) {
+      releasePadlock("no opponent", { announce: false });
+    } else if (padlock && state.pilot_conscious === false) {
       releasePadlock("pilot incapacitated");
     } else if (padlock && padlockTarget === "carrier"
         && carrierPadlockSupersededByCombat(state)) {
@@ -5801,7 +6644,9 @@ class FlightView {
       padlockKillCamUntilMs = 0;
     }
     const playerFrame = this.frameFromState(state, "p", this.playerFrame);
-    const banditFrame = this.frameFromState(state, "b", this.banditFrame);
+    const banditFrame = opponentPresent
+      ? this.frameFromState(state, "b", this.banditFrame)
+      : null;
     const nextPlayerEntityId = projectedId(state.player_entity_id);
     if (this.banditEntityId && nextBanditEntityId !== this.banditEntityId) {
       this.banditDamageSmoke.clear();
@@ -5819,7 +6664,13 @@ class FlightView {
     this.playerUp.copy(playerFrame.up);
     this.playerRight.copy(playerFrame.right);
     this.playerQuaternion.copy(playerFrame.quaternion);
-    this.banditPosition.set(state.bx, state.by, -state.bz);
+    if (opponentPresent) {
+      this.banditPosition.set(state.bx, state.by, -state.bz);
+      this.banditQuaternion.copy(banditFrame.quaternion);
+    } else {
+      this.banditPosition.set(0, 0, 0);
+      this.banditQuaternion.identity();
+    }
     if (state.recovery_platform === true && Number.isFinite(state.cx)
         && Number.isFinite(state.cy) && Number.isFinite(state.cz)) {
       this.carrierPosition.set(state.cx, state.cy, -state.cz);
@@ -5829,7 +6680,6 @@ class FlightView {
         this.carrierPadlockPosition.copy(this.carrierPosition);
       }
     }
-    this.banditQuaternion.copy(banditFrame.quaternion);
     if (state.w1_present === 1) {
       this.wingmanPosition.set(state.w1x, state.w1y, -state.w1z);
       // The hot-frame wingman fields deliberately follow the same ${prefix}fx/${prefix}lx naming
@@ -5856,15 +6706,37 @@ class FlightView {
       && Number.isFinite(state.lead_y) && Number.isFinite(state.lead_z)) {
       this.leadPipper.set(state.lead_x, state.lead_y, -state.lead_z);
     }
-    this.consumeCombatEvents(state, nowSeconds);
+    if (opponentPresent) {
+      this.combatPresentationSuppressed = false;
+      this.gunEffects.visible = true;
+      this.consumeCombatEvents(state, nowSeconds);
+    } else if (!this.combatPresentationSuppressed) {
+      this.combatPresentationSuppressed = true;
+      this.packEffectsAdapter?.clear?.();
+      this.playerDamageSmoke.clear();
+      this.banditDamageSmoke.clear();
+      this.banditContact.reset();
+      this.banditDestruction.visible = false;
+      this.gunEffects.visible = false;
+      this.muzzleFlashUntil = -1;
+      this.opponentMuzzleFlashUntil = -1;
+      this.hitSparkTime = -1;
+    }
 
     const replayExternal = state.replay_external === true;
     const replayCamera = String(state.replay_camera || "CHASE");
     this.externalCameraActive = replayExternal && replayCamera !== "COCKPIT";
     this.presentationAssets.sync(state);
+    const casevacPresentationActive = this.syncCasevacPresentation(state);
     this.ensureVisualRuntime();
     const cockpitRoot = this.presentationAssets.cockpitSlot.root;
     const playerExteriorRoot = this.presentationAssets.playerExteriorSlot.root;
+    if (casevacPresentationActive) {
+      // A default fighter compatibility asset is a false vehicle claim in this mission. The
+      // bounded commander-eye frame above is the only local vehicle presentation.
+      cockpitRoot.visible = false;
+      playerExteriorRoot.visible = false;
+    }
     cockpitRoot.position.copy(this.playerPosition);
     cockpitRoot.quaternion.copy(this.playerQuaternion);
     cockpitRoot.scale.setScalar(1);
@@ -5939,10 +6811,11 @@ class FlightView {
     }
     // Padlock is an orientation aid, not a cinematic camera. Applying buffet/head-lag after the
     // target solve makes the contact and every view-relative cue wander by a degree or two.
-    if (replayExternal || padlock) this.cockpitHead.reset(state);
+    if (casevac || replayExternal || padlock) this.cockpitHead.reset(state);
     else this.cockpitHead.update(this.camera, state, dt);
     this.camera.updateMatrixWorld(true);
     const gunsightPresentation = this.periodGunsight.update(this.camera, state, dt);
+    if (casevac) this.periodGunsight.object3d.visible = false;
     if (this.cloudBreakActive) {
       this.cloudBreakPresentation = this.tacticalClouds.updateCloudBreak({
         camera: this.camera,
@@ -5975,9 +6848,12 @@ class FlightView {
       // square in clear air with empty sky out to the ±131 km apron.
       const worldRadiusM = Number(this.terrainPresentation?.visibleWorldRadiusM
         ?? this.terrainPresentation?.streamingRadiusM);
+      const projectedVisibilityM = casevac
+        ? Number(state.casevac_visibility_m)
+        : Number(state.visibility_m);
       const reportedVisibilityM = clamp(
         Math.min(
-          Number(state.visibility_m) || CLEAR_AIR_VISIBILITY_M,
+          projectedVisibilityM || CLEAR_AIR_VISIBILITY_M,
           Number.isFinite(worldRadiusM) && worldRadiusM > 0
             // Fog reaches 2% transmission at the reported visibility, so closing it slightly
             // INSIDE the geometric edge is what actually hides the boundary rather than tinting it.
@@ -6030,9 +6906,13 @@ class FlightView {
     // their mission contract's fixed source anchor and remain excluded from remote presentation.
     const terrainPlacementEastM = Number(state.terrain_placement_east_m);
     const terrainPlacementNorthM = Number(state.terrain_placement_north_m);
-    const terrainWindX = Number(state.wind_x_mps) || 0;
+    const terrainWindX = Number(
+      casevac ? state.casevac_wind_x_mps : state.wind_x_mps,
+    ) || 0;
     // Simulation +Z is north while the renderer mirrors Z.
-    const terrainWindZ = -(Number(state.wind_z_mps) || 0);
+    const terrainWindZ = -(Number(
+      casevac ? state.casevac_wind_z_mps : state.wind_z_mps,
+    ) || 0);
     this.terrainPresentation?.update({
       cameraPosition: this.camera.position,
       deltaSeconds: dt,
@@ -6048,9 +6928,10 @@ class FlightView {
 
     const isCarrier = state.carrier === true;
     const isRecoveryPlatform = state.recovery_platform === true;
-    const banditAlive = aircraftAlive(state, "opponent_terminal_state",
+    const banditAlive = opponentPresent && aircraftAlive(state, "opponent_terminal_state",
       state.bandit_alive !== false && state.fight !== "Splash");
-    const banditBodyPresent = state.opponent_body_present !== false
+    const banditBodyPresent = opponentPresent
+      && state.opponent_body_present !== false
       && state.rapier_pattern_only !== true;
     const targetRoot = this.presentationAssets.targetSlot.root;
     const carrierRoot = this.presentationAssets.carrierSlot.root;
@@ -6114,11 +6995,18 @@ class FlightView {
     // letting an audio problem reach the flight kernel. Mute follows player settings
     // and pause — the view loop still ticks while paused (dt=0), so audio must gate here.
     updateFlightAudio(state, {
-      muted: !playerSettings.audio
+      muted: casevac
+        || !playerSettings.audio
         || pauseReasons.size > 0
         || state?.paused === true,
-      triggerHeld: isGkeyHeld(8),
+      triggerHeld: !casevac && isGkeyHeld(8),
       nowSeconds,
+    });
+    updateCasevacAudio(state, {
+      muted: !casevac
+        || !playerSettings.audio
+        || pauseReasons.size > 0
+        || state?.paused === true,
     });
     updateCarrierRuntimePresentation(
       this.carrierRuntime,
@@ -6132,10 +7020,14 @@ class FlightView {
     // has no moving-anchor contract; production keeps the continuously attached, sea-level shader
     // wake driven by authoritative carrier pose until that contract can preserve ship motion.
 
-    targetRoot.position.copy(this.banditPosition);
-    targetRoot.quaternion.copy(this.banditQuaternion);
+    if (opponentPresent) {
+      targetRoot.position.copy(this.banditPosition);
+      targetRoot.quaternion.copy(this.banditQuaternion);
+    }
     const wingmanRoot = this.presentationAssets.wingmanSlot.root;
-    const wingmanPresent = state.w1_present === 1 && state.w1_alive === 1;
+    const wingmanPresent = opponentPresent
+      && state.w1_present === 1
+      && state.w1_alive === 1;
     wingmanRoot.visible = wingmanPresent;
     if (wingmanPresent) {
       wingmanRoot.position.copy(this.wingmanPosition);
@@ -6144,7 +7036,9 @@ class FlightView {
       wingmanRoot.updateMatrixWorld(true);
     }
     const wingman2Root = this.presentationAssets.wingman2Slot.root;
-    const wingman2Present = state.w2_present === 1 && state.w2_alive === 1;
+    const wingman2Present = opponentPresent
+      && state.w2_present === 1
+      && state.w2_alive === 1;
     wingman2Root.visible = wingman2Present;
     if (wingman2Present) {
       wingman2Root.position.copy(this.wingman2Position);
@@ -6153,7 +7047,9 @@ class FlightView {
       wingman2Root.updateMatrixWorld(true);
     }
     const wingman3Root = this.presentationAssets.wingman3Slot.root;
-    const wingman3Present = state.w3_present === 1 && state.w3_alive === 1;
+    const wingman3Present = opponentPresent
+      && state.w3_present === 1
+      && state.w3_alive === 1;
     wingman3Root.visible = wingman3Present;
     if (wingman3Present) {
       wingman3Root.position.copy(this.wingman3Position);
@@ -6172,22 +7068,31 @@ class FlightView {
     }
     // Keep authored geometry at physical scale. A separate depth-tested contact owns the exact
     // 8–14 px readability floor and fades with hysteresis at the mesh hand-off.
-    targetRoot.scale.setScalar(1);
-    targetRoot.updateMatrixWorld(true);
-    const contact = this.banditContact.update({
-      camera: this.camera,
-      renderer: this.renderer,
-      target: targetRoot,
-      targetDiameterMetres: this.presentationAssets.targetSlot.boundingSphereDiameterMetres ?? 12,
-      visible: banditBodyPresent && banditAlive,
-      deltaSeconds: dt,
-    });
-    targetRoot.visible = banditBodyPresent && (!banditAlive || contact.modelVisible);
-    const targetVisual = this.presentationAssets.targetSlot.object;
-    if (targetVisual?.userData.rotodome) targetVisual.userData.rotodome.rotation.y = nowSeconds * 0.42;
-    this.updateBanditDestruction(banditAlive, nowSeconds);
-    this.updateGunEffects(state, nowSeconds);
-    this.updateDamageSmoke(state, nowSeconds, fogDensity);
+    if (opponentPresent) {
+      targetRoot.scale.setScalar(1);
+      targetRoot.updateMatrixWorld(true);
+      const contact = this.banditContact.update({
+        camera: this.camera,
+        renderer: this.renderer,
+        target: targetRoot,
+        targetDiameterMetres:
+          this.presentationAssets.targetSlot.boundingSphereDiameterMetres ?? 12,
+        visible: banditBodyPresent && banditAlive,
+        deltaSeconds: dt,
+      });
+      targetRoot.visible = banditBodyPresent && (!banditAlive || contact.modelVisible);
+      const targetVisual = this.presentationAssets.targetSlot.object;
+      if (targetVisual?.userData.rotodome) {
+        targetVisual.userData.rotodome.rotation.y = nowSeconds * 0.42;
+      }
+    } else {
+      targetRoot.visible = false;
+    }
+    if (opponentPresent) {
+      this.updateBanditDestruction(banditAlive, nowSeconds);
+      this.updateGunEffects(state, nowSeconds);
+      this.updateDamageSmoke(state, nowSeconds, fogDensity);
+    }
     this.remoteAircraft.update(dt, this.camera.position, { historicalReplay: replayExternal });
 
     this.sky.mesh.position.copy(this.camera.position);
@@ -6240,13 +7145,13 @@ class FlightView {
     // throughout the smooth return to boresight. Padlock retains its existing sensor contract.
     hudFrame.lookYaw = padlock ? 0 : sensorYaw;
     hudFrame.lookPitch = padlock ? 0 : sensorPitch;
-    hudFrame.padlock = padlock;
+    hudFrame.padlock = !casevac && padlock;
     hudFrame.padlockTarget = padlockTarget;
     hudFrame.wingmanPresent = state.w1_present === 1 && state.w1_alive === 1;
     hudFrame.padlockPhase = padlockPhase;
     hudFrame.manualLookActive = manualLookActive();
     hudFrame.periodGunsightVisible = gunsightPresentation.visible;
-    hudFrame.triggerHeld = isGkeyHeld(8);
+    hudFrame.triggerHeld = !casevac && isGkeyHeld(8);
     hudFrame.dt = dt;
     hudFrame.now = nowSeconds;
     this.lastFrameNowSeconds = nowSeconds;
@@ -6279,6 +7184,8 @@ class FlightView {
   async dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.resetCasevacPresentation();
+    this.casevacCommanderCockpit.dispose();
     this.visualRuntimeEpoch += 1;
     this.terrainPresentationRequestEpoch += 1;
     this.terrainPresentationAbortController?.abort();
@@ -6472,9 +7379,14 @@ function installMobileInput(view) {
       throttleRockerPointerId !== null || throttleRockerControl !== null,
     );
     touchThrottleRocker.dataset.direction = direction;
-    touchThrottleRocker.setAttribute("aria-label", direction === "up"
-      ? "Throttle rocker — increasing power"
-      : direction === "down" ? "Throttle rocker — decreasing power" : "Throttle rocker");
+    const casevac = isCasevacState();
+    touchThrottleRocker.setAttribute("aria-label", casevac
+      ? direction === "up"
+        ? "Vertical rocker — climb"
+        : direction === "down" ? "Vertical rocker — descend" : "Vertical rocker"
+      : direction === "up"
+        ? "Throttle rocker — increasing power"
+        : direction === "down" ? "Throttle rocker — decreasing power" : "Throttle rocker");
   }
 
   function releaseThrottleRocker() {
@@ -7100,7 +8012,7 @@ function installInput(view) {
     }
 
     if (event.code === "Enter" || event.code === "NumpadEnter") {
-      view.hud.armAudio();
+      primeSelectedMissionAudio();
       activateReadyAction();
       return;
     }
@@ -7117,6 +8029,7 @@ function installInput(view) {
     }
 
     if (event.code === "KeyP") {
+      if (isCasevacState()) return;
       const enabled = bridge.ToggleRapierAutomation();
       recorder.event("rapier-automation", enabled ? "enabled" : "disabled");
       return;
@@ -7139,6 +8052,13 @@ function installInput(view) {
     }
 
     if (event.code === "KeyH") {
+      if (isCasevacState()) {
+        if (viewStatus) {
+          viewStatus.textContent =
+            "Medevac · arrows move · W/S vertical · A/D yaw · N controlled abort";
+        }
+        return;
+      }
       const visible = view.hud.toggleLegend();
       setPauseReason("help", visible);
       if (!playerSettings.legendSeen)
@@ -7171,9 +8091,15 @@ function installInput(view) {
       return;
     }
 
-    const gkey = keyMap.get(event.code);
+    // Preserve the existing test-flight N key everywhere else. During CASEVAC only, the physical
+    // N key becomes the kernel's KnockItOff semantic command (10); the mission controller still
+    // owns the pre-pickup eligibility decision and the active-key ledger preserves the same
+    // overridden gkey for the matching key-up edge.
+    const gkey = event.code === "KeyN" && isCasevacState()
+      ? 10
+      : keyMap.get(event.code);
     if (gkey === undefined) return;
-    if (!pressMappedKey(event.code, "keyboard")) return;
+    if (!pressMappedKey(event.code, "keyboard", gkey)) return;
     if (gkey === 9) togglePadlock();
     if (gkey === 8) view.hud.armAudio();
   }, { passive: false });
@@ -7202,7 +8128,7 @@ function installInput(view) {
     if (event.button !== 0 && event.pointerType === "mouse") return;
     // Tapping the GUNS SAFE annunciation arms the gun instead of starting a look drag.
     const cueHit = hudCanvas?.__weaponsCueHit;
-    if (cueHit) {
+    if (!isCasevacState() && cueHit) {
       const hudRect = hudCanvas.getBoundingClientRect();
       const hx = event.clientX - hudRect.left;
       const hy = event.clientY - hudRect.top;

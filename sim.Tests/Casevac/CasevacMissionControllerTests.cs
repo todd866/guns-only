@@ -516,6 +516,45 @@ public sealed class CasevacMissionControllerTests {
         Assert.Equal(eventCount, harness.Events.Count);
     }
 
+    [Fact]
+    public void QuietSkipCompletesWithoutInventingAnotherAuthorityTick() {
+        var harness = new Harness(Definition(
+            stabilizationDwellTicks: 1,
+            loadingDwellTicks: 1,
+            handoffDwellTicks: 1,
+            quietAftermathTicks: 4));
+
+        Assert.False(harness.Controller.RequestQuietSkip());
+        harness.Begin();
+        CasevacMissionSnapshot ingress = harness.Controller.Snapshot;
+        Assert.False(harness.Controller.RequestQuietSkip());
+        Assert.Equal(ingress, harness.Controller.Snapshot);
+
+        ReachQuiet(harness);
+        harness.Step(LandingZoneObservation.None);
+        CasevacMissionSnapshot before = harness.Controller.Snapshot;
+        int eventCount = harness.Events.Count;
+
+        Assert.Equal(CasevacPhase.Quiet, before.Phase);
+        Assert.Equal(1, before.QuietProgressTicks);
+        Assert.True(harness.Controller.RequestQuietSkip());
+
+        CasevacMissionSnapshot complete = harness.Controller.Snapshot;
+        Assert.Equal(CasevacPhase.Complete, complete.Phase);
+        Assert.True(harness.Controller.IsTerminal);
+        Assert.Equal(before.LastSourceTick, complete.LastSourceTick);
+        Assert.Equal(before.ActiveMissionTicks, complete.ActiveMissionTicks);
+        Assert.Equal(before.CallAgeTicks, complete.CallAgeTicks);
+        Assert.Equal(before.QuietProgressTicks, complete.QuietProgressTicks);
+        Assert.Equal(before.Custody, complete.Custody);
+        Assert.Equal(before.Disposition, complete.Disposition);
+        Assert.Equal(eventCount, harness.Events.Count);
+
+        Assert.False(harness.Controller.RequestQuietSkip());
+        Assert.Equal(complete, harness.Controller.Snapshot);
+        Assert.Equal(eventCount, harness.Events.Count);
+    }
+
     [Theory]
     [InlineData(20, CasevacDisposition.TransferredOnTime)]
     [InlineData(19, CasevacDisposition.TransferredAfterRequestedTime)]

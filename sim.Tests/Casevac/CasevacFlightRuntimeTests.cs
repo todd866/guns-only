@@ -1,9 +1,53 @@
 using GunsOnly.Sim.Casevac;
+using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Vehicles;
 
 namespace GunsOnly.Sim.Tests.Casevac;
 
 public class CasevacFlightRuntimeTests {
+    sealed class FlatTerrain : ITerrainSurface {
+        readonly double _heightM;
+
+        public FlatTerrain(double heightM) => _heightM = heightM;
+
+        public TerrainBounds Bounds =>
+            new(-20_000.0, 20_000.0, -20_000.0, 20_000.0);
+
+        public double HorizontalResolutionM => 4.0;
+
+        public bool TrySample(
+            double eastM,
+            double northM,
+            out TerrainSample sample) {
+            sample = new TerrainSample(
+                _heightM,
+                new Vec3D(0.0, 1.0, 0.0));
+            return true;
+        }
+    }
+
+    sealed class CoordinateTerrain : ITerrainSurface {
+        public TerrainBounds Bounds =>
+            new(-20_000.0, 20_000.0, -20_000.0, 20_000.0);
+
+        public double HorizontalResolutionM => 4.0;
+
+        public bool TrySample(
+            double eastM,
+            double northM,
+            out TerrainSample sample) {
+            sample = new TerrainSample(
+                HeightAt(eastM, northM),
+                new Vec3D(0.0, 1.0, 0.0));
+            return true;
+        }
+
+        public static double HeightAt(
+            double eastM,
+            double northM) =>
+            50.0 + eastM * 0.001 + northM * 0.002;
+    }
+
     [Fact]
     public void ReplaysBitIdenticallyThroughTheProductionVehicleAndMissionPath() {
         CasevacFlightRuntime first = CreateRuntime(out _);
@@ -28,6 +72,138 @@ public class CasevacFlightRuntimeTests {
         Assert.Equal(first.LastLandingZone, second.LastLandingZone);
         Assert.Equal(first.LastExposure, second.LastExposure);
         Assert.Equal(first.RecentEvents, second.RecentEvents);
+        Assert.Equal(first.ConsumedEnergyJ, second.ConsumedEnergyJ);
+        Assert.Equal(
+            first.RemainingUsableEnergyJ,
+            second.RemainingUsableEnergyJ);
+        Assert.Equal(
+            first.DestinationEnergyPlan,
+            second.DestinationEnergyPlan);
+    }
+
+    [Fact]
+    public void IntegratesAppliedPowerAtTheAuthorityRateAndPlansCurrentDestination() {
+        CasevacFlightRuntime runtime = CreateRuntime(out _);
+
+        Assert.Equal(
+            CasevacFlightRuntime.DefaultInitialUsableEnergyJ,
+            runtime.InitialUsableEnergyJ);
+        Assert.Equal(
+            runtime.InitialUsableEnergyJ,
+            runtime.RemainingUsableEnergyJ);
+        Assert.Equal(0.0, runtime.ConsumedEnergyJ);
+        runtime.Begin(20);
+
+        CasevacTargetGuidance guidance = runtime.TargetGuidance;
+        CasevacDestinationEnergyPlan initialPlan =
+            runtime.DestinationEnergyPlan;
+        double expectedTransitSeconds =
+            guidance.HorizontalRangeM
+                / CasevacFlightRuntime.PlanningGroundSpeedMps
+            + CasevacFlightRuntime.PlanningArrivalAllowanceSeconds;
+        Assert.Equal(guidance.TargetId, initialPlan.TargetId);
+        Assert.Equal(
+            expectedTransitSeconds,
+            initialPlan.PlannedTransitSeconds,
+            10);
+        Assert.Equal(
+            runtime.RemainingUsableEnergyJ
+                - expectedTransitSeconds
+                    * CasevacFlightRuntime.PlanningPowerW,
+            initialPlan.ProjectedReserveEnergyJ,
+            6);
+
+        double beforeEnergyJ = runtime.RemainingUsableEnergyJ;
+        runtime.Advance(
+            21,
+            new CasevacFlightControlIntent(
+                0.0,
+                0.0,
+                0.8,
+                0.0));
+        double appliedPowerW =
+            runtime.VehicleObservation.Power.AppliedPowerW;
+        double expectedTickEnergyJ =
+            appliedPowerW / AircraftSim.TickHz;
+
+        Assert.True(appliedPowerW > 0.0);
+        Assert.Equal(
+            expectedTickEnergyJ,
+            runtime.ConsumedEnergyJ,
+            8);
+        Assert.Equal(
+            beforeEnergyJ - expectedTickEnergyJ,
+            runtime.RemainingUsableEnergyJ,
+            8);
+        Assert.Equal(
+            runtime.RemainingUsableEnergyJ
+                / runtime.InitialUsableEnergyJ,
+            runtime.RemainingEnergyFraction,
+            12);
+        Assert.Equal(
+            runtime.RemainingUsableEnergyJ
+                / CasevacFlightRuntime.PlanningPowerW,
+            runtime.PlanningEnduranceSeconds,
+            10);
+    }
+
+    [Fact]
+    public void EnergyDepletionMakesTheVehicleUnflyableForMissionAuthority() {
+        long sequence = 0;
+        var runtime = new CasevacFlightRuntime(
+            BuiltInCasevacDefinitions.CreatePrototype(),
+            terrain: null,
+            weather: null,
+            () => ++sequence,
+            initialUsableEnergyJ: 1.0);
+        runtime.Begin(0);
+
+        runtime.Advance(
+            1,
+            new CasevacFlightControlIntent(
+                0.0,
+                0.0,
+                1.0,
+                0.0));
+
+        Assert.True(runtime.ConsumedEnergyJ > 1.0);
+        Assert.Equal(0.0, runtime.RemainingUsableEnergyJ);
+        Assert.Equal(0.0, runtime.RemainingEnergyFraction);
+        Assert.True(runtime.EnergyDepleted);
+        Assert.False(runtime.VehicleFlyable);
+        Assert.Equal(CasevacPhase.AircraftLost, runtime.Snapshot.Phase);
+        Assert.Equal(
+            CasevacDisposition.AircraftLostEmpty,
+            runtime.Snapshot.Disposition);
+    }
+
+    [Fact]
+    public void FreshRuntimeRestoresAndReplaysEnergyAcrossSourceTickEpochs() {
+        CasevacFlightRuntime first = CreateRuntime(out _);
+        CasevacFlightRuntime restarted = CreateRuntime(out _);
+        first.Begin(0);
+        restarted.Begin(10_000);
+
+        for (long offset = 1; offset <= 480; offset++) {
+            var intent = new CasevacFlightControlIntent(
+                Forward: 0.65,
+                Right: -0.12,
+                Vertical: offset < 180 ? 0.45 : -0.10,
+                Yaw: 0.08);
+            first.Advance(offset, intent);
+            restarted.Advance(10_000 + offset, intent);
+        }
+
+        Assert.Equal(first.ConsumedEnergyJ, restarted.ConsumedEnergyJ);
+        Assert.Equal(
+            first.RemainingUsableEnergyJ,
+            restarted.RemainingUsableEnergyJ);
+        Assert.Equal(
+            first.RemainingEnergyFraction,
+            restarted.RemainingEnergyFraction);
+        Assert.Equal(
+            first.PlanningEnduranceSeconds,
+            restarted.PlanningEnduranceSeconds);
     }
 
     [Fact]
@@ -68,6 +244,122 @@ public class CasevacFlightRuntimeTests {
                 / (AircraftSim.TickHz * 60.0),
             6.5,
             12.0);
+    }
+
+    [Fact]
+    public void QuietSkipDoesNotAdvanceVehicleClockEnergyOrEvidence() {
+        CasevacFlightRuntime runtime = CreateRuntime(out _);
+
+        Assert.False(runtime.RequestQuietSkip());
+        runtime.Begin(0);
+        Assert.False(runtime.RequestQuietSkip());
+        long quietTick = FlyMissionUntilPhase(
+            runtime,
+            CasevacPhase.Quiet,
+            maximumTicks: 100_000);
+
+        Assert.True(quietTick > 0, Describe(runtime));
+        CasevacMissionSnapshot before = runtime.Snapshot;
+        PlayerVehicleState vehicleBefore = runtime.VehicleState;
+        PlayerVehicleObservation observationBefore =
+            runtime.VehicleObservation;
+        double consumedEnergyBefore = runtime.ConsumedEnergyJ;
+        long highestActiveTicksBefore =
+            runtime.Evidence.HighestActiveMissionTicks;
+        long routeObservedTicksBefore =
+            runtime.Evidence.RouteObservedTicks;
+        int missionEventCountBefore =
+            runtime.Evidence.MissionEventCount;
+        CasevacLandingZoneEvidence receiverEvidenceBefore =
+            runtime.Evidence.GetLandingZoneEvidence(
+                CasevacTerminalLeg.Receiver);
+
+        Assert.True(runtime.RequestQuietSkip());
+
+        CasevacMissionSnapshot complete = runtime.Snapshot;
+        Assert.Equal(CasevacPhase.Complete, complete.Phase);
+        Assert.True(runtime.IsTerminal);
+        Assert.Equal(before.LastSourceTick, complete.LastSourceTick);
+        Assert.Equal(before.ActiveMissionTicks, complete.ActiveMissionTicks);
+        Assert.Equal(before.CallAgeTicks, complete.CallAgeTicks);
+        Assert.Equal(before.QuietProgressTicks, complete.QuietProgressTicks);
+        Assert.Equal(before.Custody, complete.Custody);
+        Assert.Equal(before.Disposition, complete.Disposition);
+        Assert.Equal(vehicleBefore, runtime.VehicleState);
+        Assert.Equal(observationBefore, runtime.VehicleObservation);
+        Assert.Equal(consumedEnergyBefore, runtime.ConsumedEnergyJ);
+        Assert.Equal(
+            highestActiveTicksBefore,
+            runtime.Evidence.HighestActiveMissionTicks);
+        Assert.Equal(
+            routeObservedTicksBefore,
+            runtime.Evidence.RouteObservedTicks);
+        Assert.Equal(
+            missionEventCountBefore,
+            runtime.Evidence.MissionEventCount);
+        Assert.Equal(
+            receiverEvidenceBefore,
+            runtime.Evidence.GetLandingZoneEvidence(
+                CasevacTerminalLeg.Receiver));
+
+        Assert.False(runtime.RequestQuietSkip());
+        Assert.Equal(complete, runtime.Snapshot);
+    }
+
+    [Fact]
+    public void SafeCompletedExposedFlightRecordsReplayBoundedRouteCorrection() {
+        long sequence = 0;
+        var runtime = new CasevacFlightRuntime(
+            BuiltInCasevacDefinitions.CreatePrototype(),
+            new FlatTerrain(0.0),
+            weather: null,
+            () => ++sequence);
+        runtime.Begin(0);
+
+        long terminalTick = FlyCompleteMission(runtime, maximumTicks: 100_000);
+        CasevacAssessment assessment =
+            CasevacAssessmentEngine.Assess(runtime.Evidence, runtime.Snapshot);
+
+        Assert.True(terminalTick > 0, Describe(runtime));
+        Assert.Equal(CasevacAssessmentStatus.Pass, assessment.Safe.Status);
+        Assert.Equal(
+            CasevacAssessmentStatus.Pass,
+            assessment.Controlled.Status);
+        Assert.True(
+            runtime.Evidence.RouteExposedTicks
+                > runtime.Evidence.RouteMaskedTicks,
+            $"masked={runtime.Evidence.RouteMaskedTicks} "
+                + $"exposed={runtime.Evidence.RouteExposedTicks}");
+        CasevacCorrectionRange routeCorrection = Assert.Single(
+            runtime.Evidence.CorrectionRanges.ToArray(),
+            range => range.Stream == CasevacEvidenceStream.Route);
+        Assert.Equal(
+            CasevacPrimaryCorrectionKind.ReviewRecordedRouteSegment,
+            assessment.PrimaryCorrection.Kind);
+        Assert.Equal(
+            CasevacEvidenceStream.Route,
+            assessment.PrimaryCorrection.Stream);
+        Assert.Equal(
+            routeCorrection.StartSourceTick,
+            assessment.PrimaryCorrection.StartSourceTick);
+        Assert.Equal(
+            routeCorrection.EndSourceTick,
+            assessment.PrimaryCorrection.EndSourceTick);
+
+        CasevacEvidenceSample[] reviewedSamples =
+            runtime.Evidence.RouteSamples.Span
+                .ToArray()
+                .Where(sample =>
+                    sample.SourceTick >= routeCorrection.StartSourceTick
+                    && sample.SourceTick <= routeCorrection.EndSourceTick)
+                .ToArray();
+        Assert.NotEmpty(reviewedSamples);
+        Assert.All(reviewedSamples, sample => {
+            Assert.False(sample.InsideTerminalVolume);
+            Assert.True(
+                sample.MaskingState == CasevacMaskingState.Exposed
+                || !sample.WithinSafeMaskingBand);
+        });
     }
 
     [Fact]
@@ -113,6 +405,31 @@ public class CasevacFlightRuntimeTests {
             runtime.Course.Mission.CapsuleMassKg,
             runtime.Snapshot.PayloadMassKg,
             12);
+
+        double beforeEnergyJ = runtime.RemainingUsableEnergyJ;
+        long nextSourceTick =
+            runtime.LastTickObservation!.Value.SourceTick + 1L;
+        runtime.Advance(
+            nextSourceTick,
+            new CasevacFlightControlIntent(
+                0.0,
+                0.0,
+                1.0,
+                0.0));
+        Assert.Equal(
+            CasevacFlightRuntime.RecurringBaseMassKg
+                + runtime.Course.Mission.CapsuleMassKg,
+            runtime.VehicleObservation.GrossMassKg,
+            12);
+        Assert.True(
+            runtime.VehicleObservation.Power.HoverPowerRequiredW
+                > runtime.VehicleObservation.Power.AppliedPowerW);
+        Assert.Equal(
+            beforeEnergyJ
+                - runtime.VehicleObservation.Power.AppliedPowerW
+                    / AircraftSim.TickHz,
+            runtime.RemainingUsableEnergyJ,
+            7);
     }
 
     [Fact]
@@ -146,6 +463,115 @@ public class CasevacFlightRuntimeTests {
             1,
             runtime.Evidence.GetEventCount(
                 CasevacEventKind.CasevacAircraftLost));
+    }
+
+    [Fact]
+    public void PublishesImmutableCollisionPrimitivesInTheResolvedWorldFrame() {
+        CasevacCourseDefinition course =
+            BuiltInCasevacDefinitions.CreatePrototype();
+        long sequence = 0;
+        var runtime = new CasevacFlightRuntime(
+            course,
+            new FlatTerrain(40.0),
+            weather: null,
+            () => ++sequence);
+
+        IReadOnlyList<CasevacResolvedCollisionObstacle> resolved =
+            runtime.ResolvedCollisionObstacles;
+        Assert.Equal(
+            course.World.CollisionAuthority.Obstacles.Count,
+            resolved.Count);
+        var list = Assert.IsAssignableFrom<
+            IList<CasevacResolvedCollisionObstacle>>(resolved);
+        Assert.True(list.IsReadOnly);
+        Assert.Throws<NotSupportedException>(() =>
+            list.Add(resolved[0]));
+
+        for (int index = 0; index < resolved.Count; index++) {
+            CasevacCollisionObstacleDefinition authored =
+                course.World.CollisionAuthority.Obstacles[index];
+            CasevacResolvedCollisionObstacle obstacle =
+                resolved[index];
+            Assert.Equal(authored.Id, obstacle.Id);
+            Assert.Equal(authored.Primitive, obstacle.Primitive);
+            Assert.Equal(authored.RadiusM, obstacle.RadiusM, 12);
+            Assert.Equal(
+                authored.First + new Vec3D(0.0, 40.0, 0.0),
+                obstacle.FirstWorldM);
+            Assert.Equal(
+                authored.Second + new Vec3D(0.0, 40.0, 0.0),
+                obstacle.SecondWorldM);
+        }
+    }
+
+    [Fact]
+    public void PublishesImmutableRoutesWithPerControlPointTerrainElevations() {
+        CasevacCourseDefinition course =
+            BuiltInCasevacDefinitions.CreatePrototype();
+        long sequence = 0;
+        var runtime = new CasevacFlightRuntime(
+            course,
+            new CoordinateTerrain(),
+            weather: null,
+            () => ++sequence);
+
+        IReadOnlyList<CasevacResolvedRoute> resolved =
+            runtime.ResolvedRoutes;
+        Assert.Equal(course.World.Routes.Count, resolved.Count);
+        var routes = Assert.IsAssignableFrom<
+            IList<CasevacResolvedRoute>>(resolved);
+        Assert.True(routes.IsReadOnly);
+        Assert.Throws<NotSupportedException>(() =>
+            routes.Add(resolved[0]));
+
+        var elevations = new List<double>();
+        for (int routeIndex = 0;
+            routeIndex < resolved.Count;
+            routeIndex++) {
+            CasevacRouteDefinition authored =
+                course.World.Routes[routeIndex];
+            CasevacResolvedRoute route = resolved[routeIndex];
+            Assert.Equal(authored.Id, route.Id);
+            Assert.Equal(authored.Leg, route.Leg);
+            Assert.Equal(authored.StartLocationId, route.StartLocationId);
+            Assert.Equal(authored.EndLocationId, route.EndLocationId);
+            Assert.Equal(
+                authored.HorizontalLengthM,
+                route.HorizontalLengthM,
+                12);
+            Assert.Equal(authored.Points.Count, route.Points.Count);
+            var points = Assert.IsAssignableFrom<
+                IList<CasevacResolvedRouteControlPoint>>(route.Points);
+            Assert.True(points.IsReadOnly);
+            Assert.Throws<NotSupportedException>(() =>
+                points.Add(route.Points[0]));
+
+            for (int pointIndex = 0;
+                pointIndex < route.Points.Count;
+                pointIndex++) {
+                CasevacRouteControlPointDefinition authoredPoint =
+                    authored.Points[pointIndex];
+                CasevacResolvedRouteControlPoint point =
+                    route.Points[pointIndex];
+                Assert.Equal(authoredPoint.Id, point.Id);
+                Assert.Equal(authoredPoint.Position.XM, point.EastM);
+                Assert.Equal(authoredPoint.Position.ZM, point.NorthM);
+                Assert.Equal(
+                    CoordinateTerrain.HeightAt(
+                        point.EastM,
+                        point.NorthM),
+                    point.SurfaceElevationM,
+                    12);
+                Assert.Equal(
+                    authoredPoint.TargetAglM,
+                    point.TargetAglM);
+                Assert.Equal(
+                    authoredPoint.CorridorRadiusM,
+                    point.CorridorRadiusM);
+                elevations.Add(point.SurfaceElevationM);
+            }
+        }
+        Assert.True(elevations.Distinct().Count() > 1);
     }
 
     [Fact]
@@ -183,6 +609,15 @@ public class CasevacFlightRuntimeTests {
 
     static long FlyCompleteMission(
         CasevacFlightRuntime runtime,
+        int maximumTicks) =>
+        FlyMissionUntilPhase(
+            runtime,
+            CasevacPhase.Complete,
+            maximumTicks);
+
+    static long FlyMissionUntilPhase(
+        CasevacFlightRuntime runtime,
+        CasevacPhase targetPhase,
         int maximumTicks) {
         for (long tick = 1; tick <= maximumTicks; tick++) {
             CasevacFlightControlIntent intent =
@@ -207,7 +642,7 @@ public class CasevacFlightRuntimeTests {
                     _ => CasevacFlightControlIntent.Neutral
                 };
             runtime.Advance(tick, intent);
-            if (runtime.Snapshot.Phase == CasevacPhase.Complete)
+            if (runtime.Snapshot.Phase == targetPhase)
                 return tick;
         }
         return -1;

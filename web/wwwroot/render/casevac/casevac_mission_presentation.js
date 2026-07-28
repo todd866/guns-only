@@ -98,7 +98,7 @@ const AXIS_STATUS_COPY = Object.freeze({
 const EVENT_COPY = Object.freeze({
   CASEVAC_TASK_STARTED: Object.freeze({
     channel: "DISPATCH",
-    text: "CASEVAC task. Orchard pickup, clinic handoff.",
+    text: "Medevac task. Orchard pickup, clinic handoff.",
   }),
   PICKUP_APPROACH_ENTERED: Object.freeze({
     channel: "CREW",
@@ -202,6 +202,9 @@ const PRESENTATION_CSS = `
   font: 700 10px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: .055em;
   text-shadow: 0 1px 4px #000;
+}
+[data-casevac-presentation][data-debrief-visible="true"] {
+  z-index: 14;
 }
 [data-casevac-presentation],
 [data-casevac-presentation] * { box-sizing: border-box; }
@@ -424,12 +427,50 @@ const PRESENTATION_CSS = `
   font-size: 8px;
   font-weight: 600;
 }
+.cv-debrief-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.cv-debrief-again {
+  min-height: 38px;
+  padding: 9px 13px;
+  border: 1px solid rgba(146, 213, 166, .62);
+  color: #effbf3;
+  background: rgba(35, 91, 54, .72);
+  pointer-events: auto;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: .13em;
+}
+.cv-debrief-again:hover {
+  background: rgba(46, 119, 70, .82);
+}
+.cv-debrief-again:focus-visible {
+  outline: 2px solid var(--cv-amber);
+  outline-offset: 3px;
+}
 @media (max-width: 680px) {
   .cv-strip-grid { grid-template-columns: repeat(2, 1fr); }
   .cv-metric { border-bottom: 1px solid rgba(191, 233, 228, .1); }
   .cv-metric:last-child { grid-column: 1 / -1; }
   .cv-axis-grid { grid-template-columns: repeat(2, 1fr); }
   [data-casevac-part="radio"] { top: max(170px, calc(env(safe-area-inset-top) + 155px)); }
+  body:has([data-casevac-presentation]:not([hidden])) #pause-button {
+    top: auto;
+    right: auto;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    left: max(8px, env(safe-area-inset-left));
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+  }
+  body:has([data-casevac-presentation]:not([hidden])) #pause-button .pause-desktop {
+    display: none;
+  }
+  body:has([data-casevac-presentation]:not([hidden])) #pause-button .pause-mobile {
+    display: inline;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-casevac-presentation] * { transition: none !important; animation: none !important; }
@@ -447,6 +488,8 @@ function canonicalToken(value) {
 }
 
 function finite(value) {
+  if (value === null || value === undefined
+    || (typeof value === "string" && value.trim() === "")) return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -920,7 +963,8 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
     attributes: {
       "data-casevac-presentation": "v1",
       "data-authoritative": "false",
-      "aria-label": "CASEVAC mission presentation",
+      "data-debrief-visible": "false",
+      "aria-label": "Medevac mission presentation",
     },
   });
   root.hidden = true;
@@ -929,7 +973,7 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
   const stripNode = element(documentLike, "section", {
     attributes: {
       "data-casevac-part": "mission-strip",
-      "aria-label": "CASEVAC mission status",
+      "aria-label": "Medevac mission status",
     },
   });
   stripNode.hidden = true;
@@ -965,7 +1009,7 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
     className: "cv-dwell-track",
     attributes: {
       role: "progressbar",
-      "aria-label": "CASEVAC stable-contact dwell progress",
+      "aria-label": "Medevac stable-contact dwell progress",
       "aria-valuemin": "0",
       "aria-valuemax": "100",
       "aria-valuenow": "0",
@@ -1003,7 +1047,7 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
   const radio = element(documentLike, "aside", {
     attributes: {
       "data-casevac-part": "radio",
-      "aria-label": "CASEVAC radio and crew messages",
+      "aria-label": "Medevac radio and crew messages",
     },
   });
   radio.hidden = true;
@@ -1020,7 +1064,7 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
   const quiet = element(documentLike, "section", {
     attributes: {
       "data-casevac-part": "quiet",
-      "aria-label": "CASEVAC handoff interval",
+      "aria-label": "Medevac handoff interval",
     },
   });
   quiet.hidden = true;
@@ -1044,7 +1088,7 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
     text: "SKIP QUIET INTERVAL",
     attributes: {
       type: "button",
-      "aria-label": "Skip the CASEVAC quiet interval",
+      "aria-label": "Skip the Medevac quiet interval",
     },
   });
   quietSkip.hidden = true;
@@ -1054,16 +1098,19 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
   const debriefNode = element(documentLike, "section", {
     attributes: {
       "data-casevac-part": "debrief",
-      "aria-label": "CASEVAC debrief",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "casevac-debrief-outcome",
     },
   });
   debriefNode.hidden = true;
   const debriefKicker = element(documentLike, "p", {
     className: "cv-debrief-kicker",
-    text: "CASEVAC DEBRIEF · SEPARATE EVIDENCE AXES",
+    text: "MEDEVAC DEBRIEF · SEPARATE EVIDENCE AXES",
   });
   const debriefOutcome = element(documentLike, "h2", {
     className: "cv-debrief-outcome",
+    attributes: { id: "casevac-debrief-outcome" },
   });
   const axisGrid = element(documentLike, "div", {
     className: "cv-axis-grid",
@@ -1114,6 +1161,18 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
   const correctionEvidence = element(documentLike, "p", {
     className: "cv-correction-evidence",
   });
+  const debriefActions = element(documentLike, "div", {
+    className: "cv-debrief-actions",
+  });
+  const flyAgain = element(documentLike, "button", {
+    className: "cv-debrief-again",
+    text: "FLY AGAIN",
+    attributes: {
+      type: "button",
+      "aria-label": "Fly Medevac again",
+    },
+  });
+  debriefActions.appendChild(flyAgain);
   append(
     correction,
     correctionLabel,
@@ -1126,6 +1185,7 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
     debriefOutcome,
     axisGrid,
     correction,
+    debriefActions,
   );
   append(root, style, stripNode, radio, quiet, debriefNode);
   if (options.mount) options.mount.appendChild(root);
@@ -1138,6 +1198,7 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
   let stripState = casevacMissionStripModel({ visible: false });
   let quietState = { active: false, skippable: false };
   let debriefState = null;
+  let debriefWasVisible = false;
 
   const updateRootVisibility = () => {
     root.hidden = stripNode.hidden
@@ -1250,7 +1311,11 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
   const renderDebrief = () => {
     const visible = debriefState?.visible === true;
     debriefNode.hidden = !visible;
-    if (!visible) return;
+    root.setAttribute("data-debrief-visible", String(visible));
+    if (!visible) {
+      debriefWasVisible = false;
+      return;
+    }
     setText(debriefOutcome, debriefState.outcome);
     for (const axis of debriefState.axes) {
       const nodes = axisNodes.get(axis.id);
@@ -1265,6 +1330,16 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
       "data-available",
       String(debriefState.correction.available),
     );
+    if (!debriefWasVisible) {
+      debriefWasVisible = true;
+      const focusAction = () => {
+        if (!disposed && !debriefNode.hidden)
+          flyAgain.focus?.({ preventScroll: true });
+      };
+      if (typeof globalThis.queueMicrotask === "function")
+        globalThis.queueMicrotask(focusAction);
+      else focusAction();
+    }
   };
 
   const quietSkipHandler = () => {
@@ -1277,6 +1352,17 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
     }
   };
   quietSkip.addEventListener("click", quietSkipHandler);
+
+  const flyAgainHandler = () => {
+    if (debriefState?.visible !== true) return;
+    if (typeof options.onFlyAgain === "function") {
+      options.onFlyAgain(Object.freeze({
+        kind: "CASEVAC_FLY_AGAIN_REQUESTED",
+        presentationOnly: true,
+      }));
+    }
+  };
+  flyAgain.addEventListener("click", flyAgainHandler);
 
   const api = {
     element: root,
@@ -1329,6 +1415,7 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
       if (disposed) return;
       disposed = true;
       quietSkip.removeEventListener("click", quietSkipHandler);
+      flyAgain.removeEventListener("click", flyAgainHandler);
       resetMessages();
       root.remove();
     },

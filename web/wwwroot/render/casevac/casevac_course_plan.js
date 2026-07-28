@@ -1,10 +1,10 @@
 /**
- * Deterministic decorative layout for the fictional CASEVAC course.
+ * Deterministic non-obstacle dressing for the fictional CASEVAC course.
  *
- * This module is presentation-only. None of its surfaces, obstacles, cues, or
- * clearances are collision, landing-zone, exposure, weather, or mission truth.
- * A future scene integration must align these visuals with authoritative
- * scenario definitions rather than deriving authority from this plan.
+ * Pads, people, capsule staging, windsocks, weather, and guidance cues are
+ * presentation-only. Substantial physical scenery is deliberately absent here:
+ * it is built exclusively from simulation-projected collision primitives by
+ * casevac_collision_scenery.js, keeping visible hazards and physics co-located.
  */
 
 export const CASEVAC_SCENERY_SCHEMA =
@@ -31,25 +31,16 @@ export const CASEVAC_DEFAULT_ANCHORS = Object.freeze({
 
 export const CASEVAC_SCENERY_QUALITY = Object.freeze({
   mobile: Object.freeze({
-    orchardRows: 4,
-    orchardColumns: 6,
-    receiverTrees: 4,
     pickupPeople: 3,
     receiverPeople: 3,
     rainStreaksPerSite: 24,
   }),
   balanced: Object.freeze({
-    orchardRows: 6,
-    orchardColumns: 8,
-    receiverTrees: 7,
     pickupPeople: 4,
     receiverPeople: 4,
     rainStreaksPerSite: 48,
   }),
   desktop: Object.freeze({
-    orchardRows: 8,
-    orchardColumns: 10,
-    receiverTrees: 10,
     pickupPeople: 5,
     receiverPeople: 5,
     rainStreaksPerSite: 72,
@@ -103,125 +94,6 @@ function point(x, y, z) {
   return { x, y, z };
 }
 
-function segment(id, from, to, kind = "decorative") {
-  return { id, from, to, kind };
-}
-
-function rectangularFence(prefix, halfWidth, halfDepth, gate) {
-  const xGap = Math.max(2, finite(gate?.halfWidthM, 5));
-  const gateSide = gate?.side ?? "south";
-  const result = [];
-  const add = (name, from, to) =>
-    result.push(segment(`${prefix}.${name}`, from, to, "fence"));
-
-  if (gateSide === "south") {
-    add("south-west", point(-halfWidth, 0, halfDepth),
-      point(-xGap, 0, halfDepth));
-    add("south-east", point(xGap, 0, halfDepth),
-      point(halfWidth, 0, halfDepth));
-  } else {
-    add("south", point(-halfWidth, 0, halfDepth),
-      point(halfWidth, 0, halfDepth));
-  }
-  add("east", point(halfWidth, 0, halfDepth),
-    point(halfWidth, 0, -halfDepth));
-  if (gateSide === "north") {
-    add("north-east", point(halfWidth, 0, -halfDepth),
-      point(xGap, 0, -halfDepth));
-    add("north-west", point(-xGap, 0, -halfDepth),
-      point(-halfWidth, 0, -halfDepth));
-  } else {
-    add("north", point(halfWidth, 0, -halfDepth),
-      point(-halfWidth, 0, -halfDepth));
-  }
-  add("west", point(-halfWidth, 0, -halfDepth),
-    point(-halfWidth, 0, halfDepth));
-  return result;
-}
-
-function utilityLine(prefix, polePoints, poleHeightM) {
-  const poles = polePoints.map((position, index) => ({
-    id: `${prefix}.pole.${index + 1}`,
-    position,
-    heightM: poleHeightM,
-  }));
-  const wires = [];
-  for (let index = 1; index < poles.length; index++) {
-    for (let conductor = -1; conductor <= 1; conductor++) {
-      const lateral = conductor * 0.68;
-      wires.push(segment(
-        `${prefix}.wire.${index}.${conductor + 2}`,
-        point(
-          poles[index - 1].position.x + lateral,
-          poleHeightM * 0.9,
-          poles[index - 1].position.z,
-        ),
-        point(
-          poles[index].position.x + lateral,
-          poleHeightM * 0.9,
-          poles[index].position.z,
-        ),
-        "utility-wire",
-      ));
-    }
-  }
-  return { poles, wires };
-}
-
-function orchardTrees(seed, quality) {
-  const trees = [];
-  const xMinimum = -72;
-  const xMaximum = 72;
-  const zMinimum = -70;
-  const zMaximum = 64;
-  const rowStep = (zMaximum - zMinimum)
-    / Math.max(1, quality.orchardRows - 1);
-  const columnStep = (xMaximum - xMinimum)
-    / Math.max(1, quality.orchardColumns - 1);
-
-  for (let row = 0; row < quality.orchardRows; row++) {
-    for (let column = 0; column < quality.orchardColumns; column++) {
-      const key = `orchard:${row}:${column}`;
-      const x = xMinimum + column * columnStep
-        + (seededUnit(seed, `${key}:x`) - 0.5) * 3.4;
-      const z = zMinimum + row * rowStep
-        + (seededUnit(seed, `${key}:z`) - 0.5) * 3.0;
-      const distanceToPad = Math.hypot(x, z);
-      const insideApproachLane = z > 22 && Math.abs(x) < 13;
-      const insideShed = x > 40 && x < 76 && z > 22 && z < 62;
-      if (distanceToPad < 25 || insideApproachLane || insideShed) continue;
-      trees.push({
-        id: `decor.casevac.pickup.orchard-tree.${trees.length + 1}`,
-        position: point(x, 0, z),
-        heightM: 5.8 + seededUnit(seed, `${key}:height`) * 2.5,
-        crownRadiusM: 2.2 + seededUnit(seed, `${key}:radius`) * 0.8,
-        yaw: seededUnit(seed, `${key}:yaw`) * Math.PI * 2,
-        swayPhase: seededUnit(seed, `${key}:sway`) * Math.PI * 2,
-      });
-    }
-  }
-  return trees;
-}
-
-function receiverTrees(seed, quality) {
-  const positions = [
-    [-64, -46], [-78, -8], [-65, 47], [-14, 68], [37, 68],
-    [72, 42], [81, 4], [70, -48], [20, -72], [-30, -70],
-  ];
-  return positions.slice(0, quality.receiverTrees).map(([x, z], index) => ({
-    id: `decor.casevac.receiver.tree.${index + 1}`,
-    position: point(
-      x + (seededUnit(seed, `receiver-tree:${index}:x`) - 0.5) * 3,
-      0,
-      z + (seededUnit(seed, `receiver-tree:${index}:z`) - 0.5) * 3,
-    ),
-    heightM: 6.3 + seededUnit(seed, `receiver-tree:${index}:height`) * 2.8,
-    crownRadiusM: 2.4 + seededUnit(seed, `receiver-tree:${index}:radius`) * 0.9,
-    yaw: seededUnit(seed, `receiver-tree:${index}:yaw`) * Math.PI * 2,
-    swayPhase: seededUnit(seed, `receiver-tree:${index}:sway`) * Math.PI * 2,
-  }));
-}
-
 function staff(prefix, count, basePositions) {
   return Array.from({ length: count }, (_, index) => {
     const position = basePositions[index % basePositions.length];
@@ -251,16 +123,6 @@ function rainStreaks(seed, siteKey, count, radiusM) {
 }
 
 function pickupPlan(seed, quality) {
-  const utility = utilityLine(
-    "decor.casevac.pickup.utility",
-    [
-      point(-84, 0, -86),
-      point(-28, 0, -86),
-      point(28, 0, -86),
-      point(84, 0, -86),
-    ],
-    11.5,
-  );
   return {
     id: CASEVAC_COURSE_SITE_IDS.pickup,
     role: "ORCHARD_PICKUP",
@@ -278,31 +140,13 @@ function pickupPlan(seed, quality) {
       position: point(23, 0, -20),
       mastHeightM: 5.5,
     },
-    trees: orchardTrees(seed, quality),
-    structures: [
-      {
-        id: "decor.casevac.pickup.packing-shed",
-        position: point(58, 0, 42),
-        sizeM: point(23, 5.2, 16),
-        yaw: -0.08,
-        kind: "packing-shed",
-      },
-      {
-        id: "decor.casevac.pickup.water-pump",
-        position: point(-48, 0, 43),
-        sizeM: point(5.5, 3.2, 4.8),
-        yaw: 0.18,
-        kind: "pump-house",
-      },
-    ],
-    fences: rectangularFence(
-      "decor.casevac.pickup.fence",
-      91,
-      82,
-      { side: "south", halfWidthM: 14 },
-    ),
-    poles: utility.poles,
-    wires: utility.wires,
+    // Collision-sized trees, buildings, fences, poles, and wires must come
+    // from the projected authority stream, never this decorative plan.
+    trees: [],
+    structures: [],
+    fences: [],
+    poles: [],
+    wires: [],
     people: staff(
       "decor.casevac.pickup",
       quality.pickupPeople,
@@ -343,16 +187,6 @@ function pickupPlan(seed, quality) {
 }
 
 function receiverPlan(seed, quality) {
-  const utility = utilityLine(
-    "decor.casevac.receiver.utility",
-    [
-      point(92, 0, -72),
-      point(92, 0, -24),
-      point(92, 0, 24),
-      point(92, 0, 72),
-    ],
-    12.5,
-  );
   return {
     id: CASEVAC_COURSE_SITE_IDS.receiver,
     role: "CLINIC_HANDOFF",
@@ -370,38 +204,11 @@ function receiverPlan(seed, quality) {
       position: point(26, 0, -23),
       mastHeightM: 6,
     },
-    trees: receiverTrees(seed, quality),
-    structures: [
-      {
-        id: "decor.casevac.receiver.clinic",
-        position: point(-46, 0, 28),
-        sizeM: point(38, 8.5, 24),
-        yaw: 0,
-        kind: "clinic",
-      },
-      {
-        id: "decor.casevac.receiver.service-annex",
-        position: point(-58, 0, -17),
-        sizeM: point(17, 4.8, 13),
-        yaw: 0.08,
-        kind: "service-annex",
-      },
-      {
-        id: "decor.casevac.receiver.covered-handoff",
-        position: point(-17, 0, 18),
-        sizeM: point(13, 3.6, 9),
-        yaw: 0,
-        kind: "open-awning",
-      },
-    ],
-    fences: rectangularFence(
-      "decor.casevac.receiver.fence",
-      98,
-      82,
-      { side: "north", halfWidthM: 16 },
-    ),
-    poles: utility.poles,
-    wires: utility.wires,
+    trees: [],
+    structures: [],
+    fences: [],
+    poles: [],
+    wires: [],
     people: staff(
       "decor.casevac.receiver",
       quality.receiverPeople,

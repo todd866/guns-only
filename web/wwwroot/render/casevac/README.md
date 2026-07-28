@@ -4,7 +4,9 @@ This folder contains a deterministic, procedural presentation for the fictional
 orchard pickup and clinic handoff sites described by the accepted CASEVAC
 course design.
 
-It is intentionally not wired into the flight scene yet.
+The production flight scene creates this scenery from observer-safe,
+terrain-resolved mission anchors. The example below documents the standalone
+adapter boundary used by tests and alternate renderers.
 
 ```js
 import * as THREE from "../../vendor/three.module.js";
@@ -38,11 +40,31 @@ scenery.update({
 
 Call `dispose()` when replacing the course or renderer.
 
+## Collision-truth visuals
+
+`casevac_collision_scenery.js` mirrors the simulation's terrain-resolved
+`casevac_collision_obstacles` into visible poles, wire, orchard bounds, and
+clinic bounds. The rendered objects are presentation-only; their immutable
+centre lines and bounds agree with authority, but collision remains in C#.
+
+## Route presentation
+
+`casevac_route_briefing.js` owns the Ready-only route card. It draws the
+projected direct and masked reference geometry, bearings, distances, and
+server-projected landmark names, then disappears when the mission begins.
+It is a briefing sketch, not an autopilot or an in-flight route ghost.
+
+`casevac_route_landmarks.js` turns only projected `MASKED` routes into an
+ordinary, subdued drainage/sunken-road landscape with bounded instanced
+willows. It makes the disclosed route choice readable in the world without
+adding coaching lines, arrows, scoring rails, or collision authority.
+
 ## Mission presentation
 
 `casevac_mission_presentation.js` is a self-contained DOM view for the mission
 strip, sparse radio/crew subtitles, quiet handoff interval, and four-axis
-debrief. It is not wired into `app.js`.
+debrief. `app.js` owns its production lifecycle and supplies only projected
+mission facts.
 
 ```js
 import {
@@ -187,11 +209,11 @@ button emits a request callback only; it does not advance mission state.
 
 ## Authority boundary
 
-Every object produced here is decorative and tagged `presentationOnly=true`,
+Every object produced here is tagged `presentationOnly=true`,
 `authoritative=false`, and `collisionSource=false`. Pads, wires, poles, fences,
-trees, structures, approach/escape cues, weather, rotor wash, staff, and the
-capsule silhouette cannot provide collision, landing-zone, exposure, custody,
-or mission truth. Integration must align this presentation with separately
-authored authoritative geometry and observer-safe CASEVAC state. Likewise, the
-DOM view does not own clocks, gates, progress, custody, outcomes, assessment,
-or completion, and it ignores free-form event payload text.
+trees, structures, route landmarks, approach/escape cues, weather, rotor wash,
+staff, and the capsule silhouette cannot provide collision, landing-zone,
+exposure, custody, or mission truth. The collision mirror is deliberately
+aligned with separately authored authoritative geometry but never replaces it.
+Likewise, the DOM views do not own clocks, gates, progress, custody, outcomes,
+assessment, or completion, and they ignore free-form event payload text.

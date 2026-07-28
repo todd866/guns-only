@@ -228,7 +228,7 @@ public static class BuiltInCasevacDefinitions {
             [
                 Point("ingress-direct.start", start, 34.0, 140.0),
                 Point("ingress-direct.orchard-gap",
-                    new(-1_350.0, 900.0), 30.0, 110.0),
+                    new(-180.0, 380.0), 30.0, 110.0),
                 Point("ingress-direct.pickup", pickup, 20.0, 85.0)
             ]),
         Route(

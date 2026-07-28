@@ -78,6 +78,75 @@ public class CasevacSimulationSessionTests {
     }
 
     [Fact]
+    public void DrivingStyleUpArrowMovesTowardTheInitialPickup() {
+        var session = new SimulationSession(13);
+        session.Begin();
+        PlayerVehicleState initial =
+            session.CasevacFlight!.VehicleState;
+        CasevacResolvedLocation pickup =
+            session.CasevacFlight.PickupLocation;
+        double initialRange = HorizontalRange(initial, pickup);
+
+        // ArrowUp is the existing browser binding for PushDown. In the automated
+        // air-ambulance driving profile it means forward, not aircraft nose-down.
+        session.FeedKey(GKey.PushDown, true);
+        session.StepFixed(360);
+        session.FeedKey(GKey.PushDown, false);
+
+        PlayerVehicleState advanced =
+            session.CasevacFlight.VehicleState;
+        Assert.True(
+            HorizontalRange(advanced, pickup) < initialRange - 5.0);
+    }
+
+    [Fact]
+    public void QuietSkipFinishesOnlyTheBuiltInMedevacAndIsIdempotent() {
+        var combat = new SimulationSession(1);
+        Assert.False(combat.RequestCasevacQuietSkip());
+        Assert.Equal(
+            SimulationSession.LifecycleState.Ready,
+            combat.Lifecycle);
+
+        var session = new SimulationSession(13);
+        Assert.False(session.RequestCasevacQuietSkip());
+        session.Begin();
+        Assert.False(session.RequestCasevacQuietSkip());
+        Assert.Equal(
+            SimulationSession.LifecycleState.Active,
+            session.Lifecycle);
+
+        CasevacFlightRuntime runtime = session.CasevacFlight!;
+        AdvanceControllerToQuiet(runtime.Controller);
+        CasevacMissionSnapshot before = runtime.Controller.Snapshot;
+        int eventCountBefore = runtime.Evidence.MissionEventCount;
+        session.SetPaused(true);
+
+        Assert.True(session.RequestCasevacQuietSkip());
+
+        CasevacMissionSnapshot complete = runtime.Snapshot;
+        Assert.Equal(
+            SimulationSession.LifecycleState.Finished,
+            session.Lifecycle);
+        Assert.Equal(CasevacPhase.Complete, complete.Phase);
+        Assert.Equal(SortieOutcome.None, session.Outcome);
+        Assert.Equal(before.LastSourceTick, complete.LastSourceTick);
+        Assert.Equal(before.ActiveMissionTicks, complete.ActiveMissionTicks);
+        Assert.Equal(before.CallAgeTicks, complete.CallAgeTicks);
+        Assert.Equal(before.QuietProgressTicks, complete.QuietProgressTicks);
+        Assert.Equal(before.Custody, complete.Custody);
+        Assert.Equal(before.Disposition, complete.Disposition);
+        Assert.Equal(
+            eventCountBefore,
+            runtime.Evidence.MissionEventCount);
+
+        Assert.False(session.RequestCasevacQuietSkip());
+        Assert.Equal(complete, runtime.Snapshot);
+        Assert.Equal(
+            SimulationSession.LifecycleState.Finished,
+            session.Lifecycle);
+    }
+
+    [Fact]
     public void SemanticAbortReturnsToTheAuthoredSafeExitWithoutVictory() {
         var session = new SimulationSession(13);
         session.Begin();
@@ -89,7 +158,7 @@ public class CasevacSimulationSessionTests {
             CasevacPhase.AbortReturn,
             session.CasevacFlight!.Snapshot.Phase);
 
-        session.FeedKey(GKey.PushDown, true);
+        session.FeedKey(GKey.PullUp, true);
         session.StepFixed(10_000);
 
         Assert.Equal(
@@ -103,6 +172,14 @@ public class CasevacSimulationSessionTests {
             session.CasevacFlight.Snapshot.Disposition);
         Assert.Equal(SortieOutcome.None, session.Outcome);
         Assert.False(session.OpponentPresent);
+    }
+
+    static double HorizontalRange(
+        in PlayerVehicleState vehicle,
+        in CasevacResolvedLocation location) {
+        double east = location.EastM - vehicle.PositionWorldM.X;
+        double north = location.NorthM - vehicle.PositionWorldM.Z;
+        return Math.Sqrt(east * east + north * north);
     }
 
     [Fact]
@@ -131,5 +208,59 @@ public class CasevacSimulationSessionTests {
         Assert.True(
             session.CasevacFlight.Snapshot.MissionEpochSequence
                 > firstEpoch);
+    }
+
+    static void AdvanceControllerToQuiet(
+        CasevacMissionController controller) {
+        long sourceTick = controller.Snapshot.LastSourceTick;
+        string pickup = controller.Definition.PickupSiteId;
+        string receiver = controller.Definition.ReceiverSiteId;
+
+        Step(pickup);
+        for (int tick = 0;
+            tick < controller.Definition.StabilizationDwellTicks;
+            tick++)
+            Step(pickup);
+        for (int tick = 0;
+            tick < controller.Definition.LoadingDwellTicks;
+            tick++)
+            Step(pickup);
+        Step(receiver);
+        for (int tick = 0;
+            tick < controller.Definition.StabilizationDwellTicks;
+            tick++)
+            Step(receiver);
+        for (int tick = 0;
+            tick < controller.Definition.HandoffDwellTicks;
+            tick++)
+            Step(receiver);
+
+        Assert.Equal(CasevacPhase.Quiet, controller.Phase);
+
+        void Step(string siteId) {
+            sourceTick = checked(sourceTick + 1L);
+            controller.Advance(new CasevacTickObservation(
+                sourceTick,
+                vehicleFlyable: true,
+                insideSafeExitVolume: false,
+                Vec3D.Zero,
+                clearanceM: 0.0,
+                CasevacMaskingState.NotAssessed,
+                withinSafeMaskingBand: false,
+                protectionInterventionActive: false,
+                new LandingZoneObservation(
+                    siteId,
+                    insideTerminalVolume: true,
+                    insideEnterFootprint: true,
+                    insideExitFootprint: true,
+                    surfaceContact: true,
+                    lateralGroundSpeedMps: 0.0,
+                    verticalSpeedMps: 0.0,
+                    pitchRad: 0.0,
+                    bankRad: 0.0,
+                    LandingZoneGateViolation.None,
+                    LandingZoneGateViolation.None,
+                    LandingZoneGateClass.Advance)));
+        }
     }
 }

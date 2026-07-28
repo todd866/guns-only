@@ -386,6 +386,53 @@ public sealed class CasevacAssessmentTests {
     }
 
     [Fact]
+    public void RetainedRouteMarkerSelectsLongestReviewIntervalAndIsIdempotent() {
+        var recorder = new CasevacEvidenceRecorder(authorityTickHz: 12);
+        for (long sourceTick = 1; sourceTick <= 36; sourceTick++) {
+            bool exposed =
+                sourceTick <= 12 || sourceTick >= 19;
+            recorder.ObserveTick(
+                Observation(
+                    sourceTick,
+                    maskingState: exposed
+                        ? CasevacMaskingState.Exposed
+                        : CasevacMaskingState.Masked,
+                    withinSafeMaskingBand: true),
+                Snapshot(
+                    sourceTick,
+                    activeTicks: sourceTick,
+                    CasevacPhase.Ingress,
+                    targetSiteId: PickupSite));
+        }
+
+        CasevacRetainedCorrectionMarker.Record(recorder);
+        CasevacRetainedCorrectionMarker.Record(recorder);
+
+        CasevacCorrectionRange correction =
+            Assert.Single(recorder.CorrectionRanges.ToArray());
+        Assert.Equal(CasevacEvidenceStream.Route, correction.Stream);
+        Assert.Equal(19, correction.StartSourceTick);
+        Assert.Equal(31, correction.EndSourceTick);
+        Assert.Equal(6, recorder.RouteSampleCount);
+    }
+
+    [Fact]
+    public void RetainedRouteMarkerDoesNotReclassifySafeGoAroundAsCorrection() {
+        var recorder = new CasevacEvidenceRecorder(authorityTickHz: 12);
+        CasevacMissionSnapshot snapshot = RecordCompleted(
+            recorder,
+            issue: CasevacEventKind.ApproachDiscontinued,
+            firstPickupGate: BreakGate(PickupSite));
+
+        CasevacRetainedCorrectionMarker.Record(recorder);
+        CasevacAssessment assessment =
+            CasevacAssessmentEngine.Assess(recorder, snapshot);
+
+        Assert.Empty(recorder.CorrectionRanges.ToArray());
+        Assert.False(assessment.PrimaryCorrection.IsAvailable);
+    }
+
+    [Fact]
     public void IncoherentTimingFieldsAreNotAssessedRatherThanReinterpreted() {
         var recorder = new CasevacEvidenceRecorder(authorityTickHz: 12);
         CasevacMissionSnapshot snapshot = RecordCompleted(

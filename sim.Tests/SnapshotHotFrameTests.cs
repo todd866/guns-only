@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GunsOnly.Sim.Casevac;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Web;
@@ -52,9 +53,56 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(12, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(13, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
 
+        bool casevac = root.TryGetProperty("casevac_mission", out JsonElement casevacMission)
+            && casevacMission.GetBoolean();
+        JsonElement casevacBlock = layout.GetProperty("casevac_block");
+        int casevacPresenceIndex =
+            casevacBlock.GetProperty("presence_index").GetInt32();
+        if (casevac) {
+            Assert.Equal(1.0, buffer[casevacPresenceIndex]);
+            foreach (JsonElement slot in
+                casevacBlock.GetProperty("slots").EnumerateArray()) {
+                string name = slot.GetProperty("name").GetString()!;
+                int index = slot.GetProperty("index").GetInt32();
+                string kind = slot.GetProperty("kind").GetString()!;
+                Assert.True(root.TryGetProperty(name, out JsonElement field),
+                    $"casevac.{name}: JSON key missing");
+                switch (kind) {
+                    case "boolean":
+                        Assert.True(buffer[index] is 0.0 or 1.0,
+                            $"{name}: boolean slot holds {buffer[index]}");
+                        Assert.Equal(field.GetBoolean(), buffer[index] != 0.0);
+                        break;
+                    case "nullable":
+                        if (field.ValueKind == JsonValueKind.Null)
+                            Assert.True(double.IsNaN(buffer[index]),
+                                $"{name}: JSON null but slot holds {buffer[index]}");
+                        else
+                            AssertNumberEqual(name, field.GetDouble(), buffer[index]);
+                        break;
+                    default:
+                        AssertNumberEqual(name, field.GetDouble(), buffer[index]);
+                        break;
+                }
+            }
+
+            foreach (string combatKey in new[] {
+                "bx",
+                "bandit_alive",
+                "ammo",
+                "tracers",
+                "opponent_tracers",
+                "gun_trajectory"
+            })
+                Assert.False(root.TryGetProperty(combatKey, out _),
+                    $"CASEVAC projection leaked combat key {combatKey}");
+            return;
+        }
+
+        Assert.Equal(0.0, buffer[casevacPresenceIndex]);
         foreach (JsonElement block in layout.GetProperty("blocks").EnumerateArray()) {
             int presenceIndex = block.GetProperty("presence_index").GetInt32();
             bool present = presenceIndex < 0 || buffer[presenceIndex] != 0.0;
@@ -133,6 +181,7 @@ public class SnapshotHotFrameTests {
     [InlineData(8, false)]  // drone-raid defense: drone_detail block present
     [InlineData(9, false)]  // modern ace duel capstone
     [InlineData(10, false)] // Rapier fixed strip: recovery present, maritime carrier false
+    [InlineData(13, false)] // flight-first CASEVAC: separate commander-safe hot block
     [InlineData(7, true)]   // terrain surface drives radar_alt/below_ground paths
     public void HotFrameAgreesWithJsonAcrossBeatsAndSteps(int beatIndex, bool withTerrain) {
         SimulationSession session = StartSession(beatIndex,
@@ -141,6 +190,50 @@ public class SnapshotHotFrameTests {
             for (int tick = 0; tick < steps; tick++) session.StepFixed();
             var (root, buffer, document) = Project(session);
             using (document) AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    [Fact]
+    public void CasevacReadyFrameKeepsDestinationEnergyPlanAbsentUntilBegin() {
+        var session = new SimulationSession(
+            13,
+            Carrier.DeckConfiguration.Angled,
+            KoreaWeatherPresets.ForBeat(13));
+
+        var (readyRoot, readyBuffer, readyDocument) = Project(session);
+        using (readyDocument) {
+            Assert.Equal(
+                JsonValueKind.Null,
+                readyRoot.GetProperty(
+                    "casevac_destination_energy_target_id").ValueKind);
+            Assert.Equal(
+                JsonValueKind.Null,
+                readyRoot.GetProperty(
+                    "casevac_destination_energy_transit_s").ValueKind);
+            Assert.Equal(
+                JsonValueKind.Null,
+                readyRoot.GetProperty(
+                    "casevac_destination_reserve_kwh").ValueKind);
+            AssertHotFrameMatchesJson(readyRoot, readyBuffer);
+        }
+
+        session.Begin();
+        session.StepFixed();
+        var (activeRoot, activeBuffer, activeDocument) = Project(session);
+        using (activeDocument) {
+            Assert.Equal(
+                JsonValueKind.String,
+                activeRoot.GetProperty(
+                    "casevac_destination_energy_target_id").ValueKind);
+            Assert.Equal(
+                JsonValueKind.Number,
+                activeRoot.GetProperty(
+                    "casevac_destination_energy_transit_s").ValueKind);
+            Assert.Equal(
+                JsonValueKind.Number,
+                activeRoot.GetProperty(
+                    "casevac_destination_reserve_kwh").ValueKind);
+            AssertHotFrameMatchesJson(activeRoot, activeBuffer);
         }
     }
 
@@ -246,7 +339,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(12, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(13, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())
@@ -412,6 +505,68 @@ public class SnapshotHotFrameTests {
         SnapshotHotFrame.Fill(buffer, session, 100.0, 0.0, true);
         Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > afterPause + 1,
             "world-origin change did not bump cold_version");
+    }
+
+    [Fact]
+    public void CasevacHotNumbersAdvanceWithoutColdFetchPerFrameAndColdEdgesStillBump() {
+        SimulationSession session = StartSession(13, null);
+        session.StepFixed();
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        using JsonDocument layoutDocument =
+            JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
+        JsonElement casevacBlock =
+            layoutDocument.RootElement.GetProperty("casevac_block");
+        int SlotIndex(string name) => casevacBlock.GetProperty("slots")
+            .EnumerateArray()
+            .Single(slot => slot.GetProperty("name").GetString() == name)
+            .GetProperty("index").GetInt32();
+        int tickIndex = SlotIndex("tick");
+        int callAgeIndex = SlotIndex("casevac_call_age_s");
+        int remainingEnergyIndex =
+            SlotIndex("casevac_energy_remaining_kwh");
+
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double settledVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+        double firstTick = buffer[tickIndex];
+        double firstCallAge = buffer[callAgeIndex];
+        double firstRemainingEnergy = buffer[remainingEnergyIndex];
+
+        for (int tick = 0; tick < 30; tick++) {
+            session.StepFixed();
+            SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+            Assert.Equal(settledVersion,
+                buffer[SnapshotHotFrame.ColdVersionIndex]);
+        }
+        Assert.True(buffer[tickIndex] > firstTick);
+        Assert.True(buffer[callAgeIndex] > firstCallAge);
+        Assert.True(buffer[remainingEnergyIndex] < firstRemainingEnergy);
+
+        session.SetPaused(true);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double pausedVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+        Assert.True(pausedVersion > settledVersion);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        Assert.Equal(pausedVersion,
+            buffer[SnapshotHotFrame.ColdVersionIndex]);
+
+        session.SetPaused(false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double activeVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+        Assert.True(activeVersion > pausedVersion);
+
+        session.FeedKey(GKey.KnockItOff, true);
+        session.FeedKey(GKey.KnockItOff, false);
+        session.StepFixed();
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double abortVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+        Assert.True(abortVersion > activeVersion,
+            "phase/event/string edge did not bump CASEVAC cold_version");
+        Assert.Equal(CasevacPhase.AbortReturn,
+            session.CasevacFlight!.Snapshot.Phase);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        Assert.Equal(abortVersion,
+            buffer[SnapshotHotFrame.ColdVersionIndex]);
     }
 
     // The mode string and LSO advisory travel only in the cold JSON but are frame-cadence

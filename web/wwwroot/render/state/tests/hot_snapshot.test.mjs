@@ -48,6 +48,42 @@ const LAYOUT_JSON = JSON.stringify({
   ],
 });
 
+// The production CASEVAC block is a sibling of the combat blocks. Duplicate field names are
+// intentional: the cold snapshot's discriminator selects exactly one projection family.
+const CASEVAC_LAYOUT_JSON = JSON.stringify({
+  layout_version: 13,
+  slot_count: 14,
+  cold_version_index: 0,
+  blocks: [
+    {
+      name: "combat_core",
+      presence_index: -1,
+      slots: [
+        { name: "t", index: 1, kind: "number" },
+        { name: "paused_like", index: 2, kind: "boolean" },
+        { name: "bx", index: 3, kind: "number" },
+      ],
+    },
+  ],
+  tracers: [],
+  sample_arrays: [],
+  casevac_block: {
+    name: "casevac",
+    presence_index: 4,
+    slots: [
+      { name: "t", index: 5, kind: "number" },
+      { name: "tick", index: 6, kind: "number" },
+      { name: "px", index: 7, kind: "number" },
+      { name: "casevac_clock_running", index: 8, kind: "boolean" },
+      { name: "casevac_target_x", index: 9, kind: "nullable" },
+      { name: "casevac_target_range_m", index: 10, kind: "nullable" },
+      { name: "casevac_energy_remaining_kwh", index: 11, kind: "number" },
+      { name: "casevac_energy_depleted", index: 12, kind: "boolean" },
+      { name: "casevac_destination_reserve_kwh", index: 13, kind: "nullable" },
+    ],
+  },
+});
+
 const hotFrame = (overrides = {}) => {
   const hot = new Float64Array(25);
   hot[0] = 1;            // cold_version
@@ -60,6 +96,26 @@ const hotFrame = (overrides = {}) => {
   hot[7] = 0;            // maritime carrier false
   hot[8] = NaN;
   hot[9] = 0;            // no tracer rounds
+  for (const [index, value] of Object.entries(overrides)) hot[index] = value;
+  return hot;
+};
+
+const casevacHotFrame = (overrides = {}) => {
+  const hot = new Float64Array(14);
+  hot[0] = 1;       // cold_version
+  hot[1] = 999;     // combat t: must never overlay CASEVAC
+  hot[2] = 1;       // combat boolean: must remain absent
+  hot[3] = 123;     // bx: must remain absent
+  hot[4] = 1;       // CASEVAC block present
+  hot[5] = 12.5;    // CASEVAC t
+  hot[6] = 300;     // tick
+  hot[7] = -1800;   // px
+  hot[8] = 1;       // clock running
+  hot[9] = NaN;     // target x -> null
+  hot[10] = 420.5;  // target range
+  hot[11] = 449.75; // remaining fictional usable energy
+  hot[12] = 0;      // energy not depleted
+  hot[13] = 431.25; // projected destination reserve
   for (const [index, value] of Object.entries(overrides)) hot[index] = value;
   return hot;
 };
@@ -178,7 +234,7 @@ test("each frame returns a new object so retained snapshots never rewrite histor
   assert.equal(second.t, 99.0);
 });
 
-test("CASEVAC returns a fresh cold snapshot without manufacturing combat fields", () => {
+test("older layouts keep CASEVAC cold-only without manufacturing combat fields", () => {
   const layout = parseHotLayout(LAYOUT_JSON);
   const coldBase = {
     casevac_mission: true,
@@ -208,6 +264,43 @@ test("CASEVAC returns a fresh cold snapshot without manufacturing combat fields"
   assert.equal("paused_like" in first, false);
 });
 
+test("CASEVAC overlays only its numeric block and preserves combat-key absence", () => {
+  const layout = parseHotLayout(CASEVAC_LAYOUT_JSON);
+  const coldBase = {
+    casevac_mission: true,
+    t: 3.25,
+    tick: 1,
+    px: 0,
+    casevac_phase: "INGRESS",
+    casevac_clock_running: false,
+    casevac_target_x: 10,
+    casevac_target_range_m: null,
+    casevac_energy_remaining_kwh: 450,
+    casevac_energy_depleted: true,
+    casevac_destination_reserve_kwh: null,
+    opponent_present: false,
+  };
+  const state = decodeHotFrame(layout, casevacHotFrame(), coldBase);
+
+  assert.notEqual(state, coldBase);
+  assert.equal(layout.casevacBlock.name, "casevac");
+  assert.equal(state.t, 12.5);
+  assert.equal(state.tick, 300);
+  assert.equal(state.px, -1800);
+  assert.equal(state.casevac_clock_running, true);
+  assert.equal(state.casevac_target_x, null);
+  assert.equal(state.casevac_target_range_m, 420.5);
+  assert.equal(state.casevac_energy_remaining_kwh, 449.75);
+  assert.equal(state.casevac_energy_depleted, false);
+  assert.equal(state.casevac_destination_reserve_kwh, 431.25);
+  assert.equal(state.casevac_phase, "INGRESS");
+  assert.equal(state.opponent_present, false);
+  assert.equal("bx" in state, false);
+  assert.equal("paused_like" in state, false);
+  assert.equal("tracers" in state, false);
+  assert.equal("gun_trajectory" in state, false);
+});
+
 test("source fetches cold on first frame, version bumps, and fallback expiry only", () => {
   let fetches = 0;
   let version = 1;
@@ -230,25 +323,46 @@ test("source fetches cold on first frame, version bumps, and fallback expiry onl
   assert.equal(fetches, 3);
 });
 
-test("CASEVAC source follows every cold-version bump without a combat overlay", () => {
+test("CASEVAC source keeps cold fetches low while numeric hot values advance", () => {
   let fetches = 0;
   let version = 1;
+  let tick = 100;
+  let phase = "INGRESS";
   const source = createHotSnapshotSource({
-    layoutJson: LAYOUT_JSON,
-    readHotFrame: () => hotFrame({ 0: version++ }),
+    layoutJson: CASEVAC_LAYOUT_JSON,
+    readHotFrame: () => casevacHotFrame({
+      0: version,
+      5: tick / 120,
+      6: tick,
+    }),
     fetchColdState: () => ({
       casevac_mission: true,
-      casevac_phase: fetches++ === 0 ? "INGRESS" : "PICKUP_APPROACH",
+      casevac_phase: phase,
       opponent_present: false,
+      fetchedAt: ++fetches,
     }),
     fallbackMs: 250,
   });
 
   const first = source.frame(1000);
+  tick = 101;
   const second = source.frame(1016);
   assert.equal(first.casevac_phase, "INGRESS");
-  assert.equal(second.casevac_phase, "PICKUP_APPROACH");
-  assert.equal("t" in first, false);
+  assert.equal(second.casevac_phase, "INGRESS");
+  assert.equal(first.tick, 100);
+  assert.equal(second.tick, 101);
+  assert.equal(first.fetchedAt, 1);
+  assert.equal(second.fetchedAt, 1);
+  assert.equal(source.diagnostics().coldFetches, 1);
+
+  phase = "PICKUP_APPROACH";
+  version = 2;
+  tick = 102;
+  const edge = source.frame(1032);
+  assert.equal(edge.casevac_phase, "PICKUP_APPROACH");
+  assert.equal(edge.tick, 102);
+  assert.equal(edge.fetchedAt, 2);
+  assert.equal("bx" in edge, false);
   assert.equal("tracers" in second, false);
   assert.equal(source.diagnostics().coldFetches, 2);
 });

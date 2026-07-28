@@ -90,6 +90,104 @@ public sealed record CasevacAssessment(
 }
 
 /// <summary>
+/// Selects replay-supported correction clips from retained authoritative samples. This remains
+/// separate from assessment so assessment stays pure: the production runtime invokes it once when
+/// a disposition first latches, before any terminal debrief is projected.
+/// </summary>
+internal static class CasevacRetainedCorrectionMarker {
+    const int RouteOutsideSafeBandPriority = 30;
+    const int RouteExposedPriority = 40;
+
+    readonly record struct SampleRun(
+        long StartSourceTick,
+        long EndSourceTick,
+        int SampleCount,
+        int OutsideSafeBandSampleCount);
+
+    public static void Record(CasevacEvidenceRecorder evidence) {
+        ArgumentNullException.ThrowIfNull(evidence);
+        RecordWorstRouteRun(evidence);
+    }
+
+    static void RecordWorstRouteRun(CasevacEvidenceRecorder evidence) {
+        ReadOnlySpan<CasevacEvidenceSample> samples =
+            evidence.RouteSamples.Span;
+        SampleRun? current = null;
+        SampleRun? worst = null;
+        foreach (CasevacEvidenceSample sample in samples) {
+            bool needsReview =
+                IsRoutePhase(sample.Phase)
+                && !sample.InsideTerminalVolume
+                && (sample.MaskingState == CasevacMaskingState.Exposed
+                    || !sample.WithinSafeMaskingBand);
+            if (!needsReview
+                || (current.HasValue
+                    && sample.SourceTick
+                        - current.Value.EndSourceTick
+                        > evidence.RouteStrideTicks)) {
+                ConsiderWorstRouteRun(current, ref worst);
+                current = null;
+            }
+            if (!needsReview) continue;
+
+            int outsideSafeBand =
+                sample.WithinSafeMaskingBand ? 0 : 1;
+            current = current.HasValue
+                ? current.Value with {
+                    EndSourceTick = sample.SourceTick,
+                    SampleCount = current.Value.SampleCount + 1,
+                    OutsideSafeBandSampleCount =
+                        current.Value.OutsideSafeBandSampleCount
+                        + outsideSafeBand
+                }
+                : new SampleRun(
+                    sample.SourceTick,
+                    sample.SourceTick,
+                    SampleCount: 1,
+                    OutsideSafeBandSampleCount: outsideSafeBand);
+        }
+        ConsiderWorstRouteRun(current, ref worst);
+        if (!worst.HasValue) return;
+
+        bool outsideBand =
+            worst.Value.OutsideSafeBandSampleCount > 0;
+        evidence.ConsiderCorrection(new CasevacCorrectionRange(
+            CasevacEvidenceStream.Route,
+            worst.Value.StartSourceTick,
+            worst.Value.EndSourceTick,
+            outsideBand
+                ? RouteOutsideSafeBandPriority
+                : RouteExposedPriority,
+            outsideBand
+                ? "derived-route-outside-safe-band-v1"
+                : "derived-route-exposed-v1"));
+    }
+
+    static void ConsiderWorstRouteRun(
+        SampleRun? candidate,
+        ref SampleRun? worst) {
+        if (!candidate.HasValue) return;
+        if (!worst.HasValue
+            || candidate.Value.SampleCount > worst.Value.SampleCount
+            || (candidate.Value.SampleCount == worst.Value.SampleCount
+                && candidate.Value.OutsideSafeBandSampleCount
+                    > worst.Value.OutsideSafeBandSampleCount)
+            || (candidate.Value.SampleCount == worst.Value.SampleCount
+                && candidate.Value.OutsideSafeBandSampleCount
+                    == worst.Value.OutsideSafeBandSampleCount
+                && candidate.Value.StartSourceTick
+                    < worst.Value.StartSourceTick))
+            worst = candidate;
+    }
+
+    static bool IsRoutePhase(CasevacPhase phase) =>
+        phase is CasevacPhase.Ingress
+            or CasevacPhase.PickupApproach
+            or CasevacPhase.Outbound
+            or CasevacPhase.DropoffApproach;
+}
+
+/// <summary>
 /// Pure, deterministic assessment over one mission epoch's observer-safe aggregates and final
 /// snapshot. It does not mutate the recorder or fill gaps in recorded evidence.
 /// </summary>

@@ -46,17 +46,104 @@ public readonly record struct CasevacTargetGuidance(
 }
 
 /// <summary>
+/// Deterministic planning result for the current mission destination. This is a fictional
+/// usable-energy budget, not a performance claim for a real aircraft.
+/// </summary>
+public readonly record struct CasevacDestinationEnergyPlan(
+    string? TargetId,
+    double PlannedTransitSeconds,
+    double ProjectedReserveEnergyJ,
+    double ProjectedReserveFraction,
+    double ProjectedReserveEnduranceSeconds) {
+
+    public static CasevacDestinationEnergyPlan None { get; } =
+        new(null, 0.0, 0.0, 0.0, 0.0);
+}
+
+/// <summary>
+/// One collision-authoritative primitive translated into the runtime's terrain-resolved world
+/// frame. Browser projections may mirror these immutable facts for presentation, but collision
+/// remains owned by the simulation.
+/// </summary>
+public sealed class CasevacResolvedCollisionObstacle {
+    internal CasevacResolvedCollisionObstacle(
+        string id,
+        CasevacCollisionPrimitive primitive,
+        in Vec3D firstWorldM,
+        in Vec3D secondWorldM,
+        double radiusM) {
+        Id = id;
+        Primitive = primitive;
+        FirstWorldM = firstWorldM;
+        SecondWorldM = secondWorldM;
+        RadiusM = radiusM;
+    }
+
+    public string Id { get; }
+    public CasevacCollisionPrimitive Primitive { get; }
+    public Vec3D FirstWorldM { get; }
+    public Vec3D SecondWorldM { get; }
+    public double RadiusM { get; }
+}
+
+/// <summary>
+/// One authored route control point with its terrain-resolved surface in the runtime world frame.
+/// </summary>
+public readonly record struct CasevacResolvedRouteControlPoint(
+    string Id,
+    double EastM,
+    double SurfaceElevationM,
+    double NorthM,
+    double TargetAglM,
+    double CorridorRadiusM);
+
+/// <summary>
+/// One immutable reference route whose control points have been resolved against mission terrain.
+/// </summary>
+public sealed class CasevacResolvedRoute {
+    readonly IReadOnlyList<CasevacResolvedRouteControlPoint> _points;
+
+    internal CasevacResolvedRoute(
+        CasevacRouteDefinition authored,
+        CasevacResolvedRouteControlPoint[] points) {
+        Id = authored.Id;
+        Leg = authored.Leg;
+        StartLocationId = authored.StartLocationId;
+        EndLocationId = authored.EndLocationId;
+        HorizontalLengthM = authored.HorizontalLengthM;
+        _points = Array.AsReadOnly(points);
+    }
+
+    public string Id { get; }
+    public CasevacRouteLeg Leg { get; }
+    public string StartLocationId { get; }
+    public string EndLocationId { get; }
+    public double HorizontalLengthM { get; }
+    public IReadOnlyList<CasevacResolvedRouteControlPoint> Points =>
+        _points;
+}
+
+/// <summary>
 /// One deterministic flight-first CASEVAC runtime. SimulationSession remains the only lifecycle
 /// and fixed-step authority; this object advances exactly once for each unpaused source tick.
 /// </summary>
 public sealed class CasevacFlightRuntime {
+    public const string EnergyModelId =
+        "energy.casevac.fictional-usable-ledger.v1";
     public const int RecentEventCapacity = 64;
     public const double RecurringBaseMassKg = 5_850.0;
     public const double VehicleCollisionRadiusM = 2.6;
-    public const double MaximumForwardSpeedMps = 20.0;
+    public const double MaximumForwardSpeedMps = 28.0;
     public const double MaximumReverseSpeedMps = 8.0;
     public const double MaximumLateralSpeedMps = 11.0;
     public const double MaximumVerticalSpeedMps = 2.0;
+    // Fictional, declared planning assumptions for this reduced-order vehicle. The ledger alone
+    // is authoritative: it integrates the vehicle provider's applied shaft power at 120 Hz.
+    public const double DefaultInitialUsableEnergyJ =
+        450.0 * 3_600_000.0;
+    public const double PlanningPowerW = 1_150_000.0;
+    public const double PlanningGroundSpeedMps = 22.0;
+    public const double PlanningArrivalAllowanceSeconds = 30.0;
 
     const double HorizontalVelocityGain = 0.075;
     const double VerticalVelocityGain = 0.075;
@@ -79,6 +166,10 @@ public sealed class CasevacFlightRuntime {
     readonly double _receiverSurfaceM;
     readonly double _safeExitSurfaceM;
     readonly double[] _obstacleSurfaceM;
+    readonly IReadOnlyList<CasevacResolvedCollisionObstacle>
+        _resolvedCollisionObstacles;
+    readonly IReadOnlyList<CasevacResolvedRoute> _resolvedRoutes;
+    readonly double _initialUsableEnergyJ;
 
     CasevacMissionSnapshot _snapshot;
     LandingZoneObservation _lastLandingZone = LandingZoneObservation.None;
@@ -89,16 +180,37 @@ public sealed class CasevacFlightRuntime {
     long _vehicleAuthorityTick;
     bool _begun;
     bool _obstacleCollisionLatched;
+    bool _retainedCorrectionsRecorded;
+    double _consumedEnergyJ;
 
     public CasevacFlightRuntime(
         CasevacCourseDefinition course,
         ITerrainSurface? terrain,
         WeatherProfile? weather,
-        Func<long> allocateEventSequence) {
+        Func<long> allocateEventSequence)
+        : this(
+            course,
+            terrain,
+            weather,
+            allocateEventSequence,
+            DefaultInitialUsableEnergyJ) {
+    }
+
+    internal CasevacFlightRuntime(
+        CasevacCourseDefinition course,
+        ITerrainSurface? terrain,
+        WeatherProfile? weather,
+        Func<long> allocateEventSequence,
+        double initialUsableEnergyJ) {
         _course = course ?? throw new ArgumentNullException(nameof(course));
         _terrain = terrain;
         _weather = weather;
         ArgumentNullException.ThrowIfNull(allocateEventSequence);
+        if (!double.IsFinite(initialUsableEnergyJ)
+            || initialUsableEnergyJ <= 0.0)
+            throw new ArgumentOutOfRangeException(
+                nameof(initialUsableEnergyJ));
+        _initialUsableEnergyJ = initialUsableEnergyJ;
 
         _startSurfaceM = ResolveSurfaceElevation(
             course.World.StartPosition,
@@ -114,14 +226,61 @@ public sealed class CasevacFlightRuntime {
             course.World.SafeExit.SurfaceDatumM);
         _obstacleSurfaceM =
             new double[course.World.CollisionAuthority.Obstacles.Count];
+        var resolvedObstacles =
+            new CasevacResolvedCollisionObstacle[_obstacleSurfaceM.Length];
         for (int index = 0;
             index < _obstacleSurfaceM.Length;
             index++) {
+            CasevacCollisionObstacleDefinition obstacle =
+                course.World.CollisionAuthority.Obstacles[index];
             _obstacleSurfaceM[index] = ResolveSurfaceElevation(
-                ObstacleAnchor(
-                    course.World.CollisionAuthority.Obstacles[index]),
+                ObstacleAnchor(obstacle),
                 authoredFallbackM: 0.0);
+            var surfaceOffset =
+                new Vec3D(0.0, _obstacleSurfaceM[index], 0.0);
+            resolvedObstacles[index] =
+                new CasevacResolvedCollisionObstacle(
+                    obstacle.Id,
+                    obstacle.Primitive,
+                    obstacle.First + surfaceOffset,
+                    obstacle.Second + surfaceOffset,
+                    obstacle.RadiusM);
         }
+        _resolvedCollisionObstacles =
+            Array.AsReadOnly(resolvedObstacles);
+
+        var resolvedRoutes =
+            new CasevacResolvedRoute[course.World.Routes.Count];
+        for (int routeIndex = 0;
+            routeIndex < resolvedRoutes.Length;
+            routeIndex++) {
+            CasevacRouteDefinition authoredRoute =
+                course.World.Routes[routeIndex];
+            var resolvedPoints =
+                new CasevacResolvedRouteControlPoint[
+                    authoredRoute.Points.Count];
+            for (int pointIndex = 0;
+                pointIndex < resolvedPoints.Length;
+                pointIndex++) {
+                CasevacRouteControlPointDefinition authoredPoint =
+                    authoredRoute.Points[pointIndex];
+                resolvedPoints[pointIndex] =
+                    new CasevacResolvedRouteControlPoint(
+                        authoredPoint.Id,
+                        authoredPoint.Position.XM,
+                        ResolveSurfaceElevation(
+                            authoredPoint.Position,
+                            authoredFallbackM: 0.0),
+                        authoredPoint.Position.ZM,
+                        authoredPoint.TargetAglM,
+                        authoredPoint.CorridorRadiusM);
+            }
+            resolvedRoutes[routeIndex] =
+                new CasevacResolvedRoute(
+                    authoredRoute,
+                    resolvedPoints);
+        }
+        _resolvedRoutes = Array.AsReadOnly(resolvedRoutes);
 
         CasevacHorizontalPoint start = course.World.StartPosition;
         CasevacHorizontalPoint pickup = course.World.Pickup.Centre;
@@ -150,8 +309,22 @@ public sealed class CasevacFlightRuntime {
     public PlayerVehicleState VehicleState => _vehicle.State;
     public PlayerVehicleObservation VehicleObservation => _vehicle.Observation;
     public bool VehicleFlyable =>
-        _vehicle.State.Flyable && !_obstacleCollisionLatched;
+        _vehicle.State.Flyable
+        && !_obstacleCollisionLatched
+        && !EnergyDepleted;
     public bool ObstacleCollisionLatched => _obstacleCollisionLatched;
+    public double InitialUsableEnergyJ => _initialUsableEnergyJ;
+    public double ConsumedEnergyJ => _consumedEnergyJ;
+    public double RemainingUsableEnergyJ => Math.Max(
+        0.0,
+        _initialUsableEnergyJ - _consumedEnergyJ);
+    public double RemainingEnergyFraction => Math.Clamp(
+        RemainingUsableEnergyJ / _initialUsableEnergyJ,
+        0.0,
+        1.0);
+    public double PlanningEnduranceSeconds =>
+        RemainingUsableEnergyJ / PlanningPowerW;
+    public bool EnergyDepleted => RemainingUsableEnergyJ <= 0.0;
     public CasevacMissionController Controller => _controller;
     public CasevacMissionSnapshot Snapshot => _snapshot;
     public CasevacEvidenceRecorder Evidence => _evidence;
@@ -160,6 +333,10 @@ public sealed class CasevacFlightRuntime {
     public CasevacTickObservation? LastTickObservation => _lastTickObservation;
     public IReadOnlyList<CasevacMissionEventRecord> RecentEvents =>
         _recentEvents;
+    public IReadOnlyList<CasevacResolvedCollisionObstacle>
+        ResolvedCollisionObstacles => _resolvedCollisionObstacles;
+    public IReadOnlyList<CasevacResolvedRoute> ResolvedRoutes =>
+        _resolvedRoutes;
     public bool Begun => _begun;
     public bool IsTerminal => _controller.IsTerminal;
 
@@ -198,6 +375,9 @@ public sealed class CasevacFlightRuntime {
     public CasevacTargetGuidance TargetGuidance =>
         BuildTargetGuidance(_snapshot.TargetSiteId);
 
+    public CasevacDestinationEnergyPlan DestinationEnergyPlan =>
+        BuildDestinationEnergyPlan(TargetGuidance);
+
     public CasevacMissionSnapshot Begin(long sourceTick) {
         if (_begun)
             throw new InvalidOperationException(
@@ -206,6 +386,19 @@ public sealed class CasevacFlightRuntime {
         _begun = true;
         _lastSourceTick = sourceTick;
         return _snapshot;
+    }
+
+    /// <summary>
+    /// Acknowledges the already-entered quiet aftermath without simulating another vehicle or
+    /// mission tick. Calls before Quiet and repeated calls after completion fail closed.
+    /// </summary>
+    public bool RequestQuietSkip() {
+        if (!_begun || _controller.Phase != CasevacPhase.Quiet)
+            return false;
+        if (!_controller.RequestQuietSkip())
+            return false;
+        _snapshot = _controller.Snapshot;
+        return true;
     }
 
     public CasevacMissionSnapshot Advance(
@@ -240,6 +433,7 @@ public sealed class CasevacFlightRuntime {
                 ProtectionIntervention:
                     VehicleProtectionInterventionEvidence.None));
         _vehicleAuthorityTick++;
+        IntegrateAppliedEnergy(result.Observation.Power);
 
         Vec3D position = result.Observation.PositionWorldM;
         if (!_obstacleCollisionLatched
@@ -273,9 +467,25 @@ public sealed class CasevacFlightRuntime {
             tickObservation,
             intent.MissionCommand);
         _evidence.ObserveTick(tickObservation, _snapshot);
+        if (!_retainedCorrectionsRecorded
+            && _snapshot.Disposition != CasevacDisposition.Pending) {
+            CasevacRetainedCorrectionMarker.Record(_evidence);
+            _retainedCorrectionsRecorded = true;
+        }
         _lastTickObservation = tickObservation;
         _lastSourceTick = sourceTick;
         return _snapshot;
+    }
+
+    void IntegrateAppliedEnergy(
+        in VehiclePowerObservation power) {
+        if (power.Assessment != VehiclePowerAssessment.Assessed
+            || !double.IsFinite(power.AppliedPowerW)
+            || power.AppliedPowerW < 0.0)
+            throw new InvalidOperationException(
+                "The CASEVAC energy ledger requires finite, assessed, non-negative applied power.");
+        _consumedEnergyJ +=
+            power.AppliedPowerW / AircraftSim.TickHz;
     }
 
     PlayerVehicleEnvironmentSample ResolveEnvironment(in Vec3D position) {
@@ -681,6 +891,25 @@ public sealed class CasevacFlightRuntime {
             bearing,
             relative,
             rangeM / planningSpeedMps);
+    }
+
+    CasevacDestinationEnergyPlan BuildDestinationEnergyPlan(
+        in CasevacTargetGuidance guidance) {
+        if (guidance.TargetId is null)
+            return CasevacDestinationEnergyPlan.None;
+
+        double transitSeconds =
+            guidance.HorizontalRangeM / PlanningGroundSpeedMps
+            + PlanningArrivalAllowanceSeconds;
+        double projectedReserveEnergyJ =
+            RemainingUsableEnergyJ
+            - transitSeconds * PlanningPowerW;
+        return new CasevacDestinationEnergyPlan(
+            guidance.TargetId,
+            transitSeconds,
+            projectedReserveEnergyJ,
+            projectedReserveEnergyJ / _initialUsableEnergyJ,
+            projectedReserveEnergyJ / PlanningPowerW);
     }
 
     void ObserveMissionEvent(

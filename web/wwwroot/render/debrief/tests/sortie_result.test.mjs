@@ -4,6 +4,63 @@ import test from "node:test";
 
 import { sortieResultCopy } from "../sortie_result.js";
 
+test("medevac handoff debrief uses custody and coordination evidence, never combat copy", () => {
+  const onTime = sortieResultCopy({
+    casevac_mission: true,
+    casevac_disposition: "TRANSFERRED_ON_TIME",
+    casevac_assessment_safe: "PASS",
+    casevac_assessment_controlled: "PASS",
+    casevac_assessment_masked: "ASSESSED",
+    casevac_assessment_timely: "ASSESSED",
+    casevac_primary_correction: "Hold the masked lane until the orchard turn.",
+    sortie_outcome: "VICTORY",
+  });
+  const late = sortieResultCopy({
+    casevac_mission: true,
+    casevac_disposition: "TRANSFERRED_AFTER_REQUESTED_TIME",
+    casevac_assessment_safe: "PASS",
+    casevac_assessment_controlled: "PASS",
+    casevac_assessment_masked: "ASSESSED",
+    casevac_assessment_timely: "ASSESSED",
+  });
+
+  assert.equal(onTime.title, "Handoff Complete");
+  assert.match(onTime.brief, /custody transferred.*within the requested coordination window/i);
+  assert.match(onTime.brief,
+    /Safe: PASS · Controlled: PASS · Masked: ASSESSED · Timely: ASSESSED/);
+  assert.match(onTime.brief, /Hold the masked lane/);
+  assert.doesNotMatch(onTime.brief, /victory|opponent|patient|surviv|treatment/i);
+  assert.equal(late.title, "Handoff After Requested Time");
+  assert.match(late.brief, /after the requested coordination window/i);
+  assert.doesNotMatch(late.brief, /death|died|patient/i);
+  assert.match(late.brief, /No primary correction was recorded/);
+});
+
+test("medevac terminal dispositions preserve capsule custody and never invent a fight", () => {
+  const aborted = sortieResultCopy({
+    casevac_mission: true,
+    casevac_disposition: "CONTROLLED_ABORT",
+  });
+  const lostEmpty = sortieResultCopy({
+    casevac_mission: true,
+    casevac_disposition: "AIRCRAFT_LOST_EMPTY",
+  });
+  const lostOccupied = sortieResultCopy({
+    casevac_mission: true,
+    casevac_disposition: "AIRCRAFT_LOST_OCCUPIED",
+  });
+
+  assert.equal(aborted.title, "Controlled Abort");
+  assert.match(aborted.brief, /safe-exit volume/i);
+  assert.equal(lostEmpty.title, "Aircraft Lost");
+  assert.match(lostEmpty.brief, /before capsule custody transferred aboard/i);
+  assert.equal(lostOccupied.title, "Aircraft Lost With Capsule Aboard");
+  assert.match(lostOccupied.brief, /custody remained aboard/i);
+  for (const result of [aborted, lostEmpty, lostOccupied]) {
+    assert.doesNotMatch(result.brief, /victory|opponent|gun|patient|surviv/i);
+  }
+});
+
 test("carrier water loss teaches from the recorded physical cause", () => {
   const result = sortieResultCopy({
     sortie_outcome: "DEFEAT",
