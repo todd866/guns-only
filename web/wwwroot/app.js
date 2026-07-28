@@ -3410,13 +3410,16 @@ function launchMission(index = selectedBeat) {
   return beginFlight();
 }
 
+function restartMission() {
+  enterReady();
+}
+
+// Called only from real pilot gestures (ready click, fly-again, Enter). Boot-time auto launch
+// goes through launchMission, which must never arm audio — the enable contract test slices
+// launchMission..restartMission to enforce that, so this helper lives below the guarded span.
 function primeSelectedMissionAudio() {
   activeView?.hud.armAudio();
   if (selectedBeat === 13) primeCasevacAudio();
-}
-
-function restartMission() {
-  enterReady();
 }
 
 function restartMissionNow() {
