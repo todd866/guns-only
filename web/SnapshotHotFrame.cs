@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 14;
+    public const int LayoutVersion = 15;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -136,15 +136,22 @@ internal static class SnapshotHotFrame {
         Num("rapier_lob_skip_max", RawInteger);
         Num("rapier_rcs_gas_frac", 3);
         Num("rapier_rcs_authority", 3);
+        Num("rapier_rcs_moment_nm", 1);
+        Num("rapier_rcs_firing_frac", 3);
         Bool("rapier_zoom_lob");
         Num("rapier_commanded_mach", 2);
         Num("rapier_skin_mach_limit", 2);
+        Nul("rapier_material_mach_ceiling", 2);
         Num("rapier_authored_target_mach", 2);
         Num("rapier_turbine_thrust_kn", 2);
         Num("rapier_ramjet_thrust_kn", 2);
         Num("rapier_turbine_fuel_ppm", 2);
         Num("rapier_ramjet_fuel_ppm", 2);
+        Num("rapier_skin_temp_c", 0);
+        Num("rapier_recovery_temp_c", 0);
         Num("rapier_stagnation_temp_c", 0);
+        Nul("rapier_cmc_capability_c", 0);
+        Nul("rapier_cmc_margin_c", 0);
         Num("rapier_thermal_margin_c", 0);
         Num("player_gross_lb", 0);
         Num("rapier_intercept_eti_min", 1);
@@ -584,17 +591,29 @@ internal static class SnapshotHotFrame {
         double equivalentAirspeedMps = AirData.EquivalentAirspeedMps(
             trueAirspeedMps, playerPosition.Y, atmosphere);
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
-        // Lagged structural skin (heat capacity). Instantaneous adiabatic wall temperature falls on
-        // a decelerating dive; publishing that as "skin" made the HUD cool from 100 kft to sea
-        // level. Limit schedules still use AirData.AdiabaticWallTemperatureK / MachLimit.
-        double rapierStagnationTempC = player.SkinTemperatureK > 0.0
+        // Keep the three physical channels separate:
+        // - lagged wall skin is a provisional structural-soak surrogate;
+        // - recovery temperature is the instantaneous turbulent flat-skin equilibrium target;
+        // - stagnation T0 is the thermodynamic upper bound at an inlet lip / leading edge.
+        // Build 174 put the first value in a field named "stagnation", making the HUD comparison
+        // physically ambiguous. The canonical fields below make location and time response explicit.
+        double rapierRecoveryTempC =
+            AirData.AdiabaticWallTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
+        double rapierSkinTempC = player.SkinTemperatureK > 0.0
             ? player.SkinTemperatureK - 273.15
-            : AirData.AdiabaticWallTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
-        // Read from the AIRFRAME, never hardcoded. This was 900 C (the Mach-4 engine's number),
-        // then 320 C (steel), while the aircraft moved to a 1200 C CMC hot structure — so the HUD
-        // reported the pilot 150 C over a limit they were nowhere near. A displayed limit that does
-        // not come from the thing it is limiting will always drift out of date.
-        double rapierThermalLimitC =
+            : rapierRecoveryTempC;
+        double rapierStagnationTempC =
+            AirData.StagnationTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
+        double? rapierCmcCapabilityC = session.RapierMissionAvailable
+            && session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
+                ? session.Beat.PlayerAir.SkinTemperatureLimitK - 273.15
+                : null;
+        double? rapierCmcMarginC = rapierCmcCapabilityC is { } cmcCapabilityC
+            ? cmcCapabilityC - rapierStagnationTempC
+            : null;
+        // Compatibility field: retain the old numeric shape, but make its reference conservative
+        // and truthful (material capability minus T0, never capability minus lagged wall skin).
+        double rapierLegacyThermalLimitC =
             (session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
                 ? session.Beat.PlayerAir.SkinTemperatureLimitK : 593.15) - 273.15;
         // Minutes to the contact at present closure; negative means "do not show". Inside 20 km
@@ -681,12 +700,26 @@ internal static class SnapshotHotFrame {
         double surfaceAltitudeM = session.Terrain?.TrySample(
             playerPosition.X, playerPosition.Z, out TerrainSample terrainSample) == true
                 ? terrainSample.HeightM : 0.0;
-        if (carrier is not null && carrier.WithinDeckFootprint(playerPosition))
+        double supportReferenceHeightM = 0.0;
+        if (carrier is not null
+            && session.Catapult.TryLaunchSupportSurfaceHeight(
+                carrier,
+                playerPosition,
+                RapierLaunchSite.AircraftHalfSpanM + 0.5,
+                out double launchSurfaceHeightM)) {
+            surfaceAltitudeM = launchSurfaceHeightM;
+            supportReferenceHeightM = carrier.AircraftSupportReferenceHeightM;
+        } else if (carrier is not null && carrier.WithinDeckFootprint(playerPosition)) {
             surfaceAltitudeM = playerPosition.Y - carrier.DeckFrame(playerPosition).height;
+            supportReferenceHeightM = carrier.AircraftSupportReferenceHeightM;
+        }
         if (session.ConventionalRunwayRecovery?.Runway is { } runway
             && runway.ContainsPavement(playerPosition, marginM: 2.0))
             surfaceAltitudeM = runway.Threshold.Y;
         double radarAltitudeM = Math.Max(0.0, playerPosition.Y - surfaceAltitudeM);
+        double supportClearanceM =
+            playerPosition.Y - supportReferenceHeightM - surfaceAltitudeM;
+        bool belowGround = supportClearanceM < -RapierLaunchSite.SurfaceContactToleranceM;
         double verticalSpeedMps = arrested ? 0.0 : s.VelocityVector().Y;
         var engine = player.LastEngineOperatingPoint;
         double sustainedG = Protection.SustainedG(s, beat.PlayerAir,
@@ -737,18 +770,27 @@ internal static class SnapshotHotFrame {
         w.Num("rapier_lob_skip_max", session.RapierLobSkipMax, RawInteger);
         w.Num("rapier_rcs_gas_frac", session.RapierRcsGasFraction, 3);
         w.Num("rapier_rcs_authority", session.RapierRcsAuthority, 3);
+        w.Num("rapier_rcs_moment_nm", session.RapierRcsMomentMagnitudeNm, 1);
+        w.Num("rapier_rcs_firing_frac", session.RapierRcsFiringFraction, 3);
         w.Bool("rapier_zoom_lob", session.Beat.ScriptedIntercept?.ZoomLobProfile == true);
         w.Num("rapier_commanded_mach", session.RapierCommandedMach, 2);
         w.Num("rapier_skin_mach_limit",
             double.IsFinite(session.RapierSkinMachLimit) ? session.RapierSkinMachLimit : 0.0, 2);
+        w.Nul("rapier_material_mach_ceiling",
+            session.RapierMissionAvailable && double.IsFinite(session.RapierSkinMachLimit)
+                ? session.RapierSkinMachLimit : null, 2);
         w.Num("rapier_authored_target_mach", session.RapierAuthoredTargetMach, 2);
         w.Num("rapier_turbine_thrust_kn", session.RapierTurbineThrustN / 1000.0, 2);
         w.Num("rapier_ramjet_thrust_kn", session.RapierRamjetThrustN / 1000.0, 2);
         w.Num("rapier_turbine_fuel_ppm", session.RapierTurbineFuelFlowLbPerMinute, 2);
         w.Num("rapier_ramjet_fuel_ppm", session.RapierRamjetFuelFlowLbPerMinute, 2);
+        w.Num("rapier_skin_temp_c", rapierSkinTempC, 0);
+        w.Num("rapier_recovery_temp_c", rapierRecoveryTempC, 0);
         w.Num("rapier_stagnation_temp_c", rapierStagnationTempC, 0);
+        w.Nul("rapier_cmc_capability_c", rapierCmcCapabilityC, 0);
+        w.Nul("rapier_cmc_margin_c", rapierCmcMarginC, 0);
         w.Num("rapier_thermal_margin_c",
-            rapierThermalLimitC - rapierStagnationTempC, 0);
+            rapierLegacyThermalLimitC - rapierStagnationTempC, 0);
         w.Num("player_gross_lb", session.Player.State.Mass * 2.20462262, 0);
         w.Num("rapier_intercept_eti_min", interceptEtiMinutes, 1);
         w.Num("px", playerPosition.X, 3); w.Num("py", playerPosition.Y, 3); w.Num("pz", playerPosition.Z, 3);
@@ -979,7 +1021,7 @@ internal static class SnapshotHotFrame {
         w.Bool("opponent_replacement_pending", session.OpponentReplacementPending);
         w.Num("opponent_replacement_s", session.OpponentReplacementSeconds, 3);
         w.Bool("splash_cue", splashCue);
-        w.Bool("below_ground", playerPosition.Y <= surfaceAltitudeM);
+        w.Bool("below_ground", belowGround);
         w.Num("shots_total", session.ShotsTotal, RawInteger);
         w.Num("shots_in_window", session.ShotsInWindow, RawInteger);
         w.Num("combat_handoff_phase", (int)session.CombatHandoffPhase, RawInteger);

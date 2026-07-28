@@ -117,8 +117,9 @@ test("slowing down improves LB/NM and reserve minutes", () => {
   assert.ok(Number(slow.rows[3].value) > Number(fast.rows[3].value));
 });
 
-test("skin over forces fault accent on nav panel", () => {
+test("Rapier CMC stagnation overage forces fault accent on nav panel", () => {
   const panel = limitsPanelPresentation({
+    rapier_mission_available: true,
     recovery_point_known: true,
     fuel_lb: 4000,
     fuel_flow_pph: 3000,
@@ -132,7 +133,7 @@ test("skin over forces fault accent on nav panel", () => {
     fuel_on_arrival_estimate_lb: 3750,
     fuel_reserve_target_lb: 1000,
     fuel_reserve_margin_lb: 2750,
-    rapier_thermal_margin_c: -150,
+    rapier_cmc_margin_c: -150,
   });
   assert.equal(panel.profile, "nav");
   assert.equal(panel.accent, "fault");

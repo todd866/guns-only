@@ -78,7 +78,9 @@ export function recoveryNavigationPresentation(state = {}) {
 }
 
 function thermalAccent(state, base) {
-  const marginC = finiteNumber(state.rapier_thermal_margin_c);
+  if (state.rapier_mission_available !== true) return base;
+  const marginC = finiteNumber(state.rapier_cmc_margin_c)
+    ?? finiteNumber(state.rapier_thermal_margin_c);
   if (marginC === null) return base;
   if (marginC < 0) return "fault";
   if (marginC < 40 && base === "normal") return "caution";

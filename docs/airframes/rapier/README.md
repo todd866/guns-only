@@ -26,8 +26,9 @@ bible should be updated to match.
 
 ## The freeze (read this before anything else)
 
-**CMC hot structure** qualified to ~1200 °C sustained (`SkinTemperatureLimitK = 1473.15`) is the
-accepted **materials** freeze — stainless cannot survive M4-class stagnation. That does **not**
+**CMC hot structure** with an authored 1200 °C material-capability card
+(`SkinTemperatureLimitK = 1473.15`) is the accepted **materials** freeze — stainless cannot survive
+M4-class stagnation. It is not a qualified inlet/bondline/whole-aircraft operating limit. That does **not**
 make a sustained air-breathing Mach-4 dash closed engineering:
 
 - **Mach-4 dash** is **provisional / aspirational fiction** until propulsion is retuned against
@@ -41,8 +42,8 @@ make a sustained air-breathing Mach-4 dash closed engineering:
   [`30-propulsion-and-inlet.md`](30-propulsion-and-inlet.md).
 - Wet T/W at design gross is now **≤ 1.20** (84 kN · 1.55 / 11090 kg) — family Identity matched.
   Design gross includes the four-drone bay; see realism audit for remaining fiction (M4 dash).
-- Skin HUD previously published instantaneous recovery (dive fake-cooled the gauge); kernel now
-  lags structural skin — see realism doc.
+- Snapshot/HUD now separates lagged wall skin, flat-skin recovery, true stagnation `T0`, and CMC
+  capability; no 650 °C limit or giant pseudo-margin is invented — see realism doc.
 
 **Read first:** [`REALISM-AND-OVERPERFORMANCE.md`](REALISM-AND-OVERPERFORMANCE.md).
 
@@ -94,4 +95,3 @@ the design spec) are systems that *follow* from that spine; several are explicit
 tagged provisional or open finding rather than filled with invented precision.
 
 **Live deck:** with the web host running, open `/present/rapier-design/` (arrow keys / Space / F).
-

@@ -37,16 +37,17 @@ ram ownership by ~M2.2–2.8 in the map; four square gates into wire three.
 3. **What telemetry shows.** Intercept OFT energy-ladder runs peak at **~M3.69** near FL700. Treat
    briefing Mach 4 as **aspirational fiction** until propulsion is retuned; do not buff the core
    again to fake a green gate.
-4. **Right binding order.** CMC skin is good to ~M5.7 thermally; the engine dies first. The thermal
-   gauge (now **lagged** structure, not instantaneous recovery) is a **dive soak warning**, not a
-   permanent ceiling.
+4. **Right binding order.** The 1200 °C CMC material card screens near M5.37 against leading-edge
+   stagnation `T0` at FL700; the engine/inlet dies first. The cockpit keeps lagged wall skin,
+   recovery, `T0`, and material capability distinct instead of inventing an operating margin.
 
 ## Thermal vs thrust ceiling
 
 | Limit | Approx | What hits first |
 | --- | --- | --- |
 | Stagnation temp @ M4 | ~910 K (~637 °C) ambient-total class | Stainless already failed; CMC still has margin |
-| Skin qualified | 1473 K (1200 °C) — **closed**, `SkinTemperatureLimitK` | Airframe thermal headroom |
+| CMC material capability | 1473 K (1200 °C) — closed repo card, **not** integrated-airframe qualification | Conservative T0 screening only |
+| Inlet / bondline operating limit | **unknown / open** | No defensible pilot temperature margin yet |
 | Ram cycle / spill | useful dash ~M4; spill band M3.3–3.8; dead by ~M4.5–5 | **Thrust** |
 | Structure | 12 G qualified / 15 G override — **closed**, `PositiveStructuralLimitG` / `PositiveOverrideLimitG` | Dive pull, not cruise |
 
@@ -61,4 +62,3 @@ Regime boxes and the Mach-4 dash claim are **surrogate** (grounded in mission do
 and the propulsion performance map). Exact OFT altitudes may move with guidance retunes; the *shape*
 of the profile — climb clean, push transonic, overlap TBCC, dash thin, dive to attack, recover light
 — does not.
-

@@ -1,6 +1,7 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Web;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -345,7 +346,8 @@ public class RapierTests {
         Assert.False(session.Carrier.IsMaritime);
         Assert.Equal(1_200.0, session.Carrier.DeckLengthM, precision: 6);
         Assert.Equal(48.0, session.Carrier.DeckHalfWidthM * 2.0, precision: 6);
-        Assert.Equal(120.5, session.Carrier.Position.Y, precision: 6);
+        Assert.Equal(RapierLaunchSite.OperatingSurfaceElevationM,
+            session.Carrier.Position.Y, precision: 6);
         Assert.Equal(Vec3D.Zero, session.Carrier.SteadyWindWorld);
 
         // The declared launcher, not the 62 m/s deck default — which is below flying speed here.
@@ -643,7 +645,8 @@ public class RapierTests {
         strip.ApplyDifficulty(DifficultyModel.ForLevel(4));
         for (int tick = 0; tick < AircraftSim.TickHz * 30; tick++)
             strip.Step(1.0 / AircraftSim.TickHz);
-        Assert.Equal(120.5, strip.Position.Y, precision: 10);
+        Assert.Equal(RapierLaunchSite.OperatingSurfaceElevationM,
+            strip.Position.Y, precision: 10);
         Assert.Equal(0.0, strip.DeckPitchRad, precision: 10);
         Assert.Equal(0.0, strip.DeckHeaveM, precision: 10);
         Assert.Equal(0.0, strip.DeckVerticalVelocityMps, precision: 10);
@@ -660,6 +663,53 @@ public class RapierTests {
         var session = new SimulationSession(10);
         Assert.Null(session.Burble);
         Assert.Equal(0, session.Difficulty.Level);
+    }
+
+    [Fact]
+    public void ReadyBeginAndRestartShareOneSupportedLauncherPose() {
+        var session = new SimulationSession(10);
+        session.SetTerrainSurface(Assert.IsAssignableFrom<ITerrainSurface>(
+            UkraineTerrainTruth.Load()));
+        Carrier strip = Assert.IsType<Carrier>(session.Carrier);
+        AircraftState ready = session.Player.State;
+
+        var readyFrame = strip.DeckFrame(ready.Position);
+        Assert.Equal(CatapultLaunchModel.StartAlongM, readyFrame.along, precision: 8);
+        Assert.Equal(-70.0, readyFrame.cross, precision: 8);
+        Assert.True(session.Catapult.TryLaunchSupportSurfaceHeight(
+            strip,
+            ready.Position,
+            RapierLaunchSite.AircraftHalfSpanM + 0.5,
+            out double railHeightM));
+        Assert.Equal(RapierLaunchSite.AircraftSupportReferenceHeightM,
+            ready.Position.Y - railHeightM, precision: 8);
+        Assert.True(session.LaunchTerrainClearance.Safe,
+            session.LaunchTerrainClearance.Reason);
+
+        session.Begin();
+        Assert.Equal(ready, session.Player.State);
+        Assert.Equal(ready, session.Catapult.State);
+        Assert.True(session.Catapult.IsActive);
+
+        for (int tick = 0; tick < 20; tick++) session.StepFixed();
+        session.Restart();
+        Assert.Equal(SimulationSession.LifecycleState.Ready, session.Lifecycle);
+        Assert.Equal(ready, session.Player.State);
+        Assert.False(session.Catapult.IsActive);
+        Assert.True(session.LaunchTerrainClearance.Safe);
+    }
+
+    [Fact]
+    public void FixedLauncherFailsClosedAgainstAnUnsafeTerrainDatum() {
+        var session = new SimulationSession(10);
+        session.SetTerrainSurface(FlatLand(250.0));
+
+        Assert.False(session.LaunchTerrainClearance.Safe);
+        session.Begin();
+
+        Assert.Equal(SimulationSession.LifecycleState.Ready, session.Lifecycle);
+        Assert.False(session.Catapult.IsActive);
+        Assert.Contains("LAUNCH INHIBIT", session.TransitionCue);
     }
 
     [Fact]
@@ -721,7 +771,7 @@ public class RapierTests {
         AircraftState player = new(
             strip.LandingPoint(
                 strip.WireAlongM(3) + Carrier.HookToMainGearM,
-                height: 0.02),
+                height: strip.AircraftSupportReferenceHeightM + 0.02),
             Speed: 70.0, Gamma: -0.06, Chi: strip.LandingHeadingRad,
             Bank: 0.0, Mass: Jet.MassKg);
         BeatSetup setup = baseline with {

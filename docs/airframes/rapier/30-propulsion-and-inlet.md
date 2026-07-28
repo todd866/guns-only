@@ -44,8 +44,28 @@ lob), **cold-gas RCS** takes the stick:
 | RCS | Value |
 | --- | --- |
 | Max moment | 220 kN·m |
-| Gas budget | 40 kg peroxide-class |
+| Gas budget | 40 kg stored inert-gas equivalent; architecture trade open |
 | Burn | 0.40 kg/s at full | Enough for a few corrections per lob, not a spaceplane session |
+
+### RCS architecture and upset-recovery work (open)
+
+The kernel currently closes only moment authority, gas mass, consumption, and the aerodynamic/RCS
+handover. It does **not** yet claim a bottle, compressor, valve, or thruster architecture.
+
+The lightest credible baseline to study is a ground-charged high-pressure inert-gas accumulator
+(nitrogen or helium-class), optionally topped up at useful dynamic pressure by an engine-driven
+compressor. “Ram-air refill” is not free: captured air still has to be compressed, dried, cooled,
+and stored, and it cannot refill the system during the collapsed-q part of the lob where RCS is
+needed most. A peroxide monopropellant system would improve impulse density but would be hot-gas
+RCS, with different handling, materials, signatures, and failure modes; it must not be described as
+cold gas.
+
+Future simulation should expose bottle pressure/temperature, compressor availability, valve and
+jet health, propellant leakage, commanded versus delivered moment, and control allocation. The
+training case is an NF-104A-style high-altitude loss of attitude control: enter the coast outside
+the recoverable corridor, exhaust or lose RCS, depart into a flat tumble, then either recover as
+dynamic pressure returns or meet the ejection envelope. That belongs in a later failure-mode/OFT
+slice, not the Build 175 audio correction.
 
 ## Fuel accounting (closed in kernel — Build 163)
 

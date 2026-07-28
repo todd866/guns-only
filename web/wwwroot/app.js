@@ -448,13 +448,26 @@ function updateNavConsole(state) {
     ? `${Math.round(thrustLbf).toLocaleString("en-US")} LBF` : "—",
   thrustLbf !== null ? "nominal" : "unknown");
 
-  const skinC = num("rapier_stagnation_temp_c");
-  const marginC = num("rapier_thermal_margin_c");
-  set(navUi.skin, skinC !== null
-    ? `${Math.round(skinC)}°C · ${marginC !== null ? (marginC >= 0 ? `${Math.round(marginC)}°C MARGIN` : `${Math.round(-marginC)}°C OVER`) : "—"}`
-    : "—",
-  marginC === null ? "unknown" : marginC < 0 ? "warning"
-    : marginC < 40 ? "caution" : "nominal");
+  // Schema 1.19 separates lagged wall skin from stagnation-point T0. Under the legacy schema the
+  // "stagnation" field was actually skin, so do not relabel it T0 unless canonical skin is present.
+  const canonicalSkinC = num("rapier_skin_temp_c");
+  const skinC = canonicalSkinC ?? num("rapier_stagnation_temp_c");
+  const stagnationC = canonicalSkinC === null ? null : num("rapier_stagnation_temp_c");
+  const cmcCapabilityC = num("rapier_cmc_capability_c");
+  const cmcMarginC = num("rapier_cmc_margin_c")
+    ?? (cmcCapabilityC !== null && stagnationC !== null
+      ? cmcCapabilityC - stagnationC
+      : num("rapier_thermal_margin_c"));
+  const thermalParts = [];
+  if (skinC !== null) thermalParts.push(`SKIN ${Math.round(skinC)}°C`);
+  if (stagnationC !== null) thermalParts.push(`T0 ${Math.round(stagnationC)}°C`);
+  if (cmcCapabilityC !== null) {
+    thermalParts.push(`CMC CAP ${Math.round(cmcCapabilityC)}°C`);
+  }
+  set(navUi.skin, thermalParts.length > 0 ? thermalParts.join(" · ") : "—",
+  cmcMarginC === null ? (skinC === null ? "unknown" : "nominal")
+    : cmcMarginC < 0 ? "warning"
+      : cmcMarginC < 40 ? "caution" : "nominal");
 
   const handoff = combatHandoffPresentation(state);
   const handoffState = handoff.phase === "RELIEF_LOST" ? "warning"

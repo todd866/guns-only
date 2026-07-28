@@ -19,11 +19,11 @@
   <!-- longitudinal profile schematic -->
   <text x="360" y="130" font-size="11" font-weight="700">LONGITUDINAL (schematic)</text>
   <line x1="360" y1="220" x2="504" y2="220" stroke="#222" stroke-width="3"/>
-  <text x="360" y="210" font-size="9">360 m flat (roofed)</text>
+  <text x="360" y="210" font-size="9">433.86 m flat (roofed)</text>
   <!-- ramp arc to 12 deg over 160m -->
   <path d="M 504 220 L 568 206.6936517876634" stroke="#222" stroke-width="3" fill="none"/>
-  <text x="544" y="200" font-size="9">160 m → 12° ramp</text>
-  <text x="360" y="280" font-size="10">stroke 520 m · end ~110 m/s · rise ~16.7 m · handoff ≈ 20.7 m</text>
+  <text x="544" y="200" font-size="9">86.14 m → 12° ramp</text>
+  <text x="360" y="280" font-size="10">stroke 520 m · end ~110 m/s · rise ~8.99 m · ref handoff ≈ 13.99 m</text>
   <text x="360" y="298" font-size="10">Arrestor rated 35 MJ (ProvisionalRapierLandStrip) — closed rating</text>
   <text x="360" y="316" font-size="9" fill="#844">~12–15 MJ recovery requirement: open finding (hand arithmetic)</text>
 

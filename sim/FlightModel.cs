@@ -29,6 +29,17 @@ public enum PullLimitReason {
 }
 
 /// <summary>
+/// Temperature channel used to turn an authored hot-structure capability into a conservative
+/// Mach-screening ceiling. Recovery temperature is appropriate to a turbulent flat skin;
+/// stagnation temperature is appropriate to an inlet lip, nose, or unswept leading edge.
+/// This selection is not itself an aircraft qualification curve.
+/// </summary>
+public enum AerothermalLimitReferenceKind {
+    RecoveryTemperature,
+    StagnationTemperature
+}
+
+/// <summary>
 /// Session-agnostic flight-control limit annunciation. The shell may present this later; the
 /// kernel owns only the physical/control-allocation reason and never pilot physiology.
 /// </summary>
@@ -180,7 +191,13 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     /// <summary>Usable cold-gas propellant mass (kg). Zero with a nonzero moment max means empty.</summary>
     double ColdGasRcsGasCapacityKg = 0.0,
     /// <summary>Gas burned by holding full RCS moment for one second.</summary>
-    double ColdGasRcsBurnKgPerFullSecond = 0.35);
+    double ColdGasRcsBurnKgPerFullSecond = 0.35,
+    /// <summary>
+    /// Temperature channel used by mission guidance to screen SkinTemperatureLimitK. Appended to
+    /// preserve the long-standing positional AircraftParams constructor contract.
+    /// </summary>
+    AerothermalLimitReferenceKind AerothermalLimitReference =
+        AerothermalLimitReferenceKind.RecoveryTemperature);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -592,24 +609,24 @@ public static class FlightModel {
         PositiveOverrideLimitG: 15.0,
         DynamicPressureScheduledPostStallOverride: true,
         MaxThrustFraction: 1.55,              // augmentor lever stop
-        // 1200 C sustained: a PROPER HOT STRUCTURE. Additively manufactured SiC/SiC ceramic matrix
+        // 1200 C CMC MATERIAL-CAPABILITY SURROGATE. Additively manufactured SiC/SiC ceramic matrix
         // composite where the heat is, ordinary composite everywhere else. This is extrapolation
-        // rather than invention — GE already flies CMC shrouds in the LEAP engine, so printed CMC
-        // hot structure is a credible 2030s trajectory, and CMC is good to about 1300 C sustained
-        // with 1200 taken here for margin.
+        // rather than invention — CMC already flies in engine hot sections — but it is not a
+        // qualified Rapier inlet, bondline, tank, or whole-airframe operating temperature.
         //
-        // It buys about M5.7 thermally, which the ENGINE cannot reach: the ram cycle group peaks
-        // near M3.0 and has fallen by a third at M5, so the map's thrust curve still has margin past
-        // mission branding — do not read that as a proven sustained-M4 article (REALISM audit /
-        // OFT ~M3.69 peak). That is the right way round for a ramjet story — you run out of engine,
-        // not airframe — and it leaves the thermal gauge as a live warning in a dive rather than a
-        // permanent cap.
+        // Screening the hottest external locations against true stagnation temperature gives about
+        // M5.37 at FL700 (the old turbulent-flat-skin calculation said M5.7). The engine/inlet
+        // envelope binds first in the flown M3.6--4.0 regime. Do not read the unused CMC headroom as
+        // a proven sustained-M4 article: component qualification curves do not exist for this
+        // fictional aircraft, and the OFT energy ladder peaks around M3.69.
         //
         // Steel was the previous answer at 320 C and M3.14. It was cheap and weldable, the MiG-25
         // trade, but it made an aircraft nobody would be impressed by. CMC costs more; the cost
         // layer already assumed it, since 2 percent of structural life at 180,000 dollars implies a
         // roughly 9 million dollar airframe.
         SkinTemperatureLimitK: 1473.15,
+        AerothermalLimitReference:
+            AerothermalLimitReferenceKind.StagnationTemperature,
         // No thrust vectoring: hot actuators, mass, maintenance and cost.
         PitchThrustVectorMaxRad: 0.0, PitchThrustVectorMomentArmM: 0.0,
         PitchThrustVectorAlphaGain: 0.0, PitchThrustVectorRateGainSeconds: 0.0,

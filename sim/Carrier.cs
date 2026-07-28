@@ -1,3 +1,5 @@
+using GunsOnly.Sim.Environment;
+
 namespace GunsOnly.Sim;
 
 /// A kinematic ship — deliberately NOT an aero object. A 55-tonne hull flown through the aircraft
@@ -118,6 +120,11 @@ public sealed class Carrier {
     public DeckConfiguration Configuration { get; }
     public PlatformKind Kind { get; }
     public bool IsMaritime => Kind == PlatformKind.Ship;
+    /// Vertical distance from AircraftState.Position to the loaded wheel/cradle support plane.
+    /// Legacy carriers keep zero; the Rapier fixed strip publishes an explicit provisional value.
+    public double AircraftSupportReferenceHeightM { get; }
+    /// Height of the launcher rail's support surface above the deck/slab plane.
+    public double LaunchRailHeadHeightM { get; }
 
     readonly double _meanDeckCentreY;
     RecoveryDifficulty _difficulty = DifficultyModel.ForLevel(0);
@@ -134,11 +141,21 @@ public sealed class Carrier {
     public Carrier(Vec3D deckCentre, double headingRad, double speedMps,
                    double deckAltM, double deckLengthM, double deckWidthM,
                    DeckConfiguration configuration = DeckConfiguration.Axial,
-                   PlatformKind kind = PlatformKind.Ship) {
+                   PlatformKind kind = PlatformKind.Ship,
+                   double aircraftSupportReferenceHeightM = 0.0,
+                   double launchRailHeadHeightM = 0.0) {
+        if (!double.IsFinite(aircraftSupportReferenceHeightM)
+            || aircraftSupportReferenceHeightM < 0.0)
+            throw new System.ArgumentOutOfRangeException(
+                nameof(aircraftSupportReferenceHeightM));
+        if (!double.IsFinite(launchRailHeadHeightM) || launchRailHeadHeightM < 0.0)
+            throw new System.ArgumentOutOfRangeException(nameof(launchRailHeadHeightM));
         Position = deckCentre; HeadingRad = headingRad; SpeedMps = speedMps;
         DeckAltM = deckAltM; DeckLengthM = deckLengthM; DeckHalfWidthM = deckWidthM * 0.5;
         Configuration = configuration;
         Kind = kind;
+        AircraftSupportReferenceHeightM = aircraftSupportReferenceHeightM;
+        LaunchRailHeadHeightM = launchRailHeadHeightM;
         _meanDeckCentreY = deckCentre.Y;
     }
 
@@ -277,6 +294,21 @@ public sealed class Carrier {
         return (rel.Dot(LandingFwd), rel.Dot(LandingRight), rel.Y);
     }
 
+    /// Resolve an aircraft reference point into landing coordinates whose height is measured from
+    /// the loaded support/contact plane, not from the body's aerodynamic reference.
+    public (double along, double cross, double height) LandingAircraftSupportFrame(in Vec3D p) {
+        var frame = LandingFrame(p);
+        return (frame.along, frame.cross,
+            frame.height - AircraftSupportReferenceHeightM);
+    }
+
+    /// Ship-axis equivalent of <see cref="LandingAircraftSupportFrame"/>.
+    public (double along, double cross, double height) AircraftSupportFrame(in Vec3D p) {
+        var frame = DeckFrame(p);
+        return (frame.along, frame.cross,
+            frame.height - AircraftSupportReferenceHeightM);
+    }
+
     public Vec3D LandingPoint(double along, double cross = 0.0, double height = 0.0) {
         if (_difficulty.Level <= 0)
             return LandingOrigin + LandingFwd * along + LandingRight * cross + new Vec3D(0, height, 0);
@@ -321,8 +353,8 @@ public sealed class Carrier {
     /// exempt a recovery-classified top-deck contact (trap/bolter); every other intersection is an
     /// impact. Coordinates are resolved in the ship frame, so this works for both landing layouts.
     public SolidCollision SweptSolidCollision(in Vec3D previous, in Vec3D current) {
-        var a = DeckFrame(previous);
-        var b = DeckFrame(current);
+        var a = AircraftSupportFrame(previous);
+        var b = AircraftSupportFrame(current);
 
         if (IsMaritime && SegmentIntersectsBox(
             a.along, a.cross, a.height, b.along, b.cross, b.height,
@@ -379,7 +411,8 @@ public sealed class Carrier {
         double climbMps = System.Math.Max(5.0, relative.Y);
         var velocity = DeckVelocityWorld + LandingFwd * forwardMps
             + LandingRight * lateralMps + new Vec3D(0.0, climbMps, 0.0);
-        return StateFromVelocity(LandingPoint(along, cross, height: 1.5), velocity,
+        return StateFromVelocity(LandingPoint(along, cross,
+                height: AircraftSupportReferenceHeightM + 1.5), velocity,
             contact.Mass);
     }
 
@@ -402,7 +435,7 @@ public sealed class Carrier {
     /// calculation used by standalone carrier fixtures.
     public bool InApproachSlot(in AircraftState s,
         double indicatedAirspeedMps = double.NaN) {
-        var (along, cross, height) = LandingFrame(s.Position);
+        var (along, cross, height) = LandingAircraftSupportFrame(s.Position);
         if (along > 30.0 || along < -3000.0) return false;         // past the deck, or too far out
         if (System.Math.Abs(cross) > 220.0) return false;          // not lined up on the centreline
         if (ResolveIndicatedAirspeedMps(s, indicatedAirspeedMps) > 95.0) return false; // ~185 KIAS: maneuvering, not on-speed
@@ -429,7 +462,7 @@ public sealed class Carrier {
     /// ship's aft edge from behind/short. InTheWater = reached the sea off the deck. Flying = still
     /// airborne. Bolter handling remains outside this contact classifier.
     Recovery ClassifyPhysical(in AircraftState s) {
-        var (along, cross, height) = DeckFrame(s.Position);
+        var (along, cross, height) = AircraftSupportFrame(s.Position);
         // The rounded stern is not a mathematical knife edge: allow the hook/gear footprint two
         // metres past the deck-centre rectangle before calling a ramp strike. This is also the small
         // aft sponson the angled landing area needs where its centreline crosses the round-down.
@@ -598,6 +631,17 @@ public sealed class Carrier {
 /// Deterministic deck-relative catapult stroke used after a completed arrestment. The carrier
 /// translates beneath the aircraft throughout; at the end of the stroke the state is already
 /// above the bow with positive climb and enough airspeed for AircraftSim to take over immediately.
+public readonly record struct LaunchTerrainClearanceAssessment(
+    bool TerrainAvailable,
+    bool Safe,
+    double MinimumRailClearanceM,
+    double MinimumReleaseClearanceM,
+    int Samples,
+    string Reason) {
+    public static LaunchTerrainClearanceAssessment Unavailable => new(
+        false, false, double.NaN, double.NaN, 0, "terrain-unavailable");
+}
+
 public sealed class CatapultLaunchModel {
     public enum LaunchPhase { None, Stroke, Airborne }
 
@@ -680,7 +724,16 @@ public sealed class CatapultLaunchModel {
         RelativeSpeedMps = 0.0;
         ElapsedSeconds = 0.0;
         Phase = LaunchPhase.Stroke;
-        State = StrokeState(carrier, ParkedNosePitchRad);
+        State = StrokeState(carrier, _massKg, _distanceM,
+            RelativeSpeedMps, ParkedNosePitchRad);
+    }
+
+    /// Exact Ready/Restart pose at the launcher start. Previewing this state avoids a one-frame
+    /// teleport from the recovery centreline when Begin starts the stroke.
+    public AircraftState ParkedState(Carrier carrier, double massKg) {
+        if (massKg <= 0.0 || !double.IsFinite(massKg))
+            throw new System.ArgumentOutOfRangeException(nameof(massKg));
+        return StrokeState(carrier, massKg, 0.0, 0.0, ParkedNosePitchRad);
     }
 
     /// Call after Carrier.Step(dt), matching ArrestmentModel's moving-deck convention.
@@ -694,7 +747,8 @@ public sealed class CatapultLaunchModel {
         ElapsedSeconds += dt;
 
         if (_distanceM + 1e-12 < _strokeDistanceM) {
-            State = StrokeState(carrier, ParkedNosePitchRad);
+            State = StrokeState(carrier, _massKg, _distanceM,
+                RelativeSpeedMps, ParkedNosePitchRad);
             return;
         }
 
@@ -712,8 +766,11 @@ public sealed class CatapultLaunchModel {
         // Hand off from the TOP of the ramp, not from deck level. RampRiseM is zero for every flat
         // deck catapult, so this stays bit-for-bit identical for the carrier beats.
         State = Carrier.StateFromVelocity(
-            carrier.ShipPoint(StartAlongM + _strokeDistanceM, _crossOffsetM,
-                AirborneHeightM + RampRiseM),
+            carrier.ShipPoint(StartAlongM + HorizontalTravelAt(_strokeDistanceM),
+                _crossOffsetM,
+                carrier.LaunchRailHeadHeightM
+                    + carrier.AircraftSupportReferenceHeightM
+                    + AirborneHeightM + RampRiseM),
             velocity, _massKg,
             Attitude(carrier, System.Math.Max(LaunchNosePitchRad, _rampAngleRad)));
         Phase = LaunchPhase.Airborne;
@@ -740,6 +797,28 @@ public sealed class CatapultLaunchModel {
     public double RampArcLengthM => _rampAngleRad * RampArcRadiusM;
     public double RampFlatLengthM => System.Math.Max(0.0, _strokeDistanceM - RampArcLengthM);
 
+    /// Horizontal plan distance corresponding to distance travelled along the rail. On the curved
+    /// section the former code incorrectly used arc length as horizontal distance; the renderer
+    /// already used R·sin(theta), leaving the physics handoff 0.63 m beyond the visible lip.
+    public double HorizontalTravelAt(double distanceM) {
+        double clamped = System.Math.Clamp(distanceM, 0.0, _strokeDistanceM);
+        if (_rampAngleRad <= 0.0 || clamped <= RampFlatLengthM) return clamped;
+        return RampFlatLengthM
+            + RampArcRadiusM * System.Math.Sin(RailAngleAt(clamped));
+    }
+
+    public double HorizontalStrokeM => HorizontalTravelAt(_strokeDistanceM);
+
+    double RailDistanceAtHorizontalTravel(double horizontalM) {
+        double clamped = System.Math.Clamp(horizontalM, 0.0, HorizontalStrokeM);
+        if (_rampAngleRad <= 0.0 || clamped <= RampFlatLengthM) return clamped;
+        double sine = System.Math.Clamp(
+            (clamped - RampFlatLengthM) / RampArcRadiusM,
+            0.0,
+            System.Math.Sin(_rampAngleRad));
+        return RampFlatLengthM + RampArcRadiusM * System.Math.Asin(sine);
+    }
+
     /// Height the ramp lifts the aircraft by the end of the stroke.
     public double RampRiseM =>
         RampArcRadiusM * (1.0 - System.Math.Cos(RailAngleAt(_strokeDistanceM)));
@@ -759,19 +838,128 @@ public sealed class CatapultLaunchModel {
             ? 0.0
             : RampArcRadiusM * (1.0 - System.Math.Cos(RailAngleAt(distanceM)));
 
-    AircraftState StrokeState(Carrier carrier, double pitchRad) {
+    /// Physical launcher support surface under a point in the actual off-strip lane. This is a
+    /// bounded constructed-surface query for AGL/contact projection; outside the rail corridor the
+    /// caller must keep the natural DEM authoritative.
+    public bool TryLaunchSupportSurfaceHeight(Carrier carrier, in Vec3D worldPosition,
+        double corridorHalfWidthM, out double surfaceHeightM) {
+        if (!double.IsFinite(corridorHalfWidthM) || corridorHalfWidthM < 0.0)
+            throw new System.ArgumentOutOfRangeException(nameof(corridorHalfWidthM));
+        var frame = carrier.DeckFrame(worldPosition);
+        double horizontalM = frame.along - StartAlongM;
+        if (System.Math.Abs(frame.cross - _crossOffsetM) > corridorHalfWidthM
+            || horizontalM < 0.0 || horizontalM > HorizontalStrokeM) {
+            surfaceHeightM = 0.0;
+            return false;
+        }
+        double railDistanceM = RailDistanceAtHorizontalTravel(horizontalM);
+        Vec3D support = carrier.ShipPoint(
+            StartAlongM + horizontalM,
+            _crossOffsetM,
+            carrier.LaunchRailHeadHeightM + RailHeightAt(railDistanceM));
+        surfaceHeightM = support.Y;
+        return true;
+    }
+
+    /// Verify the lowest physical aircraft envelope (the wheel/cradle support plane) over the
+    /// natural DEM. Samples use the actual launcher cross-offset, both span edges, the full curved
+    /// rail, and a conservative two-second ballistic release path. Failure to sample is unsafe.
+    public LaunchTerrainClearanceAssessment AssessTerrainClearance(
+        Carrier carrier, ITerrainSurface? terrain, double aircraftHalfSpanM) {
+        if (terrain is null) return LaunchTerrainClearanceAssessment.Unavailable;
+        if (!double.IsFinite(aircraftHalfSpanM) || aircraftHalfSpanM < 0.0)
+            throw new System.ArgumentOutOfRangeException(nameof(aircraftHalfSpanM));
+        double stepM = System.Math.Clamp(terrain.HorizontalResolutionM * 0.25, 2.0, 8.0);
+        double minimumRailM = double.PositiveInfinity;
+        double minimumReleaseM = double.PositiveInfinity;
+        int samples = 0;
+        bool missing = false;
+        double[] lateralOffsets = aircraftHalfSpanM > 0.0
+            ? [-aircraftHalfSpanM, 0.0, aircraftHalfSpanM]
+            : [0.0];
+
+        void Observe(in Vec3D supportPoint, bool release) {
+            foreach (double lateralM in lateralOffsets) {
+                Vec3D query = supportPoint + carrier.Right * lateralM;
+                if (!terrain.TrySample(query.X, query.Z, out TerrainSample ground)) {
+                    missing = true;
+                    continue;
+                }
+                double clearanceM = query.Y - ground.HeightM;
+                if (release) minimumReleaseM = System.Math.Min(minimumReleaseM, clearanceM);
+                else minimumRailM = System.Math.Min(minimumRailM, clearanceM);
+                samples++;
+            }
+        }
+
+        int railSteps = System.Math.Max(1, (int)System.Math.Ceiling(_strokeDistanceM / stepM));
+        for (int index = 0; index <= railSteps; index++) {
+            double railDistanceM = _strokeDistanceM * index / railSteps;
+            Observe(carrier.ShipPoint(
+                StartAlongM + HorizontalTravelAt(railDistanceM),
+                _crossOffsetM,
+                carrier.LaunchRailHeadHeightM + RailHeightAt(railDistanceM)),
+                release: false);
+        }
+
+        Vec3D releaseSupport = carrier.ShipPoint(
+            StartAlongM + HorizontalStrokeM,
+            _crossOffsetM,
+            carrier.LaunchRailHeadHeightM + RampRiseM + AirborneHeightM);
+        double horizontalSpeedMps = _endRelativeSpeedMps * System.Math.Cos(_rampAngleRad);
+        double verticalSpeedMps = _rampAngleRad > 0.0
+            ? _endRelativeSpeedMps * System.Math.Sin(_rampAngleRad)
+            : LaunchClimbMps;
+        const double releaseValidationSeconds = 2.0;
+        const double releaseStepSeconds = 0.1;
+        for (double timeSeconds = 0.0;
+            timeSeconds <= releaseValidationSeconds + 1e-9;
+            timeSeconds += releaseStepSeconds) {
+            Observe(
+                releaseSupport
+                    + carrier.Fwd * (horizontalSpeedMps * timeSeconds)
+                    + new Vec3D(0.0,
+                        verticalSpeedMps * timeSeconds
+                            - 0.5 * 9.80665 * timeSeconds * timeSeconds,
+                        0.0),
+                release: true);
+        }
+
+        const double minimumClearanceM = 0.25;
+        bool safe = !missing
+            && double.IsFinite(minimumRailM)
+            && double.IsFinite(minimumReleaseM)
+            && minimumRailM >= minimumClearanceM
+            && minimumReleaseM >= minimumClearanceM;
+        return new LaunchTerrainClearanceAssessment(
+            true,
+            safe,
+            minimumRailM,
+            minimumReleaseM,
+            samples,
+            missing ? "terrain-sample-missing"
+                : safe ? "verified"
+                : "aircraft-support-envelope-below-terrain-clearance");
+    }
+
+    AircraftState StrokeState(Carrier carrier, double massKg,
+        double distanceM, double relativeSpeedMps, double pitchRad) {
         // The aircraft RIDES the rail: on the arc its height, its attitude and the direction of
         // its velocity all follow the rail rather than staying level until the end. A flat stroke
         // with an angle applied only at release would leave the aircraft flying through its own
         // ramp for the whole arc, which is what a level-until-handoff model actually looks like.
-        double railAngle = RailAngleAt(_distanceM);
+        double railAngle = RailAngleAt(distanceM);
         var up = new Vec3D(0.0, 1.0, 0.0);
         var alongRail = carrier.Fwd * System.Math.Cos(railAngle) + up * System.Math.Sin(railAngle);
-        var velocity = carrier.DeckVelocityWorld + alongRail * RelativeSpeedMps;
-        var position = carrier.ShipPoint(StartAlongM + _distanceM, _crossOffsetM)
-            + up * RailHeightAt(_distanceM);
+        var velocity = carrier.DeckVelocityWorld + alongRail * relativeSpeedMps;
+        var position = carrier.ShipPoint(
+            StartAlongM + HorizontalTravelAt(distanceM),
+            _crossOffsetM,
+            carrier.LaunchRailHeadHeightM
+                + carrier.AircraftSupportReferenceHeightM
+                + RailHeightAt(distanceM));
         // Nose-up on the arc is the rail's doing, not the pilot's; the parked sit adds to it.
-        return Carrier.StateFromVelocity(position, velocity, _massKg,
+        return Carrier.StateFromVelocity(position, velocity, massKg,
             Attitude(carrier, pitchRad + railAngle));
     }
 

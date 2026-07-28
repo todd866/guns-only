@@ -42,7 +42,10 @@ public readonly record struct RapierMissionGuidance(
     int RecoveryGate,
     /// <summary>Profile Mach before skin clamp. Equals TargetMach when the structure allows it.</summary>
     double AuthoredTargetMach = 0.0,
-    /// <summary>Highest Mach the airframe skin allows at the current ambient.</summary>
+    /// <summary>
+    /// Legacy name for the material-capability Mach screening ceiling at current ambient.
+    /// The selected temperature reference may be flat-skin recovery or stagnation-point T0.
+    /// </summary>
     double SkinMachLimit = double.PositiveInfinity,
     /// <summary>Mach after Min(authored, skin). Same as TargetMach; named for snapshot clarity.</summary>
     double CommandedMach = 0.0,
@@ -765,12 +768,16 @@ public sealed class RapierMissionDirector {
             ? $"SKIP {_lobSkip}/{MaxLobSkips} · "
             : "";
 
-        // The airframe's own ceiling. Every commanded Mach below is clamped to this, so the
-        // automation never asks for a speed that cooks the structure — and the phase cues that
-        // used to command M4.00 now command whatever the skin actually allows. Infinity for any
-        // airframe that declares no limit, so nothing else in the game is touched.
-        double skinMachLimit = AirData.MachLimitForSkinTemperature(
-            playerAircraft.SkinTemperatureLimitK, air.TemperatureK);
+        // Conservative material-capability screening ceiling. Flat external skins use turbulent
+        // recovery temperature; Rapier's declared hot zones are the inlet lip / leading edges, so
+        // their raw CMC capability must be screened against true stagnation T0 instead. This is a
+        // failsafe, not a substitute for the missing component qualification envelope.
+        double skinMachLimit = playerAircraft.AerothermalLimitReference
+                == AerothermalLimitReferenceKind.StagnationTemperature
+            ? AirData.MachLimitForStagnationTemperature(
+                playerAircraft.SkinTemperatureLimitK, air.TemperatureK)
+            : AirData.MachLimitForSkinTemperature(
+                playerAircraft.SkinTemperatureLimitK, air.TemperatureK);
 
         double targetMach;
         double targetAltitudeFt;
@@ -980,7 +987,8 @@ public sealed class RapierMissionDirector {
                         + $"{interceptEtaSeconds % 60.0:00}"
                     : "--:--";
                 cue = $"AUTO INTERCEPT · {contactRangeM / 1000.0:F0} KM · "
-                    + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · M{skinMachLimit:F1} / FL700";
+                    + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · "
+                    + $"M{Math.Min(targetMach, skinMachLimit):F1} / FL700";
                 break;
             case RapierMissionPhase.Attack:
                 waypoint = contact.Position;

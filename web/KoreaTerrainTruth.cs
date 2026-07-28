@@ -16,18 +16,19 @@ internal static class KoreaTerrainTruth {
 }
 
 /// <summary>
-/// Fictional Ukraine theatre truth shared with the browser terrain product. The 32 m Soniachne
-/// detail cell overrides a 256 m regional surface in one coordinate frame.
+/// Ukraine theatre truth derived from the exact quantized records streamed by the browser atlas.
+/// The 32 m Rapier-site records override the atlas' 256 m coarsest LOD in one coordinate frame;
+/// both outputs and their source-record hashes are locked by the adjacent kernel provenance file.
 /// </summary>
 internal static class UkraineTerrainTruth {
-    const string DetailResourceName = "GunsOnly.Web.Data.UkraineSoniachne.truth";
-    const string RegionalResourceName = "GunsOnly.Web.Data.UkraineSoniachneRegion.truth";
+    const string DetailResourceName = "GunsOnly.Web.Data.UkraineRapierSite.truth";
+    const string RegionalResourceName = "GunsOnly.Web.Data.UkraineRapierRange.truth";
 
     public static ITerrainSurface? Load() {
         ITerrainSurface? detail = PackedTerrainTruth.Load(
-            DetailResourceName, "Ukraine Soniachne detail cell");
+            DetailResourceName, "Ukraine Rapier-site atlas detail");
         ITerrainSurface? regional = PackedTerrainTruth.Load(
-            RegionalResourceName, "Ukraine Soniachne regional theatre");
+            RegionalResourceName, "Ukraine Rapier-range atlas regional truth");
         if (detail is null || regional is null) return null;
         return new NestedTerrainSurface(regional, detail);
     }

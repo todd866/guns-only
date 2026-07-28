@@ -1013,16 +1013,17 @@ export function createRapierDispersedStrip(context = {}) {
     recoveryWires.push(recoveryWire);
   }
 
-  // Electromagnetic launcher: 360 m of flat rail, then a 160 m constant-radius arc rising 16.7 m
-  // to a twelve-degree lip. This MIRRORS CatapultLaunchModel exactly — RampNormalG 3.0 gives a
-  // 765 m radius at the 150 m/s end speed, and the kernel now flies the aircraft along this same
-  // curve rather than holding it level and applying an angle at release. If either side changes,
-  // both must: the aircraft rides this rail, so a mismatch is a visible float.
+  // Live electromagnetic launcher: 433.86 m of flat rail, then an 86.14 m constant-radius arc
+  // rising 8.99 m to a twelve-degree lip. This MIRRORS CatapultLaunchModel exactly —
+  // RampNormalG 3.0 gives a 411.29 m radius at 110 m/s. The old 360 + 160 m / 16.7 m geometry
+  // belonged to the superseded 150 m/s study and must not leak back into the live presentation.
   // Matches CatapultLaunchModel's cross offset for this beat. It was -7 m — the DECK default —
   // which put an 8 m gallery under a 10 m berm directly on the 48 m strip's touchdown zone.
   const catapultX = -70;
   const strokeM = 520;
   const railStartZ = -20;
+  const railHeadHeightM = 0.15;
+  const aircraftSupportReferenceHeightM = 0.85;
   const rampAngleRad = 12 * Math.PI / 180;
   const arcRadiusM = 110 * 110 / (3.0 * 9.80665);
   const arcLengthM = rampAngleRad * arcRadiusM;
@@ -1117,9 +1118,8 @@ export function createRapierDispersedStrip(context = {}) {
   // COVERED ACCELERATION GALLERY. Ukrainian steppe is flat, so nothing hides a launcher and
   // nothing supplies a launch angle. Roofing the flat run answers the first — a dispersed launcher
   // survives by not being visible or crater-able — and the ski jump beyond answers the second.
-  // The gallery covers the FLAT 360 m only; the aircraft bursts into daylight at the foot of the
-  // ramp and rides the last 160 m of arc in the open, which is both the better reveal and far
-  // easier to build than roofing a curve.
+  // The gallery covers the live 433.86 m flat run only; the aircraft bursts into daylight at the
+  // foot of the ramp and rides the final 86.14 m arc in the open.
   //
   // It occupies the -Z third of the strip; the arresting wires sit at +240 m, so the recovery
   // runway stays clear. The bore is generously sized on purpose — a close-fitting tube would have
@@ -1148,7 +1148,7 @@ export function createRapierDispersedStrip(context = {}) {
   box(gallery, { x: galleryHalfWidth * 2 + 12, y: 2.2, z: flatLengthM },
     new THREE.Vector3(catapultX, galleryHeight + 2.4, galleryMidZ), shoulder);
 
-  // Interior ribs every 10 m. At 150 m/s these strobe rather than blur, and they are the only
+  // Interior ribs every 10 m. At 110 m/s these strobe rather than blur, and they are the only
   // speed cue in an enclosed run - without them the acceleration reads as motionless.
   const ribLampPositions = [];
   const ribPositions = [];
@@ -1224,9 +1224,11 @@ export function createRapierDispersedStrip(context = {}) {
     deckOrigin: addSemanticSocket(group, "SOCKET_DECK_ORIGIN", 0, 0, 0),
     recoveryThreshold: addSemanticSocket(group, "SOCKET_RECOVERY_THRESHOLD", 0, 0.2, 112),
     // The handoff point: top of the ramp, matching CatapultLaunchModel's
-    // AirborneHeightM + RampRiseM rather than a flat-deck 4 m.
+    // rail head + aircraft reference/support height + AirborneHeightM + RampRiseM.
     bowReference: addSemanticSocket(group, "SOCKET_LAUNCH_END",
-      catapultX, 4.0 + rampRiseM, portalZ),
+      catapultX,
+      railHeadHeightM + aircraftSupportReferenceHeightM + 4.0 + rampRiseM,
+      portalZ),
   });
   group.traverse((object) => {
     if (!object.isMesh) return;
@@ -1236,6 +1238,11 @@ export function createRapierDispersedStrip(context = {}) {
   group.userData.sockets = sockets;
   group.userData.platformKind = "FIXED_ARRESTING_STRIP";
   group.userData.launchStrokeM = 520;
+  group.userData.launchFlatLengthM = flatLengthM;
+  group.userData.launchArcLengthM = arcLengthM;
+  group.userData.launchRampRiseM = rampRiseM;
+  group.userData.launchRailHeadHeightM = railHeadHeightM;
+  group.userData.aircraftSupportReferenceHeightM = aircraftSupportReferenceHeightM;
   group.userData.fixedStripRecoveryPresentation = {
     wires: recoveryWires,
     highlightedWire: 0,

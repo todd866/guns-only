@@ -371,7 +371,7 @@ export default {
   "thermal": {
     "skinTemperatureLimitK": 1473.15,
     "epistemic": "surrogate",
-    "notes": "CMC materials freeze; lag taus for HUD skin are provisional"
+    "notes": "1200 C is a CMC material-capability surrogate, not an integrated-airframe operating limit; stagnation T0 screens inlet/leading-edge capability; wall lag taus are provisional"
   },
   "performanceClaims": {
     "designDashMach": {

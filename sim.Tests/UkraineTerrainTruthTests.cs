@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Json;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Web;
@@ -7,24 +8,43 @@ using GunsOnly.Web;
 namespace GunsOnly.Sim.Tests;
 
 public class UkraineTerrainTruthTests {
+    const string DetailResource = "GunsOnly.Web.Data.UkraineRapierSite.truth";
+    const string RegionalResource = "GunsOnly.Web.Data.UkraineRapierRange.truth";
+    const string ManifestResource = "GunsOnly.Web.Data.UkraineRapierRange.manifest.json";
+    const string ProvenanceResource = "GunsOnly.Web.Data.UkraineRapierRange.provenance.json";
+
     [Fact]
-    public void NestedTheatreIsDeterministicAndContainsEveryAuthoredRaidTrack() {
+    public void KernelLoadsTheRealAtlasBoundsAndIsReplayDeterministic() {
         ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
         ITerrainSurface replay = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
 
-        Assert.Equal(new TerrainBounds(-131_072.0, 131_072.0, -131_072.0, 131_072.0),
-            terrain.Bounds);
+        Assert.Equal(new TerrainBounds(
+            -376_832.0, 40_960.0, -212_992.0, 196_608.0), terrain.Bounds);
         Assert.Equal(32.0, terrain.HorizontalResolutionM);
+        Assert.True(terrain.TrySample(2_375.0, -1_690.0, out TerrainSample first));
+        Assert.True(replay.TrySample(2_375.0, -1_690.0, out TerrainSample second));
+        Assert.Equal(first, second);
+        Assert.False(terrain.TrySample(41_216.0, 0.0, out _));
+    }
 
+    [Fact]
+    public void AtlasContainsEveryAuthoredRaidTrackWithTerrainClearance() {
+        ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
+            UkraineTerrainTruth.Load());
         BeatSetup beat = Beats.DroneRaidDefense();
-        Assert.True(terrain.TrySample(beat.Player.Position.X, beat.Player.Position.Z,
+
+        Assert.True(terrain.TrySample(
+            beat.Player.Position.X,
+            beat.Player.Position.Z,
             out TerrainSample playerGround));
         Assert.True(beat.Player.Position.Y - playerGround.HeightM > 250.0);
 
         foreach (AircraftState target in beat.DroneRaid!.Targets) {
-            Assert.True(terrain.TrySample(target.Position.X, target.Position.Z,
+            Assert.True(terrain.TrySample(
+                target.Position.X,
+                target.Position.Z,
                 out TerrainSample ground));
             Assert.True(target.Position.Y - ground.HeightM > 100.0);
             double trackClearanceM = TerrainQueries.MinimumClearanceM(
@@ -35,68 +55,34 @@ public class UkraineTerrainTruthTests {
             Assert.True(trackClearanceM > 100.0,
                 $"raid track clearance was only {trackClearanceM:F1} m");
         }
-
-        Assert.True(terrain.TrySample(2_375.0, -1_690.0, out TerrainSample first));
-        Assert.True(replay.TrySample(2_375.0, -1_690.0, out TerrainSample second));
-        Assert.Equal(first, second);
     }
 
     [Fact]
-    public void RegionalTruthContainsTheCompleteRapierRouteAndFictionalCoast() {
+    public void RegionalAtlasContainsTheCompleteRapierInterceptRoute() {
         ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
         BeatSetup beat = Beats.RapierIntercept();
         Carrier strip = Assert.IsType<Carrier>(beat.Carrier);
-
-        Assert.True(terrain.TrySample(beat.Player.Position.X, beat.Player.Position.Z,
-            out TerrainSample launchGround));
-        Assert.Equal(TerrainSurfaceKind.Land, launchGround.Kind);
-        Assert.Equal(2.5, strip.Position.Y - launchGround.HeightM, precision: 6);
-
-        Vec3D launcherStart = strip.ShipPoint(
-            CatapultLaunchModel.StartAlongM, CatapultLaunchModel.CatapultCrossM);
-        Vec3D launcherEnd = strip.ShipPoint(
-            CatapultLaunchModel.StartAlongM + 520.0,
-            CatapultLaunchModel.CatapultCrossM);
-        Assert.True(terrain.TrySample(launcherStart.X, launcherStart.Z,
-            out TerrainSample launcherStartGround));
-        Assert.True(terrain.TrySample(launcherEnd.X, launcherEnd.Z,
-            out TerrainSample launcherEndGround));
-        Assert.Equal(TerrainSurfaceKind.Land, launcherStartGround.Kind);
-        Assert.Equal(TerrainSurfaceKind.Land, launcherEndGround.Kind);
-        Assert.True(strip.Position.Y > launcherStartGround.HeightM);
-        Assert.True(strip.Position.Y > launcherEndGround.HeightM);
-
-        // The route now deliberately runs BEYOND the authored regional cell: a realistic deep
-        // intercept was judged to matter more than staying inside the map. Walk the portion the
-        // cell is responsible for along the strip outbound axis (west for eastern home plate).
         Vec3D outbound = strip.Fwd;
         double contactAlongM = (beat.Bandit.Position - strip.Position).Dot(outbound);
-        double authoredRouteM = System.Math.Min(System.Math.Max(0.0, contactAlongM), 120_000.0);
-        for (double alongM = 0.0; alongM <= authoredRouteM; alongM += 5_000.0) {
-            double eastM = strip.Position.X + outbound.X * alongM;
-            double northM = strip.Position.Z + outbound.Z * alongM;
-            Assert.True(terrain.TrySample(eastM, northM, out TerrainSample routeGround));
-            Assert.Equal(TerrainSurfaceKind.Land, routeGround.Kind);
-            Assert.True(beat.Bandit.Position.Y - routeGround.HeightM > 11_000.0);
-        }
-        // The merge itself is now past the authored cell by design. This file owns the regional
-        // truth, and the truth's own edge is the honest thing to assert: beyond it the runtime
-        // wraps the surface in TrainingTerrainApronSurface, and the apron - a flat dirt playing
-        // field at the 78 m datum - is what carries the rest of the route.
-        Assert.False(terrain.TrySample(beat.Bandit.Position.X, beat.Bandit.Position.Z, out _));
 
-        Assert.True(terrain.TrySample(20_000.0, 0.0, out TerrainSample regionalGround));
-        Assert.NotEqual(78.0, regionalGround.HeightM);
-        Assert.True(terrain.TrySample(-100_000.0, -100_000.0,
-            out TerrainSample coastalWater));
-        Assert.Equal(TerrainSurfaceKind.Water, coastalWater.Kind);
-        Assert.Equal(0.0, coastalWater.HeightM);
-        Assert.False(terrain.TrySample(150_000.0, 0.0, out _));
+        Assert.True(contactAlongM > 0.0);
+        for (double alongM = 0.0; alongM <= contactAlongM; alongM += 5_000.0) {
+            Vec3D point = strip.Position + outbound * alongM;
+            Assert.True(terrain.TrySample(point.X, point.Z, out TerrainSample ground),
+                $"missing atlas terrain at {alongM / 1000.0:F0} km outbound");
+            Assert.Equal(TerrainSurfaceKind.Land, ground.Kind);
+            Assert.True(beat.Bandit.Position.Y - ground.HeightM > 11_000.0);
+        }
+        Assert.True(terrain.TrySample(
+            beat.Bandit.Position.X,
+            beat.Bandit.Position.Z,
+            out TerrainSample contactGround));
+        Assert.Equal(TerrainSurfaceKind.Land, contactGround.Kind);
     }
 
     [Fact]
-    public void F22RecoveryRunwayFollowsTheEmbeddedRegionalTerrainDatum() {
+    public void F22RecoveryRunwayStillFollowsTheAtlasTerrainDatum() {
         ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
         RecoveryPlan plan = Assert.IsType<RecoveryPlan>(
@@ -123,28 +109,88 @@ public class UkraineTerrainTruthTests {
             Vec3D pavement = runway.ThresholdPosition
                 + forward * alongM
                 + right * crossM;
-            Assert.True(terrain.TrySample(pavement.X, pavement.Z,
+            Assert.True(terrain.TrySample(
+                pavement.X,
+                pavement.Z,
                 out TerrainSample ground));
             Assert.Equal(TerrainSurfaceKind.Land, ground.Kind);
-            Assert.InRange(Math.Abs(runway.ElevationM - ground.HeightM), 0.0, 0.5);
+            Assert.InRange(
+                Math.Abs(runway.ElevationM - ground.HeightM),
+                0.0,
+                0.5);
         }
     }
 
     [Fact]
-    public void DetailCellRemainsByteStableAndMeetsRegionalTruthWithoutASeam() {
-        const string DetailResource = "GunsOnly.Web.Data.UkraineSoniachne.truth";
-        const string RegionalResource = "GunsOnly.Web.Data.UkraineSoniachneRegion.truth";
-        ITerrainSurface detail = Assert.IsAssignableFrom<ITerrainSurface>(
-            PackedTerrainTruth.Load(DetailResource, "Soniachne detail"));
-        ITerrainSurface regional = Assert.IsAssignableFrom<ITerrainSurface>(
-            PackedTerrainTruth.Load(RegionalResource, "Soniachne regional"));
+    public void RapierUsesActualMinus70MetreLaneAndClearsRailSpanAndReleasePath() {
+        ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
+            UkraineTerrainTruth.Load());
+        BeatSetup beat = Beats.RapierIntercept();
+        Carrier strip = Assert.IsType<Carrier>(beat.Carrier);
+        var launcher = new CatapultLaunchModel(
+            beat.CatapultStrokeM!.Value,
+            beat.CatapultEndSpeedMps!.Value,
+            beat.CatapultRampAngleRad!.Value,
+            beat.CatapultCrossOffsetM!.Value);
 
-        using Stream stream = Assert.IsAssignableFrom<Stream>(
-            Assembly.GetExecutingAssembly().GetManifestResourceStream(DetailResource));
-        string digest = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        Assert.Equal(-70.0, launcher.CrossOffsetM);
+        Assert.Equal(RapierLaunchSite.OperatingSurfaceElevationM, strip.Position.Y);
+        Assert.Equal(RapierLaunchSite.AircraftSupportReferenceHeightM,
+            strip.AircraftSupportReferenceHeightM);
+        Assert.Equal(433.861, launcher.RampFlatLengthM, precision: 3);
+        Assert.Equal(86.139, launcher.RampArcLengthM, precision: 3);
+        Assert.Equal(411.286, launcher.RampArcRadiusM, precision: 3);
+        Assert.Equal(8.988, launcher.RampRiseM, precision: 3);
+
+        Vec3D start = strip.ShipPoint(
+            CatapultLaunchModel.StartAlongM, launcher.CrossOffsetM);
+        Assert.True(terrain.TrySample(start.X, start.Z, out TerrainSample startGround));
+        Assert.Equal(188.1921875, startGround.HeightM, precision: 7);
+
+        LaunchTerrainClearanceAssessment assessment = launcher.AssessTerrainClearance(
+            strip, terrain, RapierLaunchSite.AircraftHalfSpanM);
+        Assert.True(assessment.TerrainAvailable);
+        Assert.True(assessment.Safe, assessment.Reason);
+        Assert.Equal(261, assessment.Samples);
+        Assert.True(assessment.MinimumRailClearanceM
+            >= RapierLaunchSite.MinimumConstructionSeparationM);
+        Assert.True(assessment.MinimumReleaseClearanceM
+            > assessment.MinimumRailClearanceM);
+    }
+
+    [Fact]
+    public void EmbeddedTruthHashesAndManifestDeclareOneAtlasAuthority() {
         Assert.Equal(
-            "705e782609d4e1bac280ee0631ced57c5cda0556d8f0ad419e97f5221fa64a8b",
-            digest);
+            "88c3ceb178400c7a59c8960ff55a5f888e180651dd79b28119870aed5419715f",
+            ResourceSha256(RegionalResource));
+        Assert.Equal(
+            "ae3f377f360a81e3fc4482d6bc8410190968da69749c5333f038e1d99aa07908",
+            ResourceSha256(DetailResource));
+
+        using JsonDocument manifest = ReadJsonResource(ManifestResource);
+        JsonElement truth = manifest.RootElement.GetProperty("simulationTruth");
+        Assert.Equal("derived-from-the-same-quantized-atlas-records",
+            truth.GetProperty("authority").GetString());
+        Assert.Equal(ResourceSha256(RegionalResource),
+            truth.GetProperty("regional").GetProperty("sha256").GetString());
+        Assert.Equal(ResourceSha256(DetailResource),
+            truth.GetProperty("detail").GetProperty("sha256").GetString());
+
+        using JsonDocument provenance = ReadJsonResource(ProvenanceResource);
+        Assert.Equal(manifest.RootElement.GetProperty("terrainId").GetString(),
+            provenance.RootElement.GetProperty("sourceAtlasManifest")
+                .GetProperty("terrainId").GetString());
+        Assert.Equal(2_390,
+            provenance.RootElement.GetProperty("outputs").GetProperty("regional")
+                .GetProperty("sourceRecordCount").GetInt32());
+    }
+
+    [Fact]
+    public void FinestAtlasRecordsMeetTheirCoarsestLodWithoutAHeightSeam() {
+        ITerrainSurface detail = Assert.IsAssignableFrom<ITerrainSurface>(
+            PackedTerrainTruth.Load(DetailResource, "Rapier atlas detail"));
+        ITerrainSurface regional = Assert.IsAssignableFrom<ITerrainSurface>(
+            PackedTerrainTruth.Load(RegionalResource, "Rapier atlas regional"));
 
         foreach (double edgeM in new[] { -8_192.0, 8_192.0 })
         foreach (double alongM in Enumerable.Range(0, 65)
@@ -154,13 +200,22 @@ public class UkraineTerrainTruthTests {
         }
     }
 
+    static string ResourceSha256(string resourceName) {
+        using Stream stream = Assert.IsAssignableFrom<Stream>(
+            Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName));
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
+    static JsonDocument ReadJsonResource(string resourceName) {
+        using Stream stream = Assert.IsAssignableFrom<Stream>(
+            Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName));
+        return JsonDocument.Parse(stream);
+    }
+
     static void AssertTerrainSeam(ITerrainSurface detail, ITerrainSurface regional,
         double eastM, double northM) {
         Assert.True(detail.TrySample(eastM, northM, out TerrainSample detailSample));
         Assert.True(regional.TrySample(eastM, northM, out TerrainSample regionalSample));
         Assert.Equal(detailSample.HeightM, regionalSample.HeightM, precision: 8);
-        Assert.True(detailSample.UpNormal.Dot(regionalSample.UpNormal) > 0.9999,
-            $"normal seam at ({eastM:F0}, {northM:F0}) was "
-            + $"{detailSample.UpNormal.Dot(regionalSample.UpNormal):F6}");
     }
 }

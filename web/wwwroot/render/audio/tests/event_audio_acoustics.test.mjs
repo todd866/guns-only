@@ -231,6 +231,60 @@ test("boolean buffet is a floor while angular disturbance supplies progression",
   assert.equal(latest(voices.buffetGain.gain), 0.09, "numeric profiles may request full scale");
 });
 
+test("thin-air RCS authority is silent until the thrusters actually fire", async () => {
+  const {
+    createEventVoices,
+    updateRcsVoice,
+  } = await freshEventAudio("rcs-duty");
+  const audio = new FakeAudioContext();
+  const voices = createEventVoices(audio, audio.destination);
+
+  const sourcesBeforeCoast = audio.sources.length;
+  const straightCoast = [
+    // Recorded zoom corridor endpoints. RCS availability rises as q falls, but a centred
+    // controller commands no gas at either end.
+    {
+      altitude_m: 38_709.6,
+      air_density_kg_m3: 0.00482955,
+      true_airspeed_mps: 969.95,
+      mach: 3.08,
+      rapier_rcs_authority: 0.913,
+    },
+    {
+      altitude_m: 43_586.4,
+      air_density_kg_m3: 0.00239329,
+      true_airspeed_mps: 921.71,
+      mach: 2.85,
+      rapier_rcs_authority: 1,
+    },
+  ];
+  for (const state of straightCoast) {
+    updateRcsVoice(voices, audio, {
+      ...state,
+      rapier_rcs_firing_frac: 0,
+      rapier_rcs_gas_frac: 0.94,
+      audio_perspective: "cockpit",
+    });
+    assert.equal(latest(voices.rcsGain.gain), 0);
+    audio.currentTime += 0.4;
+  }
+  assert.equal(audio.sources.length, sourcesBeforeCoast,
+    "availability alone must not schedule repeating RCS ticks");
+
+  updateRcsVoice(voices, audio, {
+    rapier_rcs_authority: 1,
+    rapier_rcs_firing_frac: 0.65,
+    rapier_rcs_gas_frac: 0.94,
+    air_density_kg_m3: 0.00239,
+    mach: 2.85,
+    audio_perspective: "cockpit",
+  });
+  assert.ok(latest(voices.rcsGain.gain) > 0,
+    "measured RCS firing retains a restrained structure-borne cockpit cue");
+  assert.ok(audio.sources.length > sourcesBeforeCoast,
+    "actual firing schedules a thruster tick");
+});
+
 test("speedbrake roar follows dynamic pressure and edge mechanisms remain audible", async () => {
   const {
     createEventVoices,

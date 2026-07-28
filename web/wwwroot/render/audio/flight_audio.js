@@ -375,6 +375,8 @@ export function projectFlightAudioState(state) {
     // presenting their final-live state as historical evidence.
     speed_brake: 0,
     rapier_rcs_authority: 0,
+    rapier_rcs_moment_nm: 0,
+    rapier_rcs_firing_frac: 0,
     auto_gcas_active: false,
     auto_gcas_warning: false,
   };

@@ -71,25 +71,60 @@ export function circuitLegLabel(leg) {
   return CIRCUIT_LEG_LABEL[leg] ?? (leg ? String(leg).replaceAll("_", " ") : "");
 }
 
+function thermalChannels(state) {
+  // Schema 1.19 separates lagged wall skin from flat-skin recovery and stagnation-point T0.
+  // In 1.18 the misleadingly named rapier_stagnation_temp_c carried lagged skin, so only call it
+  // T0 when the canonical skin field proves that the new contract is present.
+  const canonicalSkinC = finiteNumber(state.rapier_skin_temp_c);
+  const skinC = canonicalSkinC ?? finiteNumber(state.rapier_stagnation_temp_c);
+  const recoveryC = finiteNumber(state.rapier_recovery_temp_c);
+  const stagnationC = canonicalSkinC === null
+    ? null
+    : finiteNumber(state.rapier_stagnation_temp_c);
+  const cmcCapabilityC = finiteNumber(state.rapier_cmc_capability_c);
+  const cmcMarginC = finiteNumber(state.rapier_cmc_margin_c)
+    ?? (cmcCapabilityC !== null && stagnationC !== null
+      ? cmcCapabilityC - stagnationC
+      : finiteNumber(state.rapier_thermal_margin_c));
+  return Object.freeze({
+    skinC,
+    recoveryC,
+    stagnationC,
+    cmcCapabilityC,
+    cmcMarginC,
+  });
+}
+
 function skinFragment(state) {
-  const skinC = finiteNumber(state.rapier_stagnation_temp_c);
-  const marginC = finiteNumber(state.rapier_thermal_margin_c);
-  if (skinC === null) return null;
-  if (marginC !== null && marginC < 0) {
+  const thermal = thermalChannels(state);
+  const { skinC, stagnationC, cmcCapabilityC, cmcMarginC } = thermal;
+  if (skinC === null && stagnationC === null) return null;
+  if (cmcMarginC !== null && cmcMarginC < 0) {
+    const hotC = stagnationC ?? skinC;
+    const cap = cmcCapabilityC !== null
+      ? ` / CMC CAP ${Math.round(cmcCapabilityC)}°C`
+      : "";
     return Object.freeze({
-      text: `SKIN OVER ${Math.round(skinC)}°C`,
+      text: `T0 OVER ${Math.round(hotC)}°C${cap}`,
       level: "attack",
     });
   }
-  if (marginC !== null && marginC < 40) {
+  if (cmcMarginC !== null && cmcMarginC < 40) {
+    const skin = skinC !== null ? `SKIN ${Math.round(skinC)}°C · ` : "";
+    const hotC = stagnationC ?? skinC;
+    const cap = cmcCapabilityC !== null
+      ? ` · CMC CAP ${Math.round(cmcCapabilityC)}°C`
+      : "";
     return Object.freeze({
-      text: `SKIN ${Math.round(skinC)}°C · ${Math.round(marginC)}°C LEFT`,
+      text: `${skin}T0 ${Math.round(hotC)}°C${cap}`,
       level: "caution",
     });
   }
-  const marginText = marginC !== null ? ` · +${Math.round(marginC)}°C` : "";
+  const parts = [];
+  if (skinC !== null) parts.push(`SKIN ${Math.round(skinC)}°C`);
+  if (stagnationC !== null) parts.push(`T0 ${Math.round(stagnationC)}°C`);
   return Object.freeze({
-    text: `SKIN ${Math.round(skinC)}°C${marginText}`,
+    text: parts.join(" · "),
     level: "normal",
   });
 }
@@ -232,9 +267,11 @@ export function rapierGuidancePresentation(state) {
     ? circuitsCoach(state)
     : (active ? "AUTO" : enabled ? "AUTO STBY" : "PILOT");
   const skin = patternOnly ? null : skinFragment(state);
+  const thermal = patternOnly ? null : thermalChannels(state);
   const commanded = finiteNumber(state.rapier_commanded_mach);
   const authored = finiteNumber(state.rapier_authored_target_mach);
-  const skinLimit = finiteNumber(state.rapier_skin_mach_limit);
+  const skinLimit = finiteNumber(state.rapier_material_mach_ceiling)
+    ?? finiteNumber(state.rapier_skin_mach_limit);
   const machClampNote = !patternOnly
     && commanded !== null && authored !== null && skinLimit !== null
     && authored - commanded > 0.05
@@ -271,8 +308,13 @@ export function rapierGuidancePresentation(state) {
         : (!patternOnly && (phase === 6 || phase === 7)
           ? (noseErr !== null && noseErr <= 8 ? "ON V" : "NOSE→V")
           : "")),
-    skinC: patternOnly ? null : finiteNumber(state.rapier_stagnation_temp_c),
-    marginC: patternOnly ? null : finiteNumber(state.rapier_thermal_margin_c),
+    skinC: thermal?.skinC ?? null,
+    recoveryC: thermal?.recoveryC ?? null,
+    stagnationC: thermal?.stagnationC ?? null,
+    cmcCapabilityC: thermal?.cmcCapabilityC ?? null,
+    cmcMarginC: thermal?.cmcMarginC ?? null,
+    // Compatibility alias for existing HUD drawing code.
+    marginC: thermal?.cmcMarginC ?? null,
   });
 }
 
@@ -331,7 +373,7 @@ function cycleExplainer(mode) {
     case "FULL RAM":
       return "Ram owns the dash. Turbine is shutting down as inlet air gets too hot.";
     case "RAM ONLY":
-      return "Ram only — turbine is out. Skin heat is the binding limit now.";
+      return "Ram only — turbine is out. Engine/inlet envelope binds before CMC capability.";
     default:
       return "Turbine low, ram high. They hand over around Mach 2.";
   }
@@ -349,12 +391,24 @@ export function rapierCycleTeachPresentation(state) {
   const turbineKn = Math.max(0, finiteNumber(state.rapier_turbine_thrust_kn) ?? 0);
   const ramKn = Math.max(0, finiteNumber(state.rapier_ramjet_thrust_kn) ?? 0);
   const totalKn = Math.max(turbineKn + ramKn, 0.01);
-  const skinC = finiteNumber(state.rapier_stagnation_temp_c);
-  const marginC = finiteNumber(state.rapier_thermal_margin_c);
+  const thermal = thermalChannels(state);
+  const {
+    skinC,
+    recoveryC,
+    stagnationC,
+    cmcCapabilityC,
+    cmcMarginC,
+  } = thermal;
   const mode = cycleMode(mach);
   let thermalLevel = "normal";
-  if (marginC !== null && marginC < 0) thermalLevel = "fault";
-  else if (marginC !== null && marginC < 40) thermalLevel = "caution";
+  if (cmcMarginC !== null && cmcMarginC < 0) thermalLevel = "fault";
+  else if (cmcMarginC !== null && cmcMarginC < 40) thermalLevel = "caution";
+
+  const skinText = skinC !== null ? `SKIN ${Math.round(skinC)}°C` : "SKIN --";
+  const t0Text = stagnationC !== null ? ` · T0 ${Math.round(stagnationC)}°C` : "";
+  const capText = cmcCapabilityC !== null
+    ? ` · CMC CAP ${Math.round(cmcCapabilityC)}°C`
+    : "";
 
   return Object.freeze({
     mode,
@@ -365,15 +419,16 @@ export function rapierCycleTeachPresentation(state) {
     turbineShare: turbineKn / totalKn,
     ramShare: ramKn / totalKn,
     skinC,
-    marginC,
+    recoveryC,
+    stagnationC,
+    cmcCapabilityC,
+    cmcMarginC,
+    // Compatibility alias for existing HUD drawing code.
+    marginC: cmcMarginC,
     thermalLevel,
-    skinText: skinC === null
-      ? "SKIN --"
-      : marginC !== null && marginC < 0
-        ? `SKIN OVER ${Math.round(skinC)}°C`
-        : marginC !== null
-          ? `SKIN ${Math.round(skinC)}°C · +${Math.round(marginC)}°C TO LIMIT`
-          : `SKIN ${Math.round(skinC)}°C`,
+    skinText: thermalLevel === "fault"
+      ? `T0 OVER ${Math.round(stagnationC ?? skinC)}°C${capText}`
+      : `${skinText}${t0Text} · ENGINE/INLET LIMITING`,
   });
 }
 
@@ -392,8 +447,14 @@ export function rapierEnginePresentation(state) {
   const lever = Math.max(0, Number(state.throttle) || 0);
   const turbineFuelPpm = Math.max(0, Number(state.rapier_turbine_fuel_ppm) || 0);
   const ramjetFuelPpm = Math.max(0, Number(state.rapier_ramjet_fuel_ppm) || 0);
+  const skinText = teach.skinC !== null
+    ? ` · SKIN ${Math.round(teach.skinC)}°C`
+    : "";
+  const stagnationText = teach.stagnationC !== null
+    ? ` · T0 ${Math.round(teach.stagnationC)}°C`
+    : "";
   return Object.freeze({
-    text: `PROPULSION ${teach.mode} · ${thrustKn.toFixed(0)} KN · LEVER ${lever.toFixed(2)} · M${teach.mach.toFixed(2)} · ${Math.round(trueAirspeedKts).toLocaleString("en-US")} KTAS${teach.skinC !== null ? ` · T0 ${Math.round(teach.skinC)}°C` : ""}`,
+    text: `PROPULSION ${teach.mode} · ${thrustKn.toFixed(0)} KN · LEVER ${lever.toFixed(2)} · M${teach.mach.toFixed(2)} · ${Math.round(trueAirspeedKts).toLocaleString("en-US")} KTAS${skinText}${stagnationText}`,
     explainer: teach.explainer,
     level: teach.mode === "TURBINE" ? "turbine"
       : teach.mode === "HANDOVER" ? "transition" : "ram",

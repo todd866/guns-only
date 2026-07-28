@@ -9,9 +9,9 @@ infrastructure ([70 — Landing gear, arrest](../70-landing-gear-arrest.md),
 | Interface | Value | Owner chapter |
 | --- | --- | --- |
 | Catapult stroke / end speed | 520 m / ~110 m/s | [70](../70-landing-gear-arrest.md) |
-| Rail geometry | 360 m flat + 160 m arc to 12°, rise ~16.7 m at 3 G | [70](../70-landing-gear-arrest.md) |
+| Rail geometry | 433.86 m flat + 86.14 m arc to 12°, R=411.29 m, rise 8.99 m at 3 G | [70](../70-landing-gear-arrest.md) |
 | Gallery bore vs aircraft span | 14 × 8 m bore, 7.35 m span ⇒ ~2.7% blockage | [10](../10-geometry.md), [80](../80-basing-and-ground.md) |
-| Handoff height | `AirborneHeightM + RampRiseM` ≈ 20.7 m | [70](../70-landing-gear-arrest.md) |
+| Handoff height | support plane ≈13.14 m; aircraft reference ≈13.99 m above slab | [70](../70-landing-gear-arrest.md) |
 | Arrestor rated energy | **35 MJ** (`ArrestmentCapabilityProfile.ProvisionalRapierLandStrip.RatedEnergyJ`) | [70](../70-landing-gear-arrest.md) |
 
 Bore size is chosen to beat vacuum (generous clearance plus vents), not to seal tightly around the
@@ -36,4 +36,3 @@ blockage/drag argument in [80 — Basing and ground](../80-basing-and-ground.md)
 Catapult and gallery geometry, and the arrestor's rated energy (35 MJ), are **closed**. The recovery
 energy *requirement* estimate and radius-of-action arithmetic are **open findings** pending
 integrator verification.
-

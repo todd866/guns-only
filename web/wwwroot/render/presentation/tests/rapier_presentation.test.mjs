@@ -53,8 +53,9 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   const rampAngleRad = 12 * Math.PI / 180;               // Beats: CatapultRampAngleRad
   const rampRiseM = arcRadiusM * (1 - Math.cos(rampAngleRad));
   const rampHorizontalM = arcRadiusM * Math.sin(rampAngleRad);
-  assert.ok(Math.abs(strip.userData.sockets.bowReference.position.y - (4 + rampRiseM)) < 1e-6,
-    "launch handoff must sit AirborneHeightM above the ramp top");
+  assert.ok(Math.abs(strip.userData.sockets.bowReference.position.y
+      - (0.15 + 0.85 + 4 + rampRiseM)) < 1e-6,
+  "launch handoff must include rail head, authored aircraft support reference, and airborne gap");
   assert.ok(
     Math.abs(strip.userData.sockets.bowReference.position.z
       - (-20 - (520 - rampAngleRad * arcRadiusM) - rampHorizontalM)) < 1e-6,
@@ -89,6 +90,11 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   // Derived, not hardcoded: the gallery roofs the FLAT run, so its length is the stroke minus the
   // ramp arc. Shortening the launcher lengthens the gallery, and a literal here just breaks.
   const flatLengthM = 520 - rampAngleRad * arcRadiusM;
+  assert.ok(Math.abs(flatLengthM - 433.861) < 0.002);
+  assert.ok(Math.abs(strip.userData.launchArcLengthM - 86.139) < 0.002);
+  assert.ok(Math.abs(strip.userData.launchRampRiseM - 8.9876) < 0.001);
+  assert.equal(strip.userData.launchRailHeadHeightM, 0.15);
+  assert.equal(strip.userData.aircraftSupportReferenceHeightM, 0.85);
   const expectedRibs = Math.floor((flatLengthM - 10) / 10) + 1;
   assert.ok(ribs?.isInstancedMesh);
   assert.equal(ribs.count, expectedRibs);

@@ -281,6 +281,37 @@
     ]
   },
   "schemaVersion": "2.0.0",
+  "simulationTruth": {
+    "authority": "derived-from-the-same-quantized-atlas-records",
+    "derivationTool": "tools/terrain/build_atlas_truth.py",
+    "detail": {
+      "boundsLocalM": [
+        -8192.0,
+        -8192.0,
+        8192.0,
+        8192.0
+      ],
+      "byteLength": 526402,
+      "kernelResource": "GunsOnly.Web.Data.UkraineRapierSite.truth",
+      "sha256": "ae3f377f360a81e3fc4482d6bc8410190968da69749c5333f038e1d99aa07908",
+      "sourceLod": 0,
+      "spacingM": 32.0
+    },
+    "provenance": "rapier-range.kernel.provenance.json",
+    "regional": {
+      "boundsLocalM": [
+        -376832.0,
+        -212992.0,
+        40960.0,
+        196608.0
+      ],
+      "byteLength": 5228930,
+      "kernelResource": "GunsOnly.Web.Data.UkraineRapierRange.truth",
+      "sha256": "88c3ceb178400c7a59c8960ff55a5f888e180651dd79b28119870aed5419715f",
+      "sourceLod": 3,
+      "spacingM": 256.0
+    }
+  },
   "streaming": {
     "strategy": "velocity-ahead-bounded-window"
   },

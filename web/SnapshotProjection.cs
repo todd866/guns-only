@@ -30,7 +30,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.18.0";
+    const string SnapshotSchemaVersion = "1.19.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -175,14 +175,26 @@ internal static class SnapshotProjection {
         double equivalentAirspeedMps = AirData.EquivalentAirspeedMps(
             trueAirspeedMps, playerPosition.Y, atmosphere);
         double mach = trueAirspeedMps / atmosphericState.SpeedOfSoundMps;
-        double rapierStagnationTempC = Session.Player.SkinTemperatureK > 0.0
+        // Three deliberately separate aerothermal channels. The old snapshot field named
+        // "stagnation" actually carried lagged wall skin; that made a valid low wall temperature
+        // look like broken total-temperature physics and compared unlike locations.
+        double rapierRecoveryTempC =
+            AirData.AdiabaticWallTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
+        double rapierSkinTempC = Session.Player.SkinTemperatureK > 0.0
             ? Session.Player.SkinTemperatureK - 273.15
-            : AirData.AdiabaticWallTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
-        // Read from the AIRFRAME, never hardcoded. This was 900 C (the Mach-4 engine's number),
-        // then 320 C (steel), while the aircraft moved to a 1200 C CMC hot structure — so the HUD
-        // reported the pilot 150 C over a limit they were nowhere near. A displayed limit that does
-        // not come from the thing it is limiting will always drift out of date.
-        double rapierThermalLimitC =
+            : rapierRecoveryTempC;
+        double rapierStagnationTempC =
+            AirData.StagnationTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
+        double? rapierCmcCapabilityC = Session.RapierMissionAvailable
+            && Session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
+                ? Session.Beat.PlayerAir.SkinTemperatureLimitK - 273.15
+                : null;
+        double? rapierCmcMarginC = rapierCmcCapabilityC is { } cmcCapabilityC
+            ? cmcCapabilityC - rapierStagnationTempC
+            : null;
+        // Deprecated compatibility field: same numeric shape, now material capability minus true
+        // stagnation T0. New clients consume rapier_cmc_margin_c.
+        double rapierLegacyThermalLimitC =
             (Session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
                 ? Session.Beat.PlayerAir.SkinTemperatureLimitK : 593.15) - 273.15;
         Vec3D localWindVelocity = groundVelocity - airVelocity;
@@ -305,12 +317,26 @@ internal static class SnapshotProjection {
         double surfaceAltitudeM = Session.Terrain?.TrySample(
             playerPosition.X, playerPosition.Z, out TerrainSample terrainSample) == true
                 ? terrainSample.HeightM : 0.0;
-        if (_carrier is not null && _carrier.WithinDeckFootprint(playerPosition))
+        double supportReferenceHeightM = 0.0;
+        if (_carrier is not null
+            && Session.Catapult.TryLaunchSupportSurfaceHeight(
+                _carrier,
+                playerPosition,
+                RapierLaunchSite.AircraftHalfSpanM + 0.5,
+                out double launchSurfaceHeightM)) {
+            surfaceAltitudeM = launchSurfaceHeightM;
+            supportReferenceHeightM = _carrier.AircraftSupportReferenceHeightM;
+        } else if (_carrier is not null && _carrier.WithinDeckFootprint(playerPosition)) {
             surfaceAltitudeM = playerPosition.Y - _carrier.DeckFrame(playerPosition).height;
+            supportReferenceHeightM = _carrier.AircraftSupportReferenceHeightM;
+        }
         if (Session.ConventionalRunwayRecovery?.Runway is { } runway
             && runway.ContainsPavement(playerPosition, marginM: 2.0))
             surfaceAltitudeM = runway.Threshold.Y;
         double radarAltitudeM = Math.Max(0.0, playerPosition.Y - surfaceAltitudeM);
+        double supportClearanceM =
+            playerPosition.Y - supportReferenceHeightM - surfaceAltitudeM;
+        bool belowGround = supportClearanceM < -RapierLaunchSite.SurfaceContactToleranceM;
         double verticalSpeedMps = arrested ? 0.0 : s.VelocityVector().Y;
         var engine = _player.LastEngineOperatingPoint;
         double sustainedG = Protection.SustainedG(s, _beat.PlayerAir,
@@ -353,6 +379,7 @@ internal static class SnapshotProjection {
             + $"\"rapier_commanded_mach\":{Session.RapierCommandedMach:F2},"
             + $"\"rapier_authored_target_mach\":{Session.RapierAuthoredTargetMach:F2},"
             + $"\"rapier_skin_mach_limit\":{(double.IsFinite(Session.RapierSkinMachLimit) ? Session.RapierSkinMachLimit.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
+            + $"\"rapier_material_mach_ceiling\":{(Session.RapierMissionAvailable && double.IsFinite(Session.RapierSkinMachLimit) ? Session.RapierSkinMachLimit.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
             + $"\"rapier_phase_reason\":{JsonString(Session.RapierPhaseReason)},"
             + $"\"rapier_target_altitude_ft\":{Session.RapierTargetAltitudeFt:F0},"
             + $"\"rapier_missiles_remaining\":{Session.RapierMissilesRemaining},"
@@ -384,13 +411,19 @@ internal static class SnapshotProjection {
             + $"\"rapier_lob_skip_max\":{Session.RapierLobSkipMax},"
             + $"\"rapier_rcs_gas_frac\":{Session.RapierRcsGasFraction:F3},"
             + $"\"rapier_rcs_authority\":{Session.RapierRcsAuthority:F3},"
+            + $"\"rapier_rcs_moment_nm\":{Session.RapierRcsMomentMagnitudeNm:F1},"
+            + $"\"rapier_rcs_firing_frac\":{Session.RapierRcsFiringFraction:F3},"
             + $"\"rapier_zoom_lob\":{(Session.Beat.ScriptedIntercept?.ZoomLobProfile == true ? "true" : "false")},"
             + $"\"rapier_turbine_thrust_kn\":{Session.RapierTurbineThrustN / 1000.0:F2},"
             + $"\"rapier_ramjet_thrust_kn\":{Session.RapierRamjetThrustN / 1000.0:F2},"
             + $"\"rapier_turbine_fuel_ppm\":{Session.RapierTurbineFuelFlowLbPerMinute:F2},"
             + $"\"rapier_ramjet_fuel_ppm\":{Session.RapierRamjetFuelFlowLbPerMinute:F2},"
+            + $"\"rapier_skin_temp_c\":{rapierSkinTempC:F0},"
+            + $"\"rapier_recovery_temp_c\":{rapierRecoveryTempC:F0},"
             + $"\"rapier_stagnation_temp_c\":{rapierStagnationTempC:F0},"
-            + $"\"rapier_thermal_margin_c\":{rapierThermalLimitC - rapierStagnationTempC:F0},"
+            + $"\"rapier_cmc_capability_c\":{(rapierCmcCapabilityC is { } cmcCapC ? cmcCapC.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
+            + $"\"rapier_cmc_margin_c\":{(rapierCmcMarginC is { } cmcMarginC ? cmcMarginC.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
+            + $"\"rapier_thermal_margin_c\":{rapierLegacyThermalLimitC - rapierStagnationTempC:F0},"
             // Gross weight in pounds, and time-to-intercept in minutes. ETI is only meaningful on a
             // long-range run-in: inside the merge the number churns every tick and means nothing, so
             // it is published as -1 below 20 km or with no closure, and the HUD hides it.
@@ -624,7 +657,7 @@ internal static class SnapshotProjection {
             + $"\"configuration_flap_auto\":{(Session.AutomaticFlapSelection ? "true" : "false")},"
             + $"\"configuration_cue\":{JsonString(configurationCue)},"
             // Legacy frozen drives a mobile CSS interlock; Ready/Paused use their dedicated fields.
-            + $"\"below_ground\":{(playerPosition.Y <= surfaceAltitudeM ? "true" : "false")},\"frozen\":false,"
+            + $"\"below_ground\":{(belowGround ? "true" : "false")},\"frozen\":false,"
             + $"\"shots_total\":{Session.ShotsTotal},\"shots_in_window\":{Session.ShotsInWindow},"
             + $"\"combat_handoff_phase\":{(int)Session.CombatHandoffPhase},"
             + $"\"combat_handoff_phase_name\":\"{CombatHandoffPhaseToken(Session.CombatHandoffPhase)}\","

@@ -5,7 +5,7 @@
     "author": "Guns Only · airframe SE",
     "airframeId": "rapier.public-data-surrogate.v1",
     "revision": "1.0.0",
-    "note": "Teaching deck. Numbers are tagged closed / surrogate / provisional / fiction / open finding. Mach-4 dash is aspirational fiction; OFT energy-ladder peaks ~M3.69. CMC materials freeze stands. Skin HUD is lagged structure, not instantaneous recovery."
+    "note": "Teaching deck. Numbers are tagged closed / surrogate / provisional / fiction / open finding. Mach-4 dash is aspirational fiction; OFT energy-ladder peaks ~M3.69. The 1200 C CMC card is material capability, not an aircraft operating limit. HUD separates wall skin and T0."
   },
   "slides": [
     {
@@ -116,7 +116,7 @@
       "rows": [
         {
           "label": "Hot structure",
-          "detail": "SiC/SiC CMC · SkinTemperatureLimitK = 1473.15 (1200 °C) · closed materials freeze",
+          "detail": "SiC/SiC CMC · 1473.15 K (1200 °C) material-capability surrogate · no integrated qualification",
           "accent": "gold"
         },
         {
@@ -126,7 +126,7 @@
         },
         {
           "label": "Thermal vs thrust",
-          "detail": "CMC headroom ~M5.7 thermally · engine dies first ~M4.5 on thrust",
+          "detail": "CMC capability screen ~M5.37 on T0 · engine/inlet binds first",
           "accent": "red"
         },
         {
