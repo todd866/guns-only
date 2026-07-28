@@ -1852,7 +1852,9 @@ public sealed class SimulationSession {
             job: _beat.ScriptedIntercept?.Job ?? RapierJobKind.FormationIntercept,
             noseOnVelocityErrorDeg: _player.NoseOnVelocityErrorDeg,
             fuelLb: _fuel.FuelLb,
-            reserveFuelLb: _fuel.JokerThresholdLb ?? _fuel.BingoThresholdLb);
+            reserveFuelLb: _fuel.JokerThresholdLb ?? _fuel.BingoThresholdLb,
+            aircraftSupportReferenceHeightM:
+                _carrier.AircraftSupportReferenceHeightM);
         if (patternOnly) {
             _circuitTraffic = CircuitPatternTraffic.Evaluate(
                 TimeSeconds, home, recoveryInitial, count: 3);

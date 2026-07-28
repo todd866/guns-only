@@ -672,7 +672,8 @@ public sealed class RapierMissionDirector {
         RapierJobKind job = RapierJobKind.FormationIntercept,
         double noseOnVelocityErrorDeg = 0.0,
         double fuelLb = double.PositiveInfinity,
-        double reserveFuelLb = 1_200.0) {
+        double reserveFuelLb = 1_200.0,
+        double aircraftSupportReferenceHeightM = 0.0) {
         AtmosphericState air = atmosphere.Sample(player.Position.Y);
         double mach = trueAirspeedMps / Math.Max(1.0, air.SpeedOfSoundMps);
         double qPa = 0.5 * air.DensityKgM3 * trueAirspeedMps * trueAirspeedMps;
@@ -1126,8 +1127,14 @@ public sealed class RapierMissionDirector {
                     && Math.Abs(toLineup.Y) <= 1_000.0
                     && runwayHeadingError <= 45.0 * Math.PI / 180.0)
                     _recoveryLineupReached = true;
+                // Guidance is expressed at AircraftState.Position, while contact is evaluated at
+                // the loaded wheel/cradle support plane. Preserve the calibrated 1.5 m aim height
+                // above that plane instead of silently aiming a non-zero support reference low.
                 Vec3D physicalTouchdown = home - runwayForward * 240.0
-                    + new Vec3D(0.0, 1.5, 0.0);
+                    + new Vec3D(
+                        0.0,
+                        aircraftSupportReferenceHeightM + 1.5,
+                        0.0);
                 Vec3D toInitial = recoveryInitial - player.Position;
                 double initialRangeM = toInitial.Length;
                 // Three kilometres of spherical tolerance allowed an offset arrival to arm the
