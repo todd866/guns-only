@@ -62,7 +62,7 @@ public sealed class AttitudeHoldTests {
     }
 
     [Fact]
-    public void ReleasingAHighGPullCapturesTheRapierFlightPathInsteadOfContinuingTheZoom() {
+    public void ReleasingAHighGPullCapturesTheRapierNoseAttitude() {
         var session = new SimulationSession();
         session.StartBeat(() => ManualRapierAt(15_000.0, 600.0));
         session.Begin();
@@ -78,35 +78,41 @@ public sealed class AttitudeHoldTests {
 
         session.FeedKey(GKey.PullUp, false);
         session.StepFixed();
-        double capturedGamma = session.Controls.CapturedFlightPathRad;
-        double maximumGamma = session.Player.State.Gamma;
-        double minimumGamma = session.Player.State.Gamma;
+        double capturedPitch = session.Controls.CapturedPitchRad;
+        double maximumPitch = session.Player.BodyPitchRad;
+        double minimumPitch = session.Player.BodyPitchRad;
         double minimumCommandedG = session.Controls.Command.GDemand;
+        double maximumCommandedG = session.Controls.Command.GDemand;
         bool stayedActive = session.Controls.FlightPathHoldActive;
 
         for (int tick = 0; tick < 10 * AircraftSim.TickHz; tick++) {
             session.StepFixed();
-            maximumGamma = Math.Max(maximumGamma, session.Player.State.Gamma);
-            minimumGamma = Math.Min(minimumGamma, session.Player.State.Gamma);
+            maximumPitch = Math.Max(maximumPitch, session.Player.BodyPitchRad);
+            minimumPitch = Math.Min(minimumPitch, session.Player.BodyPitchRad);
             minimumCommandedG = Math.Min(minimumCommandedG,
+                session.Controls.Command.GDemand);
+            maximumCommandedG = Math.Max(maximumCommandedG,
                 session.Controls.Command.GDemand);
             stayedActive &= session.Controls.FlightPathHoldActive;
         }
 
-        double overshootDeg = (maximumGamma - capturedGamma) * 180.0 / Math.PI;
-        double undershootDeg = (capturedGamma - minimumGamma) * 180.0 / Math.PI;
-        _out.WriteLine($"captured gamma {capturedGamma * 180.0 / Math.PI:F1} deg; "
-            + $"10 s range -{undershootDeg:F1}/+{overshootDeg:F1} deg; "
-            + $"minimum command {minimumCommandedG:F2} G");
+        double overshootDeg = (maximumPitch - capturedPitch) * 180.0 / Math.PI;
+        double undershootDeg = (capturedPitch - minimumPitch) * 180.0 / Math.PI;
+        _out.WriteLine($"captured pitch {capturedPitch * 180.0 / Math.PI:F1} deg; "
+            + $"10 s attitude range -{undershootDeg:F1}/+{overshootDeg:F1} deg; "
+            + $"command {minimumCommandedG:F2}..{maximumCommandedG:F2} G; "
+            + $"final gamma {session.Player.State.Gamma * 180.0 / Math.PI:F1} deg, "
+            + $"alpha {session.Player.AngleOfAttackRad * 180.0 / Math.PI:F1} deg, "
+            + $"speed {session.Player.AirspeedMps:F0} m/s");
 
-        Assert.True(stayedActive, "neutral-stick Rapier flight-path hold dropped out");
+        Assert.True(stayedActive, "neutral-stick Rapier attitude trim dropped out");
         Assert.True(double.IsNaN(session.Controls.Command.CommandedPitchRad),
-            "fight hold must remain on the G/AoA path, not the approach absolute-pitch path");
-        Assert.True(overshootDeg < 5.0,
-            $"release let the zoom continue {overshootDeg:F1} deg above capture");
-        Assert.True(undershootDeg < 5.0,
-            $"capture correction drove {undershootDeg:F1} deg below the release path");
+            "attitude trim must remain on protected G/AoA, not the approach pitch path");
+        Assert.True(overshootDeg < 3.0,
+            $"nose rose {overshootDeg:F1} deg above the trimmed attitude");
+        Assert.True(undershootDeg < 3.0,
+            $"nose fell {undershootDeg:F1} deg below the trimmed attitude");
         Assert.True(minimumCommandedG < 0.95,
-            $"steep-climb capture never unloaded below 0.95 G ({minimumCommandedG:F2} G)");
+            $"steep-climb trim never unloaded below 0.95 G ({minimumCommandedG:F2} G)");
     }
 }

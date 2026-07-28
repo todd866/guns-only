@@ -30,7 +30,8 @@ public sealed class DetentLayer {
     const double ThrottleRate = 0.7;   // per second while W/S held — a real throttle, not tap-detents
     int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
-    double _capturedFlightPathRad = double.NaN;
+    Vec3D _capturedPitchForward;
+    double _capturedPitchRad = double.NaN;
     bool _flightPathHoldCaptured, _pitchInputActiveLastTick;
     bool _bankTargetInitialized;
     const double Tau = 0.07, StickyStepG = 0.5;
@@ -121,7 +122,7 @@ public sealed class DetentLayer {
     /// </summary>
     public double ApproachTrimThrottle { get; private set; }
     public bool FlightPathHoldActive { get; private set; }
-    public double CapturedFlightPathRad => _capturedFlightPathRad;
+    public double CapturedPitchRad => _capturedPitchRad;
 
     /// <summary>
     /// The clean datum remains the period/HUD reference. Actual flap camber reduces the body angle
@@ -350,20 +351,25 @@ public sealed class DetentLayer {
             }
         }
         else if (p.NeutralFlightPathHold.Enabled) {
-            // Modern neutral-stick law: capture the VELOCITY VECTOR where the pilot releases the
-            // pitch control, then convert gamma error back into an ordinary protected G request.
-            // At a 36-degree climb, equilibrium is cos(36)=0.81 G; the old blanket 1 G necessarily
-            // kept curving the path upward. Body-bank compensation remains signed, so an inverted
-            // aircraft asks for negative G rather than pulling through the horizon.
+            // Modern neutral-stick law: capture the BODY NOSE where the pilot releases pitch, then
+            // convert attitude error back into an ordinary protected G request. Capturing a world
+            // nose vector rather than an Euler pitch angle keeps the error finite through a
+            // near-vertical zoom. At equilibrium gravity feed-forward is still cos(gamma), not the
+            // old blanket 1 G; attitude feedback corrects the AoA/speed changes which otherwise let
+            // the nose wander while gamma appeared steady. Signed body-bank compensation means an
+            // inverted aircraft asks for negative G instead of pulling through the horizon.
             tier = DemandTier.Baseline;
             StickyOffsetG = 0.0;
             if (!_flightPathHoldCaptured || _pitchInputActiveLastTick) {
-                _capturedFlightPathRad = s.Gamma;
+                _capturedPitchForward = BodyForward(s);
+                _capturedPitchRad = System.Math.Asin(System.Math.Clamp(
+                    _capturedPitchForward.Y, -1.0, 1.0));
                 _flightPathHoldCaptured = true;
             }
             double holdAirspeed = double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed;
+            double pitchError = PitchAttitudeError(s, _capturedPitchForward);
             double holdG = FlightPathHold.RequiredNormalLoad(
-                _capturedFlightPathRad, s.Gamma, BodyBank(s), holdAirspeed,
+                pitchError, s.BodyRates.Q, s.Gamma, BodyBank(s), holdAirspeed,
                 p.NeutralFlightPathHold);
             if (double.IsFinite(holdG)) {
                 double holdMin = System.Math.Max(
@@ -709,6 +715,32 @@ public sealed class DetentLayer {
 
     static bool HasBodyAttitude(in AircraftState s) =>
         s.BodyAttitude.IsFinite && s.BodyAttitude.LengthSquared >= 1e-12;
+
+    static Vec3D BodyForward(in AircraftState s) => HasBodyAttitude(s)
+        ? s.BodyAttitude.Rotate(new Vec3D(0, 0, 1))
+        : s.ForwardDir();
+
+    static double PitchAttitudeError(in AircraftState s, in Vec3D capturedForward) {
+        if (!double.IsFinite(capturedForward.X)
+            || !double.IsFinite(capturedForward.Y)
+            || !double.IsFinite(capturedForward.Z)
+            || capturedForward.Length < 1e-9)
+            return double.NaN;
+        if (!HasBodyAttitude(s))
+            return System.Math.Asin(System.Math.Clamp(capturedForward.Y, -1.0, 1.0))
+                - s.Gamma;
+
+        Vec3D bodyForward = BodyForward(s);
+        Vec3D bodyRight = s.BodyAttitude.Rotate(new Vec3D(1, 0, 0));
+        Vec3D bodyUp = s.BodyAttitude.Rotate(new Vec3D(0, 1, 0));
+        Vec3D targetInPitchPlane = capturedForward
+            - bodyRight * capturedForward.Dot(bodyRight);
+        if (targetInPitchPlane.Length < 1e-9) return double.NaN;
+        targetInPitchPlane = targetInPitchPlane.Normalized();
+        return System.Math.Atan2(
+            targetInPitchPlane.Dot(bodyUp),
+            targetInPitchPlane.Dot(bodyForward));
+    }
 
     static double BodyBank(in AircraftState s) {
         // Above the horizon-bank validity threshold AircraftSim publishes bank in its
