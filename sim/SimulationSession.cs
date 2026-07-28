@@ -1748,8 +1748,10 @@ public sealed class SimulationSession {
         _fuel = CreatePlayerFuel();
         bool maintenanceRecovery = _beat.MaintenanceScenario
             == MaintenanceScenarioKind.F86EmergencyGearRecovery;
+        bool patternOnly = _beat.ScriptedIntercept?.PatternOnly == true;
         _systems = CreatePlayerSystems(
-            onApproach: PlayerSystemsSimulated && _carrier is not null && !maintenanceRecovery,
+            onApproach: PlayerSystemsSimulated && _carrier is not null
+                && !maintenanceRecovery && !patternOnly,
             prechargeUtilityHydraulics: _prechargeSystemsOnStage && !maintenanceRecovery);
         _maintenanceScenario = maintenanceRecovery
             ? new F86EmergencyGearRecoveryScenario(_systems)
@@ -1763,8 +1765,12 @@ public sealed class SimulationSession {
         _droneRaidTargetIndex = 0;
         _configurationAutomationEnabled = PlayerSystemsSimulated
             && _carrier is not null && !maintenanceRecovery;
+        // Circuits starts clean (Combat). Carrier approach beats stage Recovery.
         _configurationTarget = _configurationAutomationEnabled
-            ? FlightConfigurationTarget.Recovery : FlightConfigurationTarget.Combat;
+            ? (patternOnly
+                ? FlightConfigurationTarget.Combat
+                : FlightConfigurationTarget.Recovery)
+            : FlightConfigurationTarget.Combat;
         _manualGearConfiguration = false;
         _manualFlapConfiguration = false;
         _configurationWasReady = ConfigurationReady;
@@ -2027,6 +2033,41 @@ public sealed class SimulationSession {
         _detents.ConfigureFor(_beat.PlayerAir, initialThrottle);
         _waveOffArmed = approachMode;
         _waveOffUntilMs = double.NegativeInfinity;
+    }
+
+    /// <summary>
+    /// Circuits config by pattern leg: clean through BREAK, dirty from DOWNWIND to the wire.
+    /// </summary>
+    void ApplyPatternOnlyConfigurationTarget() {
+        if (_beat.ScriptedIntercept?.PatternOnly != true) return;
+        if (!_configurationAutomationEnabled) return;
+        FlightConfigurationTarget target = RapierCircuitLeg switch {
+            "DOWNWIND" or "BASE" or "SHORT_FINAL" or "WIRE_FINAL"
+                => FlightConfigurationTarget.Recovery,
+            _ => FlightConfigurationTarget.Combat
+        };
+        SelectAutomaticConfigurationTarget(target);
+    }
+
+    void ApplyCarrierConfigurationAutomation(bool inSlot) {
+        bool patternOnly = _beat.ScriptedIntercept?.PatternOnly == true;
+        if (patternOnly) {
+            ApplyPatternOnlyConfigurationTarget();
+            _detents.ApproachMode =
+                _configurationTarget == FlightConfigurationTarget.Recovery
+                && _detents.Throttle < 0.95;
+            return;
+        }
+        bool rapierRecoveryConfiguration = RapierAutomationActive
+            && RapierPhase == RapierMissionPhase.Recovery
+            && _player.IndicatedAirspeedMps * 1.94384 <= 300.0;
+        if ((inSlot && !WaveOffActive
+                && _recovery != Carrier.Recovery.Bolter
+                && _detents.Throttle < 0.95)
+            || rapierRecoveryConfiguration)
+            SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Recovery);
+        _detents.ApproachMode = inSlot && _detents.Throttle < 0.95
+            || rapierRecoveryConfiguration;
     }
 
     bool GearAtTarget => _configurationTarget == FlightConfigurationTarget.Recovery
@@ -3947,17 +3988,7 @@ public sealed class SimulationSession {
             if (_carrier is not null) {
                 bool inSlot = _carrier.InApproachSlot(_player.State,
                     _player.IndicatedAirspeedMps);
-                bool rapierRecoveryConfiguration = RapierAutomationActive
-                    && RapierPhase == RapierMissionPhase.Recovery
-                    && _player.IndicatedAirspeedMps * 1.94384 <= 300.0;
-                if ((inSlot && !WaveOffActive
-                        && _recovery != Carrier.Recovery.Bolter
-                        && _detents.Throttle < 0.95)
-                    || rapierRecoveryConfiguration)
-                    SelectAutomaticConfigurationTarget(
-                    FlightConfigurationTarget.Recovery);
-                _detents.ApproachMode = inSlot && _detents.Throttle < 0.95
-                    || rapierRecoveryConfiguration;
+                ApplyCarrierConfigurationAutomation(inSlot);
                 var (along, _, height) = _carrier.LandingFrame(_player.State.Position);
                 double gsLineH = Math.Max(0.0,
                     -_carrier.DeckLengthM * 0.2 - along) * Carrier.GlideslopeSlope;
@@ -4196,17 +4227,7 @@ public sealed class SimulationSession {
         if (_carrier is not null) {
             bool inSlot = _carrier.InApproachSlot(
                 _player.State, _player.IndicatedAirspeedMps);
-            bool rapierRecoveryConfiguration = RapierAutomationActive
-                && RapierPhase == RapierMissionPhase.Recovery
-                && _player.IndicatedAirspeedMps * 1.94384 <= 300.0;
-            if ((inSlot && !WaveOffActive
-                    && _recovery != Carrier.Recovery.Bolter
-                    && _detents.Throttle < 0.95)
-                || rapierRecoveryConfiguration)
-                SelectAutomaticConfigurationTarget(
-                FlightConfigurationTarget.Recovery);
-            _detents.ApproachMode = inSlot && _detents.Throttle < 0.95
-                || rapierRecoveryConfiguration;
+            ApplyCarrierConfigurationAutomation(inSlot);
             if (_detents.ApproachMode) _waveOffArmed = true;
             else if (!inSlot && _detents.Throttle < 0.95) _waveOffArmed = false;
             var (gsAlong, _, gsHeight) = _carrier.LandingFrame(_player.State.Position);

@@ -193,14 +193,14 @@ test("Circuits mode line names the pattern leg without Intercept attack chrome",
     rapier_mission_phase: 13,
     rapier_circuit_leg: "SHORT_FINAL",
     rapier_gun_drones_remaining: 4,
-    rapier_fd_target_ktas: 180,
-    rapier_target_altitude_ft: 400,
+    rapier_fd_target_ktas: 170,
+    rapier_target_altitude_ft: 950,
     rapier_stagnation_temp_c: 90,
     rapier_thermal_margin_c: 1110,
   });
   assert.match(cue.text, /DIRECT · CIRCUITS · SHORT FINAL/);
-  assert.match(cue.text, /HOOK DOWN · GEAR UP · FLAPS UP · 180 KT/);
-  assert.match(cue.text, /GO AROUND BEFORE GEAR/);
+  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · FLAPS DOWN · 170 KT/);
+  assert.match(cue.text, /LINE UP · CONFIGURED/);
   assert.doesNotMatch(cue.text, /SWARM|ATTACK|FL700|SKIN/);
   assert.equal(cue.boxLabel, "SHORT FINAL");
 });
@@ -213,13 +213,13 @@ test("Circuits DEMO strips skin and publishes leg config", () => {
     rapier_automation_active: true,
     rapier_mission_phase: 2,
     rapier_circuit_leg: "DEPART",
-    rapier_fd_target_ktas: 300,
-    rapier_target_altitude_ft: 1800,
+    rapier_fd_target_ktas: 250,
+    rapier_target_altitude_ft: 2500,
     rapier_stagnation_temp_c: 90,
     rapier_thermal_margin_c: 1110,
   });
   assert.match(cue.text, /DEMO · CIRCUITS · DEPART/);
-  assert.match(cue.text, /HOOK DOWN · GEAR UP · FLAPS UP · 300 KT · 1800 FT/);
+  assert.match(cue.text, /HOOK DOWN · GEAR UP · FLAPS UP · 250 KT · 2500 FT/);
   assert.doesNotMatch(cue.text, /SKIN|TBCC|RAM|AUTO ·/);
   assert.equal(cue.boxLabel, "DEPART");
 });
@@ -232,12 +232,13 @@ test("Circuits MONITOR posture when automation is off", () => {
     rapier_automation_active: false,
     rapier_mission_phase: 13,
     rapier_circuit_leg: "DOWNWIND",
-    rapier_fd_target_ktas: 300,
-    rapier_target_altitude_ft: 1800,
+    rapier_fd_target_ktas: 250,
+    rapier_target_altitude_ft: 2500,
     rapier_stagnation_temp_c: 120,
     rapier_thermal_margin_c: 1080,
   });
   assert.match(cue.text, /MONITOR · CIRCUITS · DOWNWIND/);
+  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · FLAPS DOWN/);
   assert.doesNotMatch(cue.text, /SKIN/);
 });
 
@@ -273,7 +274,7 @@ test("circuit gate presents world half-size and energy/config status", () => {
     rapier_gate_face_z: 1,
     rapier_gate_in_volume: true,
     rapier_gate_energy_ok: true,
-    rapier_fd_target_ktas: 300,
+    rapier_fd_target_ktas: 250,
     gear_nose: 0,
     gear_left: 0,
     gear_right: 0,
@@ -284,7 +285,7 @@ test("circuit gate presents world half-size and energy/config status", () => {
   assert.equal(open.status, "GATE OPEN");
   assert.equal(open.accent, "open");
   assert.match(open.boxLabel, /INITIAL · GATE OPEN/);
-  assert.match(open.configLine, /300 KT/);
+  assert.match(open.configLine, /250 KT/);
 
   const energy = circuitGatePresentation({
     rapier_mission_available: true,
@@ -294,7 +295,12 @@ test("circuit gate presents world half-size and energy/config status", () => {
     rapier_gate_face_z: 1,
     rapier_gate_in_volume: true,
     rapier_gate_energy_ok: false,
-    rapier_fd_target_ktas: 300,
+    rapier_fd_target_ktas: 250,
+    gear_nose: 1,
+    gear_left: 1,
+    gear_right: 1,
+    flap_left_deg: 30,
+    flap_right_deg: 30,
   });
   assert.equal(energy.status, "ENERGY");
   assert.equal(energy.accent, "fault");

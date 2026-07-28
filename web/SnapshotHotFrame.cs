@@ -470,6 +470,10 @@ internal static class SnapshotHotFrame {
         Num("arrest_peak_load_kn", 2);
         Num("arrest_residual_speed_kts", 2);
         Num("arrest_initial_closure_kts", 2);
+        Bool("catapult_active");
+        Num("catapult_progress", 4);
+        Num("catapult_speed_kts", 2);
+        Num("catapult_end_speed_kts", 2);
         CloseBlock();
 
         SlotCount = Slots.Count;
@@ -1069,6 +1073,11 @@ internal static class SnapshotHotFrame {
             w.Num("arrest_residual_speed_kts", arrestment.ResidualSpeedMps * AirData.MpsToKnots, 2);
             w.Num("arrest_initial_closure_kts",
                 arrestment.InitialRelativeSpeedMps * AirData.MpsToKnots, 2);
+            w.Bool("catapult_active", catapult.IsActive);
+            w.Num("catapult_progress", catapult.StrokeM > 0.0
+                ? System.Math.Clamp(catapult.DistanceM / catapult.StrokeM, 0.0, 1.0) : 0.0, 4);
+            w.Num("catapult_speed_kts", catapult.RelativeSpeedMps * AirData.MpsToKnots, 2);
+            w.Num("catapult_end_speed_kts", catapult.EndSpeedMps * AirData.MpsToKnots, 2);
         }
         w.End();
     }

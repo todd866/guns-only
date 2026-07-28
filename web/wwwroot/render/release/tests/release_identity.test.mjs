@@ -151,6 +151,13 @@ test("shell, browser module, and deployment endpoint share one release number", 
   assert.match(app, /!document\.hidden\) void resolveBuildIdentity\(\)/);
   assert.match(app, /window\.addEventListener\("focus", \(\) => void resolveBuildIdentity\(\)\)/);
   assert.doesNotMatch(app, /setInterval\([^)]*resolveBuildIdentity/);
+  assert.match(app, /async function reloadCurrentBuild\(\)/,
+    "reload must be async so it can drop the service-worker cache before navigating");
+  assert.match(app, /serviceWorker\.getRegistrations/,
+    "reload must unregister service workers or the same ?v= build stays pinned in Cache Storage");
+  assert.match(app, /caches\.keys\(\)/);
+  assert.match(app, /caches\.delete/,
+    "reload must delete guns-only-* caches before navigating to the current release");
   assert.match(index, /id="ready-build"/);
   assert.match(index, /id="ready-build-reload"/);
 });

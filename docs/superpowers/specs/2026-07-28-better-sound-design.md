@@ -21,7 +21,9 @@ Authoritative / practitioner sources consulted for the Phase 1 voice stack (not 
 | Andy Farnell / Red Blob Games motor notes (noise through resonant filters; Q as character) | Narrow high-Q bandpass for fan whine; shared pink field shaped per layer |
 | MDN Web Audio best practices (`setTargetAtTime`, gesture `resume`) | Continuous gains via `setTargetAtTime`; fail-silent suspended contexts |
 
-**Cockpit / ownship stack chosen (Approach A, procedural):** compressor partial stack + fan-whine BP + core BP + jet LP roar + ram BP + q-driven rush, density-scaled, coast-gated. No sample packs.
+**Cockpit / ownship stack chosen (Approach A, procedural):** fan/compressor **sawtooth orders** in the hundreds of Hz–kHz (HP/LP gated so they cannot organ-boom), pink **core** + **jet body**, white mid-band **grit** with LFO crackle AM, mild WaveShaper saturation, short feedback delay as exhaust “pipe,” fan-whine BP, ram BP, q-driven rush — density-scaled and coast-gated. No sample packs.
+
+**Retune note (post feel-gate):** the first Phase 1 ship (64 Hz sine stack + polite pink bed) read as synth-reactor, not jet. The retune targets NASA/Chalmers layering + Farnell/Sound.SE subtractive roar character. Preview: `web/wwwroot/render/audio/preview/jet_preview.html`; offline regime WAVs via `preview/jet_wav_export.html` / `render_jet_wavs.mjs`.
 
 ## Thesis
 
@@ -225,14 +227,21 @@ Goal: “this finally sounds like a jet fight,” before Rapier exo polish.
 
 Exit: mute works; gun and buffet read; engine still fail-silent; tests green.
 
+**Jet voice (Approach B):** Pure procedural failed the ear gate twice vs F-16 cockpit/AB
+footage. Hybrid now: CC0 F-4 loop beds under `samples/jet/` (idle/mil/grit) own Rapier
+identity; procedural handles rush, accents, coast, handover. See `samples/jet/SOURCES.md`.
+Listen: `preview/jet_preview.html` (includes maglev catshot button).
+
 ### Phase 2 — Rapier regimes
 
-1. Coast silence when q and thrust collapse / RCS authority high.
-2. RCS thruster one-shots or amplitude-gated hiss from `rapier_rcs_*` (and stick demand if needed).
-3. Reentry rush character distinct from tropospheric rush.
-4. Catapult and trap event beds from arrest/catapult snapshot edges.
-5. Optionally retune turbine/ram crossfade to propulsion map Mach bands; bias gains with
-   `rapier_*_thrust_kn` so lever-only fuel lies less to the ear.
+1. ~~Coast silence when q and thrust collapse / RCS authority high.~~
+2. ~~RCS thruster one-shots or amplitude-gated hiss from `rapier_rcs_*`.~~
+3. Reentry rush character distinct from tropospheric rush (still open).
+4. ~~Maglev buried-tube catshot~~ — EM climb + tunnel pressure + rail spark + portal exit;
+   snapshot fields `catapult_active` / `catapult_progress` / `catapult_speed_kts`.
+5. ~~Trap one-shots from `arrest_phase` edges~~ — snatch / stretch / stop / fail.
+6. ~~Hit / destroy~~ — snapshot edges on `hits` / `opponent_alive`.
+7. Turbine→ram crossfade retuned to map bands M1.9–M2.8; thrust-kn bias partial.
 
 Exit: a zoom-lob sortie is narratable with eyes closed through boost → quiet → RCS → reentry →
 trap.
@@ -241,8 +250,8 @@ trap.
 
 1. Hit / destroy one-shots from combat events (mirror visual effects events).
 2. Soft distance attenuation for bandit gun if/when peer or AI muzzle events are available.
-3. Honor `audio_profile_id` with a tiny constant table (`audio.fixed-wing.jet.v1` vs
-   `audio.rapier.turbo-ram.v1`); Rapier stops publishing `null`.
+3. ~~Honor `audio_profile_id`~~ — `audio.rapier.turbo-ram.v1` / `audio.f22a.aged-twin-fan.v1` /
+   `audio.fixed-wing.jet.v1` published from snapshot; renderer resolves character from profile.
 4. Type-1 ranging tick if that sight lands.
 5. Only then consider Approach B one-shot samples for any event that still fails the gate.
 

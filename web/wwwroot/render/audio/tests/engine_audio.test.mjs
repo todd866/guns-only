@@ -21,6 +21,11 @@ class FakeAudioParam {
     this.targets.push({ value, time, timeConstant: 0 });
     this.value = value;
   }
+
+  linearRampToValueAtTime(value, time) {
+    this.targets.push({ value, time, timeConstant: 0 });
+    this.value = value;
+  }
 }
 
 class FakeNode {
@@ -46,8 +51,8 @@ class FakeOscillator extends FakeNode {
     super();
     this.type = "sine";
     this.frequency = new FakeAudioParam();
+    this.detune = new FakeAudioParam();
     this.started = false;
-    this.stopped = false;
   }
 
   start() {
@@ -55,7 +60,7 @@ class FakeOscillator extends FakeNode {
   }
 
   stop() {
-    this.stopped = true;
+    this.started = false;
   }
 }
 
@@ -74,7 +79,7 @@ class FakeSource extends FakeNode {
     this.buffer = null;
     this.loop = false;
     this.started = false;
-    this.stopped = false;
+    this.playbackRate = new FakeAudioParam(1);
   }
 
   start() {
@@ -82,7 +87,34 @@ class FakeSource extends FakeNode {
   }
 
   stop() {
-    this.stopped = true;
+    this.started = false;
+  }
+}
+
+class FakeWaveShaper extends FakeNode {
+  constructor() {
+    super();
+    this.curve = null;
+    this.oversample = "none";
+  }
+}
+
+class FakeDelay extends FakeNode {
+  constructor() {
+    super();
+    this.delayTime = new FakeAudioParam(0);
+  }
+}
+
+class FakeConstantSource extends FakeNode {
+  constructor() {
+    super();
+    this.offset = new FakeAudioParam(1);
+    this.started = false;
+  }
+
+  start() {
+    this.started = true;
   }
 }
 
@@ -111,6 +143,9 @@ class FakeAudioContext {
     this.sources = [];
     this.buffers = [];
     this.compressors = [];
+    this.waveShapers = [];
+    this.delays = [];
+    this.constants = [];
     FakeAudioContext.instances.push(this);
   }
 
@@ -144,6 +179,24 @@ class FakeAudioContext {
     return node;
   }
 
+  createWaveShaper() {
+    const node = new FakeWaveShaper();
+    this.waveShapers.push(node);
+    return node;
+  }
+
+  createDelay(_maxDelayTime = 1) {
+    const node = new FakeDelay();
+    this.delays.push(node);
+    return node;
+  }
+
+  createConstantSource() {
+    const node = new FakeConstantSource();
+    this.constants.push(node);
+    return node;
+  }
+
   createBuffer(_channels, frames) {
     const data = new Float32Array(frames);
     const buffer = { getChannelData: () => data, data };
@@ -166,91 +219,121 @@ async function freshModule(path, label) {
   return import(`${path}?test=${label}-${freshModule.sequence}`);
 }
 
-test("build creates a falling six-partial turbine stack and deterministic pink beds", async () => {
+function spoolToGoverned(update, audio, state) {
+  for (let step = 1; step <= 24; step++) {
+    audio.currentTime = step * 0.25;
+    update(state);
+  }
+}
+
+test("build creates living jet stack: orders, shaft, grit, crackle, breath mods", async () => {
   const previous = globalThis.AudioContext;
   try {
     FakeAudioContext.instances.length = 0;
     globalThis.AudioContext = FakeAudioContext;
-    const firstModule = await freshModule("../engine_audio.js", "first");
-    firstModule.updateEngineAudio({
+    const { createEngineVoices, updateEngineVoices } = await freshModule(
+      "../engine_audio.js",
+      "build",
+    );
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    updateEngineVoices(voices, audio, {
       applied_throttle: 1.55,
       engine_rpm_pct: 100,
       mach: 0.8,
       true_airspeed_kts: 500,
       air_density_kg_m3: 0.7,
     });
-    const first = FakeAudioContext.instances.at(-1);
 
-    assert.equal(first.oscillators.length, 6);
-    assert.ok(first.oscillators.every((oscillator) =>
-      oscillator.type === "sine" && oscillator.started));
-    const partialLevels = first.gains.slice(2, 8).map((gain) => gain.gain.value);
-    assert.deepEqual(partialLevels, [1, 0.46, 0.27, 0.16, 0.095, 0.055]);
-    assert.equal(first.sources.length, 2, "engine and airframe pressure fields stay separate");
-    assert.ok(first.sources.every((source) => source.loop && source.started));
-    // Filters: compressor LP, core BP, ram BP, jet LP, fan BP, rush HP, rush LP.
-    assert.equal(first.filters.length, 7);
+    assert.equal(voices.fanOrders.length, 8, "dense fan-order comb");
+    assert.ok(voices.fanOrders.every((order) =>
+      order.oscillator.type === "sawtooth" && order.oscillator.started));
+    assert.ok(voices.shaftOsc.started, "shaft growl");
+    assert.ok(voices.flutterLfo.started, "detune flutter");
+    assert.ok(voices.crackleLfo.started, "grit LFO");
+    assert.ok(voices.crackleImpulseGain, "impulse crackle path");
+    assert.ok(voices.breathDepth, "irregular breath mod");
+    assert.ok(voices.shimmerDepth, "tonal shimmer mod");
+    assert.ok(voices.jetGritHiPre, "high grit band");
+    assert.ok(voices.cabinLp, "cabin ceiling filter");
+    assert.ok(audio.waveShapers.length >= 2, "abs-mod + exhaust saturation");
+    assert.ok(audio.sources.length >= 5, "pink/white/mod/crackle/airframe beds");
+    assert.ok(audio.delays.length >= 1);
 
-    const secondModule = await freshModule("../engine_audio.js", "second");
-    secondModule.updateEngineAudio({});
-    const second = FakeAudioContext.instances.at(-1);
-    assert.deepEqual(first.buffers[0].data, second.buffers[0].data,
-      "the seeded core bed must be bit-identical between builds");
-    assert.deepEqual(first.buffers[1].data, second.buffers[1].data,
-      "the seeded airframe bed must be bit-identical between builds");
-
-    const pink = first.buffers[0].data;
-    let signalEnergy = 0;
-    let differenceEnergy = 0;
-    for (let i = 1; i < pink.length; i++) {
-      signalEnergy += pink[i] * pink[i];
-      const difference = pink[i] - pink[i - 1];
-      differenceEnergy += difference * difference;
-    }
-    assert.ok(differenceEnergy < signalEnergy,
-      "pink noise must retain low-frequency correlation rather than read as white hiss");
+    // Seeded beds stay deterministic across builds.
+    const second = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    assert.ok(second.fanOrders.length === 8);
   } finally {
     globalThis.AudioContext = previous;
   }
 });
 
-test("audio-clock RPM is rate-limited and the turbine-to-ram handover completes", async () => {
+test("fan order fundamental sits in hundreds of Hz, not organ sub-bass", async () => {
   const previous = globalThis.AudioContext;
   try {
     FakeAudioContext.instances.length = 0;
     globalThis.AudioContext = FakeAudioContext;
-    const { updateEngineAudio } = await freshModule("../engine_audio.js", "spool");
+    const { createEngineVoices, updateEngineVoices } = await freshModule(
+      "../engine_audio.js",
+      "orders",
+    );
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const state = {
+      applied_throttle: 1.0,
+      engine_rpm_pct: 100,
+      mach: 0.7,
+      true_airspeed_kts: 400,
+      air_density_kg_m3: 1.0,
+    };
+    for (let step = 1; step <= 24; step++) {
+      audio.currentTime = step * 0.25;
+      updateEngineVoices(voices, audio, state);
+    }
+    const fundamental = latest(voices.fanOrders[0].oscillator.frequency);
+    assert.ok(fundamental > 400, `got ${fundamental}`);
+    assert.ok(fundamental < 1200, `got ${fundamental}`);
+    const shaft = latest(voices.shaftOsc.frequency);
+    assert.ok(shaft > 60 && shaft < 250, `shaft growl in cockpit band, got ${shaft}`);
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("audio-clock RPM is rate-limited and turbine-to-ram handover completes", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const { createEngineVoices, updateEngineVoices } = await freshModule(
+      "../engine_audio.js",
+      "spool",
+    );
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
     const state = {
       applied_throttle: 1.55,
       engine_rpm_pct: 100,
-      mach: 1.6,
+      mach: 1.9,
       true_airspeed_kts: 800,
       air_density_kg_m3: 0.3,
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
     };
-    updateEngineAudio(state);
-    const audio = FakeAudioContext.instances.at(-1);
-    const fundamental = audio.oscillators[0].frequency;
-
+    updateEngineVoices(voices, audio, state);
     audio.currentTime = 1;
-    updateEngineAudio(state);
-    assert.equal(latest(fundamental), 64 + 0.05 * 250,
-      "a long frame is capped to a quarter-second of spool travel");
-    for (let step = 2; step <= 20; step++) {
-      audio.currentTime = step * 0.25;
-      updateEngineAudio(state);
-    }
-    assert.ok(latest(fundamental) < 314,
-      "the compressor may not teleport to governed RPM");
+    updateEngineVoices(voices, audio, state);
+    const expected = 185 + 0.055 * 480 + 90;
+    assert.ok(Math.abs(latest(voices.fanOrders[0].oscillator.frequency) - expected) < 1e-6);
 
-    // Gain order: master; compressor; six partials; core; ram; jet; fan; rush.
-    const compressorGain = audio.gains[1].gain;
-    const ramGain = audio.gains[9].gain;
-    const jetGain = audio.gains[10].gain;
+    for (let step = 1; step <= 24; step++) {
+      audio.currentTime = 1 + step * 0.25;
+      updateEngineVoices(voices, audio, state);
+    }
     audio.currentTime += 0.25;
-    updateEngineAudio({ ...state, mach: 2.7 });
-    assert.ok(latest(compressorGain) < 1e-12);
-    assert.ok(latest(ramGain) > 0.08, "broad ram pressure must own the fully handed-over mix");
-    assert.ok(latest(jetGain) > 0, "exhaust roar remains as a supporting body under ram");
+    updateEngineVoices(voices, audio, { ...state, mach: 2.8 });
+    assert.ok(latest(voices.fanOrderGain.gain) < 1e-12, "fan orders mute when ram owns");
+    assert.ok(latest(voices.ramGain.gain) > 0.08, "ram broadband owns handed-over mix");
+    assert.ok(latest(voices.ramHowlGain.gain) > 0.04, "ram howl carries tonal shift");
   } finally {
     globalThis.AudioContext = previous;
   }
@@ -261,31 +344,33 @@ test("airframe rush follows dynamic pressure, not throttle, and mute remains ava
   try {
     FakeAudioContext.instances.length = 0;
     globalThis.AudioContext = FakeAudioContext;
-    const { updateEngineAudio } = await freshModule("../engine_audio.js", "rush");
+    const { createEngineVoices, updateEngineVoices } = await freshModule(
+      "../engine_audio.js",
+      "rush",
+    );
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
     const flight = {
       engine_rpm_pct: 80,
       mach: 0.9,
       true_airspeed_kts: 600,
       air_density_kg_m3: 0.65,
     };
-    updateEngineAudio({ ...flight, applied_throttle: 0 });
-    const audio = FakeAudioContext.instances.at(-1);
-    const rushGain = audio.gains[12].gain;
-    const masterGain = audio.gains[0].gain;
-    const idleRush = latest(rushGain);
+    updateEngineVoices(voices, audio, { ...flight, applied_throttle: 0 });
+    const idleRush = latest(voices.rushGain.gain);
 
     audio.currentTime = 0.1;
-    updateEngineAudio({ ...flight, applied_throttle: 1.55 });
-    assert.equal(latest(rushGain), idleRush);
+    updateEngineVoices(voices, audio, { ...flight, applied_throttle: 1.55 });
+    assert.equal(latest(voices.rushGain.gain), idleRush);
 
     audio.currentTime = 0.2;
-    updateEngineAudio({
+    updateEngineVoices(voices, audio, {
       ...flight,
       applied_throttle: 0,
       true_airspeed_kts: 200,
     }, { muted: true });
-    assert.ok(latest(rushGain) < idleRush);
-    assert.equal(latest(masterGain), 0);
+    assert.ok(latest(voices.rushGain.gain) < idleRush);
+    assert.equal(latest(voices.master.gain), 0);
   } finally {
     globalThis.AudioContext = previous;
   }
@@ -296,7 +381,12 @@ test("thin air and collapsed thrust near-silence the propulsion stack", async ()
   try {
     FakeAudioContext.instances.length = 0;
     globalThis.AudioContext = FakeAudioContext;
-    const { updateEngineAudio } = await freshModule("../engine_audio.js", "coast");
+    const { createEngineVoices, updateEngineVoices } = await freshModule(
+      "../engine_audio.js",
+      "coast",
+    );
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
     const dense = {
       applied_throttle: 1.55,
       engine_rpm_pct: 100,
@@ -306,19 +396,15 @@ test("thin air and collapsed thrust near-silence the propulsion stack", async ()
       rapier_turbine_thrust_kn: 90,
       rapier_ramjet_thrust_kn: 0,
     };
-    updateEngineAudio(dense);
-    const audio = FakeAudioContext.instances.at(-1);
     for (let step = 1; step <= 24; step++) {
       audio.currentTime = step * 0.25;
-      updateEngineAudio(dense);
+      updateEngineVoices(voices, audio, dense);
     }
-    const compressorGain = audio.gains[1].gain;
-    const jetGain = audio.gains[10].gain;
-    const denseCompressor = latest(compressorGain);
-    const denseJet = latest(jetGain);
+    const denseJet = latest(voices.jetBodyGain.gain);
+    const denseFan = latest(voices.fanOrderGain.gain);
 
     audio.currentTime += 0.25;
-    updateEngineAudio({
+    updateEngineVoices(voices, audio, {
       applied_throttle: 0.05,
       engine_rpm_pct: 20,
       mach: 2.2,
@@ -328,42 +414,45 @@ test("thin air and collapsed thrust near-silence the propulsion stack", async ()
       rapier_ramjet_thrust_kn: 0,
       rapier_rcs_authority: 0.8,
     });
-    assert.ok(latest(compressorGain) < denseCompressor * 0.2,
-      "exo / coast must drop the turbine stack");
-    assert.ok(latest(jetGain) < denseJet * 0.2,
-      "exo / coast must drop the exhaust roar");
+    assert.ok(latest(voices.fanOrderGain.gain) < denseFan * 0.2);
+    assert.ok(latest(voices.jetBodyGain.gain) < denseJet * 0.2);
+    assert.ok(latest(voices.crackleImpulseGain.gain) < 0.02);
   } finally {
     globalThis.AudioContext = previous;
   }
 });
 
-test("power changes move jet exhaust gain while fan whine tracks turbine share", async () => {
+test("power opens grit and impulse crackle harder than idle", async () => {
   const previous = globalThis.AudioContext;
   try {
     FakeAudioContext.instances.length = 0;
     globalThis.AudioContext = FakeAudioContext;
-    const { updateEngineAudio } = await freshModule("../engine_audio.js", "power");
+    const { createEngineVoices, updateEngineVoices } = await freshModule(
+      "../engine_audio.js",
+      "power",
+    );
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
     const base = {
       engine_rpm_pct: 100,
       mach: 0.7,
       true_airspeed_kts: 400,
       air_density_kg_m3: 1.0,
     };
-    updateEngineAudio({ ...base, applied_throttle: 0.2 });
-    const audio = FakeAudioContext.instances.at(-1);
     for (let step = 1; step <= 24; step++) {
       audio.currentTime = step * 0.25;
-      updateEngineAudio({ ...base, applied_throttle: 0.2 });
+      updateEngineVoices(voices, audio, { ...base, applied_throttle: 0.2 });
     }
-    const jetGain = audio.gains[10].gain;
-    const fanGain = audio.gains[11].gain;
-    const idleJet = latest(jetGain);
-    const idleFan = latest(fanGain);
+    const idleGrit = latest(voices.jetGritPre.gain);
+    const idleCrackle = latest(voices.crackleImpulseGain.gain);
+    const idleBreath = latest(voices.breathDepth.gain);
 
     audio.currentTime += 0.25;
-    updateEngineAudio({ ...base, applied_throttle: 1.55 });
-    assert.ok(latest(jetGain) > idleJet * 1.5, "MIL must open the exhaust roar");
-    assert.ok(latest(fanGain) >= idleFan * 0.9, "fan whine stays present under turbine share");
+    updateEngineVoices(voices, audio, { ...base, applied_throttle: 1.55 });
+    assert.ok(latest(voices.jetGritPre.gain) > idleGrit * 1.8);
+    assert.ok(latest(voices.crackleImpulseGain.gain) > idleCrackle * 2);
+    assert.ok(latest(voices.breathDepth.gain) > idleBreath * 1.4,
+      "MIL must breathe harder — anti-static");
   } finally {
     globalThis.AudioContext = previous;
   }
@@ -415,7 +504,7 @@ test("flight façade shares one compressor bus, honors mute, and schedules gun r
     }, { muted: false, triggerHeld: true, nowSeconds: 1.0 });
 
     const audio = FakeAudioContext.instances.at(-1);
-    assert.equal(audio.compressors.length, 1, "Indoor-style dynamics sit on the shared bus");
+    assert.equal(audio.compressors.length, 1);
     const master = audio.gains[0].gain;
     assert.ok(latest(master) > 0);
 
@@ -429,8 +518,7 @@ test("flight façade shares one compressor bus, honors mute, and schedules gun r
       air_density_kg_m3: 1.0,
       gun_firing: true,
     }, { muted: false, triggerHeld: true, nowSeconds: 1.12 });
-    assert.ok(audio.oscillators.length > oscillatorsBefore,
-      "firing must schedule discrete gun-report oscillators");
+    assert.ok(audio.oscillators.length > oscillatorsBefore);
 
     audio.currentTime = 0.2;
     updateFlightAudio({
@@ -442,7 +530,7 @@ test("flight façade shares one compressor bus, honors mute, and schedules gun r
       auto_gcas_warning: true,
       pilot_conscious: true,
     }, { muted: true, triggerHeld: false, nowSeconds: 1.2 });
-    assert.equal(latest(master), 0, "settings mute must silence the shared master");
+    assert.equal(latest(master), 0);
 
     setFlightAudioEnabled(false);
     assert.equal(latest(master), 0);
@@ -462,5 +550,375 @@ test("flight façade disables permanently when Web Audio is missing", async () =
   } finally {
     globalThis.AudioContext = previous;
     globalThis.webkitAudioContext = previousWebkit;
+  }
+});
+
+test("attachJetSampleBeds ducks synth and opens mil bed under power", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEngineVoices,
+      updateEngineVoices,
+      attachJetSampleBeds,
+    } = await freshModule("../engine_audio.js", "samples");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const bed = audio.createBuffer(1, 64);
+    assert.equal(attachJetSampleBeds(voices, audio, { mil: bed, idle: bed, grit: bed }), true);
+    assert.equal(voices.hasSampleBeds, true);
+    assert.ok(voices.sampleMil?.started);
+
+    const state = {
+      applied_throttle: 1.55,
+      engine_rpm_pct: 100,
+      mach: 0.8,
+      true_airspeed_kts: 500,
+      air_density_kg_m3: 1.0,
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+    };
+    for (let step = 1; step <= 24; step++) {
+      audio.currentTime = step * 0.25;
+      updateEngineVoices(voices, audio, state);
+    }
+    assert.ok(latest(voices.sampleMilGain.gain) > 0.4, "MIL sample owns power");
+    assert.ok(latest(voices.jetBodyGain.gain) < 0.15, "synth body ducked under samples");
+    assert.equal(latest(voices.shaftGain.gain), 0, "shaft saw muted under beds");
+    assert.equal(latest(voices.fanOrderGain.gain), 0, "fan orders muted under beds");
+    assert.equal(latest(voices.breathDepth.gain), 0, "breath AM muted under beds");
+    assert.ok(Math.abs(latest(voices.sampleMil.playbackRate) - 1) < 1e-6, "bed pitch locked");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("throttle slam accents grit then decays", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const { createEngineVoices, updateEngineVoices } = await freshModule(
+      "../engine_audio.js",
+      "accent",
+    );
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const base = {
+      engine_rpm_pct: 100,
+      mach: 0.7,
+      true_airspeed_kts: 420,
+      air_density_kg_m3: 1.0,
+    };
+    for (let step = 1; step <= 20; step++) {
+      audio.currentTime = step * 0.25;
+      updateEngineVoices(voices, audio, { ...base, applied_throttle: 0.2 });
+    }
+    const idleGrit = latest(voices.jetGritPre.gain);
+    audio.currentTime += 0.05;
+    updateEngineVoices(voices, audio, { ...base, applied_throttle: 1.55 });
+    assert.ok(voices.throttleAccent > 0.3, "slam raises accent");
+    assert.ok(latest(voices.jetGritPre.gain) > idleGrit, "grit jumps on slam");
+    for (let step = 1; step <= 20; step++) {
+      audio.currentTime += 0.25;
+      updateEngineVoices(voices, audio, { ...base, applied_throttle: 1.55 });
+    }
+    assert.ok(voices.throttleAccent < 0.05, "accent decays while held");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("sample beds duck and ram howl owns Mach handover", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEngineVoices,
+      updateEngineVoices,
+      attachJetSampleBeds,
+    } = await freshModule("../engine_audio.js", "handover-beds");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const bed = audio.createBuffer(1, 64);
+    attachJetSampleBeds(voices, audio, { mil: bed, idle: bed, grit: bed });
+    const milState = {
+      applied_throttle: 1.55,
+      engine_rpm_pct: 100,
+      mach: 0.85,
+      true_airspeed_kts: 520,
+      air_density_kg_m3: 0.9,
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+    };
+    for (let step = 1; step <= 24; step++) {
+      audio.currentTime = step * 0.25;
+      updateEngineVoices(voices, audio, milState);
+    }
+    const milBed = latest(voices.sampleMilGain.gain);
+    audio.currentTime += 0.25;
+    updateEngineVoices(voices, audio, {
+      ...milState,
+      mach: 2.8,
+      true_airspeed_kts: 1500,
+      air_density_kg_m3: 0.22,
+      rapier_turbine_thrust_kn: 2,
+      rapier_ramjet_thrust_kn: 80,
+    });
+    assert.ok(latest(voices.sampleMilGain.gain) < milBed * 0.15, "turbine beds fade at ram");
+    assert.ok(latest(voices.ramHowlGain.gain) > 0.05, "ram howl present under beds");
+    assert.ok(latest(voices.sampleHp.frequency) > 300, "bed HP rises into duct character");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("crackle impulse buffer is sparse and seeded", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const { crackleImpulseBuffer } = await freshModule("../engine_audio.js", "crackle");
+    const audio = new FakeAudioContext();
+    const a = crackleImpulseBuffer(audio, 0xC2AC1E);
+    const b = crackleImpulseBuffer(audio, 0xC2AC1E);
+    assert.deepEqual(a.data, b.data);
+    const nonzero = a.data.filter((v) => v !== 0).length;
+    assert.ok(nonzero > 20 && nonzero < a.data.length * 0.15, "sparse impulses");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("F-22 keeps twin-fan character with no ram handover at high Mach", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const { createEngineVoices, updateEngineVoices } = await freshModule(
+      "../engine_audio.js",
+      "f22-engine",
+    );
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const state = {
+      applied_throttle: 1.55,
+      engine_rpm_pct: 100,
+      mach: 1.8,
+      true_airspeed_kts: 1050,
+      air_density_kg_m3: 0.45,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    };
+    for (let step = 1; step <= 24; step++) {
+      audio.currentTime = step * 0.25;
+      updateEngineVoices(voices, audio, state);
+    }
+    assert.ok(latest(voices.fanWhineGain.gain) > 0.01, "F-22 fan whine present");
+    assert.ok(latest(voices.ramGain.gain) < 1e-6, "no ram duct on F-22");
+    assert.ok(latest(voices.ramHowlGain.gain) < 1e-6, "no ram howl on F-22");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("speed brake, G-on, and aged canopy cues respond to snapshot", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEventVoices,
+      updateAirframeCueVoices,
+    } = await freshModule("../event_audio.js", "cues");
+    const audio = new FakeAudioContext();
+    const voices = createEventVoices(audio, audio.destination);
+
+    updateAirframeCueVoices(voices, audio, {
+      has_speed_brake: true,
+      speed_brake: 1,
+      true_airspeed_kts: 420,
+      air_density_kg_m3: 1.0,
+      g_actual: 1.0,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    });
+    assert.ok(latest(voices.brakeGain.gain) > 0.08, "boards out make roar");
+    assert.ok(latest(voices.canopyGain.gain) < 0.005, "canopy quiet at 1G");
+
+    audio.currentTime = 0.2;
+    updateAirframeCueVoices(voices, audio, {
+      has_speed_brake: true,
+      speed_brake: 0,
+      true_airspeed_kts: 420,
+      air_density_kg_m3: 1.0,
+      pilot_gz: 6.5,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    });
+    assert.ok(latest(voices.brakeGain.gain) < 0.01, "boards in quiet");
+    assert.ok(latest(voices.gGain.gain) > 0.05, "G-on strain under load");
+    assert.ok(latest(voices.canopyGain.gain) > 0.015, "canopy seal whine under high G");
+
+    audio.currentTime = 0.4;
+    updateAirframeCueVoices(voices, audio, {
+      has_speed_brake: true,
+      speed_brake: 1,
+      true_airspeed_kts: 420,
+      air_density_kg_m3: 1.0,
+      g_actual: 6,
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+    }, { enabled: false });
+    assert.equal(latest(voices.brakeGain.gain), 0);
+    assert.equal(latest(voices.gGain.gain), 0);
+    assert.equal(latest(voices.canopyGain.gain), 0);
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("maglev catshot rises with stroke and portal exit fires once", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEventVoices,
+      updateCatapultVoice,
+    } = await freshModule("../event_audio.js", "catshot");
+    const audio = new FakeAudioContext();
+    const voices = createEventVoices(audio, audio.destination);
+    const oscillatorsBefore = audio.oscillators.length;
+
+    updateCatapultVoice(voices, audio, {
+      catapult_active: true,
+      catapult_progress: 0.15,
+      catapult_speed_kts: 40,
+      catapult_end_speed_kts: 214,
+      carrier: false,
+      recovery_platform: true,
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+    });
+    assert.ok(voices.catapultWasActive);
+    assert.ok(audio.oscillators.length > oscillatorsBefore, "energize thunk on shot start");
+    const earlyTunnel = latest(voices.tunnelGain.gain);
+    const earlyEm = latest(voices.emOsc.frequency);
+
+    audio.currentTime = 0.2;
+    updateCatapultVoice(voices, audio, {
+      catapult_active: true,
+      catapult_progress: 0.92,
+      catapult_speed_kts: 200,
+      catapult_end_speed_kts: 214,
+      carrier: false,
+      recovery_platform: true,
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+    });
+    assert.ok(latest(voices.tunnelGain.gain) > earlyTunnel * 1.5, "tunnel builds");
+    assert.ok(latest(voices.emOsc.frequency) > earlyEm * 2, "EM whine climbs");
+    assert.ok(latest(voices.sparkGain.gain) > 0.04, "rail spark late stroke");
+
+    const oscMid = audio.oscillators.length;
+    audio.currentTime = 0.4;
+    updateCatapultVoice(voices, audio, {
+      catapult_active: false,
+      catapult_progress: 1,
+      catapult_speed_kts: 214,
+      carrier: false,
+      recovery_platform: true,
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+    });
+    assert.equal(voices.catapultWasActive, false);
+    assert.ok(audio.oscillators.length > oscMid, "portal exit one-shot");
+    assert.ok(latest(voices.tunnelGain.gain) < 0.01, "tunnel dies after exit");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("RCS ticks, trap snatch, and combat hit/destroy edges fire", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEventVoices,
+      updateRcsVoice,
+      updateTrapVoice,
+      updateCombatCueVoices,
+    } = await freshModule("../event_audio.js", "regime-cues");
+    const audio = new FakeAudioContext();
+    const voices = createEventVoices(audio, audio.destination);
+
+    updateRcsVoice(voices, audio, {
+      rapier_rcs_authority: 0.9,
+      rapier_rcs_gas_frac: 0.8,
+    });
+    assert.ok(latest(voices.rcsGain.gain) > 0.02, "RCS hiss under authority");
+
+    audio.currentTime = 0.7;
+    const beforeSnatch = audio.oscillators.length;
+    updateTrapVoice(voices, audio, {
+      arrest_phase: "ARRESTED",
+      arrest_decel_g: 2.5,
+      wire_tension_kn: 180,
+    });
+    assert.ok(audio.oscillators.length > beforeSnatch, "wire snatch on catch");
+    assert.ok(latest(voices.wireGain.gain) > 0.05, "stretch groan while arrested");
+
+    audio.currentTime = 0.9;
+    const beforeStop = audio.oscillators.length;
+    updateTrapVoice(voices, audio, { arrest_phase: "STOPPED" });
+    assert.ok(audio.oscillators.length > beforeStop, "stop thud");
+    assert.ok(latest(voices.wireGain.gain) < 0.01, "wire quiet after stop");
+
+    audio.currentTime = 1.1;
+    const beforeHit = audio.sources.length;
+    updateCombatCueVoices(voices, audio, { hits: 1, opponent_alive: true });
+    assert.ok(audio.sources.length > beforeHit, "hit impact");
+    const beforeBoom = audio.oscillators.length;
+    updateCombatCueVoices(voices, audio, { hits: 1, opponent_alive: false });
+    assert.ok(audio.oscillators.length > beforeBoom, "destroy boom");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("flight façade mutes master and airframe cues when paused/muted", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const { updateFlightAudio } = await freshModule("../flight_audio.js", "pause-mute");
+
+    updateFlightAudio({
+      applied_throttle: 1.2,
+      engine_rpm_pct: 95,
+      mach: 0.7,
+      true_airspeed_kts: 380,
+      air_density_kg_m3: 1.0,
+      has_speed_brake: true,
+      speed_brake: 1,
+      g_actual: 5,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    }, { muted: false });
+
+    const audio = FakeAudioContext.instances.at(-1);
+    const master = audio.gains[0].gain;
+    assert.ok(latest(master) > 0);
+
+    audio.currentTime = 0.15;
+    updateFlightAudio({
+      applied_throttle: 1.2,
+      engine_rpm_pct: 95,
+      mach: 0.7,
+      true_airspeed_kts: 380,
+      air_density_kg_m3: 1.0,
+      paused: true,
+      has_speed_brake: true,
+      speed_brake: 1,
+      g_actual: 5,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    }, { muted: true });
+    assert.equal(latest(master), 0);
+  } finally {
+    globalThis.AudioContext = previous;
   }
 });

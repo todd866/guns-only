@@ -70,7 +70,7 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.15.0",
+        Assert.Equal("1.16.0",
             root.GetProperty("snapshot_schema_version").GetString());
         Assert.True(root.TryGetProperty("time_compression_factor",
             out JsonElement timeCompressionFactor));

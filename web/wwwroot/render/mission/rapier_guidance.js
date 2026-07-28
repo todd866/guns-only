@@ -97,7 +97,9 @@ function skinFragment(state) {
 function circuitsConfigFragment(leg, state) {
   const targetKtas = finiteNumber(state.rapier_fd_target_ktas);
   const targetAltFt = finiteNumber(state.rapier_target_altitude_ft);
-  const config = leg === "WIRE_FINAL"
+  const dirty = leg === "DOWNWIND" || leg === "BASE"
+    || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
+  const config = dirty
     ? "HOOK DOWN · GEAR DOWN · FLAPS DOWN"
     : "HOOK DOWN · GEAR UP · FLAPS UP";
   const speed = targetKtas !== null ? ` · ${Math.round(targetKtas)} KT` : "";
@@ -105,10 +107,12 @@ function circuitsConfigFragment(leg, state) {
     ? ` · ${Math.round(targetAltFt)} FT`
     : "";
   let action = "";
-  if (leg === "SHORT_FINAL") action = " · GO AROUND BEFORE GEAR";
+  if (leg === "SHORT_FINAL") action = " · LINE UP · CONFIGURED";
   else if (leg === "WIRE_FINAL") action = " · ACCEPT WIRE";
   else if (leg === "INITIAL") action = " · BREAK LEFT ABM";
-  else if (leg === "BREAK") action = " · TO DOWNWIND";
+  else if (leg === "BREAK") action = " · ~60° TO DOWNWIND";
+  else if (leg === "DOWNWIND") action = " · GEAR FLAPS · ABEAM";
+  else if (leg === "BASE") action = " · ~45° TO FINAL";
   else if (leg === "DEPART") action = " · CLIMB TO PATTERN";
   return `${config}${speed}${alt}${action}`;
 }
@@ -129,8 +133,10 @@ function circuitsConfigOk(leg, state) {
     Number(state.flap_left_deg) || 0,
     Number(state.flap_right_deg) || 0,
   ) > 8;
-  if (leg === "WIRE_FINAL") return gearDown && flapsDown;
-  // Pattern legs: gear up, flaps up (hook is always-down teaching — not a snapshot bool).
+  const dirty = leg === "DOWNWIND" || leg === "BASE"
+    || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
+  if (dirty) return gearDown && flapsDown;
+  // DEPART / INITIAL / BREAK: gear up, flaps up (hook is always-down teaching).
   return !gearDown && !flapsDown;
 }
 
@@ -164,7 +170,9 @@ export function circuitGatePresentation(state) {
     status = "ON SPEED";
     accent = "armed";
   }
-  const config = leg === "WIRE_FINAL"
+  const dirty = leg === "DOWNWIND" || leg === "BASE"
+    || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
+  const config = dirty
     ? "HOOK · GEAR · FLAPS DOWN"
     : "HOOK DOWN · GEAR UP · FLAPS UP";
   const speed = targetKtas !== null ? `${Math.round(targetKtas)} KT` : "";

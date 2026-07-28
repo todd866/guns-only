@@ -519,7 +519,7 @@ function renderCircuitsPreflight(brief) {
   }
   if (readyCircuitsCue) {
     readyCircuitsCue.textContent = brief.preflightCue
-      || "INITIAL / DOWNWIND ~300 KT · FINAL ~180 KT · hook down always";
+      || "2,500 FT · 250 KT · BREAK 60° · BASE 45° · 3 NM FINAL · GEAR/FLAPS DOWNWIND";
   }
   if (readyCircuitsModes) {
     readyCircuitsModes.replaceChildren(...modes.map((mode) => {
@@ -1454,13 +1454,41 @@ function resolveBuildIdentity({ force = false } = {}) {
   return buildIdentityLookup;
 }
 
-function reloadCurrentBuild() {
-  const destination = buildIdentity.stale
-    ? new URL(window.location.pathname, CANONICAL_PRODUCTION_ORIGIN)
-    : new URL(window.location.href);
+async function reloadCurrentBuild() {
+  // Cache-first service-worker responses pin app.js?v=N and unversioned modules until the
+  // cache name changes. A plain navigation to the same release therefore keeps serving the
+  // stale shell — the "Reload current build" button looked dead. Drop the worker and its
+  // caches first, then hard-navigate to the canonical production origin.
+  try {
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+    if (typeof caches !== "undefined") {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((key) => key.startsWith("guns-only-"))
+          .map((key) => caches.delete(key)),
+      );
+    }
+  } catch (error) {
+    console.warn("Could not clear offline caches before reload.", error);
+  }
+
+  const destination = new URL(
+    window.location.pathname || "/",
+    CANONICAL_PRODUCTION_ORIGIN,
+  );
   destination.searchParams.delete("mission");
-  destination.searchParams.set("program", selectedProgramNodeId);
-  destination.searchParams.set("build", buildIdentity.currentBuild || buildIdentity.releaseBuild);
+  if (selectedProgramNodeId) {
+    destination.searchParams.set("program", selectedProgramNodeId);
+  }
+  destination.searchParams.set(
+    "build",
+    buildIdentity.currentBuild || buildIdentity.releaseBuild,
+  );
+  destination.searchParams.set("_reload", String(Date.now()));
   window.location.replace(destination.href);
 }
 
@@ -1922,17 +1950,17 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Rapier Circuits",
     sortie: "Ski-jump · overhead pattern · touch-and-go · trap",
     configuration: "Attritable Rapier brick · full fuel · hook down · no contact",
-    brief: "Military overhead · ~1,800 ft AGL · 300 KT initial/downwind · 180 KT final · fly the boxes · trap the wire. P = DEMO; touch stick = DIRECT; P off = MONITOR. No Mach dash.",
+    brief: "Military overhead · 2,500 ft AGL · 250 KT initial/downwind · break ~60° (max 75°) · base ~45° (max 60°) · 3 NM finals · gear and flaps on downwind · fly the boxes · trap the wire. P = DEMO; touch stick = DIRECT; P off = MONITOR. No Mach dash.",
     controls: "P DEMO ↔ MONITOR · stick takeover = DIRECT · arrows/W/S · T time · V threshold · Tab traffic\nFly the boxes · trap the wire",
-    preflightCue: "INITIAL / DOWNWIND ~300 KT · FINAL ~180 KT · hook down always",
+    preflightCue: "2,500 FT · 250 KT · BREAK 60° · BASE 45° · 3 NM FINAL · GEAR/FLAPS DOWNWIND",
     preflightLegs: Object.freeze([
-      Object.freeze({ id: "DEPART", label: "DEPART", intent: "Ski-jump → climb → join INITIAL", cue: "Pattern alt ~1,500–2,000 ft AGL" }),
-      Object.freeze({ id: "INITIAL", label: "INITIAL", intent: "Runway heading, midfield", cue: "~300 KT · hook down" }),
-      Object.freeze({ id: "BREAK", label: "BREAK", intent: "~180° to downwind", cue: "~45° bank" }),
-      Object.freeze({ id: "DOWNWIND", label: "DOWNWIND", intent: "Opposite parallel, abeam", cue: "~2–2.5 NM offset · ~300 KT" }),
-      Object.freeze({ id: "BASE", label: "BASE", intent: "Continuous turn to final", cue: "Shed toward ~220 KT" }),
-      Object.freeze({ id: "SHORT_FINAL", label: "SHORT FINAL", intent: "T&G / go-around before midfield gear", cue: "~180 KT" }),
-      Object.freeze({ id: "WIRE_FINAL", label: "WIRE", intent: "Accept trap; aerobrake → wire", cue: "~170–180 KT" }),
+      Object.freeze({ id: "DEPART", label: "DEPART", intent: "Ski-jump → climb → join INITIAL", cue: "Pattern alt 2,500 ft AGL · clean" }),
+      Object.freeze({ id: "INITIAL", label: "INITIAL", intent: "Runway heading, midfield", cue: "~250 KT · gear/flaps up · hook down" }),
+      Object.freeze({ id: "BREAK", label: "BREAK", intent: "~180° to downwind", cue: "Prefer 60° bank · max 75°" }),
+      Object.freeze({ id: "DOWNWIND", label: "DOWNWIND", intent: "Opposite parallel, abeam", cue: "~1.4 NM offset · ~250 KT · gear/flaps DOWN" }),
+      Object.freeze({ id: "BASE", label: "BASE", intent: "Continuous turn to 3 NM final", cue: "Prefer 45° bank · max 60° · ~200 KT" }),
+      Object.freeze({ id: "SHORT_FINAL", label: "SHORT FINAL", intent: "3 NM final · T&G or continue", cue: "~170 KT · configured" }),
+      Object.freeze({ id: "WIRE_FINAL", label: "WIRE", intent: "Accept trap; aerobrake → wire", cue: "~165 KT · four boxes" }),
     ]),
     preflightModes: Object.freeze([
       Object.freeze({ id: "DEMO", label: "DEMO (P)", detail: "Auto on · watch the boxes" }),
@@ -6013,9 +6041,12 @@ class FlightView {
       }
     }
     // Fail-silent: flight_audio disables itself permanently on any error rather than
-    // letting an audio problem reach the flight kernel. Mute follows player settings.
+    // letting an audio problem reach the flight kernel. Mute follows player settings
+    // and pause — the view loop still ticks while paused (dt=0), so audio must gate here.
     updateFlightAudio(state, {
-      muted: !playerSettings.audio,
+      muted: !playerSettings.audio
+        || pauseReasons.size > 0
+        || state?.paused === true,
       triggerHeld: isGkeyHeld(8),
       nowSeconds,
     });

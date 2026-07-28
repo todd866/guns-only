@@ -14,9 +14,12 @@ public readonly record struct CircuitTrafficShip(
     double Chi);
 
 public static class CircuitPatternTraffic {
-    const double PatternAltAglM = 550.0;
-    const double DownwindOffsetM = 2.25 * 1852.0;
-    const double InitialAlongM = 2_000.0;
+    /// <summary>Match RapierMission Circuits shelf — 2,500 ft AGL.</summary>
+    const double PatternAltAglM = 2_500.0 * 0.3048;
+    const double DownwindOffsetM = 1.40 * 1852.0;
+    const double InitialAlongM = 1.50 * 1852.0;
+    const double FinalAlongM = 3.00 * 1852.0;
+    /// Compact overhead at ~250 KT / 60° break — about three minutes a lap.
     const double LapSeconds = 180.0;
 
     public static CircuitTrafficShip[] Evaluate(
@@ -35,16 +38,17 @@ public static class CircuitPatternTraffic {
 
         Vec3D threshold = home - runwayForward * 240.0;
         double patternY = home.Y + PatternAltAglM;
+        double finalStartAltM = home.Y + FinalAlongM * Math.Tan(3.0 * Math.PI / 180.0);
         Vec3D initial = threshold - runwayForward * InitialAlongM
             + new Vec3D(0.0, patternY - threshold.Y, 0.0);
         Vec3D downwindEntry = initial + runwayLeft * DownwindOffsetM;
         Vec3D downwindAbeam = threshold + runwayLeft * DownwindOffsetM
             + new Vec3D(0.0, patternY - threshold.Y, 0.0);
-        Vec3D basePoint = threshold - runwayForward * (InitialAlongM * 0.55)
-            + runwayLeft * (DownwindOffsetM * 0.40)
-            + new Vec3D(0.0, home.Y + 280.0 - threshold.Y, 0.0);
-        Vec3D shortFinal = threshold - runwayForward * 1_200.0
-            + new Vec3D(0.0, home.Y + 120.0 - threshold.Y, 0.0);
+        Vec3D basePoint = threshold - runwayForward * FinalAlongM
+            + runwayLeft * (DownwindOffsetM * 0.50)
+            + new Vec3D(0.0, finalStartAltM + 40.0 - threshold.Y, 0.0);
+        Vec3D shortFinal = threshold - runwayForward * FinalAlongM
+            + new Vec3D(0.0, finalStartAltM - threshold.Y, 0.0);
 
         Vec3D[] path = [initial, downwindEntry, downwindAbeam, basePoint, shortFinal, initial];
         string[] legs = ["INITIAL", "BREAK", "DOWNWIND", "BASE", "SHORT_FINAL", "INITIAL"];
