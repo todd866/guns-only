@@ -53,6 +53,11 @@ let audioSessionCreatedAt = "";
 let lastStopReason = "";
 let lifecycleInstalled = false;
 const sampleBedCache = new Map();
+// A missing or unreachable bed must not turn the per-frame ensure call into a fetch loop: one
+// failed load latches a cooldown, and the next attempt waits out the window. The beds stay
+// optional — procedural audio carries the jet until a retry lands.
+const SAMPLE_BED_RETRY_MS = 30_000;
+const sampleBedFailedAtMs = new Map();
 const MPS_TO_KNOTS = 1.9438444924406;
 const KNOTS_TO_MPS = 0.5144444444444;
 const SEA_LEVEL_DENSITY = 1.225;
@@ -296,13 +301,21 @@ function ensureJetSamples(state) {
     return;
   }
   if (sampleLoad?.character === character) return;
+  const failedAtMs = sampleBedFailedAtMs.get(character);
+  if (failedAtMs !== undefined
+    && performance.now() - failedAtMs < SAMPLE_BED_RETRY_MS) return;
 
   const generation = sampleLoadGeneration;
   const promise = loadJetSampleBeds(context, { character });
   sampleLoad = { character, promise };
   promise
     .then((beds) => {
-      if (beds?.mil) sampleBedCache.set(character, beds);
+      if (beds?.mil) {
+        sampleBedCache.set(character, beds);
+        sampleBedFailedAtMs.delete(character);
+      } else {
+        sampleBedFailedAtMs.set(character, performance.now());
+      }
       if (generation !== sampleLoadGeneration || lastCharacter !== character) return;
       if (engineVoices.hasSampleBeds) {
         replaceJetSampleBeds(engineVoices, context, beds, { character });
@@ -310,7 +323,9 @@ function ensureJetSamples(state) {
         attachJetSampleBeds(engineVoices, context, beds, { character });
       }
     })
-    .catch(() => {})
+    .catch(() => {
+      sampleBedFailedAtMs.set(character, performance.now());
+    })
     .finally(() => {
       if (sampleLoad?.promise === promise) sampleLoad = null;
     });

@@ -81,7 +81,11 @@ async function cachedTerrainBundle(url) {
 }
 
 function fetchWithCacheWrite(request, { basicOnly = false } = {}) {
-  return fetch(request).then((response) => {
+  // An unversioned URL can be satisfied by the browser HTTP cache with bytes from an older
+  // build, and a plain fetch would then persist those stale bytes into this build's cache.
+  // Unversioned assets therefore revalidate; ?v=BUILD URLs are immutable per build and skip it.
+  const versioned = new URL(request.url).searchParams.has("v");
+  return fetch(request, versioned ? undefined : { cache: "no-cache" }).then((response) => {
     let cacheWrite = Promise.resolve();
     if (response.ok && response.status === 200 && (!basicOnly || response.type === "basic")) {
       // Clone while the body is unquestionably unused. The response can then be returned
@@ -125,9 +129,12 @@ self.addEventListener("fetch", (event) => {
     event.waitUntil(network.then(({ cacheWrite }) => cacheWrite).catch(() => undefined));
     event.respondWith(
       network.then(({ response }) => response).catch(async (error) => {
-        const cached = await caches.match(request)
-          ?? await caches.match("index.html")
-          ?? await caches.match("/");
+        // Match only this build's cache: during the activate window an older build's bucket may
+        // still exist, and an unscoped match could revive it.
+        const cache = await caches.open(CACHE);
+        const cached = await cache.match(request)
+          ?? await cache.match("index.html")
+          ?? await cache.match("/");
         if (cached) return cached;
         throw error;
       }),
@@ -140,7 +147,7 @@ self.addEventListener("fetch", (event) => {
   // index preboot gate drops an older controller's cache before Blazor reads its boot manifest.
   // Cache first is therefore both correct and the reason a cold offline start is fast.
   const responseRecord = (async () => {
-    const cached = await caches.match(request);
+    const cached = await (await caches.open(CACHE)).match(request);
     if (cached) return { response: cached, cacheWrite: Promise.resolve() };
     return fetchWithCacheWrite(request, { basicOnly: true });
   })();
