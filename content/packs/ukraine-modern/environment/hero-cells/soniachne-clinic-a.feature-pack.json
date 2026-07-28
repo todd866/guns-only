@@ -1,0 +1,805 @@
+{
+  "$schema": "../../../../schemas/mission-feature-pack.schema.json",
+  "schemaVersion": "1.0.0",
+  "featurePackId": "mission-feature-pack.ukraine-modern.soniachne-clinic-a.v1",
+  "packVersion": "1.0.0",
+  "displayName": "Soniachne Clinic Meadow — Hero Cell A",
+  "status": "preview",
+  "theatre": {
+    "theatreId": "theatre.ukraine.soniachne-2030s.v1",
+    "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+    "heroCellId": "hero-cell.soniachne-clinic-a.v1",
+    "eraSetting": "2030s"
+  },
+  "coordinateFrame": {
+    "frameId": "frame.ukraine.rapier-range.local.v1",
+    "units": "metres",
+    "axisOrder": [
+      "east",
+      "up",
+      "north"
+    ],
+    "anchorSourceM": {
+      "eastM": -4208,
+      "northM": 4096,
+      "upM": 212.5
+    },
+    "groundDatum": {
+      "kind": "atlas_lod0_sample",
+      "heightSourceId": "terrain.ukraine.rapier-range.atlas.v1",
+      "requestedSourceM": {
+        "eastM": -4200,
+        "northM": 4100
+      },
+      "sampledSourceM": {
+        "eastM": -4208,
+        "northM": 4096,
+        "upM": 212.5
+      },
+      "sampleSpacingM": 32,
+      "featureGroundOffsets": "authored_from_neighbouring_lod0_samples"
+    },
+    "verticalPlacement": "anchor_source_up_plus_local_up"
+  },
+  "boundsSourceM": {
+    "minEastM": -4408,
+    "maxEastM": -4008,
+    "minNorthM": 3896,
+    "maxNorthM": 4296
+  },
+  "authority": {
+    "mode": "presentation_only",
+    "targetableByDefault": false,
+    "collisionAuthority": "none",
+    "damageAuthority": "none",
+    "navigationAuthority": "none",
+    "landingZoneAuthority": "none"
+  },
+  "renderBudgets": {
+    "mobile": {
+      "maxDrawCalls": 6,
+      "maxInstances": 256,
+      "maxTriangles": 35000,
+      "maxSurfacePatchTriangles": 0
+    },
+    "balanced": {
+      "maxDrawCalls": 7,
+      "maxInstances": 512,
+      "maxTriangles": 60000,
+      "maxSurfacePatchTriangles": 0
+    },
+    "desktop": {
+      "maxDrawCalls": 10,
+      "maxInstances": 768,
+      "maxTriangles": 100000,
+      "maxSurfacePatchTriangles": 0
+    }
+  },
+  "semanticCaps": {
+    "maxStableFeatures": 128,
+    "maxCollisionOrClearancePrimitives": 64,
+    "maxPoles": 24,
+    "maxWireSpans": 16,
+    "maxCorridorOrClearanceVolumes": 8,
+    "maxLandingZoneCandidates": 4
+  },
+  "landingZones": [
+    {
+      "id": "lz.soniachne-clinic-a.visual-marker.v1",
+      "centerLocalM": [
+        35,
+        -0.8,
+        -20
+      ],
+      "markerRadiusM": 31,
+      "status": "unassessed",
+      "surfaceStatus": "not_assessed",
+      "obstacleStatus": "not_assessed",
+      "approachDepartureStatus": "not_assessed",
+      "medicalCapabilityStatus": "not_assessed",
+      "safeApproachClaimed": false,
+      "medicalCapabilityClaimed": false,
+      "operationalUseAuthorized": false,
+      "assessmentBasis": "Visual mission landmark only. No validated 1–2 m surface model, obstacle survey, approach or departure assessment, medical capability assessment, or operational clearance exists."
+    }
+  ],
+  "ambientExclusionZones": [
+    {
+      "id": "ambient-exclusion.soniachne-clinic-a.compound.v1",
+      "shape": "circle",
+      "centerLocalM": [
+        -14,
+        0.4,
+        4
+      ],
+      "radiusM": 76,
+      "excludedAmbientKinds": [
+        "procedural_buildings",
+        "procedural_utilities",
+        "procedural_debris"
+      ],
+      "purpose": "Prevents ambient structures and utility props from intersecting the authored clinic, fences, poles, and wires while retaining pastoral grass and field texture.",
+      "presentationOnly": true,
+      "establishesOperationalClearance": false
+    },
+    {
+      "id": "ambient-exclusion.soniachne-clinic-a.lz-marker.v1",
+      "shape": "circle",
+      "centerLocalM": [
+        35,
+        -0.8,
+        -20
+      ],
+      "radiusM": 48,
+      "excludedAmbientKinds": [
+        "procedural_buildings",
+        "procedural_vegetation",
+        "procedural_utilities",
+        "procedural_debris"
+      ],
+      "purpose": "Keeps the visual landing-zone marker legible. This renderer exclusion is not a surface, obstacle, or safe-approach clearance claim.",
+      "presentationOnly": true,
+      "establishesOperationalClearance": false
+    }
+  ],
+  "features": [
+    {
+      "id": "feature.soniachne-clinic-a.main-clinic.v1",
+      "kind": "building",
+      "role": "clinic_main",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [
+          -24,
+          0.5,
+          12
+        ],
+        "yawDeg": 8
+      },
+      "dimensionsM": {
+        "width": 26,
+        "height": 6.4,
+        "depth": 13
+      },
+      "presentation": {
+        "primitive": "gable_building",
+        "batch": "clinic_buildings",
+        "color": "#E7DDBE",
+        "secondaryColor": "#718A83",
+        "essential": true
+      },
+      "notes": "Fictional cream-plaster rural clinic with a muted green roof and hand-painted pastoral proportions."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.annex.v1",
+      "kind": "building",
+      "role": "clinic_annex",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [
+          0,
+          0.6,
+          25
+        ],
+        "yawDeg": -7
+      },
+      "dimensionsM": {
+        "width": 12,
+        "height": 4.2,
+        "depth": 8
+      },
+      "presentation": {
+        "primitive": "gable_building",
+        "batch": "clinic_buildings",
+        "color": "#C8D0B1",
+        "secondaryColor": "#A65F4D",
+        "essential": true
+      },
+      "notes": "Small fictional clinic annex in soft sage plaster with a weathered clay-red roof."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.pastoral-store.v1",
+      "kind": "building",
+      "role": "pastoral_store",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [
+          -30,
+          -0.1,
+          -12
+        ],
+        "yawDeg": 14
+      },
+      "dimensionsM": {
+        "width": 18,
+        "height": 5,
+        "depth": 10
+      },
+      "presentation": {
+        "primitive": "gable_building",
+        "batch": "clinic_buildings",
+        "color": "#A88B68",
+        "secondaryColor": "#704F43",
+        "essential": false
+      },
+      "notes": "Timber-and-stone supply store that helps the clinic read as a lived-in pastoral island."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.lz-ring.v1",
+      "kind": "surface_marking",
+      "role": "landing_zone_marker",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "none",
+      "pose": {
+        "positionLocalM": [
+          35,
+          -0.8,
+          -20
+        ],
+        "yawDeg": 0
+      },
+      "dimensionsM": {
+        "width": 62,
+        "height": 0.03,
+        "depth": 62
+      },
+      "presentation": {
+        "primitive": "lz_ring_marking",
+        "batch": "clinic_markings",
+        "color": "#E8DFB9",
+        "secondaryColor": "#8A9A72",
+        "essential": true
+      },
+      "notes": "Presentation marker only; it does not establish a landing surface, clear area, safe route, or medical capability."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.fence-west.v1",
+      "kind": "fence",
+      "role": "compound_boundary",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [
+        -58,
+        -0.5,
+        -38
+      ],
+      "toLocalM": [
+        -58,
+        1.5,
+        42
+      ],
+      "widthM": 0.1,
+      "heightM": 1.25,
+      "presentation": {
+        "primitive": "post_and_rail_fence",
+        "batch": "clinic_fences",
+        "color": "#88745A",
+        "secondaryColor": "#B59D78",
+        "essential": false
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.fence-north.v1",
+      "kind": "fence",
+      "role": "compound_boundary",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [
+        -58,
+        1.5,
+        42
+      ],
+      "toLocalM": [
+        22,
+        0.9,
+        42
+      ],
+      "widthM": 0.1,
+      "heightM": 1.25,
+      "presentation": {
+        "primitive": "post_and_rail_fence",
+        "batch": "clinic_fences",
+        "color": "#88745A",
+        "secondaryColor": "#B59D78",
+        "essential": false
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.fence-south.v1",
+      "kind": "fence",
+      "role": "compound_boundary",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [
+        -58,
+        -0.5,
+        -38
+      ],
+      "toLocalM": [
+        8,
+        -1,
+        -38
+      ],
+      "widthM": 0.1,
+      "heightM": 1.25,
+      "presentation": {
+        "primitive": "post_and_rail_fence",
+        "batch": "clinic_fences",
+        "color": "#88745A",
+        "secondaryColor": "#B59D78",
+        "essential": false
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.utility-pole-west.v1",
+      "kind": "pole",
+      "role": "utility_support",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "pose": {
+        "positionLocalM": [
+          -54,
+          1.4,
+          36
+        ],
+        "yawDeg": 0
+      },
+      "dimensionsM": {
+        "width": 0.28,
+        "height": 8.5,
+        "depth": 0.28
+      },
+      "presentation": {
+        "primitive": "utility_pole",
+        "batch": "clinic_poles",
+        "color": "#665747",
+        "secondaryColor": "#A89473",
+        "essential": true
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.utility-pole-midwest.v1",
+      "kind": "pole",
+      "role": "utility_support",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "pose": {
+        "positionLocalM": [
+          -18,
+          1.1,
+          38
+        ],
+        "yawDeg": 0
+      },
+      "dimensionsM": {
+        "width": 0.28,
+        "height": 8.5,
+        "depth": 0.28
+      },
+      "presentation": {
+        "primitive": "utility_pole",
+        "batch": "clinic_poles",
+        "color": "#665747",
+        "secondaryColor": "#A89473",
+        "essential": true
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.utility-pole-mideast.v1",
+      "kind": "pole",
+      "role": "utility_support",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "pose": {
+        "positionLocalM": [
+          18,
+          0.8,
+          36
+        ],
+        "yawDeg": 0
+      },
+      "dimensionsM": {
+        "width": 0.28,
+        "height": 8.5,
+        "depth": 0.28
+      },
+      "presentation": {
+        "primitive": "utility_pole",
+        "batch": "clinic_poles",
+        "color": "#665747",
+        "secondaryColor": "#A89473",
+        "essential": true
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.utility-pole-east.v1",
+      "kind": "pole",
+      "role": "utility_support",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "pose": {
+        "positionLocalM": [
+          54,
+          0.4,
+          32
+        ],
+        "yawDeg": 0
+      },
+      "dimensionsM": {
+        "width": 0.28,
+        "height": 8.5,
+        "depth": 0.28
+      },
+      "presentation": {
+        "primitive": "utility_pole",
+        "batch": "clinic_poles",
+        "color": "#665747",
+        "secondaryColor": "#A89473",
+        "essential": true
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.wire-west-low.v1",
+      "kind": "wire",
+      "role": "overhead_utility",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [
+        -54,
+        9.2,
+        36
+      ],
+      "toLocalM": [
+        -18,
+        8.9,
+        38
+      ],
+      "widthM": 0.035,
+      "presentation": {
+        "primitive": "overhead_wire",
+        "batch": "clinic_wires",
+        "color": "#45433E",
+        "essential": true
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.wire-west-high.v1",
+      "kind": "wire",
+      "role": "overhead_utility",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [
+        -54,
+        9.6,
+        36
+      ],
+      "toLocalM": [
+        -18,
+        9.3,
+        38
+      ],
+      "widthM": 0.035,
+      "presentation": {
+        "primitive": "overhead_wire",
+        "batch": "clinic_wires",
+        "color": "#56524A",
+        "essential": true
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.wire-middle-low.v1",
+      "kind": "wire",
+      "role": "overhead_utility",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [
+        -18,
+        8.9,
+        38
+      ],
+      "toLocalM": [
+        18,
+        8.6,
+        36
+      ],
+      "widthM": 0.035,
+      "presentation": {
+        "primitive": "overhead_wire",
+        "batch": "clinic_wires",
+        "color": "#45433E",
+        "essential": true
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.wire-middle-high.v1",
+      "kind": "wire",
+      "role": "overhead_utility",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [
+        -18,
+        9.3,
+        38
+      ],
+      "toLocalM": [
+        18,
+        9,
+        36
+      ],
+      "widthM": 0.035,
+      "presentation": {
+        "primitive": "overhead_wire",
+        "batch": "clinic_wires",
+        "color": "#56524A",
+        "essential": true
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.wire-east-low.v1",
+      "kind": "wire",
+      "role": "overhead_utility",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [
+        18,
+        8.6,
+        36
+      ],
+      "toLocalM": [
+        54,
+        8.2,
+        32
+      ],
+      "widthM": 0.035,
+      "presentation": {
+        "primitive": "overhead_wire",
+        "batch": "clinic_wires",
+        "color": "#45433E",
+        "essential": true
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.wire-east-high.v1",
+      "kind": "wire",
+      "role": "overhead_utility",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [
+        18,
+        9,
+        36
+      ],
+      "toLocalM": [
+        54,
+        8.6,
+        32
+      ],
+      "widthM": 0.035,
+      "presentation": {
+        "primitive": "overhead_wire",
+        "batch": "clinic_wires",
+        "color": "#56524A",
+        "essential": true
+      }
+    },
+    {
+      "id": "feature.soniachne-clinic-a.road-west.v1",
+      "kind": "road",
+      "role": "village_road_visual",
+      "status": "present",
+      "affiliation": "neutral_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [-360, 7.659, 115],
+      "toLocalM": [-40, 2.344, 50],
+      "pathLocalM": [
+        [-360, 7.66, 115],
+        [-353.73, 7.58, 113.73],
+        [-336, 7.43, 110.13],
+        [-313.57, 6.97, 105.57],
+        [-304, 6.75, 103.63],
+        [-273.41, 6.52, 97.41],
+        [-272, 6.51, 97.13],
+        [-266.46, 6.43, 96],
+        [-240, 6, 90.63],
+        [-233.25, 5.85, 89.25],
+        [-208, 5.34, 84.13],
+        [-193.1, 5.04, 81.1],
+        [-176, 4.78, 77.63],
+        [-152.94, 4.29, 72.94],
+        [-144, 4.06, 71.13],
+        [-112.78, 3.53, 64.78],
+        [-112, 3.52, 64.63],
+        [-108.92, 3.46, 64],
+        [-80, 2.95, 58.13],
+        [-72.63, 2.8, 56.63],
+        [-48, 2.47, 51.63],
+        [-40, 2.34, 50]
+      ],
+      "widthM": 7,
+      "presentation": {
+        "primitive": "road_ribbon",
+        "batch": "hero_roads",
+        "color": "#897B6C",
+        "essential": false
+      },
+      "notes": "Fictional presentation ribbon only; not a navigation, access, or surface-authority claim."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.road-centre.v1",
+      "kind": "road",
+      "role": "village_road_visual",
+      "status": "present",
+      "affiliation": "neutral_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [-40, 2.344, 50],
+      "toLocalM": [120, 0.138, 52],
+      "pathLocalM": [
+        [-40, 2.34, 50],
+        [-34.07, 2.29, 50.07],
+        [-16, 2.01, 50.3],
+        [-2.47, 1.72, 50.47],
+        [16, 1.44, 50.7],
+        [29.14, 1.41, 50.86],
+        [48, 1.3, 51.1],
+        [60.74, 1.18, 51.26],
+        [80, 0.83, 51.5],
+        [92.35, 0.56, 51.65],
+        [112, 0.26, 51.9],
+        [120, 0.14, 52]
+      ],
+      "widthM": 7,
+      "presentation": {
+        "primitive": "road_ribbon",
+        "batch": "hero_roads",
+        "color": "#8F8070",
+        "essential": false
+      },
+      "notes": "Fictional presentation ribbon only; not a navigation, access, or surface-authority claim."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.road-east.v1",
+      "kind": "road",
+      "role": "village_road_visual",
+      "status": "present",
+      "affiliation": "neutral_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [120, 0.138, 52],
+      "toLocalM": [420, -11.909, -45],
+      "pathLocalM": [
+        [120, 0.14, 52],
+        [125.91, -0.01, 50.09],
+        [144, -0.46, 44.24],
+        [173.2, -1.09, 34.8],
+        [176, -1.15, 33.89],
+        [181.86, -1.35, 32],
+        [208, -2.13, 23.55],
+        [220.49, -2.59, 19.51],
+        [240, -3.09, 13.2],
+        [267.78, -3.89, 4.22],
+        [272, -4.04, 2.85],
+        [280.82, -4.32, 0],
+        [304, -4.97, -7.49],
+        [315.07, -5.38, -11.07],
+        [336, -5.95, -17.84],
+        [362.36, -7.07, -26.36],
+        [368, -7.34, -28.19],
+        [379.79, -8.36, -32],
+        [400, -10.1, -38.53],
+        [409.66, -11, -41.66],
+        [420, -11.91, -45]
+      ],
+      "widthM": 7,
+      "presentation": {
+        "primitive": "road_ribbon",
+        "batch": "hero_roads",
+        "color": "#7E7166",
+        "essential": false
+      },
+      "notes": "Fictional presentation ribbon only; not a navigation, access, or surface-authority claim."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.shelterbelt-north.v1",
+      "kind": "vegetation",
+      "role": "shelterbelt_visual",
+      "status": "present",
+      "affiliation": "neutral_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [0, -0.5, 96],
+        "yawDeg": -2
+      },
+      "pathLocalM": [
+        [-214.811, 5.506, 86.828],
+        [-185.361, 5.103, 85.888],
+        [-145.451, 4.659, 98.058],
+        [-118.926, 4.117, 86.075],
+        [-79.368, 3.845, 93.964],
+        [-52.877, 3.837, 97.735],
+        [-13.377, 3.238, 92.119],
+        [13.673, 2.826, 95.386],
+        [52.128, 2.518, 103.827],
+        [80.28, 1.703, 91.759],
+        [118.045, 1.472, 103.423],
+        [146.375, 0.94, 103.072],
+        [184.118, 0.172, 98.279],
+        [214.822, 0.06, 104.862]
+      ],
+      "dimensionsM": {
+        "width": 430,
+        "height": 16,
+        "depth": 26
+      },
+      "presentation": {
+        "primitive": "shelterbelt_canopy",
+        "batch": "hero_vegetation",
+        "color": "#315C34",
+        "secondaryColor": "#66503E",
+        "essential": false
+      },
+      "notes": "Batched presentation mass only; individual trunks and crowns are not obstacle or clearance truth."
+    }
+  ],
+  "fictionDisclaimer": "This is an original fictional 2030s Ukraine-inspired training landmark. It does not depict or locate a real clinic, landing zone, utility route, or settlement and is not for real navigation, targeting, medical capability, or landing-safety claims."
+}

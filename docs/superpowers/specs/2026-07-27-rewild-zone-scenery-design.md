@@ -31,6 +31,11 @@ Do not block the geodetic theatre programme on finishing Stage C meshes. Prefer 
 APIs in theatre east metres. Full Stage C tasks live in the geodetic plan’s D5 and/or a dedicated
 scenery plan after D3 cutover.
 
+As of 2026-07-28, the first A-type human island exists as a hash-bound, static presentation pack:
+Soniachne clinic A, its fenced compound, utilities and one candidate LZ. It is deliberately
+`unassessed`; the pack establishes visual vocabulary and ambient exclusions only. It does not yet
+provide the 1–2 m surface or obstacle authority required for medevac clearance.
+
 ## Success (after bind)
 
 - Inland: rewild, almost no roofs; near strip: quiet frontier compounds.

@@ -32,7 +32,12 @@ export class AdaptiveResolutionController {
   configure(options = {}) {
     this.enabled = options.enabled !== false;
     this.pixelRatioCap = clamp(finite(options.pixelRatioCap, this.pixelRatioCap ?? 1), 0.5, 4);
-    this.minScale = clamp(finite(options.minScale, this.minScale ?? 0.72), 0.5, 1);
+    this.maxRenderPixels = Math.round(clamp(
+      finite(options.maxRenderPixels, this.maxRenderPixels ?? 3_700_000),
+      65_536,
+      67_108_864,
+    ));
+    this.minScale = clamp(finite(options.minScale, this.minScale ?? 0.65), 0.5, 1);
     this.maxScale = clamp(finite(options.maxScale, this.maxScale ?? 1), this.minScale, 1);
     this.targetFps = clamp(finite(options.targetFps, this.targetFps ?? 60), 24, 240);
     this.downThreshold = clamp(finite(options.downThreshold, this.downThreshold ?? 1.08), 1, 2);
@@ -77,9 +82,20 @@ export class AdaptiveResolutionController {
     return this.apply(reason);
   }
 
+  get maximumPixelRatio() {
+    const pixelBudgetRatio = Math.sqrt(this.maxRenderPixels / (this.width * this.height));
+    return Math.min(this.devicePixelRatio, this.pixelRatioCap, pixelBudgetRatio);
+  }
+
   apply(reason) {
     const effectiveScale = this.enabled ? this.scale : this.maxScale;
-    const next = quantize(Math.min(this.devicePixelRatio, this.pixelRatioCap) * effectiveScale);
+    const maximumPixelRatio = this.maximumPixelRatio;
+    // Apply the adaptive scale after all hard limits. Clamping the rounded result
+    // back to the limit ensures quantization can never exceed the pixel budget.
+    const next = Math.min(
+      maximumPixelRatio,
+      quantize(maximumPixelRatio * effectiveScale),
+    );
     if (next === this.pixelRatio && reason !== "resize") return false;
     this.pixelRatio = next;
     this.onChange(next, {
@@ -89,6 +105,8 @@ export class AdaptiveResolutionController {
       height: this.height,
       emaFrameMs: this.emaFrameMs,
       targetFrameMs: this.targetFrameMs,
+      maximumPixelRatio,
+      maxRenderPixels: this.maxRenderPixels,
     });
     return true;
   }
@@ -135,6 +153,8 @@ export class AdaptiveResolutionController {
       scale: this.scale,
       emaFrameMs: this.emaFrameMs,
       targetFrameMs: this.targetFrameMs,
+      maximumPixelRatio: this.maximumPixelRatio,
+      maxRenderPixels: this.maxRenderPixels,
       samples: this.samples,
       ignored: false,
     };

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
 import {
+  ambientSceneryRadiusM,
   createTerrainGeometry,
   createTerrainMaterial,
   decodeTerrainRecord,
@@ -16,7 +17,15 @@ import {
   validateTerrainAtlasManifest,
   validateTerrainManifest,
 } from "../korea_terrain.js";
-import { buildTerrainMeshArrays } from "../terrain_mesh_builder.js";
+import {
+  buildTerrainMeshArrays,
+  TERRAIN_LANDCOVER_MACRO_CELL_M,
+  TERRAIN_LANDCOVER_MESO_CELL_M,
+} from "../terrain_mesh_builder.js";
+import {
+  createKoreaSceneryRuntime,
+  planKoreaScenery,
+} from "../korea_scenery.js";
 
 const quantization = {
   storage: "little-endian-signed-int16",
@@ -338,6 +347,12 @@ test("reconstructs bank-height water without sea-level slot trenches", () => {
     "water and land must share one continuous triangulation for a smooth shoreline");
   assert.equal(built.geometry.attributes.position.count, 25);
   assert.equal(built.geometry.attributes.terrainWater.getX(0), 1);
+  assert.equal(built.geometry.attributes.landcover.itemSize, 2);
+  assert.equal(built.geometry.attributes.landcover.normalized, true,
+    "two baked bytes should arrive in the shader as normalized land-cover weights");
+  assert.equal(built.geometry.attributes.landcover.count,
+    built.geometry.attributes.position.count,
+    "surface and skirt vertices both need the seamless land-cover field");
   assert.equal(built.geometry.attributes.position.getY(0), 10);
   assert.equal(built.triangleCount - built.surfaceTriangleCount, 12,
     "land-bearing chunk edges must receive crack-hiding skirt triangles");
@@ -406,6 +421,75 @@ test("concavity fades to neutral at chunk edges so neighbours cannot seam", () =
       `boundary sample ${index} must be exactly neutral`);
   }
   built.geometry.dispose();
+});
+
+test("worker-baked Ukraine land cover is deterministic, varied, and seamless by world position", () => {
+  const sampleCount = 9;
+  const decoded = {
+    sampleCount,
+    heights: new Float32Array(sampleCount * sampleCount).fill(100),
+    water: new Uint8Array(sampleCount * sampleCount),
+  };
+  const spanM = TERRAIN_LANDCOVER_MACRO_CELL_M * 4;
+  const west = buildTerrainMeshArrays([0, 0, spanM, spanM], decoded);
+  const repeated = buildTerrainMeshArrays([0, 0, spanM, spanM], decoded);
+  const east = buildTerrainMeshArrays([spanM, 0, spanM * 2, spanM], decoded);
+
+  assert.deepEqual(west.landcover, repeated.landcover,
+    "the worker field must not depend on load order or chunk identity");
+  assert.ok(new Set(west.landcover.slice(0, sampleCount * sampleCount * 2)).size > 8,
+    "macro and meso weights should add readable variation within a terrain tile");
+  for (let north = 0; north < sampleCount; north++) {
+    const westIndex = (north * sampleCount + sampleCount - 1) * 2;
+    const eastIndex = (north * sampleCount) * 2;
+    assert.deepEqual(
+      [...west.landcover.slice(westIndex, westIndex + 2)],
+      [...east.landcover.slice(eastIndex, eastIndex + 2)],
+      `shared boundary sample ${north} must be byte-identical`,
+    );
+  }
+  assert.ok(TERRAIN_LANDCOVER_MESO_CELL_M < TERRAIN_LANDCOVER_MACRO_CELL_M);
+
+  const fineSampleCount = 65;
+  const fineDecoded = {
+    sampleCount: fineSampleCount,
+    heights: new Float32Array(fineSampleCount * fineSampleCount).fill(100),
+    water: new Uint8Array(fineSampleCount * fineSampleCount),
+  };
+  const fine = buildTerrainMeshArrays([0, 0, 8_192, 8_192], fineDecoded);
+  const fieldHistory = [];
+  for (let index = 0; index < fineSampleCount * fineSampleCount; index++) {
+    fieldHistory.push(fine.landcover[index * 2 + 1]);
+  }
+  assert.ok(Math.min(...fieldHistory) < 40,
+    "the reused second channel must carry sparse former access-track lows");
+  assert.ok(Math.max(...fieldHistory) - Math.min(...fieldHistory) > 140,
+    "large former-field planes must remain readable without a texture or extra draw");
+});
+
+test("non-Ukraine terrain skips the optional land-cover bake and uses a neutral shader default", () => {
+  const sampleCount = 9;
+  const decoded = {
+    sampleCount,
+    heights: new Float32Array(sampleCount * sampleCount).fill(100),
+    water: new Uint8Array(sampleCount * sampleCount),
+    includeLandcover: false,
+  };
+  const built = buildTerrainMeshArrays([0, 0, 1_800, 1_800], decoded);
+  assert.equal(built.landcover.length, 0,
+    "Korea must not pay the Ukraine macro-field CPU or buffer cost");
+
+  const chunk = {
+    id: "non-ukraine",
+    boundsLocalM: [0, 0, 1_800, 1_800],
+  };
+  const geometry = createTerrainGeometry(THREE, chunk, decoded).geometry;
+  assert.equal(geometry.getAttribute("landcover"), undefined);
+
+  const material = createTerrainMaterial(THREE, { sceneryEra: "1950s" });
+  assert.deepEqual(material.defaultAttributeValues.landcover, [0.5, 0.5]);
+  geometry.dispose();
+  material.dispose();
 });
 
 test("skirt vertices inherit their source surface normal so they never shade as black walls", () => {
@@ -513,9 +597,9 @@ test("selects progressively coarser LODs with tier-specific distance", () => {
   assert.equal(selectTerrainLod(5_000, "desktop", 4), 0);
   assert.equal(selectTerrainLod(12_000, "desktop", 4), 0);
   // Broad, low-relief Ukraine keeps a tight LOD0 ring instead of paying Korea's mountain budget.
-  assert.equal(selectTerrainLod(5_000, "ukraine-desktop", 4), 0);
-  assert.equal(selectTerrainLod(13_000, "ukraine-desktop", 4), 1);
-  assert.equal(selectTerrainLod(40_000, "ukraine-desktop", 4), 2);
+  assert.equal(selectTerrainLod(4_000, "ukraine-desktop", 4), 0);
+  assert.equal(selectTerrainLod(6_000, "ukraine-desktop", 4), 1);
+  assert.equal(selectTerrainLod(25_000, "ukraine-desktop", 4), 2);
   // The floor is clamped to the chunk's coarsest level, so a single-LOD chunk is unaffected.
   assert.equal(selectTerrainLod(0, "balanced", 1), 0);
   // Hysteresis retains the current LOD across a small threshold crossing (desktop keeps LOD0).
@@ -525,6 +609,13 @@ test("selects progressively coarser LODs with tier-specific distance", () => {
   assert.equal(selectTerrainLod(37_000, "desktop", 4, 1), 1,
     "a small inward threshold crossing should retain the current LOD");
   assert.equal(selectTerrainLod(34_000, "desktop", 4, 1), 0);
+});
+
+test("bounds Ukraine ambient scenery independently from terrain residency", () => {
+  assert.equal(ambientSceneryRadiusM("mobile", "ukraine-modern"), 8_000);
+  assert.equal(ambientSceneryRadiusM("balanced", "ukraine-modern"), 12_000);
+  assert.equal(ambientSceneryRadiusM("desktop", "ukraine-modern"), 6_000);
+  assert.equal(ambientSceneryRadiusM("mobile", "1950s"), Number.POSITIVE_INFINITY);
 });
 
 test("uses the active ocean curvature contract for terrain presentation", () => {
@@ -863,6 +954,110 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
   terrain.dispose();
 });
 
+test("passes atlas-root mission exclusions into page workers without duplicating features", async () => {
+  const pack = JSON.parse(await readFile(new URL(
+    "../../../content/packs/ukraine-modern/environment/hero-cells/"
+      + "soniachne-clinic-a.feature-pack.json",
+    import.meta.url,
+  ), "utf8"));
+  const boundsLocalM = [-4_700, 3_600, -3_700, 4_600];
+  const page = {
+    schemaVersion: "1.0.0",
+    terrainId: "terrain.ukraine.exclusion-page.v1",
+    boundsLocalM,
+    quantization,
+    bundle: {
+      uri: "exclusion.terrain",
+      byteLength: 18,
+      sha256: "b".repeat(64),
+    },
+    chunks: [{
+      id: "exclusion-chunk",
+      boundsLocalM,
+      generation: { seed: 17, landFraction: 1 },
+      lods: [{
+        level: 0,
+        sampleCount: 3,
+        byteOffset: 0,
+        byteLength: 18,
+        spacingM: 500,
+      }],
+    }],
+  };
+  const atlas = {
+    schemaVersion: "2.0.0",
+    terrainId: "terrain.ukraine.exclusion-atlas.v1",
+    boundsLocalM,
+    tileSpanM: 1_000,
+    pageSpanM: 1_000,
+    pages: [{
+      id: "hero",
+      boundsLocalM,
+      manifest: {
+        uri: "hero.manifest.json",
+        byteLength: 100,
+        sha256: "c".repeat(64),
+      },
+    }],
+  };
+  const workers = stubMeshWorkers();
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/exclusion.atlas.json",
+    qualityTier: "balanced",
+    sceneryEra: "ukraine-modern",
+    missionFeaturePack: pack,
+    missionFeaturePackSha256: "d".repeat(64),
+    pageLoadRadiusM: 1_500,
+    pageEvictRadiusM: 2_000,
+    chunkLoadRadiusM: 1_500,
+    chunkEvictRadiusM: 2_000,
+    lookAheadSeconds: 0,
+    maximumPageLoads: 1,
+    maximumConcurrentLoads: 1,
+    createTerrainMeshWorker: workers.factory,
+    terrainMeshWorkerCount: 1,
+    fetch: async (url, options = {}) => {
+      if (String(url).endsWith("exclusion.atlas.json")) {
+        return { ok: true, status: 200, json: async () => atlas };
+      }
+      if (String(url).includes("hero.manifest.json")) {
+        return { ok: true, status: 200, json: async () => page };
+      }
+      assert.equal(options.headers?.Range, "bytes=0-17");
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => new ArrayBuffer(18),
+      };
+    },
+  });
+
+  terrain.update({
+    cameraPosition: new THREE.Vector3(-4_208, 500, -4_096),
+    deltaSeconds: 1,
+  });
+  await terrain.whenIdle();
+
+  const expectedZones = [
+    { eastM: -4_222, northM: 4_100, radiusM: 76 },
+    { eastM: -4_173, northM: 4_076, radiusM: 48 },
+  ];
+  const pagePresentation = terrain.pages.get("hero").presentation;
+  assert.ok(pagePresentation);
+  assert.equal(pagePresentation.missionFeaturePack, null,
+    "the authored feature root must remain atlas-owned rather than duplicating once per page");
+  assert.deepEqual(pagePresentation.ambientExclusionZones, expectedZones);
+  const workerRequest = workers.created.flatMap((worker) => worker.requests)
+    .find((request) => request.sceneryPlanRequest);
+  assert.ok(workerRequest, "the page must prepare its ambient scenery in the shared worker pool");
+  assert.deepEqual(
+    workerRequest.sceneryPlanRequest.options.ambientExclusionZones,
+    expectedZones,
+    "the worker planner must consume the same translated footprint as the atlas runtime",
+  );
+  terrain.dispose();
+});
+
 test("versions a same-origin bundle with its manifest hash while preserving Range", async () => {
   const requested = [];
   const source = manifest();
@@ -988,6 +1183,16 @@ test("unified Ukraine v2 terrain retains its palette while ambient micro scenery
   terrain.update({ cameraPosition: new THREE.Vector3(1, 500, -1) });
   assert.equal(terrain.diagnostics().localResidentChunks, 1);
   assert.equal(terrain.diagnostics().localSceneryChunks, 1);
+  assert.equal(terrain.diagnostics().visibleSceneryChunks, 1);
+  assert.equal(terrain.diagnostics().ambientSceneryRadiusM, 12_000);
+
+  terrain.update({ cameraPosition: new THREE.Vector3(20_000, 500, -1) });
+  assert.equal(terrain.diagnostics().sceneryChunks, 1,
+    "distant scenery may stay resident so returning does not regenerate it");
+  assert.equal(terrain.diagnostics().visibleSceneryChunks, 0,
+    "sub-pixel ambient batches must not be submitted outside their own radius");
+  terrain.update({ cameraPosition: new THREE.Vector3(1, 500, -1) });
+  assert.equal(terrain.diagnostics().visibleSceneryChunks, 1);
 
   await terrain.disableAmbientScenery();
   assert.equal(terrain.diagnostics().sceneryEra, "ukraine-modern",
@@ -1192,15 +1397,24 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.equal(ukraine.defines.UKRAINE_SCENERY, 1);
   assert.match(ukraine.fragmentShader, /ADR-0003 soft world/i);
   assert.match(ukraine.fragmentShader, /Stage C rewild/i);
+  assert.match(ukraine.vertexShader, /attribute vec2 landcover;/);
+  assert.match(ukraine.vertexShader, /vTerrainLandcover = landcover;/);
+  assert.match(ukraine.fragmentShader, /varying vec2 vTerrainLandcover;/);
   assert.match(ukraine.fragmentShader,
-    /float ukraineElevationBand = smoothstep\(22\.0, 40\.0, vTerrainHeight\)/,
+    /float ukraineElevationBand = smoothstep\(38\.0, 78\.0, vTerrainHeight\)/,
     "the low-relief theatre needs a Ukraine-scale height ramp at macro LOD");
   assert.match(ukraine.fragmentShader,
-    /float succession = clamp\(/,
-    "rewild cover must use organic succession noise, not a cadastral parcel lattice");
+    /float succession = softLandcover\.x;/,
+    "rewild cover must consume the worker-baked organic succession field");
   assert.match(ukraine.fragmentShader,
-    /vec3 rewildCover = mix\(vec3\(0\.42, 0\.58, 0\.26\)/,
+    /float fieldHistory = softLandcover\.y;/,
+    "the second baked byte must carry seamless former-field history");
+  assert.match(ukraine.fragmentShader,
+    /vec3 meadowCover = mix\(vec3\(0\.23, 0\.45, 0\.12\)/,
     "macro albedo must read meadow → scrub → canopy");
+  assert.match(ukraine.fragmentShader,
+    /float trackCue = \(1\.0 - smoothstep\(0\.06, 0\.18, fieldHistory\)\) \* openField;/,
+    "worker-baked access tracks should provide structure without per-fragment procedural noise");
   assert.match(ukraine.fragmentShader,
     /rewildFloor \* \(0\.72 \+ \(1\.0 - ukraineElevationBand\) \* 0\.12\)/,
     "rewild wash remains part of terrain albedo without ambient instances");
@@ -1211,19 +1425,28 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
     "cadastral parcel lattice must not return to the Ukraine soft-world path");
   assert.doesNotMatch(ukraine.fragmentShader, /abandonedScar/,
     "ghost-agriculture scars must not reintroduce crop blotches at altitude");
+  assert.doesNotMatch(ukraine.fragmentShader, /sin\(rewild/,
+    "land-cover structure belongs in the worker, not nested fragment sine calls");
   assert.match(ukraine.fragmentShader,
     /mix\(0\.62, 1\.0, halfLambert\)/,
     "Ukraine soft-world lighting must be continuous, not a hard two-step toon ramp");
   assert.match(ukraine.fragmentShader,
     /dot\(normal\.xz, regionalSunDirection\) \* 7\.5/,
     "coarse lowland normals need a bounded directional relief cue");
+  assert.match(ukraine.fragmentShader,
+    /0\.5 \+ \(terrainOcclusion - 0\.5\) \* 4\.0/,
+    "Ukraine drainage relief must expand around the seam-neutral concavity midpoint");
   assert.ok(ukraine.uniforms.uShadowFloor.value >= 0.18,
     "Ukraine soft-world should lift the shadow floor for painterly lee slopes");
   assert.ok(ukraine.uniforms.uHazeBandBlend.value <= 0.25,
     "Ukraine soft-world should soften aerial haze banding");
   assert.match(ukraine.fragmentShader,
-    /mix\(uFogColor, vec3\(0\.78, 0\.72, 0\.58\), 0\.62\)/,
-    "Ukraine distance haze must lean warm rather than cool poster blue");
+    /mix\(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix\)/,
+    "terrain and scenery must share one warm haze contract");
+  assert.equal(ukraine.uniforms.uAtmosphereDensityScale.value, 0.42);
+  assert.deepEqual(ukraine.uniforms.uAtmosphereHazeColor.value.toArray(),
+    [0.78, 0.72, 0.58]);
+  assert.equal(ukraine.uniforms.uAtmosphereHazeMix.value, 0.62);
   assert.ok(ukraine.uniforms.uWorldEdgeM, "stream-edge bury uniform must exist");
   assert.match(ukraine.fragmentShader,
     /smoothstep\(uWorldEdgeM \* 0\.40, uWorldEdgeM \* 0\.72, distanceToCamera\)/,
@@ -1280,8 +1503,10 @@ function stubMeshWorkers(behaviour = "build") {
       onerror: null,
       onmessageerror: null,
       terminated: false,
+      requests: [],
       postMessage(request) {
         if (request?.type !== "build") return;
+        worker.requests.push(request);
         queueMicrotask(() => {
           if (behaviour === "fail") {
             worker.onmessage?.({ data: { type: "failed", id: request.id, message: "nope" } });
@@ -1293,8 +1518,17 @@ function stubMeshWorkers(behaviour = "build") {
             heights: request.heights,
             water: request.water,
             sampleCount: request.sampleCount,
+            includeLandcover: request.includeLandcover,
           });
           const built = buildTerrainMeshArrays(request.boundsLocalM, payload);
+          if (request.sceneryPlanRequest) {
+            const sceneryRequest = structuredClone(request.sceneryPlanRequest);
+            built.sceneryPlan = planKoreaScenery(
+              sceneryRequest.chunk,
+              payload,
+              sceneryRequest.options,
+            );
+          }
           worker.onmessage?.({ data: { type: "built", id: request.id, built } });
         });
       },
@@ -1323,6 +1557,92 @@ async function loadSingleChunkTerrain(values, options = {}) {
   });
 }
 
+test("attaches one mission feature pack at the terrain root and reports its hash", async () => {
+  const pack = JSON.parse(await readFile(new URL(
+    "../../../content/packs/ukraine-modern/environment/hero-cells/"
+      + "soniachne-clinic-a.feature-pack.json",
+    import.meta.url,
+  ), "utf8"));
+  const sha256 = "f61cf6e4480644bfd2ec51e6405260bae7b48a227b07316f9818eafca0046a00";
+  const values = new Int16Array([
+    100, 100, 100,
+    100, 100, 100,
+    100, 100, 100,
+  ]);
+  const terrain = await loadSingleChunkTerrain(values, {
+    sceneryEra: "ukraine-modern",
+    qualityTier: "mobile",
+    missionFeaturePack: pack,
+    missionFeaturePackSha256: sha256,
+  });
+  await terrain.whenIdle();
+
+  const featureRootName =
+    "MISSION_FEATURE_PACK_MISSION-FEATURE-PACK_UKRAINE-MODERN_SONIACHNE-CLINIC-A_V1";
+  const featureRoot = terrain.group.getObjectByName(featureRootName);
+  assert.equal(featureRoot?.parent, terrain.group,
+    "the selected authored island belongs once beneath the terrain placement root");
+  let featureRootCount = 0;
+  terrain.group.traverse((object) => {
+    if (object.name === featureRootName) featureRootCount++;
+  });
+  assert.equal(featureRootCount, 1);
+  const diagnostics = terrain.diagnostics();
+  assert.equal(diagnostics.missionFeaturePackId, pack.featurePackId);
+  assert.equal(diagnostics.missionFeaturePackSha256, sha256);
+  assert.equal(diagnostics.missionFeatures.lzAssessmentStatus, "unassessed");
+  assert.ok(diagnostics.missionFeatures.drawCalls <= 6);
+
+  terrain.dispose();
+  assert.equal(featureRoot.parent, null);
+});
+
+test("rejects a prepared scenery plan built for a different ambient exclusion footprint", () => {
+  const chunk = {
+    id: "e0001-n0002",
+    boundsLocalM: [0, 0, 1_000, 1_000],
+    generation: { seed: 123456789, landFraction: 1 },
+  };
+  const sampleCount = 33;
+  const decoded = {
+    sampleCount,
+    heights: new Float32Array(sampleCount * sampleCount).fill(24),
+    water: new Uint8Array(sampleCount * sampleCount),
+  };
+  const preparedWithoutExclusions = planKoreaScenery(chunk, decoded, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+    ring: "near",
+  });
+  assert.ok(preparedWithoutExclusions.trees.length > 0,
+    "the fixture must expose stale ambient candidates if the plan is incorrectly reused");
+  const exclusionZones = [{ eastM: 500, northM: 500, radiusM: 1_000 }];
+  const correctlyExcluded = planKoreaScenery(chunk, decoded, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+    ring: "near",
+    ambientExclusionZones: exclusionZones,
+  });
+  assert.notEqual(
+    preparedWithoutExclusions.ambientExclusionIdentity,
+    correctlyExcluded.ambientExclusionIdentity,
+  );
+
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+    ambientExclusionZones: exclusionZones,
+  });
+  const group = runtime.createTile(chunk, decoded, 0, preparedWithoutExclusions);
+  assert.ok(group, "the bounded grass controller can retain the otherwise empty tile");
+  assert.equal(group.userData.scenery.trees, 0,
+    "a mismatched prepared plan must be discarded and replanned with the active footprint");
+  assert.equal(group.userData.scenery.buildings, 0);
+  assert.equal(group.userData.scenery.roadSegments, 0);
+  runtime.disposeTile(group);
+  runtime.dispose();
+});
+
 test("meshes terrain chunks in a worker and matches the synchronous build exactly", async () => {
   const values = new Int16Array([
     -32768, -32768, 100,
@@ -1333,16 +1653,22 @@ test("meshes terrain chunks in a worker and matches the synchronous build exactl
   const terrain = await loadSingleChunkTerrain(values, {
     createTerrainMeshWorker: workers.factory,
     terrainMeshWorkerCount: 1,
+    sceneryEra: "ukraine-modern",
   });
   await terrain.whenIdle();
 
   const mesh = terrain.entries.get("e00-n00").mesh;
   assert.ok(mesh, "the worker path must still produce a chunk mesh");
   assert.ok(workers.created.length >= 1, "the pool must have constructed a worker");
+  const workerRequest = workers.created.flatMap((worker) => worker.requests)[0];
+  assert.equal(workerRequest.sceneryPlanRequest.options.era, "ukraine-modern");
+  assert.equal(workerRequest.sceneryPlanRequest.options.ring, "near");
+  assert.equal(workerRequest.sceneryPlanRequest.chunk.id, "e00-n00",
+    "the same worker burst must prepare deterministic scenery candidates off the render thread");
 
   const reference = createTerrainGeometry(THREE, manifest().chunks[0],
     decodeTerrainRecord(values.buffer.slice(0), manifest().chunks[0].lods[0], quantization));
-  for (const name of ["position", "normal", "terrainWater", "concavity"]) {
+  for (const name of ["position", "normal", "terrainWater", "landcover", "concavity"]) {
     assert.deepEqual(
       [...mesh.geometry.getAttribute(name).array],
       [...reference.geometry.getAttribute(name).array],
@@ -1359,6 +1685,23 @@ test("meshes terrain chunks in a worker and matches the synchronous build exactl
   terrain.dispose();
 });
 
+test("forwards the non-Ukraine land-cover gate through the terrain worker", async () => {
+  const values = new Int16Array([100, 200, 300, 400, 500, 600, 700, 800, 900]);
+  const workers = stubMeshWorkers();
+  const terrain = await loadSingleChunkTerrain(values, {
+    createTerrainMeshWorker: workers.factory,
+    terrainMeshWorkerCount: 1,
+  });
+  await terrain.whenIdle();
+
+  assert.equal(workers.created[0].requests[0].includeLandcover, false);
+  assert.equal(
+    terrain.entries.get("e00-n00").mesh.geometry.getAttribute("landcover"),
+    undefined,
+  );
+  terrain.dispose();
+});
+
 test("falls back to synchronous meshing when the terrain workers are unusable", async () => {
   const values = new Int16Array([100, 200, 300, 400, 500, 600, 700, 800, 900]);
   for (const behaviour of ["fail", "unconstructable"]) {
@@ -1368,8 +1711,11 @@ test("falls back to synchronous meshing when the terrain workers are unusable", 
       terrainMeshWorkerCount: 1,
     });
     await terrain.whenIdle();
-    assert.ok(terrain.entries.get("e00-n00").mesh,
+    const mesh = terrain.entries.get("e00-n00").mesh;
+    assert.ok(mesh,
       `a ${behaviour} worker must cost a frame, never a chunk`);
+    assert.equal(mesh.geometry.getAttribute("landcover"), undefined,
+      "worker failure must preserve the non-Ukraine land-cover gate on sync fallback");
     if (behaviour === "fail") {
       assert.ok(workers.created[0].terminated,
         "a worker that reports a failed build must be retired rather than retried forever");

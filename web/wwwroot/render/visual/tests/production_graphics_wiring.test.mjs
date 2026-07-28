@@ -10,6 +10,11 @@ const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.u
 const webProjectUrl = new URL("../../../../GunsOnly.Web.csproj", import.meta.url);
 const environmentLabUrl = new URL("../../../environment-lab/main.js", import.meta.url);
 const environmentLabIndexUrl = new URL("../../../environment-lab/index.html", import.meta.url);
+const environmentLabStylesUrl = new URL("../../../environment-lab/styles.css", import.meta.url);
+const environmentLabGateUrl = new URL(
+  "../../../../../tools/perf/ukraine_hero_gate.mjs",
+  import.meta.url,
+);
 // The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
 // SnapshotProjection; the contract scan reads both so a field is found wherever it now lives.
 const readBridgeContract = () =>
@@ -126,8 +131,27 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source,
     /const UKRAINE_TRAINING_TERRAIN_MANIFEST_URL = new URL\([\s\S]*?rapier-range\.atlas\.manifest\.json/);
   assert.match(source,
+    /const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID =[\s\S]*?mission-feature-pack\.ukraine-modern\.soniachne-clinic-a\.v1/);
+  assert.match(source,
+    /const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL = new URL\([\s\S]*?hero-cells\/[\s\S]*?soniachne-clinic-a\.feature-pack\.json/);
+  assert.match(source,
     /const terrainKey = ukraineTheatre[\s\S]*?UKRAINE_2030S_TERRAIN_ID/,
     "all Ukraine fidelity bands must retain the same theatre terrain identity");
+  assert.match(source,
+    /function missionFeaturePackCacheIdentity\(state = null\)[\s\S]*?mission_feature_pack_id[\s\S]*?mission_feature_pack_sha256[\s\S]*?encodeURIComponent/,
+    "terrain reuse must be scoped to the snapshot's selected feature-pack ID and hash");
+  assert.match(source,
+    /const terrainKey = ukraineTheatre[\s\S]*?missionFeaturePackCacheIdentity\(state\)/,
+    "switching mission feature packs must rebuild rather than reuse stale terrain");
+  assert.match(source,
+    /loadMissionFeaturePack\(featurePackRequest, fetchWithAbort\)[\s\S]*?loadKoreaTerrain\(THREE,[\s\S]*?missionFeaturePack,[\s\S]*?missionFeaturePackSha256: featurePackRequest\.sha256/,
+    "the verified raw pack and its snapshot hash must reach the terrain presentation");
+  assert.match(source,
+    /response\.arrayBuffer\(\)[\s\S]*?sha256Hex\(bytes\)[\s\S]*?actualSha256 !== request\.sha256[\s\S]*?JSON\.parse/,
+    "production must verify the response bytes before parsing the selected mission pack");
+  assert.match(source,
+    /if \(request\.required\) throw error;[\s\S]*?Optional mission feature pack unavailable/,
+    "only explicitly optional feature-pack failures may fall back");
   assert.match(source,
     /presentation\.setSceneryEra\(sceneryEra\)/,
     "restaging across eras must replace scenery without rebuilding the retained terrain atlas");
@@ -147,11 +171,14 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /terrainPresentationRetryAtMs = performance\.now\(\) \+ 15_000/,
     "terrain failures should remain retryable after a bounded delay");
   assert.match(source,
-    /function prepareMissionTerrain\(index\)[\s\S]*setPauseReason\("terrain", true\)[\s\S]*warmTerrainAroundReadyAircraft[\s\S]*setPauseReason\("terrain", false\)/,
+    /function prepareMissionTerrain\(index\)[\s\S]*setPauseReason\("terrain", true\)[\s\S]*warmTerrainAroundReadyAircraft[\s\S]*setPauseReason\("terrain", requiredFeaturePack && !warmupReady\)/,
     "the low-level sortie must warm nearby terrain before releasing the flight clock");
   assert.match(source,
-    /await terrain\.ready[\s\S]*requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)[\s\S]*await terrain\.whenIdle\?\.\(\)/,
-    "terrain warmup must include the near-LOD and instanced-scenery work requested by the paused camera");
+    /terrainLaunchWarmupFailedKey === warmupKey[\s\S]*requiredFeaturePack[\s\S]*setPauseReason\("terrain", true\)[\s\S]*sortie remains interlocked/,
+    "a required mission pack failure must keep the Ready interlock closed");
+  assert.match(source,
+    /await terrain\.ready[\s\S]*requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)[\s\S]*await terrain\.whenIdle\?\.\(\)[\s\S]*view\.renderer\.compileAsync\(view\.scene, view\.camera\)/,
+    "terrain warmup must include near-LOD, instanced-scenery, and shader work requested by the paused camera");
   assert.match(source,
     /function terrainDiagnosticsCoverStagedAircraft[\s\S]*?localResidentChunks[\s\S]*?residentChunks <= 0\) return false;[\s\S]*?localSceneryChunks[\s\S]*?sceneryChunks > 0/,
     "coarse terrain alone must not release a low-level sortie before scenery is resident");
@@ -159,8 +186,11 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /if \(state\?\.terrain_micro_required !== true\) return true;[\s\S]*terrain\?\.sceneryEra === state\?\.terrain_scenery_profile/,
     "macro-only sorties must warm terrain without making low-level instances a launch dependency");
   assert.match(source,
-    /function terrainWarmupKey\(state\)[\s\S]*?terrain_placement_east_m[\s\S]*?terrain_placement_north_m[\s\S]*?terrain_micro_required/,
-    "warmup failures and readiness must be scoped to the staged placement and fidelity band");
+    /function terrainWarmupKey\(state\)[\s\S]*?terrain_placement_east_m[\s\S]*?terrain_placement_north_m[\s\S]*?terrain_micro_required[\s\S]*?mission_feature_pack_id[\s\S]*?mission_feature_pack_sha256/,
+    "warmup failures and readiness must include placement, fidelity band, and mission-pack revision");
+  assert.match(source,
+    /mission_feature_pack_required === true[\s\S]*?terrain\?\.missionFeaturePackId !== featurePackRequest\.featurePackId[\s\S]*?missionFeaturePackSha256/,
+    "required scenery cannot release the sortie until terrain diagnostics confirm its ID and hash");
   assert.match(source,
     /lazyChunks: true,[\s\S]*?chunkLoadRadiusM: TERRAIN_INITIAL_WARMUP_RADIUS_M/,
     "the unified theatre must warm only the local neighborhood before expanding in flight");
@@ -177,11 +207,20 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /cancelTerrainPresentationRequest\(terrainKey\)[\s\S]*const hasInFlightRequest = this\.terrainPresentationPromise !== null;[\s\S]*if \(\(!hasInFlightRequest && !ownsPresentation\)/,
     "a requested theatre must be able to cancel the previous theatre load blocking its warmup");
   assert.match(source,
-    /fetch: \(input, init = \{\}\) => fetch\(input, \{[\s\S]*signal: abortController\.signal/,
+    /const fetchWithAbort = \(input, init = \{\}\) => fetch\(input, \{[\s\S]*signal: abortController\.signal[\s\S]*fetch: fetchWithAbort/,
     "the manifest and bundle fetches must share the warmup abort signal");
   assert.match(source,
     /!replayActive && pauseReasons\.size === 0 && state\.session_phase === "ACTIVE"[\s\S]*?frameGovernor\.observe/,
     "Ready, warmup, pause, and replay frames must not spend the sortie frame budget");
+  assert.match(source,
+    /FRAME_GOVERNOR_LATE_FRAME_MS = 18\.5[\s\S]*?FRAME_GOVERNOR_SEVERE_FRAME_COUNT = 3/,
+    "the governor must react before sustained delivery has fallen to 45 fps");
+  assert.match(source,
+    /Math\.min\(currentRadiusM, requestedRadiusM\)/,
+    "a fallback radius must never increase load above the current warmup/governor radius");
+  assert.match(source,
+    /setAmbientSceneryBudgetLevel\?\.\(ambientLevel\)[\s\S]*?mission landmarks retained/,
+    "low-level fallback must retain authored landmarks while shedding secondary ambient detail");
   assert.match(source,
     /frameGovernor\.reset\(activeView\)[\s\S]*?bridge\.Begin\(\);[\s\S]*?frameGovernor\.reset\(activeView\)/,
     "restaging and launch must restore mission radius, shadows, and scenery policy");
@@ -191,6 +230,11 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source,
     /terrainGovernorSuppressesAmbientScenery = true[\s\S]*?disableAmbientScenery[\s\S]*?terrainGovernorSuppressesAmbientScenery !== true[\s\S]*?enableAmbientScenery/,
     "terminal governor shedding must stay latched until the next sortie reset");
+  assert.match(source, /const radarAltitudeFt = Number\(state\?\.radar_alt_ft\)/,
+    "high-altitude ambient shedding must consume the actual hot-snapshot radar-altitude field");
+  assert.match(source,
+    /cameraAglM: Number\(state\.radar_alt_ft\) \* 0\.3048/,
+    "camera-local grass must receive authoritative AGL instead of mistaking world Y for height");
   assert.match(source, /const DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL = null;/,
     "an unqualified peninsula atlas must remain unreachable from the production browser");
   assert.doesNotMatch(source, /peninsula-r2|pub-[a-z0-9]+\.r2\.dev/,
@@ -234,6 +278,9 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     "terrain_scenery_profile",
     "terrain_macro_required",
     "terrain_micro_required",
+    "mission_feature_pack_id",
+    "mission_feature_pack_sha256",
+    "mission_feature_pack_required",
     "terrain_placement_east_m",
     "terrain_placement_north_m",
     "multiplayer_terrain_shared",
@@ -244,9 +291,11 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
 });
 
 test("environment lab exercises the production terrain manifest and exposes the look gate", async () => {
-  const [source, index] = await Promise.all([
+  const [source, index, styles, gateSource] = await Promise.all([
     readFile(environmentLabUrl, "utf8"),
     readFile(environmentLabIndexUrl, "utf8"),
+    readFile(environmentLabStylesUrl, "utf8"),
+    readFile(environmentLabGateUrl, "utf8"),
   ]);
   assert.match(source,
     /import \{ loadKoreaTerrain \} from "\.\.\/render\/environment\/korea_terrain\.js"/);
@@ -255,6 +304,17 @@ test("environment lab exercises the production terrain manifest and exposes the 
   assert.match(loadCall[1], /manifestUrl: siteConfig\.manifestUrl/,
     "the lab must exercise both the production-default Korea pack and selectable Ukraine pack");
   assert.match(source, /SITE_CONFIGURATIONS[\s\S]*?sceneryEra: "ukraine-modern"/);
+  assert.match(source,
+    /missionFeaturePackUrl: new URL\([\s\S]*?hero-cells\/[\s\S]*?soniachne-clinic-a\.feature-pack\.json/);
+  assert.match(source,
+    /loadMissionFeaturePack\(siteConfig\.missionFeaturePackUrl\)[\s\S]*?missionFeaturePack: missionFeaturePack\.pack[\s\S]*?missionFeaturePackSha256: missionFeaturePack\.sha256/,
+    "the Ukraine lab must load the real hero-cell pack and pass its byte hash to terrain");
+  assert.match(source,
+    /response\.arrayBuffer\(\)[\s\S]*?sha256Hex\(bytes\)[\s\S]*?JSON\.parse/,
+    "the lab must retain a stable content hash for the exact JSON bytes it reviewed");
+  assert.match(source,
+    /terrainState\.missionFeaturePackId[\s\S]*?terrainState\.missionFeaturePackSha256/,
+    "the lab must fail visibly if terrain drops or substitutes the selected mission pack");
   assert.match(source, /await terrain\.ready/);
   assert.match(source, /window\.__terrainLookReady = terrain\.diagnostics\(\)/);
   assert.match(source, /terrainState\.errors > 0 \|\| terrainState\.residentChunks === 0/,
@@ -268,6 +328,66 @@ test("environment lab exercises the production terrain manifest and exposes the 
     "terrain look fog must derive from the active production pack profile");
   assert.match(index, /id="altitude"[^>]*max="22000"/,
     "the look gate must reach Rapier's 21.5 km cruise altitude");
+  assert.match(source,
+    /QUALITY_TIERS\.includes\(parameters\.get\("quality"\)\)[\s\S]*?parameters\.has\("altitude"\)[\s\S]*?parameters\.has\("clouds"\)/,
+    "the performance rail must accept exact quality/altitude inputs and an optional cloud switch");
+  assert.match(source,
+    /new AdaptiveResolutionController\(\{[\s\S]*?normalizedVisualProfile\.adaptiveResolution[\s\S]*?pixelRatioCap: normalizedVisualProfile\.renderer\.pixelRatioCap/,
+    "the lab's quality tiers must exercise production resolution ceilings, not one fixed DPR");
+  assert.match(source,
+    /function configureProductionShadows\(\)[\s\S]*?quality\.value === "desktop"[\s\S]*?renderer\.shadowMap\.enabled = desktopShadowPass[\s\S]*?renderer\.shadowMap\.type = THREE\.PCFSoftShadowMap[\s\S]*?sun\.castShadow = desktopShadowPass/,
+    "desktop hero-cell measurements must include the production soft-shadow pass while constrained tiers keep it disabled");
+  assert.match(source,
+    /normalizedVisualProfile\?\.tier\?\.settings\?\.shadowMapSize[\s\S]*?sun\.shadow\.mapSize\.set\(shadowMapSize, shadowMapSize\)[\s\S]*?sun\.shadow\.map\?\.dispose\(\)/,
+    "the lab shadow target must use and reallocate for the selected production tier's map size");
+  assert.match(source,
+    /sun\.shadow\.camera\.left = -44[\s\S]*?right = 44[\s\S]*?top = 44[\s\S]*?bottom = -44[\s\S]*?near = 10[\s\S]*?far = 3600[\s\S]*?updateProjectionMatrix\(\)[\s\S]*?bias = -0\.00018[\s\S]*?normalBias = 0\.16/,
+    "the enabled pass must use the production land-combat shadow volume, depth range, and bias");
+  assert.match(source,
+    /applyProductionProfile\(visualProfile\);[\s\S]*?configureProductionResolution\(visualProfile\);[\s\S]*?configureProductionShadows\(\);[\s\S]*?warmPresentationBeforePerformanceRail\(\)/,
+    "shadow policy must be active before the warmup and measured frame rail");
+  assert.match(source,
+    /warmPresentationBeforePerformanceRail\(\)[\s\S]*?renderer\.compileAsync\(scene, camera\)[\s\S]*?renderer\.render\(scene, camera\)[\s\S]*?adaptiveResolution\?\.reset\(adaptiveResolution\.maxScale, "scene-ready"\)[\s\S]*?resetPerformanceRail\(\)/,
+    "the measured rail must begin after shader and render-target warmup, at the tier ceiling");
+  assert.match(source,
+    /lowLevelCameraGroundM: 184\.8[\s\S]*?siteConfig\.lowLevelCameraGroundM \+ heightAglM/,
+    "the representative hero-cell camera must interpret its slider against sampled LOD0 ground");
+  assert.match(source,
+    /const FRAME_STATS_SAMPLE_LIMIT = 600[\s\S]*?new Float32Array\(FRAME_STATS_SAMPLE_LIMIT\)/,
+    "rolling RAF evidence must stay bounded rather than growing for the life of the tab");
+  assert.match(source,
+    /document\.visibilityState !== "visible"[\s\S]*?frameMs > FRAME_STATS_BACKGROUND_STALL_MS/,
+    "background and long resume stalls must not contaminate foreground frame percentiles");
+  assert.match(source,
+    /fps:[\s\S]*?p95Ms:[\s\S]*?p99Ms:[\s\S]*?overBudgetFraction:/,
+    "the rail must publish rate, tail latency, and the production-governor late fraction");
+  assert.match(source,
+    /FRAME_STATS_LATE_FRAME_MS = 18\.5[\s\S]*?FRAME_GATE_MIN_FPS = 59[\s\S]*?FRAME_GATE_MAX_P95_MS = 18\.5[\s\S]*?FRAME_GATE_MAX_P99_MS = 22[\s\S]*?FRAME_GATE_MAX_LATE_FRACTION = 0\.03/,
+    "the lab must enforce the production 60 fps/tail-latency contract");
+  assert.match(source,
+    /function evaluatePerformanceGate\(frameStats\)[\s\S]*?frameStats\.sampleCount >= FRAME_STATS_SAMPLE_LIMIT[\s\S]*?state: sampled \? \(pass \? "pass" : "fail"\) : "warming"/,
+    "the 600-frame rail must resolve to an automation-readable pass or fail");
+  assert.match(source,
+    /const environmentLabDiagnostics = Object\.freeze\(\{[\s\S]*?snapshot\(\)[\s\S]*?quality: quality\.value[\s\S]*?altitudeM:[\s\S]*?renderer:[\s\S]*?calls:[\s\S]*?triangles:[\s\S]*?shadows:[\s\S]*?rendererEnabled:[\s\S]*?pcfSoft:[\s\S]*?sunCastShadow:[\s\S]*?mapSize:[\s\S]*?terrain:[\s\S]*?frameStats:/,
+    "automation needs one read-only snapshot of the selected rail and current renderer, shadow, and terrain evidence");
+  assert.match(source,
+    /Object\.defineProperty\(window, "__environmentLabDiagnostics"[\s\S]*?writable: false,[\s\S]*?configurable: false,/,
+    "the diagnostic handle itself must not be replaceable by the scene under test");
+  assert.match(gateSource,
+    /const expectedShadowPass = tier === "desktop"[\s\S]*?expectedAuthoredShadowDraws = expectedShadowPass \? 4 : 0[\s\S]*?rendererEnabled !== expectedShadowPass[\s\S]*?sunCastShadow !== expectedShadowPass[\s\S]*?pcfSoft !== true[\s\S]*?expectedShadowMapSize\[tier\][\s\S]*?camera\?\.far !== 3600[\s\S]*?missionFeatures\?\.shadowDrawCalls[\s\S]*?expectedAuthoredShadowDraws/,
+    "the hardware gate must reject desktop runs that skip shadows and constrained runs that add them");
+  assert.match(gateSource,
+    /headless: process\.env\.GUNS_HERO_GATE_HEADLESS === "1"/,
+    "the device gate must default to headed hardware acceleration rather than SwiftShader");
+  for (const id of [
+    "render-pixels", "resident-chunks", "visible-scenery",
+    "fps", "frame-p95", "frame-p99", "late-fraction", "frame-gate",
+  ]) {
+    assert.match(index, new RegExp(`id="${id}"`),
+      `the compact performance readout must expose ${id}`);
+  }
+  assert.match(styles, /\.readout \{[\s\S]*?flex-wrap: wrap/,
+    "the expanded evidence rail must remain compact at narrow viewport widths");
 });
 
 test("decision-support ocean and warnings carry truth without presentation flicker", async () => {

@@ -7,8 +7,11 @@ change, but regional flight, the Soniachne low-level cell, the coastal recovery 
 Rapier strip all publish the same theatre, world-frame, and terrain identity. They are nested
 fidelity bands or mission-local instances, not separate settings.
 
-The terrain is metre-scale synthetic content, not a reskin of Korea or a derivation from current
-war geography. It carries no real coordinates, formations, bases, or operational claims.
+The setting, mission locations, strips, clinics, formations and targets are fictional. The current
+regional presentation substrate is a source-locked Copernicus DEM atlas, but it is not a current
+tactical map and carries no real base, unit, target, casualty or operational claim. Authored
+mission features bind to the theatre's local metre frame rather than publishing real-world
+coordinates.
 
 The first low-level slice is mission 8, **Low-Level Drone Intercept**: an F-22 public-data
 surrogate intercepts four sequential fictional airborne raiders over the Soniachne detail cell.
@@ -20,8 +23,8 @@ hook recovery. Neither mission is a player-controlled attack drone or a ground-a
 ```mermaid
 flowchart TD
     A["Regional macro truth<br/>262.144 km at 256 m"] --> B["Soniachne detail override<br/>16.384 km at 32 m"]
-    B --> C["Future authored hero cells<br/>features, colliders, damage"]
-    C --> D["Future LZ patches<br/>1–2 m surfaces and obstacles"]
+    B --> C["Authored mission-feature packs<br/>stable visual IDs; unassessed by default"]
+    C --> D["Future authoritative LZ patches<br/>1–2 m surfaces and obstacles"]
     C --> E["Guns-only mission entities"]
     D --> F["Rotorcraft + emergency medicine scenario"]
     A --> G["Altitude-aware presentation<br/>macro terrain and atmosphere"]
@@ -63,8 +66,12 @@ between simulation sampling and rendered placement.
 
 ## Implemented mission cells
 
-- **Regional frame:** the common synthetic substrate and macro visual for the 2030s programme.
+- **Regional frame:** the common source-locked Copernicus substrate and macro visual for the
+  fictional 2030s programme.
 - **Soniachne detail cell:** mandatory nearby micro scenery for the low-level drone intercept.
+- **Soniachne clinic A:** a hash-bound, presentation-only human-island pack with stable building,
+  fence, pole, wire and candidate-LZ identities. Its LZ status is **unassessed**; it makes no safe
+  approach, obstacle-clearance or medical-capability claim.
 - **Coastal cell:** a mission-local land/sea instance for recovery sorties in the same theatre.
 - **Rapier corridor:** a mission-local regional instance with a stationary fictional
   catapult-and-arresting strip. The platform is fixed in simulation and presentation and does not
@@ -99,9 +106,9 @@ reference. Mission entities and future LZ obstacles remain essential layers.
 
 Implement these in order:
 
-1. Add an authoritative feature-pack schema with stable IDs, footprint/collider, affiliation,
-   damage state, targetability, occlusion class and presentation binding.
-2. Author one 4 km × 4 km hero cell inside the preserved Soniachne detail cell: village edge, road,
+1. Extend the first presentation-only feature pack with simulation-owned collider, affiliation,
+   damage and target bindings; do not infer these from its render primitives.
+2. Expand the authored Soniachne hero cell: village edge, road,
    treeline, power line, bridge/culvert and two clearly fictional enemy emplacements.
 3. Add a player-controlled fictional gun UCAV using a public, reduced-order aerodynamic model.
 4. Add a ground-entity target adapter to the existing gun projectile/damage authority. Do not make
@@ -133,6 +140,74 @@ surface decals, damaged states and seasonal material variants. Every hero-cell r
 cockpit-height, hover-height and ground-level captures plus a frame-time budget. Visual polish
 cannot promote an ambient prop into an obstacle, target, medical facility, or safe landing surface;
 those bindings always originate in simulation truth.
+
+## Current scenery implementation contract
+
+- Macro meadow/scrub/woodland structure is a seamless two-channel field baked per terrain vertex
+  in the existing mesh worker (1.8 km macro and 360 m meso cells). Coarse LOD interpolation removes
+  close breakup naturally; the ground fragment shader does not evaluate the former nested
+  land-cover sine stack.
+- Terrain, ambient instances, near grass, horizon apron and mission-feature materials share the
+  same Ukraine extinction, warm-haze, haze-band and streamed-edge uniforms by reference. The
+  Environment Lab therefore exercises the production atmosphere even without `scene.fog`.
+- The clinic/LZ presentation is one mission-selected child of the terrain root, never one
+  procedurally generated site per chunk. Its wall shells generate deterministic plinth, opening,
+  porch, awning and chimney subinstances in the same five batches; static matrices have no
+  steady-state update loop. The candidate-LZ cue is a broken meadow ring rather than a polished
+  certified-helipad mark.
+- Ambient trees, buildings, fields, infrastructure and camera-local grass consume the feature
+  pack's presentation exclusion zones. They do not own or reinterpret the feature identities.
+- Per active feature pack, render ceilings are 6/7/10 renderer submissions, 256/512/768 instances
+  and 35k/60k/100k prop triangles for mobile/balanced/desktop. The submission ceiling includes the
+  main colour pass plus one possible directional-shadow submission for every casting batch; it is
+  not merely a material or mesh count. A pack may not allocate a second grass pool.
+- Clinic A plus its authored road and shelterbelt costs six main-pass submissions on every tier.
+  Mobile and balanced receive world shadows but cast no authored shadows, so their total remains
+  six. Desktop lets four compact solid batches cast while the transparent LZ marking and broad
+  canopy batch do not, for ten worst-case submissions. The village road is split at exact LOD0
+  triangle crossings and the canonical shelterbelt carries sampled stand bases, so neither
+  presentation layer is left on one false flat grade. Instance counts are 199/233/279 and submitted
+  prop triangles are 4,300/5,068/9,080 on mobile/balanced/desktop; desktop is 5,980 main-pass plus
+  3,100 authored-shadow triangles. These terrain-derived visuals remain non-authoritative and do
+  not replace the future 1–2 m medevac surface/obstacle product. Non-Ukraine terrain skips the
+  optional land-cover bake and attribute, avoiding a cross-theatre CPU and memory regression.
+- `unassessed` is a hard semantic state, not disclaimer prose. Promotion requires matching
+  high-resolution surface truth and simulation-authoritative obstacles.
+
+## 60 fps presentation contract
+
+The performance target applies to foreground, hardware-accelerated WebGL2 devices within the
+supported mobile, balanced and desktop tiers. It is not a promise that every historical, software-
+rendered or background-throttled device will sustain 60 fps. Combat, carrier and replay
+presentation target 60 fps; the Environment Lab gate records a bounded 600-frame foreground
+sample and reports p95, p99 and the fraction of frames slower than the production governor's
+18.5 ms threshold. It passes only at 59+ measured fps, p95 at or below 18.5 ms, p99 at or below
+22 ms, and no more than 3% late frames.
+
+| tier | render-pixel ceiling | ambient-scenery radius | cloud-heavy hero result |
+|---|---:|---:|---|
+| desktop | 3.7 MP | 6 km | 59.1 fps; p95 17.6 ms; p99 17.7 ms; 0.7% >18.5 ms at 3.14 MP |
+| balanced | 2.1 MP | 12 km | 60.0 fps; p95 18.2 ms; p99 18.6 ms; 2.0% >18.5 ms at 2.10 MP |
+| mobile | 1.3 MP | 8 km | 60.0 fps; p95 17.8 ms; p99 18.5 ms; 0.5% >18.5 ms at 1.29 MP |
+
+These measurements are from one development host and prove the bounded scene and instrumentation,
+not the full supported hardware matrix. Device-lab coverage remains required. Adaptive resolution,
+terrain/scenery LOD and the ambient budget may shed decorative density to hold the frame contract,
+but the selected mission-authored feature pack is never shed. Camera-local grass is hidden above
+120 m AGL. Former-field bands and access-track variation are baked into the existing terrain
+land-cover attribute in the mesh worker, so their regional visual structure adds no texture or draw
+call. Visual scenery remains presentation only and can never declare an LZ safe.
+
+Run `node tools/perf/ukraine_hero_gate.mjs` on every supported hardware class. It loads the same
+cloud-heavy 90 m AGL approach sequentially at mobile, balanced and desktop quality and exits
+non-zero when any warmed 600-frame window misses the contract. It also verifies that desktop
+actually renders the production 2,048 px PCF-soft land-combat shadow volume and four authored
+shadow batches, while constrained tiers keep that pass disabled. The device gate defaults to
+headed Chromium so macOS does not silently substitute SwiftShader for the hardware GPU.
+
+The next art milestone is an authored 4 km combat/medevac hero cell, supported by reusable modular
+settlement, road and seasonal asset sets. Richness should concentrate there while the regional
+terrain retains its bounded macro grammar and frame-time contract.
 
 ## Medevac fidelity gate
 
@@ -170,6 +245,12 @@ macro mesh, the 32 m detail grid, or decorative scenery.
 - The Rapier platform remains a fixed land strip with no maritime presentation or motion.
 - The detailed cell edge is not visible as ocean/void during the mission.
 - Ambient scenery is never targetable or collision-authoritative.
+- A required mission-feature pack is selected by stable ID and SHA-256; load/hash failure blocks
+  the required visual layer instead of silently substituting a random procedural site.
+- Mission-authored feature presentation remains within its tier renderer-submission,
+  instance and triangle ceilings, including any enabled authored shadow pass.
+- The first clinic candidate remains `unassessed` until a matching surface patch and obstacle
+  authority are loaded.
 - Mission 8 remains a disclosed staged stream with one authoritative airborne target at a time.
 - The next ground-attack slice cannot ship until target, collider and damage identities are
   simulation-owned.
@@ -177,7 +258,8 @@ macro mesh, the 32 m detail grid, or decorative scenery.
 
 ## Fictionalization and use boundary
 
-The 2030s Ukraine theatre, Soniachne, its coastline, settlements, corridors, strip, and future hero
-cells are synthetic composites. They have no real coordinates, real formations, or claim to current
-battlefield conditions. The pack is for entertainment and training-system development, not real
-navigation, targeting, or operational planning.
+The 2030s Ukraine fiction, Soniachne identity, settlements, corridors, strip, clinic and future
+hero cells are synthetic composites laid over a source-locked regional terrain substrate. They
+carry no real formations, bases, targets or claim to current battlefield conditions. The pack is
+for entertainment and training-system development, not real navigation, targeting or operational
+planning.

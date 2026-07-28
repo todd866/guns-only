@@ -31,7 +31,7 @@
             <option value="desktop">Desktop</option>
           </select>
         </label>
-        <label>Camera altitude <output id="altitude-value">8,500 m</output>
+        <label>Camera height <output id="altitude-value">8,500 m AGL</output>
           <input id="altitude" type="range" min="8" max="22000" value="8500" step="1">
         </label>
       </section>
@@ -62,9 +62,17 @@
         <span><b id="triangles">—</b> triangles</span>
         <span><b id="layers">—</b> active cloud volumes</span>
         <span><b id="draws">—</b> draw calls</span>
+        <span><b id="render-pixels">—</b> render pixels</span>
+        <span><b id="resident-chunks">—</b> resident terrain chunks</span>
+        <span><b id="visible-scenery">—</b> visible scenery chunks</span>
+        <span class="frame-stat"><b id="fps">—</b> fps</span>
+        <span class="frame-stat"><b id="frame-p95">—</b> p95</span>
+        <span class="frame-stat"><b id="frame-p99">—</b> p99</span>
+        <span class="frame-stat"><b id="late-fraction">—</b> &gt;18.5 ms</span>
+        <span class="frame-stat"><b id="frame-gate" data-state="warming">WARMING</b> 60 fps gate</span>
       </div>
     </section>
   </main>
-  <script type="module" src="./main.js?v=soft-canopy-v2"></script>
+  <script type="module" src="./main.js?v=performance-rail-v3"></script>
 </body>
 </html>
