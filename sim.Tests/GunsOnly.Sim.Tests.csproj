@@ -25,6 +25,8 @@
     <Compile Include="..\web\SnapshotJson.cs" Link="SnapshotJson.cs" />
     <Compile Include="..\web\SnapshotProjection.cs" Link="SnapshotProjection.cs" />
     <Compile Include="..\web\SnapshotHotFrame.cs" Link="SnapshotHotFrame.cs" />
+    <Compile Include="..\web\MedevacSnapshotProjection.cs" Link="MedevacSnapshotProjection.cs" />
+    <Compile Include="..\web\MedevacWebJsonContext.cs" Link="MedevacWebJsonContext.cs" />
     <Compile Include="..\web\KoreaTerrainTruth.cs" Link="KoreaTerrainTruth.cs" />
     <EmbeddedResource
       Include="..\content\packs\korea-1950s\environment\terrain\central-front.truth"

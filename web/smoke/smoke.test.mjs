@@ -200,6 +200,369 @@ test("the published Indoor route boots its Three.js facility and transitions opt
   }
 });
 
+test("the published Medevac route resolves route hold, selective relay, and diversion branches", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    async function openMedevac(viewport = { width: 1280, height: 800 }) {
+      const page = await browser.newPage({ viewport });
+      const errors = [];
+      page.on("pageerror", (error) => errors.push(error.message ?? String(error)));
+      await page.goto(`${site.url}medevac/`, { waitUntil: "load", timeout: 30000 });
+      await page.waitForFunction(
+        () => globalThis.__gunsMedevac?.ready === true,
+        undefined,
+        { timeout: 20000 },
+      );
+      return { page, errors };
+    }
+
+    async function command(
+      page,
+      commandId,
+      { requestId = null, receiverId = null, acknowledged = null } = {},
+    ) {
+      return page.evaluate(async ({ commandId, requestId, receiverId, acknowledged }) => {
+        const option = globalThis.__gunsMedevac.state.decision.options.find(
+          (candidate) => candidate.command_id === commandId
+            && (requestId == null || candidate.request_ids?.includes(requestId))
+            && (receiverId == null || candidate.receiver_id === receiverId),
+        );
+        if (!option) {
+          throw new Error(
+            `Command option not found: ${commandId} / ${requestId ?? "*"} / ${
+              receiverId ?? "*"
+            }`,
+          );
+        }
+        globalThis.__gunsMedevac.select(option.id);
+        return globalThis.__gunsMedevac.dispatch(
+          option.id,
+          acknowledged == null
+            ? option.requires_acknowledgement === true
+            : acknowledged === true,
+        );
+      }, { commandId, requestId, receiverId, acknowledged });
+    }
+
+    async function advanceUntil(page, stateName, maximumSeconds = 180) {
+      return page.evaluate(async ({ stateName, maximumSeconds }) => {
+        const reached = () => {
+          const state = globalThis.__gunsMedevac.state;
+          if (stateName === "rf-required")
+            return state.extraction?.rf_command_required === true;
+          if (stateName === "first-aboard")
+            return state.aircraft?.onboard_pod_ids?.length === 1
+              && state.decision?.options?.some((option) =>
+                option.command_id === "decision.collect");
+          if (stateName === "collection-review")
+            return state.decision?.kind === "COLLECTION_REVIEW";
+          if (stateName === "two-aboard")
+            return state.aircraft?.onboard_pod_ids?.length === 2;
+          if (stateName === "second-only")
+            return state.aircraft?.onboard_pod_ids?.length === 1
+              && state.aircraft.onboard_pod_ids[0] === "POD-02"
+              && state.decision?.options?.some((option) =>
+                option.command_id === "decision.deliver");
+          if (stateName === "no-load-collect")
+            return state.aircraft?.onboard_pod_ids?.length === 0
+              && state.decision?.options?.some((option) =>
+                option.command_id === "decision.collect"
+                && option.request_ids?.includes("PICKUP-02"));
+          if (stateName === "complete") return state.lifecycle === "COMPLETE";
+          return false;
+        };
+        for (let elapsed = 0; elapsed <= maximumSeconds; elapsed++) {
+          if (reached()) return globalThis.__gunsMedevac.state;
+          await globalThis.__gunsMedevac.advanceForSmoke(1);
+        }
+        throw new Error(`MEDEVAC smoke state not reached: ${stateName}`);
+      }, { stateName, maximumSeconds });
+    }
+
+    async function reachCollectionReview(page) {
+      let result = await command(page, "mission.begin", {
+        requestId: "PICKUP-01",
+        acknowledged: false,
+      });
+      assert.equal(result.accepted, true);
+      await advanceUntil(page, "rf-required");
+
+      const blocked = await page.evaluate(() => ({
+        type: globalThis.__gunsMedevac.state.mission_type,
+        link: globalThis.__gunsMedevac.state.extraction.link.mode,
+        exposure: globalThis.__gunsMedevac.state.rf_exposure_training_units,
+      }));
+      assert.deepEqual(blocked, {
+        type: "DUSTOFF",
+        link: "AUTONOMOUS",
+        exposure: 0,
+      });
+
+      result = await command(page, "extraction.authorize-rf", {
+        requestId: "PICKUP-01",
+        acknowledged: true,
+      });
+      assert.equal(result.accepted, true);
+      result = await command(page, "extraction.deploy-repeater", {
+        requestId: "PICKUP-01",
+        acknowledged: false,
+      });
+      assert.equal(result.accepted, true);
+      await advanceUntil(page, "first-aboard");
+
+      result = await command(page, "decision.collect", {
+        requestId: "PICKUP-02",
+        acknowledged: false,
+      });
+      assert.equal(result.accepted, true);
+      await advanceUntil(page, "collection-review");
+    }
+
+    const { page, errors: pageErrors } = await openMedevac();
+    const boot = await page.evaluate(() => ({
+      schema: globalThis.__gunsMedevac.state?.snapshot_schema_version,
+      lifecycle: globalThis.__gunsMedevac.state?.lifecycle,
+      authority: globalThis.__gunsMedevac.state?.commander?.decision_authority,
+      rearAuthority: globalThis.__gunsMedevac.state?.rear_crew?.authority,
+      capacity: globalThis.__gunsMedevac.state?.aircraft?.patient_pod_capacity,
+      patientId: globalThis.__gunsMedevac.state?.patients?.[0]?.id,
+      podId: globalThis.__gunsMedevac.state?.patients?.[0]?.pod_id,
+      primaryCount: document.querySelectorAll(".primary-action").length,
+      fatal: document.querySelector("#fatal")?.classList.contains("visible"),
+    }));
+    assert.deepEqual(boot, {
+      schema: "medevac.commander.v2",
+      lifecycle: "READY",
+      authority: "PLAYER",
+      rearAuthority: "ADVISORY",
+      capacity: 2,
+      patientId: "PATIENT-01",
+      podId: "POD-01",
+      primaryCount: 1,
+      fatal: false,
+    });
+    await page.locator("#begin-mission").click();
+
+    const unexpectedAcknowledgement = await command(page, "mission.begin", {
+      requestId: "PICKUP-01",
+      acknowledged: true,
+    });
+    assert.equal(unexpectedAcknowledgement.accepted, false);
+    assert.equal(unexpectedAcknowledgement.code, "UNEXPECTED_ACKNOWLEDGEMENT");
+
+    await reachCollectionReview(page);
+    const reviewBefore = await page.evaluate(() => ({
+      route: globalThis.__gunsMedevac.state.aircraft.route_seconds_remaining,
+      time: globalThis.__gunsMedevac.state.sim_time_s,
+      status: globalThis.__gunsMedevac.state.aircraft.automation_status,
+      challenge: globalThis.__gunsMedevac.view.crew.challenge,
+      options: globalThis.__gunsMedevac.state.decision.options.map((option) => ({
+        command: option.command_id,
+        receiver: option.receiver_id,
+        requiresAcknowledgement: option.requires_acknowledgement,
+      })),
+    }));
+    assert.equal(reviewBefore.status, "ROUTE HOLD / MEDICAL RECONSIDERATION");
+    assert.equal(reviewBefore.challenge, true);
+    assert.equal(reviewBefore.options.filter((option) =>
+      option.command === "decision.continue-collection").length, 1);
+    assert.equal(reviewBefore.options.filter((option) =>
+      option.command === "decision.deliver").length, 3);
+    await page.evaluate(() => globalThis.__gunsMedevac.advanceForSmoke(5));
+    const reviewAfter = await page.evaluate(() => ({
+      route: globalThis.__gunsMedevac.state.aircraft.route_seconds_remaining,
+      time: globalThis.__gunsMedevac.state.sim_time_s,
+    }));
+    assert.equal(reviewAfter.route, reviewBefore.route);
+    assert.ok(reviewAfter.time >= reviewBefore.time + 5);
+
+    const unacknowledgedContinue = await command(
+      page,
+      "decision.continue-collection",
+      { requestId: "PICKUP-02", acknowledged: false },
+    );
+    assert.equal(unacknowledgedContinue.accepted, false);
+    assert.equal(unacknowledgedContinue.code, "ACKNOWLEDGEMENT_REQUIRED");
+
+    await page.evaluate(() => {
+      const option = globalThis.__gunsMedevac.state.decision.options.find(
+        (candidate) => candidate.command_id === "decision.continue-collection",
+      );
+      globalThis.__gunsMedevac.select(option.id);
+    });
+    await page.locator("#primary-action").click();
+    const armed = await page.evaluate(() => ({
+      label: document.querySelector("#primary-action span")?.textContent,
+      kind: globalThis.__gunsMedevac.state.decision.kind,
+      onboard: globalThis.__gunsMedevac.state.aircraft.onboard_pod_ids,
+    }));
+    assert.match(armed.label, /CONFIRM OVERRIDE/i);
+    assert.equal(armed.kind, "COLLECTION_REVIEW");
+    assert.deepEqual(armed.onboard, ["POD-01"]);
+    await page.locator("#primary-action").click();
+    await advanceUntil(page, "two-aboard");
+
+    const deliveryPicture = await page.evaluate(() => {
+      const options = globalThis.__gunsMedevac.state.decision.options.filter(
+        (option) => option.command_id === "decision.deliver",
+      );
+      return {
+        onboardPods: globalThis.__gunsMedevac.state.aircraft.onboard_pod_ids,
+        onboardPatients: globalThis.__gunsMedevac.state.aircraft.onboard_patient_ids,
+        receiverIds: options.map((option) => option.receiver_id),
+        relay: options.find((option) => option.receiver_id === "RELAY-WEST"),
+        deck: [...document.querySelectorAll(".pod-slot strong")]
+          .map((node) => node.textContent),
+        patientCards: [...document.querySelectorAll(".patient-card")]
+          .map((node) => ({ patient: node.dataset.patientId, pod: node.dataset.podId })),
+      };
+    });
+    assert.deepEqual(deliveryPicture.onboardPods, ["POD-01", "POD-02"]);
+    assert.deepEqual(deliveryPicture.onboardPatients, ["PATIENT-01", "PATIENT-02"]);
+    assert.equal(new Set(deliveryPicture.receiverIds).size, 3);
+    assert.deepEqual(deliveryPicture.relay.pod_ids, ["POD-01"]);
+    assert.deepEqual(deliveryPicture.relay.remaining_pod_ids, ["POD-02"]);
+    assert.match(deliveryPicture.relay.detail, /POD-02 \/ PATIENT-02 remains aboard/);
+    assert.deepEqual(deliveryPicture.deck, ["POD-01", "POD-02"]);
+    assert.deepEqual(deliveryPicture.patientCards, [
+      { patient: "PATIENT-01", pod: "POD-01" },
+      { patient: "PATIENT-02", pod: "POD-02" },
+    ]);
+
+    let result = await command(page, "decision.deliver", {
+      receiverId: "RELAY-WEST",
+      acknowledged: false,
+    });
+    assert.equal(result.accepted, true);
+    await advanceUntil(page, "second-only");
+    const relayArrival = await page.evaluate(() => {
+      const event = globalThis.__gunsMedevac.state.events.find(
+        (candidate) => candidate.delivery_decision?.receiver_id === "RELAY-WEST",
+      );
+      return {
+        onboard: globalThis.__gunsMedevac.state.aircraft.onboard_pod_ids,
+        selected: event?.delivery_decision?.selected_pod_ids,
+        message: event?.message,
+      };
+    });
+    assert.deepEqual(relayArrival.onboard, ["POD-02"]);
+    assert.deepEqual(relayArrival.selected, ["POD-01"]);
+    assert.match(relayArrival.message, /POD-01 \/ PATIENT-01/);
+
+    result = await command(page, "decision.deliver", {
+      requestId: "PICKUP-02",
+      receiverId: "SURGICAL-RECEIVER",
+      acknowledged: false,
+    });
+    assert.equal(result.accepted, true);
+    await advanceUntil(page, "complete");
+    const finish = await page.evaluate(() => ({
+      lifecycle: globalThis.__gunsMedevac.state.lifecycle,
+      onboard: globalThis.__gunsMedevac.state.aircraft.onboard_pod_ids,
+      audits: globalThis.__gunsMedevac.state.debrief.decisions.length,
+      continueAudit: globalThis.__gunsMedevac.state.debrief.decisions.some(
+        (event) => event.reconsideration_decision?.worsening_acknowledged === true,
+      ),
+      fatal: document.querySelector("#fatal")?.classList.contains("visible"),
+    }));
+    assert.equal(finish.lifecycle, "COMPLETE");
+    assert.deepEqual(finish.onboard, []);
+    assert.ok(finish.audits >= 3);
+    assert.equal(finish.continueAudit, true);
+    assert.equal(finish.fatal, false);
+    assert.deepEqual(pageErrors, [],
+      `uncaught Medevac page errors:\n${pageErrors.join("\n")}`);
+
+    const { page: diversionPage, errors: diversionErrors } = await openMedevac();
+    await diversionPage.locator("#begin-mission").click();
+    await reachCollectionReview(diversionPage);
+    result = await command(diversionPage, "decision.deliver", {
+      requestId: "PICKUP-01",
+      receiverId: "SURGICAL-RECEIVER",
+      acknowledged: false,
+    });
+    assert.equal(result.accepted, true);
+    const diversion = await diversionPage.evaluate(() => {
+      const event = globalThis.__gunsMedevac.state.events.find(
+        (candidate) => candidate.code === "commander.divert-delivery",
+      );
+      return event?.delivery_decision;
+    });
+    assert.equal(diversion.receiver_id, "SURGICAL-RECEIVER");
+    assert.deepEqual(diversion.selected_request_ids, ["PICKUP-01"]);
+    assert.deepEqual(diversion.selected_patient_ids, ["PATIENT-01"]);
+    assert.deepEqual(diversion.selected_pod_ids, ["POD-01"]);
+    assert.equal(diversion.abandoned_collection_request_id, "PICKUP-02");
+
+    await advanceUntil(diversionPage, "no-load-collect");
+    result = await command(diversionPage, "decision.collect", {
+      requestId: "PICKUP-02",
+      acknowledged: false,
+    });
+    assert.equal(result.accepted, true);
+    await advanceUntil(diversionPage, "second-only");
+    result = await command(diversionPage, "decision.deliver", {
+      requestId: "PICKUP-02",
+      receiverId: "SURGICAL-RECEIVER",
+      acknowledged: false,
+    });
+    assert.equal(result.accepted, true);
+    await advanceUntil(diversionPage, "complete");
+    const divertedFinish = await diversionPage.evaluate(() => ({
+      lifecycle: globalThis.__gunsMedevac.state.lifecycle,
+      diversionInDebrief: globalThis.__gunsMedevac.state.debrief.decisions.some(
+        (event) => event.delivery_decision?.abandoned_collection_request_id
+          === "PICKUP-02",
+      ),
+      primaryCount: document.querySelectorAll(".primary-action").length,
+      fatal: document.querySelector("#fatal")?.classList.contains("visible"),
+    }));
+    assert.deepEqual(divertedFinish, {
+      lifecycle: "COMPLETE",
+      diversionInDebrief: true,
+      primaryCount: 1,
+      fatal: false,
+    });
+    assert.deepEqual(diversionErrors, [],
+      `uncaught diversion Medevac page errors:\n${diversionErrors.join("\n")}`);
+
+    const { page: phone, errors: phoneErrors } = await openMedevac({
+      width: 320,
+      height: 700,
+    });
+    await phone.locator("#begin-mission").click();
+    const narrow = await phone.evaluate(() => {
+      const action = document.querySelector(".primary-action");
+      const type = document.querySelector("#mission-type");
+      const threat = document.querySelector("#threat-label");
+      return {
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+        primaryCount: document.querySelectorAll(".primary-action").length,
+        actionHeight: action?.getBoundingClientRect().height,
+        actionVisible: action?.getBoundingClientRect().top < innerHeight,
+        typeVisible: type && getComputedStyle(type).display !== "none",
+        threatVisible: threat && getComputedStyle(threat).display !== "none",
+      };
+    });
+    assert.ok(narrow.scrollWidth <= narrow.clientWidth + 1,
+      `Medevac phone layout overflows: ${JSON.stringify(narrow)}`);
+    assert.equal(narrow.primaryCount, 1);
+    assert.ok(narrow.actionHeight >= 44, `Primary target is too small: ${narrow.actionHeight}`);
+    assert.equal(narrow.actionVisible, true);
+    assert.equal(narrow.typeVisible, true);
+    assert.equal(narrow.threatVisible, true);
+    assert.deepEqual(phoneErrors, [],
+      `uncaught phone Medevac page errors:\n${phoneErrors.join("\n")}`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
 test("the published web app boots to a running flight kernel (no fatal render error)", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 

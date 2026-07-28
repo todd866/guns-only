@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en" data-kernel="booting">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111712">
+  <meta name="color-scheme" content="dark">
+  <base href="/">
+  <title>Medevac research prototype — Guns Only</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/medevac/styles.css?v=169">
+</head>
+<body data-phase="briefing" data-mission-type="medevac">
+  <a class="skip-link" href="#command-rail">Skip to command decision</a>
+
+  <header class="command-header" inert>
+    <div class="brand-lockup">
+      <a href="../" aria-label="Return to the Guns Only mission catalogue">GUNS ONLY</a>
+      <span>MEDEVAC RESEARCH</span>
+    </div>
+    <div class="mission-identity">
+      <span id="mission-type" class="mission-type">MEDEVAC</span>
+      <span id="mission-name">TRAINING SERIAL M-01</span>
+      <span id="sim-clock">T+00:00</span>
+    </div>
+    <div class="header-actions">
+      <span id="authority-chip"><b>YOU</b> MISSION COMMANDER</span>
+      <button id="pause-button" type="button" aria-pressed="false">PAUSE</button>
+    </div>
+  </header>
+
+  <main id="mission-shell" inert>
+    <section class="theatre-pane" aria-labelledby="map-heading">
+      <header class="panel-heading">
+        <div>
+          <span class="eyebrow">SYNTHETIC UKRAINE THEATRE / LOCAL COMMAND PICTURE</span>
+          <h1 id="map-heading">Air ambulance tasking</h1>
+        </div>
+        <div class="condition-strip" aria-label="Operating conditions">
+          <div><span>WEATHER</span><strong id="weather-label">CONNECTING</strong><small id="weather-detail">AWAITING AUTHORITY</small></div>
+          <div><span>WIND</span><strong id="wind-label">CONNECTING</strong><small id="wind-detail">AWAITING AUTHORITY</small></div>
+          <div><span>THREAT</span><strong id="threat-label">CONNECTING</strong><small id="threat-detail">AWAITING AUTHORITY</small></div>
+          <div><span>EMISSIONS</span><strong id="emission-label">CONNECTING</strong><small id="emission-detail">AWAITING AUTHORITY</small></div>
+        </div>
+      </header>
+
+      <div class="map-frame">
+        <svg id="theatre-map" viewBox="0 0 1000 620" role="img"
+             aria-label="Mission map showing the air ambulance, two casualty sites, a transfer point, and receiving facilities">
+          <defs>
+            <linearGradient id="land-wash" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#354330"/>
+              <stop offset=".48" stop-color="#222f25"/>
+              <stop offset="1" stop-color="#17231e"/>
+            </linearGradient>
+            <radialGradient id="weather-wash">
+              <stop offset="0" stop-color="#c9d4bd" stop-opacity=".15"/>
+              <stop offset="1" stop-color="#c9d4bd" stop-opacity="0"/>
+            </radialGradient>
+            <filter id="map-shadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#07100a" flood-opacity=".72"/>
+            </filter>
+          </defs>
+
+          <rect width="1000" height="620" fill="url(#land-wash)"/>
+          <path class="field field-a" d="M0 37L278 0l38 184L34 219z"/>
+          <path class="field field-b" d="M304 0h284l-17 173-255 11z"/>
+          <path class="field field-c" d="M590 0h410v144L777 180 571 173z"/>
+          <path class="field field-d" d="M0 229l317-34 39 216L0 447z"/>
+          <path class="field field-e" d="M326 194l242-10 43 211-255 16z"/>
+          <path class="field field-f" d="M580 184l420-31v267l-389-25z"/>
+          <path class="field field-g" d="M0 458l360-36 23 198H0z"/>
+          <path class="field field-h" d="M371 414l240-8 41 214H383z"/>
+          <path class="field field-i" d="M621 411l379 18v191H652z"/>
+
+          <path class="tree-line" d="M-20 292C140 262 198 293 332 261s233-74 350-28 191 8 338-51"/>
+          <path class="tree-line secondary" d="M81 620c55-93 129-115 188-159s101-105 143-171 91-115 166-134"/>
+          <path class="water-line" d="M790-20c-19 111 16 161 2 249s-84 140-67 246 76 116 62 165"/>
+          <path class="road major" d="M-30 544C157 503 249 464 349 363s210-131 355-155 220-42 326-113"/>
+          <path class="road" d="M161-20c18 116 61 191 119 262s61 129 68 211 50 126 84 187"/>
+          <path class="road" d="M1006 493c-121-48-209-72-318-76s-224 6-347-25S135 319-20 324"/>
+
+          <g class="weather-cell" aria-hidden="true">
+            <ellipse cx="752" cy="98" rx="214" ry="125" fill="url(#weather-wash)"/>
+            <path d="M576 111c79-56 196-81 331-46M615 151c99-46 189-56 281-31"/>
+          </g>
+
+          <g id="route-layer" aria-hidden="true">
+            <path id="planned-route" class="route planned" d="M178 493C314 428 358 330 473 284"/>
+            <path id="completed-route" class="route completed" d="M178 493C178 493 178 493 178 493"/>
+            <path id="courier-route-a" class="route courier" d="M411 214C441 235 458 256 473 284"/>
+            <path id="courier-route-b" class="route courier muted" d="M783 401C727 387 684 401 637 430"/>
+          </g>
+
+          <g class="map-node base-node" data-map-node="base" transform="translate(178 493)">
+            <circle r="25"/><path d="M-10 4h20M0-6v20"/>
+            <text x="37" y="-5">FORWARD STRIP</text><text class="map-node-detail" x="37" y="13">AIR AMBULANCE / START</text>
+          </g>
+          <g class="map-node pickup-node active" data-map-node="pickup-a" transform="translate(473 284)">
+            <circle r="25"/><path d="M-8-8l16 16m0-16L-8 8"/>
+            <text x="37" y="-5">CALL ALPHA</text><text class="map-node-detail" x="37" y="13">POD A / PREPARING</text>
+          </g>
+          <g class="map-node pickup-node" data-map-node="pickup-b" transform="translate(637 430)">
+            <circle r="25"/><path d="M-8-8l16 16m0-16L-8 8"/>
+            <text x="37" y="-5">CALL BRAVO</text><text class="map-node-detail" x="37" y="13">POD B / DISPATCHED</text>
+          </g>
+          <g class="map-node relay-node" data-map-node="relay" transform="translate(411 214)">
+            <rect x="-20" y="-20" width="40" height="40" rx="4"/><path d="M-10 0h20"/>
+            <text x="31" y="-5">SAFE TRANSFER</text><text class="map-node-detail" x="31" y="13">REAR TRANSPORT</text>
+          </g>
+          <g class="map-node facility-node" data-map-node="facility-a" transform="translate(845 167)">
+            <path d="M0-24L21-12v24L0 24l-21-12v-24z"/><path d="M-9 0H9M0-9V9"/>
+            <text x="-34" y="43">SURGICAL RECEIVER</text>
+          </g>
+          <g class="map-node facility-node" data-map-node="facility-b" transform="translate(783 511)">
+            <path d="M0-24L21-12v24L0 24l-21-12v-24z"/><path d="M-9 0H9M0-9V9"/>
+            <text x="-23" y="43">FIELD CLINIC</text>
+          </g>
+
+          <g id="aircraft-marker" class="vehicle-marker" transform="translate(178 493)" filter="url(#map-shadow)">
+            <circle r="21"/>
+            <path d="M0-17L7-3l15 5v5L6 5 4 19h-8L-6 5l-16 2V2l15-5z"/>
+            <text x="31" y="-4">AMB-12</text><text class="map-node-detail" x="31" y="13">STAGED</text>
+          </g>
+          <g id="extractor-marker" class="extractor-marker" transform="translate(442 254)" filter="url(#map-shadow)">
+            <circle r="15"/><path d="M-12 0h24M0-12v24M-8-8l16 16m0-16L-8 8"/>
+          </g>
+        </svg>
+
+        <div class="map-scale" aria-hidden="true"><i></i><span>10 KM</span></div>
+        <div id="map-status" class="map-status" role="status">
+          <span>AUTOMATION</span>
+          <strong>HOLDING AT FORWARD STRIP</strong>
+          <small>Waiting for commander tasking</small>
+        </div>
+        <div class="map-legend" aria-label="Map legend">
+          <span><i class="legend-aircraft"></i>AIR AMBULANCE</span>
+          <span><i class="legend-call"></i>CASUALTY POD</span>
+          <span><i class="legend-facility"></i>RECEIVER</span>
+          <span><i class="legend-route"></i>ACTIVE ROUTE</span>
+        </div>
+      </div>
+
+      <section class="rendezvous-panel" aria-labelledby="rendezvous-title">
+        <div class="rendezvous-heading">
+          <span class="eyebrow">TIME-ON-POD</span>
+          <h2 id="rendezvous-title">Rendezvous not committed</h2>
+          <p id="rendezvous-copy">Ground teams are preparing both patients while their empty pods travel independently.</p>
+        </div>
+      <div class="rendezvous-gauge" role="meter" aria-label="Aircraft arrival compared with pod readiness"
+           aria-valuemin="-180" aria-valuemax="180" aria-valuenow="0" aria-valuetext="No rendezvous task">
+          <span class="gauge-label early">AIRCRAFT EARLY</span>
+          <span class="gauge-label sync">SYNC</span>
+          <span class="gauge-label late">POD WAITING</span>
+          <i class="gauge-track"><b id="rendezvous-cursor"></b></i>
+          <output id="rendezvous-delta">NO TASK</output>
+        </div>
+        <div class="rendezvous-facts">
+          <div><span>AIRCRAFT ETA</span><strong id="aircraft-eta">—</strong></div>
+          <div><span>POD READY</span><strong id="pod-ready-eta">—</strong></div>
+          <div><span>EXPOSED HOLD</span><strong id="exposed-hold">0:00</strong></div>
+        </div>
+      </section>
+
+      <section class="pod-deck" aria-labelledby="pod-deck-title">
+        <header>
+          <div>
+            <span class="eyebrow">AIRCRAFT LOAD / TWO COUPLINGS</span>
+            <h2 id="pod-deck-title">Patient deck</h2>
+          </div>
+          <span id="deck-count">0 / 2 LOADED</span>
+        </header>
+        <div class="pod-slots">
+          <article id="pod-slot-1" class="pod-slot empty">
+            <span class="slot-number">01</span>
+            <div><strong>EMPTY</strong><small>NO OUTBOUND POD CARRIED</small></div>
+            <i></i>
+          </article>
+          <article id="pod-slot-2" class="pod-slot empty">
+            <span class="slot-number">02</span>
+            <div><strong>EMPTY</strong><small>AVAILABLE FOR SECOND PICKUP</small></div>
+            <i></i>
+          </article>
+        </div>
+      </section>
+    </section>
+
+    <aside id="command-rail" class="command-rail" aria-labelledby="decision-title" tabindex="-1">
+      <section class="task-card">
+        <div class="task-sequence"><span id="phase-number">01</span><i></i><small id="phase-label">TASKING</small></div>
+        <div>
+          <span class="eyebrow">COMMAND DECISION</span>
+          <h2 id="decision-title" tabindex="-1">Accept the tasking</h2>
+          <p id="decision-prompt">Dispatch the autonomous patient pods, then use their readiness estimates to time the aircraft.</p>
+        </div>
+      </section>
+
+      <section id="crew-card" class="crew-card" aria-labelledby="crew-report-title">
+        <header>
+          <span class="crew-avatar" aria-hidden="true">R</span>
+          <div><strong>REAR CREW</strong><small>ADVISORY / YOU DECIDE</small></div>
+          <span id="crew-priority">REPORT</span>
+        </header>
+        <h3 id="crew-report-title">Both calls are incomplete.</h3>
+        <p id="crew-report">I’ll work the patients once they are aboard. Until then, compare site preparation, exposure, and receiver capability—not a diagnosis we do not have.</p>
+        <div id="crew-rationale" class="crew-rationale">
+          <span>WHY</span>
+          <p>Arriving early creates exposed hold time. Arriving late leaves a prepared patient waiting.</p>
+        </div>
+      </section>
+
+      <form id="decision-form" class="decision-form">
+        <fieldset>
+          <legend>SELECT INTENT</legend>
+          <div id="decision-options" class="decision-options" role="radiogroup" aria-describedby="decision-help">
+            <label class="decision-option selected">
+              <input type="radio" name="command-option" value="begin" checked>
+              <span><strong>Dispatch both pods</strong><small>Send empty autonomous couriers to both sites.</small></span>
+              <b>RECOMMENDED</b>
+            </label>
+          </div>
+        </fieldset>
+        <p id="decision-help">Selecting previews the consequence. Only the command below changes mission state.</p>
+        <button id="primary-action" class="primary-action" type="submit">
+          <span>DISPATCH PODS</span><small>AUTHORISE MISSION START</small>
+        </button>
+      </form>
+
+      <section class="extractor-panel" aria-labelledby="extractor-title">
+        <header>
+          <div>
+            <span class="eyebrow">LAST-DANGER LEG</span>
+            <h2 id="extractor-title">Extraction control</h2>
+          </div>
+          <span id="link-state" data-state="standby">STANDBY</span>
+        </header>
+        <div class="link-ladder" aria-label="Extraction control fallback ladder">
+          <div id="link-fibre" class="link-stage active"><b>1</b><span><strong>FIBRE</strong><small>LOW EMISSION</small></span><i></i></div>
+          <div id="link-autonomy" class="link-stage"><b>2</b><span><strong>AUTONOMY</strong><small>BOUNDED INTENT</small></span><i></i></div>
+          <div id="link-rf" class="link-stage"><b>3</b><span><strong>RADIO</strong><small>DELIBERATE EXPOSURE</small></span><i></i></div>
+          <div id="link-repeater" class="link-stage"><b>4</b><span><strong>REPEATER</strong><small>ONE AVAILABLE</small></span></div>
+        </div>
+        <div class="extractor-facts">
+          <div><span>FIBRE REMAINING</span><strong id="fibre-remaining">—</strong></div>
+          <div><span>ROUTE CONFIDENCE</span><strong id="route-confidence">—</strong></div>
+          <div><span>OBSERVED RISK</span><strong id="link-risk">LOW</strong></div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="patient-rack" aria-labelledby="patients-title">
+      <header class="section-header">
+        <div>
+          <span class="eyebrow">WHAT THE CREW CAN ACTUALLY OBSERVE</span>
+          <h2 id="patients-title">Patient picture</h2>
+        </div>
+        <p>No hidden diagnosis. Reports carry source, age, confidence, and trend.</p>
+      </header>
+      <div id="patient-cards" class="patient-cards">
+        <article class="patient-card" data-patient-id="patient-a">
+          <header>
+            <div><span class="patient-id">CALL ALPHA</span><strong>FIELD REPORT</strong></div>
+            <span class="trend watch">UNASSESSED · UNKNOWN</span>
+          </header>
+          <dl>
+            <div><dt>AIRWAY</dt><dd>UNASSESSED</dd></div>
+            <div><dt>BREATHING</dt><dd>UNASSESSED</dd></div>
+            <div><dt>CIRCULATION</dt><dd>UNASSESSED</dd></div>
+            <div><dt>TEMPERATURE</dt><dd>UNASSESSED</dd></div>
+          </dl>
+          <p class="patient-source">NO MEDICAL OBSERVATION AVAILABLE</p>
+          <div class="capability-tags"></div>
+        </article>
+        <article class="patient-card" data-patient-id="patient-b">
+          <header>
+            <div><span class="patient-id">CALL BRAVO</span><strong>FIELD REPORT</strong></div>
+            <span class="trend watch">UNASSESSED · UNKNOWN</span>
+          </header>
+          <dl>
+            <div><dt>AIRWAY</dt><dd>UNASSESSED</dd></div>
+            <div><dt>BREATHING</dt><dd>UNASSESSED</dd></div>
+            <div><dt>CIRCULATION</dt><dd>UNASSESSED</dd></div>
+            <div><dt>TEMPERATURE</dt><dd>UNASSESSED</dd></div>
+          </dl>
+          <p class="patient-source">NO MEDICAL OBSERVATION AVAILABLE</p>
+          <div class="capability-tags"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="receiver-rack" aria-labelledby="receiver-title">
+      <header class="section-header">
+        <div>
+          <span class="eyebrow">LIVE ADVERTISEMENTS / NOT ROLE LABELS</span>
+          <h2 id="receiver-title">Receiving options</h2>
+        </div>
+        <span id="receiver-updated">UPDATED T−00:40</span>
+      </header>
+      <div id="receiver-list" class="receiver-list">
+        <article>
+          <header><strong>FORWARD SURGICAL</strong><span>37 MIN</span></header>
+          <p>Awaiting authoritative capability advertisement</p>
+          <small>NOT YET CONNECTED</small>
+        </article>
+        <article>
+          <header><strong>FIELD CLINIC</strong><span>18 MIN</span></header>
+          <p>Awaiting authoritative capability advertisement</p>
+          <small>NOT YET CONNECTED</small>
+        </article>
+        <article>
+          <header><strong>SAFE TRANSFER</strong><span>11 MIN</span></header>
+          <p>Awaiting authoritative capability advertisement</p>
+          <small>NOT YET CONNECTED</small>
+        </article>
+      </div>
+    </section>
+
+    <section class="event-rack" aria-labelledby="event-title">
+      <header class="section-header">
+        <div>
+          <span class="eyebrow">ORDERED MISSION RECORD</span>
+          <h2 id="event-title">Crew and automation</h2>
+        </div>
+        <button id="audio-toggle" type="button" aria-pressed="false">VOICE OFF</button>
+      </header>
+      <ol id="event-log" class="event-log" aria-live="polite">
+        <li><time>T+00:00</time><span><b>DISPATCH</b> Two casualty calls received. Evidence incomplete.</span></li>
+        <li><time>T+00:00</time><span><b>AUTOMATION</b> Aircraft holding. No outbound pod loaded.</span></li>
+      </ol>
+    </section>
+  </main>
+
+  <section id="briefing" class="modal-layer visible" role="dialog" aria-modal="true"
+           aria-labelledby="briefing-title" aria-describedby="briefing-copy">
+    <div class="briefing-card">
+      <div class="briefing-map" aria-hidden="true">
+        <span class="briefing-grid"></span>
+        <div class="briefing-route"><i></i><b></b><i></i><b></b><i></i></div>
+        <span class="briefing-stamp">M-01<br><small>2038</small></span>
+      </div>
+      <div class="briefing-copy">
+        <span class="prototype-status">PARKED RESEARCH PROTOTYPE · NOT THE CURRENT CASEVAC COURSE</span>
+        <span class="eyebrow">AIR AMBULANCE / COMMAND TRAINING</span>
+        <h1 id="briefing-title">Medevac</h1>
+        <p id="briefing-copy" class="lede">Two calls. Two patient couplings. The pods travel ahead without you; your job is to put the aircraft where it is needed when it is needed, then get each patient to care that can actually receive them.</p>
+        <div class="briefing-principles">
+          <div><b>01</b><span><strong>Meet the pod</strong>Compare preparation time with aircraft ETA. Do not orbit over danger waiting for a loading team.</span></div>
+          <div><b>02</b><span><strong>Command the risk</strong>Stage the big bus, manage the extraction link, and choose when radio or a direct pickup is justified.</span></div>
+          <div><b>03</b><span><strong>Route the patient</strong>The rear paramedic reports and challenges. You decide between the next pickup, a capable receiver, or a safe relay.</span></div>
+        </div>
+        <div class="briefing-status">
+          <div><span>AIRCRAFT</span><strong>AMB-12 / TWO POD COUPLINGS</strong></div>
+          <div><span>CREW</span><strong>MISSION COMMANDER + REAR PARAMEDIC</strong></div>
+          <div><span>FLIGHT</span><strong>HIGH AUTOMATION / COMMAND BY INTENT</strong></div>
+        </div>
+        <button id="begin-mission" class="launch-action" type="button">
+          <span>ACCEPT TASKING</span><small>START AUTHORITATIVE SIMULATION</small>
+        </button>
+        <p class="use-boundary">Fictional training simulation. Observer-safe medical trends are educational context, not clinical guidance or real operational planning.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="debrief" class="modal-layer" role="dialog" aria-modal="true"
+           aria-labelledby="debrief-title" aria-hidden="true">
+    <div class="debrief-card">
+      <span class="eyebrow">MISSION RECORD / EVIDENCE AT THE TIME</span>
+      <h2 id="debrief-title">Medevac complete</h2>
+      <p id="debrief-summary">Both patients left aircraft custody.</p>
+      <div id="debrief-metrics" class="debrief-metrics"></div>
+      <ol id="debrief-decisions"></ol>
+      <div class="debrief-actions">
+        <button id="restart-mission" class="restart-action" type="button"><span>RUN AGAIN</span><small>SAME TRAINING SERIAL</small></button>
+        <a href="../">MISSION CATALOGUE</a>
+      </div>
+    </div>
+  </section>
+
+  <div id="boot-screen" class="boot-screen" role="status" aria-live="polite">
+    <div><span>GUNS ONLY / MEDEVAC</span><strong id="boot-status">STARTING MEDICAL LOGISTICS KERNEL</strong><i></i></div>
+  </div>
+
+  <section id="fatal" class="modal-layer fatal" role="alert" aria-hidden="true">
+    <div class="fatal-card">
+      <span class="eyebrow">AUTHORITATIVE KERNEL OFFLINE</span>
+      <h2>Medevac cannot continue</h2>
+      <p id="fatal-copy">Mission truth is unavailable. Controls are locked; no browser-side medical simulation will take over.</p>
+      <button type="button" onclick="location.reload()">RELOAD</button>
+      <a href="../">MISSION CATALOGUE</a>
+    </div>
+  </section>
+
+  <p id="announcer" class="visually-hidden" aria-live="assertive"></p>
+  <script type="module" src="/medevac/app.js?v=169"></script>
+  <script src="/_framework/blazor.webassembly.js" autostart="false"></script>
+</body>
+</html>

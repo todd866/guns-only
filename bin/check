@@ -14,6 +14,8 @@ node --check web/wwwroot/indoor/audio.js
 node --check web/wwwroot/indoor/game.js
 node --check web/wwwroot/indoor/presentation.js
 node --check web/wwwroot/indoor/sim.js
+node --check web/wwwroot/medevac/app.js
+node --check web/wwwroot/render/medevac/commander_view_model.js
 node --check web/wwwroot/api/telemetry.js
 node tools/assets/validate-manifests.mjs --strict
 node tools/content/validate-governance.mjs --strict
@@ -89,6 +91,10 @@ test -f "$publish_dir/wwwroot/index.html"
 test -f "$publish_dir/wwwroot/indoor/index.html"
 test -f "$publish_dir/wwwroot/indoor/game.js"
 test -f "$publish_dir/wwwroot/indoor/sim.js"
+test -f "$publish_dir/wwwroot/medevac/index.html"
+test -f "$publish_dir/wwwroot/medevac/app.js"
+test -f "$publish_dir/wwwroot/medevac/styles.css"
+test -f "$publish_dir/wwwroot/render/medevac/commander_view_model.js"
 test -f "$publish_dir/wwwroot/_framework/blazor.webassembly.js"
 test -f "$publish_dir/wwwroot/content/packs/korea-1950s/pack.json"
 test -f "$publish_dir/wwwroot/content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json"
