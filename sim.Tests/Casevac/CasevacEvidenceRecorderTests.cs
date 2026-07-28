@@ -837,6 +837,94 @@ public sealed class CasevacEvidenceRecorderTests {
     }
 
     [Fact]
+    public void AircraftLossCauseRequiresAndRetainsTheExactUnflyableEventTick() {
+        var recorder = new CasevacEvidenceRecorder(authorityTickHz: 12);
+        recorder.ObserveEvent(Event(
+            EpochSequence,
+            CasevacEventKind.CasevacTaskStarted,
+            sourceTick: 0,
+            activeTicks: 0));
+        recorder.ObserveEvent(Event(
+            20,
+            CasevacEventKind.CasevacAircraftLost,
+            sourceTick: 2,
+            activeTicks: 2));
+        CasevacMissionSnapshot lost = Snapshot(
+            2,
+            2,
+            CasevacPhase.AircraftLost,
+            disposition: CasevacDisposition.AircraftLostEmpty,
+            clockRunning: false);
+
+        recorder.ObserveTick(
+            Observation(2, vehicleFlyable: false),
+            lost,
+            CasevacAircraftLossCause.UsableEnergyDepleted);
+
+        Assert.Equal(
+            CasevacAircraftLossCause.UsableEnergyDepleted,
+            recorder.AircraftLossCause);
+        Assert.Equal(2, recorder.AircraftLossSourceTick);
+        Assert.Equal(2, recorder.TerminalDispositionSourceTick);
+
+        var mismatch = new CasevacEvidenceRecorder(authorityTickHz: 12);
+        mismatch.ObserveEvent(Event(
+            EpochSequence,
+            CasevacEventKind.CasevacTaskStarted,
+            sourceTick: 0,
+            activeTicks: 0));
+        mismatch.ObserveEvent(Event(
+            20,
+            CasevacEventKind.CasevacAircraftLost,
+            sourceTick: 1,
+            activeTicks: 1));
+        Assert.Throws<InvalidOperationException>(() =>
+            mismatch.ObserveTick(
+                Observation(2, vehicleFlyable: false),
+                lost,
+                CasevacAircraftLossCause.CollisionAuthorityContact));
+        Assert.Equal(0, mismatch.ObservedTickCount);
+        Assert.Equal(CasevacAircraftLossCause.None,
+            mismatch.AircraftLossCause);
+    }
+
+    [Fact]
+    public void AircraftLossCauseRejectsAnActiveTickMismatchBeforeMutation() {
+        var recorder = new CasevacEvidenceRecorder(authorityTickHz: 12);
+        recorder.ObserveEvent(Event(
+            EpochSequence,
+            CasevacEventKind.CasevacTaskStarted,
+            sourceTick: 0,
+            activeTicks: 0));
+        recorder.ObserveEvent(Event(
+            20,
+            CasevacEventKind.CasevacAircraftLost,
+            sourceTick: 2,
+            activeTicks: 3));
+        CasevacMissionSnapshot lost = Snapshot(
+            2,
+            2,
+            CasevacPhase.AircraftLost,
+            disposition: CasevacDisposition.AircraftLostEmpty,
+            clockRunning: false);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            recorder.ObserveTick(
+                Observation(2, vehicleFlyable: false),
+                lost,
+                CasevacAircraftLossCause.VehicleAuthorityUnflyable));
+
+        Assert.Equal(0, recorder.ObservedTickCount);
+        Assert.Equal(-1, recorder.LastObservedSourceTick);
+        Assert.Equal(CasevacDisposition.Pending,
+            recorder.FinalDisposition);
+        Assert.Null(recorder.TerminalDispositionSourceTick);
+        Assert.Equal(CasevacAircraftLossCause.None,
+            recorder.AircraftLossCause);
+        Assert.Null(recorder.AircraftLossSourceTick);
+    }
+
+    [Fact]
     public void DisablingSamplesPreservesEveryAggregate() {
         var captured =
             new CasevacEvidenceRecorder(authorityTickHz: 24, captureSamples: true);

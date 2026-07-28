@@ -1644,6 +1644,8 @@ const pauseReasons = new Set(["ready"]);
 // the commander chooses to depart.
 let autoLaunchPending = requestedProgramNode?.id !== "medevac";
 let terrainLaunchWarmupPromise = null;
+let terrainLaunchWarmupOwner = null;
+let terrainLaunchWarmupGeneration = 0;
 let terrainLaunchWarmupFailedKey = null;
 let settingsReturnFocus = null;
 let bindingCaptureAction = null;
@@ -2484,6 +2486,7 @@ function releasePadlock(reason = "manual", { announce = true, record = true } = 
 }
 
 function resetMissionPresentation() {
+  cancelTerrainLaunchWarmup();
   frameGovernor.reset(activeView);
   terrainLaunchWarmupFailedKey = null;
   clearFlightInput("mission-reset");
@@ -3064,6 +3067,16 @@ function setPauseReason(reason, active) {
   queueMicrotask(tryAutoLaunch);
 }
 
+function refreshStagedMissionSnapshot() {
+  if (!bridge || !snapshotSource) return latestState;
+  // StartBeat/RestartSortie mutate authority synchronously, but the browser reads the persistent
+  // hot buffer. Refill it at that same lifecycle edge, then consume its cold-version change now,
+  // so Ready UI and launch warmup can never observe the mission staged immediately before it.
+  bridge.RefreshHotFrame();
+  latestState = snapshotSource.frame(performance.now());
+  return latestState;
+}
+
 function enterReady({ resetBridge = true, focus = true } = {}) {
   const preserveCalibration = pauseReasons.has("calibration");
   const preserveBackground = pauseReasons.has("background");
@@ -3098,12 +3111,14 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
       mission: selectedBeat,
       deck_configuration: selectedDeckConfiguration === 1 ? "ANGLED" : "AXIAL",
     });
+    refreshStagedMissionSnapshot();
   }
   if ([5, 6].includes(selectedBeat)) activeView?.clearRemotePlayers();
   bridgePauseApplied = true; // StartBeat is an authoritative transition to Ready.
   renderPauseUi();
   resetFrameClock();
   if (focus) queueMicrotask(focusReadyScreen);
+  return latestState;
 }
 
 function selectCampaignNode(nodeId, { focus = true } = {}) {
@@ -3122,7 +3137,18 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
     mission: selectedBeat,
     previous_node: previous,
   });
-  renderPauseUi();
+  // A catalogue click is an explicit choice, never consent to depart. Stage that choice while the
+  // Ready interlock remains held so its authored route, terrain and vehicle facts are already the
+  // ones on screen before the commander presses Fly.
+  autoLaunchPending = false;
+  const authorityChanged = stagedBeat !== selectedBeat
+    || ([5, 6].includes(selectedBeat)
+      && stagedDeckConfiguration !== selectedDeckConfiguration);
+  if (bridge && pauseReasons.has("ready") && authorityChanged) {
+    enterReady({ resetBridge: true, focus: false });
+  } else {
+    renderPauseUi();
+  }
   if (focus) queueMicrotask(focusReadyScreen);
   return true;
 }
@@ -3131,10 +3157,15 @@ function launchMission(index = selectedBeat) {
   if (Number(index) !== selectedBeat) return false;
   const deckChanged = [5, 6].includes(selectedBeat)
     && stagedDeckConfiguration !== selectedDeckConfiguration;
+  let stagedState;
   if (!pauseReasons.has("ready") || stagedBeat !== selectedBeat || deckChanged) {
-    enterReady({ resetBridge: true, focus: false });
+    stagedState = enterReady({ resetBridge: true, focus: false });
+  } else {
+    // Even the already-selected path refreshes synchronously: launch may be invoked before the
+    // next animation frame after a host-side lifecycle edge.
+    stagedState = refreshStagedMissionSnapshot();
   }
-  if (prepareMissionTerrain(index)) {
+  if (prepareMissionTerrain(index, stagedState)) {
     autoLaunchPending = true;
     return false;
   }
@@ -3182,6 +3213,35 @@ function terrainWarmupKey(state) {
   ].join(":");
 }
 
+function stagedMissionIdentity(index, state) {
+  return [
+    Number(index),
+    projectedId(state?.mission_definition_id, "unknown-mission"),
+    Number.isSafeInteger(Number(state?.casevac_mission_epoch_sequence))
+      ? `casevac-${Number(state.casevac_mission_epoch_sequence)}`
+      : Number.isSafeInteger(Number(state?.player_spawn_sequence))
+        ? `spawn-${Number(state.player_spawn_sequence)}`
+        : "unversioned",
+  ].join(":");
+}
+
+function cancelTerrainLaunchWarmup() {
+  const owner = terrainLaunchWarmupOwner;
+  if (!owner) return false;
+  terrainLaunchWarmupGeneration += 1;
+  terrainLaunchWarmupOwner = null;
+  terrainLaunchWarmupPromise = null;
+  autoLaunchPending = false;
+  if (owner.deadlineTimer) window.clearTimeout(owner.deadlineTimer);
+  owner.cancel?.();
+  owner.view?.cancelTerrainPresentationRequest?.(
+    owner.terrainKey,
+    { markFailed: false },
+  );
+  pauseReasons.delete("terrain");
+  return true;
+}
+
 function terrainDiagnosticsCoverStagedAircraft(terrain, state) {
   if (terrain?.terrainId !== state?.terrain_profile_id) return false;
   const expectedEastM = Number(state?.terrain_placement_east_m) || 0;
@@ -3222,11 +3282,11 @@ async function warmTerrainAroundReadyAircraft(terrain, state, view) {
   return true;
 }
 
-function prepareMissionTerrain(index) {
-  const stagedState = snapshotSource?.frame?.(performance.now());
+function prepareMissionTerrain(index, stagedState) {
   const terrainKey = stagedState?.terrain_present === true
     ? stagedState?.terrain_profile_id : null;
   const warmupKey = terrainWarmupKey(stagedState);
+  const missionIdentity = stagedMissionIdentity(index, stagedState);
   activeView?.configureTerrainMission?.(stagedState);
   if (!terrainKey || missionTerrainReady(stagedState)) {
     activeView?.applyTerrainFlightPolicy?.();
@@ -3243,17 +3303,31 @@ function prepareMissionTerrain(index) {
       : "Loading Ukraine theatre terrain…";
   }
   const warmupView = activeView;
+  const owner = {
+    generation: ++terrainLaunchWarmupGeneration,
+    index: Number(index),
+    missionIdentity,
+    terrainKey,
+    warmupKey,
+    view: warmupView,
+    cancel: null,
+    deadlineTimer: 0,
+  };
+  terrainLaunchWarmupOwner = owner;
   const work = Promise.resolve(warmupView.ensureTerrainPresentation(stagedState))
     .then((terrain) => warmTerrainAroundReadyAircraft(terrain, stagedState, warmupView))
     .catch(() => false);
-  let deadlineTimer = 0;
   const deadline = new Promise((resolve) => {
-    deadlineTimer = window.setTimeout(() => {
+    owner.deadlineTimer = window.setTimeout(() => {
       warmupView.cancelTerrainPresentationRequest(terrainKey);
       resolve(false);
     }, 15_000);
   });
-  terrainLaunchWarmupPromise = Promise.race([work, deadline]).then((ready) => {
+  const cancelled = new Promise((resolve) => {
+    owner.cancel = () => resolve(false);
+  });
+  const promise = Promise.race([work, deadline, cancelled]).then((ready) => {
+    if (terrainLaunchWarmupOwner !== owner) return false;
     if (!ready) {
       terrainLaunchWarmupFailedKey = warmupKey;
       if (viewStatus) {
@@ -3262,10 +3336,15 @@ function prepareMissionTerrain(index) {
     } else {
       terrainLaunchWarmupFailedKey = null;
     }
+    return ready;
   }).finally(() => {
-    if (deadlineTimer) window.clearTimeout(deadlineTimer);
+    if (owner.deadlineTimer) window.clearTimeout(owner.deadlineTimer);
+    if (terrainLaunchWarmupOwner !== owner) return;
+    const ownsCurrentMission = selectedBeat === owner.index
+      && stagedMissionIdentity(selectedBeat, latestState) === owner.missionIdentity;
+    terrainLaunchWarmupOwner = null;
     terrainLaunchWarmupPromise = null;
-    if (selectedBeat === Number(index)) {
+    if (ownsCurrentMission) {
       setPauseReason("terrain", false);
     } else {
       pauseReasons.delete("terrain");
@@ -3274,6 +3353,8 @@ function prepareMissionTerrain(index) {
       renderPauseUi();
     }
   });
+  owner.promise = promise;
+  terrainLaunchWarmupPromise = promise;
   return true;
 }
 
@@ -4179,6 +4260,11 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
           right: max(10px, env(safe-area-inset-right));
           bottom: max(86px, calc(env(safe-area-inset-bottom) + 72px));
           width: min(330px, calc(100vw - 20px));
+        }
+      }
+      @media (max-width: 760px) and (orientation: portrait) {
+        .touch-mode.tilt-fallback [data-casevac-flight-facts] {
+          bottom: max(136px, calc(env(safe-area-inset-bottom) + 136px));
         }
       }
     </style>
@@ -5732,7 +5818,10 @@ class FlightView {
     return request;
   }
 
-  cancelTerrainPresentationRequest(terrainKey) {
+  cancelTerrainPresentationRequest(
+    terrainKey,
+    { markFailed = true } = {},
+  ) {
     // A requested theatre can be chained behind the previous theatre's still-pending load. The
     // warmup deadline belongs to the requested theatre, but it must cancel whichever fetch is
     // actually blocking that request rather than requiring both keys to match.
@@ -5749,9 +5838,15 @@ class FlightView {
     }
     this.terrainPresentationPromise = null;
     this.terrainPresentationRequestedKey = null;
-    this.terrainPresentationFailureKey = terrainKey;
-    this.terrainPresentationRetryAtMs = performance.now() + 15_000;
-    this.terrainPresentationError = "Terrain warmup timed out.";
+    if (markFailed) {
+      this.terrainPresentationFailureKey = terrainKey;
+      this.terrainPresentationRetryAtMs = performance.now() + 15_000;
+      this.terrainPresentationError = "Terrain warmup timed out.";
+    } else {
+      this.terrainPresentationFailureKey = null;
+      this.terrainPresentationRetryAtMs = 0;
+      this.terrainPresentationError = null;
+    }
     return true;
   }
 
@@ -6515,6 +6610,13 @@ class FlightView {
       .includes(activeSiteId)
       ? activeSiteId
       : null;
+    // Abort is available only before pickup custody transfers. The authoritative target becomes
+    // the distinct safe-exit volume, but the authored visual escape path belongs to the pickup
+    // site; keep that bounded cue visible while navigation facts continue to point at safe exit.
+    const showEscapeCue = state?.casevac_show_escape_cue === true;
+    const activeCourseCueSite = showEscapeCue
+      ? CASEVAC_PICKUP_SITE_ID
+      : activeCourseSite;
     const precipitation01 = projectedFinite(state, "casevac_precipitation_01");
     const rotorWashIntensity = projectedFinite(
       state,
@@ -6542,9 +6644,9 @@ class FlightView {
       windZ: -(projectedFinite(state, "casevac_wind_z_mps") ?? 0),
       precipitation01: precipitation01 ?? 0,
       rotorWash,
-      activeSiteId: activeCourseSite,
+      activeSiteId: activeCourseCueSite,
       showApproachCue: ["PICKUP_APPROACH", "DROPOFF_APPROACH"].includes(phase),
-      showEscapeCue: state?.casevac_show_escape_cue === true,
+      showEscapeCue,
       capsuleCustody: casevacCapsuleVisualState(state),
     });
 
@@ -7161,6 +7263,15 @@ class FlightView {
   }
 
   presentationDiagnostics() {
+    let pickupEscapeCueVisible = false;
+    let visibleEscapeCueCount = 0;
+    this.casevacScenery?.group.traverse((object) => {
+      if (object.userData.casevac?.kind !== "escape-cue"
+          || object.visible !== true) return;
+      visibleEscapeCueCount += 1;
+      if (object.userData.casevac.siteId === CASEVAC_PICKUP_SITE_ID)
+        pickupEscapeCueVisible = true;
+    });
     return Object.freeze({
       ...this.presentationAssets.diagnostics(),
       visualRuntime: this.visualRuntime?.diagnostics() ?? null,
@@ -7169,6 +7280,11 @@ class FlightView {
       terrainError: this.terrainPresentationError,
       cloudBreak: this.tacticalClouds.cloudBreakDiagnostics(),
       multiplayer: this.remoteAircraft.diagnostics(),
+      casevac: Object.freeze({
+        active: Boolean(this.casevacScenery),
+        pickupEscapeCueVisible,
+        visibleEscapeCueCount,
+      }),
     });
   }
 
@@ -8257,6 +8373,7 @@ async function boot() {
     value: Object.freeze({ diagnostics: () => snapshotSource.diagnostics() }),
   });
   bridge.StartBeat(selectedBeat);   // initialise the sortie; Begin is the explicit clock release
+  refreshStagedMissionSnapshot();
   syncPlayerGunTarget();
   bridgePauseApplied = true;
 

@@ -675,8 +675,31 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+    await page.addInitScript(() => {
+      const browserFetch = globalThis.fetch.bind(globalThis);
+      let terrainManifestRequests = 0;
+      let releaseFirstTerrainManifest;
+      const firstTerrainManifestGate = new Promise((resolve) => {
+        releaseFirstTerrainManifest = resolve;
+      });
+      globalThis.fetch = (input, init) => {
+        const url = typeof input === "string" ? input : input?.url ?? String(input);
+        if (!url.includes("rapier-range.atlas.manifest.json"))
+          return browserFetch(input, init);
+        terrainManifestRequests += 1;
+        if (terrainManifestRequests !== 1) return browserFetch(input, init);
+        return firstTerrainManifestGate.then(() => browserFetch(input, init));
+      };
+      Object.defineProperty(globalThis, "__gunsTerrainWarmupGate", {
+        configurable: true,
+        value: Object.freeze({
+          get requestCount() { return terrainManifestRequests; },
+          release() { releaseFirstTerrainManifest(); },
+        }),
+      });
+    });
 
-    await page.goto(`${site.url}?program=medevac&server=off`, {
+    await page.goto(`${site.url}?program=low-level-drone&server=off`, {
       waitUntil: "load",
       timeout: 60000,
     });
@@ -710,6 +733,61 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
         pageErrors,
       })}`);
     }
+    await page.waitForFunction(
+      () => globalThis.__gunsLifecycle?.selectedBeat === 8
+        && globalThis.__gunsLifecycle?.stagedBeat === 8
+        && globalThis.__gunsLifecycle?.reasons?.includes("ready")
+        && globalThis.__gunsState?.casevac_mission !== true
+        && globalThis.__gunsState?.session_phase === "READY",
+      undefined,
+      { timeout: 15000 },
+    );
+    await page.waitForFunction(
+      () => globalThis.__gunsLifecycle?.reasons?.includes("terrain"),
+      undefined,
+      { timeout: 15000 },
+    );
+    await page.waitForFunction(
+      () => globalThis.__gunsTerrainWarmupGate?.requestCount === 1,
+      undefined,
+      { timeout: 15000 },
+    );
+
+    // Exercise the normal mission catalogue, not a Medevac deep link. Selection must stage
+    // authority while Ready remains held and expose the newly projected cold route data in the
+    // same click turn, without departing.
+    const catalogueSelection = await page.evaluate(() => {
+      const coldFetchesBefore =
+        globalThis.__gunsSnapshotBridge?.diagnostics()?.coldFetches;
+      document.querySelector('[data-program-node="medevac"]').click();
+      const routeCard = document.querySelector(
+        '[aria-label="Medevac reference route sketch"]',
+      );
+      return {
+        selectedBeat: globalThis.__gunsLifecycle.selectedBeat,
+        stagedBeat: globalThis.__gunsLifecycle.stagedBeat,
+        reasons: globalThis.__gunsLifecycle.reasons,
+        startText: document.querySelector("#ready-start")?.textContent?.trim(),
+        routeCardHidden: routeCard.hidden,
+        routeOptions: routeCard.querySelectorAll(".cvr-option").length,
+        coldFetchesBefore,
+        coldFetchesAfter:
+          globalThis.__gunsSnapshotBridge?.diagnostics()?.coldFetches,
+      };
+    });
+    assert.equal(catalogueSelection.selectedBeat, 13);
+    assert.equal(catalogueSelection.stagedBeat, 13);
+    assert.ok(catalogueSelection.reasons.includes("ready"));
+    assert.equal(catalogueSelection.startText, "Fly Medevac");
+    assert.equal(catalogueSelection.routeCardHidden, false);
+    assert.equal(catalogueSelection.routeOptions, 4);
+    assert.equal(
+      catalogueSelection.coldFetchesAfter,
+      catalogueSelection.coldFetchesBefore + 1,
+      `catalogue stage did not consume the new cold version: ${
+        JSON.stringify(catalogueSelection)
+      }`,
+    );
     await page.waitForFunction(() => {
       const routeCard = document.querySelector(
         '[aria-label="Medevac reference route sketch"]',
@@ -719,6 +797,12 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
         && routeCard?.hidden === false
         && routeCard.querySelectorAll(".cvr-option").length === 4;
     }, undefined, { timeout: 15000 });
+    await page.waitForTimeout(300);
+    assert.equal(
+      await page.evaluate(() => globalThis.__gunsState?.session_phase),
+      "READY",
+      "catalogue selection departed without the commander pressing Fly",
+    );
 
     const ready = await page.evaluate(() => {
       const routeCard = document.querySelector(
@@ -754,6 +838,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     }
 
     await page.locator("#ready-start").click();
+    await page.evaluate(() => globalThis.__gunsTerrainWarmupGate.release());
     await page.waitForFunction(
       () => globalThis.__gunsState?.casevac_mission === true
         && globalThis.__gunsState?.session_phase === "ACTIVE"
@@ -935,10 +1020,157 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
 
     await page.keyboard.press("n");
     await page.waitForFunction(
-      () => globalThis.__gunsState?.casevac_phase === "ABORT_RETURN",
+      () => globalThis.__gunsState?.casevac_phase === "ABORT_RETURN"
+        && globalThis.__gunsAssets?.diagnostics()?.casevac
+          ?.pickupEscapeCueVisible === true
+        && globalThis.__gunsAssets?.diagnostics()?.casevac
+          ?.visibleEscapeCueCount === 1,
       undefined,
       { timeout: 15000 },
     );
+    const abortPresentation = await page.evaluate(() => ({
+      targetSiteId: globalThis.__gunsState?.casevac_target_site_id,
+      escapeCue: globalThis.__gunsAssets?.diagnostics()?.casevac,
+    }));
+    assert.match(abortPresentation.targetSiteId, /safe-exit/);
+    assert.equal(abortPresentation.escapeCue.pickupEscapeCueVisible, true);
+    assert.equal(abortPresentation.escapeCue.visibleEscapeCueCount, 1);
+
+    const touchViewport = { width: 390, height: 844 };
+    const touchContext = await browser.newContext({
+      viewport: touchViewport,
+      screen: touchViewport,
+      isMobile: true,
+      hasTouch: true,
+    });
+    try {
+      const touchPage = await touchContext.newPage();
+      const touchPageErrors = [];
+      touchPage.on("pageerror",
+        (error) => touchPageErrors.push(error.message ?? String(error)));
+      await touchPage.goto(`${site.url}?program=medevac&server=off`, {
+        waitUntil: "load",
+        timeout: 60000,
+      });
+      await touchPage.waitForFunction(
+        () => document.querySelector("#boot")?.classList.contains("ready") === true
+          && globalThis.__gunsMobile?.active === true,
+        undefined,
+        { timeout: 45000 },
+      );
+
+      if (await touchPage.evaluate(() => globalThis.__gunsMobile?.tiltState === "off")) {
+        const buttonsOnly = touchPage.locator('[data-mobile-action="buttons-only"]');
+        await buttonsOnly.waitFor({ state: "visible", timeout: 10000 });
+        await buttonsOnly.click();
+      }
+      await touchPage.waitForFunction(() => {
+        const active = globalThis.__gunsState?.casevac_mission === true
+          && globalThis.__gunsState?.session_phase === "ACTIVE"
+          && !document.documentElement.classList.contains("run-paused");
+        const start = document.querySelector("#ready-start");
+        const resumable = globalThis.__gunsState?.casevac_mission === true
+          && document.querySelector("#ready-screen")?.classList.contains("visible")
+          && start?.disabled === false;
+        return active || resumable;
+      }, undefined, { timeout: 45000 });
+      const touchAlreadyActive = await touchPage.evaluate(() =>
+        globalThis.__gunsState?.session_phase === "ACTIVE"
+          && !document.documentElement.classList.contains("run-paused"));
+      if (!touchAlreadyActive) await touchPage.locator("#ready-start").click();
+      await touchPage.waitForFunction(
+        () => globalThis.__gunsState?.casevac_mission === true
+          && globalThis.__gunsState?.session_phase === "ACTIVE"
+          && globalThis.__gunsMobile?.tiltState === "fallback"
+          && document.querySelector("[data-casevac-flight-facts]")?.hidden === false
+          && getComputedStyle(document.querySelector("#fallback-stick")).display !== "none"
+          && !document.documentElement.classList.contains("run-paused"),
+        undefined,
+        { timeout: 45000 },
+      );
+
+      const portraitTouch = await touchPage.evaluate(() => {
+        const rect = (element) => {
+          const box = element.getBoundingClientRect();
+          return {
+            left: box.left,
+            right: box.right,
+            top: box.top,
+            bottom: box.bottom,
+            width: box.width,
+            height: box.height,
+          };
+        };
+        const overlaps = (a, b) => a.left < b.right && a.right > b.left
+          && a.top < b.bottom && a.bottom > b.top;
+        const visible = (element) => element && !element.hidden
+          && getComputedStyle(element).display !== "none"
+          && getComputedStyle(element).visibility !== "hidden";
+        const chips = document.querySelector("#portrait-chips");
+        const stickElement = document.querySelector("#fallback-stick");
+        const factsElement = document.querySelector("[data-casevac-flight-facts]");
+        const stick = rect(stickElement);
+        const facts = rect(factsElement);
+        const motionControls = [
+          stickElement,
+          ...document.querySelectorAll("#touch-throttle-controls button"),
+        ].filter(visible).map((element) => ({
+          id: element.id,
+          rect: rect(element),
+        }));
+        return {
+          htmlClass: document.documentElement.className,
+          viewport: { width: innerWidth, height: innerHeight },
+          chips: {
+            hidden: chips.hidden,
+            display: getComputedStyle(chips).display,
+            rect: rect(chips),
+          },
+          facts,
+          stick,
+          factsStickGap: stick.top - facts.bottom,
+          factsOverlapsStick: overlaps(facts, stick),
+          overlappingMotionControls: motionControls
+            .filter((control) => overlaps(facts, control.rect)),
+          motionControls,
+        };
+      });
+      assert.match(portraitTouch.htmlClass, /\btouch-mode\b/);
+      assert.match(portraitTouch.htmlClass, /\btilt-fallback\b/);
+      assert.equal(portraitTouch.chips.hidden, true);
+      assert.equal(portraitTouch.chips.display, "none");
+      assert.equal(portraitTouch.chips.rect.width, 0);
+      assert.equal(portraitTouch.chips.rect.height, 0);
+      assert.ok(portraitTouch.stick.width >= 44 && portraitTouch.stick.height >= 44);
+      assert.ok(portraitTouch.facts.left >= 0
+        && portraitTouch.facts.right <= portraitTouch.viewport.width);
+      assert.ok(portraitTouch.facts.top >= 0
+        && portraitTouch.facts.bottom <= portraitTouch.viewport.height);
+      assert.equal(portraitTouch.factsOverlapsStick, false,
+        `portrait Medevac movement stick obscures flight facts: ${
+          JSON.stringify(portraitTouch)
+        }`);
+      assert.ok(portraitTouch.factsStickGap >= 8,
+        `portrait Medevac movement stick needs a visible facts gap: ${
+          JSON.stringify(portraitTouch)
+        }`);
+      assert.deepEqual(portraitTouch.overlappingMotionControls, [],
+        `portrait Medevac controls obscure flight facts: ${JSON.stringify(portraitTouch)}`);
+      assert.deepEqual(
+        touchPageErrors,
+        [],
+        `uncaught page errors during portrait touch Medevac flight:\n${
+          touchPageErrors.join("\n")
+        }`,
+      );
+      if (captureDir) {
+        await touchPage.screenshot({
+          path: join(captureDir, "medevac-flight-touch-portrait.png"),
+        });
+      }
+    } finally {
+      await touchContext.close();
+    }
 
     assert.deepEqual(
       pageErrors,

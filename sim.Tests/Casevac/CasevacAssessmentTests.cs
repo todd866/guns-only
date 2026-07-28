@@ -289,6 +289,46 @@ public sealed class CasevacAssessmentTests {
     }
 
     [Fact]
+    public void EnergyDepletionLossSelectsExactCauseSpecificCorrectionWithoutCollisionCoaching() {
+        var recorder = new CasevacEvidenceRecorder(authorityTickHz: 12);
+        recorder.ObserveEvent(Event(
+            Epoch,
+            CasevacEventKind.CasevacTaskStarted,
+            sourceTick: 0,
+            activeTicks: 0));
+        recorder.ObserveEvent(Event(
+            Epoch + 1,
+            CasevacEventKind.CasevacAircraftLost,
+            sourceTick: 2,
+            activeTicks: 2));
+        CasevacMissionSnapshot lost = Snapshot(
+            2,
+            2,
+            CasevacPhase.AircraftLost,
+            disposition: CasevacDisposition.AircraftLostEmpty,
+            requestedHandoffAgeTicks: 110);
+        recorder.ObserveTick(
+            Observation(2, vehicleFlyable: false),
+            lost,
+            CasevacAircraftLossCause.UsableEnergyDepleted);
+
+        CasevacPrimaryCorrection correction =
+            CasevacAssessmentEngine.Assess(recorder, lost).PrimaryCorrection;
+
+        Assert.Equal(
+            CasevacPrimaryCorrectionKind.PreserveUsableEnergyReserve,
+            correction.Kind);
+        Assert.Equal(2, correction.StartSourceTick);
+        Assert.Equal(2, correction.EndSourceTick);
+        Assert.Contains("usable-energy ledger depleted",
+            correction.CorrectionText);
+        Assert.DoesNotContain("collision", correction.CorrectionText,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("obstacle", correction.CorrectionText,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void AggregateSafetyFindingWithoutExactReplayMomentDoesNotFabricateCorrection() {
         var recorder = new CasevacEvidenceRecorder(
             authorityTickHz: 12,
@@ -414,6 +454,139 @@ public sealed class CasevacAssessmentTests {
         Assert.Equal(19, correction.StartSourceTick);
         Assert.Equal(31, correction.EndSourceTick);
         Assert.Equal(6, recorder.RouteSampleCount);
+        Assert.Equal(
+            CasevacPrimaryCorrectionKind.ReviewRouteExposureWithinSafeBand,
+            CasevacAssessmentEngine.Assess(
+                recorder,
+                Snapshot(
+                    36,
+                    36,
+                    CasevacPhase.Ingress,
+                    targetSiteId: PickupSite))
+                .PrimaryCorrection.Kind);
+    }
+
+    [Fact]
+    public void RetainedRouteMarkerPreservesOutsideSafeBandSubtype() {
+        var recorder = new CasevacEvidenceRecorder(authorityTickHz: 12);
+        for (long sourceTick = 1; sourceTick <= 18; sourceTick++)
+            recorder.ObserveTick(
+                Observation(
+                    sourceTick,
+                    maskingState: CasevacMaskingState.Exposed,
+                    withinSafeMaskingBand: false),
+                Snapshot(
+                    sourceTick,
+                    activeTicks: sourceTick,
+                    CasevacPhase.Ingress,
+                    targetSiteId: PickupSite));
+
+        CasevacRetainedCorrectionMarker.Record(recorder);
+        CasevacPrimaryCorrection correction =
+            CasevacAssessmentEngine.Assess(
+                recorder,
+                Snapshot(
+                    18,
+                    18,
+                    CasevacPhase.Ingress,
+                    targetSiteId: PickupSite))
+            .PrimaryCorrection;
+
+        Assert.Equal(
+            CasevacPrimaryCorrectionKind.ReviewRouteOutsideSafeBand,
+            correction.Kind);
+        Assert.DoesNotContain(
+            "derived-route-outside-safe-band-v1",
+            correction.CorrectionText);
+    }
+
+    [Fact]
+    public void RetainedRouteMarkerSplitsAContiguousSubtypeTransitionIntoHomogeneousRanges() {
+        var recorder = new CasevacEvidenceRecorder(authorityTickHz: 12);
+        for (long sourceTick = 1; sourceTick <= 36; sourceTick++) {
+            bool outsideSafeBand = sourceTick <= 6;
+            recorder.ObserveTick(
+                Observation(
+                    sourceTick,
+                    maskingState: CasevacMaskingState.Exposed,
+                    withinSafeMaskingBand: !outsideSafeBand),
+                Snapshot(
+                    sourceTick,
+                    activeTicks: sourceTick,
+                    CasevacPhase.Ingress,
+                    targetSiteId: PickupSite));
+        }
+
+        CasevacRetainedCorrectionMarker.Record(recorder);
+
+        Assert.Collection(
+            recorder.CorrectionRanges.ToArray(),
+            outside => {
+                Assert.Equal(1, outside.StartSourceTick);
+                Assert.Equal(1, outside.EndSourceTick);
+                Assert.Equal(
+                    "derived-route-outside-safe-band-v1",
+                    outside.Reason);
+            },
+            exposed => {
+                Assert.Equal(7, exposed.StartSourceTick);
+                Assert.Equal(31, exposed.EndSourceTick);
+                Assert.Equal(
+                    "derived-route-exposed-v1",
+                    exposed.Reason);
+            });
+    }
+
+    [Fact]
+    public void RetainedRouteMarkerSelectsShorterOutsideBandRunBeforeSeparateLongerExposureRun() {
+        var recorder = new CasevacEvidenceRecorder(authorityTickHz: 12);
+        for (long sourceTick = 1; sourceTick <= 60; sourceTick++) {
+            bool outsideSafeBand = sourceTick <= 6;
+            bool exposedWithinSafeBand = sourceTick >= 13;
+            recorder.ObserveTick(
+                Observation(
+                    sourceTick,
+                    maskingState:
+                        outsideSafeBand || exposedWithinSafeBand
+                            ? CasevacMaskingState.Exposed
+                            : CasevacMaskingState.Masked,
+                    withinSafeMaskingBand: !outsideSafeBand),
+                Snapshot(
+                    sourceTick,
+                    activeTicks: sourceTick,
+                    CasevacPhase.Ingress,
+                    targetSiteId: PickupSite));
+        }
+
+        CasevacRetainedCorrectionMarker.Record(recorder);
+        CasevacCorrectionRange[] ranges =
+            recorder.CorrectionRanges.ToArray();
+        CasevacPrimaryCorrection correction =
+            CasevacAssessmentEngine.Assess(
+                recorder,
+                Snapshot(
+                    60,
+                    60,
+                    CasevacPhase.Ingress,
+                    targetSiteId: PickupSite))
+            .PrimaryCorrection;
+
+        Assert.Equal(2, ranges.Length);
+        Assert.Equal(1, ranges[0].StartSourceTick);
+        Assert.Equal(1, ranges[0].EndSourceTick);
+        Assert.Equal(
+            "derived-route-outside-safe-band-v1",
+            ranges[0].Reason);
+        Assert.Equal(13, ranges[1].StartSourceTick);
+        Assert.Equal(55, ranges[1].EndSourceTick);
+        Assert.Equal(
+            "derived-route-exposed-v1",
+            ranges[1].Reason);
+        Assert.Equal(
+            CasevacPrimaryCorrectionKind.ReviewRouteOutsideSafeBand,
+            correction.Kind);
+        Assert.Equal(1, correction.StartSourceTick);
+        Assert.Equal(1, correction.EndSourceTick);
     }
 
     [Fact]

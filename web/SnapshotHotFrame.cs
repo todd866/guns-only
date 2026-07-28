@@ -41,7 +41,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 13;
+    public const int LayoutVersion = 14;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -555,6 +555,9 @@ internal static class SnapshotHotFrame {
         Num("casevac_visibility_m", 1);
         Num("casevac_precipitation_mm_hr", 3);
         Num("casevac_precipitation_01", 4);
+        Num("casevac_rotor_wash_intensity_01", 4);
+        Num("casevac_rotor_wash_radius_m", 2);
+        Bool("casevac_show_escape_cue");
         CasevacBlock = new BlockDef(
             "casevac",
             casevacStart,
@@ -1209,6 +1212,8 @@ internal static class SnapshotHotFrame {
         CasevacTargetGuidance guidance = flight.TargetGuidance;
         CasevacDestinationEnergyPlan energyPlan =
             flight.DestinationEnergyPlan;
+        CasevacRotorWashVisual rotorWash =
+            flight.RotorWashVisual;
 
         CasevacColdFingerprint fingerprint = CasevacColdFingerprint.Capture(
             session,
@@ -1459,6 +1464,17 @@ internal static class SnapshotHotFrame {
                 0.0,
                 1.0),
             4);
+        w.Num(
+            "casevac_rotor_wash_intensity_01",
+            rotorWash.Intensity01,
+            4);
+        w.Num(
+            "casevac_rotor_wash_radius_m",
+            rotorWash.RadiusM,
+            2);
+        w.Bool(
+            "casevac_show_escape_cue",
+            mission.Phase == CasevacPhase.AbortReturn);
         w.End();
     }
 

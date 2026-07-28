@@ -76,6 +76,53 @@ function assertVector(actual, expected, epsilon = 1e-9) {
     `${actual.toArray()} should equal ${expected.toArray()}`);
 }
 
+function assertExactOpaqueAuthorityMass(
+  root,
+  {
+    kind,
+    obstacleId,
+    minimum,
+    maximum,
+  },
+) {
+  const matches = byKind(root, kind);
+  assert.equal(matches.length, 1, `${obstacleId} needs one exact solid mass`);
+  const mass = matches[0];
+  assert.equal(mass.userData.casevac.obstacleId, obstacleId);
+  assert.equal(mass.geometry.type, "BoxGeometry");
+  assert.equal(mass.visible, true);
+  assert.equal(mass.material.transparent, false);
+  assert.equal(mass.material.opacity, 1);
+  assert.equal(mass.material.depthWrite, true);
+  assert.equal(mass.material.colorWrite, true);
+  assert.equal(mass.material.wireframe, false);
+  assert.equal(
+    mass.userData.casevacGeometry.authorityBoundsExact,
+    true,
+  );
+  assert.equal(
+    mass.userData.casevacGeometry.fullVolumeCoverage,
+    true,
+  );
+  assert.equal(
+    mass.userData.casevacGeometry.opaquePhysicalMass,
+    true,
+  );
+  const bounds = new THREE.Box3().setFromObject(mass);
+  assertVector(bounds.min, minimum, 5e-5);
+  assertVector(bounds.max, maximum, 5e-5);
+  const expectedSize = maximum.clone().sub(minimum);
+  const actualSize = bounds.getSize(new THREE.Vector3());
+  assertVector(actualSize, expectedSize, 1e-4);
+  assert.ok(
+    Math.abs(
+      actualSize.x * actualSize.y * actualSize.z
+        - expectedSize.x * expectedSize.y * expectedSize.z,
+    ) <= 1e-4,
+    `${obstacleId} solid mass must cover the complete AABB volume`,
+  );
+}
+
 test("mirrors every projected primitive as tagged presentation-only scenery", () => {
   const scenery = createCasevacCollisionScenery(
     THREE,
@@ -175,6 +222,21 @@ test("turns box authority into opaque physical orchard and clinic compounds", ()
     "fortified-clinic-compound",
   );
 
+  assertExactOpaqueAuthorityMass(scenery.group, {
+    kind: "orchard-authority-solid-mass",
+    obstacleId: "obstacle.casevac.orchard-exclusion.v1",
+    minimum: new THREE.Vector3(-650, 40, -350),
+    maximum: new THREE.Vector3(-250, 68, 50),
+  });
+  assertExactOpaqueAuthorityMass(scenery.group, {
+    kind: "clinic-authority-solid-mass",
+    obstacleId: "obstacle.casevac.clinic-exclusion.v1",
+    minimum: new THREE.Vector3(3300, 40, 2280),
+    maximum: new THREE.Vector3(3460, 74, 2520),
+  });
+
+  // Compound bounds remain aligned too, but the named mass assertions above
+  // prove full-volume coverage rather than inferring it from scattered dressing.
   const orchardBounds = new THREE.Box3().setFromObject(orchard);
   assertVector(
     orchardBounds.min,
@@ -205,6 +267,9 @@ test("turns box authority into opaque physical orchard and clinic compounds", ()
   assert.equal(
     byKind(scenery.group, "orchard-tree-canopies").length,
     1,
+  );
+  assert.ok(
+    byKind(scenery.group, "orchard-canopy-surface-row").length >= 5,
   );
   assert.ok(byKind(scenery.group, "clinic-main-block").length > 0);
   assert.ok(byKind(scenery.group, "clinic-receiving-wing").length > 0);

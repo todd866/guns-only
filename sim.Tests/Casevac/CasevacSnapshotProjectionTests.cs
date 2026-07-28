@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GunsOnly.Sim.Casevac;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Web;
@@ -187,6 +188,9 @@ public sealed class CasevacSnapshotProjectionTests {
             "casevac_wind_x_mps",
             "casevac_precipitation_mm_hr",
             "casevac_precipitation_01",
+            "casevac_rotor_wash_intensity_01",
+            "casevac_rotor_wash_radius_m",
+            "casevac_show_escape_cue",
             "casevac_recent_events",
             "casevac_debrief",
             "px", "py", "pz",
@@ -206,6 +210,16 @@ public sealed class CasevacSnapshotProjectionTests {
             root.GetProperty("casevac_disposition").GetString());
         Assert.Equal(JsonValueKind.Null,
             root.GetProperty("casevac_debrief").ValueKind);
+        Assert.InRange(
+            root.GetProperty(
+                "casevac_rotor_wash_intensity_01").GetDouble(),
+            0.0,
+            1.0);
+        Assert.True(
+            root.GetProperty(
+                "casevac_rotor_wash_radius_m").GetDouble() > 0.0);
+        Assert.False(
+            root.GetProperty("casevac_show_escape_cue").GetBoolean());
         GunsOnly.Sim.Casevac.CasevacFlightRuntime flight =
             session.CasevacFlight!;
         GunsOnly.Sim.Casevac.LandingZoneDefinition pickup =
@@ -721,5 +735,85 @@ public sealed class CasevacSnapshotProjectionTests {
             CasevacSnapshotProjection.DebriefVisible(
                 lifecycle,
                 phase));
+    }
+
+    [Fact]
+    public void RichCorrectionProjectionPreservesEnergyLossWithoutInventingCollision() {
+        long sequence = 0;
+        var flight = new CasevacFlightRuntime(
+            BuiltInCasevacDefinitions.CreatePrototype(),
+            terrain: null,
+            weather: null,
+            () => ++sequence,
+            initialUsableEnergyJ: 1.0);
+        flight.Begin(0);
+        CasevacMissionSnapshot mission = flight.Advance(
+            1,
+            new CasevacFlightControlIntent(
+                Forward: 0.0,
+                Right: 0.0,
+                Vertical: 1.0,
+                Yaw: 0.0));
+        CasevacPrimaryCorrection correction =
+            CasevacAssessmentEngine.Assess(
+                flight.Evidence,
+                mission)
+            .PrimaryCorrection;
+
+        using JsonDocument document = JsonDocument.Parse(
+            CasevacSnapshotProjection.CorrectionJson(
+                flight,
+                mission,
+                correction));
+        JsonElement projected = document.RootElement;
+        Assert.Equal(
+            "ENERGY_DEPLETION",
+            projected.GetProperty("kind").GetString());
+        Assert.Equal(
+            (flight.Course.Mission.InitialCallAgeTicks + 1)
+                / AircraftSim.TickHz,
+            projected.GetProperty(
+                "atCallAgeSeconds").GetDouble(),
+            3);
+        Assert.DoesNotContain(
+            "collision",
+            projected.GetRawText(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(
+        CasevacPrimaryCorrectionKind.ReviewRouteOutsideSafeBand,
+        "ROUTE_SAFE_BAND")]
+    [InlineData(
+        CasevacPrimaryCorrectionKind.ReviewRouteExposureWithinSafeBand,
+        "ROUTE_EXPOSURE")]
+    public void RichCorrectionProjectionPreservesKnownRouteSubtype(
+        CasevacPrimaryCorrectionKind kind,
+        string expectedToken) {
+        long sequence = 0;
+        var flight = new CasevacFlightRuntime(
+            BuiltInCasevacDefinitions.CreatePrototype(),
+            terrain: null,
+            weather: null,
+            () => ++sequence);
+        CasevacMissionSnapshot mission = flight.Begin(0);
+        var correction = new CasevacPrimaryCorrection(
+            kind,
+            "arbitrary recorder text must not project",
+            StartSourceTick: 1,
+            EndSourceTick: 60,
+            Stream: CasevacEvidenceStream.Route);
+
+        string json = CasevacSnapshotProjection.CorrectionJson(
+            flight,
+            mission,
+            correction);
+        using JsonDocument document = JsonDocument.Parse(json);
+
+        Assert.Equal(
+            expectedToken,
+            document.RootElement.GetProperty("kind").GetString());
+        Assert.DoesNotContain("arbitrary", json);
     }
 }

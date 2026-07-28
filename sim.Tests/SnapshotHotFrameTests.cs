@@ -53,7 +53,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(13, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(14, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
 
         bool casevac = root.TryGetProperty("casevac_mission", out JsonElement casevacMission)
@@ -339,7 +339,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(13, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(14, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())
@@ -524,6 +524,12 @@ public class SnapshotHotFrameTests {
         int callAgeIndex = SlotIndex("casevac_call_age_s");
         int remainingEnergyIndex =
             SlotIndex("casevac_energy_remaining_kwh");
+        int rotorWashIntensityIndex =
+            SlotIndex("casevac_rotor_wash_intensity_01");
+        int rotorWashRadiusIndex =
+            SlotIndex("casevac_rotor_wash_radius_m");
+        int escapeCueIndex =
+            SlotIndex("casevac_show_escape_cue");
 
         SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
         SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
@@ -531,6 +537,9 @@ public class SnapshotHotFrameTests {
         double firstTick = buffer[tickIndex];
         double firstCallAge = buffer[callAgeIndex];
         double firstRemainingEnergy = buffer[remainingEnergyIndex];
+        Assert.InRange(buffer[rotorWashIntensityIndex], 0.0, 1.0);
+        Assert.True(buffer[rotorWashRadiusIndex] > 0.0);
+        Assert.Equal(0.0, buffer[escapeCueIndex]);
 
         for (int tick = 0; tick < 30; tick++) {
             session.StepFixed();
@@ -564,6 +573,7 @@ public class SnapshotHotFrameTests {
             "phase/event/string edge did not bump CASEVAC cold_version");
         Assert.Equal(CasevacPhase.AbortReturn,
             session.CasevacFlight!.Snapshot.Phase);
+        Assert.Equal(1.0, buffer[escapeCueIndex]);
         SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
         Assert.Equal(abortVersion,
             buffer[SnapshotHotFrame.ColdVersionIndex]);

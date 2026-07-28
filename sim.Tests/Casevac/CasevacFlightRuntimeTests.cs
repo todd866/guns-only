@@ -175,6 +175,22 @@ public class CasevacFlightRuntimeTests {
         Assert.Equal(
             CasevacDisposition.AircraftLostEmpty,
             runtime.Snapshot.Disposition);
+        Assert.Equal(
+            CasevacAircraftLossCause.UsableEnergyDepleted,
+            runtime.Evidence.AircraftLossCause);
+        Assert.Equal(1, runtime.Evidence.AircraftLossSourceTick);
+        CasevacPrimaryCorrection correction =
+            CasevacAssessmentEngine.Assess(
+                runtime.Evidence,
+                runtime.Snapshot)
+            .PrimaryCorrection;
+        Assert.Equal(
+            CasevacPrimaryCorrectionKind.PreserveUsableEnergyReserve,
+            correction.Kind);
+        Assert.DoesNotContain(
+            "obstacle",
+            correction.CorrectionText,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -334,7 +350,7 @@ public class CasevacFlightRuntimeTests {
             runtime.Evidence.CorrectionRanges.ToArray(),
             range => range.Stream == CasevacEvidenceStream.Route);
         Assert.Equal(
-            CasevacPrimaryCorrectionKind.ReviewRecordedRouteSegment,
+            CasevacPrimaryCorrectionKind.ReviewRouteExposureWithinSafeBand,
             assessment.PrimaryCorrection.Kind);
         Assert.Equal(
             CasevacEvidenceStream.Route,
@@ -463,6 +479,66 @@ public class CasevacFlightRuntimeTests {
             1,
             runtime.Evidence.GetEventCount(
                 CasevacEventKind.CasevacAircraftLost));
+        Assert.Equal(
+            CasevacAircraftLossCause.CollisionAuthorityContact,
+            runtime.Evidence.AircraftLossCause);
+        Assert.Equal(
+            runtime.Evidence.GetFirstEventSourceTick(
+                CasevacEventKind.CasevacAircraftLost),
+            runtime.Evidence.AircraftLossSourceTick);
+    }
+
+    [Fact]
+    public void RotorWashVisualIsBoundedDeterministicAndDerivedFromTheFictionalProfile() {
+        CasevacFlightRuntime first = CreateRuntime(out _);
+        CasevacFlightRuntime replay = CreateRuntime(out _);
+        double expectedRotorRadiusM = Math.Sqrt(
+            ReducedOrderVerticalLiftProfile
+                .FictionalAirAmbulancePrototype
+                .RotorDiskAreaM2
+            / Math.PI);
+        Assert.Equal(0.0, first.RotorWashVisual.Intensity01);
+        Assert.Equal(
+            Math.Clamp(
+                expectedRotorRadiusM
+                    + 0.65 * first.Course.World.StartAglM,
+                expectedRotorRadiusM,
+                expectedRotorRadiusM * 3.0),
+            first.RotorWashVisual.RadiusM,
+            12);
+        first.Begin(0);
+        replay.Begin(10_000);
+
+        long tick = 1;
+        while ((first.LastTickObservation?.ClearanceM
+                ?? first.Course.World.StartAglM)
+                > expectedRotorRadiusM * 2.0
+            && tick <= 8_000) {
+            var intent = new CasevacFlightControlIntent(
+                Forward: 0.0,
+                Right: 0.0,
+                Vertical: -0.5,
+                Yaw: 0.0);
+            first.Advance(tick, intent);
+            replay.Advance(10_000 + tick, intent);
+            tick++;
+        }
+        Assert.False(first.IsTerminal);
+        var lift = new CasevacFlightControlIntent(
+            Forward: 0.0,
+            Right: 0.0,
+            Vertical: 1.0,
+            Yaw: 0.0);
+        first.Advance(tick, lift);
+        replay.Advance(10_000 + tick, lift);
+
+        CasevacRotorWashVisual wash = first.RotorWashVisual;
+        Assert.Equal(wash, replay.RotorWashVisual);
+        Assert.InRange(wash.Intensity01, double.Epsilon, 1.0);
+        Assert.InRange(
+            wash.RadiusM,
+            expectedRotorRadiusM,
+            expectedRotorRadiusM * 3.0);
     }
 
     [Fact]

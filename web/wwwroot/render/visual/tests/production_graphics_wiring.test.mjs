@@ -147,7 +147,7 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /terrainPresentationRetryAtMs = performance\.now\(\) \+ 15_000/,
     "terrain failures should remain retryable after a bounded delay");
   assert.match(source,
-    /function prepareMissionTerrain\(index\)[\s\S]*setPauseReason\("terrain", true\)[\s\S]*warmTerrainAroundReadyAircraft[\s\S]*setPauseReason\("terrain", false\)/,
+    /function prepareMissionTerrain\(index, stagedState\)[\s\S]*setPauseReason\("terrain", true\)[\s\S]*warmTerrainAroundReadyAircraft[\s\S]*setPauseReason\("terrain", false\)/,
     "the low-level sortie must warm nearby terrain before releasing the flight clock");
   assert.match(source,
     /await terrain\.ready[\s\S]*requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)[\s\S]*await terrain\.whenIdle\?\.\(\)/,
@@ -173,6 +173,12 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source,
     /cancelTerrainPresentationRequest\(terrainKey\)[\s\S]*terrainPresentationRequestEpoch \+= 1[\s\S]*terrainPresentationAbortController\?\.abort\(\)[\s\S]*terrainPresentationPromise = null/,
     "cancelling terrain must invalidate stale completion and leave a later retry possible");
+  assert.match(source,
+    /function cancelTerrainLaunchWarmup\(\)[\s\S]*terrainLaunchWarmupOwner = null;[\s\S]*owner\.cancel\?\.\(\);[\s\S]*cancelTerrainPresentationRequest\?\.\([\s\S]*owner\.terrainKey,[\s\S]*\{ markFailed: false \}/,
+    "restaging a mission must cancel only its owned warmup without poisoning the next terrain request");
+  assert.match(source,
+    /cancelTerrainPresentationRequest\([\s\S]*\{ markFailed = true \} = \{\}[\s\S]*if \(markFailed\)[\s\S]*terrainPresentationRetryAtMs = performance\.now\(\) \+ 15_000[\s\S]*else \{[\s\S]*terrainPresentationRetryAtMs = 0/,
+    "timeout cancellation must retain backoff while deliberate mission-switch cancellation remains immediately retryable");
   assert.match(source,
     /cancelTerrainPresentationRequest\(terrainKey\)[\s\S]*const hasInFlightRequest = this\.terrainPresentationPromise !== null;[\s\S]*if \(\(!hasInFlightRequest && !ownsPresentation\)/,
     "a requested theatre must be able to cancel the previous theatre load blocking its warmup");

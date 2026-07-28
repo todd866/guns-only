@@ -339,6 +339,73 @@ test("fails closed when a correction lacks a bounded evidence moment", () => {
   assert.doesNotMatch(JSON.stringify(debrief), /unreviewed/i);
 });
 
+test("keeps energy-depletion coaching distinct from collision coaching", () => {
+  const energy = casevacDebriefModel({
+    disposition: "AircraftLostEmpty",
+    axes: {},
+    correction: {
+      kind: "ENERGY_DEPLETION",
+      atCallAgeSeconds: 401.25,
+      reason: "arbitrary recorder reason",
+      advice: "arbitrary recorder advice",
+    },
+  });
+  const collision = casevacDebriefModel({
+    disposition: "AircraftLostEmpty",
+    axes: {},
+    correction: {
+      kind: "AIRCRAFT_COLLISION",
+      atCallAgeSeconds: 401.25,
+    },
+  });
+
+  assert.equal(energy.correction.available, true);
+  assert.match(energy.correction.summary, /energy reserve/i);
+  assert.doesNotMatch(
+    `${energy.correction.summary} ${energy.correction.evidence}`,
+    /collision|obstacle/i,
+  );
+  assert.match(collision.correction.summary, /collision authority/i);
+  assert.doesNotMatch(
+    JSON.stringify(energy),
+    /arbitrary recorder/i,
+  );
+});
+
+test("gives distinct static advice for outside-band and exposed-within-band route evidence", () => {
+  const outsideBand = casevacDebriefModel({
+    axes: {},
+    correction: {
+      kind: "ROUTE_SAFE_BAND",
+      atCallAgeSeconds: 230,
+      intervalSeconds: 16,
+      reason: "private outside-band recorder text",
+    },
+  });
+  const exposedWithinBand = casevacDebriefModel({
+    axes: {},
+    correction: {
+      kind: "ROUTE_EXPOSURE",
+      atCallAgeSeconds: 230,
+      intervalSeconds: 16,
+      reason: "private exposure recorder text",
+    },
+  });
+
+  assert.match(outsideBand.correction.summary, /safe masking band/i);
+  assert.match(outsideBand.correction.evidence, /outside-band segment/i);
+  assert.match(exposedWithinBand.correction.summary, /available masking/i);
+  assert.match(exposedWithinBand.correction.evidence, /inside the declared safe band/i);
+  assert.notEqual(
+    outsideBand.correction.summary,
+    exposedWithinBand.correction.summary,
+  );
+  assert.doesNotMatch(
+    JSON.stringify([outsideBand, exposedWithinBand]),
+    /private .* recorder text/i,
+  );
+});
+
 test("keeps nullable abort evidence unassessed instead of fabricating zero facts", () => {
   const debrief = casevacDebriefModel({
     disposition: "ControlledAbort",

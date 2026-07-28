@@ -584,6 +584,7 @@
     /* Portrait is a first-class assisted mode (Build 75): tilt flies, throttle holds corner,
        guns fire in solution. The old ROTATE TO LANDSCAPE blocker is gone. */
     #portrait-chips { display: none; }
+    #portrait-chips[hidden] { display: none !important; }
     @media (orientation: portrait) {
       .touch-mode #portrait-chips {
         display: flex;
@@ -2546,7 +2547,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 172 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 174 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>

@@ -19,8 +19,10 @@ const PRIMITIVES = Object.freeze({
 const COLORS = Object.freeze({
   pole: 0x4f4337,
   wire: 0x252a2c,
+  orchardAuthorityMass: 0x304b2e,
   orchardTrunk: 0x5b4633,
   orchardCanopy: 0x416b3d,
+  clinicAuthorityMass: 0x898d85,
   clinicWall: 0xb9b8aa,
   clinicWing: 0x9da5a2,
   clinicRoof: 0x59666a,
@@ -180,7 +182,11 @@ function resourceOwner() {
 }
 
 function createMaterials(THREE, owner) {
-  const lambert = (color, emissiveIntensity = 0.04) => owner.material(
+  const lambert = (
+    color,
+    emissiveIntensity = 0.04,
+    surfaceDressing = false,
+  ) => owner.material(
     new THREE.MeshLambertMaterial({
       color,
       emissive: color,
@@ -188,18 +194,23 @@ function createMaterials(THREE, owner) {
       transparent: false,
       opacity: 1,
       depthWrite: true,
+      polygonOffset: surfaceDressing,
+      polygonOffsetFactor: surfaceDressing ? -2 : 0,
+      polygonOffsetUnits: surfaceDressing ? -2 : 0,
     }),
   );
   return Object.freeze({
     pole: lambert(COLORS.pole),
     wire: lambert(COLORS.wire),
+    orchardAuthorityMass: lambert(COLORS.orchardAuthorityMass),
     orchardTrunk: lambert(COLORS.orchardTrunk),
-    orchardCanopy: lambert(COLORS.orchardCanopy, 0.08),
-    clinicWall: lambert(COLORS.clinicWall),
-    clinicWing: lambert(COLORS.clinicWing),
-    clinicRoof: lambert(COLORS.clinicRoof),
-    clinicConcrete: lambert(COLORS.clinicConcrete),
-    clinicWindow: lambert(COLORS.clinicWindow, 0.12),
+    orchardCanopy: lambert(COLORS.orchardCanopy, 0.08, true),
+    clinicAuthorityMass: lambert(COLORS.clinicAuthorityMass),
+    clinicWall: lambert(COLORS.clinicWall, 0.04, true),
+    clinicWing: lambert(COLORS.clinicWing, 0.04, true),
+    clinicRoof: lambert(COLORS.clinicRoof, 0.04, true),
+    clinicConcrete: lambert(COLORS.clinicConcrete, 0.04, true),
+    clinicWindow: lambert(COLORS.clinicWindow, 0.12, true),
     genericObstacle: lambert(COLORS.genericObstacle),
   });
 }
@@ -273,7 +284,12 @@ function renderBounds(THREE, obstacle) {
   return { minimum: renderMinimum, maximum: renderMaximum, size, centre };
 }
 
-function authorityGeometry(obstacle, representation, component = null) {
+function authorityGeometry(
+  obstacle,
+  representation,
+  component = null,
+  fullVolumeCoverage = false,
+) {
   return Object.freeze({
     minimumWorldM: obstacle.minimumWorldM,
     maximumWorldM: obstacle.maximumWorldM,
@@ -281,6 +297,8 @@ function authorityGeometry(obstacle, representation, component = null) {
     component,
     authorityBoundsExact: true,
     conservativeSolidCollision: true,
+    fullVolumeCoverage,
+    opaquePhysicalMass: fullVolumeCoverage,
   });
 }
 
@@ -310,6 +328,38 @@ function addBoxComponent(
     kind,
   );
   group.add(mesh);
+  return mesh;
+}
+
+function addExactAuthorityMass(
+  THREE,
+  owner,
+  group,
+  material,
+  obstacle,
+  representation,
+  kind,
+  name,
+  bounds,
+) {
+  const mesh = addBoxComponent(
+    THREE,
+    group,
+    owner.geometry(new THREE.BoxGeometry(1, 1, 1)),
+    material,
+    obstacle,
+    representation,
+    kind,
+    name,
+    bounds.centre,
+    bounds.size,
+  );
+  mesh.userData.casevacGeometry = authorityGeometry(
+    obstacle,
+    representation,
+    kind,
+    true,
+  );
   return mesh;
 }
 
@@ -348,6 +398,18 @@ function createOrchardCompound(
   group.userData.casevacGeometry = authorityGeometry(
     obstacle,
     representation,
+  );
+
+  addExactAuthorityMass(
+    THREE,
+    owner,
+    group,
+    materials.orchardAuthorityMass,
+    obstacle,
+    representation,
+    "orchard-authority-solid-mass",
+    "CASEVAC_ORCHARD_EXACT_AUTHORITY_SOLID_MASS",
+    bounds,
   );
 
   const columns = Math.max(5, Math.min(12, Math.round(bounds.size.x / 34)));
@@ -466,6 +528,34 @@ function createOrchardCompound(
   finishInstances(trunks);
   finishInstances(canopies);
   group.add(trunks, canopies);
+
+  // Flush, opaque canopy rows keep the solid windbreak readable from the
+  // commander's usual elevated view without extending beyond collision truth.
+  const rowGeometry = owner.geometry(new THREE.BoxGeometry(1, 1, 1));
+  const rowDepth = Math.max(3, Math.min(8, zStep * 0.28));
+  const rowSurfaceDepth = Math.min(0.24, bounds.size.y * 0.01);
+  for (let row = 0; row < rows; row++) {
+    addBoxComponent(
+      THREE,
+      group,
+      rowGeometry,
+      materials.orchardCanopy,
+      obstacle,
+      representation,
+      "orchard-canopy-surface-row",
+      `CASEVAC_ORCHARD_CANOPY_SURFACE_ROW_${row + 1}`,
+      new THREE.Vector3(
+        bounds.centre.x,
+        bounds.maximum.y - rowSurfaceDepth * 0.5,
+        bounds.minimum.z + zMargin + row * zStep,
+      ),
+      new THREE.Vector3(
+        bounds.size.x,
+        rowSurfaceDepth,
+        rowDepth,
+      ),
+    );
+  }
   return group;
 }
 
@@ -487,6 +577,19 @@ function createClinicCompound(
     obstacle,
     representation,
   );
+
+  addExactAuthorityMass(
+    THREE,
+    owner,
+    group,
+    materials.clinicAuthorityMass,
+    obstacle,
+    representation,
+    "clinic-authority-solid-mass",
+    "CASEVAC_CLINIC_EXACT_AUTHORITY_SOLID_MASS",
+    bounds,
+  );
+
   const unitBox = owner.geometry(new THREE.BoxGeometry(1, 1, 1));
   const add = (material, kind, name, centre, size) => addBoxComponent(
     THREE,
@@ -545,7 +648,10 @@ function createClinicCompound(
   const mainDepth = bounds.size.z * 0.58;
   const roofHeight = Math.min(2, bounds.size.y * 0.08);
   const mainHeight = bounds.size.y - roofHeight;
-  const mainCentreZ = bounds.minimum.z + bounds.size.z * 0.44;
+  // Keep the block and wings flush with the approach-facing authority surface.
+  // Polygon-offset opaque dressing makes their shapes legible over the exact
+  // solid mass without claiming collision geometry outside the projected AABB.
+  const mainCentreZ = bounds.maximum.z - mainDepth * 0.5;
   add(
     materials.clinicWall,
     "clinic-main-block",
@@ -569,14 +675,14 @@ function createClinicCompound(
     new THREE.Vector3(
       Math.min(bounds.size.x, mainWidth + 7),
       roofHeight,
-      Math.min(bounds.size.z, mainDepth + 7),
+      mainDepth,
     ),
   );
 
   const wingDepth = bounds.size.z * 0.26;
   const wingWidth = bounds.size.x * 0.42;
   const wingHeight = bounds.size.y * 0.5;
-  const wingZ = bounds.maximum.z - wallThickness - wingDepth * 0.5 - 5;
+  const wingZ = bounds.maximum.z - wingDepth * 0.5;
   add(
     materials.clinicWing,
     "clinic-receiving-wing",
@@ -611,7 +717,7 @@ function createClinicCompound(
       new THREE.Vector3(
         bounds.centre.x,
         bounds.minimum.y + mainHeight * (0.26 + level * 0.22),
-        mainCentreZ + mainDepth * 0.5 - windowDepth * 0.5,
+        bounds.maximum.z - windowDepth * 0.5,
       ),
       new THREE.Vector3(windowWidth, windowHeight, windowDepth),
     );

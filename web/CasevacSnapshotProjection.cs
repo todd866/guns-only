@@ -46,6 +46,8 @@ internal static class CasevacSnapshotProjection {
         CasevacTargetGuidance guidance = flight.TargetGuidance;
         CasevacDestinationEnergyPlan energyPlan =
             flight.DestinationEnergyPlan;
+        CasevacRotorWashVisual rotorWash =
+            flight.RotorWashVisual;
         MissionEnvironmentContract environment = session.Beat.EnvironmentIdentity;
         WeatherProfile? weather = session.Weather;
 
@@ -465,6 +467,14 @@ internal static class CasevacSnapshotProjection {
                 0.0,
                 1.0),
             4);
+        json.Number("casevac_rotor_wash_intensity_01",
+            rotorWash.Intensity01,
+            4);
+        json.Number("casevac_rotor_wash_radius_m",
+            rotorWash.RadiusM,
+            2);
+        json.Boolean("casevac_show_escape_cue",
+            mission.Phase == CasevacPhase.AbortReturn);
 
         json.Raw("casevac_recent_events",
             RecentEventsJson(flight.RecentEvents));
@@ -853,7 +863,7 @@ internal static class CasevacSnapshotProjection {
         return root.Finish();
     }
 
-    static string CorrectionJson(
+    internal static string CorrectionJson(
         CasevacFlightRuntime flight,
         CasevacMissionSnapshot mission,
         CasevacPrimaryCorrection correction) {
@@ -865,13 +875,27 @@ internal static class CasevacSnapshotProjection {
                 "LOADING_STABILITY",
             CasevacPrimaryCorrectionKind.StabilizeHandoffContact =>
                 "HANDOFF_STABILITY",
+            CasevacPrimaryCorrectionKind.ReviewRouteOutsideSafeBand
+                when correction.Stream == CasevacEvidenceStream.Route =>
+                    "ROUTE_SAFE_BAND",
+            CasevacPrimaryCorrectionKind.ReviewRouteExposureWithinSafeBand
+                when correction.Stream == CasevacEvidenceStream.Route =>
+                    "ROUTE_EXPOSURE",
             CasevacPrimaryCorrectionKind.ReviewRecordedRouteSegment
                 when correction.Stream == CasevacEvidenceStream.Route =>
-                    "ROUTE_MASKING",
+                    "ROUTE_REVIEW",
             CasevacPrimaryCorrectionKind.ReviewRecordedRouteSegment =>
                 "APPROACH_DISCIPLINE",
-            // PreserveAircraftMargin lacks the margin percentage required by the current
-            // presentation contract, so it fails closed instead of fabricating one.
+            CasevacPrimaryCorrectionKind.PreserveCollisionClearance =>
+                "AIRCRAFT_COLLISION",
+            CasevacPrimaryCorrectionKind.PreserveUsableEnergyReserve =>
+                "ENERGY_DEPLETION",
+            CasevacPrimaryCorrectionKind.RestoreVehicleFlightAuthority =>
+                "VEHICLE_UNFLYABLE",
+            CasevacPrimaryCorrectionKind.ReviewConcurrentAircraftLossCauses =>
+                "CONCURRENT_AIRCRAFT_LOSS",
+            CasevacPrimaryCorrectionKind.PreserveAircraftMargin =>
+                "AIRCRAFT_MARGIN",
             _ => null
         };
         if (kind is null) return "null";
@@ -887,7 +911,10 @@ internal static class CasevacSnapshotProjection {
         var json = new FlatJson();
         json.String("kind", kind);
         json.Number("atCallAgeSeconds", atCallAgeSeconds, 3);
-        if (kind is "ROUTE_MASKING" or "APPROACH_DISCIPLINE") {
+        if (kind is "ROUTE_SAFE_BAND"
+            or "ROUTE_EXPOSURE"
+            or "ROUTE_REVIEW"
+            or "APPROACH_DISCIPLINE") {
             if (!correction.EndSourceTick.HasValue
                 || correction.EndSourceTick.Value
                     < correction.StartSourceTick.Value)

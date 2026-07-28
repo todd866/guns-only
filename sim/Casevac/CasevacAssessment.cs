@@ -38,7 +38,13 @@ public enum CasevacPrimaryCorrectionKind {
     PreserveAircraftMargin,
     StabilizePickupContact,
     StabilizeHandoffContact,
-    ReviewRecordedRouteSegment
+    ReviewRecordedRouteSegment,
+    PreserveCollisionClearance,
+    PreserveUsableEnergyReserve,
+    RestoreVehicleFlightAuthority,
+    ReviewConcurrentAircraftLossCauses,
+    ReviewRouteOutsideSafeBand,
+    ReviewRouteExposureWithinSafeBand
 }
 
 /// <summary>
@@ -98,86 +104,120 @@ internal static class CasevacRetainedCorrectionMarker {
     const int RouteOutsideSafeBandPriority = 30;
     const int RouteExposedPriority = 40;
 
+    enum RouteReviewSubtype {
+        OutsideSafeBand,
+        ExposedWithinSafeBand
+    }
+
     readonly record struct SampleRun(
         long StartSourceTick,
         long EndSourceTick,
         int SampleCount,
-        int OutsideSafeBandSampleCount);
+        RouteReviewSubtype Subtype);
 
     public static void Record(CasevacEvidenceRecorder evidence) {
         ArgumentNullException.ThrowIfNull(evidence);
-        RecordWorstRouteRun(evidence);
+        RecordWorstRouteRuns(evidence);
     }
 
-    static void RecordWorstRouteRun(CasevacEvidenceRecorder evidence) {
+    static void RecordWorstRouteRuns(CasevacEvidenceRecorder evidence) {
         ReadOnlySpan<CasevacEvidenceSample> samples =
             evidence.RouteSamples.Span;
         SampleRun? current = null;
-        SampleRun? worst = null;
+        SampleRun? worstOutsideSafeBand = null;
+        SampleRun? worstExposedWithinSafeBand = null;
         foreach (CasevacEvidenceSample sample in samples) {
-            bool needsReview =
-                IsRoutePhase(sample.Phase)
-                && !sample.InsideTerminalVolume
-                && (sample.MaskingState == CasevacMaskingState.Exposed
-                    || !sample.WithinSafeMaskingBand);
-            if (!needsReview
+            RouteReviewSubtype? subtype =
+                ReviewSubtype(sample);
+            if (!subtype.HasValue
                 || (current.HasValue
-                    && sample.SourceTick
-                        - current.Value.EndSourceTick
-                        > evidence.RouteStrideTicks)) {
-                ConsiderWorstRouteRun(current, ref worst);
+                    && (sample.SourceTick
+                            - current.Value.EndSourceTick
+                            > evidence.RouteStrideTicks
+                        || current.Value.Subtype != subtype.Value))) {
+                ConsiderWorstRouteRun(
+                    current,
+                    ref worstOutsideSafeBand,
+                    ref worstExposedWithinSafeBand);
                 current = null;
             }
-            if (!needsReview) continue;
+            if (!subtype.HasValue) continue;
 
-            int outsideSafeBand =
-                sample.WithinSafeMaskingBand ? 0 : 1;
             current = current.HasValue
                 ? current.Value with {
                     EndSourceTick = sample.SourceTick,
-                    SampleCount = current.Value.SampleCount + 1,
-                    OutsideSafeBandSampleCount =
-                        current.Value.OutsideSafeBandSampleCount
-                        + outsideSafeBand
+                    SampleCount = current.Value.SampleCount + 1
                 }
                 : new SampleRun(
                     sample.SourceTick,
                     sample.SourceTick,
                     SampleCount: 1,
-                    OutsideSafeBandSampleCount: outsideSafeBand);
+                    subtype.Value);
         }
-        ConsiderWorstRouteRun(current, ref worst);
-        if (!worst.HasValue) return;
-
-        bool outsideBand =
-            worst.Value.OutsideSafeBandSampleCount > 0;
-        evidence.ConsiderCorrection(new CasevacCorrectionRange(
-            CasevacEvidenceStream.Route,
-            worst.Value.StartSourceTick,
-            worst.Value.EndSourceTick,
-            outsideBand
-                ? RouteOutsideSafeBandPriority
-                : RouteExposedPriority,
-            outsideBand
-                ? "derived-route-outside-safe-band-v1"
-                : "derived-route-exposed-v1"));
+        ConsiderWorstRouteRun(
+            current,
+            ref worstOutsideSafeBand,
+            ref worstExposedWithinSafeBand);
+        RetainRouteCorrection(evidence, worstOutsideSafeBand);
+        RetainRouteCorrection(evidence, worstExposedWithinSafeBand);
     }
 
     static void ConsiderWorstRouteRun(
         SampleRun? candidate,
-        ref SampleRun? worst) {
+        ref SampleRun? worstOutsideSafeBand,
+        ref SampleRun? worstExposedWithinSafeBand) {
         if (!candidate.HasValue) return;
+        if (candidate.Value.Subtype
+            == RouteReviewSubtype.OutsideSafeBand) {
+            ConsiderWorstSameSubtype(
+                candidate.Value,
+                ref worstOutsideSafeBand);
+            return;
+        }
+        ConsiderWorstSameSubtype(
+            candidate.Value,
+            ref worstExposedWithinSafeBand);
+    }
+
+    static void ConsiderWorstSameSubtype(
+        SampleRun candidate,
+        ref SampleRun? worst) {
         if (!worst.HasValue
-            || candidate.Value.SampleCount > worst.Value.SampleCount
-            || (candidate.Value.SampleCount == worst.Value.SampleCount
-                && candidate.Value.OutsideSafeBandSampleCount
-                    > worst.Value.OutsideSafeBandSampleCount)
-            || (candidate.Value.SampleCount == worst.Value.SampleCount
-                && candidate.Value.OutsideSafeBandSampleCount
-                    == worst.Value.OutsideSafeBandSampleCount
-                && candidate.Value.StartSourceTick
+            || candidate.SampleCount > worst.Value.SampleCount
+            || (candidate.SampleCount == worst.Value.SampleCount
+                && candidate.StartSourceTick
                     < worst.Value.StartSourceTick))
             worst = candidate;
+    }
+
+    static RouteReviewSubtype? ReviewSubtype(
+        in CasevacEvidenceSample sample) {
+        if (!IsRoutePhase(sample.Phase)
+            || sample.InsideTerminalVolume)
+            return null;
+        if (!sample.WithinSafeMaskingBand)
+            return RouteReviewSubtype.OutsideSafeBand;
+        return sample.MaskingState == CasevacMaskingState.Exposed
+            ? RouteReviewSubtype.ExposedWithinSafeBand
+            : null;
+    }
+
+    static void RetainRouteCorrection(
+        CasevacEvidenceRecorder evidence,
+        SampleRun? run) {
+        if (!run.HasValue) return;
+        bool outsideSafeBand =
+            run.Value.Subtype == RouteReviewSubtype.OutsideSafeBand;
+        evidence.ConsiderCorrection(new CasevacCorrectionRange(
+            CasevacEvidenceStream.Route,
+            run.Value.StartSourceTick,
+            run.Value.EndSourceTick,
+            outsideSafeBand
+                ? RouteOutsideSafeBandPriority
+                : RouteExposedPriority,
+            outsideSafeBand
+                ? "derived-route-outside-safe-band-v1"
+                : "derived-route-exposed-v1"));
     }
 
     static bool IsRoutePhase(CasevacPhase phase) =>
@@ -431,12 +471,35 @@ public static class CasevacAssessmentEngine {
                 CasevacEventKind.CasevacAircraftLost)
             ?? evidence.TerminalDispositionSourceTick;
         if (!tick.HasValue) return;
+        bool exactCause =
+            evidence.AircraftLossSourceTick == tick;
+        CasevacAircraftLossCause cause = exactCause
+            ? evidence.AircraftLossCause
+            : CasevacAircraftLossCause.None;
+        (CasevacPrimaryCorrectionKind kind, string instruction) =
+            cause switch {
+                CasevacAircraftLossCause.CollisionAuthorityContact => (
+                    CasevacPrimaryCorrectionKind.PreserveCollisionClearance,
+                    "Collision authority contact was recorded. Preserve obstacle clearance before continuing."),
+                CasevacAircraftLossCause.UsableEnergyDepleted => (
+                    CasevacPrimaryCorrectionKind.PreserveUsableEnergyReserve,
+                    "The declared usable-energy ledger depleted. Protect destination reserve before continuing."),
+                CasevacAircraftLossCause.VehicleAuthorityUnflyable => (
+                    CasevacPrimaryCorrectionKind.RestoreVehicleFlightAuthority,
+                    "The vehicle provider reported lost flight authority. Restore flyable margin before continuing."),
+                CasevacAircraftLossCause.ConcurrentAuthoritativeCauses => (
+                    CasevacPrimaryCorrectionKind.ReviewConcurrentAircraftLossCauses,
+                    "Concurrent authoritative loss causes were recorded. Review both clearance and energy or vehicle margin."),
+                _ => (
+                    CasevacPrimaryCorrectionKind.PreserveAircraftMargin,
+                    "The recorded cause was unavailable. Re-establish aircraft margin before continuing.")
+            };
         candidates.Add(new CorrectionCandidate(
             CategoryPriority: 0,
             WithinCategoryPriority: 0,
-            CasevacPrimaryCorrectionKind.PreserveAircraftMargin,
+            kind,
             $"At source tick {tick.Value}, the aircraft-loss disposition latched. "
-                + "Preserve collision and obstacle clearance before continuing.",
+                + instruction,
             tick.Value,
             tick.Value,
             Stream: null));
@@ -491,9 +554,26 @@ public static class CasevacAssessmentEngine {
             string instruction;
             switch (range.Stream) {
                 case CasevacEvidenceStream.Route:
-                    kind = CasevacPrimaryCorrectionKind.ReviewRecordedRouteSegment;
-                    instruction =
-                        "Preserve the declared route margin through this recorded segment.";
+                    if (StringComparer.Ordinal.Equals(
+                            range.Reason,
+                            "derived-route-outside-safe-band-v1")) {
+                        kind =
+                            CasevacPrimaryCorrectionKind.ReviewRouteOutsideSafeBand;
+                        instruction =
+                            "Return to the declared safe masking band through this recorded segment.";
+                    } else if (StringComparer.Ordinal.Equals(
+                            range.Reason,
+                            "derived-route-exposed-v1")) {
+                        kind =
+                            CasevacPrimaryCorrectionKind.ReviewRouteExposureWithinSafeBand;
+                        instruction =
+                            "Use available masking through this exposed segment inside the declared safe band.";
+                    } else {
+                        kind =
+                            CasevacPrimaryCorrectionKind.ReviewRecordedRouteSegment;
+                        instruction =
+                            "Preserve the declared route margin through this recorded segment.";
+                    }
                     break;
                 case CasevacEvidenceStream.PickupTerminal:
                     kind = CasevacPrimaryCorrectionKind.StabilizePickupContact;

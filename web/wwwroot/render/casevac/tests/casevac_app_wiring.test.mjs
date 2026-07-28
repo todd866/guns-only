@@ -114,6 +114,14 @@ test("scenery receives only projected CASEVAC environment and custody facts", ()
   assert.match(source, /casevac_rotor_wash_intensity_01/);
   assert.match(source, /casevac_rotor_wash_radius_m/);
   assert.match(source, /casevac_surface_contact/);
+  assert.match(
+    source,
+    /const showEscapeCue = state\?\.casevac_show_escape_cue === true;[\s\S]*const activeCourseCueSite = showEscapeCue[\s\S]*CASEVAC_PICKUP_SITE_ID[\s\S]*activeSiteId: activeCourseCueSite,[\s\S]*showEscapeCue,/,
+  );
+  assert.match(
+    source,
+    /presentationDiagnostics\(\)[\s\S]*pickupEscapeCueVisible[\s\S]*visibleEscapeCueCount/,
+  );
   assert.match(source,
     /capsuleCustody: casevacCapsuleVisualState\(state\)/);
   assert.doesNotMatch(source,
@@ -165,6 +173,18 @@ test("narrow QUIET gives the handoff card sole ownership of the lower safe area"
   );
 });
 
+test("portrait touch Medevac keeps combat chips closed and clears the movement stick", () => {
+  assert.match(source, /if \(portraitChips\) portraitChips\.hidden = casevac/);
+  assert.match(
+    indexSource,
+    /#portrait-chips\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/,
+  );
+  assert.match(
+    flightFactsSource,
+    /@media \(max-width: 760px\) and \(orientation: portrait\)[\s\S]*\.touch-mode\.tilt-fallback \[data-casevac-flight-facts\][\s\S]*bottom: max\(136px, calc\(env\(safe-area-inset-bottom\) \+ 136px\)\)/,
+  );
+});
+
 test("keyboard launch primes Medevac audio from the Enter gesture", () => {
   assert.match(
     source,
@@ -173,6 +193,50 @@ test("keyboard launch primes Medevac audio from the Enter gesture", () => {
   assert.match(
     source,
     /event\.code === "Enter" \|\| event\.code === "NumpadEnter"[\s\S]*primeSelectedMissionAudio\(\);[\s\S]*activateReadyAction\(\);/,
+  );
+});
+
+test("catalogue selection stages fresh Medevac authority without auto-departure", () => {
+  assert.match(
+    source,
+    /function refreshStagedMissionSnapshot\(\)[\s\S]*bridge\.RefreshHotFrame\(\);[\s\S]*latestState = snapshotSource\.frame\(performance\.now\(\)\)/,
+  );
+  assert.match(
+    source,
+    /function enterReady\([\s\S]*bridge\.StartBeat\(selectedBeat\);[\s\S]*refreshStagedMissionSnapshot\(\);[\s\S]*return latestState;/,
+  );
+  assert.match(
+    source,
+    /function selectCampaignNode\([\s\S]*autoLaunchPending = false;[\s\S]*pauseReasons\.has\("ready"\)[\s\S]*enterReady\(\{ resetBridge: true, focus: false \}\)/,
+  );
+  assert.match(
+    source,
+    /function launchMission\([\s\S]*stagedState = refreshStagedMissionSnapshot\(\);[\s\S]*prepareMissionTerrain\(index, stagedState\)/,
+  );
+  assert.match(source, /function prepareMissionTerrain\(index, stagedState\)/);
+  assert.doesNotMatch(
+    source,
+    /function prepareMissionTerrain\(index, stagedState\)[\s\S]*snapshotSource\?\.frame/,
+  );
+  assert.match(
+    source,
+    /function resetMissionPresentation\(\) \{[\s\S]*cancelTerrainLaunchWarmup\(\)/,
+  );
+  assert.match(
+    source,
+    /function cancelTerrainLaunchWarmup\(\)[\s\S]*terrainLaunchWarmupOwner = null;[\s\S]*owner\.cancel\?\.\(\);[\s\S]*cancelTerrainPresentationRequest[\s\S]*markFailed: false/,
+  );
+  assert.match(
+    source,
+    /cancelTerrainPresentationRequest\([\s\S]*markFailed = true[\s\S]*if \(markFailed\)[\s\S]*Terrain warmup timed out[\s\S]*terrainPresentationFailureKey = null/,
+  );
+  assert.match(
+    source,
+    /generation: \+\+terrainLaunchWarmupGeneration,[\s\S]*missionIdentity,[\s\S]*terrainLaunchWarmupOwner = owner/,
+  );
+  assert.match(
+    source,
+    /terrainLaunchWarmupOwner !== owner[\s\S]*ownsCurrentMission[\s\S]*owner\.missionIdentity/,
   );
 });
 

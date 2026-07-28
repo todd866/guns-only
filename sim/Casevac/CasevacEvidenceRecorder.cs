@@ -14,6 +14,19 @@ public enum CasevacTerminalLeg {
 }
 
 /// <summary>
+/// Bounded authoritative cause attached to the exact observation that latched an aircraft-loss
+/// disposition. This is deliberately operational rather than diagnostic: no arbitrary provider
+/// text crosses into replay evidence or learner-facing correction copy.
+/// </summary>
+public enum CasevacAircraftLossCause {
+    None,
+    CollisionAuthorityContact,
+    UsableEnergyDepleted,
+    VehicleAuthorityUnflyable,
+    ConcurrentAuthoritativeCauses
+}
+
+/// <summary>
 /// One bounded, observer-safe CASEVAC replay sample. It retains authoritative facts only; it does
 /// not infer intent, hidden state, or an outcome that the mission kernel did not emit.
 /// </summary>
@@ -214,6 +227,9 @@ public sealed class CasevacEvidenceRecorder {
     public CasevacDisposition FinalDisposition { get; private set; } =
         CasevacDisposition.Pending;
     public long? TerminalDispositionSourceTick { get; private set; }
+    public CasevacAircraftLossCause AircraftLossCause { get; private set; } =
+        CasevacAircraftLossCause.None;
+    public long? AircraftLossSourceTick { get; private set; }
     public long MaskedTicks => GetMaskingTicks(CasevacMaskingState.Masked);
     public long ExposedTicks => GetMaskingTicks(CasevacMaskingState.Exposed);
     public long MaskingNotAssessedTicks =>
@@ -292,8 +308,10 @@ public sealed class CasevacEvidenceRecorder {
     /// </summary>
     public void ObserveTick(
         in CasevacTickObservation observation,
-        CasevacMissionSnapshot snapshot) {
-        ValidateTick(observation, snapshot);
+        CasevacMissionSnapshot snapshot,
+        CasevacAircraftLossCause aircraftLossCause =
+            CasevacAircraftLossCause.None) {
+        ValidateTick(observation, snapshot, aircraftLossCause);
         var sample = BuildSample(observation, snapshot);
         bool captureRoute =
             _captureSamples && _routeEligibleTicks % _routeStrideTicks == 0L;
@@ -331,6 +349,10 @@ public sealed class CasevacEvidenceRecorder {
         if (snapshot.Disposition != CasevacDisposition.Pending
             && !TerminalDispositionSourceTick.HasValue)
             TerminalDispositionSourceTick = observation.SourceTick;
+        if (aircraftLossCause != CasevacAircraftLossCause.None) {
+            AircraftLossCause = aircraftLossCause;
+            AircraftLossSourceTick = observation.SourceTick;
+        }
 
         _maskingTicks[(int)observation.MaskingState]++;
         if (observation.WithinSafeMaskingBand) WithinSafeMaskingBandTicks++;
@@ -549,7 +571,8 @@ public sealed class CasevacEvidenceRecorder {
 
     void ValidateTick(
         in CasevacTickObservation observation,
-        CasevacMissionSnapshot snapshot) {
+        CasevacMissionSnapshot snapshot,
+        CasevacAircraftLossCause aircraftLossCause) {
         if (snapshot is null)
             throw new ArgumentNullException(nameof(snapshot));
         if (observation.SourceTick <= _lastObservedSourceTick)
@@ -577,7 +600,8 @@ public sealed class CasevacEvidenceRecorder {
             throw new ArgumentOutOfRangeException(nameof(snapshot));
         if (!Enum.IsDefined(snapshot.Phase)
             || !Enum.IsDefined(snapshot.Custody)
-            || !Enum.IsDefined(snapshot.Disposition))
+            || !Enum.IsDefined(snapshot.Disposition)
+            || !Enum.IsDefined(aircraftLossCause))
             throw new ArgumentOutOfRangeException(nameof(snapshot));
         if (snapshot.TargetSiteId is not null
             && string.IsNullOrWhiteSpace(snapshot.TargetSiteId))
@@ -592,6 +616,10 @@ public sealed class CasevacEvidenceRecorder {
                 "A terminal CASEVAC disposition cannot regress or change.");
         ValidateIdentity(snapshot.ScenarioId, snapshot.MissionEpochSequence);
         ValidateObservation(observation);
+        ValidateAircraftLossCause(
+            observation,
+            snapshot,
+            aircraftLossCause);
         if (observation.LandingZone.ApproachAttemptId
             > snapshot.LatestApproachAttemptId)
             throw new InvalidOperationException(
@@ -602,6 +630,36 @@ public sealed class CasevacEvidenceRecorder {
                 terminalLeg, observation.LandingZone.SiteId!, snapshot))
             ValidateTerminalSite(
                 terminalLeg, observation.LandingZone.SiteId!);
+    }
+
+    void ValidateAircraftLossCause(
+        in CasevacTickObservation observation,
+        CasevacMissionSnapshot snapshot,
+        CasevacAircraftLossCause aircraftLossCause) {
+        if (aircraftLossCause == CasevacAircraftLossCause.None)
+            return;
+        if (AircraftLossCause != CasevacAircraftLossCause.None
+            || AircraftLossSourceTick.HasValue)
+            throw new InvalidOperationException(
+                "CASEVAC aircraft-loss cause can be recorded only once.");
+        if (snapshot.Phase != CasevacPhase.AircraftLost
+            || snapshot.Disposition is not (
+                CasevacDisposition.AircraftLostEmpty
+                or CasevacDisposition.AircraftLostOccupied)
+            || observation.VehicleFlyable)
+            throw new InvalidOperationException(
+                "CASEVAC aircraft-loss cause requires the exact unflyable terminal observation.");
+        long? lossEventTick = GetFirstEventSourceTick(
+            CasevacEventKind.CasevacAircraftLost);
+        long? lossEventActiveTick = GetFirstEventActiveMissionTick(
+            CasevacEventKind.CasevacAircraftLost);
+        if (!lossEventTick.HasValue
+            || lossEventTick.Value != observation.SourceTick
+            || !lossEventActiveTick.HasValue
+            || lossEventActiveTick.Value != snapshot.ActiveMissionTicks)
+            throw new InvalidOperationException(
+                "CASEVAC aircraft-loss cause must match the retained aircraft-loss "
+                + "event source and active ticks.");
     }
 
     void ValidateEvent(in CasevacMissionEventRecord missionEvent) {

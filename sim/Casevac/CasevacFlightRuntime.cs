@@ -124,6 +124,15 @@ public sealed class CasevacResolvedRoute {
 }
 
 /// <summary>
+/// Presentation-only rotor-wash surrogate derived from the fictional vehicle profile and current
+/// authoritative observation. It is bounded visual guidance, not a real-aircraft downwash model
+/// and never feeds collision, contact, exposure, or mission progression.
+/// </summary>
+public readonly record struct CasevacRotorWashVisual(
+    double Intensity01,
+    double RadiusM);
+
+/// <summary>
 /// One deterministic flight-first CASEVAC runtime. SimulationSession remains the only lifecycle
 /// and fixed-step authority; this object advances exactly once for each unpaused source tick.
 /// </summary>
@@ -378,6 +387,9 @@ public sealed class CasevacFlightRuntime {
     public CasevacDestinationEnergyPlan DestinationEnergyPlan =>
         BuildDestinationEnergyPlan(TargetGuidance);
 
+    public CasevacRotorWashVisual RotorWashVisual =>
+        BuildRotorWashVisual();
+
     public CasevacMissionSnapshot Begin(long sourceTick) {
         if (_begun)
             throw new InvalidOperationException(
@@ -466,7 +478,14 @@ public sealed class CasevacFlightRuntime {
         _snapshot = _controller.Advance(
             tickObservation,
             intent.MissionCommand);
-        _evidence.ObserveTick(tickObservation, _snapshot);
+        CasevacAircraftLossCause aircraftLossCause =
+            _snapshot.Phase == CasevacPhase.AircraftLost
+                ? ResolveAircraftLossCause(result.State)
+                : CasevacAircraftLossCause.None;
+        _evidence.ObserveTick(
+            tickObservation,
+            _snapshot,
+            aircraftLossCause);
         if (!_retainedCorrectionsRecorded
             && _snapshot.Disposition != CasevacDisposition.Pending) {
             CasevacRetainedCorrectionMarker.Record(_evidence);
@@ -486,6 +505,63 @@ public sealed class CasevacFlightRuntime {
                 "The CASEVAC energy ledger requires finite, assessed, non-negative applied power.");
         _consumedEnergyJ +=
             power.AppliedPowerW / AircraftSim.TickHz;
+    }
+
+    CasevacAircraftLossCause ResolveAircraftLossCause(
+        in PlayerVehicleState state) {
+        int causeCount = 0;
+        if (_obstacleCollisionLatched) causeCount++;
+        if (EnergyDepleted) causeCount++;
+        if (!state.Flyable) causeCount++;
+        if (causeCount > 1)
+            return CasevacAircraftLossCause.ConcurrentAuthoritativeCauses;
+        if (_obstacleCollisionLatched)
+            return CasevacAircraftLossCause.CollisionAuthorityContact;
+        if (EnergyDepleted)
+            return CasevacAircraftLossCause.UsableEnergyDepleted;
+        return CasevacAircraftLossCause.VehicleAuthorityUnflyable;
+    }
+
+    CasevacRotorWashVisual BuildRotorWashVisual() {
+        ReducedOrderVerticalLiftProfile profile = _vehicle.Profile;
+        PlayerVehicleObservation observation = _vehicle.Observation;
+        double rotorRadiusM = Math.Sqrt(
+            profile.RotorDiskAreaM2 / Math.PI);
+        double aglM = _lastTickObservation?.ClearanceM
+            ?? Math.Max(
+                0.0,
+                observation.PositionWorldM.Y - _startSurfaceM);
+        double radiusM = Math.Clamp(
+            rotorRadiusM + 0.65 * aglM,
+            rotorRadiusM,
+            rotorRadiusM * 3.0);
+        if (observation.Power.Assessment
+            != VehiclePowerAssessment.Assessed)
+            return new CasevacRotorWashVisual(0.0, radiusM);
+
+        // Fictional visual surrogate: normalize applied power above the profile-power floor, then
+        // attenuate its square root to zero over four rotor radii of AGL. Both terms are bounded,
+        // deterministic, and intentionally do not claim dimensional downwash velocity.
+        double usablePowerRangeW = Math.Max(
+            1.0,
+            profile.SeaLevelMaximumShaftPowerW
+                - profile.ProfilePowerW);
+        double powerFraction = Math.Clamp(
+            (observation.Power.AppliedPowerW - profile.ProfilePowerW)
+                / usablePowerRangeW,
+            0.0,
+            1.0);
+        double groundCoupling = 1.0 - Math.Clamp(
+            aglM / (4.0 * rotorRadiusM),
+            0.0,
+            1.0);
+        double intensity01 = Math.Clamp(
+            Math.Sqrt(powerFraction) * groundCoupling,
+            0.0,
+            1.0);
+        return new CasevacRotorWashVisual(
+            intensity01,
+            radiusM);
     }
 
     PlayerVehicleEnvironmentSample ResolveEnvironment(in Vec3D position) {

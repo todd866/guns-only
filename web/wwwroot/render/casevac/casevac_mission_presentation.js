@@ -852,6 +852,65 @@ function correctionModel(correction) {
         summary: "Return to the declared safe masking band sooner.",
         evidence: `Recorded exposure began at ${atCopy} and lasted ${formatInterval(interval)}.`,
       };
+    case "ROUTE_SAFE_BAND":
+      if (interval === null || interval <= 0) return unavailableCorrection();
+      return {
+        available: true,
+        kind,
+        summary: "Return to the declared safe masking band sooner.",
+        evidence: `The outside-band segment began at ${atCopy} and lasted ${formatInterval(interval)}.`,
+      };
+    case "ROUTE_EXPOSURE":
+      if (interval === null || interval <= 0) return unavailableCorrection();
+      return {
+        available: true,
+        kind,
+        summary: "Use available masking through this exposed route segment.",
+        evidence: `Exposure inside the declared safe band began at ${atCopy} and lasted ${formatInterval(interval)}.`,
+      };
+    case "ROUTE_REVIEW":
+      if (interval === null || interval <= 0) return unavailableCorrection();
+      return {
+        available: true,
+        kind,
+        summary: "Review aircraft margin through this route segment.",
+        evidence: `The replay-supported segment began at ${atCopy} and lasted ${formatInterval(interval)}.`,
+      };
+    case "AIRCRAFT_COLLISION":
+      return {
+        available: true,
+        kind,
+        summary: "Keep the aircraft clear of collision authority.",
+        evidence: `Aircraft loss latched at ${atCopy} after authoritative obstacle contact.`,
+      };
+    case "ENERGY_DEPLETION":
+      return {
+        available: true,
+        kind,
+        summary: "Protect usable-energy reserve before committing.",
+        evidence: `Aircraft loss latched at ${atCopy} when the declared energy ledger depleted.`,
+      };
+    case "VEHICLE_UNFLYABLE":
+      return {
+        available: true,
+        kind,
+        summary: "Restore flight authority before continuing.",
+        evidence: `Aircraft loss latched at ${atCopy} when the vehicle became unflyable.`,
+      };
+    case "CONCURRENT_AIRCRAFT_LOSS":
+      return {
+        available: true,
+        kind,
+        summary: "Review every authoritative aircraft-loss margin.",
+        evidence: `Concurrent aircraft-loss causes latched at ${atCopy}.`,
+      };
+    case "AIRCRAFT_MARGIN":
+      return {
+        available: true,
+        kind,
+        summary: "Restore aircraft margin before continuing.",
+        evidence: `A replay-supported aircraft-margin event was recorded at ${atCopy}.`,
+      };
     case "DEPARTURE_MARGIN": {
       const margin = finite(correction?.marginPercent);
       if (margin === null) return unavailableCorrection();
