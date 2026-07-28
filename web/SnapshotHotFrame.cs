@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 9;
+    public const int LayoutVersion = 10;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -125,6 +125,12 @@ internal static class SnapshotHotFrame {
         Num("rapier_circuit_leg_code", RawInteger);
         Num("rapier_fd_bank_deg", 1);
         Num("rapier_fd_target_ktas", 0);
+        Num("rapier_gate_half_m", 1);
+        Num("rapier_gate_face_x", 4);
+        Num("rapier_gate_face_y", 4);
+        Num("rapier_gate_face_z", 4);
+        Bool("rapier_gate_in_volume");
+        Bool("rapier_gate_energy_ok");
         Num("rapier_nose_on_v_err_deg", 1);
         Num("rapier_lob_skip", RawInteger);
         Num("rapier_lob_skip_max", RawInteger);
@@ -664,6 +670,12 @@ internal static class SnapshotHotFrame {
         w.Num("rapier_circuit_leg_code", CircuitLegCode(session.RapierCircuitLeg), RawInteger);
         w.Num("rapier_fd_bank_deg", session.RapierFdBankDeg, 1);
         w.Num("rapier_fd_target_ktas", session.RapierFdTargetKtas, 0);
+        w.Num("rapier_gate_half_m", session.RapierGateHalfM, 1);
+        w.Num("rapier_gate_face_x", session.RapierGateFace.X, 4);
+        w.Num("rapier_gate_face_y", session.RapierGateFace.Y, 4);
+        w.Num("rapier_gate_face_z", session.RapierGateFace.Z, 4);
+        w.Bool("rapier_gate_in_volume", session.RapierGateInVolume);
+        w.Bool("rapier_gate_energy_ok", session.RapierGateEnergyOk);
         w.Num("rapier_nose_on_v_err_deg", session.RapierNoseOnVelocityErrorDeg, 1);
         w.Num("rapier_lob_skip", session.RapierLobSkip, RawInteger);
         w.Num("rapier_lob_skip_max", session.RapierLobSkipMax, RawInteger);

@@ -5952,7 +5952,8 @@ class FlightView {
     const isRecoveryPlatform = state.recovery_platform === true;
     const banditAlive = aircraftAlive(state, "opponent_terminal_state",
       state.bandit_alive !== false && state.fight !== "Splash");
-    const banditBodyPresent = state.opponent_body_present !== false;
+    const banditBodyPresent = state.opponent_body_present !== false
+      && state.rapier_pattern_only !== true;
     const targetRoot = this.presentationAssets.targetSlot.root;
     const carrierRoot = this.presentationAssets.carrierSlot.root;
     const escortRoot = this.presentationAssets.escortSlot.root;

@@ -119,6 +119,70 @@ function circuitsCoach(state) {
   return "MONITOR";
 }
 
+function circuitsConfigOk(leg, state) {
+  const gearDown = Math.max(
+    Number(state.gear_nose) || 0,
+    Number(state.gear_left) || 0,
+    Number(state.gear_right) || 0,
+  ) > 0.85;
+  const flapsDown = Math.max(
+    Number(state.flap_left_deg) || 0,
+    Number(state.flap_right_deg) || 0,
+  ) > 8;
+  if (leg === "WIRE_FINAL") return gearDown && flapsDown;
+  // Pattern legs: gear up, flaps up (hook is always-down teaching — not a snapshot bool).
+  return !gearDown && !flapsDown;
+}
+
+/// Active flythrough gate status for Circuits: volume + energy + config.
+export function circuitGatePresentation(state) {
+  if (state?.rapier_mission_available !== true) return null;
+  const patternOnly = state.rapier_pattern_only === true
+    || (typeof state.rapier_mission_cue === "string"
+      && state.rapier_mission_cue.startsWith("CIRCUITS"));
+  if (!patternOnly) return null;
+  const halfM = finiteNumber(state.rapier_gate_half_m) ?? 0;
+  if (halfM <= 0) return null;
+  const leg = circuitLegFromState(state);
+  const legLabel = circuitLegLabel(leg);
+  const inVolume = state.rapier_gate_in_volume === true;
+  const energyOk = state.rapier_gate_energy_ok === true;
+  const configOk = circuitsConfigOk(leg, state);
+  const targetKtas = finiteNumber(state.rapier_fd_target_ktas);
+  let status = "FLY THE BOX";
+  let accent = "armed";
+  if (inVolume && energyOk && configOk) {
+    status = "GATE OPEN";
+    accent = "open";
+  } else if (inVolume && !energyOk) {
+    status = "ENERGY";
+    accent = "fault";
+  } else if (inVolume && !configOk) {
+    status = "CONFIG";
+    accent = "fault";
+  } else if (energyOk) {
+    status = "ON SPEED";
+    accent = "armed";
+  }
+  const config = leg === "WIRE_FINAL"
+    ? "HOOK · GEAR · FLAPS DOWN"
+    : "HOOK DOWN · GEAR UP · FLAPS UP";
+  const speed = targetKtas !== null ? `${Math.round(targetKtas)} KT` : "";
+  return Object.freeze({
+    halfM,
+    faceX: finiteNumber(state.rapier_gate_face_x) ?? 0,
+    faceY: finiteNumber(state.rapier_gate_face_y) ?? 0,
+    faceZ: finiteNumber(state.rapier_gate_face_z) ?? 1,
+    inVolume,
+    energyOk,
+    configOk,
+    status,
+    accent,
+    boxLabel: legLabel ? `${legLabel} · ${status}` : status,
+    configLine: speed ? `${config} · ${speed}` : config,
+  });
+}
+
 /// Quiet mode line under the heading tape. Spec:
 /// docs/superpowers/specs/2026-07-27-hud-limits-panel-design.md
 /// Skin temperature is Intercept teaching chrome — never on Circuits.
@@ -194,7 +258,7 @@ export function rapierGuidancePresentation(state) {
     level,
     circuitLeg: leg,
     boxLabel: patternOnly
-      ? (legLabel || "")
+      ? (circuitGatePresentation(state)?.boxLabel || legLabel || "")
       : (phase === PHASE_RECOVERY && gate > 0 ? `GATE ${gate}/4`
         : (!patternOnly && (phase === 6 || phase === 7)
           ? (noseErr !== null && noseErr <= 8 ? "ON V" : "NOSE→V")

@@ -39,6 +39,7 @@ import {
 } from "./render/hud/gun_funnel.js";
 import { timeCompressionHudPresentation } from "./render/telemetry/time_compression.js";
 import {
+  circuitGatePresentation,
   rapierCycleTeachPresentation,
   rapierFlightDirectorPresentation,
   rapierGuidancePresentation,
@@ -175,9 +176,16 @@ function hasGunSolution(state) {
 }
 
 function isFightHudActive(state) {
+  // Circuits is pattern school — never paint bandit/gun fight chrome, even though a parked
+  // placeholder still occupies the bandit slot far off-station for kernel bookkeeping.
+  if (state?.rapier_pattern_only === true) return false;
   if (!banditIsAlive(state)) return false;
   return !recoveryPlatformAvailable(state)
     || hudMode(state) === "FREE" || hudMode(state) === "WAVE-OFF";
+}
+
+function isCircuitTrafficHudActive(state) {
+  return state?.rapier_pattern_only === true;
 }
 
 // Single source of truth for "the padlock view is genuinely looking away from the nose".
@@ -921,14 +929,18 @@ class CombatHud {
     const { state, camera } = frame;
     if (frame.wingmanPresent !== true) return;
     if (frame.padlock && frame.padlockTarget === "carrier") return;
-    if (!isFightHudActive(state)) return;
+    // Fight formation wingman uses fight HUD; Circuits uses the same slots for pattern traffic.
+    if (!isFightHudActive(state) && !isCircuitTrafficHudActive(state)) return;
     const projection = this.project(frame.wingmanPosition, camera);
     if (projection.behind === true) return;
     const inside = projection.x > 8 && projection.x < this.width - 8
       && projection.y > 8 && projection.y < this.height - 8;
     if (!inside) return;
 
-    const padlocked = frame.padlock && frame.padlockTarget === "wingman";
+    const circuitTraffic = isCircuitTrafficHudActive(state);
+    const padlocked = frame.padlock && (frame.padlockTarget === "wingman"
+      || frame.padlockTarget === "traffic2"
+      || frame.padlockTarget === "traffic3");
     const color = padlocked ? AMBER : GREEN;
     const ctx = this.ctx;
     const size = padlocked ? 26 : 20;
@@ -952,6 +964,13 @@ class CombatHud {
     ctx.lineTo(projection.x - size, projection.y + size - corner);
     ctx.stroke();
     ctx.shadowBlur = 0;
+    if (circuitTraffic) {
+      ctx.font = "600 9px ui-monospace, monospace";
+      ctx.fillStyle = color;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("TRAFFIC", projection.x, projection.y + size + 6);
+    }
   }
 
   drawBandit(frame) {
@@ -1427,7 +1446,8 @@ class CombatHud {
     }
     if (mode !== this._lastMode) {
       this._lastMode = mode;
-      this._modeCue = mode === "FREE" ? "FIGHT"
+      this._modeCue = mode === "FREE"
+        ? (state?.rapier_pattern_only === true ? "CIRCUITS" : "FIGHT")
         : mode === "APPROACH" ? "APPROACH"
         : mode === "WAVE-OFF" ? "WAVE-OFF" : null;
       this._modeCueStartedAt = now;
@@ -3404,6 +3424,8 @@ class CombatHud {
     }
 
     // Geometry only — no GATE essay over the sight. Gate index lives on the quiet mode line.
+    // Circuits: project a real sky square (world metres) so the box grows as you close and
+    // reads as an energy/config gate, not fixed-pixel HUD chrome.
     if (Number.isFinite(frame.state.rapier_guidance_x)
         && Number.isFinite(frame.state.rapier_guidance_y)
         && Number.isFinite(frame.state.rapier_guidance_z)) {
@@ -3412,32 +3434,131 @@ class CombatHud {
         frame.state.rapier_guidance_y,
         -frame.state.rapier_guidance_z,
       );
+      const gateInfo = circuitGatePresentation(frame.state);
+      const halfM = gateInfo?.halfM ?? 0;
       const projectedGate = this.project(this.worldPoint, frame.camera, this.projectionA);
       if (!projectedGate.behind) {
-        const half = [88, 76, 64, 54, 44][Math.min(4, gate)];
-        const x0 = projectedGate.x - half;
-        const x1 = projectedGate.x + half;
-        const y0 = projectedGate.y - half;
-        const y1 = projectedGate.y + half;
-        const corner = Math.max(13, half * 0.34);
-        ctx.strokeStyle = AMBER;
-        ctx.lineWidth = 3;
-        ctx.shadowColor = "rgba(255, 176, 32, 0.62)";
-        ctx.shadowBlur = 9;
-        ctx.beginPath();
-        ctx.moveTo(x0 + corner, y0); ctx.lineTo(x0, y0); ctx.lineTo(x0, y0 + corner);
-        ctx.moveTo(x1 - corner, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + corner);
-        ctx.moveTo(x0, y1 - corner); ctx.lineTo(x0, y1); ctx.lineTo(x0 + corner, y1);
-        ctx.moveTo(x1, y1 - corner); ctx.lineTo(x1, y1); ctx.lineTo(x1 - corner, y1);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        if (presentation.boxLabel) {
+        let stroke = AMBER;
+        if (gateInfo?.accent === "open") stroke = GREEN;
+        else if (gateInfo?.accent === "fault") stroke = RED;
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = gateInfo?.inVolume ? 3.5 : 2.5;
+        ctx.shadowColor = gateInfo?.accent === "open"
+          ? "rgba(77, 255, 136, 0.55)"
+          : "rgba(255, 176, 32, 0.55)";
+        ctx.shadowBlur = 8;
+
+        if (halfM > 0 && gateInfo) {
+          // Square in a plane facing the gate flight direction (kernel face, Z flip for three.js).
+          let fx = gateInfo.faceX;
+          let fy = gateInfo.faceY;
+          let fz = -gateInfo.faceZ;
+          let fLen = Math.hypot(fx, fy, fz);
+          if (fLen < 1e-6) {
+            fx = 0; fy = 0; fz = 1; fLen = 1;
+          }
+          fx /= fLen; fy /= fLen; fz /= fLen;
+          // Right = worldUp × face; up = face × right — keeps the window upright.
+          let rx = -fz; let ry = 0; let rz = fx;
+          let rLen = Math.hypot(rx, ry, rz);
+          if (rLen < 1e-6) { rx = 1; ry = 0; rz = 0; rLen = 1; }
+          rx /= rLen; ry /= rLen; rz /= rLen;
+          let ux = fy * rz - fz * ry;
+          let uy = fz * rx - fx * rz;
+          let uz = fx * ry - fy * rx;
+          const uLen = Math.hypot(ux, uy, uz) || 1;
+          ux /= uLen; uy /= uLen; uz /= uLen;
+          const cx = this.worldPoint.x;
+          const cy = this.worldPoint.y;
+          const cz = this.worldPoint.z;
+          const corners = [
+            [cx + halfM * (-rx - ux), cy + halfM * (-ry - uy), cz + halfM * (-rz - uz)],
+            [cx + halfM * (rx - ux), cy + halfM * (ry - uy), cz + halfM * (rz - uz)],
+            [cx + halfM * (rx + ux), cy + halfM * (ry + uy), cz + halfM * (rz + uz)],
+            [cx + halfM * (-rx + ux), cy + halfM * (-ry + uy), cz + halfM * (-rz + uz)],
+          ];
+          const screen = [];
+          let anyBehind = false;
+          for (let i = 0; i < 4; i += 1) {
+            this.worldPoint.set(corners[i][0], corners[i][1], corners[i][2]);
+            const p = this.project(this.worldPoint, frame.camera, this.projectionB);
+            if (p.behind) anyBehind = true;
+            screen.push({ x: p.x, y: p.y, behind: p.behind });
+          }
+          if (!anyBehind) {
+            ctx.beginPath();
+            ctx.moveTo(screen[0].x, screen[0].y);
+            for (let i = 1; i < 4; i += 1) ctx.lineTo(screen[i].x, screen[i].y);
+            ctx.closePath();
+            ctx.stroke();
+            // Corner ticks reinforce "window in the sky".
+            const tick = 0.22;
+            for (let i = 0; i < 4; i += 1) {
+              const a = screen[i];
+              const b = screen[(i + 1) % 4];
+              const d = screen[(i + 3) % 4];
+              ctx.beginPath();
+              ctx.moveTo(a.x + (b.x - a.x) * tick, a.y + (b.y - a.y) * tick);
+              ctx.lineTo(a.x, a.y);
+              ctx.lineTo(a.x + (d.x - a.x) * tick, a.y + (d.y - a.y) * tick);
+              ctx.stroke();
+            }
+          } else {
+            // Fallback: screen-space square if the plane clips.
+            const half = Math.max(28, Math.min(120, 90000 / Math.max(80, -projectedGate.cameraZ)));
+            const x0 = projectedGate.x - half;
+            const x1 = projectedGate.x + half;
+            const y0 = projectedGate.y - half;
+            const y1 = projectedGate.y + half;
+            const corner = Math.max(10, half * 0.28);
+            ctx.beginPath();
+            ctx.moveTo(x0 + corner, y0); ctx.lineTo(x0, y0); ctx.lineTo(x0, y0 + corner);
+            ctx.moveTo(x1 - corner, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + corner);
+            ctx.moveTo(x0, y1 - corner); ctx.lineTo(x0, y1); ctx.lineTo(x0 + corner, y1);
+            ctx.moveTo(x1, y1 - corner); ctx.lineTo(x1, y1); ctx.lineTo(x1 - corner, y1);
+            ctx.stroke();
+          }
+          this.worldPoint.set(
+            frame.state.rapier_guidance_x,
+            frame.state.rapier_guidance_y,
+            -frame.state.rapier_guidance_z,
+          );
+          const labelAt = this.project(this.worldPoint, frame.camera, this.projectionA);
+          ctx.shadowBlur = 0;
           ctx.font = "700 11px ui-monospace, monospace";
-          ctx.fillStyle = AMBER;
+          ctx.fillStyle = stroke;
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillText(presentation.boxLabel, projectedGate.x, y1 + 8);
+          const label = gateInfo.boxLabel || presentation.boxLabel;
+          if (label) ctx.fillText(label, labelAt.x, labelAt.y + 18);
+          if (gateInfo.configLine) {
+            ctx.font = "600 9px ui-monospace, monospace";
+            ctx.fillStyle = gateInfo.configOk ? GREEN_DIM : stroke;
+            ctx.fillText(gateInfo.configLine, labelAt.x, labelAt.y + 32);
+          }
+        } else {
+          const half = [88, 76, 64, 54, 44][Math.min(4, gate)];
+          const x0 = projectedGate.x - half;
+          const x1 = projectedGate.x + half;
+          const y0 = projectedGate.y - half;
+          const y1 = projectedGate.y + half;
+          const corner = Math.max(13, half * 0.34);
+          ctx.beginPath();
+          ctx.moveTo(x0 + corner, y0); ctx.lineTo(x0, y0); ctx.lineTo(x0, y0 + corner);
+          ctx.moveTo(x1 - corner, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + corner);
+          ctx.moveTo(x0, y1 - corner); ctx.lineTo(x0, y1); ctx.lineTo(x0 + corner, y1);
+          ctx.moveTo(x1, y1 - corner); ctx.lineTo(x1, y1); ctx.lineTo(x1 - corner, y1);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          if (presentation.boxLabel) {
+            ctx.font = "700 11px ui-monospace, monospace";
+            ctx.fillStyle = AMBER;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillText(presentation.boxLabel, projectedGate.x, y1 + 8);
+          }
         }
+        ctx.shadowBlur = 0;
       }
     }
 

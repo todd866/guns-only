@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  circuitGatePresentation,
   rapierCycleTeachPresentation,
   rapierEnginePresentation,
   rapierFlightDirectorPresentation,
@@ -259,6 +260,44 @@ test("Circuits wire final asks for the arrest", () => {
   assert.match(cue.text, /ACCEPT WIRE/);
   assert.doesNotMatch(cue.text, /SKIN/);
   assert.equal(cue.boxLabel, "WIRE FINAL");
+});
+
+test("circuit gate presents world half-size and energy/config status", () => {
+  const open = circuitGatePresentation({
+    rapier_mission_available: true,
+    rapier_pattern_only: true,
+    rapier_circuit_leg: "INITIAL",
+    rapier_gate_half_m: 100,
+    rapier_gate_face_x: 0,
+    rapier_gate_face_y: 0,
+    rapier_gate_face_z: 1,
+    rapier_gate_in_volume: true,
+    rapier_gate_energy_ok: true,
+    rapier_fd_target_ktas: 300,
+    gear_nose: 0,
+    gear_left: 0,
+    gear_right: 0,
+    flap_left_deg: 0,
+    flap_right_deg: 0,
+  });
+  assert.equal(open.halfM, 100);
+  assert.equal(open.status, "GATE OPEN");
+  assert.equal(open.accent, "open");
+  assert.match(open.boxLabel, /INITIAL · GATE OPEN/);
+  assert.match(open.configLine, /300 KT/);
+
+  const energy = circuitGatePresentation({
+    rapier_mission_available: true,
+    rapier_pattern_only: true,
+    rapier_circuit_leg: "DOWNWIND",
+    rapier_gate_half_m: 100,
+    rapier_gate_face_z: 1,
+    rapier_gate_in_volume: true,
+    rapier_gate_energy_ok: false,
+    rapier_fd_target_ktas: 300,
+  });
+  assert.equal(energy.status, "ENERGY");
+  assert.equal(energy.accent, "fault");
 });
 
 test("cycle teach stays available for Intercept but Circuits HUD gates it off", () => {
