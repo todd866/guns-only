@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Jet audio WAV export</title>
+  <style>
+    body { font: 15px/1.45 ui-sans-serif, system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    button { display: block; width: 100%; margin: 0.5rem 0; padding: 0.75rem; font: inherit; cursor: pointer; }
+    #status { color: #444; min-height: 1.5em; }
+  </style>
+</head>
+<body>
+  <h1>Export jet regime WAVs</h1>
+  <p>Renders 2.5 s of each regime via <code>OfflineAudioContext</code> using the live engine graph.</p>
+  <button type="button" id="export">Export all regimes</button>
+  <pre id="status"></pre>
+  <script type="module">
+    import { createEngineVoices, updateEngineVoices } from "../engine_audio.js";
+
+    const regimes = {
+      idle: {
+        applied_throttle: 0.35, engine_rpm_pct: 55, mach: 0.25,
+        true_airspeed_kts: 180, air_density_kg_m3: 1.15,
+        rapier_turbine_thrust_kn: 25, rapier_ramjet_thrust_kn: 0,
+      },
+      mil: {
+        applied_throttle: 1.55, engine_rpm_pct: 100, mach: 0.85,
+        true_airspeed_kts: 520, air_density_kg_m3: 0.9,
+        rapier_turbine_thrust_kn: 95, rapier_ramjet_thrust_kn: 0,
+      },
+      mach: {
+        applied_throttle: 1.45, engine_rpm_pct: 100, mach: 2.4,
+        true_airspeed_kts: 1400, air_density_kg_m3: 0.25,
+        rapier_turbine_thrust_kn: 8, rapier_ramjet_thrust_kn: 70,
+      },
+      coast: {
+        applied_throttle: 0, engine_rpm_pct: 15, mach: 2.8,
+        true_airspeed_kts: 1100, air_density_kg_m3: 0.03,
+        rapier_turbine_thrust_kn: 0, rapier_ramjet_thrust_kn: 0,
+        rapier_rcs_authority: 0.85,
+      },
+    };
+
+    const status = document.getElementById("status");
+    const log = (line) => { status.textContent += line + "\n"; };
+
+    function encodeWav(buffer) {
+      const samples = buffer.getChannelData(0);
+      const rate = buffer.sampleRate;
+      const data = new ArrayBuffer(44 + samples.length * 2);
+      const view = new DataView(data);
+      const writeStr = (offset, str) => {
+        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+      };
+      writeStr(0, "RIFF");
+      view.setUint32(4, 36 + samples.length * 2, true);
+      writeStr(8, "WAVE");
+      writeStr(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, rate, true);
+      view.setUint32(28, rate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeStr(36, "data");
+      view.setUint32(40, samples.length * 2, true);
+      let offset = 44;
+      for (let i = 0; i < samples.length; i++) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+        offset += 2;
+      }
+      return new Blob([data], { type: "audio/wav" });
+    }
+
+    async function renderRegime(name, state) {
+      const sampleRate = 44100;
+      const seconds = 2.5;
+      const offline = new OfflineAudioContext(1, Math.floor(sampleRate * seconds), sampleRate);
+      const voices = createEngineVoices(offline, offline.destination, { includeMaster: true });
+      const targetRpm = Math.max(0, Math.min(1, (state.engine_rpm_pct ?? 0) / 100));
+      voices.spoolRpm = targetRpm;
+      voices.lastControlTime = 0;
+      updateEngineVoices(voices, offline, state, { muted: false });
+      // Snap continuous targets so Offline doesn't fade in from zero for the whole clip.
+      updateEngineVoices(voices, offline, state, { muted: false, snap: true });
+      const rendered = await offline.startRendering();
+      const blob = encodeWav(rendered);
+      const ch = rendered.getChannelData(0);
+      let peak = 0, sumSq = 0;
+      for (let i = 0; i < ch.length; i++) {
+        const v = Math.abs(ch[i]);
+        if (v > peak) peak = v;
+        sumSq += ch[i] * ch[i];
+      }
+      const rms = Math.sqrt(sumSq / ch.length);
+      return { name, peak, rms, blob };
+    }
+
+    async function blobToBase64(blob) {
+      const buffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return btoa(binary);
+    }
+
+    document.getElementById("export").addEventListener("click", async () => {
+      status.textContent = "";
+      log("Rendering…");
+      const results = [];
+      for (const [name, state] of Object.entries(regimes)) {
+        const row = await renderRegime(name, state);
+        const url = URL.createObjectURL(row.blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `jet-${name}.wav`;
+        a.click();
+        URL.revokeObjectURL(url);
+        try {
+          const wavBase64 = await blobToBase64(row.blob);
+          await fetch("/write", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: row.name,
+              peak: row.peak,
+              rms: row.rms,
+              wavBase64,
+            }),
+          });
+          log(`${name}: peak=${row.peak.toFixed(3)} rms=${row.rms.toFixed(4)} → posted /write`);
+        } catch {
+          log(`${name}: peak=${row.peak.toFixed(3)} rms=${row.rms.toFixed(4)} → download only`);
+        }
+        results.push(row);
+      }
+      const mil = results.find((r) => r.name === "mil");
+      const coast = results.find((r) => r.name === "coast");
+      if (mil && coast && mil.rms > coast.rms * 4) {
+        log("Sanity: MIL much louder than coast — OK");
+      } else {
+        log("Sanity WARN: coast not quiet enough vs MIL");
+      }
+      window.__jetExportDone = results.map(({ name, peak, rms }) => ({ name, peak, rms }));
+      log("Done.");
+    });
+  </script>
+</body>
+</html>

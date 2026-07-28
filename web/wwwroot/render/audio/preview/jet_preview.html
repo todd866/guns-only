@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Rapier jet audio preview</title>
+  <style>
+    body {
+      font: 15px/1.45 ui-sans-serif, system-ui, sans-serif;
+      max-width: 42rem;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #1a1a1a;
+      background: #f4f1ea;
+    }
+    h1 { font-size: 1.35rem; margin-bottom: 0.35rem; }
+    p { margin: 0.5rem 0 1rem; color: #444; }
+    button {
+      display: block;
+      width: 100%;
+      margin: 0.4rem 0;
+      padding: 0.7rem 0.9rem;
+      font: inherit;
+      text-align: left;
+      border: 1px solid #222;
+      background: #fff;
+      cursor: pointer;
+    }
+    button:hover { background: #e8e4dc; }
+    .hint { font-size: 0.9rem; color: #666; margin-top: 1.25rem; }
+  </style>
+</head>
+<body>
+  <h1>Jet voice preview</h1>
+  <p>
+    Click once to unlock audio, then hold a regime. Uses the hybrid engine graph
+    (real jet sample beds when present under <code>samples/jet/</code>, plus procedural
+    accents). Compare idle vs MIL — MIL should read as a jet, not a synth pad.
+  </p>
+  <button type="button" data-regime="idle">Idle / taxi (low RPM, dense air)</button>
+  <button type="button" data-regime="mil">Military power (dense air)</button>
+  <button type="button" data-regime="slam">Throttle slam → MIL</button>
+  <button type="button" data-regime="catshot">Maglev catshot (buried tube)</button>
+  <button type="button" data-regime="handover">Mach 2.2 mid-handover</button>
+  <button type="button" data-regime="mach">Mach 2.6 ram dash</button>
+  <button type="button" data-regime="coast">Zoom coast / thin air</button>
+  <button type="button" data-regime="stop">Stop</button>
+  <p class="hint">
+    Open via the local web server, e.g.
+    <code>…/render/audio/preview/jet_preview.html</code>
+  </p>
+  <script type="module">
+    import {
+      attachJetSampleBeds,
+      createEngineVoices,
+      loadJetSampleBeds,
+      updateEngineVoices,
+    } from "../engine_audio.js";
+    import {
+      createEventVoices,
+      updateCatapultVoice,
+    } from "../event_audio.js";
+
+    const regimes = {
+      idle: {
+        applied_throttle: 0.35,
+        engine_rpm_pct: 55,
+        mach: 0.25,
+        true_airspeed_kts: 180,
+        air_density_kg_m3: 1.15,
+        rapier_turbine_thrust_kn: 25,
+        rapier_ramjet_thrust_kn: 0,
+        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+        audio_profile_id: "audio.rapier.turbo-ram.v1",
+      },
+      mil: {
+        applied_throttle: 1.55,
+        engine_rpm_pct: 100,
+        mach: 0.85,
+        true_airspeed_kts: 520,
+        air_density_kg_m3: 0.9,
+        rapier_turbine_thrust_kn: 95,
+        rapier_ramjet_thrust_kn: 0,
+        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+        audio_profile_id: "audio.rapier.turbo-ram.v1",
+      },
+      slam: {
+        applied_throttle: 1.55,
+        engine_rpm_pct: 100,
+        mach: 0.85,
+        true_airspeed_kts: 520,
+        air_density_kg_m3: 0.9,
+        rapier_turbine_thrust_kn: 95,
+        rapier_ramjet_thrust_kn: 0,
+        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+        audio_profile_id: "audio.rapier.turbo-ram.v1",
+      },
+      handover: {
+        applied_throttle: 1.5,
+        engine_rpm_pct: 100,
+        mach: 2.2,
+        true_airspeed_kts: 1200,
+        air_density_kg_m3: 0.28,
+        rapier_turbine_thrust_kn: 35,
+        rapier_ramjet_thrust_kn: 45,
+        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+        audio_profile_id: "audio.rapier.turbo-ram.v1",
+      },
+      mach: {
+        applied_throttle: 1.45,
+        engine_rpm_pct: 100,
+        mach: 2.6,
+        true_airspeed_kts: 1450,
+        air_density_kg_m3: 0.22,
+        rapier_turbine_thrust_kn: 5,
+        rapier_ramjet_thrust_kn: 78,
+        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+        audio_profile_id: "audio.rapier.turbo-ram.v1",
+      },
+      coast: {
+        applied_throttle: 0,
+        engine_rpm_pct: 15,
+        mach: 2.8,
+        true_airspeed_kts: 1100,
+        air_density_kg_m3: 0.03,
+        rapier_turbine_thrust_kn: 0,
+        rapier_ramjet_thrust_kn: 0,
+        rapier_rcs_authority: 0.85,
+        player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+        audio_profile_id: "audio.rapier.turbo-ram.v1",
+      },
+    };
+
+    let context = null;
+    let voices = null;
+    let events = null;
+    let timer = 0;
+    let slamTimer = 0;
+    let catshotStart = 0;
+    let state = regimes.idle;
+
+    function ensure() {
+      if (context) return;
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      context = new Ctor();
+      voices = createEngineVoices(context, context.destination, { includeMaster: true });
+      events = createEventVoices(context, context.destination);
+      loadJetSampleBeds(context).then((beds) => {
+        const ok = attachJetSampleBeds(voices, context, beds);
+        console.info(ok ? "jet sample beds attached" : "procedural fallback (no beds)");
+      });
+    }
+
+    function tick(nowMs) {
+      if (!context || !voices) return;
+      if (state?._catshot) {
+        const t = Math.min(1, (nowMs - catshotStart) / 4200);
+        const speed01 = Math.sqrt(t);
+        state = {
+          ...regimes.mil,
+          applied_throttle: 1.55,
+          catapult_active: t < 1,
+          catapult_progress: t,
+          catapult_speed_kts: speed01 * 214,
+          catapult_end_speed_kts: 214,
+          carrier: false,
+          recovery_platform: true,
+          recovery: t < 1 ? "CATAPULT" : "FREE",
+          _catshot: t < 1,
+        };
+      }
+      updateEngineVoices(voices, context, state, { muted: false });
+      updateCatapultVoice(events, context, state, { enabled: true });
+      timer = requestAnimationFrame(tick);
+    }
+
+    function play(regime) {
+      ensure();
+      context.resume();
+      clearTimeout(slamTimer);
+      if (regime === "stop") {
+        cancelAnimationFrame(timer);
+        updateEngineVoices(voices, context, state, { muted: true });
+        updateCatapultVoice(events, context, { catapult_active: false }, { enabled: false });
+        return;
+      }
+      if (regime === "slam") {
+        state = { ...regimes.idle, engine_rpm_pct: 70 };
+        cancelAnimationFrame(timer);
+        timer = requestAnimationFrame(tick);
+        slamTimer = setTimeout(() => {
+          state = regimes.slam;
+        }, 700);
+        return;
+      }
+      if (regime === "catshot") {
+        catshotStart = performance.now();
+        state = { _catshot: true };
+        cancelAnimationFrame(timer);
+        timer = requestAnimationFrame(tick);
+        return;
+      }
+      state = regimes[regime];
+      cancelAnimationFrame(timer);
+      timer = requestAnimationFrame(tick);
+    }
+
+    for (const button of document.querySelectorAll("button[data-regime]")) {
+      button.addEventListener("click", () => play(button.dataset.regime));
+    }
+  </script>
+</body>
+</html>

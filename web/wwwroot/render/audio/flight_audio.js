@@ -1,12 +1,23 @@
 // Presentation audio façade: one AudioContext, one master, one compressor bus.
-// Engine, buffet, gun reports, and GCAS all share mute. Fail-silent — never throw into the
-// flight kernel. Prefer this over updateEngineAudio in production.
+// Engine, buffet, airframe cues, gun reports, and GCAS all share mute. Fail-silent — never
+// throw into the flight kernel. Prefer this over updateEngineAudio in production.
 
-import { createEngineVoices, updateEngineVoices } from "./engine_audio.js";
+import {
+  attachJetSampleBeds,
+  createEngineVoices,
+  loadJetSampleBeds,
+  updateEngineVoices,
+} from "./engine_audio.js";
+import { resolvePropulsionCharacter } from "./audio_character.js";
 import {
   createEventVoices,
   fireGunReports,
+  updateAirframeCueVoices,
   updateBuffetVoice,
+  updateCatapultVoice,
+  updateCombatCueVoices,
+  updateRcsVoice,
+  updateTrapVoice,
 } from "./event_audio.js";
 import { createWarningVoices, updateWarningVoices } from "./warning_audio.js";
 
@@ -18,6 +29,8 @@ let eventVoices = null;
 let warningVoices = null;
 let disabled = false;
 let enabled = true;
+let sampleLoad = null;
+let lastCharacter = null;
 
 function build() {
   const Ctor = globalThis.AudioContext ?? globalThis.webkitAudioContext;
@@ -43,8 +56,23 @@ function build() {
   return true;
 }
 
+function ensureJetSamples(state) {
+  // Rapier turbo-ram beds are the wrong identity for twin-fan F-22s.
+  if (resolvePropulsionCharacter(state) !== "rapier") return;
+  if (!context || !engineVoices || engineVoices.hasSampleBeds || sampleLoad) return;
+  sampleLoad = loadJetSampleBeds(context)
+    .then((beds) => {
+      if (resolvePropulsionCharacter(state) !== "rapier") return;
+      attachJetSampleBeds(engineVoices, context, beds);
+    })
+    .catch(() => {})
+    .finally(() => {
+      sampleLoad = null;
+    });
+}
+
 /// User-gesture unlock. Safe to call repeatedly; no-ops when audio is disabled or unsupported.
-export function armFlightAudio() {
+export function armFlightAudio(state = null) {
   if (disabled || !enabled) return false;
   try {
     if (!context && !build()) {
@@ -54,6 +82,7 @@ export function armFlightAudio() {
     if (context.state === "suspended") {
       context.resume()?.catch?.(() => {});
     }
+    ensureJetSamples(state);
     return true;
   } catch {
     disabled = true;
@@ -93,9 +122,19 @@ export function updateFlightAudio(state, {
       return;
     }
 
+    const character = resolvePropulsionCharacter(state);
+    if (character !== lastCharacter) lastCharacter = character;
+    ensureJetSamples(state);
+
     const live = enabled && !muted;
-    updateEngineVoices(engineVoices, context, state, { muted: false });
+    // Collapse continuous gains on mute/pause (view loop still ticks while paused).
+    updateEngineVoices(engineVoices, context, state, { muted: !live });
     updateBuffetVoice(eventVoices, context, state, { enabled: live });
+    updateAirframeCueVoices(eventVoices, context, state, { enabled: live });
+    updateCatapultVoice(eventVoices, context, state, { enabled: live });
+    updateRcsVoice(eventVoices, context, state, { enabled: live });
+    updateTrapVoice(eventVoices, context, state, { enabled: live });
+    updateCombatCueVoices(eventVoices, context, state, { enabled: live });
     fireGunReports(eventVoices, context, state, { enabled: live, triggerHeld });
     updateWarningVoices(warningVoices, context, state, {
       enabled: live,

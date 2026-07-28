@@ -6041,9 +6041,12 @@ class FlightView {
       }
     }
     // Fail-silent: flight_audio disables itself permanently on any error rather than
-    // letting an audio problem reach the flight kernel. Mute follows player settings.
+    // letting an audio problem reach the flight kernel. Mute follows player settings
+    // and pause — the view loop still ticks while paused (dt=0), so audio must gate here.
     updateFlightAudio(state, {
-      muted: !playerSettings.audio,
+      muted: !playerSettings.audio
+        || pauseReasons.size > 0
+        || state?.paused === true,
       triggerHeld: isGkeyHeld(8),
       nowSeconds,
     });

@@ -30,7 +30,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.15.0";
+    const string SnapshotSchemaVersion = "1.16.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -39,6 +39,8 @@ internal static class SnapshotProjection {
     const string FixedWingHudProfileId = "hud.fixed-wing.guns.v1";
     const string FixedWingInputProfileId = "input.fixed-wing.unified.v1";
     const string FixedWingAudioProfileId = "audio.fixed-wing.jet.v1";
+    const string RapierAudioProfileId = "audio.rapier.turbo-ram.v1";
+    const string F22AudioProfileId = "audio.f22a.aged-twin-fan.v1";
     const string FixedWingEffectsProfileId = "effects.fixed-wing.guns.v1";
     const string PlayerPresentationId = "presentation.vehicle.player.v1";
     const string PlayerCockpitPresentationId = "presentation.cockpit.player.v1";
@@ -1000,8 +1002,15 @@ internal static class SnapshotProjection {
             ? "null" : $"\"{KoreaAssetProfileId}\"";
         string assetManifestJson = modernSurrogate || balloonPrototype
             ? "null" : $"\"{KoreaAssetManifestId}\"";
-        string audioProfileJson = modernSurrogate || balloonPrototype
-            ? "null" : $"\"{FixedWingAudioProfileId}\"";
+        string audioProfileJson = balloonPrototype
+            ? "null"
+            : player.Id == AircraftCapability.RapierSurrogate.Id
+                ? $"\"{RapierAudioProfileId}\""
+            : player.Id == AircraftCapability.F22ASurrogate.Id
+                ? $"\"{F22AudioProfileId}\""
+            : modernSurrogate
+                ? $"\"{FixedWingAudioProfileId}\""
+                : $"\"{FixedWingAudioProfileId}\"";
         string cockpitPresentationJson = modernSurrogate || balloonPrototype
             ? "null" : $"\"{PlayerCockpitPresentationId}\"";
         string carrierEntityJson = hasCarrier
@@ -1406,7 +1415,11 @@ internal static class SnapshotProjection {
             + $"\"arrest_max_line_load_kn\":{arrestment.Capability.MaximumLineLoadN / 1000.0:F2},"
             + $"\"arrest_peak_load_kn\":{arrestment.PeakLoadN / 1000.0:F2},"
             + $"\"arrest_residual_speed_kts\":{arrestment.ResidualSpeedMps * AirData.MpsToKnots:F2},"
-            + $"\"arrest_initial_closure_kts\":{arrestment.InitialRelativeSpeedMps * AirData.MpsToKnots:F2},";
+            + $"\"arrest_initial_closure_kts\":{arrestment.InitialRelativeSpeedMps * AirData.MpsToKnots:F2},"
+            + $"\"catapult_active\":{(catapult.IsActive ? "true" : "false")},"
+            + $"\"catapult_progress\":{(catapult.StrokeM > 0.0 ? System.Math.Clamp(catapult.DistanceM / catapult.StrokeM, 0.0, 1.0) : 0.0):F4},"
+            + $"\"catapult_speed_kts\":{catapult.RelativeSpeedMps * AirData.MpsToKnots:F2},"
+            + $"\"catapult_end_speed_kts\":{catapult.EndSpeedMps * AirData.MpsToKnots:F2},";
     }
 
     static int CircuitLegCode(string? leg) => leg switch {
