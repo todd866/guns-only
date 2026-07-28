@@ -180,7 +180,11 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     /// <summary>Usable cold-gas propellant mass (kg). Zero with a nonzero moment max means empty.</summary>
     double ColdGasRcsGasCapacityKg = 0.0,
     /// <summary>Gas burned by holding full RCS moment for one second.</summary>
-    double ColdGasRcsBurnKgPerFullSecond = 0.35);
+    double ColdGasRcsBurnKgPerFullSecond = 0.35,
+    // Optional neutral-stick flight-path capture. Default/disabled preserves the legacy 1 G
+    // baseline; modern opt-in airframes convert the captured gamma back through the ordinary
+    // bank-aware G/AoA law rather than invoking the approach-only absolute-pitch controller.
+    FlightPathHoldConfig NeutralFlightPathHold = default);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -584,6 +588,10 @@ public static class FlightModel {
         // a bank and the aircraft keeps it through a hard pull without constant correction.
         RollHoldRateGainNms: 1_200_000.0, RollHoldDeadband: 0.05,
         RollHoldAttitudeGainNmRad: 1_200_000.0,
+        // Neutral pitch captures the velocity-vector angle. At the observed 36-degree zoom this
+        // commands about cos(36)=0.81 G instead of the old 1 G, which otherwise keeps bending the
+        // path upward. Signed bank compensation also gives the correct negative-G hold inverted.
+        NeutralFlightPathHold: FlightPathHoldConfig.Rapier,
         // Structure binds, not the pilot — the reclined occupant can use all of it. 12 G is the
         // qualified limit against an 18 G article; Space releases to 15 G, which is knowingly eating
         // margin on the SAME structure rather than pretending a stronger aircraft exists.

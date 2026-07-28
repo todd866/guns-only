@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   circuitGatePresentation,
+  rapierBriefingText,
   rapierCycleTeachPresentation,
   rapierEnginePresentation,
   rapierFlightDirectorPresentation,
@@ -153,6 +154,61 @@ test("flight director exposes bank/altitude/speed bugs from snapshot targets", (
   assert.equal(fd.altErrorFt, 6000);
   assert.equal(fd.speedCall, "SLOW");
   assert.equal(fd.targetKtas, 450);
+});
+
+test("RAM climb director predicts FL700 capture before a high-rate overshoot", () => {
+  const fd = rapierFlightDirectorPresentation({
+    rapier_mission_available: true,
+    rapier_mission_phase: 4,
+    rapier_target_altitude_ft: 70000,
+    alt_ft: 69380,
+    vertical_speed_fpm: 38971,
+    rapier_fd_bank_deg: 0,
+    bank_deg: 0,
+  });
+  assert.equal(fd.altitudeCall, "CAPTURE FL700 · UNLOAD");
+  assert.equal(fd.altitudeSeverity, "danger");
+  assert.ok(fd.timeToAltitudeS > 0.9 && fd.timeToAltitudeS < 1.0);
+});
+
+test("intercept director calls a continuing climb above FL700", () => {
+  const fd = rapierFlightDirectorPresentation({
+    rapier_mission_available: true,
+    rapier_mission_phase: 9,
+    rapier_target_altitude_ft: 70000,
+    alt_ft: 71200,
+    vertical_speed_fpm: 12000,
+    rapier_fd_bank_deg: 0,
+    bank_deg: 0,
+  });
+  assert.equal(fd.altitudeCall, "LEVEL NOW · DESCEND FL700");
+  assert.equal(fd.altitudeSeverity, "danger");
+  assert.equal(fd.timeToAltitudeS, null);
+});
+
+test("high-G pull above target produces an unmistakable energy warning", () => {
+  const fd = rapierFlightDirectorPresentation({
+    rapier_mission_available: true,
+    rapier_mission_phase: 9,
+    rapier_target_altitude_ft: 70000,
+    alt_ft: 72000,
+    vertical_speed_fpm: 18000,
+    requested_g_cmd: 8.5,
+    rapier_automation_active: false,
+  });
+  assert.equal(fd.altitudeCall, "UNLOAD NOW · ENERGY HIGH");
+  assert.equal(fd.altitudeSeverity, "danger");
+});
+
+test("mission brief formats thresholds published by the kernel", () => {
+  const text = rapierBriefingText(
+    "RAM LIGHT begins at {RAM_LIGHT_MACH} and full ram arrives at {FULL_RAM_MACH}",
+    {
+      rapier_ram_light_mach: 2.15,
+      rapier_full_ram_mach: 2.95,
+    },
+  );
+  assert.equal(text, "RAM LIGHT begins at M2.1 and full ram arrives at M3.0");
 });
 
 test("zoom coast FD publishes nose-on-V call without speed bug", () => {

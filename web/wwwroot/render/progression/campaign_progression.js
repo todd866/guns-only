@@ -37,7 +37,7 @@ export const CAMPAIGN_NODES = Object.freeze([
     sequence: 4,
     aircraft: "Rapier",
     title: "Rapier Intercept",
-    shortObjective: "Climb around M0.90 to FL560, ram through M2.2 to FL700, release the swarm, recover.",
+    shortObjective: "Climb around M0.90 to FL560, cross the live ram handover, ram-climb to FL700, release the swarm, recover.",
     qualification: "",
   }),
 ]);

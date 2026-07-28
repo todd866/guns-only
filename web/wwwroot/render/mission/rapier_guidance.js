@@ -26,6 +26,7 @@ const PHASE_ATTACK = 10;
 const PHASE_EGRESS = 11;
 const PHASE_RECOVERY = 13;
 const PHASE_INTERCEPT = 9;
+const PHASE_RAM_CLIMB = 4;
 
 const CIRCUIT_LEG_LABEL = Object.freeze({
   DEPART: "DEPART",
@@ -49,14 +50,33 @@ const CIRCUIT_LEG_FROM_CODE = Object.freeze({
   8: "COMPLETE",
 });
 
-// Honest combined-cycle band (matches TurboRamjetPerformanceMap teaching schedule).
-const RAM_LIGHT_MACH = 2.0;
-const FULL_RAM_MACH = 2.8;
-const TURBINE_GONE_MACH = 3.0;
+// Backward-compatible values for old recorded snapshots. Current sorties publish these constants
+// from TurboRamjetPerformanceMap, so live teaching and briefing copy follow the executable kernel.
+const LEGACY_RAM_LIGHT_MACH = 2.0;
+const LEGACY_FULL_RAM_MACH = 2.8;
+const LEGACY_TURBINE_GONE_MACH = 3.0;
 
 function finiteNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+export function rapierPropulsionThresholds(state = {}) {
+  return Object.freeze({
+    ramLightMach: finiteNumber(state.rapier_ram_light_mach)
+      ?? LEGACY_RAM_LIGHT_MACH,
+    fullRamMach: finiteNumber(state.rapier_full_ram_mach)
+      ?? LEGACY_FULL_RAM_MACH,
+    turbineGoneMach: finiteNumber(state.rapier_turbine_gone_mach)
+      ?? LEGACY_TURBINE_GONE_MACH,
+  });
+}
+
+export function rapierBriefingText(template, state = {}) {
+  const thresholds = rapierPropulsionThresholds(state);
+  return String(template ?? "")
+    .replaceAll("{RAM_LIGHT_MACH}", `M${thresholds.ramLightMach.toFixed(1)}`)
+    .replaceAll("{FULL_RAM_MACH}", `M${thresholds.fullRamMach.toFixed(1)}`);
 }
 
 export function circuitLegFromState(state) {
@@ -293,6 +313,7 @@ export function rapierFlightDirectorPresentation(state) {
   const altFt = finiteNumber(state.alt_ft)
     ?? finiteNumber(state.altitude_ft)
     ?? 0;
+  const verticalSpeedFpm = finiteNumber(state.vertical_speed_fpm);
   const currentKtas = finiteNumber(state.true_airspeed_kts) ?? 0;
   let speedCall = "";
   if (targetKtas > 0) {
@@ -303,9 +324,41 @@ export function rapierFlightDirectorPresentation(state) {
   if (noseErr !== null && (zoomLob || coastPhase)) {
     noseCall = noseErr <= 8.0 ? "ON V" : "ALIGN NOSE→V";
   }
+  const altitudeErrorFt = targetAltFt - altFt;
+  const altitudeCapturePhase = phase === PHASE_RAM_CLIMB || phase === PHASE_INTERCEPT;
+  const closingAltitude = verticalSpeedFpm !== null
+    && Math.abs(verticalSpeedFpm) >= 500
+    && altitudeErrorFt * verticalSpeedFpm > 0;
+  const timeToAltitudeS = closingAltitude
+    ? Math.abs(altitudeErrorFt / verticalSpeedFpm) * 60
+    : null;
+  const flightLevel = targetAltFt > 0
+    ? `FL${Math.round(targetAltFt / 100)}`
+    : "";
+  let altitudeCall = "";
+  let altitudeSeverity = "normal";
+  const requestedG = finiteNumber(state.requested_g_cmd);
+  const manualHighGPull = state.rapier_automation_active !== true
+    && requestedG !== null
+    && requestedG >= 4.0;
+  if (altitudeCapturePhase && targetAltFt > 0 && verticalSpeedFpm !== null) {
+    if (altitudeErrorFt < 0 && verticalSpeedFpm > 1000) {
+      altitudeCall = manualHighGPull
+        ? "UNLOAD NOW · ENERGY HIGH"
+        : `LEVEL NOW · DESCEND ${flightLevel}`;
+      altitudeSeverity = "danger";
+    } else if (altitudeErrorFt > 0 && verticalSpeedFpm > 1000
+      && timeToAltitudeS !== null && timeToAltitudeS <= 12) {
+      altitudeCall = `CAPTURE ${flightLevel} · UNLOAD`;
+      altitudeSeverity = timeToAltitudeS <= 6 ? "danger" : "caution";
+    }
+  }
   return Object.freeze({
     bankErrorDeg: fdBankDeg - bankDeg,
-    altErrorFt: targetAltFt - altFt,
+    altErrorFt: altitudeErrorFt,
+    altitudeCall,
+    altitudeSeverity,
+    timeToAltitudeS,
     speedCall,
     targetKtas,
     noseOnVErrorDeg: noseErr,
@@ -315,17 +368,17 @@ export function rapierFlightDirectorPresentation(state) {
   });
 }
 
-function cycleMode(mach) {
-  if (mach < RAM_LIGHT_MACH) return "TURBINE";
-  if (mach < FULL_RAM_MACH) return "HANDOVER";
-  if (mach < TURBINE_GONE_MACH) return "FULL RAM";
+function cycleMode(mach, thresholds) {
+  if (mach < thresholds.ramLightMach) return "TURBINE";
+  if (mach < thresholds.fullRamMach) return "HANDOVER";
+  if (mach < thresholds.turbineGoneMach) return "FULL RAM";
   return "RAM ONLY";
 }
 
-function cycleExplainer(mode) {
+function cycleExplainer(mode, thresholds) {
   switch (mode) {
     case "TURBINE":
-      return "Turbojet + AB make thrust now. Ram needs ~M2 before it lights.";
+      return `Turbojet + AB make thrust now. Ram needs ~M${thresholds.ramLightMach.toFixed(1)} before it lights.`;
     case "HANDOVER":
       return "Handover band: turbine fading, ram lighting. Expect a thrust bucket.";
     case "FULL RAM":
@@ -351,14 +404,15 @@ export function rapierCycleTeachPresentation(state) {
   const totalKn = Math.max(turbineKn + ramKn, 0.01);
   const skinC = finiteNumber(state.rapier_stagnation_temp_c);
   const marginC = finiteNumber(state.rapier_thermal_margin_c);
-  const mode = cycleMode(mach);
+  const thresholds = rapierPropulsionThresholds(state);
+  const mode = cycleMode(mach, thresholds);
   let thermalLevel = "normal";
   if (marginC !== null && marginC < 0) thermalLevel = "fault";
   else if (marginC !== null && marginC < 40) thermalLevel = "caution";
 
   return Object.freeze({
     mode,
-    explainer: cycleExplainer(mode),
+    explainer: cycleExplainer(mode, thresholds),
     mach,
     turbineKn,
     ramKn,

@@ -30,6 +30,8 @@ public sealed class DetentLayer {
     const double ThrottleRate = 0.7;   // per second while W/S held — a real throttle, not tap-detents
     int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
+    double _capturedFlightPathRad = double.NaN;
+    bool _flightPathHoldCaptured, _pitchInputActiveLastTick;
     bool _bankTargetInitialized;
     const double Tau = 0.07, StickyStepG = 0.5;
     readonly HashSet<int> _sampledRollRightPresses = new();
@@ -118,6 +120,8 @@ public sealed class DetentLayer {
     /// second hard-coded throttle datum.
     /// </summary>
     public double ApproachTrimThrottle { get; private set; }
+    public bool FlightPathHoldActive { get; private set; }
+    public double CapturedFlightPathRad => _capturedFlightPathRad;
 
     /// <summary>
     /// The clean datum remains the period/HUD reference. Actual flap camber reduces the body angle
@@ -187,6 +191,8 @@ public sealed class DetentLayer {
 
         var pull = keys.PhaseAt(GKey.PullUp, nowMs);
         var push = keys.PhaseAt(GKey.PushDown, nowMs);
+        bool pitchInputActive = pull != KeyPhase.Idle || push != KeyPhase.Idle;
+        FlightPathHoldActive = false;
         // Sticky clears on actual pull-release EVENTS, not sampled Idle — a release+re-press
         // batched between ticks must still reset (reviewer finding).
         int pr = keys.ReleaseCount(GKey.PullUp);
@@ -236,6 +242,7 @@ public sealed class DetentLayer {
         _overrideIncidenceActiveLastTick = overrideIncidenceActive;
 
         if (ApproachMode) {
+            _flightPathHoldCaptured = false;
             double onSpeedAoaRad = EffectiveOnSpeedAoARad(p);
             // Stick commands the NOSE ATTITUDE (θ) directly and it HOLDS there — stable, like a real
             // jet. The nose is what you fly; the flight path emerges under it and lags.
@@ -274,6 +281,7 @@ public sealed class DetentLayer {
         }
         double target; DemandTier tier;
         if (HighAlphaRecoveryActive) {
+            _flightPathHoldCaptured = false;
             // Modern high-alpha re-entry: releasing Space is an unambiguous request to restore the
             // protected envelope. Capture a neutral load-factor command while the integrated
             // alpha/rate loop (including any configured thrust vectoring) drives through the break.
@@ -308,10 +316,12 @@ public sealed class DetentLayer {
             target = over ? pushFloor : System.Math.Max(pushFloor, -1.0);
         }
         else if (_waveOff) {
+            _flightPathHoldCaptured = false;
             tier = DemandTier.Valley;
             target = System.Math.Min(maxPerform, 1.55);   // smooth hands-off rotation; stick still has full authority
         }
         else if (AssistedFlight) {
+            _flightPathHoldCaptured = false;
             // Portrait-phone baseline, pilot-tuned (2026-07-23): the old blanket 4 G in-cone pull
             // made the phone "almost impossible to stop pitching up" — the bandit is near the nose
             // most of a fight, so the assist owned the pitch axis at full pull. About-right means
@@ -339,9 +349,42 @@ public sealed class DetentLayer {
                     1.0 / System.Math.Max(System.Math.Cos(s.Bank), 0.5), 1.0, 1.35);
             }
         }
-        else { tier = DemandTier.Baseline; StickyOffsetG = 0; target = 1.0; }
+        else if (p.NeutralFlightPathHold.Enabled) {
+            // Modern neutral-stick law: capture the VELOCITY VECTOR where the pilot releases the
+            // pitch control, then convert gamma error back into an ordinary protected G request.
+            // At a 36-degree climb, equilibrium is cos(36)=0.81 G; the old blanket 1 G necessarily
+            // kept curving the path upward. Body-bank compensation remains signed, so an inverted
+            // aircraft asks for negative G rather than pulling through the horizon.
+            tier = DemandTier.Baseline;
+            StickyOffsetG = 0.0;
+            if (!_flightPathHoldCaptured || _pitchInputActiveLastTick) {
+                _capturedFlightPathRad = s.Gamma;
+                _flightPathHoldCaptured = true;
+            }
+            double holdAirspeed = double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed;
+            double holdG = FlightPathHold.RequiredNormalLoad(
+                _capturedFlightPathRad, s.Gamma, BodyBank(s), holdAirspeed,
+                p.NeutralFlightPathHold);
+            if (double.IsFinite(holdG)) {
+                double holdMin = System.Math.Max(
+                    FlightModel.NzAeroMin(s, p, holdAirspeed, AtmosphereModel),
+                    p.NeutralFlightPathHold.MinG);
+                target = System.Math.Clamp(holdG, holdMin, maxPerform);
+                FlightPathHoldActive = true;
+            } else {
+                _flightPathHoldCaptured = false;
+                target = 1.0;
+            }
+        }
+        else {
+            _flightPathHoldCaptured = false;
+            tier = DemandTier.Baseline;
+            StickyOffsetG = 0;
+            target = 1.0;
+        }
         Tier = tier;
         _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
+        _pitchInputActiveLastTick = pitchInputActive;
 
         // FREE/FIGHT pitch stays a load-factor command. Do not turn it into a horizon-referenced
         // nose-attitude target here: at 90 degrees of bank that target is on the wrong axis and it

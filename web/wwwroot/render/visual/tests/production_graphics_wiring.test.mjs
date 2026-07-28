@@ -189,8 +189,8 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /const sceneryWasSuppressed = view\.terrainGovernorSuppressesAmbientScenery === true;[\s\S]*?if \(sceneryWasSuppressed \|\| view\.terrainMicroRequired === true\) \{[\s\S]*?enableAmbientScenery/,
     "a new sortie must restore scenery shed by the governor even when micro scenery is optional");
   assert.match(source,
-    /terrainGovernorSuppressesAmbientScenery = true[\s\S]*?disableAmbientScenery[\s\S]*?terrainGovernorSuppressesAmbientScenery !== true[\s\S]*?enableAmbientScenery/,
-    "terminal governor shedding must stay latched until the next sortie reset");
+    /const frameGovernorPolicy = new FrameGovernorPolicy[\s\S]*?recover\(view, transition\)[\s\S]*?enableAmbientScenery/,
+    "governor quality must recover one policy-approved rung after sustained clean windows");
   assert.match(source, /const DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL = null;/,
     "an unqualified peninsula atlas must remain unreachable from the production browser");
   assert.doesNotMatch(source, /peninsula-r2|pub-[a-z0-9]+\.r2\.dev/,
@@ -300,6 +300,11 @@ test("decision-support ocean and warnings carry truth without presentation flick
   assert.match(hudSource, /this\._carrierPatternCue\.update\(state, frame\.dt\)/);
   assert.match(hudSource, /this\._aoaIndexerCue\.update/);
   assert.match(hudSource, /this\._lsoDisplayCue\.update/);
+  assert.match(hudSource,
+    /if \(!frame\.padlock\) this\.drawPitchLadder[\s\S]*this\.drawAirframeSymbols/,
+    "the 2D horizon and flight-path vector must remain independent of scenery quality");
+  assert.doesNotMatch(hudSource, /frameGovernor.*drawPitchLadder|governor_level.*drawPitchLadder/,
+    "maximum scenery shedding must never suppress the attitude reference");
 });
 
 test("bridge publishes authoritative local weather instead of renderer-owned decoration", async () => {
