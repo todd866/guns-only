@@ -3708,6 +3708,12 @@ class CombatHud {
           : `${Math.round(fd.targetKtas)} KT`;
         ctx.fillText(speedText, cx + 64, cy - pitchClamp);
       }
+      if (fd.altitudeCall) {
+        ctx.font = "800 11px ui-monospace, monospace";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(fd.altitudeCall, cx + 64, cy - pitchClamp - 15);
+      }
     }
 
     // Quiet mode line — one short row under the heading tape. Engine bars and triad essays are gone.

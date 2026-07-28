@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   circuitGatePresentation,
@@ -7,6 +8,8 @@ import {
   rapierFlightDirectorPresentation,
   rapierGuidancePresentation,
 } from "../rapier_guidance.js";
+
+const appUrl = new URL("../../../app.js", import.meta.url);
 
 test("Rapier guidance is absent outside the scripted sortie", () => {
   assert.equal(rapierGuidancePresentation({}), null);
@@ -153,6 +156,40 @@ test("flight director exposes bank/altitude/speed bugs from snapshot targets", (
   assert.equal(fd.altErrorFt, 6000);
   assert.equal(fd.speedCall, "SLOW");
   assert.equal(fd.targetKtas, 450);
+});
+
+test("RAM climb director predicts FL700 capture before a high-rate overshoot", () => {
+  const fd = rapierFlightDirectorPresentation({
+    rapier_mission_available: true,
+    rapier_mission_phase: 4,
+    rapier_target_altitude_ft: 70000,
+    alt_ft: 69380,
+    vertical_speed_fpm: 38971,
+    rapier_fd_bank_deg: 0,
+    bank_deg: 0,
+  });
+  assert.equal(fd.altitudeCall, "CAPTURE FL700 · UNLOAD");
+  assert.ok(fd.timeToAltitudeS > 0.9 && fd.timeToAltitudeS < 1.0);
+});
+
+test("intercept director calls a continuing climb above FL700", () => {
+  const fd = rapierFlightDirectorPresentation({
+    rapier_mission_available: true,
+    rapier_mission_phase: 9,
+    rapier_target_altitude_ft: 70000,
+    alt_ft: 71200,
+    vertical_speed_fpm: 12000,
+    rapier_fd_bank_deg: 0,
+    bank_deg: 0,
+  });
+  assert.equal(fd.altitudeCall, "LEVEL NOW · DESCEND FL700");
+  assert.equal(fd.timeToAltitudeS, null);
+});
+
+test("mission brief teaches the same M2.0/M2.8 handover as the director", async () => {
+  const app = await readFile(appUrl, "utf8");
+  assert.match(app, /RAM LIGHT begins at M2\.0 and full ram arrives at M2\.8/);
+  assert.doesNotMatch(app, /RAM LIGHT begins at M1\.6 and full ram arrives at M2\.2/);
 });
 
 test("zoom coast FD publishes nose-on-V call without speed bug", () => {

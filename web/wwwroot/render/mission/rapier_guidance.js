@@ -26,6 +26,7 @@ const PHASE_ATTACK = 10;
 const PHASE_EGRESS = 11;
 const PHASE_RECOVERY = 13;
 const PHASE_INTERCEPT = 9;
+const PHASE_RAM_CLIMB = 4;
 
 const CIRCUIT_LEG_LABEL = Object.freeze({
   DEPART: "DEPART",
@@ -293,6 +294,7 @@ export function rapierFlightDirectorPresentation(state) {
   const altFt = finiteNumber(state.alt_ft)
     ?? finiteNumber(state.altitude_ft)
     ?? 0;
+  const verticalSpeedFpm = finiteNumber(state.vertical_speed_fpm);
   const currentKtas = finiteNumber(state.true_airspeed_kts) ?? 0;
   let speedCall = "";
   if (targetKtas > 0) {
@@ -303,9 +305,31 @@ export function rapierFlightDirectorPresentation(state) {
   if (noseErr !== null && (zoomLob || coastPhase)) {
     noseCall = noseErr <= 8.0 ? "ON V" : "ALIGN NOSE→V";
   }
+  const altitudeErrorFt = targetAltFt - altFt;
+  const altitudeCapturePhase = phase === PHASE_RAM_CLIMB || phase === PHASE_INTERCEPT;
+  const closingAltitude = verticalSpeedFpm !== null
+    && Math.abs(verticalSpeedFpm) >= 500
+    && altitudeErrorFt * verticalSpeedFpm > 0;
+  const timeToAltitudeS = closingAltitude
+    ? Math.abs(altitudeErrorFt / verticalSpeedFpm) * 60
+    : null;
+  const flightLevel = targetAltFt > 0
+    ? `FL${Math.round(targetAltFt / 100)}`
+    : "";
+  let altitudeCall = "";
+  if (altitudeCapturePhase && targetAltFt > 0 && verticalSpeedFpm !== null) {
+    if (altitudeErrorFt < 0 && verticalSpeedFpm > 1000) {
+      altitudeCall = `LEVEL NOW · DESCEND ${flightLevel}`;
+    } else if (altitudeErrorFt > 0 && verticalSpeedFpm > 1000
+      && timeToAltitudeS !== null && timeToAltitudeS <= 12) {
+      altitudeCall = `CAPTURE ${flightLevel} · UNLOAD`;
+    }
+  }
   return Object.freeze({
     bankErrorDeg: fdBankDeg - bankDeg,
-    altErrorFt: targetAltFt - altFt,
+    altErrorFt: altitudeErrorFt,
+    altitudeCall,
+    timeToAltitudeS,
     speedCall,
     targetKtas,
     noseOnVErrorDeg: noseErr,

@@ -26,19 +26,22 @@ public sealed class AttitudeHoldTests {
         return Math.Atan2(bodyUp.Dot(right), bodyUp.Dot(up0)) * 180.0 / Math.PI;
     }
 
-    [Fact]
-    public void ReleasingTheStickHoldsTheBankTheAircraftWasLeftAt() {
+    static BeatSetup ManualRapierAt(double altitudeM, double speedMps) {
         BeatSetup beat = Beats.RapierIntercept() with {
             Carrier = null, StartsOnCatapult = false, ScriptedIntercept = null
         };
-        beat = beat with {
+        return beat with {
             Player = beat.Player with {
-                Position = new Vec3D(0.0, 15_000.0, 0.0),
-                Speed = 600.0, Gamma = 0.0, Chi = 0.0, Bank = 0.0
+                Position = new Vec3D(0.0, altitudeM, 0.0),
+                Speed = speedMps, Gamma = 0.0, Chi = 0.0, Bank = 0.0
             }
         };
+    }
+
+    [Fact]
+    public void ReleasingTheStickHoldsTheBankTheAircraftWasLeftAt() {
         var session = new SimulationSession();
-        session.StartBeat(() => beat);
+        session.StartBeat(() => ManualRapierAt(15_000.0, 600.0));
         session.Begin();
         session.SetRapierAutomationEnabled(false);
 
@@ -56,5 +59,54 @@ public sealed class AttitudeHoldTests {
             + $"15 s later {BodyBankDeg(session.Player.State):F1} deg (worst drift {worst:F1} deg)");
         Assert.True(worst < 12.0,
             $"bank wandered {worst:F1} deg after release from {atRelease:F1} deg — not an attitude hold");
+    }
+
+    [Fact]
+    public void ReleasingAHighGPullCapturesTheRapierFlightPathInsteadOfContinuingTheZoom() {
+        var session = new SimulationSession();
+        session.StartBeat(() => ManualRapierAt(15_000.0, 600.0));
+        session.Begin();
+        session.SetRapierAutomationEnabled(false);
+
+        session.FeedKey(GKey.PullUp, true);
+        int pullTicks = 0;
+        while (session.Player.State.Gamma < 30.0 * Math.PI / 180.0
+            && pullTicks++ < 5 * AircraftSim.TickHz)
+            session.StepFixed();
+        Assert.True(session.Player.State.Gamma >= 30.0 * Math.PI / 180.0,
+            "test setup never established the recorded high-G zoom");
+
+        session.FeedKey(GKey.PullUp, false);
+        session.StepFixed();
+        double capturedGamma = session.Controls.CapturedFlightPathRad;
+        double maximumGamma = session.Player.State.Gamma;
+        double minimumGamma = session.Player.State.Gamma;
+        double minimumCommandedG = session.Controls.Command.GDemand;
+        bool stayedActive = session.Controls.FlightPathHoldActive;
+
+        for (int tick = 0; tick < 10 * AircraftSim.TickHz; tick++) {
+            session.StepFixed();
+            maximumGamma = Math.Max(maximumGamma, session.Player.State.Gamma);
+            minimumGamma = Math.Min(minimumGamma, session.Player.State.Gamma);
+            minimumCommandedG = Math.Min(minimumCommandedG,
+                session.Controls.Command.GDemand);
+            stayedActive &= session.Controls.FlightPathHoldActive;
+        }
+
+        double overshootDeg = (maximumGamma - capturedGamma) * 180.0 / Math.PI;
+        double undershootDeg = (capturedGamma - minimumGamma) * 180.0 / Math.PI;
+        _out.WriteLine($"captured gamma {capturedGamma * 180.0 / Math.PI:F1} deg; "
+            + $"10 s range -{undershootDeg:F1}/+{overshootDeg:F1} deg; "
+            + $"minimum command {minimumCommandedG:F2} G");
+
+        Assert.True(stayedActive, "neutral-stick Rapier flight-path hold dropped out");
+        Assert.True(double.IsNaN(session.Controls.Command.CommandedPitchRad),
+            "fight hold must remain on the G/AoA path, not the approach absolute-pitch path");
+        Assert.True(overshootDeg < 5.0,
+            $"release let the zoom continue {overshootDeg:F1} deg above capture");
+        Assert.True(undershootDeg < 5.0,
+            $"capture correction drove {undershootDeg:F1} deg below the release path");
+        Assert.True(minimumCommandedG < 0.95,
+            $"steep-climb capture never unloaded below 0.95 G ({minimumCommandedG:F2} G)");
     }
 }

@@ -1084,6 +1084,9 @@ public sealed class SimulationSession {
     bool KeyActive(GKey key) =>
         _keys.PhaseAt(key, _simTimeMs) != KeyPhase.Idle;
 
+    bool PilotPitchInputActive() =>
+        KeyActive(GKey.PullUp) || KeyActive(GKey.PushDown);
+
     bool HasControlInputBeyondTrim() {
         PilotCommand command = _detents.Command;
         return KeyActive(GKey.PullUp)
@@ -3762,8 +3765,7 @@ public sealed class SimulationSession {
         bool rawInputPresent = rawCommand.EnvelopeOverride
             || System.Math.Abs(rawCommand.RollControl) > 0.05
             || System.Math.Abs(rawCommand.Rudder) > 0.05
-            || rawCommand.GDemand >= 2.0
-            || rawCommand.GDemand <= 0.0;
+            || PilotPitchInputActive();
         if (_autoGcasState.Active && rawInputPresent
             && _pilotPhysiology.State.ControlAuthority01 >= 0.55)
             _pilotInputOverrideSeconds += FixedDeltaSeconds;
@@ -3807,8 +3809,7 @@ public sealed class SimulationSession {
                 || humanCommand.EnvelopeOverride
                 || System.Math.Abs(humanCommand.RollControl) > 0.05
                 || System.Math.Abs(humanCommand.Rudder) > 0.05
-                || humanCommand.GDemand >= 2.0
-                || humanCommand.GDemand <= 0.0);
+                || PilotPitchInputActive());
         var result = AutoGcasController.Step(_autoGcasPredictionElapsedSeconds, _autoGcasState,
             new AutoGcasInput(
                 Aircraft: _player.State,
@@ -3927,7 +3928,7 @@ public sealed class SimulationSession {
         bool handsOn = human.EnvelopeOverride
             || System.Math.Abs(human.RollControl) > 0.02
             || System.Math.Abs(human.Rudder) > 0.02
-            || System.Math.Abs(human.GDemand - 1.0) > 0.05;
+            || PilotPitchInputActive();
         _gcasTimeSinceStandbyInputSeconds = handsOn
             ? 0.0 : _gcasTimeSinceStandbyInputSeconds + FixedDeltaSeconds;
 
