@@ -37,12 +37,12 @@ for the dive pass, not for a turning war at altitude. Opponent doctrine: survive
 | --- | --- |
 | Empty | forward of aft duct mass; spine/crew mid-forward |
 | Alert fuelled | fuel stations keep CG in FBW envelope |
-| After drone release | aft or mid bay empty — **provisional**; packaging trade owns travel |
+| After drone release | aft/mid belly −1440 kg · CG shifts forward/up (order-of-magnitude) |
 | Near bingo | light, recovery CG |
 
-Ownship ammo (480 rounds, see [60 — Armament and drones](60-armament-and-drones.md)): small vs fuel;
-mass unclosed but second-order. Gun-drone load (0–4): **packaging unclosed** — gameplay says four;
-engineering mass/volume still provisional. Do not invent a closed drone mass to fill this gap.
+Ownship ammo (480 rounds): second-order. Gun-drone load: **preferred four cells** (trade C) at
+**1440 kg** stowed — see [60](60-armament-and-drones.md). That mass is **not yet** in
+`FlightModel.MassKg` (open finding / optimistic OFT).
 
 Inertias in params (`Ixx` 9.5e3, `Iyy` 6.2e4, `Izz` 6.8e4) are geometry-derived for the ~13 m / 7.3 m
 / ~7.85 t class — keep consistent with any future OML revision.

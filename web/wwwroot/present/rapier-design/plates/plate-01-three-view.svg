@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 640" width="720" height="640" font-family="IBM Plex Mono, ui-monospace, monospace">
   <rect width="100%" height="100%" fill="#f7f4ef"/>
-  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 01 — Three-view · rapier.public-data-surrogate.v1 @ 1.0.0</text>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 01 — Three-view · rapier.public-data-surrogate.v1 @ 1.2.0</text>
   <text x="24" y="48" font-size="10" fill="#555">Source: airframes/rapier.v1.json · frame: threejs-createRapier-v1 (+Z aft) · epistemic: surrogate</text>
   <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
 

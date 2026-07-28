@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" width="720" height="520" font-family="IBM Plex Mono, ui-monospace, monospace">
+  <rect width="100%" height="100%" fill="#f7f4ef"/>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 13 — Fuel system · rapier.public-data-surrogate.v1 @ 1.2.0</text>
+  <text x="24" y="48" font-size="10" fill="#555">Usable 4500 kg closed capacity · tank layout provisional · lever-only burn still open finding</text>
+  <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
+
+  <text x="40" y="90" font-size="12" font-weight="700">SIDE · tank groups</text>
+  <path d="M 60,180 L 100,160 L 200,150 L 360,145 L 520,155 L 620,170 L 640,185 L 640,220 L 620,235 L 520,245 L 360,250 L 200,245 L 100,230 L 60,210 Z" fill="#596b73" fill-opacity="0.1" stroke="#222"/>
+  <rect x="150" y="170" width="100" height="50" fill="#3d9b7a" fill-opacity="0.35" stroke="#3d9b7a"/>
+  <text x="200" y="200" text-anchor="middle" font-size="9">FWD ~900 kg</text>
+  <rect x="280" y="168" width="140" height="55" fill="#3d9b7a" fill-opacity="0.45" stroke="#3d9b7a"/>
+  <text x="350" y="200" text-anchor="middle" font-size="9">CENTRE ~1800 kg</text>
+  <rect x="450" y="175" width="120" height="50" fill="#3d9b7a" fill-opacity="0.35" stroke="#3d9b7a"/>
+  <text x="510" y="205" text-anchor="middle" font-size="9">AFT ~1800 kg</text>
+  <line x1="200" y1="220" x2="350" y2="230" stroke="#844" stroke-width="2"/>
+  <line x1="350" y1="230" x2="510" y2="225" stroke="#844" stroke-width="2"/>
+  <line x1="350" y1="230" x2="350" y2="280" stroke="#844" stroke-width="2"/>
+  <text x="360" y="295" font-size="9" fill="#844">→ engine feed / boost pumps</text>
+  <rect x="40" y="320" width="320" height="160" fill="#fff" stroke="#3d9b7a"/>
+  <text x="50" y="340" font-size="10" font-weight="700" fill="#3d9b7a">CLOSED</text>
+  <text x="50" y="358" font-size="9">Capacity 4500 kg (~9920 lb)</text>
+  <text x="50" y="374" font-size="9">Alert load 3100 lb (~1406 kg)</text>
+  <text x="50" y="390" font-size="9">Bingo / min / emerg 1000/600/300 lb</text>
+  <text x="50" y="406" font-size="9">CG kept in FBW envelope by burn order</text>
+  <text x="50" y="422" font-size="9">FWD→CENTRE→AFT transfer preference</text>
+  <text x="50" y="438" font-size="9">(provisional sequencing)</text>
+  <rect x="380" y="320" width="300" height="160" fill="#fff" stroke="#c45c48"/>
+  <text x="390" y="340" font-size="10" font-weight="700" fill="#c45c48">OPEN / PROVISIONAL</text>
+  <text x="390" y="358" font-size="9">Tank walls / bladder design</text>
+  <text x="390" y="374" font-size="9">Exact station volumes</text>
+  <text x="390" y="390" font-size="9">Per-stream fuel (turbine vs ram)</text>
+  <text x="390" y="406" font-size="9">— still lever-only in map</text>
+  <text x="390" y="422" font-size="9">Do not claim ram-cruise lb/nm</text>
+  <text x="390" y="438" font-size="9">until per-stream lands</text>
+  <text x="390" y="454" font-size="9">Inerting / vent: provisional</text>
+
+</svg>

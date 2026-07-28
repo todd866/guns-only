@@ -1,49 +1,52 @@
-# Rapier blueprints (Phase 1)
+# Rapier blueprints — construction package
 
-Hand plates derived from **`airframes/rapier.v1.json`** revision **`1.0.0`** (`rapier.public-data-surrogate.v1`).
+**Airframe:** `rapier.public-data-surrogate.v1` · **Definition revision:** `1.2.0`  
+**Frame:** `threejs-createRapier-v1` (+Z aft, +Y up, +X right) · Nose toward −Z  
+**Authority:** OML from `airframes/rapier.v1.json`. Internals fit that OML; tagged per plate.
 
-Geometry numbers must match the JSON. If the definition revision bumps, regenerate or re-check every plate before claiming plates are current.
+This is the in-repo **build package**: geometry, materials, systems, and assembly order to reconstruct
+the article without reading `scene_builders.js`. Not an OEM certified set.
 
-## Frame
-
-`threejs-createRapier-v1`: **+Z aft**, +Y up, +X right. Drawings that put the nose at the top or left document that mapping in the plate title block.
+**Read first:** [REALISM-AND-OVERPERFORMANCE.md](../REALISM-AND-OVERPERFORMANCE.md) · teaching deck
+`/present/rapier-design/`.
 
 ## Plate index
 
-| Plate | File | Binds to |
-| --- | --- | --- |
-| 01 Three-view | [plate-01-three-view.svg](plate-01-three-view.svg) | `dimensionsM`, wing planform, fuselage/spine envelopes |
-| 02 Wing planform | [plate-02-wing-planform.svg](plate-02-wing-planform.svg) | `wing.planform`, `wing.areaM2`, AR, thickness, bevel |
-| 03 Loft stations | [plate-03-loft-stations.md](plate-03-loft-stations.md) | `fuselage` / `escapePodSpine` / `propulsionTunnel` stations |
-| 04 Inlet · duct · nozzle | [plate-04-inlet-duct-nozzle.svg](plate-04-inlet-duct-nozzle.svg) | `intake`, `exhaust`, `propulsionTunnel`, `propulsion.ramCaptureAreaM2` |
-| 05 Escape-pod spine | [plate-05-escape-spine.svg](plate-05-escape-spine.svg) | `escapePodSpine`, `sockets.cockpitCamera` |
-| 06 Drone bay | [plate-06-drone-bay.svg](plate-06-drone-bay.svg) | `sockets.droneBay` · trade C 2×2 |
-| 07 Systems arrangement | [plate-07-systems-arrangement.svg](plate-07-systems-arrangement.svg) | spine · duct · bays · fuel · hook |
-| 08 Thermal zones | [plate-08-thermal-zones.svg](plate-08-thermal-zones.svg) | `materialZones`, `thermal`, `palette` |
-| 09 Performance envelope | [plate-09-performance-envelope.svg](plate-09-performance-envelope.svg) | OFT peak Mach · T/W · fiction M4 · open fuel |
-| 10 Basing interface | [plate-10-basing-interface.svg](plate-10-basing-interface.svg) | `dimensionsM.span` + bible §70/§80 gallery (14×8 m, ~2.7%, 12° ramp) |
+| # | Plate | File | Purpose | Epistemic |
+| --- | --- | --- | --- | --- |
+| 00 | Master BOM & build order | [plate-00-master-bom.md](plate-00-master-bom.md) | Modules, masses, mate sequence | provisional masses |
+| 01 | Three-view | [plate-01-three-view.svg](plate-01-three-view.svg) | OML envelope | closed geom |
+| 02 | Wing planform | [plate-02-wing-planform.svg](plate-02-wing-planform.svg) | Planform vertices | closed geom |
+| 03 | Loft stations | [plate-03-loft-stations.md](plate-03-loft-stations.md) | Fuselage/spine/tunnel tables | closed geom |
+| 04 | Inlet · duct · nozzle | [plate-04-inlet-duct-nozzle.svg](plate-04-inlet-duct-nozzle.svg) | Capture 1.2 m² path | closed capture |
+| 05 | Escape-pod spine | [plate-05-escape-spine.svg](plate-05-escape-spine.svg) | Crew module OML | closed geom |
+| 06 | Drone bay | [plate-06-drone-bay.svg](plate-06-drone-bay.svg) | 2×2 belly cells | provisional |
+| 07 | Systems arrangement | [plate-07-systems-arrangement.svg](plate-07-systems-arrangement.svg) | Nose→tail zones | surrogate |
+| 08 | Thermal / materials zones | [plate-08-thermal-zones.svg](plate-08-thermal-zones.svg) | CMC vs composite | surrogate |
+| 09 | Performance envelope | [plate-09-performance-envelope.svg](plate-09-performance-envelope.svg) | Honest Mach/T/W | mixed |
+| 10 | Basing interface | [plate-10-basing-interface.svg](plate-10-basing-interface.svg) | Gallery / strip ICD | closed ground |
+| 11 | Primary structure | [plate-11-primary-structure.svg](plate-11-primary-structure.svg) | Frames, longerons, carry-through | provisional |
+| 12 | Wing structure | [plate-12-wing-structure.svg](plate-12-wing-structure.svg) | Spars, ribs, hinges | provisional |
+| 13 | Fuel system | [plate-13-fuel-system.svg](plate-13-fuel-system.svg) | Tanks, 4500 kg usable | provisional |
+| 14 | Landing gear & hook | [plate-14-landing-gear-hook.svg](plate-14-landing-gear-hook.svg) | Gear + arrest | provisional |
+| 15 | Flight controls | [plate-15-flight-controls.svg](plate-15-flight-controls.svg) | Surfaces, actuators, FBW | provisional |
+| 16 | Electrical & FBW | [plate-16-electrical-fbw.svg](plate-16-electrical-fbw.svg) | Power, buses, computers | provisional |
+| 17 | Propulsion install | [plate-17-propulsion-install.svg](plate-17-propulsion-install.svg) | Mounts, CMC duct, RCS | provisional |
+| 18 | Station cross-sections | [plate-18-station-cross-sections.md](plate-18-station-cross-sections.md) | Cuts at key z | closed OML + provisional guts |
+| 19 | Assembly sequence | [plate-19-assembly-sequence.svg](plate-19-assembly-sequence.svg) | Mate order | provisional |
+| 20 | Materials & gauges | [plate-20-materials-gauges.md](plate-20-materials-gauges.md) | Thicknesses, fastener class | provisional |
 
-Current definition revision: **1.1.0**.
+## Closed vs soft
 
-## Epistemic labels
+**Closed today:** OML, loft stations, capture area, basing gallery/arrest energy, mass statement
+5150/4500/9650, CMC skin limit constant.  
+**Soft until sim catches up:** wet T/W, per-stream fuel, stowed-drone mass in `MassKg`, structural
+gauges, actuator rates — labelled, not papered over.
 
-| Claim | Tag on plates |
-| --- | --- |
-| OML length / span / planform / lofts | **closed** (surrogate geometry-of-record) |
-| `ramCaptureAreaM2 = 1.2` | **closed** capture; propulsion performance **provisional** |
-| CMC skin limit 1473.15 K | **surrogate** materials freeze |
-| Mach-4 design dash | **fiction** (OFT peak ~3.69 **measured**) |
-| Gallery 14×8 / ~2.7% / 12° | **closed** ground geometry (bible); theatre siting **fiction** |
-| Drone bays / hook | **provisional** (JSON sockets; omit or label if drawn) |
+## Regenerate on revision bump
 
-## Regenerate checklist (on revision bump)
-
-1. Diff `airframes/rapier.v1.json` against previous revision.
-2. Update plate title blocks to the new `revision`.
-3. Re-run coordinate extract for planform + loft tables (do not freehand).
-4. Cross-check three SoT numbers on plate 01 and plate 04: `length`, `span`, `ramCaptureAreaM2`.
-5. Sync embedded renderer copy if geometry changed (`web/wwwroot/airframes/rapier_v1.embedded.js`).
-
-## Phase 1 method
-
-Hand SVG / MD authored from the JSON (and, for plate 10 only, closed gallery numbers from `docs/airframes/rapier/70-…` / `80-…`). No automated plate generator in Phase 1.
+1. Diff `airframes/rapier.v1.json`.  
+2. Update title blocks to new `revision`.  
+3. Re-extract planform + loft tables (no freehand OML).  
+4. Cross-check length 13 · span 7.35 · capture 1.2 on plates 01/04.  
+5. Sync `web/wwwroot/airframes/rapier_v1.embedded.js`.

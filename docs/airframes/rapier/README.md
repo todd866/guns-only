@@ -70,6 +70,7 @@ mass; systems follow)
 | --- | --- | --- |
 | [00](00-mission-and-ops.md) | Mission and flight regime | closed regime boxes; surrogate dash claim |
 | [10](10-geometry.md) | Geometry | closed envelope |
+| [15](15-structure-and-build.md) | Structure and build | provisional gauges; OML closed |
 | [20](20-thermal-and-materials.md) | Thermal and materials | closed CMC freeze; surrogate zones |
 | [30](30-propulsion-and-inlet.md) | Propulsion and inlet | closed map constants; open finding: per-stream fuel |
 | [40](40-mass-and-cg.md) | Mass and CG | closed mass statement; provisional CG travel |
@@ -83,7 +84,7 @@ mass; systems follow)
 | [icds/fbw-crew](icds/fbw-crew.md) | FBW ↔ crew capsule ICD | provisional |
 | [icds/gun-drone-carriage](icds/gun-drone-carriage.md) | Carrier ↔ drone cell ICD | provisional |
 | [icds/basing-arrest](icds/basing-arrest.md) | Basing ↔ arrest ICD | provisional |
-| [blueprints/](blueprints/README.md) | Plates 01–05, 08–10 | from `airframes/rapier.v1.json` @ 1.0.0 |
+| [blueprints/](blueprints/README.md) | Plates **00–20** construction package | `rapier.v1.json` @ **1.2.0** |
 | [present/](present/index.html) | Teaching deck (MD `/present` grammar) | serve via `web/wwwroot/present/rapier-design/` |
 | [REALISM](REALISM-AND-OVERPERFORMANCE.md) | Telemetry / overperformance audit | **read with chapter 00** |
 

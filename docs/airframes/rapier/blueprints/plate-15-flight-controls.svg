@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" width="720" height="520" font-family="IBM Plex Mono, ui-monospace, monospace">
+  <rect width="100%" height="100%" fill="#f7f4ef"/>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 15 — Flight controls · rapier.public-data-surrogate.v1 @ 1.2.0</text>
+  <text x="24" y="48" font-size="10" fill="#555">Elevons + twin rudders · FBW · RCS at collapsed q · epistemic: provisional actuators</text>
+  <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
+
+  <text x="40" y="90" font-size="12" font-weight="700">PLAN · control surfaces</text>
+  <path d="M 360,120 L 200,200 L 360,400 L 520,200 Z" fill="#596b73" fill-opacity="0.15" stroke="#222"/>
+  <rect x="230" y="280" width="90" height="28" fill="#c45c48" fill-opacity="0.4" stroke="#844"/>
+  <rect x="400" y="280" width="90" height="28" fill="#c45c48" fill-opacity="0.4" stroke="#844"/>
+  <text x="275" y="298" text-anchor="middle" font-size="9">L elevon</text>
+  <text x="445" y="298" text-anchor="middle" font-size="9">R elevon</text>
+  <path d="M 340,150 L 340,200 L 360,210 L 380,200 L 380,150" fill="#3d9b7a" fill-opacity="0.35" stroke="#3d9b7a"/>
+  <path d="M 380,150 L 380,200 L 400,210 L 420,200 L 420,150" fill="#3d9b7a" fill-opacity="0.35" stroke="#3d9b7a"/>
+  <text x="380" y="140" text-anchor="middle" font-size="9">twin fins / rudders</text>
+  <rect x="40" y="340" width="300" height="140" fill="#fff" stroke="#3d9b7a"/>
+  <text x="50" y="360" font-size="10" font-weight="700" fill="#3d9b7a">AUTHORITY (from params)</text>
+  <text x="50" y="378" font-size="9">RollMomentMax 380 kN·m · Pitch 980 · Yaw 320</text>
+  <text x="50" y="394" font-size="9">RollHoldRateGain 1.2e6 — bank hold thesis</text>
+  <text x="50" y="410" font-size="9">No TVC — actuators aero only in air</text>
+  <text x="50" y="426" font-size="9">RCS 220 kN·m · 40 kg gas · exo/lob only</text>
+  <text x="50" y="442" font-size="9">Same stick maps to RCS when q collapses</text>
+  <rect x="360" y="340" width="320" height="140" fill="#fff" stroke="#844"/>
+  <text x="370" y="360" font-size="10" font-weight="700" fill="#844">PROVISIONAL HARDWARE</text>
+  <text x="370" y="378" font-size="9">Hydraulic vs EMA — prefer EMA (mass/heat)</text>
+  <text x="370" y="394" font-size="9">Elevon rate ≥ 40°/s design target</text>
+  <text x="370" y="410" font-size="9">Dual-redundant per surface</text>
+  <text x="370" y="426" font-size="9">FBW laws in spine computers (plate 16)</text>
+  <text x="370" y="442" font-size="9">Trim: elevon bias, no separate stab</text>
+
+</svg>

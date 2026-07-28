@@ -1,8 +1,8 @@
-// AUTO-SYNC from airframes/rapier.v1.json — do not hand-edit.
+// AUTO-SYNC from airframes/rapier.v1.json
 export default {
   "schema": "guns-only.airframe-definition.v1",
   "id": "rapier.public-data-surrogate.v1",
-  "revision": "1.1.0",
+  "revision": "1.2.0",
   "displayName": "Rapier",
   "role": "dispersed TBCC interceptor",
   "presentationId": "presentation.vehicle.rapier.public-data-surrogate.v1",
@@ -392,5 +392,24 @@ export default {
       "notes": "4 x RapierGunDroneSurrogate 360 kg; NOT yet in FlightModel.MassKg"
     }
   },
-  "notes": "Geometry 1:1 from createRapier. Performance claims tagged honestly. Four droneBay sockets provisional preferred packaging (trade C). Revision 1.1.0 adds cell clear boxes + stowed mass claim."
+  "notes": "Geometry 1:1 from createRapier. Rev 1.2.0 adds provisional structure metadata + full blueprint package plates 00\u201320. Performance honesty unchanged.",
+  "structure": {
+    "epistemic": "provisional",
+    "longerons": "four continuous U/L \u00d7 L/R",
+    "carryThroughZ": [
+      -1.0,
+      1.5
+    ],
+    "frameStationsZ": [
+      -5.65,
+      -3.6,
+      -0.6,
+      2.9,
+      5.55,
+      6.5
+    ],
+    "hookHardpointZ": 4.2,
+    "notes": "See docs/airframes/rapier/blueprints/plate-11 and plate-00 BOM"
+  },
+  "buildPackage": "docs/airframes/rapier/blueprints/"
 };

@@ -62,12 +62,12 @@ test("createRapier thin loader matches definition-built silhouette", () => {
   assert.equal(viaLoader.name, viaDef.name);
   assert.deepEqual(viaLoader.userData.dimensionsM, viaDef.userData.dimensionsM);
   assert.equal(viaLoader.userData.airframeId, "rapier.public-data-surrogate.v1");
-  assert.equal(viaLoader.userData.definitionRevision, "1.1.0");
+  assert.equal(viaLoader.userData.definitionRevision, "1.2.0");
 });
 
-test("rapier revision 1.1.0 publishes provisional drone cell clears and stowed mass", () => {
+test("rapier revision 1.2.0 publishes provisional drone cell clears and stowed mass", () => {
   const def = JSON.parse(readFileSync(join(root, "rapier.v1.json"), "utf8"));
-  assert.equal(def.revision, "1.1.0");
+  assert.equal(def.revision, "1.2.0");
   assert.equal(def.sockets.droneBay.length, 4);
   assert.equal(def.sockets.droneBay[0].cellClearM.length, 1.1);
   assert.equal(def.performanceClaims.stowedDroneMassKg.value, 1440);

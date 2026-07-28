@@ -20,7 +20,7 @@ test("Rapier definition envelope binds to FlightModel.RapierPublicDataSurrogate"
   const def = JSON.parse(readFileSync(join(wwwroot, "airframes/rapier.v1.json"), "utf8"));
   const repoDef = JSON.parse(readFileSync(join(repoAirframes, "rapier.v1.json"), "utf8"));
   assert.deepEqual(def.massKg, repoDef.massKg, "wwwroot and repo definitions must match");
-  assert.equal(def.revision, "1.1.0");
+  assert.equal(def.revision, "1.2.0");
 
   const block = extractRapierBlock();
   assert.match(block, /MassKg:\s*9650\.0/);

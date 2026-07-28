@@ -382,6 +382,62 @@
       "page": "17"
     },
     {
+      "id": "build-bom",
+      "layout": "table",
+      "eyebrow": "BUILD \u00b7 00",
+      "heading": "Modules that sum to 5150 kg empty.",
+      "subhead": "BOM allocations are provisional; the sum is closed. Stowed drones are a separate +1440 kg state.",
+      "rows": [
+        {
+          "label": "A\u2013C\u2013F",
+          "detail": "Forward / centre / aft backbone + carry-through",
+          "accent": "teal"
+        },
+        {
+          "label": "E",
+          "detail": "Propulsion tunnel + CMC duct + core (~1100 kg)",
+          "accent": "gold"
+        },
+        {
+          "label": "B + D",
+          "detail": "Escape spine + wings",
+          "accent": "teal"
+        },
+        {
+          "label": "Systems",
+          "detail": "Fuel dry, avionics, gear, hook, empty bays",
+          "accent": "gold"
+        }
+      ],
+      "bottomLine": "Plate 00 owns the mass budget. Do not grow OML to fix a packaging mistake.",
+      "footer": "plate-00-master-bom.md",
+      "page": "18"
+    },
+    {
+      "id": "build-structure",
+      "layout": "figure",
+      "eyebrow": "BUILD \u00b7 11\u201312",
+      "heading": "Longerons, frames, spars.",
+      "subhead": "Primary structure is provisional but must hit closed loft stations and 12 G dive loads.",
+      "figure": "plates/plate-11-primary-structure.svg",
+      "figureCaption": "Plate 11 \u2014 primary structure",
+      "bottomLine": "Load paths never go through the CMC duct liner.",
+      "footer": "plate-11 \u00b7 plate-12",
+      "page": "19"
+    },
+    {
+      "id": "build-assembly",
+      "layout": "figure",
+      "eyebrow": "BUILD \u00b7 19",
+      "heading": "Mate order is the build.",
+      "subhead": "Keel \u2192 duct \u2192 spine \u2192 wings \u2192 systems \u2192 fins. Stop gates refuse Mach-4 / T/W fantasy acceptance.",
+      "figure": "plates/plate-19-assembly-sequence.svg",
+      "figureCaption": "Plate 19 \u2014 assembly sequence",
+      "bottomLine": "Full blueprints exist. Realism still needs sim mass, T/W, and per-stream fuel \u2014 labelled, not claimed.",
+      "footer": "plate-19 \u00b7 REALISM-AND-OVERPERFORMANCE.md",
+      "page": "20"
+    },
+    {
       "id": "close",
       "layout": "close",
       "eyebrow": "BOTTOM LINE",
@@ -389,7 +445,7 @@
       "subtitle": "High loading \u00b7 CMC hot \u00b7 continuous TBCC \u00b7 trap light \u00b7 measure the dash you actually get.",
       "thanks": "Bible \u00b7 blueprints \u00b7 definition \u00b7 lagged skin \u00b7 this deck.\nOpen: per-stream fuel \u00b7 T/W retune \u00b7 drone packaging \u00b7 honest dash Mach.",
       "footer": "docs/airframes/rapier/",
-      "page": "18"
+      "page": "21"
     }
   ]
 }
