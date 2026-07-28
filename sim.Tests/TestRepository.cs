@@ -10,7 +10,7 @@ internal static class TestRepository {
         // assembly location alone cannot anchor the walk; the gate always runs from the repo, so
         // the working directory covers it, and BaseDirectory covers in-tree dotnet test / IDEs.
         foreach (string start in new[] {
-            AppContext.BaseDirectory, Environment.CurrentDirectory
+            AppContext.BaseDirectory, Directory.GetCurrentDirectory()
         }) {
             DirectoryInfo? directory = new(start);
             while (directory is not null) {
@@ -22,6 +22,6 @@ internal static class TestRepository {
 
         throw new DirectoryNotFoundException(
             "Could not find GunsOnly.sln above "
-            + $"{AppContext.BaseDirectory} or {Environment.CurrentDirectory}");
+            + $"{AppContext.BaseDirectory} or {Directory.GetCurrentDirectory()}");
     }
 }
