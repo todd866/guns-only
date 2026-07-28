@@ -33,14 +33,26 @@ substitute for a hardware frame-rate run.
 
 ## Gates and configuration
 
-Each leg reports frame count, p50, p95, p99, MAX, and the count/percentage over 33 ms. The gate
-uses only MAX and long-frame percentage. It deliberately never gates on p50: a perfect 16.7 ms
-median coexists with this regression.
+Each leg reports frame count, p50, p95, p99, MAX, and the count/percentage over **22 ms**
+(aligned with the closed-loop frame governor / `FRAME_PERF_LONG_FRAME_MS`). The gate uses only
+MAX and long-frame percentage. It deliberately never gates on p50: a perfect 16.7 ms median
+coexists with this regression.
+
+Every run also writes an agent-readable report under `analysis/perf/`:
+
+```text
+analysis/perf/<iso>-beat7-flight.json
+analysis/perf/<iso>-beat7-flight.md
+```
+
+Those files carry per-leg percentiles, `% >22 ms`, RAF phase averages (`sim` / `view` / …), and
+load-context counters from `document.documentElement.dataset.framePerf` (governor level, stream
+radius, scenery shed, engagement). Use them for post-flight triage — there is no on-screen FPS HUD.
 
 Defaults:
 
 - MAX: `100 ms`
-- frames over 33 ms: `1.0%`
+- frames over 22 ms: `1.0%`
 - measured duration: `60,000 ms` per leg (the low leg cannot be shortened below 60 seconds)
 - minimum captured frames: `600` per leg
 

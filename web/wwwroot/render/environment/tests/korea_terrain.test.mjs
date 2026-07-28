@@ -1059,7 +1059,42 @@ test("legacy compact Ukraine v1 terrain retains a non-authoritative land horizon
   assert.equal(terrain.streamingRadiusM, Number.POSITIVE_INFINITY);
   assert.equal(terrain.setStreamingRadiusM(12_000), true);
   assert.equal(terrain.streamingRadiusM, 12_000);
+  // Compact v1 apron starts at ±8.2 km; a 12 km stream already reaches it, so fog may open.
+  assert.equal(terrain.visibleWorldRadiusM, 560_000);
   assert.equal(terrain.setStreamingRadiusM(12_000), false);
+  assert.equal(terrain.setStreamingRadiusM(Number.NaN), false);
+  terrain.dispose();
+});
+
+test("theatre fog closes on the streamed disc until chunks reach the apron", async () => {
+  const source = manifest();
+  source.terrainId = "terrain.ukraine.soniachne-theatre.v2";
+  source.boundsLocalM = [-131_072, -131_072, 131_072, 131_072];
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/soniachne-v2-fog.manifest.json",
+    sceneryEra: "ukraine-modern",
+    qualityTier: "balanced",
+    fetch: async (_url, options = {}) => {
+      if (!options.headers?.Range) {
+        return { ok: true, status: 200, json: async () => source };
+      }
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => new ArrayBuffer(18),
+      };
+    },
+  });
+  await terrain.ready;
+  assert.equal(terrain.setStreamingRadiusM(48_000), true);
+  assert.equal(terrain.visibleWorldRadiusM, 48_000,
+    "Shared/dogfight 48 km stream must not leave a sky hole to the ±131 km apron in clear air");
+  assert.equal(terrain.setStreamingRadiusM(12_000), true);
+  assert.equal(terrain.visibleWorldRadiusM, 12_000,
+    "governor-shed discs must close fog on the streamed edge");
+  assert.equal(terrain.setStreamingRadiusM(145_000), true);
+  assert.equal(terrain.visibleWorldRadiusM, 560_000,
+    "Rapier-scale stream that reaches the apron may open fog to the far horizon");
   assert.equal(terrain.setStreamingRadiusM(Number.NaN), false);
   terrain.dispose();
 });
@@ -1173,6 +1208,10 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(ukraine.fragmentShader,
     /mix\(uFogColor, vec3\(0\.78, 0\.72, 0\.58\), 0\.62\)/,
     "Ukraine distance haze must lean warm rather than cool poster blue");
+  assert.ok(ukraine.uniforms.uWorldEdgeM, "stream-edge bury uniform must exist");
+  assert.match(ukraine.fragmentShader,
+    /smoothstep\(uWorldEdgeM \* 0\.40, uWorldEdgeM \* 0\.72, distanceToCamera\)/,
+    "Ukraine soft-world must haze out the streamed disc so it never reads as a render-square");
   assert.ok(
     modern.fragmentShader.indexOf("lit *= mix(uOcclusionRange.x")
       < modern.fragmentShader.indexOf("lit = mix(lit, waterLit, waterMask)"),

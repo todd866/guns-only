@@ -4,6 +4,9 @@ import { mergeGeometries } from "../../vendor/three/addons/utils/BufferGeometryU
 // geometry, so forest density costs vertices/fill on the under-drawn GPU instead of multiplying
 // the synchronous LOD0 planning and matrix-composition work that already hitches the main thread.
 export const KOREA_TREE_STAND_SIZE = 7;
+// Mid-ring (terrain LOD1) Ukraine stands: fewer silhouettes per instance so the far ring stays
+// readable without paying the full soft-canopy sphere budget twice.
+export const UKRAINE_MID_RING_STAND_SIZE = 3;
 
 const TREE_STAND_LAYOUT = Object.freeze([
   Object.freeze({ x: 0, z: 0, height: 1, radius: 1 }),
@@ -14,6 +17,10 @@ const TREE_STAND_LAYOUT = Object.freeze([
   Object.freeze({ x: 2.28, z: 1.05, height: 0.58, radius: 0.66 }),
   Object.freeze({ x: -2.18, z: -0.92, height: 0.55, radius: 0.64 }),
 ]);
+
+const UKRAINE_MID_RING_STAND_LAYOUT = Object.freeze(
+  TREE_STAND_LAYOUT.slice(0, UKRAINE_MID_RING_STAND_SIZE),
+);
 
 const BUILDING_COMPOUND_LAYOUT = Object.freeze([
   Object.freeze({ x: 0, z: 0, width: 1, depth: 1, height: 1 }),
@@ -502,6 +509,10 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
   const profile = KOREA_SCENERY_PROFILES[options.era ?? "1950s"];
   if (!profile) throw new TypeError(`Unknown Korea scenery era: ${options.era}.`);
   const quality = QUALITY[options.qualityTier] ?? QUALITY.balanced;
+  const ring = options.ring === "mid" ? "mid" : "near";
+  // Mid ring keeps the same seed and placement grammar but spends ~half the instance budget so
+  // far tiles stay cheaper than the near soft-canopy stands without a second planner.
+  const ringDensity = ring === "mid" ? 0.5 : 1;
   const [minimumEast, minimumNorth, maximumEast, maximumNorth] = chunk.boundsLocalM;
   const spanEastM = maximumEast - minimumEast;
   const spanNorthM = maximumNorth - minimumNorth;
@@ -521,11 +532,14 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
   const powerPoles = [];
   const powerLines = [];
   const treeTarget = candidateCount(profile.treeDensityPerKm2, areaKm2, landFraction,
-    Math.round(quality.treeLimit * profile.treeLimitScale), quality.density);
+    Math.round(quality.treeLimit * profile.treeLimitScale * ringDensity),
+    quality.density * ringDensity);
   const buildingTarget = candidateCount(profile.buildingDensityPerKm2, areaKm2, landFraction,
-    Math.round(quality.buildingLimit * profile.buildingLimitScale), quality.density);
+    Math.round(quality.buildingLimit * profile.buildingLimitScale * ringDensity),
+    quality.density * ringDensity);
   const fieldTarget = candidateCount(profile.fieldDensityPerKm2, areaKm2, landFraction,
-    Math.round(quality.fieldLimit * profile.fieldLimitScale), quality.density);
+    Math.round(quality.fieldLimit * profile.fieldLimitScale * ringDensity),
+    quality.density * ringDensity);
 
   const addTree = (surface, variation) => {
     trees.push({
@@ -796,6 +810,7 @@ export function planKoreaScenery(chunk, decoded, options = {}) {
   return Object.freeze({
     era: profile.id,
     period: profile.period,
+    ring,
     seed: seed >>> 0,
     trees: Object.freeze(trees),
     buildings: Object.freeze(buildings),
@@ -883,12 +898,12 @@ function mergeLayout(baseGeometry, layout, transform) {
   return merged;
 }
 
-function createTreeStandGeometry(crownPrimitive, trunkPrimitive) {
-  const crowns = mergeLayout(crownPrimitive, TREE_STAND_LAYOUT, (geometry, tree) => {
+function createTreeStandGeometry(crownPrimitive, trunkPrimitive, layout = TREE_STAND_LAYOUT) {
+  const crowns = mergeLayout(crownPrimitive, layout, (geometry, tree) => {
     geometry.scale(tree.radius, tree.height, tree.radius);
     geometry.translate(tree.x, 0, tree.z);
   });
-  const trunks = mergeLayout(trunkPrimitive, TREE_STAND_LAYOUT, (geometry, tree) => {
+  const trunks = mergeLayout(trunkPrimitive, layout, (geometry, tree) => {
     const trunkRadius = 0.172 * tree.radius;
     geometry.scale(trunkRadius, tree.height * 0.48, trunkRadius);
     geometry.translate(tree.x, 0, tree.z);
@@ -919,12 +934,19 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   // Mobile and balanced terrain deliberately floor at LOD1 to cap heightfield cost. Restricting
   // scenery to literal LOD0 therefore made every building, tree and road disappear on those tiers.
   // Permit their nearest selectable LOD while still avoiding duplicate dressing on farther rings.
-  const maximumSceneryLevel = qualityTier === "desktop" ? 0 : 1;
+  // Ukraine soft-world also dresses LOD1 with a cheaper mid-ring stand so the far disc stays
+  // populated without the full near-ring soft-canopy sphere budget.
+  const maximumSceneryLevel = (qualityTier === "desktop" && profile.theatre !== "ukraine")
+    ? 0
+    : 1;
   const softCanopy = profile.crownShape === "soft-canopy";
   // Ukraine soft-world: rounded canopy ellipsoids. Korea eras keep the cheap faceted cone stands.
+  // Mid-ring soft canopies use a lower-tessellation sphere so vertex count is strictly cheaper.
   const crownPrimitive = softCanopy
     ? (() => {
-      const geometry = new THREE.SphereGeometry(1, 11, 8);
+      // 9×6 is still a soft ellipsoid silhouette (>400 verts across a 7-tree stand) while cutting
+      // the old 11×8 sphere budget that dominated Ukraine dogfight fill under 64 km streaming.
+      const geometry = new THREE.SphereGeometry(1, 9, 6);
       geometry.scale(1.05, 0.78, 1.05);
       geometry.translate(0, 0.78, 0);
       return geometry;
@@ -934,6 +956,14 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
       geometry.translate(0, 0.5, 0);
       return geometry;
     })();
+  const midCrownPrimitive = softCanopy
+    ? (() => {
+      const geometry = new THREE.SphereGeometry(1, 6, 4);
+      geometry.scale(1.05, 0.78, 1.05);
+      geometry.translate(0, 0.78, 0);
+      return geometry;
+    })()
+    : crownPrimitive.clone();
   const trunkPrimitive = new THREE.CylinderGeometry(
     softCanopy ? 0.09 : 0.12,
     softCanopy ? 0.14 : 0.18,
@@ -942,11 +972,25 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     1,
   );
   trunkPrimitive.translate(0, 0.5, 0);
+  const midTrunkPrimitive = softCanopy
+    ? (() => {
+      const geometry = new THREE.CylinderGeometry(0.09, 0.14, 1, 5, 1);
+      geometry.translate(0, 0.5, 0);
+      return geometry;
+    })()
+    : trunkPrimitive.clone();
   const treeStandGeometry = createTreeStandGeometry(crownPrimitive, trunkPrimitive);
+  const midTreeStandGeometry = createTreeStandGeometry(
+    midCrownPrimitive, midTrunkPrimitive, UKRAINE_MID_RING_STAND_LAYOUT,
+  );
   const crownGeometry = treeStandGeometry.crowns;
   const trunkGeometry = treeStandGeometry.trunks;
+  const midCrownGeometry = midTreeStandGeometry.crowns;
+  const midTrunkGeometry = midTreeStandGeometry.trunks;
   crownPrimitive.dispose();
   trunkPrimitive.dispose();
+  if (midCrownPrimitive !== crownPrimitive) midCrownPrimitive.dispose();
+  if (midTrunkPrimitive !== trunkPrimitive) midTrunkPrimitive.dispose();
   const buildingPrimitive = new THREE.BoxGeometry(1, 1, 1);
   buildingPrimitive.translate(0, 0.5, 0);
   const buildingGeometry = createBuildingCompoundGeometry(buildingPrimitive);
@@ -1033,7 +1077,8 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const roofPalette = profile.roofColors.map((color) => new THREE.Color(color));
   const fieldPalette = profile.fieldColors.map((color) => new THREE.Color(color));
   const geometries = [
-    crownGeometry, trunkGeometry, buildingGeometry, roofGeometry,
+    crownGeometry, trunkGeometry, midCrownGeometry, midTrunkGeometry,
+    buildingGeometry, roofGeometry,
     surfaceGeometry, segmentGeometry, poleGeometry,
   ];
   const materials = [
@@ -1048,7 +1093,11 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     disposeTile: disposeKoreaSceneryTile,
     createTile(chunk, decoded, level = 0) {
       if (disposed || level < 0 || level > maximumSceneryLevel) return null;
-      const plan = planKoreaScenery(chunk, decoded, { era, qualityTier });
+      const ring = level >= 1 ? "mid" : "near";
+      const standSize = ring === "mid" ? UKRAINE_MID_RING_STAND_SIZE : KOREA_TREE_STAND_SIZE;
+      const activeCrownGeometry = ring === "mid" ? midCrownGeometry : crownGeometry;
+      const activeTrunkGeometry = ring === "mid" ? midTrunkGeometry : trunkGeometry;
+      const plan = planKoreaScenery(chunk, decoded, { era, qualityTier, ring });
       if (!plan.trees.length && !plan.buildings.length && !plan.fields.length
         && !plan.roads.length && !plan.railSegments.length && !plan.runways.length
         && !plan.powerPoles.length) return null;
@@ -1070,8 +1119,12 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
         segmentAxis: new THREE.Vector3(0, 0, 1),
       };
       if (plan.trees.length) {
-        const crowns = new THREE.InstancedMesh(crownGeometry, crownMaterial, plan.trees.length);
-        const trunks = new THREE.InstancedMesh(trunkGeometry, trunkMaterial, plan.trees.length);
+        const crowns = new THREE.InstancedMesh(
+          activeCrownGeometry, crownMaterial, plan.trees.length,
+        );
+        const trunks = new THREE.InstancedMesh(
+          activeTrunkGeometry, trunkMaterial, plan.trees.length,
+        );
         const crownColors = new Float32Array(plan.trees.length * 3);
         crowns.name = "PROCEDURAL_TREE_CROWNS";
         trunks.name = "PROCEDURAL_TREE_TRUNKS";
@@ -1206,9 +1259,10 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
         theatre: profile.theatre ?? "korea",
         trainingSector: profile.trainingSector === true,
         period: profile.period,
+        ring,
         seed: plan.seed,
         trees: plan.trees.length,
-        treeSilhouettes: plan.trees.length * KOREA_TREE_STAND_SIZE,
+        treeSilhouettes: plan.trees.length * standSize,
         buildings: plan.buildings.length,
         buildingSilhouettes: plan.buildings.length * BUILDING_COMPOUND_LAYOUT.length,
         fields: plan.fields.length,

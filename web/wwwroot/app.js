@@ -884,20 +884,23 @@ const SIM_CATCHUP_CAP_SECONDS = 10 / 120;
 const timeCompressionBudget = new MeasuredTimeCompressionBudget();
 
 const FRAME_GOVERNOR_LATE_FRAME_MS = 22;
-const FRAME_GOVERNOR_TRIP_FRACTION = 0.08;   // 8% of a window's frames arriving late
+const FRAME_GOVERNOR_TRIP_FRACTION = 0.05;   // 5% of a window's frames arriving late
 
 // Streaming radii to fall back through, in metres. Terrain chunk builds are the dominant cost —
 // one LOD0 chunk is ~9.5 ms of synchronous main-thread work, 57% of a 60 fps budget — so the only
-// lever that reliably buys frames is having fewer chunks in flight.
-const FRAME_GOVERNOR_RADII_M = [26_000, 18_000, 12_000];
+// lever that reliably buys frames is having fewer chunks in flight. Ukraine Shared dogfight starts
+// at 48 km; the ladder must step below that immediately rather than lingering on an unreachable
+// first rung.
+const FRAME_GOVERNOR_RADII_M = [32_000, 20_000, 12_000];
 // Terrain starts lazy at a local radius so Ready waits only for the aircraft's neighborhood.
 // Once that cell is resident, the mission contract expands streaming to its normal flight radius
 // in the background (32 km for the hero cell, 112 km for Rapier's regional corridor).
 const TERRAIN_INITIAL_WARMUP_RADIUS_M = 12_000;
 /// How far inside the streamed world edge the haze must close. Fog reaches 2% transmission at the
 /// visibility figure, so matching visibility exactly to the radius still leaves the boundary
-/// faintly drawn; 0.85 puts the last of the terrain behind effectively opaque air.
-const WORLD_EDGE_VISIBILITY_FRACTION = 0.85;
+/// faintly drawn; 0.72 puts the last of the terrain behind effectively opaque air (Ukraine also
+/// thins mid-field haze in-shader, so scene fog needs a tighter close than Korea).
+const WORLD_EDGE_VISIBILITY_FRACTION = 0.60;
 
 const frameGovernor = {
   level: 0,
@@ -1031,6 +1034,8 @@ function restoreDirectorState() {
 // Renderer/scene counters for the 0.2 Hz perf row. Frame deltas say a stall HAPPENED; these say
 // what was accumulating when it did. `geometries`/`textures` are the leak detector — they are
 // live GPU resource counts, so a monotone rise across a sortie is a leak rather than load.
+// Load-context fields (governor, stream radius, scenery, fight pressure) localise *why* the
+// picture was expensive without an on-screen HUD — agent post-flight tapes only.
 // Sampled once per closed 5 s window, never per frame; `activeView` is null before the first
 // sortie stages, which is why every read is optional.
 function sampleSceneCounters() {
@@ -1038,6 +1043,12 @@ function sampleSceneCounters() {
   if (!info) return null;
   let sceneObjects = 0;
   activeView.scene?.traverse?.(() => { sceneObjects += 1; });
+  const streamRadius = Number(
+    activeView.terrainPresentation?.streamingRadiusM
+      ?? activeView.terrainNominalStreamingRadiusM,
+  );
+  const radarAltFt = Number(latestState?.radar_alt_ft ?? latestState?.alt_ft);
+  const engagement = Number(latestState?.engagement_number);
   return {
     draw_calls: info.render?.calls ?? 0,
     triangles: info.render?.triangles ?? 0,
@@ -1045,6 +1056,13 @@ function sampleSceneCounters() {
     textures: info.memory?.textures ?? 0,
     programs: info.programs?.length ?? 0,
     scene_objects: sceneObjects,
+    governor_level: frameGovernor.level,
+    stream_radius_m: Number.isFinite(streamRadius) ? streamRadius : 0,
+    scenery_suppressed: activeView.terrainGovernorSuppressesAmbientScenery === true ? 1 : 0,
+    micro_required: activeView.terrainMicroRequired === true ? 1 : 0,
+    radar_alt_ft: Number.isFinite(radarAltFt) ? radarAltFt : 0,
+    engagement: Number.isFinite(engagement) ? engagement : 0,
+    bandit_alive: latestState?.bandit_alive === true ? 1 : 0,
   };
 }
 
@@ -4852,7 +4870,9 @@ class FlightView {
     }
     if (ukraineTheatre) {
       this.fogLow.set(0xd2c4a8);
-      this.fogHigh.set(0x5a7088);
+      // Stay in the warm dusty family at altitude — cool fogHigh read as blue ocean past the
+      // streamed disc (ADR-0003 soft world, not Korea poster blue).
+      this.fogHigh.set(0x8a8470);
       this.cloudFogColor.set(0xd2c4a8);
       if (this.sea?.mesh) this.sea.mesh.visible = false;
     } else {
@@ -5905,10 +5925,10 @@ class FlightView {
       // pilot filed that as "still getting some z buffer issues I think" — it is not a depth
       // artefact, it is the edge of the map with no haze over it, and the frame governor created
       // it in Build 114 by shedding view distance without closing the visibility behind it.
-      // The VISUAL edge, not the streaming edge. With a horizon apron the world continues far
-      // past the last streamed chunk, so capping fog at the chunk radius needlessly closed the
-      // view — and forcing the radius up to reopen it streamed a huge disc of chunks for terrain
-      // that is not authored out there. Falls back to the streaming radius when there is no apron.
+      // The VISUAL edge follows visibleWorldRadiusM: fog stays open past the streamed disc
+      // only when chunks already reach the Ukraine theatre apron. Otherwise fog closes on the
+      // streamed radius so a 48 km Shared/dogfight disc (or a governor shed) is not drawn as a
+      // square in clear air with empty sky out to the ±131 km apron.
       const worldRadiusM = Number(this.terrainPresentation?.visibleWorldRadiusM
         ?? this.terrainPresentation?.streamingRadiusM);
       const reportedVisibilityM = clamp(

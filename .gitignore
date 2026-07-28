@@ -33,6 +33,8 @@ recordings/
 analysis/circuit-oft/*/
 analysis/intercept-oft/*/
 analysis/glide-drone-oft/*/
+analysis/perf/*
+!analysis/perf/README.md
 
 # Local scenery debug frames/probes. Keep README if present.
 analysis/desktop-captures/scenery-flicker/*

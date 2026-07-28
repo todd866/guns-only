@@ -4,10 +4,12 @@
 // boundaries exactly, and the browser recorder stays a thin enqueue shim.
 
 export const FRAME_PERF_INTERVAL_MS = 5_000;
-export const FRAME_PERF_LONG_FRAME_MS = 50;
+// Align with FRAME_GOVERNOR_LATE_FRAME_MS: one missed display interval. The old 50 ms threshold
+// left felt-30-fps tapes reporting ~0 long frames while p95 sat at 33 ms.
+export const FRAME_PERF_LONG_FRAME_MS = 22;
 // Percentiles read a bounded sample window: 4096 samples covers a full 5 s interval beyond
 // 800 Hz, so the bound — not the display refresh rate — owns worst-case memory. frames,
-// long_frames, and frame_ms_max stay exact even past the bound.
+// long_frames / frames_over_22ms, and frame_ms_max stay exact even past the bound.
 export const FRAME_PERF_MAX_WINDOW_SAMPLES = 4_096;
 
 function nearestRank(sortedDeltas, quantile) {
@@ -119,6 +121,9 @@ export function createFramePerfAggregator({
         frame_ms_max: rounded(maxDelta),
         long_frames: longFrames,
         frames,
+        // Alias of long_frames under the 22 ms contract so agent tapes and harness gates share one
+        // name with the closed-loop governor without breaking older consumers of long_frames.
+        frames_over_22ms: longFrames,
       };
       if (sampleScene) {
         // Guarded exactly like the rest of the recorder: diagnostics must never be able to

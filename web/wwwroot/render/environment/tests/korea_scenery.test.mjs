@@ -4,6 +4,7 @@ import * as THREE from "../../../vendor/three.module.js";
 import {
   createKoreaSceneryRuntime,
   KOREA_TREE_STAND_SIZE,
+  UKRAINE_MID_RING_STAND_SIZE,
   KOREA_SCENERY_PROFILES,
   planKoreaScenery,
 } from "../korea_scenery.js";
@@ -213,6 +214,57 @@ test("Ukraine soft-canopy stands use rounded crown geometry and Lambert lighting
   assert.equal(crowns.material.type, "MeshLambertMaterial",
     "Ukraine soft-world crowns must not use hard toon posterization");
   runtime.disposeTile(group);
+  runtime.dispose();
+});
+
+test("Ukraine mid-ring scenery uses thinner stands and lower density than the near ring", () => {
+  const chunk = {
+    id: "e0002-n0003",
+    eastIndex: 2,
+    northIndex: 3,
+    boundsLocalM: [0, 0, 8_192, 8_192],
+    generation: { seed: 42, landFraction: 1 },
+  };
+  const decoded = flatDecodedFixture();
+  const near = planKoreaScenery(chunk, decoded, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+    ring: "near",
+  });
+  const mid = planKoreaScenery(chunk, decoded, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+    ring: "mid",
+  });
+  assert.ok(near.trees.length > 0);
+  assert.ok(mid.trees.length < near.trees.length,
+    "mid ring must keep fewer tree instances than the near ring under the same tier cap");
+  assert.ok(mid.trees.length <= Math.ceil(near.trees.length * 0.55) + 1);
+
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+  });
+  const nearTile = runtime.createTile(chunk, decoded, 0);
+  const midTile = runtime.createTile(chunk, decoded, 1);
+  assert.ok(nearTile && midTile);
+  assert.equal(nearTile.userData.scenery.ring, "near");
+  assert.equal(midTile.userData.scenery.ring, "mid");
+  assert.equal(
+    nearTile.userData.scenery.treeSilhouettes,
+    nearTile.userData.scenery.trees * KOREA_TREE_STAND_SIZE,
+  );
+  assert.equal(
+    midTile.userData.scenery.treeSilhouettes,
+    midTile.userData.scenery.trees * UKRAINE_MID_RING_STAND_SIZE,
+  );
+  const nearCrowns = nearTile.getObjectByName("PROCEDURAL_TREE_CROWNS");
+  const midCrowns = midTile.getObjectByName("PROCEDURAL_TREE_CROWNS");
+  assert.ok(midCrowns.geometry.attributes.position.count
+    < nearCrowns.geometry.attributes.position.count,
+    "mid-ring stand geometry must be cheaper than the near-ring full stand");
+  runtime.disposeTile(nearTile);
+  runtime.disposeTile(midTile);
   runtime.dispose();
 });
 

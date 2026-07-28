@@ -284,6 +284,7 @@ const TERRAIN_FRAGMENT = /* glsl */ `
 uniform vec3 uSunDirection;
 uniform vec3 uFogColor;
 uniform float uFogDensity;
+uniform float uWorldEdgeM;
 uniform float uModernScenery;
 uniform float uParcelTint;
 uniform float uShadowFloor;
@@ -500,6 +501,17 @@ void main() {
   float distanceToCamera = length(cameraPosition - vTerrainWorldPosition);
   float aerial = 1.0 - exp(-fogDensity * fogDensity
     * distanceToCamera * distanceToCamera);
+  #ifdef UKRAINE_SCENERY
+  // Painterly mid-field haze is intentionally thin (0.42×). That same thinning leaves the
+  // streamed disc readable as a render-square against sky / cool void. Force warm haze opaque
+  // approaching the visual world edge so distance stays Ghibli atmosphere, not a tile boundary.
+  if (uWorldEdgeM > 1.0) {
+    // Start the bury early: at altitude the disc silhouette still reads square if haze only
+    // thickens in the last 15% of the stream radius.
+    float edgeHide = smoothstep(uWorldEdgeM * 0.40, uWorldEdgeM * 0.72, distanceToCamera);
+    aerial = max(aerial, edgeHide);
+  }
+  #endif
   if (uHazeBands > 0.5) {
     float banded = floor(aerial * uHazeBands) / uHazeBands;
     aerial = mix(aerial, banded, uHazeBandBlend);
@@ -794,6 +806,9 @@ export function createTerrainMaterial(THREE, options = {}) {
         value: new THREE.Color(options.fogColor ?? (ukraine ? 0xd2c4a8 : 0x6f8790)),
       },
       uFogDensity: { value: finite(options.fogDensity, ukraine ? 0.000052 : 0.000055) },
+      // 0 = no edge bury. Set each frame from visibleWorldRadiusM so Shared/dogfight stream
+      // discs haze out instead of reading as squares.
+      uWorldEdgeM: { value: finite(options.worldEdgeM, 0) },
       uModernScenery: { value: illustrative ? 1 : 0 },
       // Full-detail parcel/cultivation tint only affects the period desktop treatment. Modern
       // shading discards periodLit, so skip its four otherwise invisible sin() calls there too.
@@ -1106,8 +1121,9 @@ class KoreaTerrainPresentation {
     //
     // Size the apron from the manifest bounds. Theatre.v2 is ±131 km; the old training constant
     // (±8.2 km) left the flat apron overlapping every streamed chunk and z-fighting at altitude.
+    this.horizonApronCoreHalfSpanM = ukraineCoreHalfSpanFromManifest(manifest);
     this.horizonApron = /^terrain\.ukraine\./.test(String(manifest.terrainId ?? ""))
-      ? createUkraineTrainingHorizonApron(THREE, ukraineCoreHalfSpanFromManifest(manifest))
+      ? createUkraineTrainingHorizonApron(THREE, this.horizonApronCoreHalfSpanM)
       : null;
     if (this.horizonApron) {
       this.group.add(this.horizonApron);
@@ -1244,14 +1260,18 @@ class KoreaTerrainPresentation {
     return this.chunkLoadRadiusM;
   }
 
-  /// Where the world VISUALLY stops, which is not where chunk streaming stops once a horizon apron
-  /// exists. Fog is capped at the world edge to hide a dead-straight chunk boundary in clear air —
-  /// but with the apron present the edge is 560 km away, not at the chunk radius. Tying fog to the
-  /// chunk radius forced the two to move together: opening the view meant streaming a 420 km disc
-  /// of chunks, which cost the frame rate for terrain that does not exist out there anyway (the
-  /// authored cell is 16.4 km). This is the seam that lets them move independently.
+  /// Where the world VISUALLY stops for fog. The Ukraine apron sits at the theatre edge
+  /// (±131 km for v2), not at the streamed disc. Opening fog to 560 km while only streaming
+  /// 12–48 km leaves a sky hole between the last chunk and the apron — a dead-straight square
+  /// in clear air. Keep fog on the streamed radius until chunks reach the apron; then fog may
+  /// open so the apron can carry the far horizon (Rapier ~145 km stream).
   get visibleWorldRadiusM() {
-    return this.horizonApron ? UKRAINE_TRAINING_HORIZON_HALF_SPAN_M : this.chunkLoadRadiusM;
+    if (!this.horizonApron) return this.chunkLoadRadiusM;
+    if (this.chunkLoadRadiusM + UKRAINE_TRAINING_APRON_TRANSITION_M
+        >= this.horizonApronCoreHalfSpanM) {
+      return UKRAINE_TRAINING_HORIZON_HALF_SPAN_M;
+    }
+    return this.chunkLoadRadiusM;
   }
 
   setStreamingRadiusM(loadRadiusM) {
@@ -1485,6 +1505,9 @@ class KoreaTerrainPresentation {
     }
     if (fogColor) this.material.uniforms.uFogColor.value.copy(fogColor);
     if (Number.isFinite(fogDensity)) this.material.uniforms.uFogDensity.value = fogDensity;
+    if (Number.isFinite(this.visibleWorldRadiusM) && this.visibleWorldRadiusM > 0) {
+      this.material.uniforms.uWorldEdgeM.value = this.visibleWorldRadiusM;
+    }
     if (sunDirection) this.material.uniforms.uSunDirection.value.copy(sunDirection).normalize();
     if (!cameraPosition) return;
 
@@ -1717,14 +1740,16 @@ class KoreaTerrainAtlasPresentation {
     return this.chunkLoadRadiusM;
   }
 
-  /// Where the world VISUALLY stops, which is not where chunk streaming stops once a horizon apron
-  /// exists. Fog is capped at the world edge to hide a dead-straight chunk boundary in clear air —
-  /// but with the apron present the edge is 560 km away, not at the chunk radius. Tying fog to the
-  /// chunk radius forced the two to move together: opening the view meant streaming a 420 km disc
-  /// of chunks, which cost the frame rate for terrain that does not exist out there anyway (the
-  /// authored cell is 16.4 km). This is the seam that lets them move independently.
+  /// Atlas pages own their own aprons; fog still follows the streamed disc unless a page has
+  /// already reached the theatre apron (same contract as KoreaTerrainPresentation).
   get visibleWorldRadiusM() {
-    return this.horizonApron ? UKRAINE_TRAINING_HORIZON_HALF_SPAN_M : this.chunkLoadRadiusM;
+    const core = ukraineCoreHalfSpanFromManifest(this.manifest);
+    const ukraineAtlas = /^terrain\.ukraine\./.test(String(this.manifest.terrainId ?? ""));
+    if (!ukraineAtlas) return this.chunkLoadRadiusM;
+    if (this.chunkLoadRadiusM + UKRAINE_TRAINING_APRON_TRANSITION_M >= core) {
+      return UKRAINE_TRAINING_HORIZON_HALF_SPAN_M;
+    }
+    return this.chunkLoadRadiusM;
   }
 
   setStreamingRadiusM(loadRadiusM) {
@@ -1895,6 +1920,9 @@ class KoreaTerrainAtlasPresentation {
     }
     if (fogColor) this.material.uniforms.uFogColor.value.copy(fogColor);
     if (Number.isFinite(fogDensity)) this.material.uniforms.uFogDensity.value = fogDensity;
+    if (Number.isFinite(this.visibleWorldRadiusM) && this.visibleWorldRadiusM > 0) {
+      this.material.uniforms.uWorldEdgeM.value = this.visibleWorldRadiusM;
+    }
     if (sunDirection) this.material.uniforms.uSunDirection.value.copy(sunDirection).normalize();
     if (!cameraPosition) return;
 

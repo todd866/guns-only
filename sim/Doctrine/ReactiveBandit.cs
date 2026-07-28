@@ -207,7 +207,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     // Lookahead decision cache. Rolling a small candidate set forward over the horizon every
     // tick is wasteful, so the choice is recomputed on a fixed deterministic cadence and held
     // between recomputes. The cadence counts real ticks (never wall-clock), keeping determinism.
-    const int LookaheadDecisionCadenceTicks = 12; // ~0.1 s at 120 Hz
+    const int LookaheadDecisionCadenceTicks = 48; // ~0.4 s at 120 Hz
     PilotCommand _lookaheadCommand = new(1.0, 0.0, 0.85, 0.0);
     int _lookaheadHoldTicks;
     long _selectionSequence;
@@ -239,11 +239,10 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // synchronised pair costs 44.6 ms — three frames of work inside one frame.
         //
         // Staggering the START of the counter changes WHICH tick each aircraft decides on and
-        // nothing about how it decides: the rollout, its horizon and its result are untouched. The
-        // multiplier is 5 rather than 1 because the session stages a wingman at engagementNumber + 1
-        // (WingmanSpawnStride), and a one-tick separation still lands both inside a single rendered
-        // frame at 60 fps, where the sim advances about two ticks per frame.
-        _lookaheadHoldTicks = (engagementNumber - 1) * 5 % LookaheadDecisionCadenceTicks;
+        // nothing about how it decides: the rollout, its horizon and its result are untouched. With
+        // a 36-tick cadence, stride 12 keeps wingmen off the same rendered frame when the sim
+        // advances ~2 ticks per 60 fps frame (session stages wingmen at engagementNumber + 1).
+        _lookaheadHoldTicks = (engagementNumber - 1) * 12 % LookaheadDecisionCadenceTicks;
         _parameters = parameters;
         _terrain = terrain;
         _sim = new AircraftSim(initial, parameters);
@@ -1409,7 +1408,10 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     /// Terrain safety is unaffected: the swept clearance query below samples each segment at
     /// maximumHorizontalStepM regardless of how long the segment is, so a longer step still checks
     /// every intervening grid cell rather than skipping over a ridge.
-    const int LookaheadPredictionSubstepTicks = 2;
+    /// Coarser prediction steps cut the PEAK without touching decision cadence,
+    /// command freshness, or the horizon in seconds. Raised to 12 after beat-7 Metal
+    /// tapes still showed Ace decision bursts owning sim_ms_max past a 22 ms frame.
+    const int LookaheadPredictionSubstepTicks = 12;
 
     double ScoreCandidate(in PilotCommand command, in ActorObservation player) {
         const double dt = LookaheadPredictionSubstepTicks / (double)AircraftSim.TickHz;

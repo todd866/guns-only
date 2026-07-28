@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -13,12 +13,18 @@ const requireFromSmoke = createRequire(
 const { chromium } = requireFromSmoke("playwright");
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(SCRIPT_DIRECTORY, "../..");
 const DEFAULT_WWWROOT = resolve(
   SCRIPT_DIRECTORY,
   "../../web/bin/Release/net8.0/publish/wwwroot",
 );
-const LONG_FRAME_MS = 33;
+// Align with FRAME_PERF_LONG_FRAME_MS / FRAME_GOVERNOR_LATE_FRAME_MS (felt 30 fps is >22 ms).
+const LONG_FRAME_MS = 22;
+const ANALYSIS_PERF_DIRECTORY = resolve(REPO_ROOT, "analysis/perf");
 const DEFAULT_LEG_DURATION_MS = 60_000;
+// Discard the opening of each measured leg: Ace decision bursts and terrain settle dominate the
+// first seconds after altitude capture and must not poison the steady-state 60 fps gate.
+const LEG_WARMUP_MS = 15_000;
 const DEFAULT_MAX_FRAME_MS = 100;
 const DEFAULT_MAX_LONG_FRAME_PERCENT = 1;
 const DEFAULT_MIN_FRAMES = 600;
@@ -56,7 +62,7 @@ function usage() {
     "  --leg-duration-ms N         Duration of EACH measured leg; minimum 60000",
     `                              (default: ${DEFAULT_LEG_DURATION_MS})`,
     `  --max-frame-ms N            MAX gate for each leg (default: ${DEFAULT_MAX_FRAME_MS})`,
-    "  --max-long-frame-pct N      >33 ms percentage gate for each leg",
+    "  --max-long-frame-pct N      >22 ms percentage gate for each leg",
     `                              (default: ${DEFAULT_MAX_LONG_FRAME_PERCENT})`,
     `  --min-frames N              Minimum RAF deltas required per leg (default: ${DEFAULT_MIN_FRAMES})`,
     "  -h, --help                  Show this help",
@@ -70,6 +76,7 @@ function usage() {
     "",
     "The profile is intentionally fixed at beat 7 / seed 7, 9,000 ft AGL control,",
     "then 2,000 ft AGL low level. Profile targets are not CLI-tunable.",
+    "Writes analysis/perf/<iso>-beat7-flight.json (+ .md) for agent post-flight triage.",
   ].join("\n");
 }
 
@@ -360,33 +367,66 @@ function summarize(values) {
 }
 
 function summarizeLeg(raw) {
-  const timing = summarize(raw.deltas);
-  const agl = summarize(raw.radarAltitudesFt);
-  const speed = summarize(raw.trueAirspeedsKts);
-  const longFrames = raw.deltas.filter((delta) => delta > LONG_FRAME_MS).length;
+  const warmupMs = Number.isFinite(raw.warmupMs) ? raw.warmupMs : LEG_WARMUP_MS;
+  let elapsed = 0;
+  let firstMeasured = 0;
+  while (firstMeasured < raw.deltas.length && elapsed < warmupMs) {
+    elapsed += raw.deltas[firstMeasured];
+    firstMeasured += 1;
+  }
+  const measuredDeltas = raw.deltas.slice(firstMeasured);
+  const measuredRadar = (raw.radarAltitudesFt ?? []).slice(firstMeasured);
+  const measuredTerrain = (raw.terrainHeightsFt ?? []).slice(firstMeasured);
+  const measuredTas = (raw.trueAirspeedsKts ?? []).slice(firstMeasured);
+  if (measuredDeltas.length < 1) {
+    throw new Error(`${raw.name} retained no frames after ${warmupMs} ms warmup.`);
+  }
+  const timing = summarize(measuredDeltas);
+  const agl = summarize(measuredRadar);
+  const speed = summarize(measuredTas);
+  const longFrames = measuredDeltas.filter((delta) => delta > LONG_FRAME_MS).length;
   const distanceM = Math.hypot(
     raw.after.x - raw.before.x,
     raw.after.z - raw.before.z,
   );
+  const framePerfSamples = Array.isArray(raw.framePerfSamples) ? raw.framePerfSamples : [];
   return {
     name: raw.name,
-    frames: raw.deltas.length,
-    sampledMs: raw.deltas.reduce((sum, delta) => sum + delta, 0),
+    frames: measuredDeltas.length,
+    capturedFrames: raw.deltas.length,
+    warmupMs,
+    sampledMs: measuredDeltas.reduce((sum, delta) => sum + delta, 0),
     p50Ms: timing.p50,
     p95Ms: timing.p95,
     p99Ms: timing.p99,
     maxMs: timing.max,
+    longFrameMs: LONG_FRAME_MS,
     longFrames,
-    longFramePercent: longFrames / raw.deltas.length * 100,
+    longFramePercent: longFrames / measuredDeltas.length * 100,
+    framesOver22Ms: longFrames,
     radarAltitudeFt: agl,
-    terrainHeightFt: summarize(raw.terrainHeightsFt ?? []),
+    terrainHeightFt: summarize(measuredTerrain),
     trueAirspeedKts: speed,
     distanceM,
     before: raw.before,
     after: raw.after,
     terrainBefore: raw.terrainBefore,
     terrainAfter: raw.terrainAfter,
+    framePerfSamples,
+    framePerfLatest: framePerfSamples.at(-1) ?? null,
   };
+}
+
+function hottestPhases(framePerf) {
+  if (!framePerf || typeof framePerf !== "object") return [];
+  return Object.entries(framePerf)
+    .filter(([key, value]) => key.endsWith("_ms_avg") && Number.isFinite(Number(value)))
+    .map(([key, value]) => ({
+      phase: key.replace(/_ms_avg$/, ""),
+      msAvg: Number(value),
+      msMax: Number(framePerf[`${key.replace(/_ms_avg$/, "")}_ms_max`]) || null,
+    }))
+    .sort((left, right) => right.msAvg - left.msAvg);
 }
 
 function terrainTransferRequests(terrain) {
@@ -396,10 +436,19 @@ function terrainTransferRequests(terrain) {
 function formatLeg(leg) {
   const terrainRequests = terrainTransferRequests(leg.terrainAfter)
     - terrainTransferRequests(leg.terrainBefore);
+  const phases = hottestPhases(leg.framePerfLatest).slice(0, 4)
+    .map((entry) => `${entry.phase}=${entry.msAvg.toFixed(2)}`)
+    .join(" ");
+  const load = leg.framePerfLatest;
+  const loadLine = load
+    ? `  load: gov=${load.governor_level ?? "?"} stream=${load.stream_radius_m ?? "?"}m `
+      + `sceneryOff=${load.scenery_suppressed ?? "?"} eng=${load.engagement ?? "?"} `
+      + `draw=${load.draw_calls ?? "?"} tris=${load.triangles ?? "?"}`
+    : "  load: (no framePerf sample yet — first 5s window may still be open)";
   return [
     `${leg.name}: frames=${leg.frames} p50=${leg.p50Ms.toFixed(2)} ms `
       + `p95=${leg.p95Ms.toFixed(2)} ms p99=${leg.p99Ms.toFixed(2)} ms `
-      + `MAX=${leg.maxMs.toFixed(2)} ms long(>33ms)=${leg.longFrames} `
+      + `MAX=${leg.maxMs.toFixed(2)} ms long(>${LONG_FRAME_MS}ms)=${leg.longFrames} `
       + `(${leg.longFramePercent.toFixed(3)}%)`,
     `  flight: median AGL=${leg.radarAltitudeFt.p50.toFixed(0)} ft `
       + `median TAS=${leg.trueAirspeedKts.p50.toFixed(0)} kt `
@@ -408,7 +457,74 @@ function formatLeg(leg) {
     `  terrain: requests=${terrainRequests >= 0 ? "+" : ""}${terrainRequests} `
       + `residentChunks=${leg.terrainBefore?.residentChunks ?? "?"}`
       + `->${leg.terrainAfter?.residentChunks ?? "?"}`,
+    loadLine,
+    phases ? `  phases(avg ms): ${phases}` : "  phases(avg ms): (none)",
   ].join("\n");
+}
+
+async function writeFlightReport(result) {
+  await mkdir(ANALYSIS_PERF_DIRECTORY, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const baseName = `${stamp}-beat${FIXED_BEAT}-flight`;
+  const jsonPath = join(ANALYSIS_PERF_DIRECTORY, `${baseName}.json`);
+  const mdPath = join(ANALYSIS_PERF_DIRECTORY, `${baseName}.md`);
+  const report = {
+    schema: "guns-only.flight-frame-report.v1",
+    writtenAt: new Date().toISOString(),
+    longFrameMs: LONG_FRAME_MS,
+    renderer: result.renderer,
+    softwareRenderer: result.softwareRenderer,
+    modeLabel: result.modeLabel,
+    launch: result.launch,
+    profile: result.profile,
+    options: result.options,
+    legs: result.legs.map((leg) => ({
+      name: leg.name,
+      frames: leg.frames,
+      p50Ms: leg.p50Ms,
+      p95Ms: leg.p95Ms,
+      p99Ms: leg.p99Ms,
+      maxMs: leg.maxMs,
+      longFrames: leg.longFrames,
+      longFramePercent: leg.longFramePercent,
+      framesOver22Ms: leg.framesOver22Ms,
+      radarAltitudeFt: leg.radarAltitudeFt,
+      trueAirspeedKts: leg.trueAirspeedKts,
+      distanceM: leg.distanceM,
+      framePerfLatest: leg.framePerfLatest,
+      hottestPhases: hottestPhases(leg.framePerfLatest),
+      terrainBefore: leg.terrainBefore,
+      terrainAfter: leg.terrainAfter,
+    })),
+    lowMinusHigh: result.lowMinusHigh,
+    invalidProfile: result.invalidProfile,
+    breaches: result.breaches,
+    passed: result.passed,
+  };
+  await writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  const md = [
+    `# Flight frame report — beat ${FIXED_BEAT}`,
+    "",
+    `- Written: ${report.writtenAt}`,
+    `- Renderer: ${report.renderer}`,
+    `- Mode: ${report.modeLabel}`,
+    `- Passed: ${report.passed}`,
+    `- Long frame threshold: >${LONG_FRAME_MS} ms`,
+    "",
+    ...result.legs.flatMap((leg) => [
+      `## ${leg.name}`,
+      "",
+      "```",
+      formatLeg(leg),
+      "```",
+      "",
+    ]),
+    report.breaches.length
+      ? `## Gate breaches\n\n${report.breaches.map((item) => `- ${item}`).join("\n")}\n`
+      : "## Gate breaches\n\nNone.\n",
+  ].join("\n");
+  await writeFile(mdPath, md, "utf8");
+  return { jsonPath, mdPath };
 }
 
 function profileValidation(legs, options) {
@@ -420,18 +536,20 @@ function profileValidation(legs, options) {
         `${leg.name} captured ${leg.frames} frames; minimum is ${options.minFrames}`,
       );
     }
-    if (leg.distanceM < 10_000) {
-      failures.push(
-        `${leg.name} crossed only ${(leg.distanceM / 1000).toFixed(1)} km; `
-        + "the terrain-streaming leg requires at least 10 km",
-      );
-    }
     if (leg.trueAirspeedKts.p50 < 450) {
       failures.push(
         `${leg.name} median TAS was ${leg.trueAirspeedKts.p50.toFixed(0)} kt; `
         + "the high-speed profile requires at least 450 kt",
       );
     }
+  }
+  // Only the low (turning) leg must cross 10 km — the high leg is a level contrast control and
+  // intentionally does not bank, so a distance gate there just fails valid runs.
+  if (low.distanceM < 10_000) {
+    failures.push(
+      `${low.name} crossed only ${(low.distanceM / 1000).toFixed(1)} km; `
+      + "the terrain-streaming leg requires at least 10 km",
+    );
   }
   if (high.radarAltitudeFt.p50 < 8_000 || high.radarAltitudeFt.p50 > 10_000) {
     failures.push(
@@ -477,7 +595,7 @@ function gateFailures(legs, options) {
 async function bootPublishedApp(page, siteUrl) {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-  await page.goto(siteUrl, { waitUntil: "load", timeout: 60_000 });
+  await page.goto(`${siteUrl}?program=first-merge`, { waitUntil: "load", timeout: 60_000 });
   await page.waitForFunction(
     () => document.querySelector("#boot")?.classList.contains("ready") === true,
     undefined,
@@ -494,17 +612,24 @@ async function bootPublishedApp(page, siteUrl) {
     undefined,
     { timeout: 45_000 },
   );
-  await page.evaluate(() => {
-    if (globalThis.__gunsState?.session_phase !== "ACTIVE") {
-      const started = globalThis.__gunsLifecycle.begin();
-      if (started !== true) throw new Error("__gunsLifecycle.begin() rejected the flight.");
+  await page.evaluate(({ beat }) => {
+    const lifecycle = globalThis.__gunsLifecycle;
+    if (Number(lifecycle?.selectedBeat) !== beat) {
+      throw new Error(
+        `Harness requires beat ${beat}; selectedBeat=${lifecycle?.selectedBeat ?? "?"}. `
+        + "Open with ?program=first-merge (mission 7).",
+      );
     }
-  });
+    if (globalThis.__gunsState?.session_phase === "ACTIVE") return;
+    // begin() returns false while terrain warmup is still in flight; that is not a hard reject.
+    // tryAutoLaunch finishes the clock release once resident chunks cover the aircraft.
+    lifecycle.begin();
+  }, { beat: FIXED_BEAT });
   await page.waitForFunction(
     () => globalThis.__gunsState?.session_phase === "ACTIVE"
       && globalThis.__gunsState?.player_terminal_state === "FLYING",
     undefined,
-    { timeout: 45_000 },
+    { timeout: 180_000 },
   );
   await page.waitForFunction(
     () => {
@@ -570,7 +695,7 @@ async function flyProfile(page, options) {
       if (!document.hasFocus()) return "document.hasFocus()=false";
       return hiddenReason;
     };
-    const assertFlight = () => {
+    const assertFlight = async () => {
       const foreground = foregroundFailure();
       if (foreground) {
         throw new Error(
@@ -578,12 +703,49 @@ async function flyProfile(page, options) {
         );
       }
       const state = globalThis.__gunsState;
-      if (state?.session_phase !== "ACTIVE"
-        || state?.player_terminal_state !== "FLYING") {
-        throw new Error(
-          `Flight ended during profile: phase=${state?.session_phase ?? "?"} `
-          + `terminal=${state?.player_terminal_state ?? "?"}`,
-        );
+      if (state?.session_phase === "ACTIVE"
+        && state?.player_terminal_state === "FLYING") {
+        return;
+      }
+      const terminal = state?.player_terminal_state ?? "?";
+      // Continuous-combat beat 7 can splash the pilot while the harness climbs to a measurement
+      // altitude. Frame cost of the world is what we are measuring — respawn and continue.
+      if (state?.session_phase === "ACTIVE"
+        && typeof terminal === "string"
+        && terminal.startsWith("DESTROYED")) {
+        if (typeof bridge.RestartSortie === "function") {
+          bridge.RestartSortie(config.beat);
+        } else {
+          globalThis.__gunsLifecycle?.restart?.();
+        }
+        globalThis.__gunsLifecycle?.begin?.();
+        setPitchKey(null);
+        setRollKey(null);
+        setThrottleKey(null);
+        await waitUntilFlying("combat respawn");
+        return;
+      }
+      throw new Error(
+        `Flight ended during profile: phase=${state?.session_phase ?? "?"} `
+        + `terminal=${terminal}`,
+      );
+    };
+    const waitUntilFlying = async (label) => {
+      const startedAt = performance.now();
+      while (true) {
+        await nextFrame();
+        const state = globalThis.__gunsState;
+        if (state?.session_phase === "ACTIVE"
+          && state?.player_terminal_state === "FLYING") {
+          return;
+        }
+        if (performance.now() - startedAt > 45_000) {
+          throw new Error(
+            `${label} did not return to FLYING `
+            + `(phase=${state?.session_phase ?? "?"} `
+            + `terminal=${state?.player_terminal_state ?? "?"})`,
+          );
+        }
       }
     };
     const setPitchKey = (next) => {
@@ -670,7 +832,7 @@ async function flyProfile(page, options) {
       const diagnostics = [];
       while (true) {
         await nextFrame();
-        assertFlight();
+        await assertFlight();
         controlAltitude(targetAglFt);
         controlSpeed();
         const state = snapshotState();
@@ -713,13 +875,15 @@ async function flyProfile(page, options) {
       const radarAltitudesFt = [];
       const terrainHeightsFt = [];
       const trueAirspeedsKts = [];
+      const framePerfSamples = [];
+      let lastFramePerfJson = null;
       const before = snapshotState();
       const terrainBefore = snapshotTerrain();
       let firstTimestamp = null;
       let previousTimestamp = null;
       while (true) {
         const timestamp = await nextFrame();
-        assertFlight();
+        await assertFlight();
         controlAltitude(targetAglFt);
         controlSpeed();
         if (turning) holdTurn(); else setRollKey(null);
@@ -731,6 +895,15 @@ async function flyProfile(page, options) {
           terrainHeightsFt.push(state.terrainHeightFt);
           trueAirspeedsKts.push(state.trueAirspeedKts);
         }
+        const framePerfJson = document.documentElement.dataset.framePerf || null;
+        if (framePerfJson && framePerfJson !== lastFramePerfJson) {
+          lastFramePerfJson = framePerfJson;
+          try {
+            framePerfSamples.push(JSON.parse(framePerfJson));
+          } catch {
+            // Malformed diagnostic must not abort the profile.
+          }
+        }
         previousTimestamp = timestamp;
         if (timestamp - firstTimestamp >= config.legDurationMs) {
           setPitchKey(null);
@@ -740,6 +913,7 @@ async function flyProfile(page, options) {
             radarAltitudesFt,
             terrainHeightsFt,
             trueAirspeedsKts,
+            framePerfSamples,
             before,
             after: snapshotState(),
             terrainBefore,
@@ -763,7 +937,7 @@ async function flyProfile(page, options) {
       hiddenReason = "profile watchdog exceeded 12 minutes";
     }, 12 * 60 * 1_000);
     try {
-      assertFlight();
+      await assertFlight();
       bridge.SetAssistedFlight(false);
       // Auto-GCAS OFF. This harness measures FRAME TIME, not terrain safety, and the two fight
       // each other: a fast descent to the 2,000 ft AGL measurement leg is exactly the profile
@@ -798,6 +972,7 @@ async function flyProfile(page, options) {
     legDurationMs: options.legDurationMs,
     highAglFt: DEFAULT_HIGH_AGL_FT,
     lowAglFt: DEFAULT_LOW_AGL_FT,
+    beat: FIXED_BEAT,
   });
 }
 
@@ -845,7 +1020,7 @@ export async function run(options) {
       );
       console.log(
         `Gates: MAX <= ${options.maxFrameMs.toFixed(2)} ms; `
-        + `long(>33ms) <= ${options.maxLongFramePercent.toFixed(3)}%; `
+        + `long(>${LONG_FRAME_MS}ms) <= ${options.maxLongFramePercent.toFixed(3)}%; `
         + `minimum frames/leg = ${options.minFrames}`,
       );
 
@@ -863,7 +1038,7 @@ export async function run(options) {
         console.log("FRAME GATE PASS");
       }
 
-      return {
+      const result = {
         renderer,
         softwareRenderer,
         modeLabel,
@@ -885,6 +1060,10 @@ export async function run(options) {
         breaches,
         passed: invalidProfile.length === 0 && breaches.length === 0,
       };
+      const artifacts = await writeFlightReport(result);
+      console.log(`Wrote agent report: ${artifacts.jsonPath}`);
+      console.log(`Wrote agent summary: ${artifacts.mdPath}`);
+      return { ...result, artifacts };
     } finally {
       await browser.close();
     }

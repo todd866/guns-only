@@ -29,8 +29,10 @@ test("a window closes after the interval and summarizes exactly its own deltas",
   assert.equal(summary.frame_ms_p95, 16.7);
   assert.equal(summary.frame_ms_max, 120);
   assert.equal(summary.long_frames, 1);
+  assert.equal(summary.frames_over_22ms, 1);
   assert.deepEqual(Object.keys(summary),
-    ["frame_ms_p50", "frame_ms_p95", "frame_ms_max", "long_frames", "frames"]);
+    ["frame_ms_p50", "frame_ms_p95", "frame_ms_max", "long_frames", "frames",
+      "frames_over_22ms"]);
 
   // The next window starts empty: its summary must not inherit the previous stall.
   let next = null;
@@ -40,6 +42,17 @@ test("a window closes after the interval and summarizes exactly its own deltas",
   }
   assert.equal(next.frame_ms_max, 20);
   assert.equal(next.long_frames, 0);
+  assert.equal(next.frames_over_22ms, 0);
+});
+
+test("felt 30 fps frames over 22 ms count as long even when under the old 50 ms blind spot", () => {
+  const aggregator = createFramePerfAggregator({ intervalMs: 100 });
+  aggregator.observe(16.7, 0);
+  aggregator.observe(33, 50);
+  const summary = aggregator.observe(16.7, 100);
+  assert.equal(summary.frames_over_22ms, 1);
+  assert.equal(summary.long_frames, 1);
+  assert.equal(summary.frame_ms_max, 33);
 });
 
 test("percentiles use nearest-rank over the sorted window", () => {
@@ -89,7 +102,8 @@ test("invalid deltas and clocks are ignored instead of poisoning the window", ()
 
 test("exported defaults match the documented perf-row contract", () => {
   assert.equal(FRAME_PERF_INTERVAL_MS, 5_000);
-  assert.equal(FRAME_PERF_LONG_FRAME_MS, 50);
+  // Align with the closed-loop frame governor: one missed display interval, not a 50 ms stall.
+  assert.equal(FRAME_PERF_LONG_FRAME_MS, 22);
   assert.ok(FRAME_PERF_MAX_WINDOW_SAMPLES >= 4_000);
 });
 
@@ -103,6 +117,14 @@ test("the browser recorder feeds raw render deltas and never displaces state row
   assert.match(app, /function sampleSceneCounters\(\) \{[\s\S]*?activeView\?\.renderer\?\.info/);
   assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?geometries: info\.memory\?\.geometries/);
   assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?textures: info\.memory\?\.textures/);
+  // Load context localises a stall: governor level, stream radius, scenery shed, and fight pressure.
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?governor_level:/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?stream_radius_m:/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?scenery_suppressed:/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?micro_required:/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?radar_alt_ft:/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?engagement:/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?bandit_alive:/);
   // The render loop hands the recorder the raw delta before the simulation-advance clamp, so a
   // stall is measured at its true length rather than at the length the kernel was willing to run.
   assert.match(app,
@@ -174,5 +196,6 @@ test("no sampler leaves the row exactly as it was before instrumentation", () =>
   plain.observe(16, 0);
   const summary = plain.observe(16, 100);
   assert.deepEqual(Object.keys(summary).sort(),
-    ["frame_ms_max", "frame_ms_p50", "frame_ms_p95", "frames", "long_frames"]);
+    ["frame_ms_max", "frame_ms_p50", "frame_ms_p95", "frames", "frames_over_22ms",
+      "long_frames"]);
 });

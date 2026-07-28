@@ -2200,7 +2200,8 @@ export function createDecisionSupportSky() {
         color = mix(color, horizon * 1.08, horizonShoulder * 0.38);
         if (direction.y < 0.0) {
           vec3 belowCool = vec3(0.022, 0.075, 0.095);
-          vec3 belowWarm = vec3(0.12, 0.14, 0.10);
+          // Warm dusty ground wash — past the streamed disc this must not read as blue ocean.
+          vec3 belowWarm = vec3(0.62, 0.56, 0.42);
           color = mix(mix(belowCool, belowWarm, uSoftWorld), horizon, exp(direction.y * 16.0));
         }
 

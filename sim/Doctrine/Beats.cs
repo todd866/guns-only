@@ -193,7 +193,8 @@ public static class Ukraine2030sTheatre {
         TerrainProfileId,
         MacroSceneryProfile,
         MicroSceneryProfile,
-        MissionEnvironmentFrameKind.SharedTheatre);
+        MissionEnvironmentFrameKind.SharedTheatre,
+        PreferredTerrainStreamingRadiusM: 48_000.0);
 
     public static MissionEnvironmentContract HeroCell { get; } = Shared with {
         LocationId = "location.ukraine.soniachne-hero-cell.v1",
