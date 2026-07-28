@@ -154,17 +154,25 @@ test("build lookup uses canonical production from Vercel deployments but stays o
 });
 
 test("shell, browser module, service worker, and deployment endpoint share one release number", async () => {
-  const [index, app, serviceWorker, deployScript] = await Promise.all([
+  const [index, app, serviceWorker, deployScript, sceneBuilders, airframeBuilder] = await Promise.all([
     readFile(new URL("index.html", WEB_ROOT), "utf8"),
     readFile(new URL("app.js", WEB_ROOT), "utf8"),
     readFile(new URL("service-worker.js", WEB_ROOT), "utf8"),
     readFile(new URL("../../../../../bin/deploy-web", import.meta.url), "utf8"),
+    readFile(new URL("render/scene/scene_builders.js", WEB_ROOT), "utf8"),
+    readFile(new URL("render/scene/airframe_from_definition.js", WEB_ROOT), "utf8"),
   ]);
   const entrypoint = index.match(/<script type="module" src="\.\/app\.js\?v=([^"]+)"/);
+  const blazorLoader = index.match(
+    /<script src="\.\/_framework\/blazor\.webassembly\.js\?v=([^"]+)"/,
+  );
   const worker = serviceWorker.match(/const RELEASE_BUILD = "([^"]+)"/);
   assert.ok(entrypoint, "index must cache-bust the application entrypoint");
+  assert.ok(blazorLoader, "index must cache-bust the Blazor loader");
   assert.ok(worker, "service worker must carry the release cache stamp");
   assert.equal(entrypoint[1], RELEASE_BUILD, "index and canonical release must advance together");
+  assert.equal(blazorLoader[1], RELEASE_BUILD,
+    "the Blazor loader and canonical release must advance together");
   assert.equal(worker[1], RELEASE_BUILD,
     "service-worker cache and canonical release must advance together");
   assert.equal(buildInfo.RELEASE_BUILD, RELEASE_BUILD, "endpoint and canonical release must match");
@@ -176,7 +184,29 @@ test("shell, browser module, service worker, and deployment endpoint share one r
     "deployments must verify the exact staged atlas bytes after copying");
   assert.doesNotMatch(deployScript, /Ukraine atlas pages missing; Rapier theatre may render empty/,
     "a missing deployment atlas must be fatal, not a warning");
-  assert.match(app, /from "\.\/render\/release\/release_identity\.js"/);
+  for (const path of [
+    "./render/audio/flight_audio.js",
+    "./render/debrief/sortie_result.js",
+    "./render/hud/limits_panel.js",
+    "./render/release/release_identity.js",
+    "./render/scene/scene_builders.js",
+    "./render/settings/player_settings.js",
+  ]) {
+    const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.match(
+      app,
+      new RegExp(`from "${escapedPath}\\?v=${RELEASE_BUILD}"`),
+      `${path} must bypass the previous release worker's cache on the first upgraded load`,
+    );
+    assert.doesNotMatch(app, new RegExp(`from "${escapedPath}"`),
+      `${path} must not retain an unversioned direct import`);
+  }
+  assert.match(sceneBuilders,
+    new RegExp(`from "\\./airframe_from_definition\\.js\\?v=${RELEASE_BUILD}"`),
+    "the versioned scene graph must not re-enter an older cached airframe builder");
+  assert.match(airframeBuilder,
+    new RegExp(`from "\\./scene_builders\\.js\\?v=${RELEASE_BUILD}"`),
+    "the circular scene-builder edge must resolve to the same versioned module instance");
   assert.doesNotMatch(app, /const BUILD = new URL\(import\.meta\.url\)/);
   assert.match(app, /BUILD_IDENTITY_REVALIDATE_MS = 60_000/);
   assert.match(app, /function buildIdentityBlocksSortie\(\)[\s\S]*?buildIdentity\.stale \|\| buildIdentity\.state === "checking"/,
@@ -204,6 +234,31 @@ test("shell, browser module, service worker, and deployment endpoint share one r
     "reload must delete guns-only-* caches before navigating to the current release");
   assert.match(index, /id="ready-build"/);
   assert.match(index, /id="ready-build-reload"/);
+
+  const prebootGate = index.indexOf("globalThis.__gunsPrebootReady = (async () =>");
+  const appEntrypoint = index.indexOf(`./app.js?v=${RELEASE_BUILD}`);
+  const blazorEntrypoint = index.indexOf(
+    `./_framework/blazor.webassembly.js?v=${RELEASE_BUILD}`,
+  );
+  assert.ok(prebootGate >= 0, "index must establish the upgrade gate");
+  assert.ok(prebootGate < appEntrypoint && prebootGate < blazorEntrypoint,
+    "the upgrade gate must be established before either runtime script can execute");
+  assert.match(index, new RegExp(`const releaseBuild = "${RELEASE_BUILD}"`));
+  assert.match(index,
+    /navigator\.serviceWorker\?\.controller[\s\S]*?controller\.scriptURL[\s\S]*?searchParams\.get\("v"\)/,
+    "the gate must distinguish the controlling worker by its release query");
+  assert.match(index,
+    /serviceWorker\.getRegistrations\(\)[\s\S]*?registration\.unregister\(\)/,
+    "an older controller must be unregistered before runtime startup");
+  assert.match(index,
+    /caches\.keys\(\)[\s\S]*?key\.startsWith\("guns-only-"\)[\s\S]*?caches\.delete\(key\)/,
+    "an older controller's cache must be removed before unversioned WASM requests");
+  assert.match(app,
+    /async function boot\(\) \{[\s\S]*?await \(globalThis\.__gunsPrebootReady \?\? Promise\.resolve\(\)\);[\s\S]*?await blazor\.start\(\);/,
+    "Blazor startup must await the index upgrade gate");
+  assert.match(app,
+    new RegExp(`serviceWorker\\.register\\("service-worker\\.js\\?v=${RELEASE_BUILD}"\\)`),
+    "the installed worker URL must carry the release query inspected by the next upgrade");
 });
 
 test("a committed production runtime change cannot silently reuse this build", (context) => {

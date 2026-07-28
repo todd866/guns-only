@@ -423,6 +423,35 @@ class JetLibraryTests(unittest.TestCase):
             "streams": [{"codec_type": "video", "height": None}],
         }), 0)
 
+    def test_video_height_publish_failure_preserves_original_source(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            media = root / "reference.webm"
+            media.write_bytes(b"original-reference")
+            temporary = root / ".reference.height-480.mp4"
+
+            def fake_transcode(command: list[str]) -> None:
+                Path(command[-1]).write_bytes(b"complete-transcode")
+
+            with mock.patch.object(
+                jet_library,
+                "ffprobe",
+                return_value={"streams": [{"codec_type": "video", "height": 1080}]},
+            ), mock.patch.object(
+                jet_library,
+                "run_checked",
+                side_effect=fake_transcode,
+            ), mock.patch.object(
+                Path,
+                "replace",
+                side_effect=OSError("publish failed"),
+            ):
+                with self.assertRaisesRegex(OSError, "publish failed"):
+                    jet_library.normalize_fetched_video_height(media, 480)
+
+            self.assertEqual(media.read_bytes(), b"original-reference")
+            self.assertFalse(temporary.exists(), "failed publish temporary should be cleaned")
+
 
 if __name__ == "__main__":
     unittest.main()

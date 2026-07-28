@@ -35,6 +35,25 @@ public class SnapshotHotFrameTests {
         return session;
     }
 
+    static AircraftState RunwayApproachState(
+        ConventionalRunway runway,
+        double heightM,
+        double alongM = 430.0,
+        double forwardMps = 74.0,
+        double sinkMps = 2.2) {
+        Vec3D velocity = runway.Forward * forwardMps
+            + new Vec3D(0.0, -sinkMps, 0.0);
+        double speed = velocity.Length;
+        return new AircraftState(
+            runway.SurfacePoint(alongM) + new Vec3D(0.0, heightM, 0.0),
+            speed,
+            Gamma: Math.Asin(velocity.Y / speed),
+            Chi: Math.Atan2(velocity.X, velocity.Z),
+            Bank: 0.0,
+            Mass: FlightModel.F22APublicDataSurrogate.MassKg,
+            BodyAttitude: QuaternionD.Identity);
+    }
+
     static (JsonElement Root, double[] Buffer, JsonDocument Document) Project(
         SimulationSession session) {
         string json = SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Angled,
@@ -52,7 +71,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(12, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(14, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
 
         foreach (JsonElement block in layout.GetProperty("blocks").EnumerateArray()) {
@@ -174,6 +193,28 @@ public class SnapshotHotFrameTests {
     }
 
     [Fact]
+    public void F22GearOnlySurrogateKeepsElectricalCapabilityOutOfColdAndHotState() {
+        SimulationSession session = StartSession(7, null);
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            Assert.True(root.GetProperty("has_retractable_gear").GetBoolean());
+            Assert.False(root.GetProperty("has_electrical_system").GetBoolean());
+            Assert.False(root.GetProperty("primary_bus_powered").GetBoolean());
+
+            using JsonDocument layoutDocument =
+                JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
+            int primaryBusIndex = layoutDocument.RootElement.GetProperty("blocks")
+                .EnumerateArray()
+                .SelectMany(block => block.GetProperty("slots").EnumerateArray())
+                .Single(slot =>
+                    slot.GetProperty("name").GetString() == "primary_bus_powered")
+                .GetProperty("index").GetInt32();
+            Assert.Equal(0.0, buffer[primaryBusIndex]);
+            AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    [Fact]
     public void HotFrameAgreesWithJsonWhileFiring() {
         // Beat 1 has no visual-merge interlock, so a held trigger puts rounds in the air at once
         // and the tracer regions get live (non-empty) golden coverage.
@@ -246,7 +287,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(12, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(14, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())
@@ -436,5 +477,67 @@ public class SnapshotHotFrameTests {
         SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
         Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > toggledBack,
             "mode APPROACH<->FREE exit edge did not bump cold_version");
+    }
+
+    [Fact]
+    public void ColdVersionBumpsOnCombatHandoffPhaseOnlyTransition() {
+        BeatSetup authored = Beats.ModernVisualMerge();
+        var session = new SimulationSession();
+        session.StartBeat(() => authored with {
+            Combat = authored.CombatRules with { OpponentAmmo = 0 },
+            ContinuousCombat = authored.ContinuousCombat! with {
+                MaximumFormationSize = 1
+            }
+        });
+        session.Begin();
+        session.FeedKey(GKey.KnockItOff, true);
+        session.FeedKey(GKey.KnockItOff, false);
+        Assert.Equal(CombatHandoffPhase.Requested, session.CombatHandoffPhase);
+
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double requestedVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+
+        session.StepFixed();
+        Assert.Equal(CombatHandoffPhase.Drain, session.CombatHandoffPhase);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+
+        Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > requestedVersion,
+            "REQUESTED -> DRAIN did not invalidate the cold phase-name field");
+        using JsonDocument document = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Angled,
+                0.0, 0.0, false, null));
+        Assert.Equal("DRAIN",
+            document.RootElement.GetProperty("combat_handoff_phase_name").GetString());
+    }
+
+    [Fact]
+    public void ColdVersionBumpsWhenRunwayModelEntersRollout() {
+        SimulationSession session = StartSession(7, null);
+        ConventionalRunwayRecoveryModel recovery = Assert.IsType<
+            ConventionalRunwayRecoveryModel>(session.ConventionalRunwayRecovery);
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double airborneVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+
+        Assert.True(recovery.TryTouchdown(
+            RunwayApproachState(recovery.Runway,
+                heightM: recovery.ReferenceHeightM + 0.25),
+            RunwayApproachState(recovery.Runway,
+                heightM: recovery.ReferenceHeightM - 0.05, alongM: 430.7),
+            gearDownAndLocked: true,
+            airspeedMps: 74.0));
+        Assert.Equal(RunwayRecoveryPhase.Rollout, session.ConventionalRunwayPhase);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+
+        Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > airborneVersion,
+            "AIRBORNE -> ROLLOUT did not invalidate the cold phase-name field");
+        using JsonDocument document = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Angled,
+                0.0, 0.0, false, null));
+        Assert.Equal("ROLLOUT",
+            document.RootElement.GetProperty("runway_recovery_phase_name").GetString());
     }
 }

@@ -35,6 +35,7 @@ function normalizedCopy(source, { markup = false } = {}) {
   return visible
     .replace(/&minus;/gi, "-")
     .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
     .replace(/\s+/g, " ")
     .trim()
     .toUpperCase();
@@ -99,6 +100,7 @@ const BRIDGE_ACTIONS = Object.freeze([
   // established, app.js sends a separate semantic transition to the fixed-tick roll augmentation;
   // it never turns camera pixels or RAF timing into aircraft input.
   { id: "padlock", bindingAction: "padlock", code: "KeyV", gkey: "Padlock", behavior: "momentary", help: "PADLOCK ON / OFF", uiConsumer: /contextualPadlockTarget\(latestState\)/, uiObservable: /hudFrame\.padlockTarget = padlockTarget/ },
+  { id: "knock-it-off", code: "KeyO", gkey: "KnockItOff", behavior: "momentary", help: "HAND OFF FIGHT & RTB", consumer: /key == GKey\.KnockItOff/, observable: /combat_handoff_phase/ },
   { id: "restart", code: "KeyR", gkey: "Restart", behavior: "momentary", help: "R RESTART", consumer: /key == GKey\.Restart/, uiConsumer: /restartMission\(\)/ },
   { id: "limit-override", bindingAction: "limitOverride", code: "Space", gkey: "Override", behavior: "hold", help: "LIMIT OVERRIDE", consumer: /GKey\.Override/, observable: /requested_g_cmd/ },
   { id: "auto-gcas-paddle", bindingAction: "gcasOverride", code: "KeyK", gkey: "AutoGcasOverride", behavior: "hold", help: "AGCAS PADDLE", consumer: /GKey\.AutoGcasOverride/, observable: /auto_gcas_override_held/ },
@@ -174,11 +176,42 @@ test("every advertised bridge action has help copy, a runtime consumer, and obse
   }
 });
 
-test("keyboard dispatch is edge-safe and every held action has a release path", () => {
-  assert.match(appSource, /if \(event\.repeat \|\| !bridge\) return;/,
-    "OS key repeat must not create extra momentary actions");
+test("keyboard dispatch keeps continuous axes live without repeating semantic actions", () => {
+  const reassertableActions = appSource
+    .match(/const REASSERTABLE_KEYBOARD_AXIS_ACTIONS = new Set\(\[([\s\S]*?)\]\)/)?.[1]
+    ?.match(/"([^"]+)"/g)
+    ?.map((token) => token.slice(1, -1));
+  assert.deepEqual(reassertableActions,
+    ["pull", "push", "rollLeft", "rollRight", "rudderLeft", "rudderRight"],
+    "only continuous flight-surface actions may use the liveness path");
+  assert.match(appSource,
+    /if \(event\.repeat\) \{[\s\S]*?reassertMappedKeyboardAxis\(event\.code\)[\s\S]*?return;/,
+    "OS repeat must refresh a flight-axis hold instead of being discarded");
+  assert.match(appSource,
+    /function reassertMappedKeyboardAxis\(code\)[\s\S]*?reassertableKeyboardAxisGkeys\.has\(gkey\)[\s\S]*?keyOwners\.get\(code\)\?\.has\("keyboard"\)[\s\S]*?bridge\.FeedKey\(gkey, true\)/,
+    "an owned axis repeat must idempotently refresh simulation authority");
+  assert.match(appSource,
+    /function observePilotControlInterlock\(state\)[\s\S]*?pilot_control_interlocked !== true[\s\S]*?keyboardAxesAwaitingFreshPress\.add\(code\)/,
+    "G-LOC must suppress liveness refresh until a fresh physical press");
+  assert.match(appSource,
+    /if \(flightAxisOwnsKey && latestState\?\.pilot_control_interlocked === true\) \{[\s\S]*?keyboardAxesAwaitingFreshPress\.add\(event\.code\)[\s\S]*?return;[\s\S]*?keyboardAxesAwaitingFreshPress\.delete\(event\.code\)/,
+    "new axis presses during G-LOC stay rejected and only a post-recovery edge re-arms them");
+  assert.match(appSource,
+    /function reassertHeldKeyboardAxes\(nowMs\)[\s\S]*?KEYBOARD_AXIS_HEARTBEAT_MS[\s\S]*?owners\.has\("keyboard"\)[\s\S]*?reassertMappedKeyboardAxis\(code\)/,
+    "held axes need a bounded heartbeat even when another chord key owns OS repeat");
+  assert.match(appSource,
+    /reassertHeldKeyboardAxes\(now\)[\s\S]*?bridge\.Advance\(/,
+    "the hold heartbeat must run before the next authoritative ticks");
+  assert.match(appSource,
+    /function activeFlightAxisOwnsKey\(event\)[\s\S]*?pauseReasons\.size > 0[\s\S]*?input, select, textarea[\s\S]*?reassertableKeyboardAxisGkeys\.has\(keyMap\.get\(event\.code\)\)/,
+    "live axes must outrank stale flight-button focus but never an overlay or text field");
+  assert.match(appSource,
+    /const flightAxisOwnsKey = activeFlightAxisOwnsKey\(event\)[\s\S]*?nativeInteractiveOwnsKey\(event\) && !flightAxisOwnsKey[\s\S]*?pressMappedKey\(event\.code, "keyboard"\)[\s\S]*?sceneCanvas\.focus/,
+    "a recovered live-axis press must reclaim the flight focus owner");
   assert.match(appSource, /pressMappedKey\(event\.code, "keyboard"\)/);
-  assert.match(appSource, /window\.addEventListener\("keyup"[\s\S]*?releaseMappedKey\(event\.code, "keyboard"\)/);
+  assert.match(appSource,
+    /window\.addEventListener\("keyup"[\s\S]*?keyOwners\.get\(event\.code\)\?\.has\("keyboard"\)[\s\S]*?releaseMappedKey\(event\.code, "keyboard"\)/,
+    "key-up must release the original owner even if DOM focus changed");
   assert.match(appSource, /bridge\.FeedKey\(gkey, true\)/);
   assert.match(appSource, /bridge\.FeedKey\(gkey, false\)/);
   assert.match(appSource, /releaseAllMappedKeys\("visibility-hidden"\)/,
@@ -210,6 +243,7 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["incident-replay-skip", /incidentReplaySkip\?\.addEventListener\("click", skipIncidentReplay\)/],
     ["ready-start", /readyStart\.addEventListener\("click"/],
     ["ready-replay", /readyReplay\?\.addEventListener\("click"/],
+    ["ready-handoff", /readyHandoff\?\.addEventListener\("click", requestCombatHandoffFromPause\)/],
     ["ready-settings", /readySettings\?\.addEventListener\("click", openSettings\)/],
     ["ready-restart", /readyRestart\?\.addEventListener\("click", restartMissionNow\)/],
     ["ready-return", /readyReturn\?\.addEventListener\("click", returnToCatalogue\)/],
@@ -265,6 +299,21 @@ test("every visible HTML button is wired through one auditable action surface", 
         `${button.text}: deck configuration has no delegated selection handler`);
     }
   }
+});
+
+test("pause-menu handoff is authoritative, deliberate, and shares the remappable GKey path", () => {
+  assert.match(appSource,
+    /const handoffActionAvailable = sessionPaused[\s\S]*?pauseReasons\.size === 1[\s\S]*?handoff\.available/,
+    "the pause action must remain hidden unless the current authoritative phase is AVAILABLE");
+  assert.match(appSource,
+    /readyHandoff\.hidden = !handoffActionAvailable[\s\S]*?readyHandoff\.disabled = !handoffActionAvailable/,
+    "visibility and enabled state must share the same authority gate");
+  assert.match(appSource,
+    /function requestCombatHandoffFromPause\(\)[\s\S]*?setPauseReason\("session", false\)[\s\S]*?pressMappedKey\(code, "pause-handoff", knockItOffControl\.gkey\)[\s\S]*?releaseMappedKey\(code, "pause-handoff"\)/,
+    "a deliberate pause-menu request must resume authority, issue one down/up pulse, and use GKey 10");
+  assert.match(indexSource,
+    /<button id="ready-handoff"[^>]*hidden[^>]*disabled[^>]*>HAND OFF FIGHT &amp; RTB<\/button>/,
+    "the mobile-safe pause action must start unavailable before authoritative state arrives");
 });
 
 test("touch pilots retain system commands but the live surface makes them contextual", () => {

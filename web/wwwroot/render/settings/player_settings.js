@@ -11,6 +11,12 @@ export const CONTROL_BINDINGS = Object.freeze([
   Object.freeze({ action: "powerDown", label: "Power down", defaultCode: "KeyS", gkey: 7 }),
   Object.freeze({ action: "fire", label: "Fire", defaultCode: "KeyF", gkey: 8 }),
   Object.freeze({ action: "padlock", label: "Padlock", defaultCode: "KeyV", gkey: 9 }),
+  Object.freeze({
+    action: "knockItOff",
+    label: "Hand off fight and RTB",
+    defaultCode: "KeyO",
+    gkey: 10,
+  }),
   Object.freeze({ action: "limitOverride", label: "Limit override", defaultCode: "Space", gkey: 12 }),
   Object.freeze({ action: "gearToggle", label: "Gear toggle", defaultCode: "KeyG", gkey: 13 }),
   Object.freeze({ action: "flapUp", label: "Flaps up", defaultCode: "BracketLeft", gkey: 14 }),

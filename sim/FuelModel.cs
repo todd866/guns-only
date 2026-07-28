@@ -156,6 +156,15 @@ public sealed class FuelModel {
     /// shells can render the absolute bearing and signed shortest turn for the pilot to follow.
     /// </summary>
     public RtbGuidance GuidanceTo(in Vec3D position, double headingRad, in Vec3D home) {
+        return GuidanceTo(position, headingRad, home, RtbAdvisory);
+    }
+
+    /// <summary>
+    /// Geometry to a known recovery point with activation supplied by the sortie task. This keeps a
+    /// voluntary relief/RTB decision independent of the fuel model's latched bingo advisory.
+    /// </summary>
+    public RtbGuidance GuidanceTo(in Vec3D position, double headingRad, in Vec3D home,
+        bool active) {
         if (!double.IsFinite(headingRad)
             || !double.IsFinite(position.X) || !double.IsFinite(position.Y) || !double.IsFinite(position.Z)
             || !double.IsFinite(home.X) || !double.IsFinite(home.Y) || !double.IsFinite(home.Z))
@@ -167,7 +176,117 @@ public sealed class FuelModel {
         double bearingRad = rangeM < 1e-9 ? headingRad : Math.Atan2(eastM, northM);
         double turnRad = Math.Atan2(Math.Sin(bearingRad - headingRad),
             Math.Cos(bearingRad - headingRad));
-        return new RtbGuidance(RtbAdvisory, bearingRad, turnRad, rangeM);
+        return new RtbGuidance(active, bearingRad, turnRad, rangeM);
+    }
+
+    /// <summary>
+    /// Project recovery at the aircraft's present horizontal ground vector and damped cockpit fuel
+    /// flow. Signed closure remains available while opening or abeam, but time/fuel estimates do
+    /// not: substituting TAS there would claim progress the aircraft is not making.
+    /// </summary>
+    public RecoveryNavigationProjection ProjectRecoveryTo(in Vec3D position,
+        in Vec3D groundVelocity, double headingRad, in Vec3D home,
+        double? requiredLandingReserveLb, bool active) {
+        if (!groundVelocity.IsFinite)
+            throw new ArgumentOutOfRangeException(nameof(groundVelocity));
+        if (requiredLandingReserveLb is { } reserve
+            && (!double.IsFinite(reserve) || reserve < 0.0 || reserve > CapacityLb))
+            throw new ArgumentOutOfRangeException(nameof(requiredLandingReserveLb));
+
+        RtbGuidance guidance = GuidanceTo(position, headingRad, home, active);
+        double eastM = home.X - position.X;
+        double northM = home.Z - position.Z;
+        double horizontalRangeM = guidance.RangeM;
+
+        // Horizontal co-location is not physical recovery: the aircraft may be overhead at
+        // altitude, crossing the runway, or stopped there without an accepted mission handoff.
+        // Only ProjectCompletedRecovery may publish an arrived/zero-cost result.
+        if (horizontalRangeM < 1.0) {
+            return new RecoveryNavigationProjection(
+                RecoveryPointKnown: true,
+                Guidance: guidance,
+                ClosureKts: 0.0,
+                EtaMinutes: null,
+                FuelToHomeEstimateLb: null,
+                FuelOnArrivalEstimateLb: null,
+                ReserveTargetLb: requiredLandingReserveLb,
+                ReserveMarginLb: null);
+        }
+
+        double closureMps =
+            (groundVelocity.X * eastM + groundVelocity.Z * northM) / horizontalRangeM;
+        double closureKts = closureMps * AirData.MpsToKnots;
+        if (closureKts <= 1.0) {
+            return new RecoveryNavigationProjection(
+                RecoveryPointKnown: true,
+                Guidance: guidance,
+                ClosureKts: closureKts,
+                EtaMinutes: null,
+                FuelToHomeEstimateLb: null,
+                FuelOnArrivalEstimateLb: null,
+                ReserveTargetLb: requiredLandingReserveLb,
+                ReserveMarginLb: null);
+        }
+
+        double etaMinutes = horizontalRangeM / closureMps / 60.0;
+        // A powered aircraft has no defensible current-condition burn estimate until the first
+        // engine-flow sample seeds the cockpit filter. Engine-less loadouts genuinely price at 0.
+        bool fuelEstimateAvailable = !ConsumesFuel || SmoothedBurnLbPerMinute > 1e-9;
+        if (!fuelEstimateAvailable) {
+            return new RecoveryNavigationProjection(
+                RecoveryPointKnown: true,
+                Guidance: guidance,
+                ClosureKts: closureKts,
+                EtaMinutes: etaMinutes,
+                FuelToHomeEstimateLb: null,
+                FuelOnArrivalEstimateLb: null,
+                ReserveTargetLb: requiredLandingReserveLb,
+                ReserveMarginLb: null);
+        }
+
+        double fuelToHomeLb = SmoothedBurnLbPerMinute * etaMinutes;
+        // Keep the planning result signed. A negative arrival estimate quantifies a shortfall;
+        // clamping it to zero would make every severe shortfall look identical.
+        double fuelOnArrivalLb = FuelLb - fuelToHomeLb;
+        double? reserveMarginLb = requiredLandingReserveLb is { } landingReserve
+            ? fuelOnArrivalLb - landingReserve
+            : null;
+        return new RecoveryNavigationProjection(
+            RecoveryPointKnown: true,
+            Guidance: guidance,
+            ClosureKts: closureKts,
+            EtaMinutes: etaMinutes,
+            FuelToHomeEstimateLb: fuelToHomeLb,
+            FuelOnArrivalEstimateLb: fuelOnArrivalLb,
+            ReserveTargetLb: requiredLandingReserveLb,
+            ReserveMarginLb: reserveMarginLb);
+    }
+
+    /// <summary>
+    /// Freeze the actual quantity result at a physically completed recovery. A stopped aircraft
+    /// can be hundreds of metres beyond the authored touchdown aim and necessarily has zero
+    /// closure, but neither fact makes its landing fuel or protected-reserve margin unknowable.
+    /// </summary>
+    public RecoveryNavigationProjection ProjectCompletedRecovery(
+        in Vec3D position,
+        double headingRad,
+        double? requiredLandingReserveLb) {
+        if (requiredLandingReserveLb is { } reserve
+            && (!double.IsFinite(reserve) || reserve < 0.0 || reserve > CapacityLb))
+            throw new ArgumentOutOfRangeException(nameof(requiredLandingReserveLb));
+        RtbGuidance guidance = GuidanceTo(
+            position, headingRad, position, active: false);
+        return new RecoveryNavigationProjection(
+            RecoveryPointKnown: true,
+            Guidance: guidance,
+            ClosureKts: 0.0,
+            EtaMinutes: 0.0,
+            FuelToHomeEstimateLb: 0.0,
+            FuelOnArrivalEstimateLb: FuelLb,
+            ReserveTargetLb: requiredLandingReserveLb,
+            ReserveMarginLb: requiredLandingReserveLb is { } target
+                ? FuelLb - target
+                : null);
     }
 
 }

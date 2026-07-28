@@ -2,7 +2,25 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { sortieResultCopy } from "../sortie_result.js";
+import {
+  combatHandoffPresentation,
+  sortieResultCopy,
+} from "../sortie_result.js";
+
+test("handoff presentation fails closed before the first simulation snapshot", () => {
+  for (const state of [undefined, null, false, 0, ""]) {
+    assert.deepEqual(combatHandoffPresentation(state), {
+      phase: "",
+      requested: false,
+      active: false,
+      playerRtbActive: false,
+      reliefKills: 0,
+      occurred: false,
+      available: false,
+      status: "HANDOFF UNAVAILABLE",
+    });
+  }
+});
 
 test("carrier water loss teaches from the recorded physical cause", () => {
   const result = sortieResultCopy({
@@ -275,10 +293,78 @@ test("G-LOC and Auto-GCAS lessons coexist exactly once", () => {
   assert.equal(result.brief.match(/Auto-GCAS:/g)?.length, 1);
 });
 
+test("combat handoff presentation preserves every authoritative phase flag", () => {
+  const available = combatHandoffPresentation({
+    combat_handoff_phase: "AVAILABLE",
+    combat_handoff_requested: false,
+    combat_handoff_active: false,
+    player_rtb_active: false,
+    relief_kills: 0,
+  });
+  const rtb = combatHandoffPresentation({
+    combat_handoff_phase: 5,
+    combat_handoff_requested: true,
+    combat_handoff_active: true,
+    player_rtb_active: true,
+    relief_kills: 3,
+  });
+
+  assert.equal(available.available, true);
+  assert.equal(available.occurred, false);
+  assert.equal(rtb.phase, "PLAYER_RTB");
+  assert.equal(rtb.requested, true);
+  assert.equal(rtb.active, true);
+  assert.equal(rtb.playerRtbActive, true);
+  assert.equal(rtb.reliefKills, 3);
+  assert.equal(rtb.status, "PLAYER RTB");
+});
+
+test("recovered handoff debrief keeps player and relief kills separate", () => {
+  const result = sortieResultCopy({
+    sortie_outcome: "VICTORY",
+    combat_handoff_phase: "RECOVERED",
+    combat_handoff_requested: true,
+    combat_handoff_active: true,
+    player_rtb_active: false,
+    kill_count: 2,
+    relief_kills: 4,
+    fuel_lb: 4650,
+    fuel_reserve_target_lb: 4000,
+    fuel_reserve_margin_lb: 650,
+  });
+
+  assert.equal(result.title, "Handoff Complete · Home");
+  assert.equal(result.handoff, true);
+  assert.equal(result.playerKills, 2);
+  assert.equal(result.reliefKills, 4);
+  assert.match(result.brief, /Your credited kills: 2\./);
+  assert.match(result.brief, /Relief kills: 4 \(tracked separately and not credited to you\)/);
+  assert.match(result.brief, /650 LB above reserve/);
+  assert.doesNotMatch(result.brief, /6 kills|total kills/i);
+});
+
+test("handoff does not hide a subsequent ownship loss or invent reserve evidence", () => {
+  const result = sortieResultCopy({
+    sortie_outcome: "DEFEAT",
+    combat_handoff_phase: "RELIEF_ENGAGED",
+    combat_handoff_requested: true,
+    combat_handoff_active: true,
+    player_rtb_active: true,
+    kill_count: 1,
+    relief_kills: 0,
+    fuel_reserve_target_lb: 4000,
+    fuel_reserve_margin_lb: null,
+  });
+
+  assert.equal(result.title, "Aircraft Lost After Handoff");
+  assert.match(result.brief, /Recovery reserve result was unavailable/);
+});
+
 test("app consumes the pure evidence-based debrief module", async () => {
   const app = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
 
-  assert.match(app, /import \{ sortieResultCopy \} from "\.\/render\/debrief\/sortie_result\.js";/);
+  assert.match(app,
+    /import \{[\s\S]*?combatHandoffPresentation,[\s\S]*?sortieResultCopy,[\s\S]*?} from "\.\/render\/debrief\/sortie_result\.js\?v=173";/);
   assert.doesNotMatch(app, /function sortieResultCopy\(/);
   assert.doesNotMatch(app, /The opponent's gun solution was decisive\. The loss was/);
 });
@@ -295,5 +381,6 @@ test("carrier debrief keeps physical outcome, full-pass trend, and touchdown fac
     /Full-pass primary · \$\{carrierFacts\.passCorrection\}[\s\S]*?Touchdown assessment · \$\{carrierFacts\.touchdown\}[\s\S]*?Touchdown primary · \$\{carrierFacts\.touchdownCorrection\}/,
     "pass correction and touchdown assessment must not overwrite one another");
   assert.match(app,
-    /readySortieLabel\.textContent = carrierQualification[\s\S]*?"Physical outcome"[\s\S]*?readyConfigLabel\.textContent = carrierQualification[\s\S]*?"Full-pass assessment"/);
+    /readySortieLabel\.textContent = result\.handoff[\s\S]*?carrierQualification \? "Physical outcome"[\s\S]*?readyConfigLabel\.textContent = result\.handoff[\s\S]*?carrierQualification[\s\S]*?"Full-pass assessment"/,
+    "handoff may add a branch, but carrier labels must retain their distinct physical/pass meanings");
 });

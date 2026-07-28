@@ -15,7 +15,7 @@
 // The cache name carries the release build, so shipping a new build orphans the old cache and
 // activate() deletes it. That reuses the existing stamp ritual rather than inventing a second
 // versioning scheme — see web/wwwroot/render/release/release_identity.js.
-const RELEASE_BUILD = "172";
+const RELEASE_BUILD = "173";
 const CACHE = `guns-only-${RELEASE_BUILD}`;
 
 // Never cached: telemetry and the multiplayer room are live services, and a cached reply would be
@@ -131,9 +131,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Everything else is content-addressed in practice: app.js carries ?v=BUILD, the WASM runtime and
-  // vendor tree are versioned by path, and the cache is dropped wholesale on a new build. Cache
-  // first is therefore both correct and the reason a cold offline start is fast.
+  // Everything else is content-addressed in practice: the entrypoint and every release-mutated
+  // direct module carry ?v=BUILD, the WASM assemblies/vendor tree are versioned by path, and the
+  // index preboot gate drops an older controller's cache before Blazor reads its boot manifest.
+  // Cache first is therefore both correct and the reason a cold offline start is fast.
   const responseRecord = (async () => {
     const cached = await caches.match(request);
     if (cached) return { response: cached, cacheWrite: Promise.resolve() };

@@ -3,7 +3,7 @@ import {
   TERRAIN_CURVATURE_START_M,
   TERRAIN_EARTH_RADIUS_M,
 } from "../environment/korea_terrain.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=173";
 import rapierV1Definition from "../../airframes/rapier_v1.embedded.js";
 
 // Pure Three.js scene/model builders extracted verbatim from app.js. Runtime-derived configuration
@@ -1242,6 +1242,203 @@ export function createRapierDispersedStrip(context = {}) {
   };
   annotateProceduralFallback(group, context);
   return group;
+}
+
+/**
+ * A deliberately bounded conventional runway presentation. The simulation owns the threshold,
+ * heading, width and length; this layer only makes that finite collision surface legible. It does
+ * not borrow the carrier recovery overlay, add arresting wires, or imply an airport beyond the
+ * published strip.
+ */
+function applyTerrainCurvatureToRunwayMaterial(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>", `
+      vec4 runwayWorldPosition = modelMatrix * vec4(transformed, 1.0);
+      float runwayRadialM = distance(runwayWorldPosition.xz, cameraPosition.xz);
+      float runwayCurvedRadialM = max(
+        runwayRadialM - ${TERRAIN_CURVATURE_START_M.toFixed(1)},
+        0.0
+      );
+      runwayWorldPosition.y -= runwayCurvedRadialM * runwayCurvedRadialM
+        / ${(2 * TERRAIN_EARTH_RADIUS_M).toFixed(1)};
+      vec4 mvPosition = viewMatrix * runwayWorldPosition;
+      gl_Position = projectionMatrix * mvPosition;
+    `);
+  };
+  material.customProgramCacheKey = () => "conventional-runway-terrain-curvature-v1";
+  return material;
+}
+
+export function createConventionalRunwayPresentation() {
+  const group = new THREE.Group();
+  group.name = "CONVENTIONAL_RUNWAY";
+  group.visible = false;
+
+  const asphalt = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
+    color: 0x34383a,
+    roughness: 0.96,
+    metalness: 0,
+  }));
+  const shoulder = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
+    color: 0x6b6755,
+    roughness: 1,
+    metalness: 0,
+  }));
+  const paint = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
+    color: 0xe7e0c8,
+    emissive: 0x11100c,
+    roughness: 0.83,
+    metalness: 0,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  }));
+
+  const unitSlab = new THREE.BoxGeometry(1, 0.08, 1);
+  const unitMark = new THREE.BoxGeometry(1, 0.025, 1);
+  const addScaledMesh = (name, geometry, material) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = name;
+    mesh.receiveShadow = true;
+    mesh.userData.noShadow = true;
+    mesh.castShadow = false;
+    group.add(mesh);
+    return mesh;
+  };
+
+  // The shoulder is a visual boundary only. The darker slab retains the exact authoritative width.
+  const visualShoulder = addScaledMesh("RUNWAY_VISUAL_SHOULDER", unitSlab, shoulder);
+  const surface = addScaledMesh("RUNWAY_PAVEMENT", unitSlab, asphalt);
+  const edgeLines = [
+    addScaledMesh("RUNWAY_EDGE_LEFT", unitMark, paint),
+    addScaledMesh("RUNWAY_EDGE_RIGHT", unitMark, paint),
+  ];
+  const endLines = [
+    addScaledMesh("RUNWAY_THRESHOLD_LINE", unitMark, paint),
+    addScaledMesh("RUNWAY_END_LINE", unitMark, paint),
+  ];
+
+  const thresholdBars = Array.from({ length: 10 }, (_, index) =>
+    addScaledMesh(`RUNWAY_THRESHOLD_BAR_${index + 1}`, unitMark, paint));
+  const centreDashes = Array.from({ length: 48 }, (_, index) =>
+    addScaledMesh(`RUNWAY_CENTRELINE_${index + 1}`, unitMark, paint));
+  const touchdownBars = Array.from({ length: 12 }, (_, index) =>
+    addScaledMesh(`RUNWAY_TOUCHDOWN_ZONE_${index + 1}`, unitMark, paint));
+  const aimingBars = [
+    addScaledMesh("RUNWAY_AIMING_POINT_LEFT", unitMark, paint),
+    addScaledMesh("RUNWAY_AIMING_POINT_RIGHT", unitMark, paint),
+  ];
+
+  return {
+    group,
+    visualShoulder,
+    surface,
+    edgeLines,
+    endLines,
+    thresholdBars,
+    centreDashes,
+    touchdownBars,
+    aimingBars,
+  };
+}
+
+export function updateConventionalRunwayPresentation(runway, state) {
+  if (!runway?.group) return;
+  const thresholdX = state?.runway_threshold_x;
+  const thresholdY = state?.runway_threshold_y;
+  const thresholdZ = state?.runway_threshold_z;
+  const headingDeg = state?.runway_heading_deg;
+  const lengthM = state?.runway_length_m;
+  const widthM = state?.runway_width_m;
+  const valid = state?.runway_available === true
+    && typeof thresholdX === "number" && Number.isFinite(thresholdX)
+    && typeof thresholdY === "number" && Number.isFinite(thresholdY)
+    && typeof thresholdZ === "number" && Number.isFinite(thresholdZ)
+    && typeof headingDeg === "number" && Number.isFinite(headingDeg)
+    && typeof lengthM === "number" && Number.isFinite(lengthM)
+    && typeof widthM === "number" && Number.isFinite(widthM)
+    && lengthM >= 300
+    && widthM >= 12;
+  runway.group.visible = valid;
+  if (!valid) return;
+
+  const headingRad = headingDeg * Math.PI / 180;
+  runway.group.position.set(thresholdX, thresholdY + 0.055, -thresholdZ);
+  // Simulation +Z is north and renderer Z is mirrored. Local +Z runs threshold-to-far-end.
+  runway.group.rotation.set(0, Math.PI - headingRad, 0);
+
+  runway.visualShoulder.position.set(0, -0.095, lengthM * 0.5);
+  runway.visualShoulder.scale.set(widthM + 8, 1.25, lengthM + 12);
+  runway.surface.position.set(0, -0.04, lengthM * 0.5);
+  runway.surface.scale.set(widthM, 1, lengthM);
+
+  const edgeInsetM = Math.min(0.7, widthM * 0.025);
+  for (let index = 0; index < runway.edgeLines.length; index++) {
+    const side = index === 0 ? -1 : 1;
+    const edge = runway.edgeLines[index];
+    edge.position.set(side * (widthM * 0.5 - edgeInsetM), 0.018, lengthM * 0.5);
+    edge.scale.set(0.42, 1, Math.max(1, lengthM - 4));
+  }
+  for (let index = 0; index < runway.endLines.length; index++) {
+    const end = runway.endLines[index];
+    end.position.set(0, 0.019, index === 0 ? 5.5 : lengthM - 5.5);
+    end.scale.set(Math.max(4, widthM - 2.4), 1, 0.9);
+  }
+
+  const stripeWidthM = Math.min(2.15, widthM / 16);
+  const stripeGapM = stripeWidthM * 0.72;
+  const thresholdSpanM = stripeWidthM * runway.thresholdBars.length
+    + stripeGapM * (runway.thresholdBars.length - 1);
+  for (let index = 0; index < runway.thresholdBars.length; index++) {
+    const stripe = runway.thresholdBars[index];
+    stripe.position.set(
+      -thresholdSpanM * 0.5 + stripeWidthM * 0.5 + index * (stripeWidthM + stripeGapM),
+      0.02,
+      18,
+    );
+    stripe.scale.set(stripeWidthM, 1, 24);
+  }
+
+  const centrelineStartM = 70;
+  const centrelineEndM = Math.max(centrelineStartM, lengthM - 55);
+  const centrelineStepM = (centrelineEndM - centrelineStartM)
+    / runway.centreDashes.length;
+  const centrelineLengthM = Math.max(8, Math.min(30, centrelineStepM * 0.58));
+  for (let index = 0; index < runway.centreDashes.length; index++) {
+    const dash = runway.centreDashes[index];
+    dash.position.set(0, 0.021,
+      centrelineStartM + (index + 0.5) * centrelineStepM);
+    dash.scale.set(0.55, 1, centrelineLengthM);
+  }
+
+  // Paired touchdown-zone bars show usable depth without claiming a particular civil standard.
+  for (let pair = 0; pair < runway.touchdownBars.length / 2; pair++) {
+    const alongM = Math.min(lengthM - 120, 150 + pair * 150);
+    const halfSeparationM = Math.min(widthM * 0.25, 11.5);
+    for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
+      const bar = runway.touchdownBars[pair * 2 + sideIndex];
+      bar.position.set(sideIndex === 0 ? -halfSeparationM : halfSeparationM, 0.022, alongM);
+      bar.scale.set(Math.min(2.2, widthM * 0.06), 1, 22);
+    }
+  }
+
+  // Put the aiming bars at the simulation's published recovery aim point when it lies on-strip.
+  const aimX = state?.runway_touchdown_x;
+  const aimZ = state?.runway_touchdown_z;
+  const deltaX = aimX - thresholdX;
+  const deltaZ = aimZ - thresholdZ;
+  const aimAlongM = typeof aimX === "number" && Number.isFinite(aimX)
+    && typeof aimZ === "number" && Number.isFinite(aimZ)
+    ? deltaX * Math.sin(headingRad) + deltaZ * Math.cos(headingRad)
+    : Math.min(300, lengthM * 0.18);
+  const clampedAimAlongM = Math.max(80, Math.min(lengthM - 80, aimAlongM));
+  const aimingHalfSeparationM = Math.min(widthM * 0.23, 10.5);
+  for (let index = 0; index < runway.aimingBars.length; index++) {
+    const bar = runway.aimingBars[index];
+    bar.position.set(index === 0 ? -aimingHalfSeparationM : aimingHalfSeparationM,
+      0.024, clampedAimAlongM);
+    bar.scale.set(Math.min(3.2, widthM * 0.075), 1, Math.min(48, lengthM * 0.025));
+  }
 }
 
 export function createCarrierRuntimePresentation() {

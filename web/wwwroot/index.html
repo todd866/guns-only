@@ -1643,6 +1643,34 @@
 
     .ready-secondary-actions button[hidden] { display: none; }
 
+    #ready-handoff {
+      width: 100%;
+      min-height: 50px;
+      margin-top: 8px;
+      border: 1px solid rgba(255, 193, 93, .72);
+      border-radius: 6px;
+      color: #ffe2af;
+      background: rgba(104, 72, 18, .22);
+      cursor: pointer;
+      font: 850 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      touch-action: manipulation;
+    }
+
+    #ready-handoff:hover,
+    #ready-handoff:focus-visible {
+      outline: 2px solid #ffd28b;
+      outline-offset: 1px;
+      background: rgba(139, 94, 20, .34);
+    }
+
+    #ready-handoff[hidden] { display: none; }
+    #ready-handoff:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+    }
+
     /* Top-LEFT, under the multiplayer badge. The top-right corner belongs to the GUN TEMP
        instrument and the aircraft-systems console; this chrome was sitting on top of the
        temperature bar and hiding a primary gunnery instrument behind a pause button. */
@@ -2292,7 +2320,7 @@
        It answers the four questions the cue could not — where am I going, how far, how long, and
        can I get there on the fuel aboard. -->
   <details id="nav-console" hidden data-relevance="none">
-    <summary role="button" aria-expanded="false" aria-label="Toggle navigation console">
+    <summary role="button" aria-expanded="false" aria-label="Toggle navigation console" aria-keyshortcuts="N">
       <span class="tf-title">NAVIGATION</span>
       <span class="tf-collapse-cue" aria-hidden="true"></span>
     </summary>
@@ -2315,6 +2343,10 @@
           <output id="nav-eta" class="tf-value" data-state="unknown">--</output>
         </div>
         <div class="tf-indication">
+          <span class="tf-label">Closure home</span>
+          <output id="nav-closure" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
           <span class="tf-label">Turn</span>
           <output id="nav-turn" class="tf-value" data-state="unknown">--</output>
         </div>
@@ -2328,8 +2360,16 @@
           <span class="tf-label">Fuel aboard</span>
           <output id="nav-fuel-have" class="tf-value" data-state="unknown">--</output>
         </div>
+        <div class="tf-indication">
+          <span class="tf-label">On arrival</span>
+          <output id="nav-fuel-arrival" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Protected reserve</span>
+          <output id="nav-fuel-reserve" class="tf-value" data-state="unknown">--</output>
+        </div>
         <div class="tf-indication wide">
-          <span class="tf-label">Margin</span>
+          <span class="tf-label">Reserve margin</span>
           <output id="nav-fuel-margin" class="tf-value" data-state="unknown">--</output>
         </div>
       </div>
@@ -2363,6 +2403,16 @@
         <div class="tf-indication wide">
           <span class="tf-label">Skin (stagnation)</span>
           <output id="nav-skin" class="tf-value" data-state="unknown">--</output>
+        </div>
+      </div>
+      <div class="tf-indications" aria-label="Combat handoff and return status">
+        <div class="tf-indication wide">
+          <span class="tf-label">Combat handoff</span>
+          <output id="nav-handoff" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
+          <span class="tf-label">Relief kills</span>
+          <output id="nav-relief-kills" class="tf-value" data-state="unknown">--</output>
         </div>
       </div>
       <div class="tf-indications" aria-label="Contact">
@@ -2524,6 +2574,7 @@
 Splash one bandit to qualify · H controls · R restarts</p>
           <button id="ready-start" type="button">Fly First Merge</button>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
+          <button id="ready-handoff" type="button" hidden disabled>HAND OFF FIGHT &amp; RTB</button>
           <div class="ready-secondary-actions">
             <button id="ready-settings" type="button">Settings</button>
             <button id="ready-restart" type="button" hidden>Restart sortie</button>
@@ -2531,7 +2582,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 172 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 173 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
@@ -2585,8 +2636,33 @@ Splash one bandit to qualify · H controls · R restarts</p>
     </div>
   </div>
 
+  <script>
+    // A network-fresh Build 173 document may still be controlled by Build 172's cache-first
+    // service worker. Purge that controller and its Cache Storage before Blazor requests the
+    // unversioned boot manifest/WASM graph. Offline clients never see this newer document until a
+    // network navigation succeeds, so the gate cannot destroy the only usable offline release.
+    globalThis.__gunsPrebootReady = (async () => {
+      const releaseBuild = "173";
+      const controller = navigator.serviceWorker?.controller;
+      if (!controller) return;
+      const controllerBuild = new URL(controller.scriptURL, location.href)
+        .searchParams.get("v");
+      if (controllerBuild === releaseBuild) return;
+
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+      if ("caches" in globalThis) {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter((key) => key.startsWith("guns-only-"))
+            .map((key) => caches.delete(key)),
+        );
+      }
+    })();
+  </script>
   <script src="./multiplayer-config.js"></script>
-  <script type="module" src="./app.js?v=172"></script>
-  <script src="./_framework/blazor.webassembly.js" autostart="false"></script>
+  <script type="module" src="./app.js?v=173"></script>
+  <script src="./_framework/blazor.webassembly.js?v=173" autostart="false"></script>
 </body>
 </html>

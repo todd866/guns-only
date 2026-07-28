@@ -628,6 +628,41 @@ test("only gesture arming resumes a suspended flight graph and suspended updates
   }
 });
 
+test("Safari interrupted flight audio resumes only from arming and stays muted meanwhile", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = class extends FakeAudioContext {
+      constructor() {
+        super();
+        this.state = "interrupted";
+      }
+
+      resume() {
+        this.resumeCalls += 1;
+        return new Promise(() => {});
+      }
+    };
+    const {
+      armFlightAudio,
+      updateFlightAudio,
+    } = await freshModule("../flight_audio.js", "interrupted-lifecycle");
+
+    assert.equal(armFlightAudio(), true);
+    assert.equal(armFlightAudio(), true);
+    const audio = FakeAudioContext.instances.at(-1);
+    assert.equal(audio.resumeCalls, 1, "one user-gesture resume attempt is in flight");
+
+    audio.gains[0].gain.value = 0.8;
+    updateFlightAudio({ engine_rpm_pct: 90 }, { muted: false });
+    assert.equal(audio.resumeCalls, 1, "animation frames cannot resume interrupted Safari audio");
+    assert.equal(latest(audio.gains[0].gain), 0,
+      "an interrupted graph cannot retain a previously audible master gain");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
 test("flight façade re-projects recorded external replay instead of leaking final-live cues", async () => {
   const {
     projectFlightAudioState,

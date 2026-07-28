@@ -84,6 +84,17 @@ public sealed record AircraftCapability(
         "systems.modern-airborne.not-simulated.v1", false, true,
         "https://www.af.mil/About-Us/Fact-Sheets/Display/Article/104506/f-22-raptor/",
         AutoGcasCapabilityProfile.ModernCrewedPublicDataSurrogate);
+    /// <summary>
+    /// The same public-data aircraft identity with only the generic conventional landing-gear
+    /// seam enabled for the authored runway recovery. This does not claim an F-22 hydraulic,
+    /// flap, warning, or emergency-extension simulation.
+    /// </summary>
+    public static AircraftCapability F22AConventionalRecoverySurrogate { get; } =
+        F22ASurrogate with {
+            SystemsProfileId =
+                "systems.modern-conventional-gear.public-data-surrogate.v1",
+            SystemsSimulated = true
+        };
     /// The 2030s cheap high-altitude interceptor. Steel where the heat is, composite elsewhere, no
     /// windscreen — the occupant is reclined behind sensors in a composite escape pod — catapult
     /// launched from deep rear basing and recovered on a hook. Systems ARE simulated because the
@@ -332,7 +343,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     ContinuousCombatConfig? ContinuousCombat = null,
     PilotSkill BanditSkill = PilotSkill.Competent,
     MissionEnvironmentContract? Environment = null,
-    ScriptedInterceptConfig? ScriptedIntercept = null) {
+    ScriptedInterceptConfig? ScriptedIntercept = null,
+    RecoveryPlan? RecoveryPlan = null) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
@@ -846,7 +858,15 @@ public static class Beats {
             PlayerPhysiologyProfile: PilotPhysiologyProfile.RapierReclinedInterceptor,
             RecoveryCompletesSortie: true,
             Environment: Ukraine2030sTheatre.RapierCorridor,
-            ScriptedIntercept: new ScriptedInterceptConfig());
+            ScriptedIntercept: new ScriptedInterceptConfig(),
+            // The existing arrested strip is also the mission-authored navigation home. Six
+            // hundred pounds is this loadout's declared minimum-fuel threshold; the projection
+            // protects it explicitly instead of presenting every pound on board as expendable.
+            RecoveryPlan: new RecoveryPlan(
+                "recovery.rapier.eastern-dispersed-strip.v1",
+                "Eastern dispersed strip",
+                carrier.Position,
+                requiredLandingReserveLb: 600.0));
     }
 
     /// <summary>
@@ -1076,17 +1096,40 @@ public static class Beats {
                 EmergencyFuelThresholdLb: 1200.0),
             InitialThrottle: 1.0,
             StageAtTrimThrottle: true,
+            // Landing-gear-only, public-data/provisional recovery seam. An explicit profile keeps
+            // this modern jet from silently inheriting the F-86 hydraulic/flap research model.
+            SystemsProfile: AirframeSystemsProfile.ModernConventionalGearSurrogate,
             Mission: new MissionContract(
                 "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,
                 PublicDataSurrogate: true,
                 RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE",
                 Era: "MODERN_PUBLIC_DATA_EXERCISE"),
-            PlayerCapability: AircraftCapability.F22ASurrogate,
+            PlayerCapability: AircraftCapability.F22AConventionalRecoverySurrogate,
             BanditCapability: AircraftCapability.Su27SSurrogate,
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
             ContinuousCombat: new ContinuousCombatConfig(),
+            // Fictional runway inside the shared 262 km theatre, roughly 43 NM southwest of the
+            // merge. Its 52.5 m pavement datum is the embedded regional terrain height at the
+            // threshold; the full strip stays within 0.3 m of that flat datum. The 3,000 lb
+            // exercise reserve sits 900 lb above declared MIN FUEL and
+            // 1,800 lb above EMERGENCY FUEL; it is deliberately below 4,000 lb Bingo, which remains
+            // the action threshold for turning home rather than the desired fuel at touchdown.
+            RecoveryPlan: new RecoveryPlan(
+                "recovery.f22a.soniachne-west-runway.v1",
+                "Soniachne west recovery runway",
+                new Vec3D(-55_000.0, 52.5, -55_000.0),
+                requiredLandingReserveLb: 3_000.0,
+                // Threshold centre is 300 m south of the touchdown aim. Heading zero is +north
+                // in the simulation frame, so the full 3,000 m rollout stays inside the regional
+                // theatre. These dimensions match a substantial fast-jet runway without claiming
+                // a real site or an exact F-22 landing-performance requirement.
+                conventionalRunway: new ConventionalRunwayGeometry(
+                    thresholdPosition: new Vec3D(-55_000.0, 52.5, -55_300.0),
+                    landingHeadingRad: 0.0,
+                    lengthM: 3_000.0,
+                    widthM: 45.0)),
             // The opening neutral-merge dogfight is engagement 1: a gentle Novice warm-up under the
             // interim ForEngagement ramp (1 Novice, 2 Competent, 3 Veteran, 4+ Ace). Continuous
             // successors escalate via ForEngagement at CreateNextBandit.

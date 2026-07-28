@@ -51,8 +51,21 @@ public class ModernVisualMergeTests {
         Assert.Equal("GUNS_ONLY_FIRST_PASS_SAFE", beat.MissionIdentity.RulesOfEngagement);
         Assert.Equal("aircraft.f22a.public-data-surrogate.v1", beat.PlayerAircraft.Id);
         Assert.Equal("aircraft.su27s.public-data-surrogate.v1", beat.BanditAircraft.Id);
-        Assert.False(beat.PlayerAircraft.SystemsSimulated);
+        Assert.True(beat.PlayerAircraft.SystemsSimulated);
         Assert.False(beat.BanditAircraft.SystemsSimulated);
+        Assert.False(AircraftCapability.F22ASurrogate.SystemsSimulated);
+        Assert.False(Beats.DroneRaidDefense().PlayerAircraft.SystemsSimulated);
+        Assert.Equal("systems.modern-conventional-gear.public-data-surrogate.v1",
+            beat.PlayerAircraft.SystemsProfileId);
+        Assert.Equal(AirframeSystemsProfile.ModernConventionalGearSurrogate,
+            beat.SystemsProfile);
+        Assert.Equal(AirframeSystemsProfile.ModernConventionalGearSurrogate,
+            session.PlayerSystems.Profile);
+        Assert.False(session.PlayerSystems.PilotOperatedFlapsAvailable);
+        Assert.False(session.PlayerSystems.UtilityHydraulicSystemAvailable);
+        Assert.False(session.PlayerSystems.ElectricalSystemAvailable);
+        Assert.Equal(0.0,
+            session.PlayerSystems.Profile.UtilityHydraulicNominalPsi);
         Assert.Equal("gun.m61a2.public-data-surrogate.v1", session.PlayerGun.Profile.Id);
         Assert.Equal("gun.gsh301.public-data-surrogate.v1", session.OpponentGun.Profile.Id);
         Assert.Equal(12000.0, session.PlayerFuel.FuelLb, 8);
@@ -322,42 +335,33 @@ public class ModernVisualMergeTests {
     }
 
     [Fact]
-    public void UnsimulatedModernGearAndFlapsRejectInputAndCannotAddHiddenDrag() {
-        var reference = new SimulationSession(7);
-        var challenged = new SimulationSession(7);
-        reference.Begin();
-        challenged.Begin();
+    public void ModernRecoveryAcceptsGearButCannotManufactureF86Flaps() {
+        var session = new SimulationSession(7);
+        session.Begin();
 
-        challenged.FeedKey(GKey.GearToggle, true);
-        challenged.FeedKey(GKey.GearToggle, false);
-        challenged.FeedKey(GKey.FlapDown, true);
-        for (int tick = 0; tick < 2 * AircraftSim.TickHz; tick++) {
-            reference.StepFixed();
-            challenged.StepFixed();
-        }
-        challenged.FeedKey(GKey.FlapDown, false);
+        session.FeedKey(GKey.GearToggle, true);
+        session.FeedKey(GKey.GearToggle, false);
+        session.FeedKey(GKey.FlapDown, true);
+        for (int tick = 0; tick < 7 * AircraftSim.TickHz; tick++)
+            session.StepFixed();
+        session.FeedKey(GKey.FlapDown, false);
 
-        Assert.False(challenged.PlayerSystemsSimulated);
-        Assert.Equal(LandingGearHandle.Up, challenged.PlayerSystems.GearHandle);
-        Assert.Equal(WingFlapLever.Hold, challenged.PlayerSystems.FlapLever);
-        Assert.Equal(0.0, challenged.PlayerSystems.LeftFlapDegrees, 12);
-        Assert.Equal(0.0, challenged.PlayerSystems.RightFlapDegrees, 12);
-        Assert.Equal(AirframeAerodynamicState.Clean,
-            challenged.PlayerAerodynamicConfiguration);
-        Assert.Equal(AirframeAerodynamicState.Clean,
-            challenged.Player.AerodynamicConfiguration);
-        Assert.Equal(KeyPhase.Idle,
-            challenged.Keys.PhaseAt(GKey.GearToggle, challenged.TimeMilliseconds));
-        Assert.Equal(KeyPhase.Idle,
-            challenged.Keys.PhaseAt(GKey.FlapDown, challenged.TimeMilliseconds));
-
-        Assert.Equal(reference.Player.State.Position.X,
-            challenged.Player.State.Position.X, 12);
-        Assert.Equal(reference.Player.State.Position.Y,
-            challenged.Player.State.Position.Y, 12);
-        Assert.Equal(reference.Player.State.Position.Z,
-            challenged.Player.State.Position.Z, 12);
-        Assert.Equal(reference.Player.State.Speed, challenged.Player.State.Speed, 12);
+        Assert.True(session.PlayerSystemsSimulated);
+        Assert.Equal(LandingGearHandle.Down, session.PlayerSystems.GearHandle);
+        Assert.True(session.PlayerSystems.AllGearDownAndLocked,
+            $"gear transit N/L/R {session.PlayerSystems.NoseGearPosition:F3}/"
+            + $"{session.PlayerSystems.LeftMainGearPosition:F3}/"
+            + $"{session.PlayerSystems.RightMainGearPosition:F3}, "
+            + $"doors {session.PlayerSystems.GearDoorPosition:F3}, "
+            + $"hyd {session.PlayerSystems.UtilityHydraulicPressureFraction:F3}");
+        Assert.Equal(WingFlapLever.Hold, session.PlayerSystems.FlapLever);
+        Assert.Equal(0.0, session.PlayerSystems.LeftFlapDegrees, 12);
+        Assert.Equal(0.0, session.PlayerSystems.RightFlapDegrees, 12);
+        Assert.Equal(0.0, session.PlayerSystems.EffectiveFlapFraction, 12);
+        Assert.True(session.PlayerAerodynamicConfiguration
+            .DragCoefficientIncrement > 0.0);
+        Assert.Equal(0.0, session.PlayerAerodynamicConfiguration
+            .LiftCoefficientIncrement, 12);
     }
 
     [Fact]

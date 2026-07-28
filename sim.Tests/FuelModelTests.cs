@@ -1,4 +1,5 @@
 using GunsOnly.Sim;
+using GunsOnly.Sim.Doctrine;
 
 namespace GunsOnly.Sim.Tests;
 
@@ -165,6 +166,207 @@ public class FuelModelTests {
         fuel.Step(10.0, 0.0);
         Assert.True(fuel.RtbAdvisory);
         Assert.Equal(guidance, fuel.GuidanceTo(position, headingRad: 0.0, boat));
+    }
+
+    [Fact]
+    public void RecoveryProjectionUsesSignedGroundClosureAndProtectsLandingReserve() {
+        var fuel = new FuelModel(
+            initialFuelLb: 5000.0,
+            capacityLb: 6000.0,
+            bingoThresholdLb: 1000.0);
+        fuel.Step(60.0, 200.0);
+        var position = Vec3D.Zero;
+        var home = new Vec3D(0.0, 120.0, 18_520.0); // ten horizontal NM north
+        var northAt100Mps = new Vec3D(0.0, 0.0, 100.0);
+
+        RecoveryNavigationProjection projection = fuel.ProjectRecoveryTo(
+            position, northAt100Mps, headingRad: 0.0, home,
+            requiredLandingReserveLb: 3000.0, active: true);
+
+        double expectedEtaMinutes = 18_520.0 / 100.0 / 60.0;
+        double expectedFuelToHomeLb = 200.0 * expectedEtaMinutes;
+        Assert.True(projection.RecoveryPointKnown);
+        Assert.True(projection.Guidance.Active);
+        Assert.Equal(100.0 * AirData.MpsToKnots,
+            projection.ClosureKts!.Value, precision: 10);
+        Assert.Equal(expectedEtaMinutes, projection.EtaMinutes!.Value, precision: 10);
+        Assert.Equal(expectedFuelToHomeLb,
+            projection.FuelToHomeEstimateLb!.Value, precision: 10);
+        Assert.Equal(fuel.FuelLb - expectedFuelToHomeLb,
+            projection.FuelOnArrivalEstimateLb!.Value, precision: 10);
+        Assert.Equal(3000.0, projection.ReserveTargetLb);
+        Assert.Equal(fuel.FuelLb - expectedFuelToHomeLb - 3000.0,
+            projection.ReserveMarginLb!.Value, precision: 10);
+    }
+
+    [Theory]
+    [InlineData(0.0, 0.0, -100.0)]
+    [InlineData(100.0, 0.0, 0.0)]
+    public void RecoveryProjectionWithholdsEtaAndFuelWhenOutboundOrAbeam(
+        double eastMps, double upMps, double northMps) {
+        var fuel = new FuelModel(
+            initialFuelLb: 5000.0,
+            capacityLb: 6000.0,
+            bingoThresholdLb: 1000.0);
+        fuel.Step(60.0, 200.0);
+
+        RecoveryNavigationProjection projection = fuel.ProjectRecoveryTo(
+            Vec3D.Zero,
+            new Vec3D(eastMps, upMps, northMps),
+            headingRad: 0.0,
+            new Vec3D(0.0, 120.0, 18_520.0),
+            requiredLandingReserveLb: 3000.0,
+            active: true);
+
+        Assert.NotNull(projection.ClosureKts);
+        Assert.True(projection.ClosureKts <= 0.0);
+        Assert.Null(projection.EtaMinutes);
+        Assert.Null(projection.FuelToHomeEstimateLb);
+        Assert.Null(projection.FuelOnArrivalEstimateLb);
+        Assert.Equal(3000.0, projection.ReserveTargetLb);
+        Assert.Null(projection.ReserveMarginLb);
+    }
+
+    [Fact]
+    public void PoweredRecoveryProjectionWaitsForARealFlowSample() {
+        var fuel = new FuelModel(
+            initialFuelLb: 5000.0,
+            capacityLb: 6000.0,
+            bingoThresholdLb: 1000.0);
+
+        RecoveryNavigationProjection projection = fuel.ProjectRecoveryTo(
+            Vec3D.Zero,
+            new Vec3D(0.0, 0.0, 100.0),
+            headingRad: 0.0,
+            new Vec3D(0.0, 120.0, 18_520.0),
+            requiredLandingReserveLb: 3000.0,
+            active: false);
+
+        Assert.NotNull(projection.EtaMinutes);
+        Assert.Null(projection.FuelToHomeEstimateLb);
+        Assert.Null(projection.FuelOnArrivalEstimateLb);
+        Assert.Null(projection.ReserveMarginLb);
+    }
+
+    [Fact]
+    public void OverheadAtAltitudeIsNotACompletedZeroCostRecovery() {
+        var fuel = new FuelModel(
+            initialFuelLb: 5000.0,
+            capacityLb: 6000.0,
+            bingoThresholdLb: 1000.0);
+        fuel.Step(60.0, 200.0);
+        var home = new Vec3D(-55_000.0, 52.5, -55_000.0);
+
+        RecoveryNavigationProjection projection = fuel.ProjectRecoveryTo(
+            new Vec3D(home.X, 3000.0, home.Z),
+            new Vec3D(0.0, -100.0, 0.0),
+            headingRad: 0.0,
+            home,
+            requiredLandingReserveLb: 3000.0,
+            active: true);
+
+        Assert.True(projection.RecoveryPointKnown);
+        Assert.True(projection.Guidance.Active);
+        Assert.Equal(0.0, projection.Guidance.RangeM);
+        Assert.Equal(0.0, projection.ClosureKts);
+        Assert.Null(projection.EtaMinutes);
+        Assert.Null(projection.FuelToHomeEstimateLb);
+        Assert.Null(projection.FuelOnArrivalEstimateLb);
+        Assert.Equal(3000.0, projection.ReserveTargetLb);
+        Assert.Null(projection.ReserveMarginLb);
+    }
+
+    [Fact]
+    public void CompletedRecoveryReportsActualFuelAndReserveAtZeroTravelCost() {
+        var fuel = new FuelModel(
+            initialFuelLb: 5000.0,
+            capacityLb: 6000.0,
+            bingoThresholdLb: 1000.0);
+        fuel.Step(60.0, 200.0);
+
+        RecoveryNavigationProjection projection =
+            fuel.ProjectCompletedRecovery(
+                new Vec3D(-55_000.0, 120.0, -54_200.0),
+                headingRad: 0.0,
+                requiredLandingReserveLb: 3000.0);
+
+        Assert.True(projection.RecoveryPointKnown);
+        Assert.False(projection.Guidance.Active);
+        Assert.Equal(0.0, projection.Guidance.RangeM);
+        Assert.Equal(0.0, projection.ClosureKts);
+        Assert.Equal(0.0, projection.EtaMinutes);
+        Assert.Equal(0.0, projection.FuelToHomeEstimateLb);
+        Assert.Equal(fuel.FuelLb, projection.FuelOnArrivalEstimateLb);
+        Assert.Equal(3000.0, projection.ReserveTargetLb);
+        Assert.Equal(fuel.FuelLb - 3000.0, projection.ReserveMarginLb);
+    }
+
+    [Fact]
+    public void ModernVisualMergeAuthorsAHomeAndReserveAboveMinimumFuel() {
+        BeatSetup beat = Beats.ModernVisualMerge();
+        RecoveryPlan plan = Assert.IsType<RecoveryPlan>(beat.RecoveryPlan);
+
+        double horizontalRangeNm = Math.Sqrt(
+            Math.Pow(plan.Position.X - beat.Player.Position.X, 2.0)
+            + Math.Pow(plan.Position.Z - beat.Player.Position.Z, 2.0)) / 1852.0;
+        Assert.InRange(horizontalRangeNm, 40.0, 45.0);
+        Assert.Equal(3000.0, plan.RequiredLandingReserveLb);
+        Assert.True(plan.RequiredLandingReserveLb
+            > beat.FuelLoadout.MinimumFuelThresholdLb);
+        Assert.True(plan.RequiredLandingReserveLb
+            > beat.FuelLoadout.EmergencyFuelThresholdLb);
+        Assert.True(plan.RequiredLandingReserveLb
+            < beat.FuelLoadout.BingoThresholdLb);
+        ConventionalRunwayGeometry runway =
+            Assert.IsType<ConventionalRunwayGeometry>(plan.ConventionalRunway);
+        Assert.Equal(3000.0, runway.LengthM);
+        Assert.Equal(45.0, runway.WidthM);
+        Assert.Equal(52.5, runway.ElevationM);
+        Assert.Equal(0.0, runway.LandingHeadingRad);
+        Assert.Equal(new Vec3D(-55_000.0, 52.5, -55_300.0),
+            runway.ThresholdPosition);
+        Assert.Equal(new Vec3D(-55_000.0, 52.5, -52_300.0),
+            runway.FarEndPosition);
+        Assert.Null(Beats.RapierIntercept().RecoveryPlan!.ConventionalRunway);
+        Assert.Equal(plan, Beats.ModernAceDuel().RecoveryPlan);
+    }
+
+    [Fact]
+    public void RecoveryPlanAndProjectionRejectInvalidReserveContracts() {
+        Assert.Throws<ArgumentException>(() => new RecoveryPlan(
+            "", "Runway", Vec3D.Zero, requiredLandingReserveLb: 1000.0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RecoveryPlan(
+            "recovery.test.v1", "Runway", Vec3D.Zero,
+            requiredLandingReserveLb: -1.0));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new ConventionalRunwayGeometry(
+                thresholdPosition: Vec3D.Zero,
+                landingHeadingRad: 0.0,
+                lengthM: 0.0,
+                widthM: 45.0));
+        var runway = new ConventionalRunwayGeometry(
+            thresholdPosition: Vec3D.Zero,
+            landingHeadingRad: 0.0,
+            lengthM: 3000.0,
+            widthM: 45.0);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RecoveryPlan(
+            "recovery.test.v1",
+            "Runway",
+            new Vec3D(30.0, 0.0, 300.0),
+            requiredLandingReserveLb: 1000.0,
+            conventionalRunway: runway));
+
+        var fuel = new FuelModel(
+            initialFuelLb: 5000.0,
+            capacityLb: 6000.0,
+            bingoThresholdLb: 1000.0);
+        Assert.Throws<ArgumentOutOfRangeException>(() => fuel.ProjectRecoveryTo(
+            Vec3D.Zero,
+            new Vec3D(0.0, 0.0, 100.0),
+            headingRad: 0.0,
+            new Vec3D(0.0, 0.0, 1000.0),
+            requiredLandingReserveLb: 6001.0,
+            active: true));
     }
 
     [Fact]

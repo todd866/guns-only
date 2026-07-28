@@ -14,40 +14,67 @@ function row(label, value, unit) {
   return Object.freeze({ label, value, unit });
 }
 
-function recoveryPointKnown(state) {
-  if (state?.rtb_steer === true
-      && finiteNumber(state.rtb_range_nm) !== null
-      && finiteNumber(state.rtb_bearing_deg) !== null) {
-    return true;
-  }
-  // Rapier / Circuits publish strip geometry even before formal RTB steer.
-  if (state?.rapier_mission_available === true
-      && finiteNumber(state.rtb_range_nm) !== null
-      && finiteNumber(state.rtb_bearing_deg) !== null) {
-    return true;
-  }
-  return false;
-}
+/**
+ * Consume the kernel's current-condition recovery projection without repairing missing or
+ * outbound data in the browser. Signed closure is useful evidence in its own right: a negative
+ * value means AWAY, near-zero means ABEAM, and neither state has a defensible ETA or fuel price.
+ */
+export function recoveryNavigationPresentation(state = {}) {
+  // The render loop can run once before the first kernel snapshot exists. Optional chaining only
+  // protects null on the property where it is used, so normalize the whole public boundary once.
+  const snapshot = state && typeof state === "object" ? state : {};
+  const recoveryPointKnown = snapshot.recovery_point_known === true;
+  const rangeNm = finiteNumber(snapshot.rtb_range_nm);
+  const bearingDeg = finiteNumber(snapshot.rtb_bearing_deg);
+  const turnDeg = finiteNumber(snapshot.rtb_turn_deg);
+  const closureKts = finiteNumber(snapshot.rtb_closure_kts);
+  const etaMinutes = finiteNumber(snapshot.rtb_eta_min);
+  const fuelToHomeLb = finiteNumber(snapshot.fuel_to_home_estimate_lb);
+  const fuelOnArrivalLb = finiteNumber(snapshot.fuel_on_arrival_estimate_lb);
+  const reserveTargetLb = finiteNumber(snapshot.fuel_reserve_target_lb);
+  const reserveMarginLb = finiteNumber(snapshot.fuel_reserve_margin_lb);
+  const groundKts = finiteNumber(snapshot.ground_speed_kts);
+  const directFlowPph = finiteNumber(snapshot.fuel_flow_pph);
+  const legacyFlowLbPerMinute = finiteNumber(snapshot.fuel_flow_lb_min)
+    ?? finiteNumber(snapshot.fuel_burn_lb_min);
+  const flowPph = directFlowPph
+    ?? (legacyFlowLbPerMinute === null ? null : legacyFlowLbPerMinute * 60);
+  const nmPerMin = groundKts === null ? null : Math.max(0, groundKts) / 60;
+  const lbPerMin = flowPph === null ? null : Math.max(0, flowPph) / 60;
+  const lbPerNm = lbPerMin !== null && nmPerMin !== null && nmPerMin > 0.01
+    ? lbPerMin / nmPerMin : null;
+  const reserveMinutes = reserveMarginLb !== null
+      && lbPerMin !== null && lbPerMin > 0.01
+    ? reserveMarginLb / lbPerMin : null;
 
-function closingKtsTowardHome(state) {
-  // Published home-closure wins when present. Harness / teaching snapshots pin weak progress
-  // toward the strip without fighting the FPV↔α geometry contract (which overwrites vx/vz from
-  // TAS along the flight path).
-  const published = finiteNumber(state.rtb_closure_kts);
-  if (published !== null) {
-    const trueAirspeedKts = Math.max(1, finiteNumber(state.true_airspeed_kts) ?? 1);
-    return published > 1 ? published : trueAirspeedKts;
+  let travelState = "unavailable";
+  if (recoveryPointKnown) {
+    if (etaMinutes === 0 && rangeNm !== null && rangeNm < 0.01) travelState = "arrived";
+    else if (closureKts === null) travelState = "unknown";
+    else if (closureKts < -1) travelState = "outbound";
+    else if (closureKts <= 1) travelState = "abeam";
+    else travelState = "inbound";
   }
-  const bearingDeg = finiteNumber(state.rtb_bearing_deg) ?? 0;
-  const bearingRad = bearingDeg * Math.PI / 180;
-  const eastMps = Number(state.vx) || 0;
-  const northMps = Number(state.vz) || 0;
-  const closureKts = (eastMps * Math.sin(bearingRad) + northMps * Math.cos(bearingRad))
-    * 1.94384;
-  const trueAirspeedKts = Math.max(1, finiteNumber(state.true_airspeed_kts) ?? 1);
-  // Below a knot of closure the arc is not making progress home; fall back to TAS so the readout
-  // degrades rather than dividing by zero / inventing negative time.
-  return closureKts > 1 ? closureKts : trueAirspeedKts;
+
+  return Object.freeze({
+    recoveryPointKnown,
+    rangeNm,
+    bearingDeg,
+    turnDeg,
+    closureKts,
+    etaMinutes,
+    fuelToHomeLb,
+    fuelOnArrivalLb,
+    reserveTargetLb,
+    reserveMarginLb,
+    groundKts,
+    flowPph,
+    nmPerMin,
+    lbPerMin,
+    lbPerNm,
+    reserveMinutes,
+    travelState,
+  });
 }
 
 function thermalAccent(state, base) {
@@ -59,25 +86,19 @@ function thermalAccent(state, base) {
 }
 
 function navPresentation(state, fuelLb, flowPph, capacityLb, bingoThresholdLb) {
-  const rangeNm = finiteNumber(state.rtb_range_nm);
-  const groundKts = Math.max(0, finiteNumber(state.ground_speed_kts) ?? 0);
-  const nmPerMin = groundKts / 60;
-  const lbPerMin = flowPph / 60;
-  const lbPerNm = nmPerMin > 0.01 ? lbPerMin / nmPerMin : null;
-
-  const closing = closingKtsTowardHome(state);
-  const etaMinutes = rangeNm !== null && closing > 0
-    ? Math.max(0, rangeNm / closing * 60) : null;
-  const fuelRequiredLb = etaMinutes !== null && flowPph > 0
-    ? flowPph * (etaMinutes / 60) : null;
-  const reserveLb = fuelRequiredLb !== null ? fuelLb - fuelRequiredLb : null;
-  const reserveMin = reserveLb !== null && lbPerMin > 0.01
-    ? reserveLb / lbPerMin : null;
+  const navigation = recoveryNavigationPresentation(state);
+  const nmPerMin = navigation.nmPerMin;
+  const lbPerMin = navigation.lbPerMin;
+  const lbPerNm = navigation.lbPerNm;
+  const reserveMin = navigation.reserveMinutes;
+  const reserveMarginLb = navigation.reserveMarginLb;
+  const reserveTargetLb = navigation.reserveTargetLb;
 
   let accent = "normal";
-  if (reserveMin !== null && etaMinutes !== null) {
-    if (reserveMin < 0) accent = "fault";
-    else if (reserveMin < 0.10 * etaMinutes) accent = "caution";
+  if (reserveMarginLb !== null) {
+    if (reserveMarginLb < 0) accent = "fault";
+    else if (reserveTargetLb !== null && reserveTargetLb > 0
+      && reserveMarginLb < reserveTargetLb * 0.10) accent = "caution";
   }
   accent = thermalAccent(state, accent);
 
@@ -90,8 +111,8 @@ function navPresentation(state, fuelLb, flowPph, capacityLb, bingoThresholdLb) {
   return Object.freeze({
     profile: "nav",
     rows: Object.freeze([
-      row("NM/MIN", nmPerMin > 0.01 ? nmPerMin.toFixed(1) : "--", ""),
-      row("LB/MIN", Number.isFinite(lbPerMin) ? String(Math.round(lbPerMin)) : "--", ""),
+      row("NM/MIN", nmPerMin !== null && nmPerMin > 0.01 ? nmPerMin.toFixed(1) : "--", ""),
+      row("LB/MIN", lbPerMin !== null ? String(Math.round(lbPerMin)) : "--", ""),
       row("LB/NM", lbPerNm !== null ? lbPerNm.toFixed(2) : "--", ""),
       row("RESERVE", reserveValue, "MIN"),
     ]),
@@ -101,8 +122,9 @@ function navPresentation(state, fuelLb, flowPph, capacityLb, bingoThresholdLb) {
     bingoRatio: capacityLb > 0
       ? Math.min(1, Math.max(0, bingoThresholdLb / capacityLb)) : 0,
     reserveMin,
-    etaMinutes,
-    fuelRequiredLb,
+    reserveMarginLb,
+    etaMinutes: navigation.etaMinutes,
+    fuelRequiredLb: navigation.fuelToHomeLb,
   });
 }
 
@@ -146,22 +168,23 @@ function fuelPresentation(state, fuelLb, flowPph, capacityLb, bingoThresholdLb) 
 }
 
 export function limitsPanelPresentation(state = {}) {
-  const fuelLb = finiteNumber(state.fuel_lb);
+  const snapshot = state && typeof state === "object" ? state : {};
+  const fuelLb = finiteNumber(snapshot.fuel_lb);
   if (fuelLb === null) return null;
-  const capacityLb = Math.max(0, finiteNumber(state.fuel_capacity_lb) ?? 2826);
-  const bingoThresholdLb = Math.max(0, finiteNumber(state.fuel_bingo_lb) ?? 800);
-  const directFlowPph = finiteNumber(state.fuel_flow_pph);
-  const legacyFlowLbPerMinute = finiteNumber(state.fuel_flow_lb_min)
-    ?? finiteNumber(state.fuel_burn_lb_min);
+  const capacityLb = Math.max(0, finiteNumber(snapshot.fuel_capacity_lb) ?? 2826);
+  const bingoThresholdLb = Math.max(0, finiteNumber(snapshot.fuel_bingo_lb) ?? 800);
+  const directFlowPph = finiteNumber(snapshot.fuel_flow_pph);
+  const legacyFlowLbPerMinute = finiteNumber(snapshot.fuel_flow_lb_min)
+    ?? finiteNumber(snapshot.fuel_burn_lb_min);
   const flowPph = directFlowPph
     ?? (legacyFlowLbPerMinute === null ? 0 : legacyFlowLbPerMinute * 60);
   const measuredFlow = Math.max(0, flowPph);
 
-  if (recoveryPointKnown(state)) {
-    return navPresentation(state, Math.max(0, fuelLb), measuredFlow, capacityLb,
+  if (snapshot.recovery_point_known === true) {
+    return navPresentation(snapshot, Math.max(0, fuelLb), measuredFlow, capacityLb,
       bingoThresholdLb);
   }
-  if (state.fuel_consumes === false) return null;
-  return fuelPresentation(state, Math.max(0, fuelLb), measuredFlow, capacityLb,
+  if (snapshot.fuel_consumes === false) return null;
+  return fuelPresentation(snapshot, Math.max(0, fuelLb), measuredFlow, capacityLb,
     bingoThresholdLb);
 }

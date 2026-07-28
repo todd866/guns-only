@@ -33,8 +33,78 @@ function carrierLossBrief(state) {
 }
 
 function finiteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+const HANDOFF_PHASE_BY_ORDINAL = Object.freeze([
+  "UNAVAILABLE",
+  "AVAILABLE",
+  "REQUESTED",
+  "DRAIN",
+  "RELIEF_ENGAGED",
+  "PLAYER_RTB",
+  "RELIEF_COMPLETE",
+  "RELIEF_LOST",
+  "RECOVERED",
+]);
+
+function combatHandoffPhaseToken(value) {
+  const numeric = finiteNumber(value);
+  if (numeric !== null && Number.isInteger(numeric)
+    && numeric >= 0 && numeric < HANDOFF_PHASE_BY_ORDINAL.length) {
+    return HANDOFF_PHASE_BY_ORDINAL[numeric];
+  }
+  return token(value);
+}
+
+/**
+ * One presentation contract for the pause action, navigation console, and debrief. Booleans remain
+ * independent snapshot evidence; the phase supplies the human label but cannot erase a latched
+ * requested/active/RTB flag if a partial hot frame arrives during a schema transition.
+ */
+export function combatHandoffPresentation(state = {}) {
+  const snapshot = state && typeof state === "object" ? state : {};
+  const phase = combatHandoffPhaseToken(snapshot.combat_handoff_phase);
+  const requested = snapshot.combat_handoff_requested === true;
+  const active = snapshot.combat_handoff_active === true;
+  const playerRtbActive = snapshot.player_rtb_active === true;
+  const reliefKills = Math.max(0,
+    Math.trunc(finiteNumber(snapshot.relief_kills) ?? 0));
+  const phaseIndex = HANDOFF_PHASE_BY_ORDINAL.indexOf(phase);
+  const occurred = requested || active || playerRtbActive || phaseIndex >= 2;
+  const available = phase === "AVAILABLE"
+    && !requested && !active && !playerRtbActive;
+
+  let status = "HANDOFF UNAVAILABLE";
+  switch (phase) {
+    case "AVAILABLE": status = "HANDOFF AVAILABLE"; break;
+    case "REQUESTED": status = "HANDOFF REQUESTED"; break;
+    case "DRAIN": status = "HANDOFF · ROUNDS DRAINING"; break;
+    case "RELIEF_ENGAGED": status = "RELIEF ENGAGED"; break;
+    case "PLAYER_RTB": status = "PLAYER RTB"; break;
+    case "RELIEF_COMPLETE": status = "RELIEF COMPLETE"; break;
+    case "RELIEF_LOST": status = "RELIEF LOST"; break;
+    case "RECOVERED": status = "RECOVERED"; break;
+    default:
+      if (active) status = "RELIEF ENGAGED";
+      else if (requested) status = "HANDOFF REQUESTED";
+      break;
+  }
+  if (playerRtbActive && !status.includes("RTB"))
+    status = `${status} · PLAYER RTB`;
+
+  return Object.freeze({
+    phase,
+    requested,
+    active,
+    playerRtbActive,
+    reliefKills,
+    occurred,
+    available,
+    status,
+  });
 }
 
 function formatG(value) {
@@ -144,6 +214,43 @@ function carrierQualificationCopy(state) {
   }, state);
 }
 
+function combatHandoffCopy(state) {
+  const handoff = combatHandoffPresentation(state);
+  if (!handoff.occurred) return null;
+
+  const playerKills = Math.max(0,
+    Math.trunc(finiteNumber(state?.kill_count) ?? 0));
+  const reserveTargetLb = finiteNumber(state?.fuel_reserve_target_lb);
+  const reserveMarginLb = finiteNumber(state?.fuel_reserve_margin_lb);
+  const recoveryFuelLb = finiteNumber(state?.fuel_lb)
+    ?? finiteNumber(state?.fuel_on_arrival_estimate_lb);
+  const lost = token(state?.sortie_outcome) === "DEFEAT";
+  const recovered = handoff.phase === "RECOVERED";
+
+  const fuelCopy = reserveTargetLb === null || reserveMarginLb === null
+    ? "Recovery reserve result was unavailable."
+    : `${recoveryFuelLb === null ? "Recovery fuel unavailable" : `Recovery fuel ${Math.round(recoveryFuelLb)} LB`} against ${Math.round(reserveTargetLb)} LB protected reserve; ${
+      reserveMarginLb < 0
+        ? `short by ${Math.round(-reserveMarginLb)} LB`
+        : `${Math.round(reserveMarginLb)} LB above reserve`
+    }.`;
+
+  return withSortieLessons({
+    kicker: "Guns-only handoff debrief",
+    title: lost
+      ? "Aircraft Lost After Handoff"
+      : recovered ? "Handoff Complete · Home"
+        : handoff.active ? "Fight Handed Off" : "Handoff Requested",
+    brief: `Your credited kills: ${playerKills}. Relief kills: ${handoff.reliefKills} (tracked separately and not credited to you). ${fuelCopy}`,
+    handoff: true,
+    handoffPhase: handoff.phase,
+    playerKills,
+    reliefKills: handoff.reliefKills,
+    reserveTargetLb,
+    reserveMarginLb,
+  }, state);
+}
+
 /**
  * Produce the concise result-card story from authoritative snapshot evidence.
  * Detailed replay analysis is appended separately when the recorded clip is available.
@@ -189,8 +296,16 @@ export function sortieResultCopy(state) {
   }
 
   if (isCarrierQualification(state)) return carrierQualificationCopy(state);
+  const handoff = combatHandoffCopy(state);
+  if (handoff) return handoff;
 
   switch (token(state?.sortie_outcome)) {
+    case "DISCONTINUED":
+      return withSortieLessons({
+        kicker: "Sortie complete",
+        title: "Discontinued · Recovered",
+        brief: "The aircraft was recovered after the fight was discontinued. Review the landing fuel against the protected reserve before the next sortie.",
+      }, state);
     case "VICTORY":
       return withSortieLessons({
         kicker: "Sortie complete",

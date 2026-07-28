@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 12;
+    public const int LayoutVersion = 14;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -344,6 +344,10 @@ internal static class SnapshotHotFrame {
         Bool("below_ground");
         Num("shots_total", RawInteger);
         Num("shots_in_window", RawInteger);
+        Num("combat_handoff_phase", RawInteger);
+        Bool("combat_handoff_requested");
+        Bool("combat_handoff_active");
+        Num("relief_kills", RawInteger);
         Num("throttle", 3);
         Num("requested_throttle", 3);
         Num("applied_throttle", 3);
@@ -373,6 +377,27 @@ internal static class SnapshotHotFrame {
         Num("rtb_bearing_deg", 2);
         Num("rtb_turn_deg", 2);
         Num("rtb_range_nm", 2);
+        Bool("recovery_point_known");
+        Bool("runway_available");
+        Nul("runway_threshold_x", 2);
+        Nul("runway_threshold_y", 2);
+        Nul("runway_threshold_z", 2);
+        Nul("runway_heading_deg", 2);
+        Nul("runway_length_m", 2);
+        Nul("runway_width_m", 2);
+        Nul("runway_touchdown_x", 2);
+        Nul("runway_touchdown_y", 2);
+        Nul("runway_touchdown_z", 2);
+        Num("runway_recovery_phase", RawInteger);
+        Bool("runway_weight_on_wheels");
+        Num("runway_touchdown_deviations", RawInteger);
+        Bool("player_rtb_active");
+        Nul("rtb_closure_kts", 2);
+        Nul("rtb_eta_min", 2);
+        Nul("fuel_to_home_estimate_lb", 2);
+        Nul("fuel_on_arrival_estimate_lb", 2);
+        Nul("fuel_reserve_target_lb", 2);
+        Nul("fuel_reserve_margin_lb", 2);
         Num("gear_nose", 4); Num("gear_left", 4); Num("gear_right", 4);
         Bool("gear_unsafe");
         Bool("gear_warning_horn");
@@ -630,15 +655,37 @@ internal static class SnapshotHotFrame {
             pl = carrier.LandingFwd * -sinPitch + new Vec3D(0, cosPitch, 0);
         }
 
-        RtbGuidance rtb = carrier is null
-            ? default
-            : fuel.GuidanceTo(simulationPosition, displayHeadingRad, carrier.Position);
+        RecoveryPlan? recoveryPlan = beat.RecoveryPlan;
+        ConventionalRunwayGeometry? conventionalRunway =
+            recoveryPlan?.ConventionalRunway;
+        Vec3D? recoveryPoint = recoveryPlan?.Position
+            ?? (carrier is null ? null : carrier.Position);
+        bool playerRtbActive = session.PlayerRtbActive;
+        RecoveryNavigationProjection recoveryNavigation =
+            session.ConventionalRunwayPhase == RunwayRecoveryPhase.Recovered
+                ? fuel.ProjectCompletedRecovery(
+                    simulationPosition,
+                    displayHeadingRad,
+                    recoveryPlan?.RequiredLandingReserveLb)
+                : recoveryPoint is { } home
+                    ? fuel.ProjectRecoveryTo(
+                        simulationPosition,
+                        groundVelocity,
+                        displayHeadingRad,
+                        home,
+                        recoveryPlan?.RequiredLandingReserveLb,
+                        active: playerRtbActive || fuel.RtbAdvisory)
+                    : RecoveryNavigationProjection.Unknown;
+        RtbGuidance rtb = recoveryNavigation.Guidance;
         bool splashCue = !finished && session.SplashCueActive;
         double surfaceAltitudeM = session.Terrain?.TrySample(
             playerPosition.X, playerPosition.Z, out TerrainSample terrainSample) == true
                 ? terrainSample.HeightM : 0.0;
         if (carrier is not null && carrier.WithinDeckFootprint(playerPosition))
             surfaceAltitudeM = playerPosition.Y - carrier.DeckFrame(playerPosition).height;
+        if (session.ConventionalRunwayRecovery?.Runway is { } runway
+            && runway.ContainsPavement(playerPosition, marginM: 2.0))
+            surfaceAltitudeM = runway.Threshold.Y;
         double radarAltitudeM = Math.Max(0.0, playerPosition.Y - surfaceAltitudeM);
         double verticalSpeedMps = arrested ? 0.0 : s.VelocityVector().Y;
         var engine = player.LastEngineOperatingPoint;
@@ -935,6 +982,10 @@ internal static class SnapshotHotFrame {
         w.Bool("below_ground", playerPosition.Y <= surfaceAltitudeM);
         w.Num("shots_total", session.ShotsTotal, RawInteger);
         w.Num("shots_in_window", session.ShotsInWindow, RawInteger);
+        w.Num("combat_handoff_phase", (int)session.CombatHandoffPhase, RawInteger);
+        w.Bool("combat_handoff_requested", session.CombatHandoffRequested);
+        w.Bool("combat_handoff_active", session.CombatHandoffActive);
+        w.Num("relief_kills", session.ReliefKills, RawInteger);
         w.Num("throttle", detents.Throttle, 3);
         w.Num("requested_throttle", requestedCommand.Throttle, 3);
         w.Num("applied_throttle", appliedCommand.Throttle, 3);
@@ -961,6 +1012,35 @@ internal static class SnapshotHotFrame {
         w.Num("rtb_bearing_deg", rtb.BearingRad * 57.29577951308232, 2);
         w.Num("rtb_turn_deg", rtb.TurnRad * 57.29577951308232, 2);
         w.Num("rtb_range_nm", rtb.RangeM / 1852.0, 2);
+        w.Bool("recovery_point_known", recoveryNavigation.RecoveryPointKnown);
+        w.Bool("runway_available", conventionalRunway is not null);
+        w.Nul("runway_threshold_x", conventionalRunway?.ThresholdPosition.X, 2);
+        w.Nul("runway_threshold_y", conventionalRunway?.ThresholdPosition.Y, 2);
+        w.Nul("runway_threshold_z", conventionalRunway?.ThresholdPosition.Z, 2);
+        w.Nul("runway_heading_deg",
+            conventionalRunway?.LandingHeadingRad * 57.29577951308232, 2);
+        w.Nul("runway_length_m", conventionalRunway?.LengthM, 2);
+        w.Nul("runway_width_m", conventionalRunway?.WidthM, 2);
+        w.Nul("runway_touchdown_x",
+            conventionalRunway is null ? null : recoveryPlan?.Position.X, 2);
+        w.Nul("runway_touchdown_y",
+            conventionalRunway is null ? null : recoveryPlan?.Position.Y, 2);
+        w.Nul("runway_touchdown_z",
+            conventionalRunway is null ? null : recoveryPlan?.Position.Z, 2);
+        w.Num("runway_recovery_phase",
+            (int)session.ConventionalRunwayPhase, RawInteger);
+        w.Bool("runway_weight_on_wheels", session.RunwayWeightOnWheels);
+        w.Num("runway_touchdown_deviations",
+            (int)session.RunwayTouchdown.Deviations, RawInteger);
+        w.Bool("player_rtb_active", playerRtbActive);
+        w.Nul("rtb_closure_kts", recoveryNavigation.ClosureKts, 2);
+        w.Nul("rtb_eta_min", recoveryNavigation.EtaMinutes, 2);
+        w.Nul("fuel_to_home_estimate_lb",
+            recoveryNavigation.FuelToHomeEstimateLb, 2);
+        w.Nul("fuel_on_arrival_estimate_lb",
+            recoveryNavigation.FuelOnArrivalEstimateLb, 2);
+        w.Nul("fuel_reserve_target_lb", recoveryNavigation.ReserveTargetLb, 2);
+        w.Nul("fuel_reserve_margin_lb", recoveryNavigation.ReserveMarginLb, 2);
         w.Num("gear_nose", systems.NoseGearPosition, 4);
         w.Num("gear_left", systems.LeftMainGearPosition, 4);
         w.Num("gear_right", systems.RightMainGearPosition, 4);
@@ -971,7 +1051,8 @@ internal static class SnapshotHotFrame {
         w.Num("flap_right_deg", systems.RightFlapDegrees, 2);
         w.Bool("flap_split", systems.FlapSplit);
         w.Bool("flap_limit_exceeded", systems.FlapLimitExceeded);
-        w.Bool("primary_bus_powered", systems.PrimaryBusPowered);
+        w.Bool("primary_bus_powered",
+            systems.ElectricalSystemAvailable && systems.PrimaryBusPowered);
         w.Num("utility_hydraulic_pressure_psi", systems.UtilityHydraulicPressurePsi, 1);
 
         VisualMergeEvaluation? merge = session.VisualMergeEvaluation;
@@ -1394,6 +1475,8 @@ internal static class SnapshotHotFrame {
         ValleyVariant Variant,
         SortieOutcome Outcome,
         SortieOutcome PendingOutcome,
+        CombatHandoffPhase CombatHandoffPhase,
+        RunwayRecoveryPhase ConventionalRunwayPhase,
         bool TerminalPhaseActive,
         AircraftTerminalState PlayerTerminalState,
         AircraftTerminalState OpponentTerminalState,
@@ -1496,6 +1579,8 @@ internal static class SnapshotHotFrame {
                 session.Variant,
                 session.Outcome,
                 session.PendingOutcome,
+                session.CombatHandoffPhase,
+                session.ConventionalRunwayPhase,
                 session.TerminalPhaseActive,
                 session.PlayerTerminalState,
                 session.OpponentTerminalState,

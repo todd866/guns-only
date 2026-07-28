@@ -126,6 +126,83 @@ public class SnapshotProjectionTests {
         Assert.True(root.TryGetProperty("fuel_joker", out _));
         Assert.True(root.TryGetProperty("fuel_minimum", out _));
         Assert.True(root.TryGetProperty("fuel_emergency", out _));
+        bool recoveryPointKnown = beatIndex is 5 or 7 or 9 or 10;
+        Assert.Equal(recoveryPointKnown,
+            root.GetProperty("recovery_point_known").GetBoolean());
+        bool runwayAvailable = beatIndex is 7 or 9;
+        Assert.Equal(runwayAvailable,
+            root.GetProperty("runway_available").GetBoolean());
+        Assert.False(root.GetProperty("player_rtb_active").GetBoolean());
+        JsonElement recoveryClosure = root.GetProperty("rtb_closure_kts");
+        JsonElement recoveryEta = root.GetProperty("rtb_eta_min");
+        JsonElement fuelToHome = root.GetProperty("fuel_to_home_estimate_lb");
+        JsonElement fuelOnArrival =
+            root.GetProperty("fuel_on_arrival_estimate_lb");
+        JsonElement reserveTarget = root.GetProperty("fuel_reserve_target_lb");
+        JsonElement reserveMargin = root.GetProperty("fuel_reserve_margin_lb");
+        string[] runwayFields = {
+            "runway_threshold_x", "runway_threshold_y", "runway_threshold_z",
+            "runway_heading_deg", "runway_length_m", "runway_width_m",
+            "runway_touchdown_x", "runway_touchdown_y", "runway_touchdown_z",
+        };
+        if (!runwayAvailable) {
+            foreach (string field in runwayFields)
+                Assert.Equal(JsonValueKind.Null, root.GetProperty(field).ValueKind);
+        }
+        if (!recoveryPointKnown) {
+            Assert.Equal(JsonValueKind.Null, recoveryClosure.ValueKind);
+            Assert.Equal(JsonValueKind.Null, recoveryEta.ValueKind);
+            Assert.Equal(JsonValueKind.Null, fuelToHome.ValueKind);
+            Assert.Equal(JsonValueKind.Null, fuelOnArrival.ValueKind);
+            Assert.Equal(JsonValueKind.Null, reserveTarget.ValueKind);
+            Assert.Equal(JsonValueKind.Null, reserveMargin.ValueKind);
+        } else {
+            Assert.Equal(JsonValueKind.Number, recoveryClosure.ValueKind);
+        }
+        if (beatIndex is 7 or 9) {
+            Assert.Equal("recovery.f22a.soniachne-west-runway.v1",
+                root.GetProperty("recovery_id").GetString());
+            Assert.Equal("Soniachne west recovery runway",
+                root.GetProperty("recovery_display_name").GetString());
+            Assert.Equal(-55_000.0,
+                root.GetProperty("runway_threshold_x").GetDouble());
+            Assert.Equal(52.5,
+                root.GetProperty("runway_threshold_y").GetDouble());
+            Assert.Equal(-55_300.0,
+                root.GetProperty("runway_threshold_z").GetDouble());
+            Assert.Equal(0.0,
+                root.GetProperty("runway_heading_deg").GetDouble());
+            Assert.Equal(3_000.0,
+                root.GetProperty("runway_length_m").GetDouble());
+            Assert.Equal(45.0,
+                root.GetProperty("runway_width_m").GetDouble());
+            Assert.Equal(-55_000.0,
+                root.GetProperty("runway_touchdown_x").GetDouble());
+            Assert.Equal(52.5,
+                root.GetProperty("runway_touchdown_y").GetDouble());
+            Assert.Equal(-55_000.0,
+                root.GetProperty("runway_touchdown_z").GetDouble());
+            Assert.True(recoveryClosure.GetDouble() < 0.0,
+                "the opening northbound F-22 is outbound from its southwest runway");
+            Assert.Equal(JsonValueKind.Null, recoveryEta.ValueKind);
+            Assert.Equal(JsonValueKind.Null, fuelToHome.ValueKind);
+            Assert.Equal(JsonValueKind.Null, fuelOnArrival.ValueKind);
+            Assert.Equal(3000.0, reserveTarget.GetDouble());
+            Assert.Equal(JsonValueKind.Null, reserveMargin.ValueKind);
+        } else if (beatIndex == 10) {
+            Assert.Equal("recovery.rapier.eastern-dispersed-strip.v1",
+                root.GetProperty("recovery_id").GetString());
+            Assert.Equal("Eastern dispersed strip",
+                root.GetProperty("recovery_display_name").GetString());
+            Assert.Equal(600.0, reserveTarget.GetDouble());
+        } else if (beatIndex == 5) {
+            // Legacy carrier qualification knows deck geometry but does not invent a mission
+            // landing reserve where content has authored none.
+            Assert.Equal(JsonValueKind.Null, reserveTarget.ValueKind);
+            Assert.Equal(JsonValueKind.Null, reserveMargin.ValueKind);
+            Assert.Equal("", root.GetProperty("recovery_id").GetString());
+            Assert.Equal("", root.GetProperty("recovery_display_name").GetString());
+        }
         if (beatIndex is 7 or 9) {
             Assert.Equal(6000.0, jokerThreshold.GetDouble());
             Assert.Equal(2100.0, minimumThreshold.GetDouble());
@@ -190,6 +267,113 @@ public class SnapshotProjectionTests {
 
         Assert.True(root.GetProperty("assisted_flight").GetBoolean());
         Assert.Equal(60, root.GetProperty("assisted_speed_bias_kts").GetInt32());
+    }
+
+    [Fact]
+    public void SystemsCapabilityProjectionDoesNotInventF22ElectricalOrHydraulicSystems() {
+        using JsonDocument f22 = JsonDocument.Parse(ProjectAfterSteps(7, 8, null));
+        JsonElement f22Root = f22.RootElement;
+        Assert.True(f22Root.GetProperty("has_retractable_gear").GetBoolean());
+        Assert.False(f22Root.GetProperty("has_flaps").GetBoolean());
+        Assert.False(f22Root.GetProperty("has_electrical_system").GetBoolean());
+        Assert.False(f22Root.GetProperty("has_utility_hydraulics").GetBoolean());
+        Assert.False(f22Root.GetProperty("primary_bus_powered").GetBoolean());
+        Assert.Equal(0.0,
+            f22Root.GetProperty("utility_hydraulic_nominal_psi").GetDouble());
+        Assert.Equal(0.0,
+            f22Root.GetProperty("utility_hydraulic_pressure_psi").GetDouble());
+
+        using JsonDocument f86 = JsonDocument.Parse(ProjectAfterSteps(1, 8, null));
+        JsonElement f86Root = f86.RootElement;
+        Assert.True(f86Root.GetProperty("has_retractable_gear").GetBoolean());
+        Assert.True(f86Root.GetProperty("has_flaps").GetBoolean());
+        Assert.True(f86Root.GetProperty("has_electrical_system").GetBoolean());
+        Assert.True(f86Root.GetProperty("has_utility_hydraulics").GetBoolean());
+        Assert.True(f86Root.GetProperty("primary_bus_powered").GetBoolean());
+        Assert.Equal(3000.0,
+            f86Root.GetProperty("utility_hydraulic_nominal_psi").GetDouble());
+        Assert.InRange(
+            f86Root.GetProperty("utility_hydraulic_pressure_psi").GetDouble(),
+            2999.0, 3000.0);
+    }
+
+    [Fact]
+    public void VoluntaryHandoffActivatesF22SteeringWithoutInventingOutboundEta() {
+        var session = new SimulationSession(7, Carrier.DeckConfiguration.Angled,
+            KoreaWeatherPresets.ForBeat(7));
+        session.Begin();
+        Assert.True(session.CombatHandoffAvailable);
+        Assert.False(session.PlayerFuel.RtbAdvisory);
+
+        session.FeedKey(GKey.KnockItOff, true);
+        session.FeedKey(GKey.KnockItOff, false);
+        for (int tick = 0; tick < 4 && !session.PlayerRtbActive; tick++)
+            session.StepFixed();
+        Assert.True(session.PlayerRtbActive);
+
+        string json = SnapshotProjection.BuildState(session,
+            Carrier.DeckConfiguration.Angled, 0.0, 0.0, false, terrain: null);
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+
+        Assert.False(root.GetProperty("rtb").GetBoolean(),
+            "voluntary handoff must not manufacture a Bingo crossing");
+        Assert.InRange(root.GetProperty("combat_handoff_phase").GetInt32(),
+            (int)CombatHandoffPhase.ReliefEngaged,
+            (int)CombatHandoffPhase.ReliefLost);
+        Assert.Contains(root.GetProperty("combat_handoff_phase_name").GetString(),
+            new[] { "RELIEF_ENGAGED", "PLAYER_RTB", "RELIEF_LOST" });
+        Assert.True(root.GetProperty("combat_handoff_requested").GetBoolean());
+        Assert.True(root.GetProperty("combat_handoff_active").GetBoolean());
+        Assert.Equal(0, root.GetProperty("relief_kills").GetInt32());
+        Assert.True(root.GetProperty("player_rtb_active").GetBoolean());
+        Assert.True(root.GetProperty("rtb_steer").GetBoolean());
+        Assert.True(root.GetProperty("recovery_point_known").GetBoolean());
+        Assert.True(root.GetProperty("rtb_closure_kts").GetDouble() < 0.0);
+        Assert.Equal(JsonValueKind.Null,
+            root.GetProperty("rtb_eta_min").ValueKind);
+        Assert.Equal(JsonValueKind.Null,
+            root.GetProperty("fuel_to_home_estimate_lb").ValueKind);
+        Assert.Equal(JsonValueKind.Null,
+            root.GetProperty("fuel_on_arrival_estimate_lb").ValueKind);
+        Assert.Equal(JsonValueKind.Null,
+            root.GetProperty("fuel_reserve_margin_lb").ValueKind);
+    }
+
+    [Fact]
+    public void ReliefEventsKeepFriendlyRoleAndEntityIdentity() {
+        var session = new SimulationSession(7, Carrier.DeckConfiguration.Angled,
+            KoreaWeatherPresets.ForBeat(7));
+        session.Begin();
+        session.FeedKey(GKey.KnockItOff, true);
+        session.FeedKey(GKey.KnockItOff, false);
+        for (int tick = 0; tick < 4
+            && session.CombatHandoffPhase < CombatHandoffPhase.ReliefEngaged; tick++)
+            session.StepFixed();
+
+        ReliefFighter relief = Assert.IsType<ReliefFighter>(session.Relief);
+        session.RecordReliefHitsForTest(
+            session.Beat.CombatRules.PlayerHitsToDefeat);
+
+        using JsonDocument document = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session,
+                Carrier.DeckConfiguration.Angled, 0.0, 0.0, false, terrain: null));
+        JsonElement[] reliefEvents = document.RootElement
+            .GetProperty("recent_events")
+            .EnumerateArray()
+            .Where(e => e.GetProperty("target").GetString() == "RELIEF")
+            .ToArray();
+
+        Assert.Contains(reliefEvents,
+            e => e.GetProperty("type").GetString() == "HIT");
+        Assert.Contains(reliefEvents,
+            e => e.GetProperty("type").GetString() == "DESTROYED");
+        Assert.All(reliefEvents, e => {
+            Assert.Equal("OPPONENT", e.GetProperty("source").GetString());
+            Assert.Equal(
+                $"entity.relief.{relief.SpawnSequence}",
+                e.GetProperty("entity_id").GetString());
+        });
     }
 
     [Fact]

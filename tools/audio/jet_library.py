@@ -347,9 +347,16 @@ def normalize_fetched_video_height(
             "-movflags", "+faststart",
             str(temporary),
         ])
+    # Publish the complete transcode before removing a differently-suffixed source. Path.replace
+    # is atomic on this same-directory temporary; unlinking the only good source first meant a
+    # filesystem/permission failure at the publish edge could destroy the reference video.
+    try:
+        temporary.replace(target)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        raise
     if target != media:
         media.unlink()
-    temporary.replace(target)
     return target
 
 

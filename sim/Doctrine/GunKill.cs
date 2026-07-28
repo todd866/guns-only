@@ -244,13 +244,64 @@ public sealed class GunKill {
     /// </summary>
     public GunKill CreateForFreshShooterAgainstSameTarget(int ammo,
         double hitRadiusM, GunProfile profile) {
-        if (Outcome != FightOutcome.Flying)
-            throw new System.InvalidOperationException(
-                "A fresh shooter cannot inherit a target which has already been splashed.");
+        return CreateForFreshShooterAgainstTargets(
+            new[] { LegacyTargetId },
+            LegacyTargetId,
+            ammo,
+            hitRadiusM,
+            profile);
+    }
+
+    /// <summary>
+    /// Hand several still-living physical targets to a fresh shooter. The previous gun must have
+    /// no airborne rounds: otherwise a late hit could mutate its ledger after this atomic copy and
+    /// leave two different authoritative health values for one aircraft. Only the supplied stable
+    /// target IDs are copied, so historical targets retained by another weapon never leak into the
+    /// new engagement.
+    /// </summary>
+    public GunKill CreateForFreshShooterAgainstTargets(
+        IReadOnlyList<long> targetIds,
+        long selectedTargetId,
+        int ammo,
+        double hitRadiusM,
+        GunProfile profile) {
+        ArgumentNullException.ThrowIfNull(targetIds);
+        ArgumentNullException.ThrowIfNull(profile);
+        if (_rounds.Count != 0)
+            throw new InvalidOperationException(
+                "A fresh shooter cannot inherit damage while rounds remain airborne.");
+        if (targetIds.Count == 0)
+            throw new ArgumentException(
+                "At least one live target is required.", nameof(targetIds));
+
+        var seen = new HashSet<long>();
+        bool selectedFound = false;
+        foreach (long targetId in targetIds) {
+            if (!seen.Add(targetId))
+                throw new ArgumentException(
+                    "Target IDs must be unique.", nameof(targetIds));
+            if (!_targetDamage.TryGetValue(targetId, out TargetDamageState? damage))
+                throw new ArgumentOutOfRangeException(
+                    nameof(targetIds), $"Target {targetId} is not registered.");
+            if (damage.Outcome != FightOutcome.Flying)
+                throw new InvalidOperationException(
+                    "A fresh shooter can inherit only targets which are still flying.");
+            if (targetId == selectedTargetId) selectedFound = true;
+        }
+        if (!selectedFound)
+            throw new ArgumentOutOfRangeException(
+                nameof(selectedTargetId), "The selected target is not in the transfer set.");
+
         var next = new GunKill(ammo, _hitsToKill, hitRadiusM, profile);
-        TargetDamageState inherited = next.EnsureTarget(LegacyTargetId);
-        inherited.HitCount = HitCount;
-        inherited.Outcome = Outcome;
+        next._targetDamage.Clear();
+        foreach (long targetId in targetIds) {
+            TargetDamageState source = _targetDamage[targetId];
+            TargetDamageState inherited = next.EnsureTarget(targetId);
+            inherited.HitCount = source.HitCount;
+            inherited.HitsThisStep = 0;
+            inherited.Outcome = source.Outcome;
+        }
+        next.SelectTarget(selectedTargetId);
         return next;
     }
 

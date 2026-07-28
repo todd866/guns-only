@@ -98,7 +98,12 @@ public sealed record AirframeSystemsProfile(
     double UtilityHydraulicNominalPsi,
     double FullGearDragCoefficientIncrement,
     double FullFlapLiftCoefficientIncrement,
-    double FullFlapDragCoefficientIncrement) {
+    double FullFlapDragCoefficientIncrement,
+    bool PilotOperatedFlaps = true,
+    bool ThrottleTriggeredGearWarning = true,
+    bool EmergencyGearExtensionAvailable = true,
+    bool UtilityHydraulicSystemSimulated = true,
+    bool ElectricalSystemSimulated = true) {
 
     /// <summary>
     /// T.O. 1F-86F-1 basis. Gear times, limits, dependencies, warning logic, flap architecture, and
@@ -126,6 +131,38 @@ public sealed record AirframeSystemsProfile(
         // configuration polar rather than being disguised as clean-airframe CD0.
         FullFlapLiftCoefficientIncrement: 0.30,
         FullFlapDragCoefficientIncrement: 0.085);
+
+    /// <summary>
+    /// Generic conventional landing-gear surrogate for the modern visual-merge recovery.
+    ///
+    /// This is deliberately a narrow mission-enabling model, not an F-22 systems simulation or a
+    /// claim about certified F-22 extension times, airspeed limits, actuator pressure, warning
+    /// logic, or emergency procedures. The provisional values provide a plausible fast-jet gear
+    /// transit and drag boundary until primary public engineering data is available. Pilot flaps,
+    /// the F-86 throttle-triggered gear horn, and the F-86 emergency accumulator/free-fall
+    /// procedure are explicitly absent rather than leaking through the shared state machine.
+    /// </summary>
+    public static readonly AirframeSystemsProfile ModernConventionalGearSurrogate = new(
+        Id: "modern-conventional-gear-public-data-surrogate-v1",
+        GearExtensionSeconds: 6.0,
+        GearRetractionSeconds: 6.0,
+        EmergencyGearExtensionSeconds: 8.0,
+        GearDoorTravelSeconds: 1.0,
+        GearAndFlapLimitKias: 250.0,
+        EmergencyGearExtensionMaxKias: 200.0,
+        FullFlapDegrees: 0.0,
+        FullFlapTravelSeconds: 0.0,
+        GeneratorCutInRpmPercent: 45.0,
+        GearHornRpmPercent: 0.0,
+        UtilityHydraulicNominalPsi: 0.0,
+        FullGearDragCoefficientIncrement: 0.035,
+        FullFlapLiftCoefficientIncrement: 0.0,
+        FullFlapDragCoefficientIncrement: 0.0,
+        PilotOperatedFlaps: false,
+        ThrottleTriggeredGearWarning: false,
+        EmergencyGearExtensionAvailable: false,
+        UtilityHydraulicSystemSimulated: false,
+        ElectricalSystemSimulated: false);
 
     /// <summary>
     /// Rapier surrogate. The limits are not a balance knob — they are forced by the launcher.
@@ -168,9 +205,10 @@ public sealed record AirframeSystemsProfile(
 }
 
 /// <summary>
-/// Early-jet airframe systems with real command/actual separation and failure dependencies.
-/// No randomness lives here: repeatable training scenarios inject faults explicitly and can judge
-/// diagnosis and procedure from the resulting state history.
+/// Profile-scoped airframe systems with real command/actual separation and failure dependencies.
+/// The detailed research profile remains the early-jet F-86 model; narrow surrogate profiles can
+/// opt out of unsupported procedures instead of inheriting those details by accident. No
+/// randomness lives here: repeatable training scenarios inject faults explicitly.
 /// </summary>
 public sealed class AirframeSystems {
     const double PositionTolerance = 1e-4;
@@ -229,20 +267,36 @@ public sealed class AirframeSystems {
     public bool EmergencyExtensionAirloadBlocked => EmergencyGearReleaseHeld
         && IndicatedAirspeedKnots > _profile.EmergencyGearExtensionMaxKias
         && !AllGearDownAndLocked;
-    public bool EmergencyAccumulatorAvailable => !_emergencyAccumulatorUsed;
+    public bool EmergencyAccumulatorAvailable =>
+        EmergencyGearExtensionAvailable && !_emergencyAccumulatorUsed;
     public bool EmergencyNoseGearLatched => _emergencyNoseGearLatched;
+    public bool PilotOperatedFlapsAvailable => _profile.PilotOperatedFlaps;
+    public bool ThrottleTriggeredGearWarningAvailable =>
+        _profile.ThrottleTriggeredGearWarning;
+    public bool EmergencyGearExtensionAvailable =>
+        _profile.EmergencyGearExtensionAvailable;
+    public bool UtilityHydraulicSystemAvailable =>
+        _profile.UtilityHydraulicSystemSimulated;
+    public bool ElectricalSystemAvailable =>
+        _profile.ElectricalSystemSimulated;
 
     public bool GearUnsafeLight { get; private set; }
     public bool GearWarningHorn { get; private set; }
     public bool GearLimitExceeded => IndicatedAirspeedKnots > _profile.GearAndFlapLimitKias
         && (!AllGearUpAndLocked || GearDoorPosition > PositionTolerance);
-    public bool FlapLimitExceeded => IndicatedAirspeedKnots > _profile.GearAndFlapLimitKias
+    public bool FlapLimitExceeded => PilotOperatedFlapsAvailable
+        && IndicatedAirspeedKnots > _profile.GearAndFlapLimitKias
         && Math.Max(LeftFlapDegrees, RightFlapDegrees) > 0.25;
     public bool FlapSplit => Math.Abs(LeftFlapDegrees - RightFlapDegrees) > 1.0;
     public double FlapSplitDegrees => LeftFlapDegrees - RightFlapDegrees;
     public double FullFlapDegrees => _profile.FullFlapDegrees;
-    public double EffectiveFlapFraction => Math.Clamp(
-        (LeftFlapDegrees + RightFlapDegrees) / (2.0 * _profile.FullFlapDegrees), 0.0, 1.0);
+    public double EffectiveFlapFraction => !PilotOperatedFlapsAvailable
+        || _profile.FullFlapDegrees <= 0.0
+            ? 0.0
+            : Math.Clamp(
+                (LeftFlapDegrees + RightFlapDegrees)
+                    / (2.0 * _profile.FullFlapDegrees),
+                0.0, 1.0);
     public double EffectiveGearFraction => Math.Clamp(
         (NoseGearPosition + LeftMainGearPosition + RightMainGearPosition) / 3.0, 0.0, 1.0);
     public double GearOverspeedExposureSeconds { get; private set; }
@@ -291,9 +345,11 @@ public sealed class AirframeSystems {
     }
 
     public void CommandGear(LandingGearHandle handle) => GearHandle = handle;
-    public void SetFlapLever(WingFlapLever lever) => FlapLever = lever;
+    public void SetFlapLever(WingFlapLever lever) =>
+        FlapLever = PilotOperatedFlapsAvailable ? lever : WingFlapLever.Hold;
     public void SetBatterySwitch(bool on) => BatterySwitchOn = on;
-    public void SetEmergencyGearRelease(bool held) => EmergencyGearReleaseHeld = held;
+    public void SetEmergencyGearRelease(bool held) =>
+        EmergencyGearReleaseHeld = EmergencyGearExtensionAvailable && held;
 
     public void SetFailure(AirframeSystemFailure failure, bool active = true) {
         if (active) _failures.Add(failure);
@@ -310,7 +366,7 @@ public sealed class AirframeSystems {
     /// flight, where the Dash-1 says the emergency-lowered nose gear cannot be retracted.
     /// </summary>
     public bool ResetEmergencyGearExtensionOnGround() {
-        if (!WeightOnWheels) return false;
+        if (!EmergencyGearExtensionAvailable || !WeightOnWheels) return false;
         _emergencyAccumulatorUsed = false;
         _emergencyNoseGearLatched = false;
         return true;
@@ -342,7 +398,8 @@ public sealed class AirframeSystems {
             && (GeneratorOnline || BatterySwitchOn);
 
         double targetPressure = 0.0;
-        if (!HasFailure(AirframeSystemFailure.UtilityHydraulicPump)) {
+        if (UtilityHydraulicSystemAvailable
+            && !HasFailure(AirframeSystemFailure.UtilityHydraulicPump)) {
             // An engine-driven variable-volume pump supplies useful pressure at idle and reaches
             // nominal authority by roughly generator cut-in. Exact transient pump maps remain a
             // profile concern rather than a binary "hydraulics available" switch.
@@ -360,8 +417,14 @@ public sealed class AirframeSystems {
         bool normalCommandPowered = PrimaryBusPowered
             && !HasFailure(AirframeSystemFailure.GearSelectorCircuit);
         bool normalRetractionBlocked = WeightOnWheels && GearHandle == LandingGearHandle.Up;
+        // Narrow modern gear-only surrogates deliberately avoid inventing a utility-hydraulic
+        // system. Their numerical actuator authority is simply available while the generic engine
+        // core is turning and the selector bus is powered; this is not a claim about actuator type.
+        double normalActuatorAuthority = UtilityHydraulicSystemAvailable
+            ? UtilityHydraulicPressureFraction
+            : EngineRpmPercent > PositionTolerance ? 1.0 : 0.0;
         bool normalMotion = normalCommandPowered
-            && UtilityHydraulicPressureFraction > 0.10
+            && normalActuatorAuthority > 0.10
             && !normalRetractionBlocked;
 
         bool wantsNormalMovement = GearHandle == LandingGearHandle.Down
@@ -377,7 +440,7 @@ public sealed class AirframeSystems {
         if (!HasFailure(AirframeSystemFailure.GearDoorActuator)) {
             double doorAuthority = emergencyCanOpen
                 ? 1.0
-                : UtilityHydraulicPressureFraction;
+                : normalActuatorAuthority;
             GearDoorPosition = MoveToward(GearDoorPosition, doorsShouldOpen ? 1.0 : 0.0,
                 dt * doorAuthority / Math.Max(_profile.GearDoorTravelSeconds, 0.1));
         }
@@ -390,7 +453,7 @@ public sealed class AirframeSystems {
                 : _profile.GearRetractionSeconds;
             double legTravelSeconds = Math.Max(0.5,
                 totalTime - _profile.GearDoorTravelSeconds);
-            double step = dt * UtilityHydraulicPressureFraction / legTravelSeconds;
+            double step = dt * normalActuatorAuthority / legTravelSeconds;
             MoveNormalGear(target, step);
         }
 
@@ -428,7 +491,11 @@ public sealed class AirframeSystems {
     }
 
     void StepFlaps(double dt) {
-        if (!PrimaryBusPowered || FlapLever == WingFlapLever.Hold || dt <= 0.0) return;
+        if (!PilotOperatedFlapsAvailable
+            || !PrimaryBusPowered
+            || FlapLever == WingFlapLever.Hold
+            || dt <= 0.0)
+            return;
         double target = FlapLever == WingFlapLever.Down ? _profile.FullFlapDegrees : 0.0;
         bool leftPowered = !HasFailure(AirframeSystemFailure.LeftFlapMotor)
             && !HasFailure(AirframeSystemFailure.LeftFlapCircuit);
@@ -454,7 +521,8 @@ public sealed class AirframeSystems {
         bool warningPowered = PrimaryBusPowered
             && !HasFailure(AirframeSystemFailure.GearWarningCircuit);
         bool doorUnlocked = GearDoorPosition > PositionTolerance;
-        bool throttleWarning = !AllGearDownAndLocked
+        bool throttleWarning = ThrottleTriggeredGearWarningAvailable
+            && !AllGearDownAndLocked
             && EngineRpmPercent < _profile.GearHornRpmPercent;
         if (EngineRpmPercent > _profile.GearHornRpmPercent + 3.0)
             _gearHornSilenced = false;

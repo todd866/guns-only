@@ -32,6 +32,21 @@ public sealed class AirframeSystemsTests {
     }
 
     [Fact]
+    public void NormalPoweredF86PublishesNominalUtilityHydraulicPressure() {
+        var systems = new AirframeSystems(
+            profile: AirframeSystemsProfile.F86FResearchBasis);
+
+        Assert.True(systems.ElectricalSystemAvailable);
+        Assert.True(systems.UtilityHydraulicSystemAvailable);
+        Assert.Equal(3000.0, systems.Profile.UtilityHydraulicNominalPsi);
+
+        StepFor(systems, 4.0, rpm: 80.0);
+
+        Assert.True(systems.PrimaryBusPowered);
+        Assert.InRange(systems.UtilityHydraulicPressurePsi, 2999.0, 3000.0);
+    }
+
+    [Fact]
     public void GroundSafetySwitchBlocksLegsButHandleUpOpensDoors() {
         var systems = new AirframeSystems(initialGear: LandingGearHandle.Down);
         systems.CommandGear(LandingGearHandle.Up);
@@ -138,5 +153,43 @@ public sealed class AirframeSystemsTests {
         Assert.True(systems.FlapLimitExceeded);
         Assert.InRange(systems.GearOverspeedExposureSeconds, 1.99, 2.02);
         Assert.InRange(systems.FlapOverspeedExposureSeconds, 1.99, 2.02);
+    }
+
+    [Fact]
+    public void ModernConventionalSurrogateIsGearOnlyAndDoesNotInheritF86Procedures() {
+        var systems = new AirframeSystems(
+            profile: AirframeSystemsProfile.ModernConventionalGearSurrogate);
+
+        Assert.Equal("modern-conventional-gear-public-data-surrogate-v1",
+            systems.Profile.Id);
+        Assert.False(systems.PilotOperatedFlapsAvailable);
+        Assert.False(systems.ThrottleTriggeredGearWarningAvailable);
+        Assert.False(systems.EmergencyGearExtensionAvailable);
+        Assert.False(systems.EmergencyAccumulatorAvailable);
+        Assert.False(systems.UtilityHydraulicSystemAvailable);
+        Assert.False(systems.ElectricalSystemAvailable);
+        Assert.Equal(0.0, systems.Profile.UtilityHydraulicNominalPsi);
+
+        systems.SetFlapLever(WingFlapLever.Down);
+        systems.SetEmergencyGearRelease(true);
+        StepFor(systems, 1.0, rpm: 20.0, ias: 140.0);
+
+        Assert.Equal(WingFlapLever.Hold, systems.FlapLever);
+        Assert.Equal(0.0, systems.LeftFlapDegrees, 12);
+        Assert.Equal(0.0, systems.RightFlapDegrees, 12);
+        Assert.Equal(0.0, systems.EffectiveFlapFraction, 12);
+        Assert.False(systems.EmergencyGearReleaseHeld);
+        Assert.False(systems.GearWarningHorn);
+        Assert.Equal(0.0, systems.UtilityHydraulicPressurePsi, 12);
+        Assert.Equal(AirframeAerodynamicState.Clean, systems.AerodynamicState);
+
+        systems.CommandGear(LandingGearHandle.Down);
+        StepFor(systems, 7.0, rpm: 80.0, ias: 200.0);
+
+        Assert.True(systems.AllGearDownAndLocked);
+        Assert.True(systems.AerodynamicState.DragCoefficientIncrement > 0.0);
+        Assert.Equal(0.0, systems.AerodynamicState.LiftCoefficientIncrement, 12);
+        Assert.False(systems.GearLimitExceeded);
+        Assert.False(systems.FlapLimitExceeded);
     }
 }

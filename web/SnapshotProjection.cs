@@ -273,9 +273,28 @@ internal static class SnapshotProjection {
             && !Session.TerminalPhaseActive)
             context = mergeEvaluation.Cue;
 
-        RtbGuidance rtb = _carrier is null
-            ? default
-            : _fuel.GuidanceTo(simulationPosition, displayHeadingRad, _carrier.Position);
+        RecoveryPlan? recoveryPlan = _beat.RecoveryPlan;
+        ConventionalRunwayGeometry? conventionalRunway =
+            recoveryPlan?.ConventionalRunway;
+        Vec3D? recoveryPoint = recoveryPlan?.Position
+            ?? (_carrier is null ? null : _carrier.Position);
+        bool playerRtbActive = Session.PlayerRtbActive;
+        RecoveryNavigationProjection recoveryNavigation =
+            Session.ConventionalRunwayPhase == RunwayRecoveryPhase.Recovered
+                ? _fuel.ProjectCompletedRecovery(
+                    simulationPosition,
+                    displayHeadingRad,
+                    recoveryPlan?.RequiredLandingReserveLb)
+                : recoveryPoint is { } home
+                    ? _fuel.ProjectRecoveryTo(
+                        simulationPosition,
+                        groundVelocity,
+                        displayHeadingRad,
+                        home,
+                        recoveryPlan?.RequiredLandingReserveLb,
+                        active: playerRtbActive || _fuel.RtbAdvisory)
+                    : RecoveryNavigationProjection.Unknown;
+        RtbGuidance rtb = recoveryNavigation.Guidance;
         // Finished freezes simulation time. Timed in-flight cues would otherwise remain active
         // forever, so terminal presentation comes from the durable outcome and ordered events.
         bool splashCue = !finished && Session.SplashCueActive;
@@ -288,6 +307,9 @@ internal static class SnapshotProjection {
                 ? terrainSample.HeightM : 0.0;
         if (_carrier is not null && _carrier.WithinDeckFootprint(playerPosition))
             surfaceAltitudeM = playerPosition.Y - _carrier.DeckFrame(playerPosition).height;
+        if (Session.ConventionalRunwayRecovery?.Runway is { } runway
+            && runway.ContainsPavement(playerPosition, marginM: 2.0))
+            surfaceAltitudeM = runway.Threshold.Y;
         double radarAltitudeM = Math.Max(0.0, playerPosition.Y - surfaceAltitudeM);
         double verticalSpeedMps = arrested ? 0.0 : s.VelocityVector().Y;
         var engine = _player.LastEngineOperatingPoint;
@@ -604,6 +626,11 @@ internal static class SnapshotProjection {
             // Legacy frozen drives a mobile CSS interlock; Ready/Paused use their dedicated fields.
             + $"\"below_ground\":{(playerPosition.Y <= surfaceAltitudeM ? "true" : "false")},\"frozen\":false,"
             + $"\"shots_total\":{Session.ShotsTotal},\"shots_in_window\":{Session.ShotsInWindow},"
+            + $"\"combat_handoff_phase\":{(int)Session.CombatHandoffPhase},"
+            + $"\"combat_handoff_phase_name\":\"{CombatHandoffPhaseToken(Session.CombatHandoffPhase)}\","
+            + $"\"combat_handoff_requested\":{(Session.CombatHandoffRequested ? "true" : "false")},"
+            + $"\"combat_handoff_active\":{(Session.CombatHandoffActive ? "true" : "false")},"
+            + $"\"relief_kills\":{Session.ReliefKills},"
             + $"\"throttle\":{_detents.Throttle:F3},\"requested_throttle\":{requestedCommand.Throttle:F3},"
             + $"\"applied_throttle\":{appliedCommand.Throttle:F3},\"engine\":{_player.ThrustFraction:F3},"
             + $"\"engine_spool_fraction\":{_player.ThrustFraction:F4},"
@@ -613,9 +640,9 @@ internal static class SnapshotProjection {
             + $"\"max_thrust_fraction\":{_beat.PlayerAir.MaxThrustFraction:F3},"
             + $"\"has_afterburner\":{(_beat.PlayerAir.MaxThrustFraction > 1.0 ? "true" : "false")},"
             + $"\"has_retractable_gear\":{(hasSimulatedAirframeSystems ? "true" : "false")},"
-            + $"\"has_flaps\":{(hasSimulatedAirframeSystems ? "true" : "false")},"
-            + $"\"has_electrical_system\":{(hasSimulatedAirframeSystems ? "true" : "false")},"
-            + $"\"has_utility_hydraulics\":{(hasSimulatedAirframeSystems ? "true" : "false")},"
+            + $"\"has_flaps\":{(_systems.PilotOperatedFlapsAvailable ? "true" : "false")},"
+            + $"\"has_electrical_system\":{(_systems.ElectricalSystemAvailable ? "true" : "false")},"
+            + $"\"has_utility_hydraulics\":{(_systems.UtilityHydraulicSystemAvailable ? "true" : "false")},"
             + $"\"engine_rpm_pct\":{engine.RpmPercent:F2},\"engine_thrust_lbf\":{engine.NetThrustLbf:F1},"
             + $"\"engine_net_thrust_lbf\":{engine.NetThrustLbf:F1},"
             + $"\"engine_running\":{(engine.Running ? "true" : "false")},"
@@ -637,6 +664,30 @@ internal static class SnapshotProjection {
             + $"\"rtb\":{(_fuel.RtbAdvisory ? "true" : "false")},\"rtb_steer\":{(rtb.Active ? "true" : "false")},"
             + $"\"rtb_bearing_deg\":{rtb.BearingRad * 57.29577951308232:F2},\"rtb_turn_deg\":{rtb.TurnRad * 57.29577951308232:F2},"
             + $"\"rtb_range_nm\":{rtb.RangeM / 1852.0:F2},"
+            + $"\"recovery_point_known\":{(recoveryNavigation.RecoveryPointKnown ? "true" : "false")},"
+            + $"\"recovery_id\":{JsonString(recoveryPlan?.Id)},"
+            + $"\"recovery_display_name\":{JsonString(recoveryPlan?.DisplayName)},"
+            + $"\"runway_available\":{(conventionalRunway is not null ? "true" : "false")},"
+            + $"\"runway_threshold_x\":{NullableNumberJson(conventionalRunway?.ThresholdPosition.X)},"
+            + $"\"runway_threshold_y\":{NullableNumberJson(conventionalRunway?.ThresholdPosition.Y)},"
+            + $"\"runway_threshold_z\":{NullableNumberJson(conventionalRunway?.ThresholdPosition.Z)},"
+            + $"\"runway_heading_deg\":{NullableNumberJson(conventionalRunway?.LandingHeadingRad * 57.29577951308232)},"
+            + $"\"runway_length_m\":{NullableNumberJson(conventionalRunway?.LengthM)},"
+            + $"\"runway_width_m\":{NullableNumberJson(conventionalRunway?.WidthM)},"
+            + $"\"runway_touchdown_x\":{NullableNumberJson(conventionalRunway is null ? null : recoveryPlan?.Position.X)},"
+            + $"\"runway_touchdown_y\":{NullableNumberJson(conventionalRunway is null ? null : recoveryPlan?.Position.Y)},"
+            + $"\"runway_touchdown_z\":{NullableNumberJson(conventionalRunway is null ? null : recoveryPlan?.Position.Z)},"
+            + $"\"runway_recovery_phase\":{(int)Session.ConventionalRunwayPhase},"
+            + $"\"runway_recovery_phase_name\":\"{Session.ConventionalRunwayPhase.ToString().ToUpperInvariant()}\","
+            + $"\"runway_weight_on_wheels\":{(Session.RunwayWeightOnWheels ? "true" : "false")},"
+            + $"\"runway_touchdown_deviations\":{(int)Session.RunwayTouchdown.Deviations},"
+            + $"\"player_rtb_active\":{(playerRtbActive ? "true" : "false")},"
+            + $"\"rtb_closure_kts\":{NullableNumberJson(recoveryNavigation.ClosureKts)},"
+            + $"\"rtb_eta_min\":{NullableNumberJson(recoveryNavigation.EtaMinutes)},"
+            + $"\"fuel_to_home_estimate_lb\":{NullableNumberJson(recoveryNavigation.FuelToHomeEstimateLb)},"
+            + $"\"fuel_on_arrival_estimate_lb\":{NullableNumberJson(recoveryNavigation.FuelOnArrivalEstimateLb)},"
+            + $"\"fuel_reserve_target_lb\":{NullableNumberJson(recoveryNavigation.ReserveTargetLb)},"
+            + $"\"fuel_reserve_margin_lb\":{NullableNumberJson(recoveryNavigation.ReserveMarginLb)},"
             + $"\"gear_handle\":\"{GearHandleToken(_systems.GearHandle)}\","
             + $"\"gear_nose\":{_systems.NoseGearPosition:F4},\"gear_left\":{_systems.LeftMainGearPosition:F4},\"gear_right\":{_systems.RightMainGearPosition:F4},"
             + $"\"gear_nose_indication\":\"{GearIndicationToken(_systems.NoseGearIndication)}\","
@@ -649,7 +700,7 @@ internal static class SnapshotProjection {
             + $"\"flap_left_deg\":{_systems.LeftFlapDegrees:F2},\"flap_right_deg\":{_systems.RightFlapDegrees:F2},"
             + $"\"flap_split\":{(_systems.FlapSplit ? "true" : "false")},"
             + $"\"flap_limit_exceeded\":{(_systems.FlapLimitExceeded ? "true" : "false")},"
-            + $"\"primary_bus_powered\":{(_systems.PrimaryBusPowered ? "true" : "false")},"
+            + $"\"primary_bus_powered\":{(_systems.ElectricalSystemAvailable && _systems.PrimaryBusPowered ? "true" : "false")},"
             + $"\"utility_hydraulic_pressure_psi\":{_systems.UtilityHydraulicPressurePsi:F1},"
             + $"\"utility_hydraulic_nominal_psi\":{_systems.Profile.UtilityHydraulicNominalPsi:F1},"
             + MaintenanceScenarioJson()
@@ -1149,6 +1200,7 @@ internal static class SnapshotProjection {
         SortieOutcome.Victory => "VICTORY",
         SortieOutcome.Defeat => "DEFEAT",
         SortieOutcome.Draw => "DRAW",
+        SortieOutcome.Discontinued => "DISCONTINUED",
         _ => "NONE"
     };
 
@@ -1160,7 +1212,8 @@ internal static class SnapshotProjection {
         bool playerAlive = Session.PlayerAlive && !playerLost;
         bool banditDestroyed = !Session.PlayerGun.BanditAlive;
         bool cleanRecovery = Session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped
-            || Session.Recovery == Carrier.Recovery.Trap;
+            || Session.Recovery == Carrier.Recovery.Trap
+            || Session.ConventionalRunwayPhase == RunwayRecoveryPhase.Recovered;
         PointsLedgerSlip slip = PointsLedger.Evaluate(
             new SortieLedgerFacts(
                 Finished: finished,
@@ -1259,7 +1312,28 @@ internal static class SnapshotProjection {
     static string CombatRoleToken(CombatRole role) => role switch {
         CombatRole.Player => "PLAYER",
         CombatRole.Opponent => "OPPONENT",
+        CombatRole.Relief => "RELIEF",
         _ => "NONE"
+    };
+
+    static string CombatHandoffPhaseToken(CombatHandoffPhase phase) => phase switch {
+        CombatHandoffPhase.Unavailable => "UNAVAILABLE",
+        CombatHandoffPhase.Available => "AVAILABLE",
+        CombatHandoffPhase.Requested => "REQUESTED",
+        CombatHandoffPhase.Drain => "DRAIN",
+        CombatHandoffPhase.ReliefEngaged => "RELIEF_ENGAGED",
+        CombatHandoffPhase.PlayerRtb => "PLAYER_RTB",
+        CombatHandoffPhase.ReliefComplete => "RELIEF_COMPLETE",
+        CombatHandoffPhase.ReliefLost => "RELIEF_LOST",
+        CombatHandoffPhase.Recovered => "RECOVERED",
+        _ => "UNAVAILABLE"
+    };
+
+    static string? CombatEntityKind(CombatRole role) => role switch {
+        CombatRole.Player => "player",
+        CombatRole.Opponent => "bandit",
+        CombatRole.Relief => "relief",
+        _ => null
     };
 
     static string FormationTacticalRoleToken(FormationTacticalRole role) => role switch {
@@ -1286,8 +1360,8 @@ internal static class SnapshotProjection {
                 .Append(",\"outcome\":\"").Append(SortieOutcomeToken(e.Outcome))
                 .Append("\",\"surface\":\"").Append(ImpactSurfaceToken(e.Surface))
                 .Append('"');
-            if (e.EntitySequence > 0) {
-                string entityKind = e.Target == CombatRole.Player ? "player" : "bandit";
+            if (e.EntitySequence > 0
+                && CombatEntityKind(e.Target) is { } entityKind) {
                 json.Append(",\"entity_id\":\"entity.").Append(entityKind).Append('.')
                     .Append(e.EntitySequence).Append('"');
             }

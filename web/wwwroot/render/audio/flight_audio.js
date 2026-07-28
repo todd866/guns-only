@@ -47,6 +47,10 @@ const MPS_TO_KNOTS = 1.9438444924406;
 const KNOTS_TO_MPS = 0.5144444444444;
 const SEA_LEVEL_DENSITY = 1.225;
 
+function contextNeedsUserResume(audioContext) {
+  return audioContext?.state === "suspended" || audioContext?.state === "interrupted";
+}
+
 function build() {
   const Ctor = globalThis.AudioContext ?? globalThis.webkitAudioContext;
   if (!Ctor) return false;
@@ -502,7 +506,7 @@ export function armFlightAudio(state = null) {
       disabled = true;
       return false;
     }
-    if (context.state === "suspended" && !resumePending) {
+    if (contextNeedsUserResume(context) && !resumePending) {
       const attempt = context.resume();
       if (attempt?.then) {
         const pending = Promise.resolve(attempt)
@@ -550,9 +554,10 @@ export function updateFlightAudio(state, {
       disabled = true;
       return;
     }
-    if (context.state === "suspended") {
+    if (contextNeedsUserResume(context)) {
       // Updates run every animation frame and are not a reliable user gesture. Keep the graph
-      // inaudible here; armFlightAudio owns the single in-flight resume attempt.
+      // inaudible here; armFlightAudio owns the single in-flight resume attempt. Safari reports
+      // the same user-gesture requirement as "interrupted" after calls, route changes, and sleep.
       master.gain.setTargetAtTime(0, context.currentTime, 0.02);
       return;
     }

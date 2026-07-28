@@ -13,7 +13,10 @@ import {
   advancePadlockGimbal,
   PADLOCK_LIMITS,
 } from "./render/camera/padlock_controller.js";
-import { sortieResultCopy } from "./render/debrief/sortie_result.js";
+import {
+  combatHandoffPresentation,
+  sortieResultCopy,
+} from "./render/debrief/sortie_result.js?v=173";
 import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -40,7 +43,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js";
+} from "./render/release/release_identity.js?v=173";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -53,6 +56,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=173";
 import {
   applyLookDelta,
   trackpadLookDelta,
@@ -111,7 +115,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js";
+} from "./render/settings/player_settings.js?v=173";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -139,6 +143,7 @@ import {
   createBanditDestruction,
   createCarrier,
   createCarrierRuntimePresentation,
+  createConventionalRunwayPresentation,
   createDecisionSupportSea,
   createDecisionSupportSky,
   createDrone,
@@ -150,11 +155,12 @@ import {
   createRapier,
   createRapierDispersedStrip,
   createRapierGunDrone,
-} from "./render/scene/scene_builders.js";
+  updateConventionalRunwayPresentation,
+} from "./render/scene/scene_builders.js?v=173";
 import {
   setFlightAudioEnabled,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js";
+} from "./render/audio/flight_audio.js?v=173";
 
 const DEG = Math.PI / 180;
 const MAX_GIMBAL_YAW = PADLOCK_LIMITS.yawRad;
@@ -238,6 +244,7 @@ const readyProgramStatuses = [...document.querySelectorAll("[data-program-status
 const readyProgramProgress = document.querySelector("#ready-program-progress");
 const readyStart = document.querySelector("#ready-start");
 const readyReplay = document.querySelector("#ready-replay");
+const readyHandoff = document.querySelector("#ready-handoff");
 const readySettings = document.querySelector("#ready-settings");
 const readyRestart = document.querySelector("#ready-restart");
 const readyReturn = document.querySelector("#ready-return");
@@ -280,9 +287,12 @@ const navUi = navConsole ? Object.freeze({
   bearing: document.querySelector("#nav-bearing"),
   range: document.querySelector("#nav-range"),
   eta: document.querySelector("#nav-eta"),
+  closure: document.querySelector("#nav-closure"),
   turn: document.querySelector("#nav-turn"),
   fuelNeed: document.querySelector("#nav-fuel-need"),
   fuelHave: document.querySelector("#nav-fuel-have"),
+  fuelArrival: document.querySelector("#nav-fuel-arrival"),
+  fuelReserve: document.querySelector("#nav-fuel-reserve"),
   fuelMargin: document.querySelector("#nav-fuel-margin"),
   nmPerMin: document.querySelector("#nav-nm-per-min"),
   lbPerMin: document.querySelector("#nav-lb-per-min"),
@@ -291,6 +301,8 @@ const navUi = navConsole ? Object.freeze({
   gross: document.querySelector("#nav-gross"),
   thrust: document.querySelector("#nav-thrust"),
   skin: document.querySelector("#nav-skin"),
+  handoff: document.querySelector("#nav-handoff"),
+  reliefKills: document.querySelector("#nav-relief-kills"),
   contactRange: document.querySelector("#nav-contact-range"),
   contactEti: document.querySelector("#nav-contact-eti"),
 }) : null;
@@ -300,133 +312,155 @@ const navUi = navConsole ? Object.freeze({
 /// into a decision rather than trivia.
 function updateNavConsole(state) {
   if (!navConsole || !navUi) return;
-  const relevant = state?.rapier_mission_available === true;
+  const navigation = recoveryNavigationPresentation(state);
+  const relevant = navigation.recoveryPointKnown;
   navConsole.hidden = !relevant;
-  if (!relevant) return;
+  if (!relevant) {
+    if (navConsole.open) navConsole.open = false;
+    syncNavConsoleDisclosure();
+    return;
+  }
   const set = (node, text, condition) => {
     if (!node) return;
     node.textContent = text;
     node.dataset.state = condition;
   };
-  const num = (key) => Number(state?.[key]);
-  const finite = (value) => Number.isFinite(value);
+  const num = (key) => {
+    const value = state?.[key];
+    if (value === null || value === undefined || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  };
+  const wholeLb = (value) => value === null
+    ? "—" : `${Math.round(value).toLocaleString("en-US")} LB`;
 
-  const rangeNm = num("rtb_range_nm");
-  const bearing = num("rtb_bearing_deg");
-  const turnDeg = num("rtb_turn_deg");
-  const ktas = Math.max(1, num("true_airspeed_kts") || 0);
-  const homeKnown = finite(rangeNm) && finite(bearing);
   const patternOnly = state?.rapier_pattern_only === true;
   const legRaw = typeof state?.rapier_circuit_leg === "string" ? state.rapier_circuit_leg : "";
   const legLabel = legRaw ? legRaw.replaceAll("_", " ") : "";
-  const patternAltFt = finite(num("rapier_target_altitude_ft"))
-    ? Math.round(num("rapier_target_altitude_ft")) : null;
-  const patternSpeedKt = finite(num("rapier_fd_target_ktas"))
-    ? Math.round(num("rapier_fd_target_ktas")) : null;
-
-  // Destination follows the PHASE. Circuits never shows CONTACT · INTERCEPT.
-  const phase = Math.floor(Number(state?.rapier_mission_phase) || 0);
-  const outbound = !patternOnly && phase >= 1 && phase <= 10;
+  const patternAltFt = num("rapier_target_altitude_ft");
+  const patternSpeedKt = num("rapier_fd_target_ktas");
   const gate = Math.max(0, Math.floor(Number(state?.rapier_recovery_gate) || 0));
-  const guidanceRangeM = Math.hypot(
-    (num("rapier_guidance_x") || 0) - (num("px") || 0),
-    (num("rapier_guidance_y") || 0) - (num("py") || 0),
-    (num("rapier_guidance_z") || 0) - (num("pz") || 0),
-  );
-  const boxNm = Number.isFinite(guidanceRangeM) ? guidanceRangeM / 1852 : Number.NaN;
+  const recoveryName = typeof state?.recovery_display_name === "string"
+    && state.recovery_display_name.trim()
+    ? state.recovery_display_name.trim().toUpperCase()
+    : state?.rapier_mission_available === true
+      ? "DISPERSED STRIP · HOME" : "RECOVERY POINT · HOME";
   set(navUi.destination,
     patternOnly
       ? (legLabel
         ? (gate > 0 ? `CIRCUITS · ${legLabel} · BOX ${gate}/4` : `CIRCUITS · ${legLabel}`)
         : "CIRCUITS · PATTERN")
-      : !homeKnown && !outbound ? "--"
-        : outbound
-          ? (gate > 0 ? `GATE ${gate}/4` : "CONTACT · INTERCEPT")
-          : "DISPERSED STRIP · HOME",
-    "normal");
-  set(navUi.bearing, homeKnown
-    ? `${String(Math.round((bearing % 360 + 360) % 360)).padStart(3, "0")}°` : "--",
-    homeKnown ? "normal" : "unknown");
-  const contactNm = num("range_m") / 1852;
-  const shownRangeNm = patternOnly && Number.isFinite(boxNm) ? boxNm
-    : outbound && Number.isFinite(contactNm) ? contactNm
-      : rangeNm;
-  set(navUi.range, Number.isFinite(shownRangeNm)
-    ? (patternOnly && shownRangeNm < 10
-      ? `${shownRangeNm.toFixed(1)} NM`
-      : `${Math.round(shownRangeNm)} NM`)
-    : "--",
-    Number.isFinite(shownRangeNm) ? "normal" : "unknown");
+      : recoveryName,
+    "nominal");
+  set(navUi.bearing, navigation.bearingDeg !== null
+    ? `${String(Math.round((navigation.bearingDeg % 360 + 360) % 360)).padStart(3, "0")}°`
+    : "—",
+  navigation.bearingDeg !== null ? "nominal" : "unknown");
+  set(navUi.range, navigation.rangeNm !== null
+    ? `${navigation.rangeNm < 10 ? navigation.rangeNm.toFixed(1) : Math.round(navigation.rangeNm)} NM`
+    : "—",
+  navigation.rangeNm !== null ? "nominal" : "unknown");
 
-  // Time to run uses CLOSURE toward home, not true airspeed. On a ballistic lob much of TAS is
-  // vertical, so range/TAS reads optimistic climbing and pessimistic descending — and fuel required
-  // is time-to-run times flow, so the error propagates straight into the decision number.
-  const bearingRad = (finite(bearing) ? bearing : 0) * Math.PI / 180;
-  const closureKts = ((num("vx") || 0) * Math.sin(bearingRad)
-    + (num("vz") || 0) * Math.cos(bearingRad)) * 1.94384;
-  const closingKts = closureKts > 1 ? closureKts : ktas;
-  const minutesToRun = patternOnly && Number.isFinite(boxNm)
-    ? boxNm / Math.max(1, ktas) * 60
-    : homeKnown ? rangeNm / closingKts * 60 : Number.NaN;
-  set(navUi.eta, finite(minutesToRun) ? `${Math.max(0, Math.round(minutesToRun))} MIN` : "--",
-    finite(minutesToRun) ? "normal" : "unknown");
-  set(navUi.turn, finite(turnDeg)
-    ? (Math.abs(turnDeg) < 3 ? "STEADY"
-      : `${turnDeg < 0 ? "LEFT" : "RIGHT"} ${Math.round(Math.abs(turnDeg))}°`) : "--",
-    finite(turnDeg) ? "normal" : "unknown");
+  let etaText = "—";
+  let progressState = "unknown";
+  if (navigation.travelState === "arrived") {
+    etaText = "ARRIVED";
+    progressState = "nominal";
+  } else if (navigation.travelState === "outbound") {
+    etaText = "AWAY";
+    progressState = "caution";
+  } else if (navigation.travelState === "abeam") {
+    etaText = "ABEAM";
+    progressState = "caution";
+  } else if (navigation.travelState === "inbound"
+    && navigation.etaMinutes !== null) {
+    etaText = `${Math.max(0, Math.round(navigation.etaMinutes))} MIN`;
+    progressState = "nominal";
+  }
+  set(navUi.eta, etaText, progressState);
 
-  // The decision number. Required fuel is priced at the CURRENT flow, so a pilot who pulls the
-  // lever back watches it improve — which is exactly the trade the egress is about.
+  let closureText = "—";
+  if (navigation.travelState === "arrived") closureText = "AT HOME";
+  else if (navigation.closureKts !== null && navigation.closureKts > 1)
+    closureText = `${Math.round(navigation.closureKts)} KT HOME`;
+  else if (navigation.closureKts !== null && navigation.closureKts < -1)
+    closureText = `AWAY ${Math.round(-navigation.closureKts)} KT`;
+  else if (navigation.closureKts !== null) closureText = "ABEAM";
+  set(navUi.closure, closureText, progressState);
+
+  set(navUi.turn, navigation.turnDeg !== null
+    ? (Math.abs(navigation.turnDeg) < 3 ? "STEADY"
+      : `${navigation.turnDeg < 0 ? "LEFT" : "RIGHT"} ${Math.round(Math.abs(navigation.turnDeg))}°`)
+    : "—",
+  navigation.turnDeg !== null ? "nominal" : "unknown");
+
+  // These five numbers are an authoritative set. In particular, AWAY/ABEAM withholds time and
+  // fuel-to-home; the browser must not manufacture a plausible-looking answer from TAS.
   const fuelLb = num("fuel_lb");
-  const flowPph = num("fuel_flow_pph");
-  const needLb = finite(minutesToRun) && finite(flowPph) ? flowPph * minutesToRun / 60 : Number.NaN;
-  const marginLb = fuelLb - needLb;
-  set(navUi.fuelNeed, finite(needLb) ? `${Math.round(needLb)} LB` : "--",
-    finite(needLb) ? "normal" : "unknown");
-  set(navUi.fuelHave, finite(fuelLb) ? `${Math.round(fuelLb)} LB` : "--",
-    finite(fuelLb) ? "normal" : "unknown");
+  set(navUi.fuelNeed, wholeLb(navigation.fuelToHomeLb),
+    navigation.fuelToHomeLb !== null ? "nominal" : "unknown");
+  set(navUi.fuelHave, wholeLb(fuelLb), fuelLb !== null ? "nominal" : "unknown");
+  set(navUi.fuelArrival, wholeLb(navigation.fuelOnArrivalLb),
+    navigation.fuelOnArrivalLb !== null
+      ? navigation.fuelOnArrivalLb < 0 ? "warning" : "nominal"
+      : "unknown");
+  set(navUi.fuelReserve, wholeLb(navigation.reserveTargetLb),
+    navigation.reserveTargetLb !== null ? "nominal" : "unknown");
+  const reserveCautionThreshold = navigation.reserveTargetLb !== null
+    ? navigation.reserveTargetLb * 0.10 : 0;
   set(navUi.fuelMargin,
-    finite(marginLb)
-      ? (marginLb < 0 ? `SHORT ${Math.round(-marginLb)} LB`
-        : `+${Math.round(marginLb)} LB`)
-      : "--",
-    !finite(marginLb) ? "unknown"
-      : marginLb < 0 ? "fault"
-        : marginLb < needLb * 0.10 ? "caution" : "normal");
+    navigation.reserveMarginLb === null
+      ? "—"
+      : navigation.reserveMarginLb < 0
+        ? `BELOW RES ${Math.round(-navigation.reserveMarginLb)} LB`
+        : `ABOVE RES ${Math.round(navigation.reserveMarginLb)} LB`,
+    navigation.reserveMarginLb === null ? "unknown"
+      : navigation.reserveMarginLb < 0 ? "warning"
+        : navigation.reserveMarginLb < reserveCautionThreshold ? "caution" : "nominal");
 
   // THE NAV TRIAD, and it leads the console because it is how the pilot actually thinks:
   // miles per minute, pounds per minute, pounds per mile. Everything else on this panel is
   // derived from these three, and lb/nm is the one that decides whether a speed is affordable —
   // it is the only figure that improves when you slow down.
-  const groundKts = num("ground_speed_kts");
-  const nmPerMin = Number.isFinite(groundKts) ? groundKts / 60 : Number.NaN;
-  const lbPerMin = Number.isFinite(flowPph) ? flowPph / 60 : Number.NaN;
-  const lbPerNm = Number.isFinite(lbPerMin) && nmPerMin > 0.01
-    ? lbPerMin / nmPerMin : Number.NaN;
-  set(navUi.nmPerMin, Number.isFinite(nmPerMin) ? `${nmPerMin.toFixed(1)} NM/MIN` : "--",
-    Number.isFinite(nmPerMin) ? "normal" : "unknown");
-  set(navUi.lbPerMin, Number.isFinite(lbPerMin) ? `${Math.round(lbPerMin)} LB/MIN` : "--",
-    Number.isFinite(lbPerMin) ? "normal" : "unknown");
-  set(navUi.lbPerNm, Number.isFinite(lbPerNm) ? `${lbPerNm.toFixed(2)} LB/NM` : "--",
-    Number.isFinite(lbPerNm) ? "normal" : "unknown");
-  set(navUi.groundspeed, finite(groundKts)
-    ? `${Math.round(groundKts).toLocaleString("en-US")} KT`
-    : "--", finite(groundKts) ? "normal" : "unknown");
+  set(navUi.nmPerMin, navigation.nmPerMin !== null
+    ? `${navigation.nmPerMin.toFixed(1)} NM/MIN` : "—",
+  navigation.nmPerMin !== null ? "nominal" : "unknown");
+  set(navUi.lbPerMin, navigation.lbPerMin !== null
+    ? `${Math.round(navigation.lbPerMin)} LB/MIN` : "—",
+  navigation.lbPerMin !== null ? "nominal" : "unknown");
+  set(navUi.lbPerNm, navigation.lbPerNm !== null
+    ? `${navigation.lbPerNm.toFixed(2)} LB/NM` : "—",
+  navigation.lbPerNm !== null ? "nominal" : "unknown");
+  set(navUi.groundspeed, navigation.groundKts !== null
+    ? `${Math.round(navigation.groundKts).toLocaleString("en-US")} KT`
+    : "—", navigation.groundKts !== null ? "nominal" : "unknown");
 
   const grossLb = num("player_gross_lb");
-  set(navUi.gross, finite(grossLb) ? `${Math.round(grossLb).toLocaleString("en-US")} LB` : "--",
-    finite(grossLb) ? "normal" : "unknown");
+  set(navUi.gross, grossLb !== null
+    ? `${Math.round(grossLb).toLocaleString("en-US")} LB` : "—",
+  grossLb !== null ? "nominal" : "unknown");
   const thrustLbf = num("engine_net_thrust_lbf");
-  set(navUi.thrust, finite(thrustLbf)
-    ? `${Math.round(thrustLbf).toLocaleString("en-US")} LBF` : "--",
-    finite(thrustLbf) ? "normal" : "unknown");
+  set(navUi.thrust, thrustLbf !== null
+    ? `${Math.round(thrustLbf).toLocaleString("en-US")} LBF` : "—",
+  thrustLbf !== null ? "nominal" : "unknown");
 
   const skinC = num("rapier_stagnation_temp_c");
   const marginC = num("rapier_thermal_margin_c");
-  set(navUi.skin, finite(skinC)
-    ? `${Math.round(skinC)}°C · ${finite(marginC) ? (marginC >= 0 ? `${Math.round(marginC)}°C MARGIN` : `${Math.round(-marginC)}°C OVER`) : "--"}`
-    : "--",
-    !finite(marginC) ? "unknown" : marginC < 0 ? "fault" : marginC < 40 ? "caution" : "normal");
+  set(navUi.skin, skinC !== null
+    ? `${Math.round(skinC)}°C · ${marginC !== null ? (marginC >= 0 ? `${Math.round(marginC)}°C MARGIN` : `${Math.round(-marginC)}°C OVER`) : "—"}`
+    : "—",
+  marginC === null ? "unknown" : marginC < 0 ? "warning"
+    : marginC < 40 ? "caution" : "nominal");
+
+  const handoff = combatHandoffPresentation(state);
+  const handoffState = handoff.phase === "RELIEF_LOST" ? "warning"
+    : ["REQUESTED", "DRAIN"].includes(handoff.phase) ? "caution"
+      : handoff.phase === "UNAVAILABLE" || !handoff.phase ? "unknown" : "nominal";
+  set(navUi.handoff, handoff.status, handoffState);
+  set(navUi.reliefKills, `${handoff.reliefKills} · UNCREDITED`,
+    handoff.occurred ? "nominal" : "unknown");
+  navConsole.dataset.relevance = handoff.playerRtbActive
+    ? "recovery" : handoff.requested ? "handoff" : "navigation";
 
   const contactRangeM = num("range_m");
   const rangeLabel = document.querySelector("#nav-contact-range")
@@ -437,23 +471,23 @@ function updateNavConsole(state) {
     if (rangeLabel) rangeLabel.textContent = "Pattern alt";
     if (etiLabel) etiLabel.textContent = "Pattern speed";
     const call = typeof state?.rapier_circuit_comms === "string" ? state.rapier_circuit_comms : "";
-    set(navUi.contactRange, patternAltFt !== null ? `${patternAltFt} FT` : "--",
-      patternAltFt !== null ? "normal" : "unknown");
+    set(navUi.contactRange, patternAltFt !== null ? `${Math.round(patternAltFt)} FT` : "—",
+      patternAltFt !== null ? "nominal" : "unknown");
     set(navUi.contactEti, patternSpeedKt !== null
-      ? `${patternSpeedKt} KT${call ? ` · ${call}` : ""}`
+      ? `${Math.round(patternSpeedKt)} KT${call ? ` · ${call}` : ""}`
       : (call || "PATTERN"),
-      "normal");
+    "nominal");
   } else {
     if (rangeLabel) rangeLabel.textContent = "Contact range";
     if (etiLabel) etiLabel.textContent = "Time to intercept";
-    set(navUi.contactRange, finite(contactRangeM)
-      ? `${(contactRangeM / 1852).toFixed(0)} NM` : "--",
-      finite(contactRangeM) ? "normal" : "unknown");
+    set(navUi.contactRange, contactRangeM !== null
+      ? `${(contactRangeM / 1852).toFixed(0)} NM` : "—",
+    contactRangeM !== null ? "nominal" : "unknown");
     // Negative means the kernel judged it meaningless — inside 20 km, or no closure.
     const etiMin = num("rapier_intercept_eti_min");
-    set(navUi.contactEti, finite(etiMin) && etiMin >= 0
+    set(navUi.contactEti, etiMin !== null && etiMin >= 0
       ? `${etiMin.toFixed(1)} MIN` : "MERGE",
-      finite(etiMin) && etiMin >= 0 ? "normal" : "unknown");
+    etiMin !== null && etiMin >= 0 ? "nominal" : "unknown");
   }
 }
 
@@ -635,6 +669,17 @@ function enableDraggableConsole(panel) {
 }
 
 const testFlightConsole = document.querySelector("#test-flight-console");
+function syncNavConsoleDisclosure() {
+  const summary = navConsole?.querySelector("summary");
+  summary?.setAttribute("aria-expanded", String(navConsole?.open === true));
+  if (navConsole?.open && testFlightConsole?.open) {
+    testFlightConsole.open = false;
+    testFlightConsole.querySelector("summary")
+      ?.setAttribute("aria-expanded", "false");
+  }
+}
+navConsole?.addEventListener("toggle", syncNavConsoleDisclosure);
+syncNavConsoleDisclosure();
 enableDraggableConsole(navConsole);
 enableDraggableConsole(testFlightConsole);
 bindCircuitsSystemsActions();
@@ -797,6 +842,25 @@ const touchGkeyByDefaultCode = new Map(CONTROL_BINDINGS.map(
 for (const action of Object.values(TEST_FLIGHT_ACTIONS))
   touchGkeyByDefaultCode.set(action.code, action.gkey);
 const keyMap = new Map();
+const knockItOffControl = CONTROL_BINDINGS.find(
+  ({ action }) => action === "knockItOff",
+);
+// These are true, continuous flight-surface demands. They are safe to reassert idempotently:
+// unlike guns, configuration selectors, limiter release, or throttle detents, a repeated DOWN
+// cannot manufacture another cockpit action. Keeping the list in action-space also preserves the
+// contract when the pilot remaps the physical keys.
+const REASSERTABLE_KEYBOARD_AXIS_ACTIONS = new Set([
+  "pull", "push", "rollLeft", "rollRight", "rudderLeft", "rudderRight",
+]);
+const reassertableKeyboardAxisGkeys = new Set(CONTROL_BINDINGS
+  .filter(({ action }) => REASSERTABLE_KEYBOARD_AXIS_ACTIONS.has(action))
+  .map(({ gkey }) => gkey));
+// G-LOC is deliberately different from an ordinary dropped edge: recovery requires a physical
+// release and a fresh press. Codes enter this set on the authoritative interlock edge and leave it
+// only on a later non-repeat key-down after useful function has returned.
+const keyboardAxesAwaitingFreshPress = new Set();
+const KEYBOARD_AXIS_HEARTBEAT_MS = 50;
+let nextKeyboardAxisHeartbeatMs = 0;
 function rebuildKeyboardMap() {
   keyMap.clear();
   for (const [code, gkey] of keyboardMapForSettings(playerSettings)) keyMap.set(code, gkey);
@@ -1943,7 +2007,7 @@ const MISSION_BRIEFS = Object.freeze({
     configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     card: "Splash successive Su-27 surrogates; each replacement enters through a fresh neutral merge.",
     brief: "Each splash stages another offset Su-27 visual merge after a short destruction dwell. Fuel, ammunition, ownship damage, and kill count persist, so burst discipline matters; every new opponent starts guns-safe through the first pass. Fight for the rear quarter, preserve energy, and manage both G onset and duration: 9 G is available, but vision and consciousness are physiological state. Auto-GCAS responds only to predicted terrain collision; hold K to paddle an active fly-up. No missiles or unmodelled modern sensors.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace releases the G limiter · hold K only to paddle an active Auto-GCAS fly-up",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · Space G limiter · K Auto-GCAS paddle",
   },
   8: {
     activity: "defence",
@@ -1964,7 +2028,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "F-22A vs escalating opposition · guns only · first pass safe",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     brief: "You are already at the visual merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going — the fight director watches how you actually flew and moves the pilot tier, the opponent's jet and the number of aircraft you face. Win and it stays hard. Lose twice and it eases. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace releases the G limiter · H opens controls",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · Space G limiter · H controls",
   }),
   "low-level-drone": Object.freeze({
     ...MISSION_BRIEFS[8],
@@ -1979,7 +2043,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Endurance Merge",
     sortie: "Successive visual merges · persistent fuel, ammunition, and damage",
     brief: "Two splashes earn carrier conversion. Each replacement Su-27 enters through a fresh neutral merge while fuel, ammunition, damage, and your kill count persist. Burst discipline and G management now matter across the whole sortie, not just one fight.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash two bandits in one sortie to qualify",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · splash two to qualify",
   }),
   "rapier-circuits": Object.freeze({
     kicker: "2030s Ukraine · overhead circuit practice",
@@ -2050,6 +2114,41 @@ function pressMappedKey(code, source, gkeyOverride = undefined,
   }
   recorder.event("down", code, { source });
   return true;
+}
+
+function reassertMappedKeyboardAxis(code) {
+  if (!bridge || pauseReasons.size > 0) return false;
+  const gkey = activeGkeys.get(code) ?? keyMap.get(code);
+  if (!reassertableKeyboardAxisGkeys.has(gkey)
+    || keyboardAxesAwaitingFreshPress.has(code)) return false;
+
+  // A repeat after a transient keyboard-rollover release is fresh evidence that the physical key
+  // is still down. Restore browser ownership if that edge was lost; otherwise refresh only the
+  // authoritative side. KeyGrammar.Feed is idempotent for an already-held key.
+  if (!keyOwners.get(code)?.has("keyboard"))
+    return pressMappedKey(code, "keyboard");
+
+  heldKeys.add(code);
+  activeGkeys.set(code, gkey);
+  bridge.FeedKey(gkey, true);
+  return true;
+}
+
+function reassertHeldKeyboardAxes(nowMs) {
+  if (!bridge || pauseReasons.size > 0 || nowMs < nextKeyboardAxisHeartbeatMs) return;
+  nextKeyboardAxisHeartbeatMs = nowMs + KEYBOARD_AXIS_HEARTBEAT_MS;
+  for (const [code, owners] of keyOwners) {
+    if (owners.has("keyboard")) reassertMappedKeyboardAxis(code);
+  }
+}
+
+function observePilotControlInterlock(state) {
+  if (state?.pilot_control_interlocked !== true) return;
+  for (const [code, owners] of keyOwners) {
+    const gkey = activeGkeys.get(code) ?? keyMap.get(code);
+    if (owners.has("keyboard") && reassertableKeyboardAxisGkeys.has(gkey))
+      keyboardAxesAwaitingFreshPress.add(code);
+  }
 }
 
 function releaseMappedKey(code, source) {
@@ -2248,7 +2347,10 @@ function installTestFlightConsole() {
     consoleSummary?.setAttribute("aria-expanded", String(testFlightConsole.open));
     if (!testFlightConsole.open) releaseConsoleActions();
     // Limits teaching: Systems and Nav are diagnostic — never both open.
-    if (testFlightConsole.open && navConsole?.open) navConsole.open = false;
+    if (testFlightConsole.open && navConsole?.open) {
+      navConsole.open = false;
+      syncNavConsoleDisclosure();
+    }
   };
   consoleSummary?.addEventListener("click", (event) => {
     event.preventDefault();
@@ -2740,6 +2842,10 @@ function renderPauseUi(state = latestState) {
   const showScreen = !help && !calibrating
     && (ready || finished || background || sessionPaused || settingsPaused);
   const brief = missionBrief();
+  const handoff = combatHandoffPresentation(state);
+  const handoffActionAvailable = sessionPaused
+    && pauseReasons.size === 1
+    && handoff.available;
   const wasScreenVisible = readyScreen.classList.contains("visible");
   const startWasDisabled = readyStart.disabled;
 
@@ -2782,6 +2888,10 @@ function renderPauseUi(state = latestState) {
     readyReturn.hidden = ready;
     readyReturn.textContent = "Mission program";
   }
+  if (readyHandoff) {
+    readyHandoff.hidden = !handoffActionAvailable;
+    readyHandoff.disabled = !handoffActionAvailable;
+  }
 
   if (finished) {
     const result = sortieResultCopy(state);
@@ -2816,14 +2926,19 @@ function renderPauseUi(state = latestState) {
       : ledger
         ? `${result.brief} ${ledger.clearanceText}.`
         : result.brief;
-    if (readySortieLabel) readySortieLabel.textContent = carrierQualification
-      ? "Physical outcome" : "Sortie";
-    if (readyConfigLabel) readyConfigLabel.textContent = carrierQualification
-      ? "Full-pass assessment" : ledger ? "Allocation" : "Result";
+    if (readySortieLabel) readySortieLabel.textContent = result.handoff
+      ? "Recovery" : carrierQualification ? "Physical outcome" : "Sortie";
+    if (readyConfigLabel) readyConfigLabel.textContent = result.handoff
+      ? "Combat custody" : carrierQualification
+        ? "Full-pass assessment" : ledger ? "Allocation" : "Result";
     readySortie.textContent = carrierQualification
       ? `${carrierQualificationPhysicalOutcome(state)}${Number(state?.wire) > 0 ? ` · wire ${Math.round(Number(state.wire))}` : ""}`
-      : `${brief.title} · ${String(state?.sortie_outcome || "complete").toLowerCase()}`;
-    readyConfig.textContent = state?.maintenance_scenario === true
+      : result.handoff
+        ? `${brief.title} · ${String(result.handoffPhase || "handoff").replaceAll("_", " ").toLowerCase()}`
+        : `${brief.title} · ${String(state?.sortie_outcome || "complete").toLowerCase()}`;
+    readyConfig.textContent = result.handoff
+      ? `Player kills ${result.playerKills} · Relief kills ${result.reliefKills} (uncredited)`
+      : state?.maintenance_scenario === true
       ? `Procedure ${Math.round(Number(state?.maintenance_score) || 0)}/${Math.round(Number(state?.maintenance_max_score) || 100)} · ${Math.round(Number(state?.maintenance_demerits) || 0)} demerits`
       : state?.drone_raid_evaluation === true
         ? droneRaidDebriefFacts(state)
@@ -2841,7 +2956,11 @@ function renderPauseUi(state = latestState) {
     // No qualification, so the debrief offers the only two things that make sense: go again, or
     // pick the other aircraft.
     readyStart.textContent = "Fly again";
-    if (readyControls) readyControls.textContent = carrierQualification
+    if (readyControls) readyControls.textContent = result.handoff
+      ? result.reserveMarginLb === null
+        ? "Recovery reserve result unavailable · relief combat remains separately scored"
+        : `${result.reserveMarginLb < 0 ? "Below" : "Above"} protected reserve by ${Math.round(Math.abs(result.reserveMarginLb))} LB\nRelief combat remains separately scored`
+      : carrierQualification
       ? `Full-pass primary · ${carrierFacts.passCorrection}\nTouchdown assessment · ${carrierFacts.touchdown}\nTouchdown primary · ${carrierFacts.touchdownCorrection}`
       : ledger
         ? `${ledger.lines.map((line) => `${line.label} · ${line.pointsText}`).join("\n") || "No lines"}\n${ledger.clearanceText}`
@@ -2876,8 +2995,12 @@ function renderPauseUi(state = latestState) {
     readyTitle.textContent = "Hold Position";
     readyBrief.textContent = "The deterministic flight clock is stopped. No aircraft, weapons, fuel, or carrier state advances while the sortie is paused.";
     readySortie.textContent = brief.title;
-    readyConfig.textContent = "Inputs neutralised";
-    if (readyControls) readyControls.textContent = "Press Enter to resume · R restages the selected sortie";
+    readyConfig.textContent = handoff.occurred
+      ? `${handoff.status} · Relief kills ${handoff.reliefKills} (uncredited)`
+      : "Inputs neutralised";
+    if (readyControls) readyControls.textContent = handoffActionAvailable
+      ? `Press Enter to resume · ${controlCodeLabel(playerSettings.bindings.knockItOff)} hands off and resumes RTB · R restages`
+      : "Press Enter to resume · R restages the selected sortie";
     readyStart.textContent = "Resume flight";
     readyHint.textContent = "Press Enter to resume";
   }
@@ -3148,6 +3271,31 @@ function toggleSessionPause() {
   return true;
 }
 
+function requestCombatHandoffFromPause() {
+  const handoff = combatHandoffPresentation(latestState);
+  if (!bridge || !knockItOffControl || !handoff.available
+    || !pauseReasons.has("session") || pauseReasons.size !== 1) return false;
+
+  // This is a deliberate phase-change command, not a background action against a paused kernel.
+  // Resume first so the authoritative lifecycle can accept the rising edge, then issue one bounded
+  // down/up pulse. The mobile pause menu therefore shares the same GKey path as remappable KeyO.
+  setPauseReason("session", false);
+  const code = playerSettings.bindings.knockItOff
+    || knockItOffControl.defaultCode;
+  if (!pressMappedKey(code, "pause-handoff", knockItOffControl.gkey)) {
+    setPauseReason("session", true);
+    return false;
+  }
+  releaseMappedKey(code, "pause-handoff");
+  if (viewStatus) viewStatus.textContent = "Handoff requested · weapons safe · stand by relief";
+  recorder.event("combat-handoff", "requested", {
+    source: "pause-menu",
+    code,
+  });
+  sceneCanvas.focus({ preventScroll: true });
+  return true;
+}
+
 function selectDeckConfiguration(value) {
   if (![5, 6].includes(selectedBeat) || !pauseReasons.has("ready")) return false;
   selectedDeckConfiguration = Number(value) === 1 ? 1 : 0;
@@ -3288,6 +3436,7 @@ readyReplay?.addEventListener("click", () => {
 });
 
 readySettings?.addEventListener("click", openSettings);
+readyHandoff?.addEventListener("click", requestCombatHandoffFromPause);
 readyRestart?.addEventListener("click", restartMissionNow);
 readyReturn?.addEventListener("click", returnToCatalogue);
 pauseButton?.addEventListener("click", toggleSessionPause);
@@ -4691,7 +4840,7 @@ class FlightView {
         cancelCloudBreak: () => Object.freeze({ active: false, phase: "disabled" }),
         cloudBreakDiagnostics: () => Object.freeze({ active: false, phase: "disabled" }),
         dispose() {},
-      };
+    };
     this.tacticalClouds.group.name = "AUTHORITATIVE_WEATHER_CLOUDS";
     this.tacticalClouds.group.visible = PRODUCTION_SIMULATED_CLOUDS_ENABLED;
     this.scene.add(this.sky.mesh, this.sea.mesh, this.tacticalClouds.group);
@@ -4736,7 +4885,12 @@ class FlightView {
       this.camera,
     );
     this.carrierRuntime = createCarrierRuntimePresentation();
-    this.scene.add(this.carrierRuntime.recovery.group, this.carrierRuntime.water.group);
+    this.conventionalRunway = createConventionalRunwayPresentation();
+    this.scene.add(
+      this.carrierRuntime.recovery.group,
+      this.carrierRuntime.water.group,
+      this.conventionalRunway.group,
+    );
     this.banditDestruction = createBanditDestruction();
     this.gunEffects = createGunEffects();
     this.playerDamageSmoke = createDamageSmokeTrail(THREE, {
@@ -6046,6 +6200,7 @@ class FlightView {
       placementNorthM: Number.isFinite(terrainPlacementNorthM) ? terrainPlacementNorthM : 0,
     });
 
+    updateConventionalRunwayPresentation(this.conventionalRunway, state);
     const isCarrier = state.carrier === true;
     const isRecoveryPlatform = state.recovery_platform === true;
     const banditAlive = aircraftAlive(state, "opponent_terminal_state",
@@ -6303,8 +6458,10 @@ class FlightView {
     this.banditDamageSmoke.dispose();
     this.carrierRuntime.recovery.group.removeFromParent();
     this.carrierRuntime.water.group.removeFromParent();
+    this.conventionalRunway.group.removeFromParent();
     disposeSceneResources(this.carrierRuntime.recovery.group);
     disposeSceneResources(this.carrierRuntime.water.group);
+    disposeSceneResources(this.conventionalRunway.group);
     this.sky.mesh.removeFromParent();
     this.sea.mesh.removeFromParent();
     this.banditDestruction.removeFromParent();
@@ -7081,17 +7238,50 @@ function nativeInteractiveOwnsKey(event) {
   ].includes(event.code);
 }
 
+function activeFlightAxisOwnsKey(event) {
+  // Text editing remains sacred even if a future in-flight console contains an input. Ordinary
+  // buttons, however, must not swallow a remapped flight axis merely because a click left focus on
+  // PAUSE, audio, or another piece of flight chrome. Paused/ready/settings overlays still retain
+  // the complete native keyboard contract through pauseReasons.
+  if (pauseReasons.size > 0
+    || event.target.closest?.("input, select, textarea")) return false;
+  return reassertableKeyboardAxisGkeys.has(keyMap.get(event.code));
+}
+
 function installInput(view) {
   window.addEventListener("keydown", (event) => {
     // Native controls own Enter, Space and arrow-key semantics while focused. This prevents the
     // dialog's mission buttons from leaking into flight shortcuts or launching the previous card.
-    if (nativeInteractiveOwnsKey(event)) return;
+    // During live flight, a mapped flight axis takes priority over stale button focus.
+    const flightAxisOwnsKey = activeFlightAxisOwnsKey(event);
+    if (nativeInteractiveOwnsKey(event) && !flightAxisOwnsKey) return;
     if (keyMap.has(event.code)
       || ["BracketLeft", "BracketRight", "F1", "Enter", "NumpadEnter", "Escape",
         "KeyT", "KeyP"].includes(event.code)) {
       event.preventDefault();
     }
-    if (event.repeat || !bridge) return;
+    if (!bridge) return;
+
+    // Native repeat is a liveness signal for continuous flight axes, not another semantic press.
+    // Reasserting it closes both halves of the failure: a brief rollover/key-chord release can
+    // rebuild browser ownership, and a simulation-side neutralisation cannot leave the physical
+    // hold silently desynchronised. Momentary, weapon, throttle, configuration, and protection
+    // actions remain strictly edge-triggered.
+    if (event.repeat) {
+      if (flightAxisOwnsKey && latestState?.pilot_control_interlocked === true)
+        keyboardAxesAwaitingFreshPress.add(event.code);
+      reassertMappedKeyboardAxis(event.code);
+      return;
+    }
+
+    // G-LOC rejects inputs until the pilot has useful function again. Do not let the browser retain
+    // a press the simulation correctly refused, and do not let subsequent OS repeat impersonate a
+    // fresh post-recovery motor action.
+    if (flightAxisOwnsKey && latestState?.pilot_control_interlocked === true) {
+      keyboardAxesAwaitingFreshPress.add(event.code);
+      return;
+    }
+    if (flightAxisOwnsKey) keyboardAxesAwaitingFreshPress.delete(event.code);
 
     if (event.code === "Escape") {
       if (closeSettings()) return;
@@ -7129,11 +7319,7 @@ function installInput(view) {
 
     if (event.code === "KeyN" && navConsole && !navConsole.hidden) {
       navConsole.open = !navConsole.open;
-      if (navConsole.open && testFlightConsole?.open) {
-        testFlightConsole.open = false;
-        testFlightConsole.querySelector("summary")
-          ?.setAttribute("aria-expanded", "false");
-      }
+      syncNavConsoleDisclosure();
       recorder.event("nav-console", navConsole.open ? "open" : "closed");
       return;
     }
@@ -7174,11 +7360,19 @@ function installInput(view) {
     const gkey = keyMap.get(event.code);
     if (gkey === undefined) return;
     if (!pressMappedKey(event.code, "keyboard")) return;
+    if (flightAxisOwnsKey) sceneCanvas.focus({ preventScroll: true });
     if (gkey === 9) togglePadlock();
     if (gkey === 8) view.hud.armAudio();
   }, { passive: false });
 
   window.addEventListener("keyup", (event) => {
+    // Release a flight key that this input layer owns even if focus moved to an interactive
+    // element after key-down. Ownership belongs to the original edge, not the key-up target.
+    if (keyOwners.get(event.code)?.has("keyboard")) {
+      event.preventDefault();
+      releaseMappedKey(event.code, "keyboard");
+      return;
+    }
     if (nativeInteractiveOwnsKey(event)) return;
     if (keyMap.has(event.code) || ["BracketLeft", "BracketRight"].includes(event.code)) {
       event.preventDefault();
@@ -7292,6 +7486,11 @@ function installInput(view) {
 }
 
 async function boot() {
+  // A fresh navigation can still be controlled by the previous release's cache-first worker.
+  // The inline index gate removes that worker/cache before Blazor asks for its unversioned boot
+  // manifest. Direct release-mutated imports above are independently query-busted because ESM
+  // linking necessarily happens before this top-level boot body can await the gate.
+  await (globalThis.__gunsPrebootReady ?? Promise.resolve());
   setBootStatus("STARTING .NET RUNTIME…");
   const blazor = await waitForGlobal(() => globalThis.Blazor);
   await blazor.start();
@@ -7436,6 +7635,10 @@ async function boot() {
       const tickBeforeAdvance = Number(latestState?.tick) || 0;
       let kernelSelectedCompressionFactor = 1;
       if (pauseReasons.size === 0) {
+        // Refresh durable physical-axis intent immediately before the authoritative fixed ticks.
+        // At 50 ms this is much faster than a player can perceive as a dropped max-performance
+        // pull, while avoiding per-frame bridge traffic during a healthy hold.
+        reassertHeldKeyboardAxes(now);
         kernelSelectedCompressionFactor = bridge.Advance(
           dt, compressionPlan.maximumFactor,
         );
@@ -7459,6 +7662,7 @@ async function boot() {
       });
       recorder.observeFramePhase("snap", performance.now() - afterSim);
       latestState = state;
+      observePilotControlInterlock(state);
       // The kernel can retarget after a kill or promotion without a browser input edge. Reconcile
       // the cached request from the hot slot every frame; matching states do not cross the bridge.
       syncPlayerGunTarget();
@@ -7516,7 +7720,7 @@ async function boot() {
 // prevent the game from starting: the sortie is the product, offline is an enhancement.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js").catch((error) => {
+    navigator.serviceWorker.register("service-worker.js?v=173").catch((error) => {
       console.warn("Offline support unavailable.", error);
     });
   });

@@ -96,6 +96,41 @@ public class UkraineTerrainTruthTests {
     }
 
     [Fact]
+    public void F22RecoveryRunwayFollowsTheEmbeddedRegionalTerrainDatum() {
+        ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
+            UkraineTerrainTruth.Load());
+        RecoveryPlan plan = Assert.IsType<RecoveryPlan>(
+            Beats.ModernVisualMerge().RecoveryPlan);
+        ConventionalRunwayGeometry runway =
+            Assert.IsType<ConventionalRunwayGeometry>(plan.ConventionalRunway);
+
+        Assert.True(terrain.TrySample(
+            runway.ThresholdPosition.X,
+            runway.ThresholdPosition.Z,
+            out TerrainSample thresholdGround));
+        Assert.Equal(TerrainSurfaceKind.Land, thresholdGround.Kind);
+        Assert.Equal(thresholdGround.HeightM, runway.ElevationM, precision: 8);
+        Assert.Equal(runway.ElevationM, plan.Position.Y, precision: 8);
+
+        Vec3D forward = runway.RolloutDirection;
+        Vec3D right = new(forward.Z, 0.0, -forward.X);
+        for (double alongM = 0.0; alongM <= runway.LengthM; alongM += 25.0)
+        foreach (double crossM in new[] {
+            -runway.WidthM * 0.5,
+            0.0,
+            runway.WidthM * 0.5,
+        }) {
+            Vec3D pavement = runway.ThresholdPosition
+                + forward * alongM
+                + right * crossM;
+            Assert.True(terrain.TrySample(pavement.X, pavement.Z,
+                out TerrainSample ground));
+            Assert.Equal(TerrainSurfaceKind.Land, ground.Kind);
+            Assert.InRange(Math.Abs(runway.ElevationM - ground.HeightM), 0.0, 0.5);
+        }
+    }
+
+    [Fact]
     public void DetailCellRemainsByteStableAndMeetsRegionalTruthWithoutASeam() {
         const string DetailResource = "GunsOnly.Web.Data.UkraineSoniachne.truth";
         const string RegionalResource = "GunsOnly.Web.Data.UkraineSoniachneRegion.truth";

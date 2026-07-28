@@ -39,9 +39,28 @@ test("rebinding swaps an occupied key instead of creating an ambiguous control",
 });
 
 test("binding reset and labels preserve the ordinary flight-control vocabulary", () => {
-  const rebound = rebindControl(normalisePlayerSettings(), "pull", "KeyP");
+  const rebound = rebindControl(
+    rebindControl(normalisePlayerSettings(), "pull", "KeyP"),
+    "knockItOff",
+    "KeyL",
+  );
   const reset = resetControlBindings(rebound);
   assert.equal(reset.bindings.pull, "ArrowDown");
+  assert.equal(reset.bindings.knockItOff, "KeyO");
+  assert.equal(keyboardMapForSettings(reset).get("KeyO"), 10);
+  assert.equal(keyboardMapForSettings(reset).get("KeyK"), 20,
+    "Knock It Off must never displace the Auto-GCAS paddle");
   assert.equal(controlCodeLabel("ArrowDown"), "↓");
   assert.equal(controlCodeLabel("KeyW"), "W");
+});
+
+test("Knock It Off is remappable without creating a second action on O", () => {
+  const original = normalisePlayerSettings();
+  const rebound = rebindControl(original, "knockItOff", "KeyF");
+
+  assert.equal(rebound.bindings.knockItOff, "KeyF");
+  assert.equal(rebound.bindings.fire, "KeyO");
+  assert.equal(keyboardMapForSettings(rebound).get("KeyF"), 10);
+  assert.equal(keyboardMapForSettings(rebound).get("KeyO"), 8);
+  assert.equal(new Set(Object.values(rebound.bindings)).size, CONTROL_BINDINGS.length);
 });
