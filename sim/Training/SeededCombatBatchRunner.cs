@@ -311,6 +311,38 @@ public static class SeededCombatBatchRunner {
         return new CombatTrainingBatch(selected, episodes);
     }
 
+    /// <summary>
+    /// Run the ordinary deterministic combat batch while also retaining every synchronous behavior
+    /// policy selection. The returned <see cref="CombatTrainingBatch"/> view was produced by the
+    /// same physics loop; enabling capture does not replay or fork the engagement.
+    /// </summary>
+    public static PlannerTeacherBatch RunWithPlannerTeacherSamples(
+        CombatTrainingBatchConfig? config = null,
+        CancellationToken cancellationToken = default) {
+        CombatTrainingBatchConfig selected = config ?? new CombatTrainingBatchConfig();
+        Validate(selected);
+        cancellationToken.ThrowIfCancellationRequested();
+        var episodes = new PlannerTeacherEpisode[selected.EpisodeCount];
+        for (int index = 0; index < episodes.Length; index++) {
+            cancellationToken.ThrowIfCancellationRequested();
+            ulong seed = unchecked(selected.FirstSeed + (ulong)index);
+            CombatTrainingScenario scenario =
+                CombatTrainingScenarioFactory.SeededOffsetMerge(seed);
+            episodes[index] = RunEpisodeWithPlannerTeacherSamples(
+                index,
+                scenario,
+                selected.ReferenceSkill,
+                selected.BehaviorSkill,
+                selected.MaximumSecondsPerEpisode,
+                selected.RewardWeights,
+                cancellationToken);
+        }
+        return new PlannerTeacherBatch(
+            selected,
+            PlannerTeacherCaptureContext.SeededFlatCalmV1,
+            episodes);
+    }
+
     public static CombatEpisode RunEpisode(
         int episodeIndex,
         in CombatTrainingScenario scenario,
@@ -319,7 +351,60 @@ public static class SeededCombatBatchRunner {
         double maximumSeconds,
         CombatRewardWeights? rewardWeights = null,
         CancellationToken cancellationToken = default,
+        int engagementNumber = 1) =>
+        RunEpisodeCore(
+            episodeIndex,
+            scenario,
+            referenceSkill,
+            behaviorSkill,
+            maximumSeconds,
+            rewardWeights,
+            cancellationToken,
+            engagementNumber,
+            plannerTeacherSamples: null);
+
+    /// <summary>
+    /// Run one ordinary episode and retain the full decision trace and recurrent memory at every
+    /// behavior-policy selection boundary.
+    /// </summary>
+    public static PlannerTeacherEpisode RunEpisodeWithPlannerTeacherSamples(
+        int episodeIndex,
+        in CombatTrainingScenario scenario,
+        PilotSkill referenceSkill,
+        PilotSkill behaviorSkill,
+        double maximumSeconds,
+        CombatRewardWeights? rewardWeights = null,
+        CancellationToken cancellationToken = default,
         int engagementNumber = 1) {
+        var samples = new List<PlannerTeacherSample>();
+        CombatEpisode episode = RunEpisodeCore(
+            episodeIndex,
+            scenario,
+            referenceSkill,
+            behaviorSkill,
+            maximumSeconds,
+            rewardWeights,
+            cancellationToken,
+            engagementNumber,
+            samples);
+        return new PlannerTeacherEpisode(
+            episode,
+            referenceSkill,
+            behaviorSkill,
+            PlannerTeacherCaptureContext.SeededFlatCalmV1,
+            samples);
+    }
+
+    static CombatEpisode RunEpisodeCore(
+        int episodeIndex,
+        in CombatTrainingScenario scenario,
+        PilotSkill referenceSkill,
+        PilotSkill behaviorSkill,
+        double maximumSeconds,
+        CombatRewardWeights? rewardWeights,
+        CancellationToken cancellationToken,
+        int engagementNumber,
+        List<PlannerTeacherSample>? plannerTeacherSamples) {
         if (episodeIndex < 0) throw new ArgumentOutOfRangeException(nameof(episodeIndex));
         if (engagementNumber < 1)
             throw new ArgumentOutOfRangeException(nameof(engagementNumber));
@@ -408,6 +493,14 @@ public static class SeededCombatBatchRunner {
                 && learningGun.AmmoRemaining > 0
                 && learningGun.TargetAlive;
             long learningSelectionBefore = learning.DecisionTrace.SelectionSequence;
+            BanditPolicyMemory learningPolicyMemoryBefore =
+                plannerTeacherSamples is null
+                    ? default
+                    : learning.PolicyMemory;
+            double learningEnginePowerBefore =
+                plannerTeacherSamples is null
+                    ? 0.0
+                    : learning.ThrustFraction;
             int learningRoundsBefore = learningGun.RoundsFired;
             int learningHitsBefore = learningGun.HitCount;
             int referenceHitsBefore = referenceGun.HitCount;
@@ -424,6 +517,16 @@ public static class SeededCombatBatchRunner {
             EnsureSupportedFlightVolume(learning.State, scenario.Id, "learning");
             bool maneuverSelected =
                 learning.DecisionTrace.SelectionSequence > learningSelectionBefore;
+            if (maneuverSelected && plannerTeacherSamples is not null) {
+                plannerTeacherSamples.Add(new PlannerTeacherSample(
+                    recorder.Count,
+                    observation,
+                    learningPolicyMemoryBefore,
+                    learning.PolicyMemory,
+                    learning.DecisionTrace,
+                    behaviorSkill,
+                    learningEnginePowerBefore));
+            }
 
             bool learningDestroyed = referenceGun.Outcome == FightOutcome.Splash;
             bool referenceDestroyed = learningGun.Outcome == FightOutcome.Splash;
