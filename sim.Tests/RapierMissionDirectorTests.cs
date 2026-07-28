@@ -119,15 +119,15 @@ public class RapierMissionDirectorTests {
 
         Assert.Equal(RapierMissionPhase.Climb, guidance.Phase);
         Assert.Equal("DEPART", guidance.CircuitLeg);
-        Assert.True(guidance.FdTargetKtas > 250.0 && guidance.FdTargetKtas < 320.0,
-            $"DEPART must command ~300 KT pattern band, got {guidance.FdTargetKtas:F0} KT");
-        Assert.True(guidance.AuthoredTargetMach < 0.52,
+        Assert.True(guidance.FdTargetKtas > 220.0 && guidance.FdTargetKtas < 280.0,
+            $"DEPART must command ~250 KT pattern band, got {guidance.FdTargetKtas:F0} KT");
+        Assert.True(guidance.AuthoredTargetMach < 0.45,
             $"DEPART must stay subsonic pattern energy, got M{guidance.AuthoredTargetMach:F2}");
-        Assert.True(guidance.CommandedMach < 0.52,
+        Assert.True(guidance.CommandedMach < 0.45,
             $"DEPART must not chase Mach dash, got M{guidance.CommandedMach:F2}");
         Assert.Contains("HOOK DOWN", guidance.Cue);
         Assert.Contains("GEAR UP", guidance.Cue);
-        Assert.Contains("300 KT", guidance.Cue);
+        Assert.Contains("250 KT", guidance.Cue);
         // Flythrough box aims at INITIAL, not the strip centre / FL560 phantom.
         Assert.True(guidance.Waypoint.Y > home.Y + 400.0,
             "DEPART box must sit near pattern shelf height");
@@ -141,16 +141,19 @@ public class RapierMissionDirectorTests {
         var director = new RapierMissionDirector();
         Vec3D home = new(0.0, 120.0, 0.0);
         Vec3D recoveryInitial = new(0.0, 1_120.0, -16_000.0);
-        // Above the 550 m Circuits shelf, still inbound to INITIAL (not yet captured).
-        AircraftState player = StateAt(home.Y + 600.0, 154.0, chi: 0.0);
-        player = player with { Position = new Vec3D(0.0, home.Y + 600.0, -8_000.0) };
+        // Above the 2,500 ft Circuits shelf, still inbound to INITIAL (not yet captured).
+        double patternShelfM = home.Y + 2_500.0 * 0.3048;
+        AircraftState player = StateAt(patternShelfM + 20.0, 129.0, chi: 0.0);
+        player = player with {
+            Position = new Vec3D(0.0, patternShelfM + 20.0, -8_000.0)
+        };
         AircraftState contact = StateAt(24_000.0, 200.0);
         contact = contact with { Position = new Vec3D(0.0, 24_000.0, -400_000.0) };
 
         RapierMissionGuidance guidance = default;
         for (int i = 0; i < 4; i++) {
             guidance = director.Step(
-                player, contact, 154.0, StandardAtmosphere1976.Instance,
+                player, contact, 129.0, StandardAtmosphere1976.Instance,
                 FlightModel.RapierPublicDataSurrogate,
                 catapultActive: false, liveOpponentCount: 0, pursuitActive: false,
                 pursuerCount: 0, pursuitRangeM: 0.0, home, recoveryInitial,
@@ -159,8 +162,8 @@ public class RapierMissionDirectorTests {
 
         Assert.Equal(RapierMissionPhase.Recovery, guidance.Phase);
         Assert.Equal("INITIAL", guidance.CircuitLeg);
-        Assert.True(guidance.FdTargetKtas > 250.0 && guidance.FdTargetKtas < 320.0,
-            $"expected ~300 KT pattern speed, got {guidance.FdTargetKtas:F0}");
+        Assert.True(guidance.FdTargetKtas > 220.0 && guidance.FdTargetKtas < 280.0,
+            $"expected ~250 KT pattern speed, got {guidance.FdTargetKtas:F0}");
         Assert.Contains("INITIAL", guidance.Cue);
         Assert.Contains("HOOK DOWN", guidance.Cue);
         Assert.Contains("GEAR UP", guidance.Cue);
@@ -186,8 +189,58 @@ public class RapierMissionDirectorTests {
         Assert.Equal("DEPART", guidance.CircuitLeg);
         Assert.True(guidance.AuthoredTargetMach < 0.52,
             $"pattern launch must not author M0.9 dash, got M{guidance.AuthoredTargetMach:F2}");
-        Assert.True(guidance.FdTargetKtas > 250.0 && guidance.FdTargetKtas < 320.0,
-            $"pattern launch FD must be ~300 KT, got {guidance.FdTargetKtas:F0}");
+        Assert.True(guidance.FdTargetKtas > 220.0 && guidance.FdTargetKtas < 280.0,
+            $"pattern launch FD must be ~250 KT, got {guidance.FdTargetKtas:F0}");
+    }
+
+    [Fact]
+    public void PatternOnlyBreakCommandsSteepBankAndG() {
+        var director = new RapierMissionDirector();
+        Vec3D home = new(0.0, 120.0, 0.0);
+        Vec3D recoveryInitial = new(0.0, 1_120.0, -16_000.0);
+        // Capture INITIAL by placing on the INITIAL box at pattern speed/heading, then step
+        // into BREAK by advancing past INITIAL along runway heading.
+        double patternY = home.Y + 2_500.0 * 0.3048;
+        Vec3D runwayForward = new(0.0, 0.0, 1.0); // recoveryInitial is south of home
+        Vec3D threshold = home - runwayForward * 240.0;
+        Vec3D initial = threshold - runwayForward * (1.50 * 1852.0)
+            + new Vec3D(0.0, patternY - threshold.Y, 0.0);
+        AircraftState contact = StateAt(24_000.0, 200.0);
+        contact = contact with { Position = new Vec3D(0.0, 24_000.0, -400_000.0) };
+
+        // Seed through INITIAL capture.
+        AircraftState atInitial = StateAt(patternY, 129.0, chi: 0.0);
+        atInitial = atInitial with { Position = initial };
+        RapierMissionGuidance guidance = default;
+        for (int i = 0; i < 3; i++) {
+            guidance = director.Step(
+                atInitial, contact, 129.0, StandardAtmosphere1976.Instance,
+                FlightModel.RapierPublicDataSurrogate,
+                catapultActive: false, liveOpponentCount: 0, pursuitActive: false,
+                pursuerCount: 0, pursuitRangeM: 0.0, home, recoveryInitial,
+                recovered: false, patternOnly: true);
+        }
+        Assert.Equal("BREAK", guidance.CircuitLeg);
+
+        // Large heading error to downwind → steep bank target.
+        AircraftState breaking = atInitial with {
+            Position = initial + new Vec3D(-400.0, 0.0, 200.0),
+            Chi = 0.0
+        };
+        guidance = director.Step(
+            breaking, contact, 118.0, StandardAtmosphere1976.Instance,
+            FlightModel.RapierPublicDataSurrogate,
+            catapultActive: false, liveOpponentCount: 0, pursuitActive: false,
+            pursuerCount: 0, pursuitRangeM: 0.0, home, recoveryInitial,
+            recovered: false, patternOnly: true);
+
+        Assert.Equal("BREAK", guidance.CircuitLeg);
+        Assert.True(Math.Abs(guidance.FdBankDeg) >= 55.0,
+            $"BREAK should prefer ~60° bank, got {guidance.FdBankDeg:F0}°");
+        Assert.True(Math.Abs(guidance.FdBankDeg) <= 76.0,
+            $"BREAK bank must stay ≤75°, got {guidance.FdBankDeg:F0}°");
+        Assert.True(guidance.Command.GDemand >= 2.8,
+            $"BREAK needs ≥~3 G for steep bank, got {guidance.Command.GDemand:F2}");
     }
 
 }

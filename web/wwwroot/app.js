@@ -519,7 +519,7 @@ function renderCircuitsPreflight(brief) {
   }
   if (readyCircuitsCue) {
     readyCircuitsCue.textContent = brief.preflightCue
-      || "INITIAL / DOWNWIND ~300 KT · FINAL ~180 KT · hook down always";
+      || "2,500 FT · 250 KT · BREAK 60° · BASE 45° · 3 NM FINAL · GEAR/FLAPS DOWNWIND";
   }
   if (readyCircuitsModes) {
     readyCircuitsModes.replaceChildren(...modes.map((mode) => {
@@ -1950,17 +1950,17 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Rapier Circuits",
     sortie: "Ski-jump · overhead pattern · touch-and-go · trap",
     configuration: "Attritable Rapier brick · full fuel · hook down · no contact",
-    brief: "Military overhead · ~1,800 ft AGL · 300 KT initial/downwind · 180 KT final · fly the boxes · trap the wire. P = DEMO; touch stick = DIRECT; P off = MONITOR. No Mach dash.",
+    brief: "Military overhead · 2,500 ft AGL · 250 KT initial/downwind · break ~60° (max 75°) · base ~45° (max 60°) · 3 NM finals · gear and flaps on downwind · fly the boxes · trap the wire. P = DEMO; touch stick = DIRECT; P off = MONITOR. No Mach dash.",
     controls: "P DEMO ↔ MONITOR · stick takeover = DIRECT · arrows/W/S · T time · V threshold · Tab traffic\nFly the boxes · trap the wire",
-    preflightCue: "INITIAL / DOWNWIND ~300 KT · FINAL ~180 KT · hook down always",
+    preflightCue: "2,500 FT · 250 KT · BREAK 60° · BASE 45° · 3 NM FINAL · GEAR/FLAPS DOWNWIND",
     preflightLegs: Object.freeze([
-      Object.freeze({ id: "DEPART", label: "DEPART", intent: "Ski-jump → climb → join INITIAL", cue: "Pattern alt ~1,500–2,000 ft AGL" }),
-      Object.freeze({ id: "INITIAL", label: "INITIAL", intent: "Runway heading, midfield", cue: "~300 KT · hook down" }),
-      Object.freeze({ id: "BREAK", label: "BREAK", intent: "~180° to downwind", cue: "~45° bank" }),
-      Object.freeze({ id: "DOWNWIND", label: "DOWNWIND", intent: "Opposite parallel, abeam", cue: "~2–2.5 NM offset · ~300 KT" }),
-      Object.freeze({ id: "BASE", label: "BASE", intent: "Continuous turn to final", cue: "Shed toward ~220 KT" }),
-      Object.freeze({ id: "SHORT_FINAL", label: "SHORT FINAL", intent: "T&G / go-around before midfield gear", cue: "~180 KT" }),
-      Object.freeze({ id: "WIRE_FINAL", label: "WIRE", intent: "Accept trap; aerobrake → wire", cue: "~170–180 KT" }),
+      Object.freeze({ id: "DEPART", label: "DEPART", intent: "Ski-jump → climb → join INITIAL", cue: "Pattern alt 2,500 ft AGL · clean" }),
+      Object.freeze({ id: "INITIAL", label: "INITIAL", intent: "Runway heading, midfield", cue: "~250 KT · gear/flaps up · hook down" }),
+      Object.freeze({ id: "BREAK", label: "BREAK", intent: "~180° to downwind", cue: "Prefer 60° bank · max 75°" }),
+      Object.freeze({ id: "DOWNWIND", label: "DOWNWIND", intent: "Opposite parallel, abeam", cue: "~1.4 NM offset · ~250 KT · gear/flaps DOWN" }),
+      Object.freeze({ id: "BASE", label: "BASE", intent: "Continuous turn to 3 NM final", cue: "Prefer 45° bank · max 60° · ~200 KT" }),
+      Object.freeze({ id: "SHORT_FINAL", label: "SHORT FINAL", intent: "3 NM final · T&G or continue", cue: "~170 KT · configured" }),
+      Object.freeze({ id: "WIRE_FINAL", label: "WIRE", intent: "Accept trap; aerobrake → wire", cue: "~165 KT · four boxes" }),
     ]),
     preflightModes: Object.freeze([
       Object.freeze({ id: "DEMO", label: "DEMO (P)", detail: "Auto on · watch the boxes" }),

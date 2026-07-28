@@ -295,12 +295,12 @@ public class RapierCircuitOftTests {
     public void OftMarshal_NearShelfHoldsRecoveryGateZero() {
         BeatSetup baseline = Beats.RapierCircuits();
         Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
-        // Join INITIAL at pattern altitude — overhead shelf, not the old 30 km / FL120 marshal.
-        Vec3D marshal = strip.LandingPoint(along: -2_000.0, cross: 0.0, height: 550.0);
+        // Join INITIAL at pattern altitude — 2,500 ft overhead shelf.
+        Vec3D marshal = strip.LandingPoint(along: -2_000.0, cross: 0.0, height: 762.0);
         BeatSetup card = baseline with {
             Player = baseline.Player with {
                 Position = marshal,
-                Speed = 154.0,
+                Speed = 129.0,
                 Gamma = -0.04,
                 Chi = strip.LandingHeadingRad,
                 Bank = 0.0
@@ -324,7 +324,7 @@ public class RapierCircuitOftTests {
                 sawRecovery = true;
                 reason = session.RapierPhaseReason;
                 if (session.RapierRecoveryGate == 0
-                    && session.Player.State.Position.Y > 400.0
+                    && session.Player.State.Position.Y > 600.0
                     && session.RapierCircuitLeg is "INITIAL" or "BREAK" or "DOWNWIND"
                     && tick > AircraftSim.TickHz / 2)
                     break;
