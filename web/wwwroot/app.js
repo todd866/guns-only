@@ -85,6 +85,7 @@ import {
 } from "./render/presence/presence_presentation.js";
 import { RemoteAssetResolutionPolicy } from "./render/presence/remote_asset_policy.js";
 import { gTolerancePresentation } from "./render/physiology/g_tolerance_presentation.js";
+import { rapierBriefingText } from "./render/mission/rapier_guidance.js";
 import { createHotSnapshotSource } from "./render/state/hot_snapshot.js";
 import {
   CAMPAIGN_NODES,
@@ -98,6 +99,7 @@ import {
   saveCampaignProfile,
 } from "./render/progression/campaign_progression.js";
 import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
+import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
@@ -810,6 +812,7 @@ rebuildKeyboardMap();
 
 const heldKeys = new Set();
 const activeGkeys = new Map();
+let flightTestSyncSequence = 0;
 
 // --- Telemetry recorder ----------------------------------------------------------------------
 // Tuning feel by guesswork is a waste of time; this captures every input event and a 20 Hz state
@@ -852,16 +855,16 @@ function newTelemetryBatchId() {
 // lookahead pilot adds a synchronous decision burst on the main thread. So this watches actual
 // delivered frames and sheds work until the budget is met, worst-looking-thing-last:
 //
-//   1  view distance  bounds synchronous terrain streaming and closes the haze with it
-//   2  shadows        removes the largest remaining fill-rate cost
-//   3  scenery        ordinary high-altitude sorties may shed it as the final fallback
+//   1–3  view distance  bounds synchronous terrain streaming and closes the haze with it
+//   4    shadows/scenery removes the remaining fill and instance cost at high altitude
 //
 // The fictional Ukraine low-level programme is the deliberate exception to step 3: its fields,
 // shelterbelts, wires, roads and settlement silhouettes are mission-essential orientation cues.
 // That bounded instanced layer stays while shadows still go.
 //
-// It only ever steps DOWN within a sortie. Stepping back up on a quiet moment is how governors
-// oscillate, and an oscillating frame rate reads worse than a consistently lower one.
+// Recovery is deliberately asymmetric: one bad one-second window sheds one rung, while eight
+// consecutive clean windows restore only one. That lets a launch/loading transient recover during
+// a long sortie without turning the picture into an oscillating quality switch.
 const FRAME_GOVERNOR_WINDOW_MS = 1000;
 // One missed display interval, not a 50 ms stall. The original threshold was 50 ms, which is why
 // production tapes reported ~0 long frames while p95 sat at 33 ms: the pilot was feeling 30 fps
@@ -889,6 +892,8 @@ const timeCompressionBudget = new MeasuredTimeCompressionBudget();
 
 const FRAME_GOVERNOR_LATE_FRAME_MS = 22;
 const FRAME_GOVERNOR_TRIP_FRACTION = 0.05;   // 5% of a window's frames arriving late
+const FRAME_GOVERNOR_RECOVER_FRACTION = 0.01;
+const FRAME_GOVERNOR_RECOVER_CLEAN_WINDOWS = 8;
 
 // Streaming radii to fall back through, in metres. Terrain chunk builds are the dominant cost —
 // one LOD0 chunk is ~9.5 ms of synchronous main-thread work, 57% of a 60 fps budget — so the only
@@ -906,45 +911,43 @@ const TERRAIN_INITIAL_WARMUP_RADIUS_M = 12_000;
 /// thins mid-field haze in-shader, so scene fog needs a tighter close than Korea).
 const WORLD_EDGE_VISIBILITY_FRACTION = 0.60;
 
+const frameGovernorPolicy = new FrameGovernorPolicy({
+  windowMs: FRAME_GOVERNOR_WINDOW_MS,
+  lateFrameMs: FRAME_GOVERNOR_LATE_FRAME_MS,
+  tripFraction: FRAME_GOVERNOR_TRIP_FRACTION,
+  recoverFraction: FRAME_GOVERNOR_RECOVER_FRACTION,
+  recoverCleanWindows: FRAME_GOVERNOR_RECOVER_CLEAN_WINDOWS,
+  maxLevel: FRAME_GOVERNOR_RADII_M.length + 1,
+});
+
 const frameGovernor = {
-  level: 0,
-  windowStartedAt: 0,
-  lateFrames: 0,
-  windowFrames: 0,
+  get level() { return frameGovernorPolicy.level; },
 
   observe(deltaMs, nowMs, view) {
     if (!Number.isFinite(deltaMs) || !view) return;
-    this.windowFrames += 1;
-    if (deltaMs > FRAME_GOVERNOR_LATE_FRAME_MS) this.lateFrames += 1;
-    if (nowMs - this.windowStartedAt < FRAME_GOVERNOR_WINDOW_MS) return;
-    const late = this.windowFrames > 0 ? this.lateFrames / this.windowFrames : 0;
-    this.windowStartedAt = nowMs;
-    this.lateFrames = 0;
-    this.windowFrames = 0;
-    if (late >= FRAME_GOVERNOR_TRIP_FRACTION) this.shed(view);
+    const transition = frameGovernorPolicy.observe(deltaMs, nowMs);
+    if (transition?.direction === "shed") this.shed(view, transition);
+    else if (transition?.direction === "recover") this.recover(view, transition);
   },
 
   idle(nowMs) {
     // Ready, pause and replay frames include loading/UI work that says nothing about sortie
-    // performance. Keep the earned quality level, but begin a fresh observation window on resume.
-    this.windowStartedAt = Number.isFinite(nowMs) ? nowMs : 0;
-    this.lateFrames = 0;
-    this.windowFrames = 0;
+    // performance. Keep the earned level, but discard partial recovery credit on resume.
+    frameGovernorPolicy.idle(nowMs);
   },
 
   // Ordered by what actually costs frames, measured — NOT by what looks most expendable. Shadows
   // and resolution were the original first moves and they were the wrong ones: a production tape
   // showed an 11 fps window drawing 2.98M triangles in 78 calls and a 60 fps window drawing 2.91M
   // in 72. Shedding pixels against a CPU-bound chunk-build stall buys nothing.
-  shed(view) {
-    if (this.level >= 4) return;
-    this.level += 1;
+  shed(view, transition) {
+    const level = transition.level;
     try {
-      if (this.level <= FRAME_GOVERNOR_RADII_M.length) {
-        const radiusM = FRAME_GOVERNOR_RADII_M[this.level - 1];
+      if (level <= FRAME_GOVERNOR_RADII_M.length) {
+        const radiusM = FRAME_GOVERNOR_RADII_M[level - 1];
         const changed = view.terrainPresentation?.setStreamingRadiusM?.(radiusM);
         announceGovernor(`View distance ${Math.round(radiusM / 1000)} km · holding 60`);
-        if (changed === false && this.level < FRAME_GOVERNOR_RADII_M.length) return;
+        if (changed === false && level < FRAME_GOVERNOR_RADII_M.length) return;
       } else {
         // Only once distance is exhausted does the picture itself start going.
         const shadowCasters = [];
@@ -971,15 +974,56 @@ const frameGovernor = {
     } catch (error) {
       console.warn("Frame governor could not shed load.", error);
     }
-    recorder.event("perf", "FrameGovernor", { level: this.level });
+    recorder.event("perf", "FrameGovernor", {
+      level,
+      direction: "shed",
+      late_fraction: transition.lateFraction,
+    });
+  },
+
+  recover(view, transition) {
+    const { previousLevel, level } = transition;
+    try {
+      if (previousLevel > FRAME_GOVERNOR_RADII_M.length) {
+        const shadowState = view.frameGovernorShadowState;
+        if (shadowState) {
+          view.renderer.shadowMap.enabled = shadowState.enabled;
+          for (const object of shadowState.casters) {
+            if (object) object.castShadow = true;
+          }
+          view.frameGovernorShadowState = null;
+        }
+        const sceneryWasSuppressed =
+          view.terrainGovernorSuppressesAmbientScenery === true;
+        view.terrainGovernorSuppressesAmbientScenery = false;
+        if (sceneryWasSuppressed) {
+          void view.terrainPresentation?.enableAmbientScenery?.();
+        }
+        announceGovernor("Shadows and scenery restored after stable 60");
+      } else {
+        const radiusM = level > 0
+          ? FRAME_GOVERNOR_RADII_M[level - 1]
+          : view.terrainNominalStreamingRadiusM;
+        if (Number.isFinite(radiusM)) {
+          view.terrainPresentation?.setStreamingRadiusM?.(radiusM);
+          announceGovernor(
+            `View distance ${Math.round(radiusM / 1000)} km restored after stable 60`,
+          );
+        }
+      }
+    } catch (error) {
+      console.warn("Frame governor could not restore quality.", error);
+    }
+    recorder.event("perf", "FrameGovernor", {
+      level,
+      direction: "recover",
+      late_fraction: transition.lateFraction,
+    });
   },
 
   reset(view = null) {
     // A new sortie re-earns its quality: one bad moment should not permanently downgrade a session.
-    this.level = 0;
-    this.lateFrames = 0;
-    this.windowFrames = 0;
-    this.windowStartedAt = 0;
+    frameGovernorPolicy.reset(performance.now());
     if (!view) return;
     const shadowState = view.frameGovernorShadowState;
     if (shadowState) {
@@ -2009,7 +2053,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Rapier Intercept",
     sortie: "Rapier turbo-ramjet interceptor · guns-only · one-pass sweep · pursued recovery",
     configuration: "Fictional TBCC Rapier · design dash M4 (fiction) · OFT peak ~M3.7 · CMC hot structure · reusable gun-drones · 3,100 LB alert fuel",
-    brief: "Mission automation owns the long profile by default: use full augmentation to launch, climb around M0.90 to FL560 (56,000 ft), and drive cleanly through the transonic drag rise. RAM LIGHT begins at M2.0 and full ram arrives at M2.8; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the altitude profile, ram-climb to FL700, and dash. Mach and KTAS, range, closure, and intercept ETA stay visible throughout the long leg. Treat briefing Mach 4 as aspirational — measured energy-ladder peaks near M3.7. At the formation, press F to release the gun-drone load; Rapier egresses while drones fight. Return, shed energy for marshal, lineup, and four large square gates into wire three.",
+    brief: "Mission automation owns the long profile by default: use full augmentation to launch, climb around M0.90 to FL560 (56,000 ft), and drive cleanly through the transonic drag rise. RAM LIGHT begins at {RAM_LIGHT_MACH} and full ram arrives at {FULL_RAM_MACH}; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the altitude profile, ram-climb to FL700, and dash. Mach and KTAS, range, closure, and intercept ETA stay visible throughout the long leg. Treat briefing Mach 4 as aspirational — measured energy-ladder peaks near M3.7. At the formation, press F to release the gun-drone load; Rapier egresses while drones fight. Return, shed energy for marshal, lineup, and four large square gates into wire three.",
     controls: "P mission automation · F release gun-drones · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
   }),
   "ace-duel": Object.freeze({
@@ -2096,6 +2140,19 @@ function releaseAllMappedKeys(reason = "system-neutralise") {
 
 function isGkeyHeld(gkey) {
   return [...activeGkeys.values()].includes(gkey);
+}
+
+function emitFlightTestSyncMarker(view) {
+  flightTestSyncSequence += 1;
+  const markerId = `MARK-${String(flightTestSyncSequence).padStart(3, "0")}`;
+  const nowSeconds = performance.now() / 1000;
+  view.hud.showFlightTestSyncMarker(markerId, nowSeconds);
+  recorder.event("flight-test-sync", markerId, {
+    sample_key: recorder.lastSampleKey ?? null,
+    wall_epoch_ms: Date.now(),
+  });
+  if (flightAnnouncer) flightAnnouncer.textContent = `Flight test sync ${markerId}`;
+  return markerId;
 }
 
 function setTestFlightValue(node, text, state = null) {
@@ -2520,8 +2577,13 @@ function togglePadlock() {
 }
 
 function missionBrief() {
-  return CAMPAIGN_BRIEFS[selectedProgramNodeId]
+  const brief = CAMPAIGN_BRIEFS[selectedProgramNodeId]
     || MISSION_BRIEFS[selectedBeat] || CAMPAIGN_BRIEFS["first-merge"];
+  if (brief !== CAMPAIGN_BRIEFS["rapier-intercept"]) return brief;
+  return Object.freeze({
+    ...brief,
+    brief: rapierBriefingText(brief.brief, latestState ?? {}),
+  });
 }
 
 function healthPercent(value) {
@@ -7088,7 +7150,7 @@ function installInput(view) {
     if (nativeInteractiveOwnsKey(event)) return;
     if (keyMap.has(event.code)
       || ["BracketLeft", "BracketRight", "F1", "Enter", "NumpadEnter", "Escape",
-        "KeyT", "KeyP"].includes(event.code)) {
+        "KeyT", "KeyP", "Backquote"].includes(event.code)) {
       event.preventDefault();
     }
     if (event.repeat || !bridge) return;
@@ -7119,6 +7181,11 @@ function installInput(view) {
     if (event.code === "KeyP") {
       const enabled = bridge.ToggleRapierAutomation();
       recorder.event("rapier-automation", enabled ? "enabled" : "disabled");
+      return;
+    }
+
+    if (event.code === "Backquote") {
+      if (latestState?.session_phase === "ACTIVE") emitFlightTestSyncMarker(view);
       return;
     }
 

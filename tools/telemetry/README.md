@@ -195,6 +195,11 @@ node --test tools/telemetry/test/*.test.mjs
 
 ## Offline Rapier flight reconstruction
 
+During the recording, press the backquote key (`` ` ``) once the sortie is active. The HUD flashes a
+numbered `FLIGHT TEST SYNC · MARK-NNN` frame for one second and the recorder writes the same marker
+ID, wall epoch, current sample key, sortie ID, and held controls. Note the marker's visible time in
+the recording.
+
 Once the selected immutable chunks are on disk, reconstruct a sortie locally without network,
 credential, or browser access:
 
@@ -205,16 +210,22 @@ node tools/telemetry/rapier_reconstruct_cli.mjs \
   --sortie-id 'sortie-1700000000000-1' \
   --output '/tmp/guns-only-telemetry/rapier-reconstruction.json' \
   --csv '/tmp/guns-only-telemetry/rapier-track.csv' \
-  --video-start-epoch-ms 1700000000000 \
+  --video-sync-marker 'MARK-001' \
+  --video-sync-seconds 4.250 \
   --video-duration-s 253.223
 ```
+
+The matching visible/telemetry marker derives recording start directly and avoids relying on MOV
+container creation time. `--video-start-epoch-ms` remains available for older recordings; it is
+mutually exclusive with marker alignment.
 
 The reconstructor accepts only explicit local `.jsonl` or `.jsonl.gz` paths. It reuses the
 production `TelemetryStateDecoder`, merges out-of-order inputs, suppresses duplicate rows, rejects
 mixed sessions, records coverage intervals and missing sequences, and never invents state across a
 gap. The JSON output includes a compact track, numeric phase and propulsion events, extrema,
 observed control/phase dwell, video alignment, performance samples, and SHA-256 hashes of the exact
-source files. The optional CSV is intended for plots and notebooks.
+source files. Sync markers are first-class timeline events with their derived video time. The
+optional CSV is intended for plots and notebooks.
 
 Mission-phase event labels come from the numeric hot-state phase code. The independently recorded
 cold text label and phase reason remain in the evidence so a transition-time UI lag is visible

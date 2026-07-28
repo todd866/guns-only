@@ -179,6 +179,86 @@ test("uses session epoch plus row elapsed time for video alignment", () => {
   assert.equal(clipped.coverage.intervals[0].first_video_s, 0.025);
 });
 
+test("projects pilot sync markers into the video-aligned event timeline", () => {
+  const rows = encodeSortie([
+    baseState({ t: 0 }),
+    baseState({ t: 0.05 }),
+  ]);
+  rows.push({
+    k: "in",
+    t: 1025,
+    sortie: SORTIE_ID,
+    type: "flight-test-sync",
+    code: "MARK-003",
+    sample_key: "tick:120",
+    held: [],
+    wall_epoch_ms: SESSION_T0 + 1025,
+  });
+
+  const reconstruction = reconstructRapierFlight({
+    rows,
+    sortieId: SORTIE_ID,
+    videoStartEpochMs: SESSION_T0 + 1000,
+    videoDurationS: 2,
+  });
+  const marker = reconstruction.events.find(
+    (event) => event.kind === "flight_test_sync",
+  );
+
+  assert.equal(marker.evidence.marker_id, "MARK-003");
+  assert.equal(marker.evidence.sample_key, "tick:120");
+  assert.equal(marker.video_s, 0.025);
+});
+
+test("derives recording start from a visible sync marker", () => {
+  const rows = encodeSortie([
+    baseState({ t: 0 }),
+    baseState({ t: 0.05 }),
+  ]);
+  rows.push({
+    k: "in",
+    t: 1250,
+    sortie: SORTIE_ID,
+    type: "flight-test-sync",
+    code: "MARK-004",
+    sample_key: "tick:150",
+    wall_epoch_ms: SESSION_T0 + 1250,
+  });
+
+  const reconstruction = reconstructRapierFlight({
+    rows,
+    sortieId: SORTIE_ID,
+    videoSyncMarker: "MARK-004",
+    videoSyncSeconds: 5,
+    videoDurationS: 10,
+  });
+  const marker = reconstruction.events.find(
+    (event) => event.kind === "flight_test_sync",
+  );
+
+  assert.equal(reconstruction.coverage.video_window.alignment,
+    "flight_test_sync_marker");
+  assert.equal(reconstruction.coverage.video_window.start_epoch_ms,
+    SESSION_T0 - 3750);
+  assert.equal(reconstruction.coverage.video_window.sync_marker_id, "MARK-004");
+  assert.equal(marker.video_s, 5);
+  assert.equal(reconstruction.track[0].video_s, 4.75);
+});
+
+test("sync alignment rejects ambiguous or incomplete options", () => {
+  const rows = encodeSortie([baseState()]);
+  assert.throws(() => reconstructRapierFlight({
+    rows,
+    videoSyncMarker: "MARK-001",
+  }), /must be supplied together/);
+  assert.throws(() => reconstructRapierFlight({
+    rows,
+    videoStartEpochMs: SESSION_T0,
+    videoSyncMarker: "MARK-001",
+    videoSyncSeconds: 0,
+  }), /choose either/);
+});
+
 test("merges out-of-order chunks, suppresses duplicates, and records coverage gaps", async (t) => {
   const directory = await temporaryDirectory(t);
   const encoder = new TelemetryStateEncoder({ keyframeIntervalSamples: 4 });

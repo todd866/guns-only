@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
@@ -436,5 +437,55 @@ public class SnapshotHotFrameTests {
         SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
         Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > toggledBack,
             "mode APPROACH<->FREE exit edge did not bump cold_version");
+    }
+
+    [Fact]
+    public void ColdVersionBumpsOnTheSameFillAsARapierPhaseEdge() {
+        SimulationSession session = StartSession(10, null);
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+
+        RapierMissionPhase previousPhase = session.RapierPhase;
+        bool sawEdge = false;
+        for (int tick = 0; tick < 30 * AircraftSim.TickHz; tick++) {
+            SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+            double beforeStep = buffer[SnapshotHotFrame.ColdVersionIndex];
+            session.StepFixed();
+            if (session.RapierPhase == previousPhase) continue;
+
+            SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+            Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > beforeStep,
+                $"Rapier {previousPhase}->{session.RapierPhase} did not bump cold_version");
+            sawEdge = true;
+            break;
+        }
+
+        Assert.True(sawEdge, "test setup did not reach a Rapier phase edge");
+    }
+
+    [Fact]
+    public void RapierDynamicCueDoesNotHotLoopColdJsonButReasonEdgesRefreshIt() {
+        SimulationSession session = StartSession(10, null);
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double settled = buffer[SnapshotHotFrame.ColdVersionIndex];
+
+        FieldInfo guidanceField = typeof(SimulationSession).GetField(
+            "_rapierMissionGuidance",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var guidance = (RapierMissionGuidance)guidanceField.GetValue(session)!;
+        guidanceField.SetValue(session, guidance with {
+            Cue = $"{guidance.Cue} · LIVE MACH"
+        });
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        Assert.Equal(settled, buffer[SnapshotHotFrame.ColdVersionIndex]);
+
+        guidanceField.SetValue(session, guidance with {
+            PhaseReason = $"{guidance.PhaseReason}-edge"
+        });
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > settled,
+            "Rapier phase-reason edge did not refresh the cold cue/reason projection");
     }
 }

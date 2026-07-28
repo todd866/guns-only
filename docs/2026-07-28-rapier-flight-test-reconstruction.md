@@ -209,3 +209,19 @@ The current suite passes 30/30.
 This order fixes false or stale information first, then improves flight guidance, then presentation
 quality and analysis ergonomics. None of these recommendations requires changing the evidenced
 propulsion or thermal model; those were the strongest parts of this event.
+
+## Follow-up implementation
+
+The post-Build173 Rapier improvement branch implements the first operational pass:
+
+- neutral-stick, signed bank-aware flight-path capture through the protected G/AoA controller;
+- same-fill cold refresh on numeric phase and stable phase-reason edges;
+- kernel-published turbo-ramjet thresholds used to format browser briefing and teaching copy;
+- predictive FL700 capture guidance plus a flashing high-energy/high-G unload warning;
+- hysteretic, one-rung visual-quality recovery after eight clean one-second windows;
+- an always-on 2D horizon/FPV/bank picture that remains independent of 3D scenery shedding;
+- backquote-triggered numbered HUD/telemetry sync markers and marker-derived video alignment in the
+  reconstruction CLI.
+
+The remaining work is an instrumented comparison flight and tuning from that evidence, not another
+architecture change.

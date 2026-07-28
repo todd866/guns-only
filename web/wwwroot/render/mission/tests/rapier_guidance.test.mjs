@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   circuitGatePresentation,
+  rapierBriefingText,
   rapierCycleTeachPresentation,
   rapierEnginePresentation,
   rapierFlightDirectorPresentation,
   rapierGuidancePresentation,
 } from "../rapier_guidance.js";
-
-const appUrl = new URL("../../../app.js", import.meta.url);
 
 test("Rapier guidance is absent outside the scripted sortie", () => {
   assert.equal(rapierGuidancePresentation({}), null);
@@ -169,6 +167,7 @@ test("RAM climb director predicts FL700 capture before a high-rate overshoot", (
     bank_deg: 0,
   });
   assert.equal(fd.altitudeCall, "CAPTURE FL700 · UNLOAD");
+  assert.equal(fd.altitudeSeverity, "danger");
   assert.ok(fd.timeToAltitudeS > 0.9 && fd.timeToAltitudeS < 1.0);
 });
 
@@ -183,13 +182,33 @@ test("intercept director calls a continuing climb above FL700", () => {
     bank_deg: 0,
   });
   assert.equal(fd.altitudeCall, "LEVEL NOW · DESCEND FL700");
+  assert.equal(fd.altitudeSeverity, "danger");
   assert.equal(fd.timeToAltitudeS, null);
 });
 
-test("mission brief teaches the same M2.0/M2.8 handover as the director", async () => {
-  const app = await readFile(appUrl, "utf8");
-  assert.match(app, /RAM LIGHT begins at M2\.0 and full ram arrives at M2\.8/);
-  assert.doesNotMatch(app, /RAM LIGHT begins at M1\.6 and full ram arrives at M2\.2/);
+test("high-G pull above target produces an unmistakable energy warning", () => {
+  const fd = rapierFlightDirectorPresentation({
+    rapier_mission_available: true,
+    rapier_mission_phase: 9,
+    rapier_target_altitude_ft: 70000,
+    alt_ft: 72000,
+    vertical_speed_fpm: 18000,
+    requested_g_cmd: 8.5,
+    rapier_automation_active: false,
+  });
+  assert.equal(fd.altitudeCall, "UNLOAD NOW · ENERGY HIGH");
+  assert.equal(fd.altitudeSeverity, "danger");
+});
+
+test("mission brief formats thresholds published by the kernel", () => {
+  const text = rapierBriefingText(
+    "RAM LIGHT begins at {RAM_LIGHT_MACH} and full ram arrives at {FULL_RAM_MACH}",
+    {
+      rapier_ram_light_mach: 2.15,
+      rapier_full_ram_mach: 2.95,
+    },
+  );
+  assert.equal(text, "RAM LIGHT begins at M2.1 and full ram arrives at M3.0");
 });
 
 test("zoom coast FD publishes nose-on-V call without speed bug", () => {

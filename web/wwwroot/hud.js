@@ -252,6 +252,9 @@ class CombatHud {
     this._hitFlashUntil = -1;
     this._damageFlashUntil = -1;
     this._destroyedFlashUntil = -1;
+    this._flightTestSyncMarker = "";
+    this._flightTestSyncMarkerStartedAt = -Infinity;
+    this._flightTestSyncMarkerUntil = -Infinity;
     this._incomingHitCount = 0;
     this._lastMode = null;
     this._modeCue = null;
@@ -361,6 +364,43 @@ class CombatHud {
     this.audioEnabled = Boolean(enabled);
     setFlightAudioEnabled(this.audioEnabled);
     return this.audioEnabled;
+  }
+
+  showFlightTestSyncMarker(markerId, nowSeconds) {
+    const now = Number(nowSeconds);
+    if (!Number.isFinite(now)) return false;
+    this._flightTestSyncMarker = String(markerId || "MARK").slice(0, 24);
+    this._flightTestSyncMarkerStartedAt = now;
+    this._flightTestSyncMarkerUntil = now + 1.0;
+    return true;
+  }
+
+  drawFlightTestSyncMarker(frame) {
+    const now = Number(frame?.now);
+    if (!Number.isFinite(now) || now >= this._flightTestSyncMarkerUntil) return;
+    const ctx = this.ctx;
+    const elapsed = Math.max(0, now - this._flightTestSyncMarkerStartedAt);
+    const bright = Math.floor(elapsed * 10) % 2 === 0;
+    const text = `FLIGHT TEST SYNC · ${this._flightTestSyncMarker}`;
+    const y = this.safeInsets.top + 44;
+
+    ctx.save();
+    ctx.strokeStyle = bright ? "#ffffff" : AMBER;
+    ctx.lineWidth = bright ? 4 : 2;
+    ctx.strokeRect(5, 5, this.width - 10, this.height - 10);
+    ctx.font = "900 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const width = Math.min(this.width - 32, ctx.measureText(text).width + 30);
+    const x = (this.width - width) / 2;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.88)";
+    ctx.fillRect(x, y, width, 34);
+    ctx.strokeStyle = bright ? "#ffffff" : AMBER;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 0.5, y + 0.5, width - 1, 33);
+    ctx.fillStyle = bright ? "#ffffff" : AMBER;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, this.width / 2, y + 17);
+    ctx.restore();
   }
 
   updateGunAudio(_frame) {
@@ -3709,10 +3749,31 @@ class CombatHud {
         ctx.fillText(speedText, cx + 64, cy - pitchClamp);
       }
       if (fd.altitudeCall) {
-        ctx.font = "800 11px ui-monospace, monospace";
-        ctx.textAlign = "left";
+        const danger = fd.altitudeSeverity === "danger";
+        const caution = danger || fd.altitudeSeverity === "caution";
+        const blink = Math.floor((Number(frame.now) || 0) * 4) % 2 === 0;
+        ctx.font = `${danger ? "900 14px" : "800 11px"} ui-monospace, monospace`;
         ctx.textBaseline = "middle";
-        ctx.fillText(fd.altitudeCall, cx + 64, cy - pitchClamp - 15);
+        if (danger) {
+          const warningWidth = Math.min(
+            this.width - 32,
+            ctx.measureText(fd.altitudeCall).width + 30,
+          );
+          const warningX = cx - warningWidth / 2;
+          const warningY = cy - 112;
+          ctx.fillStyle = "rgba(0, 0, 0, 0.82)";
+          ctx.fillRect(warningX, warningY, warningWidth, 32);
+          ctx.strokeStyle = blink ? "#ffffff" : RED;
+          ctx.lineWidth = blink ? 3 : 2;
+          ctx.strokeRect(warningX + 0.5, warningY + 0.5, warningWidth - 1, 31);
+          ctx.fillStyle = blink ? "#ffffff" : RED;
+          ctx.textAlign = "center";
+          ctx.fillText(fd.altitudeCall, cx, warningY + 16);
+        } else {
+          ctx.fillStyle = caution ? AMBER : GREEN;
+          ctx.textAlign = "left";
+          ctx.fillText(fd.altitudeCall, cx + 64, cy - pitchClamp - 15);
+        }
       }
     }
 
@@ -3804,7 +3865,7 @@ class CombatHud {
     const wideLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${binding("fire", "KeyF")}  GUNS   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
-      `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   R  RESTART   ·   M  SOUND   ·   H  HIDE`,
+      `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   R  RESTART   ·   M  SOUND   ·   \`  SYNC MARK   ·   H  HIDE`,
       "T  TIME COMPRESSION ON / OFF",
       "P  RAPIER MISSION AUTOMATION   ·   Z  SHORT-RANGE MISSILE",
     ];
@@ -3813,7 +3874,7 @@ class CombatHud {
       `${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
       `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${binding("fire", "KeyF")}  GUNS   ·   M  SOUND`,
-      `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   R  RESTART   ·   H  HIDE`,
+      `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   R  RESTART   ·   \`  SYNC MARK   ·   H  HIDE`,
       "T  TIME COMPRESSION ON / OFF",
     ];
     if (gcasAvailable) {
@@ -3954,6 +4015,7 @@ class CombatHud {
     this.drawModeCue(frame);
     this.drawOutcomeCues(frame);
     this.drawDamageFeedback(frame);
+    this.drawFlightTestSyncMarker(frame);
     if (this._debug) {
       globalThis.__HUD_GEOMETRY = this._debug;
       this._debug = null;

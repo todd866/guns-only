@@ -1,6 +1,7 @@
 using System.Text.Json;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Sim.Propulsion;
 using GunsOnly.Web;
 
 namespace GunsOnly.Sim.Tests;
@@ -70,8 +71,14 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.18.0",
+        Assert.Equal("1.19.0",
             root.GetProperty("snapshot_schema_version").GetString());
+        Assert.Equal(TurboRamjetPerformanceMap.RamFadeStartMach,
+            root.GetProperty("rapier_ram_light_mach").GetDouble(), 10);
+        Assert.Equal(TurboRamjetPerformanceMap.FullRamMach,
+            root.GetProperty("rapier_full_ram_mach").GetDouble(), 10);
+        Assert.Equal(TurboRamjetPerformanceMap.TurbineGoneMach,
+            root.GetProperty("rapier_turbine_gone_mach").GetDouble(), 10);
         Assert.Contains(root.GetProperty("bandit_coordination_role").GetString(),
             new[] { "NONE", "PRESSURE", "BRACKET", "EXTEND" });
         Assert.Contains(root.GetProperty("w1_coordination_role").GetString(),

@@ -16,6 +16,8 @@ Options:
   --sortie-id ID              Filter by telemetry_sortie_id
   --csv FILE                  Optional compact CSV track export
   --video-start-epoch-ms N    Recording start as Unix epoch milliseconds
+  --video-sync-marker ID      Visible/telemetry marker ID, for example MARK-003
+  --video-sync-seconds N      Marker time within the recording, in seconds
   --video-duration-s N        Optional recording window length in seconds
   --help                      Show this help
 
@@ -65,6 +67,12 @@ function parseArguments(args) {
         break;
       case "--video-start-epoch-ms":
         options.videoStartEpochMs = numberOption(nextValue(), argument);
+        break;
+      case "--video-sync-marker":
+        options.videoSyncMarker = nextValue();
+        break;
+      case "--video-sync-seconds":
+        options.videoSyncSeconds = numberOption(nextValue(), argument);
         break;
       case "--video-duration-s":
         options.videoDurationS = numberOption(nextValue(), argument);

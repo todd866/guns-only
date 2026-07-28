@@ -219,6 +219,63 @@ function videoTimeSeconds(wallMs, videoStartEpochMs, videoDurationS) {
   return Number(offset.toFixed(3));
 }
 
+function resolveVideoAlignment(rows, header, {
+  videoStartEpochMs,
+  videoSyncMarker,
+  videoSyncSeconds,
+  sortieId,
+} = {}) {
+  const explicitStart = finiteNumber(videoStartEpochMs);
+  const markerId = typeof videoSyncMarker === "string" && videoSyncMarker.trim()
+    ? videoSyncMarker.trim() : null;
+  const markerSeconds = finiteNumber(videoSyncSeconds);
+  if (explicitStart !== null && (markerId !== null || markerSeconds !== null)) {
+    throw new RapierReconstructError(
+      "choose either --video-start-epoch-ms or sync-marker alignment, not both",
+    );
+  }
+  if ((markerId === null) !== (markerSeconds === null)) {
+    throw new RapierReconstructError(
+      "--video-sync-marker and --video-sync-seconds must be supplied together",
+    );
+  }
+  if (explicitStart !== null) {
+    return {
+      videoStartEpochMs: explicitStart,
+      alignment: "explicit_start_epoch",
+      markerId: null,
+      markerVideoSeconds: null,
+    };
+  }
+  if (markerId === null) {
+    return {
+      videoStartEpochMs: null,
+      alignment: null,
+      markerId: null,
+      markerVideoSeconds: null,
+    };
+  }
+
+  const marker = rows.find((row) => row?.k === "in"
+    && row.type === "flight-test-sync"
+    && row.code === markerId
+    && (!sortieId || row.sortie === sortieId));
+  if (!marker) {
+    throw new RapierReconstructError(`sync marker not found: ${markerId}`);
+  }
+  const markerWallMs = finiteNumber(marker.wall_epoch_ms)
+    ?? wallEpochMs(header, finiteNumber(marker.t));
+  if (markerWallMs === null) {
+    throw new RapierReconstructError(`sync marker has no usable time: ${markerId}`);
+  }
+  return {
+    videoStartEpochMs: markerWallMs - markerSeconds * 1000,
+    alignment: "flight_test_sync_marker",
+    markerId,
+    markerVideoSeconds: markerSeconds,
+  };
+}
+
 function pickFields(state) {
   const picked = {};
   for (const name of TRACK_STATE_FIELDS) {
@@ -666,6 +723,32 @@ function lifecycleEvents(rows, sortieId, header, videoOptions) {
     });
 }
 
+function flightTestSyncEvents(rows, sortieId, header, videoOptions) {
+  return rows
+    .filter((row) => row?.k === "in"
+      && row.type === "flight-test-sync"
+      && (!sortieId || row.sortie === sortieId))
+    .map((row) => {
+      const projectedWallMs = wallEpochMs(header, finiteNumber(row.t));
+      const wallMs = finiteNumber(row.wall_epoch_ms) ?? projectedWallMs;
+      return {
+        kind: "flight_test_sync",
+        session_ms: finiteNumber(row.t),
+        wall_epoch_ms: wallMs,
+        video_s: videoTimeSeconds(
+          wallMs,
+          videoOptions.videoStartEpochMs,
+          videoOptions.videoDurationS,
+        ),
+        evidence: {
+          marker_id: row.code ?? null,
+          sample_key: row.sample_key ?? null,
+          held: Array.isArray(row.held) ? [...row.held] : [],
+        },
+      };
+    });
+}
+
 function projectPerformance(perfRows, header, videoOptions) {
   return perfRows.map((row) => {
     const wallMs = wallEpochMs(header, finiteNumber(row.t));
@@ -711,6 +794,8 @@ export function reconstructRapierFlight({
   sortieId = null,
   videoStartEpochMs = undefined,
   videoDurationS = undefined,
+  videoSyncMarker = undefined,
+  videoSyncSeconds = undefined,
   rawRowCount = null,
 } = {}) {
   if (!Array.isArray(rows)) throw new RapierReconstructError("rows must be an array");
@@ -722,8 +807,14 @@ export function reconstructRapierFlight({
     .filter((row) => row?.k === "st" && Number.isSafeInteger(row.q))
     .sort((left, right) => left.q - right.q || (left.t ?? 0) - (right.t ?? 0));
   const { decoded, gaps: decodeGaps } = decodeStateRows(stateRows);
+  const resolvedAlignment = resolveVideoAlignment(rows, header, {
+    videoStartEpochMs,
+    videoSyncMarker,
+    videoSyncSeconds,
+    sortieId,
+  });
   const videoOptions = {
-    videoStartEpochMs: finiteNumber(videoStartEpochMs),
+    videoStartEpochMs: resolvedAlignment.videoStartEpochMs,
     videoDurationS: finiteNumber(videoDurationS),
   };
   const track = decoded
@@ -737,6 +828,7 @@ export function reconstructRapierFlight({
   const performance = projectPerformance(perfRows, header, videoOptions);
   const events = [
     ...lifecycleEvents(rows, sortieId, header, videoOptions),
+    ...flightTestSyncEvents(rows, sortieId, header, videoOptions),
     ...detectEvents(track),
     ...detectGapBracketedThresholds(track),
     ...extremaEvents(track, summary),
@@ -772,6 +864,9 @@ export function reconstructRapierFlight({
         start_epoch_ms: videoOptions.videoStartEpochMs,
         duration_s: videoOptions.videoDurationS,
         samples_in_window: track.filter((point) => point.video_s !== undefined).length,
+        alignment: resolvedAlignment.alignment,
+        sync_marker_id: resolvedAlignment.markerId,
+        sync_marker_video_s: resolvedAlignment.markerVideoSeconds,
       } : null,
     },
     gaps: [...decodeGaps, ...recordIntervalGaps(intervals)],
@@ -794,6 +889,8 @@ export async function reconstructRapierFlightFromInputs(options) {
     sortieId: options.sortieId ?? null,
     videoStartEpochMs: options.videoStartEpochMs,
     videoDurationS: options.videoDurationS,
+    videoSyncMarker: options.videoSyncMarker,
+    videoSyncSeconds: options.videoSyncSeconds,
   });
 }
 

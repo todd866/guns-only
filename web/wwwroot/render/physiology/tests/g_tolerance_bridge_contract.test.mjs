@@ -4,16 +4,24 @@ import test from "node:test";
 
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
 const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
+const sourcePackUrl = new URL(
+  "../../../../../content/packs/korea-1950s/pack.json",
+  import.meta.url,
+);
+const browserPackUrl = new URL(
+  "../../../content/packs/korea-1950s/pack.json",
+  import.meta.url,
+);
 // The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
 // SnapshotProjection; the contract scan reads both so a field is found wherever it now lives.
 const readBridgeContract = () =>
   Promise.all([readFile(bridgeUrl, "utf8"), readFile(projectionUrl, "utf8")])
     .then((parts) => parts.join("\n"));
 
-test("snapshot 1.18 projects the authoritative pilot physiology contract", async () => {
+test("snapshot 1.19 projects the authoritative pilot physiology contract", async () => {
   const source = await readBridgeContract();
 
-  assert.match(source, /const string SnapshotSchemaVersion = "1\.18\.0";/);
+  assert.match(source, /const string SnapshotSchemaVersion = "1\.19\.0";/);
   assert.match(source,
     /PilotPhysiologyState pilotPhysiology = Session\.PilotPhysiologyState;/);
   assert.match(source,
@@ -57,6 +65,17 @@ test("snapshot 1.18 projects the authoritative pilot physiology contract", async
     assert.equal(source.includes(`\\\"${field}\\\"`), true,
       `missing physiology snapshot field ${field}`);
   }
+});
+
+test("snapshot schema 1.19 is mirrored in source and browser pack manifests", async () => {
+  const [sourcePack, browserPack] = await Promise.all([
+    readFile(sourcePackUrl, "utf8").then(JSON.parse),
+    readFile(browserPackUrl, "utf8").then(JSON.parse),
+  ]);
+
+  assert.equal(sourcePack.compatibility?.snapshotSchemaVersion, "1.19.0");
+  assert.equal(browserPack.compatibility?.snapshotSchemaVersion, "1.19.0");
+  assert.deepEqual(browserPack, sourcePack);
 });
 
 test("bridge keeps pilot intent distinct from physiology-impaired actuator truth", async () => {
