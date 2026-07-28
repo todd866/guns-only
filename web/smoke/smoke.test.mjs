@@ -1091,6 +1091,11 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     assert.equal(abortPresentation.escapeCue.pickupEscapeCueVisible, true);
     assert.equal(abortPresentation.escapeCue.visibleEscapeCueCount, 1);
 
+    // The desktop flight is finished (pageErrors is already collected); release its live render
+    // loop before booting the touch context, or the two pages fight for the single SwiftShader
+    // process and the mobile boot can blow its 45 s window on a loaded gate machine.
+    await page.close();
+
     const touchViewport = { width: 390, height: 844 };
     const touchContext = await browser.newContext({
       viewport: touchViewport,
