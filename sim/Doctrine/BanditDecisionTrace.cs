@@ -16,7 +16,13 @@ public readonly record struct BanditPolicyMemory(
     double DefendCooldownSecondsRemaining,
     int JinkIndex,
     int BreakSign,
-    int LookaheadTicksUntilSelection);
+    int LookaheadTicksUntilSelection,
+    FormationTacticalRole FormationRole = FormationTacticalRole.Independent,
+    int FormationLateralSign = 0,
+    long FormationAssignmentSequence = 0,
+    long FormationSharedContactSourceTick = 0,
+    int FormationSharedContactAgeTicks = 0,
+    double FormationSharedContactConfidence = 0.0);
 
 /// <summary>
 /// Immutable trace emitted at the exact point a ReactiveBandit selects a new maneuver. Candidate

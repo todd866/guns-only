@@ -228,6 +228,7 @@ public sealed class SimulationSession {
     EngagementCounters _engagementCounters;
     readonly List<EngagementReport> _engagementReports = new();
     readonly FightDirector _fightDirector = new();
+    readonly EnemyPairCoordinator _enemyPairCoordinator = new();
     int _droneRaidTargetIndex;
     bool _triggerDown;
     bool _opponentTriggerDown;
@@ -533,6 +534,27 @@ public sealed class SimulationSession {
     public int ShotsInWindow => _shotsInWindow;
     public int KillCount => _killCount;
     public bool ContinuousCombat => _beat.ContinuousCombat is not null;
+    public FormationTacticalRole PrimaryFormationRole =>
+        _bandit is not null
+        && _opponentTerminalState == AircraftTerminalState.Flying
+        && !_bandit.CatastrophicallyDamaged
+        && _bandit is IFormationDirectiveSink sink
+            ? sink.FormationDirective.Role
+            : FormationTacticalRole.Independent;
+    public FormationTacticalRole WingmanFormationRole(int index) =>
+        index >= 0
+        && index < _wingmen.Count
+        && _wingmen[index].StillFighting
+        && _wingmen[index].Bandit is IFormationDirectiveSink sink
+            ? sink.FormationDirective.Role
+            : FormationTacticalRole.Independent;
+    public double? FormationCoordinationAgeSeconds =>
+        _enemyPairCoordinator.Active
+            ? _enemyPairCoordinator.SharedContactAgeTicks * FixedDeltaSeconds
+            : null;
+    public bool FormationCoordinationStale =>
+        _enemyPairCoordinator.Active
+        && _enemyPairCoordinator.SharedContactStale;
     public int EngagementNumber => _engagementNumber;
     public EngagementReport? LastEngagementReport =>
         _engagementReports.Count == 0 ? null : _engagementReports[^1];
@@ -1563,6 +1585,10 @@ public sealed class SimulationSession {
     }
 
     void RunFixedTick() {
+        // Formation radio traffic is sampled and delivered at the beginning-of-tick boundary.
+        // Decision traces therefore capture the exact held assignment that can affect this tick,
+        // and neither pilot receives the player's already-integrated future state.
+        UpdateFormationCoordination();
         DecisionTickCapture? decisionCapture = BeginDecisionTickCapture();
         _decisionFireIntentEvaluatedThisTick = false;
         _decisionFireIntentConsumedThisTick = false;
@@ -1586,6 +1612,58 @@ public sealed class SimulationSession {
         _tick++;
         CaptureIncidentReplaySample();
         UpdateTimeCompressionDecision();
+    }
+
+    void UpdateFormationCoordination() {
+        bool eligibleBeat = _beat.ContinuousCombat is not null
+            && (_beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit);
+        if (!eligibleBeat
+            || _opponentTerminalState != AircraftTerminalState.Flying
+            || _bandit.CatastrophicallyDamaged
+            || _bandit is not IFormationDirectiveSink primarySink) {
+            ClearFormationCoordination();
+            return;
+        }
+
+        Wingman? support = null;
+        int liveSupportCount = 0;
+        foreach (Wingman wingman in _wingmen) {
+            if (!wingman.StillFighting) continue;
+            liveSupportCount++;
+            support = wingman;
+        }
+        if (liveSupportCount != 1
+            || support is null
+            || support.Bandit is not IFormationDirectiveSink supportSink) {
+            ClearFormationCoordination();
+            return;
+        }
+
+        ActorObservation sharedContact =
+            ActorObservation.Capture(_player.State, _tick);
+        _enemyPairCoordinator.Step(
+            _tick,
+            sharedContact,
+            new FormationCoordinationMember(
+                _primaryOpponentGunTargetId, _bandit.State),
+            new FormationCoordinationMember(
+                support.PlayerGunTargetId, support.Bandit.State));
+        primarySink.AcceptFormationDirective(
+            _enemyPairCoordinator.DirectiveFor(
+                _primaryOpponentGunTargetId, _tick));
+        supportSink.AcceptFormationDirective(
+            _enemyPairCoordinator.DirectiveFor(
+                support.PlayerGunTargetId, _tick));
+    }
+
+    void ClearFormationCoordination() {
+        _enemyPairCoordinator.Reset();
+        if (_bandit is IFormationDirectiveSink primarySink)
+            primarySink.AcceptFormationDirective(default);
+        foreach (Wingman wingman in _wingmen) {
+            if (wingman.Bandit is IFormationDirectiveSink supportSink)
+                supportSink.AcceptFormationDirective(default);
+        }
     }
 
     readonly record struct DecisionTickCapture(
@@ -1819,6 +1897,7 @@ public sealed class SimulationSession {
         // Restaging discards any still-airborne rounds, so a buffered terminal record can no
         // longer change: append it before the terminal states below are reset.
         FinalizePendingTerminalDecision();
+        ClearFormationCoordination();
         if (_bandit is not null
             && _decisionLastCapturedActorSpawnSequence == _banditSpawnSequence
             && _decisionClosedActorSpawnSequence != _banditSpawnSequence) {
@@ -2390,6 +2469,7 @@ public sealed class SimulationSession {
     const int WingmanSpawnStride = 1;
 
     void ClearWingmen() {
+        ClearFormationCoordination();
         foreach (Wingman wingman in _wingmen) {
             if (wingman.Gun.RoundsInFlight.Count > 0)
                 _retiredOpponentGuns.Add(
@@ -2659,6 +2739,7 @@ public sealed class SimulationSession {
             SelectPlayerGunTarget(_primaryOpponentGunTargetId);
         _banditSpawnSequence++;
         _padlockRollAssist.Reset();
+        ClearFormationCoordination();
         ShowTransition("WINGMAN ENGAGED · V PADLOCK", 2200.0);
         return true;
     }
@@ -2734,6 +2815,12 @@ public sealed class SimulationSession {
                 kinematics: wingman.Bandit.State);
         }
 
+        if (_enemyPairCoordinator.Active
+            && (_opponentTerminalState != AircraftTerminalState.Flying
+                || _bandit.CatastrophicallyDamaged
+                || _wingmen.Count(static wingman => wingman.StillFighting) != 1))
+            ClearFormationCoordination();
+
         if (_gunKill.DamageFor(_primaryOpponentGunTargetId).Outcome
                 == FightOutcome.Splash
             && _opponentTerminalState == AircraftTerminalState.Flying) {
@@ -2778,6 +2865,7 @@ public sealed class SimulationSession {
             BeginTerminalClock(clearHeldInput: !replacementExpected);
             _opponentTerminalState = AircraftTerminalState.DestroyedAirborne;
             _bandit.ApplyCatastrophicDamage(handedness: 1);
+            ClearFormationCoordination();
             _splashCueUntilMs = _simTimeMs + 3000.0;
             if (replacementExpected) {
                 double delaySeconds = _beat.ScriptedIntercept?.KillCameraSeconds

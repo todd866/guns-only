@@ -27,10 +27,18 @@ const POWER_UP_PER_SECOND = 1.8;
 const POWER_DOWN_PER_SECOND = 2.6;
 const ACCENT_DECAY_PER_SECOND = 3.2;
 const Q_ACCENT_DECAY_PER_SECOND = 1.35;
+const AUGMENTATION_KICK_DECAY_PER_SECOND = 2.4;
 const MAX_CONTROL_STEP_SECONDS = 0.25;
 const KNOTS_TO_MPS = 0.514444;
 const SEA_LEVEL_DENSITY = 1.225;
 const THRUST_REF_KN = 140;
+// Rapier's 18-second interior bed owns the steady cockpit body. The brighter 2.6-second CC0
+// F-4 excerpt remains as identity seasoning, but cannot dominate strongly enough for its short
+// envelope to announce every loop.
+const RAPIER_PRIMARY_SAMPLE_WEIGHT = 0.24;
+const RAPIER_COCKPIT_SAMPLE_WEIGHT = Math.sqrt(
+  1 - RAPIER_PRIMARY_SAMPLE_WEIGHT * RAPIER_PRIMARY_SAMPLE_WEIGHT,
+);
 const DEFAULT_SAMPLE_BASE = new URL("./samples/jet/", import.meta.url).href;
 
 let context = null;
@@ -451,6 +459,38 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
     .connect(compressorTraceGain)
     .connect(output);
 
+  // F-22 military power and full augmentation can share almost the same governed core RPM.
+  // A separate structure-borne reheat cue makes the detent crossing readable without pitching
+  // the fixed broadband cockpit recording. The low noise body is the pressure/seat component;
+  // the shallow oscillator is an irregular-feeling airframe pulse, not an exterior exhaust tone.
+  const augmentationSource = audioContext.createBufferSource();
+  augmentationSource.buffer = pinkNoiseBuffer(audioContext, 0x4155474D);
+  augmentationSource.loop = true;
+  const augmentationBodyFilter = audioContext.createBiquadFilter();
+  augmentationBodyFilter.type = "lowpass";
+  augmentationBodyFilter.frequency.value = 150;
+  augmentationBodyFilter.Q.value = 1.05;
+  const augmentationBodyGain = audioContext.createGain();
+  augmentationBodyGain.gain.value = 0;
+  augmentationSource
+    .connect(augmentationBodyFilter)
+    .connect(augmentationBodyGain)
+    .connect(output);
+
+  const augmentationPulseOsc = audioContext.createOscillator();
+  augmentationPulseOsc.type = "triangle";
+  augmentationPulseOsc.frequency.value = 44;
+  const augmentationPulseFilter = audioContext.createBiquadFilter();
+  augmentationPulseFilter.type = "bandpass";
+  augmentationPulseFilter.frequency.value = 44;
+  augmentationPulseFilter.Q.value = 2.2;
+  const augmentationPulseGain = audioContext.createGain();
+  augmentationPulseGain.gain.value = 0;
+  augmentationPulseOsc
+    .connect(augmentationPulseFilter)
+    .connect(augmentationPulseGain)
+    .connect(output);
+
   modNoise.start();
   breathSource.start();
   pinkSource.start();
@@ -460,6 +500,8 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
   airframeNoise.start();
   canopyFlowNoise.start();
   compressorTraceOsc.start();
+  augmentationSource.start();
+  augmentationPulseOsc.start();
   ecsSource.start();
   inverterOsc.start();
 
@@ -533,10 +575,17 @@ export function createEngineVoices(audioContext, destination, { includeMaster = 
     compressorTraceOsc,
     compressorTraceFilter,
     compressorTraceGain,
+    augmentationBodyFilter,
+    augmentationBodyGain,
+    augmentationPulseOsc,
+    augmentationPulseFilter,
+    augmentationPulseGain,
     spoolRpm: 0,
     powerSlew: 0,
     throttleAccent: 0,
     qAccent: 0,
+    augmentationKick: 0,
+    lastAugmentation: null,
     lastQ01: null,
     lastControlTime: audioContext.currentTime,
   };
@@ -788,6 +837,10 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   const deliveredLever = Math.max(0,
     finiteNumber(state?.engine_spool_fraction) ?? appliedLever);
   const deliveredPower = clamp01(deliveredLever / leverStop);
+  const augmentationSpan = Math.max(0.05, leverStop - 1);
+  const augmentation = isF22
+    ? clamp01((deliveredLever - 1) / augmentationSpan)
+    : 0;
   const targetRpm = clamp01(
     (finiteNumber(state?.engine_rpm_pct) ?? (deliveredPower * 100)) / 100);
   const mach = Math.max(0, finiteNumber(state?.mach) ?? 0);
@@ -807,6 +860,24 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   const turbineShare = Math.cos(handover * Math.PI / 2);
   const ramShare = Math.sin(handover * Math.PI / 2);
   const q01 = dynamicPressureFraction(state);
+  if (voiceGraph.augmentationKick == null) voiceGraph.augmentationKick = 0;
+  if (voiceGraph.lastAugmentation == null) voiceGraph.lastAugmentation = augmentation;
+  const augmentationRisePerSecond = elapsed > 1e-4
+    ? Math.max(0, augmentation - voiceGraph.lastAugmentation) / elapsed
+    : 0;
+  if (snap) {
+    voiceGraph.augmentationKick = 0;
+  } else {
+    voiceGraph.augmentationKick = moveTowards(
+      Math.max(
+        voiceGraph.augmentationKick,
+        clamp01(augmentationRisePerSecond * 0.42),
+      ),
+      0,
+      AUGMENTATION_KICK_DECAY_PER_SECOND * elapsed,
+    );
+  }
+  voiceGraph.lastAugmentation = augmentation;
   if (voiceGraph.qAccent == null) voiceGraph.qAccent = 0;
   if (voiceGraph.lastQ01 == null) voiceGraph.lastQ01 = q01;
   const qRisePerSecond = elapsed > 1e-4
@@ -895,13 +966,10 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     for (const bed of [voiceGraph.sampleIdle, voiceGraph.sampleMil, voiceGraph.sampleGrit]) {
       if (bed?.playbackRate) nowRamp(bed.playbackRate, 1, 0.4);
     }
-    // Two long, independently synthesized cockpit beds drift in an equal-power crossfade.
-    // Timbre drifts on its own clock. Power, q, and G must remain independent audible axes rather
-    // than also jumping the source palette underneath the player.
-    const paletteMotion = 0.5 + 0.5 * Math.sin(now * 0.105 + (isF22 ? 0.35 : 1.1));
-    // F-22 alternates are both sealed-cockpit beds and can trade fully. Rapier's alternate is
-    // specifically an interior mid-body layer under the brighter CC0 F-4-derived identity.
-    const paletteBlend = clamp01(isF22 ? paletteMotion : 0.1 + paletteMotion * 0.24);
+    // F-22's two sealed-cockpit beds may trade slowly for texture. Rapier's long interior bed
+    // owns the steady body while the short brighter CC0 F-4 excerpt stays fixed as seasoning.
+    // A previous slow sine crossfade made steady Rapier power audibly rise and fall even when
+    // every flight-state input was unchanged.
     for (const variants of [
       voiceGraph.sampleIdleVariants,
       voiceGraph.sampleMilVariants,
@@ -912,8 +980,16 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
         nowRamp(variants[0].gain.gain, 1, 0.8);
         continue;
       }
-      nowRamp(variants[0].gain.gain, Math.cos(paletteBlend * Math.PI / 2), 1.4);
-      nowRamp(variants[1].gain.gain, Math.sin(paletteBlend * Math.PI / 2), 1.4);
+      if (isRapier) {
+        nowRamp(variants[0].gain.gain, RAPIER_PRIMARY_SAMPLE_WEIGHT, 1.4);
+        nowRamp(variants[1].gain.gain, RAPIER_COCKPIT_SAMPLE_WEIGHT, 1.4);
+      } else {
+        const paletteBlend = clamp01(
+          0.5 + 0.5 * Math.sin(now * 0.105 + 0.35),
+        );
+        nowRamp(variants[0].gain.gain, Math.cos(paletteBlend * Math.PI / 2), 1.4);
+        nowRamp(variants[1].gain.gain, Math.sin(paletteBlend * Math.PI / 2), 1.4);
+      }
       for (let index = 2; index < variants.length; index++) {
         nowRamp(variants[index].gain.gain, 0, 0.3);
       }
@@ -972,6 +1048,29 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
         * propulsionPresence * (sealedF22 ? (sampled ? 1.3 : 0.8) : 1.6)
       : 0,
     0.16);
+
+  const augmentationDrive = Math.pow(augmentation, 0.72);
+  const augmentationKick = voiceGraph.augmentationKick;
+  nowRamp(voiceGraph.augmentationBodyFilter.frequency,
+    (sealedF22 ? 105 : 145) + augmentation * (sealedF22 ? 95 : 210), 0.12);
+  nowRamp(voiceGraph.augmentationBodyFilter.Q,
+    sealedF22 ? 1.18 : 0.82, 0.18);
+  nowRamp(voiceGraph.augmentationBodyGain.gain,
+    isF22
+      ? ((sealedF22 ? 0.055 : 0.14) * augmentationDrive
+        + augmentationKick * (sealedF22 ? 0.026 : 0.055))
+        * propulsionPresence
+      : 0,
+    0.09);
+  const augmentationPulseHz = 39 + augmentation * 23;
+  nowRamp(voiceGraph.augmentationPulseOsc.frequency, augmentationPulseHz, 0.1);
+  nowRamp(voiceGraph.augmentationPulseFilter.frequency, augmentationPulseHz, 0.1);
+  nowRamp(voiceGraph.augmentationPulseFilter.Q, sealedF22 ? 2.5 : 1.7, 0.16);
+  nowRamp(voiceGraph.augmentationPulseGain.gain,
+    isF22
+      ? (sealedF22 ? 0.014 : 0.034) * augmentationDrive * propulsionPresence
+      : 0,
+    0.1);
 
   nowRamp(voiceGraph.shaftOsc.frequency, shaftHz, 0.16);
   nowRamp(voiceGraph.shaftFilter.frequency, 280 + rpm * 220 + power * 160, 0.18);

@@ -131,7 +131,76 @@ class JetLibraryTests(unittest.TestCase):
         self.assertIn("<video controls", page)
         self.assertIn("Cockpit &amp; close pass", page)
         self.assertIn("Raw media is local reference evidence", page)
+        self.assertIn("Export annotations", page)
+        self.assertIn("Mark IN", page)
+        self.assertIn(jet_library.ANNOTATION_EXPORT_VERSION, page)
         self.assertNotIn("data:video", page)
+
+    def test_annotation_export_merges_by_segment_id_and_validates(self) -> None:
+        catalog = {
+            "schema_version": jet_library.CATALOG_VERSION,
+            "sources": [{
+                "id": "test.source",
+                "title": "Test source",
+                "url": "https://example.test/video",
+                "provider": "test",
+                "distribution": {"tier": "reference_local"},
+                "subject": {"perspective": "cockpit_airframe"},
+                "tags": ["cockpit"],
+                "segments": [{
+                    "id": "test.source.old",
+                    "start_s": 1,
+                    "end_s": 2,
+                }],
+            }],
+        }
+        exported = {
+            "schema_version": jet_library.ANNOTATION_EXPORT_VERSION,
+            "sources": [{
+                "id": "test.source",
+                "segments": [{
+                    "id": "test.source.new",
+                    "start_s": 3.25,
+                    "end_s": 4.75,
+                    "states": {
+                        "engine_power": "military",
+                        "dynamic_pressure": "high",
+                        "g_load": "positive-high",
+                    },
+                    "events": ["g_onset"],
+                    "evidence": {"kind": "visible_hud", "confidence": 0.85},
+                    "contaminants": [],
+                }],
+            }],
+        }
+        merged, changed = jet_library.merge_annotation_export(catalog, exported)
+        self.assertEqual(changed, 1)
+        self.assertEqual(
+            [segment["id"] for segment in merged["sources"][0]["segments"]],
+            ["test.source.old", "test.source.new"],
+        )
+        self.assertEqual(jet_library.validate_catalog(merged), [])
+        self.assertEqual(catalog["sources"][0]["segments"][0]["id"], "test.source.old")
+
+    def test_annotation_export_rejects_unknown_source(self) -> None:
+        catalog = {
+            "schema_version": jet_library.CATALOG_VERSION,
+            "sources": [{
+                "id": "test.source",
+                "title": "Test source",
+                "url": "https://example.test/video",
+                "provider": "test",
+                "distribution": {"tier": "reference_local"},
+                "subject": {"perspective": "cockpit_airframe"},
+                "tags": ["cockpit"],
+                "segments": [],
+            }],
+        }
+        with self.assertRaisesRegex(ValueError, "unknown source"):
+            jet_library.merge_annotation_export(catalog, {
+                "schema_version": jet_library.ANNOTATION_EXPORT_VERSION,
+                "sources": [{"id": "missing.source", "segments": []}],
+            })
 
     def test_video_height_check_does_not_trust_missing_provider_metadata(self) -> None:
         self.assertEqual(jet_library.maximum_video_height({

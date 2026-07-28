@@ -52,7 +52,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(11, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(12, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
 
         foreach (JsonElement block in layout.GetProperty("blocks").EnumerateArray()) {
@@ -246,7 +246,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(11, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(12, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())
@@ -288,6 +288,52 @@ public class SnapshotHotFrameTests {
             Assert.Equal(0.0, buffer[SlotIndex("player_health")]);
             Assert.Equal(0.0, buffer[SlotIndex("player_alive")]);
             AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    [Fact]
+    public void FormationCoordinationProjectsColdRolesAndHotPictureAge() {
+        SimulationSession coordinated = StartSession(7, null);
+        bool sawUsableDelayedPicture = false;
+        for (int tick = 0; tick < 8 * AircraftSim.TickHz; tick++) {
+            coordinated.StepFixed();
+            if (coordinated.FormationCoordinationAgeSeconds is { } ageSeconds
+                && ageSeconds > SimulationSession.FixedDeltaSeconds
+                && !coordinated.FormationCoordinationStale) {
+                sawUsableDelayedPicture = true;
+                break;
+            }
+        }
+        Assert.True(sawUsableDelayedPicture,
+            "the formation never exposed a usable communication-aged picture");
+
+        var (root, buffer, document) = Project(coordinated);
+        using (document) {
+            string[] roles = {
+                root.GetProperty("bandit_coordination_role").GetString()!,
+                root.GetProperty("w1_coordination_role").GetString()!
+            };
+            Assert.Contains("PRESSURE", roles);
+            Assert.Contains("BRACKET", roles);
+            Assert.True(root.GetProperty("formation_coordination_age_s").GetDouble()
+                > SimulationSession.FixedDeltaSeconds);
+            Assert.False(root.GetProperty("formation_coordination_stale").GetBoolean());
+            AssertHotFrameMatchesJson(root, buffer);
+        }
+
+        SimulationSession independent = StartSession(9, null);
+        independent.StepFixed();
+        var (soloRoot, soloBuffer, soloDocument) = Project(independent);
+        using (soloDocument) {
+            Assert.Equal("NONE",
+                soloRoot.GetProperty("bandit_coordination_role").GetString());
+            Assert.Equal("NONE",
+                soloRoot.GetProperty("w1_coordination_role").GetString());
+            Assert.Equal(JsonValueKind.Null,
+                soloRoot.GetProperty("formation_coordination_age_s").ValueKind);
+            Assert.False(
+                soloRoot.GetProperty("formation_coordination_stale").GetBoolean());
+            AssertHotFrameMatchesJson(soloRoot, soloBuffer);
         }
     }
 

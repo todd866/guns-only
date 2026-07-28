@@ -31,13 +31,19 @@ let bus = null;
 let engineVoices = null;
 let eventVoices = null;
 let contactVoices = null;
+let formationContactVoices = [];
+let formationContactTracks = [];
 let warningVoices = null;
 let disabled = false;
 let enabled = true;
 let sampleLoad = null;
 let lastCharacter = null;
 let sampleLoadGeneration = 0;
+let lastCombatLifecycleKey = "";
 const sampleBedCache = new Map();
+const MPS_TO_KNOTS = 1.9438444924406;
+const KNOTS_TO_MPS = 0.5144444444444;
+const SEA_LEVEL_DENSITY = 1.225;
 
 function build() {
   const Ctor = globalThis.AudioContext ?? globalThis.webkitAudioContext;
@@ -62,6 +68,19 @@ function build() {
   engineVoices = createEngineVoices(context, bus, { includeMaster: true });
   eventVoices = createEventVoices(context, bus);
   contactVoices = createContactAcousticVoices(context, bus);
+  // The authoritative target graph follows whichever formation slot owns the gun solution.
+  // Three bounded supplemental graphs keep the other published w1..w3 aircraft audible without
+  // constructing Web Audio nodes in the render loop.
+  formationContactVoices = Array.from(
+    { length: 3 },
+    () => createContactAcousticVoices(context, bus),
+  );
+  formationContactTracks = formationContactVoices.map(() => ({
+    identity: "",
+    rangeM: null,
+    closureKts: 0,
+    at: null,
+  }));
   warningVoices = createWarningVoices(context, bus);
   return true;
 }
@@ -101,6 +120,278 @@ function ensureJetSamples(state) {
     .finally(() => {
       if (sampleLoad?.promise === promise) sampleLoad = null;
     });
+}
+
+function finiteNumber(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function nonEmptyText(...values) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function isaState(altitudeM) {
+  const altitude = Math.max(-500, Math.min(32_000, finiteNumber(altitudeM) ?? 0));
+  const gravity = 9.80665;
+  const gasConstant = 287.05287;
+  let temperature;
+  let pressure;
+  if (altitude <= 11_000) {
+    temperature = 288.15 - 0.0065 * altitude;
+    pressure = 101325 * Math.pow(
+      temperature / 288.15,
+      gravity / (gasConstant * 0.0065),
+    );
+  } else if (altitude <= 20_000) {
+    temperature = 216.65;
+    pressure = 22632.06
+      * Math.exp(-gravity * (altitude - 11_000) / (gasConstant * temperature));
+  } else {
+    temperature = 216.65 + 0.001 * (altitude - 20_000);
+    const pressure20 = 5474.889;
+    pressure = pressure20 * Math.pow(
+      temperature / 216.65,
+      -gravity / (gasConstant * 0.001),
+    );
+  }
+  return {
+    density: pressure / (gasConstant * temperature),
+    speedOfSoundMps: Math.sqrt(1.4 * gasConstant * temperature),
+  };
+}
+
+/// Incident replay deliberately overlays a compact recorded frame onto the final live snapshot.
+/// Re-project the audio-owned continuous fields so final-live RPM, q, G, speed-brake, RCS and GCAS
+/// state cannot leak into the historical external pass. Ordinary live/external preview snapshots
+/// are returned by identity.
+export function projectFlightAudioState(state) {
+  if (!state || typeof state !== "object") return {};
+  const recordedReplay = state.replay_external === true
+    && state.suppress_unrecorded_combat_transients === true;
+  if (!recordedReplay) return state;
+
+  const altitudeM = finiteNumber(state.py, state.altitude_m) ?? 0;
+  const atmosphere = isaState(altitudeM);
+  const indicatedKts = Math.max(0,
+    finiteNumber(state.indicated_airspeed_kts, state.speed_kts, state.ground_speed_kts) ?? 0);
+  // The carrier recorder stores KIAS, not TAS. Recover the no-wind standard-atmosphere TAS which
+  // preserves the recorded dynamic pressure while allowing the existing engine/q paths to operate.
+  const trueKts = indicatedKts * Math.sqrt(SEA_LEVEL_DENSITY / atmosphere.density);
+  const trueMps = trueKts * KNOTS_TO_MPS;
+  const enginePower = Math.max(0,
+    finiteNumber(state.engine, state.engine_spool_fraction, state.applied_throttle) ?? 0);
+  const throttle = Math.max(0,
+    finiteNumber(state.throttle, state.applied_throttle) ?? enginePower);
+  const pilotG = finiteNumber(state.g_actual) ?? 1;
+
+  return {
+    ...state,
+    applied_throttle: throttle,
+    engine_spool_fraction: enginePower,
+    // Dry thrust reaches the governed RPM ceiling; augmentation adds thrust, not another 35% RPM.
+    engine_rpm_pct: Math.min(1, enginePower) * 100,
+    true_airspeed_kts: trueKts,
+    true_airspeed_mps: trueMps,
+    air_density_kg_m3: atmosphere.density,
+    mach: trueMps / Math.max(1, atmosphere.speedOfSoundMps),
+    pilot_gz: pilotG,
+    pilot_gz_valid: true,
+    pilot_positive_onset_rate_g_per_second: 0,
+    pilot_negative_onset_rate_g_per_second: 0,
+    // These continuous systems are not recorded in the incident clip. Fail quiet rather than
+    // presenting their final-live state as historical evidence.
+    speed_brake: 0,
+    rapier_rcs_authority: 0,
+    auto_gcas_active: false,
+    auto_gcas_warning: false,
+  };
+}
+
+/// Give the selected-contact graph a real lifecycle identity. The kernel's range/closure fields
+/// follow the selected formation slot, while bandit_aircraft_id alone identifies only the type;
+/// without the suffix, changing targets can complete a pass transient armed by another aircraft.
+export function projectSelectedContactAudioState(state) {
+  if (!state || typeof state !== "object") return {};
+  const selectedSlot = Math.max(
+    0,
+    Math.trunc(finiteNumber(state.selected_player_gun_target_slot) ?? 0),
+  );
+  const selectedPrefix = selectedSlot > 0 && selectedSlot <= 3 ? `w${selectedSlot}` : "";
+  const selectedX = selectedPrefix ? finiteNumber(state[`${selectedPrefix}x`]) : null;
+  const selectedY = selectedPrefix ? finiteNumber(state[`${selectedPrefix}y`]) : null;
+  const selectedZ = selectedPrefix ? finiteNumber(state[`${selectedPrefix}z`]) : null;
+  const selectedPositionValid = [selectedX, selectedY, selectedZ]
+    .every((value) => value != null);
+  const aircraftId = nonEmptyText(
+    state.bandit_aircraft_id,
+    state.bandit_audio_class,
+    state.bandit_presentation_id,
+  );
+  const entityId = nonEmptyText(state.bandit_entity_id, "entity.bandit");
+  const absent = state.opponent_body_present === false;
+  if (!aircraftId && !absent) return state;
+  return {
+    ...state,
+    ...(aircraftId
+      ? { bandit_aircraft_id: `${aircraftId}#${entityId}:slot-${selectedSlot}` }
+      : {}),
+    ...(selectedPositionValid
+      ? { bx: selectedX, by: selectedY, bz: selectedZ }
+      : {}),
+    air_temperature_c: finiteNumber(
+      state.air_temperature_c,
+      state.static_temperature_c,
+    ) ?? 15,
+    ...(absent ? { bandit_audio_class: "silent" } : {}),
+  };
+}
+
+/// Pure projection for the three additional-aircraft slots in the production snapshot. Positions
+/// are authoritative but velocities are not published, so closure is the bounded range derivative
+/// across audio frames. Pattern traffic is friendly Rapier traffic; combat formations inherit the
+/// staged bandit type.
+export function projectFormationContactAudioState(
+  state,
+  slot,
+  { previousRangeM = null, elapsedSeconds = null, smoothedClosureKts = 0 } = {},
+) {
+  if (!state || typeof state !== "object" || slot < 1 || slot > 3) return null;
+  const prefix = `w${slot}`;
+  const present = state[`${prefix}_present`] === 1
+    || state[`${prefix}_present`] === true;
+  const alive = state[`${prefix}_alive`] === 1
+    || state[`${prefix}_alive`] === true;
+  const px = finiteNumber(state.px);
+  const py = finiteNumber(state.py);
+  const pz = finiteNumber(state.pz);
+  const x = finiteNumber(state[`${prefix}x`]);
+  const y = finiteNumber(state[`${prefix}y`]);
+  const z = finiteNumber(state[`${prefix}z`]);
+  const positionValid = [px, py, pz, x, y, z].every((value) => value != null);
+  const rangeM = present && positionValid
+    ? Math.hypot(x - px, y - py, z - pz)
+    : Infinity;
+  const dt = finiteNumber(elapsedSeconds);
+  const priorRange = finiteNumber(previousRangeM);
+  const derivativeKts = Number.isFinite(rangeM)
+    && priorRange != null
+    && dt != null
+    && dt >= 1 / 240
+    && dt <= 1
+    ? Math.max(-1200, Math.min(1200, (priorRange - rangeM) / dt * MPS_TO_KNOTS))
+    : 0;
+  const closureKts = (finiteNumber(smoothedClosureKts) ?? 0) * 0.68
+    + derivativeKts * 0.32;
+  const selectedSlot = Math.max(
+    0,
+    Math.trunc(finiteNumber(state.selected_player_gun_target_slot) ?? 0),
+  );
+  const patternTraffic = state.rapier_pattern_only === true;
+  const aircraftId = nonEmptyText(
+    patternTraffic ? state.player_aircraft_id : state.bandit_aircraft_id,
+    patternTraffic ? state.player_presentation_id : state.bandit_presentation_id,
+    patternTraffic ? "aircraft.rapier" : "aircraft.fighter-jet",
+  );
+  const entityId = nonEmptyText(
+    patternTraffic ? state.player_entity_id : state.bandit_entity_id,
+    patternTraffic ? "entity.player" : "entity.bandit",
+  );
+  const identity = `${aircraftId}#${entityId}:${prefix}`;
+  const unrecordedReplay = state.replay_external === true
+    && state.suppress_unrecorded_combat_transients === true;
+
+  return {
+    audible: present && alive && positionValid && selectedSlot !== slot && !unrecordedReplay,
+    identity,
+    rangeM,
+    closureKts,
+    state: {
+      bandit_aircraft_id: identity,
+      opponent_alive: present && alive,
+      opponent_body_present: present,
+      range_m: rangeM,
+      closure_kts: closureKts,
+      player_aircraft_id: state.player_aircraft_id,
+      audio_profile_id: state.audio_profile_id,
+      audio_perspective: state.audio_perspective,
+      camera_perspective: state.camera_perspective,
+      replay_external: state.replay_external,
+      replay_camera: state.replay_camera,
+      px,
+      py,
+      pz,
+      bx: x,
+      by: y,
+      bz: z,
+      pfx: state.pfx,
+      pfy: state.pfy,
+      pfz: state.pfz,
+      plx: state.plx,
+      ply: state.ply,
+      plz: state.plz,
+      air_temperature_c: finiteNumber(
+        state.air_temperature_c,
+        state.static_temperature_c,
+      ) ?? 15,
+    },
+  };
+}
+
+function updateFormationContacts(state, live) {
+  const now = context.currentTime;
+  for (let index = 0; index < formationContactVoices.length; index++) {
+    const track = formationContactTracks[index];
+    const elapsedSeconds = track.at == null ? null : now - track.at;
+    let projected = projectFormationContactAudioState(state, index + 1, {
+      previousRangeM: track.rangeM,
+      elapsedSeconds,
+      smoothedClosureKts: track.closureKts,
+    });
+    if (!projected) continue;
+    if (track.identity && projected.identity !== track.identity) {
+      projected = projectFormationContactAudioState(state, index + 1);
+    }
+    updateContactAcousticVoices(
+      formationContactVoices[index],
+      context,
+      projected.state,
+      { enabled: live && projected.audible },
+    );
+    track.identity = projected.identity;
+    track.rangeM = Number.isFinite(projected.rangeM) ? projected.rangeM : null;
+    track.closureKts = projected.closureKts;
+    track.at = now;
+  }
+}
+
+function synchronizeCombatLifecycle(state) {
+  const keyParts = [
+    nonEmptyText(state?.player_entity_id),
+    nonEmptyText(state?.bandit_entity_id),
+    nonEmptyText(state?.event_stream_id, "live"),
+  ];
+  if (!keyParts[0] && !keyParts[1]) return;
+  const key = keyParts.join("|");
+  if (key === lastCombatLifecycleKey) return;
+  lastCombatLifecycleKey = key;
+  // Do not replay cumulative counters from the previous sortie/opponent when the new entity starts
+  // below them, and do not invent a destroy edge merely because audio was armed mid-engagement.
+  eventVoices.lastHits = Math.max(0, Math.trunc(finiteNumber(state?.hits) ?? 0));
+  eventVoices.lastOpponentHits = Math.max(
+    0,
+    Math.trunc(finiteNumber(state?.opponent_hits) ?? 0),
+  );
+  eventVoices.lastOpponentAlive = typeof state?.opponent_alive === "boolean"
+    ? state.opponent_alive
+    : state?.bandit_alive !== false;
 }
 
 /// User-gesture unlock. Safe to call repeatedly; no-ops when audio is disabled or unsupported.
@@ -154,21 +445,29 @@ export function updateFlightAudio(state, {
       return;
     }
 
-    ensureJetSamples(state);
+    const audioState = projectFlightAudioState(state);
+    ensureJetSamples(audioState);
+    synchronizeCombatLifecycle(audioState);
 
     const live = enabled && !muted;
     // Collapse continuous gains on mute/pause (view loop still ticks while paused).
-    updateEngineVoices(engineVoices, context, state, { muted: !live });
-    updateBuffetVoice(eventVoices, context, state, { enabled: live });
-    updateAirframeCueVoices(eventVoices, context, state, { enabled: live });
-    updateConfigurationVoices(eventVoices, context, state, { enabled: live });
-    updateContactAcousticVoices(contactVoices, context, state, { enabled: live });
-    updateCatapultVoice(eventVoices, context, state, { enabled: live });
-    updateRcsVoice(eventVoices, context, state, { enabled: live });
-    updateTrapVoice(eventVoices, context, state, { enabled: live });
-    updateCombatCueVoices(eventVoices, context, state, { enabled: live });
-    fireGunReports(eventVoices, context, state, { enabled: live, triggerHeld });
-    updateWarningVoices(warningVoices, context, state, {
+    updateEngineVoices(engineVoices, context, audioState, { muted: !live });
+    updateBuffetVoice(eventVoices, context, audioState, { enabled: live });
+    updateAirframeCueVoices(eventVoices, context, audioState, { enabled: live });
+    updateConfigurationVoices(eventVoices, context, audioState, { enabled: live });
+    updateContactAcousticVoices(
+      contactVoices,
+      context,
+      projectSelectedContactAudioState(audioState),
+      { enabled: live },
+    );
+    updateFormationContacts(audioState, live);
+    updateCatapultVoice(eventVoices, context, audioState, { enabled: live });
+    updateRcsVoice(eventVoices, context, audioState, { enabled: live });
+    updateTrapVoice(eventVoices, context, audioState, { enabled: live });
+    updateCombatCueVoices(eventVoices, context, audioState, { enabled: live });
+    fireGunReports(eventVoices, context, audioState, { enabled: live, triggerHeld });
+    updateWarningVoices(warningVoices, context, audioState, {
       enabled: live,
       nowSeconds,
     });

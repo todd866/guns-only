@@ -19,7 +19,9 @@ The matrix is organized around controlled comparisons:
 
 The automatic buttons loop the same states. The live readout shows power, RPM, computed dynamic
 pressure, signed G, perspective, and (for traffic) range and closure. Traffic presets drive the
-production `updateContactAcousticVoices` path; they do not synthesize a preview-only flyby.
+production `updateContactAcousticVoices` path; they do not synthesize a preview-only flyby. Pass
+geometry remains on one side of the aircraft—far ahead, abeam, then behind—so the lab also exercises
+the production canopy-attenuated stereo position and range-dependent atmospheric filter.
 
 The preview routes engine and event voices through the production-shaped dynamics stage
 (`-18 dB` threshold, `12 dB` knee, `4.5:1`, `5 ms` attack, `180 ms` release) and the engine's

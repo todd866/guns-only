@@ -19,7 +19,9 @@ Mirror used for acquisition: Creazilla public-domain copy of the same recording.
 Their aggregate spectral target comes from the public-domain U.S. Air Force
 [158th FW F-16 cockpit footage](https://www.dvidshub.net/video/669814/158th-fw-aerial-f-16-footage)
 hosted by DVIDS. No DVIDS PCM is shipped. The F-16 profile contributes pressurized-cabin
-80–800 Hz body while the CC0 F-4 beds retain Rapier's fictional turbo/ram identity.
+80–800 Hz body while the CC0 F-4 beds retain Rapier's fictional turbo/ram identity. These beds
+run for 18 seconds and keep authored amplitude movement deliberately restrained so a steady
+power setting does not pulse at the loop period.
 
 ## F-22 (cockpit) — License
 
@@ -81,7 +83,7 @@ python3 tools/audio/cockpit_palette.py synthesize \
 python3 tools/audio/cockpit_palette.py synthesize \
   --profile web/wwwroot/render/audio/samples/jet/rapier_cockpit_profile.json \
   --output-dir web/wwwroot/render/audio/samples/jet \
-  --prefix rapier --suffix cockpit --seconds 6 --seed 20260729 \
+  --prefix rapier --suffix cockpit --seconds 18 --seed 20260729 \
   --target-rms-dbfs=-30,-30,-22
 
 # Final deterministic conditioning for the six primary beds. This removes hard PCM wraps with an

@@ -425,7 +425,8 @@
       },
       "tags": ["engine", "test-cell", "rpm", "spool-up", "military", "afterburner"],
       "priority": "seed",
-      "annotation_status": "pending_timecodes"
+      "annotation_status": "pending_timecodes",
+      "notes": "Fetched copy is a static-camera F110-GE-100 test-cell run with distinct sustained states, tonal spool sweeps, and visible afterburner. The spectrogram has edit boundaries near 70, 259, 282, 306, 329, 391, and 402 seconds; annotate each run separately and do not treat the edited timeline as one continuous throttle programme."
     },
     {
       "id": "dvids.975275",
@@ -736,6 +737,380 @@
       "tags": ["external", "flyover", "drone", "medevac", "future"],
       "priority": "medium",
       "annotation_status": "collection_review"
+    },
+    {
+      "id": "dvids.744272",
+      "title": "Full F-22 Demo: Exclusive Look Inside the Raptor",
+      "provider": "dvids",
+      "provider_id": "744272",
+      "url": "https://www.dvidshub.net/video/744272/full-f-22-demo-exclusive-look-inside-raptor",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "full-demo", "takeoff", "afterburner", "dynamic-pressure", "positive-g", "high-alpha", "state-transition"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes",
+      "notes": "Official 3:21 full demonstration with named manoeuvres. Signal and contact-sheet screening found broadband cockpit audio without an obvious continuous music bed, but also many title cards and alternating cockpit/external edits. Annotate shot by shot and complete an ear check before treating an interval as acoustic evidence."
+    },
+    {
+      "id": "dvids.986715",
+      "title": "Cockpit Footage: F-22 Raptor Demonstration at Miami Beach",
+      "provider": "dvids",
+      "provider_id": "986715",
+      "url": "https://www.dvidshub.net/video/986715/cockpit-footage-f-22-raptor-demonstration-miami-beach",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "short-form", "manoeuvre", "dynamic-pressure", "positive-g"],
+      "priority": "high",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Eleven-second official cockpit shot from 2025; useful only if the published track preserves natural camera audio."
+    },
+    {
+      "id": "dvids.992948",
+      "title": "F-22 Raptor Aerial Demonstration Team Cockpit B-Roll",
+      "provider": "dvids",
+      "provider_id": "992948",
+      "url": "https://www.dvidshub.net/video/992948/f-22-raptor-aerial-demonstration-team-cockpit-b-roll",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "demo", "engine-power", "dynamic-pressure", "positive-g", "high-alpha"],
+      "priority": "high",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Thirty-eight-second official b-roll assembled from 2023-season footage; check continuity and whether natural audio survived the later edit."
+    },
+    {
+      "id": "dvids.975726",
+      "title": "BRIGHT STAR 25 USAF Cockpit Simulated Air-to-Air Encounter",
+      "provider": "dvids",
+      "provider_id": "975726",
+      "url": "https://www.dvidshub.net/video/975726/bright-star-25-usaf-cockpit-simulated-air-air-encounter",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-16"],
+        "propulsion": "single_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "m61", "gun", "air-to-air", "basic-fighter-manoeuvres", "positive-g", "other-aircraft"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes",
+      "notes": "DVIDS says the package includes a natural recording and a 1.5x zoomed duplicate while the pilot fires the M61A1; contact-sheet and spectrogram screening confirm the repeated manoeuvre and a transition in roughly the 47-56 second region. Annotate the natural first recording independently and do not double-count the zoomed edit."
+    },
+    {
+      "id": "dvids.502462",
+      "title": "F-15E Formation Flight Cockpit Footage",
+      "provider": "dvids",
+      "provider_id": "502462",
+      "url": "https://www.dvidshub.net/video/502462/f-15e-formation-flight-cockpit-footage",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-15E"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "formation", "other-aircraft", "cockpit-occlusion", "close-proximity"],
+      "priority": "high",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Twenty-one-second GoPro formation clip. The source discloses post-production color grading and lens flares; verify the soundtrack independently."
+    },
+    {
+      "id": "dvids.738032",
+      "title": "U.S. and Portuguese F-16 Formation Flight",
+      "provider": "dvids",
+      "provider_id": "738032",
+      "url": "https://www.dvidshub.net/video/738032/aerial-footage-us-f-16-fighting-falcons-integrating-with-portuguese-air-force",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-16", "C-295"],
+        "propulsion": "mixed",
+        "perspective": "chase_aircraft"
+      },
+      "tags": ["formation", "other-aircraft", "close-proximity", "cockpit-occlusion", "approach", "departure"],
+      "priority": "seed",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Filmed during a formation sortie involving four F-16s and a C-295. Candidate for aircraft proximity heard through another airframe; camera position and audio continuity require screening."
+    },
+    {
+      "id": "dvids.749070",
+      "title": "Baltic Air Policing Jets Intercept Russian Fighters",
+      "provider": "dvids",
+      "provider_id": "749070",
+      "url": "https://www.dvidshub.net/video/749070/baltic-air-policing-jets-intercept-russian-fighters",
+      "distribution": {
+        "tier": "reference_local",
+        "license_expression": "NOASSERTION",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS displays PUBLIC DOMAIN, but identifies the work as courtesy NATO; verify upstream NATO terms before redistribution"
+      },
+      "subject": {
+        "aircraft": ["F-16", "Su-24", "Su-27", "Su-30"],
+        "propulsion": "mixed",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "intercept", "other-aircraft", "close-pass", "cockpit-occlusion", "formation"],
+      "priority": "seed",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Official NATO/DVIDS package has GoPro and helmet views of nearby Russian aircraft, including a pass. High-value visual geometry; edited audio may not represent the encounter."
+    },
+    {
+      "id": "dvids.742566",
+      "title": "F-22 Engine Hush-House Test and Certification",
+      "provider": "dvids",
+      "provider_id": "742566",
+      "url": "https://www.dvidshub.net/video/742566/airmen-192nd-wg-and-1st-fw-test-and-certify-f-22-engine-hush-house",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22", "F119"],
+        "propulsion": "twin_turbofan",
+        "perspective": "test_cell"
+      },
+      "tags": ["f119", "test-cell", "hush-house", "engine-power", "stationary", "maintenance"],
+      "priority": "seed",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Short official view of an uninstalled F119 certification run. Microphone protection, room response, and possible replaced audio must be checked."
+    },
+    {
+      "id": "dvids.906430",
+      "title": "RAF Lakenheath Hush House B-Roll",
+      "provider": "dvids",
+      "provider_id": "906430",
+      "url": "https://www.dvidshub.net/video/906430/raf-lakenheath-hush-house",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-15 engine"],
+        "propulsion": "turbofan",
+        "perspective": "test_cell"
+      },
+      "tags": ["test-cell", "hush-house", "engine-power", "spool-up", "spool-down", "stationary", "maintenance"],
+      "priority": "high",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Long-form official b-roll of loading and operationally checking a jet engine. Identify engine variant and natural-audio intervals before comparison."
+    },
+    {
+      "id": "dvids.618181",
+      "title": "F-22s Arrive at Spangdahlem Air Base",
+      "provider": "dvids",
+      "provider_id": "618181",
+      "url": "https://www.dvidshub.net/video/618181/f-22s-arrive-spangdahlem-ab",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "arrival", "approach", "landing", "taxi", "idle", "spool-down"],
+      "priority": "seed",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Official arrival b-roll; screen for usable continuous approach, touchdown, roll, taxi, and shutdown-adjacent states."
+    },
+    {
+      "id": "dvids.391474",
+      "title": "Sentry Savannah F-16, F-22 and T-38 B-Roll",
+      "provider": "dvids",
+      "provider_id": "391474",
+      "url": "https://www.dvidshub.net/video/391474/sentry-savannah-15-1-b-roll-f-16-f-22-and-t-38",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-16", "F-22", "T-38"],
+        "propulsion": "mixed",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "takeoff", "landing", "taxi", "idle", "flyby", "aircraft-comparison"],
+      "priority": "high",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Four-minute official flight-line b-roll spanning three fighter/trainer types. Useful for within-location comparisons if shots retain natural audio."
+    },
+    {
+      "id": "dvids.457752",
+      "title": "Icelandic Air Surveillance 2016 Flight B-Roll",
+      "provider": "dvids",
+      "provider_id": "457752",
+      "url": "https://www.dvidshub.net/video/457752/icelandic-air-surveillance-2016-flight-broll",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-15C", "KC-135"],
+        "propulsion": "turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "takeoff", "landing", "overhead-pass", "approach", "departure", "taxi"],
+      "priority": "seed",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Shot list explicitly includes F-15C takeoffs, landings, overhead flight, cloud passes, and taxi. Separate KC-135 material and screen edit continuity."
+    },
+    {
+      "id": "commons.tu95-parade-2008",
+      "title": "Tu-95, Il-78 and MiG-31 Moscow Parade Flyover",
+      "provider": "wikimedia_commons",
+      "provider_id": "Tupolev_Tu-95.ogv",
+      "url": "https://commons.wikimedia.org/wiki/File:Tupolev_Tu-95.ogv",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "CC-BY-4.0",
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "source_claim": "Wikimedia file page attributes the Kremlin Presidential Press and Information Office and marks the work CC BY 4.0"
+      },
+      "subject": {
+        "aircraft": ["Tu-95", "Il-78", "MiG-31"],
+        "propulsion": "mixed",
+        "perspective": "external_far"
+      },
+      "tags": ["external", "tu-95", "contra-rotating", "flyover", "approach", "pass", "departure", "long-range"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes",
+      "notes": "Synchronized 29-second parade flyover from an official Kremlin source. Screening confirms multiple aircraft, crowd ambience, and a cut to dignitaries, so this is licensed geometry and distant-event reference rather than an isolated Tu-95 contra-prop signature."
+    },
+    {
+      "id": "dvids.886585",
+      "title": "F-16 Action-Camera Video of F-22",
+      "provider": "dvids",
+      "provider_id": "886585",
+      "url": "https://www.dvidshub.net/video/886585/f-16-action-camera-video-f-22",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-16", "F-22"],
+        "propulsion": "mixed",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "formation", "other-aircraft", "f-22", "cockpit-occlusion", "close-proximity"],
+      "priority": "seed",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Official 1:21 action-camera recording from an F-16 as an F-22 closes into sustained close formation. Contact-sheet and signal screening show continuous geometry and broadband cockpit/airframe audio with no obvious music bed; an ear review still must establish whether the F-22 is distinguishable from the host-aircraft noise."
+    },
+    {
+      "id": "dvids.569358",
+      "title": "F-22 Raptors Fly in Formation and Refuel",
+      "provider": "dvids",
+      "provider_id": "569358",
+      "url": "https://www.dvidshub.net/video/569358/f-22-raptors-fly-formation-and-refuel",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22", "KC-10"],
+        "propulsion": "turbofan",
+        "perspective": "chase_aircraft"
+      },
+      "tags": ["formation", "air-refueling", "other-aircraft", "close-proximity", "approach", "departure", "airframe-occlusion"],
+      "priority": "high",
+      "annotation_status": "pending_audio_screening",
+      "notes": "KC-10 perspective on F-22 formation and refueling, with strong approach, close-position, and departure geometry. The published track is low-contrast and highly uniform after several early edits, so keep this as visual state reference until an ear review confirms usable natural proximity audio."
+    },
+    {
+      "id": "dvids.566040",
+      "title": "Dubai Airshow F-22 Flyover",
+      "provider": "dvids",
+      "provider_id": "566040",
+      "url": "https://www.dvidshub.net/video/566040/das-17-afcent-f-22-fly-over",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "f-22", "approach", "flyover", "pass", "departure", "doppler"],
+      "priority": "seed",
+      "annotation_status": "pending_timecodes",
+      "notes": "Compact 28-second official flyover b-roll. Screening found several shot changes and a persistent high-frequency camera/electronic tone, so isolate individual shots and ear-check them rather than deriving one continuous approach-pass-departure envelope."
+    },
+    {
+      "id": "dvids.1011656",
+      "title": "F-22 Demonstration Team at the 2026 Dayton Airshow",
+      "provider": "dvids",
+      "provider_id": "1011656",
+      "url": "https://www.dvidshub.net/video/1011656/f-22-demonstration-team-performs-2026-dayton-airshow",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page marks work PUBLIC DOMAIN"
+      },
+      "subject": {
+        "aircraft": ["F-22"],
+        "propulsion": "twin_turbofan",
+        "perspective": "external_near"
+      },
+      "tags": ["external", "f-22", "airshow", "approach", "close-pass", "departure", "afterburner", "high-alpha"],
+      "priority": "high",
+      "annotation_status": "pending_audio_screening",
+      "notes": "Recent 3:48 official demonstration b-roll. Screen shot boundaries, music, clipping, crowd noise, and camera AGC before extracting any pass envelope."
     }
   ]
 }

@@ -68,6 +68,23 @@ class CockpitPaletteTests(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(first)))
         self.assertLessEqual(float(np.max(np.abs(first))), 0.92)
 
+    def test_synthesized_bed_does_not_impose_a_short_power_cycle(self) -> None:
+        signal = cockpit_palette._synthesize_regime(
+            self.profile, "mil", 8_000, 6.0, 20260728, -20.5
+        )
+        window = 8_000
+        rms_db = np.asarray([
+            20.0 * np.log10(max(float(np.sqrt(np.mean(
+                signal[start : start + window] ** 2
+            ))), 1e-12))
+            for start in range(0, signal.size, window)
+        ])
+        self.assertLess(
+            float(np.max(rms_db) - np.min(rms_db)),
+            0.75,
+            "a constant regime must not audibly breathe once per authored loop",
+        )
+
     def test_synthesize_command_writes_the_three_expected_pcm_beds(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
@@ -99,27 +116,36 @@ class CockpitPaletteTests(unittest.TestCase):
             / "web/wwwroot/render/audio/samples/jet"
         )
         configurations = (
-            ("f22_palette_profile.json", "f22", "alt", 20260728, "-16,-14.5,-13.5"),
+            (
+                "f22_palette_profile.json",
+                "f22",
+                "alt",
+                20260728,
+                "-16,-14.5,-13.5",
+                6.0,
+            ),
             (
                 "rapier_cockpit_profile.json",
                 "rapier",
                 "cockpit",
                 20260729,
                 "-30,-30,-22",
+                18.0,
             ),
         )
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)
-            for profile, prefix, suffix, seed, levels in configurations:
+            for profile, prefix, suffix, seed, levels, seconds in configurations:
                 cockpit_palette.synthesize(argparse.Namespace(
                     profile=sample_root / profile,
                     output_dir=output,
                     prefix=prefix,
                     suffix=suffix,
                     sample_rate=44_100,
-                    seconds=6.0,
+                    seconds=seconds,
                     seed=seed,
                     target_rms_dbfs=levels,
+                    modulation_depth=cockpit_palette.DEFAULT_MODULATION_DEPTH,
                 ))
                 for regime in ("idle", "mil", "grit"):
                     name = f"{prefix}_{regime}_{suffix}_loop.wav"
@@ -128,6 +154,29 @@ class CockpitPaletteTests(unittest.TestCase):
                         (sample_root / name).read_bytes(),
                         f"{name} is not reproducible from its tracked profile",
                     )
+
+    def test_shipped_rapier_cockpit_beds_are_long_and_level_stable(self) -> None:
+        sample_root = (
+            Path(__file__).resolve().parents[2]
+            / "web/wwwroot/render/audio/samples/jet"
+        )
+        for regime in ("idle", "mil", "grit"):
+            name = f"rapier_{regime}_cockpit_loop.wav"
+            sample_rate, pcm = wavfile.read(sample_root / name)
+            signal = cockpit_palette._float_mono(pcm)
+            self.assertGreaterEqual(signal.size / sample_rate, 17.9, name)
+            window = int(round(sample_rate * 0.5))
+            rms_db = np.asarray([
+                20.0 * np.log10(max(float(np.sqrt(np.mean(
+                    signal[start : start + window] ** 2
+                ))), 1e-12))
+                for start in range(0, signal.size - window + 1, window)
+            ])
+            self.assertLess(
+                float(np.max(rms_db) - np.min(rms_db)),
+                1.0,
+                f"{name} contains an audible loop-synchronous power envelope",
+            )
 
     def test_condition_loop_repairs_a_hard_wrap_and_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:

@@ -545,6 +545,134 @@ test("flight façade shares one compressor bus, honors mute, and schedules gun r
   }
 });
 
+test("flight façade re-projects recorded external replay instead of leaking final-live cues", async () => {
+  const {
+    projectFlightAudioState,
+    projectSelectedContactAudioState,
+  } = await freshModule("../flight_audio.js", "replay-projection");
+  const finalLive = {
+    replay_external: true,
+    suppress_unrecorded_combat_transients: true,
+    replay_camera: "CHASE",
+    py: 1000,
+    throttle: 0.72,
+    engine: 0.62,
+    applied_throttle: 1.35,
+    engine_spool_fraction: 1.35,
+    engine_rpm_pct: 100,
+    indicated_airspeed_kts: 140,
+    true_airspeed_kts: 610,
+    air_density_kg_m3: 0.2,
+    g_actual: 2.4,
+    pilot_gz: 8,
+    speed_brake: 1,
+    rapier_rcs_authority: 1,
+    auto_gcas_active: true,
+    auto_gcas_warning: true,
+    bandit_aircraft_id: "aircraft.su27s.public-data-surrogate.v1",
+    bandit_entity_id: "entity.bandit.8",
+    selected_player_gun_target_slot: 2,
+    w2x: 22,
+    w2y: 33,
+    w2z: 44,
+    static_temperature_c: -12,
+    opponent_body_present: false,
+  };
+
+  const projected = projectFlightAudioState(finalLive);
+  assert.notEqual(projected, finalLive);
+  assert.equal(projected.applied_throttle, 0.72);
+  assert.equal(projected.engine_spool_fraction, 0.62);
+  assert.equal(projected.engine_rpm_pct, 62);
+  assert.ok(projected.true_airspeed_kts > 140 && projected.true_airspeed_kts < 170);
+  assert.ok(projected.mach > 0.2 && projected.mach < 0.3);
+  assert.equal(projected.pilot_gz, 2.4);
+  assert.equal(projected.speed_brake, 0);
+  assert.equal(projected.rapier_rcs_authority, 0);
+  assert.equal(projected.auto_gcas_active, false);
+  assert.equal(projected.auto_gcas_warning, false);
+
+  const contact = projectSelectedContactAudioState(projected);
+  assert.match(contact.bandit_aircraft_id, /entity\.bandit\.8:slot-2$/);
+  assert.deepEqual([contact.bx, contact.by, contact.bz], [22, 33, 44],
+    "selected wingman geometry replaces the primary bandit's pan position");
+  assert.equal(contact.air_temperature_c, -12,
+    "published static temperature reaches the contact propagation model");
+  assert.equal(contact.bandit_audio_class, "silent",
+    "the carrier recorder explicitly excludes unrecorded opponents");
+
+  const ordinaryExternal = { replay_external: true, engine_rpm_pct: 93 };
+  assert.equal(projectFlightAudioState(ordinaryExternal), ordinaryExternal,
+    "an authored exterior state is not mistaken for compact incident replay");
+});
+
+test("flight façade derives bounded closure for unselected formation traffic", async () => {
+  const {
+    projectFormationContactAudioState,
+  } = await freshModule("../flight_audio.js", "formation-projection");
+  const state = {
+    px: 0,
+    py: 1000,
+    pz: 0,
+    w1_present: 1,
+    w1_alive: 1,
+    w1x: 1000,
+    w1y: 1000,
+    w1z: 0,
+    pfx: 0,
+    pfy: 0,
+    pfz: 1,
+    plx: 0,
+    ply: 1,
+    plz: 0,
+    static_temperature_c: -20,
+    selected_player_gun_target_slot: 0,
+    player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    player_entity_id: "entity.player.3",
+    bandit_aircraft_id: "aircraft.su27s.public-data-surrogate.v1",
+    bandit_entity_id: "entity.bandit.4",
+  };
+
+  const approaching = projectFormationContactAudioState(state, 1, {
+    previousRangeM: 1100,
+    elapsedSeconds: 1,
+  });
+  assert.equal(approaching.audible, true);
+  assert.equal(approaching.rangeM, 1000);
+  assert.ok(approaching.closureKts > 60 && approaching.closureKts < 65);
+  assert.match(approaching.identity, /aircraft\.su27s.*entity\.bandit\.4:w1$/);
+  assert.deepEqual(
+    [approaching.state.px, approaching.state.py, approaching.state.pz],
+    [0, 1000, 0],
+  );
+  assert.deepEqual(
+    [approaching.state.bx, approaching.state.by, approaching.state.bz],
+    [1000, 1000, 0],
+  );
+  assert.equal(approaching.state.air_temperature_c, -20);
+
+  const selected = projectFormationContactAudioState({
+    ...state,
+    selected_player_gun_target_slot: 1,
+  }, 1);
+  assert.equal(selected.audible, false, "selected target is owned by the authoritative graph");
+
+  const pattern = projectFormationContactAudioState({
+    ...state,
+    rapier_pattern_only: true,
+    player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+  }, 1);
+  assert.match(pattern.identity, /^aircraft\.rapier/,
+    "friendly circuit traffic inherits the ownship type, not the staged target type");
+
+  const replay = projectFormationContactAudioState({
+    ...state,
+    replay_external: true,
+    suppress_unrecorded_combat_transients: true,
+  }, 1);
+  assert.equal(replay.audible, false, "unrecorded final-live formation state cannot enter replay");
+});
+
 test("flight façade disables permanently when Web Audio is missing", async () => {
   const previous = globalThis.AudioContext;
   const previousWebkit = globalThis.webkitAudioContext;
@@ -683,6 +811,56 @@ test("alternate F-22 beds equal-power crossfade and cockpit equipment remains al
     assert.ok(Math.abs(a * a + b * b - 1) < 1e-6, "equal-power crossfade");
     assert.ok(latest(voices.ecsGain.gain) > 0, "ECS cabin floor");
     assert.ok(latest(voices.inverterGain.gain) > 0, "400 Hz electrical floor");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("Rapier cockpit-bed blend stays steady when flight state is steady", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEngineVoices,
+      updateEngineVoices,
+      attachJetSampleBeds,
+    } = await freshModule("../engine_audio.js", "rapier-steady-palette");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const primary = audio.createBuffer(1, 64);
+    const cockpit = audio.createBuffer(1, 96);
+    attachJetSampleBeds(voices, audio, {
+      idle: primary,
+      mil: primary,
+      grit: primary,
+      idleVariants: [primary, cockpit],
+      milVariants: [primary, cockpit],
+      gritVariants: [primary, cockpit],
+    }, { character: "rapier" });
+    const state = {
+      applied_throttle: 1,
+      engine_spool_fraction: 1,
+      max_thrust_fraction: 1.55,
+      engine_rpm_pct: 100,
+      mach: 0.9,
+      true_airspeed_kts: 520,
+      air_density_kg_m3: 0.9,
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+    };
+
+    audio.currentTime = 4;
+    updateEngineVoices(voices, audio, state, { snap: true });
+    const early = voices.sampleMilVariants.map((variant) => latest(variant.gain.gain));
+    audio.currentTime = 44;
+    updateEngineVoices(voices, audio, state, { snap: true });
+    const late = voices.sampleMilVariants.map((variant) => latest(variant.gain.gain));
+
+    assert.deepEqual(late, early,
+      "the supporting cockpit layer must not impose a time-based loudness cycle");
+    assert.ok(early[0] > 0 && early[1] > 0, "both de-correlated beds mask short repetition");
+    assert.ok(Math.abs(early[0] * early[0] + early[1] * early[1] - 1) < 1e-6,
+      "the fixed mix remains equal-power");
   } finally {
     globalThis.AudioContext = previous;
   }
@@ -879,6 +1057,60 @@ test("F-22 power uses its published lever stop and RPM remains audible under bed
     }, { snap: true });
     assert.ok(voices.powerSlew > 0.99,
       "F-22's published 1.35 lever stop maps full augmentation to full audio power");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("F-22 augmentation stays independent from governed RPM and dynamic pressure", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      attachJetSampleBeds,
+      createEngineVoices,
+      updateEngineVoices,
+    } = await freshModule("../engine_audio.js", "f22-augmentation-cue");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const bed = audio.createBuffer(1, 64);
+    attachJetSampleBeds(
+      voices,
+      audio,
+      { idle: bed, mil: bed, grit: bed },
+      { character: "f22" },
+    );
+    const fixedState = {
+      max_thrust_fraction: 1.35,
+      engine_rpm_pct: 100,
+      mach: 0.72,
+      true_airspeed_kts: 430,
+      air_density_kg_m3: 0.9,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    };
+
+    updateEngineVoices(voices, audio, {
+      ...fixedState,
+      applied_throttle: 1,
+      engine_spool_fraction: 1,
+    }, { snap: true });
+    const milBody = latest(voices.augmentationBodyGain.gain);
+    const milPulse = latest(voices.augmentationPulseGain.gain);
+
+    updateEngineVoices(voices, audio, {
+      ...fixedState,
+      applied_throttle: 1.35,
+      engine_spool_fraction: 1.35,
+    }, { snap: true });
+    assert.equal(milBody, 0, "MIL has no false reheat body");
+    assert.equal(milPulse, 0, "MIL has no false augmentation pulse");
+    assert.ok(latest(voices.augmentationBodyGain.gain) > 0.04,
+      "delivered augmentation adds a cockpit pressure/structure cue");
+    assert.ok(latest(voices.augmentationPulseGain.gain) > 0.01,
+      "delivered augmentation adds a restrained low pulse");
+    assert.equal(latest(voices.sampleMil.playbackRate), 1,
+      "augmentation does not pitch the broadband cockpit bed");
   } finally {
     globalThis.AudioContext = previous;
   }

@@ -6,8 +6,8 @@ This tool deliberately separates reference analysis from production assets:
 * ``analyze`` stores only aggregate spectral statistics. It never copies PCM.
 * ``synthesize`` creates new periodic noise/tone beds from those statistics.
 
-The runtime can crossfade the generated alternates against the hand-authored primary
-beds, adding movement without redistributing a reference recording.
+The runtime can blend the generated alternates against the hand-authored primary
+beds, adding dense cockpit body without redistributing a reference recording.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from scipy.io import wavfile
 
 
 PROFILE_VERSION = 1
+DEFAULT_MODULATION_DEPTH = 0.012
 BANDS_HZ = (
     (20.0, 80.0),
     (80.0, 250.0),
@@ -234,6 +235,7 @@ def _synthesize_regime(
     seconds: float,
     seed: int,
     target_rms_dbfs: float,
+    modulation_depth: float = DEFAULT_MODULATION_DEPTH,
 ) -> np.ndarray:
     regime = profile["regimes"][regime_name]
     frames = int(round(sample_rate * seconds))
@@ -265,9 +267,12 @@ def _synthesize_regime(
         2.0 * math.pi * electrical_hz * time + rng.uniform(0.0, 2.0 * math.pi)
     )
 
+    # Keep the bed stationary at a fixed operating point. Strong loop-synchronous AM reads as
+    # an engine surging every few seconds once the buffer repeats; a restrained multi-rate field
+    # retains microscopic life without becoming a false power cue.
     modulation = np.ones(frames, dtype=np.float64)
-    for cycles, depth in ((1, 0.09), (3, 0.045), (7, 0.022)):
-        modulation += depth * (0.55 + 0.45 * power) * np.sin(
+    for cycles, depth_ratio in ((1, 1.0), (3, 0.5), (7, 0.25)):
+        modulation += modulation_depth * depth_ratio * (0.55 + 0.45 * power) * np.sin(
             2.0 * math.pi * cycles * time / seconds + rng.uniform(0.0, 2.0 * math.pi)
         )
     signal = signal / max(float(np.std(signal)), 1e-12)
@@ -300,6 +305,7 @@ def synthesize(args: argparse.Namespace) -> None:
             args.seconds,
             args.seed + index * 1009,
             target_levels[index],
+            getattr(args, "modulation_depth", DEFAULT_MODULATION_DEPTH),
         )
         pcm = np.int16(np.clip(signal, -1.0, 1.0) * 32767.0)
         name = f"{args.prefix}_{regime}_{args.suffix}_loop.wav"
@@ -436,6 +442,12 @@ def parser() -> argparse.ArgumentParser:
     synth_parser.add_argument("--sample-rate", type=int, default=44100)
     synth_parser.add_argument("--seconds", type=float, default=6.0)
     synth_parser.add_argument("--seed", type=int, default=20260728)
+    synth_parser.add_argument(
+        "--modulation-depth",
+        type=float,
+        default=DEFAULT_MODULATION_DEPTH,
+        help="base loop-synchronous AM depth (default: 0.012; keep restrained for steady power)",
+    )
     synth_parser.add_argument(
         "--target-rms-dbfs",
         default="-24,-20.5,-18.5",

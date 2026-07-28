@@ -8,7 +8,10 @@ namespace GunsOnly.Sim.Doctrine;
 /// not a combat kinematic shortcut: both aircraft use <see cref="AircraftSim"/> throughout, and
 /// only the opponent's pilot command changes after the pass.
 /// </summary>
-public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
+public sealed class NeutralMergeBandit :
+    IBandit,
+    IBanditDecisionTraceSource,
+    IFormationDirectiveSink {
     const double MergeGateM = 900.0;
     const double OpeningConfirmationSeconds = 0.20;
     readonly AircraftParams _parameters;
@@ -23,6 +26,7 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
     double _previousRangeM = double.NaN;
     double _minimumRangeM = double.PositiveInfinity;
     double _openingSeconds;
+    FormationDirective _formationDirective;
 
     public NeutralMergeBandit(AircraftState initial, AircraftParams parameters,
         PilotSkill skill = PilotSkill.Competent,
@@ -87,6 +91,17 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
     public PilotCommand AppliedCommand =>
         (_fight as IBanditDecisionTraceSource)?.AppliedCommand ??
         new PilotCommand(1.0, 0.0, 1.0, 0.0);
+    public FormationDirective FormationDirective => _fight?.FormationDirective
+        ?? _formationDirective;
+
+    /// <summary>
+    /// Cache the radio assignment through the authored neutral pass. It becomes tactical input
+    /// only after BeginFight, so coordination cannot bend or shorten the briefed merge geometry.
+    /// </summary>
+    public void AcceptFormationDirective(in FormationDirective directive) {
+        _formationDirective = directive;
+        _fight?.AcceptFormationDirective(directive);
+    }
 
     public bool WantsToFire(in ActorObservation player) =>
         _fight?.WantsToFire(player) ?? false;
@@ -145,6 +160,7 @@ public sealed class NeutralMergeBandit : IBandit, IBanditDecisionTraceSource {
             Atmosphere = _atmosphere
         };
         fight.SeedEnginePowerFraction(_mergeSim.ThrustFraction);
+        fight.AcceptFormationDirective(_formationDirective);
         _fight = fight;
     }
 }

@@ -70,8 +70,18 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.17.0",
+        Assert.Equal("1.18.0",
             root.GetProperty("snapshot_schema_version").GetString());
+        Assert.Contains(root.GetProperty("bandit_coordination_role").GetString(),
+            new[] { "NONE", "PRESSURE", "BRACKET", "EXTEND" });
+        Assert.Contains(root.GetProperty("w1_coordination_role").GetString(),
+            new[] { "NONE", "PRESSURE", "BRACKET", "EXTEND" });
+        JsonElement coordinationAge =
+            root.GetProperty("formation_coordination_age_s");
+        Assert.True(coordinationAge.ValueKind == JsonValueKind.Null
+            || coordinationAge.GetDouble() >= 0.0);
+        Assert.True(root.GetProperty("formation_coordination_stale").ValueKind
+            is JsonValueKind.True or JsonValueKind.False);
         Assert.True(root.TryGetProperty("time_compression_factor",
             out JsonElement timeCompressionFactor));
         Assert.InRange(timeCompressionFactor.GetInt32(), 1, 16);

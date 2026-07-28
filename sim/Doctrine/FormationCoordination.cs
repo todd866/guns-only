@@ -1,0 +1,335 @@
+namespace GunsOnly.Sim.Doctrine;
+
+/// <summary>
+/// A small, explicit tactical vocabulary for a two-ship. Pressure preserves the ordinary
+/// independent pursuit law; Bracket asks the support fighter to build lateral separation; Extend
+/// asks it to regain spacing before recommitting.
+/// </summary>
+public enum FormationTacticalRole {
+    Independent,
+    Pressure,
+    Bracket,
+    Extend
+}
+
+/// <summary>
+/// One radio-delivered assignment. SharedContact is deliberately a sampled observation rather
+/// than current AircraftState truth: formation awareness can be delayed without degrading the
+/// individual pilot's own sight picture or fire control.
+/// </summary>
+public readonly record struct FormationDirective(
+    FormationTacticalRole Role,
+    int LateralSign,
+    long PartnerId,
+    long AssignmentSequence,
+    ActorObservation SharedContact);
+
+/// <summary>Optional formation input for policies which understand two-ship tactics.</summary>
+public interface IFormationDirectiveSink {
+    FormationDirective FormationDirective { get; }
+    void AcceptFormationDirective(in FormationDirective directive);
+}
+
+/// <summary>An ordered member supplied at the session's beginning-of-tick boundary.</summary>
+public readonly record struct FormationCoordinationMember(
+    long Id,
+    AircraftState State,
+    bool Active = true);
+
+/// <summary>
+/// Deterministic two-ship radio coordinator. It assigns one pressure fighter and one support
+/// fighter, samples shared contact updates on a fixed cadence, and delivers them after a fixed
+/// communication delay. It supplies intent only; each member still flies through its own pilot
+/// policy and AircraftSim.
+/// </summary>
+public sealed class EnemyPairCoordinator {
+    public const int EvaluationIntervalTicks = 180;
+    public const int MessageDelayTicks = 42;
+    public const int MinimumRoleDwellTicks = 360;
+    public const int SharedContactStaleAfterTicks = 240;
+    public const double ExtendPairSeparationM = 850.0;
+
+    readonly record struct PendingAssignment(
+        long DueTick,
+        long PrimaryId,
+        long SupportId,
+        FormationTacticalRole PrimaryRole,
+        FormationTacticalRole SupportRole,
+        int PrimaryLateralSign,
+        int SupportLateralSign,
+        long AssignmentSequence,
+        ActorObservation SharedContact);
+
+    long _primaryId;
+    long _supportId;
+    FormationTacticalRole _primaryRole;
+    FormationTacticalRole _supportRole;
+    int _primaryLateralSign;
+    int _supportLateralSign;
+    long _assignmentSequence;
+    long _nextEvaluationTick;
+    long _lastRoleChangeTick;
+    long _lastTick;
+    ActorObservation _sharedContact;
+    PendingAssignment? _pending;
+
+    public bool Active { get; private set; }
+    public FormationTacticalRole PrimaryRole =>
+        Active ? _primaryRole : FormationTacticalRole.Independent;
+    public FormationTacticalRole SupportRole =>
+        Active ? _supportRole : FormationTacticalRole.Independent;
+    public long AssignmentSequence => Active ? _assignmentSequence : 0;
+    public int SharedContactAgeTicks => Active
+        ? AgeContact(_sharedContact, _lastTick).ObservationAgeTicks
+        : 0;
+    public bool SharedContactStale => Active
+        && SharedContactAgeTicks > SharedContactStaleAfterTicks;
+
+    public void Reset() {
+        Active = false;
+        _primaryId = 0;
+        _supportId = 0;
+        _primaryRole = FormationTacticalRole.Independent;
+        _supportRole = FormationTacticalRole.Independent;
+        _primaryLateralSign = 0;
+        _supportLateralSign = 0;
+        _assignmentSequence = 0;
+        _nextEvaluationTick = 0;
+        _lastRoleChangeTick = 0;
+        _lastTick = 0;
+        _sharedContact = default;
+        _pending = null;
+    }
+
+    public void Step(
+        long tick,
+        in ActorObservation player,
+        in FormationCoordinationMember primary,
+        in FormationCoordinationMember support) {
+        ValidateInputs(tick, player, primary, support);
+        if (!primary.Active || !support.Active) {
+            Reset();
+            return;
+        }
+
+        if (!Active
+            || primary.Id != _primaryId
+            || support.Id != _supportId) {
+            Seed(tick, player, primary, support);
+            return;
+        }
+
+        _lastTick = tick;
+        if (_pending is { } pending && tick >= pending.DueTick)
+            Deliver(pending, tick);
+
+        if (tick < _nextEvaluationTick) return;
+
+        EvaluateAndQueue(tick, player, primary, support);
+        _nextEvaluationTick = tick + EvaluationIntervalTicks;
+    }
+
+    public FormationDirective DirectiveFor(long memberId, long tick) {
+        if (tick < 0) throw new ArgumentOutOfRangeException(nameof(tick));
+        if (!Active) return default;
+
+        ActorObservation agedContact = AgeContact(_sharedContact, tick);
+        if (memberId == _primaryId) {
+            return new FormationDirective(
+                _primaryRole,
+                _primaryLateralSign,
+                _supportId,
+                _assignmentSequence,
+                agedContact);
+        }
+        if (memberId == _supportId) {
+            return new FormationDirective(
+                _supportRole,
+                _supportLateralSign,
+                _primaryId,
+                _assignmentSequence,
+                agedContact);
+        }
+        return default;
+    }
+
+    void Seed(
+        long tick,
+        in ActorObservation player,
+        in FormationCoordinationMember primary,
+        in FormationCoordinationMember support) {
+        Active = true;
+        _primaryId = primary.Id;
+        _supportId = support.Id;
+        _primaryRole = FormationTacticalRole.Pressure;
+        _supportRole = FormationTacticalRole.Bracket;
+        _primaryLateralSign = 0;
+        _supportLateralSign = BracketSign(support.State, player);
+        _assignmentSequence = 1;
+        _lastRoleChangeTick = tick;
+        _lastTick = tick;
+        _sharedContact = player;
+        _pending = new PendingAssignment(
+            tick + MessageDelayTicks,
+            _primaryId,
+            _supportId,
+            _primaryRole,
+            _supportRole,
+            _primaryLateralSign,
+            _supportLateralSign,
+            _assignmentSequence + 1,
+            player);
+        _nextEvaluationTick = tick + EvaluationIntervalTicks;
+    }
+
+    void EvaluateAndQueue(
+        long tick,
+        in ActorObservation player,
+        in FormationCoordinationMember primary,
+        in FormationCoordinationMember support) {
+        FormationTacticalRole nextPrimaryRole = _primaryRole;
+        FormationTacticalRole nextSupportRole = _supportRole;
+        int nextPrimarySign = _primaryLateralSign;
+        int nextSupportSign = _supportLateralSign;
+
+        if (tick - _lastRoleChangeTick >= MinimumRoleDwellTicks) {
+            double primaryPressureScore = PressureScore(primary.State, player);
+            double supportPressureScore = PressureScore(support.State, player);
+            bool supportPressures =
+                supportPressureScore > primaryPressureScore + 1e-9;
+            double pairSeparationM =
+                (primary.State.Position - support.State.Position).Length;
+            FormationTacticalRole supportRole =
+                pairSeparationM < ExtendPairSeparationM
+                    ? FormationTacticalRole.Extend
+                    : FormationTacticalRole.Bracket;
+
+            if (supportPressures) {
+                nextPrimaryRole = supportRole;
+                nextSupportRole = FormationTacticalRole.Pressure;
+                nextPrimarySign = supportRole == FormationTacticalRole.Bracket
+                    ? BracketSign(primary.State, player)
+                    : 0;
+                nextSupportSign = 0;
+            } else {
+                nextPrimaryRole = FormationTacticalRole.Pressure;
+                nextSupportRole = supportRole;
+                nextPrimarySign = 0;
+                nextSupportSign = supportRole == FormationTacticalRole.Bracket
+                    ? BracketSign(support.State, player)
+                    : 0;
+            }
+        }
+
+        _pending = new PendingAssignment(
+            tick + MessageDelayTicks,
+            _primaryId,
+            _supportId,
+            nextPrimaryRole,
+            nextSupportRole,
+            nextPrimarySign,
+            nextSupportSign,
+            _assignmentSequence + 1,
+            player);
+    }
+
+    void Deliver(in PendingAssignment pending, long tick) {
+        // Membership changes reset the coordinator synchronously, so an old queued transmission
+        // can never assign the survivor a dead partner.
+        if (pending.PrimaryId != _primaryId
+            || pending.SupportId != _supportId) {
+            _pending = null;
+            return;
+        }
+
+        bool roleChanged = pending.PrimaryRole != _primaryRole
+            || pending.SupportRole != _supportRole;
+        _primaryRole = pending.PrimaryRole;
+        _supportRole = pending.SupportRole;
+        _primaryLateralSign = pending.PrimaryLateralSign;
+        _supportLateralSign = pending.SupportLateralSign;
+        _assignmentSequence = pending.AssignmentSequence;
+        _sharedContact = pending.SharedContact;
+        _pending = null;
+        if (roleChanged) _lastRoleChangeTick = tick;
+    }
+
+    static int BracketSign(
+        in AircraftState member,
+        in ActorObservation player) {
+        Vec3D forward = player.ForwardDir();
+        var horizontalForward = new Vec3D(forward.X, 0.0, forward.Z);
+        if (horizontalForward.Length < 1e-9)
+            horizontalForward = new Vec3D(0.0, 0.0, 1.0);
+        else
+            horizontalForward = horizontalForward.Normalized();
+        var right = new Vec3D(
+            horizontalForward.Z, 0.0, -horizontalForward.X);
+        double lateralM = (member.Position - player.Position).Dot(right);
+        // Exact ties follow formation order: the support member is assigned the positive side.
+        return lateralM < 0.0 ? -1 : 1;
+    }
+
+    static double PressureScore(
+        in AircraftState member,
+        in ActorObservation player) {
+        Vec3D line = player.Position - member.Position;
+        double rangeM = line.Length;
+        double noseDot = rangeM > 1e-9
+            ? member.ForwardDir().Dot(line * (1.0 / rangeM))
+            : 1.0;
+        return -0.001 * rangeM
+            + 2.0 * noseDot
+            + 0.002 * member.Speed;
+    }
+
+    static ActorObservation AgeContact(
+        in ActorObservation contact,
+        long tick) {
+        long sourceAge = Math.Max(0L, tick - contact.SourceTick);
+        long age = Math.Max(contact.ObservationAgeTicks, sourceAge);
+        int boundedAge = age > int.MaxValue ? int.MaxValue : (int)age;
+        double confidenceScale = Math.Max(
+            0.0,
+            1.0 - 0.5 * boundedAge
+                / (SharedContactStaleAfterTicks + 1.0));
+        return contact with {
+            ObservationAgeTicks = boundedAge,
+            Confidence = Math.Clamp(
+                contact.Confidence * confidenceScale,
+                0.0,
+                1.0)
+        };
+    }
+
+    static void ValidateInputs(
+        long tick,
+        in ActorObservation player,
+        in FormationCoordinationMember primary,
+        in FormationCoordinationMember support) {
+        if (tick < 0) throw new ArgumentOutOfRangeException(nameof(tick));
+        if (!player.IsFinite)
+            throw new ArgumentException(
+                "Shared contact must be finite.", nameof(player));
+        if (primary.Id <= 0)
+            throw new ArgumentOutOfRangeException(nameof(primary));
+        if (support.Id <= 0 || support.Id == primary.Id)
+            throw new ArgumentOutOfRangeException(nameof(support));
+        if (!StateIsFinite(primary.State))
+            throw new ArgumentException(
+                "Primary state must be finite.", nameof(primary));
+        if (!StateIsFinite(support.State))
+            throw new ArgumentException(
+                "Support state must be finite.", nameof(support));
+    }
+
+    static bool StateIsFinite(in AircraftState state) =>
+        state.Position.IsFinite
+        && double.IsFinite(state.Speed)
+        && state.Speed >= 0.0
+        && double.IsFinite(state.Gamma)
+        && double.IsFinite(state.Chi)
+        && double.IsFinite(state.Bank)
+        && double.IsFinite(state.Mass)
+        && state.Mass >= 0.0;
+}

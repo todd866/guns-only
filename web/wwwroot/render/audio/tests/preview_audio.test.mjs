@@ -93,6 +93,11 @@ test("fighter sequence crosses close and changes closure sign", () => {
   assert.ok(crossing.range_m <= 140);
   assert.ok(receding.closure_kts < 0);
   assert.ok(receding.range_m > crossing.range_m);
+  assert.ok(approaching.bx > 0, "contact begins ahead");
+  assert.ok(Math.abs(crossing.bx) < 1, "closest approach is abeam");
+  assert.ok(receding.bx < 0, "contact departs behind");
+  assert.ok([approaching, crossing, receding].every((state) => state.bz > 0),
+    "straight pass remains on one side of the canopy");
 });
 
 test("Bear sequence remains distant and identifies contra-rotating propulsion", () => {

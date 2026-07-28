@@ -70,9 +70,19 @@ metadata; pass `--max-video-height 720` for a source whose cockpit evidence
 genuinely needs more detail, or `0` to retain the fetched resolution.
 
 `review-index` builds `analysis/jet-audio-library/review.html`, a searchable
-local gallery with synchronized video playback and source annotations. Serve
-the ignored vault and open `http://localhost:8765/review.html`; the page never
+local gallery with synchronized video playback and a segment-annotation
+workstation. Serve the ignored vault and open `http://localhost:8765/review.html`;
+mark IN/OUT against the picture, label engine/q/G/evidence and events, then use
+**Export annotations**. The page keeps drafts in browser local storage and never
 embeds or copies media into tracked files.
+
+Merge the exported file through the validator rather than hand-editing timecodes:
+
+```bash
+python3 tools/audio/jet_library.py apply-annotations \
+  --input ~/Downloads/jet-audio-annotations.json
+python3 tools/audio/jet_library.py analyze --id dvids.759958
+```
 
 ## Promotion rule
 

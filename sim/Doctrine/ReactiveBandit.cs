@@ -147,7 +147,10 @@ public enum BanditTactic { Acquire, Defend, Energy, Return }
 
 /// Deterministic, deliberately beatable BFM opponent. It owns a normal AircraftSim and supplies
 /// only pilot controls: no kinematic shortcuts, wall clock, or random source enters the kernel.
-public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
+public sealed class ReactiveBandit :
+    IBandit,
+    IBanditDecisionTraceSource,
+    IFormationDirectiveSink {
     const double FloorM = 260.0;
     const double CeilingM = 3200.0;
     // Believable guns knife-fight ceiling (~37,700 ft). The per-fight ceiling may sit LOWER (it
@@ -211,6 +214,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     PilotCommand _lookaheadCommand = new(1.0, 0.0, 0.85, 0.0);
     int _lookaheadHoldTicks;
     long _selectionSequence;
+    FormationDirective _formationDirective;
 
     public PilotSkill Skill { get; }
     public AircraftParams AircraftParameters => _parameters;
@@ -536,6 +540,7 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
     public PilotCommand LastCommand { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
     public PilotCommand AppliedCommand => LastCommand;
     public BanditDecisionTrace DecisionTrace { get; private set; }
+    public FormationDirective FormationDirective => _formationDirective;
     public BanditPolicyMemory PolicyMemory => new(
         Tactic,
         T,
@@ -543,7 +548,42 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         System.Math.Max(0.0, _defendCooldownUntil - T),
         _jinkIndex,
         _breakSign,
-        _lookaheadHoldTicks);
+        _lookaheadHoldTicks,
+        EffectiveFormationRole,
+        _formationDirective.LateralSign,
+        _formationDirective.AssignmentSequence,
+        _formationDirective.SharedContact.SourceTick,
+        _formationDirective.SharedContact.ObservationAgeTicks,
+        _formationDirective.SharedContact.Confidence);
+
+    /// <summary>
+    /// Receives a held formation assignment without disturbing the pilot's independent decision
+    /// cadence. In particular, radio updates must not re-synchronise two expensive lookahead
+    /// rollouts onto the same fixed tick.
+    /// </summary>
+    public void AcceptFormationDirective(in FormationDirective directive) {
+        if (!System.Enum.IsDefined(directive.Role))
+            throw new System.ArgumentOutOfRangeException(nameof(directive));
+        if (directive.LateralSign is < -1 or > 1)
+            throw new System.ArgumentOutOfRangeException(nameof(directive));
+        if (directive.AssignmentSequence < 0)
+            throw new System.ArgumentOutOfRangeException(nameof(directive));
+        if (directive.Role != FormationTacticalRole.Independent
+            && !directive.SharedContact.IsFinite)
+            throw new System.ArgumentException(
+                "An active formation directive requires a finite shared contact.",
+                nameof(directive));
+        _formationDirective = directive;
+    }
+
+    FormationTacticalRole EffectiveFormationRole =>
+        _formationDirective.Role != FormationTacticalRole.Independent
+        && _formationDirective.SharedContact.IsFinite
+        && _formationDirective.SharedContact.Confidence > 0.05
+        && _formationDirective.SharedContact.ObservationAgeTicks
+            <= EnemyPairCoordinator.SharedContactStaleAfterTicks
+            ? _formationDirective.Role
+            : FormationTacticalRole.Independent;
 
     /// <summary>
     /// Preserve the real engine spool state when scenario geometry hands this controller an
@@ -1014,11 +1054,27 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         var own = State;
         double range = (player.Position - own.Position).Length;
         double leadSeconds = System.Math.Clamp(range / 900.0, 0.35, 1.35);
-        var aim = player.Position + player.VelocityVector() * leadSeconds;
+        var independentAim =
+            player.Position + player.VelocityVector() * leadSeconds;
+        bool followingFormationDirective =
+            ShouldFollowFormationDirective(player);
+        var aim = followingFormationDirective
+            ? FormationAimPoint(player, independentAim)
+            : independentAim;
         aim = KeepAimInFightVolume(aim);
 
         double bank = LimitedBankTo(aim, 1.08);
         double angle = AngleTo(aim);
+        if (followingFormationDirective
+            && EffectiveFormationRole == FormationTacticalRole.Extend) {
+            // Extension is separation, not another max-performance turn. AircraftSim still owns
+            // the energy actually gained and the terrain reflex above still pre-empts this order.
+            return new PilotCommand(
+                System.Math.Min(AvailableAcquireG(safetyReserve: false), 1.05),
+                System.Math.Clamp(bank, -0.45, 0.45),
+                _maximumThrottle,
+                0.0);
+        }
         // The legacy bank cap (±62°) cannot place the lift vector below the horizon, so a steep
         // climbing pursuit of a target BELOW adds climb instead of converting: gamma-dot =
         // (n·cosφ − cosγ)·g/V stays positive and modern thrust sustains it — production
@@ -1043,6 +1099,73 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             : State.Speed > _highSpeedMps ? System.Math.Min(_maximumThrottle, 0.45)
             : System.Math.Min(_maximumThrottle, 0.84);
         return new PilotCommand(g, bank, throttle, 0.0);
+    }
+
+    bool ShouldFollowFormationDirective(in ActorObservation player) {
+        FormationTacticalRole role = EffectiveFormationRole;
+        if (role is FormationTacticalRole.Independent
+                or FormationTacticalRole.Pressure
+            || Tactic == BanditTactic.Defend
+            || IsGunThreat(player))
+            return false;
+
+        // A supporting fighter does not fly past an honest shot merely to touch an abstract
+        // station. Once the real, current contact is close to a usable lead solution, ordinary
+        // pursuit and fire-control take over. Only the shared formation picture is delayed.
+        double rangeM = (player.Position - State.Position).Length;
+        double opportunityGateRad = System.Math.Max(
+            EffectiveLeadFireConeRad * 1.5,
+            6.0 * System.Math.PI / 180.0);
+        return rangeM < BanditFireControl.MinimumRangeM
+            || rangeM > BanditFireControl.MaximumRangeM
+            || BanditFireControl.LeadNoseErrorRad(State, player)
+                > opportunityGateRad;
+    }
+
+    Vec3D FormationAimPoint(
+        in ActorObservation player,
+        in Vec3D independentAim) {
+        ActorObservation shared = _formationDirective.SharedContact;
+        Vec3D sharedForward = shared.ForwardDir();
+        var horizontalForward = new Vec3D(
+            sharedForward.X, 0.0, sharedForward.Z);
+        if (horizontalForward.Length < 1e-6) {
+            Vec3D ownForward = State.ForwardDir();
+            horizontalForward = new Vec3D(
+                ownForward.X, 0.0, ownForward.Z);
+        }
+        horizontalForward = horizontalForward.Normalized();
+
+        if (EffectiveFormationRole == FormationTacticalRole.Bracket) {
+            int sign = _formationDirective.LateralSign == 0
+                ? 1
+                : _formationDirective.LateralSign;
+            // A lateral/aft station forces the player to choose which nose to honour. It is built
+            // only from the last delivered shared contact, so a stale radio picture can be wrong
+            // without granting either pilot hidden current truth.
+            var right = new Vec3D(
+                horizontalForward.Z, 0.0, -horizontalForward.X);
+            return shared.Position
+                + right * (sign * 1300.0)
+                - horizontalForward * 350.0;
+        }
+
+        if (EffectiveFormationRole == FormationTacticalRole.Extend) {
+            Vec3D away = State.Position - shared.Position;
+            away = new Vec3D(away.X, 0.0, away.Z);
+            if (away.Length < 1e-6) away = horizontalForward * -1.0;
+            return State.Position
+                + away.Normalized() * 1600.0
+                + new Vec3D(
+                    0.0,
+                    System.Math.Clamp(
+                        shared.Position.Y - State.Position.Y,
+                        -120.0,
+                        120.0),
+                    0.0);
+        }
+
+        return independentAim;
     }
 
     PilotCommand DefendCommand(in ActorObservation player) {
@@ -1203,8 +1326,13 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         // Steer to the SAME ballistic solution fire control scores the shot against. The low-attack
         // plan keeps its own aim point: that one is a terrain-certified descent path, not a gun
         // solution, and overriding it here would fly the bandit into the ground.
-        var leadPoint = lowAttackPlan?.AimPoint
+        var independentLeadPoint = lowAttackPlan?.AimPoint
             ?? BanditFireControl.LeadPoint(State, player);
+        bool followingFormationDirective = lowAttackPlan is null
+            && ShouldFollowFormationDirective(player);
+        var leadPoint = followingFormationDirective
+            ? FormationAimPoint(player, independentLeadPoint)
+            : independentLeadPoint;
 
         // Throttle schedule mirrors the acquire law's energy management so lookahead never
         // manufactures thrust the airframe cannot deliver.
@@ -1249,7 +1377,11 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
         double defensiveOffsetM = System.Math.Max(900.0, range);
         var breakAim = State.Position + upAcross * defensiveOffsetM;
         var reverseAim = State.Position + reverseAcross * defensiveOffsetM;
-        var awayFromPlayer = State.Position - player.Position;
+        Vec3D separationContact = followingFormationDirective
+                && EffectiveFormationRole == FormationTacticalRole.Extend
+            ? _formationDirective.SharedContact.Position
+            : player.Position;
+        var awayFromPlayer = State.Position - separationContact;
         if (awayFromPlayer.Length < 1e-6)
             awayFromPlayer = State.ForwardDir();
         var separateAim = State.Position + awayFromPlayer.Normalized() * 1400.0;
@@ -1286,6 +1418,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             _profile.ForcesOvershoot,
             _profile.ForcesOvershoot,
             _profile.DisengagesWhenLosing
+                || (followingFormationDirective
+                    && EffectiveFormationRole == FormationTacticalRole.Extend)
         };
 
         double bestScore = double.NegativeInfinity;
@@ -1297,7 +1431,8 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
             if (!available[i]) continue;
             double s = ScoreCandidate(candidates[i], player)
                 + DoctrineOpenerBias(i, player)
-                + TailContestBias(i, player);
+                + TailContestBias(i, player)
+                + FormationRoleBias(i, followingFormationDirective);
             scores[i] = s;
             if (s > bestScore) {
                 bestScore = s;
@@ -1334,6 +1469,24 @@ public sealed class ReactiveBandit : IBandit, IBanditDecisionTraceSource {
                 8, candidates[8], scores[8],
                 HasScore: available[8], Available: available[8]));
         return bestCommand;
+    }
+
+    double FormationRoleBias(
+        int candidateIndex,
+        bool followingFormationDirective) {
+        if (!followingFormationDirective) return 0.0;
+        return EffectiveFormationRole switch {
+            // The target point already carries the delayed lateral station. Prefer a sustainable
+            // pull toward it, but leave the physical rollout free to reject unsafe geometry.
+            FormationTacticalRole.Bracket when candidateIndex == 1 => 28.0,
+            FormationTacticalRole.Bracket when candidateIndex == 4 => 12.0,
+            FormationTacticalRole.Bracket when candidateIndex is 2 or 3 => 7.0,
+            // Candidate 8 is the true separation manoeuvre. A secondary reward on the historical
+            // unload lets terrain/energy scoring choose the safer of two extension shapes.
+            FormationTacticalRole.Extend when candidateIndex == 8 => 45.0,
+            FormationTacticalRole.Extend when candidateIndex == 4 => 20.0,
+            _ => 0.0
+        };
     }
 
     double DoctrineOpenerBias(int candidateIndex, in ActorObservation player) {

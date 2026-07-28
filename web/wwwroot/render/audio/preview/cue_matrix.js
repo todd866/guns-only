@@ -26,6 +26,15 @@ const F22_CONTROL = Object.freeze({
   replay_external: false,
   replay_camera: "COCKPIT",
   audio_perspective: "cockpit",
+  px: 0,
+  py: 0,
+  pz: 0,
+  pfx: 1,
+  pfy: 0,
+  pfz: 0,
+  plx: 0,
+  ply: 1,
+  plz: 0,
 });
 
 function f22State(overrides = {}) {
@@ -228,12 +237,21 @@ function trafficState({
   const rangeM = approaching
     ? farRangeM + (nearRangeM - farRangeM) * leg
     : nearRangeM + (farRangeM - nearRangeM) * leg;
+  // Fly one consistent side of the cockpit: far ahead-left → closest abeam-left → behind-left.
+  // This is a physically plausible straight pass and exercises production stereo positioning
+  // without inventing a contact that teleports through the ownship centreline.
+  const lateralM = Math.min(nearRangeM, rangeM);
+  const alongM = Math.sqrt(Math.max(0, rangeM * rangeM - lateralM * lateralM))
+    * (approaching ? 1 : -1);
   return {
     ...F22_CONTROL,
     bandit_aircraft_id: id,
     bandit_audio_class: audioClass,
     range_m: rangeM,
     closure_kts: approaching ? approachingClosureKts : recedingClosureKts,
+    bx: alongM,
+    by: 0,
+    bz: lateralM,
     cue_pass_progress_01: progress,
   };
 }

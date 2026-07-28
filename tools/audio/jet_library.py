@@ -14,6 +14,7 @@ infers idle/MIL/afterburner merely from loudness.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import html
 import json
@@ -37,6 +38,7 @@ DEFAULT_CATALOG = REPO_ROOT / "audio/jet-library/catalog.json"
 DEFAULT_VAULT = REPO_ROOT / "analysis/jet-audio-library"
 DEFAULT_PROFILE_DIR = REPO_ROOT / "audio/jet-library/profiles"
 CATALOG_VERSION = "guns-only.jet-audio-catalog.v1"
+ANNOTATION_EXPORT_VERSION = "guns-only.jet-audio-annotations.v1"
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,95}$")
 PERSPECTIVES = {
     "cockpit_airframe",
@@ -139,6 +141,61 @@ def source_by_id(catalog: dict[str, Any], source_id: str) -> dict[str, Any]:
         if source["id"] == source_id:
             return source
     raise KeyError(f"unknown source id: {source_id}")
+
+
+def merge_annotation_export(
+    catalog: dict[str, Any],
+    annotation_export: dict[str, Any],
+) -> tuple[dict[str, Any], int]:
+    """Merge review-page annotations by stable segment id and revalidate the catalog."""
+    if annotation_export.get("schema_version") != ANNOTATION_EXPORT_VERSION:
+        raise ValueError(
+            f"annotation schema_version must be {ANNOTATION_EXPORT_VERSION}"
+        )
+    exported_sources = annotation_export.get("sources")
+    if not isinstance(exported_sources, list):
+        raise ValueError("annotation sources must be an array")
+
+    merged = copy.deepcopy(catalog)
+    known = {source["id"]: source for source in merged["sources"]}
+    seen_sources: set[str] = set()
+    changed = 0
+    for exported in exported_sources:
+        if not isinstance(exported, dict):
+            raise ValueError("each annotation source must be an object")
+        source_id = exported.get("id")
+        if source_id not in known:
+            raise ValueError(f"annotation references unknown source id: {source_id}")
+        if source_id in seen_sources:
+            raise ValueError(f"annotation repeats source id: {source_id}")
+        seen_sources.add(source_id)
+        segments = exported.get("segments")
+        if not isinstance(segments, list):
+            raise ValueError(f"{source_id} annotation segments must be an array")
+
+        source = known[source_id]
+        existing = {
+            segment["id"]: segment
+            for segment in source.get("segments", [])
+            if isinstance(segment, dict) and isinstance(segment.get("id"), str)
+        }
+        for segment in segments:
+            if not isinstance(segment, dict) or not isinstance(segment.get("id"), str):
+                raise ValueError(f"{source_id} contains an invalid segment")
+            existing[segment["id"]] = segment
+            changed += 1
+        source["segments"] = sorted(
+            existing.values(),
+            key=lambda segment: (
+                float(segment.get("start_s", math.inf)),
+                str(segment.get("id", "")),
+            ),
+        )
+
+    errors = validate_catalog(merged)
+    if errors:
+        raise ValueError("\n".join(errors))
+    return merged, changed
 
 
 def source_slug(source_id: str) -> str:
@@ -588,6 +645,10 @@ def generate_review_index(
         perspective = html.escape(source["subject"]["perspective"])
         tags = " ".join(html.escape(tag) for tag in source.get("tags", []))
         notes = html.escape(source.get("notes", ""))
+        source_segments = html.escape(
+            json.dumps(source.get("segments", []), separators=(",", ":")),
+            quote=True,
+        )
         search = html.escape(
             " ".join([
                 source["id"],
@@ -616,7 +677,8 @@ def generate_review_index(
         cards.append(
             f"""
             <article class="card" data-search="{search}" data-perspective="{perspective}"
-              data-tier="{tier}" data-fetched="{"yes" if inventory else "no"}">
+              data-tier="{tier}" data-fetched="{"yes" if inventory else "no"}"
+              data-source-id="{source_id}" data-segments="{source_segments}">
               {media_markup}
               <div class="body">
                 <div class="eyebrow">{perspective} · {tier}</div>
@@ -625,6 +687,62 @@ def generate_review_index(
                 <p class="tags">{tags}</p>
                 <p>{notes}</p>
                 <a href="{url}" target="_blank" rel="noreferrer">Open original source</a>
+                <details class="annotator">
+                  <summary>Annotate synchronized segment</summary>
+                  <div class="time-row">
+                    <button type="button" data-action="mark-in">Mark IN</button>
+                    <output data-field="start">0.000 s</output>
+                    <button type="button" data-action="mark-out">Mark OUT</button>
+                    <output data-field="end">0.000 s</output>
+                  </div>
+                  <div class="annotation-grid">
+                    <label>Engine
+                      <select data-field="engine">
+                        <option>unknown</option><option>off</option><option>start</option>
+                        <option>idle</option><option>taxi</option><option>spool-up</option>
+                        <option>military</option><option>afterburner</option>
+                        <option>spool-down</option>
+                      </select>
+                    </label>
+                    <label>Dynamic pressure
+                      <select data-field="q">
+                        <option>unknown</option><option>low</option><option>medium</option>
+                        <option>high</option>
+                      </select>
+                    </label>
+                    <label>G load
+                      <select data-field="g">
+                        <option>unknown</option><option>negative</option><option>one-g</option>
+                        <option>positive-moderate</option><option>positive-high</option>
+                        <option>onset</option><option>unload</option>
+                      </select>
+                    </label>
+                    <label>Evidence
+                      <select data-field="evidence">
+                        <option value="unknown">unknown</option>
+                        <option value="visible_hud">visible HUD</option>
+                        <option value="visible_control">visible control</option>
+                        <option value="visible_manoeuvre">visible manoeuvre</option>
+                        <option value="description">source description</option>
+                        <option value="telemetry">telemetry</option>
+                      </select>
+                    </label>
+                    <label>Confidence
+                      <input data-field="confidence" type="number" min="0" max="1"
+                        step="0.05" value="0.7">
+                    </label>
+                    <label>Events, comma separated
+                      <input data-field="events" type="text"
+                        placeholder="flyby, pass, g_onset">
+                    </label>
+                    <label>Contaminants, comma separated
+                      <input data-field="contaminants" type="text"
+                        placeholder="speech, music, clipping">
+                    </label>
+                  </div>
+                  <button type="button" data-action="add-segment">Add segment</button>
+                  <ol class="segments"></ol>
+                </details>
               </div>
             </article>
             """
@@ -649,6 +767,9 @@ def generate_review_index(
     input, select {{ border: 1px solid #40524b; border-radius: 7px; padding: 9px 11px;
       background: #18231f; color: inherit; }}
     input {{ min-width: min(430px, 75vw); }}
+    button {{ border: 1px solid #61736a; border-radius: 7px; padding: 8px 11px;
+      background: #26372f; color: inherit; cursor: pointer; }}
+    button:hover {{ background: #31483d; }}
     main {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
       gap: 18px; padding: 24px clamp(18px, 4vw, 56px) 60px; }}
     .card {{ overflow: hidden; border: 1px solid #33433d; border-radius: 12px;
@@ -665,6 +786,19 @@ def generate_review_index(
     h2 {{ margin: 7px 0; font: 600 20px Georgia, serif; }}
     code {{ color: #b8d7c5; }}
     a {{ color: #f1c77b; }}
+    .annotator {{ margin-top: 14px; border-top: 1px solid #33433d; padding-top: 12px; }}
+    .annotator summary {{ cursor: pointer; color: #f1c77b; }}
+    .time-row {{ display: grid; grid-template-columns: auto 1fr auto 1fr;
+      align-items: center; gap: 7px; margin: 12px 0; }}
+    .time-row output {{ font: 12px ui-monospace, monospace; color: #b8d7c5; }}
+    .annotation-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px; margin-bottom: 10px; }}
+    .annotation-grid label {{ display: grid; gap: 4px; color: #b8c7bf; font-size: 12px; }}
+    .annotation-grid input {{ min-width: 0; width: auto; }}
+    .annotation-grid label:nth-last-child(-n + 2) {{ grid-column: 1 / -1; }}
+    .segments {{ padding-left: 22px; color: #b8c7bf; font-size: 12px; }}
+    .segments button {{ margin-left: 7px; padding: 2px 6px; }}
+    #annotation-status {{ color: #b8d7c5; align-self: center; }}
     .hidden {{ display: none; }}
   </style>
 </head>
@@ -680,13 +814,105 @@ def generate_review_index(
         <option value="yes">Fetched only</option>
         <option value="no">Pending only</option>
       </select>
+      <button id="export-annotations" type="button">Export annotations</button>
+      <button id="clear-annotations" type="button">Clear local draft</button>
+      <span id="annotation-status">0 draft segments</span>
     </div>
   </header>
   <main>{"".join(cards)}</main>
   <script>
+    const annotationSchema = "{ANNOTATION_EXPORT_VERSION}";
+    const storageKey = "guns-only.jet-audio-annotations.v1";
     const query = document.querySelector("#query");
     const fetched = document.querySelector("#fetched");
     const cards = [...document.querySelectorAll(".card")];
+    let draft = {{}};
+    try {{ draft = JSON.parse(localStorage.getItem(storageKey) || "{{}}"); }} catch {{}}
+    const splitTags = value => value.split(",").map(item => item.trim()).filter(Boolean);
+    const slug = value => value.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "").slice(0, 36) || "segment";
+    const saveDraft = () => {{
+      localStorage.setItem(storageKey, JSON.stringify(draft));
+      const count = Object.values(draft).reduce((sum, segments) => sum + segments.length, 0);
+      document.querySelector("#annotation-status").textContent =
+        `${{count}} draft segment${{count === 1 ? "" : "s"}}`;
+    }};
+    const renderSegments = card => {{
+      const sourceId = card.dataset.sourceId;
+      const tracked = JSON.parse(card.dataset.segments || "[]");
+      const local = draft[sourceId] || [];
+      const list = card.querySelector(".segments");
+      list.replaceChildren();
+      for (const [kind, segments] of [["tracked", tracked], ["draft", local]]) {{
+        for (const segment of segments) {{
+          const item = document.createElement("li");
+          item.textContent =
+            `${{kind}} · ${{Number(segment.start_s).toFixed(3)}}–`
+            + `${{Number(segment.end_s).toFixed(3)}} · ${{segment.id}}`;
+          if (kind === "draft") {{
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.textContent = "remove";
+            remove.addEventListener("click", () => {{
+              draft[sourceId] = (draft[sourceId] || [])
+                .filter(candidate => candidate.id !== segment.id);
+              if (draft[sourceId].length === 0) delete draft[sourceId];
+              saveDraft();
+              renderSegments(card);
+            }});
+            item.append(remove);
+          }}
+          list.append(item);
+        }}
+      }}
+    }};
+    for (const card of cards) {{
+      const media = card.querySelector("video, audio");
+      const startOutput = card.querySelector('[data-field="start"]');
+      const endOutput = card.querySelector('[data-field="end"]');
+      let start = 0;
+      let end = 0;
+      card.querySelector('[data-action="mark-in"]').addEventListener("click", () => {{
+        start = Number(media?.currentTime || 0);
+        startOutput.value = `${{start.toFixed(3)}} s`;
+      }});
+      card.querySelector('[data-action="mark-out"]').addEventListener("click", () => {{
+        end = Number(media?.currentTime || 0);
+        endOutput.value = `${{end.toFixed(3)}} s`;
+      }});
+      card.querySelector('[data-action="add-segment"]').addEventListener("click", () => {{
+        if (!(end > start)) {{
+          window.alert("Mark an OUT time later than IN.");
+          return;
+        }}
+        const sourceId = card.dataset.sourceId;
+        const events = splitTags(card.querySelector('[data-field="events"]').value);
+        const sequence = (draft[sourceId] || []).length + 1;
+        const hint = events[0] || card.querySelector('[data-field="engine"]').value;
+        const segment = {{
+          id: `${{sourceId}}.${{slug(hint)}}-${{String(sequence).padStart(2, "0")}}`,
+          start_s: Number(start.toFixed(3)),
+          end_s: Number(end.toFixed(3)),
+          states: {{
+            engine_power: card.querySelector('[data-field="engine"]').value,
+            dynamic_pressure: card.querySelector('[data-field="q"]').value,
+            g_load: card.querySelector('[data-field="g"]').value,
+          }},
+          events,
+          evidence: {{
+            kind: card.querySelector('[data-field="evidence"]').value,
+            confidence: Number(card.querySelector('[data-field="confidence"]').value),
+          }},
+          contaminants: splitTags(
+            card.querySelector('[data-field="contaminants"]').value),
+        }};
+        draft[sourceId] = [...(draft[sourceId] || []), segment];
+        saveDraft();
+        renderSegments(card);
+      }});
+      renderSegments(card);
+    }}
+    saveDraft();
     function filter() {{
       const text = query.value.trim().toLowerCase();
       cards.forEach(card => card.classList.toggle("hidden",
@@ -695,6 +921,25 @@ def generate_review_index(
     }}
     query.addEventListener("input", filter);
     fetched.addEventListener("change", filter);
+    document.querySelector("#export-annotations").addEventListener("click", () => {{
+      const documentValue = {{
+        schema_version: annotationSchema,
+        sources: Object.entries(draft).map(([id, segments]) => ({{ id, segments }})),
+      }};
+      const blob = new Blob([JSON.stringify(documentValue, null, 2) + "\\n"],
+        {{ type: "application/json" }});
+      const anchor = document.createElement("a");
+      anchor.href = URL.createObjectURL(blob);
+      anchor.download = "jet-audio-annotations.json";
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(anchor.href), 0);
+    }});
+    document.querySelector("#clear-annotations").addEventListener("click", () => {{
+      if (!window.confirm("Clear every locally drafted segment?")) return;
+      draft = {{}};
+      saveDraft();
+      cards.forEach(renderSegments);
+    }});
   </script>
 </body>
 </html>
@@ -711,6 +956,16 @@ def command_review_index(args: argparse.Namespace) -> None:
     catalog = load_catalog(args.catalog)
     stats = generate_review_index(catalog, args.vault, args.output)
     print(f"wrote {args.output} ({stats['fetched']}/{stats['sources']} fetched)")
+
+
+def command_apply_annotations(args: argparse.Namespace) -> None:
+    catalog = load_catalog(args.catalog)
+    annotation_export = json.loads(args.input.read_text(encoding="utf-8"))
+    merged, changed = merge_annotation_export(catalog, annotation_export)
+    output = args.output or args.catalog
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {output} ({changed} segments merged)")
 
 
 def _finite(value: Any) -> float | None:
@@ -768,6 +1023,18 @@ def parser() -> argparse.ArgumentParser:
     )
     review.add_argument("--output", type=Path, default=DEFAULT_VAULT / "review.html")
     review.set_defaults(func=command_review_index)
+
+    annotations = commands.add_parser(
+        "apply-annotations",
+        help="merge a review-page annotation export into the tracked catalog",
+    )
+    annotations.add_argument("--input", type=Path, required=True)
+    annotations.add_argument(
+        "--output",
+        type=Path,
+        help="write a separate catalog instead of updating --catalog",
+    )
+    annotations.set_defaults(func=command_apply_annotations)
     return root
 
 

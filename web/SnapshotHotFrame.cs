@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 11;
+    public const int LayoutVersion = 12;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -166,6 +166,8 @@ internal static class SnapshotHotFrame {
             Num($"{prefix}lx", 5); Num($"{prefix}ly", 5); Num($"{prefix}lz", 5);
             Num($"{prefix}_alive", RawInteger);
         }
+        Nul("formation_coordination_age_s", 3);
+        Bool("formation_coordination_stale");
         // One released Rapier reusable gun-drone rides the hot path while it is still active.
         Num("rd1_present", RawInteger);
         Num("rd1x", 3); Num("rd1y", 3); Num("rd1z", 3);
@@ -712,6 +714,15 @@ internal static class SnapshotHotFrame {
         WriteWingman(ref w, session, 0, "w1");
         WriteWingman(ref w, session, 1, "w2");
         WriteWingman(ref w, session, 2, "w3");
+        w.Nul("formation_coordination_age_s",
+            session.FormationCoordinationAgeSeconds is { } coordinationAgeSeconds
+                && double.IsFinite(coordinationAgeSeconds)
+                && coordinationAgeSeconds >= 0.0
+                    ? coordinationAgeSeconds
+                    : null,
+            3);
+        w.Bool("formation_coordination_stale",
+            session.FormationCoordinationStale);
         WriteRapierGunDrone(ref w, session);
         w.Num("buffet_pitch_deg", player.PitchBuffetRad * 57.2958, 3);
         w.Num("buffet_roll_deg", player.RollBuffetRad * 57.2958, 3);
@@ -1389,6 +1400,8 @@ internal static class SnapshotHotFrame {
         ImpactSurface PlayerImpactSurface,
         ImpactSurface OpponentImpactSurface,
         bool OpponentBodyPresent,
+        FormationTacticalRole PrimaryFormationRole,
+        FormationTacticalRole FirstWingmanFormationRole,
         long PlayerSpawnSequence,
         long BanditSpawnSequence,
         long CarrierSpawnSequence,
@@ -1489,6 +1502,8 @@ internal static class SnapshotHotFrame {
                 session.PlayerImpactSurface,
                 session.OpponentImpactSurface,
                 session.OpponentBodyPresent,
+                session.PrimaryFormationRole,
+                session.WingmanFormationRole(0),
                 session.PlayerSpawnSequence,
                 session.BanditSpawnSequence,
                 session.CarrierSpawnSequence,

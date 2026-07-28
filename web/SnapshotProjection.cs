@@ -30,7 +30,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.17.0";
+    const string SnapshotSchemaVersion = "1.18.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -136,6 +136,13 @@ internal static class SnapshotProjection {
         AircraftState s = catapulting ? _catapult.State : _player.State;
         AircraftState b = _bandit.State;
         AircraftState gunTarget = Session.SelectedOpponentState;
+        string formationCoordinationAgeJson =
+            Session.FormationCoordinationAgeSeconds is { } coordinationAgeSeconds
+            && double.IsFinite(coordinationAgeSeconds)
+            && coordinationAgeSeconds >= 0.0
+                ? coordinationAgeSeconds.ToString("F3",
+                    System.Globalization.CultureInfo.InvariantCulture)
+                : "null";
         bool arrested = _arrestment.IsActive && !catapulting;
         Vec3D simulationPosition = arrested ? _arrestment.Position : s.Position;
         Vec3D playerPosition = simulationPosition;
@@ -393,6 +400,10 @@ internal static class SnapshotProjection {
             + WingmanJson(0, "w1")
             + WingmanJson(1, "w2")
             + WingmanJson(2, "w3")
+            + $"\"bandit_coordination_role\":\"{FormationTacticalRoleToken(Session.PrimaryFormationRole)}\","
+            + $"\"w1_coordination_role\":\"{FormationTacticalRoleToken(Session.WingmanFormationRole(0))}\","
+            + $"\"formation_coordination_age_s\":{formationCoordinationAgeJson},"
+            + $"\"formation_coordination_stale\":{(Session.FormationCoordinationStale ? "true" : "false")},"
             + RapierGunDroneJson("rd1")
             + $"\"buffet_pitch_deg\":{_player.PitchBuffetRad * 57.2958:F3},\"buffet_roll_deg\":{_player.RollBuffetRad * 57.2958:F3},\"buffet_yaw_deg\":{_player.YawBuffetRad * 57.2958:F3},"
             + $"\"indicated_airspeed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"
@@ -1248,6 +1259,14 @@ internal static class SnapshotProjection {
     static string CombatRoleToken(CombatRole role) => role switch {
         CombatRole.Player => "PLAYER",
         CombatRole.Opponent => "OPPONENT",
+        _ => "NONE"
+    };
+
+    static string FormationTacticalRoleToken(FormationTacticalRole role) => role switch {
+        FormationTacticalRole.Independent => "NONE",
+        FormationTacticalRole.Pressure => "PRESSURE",
+        FormationTacticalRole.Bracket => "BRACKET",
+        FormationTacticalRole.Extend => "EXTEND",
         _ => "NONE"
     };
 

@@ -1,6 +1,6 @@
 # Cockpit audio palette and mechanism pass
 
-Status: implemented for Build 170 · 2026-07-28
+Status: implemented through Build 171 · 2026-07-28
 
 Builds on:
 
@@ -20,7 +20,7 @@ The answer is a **palette**, not a pile of unrelated one-shots:
 1. measure several real cockpit perspectives;
 2. retain only aggregate spectra in the repository;
 3. synthesize independent, seamless production beds from those targets;
-4. crossfade slowly enough that the player hears a living cabin rather than a playlist;
+4. vary only where the aircraft state or a deliberately slow F-22 timbre drift calls for it;
 5. reserve transients for physical edges (gun start, gear door, downlock, flap actuator).
 
 ## Ghibli-adjacent tone alignment
@@ -81,10 +81,10 @@ python3 tools/audio/cockpit_palette.py synthesize \
 `analyze` uses overlapping 250 ms frames, classifies quiet/mid/loud regimes by RMS quantiles, and
 stores band fractions, centroid, rolloff, and low-frequency peak locations. It rejects effectively
 silent sources. `synthesize` starts from random-phase spectral noise, adds authored periodic
-cockpit mechanics, gentle saturation, and loop-periodic modulation. It cannot reconstruct or
-redistribute source PCM. Production RMS targets are explicit because recording gain is not an
-aircraft property; F-22 alternates level-match the primary set, while Rapier interior beds are
-authored lower so they color rather than replace the CC0 primary.
+cockpit mechanics, gentle saturation, and only restrained loop-periodic modulation. It cannot
+reconstruct or redistribute source PCM. Production RMS targets are explicit because recording
+gain is not an aircraft property. Rapier's interior beds are 18 seconds long and level-stable;
+the short F-4 excerpt is retained only as quiet identity seasoning.
 
 ## Runtime mix
 
@@ -98,10 +98,10 @@ authored lower so they color rather than replace the CC0 primary.
 
 ### Rapier
 
-- Existing CC0 F-4-derived beds retain the aircraft's bright turbo/ram identity.
-- New F-16-cockpit-profile synthesis sits underneath as an interior body layer.
-- Crossfade range is intentionally constrained (10–34% alternate blend); the cockpit layer colors
-  the primary instead of replacing it.
+- The 18-second F-16-cockpit-profile synthesis owns the level-stable interior body.
+- Existing 2.6-second CC0 F-4-derived beds remain at a fixed, quieter weight for bright turbo/ram
+  identity without announcing their short envelope.
+- Rapier has no wall-clock palette crossfade: a fixed flight state produces fixed bed gains.
 - Procedural ram duct/howl/spit still takes over through the Mach 1.9–2.8 handover.
 
 ## Gun
@@ -137,7 +137,7 @@ Use `render/audio/preview/jet_preview.html`:
 
 1. F-22 idle → MIL: dark cabin body, no exterior fan scream.
 2. Hold either F-22 regime for 30–60 seconds: texture moves without an obvious loop boundary.
-3. Rapier idle/MIL: cockpit body is present but the F-4-derived identity remains forward.
+3. Hold Rapier idle/MIL for 30 seconds: the body stays steady, with no 2.6 s or 6 s pumping.
 4. M61 burst: one dense internal buzz/hammer, not eighteen identical pops per second.
 5. Gear extension: bay/pump movement followed by a decisive lock.
 6. Zoom coast: propulsion collapses; ECS/electrical floor and RCS remain.
@@ -156,10 +156,20 @@ separate lighter strap/loose-kit voice. Speed-brake aerodynamic level uses dynam
 than TAS, and boolean buffet is only an onset floor.
 
 Other-aircraft sound is a separate range/closure-driven graph. Fighter contacts receive a bounded
-Doppler-like spectral shift and one pass transient; cockpit mode low-passes them through the
-canopy. Heavy turboprops have a longer falloff, while the Tu-95/Bear class uses a 750 rpm rotor
-pulse, approximately 50 Hz four-blade passage, interaction harmonics, and an intentionally long
-audibility envelope. External camera mode opens both ownship and contact spectra.
+Doppler spectral shift and one latched pass transient; cockpit mode low-passes them through the
+canopy. A second range/climate filter models atmospheric loss independently, so an exterior
+listener still loses upper-band detail with distance. Live geometry adds restrained stereo
+positioning in the F-22 cockpit and wider positioning externally. Heavy turboprops have a longer
+falloff, while the Tu-95/Bear class uses a 750 rpm rotor pulse, approximately 50 Hz four-blade
+passage, interaction harmonics, and an intentionally long audibility envelope. External camera
+mode opens both ownship and contact spectra.
+
+MIL-to-augmentation is a separate F-22 cue even when governed core RPM remains at 100%: delivered
+power above the dry stop drives a low structure/pressure body and shallow pulse. It does not pitch
+the fixed broadband cockpit bed. Production also pools three bounded contact graphs for formation
+traffic, de-duplicates the selected gun target, and derives missing wingman closure from smoothed
+range change. Compact incident replay reconstructs only recorded continuous state and fails quiet
+for unrecorded systems instead of leaking final-live audio into historical footage.
 
 ## Next highest-value captures
 

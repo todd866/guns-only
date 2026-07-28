@@ -392,13 +392,23 @@ export function createEventVoices(audioContext, destination) {
 /// separate from ownship propulsion so callers can update/mute it independently in cockpit,
 /// external-camera, replay, and preview contexts.
 export function createContactAcousticVoices(audioContext, destination) {
+  // Atmospheric loss and canopy occlusion are separate filters. This matters outside the
+  // cockpit: a distant aircraft should lose high-frequency detail even with no canopy present.
+  const contactAirFilter = audioContext.createBiquadFilter();
+  contactAirFilter.type = "lowpass";
+  contactAirFilter.frequency.value = 12_000;
+  contactAirFilter.Q.value = 0.5;
   const contactOcclusionFilter = audioContext.createBiquadFilter();
   contactOcclusionFilter.type = "lowpass";
   contactOcclusionFilter.frequency.value = 1000;
   contactOcclusionFilter.Q.value = 0.65;
+  const contactPanner = typeof audioContext.createStereoPanner === "function"
+    ? audioContext.createStereoPanner()
+    : audioContext.createGain();
   const contactOutput = audioContext.createGain();
   contactOutput.gain.value = 0;
-  contactOcclusionFilter.connect(contactOutput).connect(destination);
+  contactAirFilter.connect(contactOcclusionFilter)
+    .connect(contactPanner).connect(contactOutput).connect(destination);
 
   // Nearby jet: broadband exhaust/shear noise plus a low structure-borne turbine component.
   const fighterSource = audioContext.createBufferSource();
@@ -415,7 +425,7 @@ export function createContactAcousticVoices(audioContext, destination) {
   const fighterGain = audioContext.createGain();
   fighterGain.gain.value = 0;
   fighterSource.connect(fighterHp).connect(fighterBp)
-    .connect(fighterGain).connect(contactOcclusionFilter);
+    .connect(fighterGain).connect(contactAirFilter);
   fighterSource.start();
 
   const fighterBodyOsc = audioContext.createOscillator();
@@ -428,7 +438,7 @@ export function createContactAcousticVoices(audioContext, destination) {
   const fighterBodyGain = audioContext.createGain();
   fighterBodyGain.gain.value = 0;
   fighterBodyOsc.connect(fighterBodyFilter).connect(fighterBodyGain)
-    .connect(contactOcclusionFilter);
+    .connect(contactAirFilter);
   fighterBodyOsc.start();
 
   // Heavy contra-prop: broad low-frequency wash plus blade-passing and interaction tones.
@@ -441,7 +451,7 @@ export function createContactAcousticVoices(audioContext, destination) {
   propNoiseFilter.Q.value = 0.5;
   const propNoiseGain = audioContext.createGain();
   propNoiseGain.gain.value = 0;
-  propSource.connect(propNoiseFilter).connect(propNoiseGain).connect(contactOcclusionFilter);
+  propSource.connect(propNoiseFilter).connect(propNoiseGain).connect(contactAirFilter);
   propSource.start();
 
   const propBladeOsc = audioContext.createOscillator();
@@ -449,7 +459,7 @@ export function createContactAcousticVoices(audioContext, destination) {
   propBladeOsc.frequency.value = 50;
   const propBladeGain = audioContext.createGain();
   propBladeGain.gain.value = 0;
-  propBladeOsc.connect(propBladeGain).connect(contactOcclusionFilter);
+  propBladeOsc.connect(propBladeGain).connect(contactAirFilter);
   propBladeOsc.start();
 
   const propInteractionOsc = audioContext.createOscillator();
@@ -462,7 +472,7 @@ export function createContactAcousticVoices(audioContext, destination) {
   const propInteractionGain = audioContext.createGain();
   propInteractionGain.gain.value = 0;
   propInteractionOsc.connect(propInteractionFilter).connect(propInteractionGain)
-    .connect(contactOcclusionFilter);
+    .connect(contactAirFilter);
   propInteractionOsc.start();
 
   // ~750 rpm rotor-rate pulse for the Tu-95 branch; kept very shallow under the BPF/tone bed.
@@ -476,7 +486,9 @@ export function createContactAcousticVoices(audioContext, destination) {
 
   return {
     destination,
+    contactAirFilter,
     contactOcclusionFilter,
+    contactPanner,
     contactOutput,
     fighterHp,
     fighterBp,
@@ -495,9 +507,14 @@ export function createContactAcousticVoices(audioContext, destination) {
     propPulseDepth,
     lastContactId: "",
     lastClosureKts: null,
+    lastRangeM: null,
+    closestRangeM: Infinity,
     passArmed: false,
+    passCompleted: false,
     passTransientCount: 0,
     acousticClass: "silent",
+    contactVariation: 0,
+    lastAlive: null,
   };
 }
 
@@ -535,20 +552,61 @@ export function updateContactAcousticVoices(
   if (contactId !== voices.lastContactId) {
     voices.lastContactId = contactId;
     voices.lastClosureKts = null;
+    voices.lastRangeM = null;
+    voices.closestRangeM = Infinity;
     voices.passArmed = false;
+    voices.passCompleted = false;
+    voices.contactVariation = stableContactVariation(contactId);
+  } else if (alive && voices.lastAlive === false) {
+    // A respawn/re-entry under the same content id is a new acoustic encounter.
+    voices.lastClosureKts = null;
+    voices.lastRangeM = null;
+    voices.closestRangeM = Infinity;
+    voices.passArmed = false;
+    voices.passCompleted = false;
   }
 
-  // Closure is positive while the contact is approaching in the combat snapshot. Arm on a
-  // confidently positive value, then fire exactly once when it becomes confidently negative.
-  if (live && closureKts > 6) voices.passArmed = true;
-  const crossedPass = live
-    && voices.passArmed
-    && closureKts < -6
-    && (voices.lastClosureKts == null || voices.lastClosureKts >= -6);
-  if (closureKts < -6) voices.passArmed = false;
-  voices.lastClosureKts = closureKts;
+  const fighter = acousticClass === "fighter_jet";
+  const contra = acousticClass === "heavy_contra_prop";
+  const heavyProp = contra || acousticClass === "heavy_turboprop";
+  const passRangeM = fighter ? 2800 : contra ? 8000 : 5000;
+  if (live) voices.closestRangeM = Math.min(voices.closestRangeM, rangeM);
 
-  const doppler = clamp(1 + closureKts / 1450, 0.72, 1.34);
+  // Closure is positive while the contact is approaching in the combat snapshot. Require both
+  // an approaching sign and non-increasing range before arming, then latch completion so closure
+  // noise around zero cannot create a machine-gun series of "passes".
+  const rangeStillClosing = voices.lastRangeM == null || rangeM <= voices.lastRangeM + 25;
+  if (live
+    && !voices.passCompleted
+    && closureKts > 8
+    && rangeStillClosing
+    && rangeM <= passRangeM * 1.25) {
+    voices.passArmed = true;
+  }
+  const closureCrossed = live
+    && !voices.passCompleted
+    && voices.passArmed
+    && closureKts < -8
+    && (voices.lastClosureKts == null || voices.lastClosureKts >= -8);
+  const crossedPass = closureCrossed
+    && rangeM <= passRangeM
+    && voices.closestRangeM <= passRangeM;
+  if (closureCrossed) {
+    voices.passArmed = false;
+    voices.passCompleted = true;
+  }
+  voices.lastClosureKts = closureKts;
+  voices.lastRangeM = rangeM;
+  voices.lastAlive = alive;
+
+  const soundSpeedMps = speedOfSoundMps(state);
+  // Treat closure as a radial-velocity proxy, not a license for a synthetic sonic boom. Limiting
+  // it to 38% of local sound speed keeps the tonal shift useful and finite when telemetry spikes.
+  const radialMps = clamp(closureKts * 0.514444, -0.38 * soundSpeedMps, 0.38 * soundSpeedMps);
+  const doppler = clamp(soundSpeedMps / (soundSpeedMps - radialMps), 0.72, 1.55);
+  const airCutoffHz = contactAtmosphericCutoffHz(rangeM, acousticClass, state);
+  voices.contactAirFilter.frequency.setTargetAtTime(airCutoffHz, now, 0.18);
+  voices.contactAirFilter.Q.setTargetAtTime(0.5, now, 0.18);
   const perspectiveLevel = cockpitMode ? (f22Cockpit ? 0.78 : 0.9) : 1.35;
   voices.contactOcclusionFilter.frequency.setTargetAtTime(
     cockpitMode ? (f22Cockpit ? 920 : 1450) : 12_000,
@@ -561,22 +619,28 @@ export function updateContactAcousticVoices(
     0.12,
   );
   voices.contactOutput.gain.setTargetAtTime(live ? perspectiveLevel : 0, now, 0.08);
+  const rawPan = contactRelativePan(state);
+  const pan = rawPan * (cockpitMode ? (f22Cockpit ? 0.28 : 0.38) : 0.78);
+  if (voices.contactPanner?.pan) {
+    voices.contactPanner.pan.setTargetAtTime(pan, now, 0.09);
+  }
 
-  const fighter = acousticClass === "fighter_jet";
+  const variation = voices.contactVariation;
+  const fighterCharacter = 1 + variation * 0.065;
   const fighterDistance = clamp01(1 - (rangeM - 80) / 2520);
   const fighterPresence = live && fighter ? Math.pow(fighterDistance, 1.65) : 0;
   voices.fighterHp.frequency.setTargetAtTime(
-    (70 + fighterPresence * 150) * doppler,
+    (70 + fighterPresence * 150) * doppler * fighterCharacter,
     now,
     0.08,
   );
   voices.fighterBp.frequency.setTargetAtTime(
-    (560 + fighterPresence * 1250) * doppler,
+    (560 + fighterPresence * 1250) * doppler * fighterCharacter,
     now,
     0.065,
   );
   voices.fighterBodyOsc.frequency.setTargetAtTime(
-    (78 + fighterPresence * 90) * doppler,
+    (78 + fighterPresence * 90) * doppler * (1 + variation * 0.045),
     now,
     0.06,
   );
@@ -585,11 +649,17 @@ export function updateContactAcousticVoices(
     now,
     0.07,
   );
-  voices.fighterGain.gain.setTargetAtTime(0.16 * fighterPresence, now, 0.055);
-  voices.fighterBodyGain.gain.setTargetAtTime(0.075 * fighterPresence, now, 0.055);
+  voices.fighterGain.gain.setTargetAtTime(
+    0.16 * fighterPresence * (1 + variation * 0.04),
+    now,
+    0.055,
+  );
+  voices.fighterBodyGain.gain.setTargetAtTime(
+    0.075 * fighterPresence * (1 - variation * 0.035),
+    now,
+    0.055,
+  );
 
-  const contra = acousticClass === "heavy_contra_prop";
-  const heavyProp = contra || acousticClass === "heavy_turboprop";
   const maxPropRangeM = contra ? 80_000 : 32_000;
   const propReferenceM = contra ? 9_000 : 5_500;
   const propFade = clamp01(1 - rangeM / maxPropRangeM);
@@ -610,12 +680,13 @@ export function updateContactAcousticVoices(
   voices.propPulseOsc.frequency.setTargetAtTime(rotorHz * doppler, now, 0.1);
   voices.propBladeOsc.frequency.setTargetAtTime(bladeHz * doppler, now, 0.08);
   voices.propInteractionOsc.frequency.setTargetAtTime(
-    bladeHz * (contra ? 2.02 : 1.5) * doppler,
+    bladeHz * (contra ? 2.02 + variation * 0.012 : 1.5 + variation * 0.025) * doppler,
     now,
     0.08,
   );
   voices.propNoiseFilter.frequency.setTargetAtTime(
-    (105 + propPresence * (contra ? 170 : 230)) * doppler,
+    (105 + propPresence * (contra ? 170 : 230))
+      * doppler * (1 + variation * 0.045),
     now,
     0.11,
   );
@@ -637,21 +708,28 @@ export function updateContactAcousticVoices(
   );
   voices.propPulseDepth.gain.setTargetAtTime(0.018 * propPresence, now, 0.1);
 
-  const passRangeM = fighter ? 2800 : contra ? 14_000 : 7500;
-  if (crossedPass && rangeM <= passRangeM) {
+  if (crossedPass) {
     const passScale = clamp01(1 - rangeM / passRangeM);
     scheduleContactPass(
       audioContext,
-      voices.contactOcclusionFilter,
+      voices.contactAirFilter,
       now,
       fighter,
       passScale,
       cockpitMode,
+      variation,
     );
     voices.passTransientCount += 1;
   }
   voices.acousticClass = acousticClass;
 
+  const passPhase = !live
+    ? "silent"
+    : closureKts > 8
+      ? "approach"
+      : closureKts < -8
+        ? "departure"
+        : "closest";
   return {
     acousticClass,
     rangeM,
@@ -660,7 +738,11 @@ export function updateContactAcousticVoices(
     fighterPresence,
     propPresence,
     doppler,
-    crossedPass: crossedPass && rangeM <= passRangeM,
+    airCutoffHz,
+    pan,
+    passPhase,
+    variation,
+    crossedPass,
   };
 }
 
@@ -687,40 +769,53 @@ function scheduleContactPass(
   fighter,
   passScale,
   cockpit,
+  variation,
 ) {
   const scale = passScale * (cockpit ? 0.78 : 1.15);
+  const duration = fighter ? 0.68 : 1.35;
+  const character = 1 + variation * 0.06;
   const noise = audioContext.createBufferSource();
-  noise.buffer = shortNoiseBuffer(audioContext, fighter ? 0x50415353 : 0x50524F50, 0.65);
+  noise.buffer = shortNoiseBuffer(
+    audioContext,
+    fighter ? 0x50415353 : 0x50524F50,
+    duration,
+  );
   const filter = audioContext.createBiquadFilter();
   filter.type = "bandpass";
-  filter.frequency.setValueAtTime(fighter ? 1850 : 520, at);
-  filter.frequency.exponentialRampToValueAtTime(fighter ? 430 : 170, at + 0.5);
+  filter.frequency.setValueAtTime((fighter ? 1850 : 520) * character, at);
+  filter.frequency.exponentialRampToValueAtTime(
+    (fighter ? 430 : 170) / character,
+    at + duration * 0.78,
+  );
   filter.Q.value = fighter ? 0.42 : 0.7;
   const env = audioContext.createGain();
   env.gain.setValueAtTime(0.0001, at);
   env.gain.exponentialRampToValueAtTime(
     Math.max(0.0002, (fighter ? 0.24 : 0.15) * scale),
-    at + 0.035,
+    at + (fighter ? 0.035 : 0.09),
   );
-  env.gain.exponentialRampToValueAtTime(0.0001, at + 0.62);
+  env.gain.exponentialRampToValueAtTime(0.0001, at + duration * 0.95);
   noise.connect(filter).connect(env).connect(destination);
   noise.start(at);
-  noise.stop(at + 0.68);
+  noise.stop(at + duration);
 
   const body = audioContext.createOscillator();
   body.type = fighter ? "sawtooth" : "triangle";
-  body.frequency.setValueAtTime(fighter ? 155 : 72, at);
-  body.frequency.exponentialRampToValueAtTime(fighter ? 58 : 42, at + 0.48);
+  body.frequency.setValueAtTime((fighter ? 155 : 72) * character, at);
+  body.frequency.exponentialRampToValueAtTime(
+    (fighter ? 58 : 42) / character,
+    at + duration * 0.74,
+  );
   const bodyEnv = audioContext.createGain();
   bodyEnv.gain.setValueAtTime(0.0001, at);
   bodyEnv.gain.exponentialRampToValueAtTime(
     Math.max(0.0002, (fighter ? 0.085 : 0.065) * scale),
-    at + 0.025,
+    at + (fighter ? 0.025 : 0.07),
   );
-  bodyEnv.gain.exponentialRampToValueAtTime(0.0001, at + 0.55);
+  bodyEnv.gain.exponentialRampToValueAtTime(0.0001, at + duration * 0.88);
   body.connect(bodyEnv).connect(destination);
   body.start(at);
-  body.stop(at + 0.58);
+  body.stop(at + duration * 0.92);
 }
 
 export function updateBuffetVoice(voices, audioContext, state, { enabled = true } = {}) {
@@ -1515,6 +1610,95 @@ function resolveCockpitPerspective(state, explicitCockpit) {
   ).trim().toLowerCase();
   if (/(?:external|outside|chase|orbit|flyby)/.test(perspective)) return false;
   return true;
+}
+
+function speedOfSoundMps(state) {
+  const temperatureC = clamp(
+    finiteNumber(
+      state?.air_temperature_c,
+      state?.outside_air_temperature_c,
+      state?.oat_c,
+    ) ?? 15,
+    -60,
+    50,
+  );
+  return 331.3 + 0.606 * temperatureC;
+}
+
+function contactAtmosphericCutoffHz(rangeM, acousticClass, state) {
+  const temperatureC = clamp(
+    finiteNumber(
+      state?.air_temperature_c,
+      state?.outside_air_temperature_c,
+      state?.oat_c,
+    ) ?? 15,
+    -60,
+    50,
+  );
+  const humidityPct = clamp(
+    finiteNumber(state?.relative_humidity_pct, state?.humidity_pct) ?? 50,
+    5,
+    100,
+  );
+  // This is deliberately a conservative perceptual surrogate, not a full ISO 9613 solver.
+  // Warmer/humid air retains slightly more upper-band energy; distance remains the main driver.
+  const climateScale = clamp(
+    0.78 + humidityPct * 0.0026 + (temperatureC + 20) * 0.003,
+    0.72,
+    1.25,
+  );
+  const profile = acousticClass === "fighter_jet"
+    ? { floorHz: 320, ceilingHz: 16_000, distanceM: 1100, exponent: 1.22 }
+    : acousticClass === "heavy_contra_prop"
+      ? { floorHz: 115, ceilingHz: 5200, distanceM: 9500, exponent: 1.28 }
+      : { floorHz: 145, ceilingHz: 6500, distanceM: 6200, exponent: 1.25 };
+  if (!Number.isFinite(rangeM)) return profile.floorHz;
+  const normalizedRange = Math.max(0, rangeM) / (profile.distanceM * climateScale);
+  return profile.floorHz
+    + (profile.ceilingHz - profile.floorHz)
+      / (1 + normalizedRange ** profile.exponent);
+}
+
+function contactRelativePan(state) {
+  const player = readFiniteVector(state, "px", "py", "pz");
+  const contact = readFiniteVector(state, "bx", "by", "bz");
+  const forward = readFiniteVector(state, "pfx", "pfy", "pfz");
+  const lift = readFiniteVector(state, "plx", "ply", "plz");
+  if (!player || !contact || !forward || !lift) return 0;
+
+  // The simulation uses a left-handed frame; physical right is lift × forward.
+  const rightX = lift.y * forward.z - lift.z * forward.y;
+  const rightY = lift.z * forward.x - lift.x * forward.z;
+  const rightZ = lift.x * forward.y - lift.y * forward.x;
+  const rightLength = Math.hypot(rightX, rightY, rightZ);
+  const dx = contact.x - player.x;
+  const dy = contact.y - player.y;
+  const dz = contact.z - player.z;
+  const relativeLength = Math.hypot(dx, dy, dz);
+  if (rightLength < 1e-6 || relativeLength < 1e-3) return 0;
+  return clamp(
+    (dx * rightX + dy * rightY + dz * rightZ) / (rightLength * relativeLength),
+    -1,
+    1,
+  );
+}
+
+function readFiniteVector(state, xKey, yKey, zKey) {
+  const x = Number(state?.[xKey]);
+  const y = Number(state?.[yKey]);
+  const z = Number(state?.[zKey]);
+  return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)
+    ? { x, y, z }
+    : null;
+}
+
+function stableContactVariation(contactId) {
+  let hash = 2166136261;
+  for (let index = 0; index < contactId.length; index += 1) {
+    hash ^= contactId.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) / 0xffffffff) * 2 - 1;
 }
 
 function finiteNumber(...values) {
