@@ -624,7 +624,7 @@ public sealed class AircraftSim {
         double thrustLapse = _p.PropulsionModel
             == PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate
                 ? System.Math.Clamp(System.Math.Sqrt(System.Math.Max(0.0, densityRatio))
-                    * (1.0 + 0.10 * System.Math.Clamp(mach, 0.0, 1.5)), 0.30, 1.05)
+                    * (1.0 + 0.10 * System.Math.Clamp(mach, 0.0, 1.5)), 0.0, 1.05)
                 : densityRatio;
         double thrustN = _thrustFrac * _p.ThrustMaxN * thrustLapse;
         double corePower = System.Math.Clamp(_thrustFrac, 0.0, 1.0);
