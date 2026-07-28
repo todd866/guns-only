@@ -13,6 +13,8 @@ public sealed class WeatherProfile {
     public IAtmosphereModel Atmosphere { get; }
     public IWindField Wind { get; }
     public ICloudField Clouds { get; }
+    public IPrecipitationField Precipitation { get; }
+    public ISurfaceConditionField SurfaceConditions { get; }
     public ITerrainSurface? Terrain { get; }
 
     public WeatherProfile(IAtmosphereModel atmosphere, IWindField wind)
@@ -20,13 +22,17 @@ public sealed class WeatherProfile {
 
     public WeatherProfile(IAtmosphereModel atmosphere, IWindField wind,
         ICloudField clouds, ITerrainSurface? terrain = null,
-        string id = "weather.unspecified.v1") {
+        string id = "weather.unspecified.v1",
+        IPrecipitationField? precipitation = null,
+        ISurfaceConditionField? surfaceConditions = null) {
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("weather identity cannot be blank", nameof(id));
         Id = id;
         Atmosphere = atmosphere ?? throw new ArgumentNullException(nameof(atmosphere));
         Wind = wind ?? throw new ArgumentNullException(nameof(wind));
         Clouds = clouds ?? throw new ArgumentNullException(nameof(clouds));
+        Precipitation = precipitation ?? ClearPrecipitationField.Instance;
+        SurfaceConditions = surfaceConditions ?? UniformSurfaceConditionField.ClearDry;
         Terrain = terrain;
     }
 }

@@ -1225,6 +1225,14 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
     /mix\(uFogColor, vec3\(0\.78, 0\.72, 0\.58\), 0\.62\)/,
     "Ukraine distance haze must lean warm rather than cool poster blue");
   assert.ok(ukraine.uniforms.uWorldEdgeM, "stream-edge bury uniform must exist");
+  assert.equal(ukraine.uniforms.uSnowCover01.value, 0,
+    "winter surface shading must preserve the current green-world default");
+  assert.equal(ukraine.uniforms.uSnowWetness01.value, 0);
+  assert.equal(ukraine.uniforms.uGlazeIce01.value, 0);
+  assert.match(ukraine.fragmentShader, /uSnowCover01 > 0\.001 \|\| uGlazeIce01 > 0\.001/,
+    "snow-free frames must skip the winter shading work through one coherent uniform branch");
+  assert.match(ukraine.fragmentShader, /float snowRetention =/,
+    "snow cover must follow terrain slope rather than behave as a flat colour filter");
   assert.match(ukraine.fragmentShader,
     /smoothstep\(uWorldEdgeM \* 0\.40, uWorldEdgeM \* 0\.72, distanceToCamera\)/,
     "Ukraine soft-world must haze out the streamed disc so it never reads as a render-square");

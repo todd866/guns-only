@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 12;
+    public const int LayoutVersion = 15;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -189,6 +189,28 @@ internal static class SnapshotHotFrame {
         Num("wind_x_mps", 3); Num("wind_y_mps", 3); Num("wind_z_mps", 3);
         Num("visibility_m", 1); Num("cloud_fraction_01", 4);
         Num("cloud_extinction_per_m", 8); Num("precipitation_mm_hr", 3);
+        Num("precipitation_total_mm_water_equivalent_hr", 3);
+        Num("precipitation_rain_mm_water_equivalent_hr", 3);
+        Num("precipitation_snow_mm_water_equivalent_hr", 3);
+        Num("precipitation_freezing_drizzle_mm_water_equivalent_hr", 3);
+        Num("precipitation_freezing_rain_mm_water_equivalent_hr", 3);
+        Num("precipitation_ice_pellets_mm_water_equivalent_hr", 3);
+        Num("precipitation_graupel_mm_water_equivalent_hr", 3);
+        Num("precipitation_hail_mm_water_equivalent_hr", 3);
+        Num("precipitation_extinction_per_m", 8);
+        Num("precipitation_visibility_m", 1);
+        Num("surface_temperature_k", 2);
+        Num("snow_water_equivalent_m", 4);
+        Num("snow_depth_m", 4);
+        Num("snow_liquid_water_fraction_01", 4);
+        Num("snow_crust_01", 4);
+        Num("surface_wetness_01", 4);
+        Num("standing_water_depth_m", 4);
+        Num("slush_depth_m", 4);
+        Num("glaze_ice_thickness_m", 4);
+        Num("mud_depth_m", 4);
+        Num("surface_friction_coefficient", 4);
+        Num("surface_braking_factor_01", 4);
         Num("cloud_turbulence_x_mps", 3); Num("cloud_turbulence_y_mps", 3);
         Num("cloud_turbulence_z_mps", 3); Num("cloud_vertical_air_mps", 3);
         Num("icing_hazard_01", 4); Num("lightning_hazard_01", 4);
@@ -586,8 +608,18 @@ internal static class SnapshotHotFrame {
             }
         }
         Vec3D localWindVelocity = groundVelocity - airVelocity;
+        double simulationTimeSeconds = simTimeMs / 1000.0;
         CloudSample localCloud = (session.Weather?.Clouds ?? ClearCloudField.Instance)
-            .Sample(playerPosition, simTimeMs / 1000.0);
+            .Sample(playerPosition, simulationTimeSeconds);
+        PrecipitationSample localPrecipitation =
+            (session.Weather?.Precipitation ?? ClearPrecipitationField.Instance)
+                .Sample(playerPosition, simulationTimeSeconds);
+        SurfaceConditionSample localSurface =
+            (session.Weather?.SurfaceConditions ?? UniformSurfaceConditionField.ClearDry)
+                .Sample(playerPosition.X, playerPosition.Z, simulationTimeSeconds);
+        double localVisibilityM = Math.Min(
+            localCloud.VisibilityM,
+            localPrecipitation.VisibilityM);
         double groundSpeedMps = Math.Sqrt(
             groundVelocity.X * groundVelocity.X + groundVelocity.Z * groundVelocity.Z);
         double positiveLoadFactor = Math.Max(1.0,
@@ -739,10 +771,43 @@ internal static class SnapshotHotFrame {
         w.Num("wind_x_mps", localWindVelocity.X, 3);
         w.Num("wind_y_mps", localWindVelocity.Y, 3);
         w.Num("wind_z_mps", localWindVelocity.Z, 3);
-        w.Num("visibility_m", localCloud.VisibilityM, 1);
+        w.Num("visibility_m", localVisibilityM, 1);
         w.Num("cloud_fraction_01", localCloud.CloudFraction01, 4);
         w.Num("cloud_extinction_per_m", localCloud.ExtinctionPerMetre, 8);
         w.Num("precipitation_mm_hr", localCloud.PrecipitationMmPerHour, 3);
+        w.Num("precipitation_total_mm_water_equivalent_hr",
+            localPrecipitation.TotalMmWaterEquivalentPerHour, 3);
+        w.Num("precipitation_rain_mm_water_equivalent_hr",
+            localPrecipitation.Rates.RainMmWaterEquivalentPerHour, 3);
+        w.Num("precipitation_snow_mm_water_equivalent_hr",
+            localPrecipitation.Rates.SnowMmWaterEquivalentPerHour, 3);
+        w.Num("precipitation_freezing_drizzle_mm_water_equivalent_hr",
+            localPrecipitation.Rates.FreezingDrizzleMmWaterEquivalentPerHour, 3);
+        w.Num("precipitation_freezing_rain_mm_water_equivalent_hr",
+            localPrecipitation.Rates.FreezingRainMmWaterEquivalentPerHour, 3);
+        w.Num("precipitation_ice_pellets_mm_water_equivalent_hr",
+            localPrecipitation.Rates.IcePelletsMmWaterEquivalentPerHour, 3);
+        w.Num("precipitation_graupel_mm_water_equivalent_hr",
+            localPrecipitation.Rates.GraupelMmWaterEquivalentPerHour, 3);
+        w.Num("precipitation_hail_mm_water_equivalent_hr",
+            localPrecipitation.Rates.HailMmWaterEquivalentPerHour, 3);
+        w.Num("precipitation_extinction_per_m",
+            localPrecipitation.ExtinctionPerMetre, 8);
+        w.Num("precipitation_visibility_m", localPrecipitation.VisibilityM, 1);
+        w.Num("surface_temperature_k", localSurface.SurfaceTemperatureK, 2);
+        w.Num("snow_water_equivalent_m", localSurface.SnowWaterEquivalentM, 4);
+        w.Num("snow_depth_m", localSurface.SnowDepthM, 4);
+        w.Num("snow_liquid_water_fraction_01",
+            localSurface.SnowLiquidWaterFraction01, 4);
+        w.Num("snow_crust_01", localSurface.SnowCrust01, 4);
+        w.Num("surface_wetness_01", localSurface.SurfaceWetness01, 4);
+        w.Num("standing_water_depth_m", localSurface.StandingWaterDepthM, 4);
+        w.Num("slush_depth_m", localSurface.SlushDepthM, 4);
+        w.Num("glaze_ice_thickness_m", localSurface.GlazeIceThicknessM, 4);
+        w.Num("mud_depth_m", localSurface.MudDepthM, 4);
+        w.Num("surface_friction_coefficient",
+            localSurface.FrictionCoefficient, 4);
+        w.Num("surface_braking_factor_01", localSurface.BrakingFactor01, 4);
         w.Num("cloud_turbulence_x_mps", localCloud.TurbulenceVelocityMps.X, 3);
         w.Num("cloud_turbulence_y_mps", localCloud.TurbulenceVelocityMps.Y, 3);
         w.Num("cloud_turbulence_z_mps", localCloud.TurbulenceVelocityMps.Z, 3);
