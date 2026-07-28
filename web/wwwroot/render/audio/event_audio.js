@@ -1242,34 +1242,54 @@ function schedulePortalExit(audioContext, destination, at, maglev) {
 }
 
 
-/// Cold-gas RCS hiss + irregular thruster ticks while authority is up (zoom-coast).
+/// Cold-gas RCS hiss + irregular thruster ticks while the jets are actually firing.
+///
+/// `rapier_rcs_authority` is only the fraction of attitude control AVAILABLE from RCS as
+/// aerodynamic authority fades. It approaches one in thin air even with the controls centred, so
+/// using it as an acoustic demand made a straight zoom coast get louder with altitude. The kernel's
+/// measured moment/duty is the firing truth; missing duty fails quiet for old replays.
 export function updateRcsVoice(voices, audioContext, state, { enabled = true } = {}) {
   if (!voices || !audioContext) return;
   const now = audioContext.currentTime;
   const authority = clamp01(finiteNumber(state?.rapier_rcs_authority) ?? 0);
+  const duty = clamp01(finiteNumber(state?.rapier_rcs_firing_frac) ?? 0);
   const gas = clamp01(finiteNumber(state?.rapier_rcs_gas_frac) ?? 1);
-  const live = enabled && authority > 0.08 && gas > 0.02;
-  const level = live ? authority * (0.35 + 0.65 * gas) : 0;
-  voices.rcsHp.frequency.setTargetAtTime(600 + authority * 1400, now, 0.1);
-  voices.rcsBp.frequency.setTargetAtTime(1800 + authority * 2200, now, 0.1);
-  voices.rcsGain.gain.setTargetAtTime(0.055 * Math.pow(level, 1.1), now, 0.08);
+  const cockpit = resolveCockpitPerspective(state, null);
+  const live = enabled && authority > 0.02 && duty > 0.003 && gas > 0.02;
+  const demand = live ? Math.pow(duty, 0.72) * (0.35 + 0.65 * gas) : 0;
+  const perspectiveScale = cockpit ? 0.28 : 1;
+  const level = demand * perspectiveScale;
+  voices.rcsHp.frequency.setTargetAtTime(
+    cockpit ? 320 + duty * 680 : 600 + duty * 1400,
+    now,
+    0.1,
+  );
+  voices.rcsBp.frequency.setTargetAtTime(
+    cockpit ? 850 + duty * 1250 : 1800 + duty * 2200,
+    now,
+    0.1,
+  );
+  voices.rcsGain.gain.setTargetAtTime(0.045 * Math.pow(level, 1.1), now, 0.08);
 
-  if (live && now - (voices.lastRcsPulseAt || 0) > (0.12 + (1 - authority) * 0.35)) {
+  if (live && now - (voices.lastRcsPulseAt || 0) > (0.14 + (1 - duty) * 0.52)) {
     voices.lastRcsPulseAt = now;
-    scheduleRcsTick(audioContext, voices.destination, now, authority);
+    scheduleRcsTick(audioContext, voices.destination, now, duty, cockpit);
   }
 }
 
-function scheduleRcsTick(audioContext, destination, at, authority) {
+function scheduleRcsTick(audioContext, destination, at, duty, cockpit) {
   const noise = audioContext.createBufferSource();
   noise.buffer = shortNoiseBuffer(audioContext, 0x52435354, 0.06);
   const bp = audioContext.createBiquadFilter();
   bp.type = "bandpass";
-  bp.frequency.value = 2800 + authority * 1800;
+  bp.frequency.value = cockpit ? 950 + duty * 1150 : 2800 + duty * 1800;
   bp.Q.value = 1.2;
   const env = audioContext.createGain();
   env.gain.setValueAtTime(0.0001, at);
-  env.gain.exponentialRampToValueAtTime(0.07 + authority * 0.06, at + 0.004);
+  env.gain.exponentialRampToValueAtTime(
+    (0.025 + duty * 0.055) * (cockpit ? 0.28 : 1),
+    at + 0.004,
+  );
   env.gain.exponentialRampToValueAtTime(0.0001, at + 0.05);
   noise.connect(bp).connect(env).connect(destination);
   noise.start(at);

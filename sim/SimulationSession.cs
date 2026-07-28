@@ -306,6 +306,8 @@ public sealed class SimulationSession {
     readonly CarrierPassRecorder _carrierPass = new();
     ArrestmentModel _arrestment = new();
     CatapultLaunchModel _catapult = new();
+    LaunchTerrainClearanceAssessment _launchTerrainClearance =
+        LaunchTerrainClearanceAssessment.Unavailable;
     BurbleField? _burble;
     Carrier.DeckConfiguration _deckConfiguration;
     bool _waveOffArmed;
@@ -409,6 +411,13 @@ public sealed class SimulationSession {
     public int RapierLobSkipMax => _rapierMissionGuidance.LobSkipMax;
     public double RapierRcsGasFraction => _player.ColdGasRcsGasFraction;
     public double RapierRcsAuthority => _player.ColdGasRcsAuthority;
+    public double RapierRcsMomentMagnitudeNm => _player.LastRcsMomentMagnitudeNm;
+    public double RapierRcsFiringFraction => _beat.PlayerAir.ColdGasRcsMaxMomentNm > 1e-9
+        ? Math.Clamp(
+            _player.LastRcsMomentMagnitudeNm / _beat.PlayerAir.ColdGasRcsMaxMomentNm,
+            0.0,
+            1.0)
+        : 0.0;
     public double RapierCommandedMach => _rapierMissionGuidance.CommandedMach;
     public double RapierAuthoredTargetMach => _rapierMissionGuidance.AuthoredTargetMach;
     public double RapierSkinMachLimit => _rapierMissionGuidance.SkinMachLimit;
@@ -600,6 +609,8 @@ public sealed class SimulationSession {
     public CarrierPassResult CarrierPass => _carrierPass.Result;
     public ArrestmentModel Arrestment => _arrestment;
     public CatapultLaunchModel Catapult => _catapult;
+    public LaunchTerrainClearanceAssessment LaunchTerrainClearance =>
+        _launchTerrainClearance;
     public BurbleField? Burble => _burble;
     public double ClosureKts => _closureKts;
     public int ShotsTotal => _shotsTotal;
@@ -788,6 +799,7 @@ public sealed class SimulationSession {
     /// </summary>
     public void SetTerrainSurface(ITerrainSurface? terrain) {
         _terrainSurface = terrain;
+        RefreshLaunchTerrainClearance();
         // Every live opponent captured the previous surface at construction; a world-origin
         // re-anchor must reach the whole formation or a wingman's floor sense silently reads the
         // stale translation. Destroyed/settled actors already fly through their impact-owned
@@ -822,6 +834,23 @@ public sealed class SimulationSession {
                 merge.UpdateTerrain(terrain);
                 break;
         }
+    }
+
+    void RefreshLaunchTerrainClearance() {
+        _launchTerrainClearance =
+            _carrier is { Kind: Carrier.PlatformKind.FixedArrestingStrip }
+                && _beat.StartsOnCatapult
+                ? _catapult.AssessTerrainClearance(
+                    _carrier,
+                    _terrainSurface,
+                    RapierLaunchSite.AircraftHalfSpanM)
+                : new LaunchTerrainClearanceAssessment(
+                    TerrainAvailable: _terrainSurface is not null,
+                    Safe: true,
+                    MinimumRailClearanceM: double.PositiveInfinity,
+                    MinimumReleaseClearanceM: double.PositiveInfinity,
+                    Samples: 0,
+                    Reason: "not-required");
     }
 
     /// <summary>Construct and stage one of the built-in beats. Physics remains held in Ready.</summary>
@@ -898,6 +927,14 @@ public sealed class SimulationSession {
     /// <summary>Release a staged sortie from Ready with a clean input boundary.</summary>
     public void Begin() {
         if (Lifecycle != LifecycleState.Ready) return;
+        RefreshLaunchTerrainClearance();
+        if (_carrier is { Kind: Carrier.PlatformKind.FixedArrestingStrip }
+            && _beat.StartsOnCatapult
+            && _terrainSurface is not null
+            && !_launchTerrainClearance.Safe) {
+            ShowTransition("LAUNCH INHIBIT · TERRAIN CLEARANCE", 4000.0);
+            return;
+        }
         ClearHeldInput();
         if (_carrier is not null) {
             // StageBeat previews these exact conditions so the aircraft and deck can be rendered in
@@ -1845,7 +1882,9 @@ public sealed class SimulationSession {
             job: _beat.ScriptedIntercept?.Job ?? RapierJobKind.FormationIntercept,
             noseOnVelocityErrorDeg: _player.NoseOnVelocityErrorDeg,
             fuelLb: _fuel.FuelLb,
-            reserveFuelLb: _fuel.JokerThresholdLb ?? _fuel.BingoThresholdLb);
+            reserveFuelLb: _fuel.JokerThresholdLb ?? _fuel.BingoThresholdLb,
+            aircraftSupportReferenceHeightM:
+                _carrier.AircraftSupportReferenceHeightM);
         if (patternOnly) {
             _circuitTraffic = CircuitPatternTraffic.Evaluate(
                 TimeSeconds, home, recoveryInitial, count: 3);
@@ -2299,6 +2338,11 @@ public sealed class SimulationSession {
         }
         FinishPreviousRecoveryAttempt();
         _beat = setup;
+        // Stowed Rapier drone mass is part of the staged aircraft mass. Initialize the loadout
+        // before CreatePlayer/WithCurrentFuelMass; doing this near the end of StageBeat made the
+        // first ever Rapier sortie 1,440 kg lighter than every restart.
+        _rapierDogfightingDronesRemaining =
+            Math.Max(0, _beat.ScriptedIntercept?.DogfightingDrones ?? 0);
         _carrier = _beat.Carrier;
         _conventionalRunwayRecovery =
             _beat.RecoveryPlan?.ConventionalRunway is null
@@ -2364,6 +2408,20 @@ public sealed class SimulationSession {
         _carrierPass.Reset();
         _arrestment.Reset();
         _catapult.Reset();
+        _catapult = new CatapultLaunchModel(
+            _beat.CatapultStrokeM ?? CatapultLaunchModel.StrokeDistanceM,
+            _beat.CatapultEndSpeedMps ?? CatapultLaunchModel.EndDeckRelativeSpeedMps,
+            _beat.CatapultRampAngleRad ?? 0.0,
+            _beat.CatapultCrossOffsetM ?? CatapultLaunchModel.CatapultCrossM);
+        if (_carrier is not null && _beat.StartsOnCatapult) {
+            // Ready and Restart show the exact constrained parked pose. Begin starts the clock and
+            // phase but must not teleport the aircraft 70 m from the recovery centreline or snap
+            // its reference point down through the launcher support.
+            _beat = _beat with {
+                Player = _catapult.ParkedState(_carrier, _beat.Player.Mass)
+            };
+        }
+        RefreshLaunchTerrainClearance();
         _waveOffArmed = _carrier is not null;
         _waveOffUntilMs = double.NegativeInfinity;
         _burble = _carrier is { IsMaritime: true }
@@ -2415,11 +2473,6 @@ public sealed class SimulationSession {
         };
         // Arrive configured: for a beat staged at a deliberate fighting speed, hand the pilot the
         // power setting that HOLDS it instead of an arbitrary one they must correct every sortie.
-        _catapult = new CatapultLaunchModel(
-            _beat.CatapultStrokeM ?? CatapultLaunchModel.StrokeDistanceM,
-            _beat.CatapultEndSpeedMps ?? CatapultLaunchModel.EndDeckRelativeSpeedMps,
-            _beat.CatapultRampAngleRad ?? 0.0,
-            _beat.CatapultCrossOffsetM ?? CatapultLaunchModel.CatapultCrossM);
         _detents.ConfigureFor(_beat.PlayerAir, StagedThrottle());
         _pilotPhysiology = new PilotPhysiologyModel(_beat.PlayerPilotPhysiology);
         _autoGcasState = AutoGcasState.Initial(PlayerAutoGcasCapability.Available);
@@ -2506,8 +2559,6 @@ public sealed class SimulationSession {
         _rapierManualOverrideUntilMs = double.NegativeInfinity;
         _rapierMissilesRemaining =
             Math.Max(0, _beat.ScriptedIntercept?.ShortRangeMissiles ?? 0);
-        _rapierDogfightingDronesRemaining =
-            Math.Max(0, _beat.ScriptedIntercept?.DogfightingDrones ?? 0);
         _rapierMissileInFlight = false;
         _rapierMissileImpactAtMs = double.PositiveInfinity;
         _rapierMissileTargetSequence = 0;
@@ -5069,7 +5120,8 @@ public sealed class SimulationSession {
     void ObserveCarrierPass() {
         if (_carrier is null || _touchdown.Recovery != Carrier.Recovery.Flying
             || _playerTerminalState != AircraftTerminalState.Flying) return;
-        var (along, cross, height) = _carrier.LandingFrame(_player.State.Position);
+        var (along, cross, height) =
+            _carrier.LandingAircraftSupportFrame(_player.State.Position);
         double distance = _carrier.TouchdownAlongM - along;
         if (CarrierPassRecorder.PhaseForDistance(distance) == CarrierPassPhase.None) return;
         double desiredHeight = Math.Max(0.0, distance * Carrier.GlideslopeSlope);
@@ -5104,8 +5156,8 @@ public sealed class SimulationSession {
             _player.IndicatedAirspeedMps,
             _detents.EffectiveOnSpeedAoARad(_beat.PlayerAir));
         Carrier.Recovery contact = touchdown.Recovery;
-        var previousDeck = _carrier.DeckFrame(previousPlayerState.Position);
-        var currentDeck = _carrier.DeckFrame(_player.State.Position);
+        var previousDeck = _carrier.AircraftSupportFrame(previousPlayerState.Position);
+        var currentDeck = _carrier.AircraftSupportFrame(_player.State.Position);
         bool topDeckContact = contact is Carrier.Recovery.Trap
                 or Carrier.Recovery.Bolter or Carrier.Recovery.HardLanding
             && previousDeck.height >= -0.05 && currentDeck.height <= 0.05
@@ -5169,7 +5221,8 @@ public sealed class SimulationSession {
             }
             _recovery = Carrier.Recovery.Bolter;
         } else if (_recovery == Carrier.Recovery.Bolter) {
-            var (along, cross, height) = _carrier.DeckFrame(_player.State.Position);
+            var (along, cross, height) =
+                _carrier.AircraftSupportFrame(_player.State.Position);
             if (height > 8.0 || along > _carrier.DeckLengthM * 0.5 + 5.0
                 || Math.Abs(cross) > _carrier.DeckHalfWidthM + 10.0) {
                 if (_beat.RecoveryCompletesSortie) {
@@ -5228,7 +5281,8 @@ public sealed class SimulationSession {
                 bool inSlot = _carrier.InApproachSlot(_player.State,
                     _player.IndicatedAirspeedMps);
                 ApplyCarrierConfigurationAutomation(inSlot);
-                var (along, _, height) = _carrier.LandingFrame(_player.State.Position);
+                var (along, _, height) =
+                    _carrier.LandingAircraftSupportFrame(_player.State.Position);
                 double gsLineH = Math.Max(0.0,
                     -_carrier.DeckLengthM * 0.2 - along) * Carrier.GlideslopeSlope;
                 _detents.GlideslopeErrorM = gsLineH - height;
@@ -5644,7 +5698,8 @@ public sealed class SimulationSession {
             ApplyCarrierConfigurationAutomation(inSlot);
             if (_detents.ApproachMode) _waveOffArmed = true;
             else if (!inSlot && _detents.Throttle < 0.95) _waveOffArmed = false;
-            var (gsAlong, _, gsHeight) = _carrier.LandingFrame(_player.State.Position);
+            var (gsAlong, _, gsHeight) =
+                _carrier.LandingAircraftSupportFrame(_player.State.Position);
             double gsLineH = Math.Max(0.0, -_carrier.DeckLengthM * 0.2 - gsAlong)
                 * Carrier.GlideslopeSlope;
             _detents.GlideslopeErrorM = gsLineH - gsHeight;

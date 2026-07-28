@@ -55,11 +55,16 @@ test("Rapier guidance is a quiet mode line with authority and takeover", () => {
     rapier_automation_active: true,
     rapier_mission_phase: 3,
     rapier_gun_drones_remaining: 4,
-    rapier_stagnation_temp_c: 90,
-    rapier_thermal_margin_c: 1110,
+    rapier_skin_temp_c: 90,
+    rapier_recovery_temp_c: 100,
+    rapier_stagnation_temp_c: 110,
+    rapier_cmc_capability_c: 1200,
+    rapier_cmc_margin_c: 1090,
   });
   assert.match(cue.text, /AUTO · LEVEL ACCEL · M2\.20/);
   assert.match(cue.text, /SKIN 90°C/);
+  assert.match(cue.text, /T0 110°C/);
+  assert.doesNotMatch(cue.text, /MARGIN|TO LIMIT|\+1090/);
   assert.match(cue.text, /P TOGGLE AUTO/);
   assert.equal(cue.detail, "");
   assert.equal(cue.level, "active");
@@ -119,16 +124,20 @@ test("egress is a short mode line, not a fuel paragraph", () => {
   assert.equal(cue.level, "attack");
 });
 
-test("skin over replaces the mode fragment and keeps the temperature", () => {
+test("stagnation over names the CMC channel instead of calling T0 skin", () => {
   const cue = rapierGuidancePresentation({
     rapier_mission_available: true,
     rapier_automation_enabled: false,
     rapier_automation_active: false,
     rapier_mission_phase: 4,
+    rapier_skin_temp_c: 1100,
+    rapier_recovery_temp_c: 1180,
     rapier_stagnation_temp_c: 1240,
-    rapier_thermal_margin_c: -40,
+    rapier_cmc_capability_c: 1200,
+    rapier_cmc_margin_c: -40,
   });
-  assert.match(cue.text, /SKIN OVER 1240°C/);
+  assert.match(cue.text, /T0 OVER 1240°C/);
+  assert.match(cue.text, /CMC CAP 1200°C/);
   assert.equal(cue.level, "attack");
 });
 
@@ -141,6 +150,7 @@ test("skin-clamped dash surfaces commanded Mach on the quiet line", () => {
     rapier_commanded_mach: 3.14,
     rapier_authored_target_mach: 4.0,
     rapier_skin_mach_limit: 3.14,
+    rapier_material_mach_ceiling: 3.14,
     rapier_stagnation_temp_c: 320,
     rapier_thermal_margin_c: 0,
   });
@@ -154,12 +164,18 @@ test("cycle teach explains turbine-to-ram handoff with live shares and skin", ()
     mach: 1.88,
     rapier_turbine_thrust_kn: 23,
     rapier_ramjet_thrust_kn: 0,
-    rapier_stagnation_temp_c: 90,
-    rapier_thermal_margin_c: 1110,
+    rapier_skin_temp_c: 90,
+    rapier_recovery_temp_c: 100,
+    rapier_stagnation_temp_c: 110,
+    rapier_cmc_capability_c: 1200,
+    rapier_cmc_margin_c: 1090,
   });
   assert.equal(teach.mode, "TURBINE");
   assert.match(teach.explainer, /Ram needs ~M2/);
   assert.match(teach.skinText, /SKIN 90°C/);
+  assert.match(teach.skinText, /T0 110°C/);
+  assert.match(teach.skinText, /ENGINE\/INLET LIMITING/);
+  assert.doesNotMatch(teach.skinText, /TO LIMIT|\+1090/);
   assert.ok(teach.turbineShare > 0.9);
   assert.equal(teach.ramShare, 0);
 
@@ -428,13 +444,20 @@ test("engine presentation remains available for Systems / diagnostics", () => {
     true_airspeed_kts: 2_174,
     engine_net_thrust_lbf: 22_480,
     throttle: 1.55,
-    rapier_stagnation_temp_c: 612,
+    rapier_skin_temp_c: 451,
+    rapier_recovery_temp_c: 451,
+    rapier_stagnation_temp_c: 520,
+    rapier_cmc_capability_c: 1200,
+    rapier_cmc_margin_c: 680,
     rapier_turbine_thrust_kn: 18,
     rapier_ramjet_thrust_kn: 82,
     rapier_turbine_fuel_ppm: 0,
     rapier_ramjet_fuel_ppm: 270,
   });
   assert.match(cue.text, /PROPULSION RAM ONLY/);
+  assert.match(cue.text, /SKIN 451°C/);
+  assert.match(cue.text, /T0 520°C/);
+  assert.doesNotMatch(cue.text, /T0 451°C/);
   assert.match(cue.explainer, /Ram only/);
   assert.equal(cue.channels.length, 2);
 });

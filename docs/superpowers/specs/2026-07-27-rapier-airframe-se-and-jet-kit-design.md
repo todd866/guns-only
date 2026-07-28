@@ -224,8 +224,15 @@ dynamic pressure (exo coast / zoom lob), **cold-gas RCS** takes the stick:
 | RCS | Value |
 | --- | --- |
 | Max moment | 220 kN·m |
-| Gas budget | 40 kg peroxide-class |
+| Gas budget | 40 kg stored inert-gas equivalent; bottle/compressor trade remains open |
 | Burn | 0.40 kg/s at full | Enough for a few corrections per lob, not a spaceplane session |
+
+Do not call peroxide “cold gas.” The next systems trade should compare a ground-charged
+nitrogen/helium-class accumulator with compressor top-up against a genuinely hot-gas
+monopropellant system. Ram capture still requires compression, drying, cooling, and storage, and
+cannot refill the bottle during the collapsed-q coast. The later training/OFT slice should model
+pressure, temperature, leaks, stuck valves, delivered moment, and an NF-104A-style tumble/ejection
+case after an incorrect lob entry or RCS depletion.
 
 ### Known first-principles gap (do not paper over)
 
@@ -307,7 +314,9 @@ First principles cascade; these are not optional cosmetics.
 
 ### Landing gear, arrest, basing
 
-- Catapult: 520 m stroke, ~110 m/s, 360 m flat gallery + 160 m arc to **12°**, rise ~16.7 m at 3 G
+- Catapult: 520 m rail stroke, ~110 m/s, 433.86 m flat gallery + 86.14 m arc to
+  **12°**, R=411.29 m, rise ~8.99 m at 3 G. The earlier 360+160 m / 16.7 m line
+  was the superseded 150 m/s study, not the live launcher.
   rail normal — angle from aircraft capability and pilot load, not from Ukrainian hills.
 - Hook recovery on purpose-built land strip (`ProvisionalRapierLandStrip`).
 - Buried tube: crater-proof dispersed basing; bore 14×8 m sized for span clearance, not vacuum.

@@ -750,17 +750,26 @@ public static class Beats {
         GunsOnly.Sim.Carrier.DeckConfiguration configuration =
             GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
         // A fixed land installation reuses the catapult/arrestment geometry but explicitly opts out
-        // of ship wind, burble, heave, hull and island. Its 120.5 m datum sits 2.5 m above the
-        // packed Soniachne terrain at local origin (118.0 m after 0.1 m quantization).
+        // of ship wind, burble, heave, hull and island. The slab datum comes from the exact 32 m
+        // visual-atlas records now embedded as kernel truth: 192.0 m leaves at least 1.0875 m over
+        // the highest surveyed natural sample under the shoulder/gallery/ramp earthworks. Natural
+        // DEM remains untouched outside those bounded constructed surfaces.
         // Eastern home plate: strip faces west (−π/2) so climb-out runs into the theatre.
         var carrier = new GunsOnly.Sim.Carrier(
-            deckCentre: new Vec3D(0, 120.5, 0), headingRad: -Math.PI / 2, speedMps: 0,
-            deckAltM: 120.5, deckLengthM: 1_200, deckWidthM: 48,
+            deckCentre: new Vec3D(0, RapierLaunchSite.OperatingSurfaceElevationM, 0),
+            headingRad: -Math.PI / 2, speedMps: 0,
+            deckAltM: RapierLaunchSite.OperatingSurfaceElevationM,
+            deckLengthM: 1_200, deckWidthM: 48,
             configuration: GunsOnly.Sim.Carrier.DeckConfiguration.Axial,
-            kind: GunsOnly.Sim.Carrier.PlatformKind.FixedArrestingStrip);
+            kind: GunsOnly.Sim.Carrier.PlatformKind.FixedArrestingStrip,
+            aircraftSupportReferenceHeightM:
+                RapierLaunchSite.AircraftSupportReferenceHeightM,
+            launchRailHeadHeightM: RapierLaunchSite.LaunchRailHeadHeightM);
         return new BeatSetup(
             Name: "Rapier intercept",
-            Player: new AircraftState(new Vec3D(0, 120.5, 0), 0.0, 0, -Math.PI / 2, 0,
+            Player: new AircraftState(
+                new Vec3D(0, RapierLaunchSite.OperatingSurfaceElevationM, 0),
+                0.0, 0, -Math.PI / 2, 0,
                 FlightModel.RapierPublicDataSurrogate.MassKg),
             // A contact high and slow west of home: the thing this aircraft was built to kill is an
             // enabler, not a fighter. Eastbound closing toward the eastern strip.
@@ -811,33 +820,23 @@ public static class Beats {
             InitialThrottle: 1.55,
             StartsOnCatapult: true,
             // The deck default of 62 m/s over 75 m cannot fly this wing. A LAND installation is
-            // not constrained by a deck. 520 m of electromagnetic track is shorter than any
-            // runway, costs 2.2 G to the pilot, and delivers 150 m/s — about 2.1 times this wing's
-            // stall speed, where the aircraft is genuinely flying rather than clinging on. Launch
-            // speed is the cheapest safety margin available: the ramp then converts it into climb.
+            // not constrained by a deck: the live 520 m electromagnetic track delivers 110 m/s,
+            // 1.67 Vs at launch mass, with 1.19 g along-rail acceleration. The superseded 150 m/s
+            // study drove a very different rail and is not the geometry simulated here.
             CatapultStrokeM: 520.0,
-            // 110 m/s, not 150. Stall at launch mass with flaps is 66 m/s, so 150 left the rail at
-            // 2.28 Vs -- roughly double a carrier cat shot, which is why the launch and climbout
-            // read as frantic. It also forced everything around it: 88.3 MJ of launcher energy at
-            // 25.5 MW peak, a 2.2 g stroke, a 16.7 m ski jump, and gear/flap limits invented at
-            // 350 KIAS purely to survive our own catapult.
-            //
-            // 110 m/s is 1.67 Vs -- still a healthier margin than a carrier gives -- and halves the
-            // launcher to 47.5 MJ at 10.0 MW, gentles the stroke to 1.19 g, and lets the gear and
-            // flap limits come back to an ordinary fast-jet number.
+            // At the staged mass this is about 47.5 MJ and 10.0 MW peak, versus the superseded
+            // 150 m/s study's 88.3 MJ / 25.5 MW. Gear/flap qualification is therefore the live
+            // near-ground 214 KIAS handoff, not the old 291 KIAS case.
             CatapultEndSpeedMps: 110.0,
             // A real ski jump, and the earlier seven degrees was an excuse rather than a design.
             // The steppe is flat, so the ramp is built either way; once you are building it, the
             // angle should be chosen by what the aircraft and the pilot can take, not by what
             // terrain might have offered.
             //
-            // At 150 m/s this aircraft can SUSTAIN a 47.7 degree climb — thrust 65 kN against
-            // 8.1 kN of drag and 77 kN of weight. So the jet is nowhere near the limit; the arc is.
-            // Twelve degrees is the same angle Kuznetsov and Invincible use, and at 3 G normal it
-            // needs a 765 m radius: a 160 m arc rising 16.7 m, with 360 m of flat run before it.
-            // The pilot sees sqrt(2.21^2 + 3^2) = 3.73 G combined, reclined, against a 12 G
-            // airframe. The rise costs 1.29 MJ of an 88.3 MJ launch — 1.5%, the same order as the
-            // air the aircraft pushes down the gallery.
+            // At the live 110 m/s and 3 g rail-normal design load, the twelve-degree turn has a
+            // 411.29 m radius and 86.14 m arc after 433.86 m flat, rising 8.99 m. The pilot sees
+            // sqrt(1.19^2 + 3^2) = 3.23 g combined, reclined, against a 12 g airframe. The old
+            // 765 m / 160 m / 16.7 m figures belong only to the superseded 150 m/s study.
             CatapultRampAngleRad: 12.0 * Math.PI / 180.0,
             // The launch lane is 70 m off the recovery centreline. A carrier shares one deck
             // because it has no choice; a dispersed land site has room and must use it. The launch
@@ -845,7 +844,7 @@ public static class Beats {
             // it sat squarely in the touchdown zone of a 48 m strip — an aircraft on short final
             // would fly into it. 70 m clears the strip edge by nearly 40 m.
             CatapultCrossOffsetM: -70.0,
-            // Gear and flaps qualified past the 291 KIAS the launcher hands over at.
+            // Gear and flaps are qualified past the live near-ground 214 KIAS handoff.
             SystemsProfile: AirframeSystemsProfile.RapierSurrogate,
             Mission: new MissionContract(
                 "mission.modern.rapier-intercept.public-data-surrogate.v1",
@@ -1123,24 +1122,28 @@ public static class Beats {
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
             ContinuousCombat: new ContinuousCombatConfig(),
-            // Fictional runway inside the shared 262 km theatre, roughly 43 NM southwest of the
-            // merge. Its 52.5 m pavement datum is the embedded regional terrain height at the
-            // threshold; the full strip stays within 0.3 m of that flat datum. The 3,000 lb
+            // Fictional runway inside the shared theatre, roughly 44 NM southwest of the merge.
+            // The old (-55 km, -55 km) strip crossed a 37 m atlas rise and was visibly buried once
+            // simulation terrain and presentation began sharing one authority. The eastbound site
+            // below was surveyed from the same 256 m atlas records: natural terrain under the full
+            // 3,000 x 45 m pavement spans 104.896..106.511 m. A 106.75 m constructed slab therefore
+            // stays above the DEM with 0.24..1.85 m of bounded fill rather than flattening the
+            // surrounding terrain. The 3,000 lb
             // exercise reserve sits 900 lb above declared MIN FUEL and
             // 1,800 lb above EMERGENCY FUEL; it is deliberately below 4,000 lb Bingo, which remains
             // the action threshold for turning home rather than the desired fuel at touchdown.
             RecoveryPlan: new RecoveryPlan(
                 "recovery.f22a.soniachne-west-runway.v1",
                 "Soniachne west recovery runway",
-                new Vec3D(-55_000.0, 52.5, -55_000.0),
+                new Vec3D(-61_652.0, 106.75, -56_576.0),
                 requiredLandingReserveLb: 3_000.0,
-                // Threshold centre is 300 m south of the touchdown aim. Heading zero is +north
-                // in the simulation frame, so the full 3,000 m rollout stays inside the regional
+                // Threshold centre is 300 m west of the touchdown aim. Heading +pi/2 is +east in
+                // the simulation frame, so the full 3,000 m rollout stays inside the regional
                 // theatre. These dimensions match a substantial fast-jet runway without claiming
                 // a real site or an exact F-22 landing-performance requirement.
                 conventionalRunway: new ConventionalRunwayGeometry(
-                    thresholdPosition: new Vec3D(-55_000.0, 52.5, -55_300.0),
-                    landingHeadingRad: 0.0,
+                    thresholdPosition: new Vec3D(-61_952.0, 106.75, -56_576.0),
+                    landingHeadingRad: Math.PI / 2.0,
                     lengthM: 3_000.0,
                     widthM: 45.0)),
             // The opening neutral-merge dogfight is engagement 1: a gentle Novice warm-up under the
@@ -1181,7 +1184,9 @@ public static class Beats {
     /// </summary>
     public static BeatSetup DroneRaidDefense() {
         const double DroneAltitudeM = 300.0;
-        const double PlayerAltitudeM = 460.0;
+        // The real 32 m atlas is 211.35 m beneath the staged player. Five metres restores the
+        // authored >250 m terrain clearance that the old synthetic datum supplied.
+        const double PlayerAltitudeM = 465.0;
         const double DroneSpeedMps = 115.0;
         const double DroneMassKg = 500.0;
         static AircraftState Inbound(double x, double z) => new(

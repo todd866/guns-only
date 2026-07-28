@@ -88,7 +88,8 @@ public sealed class ArrestmentModel {
         _along = along;
         _cross = cross;
         _initialPitchRad = Math.Max(ParkedNosePitchRad, bodyPitchRad);
-        Position = carrier.LandingPoint(_along, _cross);
+        Position = carrier.LandingPoint(
+            _along, _cross, carrier.AircraftSupportReferenceHeightM);
         RelativeSpeedMps = Math.Max(0.0, carrier.DeckClosureMps(contact));
         InitialRelativeSpeedMps = RelativeSpeedMps;
         _massKg = Math.Max(1.0, contact.Mass);
@@ -117,7 +118,8 @@ public sealed class ArrestmentModel {
             throw new ArgumentOutOfRangeException(nameof(dt));
 
         if (!CheckLineLoad()) {
-            Position = carrier.LandingPoint(_along, _cross);
+            Position = carrier.LandingPoint(
+                _along, _cross, carrier.AircraftSupportReferenceHeightM);
             return;
         }
 
@@ -150,7 +152,8 @@ public sealed class ArrestmentModel {
         NosePitchRad = _initialPitchRad
             + (ParkedNosePitchRad - _initialPitchRad) * settle;
         UpdateWireGeometry();
-        Position = carrier.LandingPoint(_along, _cross);
+        Position = carrier.LandingPoint(
+            _along, _cross, carrier.AircraftSupportReferenceHeightM);
 
         if (kineticAfter <= StopEnergyToleranceJ) {
             RelativeSpeedMps = 0.0;

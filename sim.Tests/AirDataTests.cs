@@ -194,6 +194,37 @@ public class AirDataTests {
     }
 
     [Fact]
+    public void MachFourSeparatesFlatSkinRecoveryFromStagnationPointTemperature() {
+        const double altitudeM = 56_000.0 * 0.3048;
+        double ambientK = StandardAtmosphere1976.Instance.Sample(altitudeM).TemperatureK;
+
+        double recoveryK = AirData.AdiabaticWallTemperatureK(4.0, ambientK);
+        double stagnationK = AirData.StagnationTemperatureK(4.0, ambientK);
+
+        Assert.InRange(stagnationK - 273.15, 635.0, 640.0);
+        Assert.InRange(recoveryK - 273.15, 550.0, 557.0);
+        Assert.True(stagnationK > recoveryK + 80.0,
+            $"M4 T0 {stagnationK - 273.15:F1} C must not be flattened into "
+            + $"recovery {recoveryK - 273.15:F1} C");
+    }
+
+    [Fact]
+    public void StagnationReferencedCmcCeilingIsMoreConservativeThanFlatSkinRecovery() {
+        const double altitudeM = 70_000.0 * 0.3048;
+        double ambientK = StandardAtmosphere1976.Instance.Sample(altitudeM).TemperatureK;
+        double limitK = FlightModel.RapierPublicDataSurrogate.SkinTemperatureLimitK;
+
+        double stagnationCeiling =
+            AirData.MachLimitForStagnationTemperature(limitK, ambientK);
+        double recoveryCeiling =
+            AirData.MachLimitForSkinTemperature(limitK, ambientK);
+
+        Assert.InRange(stagnationCeiling, 5.30, 5.40);
+        Assert.InRange(recoveryCeiling, 5.70, 5.80);
+        Assert.True(stagnationCeiling < recoveryCeiling - 0.3);
+    }
+
+    [Fact]
     public void InstantaneousRecoveryTemperatureFallsOnADeceleratingDive() {
         // 100 kft ≈ 30 480 m. ISA ambient is colder aloft; a pull that bleeds Mach into the
         // denser column can drop adiabatic wall temperature even as static temperature rises.

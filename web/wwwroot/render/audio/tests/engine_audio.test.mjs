@@ -925,6 +925,8 @@ test("flight façade re-projects recorded external replay instead of leaking fin
     pilot_gz: 8,
     speed_brake: 1,
     rapier_rcs_authority: 1,
+    rapier_rcs_moment_nm: 180000,
+    rapier_rcs_firing_frac: 0.82,
     auto_gcas_active: true,
     auto_gcas_warning: true,
     bandit_aircraft_id: "aircraft.su27s.public-data-surrogate.v1",
@@ -947,8 +949,10 @@ test("flight façade re-projects recorded external replay instead of leaking fin
   assert.ok(projected.true_airspeed_kts > 140 && projected.true_airspeed_kts < 170);
   assert.ok(projected.mach > 0.2 && projected.mach < 0.3);
   assert.equal(projected.pilot_gz, 2.4);
-  assert.equal(projected.speed_brake, 0);
-  assert.equal(projected.rapier_rcs_authority, 0);
+    assert.equal(projected.speed_brake, 0);
+    assert.equal(projected.rapier_rcs_authority, 0);
+    assert.equal(projected.rapier_rcs_moment_nm, 0);
+    assert.equal(projected.rapier_rcs_firing_frac, 0);
   assert.equal(projected.auto_gcas_active, false);
   assert.equal(projected.auto_gcas_warning, false);
 
@@ -2015,9 +2019,10 @@ test("RCS ticks, trap snatch, and combat hit/destroy edges fire", async () => {
 
     updateRcsVoice(voices, audio, {
       rapier_rcs_authority: 0.9,
+      rapier_rcs_firing_frac: 0.8,
       rapier_rcs_gas_frac: 0.8,
     });
-    assert.ok(latest(voices.rcsGain.gain) > 0.02, "RCS hiss under authority");
+    assert.ok(latest(voices.rcsGain.gain) > 0.005, "RCS hiss under measured firing demand");
 
     audio.currentTime = 0.7;
     const beforeSnatch = audio.oscillators.length;

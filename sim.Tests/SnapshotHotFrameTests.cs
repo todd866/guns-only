@@ -55,6 +55,8 @@ public class SnapshotHotFrameTests {
         Vec3D velocity = runway.Forward * forwardMps
             + new Vec3D(0.0, -sinkMps, 0.0);
         double speed = velocity.Length;
+        Vec3D bodyUp = new(0.0, 1.0, 0.0);
+        Vec3D bodyRight = bodyUp.Cross(runway.Forward).Normalized();
         return new AircraftState(
             runway.SurfacePoint(alongM) + new Vec3D(0.0, heightM, 0.0),
             speed,
@@ -62,7 +64,8 @@ public class SnapshotHotFrameTests {
             Chi: Math.Atan2(velocity.X, velocity.Z),
             Bank: 0.0,
             Mass: FlightModel.F22APublicDataSurrogate.MassKg,
-            BodyAttitude: QuaternionD.Identity);
+            BodyAttitude: QuaternionD.FromFrame(
+                bodyRight, bodyUp, runway.Forward));
     }
 
     static (JsonElement Root, double[] Buffer, JsonDocument Document) Project(

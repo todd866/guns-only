@@ -42,6 +42,29 @@ public class SnapshotProjectionTests {
             0.0, 0.0, false, terrain);
     }
 
+    [Fact]
+    public void RapierSnapshotSeparatesWallRecoveryStagnationAndCmcCapability() {
+        using JsonDocument document = JsonDocument.Parse(
+            ProjectAfterSteps(beatIndex: 10, ticks: 12, terrain: null));
+        JsonElement root = document.RootElement;
+
+        double skinC = root.GetProperty("rapier_skin_temp_c").GetDouble();
+        double recoveryC = root.GetProperty("rapier_recovery_temp_c").GetDouble();
+        double stagnationC = root.GetProperty("rapier_stagnation_temp_c").GetDouble();
+        double capabilityC = root.GetProperty("rapier_cmc_capability_c").GetDouble();
+        double marginC = root.GetProperty("rapier_cmc_margin_c").GetDouble();
+
+        Assert.True(stagnationC >= recoveryC,
+            $"T0 {stagnationC:F0} C must be at least recovery {recoveryC:F0} C");
+        Assert.True(double.IsFinite(skinC));
+        Assert.Equal(1200.0, capabilityC);
+        Assert.Equal(capabilityC - stagnationC, marginC);
+        Assert.Equal(marginC,
+            root.GetProperty("rapier_thermal_margin_c").GetDouble());
+        Assert.Equal(root.GetProperty("rapier_skin_mach_limit").GetDouble(),
+            root.GetProperty("rapier_material_mach_ceiling").GetDouble());
+    }
+
     [Theory]
     [InlineData(7, 12)]   // F-22 modern visual-merge beat
     [InlineData(8, 12)]   // fictional Ukraine low-level drone intercept
@@ -171,23 +194,23 @@ public class SnapshotProjectionTests {
                 root.GetProperty("recovery_id").GetString());
             Assert.Equal("Soniachne west recovery runway",
                 root.GetProperty("recovery_display_name").GetString());
-            Assert.Equal(-55_000.0,
+            Assert.Equal(-61_952.0,
                 root.GetProperty("runway_threshold_x").GetDouble());
-            Assert.Equal(52.5,
+            Assert.Equal(106.75,
                 root.GetProperty("runway_threshold_y").GetDouble());
-            Assert.Equal(-55_300.0,
+            Assert.Equal(-56_576.0,
                 root.GetProperty("runway_threshold_z").GetDouble());
-            Assert.Equal(0.0,
+            Assert.Equal(90.0,
                 root.GetProperty("runway_heading_deg").GetDouble());
             Assert.Equal(3_000.0,
                 root.GetProperty("runway_length_m").GetDouble());
             Assert.Equal(45.0,
                 root.GetProperty("runway_width_m").GetDouble());
-            Assert.Equal(-55_000.0,
+            Assert.Equal(-61_652.0,
                 root.GetProperty("runway_touchdown_x").GetDouble());
-            Assert.Equal(52.5,
+            Assert.Equal(106.75,
                 root.GetProperty("runway_touchdown_y").GetDouble());
-            Assert.Equal(-55_000.0,
+            Assert.Equal(-56_576.0,
                 root.GetProperty("runway_touchdown_z").GetDouble());
             Assert.True(recoveryClosure.GetDouble() < 0.0,
                 "the opening northbound F-22 is outbound from its southwest runway");
@@ -468,6 +491,10 @@ public class SnapshotProjectionTests {
             root.GetProperty("world_frame_id").GetString());
         Assert.Equal("terrain.ukraine.rapier-range.atlas.v1",
             root.GetProperty("terrain_profile_id").GetString());
+        Assert.InRange(root.GetProperty("radar_alt_ft").GetDouble(), 2.7, 2.9);
+        Assert.False(root.GetProperty("below_ground").GetBoolean());
+        Assert.Equal(0.0, root.GetProperty("rapier_rcs_moment_nm").GetDouble());
+        Assert.Equal(0.0, root.GetProperty("rapier_rcs_firing_frac").GetDouble());
         Assert.True(root.GetProperty("terrain_macro_required").GetBoolean());
         Assert.False(root.GetProperty("terrain_micro_required").GetBoolean());
         Assert.Equal(145_000.0,

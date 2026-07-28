@@ -76,12 +76,21 @@ diff -qr "$staged_content_dir" web/wwwroot/content
   --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
 "$dotnet_cli" build GunsOnly.sln --configuration Release --no-restore --nologo \
   --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
-"$dotnet_cli" test sim.Tests/GunsOnly.Sim.Tests.csproj \
-  --configuration Release --no-build --nologo \
-  --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
-"$dotnet_cli" test server.Tests/GunsOnly.Server.Tests.csproj \
-  --configuration Release --no-build --nologo \
-  --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
+if [ "${GUNS_TEST_IN_PROCESS:-0}" = "1" ]; then
+  # VSTest opens a loopback control socket even for a local test assembly. Restricted release
+  # hosts can forbid that bind while still allowing the tests themselves. The repository's
+  # xUnit runner executes the same freshly built Release assemblies in process and fails on the
+  # same test failures without asking for network authority.
+  GUNS_TEST_CONFIGURATION=Release "$repo_dir/bin/test-in-process"
+  GUNS_TEST_CONFIGURATION=Release "$repo_dir/bin/test-in-process" --server
+else
+  "$dotnet_cli" test sim.Tests/GunsOnly.Sim.Tests.csproj \
+    --configuration Release --no-build --nologo \
+    --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
+  "$dotnet_cli" test server.Tests/GunsOnly.Server.Tests.csproj \
+    --configuration Release --no-build --nologo \
+    --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
+fi
 
 "$dotnet_cli" publish web/GunsOnly.Web.csproj \
   --configuration Release --no-restore --nologo --output "$publish_dir" \

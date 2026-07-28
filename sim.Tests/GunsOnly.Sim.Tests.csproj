@@ -31,13 +31,21 @@
       Link="Data\central-front.truth"
       LogicalName="GunsOnly.Web.Data.KoreaCentralFront.truth" />
     <EmbeddedResource
-      Include="..\content\packs\ukraine-modern\environment\terrain\soniachne-steppe.truth"
-      Link="Data\soniachne-steppe.truth"
-      LogicalName="GunsOnly.Web.Data.UkraineSoniachne.truth" />
+      Include="..\content\packs\ukraine-modern\environment\terrain-atlas\rapier-site.kernel.truth"
+      Link="Data\rapier-site.kernel.truth"
+      LogicalName="GunsOnly.Web.Data.UkraineRapierSite.truth" />
     <EmbeddedResource
-      Include="..\content\packs\ukraine-modern\environment\terrain\soniachne-region.truth"
-      Link="Data\soniachne-region.truth"
-      LogicalName="GunsOnly.Web.Data.UkraineSoniachneRegion.truth" />
+      Include="..\content\packs\ukraine-modern\environment\terrain-atlas\rapier-range.kernel.truth"
+      Link="Data\rapier-range.kernel.truth"
+      LogicalName="GunsOnly.Web.Data.UkraineRapierRange.truth" />
+    <EmbeddedResource
+      Include="..\content\packs\ukraine-modern\environment\terrain-atlas\rapier-range.atlas.manifest.json"
+      Link="Data\rapier-range.atlas.manifest.json"
+      LogicalName="GunsOnly.Web.Data.UkraineRapierRange.manifest.json" />
+    <EmbeddedResource
+      Include="..\content\packs\ukraine-modern\environment\terrain-atlas\rapier-range.kernel.provenance.json"
+      Link="Data\rapier-range.kernel.provenance.json"
+      LogicalName="GunsOnly.Web.Data.UkraineRapierRange.provenance.json" />
   </ItemGroup>
 
 </Project>

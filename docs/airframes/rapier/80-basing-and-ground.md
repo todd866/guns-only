@@ -16,8 +16,9 @@ an open cutting, rather than a hilltop ramp. This removes dependence on terrain 
 | --- | --- | --- |
 | Gallery bore | 14 × 8 m internal | closed |
 | Span vs bore | 7.35 m span ⇒ ~2.7% blockage | closed (see [10 — Geometry](10-geometry.md)) |
-| Roofed section | flat run only (360 m); ramp ridden in the open | closed |
+| Roofed section | flat run only (433.86 m); 86.14 m ramp arc ridden in the open | closed |
 | Berm crest | +10 m | closed |
+| Slab datum | 192.0 m MSL; ≥1.0875 m above the 32 m atlas survey under bounded earthworks | closed fiction siting |
 
 **Bore size beats vacuum:** the aircraft's frontal area is a small fraction of the bore, so the tube
 behaves like free air with generous vents rather than a pneumatic cannon or an evacuated structure.
@@ -44,4 +45,3 @@ geography on top of it, per the project's fact/fiction discipline.
 Gallery and bore dimensions are **closed**. Theatre placement and doctrine are **fiction**. Radius of
 action and infrastructure cost are **open findings** pending integrator verification and Phase 2 cost
 work.
-

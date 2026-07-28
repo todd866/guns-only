@@ -62,6 +62,18 @@ public static class AirData {
     public const double SkinCoolTauSeconds = 180.0;
 
     /// <summary>
+    /// Calorically-perfect stagnation (total) temperature. Unlike recovery temperature this is
+    /// the thermodynamic upper bound reached only where the flow is brought to rest. NASA Glenn's
+    /// perfect-gas relation is T0/T∞ = 1 + (gamma-1) M² / 2:
+    /// https://www.grc.nasa.gov/WWW/BGH/stagtmp.html
+    /// </summary>
+    public static double StagnationTemperatureK(double mach, double ambientTemperatureK) =>
+        ambientTemperatureK <= 0.0 || !double.IsFinite(mach) || mach <= 0.0
+            ? System.Math.Max(0.0, ambientTemperatureK)
+            : ambientTemperatureK
+                * (1.0 + GammaMinusOneOverTwo * mach * mach);
+
+    /// <summary>
     /// Instantaneous adiabatic wall / recovery temperature from Mach and ambient static
     /// temperature. This is freestream thermodynamics, not structural skin with heat capacity.
     /// HUD "skin" must not publish this directly through a decelerating dive.
@@ -113,6 +125,20 @@ public static class AirData {
         if (rise <= 0.0) return 0.0;
         return System.Math.Sqrt(rise
             / (0.5 * (Gamma - 1.0) * TurbulentRecoveryFactor));
+    }
+
+    /// <summary>
+    /// Highest Mach whose stagnation-point temperature stays inside a hot-structure limit.
+    /// This is the conservative reference for a nose, inlet lip, or unswept leading edge; it must
+    /// not use the lower turbulent flat-skin recovery factor.
+    /// </summary>
+    public static double MachLimitForStagnationTemperature(
+        double temperatureLimitK, double ambientTemperatureK) {
+        if (!(temperatureLimitK > 0.0)) return double.PositiveInfinity;
+        if (!(ambientTemperatureK > 0.0)) return double.PositiveInfinity;
+        double rise = temperatureLimitK / ambientTemperatureK - 1.0;
+        if (rise <= 0.0) return 0.0;
+        return System.Math.Sqrt(rise / GammaMinusOneOverTwo);
     }
 
     /// <summary>Local Mach number from TAS and the scenario's thermodynamic state.</summary>

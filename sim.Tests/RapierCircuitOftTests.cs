@@ -14,8 +14,8 @@ namespace GunsOnly.Sim.Tests;
 public class RapierCircuitOftTests {
     static string OftRoot {
         get {
-            string root = Path.GetFullPath(Path.Combine(
-                AppContext.BaseDirectory, "..", "..", "..", "..", "analysis", "circuit-oft"));
+            string root = Path.Combine(
+                TestRepository.Root, "analysis", "circuit-oft");
             Directory.CreateDirectory(root);
             return root;
         }

@@ -15,7 +15,9 @@ public class RapierMissionDirectorTests {
     static AircraftParams SteelLimitedRapier =>
         FlightModel.RapierPublicDataSurrogate with {
             // Historical 320 C steel skin — clamps authored M4 dash to ~M3.14 at FL700.
-            SkinTemperatureLimitK = 273.15 + 320.0
+            SkinTemperatureLimitK = 273.15 + 320.0,
+            AerothermalLimitReference =
+                AerothermalLimitReferenceKind.RecoveryTemperature
         };
 
     static RapierMissionGuidance StepDash(
@@ -66,6 +68,22 @@ public class RapierMissionDirectorTests {
         Assert.True(guidance.CommandedMach <= guidance.SkinMachLimit + 1e-9);
         Assert.True(guidance.CommandedMach < guidance.AuthoredTargetMach);
         Assert.Equal("intercept_dash", guidance.PhaseReason);
+    }
+
+    [Fact]
+    public void RapierUsesStagnationCmcScreenButAdvertisesTheAuthoredM4Dash() {
+        var director = new RapierMissionDirector();
+        RapierMissionGuidance guidance = default;
+        for (int i = 0; i < 8; i++) {
+            guidance = StepDash(director, FlightModel.RapierPublicDataSurrogate,
+                altitudeM: 70_000.0 * 0.3048, mach: 3.0, contactRangeM: 80_000.0);
+        }
+
+        Assert.Equal(RapierMissionPhase.Intercept, guidance.Phase);
+        Assert.InRange(guidance.SkinMachLimit, 5.30, 5.40);
+        Assert.Equal(4.0, guidance.CommandedMach, 3);
+        Assert.Contains("M4.0 / FL700", guidance.Cue);
+        Assert.DoesNotContain("M5.", guidance.Cue);
     }
 
     [Fact]

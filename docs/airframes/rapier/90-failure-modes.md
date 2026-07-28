@@ -14,6 +14,9 @@ directionally right, not certified procedures.
 | P5 | Drone bay hang | Asymmetric mass / drag | Bay status | Inhibit further release; land heavy | 2 |
 | P6 | Hook miss / bolter | Reserve fuel burn | Wire gates | Bingo logic; Circuits trains the trap | 2 |
 | P7 | RCS empty on lob | No attitude at collapsed q | Gas remaining | Limit lob duration; don't exo-coast dry | 2 |
+| P11 | RCS bottle/line leak or valve frozen shut | Commanded moment is not delivered | Bottle pressure, commanded vs delivered moment, jet health | Abort lob early; recover on aerodynamic controls as q returns; eject if tumble exceeds recovery envelope | 1 |
+| P12 | RCS valve stuck open / allocator runaway | Uncommanded torque, rapid gas loss, high-altitude tumble | Delivered moment with centred controls, pressure decay | Isolate failed manifold; counter-fire only while reserve permits; descend into aerodynamic authority | 1 |
+| P13 | Compressor/refill unavailable | No replenishment before the next lob | Compressor state, bottle pressure trend | Ground recharge or remain inside one-lob reserve; ram capture alone is not storage pressure | 2 |
 | P8 | Lever-only fuel lie | Pilot trusts false ram economy | Per-stream kernel fuel | **Closed** Build 163 — re-check OFT burn | — |
 | P9 | Optimistic mass (no drones) | Climb/dash too easy | Mass vs bay count | **Closed** — design bay in MassKg; shed on release | — |
 | P10 | Wet T/W overbuff | Unrealistic accel | Identity ≤1.20 at design gross | **Closed** — 84 kN / 11090 kg card | — |

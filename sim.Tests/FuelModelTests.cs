@@ -321,11 +321,11 @@ public class FuelModelTests {
             Assert.IsType<ConventionalRunwayGeometry>(plan.ConventionalRunway);
         Assert.Equal(3000.0, runway.LengthM);
         Assert.Equal(45.0, runway.WidthM);
-        Assert.Equal(52.5, runway.ElevationM);
-        Assert.Equal(0.0, runway.LandingHeadingRad);
-        Assert.Equal(new Vec3D(-55_000.0, 52.5, -55_300.0),
+        Assert.Equal(106.75, runway.ElevationM);
+        Assert.Equal(Math.PI / 2.0, runway.LandingHeadingRad);
+        Assert.Equal(new Vec3D(-61_952.0, 106.75, -56_576.0),
             runway.ThresholdPosition);
-        Assert.Equal(new Vec3D(-55_000.0, 52.5, -52_300.0),
+        Assert.Equal(new Vec3D(-58_952.0, 106.75, -56_576.0),
             runway.FarEndPosition);
         Assert.Null(Beats.RapierIntercept().RecoveryPlan!.ConventionalRunway);
         Assert.Equal(plan, Beats.ModernAceDuel().RecoveryPlan);
