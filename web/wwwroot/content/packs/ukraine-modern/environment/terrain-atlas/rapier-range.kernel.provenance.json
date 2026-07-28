@@ -1,0 +1,217 @@
+{
+  "lockedPageManifests": [
+    {
+      "pageId": "page-em003-nm002",
+      "sha256": "0f29fcd07fe6868ec6209203cdab832fb5881e90a93a5ac7e9d7a762565eed41"
+    },
+    {
+      "pageId": "page-em002-nm002",
+      "sha256": "5a2fea65d0e4de3b424a6010d583f91e5e96535329ef94a0bdffcdd2f4411ca0"
+    },
+    {
+      "pageId": "page-em001-nm002",
+      "sha256": "5a2d00a20ec7c7688f7bfbbbcb77a3494f4b1d7b9c5e965f0c030e91ac2f3f6b"
+    },
+    {
+      "pageId": "page-ep000-nm002",
+      "sha256": "f8977ee5c3df3714ccecfa714999b6fca54edb7eeb5cdcf3d041de82ad1bcb48"
+    },
+    {
+      "pageId": "page-em003-nm001",
+      "sha256": "a35aaa39d75805a3481e5e74388159e22325c645c207ff678e93e0afcd9b85ef"
+    },
+    {
+      "pageId": "page-em002-nm001",
+      "sha256": "2f749e6d66a6cf09933bfd36e161a0aca511ecde47b8c8b8370719f6e8c639d9"
+    },
+    {
+      "pageId": "page-em001-nm001",
+      "sha256": "06c45ea68e09fb27b68f186e2896868717714d6eb5538f3621a5180f18056c46"
+    },
+    {
+      "pageId": "page-ep000-nm001",
+      "sha256": "cf2c26e989cf5b049eec196c96651595869e288943187833df21f6e40da09a50"
+    },
+    {
+      "pageId": "page-em003-np000",
+      "sha256": "e12556e1f04f4e6162f8cec846b697936f3ab240eae48359ed7a956f83b54cd0"
+    },
+    {
+      "pageId": "page-em002-np000",
+      "sha256": "1d973d241430edecc643837d39b728bef12369169bc9a63ba5d1be87848c519c"
+    },
+    {
+      "pageId": "page-em001-np000",
+      "sha256": "8445b368a214320641c899adb66f61533bacd1dc632bd66b97c60d45d05f1036"
+    },
+    {
+      "pageId": "page-ep000-np000",
+      "sha256": "7bc57c6267fadb514de1ce0eaafe613d7d7e9b79d8a86b9c7738e6daa3038189"
+    },
+    {
+      "pageId": "page-em003-np001",
+      "sha256": "0ff40f358011a65ee9d1fd4799ebaea23eb7bdcab1c1f4e9a2b4be62aa868d5d"
+    },
+    {
+      "pageId": "page-em002-np001",
+      "sha256": "425a1791f8a0f45ea1704f8f84d9e51f420cc0340b9a5e5d150235846d9350e1"
+    },
+    {
+      "pageId": "page-em001-np001",
+      "sha256": "15af51cf6e726794af2c9e69e5d25aba41054c3894ea07625f3b67e0bc1c916a"
+    },
+    {
+      "pageId": "page-ep000-np001",
+      "sha256": "c03aa103d8a9a384eb2baf720d5b5f2d676af3c627dc5f1aa230985b273c2536"
+    }
+  ],
+  "outputs": {
+    "detail": {
+      "boundsLocalM": [
+        -8192.0,
+        -8192.0,
+        8192.0,
+        8192.0
+      ],
+      "byteLength": 526402,
+      "path": "content/packs/ukraine-modern/environment/terrain-atlas/rapier-site.kernel.truth",
+      "sha256": "ae3f377f360a81e3fc4482d6bc8410190968da69749c5333f038e1d99aa07908",
+      "sourceLevel": 0,
+      "sourceRecordCount": 16,
+      "sourceRecords": [
+        {
+          "chunkId": "e0044-n0024",
+          "level": 0,
+          "pageId": "page-em001-nm001",
+          "sha256": "c050fdec61defba4f10dec3221ed4f11101e48485c95e346b739ef5beafd4143",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0045-n0024",
+          "level": 0,
+          "pageId": "page-em001-nm001",
+          "sha256": "0f1453b5f30ac3eb469c8991832a04f8db60c8f45eecc5fb6e9bb12a282fe3ab",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0044-n0025",
+          "level": 0,
+          "pageId": "page-em001-nm001",
+          "sha256": "97c73b72b01a2667050504350f3b798bba64eed5791c28dd53ba1f76c1ca220f",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0045-n0025",
+          "level": 0,
+          "pageId": "page-em001-nm001",
+          "sha256": "b776ab36fe4bbbb4f566a9491f50b4c572b648c81a617a8c09e5a3f046f3ffc1",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0046-n0024",
+          "level": 0,
+          "pageId": "page-ep000-nm001",
+          "sha256": "cc9f60bf456168a28a0b24249ba32ce22a9e6898716a073eb1650317a958f108",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0047-n0024",
+          "level": 0,
+          "pageId": "page-ep000-nm001",
+          "sha256": "0fca61ad75be794280bccb39962ca34b0edcf3d22736674db6ba2a66562e11d2",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0046-n0025",
+          "level": 0,
+          "pageId": "page-ep000-nm001",
+          "sha256": "0ea24192540325bda78c38e995976e0b7e9c33f2325315982d555e3e552826ff",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0047-n0025",
+          "level": 0,
+          "pageId": "page-ep000-nm001",
+          "sha256": "12ff7c8441a9522f566f04d822b3e711992d96bdd2cc4583c23724f76f988bc6",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0044-n0026",
+          "level": 0,
+          "pageId": "page-em001-np000",
+          "sha256": "c04ab4ac401890ad733a680e3f3aace916aaddd1e98bb1895cb4cb65b77293f0",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0045-n0026",
+          "level": 0,
+          "pageId": "page-em001-np000",
+          "sha256": "8cefa25a4700a8b7bd792c5a48d24f71a412cc5eaddd837e7f26edd6b602f42f",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0044-n0027",
+          "level": 0,
+          "pageId": "page-em001-np000",
+          "sha256": "7945112af465d4585c4aef0d45a44c7e12fa65058dc3e9d760f3ef3c86f683e8",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0045-n0027",
+          "level": 0,
+          "pageId": "page-em001-np000",
+          "sha256": "d27f7dc9ffdd33d5ea261f6376833d04c094d531581dd7625c7db69ed5a97f56",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0046-n0026",
+          "level": 0,
+          "pageId": "page-ep000-np000",
+          "sha256": "4b16d3cc23e3a6cb1eccb8cf645d4b8571babe9cecf3ff3a4792328b30f75ac1",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0047-n0026",
+          "level": 0,
+          "pageId": "page-ep000-np000",
+          "sha256": "8913cb0a69293672d48d6a3258c5e9c83cf6297fe4942bc3b0eb6c30817f063d",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0046-n0027",
+          "level": 0,
+          "pageId": "page-ep000-np000",
+          "sha256": "92dec34d7d3ec4011463f17344bb837fafcc944f0351865b971fc4e251b4e6b4",
+          "spacingM": 32.0
+        },
+        {
+          "chunkId": "e0047-n0027",
+          "level": 0,
+          "pageId": "page-ep000-np000",
+          "sha256": "227a10c2f6b855916c6b3836baca27cd2abfcc30d31a754f2460f106831f4fbd",
+          "spacingM": 32.0
+        }
+      ],
+      "spacingM": 32.0
+    },
+    "regional": {
+      "boundsLocalM": [
+        -376832.0,
+        -212992.0,
+        40960.0,
+        196608.0
+      ],
+      "byteLength": 5228930,
+      "path": "content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.kernel.truth",
+      "sha256": "88c3ceb178400c7a59c8960ff55a5f888e180651dd79b28119870aed5419715f",
+      "sourceLevel": 3,
+      "sourceRecordCount": 2390,
+      "spacingM": 256.0
+    }
+  },
+  "schemaVersion": "1.0.0",
+  "sourceAtlasManifest": {
+    "sha256": "3940358e00c16fe772fc79c94cac6ba75db0e70428ae7404528995399257cef4",
+    "terrainId": "terrain.ukraine.rapier-range.atlas.v1"
+  }
+}
