@@ -39,7 +39,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 12;
+    public const int LayoutVersion = 13;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -108,6 +108,11 @@ internal static class SnapshotHotFrame {
         Bool("rapier_pattern_only");
         Bool("rapier_automation_enabled");
         Bool("rapier_automation_active");
+        Num("rapier_computer_failure_plan_code", RawInteger);
+        Num("rapier_computer_failure_active_code", RawInteger);
+        Bool("rapier_mission_computer_available");
+        Bool("rapier_flight_control_computers_available");
+        Bool("rapier_uncontrolled_reentry");
         Num("rapier_mission_phase", RawInteger);
         Num("rapier_target_mach", 2);
         Num("rapier_target_altitude_ft", 0);
@@ -661,6 +666,14 @@ internal static class SnapshotHotFrame {
         w.Bool("rapier_pattern_only", session.Beat.ScriptedIntercept?.PatternOnly == true);
         w.Bool("rapier_automation_enabled", session.RapierAutomationEnabled);
         w.Bool("rapier_automation_active", session.RapierAutomationActive);
+        w.Num("rapier_computer_failure_plan_code",
+            (int)session.RapierComputerFailurePlan, RawInteger);
+        w.Num("rapier_computer_failure_active_code",
+            (int)session.RapierComputerFailureActive, RawInteger);
+        w.Bool("rapier_mission_computer_available", session.RapierMissionComputerAvailable);
+        w.Bool("rapier_flight_control_computers_available",
+            session.RapierFlightControlComputersAvailable);
+        w.Bool("rapier_uncontrolled_reentry", session.RapierUncontrolledReentry);
         w.Num("rapier_mission_phase", (int)session.RapierPhase, RawInteger);
         w.Num("rapier_target_mach", session.RapierTargetMach, 2);
         w.Num("rapier_target_altitude_ft", session.RapierTargetAltitudeFt, 0);
@@ -1415,6 +1428,7 @@ internal static class SnapshotHotFrame {
         AutoGcasInhibitReason GcasInhibit,
         string? GcasCue,
         TimeCompressionInhibitReason TimeCompressionInhibit,
+        RapierComputerFailure RapierComputerFailure,
         LandingGearHandle GearHandle,
         LandingGearIndication GearNose,
         LandingGearIndication GearLeft,
@@ -1517,6 +1531,7 @@ internal static class SnapshotHotFrame {
                 gcas.InhibitReason,
                 gcas.Cue,
                 session.TimeCompressionInhibitReason,
+                session.RapierComputerFailureActive,
                 systems.GearHandle,
                 systems.NoseGearIndication,
                 systems.LeftMainGearIndication,

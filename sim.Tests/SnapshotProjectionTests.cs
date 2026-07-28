@@ -70,7 +70,7 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.18.0",
+        Assert.Equal("1.19.0",
             root.GetProperty("snapshot_schema_version").GetString());
         Assert.Contains(root.GetProperty("bandit_coordination_role").GetString(),
             new[] { "NONE", "PRESSURE", "BRACKET", "EXTEND" });

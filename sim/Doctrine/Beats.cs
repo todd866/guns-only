@@ -908,7 +908,8 @@ public static class Beats {
         int jobSeed = 0,
         GunsOnly.Sim.Carrier.DeckConfiguration configuration =
             GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
-        RapierJobKind job = DealRapierJob(jobSeed);
+        (RapierJobKind job, RapierComputerFailure computerFailure) =
+            DealRapierSortie(jobSeed);
         BeatSetup sortie = RapierIntercept(configuration);
         AircraftState contact = job switch {
             RapierJobKind.Balloon => new AircraftState(
@@ -939,8 +940,13 @@ public static class Beats {
         };
         // AWACS / enabler kill: F-22-class pursuers home — Escape path already models them.
         int pursuers = job is RapierJobKind.Awacs or RapierJobKind.Balloon ? 2 : 1;
+        string computerVariant = computerFailure switch {
+            RapierComputerFailure.MissionComputer => "MISSION COMPUTER FAILURE",
+            RapierComputerFailure.FlightControlComputers => "FLIGHT CONTROL FAILURE",
+            _ => "SYSTEMS NOMINAL"
+        };
         return sortie with {
-            Name = $"Go fly the Rapier — {job}",
+            Name = $"Go fly the Rapier — {job} · {computerVariant}",
             Bandit = contact,
             BanditParams = banditParams,
             BanditCapability = banditCapability,
@@ -953,7 +959,8 @@ public static class Beats {
                 AutomationDefaultEnabled: true,
                 RecoveryRequired: true,
                 ZoomLobProfile: true,
-                Job: job),
+                Job: job,
+                ComputerFailureAtZoomCoast: computerFailure),
             Mission = new MissionContract(
                 "mission.modern.rapier-go-fly.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,
@@ -963,13 +970,19 @@ public static class Beats {
         };
     }
 
-    static RapierJobKind DealRapierJob(int seed) {
+    static (RapierJobKind Job, RapierComputerFailure ComputerFailure)
+        DealRapierSortie(int seed) {
         // Stable deal: seed 0 rotates with wall-clock seconds so each session differs; explicit
-        // seeds stay deterministic for tests and OFT cards.
-        int pick = seed != 0
-            ? Math.Abs(seed)
-            : (int)(DateTime.UtcNow.Ticks / TimeSpan.TicksPerSecond);
-        return (RapierJobKind)(1 + (pick % 4)); // Balloon..SwarmLob (skip FormationIntercept)
+        // seeds stay deterministic for tests and OFT cards. Four consecutive deals hold the job
+        // cycle while the quotient deals NOMINAL / MISSION COMPUTER / FLIGHT CONTROLS, so tests can
+        // vary the casualty without also changing the target. Widen to long before Abs so
+        // int.MinValue remains a valid deterministic seed.
+        long pick = seed != 0
+            ? Math.Abs((long)seed)
+            : DateTime.UtcNow.Ticks / TimeSpan.TicksPerSecond;
+        RapierJobKind job = (RapierJobKind)(1 + (pick % 4));
+        RapierComputerFailure failure = (RapierComputerFailure)((pick / 4) % 3);
+        return (job, failure);
     }
 
     /// <summary>
