@@ -56,6 +56,12 @@ export function parseHotLayout(layoutJson) {
 // arrays. Nested cold arrays/objects stay shared by reference — nothing downstream mutates the
 // snapshot, and the cold base itself is replaced wholesale on re-fetch.
 export function decodeHotFrame(layout, hot, coldBase) {
+  // CASEVAC deliberately has no numeric overlay in the first production slice. Its kernel bumps
+  // cold_version every fill, so the freshly fetched observer-safe state is already the complete
+  // frame. Skipping the combat layout is what preserves opponent-field absence rather than
+  // manufacturing zero-valued bx/by/bz, gun, and fixed-wing keys.
+  if (coldBase?.casevac_mission === true) return { ...coldBase };
+
   const state = { ...coldBase };
   for (const block of layout.blocks) {
     if (block.presenceIndex >= 0 && !hot[block.presenceIndex]) continue;

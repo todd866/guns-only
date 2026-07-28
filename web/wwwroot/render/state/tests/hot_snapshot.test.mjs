@@ -178,6 +178,36 @@ test("each frame returns a new object so retained snapshots never rewrite histor
   assert.equal(second.t, 99.0);
 });
 
+test("CASEVAC returns a fresh cold snapshot without manufacturing combat fields", () => {
+  const layout = parseHotLayout(LAYOUT_JSON);
+  const coldBase = {
+    casevac_mission: true,
+    t: 3.25,
+    casevac_phase: "INGRESS",
+    opponent_present: false,
+  };
+  const first = decodeHotFrame(layout, hotFrame({
+    1: 99.0,
+    9: 1,
+    10: 1,
+  }), coldBase);
+  const second = decodeHotFrame(layout, hotFrame({
+    1: 101.0,
+    9: 1,
+    10: 2,
+  }), coldBase);
+
+  assert.notEqual(first, coldBase);
+  assert.notEqual(second, first);
+  assert.equal(first.t, 3.25);
+  assert.equal(second.t, 3.25);
+  assert.equal(first.casevac_phase, "INGRESS");
+  assert.equal(first.opponent_present, false);
+  assert.equal("tracers" in first, false);
+  assert.equal("gun_trajectory" in first, false);
+  assert.equal("paused_like" in first, false);
+});
+
 test("source fetches cold on first frame, version bumps, and fallback expiry only", () => {
   let fetches = 0;
   let version = 1;
@@ -198,6 +228,29 @@ test("source fetches cold on first frame, version bumps, and fallback expiry onl
 
   assert.equal(source.frame(1298).fetchedAt, 3);    // fallback interval expired
   assert.equal(fetches, 3);
+});
+
+test("CASEVAC source follows every cold-version bump without a combat overlay", () => {
+  let fetches = 0;
+  let version = 1;
+  const source = createHotSnapshotSource({
+    layoutJson: LAYOUT_JSON,
+    readHotFrame: () => hotFrame({ 0: version++ }),
+    fetchColdState: () => ({
+      casevac_mission: true,
+      casevac_phase: fetches++ === 0 ? "INGRESS" : "PICKUP_APPROACH",
+      opponent_present: false,
+    }),
+    fallbackMs: 250,
+  });
+
+  const first = source.frame(1000);
+  const second = source.frame(1016);
+  assert.equal(first.casevac_phase, "INGRESS");
+  assert.equal(second.casevac_phase, "PICKUP_APPROACH");
+  assert.equal("t" in first, false);
+  assert.equal("tracers" in second, false);
+  assert.equal(source.diagnostics().coldFetches, 2);
 });
 
 test("source survives a non-finite clock without wedging the cold base", () => {

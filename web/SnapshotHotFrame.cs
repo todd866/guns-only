@@ -495,6 +495,17 @@ internal static class SnapshotHotFrame {
             throw new ArgumentException(
                 $"hot frame buffer length {buffer.Length} != layout slot count {SlotCount}");
 
+        // CASEVAC is intentionally cold-only for the first production slice. Clear every legacy
+        // combat slot, publish only a fresh cold version, and return before ColdFingerprint or any
+        // Player/Bandit/Gun accessor can observe the no-opponent mission.
+        if (session.CasevacMission) {
+            Array.Clear(buffer);
+            _coldVersion++;
+            _lastFingerprint = null;
+            buffer[ColdVersionIndex] = _coldVersion;
+            return;
+        }
+
         ColdFingerprint fingerprint = ColdFingerprint.Capture(
             session, worldOriginEastM, worldOriginNorthM, worldOriginConfigured);
         if (_lastFingerprint is not { } last || !fingerprint.Equals(last))
