@@ -1,0 +1,66 @@
+#!/bin/sh
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$repo_dir"
+. "$repo_dir/bin/dotnet-env"
+
+configuration=${GUNS_TEST_CONFIGURATION:-Debug}
+target_framework=net8.0
+runner_project="$repo_dir/tools/in-process-test-runner/InProcessTestRunner.csproj"
+runner_dir="$repo_dir/tools/in-process-test-runner/bin/$configuration/$target_framework"
+
+"$dotnet_cli" build "$runner_project" \
+  --configuration "$configuration" --nologo -m:1 /nodeReuse:false
+
+suite=sim
+for argument in "$@"; do
+  if [ "$argument" = "--server" ]; then
+    suite=server
+  fi
+done
+
+case "$suite" in
+  sim)
+    test_assembly=GunsOnly.Sim.Tests.dll
+    product_assembly=GunsOnly.Sim.dll
+    authoritative_test="$repo_dir/sim.Tests/bin/$configuration/$target_framework/$test_assembly"
+    authoritative_product="$repo_dir/sim/bin/$configuration/$target_framework/$product_assembly"
+    ;;
+  server)
+    test_assembly=GunsOnly.Server.Tests.dll
+    product_assembly=GunsOnly.Server.dll
+    authoritative_test="$repo_dir/server.Tests/bin/$configuration/$target_framework/$test_assembly"
+    authoritative_product="$repo_dir/server/bin/$configuration/$target_framework/$product_assembly"
+    ;;
+esac
+
+verify_runner_copy() {
+  authoritative=$1
+  copied=$2
+
+  if [ ! -f "$authoritative" ]; then
+    echo "Authoritative test artifact is missing after build: $authoritative" >&2
+    exit 1
+  fi
+  if [ ! -f "$copied" ]; then
+    echo "In-process runner artifact is missing after build: $copied" >&2
+    exit 1
+  fi
+  if ! cmp -s "$authoritative" "$copied"; then
+    echo "In-process runner artifact is stale: $copied" >&2
+    echo "It does not match the freshly built artifact: $authoritative" >&2
+    exit 1
+  fi
+}
+
+verify_runner_copy "$authoritative_test" "$runner_dir/$test_assembly"
+verify_runner_copy "$authoritative_product" "$runner_dir/$product_assembly"
+
+runner_assembly="$runner_dir/InProcessTestRunner.dll"
+if [ ! -f "$runner_assembly" ]; then
+  echo "In-process test runner is missing after build: $runner_assembly" >&2
+  exit 1
+fi
+
+exec "$dotnet_cli" "$runner_assembly" "$@"

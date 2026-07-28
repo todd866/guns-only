@@ -302,7 +302,21 @@ public sealed class AircraftSim {
         LiftDir = ComputeLiftDir(vhat);
     }
 
-    public void Step(in PilotCommand cmd, double dt) {
+    public void Step(in PilotCommand cmd, double dt) =>
+        StepCore(cmd, dt, updateDiagnostics: true);
+
+    /// <summary>
+    /// Advance the physical state for a speculative trajectory without evaluating presentation
+    /// and pilot-facing diagnostics that cannot feed a later integration step. Air-relative
+    /// velocity, engine/nozzle state, automatic surfaces, aerodynamic gust alleviation and
+    /// consumable RCS gas are still advanced, so repeated prediction steps produce the exact same
+    /// aircraft trajectory as <see cref="Step"/>. Diagnostic properties are intentionally
+    /// unspecified after this call.
+    /// </summary>
+    internal void StepPrediction(in PilotCommand cmd, double dt) =>
+        StepCore(cmd, dt, updateDiagnostics: false);
+
+    void StepCore(in PilotCommand cmd, double dt, bool updateDiagnostics) {
         LastAppliedCommand = cmd;
         HasAppliedFlightCommand = true;
         var s = State;
@@ -402,6 +416,14 @@ public sealed class AircraftSim {
         if (!IsFinite(pos) || !double.IsFinite(speed) || !double.IsFinite(_bank) || !attitude.IsFinite || !bodyRates.IsFinite)
             throw new System.InvalidOperationException("non-finite sim state");
         State = new AircraftState(pos, speed, gamma, chi, _reportedBank, s.Mass, attitude, bodyRates);
+
+        if (!updateDiagnostics) {
+            // Aerodynamics(finalRaw) returns this same air-relative vector. Preserve it because
+            // the next engine and automatic-surface update consume AirspeedMps; everything below
+            // this point only updates telemetry, cues, rendering state, or thermal diagnostics.
+            _airVelocity = vel - gust;
+            return;
+        }
 
         var finalRaw = new RawState(pos, vel, _bank, s.Mass, attitude, bodyRates);
         var aero = FlightModel.Aerodynamics(finalRaw, spooled, _p, gust, thrustN,

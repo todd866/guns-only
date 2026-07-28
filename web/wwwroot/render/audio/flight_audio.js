@@ -25,6 +25,7 @@ import {
   updateTrapVoice,
 } from "./event_audio.js";
 import { createWarningVoices, updateWarningVoices } from "./warning_audio.js";
+import { createSharedFlightAudioFacade } from "./flight_audio_singleton.js";
 
 let context = null;
 let master = null;
@@ -42,6 +43,8 @@ let lastCharacter = null;
 let sampleLoadGeneration = 0;
 let lastCombatLifecycleKey = "";
 let resumePending = null;
+let lastAudibleTarget = false;
+let lastPublishedRuntimeState = "";
 const sampleBedCache = new Map();
 const MPS_TO_KNOTS = 1.9438444924406;
 const KNOTS_TO_MPS = 0.5144444444444;
@@ -49,6 +52,48 @@ const SEA_LEVEL_DENSITY = 1.225;
 
 function contextNeedsUserResume(audioContext) {
   return audioContext?.state === "suspended" || audioContext?.state === "interrupted";
+}
+
+function userActivationAllowsResume() {
+  const activation = globalThis.navigator?.userActivation;
+  // Older browsers and deterministic Node harnesses do not expose UserActivation. Keep the
+  // established best-effort behavior there; where the browser does expose it, never let an
+  // auto-launch call create a forever-pending resume promise ahead of the pilot's real gesture.
+  return activation == null || activation.isActive === true;
+}
+
+function flightAudioDiagnosticsLocal() {
+  return Object.freeze({
+    controller: "shared",
+    built: context != null,
+    contextState: disabled ? "disabled" : context?.state ?? "unbuilt",
+    enabled,
+    audible: !disabled
+      && enabled
+      && context?.state === "running"
+      && lastAudibleTarget,
+    resumePending: resumePending != null,
+  });
+}
+
+function publishFlightAudioRuntimeState() {
+  const root = globalThis.document?.documentElement;
+  if (!root?.setAttribute) return;
+  const diagnostics = flightAudioDiagnosticsLocal();
+  const serialized = [
+    diagnostics.controller,
+    diagnostics.contextState,
+    diagnostics.enabled,
+    diagnostics.audible,
+    diagnostics.resumePending,
+  ].join("|");
+  if (serialized === lastPublishedRuntimeState) return;
+  lastPublishedRuntimeState = serialized;
+  root.setAttribute("data-audio-controller", diagnostics.controller);
+  root.setAttribute("data-audio-context-state", diagnostics.contextState);
+  root.setAttribute("data-audio-enabled", String(diagnostics.enabled));
+  root.setAttribute("data-audio-audible", String(diagnostics.audible));
+  root.setAttribute("data-audio-resume-pending", String(diagnostics.resumePending));
 }
 
 function build() {
@@ -88,6 +133,7 @@ function build() {
     at: null,
   }));
   warningVoices = createWarningVoices(context, bus);
+  publishFlightAudioRuntimeState();
   return true;
 }
 
@@ -499,49 +545,57 @@ function synchronizeCombatLifecycle(state) {
 }
 
 /// User-gesture unlock. Safe to call repeatedly; no-ops when audio is disabled or unsupported.
-export function armFlightAudio(state = null) {
+function armFlightAudioLocal(state = null) {
   if (disabled || !enabled) return false;
   try {
     if (!context && !build()) {
       disabled = true;
       return false;
     }
-    if (contextNeedsUserResume(context) && !resumePending) {
+    if (contextNeedsUserResume(context) && !resumePending && userActivationAllowsResume()) {
       const attempt = context.resume();
       if (attempt?.then) {
         const pending = Promise.resolve(attempt)
           .catch(() => {})
           .finally(() => {
             if (resumePending === pending) resumePending = null;
+            publishFlightAudioRuntimeState();
           });
         resumePending = pending;
+        publishFlightAudioRuntimeState();
       }
     }
     ensureJetSamples(state);
     return true;
   } catch {
     disabled = true;
+    publishFlightAudioRuntimeState();
     return false;
   }
 }
 
-export function setFlightAudioEnabled(nextEnabled) {
+function setFlightAudioEnabledLocal(nextEnabled) {
   enabled = Boolean(nextEnabled);
-  if (!master || !context) return enabled;
+  if (!enabled) lastAudibleTarget = false;
+  if (!master || !context) {
+    publishFlightAudioRuntimeState();
+    return enabled;
+  }
   try {
     master.gain.setTargetAtTime(enabled ? 0.55 : 0, context.currentTime, 0.02);
   } catch {
     disabled = true;
   }
+  publishFlightAudioRuntimeState();
   return enabled;
 }
 
-export function isFlightAudioEnabled() {
+function isFlightAudioEnabledLocal() {
   return enabled;
 }
 
 /// Drive every continuous voice from the flat snapshot. `triggerHeld` gates gun reports.
-export function updateFlightAudio(state, {
+function updateFlightAudioLocal(state, {
   muted = false,
   triggerHeld = false,
   nowSeconds = 0,
@@ -559,6 +613,8 @@ export function updateFlightAudio(state, {
       // inaudible here; armFlightAudio owns the single in-flight resume attempt. Safari reports
       // the same user-gesture requirement as "interrupted" after calls, route changes, and sleep.
       master.gain.setTargetAtTime(0, context.currentTime, 0.02);
+      lastAudibleTarget = false;
+      publishFlightAudioRuntimeState();
       return;
     }
 
@@ -567,6 +623,7 @@ export function updateFlightAudio(state, {
     synchronizeCombatLifecycle(audioState);
 
     const live = enabled && !muted;
+    lastAudibleTarget = live;
     // Collapse continuous gains on mute/pause (view loop still ticks while paused).
     updateEngineVoices(engineVoices, context, audioState, { muted: !live });
     updateBuffetVoice(eventVoices, context, audioState, { enabled: live });
@@ -589,7 +646,40 @@ export function updateFlightAudio(state, {
       nowSeconds,
     });
     master.gain.setTargetAtTime(live ? 0.55 : 0, context.currentTime, live ? 0.18 : 0.02);
+    publishFlightAudioRuntimeState();
   } catch {
     disabled = true;
+    lastAudibleTarget = false;
+    publishFlightAudioRuntimeState();
   }
+}
+
+const sharedFlightAudio = createSharedFlightAudioFacade({
+  arm: armFlightAudioLocal,
+  setEnabled: setFlightAudioEnabledLocal,
+  isEnabled: isFlightAudioEnabledLocal,
+  diagnostics: flightAudioDiagnosticsLocal,
+  update: updateFlightAudioLocal,
+}, import.meta.url);
+
+/// User-gesture unlock. Safe to call repeatedly; every import identity reaches the shared graph.
+export function armFlightAudio(state = null) {
+  return sharedFlightAudio.arm(state);
+}
+
+export function setFlightAudioEnabled(nextEnabled) {
+  return sharedFlightAudio.setEnabled(nextEnabled);
+}
+
+export function isFlightAudioEnabled() {
+  return sharedFlightAudio.isEnabled();
+}
+
+export function flightAudioDiagnostics() {
+  return sharedFlightAudio.diagnostics();
+}
+
+/// Drive every continuous voice from the flat snapshot. `triggerHeld` gates gun reports.
+export function updateFlightAudio(state, options = {}) {
+  return sharedFlightAudio.update(state, options);
 }

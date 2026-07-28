@@ -188,8 +188,7 @@ public class FormationCoordinationSessionTests {
         phaseSeparation = Math.Min(
             phaseSeparation,
             ReactiveBandit.LookaheadDecisionCadenceTicks - phaseSeparation);
-        Assert.True(phaseSeparation > 2,
-            $"formation lookahead lanes are only {phaseSeparation} ticks apart");
+        Assert.Equal(5, phaseSeparation);
         session.Begin();
 
         for (int tick = 0;

@@ -1,4 +1,5 @@
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
 
 namespace GunsOnly.Sim.Tests;
 
@@ -6,12 +7,35 @@ public sealed class CombatHandoffTests {
     const long TargetA = 101;
     const long TargetB = 202;
 
+    sealed class FlatTerrain(double heightM = 0.0) : ITerrainSurface {
+        public TerrainBounds Bounds { get; } =
+            new(-100_000.0, 100_000.0, -100_000.0, 100_000.0);
+        public double HorizontalResolutionM => 100.0;
+
+        public bool TrySample(
+            double eastM,
+            double northM,
+            out TerrainSample sample) {
+            if (!Bounds.Contains(eastM, northM)) {
+                sample = default;
+                return false;
+            }
+            sample = new TerrainSample(
+                heightM,
+                new Vec3D(0.0, 1.0, 0.0));
+            return true;
+        }
+    }
+
     static AircraftState State(Vec3D position, double speed, double heading,
         double mass) => new(
             position, speed, 0.0, heading, 0.0, mass, QuaternionD.Identity);
 
     static BeatSetup HandoffFight(int opponentAmmo = 0,
-        int opponentHitsToDefeat = 2) => new(
+        int opponentHitsToDefeat = 2,
+        bool usesReactiveBandit = false,
+        int maximumFormationSize = 1,
+        int playerAmmo = 40) => new(
         "Combat handoff fixture",
         State(new Vec3D(0.0, 5000.0, 0.0), 220.0, 0.0,
             FlightModel.F22APublicDataSurrogate.MassKg),
@@ -21,8 +45,9 @@ public sealed class CombatHandoffTests {
         new() { (0.0, new PilotCommand(1.0, 0.0, 0.75, 0.0)) },
         PlayerParams: FlightModel.F22APublicDataSurrogate,
         BanditParams: FlightModel.Su27SPublicDataSurrogate,
+        UsesReactiveBandit: usesReactiveBandit,
         Combat: new CombatConfig(
-            PlayerAmmo: 40,
+            PlayerAmmo: playerAmmo,
             OpponentAmmo: opponentAmmo,
             PlayerHitsToDefeat: 3,
             OpponentHitsToDefeat: opponentHitsToDefeat,
@@ -37,12 +62,21 @@ public sealed class CombatHandoffTests {
         BanditCapability: AircraftCapability.Su27SSurrogate,
         ContinuousCombat: new ContinuousCombatConfig(
             ReplacementDelaySeconds: 0.1,
-            MaximumFormationSize: 1));
+            MaximumFormationSize: maximumFormationSize),
+        BanditSkill: PilotSkill.Ace);
 
     static SimulationSession StartHandoffFight(int opponentAmmo = 0,
-        int opponentHitsToDefeat = 2) {
+        int opponentHitsToDefeat = 2,
+        bool usesReactiveBandit = false,
+        int maximumFormationSize = 1,
+        int playerAmmo = 40) {
         var session = new SimulationSession();
-        session.StartBeat(() => HandoffFight(opponentAmmo, opponentHitsToDefeat));
+        session.StartBeat(() => HandoffFight(
+            opponentAmmo,
+            opponentHitsToDefeat,
+            usesReactiveBandit,
+            maximumFormationSize,
+            playerAmmo));
         session.Begin();
         return session;
     }
@@ -180,6 +214,163 @@ public sealed class CombatHandoffTests {
         Assert.Empty(playerGun.RoundsInFlight);
         Assert.Equal(ammoAfterLaunch, playerGun.AmmoRemaining);
         Assert.NotNull(session.Relief.Gun);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ActualHandoffContactSwitchInvalidatesPlannerWorkOffLane(
+        bool completedPlan) {
+        SimulationSession session = StartHandoffFight(
+            usesReactiveBandit: true);
+        session.SetAiComputeLevel(AiComputeLevel.Full);
+        var planner = Assert.IsType<ReactiveBandit>(session.Bandit);
+
+        bool reachedRequestedPlannerState = false;
+        for (int tick = 0;
+            tick < 2 * ReactiveBandit.LookaheadDecisionCadenceTicks;
+            tick++) {
+            AiWorkloadCounters before = planner.AiWorkload;
+            session.StepFixed();
+            AiWorkloadCounters delta = planner.AiWorkload - before;
+            Assert.InRange(delta.CandidateEvaluations, 0, 2);
+
+            reachedRequestedPlannerState = completedPlan
+                ? planner.AiWorkload.PlansCompleted > 0
+                : planner.AiWorkload.PlansStarted > 0
+                    && planner.AiWorkload.PlansCompleted == 0;
+            if (reachedRequestedPlannerState) break;
+        }
+        Assert.True(reachedRequestedPlannerState);
+
+        AiWorkloadCounters workBeforeSwitch = planner.AiWorkload;
+        long selectionBeforeSwitch =
+            planner.DecisionTrace.SelectionSequence;
+        session.FeedKey(GKey.KnockItOff, true);
+        session.StepFixed();
+
+        Assert.Equal(CombatHandoffPhase.Drain, session.CombatHandoffPhase);
+        Assert.NotNull(session.Relief);
+        // Player and relief can both be their class's first spawn. A safe hold here proves the
+        // selected-contact identity includes its class rather than accidentally reusing "1".
+        Assert.Equal(workBeforeSwitch, planner.AiWorkload);
+        Assert.Equal(
+            selectionBeforeSwitch + 1,
+            planner.DecisionTrace.SelectionSequence);
+        Assert.Equal(1, planner.DecisionTrace.CandidateCount);
+        Assert.Equal(
+            planner.LastCommand,
+            planner.DecisionTrace.SelectedCommand);
+    }
+
+    [Fact]
+    public void LiveReliefSharesComputeBudgetWorkloadAndTerrainInvalidation() {
+        SimulationSession session = StartHandoffFight(
+            usesReactiveBandit: true,
+            maximumFormationSize: 2,
+            playerAmmo: 0);
+        session.SetAiComputeLevel(AiComputeLevel.Emergency);
+        session.FeedKey(GKey.KnockItOff, true);
+        session.StepFixed();
+
+        var primary = Assert.IsType<ReactiveBandit>(session.Bandit);
+        var support = Assert.IsType<ReactiveBandit>(
+            Assert.Single(session.Wingmen).Bandit);
+        var relief = Assert.IsType<ReactiveBandit>(
+            Assert.IsType<ReliefFighter>(session.Relief).Actor);
+        Assert.Equal(AiComputeLevel.Emergency, primary.ComputeLevel);
+        Assert.Equal(AiComputeLevel.Emergency, support.ComputeLevel);
+        Assert.Equal(AiComputeLevel.Emergency, relief.ComputeLevel);
+
+        bool reliefCompletedPlan = false;
+        for (int tick = 0;
+            tick < 3 * ReactiveBandit.LookaheadDecisionCadenceTicks;
+            tick++) {
+            AiWorkloadCounters primaryBefore = primary.AiWorkload;
+            AiWorkloadCounters supportBefore = support.AiWorkload;
+            AiWorkloadCounters reliefBefore = relief.AiWorkload;
+            session.StepFixed();
+
+            Assert.InRange(
+                (primary.AiWorkload - primaryBefore).CandidateEvaluations,
+                0, 1);
+            Assert.InRange(
+                (support.AiWorkload - supportBefore).CandidateEvaluations,
+                0, 1);
+            Assert.InRange(
+                (relief.AiWorkload - reliefBefore).CandidateEvaluations,
+                0, 1);
+            Assert.Equal(
+                primary.AiWorkload + support.AiWorkload + relief.AiWorkload,
+                session.AiWorkload);
+            if (relief.AiWorkload.PlansCompleted > 0) {
+                reliefCompletedPlan = true;
+                break;
+            }
+        }
+        Assert.True(reliefCompletedPlan);
+
+        AiWorkloadCounters workBeforeReanchor = relief.AiWorkload;
+        long selectionBeforeReanchor =
+            relief.DecisionTrace.SelectionSequence;
+        session.SetTerrainSurface(new FlatTerrain(heightM: 25.0));
+        session.StepFixed();
+
+        Assert.Equal(workBeforeReanchor, relief.AiWorkload);
+        Assert.Equal(
+            selectionBeforeReanchor + 1,
+            relief.DecisionTrace.SelectionSequence);
+        Assert.Equal(1, relief.DecisionTrace.CandidateCount);
+        Assert.Equal(
+            relief.LastCommand,
+            relief.DecisionTrace.SelectedCommand);
+    }
+
+    [Fact]
+    public void ReliefTargetPromotionInvalidatesItsCompletedHoldOffLane() {
+        SimulationSession session = StartHandoffFight(
+            opponentHitsToDefeat: 1,
+            usesReactiveBandit: true,
+            maximumFormationSize: 2);
+        session.SetAiComputeLevel(AiComputeLevel.Full);
+        AdvanceToReliefEngaged(session);
+
+        var relief = Assert.IsType<ReactiveBandit>(session.Relief!.Actor);
+        int phase = Assert.IsType<int>(relief.LookaheadCadencePhase);
+        for (int tick = 0;
+            tick < 3 * ReactiveBandit.LookaheadDecisionCadenceTicks
+                && (relief.AiWorkload.PlansCompleted == 0
+                    || (session.Tick + 1)
+                        % ReactiveBandit.LookaheadDecisionCadenceTicks
+                        == phase);
+            tick++)
+            session.StepFixed();
+        Assert.True(relief.AiWorkload.PlansCompleted > 0);
+        Assert.NotEqual(
+            phase,
+            (int)((session.Tick + 1)
+                % ReactiveBandit.LookaheadDecisionCadenceTicks));
+
+        IBandit promotedActor = Assert.Single(session.Wingmen).Bandit;
+        GunKill reliefGun = Assert.IsType<GunKill>(session.Relief.Gun);
+        ScoreOneHit(reliefGun, reliefGun.SelectedTargetId);
+        session.StepFixed();
+
+        Assert.Same(promotedActor, session.Bandit);
+        Assert.Empty(session.Wingmen);
+        AiWorkloadCounters workBeforeSwitch = relief.AiWorkload;
+        long selectionBeforeSwitch =
+            relief.DecisionTrace.SelectionSequence;
+        session.StepFixed();
+
+        Assert.Equal(workBeforeSwitch, relief.AiWorkload);
+        Assert.Equal(
+            selectionBeforeSwitch + 1,
+            relief.DecisionTrace.SelectionSequence);
+        Assert.Equal(1, relief.DecisionTrace.CandidateCount);
+        Assert.Equal(
+            relief.LastCommand,
+            relief.DecisionTrace.SelectedCommand);
     }
 
     [Fact]

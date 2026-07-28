@@ -154,9 +154,10 @@ test("build lookup uses canonical production from Vercel deployments but stays o
 });
 
 test("shell, browser module, service worker, and deployment endpoint share one release number", async () => {
-  const [index, app, serviceWorker, deployScript, sceneBuilders, airframeBuilder] = await Promise.all([
+  const [index, app, hud, serviceWorker, deployScript, sceneBuilders, airframeBuilder] = await Promise.all([
     readFile(new URL("index.html", WEB_ROOT), "utf8"),
     readFile(new URL("app.js", WEB_ROOT), "utf8"),
+    readFile(new URL("hud.js", WEB_ROOT), "utf8"),
     readFile(new URL("service-worker.js", WEB_ROOT), "utf8"),
     readFile(new URL("../../../../../bin/deploy-web", import.meta.url), "utf8"),
     readFile(new URL("render/scene/scene_builders.js", WEB_ROOT), "utf8"),
@@ -185,12 +186,15 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.doesNotMatch(deployScript, /Ukraine atlas pages missing; Rapier theatre may render empty/,
     "a missing deployment atlas must be fatal, not a warning");
   for (const path of [
+    "./hud.js",
     "./render/audio/flight_audio.js",
     "./render/debrief/sortie_result.js",
     "./render/hud/limits_panel.js",
     "./render/release/release_identity.js",
     "./render/scene/scene_builders.js",
     "./render/settings/player_settings.js",
+    "./render/telemetry/ai_frame_pressure.js",
+    "./render/telemetry/telemetry_batch.js",
   ]) {
     const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     assert.match(
@@ -201,6 +205,16 @@ test("shell, browser module, service worker, and deployment endpoint share one r
     assert.doesNotMatch(app, new RegExp(`from "${escapedPath}"`),
       `${path} must not retain an unversioned direct import`);
   }
+  assert.match(
+    hud,
+    new RegExp(`from "\\./render/audio/flight_audio\\.js\\?v=${RELEASE_BUILD}"`),
+    "the HUD gesture path and render loop must import the same flight-audio module identity",
+  );
+  assert.doesNotMatch(
+    hud,
+    /from "\.\/render\/audio\/flight_audio\.js";/,
+    "the HUD must not reintroduce an unversioned second flight-audio controller",
+  );
   assert.match(sceneBuilders,
     new RegExp(`from "\\./airframe_from_definition\\.js\\?v=${RELEASE_BUILD}"`),
     "the versioned scene graph must not re-enter an older cached airframe builder");

@@ -6,6 +6,7 @@ import {
   TELEMETRY_REQUEST_BYTE_LIMIT,
   buildTelemetryBatch,
   retainNewestTelemetryRows,
+  retainTelemetryRowsUnderBackpressure,
   utf8ByteLength,
 } from "../telemetry_batch.js";
 
@@ -103,8 +104,112 @@ test("UTF-8 byte accounting, rather than JavaScript character count, sets the bo
   assert.ok(batch.requestBytes > batch.payload.length);
 });
 
+test("AI compute transitions retain their effective authority ticks through serialization", () => {
+  const rows = [
+    {
+      k: "in",
+      type: "perf",
+      code: "AiComputeLevel",
+      level: 2,
+      initial: true,
+      effective_authority_tick: 0,
+    },
+    {
+      k: "in",
+      type: "perf",
+      code: "AiComputeLevel",
+      level: 0,
+      effective_authority_tick: 19,
+    },
+  ];
+  const batch = buildTelemetryBatch({
+    session: "ai-level-tape",
+    batchId: "batch-ai-level-tape-0001",
+    rows,
+  });
+  const decodedRows = JSON.parse(batch.payload).rows;
+
+  assert.deepEqual(decodedRows, rows);
+  assert.deepEqual(
+    decodedRows.map((row) => [
+      row.effective_authority_tick,
+      row.level,
+    ]),
+    [[0, 2], [19, 0]],
+  );
+});
+
 test("bounded queues retain the newest reconstruction trace", () => {
   const rows = Array.from({ length: 12 }, (_, tick) => ({ tick }));
   assert.deepEqual(retainNewestTelemetryRows(rows, 5).map((row) => row.tick), [7, 8, 9, 10, 11]);
   assert.equal(retainNewestTelemetryRows(rows, 0).length, 0);
+});
+
+test("backpressure retains and serializes the latest sortie AI baseline in order", () => {
+  const oldBaseline = {
+    k: "in",
+    t: 0,
+    sortie: "sortie-1",
+    type: "perf",
+    code: "AiComputeLevel",
+    level: 0,
+    cause: "sortie-initial",
+    initial: true,
+    effective_authority_tick: 0,
+  };
+  const currentBaseline = {
+    k: "in",
+    t: 20,
+    sortie: "sortie-2",
+    type: "perf",
+    code: "AiComputeLevel",
+    level: 2,
+    cause: "sortie-initial",
+    initial: true,
+    effective_authority_tick: 240,
+  };
+  let queued = [
+    oldBaseline,
+    ...Array.from({ length: 4 }, (_, index) => ({ k: "ctx", t: index + 1 })),
+    currentBaseline,
+    ...Array.from({ length: 8 }, (_, index) => ({
+      k: "in",
+      t: 21 + index,
+      sortie: "sortie-2",
+      type: "input",
+      code: `sample-${index}`,
+    })),
+  ];
+
+  queued = retainTelemetryRowsUnderBackpressure(queued, 5);
+  assert.equal(queued.length, 5);
+  assert.equal(queued[0], currentBaseline,
+    "the latest sortie baseline replaces only the oldest retained tail row");
+  assert.deepEqual(queued.slice(1).map((row) => row.t), [25, 26, 27, 28]);
+  assert.equal(queued.includes(oldBaseline), false);
+
+  queued.push({
+    k: "in",
+    t: 29,
+    sortie: "sortie-2",
+    type: "input",
+    code: "sample-8",
+  });
+  queued = retainTelemetryRowsUnderBackpressure(queued, 5);
+  assert.deepEqual(queued.map((row) => row.t), [20, 26, 27, 28, 29],
+    "repeated overflow remains bounded and chronological");
+
+  const batch = buildTelemetryBatch({
+    session: "ai-baseline-backpressure",
+    batchId: "batch-ai-baseline-backpressure-0001",
+    rows: queued,
+  });
+  const decodedRows = JSON.parse(batch.payload).rows;
+  assert.equal(decodedRows.length, 5);
+  assert.deepEqual(decodedRows, queued);
+  assert.deepEqual(decodedRows[0], currentBaseline);
+  assert.deepEqual(
+    decodedRows.map((row) => row.t),
+    [20, 26, 27, 28, 29],
+  );
 });

@@ -115,6 +115,27 @@ public class RapierGunDroneTests {
         };
     }
 
+    static BeatSetup ReactivePlanningAttackCard(bool startsReactive) {
+        BeatSetup card = AirborneAttackCard(formationSize: 1);
+        return card with {
+            // Match the direct-planner regression geometry below the opponent's BFM ceiling.
+            // The ordinary Rapier fixture starts at 12 km, where terrain/energy recovery correctly
+            // pre-empts lookahead and therefore cannot prove incremental planner behaviour.
+            Player = card.Player with {
+                Position = new Vec3D(650.0, 3_120.0, 301_550.0),
+                Speed = 285.0,
+                Chi = Math.PI - 0.25
+            },
+            Bandit = card.Bandit with {
+                Position = new Vec3D(0.0, 3_000.0, 300_000.0),
+                Speed = 300.0,
+                Chi = 0.15
+            },
+            UsesReactiveBandit = startsReactive,
+            BanditSkill = PilotSkill.Ace
+        };
+    }
+
     [Fact]
     public void SessionReleaseSpawnsOnePhysicalDroneWithoutWipingFormation() {
         var session = new SimulationSession();
@@ -176,7 +197,8 @@ public class RapierGunDroneTests {
     [Fact]
     public void ReleasedDronePromotesPrimaryBanditOffRailInsideThreatVolume() {
         var session = new SimulationSession();
-        session.StartBeat(() => AirborneAttackCard());
+        session.StartBeat(() => ReactivePlanningAttackCard(startsReactive: false));
+        session.SetAiComputeLevel(AiComputeLevel.Emergency);
         session.Begin();
         session.StepFixed();
         session.FeedKey(GKey.Trigger, true);
@@ -184,15 +206,60 @@ public class RapierGunDroneTests {
         session.StepFixed();
 
         Assert.True(session.RapierGunDroneThreatReactive);
+        var promoted = Assert.IsType<ReactiveBandit>(session.Bandit);
+        Assert.Equal(AiComputeLevel.Emergency, promoted.ComputeLevel);
         AircraftState before = session.Bandit.State;
-        for (int i = 0; i < (int)(2.0 * AircraftSim.TickHz); i++)
+        bool observedIncrementalWork = false;
+        for (int i = 0; i < (int)(2.0 * AircraftSim.TickHz); i++) {
+            AiWorkloadCounters workBeforeStep = promoted.AiWorkload;
             session.StepFixed();
+            AiWorkloadCounters workThisStep =
+                promoted.AiWorkload - workBeforeStep;
+            Assert.InRange(workThisStep.CandidateEvaluations, 0, 1);
+            observedIncrementalWork |= workThisStep.CandidateEvaluations > 0;
+        }
         AircraftState after = session.Bandit.State;
+        Assert.True(observedIncrementalWork);
         Assert.True(
             Math.Abs(after.Bank - before.Bank) > 1e-3
             || Math.Abs(after.Chi - before.Chi) > 1e-3
             || Math.Abs(after.Gamma - before.Gamma) > 1e-3,
             "primary stayed on pure rail after gun-drone release");
+    }
+
+    [Fact]
+    public void GunDroneContactSwitchInvalidatesReactiveHoldOffLane() {
+        var session = new SimulationSession();
+        session.StartBeat(() => ReactivePlanningAttackCard(startsReactive: true));
+        session.SetAiComputeLevel(AiComputeLevel.Full);
+        session.Begin();
+        session.StepFixed();
+
+        Assert.Equal(RapierMissionPhase.Attack, session.RapierPhase);
+        var planner = Assert.IsType<ReactiveBandit>(session.Bandit);
+        for (int tick = 0;
+            tick < 3 * ReactiveBandit.LookaheadDecisionCadenceTicks
+                && planner.AiWorkload.PlansCompleted == 0;
+            tick++)
+            session.StepFixed();
+        Assert.True(planner.AiWorkload.PlansCompleted > 0);
+
+        AiWorkloadCounters workBeforeSwitch = planner.AiWorkload;
+        long selectionBeforeSwitch =
+            planner.DecisionTrace.SelectionSequence;
+        session.FeedKey(GKey.Trigger, true);
+        session.FeedKey(GKey.Trigger, false);
+        session.StepFixed();
+
+        Assert.NotNull(session.ActiveRapierGunDrone);
+        Assert.Equal(workBeforeSwitch, planner.AiWorkload);
+        Assert.Equal(
+            selectionBeforeSwitch + 1,
+            planner.DecisionTrace.SelectionSequence);
+        Assert.Equal(1, planner.DecisionTrace.CandidateCount);
+        Assert.Equal(
+            planner.LastCommand,
+            planner.DecisionTrace.SelectedCommand);
     }
 
     [Fact]

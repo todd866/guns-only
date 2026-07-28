@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js";
+import { createHud } from "./hud.js?v=174";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=173";
+} from "./render/debrief/sortie_result.js?v=174";
 import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -43,7 +43,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=173";
+} from "./render/release/release_identity.js?v=174";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -56,7 +56,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=173";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=174";
 import {
   applyLookDelta,
   trackpadLookDelta,
@@ -102,11 +102,15 @@ import {
   saveCampaignProfile,
 } from "./render/progression/campaign_progression.js";
 import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
+import {
+  AdaptiveAiWorkBudget,
+  AI_COMPUTE_LEVEL,
+} from "./render/telemetry/ai_frame_pressure.js?v=174";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
-  retainNewestTelemetryRows,
-} from "./render/telemetry/telemetry_batch.js";
+  retainTelemetryRowsUnderBackpressure,
+} from "./render/telemetry/telemetry_batch.js?v=174";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -115,7 +119,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=173";
+} from "./render/settings/player_settings.js?v=174";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -156,11 +160,11 @@ import {
   createRapierDispersedStrip,
   createRapierGunDrone,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=173";
+} from "./render/scene/scene_builders.js?v=174";
 import {
   setFlightAudioEnabled,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=173";
+} from "./render/audio/flight_audio.js?v=174";
 
 const DEG = Math.PI / 180;
 const MAX_GIMBAL_YAW = PADLOCK_LIMITS.yawRad;
@@ -942,14 +946,16 @@ const FRAME_GOVERNOR_WINDOW_MS = 1000;
 // with geometries, programs and scene objects all flat, so nothing was being built or compiled. It
 // was the loop eating itself.
 //
-// Ten ticks recovers an ordinary five-frame hitch inside one frame and still leaves 5x headroom
-// over the 2 ticks a healthy frame needs. Past that the simulation deliberately loses wall-clock
-// time rather than chase it. Slight slow motion during a stall is the correct trade: the pilot
-// keeps control authority and the frame rate recovers, instead of both being surrendered for
-// several seconds. It also removes a quarter-second window in which the pilot's stick was frozen
-// while the aircraft flew on — which is how a low-altitude fight ends in a smoking hole.
-const SIM_CATCHUP_CAP_SECONDS = 10 / 120;
+// Four ticks recovers one missed 60 Hz interval without crossing the formation's five-tick planner
+// lane separation. The former ten-tick cap could execute both enemies' expensive lookahead lanes
+// in one request immediately after a hitch, manufacturing the next hitch. Past four ticks the
+// simulation deliberately loses wall-clock time rather than chase it. Brief slow motion is safer
+// than surrendering both control authority and frame delivery to a catch-up spiral.
+const SIM_CATCHUP_CAP_SECONDS = 4 / 120;
 const timeCompressionBudget = new MeasuredTimeCompressionBudget();
+const adaptiveAiWorkBudget = new AdaptiveAiWorkBudget();
+let previousSimPhaseMilliseconds = 0;
+let previousExecutedTicks = 2;
 
 const FRAME_GOVERNOR_LATE_FRAME_MS = 22;
 const FRAME_GOVERNOR_TRIP_FRACTION = 0.05;   // 5% of a window's frames arriving late
@@ -1069,6 +1075,37 @@ function announceGovernor(message) {
   if (viewStatus) viewStatus.textContent = message;
 }
 
+function applyAiComputeLevel(level) {
+  const bridgeTick = Number(bridge?.SetAiComputeLevel?.(level));
+  if (Number.isFinite(bridgeTick) && bridgeTick >= 0)
+    return Math.floor(bridgeTick);
+  const projectedTick = Number(latestState?.tick);
+  return Number.isFinite(projectedTick) && projectedTick >= 0
+    ? Math.floor(projectedTick)
+    : 0;
+}
+
+function resetAdaptiveAiBudget({ recordInitial = false } = {}) {
+  // Keep the compute level learned on this browser session across sorties. A low-spec machine
+  // should not have to reproduce two bad frames after every respawn; eight seconds of measured
+  // headroom will still earn fidelity back one level at a time.
+  const retainedLevel = adaptiveAiWorkBudget.snapshot().computeLevel
+    ?? AI_COMPUTE_LEVEL.FULL;
+  const state = adaptiveAiWorkBudget.reset(retainedLevel);
+  previousSimPhaseMilliseconds = 0;
+  previousExecutedTicks = 2;
+  const effectiveAuthorityTick =
+    applyAiComputeLevel(state.computeLevel);
+  if (recordInitial) {
+    recorder.event("perf", "AiComputeLevel", {
+      level: state.computeLevel,
+      cause: "sortie-initial",
+      initial: true,
+      effective_authority_tick: effectiveAuthorityTick,
+    });
+  }
+}
+
 // The fight director's pacing estimate, persisted across page loads.
 //
 // The gauntlet cold-started at the 2.4 G Novice warm-up every time the page was reloaded, so a
@@ -1126,6 +1163,7 @@ function sampleSceneCounters() {
     programs: info.programs?.length ?? 0,
     scene_objects: sceneObjects,
     governor_level: frameGovernor.level,
+    ai_compute_level: adaptiveAiWorkBudget.snapshot().computeLevel,
     stream_radius_m: Number.isFinite(streamRadius) ? streamRadius : 0,
     scenery_suppressed: activeView.terrainGovernorSuppressesAmbientScenery === true ? 1 : 0,
     micro_required: activeView.terrainMicroRequired === true ? 1 : 0,
@@ -1184,7 +1222,7 @@ const recorder = {
     if (this.buf.length > TELEMETRY_BUFFER_LIMIT) {
       const overflow = this.buf.length - TELEMETRY_BUFFER_LIMIT;
       this.buf = ensureTelemetryChunkKeyframe(
-        retainNewestTelemetryRows(this.buf, TELEMETRY_BUFFER_LIMIT),
+        retainTelemetryRowsUnderBackpressure(this.buf, TELEMETRY_BUFFER_LIMIT),
       );
       this.droppedRows += overflow;
     }
@@ -2478,6 +2516,7 @@ function releasePadlock(reason = "manual", { announce = true, record = true } = 
 
 function resetMissionPresentation() {
   frameGovernor.reset(activeView);
+  resetAdaptiveAiBudget();
   terrainLaunchWarmupFailedKey = null;
   clearFlightInput("mission-reset");
   incidentReplay?.stop();
@@ -3120,7 +3159,6 @@ function launchMission(index = selectedBeat) {
     autoLaunchPending = true;
     return false;
   }
-  activeView?.hud.armAudio();
   return beginFlight();
 }
 
@@ -3335,6 +3373,7 @@ function beginFlight() {
   // Ready/warmup frames are deliberately excluded from the performance sample, and every sortie
   // starts from its mission-authored terrain radius and restored shadow/scenery policy.
   frameGovernor.reset(activeView);
+  resetAdaptiveAiBudget({ recordInitial: true });
   activeView?.beginCloudBreakEntry();
   pauseReasons.delete("ready");
   bridgePauseApplied = false;
@@ -7249,6 +7288,20 @@ function activeFlightAxisOwnsKey(event) {
 }
 
 function installInput(view) {
+  // The default sortie can launch before the pilot has touched the page. Unlock the shared graph
+  // on the first real keyboard/pointer interaction, regardless of which flight control they use.
+  // armFlightAudio verifies browser user activation, so synthetic and automatic launch paths stay
+  // allocation-safe without spending a resume attempt.
+  const armAudioFromGesture = () => view.hud.armAudio();
+  window.addEventListener("pointerdown", armAudioFromGesture, {
+    capture: true,
+    passive: true,
+  });
+  window.addEventListener("keydown", armAudioFromGesture, {
+    capture: true,
+    passive: true,
+  });
+
   window.addEventListener("keydown", (event) => {
     // Native controls own Enter, Space and arrow-key semantics while focused. This prevents the
     // dialog's mission buttons from leaking into flight shortcuts or launching the previous card.
@@ -7620,11 +7673,31 @@ async function boot() {
       // consumer upward cannot create a temporal-dead-zone crash that freezes every flight
       // control on the first live frame. The projection below refreshes this value for rendering.
       let replayActive = incidentReplay?.active === true;
-      // Raw (unclamped) render-frame delta: the perf telemetry must see the true stall length,
-      // not the 0.25 s simulation-advance cap.
+      // Raw (unclamped) render-frame delta: perf telemetry must see the true stall length, not the
+      // deliberately short simulation-advance cap used to prevent a catch-up spiral.
       const renderDeltaMs = now - previous;
       recorder.observeFrameDelta(renderDeltaMs);
       const dt = clamp(renderDeltaMs / 1000, 0, SIM_CATCHUP_CAP_SECONDS);
+      const aiBudgetDecision = adaptiveAiWorkBudget.observe({
+        // RAF's delta closes the preceding rendered frame, so pair it with the sim phase measured
+        // in that same preceding frame rather than the work this callback has not run yet.
+        frameMs: renderDeltaMs,
+        simMs: previousSimPhaseMilliseconds,
+        executedTicks: previousExecutedTicks,
+        active: incidentReplay?.active !== true
+          && pauseReasons.size === 0
+          && latestState?.session_phase === "ACTIVE",
+      });
+      if (aiBudgetDecision.changed) {
+        const effectiveAuthorityTick =
+          applyAiComputeLevel(aiBudgetDecision.computeLevel);
+        recorder.event("perf", "AiComputeLevel", {
+          level: aiBudgetDecision.computeLevel,
+          cause: aiBudgetDecision.cause,
+          normalized_sim_ms: aiBudgetDecision.normalizedSimMs,
+          effective_authority_tick: effectiveAuthorityTick,
+        });
+      }
       const compressionPlan = timeCompressionBudget.plan(
         renderDeltaMs, SIM_CATCHUP_CAP_SECONDS,
       );
@@ -7650,6 +7723,8 @@ async function boot() {
       const state = snapshotSource.frame(now);
       const executedTicks = Math.max(0,
         (Number(state.tick) || 0) - tickBeforeAdvance);
+      previousSimPhaseMilliseconds = simPhaseMilliseconds;
+      previousExecutedTicks = executedTicks;
       timeCompressionBudget.observeSimPhase(simPhaseMilliseconds, executedTicks);
       recorder.observeTimeCompression({
         requestedTicks: kernelSelectedCompressionFactor > 1
@@ -7720,7 +7795,7 @@ async function boot() {
 // prevent the game from starting: the sortie is the product, offline is an enhancement.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=173").catch((error) => {
+    navigator.serviceWorker.register("service-worker.js?v=174").catch((error) => {
       console.warn("Offline support unavailable.", error);
     });
   });

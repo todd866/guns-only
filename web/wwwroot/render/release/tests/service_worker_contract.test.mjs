@@ -102,6 +102,27 @@ test("successful runtime cache writes extend the fetch-event lifetime", async ()
   assert.equal(lifetimeSettled, true);
 });
 
+test("live telemetry endpoints bypass caching without excluding telemetry modules", async () => {
+  const harness = await workerHarness();
+  const endpoint = harness.dispatchFetch({
+    method: "GET",
+    mode: "cors",
+    url: "https://guns-only.vercel.app/telemetry/session",
+  });
+  assert.equal(endpoint.response, undefined);
+  assert.equal(endpoint.lifetimeCount, 0);
+
+  const module = harness.dispatchFetch({
+    method: "GET",
+    mode: "cors",
+    url: "https://guns-only.vercel.app/render/telemetry/ai_frame_pressure.js?v=test",
+  });
+  assert.ok(module.response, "a telemetry presentation module must use the offline cache path");
+  await module.response;
+  await module.lifetime;
+  assert.equal(harness.puts.length, 1);
+});
+
 test("navigation caching is lifecycle-safe and rejects non-OK responses", async () => {
   let finishWrite;
   const successful = await workerHarness({

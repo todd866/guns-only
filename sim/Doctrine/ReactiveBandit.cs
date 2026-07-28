@@ -150,7 +150,8 @@ public enum BanditTactic { Acquire, Defend, Energy, Return }
 public sealed class ReactiveBandit :
     IBandit,
     IBanditDecisionTraceSource,
-    IFormationDirectiveSink {
+    IFormationDirectiveSink,
+    IAdaptiveAiPlanner {
     const double FloorM = 260.0;
     const double CeilingM = 3200.0;
     // Believable guns knife-fight ceiling (~37,700 ft). The per-fight ceiling may sit LOWER (it
@@ -217,10 +218,55 @@ public sealed class ReactiveBandit :
     long _lastAbsoluteLookaheadDecisionTick = long.MinValue;
     long _selectionSequence;
     FormationDirective _formationDirective;
+    AiComputeLevel _computeLevel = AiComputeLevel.Full;
+    bool _incrementalAiPlanning;
+    bool _lookaheadPlanPending;
+    bool _lookaheadPlanUsesLowAttack;
+    bool _lookaheadCommandUsesLowAttack;
+    bool _lookaheadCommandValid = true;
+    bool _lookaheadContextBound;
+    long _lookaheadPlanContactIdentity;
+    long _lookaheadCommandContactIdentity;
+    readonly PilotCommand[] _lookaheadCandidates =
+        new PilotCommand[BanditDecisionTrace.CandidateCapacity];
+    readonly bool[] _lookaheadCandidateAvailable =
+        new bool[BanditDecisionTrace.CandidateCapacity];
+    readonly double[] _lookaheadCandidateScores =
+        new double[BanditDecisionTrace.CandidateCapacity];
+    readonly double[] _lookaheadDoctrineBiases =
+        new double[BanditDecisionTrace.CandidateCapacity];
+    readonly double[] _lookaheadTailBiases =
+        new double[BanditDecisionTrace.CandidateCapacity];
+    readonly double[] _lookaheadFormationBiases =
+        new double[BanditDecisionTrace.CandidateCapacity];
+    AircraftState _lookaheadPlanOwn;
+    ActorObservation _lookaheadPlanPlayer;
+    GunsOnly.Sim.Environment.ITerrainSurface? _lookaheadPlanTerrain;
+    IAtmosphereModel? _lookaheadPlanAtmosphere;
+    GunsOnly.Sim.Turbulence.IWindField? _lookaheadPlanWind;
+    double _lookaheadPlanThrustFraction;
+    bool _lookaheadPlanBossCommitted;
+    int _lookaheadPlanPredictionSubstepTicks;
+    int _lookaheadNextCandidateIndex;
+    double _lookaheadBestScore;
+    PilotCommand _lookaheadBestCommand;
+    int _lookaheadBestIndex;
+    long _plansStarted;
+    long _plansCompleted;
+    long _candidateEvaluations;
+    long _forecastSteps;
+    long _terrainSweeps;
 
     public PilotSkill Skill { get; }
     public AircraftParams AircraftParameters => _parameters;
     internal int? LookaheadCadencePhase => _absoluteLookaheadCadencePhase;
+    public AiComputeLevel ComputeLevel => _computeLevel;
+    public AiWorkloadCounters AiWorkload => new(
+        _plansStarted,
+        _plansCompleted,
+        _candidateEvaluations,
+        _forecastSteps,
+        _terrainSweeps);
 
     public ReactiveBandit(AircraftState initial, AircraftParams parameters,
         PilotSkill skill = PilotSkill.Competent,
@@ -580,14 +626,36 @@ public sealed class ReactiveBandit :
     }
 
     /// <summary>
+    /// Select how speculative lookahead work is distributed. Directly constructed bandits retain
+    /// the historical all-candidates-on-the-decision-tick path until a host explicitly opts into
+    /// incremental planning.
+    /// </summary>
+    public void ConfigureAiPlanning(AiComputeLevel level, bool incremental) {
+        if (!System.Enum.IsDefined(level))
+            throw new System.ArgumentOutOfRangeException(nameof(level));
+        if (_computeLevel == level && _incrementalAiPlanning == incremental) return;
+
+        CancelPendingLookaheadPlan();
+        // Forecast fidelity is part of maneuver selection. A command published under a different
+        // level (or synchronous/amortized policy) must not remain authoritative until the next
+        // cadence lane; the next Step installs a cheap, current-context hold without doing
+        // unscheduled candidate work.
+        if (_lookaheadContextBound)
+            _lookaheadCommandValid = false;
+        _computeLevel = level;
+        _incrementalAiPlanning = incremental;
+    }
+
+    /// <summary>
     /// Anchor expensive formation lookahead to an actor-specific lane on the authoritative
     /// observation tick. A neutral-merge controller may begin many seconds after its wingman, and
-    /// local countdowns can therefore coincide for some merge/input timing. Absolute lanes keep
-    /// the pair dephased without reading wall time or changing deterministic replay.
+    /// local countdowns can otherwise coincide after tactical preemption or handoff. Absolute
+    /// lanes keep the pair dephased without wall time or replay-dependent local countdowns.
     /// </summary>
     internal void ConfigureLookaheadCadencePhase(int phase) {
         if (phase < 0 || phase >= LookaheadDecisionCadenceTicks)
             throw new System.ArgumentOutOfRangeException(nameof(phase));
+        CancelPendingLookaheadPlan();
         _absoluteLookaheadCadencePhase = phase;
         _lastAbsoluteLookaheadDecisionTick = long.MinValue;
     }
@@ -609,11 +677,34 @@ public sealed class ReactiveBandit :
     internal void SeedEnginePowerFraction(double powerFraction) =>
         _sim.SeedEnginePowerFraction(powerFraction);
 
+    /// <summary>
+    /// Preserve the command already being flown when scenario geometry hands this controller an
+    /// existing aircraft. In particular, an incremental post-merge plan must not replace the
+    /// authored reciprocal-pass hold with the generic constructor default while it is scored.
+    /// </summary>
+    internal void SeedHeldCommand(
+        in PilotCommand command,
+        long contactIdentity = 0) {
+        if (contactIdentity < 0)
+            throw new System.ArgumentOutOfRangeException(nameof(contactIdentity));
+        _lookaheadCommand = command;
+        _lookaheadCommandUsesLowAttack = false;
+        _lookaheadCommandContactIdentity = contactIdentity;
+        _lookaheadCommandValid = true;
+        _lookaheadContextBound = true;
+        LastCommand = command;
+    }
+
     /// <summary>Follow a session terrain replacement (world-origin re-anchor or data-pack swap)
     /// so floor sense and the recovery reflex keep sampling the currently authoritative ground.
     /// </summary>
-    public void UpdateTerrain(GunsOnly.Sim.Environment.ITerrainSurface? terrain) =>
+    public void UpdateTerrain(GunsOnly.Sim.Environment.ITerrainSurface? terrain) {
+        if (ReferenceEquals(_terrain, terrain)) return;
+        CancelPendingLookaheadPlan();
+        if (_lookaheadContextBound)
+            _lookaheadCommandValid = false;
         _terrain = terrain;
+    }
 
     public bool WantsToFire(in ActorObservation player) {
         if (CatastrophicallyDamaged || _terrainRecoveryActive
@@ -696,6 +787,7 @@ public sealed class ReactiveBandit :
 
     public void ApplyCatastrophicDamage(int handedness) {
         if (CatastrophicallyDamaged) return;
+        CancelPendingLookaheadPlan();
         CatastrophicallyDamaged = true;
         _damageHandedness = handedness < 0 ? -1 : 1;
         _sim.EngineCombustionAvailable = false;
@@ -707,6 +799,7 @@ public sealed class ReactiveBandit :
         double surfaceHeightM, Carrier? carrier = null,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
         if (_wreckMotion is not null) return;
+        CancelPendingLookaheadPlan();
         ApplyCatastrophicDamage(_damageHandedness);
         _wreckMotion = new WreckContactMotion(_sim.State, surface,
             surfaceVelocity, surfaceHeightM, carrier, terrain: terrain ?? _terrain);
@@ -718,6 +811,7 @@ public sealed class ReactiveBandit :
             throw new System.ArgumentOutOfRangeException(nameof(dt));
 
         if (_wreckMotion is not null) {
+            CancelPendingLookaheadPlan();
             _sim.AdvanceEngineOnly(0.0, dt);
             _wreckMotion.Step(dt);
             _sim.AdoptExternalKinematics(_wreckMotion.State);
@@ -726,6 +820,7 @@ public sealed class ReactiveBandit :
         }
 
         if (CatastrophicallyDamaged) {
+            CancelPendingLookaheadPlan();
             LastCommand = TerminalFlightDynamics.UncontrolledCommand(_sim.State);
             TerminalFlightDynamics.Step(_sim, AirframeAerodynamicState.Clean,
                 _damageHandedness, dt);
@@ -766,6 +861,7 @@ public sealed class ReactiveBandit :
             // lookahead is for BFM conversion and tail denial, not permission to turn the middle
             // rung into the Ace's continuous valley hunt.
             if (Skill == PilotSkill.Competent && lowTarget) {
+                CancelPendingLookaheadPlan();
                 LastCommand = CompetentLowBlockCommand(
                     player, hasLowAttackPlan, lowAttackPlan);
                 Tactic = BanditTactic.Acquire;
@@ -782,6 +878,7 @@ public sealed class ReactiveBandit :
                 SelectTactic(player);
                 if (Tactic == BanditTactic.Energy
                     && Skill != PilotSkill.Machine) {
+                    CancelPendingLookaheadPlan();
                     LastCommand = EnergyCommand(player);
                     RecordSingleCandidateDecision(LastCommand);
                     _sim.Step(LastCommand, dt);
@@ -792,6 +889,7 @@ public sealed class ReactiveBandit :
             if (lowTarget && hasLowAttackPlan) {
                 _lowAttackActive = true;
                 if (ownClearanceM <= LowBlockCaptureClearanceM) {
+                    CancelPendingLookaheadPlan();
                     LastCommand = LowLevelHuntCommand(player, lowAttackPlan);
                     RecordSingleCandidateDecision(LastCommand);
                 } else {
@@ -799,6 +897,7 @@ public sealed class ReactiveBandit :
                 }
                 Tactic = BanditTactic.Acquire; // firing remains governed by BanditFireControl
             } else if (lowTarget) {
+                CancelPendingLookaheadPlan();
                 _lowAttackActive = false;
                 LastCommand = LowBlockPerchCommand(player);
                 Tactic = BanditTactic.Return;
@@ -815,6 +914,7 @@ public sealed class ReactiveBandit :
             return;
         }
 
+        CancelPendingLookaheadPlan();
         SelectTactic(player);
         LastCommand = Tactic switch {
             BanditTactic.Defend => DefendCommand(player),
@@ -830,6 +930,7 @@ public sealed class ReactiveBandit :
     }
 
     void FlyTerrainRecovery(double dt) {
+        CancelPendingLookaheadPlan();
         _lowAttackActive = false;
         _terrainRecoveryActive = true;
         _lowAttackRecommitAt = System.Math.Max(_lowAttackRecommitAt,
@@ -1332,8 +1433,93 @@ public sealed class ReactiveBandit :
     /// recomputes so the rollout cost stays bounded and the whole layer stays deterministic.
     PilotCommand LookaheadCommand(in ActorObservation player,
         LowAttackPlan? lowAttackPlan = null) {
-        if (!LookaheadDecisionDue(player.SourceTick))
+        bool usesLowAttack = lowAttackPlan.HasValue;
+        bool contextChanged =
+            !_lookaheadCommandValid
+            || _lookaheadCommandUsesLowAttack != usesLowAttack
+            || _lookaheadCommandContactIdentity != player.ContactIdentity
+            || (_lookaheadPlanPending
+                && (_lookaheadPlanUsesLowAttack != usesLowAttack
+                    || _lookaheadPlanContactIdentity
+                        != player.ContactIdentity));
+        bool invalidatesBoundContext =
+            contextChanged && _lookaheadContextBound;
+        if (!contextChanged && !_lookaheadContextBound) {
+            // Contact identity zero is a valid session identity, but it also matches the
+            // constructor defaults. Bind that first observed generic context even off cadence so
+            // a subsequent pre-plan contact switch is treated as a real invalidation.
+            _lookaheadCommandUsesLowAttack = usesLowAttack;
+            _lookaheadCommandContactIdentity = player.ContactIdentity;
+            _lookaheadContextBound = true;
+        }
+        if (contextChanged) {
+            // Generic BFM and a terrain-certified low-block corridor are different tactical
+            // contracts. Never finish or continue holding one as the other merely because the
+            // context changed between cadence lanes. Hold a safe command instead of starting
+            // unscheduled work which could overlap the actor's formation partner.
+            CancelPendingLookaheadPlan();
+            // The constructor's generic first-contact hold is already a bounded command. Preserve
+            // it while the first incremental plan is frozen so opt-in does not create an
+            // unrecorded maneuver change. A low-block context is the exception: its safe perch is
+            // terrain-specific and must replace the generic hold immediately.
+            if (invalidatesBoundContext || usesLowAttack)
+                _lookaheadCommand = usesLowAttack
+                    ? LowBlockPerchCommand(player)
+                    : AcquireCommand(player);
+            _lookaheadCommandUsesLowAttack = usesLowAttack;
+            _lookaheadCommandContactIdentity =
+                player.ContactIdentity;
+            _lookaheadCommandValid = true;
+            _lookaheadContextBound = true;
+        }
+
+        if (_lookaheadPlanPending) {
+            // Keep cadence telemetry advancing while the frozen plan is evaluated. Every current
+            // level completes its nine slots before another twelve-tick boundary can arrive.
+            _ = LookaheadDecisionDue(player.SourceTick);
+            EvaluatePendingLookahead(
+                MaximumCandidateEvaluationsPerTick(_computeLevel));
             return _lookaheadCommand;
+        }
+
+        if (!LookaheadDecisionDue(player.SourceTick)) {
+            if (invalidatesBoundContext)
+                RecordSingleCandidateDecision(
+                    _lookaheadCommand,
+                    invalidatesLookaheadHold: false);
+            return _lookaheadCommand;
+        }
+
+        StartLookaheadPlan(player, lowAttackPlan);
+        EvaluatePendingLookahead(_incrementalAiPlanning
+            ? MaximumCandidateEvaluationsPerTick(_computeLevel)
+            : int.MaxValue);
+        if (invalidatesBoundContext && _lookaheadPlanPending)
+            RecordSingleCandidateDecision(
+                _lookaheadCommand,
+                invalidatesLookaheadHold: false);
+        return _lookaheadCommand;
+    }
+
+    void StartLookaheadPlan(
+        in ActorObservation player,
+        LowAttackPlan? lowAttackPlan) {
+        // Freeze every mutable input before the first candidate runs. Authoritative ownship and
+        // contact motion continue on later ticks, but every candidate in this plan receives this
+        // exact same decision-boundary snapshot.
+        _lookaheadPlanOwn = State;
+        _lookaheadPlanPlayer = player;
+        _lookaheadPlanTerrain = _terrain;
+        _lookaheadPlanAtmosphere = _sim.AtmosphereModel;
+        _lookaheadPlanWind = _sim.Wind;
+        _lookaheadPlanThrustFraction = _sim.ThrustFraction;
+        _lookaheadPlanBossCommitted = BossCommitted;
+        _lookaheadPlanPredictionSubstepTicks = _incrementalAiPlanning
+            ? PredictionSubstepTicks(_computeLevel)
+            : PredictionSubstepTicks(AiComputeLevel.Full);
+        _lookaheadPlanUsesLowAttack = lowAttackPlan.HasValue;
+        _lookaheadPlanContactIdentity = player.ContactIdentity;
+        _lookaheadContextBound = true;
 
         double range = (player.Position - State.Position).Length;
         // Steer to the SAME ballistic solution fire control scores the shot against. The low-attack
@@ -1400,88 +1586,172 @@ public sealed class ReactiveBandit :
         var separateAim = State.Position + awayFromPlayer.Normalized() * 1400.0;
         double breakBank = Geometry.BankToPlaceLiftVectorOn(State, breakAim);
         double orthogonalReverseBank = Geometry.BankToPlaceLiftVectorOn(State, reverseAim);
-        var candidates = new PilotCommand[] {
-            // Hard 3D pursuit: max-perform pull with the lift vector planted on the lead point.
-            new(maxG, bankOnLead, fastThrottle, 0.0),
-            // Moderate 3D pursuit: a sustainable rate pull that trades less energy.
-            new(System.Math.Min(maxG, 4.0), bankOnLead, cruiseThrottle, 0.0),
-            // Pull into the vertical (high yo-yo).
-            new(System.Math.Min(maxG, 6.5), Geometry.BankToPlaceLiftVectorOn(State, verticalAim),
-                fastThrottle, 0.0),
-            // Nose-low reposition (low yo-yo / Split-S recommit).
-            new(System.Math.Min(maxG, 5.5), Geometry.BankToPlaceLiftVectorOn(State, lowAim),
-                fastThrottle, 0.0),
-            // Unload / extend: near-1 G, max throttle, wings toward the target — rebuild energy.
+        // Fixed storage is owned by the controller and reused plan after plan. The candidate order
+        // is the historical declaration order because it is also the deterministic tie-break.
+        _lookaheadCandidates[0] =
+            new(maxG, bankOnLead, fastThrottle, 0.0);
+        _lookaheadCandidates[1] =
+            new(System.Math.Min(maxG, 4.0), bankOnLead, cruiseThrottle, 0.0);
+        _lookaheadCandidates[2] =
+            new(System.Math.Min(maxG, 6.5),
+                Geometry.BankToPlaceLiftVectorOn(State, verticalAim),
+                fastThrottle, 0.0);
+        _lookaheadCandidates[3] =
+            new(System.Math.Min(maxG, 5.5),
+                Geometry.BankToPlaceLiftVectorOn(State, lowAim),
+                fastThrottle, 0.0);
+        _lookaheadCandidates[4] =
             new(System.Math.Min(maxG, 1.05), LimitedBankTo(leadPoint, 0.45),
-                _maximumThrottle, 0.0),
-            // Reverse: bank the opposite way for a scissors/reposition flavour.
-            new(System.Math.Min(maxG, 4.5), -bankOnLead, cruiseThrottle, 0.0),
-            // Break: max-perform, up-and-across out of the attacker's projected gun line.
-            new(maxG, breakBank, fastThrottle, 0.0),
-            // Orthogonal reverse: give the scorer the opposite out-of-plane exit at moderate G.
-            new(System.Math.Min(maxG, 4.5),
-                orthogonalReverseBank,
-                cruiseThrottle, 0.0),
-            // True separation: unload and accelerate toward the point diametrically away from
-            // the player. Candidate 4 intentionally remains the historical lead-point extension.
-            new(1.05, LimitedBankTo(separateAim, 0.45), _maximumThrottle, 0.0),
-        };
-        Span<bool> available = stackalloc bool[] {
-            true, true, true, true, true, true,
-            _profile.ForcesOvershoot,
-            _profile.ForcesOvershoot,
-            _profile.DisengagesWhenLosing
-                || (followingFormationDirective
-                    && EffectiveFormationRole == FormationTacticalRole.Extend)
-        };
+                _maximumThrottle, 0.0);
+        _lookaheadCandidates[5] =
+            new(System.Math.Min(maxG, 4.5), -bankOnLead, cruiseThrottle, 0.0);
+        _lookaheadCandidates[6] =
+            new(maxG, breakBank, fastThrottle, 0.0);
+        _lookaheadCandidates[7] =
+            new(System.Math.Min(maxG, 4.5), orthogonalReverseBank,
+                cruiseThrottle, 0.0);
+        _lookaheadCandidates[8] =
+            new(1.05, LimitedBankTo(separateAim, 0.45), _maximumThrottle, 0.0);
 
-        double bestScore = double.NegativeInfinity;
-        var bestCommand = candidates[0];
-        int bestIndex = 0;
-        Span<double> scores = stackalloc double[candidates.Length];
-        scores.Clear();
-        for (int i = 0; i < candidates.Length; i++) {
-            if (!available[i]) continue;
-            double s = ScoreCandidate(candidates[i], player)
-                + DoctrineOpenerBias(i, player)
-                + TailContestBias(i, player)
-                + FormationRoleBias(i, followingFormationDirective);
-            scores[i] = s;
-            if (s > bestScore) {
-                bestScore = s;
-                bestCommand = candidates[i];
-                bestIndex = i;
+        for (int i = 0; i < BanditDecisionTrace.CandidateCapacity; i++) {
+            bool available = i < 6
+                || ((i is 6 or 7) && _profile.ForcesOvershoot)
+                || (i == 8 && (_profile.DisengagesWhenLosing
+                    || (followingFormationDirective
+                        && EffectiveFormationRole == FormationTacticalRole.Extend)));
+            _lookaheadCandidateAvailable[i] = available;
+            _lookaheadCandidateScores[i] = 0.0;
+            // Store each term separately so completing an incremental Full plan performs the same
+            // left-to-right floating-point additions as the historical synchronous expression.
+            _lookaheadDoctrineBiases[i] = DoctrineOpenerBias(i, player);
+            _lookaheadTailBiases[i] = TailContestBias(i, player);
+            _lookaheadFormationBiases[i] =
+                FormationRoleBias(i, followingFormationDirective);
+        }
+
+        _lookaheadNextCandidateIndex = 0;
+        _lookaheadBestScore = double.NegativeInfinity;
+        _lookaheadBestCommand = _lookaheadCandidates[0];
+        _lookaheadBestIndex = 0;
+        _lookaheadPlanPending = true;
+        _plansStarted++;
+    }
+
+    void EvaluatePendingLookahead(int maximumCandidateEvaluations) {
+        if (!_lookaheadPlanPending) return;
+
+        int evaluated = 0;
+        while (_lookaheadNextCandidateIndex
+                < BanditDecisionTrace.CandidateCapacity
+            && evaluated < maximumCandidateEvaluations) {
+            int index = _lookaheadNextCandidateIndex++;
+            if (!_lookaheadCandidateAvailable[index]) continue;
+
+            double score = ScoreCandidate(
+                _lookaheadCandidates[index],
+                _lookaheadPlanOwn,
+                _lookaheadPlanPlayer,
+                _lookaheadPlanTerrain,
+                _lookaheadPlanAtmosphere!,
+                _lookaheadPlanWind,
+                _lookaheadPlanThrustFraction,
+                _lookaheadPlanBossCommitted,
+                _lookaheadPlanPredictionSubstepTicks,
+                out int forecastSteps,
+                out int terrainSweeps);
+            score += _lookaheadDoctrineBiases[index];
+            score += _lookaheadTailBiases[index];
+            score += _lookaheadFormationBiases[index];
+            _lookaheadCandidateScores[index] = score;
+            _candidateEvaluations++;
+            _forecastSteps += forecastSteps;
+            _terrainSweeps += terrainSweeps;
+            evaluated++;
+
+            if (score > _lookaheadBestScore) {
+                _lookaheadBestScore = score;
+                _lookaheadBestCommand = _lookaheadCandidates[index];
+                _lookaheadBestIndex = index;
             }
         }
-        _lookaheadCommand = bestCommand;
+
+        while (_lookaheadNextCandidateIndex
+                < BanditDecisionTrace.CandidateCapacity
+            && !_lookaheadCandidateAvailable[_lookaheadNextCandidateIndex])
+            _lookaheadNextCandidateIndex++;
+
+        if (_lookaheadNextCandidateIndex
+            < BanditDecisionTrace.CandidateCapacity)
+            return;
+
+        bool completedPlanUsesLowAttack =
+            _lookaheadPlanUsesLowAttack;
+        long completedPlanContactIdentity =
+            _lookaheadPlanContactIdentity;
+        _lookaheadPlanPending = false;
+        _lookaheadPlanUsesLowAttack = false;
+        _lookaheadPlanContactIdentity = 0;
+        _plansCompleted++;
+        _lookaheadCommand = _lookaheadBestCommand;
+        _lookaheadCommandUsesLowAttack =
+            completedPlanUsesLowAttack;
+        _lookaheadCommandContactIdentity =
+            completedPlanContactIdentity;
+        _lookaheadCommandValid = true;
         DecisionTrace = new BanditDecisionTrace(
             ++_selectionSequence,
             Skill,
-            bestCommand,
-            bestIndex,
-            candidates.Length,
+            _lookaheadBestCommand,
+            _lookaheadBestIndex,
+            BanditDecisionTrace.CandidateCapacity,
             new BanditDecisionCandidate(
-                0, candidates[0], scores[0], HasScore: true, Available: true),
+                0, _lookaheadCandidates[0], _lookaheadCandidateScores[0],
+                HasScore: true, Available: true),
             new BanditDecisionCandidate(
-                1, candidates[1], scores[1], HasScore: true, Available: true),
+                1, _lookaheadCandidates[1], _lookaheadCandidateScores[1],
+                HasScore: true, Available: true),
             new BanditDecisionCandidate(
-                2, candidates[2], scores[2], HasScore: true, Available: true),
+                2, _lookaheadCandidates[2], _lookaheadCandidateScores[2],
+                HasScore: true, Available: true),
             new BanditDecisionCandidate(
-                3, candidates[3], scores[3], HasScore: true, Available: true),
+                3, _lookaheadCandidates[3], _lookaheadCandidateScores[3],
+                HasScore: true, Available: true),
             new BanditDecisionCandidate(
-                4, candidates[4], scores[4], HasScore: true, Available: true),
+                4, _lookaheadCandidates[4], _lookaheadCandidateScores[4],
+                HasScore: true, Available: true),
             new BanditDecisionCandidate(
-                5, candidates[5], scores[5], HasScore: true, Available: true),
+                5, _lookaheadCandidates[5], _lookaheadCandidateScores[5],
+                HasScore: true, Available: true),
             new BanditDecisionCandidate(
-                6, candidates[6], scores[6],
-                HasScore: available[6], Available: available[6]),
+                6, _lookaheadCandidates[6], _lookaheadCandidateScores[6],
+                HasScore: _lookaheadCandidateAvailable[6],
+                Available: _lookaheadCandidateAvailable[6]),
             new BanditDecisionCandidate(
-                7, candidates[7], scores[7],
-                HasScore: available[7], Available: available[7]),
+                7, _lookaheadCandidates[7], _lookaheadCandidateScores[7],
+                HasScore: _lookaheadCandidateAvailable[7],
+                Available: _lookaheadCandidateAvailable[7]),
             new BanditDecisionCandidate(
-                8, candidates[8], scores[8],
-                HasScore: available[8], Available: available[8]));
-        return bestCommand;
+                8, _lookaheadCandidates[8], _lookaheadCandidateScores[8],
+                HasScore: _lookaheadCandidateAvailable[8],
+                Available: _lookaheadCandidateAvailable[8]));
+    }
+
+    static int MaximumCandidateEvaluationsPerTick(AiComputeLevel level) =>
+        level == AiComputeLevel.Full ? 2 : 1;
+
+    static int PredictionSubstepTicks(AiComputeLevel level) => level switch {
+        AiComputeLevel.Full => 4,
+        AiComputeLevel.Balanced => 6,
+        AiComputeLevel.Constrained => 8,
+        AiComputeLevel.Emergency => 12,
+        _ => throw new System.ArgumentOutOfRangeException(nameof(level))
+    };
+
+    void CancelPendingLookaheadPlan() {
+        _lookaheadPlanPending = false;
+        _lookaheadPlanUsesLowAttack = false;
+        _lookaheadPlanContactIdentity = 0;
+        _lookaheadNextCandidateIndex = 0;
     }
 
     bool LookaheadDecisionDue(long sourceTick) {
@@ -1567,7 +1837,11 @@ public sealed class ReactiveBandit :
         return 0.0;
     }
 
-    void RecordSingleCandidateDecision(in PilotCommand command) {
+    void RecordSingleCandidateDecision(
+        in PilotCommand command,
+        bool invalidatesLookaheadHold = true) {
+        if (invalidatesLookaheadHold)
+            _lookaheadCommandValid = false;
         var selected = new BanditDecisionCandidate(
             0, command, Score: 0.0, HasScore: false, Available: true);
         DecisionTrace = new BanditDecisionTrace(
@@ -1604,14 +1878,23 @@ public sealed class ReactiveBandit :
     /// Terrain safety is unaffected: the swept clearance query below samples each segment at
     /// maximumHorizontalStepM regardless of how long the segment is, so a longer step still checks
     /// every intervening grid cell rather than skipping over a ridge.
-    // Integrate the forecast at 30 Hz while retaining the established 120 Hz command cadence and
-    // full horizon in seconds. Four authoritative ticks is the smallest divisor that materially
-    // reduces the synchronous candidate burst; the combat-contract suite guards the resulting
-    // approximation across firing geometry, terrain hunting, lethality and tier ordering.
-    const int LookaheadPredictionSubstepTicks = 4;
-
-    double ScoreCandidate(in PilotCommand command, in ActorObservation player) {
+    // Full preserves the established 30 Hz forecast. Pressure levels cover the same horizon with
+    // progressively coarser throwaway integration; authoritative flight remains fixed at 120 Hz.
+    double ScoreCandidate(
+        in PilotCommand command,
+        in AircraftState own,
+        in ActorObservation player,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain,
+        IAtmosphereModel atmosphere,
+        GunsOnly.Sim.Turbulence.IWindField? wind,
+        double thrustFraction,
+        bool bossCommitted,
+        int predictionSubstepTicks,
+        out int forecastSteps,
+        out int terrainSweeps) {
         const double threatWeight = 26.0;
+        forecastSteps = 0;
+        terrainSweeps = 0;
         // Optimize the envelope the trigger can ACTUALLY use. The old 12-degree camera window made
         // the lookahead tests look threatening while first-pass-safe production fights never fired:
         // every selected "solution" remained outside BanditFireControl's real 3-degree gate. The
@@ -1620,8 +1903,8 @@ public sealed class ReactiveBandit :
         // license to fly sloppier geometry (widening the shaping cone here re-flattens the angle
         // gradient and the controller goes back to orbiting outside the gate).
         const double gunConeRad = BanditFireControl.MaximumNoseErrorRad;
-        var probe = new AircraftSim(State, _parameters, _sim.AtmosphereModel) { Wind = _sim.Wind };
-        probe.SeedEnginePowerFraction(_sim.ThrustFraction);
+        var probe = new AircraftSim(own, _parameters, atmosphere) { Wind = wind };
+        probe.SeedEnginePowerFraction(thrustFraction);
 
         // Belief-limited player prediction: a coordinated turn extrapolated from the OBSERVED state
         // only (speed, flight-path angle, and the reported flight-path bank). This is honest -- it
@@ -1634,7 +1917,7 @@ public sealed class ReactiveBandit :
         double predTurnRate = predSpeed > 1.0
             ? FlightModel.G0 * System.Math.Tan(System.Math.Clamp(player.Bank, -1.3, 1.3)) / predSpeed
             : 0.0;
-        var initialPlayerToProbe = State.Position - player.Position;
+        var initialPlayerToProbe = own.Position - player.Position;
         double initialPlayerRangeM = initialPlayerToProbe.Length;
         double initialPlayerAngleOffRad = initialPlayerRangeM > 1e-6
             ? System.Math.Acos(System.Math.Clamp(
@@ -1642,25 +1925,26 @@ public sealed class ReactiveBandit :
                 -1.0, 1.0))
             : 0.0;
         double initialPlayerClosureMps = initialPlayerRangeM > 1e-6
-            ? -(State.VelocityVector() - player.VelocityVector())
+            ? -(own.VelocityVector() - player.VelocityVector())
                 .Dot(initialPlayerToProbe * (1.0 / initialPlayerRangeM))
             : 0.0;
 
         double windowSeconds = 0.0;
         double threatSeconds = 0.0;
-        double minClearanceM = State.Position.Y
-            - SurfaceHeightM(_terrain, State.Position.X, State.Position.Z);
-        double maxY = State.Position.Y;
-        var previousProbePosition = State.Position;
+        double minClearanceM = own.Position.Y
+            - SurfaceHeightM(terrain, own.Position.X, own.Position.Z);
+        double maxY = own.Position.Y;
+        var previousProbePosition = own.Position;
         // Same horizon in SECONDS, fewer prediction steps to cover it. The last step is shortened
-        // when a tier's exact horizon is not divisible by four (Veteran 90, Ace 150), rather than
-        // silently extending those forecasts by two authoritative ticks.
+        // when a tier's exact horizon is not divisible by the selected pressure-level substep,
+        // rather than silently extending the forecast.
         for (int elapsedTicks = 0; elapsedTicks < _profile.LookaheadHorizonTicks;) {
             int stepTicks = System.Math.Min(
-                LookaheadPredictionSubstepTicks,
+                predictionSubstepTicks,
                 _profile.LookaheadHorizonTicks - elapsedTicks);
             double dt = stepTicks / (double)AircraftSim.TickHz;
-            probe.Step(command, dt);
+            probe.StepPrediction(command, dt);
+            forecastSteps++;
             predChi += predTurnRate * dt;
             var predVel = new Vec3D(
                 System.Math.Sin(predChi) * System.Math.Cos(predGamma),
@@ -1672,14 +1956,15 @@ public sealed class ReactiveBandit :
             // query as merge-spawn safety and means every candidate which can become a new descent
             // decision has been checked across the intervening grid cells.
             double segmentClearanceM;
-            if (_terrain is null) {
+            if (terrain is null) {
                 segmentClearanceM = System.Math.Min(
                     previousProbePosition.Y, probeState.Position.Y);
             } else {
                 try {
+                    terrainSweeps++;
                     segmentClearanceM =
                         GunsOnly.Sim.Environment.TerrainQueries.MinimumClearanceM(
-                            _terrain, previousProbePosition, probeState.Position,
+                            terrain, previousProbePosition, probeState.Position,
                             maximumHorizontalStepM: 60.0);
                 } catch (System.ArgumentOutOfRangeException) {
                     return double.NegativeInfinity;
@@ -1764,7 +2049,7 @@ public sealed class ReactiveBandit :
             * System.Math.Min(terminal.Speed, 320.0);
         // A stalking boss doubles the energy-reserve weight: conservative-dominant flying — keep
         // smash in hand, refuse the gamble — until the commit trigger removes the bias.
-        if (_profile.IsBoss && !BossCommitted)
+        if (_profile.IsBoss && !bossCommitted)
             score += 0.010 * System.Math.Min(terminal.Speed, 320.0);
         // Floor avoidance: a hard penalty as the rollout approaches the local surface, and an
         // outright disqualifier for a path that actually reaches it. The gradient alone maxes out

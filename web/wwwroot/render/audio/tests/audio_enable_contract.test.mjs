@@ -21,3 +21,19 @@ test("audio enable gestures commit the preference before arming the shared bus",
     "the keyboard mute toggle must use the same enable-and-arm path",
   );
 });
+
+test("automatic launch cannot spend audio resume before the first pilot gesture", () => {
+  const launchStart = appSource.indexOf("function launchMission(");
+  const launchEnd = appSource.indexOf("\nfunction restartMission(", launchStart);
+  assert.ok(launchStart >= 0 && launchEnd > launchStart);
+  assert.doesNotMatch(
+    appSource.slice(launchStart, launchEnd),
+    /\.armAudio\(\)/,
+    "launchMission is also called by boot-time auto launch and must not attempt resume",
+  );
+  assert.match(
+    appSource,
+    /function installInput\(view\) \{[\s\S]*?const armAudioFromGesture = \(\) => view\.hud\.armAudio\(\);[\s\S]*?window\.addEventListener\("pointerdown", armAudioFromGesture,[\s\S]*?window\.addEventListener\("keydown", armAudioFromGesture,/,
+    "the first ordinary pointer or keyboard flight input must unlock audio",
+  );
+});

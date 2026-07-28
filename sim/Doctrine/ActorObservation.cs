@@ -7,7 +7,10 @@ namespace GunsOnly.Sim.Doctrine;
 ///
 /// Position/flight-path kinematics/bank are the presently idealized contact belief. SourceTick and
 /// ObservationAgeTicks make its temporal authority explicit; Confidence is reserved for the
-/// fallible-contact layer. The current perfect-contact adapter records confidence 1 and age 0.
+/// fallible-contact layer. ContactIdentity is an opaque, session-stable identity for the observed
+/// aircraft, so a policy can reject cached work when the sensor/director selects another contact.
+/// Zero means the caller has no identity channel. The current perfect-contact adapter records
+/// confidence 1 and age 0.
 /// </summary>
 public readonly record struct ActorObservation(
     Vec3D Position,
@@ -17,7 +20,8 @@ public readonly record struct ActorObservation(
     double Bank,
     long SourceTick,
     int ObservationAgeTicks,
-    double Confidence) {
+    double Confidence,
+    long ContactIdentity = 0) {
 
     public Vec3D ForwardDir() => new(
         System.Math.Sin(Chi) * System.Math.Cos(Gamma),
@@ -33,19 +37,23 @@ public readonly record struct ActorObservation(
         && SourceTick >= 0
         && ObservationAgeTicks >= 0
         && double.IsFinite(Confidence)
-        && Confidence is >= 0.0 and <= 1.0;
+        && Confidence is >= 0.0 and <= 1.0
+        && ContactIdentity >= 0;
 
     /// <summary>
     /// Current perfect-contact adapter. This conversion belongs at the session/scenario boundary;
     /// policies receive only the returned value and cannot recover omitted authoritative fields.
     /// </summary>
     public static ActorObservation Capture(in AircraftState truth, long sourceTick = 0,
-        int observationAgeTicks = 0, double confidence = 1.0) {
+        int observationAgeTicks = 0, double confidence = 1.0,
+        long contactIdentity = 0) {
         if (sourceTick < 0) throw new ArgumentOutOfRangeException(nameof(sourceTick));
         if (observationAgeTicks < 0)
             throw new ArgumentOutOfRangeException(nameof(observationAgeTicks));
         if (!double.IsFinite(confidence) || confidence < 0.0 || confidence > 1.0)
             throw new ArgumentOutOfRangeException(nameof(confidence));
+        if (contactIdentity < 0)
+            throw new ArgumentOutOfRangeException(nameof(contactIdentity));
         return new ActorObservation(
             truth.Position,
             truth.Speed,
@@ -54,7 +62,8 @@ public readonly record struct ActorObservation(
             truth.Bank,
             sourceTick,
             observationAgeTicks,
-            confidence);
+            confidence,
+            contactIdentity);
     }
 
     /// <summary>

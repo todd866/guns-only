@@ -94,6 +94,21 @@ public static partial class WebBridge {
     public static void SetAssistedFlight(bool enabled) =>
         Session.SetAssistedFlight(enabled);
 
+    /// <summary>
+    /// Browser frame-pressure input: 0 is full-fidelity forecast work and 3 is the emergency
+    /// budget. Clamp untrusted JS values at the bridge; the kernel owns the meaning of each level.
+    /// Returns the first authority tick the new level can affect so the browser can record an
+    /// exactly replayable transition tape.
+    /// </summary>
+    [JSExport]
+    public static double SetAiComputeLevel(int level) {
+        Session.SetAiComputeLevel((AiComputeLevel)Math.Clamp(
+            level,
+            (int)AiComputeLevel.Full,
+            (int)AiComputeLevel.Emergency));
+        return Session.Tick;
+    }
+
     [JSExport]
     public static bool ToggleTimeCompression() => Session.ToggleTimeCompression();
 

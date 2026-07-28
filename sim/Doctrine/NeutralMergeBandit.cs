@@ -11,7 +11,8 @@ namespace GunsOnly.Sim.Doctrine;
 public sealed class NeutralMergeBandit :
     IBandit,
     IBanditDecisionTraceSource,
-    IFormationDirectiveSink {
+    IFormationDirectiveSink,
+    IAdaptiveAiPlanner {
     const double MergeGateM = 900.0;
     const double OpeningConfirmationSeconds = 0.20;
     readonly AircraftParams _parameters;
@@ -20,6 +21,8 @@ public sealed class NeutralMergeBandit :
     readonly BanditSkillProfile _profile;
     readonly int? _doctrineIndex;
     int? _lookaheadCadencePhase;
+    AiComputeLevel _computeLevel = AiComputeLevel.Full;
+    bool _incrementalAiPlanning;
     GunsOnly.Sim.Environment.ITerrainSurface? _terrain;
     ReactiveBandit? _fight;
     IWindField? _wind;
@@ -78,6 +81,8 @@ public sealed class NeutralMergeBandit :
     public AircraftParams? FightAircraftParameters => _fight?.AircraftParameters;
     internal int? LookaheadCadencePhase => _fight?.LookaheadCadencePhase
         ?? _lookaheadCadencePhase;
+    public AiComputeLevel ComputeLevel => _fight?.ComputeLevel ?? _computeLevel;
+    public AiWorkloadCounters AiWorkload => _fight?.AiWorkload ?? default;
     /// The tier this actor fields across both phases: the scripted merge is briefed at the same
     /// tier its post-pass ReactiveBandit fights at, so snapshot consumers read one stable value.
     public PilotSkill Skill => _skill;
@@ -93,7 +98,7 @@ public sealed class NeutralMergeBandit :
         (_fight as IBanditDecisionTraceSource)?.PolicyMemory ?? default;
     public PilotCommand AppliedCommand =>
         (_fight as IBanditDecisionTraceSource)?.AppliedCommand ??
-        new PilotCommand(1.0, 0.0, 1.0, 0.0);
+        _mergeSim.LastAppliedCommand;
     public FormationDirective FormationDirective => _fight?.FormationDirective
         ?? _formationDirective;
 
@@ -106,7 +111,21 @@ public sealed class NeutralMergeBandit :
         _fight?.AcceptFormationDirective(directive);
     }
 
+    /// <summary>
+    /// Cache host pressure through the authored merge, then forward it to the reactive planner at
+    /// handoff. The scripted reciprocal pass performs no speculative forecast work itself.
+    /// </summary>
+    public void ConfigureAiPlanning(AiComputeLevel level, bool incremental) {
+        if (!System.Enum.IsDefined(level))
+            throw new System.ArgumentOutOfRangeException(nameof(level));
+        _computeLevel = level;
+        _incrementalAiPlanning = incremental;
+        _fight?.ConfigureAiPlanning(level, incremental);
+    }
+
+    /// <summary>
     /// Cache the actor's absolute lookahead lane across the authored neutral-pass handoff.
+    /// </summary>
     internal void ConfigureLookaheadCadencePhase(int phase) {
         if (phase < 0 || phase >= ReactiveBandit.LookaheadDecisionCadenceTicks)
             throw new System.ArgumentOutOfRangeException(nameof(phase));
@@ -126,11 +145,7 @@ public sealed class NeutralMergeBandit :
             return;
         }
 
-        _mergeSim.Step(new PilotCommand(
-            GDemand: 1.0,
-            BankTarget: _mergeSim.State.Bank,
-            Throttle: Math.Min(1.0, _parameters.MaxThrustFraction),
-            Rudder: 0.0), dt);
+        _mergeSim.Step(ReciprocalPassCommand(), dt);
         T += dt;
 
         double rangeM = Geometry.Range(player, _mergeSim.State);
@@ -141,7 +156,8 @@ public sealed class NeutralMergeBandit :
             && rangeM >= _minimumRangeM + 20.0;
         _openingSeconds = opening ? _openingSeconds + dt : 0.0;
         _previousRangeM = rangeM;
-        if (_openingSeconds >= OpeningConfirmationSeconds) BeginFight();
+        if (_openingSeconds >= OpeningConfirmationSeconds)
+            BeginFight(player.ContactIdentity);
     }
 
     public void ApplyCatastrophicDamage(int handedness) {
@@ -162,7 +178,13 @@ public sealed class NeutralMergeBandit :
         _fight?.UpdateTerrain(terrain);
     }
 
-    void BeginFight() {
+    PilotCommand ReciprocalPassCommand() => new(
+        GDemand: 1.0,
+        BankTarget: _mergeSim.State.Bank,
+        Throttle: Math.Min(1.0, _parameters.MaxThrustFraction),
+        Rudder: 0.0);
+
+    void BeginFight(long contactIdentity = 0) {
         if (_fight is not null) return;
         var fight = new ReactiveBandit(
             _mergeSim.State, _parameters, _skill, _terrain,
@@ -172,7 +194,11 @@ public sealed class NeutralMergeBandit :
         };
         if (_lookaheadCadencePhase is int phase)
             fight.ConfigureLookaheadCadencePhase(phase);
+        fight.ConfigureAiPlanning(_computeLevel, _incrementalAiPlanning);
         fight.SeedEnginePowerFraction(_mergeSim.ThrustFraction);
+        fight.SeedHeldCommand(
+            _mergeSim.LastAppliedCommand,
+            contactIdentity);
         fight.AcceptFormationDirective(_formationDirective);
         _fight = fight;
     }

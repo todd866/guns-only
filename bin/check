@@ -6,6 +6,7 @@ cd "$repo_dir"
 . "$repo_dir/bin/dotnet-env"
 
 sh -n bin/dotnet-env
+sh -n bin/test-in-process
 sh -n bin/deploy-web
 node --check web/wwwroot/app.js
 node --check web/wwwroot/hud.js

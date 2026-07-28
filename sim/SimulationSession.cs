@@ -221,6 +221,7 @@ public sealed class SimulationSession {
     bool _rapierFormationSweepCommitted;
     bool _rapierFormationSweepRequested;
     RapierGunDrone? _rapierGunDrone;
+    long _rapierGunDroneSpawnSequence;
     bool _rapierGunDroneEgress;
     bool _rapierGunDroneThreatReactive;
     bool _rapierPursuitActive;
@@ -243,6 +244,8 @@ public sealed class SimulationSession {
     readonly List<EngagementReport> _engagementReports = new();
     readonly FightDirector _fightDirector = new();
     readonly EnemyPairCoordinator _enemyPairCoordinator = new();
+    AiComputeLevel _aiComputeLevel = AiComputeLevel.Full;
+    bool _incrementalAiPlanningEnabled;
     int _droneRaidTargetIndex;
     bool _triggerDown;
     bool _opponentTriggerDown;
@@ -425,6 +428,28 @@ public sealed class SimulationSession {
     public AircraftSim Player => _player;
     public IBandit Bandit => _bandit;
     public BeatSetup Beat => _beat;
+    public AiComputeLevel AiComputeLevel => _aiComputeLevel;
+    /// <summary>
+    /// Aggregate workload of the planners in the currently staged live formation. Individual
+    /// planner counters are lifetime-cumulative, but this aggregate may decrease when an actor is
+    /// promoted, replaced, or retired; it is not a cross-wave session total.
+    /// </summary>
+    public AiWorkloadCounters AiWorkload {
+        get {
+            AiWorkloadCounters total = _bandit is IAdaptiveAiPlanner primary
+                ? primary.AiWorkload
+                : default;
+            foreach (Wingman wingman in _wingmen) {
+                if (wingman.Bandit is IAdaptiveAiPlanner support)
+                    total += support.AiWorkload;
+            }
+            if (_reliefFighter is {
+                    StillFighting: true,
+                    Actor: IAdaptiveAiPlanner relief })
+                total += relief.AiWorkload;
+            return total;
+        }
+    }
     public KeyGrammar Keys => _keys;
     public DetentLayer Controls => _detents;
     public GunKill PlayerGun => _gunKill;
@@ -743,11 +768,39 @@ public sealed class SimulationSession {
     /// </summary>
     public void SetTerrainSurface(ITerrainSurface? terrain) {
         _terrainSurface = terrain;
-        // The active opponent captured the previous surface at construction; a world-origin
-        // re-anchor must reach it or its floor sense silently reads the stale translation.
-        switch (_bandit) {
-            case ReactiveBandit reactive: reactive.UpdateTerrain(terrain); break;
-            case NeutralMergeBandit merge: merge.UpdateTerrain(terrain); break;
+        // Every live opponent captured the previous surface at construction; a world-origin
+        // re-anchor must reach the whole formation or a wingman's floor sense silently reads the
+        // stale translation. Destroyed/settled actors already fly through their impact-owned
+        // WreckContactMotion (or detached-wreck state), and are deliberately not retargeted to a
+        // newly translated surface mid-contact.
+        if (!_bandit.CatastrophicallyDamaged)
+            UpdateLiveBanditTerrain(_bandit, terrain);
+        foreach (Wingman wingman in _wingmen) {
+            if (wingman.StillFighting)
+                UpdateLiveBanditTerrain(wingman.Bandit, terrain);
+        }
+        if (_reliefFighter is { StillFighting: true } relief)
+            UpdateLiveBanditTerrain(relief.Actor, terrain);
+        foreach (DetachedOpponentWreck detached in _detachedOpponentWrecks) {
+            // The collection can also contain a still-flying raid leaker. It remains a physical
+            // AI actor and therefore follows a world re-anchor; actual destroyed/impacted wrecks
+            // retain the surface/contact model they already own.
+            if (detached.TerminalState == AircraftTerminalState.Flying
+                && !detached.Actor.CatastrophicallyDamaged)
+                UpdateLiveBanditTerrain(detached.Actor, terrain);
+        }
+    }
+
+    static void UpdateLiveBanditTerrain(
+        IBandit bandit,
+        ITerrainSurface? terrain) {
+        switch (bandit) {
+            case ReactiveBandit reactive:
+                reactive.UpdateTerrain(terrain);
+                break;
+            case NeutralMergeBandit merge:
+                merge.UpdateTerrain(terrain);
+                break;
         }
     }
 
@@ -1046,6 +1099,23 @@ public sealed class SimulationSession {
     public void SetVariant(ValleyVariant variant) {
         _requestedVariant = variant;
         if (_carrier is null) _detents.Variant = variant;
+    }
+
+    /// <summary>
+    /// Apply presentation-measured compute pressure to throwaway opponent forecasts. Fixed-tick
+    /// flight, guns, damage, terrain recovery, candidate count, and forecast horizon stay
+    /// authoritative; coarser forecast integration may select a different candidate maneuver.
+    /// The selected level is explicit input so an identical level tape remains replayable.
+    /// </summary>
+    public void SetAiComputeLevel(AiComputeLevel level) {
+        if (!Enum.IsDefined(level))
+            throw new ArgumentOutOfRangeException(nameof(level));
+        _aiComputeLevel = level;
+        // Calling this host boundary is also the explicit opt-in to amortized lookahead. Session
+        // consumers which never supply presentation pressure retain the historical synchronous
+        // policy boundary, including tick-zero decision-recording semantics. The browser calls
+        // this even for Full, so production still receives bounded per-tick forecast work.
+        _incrementalAiPlanningEnabled = true;
     }
 
     /// <summary>Enable or disable the pilot-selected assisted dogfighting command layer.</summary>
@@ -1623,6 +1693,7 @@ public sealed class SimulationSession {
         _rapierDogfightingDronesRemaining--;
         _rapierGunDrone = RapierGunDrone.SpawnFrom(
             _player.State, _player.AtmosphereModel);
+        _rapierGunDroneSpawnSequence++;
         _rapierGunDrone.Sim.Wind = _player.Wind;
         _rapierGunDroneEgress = true;
         PromoteBanditsAgainstGunDrone();
@@ -1641,6 +1712,11 @@ public sealed class SimulationSession {
             state, _beat.BanditAir, _beat.BanditSkill, _terrainSurface);
         reactive.Wind = _bandit.Wind;
         reactive.Atmosphere = _bandit.Atmosphere;
+        // Release and rail-to-reactive promotion happen inside StepCore, after the ordinary
+        // beginning-of-tick configuration pass. Configure this new actor before its first
+        // same-tick step so a browser-budgeted sortie can never pay one synchronous rollout.
+        reactive.ConfigureAiPlanning(
+            _aiComputeLevel, _incrementalAiPlanningEnabled);
         _bandit = reactive;
         _banditSpawnSequence++;
         _rapierGunDroneThreatReactive = true;
@@ -1672,11 +1748,21 @@ public sealed class SimulationSession {
         in AircraftState playerState, in AircraftState banditState) {
         if (_rapierGunDrone is { StillActive: true } drone
             && drone.InsideThreatVolume(banditState))
-            return ActorObservation.Capture(drone.Sim.State, _tick);
+            return ActorObservation.Capture(
+                drone.Sim.State,
+                _tick,
+                contactIdentity: PolicyContactIdentity(
+                    _rapierGunDroneSpawnSequence,
+                    PolicyContactClass.RapierGunDrone));
         if (CombatHandoffRequested
-            && _reliefFighter is not null
+            && _reliefFighter is { } relief
             && _reliefThreatStateValid)
-            return ActorObservation.Capture(_reliefThreatState, _tick);
+            return ActorObservation.Capture(
+                _reliefThreatState,
+                _tick,
+                contactIdentity: PolicyContactIdentity(
+                    relief.SpawnSequence,
+                    PolicyContactClass.ReliefFighter));
         return ObservePlayer(playerState);
     }
 
@@ -1782,6 +1868,7 @@ public sealed class SimulationSession {
 
     void RunFixedTick() {
         AdvanceCombatHandoffAtTickBoundary();
+        ConfigureAdaptiveAiPlanning();
         // Formation radio traffic is sampled and delivered at the beginning-of-tick boundary.
         // Decision traces therefore capture the exact held assignment that can affect this tick,
         // and neither pilot receives the player's already-integrated future state.
@@ -1809,6 +1896,22 @@ public sealed class SimulationSession {
         _tick++;
         CaptureIncidentReplaySample();
         UpdateTimeCompressionDecision();
+    }
+
+    void ConfigureAdaptiveAiPlanning() {
+        if (_bandit is IAdaptiveAiPlanner primary)
+            primary.ConfigureAiPlanning(
+                _aiComputeLevel, _incrementalAiPlanningEnabled);
+        foreach (Wingman wingman in _wingmen) {
+            if (wingman.Bandit is IAdaptiveAiPlanner support)
+                support.ConfigureAiPlanning(
+                    _aiComputeLevel, _incrementalAiPlanningEnabled);
+        }
+        if (_reliefFighter is {
+                StillFighting: true,
+                Actor: IAdaptiveAiPlanner relief })
+            relief.ConfigureAiPlanning(
+                _aiComputeLevel, _incrementalAiPlanningEnabled);
     }
 
     void UpdateFormationCoordination() {
@@ -1839,7 +1942,7 @@ public sealed class SimulationSession {
         }
 
         ActorObservation sharedContact =
-            ActorObservation.Capture(_player.State, _tick);
+            ObservePlayer(_player.State);
         _enemyPairCoordinator.Step(
             _tick,
             sharedContact,
@@ -1896,7 +1999,7 @@ public sealed class SimulationSession {
             _bandit,
             traceSource,
             _bandit.State,
-            ActorObservation.Capture(playerState, _tick),
+            ObservePlayer(playerState),
             traceSource.PolicyMemory,
             traceSource.DecisionTrace.SelectionSequence,
             _playerSpawnSequence,
@@ -1961,7 +2064,11 @@ public sealed class SimulationSession {
             capture.ActorAmmo,
             capture.WeaponsAuthorized);
         ActorObservation nextPlayerObservation = ActorObservation.Capture(
-            _player.State, _tick + 1L);
+            _player.State,
+            _tick + 1L,
+            contactIdentity: PolicyContactIdentity(
+                _playerSpawnSequence,
+                PolicyContactClass.Player));
         CombatPolicyObservation nextObservation = CombatPolicyObservation.Capture(
             _tick + 1L,
             TimeSeconds,
@@ -2859,12 +2966,18 @@ public sealed class SimulationSession {
             && relief.Actor.CatastrophicallyDamaged)
             relief.TerminalState = AircraftTerminalState.DestroyedAirborne;
 
-        AircraftState targetState = IsOpponentTargetLiveForHandoff(
+        long targetId = IsOpponentTargetLiveForHandoff(
             _selectedPlayerGunTargetId)
-                ? OpponentTargetStateForHandoff(_selectedPlayerGunTargetId)
-                : _bandit.State;
+                ? _selectedPlayerGunTargetId
+                : _primaryOpponentGunTargetId;
+        AircraftState targetState = OpponentTargetStateForHandoff(targetId);
         relief.Actor.Step(
-            ActorObservation.Capture(targetState, _tick),
+            ActorObservation.Capture(
+                targetState,
+                _tick,
+                contactIdentity: PolicyContactIdentity(
+                    targetId,
+                    PolicyContactClass.Opponent)),
             FixedDeltaSeconds);
         AircraftState currentState = relief.State;
 
@@ -3490,7 +3603,29 @@ public sealed class SimulationSession {
     }
 
     ActorObservation ObservePlayer(in AircraftState state) =>
-        ActorObservation.Capture(state, Tick);
+        ActorObservation.Capture(
+            state,
+            Tick,
+            contactIdentity: PolicyContactIdentity(
+                _playerSpawnSequence,
+                PolicyContactClass.Player));
+
+    enum PolicyContactClass : byte {
+        Player = 0,
+        RapierGunDrone = 1,
+        ReliefFighter = 2,
+        Opponent = 3,
+    }
+
+    static long PolicyContactIdentity(
+        long spawnSequence,
+        PolicyContactClass contactClass) {
+        if (spawnSequence <= 0) return 0;
+        // Four disjoint lanes leave room for another friendly target class without renumbering
+        // persisted decision traces. Every source counter is monotonic, so identity survives
+        // kinematic coincidence but changes on replacement or player-to-relief handoff.
+        return spawnSequence * 4L + (long)contactClass;
+    }
 
     void UpdatePendingOutcome() {
         bool playerLost = _playerTerminalState != AircraftTerminalState.Flying;

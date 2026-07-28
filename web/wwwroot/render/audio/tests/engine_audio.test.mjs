@@ -592,6 +592,49 @@ test("gesture enable from a preference-disabled startup resumes and becomes audi
   }
 });
 
+test("non-gesture arming cannot poison the later user-activation resume", async () => {
+  const previousAudio = globalThis.AudioContext;
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const userActivation = { isActive: false };
+  try {
+    FakeAudioContext.instances.length = 0;
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { userActivation },
+    });
+    globalThis.AudioContext = class extends FakeAudioContext {
+      constructor() {
+        super();
+        this.state = "suspended";
+      }
+
+      resume() {
+        this.resumeCalls += 1;
+        return new Promise(() => {});
+      }
+    };
+    const { armFlightAudio } = await freshModule(
+      "../flight_audio.js",
+      "non-gesture-then-gesture",
+    );
+
+    assert.equal(armFlightAudio(), true);
+    const audio = FakeAudioContext.instances.at(-1);
+    assert.equal(audio.resumeCalls, 0,
+      "automatic launch code may build, but cannot spend the resume attempt");
+
+    userActivation.isActive = true;
+    assert.equal(armFlightAudio(), true);
+    assert.equal(audio.resumeCalls, 1,
+      "the later trusted gesture owns the first and only pending resume");
+  } finally {
+    globalThis.AudioContext = previousAudio;
+    if (navigatorDescriptor)
+      Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    else delete globalThis.navigator;
+  }
+});
+
 test("only gesture arming resumes a suspended flight graph and suspended updates stay muted", async () => {
   const previous = globalThis.AudioContext;
   try {

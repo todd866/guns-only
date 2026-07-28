@@ -17,6 +17,38 @@ export function retainNewestTelemetryRows(rows, maximumRows) {
   return rows.length <= limit ? rows : rows.slice(rows.length - limit);
 }
 
+function isSortieInitialAiComputeLevel(row) {
+  return row?.k === "in"
+    && row.type === "perf"
+    && row.code === "AiComputeLevel"
+    && row.initial === true
+    && row.cause === "sortie-initial";
+}
+
+/**
+ * Bound the live recorder queue without orphaning its AI compute-level tape.
+ *
+ * Reconstruction favors the newest rows during backpressure, but the latest sortie's initial
+ * level is the baseline that gives every later transition meaning. If ordinary head trimming
+ * would remove it, sacrifice only the oldest retained tail row and keep the baseline first. The
+ * result remains chronological and never exceeds `maximumRows`.
+ */
+export function retainTelemetryRowsUnderBackpressure(rows, maximumRows) {
+  const retained = retainNewestTelemetryRows(rows, maximumRows);
+  if (!Array.isArray(rows) || retained.length === 0 || retained.length === rows.length)
+    return retained;
+
+  let baselineIndex = -1;
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (isSortieInitialAiComputeLevel(rows[index])) {
+      baselineIndex = index;
+      break;
+    }
+  }
+  if (baselineIndex < 0 || retained.includes(rows[baselineIndex])) return retained;
+  return [rows[baselineIndex], ...retained.slice(1)];
+}
+
 function serializeObjectRow(row) {
   if (!row || typeof row !== "object" || Array.isArray(row)) return null;
   try {

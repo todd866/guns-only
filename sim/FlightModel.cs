@@ -1185,12 +1185,17 @@ public static class FlightModel {
         var controlVhat = speed < 1e-9
             ? r.Attitude.Normalized().Rotate(new Vec3D(0, 0, 1))
             : vAir * (1.0 / speed);
-        double rho = atmosphere.Sample(r.Pos.Y).DensityKgM3;
+        // Every force and moment calculation in one RK stage is evaluated at the same
+        // RawState altitude. Sample that thermodynamic state once: the standard and weather
+        // atmosphere implementations are immutable altitude functions, and repeating their
+        // hydrostatic calculation here cannot add information to the stage.
+        AtmosphericState atmosphericState = atmosphere.Sample(r.Pos.Y);
+        double rho = atmosphericState.DensityKgM3;
         double q = 0.5 * rho * speed * speed;
-        var aero = Aerodynamics(r, c, p, wind, netThrustN, configuration, atmosphere,
+        var aero = Aerodynamics(r, c, p, wind, netThrustN, configuration, atmosphericState,
             pitchThrustVectorAngleRad);
         var (dAttitude, dRates, rollMomentNm, rcsMomentNm) = RotationalDerivatives(r, c, p,
-            liftRef, controlVhat, q, speed, netThrustN, configuration, atmosphere,
+            liftRef, controlVhat, q, speed, netThrustN, configuration, atmosphericState,
             pitchThrustVectorAngleRad, coldGasRemainingKg);
         return new StateDeriv(r.Vel, aero.Accel, BankRate(r.Bank, c.BankTarget, p),
             dAttitude, dRates, rollMomentNm, rcsMomentNm);
@@ -1208,6 +1213,16 @@ public static class FlightModel {
         in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere,
         double pitchThrustVectorAngleRad = double.NaN) {
         ArgumentNullException.ThrowIfNull(atmosphere);
+        AtmosphericState atmosphericState = atmosphere.Sample(r.Pos.Y);
+        return Aerodynamics(r, c, p, wind, netThrustN, configuration, atmosphericState,
+            pitchThrustVectorAngleRad);
+    }
+
+    static AeroResult Aerodynamics(in RawState r, in PilotCommand c,
+        in AircraftParams p, in Vec3D wind, double netThrustN,
+        in AirframeAerodynamicState configuration,
+        in AtmosphericState atmosphericState,
+        double pitchThrustVectorAngleRad = double.NaN) {
         var vAir = r.Vel - wind;
         double speed = vAir.Length;
         var attitude = r.Attitude.Normalized();
@@ -1218,7 +1233,6 @@ public static class FlightModel {
         double alpha = System.Math.Atan2(-vhat.Dot(bodyUp), vhat.Dot(bodyForward));
         double beta = System.Math.Asin(System.Math.Clamp(vhat.Dot(bodyRight), -1.0, 1.0));
 
-        AtmosphericState atmosphericState = atmosphere.Sample(r.Pos.Y);
         double rho = atmosphericState.DensityKgM3;
         double q = 0.5 * rho * speed * speed;
         bool scheduledLiftLimit = p.HighAlphaModel
@@ -1472,7 +1486,8 @@ public static class FlightModel {
         RotationalDerivatives(in RawState r,
         in PilotCommand c, in AircraftParams p, in Vec3D liftRef, in Vec3D vhat,
         double dynamicPressure, double speed, double netThrustN,
-        in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere,
+        in AirframeAerodynamicState configuration,
+        in AtmosphericState atmosphericState,
         double pitchThrustVectorAngleRad, double coldGasRemainingKg = 0.0) {
         var attitude = r.Attitude.Normalized();
         var target = TargetAttitude(r, c, p, liftRef, vhat, dynamicPressure, configuration);
@@ -1577,7 +1592,7 @@ public static class FlightModel {
         double momentScale = dynamicPressure * p.WingAreaM2 * span * 0.25;
         double stalledRollMoment = p.StallRollCoupling * momentScale
             * (LiftCoefficient(leftAlpha, p) - LiftCoefficient(rightAlpha, p)) * wingSeparation;
-        double mach = speed / atmosphere.Sample(r.Pos.Y).SpeedOfSoundMps;
+        double mach = speed / atmosphericState.SpeedOfSoundMps;
         double stalledYawMoment = p.StallYawCoupling * momentScale
             * (ProfileDragCoefficient(rightAlpha, mach, p)
                 - ProfileDragCoefficient(leftAlpha, mach, p)) * wingSeparation;
