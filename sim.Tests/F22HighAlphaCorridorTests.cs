@@ -71,19 +71,21 @@ public sealed class F22HighAlphaCorridorTests {
     }
 
     [Fact]
-    public void GenericPostStallPolarRemainsBitIdenticalForSabreAndSu27() {
-        // Exact pre-change values at the adopted review stations. The F-22-only CN/CA branch must
-        // never perturb the existing generic exponential curve used by these two airframes.
+    public void GenericPostStallPolarRemainsNumericallyIdenticalForSabreAndSu27() {
+        // Pre-change values at the adopted review stations. The F-22-only CN/CA branch must never
+        // perturb the existing generic exponential curve used by these two airframes. Fifteen
+        // decimal places exclude meaningful drift while allowing the one-ULP libm difference
+        // observed between macOS and Linux.
         Assert.Equal(0.39082327904804254,
-            FlightModel.LiftCoefficient(36.0 / Degrees, FlightModel.Sabre));
+            FlightModel.LiftCoefficient(36.0 / Degrees, FlightModel.Sabre), 15);
         Assert.Equal(0.09522108451578758,
-            FlightModel.LiftCoefficient(60.0 / Degrees, FlightModel.Sabre));
+            FlightModel.LiftCoefficient(60.0 / Degrees, FlightModel.Sabre), 15);
         Assert.Equal(0.7398380108124869,
             FlightModel.LiftCoefficient(36.0 / Degrees,
-                FlightModel.Su27SPublicDataSurrogate));
+                FlightModel.Su27SPublicDataSurrogate), 15);
         Assert.Equal(0.18025583820688437,
             FlightModel.LiftCoefficient(60.0 / Degrees,
-                FlightModel.Su27SPublicDataSurrogate));
+                FlightModel.Su27SPublicDataSurrogate), 15);
     }
 
     [Fact]

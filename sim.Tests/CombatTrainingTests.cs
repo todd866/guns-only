@@ -176,11 +176,15 @@ public class CombatTrainingTests {
         Assert.Equal(firstJson, secondJson);
         // The pinned hash moves ONLY with deliberate kernel/policy trajectory changes (Build 72
         // alpha model; Build 74 F-22 lateral authority + pushover guard; Build 97 opportunity-keyed
-        // trigger and six-denial policy). The serializer, schema, and same-seed bit-equality above
-        // are the real invariants. Print-and-update via the assertion when a labelled change lands.
-        Assert.Equal(
-            "5FE4F29DDF845380CA54F810BAC6F2069875C393A8F49E59B6BD577A571F4B52",
-            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(firstJson))));
+        // trigger and six-denial policy; Build 170 twelve-significant-digit portable wire
+        // canonicalization). The serializer, schema, and same-seed bit-equality above are the real
+        // invariants. Print-and-update via the assertion when a labelled change lands.
+        const string ExpectedDatasetHash =
+            "2C23FFA0D6FB0337A38A24674C43E5BBAC7061292163C9C3F2C639A42BC8A49C";
+        string datasetHash =
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(firstJson)));
+        Assert.True(datasetHash == ExpectedDatasetHash,
+            $"expected dataset hash {ExpectedDatasetHash}, actual {datasetHash}");
         string[] lines = firstJson.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(1 + first.Episodes.Count + first.TransitionCount, lines.Length);
         using JsonDocument header = JsonDocument.Parse(lines[0]);

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using GunsOnly.Sim.Doctrine;
 
 namespace GunsOnly.Sim.Training;
@@ -22,7 +23,13 @@ public static class CombatDatasetJsonLines {
         "guns-only.seeded-offset-merge.splitmix64.v1";
 
     static readonly JsonSerializerOptions Options = new() {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        // System.Math's transcendental functions are allowed to differ by a few final bits across
+        // operating systems. Those differences are physically meaningless but made otherwise
+        // identical training exports hash differently on macOS and Linux. Twelve significant
+        // digits retain substantially more resolution than the simulator's sensors and make the
+        // wire artifact portable and reproducible.
+        Converters = { new CanonicalDoubleConverter() }
     };
 
     public static void Write(TextWriter writer, CombatTrainingBatch batch) {
@@ -284,4 +291,18 @@ public static class CombatDatasetJsonLines {
     readonly record struct Vec3Row(double X, double Y, double Z);
     readonly record struct QuaternionRow(double W, double X, double Y, double Z);
     readonly record struct BodyRatesRow(double P, double Q, double R);
+
+    sealed class CanonicalDoubleConverter : JsonConverter<double> {
+        public override double Read(ref Utf8JsonReader reader, Type typeToConvert,
+            JsonSerializerOptions options) => reader.GetDouble();
+
+        public override void Write(Utf8JsonWriter writer, double value,
+            JsonSerializerOptions options) {
+            if (!double.IsFinite(value))
+                throw new JsonException("Combat dataset values must be finite.");
+            writer.WriteRawValue(
+                value.ToString("G12", CultureInfo.InvariantCulture),
+                skipInputValidation: true);
+        }
+    }
 }
