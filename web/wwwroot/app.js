@@ -609,7 +609,9 @@ function updateMissionRadio(state) {
     if (rapierRadioRoute)
       rapierRadioRoute.textContent = `${speaker || "PATTERN"} → ${callsign || "ALL STATIONS"}`;
     if (rapierRadioHistory) {
-      const rows = rapierRadioCalls.slice(1).map((call) => {
+      // One line of history, not a scrollback: the live call is the message and the ANCA C
+      // row already carries the net (owner declutter verdict 2026-07-29).
+      const rows = rapierRadioCalls.slice(1, 2).map((call) => {
         const row = document.createElement("li");
         row.textContent = `${call.channel || "NET"} · ${call.speaker} · ${call.text}`;
         return row;
