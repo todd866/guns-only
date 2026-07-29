@@ -10,7 +10,11 @@ public sealed record VisualMergeEvaluationConfig(
     double RearQuarterNoseLimitDeg = 18.0,
     double RearQuarterAspectLimitDeg = 60.0,
     double RequiredRearQuarterDwellSeconds = 5.0,
-    double DesiredMaximumClosureKts = 250.0);
+    double DesiredMaximumClosureKts = 250.0,
+    // First-pass weapons discipline is per-mission doctrine, not a property of scoring. The
+    // front-door 2v1 opens guns free (pilot request 2026-07-29); the ace duel keeps the
+    // classical safe first pass.
+    bool HoldFireThroughFirstPass = true);
 
 /// <summary>
 /// Scores decisions which the fixed-step simulation actually observes. It does not award a
@@ -23,6 +27,9 @@ public sealed class VisualMergeEvaluation {
     const double WeaponsHotCueSeconds = 1.8;
     readonly VisualMergeEvaluationConfig _config;
     double _previousRangeM = double.NaN;
+    // Geometry truth, decoupled from weapons authority: guns-free doctrine (and a hand release)
+    // arm the gun early, but the reciprocal pass is still observed and scored when it happens.
+    bool _firstPassObserved;
     double _openingSeconds;
     bool _wasBehindAtCloseRange;
     bool _playerTriggerInterlocked;
@@ -36,9 +43,15 @@ public sealed class VisualMergeEvaluation {
             || !double.IsFinite(config.RequiredRearQuarterDwellSeconds)
             || config.RequiredRearQuarterDwellSeconds <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(config));
+        // Guns-free doctrine: the pass is complete by declaration, not by pilot override, so the
+        // debrief does not record a hand release that never happened.
+        if (!config.HoldFireThroughFirstPass) FirstPassComplete = true;
     }
 
     public bool FirstPassComplete { get; private set; }
+    /// The reciprocal pass as flown geometry, independent of weapons authority: true only once
+    /// an actual pass has been observed, under any doctrine.
+    public bool FirstPassObserved => _firstPassObserved;
     public bool FirstPassHoldReleasedByPilot { get; private set; }
     public bool WeaponsInhibited => !FirstPassComplete;
 
@@ -82,7 +95,10 @@ public sealed class VisualMergeEvaluation {
     public int Score {
         get {
             if (!double.IsFinite(MinimumEnergyKias)) return 0;
-            double merge = FirstPassComplete
+            // Merge points require a pass actually flown, not merely an armed gun: guns-free
+            // doctrine and the hand release must not award points for geometry that never
+            // happened. (Minimum range records from spawn, so finiteness alone proves nothing.)
+            double merge = FirstPassObserved
                 ? 20.0 * Math.Clamp(MinimumMergeRangeM / _config.MinimumSafePassM, 0.0, 1.0)
                 : 0.0;
             double energy = 20.0 * Math.Clamp(
@@ -151,7 +167,7 @@ public sealed class VisualMergeEvaluation {
             player.Position.Y, atmosphere) * AirData.MpsToKnots;
         MinimumEnergyKias = Math.Min(MinimumEnergyKias, kias);
 
-        if (!FirstPassComplete) {
+        if (!_firstPassObserved) {
             MinimumMergeRangeM = Math.Min(MinimumMergeRangeM, rangeM);
             bool passedGate = MinimumMergeRangeM <= _config.MergeGateM;
             bool opening = double.IsFinite(_previousRangeM)
@@ -160,8 +176,11 @@ public sealed class VisualMergeEvaluation {
                 && rangeM >= MinimumMergeRangeM + 20.0;
             _openingSeconds = passedGate && opening ? _openingSeconds + dt : 0.0;
             if (_openingSeconds >= OpeningConfirmationSeconds) {
-                FirstPassComplete = true;
-                _weaponsHotCueRemainingSeconds = WeaponsHotCueSeconds;
+                _firstPassObserved = true;
+                if (!FirstPassComplete) {
+                    FirstPassComplete = true;
+                    _weaponsHotCueRemainingSeconds = WeaponsHotCueSeconds;
+                }
             }
         }
 
@@ -176,13 +195,13 @@ public sealed class VisualMergeEvaluation {
         // only once ownship is actually pursuing from the opponent's rear hemisphere with the
         // target ahead of the wing line. This also prevents an opening, nose-away post-pass state
         // from arming the later overshoot detector merely because ownship is geometrically astern.
-        bool pursuitGeometry = FirstPassComplete
+        bool pursuitGeometry = _firstPassObserved
             && rearRangeM <= 1500.0
             && banditAspect < 0.0
             && noseAlignment > 0.0;
         if (pursuitGeometry)
             PeakClosureKts = Math.Max(PeakClosureKts, closureKts);
-        CurrentRearQuarterValid = FirstPassComplete && rearGeometryValid;
+        CurrentRearQuarterValid = _firstPassObserved && rearGeometryValid;
         if (CurrentRearQuarterValid) RearQuarterDwellSeconds += dt;
 
         bool close = rearRangeM < 1000.0;
