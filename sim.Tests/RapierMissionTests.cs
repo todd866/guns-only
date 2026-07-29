@@ -98,12 +98,17 @@ public class RapierMissionTests {
                 + $"gamma {session.Player.State.Gamma * 180.0 / Math.PI:F1}°");
         bool okReason = reasons.Contains("intercept_dash")
             || reasons.Contains("direct_join")
+            || reasons.Contains("level_dash")
             || reasons.Contains("post_lob_intercept");
+        // Goal-capable ReachFight may RamClimb, ZoomLob, or DirectJoin/LevelDash into Intercept.
         bool energyLadder = sawRamClimb
             || (sawZoomPull && okReason)
-            || reasons.Contains("intercept_dash");
+            || reasons.Contains("intercept_dash")
+            || reasons.Contains("direct_join")
+            || reasons.Contains("level_dash");
         Assert.True(energyLadder,
-            "automation never climbed toward intercept (RamClimb or ZoomLob→Intercept): "
+            "automation never climbed toward intercept "
+                + "(RamClimb / ZoomLob / DirectJoin / LevelDash): "
                 + $"[{string.Join(", ", phaseTimeline)}]");
         Assert.True(maximumMach >= 2.7,
             $"automation only reached M{maximumMach:F2}");

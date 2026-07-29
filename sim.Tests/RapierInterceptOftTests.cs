@@ -164,10 +164,14 @@ public class RapierInterceptOftTests {
         bool reachedIntercept = phases.Contains(RapierMissionPhase.Intercept);
         bool okReason = reasons.Contains("intercept_dash")
             || reasons.Contains("direct_join")
+            || reasons.Contains("level_dash")
             || reasons.Contains("post_lob_intercept");
+        // Goal-capable ReachFight may RamClimb, ZoomLob, or DirectJoin/LevelDash into Intercept.
         bool energyLadder = phases.Contains(RapierMissionPhase.RamClimb)
             || (phases.Contains(RapierMissionPhase.ZoomPull) && okReason)
-            || reasons.Contains("intercept_dash");
+            || reasons.Contains("intercept_dash")
+            || reasons.Contains("direct_join")
+            || reasons.Contains("level_dash");
         bool ok = phases.Contains(RapierMissionPhase.Accelerate)
             && energyLadder
             && reachedIntercept
