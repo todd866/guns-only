@@ -74,6 +74,7 @@ mass; systems follow)
 | [12](12-aerodynamics-and-controls.md) | Aerodynamics and control allocation | closed architecture; provisional schedules |
 | [15](15-structure-and-build.md) | Structure and build | provisional gauges; OML closed |
 | [16](16-manufacturing-and-industrial-basis.md) | Manufacturing and the 2026 industrial basis | anchor lineage + 2026 basis; fiction program shape |
+| [17](17-signatures-and-survivability.md) | Signatures and survivability | closed refusal of LO; surrogate kinematic doctrine |
 | [20](20-thermal-and-materials.md) | Thermal and materials | closed CMC freeze; surrogate zones |
 | [30](30-propulsion-and-inlet.md) | Propulsion and inlet | closed map constants + per-stream fuel |
 | [40](40-mass-and-cg.md) | Mass and CG | closed mass statement; provisional CG travel |

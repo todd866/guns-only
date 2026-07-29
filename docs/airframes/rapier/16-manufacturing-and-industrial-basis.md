@@ -123,4 +123,6 @@ program-shape section is **fiction** disciplined by those anchors. The honest ha
 transition across the handover band, additive-CMC joint fatigue under thermal cycling (the
 2%-life line), and inlet behavior through the M3.3–3.8 spill schedule. Nothing in this chapter
 claims those are easy — it claims they are **1960s-adjacent engineering plus 2026 materials**,
-which is a different thing from a frontier.
+which is a different thing from a frontier. That claim holds only because signature
+management is explicitly refused — see [17 — Signatures and survivability](17-signatures-and-survivability.md);
+"somewhat stealthy" would put this aircraft back on a frontier and break the cost thesis with it.
