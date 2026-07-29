@@ -2470,10 +2470,12 @@ class CombatHud {
     ctx.fillStyle = thermalAccent;
     ctx.fillText(teach.skinText, x + 8, y + 26);
 
-    if (teach.wallC !== null) {
+    // Schema 1.19 renamed the freestream recovery channel to recoveryC; the old wallC key
+    // read undefined here and printed "ADIABATIC WALL NaN°C" on every teach card.
+    if (Number.isFinite(teach.recoveryC)) {
       ctx.font = "600 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillStyle = GREEN_DIM;
-      ctx.fillText(`ADIABATIC WALL ${Math.round(teach.wallC)}°C`, x + 8, y + 39);
+      ctx.fillText(`ADIABATIC WALL ${Math.round(teach.recoveryC)}°C`, x + 8, y + 39);
     }
 
     const barX = x + 8;
