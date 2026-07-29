@@ -31,7 +31,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.24.0";
+    const string SnapshotSchemaVersion = "1.25.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -408,6 +408,7 @@ internal static class SnapshotProjection {
             + $"\"rapier_ram_light_mach\":{TurboRamjetPerformanceMap.RamFadeStartMach:F2},"
             + $"\"rapier_full_ram_mach\":{TurboRamjetPerformanceMap.FullRamMach:F2},"
             + $"\"rapier_turbine_gone_mach\":{TurboRamjetPerformanceMap.TurbineGoneMach:F2},"
+            + $"\"rapier_design_dash_mach\":{RapierMissionDirector.MeasuredDashMach:F2},"
             + $"\"rapier_target_mach\":{Session.RapierTargetMach:F2},"
             + $"\"rapier_commanded_mach\":{Session.RapierCommandedMach:F2},"
             + $"\"rapier_authored_target_mach\":{Session.RapierAuthoredTargetMach:F2},"
@@ -481,6 +482,8 @@ internal static class SnapshotProjection {
             + $"\"rapier_rcs_firing_frac\":{Session.RapierRcsFiringFraction:F3},"
             + $"\"rapier_inlet_recovery\":{_player.InletFlowRecovery:F3},"
             + $"\"rapier_inlet_distorted\":{(_player.InletDistorted ? "true" : "false")},"
+            + $"\"rapier_inlet_unstart\":{(_player.InletUnstarted ? "true" : "false")},"
+            + $"\"rapier_over_q\":{(_player.OverDynamicPressure ? "true" : "false")},"
             + $"\"rapier_normal_alpha_limit_deg\":{RapierAerodynamics.NormalLawAlphaLimitRad(mach) * 57.29577951308232:F2},"
             + $"\"rapier_zoom_lob\":{(Session.Beat.ScriptedIntercept?.ZoomLobProfile == true ? "true" : "false")},"
             + $"\"rapier_turbine_thrust_lbf\":{Session.RapierTurbineThrustN / J47PerformanceMap.NewtonsPerPoundForce:F0},"

@@ -57,6 +57,8 @@ const CIRCUIT_LEG_FROM_CODE = Object.freeze({
 const LEGACY_RAM_LIGHT_MACH = 2.0;
 const LEGACY_FULL_RAM_MACH = 2.8;
 const LEGACY_TURBINE_GONE_MACH = 3.0;
+// Pass 1 measured dash — mirrors RapierMissionDirector.MeasuredDashMach for old recordings.
+const LEGACY_DESIGN_DASH_MACH = 3.55;
 
 function finiteNumber(value) {
   const number = Number(value);
@@ -71,6 +73,8 @@ export function rapierPropulsionThresholds(state = {}) {
       ?? LEGACY_FULL_RAM_MACH,
     turbineGoneMach: finiteNumber(state.rapier_turbine_gone_mach)
       ?? LEGACY_TURBINE_GONE_MACH,
+    designDashMach: finiteNumber(state.rapier_design_dash_mach)
+      ?? LEGACY_DESIGN_DASH_MACH,
   });
 }
 
@@ -78,7 +82,8 @@ export function rapierBriefingText(template, state = {}) {
   const thresholds = rapierPropulsionThresholds(state);
   return String(template ?? "")
     .replaceAll("{RAM_LIGHT_MACH}", `M${thresholds.ramLightMach.toFixed(1)}`)
-    .replaceAll("{FULL_RAM_MACH}", `M${thresholds.fullRamMach.toFixed(1)}`);
+    .replaceAll("{FULL_RAM_MACH}", `M${thresholds.fullRamMach.toFixed(1)}`)
+    .replaceAll("{DESIGN_DASH_MACH}", `M${thresholds.designDashMach.toFixed(1)}`);
 }
 
 export function circuitLegFromState(state) {

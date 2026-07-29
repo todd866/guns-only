@@ -82,6 +82,61 @@ public static class RapierAerodynamics {
     }
 
     /// <summary>
+    /// Minimum normal-law α (radians) for approximately <paramref name="loadFactor"/> g of level
+    /// flight at the current mass and dynamic pressure. Returns 0 when q or CL_α is unusable so
+    /// the Mach schedule remains the sole ceiling.
+    /// </summary>
+    public static double LevelFlightAlphaFloorRad(
+        double massKg, double dynamicPressurePa, double clAlphaPerRad, double loadFactor = 1.05) {
+        if (!double.IsFinite(massKg) || massKg <= 0.0) return 0.0;
+        if (!double.IsFinite(dynamicPressurePa) || dynamicPressurePa <= 1.0) return 0.0;
+        if (!double.IsFinite(clAlphaPerRad) || clAlphaPerRad <= 1e-6) return 0.0;
+        if (!double.IsFinite(loadFactor) || loadFactor <= 0.0) loadFactor = 1.0;
+        const double g0 = 9.80665;
+        double clNeeded = loadFactor * massKg * g0
+            / (dynamicPressurePa * ReferenceAreaM2);
+        return System.Math.Max(0.0, clNeeded / clAlphaPerRad);
+    }
+
+    /// <summary>Authored high-q awareness placard (Pa). Soft cue only — not structural damage.</summary>
+    public const double HighDynamicPressurePlacardPa = 80_000.0;
+
+    public static bool IsOverDynamicPressure(double dynamicPressurePa) =>
+        double.IsFinite(dynamicPressurePa) && dynamicPressurePa > HighDynamicPressurePlacardPa;
+
+    /// <summary>
+    /// Combined flow-angle magnitude used by the inlet recovery / unstart surrogates.
+    /// </summary>
+    public static double InletFlowAngleRad(double alphaRad, double betaRad) {
+        double alpha = double.IsFinite(alphaRad) ? alphaRad : 0.0;
+        double beta = double.IsFinite(betaRad) ? betaRad : 0.0;
+        return System.Math.Sqrt(alpha * alpha + beta * beta);
+    }
+
+    /// <summary>
+    /// Sticky unstart seed above ram regime. Trip near ~7° combined flow angle; clear below ~2.3°.
+    /// Epistemic: provisional surrogate inspired by mixed-compression incidence envelopes — not OEM.
+    /// </summary>
+    public const double InletUnstartTripFlowAngleRad = 0.12;
+    public const double InletUnstartClearFlowAngleRad = 0.04;
+    public const double InletUnstartRecoveryFloor = 0.15;
+
+    public static bool NextInletUnstartState(
+        double mach, double alphaRad, double betaRad, bool previouslyUnstarted) {
+        if (!double.IsFinite(mach) || mach <= RamRegimeStartMach) return false;
+        double flow = InletFlowAngleRad(alphaRad, betaRad);
+        if (previouslyUnstarted) return flow > InletUnstartClearFlowAngleRad;
+        return flow >= InletUnstartTripFlowAngleRad;
+    }
+
+    public static double InletFlowRecovery(
+        double mach, double alphaRad, double betaRad, bool inletUnstarted) {
+        double continuous = InletFlowRecovery(mach, alphaRad, betaRad);
+        if (!inletUnstarted) return continuous;
+        return System.Math.Min(continuous, InletUnstartRecoveryFloor);
+    }
+
+    /// <summary>
     /// Supersonic control-surface effectiveness multiplier. Unity subsonic; about 0.5 by Mach 1.65
     /// (NACA RM L52H14 order); gently declining thereafter. Non-increasing for Mach ≥ 1.
     /// </summary>

@@ -157,6 +157,10 @@ public sealed class AircraftSim {
     /// </summary>
     public double InletFlowRecovery { get; private set; } = 1.0;
     public bool InletDistorted => InletFlowRecovery < 0.90;
+    /// <summary>Sticky Rapier inlet-unstart seed; cleared by unloading flow angle.</summary>
+    public bool InletUnstarted { get; private set; }
+    public bool OverDynamicPressure =>
+        RapierAerodynamics.IsOverDynamicPressure(DynamicPressurePa);
     /// <summary>Fuel-system and failure models may remove combustion without rewriting controls.</summary>
     public bool EngineFuelAvailable { get; set; } = true;
     public bool EngineCombustionAvailable { get; set; } = true;
@@ -593,6 +597,7 @@ public sealed class AircraftSim {
         bool running = EngineFuelAvailable && EngineCombustionAvailable && _p.ThrustMaxN > 0.0;
         if (!running) {
             InletFlowRecovery = 1.0;
+            InletUnstarted = false;
             LastEngineOperatingPoint = EngineOperatingPoint.Stopped;
             return;
         }
@@ -605,6 +610,7 @@ public sealed class AircraftSim {
             // temperature still supplies the physically correct Mach input, but applying an
             // invented non-standard-day thrust correction would imply data the source does not
             // contain. A future engine deck can consume pressure/temperature through its API.
+            InletUnstarted = false;
             LastEngineOperatingPoint = J47PerformanceMap.Evaluate(_thrustFrac,
                 State.Position.Y, mach, running: true);
             return;
@@ -616,17 +622,22 @@ public sealed class AircraftSim {
                 _p.GenericIdleFuelFlowLbPerMinute, _p.GenericMilitaryFuelFlowLbPerMinute,
                 _p.GenericAfterburnerFuelFlowLbPerMinute, _p.MaxThrustFraction);
             if (FlightModel.UsesRapierAerodynamics(_p)) {
+                InletUnstarted = RapierAerodynamics.NextInletUnstartState(
+                    mach, AngleOfAttackRad, SideslipRad, InletUnstarted);
                 InletFlowRecovery = RapierAerodynamics.InletFlowRecovery(
-                    mach, AngleOfAttackRad, SideslipRad);
+                    mach, AngleOfAttackRad, SideslipRad, InletUnstarted);
                 point = point with {
                     NetThrustN = point.NetThrustN * InletFlowRecovery,
                     NetThrustLbf = point.NetThrustLbf * InletFlowRecovery
                 };
+            } else {
+                InletUnstarted = false;
             }
             LastEngineOperatingPoint = point;
             return;
         }
 
+        InletUnstarted = false;
         if (_p.PropulsionModel == PropulsionModelKind.RamjetPublicDataSurrogate) {
             // A ramjet's only compressor is the shock system in its own inlet, so thrust is a
             // function of how fast the airframe already is. Below light-up it produces nothing at

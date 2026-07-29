@@ -138,6 +138,13 @@ public sealed record ScriptedInterceptConfig(
 /// an explicit automation command hands the aircraft back to the director.
 /// </summary>
 public sealed class RapierMissionDirector {
+    /// <summary>
+    /// Measured design dash (Intercept OFT energy-ladder ~M3.69 class). Commands Intercept and
+    /// Escape. Stays below <c>RamSpillCompleteMach</c> (3.8). Mach 4 remains SE-bible fiction only
+    /// — never a mission target.
+    /// </summary>
+    public const double MeasuredDashMach = 3.55;
+
     const double ClimbTopM = 56_000.0 * 0.3048;
     const double CruiseAltitudeM = 70_000.0 * 0.3048;
     const double FeetPerMetre = 1.0 / 0.3048;
@@ -1113,7 +1120,7 @@ public sealed class RapierMissionDirector {
                     + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0}";
                 break;
             case RapierMissionPhase.Intercept:
-                targetMach = 4.0;
+                targetMach = MeasuredDashMach;
                 targetAltitudeFt = 70_000.0;
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 120.0,
@@ -1183,7 +1190,7 @@ public sealed class RapierMissionDirector {
                 }
                 break;
             case RapierMissionPhase.Escape:
-                targetMach = 4.0;
+                targetMach = MeasuredDashMach;
                 targetAltitudeFt = 70_000.0;
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 120.0,
@@ -1193,10 +1200,10 @@ public sealed class RapierMissionDirector {
                 waypoint = recoveryInitial;
                 cue = _phaseReason == "gun_drone_away"
                     ? "GUN-DRONE AWAY · EGRESS HOME · "
-                        + $"DASH M{Math.Min(4.0, skinMachLimit):F1}"
+                        + $"DASH M{Math.Min(MeasuredDashMach, skinMachLimit):F1}"
                     : $"FORMATION DESTROYED · EGRESS HOME · {pursuerCount} PURSUERS · "
                         + $"{pursuitRangeM / 1000.0:F0} KM SEPARATION · "
-                        + $"DASH M{Math.Min(4.0, skinMachLimit):F1}";
+                        + $"DASH M{Math.Min(MeasuredDashMach, skinMachLimit):F1}";
                 break;
             case RapierMissionPhase.ReturnToBase:
                 targetMach = 2.0;

@@ -40,11 +40,13 @@ public sealed class RapierAerodynamicsIntegrationTests {
     [Fact]
     public void OrdinaryRapierNormalLawAtMach35UsesScheduledAlphaClLimitBelowPhysicalBreak() {
         // Provisional high-speed normal-law schedule — not physical CLmax / stall incidence.
+        // Pass 2: mass/q floor may raise ordinary α above the Mach schedule so ~1 g is holdable.
         AircraftParams p = Rapier;
         AtmosphericState air = StandardAtmosphere1976.Instance.Sample(Fl720M);
         double mach = 3.5;
         double speedMps = air.SpeedOfSoundMps * mach;
         var state = LevelAt(Fl720M, speedMps, p.MassKg);
+        double q = 0.5 * air.DensityKgM3 * speedMps * speedMps;
 
         double scheduledAlpha = RapierAerodynamics.NormalLawAlphaLimitRad(mach);
         double physicalAlpha = FlightModel.AlphaAeroMax(p);
@@ -52,17 +54,28 @@ public sealed class RapierAerodynamicsIntegrationTests {
         Assert.True(scheduledAlpha < physicalAlpha * 0.45,
             "Mach-3.5 normal-law α must sit well below the physical lift-break incidence");
 
-        double controllableCl = FlightModel.EffectiveControllableClMax(
+        double scheduleOnlyCl = FlightModel.EffectiveControllableClMax(
             p, mach, AirframeAerodynamicState.Clean);
+        double massAwareCl = FlightModel.EffectiveControllableClMax(
+            p, mach, AirframeAerodynamicState.Clean, p.MassKg, q);
         double physicalCl = FlightModel.EffectiveClMax(p, mach);
-        Assert.True(controllableCl < physicalCl * 0.55,
-            $"scheduled CL limit {controllableCl:F3} must be materially below physical break {physicalCl:F3}");
+        Assert.True(scheduleOnlyCl < physicalCl * 0.55,
+            $"scheduled CL limit {scheduleOnlyCl:F3} must be materially below physical break {physicalCl:F3}");
+        Assert.True(massAwareCl >= scheduleOnlyCl - 1e-9);
+        Assert.True(massAwareCl < physicalCl * 0.55,
+            $"mass/q-aware CL {massAwareCl:F3} must remain below physical break {physicalCl:F3}");
 
         var (_, normalLawG, _) = FlightModel.ClampNz(state, new PilotCommand(99.0, 0.0, 0.0, 0.0),
             p, speedMps, AirframeAerodynamicState.Clean);
         double physicalBreakG = FlightModel.NzAeroMax(state, p, speedMps);
+        Assert.True(normalLawG >= 1.0,
+            $"Pass 2 ordinary law must hold ≥1 g at FL720/M3.5 design mass, got {normalLawG:F2}");
         Assert.True(normalLawG < physicalBreakG * 0.55,
             $"ordinary normal-law G {normalLawG:F2} must be materially less than physical-break G {physicalBreakG:F2}");
+
+        Assert.InRange(p.IxxKgM2, 13_400.0, 13_450.0);
+        Assert.InRange(p.IyyKgM2, 87_500.0, 87_650.0);
+        Assert.InRange(p.IzzKgM2, 96_000.0, 96_150.0);
 
         // Explicit CommandedAlphaRad exposes the physical CL break; ordinary GDemand does not.
         var normalSim = new AircraftSim(
@@ -231,6 +244,39 @@ public sealed class RapierAerodynamicsIntegrationTests {
             alphaOff.LastEngineOperatingPoint.NetThrustN / onDesign.LastEngineOperatingPoint.NetThrustN,
             alphaOff.InletFlowRecovery,
             5);
+    }
+
+    [Fact]
+    public void InletUnstartCollapsesInstalledThrustUntilFlowAngleClears() {
+        AircraftParams p = Rapier;
+        const double altitudeM = 18_000.0;
+        const double mach = 2.6;
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
+        double speedMps = air.SpeedOfSoundMps * mach;
+        double throttle = p.MaxThrustFraction;
+        double tripAlpha = RapierAerodynamics.InletUnstartTripFlowAngleRad + 0.01;
+
+        var onDesign = new AircraftSim(
+            LevelAt(altitudeM, speedMps, p.MassKg, AttitudeForAlphaBeta(0.0, 0.0)), p);
+        var tripped = new AircraftSim(
+            LevelAt(altitudeM, speedMps, p.MassKg, AttitudeForAlphaBeta(tripAlpha, 0.0)), p);
+        var hold = new PilotCommand(1.0, 0.0, throttle, 0.0);
+        onDesign.Step(hold, Dt);
+        tripped.Step(hold, Dt);
+
+        Assert.False(onDesign.InletUnstarted);
+        Assert.Equal(1.0, onDesign.InletFlowRecovery, 5);
+        Assert.True(tripped.InletUnstarted);
+        Assert.True(tripped.InletFlowRecovery <= RapierAerodynamics.InletUnstartRecoveryFloor + 1e-6);
+        Assert.True(tripped.LastEngineOperatingPoint.NetThrustN
+            < onDesign.LastEngineOperatingPoint.NetThrustN
+                * RapierAerodynamics.InletUnstartRecoveryFloor + 1.0);
+
+        // Clear path is unit-tested on NextInletUnstartState; prove sticky mid-band holds.
+        Assert.True(RapierAerodynamics.NextInletUnstartState(
+            mach, 0.08, 0.0, previouslyUnstarted: true));
+        Assert.False(RapierAerodynamics.NextInletUnstartState(
+            mach, 0.0, 0.0, previouslyUnstarted: true));
     }
 
     [Fact]
