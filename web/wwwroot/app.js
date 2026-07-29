@@ -214,6 +214,141 @@ const UKRAINE_TRAINING_TERRAIN_MANIFEST_URL = new URL(
   "./content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json",
   import.meta.url,
 ).href;
+const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID =
+  "mission-feature-pack.ukraine-modern.soniachne-clinic-a.v1";
+const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL = new URL(
+  "./content/packs/ukraine-modern/environment/hero-cells/"
+    + "soniachne-clinic-a.feature-pack.json",
+  import.meta.url,
+).href;
+const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
+
+function normalizedContractText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizedSha256(value) {
+  return normalizedContractText(value).toLowerCase();
+}
+
+function missionFeaturePackCacheIdentity(state = null) {
+  const featurePackId = normalizedContractText(state?.mission_feature_pack_id);
+  const sha256 = normalizedSha256(state?.mission_feature_pack_sha256);
+  return `mission-feature:${encodeURIComponent(featurePackId || "none")}`
+    + `@${sha256 || "none"}`;
+}
+
+function missionFeaturePackRequest(state = null) {
+  const featurePackId = normalizedContractText(state?.mission_feature_pack_id);
+  const sha256 = normalizedSha256(state?.mission_feature_pack_sha256);
+  return Object.freeze({
+    featurePackId,
+    sha256,
+    required: state?.mission_feature_pack_required === true,
+    supported: featurePackId === UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID
+      && state?.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID,
+    url: UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL,
+  });
+}
+
+async function sha256Hex(bytes) {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("SHA-256 verification is unavailable in this browser.");
+  }
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function validateMissionFeaturePack(pack, request) {
+  if (!pack || typeof pack !== "object" || Array.isArray(pack)) {
+    throw new TypeError("Mission feature pack must be a JSON object.");
+  }
+  if (pack.schemaVersion !== "1.0.0") {
+    throw new TypeError(`Unsupported mission feature schema ${pack.schemaVersion}.`);
+  }
+  if (pack.featurePackId !== request.featurePackId) {
+    throw new TypeError(`Mission feature pack identity mismatch: ${pack.featurePackId}.`);
+  }
+  if (typeof pack.packVersion !== "string" || !pack.packVersion.trim()) {
+    throw new TypeError("Mission feature pack version is required.");
+  }
+  if (pack.theatre?.terrainId !== UKRAINE_2030S_TERRAIN_ID) {
+    throw new TypeError(`Mission feature pack terrain mismatch: ${pack.theatre?.terrainId}.`);
+  }
+  const anchor = pack.coordinateFrame?.anchorSourceM;
+  if (!pack.coordinateFrame || typeof pack.coordinateFrame !== "object"
+      || !anchor || typeof anchor !== "object" || Array.isArray(anchor)
+      || !Number.isFinite(anchor.eastM)
+      || !Number.isFinite(anchor.upM)
+      || !Number.isFinite(anchor.northM)) {
+    throw new TypeError("Mission feature pack coordinate frame is invalid.");
+  }
+  const presentationOnly = pack.authority?.mode === "presentation_only"
+    && pack.authority?.targetableByDefault === false
+    && pack.authority?.collisionAuthority === "none"
+    && pack.authority?.damageAuthority === "none"
+    && pack.authority?.navigationAuthority === "none"
+    && pack.authority?.landingZoneAuthority === "none";
+  if (!presentationOnly
+      || !pack.renderBudgets || typeof pack.renderBudgets !== "object"
+      || !Array.isArray(pack.features)
+      || pack.features.length === 0
+      || pack.features.some((feature) =>
+        feature?.presentationOnly !== true || feature?.targetable !== false)
+      || !Array.isArray(pack.landingZones)
+      || !Array.isArray(pack.ambientExclusionZones)) {
+    throw new TypeError("Mission feature pack presentation authority or collections are invalid.");
+  }
+  return pack;
+}
+
+async function loadMissionFeaturePack(request, fetchImpl) {
+  if (!request.featurePackId) {
+    if (request.required) throw new Error("Required mission feature pack ID is missing.");
+    return null;
+  }
+  if (!request.supported) {
+    if (request.required) {
+      throw new Error(`Required mission feature pack is unsupported: ${request.featurePackId}.`);
+    }
+    return null;
+  }
+  if (!SHA256_HEX_PATTERN.test(request.sha256)) {
+    if (request.required) {
+      throw new Error(`Required mission feature pack SHA-256 is invalid: ${request.sha256}.`);
+    }
+    return null;
+  }
+  try {
+    const versionedUrl = new URL(request.url);
+    versionedUrl.searchParams.set("sha256", request.sha256);
+    const response = await fetchImpl(versionedUrl.href, {
+      cache: "no-cache",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new Error(`Mission feature pack request failed: ${response.status} ${versionedUrl}`);
+    }
+    const bytes = await response.arrayBuffer();
+    const actualSha256 = await sha256Hex(bytes);
+    if (actualSha256 !== request.sha256) {
+      throw new Error("Mission feature pack SHA-256 does not match the mission snapshot.");
+    }
+    let pack;
+    try {
+      pack = JSON.parse(new TextDecoder().decode(bytes));
+    } catch (error) {
+      throw new TypeError(`Mission feature pack JSON is invalid: ${error.message}`);
+    }
+    return validateMissionFeaturePack(pack, request);
+  } catch (error) {
+    if (request.required) throw error;
+    console.warn("Optional mission feature pack unavailable; continuing without it.", error);
+    return null;
+  }
+}
 
 const sceneCanvas = document.querySelector("#scene");
 const hudCanvas = document.querySelector("#hud");
@@ -863,13 +998,23 @@ if (mobileControls) {
 // Centralised, deliberately conservative quality knobs. The shader work stays identical across
 // tiers; mobile saves fill-rate and vertex cost while desktop keeps the silhouette and deck edges
 // crisp. These are evaluated once and never branch inside the render loop.
+const detectedDeviceMemoryGiB = Number(navigator.deviceMemory) || 8;
+const detectedLogicalCores = Number(navigator.hardwareConcurrency) || 8;
+const detectedVisualTier = mobileControls
+  ? "mobile"
+  : detectedDeviceMemoryGiB <= 4 || detectedLogicalCores <= 4
+    ? "balanced"
+    : "desktop";
 const VISUAL_QUALITY = Object.freeze({
-  tier: mobileControls ? "mobile" : ((navigator.deviceMemory || 8) <= 4 ? "balanced" : "desktop"),
-  pixelRatioCap: mobileControls ? 1.4 : ((navigator.deviceMemory || 8) <= 4 ? 1.6 : 2),
+  tier: detectedVisualTier,
+  pixelRatioCap: detectedVisualTier === "mobile"
+    ? 1.4 : detectedVisualTier === "balanced" ? 1.6 : 2,
   oceanRadialSegments: mobileControls ? 112 : 145,
   oceanAngularSegments: mobileControls ? 144 : 192,
-  oceanDetailOctaves: mobileControls ? 4 : ((navigator.deviceMemory || 8) <= 4 ? 5 : 7),
-  shadowMapSize: mobileControls ? 512 : ((navigator.deviceMemory || 8) <= 4 ? 1024 : 2048),
+  oceanDetailOctaves: detectedVisualTier === "mobile"
+    ? 4 : detectedVisualTier === "balanced" ? 5 : 7,
+  shadowMapSize: detectedVisualTier === "mobile"
+    ? 512 : detectedVisualTier === "balanced" ? 1024 : 2048,
   cloudOctaves: mobileControls ? 2 : 3,
   carrierSprayCount: mobileControls ? 28 : 44,
 });
@@ -1002,10 +1147,14 @@ const adaptiveAiWorkBudget = new AdaptiveAiWorkBudget();
 let previousSimPhaseMilliseconds = 0;
 let previousExecutedTicks = 2;
 
-const FRAME_GOVERNOR_LATE_FRAME_MS = 22;
-const FRAME_GOVERNOR_TRIP_FRACTION = 0.05;   // 5% of a window's frames arriving late
+// A 22 ms threshold only detects 45 fps after the pilot can already feel it. Keep a little browser
+// scheduling tolerance over 16.67 ms, but treat sustained 17–22 ms delivery as a missed contract.
+const FRAME_GOVERNOR_LATE_FRAME_MS = 18.5;
+const FRAME_GOVERNOR_TRIP_FRACTION = 0.03;
 const FRAME_GOVERNOR_RECOVER_FRACTION = 0.01;
 const FRAME_GOVERNOR_RECOVER_CLEAN_WINDOWS = 8;
+const FRAME_GOVERNOR_SEVERE_FRAME_MS = 28;
+const FRAME_GOVERNOR_SEVERE_FRAME_COUNT = 3;
 
 // Streaming radii to fall back through, in metres. Terrain chunk builds are the dominant cost —
 // one LOD0 chunk is ~9.5 ms of synchronous main-thread work, 57% of a 60 fps budget — so the only
@@ -1029,6 +1178,8 @@ const frameGovernorPolicy = new FrameGovernorPolicy({
   tripFraction: FRAME_GOVERNOR_TRIP_FRACTION,
   recoverFraction: FRAME_GOVERNOR_RECOVER_FRACTION,
   recoverCleanWindows: FRAME_GOVERNOR_RECOVER_CLEAN_WINDOWS,
+  severeFrameMs: FRAME_GOVERNOR_SEVERE_FRAME_MS,
+  severeFrameCount: FRAME_GOVERNOR_SEVERE_FRAME_COUNT,
   maxLevel: FRAME_GOVERNOR_RADII_M.length + 1,
 });
 
@@ -1056,7 +1207,13 @@ const frameGovernor = {
     const level = transition.level;
     try {
       if (level <= FRAME_GOVERNOR_RADII_M.length) {
-        const radiusM = FRAME_GOVERNOR_RADII_M[level - 1];
+        const requestedRadiusM = FRAME_GOVERNOR_RADII_M[level - 1];
+        const currentRadiusM = Number(view.terrainPresentation?.streamingRadiusM);
+        // A fallback rung must never increase a presentation that is already on a tighter warmup
+        // or earlier-governor radius.
+        const radiusM = Number.isFinite(currentRadiusM)
+          ? Math.min(currentRadiusM, requestedRadiusM)
+          : requestedRadiusM;
         const changed = view.terrainPresentation?.setStreamingRadiusM?.(radiusM);
         announceGovernor(`View distance ${Math.round(radiusM / 1000)} km · holding 60`);
         if (changed === false && level < FRAME_GOVERNOR_RADII_M.length) return;
@@ -1082,6 +1239,15 @@ const frameGovernor = {
         announceGovernor(lowLevelSceneryRequired
           ? "Shadows off · low-level scenery retained · holding 60"
           : "Shadows and scenery off · holding 60");
+      } else {
+        // Authored mission packs (clinic, candidate LZ, and future medevac obstacles) are separate
+        // scene roots and are never touched. These final rungs reduce only secondary procedural
+        // grass/canopy/trunk/line detail while retaining settlement, road and pole cues.
+        const ambientLevel = this.level - 4;
+        view.terrainPresentation?.setAmbientSceneryBudgetLevel?.(ambientLevel);
+        announceGovernor(ambientLevel === 1
+          ? "Ambient detail reduced · mission landmarks retained · holding 60"
+          : "Navigation scenery mode · mission landmarks retained · holding 60");
       }
     } catch (error) {
       console.warn("Frame governor could not shed load.", error);
@@ -1154,6 +1320,7 @@ const frameGovernor = {
     if (sceneryWasSuppressed || view.terrainMicroRequired === true) {
       void view.terrainPresentation?.enableAmbientScenery?.();
     }
+    view.terrainPresentation?.setAmbientSceneryBudgetLevel?.(0);
   },
 };
 
@@ -3450,6 +3617,8 @@ function terrainWarmupKey(state) {
     eastM.toFixed(1),
     northM.toFixed(1),
     state.terrain_micro_required === true ? "micro" : "macro",
+    normalizedContractText(state.mission_feature_pack_id) || "no-feature-pack",
+    normalizedSha256(state.mission_feature_pack_sha256) || "no-feature-pack-sha256",
   ].join(":");
 }
 
@@ -3493,6 +3662,15 @@ function terrainDiagnosticsCoverStagedAircraft(terrain, state) {
   const residentChunks = Number.isFinite(Number(terrain?.localResidentChunks))
     ? Number(terrain.localResidentChunks) : Number(terrain?.residentChunks);
   if (residentChunks <= 0) return false;
+  if (state?.mission_feature_pack_required === true) {
+    const featurePackRequest = missionFeaturePackRequest(state);
+    if (!featurePackRequest.supported
+        || !SHA256_HEX_PATTERN.test(featurePackRequest.sha256)
+        || terrain?.missionFeaturePackId !== featurePackRequest.featurePackId
+        || normalizedSha256(terrain?.missionFeaturePackSha256) !== featurePackRequest.sha256) {
+      return false;
+    }
+  }
   if (state?.terrain_micro_required !== true) return true;
   const sceneryChunks = Number.isFinite(Number(terrain?.localSceneryChunks))
     ? Number(terrain.localSceneryChunks) : Number(terrain?.sceneryChunks);
@@ -3516,6 +3694,16 @@ async function warmTerrainAroundReadyAircraft(terrain, state, view) {
   await new Promise((resolve) =>
     requestAnimationFrame(() => requestAnimationFrame(resolve)));
   await terrain.whenIdle?.();
+  // Compile the now-resident terrain, scenery and required mission pack while Ready still owns
+  // the pause. Shader/link and driver allocation stalls must not become the first controllable
+  // frames of a 60 fps sortie.
+  if (typeof view?.renderer?.compileAsync === "function") {
+    await view.renderer.compileAsync(view.scene, view.camera);
+  } else {
+    view?.renderer?.compile?.(view.scene, view.camera);
+  }
+  await new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const diagnostics = terrain.diagnostics?.();
   if (!terrainDiagnosticsCoverStagedAircraft(diagnostics, state)) return false;
   view?.applyTerrainFlightPolicy?.();
@@ -3524,15 +3712,25 @@ async function warmTerrainAroundReadyAircraft(terrain, state, view) {
 
 function prepareMissionTerrain(index, stagedState) {
   const terrainKey = stagedState?.terrain_present === true
-    ? stagedState?.terrain_profile_id : null;
+    ? `${stagedState?.terrain_profile_id}|${missionFeaturePackCacheIdentity(stagedState)}`
+    : null;
   const warmupKey = terrainWarmupKey(stagedState);
   const missionIdentity = stagedMissionIdentity(index, stagedState);
+  const requiredFeaturePack = stagedState?.mission_feature_pack_required === true;
   activeView?.configureTerrainMission?.(stagedState);
   if (!terrainKey || missionTerrainReady(stagedState)) {
     activeView?.applyTerrainFlightPolicy?.();
     return false;
   }
-  if (terrainLaunchWarmupFailedKey === warmupKey) return false;
+  if (terrainLaunchWarmupFailedKey === warmupKey) {
+    if (!requiredFeaturePack) return false;
+    setPauseReason("terrain", true);
+    if (viewStatus) {
+      viewStatus.textContent =
+        "Required mission scenery unavailable · sortie remains interlocked";
+    }
+    return true;
+  }
   if (terrainLaunchWarmupPromise) return true;
   if (!activeView || !stagedState) return false;
 
@@ -3566,12 +3764,16 @@ function prepareMissionTerrain(index, stagedState) {
   const cancelled = new Promise((resolve) => {
     owner.cancel = () => resolve(false);
   });
+  let warmupReady = false;
   const promise = Promise.race([work, deadline, cancelled]).then((ready) => {
+    warmupReady = ready;
     if (terrainLaunchWarmupOwner !== owner) return false;
     if (!ready) {
       terrainLaunchWarmupFailedKey = warmupKey;
       if (viewStatus) {
-        viewStatus.textContent = "Detailed terrain unavailable · presentation fallback active";
+        viewStatus.textContent = requiredFeaturePack
+          ? "Required mission scenery unavailable · sortie remains interlocked"
+          : "Detailed terrain unavailable · presentation fallback active";
       }
     } else {
       terrainLaunchWarmupFailedKey = null;
@@ -3585,7 +3787,7 @@ function prepareMissionTerrain(index, stagedState) {
     terrainLaunchWarmupOwner = null;
     terrainLaunchWarmupPromise = null;
     if (ownsCurrentMission) {
-      setPauseReason("terrain", false);
+      setPauseReason("terrain", requiredFeaturePack && !warmupReady);
     } else {
       pauseReasons.delete("terrain");
       autoLaunchPending = false;
@@ -6003,11 +6205,12 @@ class FlightView {
         || (terrainPackId.includes("modern") || selectedBeat === 7 || selectedBeat === 9
           || selectedBeat === 10 ? "modern" : "1950s"));
     const terrainKey = ukraineTheatre
-      ? UKRAINE_2030S_TERRAIN_ID
-      : "terrain.korea.central-front.v2";
+      ? `${UKRAINE_2030S_TERRAIN_ID}|${missionFeaturePackCacheIdentity(state)}`
+      : `terrain.korea.central-front.v2|${missionFeaturePackCacheIdentity(state)}`;
     const manifestUrl = ukraineTheatre
       ? UKRAINE_TRAINING_TERRAIN_MANIFEST_URL
       : DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL;
+    const featurePackRequest = missionFeaturePackRequest(state);
     if (!PRODUCTION_KOREA_TERRAIN_ENABLED || this.disposed) {
       return Promise.resolve(this.terrainPresentation);
     }
@@ -6067,39 +6270,48 @@ class FlightView {
     const requestEpoch = ++this.terrainPresentationRequestEpoch;
     const abortController = new AbortController();
     this.terrainPresentationAbortController = abortController;
-    const request = loadKoreaTerrain(THREE, {
-      manifestUrl,
-      qualityTier: VISUAL_QUALITY.tier,
-      maximumConcurrentLoads: VISUAL_QUALITY.tier === "mobile" ? 3 : 6,
-      lazyChunks: true,
-      chunkLoadRadiusM: TERRAIN_INITIAL_WARMUP_RADIUS_M,
-      chunkEvictRadiusM: TERRAIN_INITIAL_WARMUP_RADIUS_M + 16_000,
-      sceneryEra,
-      sunDirection: SUN_DIRECTION,
-      fetch: (input, init = {}) => fetch(input, {
-        ...init,
-        signal: abortController.signal,
-      }),
-    }).then((terrain) => {
-      if (this.disposed || requestEpoch !== this.terrainPresentationRequestEpoch) {
-        terrain.dispose();
-        return null;
-      }
-      this.terrainPresentation = terrain;
-      this.terrainPresentationKey = terrainKey;
-      this.terrainPresentationFailureKey = null;
-      this.terrainPresentationRetryAtMs = 0;
-      this.scene.add(terrain.group);
-      return terrain;
-    }).catch((error) => {
-      if (!this.disposed && requestEpoch === this.terrainPresentationRequestEpoch) {
-        this.terrainPresentationError = String(error?.message ?? error);
-        this.terrainPresentationFailureKey = terrainKey;
-        this.terrainPresentationRetryAtMs = performance.now() + 15_000;
-        console.warn("Korea terrain unavailable; ocean presentation retained.", error);
-      }
-      return null;
+    const fetchWithAbort = (input, init = {}) => fetch(input, {
+      ...init,
+      signal: abortController.signal,
     });
+    const request = loadMissionFeaturePack(featurePackRequest, fetchWithAbort)
+      .then((missionFeaturePack) => loadKoreaTerrain(THREE, {
+        manifestUrl,
+        qualityTier: VISUAL_QUALITY.tier,
+        maximumConcurrentLoads: VISUAL_QUALITY.tier === "mobile" ? 3 : 6,
+        lazyChunks: true,
+        chunkLoadRadiusM: TERRAIN_INITIAL_WARMUP_RADIUS_M,
+        chunkEvictRadiusM: TERRAIN_INITIAL_WARMUP_RADIUS_M + 16_000,
+        sceneryEra,
+        sunDirection: SUN_DIRECTION,
+        ...(missionFeaturePack ? {
+          missionFeaturePack,
+          missionFeaturePackSha256: featurePackRequest.sha256,
+        } : {}),
+        fetch: fetchWithAbort,
+      })).then((terrain) => {
+        if (this.disposed || requestEpoch !== this.terrainPresentationRequestEpoch) {
+          terrain.dispose();
+          return null;
+        }
+        this.terrainPresentation = terrain;
+        this.terrainPresentationKey = terrainKey;
+        this.terrainPresentationFailureKey = null;
+        this.terrainPresentationRetryAtMs = 0;
+        this.scene.add(terrain.group);
+        return terrain;
+      }).catch((error) => {
+        if (!this.disposed && requestEpoch === this.terrainPresentationRequestEpoch) {
+          this.terrainPresentationError = String(error?.message ?? error);
+          this.terrainPresentationFailureKey = terrainKey;
+          this.terrainPresentationRetryAtMs = performance.now() + 15_000;
+          const description = featurePackRequest.required
+            ? "Required mission terrain/scenery unavailable; sortie remains interlocked."
+            : "Korea terrain unavailable; ocean presentation retained.";
+          console.warn(description, error);
+        }
+        return null;
+      });
     this.terrainPresentationPromise = request;
     void request.finally(() => {
       if (this.terrainPresentationPromise === request) this.terrainPresentationPromise = null;
@@ -6969,7 +7181,7 @@ class FlightView {
       void this.ensureTerrainPresentation(state);
     }
     const terrainDiagnostics = this.terrainPresentation?.diagnostics?.();
-    const radarAltitudeFt = Number(state?.radar_altitude_ft);
+    const radarAltitudeFt = Number(state?.radar_alt_ft);
     if (state?.terrain_micro_required !== true && Number.isFinite(radarAltitudeFt)) {
       if (radarAltitudeFt >= 12_000 && terrainDiagnostics?.ambientSceneryEnabled === true) {
         void this.terrainPresentation.disableAmbientScenery?.();
@@ -7336,6 +7548,7 @@ class FlightView {
     );
     this.terrainPresentation?.update({
       cameraPosition: this.camera.position,
+      cameraAglM: Number(state.radar_alt_ft) * 0.3048,
       deltaSeconds: dt,
       elapsedSeconds: nowSeconds,
       windX: terrainWindX,

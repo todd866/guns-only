@@ -78,3 +78,24 @@ test("idle and reset discard partial windows without inventing quality", () => {
   assert.equal(policy.level, 0);
   assert.equal(policy.cleanWindows, 0);
 });
+
+test("a run of severe frames sheds immediately without waiting out the window", () => {
+  const policy = new FrameGovernorPolicy({
+    severeFrameMs: 28, severeFrameCount: 3, lateFrameMs: 18.5,
+  });
+  policy.idle(0);
+  assert.equal(policy.observe(30, 10), null);
+  assert.equal(policy.observe(30, 20), null);
+  const transition = policy.observe(30, 30);
+  assert.equal(transition.direction, "shed");
+  assert.equal(transition.severe, true);
+  assert.equal(policy.level, 1);
+  // A non-severe frame breaks the run: two severe + one ordinary + two severe stays quiet.
+  policy.reset(0);
+  policy.observe(30, 10);
+  policy.observe(30, 20);
+  assert.equal(policy.observe(17, 30), null);
+  policy.observe(30, 40);
+  assert.equal(policy.observe(30, 50), null);
+  assert.equal(policy.level, 0);
+});

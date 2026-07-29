@@ -34,6 +34,12 @@ Applied here:
 - **Reserve detail**: drowned roads, feral orchards, young growth through hardstand, and rare
   maintained machine infrastructure. Do not cover every frame in ruins or fire.
 
+The runtime gets richness from hierarchy, not indiscriminate density: worker-baked macro land-cover
+masses at distance, bounded ambient instances in the low-detail ring, one camera-local grass pool,
+and small mission-authored landmark islands. Terrain and every Ukraine scenery material use one
+shared warm atmospheric-extinction contract so reducing streaming range closes the scene in haze
+instead of exposing a square world edge.
+
 ## Moral thesis
 
 Air warfare’s emotional distance is manufactured by the **sealed machine**. The soft world outside

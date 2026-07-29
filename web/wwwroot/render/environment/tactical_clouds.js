@@ -572,6 +572,11 @@ const ENTRY_INSIDE_FRAGMENT = /* glsl */ `
 
 function tierGridSize(tier) {
   if (tier === "desktop") return 7;
+  // Mobile uses camera-facing alpha impostors. A 5×5 neighbourhood can stack nearly twenty
+  // screen-sized transparent layers at low altitude; resolution shedding cannot recover that
+  // overdraw on tile-based GPUs. The authoritative density query remains seeded and continuous,
+  // while the nearest 3×3 visual neighbourhood plus explicit cells carries the sight picture.
+  if (tier === "mobile") return 3;
   return 5;
 }
 

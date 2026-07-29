@@ -186,7 +186,10 @@ public sealed record MissionEnvironmentContract(
     double TerrainSourceAnchorEastM = 0.0,
     double TerrainSourceAnchorNorthM = 0.0,
     double PreferredTerrainStreamingRadiusM = 64_000.0,
-    bool AcceptsMultiplayerWorldOrigin = false) {
+    bool AcceptsMultiplayerWorldOrigin = false,
+    string? MissionFeaturePackId = null,
+    string? MissionFeaturePackSha256 = null,
+    bool MissionFeaturePackRequired = false) {
     public bool MultiplayerTerrainShared =>
         FrameKind == MissionEnvironmentFrameKind.SharedTheatre
         && AcceptsMultiplayerWorldOrigin;
@@ -203,6 +206,10 @@ public static class Ukraine2030sTheatre {
     public const string TerrainProfileId = "terrain.ukraine.rapier-range.atlas.v1";
     public const string MacroSceneryProfile = "ukraine-2030s-macro";
     public const string MicroSceneryProfile = "ukraine-modern";
+    public const string HeroFeaturePackId =
+        "mission-feature-pack.ukraine-modern.soniachne-clinic-a.v1";
+    public const string HeroFeaturePackSha256 =
+        "f61cf6e4480644bfd2ec51e6405260bae7b48a227b07316f9818eafca0046a00";
 
     // The physical theatre is shared by every mission, but current multiplayer sectors can extend
     // beyond this finite regional product and the v2 presence protocol carries no frame/instance
@@ -221,7 +228,10 @@ public static class Ukraine2030sTheatre {
     public static MissionEnvironmentContract HeroCell { get; } = Shared with {
         LocationId = "location.ukraine.soniachne-hero-cell.v1",
         FrameKind = MissionEnvironmentFrameKind.LocalHeroCell,
-        PreferredTerrainStreamingRadiusM = 32_000.0
+        PreferredTerrainStreamingRadiusM = 32_000.0,
+        MissionFeaturePackId = HeroFeaturePackId,
+        MissionFeaturePackSha256 = HeroFeaturePackSha256,
+        MissionFeaturePackRequired = true
     };
 
     // The source coordinate (-100 km, -100 km) lies in the synthetic coastal water cell. Positive

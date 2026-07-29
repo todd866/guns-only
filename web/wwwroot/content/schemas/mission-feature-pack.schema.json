@@ -1,0 +1,1098 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guns-only.invalid/schemas/v1/mission-feature-pack.schema.json",
+  "title": "Guns Only mission feature pack",
+  "description": "Declares a bounded, budgeted set of stable mission landmarks and explicitly separates presentation cues from simulation, targeting, collision, damage, navigation, and landing-zone authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "featurePackId",
+    "packVersion",
+    "displayName",
+    "status",
+    "theatre",
+    "coordinateFrame",
+    "boundsSourceM",
+    "authority",
+    "renderBudgets",
+    "semanticCaps",
+    "landingZones",
+    "ambientExclusionZones",
+    "features",
+    "fictionDisclaimer"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "featurePackId": {
+      "$ref": "#/$defs/versionedId"
+    },
+    "packVersion": {
+      "$ref": "#/$defs/semver"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "experimental",
+        "preview",
+        "stable",
+        "deprecated"
+      ]
+    },
+    "theatre": {
+      "$ref": "#/$defs/theatre"
+    },
+    "coordinateFrame": {
+      "$ref": "#/$defs/coordinateFrame"
+    },
+    "boundsSourceM": {
+      "$ref": "#/$defs/sourceBounds"
+    },
+    "authority": {
+      "$ref": "#/$defs/authority"
+    },
+    "renderBudgets": {
+      "$ref": "#/$defs/renderBudgets"
+    },
+    "semanticCaps": {
+      "$ref": "#/$defs/semanticCaps"
+    },
+    "landingZones": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/landingZone"
+      }
+    },
+    "ambientExclusionZones": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/ambientExclusionZone"
+      }
+    },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/feature"
+      }
+    },
+    "fictionDisclaimer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "authority": {
+            "properties": {
+              "mode": {
+                "const": "presentation_only"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          }
+        },
+        "required": [
+          "authority"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authority": {
+            "properties": {
+              "targetableByDefault": {
+                "const": false
+              },
+              "collisionAuthority": {
+                "const": "none"
+              },
+              "damageAuthority": {
+                "const": "none"
+              },
+              "navigationAuthority": {
+                "const": "none"
+              },
+              "landingZoneAuthority": {
+                "const": "none"
+              }
+            }
+          },
+          "features": {
+            "items": {
+              "properties": {
+                "targetable": {
+                  "const": false
+                },
+                "presentationOnly": {
+                  "const": true
+                }
+              },
+              "required": [
+                "targetable",
+                "presentationOnly"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "collider"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "damage"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "versionedId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*\\.v[1-9][0-9]*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "localPoint": {
+      "type": "array",
+      "description": "Local position in [east, up, north] metres.",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "theatre": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "theatreId",
+        "terrainId",
+        "heroCellId",
+        "eraSetting"
+      ],
+      "properties": {
+        "theatreId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "terrainId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "heroCellId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "eraSetting": {
+          "type": "string",
+          "enum": [
+            "2030s"
+          ]
+        }
+      }
+    },
+    "coordinateFrame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frameId",
+        "units",
+        "axisOrder",
+        "anchorSourceM",
+        "groundDatum",
+        "verticalPlacement"
+      ],
+      "properties": {
+        "frameId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "units": {
+          "const": "metres"
+        },
+        "axisOrder": {
+          "const": [
+            "east",
+            "up",
+            "north"
+          ]
+        },
+        "anchorSourceM": {
+          "$ref": "#/$defs/sourcePoint"
+        },
+        "groundDatum": {
+          "$ref": "#/$defs/groundDatum"
+        },
+        "verticalPlacement": {
+          "const": "anchor_source_up_plus_local_up"
+        }
+      }
+    },
+    "sourceHorizontalPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eastM",
+        "northM"
+      ],
+      "properties": {
+        "eastM": {
+          "type": "number"
+        },
+        "northM": {
+          "type": "number"
+        }
+      }
+    },
+    "sourcePoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eastM",
+        "northM",
+        "upM"
+      ],
+      "properties": {
+        "eastM": {
+          "type": "number"
+        },
+        "northM": {
+          "type": "number"
+        },
+        "upM": {
+          "type": "number"
+        }
+      }
+    },
+    "groundDatum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "heightSourceId",
+        "requestedSourceM",
+        "sampledSourceM",
+        "sampleSpacingM",
+        "featureGroundOffsets"
+      ],
+      "properties": {
+        "kind": {
+          "const": "atlas_lod0_sample"
+        },
+        "heightSourceId": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "requestedSourceM": {
+          "$ref": "#/$defs/sourceHorizontalPoint"
+        },
+        "sampledSourceM": {
+          "$ref": "#/$defs/sourcePoint"
+        },
+        "sampleSpacingM": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "featureGroundOffsets": {
+          "const": "authored_from_neighbouring_lod0_samples"
+        }
+      }
+    },
+    "sourceBounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minEastM",
+        "maxEastM",
+        "minNorthM",
+        "maxNorthM"
+      ],
+      "properties": {
+        "minEastM": {
+          "type": "number"
+        },
+        "maxEastM": {
+          "type": "number"
+        },
+        "minNorthM": {
+          "type": "number"
+        },
+        "maxNorthM": {
+          "type": "number"
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "targetableByDefault",
+        "collisionAuthority",
+        "damageAuthority",
+        "navigationAuthority",
+        "landingZoneAuthority"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "presentation_only",
+            "simulation_authoritative"
+          ]
+        },
+        "targetableByDefault": {
+          "type": "boolean"
+        },
+        "collisionAuthority": {
+          "$ref": "#/$defs/authoritySource"
+        },
+        "damageAuthority": {
+          "$ref": "#/$defs/authoritySource"
+        },
+        "navigationAuthority": {
+          "$ref": "#/$defs/authoritySource"
+        },
+        "landingZoneAuthority": {
+          "$ref": "#/$defs/authoritySource"
+        }
+      }
+    },
+    "authoritySource": {
+      "type": "string",
+      "enum": [
+        "none",
+        "simulation"
+      ]
+    },
+    "renderBudgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mobile",
+        "balanced",
+        "desktop"
+      ],
+      "properties": {
+        "mobile": {
+          "$ref": "#/$defs/mobileBudget"
+        },
+        "balanced": {
+          "$ref": "#/$defs/balancedBudget"
+        },
+        "desktop": {
+          "$ref": "#/$defs/desktopBudget"
+        }
+      }
+    },
+    "mobileBudget": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/tierBudget"
+        },
+        {
+          "properties": {
+            "maxDrawCalls": {
+              "maximum": 6
+            },
+            "maxInstances": {
+              "maximum": 256
+            },
+            "maxTriangles": {
+              "maximum": 35000
+            }
+          }
+        }
+      ]
+    },
+    "balancedBudget": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/tierBudget"
+        },
+        {
+          "properties": {
+            "maxDrawCalls": {
+              "maximum": 7
+            },
+            "maxInstances": {
+              "maximum": 512
+            },
+            "maxTriangles": {
+              "maximum": 60000
+            }
+          }
+        }
+      ]
+    },
+    "desktopBudget": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/tierBudget"
+        },
+        {
+          "properties": {
+            "maxDrawCalls": {
+              "maximum": 10
+            },
+            "maxInstances": {
+              "maximum": 768
+            },
+            "maxTriangles": {
+              "maximum": 100000
+            }
+          }
+        }
+      ]
+    },
+    "tierBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxDrawCalls",
+        "maxInstances",
+        "maxTriangles",
+        "maxSurfacePatchTriangles"
+      ],
+      "properties": {
+        "maxDrawCalls": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum renderer submissions across the main colour pass and one directional-shadow pass. Each shadow-casting batch counts once in each pass."
+        },
+        "maxInstances": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxTriangles": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum submitted prop triangles across the main colour pass and any enabled authored directional-shadow pass."
+        },
+        "maxSurfacePatchTriangles": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "semanticCaps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxStableFeatures",
+        "maxCollisionOrClearancePrimitives",
+        "maxPoles",
+        "maxWireSpans",
+        "maxCorridorOrClearanceVolumes",
+        "maxLandingZoneCandidates"
+      ],
+      "properties": {
+        "maxStableFeatures": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "maxCollisionOrClearancePrimitives": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "maxPoles": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 24
+        },
+        "maxWireSpans": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "maxCorridorOrClearanceVolumes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "maxLandingZoneCandidates": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4
+        }
+      }
+    },
+    "landingZone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "centerLocalM",
+        "markerRadiusM",
+        "status",
+        "surfaceStatus",
+        "obstacleStatus",
+        "approachDepartureStatus",
+        "medicalCapabilityStatus",
+        "safeApproachClaimed",
+        "medicalCapabilityClaimed",
+        "operationalUseAuthorized",
+        "assessmentBasis"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "centerLocalM": {
+          "$ref": "#/$defs/localPoint"
+        },
+        "markerRadiusM": {
+          "description": "Radius of the presentation marker only; it is not an operational clearance radius.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "unassessed",
+            "assessed",
+            "closed"
+          ]
+        },
+        "surfaceStatus": {
+          "$ref": "#/$defs/assessmentStatus"
+        },
+        "obstacleStatus": {
+          "$ref": "#/$defs/assessmentStatus"
+        },
+        "approachDepartureStatus": {
+          "$ref": "#/$defs/assessmentStatus"
+        },
+        "medicalCapabilityStatus": {
+          "$ref": "#/$defs/assessmentStatus"
+        },
+        "safeApproachClaimed": {
+          "type": "boolean"
+        },
+        "medicalCapabilityClaimed": {
+          "type": "boolean"
+        },
+        "operationalUseAuthorized": {
+          "type": "boolean"
+        },
+        "assessmentBasis": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "unassessed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "surfaceStatus": {
+                "const": "not_assessed"
+              },
+              "obstacleStatus": {
+                "const": "not_assessed"
+              },
+              "approachDepartureStatus": {
+                "const": "not_assessed"
+              },
+              "medicalCapabilityStatus": {
+                "const": "not_assessed"
+              },
+              "safeApproachClaimed": {
+                "const": false
+              },
+              "medicalCapabilityClaimed": {
+                "const": false
+              },
+              "operationalUseAuthorized": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "assessmentStatus": {
+      "type": "string",
+      "enum": [
+        "not_assessed",
+        "pending",
+        "passed",
+        "failed",
+        "unknown"
+      ]
+    },
+    "ambientExclusionZone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "shape",
+        "excludedAmbientKinds",
+        "purpose",
+        "presentationOnly",
+        "establishesOperationalClearance"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "shape": {
+          "type": "string",
+          "enum": [
+            "circle",
+            "corridor",
+            "polygon"
+          ]
+        },
+        "centerLocalM": {
+          "$ref": "#/$defs/localPoint"
+        },
+        "fromLocalM": {
+          "$ref": "#/$defs/localPoint"
+        },
+        "toLocalM": {
+          "$ref": "#/$defs/localPoint"
+        },
+        "pointsLocalM": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/localPoint"
+          }
+        },
+        "radiusM": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "excludedAmbientKinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "procedural_buildings",
+              "procedural_vegetation",
+              "procedural_fields",
+              "procedural_grass",
+              "procedural_utilities",
+              "procedural_debris"
+            ]
+          }
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "presentationOnly": {
+          "const": true
+        },
+        "establishesOperationalClearance": {
+          "const": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "shape": {
+                "const": "circle"
+              }
+            },
+            "required": [
+              "shape"
+            ]
+          },
+          "then": {
+            "required": [
+              "centerLocalM",
+              "radiusM"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape": {
+                "const": "corridor"
+              }
+            },
+            "required": [
+              "shape"
+            ]
+          },
+          "then": {
+            "required": [
+              "fromLocalM",
+              "toLocalM",
+              "radiusM"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape": {
+                "const": "polygon"
+              }
+            },
+            "required": [
+              "shape"
+            ]
+          },
+          "then": {
+            "required": [
+              "pointsLocalM"
+            ]
+          }
+        }
+      ]
+    },
+    "pose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "positionLocalM",
+        "yawDeg"
+      ],
+      "properties": {
+        "positionLocalM": {
+          "$ref": "#/$defs/localPoint"
+        },
+        "yawDeg": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360
+        }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "depth"
+      ],
+      "properties": {
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "depth": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primitive",
+        "batch",
+        "color",
+        "essential"
+      ],
+      "properties": {
+        "primitive": {
+          "$ref": "#/$defs/id"
+        },
+        "batch": {
+          "$ref": "#/$defs/id"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "secondaryColor": {
+          "$ref": "#/$defs/color"
+        },
+        "essential": {
+          "type": "boolean"
+        }
+      }
+    },
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "role",
+        "status",
+        "affiliation",
+        "targetable",
+        "presentationOnly",
+        "occlusionClass",
+        "presentation"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/versionedId"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "building",
+            "fence",
+            "pole",
+            "wire",
+            "surface_marking",
+            "bridge",
+            "culvert",
+            "vegetation",
+            "road",
+            "emplacement",
+            "other"
+          ]
+        },
+        "role": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "authored",
+            "present",
+            "damaged",
+            "destroyed",
+            "disabled"
+          ]
+        },
+        "affiliation": {
+          "type": "string",
+          "enum": [
+            "civilian_fictional",
+            "neutral_fictional",
+            "friendly_fictional",
+            "hostile_fictional",
+            "unaffiliated"
+          ]
+        },
+        "targetable": {
+          "type": "boolean"
+        },
+        "presentationOnly": {
+          "type": "boolean"
+        },
+        "occlusionClass": {
+          "type": "string",
+          "enum": [
+            "none",
+            "thin_visual",
+            "solid_visual"
+          ]
+        },
+        "pose": {
+          "$ref": "#/$defs/pose"
+        },
+        "dimensionsM": {
+          "$ref": "#/$defs/dimensions"
+        },
+        "fromLocalM": {
+          "$ref": "#/$defs/localPoint"
+        },
+        "toLocalM": {
+          "$ref": "#/$defs/localPoint"
+        },
+        "pathLocalM": {
+          "description": "Optional LOD0-derived presentation path in local [east, up, north] metres. It refines visual ground conformance without establishing navigation, collision, obstacle, or surface authority.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/localPoint"
+          }
+        },
+        "widthM": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "heightM": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "presentation": {
+          "$ref": "#/$defs/presentation"
+        },
+        "collider": {
+          "$ref": "#/$defs/collider"
+        },
+        "damage": {
+          "$ref": "#/$defs/damage"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 300
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "building",
+                  "pole",
+                  "surface_marking",
+                  "vegetation",
+                  "emplacement",
+                  "other"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "pose",
+              "dimensionsM"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "fence",
+                  "wire",
+                  "road",
+                  "bridge",
+                  "culvert"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "fromLocalM",
+              "toLocalM",
+              "widthM"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "fence"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "heightM"
+            ]
+          }
+        }
+      ]
+    },
+    "collider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "shape"
+      ],
+      "properties": {
+        "authority": {
+          "const": "simulation"
+        },
+        "shape": {
+          "type": "string",
+          "enum": [
+            "box",
+            "capsule",
+            "segment"
+          ]
+        }
+      }
+    },
+    "damage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "state"
+      ],
+      "properties": {
+        "authority": {
+          "const": "simulation"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "intact",
+            "damaged",
+            "destroyed"
+          ]
+        }
+      }
+    }
+  }
+}

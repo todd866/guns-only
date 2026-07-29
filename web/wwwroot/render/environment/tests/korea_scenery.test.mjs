@@ -2,13 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
 import {
+  applyKoreaSceneryBudgetLevel,
   createKoreaSceneryRuntime,
   KOREA_TREE_STAND_SIZE,
   SOFT_WORLD_GRASS_BLADES_PER_PATCH,
+  UKRAINE_NEAR_RING_STAND_SIZE,
+  UKRAINE_NEAR_RING_VISIBLE_TRUNKS,
   UKRAINE_MID_RING_STAND_SIZE,
   KOREA_SCENERY_PROFILES,
   planKoreaScenery,
 } from "../korea_scenery.js";
+import {
+  UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES,
+} from "../soft_world_atmosphere.js";
 
 function decodedFixture(waterValue = 0) {
   const sampleCount = 9;
@@ -36,6 +42,10 @@ function chunkFixture() {
     boundsLocalM: [0, 0, 1_000, 1_000],
     generation: { seed: 123456789, landFraction: 1 },
   };
+}
+
+function trianglesPerInstance(mesh) {
+  return (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) / 3;
 }
 
 function localHorizontalOffset(matrix, worldEast, worldNorth) {
@@ -168,6 +178,32 @@ test("creates instanced, disposable scenery only for the closest terrain LOD", (
   assert.equal(runtime.createTile(chunkFixture(), decodedFixture(), 0), null);
 });
 
+test("consumes a worker-prepared scenery plan without replanning the tile", () => {
+  const chunk = chunkFixture();
+  const decoded = decodedFixture();
+  const plan = planKoreaScenery(chunk, decoded, {
+    era: "1950s",
+    qualityTier: "mobile",
+    ring: "near",
+  });
+  assert.ok(plan.trees.length > 0);
+  const prepared = Object.freeze({
+    ...plan,
+    trees: Object.freeze([]),
+  });
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "1950s",
+    qualityTier: "mobile",
+  });
+  const group = runtime.createTile(chunk, decoded, 0, prepared);
+  assert.ok(group, "non-tree prepared layers should still build the tile");
+  assert.equal(group.userData.scenery.trees, 0);
+  assert.equal(group.getObjectByName("PROCEDURAL_TREE_CROWNS"), undefined,
+    "the runtime must use the worker result rather than invoking the planner again");
+  runtime.disposeTile(group);
+  runtime.dispose();
+});
+
 test("keeps scenery on the nearest selectable mobile and balanced terrain LOD", () => {
   for (const qualityTier of ["mobile", "balanced"]) {
     const runtime = createKoreaSceneryRuntime(THREE, {
@@ -216,6 +252,59 @@ test("plans a distinct Ukraine rewild grammar with sparse ambient compounds", ()
   assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].softLit, true);
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].grassPatchDensityPerKm2 > 100);
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].toonSteps.length >= 3);
+});
+
+test("Ukraine shelterbelt stands align and stretch along their continuous route", () => {
+  const chunk = {
+    id: "e0030-n0030",
+    eastIndex: 30,
+    northIndex: 30,
+    boundsLocalM: [0, 0, 8_192, 8_192],
+    generation: { seed: 153, landFraction: 1 },
+  };
+  const plan = planKoreaScenery(chunk, flatDecodedFixture(), {
+    era: "ukraine-modern",
+    qualityTier: "desktop",
+  });
+  const shelterbelt = plan.trees.filter((tree) => tree.kind === "shelterbelt");
+  assert.ok(shelterbelt.length > 10);
+  assert.ok(shelterbelt.every((tree) => Math.abs(tree.yaw) < 1e-12),
+    "this deterministic row route must align every stand east-west");
+  assert.ok(shelterbelt.every((tree) => tree.widthScale >= 1.5),
+    "existing instances must overlap into a windbreak instead of isolated crown dots");
+  assert.ok(plan.trees.some((tree) => tree.kind === "woodland"),
+    "the route must not replace the separate woodland grammar");
+});
+
+test("authored mission footprints exclude ambient scenery without creating LZ claims", () => {
+  const chunk = chunkFixture();
+  const exclusion = [{ eastM: 500, northM: 500, radiusM: 1_000 }];
+  const plan = planKoreaScenery(chunk, flatDecodedFixture(), {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+    ambientExclusionZones: exclusion,
+  });
+  for (const key of [
+    "trees", "buildings", "fields", "fieldRows", "roads",
+    "railSegments", "runways", "powerPoles", "powerLines",
+  ]) {
+    assert.equal(plan[key].length, 0, `${key} must yield to the authored footprint`);
+  }
+  assert.equal(Object.hasOwn(plan, "landingZones"), false,
+    "ambient scenery must not invent operational LZ state");
+
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+    ambientExclusionZones: exclusion,
+  });
+  const group = runtime.createTile(chunk, flatDecodedFixture(), 0);
+  assert.ok(group, "the bounded camera-local grass pool can remain allocated");
+  runtime.update({ cameraPosition: new THREE.Vector3(500, 120, -500) });
+  assert.equal(group.getObjectByName("PROCEDURAL_SOFT_WORLD_GRASS")?.count ?? 0, 0,
+    "camera-local grass must consume the same authored exclusion");
+  runtime.disposeTile(group);
+  runtime.dispose();
 });
 
 test("Ukraine meadow clumps batch real blades and share the authoritative wind field", () => {
@@ -270,6 +359,35 @@ test("Ukraine meadow clumps batch real blades and share the authoritative wind f
   assert.match(shader.vertexShader, /travellingWave/);
   assert.match(shader.vertexShader, /softWorldDeterminant/);
   assert.doesNotMatch(shader.vertexShader, /0\.70710678/);
+  runtime.disposeTile(group);
+  runtime.dispose();
+});
+
+test("camera-local Ukraine grass is governed by AGL rather than world altitude", () => {
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+  });
+  const group = runtime.createTile(chunkFixture(), flatDecodedFixture(), 0);
+  runtime.update({
+    cameraPosition: new THREE.Vector3(500, 1_120, -500),
+    cameraAglM: 90,
+  });
+  const grass = group.getObjectByName("PROCEDURAL_SOFT_WORLD_GRASS");
+  assert.ok(grass?.visible);
+  assert.ok(grass.count > 0,
+    "high-datum terrain must retain hover-height grass when the aircraft is actually low");
+  runtime.update({
+    cameraPosition: new THREE.Vector3(500, 340, -500),
+    cameraAglM: 220,
+  });
+  assert.equal(grass.visible, false,
+    "sub-pixel blade batches must stay unsubmitted at low-level cruise height");
+  runtime.update({
+    cameraPosition: new THREE.Vector3(500, 1_120, -500),
+    cameraAglM: 60,
+  });
+  assert.equal(grass.visible, true);
   runtime.disposeTile(group);
   runtime.dispose();
 });
@@ -366,12 +484,19 @@ test("Ukraine soft-canopy stands use rounded crown geometry and Lambert lighting
   const group = runtime.createTile(chunkFixture(), flatDecodedFixture(), 0);
   assert.ok(group);
   const crowns = group.getObjectByName("PROCEDURAL_TREE_CROWNS");
+  const trunks = group.getObjectByName("PROCEDURAL_TREE_TRUNKS");
   assert.ok(crowns?.isInstancedMesh);
-  const crownTriangles = crowns.geometry.index.count / 3;
-  assert.ok(crownTriangles >= KOREA_TREE_STAND_SIZE * 40,
-    "soft canopy stands should retain enough surface for a rounded silhouette");
-  assert.ok(crownTriangles <= KOREA_TREE_STAND_SIZE * 60,
-    "softness must come from the clump silhouette, not excessive sphere tessellation");
+  assert.ok(trunks?.isInstancedMesh);
+  const crownTriangles = trianglesPerInstance(crowns);
+  const trunkTriangles = trianglesPerInstance(trunks);
+  assert.equal(crownTriangles, UKRAINE_NEAR_RING_STAND_SIZE * 24,
+    "all five six-sided smooth canopy lobes must survive the geometry reduction");
+  assert.equal(trunkTriangles, UKRAINE_NEAR_RING_VISIBLE_TRUNKS * 24,
+    "only one dominant trunk should remain under overlapping foliage");
+  assert.ok(crownTriangles + trunkTriangles <= 200,
+    "a complete Ukraine near stand must stay inside its 200-triangle ceiling");
+  assert.equal(crowns.geometry.getAttribute("color")?.itemSize, 3,
+    "painted lobe variation must live in the shared geometry instead of another draw");
   assert.equal(crowns.material.type, "MeshLambertMaterial",
     "Ukraine soft-world crowns must not use hard toon posterization");
   runtime.update({ elapsedSeconds: 8, windX: 5, windZ: 2 });
@@ -385,6 +510,67 @@ test("Ukraine soft-canopy stands use rounded crown geometry and Lambert lighting
   assert.match(shader.vertexShader, /canopyWeight/);
   assert.match(shader.vertexShader, /softWorldDeterminant/);
   assert.doesNotMatch(shader.vertexShader, /0\.70710678/);
+  runtime.disposeTile(group);
+  runtime.dispose();
+});
+
+test("all Ukraine scenery materials share the terrain atmosphere by identity", () => {
+  const atmosphereUniforms = {
+    uFogColor: { value: new THREE.Color(0xd2c4a8) },
+    uFogDensity: { value: 1 / 48_000 },
+    uAtmosphereDensityScale: { value: 0.42 },
+    uAtmosphereHazeColor: { value: new THREE.Color(0.78, 0.72, 0.58) },
+    uAtmosphereHazeMix: { value: 0.62 },
+    uWorldEdgeM: { value: 12_000 },
+    uHazeBands: { value: 3 },
+    uHazeBandBlend: { value: 0.18 },
+  };
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "balanced",
+    atmosphereUniforms,
+  });
+  const group = runtime.createTile(chunkFixture(), flatDecodedFixture(), 0);
+  const materials = new Set();
+  group.traverse((child) => {
+    const childMaterials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of childMaterials) if (material) materials.add(material);
+  });
+  assert.ok(materials.size > 5);
+  for (const material of materials) {
+    assert.equal(material.fog, false, `${material.name || material.type} must not double-fog`);
+    assert.equal(material.userData.ukraineSoftWorldFog, true);
+  }
+
+  const material = group.getObjectByName("PROCEDURAL_TREE_CROWNS").material;
+  const shader = {
+    uniforms: {},
+    vertexShader: [
+      "#include <common>",
+      "void main(){",
+      "vec4 mvPosition = vec4(0.0);",
+      "#include <begin_vertex>",
+      "#include <fog_pars_vertex>",
+      "#include <fog_vertex>",
+      "}",
+    ].join("\n"),
+    fragmentShader: [
+      "#include <fog_pars_fragment>",
+      "void main(){",
+      "vec3 outgoingLight = vec3(1.0);",
+      "#include <opaque_fragment>",
+      "}",
+    ].join("\n"),
+  };
+  material.onBeforeCompile(shader);
+  for (const name of UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES) {
+    assert.equal(shader.uniforms[name], atmosphereUniforms[name],
+      `${name} must be the terrain uniform entry, not a copied value`);
+  }
+  assert.match(shader.vertexShader, /length\(mvPosition\.xyz\)/);
+  assert.match(shader.fragmentShader, /uWorldEdgeM \* 0\.40/);
+  assert.match(shader.fragmentShader, /floor\(softWorldAerial \* uHazeBands\)/);
+  assert.match(shader.fragmentShader, /outgoingLight = mix/);
   runtime.disposeTile(group);
   runtime.dispose();
 });
@@ -427,7 +613,7 @@ test("Ukraine mid-ring scenery uses thinner stands and lower density than the ne
   assert.equal(midTile.userData.scenery.ring, "mid");
   assert.equal(
     nearTile.userData.scenery.treeSilhouettes,
-    nearTile.userData.scenery.trees * KOREA_TREE_STAND_SIZE,
+    nearTile.userData.scenery.trees * UKRAINE_NEAR_RING_STAND_SIZE,
   );
   assert.equal(
     midTile.userData.scenery.treeSilhouettes,
@@ -435,9 +621,14 @@ test("Ukraine mid-ring scenery uses thinner stands and lower density than the ne
   );
   const nearCrowns = nearTile.getObjectByName("PROCEDURAL_TREE_CROWNS");
   const midCrowns = midTile.getObjectByName("PROCEDURAL_TREE_CROWNS");
+  const midTrunks = midTile.getObjectByName("PROCEDURAL_TREE_TRUNKS");
   assert.ok(midCrowns.geometry.attributes.position.count
     < nearCrowns.geometry.attributes.position.count,
     "mid-ring stand geometry must be cheaper than the near-ring full stand");
+  assert.ok(trianglesPerInstance(midCrowns) <= 60,
+    "a Ukraine mid-ring tree mass must stay inside its 60-triangle ceiling");
+  assert.equal(midTrunks, undefined,
+    "mid-ring canopy masses must not submit hidden trunk geometry");
   runtime.disposeTile(nearTile);
   runtime.disposeTile(midTile);
   runtime.dispose();
@@ -490,8 +681,103 @@ test("Korea LOD1 retains the established density and full tree stands", () => {
     midTile.userData.scenery.trees * KOREA_TREE_STAND_SIZE,
   );
   const crowns = midTile.getObjectByName("PROCEDURAL_TREE_CROWNS");
+  const trunks = midTile.getObjectByName("PROCEDURAL_TREE_TRUNKS");
   assert.ok(crowns.geometry.attributes.position.count > KOREA_TREE_STAND_SIZE * 10);
+  assert.equal(trianglesPerInstance(crowns), 147,
+    "Ukraine-only blob reduction must not alter Korea crown geometry");
+  assert.equal(trianglesPerInstance(trunks), 140,
+    "Ukraine-only trunk reduction must not alter Korea trunk geometry");
   runtime.disposeTile(midTile);
+  runtime.dispose();
+});
+
+test("ambient budget rungs shed secondary detail and restore exact authored counts", () => {
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "mobile",
+  });
+  const group = runtime.createTile({
+    id: "e0120-n0000",
+    eastIndex: 120,
+    northIndex: 0,
+    boundsLocalM: [0, 0, 8_192, 8_192],
+    generation: { seed: 1, landFraction: 1 },
+  }, flatDecodedFixture(), 0);
+  runtime.update({
+    cameraPosition: new THREE.Vector3(4_096, 120, -4_096),
+  });
+
+  const byName = (name) => {
+    const mesh = group.getObjectByName(name);
+    assert.ok(mesh?.isInstancedMesh, `${name} fixture batch must exist`);
+    return mesh;
+  };
+  const crowns = byName("PROCEDURAL_TREE_CROWNS");
+  assert.equal(group.getObjectByName("PROCEDURAL_UKRAINE-MODERN_LAND_USE"), undefined,
+    "former-field structure belongs in the terrain byte, not intersecting mean-height boxes");
+  const grass = byName("PROCEDURAL_SOFT_WORLD_GRASS");
+  const hiddenAtLevelOne = [
+    grass,
+    byName("PROCEDURAL_TREE_TRUNKS"),
+    byName("PROCEDURAL_ROAD_MARKINGS"),
+    byName("PROCEDURAL_POWER_LINES"),
+  ];
+  const navigationCues = [
+    byName("PROCEDURAL_UKRAINE-MODERN_BUILDINGS"),
+    byName("PROCEDURAL_UKRAINE-MODERN_ROADS"),
+    byName("PROCEDURAL_UKRAINE-MODERN_POWER_POLES"),
+  ];
+  const meshes = group.children.filter((child) => child.isInstancedMesh);
+  const original = new Map(meshes.map((mesh) => [
+    mesh.name,
+    { count: mesh.count, visible: mesh.visible },
+  ]));
+
+  assert.equal(applyKoreaSceneryBudgetLevel(group, 1), 1);
+  assert.equal(group.userData.koreaSceneryBudgetLevel, 1);
+  assert.equal(crowns.count, Math.ceil(original.get(crowns.name).count * 0.60));
+  for (const mesh of hiddenAtLevelOne) assert.equal(mesh.visible, false);
+  for (const mesh of navigationCues) {
+    assert.equal(mesh.visible, original.get(mesh.name).visible,
+      `${mesh.name} must remain visible at budget level 1`);
+    assert.equal(mesh.count, original.get(mesh.name).count,
+      `${mesh.name} must retain all navigation instances at budget level 1`);
+  }
+  runtime.update({
+    cameraPosition: new THREE.Vector3(4_096, 120, -4_096),
+  });
+  assert.equal(grass.visible, false,
+    "the camera-local updater must not undo a grass budget shed");
+
+  assert.equal(applyKoreaSceneryBudgetLevel(group, 2), 2);
+  const levelTwoCounts = {
+    crowns: crowns.count,
+  };
+  assert.equal(levelTwoCounts.crowns,
+    Math.ceil(original.get(crowns.name).count * 0.35));
+  for (const mesh of navigationCues) {
+    assert.equal(mesh.visible, original.get(mesh.name).visible,
+      `${mesh.name} must remain visible at budget level 2`);
+    assert.equal(mesh.count, original.get(mesh.name).count,
+      `${mesh.name} must retain all navigation instances at budget level 2`);
+  }
+  applyKoreaSceneryBudgetLevel(group, 2);
+  assert.deepEqual(
+    { crowns: crowns.count },
+    levelTwoCounts,
+    "reapplying a rung must not compound instance reductions",
+  );
+
+  assert.equal(applyKoreaSceneryBudgetLevel(group, 0), 0);
+  for (const mesh of meshes) {
+    assert.deepEqual(
+      { count: mesh.count, visible: mesh.visible },
+      original.get(mesh.name),
+      `${mesh.name} must restore its exact pre-budget state`,
+    );
+  }
+
+  runtime.disposeTile(group);
   runtime.dispose();
 });
 

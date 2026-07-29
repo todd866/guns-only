@@ -25,6 +25,15 @@ test("normalizes the canonical desktop profile into renderer-facing settings", a
   assert.equal(config.readability.distantRepresentation.mode, "silhouette_impostor");
   assert.equal(config.postProcessing.antialiasing, "smaa");
   assert.equal(config.postProcessing.bloom.enabled, true);
+  assert.equal(config.adaptiveResolution.maxRenderPixels, 3_700_000);
+  assert.equal(config.adaptiveResolution.minScale, 0.65);
+  assert.equal(config.adaptiveResolution.targetFps, 60);
+  assert.deepEqual(config.adaptiveResolution.modeTargetFps, {
+    combat: 60,
+    carrier: 60,
+    replay: 60,
+    menu: 30,
+  });
   assert.equal(config.effects.byEventId["event.weapon.gun-fire.v1"].settings.tracerEveryRounds, 4);
   assert.ok(Object.isFrozen(config.effects.byEventId));
 });
@@ -37,6 +46,11 @@ test("derives a cheap mobile path without mutating the source profile", async ()
   assert.equal(config.postProcessing.enabled, false);
   assert.equal(config.postProcessing.antialiasing, "none");
   assert.equal(config.renderer.pixelRatioCap, 1.4);
+  assert.equal(config.adaptiveResolution.maxRenderPixels, 1_300_000);
+  assert.equal(config.adaptiveResolution.minScale, 0.55);
+  assert.equal(config.adaptiveResolution.modeTargetFps.combat, 60);
+  assert.equal(config.adaptiveResolution.modeTargetFps.carrier, 60);
+  assert.equal(config.adaptiveResolution.modeTargetFps.replay, 60);
   assert.equal(JSON.stringify(profile), before);
 });
 
@@ -47,7 +61,16 @@ test("extension overrides remain bounded and tier-specific", async () => {
       bloom: { strength: 99 },
       tiers: { balanced: { antialiasing: "smaa", bloom: { enabled: true, strength: 0.25 } } },
     },
-    adaptiveResolution: { tiers: { balanced: { minScale: 0.8, targetFps: 55 } } },
+    adaptiveResolution: {
+      tiers: {
+        balanced: {
+          minScale: 0.8,
+          targetFps: 55,
+          maxRenderPixels: 1_800_000,
+          modeTargetFps: { combat: 72 },
+        },
+      },
+    },
   };
   const balanced = normalizeVisualProfile(profile, { tierId: "balanced" });
   const desktop = normalizeVisualProfile(profile, { tierId: "desktop" });
@@ -55,7 +78,25 @@ test("extension overrides remain bounded and tier-specific", async () => {
   assert.equal(balanced.postProcessing.bloom.enabled, true);
   assert.equal(balanced.postProcessing.bloom.strength, 0.25);
   assert.equal(balanced.adaptiveResolution.minScale, 0.8);
+  assert.equal(balanced.adaptiveResolution.targetFps, 55);
+  assert.equal(balanced.adaptiveResolution.maxRenderPixels, 1_800_000);
+  assert.equal(balanced.adaptiveResolution.modeTargetFps.combat, 72);
+  assert.equal(balanced.adaptiveResolution.modeTargetFps.carrier, 60);
+  assert.equal(balanced.adaptiveResolution.modeTargetFps.replay, 60);
+  assert.equal(desktop.adaptiveResolution.maxRenderPixels, 3_700_000);
   assert.equal(desktop.postProcessing.bloom.strength, 2);
+});
+
+test("balanced defaults have their own pixel ceiling and 60 fps flight targets", async () => {
+  const profile = await canonicalProfile();
+  const config = normalizeVisualProfile(profile, { tierId: "balanced" });
+  assert.equal(config.adaptiveResolution.maxRenderPixels, 2_100_000);
+  assert.equal(config.adaptiveResolution.minScale, 0.6);
+  assert.equal(config.adaptiveResolution.targetFps, 60);
+  assert.equal(config.adaptiveResolution.modeTargetFps.combat, 60);
+  assert.equal(config.adaptiveResolution.modeTargetFps.carrier, 60);
+  assert.equal(config.adaptiveResolution.modeTargetFps.replay, 60);
+  assert.equal(config.adaptiveResolution.modeTargetFps.menu, 30);
 });
 
 test("loads through an injected fetch and resolves a stable absolute URL", async () => {

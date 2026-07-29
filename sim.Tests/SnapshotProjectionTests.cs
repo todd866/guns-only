@@ -464,6 +464,13 @@ public class SnapshotProjectionTests {
             root.GetProperty("terrain_scenery_profile").GetString());
         Assert.True(root.GetProperty("terrain_macro_required").GetBoolean());
         Assert.True(root.GetProperty("terrain_micro_required").GetBoolean());
+        Assert.Equal(Ukraine2030sTheatre.HeroFeaturePackId,
+            root.GetProperty("mission_feature_pack_id").GetString());
+        Assert.Equal(Ukraine2030sTheatre.HeroFeaturePackSha256,
+            root.GetProperty("mission_feature_pack_sha256").GetString());
+        Assert.True(root.GetProperty("mission_feature_pack_required").GetBoolean());
+        Assert.Equal("unassessed",
+            root.GetProperty("lz_assessment_status").GetString());
         Assert.Equal(32_000.0,
             root.GetProperty("terrain_streaming_radius_m").GetDouble());
         Assert.Equal(0.0, root.GetProperty("terrain_placement_east_m").GetDouble());
@@ -497,6 +504,11 @@ public class SnapshotProjectionTests {
         Assert.Equal(0.0, root.GetProperty("rapier_rcs_firing_frac").GetDouble());
         Assert.True(root.GetProperty("terrain_macro_required").GetBoolean());
         Assert.False(root.GetProperty("terrain_micro_required").GetBoolean());
+        Assert.Equal("", root.GetProperty("mission_feature_pack_id").GetString());
+        Assert.Equal("", root.GetProperty("mission_feature_pack_sha256").GetString());
+        Assert.False(root.GetProperty("mission_feature_pack_required").GetBoolean());
+        Assert.Equal("not_applicable",
+            root.GetProperty("lz_assessment_status").GetString());
         Assert.Equal(145_000.0,
             root.GetProperty("terrain_streaming_radius_m").GetDouble());
         Assert.Equal(0.0, root.GetProperty("terrain_placement_east_m").GetDouble());

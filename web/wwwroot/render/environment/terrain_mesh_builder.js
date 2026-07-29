@@ -17,9 +17,86 @@
 export const TERRAIN_CONCAVITY_RADIUS_M = 300;
 /// Relief that saturates the baked concavity term.
 export const TERRAIN_CONCAVITY_RELIEF_M = 120;
+/// Broad painted land-cover masses. This survives coarse theatre LODs without becoming a grid.
+export const TERRAIN_LANDCOVER_MACRO_CELL_M = 1_800;
+/// Close breakup for meadow/scrub colour. LOD interpolation naturally removes it with distance.
+export const TERRAIN_LANDCOVER_MESO_CELL_M = 360;
 
 function finite(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
+}
+
+function smoothUnit(value) {
+  return value * value * (3 - 2 * value);
+}
+
+function clampUnit(value) {
+  return Math.min(1, Math.max(0, value));
+}
+
+function fraction(value) {
+  return value - Math.floor(value);
+}
+
+function latticeHash(east, north, seed) {
+  let hash = Math.imul(east, 0x1f12_3bb5)
+    ^ Math.imul(north, 0x5f35_6495)
+    ^ seed;
+  hash = Math.imul(hash ^ (hash >>> 15), 0x2c1b_3c6d);
+  hash = Math.imul(hash ^ (hash >>> 12), 0x297a_2d39);
+  return ((hash ^ (hash >>> 15)) >>> 0) / 0xffff_ffff;
+}
+
+function valueNoise1d(positionM, cellM, seed, axisSalt) {
+  const position = positionM / cellM;
+  const cell = Math.floor(position);
+  const blend = smoothUnit(position - cell);
+  const start = latticeHash(cell, axisSalt, seed);
+  const end = latticeHash(cell + 1, axisSalt, seed);
+  return start + (end - start) * blend;
+}
+
+/// Precompute four seamless one-dimensional fields along the regular heightfield axes. Combining
+/// them non-linearly gives soft 2D masses, but the per-vertex loop performs only array reads and
+/// arithmetic. That matters for Worker-less fallback browsers: a 257² chunk should not pay eight
+/// integer hashes and two floor/divide pairs at every vertex.
+function createLandcoverAxes(boundsLocalM, sampleCount) {
+  const [minimumEast, minimumNorth, maximumEast, maximumNorth] = boundsLocalM;
+  const spacingEast = (maximumEast - minimumEast) / (sampleCount - 1);
+  const spacingNorth = (maximumNorth - minimumNorth) / (sampleCount - 1);
+  const macroEast = new Float32Array(sampleCount);
+  const macroNorth = new Float32Array(sampleCount);
+  const mesoEast = new Float32Array(sampleCount);
+  const mesoNorth = new Float32Array(sampleCount);
+  for (let index = 0; index < sampleCount; index++) {
+    const eastM = minimumEast + index * spacingEast;
+    const northM = minimumNorth + index * spacingNorth;
+    macroEast[index] = valueNoise1d(
+      eastM,
+      TERRAIN_LANDCOVER_MACRO_CELL_M,
+      0x51a7_2d39,
+      0x19b5,
+    );
+    macroNorth[index] = valueNoise1d(
+      northM,
+      TERRAIN_LANDCOVER_MACRO_CELL_M * 1.17,
+      0x51a7_2d39,
+      0x63d1,
+    );
+    mesoEast[index] = valueNoise1d(
+      eastM,
+      TERRAIN_LANDCOVER_MESO_CELL_M,
+      0x2e6d_8b17,
+      0x37a9,
+    );
+    mesoNorth[index] = valueNoise1d(
+      northM,
+      TERRAIN_LANDCOVER_MESO_CELL_M * 1.31,
+      0x2e6d_8b17,
+      0x71c3,
+    );
+  }
+  return { macroEast, macroNorth, mesoEast, mesoNorth };
 }
 
 /// Water samples arrive as a sentinel rather than a height, so they carry no elevation of their
@@ -188,6 +265,7 @@ function boundingSphereOf(positions) {
 /// decodeTerrainRecord's { heights, water, sampleCount }.
 export function buildTerrainMeshArrays(boundsLocalM, decoded) {
   const { water, sampleCount } = decoded;
+  const includeLandcover = decoded.includeLandcover !== false;
   const surfaceHeights = reconstructWaterHeights(decoded);
   const [minimumEast, minimumNorth, maximumEast, maximumNorth] = boundsLocalM;
   const centreEast = (minimumEast + maximumEast) * 0.5;
@@ -214,13 +292,64 @@ export function buildTerrainMeshArrays(boundsLocalM, decoded) {
   const vertexCount = baseVertexCount + skirtVertexCount;
   const positions = new Float32Array(vertexCount * 3);
   const waterValues = new Float32Array(vertexCount);
+  const landcover = new Uint8Array(includeLandcover ? vertexCount * 2 : 0);
+  const landcoverAxes = includeLandcover
+    ? createLandcoverAxes(boundsLocalM, sampleCount)
+    : null;
   for (let north = 0; north < sampleCount; north++) {
     for (let east = 0; east < sampleCount; east++) {
       const index = north * sampleCount + east;
-      positions[index * 3] = minimumEast + east * spacingEast - centreEast;
+      const worldEastM = minimumEast + east * spacingEast;
+      const worldNorthM = minimumNorth + north * spacingNorth;
+      positions[index * 3] = worldEastM - centreEast;
       positions[index * 3 + 1] = surfaceHeights[index];
-      positions[index * 3 + 2] = -(minimumNorth + north * spacingNorth - centreNorth);
+      positions[index * 3 + 2] = -(worldNorthM - centreNorth);
       waterValues[index] = water[index];
+      if (includeLandcover) {
+        const macroEast = landcoverAxes.macroEast[east];
+        const macroNorth = landcoverAxes.macroNorth[north];
+        const mesoEast = landcoverAxes.mesoEast[east];
+        const mesoNorth = landcoverAxes.mesoNorth[north];
+        const macro = Math.min(1, Math.max(0,
+          macroEast * 0.46
+            + macroNorth * 0.34
+            + (1 - Math.abs(macroEast - macroNorth)) * 0.20));
+        const meso = Math.min(1, Math.max(0,
+          mesoEast * 0.48
+            + mesoNorth * 0.34
+            + mesoEast * mesoNorth * 0.18));
+        // X: meadow → scrub → woodland succession.
+        landcover[index * 2] = Math.round(clampUnit(
+          macro * 0.68 + meso * 0.32,
+        ) * 255);
+
+        // Y: seamless former-field history. Absolute metre coordinates keep it identical at
+        // neighbouring chunk edges; the existing smooth macro/meso fields warp the large rotated
+        // parcels away from a cadastral grid. Fine strips/access tracks fade out automatically as
+        // source spacing becomes too coarse, so LOD2/3 cannot alias them in the distance.
+        const fieldAcross = worldEastM * 0.894427 + worldNorthM * 0.447214
+          + (macro - 0.5) * 280;
+        const fieldAlong = -worldEastM * 0.447214 + worldNorthM * 0.894427
+          + (meso - 0.5) * 220;
+        const parcelEast = Math.floor(fieldAcross / 420);
+        const parcelNorth = Math.floor(fieldAlong / 820);
+        const parcelTone = fraction(
+          parcelEast * 0.754877666 + parcelNorth * 0.569840296,
+        );
+        const detailWeight = clampUnit(
+          (192 - Math.max(spacingEast, spacingNorth)) / 128,
+        );
+        const stripTone = 1 - Math.abs(fraction(fieldAcross / 180) * 2 - 1);
+        const trackDistanceM = Math.abs(fraction(fieldAlong / 1_000) - 0.5) * 1_000;
+        const trackBlend = clampUnit((trackDistanceM - 14) / 46);
+        const track = (1 - smoothUnit(trackBlend)) * detailWeight;
+        const fieldTone = clampUnit(
+          0.08 + (parcelTone * 0.45 + stripTone * 0.55 * detailWeight) * 0.86,
+        );
+        landcover[index * 2 + 1] = Math.round(
+          (fieldTone + (0.015 - fieldTone) * track) * 255,
+        );
+      }
     }
   }
   // Baked ambient occlusion: each sample against the mean of its ring neighbours. Negative means
@@ -291,6 +420,12 @@ export function buildTerrainMeshArrays(boundsLocalM, decoded) {
     positions[bottomIndex * 3 + 2] = positions[sourceIndex * 3 + 2];
     waterValues[topIndex] = water[sourceIndex];
     waterValues[bottomIndex] = water[sourceIndex];
+    if (includeLandcover) {
+      landcover[topIndex * 2] = landcover[sourceIndex * 2];
+      landcover[topIndex * 2 + 1] = landcover[sourceIndex * 2 + 1];
+      landcover[bottomIndex * 2] = landcover[sourceIndex * 2];
+      landcover[bottomIndex * 2 + 1] = landcover[sourceIndex * 2 + 1];
+    }
     concavity[topIndex] = concavity[sourceIndex];
     concavity[bottomIndex] = concavity[sourceIndex];
   }
@@ -333,6 +468,7 @@ export function buildTerrainMeshArrays(boundsLocalM, decoded) {
     positions,
     normals,
     waterValues,
+    landcover,
     concavity,
     indices: indexArray,
     centreEast,
@@ -358,6 +494,7 @@ export function terrainMeshTransferables(built) {
     built.positions.buffer,
     built.normals.buffer,
     built.waterValues.buffer,
+    built.landcover.buffer,
     built.concavity.buffer,
     built.indices.buffer,
     built.boundaryIndices.buffer,

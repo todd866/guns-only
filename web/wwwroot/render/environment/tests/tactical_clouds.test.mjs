@@ -31,7 +31,7 @@ test("runtime builds one instanced cloud and shadow draw for its tier", () => {
   const extinction = field.update(new THREE.Vector3(0, 1450, 0), 2,
     new THREE.Color(0x7898a0), 0.000055);
   assert.ok(extinction >= 0 && extinction <= 1);
-  assert.equal(field.descriptors.length, 25);
+  assert.equal(field.descriptors.length, 9);
   const shown = field.descriptors.filter((cloud) => cloud.present && cloud.opacity > 0.002);
   assert.equal(field.cloudMesh.count, shown.length);
   assert.equal(field.shadowMesh.count, shown.length);

@@ -3,13 +3,33 @@ import { OrbitControls } from "../vendor/three/addons/controls/OrbitControls.js"
 import { loadKoreaEnvironment } from "../render/environment/korea_environment.js";
 import { loadKoreaTerrain } from "../render/environment/korea_terrain.js";
 import { createTacticalCloudField } from "../render/environment/tactical_clouds.js?v=authoritative-clouds-v3";
+import { AdaptiveResolutionController } from "../render/visual/adaptive_resolution.js";
+import { normalizeVisualProfile } from "../render/visual/profile.js";
 
 const parameters = new URLSearchParams(location.search);
 const terrainLookMode = parameters.has("terrain-look");
 if (terrainLookMode) document.documentElement.dataset.terrainLook = "true";
+const QUALITY_TIERS = Object.freeze(["mobile", "balanced", "desktop"]);
+const requestedQuality = QUALITY_TIERS.includes(parameters.get("quality"))
+  ? parameters.get("quality")
+  : null;
+const requestedAltitudeM = parameters.has("altitude")
+  && Number.isFinite(Number(parameters.get("altitude")))
+  ? Number(parameters.get("altitude"))
+  : null;
+const requestedClouds = (() => {
+  if (!parameters.has("clouds")) return null;
+  const token = String(parameters.get("clouds")).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(token)) return true;
+  if (["0", "false", "no", "off"].includes(token)) return false;
+  return null;
+})();
 const TERRAIN_LOOK_STREAM_RADIUS_M = 28_000;
 const PRODUCTION_SUN_DIRECTION = new THREE.Vector3(0.32, 0.78, -0.53).normalize();
 const VISUAL_PROFILE_URL = "../content/packs/korea-1950s/visual-profile.json";
+const UKRAINE_2030S_TERRAIN_ID = "terrain.ukraine.rapier-range.atlas.v1";
+const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID =
+  "mission-feature-pack.ukraine-modern.soniachne-clinic-a.v1";
 const SITE_CONFIGURATIONS = Object.freeze({
     ukraine: Object.freeze({
       label: "Ukraine jet-range · real DEM (fictional strip)",
@@ -21,25 +41,36 @@ const SITE_CONFIGURATIONS = Object.freeze({
         "../content/packs/ukraine-modern/environment/atmosphere.material.json",
         import.meta.url,
       ).href,
+      missionFeaturePackUrl: new URL(
+        "../content/packs/ukraine-modern/environment/hero-cells/"
+          + "soniachne-clinic-a.feature-pack.json",
+        import.meta.url,
+      ).href,
       sceneryEra: "ukraine-modern",
       inland: true,
+      referenceGroundM: 212.5,
+      lowLevelCameraSourceM: Object.freeze([-4000, 3712]),
+      lowLevelCameraGroundM: 184.8,
+      lowLevelTargetSceneM: Object.freeze([-4218, 216.5, -4101]),
       weatherId: "weather.ukraine-training.soniachne-broken-cumulus.v1",
     }),
   "korea-modern": Object.freeze({
     label: "Korea central front · modern treatment",
     manifestUrl: null,
     atmosphereUrl: null,
-    sceneryEra: "modern",
-    inland: false,
-    weatherId: "weather.korea-2030s.drone-front-cumulus.v1",
+      sceneryEra: "modern",
+      inland: false,
+      referenceGroundM: 0,
+      weatherId: "weather.korea-2030s.drone-front-cumulus.v1",
   }),
   "korea-1950s": Object.freeze({
     label: "Korea central front · 1950s treatment",
     manifestUrl: null,
     atmosphereUrl: null,
-    sceneryEra: "1950s",
-    inland: false,
-    weatherId: "weather.korea-1950s.inland-cumulus.v1",
+      sceneryEra: "1950s",
+      inland: false,
+      referenceGroundM: 0,
+      weatherId: "weather.korea-1950s.inland-cumulus.v1",
   }),
 });
 
@@ -67,6 +98,14 @@ const elevation = document.querySelector("#elevation");
 const bearing = document.querySelector("#bearing");
 const speed = document.querySelector("#speed");
 const clouds = document.querySelector("#clouds");
+if (requestedQuality) quality.value = requestedQuality;
+if (requestedAltitudeM !== null) {
+  const minimumAltitudeM = Number(altitude.min);
+  const maximumAltitudeM = Number(altitude.max);
+  altitude.value = String(Math.min(maximumAltitudeM,
+    Math.max(minimumAltitudeM, requestedAltitudeM)));
+}
+if (requestedClouds !== null) clouds.checked = requestedClouds;
 const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: true,
@@ -76,7 +115,7 @@ const renderer = new THREE.WebGLRenderer({
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.02;
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1));
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(54, 1, 1, 680000);
@@ -95,37 +134,214 @@ let environment = null;
 let terrain = null;
 let tacticalClouds = null;
 let visualProfile = null;
+let normalizedVisualProfile = null;
+let adaptiveResolution = null;
+let adaptiveResolutionStatus = null;
 const terrainFogColor = new THREE.Color(0xd2c4a8);
 let terrainFogDensity = 1 / 48_000;
 let elapsed = 0;
-let previous = performance.now();
+let previous = null;
 let previousMetricsSample = 0;
 
 const requestedSite = parameters.get("site");
 site.value = SITE_CONFIGURATIONS[requestedSite] ? requestedSite : "ukraine";
 
+const FRAME_STATS_SAMPLE_LIMIT = 600;
+const FRAME_STATS_BACKGROUND_STALL_MS = 250;
+const FRAME_STATS_LATE_FRAME_MS = 18.5;
+const FRAME_GATE_MIN_FPS = 59;
+const FRAME_GATE_MAX_P95_MS = 18.5;
+const FRAME_GATE_MAX_P99_MS = 22;
+const FRAME_GATE_MAX_LATE_FRACTION = 0.03;
+
+function percentile(sorted, quantile) {
+  if (!sorted.length) return null;
+  const index = Math.max(0, Math.min(sorted.length - 1,
+    Math.ceil(sorted.length * quantile) - 1));
+  return sorted[index];
+}
+
+function createForegroundFrameStats() {
+  const samples = new Float32Array(FRAME_STATS_SAMPLE_LIMIT);
+  let count = 0;
+  let next = 0;
+  let ignoreNext = true;
+
+  return Object.freeze({
+    reset() {
+      count = 0;
+      next = 0;
+      ignoreNext = true;
+    },
+    observe(frameMs) {
+      if (ignoreNext) {
+        ignoreNext = false;
+        return false;
+      }
+      if (document.visibilityState !== "visible"
+          || !Number.isFinite(frameMs)
+          || frameMs <= 0
+          || frameMs > FRAME_STATS_BACKGROUND_STALL_MS) return false;
+      samples[next] = frameMs;
+      next = (next + 1) % samples.length;
+      count = Math.min(samples.length, count + 1);
+      return true;
+    },
+    snapshot() {
+      const values = new Array(count);
+      let totalMs = 0;
+      let lateFrames = 0;
+      const start = count === samples.length ? next : 0;
+      for (let index = 0; index < count; index++) {
+        const value = samples[(start + index) % samples.length];
+        values[index] = value;
+        totalMs += value;
+        if (value > FRAME_STATS_LATE_FRAME_MS) lateFrames++;
+      }
+      values.sort((left, right) => left - right);
+      return Object.freeze({
+        sampleCount: count,
+        fps: count > 0 && totalMs > 0 ? 1000 / (totalMs / count) : null,
+        p95Ms: percentile(values, 0.95),
+        p99Ms: percentile(values, 0.99),
+        overBudgetFraction: count > 0 ? lateFrames / count : null,
+      });
+    },
+  });
+}
+
+const foregroundFrameStats = createForegroundFrameStats();
+
+function evaluatePerformanceGate(frameStats) {
+  const sampled = frameStats.sampleCount >= FRAME_STATS_SAMPLE_LIMIT;
+  const pass = sampled
+    && frameStats.fps >= FRAME_GATE_MIN_FPS
+    && frameStats.p95Ms <= FRAME_GATE_MAX_P95_MS
+    && frameStats.p99Ms <= FRAME_GATE_MAX_P99_MS
+    && frameStats.overBudgetFraction <= FRAME_GATE_MAX_LATE_FRACTION;
+  return Object.freeze({
+    state: sampled ? (pass ? "pass" : "fail") : "warming",
+    pass: sampled ? pass : null,
+    thresholds: Object.freeze({
+      sampleCount: FRAME_STATS_SAMPLE_LIMIT,
+      minimumFps: FRAME_GATE_MIN_FPS,
+      maximumP95Ms: FRAME_GATE_MAX_P95_MS,
+      maximumP99Ms: FRAME_GATE_MAX_P99_MS,
+      maximumLateFraction: FRAME_GATE_MAX_LATE_FRACTION,
+      lateFrameMs: FRAME_STATS_LATE_FRAME_MS,
+    }),
+  });
+}
+
+function resetPerformanceRail() {
+  foregroundFrameStats.reset();
+  previous = null;
+}
+
 function siteConfiguration() {
   return SITE_CONFIGURATIONS[site.value] ?? SITE_CONFIGURATIONS.ukraine;
 }
 
+async function sha256Hex(bytes) {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("SHA-256 verification is unavailable in this browser.");
+  }
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function validateMissionFeaturePack(pack) {
+  if (!pack || typeof pack !== "object" || Array.isArray(pack)) {
+    throw new TypeError("Mission feature pack must be a JSON object.");
+  }
+  if (pack.schemaVersion !== "1.0.0"
+      || pack.featurePackId !== UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID
+      || typeof pack.packVersion !== "string"
+      || pack.theatre?.terrainId !== UKRAINE_2030S_TERRAIN_ID) {
+    throw new TypeError("Ukraine mission feature pack identity is invalid.");
+  }
+  const anchor = pack.coordinateFrame?.anchorSourceM;
+  const presentationOnly = pack.authority?.mode === "presentation_only"
+    && pack.authority?.targetableByDefault === false
+    && pack.authority?.collisionAuthority === "none"
+    && pack.authority?.damageAuthority === "none"
+    && pack.authority?.navigationAuthority === "none"
+    && pack.authority?.landingZoneAuthority === "none";
+  if (!pack.coordinateFrame || typeof pack.coordinateFrame !== "object"
+      || !anchor || typeof anchor !== "object" || Array.isArray(anchor)
+      || !Number.isFinite(anchor.eastM)
+      || !Number.isFinite(anchor.upM)
+      || !Number.isFinite(anchor.northM)
+      || !presentationOnly
+      || !pack.renderBudgets || typeof pack.renderBudgets !== "object"
+      || !Array.isArray(pack.features)
+      || pack.features.length === 0
+      || pack.features.some((feature) =>
+        feature?.presentationOnly !== true || feature?.targetable !== false)
+      || !Array.isArray(pack.landingZones)
+      || !Array.isArray(pack.ambientExclusionZones)) {
+    throw new TypeError("Ukraine mission feature pack structure or authority is invalid.");
+  }
+  return pack;
+}
+
+async function loadMissionFeaturePack(url) {
+  if (!url) return null;
+  const response = await fetch(url, {
+    cache: "no-cache",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`Mission feature pack request failed: ${response.status} ${url}`);
+  }
+  const bytes = await response.arrayBuffer();
+  const sha256 = await sha256Hex(bytes);
+  let pack;
+  try {
+    pack = JSON.parse(new TextDecoder().decode(bytes));
+  } catch (error) {
+    throw new TypeError(`Mission feature pack JSON is invalid: ${error.message}`);
+  }
+  return Object.freeze({
+    pack: validateMissionFeaturePack(pack),
+    sha256,
+  });
+}
+
 function setCameraView() {
-  const height = Number(altitude.value);
+  const heightAglM = Number(altitude.value);
+  const siteConfig = siteConfiguration();
+  const referenceGroundM = Number(siteConfig.referenceGroundM) || 0;
+  const eyeY = referenceGroundM + heightAglM;
   // High-altitude default reads country relief; drop the slider for low-level soft-world checks.
-  if (height >= 2_500) {
-    camera.position.set(-12_000, height, 18_000);
-    controls.target.set(-40_000, Math.max(120, height * 0.05), -8_000);
+  if (heightAglM >= 2_500) {
+    camera.position.set(-12_000, eyeY, 18_000);
+    controls.target.set(
+      -40_000,
+      referenceGroundM + Math.max(35, heightAglM * 0.05),
+      -8_000,
+    );
   } else if (site.value === "ukraine") {
-    // Low over the rewild plain: keep the camera above typical DEM (~50–120 m) and look out
-    // across succession country rather than into a near wall of ground.
-    const eye = Math.max(height, 140);
-    camera.position.set(-2_400, eye, 3_200);
-    controls.target.set(-6_500, Math.max(60, eye * 0.18), -1_200);
+    // Review the actual hero-cell composition instead of looking away from it across an arbitrary
+    // patch of plain. This source-locked camera point is on 184.8 m LOD0 ground; the slider is
+    // therefore genuinely AGL. The target is the authored compound centre in Three's -north Z
+    // convention, keeping clinic, meadow, utilities and ambient field language in one sightline.
+    const [cameraEastM, cameraNorthM] = siteConfig.lowLevelCameraSourceM;
+    camera.position.set(
+      cameraEastM,
+      siteConfig.lowLevelCameraGroundM + heightAglM,
+      -cameraNorthM,
+    );
+    controls.target.fromArray(siteConfig.lowLevelTargetSceneM);
   } else {
-    camera.position.set(-250, height, -450);
-    controls.target.set(-760, Math.max(85, height * 0.28), -1_900);
+    camera.position.set(-250, eyeY, -450);
+    controls.target.set(-760, referenceGroundM + Math.max(85, heightAglM * 0.28), -1_900);
   }
   controls.update();
-  document.querySelector("#altitude-value").value = `${Math.round(height).toLocaleString()} m`;
+  document.querySelector("#altitude-value").value =
+    `${Math.round(heightAglM).toLocaleString()} m AGL`;
 }
 
 function updateLabels() {
@@ -137,9 +353,18 @@ function updateLabels() {
 function resize() {
   const width = viewport.clientWidth;
   const height = viewport.clientHeight;
+  adaptiveResolution?.setViewport(width, height, devicePixelRatio, "resize");
   renderer.setSize(width, height, false);
   camera.aspect = width / Math.max(1, height);
   camera.updateProjectionMatrix();
+}
+
+function tacticalCloudsVisible() {
+  return clouds.checked && (!terrainLookMode || requestedClouds === true);
+}
+
+function formatMetric(value, digits = 1, suffix = "") {
+  return Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : "—";
 }
 
 function metrics() {
@@ -148,11 +373,89 @@ function metrics() {
   // millions of triangles even when only a small foreground wedge reached the GPU.
   document.querySelector("#triangles").textContent =
     Math.round(renderer.info.render.triangles).toLocaleString();
-  document.querySelector("#layers").textContent = String(
-    tacticalClouds?.descriptors.filter((cloud) => cloud.present).length ?? 0,
-  );
+  const cloudVolumes = tacticalCloudsVisible()
+    ? tacticalClouds?.descriptors.filter((cloud) => cloud.present).length ?? 0
+    : 0;
+  const terrainState = terrain?.diagnostics?.() ?? null;
+  const renderPixels = renderer.domElement.width * renderer.domElement.height;
+  document.querySelector("#layers").textContent = String(cloudVolumes);
   document.querySelector("#draws").textContent = String(renderer.info.render.calls);
+  document.querySelector("#render-pixels").textContent =
+    `${(renderPixels / 1_000_000).toFixed(2)} MP`;
+  document.querySelector("#resident-chunks").textContent =
+    String(terrainState?.residentChunks ?? 0);
+  document.querySelector("#visible-scenery").textContent =
+    String(terrainState?.visibleSceneryChunks ?? 0);
+  const frameStats = foregroundFrameStats.snapshot();
+  document.querySelector("#fps").textContent = formatMetric(frameStats.fps);
+  document.querySelector("#frame-p95").textContent = formatMetric(frameStats.p95Ms, 1, " ms");
+  document.querySelector("#frame-p99").textContent = formatMetric(frameStats.p99Ms, 1, " ms");
+  document.querySelector("#late-fraction").textContent =
+    formatMetric(frameStats.overBudgetFraction === null
+      ? null
+      : frameStats.overBudgetFraction * 100, 1, "%");
+  const performanceGate = evaluatePerformanceGate(frameStats);
+  const frameGate = document.querySelector("#frame-gate");
+  frameGate.textContent = performanceGate.state.toUpperCase();
+  frameGate.dataset.state = performanceGate.state;
+  document.documentElement.dataset.performanceGate = performanceGate.state;
 }
+
+const environmentLabDiagnostics = Object.freeze({
+  snapshot() {
+    return Object.freeze({
+      quality: quality.value,
+      altitudeM: camera.position.y,
+      altitudeAglM: Number(altitude.value),
+      cloudsEnabled: tacticalCloudsVisible(),
+      camera: Object.freeze({
+        heightMode: "agl",
+        preset: site.value === "ukraine" && Number(altitude.value) < 2_500
+          ? "soniachne-hero-approach"
+          : "regional-horizon",
+        position: Object.freeze(camera.position.toArray()),
+        target: Object.freeze(controls.target.toArray()),
+      }),
+      renderer: Object.freeze({
+        calls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles,
+        pixelRatio: renderer.getPixelRatio(),
+        width: renderer.domElement.width,
+        height: renderer.domElement.height,
+        pixels: renderer.domElement.width * renderer.domElement.height,
+      }),
+      shadows: Object.freeze({
+        rendererEnabled: renderer.shadowMap.enabled,
+        rendererType: renderer.shadowMap.type,
+        pcfSoft: renderer.shadowMap.type === THREE.PCFSoftShadowMap,
+        sunCastShadow: sun.castShadow,
+        mapSize: Object.freeze([
+          sun.shadow.mapSize.x,
+          sun.shadow.mapSize.y,
+        ]),
+        camera: Object.freeze({
+          left: sun.shadow.camera.left,
+          right: sun.shadow.camera.right,
+          top: sun.shadow.camera.top,
+          bottom: sun.shadow.camera.bottom,
+          near: sun.shadow.camera.near,
+          far: sun.shadow.camera.far,
+        }),
+        bias: sun.shadow.bias,
+        normalBias: sun.shadow.normalBias,
+      }),
+      terrain: terrain?.diagnostics?.() ?? null,
+      adaptiveResolution: adaptiveResolution?.status?.() ?? adaptiveResolutionStatus,
+      frameStats: foregroundFrameStats.snapshot(),
+      performanceGate: evaluatePerformanceGate(foregroundFrameStats.snapshot()),
+    });
+  },
+});
+Object.defineProperty(window, "__environmentLabDiagnostics", {
+  value: environmentLabDiagnostics,
+  writable: false,
+  configurable: false,
+});
 
 async function loadVisualProfile() {
   const response = await fetch(VISUAL_PROFILE_URL);
@@ -183,9 +486,57 @@ function applyProductionProfile(profile) {
   }
 }
 
+function configureProductionResolution(profile) {
+  normalizedVisualProfile = normalizeVisualProfile(profile, { tierId: quality.value });
+  adaptiveResolution = new AdaptiveResolutionController({
+    ...normalizedVisualProfile.adaptiveResolution,
+    pixelRatioCap: normalizedVisualProfile.renderer.pixelRatioCap,
+    mode: "combat",
+    onChange(pixelRatio, statusSnapshot) {
+      renderer.setPixelRatio(pixelRatio);
+      adaptiveResolutionStatus = Object.freeze({ ...statusSnapshot, pixelRatio });
+    },
+  });
+  adaptiveResolution.setViewport(
+    viewport.clientWidth,
+    viewport.clientHeight,
+    devicePixelRatio,
+    "quality-tier",
+  );
+  resize();
+}
+
+function configureProductionShadows() {
+  const shadowMapSize = normalizedVisualProfile?.tier?.settings?.shadowMapSize ?? 0;
+  const desktopShadowPass = quality.value === "desktop" && shadowMapSize > 0;
+  renderer.shadowMap.enabled = desktopShadowPass;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  sun.castShadow = desktopShadowPass;
+  // This lab is a land-combat gate. Mirror the production 88 m tracked volume and depth range;
+  // Three's default ±5 m / 500 m shadow camera cannot see a sun placed 1.6 km from the target and
+  // would make a nominally enabled gate silently measure zero shadow submissions.
+  sun.shadow.camera.left = -44;
+  sun.shadow.camera.right = 44;
+  sun.shadow.camera.top = 44;
+  sun.shadow.camera.bottom = -44;
+  sun.shadow.camera.near = 10;
+  sun.shadow.camera.far = 3600;
+  sun.shadow.camera.updateProjectionMatrix();
+  sun.shadow.bias = -0.00018;
+  sun.shadow.normalBias = 0.16;
+  if (shadowMapSize > 0
+      && (sun.shadow.mapSize.x !== shadowMapSize
+        || sun.shadow.mapSize.y !== shadowMapSize)) {
+    sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+  }
+}
+
 function terrainFrame(deltaSeconds = 0) {
   return {
     cameraPosition: camera.position,
+    cameraAglM: Number(altitude.value),
     deltaSeconds,
     elapsedSeconds: elapsed,
     windX: site.value === "ukraine" ? 12 : 11,
@@ -196,6 +547,21 @@ function terrainFrame(deltaSeconds = 0) {
   };
 }
 
+async function warmPresentationBeforePerformanceRail() {
+  // Compilation and render-target allocation belong behind the Ready interlock, not in the
+  // foreground frame sample. The explicit render also exercises lazy driver work before the
+  // controller is reset to the tier ceiling.
+  if (typeof renderer.compileAsync === "function") {
+    await renderer.compileAsync(scene, camera);
+  } else {
+    renderer.compile(scene, camera);
+  }
+  renderer.render(scene, camera);
+  await new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  renderer.render(scene, camera);
+}
+
 async function rebuild() {
   const siteConfig = siteConfiguration();
   site.disabled = true;
@@ -204,7 +570,8 @@ async function rebuild() {
   environment?.dispose();
   terrain?.dispose();
   tacticalClouds?.dispose();
-  [environment, visualProfile] = await Promise.all([
+  let missionFeaturePack = null;
+  [environment, visualProfile, missionFeaturePack] = await Promise.all([
     loadKoreaEnvironment(THREE, {
       qualityTier: quality.value,
       ...(siteConfig.atmosphereUrl ? { atmosphereUrl: siteConfig.atmosphereUrl } : {}),
@@ -213,8 +580,11 @@ async function rebuild() {
       fogFar: site.value === "ukraine" ? 48_000 : undefined,
     }),
     loadVisualProfile(),
+    loadMissionFeaturePack(siteConfig.missionFeaturePackUrl),
   ]);
   applyProductionProfile(visualProfile);
+  configureProductionResolution(visualProfile);
+  configureProductionShadows();
   scene.add(environment.group);
   environment.ocean.visible = !siteConfig.inland;
   // Production loads terrain separately from the atmosphere adapter. A null manifest keeps the
@@ -231,6 +601,10 @@ async function rebuild() {
       lookAheadSeconds: 0,
     } : {}),
     sceneryEra: siteConfig.sceneryEra,
+    ...(missionFeaturePack ? {
+      missionFeaturePack: missionFeaturePack.pack,
+      missionFeaturePackSha256: missionFeaturePack.sha256,
+    } : {}),
     sunDirection: sunDirection(),
     fogColor: terrainFogColor,
     fogDensity: terrainFogDensity,
@@ -282,7 +656,7 @@ async function rebuild() {
       extinction_per_m: site.value === "ukraine" ? 0.018 : 0.022,
     }],
   });
-  tacticalClouds.group.visible = clouds.checked && !terrainLookMode;
+  tacticalClouds.group.visible = tacticalCloudsVisible();
   scene.add(tacticalClouds.group);
   tacticalClouds.update(camera.position, elapsed, new THREE.Color(0x7898a0),
     0.000055, sunDirection());
@@ -292,7 +666,16 @@ async function rebuild() {
     throw new Error(`${siteConfig.label} loaded with ${terrainState.errors} errors and `
       + `${terrainState.residentChunks} resident chunks`);
   }
+  if (missionFeaturePack
+      && (terrainState.missionFeaturePackId !==
+          missionFeaturePack.pack.featurePackId
+        || terrainState.missionFeaturePackSha256 !== missionFeaturePack.sha256)) {
+    throw new Error(`${siteConfig.label} did not retain the selected mission feature pack.`);
+  }
+  await warmPresentationBeforePerformanceRail();
+  adaptiveResolution?.reset(adaptiveResolution.maxScale, "scene-ready");
   status.lastChild.textContent = ` ${siteConfig.label} · ${quality.value}`;
+  resetPerformanceRail();
   site.disabled = false;
   quality.disabled = false;
 }
@@ -311,8 +694,11 @@ function sunDirection() {
 
 function animate(now) {
   requestAnimationFrame(animate);
-  const delta = Math.min(0.05, (now - previous) / 1000);
+  const frameMs = previous === null ? null : now - previous;
   previous = now;
+  foregroundFrameStats.observe(frameMs);
+  adaptiveResolution?.sample(frameMs);
+  const delta = Math.min(0.05, Math.max(0, frameMs ?? 0) / 1000);
   elapsed += delta * Number(speed.value);
   controls.update();
   sunTarget.position.copy(controls.target);
@@ -321,7 +707,7 @@ function animate(now) {
   environment?.update({ timeSeconds: elapsed, cameraPosition: camera.position, sunDirection: sunDirection() });
   terrain?.update(terrainFrame(delta));
   if (tacticalClouds) {
-    tacticalClouds.group.visible = clouds.checked && !terrainLookMode;
+    tacticalClouds.group.visible = tacticalCloudsVisible();
     const cloudFog = site.value === "ukraine"
       ? new THREE.Color(0xd2c4a8)
       : new THREE.Color(0x7898a0);
@@ -337,14 +723,22 @@ function animate(now) {
 
 quality.addEventListener("change", () => rebuild().catch(showError));
 site.addEventListener("change", () => rebuild().catch(showError));
-altitude.addEventListener("input", setCameraView);
+altitude.addEventListener("input", () => {
+  setCameraView();
+  resetPerformanceRail();
+});
 elevation.addEventListener("input", updateLabels);
 bearing.addEventListener("input", updateLabels);
 speed.addEventListener("input", updateLabels);
 clouds.addEventListener("change", () => {
-  if (tacticalClouds) tacticalClouds.group.visible = clouds.checked;
+  if (tacticalClouds) tacticalClouds.group.visible = tacticalCloudsVisible();
+  resetPerformanceRail();
 });
 document.querySelector("#reset").addEventListener("click", setCameraView);
+document.addEventListener("visibilitychange", () => {
+  // The first foreground RAF after a hidden tab includes background time, not render work.
+  previous = null;
+});
 new ResizeObserver(resize).observe(viewport);
 
 function showError(error) {
@@ -372,6 +766,7 @@ async function setTerrainLookView(view) {
   await new Promise((resolvePromise) => requestAnimationFrame(
     () => requestAnimationFrame(resolvePromise),
   ));
+  resetPerformanceRail();
   return terrain.diagnostics();
 }
 
@@ -379,8 +774,8 @@ setCameraView();
 updateLabels();
 resize();
 if (terrainLookMode) {
-  quality.value = "desktop";
-  clouds.checked = false;
+  if (!requestedQuality) quality.value = "desktop";
+  if (requestedClouds === null) clouds.checked = false;
   speed.value = "0";
 }
 await rebuild().then(async () => {

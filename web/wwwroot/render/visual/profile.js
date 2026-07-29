@@ -135,11 +135,17 @@ function normalizePostProcessing(profile, tier) {
 function normalizeAdaptiveResolution(profile, tier) {
   const tierId = tier.id;
   const raw = tierExtension(record(profile.extensions).adaptiveResolution, tierId);
-  const mobile = tierId === "mobile";
-  const minScale = number(raw.minScale, mobile ? 0.68 : 0.72, 0.5, 1);
+  const defaults = tierId === "mobile"
+    ? { maxRenderPixels: 1_300_000, minScale: 0.55 }
+    : tierId === "balanced"
+      ? { maxRenderPixels: 2_100_000, minScale: 0.6 }
+      : { maxRenderPixels: 3_700_000, minScale: 0.65 };
+  const minScale = number(raw.minScale, defaults.minScale, 0.5, 1);
+  const modeTargetFps = record(raw.modeTargetFps);
   return {
     enabled: bool(raw.enabled, true),
-    targetFps: number(raw.targetFps, mobile ? 50 : 60, 24, 240),
+    targetFps: number(raw.targetFps, 60, 24, 240),
+    maxRenderPixels: integer(raw.maxRenderPixels, defaults.maxRenderPixels, 65_536, 67_108_864),
     minScale,
     maxScale: Math.max(minScale, number(raw.maxScale, 1, 0.5, 1)),
     downThreshold: number(raw.downThreshold, 1.08, 1, 2),
@@ -151,10 +157,11 @@ function normalizeAdaptiveResolution(profile, tier) {
     cooldownSamples: integer(raw.cooldownSamples, 45, 1, 600),
     ignoredFrameMs: number(raw.ignoredFrameMs, 250, 34, 2000),
     modeTargetFps: {
-      combat: number(record(raw.modeTargetFps).combat, mobile ? 50 : 60, 24, 240),
-      carrier: number(record(raw.modeTargetFps).carrier, mobile ? 45 : 55, 24, 240),
-      replay: number(record(raw.modeTargetFps).replay, mobile ? 45 : 60, 24, 240),
-      menu: number(record(raw.modeTargetFps).menu, 30, 24, 240),
+      combat: number(modeTargetFps.combat, 60, 24, 240),
+      carrier: number(modeTargetFps.carrier, 60, 24, 240),
+      replay: number(modeTargetFps.replay, 60, 24, 240),
+      // Menus have no flight-control or sight-picture latency requirement.
+      menu: number(modeTargetFps.menu, 30, 24, 240),
     },
   };
 }

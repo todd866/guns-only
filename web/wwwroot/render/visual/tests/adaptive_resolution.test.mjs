@@ -6,6 +6,7 @@ test("drops quickly under sustained load and recovers asymmetrically", () => {
   const changes = [];
   const controller = new AdaptiveResolutionController({
     pixelRatioCap: 1.5,
+    maxRenderPixels: 10_000_000,
     targetFps: 60,
     minScale: 0.7,
     stepDown: 0.1,
@@ -56,4 +57,54 @@ test("disabled adaptation still honors the quality-tier pixel ratio cap", () => 
   assert.equal(controller.pixelRatio, 1.4);
   assert.equal(controller.sample(40).changed, false);
   assert.equal(controller.scale, 1);
+});
+
+test("applies the viewport pixel budget before the adaptive scale", () => {
+  const changes = [];
+  const controller = new AdaptiveResolutionController({
+    pixelRatioCap: 2,
+    maxRenderPixels: 2_100_000,
+    minScale: 0.6,
+    warmupSamples: 1,
+    cooldownSamples: 1,
+    smoothing: 1,
+    onChange: (ratio, metadata) => changes.push({ ratio, metadata }),
+  });
+  controller.setViewport(1366, 1024, 2);
+
+  const budgetRatio = Math.sqrt(2_100_000 / (1366 * 1024));
+  assert.equal(controller.pixelRatio, budgetRatio);
+  assert.equal(controller.maximumPixelRatio, budgetRatio);
+  assert.ok(controller.pixelRatio ** 2 * 1366 * 1024 <= 2_100_000);
+  assert.equal(changes.at(-1).metadata.maxRenderPixels, 2_100_000);
+  assert.equal(changes.at(-1).metadata.maximumPixelRatio, budgetRatio);
+
+  controller.reset(0.6);
+  assert.equal(controller.pixelRatio, 0.74);
+  assert.ok(controller.pixelRatio < budgetRatio);
+});
+
+test("recomputes the hard pixel ceiling on viewport changes", () => {
+  const controller = new AdaptiveResolutionController({
+    pixelRatioCap: 2,
+    maxRenderPixels: 3_700_000,
+  });
+  controller.setViewport(1920, 1080, 2);
+  assert.equal(controller.pixelRatio, Math.sqrt(3_700_000 / (1920 * 1080)));
+
+  controller.setViewport(800, 600, 2);
+  assert.equal(controller.pixelRatio, 2);
+  assert.equal(controller.status().maxRenderPixels, 3_700_000);
+});
+
+test("disabled adaptation still enforces the render-pixel budget", () => {
+  const controller = new AdaptiveResolutionController({
+    enabled: false,
+    pixelRatioCap: 3,
+    maxRenderPixels: 1_300_000,
+  });
+  controller.setViewport(1920, 1080, 3);
+  assert.equal(controller.maximumPixelRatio, Math.sqrt(1_300_000 / (1920 * 1080)));
+  assert.equal(controller.pixelRatio, 0.79);
+  assert.ok(controller.pixelRatio ** 2 * 1920 * 1080 <= 1_300_000);
 });

@@ -5,18 +5,40 @@
 // on the render thread is wrapping those arrays in BufferAttributes, which is O(1) in the size of
 // the chunk.
 //
-// This file must stay a leaf: it may import terrain_mesh_builder.js and nothing else. Any import
-// that reaches THREE, the DOM, or window would fail to load here and silently push every build
-// back onto the main thread through the fallback path.
+// The pure scenery planner is also executed here so streaming a detailed tile does not spend
+// another 7–9 ms selecting procedural candidates on the render thread. The imported planner is a
+// renderer-free leaf so the worker bundle never evaluates THREE or BufferGeometryUtils.
 
 import { buildTerrainMeshArrays, terrainMeshTransferables } from "./terrain_mesh_builder.js";
+import { planKoreaScenery } from "./korea_scenery_planner.js";
 
 self.onmessage = (event) => {
   const request = event.data;
   if (!request || request.type !== "build") return;
-  const { id, boundsLocalM, heights, water, sampleCount } = request;
+  const {
+    id,
+    boundsLocalM,
+    heights,
+    water,
+    sampleCount,
+    includeLandcover,
+    sceneryPlanRequest,
+  } = request;
   try {
-    const built = buildTerrainMeshArrays(boundsLocalM, { heights, water, sampleCount });
+    const decoded = {
+      heights,
+      water,
+      sampleCount,
+      includeLandcover,
+    };
+    const built = buildTerrainMeshArrays(boundsLocalM, decoded);
+    if (sceneryPlanRequest?.chunk && sceneryPlanRequest?.options) {
+      built.sceneryPlan = planKoreaScenery(
+        sceneryPlanRequest.chunk,
+        decoded,
+        sceneryPlanRequest.options,
+      );
+    }
     // The heightfield arrives as a COPY rather than a transfer, and is not sent back. The main
     // thread still needs those samples to place scenery, and transferring them out would detach
     // its arrays — leaving the synchronous fallback with nothing to rebuild from if this worker
