@@ -31,7 +31,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.22.0";
+    const string SnapshotSchemaVersion = "1.23.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -856,6 +856,9 @@ internal static class SnapshotProjection {
         MeshActiveDest? meshActive = Session.MeshNav.Active;
         MeshPlace? meshHome = Session.MeshNav.HomePlate;
         RtbGuidance meshGuidance = meshSolution.DestLeg.Guidance;
+        RecoveryProcedureDirector recovery = Session.RecoveryProcedure;
+        RecoveryGate? recoveryGate = recovery.ActiveGate;
+        Vec3D recoveryFace = recovery.ActiveGateFace;
         return $"\"mesh_transit_mode\":{JsonString(MeshSnapshot.TransitModeToken(Session.MeshNav.Mode))},"
             + $"\"mesh_transit_mode_code\":{(int)Session.MeshNav.Mode},"
             + $"\"mesh_home_place_id\":{JsonString(meshHome?.PlaceId)},"
@@ -878,7 +881,25 @@ internal static class SnapshotProjection {
             + $"\"mesh_fuel_dest_to_home_lb\":{NullableNumberJson(meshSolution.FuelDestToHomeLb)},"
             + $"\"mesh_fuel_on_arrival_home_via_dest_lb\":{NullableNumberJson(meshSolution.FuelOnArrivalHomeViaDestLb)},"
             + $"\"mesh_reserve_margin_via_dest_lb\":{NullableNumberJson(meshSolution.ReserveMarginViaDestLb)},"
-            + $"\"mesh_place_catalog_json\":{SnapshotJson.JsonString(MeshSnapshot.CatalogJson(Session))},";
+            + $"\"mesh_tour_count\":{Session.MeshNav.Tour.Count},"
+            + $"\"mesh_tour_json\":{SnapshotJson.JsonString(MeshSnapshot.TourJson(Session))},"
+            + $"\"mesh_place_catalog_json\":{SnapshotJson.JsonString(MeshSnapshot.CatalogJson(Session))},"
+            + $"\"recovery_procedure_kind\":{(int)recovery.Kind},"
+            + $"\"recovery_procedure_label\":{JsonString(MeshSnapshot.ProcedureKindLabel(recovery.Kind))},"
+            + $"\"recovery_gate_active_index\":{recovery.ActiveIndex},"
+            + $"\"recovery_gate_x\":{NullableNumberJson(recoveryGate?.EastM)},"
+            + $"\"recovery_gate_y\":{NullableNumberJson(recoveryGate?.UpM)},"
+            + $"\"recovery_gate_z\":{NullableNumberJson(recoveryGate?.NorthM)},"
+            + $"\"recovery_gate_half_m\":{(recoveryGate?.HalfM ?? 0.0):F1},"
+            + $"\"recovery_gate_face_x\":{recoveryFace.X:F4},"
+            + $"\"recovery_gate_face_y\":{recoveryFace.Y:F4},"
+            + $"\"recovery_gate_face_z\":{recoveryFace.Z:F4},"
+            + $"\"recovery_gate_in_volume\":{(recovery.InVolume ? "true" : "false")},"
+            + $"\"recovery_gate_energy_ok\":{(recovery.EnergyOk ? "true" : "false")},"
+            + $"\"recovery_gate_config_ok\":{(recovery.ConfigOk ? "true" : "false")},"
+            + $"\"recovery_gate_target_ktas\":{NullableNumberJson(recoveryGate?.TargetKtas)},"
+            + $"\"recovery_gate_dirty\":{(recoveryGate?.DirtyConfig == true ? "true" : "false")},"
+            + $"\"recovery_gates_json\":{SnapshotJson.JsonString(MeshSnapshot.RecoveryGatesJson(Session))},";
     }
 
     static string FiniteNumberJson(double value) => SnapshotJson.FiniteNumberJson(value);

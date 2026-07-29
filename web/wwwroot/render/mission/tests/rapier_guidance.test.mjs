@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   circuitGatePresentation,
+  recoveryGatePresentation,
   rapierBriefingText,
   rapierCycleTeachPresentation,
   rapierEnginePresentation,
@@ -446,6 +447,28 @@ test("circuit gate presents world half-size and energy/config status", () => {
   });
   assert.equal(energy.status, "ENERGY");
   assert.equal(energy.accent, "fault");
+});
+
+test("recoveryGatePresentation uses Mesh procedure fields with straight-in accent", () => {
+  const open = recoveryGatePresentation({
+    recovery_procedure_kind: 3,
+    recovery_procedure_label: "STRAIGHT-IN",
+    recovery_gate_half_m: 700,
+    recovery_gate_x: -14816,
+    recovery_gate_y: 720,
+    recovery_gate_z: 0,
+    recovery_gate_face_z: 1,
+    recovery_gate_in_volume: true,
+    recovery_gate_energy_ok: true,
+    recovery_gate_config_ok: true,
+    recovery_gate_target_ktas: 240,
+    recovery_gate_dirty: false,
+  });
+  assert.equal(open.halfM, 700);
+  assert.equal(open.worldX, -14816);
+  assert.equal(open.status, "GATE OPEN");
+  assert.equal(open.accent, "open");
+  assert.match(open.boxLabel, /STRAIGHT-IN · GATE OPEN/);
 });
 
 test("cycle teach is ascent-only on Intercept; Circuits stays gated; OVER resurfaces it", () => {

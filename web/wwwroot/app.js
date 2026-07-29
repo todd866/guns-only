@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=181";
+import { createHud } from "./hud.js?v=182";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=181";
+} from "./render/debrief/sortie_result.js?v=182";
 import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -44,7 +44,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=181";
+} from "./render/release/release_identity.js?v=182";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -57,10 +57,12 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=181";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=182";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
+  parseMeshTour,
+  parseRecoveryGates,
 } from "./render/nav/mesh_nav_presentation.js";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
@@ -130,13 +132,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=181";
+} from "./render/telemetry/ai_frame_pressure.js?v=182";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=181";
+} from "./render/telemetry/telemetry_batch.js?v=182";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -145,7 +147,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=181";
+} from "./render/settings/player_settings.js?v=182";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -186,11 +188,11 @@ import {
   createRapierDispersedStrip,
   createRapierGunDrone,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=181";
+} from "./render/scene/scene_builders.js?v=182";
 import {
   setFlightAudioEnabled,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=181";
+} from "./render/audio/flight_audio.js?v=182";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -752,6 +754,8 @@ function updateNavConsole(state) {
       transitMode: mesh?.transitMode
         ?? (typeof state?.mesh_transit_mode === "string" ? state.mesh_transit_mode : "mission_gated"),
       follow: meshNdFollow,
+      tourStops: parseMeshTour(state),
+      procedureGates: parseRecoveryGates(state),
     });
   }
 
@@ -9698,7 +9702,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=181")
+    navigator.serviceWorker.register("service-worker.js?v=182")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);

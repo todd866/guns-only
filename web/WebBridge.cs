@@ -241,6 +241,21 @@ public static partial class WebBridge {
     public static void ClearMeshActiveDest() => Session.ClearMeshActiveDest();
 
     [JSExport]
+    public static bool MeshTourAppendPlace(string placeId) =>
+        Session.TryMeshTourAppendPlace(placeId);
+
+    [JSExport]
+    public static bool MeshTourAppendFreeFix(double eastM, double northM, string? label) =>
+        Session.TryMeshTourAppendFreeFix(eastM, northM, label);
+
+    [JSExport]
+    public static void ClearMeshTour() => Session.ClearMeshTour();
+
+    [JSExport]
+    public static bool SetRecoveryProcedure(int kindCode) =>
+        Session.TrySetRecoveryProcedure(kindCode);
+
+    [JSExport]
     public static void SetCircuitsCleanMode(bool clean) =>
         Session.SetCircuitsCleanMode(clean);
 

@@ -70,22 +70,26 @@ public static class MeshSelectability {
 
 public sealed class MeshNavDirector {
     public const double FreeFixClampM = 500_000.0;
+    public const int MaxTourStops = 16;
 
     MeshNavTransitMode _mode = MeshNavTransitMode.MissionGated;
     MeshPlace? _homePlate;
     List<MeshPlace> _catalog = new();
     MeshActiveDest? _active;
+    List<MeshActiveDest> _tour = new();
 
     public MeshNavTransitMode Mode => _mode;
     public MeshPlace? HomePlate => _homePlate;
     public MeshActiveDest? Active => _active;
     public IReadOnlyList<MeshPlace> Catalog => _catalog;
+    public IReadOnlyList<MeshActiveDest> Tour => _tour;
 
     public void Reset() {
         _mode = MeshNavTransitMode.MissionGated;
         _homePlate = null;
         _catalog = new List<MeshPlace>();
         _active = null;
+        _tour = new List<MeshActiveDest>();
     }
 
     public void Configure(
@@ -105,6 +109,7 @@ public sealed class MeshNavDirector {
             merged.Add(place);
         }
         _catalog = merged;
+        _tour = new List<MeshActiveDest>();
         ClearActiveDestToHome();
     }
 
@@ -121,19 +126,36 @@ public sealed class MeshNavDirector {
 
     public bool TrySetFreeFix(double eastM, double northM, string? label) {
         if (_mode != MeshNavTransitMode.OpenSegment) return false;
-        if (!double.IsFinite(eastM) || !double.IsFinite(northM)) return false;
-        if (Math.Abs(eastM) > FreeFixClampM || Math.Abs(northM) > FreeFixClampM) return false;
-        string display = string.IsNullOrWhiteSpace(label)
-            ? $"FIX {eastM:0}/{northM:0}"
-            : label.Trim();
-        _active = new MeshActiveDest(
-            IsPlace: false,
-            PlaceId: null,
-            DisplayName: display,
-            EastM: eastM,
-            NorthM: northM,
-            UpM: null);
+        if (!TryBuildFreeFix(eastM, northM, label, out MeshActiveDest fix)) return false;
+        _active = fix;
         return true;
+    }
+
+    public bool TryTourAppendPlace(string placeId, bool phaseAllows) {
+        if (_tour.Count >= MaxTourStops) return false;
+        if (string.IsNullOrWhiteSpace(placeId)) return false;
+        foreach (MeshPlace place in _catalog) {
+            if (!string.Equals(place.PlaceId, placeId, StringComparison.Ordinal)) continue;
+            if (!MeshSelectability.CanSelect(place.Role, _mode, phaseAllows)) return false;
+            MeshActiveDest stop = ToActive(place);
+            _tour.Add(stop);
+            _active = stop;
+            return true;
+        }
+        return false;
+    }
+
+    public bool TryTourAppendFreeFix(double eastM, double northM, string? label) {
+        if (_mode != MeshNavTransitMode.OpenSegment) return false;
+        if (_tour.Count >= MaxTourStops) return false;
+        if (!TryBuildFreeFix(eastM, northM, label, out MeshActiveDest fix)) return false;
+        _tour.Add(fix);
+        _active = fix;
+        return true;
+    }
+
+    public void ClearTour() {
+        _tour = new List<MeshActiveDest>();
     }
 
     public void ClearActiveDestToHome() {
@@ -142,6 +164,24 @@ public sealed class MeshNavDirector {
             return;
         }
         _active = null;
+    }
+
+    static bool TryBuildFreeFix(
+        double eastM, double northM, string? label, out MeshActiveDest fix) {
+        fix = default;
+        if (!double.IsFinite(eastM) || !double.IsFinite(northM)) return false;
+        if (Math.Abs(eastM) > FreeFixClampM || Math.Abs(northM) > FreeFixClampM) return false;
+        string display = string.IsNullOrWhiteSpace(label)
+            ? $"FIX {eastM:0}/{northM:0}"
+            : label.Trim();
+        fix = new MeshActiveDest(
+            IsPlace: false,
+            PlaceId: null,
+            DisplayName: display,
+            EastM: eastM,
+            NorthM: northM,
+            UpM: null);
+        return true;
     }
 
     static MeshActiveDest ToActive(in MeshPlace place) => new(

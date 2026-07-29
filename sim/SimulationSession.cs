@@ -219,6 +219,7 @@ public sealed class SimulationSession {
     MissionChecklistStatus _missionChecklist = MissionChecklistStatus.None;
     readonly MeshNavDirector _meshNav = new();
     MeshNavSolution _meshNavSolution = default;
+    readonly RecoveryProcedureDirector _recoveryProcedure = new();
     // Pattern school starts with a serviceable aircraft. Attrition faults remain available from
     // the systems panel, but silently failing the utility hydraulics 90 seconds into every first
     // circuit left the gear at 91% and made the taught wire pass unrecoverable.
@@ -422,6 +423,7 @@ public sealed class SimulationSession {
     public MissionChecklistStatus MissionChecklist => _missionChecklist;
     public MeshNavDirector MeshNav => _meshNav;
     public MeshNavSolution MeshNavSolution => _meshNavSolution;
+    public RecoveryProcedureDirector RecoveryProcedure => _recoveryProcedure;
     public bool CircuitsCleanMode => _circuitsCleanMode;
     public bool CircuitsFaultArmed => _circuitsFaultArmed;
     public double RapierNoseOnVelocityErrorDeg =>
@@ -2243,6 +2245,7 @@ public sealed class SimulationSession {
         StepCore();
         UpdateMissionChecklists();
         UpdateMissionRadio();
+        UpdateRecoveryProcedure();
         if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
         StepPendingTerminalDecision();
         _tick++;
@@ -2797,6 +2800,7 @@ public sealed class SimulationSession {
         _missionRadio = MissionRadioTransmission.Silent;
         _missionChecklistDirector.Reset();
         _missionChecklist = MissionChecklistStatus.None;
+        _recoveryProcedure.Reset();
         ConfigureMeshNavFromBeat();
         _rapierAutomationEnabled =
             _beat.ScriptedIntercept?.AutomationDefaultEnabled ?? false;
@@ -2938,6 +2942,7 @@ public sealed class SimulationSession {
         _missionChecklist = MissionChecklistStatus.None;
         _meshNav.Reset();
         _meshNavSolution = default;
+        _recoveryProcedure.Reset();
         Lifecycle = LifecycleState.Ready;
     }
 
@@ -2972,6 +2977,39 @@ public sealed class SimulationSession {
         _meshNav.TrySetFreeFix(eastM, northM, label);
 
     public void ClearMeshActiveDest() => _meshNav.ClearActiveDestToHome();
+
+    bool MeshPhaseAllows => Lifecycle is LifecycleState.Active
+        or LifecycleState.Ready
+        or LifecycleState.Paused;
+
+    public bool TryMeshTourAppendPlace(string placeId) =>
+        _meshNav.TryTourAppendPlace(placeId, phaseAllows: MeshPhaseAllows);
+
+    public bool TryMeshTourAppendFreeFix(double eastM, double northM, string? label) =>
+        _meshNav.TryTourAppendFreeFix(eastM, northM, label);
+
+    public void ClearMeshTour() => _meshNav.ClearTour();
+
+    public bool TrySetRecoveryProcedure(int kindCode) {
+        if (!_meshNav.HomePlate.HasValue) return kindCode == 0;
+        MeshPlace home = _meshNav.HomePlate.Value;
+        var homePos = new Vec3D(home.EastM, home.UpM ?? 0.0, home.NorthM);
+        double heading = _beat.RecoveryPlan?.ConventionalRunway?.LandingHeadingRad
+            ?? _carrier?.LandingHeadingRad
+            ?? 0.0;
+        if (kindCode is < 0 or > 3) return false;
+        return _recoveryProcedure.TrySet((RecoveryProcedureKind)kindCode, homePos, heading);
+    }
+
+    void UpdateRecoveryProcedure() {
+        if (_recoveryProcedure.Kind == RecoveryProcedureKind.None) return;
+        double ktas = Player.IndicatedAirspeedMps * AirData.MpsToKnots;
+        _recoveryProcedure.Step(
+            Player.State.Position,
+            ktas,
+            PlayerSystems.AllGearDownAndLocked,
+            Math.Max(PlayerSystems.LeftFlapDegrees, PlayerSystems.RightFlapDegrees) > 1.0);
+    }
 
     AircraftSim CreatePlayer(in AircraftState state) {
         var player = new AircraftSim(WithCurrentFuelMass(state), _beat.PlayerAir,

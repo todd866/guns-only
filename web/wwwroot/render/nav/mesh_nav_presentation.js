@@ -94,3 +94,43 @@ export function parseMeshPlaceCatalog(state = {}) {
     return Object.freeze([]);
   }
 }
+
+export function parseMeshTour(state = {}) {
+  const raw = state?.mesh_tour_json;
+  if (typeof raw !== "string" || !raw.trim()) return Object.freeze([]);
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return Object.freeze([]);
+    return Object.freeze(parsed.map((entry) => Object.freeze({
+      id: entry?.id == null ? null : String(entry.id),
+      name: String(entry?.name ?? ""),
+      eastM: Number(entry?.east_m),
+      northM: Number(entry?.north_m),
+      isPlace: entry?.is_place === true,
+    })).filter((stop) => Number.isFinite(stop.eastM) && Number.isFinite(stop.northM)));
+  } catch {
+    return Object.freeze([]);
+  }
+}
+
+export function parseRecoveryGates(state = {}) {
+  const raw = state?.recovery_gates_json;
+  if (typeof raw !== "string" || !raw.trim()) return Object.freeze([]);
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return Object.freeze([]);
+    return Object.freeze(parsed.map((entry) => Object.freeze({
+      id: String(entry?.id ?? ""),
+      label: String(entry?.label ?? ""),
+      eastM: Number(entry?.east_m),
+      northM: Number(entry?.north_m),
+      upM: Number(entry?.up_m),
+      halfM: Number(entry?.half_m),
+      targetKtas: Number(entry?.target_ktas),
+      dirty: entry?.dirty === true,
+      active: entry?.active === true,
+    })).filter((gate) => Number.isFinite(gate.eastM) && Number.isFinite(gate.northM)));
+  } catch {
+    return Object.freeze([]);
+  }
+}
