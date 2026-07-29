@@ -2082,6 +2082,20 @@ public sealed class SimulationSession {
                 _detents.ApproachMode,
                 WaveOffActive);
         }
+        // Live contact geometry for the GCI commit call: bearing/range/altitude/aspect are the
+        // fields a fighter needs to correlate the directive (world axes: X east, Z north).
+        double contactBearingDeg = double.NaN;
+        double contactRangeNm = double.NaN;
+        double contactAltitudeFt = double.NaN;
+        bool contactHot = false;
+        if (_bandit is not null && OpponentPresent) {
+            Vec3D contactRel = _bandit.State.Position - _player.State.Position;
+            contactBearingDeg =
+                (Math.Atan2(contactRel.X, contactRel.Z) * 180.0 / Math.PI + 360.0) % 360.0;
+            contactRangeNm = contactRel.Length / 1_852.0;
+            contactAltitudeFt = _bandit.State.Position.Y * 3.28084;
+            contactHot = _closureKts > 50.0;
+        }
         _missionRadio = _missionRadioDirector.Step(new MissionRadioState(
             TimeSeconds,
             Lifecycle is LifecycleState.Active or LifecycleState.Finished,
@@ -2108,7 +2122,11 @@ public sealed class SimulationSession {
             _fuel.IsBingo,
             _recentEvents,
             _missionChecklist.Name,
-            _missionChecklist.CompletedCall));
+            _missionChecklist.CompletedCall,
+            contactBearingDeg,
+            contactRangeNm,
+            contactAltitudeFt,
+            contactHot));
         _circuitComms = _beat.ScriptedIntercept?.PatternOnly == true
             && _missionRadio.Active
                 ? $"{_missionRadio.Speaker} · {_missionRadio.Callsign} · "

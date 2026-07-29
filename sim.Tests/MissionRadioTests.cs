@@ -209,7 +209,7 @@ public class MissionRadioTests {
         director.Step(State(
             1.0, pattern: false, phase: RapierMissionPhase.Intercept));
         clock = 1.0;
-        WaitFor(director, ref clock, "control-commit",
+        WaitFor(director, ref clock, "control-commit-braa",
             t => State(t, pattern: false, phase: RapierMissionPhase.Intercept));
 
         director.Step(State(
@@ -237,7 +237,7 @@ public class MissionRadioTests {
         director.Step(State(
             clock + 30.0, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 12));
         clock += 30.0;
-        WaitFor(director, ref clock, "control-commit",
+        WaitFor(director, ref clock, "control-commit-braa",
             t => State(t, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 12));
         director.Step(State(
             clock + 1.0, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 16));
@@ -408,7 +408,7 @@ public class MissionRadioTests {
             3.0, pattern: false, phase: RapierMissionPhase.Intercept));
         double clock = 3.0;
         MissionRadioTransmission commit = WaitFor(
-            director, ref clock, "control-commit",
+            director, ref clock, "control-commit-braa",
             t => State(t, pattern: false, phase: RapierMissionPhase.Intercept));
 
         Assert.False(duringHold.Active);

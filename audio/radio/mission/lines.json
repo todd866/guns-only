@@ -313,10 +313,17 @@
       "direction": "C2 economy: two facts, flat, the net is open for business."
     },
     {
-      "id": "control-commit",
+      "id": "control-commit-braa",
       "role": "controller",
-      "text": "Ghost One One, hostile. You are ordered to engage.",
-      "direction": "The real C2 kill-chain wording (2023 HUNTRESS tape): cold, formal, zero drama — the formality IS the escalation."
+      "dynamic": true,
+      "text": "Ghost One One, single group, braa two seven zero, forty, twenty thousand, hot, hostile. Commit.",
+      "direction": "The commit with the core fields (2024 ACC doctrine): declaration then directive, cold and exact. Text is dynamic live geometry; this line is the representative take for voice work pending segment stitching."
+    },
+    {
+      "id": "pilot-commit-ack",
+      "role": "pilot",
+      "text": "Ghost One One.",
+      "direction": "Bare callsign acknowledgment — the commit is received, nothing more is owed on the net."
     },
     {
       "id": "pilot-separating",

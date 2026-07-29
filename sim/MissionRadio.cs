@@ -57,7 +57,11 @@ public readonly record struct MissionRadioState(
     bool Bingo,
     IReadOnlyList<SessionEvent> Events,
     string ChecklistName = "",
-    string ChecklistCompletedCall = "");
+    string ChecklistCompletedCall = "",
+    double ContactBearingDeg = double.NaN,
+    double ContactRangeNm = double.NaN,
+    double ContactAltitudeFt = double.NaN,
+    bool ContactHot = false);
 
 /// <summary>Formatting shared by authored calls and tests, following ICAO/military pronunciation.</summary>
 public static class RadioPhraseology {
@@ -123,6 +127,28 @@ public static class RadioPhraseology {
     static string NumberBelowTen(int number) {
         if (number is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(number));
         return Digits[number];
+    }
+
+    /// <summary>
+    /// GCI commit with the core fields a fighter needs to correlate the directive: bearing,
+    /// range, altitude, aspect, declaration, then the commit. "Ghost One One, single group,
+    /// braa two seven zero, forty, twenty thousand, hot, hostile. Commit." Degrades gracefully
+    /// when geometry is unavailable — declaration and commit only, never invented numbers.
+    /// </summary>
+    public static string BraaCommit(string spokenCallsign,
+        double bearingDeg, double rangeNm, double altitudeFt, bool hot) {
+        if (!double.IsFinite(bearingDeg) || !double.IsFinite(rangeNm)
+            || !double.IsFinite(altitudeFt) || rangeNm <= 0.0) {
+            return $"{spokenCallsign}, single group, hostile. Commit.";
+        }
+        int bearing = ((int)System.Math.Round(bearingDeg) % 360 + 360) % 360;
+        string bearingWords = DigitGroup(bearing.ToString("000",
+            CultureInfo.InvariantCulture));
+        int range = System.Math.Max(1, (int)System.Math.Round(rangeNm));
+        int altitude = System.Math.Max(100,
+            (int)System.Math.Round(altitudeFt / 100.0) * 100);
+        return $"{spokenCallsign}, single group, braa {bearingWords}, {range}, "
+            + $"{AltitudeFeet(altitude)}, {(hot ? "hot" : "cold")}, hostile. Commit.";
     }
 }
 
@@ -292,9 +318,14 @@ public sealed class MissionRadioDirector {
                     $"{PlayerSpoken}, radar contact.",
                     "controller", MissionRadioPriority.Routine));
                 Enqueue(state, Tactical(
-                    "control-commit", "CONTROL", Player,
-                    $"{PlayerSpoken}, hostile. You are ordered to engage.",
+                    "control-commit-braa", "CONTROL", Player,
+                    RadioPhraseology.BraaCommit(PlayerSpoken, state.ContactBearingDeg,
+                        state.ContactRangeNm, state.ContactAltitudeFt, state.ContactHot),
                     "controller", MissionRadioPriority.Advisory));
+                Enqueue(state, Tactical(
+                    "pilot-commit-ack", Player, "CONTROL",
+                    $"{PlayerSpoken}.",
+                    "pilot", MissionRadioPriority.Routine));
             }
             // Gun employment before the director existed is not a package call — see
             // ObserveWeaponsAndFuel. Classic dogfight / mid-burst attach stays silent.
@@ -486,9 +517,14 @@ public sealed class MissionRadioDirector {
         switch (state.RapierPhase) {
             case RapierMissionPhase.Intercept:
                 Enqueue(state, Tactical(
-                    "control-commit", "CONTROL", Player,
-                    $"{PlayerSpoken}, hostile. You are ordered to engage.",
+                    "control-commit-braa", "CONTROL", Player,
+                    RadioPhraseology.BraaCommit(PlayerSpoken, state.ContactBearingDeg,
+                        state.ContactRangeNm, state.ContactAltitudeFt, state.ContactHot),
                     "controller", MissionRadioPriority.Advisory));
+                Enqueue(state, Tactical(
+                    "pilot-commit-ack", Player, "CONTROL",
+                    $"{PlayerSpoken}.",
+                    "pilot", MissionRadioPriority.Routine));
                 break;
             case RapierMissionPhase.Escape:
                 Enqueue(state, Tactical(

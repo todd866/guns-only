@@ -75,11 +75,11 @@ static class Scenarios {
             Sample("spawn"),
             WaitUntilPhase("INTERCEPT", timeoutSeconds: 45),
             WaitUntilChecklist("COMMIT", timeoutSeconds: 10),
-            WaitUntilRadio("control-commit", timeoutSeconds: 20),
+            WaitUntilRadio("control-commit-braa", timeoutSeconds: 20),
             Sample("commit"),
             Wait(4), Sample("commit+4s"),
         ], BeatFactory: AirborneInterceptCard,
-            RequireRadioIds: ["control-commit"]),
+            RequireRadioIds: ["control-commit-braa"]),
         new("rapier-guns", "Rapier Intercept — package Guns. once", 10, [
             Sample("spawn"),
             WaitUntilPhase("INTERCEPT", timeoutSeconds: 15),

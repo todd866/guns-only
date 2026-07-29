@@ -14,7 +14,7 @@ public class MissionRadioCatalogContractTests {
     static readonly CircuitTrafficShip[] NoTraffic = [];
     static readonly SessionEvent[] NoEvents = [];
 
-    sealed record CatalogLine(string Role, string Text);
+    sealed record CatalogLine(string Role, string Text, bool Dynamic);
 
     static Dictionary<string, CatalogLine> LoadCatalog() {
         string path = Path.Combine(
@@ -24,7 +24,9 @@ public class MissionRadioCatalogContractTests {
         foreach (JsonElement line in document.RootElement.GetProperty("lines").EnumerateArray()) {
             lines[line.GetProperty("id").GetString()!] = new CatalogLine(
                 line.GetProperty("role").GetString()!,
-                line.GetProperty("text").GetString()!);
+                line.GetProperty("text").GetString()!,
+                line.TryGetProperty("dynamic", out JsonElement dynamicFlag)
+                    && dynamicFlag.GetBoolean());
         }
         return lines;
     }
@@ -255,7 +257,8 @@ public class MissionRadioCatalogContractTests {
             if (!catalog.TryGetValue(transmission.Id, out CatalogLine? line)) {
                 offCatalog.Add($"{transmission.Id}: id missing from catalog "
                     + $"(text: \"{transmission.Text}\")");
-            } else if (!string.Equals(line.Text, transmission.Text, StringComparison.Ordinal)) {
+            } else if (!line.Dynamic
+                && !string.Equals(line.Text, transmission.Text, StringComparison.Ordinal)) {
                 offCatalog.Add($"{transmission.Id}: text diverged\n"
                     + $"  sim:     \"{transmission.Text}\"\n"
                     + $"  catalog: \"{line.Text}\"");
