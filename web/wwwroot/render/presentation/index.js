@@ -33,3 +33,9 @@ export {
   applyEscortFormationPose,
   escortFormationPose,
 } from "./escort_formation.js";
+
+export {
+  createF22CanopyGlass,
+  isF22CanopyGlassAirframe,
+  updateF22CanopyGlass,
+} from "./f22_canopy_glass.js";
