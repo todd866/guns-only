@@ -2,6 +2,7 @@ import {
   addUkraineSoftWorldFog,
   UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES,
   UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE,
+  UKRAINE_SOFT_WORLD_FOG_HEX,
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "./soft_world_atmosphere.js";
@@ -412,7 +413,7 @@ function geometryTriangleCount(geometry) {
 
 function createAtmosphereUniforms(THREE, provided = {}) {
   const fallback = {
-    uFogColor: { value: new THREE.Color(0xd2c4a8) },
+    uFogColor: { value: new THREE.Color(UKRAINE_SOFT_WORLD_FOG_HEX) },
     uFogDensity: { value: 0.000052 },
     uAtmosphereDensityScale: { value: UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE },
     uAtmosphereHazeColor: { value: new THREE.Color(...UKRAINE_SOFT_WORLD_HAZE_RGB) },

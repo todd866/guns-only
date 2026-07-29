@@ -7,6 +7,9 @@
 export const UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE = 0.34;
 export const UKRAINE_SOFT_WORLD_HAZE_MIX = 0.58;
 export const UKRAINE_SOFT_WORLD_HAZE_RGB = Object.freeze([0.66, 0.51, 0.30]);
+// Single source for the soft-world fog hex; fallback paths in scenery/mission features must
+// use this, never a literal — two hardcoded fallbacks forked the palette once already.
+export const UKRAINE_SOFT_WORLD_FOG_HEX = 0xa8814b;
 export const UKRAINE_SOFT_WORLD_EDGE_HIDE_START = 0.36;
 export const UKRAINE_SOFT_WORLD_EDGE_HIDE_END = 0.72;
 

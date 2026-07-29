@@ -2,6 +2,7 @@ import { mergeGeometries } from "../../vendor/three/addons/utils/BufferGeometryU
 import {
   addUkraineSoftWorldFog,
   UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE,
+  UKRAINE_SOFT_WORLD_FOG_HEX,
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "./soft_world_atmosphere.js";
@@ -658,7 +659,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   );
   const exclusionIdentity = ambientExclusionIdentity(ambientExclusionZones);
   const fallbackAtmosphereUniforms = {
-    uFogColor: { value: new THREE.Color(0xd2c4a8) },
+    uFogColor: { value: new THREE.Color(UKRAINE_SOFT_WORLD_FOG_HEX) },
     uFogDensity: { value: 0.000052 },
     uAtmosphereDensityScale: { value: UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE },
     uAtmosphereHazeColor: {
