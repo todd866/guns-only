@@ -500,7 +500,8 @@ test("F-22 canopy glass is aircraft-fixed and never admitted for Rapier or exter
   assert.match(source, /createF22CanopyGlass\(THREE\)/);
   assert.match(source, /this\.scene\.add\(this\.f22CanopyGlass\.group\)/);
   assert.match(source,
-    /isF22CanopyGlassAirframe\(state\)\s*&&\s*state\.replay_external !== true\s*&&\s*String\(state\.replay_camera \|\| "CHASE"\) !== "CHASE"/,
+    /isF22CanopyGlassAirframe\(state\)\s*&&\s*state\.replay_external !== true\s*&&\s*String\(state\.replay_camera \|\| "COCKPIT"\) !== "CHASE"/,
+    "live frames default to the cockpit view; defaulting to CHASE made the gate constant-false",
   );
   assert.match(source,
     /updateF22CanopyGlass\(this\.f22CanopyGlass,\s*\{[\s\S]*?position: this\.camera\.position,[\s\S]*?quaternion: this\.playerQuaternion,[\s\S]*?lookQuaternion: this\.camera\.quaternion/,

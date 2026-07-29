@@ -4396,7 +4396,14 @@ function updateCarrierRuntimePresentation(runtime, carrier, state, nowSeconds, f
     const fixedStripRecovery = carrier?.userData?.fixedStripRecoveryPresentation;
     const launchFx = carrier?.userData?.launchFx;
     if (launchFx && typeof launchFx.update === "function") {
-      launchFx.update(state, 1 / 60);
+      // Real seconds, not frames: the hardcoded 1/60 ran the FX timebase at whatever the
+      // display refresh happened to be. Clamp survives tab-away clock jumps.
+      const lastNow = carrier.userData.launchFxLastNowSeconds;
+      const launchFxDt = Number.isFinite(lastNow)
+        ? Math.min(Math.max(nowSeconds - lastNow, 0), 0.1)
+        : 1 / 60;
+      carrier.userData.launchFxLastNowSeconds = nowSeconds;
+      launchFx.update(state, launchFxDt);
     }
     if (fixedStripRecovery) {
       runtime.recovery.group.visible = false;
@@ -7621,9 +7628,12 @@ class FlightView {
     if (casevac || replayExternal || padlock) this.cockpitHead.reset(state);
     else this.cockpitHead.update(this.camera, state, dt);
     this.camera.updateMatrixWorld(true);
+    // Live frames carry no replay_camera; they are the cockpit view, so the default must
+    // be COCKPIT — defaulting to CHASE made this gate constant-false and the canopy glass
+    // never rendered anywhere.
     const f22CanopyVisible = isF22CanopyGlassAirframe(state)
       && state.replay_external !== true
-      && String(state.replay_camera || "CHASE") !== "CHASE";
+      && String(state.replay_camera || "COCKPIT") !== "CHASE";
     updateF22CanopyGlass(this.f22CanopyGlass, {
       position: this.camera.position,
       quaternion: this.playerQuaternion,
