@@ -81,7 +81,7 @@ test("the published Indoor route boots its Three.js facility and transitions opt
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}indoor/`, { waitUntil: "load", timeout: 30000 });
+    await page.goto(`${site.url}indoor/`, { waitUntil: "load", timeout: scaled(30000) });
     await page.waitForFunction(
       () => globalThis.__gunsIndoor?.ready === true,
       undefined,
@@ -217,7 +217,7 @@ test("the published Medevac route resolves route hold, selective relay, and dive
       const page = await browser.newPage({ viewport });
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message ?? String(error)));
-      await page.goto(`${site.url}medevac/`, { waitUntil: "load", timeout: 30000 });
+      await page.goto(`${site.url}medevac/`, { waitUntil: "load", timeout: scaled(30000) });
       await page.waitForFunction(
         () => globalThis.__gunsMedevac?.ready === true,
         undefined,
@@ -587,7 +587,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
     // The real graph must activate, update and expose diagnostics, but release validation must
     // never put aircraft audio onto a developer's speakers. `audioQa=silent` leaves Web Audio
     // running while clamping only the destination master.
-    await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: 60000 });
+    await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: scaled(60000) });
 
     // #boot gains the "ready" class when boot settles — on success (boot()) AND on a fatal error
     // (showFatal()). Waiting for it makes the assertion below deterministic instead of timing-based.
@@ -763,7 +763,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
 
     await page.goto(`${site.url}?program=low-level-drone&server=off`, {
       waitUntil: "load",
-      timeout: 60000,
+      timeout: scaled(60000),
     });
     try {
       await page.waitForFunction(
@@ -1137,7 +1137,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
         (error) => touchPageErrors.push(error.message ?? String(error)));
       await touchPage.goto(`${site.url}?program=medevac&server=off`, {
         waitUntil: "load",
-        timeout: 60000,
+        timeout: scaled(60000),
       });
       await touchPage.waitForFunction(
         () => document.querySelector("#boot")?.classList.contains("ready") === true
@@ -1148,7 +1148,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
 
       if (await touchPage.evaluate(() => globalThis.__gunsMobile?.tiltState === "off")) {
         const buttonsOnly = touchPage.locator('[data-mobile-action="buttons-only"]');
-        await buttonsOnly.waitFor({ state: "visible", timeout: 10000 });
+        await buttonsOnly.waitFor({ state: "visible", timeout: scaled(10000) });
         await buttonsOnly.click();
       }
       await touchPage.waitForFunction(() => {
@@ -1290,7 +1290,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         const page = await context.newPage();
         const pageErrors = [];
         page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-        await page.goto(site.url, { waitUntil: "load", timeout: 60000 });
+        await page.goto(site.url, { waitUntil: "load", timeout: scaled(60000) });
         await page.waitForFunction(
           () => document.querySelector("#boot")?.classList.contains("ready") === true,
           undefined,
@@ -1304,7 +1304,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           { timeout: scaled(10000) },
         );
         if (await page.evaluate(() => globalThis.__gunsMobile?.tiltState === "off")) {
-          await buttonsOnly.waitFor({ state: "visible", timeout: 10000 });
+          await buttonsOnly.waitFor({ state: "visible", timeout: scaled(10000) });
           await buttonsOnly.click();
         }
         const readyStart = page.locator("#ready-start");
@@ -1783,7 +1783,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
     await page.goto(`${site.url}?input=touch&audioQa=silent`, {
       waitUntil: "load",
-      timeout: 60000,
+      timeout: scaled(60000),
     });
     await page.waitForFunction(
       () => document.querySelector("#boot")?.classList.contains("ready") === true,
