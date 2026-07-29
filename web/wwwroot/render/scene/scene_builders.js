@@ -3,7 +3,7 @@ import {
   TERRAIN_CURVATURE_START_M,
   TERRAIN_EARTH_RADIUS_M,
 } from "../environment/korea_terrain.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=184";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=185";
 import rapierV1Definition from "../../airframes/rapier_v1.embedded.js";
 import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
 
@@ -989,7 +989,6 @@ export function createRapierDispersedStrip(context = {}) {
   const rail = makeMaterial(0x20262a, 0.38, 0.18, 0x010202,
     { grain: 0.04, grainScale: 2.4 });
   const paint = depthBiasDeckMaterial(makeMaterial(0xd7c88e, 0.66, 0.03));
-  const orange = makeMaterial(0xb95b2d, 0.61, 0.035, 0x060201);
   const lamp = new THREE.MeshBasicMaterial({ color: 0xf0d38d, toneMapped: false });
 
   box(group, { x: 72, y: 0.28, z: 1_200 }, new THREE.Vector3(0, -0.36, 0), shoulder);
@@ -1255,14 +1254,110 @@ export function createRapierDispersedStrip(context = {}) {
   gallery.add(launchFx.group);
   group.userData.launchFx = launchFx;
 
-  // Dispersed revetments and chunky value blocks establish the illustrative 2030s silhouette
-  // without implying a real airfield plan.
+  // INSTALLATION VICINITY (~300 m): lived-in defensive compound — spoil, revetments, gravel
+  // access, soft berms. Ambient presentation only; not a targetable airfield plan.
+  // Spec: docs/superpowers/specs/2026-07-29-rapier-base-vicinity-design.md
+  const vicinity = new THREE.Group();
+  vicinity.name = "STRIP_VICINITY";
+  vicinity.userData.ambientRole = "vicinity";
+  const spoilEarth = makeMaterial(0x5a6546, 0.97, 0.01, 0x010100,
+    { grain: 0.22, grainScale: 0.22 });
+  const bermEarth = makeMaterial(0x62704c, 0.96, 0.01, 0x010100,
+    { grain: 0.16, grainScale: 0.3 });
+  const revetmentConcrete = makeMaterial(0x5a5f5b, 0.88, 0.025, 0x010101,
+    { grain: 0.12, grainScale: 0.5 });
+  const gravel = makeMaterial(0x6a6658, 0.94, 0.02, 0x010100,
+    { grain: 0.28, grainScale: 0.9 });
+  const weatheredPad = makeMaterial(0x4a4e4a, 0.9, 0.02, 0x010101,
+    { grain: 0.14, grainScale: 0.55 });
+
+  const addBlastRevetment = (cx, cz, openTowardStrip) => {
+    const pocket = new THREE.Group();
+    pocket.name = "STRIP_REVETMENT";
+    const open = openTowardStrip ? Math.sign(cx) || 1 : -Math.sign(cx) || -1;
+    // Back wall away from strip; short wings form a shallow U facing the shoulder.
+    box(pocket, { x: 14, y: 3.2, z: 2.4 },
+      new THREE.Vector3(cx + open * 8, 1.5, cz), spoilEarth);
+    box(pocket, { x: 14, y: 0.35, z: 2.6 },
+      new THREE.Vector3(cx + open * 8, 3.25, cz), revetmentConcrete);
+    for (const wingZ of [-1, 1]) {
+      box(pocket, { x: 2.2, y: 2.8, z: 11 },
+        new THREE.Vector3(cx + open * 2.5, 1.3, cz + wingZ * 7), spoilEarth);
+      box(pocket, { x: 2.4, y: 0.3, z: 11 },
+        new THREE.Vector3(cx + open * 2.5, 2.85, cz + wingZ * 7), revetmentConcrete);
+    }
+    vicinity.add(pocket);
+  };
+  for (const [cx, cz] of [
+    [48, 340], [-50, 310], [52, 210], [-46, 180],
+    [50, 40], [-48, -30], [46, -160], [-52, -220],
+  ]) {
+    addBlastRevetment(cx, cz, true);
+  }
+
+  // Cut-and-cover spoil dumps — irregular stacked mounds near gallery and shoulders.
+  const spoilSites = [
+    [catapultX + 22, galleryMidZ + 40], [catapultX - 24, galleryMidZ - 60],
+    [catapultX + 28, galleryEndZ + 18], [38, -380], [-42, -400],
+    [44, 280], [-40, 260], [36, 100],
+  ];
+  for (const [sx, sz] of spoilSites) {
+    const dump = new THREE.Group();
+    dump.name = "STRIP_SPOIL_PILE";
+    box(dump, { x: 9, y: 2.4, z: 11 }, new THREE.Vector3(sx, 1.0, sz), spoilEarth,
+      { x: 0.08, y: 0.35, z: -0.06 });
+    box(dump, { x: 6.5, y: 1.8, z: 7 }, new THREE.Vector3(sx + 2.2, 2.0, sz - 1.5), bermEarth,
+      { x: -0.12, y: -0.4, z: 0.1 });
+    box(dump, { x: 4, y: 1.2, z: 5 }, new THREE.Vector3(sx - 1.8, 2.4, sz + 1.2), spoilEarth,
+      { x: 0.15, y: 0.55, z: 0.05 });
+    vicinity.add(dump);
+  }
+
+  // Gravel access track: berm → strip shoulder (service path, not a taxiway system).
+  const track = new THREE.Group();
+  track.name = "STRIP_ACCESS_TRACK";
+  const trackZ = galleryMidZ + 28;
+  for (let i = 0; i < 7; i++) {
+    const t = i / 6;
+    const x = catapultX + 16 + t * 28;
+    const z = trackZ + Math.sin(t * Math.PI) * 6;
+    box(track, { x: 5.2, y: 0.09, z: 9.5 },
+      new THREE.Vector3(x, 0.02, z), gravel,
+      { x: 0, y: (0.18 - t * 0.05), z: 0 });
+  }
+  // Short spur toward recovery threshold shoulder.
+  for (let i = 0; i < 4; i++) {
+    box(track, { x: 4.4, y: 0.08, z: 14 },
+      new THREE.Vector3(38, 0.02, 120 + i * 22), gravel);
+  }
+  vicinity.add(track);
+
+  // Soft berm landscape outside the hard shoulder — ties gallery mound into the steppe.
+  for (const side of [-1, 1]) {
+    for (const [z, length, height] of [
+      [300, 90, 2.2], [120, 70, 1.8], [-80, 100, 2.0], [-320, 80, 1.6],
+    ]) {
+      box(vicinity, { x: 8, y: height, z: length },
+        new THREE.Vector3(side * 40, height * 0.42, z), bermEarth)
+        .name = "STRIP_SOFT_BERM";
+    }
+  }
+
+  // Weathered equipment pads (muted concrete — replaces former orange value blocks).
+  for (const [px, pz, sx, sz] of [
+    [34, 365, 8, 18], [-36, 350, 7, 14], [30, -420, 6, 12], [-32, -430, 5, 10],
+  ]) {
+    box(vicinity, { x: sx, y: 0.22, z: sz },
+      new THREE.Vector3(px, 0.08, pz), weatheredPad)
+      .name = "STRIP_EQUIPMENT_PAD";
+    box(vicinity, { x: sx * 0.35, y: 1.4, z: sz * 0.22 },
+      new THREE.Vector3(px - sx * 0.2, 0.75, pz), revetmentConcrete)
+      .name = "STRIP_EQUIPMENT_CABINET";
+  }
+  group.add(vicinity);
+
   const edgeLampPositions = [];
   for (const side of [-1, 1]) {
-    box(group, { x: 7, y: 2.6, z: 38 },
-      new THREE.Vector3(side * 31, 1.1, 365), shoulder);
-    box(group, { x: 2.2, y: 1.6, z: 12 },
-      new THREE.Vector3(side * 26, 0.8, -440), orange);
     for (let index = 0; index < 18; index++) {
       edgeLampPositions.push(new THREE.Vector3(
         side * 23.3, 0.18, -540 + index * 62,

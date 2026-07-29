@@ -110,6 +110,15 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   assert.ok(strip.getObjectByName("LAUNCH_PORTAL"), "portal headwall must present");
   assert.ok(strip.getObjectByName("LAUNCH_FX"), "catshot FX group must present");
   assert.ok(strip.userData.launchFx?.update, "strip must expose launchFx.update");
+  const vicinity = strip.getObjectByName("STRIP_VICINITY");
+  assert.ok(vicinity, "installation vicinity kit must present");
+  assert.equal(vicinity.userData.ambientRole, "vicinity");
+  assert.ok(vicinity.getObjectByName("STRIP_ACCESS_TRACK"), "gravel access track must present");
+  assert.ok(vicinity.children.some((child) => child.name === "STRIP_REVETMENT"),
+    "blast revetments must present");
+  assert.ok(vicinity.children.some((child) => child.name === "STRIP_SPOIL_PILE"),
+    "spoil piles must present");
+  assert.ok(vicinity.getObjectByName("STRIP_SOFT_BERM"), "soft berm landscape must present");
   const lastRailMatrix = new THREE.Matrix4();
   centreArcRail.getMatrixAt(centreArcRail.count - 1, lastRailMatrix);
   const halfChord = centreArcRail.geometry.parameters.depth / 2;
