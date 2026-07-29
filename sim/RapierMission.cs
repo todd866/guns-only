@@ -85,7 +85,11 @@ public readonly record struct RapierMissionGuidance(
     /// <summary>Aircraft is inside the physical gate volume this tick.</summary>
     bool GateInVolume = false,
     /// <summary>True airspeed within the gate energy band.</summary>
-    bool GateEnergyOk = false);
+    bool GateEnergyOk = false,
+    /// <summary>Stable reach-fight intention token for guidance and snapshots.</summary>
+    string Intention = "",
+    /// <summary>Stable reach-fight strategy token for guidance and snapshots.</summary>
+    string Strategy = "");
 
 public sealed record ScriptedInterceptConfig(
     int FormationSize = 4,
@@ -149,6 +153,9 @@ public sealed class RapierMissionDirector {
     bool _circuitDownwindReached;
     bool _circuitBaseReached;
     bool _circuitInitialJoinEstablished;
+    readonly ReachFightDirector _reachFight = new();
+    MissionIntention _intention;
+    ReachFightStrategy _strategy;
     /// Height above the strip that counts as "going around" rather than still landing. 300 m is
     /// above any bounce and below pattern altitude, so a touch-and-go re-arms but a long float
     /// down the runway does not.
@@ -869,25 +876,29 @@ public sealed class RapierMissionDirector {
         } else if (catapultActive) {
             EnterPhase(RapierMissionPhase.Launch, "catapult_active");
         } else if ((int)_phase < (int)RapierMissionPhase.Attack) {
-            if (contactRangeM <= 30_000.0
-                && (!zoomLobProfile
-                    || (int)_phase >= (int)RapierMissionPhase.DipRelight)) {
-                EnterPhase(RapierMissionPhase.Attack, "contact_leq_30km");
-            } else if (player.Position.Y < ClimbTopM - 40.0
-                && (int)_phase <= (int)RapierMissionPhase.Climb) {
-                EnterPhase(RapierMissionPhase.Climb, "climb_to_fl560");
-            } else if (mach < 2.2
-                && (int)_phase <= (int)RapierMissionPhase.Accelerate) {
-                EnterPhase(RapierMissionPhase.Accelerate, "accel_to_m2.2");
-            } else if (player.Position.Y < CruiseAltitudeM - 200.0
-                && (int)_phase <= (int)RapierMissionPhase.RamClimb
-                && (int)_phase < (int)RapierMissionPhase.ZoomPull) {
-                EnterPhase(RapierMissionPhase.RamClimb, "ram_climb_to_fl700");
-            } else if (zoomLobProfile) {
+            bool inZoomPhases = (int)_phase >= (int)RapierMissionPhase.ZoomPull
+                && (int)_phase <= (int)RapierMissionPhase.DipRelight;
+            ReachFightDecision decision = _reachFight.Decide(
+                _phase,
+                player.Position.Y,
+                mach,
+                qPa,
+                player.Gamma,
+                contactRangeM,
+                fuelLb,
+                reserveFuelLb,
+                zoomLobProfile,
+                _lobSkip,
+                inZoomPhases);
+            _intention = decision.Intention;
+            _strategy = decision.Strategy;
+            if (decision.Strategy != ReachFightStrategy.ZoomLob
+                && decision.PhaseReason.Length > 0) {
+                EnterPhase(decision.SuggestedPhase, decision.PhaseReason);
+            }
+            if (decision.Strategy == ReachFightStrategy.ZoomLob) {
                 UpdateZoomLobPhase(player, mach, qPa, noseOnVelocityErrorDeg,
                     contactRangeM, fuelLb, reserveFuelLb);
-            } else {
-                EnterPhase(RapierMissionPhase.Intercept, "intercept_dash");
             }
         }
 
@@ -1524,6 +1535,8 @@ public sealed class RapierMissionDirector {
             GateFaceY: gateFace.Y,
             GateFaceZ: gateFace.Z,
             GateInVolume: gateInVolume,
-            GateEnergyOk: gateEnergyOk);
+            GateEnergyOk: gateEnergyOk,
+            Intention: ReachFightDirector.Token(_intention),
+            Strategy: ReachFightDirector.Token(_strategy));
     }
 }
