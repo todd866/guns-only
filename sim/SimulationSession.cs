@@ -5281,6 +5281,11 @@ public sealed class SimulationSession {
     /// roll remains the immediate override signal; the small correction occupies only the explicit
     /// SAS channel, and Auto-GCAS still runs afterward with unconditional safety priority.
     /// </summary>
+    // Corner speed is operationally meaningless above this band and the pitot inversion
+    // eventually has no finite answer; 50 km is far above every flyable envelope while
+    // comfortably inside AirData's solvable range.
+    const double CornerSpeedSolvableCeilingM = 50_000.0;
+
     PilotCommand ApplyBanditPadlockRollAssist(
         in PilotCommand effectiveCommand,
         double rawPilotRollControl) {
@@ -5301,10 +5306,17 @@ public sealed class SimulationSession {
         if (_terrainSurface is not null && _terrainSurface.TrySample(
             _player.State.Position.X, _player.State.Position.Z, out TerrainSample terrain))
             radarAltitudeM -= terrain.HeightM;
+        // The CAS→TAS inversion behind corner speed has no finite solution in near-vacuum
+        // (static pressure → 0 demands Mach beyond AirData's physical band and it throws) —
+        // seen from a 250 kft sortie and from tumbling terminal wrecks. Above the solvable
+        // band the honest answer is "no corner truth"; PadlockPreferredPlane.Select already
+        // fail-closes to its any-plane fallback on a non-finite corner.
+        double cornerSpeedMps = _player.State.Position.Y <= CornerSpeedSolvableCeilingM
+            ? BeatSetup.CornerTrueAirspeedMps(_beat.PlayerAir, _player.State.Position.Y)
+            : double.NaN;
         var energy = new PadlockRollAssistEnergy(
             TrueAirspeedMps: _player.AirspeedMps,
-            CornerSpeedMps: BeatSetup.CornerTrueAirspeedMps(
-                _beat.PlayerAir, _player.State.Position.Y),
+            CornerSpeedMps: cornerSpeedMps,
             RadarAltitudeM: radarAltitudeM,
             GcasWarningOrActive: _autoGcasState.Warning || _autoGcasState.Active);
         PadlockRollAssistResult result = _padlockRollAssist.Step(
