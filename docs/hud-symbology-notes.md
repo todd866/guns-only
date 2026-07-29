@@ -94,6 +94,9 @@ aileron contribution so flown tuning remains auditable.
 
 ## Aft-hemisphere padlock rebuild (adopted design, next HUD build)
 
+See also: [F-22 padlock spatial SA spec](superpowers/specs/2026-07-29-f22-padlock-spatial-sa-design.md)
+— implemented design for the body-fixed inset, shoulder labels, and presentation-only capture path.
+
 Production complaint (Build 68/69): padlock is confusing when the bandit is aft, and the off-axis
 locator arrow "wanders in a weird way." External review (gpt-5.6-sol over the actual padlock
 files) confirmed the roll LAW is correct — body-frame `atan2(targetRight, targetUp)`, invariant
