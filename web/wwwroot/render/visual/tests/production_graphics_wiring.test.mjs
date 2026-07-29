@@ -495,6 +495,19 @@ test("production keeps the rejected authored cockpit out of the pilot's SA view"
     "a hidden authoring cockpit must not retain ownership of the live gunsight");
 });
 
+test("F-22 canopy glass is aircraft-fixed and never admitted for Rapier or external replay", async () => {
+  const source = await readFile(appUrl, "utf8");
+  assert.match(source, /createF22CanopyGlass\(THREE\)/);
+  assert.match(source, /this\.scene\.add\(this\.f22CanopyGlass\.group\)/);
+  assert.match(source,
+    /isF22CanopyGlassAirframe\(state\)\s*&&\s*state\.replay_external !== true\s*&&\s*String\(state\.replay_camera \|\| "CHASE"\) !== "CHASE"/,
+  );
+  assert.match(source,
+    /updateF22CanopyGlass\(this\.f22CanopyGlass,\s*\{[\s\S]*?position: this\.camera\.position,[\s\S]*?quaternion: this\.playerQuaternion,[\s\S]*?lookQuaternion: this\.camera\.quaternion/,
+    "canopy must follow the aircraft eye/body pose rather than become camera-parented",
+  );
+});
+
 test("modern surrogate mission stays an explicit abstract visual contact without Korea asset fetches", async () => {
   const [appSource, bridgeSource] = await Promise.all([
     readFile(appUrl, "utf8"),

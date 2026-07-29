@@ -243,6 +243,7 @@ export function buildFrame(scenario) {
 }
 
 let lastRenderedFrame = null;
+let lastPresentationCaptureSequence = null;
 
 async function renderScenario(name, now = 0) {
   const scenario = scenarioByName(name);
@@ -255,6 +256,20 @@ async function renderScenario(name, now = 0) {
   hud.resize(WIDTH, HEIGHT, 1);
   const frame = buildFrame(scenario);
   frame.now = Number.isFinite(Number(now)) ? Number(now) : 0;
+  lastPresentationCaptureSequence = null;
+  if (Array.isArray(scenario.presentationCaptureStates)) {
+    const releasedState = frame.state;
+    lastPresentationCaptureSequence = [];
+    for (const stateOverride of scenario.presentationCaptureStates) {
+      frame.state = { ...releasedState, ...stateOverride };
+      hud.draw(frame);
+      lastPresentationCaptureSequence.push({
+        errorDeg: Number(frame.state.padlock_roll_error_deg),
+        captured: window.__HUD_GEOMETRY?.padlockDirector?.captured === true,
+      });
+    }
+    frame.state = releasedState;
+  }
   if (scenario.beforeState) {
     const releasedState = frame.state;
     frame.state = { ...releasedState, ...scenario.beforeState };
@@ -393,6 +408,7 @@ window.__debugScenario = async (name) => {
     name,
     geometry: window.__HUD_GEOMETRY ?? null,
     probes: computeProbes(frame),
+    presentationCaptureSequence: lastPresentationCaptureSequence,
     padlock: frame.padlock === true,
     padlockState: {
       phase: frame.padlockPhase,
@@ -441,6 +457,8 @@ window.__debugScenario = async (name) => {
       ground_speed_kts: frame.state.ground_speed_kts,
       vx: frame.state.vx,
       vz: frame.state.vz,
+      padlock_preferred_plane_valid: frame.state.padlock_preferred_plane_valid,
+      padlock_preferred_plane_deg: frame.state.padlock_preferred_plane_deg,
     },
     triggerHeld: frame.triggerHeld,
     banditOnTrajectory: scenario?.bandit?.onTrajectory === true,

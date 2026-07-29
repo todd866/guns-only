@@ -15,7 +15,8 @@ public class PadlockRollAssistSessionTests {
                 { heightM, heightM, heightM }
             });
 
-    static SimulationSession SessionWithPlaneError(double rollErrorDegrees) {
+    static SimulationSession SessionWithPlaneError(double rollErrorDegrees,
+        double angleOffDegrees = 60.0) {
         AircraftParams f22 = FlightModel.F22APublicDataSurrogate;
         AircraftState player = new(
             Position: new Vec3D(0.0, AltitudeM, 0.0),
@@ -26,7 +27,7 @@ public class PadlockRollAssistSessionTests {
             Mass: f22.MassKg,
             BodyAttitude: QuaternionD.Identity);
         double error = rollErrorDegrees * DegreesToRadians;
-        double angleOff = 60.0 * DegreesToRadians;
+        double angleOff = angleOffDegrees * DegreesToRadians;
         Vec3D direction = new(
             System.Math.Sin(angleOff) * System.Math.Sin(error),
             System.Math.Sin(angleOff) * System.Math.Cos(error),
@@ -79,6 +80,25 @@ public class PadlockRollAssistSessionTests {
         Assert.Equal(state.SasRollControl,
             session.Player.LastAppliedCommand.SasRollControl, 10);
         Assert.Equal(0.0, session.Player.LastAppliedCommand.RollControl, 12);
+    }
+
+    [Fact]
+    public void DeadSixPublishesOnSpeedPreferredPlaneWithoutSas() {
+        SimulationSession session = SessionWithPlaneError(90.0, 180.0);
+        session.SetBanditPadlockRollAssist(true);
+
+        session.StepFixed();
+
+        PadlockRollAssistState state = session.BanditPadlockRollAssist;
+        Assert.True(state.Selected);
+        Assert.True(state.GeometryValid);
+        Assert.True(state.PreferredPlaneValid);
+        Assert.False(state.AnyPlane);
+        Assert.False(state.Captured);
+        Assert.False(state.Active);
+        Assert.Equal(0.0, state.PreferredPlaneRad, 12);
+        Assert.Equal(0.0, state.RollErrorRad, 12);
+        Assert.Equal(0.0, state.SasRollControl, 12);
     }
 
     [Fact]

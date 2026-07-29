@@ -88,6 +88,13 @@ public class SnapshotHotFrameTests {
         JsonElement layout = layoutDocument.RootElement;
         Assert.Equal(18, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
+        string[] names = layout.GetProperty("blocks")
+            .EnumerateArray()
+            .SelectMany(block => block.GetProperty("slots").EnumerateArray())
+            .Select(slot => slot.GetProperty("name").GetString()!)
+            .ToArray();
+        Assert.Contains("padlock_preferred_plane_valid", names);
+        Assert.Contains("padlock_preferred_plane_deg", names);
 
         bool casevac = root.TryGetProperty("casevac_mission", out JsonElement casevacMission)
             && casevacMission.GetBoolean();

@@ -31,7 +31,10 @@ import {
   applyEscortFormationPose,
   createCockpitHeadPresentation,
   createDistantAircraftImpostor,
+  createF22CanopyGlass,
   createPeriodGunsight,
+  isF22CanopyGlassAirframe,
+  updateF22CanopyGlass,
 } from "./render/presentation/index.js";
 import {
   advanceIncidentReplay,
@@ -6176,9 +6179,11 @@ class FlightView {
 
     this.presentationAssets = new PresentationAssetManager(this.renderer, this.scene, this.camera);
     this.cockpitHead = createCockpitHeadPresentation(THREE);
+    this.f22CanopyGlass = createF22CanopyGlass(THREE);
     this.periodGunsight = createPeriodGunsight(THREE);
     this.banditContact = createDistantAircraftImpostor(THREE);
     this.scene.add(this.periodGunsight.object3d, this.banditContact.object3d);
+    this.scene.add(this.f22CanopyGlass.group);
     this.visualRuntime = null;
     this.visualRuntimeRequestedKey = "";
     this.visualRuntimeEpoch = 0;
@@ -7616,6 +7621,15 @@ class FlightView {
     if (casevac || replayExternal || padlock) this.cockpitHead.reset(state);
     else this.cockpitHead.update(this.camera, state, dt);
     this.camera.updateMatrixWorld(true);
+    const f22CanopyVisible = isF22CanopyGlassAirframe(state)
+      && state.replay_external !== true
+      && String(state.replay_camera || "CHASE") !== "CHASE";
+    updateF22CanopyGlass(this.f22CanopyGlass, {
+      position: this.camera.position,
+      quaternion: this.playerQuaternion,
+      lookQuaternion: this.camera.quaternion,
+      visible: f22CanopyVisible,
+    });
     const gunsightPresentation = this.periodGunsight.update(this.camera, state, dt);
     if (casevac) this.periodGunsight.object3d.visible = false;
     if (this.cloudBreakActive) {
@@ -8056,6 +8070,8 @@ class FlightView {
     this.visualRuntime = null;
     if (visualRuntime) await visualRuntime.dispose().catch(() => undefined);
     this.periodGunsight.dispose();
+    this.f22CanopyGlass.group.removeFromParent();
+    this.f22CanopyGlass.dispose();
     this.banditContact.dispose();
     await this.remoteAircraft.dispose();
     this.tacticalClouds.dispose();

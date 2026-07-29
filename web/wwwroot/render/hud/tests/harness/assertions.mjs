@@ -241,8 +241,9 @@ function assertBandit(data) {
 }
 
 function assertPadlockDirector(data) {
-  const { name, geometry, probes, padlockState } = data;
+  const { name, geometry, probes, padlockState, state } = data;
   const director = geometry.padlockDirector;
+  const preferredValid = state.padlock_preferred_plane_valid === true;
   const shouldHaveDirector = data.padlock
     && padlockState?.target !== "carrier"
     && (padlockState?.phase === "TRACK" || padlockState?.trackPrimed === true)
@@ -253,14 +254,49 @@ function assertPadlockDirector(data) {
     Boolean(director) === shouldHaveDirector,
     `${director ? "present" : "absent"}; expected ${shouldHaveDirector ? "present" : "absent"}`);
   if (!director) return;
-  const error = Math.abs(director.rollErrorRad - probes.padlockRollErrorRad);
-  check(name, "padlock roll error == atan2(target-right, target-up)",
+  const expectedRollErrorRad = preferredValid
+    ? Number(state.padlock_preferred_plane_deg) * DEG
+    : probes.padlockRollErrorRad;
+  const error = Math.abs(director.rollErrorRad - expectedRollErrorRad);
+  check(name, preferredValid
+    ? "padlock director uses the kernel preferred-plane error"
+    : "padlock roll error == atan2(target-right, target-up)",
     error <= 1e-9,
     `error ${(error * RAD).toFixed(9)} deg (tol ${(1e-9 * RAD).toFixed(9)})`);
+  if (preferredValid) {
+    check(name, "preferred-plane director never draws the neutral ring",
+      director.anyPlane === false, `anyPlane=${director.anyPlane}`);
+    check(name, "preferred-plane presentation captures inside 11 degrees",
+      director.captured === (Math.abs(expectedRollErrorRad) <= 11 * DEG),
+      `captured=${director.captured}; error=${Math.abs(expectedRollErrorRad * RAD).toFixed(1)} deg`);
+  }
   if (probes.padlockPlaneMagnitude < 0.035 && probes.padlockTargetForward < 0) {
-    check(name, "dead-six director retains the current lift plane",
-      director.anyPlane === true && director.captured === true,
-      `anyPlane=${director.anyPlane}; captured=${director.captured}`);
+    check(name, preferredValid
+      ? "dead-six preferred plane replaces the neutral director"
+      : "dead-six director retains the current lift plane",
+    preferredValid
+      ? director.anyPlane === false
+      : director.anyPlane === true && director.captured === true,
+    `anyPlane=${director.anyPlane}; captured=${director.captured}`);
+  }
+}
+
+function assertPresentationCaptureSequence(data) {
+  const steps = data.presentationCaptureSequence;
+  if (!Array.isArray(steps)) return;
+  const expected = [
+    { errorDeg: 11, captured: true, label: "enters at 11 degrees" },
+    { errorDeg: 15, captured: true, label: "retains through the 18-degree band" },
+    { errorDeg: 19, captured: false, label: "releases outside 18 degrees" },
+  ];
+  check(data.name, "presentation capture sequence has three frames",
+    steps.length === expected.length, `${steps.length} frames`);
+  for (let index = 0; index < Math.min(steps.length, expected.length); index += 1) {
+    const actual = steps[index];
+    const want = expected[index];
+    check(data.name, `presentation capture ${want.label}`,
+      actual.errorDeg === want.errorDeg && actual.captured === want.captured,
+      `error=${actual.errorDeg}; captured=${actual.captured}`);
   }
 }
 
@@ -290,7 +326,7 @@ function assertFunnelContainsTarget(data) {
 }
 
 function assertPadlockInsetAndLocator(data) {
-  const { name, geometry, probes, padlockState } = data;
+  const { name, geometry, probes, padlockState, state } = data;
   if (!data.padlock || padlockState?.target === "carrier") return;
 
   // The body-fixed locator inset is the padlock's single ownship instrument: always present in
@@ -326,8 +362,13 @@ function assertPadlockInsetAndLocator(data) {
   // hemisphere. Chevrons therefore always mean keyboard roll direction.
   const director = geometry.padlockDirector;
   if (director && !director.captured && !director.anyPlane) {
-    const error = Math.abs(inset.gateAngleFromUpRad - probes.padlockRollErrorRad);
-    check(name, "inset gate == body-frame roll error (never mirrored)",
+    const expectedRollErrorRad = state.padlock_preferred_plane_valid === true
+      ? Number(state.padlock_preferred_plane_deg) * DEG
+      : probes.padlockRollErrorRad;
+    const error = Math.abs(inset.gateAngleFromUpRad - expectedRollErrorRad);
+    check(name, state.padlock_preferred_plane_valid === true
+      ? "inset gate == kernel preferred-plane error"
+      : "inset gate == body-frame roll error (never mirrored)",
       error <= 1e-9,
       `error ${(error * RAD).toFixed(9)} deg`);
   } else if (director && (director.captured || director.anyPlane)) {
@@ -670,6 +711,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     assertFunnel(data);
     assertBandit(data);
     if (data.padlock) assertPadlockDirector(data);
+    assertPresentationCaptureSequence(data);
     assertPadlockInsetAndLocator(data);
     assertBasicJobs(data);
     assertGunHeat(data);

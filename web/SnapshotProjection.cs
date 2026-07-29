@@ -685,6 +685,8 @@ internal static class SnapshotProjection {
             + $"\"padlock_roll_rate_measured_dps\":{padlockRollAssist.MeasuredRollRateRadPerSecond * 57.29577951308232:F3},"
             + $"\"padlock_target_plane_rate_dps\":{padlockRollAssist.EstimatedTargetPlaneRateRadPerSecond * 57.29577951308232:F3},"
             + $"\"padlock_roll_assist_aileron\":{padlockRollAssist.SasRollControl:F4},"
+            + $"\"padlock_preferred_plane_valid\":{(padlockRollAssist.PreferredPlaneValid ? "true" : "false")},"
+            + $"\"padlock_preferred_plane_deg\":{padlockRollAssist.PreferredPlaneRad * 57.29577951308232:F3},"
             + $"\"high_alpha_recovery\":{(_detents.HighAlphaRecoveryActive ? "true" : "false")},"
             + $"\"g_valley\":{_detents.ValleyG:F3},"
             + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
