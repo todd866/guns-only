@@ -13,7 +13,7 @@
 - Ambient only — no colliders, targets, or Free Fix scenery seeds.
 - ADR-0003 Ghibli-adjacent earth/concrete; no IP; no training-orange blocks.
 - Explicit `git add` paths only; worktree `codex/rapier-base-vicinity-20260729`.
-- wwwroot changes ship as Build **185**.
+- wwwroot changes ship as Build **186**.
 
 ---
 
@@ -44,5 +44,5 @@
 
 - [x] Extend `rapier_presentation.test.mjs` for `STRIP_VICINITY`
 - [x] Run presentation + release_identity tests
-- [x] Stamp RELEASE_BUILD 185 (four places + index.html `?v=`)
+- [x] Stamp RELEASE_BUILD 186 (four places + index.html `?v=`)
 - [ ] Commit, merge to `pivot-hardening`, push for deploy

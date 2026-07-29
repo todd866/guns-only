@@ -61,7 +61,7 @@ createRapierDispersedStrip()
 - Still clearly **not** a full airfield (no parallel taxiways, no aprons of parked fighters)
 - `rapier_presentation.test.mjs` stroke / handoff / rib / edge-lamp contracts still pass
 - Named `STRIP_VICINITY` present for shots and future Place migration
-- Build stamp +1 on wwwroot ship (Build **185**)
+- Build stamp +1 on wwwroot ship (Build **186**)
 
 ## Out of scope follow-ons
 
