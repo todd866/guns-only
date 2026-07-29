@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 420" width="560" height="420" font-family="IBM Plex Mono, ui-monospace, monospace">
   <rect width="100%" height="100%" fill="#f7f4ef"/>
-  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 02 — Wing planform · rapier.public-data-surrogate.v1 @ 1.2.0</text>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 02 — Wing planform · rapier.public-data-surrogate.v1 @ 1.4.0</text>
   <text x="24" y="48" font-size="10" fill="#555">Source: airframes/rapier.v1.json · frame: threejs-createRapier-v1 (+Z aft) · epistemic: surrogate</text>
   <line x1="24" y1="58" x2="536" y2="58" stroke="#222" stroke-width="1"/>
 
-  <text x="24" y="78" font-size="11" fill="#333">wing.planform [x, z] metres · area 18 m² · AR 3 · thickness 0.16 m · bevel 0.044 m</text>
+  <text x="24" y="78" font-size="11" fill="#333">wing.planform [x, z] metres · area 18 m² · AR 3.00125 · thickness 0.16 m · bevel 0.044 m</text>
   <g>
     <path d="M 280.00,94.40 L 253.36,119.60 L 147.70,233.00 L 154.72,264.32 L 242.56,247.76 L 254.08,357.20 L 280.00,377.00 L 305.92,357.20 L 317.44,247.76 L 405.28,264.32 L 412.30,233.00 L 306.64,119.60 Z" fill="#596b73" fill-opacity="0.25" stroke="#1a1a1a" stroke-width="1.5"/>
     <circle cx="280.00" cy="94.40" r="2.5" fill="#c45c26"/><text x="286.00" y="97.40" font-size="8" fill="#844">0, -3.8</text>

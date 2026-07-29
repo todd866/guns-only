@@ -1,6 +1,6 @@
 # Plate 00 — Master BOM & build order
 
-Title block: `rapier.public-data-surrogate.v1` @ **1.2.0** · epistemic: **provisional** masses  
+Title block: `rapier.public-data-surrogate.v1` @ **1.4.0** · epistemic: **provisional** masses  
 Source: mass statement + packaging trade C + FlightModel class comment
 
 ## Top-level modules (build units)
@@ -19,11 +19,11 @@ Source: mass statement + packaging trade C + FlightModel class comment
 | J | Fuel system dry (tanks/plumbing) | 310 | bladder/composite bladder | in C–F |
 | K | Avionics / FBW / electrical | 220 | — | spine + racks |
 | L | Drone bay structure (empty) | 160 | composite | belly C |
-| — | **Fuel-free sum (target)** | **≈5150** | — | must match `FuelFreeMassKg` |
+| — | **Fuel-free sum (target)** | **≈5150** | — | must match `RapierAirframeFuelFreeMassKg` (published `FuelFreeMassKg` adds the 1440 kg bay) |
 | M | Usable fuel | 4500 | JP-class | — |
-| N | 4× gun-drones (stowed, optional) | 1440 | — | **not in MassKg yet** |
+| N | 4× gun-drones (stowed, design load) | 1440 | — | in `MassKg`/`FuelFreeMassKg` since Build 163; session sheds 360 kg per release |
 
-Masses are **provisional allocations** that sum to the closed fuel-free 5150 kg. Redistribute inside
+Masses are **provisional allocations** summing to 5,145 kg against the closed 5,150 kg airframe fuel-free target (5 kg unallocated margin, inside the ±50 kg rule). Redistribute inside
 the OML; do not change gross without bumping the definition and FlightModel together.
 
 ## Assembly sequence (see plate 19)

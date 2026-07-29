@@ -1,6 +1,6 @@
 # Plate 03 — Loft stations
 
-**Airframe:** `rapier.public-data-surrogate.v1` @ `1.0.0`  
+**Airframe:** `rapier.public-data-surrogate.v1` @ `1.4.0`  
 **Source:** `airframes/rapier.v1.json` · frame `threejs-createRapier-v1` (+Z aft)  
 **Epistemic:** geometry **closed** (surrogate OML)
 

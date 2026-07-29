@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 640" width="720" height="640" font-family="IBM Plex Mono, ui-monospace, monospace">
   <rect width="100%" height="100%" fill="#f7f4ef"/>
-  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 01 — Three-view · rapier.public-data-surrogate.v1 @ 1.2.0</text>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 01 — Three-view · rapier.public-data-surrogate.v1 @ 1.4.0</text>
   <text x="24" y="48" font-size="10" fill="#555">Source: airframes/rapier.v1.json · frame: threejs-createRapier-v1 (+Z aft) · epistemic: surrogate</text>
   <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
 
   <text x="24" y="78" font-size="12" fill="#222">dimensionsM: length 13 m · span 7.35 m · height 2.5 m (envelope)</text>
-  <text x="24" y="94" font-size="10" fill="#666">massKg fuelFree 5150 / fuel 4500 / gross 9650 · epistemic: surrogate</text>
+  <text x="24" y="94" font-size="10" fill="#666">massKg fuelFree 6590 (airframe 5150 + drone bay 1440) / fuel 4500 / gross 11090 · epistemic: surrogate</text>
 
   <!-- TOP -->
   <text x="40" y="118" font-size="11" font-weight="700" fill="#111">TOP (−Y)</text>
@@ -44,7 +44,7 @@
   <rect x="480" y="320" width="200" height="90" fill="#fff" stroke="#999"/>
   <text x="490" y="340" font-size="10" font-weight="700">CLOSED (geometry)</text>
   <text x="490" y="356" font-size="9">length 13 · span 7.35</text>
-  <text x="490" y="370" font-size="9">S=18 m² · AR=3</text>
+  <text x="490" y="370" font-size="9">S=18 m² · AR=3.00125</text>
   <text x="490" y="386" font-size="9" fill="#844">FICTION: designDashMach 4</text>
   <text x="490" y="400" font-size="9" fill="#844">MEASURED OFT peak ~3.69</text>
 

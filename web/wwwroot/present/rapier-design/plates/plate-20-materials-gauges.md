@@ -1,6 +1,6 @@
 # Plate 20 — Materials & gauges
 
-Title: `rapier.public-data-surrogate.v1` @ **1.2.0** · epistemic: **provisional** gauges  
+Title: `rapier.public-data-surrogate.v1` @ **1.4.0** · epistemic: **provisional** gauges  
 Skin limit **1473.15 K** closed as materials freeze constant.
 
 ## Zone schedule

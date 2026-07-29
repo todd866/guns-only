@@ -1,6 +1,6 @@
 # Rapier blueprints — construction package
 
-**Airframe:** `rapier.public-data-surrogate.v1` · **Definition revision:** `1.2.0`  
+**Airframe:** `rapier.public-data-surrogate.v1` · **Definition revision:** `1.4.0`  
 **Frame:** `threejs-createRapier-v1` (+Z aft, +Y up, +X right) · Nose toward −Z  
 **Authority:** OML from `airframes/rapier.v1.json`. Internals fit that OML; tagged per plate.
 

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" width="720" height="520" font-family="IBM Plex Mono, ui-monospace, monospace">
   <rect width="100%" height="100%" fill="#f7f4ef"/>
-  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 17 — Propulsion install · rapier.public-data-surrogate.v1 @ 1.2.0</text>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 17 — Propulsion install · rapier.public-data-surrogate.v1 @ 1.4.0</text>
   <text x="24" y="48" font-size="10" fill="#555">Single TBCC in continuous duct · CMC sections · RCS bottles · capture 1.2 m² closed</text>
   <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
 
@@ -22,7 +22,7 @@
   <text x="50" y="378" font-size="9">Capture 1.2 m² · DesignMach 2.6 normaliser</text>
   <text x="50" y="394" font-size="9">Fade M1.9–3.0 · Ram M2.0–2.8</text>
   <text x="50" y="410" font-size="9">Burner 2300 K · Spill M3.3–3.8</text>
-  <text x="50" y="426" font-size="9">SLS dry 85 kN · augmentor 1.55</text>
+  <text x="50" y="426" font-size="9">SLS dry 84 kN · augmentor 1.55</text>
   <text x="50" y="442" font-size="9">Mounts: 3-point into frames FS−1.9…+4.9</text>
   <rect x="360" y="340" width="320" height="140" fill="#fff" stroke="#844"/>
   <text x="370" y="360" font-size="10" font-weight="700" fill="#844">INSTALL RULES</text>
@@ -30,6 +30,6 @@
   <text x="370" y="394" font-size="9">No structural load through hot liner</text>
   <text x="370" y="410" font-size="9">Access panels upper cold structure only</text>
   <text x="370" y="426" font-size="9">Generator pad on accessory gearbox</text>
-  <text x="370" y="442" font-size="9">Wet T/W still overperformance — plate 09</text>
+  <text x="370" y="442" font-size="9">Wet T/W resolved <=1.20 at design gross (84 kN) — plate 09</text>
 
 </svg>

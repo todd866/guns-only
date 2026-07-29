@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" width="720" height="520" font-family="IBM Plex Mono, ui-monospace, monospace">
   <rect width="100%" height="100%" fill="#f7f4ef"/>
-  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 19 — Assembly sequence · rapier.public-data-surrogate.v1 @ 1.2.0</text>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 19 — Assembly sequence · rapier.public-data-surrogate.v1 @ 1.4.0</text>
   <text x="24" y="48" font-size="10" fill="#555">Mate order A→G from plate 00 BOM · epistemic: provisional shop flow</text>
   <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
 
@@ -24,6 +24,6 @@
   <text x="50" y="370" font-size="9">5→6: fuel integrity · FBW BIT · bay doors · hook drop · gear swing</text>
   <text x="50" y="390" font-size="9">6→fly: gallery clearance fit check · 35 MJ strip available · mass empty ≈5150 kg</text>
   <text x="50" y="420" font-size="9" fill="#844">STOP GATE: if wet T/W or dash claims are used in acceptance, fail — those are fiction/provisional (plate 09).</text>
-  <text x="50" y="440" font-size="9" fill="#844">STOP GATE: do not load 4 drones into mass budget until FlightModel includes 1440 kg.</text>
+  <text x="50" y="440" font-size="9" fill="#844">GATE SATISFIED (Build 163): the 1440 kg bay is in the FlightModel mass card - load all four before weigh-off.</text>
 
 </svg>

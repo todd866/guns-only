@@ -21,7 +21,7 @@ Carrier does **not** own: in-flight recovery, rearm, post-release flight control
 
 ## Open findings
 
-- Drone mass **not** yet added to `FlightModel.RapierPublicDataSurrogate.MassKg` (+1440 kg if four stowed)
+- Drone mass closed Build 163: the 1,440 kg four-cell bay is in `MassKg`/`FuelFreeMassKg`; the session sheds 360 kg per release
 - Door kinematics, ejector impulse, inlet-interaction CFD
 - Gun/ammo package on the drone; datalink EMCON; swarm FMECA
 

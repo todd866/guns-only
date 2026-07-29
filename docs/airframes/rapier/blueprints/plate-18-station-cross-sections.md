@@ -1,6 +1,6 @@
 # Plate 18 — Station cross-sections
 
-Title: `rapier.public-data-surrogate.v1` @ **1.2.0**  
+Title: `rapier.public-data-surrogate.v1` @ **1.4.0**  
 OML radii **closed** (loft tables). Internal packing **provisional**.
 
 Frame: +Z aft. Sections looking forward (−Z direction).
