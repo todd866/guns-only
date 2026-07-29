@@ -83,16 +83,16 @@ re-score only when phase-stable / on significant state jumps.
 Picker is **priority + predicates**, not a search tree. Live-opponent, pursuit, and
 gun-drone egress overrides keep today’s shape.
 
-### ReachFight “done” (explicit)
+### ReachFight → Employ handoff (explicit)
 
-Not “Y ≥ FL700.” Something like:
+Not “Y ≥ FL700.” Handoff when **both**:
 
-- Contact range ≤ attack gate (~30 km), **or**
-- Already on a strategy whose next authored step is Employ, **and**
-- Mach / q / geometry are not below a soft floor that makes employment impossible
+1. Contact range ≤ attack gate (~30 km), and  
+2. Soft energy floor passes (named Mach/q constants on the ReachFight module — enough to
+   Employ, not a cruise-shelf lock).
 
-Exact thresholds live as named constants on the ReachFight module; they are strategy
-acceptance bands, not phase locks for the whole director.
+Until then, stay on ReachFight and pick a strategy. DirectJoin still selects Intercept
+phase while closing; only the handoff above enters Employ/Attack.
 
 ## Strategies (ReachFight)
 
