@@ -76,12 +76,14 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
       }
       html:not(.touch-mode) [data-anca-panel] .anca-line { display: block; }
       /* Portrait touch: hold the spine above the movement stick reservation
-         (stick is min(36vw, 156px) square plus its safe-area bottom inset). */
+         (stick is min(36vw, 156px) square plus its safe-area bottom inset) AND the
+         radio caption box that rides above the sticks while a call is up — the
+         caption is ~120px tall, so the spine clears stick + caption together. */
       @media (orientation: portrait) {
         .touch-mode [data-anca-panel] {
           top: auto;
           transform: none;
-          bottom: max(196px, calc(env(safe-area-inset-bottom) + min(36vw, 156px) + 56px));
+          bottom: max(280px, calc(env(safe-area-inset-bottom) + min(36vw, 156px) + 124px));
         }
       }
     </style>
