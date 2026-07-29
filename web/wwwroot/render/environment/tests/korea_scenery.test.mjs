@@ -568,7 +568,8 @@ test("all Ukraine scenery materials share the terrain atmosphere by identity", (
       `${name} must be the terrain uniform entry, not a copied value`);
   }
   assert.match(shader.vertexShader, /length\(mvPosition\.xyz\)/);
-  assert.match(shader.fragmentShader, /uWorldEdgeM \* 0\.40/);
+  assert.match(shader.fragmentShader, /uWorldEdgeM \* 0\.32/);
+  assert.match(shader.fragmentShader, /uWorldEdgeM \* 0\.68/);
   assert.match(shader.fragmentShader, /floor\(softWorldAerial \* uHazeBands\)/);
   assert.match(shader.fragmentShader, /outgoingLight = mix/);
   runtime.disposeTile(group);

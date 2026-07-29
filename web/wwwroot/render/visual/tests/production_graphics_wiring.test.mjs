@@ -32,6 +32,10 @@ test("production admits only state-bearing environment visuals and event-bearing
     "decision-support sky must expose the Ukraine soft-world atmosphere switch");
   assert.match(source, /this\.sky\.uniforms\.uSoftWorld\.value = ukraineTheatre \? 1 : 0/,
     "Ukraine theatre must warm the production sky without enabling the Korea pack environment");
+  assert.match(source, /this\.sky\.uniforms\.uSunDirection\.value\.copy\(SUN_DIRECTION\)/,
+    "soft-world sky sun bloom must follow the scene sun direction");
+  assert.match(source, /this\.ambient\.color\.set\(0xe8d8b8\)/,
+    "Ukraine soft-world fill light must lean warm painterly");
   assert.match(source, /this\.fogLow\.set\(0xd2c4a8\)/,
     "Ukraine soft-world fog must lean warm dusty rather than cool Korea blue");
   assert.match(source, /createDecisionSupportSea\(\)/);
@@ -264,7 +268,7 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
     "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
-    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=186"/,
+    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=187"/,
     "the active ocean builder must be sourced from the scene builder module");
   assert.match(source, /createDecisionSupportSea\(\)/,
     "production must instantiate the decision-support sea");

@@ -624,7 +624,7 @@ void main() {
   if (uWorldEdgeM > 1.0) {
     // Start the bury early: at altitude the disc silhouette still reads square if haze only
     // thickens in the last 15% of the stream radius.
-    float edgeHide = smoothstep(uWorldEdgeM * 0.40, uWorldEdgeM * 0.72, distanceToCamera);
+    float edgeHide = smoothstep(uWorldEdgeM * 0.32, uWorldEdgeM * 0.68, distanceToCamera);
     aerial = max(aerial, edgeHide);
   }
   #endif

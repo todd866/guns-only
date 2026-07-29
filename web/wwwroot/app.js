@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=186";
+import { createHud } from "./hud.js?v=187";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=186";
+} from "./render/debrief/sortie_result.js?v=187";
 import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -47,7 +47,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=186";
+} from "./render/release/release_identity.js?v=187";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -60,7 +60,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=186";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=187";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -135,13 +135,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=186";
+} from "./render/telemetry/ai_frame_pressure.js?v=187";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=186";
+} from "./render/telemetry/telemetry_batch.js?v=187";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -150,7 +150,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=186";
+} from "./render/settings/player_settings.js?v=187";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -191,11 +191,11 @@ import {
   createRapierDispersedStrip,
   createRapierGunDrone,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=186";
+} from "./render/scene/scene_builders.js?v=187";
 import {
   setFlightAudioEnabled,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=186";
+} from "./render/audio/flight_audio.js?v=187";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -6375,6 +6375,9 @@ class FlightView {
     if (this.sky?.uniforms?.uSoftWorld) {
       this.sky.uniforms.uSoftWorld.value = ukraineTheatre ? 1 : 0;
     }
+    if (this.sky?.uniforms?.uSunDirection) {
+      this.sky.uniforms.uSunDirection.value.copy(SUN_DIRECTION);
+    }
     if (ukraineTheatre) {
       const winterSurface = (Number(state?.snow_depth_m) || 0) > 0.005
         || (Number(state?.glaze_ice_thickness_m) || 0) > 0.0001;
@@ -6382,18 +6385,37 @@ class FlightView {
         this.fogLow.set(0xcbd3cf);
         this.fogHigh.set(0x7f9093);
         this.cloudFogColor.set(0xd7deda);
+        this.ambient.color.set(0xc5d0d2);
+        this.ambient.groundColor.set(0x2a3230);
+        this.ambient.intensity = 0.82;
+        this.sun.color.set(0xf2ebe0);
+        this.sun.intensity = 2.45;
+        this.renderer.toneMappingExposure = 1.04;
       } else {
         this.fogLow.set(0xd2c4a8);
         // Stay in the warm dusty family at altitude — cool fogHigh read as blue ocean past the
         // streamed disc (ADR-0003 soft world, not Korea poster blue).
         this.fogHigh.set(0x8a8470);
         this.cloudFogColor.set(0xd2c4a8);
+        // Warm fill + golden key — painterly daylight without crushing lee slopes.
+        this.ambient.color.set(0xe8d8b8);
+        this.ambient.groundColor.set(0x3a3428);
+        this.ambient.intensity = 0.88;
+        this.sun.color.set(0xffe2b4);
+        this.sun.intensity = 2.85;
+        this.renderer.toneMappingExposure = 1.08;
       }
       if (this.sea?.mesh) this.sea.mesh.visible = false;
     } else {
       this.fogLow.set(0x6f8790);
       this.fogHigh.set(0x263d55);
       this.cloudFogColor.set(0xb8c6c8);
+      this.ambient.color.set(0xb5cad0);
+      this.ambient.groundColor.set(0x102229);
+      this.ambient.intensity = 0.78;
+      this.sun.color.set(0xffe2b4);
+      this.sun.intensity = 2.65;
+      this.renderer.toneMappingExposure = 1.02;
       if (this.sea?.mesh) this.sea.mesh.visible = true;
     }
     const terrainPackId = this.presentationAssets.requested.packId
@@ -9727,7 +9749,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=186")
+    navigator.serviceWorker.register("service-worker.js?v=187")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);

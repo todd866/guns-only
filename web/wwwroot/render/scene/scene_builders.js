@@ -3,7 +3,7 @@ import {
   TERRAIN_CURVATURE_START_M,
   TERRAIN_EARTH_RADIUS_M,
 } from "../environment/korea_terrain.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=186";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=187";
 import rapierV1Definition from "../../airframes/rapier_v1.embedded.js";
 import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
 
@@ -2512,14 +2512,15 @@ export function createOceanGeometry(radius = 360000, radialSegments = 145, angul
 }
 
 // The production scene is deliberately closer to a flight-test visual system than a decorative
-// game sky. It supplies an unambiguous world horizon and altitude-dependent atmospheric colour;
-// clouds, stars, a sun disc, and other scene dressing are absent unless a later renderer can bind
-// them to scenario-owned state.
+// game sky. It supplies an unambiguous world horizon and altitude-dependent atmospheric colour.
+// Ukraine soft-world (ADR-0003) adds a restrained sun bloom and warmer gradient; clouds/stars
+// remain absent unless a later renderer binds them to scenario-owned state.
 export function createDecisionSupportSky() {
   const uniforms = {
     uAltitude: { value: 0 },
     // 0 = cool decision-support blue (Korea / default). 1 = ADR-0003 warm Ukraine soft-world.
     uSoftWorld: { value: 0 },
+    uSunDirection: { value: new THREE.Vector3(0.32, 0.78, -0.53).normalize() },
   };
   const material = new THREE.ShaderMaterial({
     side: THREE.DoubleSide,
@@ -2538,6 +2539,7 @@ export function createDecisionSupportSky() {
       precision highp float;
       uniform float uAltitude;
       uniform float uSoftWorld;
+      uniform vec3 uSunDirection;
       varying vec3 vDirection;
 
       void main() {
@@ -2547,21 +2549,36 @@ export function createDecisionSupportSky() {
         vec3 horizonCool = mix(vec3(0.34, 0.47, 0.52), vec3(0.18, 0.33, 0.50), altitudeMix);
         vec3 zenithCool = mix(vec3(0.035, 0.16, 0.34), vec3(0.006, 0.025, 0.105), altitudeMix);
         // Warm dusty horizon, softer grey-blue zenith — Ghibli-adjacent soft world (ADR-0003).
-        vec3 horizonWarm = mix(vec3(0.90, 0.84, 0.72), vec3(0.72, 0.70, 0.62), altitudeMix);
-        vec3 zenithWarm = mix(vec3(0.28, 0.40, 0.52), vec3(0.12, 0.18, 0.28), altitudeMix);
+        vec3 horizonWarm = mix(vec3(0.94, 0.86, 0.70), vec3(0.76, 0.72, 0.60), altitudeMix);
+        vec3 zenithWarm = mix(vec3(0.32, 0.44, 0.56), vec3(0.14, 0.20, 0.30), altitudeMix);
         vec3 horizon = mix(horizonCool, horizonWarm, uSoftWorld);
         vec3 zenith = mix(zenithCool, zenithWarm, uSoftWorld);
-        float skyCurve = pow(aboveHorizon, mix(0.42, 0.30, altitudeMix));
+        float skyCurve = pow(aboveHorizon, mix(0.42, 0.28, altitudeMix));
         vec3 color = mix(horizon, zenith, skyCurve);
 
         // A narrow, non-luminous horizon shoulder stays visible during unusual attitudes and over
-        // the far-field sea. It is an attitude reference, not simulated cloud or weather.
-        float horizonShoulder = exp(-abs(direction.y) * 70.0);
-        color = mix(color, horizon * 1.08, horizonShoulder * 0.38);
+        // the far-field sea. Soft-world widens it slightly into a painterly band.
+        float horizonShoulder = exp(-abs(direction.y) * mix(70.0, 48.0, uSoftWorld));
+        color = mix(color, horizon * mix(1.08, 1.14, uSoftWorld),
+          horizonShoulder * mix(0.38, 0.48, uSoftWorld));
+
+        // Soft sun disc + bloom — Ukraine only. Not a lens flare; readable daylight presence.
+        if (uSoftWorld > 0.5) {
+          vec3 sunDir = normalize(uSunDirection);
+          float sunDot = max(dot(direction, sunDir), 0.0);
+          float sunCore = pow(sunDot, 1800.0);
+          float sunBloom = pow(sunDot, 42.0);
+          float sunHalo = pow(sunDot, 8.0);
+          float above = smoothstep(-0.02, 0.08, direction.y);
+          vec3 sunColor = mix(vec3(1.0, 0.82, 0.55), vec3(1.0, 0.94, 0.82), sunCore);
+          color += sunColor * (sunCore * 1.35 + sunBloom * 0.55 + sunHalo * 0.12) * above
+            * (1.0 - altitudeMix * 0.35);
+        }
+
         if (direction.y < 0.0) {
           vec3 belowCool = vec3(0.022, 0.075, 0.095);
           // Warm dusty ground wash — past the streamed disc this must not read as blue ocean.
-          vec3 belowWarm = vec3(0.62, 0.56, 0.42);
+          vec3 belowWarm = vec3(0.66, 0.58, 0.42);
           color = mix(mix(belowCool, belowWarm, uSoftWorld), horizon, exp(direction.y * 16.0));
         }
 

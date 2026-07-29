@@ -2,9 +2,13 @@
 // ordinary scene-fog materials. Keep these values in one dependency-free module so the custom
 // terrain shader and Three's built-in material path cannot silently drift apart again.
 
-export const UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE = 0.42;
-export const UKRAINE_SOFT_WORLD_HAZE_MIX = 0.62;
-export const UKRAINE_SOFT_WORLD_HAZE_RGB = Object.freeze([0.78, 0.72, 0.58]);
+export const UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE = 0.38;
+export const UKRAINE_SOFT_WORLD_HAZE_MIX = 0.68;
+// Slightly warmer dust — Ghibli-adjacent distance without going cream-poster.
+export const UKRAINE_SOFT_WORLD_HAZE_RGB = Object.freeze([0.82, 0.74, 0.58]);
+// Edge bury starts earlier so the streamed disc dissolves into atmosphere, not a square.
+export const UKRAINE_SOFT_WORLD_EDGE_HIDE_START = 0.32;
+export const UKRAINE_SOFT_WORLD_EDGE_HIDE_END = 0.68;
 
 export const UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES = Object.freeze([
   "uFogColor",
@@ -66,8 +70,8 @@ export function addUkraineSoftWorldFog(material, atmosphereUniforms) {
           );
           if (uWorldEdgeM > 1.0) {
             float softWorldEdgeHide = smoothstep(
-              uWorldEdgeM * 0.40,
-              uWorldEdgeM * 0.72,
+              uWorldEdgeM * 0.32,
+              uWorldEdgeM * 0.68,
               vSoftWorldFogDistance
             );
             softWorldAerial = max(softWorldAerial, softWorldEdgeHide);
