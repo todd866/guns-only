@@ -18,17 +18,19 @@ const OUT = process.env.SHOT_DIR
 
 const MIME = { ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".mjs": "text/javascript", ".png": "image/png" };
 
+// The launch axis lives at x = -70 since the vicinity rebuild (the harness prints
+// launchEnd from the live geometry — retarget these views if it moves again).
 const VIEWS = [
   // Down the launch axis from behind the shuttle start: what the pilot sees at t=0.
-  { name: "01-pilot-at-launch", pos: [-7, 3.5, 10], look: [-7, 8, -560], fov: 70 },
+  { name: "01-pilot-at-launch", pos: [-70, 3.5, 10], look: [-70, 8, -560], fov: 70 },
   // Inside the gallery mid-run, showing the ribs and the daylight at the far end.
-  { name: "02-inside-gallery", pos: [-7, 3.0, -180], look: [-7, 6, -560], fov: 75 },
+  { name: "02-inside-gallery", pos: [-70, 3.0, -180], look: [-70, 6, -560], fov: 75 },
   // Three-quarter exterior: the mound, the portal, and the ski jump rising out of it.
-  { name: "03-ramp-exterior", pos: [180, 70, -680], look: [-7, 10, -420], fov: 45 },
-  // Side elevation of the ramp so the 12 degree lip and 16.7 m rise are measurable by eye.
-  { name: "04-ramp-side", pos: [-360, 28, -460], look: [-7, 14, -470], fov: 40 },
+  { name: "03-ramp-exterior", pos: [140, 70, -700], look: [-70, 10, -440], fov: 45 },
+  // Side elevation of the ramp so the lip and rise are measurable by eye.
+  { name: "04-ramp-side", pos: [-420, 28, -480], look: [-70, 14, -490], fov: 40 },
   // Whole installation from high abeam: gallery, jump, and the open recovery runway beyond.
-  { name: "05-whole-site", pos: [700, 340, 500], look: [0, 0, -200], fov: 42 },
+  { name: "05-whole-site", pos: [700, 340, 500], look: [-40, 0, -220], fov: 42 },
 ];
 
 const PAGE = (viewJson) => `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#8fa5b8}</style>
