@@ -377,7 +377,7 @@ public class SnapshotHotFrameTests {
                 root.GetProperty("radio_channel").GetString());
             Assert.Equal("305.500 UHF",
                 root.GetProperty("radio_frequency").GetString());
-            Assert.Equal("RAPIER 1-1",
+            Assert.Equal("GHOST 11",
                 root.GetProperty("radio_callsign").GetString());
             Assert.True(root.GetProperty("radio_ai_generated").GetBoolean());
             // First-generation Circuits field names remain aliases for older browser bundles.

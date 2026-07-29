@@ -55,14 +55,28 @@ transcript of the 2015 Moncks Corner F-16 midair:
 lists under "Do not abbreviate:" — "Aircraft with a military call sign." AIM 4-2-4: "Call
 signs should never be abbreviated on an initial contact." Tactical callsign format is
 "Pronounceable words of 3 to 6 letters followed by a 1 to 5 digit number" (JO 7110.65 2-4-20) —
-"Rapier One One" is to-spec.
+"Ghost Eleven" is to-spec (AFI 33-217 lineage: dictionary word + one/two-digit suffix,
+number series deconflicted per squadron).
+
+**Number pronunciation — two regimes [OBSERVED, mechanism unconfirmed].** Real traffic shows
+both digit-by-digit and group form, and the split appears to track what the number *is*:
+formation-positional numbers assigned off the daily schedule are spoken digit-by-digit to keep
+the position audible ("Death four one" — NTSB ERA15MA259AB, flight 4 lead), while a **static
+squadron slot** — the number as a pilot's standing identity — collapses to group form
+(owner testimony, UkrAF-adjacent practice: "I was always Viper eleven"). No pub we could
+retrieve writes this rule down; it is community convention, recorded here as observed practice
+with the mechanism explicitly unconfirmed. **Catalog ruling:** Rapier pilots fly static
+squadron slots → group form throughout ("Ghost Eleven", "Ghost Twelve"). If formation
+sorties gain their own R/T, those flights speak digits ("Ghost one two"). The callsign word
+never matches the airframe program: the *field* is Rapier (Rapier Tower), the jet is GHOST —
+see docs/2026-07-29-callsign-and-pilot-identity.md for the derivation.
 
 **[OBSERVED]** At home fields the gradient is real anyway: full form on first contact with a
 new agency, side-number shorthand once established. Navy squadron script at Whiting:
 "010, 180, gear down" (VT-6 Contact Supplemental). Intraflight acknowledgment is the single
 word "2" (AETCMAN 11-251; AFI 11-2F-16V3 3.15.3: acknowledge "in turn (EXAMPLE: '2, 3, 4')").
 
-**Catalog rule:** the drift from "Rapier Tower, Rapier One Two, base" to "Tower, One Two,
+**Catalog rule:** the drift from "Rapier Tower, Ghost Twelve, base" to "Tower, Twelve,
 final" across takes mirrors reality — but an abbreviated callsign must never carry a
 transaction of an ATC clearance.
 

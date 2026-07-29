@@ -105,7 +105,7 @@ public class MissionRadioTests {
         Assert.Contains("two thousand five hundred", patternInstruction.Text);
         Assert.DoesNotContain("report initial", patternInstruction.Text);
         Assert.Equal("pilot-initial", initial.Id);
-        Assert.Equal("RAPIER 1-1", clearance.Callsign);
+        Assert.Equal("GHOST 11", clearance.Callsign);
         Assert.Equal(MissionRadioChannel.Tower, clearance.Channel);
     }
 
@@ -138,7 +138,7 @@ public class MissionRadioTests {
             t => State(t, traffic: [onBase]));
 
         Assert.Equal("RAPIER 1-2", call.Speaker);
-        Assert.Equal("Rapier Tower, Rapier One Two, base.", call.Text);
+        Assert.Equal("Rapier Tower, Ghost Twelve, base.", call.Text);
         Assert.True(call.StartedAtSeconds >= 2.4);
     }
 
@@ -428,7 +428,7 @@ public class MissionRadioTests {
             RadioPhraseology.Frequency(305.5));
         Assert.Equal("two thousand five hundred",
             RadioPhraseology.AltitudeFeet(2_500));
-        Assert.Equal("Rapier one one",
+        Assert.Equal("Ghost eleven",
             RadioPhraseology.SpokenCallsign(1, 1));
     }
 

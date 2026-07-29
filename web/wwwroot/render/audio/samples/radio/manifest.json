@@ -8,13 +8,13 @@
       "url": "./launch-cleared.wav",
       "role": "launch",
       "voice": "onyx",
-      "duration_s": 2.2,
+      "duration_s": 2.15,
       "takes": [
         {
           "url": "./launch-cleared.wav",
-          "source_sha256": "a98898fb6fb611c5ff4262aed8cc7dbcd0ad7d702e39fa89ba5b21a94d34d061",
-          "file_sha256": "34bb916016b760602738bd8a3ee6ec6331768ad3c2924085a2a03f2d75d8e3b2",
-          "duration_s": 2.2,
+          "source_sha256": "3f530fed1d20f32b8196e6714788bbb8770de13c275c9b0402e731105cda19ea",
+          "file_sha256": "0e0ad7aa37c044ccac8184dd060762693399e3e838733870040e49b3f8be7d2b",
+          "duration_s": 2.15,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -25,13 +25,13 @@
       "url": "./pilot-launch-readback.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 1.95,
+      "duration_s": 1.3,
       "takes": [
         {
           "url": "./pilot-launch-readback.wav",
-          "source_sha256": "e782b55f2d499b6b7f698135c2555f46e2f3b841ba0bcf8f0a9fdec854beae30",
-          "file_sha256": "feb8301c93c2db8f531464885191772dd84ebce667cd3a618c81d43bbc42b500",
-          "duration_s": 1.95,
+          "source_sha256": "6439db989dc7c4526686c5b35df1f76402b988e84a833c2f5082d1b1dc0100e2",
+          "file_sha256": "20b05ac81e577459f7bc1edcb9f96ddc1fbd73b187076955d0aafeccaccc2e3f",
+          "duration_s": 1.3,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -42,13 +42,13 @@
       "url": "./pilot-airborne.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 2.85,
+      "duration_s": 2.45,
       "takes": [
         {
           "url": "./pilot-airborne.wav",
-          "source_sha256": "6ab62696cacdc7c8122bd94c257657e1135a881e03276d95d216714abcabcc67",
-          "file_sha256": "b3810902106362ce348f2d2554d79691078a1511c4bd45f993e81602090314c5",
-          "duration_s": 2.85,
+          "source_sha256": "ef3413b5b2df50416e49405509dc37da7751fa58da2f5c6be5f139f46b3ea98a",
+          "file_sha256": "f608e4464e88f03b4012417780baaf9a179b5161a6545e0fcbe881d8bac988ba",
+          "duration_s": 2.45,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -59,13 +59,13 @@
       "url": "./tower-join-initial.wav",
       "role": "tower",
       "voice": "cedar",
-      "duration_s": 5.1,
+      "duration_s": 4.5,
       "takes": [
         {
           "url": "./tower-join-initial.wav",
-          "source_sha256": "c6442289e6d2124e3263d5ae4c61b8738fe200ccb34ca1f1ad73026299765f64",
-          "file_sha256": "eedb3835836343433ba8777bfea8e70c6a640385c4ed19a6580baf546a259197",
-          "duration_s": 5.1,
+          "source_sha256": "116414e62b5615db4da2b97a57f935349742c56a952c06435dddeefc51723e6c",
+          "file_sha256": "db5bfcf69ba99cc239f44e28d0f27fe34ec446cc7e943a347de9f231ecdd6fb8",
+          "duration_s": 4.5,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -76,13 +76,13 @@
       "url": "./pilot-initial.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 1.85,
+      "duration_s": 1.75,
       "takes": [
         {
           "url": "./pilot-initial.wav",
-          "source_sha256": "e4a22bc4a2ae6f13da920e855806cc853527064df4d895cfb04f0b108c2e6972",
-          "file_sha256": "4610724ece6f9e759eafbe8fe5e1e3f09d16c4cf89503a75898dd37b6e99fbfb",
-          "duration_s": 1.85,
+          "source_sha256": "f828792fa09adffd246300c4ee1000830b3ef2b9c53d1b14ab72d5ec982be274",
+          "file_sha256": "7114143f72e3ee65928ee765d3a5237f276f7178db28b5ffe35f488775048e43",
+          "duration_s": 1.75,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -93,13 +93,13 @@
       "url": "./tower-break-approved.wav",
       "role": "tower",
       "voice": "cedar",
-      "duration_s": 2.75,
+      "duration_s": 2.85,
       "takes": [
         {
           "url": "./tower-break-approved.wav",
-          "source_sha256": "aaaa8c49d8d36a78c4e1796d1e0732c787c94104e6d80cf3274345dc4b6f8058",
-          "file_sha256": "9c9a6687d585346a44ca8add3750800fee2c5693b332373b4535f6ebeab292c4",
-          "duration_s": 2.75,
+          "source_sha256": "2e7a7362bca6fb62073090704b204b9a0a3f402523af2b3719efad2dccc966f7",
+          "file_sha256": "6b83f89eff3bb73016e93232ec11e90c5e69b476e757f229e09f6e212de64954",
+          "duration_s": 2.85,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -110,13 +110,13 @@
       "url": "./pilot-downwind.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 2.95,
+      "duration_s": 2.85,
       "takes": [
         {
           "url": "./pilot-downwind.wav",
-          "source_sha256": "e667610d14963f28c5967894da2fd9d29d3f1ed05620d843d2898b09dd9f7a7e",
-          "file_sha256": "eaa59c4aec9bb49fac08487a65562ae1ef51a5643c2a906941b21027396f1fd6",
-          "duration_s": 2.95,
+          "source_sha256": "8637cd45846856dd3e31b7deda8b122623a0c055de880149e6ee5d42f59eaedf",
+          "file_sha256": "652c57bed83210390aead8133b84aaa0416e75bf3c5fe45475836ee556aae8a5",
+          "duration_s": 2.85,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -127,13 +127,13 @@
       "url": "./pilot-downwind-gear-unsafe.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 1.65,
+      "duration_s": 1.55,
       "takes": [
         {
           "url": "./pilot-downwind-gear-unsafe.wav",
-          "source_sha256": "91cd087731e665202c6d36c2810edcc21d8ace14bab6aeece1ac46007ab1e7a0",
-          "file_sha256": "25f36e9bb6381e48cc31f647b7377b181d298fb69384237945228da5030c22ac",
-          "duration_s": 1.65,
+          "source_sha256": "42d2d9ca4d68873163170a101a9e6865c83f9ff4668a485791360b5264052c9c",
+          "file_sha256": "190a0c6138af02ae62bcaee31b510e42779cd284f9ab413ac4f874a0cc087d01",
+          "duration_s": 1.55,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -144,13 +144,13 @@
       "url": "./tower-check-gear-downwind.wav",
       "role": "tower",
       "voice": "cedar",
-      "duration_s": 2.6,
+      "duration_s": 2.75,
       "takes": [
         {
           "url": "./tower-check-gear-downwind.wav",
-          "source_sha256": "b9bac9a92b6a143644d9361f2855dfa2a28a815f1f9fc85cef8d0121c92e01bb",
-          "file_sha256": "c554ef3fe4f8ba537c7016e9e531c934159fae9b09055be4d6a3eea680751432",
-          "duration_s": 2.6,
+          "source_sha256": "68ec265dacabf6febfe6947befbb997c3469a2a2ab17c96f0f4cf5fb48513864",
+          "file_sha256": "cb698acc066ceb617d6020ac3b62de036ca18c345c5aaa69af2278d16e8a7c12",
+          "duration_s": 2.75,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -161,13 +161,13 @@
       "url": "./pilot-base.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 3.2,
+      "duration_s": 3.55,
       "takes": [
         {
           "url": "./pilot-base.wav",
-          "source_sha256": "af8442a17df77a703d702bc896bfa59ee220fa657f0be86beea5c32b5ba803ee",
-          "file_sha256": "6af1958cddca295d6c4224b5d4a69fff859bd252b14c19bbd16fd6ccdd7225b9",
-          "duration_s": 3.2,
+          "source_sha256": "8a3dfc9102417c590afbd0febeb46ac7651a7dc98147233ed833fda87082d00f",
+          "file_sha256": "7ff90e9e2e13e6d980269e42ad0ea0c29eb10b909ceb011082014f0bb53e223c",
+          "duration_s": 3.55,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -178,13 +178,13 @@
       "url": "./pilot-base-gear-unsafe.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 2.45,
+      "duration_s": 2.2,
       "takes": [
         {
           "url": "./pilot-base-gear-unsafe.wav",
-          "source_sha256": "6fc5f667b75a59eb1907a8f996b595b291f1fed336ad1c6156c3ba663afa7fe1",
-          "file_sha256": "b6b698c7e3073c7587e34c8944af92356f7506463c7b79a3aded83512dcca0cf",
-          "duration_s": 2.45,
+          "source_sha256": "fd81711c887e0ef93abb63703c097dd6d7278c160cafbdd4eac3117c2137256e",
+          "file_sha256": "62233bafaf8c1e527af2c62363d1f866b757576de1423b32422960d35c1b1f58",
+          "duration_s": 2.2,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -195,13 +195,13 @@
       "url": "./tower-cleared-arrested-landing.wav",
       "role": "tower",
       "voice": "cedar",
-      "duration_s": 3.9,
+      "duration_s": 3.65,
       "takes": [
         {
           "url": "./tower-cleared-arrested-landing.wav",
-          "source_sha256": "c62aaab14457ac3c08097c47432aaab10f61e32a53d8e81b286be5019e18a750",
-          "file_sha256": "1df270c328e8549f5dc02ce321a9abc8aca6823ee29c305044ac7227818b524f",
-          "duration_s": 3.9,
+          "source_sha256": "33f97f1b46cd13d879f40664727ee2972d99d6319e5704ee536213911ec41a0d",
+          "file_sha256": "854debe3113703864dfaf19573a471f6ec08e9a9be8983ff4625eb88f3eb66fe",
+          "duration_s": 3.65,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -212,13 +212,13 @@
       "url": "./pilot-land.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 2.8,
+      "duration_s": 1.55,
       "takes": [
         {
           "url": "./pilot-land.wav",
-          "source_sha256": "b77dd6059803f59f93880bc7185bd989aeb7af1643fc7fe2b2858d25be5862cd",
-          "file_sha256": "29d92902f70ae16012310119a122a7fb5a1bc7ad24757a1a75b2fba3f54d7541",
-          "duration_s": 2.8,
+          "source_sha256": "20b47d8eac360f6ba7c3bdb948be25d580122147a7eb30c621dae7ee17c00aee",
+          "file_sha256": "1f5cd18d66a3015c87fd05376e939d0f9a2b159d0778c97874b7fb5e85c42e94",
+          "duration_s": 1.55,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -229,13 +229,13 @@
       "url": "./pilot-checklist-recovery-config.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 3.3,
+      "duration_s": 1.9,
       "takes": [
         {
           "url": "./pilot-checklist-recovery-config.wav",
-          "source_sha256": "6327e09848f8eb9ca6fb7830dd7c1d0320cddd9495e365105753ff4773ca3401",
-          "file_sha256": "5a5e4c50496820ae893b64a364b90ba03920bf523a29c10cccc6747580d2a986",
-          "duration_s": 3.3,
+          "source_sha256": "4c5e11a50ca990fa72a8b55cfb52fedf85fe8e96f9bbc2e17fd84bc77606157d",
+          "file_sha256": "855c801cceacb77779bfa50167b19f77a957cd3c0a4b7a3058a6e31d2baacbd1",
+          "duration_s": 1.9,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -246,13 +246,13 @@
       "url": "./tower-waveoff-gear.wav",
       "role": "tower",
       "voice": "cedar",
-      "duration_s": 2.7,
+      "duration_s": 2.6,
       "takes": [
         {
           "url": "./tower-waveoff-gear.wav",
-          "source_sha256": "d2cb00d7c7e7e2b2ab07f11658478ddf846003ce341ce79423f431515f0a2c6b",
-          "file_sha256": "317db2344b7dc68d470248f85fc8c5153a58072ec4f72087076c6b4f881518be",
-          "duration_s": 2.7,
+          "source_sha256": "1fea0ca31b55659595abeba19c3f4ad636e6bf8f309d9c0140ca14a899cdaf67",
+          "file_sha256": "1b1b25b72a80c771b446af66d298d789cda4dbc3f721d4f107a542ea51503011",
+          "duration_s": 2.6,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -263,13 +263,13 @@
       "url": "./tower-bolter.wav",
       "role": "tower",
       "voice": "cedar",
-      "duration_s": 1.95,
+      "duration_s": 2.25,
       "takes": [
         {
           "url": "./tower-bolter.wav",
-          "source_sha256": "167cda2b53627486e5337972c4ed45da1bb0cff2596285facc7fb3c00666da68",
-          "file_sha256": "8c90804d7dbe6cacfac05c426ab690eba321c48963e79003cadaacc060bc46b6",
-          "duration_s": 1.95,
+          "source_sha256": "ea094a194d5da529f8c7ccae5b231b054ebcb63219c4c9bb7669f81e01dabccb",
+          "file_sha256": "8e3f7576684e9965d20300069b99aba0107ca42991a6441f2cdb9d1dfa9ef895",
+          "duration_s": 2.25,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -280,22 +280,22 @@
       "url": "./traffic-rapier-2-base.wav",
       "role": "traffic-two",
       "voice": "verse",
-      "duration_s": 2.8,
+      "duration_s": 2.3,
       "takes": [
         {
           "url": "./traffic-rapier-2-base.wav",
-          "source_sha256": "5b6fdd7ebe8bc155ed1cbb205f4a63df022114adbbe52c0b95e6269fb61e2906",
-          "file_sha256": "80f463abbd14091620daf1d5c3eda0a32af8b40da1bf62207d2e70ae1ff04752",
-          "duration_s": 2.65,
+          "source_sha256": "fad272d6f2d121db41c1e86eca8ef210b3fb7e3bddd380a847f0b57e123a77b9",
+          "file_sha256": "d45d33a997a39da3c32edce80811abd3629ee66851ecfa4c19b81de2340821d5",
+          "duration_s": 2.25,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-2-base--t2.wav",
-          "source_sha256": "910a62579edcb19193ca3089683cb019d20bcfcb4eefe80af7c0ca28abfeab40",
-          "file_sha256": "7e31ebabb0f7bb47c3c077adcf5ccb07a82d85999a2c451746bd9ec6f8da95a2",
-          "duration_s": 2.8,
+          "source_sha256": "add75d12f00883740785bec5c83bd0c3a0ab85ab03bdb2a901b783b6e0ff9a4c",
+          "file_sha256": "bb4a7ebf34aa5cbd408d38e21eeca810f0a66a4637bb94310e3e10bbd9ec1e3e",
+          "duration_s": 2.3,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -306,22 +306,22 @@
       "url": "./traffic-rapier-2-base-alt.wav",
       "role": "traffic-two",
       "voice": "verse",
-      "duration_s": 3.45,
+      "duration_s": 2.95,
       "takes": [
         {
           "url": "./traffic-rapier-2-base-alt.wav",
-          "source_sha256": "06cc3b2442ce702a3b072eff6933f907c5054224e4c66595b78be918f606fb21",
-          "file_sha256": "bb4376626eb99b3954a1fd99b9b4960ef37d14e9e2dbcc4043ece00ce48725ae",
-          "duration_s": 3.45,
+          "source_sha256": "5e5d4f9cb0aff6c97b63ab6d9176cfb2915122c1b4d9d38c94e2fca369285bb6",
+          "file_sha256": "bc316475c1e91abd665e3a88a85f4eb07d61de1366649ec5ea85f6f7a5f04d3b",
+          "duration_s": 2.9,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-2-base-alt--t2.wav",
-          "source_sha256": "ae421506924ee97e0520b5f6d61465b1b3bc9779a1d8cb63fac8d82961cee5f3",
-          "file_sha256": "f527b89f5ccb439804456c7d6180613e9f1ae3ae9d6ea42a3e78844f287318ec",
-          "duration_s": 3.3,
+          "source_sha256": "58ff0ad11ee0e7786a9d28a85354cc084c5074a3542d8d389f8e8e7446f10042",
+          "file_sha256": "f50537b1d5718d3fdb5c9831e7cc16e110908d803ffa393c49d71c72253d7090",
+          "duration_s": 2.95,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -332,22 +332,22 @@
       "url": "./traffic-rapier-2-final.wav",
       "role": "traffic-two",
       "voice": "verse",
-      "duration_s": 3.4,
+      "duration_s": 3.5,
       "takes": [
         {
           "url": "./traffic-rapier-2-final.wav",
-          "source_sha256": "e735528ed4e7de9f6ba00b99139c5d5719628a2da70e5dda39d4a75f7cbbb4d5",
-          "file_sha256": "93bf2be90f87c53b6908780422942e31c5de7f1604a31c01ab6d4b7081fbfab9",
-          "duration_s": 3.4,
+          "source_sha256": "3a572924aeeca0cbe713e13ae5442608ce075a8c837afcf881c2b9e4356a85d4",
+          "file_sha256": "8f3e2efa471b61313f009b268fdd586584338f0c8c562d2078906a6b087426a6",
+          "duration_s": 3.5,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-2-final--t2.wav",
-          "source_sha256": "7146ef82e5869f016d26ddb239348fee6b7253a11b21c835ae9c2d16cb8cc0d2",
-          "file_sha256": "cc3a477382b01ca0b7d9d60732e40545a296b77447f5503edbfbee3a79fbc914",
-          "duration_s": 2.9,
+          "source_sha256": "f454aad89ca16bbad5c3942e9c546a5f2dd6765362dea53ab08751059a97452e",
+          "file_sha256": "28a08bafe01a0e7a5e0b05010d96ed4e93e98ee41f4bf4f49d7abc4b54dac4a8",
+          "duration_s": 2.35,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -358,22 +358,22 @@
       "url": "./traffic-rapier-2-final-alt.wav",
       "role": "traffic-two",
       "voice": "verse",
-      "duration_s": 2.6,
+      "duration_s": 2.4,
       "takes": [
         {
           "url": "./traffic-rapier-2-final-alt.wav",
-          "source_sha256": "7e8cac3a048f21f149ac856f6ed4d5432dc29d54c8d4d0be61e97d2eb1df8de0",
-          "file_sha256": "42d8aeca0eba68136ea92c43e7d4da87e57b038fbb7da61dd897d5fda4c7c5b9",
-          "duration_s": 2.6,
+          "source_sha256": "889a8f311bbbc7641a6aa103bac1f737bfd4a455d1e110d8a2a6e59fc9d9f7ca",
+          "file_sha256": "cd75191927390968aa85b29d8bf3f3aea2ca3f97a49f50e21a355dce14d7a3c2",
+          "duration_s": 2.4,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-2-final-alt--t2.wav",
-          "source_sha256": "9cae8355d35d766b485cdc58df8831af7df97215698e3da741ac7c5bae0955a4",
-          "file_sha256": "6aa5e2717e2c9da77c32f7bd483c9ef5221981d0f1121b3bc1e6596f52da3a7c",
-          "duration_s": 2.45,
+          "source_sha256": "88327fa7b6133b50e8716b79a9292cd52670964a66b2f97fbf2110b196bd3334",
+          "file_sha256": "134ea7c7dd52ce8db591e8b7d1318fc5f065bbea8283cfb83458366c3ccba8e5",
+          "duration_s": 1.5,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -384,22 +384,22 @@
       "url": "./traffic-rapier-3-base.wav",
       "role": "traffic-three",
       "voice": "echo",
-      "duration_s": 3.7,
+      "duration_s": 2.85,
       "takes": [
         {
           "url": "./traffic-rapier-3-base.wav",
-          "source_sha256": "27f3cc948b6034a293f17fa69a1e8ebe6d400209d1fbf61d198624e7ef9ed37f",
-          "file_sha256": "7c59906d299ac6401791914d15877f99a6cebb037728760bcff39d7cacb3a0bd",
-          "duration_s": 3.7,
+          "source_sha256": "51bccb759efee15aed36787ba0e000dd0b319bbad9b13e925a9fb41f2228b46e",
+          "file_sha256": "2cbedf96d59afb2b4a4b77c2943e828b4f53e2ee52f6b2d83ec62fe3d7515910",
+          "duration_s": 2.6,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-3-base--t2.wav",
-          "source_sha256": "be708fcc00c15a96531921e6ad9b618dbf1d57b5eb1c584b43196013bd292195",
-          "file_sha256": "d29b6fa896a7337b61c504e19740ea7781b5a4702e65f9a3689546c1f8c513c2",
-          "duration_s": 3.1,
+          "source_sha256": "a8b0d1fef6860c990be9f23d9001948441e9e411a7ff29a731843b99551795a5",
+          "file_sha256": "1d9403a54ecc8c3b31280e97e1e5fe7ef7ecd996b6f8cbb9327ce7ee2715ad5c",
+          "duration_s": 2.85,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -410,22 +410,22 @@
       "url": "./traffic-rapier-3-base-alt.wav",
       "role": "traffic-three",
       "voice": "echo",
-      "duration_s": 3.85,
+      "duration_s": 3.55,
       "takes": [
         {
           "url": "./traffic-rapier-3-base-alt.wav",
-          "source_sha256": "77732e33ec4846302b3be9efd659cd1563019850f7f46b89871daff069984a11",
-          "file_sha256": "08a187c55e92c317e98582a2df6bdb791bcefe1e3576004b8e1ebb2449e84685",
-          "duration_s": 3.6,
+          "source_sha256": "0a7edf300d220dd45fd7b1f14002fcacdfbcda7f0705318631b35cd110f466b6",
+          "file_sha256": "005e856e804161ee2feb010650eafdece2e97b2519bed014a348a648847f1aa6",
+          "duration_s": 3.55,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-3-base-alt--t2.wav",
-          "source_sha256": "13bd7ef543a91a8c1a1973750351da9956ce9c6f45342ca9b1198382a656d78a",
-          "file_sha256": "0d9f7edec9b2f11a20a4639b92e3a2fe96b692f4876e0244e3e0bc004ba49e2e",
-          "duration_s": 3.85,
+          "source_sha256": "542d76eca37ed983e28c9270cb633fe8478c4f5b8725d6e817de9d60f45a95b2",
+          "file_sha256": "e010fa3177328f20ecfad57a2638f50a36dd1c0d1b76f8e73ee66ac272803c88",
+          "duration_s": 3.2,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -436,22 +436,22 @@
       "url": "./traffic-rapier-3-final.wav",
       "role": "traffic-three",
       "voice": "echo",
-      "duration_s": 4.4,
+      "duration_s": 3.4,
       "takes": [
         {
           "url": "./traffic-rapier-3-final.wav",
-          "source_sha256": "ede7aa0609f46688ee2cfbbaca90a095084136aaf696889657899c565e90e060",
-          "file_sha256": "1aef53c85395398e6face3070b4c81c9bc21312e7e6e1cb56bda6c91d01b909f",
-          "duration_s": 3.1,
+          "source_sha256": "27ac0bdbd21577582aadef9512a4bd7dfbfbda0297a950ecfa4bc5c750b2553b",
+          "file_sha256": "da2fe1b14993ee7782456a2755b33d25e9a8839f27fb2e3927809fa76dd48679",
+          "duration_s": 3.2,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-3-final--t2.wav",
-          "source_sha256": "4bbcf7fd9c465819cc5d7d88f81c517fb3ea89966a83694c48b92a3355fed8eb",
-          "file_sha256": "6cfbc031246726a33c7ca6fb6fe5dc06a3a6f06a4ef5fd1b35867b7a286d13b9",
-          "duration_s": 4.4,
+          "source_sha256": "eb216d43bd031582f72b62f49ce9c616cdf0d4e05992266f51bb6c3624d6328d",
+          "file_sha256": "2410aad19aee1394411607174e3a90fdd46d16c919000b546612a9278d6b40fa",
+          "duration_s": 3.4,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -462,22 +462,22 @@
       "url": "./traffic-rapier-3-final-alt.wav",
       "role": "traffic-three",
       "voice": "echo",
-      "duration_s": 2.25,
+      "duration_s": 1.95,
       "takes": [
         {
           "url": "./traffic-rapier-3-final-alt.wav",
-          "source_sha256": "87ed0aae3430f86778850523cafcbac7f777fc10027b843e8a08d5c9c116f025",
-          "file_sha256": "fadd282a9a69c99d7b12b5de9877c20aa85976c1de6736f1c86cf4916d13c263",
-          "duration_s": 2.05,
+          "source_sha256": "fe9ade9528e8abf28f35a74fa324c6c0b3fba1957508ce11c5d52da5215272d5",
+          "file_sha256": "df1f83d3487c203acb63c4f6abe4f392155b011099313c3bcdef79d94f2090b6",
+          "duration_s": 1.95,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-3-final-alt--t2.wav",
-          "source_sha256": "f34d87dc52b32a7d58736b8936b2fddbb024d12127d469b84ad62c1b42280a5f",
-          "file_sha256": "793fce630bcdcd56474f03e6a1ca04f7317ae2c0f49006fb0085f30e458f9cbe",
-          "duration_s": 2.25,
+          "source_sha256": "a9dd5d380c27cffd562634d64e992fd08d75365a00652f306676c37a80b3573b",
+          "file_sha256": "d7e105cc940463fc17128edfe3290fa0513bea1d19730e11ad088b9a4942b698",
+          "duration_s": 1.9,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -488,22 +488,22 @@
       "url": "./traffic-rapier-4-base.wav",
       "role": "traffic-four",
       "voice": "ballad",
-      "duration_s": 3.95,
+      "duration_s": 5.15,
       "takes": [
         {
           "url": "./traffic-rapier-4-base.wav",
-          "source_sha256": "de768e4adac11dcc5f267185d77a99e89b9fa5cffbdccdc89d91709a024800f6",
-          "file_sha256": "6a2950fc881290b0de15ecf24b548c2e5ddf49bc95d9c699bedf003c4a49da30",
-          "duration_s": 3.95,
+          "source_sha256": "d4eca56ed05a7933850dc811fd9f8315ff4d0838307699f968350b93325aeca3",
+          "file_sha256": "2195fac54a0c2a70250d4e880fdd6b1ef8aa62f0f5a77bcf125104d999c09cdb",
+          "duration_s": 5.15,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-4-base--t2.wav",
-          "source_sha256": "45f49d787b02505acc5a7789392ec85ad00021bf4f4099068d03ea2f37f0c9a6",
-          "file_sha256": "4ac962e0c58b76c7f93051bf3f96b46be347dda5a3af1953df964303c12ebf6d",
-          "duration_s": 3.6,
+          "source_sha256": "62d0a2c06182df51817643a99eded7eec3cdda64baefff046d4a00c87c0b3a28",
+          "file_sha256": "ba3d26030ba30068a700b0ef55befc8299751cd4a6d4e3f0cf9ea52a9d7f6598",
+          "duration_s": 4.4,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -514,22 +514,22 @@
       "url": "./traffic-rapier-4-base-alt.wav",
       "role": "traffic-four",
       "voice": "ballad",
-      "duration_s": 4.4,
+      "duration_s": 4.35,
       "takes": [
         {
           "url": "./traffic-rapier-4-base-alt.wav",
-          "source_sha256": "572ebc99dd3d411f21ee86e5f4af0cd6a77591d9daf99b57644dc9c10a8c5b9e",
-          "file_sha256": "340205afc7946979b21a0e7aafccfd028475d4ff8c5056da58c6c1ca18a1c3fa",
-          "duration_s": 4.2,
+          "source_sha256": "4cebf5a04e6c847aed81ece0df51a0878f106fea87d1e29804c3c1337544bf9f",
+          "file_sha256": "1b01244e3e3c3b143dbae37b8bffa824ccf2c35808cb7cfb2a61170791f0066f",
+          "duration_s": 4.35,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-4-base-alt--t2.wav",
-          "source_sha256": "85d041527f8f14d02f03134a683f6d26fadbd61ced572bebaa3638b2525006e8",
-          "file_sha256": "b5dd797625f4ae8118f399e4a17d57c938d5bed31eb370c0a7a511c89fa0a92b",
-          "duration_s": 4.4,
+          "source_sha256": "efacac022cf95f896e8a1f0eea1c65ab54ff7b705167ec6a8b2954551718d286",
+          "file_sha256": "a7a14efe338938b4f97ddb8e29fbce8ae76a744151afc682e780fc8351c9448d",
+          "duration_s": 4.1,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -540,22 +540,22 @@
       "url": "./traffic-rapier-4-final.wav",
       "role": "traffic-four",
       "voice": "ballad",
-      "duration_s": 4.45,
+      "duration_s": 5.6,
       "takes": [
         {
           "url": "./traffic-rapier-4-final.wav",
-          "source_sha256": "1d07852b00a5756f206fea41248db49a1610936150cc15c5bcd510295336857e",
-          "file_sha256": "7776308ca80c1b275a1ee09747b9cfa4503c7fab1b0b32d5f190330f72e44d0c",
-          "duration_s": 3.9,
+          "source_sha256": "ba74f7a7bde1671e5e86043ac38f8c61cb4b6f16403976298d5fb19beb673f57",
+          "file_sha256": "b3f26bf4819645133501c887fac1692cd757540337fd3345b8be3b2c44b27277",
+          "duration_s": 4.35,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-4-final--t2.wav",
-          "source_sha256": "917dc937edc3f493b8db39a4125a85a9eca46981eb1732ab357ec06c498b7e9b",
-          "file_sha256": "9ad4829bf59437040c1735751a2b866584da002b25d29528a0cc52f05dc317af",
-          "duration_s": 4.45,
+          "source_sha256": "6290a0625110a53b8640fc67c25183815845eab834175db61156a6c53c743926",
+          "file_sha256": "f83b944a4b979c30a15f9385635c26e94d5efb5473798b167eab7e7f60f4e4cf",
+          "duration_s": 5.6,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -566,22 +566,22 @@
       "url": "./traffic-rapier-4-final-alt.wav",
       "role": "traffic-four",
       "voice": "ballad",
-      "duration_s": 3.4,
+      "duration_s": 3.95,
       "takes": [
         {
           "url": "./traffic-rapier-4-final-alt.wav",
-          "source_sha256": "4159415cf0a01eb13b4355e8143d274289c549b8425be959582f83322a4ad5a8",
-          "file_sha256": "4736440833c101e6c789104040b0a7c72becfd382954b1bd464cb7d50e91c633",
-          "duration_s": 3.1,
+          "source_sha256": "e1e1962e5a3fd847393cebddae3817edb4b0df9ee4b7062c724b8c5a9c4d10d9",
+          "file_sha256": "7c88e204141840a9c8c66dec4b9e11846651534bc6f90e9371b90cd7de76230a",
+          "duration_s": 3.95,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
         },
         {
           "url": "./traffic-rapier-4-final-alt--t2.wav",
-          "source_sha256": "62ad575a5960669f1c5b6e89f682da1143849c3cd77516a5bdf350a16217333d",
-          "file_sha256": "fbc3f1951517fe326a51d5f4ccfe53cae20b387a98b7fdd8945ce1b9d52454ab",
-          "duration_s": 3.4,
+          "source_sha256": "9b3477bdb297231f073f6509ac9eb2f7fa9aed3ab3a54668f49ca6c3fc85ef92",
+          "file_sha256": "9555b73bc04ec91a709f4a0a3b8d4d3382cd646fee6773354c80b1d720b44d12",
+          "duration_s": 3.15,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -592,13 +592,13 @@
       "url": "./tower-continue-check-gear.wav",
       "role": "tower",
       "voice": "cedar",
-      "duration_s": 3.05,
+      "duration_s": 3.1,
       "takes": [
         {
           "url": "./tower-continue-check-gear.wav",
-          "source_sha256": "7d64f78fb2df7e8b72b28c984355a5698d73021bc7d721173d2265809ea3b495",
-          "file_sha256": "eb99fdf1f713371a11f06241b267f626b69247cde6cc169a3e3d2e0cf71f48b5",
-          "duration_s": 3.05,
+          "source_sha256": "6e8815049d2575caa4e7f7970a1beb59c30ea36f27df468d2d24be30094681b2",
+          "file_sha256": "69fe954a5958528160967688cc7f0215ca59e276bdbd949bc5066eacc3b7a2e3",
+          "duration_s": 3.1,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -609,13 +609,13 @@
       "url": "./tower-hold-position.wav",
       "role": "tower",
       "voice": "cedar",
-      "duration_s": 2.45,
+      "duration_s": 2.0,
       "takes": [
         {
           "url": "./tower-hold-position.wav",
-          "source_sha256": "1103b581bdf197ba7f67c426ef85b854f0c5c90f6c79ac8267cee7c4b5c8a797",
-          "file_sha256": "6f08286c1e72fdef38849e896ceaddcc0003046ad8171c4ff187f9b2668a40ff",
-          "duration_s": 2.45,
+          "source_sha256": "1dc5e9517600e4b2ecd39c4b9357502e4452cbea1d87a1febbd9dd1399325fa6",
+          "file_sha256": "4a2b2f12b81e4b8d14a94c6d923798cc51e5db3bfcd159a331f8cb3137d7fea0",
+          "duration_s": 2.0,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -860,13 +860,13 @@
       "url": "./pilot-departure-airborne.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 2.6,
+      "duration_s": 3.25,
       "takes": [
         {
           "url": "./pilot-departure-airborne.wav",
-          "source_sha256": "cec3f60ada58085bd0cd215f5008259475057721c27dea3c9e6873775cc7df02",
-          "file_sha256": "ed9dde1f5e72a156a75fdbd60960374c0a96affc81457ccade4b725b81603f95",
-          "duration_s": 2.6,
+          "source_sha256": "92ff6ef2e8f7f873517e2b4caca1e653fb52002d08f4d3ea9e68491e21ce5349",
+          "file_sha256": "465bdfac8a171072aac18ab9be6ad92ac3bfcb7b821e39a34658241e4e3f06db",
+          "duration_s": 3.25,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -877,13 +877,13 @@
       "url": "./pilot-check-in.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 2.5,
+      "duration_s": 1.9,
       "takes": [
         {
           "url": "./pilot-check-in.wav",
-          "source_sha256": "39f4e407641cad89b531b8189b799a806471326b6bc86af1d1c9b1f9561358ab",
-          "file_sha256": "be3de1f40be13be15e6b0bca48829b5fbf59ebee1fb546b9885be9dac18c37d9",
-          "duration_s": 2.5,
+          "source_sha256": "87de0dc970db379da9ff02628ca12d1c157f2f8d02a2d4c3c8a166e40176c1c9",
+          "file_sha256": "0021a57a6f37b664ea265ac6ff726e59ad6cab402479b8992bcc24c6d77eec56",
+          "duration_s": 1.9,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -894,13 +894,13 @@
       "url": "./control-radar-contact.wav",
       "role": "controller",
       "voice": "ash",
-      "duration_s": 2.75,
+      "duration_s": 2.4,
       "takes": [
         {
           "url": "./control-radar-contact.wav",
-          "source_sha256": "2bc5e4b033a2804e15387d32323eaca83078bdce99d59168ddee244c922fca35",
-          "file_sha256": "9ca6bbc24baef5f5e264e591ab52d6696cc0a0bfcd28fe9b3d7b955b3cb6c35d",
-          "duration_s": 2.75,
+          "source_sha256": "2a4aa07112b58e6765ebba107ebf7844bde7ba315730cfed5d706d97b3bcb909",
+          "file_sha256": "44dc09c5837a73479ddff79b25521e550c2d822246ea79bb1498ea3049e520b7",
+          "duration_s": 2.4,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -911,13 +911,13 @@
       "url": "./control-commit.wav",
       "role": "controller",
       "voice": "ash",
-      "duration_s": 3.9,
+      "duration_s": 4.0,
       "takes": [
         {
           "url": "./control-commit.wav",
-          "source_sha256": "e69d44205753c02003cdf17579ce84cc8fcf067f7f2806aa378d1123783c7436",
-          "file_sha256": "16461285de472c3aac3fe068c0b4745cf41866825e16da145f8885dbc77b42d8",
-          "duration_s": 3.9,
+          "source_sha256": "642c535c466186d7db18d82e6fad8d3b839c98293e8996c0f339ce6193190277",
+          "file_sha256": "6291ea094c284c05b4842e544c45633085a503197231d5c65dc84ef27ef7d210",
+          "duration_s": 4.0,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -928,13 +928,13 @@
       "url": "./pilot-separating.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 3.05,
+      "duration_s": 1.75,
       "takes": [
         {
           "url": "./pilot-separating.wav",
-          "source_sha256": "563058f4ae6a07aacbbe1d200a95c8020f68a1823a118395e46f130b10776155",
-          "file_sha256": "c2b6f2d11429a9c55ed7d25fd4493b4725caf8b1004eee3d9420d3fecf24fcd8",
-          "duration_s": 3.05,
+          "source_sha256": "b8e2310f7ae4b861414d921407ab04a00832fad35da92224300042531f35e1a3",
+          "file_sha256": "b6d52c02f5eee41c4b9e1f6d29d46501ca5c7a0813dd2c98878887afc79cf14d",
+          "duration_s": 1.75,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -945,13 +945,13 @@
       "url": "./pilot-rtb.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 2.95,
+      "duration_s": 2.65,
       "takes": [
         {
           "url": "./pilot-rtb.wav",
-          "source_sha256": "b612396f79b58a40f6dae6e3e78aa3cc6759e16cfabb2a767ca9bf5205864216",
-          "file_sha256": "538410cabf3d60a0e2cb6f830d88289542294baaf711a1ef7719bddd27d8db52",
-          "duration_s": 2.95,
+          "source_sha256": "89aa6196254058153ae4bae980cc07c2d67554b7861caab64e050780249edd12",
+          "file_sha256": "4785d9e681855204aceda6397b7d481b7636ed00be7aa2f7da7f76cabd8d62db",
+          "duration_s": 2.65,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -962,13 +962,13 @@
       "url": "./pilot-recovery-request.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 4.5,
+      "duration_s": 3.65,
       "takes": [
         {
           "url": "./pilot-recovery-request.wav",
-          "source_sha256": "04a713393854f900f2cc712d8f63f9657142c7dfc74e55054da85b2ee3fb07de",
-          "file_sha256": "a9a5b1d5b99da795a353cd78971e5fcd642d8146180cf36aabfd8afb362607bd",
-          "duration_s": 4.5,
+          "source_sha256": "3414166c644855d7c3311a48e8ae9a74a5ed54e168048bd174a2f79b311eeaa2",
+          "file_sha256": "01c947bcfb1b6d809d618b29f7a51bdacb85edb848294ac71e8bc6f7d84fe535",
+          "duration_s": 3.65,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -979,13 +979,13 @@
       "url": "./approach-recovery-continue.wav",
       "role": "controller",
       "voice": "ash",
-      "duration_s": 2.5,
+      "duration_s": 2.95,
       "takes": [
         {
           "url": "./approach-recovery-continue.wav",
-          "source_sha256": "941494c557b68c9673ed42724d6ac824e10c48644ab4994a43a009ab8041c7ec",
-          "file_sha256": "4b689ddbc27b5efa3083f6017a1a87ecf0b7ff228376b14e516faf8d3915c622",
-          "duration_s": 2.5,
+          "source_sha256": "7a6ec0f29262d2d67da4d053912fdd4fcf71af1adb9721e0fb33ee1fce1c9c3a",
+          "file_sha256": "308231bf172de91e1c2c6b5bf44f8988e195cb811841e1891fb366ef964a2691",
+          "duration_s": 2.95,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -1000,7 +1000,7 @@
       "takes": [
         {
           "url": "./pilot-guns.wav",
-          "source_sha256": "4215c69ec09a87d69213d1d70be98135c39be9c083c914183ec5d442d2627605",
+          "source_sha256": "0b5a320fea2c586dbcb7eaab7576ec51d0ec003ccd0a74e8b54b237da35e6c6b",
           "file_sha256": "81f84244971671eb05761c638f1df511fb42c0353f70677904e32e1636732d50",
           "duration_s": 1.4,
           "sample_rate_hz": 24000,
@@ -1009,7 +1009,7 @@
         },
         {
           "url": "./pilot-guns--t2.wav",
-          "source_sha256": "4f7fab9a54e70313d2af46377b5defff8d850bad18cfe3d566e7381934cd7a31",
+          "source_sha256": "a5abefef454910cb974ec7b62d4619e8169d1da96fc03638c405778bee070875",
           "file_sha256": "0a558c9d5311bde63df7585abe7a3d07ab932d51964b03e00dde1089c64bc5a6",
           "duration_s": 0.85,
           "sample_rate_hz": 24000,
@@ -1026,7 +1026,7 @@
       "takes": [
         {
           "url": "./pilot-fox-two.wav",
-          "source_sha256": "e5ea4114d52acea693747699ce894e32e0a1b994a8ef5e8c42de3addfaa93f73",
+          "source_sha256": "12fee345caa3bbf1db86a8ad572bcd59c675ccd51c108b2c53aeedc97c76c185",
           "file_sha256": "96469b8ae4772d5420b3afc7b60ca65149e0b6f526f5d3ac820a11578368cdc6",
           "duration_s": 1.15,
           "sample_rate_hz": 24000,
@@ -1035,7 +1035,7 @@
         },
         {
           "url": "./pilot-fox-two--t2.wav",
-          "source_sha256": "a8e7e5c05a5fffa16f55ff6051c8f185edd979de4d92c11df7a6dd66cd49cba7",
+          "source_sha256": "5ff9bc8bf802c283525d0805c59746cdafc067a0844b9b31e1d758d26b8cafa1",
           "file_sha256": "434ba17a2ec7b1b8b22d071c76111a4ba7d53f124446be97852ed93cdae4a877",
           "duration_s": 1.4,
           "sample_rate_hz": 24000,
@@ -1052,7 +1052,7 @@
       "takes": [
         {
           "url": "./pilot-drone-away.wav",
-          "source_sha256": "a6679e67467892130d27d11c0c28e963980f0b562246eb4b9abfbb77d03af630",
+          "source_sha256": "533d859e1bb398b4deabf49f701abc4e86ef17f4a8aa05c160520fc2a2789e47",
           "file_sha256": "9a69b9ee402576e83cae08beec358f331068edf688c69b0027c088cbdbdad5c0",
           "duration_s": 1.1,
           "sample_rate_hz": 24000,
@@ -1069,7 +1069,7 @@
       "takes": [
         {
           "url": "./pilot-remington.wav",
-          "source_sha256": "a49e2e7d088a9802e7eee82c832b2116f9ae8bac5fa272da1243e4ff2b35eaf5",
+          "source_sha256": "669dbd9052dfbfecdba0422e9f0a0ec76041754bda9d21d74960e8945fe925e2",
           "file_sha256": "06ec50e2879ba3ac679a31cb92926ef7d8aafed603dcf478d7b56aa242a2a967",
           "duration_s": 0.75,
           "sample_rate_hz": 24000,
@@ -1086,7 +1086,7 @@
       "takes": [
         {
           "url": "./pilot-winchester.wav",
-          "source_sha256": "fa0a4c71d2d1d28610e40c857eefc2296e63732dc60b362cef9dacfb5bfd40ce",
+          "source_sha256": "baab0ecb4357728a4ca186c7f6bbf1bfc43c4981e71a8f8f9a80e1d961f7395a",
           "file_sha256": "035bce444449682c32ebcc3d45f5d7b91f33f782dab0de53f2bc312451da60b3",
           "duration_s": 1.05,
           "sample_rate_hz": 24000,
@@ -1099,13 +1099,13 @@
       "url": "./pilot-joker.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 1.95,
+      "duration_s": 1.75,
       "takes": [
         {
           "url": "./pilot-joker.wav",
-          "source_sha256": "11f59c9931ef6af94122f0771e5eeaa54c5b210a9d9920ae1df97fb32cdd2c3a",
-          "file_sha256": "a7acdfa885e3d6c08ac49fa8e13f04c6ec6bc6cbdde32ee47cf50b720235d94e",
-          "duration_s": 1.95,
+          "source_sha256": "d63dd86dbefdabd64a7cc02d3cba3f82ea31b11659a8a7c352672798d9722149",
+          "file_sha256": "444c6070e6e8ea98c74f0dea7742c8ed7a66514cfc2702aca2df2e3cb96ef3d9",
+          "duration_s": 1.75,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -1116,13 +1116,13 @@
       "url": "./pilot-bingo.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 2.45,
+      "duration_s": 1.7,
       "takes": [
         {
           "url": "./pilot-bingo.wav",
-          "source_sha256": "d954f4002cbfa021b375535984e98f928fde063bfdc7fcf8c631868b2636d301",
-          "file_sha256": "fc4604b68abeff8dd644d358e365b7a1a3fbe7dfbb4b906d572c1a7b985d1b96",
-          "duration_s": 2.45,
+          "source_sha256": "4c7c86c4afbb21247e928bc574ddaa2cbe438dd3064f2fb630ec0702ebb3419f",
+          "file_sha256": "bf41195110c551826f733957cdf4a122da44ad3bf884d1c8d4d0b528f6de42cd",
+          "duration_s": 1.7,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -1133,13 +1133,13 @@
       "url": "./control-bingo-rtb.wav",
       "role": "controller",
       "voice": "ash",
-      "duration_s": 1.9,
+      "duration_s": 2.15,
       "takes": [
         {
           "url": "./control-bingo-rtb.wav",
-          "source_sha256": "0d287c63f956556e4d6ef8dd359b38cd6d7850a7bc811192224659a00b0302b0",
-          "file_sha256": "2054647608501481a7567b87a69af8ae6c93c09f7816fea07e6dc65b1027cf81",
-          "duration_s": 1.9,
+          "source_sha256": "0392d65230ed67b7ab1344928b604c2e9b6dfb4acdf7dd9888e6cc1f8586beb8",
+          "file_sha256": "8dff04d63edde549024057a356f16ef1e90c3735b798a3354f0f41fd97dc5a21",
+          "duration_s": 2.15,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -1154,7 +1154,7 @@
       "takes": [
         {
           "url": "./pilot-splash.wav",
-          "source_sha256": "adf7ce1b7a3b0c3f36e03c27fdc125dd30baa2dd62227fe6f41f29decfe2e6ae",
+          "source_sha256": "d2401d0ef4cef7cd3e30e26dc81d0a9b02bc983c784c280cdd1b6d9f8c90ca9b",
           "file_sha256": "2b786e58d89eafd9489ab71d6d92788815b27fc7fc6da385861ac8b668f90601",
           "duration_s": 1.15,
           "sample_rate_hz": 24000,
@@ -1163,7 +1163,7 @@
         },
         {
           "url": "./pilot-splash--t2.wav",
-          "source_sha256": "e46e59af9549d2c67babaa8d7b8e7c37fc7094a73119e228739eb47f7a680c58",
+          "source_sha256": "ac6151c83edd6bbf1042702c90351cde9395656dba5d60fc617fef5f5eb9f0cb",
           "file_sha256": "ae5402efc1d5b7fac59c203f66ef4daa5b606b970086ee38326255b1b04b5315",
           "duration_s": 1.75,
           "sample_rate_hz": 24000,
@@ -1176,13 +1176,13 @@
       "url": "./control-confirm-safe.wav",
       "role": "controller",
       "voice": "ash",
-      "duration_s": 3.35,
+      "duration_s": 2.65,
       "takes": [
         {
           "url": "./control-confirm-safe.wav",
-          "source_sha256": "456e43bf8c2eeab6d75dd2541571c3d111623fcf19850cc77320682ff724a196",
-          "file_sha256": "2b60ec78e804fcf72f4585f2e2ee8c56fd92f30794352163d7b49ac6a44f69a1",
-          "duration_s": 3.35,
+          "source_sha256": "cb24c3f46a7efa6c4cb20c256b8f4564a6818ecc188fa8959826d56c4e6ac81f",
+          "file_sha256": "142f7532349c70b0c6448c73cfcaa49dcc359ff6038758d5d7c006c380bd73e9",
+          "duration_s": 2.65,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2
@@ -1193,13 +1193,13 @@
       "url": "./pilot-switch-safe.wav",
       "role": "pilot",
       "voice": "marin",
-      "duration_s": 1.9,
+      "duration_s": 1.7,
       "takes": [
         {
           "url": "./pilot-switch-safe.wav",
-          "source_sha256": "294d2776a78210188aa31ae718ff3b799194c077102406d9c1fec23a6ae9463e",
-          "file_sha256": "57de0299c4aaf59458be1261b1e19094b77f9468d07b5189f48f18fcfe11634c",
-          "duration_s": 1.9,
+          "source_sha256": "1568294479835245f090a7bd4d26ff7f59f8b9aa39668932570b6dab97adfb9f",
+          "file_sha256": "6ac4a0448991129d8fdc485f9645f0fcddeb22327f61d983b0bd09703213ca8b",
+          "duration_s": 1.7,
           "sample_rate_hz": 24000,
           "channels": 1,
           "sample_width_bytes": 2

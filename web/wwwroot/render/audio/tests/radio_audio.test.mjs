@@ -136,7 +136,7 @@ test("mission reset lets sequence one play again", async () => {
     radio_active: true,
     radio_sequence: 1,
     radio_id: "launch-cleared",
-    radio_text: "Rapier One One, cleared for launch.",
+    radio_text: "Ghost Eleven, cleared for launch.",
   };
 
   updateRadioVoice(voice, context, call);
@@ -158,7 +158,7 @@ test("tactical radio is not restricted to the Circuits mission", async () => {
     radio_active: true,
     radio_sequence: 8,
     radio_id: "pilot-guns",
-    radio_text: "Rapier One One, guns.",
+    radio_text: "Ghost Eleven, guns.",
     radio_voice: "pilot",
   });
 
