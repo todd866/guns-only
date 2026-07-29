@@ -733,7 +733,7 @@ public sealed class RapierMissionDirector {
     /// </summary>
     void UpdateZoomLobPhase(
         in AircraftState player, double mach, double qPa, double noseOnVelocityErrorDeg,
-        double contactRangeM, double fuelLb, double reserveFuelLb) {
+        double contactRangeM, double fuelLb, double reserveFuelLb, bool zoomLobProfile) {
         const double PullGammaRad = 40.0 * Math.PI / 180.0;
         const double CoastEntryAltM = 28_000.0; // ~FL920 — q collapsing
         const double ReenterAltM = 24_000.0;    // start aligning on the way down
@@ -771,7 +771,8 @@ public sealed class RapierMissionDirector {
 
         if (_phase == RapierMissionPhase.DipRelight) {
             if (mach < 2.2 || qPa < RelightQPa) return;
-            if (ShouldAnotherLobSkip(contactRangeM, fuelLb, reserveFuelLb, mach)) {
+            if (ShouldAnotherLobSkip(
+                    contactRangeM, fuelLb, reserveFuelLb, mach, zoomLobProfile)) {
                 _lobSkip++;
                 EnterPhase(RapierMissionPhase.ZoomPull, $"zoom_pull_skip_{_lobSkip}");
             } else {
@@ -781,8 +782,10 @@ public sealed class RapierMissionDirector {
     }
 
     bool ShouldAnotherLobSkip(
-        double contactRangeM, double fuelLb, double reserveFuelLb, double mach) =>
-        _lobSkip < MaxLobSkips
+        double contactRangeM, double fuelLb, double reserveFuelLb, double mach,
+        bool zoomLobProfile) =>
+        zoomLobProfile
+        && _lobSkip < MaxLobSkips
         && contactRangeM > AnotherSkipContactRangeM
         && mach >= 2.2
         && fuelLb > reserveFuelLb;
@@ -905,7 +908,7 @@ public sealed class RapierMissionDirector {
             }
             if (decision.Strategy == ReachFightStrategy.ZoomLob) {
                 UpdateZoomLobPhase(player, mach, qPa, noseOnVelocityErrorDeg,
-                    contactRangeM, fuelLb, reserveFuelLb);
+                    contactRangeM, fuelLb, reserveFuelLb, zoomLobProfile);
             }
         }
 

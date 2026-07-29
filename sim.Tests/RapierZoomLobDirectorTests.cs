@@ -17,7 +17,8 @@ public class RapierZoomLobDirectorTests {
         double noseErrDeg,
         double contactRangeM = 200_000.0,
         double fuelLb = 2_400.0,
-        double reserveFuelLb = 1_200.0) {
+        double reserveFuelLb = 1_200.0,
+        bool zoomLobProfile = true) {
         AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
         double speed = mach * air.SpeedOfSoundMps;
         AircraftState player = StateAt(altitudeM, speed, gamma);
@@ -35,29 +36,33 @@ public class RapierZoomLobDirectorTests {
             recoveryInitial: new Vec3D(0.0, 1_120.0, -16_000.0),
             recovered: false,
             patternOnly: false,
-            zoomLobProfile: true,
+            zoomLobProfile: zoomLobProfile,
             job: RapierJobKind.Awacs,
             noseOnVelocityErrorDeg: noseErrDeg,
             fuelLb: fuelLb,
             reserveFuelLb: reserveFuelLb);
     }
 
-    static RapierMissionGuidance WalkToDipRelight(RapierMissionDirector director) {
+    static RapierMissionGuidance WalkToDipRelight(
+        RapierMissionDirector director, bool zoomLobProfile = true) {
         RapierMissionGuidance g = default;
         for (int i = 0; i < 4; i++) {
             g = Step(director, altitudeM: 21_500.0, mach: 3.5, gamma: 0.05,
-                noseErrDeg: 5.0);
+                noseErrDeg: 5.0, zoomLobProfile: zoomLobProfile);
         }
         Assert.Equal(RapierMissionPhase.ZoomPull, g.Phase);
-        Assert.Equal(1, g.LobSkip);
+        Assert.Equal(zoomLobProfile ? 1 : 0, g.LobSkip);
         g = Step(director, altitudeM: 30_000.0, mach: 3.2,
-            gamma: 40.0 * Math.PI / 180.0, noseErrDeg: 8.0);
+            gamma: 40.0 * Math.PI / 180.0, noseErrDeg: 8.0,
+            zoomLobProfile: zoomLobProfile);
         Assert.Equal(RapierMissionPhase.ZoomCoast, g.Phase);
         g = Step(director, altitudeM: 32_000.0, mach: 2.8,
-            gamma: -5.0 * Math.PI / 180.0, noseErrDeg: 20.0);
+            gamma: -5.0 * Math.PI / 180.0, noseErrDeg: 20.0,
+            zoomLobProfile: zoomLobProfile);
         Assert.Equal(RapierMissionPhase.ReenterAlign, g.Phase);
         g = Step(director, altitudeM: 22_000.0, mach: 2.5,
-            gamma: -8.0 * Math.PI / 180.0, noseErrDeg: 6.0);
+            gamma: -8.0 * Math.PI / 180.0, noseErrDeg: 6.0,
+            zoomLobProfile: zoomLobProfile);
         Assert.Equal(RapierMissionPhase.DipRelight, g.Phase);
         return g;
     }
@@ -124,6 +129,19 @@ public class RapierZoomLobDirectorTests {
             gamma: 0.02, noseErrDeg: 4.0, contactRangeM: 180_000.0,
             fuelLb: 1_200.0, reserveFuelLb: 1_200.0);
         Assert.Equal(RapierMissionPhase.Intercept, g.Phase);
+    }
+
+    [Fact]
+    public void ScoredZoomLobWithoutProfileIsSingleSkipOnly() {
+        var director = new RapierMissionDirector();
+        WalkToDipRelight(director, zoomLobProfile: false);
+        RapierMissionGuidance g = Step(director, altitudeM: 21_336.0, mach: 2.5,
+            gamma: 0.02, noseErrDeg: 4.0, contactRangeM: 180_000.0, fuelLb: 2_200.0,
+            zoomLobProfile: false);
+        Assert.Equal(RapierMissionPhase.Intercept, g.Phase);
+        Assert.Equal("post_lob_intercept", g.PhaseReason);
+        Assert.Equal(0, g.LobSkip);
+        Assert.Equal(0, g.LobSkipMax);
     }
 
     [Fact]
