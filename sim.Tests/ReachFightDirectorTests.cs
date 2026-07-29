@@ -99,4 +99,24 @@ public class ReachFightDirectorTests {
         Assert.Equal(RapierMissionPhase.Attack, dec.SuggestedPhase);
         Assert.Equal("contact_leq_30km", dec.PhaseReason);
     }
+
+    [Fact]
+    public void DeadSlowInside30km_DoesNotEmploy() {
+        var d = new ReachFightDirector();
+        ReachFightDecision dec = d.Decide(
+            RapierMissionPhase.Intercept,
+            altitudeM: 12_000.0,
+            mach: 0.85,
+            qPa: 8_000.0,
+            gammaRad: 0.0,
+            contactRangeM: 20_000.0,
+            fuelLb: 2_000.0,
+            reserveFuelLb: 1_200.0,
+            zoomLobPreferred: false,
+            lobSkip: 0,
+            inZoomPhases: false);
+        Assert.NotEqual(MissionIntention.Employ, dec.Intention);
+        Assert.NotEqual(RapierMissionPhase.Attack, dec.SuggestedPhase);
+        Assert.Equal(MissionIntention.ReachFightGeometry, dec.Intention);
+    }
 }
