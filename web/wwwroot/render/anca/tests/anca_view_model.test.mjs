@@ -83,6 +83,14 @@ test("navigate reads fuel-to-home and escalates joker then bingo", () => {
   assert.match(navigateRow(state({ fuel_bingo: true })).line, /BINGO/);
 });
 
+test("idle communicate names the channel when the wire carries one", () => {
+  const named = communicateRow(state({ radio_channel: "TOWER" }));
+  assert.equal(named.tone, "steady");
+  assert.match(named.line, /281\.800/);
+  assert.match(named.line, /TOWER/);
+  assert.doesNotMatch(named.line, /MONITORING/);
+});
+
 test("communicate shows the live call, else the monitored frequency", () => {
   const quietRow = communicateRow(state());
   assert.equal(quietRow.tone, "steady");

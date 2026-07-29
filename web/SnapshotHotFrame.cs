@@ -2259,6 +2259,9 @@ internal static class SnapshotHotFrame {
         LandingGearIndication GearLeft,
         LandingGearIndication GearRight,
         WingFlapLever FlapLever,
+        MissionChecklistId ChecklistId,
+        int ChecklistDone,
+        int ChecklistTotal,
         FlightConfigurationTarget ConfigurationTarget,
         bool ConfigurationTransitionActive,
         string? TransitionCue,
@@ -2371,6 +2374,12 @@ internal static class SnapshotHotFrame {
                 systems.LeftMainGearIndication,
                 systems.RightMainGearIndication,
                 systems.FlapLever,
+                // Checklist name/next travel cold-only; fingerprint the progress so a
+                // completion (e.g. WEAPONS AUTH) that moves no other fingerprinted field
+                // still refreshes the cold wire promptly instead of on the 5 s fallback.
+                session.MissionChecklist.Id,
+                session.MissionChecklist.Done,
+                session.MissionChecklist.Total,
                 session.ConfigurationTarget,
                 session.ConfigurationTransitionActive,
                 session.TransitionCue,

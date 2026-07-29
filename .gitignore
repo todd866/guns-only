@@ -80,3 +80,4 @@ analysis/audio-refs/
 # audio/jet-library; synchronized source video/audio, thumbnails, and provider
 # metadata remain local so reference-only material cannot enter a web build.
 analysis/jet-audio-library/
+anca-shots/
