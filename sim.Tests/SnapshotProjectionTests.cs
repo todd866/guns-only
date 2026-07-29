@@ -95,7 +95,7 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.21.0",
+        Assert.Equal("1.22.0",
             root.GetProperty("snapshot_schema_version").GetString());
         Assert.Equal(TurboRamjetPerformanceMap.RamFadeStartMach,
             root.GetProperty("rapier_ram_light_mach").GetDouble(), 10);

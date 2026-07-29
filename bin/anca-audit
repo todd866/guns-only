@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$repo_dir"
+. "$repo_dir/bin/dotnet-env"
+
+exec dotnet run --project tools/anca-audit/GunsOnly.AncaAudit.csproj -c Release -- "$@"

@@ -49,14 +49,21 @@ export function navigateRow(state) {
 }
 
 export function communicateRow(state) {
+  // Live call wins: the spoken delta is the Communicate channel right now.
   if (state?.radio_active === true) {
     const speaker = token(state?.radio_speaker) || "R/T";
     const text = token(state?.radio_text);
     return { line: `${speaker} · ${text}`, tone: "active" };
   }
+  // Idle SA: who owns the net / what frequency — next intent, not a caption log.
   const frequency = token(state?.radio_frequency);
-  if (!frequency) return null;
-  return { line: `${frequency} · MONITORING`, tone: "steady" };
+  const channel = token(state?.radio_channel);
+  if (!frequency && !channel) return null;
+  const parts = [];
+  if (frequency) parts.push(frequency);
+  if (channel) parts.push(channel);
+  else parts.push("MONITORING");
+  return { line: parts.join(" · "), tone: "steady" };
 }
 
 export function administrateRow(state) {
