@@ -137,8 +137,8 @@ public class MissionRadioTests {
             director, ref clock, "traffic-rapier-2-base",
             t => State(t, traffic: [onBase]));
 
-        Assert.Equal("RAPIER 1-2", call.Speaker);
-        Assert.Equal("Rapier Tower, Ghost Twelve, base.", call.Text);
+        Assert.Equal("GHOST 12", call.Speaker);
+        Assert.Equal("Rapier Tower, Ghost One Two, base.", call.Text);
         Assert.True(call.StartedAtSeconds >= 2.4);
     }
 
@@ -428,7 +428,7 @@ public class MissionRadioTests {
             RadioPhraseology.Frequency(305.5));
         Assert.Equal("two thousand five hundred",
             RadioPhraseology.AltitudeFeet(2_500));
-        Assert.Equal("Ghost eleven",
+        Assert.Equal("Ghost one one",
             RadioPhraseology.SpokenCallsign(1, 1));
     }
 

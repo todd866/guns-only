@@ -1,8 +1,8 @@
 # Decision record: GHOST 11, and who is flying the Rapier
 
-**Decision (2026-07-29):** the player's flight callsign is **GHOST 11**, spoken **"Ghost
-Eleven"** (group form). Pattern traffic are the squadron's other slots: Ghost Twelve,
-Thirteen, Fourteen. The *field* keeps the program name — Rapier Tower, Rapier Approach —
+**Decision (2026-07-29):** the player's flight callsign is **GHOST 11**, spoken **"Ghost One One"**
+(digit form — GHOST is monosyllabic and rejects "eleven" prosodically; see PHRASEOLOGY.md
+§2.2). Pattern traffic are the squadron's other slots: Ghost One Two, One Three, One Four. The *field* keeps the program name — Rapier Tower, Rapier Approach —
 because station names come from the installation, not the aircraft. The callsign word
 deliberately does **not** match the airframe: that mismatch is the realism (Death 41 flew an
 F-16, Shooter 010 a T-6, KATT 11 a T-45; nobody flies "Falcon 11" in a Falcon).

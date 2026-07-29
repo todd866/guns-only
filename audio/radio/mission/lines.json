@@ -23,212 +23,212 @@
     },
     "pilot": {
       "voice": "marin",
-      "instructions": "You are Ghost Eleven — the mission pilot, and you sound like a specific person: a chill, economical fast-jet pilot who trends toward brevity and sounding cool. Never recite the rulebook; ATC does that. Natural speech, military-clean, minimum syllables — '3 greens', 'gear to come', 'Land Ghost Eleven' — not 'three down and locked'. Slightly dry, understated, breath audible when the body is working, never theatrical. Standard calls are bored-precise and easy. Under G or employment the same chill gets clipped. Bad news (bingo, gear to come, emergency) is slightly concerned trying to stay chill — tighter and flatter, composure held on purpose. Preserve callsign and brevity-word clarity over a bandwidth-limited channel."
+      "instructions": "You are Ghost One One — the mission pilot, and you sound like a specific person: a chill, economical fast-jet pilot who trends toward brevity and sounding cool. Never recite the rulebook; ATC does that. Natural speech, military-clean, minimum syllables — '3 greens', 'gear to come', 'Land Ghost One One' — not 'three down and locked'. Slightly dry, understated, breath audible when the body is working, never theatrical. Standard calls are bored-precise and easy. Under G or employment the same chill gets clipped. Bad news (bingo, gear to come, emergency) is slightly concerned trying to stay chill — tighter and flatter, composure held on purpose. Preserve callsign and brevity-word clarity over a bandwidth-limited channel."
     },
     "traffic-two": {
       "voice": "verse",
-      "instructions": "You are Ghost Twelve: the junior wingman in the pattern, crisp and slightly eager, still proving himself on the radio. Short, correct, a touch quick."
+      "instructions": "You are Ghost One Two: the junior wingman in the pattern, crisp and slightly eager, still proving himself on the radio. Short, correct, a touch quick."
     },
     "traffic-three": {
       "voice": "echo",
-      "instructions": "You are Ghost Thirteen: mid-tour, flat, utterly bored competence, flying the hundredth lap of this pattern. Minimum energy, perfect precision."
+      "instructions": "You are Ghost One Three: mid-tour, flat, utterly bored competence, flying the hundredth lap of this pattern. Minimum energy, perfect precision."
     },
     "traffic-four": {
       "voice": "ballad",
-      "instructions": "You are Ghost Fourteen: the old head of the flight. Relaxed, unhurried, minimum syllables, a hint of drawl. Nothing on this radio has ever surprised him."
+      "instructions": "You are Ghost One Four: the old head of the flight. Relaxed, unhurried, minimum syllables, a hint of drawl. Nothing on this radio has ever surprised him."
     }
   },
   "lines": [
     {
       "id": "launch-cleared",
       "role": "launch",
-      "text": "Ghost Eleven, cleared for launch.",
+      "text": "Ghost One One, cleared for launch.",
       "direction": "Routine catapult shot, the tenth today: brisk, positive, the ritual cadence of a launch crew."
     },
     {
       "id": "pilot-launch-readback",
       "role": "pilot",
-      "text": "Launch Ghost Eleven.",
-      "direction": "Clearance readback in the house register, mirror of 'Land Ghost Eleven': cockpit ritual, one steadying breath, the last words before the stroke."
+      "text": "Launch Ghost One One.",
+      "direction": "Clearance readback in the house register, mirror of 'Land Ghost One One': cockpit ritual, one steadying breath, the last words before the stroke."
     },
     {
       "id": "pilot-airborne",
       "role": "pilot",
-      "text": "Rapier Tower, Ghost Eleven, airborne.",
+      "text": "Rapier Tower, Ghost One One, airborne.",
       "direction": "Chill pilot, just off the shot: easy station call, one fact, still settling."
     },
     {
       "id": "tower-join-initial",
       "role": "tower",
-      "text": "Ghost Eleven, pattern altitude two thousand five hundred. Traffic in the pattern.",
+      "text": "Ghost One One, pattern altitude two thousand five hundred. Traffic in the pattern.",
       "direction": "Altitude clearance and traffic SA — no 'report initial'; the gate announces itself."
     },
     {
       "id": "pilot-initial",
       "role": "pilot",
-      "text": "Ghost Eleven, initial.",
+      "text": "Ghost One One, initial.",
       "direction": "Chill pilot, routine gate: bored-precise. Intentions wait for the gear call (AETCMAN)."
     },
     {
       "id": "tower-break-approved",
       "role": "tower",
-      "text": "Ghost Eleven, left break approved.",
+      "text": "Ghost One One, left break approved.",
       "direction": "Rulebook approval, level and brief: the pattern is his."
     },
     {
       "id": "pilot-downwind",
       "role": "pilot",
-      "text": "Ghost Eleven, downwind, 3 greens.",
+      "text": "Ghost One One, downwind, 3 greens.",
       "direction": "Chill pilot, pattern working: brief and cool, almost bored."
     },
     {
       "id": "pilot-downwind-gear-unsafe",
       "role": "pilot",
-      "text": "Ghost Eleven, downwind.",
+      "text": "Ghost One One, downwind.",
       "direction": "Chill pilot, a hair distracted — level, unaware the gear call is missing."
     },
     {
       "id": "tower-check-gear-downwind",
       "role": "tower",
-      "text": "Ghost Eleven, check wheels down.",
+      "text": "Ghost One One, check wheels down.",
       "direction": "Rulebook tower, JO 7110.65 exact phraseology: caught the omission. Sharpened, pointed, not alarmed."
     },
     {
       "id": "pilot-base",
       "role": "pilot",
-      "text": "Ghost Eleven, base, 3 greens, full stop.",
+      "text": "Ghost One One, base, 3 greens, full stop.",
       "direction": "Chill pilot: position, status, intention in one breath — the UPT base-call shape, minimum syllables."
     },
     {
       "id": "pilot-base-gear-unsafe",
       "role": "pilot",
-      "text": "Ghost Eleven, base, gear to come.",
+      "text": "Ghost One One, base, gear to come.",
       "direction": "Slightly concerned trying to give chill: honest and brief, tighter, no drama."
     },
     {
       "id": "tower-cleared-arrested-landing",
       "role": "tower",
-      "text": "Ghost Eleven, cable indicates up, cleared to land.",
+      "text": "Ghost One One, cable indicates up, cleared to land.",
       "direction": "Rulebook clearance with the real JO 3-3-6 cable status, in order, nothing invented."
     },
     {
       "id": "pilot-land",
       "role": "pilot",
-      "text": "Land Ghost Eleven.",
+      "text": "Land Ghost One One.",
       "direction": "Chill pilot clearance take: two words and a callsign, almost thrown away."
     },
     {
       "id": "pilot-checklist-recovery-config",
       "role": "pilot",
-      "text": "Ghost Eleven, 3 greens.",
+      "text": "Ghost One One, 3 greens.",
       "direction": "Chill pilot on approach: brief config call, still easy."
     },
     {
       "id": "tower-waveoff-gear",
       "role": "tower",
-      "text": "Ghost Eleven, go around. Gear unsafe.",
+      "text": "Ghost One One, go around. Gear unsafe.",
       "direction": "Immediate command, punched fast: go-around is the tower's word — urgency is speed and compression, not new vocabulary."
     },
     {
       "id": "tower-bolter",
       "role": "tower",
-      "text": "Ghost Eleven, go around.",
+      "text": "Ghost One One, go around.",
       "direction": "Quick, matter-of-fact: bolter is deck vocabulary; the tower just re-flies the jet."
     },
     {
       "id": "traffic-rapier-2-base",
       "role": "traffic-two",
-      "text": "Rapier Tower, Ghost Twelve, base.",
+      "text": "Rapier Tower, Ghost One Two, base.",
       "direction": "Crisp junior-wingman position report, a touch quick.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-2-base-alt",
       "role": "traffic-two",
-      "text": "Tower, Ghost Twelve, base, 3 greens.",
+      "text": "Tower, Ghost One Two, base, 3 greens.",
       "direction": "Same report later in the session, abbreviated station call, still crisp.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-2-final",
       "role": "traffic-two",
-      "text": "Rapier Tower, Ghost Twelve, final.",
+      "text": "Rapier Tower, Ghost One Two, final.",
       "direction": "Short final report, concentration audible.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-2-final-alt",
       "role": "traffic-two",
-      "text": "Tower, Twelve, final.",
+      "text": "Tower, One Two, final.",
       "direction": "Abbreviated final report, later lap, comfortable now.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-3-base",
       "role": "traffic-three",
-      "text": "Rapier Tower, Ghost Thirteen, base.",
+      "text": "Rapier Tower, Ghost One Three, base.",
       "direction": "Flat, bored, perfectly precise.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-3-base-alt",
       "role": "traffic-three",
-      "text": "Tower, Ghost Thirteen, base, 3 greens.",
+      "text": "Tower, Ghost One Three, base, 3 greens.",
       "direction": "Same bored precision, abbreviated station call.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-3-final",
       "role": "traffic-three",
-      "text": "Rapier Tower, Ghost Thirteen, final.",
+      "text": "Rapier Tower, Ghost One Three, final.",
       "direction": "Minimum-energy final call.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-3-final-alt",
       "role": "traffic-three",
-      "text": "Tower, Thirteen, final.",
+      "text": "Tower, One Three, final.",
       "direction": "Even fewer syllables. Landing anyway.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-4-base",
       "role": "traffic-four",
-      "text": "Rapier Tower, Ghost Fourteen, base.",
+      "text": "Rapier Tower, Ghost One Four, base.",
       "direction": "Unhurried drawl, old-head economy.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-4-base-alt",
       "role": "traffic-four",
-      "text": "Tower, Ghost Fourteen, base, 3 greens.",
+      "text": "Tower, Ghost One Four, base, 3 greens.",
       "direction": "Same drawl, abbreviated, entirely at home.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-4-final",
       "role": "traffic-four",
-      "text": "Rapier Tower, Ghost Fourteen, final.",
+      "text": "Rapier Tower, Ghost One Four, final.",
       "direction": "Relaxed final report.",
       "takes": 2
     },
     {
       "id": "traffic-rapier-4-final-alt",
       "role": "traffic-four",
-      "text": "Tower, Fourteen, final.",
+      "text": "Tower, One Four, final.",
       "direction": "Two words shorter than anyone else's. Lands the same.",
       "takes": 2
     },
     {
       "id": "tower-continue-check-gear",
       "role": "tower",
-      "text": "Ghost Eleven, continue, check wheels down.",
+      "text": "Ghost One One, continue, check wheels down.",
       "direction": "Second challenge, same rulebook words, firmer: the gear is still unsafe on base."
     },
     {
       "id": "tower-hold-position",
       "role": "tower",
-      "text": "Ghost Eleven, hold position.",
+      "text": "Ghost One One, hold position.",
       "direction": "Post-trap: brisk and conclusive, the cable crew is moving. The wire number stays inside the LSO shack."
     },
     {
@@ -297,49 +297,49 @@
     {
       "id": "pilot-departure-airborne",
       "role": "pilot",
-      "text": "Rapier Tower, Ghost Eleven, airborne.",
+      "text": "Rapier Tower, Ghost One One, airborne.",
       "direction": "Chill pilot, mission ahead: focused but unhurried."
     },
     {
       "id": "pilot-check-in",
       "role": "pilot",
-      "text": "Control, Ghost Eleven, up as fragged.",
+      "text": "Control, Ghost One One, up as fragged.",
       "direction": "Chill pilot checking onto the tactical net: the real check-in idiom, easy and complete."
     },
     {
       "id": "control-radar-contact",
       "role": "controller",
-      "text": "Ghost Eleven, radar contact.",
+      "text": "Ghost One One, radar contact.",
       "direction": "C2 economy: two facts, flat, the net is open for business."
     },
     {
       "id": "control-commit",
       "role": "controller",
-      "text": "Ghost Eleven, hostile. You are ordered to engage.",
+      "text": "Ghost One One, hostile. You are ordered to engage.",
       "direction": "The real C2 kill-chain wording (2023 HUNTRESS tape): cold, formal, zero drama — the formality IS the escalation."
     },
     {
       "id": "pilot-separating",
       "role": "pilot",
-      "text": "Ghost Eleven, separating.",
+      "text": "Ghost One One, separating.",
       "direction": "Working chill under G: terse, breath held, no heat in the voice."
     },
     {
       "id": "pilot-rtb",
       "role": "pilot",
-      "text": "Control, Ghost Eleven, RTB.",
+      "text": "Control, Ghost One One, RTB.",
       "direction": "Chill pilot coming off the fight: three syllables of brevity, fatigue at the edges."
     },
     {
       "id": "pilot-recovery-request",
       "role": "pilot",
-      "text": "Rapier Approach, Ghost Eleven, inbound, request recovery.",
+      "text": "Rapier Approach, Ghost One One, inbound, request recovery.",
       "direction": "Chill pilot coming home: steady, slightly tired, intent clean."
     },
     {
       "id": "approach-recovery-continue",
       "role": "controller",
-      "text": "Ghost Eleven, continue.",
+      "text": "Ghost One One, continue.",
       "direction": "Approach control economy: one word of permission."
     },
     {
@@ -377,19 +377,19 @@
     {
       "id": "pilot-joker",
       "role": "pilot",
-      "text": "Ghost Eleven, Joker.",
+      "text": "Ghost One One, Joker.",
       "direction": "Slightly concerned trying to give chill: fuel clock just entered the voice."
     },
     {
       "id": "pilot-bingo",
       "role": "pilot",
-      "text": "Ghost Eleven, Bingo.",
+      "text": "Ghost One One, Bingo.",
       "direction": "Slightly concerned trying to give chill: flat, non-negotiable, composure held on purpose."
     },
     {
       "id": "control-bingo-rtb",
       "role": "controller",
-      "text": "Ghost Eleven, RTB.",
+      "text": "Ghost One One, RTB.",
       "direction": "Cold, final, administrative. There is no argument with fuel."
     },
     {
@@ -402,13 +402,13 @@
     {
       "id": "control-confirm-safe",
       "role": "controller",
-      "text": "Ghost Eleven, confirm weapons safe.",
+      "text": "Ghost One One, confirm weapons safe.",
       "direction": "The real closing of a kill chain: administrative, cold, complete."
     },
     {
       "id": "pilot-switch-safe",
       "role": "pilot",
-      "text": "Ghost Eleven, switch is safe.",
+      "text": "Ghost One One, switch is safe.",
       "direction": "Chill pilot, adrenaline draining: the fight is over when this is said, and he knows it."
     }
   ]

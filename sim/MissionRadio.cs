@@ -111,18 +111,11 @@ public static class RadioPhraseology {
         return result;
     }
 
-    static readonly string[] SlotNumbers =
-        ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
-         "sixteen", "seventeen", "eighteen", "nineteen"];
-
-    /// Static squadron slots speak group form; formation-positional callsigns would use
-    /// DigitGroup instead ("Ghost one two"). See PHRASEOLOGY.md §2.2.
-    public static string SpokenCallsign(int flight, int position) {
-        int slot = flight * 10 + position;
-        return slot is >= 10 and <= 19
-            ? $"Ghost {SlotNumbers[slot - 10]}"
-            : $"Ghost {DigitGroup(slot.ToString(CultureInfo.InvariantCulture))}";
-    }
+    /// GHOST is monosyllabic, so its number takes digit form ("Ghost one one"); a
+    /// polysyllabic word would take group form ("Viper eleven"). See PHRASEOLOGY.md §2.2.
+    public static string SpokenCallsign(int flight, int position) =>
+        $"Ghost {DigitGroup(flight.ToString(CultureInfo.InvariantCulture))} "
+        + DigitGroup(position.ToString(CultureInfo.InvariantCulture));
 
     public static string DisplayCallsign(int flight, int position) =>
         $"GHOST {flight}{position}";
@@ -141,7 +134,7 @@ public static class RadioPhraseology {
 /// </summary>
 public sealed class MissionRadioDirector {
     const string Player = "GHOST 11";
-    const string PlayerSpoken = "Ghost Eleven";
+    const string PlayerSpoken = "Ghost One One";
     const string TowerFrequency = "305.500 UHF";
     const string ApproachFrequency = "281.800 UHF";
     const string TacticalFrequency = "251.000 UHF";
@@ -341,7 +334,7 @@ public sealed class MissionRadioDirector {
     void QueueLaunch(in MissionRadioState state) {
         // Pre-stroke clearance: talk first, then aviate the shot (hold 0). A CLEARANCE is
         // the one transaction that earns a reply (AIM 4-4-7's model is operative item +
-        // callsign) — same compressed house form as the landing take, "Land Ghost Eleven."
+        // callsign) — same compressed house form as the landing take, "Land Ghost One One."
         Enqueue(state, Tower(
             "launch-cleared", "LAUNCH", Player,
             $"{PlayerSpoken}, cleared for launch.",
@@ -818,16 +811,16 @@ public sealed class MissionRadioDirector {
     // Static squadron slots speak group form ("Ghost Twelve"); only formation flights
     // with positional numbering would speak digits ("Ghost one two"). PHRASEOLOGY.md §2.2.
     static string SpokenTrafficCallsign(string callsign) => callsign switch {
-        "RAPIER 2" or "GHOST 12" => "Ghost Twelve",
-        "RAPIER 3" or "GHOST 13" => "Ghost Thirteen",
-        "RAPIER 4" or "GHOST 14" => "Ghost Fourteen",
+        "RAPIER 2" or "GHOST 12" => "Ghost One Two",
+        "RAPIER 3" or "GHOST 13" => "Ghost One Three",
+        "RAPIER 4" or "GHOST 14" => "Ghost One Four",
         _ => callsign,
     };
 
     static string ShortTrafficCallsign(string callsign) => callsign switch {
-        "RAPIER 2" or "GHOST 12" => "Twelve",
-        "RAPIER 3" or "GHOST 13" => "Thirteen",
-        "RAPIER 4" or "GHOST 14" => "Fourteen",
+        "RAPIER 2" or "GHOST 12" => "One Two",
+        "RAPIER 3" or "GHOST 13" => "One Three",
+        "RAPIER 4" or "GHOST 14" => "One Four",
         _ => callsign,
     };
 
