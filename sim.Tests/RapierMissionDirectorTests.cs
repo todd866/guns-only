@@ -74,7 +74,7 @@ public class RapierMissionDirectorTests {
         }
 
         Assert.Equal(RapierMissionPhase.Intercept, guidance.Phase);
-        Assert.Equal(4.0, guidance.AuthoredTargetMach, 3);
+        Assert.Equal(RapierMissionDirector.MeasuredDashMach, guidance.AuthoredTargetMach, 3);
         Assert.True(guidance.SkinMachLimit < 3.3 && guidance.SkinMachLimit > 2.9,
             $"expected ~M3.14 steel limit, got {guidance.SkinMachLimit:F2}");
         Assert.Equal(guidance.CommandedMach, guidance.TargetMach, 6);
@@ -84,7 +84,7 @@ public class RapierMissionDirectorTests {
     }
 
     [Fact]
-    public void RapierUsesStagnationCmcScreenButAdvertisesTheAuthoredM4Dash() {
+    public void RapierUsesStagnationCmcScreenButAdvertisesTheMeasuredDash() {
         var director = new RapierMissionDirector();
         RapierMissionGuidance guidance = default;
         for (int i = 0; i < 8; i++) {
@@ -94,8 +94,10 @@ public class RapierMissionDirectorTests {
 
         Assert.Equal(RapierMissionPhase.Intercept, guidance.Phase);
         Assert.InRange(guidance.SkinMachLimit, 5.30, 5.40);
-        Assert.Equal(4.0, guidance.CommandedMach, 3);
-        Assert.Contains("M4.0 / FL700", guidance.Cue);
+        Assert.Equal(RapierMissionDirector.MeasuredDashMach, guidance.CommandedMach, 3);
+        Assert.Contains(
+            $"M{RapierMissionDirector.MeasuredDashMach:F1} / FL700", guidance.Cue);
+        Assert.DoesNotContain("M4.0", guidance.Cue);
         Assert.DoesNotContain("M5.", guidance.Cue);
     }
 

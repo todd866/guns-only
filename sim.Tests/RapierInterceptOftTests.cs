@@ -197,6 +197,9 @@ public class RapierInterceptOftTests {
             Assert.True(dashStagnationC > dashRecoveryC + 50.0);
             Assert.InRange(session.RapierSkinMachLimit, 5.30, 5.40);
         }
-        Assert.Contains("M4.0 / FL700", session.RapierMissionCue);
+        Assert.Contains(
+            $"M{RapierMissionDirector.MeasuredDashMach:F1} / FL700",
+            session.RapierMissionCue);
+        Assert.DoesNotContain("M4.0 / FL700", session.RapierMissionCue);
     }
 }

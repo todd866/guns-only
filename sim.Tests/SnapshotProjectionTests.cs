@@ -105,6 +105,12 @@ public class SnapshotProjectionTests {
             root.GetProperty("rapier_full_ram_mach").GetDouble(), 10);
         Assert.Equal(TurboRamjetPerformanceMap.TurbineGoneMach,
             root.GetProperty("rapier_turbine_gone_mach").GetDouble(), 10);
+        Assert.Equal(RapierMissionDirector.MeasuredDashMach,
+            root.GetProperty("rapier_design_dash_mach").GetDouble(), 10);
+        Assert.True(root.TryGetProperty("rapier_inlet_unstart", out JsonElement inletUnstart));
+        Assert.True(inletUnstart.ValueKind is JsonValueKind.True or JsonValueKind.False);
+        Assert.True(root.TryGetProperty("rapier_over_q", out JsonElement overQ));
+        Assert.True(overQ.ValueKind is JsonValueKind.True or JsonValueKind.False);
         Assert.Contains(root.GetProperty("bandit_coordination_role").GetString(),
             new[] { "NONE", "PRESSURE", "BRACKET", "EXTEND" });
         Assert.Contains(root.GetProperty("w1_coordination_role").GetString(),
