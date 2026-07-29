@@ -35,7 +35,12 @@ public sealed class ReachFightDirector {
     public const double LevelDashMinAltM = ClimbTopM;
     public const double LevelDashMinMach = 2.2;
     public const double DirectJoinMinMach = 2.0;
-    public const double SoftEmployMach = 0.9;
+    /// <summary>
+    /// Soft floor for Employ handoff. Below this, stay on ReachFight even inside 30 km
+    /// (dead-slow / parking). ~M0.85 covers reactive Attack cards at low altitude (~285 m/s
+    /// near 3 km); the dead-slow unit test pins rejection at M0.80.
+    /// </summary>
+    public const double SoftEmployMach = 0.85;
     public const double StrategySwitchMargin = 15.0;
     public const double ScoredZoomLobMinRangeM = 90_000.0;
     public const double ScoredZoomLobMaxRangeM = 250_000.0;

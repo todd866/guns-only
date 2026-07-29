@@ -233,7 +233,7 @@ public class ReachFightDirectorTests {
         ReachFightDecision dec = d.Decide(
             RapierMissionPhase.Intercept,
             altitudeM: 12_000.0,
-            mach: 0.85,
+            mach: 0.80,
             qPa: 8_000.0,
             gammaRad: 0.0,
             contactRangeM: 20_000.0,
