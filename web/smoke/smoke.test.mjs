@@ -894,15 +894,35 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
 
     await page.locator("#ready-start").click();
     await page.evaluate(() => globalThis.__gunsTerrainWarmupGate.release());
-    await page.waitForFunction(
-      () => globalThis.__gunsState?.casevac_mission === true
-        && globalThis.__gunsState?.session_phase === "ACTIVE"
-        && globalThis.__gunsState?.casevac_phase === "INGRESS"
-        && !document.documentElement.classList.contains("run-paused")
-        && document.querySelector("[data-casevac-flight-facts]")?.hidden === false,
-      undefined,
-      { timeout: 15000 },
-    );
+    try {
+      await page.waitForFunction(
+        () => globalThis.__gunsState?.casevac_mission === true
+          && globalThis.__gunsState?.session_phase === "ACTIVE"
+          && globalThis.__gunsState?.casevac_phase === "INGRESS"
+          && !document.documentElement.classList.contains("run-paused")
+          && document.querySelector("[data-casevac-flight-facts]")?.hidden === false,
+        undefined,
+        // 2026-07-29: the Ships A-D Ukraine content (Soniachne village edge, scenery density,
+        // exclusion pack) grew low-level-drone ingress warmup past the old 15s SwiftShader
+        // budget (measured 50-75s on a loaded machine; real GPUs are unaffected).
+        { timeout: 90000 },
+      );
+    } catch (error) {
+      const diag = await page.evaluate(() => {
+        const g = globalThis.__gunsState || {};
+        const out = {};
+        for (const k of ["casevac_mission", "casevac_phase", "session_phase", "paused", "frozen",
+          "terrain_present", "player_terminal_state", "mission_feature_pack_required",
+          "mission_feature_pack_id", "lz_assessment_status"]) out[k] = g[k];
+        out.runPaused = document.documentElement.className.includes("run-paused");
+        out.factsHidden = document.querySelector("[data-casevac-flight-facts]")?.hidden;
+        out.fatal = document.querySelector("#fatal")?.classList.contains("visible");
+        out.fatalMsg = (document.querySelector("#fatal-message")?.textContent || "").slice(0, 300);
+        return out;
+      });
+      console.error("CASEVAC_DIAG " + JSON.stringify(diag));
+      throw error;
+    }
 
     const before = await page.evaluate(() => ({
       px: Number(globalThis.__gunsState.px),
