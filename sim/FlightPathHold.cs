@@ -59,8 +59,16 @@ public static class FlightPathHold {
         if (!double.IsFinite(numerator) || !double.IsFinite(denominator))
             return double.NaN;
 
-        return System.Math.Clamp(
-            numerator / denominator, config.MinG, config.MaxG);
+        double load = numerator / denominator;
+        // Past 90 degrees of bank the signed division can compose a nose-down attitude error
+        // with the negative denominator into a saturated POSITIVE pull — a hands-off inverted
+        // aircraft then split-esses at MaxG while the error feeds itself (owner flight report
+        // 2026-07-29: "inverted it pulls 6g uncommanded"; reproduced at commanded 8.0 G).
+        // The documented contract is the opposite: inverted asks for negative G instead of
+        // pulling through the horizon. Enforce it — inverted-side holds may push to MinG but
+        // never demand more than a 1 G pull.
+        if (cosBank < 0.0) load = System.Math.Min(load, 1.0);
+        return System.Math.Clamp(load, config.MinG, config.MaxG);
     }
 
     static bool IsValidConfig(in FlightPathHoldConfig config) =>
