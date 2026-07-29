@@ -2063,7 +2063,10 @@ public sealed class SimulationSession {
                 <= FlapTargetToleranceDeg,
             Math.Min(systems.LeftFlapDegrees, systems.RightFlapDegrees)
                 >= systems.FullFlapDegrees - FlapTargetToleranceDeg,
-            PlayerWeaponsAuthorized));
+            PlayerWeaponsAuthorized,
+            _fuel.IsBingo,
+            // Mirrors the projection's recovery-point truth: a plan or a carrier to come home to.
+            _beat.RecoveryPlan is not null || _carrier is not null));
     }
 
     void UpdateMissionRadio() {

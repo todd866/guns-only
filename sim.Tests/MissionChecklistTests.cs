@@ -106,6 +106,46 @@ public sealed class MissionChecklistTests {
     }
 
     [Fact]
+    public void RtbChecklistActivatesOnReturnToBaseAndWalksItsItems() {
+        var director = new MissionChecklistDirector();
+        director.Step(Base(0.0));
+
+        var entered = director.Step(Base(1.0) with {
+            RapierPhase = RapierMissionPhase.ReturnToBase,
+            RecoveryPointKnown = false });
+        Assert.Equal(MissionChecklistId.ReturnToBase, entered.Id);
+        Assert.Equal("RTB", entered.Name);
+        Assert.Equal(3, entered.Total);
+        Assert.Equal(1, entered.Done);
+        Assert.Equal("RECOVERY POINT", entered.NextItem);
+
+        // Bingo fuel on RTB is the common case; the reserve item stays honestly pending.
+        var onReserve = director.Step(Base(2.0) with {
+            RapierPhase = RapierMissionPhase.ReturnToBase,
+            RecoveryPointKnown = true, Bingo = true });
+        Assert.Equal(2, onReserve.Done);
+        Assert.Equal("RESERVE MARGIN", onReserve.NextItem);
+
+        var comfortable = director.Step(Base(3.0) with {
+            RapierPhase = RapierMissionPhase.ReturnToBase,
+            RecoveryPointKnown = true, Bingo = false });
+        Assert.Equal(3, comfortable.Done);
+        Assert.Equal("", comfortable.NextItem);
+    }
+
+    [Fact]
+    public void RtbYieldsToRecoveryAndNeverResurrects() {
+        var director = new MissionChecklistDirector();
+        director.Step(Base(0.0) with { RapierPhase = RapierMissionPhase.ReturnToBase });
+        var recovery = director.Step(Base(1.0) with {
+            RapierPhase = RapierMissionPhase.Recovery });
+        Assert.Equal(MissionChecklistId.Recovery, recovery.Id);
+        var held = director.Step(Base(2.0) with {
+            RapierPhase = RapierMissionPhase.ReturnToBase });
+        Assert.Equal(MissionChecklistId.Recovery, held.Id);
+    }
+
+    [Fact]
     public void LaterChecklistsNeverRegressToEarlierOnes() {
         var director = new MissionChecklistDirector();
         director.Step(Base(0.0));

@@ -2,8 +2,12 @@ using System;
 
 namespace GunsOnly.Sim;
 
-/// <summary>Which automatic checklist is currently running. Ordinal values ride the snapshot.</summary>
-public enum MissionChecklistId { None = 0, Launch = 1, Commit = 2, Recovery = 3 }
+/// <summary>
+/// Which automatic checklist is currently running. Ordinal values ride the snapshot, so they
+/// are append-only: ReturnToBase joined after Recovery shipped and keeps the higher ordinal
+/// even though it precedes Recovery in mission order (Definitions[] order carries sequence).
+/// </summary>
+public enum MissionChecklistId { None = 0, Launch = 1, Commit = 2, Recovery = 3, ReturnToBase = 4 }
 
 /// <summary>
 /// Per-tick truth the checklist director observes. Assembled by SimulationSession from
@@ -21,7 +25,9 @@ public readonly record struct MissionChecklistState(
     bool AllGearDown,
     bool FlapsUp,
     bool FlapsLanding,
-    bool WeaponsAuthorized);
+    bool WeaponsAuthorized,
+    bool Bingo = false,
+    bool RecoveryPointKnown = false);
 
 /// <summary>
 /// The panel-facing checklist snapshot. CompletedCall carries an item's narration token for
@@ -70,6 +76,16 @@ public sealed class MissionChecklistDirector {
                 new("COMMITTED", "", (s, _) => s.RapierPhase
                     is RapierMissionPhase.Intercept or RapierMissionPhase.Attack),
                 new("WEAPONS AUTH", "", (s, _) => s.WeaponsAuthorized),
+            ]),
+        new(MissionChecklistId.ReturnToBase, "RTB",
+            state => state.RapierPhase == RapierMissionPhase.ReturnToBase,
+            [
+                new("RTB COMMITTED", "",
+                    (s, _) => s.RapierPhase == RapierMissionPhase.ReturnToBase),
+                new("RECOVERY POINT", "", (s, _) => s.RecoveryPointKnown),
+                // Bingo-triggered RTBs are the common case; this stays honestly pending
+                // (amber on the panel) while the sortie rides its reserve home.
+                new("RESERVE MARGIN", "", (s, _) => !s.Bingo),
             ]),
         new(MissionChecklistId.Recovery, "RECOVERY",
             state => state.RapierPhase == RapierMissionPhase.Recovery,

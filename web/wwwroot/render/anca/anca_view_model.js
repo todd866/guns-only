@@ -2,7 +2,7 @@
 /// display of what the automation is doing for the pilot — it never invents state; missing
 /// truth renders as a quiet em-dash.
 export const CHECKLIST_NAMES = Object.freeze({
-  0: "", 1: "LAUNCH", 2: "COMMIT", 3: "RECOVERY",
+  0: "", 1: "LAUNCH", 2: "COMMIT", 3: "RECOVERY", 4: "RTB",
 });
 
 const QUIET_ROW = Object.freeze({ line: "—", tone: "quiet" });

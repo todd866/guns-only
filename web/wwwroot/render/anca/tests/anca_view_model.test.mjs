@@ -123,6 +123,11 @@ test("administrate shows checklist progress and next item", () => {
 test("checklist name falls back to the ordinal table when cold strings lag", () => {
   const row = administrateRow(state({ checklist_name: undefined }));
   assert.match(row.line, new RegExp(CHECKLIST_NAMES[1]));
+  const rtb = administrateRow(state({
+    checklist_name: undefined, checklist_id: 4, checklist_total: 3,
+    checklist_done: 2, checklist_next: "RESERVE MARGIN" }));
+  assert.match(rtb.line, /RTB 2\/3/);
+  assert.match(rtb.line, /RESERVE MARGIN/);
 });
 
 test("stale or missing snapshot degrades to quiet dashes, never throws", () => {
