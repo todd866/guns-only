@@ -725,29 +725,36 @@ public sealed class DetentLayer {
         double stop = System.Math.Clamp(parameters.MaxThrustFraction, 0.0, 1.65);
         if (stop <= 0.0) return 0.0;
 
-        if (parameters.PropulsionModel != PropulsionModelKind.J47Ge27) {
-            double availableN = parameters.ThrustMaxN
-                * atmosphere.Sample(altitudeM).DensityKgM3 / AirData.SeaLevelDensityKgM3;
-            return availableN <= 1e-9 ? stop
-                : System.Math.Clamp(requiredThrustN / availableN, 0.0, stop);
+        if (parameters.PropulsionModel == PropulsionModelKind.J47Ge27) {
+            // The J47 API deliberately maps lever power to a nonlinear RPM/thrust point. Invert that
+            // same surface instead of pretending normalized RPM or sea-level rated thrust is the
+            // installed thrust available at this altitude and Mach.
+            if (J47PerformanceMap.Evaluate(stop, altitudeM, mach).NetThrustN
+                <= requiredThrustN)
+                return stop;
+            double lo = 0.0, hi = stop;
+            for (int i = 0; i < 12; i++) {
+                double mid = (lo + hi) * 0.5;
+                if (J47PerformanceMap.Evaluate(mid, altitudeM, mach).NetThrustN
+                    < requiredThrustN)
+                    lo = mid;
+                else
+                    hi = mid;
+            }
+            return (lo + hi) * 0.5;
         }
 
-        // The J47 API deliberately maps lever power to a nonlinear RPM/thrust point. Invert that
-        // same surface instead of pretending normalized RPM or sea-level rated thrust is the
-        // installed thrust available at this altitude and Mach.
-        if (J47PerformanceMap.Evaluate(stop, altitudeM, mach).NetThrustN
-            <= requiredThrustN)
-            return stop;
-        double lo = 0.0, hi = stop;
-        for (int i = 0; i < 12; i++) {
-            double mid = (lo + hi) * 0.5;
-            if (J47PerformanceMap.Evaluate(mid, altitudeM, mach).NetThrustN
-                < requiredThrustN)
-                lo = mid;
-            else
-                hi = mid;
-        }
-        return (lo + hi) * 0.5;
+        AtmosphericState air = atmosphere.Sample(altitudeM);
+        double densityRatio = air.DensityKgM3 / AirData.SeaLevelDensityKgM3;
+        // Lever 1.0 is military (ThrustMaxN × lapse). MaxThrustFraction may exceed 1.0 for AB;
+        // invert against the unit-lever available thrust, then clamp to the airframe stop.
+        double unitAvailableN = parameters.PropulsionModel
+            == PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate
+                ? TurbofanPublicDataSurrogate.AvailableThrustN(
+                    parameters.ThrustMaxN, densityRatio, mach, 1.0)
+                : parameters.ThrustMaxN * densityRatio;
+        return unitAvailableN <= 1e-9 ? stop
+            : System.Math.Clamp(requiredThrustN / unitAvailableN, 0.0, stop);
     }
 
     static bool HasBodyAttitude(in AircraftState s) =>

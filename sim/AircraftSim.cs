@@ -639,15 +639,11 @@ public sealed class AircraftSim {
         }
 
         double densityRatio = atmosphericState.DensityKgM3 / AirData.SeaLevelDensityKgM3;
-        // Transparent generic afterburning-turbofan surrogate: gross thrust lapses approximately
-        // with sqrt(density ratio), while bounded inlet ram recovery grows with Mach. This avoids
-        // applying the legacy turbojet/toy density-linear lapse to Mission 7, but remains explicitly
-        // short of an OEM engine deck. Sea-level over-recovery is capped and no hidden supercruise,
-        // nozzle schedule, installation loss, or classified control law is implied.
+        // Transparent generic afterburning-turbofan surrogate: shared with detent feed-forward so
+        // speed-hold / trim estimates use the same √density × Mach-ram lapse as the force kernel.
         double thrustLapse = _p.PropulsionModel
             == PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate
-                ? System.Math.Clamp(System.Math.Sqrt(System.Math.Max(0.0, densityRatio))
-                    * (1.0 + 0.10 * System.Math.Clamp(mach, 0.0, 1.5)), 0.0, 1.05)
+                ? Propulsion.TurbofanPublicDataSurrogate.ThrustLapse(densityRatio, mach)
                 : densityRatio;
         double thrustN = _thrustFrac * _p.ThrustMaxN * thrustLapse;
         double corePower = System.Math.Clamp(_thrustFrac, 0.0, 1.0);
