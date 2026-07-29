@@ -86,8 +86,15 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(17, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(18, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
+        string[] names = layout.GetProperty("blocks")
+            .EnumerateArray()
+            .SelectMany(block => block.GetProperty("slots").EnumerateArray())
+            .Select(slot => slot.GetProperty("name").GetString()!)
+            .ToArray();
+        Assert.Contains("padlock_preferred_plane_valid", names);
+        Assert.Contains("padlock_preferred_plane_deg", names);
 
         bool casevac = root.TryGetProperty("casevac_mission", out JsonElement casevacMission)
             && casevacMission.GetBoolean();
@@ -508,7 +515,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(17, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(18, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())

@@ -2766,12 +2766,20 @@ class CombatHud {
       const kernelSteeringReported = Object.prototype.hasOwnProperty.call(
         state, "padlock_roll_assist_selected");
       const kernelRollErrorDeg = Number(state.padlock_roll_error_deg);
+      const preferredPlaneValid = state.padlock_preferred_plane_valid === true;
+      const preferredPlaneDeg = Number(state.padlock_preferred_plane_deg);
+      const assistCaptured = state.padlock_roll_assist_captured === true;
+      const presentationCaptured = steeringAvailable && Number.isFinite(kernelRollErrorDeg)
+        && (Math.abs(kernelRollErrorDeg) <= 11
+          || (this._padlockLiftCaptured && Math.abs(kernelRollErrorDeg) <= 18));
       const steering = steeringAvailable && orientation.liftValid
         ? kernelSteeringReported ? {
           valid: state.padlock_roll_assist_selected === true
             && state.padlock_roll_assist_geometry_valid === true
             && Number.isFinite(kernelRollErrorDeg),
-          captured: state.padlock_roll_assist_captured === true,
+          captured: preferredPlaneValid
+            ? presentationCaptured
+            : (assistCaptured || presentationCaptured),
           anyPlane: state.padlock_roll_assist_any_plane === true,
           rollErrorRad: Number.isFinite(kernelRollErrorDeg)
             ? kernelRollErrorDeg * DEG : null,
@@ -2781,7 +2789,9 @@ class CombatHud {
           targetForward: this.relative.dot(frame.playerForward),
           wasCaptured: this._padlockLiftCaptured,
         }) : null;
-      this._padlockLiftCaptured = steering?.valid ? steering.captured : false;
+      this._padlockLiftCaptured = steering?.valid
+        ? kernelSteeringReported ? presentationCaptured : steering.captured
+        : false;
       if (steering?.valid) {
         if (this._debug) {
           this._debug.padlockDirector = {
@@ -2789,6 +2799,9 @@ class CombatHud {
             captured: steering.captured,
             anyPlane: steering.anyPlane,
             assistActive: state.padlock_roll_assist_active === true,
+            preferredPlaneValid,
+            preferredPlaneRad: preferredPlaneValid && Number.isFinite(preferredPlaneDeg)
+              ? preferredPlaneDeg * DEG : null,
           };
         }
       }

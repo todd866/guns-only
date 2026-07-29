@@ -42,7 +42,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 17;
+    public const int LayoutVersion = 18;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -351,6 +351,8 @@ internal static class SnapshotHotFrame {
         Num("padlock_roll_rate_measured_dps", 3);
         Num("padlock_target_plane_rate_dps", 3);
         Num("padlock_roll_assist_aileron", 4);
+        Bool("padlock_preferred_plane_valid");
+        Num("padlock_preferred_plane_deg", 3);
         Bool("high_alpha_recovery");
         Num("g_valley", 3);
         Num("g_maxperform", 3);
@@ -1191,6 +1193,9 @@ internal static class SnapshotHotFrame {
         w.Num("padlock_target_plane_rate_dps",
             padlockRollAssist.EstimatedTargetPlaneRateRadPerSecond * 57.29577951308232, 3);
         w.Num("padlock_roll_assist_aileron", padlockRollAssist.SasRollControl, 4);
+        w.Bool("padlock_preferred_plane_valid", padlockRollAssist.PreferredPlaneValid);
+        w.Num("padlock_preferred_plane_deg",
+            padlockRollAssist.PreferredPlaneRad * 57.29577951308232, 3);
         w.Bool("high_alpha_recovery", detents.HighAlphaRecoveryActive);
         w.Num("g_valley", detents.ValleyG, 3);
         w.Num("g_maxperform", Protection.MaxPerformG(s, beat.PlayerAir, trueAirspeedMps, atmosphere), 3);

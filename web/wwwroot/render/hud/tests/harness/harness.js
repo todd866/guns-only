@@ -441,6 +441,8 @@ window.__debugScenario = async (name) => {
       ground_speed_kts: frame.state.ground_speed_kts,
       vx: frame.state.vx,
       vz: frame.state.vz,
+      padlock_preferred_plane_valid: frame.state.padlock_preferred_plane_valid,
+      padlock_preferred_plane_deg: frame.state.padlock_preferred_plane_deg,
     },
     triggerHeld: frame.triggerHeld,
     banditOnTrajectory: scenario?.bandit?.onTrajectory === true,
