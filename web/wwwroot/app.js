@@ -64,6 +64,11 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
+  bindNavNdChrome,
+  formatWholeLb,
+  procedureLabelFromState,
+} from "./render/nav/mesh_nd_chrome.js";
+import {
   applyLookDelta,
   trackpadLookDelta,
 } from "./render/input/look_gesture.js";
@@ -471,43 +476,70 @@ const rapierRadioHistory = document.querySelector("#rapier-radio-history");
 const rapierRadioDisclosure = document.querySelector("#rapier-radio-disclosure");
 const navConsole = document.querySelector("#nav-console");
 const navMeshMapCanvas = document.querySelector("#nav-mesh-map");
-const navUi = navConsole ? Object.freeze({
-  destination: document.querySelector("#nav-destination"),
-  bearing: document.querySelector("#nav-bearing"),
-  range: document.querySelector("#nav-range"),
-  eta: document.querySelector("#nav-eta"),
-  closure: document.querySelector("#nav-closure"),
-  turn: document.querySelector("#nav-turn"),
-  fuelNeed: document.querySelector("#nav-fuel-need"),
-  fuelHave: document.querySelector("#nav-fuel-have"),
-  fuelArrival: document.querySelector("#nav-fuel-arrival"),
-  fuelReserve: document.querySelector("#nav-fuel-reserve"),
-  fuelMargin: document.querySelector("#nav-fuel-margin"),
-  nmPerMin: document.querySelector("#nav-nm-per-min"),
-  lbPerMin: document.querySelector("#nav-lb-per-min"),
-  lbPerNm: document.querySelector("#nav-lb-per-nm"),
-  groundspeed: document.querySelector("#nav-groundspeed"),
-  gross: document.querySelector("#nav-gross"),
-  thrust: document.querySelector("#nav-thrust"),
-  skin: document.querySelector("#nav-skin"),
-  handoff: document.querySelector("#nav-handoff"),
-  reliefKills: document.querySelector("#nav-relief-kills"),
-  contactRange: document.querySelector("#nav-contact-range"),
-  contactEti: document.querySelector("#nav-contact-eti"),
-}) : null;
+const navUi = navConsole ? bindNavNdChrome(document) : null;
 
 let meshNavMap = null;
+let meshNdFollow = true;
+let meshNdTourArm = false;
 function ensureMeshNavMap(bridgeRef) {
   if (meshNavMap || !navMeshMapCanvas) return meshNavMap;
   meshNavMap = createMeshNavMap(navMeshMapCanvas, {
     onSelectPlace(placeId) {
+      if (meshNdTourArm && bridgeRef?.MeshTourAppendPlace) {
+        bridgeRef.MeshTourAppendPlace(placeId);
+        return;
+      }
       bridgeRef?.SetMeshActivePlace?.(placeId);
     },
     onFreeFix(eastM, northM) {
+      if (meshNdTourArm && bridgeRef?.MeshTourAppendFreeFix) {
+        bridgeRef.MeshTourAppendFreeFix(eastM, northM, null);
+        return;
+      }
       bridgeRef?.SetMeshFreeFix?.(eastM, northM, null);
+    },
+    onDragDest(eastM, northM) {
+      bridgeRef?.SetMeshFreeFix?.(eastM, northM, null);
+    },
+    getFollowMode() {
+      return meshNdFollow;
     },
   });
   return meshNavMap;
+}
+
+function bindMeshNdToolbar(bridgeRef) {
+  if (!navUi) return;
+  const setFollow = (follow) => {
+    meshNdFollow = follow;
+    if (navUi.follow) navUi.follow.dataset.active = follow ? "true" : "false";
+    if (navUi.free) navUi.free.dataset.active = follow ? "false" : "true";
+    meshNavMap?.setFollowMode?.(follow);
+  };
+  navUi.follow?.addEventListener("click", () => setFollow(true));
+  navUi.free?.addEventListener("click", () => setFollow(false));
+  navUi.tourAdd?.addEventListener("click", () => {
+    meshNdTourArm = !meshNdTourArm;
+    if (navUi.tourAdd) navUi.tourAdd.dataset.active = meshNdTourArm ? "true" : "false";
+  });
+  navUi.clearDest?.addEventListener("click", () => {
+    bridgeRef?.ClearMeshTour?.();
+    bridgeRef?.ClearMeshActiveDest?.();
+    meshNdTourArm = false;
+    if (navUi.tourAdd) navUi.tourAdd.dataset.active = "false";
+  });
+  const procButtons = [
+    [navUi.procNone, 0],
+    [navUi.procOverhead, 1],
+    [navUi.procDownwind, 2],
+    [navUi.procStraight, 3],
+  ];
+  for (const [button, kind] of procButtons) {
+    button?.addEventListener("click", () => {
+      bridgeRef?.SetRecoveryProcedure?.(kind);
+    });
+  }
+  setFollow(true);
 }
 
 let lastRapierRadioSequence = 0;
@@ -580,8 +612,7 @@ function updateMissionRadio(state) {
   rapierRadio.dataset.priority = String(priority);
 }
 
-/// Populate the navigation console. Mesh ActiveDest fields win when present; otherwise HomePlate
-/// recovery projection. Fuel aboard is always `fuel_lb`.
+/// Mesh ND: map-first solution strip. Legacy TF rows removed.
 function updateNavConsole(state) {
   if (!navConsole || !navUi) return;
   const mesh = meshNavPresentation(state);
@@ -593,9 +624,9 @@ function updateNavConsole(state) {
     syncNavConsoleDisclosure();
     return;
   }
-  const set = (node, text, condition) => {
+  const set = (node, textValue, condition) => {
     if (!node) return;
-    node.textContent = text;
+    node.textContent = textValue;
     node.dataset.state = condition;
   };
   const num = (key) => {
@@ -604,29 +635,23 @@ function updateNavConsole(state) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
   };
-  const wholeLb = (value) => value === null
-    ? "—" : `${Math.round(value).toLocaleString("en-US")} LB`;
 
   const patternOnly = state?.rapier_pattern_only === true;
   const legRaw = typeof state?.rapier_circuit_leg === "string" ? state.rapier_circuit_leg : "";
   const legLabel = legRaw ? legRaw.replaceAll("_", " ") : "";
-  const gate = Math.max(0, Math.floor(Number(state?.rapier_recovery_gate) || 0));
   const recoveryName = typeof state?.recovery_display_name === "string"
     && state.recovery_display_name.trim()
     ? state.recovery_display_name.trim().toUpperCase()
     : state?.rapier_mission_available === true
       ? "DISPERSED STRIP · HOME" : "RECOVERY POINT · HOME";
-  const destinationName = patternOnly
-    ? (legLabel
-      ? (gate > 0 ? `CIRCUITS · ${legLabel} · BOX ${gate}/4` : `CIRCUITS · ${legLabel}`)
-      : "CIRCUITS · PATTERN")
-    : (mesh ? mesh.displayName.toUpperCase() : recoveryName);
+  const destinationName = mesh
+    ? mesh.displayName.toUpperCase()
+    : (patternOnly && legLabel ? `CIRCUITS · ${legLabel}` : recoveryName);
   set(navUi.destination, destinationName, "nominal");
 
   const bearingDeg = mesh?.bearingDeg ?? navigation.bearingDeg;
   const rangeNm = mesh?.rangeNm ?? navigation.rangeNm;
   const turnDeg = mesh?.turnDeg ?? navigation.turnDeg;
-  const closureKts = mesh?.closureKts ?? navigation.closureKts;
   const etaMinutes = mesh?.etaMinutes ?? navigation.etaMinutes;
   const travelState = mesh?.travelState ?? navigation.travelState;
   const fuelNeedLb = mesh?.fuelToDestLb ?? navigation.fuelToHomeLb;
@@ -662,16 +687,6 @@ function updateNavConsole(state) {
     progressState = "nominal";
   }
   set(navUi.eta, etaText, progressState);
-
-  let closureText = "—";
-  if (travelState === "arrived") closureText = "AT DEST";
-  else if (closureKts !== null && closureKts > 1)
-    closureText = `${Math.round(closureKts)} KT DEST`;
-  else if (closureKts !== null && closureKts < -1)
-    closureText = `AWAY ${Math.round(-closureKts)} KT`;
-  else if (closureKts !== null) closureText = "ABEAM";
-  set(navUi.closure, closureText, progressState);
-
   set(navUi.turn, turnDeg !== null
     ? (Math.abs(turnDeg) < 3 ? "STEADY"
       : `${turnDeg < 0 ? "LEFT" : "RIGHT"} ${Math.round(Math.abs(turnDeg))}°`)
@@ -679,37 +694,49 @@ function updateNavConsole(state) {
   turnDeg !== null ? "nominal" : "unknown");
 
   const fuelLb = num("fuel_lb");
-  set(navUi.fuelNeed, wholeLb(fuelNeedLb),
+  set(navUi.fuelHave, formatWholeLb(fuelLb), fuelLb !== null ? "nominal" : "unknown");
+  set(navUi.fuelNeed, formatWholeLb(fuelNeedLb),
     fuelNeedLb !== null ? "nominal" : "unknown");
-  set(navUi.fuelHave, wholeLb(fuelLb), fuelLb !== null ? "nominal" : "unknown");
-  set(navUi.fuelArrival, wholeLb(fuelArrivalLb),
+  set(navUi.fuelArrival, formatWholeLb(fuelArrivalLb),
     fuelArrivalLb !== null
       ? fuelArrivalLb < 0 ? "warning" : "nominal"
       : "unknown");
-  set(navUi.fuelReserve, wholeLb(reserveTargetLb),
-    reserveTargetLb !== null ? "nominal" : "unknown");
   const reserveCautionThreshold = reserveTargetLb !== null
     ? reserveTargetLb * 0.10 : 0;
-  const marginLabel = mesh && mesh.reserveMarginViaDestLb !== null ? "VIA HOME" : "RES";
   set(navUi.fuelMargin,
     reserveMarginLb === null
       ? "—"
       : reserveMarginLb < 0
-        ? `BELOW ${marginLabel} ${Math.round(-reserveMarginLb)} LB`
-        : `ABOVE ${marginLabel} ${Math.round(reserveMarginLb)} LB`,
+        ? `BELOW ${Math.round(-reserveMarginLb)} LB`
+        : `ABOVE ${Math.round(reserveMarginLb)} LB`,
     reserveMarginLb === null ? "unknown"
       : reserveMarginLb < 0 ? "warning"
         : reserveMarginLb < reserveCautionThreshold ? "caution" : "nominal");
 
   set(navUi.nmPerMin, nmPerMin !== null
-    ? `${nmPerMin.toFixed(1)} NM/MIN` : "—",
+    ? `${nmPerMin.toFixed(1)}` : "—",
   nmPerMin !== null ? "nominal" : "unknown");
   set(navUi.lbPerMin, lbPerMin !== null
-    ? `${Math.round(lbPerMin)} LB/MIN` : "—",
+    ? `${Math.round(lbPerMin)}` : "—",
   lbPerMin !== null ? "nominal" : "unknown");
   set(navUi.lbPerNm, lbPerNm !== null
-    ? `${lbPerNm.toFixed(2)} LB/NM` : "—",
+    ? `${lbPerNm.toFixed(2)}` : "—",
   lbPerNm !== null ? "nominal" : "unknown");
+
+  const procLabel = procedureLabelFromState(state);
+  set(navUi.procedure, procLabel, procLabel === "NONE" ? "unknown" : "nominal");
+  const homeKnown = navigation.recoveryPointKnown || state?.mesh_home_place_id;
+  for (const [button, kind] of [
+    [navUi.procNone, 0],
+    [navUi.procOverhead, 1],
+    [navUi.procDownwind, 2],
+    [navUi.procStraight, 3],
+  ]) {
+    if (!button) continue;
+    button.disabled = !homeKnown && kind !== 0;
+    const activeKind = Number(state?.recovery_procedure_kind) || 0;
+    button.dataset.active = activeKind === kind ? "true" : "false";
+  }
 
   const map = ensureMeshNavMap(typeof bridge !== "undefined" ? bridge : null);
   if (map) {
@@ -724,82 +751,12 @@ function updateNavConsole(state) {
       activeNorthM: num("mesh_active_north_m"),
       transitMode: mesh?.transitMode
         ?? (typeof state?.mesh_transit_mode === "string" ? state.mesh_transit_mode : "mission_gated"),
+      follow: meshNdFollow,
     });
   }
 
-  set(navUi.groundspeed, navigation.groundKts !== null
-    ? `${Math.round(navigation.groundKts).toLocaleString("en-US")} KT`
-    : "—", navigation.groundKts !== null ? "nominal" : "unknown");
-
-  const grossLb = num("player_gross_lb");
-  set(navUi.gross, grossLb !== null
-    ? `${Math.round(grossLb).toLocaleString("en-US")} LB` : "—",
-  grossLb !== null ? "nominal" : "unknown");
-  const thrustLbf = num("engine_net_thrust_lbf");
-  set(navUi.thrust, thrustLbf !== null
-    ? `${Math.round(thrustLbf).toLocaleString("en-US")} LBF` : "—",
-  thrustLbf !== null ? "nominal" : "unknown");
-
-  // Schema 1.19 separates lagged wall skin from stagnation-point T0. Under the legacy schema the
-  // "stagnation" field was actually skin, so do not relabel it T0 unless canonical skin is present.
-  const canonicalSkinC = num("rapier_skin_temp_c");
-  const skinC = canonicalSkinC ?? num("rapier_stagnation_temp_c");
-  const stagnationC = canonicalSkinC === null ? null : num("rapier_stagnation_temp_c");
-  const cmcCapabilityC = num("rapier_cmc_capability_c");
-  const cmcMarginC = num("rapier_cmc_margin_c")
-    ?? (cmcCapabilityC !== null && stagnationC !== null
-      ? cmcCapabilityC - stagnationC
-      : num("rapier_thermal_margin_c"));
-  const thermalParts = [];
-  if (skinC !== null) thermalParts.push(`SKIN ${Math.round(skinC)}°C`);
-  if (stagnationC !== null) thermalParts.push(`T0 ${Math.round(stagnationC)}°C`);
-  if (cmcCapabilityC !== null) {
-    thermalParts.push(`CMC CAP ${Math.round(cmcCapabilityC)}°C`);
-  }
-  set(navUi.skin, thermalParts.length > 0 ? thermalParts.join(" · ") : "—",
-  cmcMarginC === null ? (skinC === null ? "unknown" : "nominal")
-    : cmcMarginC < 0 ? "warning"
-      : cmcMarginC < 40 ? "caution" : "nominal");
-
-  const handoff = combatHandoffPresentation(state);
-  const handoffState = handoff.phase === "RELIEF_LOST" ? "warning"
-    : ["REQUESTED", "DRAIN"].includes(handoff.phase) ? "caution"
-      : handoff.phase === "UNAVAILABLE" || !handoff.phase ? "unknown" : "nominal";
-  set(navUi.handoff, handoff.status, handoffState);
-  set(navUi.reliefKills, `${handoff.reliefKills} · UNCREDITED`,
-    handoff.occurred ? "nominal" : "unknown");
-  navConsole.dataset.relevance = handoff.playerRtbActive
-    ? "recovery" : handoff.requested ? "handoff" : "navigation";
-
-  const contactRangeM = num("range_m");
-  const rangeLabel = document.querySelector("#nav-contact-range")
-    ?.closest(".tf-indication")?.querySelector(".tf-label");
-  const etiLabel = document.querySelector("#nav-contact-eti")
-    ?.closest(".tf-indication")?.querySelector(".tf-label");
-  if (patternOnly) {
-    if (rangeLabel) rangeLabel.textContent = "Pattern alt";
-    if (etiLabel) etiLabel.textContent = "Pattern speed";
-    const call = typeof state?.rapier_circuit_comms === "string" ? state.rapier_circuit_comms : "";
-    set(navUi.contactRange, patternAltFt !== null ? `${Math.round(patternAltFt)} FT` : "—",
-      patternAltFt !== null ? "nominal" : "unknown");
-    set(navUi.contactEti, patternSpeedKt !== null
-      ? `${Math.round(patternSpeedKt)} KT${call ? ` · ${call}` : ""}`
-      : (call || "PATTERN"),
-    "nominal");
-  } else {
-    if (rangeLabel) rangeLabel.textContent = "Contact range";
-    if (etiLabel) etiLabel.textContent = "Time to intercept";
-    set(navUi.contactRange, contactRangeM !== null
-      ? `${(contactRangeM / 1852).toFixed(0)} NM` : "—",
-    contactRangeM !== null ? "nominal" : "unknown");
-    // Negative means the kernel judged it meaningless — inside 20 km, or no closure.
-    const etiMin = num("rapier_intercept_eti_min");
-    set(navUi.contactEti, etiMin !== null && etiMin >= 0
-      ? `${etiMin.toFixed(1)} MIN` : "MERGE",
-    etiMin !== null && etiMin >= 0 ? "nominal" : "unknown");
-  }
+  navConsole.dataset.relevance = "navigation";
 }
-
 
 
 function bindCircuitsSystemsActions() {
@@ -9468,6 +9425,7 @@ async function boot() {
   await getConfig();
   const assemblyExports = await getAssemblyExports("GunsOnly.Web");
   bridge = assemblyExports.GunsOnly.Web.WebBridge;
+  bindMeshNdToolbar(bridge);
   // Per-frame state now rides the kernel's numeric hot buffer; the full JSON snapshot is
   // re-fetched only when its cold_version slot bumps (or on the source's fallback interval).
   // The MemoryView is fetched once; copyTo re-derives the WASM view per call, so a persistent

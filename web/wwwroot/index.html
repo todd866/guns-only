@@ -944,13 +944,38 @@
     #nav-mesh-map {
       display: block;
       width: 100%;
-      height: 160px;
+      height: 240px;
       margin: 0 0 8px;
       border: 1px solid rgba(60, 45, 28, 0.35);
       border-radius: 2px;
       cursor: crosshair;
       background: #d9cbb0;
+      touch-action: none;
     }
+    .nav-nd-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+      margin: 0 0 6px;
+    }
+    .nav-nd-tool {
+      appearance: none;
+      border: 1px solid rgba(128, 225, 218, .28);
+      background: rgba(4, 18, 22, .72);
+      color: rgba(210, 240, 232, .88);
+      font: 600 9px/1.1 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: 0.04em;
+      padding: 5px 6px;
+      cursor: pointer;
+    }
+    .nav-nd-tool[data-active="true"] {
+      border-color: rgba(141, 255, 179, .55);
+      color: rgba(200, 255, 220, .95);
+      background: rgba(20, 48, 36, .85);
+    }
+    .nav-nd-sep { opacity: 0.35; font-size: 10px; }
+
 
     .tf-indications {
       display: grid;
@@ -2418,20 +2443,29 @@
     </div>
   </details>
 
-  <!-- NAV CONSOLE. Same idiom as AIRCRAFT SYSTEMS deliberately: the pilot already knows how that
-       panel behaves, so navigation gets a console rather than more cue text crowding the HUD.
-       It answers the four questions the cue could not — where am I going, how far, how long, and
-       can I get there on the fuel aboard. -->
+  <!-- MESH ND. Map-first navigation display in the old nav-console shell (N key). -->
   <details id="nav-console" hidden data-relevance="none">
-    <summary role="button" aria-expanded="false" aria-label="Toggle navigation console" aria-keyshortcuts="N">
+    <summary role="button" aria-expanded="false" aria-label="Toggle navigation display" aria-keyshortcuts="N">
       <span class="tf-title">NAVIGATION</span>
       <span class="tf-collapse-cue" aria-hidden="true"></span>
     </summary>
-    <div class="tf-body">
-      <canvas id="nav-mesh-map" width="280" height="160"
-        aria-label="Mesh navigation map"
-        title="Click a place or drop a Free Fix (Open Segment)"></canvas>
-      <div class="tf-indications" aria-label="Destination">
+    <div class="tf-body nav-nd-body">
+      <div class="nav-nd-toolbar" role="toolbar" aria-label="Mesh ND tools">
+        <button type="button" id="nav-nd-follow" class="nav-nd-tool" data-active="true">FOLLOW</button>
+        <button type="button" id="nav-nd-free" class="nav-nd-tool">FREE</button>
+        <span class="nav-nd-sep" aria-hidden="true">·</span>
+        <button type="button" id="nav-nd-proc-none" class="nav-nd-tool" data-proc="0">PROC OFF</button>
+        <button type="button" id="nav-nd-proc-overhead" class="nav-nd-tool" data-proc="1">OVERHEAD</button>
+        <button type="button" id="nav-nd-proc-downwind" class="nav-nd-tool" data-proc="2">DOWNWIND</button>
+        <button type="button" id="nav-nd-proc-straight" class="nav-nd-tool" data-proc="3">STRAIGHT</button>
+        <span class="nav-nd-sep" aria-hidden="true">·</span>
+        <button type="button" id="nav-nd-tour-add" class="nav-nd-tool">TOUR+</button>
+        <button type="button" id="nav-nd-clear" class="nav-nd-tool">HOME</button>
+      </div>
+      <canvas id="nav-mesh-map" width="280" height="240"
+        aria-label="Mesh navigation display"
+        title="Pan/zoom in FREE · click Place/Free Fix · drag ActiveDest"></canvas>
+      <div class="tf-indications nav-nd-strip" aria-label="Mesh solution">
         <div class="tf-indication wide">
           <span class="tf-label">Destination</span>
           <output id="nav-destination" class="tf-value" data-state="unknown">--</output>
@@ -2445,90 +2479,44 @@
           <output id="nav-range" class="tf-value" data-state="unknown">--</output>
         </div>
         <div class="tf-indication">
-          <span class="tf-label">Time to run</span>
+          <span class="tf-label">ETA</span>
           <output id="nav-eta" class="tf-value" data-state="unknown">--</output>
-        </div>
-        <div class="tf-indication">
-          <span class="tf-label">Closure home</span>
-          <output id="nav-closure" class="tf-value" data-state="unknown">--</output>
         </div>
         <div class="tf-indication">
           <span class="tf-label">Turn</span>
           <output id="nav-turn" class="tf-value" data-state="unknown">--</output>
-        </div>
-      </div>
-      <div class="tf-indications" aria-label="Fuel to destination">
-        <div class="tf-indication">
-          <span class="tf-label">Fuel required</span>
-          <output id="nav-fuel-need" class="tf-value" data-state="unknown">--</output>
         </div>
         <div class="tf-indication">
           <span class="tf-label">Fuel aboard</span>
           <output id="nav-fuel-have" class="tf-value" data-state="unknown">--</output>
         </div>
         <div class="tf-indication">
+          <span class="tf-label">Fuel to dest</span>
+          <output id="nav-fuel-need" class="tf-value" data-state="unknown">--</output>
+        </div>
+        <div class="tf-indication">
           <span class="tf-label">On arrival</span>
           <output id="nav-fuel-arrival" class="tf-value" data-state="unknown">--</output>
         </div>
-        <div class="tf-indication">
-          <span class="tf-label">Protected reserve</span>
-          <output id="nav-fuel-reserve" class="tf-value" data-state="unknown">--</output>
-        </div>
         <div class="tf-indication wide">
-          <span class="tf-label">Reserve margin</span>
+          <span class="tf-label">Reserve via home</span>
           <output id="nav-fuel-margin" class="tf-value" data-state="unknown">--</output>
         </div>
-      </div>
-      <div class="tf-indications" aria-label="Rate">
         <div class="tf-indication">
-          <span class="tf-label">Miles per minute</span>
+          <span class="tf-label">NM/MIN</span>
           <output id="nav-nm-per-min" class="tf-value" data-state="unknown">--</output>
         </div>
         <div class="tf-indication">
-          <span class="tf-label">Pounds per minute</span>
+          <span class="tf-label">LB/MIN</span>
           <output id="nav-lb-per-min" class="tf-value" data-state="unknown">--</output>
         </div>
         <div class="tf-indication">
-          <span class="tf-label">Pounds per mile</span>
+          <span class="tf-label">LB/NM</span>
           <output id="nav-lb-per-nm" class="tf-value" data-state="unknown">--</output>
         </div>
-      </div>
-      <div class="tf-indications" aria-label="Performance">
-        <div class="tf-indication">
-          <span class="tf-label">Groundspeed</span>
-          <output id="nav-groundspeed" class="tf-value" data-state="unknown">--</output>
-        </div>
-        <div class="tf-indication">
-          <span class="tf-label">Gross weight</span>
-          <output id="nav-gross" class="tf-value" data-state="unknown">--</output>
-        </div>
-        <div class="tf-indication">
-          <span class="tf-label">Thrust</span>
-          <output id="nav-thrust" class="tf-value" data-state="unknown">--</output>
-        </div>
         <div class="tf-indication wide">
-          <span class="tf-label">Thermal state</span>
-          <output id="nav-skin" class="tf-value" data-state="unknown">--</output>
-        </div>
-      </div>
-      <div class="tf-indications" aria-label="Combat handoff and return status">
-        <div class="tf-indication wide">
-          <span class="tf-label">Combat handoff</span>
-          <output id="nav-handoff" class="tf-value" data-state="unknown">--</output>
-        </div>
-        <div class="tf-indication">
-          <span class="tf-label">Relief kills</span>
-          <output id="nav-relief-kills" class="tf-value" data-state="unknown">--</output>
-        </div>
-      </div>
-      <div class="tf-indications" aria-label="Contact">
-        <div class="tf-indication">
-          <span class="tf-label">Contact range</span>
-          <output id="nav-contact-range" class="tf-value" data-state="unknown">--</output>
-        </div>
-        <div class="tf-indication">
-          <span class="tf-label">Time to intercept</span>
-          <output id="nav-contact-eti" class="tf-value" data-state="unknown">--</output>
+          <span class="tf-label">Recovery procedure</span>
+          <output id="nav-procedure" class="tf-value" data-state="unknown">--</output>
         </div>
       </div>
     </div>
