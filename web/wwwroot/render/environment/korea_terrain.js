@@ -48,6 +48,20 @@ const UKRAINE_AMBIENT_SCENERY_RADIUS_M = Object.freeze({
 const AMBIENT_SCENERY_ALTITUDE_WEIGHT = 3;
 const AMBIENT_SCENERY_HYSTERESIS = 0.12;
 
+// Hero-detail convergence band: full patch/rewild grammar below the floor, pure regional
+// elevation palette above the ceiling (smoothstepped). At zoom-apex altitudes the per-chunk
+// landcover otherwise reads as a quilt of green rectangles against the regional base.
+const TERRAIN_DETAIL_FULL_AGL_M = 2_500;
+const TERRAIN_DETAIL_ZERO_AGL_M = 7_500;
+
+export function terrainDetail01(cameraAglM) {
+  if (!Number.isFinite(cameraAglM)) return 1;
+  const x = Math.max(0, Math.min(1,
+    (cameraAglM - TERRAIN_DETAIL_FULL_AGL_M)
+      / (TERRAIN_DETAIL_ZERO_AGL_M - TERRAIN_DETAIL_FULL_AGL_M)));
+  return 1 - x * x * (3 - 2 * x);
+}
+
 export function ambientSceneryRadiusM(tier = "balanced", era = null) {
   if (era !== "ukraine-modern") return Number.POSITIVE_INFINITY;
   return UKRAINE_AMBIENT_SCENERY_RADIUS_M[tier]
@@ -362,6 +376,11 @@ uniform float uWorldEdgeM;
 uniform float uModernScenery;
 uniform float uParcelTint;
 uniform float uShadowFloor;
+// 1 = full hero detail (low level), 0 = regional convergence (high altitude). Driven from
+// cameraAglM so the rewild patch grammar, relief gain, and concavity expansion all fade
+// together — fading only the palette would leave rectangular brightness seams at the
+// hero/regional LOD boundary (the 2026-07-29 zoom-apex quilt).
+uniform float uTerrainDetail01;
 uniform vec2 uOcclusionRange;
 uniform float uCloudShadowStrength;
 uniform vec2 uCloudShadowOffset;
@@ -511,8 +530,22 @@ void main() {
     smoothstep(0.32, 0.68, patchwork));
   #endif
   #ifdef UKRAINE_SCENERY
-  sAlbedo = mix(sAlbedo, rewildCover,
-    rewildFloor * (0.72 + (1.0 - ukraineElevationBand) * 0.12));
+  // Altitude-keyed hero-to-regional convergence. Aloft, chunks at different landcover LODs
+  // read as a quilt of green rectangles; value-matching the detailed cover to the regional
+  // elevation palette and fading the blend with uTerrainDetail01 makes every chunk converge
+  // on one regional grammar before its rectangle becomes visible.
+  vec3 regionalAlbedo = sAlbedo;
+  const vec3 TERRAIN_LUMA = vec3(0.2126, 0.7152, 0.0722);
+  float coverValueScale = dot(regionalAlbedo, TERRAIN_LUMA)
+    / max(dot(rewildCover, TERRAIN_LUMA), 0.04);
+  vec3 matchedCover = rewildCover * clamp(coverValueScale, 0.80, 1.22);
+  float heroMix = rewildFloor
+    * (0.72 + (1.0 - ukraineElevationBand) * 0.12)
+    * uTerrainDetail01;
+  sAlbedo = mix(
+    mix(regionalAlbedo, matchedCover, heroMix),
+    mix(regionalAlbedo, rewildCover, heroMix),
+    uTerrainDetail01);
   sAlbedo *= mix(1.06, 0.92, ukraineElevationBand);
   #else
   sAlbedo = mix(sAlbedo, cultivation, valleyFloor * (0.34 + patchwork * 0.30));
@@ -540,8 +573,12 @@ void main() {
   // Low-relief macro normals need a bounded directional cue so sun-facing versus lee-facing
   // terrain still separates without hard toon steps, textures, or micro-scenery at altitude.
   vec2 regionalSunDirection = normalize(uSunDirection.xz + vec2(0.0001));
+  // The 7.5x gain is a per-chunk LOD signature: adjacent LODs disagree about macro normals,
+  // so at altitude it prints chunk-shaped brightness seams. Relax toward a gentle regional
+  // cue as hero detail fades.
+  float reliefGain = mix(2.2, 7.5, uTerrainDetail01);
   float regionalReliefLight = clamp(
-    0.96 + dot(normal.xz, regionalSunDirection) * 7.5,
+    0.96 + dot(normal.xz, regionalSunDirection) * reliefGain,
     0.70,
     1.12);
   stylizedLit *= regionalReliefLight;
@@ -581,7 +618,13 @@ void main() {
   // The broad real-DEM plain clusters tightly around the seam-neutral 0.5 value. Expand that
   // small source signal so drainage and low crowns survive ACES without moving the exact neutral
   // boundary value shared by adjacent chunks.
-  terrainOcclusion = clamp(0.5 + (terrainOcclusion - 0.5) * 4.0, 0.0, 1.0);
+  float expandedOcclusion = clamp(0.5 + (terrainOcclusion - 0.5) * 4.0, 0.0, 1.0);
+  // Same LOD-signature logic as reliefGain: the 4x concavity expansion amplifies per-LOD
+  // sampling disagreements into rectangular value seams aloft, so relax it with detail.
+  terrainOcclusion = mix(
+    0.5 + (expandedOcclusion - 0.5) * 0.30,
+    expandedOcclusion,
+    uTerrainDetail01);
   #endif
   lit *= mix(uOcclusionRange.x, uOcclusionRange.y, terrainOcclusion);
 
@@ -963,6 +1006,9 @@ export function createTerrainMaterial(THREE, options = {}) {
       // 0 = no edge bury. Set each frame from visibleWorldRadiusM so Shared/dogfight stream
       // discs haze out instead of reading as squares.
       uWorldEdgeM: { value: finite(options.worldEdgeM, 0) },
+      // Hero-detail fraction, driven each frame from cameraAglM: full patch grammar below
+      // TERRAIN_DETAIL_FULL_AGL_M, pure regional palette above TERRAIN_DETAIL_ZERO_AGL_M.
+      uTerrainDetail01: { value: 1 },
       uModernScenery: { value: illustrative ? 1 : 0 },
       // Full-detail parcel/cultivation tint only affects the period desktop treatment. Modern
       // shading discards periodLit, so skip its four otherwise invisible sin() calls there too.
@@ -1888,6 +1934,7 @@ class KoreaTerrainPresentation {
         placementNorthM: this.worldNorthM,
       });
     }
+    this.material.uniforms.uTerrainDetail01.value = terrainDetail01(cameraAglM);
     if (fogColor) this.material.uniforms.uFogColor.value.copy(fogColor);
     if (Number.isFinite(fogDensity)) this.material.uniforms.uFogDensity.value = fogDensity;
     if (Number.isFinite(this.visibleWorldRadiusM) && this.visibleWorldRadiusM > 0) {
@@ -2415,6 +2462,7 @@ class KoreaTerrainAtlasPresentation {
       placementEastM: this.worldEastM,
       placementNorthM: this.worldNorthM,
     });
+    this.material.uniforms.uTerrainDetail01.value = terrainDetail01(cameraAglM);
     if (fogColor) this.material.uniforms.uFogColor.value.copy(fogColor);
     if (Number.isFinite(fogDensity)) this.material.uniforms.uFogDensity.value = fogDensity;
     if (Number.isFinite(this.visibleWorldRadiusM) && this.visibleWorldRadiusM > 0) {
@@ -2460,6 +2508,9 @@ class KoreaTerrainAtlasPresentation {
       cameraPosition: cameraLocal,
       streamPosition: streamLocal,
       elapsedSeconds,
+      // Page presentations share this atlas's material; omitting cameraAglM here would make
+      // their update stomp uTerrainDetail01 back to full detail every frame.
+      cameraAglM,
       windX,
       windZ,
       fogColor,

@@ -1417,8 +1417,16 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
     /float trackCue = \(1\.0 - smoothstep\(0\.06, 0\.18, fieldHistory\)\) \* openField;/,
     "worker-baked access tracks should provide structure without per-fragment procedural noise");
   assert.match(ukraine.fragmentShader,
-    /rewildFloor \* \(0\.72 \+ \(1\.0 - ukraineElevationBand\) \* 0\.12\)/,
-    "rewild wash remains part of terrain albedo without ambient instances");
+    /heroMix = rewildFloor[\s\S]{0,80}?\(0\.72 \+ \(1\.0 - ukraineElevationBand\) \* 0\.12\)[\s\S]{0,40}?\* uTerrainDetail01/,
+    "rewild wash remains part of terrain albedo, faded by altitude so the hero/regional LOD"
+    + " quilt cannot print at combat apex (2026-07-29)");
+  assert.ok(ukraine.uniforms.uTerrainDetail01,
+    "altitude detail fraction must be a uniform the presentations drive from cameraAglM");
+  assert.match(ukraine.fragmentShader, /reliefGain = mix\(2\.2, 7\.5, uTerrainDetail01\)/,
+    "the 7.5x macro-normal cue is a per-chunk LOD signature and must relax aloft");
+  assert.match(ukraine.fragmentShader,
+    /terrainOcclusion = mix\([\s\S]{0,90}?expandedOcclusion,[\s\S]{0,30}?uTerrainDetail01\)/,
+    "the 4x concavity expansion must relax aloft with the same detail fraction");
   assert.match(ukraine.fragmentShader,
     /sAlbedo \*= mix\(1\.06, 0\.92, ukraineElevationBand\)/,
     "the rewild palette must retain regional height value structure");
@@ -1432,7 +1440,7 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
     /mix\(0\.34, 1\.0, halfLambert\)/,
     "Ukraine soft-world lighting must be continuous, not a hard two-step toon ramp");
   assert.match(ukraine.fragmentShader,
-    /dot\(normal\.xz, regionalSunDirection\) \* 7\.5/,
+    /dot\(normal\.xz, regionalSunDirection\) \* reliefGain/,
     "coarse lowland normals need a bounded directional relief cue");
   assert.match(ukraine.fragmentShader,
     /0\.5 \+ \(terrainOcclusion - 0\.5\) \* 4\.0/,

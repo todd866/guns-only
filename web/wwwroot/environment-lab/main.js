@@ -24,7 +24,10 @@ const requestedClouds = (() => {
   if (["0", "false", "no", "off"].includes(token)) return false;
   return null;
 })();
-const TERRAIN_LOOK_STREAM_RADIUS_M = 28_000;
+// Matches app.js terrainNominalStreamingRadiusM (64 km): the world-edge haze bury keys off
+// this radius, so a smaller capture disc buries the whole ground from combat-apex altitudes
+// and the harness stops seeing what the pilot sees.
+const TERRAIN_LOOK_STREAM_RADIUS_M = 64_000;
 const PRODUCTION_SUN_DIRECTION = new THREE.Vector3(0.50, 0.28, -0.82).normalize();
 const VISUAL_PROFILE_URL = "../content/packs/korea-1950s/visual-profile.json";
 const UKRAINE_2030S_TERRAIN_ID = "terrain.ukraine.rapier-range.atlas.v1";
@@ -123,7 +126,10 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.dampingFactor = 0.07;
 controls.minDistance = 20;
-controls.maxDistance = 24000;
+// terrain-look views must be honored verbatim — the 24 km interactive orbit clamp silently
+// pulled the "high altitude" captures down to ~5 km AGL, so the harness never actually saw
+// the combat-apex quilt it exists to gate.
+controls.maxDistance = terrainLookMode ? 400_000 : 24000;
 const ambient = new THREE.HemisphereLight(0xb5cad0, 0x102229, 0.78);
 const sun = new THREE.DirectionalLight(0xffe2b4, 2.65);
 const sunTarget = new THREE.Object3D();
@@ -536,7 +542,11 @@ function configureProductionShadows() {
 function terrainFrame(deltaSeconds = 0) {
   return {
     cameraPosition: camera.position,
-    cameraAglM: Number(altitude.value),
+    // terrain-look views place the camera directly (slider untouched), so AGL must come from
+    // the real camera height or altitude-keyed shading (uTerrainDetail01) never engages.
+    cameraAglM: terrainLookMode
+      ? Math.max(0, camera.position.y)
+      : Number(altitude.value),
     deltaSeconds,
     elapsedSeconds: elapsed,
     windX: site.value === "ukraine" ? 12 : 11,
@@ -781,6 +791,14 @@ if (terrainLookMode) {
 await rebuild().then(async () => {
   window.__terrainLookSetView = setTerrainLookView;
   window.__terrainLookReady = terrain.diagnostics();
+  // QA seam: lets the screenshot harness assert shader uniforms (e.g. uTerrainDetail01)
+  // actually carry the value the captured view implies, instead of trusting plumbing.
+  window.__terrainLookUniform = (name) =>
+    terrain?.material?.uniforms?.[name]?.value ?? null;
+  window.__terrainLookFrame = () => {
+    const frame = terrainFrame();
+    return { cameraAglM: frame.cameraAglM, cameraY: camera.position.y };
+  };
   if (requestedTerrainLookView) await setTerrainLookView(requestedTerrainLookView);
   document.documentElement.dataset.terrainLookReady = "true";
 }).catch(showError);

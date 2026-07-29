@@ -55,6 +55,14 @@ const VIEWS = Object.freeze([
     position: Object.freeze([-8_000, 15_000, 20_000]),
     target: Object.freeze([-30_000, 0, -20_000]),
   }),
+  Object.freeze({
+    // The owner's actual flight condition: 72,000 ft (21,946 m) inverted over the theatre.
+    // Environment-lab's orbit clamp used to pull "high" views down to ~5 km AGL, so this
+    // aspect was never truly captured until the terrain-look maxDistance override.
+    name: "combat-apex-72k",
+    position: Object.freeze([-8_000, 21_946, 20_000]),
+    target: Object.freeze([-30_000, 0, -20_000]),
+  }),
 ]);
 
 function assertTerrain(diagnostics, label, { requireLocalScenery = false } = {}) {
