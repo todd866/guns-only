@@ -11,6 +11,7 @@ import {
   verticalSpeedText,
   visualMergeWeaponsCue,
 } from "./render/hud/hud_readouts.js";
+import { targetDataLineOwner } from "./render/hud/target_data_line.js";
 import {
   carrierAoARelevant,
   carrierConfigurationCue,
@@ -50,7 +51,7 @@ import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=190";
+} from "./render/audio/flight_audio.js?v=191";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -972,10 +973,34 @@ class CombatHud {
     ctx.restore();
   }
 
+  /// The range/closure data line beside a contact's bracket. Factored so the primary designator
+  /// and the formation-wingman marker render the identical instrument: the kernel's range_m and
+  /// closure_kts follow the player's gun-target selection, so exactly one bracket — the selected
+  /// jet's — carries the numbers.
+  drawTargetDataLine(projection, size, state, color) {
+    const ctx = this.ctx;
+    const safe = this.getLayout().targetSafe;
+    const closure = targetClosureReadout(state.closure_kts);
+    const dataLine = `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`;
+    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const textWidth = ctx.measureText(dataLine).width;
+    const textHeight = 14;
+    const rightX = projection.x + size + 8;
+    const useRight = rightX + textWidth + 8 <= safe.right;
+    const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
+    const textY = clamp(projection.y - textHeight / 2, safe.top, safe.bottom - textHeight);
+    ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
+    ctx.fillRect(textX - 4, textY, textWidth + 8, textHeight);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = color;
+    ctx.fillText(dataLine, textX, textY + textHeight / 2);
+  }
+
   /// Symbology for the second aircraft of a formation. Deliberately a SMALLER, thinner bracket in
-  /// the same green: the pilot must be able to tell at a glance which contact the HUD's range,
-  /// closure and gun cues refer to (always the primary) and which one is merely also out there.
-  /// It goes amber only when the pilot has actually padlocked it with V.
+  /// the same green, going amber when the pilot padlocks it with V. The range/closure data line
+  /// follows the player's gun-target selection: padlock TRAFFIC 2 and its bracket carries the
+  /// numbers while the primary's goes quiet — the instrument sits on the jet it measures.
   drawWingman(frame) {
     const { state, camera } = frame;
     if (frame.wingmanPresent !== true) return;
@@ -1015,6 +1040,8 @@ class CombatHud {
     ctx.lineTo(projection.x - size, projection.y + size - corner);
     ctx.stroke();
     ctx.shadowBlur = 0;
+    if (!circuitTraffic && targetDataLineOwner(state) === "wingman")
+      this.drawTargetDataLine(projection, size, state, color);
     if (circuitTraffic) {
       ctx.font = "600 9px ui-monospace, monospace";
       ctx.fillStyle = color;
@@ -1091,21 +1118,11 @@ class CombatHud {
         ctx.fill();
       }
 
-      const closure = targetClosureReadout(state.closure_kts);
-      const dataLine = `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`;
-      ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      const textWidth = ctx.measureText(dataLine).width;
-      const textHeight = 14;
-      const rightX = projection.x + size + 8;
-      const useRight = rightX + textWidth + 8 <= safe.right;
-      const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
-      const textY = clamp(projection.y - textHeight / 2, safe.top, safe.bottom - textHeight);
-      ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
-      ctx.fillRect(textX - 4, textY, textWidth + 8, textHeight);
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = color;
-      ctx.fillText(dataLine, textX, textY + textHeight / 2);
+      // The numbers follow the gun-target selection; when TRAFFIC 2 is selected the data
+      // line rides its bracket (drawWingman) rather than hovering beside a jet it no longer
+      // measures.
+      if (targetDataLineOwner(state) === "primary")
+        this.drawTargetDataLine(projection, size, state, color);
 
       return;
     }
@@ -1199,8 +1216,13 @@ class CombatHud {
 
     const length = Math.hypot(dx, dy) || 1;
     const azimuth = angles.azimuth * RAD_TO_DEG;
+    // The off-screen locator's caption follows the same ownership: an arrow to the primary
+    // must not be captioned with the selected wingman's range.
+    const numbersHere = targetDataLineOwner(state) === "primary";
     const closure = targetClosureReadout(state.closure_kts);
-    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`;
+    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${numbersHere
+      ? `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`
+      : "BANDIT"}`;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
