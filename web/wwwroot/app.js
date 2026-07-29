@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=178";
+import { createHud } from "./hud.js?v=179";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=178";
+} from "./render/debrief/sortie_result.js?v=179";
 import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -44,7 +44,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=178";
+} from "./render/release/release_identity.js?v=179";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -57,7 +57,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=178";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=179";
 import {
   applyLookDelta,
   trackpadLookDelta,
@@ -119,13 +119,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=178";
+} from "./render/telemetry/ai_frame_pressure.js?v=179";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=178";
+} from "./render/telemetry/telemetry_batch.js?v=179";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -134,7 +134,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=178";
+} from "./render/settings/player_settings.js?v=179";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -175,11 +175,11 @@ import {
   createRapierDispersedStrip,
   createRapierGunDrone,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=178";
+} from "./render/scene/scene_builders.js?v=179";
 import {
   setFlightAudioEnabled,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=178";
+} from "./render/audio/flight_audio.js?v=179";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -4910,7 +4910,9 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
       }
       @media (max-width: 760px) and (orientation: portrait) {
         .touch-mode.tilt-fallback [data-casevac-flight-facts] {
-          bottom: max(136px, calc(env(safe-area-inset-bottom) + 136px));
+          /* Clear the portrait movement stick, whose size is min(36vw, 156px) plus its
+             safe-area bottom inset — the fixed 136px reservation predates the larger stick. */
+          bottom: max(162px, calc(env(safe-area-inset-bottom) + min(36vw, 156px) + 22px));
         }
       }
     </style>
@@ -9688,7 +9690,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=178")
+    navigator.serviceWorker.register("service-worker.js?v=179")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);

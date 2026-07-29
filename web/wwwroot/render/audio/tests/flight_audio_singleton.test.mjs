@@ -28,7 +28,7 @@ test("cache-busted and canonical flight-audio imports share one controller", () 
   );
   const cacheBustedFacade = createSharedFlightAudioFacade(
     duplicate,
-    "https://example.test/render/audio/flight_audio.js?v=178",
+    "https://example.test/render/audio/flight_audio.js?v=179",
   );
   const state = { engine_rpm_pct: 91 };
   const options = { muted: false };
