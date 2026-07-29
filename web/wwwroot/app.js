@@ -987,6 +987,12 @@ const smallViewport = Math.min(
 // weakening production's coarse-pointer eligibility contract.
 const localTouchPreview = ["localhost", "127.0.0.1"].includes(location.hostname)
   && new URL(location.href).searchParams.get("input") === "touch";
+// Governor shed-rung QA (localhost-only, like the touch seam above): ?governorLevel=N
+// forces N rungs once the sortie is ACTIVE so radius/fog/shadow states can be screenshot.
+const governorQaLevel = ["localhost", "127.0.0.1"].includes(location.hostname)
+  ? Number(new URL(location.href).searchParams.get("governorLevel"))
+  : NaN;
+let governorQaApplied = false;
 const mobileControls = localTouchPreview || coarsePointer || (touchCapable && smallViewport);
 document.documentElement.classList.toggle("touch-mode", mobileControls);
 document.documentElement.classList.toggle("touch-primary", mobileControls);
@@ -9658,6 +9664,16 @@ async function boot() {
       const replayFrame = replayPresentation.frame;
       replayActive = replayPresentation.active;
       if (!replayActive && pauseReasons.size === 0 && state.session_phase === "ACTIVE") {
+        // Local-only governor QA seam (the ?input=touch precedent): each shed rung's pixels
+        // can only be verified by forcing the rung — automation cannot make SwiftShader
+        // slow in a controlled, reproducible way.
+        if (!governorQaApplied && Number.isFinite(governorQaLevel) && activeView) {
+          governorQaApplied = true;
+          for (let qaLevel = 1; qaLevel <= governorQaLevel; qaLevel++) {
+            frameGovernor.shed(activeView,
+              { direction: "shed", level: qaLevel, previousLevel: qaLevel - 1 });
+          }
+        }
         frameGovernor.observe(renderDeltaMs, now, activeView);
       } else {
         frameGovernor.idle(now);
