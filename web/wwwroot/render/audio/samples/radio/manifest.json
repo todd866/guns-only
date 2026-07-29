@@ -21,6 +21,23 @@
         }
       ]
     },
+    "pilot-launch-readback": {
+      "url": "./pilot-launch-readback.wav",
+      "role": "pilot",
+      "voice": "marin",
+      "duration_s": 1.95,
+      "takes": [
+        {
+          "url": "./pilot-launch-readback.wav",
+          "source_sha256": "e782b55f2d499b6b7f698135c2555f46e2f3b841ba0bcf8f0a9fdec854beae30",
+          "file_sha256": "feb8301c93c2db8f531464885191772dd84ebce667cd3a618c81d43bbc42b500",
+          "duration_s": 1.95,
+          "sample_rate_hz": 24000,
+          "channels": 1,
+          "sample_width_bytes": 2
+        }
+      ]
+    },
     "pilot-airborne": {
       "url": "./pilot-airborne.wav",
       "role": "pilot",

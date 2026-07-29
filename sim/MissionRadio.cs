@@ -330,13 +330,17 @@ public sealed class MissionRadioDirector {
     }
 
     void QueueLaunch(in MissionRadioState state) {
-        // Clearance only — ambient R/T keys the mic for the player; echoing the same
-        // clearance back as a "readback" doubles airtime for no new fact.
-        // Pre-stroke clearance: talk first, then aviate the shot (hold 0).
+        // Pre-stroke clearance: talk first, then aviate the shot (hold 0). A CLEARANCE is
+        // the one transaction that earns a reply (AIM 4-4-7's model is operative item +
+        // callsign) — same compressed house form as the landing take, "Land Rapier One One."
         Enqueue(state, Tower(
             "launch-cleared", "LAUNCH", Player,
             $"{PlayerSpoken}, cleared for launch.",
             "launch", MissionRadioPriority.Advisory));
+        Enqueue(state, Tower(
+            "pilot-launch-readback", Player, "LAUNCH",
+            $"Launch {PlayerSpoken}.",
+            "pilot", MissionRadioPriority.Routine));
     }
 
     void ObservePattern(in MissionRadioState state, string playerLeg) {

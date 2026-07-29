@@ -36,6 +36,7 @@ public static class MissionRadioClipDurations {
         ["pilot-initial"] = 1.850,
         ["pilot-joker"] = 1.950,
         ["pilot-land"] = 2.800,
+        ["pilot-launch-readback"] = 1.950,
         ["pilot-recovery-request"] = 4.500,
         ["pilot-remington"] = 0.750,
         ["pilot-rtb"] = 2.950,

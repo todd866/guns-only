@@ -46,6 +46,12 @@
       "direction": "Routine catapult shot, the tenth today: brisk, positive, the ritual cadence of a launch crew."
     },
     {
+      "id": "pilot-launch-readback",
+      "role": "pilot",
+      "text": "Launch Rapier One One.",
+      "direction": "Clearance readback in the house register, mirror of 'Land Rapier One One': cockpit ritual, one steadying breath, the last words before the stroke."
+    },
+    {
       "id": "pilot-airborne",
       "role": "pilot",
       "text": "Rapier Tower, Rapier One One, airborne.",
