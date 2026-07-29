@@ -25,7 +25,8 @@ public class RapierMissionDirectorTests {
         AircraftParams airframe,
         double altitudeM,
         double mach,
-        double contactRangeM) {
+        double contactRangeM,
+        bool zoomLobProfile = false) {
         AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
         double speed = mach * air.SpeedOfSoundMps;
         AircraftState player = StateAt(altitudeM, speed);
@@ -47,7 +48,19 @@ public class RapierMissionDirectorTests {
             home: new Vec3D(0.0, 120.0, -50_000.0),
             recoveryInitial: new Vec3D(0.0, 1_120.0, -16_000.0),
             recovered: false,
-            patternOnly: false);
+            patternOnly: false,
+            zoomLobProfile: zoomLobProfile);
+    }
+
+    [Fact]
+    public void DefaultInterceptLongRangeHighEnergy_MayEnterZoomLob() {
+        var director = new RapierMissionDirector();
+        RapierMissionGuidance guidance = StepDash(
+            director, FlightModel.RapierPublicDataSurrogate,
+            altitudeM: 21_500.0, mach: 3.5, contactRangeM: 200_000.0,
+            zoomLobProfile: false);
+        Assert.Equal("zoom_lob", guidance.Strategy);
+        Assert.Equal(RapierMissionPhase.ZoomPull, guidance.Phase);
     }
 
     [Fact]

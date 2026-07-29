@@ -78,6 +78,7 @@ public sealed class ReachFightDirector {
 
         bool levelDashEligible = mach >= LevelDashMinMach
             && altitudeM >= LevelDashMinAltM - 40.0;
+        bool zoomLobEligible = mach >= LevelDashMinMach;
         bool directJoinEligible = levelDashEligible
             || currentPhase is RapierMissionPhase.Intercept
                 or RapierMissionPhase.Attack
@@ -100,7 +101,7 @@ public sealed class ReachFightDirector {
             }
         }
 
-        {
+        if (zoomLobEligible) {
             double score = ScoreZoomLob(contactRangeM, mach, fuelLb, reserveFuelLb, lobSkip);
             if (score > bestScore) {
                 bestScore = score;
@@ -117,14 +118,21 @@ public sealed class ReachFightDirector {
         }
 
         ReachFightStrategy chosen = bestStrategy;
-        if (_incumbentStrategy is ReachFightStrategy incumbent) {
+        if (bestScore > double.NegativeInfinity
+            && _incumbentStrategy is ReachFightStrategy incumbent) {
             double incumbentScore = ScoreForStrategy(
                 incumbent, contactRangeM, mach, fuelLb, reserveFuelLb, lobSkip,
-                levelDashEligible, directJoinEligible);
+                levelDashEligible, zoomLobEligible, directJoinEligible);
             if (incumbentScore > double.NegativeInfinity
                 && bestScore < incumbentScore + StrategySwitchMargin) {
                 chosen = incumbent;
             }
+        }
+
+        if (bestScore <= double.NegativeInfinity) {
+            _incumbentStrategy = null;
+            return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,
+                RapierMissionPhase.RamClimb, "ram_climb_to_fl700");
         }
 
         _incumbentStrategy = chosen;
@@ -175,10 +183,11 @@ public sealed class ReachFightDirector {
         double reserveFuelLb,
         int lobSkip,
         bool levelDashEligible,
+        bool zoomLobEligible,
         bool directJoinEligible) => strategy switch {
         ReachFightStrategy.LevelDash when levelDashEligible =>
             ScoreLevelDash(contactRangeM, mach, fuelLb, reserveFuelLb),
-        ReachFightStrategy.ZoomLob =>
+        ReachFightStrategy.ZoomLob when zoomLobEligible =>
             ScoreZoomLob(contactRangeM, mach, fuelLb, reserveFuelLb, lobSkip),
         ReachFightStrategy.DirectJoin when directJoinEligible =>
             ScoreDirectJoin(contactRangeM, mach, fuelLb, reserveFuelLb),

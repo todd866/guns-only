@@ -140,9 +140,29 @@ public class ReachFightDirectorTests {
     }
 
     [Fact]
+    public void SubShelfMach2_DoesNotPickNegativeScoreZoomLob() {
+        var d = new ReachFightDirector();
+        ReachFightDecision dec = d.Decide(
+            RapierMissionPhase.RamClimb,
+            altitudeM: 15_000.0,
+            mach: 2.0,
+            qPa: 5_000.0,
+            gammaRad: 0.05,
+            contactRangeM: 200_000.0,
+            fuelLb: 2_400.0,
+            reserveFuelLb: 1_200.0,
+            zoomLobPreferred: false,
+            lobSkip: 0,
+            inZoomPhases: false);
+        Assert.Equal(ReachFightStrategy.ClimbBuild, dec.Strategy);
+        Assert.Equal(RapierMissionPhase.RamClimb, dec.SuggestedPhase);
+        Assert.Equal("ram_climb_to_fl700", dec.PhaseReason);
+    }
+
+    [Fact]
     public void Hysteresis_PreventsFlipFlopOnTinyScoreDelta() {
         var d = new ReachFightDirector();
-        _ = d.Decide(
+        ReachFightDecision first = d.Decide(
             RapierMissionPhase.RamClimb,
             altitudeM: 21_500.0,
             mach: 3.5,
@@ -154,6 +174,7 @@ public class ReachFightDirectorTests {
             zoomLobPreferred: false,
             lobSkip: 0,
             inZoomPhases: false);
+        Assert.Equal(ReachFightStrategy.ZoomLob, first.Strategy);
         ReachFightDecision second = d.Decide(
             RapierMissionPhase.RamClimb,
             altitudeM: 21_500.0,
