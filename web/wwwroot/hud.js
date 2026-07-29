@@ -57,6 +57,9 @@ const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
 const GREEN_FAINT = "rgba(77, 255, 136, 0.18)";
 const AMBER = "#ffb020";
+// Beyond ~10 nm no human eye holds a fighter: BVR contacts keep the bearing locator and the
+// data line, never positional brackets (which horizon-flatten into a false co-altitude cue).
+const BANDIT_TALLY_RANGE_M = 18_520;
 const RED = "#ff465d";
 const GLASS = "rgba(2, 10, 16, 0.72)";
 const DEG = Math.PI / 180;
@@ -1009,6 +1012,13 @@ class CombatHud {
     if (!isFightHudActive(state) && !isCircuitTrafficHudActive(state)) return;
     const projection = this.project(frame.wingmanPosition, camera);
     if (projection.behind === true) return;
+    // Same tally discipline as the primary: no positional bracket for a BVR contact.
+    if (frame.wingmanPosition && frame.playerPosition) {
+      const dx = frame.wingmanPosition.x - frame.playerPosition.x;
+      const dy = frame.wingmanPosition.y - frame.playerPosition.y;
+      const dz = frame.wingmanPosition.z - frame.playerPosition.z;
+      if (Math.sqrt(dx * dx + dy * dy + dz * dz) > BANDIT_TALLY_RANGE_M) return;
+    }
     const inside = projection.x > 8 && projection.x < this.width - 8
       && projection.y > 8 && projection.y < this.height - 8;
     if (!inside) return;
@@ -1066,6 +1076,11 @@ class CombatHud {
     }
     const layout = this.getLayout();
     const safe = layout.targetSafe;
+    // Beyond plausible tally there is nothing to SEE: positional brackets for a BVR contact
+    // read as a visible aircraft and horizon-flatten into a false co-altitude cue (owner
+    // report 2026-07-29: "if the bad guy is 360nm away why can I see him?"). The contact
+    // keeps its bearing locator and data line; brackets wait for tally range.
+    const bvrContact = Number(state.range_m) > BANDIT_TALLY_RANGE_M;
     const solution = frame.visualGunSolution === true;
     const padlockedBandit = frame.padlock && frame.padlockTarget !== "carrier";
     const color = padlockedBandit || solution ? AMBER : GREEN;
@@ -1088,7 +1103,7 @@ class CombatHud {
       this._debug.banditLocator = { markerInside: inside, arrowDrawn: false };
     }
 
-    if (inside) {
+    if (inside && !bvrContact) {
       const corner = 8;
       this.setLine(color, solution ? 1.8 : 1.35);
       ctx.shadowColor = solution ? "rgba(255, 176, 32, 0.46)" : "rgba(77, 255, 136, 0.34)";
