@@ -1294,7 +1294,8 @@ const frameGovernorPolicy = new FrameGovernorPolicy({
   recoverCleanWindows: FRAME_GOVERNOR_RECOVER_CLEAN_WINDOWS,
   severeFrameMs: FRAME_GOVERNOR_SEVERE_FRAME_MS,
   severeFrameCount: FRAME_GOVERNOR_SEVERE_FRAME_COUNT,
-  maxLevel: FRAME_GOVERNOR_RADII_M.length + 1,
+  // Radii rungs, then shadows/scenery, then two ambient-budget rungs.
+  maxLevel: FRAME_GOVERNOR_RADII_M.length + 3,
 });
 
 const frameGovernor = {
@@ -1331,7 +1332,7 @@ const frameGovernor = {
         const changed = view.terrainPresentation?.setStreamingRadiusM?.(radiusM);
         announceGovernor(`View distance ${Math.round(radiusM / 1000)} km · holding 60`);
         if (changed === false && level < FRAME_GOVERNOR_RADII_M.length) return;
-      } else {
+      } else if (level === FRAME_GOVERNOR_RADII_M.length + 1) {
         // Only once distance is exhausted does the picture itself start going.
         const shadowCasters = [];
         view.scene?.traverse?.((object) => {
@@ -1357,7 +1358,7 @@ const frameGovernor = {
         // Authored mission packs (clinic, candidate LZ, and future medevac obstacles) are separate
         // scene roots and are never touched. These final rungs reduce only secondary procedural
         // grass/canopy/trunk/line detail while retaining settlement, road and pole cues.
-        const ambientLevel = this.level - 4;
+        const ambientLevel = level - (FRAME_GOVERNOR_RADII_M.length + 1);
         view.terrainPresentation?.setAmbientSceneryBudgetLevel?.(ambientLevel);
         announceGovernor(ambientLevel === 1
           ? "Ambient detail reduced · mission landmarks retained · holding 60"
@@ -1376,7 +1377,14 @@ const frameGovernor = {
   recover(view, transition) {
     const { previousLevel, level } = transition;
     try {
-      if (previousLevel > FRAME_GOVERNOR_RADII_M.length) {
+      if (previousLevel > FRAME_GOVERNOR_RADII_M.length + 1) {
+        const ambientLevel = Math.max(
+          0, level - (FRAME_GOVERNOR_RADII_M.length + 1));
+        view.terrainPresentation?.setAmbientSceneryBudgetLevel?.(ambientLevel);
+        announceGovernor(ambientLevel > 0
+          ? "Ambient detail partially restored after stable 60"
+          : "Ambient scenery detail restored after stable 60");
+      } else if (previousLevel > FRAME_GOVERNOR_RADII_M.length) {
         const shadowState = view.frameGovernorShadowState;
         if (shadowState) {
           view.renderer.shadowMap.enabled = shadowState.enabled;
