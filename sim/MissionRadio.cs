@@ -55,7 +55,9 @@ public readonly record struct MissionRadioState(
     int DronesRemaining,
     bool Joker,
     bool Bingo,
-    IReadOnlyList<SessionEvent> Events);
+    IReadOnlyList<SessionEvent> Events,
+    string ChecklistName = "",
+    string ChecklistCompletedCall = "");
 
 /// <summary>Formatting shared by authored calls and tests, following ICAO/military pronunciation.</summary>
 public static class RadioPhraseology {
