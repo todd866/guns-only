@@ -155,11 +155,13 @@ public class MissionRadioTests {
             step: 0.25);
 
         Assert.Equal(MissionRadioPriority.Urgent, warning.Priority);
-        Assert.Contains("gear unsafe", warning.Text);
+        Assert.Contains("go around", warning.Text);
+        Assert.Contains("Gear unsafe", warning.Text);
     }
 
     [Fact]
-    public void StoppedArrestmentAnnouncesTheCaughtWire() {
+    public void StoppedArrestmentOrdersHoldWithoutTheWireNumber() {
+        // The wire number is an internal LSO datum, never a radio call (PHRASEOLOGY.md §3.3).
         var director = new MissionRadioDirector();
         director.Step(State(0.0, leg: "WIRE_FINAL"));
         double clock = 0.0;
@@ -171,14 +173,15 @@ public class MissionRadioTests {
             wire: 3));
         clock = 1.0;
         MissionRadioTransmission trap = WaitFor(
-            director, ref clock, "tower-trap-wire-3",
+            director, ref clock, "tower-hold-position",
             t => State(
                 t, leg: "WIRE_FINAL",
                 recovery: Carrier.Recovery.Trap,
                 arrestment: ArrestmentModel.ArrestmentPhase.Stopped,
                 wire: 3));
 
-        Assert.Contains("wire three", trap.Text);
+        Assert.Contains("hold position", trap.Text);
+        Assert.DoesNotContain("wire", trap.Text);
     }
 
     [Fact]

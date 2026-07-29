@@ -44,17 +44,21 @@ public sealed class MissionChecklistSessionTests {
     }
 
     [Fact]
-    public void GearUpMilestoneReachesTheRadio() {
+    public void GearUpMilestoneCompletesButStaysOffTheRadio() {
+        // Post-launch "gear up" is flight-intercom chatter, not a radio call (AFI 11-2F-16V3
+        // 3.15 via PHRASEOLOGY.md): the checklist milestone still completes, silently.
         var session = new SimulationSession();
         session.StartBeat(() => Beats.RapierIntercept());
         session.Begin();
 
-        bool heard = false;
-        for (int tick = 0; tick < AircraftSim.TickHz * 60 && !heard; tick++) {
+        bool narrated = false;
+        for (int tick = 0; tick < AircraftSim.TickHz * 60; tick++) {
             session.StepFixed();
-            heard = session.MissionRadio.Active
+            narrated |= session.MissionRadio.Active
                 && session.MissionRadio.Id == "pilot-checklist-gear-up";
         }
-        Assert.True(heard, "gear-up checklist milestone never narrated");
+        Assert.False(narrated, "cut gear-up call resurfaced on the radio");
+        Assert.True(session.MissionChecklist.Done > 0,
+            "gear-up checklist milestone never completed");
     }
 }

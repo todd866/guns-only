@@ -86,14 +86,13 @@ public class MissionRadioCatalogContractTests {
         List<MissionRadioTransmission> collected,
         ref double clock,
         Func<double, MissionRadioState> state) {
-        long lastSequence = collected.Count > 0 ? collected[^1].Sequence : 0;
+        // Dedupe by value, not by sequence number: sequence counters restart per director,
+        // so a fresh director's first call can collide with the previous director's last.
         for (int i = 0; i < 40; i++) {
             clock += 9.0;
             MissionRadioTransmission current = director.Step(state(clock));
-            if (current.Active && current.Sequence != lastSequence) {
+            if (current.Active && (collected.Count == 0 || !collected[^1].Equals(current)))
                 collected.Add(current);
-                lastSequence = current.Sequence;
-            }
         }
     }
 

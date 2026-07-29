@@ -7,7 +7,7 @@
   "roles": {
     "tower": {
       "voice": "cedar",
-      "instructions": "You are Rapier Tower: a senior tower controller in his late forties, twenty years of fast-jet patterns behind him. You always follow the exact rulebook \u2014 complete clearances, correct order, nothing abbreviated for cool. Clipped, level, quietly authoritative military radio cadence over a bandwidth-limited channel. No theatrical emotion. Natural aviation pronunciation; the callsign must be unmistakable."
+      "instructions": "You are Rapier Tower: a senior tower controller in his late forties, twenty years of fast-jet patterns behind him. You always follow the exact rulebook — complete clearances, correct order, nothing abbreviated for cool. Clipped, level, quietly authoritative military radio cadence over a bandwidth-limited channel. No theatrical emotion. Natural aviation pronunciation; the callsign must be unmistakable."
     },
     "launch": {
       "voice": "onyx",
@@ -23,7 +23,7 @@
     },
     "pilot": {
       "voice": "marin",
-      "instructions": "You are Rapier One One \u2014 the mission pilot, and you sound like a specific person: a chill, economical fast-jet pilot who trends toward brevity and sounding cool. Never recite the rulebook; ATC does that. Natural speech, military-clean, minimum syllables \u2014 '3 greens', 'gear to come', 'Land Rapier One One' \u2014 not 'three down and locked'. Slightly dry, understated, breath audible when the body is working, never theatrical. Standard calls are bored-precise and easy. Under G or employment the same chill gets clipped. Bad news (bingo, gear to come, emergency) is slightly concerned trying to stay chill \u2014 tighter and flatter, composure held on purpose. Preserve callsign and brevity-word clarity over a bandwidth-limited channel."
+      "instructions": "You are Rapier One One — the mission pilot, and you sound like a specific person: a chill, economical fast-jet pilot who trends toward brevity and sounding cool. Never recite the rulebook; ATC does that. Natural speech, military-clean, minimum syllables — '3 greens', 'gear to come', 'Land Rapier One One' — not 'three down and locked'. Slightly dry, understated, breath audible when the body is working, never theatrical. Standard calls are bored-precise and easy. Under G or employment the same chill gets clipped. Bad news (bingo, gear to come, emergency) is slightly concerned trying to stay chill — tighter and flatter, composure held on purpose. Preserve callsign and brevity-word clarity over a bandwidth-limited channel."
     },
     "traffic-two": {
       "voice": "verse",
@@ -55,19 +55,19 @@
       "id": "tower-join-initial",
       "role": "tower",
       "text": "Rapier One One, pattern altitude two thousand five hundred. Traffic in the pattern.",
-      "direction": "Altitude clearance and traffic SA \u2014 no 'report initial'; the gate announces itself."
+      "direction": "Altitude clearance and traffic SA — no 'report initial'; the gate announces itself."
     },
     {
       "id": "pilot-initial",
       "role": "pilot",
-      "text": "Rapier One One, initial, full stop.",
-      "direction": "Chill pilot, routine gate: bored-precise, easy breath."
+      "text": "Rapier One One, initial.",
+      "direction": "Chill pilot, routine gate: bored-precise. Intentions wait for the gear call (AETCMAN)."
     },
     {
-      "id": "pilot-break",
-      "role": "pilot",
-      "text": "Rapier One One, breaking.",
-      "direction": "Working chill: mid-turn under G, clipped, body in the voice, not loud."
+      "id": "tower-break-approved",
+      "role": "tower",
+      "text": "Rapier One One, left break approved.",
+      "direction": "Rulebook approval, level and brief: the pattern is his."
     },
     {
       "id": "pilot-downwind",
@@ -79,19 +79,19 @@
       "id": "pilot-downwind-gear-unsafe",
       "role": "pilot",
       "text": "Rapier One One, downwind.",
-      "direction": "Chill pilot, a hair distracted \u2014 level, unaware the gear call is missing."
+      "direction": "Chill pilot, a hair distracted — level, unaware the gear call is missing."
     },
     {
       "id": "tower-check-gear-downwind",
       "role": "tower",
-      "text": "Rapier One One, check gear down.",
-      "direction": "Rulebook tower: caught the omission. Sharpened and deliberate, pointed but not alarmed."
+      "text": "Rapier One One, check wheels down.",
+      "direction": "Rulebook tower, JO 7110.65 exact phraseology: caught the omission. Sharpened, pointed, not alarmed."
     },
     {
       "id": "pilot-base",
       "role": "pilot",
-      "text": "Rapier One One, base, 3 greens.",
-      "direction": "Chill pilot: position plus status, minimum syllables, easy breath."
+      "text": "Rapier One One, base, 3 greens, full stop.",
+      "direction": "Chill pilot: position, status, intention in one breath — the UPT base-call shape, minimum syllables."
     },
     {
       "id": "pilot-base-gear-unsafe",
@@ -102,20 +102,14 @@
     {
       "id": "tower-cleared-arrested-landing",
       "role": "tower",
-      "text": "Rapier One One, cleared to land. Arresting gear rigged.",
-      "direction": "Rulebook clearance with the arrestment addendum: steady, complete, nothing abbreviated."
+      "text": "Rapier One One, cable indicates up, cleared to land.",
+      "direction": "Rulebook clearance with the real JO 3-3-6 cable status, in order, nothing invented."
     },
     {
       "id": "pilot-land",
       "role": "pilot",
       "text": "Land Rapier One One.",
       "direction": "Chill pilot clearance take: two words and a callsign, almost thrown away."
-    },
-    {
-      "id": "pilot-checklist-gear-up",
-      "role": "pilot",
-      "text": "Gear up.",
-      "direction": "Chill pilot, package brevity: one soft fact, almost thrown away."
     },
     {
       "id": "pilot-checklist-recovery-config",
@@ -126,14 +120,14 @@
     {
       "id": "tower-waveoff-gear",
       "role": "tower",
-      "text": "Wave off, wave off. Rapier One One, gear unsafe.",
-      "direction": "Immediate command punched out fast and loud. Absolute authority, zero panic. This transmission prevents a crash."
+      "text": "Rapier One One, go around. Gear unsafe.",
+      "direction": "Immediate command, punched fast: go-around is the tower's word — urgency is speed and compression, not new vocabulary."
     },
     {
       "id": "tower-bolter",
       "role": "tower",
-      "text": "Rapier One One, bolter. Go around.",
-      "direction": "Quick and matter-of-fact, already moving the jet around the pattern."
+      "text": "Rapier One One, go around.",
+      "direction": "Quick, matter-of-fact: bolter is deck vocabulary; the tower just re-flies the jet."
     },
     {
       "id": "traffic-rapier-2-base",
@@ -220,106 +214,36 @@
       "takes": 2
     },
     {
-      "id": "tower-trap-wire-1",
-      "role": "tower",
-      "text": "Rapier One One, wire one, hold position.",
-      "direction": "Post-trap: brisk and conclusive, the cable crew is moving."
-    },
-    {
-      "id": "tower-trap-wire-2",
-      "role": "tower",
-      "text": "Rapier One One, wire two, hold position.",
-      "direction": "Post-trap: brisk and conclusive, the cable crew is moving."
-    },
-    {
-      "id": "tower-trap-wire-3",
-      "role": "tower",
-      "text": "Rapier One One, wire three, hold position.",
-      "direction": "Post-trap: brisk and conclusive, the cable crew is moving."
-    },
-    {
-      "id": "tower-trap-wire-4",
-      "role": "tower",
-      "text": "Rapier One One, wire four, hold position.",
-      "direction": "Post-trap: brisk and conclusive, the cable crew is moving."
-    },
-    {
       "id": "tower-continue-check-gear",
       "role": "tower",
-      "text": "Rapier One One, continue, check gear down.",
-      "direction": "The gear is still unsafe on base: firmer now, the second challenge, watching the jet the whole time."
+      "text": "Rapier One One, continue, check wheels down.",
+      "direction": "Second challenge, same rulebook words, firmer: the gear is still unsafe on base."
     },
     {
-      "id": "tower-trap-wire-1-relaunch",
+      "id": "tower-hold-position",
       "role": "tower",
-      "text": "Rapier One One, wire one.",
-      "direction": "Trap into immediate relaunch: quick wire confirmation, the catapult cycle is already running."
-    },
-    {
-      "id": "tower-trap-wire-2-relaunch",
-      "role": "tower",
-      "text": "Rapier One One, wire two.",
-      "direction": "Trap into immediate relaunch: quick wire confirmation, the catapult cycle is already running."
-    },
-    {
-      "id": "tower-trap-wire-3-relaunch",
-      "role": "tower",
-      "text": "Rapier One One, wire three.",
-      "direction": "Trap into immediate relaunch: quick wire confirmation, the catapult cycle is already running."
-    },
-    {
-      "id": "tower-trap-wire-4-relaunch",
-      "role": "tower",
-      "text": "Rapier One One, wire four.",
-      "direction": "Trap into immediate relaunch: quick wire confirmation, the catapult cycle is already running."
+      "text": "Rapier One One, hold position.",
+      "direction": "Post-trap: brisk and conclusive, the cable crew is moving. The wire number stays inside the LSO shack."
     },
     {
       "id": "lso-bolter",
       "role": "lso",
-      "text": "Bolter, bolter.",
-      "direction": "Loud and instant, a command not commentary: the hook missed, fly the jet.",
-      "takes": 2
-    },
-    {
-      "id": "lso-wire-1",
-      "role": "lso",
-      "text": "Wire one.",
-      "direction": "Quick, conclusive, faint disapproval: an early wire is a low pass.",
-      "takes": 2
-    },
-    {
-      "id": "lso-wire-2",
-      "role": "lso",
-      "text": "Wire two.",
-      "direction": "Quick, conclusive, satisfied enough.",
-      "takes": 2
-    },
-    {
-      "id": "lso-wire-3",
-      "role": "lso",
-      "text": "Wire three.",
-      "direction": "Quick, conclusive, that is the target wire: quiet approval.",
-      "takes": 2
-    },
-    {
-      "id": "lso-wire-4",
-      "role": "lso",
-      "text": "Wire four.",
-      "direction": "Quick, conclusive, a shade late on the pass.",
+      "text": "Bolter.",
+      "direction": "The card's single imperative, loud and instant: the hook missed, fly the jet.",
       "takes": 2
     },
     {
       "id": "lso-waveoff",
       "role": "lso",
-      "text": "Wave off, wave off.",
-      "direction": "Explosive command, both words, no ambiguity. The pass is dead.",
+      "text": "Waveoff.",
+      "direction": "Explosive single-word imperative off the card. The pass is dead; volume and attack carry it.",
       "takes": 2
     },
     {
       "id": "lso-add-power",
       "role": "lso",
-      "text": "Add power.",
-      "direction": "Urgent rising command: the jet is settling.",
+      "text": "A little power.",
+      "direction": "The card's sugar call: rising urgency wrapped in the LSO's soothing idiom.",
       "takes": 2
     },
     {
@@ -346,22 +270,22 @@
     {
       "id": "lso-fast",
       "role": "lso",
-      "text": "Fast.",
-      "direction": "One-word corrective, clipped.",
+      "text": "You're fast.",
+      "direction": "Instant corrective, clipped, calm.",
       "takes": 2
     },
     {
       "id": "lso-come-left",
       "role": "lso",
-      "text": "Come left.",
-      "direction": "Instant lineup corrective, calm, immediate.",
+      "text": "Left for lineup.",
+      "direction": "The book's lineup idiom: instant, calm, immediate.",
       "takes": 2
     },
     {
       "id": "lso-come-right",
       "role": "lso",
-      "text": "Come right.",
-      "direction": "Instant lineup corrective, calm, immediate.",
+      "text": "Right for lineup.",
+      "direction": "The book's lineup idiom: instant, calm, immediate.",
       "takes": 2
     },
     {
@@ -371,10 +295,22 @@
       "direction": "Chill pilot, mission ahead: focused but unhurried."
     },
     {
+      "id": "pilot-check-in",
+      "role": "pilot",
+      "text": "Control, Rapier One One, up as fragged.",
+      "direction": "Chill pilot checking onto the tactical net: the real check-in idiom, easy and complete."
+    },
+    {
+      "id": "control-radar-contact",
+      "role": "controller",
+      "text": "Rapier One One, radar contact.",
+      "direction": "C2 economy: two facts, flat, the net is open for business."
+    },
+    {
       "id": "control-commit",
       "role": "controller",
-      "text": "Rapier One One, commit.",
-      "direction": "Cold and flat. The fight starts on this word."
+      "text": "Rapier One One, hostile. You are ordered to engage.",
+      "direction": "The real C2 kill-chain wording (2023 HUNTRESS tape): cold, formal, zero drama — the formality IS the escalation."
     },
     {
       "id": "pilot-separating",
@@ -385,8 +321,8 @@
     {
       "id": "pilot-rtb",
       "role": "pilot",
-      "text": "Control, Rapier One One, RTB home plate.",
-      "direction": "Chill pilot coming off the fight: flat, fatigue at the edges, still dry."
+      "text": "Control, Rapier One One, RTB.",
+      "direction": "Chill pilot coming off the fight: three syllables of brevity, fatigue at the edges."
     },
     {
       "id": "pilot-recovery-request",
@@ -447,7 +383,7 @@
     {
       "id": "control-bingo-rtb",
       "role": "controller",
-      "text": "Rapier One One, RTB home plate.",
+      "text": "Rapier One One, RTB.",
       "direction": "Cold, final, administrative. There is no argument with fuel."
     },
     {
@@ -458,10 +394,16 @@
       "takes": 2
     },
     {
-      "id": "control-mission-complete",
+      "id": "control-confirm-safe",
       "role": "controller",
-      "text": "Rapier One One, mission complete.",
-      "direction": "Dry, conclusive, one single degree of warmth permitted."
+      "text": "Rapier One One, confirm weapons safe.",
+      "direction": "The real closing of a kill chain: administrative, cold, complete."
+    },
+    {
+      "id": "pilot-switch-safe",
+      "role": "pilot",
+      "text": "Rapier One One, switch is safe.",
+      "direction": "Chill pilot, adrenaline draining: the fight is over when this is said, and he knows it."
     }
   ]
 }

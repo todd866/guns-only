@@ -282,8 +282,16 @@ public sealed class MissionRadioDirector {
                 && !state.PatternOnly
                 && state.RapierPhase == RapierMissionPhase.Intercept) {
                 Enqueue(state, Tactical(
+                    "pilot-check-in", Player, "CONTROL",
+                    $"Control, {PlayerSpoken}, up as fragged.",
+                    "pilot", MissionRadioPriority.Routine));
+                Enqueue(state, Tactical(
+                    "control-radar-contact", "CONTROL", Player,
+                    $"{PlayerSpoken}, radar contact.",
+                    "controller", MissionRadioPriority.Routine));
+                Enqueue(state, Tactical(
                     "control-commit", "CONTROL", Player,
-                    $"{PlayerSpoken}, commit.",
+                    $"{PlayerSpoken}, hostile. You are ordered to engage.",
                     "controller", MissionRadioPriority.Advisory));
             }
             // Gun employment before the director existed is not a package call — see
@@ -380,7 +388,7 @@ public sealed class MissionRadioDirector {
         if (gearUnsafe && !_gearUnsafeOnFinal) {
             Enqueue(state, Tower(
                 "tower-waveoff-gear", "RAPIER TOWER", Player,
-                $"Wave off, wave off. {PlayerSpoken}, gear unsafe.",
+                $"{PlayerSpoken}, go around. Gear unsafe.",
                 "tower", MissionRadioPriority.Urgent), preempt: true);
         }
     }
@@ -394,15 +402,15 @@ public sealed class MissionRadioDirector {
                 // Initial announces itself; no "report break" prompt — BREAK will speak.
                 Enqueue(state, Tower(
                     "pilot-initial", Player, "RAPIER TOWER",
-                    $"{PlayerSpoken}, initial, full stop.",
+                    $"{PlayerSpoken}, initial.",
                     "pilot", MissionRadioPriority.Routine));
-                break;
-            case "BREAK":
                 Enqueue(state, Tower(
-                    "pilot-break", Player, "RAPIER TOWER",
-                    $"{PlayerSpoken}, breaking.",
-                    "pilot", MissionRadioPriority.Routine));
+                    "tower-break-approved", "RAPIER TOWER", Player,
+                    $"{PlayerSpoken}, left break approved.",
+                    "tower", MissionRadioPriority.Advisory));
                 break;
+            // BREAK is flown, not spoken: the approval preceded it, and the maneuver
+            // announces itself. (PHRASEOLOGY.md: responses to approvals are the jet moving.)
             case "DOWNWIND":
                 // One pilot call. No "report base" / wilco pair — base announces itself.
                 // Unsafe gear draws the tower challenge; safe gear stays quiet after.
@@ -416,7 +424,7 @@ public sealed class MissionRadioDirector {
                 if (!state.GearDownAndLocked) {
                     Enqueue(state, Tower(
                         "tower-check-gear-downwind", "RAPIER TOWER", Player,
-                        $"{PlayerSpoken}, check gear down.",
+                        $"{PlayerSpoken}, check wheels down.",
                         "tower", MissionRadioPriority.Advisory));
                 }
                 break;
@@ -425,14 +433,14 @@ public sealed class MissionRadioDirector {
                     state.GearDownAndLocked ? "pilot-base" : "pilot-base-gear-unsafe",
                     Player, "RAPIER TOWER",
                     state.GearDownAndLocked
-                        ? $"{PlayerSpoken}, base, 3 greens."
+                        ? $"{PlayerSpoken}, base, 3 greens, full stop."
                         : $"{PlayerSpoken}, base, gear to come.",
                     "pilot", MissionRadioPriority.Routine));
                 // Tower keeps the rulebook clearance. Pilot takes it brief — not an echo.
                 if (state.GearDownAndLocked) {
                     Enqueue(state, Tower(
                         "tower-cleared-arrested-landing", "RAPIER TOWER", Player,
-                        $"{PlayerSpoken}, cleared to land. Arresting gear rigged.",
+                        $"{PlayerSpoken}, cable indicates up, cleared to land.",
                         "tower", MissionRadioPriority.Advisory));
                     Enqueue(state, Tower(
                         "pilot-land", Player, "RAPIER TOWER",
@@ -441,7 +449,7 @@ public sealed class MissionRadioDirector {
                 } else {
                     Enqueue(state, Tower(
                         "tower-continue-check-gear", "RAPIER TOWER", Player,
-                        $"{PlayerSpoken}, continue, check gear down.",
+                        $"{PlayerSpoken}, continue, check wheels down.",
                         "tower", MissionRadioPriority.Advisory));
                 }
                 break;
@@ -456,6 +464,14 @@ public sealed class MissionRadioDirector {
                 "pilot-departure-airborne", Player, "RAPIER TOWER",
                 $"Rapier Tower, {PlayerSpoken}, airborne.",
                 "pilot", MissionRadioPriority.Routine));
+            Enqueue(state, Tactical(
+                "pilot-check-in", Player, "CONTROL",
+                $"Control, {PlayerSpoken}, up as fragged.",
+                "pilot", MissionRadioPriority.Routine));
+            Enqueue(state, Tactical(
+                "control-radar-contact", "CONTROL", Player,
+                $"{PlayerSpoken}, radar contact.",
+                "controller", MissionRadioPriority.Routine));
         }
         if (state.RapierPhase == _rapierPhase) return;
         // A fresh Intercept engagement may voice one GUNS; later bursts stay silent.
@@ -465,7 +481,7 @@ public sealed class MissionRadioDirector {
             case RapierMissionPhase.Intercept:
                 Enqueue(state, Tactical(
                     "control-commit", "CONTROL", Player,
-                    $"{PlayerSpoken}, commit.",
+                    $"{PlayerSpoken}, hostile. You are ordered to engage.",
                     "controller", MissionRadioPriority.Advisory));
                 break;
             case RapierMissionPhase.Escape:
@@ -478,7 +494,7 @@ public sealed class MissionRadioDirector {
                 // Pilot states the want. CONTROL's roger is pure echo — omit it.
                 Enqueue(state, Tactical(
                     "pilot-rtb", Player, "CONTROL",
-                    $"Control, {PlayerSpoken}, RTB home plate.",
+                    $"Control, {PlayerSpoken}, RTB.",
                     "pilot", MissionRadioPriority.Advisory));
                 break;
             case RapierMissionPhase.Recovery:
@@ -495,34 +511,26 @@ public sealed class MissionRadioDirector {
             PendingCall bolter = !state.MaritimeRecovery
                 ? Tower(
                     "tower-bolter", "RAPIER TOWER", Player,
-                    $"{PlayerSpoken}, bolter. Go around.",
+                    $"{PlayerSpoken}, go around.",
                     "tower", MissionRadioPriority.Urgent)
                 : Approach(
                     "lso-bolter", "PADDLES", Player,
-                    "Bolter, bolter.",
+                    "Bolter.",
                     "lso", MissionRadioPriority.Urgent);
             Enqueue(state, bolter, preempt: true);
         }
         if (state.ArrestmentPhase == ArrestmentModel.ArrestmentPhase.Stopped
             && _arrestmentPhase != ArrestmentModel.ArrestmentPhase.Stopped) {
-            int wire = Math.Clamp(state.CaughtWire, 1, 4);
-            // "Hold position" is only honest when the jet is actually holding: a circuit trap
-            // that rolls straight into the relaunch catapult gets the wire call alone.
-            PendingCall wireCall = !state.MaritimeRecovery
-                ? state.CatapultActive
-                    ? Tower(
-                        $"tower-trap-wire-{wire}-relaunch", "RAPIER TOWER", Player,
-                        $"{PlayerSpoken}, wire {RadioPhraseology.DigitGroup(wire.ToString())}.",
-                        "tower", MissionRadioPriority.Advisory)
-                    : Tower(
-                        $"tower-trap-wire-{wire}", "RAPIER TOWER", Player,
-                        $"{PlayerSpoken}, wire {RadioPhraseology.DigitGroup(wire.ToString())}, hold position.",
-                        "tower", MissionRadioPriority.Advisory)
-                : Approach(
-                    $"lso-wire-{wire}", "PADDLES", Player,
-                    $"Wire {RadioPhraseology.DigitGroup(wire.ToString())}.",
-                    "lso", MissionRadioPriority.Advisory);
-            Enqueue(state, wireCall);
+            // The wire number is an internal LSO datum, never a radio call (PHRASEOLOGY.md
+            // §3.3): surface it on the debrief panel instead. Tower speaks only when the
+            // jet must actually hold; a trap rolling into the relaunch catapult, and every
+            // maritime trap (the deck crew owns the jet), recover in radio silence.
+            if (!state.MaritimeRecovery && !state.CatapultActive) {
+                Enqueue(state, Tower(
+                    "tower-hold-position", "RAPIER TOWER", Player,
+                    $"{PlayerSpoken}, hold position.",
+                    "tower", MissionRadioPriority.Advisory));
+            }
         }
     }
 
@@ -540,10 +548,10 @@ public sealed class MissionRadioDirector {
         PendingCall? transmission = call switch {
             "WAVE OFF, WAVE OFF" => Approach(
                 "lso-waveoff", "PADDLES", Player,
-                "Wave off, wave off.", "lso", MissionRadioPriority.Urgent),
+                "Waveoff.", "lso", MissionRadioPriority.Urgent),
             "ADD POWER NOW" => Approach(
                 "lso-add-power", "PADDLES", Player,
-                "Add power.", "lso", MissionRadioPriority.Advisory),
+                "A little power.", "lso", MissionRadioPriority.Advisory),
             "POWER" => Approach(
                 "lso-power", "PADDLES", Player,
                 "Power.", "lso", MissionRadioPriority.Advisory),
@@ -555,13 +563,13 @@ public sealed class MissionRadioDirector {
                 "You're high.", "lso", MissionRadioPriority.Advisory),
             "FAST" => Approach(
                 "lso-fast", "PADDLES", Player,
-                "Fast.", "lso", MissionRadioPriority.Advisory),
+                "You're fast.", "lso", MissionRadioPriority.Advisory),
             "COME LEFT" => Approach(
                 "lso-come-left", "PADDLES", Player,
-                "Come left.", "lso", MissionRadioPriority.Advisory),
+                "Left for lineup.", "lso", MissionRadioPriority.Advisory),
             "COME RIGHT" => Approach(
                 "lso-come-right", "PADDLES", Player,
-                "Come right.", "lso", MissionRadioPriority.Advisory),
+                "Right for lineup.", "lso", MissionRadioPriority.Advisory),
             _ => null,
         };
         if (transmission is not { } selected) return;
@@ -643,7 +651,7 @@ public sealed class MissionRadioDirector {
                 "pilot", MissionRadioPriority.Urgent), preempt: true);
             Enqueue(state, Tactical(
                 "control-bingo-rtb", "CONTROL", Player,
-                $"{PlayerSpoken}, RTB home plate.",
+                $"{PlayerSpoken}, RTB.",
                 "controller", MissionRadioPriority.Urgent));
         }
     }
@@ -679,10 +687,16 @@ public sealed class MissionRadioDirector {
                 _missionFinished = true;
                 // Victory only — CONTROL congratulating a shoot-down fails audience and delta.
                 if (sessionEvent.Outcome == SortieOutcome.Victory) {
+                    // Real kill chains close administratively, not congratulatorily: C2
+                    // queries weapons state, the pilot safes the switch (PHRASEOLOGY.md §3.4).
                     Enqueue(state, Tactical(
-                        "control-mission-complete", "CONTROL", Player,
-                        $"{PlayerSpoken}, mission complete.",
+                        "control-confirm-safe", "CONTROL", Player,
+                        $"{PlayerSpoken}, confirm weapons safe.",
                         "controller", MissionRadioPriority.Advisory));
+                    Enqueue(state, Tactical(
+                        "pilot-switch-safe", Player, "CONTROL",
+                        $"{PlayerSpoken}, switch is safe.",
+                        "pilot", MissionRadioPriority.Routine));
                 }
             }
         }
@@ -692,19 +706,11 @@ public sealed class MissionRadioDirector {
     /// session; the pilot voices the two that matter on the air. Same automatic-but-present
     /// doctrine as every other call — the jet did the work, the R/T reports it.
     void ObserveChecklists(in MissionRadioState state) {
-        string text = state.ChecklistCompletedCall switch {
-            "LAUNCH_GEAR_UP" => "Gear up.",
-            "RECOVERY_GEAR_DOWN" => $"{PlayerSpoken}, 3 greens.",
-            _ => "",
-        };
-        if (text.Length == 0) return;
-        if (state.ChecklistCompletedCall == "LAUNCH_GEAR_UP") {
-            Enqueue(state, Tactical("pilot-checklist-gear-up", Player, "PACKAGE", text,
-                "pilot", MissionRadioPriority.Routine));
-        } else {
-            Enqueue(state, Approach("pilot-checklist-recovery-config", Player, "RAPIER APPROACH",
-                text, "pilot", MissionRadioPriority.Routine));
-        }
+        // Post-launch "gear up" was flight-intercom chatter (AFI 11-2F-16V3 3.15: the radio
+        // is not an intercom) — cut. Only the recovery configuration report is a real call.
+        if (state.ChecklistCompletedCall != "RECOVERY_GEAR_DOWN") return;
+        Enqueue(state, Approach("pilot-checklist-recovery-config", Player, "RAPIER APPROACH",
+            $"{PlayerSpoken}, 3 greens.", "pilot", MissionRadioPriority.Routine));
     }
 
     void Enqueue(in MissionRadioState state, PendingCall call, bool preempt = false) {
