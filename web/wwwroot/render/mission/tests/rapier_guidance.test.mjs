@@ -173,7 +173,7 @@ test("cycle teach explains turbine-to-ram handoff with live shares and skin", ()
   assert.match(teach.explainer, /Ram needs ~M2/);
   assert.match(teach.skinText, /SKIN 90°C/);
   assert.match(teach.skinText, /T0 110°C/);
-  assert.match(teach.skinText, /ENGINE\/INLET LIMITING/);
+  assert.match(teach.skinText, /SKIN/);
   assert.doesNotMatch(teach.skinText, /TO LIMIT|\+1090/);
   assert.ok(teach.turbineShare > 0.9);
   assert.equal(teach.ramShare, 0);

@@ -2462,7 +2462,10 @@ class CombatHud {
     const ctx = this.ctx;
     const width = Math.min(214,
       this.width - this.safeInsets.left - this.safeInsets.right - 36);
-    const height = 72;
+    // One quiet line while thermals are normal; the full lesson card only when the thermal
+    // state is actually talking (owner verdict 2026-07-29: the always-on card was UX noise).
+    const expanded = teach.thermalLevel !== "normal";
+    const height = expanded ? 72 : 20;
     const x = this.safeInsets.left + 18;
     const legendReserve = (!this.legendVisible && !this.touchMode) ? 28 : 0;
     // The G-tape wash begins 36 px above secondaryBottom. Keep an explicit gap instead of sharing
@@ -2499,6 +2502,16 @@ class CombatHud {
 
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
+    if (!expanded) {
+      const skinLabel = Number.isFinite(teach.skinC)
+        ? ` · SKIN ${Math.round(teach.skinC)}°C` : "";
+      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = modeAccent;
+      ctx.fillText(`CYCLE ${teach.mode} · M${teach.mach.toFixed(2)}${skinLabel}`,
+        x + 8, y + 10);
+      ctx.restore();
+      return;
+    }
     ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillStyle = modeAccent;
     ctx.fillText(`CYCLE ${teach.mode} · M${teach.mach.toFixed(2)}`, x + 8, y + 11);

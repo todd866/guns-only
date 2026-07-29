@@ -584,7 +584,7 @@ function buildCycleTeach(state) {
     thermalLevel,
     skinText: thermalLevel === "fault"
       ? `T0 OVER ${Math.round(stagnationC ?? skinC)}°C${capText}`
-      : `${skinText}${t0Text} · ENGINE/INLET LIMITING`,
+      : `${skinText}${t0Text}`,
   });
 }
 
