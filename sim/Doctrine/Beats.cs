@@ -100,7 +100,7 @@ public sealed record AircraftCapability(
                 "systems.modern-conventional-gear.public-data-surrogate.v1",
             SystemsSimulated = true
         };
-    /// The 2030s cheap high-altitude interceptor. Steel where the heat is, composite elsewhere, no
+    /// The 2030s cheap high-altitude interceptor. CMC where the heat is, composite elsewhere, no
     /// windscreen — the occupant is reclined behind sensors in a composite escape pod — catapult
     /// launched from deep rear basing and recovered on a hook. Systems ARE simulated because the
     /// aircraft's whole character lives in what its engine can and cannot do at a given Mach.

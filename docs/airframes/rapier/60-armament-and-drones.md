@@ -48,7 +48,7 @@ all four leave (order-of-magnitude, provisional).
 | State | Approx mass | Notes |
 | --- | --- | --- |
 | Alert Rapier alone (today's params) | 6556 kg class | Fuel partially filled |
-| + 4 stowed drones | **+1440 kg** | **Not yet in `AircraftParams.MassKg`** — open binding gap |
+| + 4 stowed drones | **+1440 kg** | Closed Build 163: design gross 11,090 kg includes the bay; session sheds 360 kg per release (`sim/FlightModel.cs:572-580`) |
 | After full release | −1440 kg | CG shifts forward/up as aft-belly mass leaves |
 
 Until the flight model carries drone mass, the intercept OFT is **optimistic** on climb and dash.

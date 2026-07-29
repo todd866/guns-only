@@ -22,7 +22,7 @@ with the CMC freeze. Do not cost the product as stainless.
 
 | Item | Note |
 | --- | --- |
-| Fuel | Alert ~3,100 LB; ram burn still lever-modelled (open finding) |
+| Fuel | Alert 3,600 LB (raised from 3,100 when design gross absorbed the drone bay); ram burn still lever-modelled (open finding) |
 | Ownship ammo | 480 rounds — negligible $ vs fuel |
 | Structural life | Hard 12/15 G pulls eat CMC life; ~2% life @ ~$180k was the comment's pricing sketch |
 | Gun-drone attrition | Four × attritable fighterettes; reuse only if quiet-strip pickup closes |
