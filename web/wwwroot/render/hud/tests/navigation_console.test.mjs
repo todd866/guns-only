@@ -18,7 +18,7 @@ const updateNavSource = appSource.match(
 test("navigation console is recovery-authoritative and never repairs ETA from TAS", () => {
   assert.ok(updateNavSource, "updateNavConsole must remain inspectable");
   assert.match(updateNavSource,
-    /const navigation = recoveryNavigationPresentation\(state\)[\s\S]*?const relevant = navigation\.recoveryPointKnown/);
+    /const mesh = meshNavPresentation\(state\);[\s\S]*?const navigation = recoveryNavigationPresentation\(state\);[\s\S]*?const relevant = mesh !== null \|\| navigation\.recoveryPointKnown/);
   for (const field of [
     "rtb_closure_kts",
     "rtb_eta_min",
@@ -34,7 +34,8 @@ test("navigation console is recovery-authoritative and never repairs ETA from TA
     "the browser must not reconstruct home closure or substitute TAS");
   assert.match(updateNavSource, /travelState === "outbound"[\s\S]*?etaText = "AWAY"/);
   assert.match(updateNavSource, /travelState === "abeam"[\s\S]*?etaText = "ABEAM"/);
-  assert.match(updateNavSource, /fuelToHomeLb[\s\S]*?fuelOnArrivalLb[\s\S]*?reserveTargetLb[\s\S]*?reserveMarginLb/);
+  assert.match(updateNavSource,
+    /fuelToHomeLb[\s\S]*?fuelOnArrivalLb[\s\S]*?reserveTargetLb[\s\S]*?reserveMarginLb/);
 });
 
 test("navigation values use the systems-console state vocabulary", () => {
@@ -59,19 +60,20 @@ test("navigation disclosure mirrors native and KeyN state for assistive technolo
     /id="nav-console"[\s\S]*?<summary[^>]*aria-expanded="false"[^>]*aria-keyshortcuts="N"/);
 });
 
-test("semantic navigation surface exposes protected reserve and separate relief score", () => {
+test("Mesh ND solution strip exposes destination fuel and procedure chrome", () => {
   for (const id of [
-    "nav-closure",
+    "nav-destination",
     "nav-fuel-arrival",
-    "nav-fuel-reserve",
     "nav-fuel-margin",
-    "nav-handoff",
-    "nav-relief-kills",
+    "nav-fuel-have",
+    "nav-fuel-need",
+    "nav-procedure",
+    "nav-nd-follow",
+    "nav-mesh-map",
   ]) {
-    assert.match(indexSource, new RegExp(`id="${id}"`), `${id} output is missing`);
-    assert.match(appSource, new RegExp(`#${id}`), `${id} output is not wired`);
+    assert.match(indexSource, new RegExp(`id="${id}"`), `${id} is missing`);
   }
-  assert.match(updateNavSource, /BELOW RES/);
-  assert.match(updateNavSource, /ABOVE RES/);
-  assert.match(updateNavSource, /UNCREDITED/);
+  assert.match(updateNavSource, /BELOW \$\{|ABOVE \$\{/);
+  assert.match(appSource, /bindNavNdChrome/);
+  assert.match(appSource, /navUi\.follow\?\.addEventListener\("click"/);
 });

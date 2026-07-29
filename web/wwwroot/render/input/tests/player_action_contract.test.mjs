@@ -251,6 +251,14 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["settings-close", /\[settingsClose, settingsCloseBottom\][\s\S]*?addEventListener\("click", closeSettings\)/],
     ["settings-close-bottom", /\[settingsClose, settingsCloseBottom\][\s\S]*?addEventListener\("click", closeSettings\)/],
     ["settings-reset-bindings", /settingsResetBindings\?\.addEventListener\("click"/],
+    ["nav-nd-follow", /navUi\.follow\?\.addEventListener\("click"/],
+    ["nav-nd-free", /navUi\.free\?\.addEventListener\("click"/],
+    ["nav-nd-tour-add", /navUi\.tourAdd\?\.addEventListener\("click"/],
+    ["nav-nd-clear", /navUi\.clearDest\?\.addEventListener\("click"/],
+    ["nav-nd-proc-none", /procButtons[\s\S]*?procNone[\s\S]*?addEventListener\("click"/],
+    ["nav-nd-proc-overhead", /procButtons[\s\S]*?procOverhead[\s\S]*?addEventListener\("click"/],
+    ["nav-nd-proc-downwind", /procButtons[\s\S]*?procDownwind[\s\S]*?addEventListener\("click"/],
+    ["nav-nd-proc-straight", /procButtons[\s\S]*?procStraight[\s\S]*?addEventListener\("click"/],
   ]);
 
   for (const button of htmlButtons(indexSource)) {

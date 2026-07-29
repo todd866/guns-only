@@ -74,6 +74,7 @@ class FakeFilter extends FakeNode {
     this.type = "lowpass";
     this.frequency = new FakeAudioParam();
     this.Q = new FakeAudioParam();
+    this.gain = new FakeAudioParam();
   }
 }
 
