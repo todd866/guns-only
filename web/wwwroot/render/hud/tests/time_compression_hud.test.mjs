@@ -14,14 +14,12 @@ test("HUD presentation exposes the active kernel factor and the normal-time key"
     text: "TIME ×8 · T NORMAL",
     level: "active",
   });
-  assert.deepEqual(timeCompressionHudPresentation({
+  // No idle chrome: a disabled/idle state renders nothing (owner direction 2026-07-29).
+  assert.equal(timeCompressionHudPresentation({
     time_compression_available: true,
     time_compression_enabled: false,
     time_compression_factor: 1,
-  }), {
-    text: "TIME COMP OFF · T ENABLE",
-    level: "disabled",
-  });
+  }), null);
   assert.equal(timeCompressionHudPresentation({
     time_compression_available: false,
     time_compression_factor: 8,

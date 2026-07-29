@@ -52,15 +52,16 @@ public class TimeCompressionTests {
     }
 
     [Fact]
-    public void DefaultsToOffSoItNeverTakesTheAircraftUnasked() {
+    public void DefaultsToOnSoTransitCompressesWithoutCeremony() {
+        // Owner direction 2026-07-29: no enable ritual — dull transit fast-forwards by itself
+        // and T drops to normal time. The aircraft is still never taken from an interacting
+        // pilot: the ControlInput/ContactThreat inhibits gate engagement, pinned below.
         var cruise = RapierCruiseBeat();
         var session = new SimulationSession();
         session.StartBeat(() => cruise);
         session.Begin();
 
-        Assert.False(session.TimeCompressionPilotEnabled);
-        Assert.Equal(1, session.Advance(SimulationSession.FixedDeltaSeconds, 8));
-        Assert.Equal(1, session.TimeCompressionFactor);
+        Assert.True(session.TimeCompressionPilotEnabled);
     }
 
     [Fact]

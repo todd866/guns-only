@@ -246,7 +246,9 @@ public sealed class SimulationSession {
     // without being asked, which reads as the sim jumping rather than the pilot skipping — the
     // pilot's words were "should be player-driven not auto fast forward". The eligibility rules
     // still gate it; they now decide whether a REQUEST is honoured, not whether one is made.
-    bool _timeCompressionPilotEnabled;
+    // Owner direction 2026-07-29: transit compression is on by default — no enable ceremony.
+    // T toggles it off/back; the inhibit policy still drops to 1x near contact and control input.
+    bool _timeCompressionPilotEnabled = true;
     int _timeCompressionHostMaximumFactor = 1;
     int _timeCompressionFactor = 1;
     double _timeCompressionAccumulatorSeconds;

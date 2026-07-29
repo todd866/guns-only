@@ -83,11 +83,7 @@ export function timeCompressionHudPresentation(state) {
       level: "active",
     });
   }
-  if (state.time_compression_enabled === false) {
-    return Object.freeze({
-      text: "TIME COMP OFF · T ENABLE",
-      level: "disabled",
-    });
-  }
+  // No idle-state chrome: the pill exists only while fast time is actually running
+  // (owner direction 2026-07-29 — "don't show random shit like that").
   return null;
 }
