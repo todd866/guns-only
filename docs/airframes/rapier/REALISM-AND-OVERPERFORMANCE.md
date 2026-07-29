@@ -135,23 +135,23 @@ Map constants (owner): `RamFadeStartMach` 2.0 · `FullRamMach` 2.8 · `TurbineFa
 
 ## Pass 0 — Drift checklist (coherence inventory)
 
-Status: **skeleton — fill during Pass 0 implementation**; no physics retune in this pass.
+Status: **filled 2026-07-29** — coherence inventory complete; no physics retune in this pass.
 
 Disposition per row: **own** (already single-sourced) · **fix** (must consume owner) · **accept**
 (documented fiction / provisional with tag).
 
 | Surface | Claimed number / schedule | Owner should be | Observed (fill in Pass 0) | Disposition |
 | --- | --- | --- | --- | --- |
-| `TurboRamjetPerformanceMap` | M2.0 / 2.8 / 1.9 / 3.0 / spill 3.3–3.8 | (owner) | closed map constants | own |
-| Runtime transition banners | Formatted from map | map | verify still derived | own / fix |
-| Intercept briefing prose | Historically M1.6/M2.2; kernel-publish path shipped | map | verify no hard-coded leftovers | own / fix |
-| Mission director climb/dash Mach | M3.15 climb; intercept cues | mission + skin clamp | inventory commanded vs fiction M4 | fix / accept |
-| Identity / campaign brief | “design dash M4 (fiction)” | audit dash claim | inventory copy vs OFT ~M3.69 | fix / accept |
-| `engine_audio.js` `HANDOVER_MACH_*` | literals (e.g. 1.9–2.8) | map via published snapshot or shared config | inventory exact literals | fix |
-| Better-sound spec regime table | Still mentions 1.6–2.7 in places | map | align prose to map | fix |
-| HUD combined-cycle lesson | Thresholds | map | verify | own / fix |
-| Audio profile IDs | `audio.rapier.turbo-ram.v1` | character only — not Mach schedule | confirm no Mach copies | own |
-| Thermal ceiling cues | T0 vs CMC capability | aerothermal snapshot | closed this branch | own |
+| `TurboRamjetPerformanceMap` | M2.0 / 2.8 / 1.9 / 3.0 / spill 3.3–3.8 | (owner) | `RamFadeStartMach=2.0`, `FullRamMach=2.8`, `TurbineFadeStartMach=1.9`, `TurbineGoneMach=3.0`, spill 3.3–3.8 — closed constants in `TurboRamjetPerformanceMap.cs` | own |
+| Runtime transition banners | Formatted from map | map | `SimulationSession` emits `RAM LIGHT · M{RamFadeStartMach}` / `FULL RAM · M{FullRamMach}` from map constants | own |
+| Intercept briefing prose | Historically M1.6/M2.2; kernel-publish path shipped | map | `app.js` brief uses `{RAM_LIGHT_MACH}` / `{FULL_RAM_MACH}`; `rapierBriefingText` substitutes from `rapier_*_mach` snapshot fields | own |
+| Mission director climb/dash Mach | M3.15 climb; intercept cues | mission + skin clamp | `RapierMission.cs`: RamClimb `targetMach=3.15`; Accelerate gate `accel_to_m2.2` / M2.20; Intercept authored M4.0 skin-clamped — profile gates, not map thresholds | own |
+| Identity / campaign brief | “design dash M4 (fiction)” | audit dash claim | `app.js` configuration labels “design dash M4 (fiction) · OFT peak ~M3.7”; brief prose says Mach 4 aspirational | accept |
+| `engine_audio.js` `HANDOVER_MACH_*` | literals (e.g. 1.9–2.8) | map via published snapshot or shared config | `HANDOVER_MACH_START=1.9`, `HANDOVER_MACH_END=2.8` module literals at L27–28; not consuming `rapier_*_mach` | fix |
+| Better-sound spec regime table | Still mentions 1.6–2.7 in places | map | `2026-07-28-better-sound-design.md` L47, L214, L226 still cite M1.6–M2.7 handover band | fix |
+| HUD combined-cycle lesson | Thresholds | map | `rapierCycleTeachPresentation` → `rapierPropulsionThresholds(state)` reads published `rapier_ram_light_mach` / `rapier_full_ram_mach` / `rapier_turbine_gone_mach` | own |
+| Audio profile IDs | `audio.rapier.turbo-ram.v1` | character only — not Mach schedule | `audio_character.js` maps ID to `"rapier"`; no Mach schedule copies in profile registry | own |
+| Thermal ceiling cues | T0 vs CMC capability | aerothermal snapshot | Snapshot 1.19 distinguishes `rapier_skin_temp_c`, `rapier_stagnation_temp_c`, `rapier_cmc_capability_c`; HUD shows SKIN/T0/ENGINE-INLET LIMITING | own |
 
 Pass 0 exit: every row above has a disposition; CI or unit tests cover the cheap **fix** rows
 (briefing / audio / banner numeric claims vs map). Then Pass 1 may retune dash story.
