@@ -227,6 +227,10 @@ function latest(param) {
   return param.targets.at(-1)?.value;
 }
 
+function smoothstep(t) {
+  return t * t * (3 - 2 * t);
+}
+
 async function freshModule(path, label) {
   freshModule.sequence = (freshModule.sequence ?? 0) + 1;
   return import(`${path}?test=${label}-${freshModule.sequence}`);
@@ -2208,8 +2212,8 @@ test("Rapier Mach-fallback handover uses published ram-light and full-ram thresh
       rapier_full_ram_mach: 3.0,
     });
     assert.ok(
-      Math.abs(shiftedMid - 0.375) < 1e-6,
-      "fallback follows published 2.2–3.0, not module constants",
+      Math.abs(shiftedMid - smoothstep(0.375)) < 1e-6,
+      "fallback follows published 2.2–3.0 with smoothstep ear curve, not module constants",
     );
 
     // Voices path: without thrust-kn, ram howl must stay quiet below published ram-light
@@ -2253,10 +2257,11 @@ test("rapierPropulsionThresholds and audio fallback agree on the same state", as
     rapier_full_ram_mach: 2.8,
   };
   const t = rapierPropulsionThresholds(state);
-  const expected = (state.mach - t.ramLightMach)
+  const linear = (state.mach - t.ramLightMach)
     / (t.fullRamMach - t.ramLightMach);
+  const expected = smoothstep(linear);
   assert.ok(
     Math.abs(rapierHandoverMachFallback(state) - expected) < 1e-9,
-    "audio fallback fraction must match briefing threshold helper arithmetic",
+    "audio fallback fraction must match briefing endpoints through smoothstep",
   );
 });
