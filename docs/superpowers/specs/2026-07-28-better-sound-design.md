@@ -44,7 +44,7 @@ bend the flight model to make audio interesting.
 | Surface | Location | Mechanism | Works? |
 | --- | --- | --- | --- |
 | Flight façade | `web/wwwroot/render/audio/flight_audio.js` | Shared `AudioContext` + master + DynamicsCompressor; mute; drives engine/events/warnings | Yes — unit-tested |
-| Engine / airframe loop | `engine_audio.js` | Partials + fan whine + core + jet exhaust + ram + q rush; density + coast gate; M1.6–M2.7 handover | Yes — deepened |
+| Engine / airframe loop | `engine_audio.js` | Partials + fan whine + core + jet exhaust + ram + q rush; density + coast gate; M2.0–M2.8 map / published fields; thrust-kn owns live mix | Yes — deepened |
 | Gun reports | `event_audio.js` | Weapon-rate body/gas/mechanism bed + varied clustered reports while `gun_firing` | Yes — profile-driven |
 | Buffet rumble | `event_audio.js` | Boolean floor plus progressive measured angular disturbance / AoA | Yes |
 | Cockpit palette | `engine_audio.js` + `samples/jet/` | Independent F-22/Rapier interior alternates with slow time-only crossfade | Yes — Build 170 |
@@ -210,8 +210,8 @@ Use without new bridge work where possible:
 | Regime | Ear | Control sources | Mix intent |
 | --- | --- | --- | --- |
 | Taxi / spool | Rising partial stack | `engine_rpm_pct` spool | Quiet rush; clear RPM story |
-| MIL / wet climb | Turbine + core dominant | throttle, rpm, mach &lt; ~1.6 | Punch without clipping |
-| Turbine→ram handover | Equal-power swap (already) | mach 1.6→2.7; optionally weight by thrust split | Audible shove; no energy hole |
+| MIL / wet climb | Turbine + core dominant | throttle, rpm, mach &lt; ram-light (published) | Punch without clipping |
+| Turbine→ram handover | Equal-power swap (already) | mach ram-light→full-ram (published 2.0→2.8); live mix prefers thrust-kn share | Audible shove; no energy hole |
 | High-q dash | Broad ram + bright rush | ram thrust, q | Rush owns “fast” even at idle |
 | Zoom coast / exo | **Near silence** | low q + low thrust + high `rapier_rcs_authority` | Drop rush/engine to whisper; leave cabin/electric bed optional later |
 | RCS | Sparse cold-gas ticks/hiss | authority × stick demand proxy (derive from rate change or publish later) | Expensive, not continuous rocket |
@@ -222,9 +222,10 @@ Use without new bridge work where possible:
 | Buffet | Low rumble / modulation | `buffet` + buffet angle magnitude | Pre-stall warning by ear |
 | GCAS | Keep existing square attention getter | warning/active | Unchanged semantics |
 
-Align handover Mach band with propulsion bible where practical (`M1.9–M3.0` fade /
-`M2.0–M2.8` ram) — today’s audio uses 1.6–2.7; retune toward map constants in Phase 2 so ear and
-instruments agree.
+Pass 0 wired Mach-fallback to published map fields via `rapierPropulsionThresholds`; live mix
+remains thrust-kn owned (`rapier_turbine_thrust_kn` / `rapier_ramjet_thrust_kn`). Map bands:
+`M1.9–M3.0` turbine fade · `M2.0–M2.8` ram overlap — ear and instruments share the same
+published thresholds.
 
 ## Phased delivery
 

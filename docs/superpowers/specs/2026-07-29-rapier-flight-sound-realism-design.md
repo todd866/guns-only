@@ -87,7 +87,7 @@ accepted fiction.
 
 | Pass | Name | Dynamics | Sound | Exit |
 | ---: | --- | --- | --- | --- |
-| **0** | Coherence | Inventory drift (briefing, map, audio knots, Identity) | Flag every hard-coded Mach/regime duplicate | Single drift checklist in the living audit; no physics retune |
+| **0** | Coherence — **exited** (see living audit Pass 0 checklist) | Inventory drift (briefing, map, audio knots, Identity) | Flag every hard-coded Mach/regime duplicate | Single drift checklist in the living audit; no physics retune |
 | **1** | Honest dash story | Decide fiction vs retune toward measured ~M3.5–3.7; stop selling M4 as closed | Retune handover/dash mix to **map** bands + thrust-kn ownership | Briefing, HUD, audio, OFT agree on dash claim |
 | **2** | Handling calibration | Mass/q/inlet-aware normal law; rescale inertias to ~11 t design gross | q / authority / alpha-limit cues (bind, not buffet-only) | Level FL720 feasible under ordinary law; inertias match mass |
 | **3** | Failure / envelope | Scalar inlet → buzz/unstart seed; V-n/V-q awareness | Distinct aural failures (unstart gulp, over-q warning) | At least one taught failure by eye + ear |

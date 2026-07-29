@@ -135,7 +135,8 @@ Map constants (owner): `RamFadeStartMach` 2.0 · `FullRamMach` 2.8 · `TurbineFa
 
 ## Pass 0 — Drift checklist (coherence inventory)
 
-Status: **filled 2026-07-29** — coherence inventory complete; no physics retune in this pass.
+Status: **exited 2026-07-29** — dispositions filled; audio Mach-fallback consumes
+`rapierPropulsionThresholds`; better-sound prose aligned. Pass 1 may begin (honest dash story).
 
 Disposition per row: **own** (already single-sourced) · **fix** (must consume owner) · **accept**
 (documented fiction / provisional with tag).
@@ -147,8 +148,8 @@ Disposition per row: **own** (already single-sourced) · **fix** (must consume o
 | Intercept briefing prose | Historically M1.6/M2.2; kernel-publish path shipped | map | `app.js` brief uses `{RAM_LIGHT_MACH}` / `{FULL_RAM_MACH}`; `rapierBriefingText` substitutes from `rapier_*_mach` snapshot fields | own |
 | Mission director climb/dash Mach | M3.15 climb; intercept cues | mission + skin clamp | `RapierMission.cs`: RamClimb `targetMach=3.15`; Accelerate gate `accel_to_m2.2` / M2.20; Intercept authored M4.0 skin-clamped — profile gates, not map thresholds | own |
 | Identity / campaign brief | “design dash M4 (fiction)” | audit dash claim | `app.js` configuration labels “design dash M4 (fiction) · OFT peak ~M3.7”; brief prose says Mach 4 aspirational | accept |
-| `engine_audio.js` `HANDOVER_MACH_*` | literals (e.g. 1.9–2.8) | map via published snapshot or shared config | `HANDOVER_MACH_START=1.9`, `HANDOVER_MACH_END=2.8` module literals at L27–28; not consuming `rapier_*_mach` | fix |
-| Better-sound spec regime table | Still mentions 1.6–2.7 in places | map | `2026-07-28-better-sound-design.md` L47, L214, L226 still cite M1.6–M2.7 handover band | fix |
+| `engine_audio.js` Mach-fallback | `rapierPropulsionThresholds` | map via published snapshot | `rapierHandoverMachFallback` reads `rapier_ram_light_mach` / `rapier_full_ram_mach`; live mix prefers thrust-kn share | own |
+| Better-sound spec regime table | M2.0–M2.8 map bands; thrust-kn live mix | map | `2026-07-28-better-sound-design.md` regime table aligned with published thresholds (Pass 0 exit) | own |
 | HUD combined-cycle lesson | Thresholds | map | `rapierCycleTeachPresentation` → `rapierPropulsionThresholds(state)` reads published `rapier_ram_light_mach` / `rapier_full_ram_mach` / `rapier_turbine_gone_mach` | own |
 | Audio profile IDs | `audio.rapier.turbo-ram.v1` | character only — not Mach schedule | `audio_character.js` maps ID to `"rapier"`; no Mach schedule copies in profile registry | own |
 | Thermal ceiling cues | T0 vs CMC capability | aerothermal snapshot | Snapshot 1.19 distinguishes `rapier_skin_temp_c`, `rapier_stagnation_temp_c`, `rapier_cmc_capability_c`; HUD shows SKIN/T0/ENGINE-INLET LIMITING | own |
