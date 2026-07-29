@@ -1,6 +1,15 @@
-/// North-up Mesh moving map math + canvas presenter for `#nav-mesh-map`.
+/// North-up Mesh ND map: pan/zoom/follow, Place/Free Fix click, ActiveDest drag.
 
 export const MESH_MAP_DEFAULT_SPAN_NM = 120;
+export const MESH_MAP_MIN_SPAN_NM = 15;
+export const MESH_MAP_MAX_SPAN_NM = 400;
+export const MESH_MAP_DRAG_THRESHOLD_PX = 6;
+
+export function clampSpanNm(spanNm) {
+  const value = Number(spanNm);
+  if (!Number.isFinite(value)) return MESH_MAP_DEFAULT_SPAN_NM;
+  return Math.min(MESH_MAP_MAX_SPAN_NM, Math.max(MESH_MAP_MIN_SPAN_NM, value));
+}
 
 export function worldToCanvas(eastM, northM, centreEastM, centreNorthM, widthPx, heightPx, spanM) {
   const x = ((eastM - centreEastM) / spanM + 0.5) * widthPx;
@@ -30,21 +39,46 @@ export function hitTestPlace(places, xPx, yPx, centreEastM, centreNorthM, widthP
   return best;
 }
 
+export function hitTestActiveDest(frame, xPx, yPx, centreEastM, centreNorthM, widthPx, heightPx, spanM, radiusPx = 10) {
+  if (!Number.isFinite(frame?.activeEastM) || !Number.isFinite(frame?.activeNorthM)) return false;
+  const point = worldToCanvas(
+    frame.activeEastM, frame.activeNorthM, centreEastM, centreNorthM, widthPx, heightPx, spanM);
+  return Math.hypot(point.x - xPx, point.y - yPx) <= radiusPx;
+}
+
 export function createMeshNavMap(canvas, options = {}) {
   if (!canvas || typeof canvas.getContext !== "function") {
     throw new TypeError("Mesh nav map requires a canvas element.");
   }
-  const spanNm = Number.isFinite(options.spanNm) ? options.spanNm : MESH_MAP_DEFAULT_SPAN_NM;
-  const spanM = spanNm * 1852;
+  let spanNm = clampSpanNm(options.spanNm ?? MESH_MAP_DEFAULT_SPAN_NM);
+  let follow = true;
+  let freeCentreEastM = 0;
+  let freeCentreNorthM = 0;
   const onSelectPlace = typeof options.onSelectPlace === "function" ? options.onSelectPlace : null;
   const onFreeFix = typeof options.onFreeFix === "function" ? options.onFreeFix : null;
+  const onDragDest = typeof options.onDragDest === "function" ? options.onDragDest : null;
   const ctx = canvas.getContext("2d");
   let lastFrame = null;
+  let pointer = null;
+
+  function spanM() {
+    return spanNm * 1852;
+  }
+
+  function centres(frame) {
+    if (follow) {
+      return {
+        eastM: Number(frame?.ownshipEastM) || 0,
+        northM: Number(frame?.ownshipNorthM) || 0,
+      };
+    }
+    return { eastM: freeCentreEastM, northM: freeCentreNorthM };
+  }
 
   function resize() {
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(120, Math.floor(rect.width || canvas.width || 280));
-    const height = Math.max(100, Math.floor(rect.height || canvas.height || 160));
+    const height = Math.max(120, Math.floor(rect.height || canvas.height || 240));
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
@@ -53,13 +87,19 @@ export function createMeshNavMap(canvas, options = {}) {
 
   function draw(frame) {
     lastFrame = frame;
+    if (frame?.follow === true) follow = true;
+    if (frame?.follow === false) follow = false;
+    if (follow) {
+      freeCentreEastM = Number(frame?.ownshipEastM) || 0;
+      freeCentreNorthM = Number(frame?.ownshipNorthM) || 0;
+    }
     resize();
     const width = canvas.width;
     const height = canvas.height;
-    const centreEastM = Number(frame?.ownshipEastM) || 0;
-    const centreNorthM = Number(frame?.ownshipNorthM) || 0;
+    const { eastM: centreEastM, northM: centreNorthM } = centres(frame);
     const places = Array.isArray(frame?.places) ? frame.places : [];
     const headingRad = Number(frame?.headingRad) || 0;
+    const mapSpanM = spanM();
 
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#d9cbb0";
@@ -77,9 +117,46 @@ export function createMeshNavMap(canvas, options = {}) {
       ctx.stroke();
     }
 
+    const tour = Array.isArray(frame?.tourStops) ? frame.tourStops : [];
+    if (tour.length > 1) {
+      ctx.strokeStyle = "rgba(122, 46, 18, 0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      tour.forEach((stop, index) => {
+        const point = worldToCanvas(
+          stop.eastM, stop.northM, centreEastM, centreNorthM, width, height, mapSpanM);
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    const gates = Array.isArray(frame?.procedureGates) ? frame.procedureGates : [];
+    if (gates.length > 0) {
+      ctx.strokeStyle = "rgba(40, 70, 90, 0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      gates.forEach((gate, index) => {
+        const point = worldToCanvas(
+          gate.eastM, gate.northM, centreEastM, centreNorthM, width, height, mapSpanM);
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
+      for (const gate of gates) {
+        const point = worldToCanvas(
+          gate.eastM, gate.northM, centreEastM, centreNorthM, width, height, mapSpanM);
+        const active = gate.active === true;
+        ctx.fillStyle = active ? "#1a4a6a" : "rgba(40, 70, 90, 0.45)";
+        ctx.fillRect(point.x - 4, point.y - 4, 8, 8);
+      }
+    }
+
     for (const place of places) {
       const point = worldToCanvas(
-        place.eastM, place.northM, centreEastM, centreNorthM, width, height, spanM);
+        place.eastM, place.northM, centreEastM, centreNorthM, width, height, mapSpanM);
       const isHome = place.role === "home";
       const isActive = frame?.activePlaceId && place.id === frame.activePlaceId;
       ctx.beginPath();
@@ -95,22 +172,23 @@ export function createMeshNavMap(canvas, options = {}) {
       }
       ctx.fillStyle = "#3a2a18";
       ctx.font = "10px ui-sans-serif, system-ui, sans-serif";
-      ctx.fillText(place.name.slice(0, 18), point.x + 6, point.y - 4);
+      ctx.fillText(String(place.name || "").slice(0, 18), point.x + 6, point.y - 4);
     }
 
-    if (Number.isFinite(frame?.activeEastM) && Number.isFinite(frame?.activeNorthM)
-      && !(frame?.activePlaceId)) {
+    if (Number.isFinite(frame?.activeEastM) && Number.isFinite(frame?.activeNorthM)) {
       const fix = worldToCanvas(
-        frame.activeEastM, frame.activeNorthM, centreEastM, centreNorthM, width, height, spanM);
+        frame.activeEastM, frame.activeNorthM, centreEastM, centreNorthM, width, height, mapSpanM);
       ctx.strokeStyle = "#7a2e12";
       ctx.lineWidth = 1.5;
       ctx.strokeRect(fix.x - 5, fix.y - 5, 10, 10);
     }
 
-    const own = worldToCanvas(
-      centreEastM, centreNorthM, centreEastM, centreNorthM, width, height, spanM);
+    const ownship = worldToCanvas(
+      Number(frame?.ownshipEastM) || 0,
+      Number(frame?.ownshipNorthM) || 0,
+      centreEastM, centreNorthM, width, height, mapSpanM);
     ctx.save();
-    ctx.translate(own.x, own.y);
+    ctx.translate(ownship.x, ownship.y);
     ctx.rotate(headingRad);
     ctx.fillStyle = "#102018";
     ctx.beginPath();
@@ -121,6 +199,10 @@ export function createMeshNavMap(canvas, options = {}) {
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+
+    ctx.fillStyle = "rgba(40, 30, 20, 0.55)";
+    ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillText(`${Math.round(spanNm)} NM · ${follow ? "FOLLOW" : "FREE"}`, 8, height - 8);
   }
 
   function pointerToLocal(event) {
@@ -131,31 +213,118 @@ export function createMeshNavMap(canvas, options = {}) {
     };
   }
 
-  function onClick(event) {
+  function onPointerDown(event) {
     if (!lastFrame) return;
+    canvas.setPointerCapture?.(event.pointerId);
     const local = pointerToLocal(event);
-    const centreEastM = Number(lastFrame.ownshipEastM) || 0;
-    const centreNorthM = Number(lastFrame.ownshipNorthM) || 0;
+    const { eastM, northM } = centres(lastFrame);
+    const mapSpanM = spanM();
+    const draggingDest = hitTestActiveDest(
+      lastFrame, local.x, local.y, eastM, northM, canvas.width, canvas.height, mapSpanM);
+    pointer = {
+      id: event.pointerId,
+      startX: local.x,
+      startY: local.y,
+      lastX: local.x,
+      lastY: local.y,
+      dragged: false,
+      draggingDest,
+      centreEastM: eastM,
+      centreNorthM: northM,
+    };
+  }
+
+  function onPointerMove(event) {
+    if (!pointer || pointer.id !== event.pointerId || !lastFrame) return;
+    const local = pointerToLocal(event);
+    const dx = local.x - pointer.startX;
+    const dy = local.y - pointer.startY;
+    if (!pointer.dragged && Math.hypot(dx, dy) >= MESH_MAP_DRAG_THRESHOLD_PX) {
+      pointer.dragged = true;
+    }
+    if (!pointer.dragged) return;
+    const mapSpanM = spanM();
+    if (pointer.draggingDest) {
+      const world = canvasToWorld(
+        local.x, local.y, pointer.centreEastM, pointer.centreNorthM,
+        canvas.width, canvas.height, mapSpanM);
+      onDragDest?.(world.eastM, world.northM);
+      return;
+    }
+    if (!follow) {
+      const dEast = -((local.x - pointer.lastX) / canvas.width) * mapSpanM;
+      const dNorth = ((local.y - pointer.lastY) / canvas.height) * mapSpanM;
+      freeCentreEastM += dEast;
+      freeCentreNorthM += dNorth;
+      pointer.lastX = local.x;
+      pointer.lastY = local.y;
+      draw({ ...lastFrame, follow: false });
+    }
+  }
+
+  function onPointerUp(event) {
+    if (!pointer || pointer.id !== event.pointerId || !lastFrame) {
+      pointer = null;
+      return;
+    }
+    const local = pointerToLocal(event);
+    const wasDrag = pointer.dragged;
+    const draggingDest = pointer.draggingDest;
+    pointer = null;
+    if (wasDrag) {
+      if (draggingDest) {
+        const { eastM, northM } = centres(lastFrame);
+        const world = canvasToWorld(
+          local.x, local.y, eastM, northM, canvas.width, canvas.height, spanM());
+        onDragDest?.(world.eastM, world.northM);
+      }
+      return;
+    }
+    const { eastM, northM } = centres(lastFrame);
     const places = Array.isArray(lastFrame.places) ? lastFrame.places : [];
     const hit = hitTestPlace(
-      places, local.x, local.y, centreEastM, centreNorthM, canvas.width, canvas.height, spanM);
+      places, local.x, local.y, eastM, northM, canvas.width, canvas.height, spanM());
     if (hit) {
       onSelectPlace?.(hit.id);
       return;
     }
     if (lastFrame.transitMode === "open_segment") {
       const world = canvasToWorld(
-        local.x, local.y, centreEastM, centreNorthM, canvas.width, canvas.height, spanM);
+        local.x, local.y, eastM, northM, canvas.width, canvas.height, spanM());
       onFreeFix?.(world.eastM, world.northM);
     }
   }
 
-  canvas.addEventListener("click", onClick);
+  function onWheel(event) {
+    event.preventDefault();
+    const factor = event.deltaY > 0 ? 1.12 : 1 / 1.12;
+    spanNm = clampSpanNm(spanNm * factor);
+    if (lastFrame) draw(lastFrame);
+  }
+
+  canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", onPointerUp);
+  canvas.addEventListener("wheel", onWheel, { passive: false });
 
   return Object.freeze({
     draw,
+    setFollowMode(next) {
+      follow = next === true;
+      if (follow && lastFrame) {
+        freeCentreEastM = Number(lastFrame.ownshipEastM) || 0;
+        freeCentreNorthM = Number(lastFrame.ownshipNorthM) || 0;
+        draw(lastFrame);
+      }
+    },
+    getSpanNm: () => spanNm,
     dispose() {
-      canvas.removeEventListener("click", onClick);
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointercancel", onPointerUp);
+      canvas.removeEventListener("wheel", onWheel);
     },
   });
 }

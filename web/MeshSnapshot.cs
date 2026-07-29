@@ -60,4 +60,62 @@ static class MeshSnapshot {
         MeshPlaceRole.ProcedureFix => "procedure_fix",
         _ => "landmark",
     };
+
+    public static string ProcedureKindToken(RecoveryProcedureKind kind) => kind switch {
+        RecoveryProcedureKind.Overhead => "overhead",
+        RecoveryProcedureKind.DownwindRejoin => "downwind_rejoin",
+        RecoveryProcedureKind.StraightIn => "straight_in",
+        _ => "none",
+    };
+
+    public static string ProcedureKindLabel(RecoveryProcedureKind kind) => kind switch {
+        RecoveryProcedureKind.Overhead => "OVERHEAD",
+        RecoveryProcedureKind.DownwindRejoin => "DOWNWIND REJOIN",
+        RecoveryProcedureKind.StraightIn => "STRAIGHT-IN",
+        _ => "NONE",
+    };
+
+    public static string TourJson(SimulationSession session) {
+        var sb = new StringBuilder(256);
+        sb.Append('[');
+        bool first = true;
+        foreach (MeshActiveDest stop in session.MeshNav.Tour) {
+            if (!first) sb.Append(',');
+            first = false;
+            sb.Append('{')
+                .Append("\"is_place\":").Append(stop.IsPlace ? "true" : "false").Append(',')
+                .Append("\"id\":").Append(SnapshotJson.JsonString(stop.PlaceId)).Append(',')
+                .Append("\"name\":").Append(SnapshotJson.JsonString(stop.DisplayName)).Append(',')
+                .Append("\"east_m\":").Append(stop.EastM.ToString("F1")).Append(',')
+                .Append("\"north_m\":").Append(stop.NorthM.ToString("F1"))
+                .Append('}');
+        }
+        sb.Append(']');
+        return sb.ToString();
+    }
+
+    public static string RecoveryGatesJson(SimulationSession session) {
+        var sb = new StringBuilder(256);
+        sb.Append('[');
+        bool first = true;
+        int active = session.RecoveryProcedure.ActiveIndex;
+        for (int i = 0; i < session.RecoveryProcedure.Gates.Count; i++) {
+            RecoveryGate gate = session.RecoveryProcedure.Gates[i];
+            if (!first) sb.Append(',');
+            first = false;
+            sb.Append('{')
+                .Append("\"id\":").Append(SnapshotJson.JsonString(gate.Id)).Append(',')
+                .Append("\"label\":").Append(SnapshotJson.JsonString(gate.Label)).Append(',')
+                .Append("\"east_m\":").Append(gate.EastM.ToString("F1")).Append(',')
+                .Append("\"north_m\":").Append(gate.NorthM.ToString("F1")).Append(',')
+                .Append("\"up_m\":").Append(gate.UpM.ToString("F1")).Append(',')
+                .Append("\"half_m\":").Append(gate.HalfM.ToString("F1")).Append(',')
+                .Append("\"target_ktas\":").Append(gate.TargetKtas.ToString("F0")).Append(',')
+                .Append("\"dirty\":").Append(gate.DirtyConfig ? "true" : "false").Append(',')
+                .Append("\"active\":").Append(i == active ? "true" : "false")
+                .Append('}');
+        }
+        sb.Append(']');
+        return sb.ToString();
+    }
 }

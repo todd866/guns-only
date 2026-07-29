@@ -42,7 +42,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 17;
+    public const int LayoutVersion = 18;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -478,6 +478,21 @@ internal static class SnapshotHotFrame {
         Nul("mesh_fuel_dest_to_home_lb", 2);
         Nul("mesh_fuel_on_arrival_home_via_dest_lb", 2);
         Nul("mesh_reserve_margin_via_dest_lb", 2);
+        Num("mesh_tour_count", RawInteger);
+        Num("recovery_procedure_kind", RawInteger);
+        Num("recovery_gate_active_index", RawInteger);
+        Nul("recovery_gate_x", 2);
+        Nul("recovery_gate_y", 2);
+        Nul("recovery_gate_z", 2);
+        Num("recovery_gate_half_m", 1);
+        Num("recovery_gate_face_x", 4);
+        Num("recovery_gate_face_y", 4);
+        Num("recovery_gate_face_z", 4);
+        Bool("recovery_gate_in_volume");
+        Bool("recovery_gate_energy_ok");
+        Bool("recovery_gate_config_ok");
+        Nul("recovery_gate_target_ktas", 1);
+        Bool("recovery_gate_dirty");
         Num("gear_nose", 4); Num("gear_left", 4); Num("gear_right", 4);
         Bool("gear_unsafe");
         Bool("gear_warning_horn");
@@ -1344,6 +1359,24 @@ internal static class SnapshotHotFrame {
         w.Nul("mesh_fuel_on_arrival_home_via_dest_lb",
             meshSolution.FuelOnArrivalHomeViaDestLb, 2);
         w.Nul("mesh_reserve_margin_via_dest_lb", meshSolution.ReserveMarginViaDestLb, 2);
+        RecoveryProcedureDirector meshRecovery = session.RecoveryProcedure;
+        RecoveryGate? recoveryGate = meshRecovery.ActiveGate;
+        Vec3D recoveryFace = meshRecovery.ActiveGateFace;
+        w.Num("mesh_tour_count", session.MeshNav.Tour.Count, RawInteger);
+        w.Num("recovery_procedure_kind", (int)meshRecovery.Kind, RawInteger);
+        w.Num("recovery_gate_active_index", meshRecovery.ActiveIndex, RawInteger);
+        w.Nul("recovery_gate_x", recoveryGate?.EastM, 2);
+        w.Nul("recovery_gate_y", recoveryGate?.UpM, 2);
+        w.Nul("recovery_gate_z", recoveryGate?.NorthM, 2);
+        w.Num("recovery_gate_half_m", recoveryGate?.HalfM ?? 0.0, 1);
+        w.Num("recovery_gate_face_x", recoveryFace.X, 4);
+        w.Num("recovery_gate_face_y", recoveryFace.Y, 4);
+        w.Num("recovery_gate_face_z", recoveryFace.Z, 4);
+        w.Bool("recovery_gate_in_volume", meshRecovery.InVolume);
+        w.Bool("recovery_gate_energy_ok", meshRecovery.EnergyOk);
+        w.Bool("recovery_gate_config_ok", meshRecovery.ConfigOk);
+        w.Nul("recovery_gate_target_ktas", recoveryGate?.TargetKtas, 1);
+        w.Bool("recovery_gate_dirty", recoveryGate?.DirtyConfig == true);
         w.Num("gear_nose", systems.NoseGearPosition, 4);
         w.Num("gear_left", systems.LeftMainGearPosition, 4);
         w.Num("gear_right", systems.RightMainGearPosition, 4);
@@ -2369,15 +2402,18 @@ internal static class SnapshotHotFrame {
                 worldOriginEastM,
                 worldOriginNorthM,
                 worldOriginConfigured,
-                FormatMeshActiveKey(session.MeshNav));
+                FormatMeshNavColdKey(session.MeshNav, session.RecoveryProcedure));
         }
 
-        static string FormatMeshActiveKey(MeshNavDirector mesh) {
+        static string FormatMeshNavColdKey(MeshNavDirector mesh, RecoveryProcedureDirector recovery) {
             MeshActiveDest? active = mesh.Active;
-            if (active is null) return $"{(int)mesh.Mode}|none|{mesh.Catalog.Count}";
-            if (active.Value.IsPlace)
-                return $"{(int)mesh.Mode}|place|{active.Value.PlaceId}|{mesh.Catalog.Count}";
-            return $"{(int)mesh.Mode}|fix|{active.Value.EastM:F0}|{active.Value.NorthM:F0}|{mesh.Catalog.Count}";
+            string activeKey = active is null
+                ? "none"
+                : active.Value.IsPlace
+                    ? $"place|{active.Value.PlaceId}"
+                    : $"fix|{active.Value.EastM:F0}|{active.Value.NorthM:F0}";
+            return $"{(int)mesh.Mode}|{activeKey}|cat:{mesh.Catalog.Count}|tour:{mesh.Tour.Count}"
+                + $"|proc:{(int)recovery.Kind}|gate:{recovery.ActiveIndex}";
         }
     }
 }

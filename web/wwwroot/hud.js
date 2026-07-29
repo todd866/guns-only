@@ -40,7 +40,7 @@ import {
 } from "./render/hud/gun_funnel.js";
 import { timeCompressionHudPresentation } from "./render/telemetry/time_compression.js";
 import {
-  circuitGatePresentation,
+  recoveryGatePresentation,
   rapierCycleTeachPresentation,
   rapierFlightDirectorPresentation,
   rapierGuidancePresentation,
@@ -50,7 +50,7 @@ import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=181";
+} from "./render/audio/flight_audio.js?v=182";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -3639,17 +3639,17 @@ class CombatHud {
     }
 
     // Geometry only — no GATE essay over the sight. Gate index lives on the quiet mode line.
-    // Circuits: project a real sky square (world metres) so the box grows as you close and
-    // reads as an energy/config gate, not fixed-pixel HUD chrome.
-    if (Number.isFinite(frame.state.rapier_guidance_x)
-        && Number.isFinite(frame.state.rapier_guidance_y)
-        && Number.isFinite(frame.state.rapier_guidance_z)) {
-      this.worldPoint.set(
-        frame.state.rapier_guidance_x,
-        frame.state.rapier_guidance_y,
-        -frame.state.rapier_guidance_z,
-      );
-      const gateInfo = circuitGatePresentation(frame.state);
+    // Circuits / Mesh recovery: project a real sky square (world metres) so the box grows as you
+    // close and reads as an energy/config gate, not fixed-pixel HUD chrome.
+    {
+      const gateInfo = recoveryGatePresentation(frame.state);
+      const gateX = gateInfo?.worldX ?? frame.state.rapier_guidance_x;
+      const gateY = gateInfo?.worldY ?? frame.state.rapier_guidance_y;
+      const gateZ = gateInfo?.worldZ ?? frame.state.rapier_guidance_z;
+      if (Number.isFinite(gateX)
+        && Number.isFinite(gateY)
+        && Number.isFinite(gateZ)) {
+      this.worldPoint.set(gateX, gateY, -gateZ);
       const halfM = gateInfo?.halfM ?? 0;
       const projectedGate = this.project(this.worldPoint, frame.camera, this.projectionA);
       if (!projectedGate.behind) {
@@ -3733,11 +3733,7 @@ class CombatHud {
             ctx.moveTo(x1, y1 - corner); ctx.lineTo(x1, y1); ctx.lineTo(x1 - corner, y1);
             ctx.stroke();
           }
-          this.worldPoint.set(
-            frame.state.rapier_guidance_x,
-            frame.state.rapier_guidance_y,
-            -frame.state.rapier_guidance_z,
-          );
+          this.worldPoint.set(gateX, gateY, -gateZ);
           const labelAt = this.project(this.worldPoint, frame.camera, this.projectionA);
           ctx.shadowBlur = 0;
           ctx.font = "700 11px ui-monospace, monospace";
@@ -3774,6 +3770,7 @@ class CombatHud {
           }
         }
         ctx.shadowBlur = 0;
+      }
       }
     }
 

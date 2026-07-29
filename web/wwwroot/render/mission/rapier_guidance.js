@@ -245,7 +245,67 @@ export function circuitGatePresentation(state) {
     accent,
     boxLabel: legLabel ? `${legLabel} · ${status}` : status,
     configLine: speed ? `${config} · ${speed}` : config,
+    worldX: null,
+    worldY: null,
+    worldZ: null,
   });
+}
+
+/// Mesh ND recovery procedure gates, falling back to Circuits pattern boxes.
+export function recoveryGatePresentation(state) {
+  const kind = Math.max(0, Math.floor(Number(state?.recovery_procedure_kind) || 0));
+  if (kind > 0) {
+    const halfM = finiteNumber(state.recovery_gate_half_m) ?? 0;
+    const worldX = finiteNumber(state.recovery_gate_x);
+    const worldY = finiteNumber(state.recovery_gate_y);
+    const worldZ = finiteNumber(state.recovery_gate_z);
+    if (halfM <= 0 || worldX === null || worldY === null || worldZ === null) return null;
+    const inVolume = state.recovery_gate_in_volume === true;
+    const energyOk = state.recovery_gate_energy_ok === true;
+    const configOk = state.recovery_gate_config_ok === true;
+    const dirty = state.recovery_gate_dirty === true;
+    const targetKtas = finiteNumber(state.recovery_gate_target_ktas);
+    let status = "FLY THE BOX";
+    let accent = "armed";
+    if (inVolume && energyOk && configOk) {
+      status = "GATE OPEN";
+      accent = "open";
+    } else if (inVolume && !energyOk) {
+      status = "ENERGY";
+      accent = "fault";
+    } else if (inVolume && !configOk) {
+      status = "CONFIG";
+      accent = "fault";
+    } else if (energyOk) {
+      status = "ON SPEED";
+      accent = "armed";
+    }
+    const label = typeof state.recovery_procedure_label === "string"
+      && state.recovery_procedure_label.trim()
+      ? state.recovery_procedure_label.trim().toUpperCase()
+      : (kind === 1 ? "OVERHEAD" : kind === 2 ? "DOWNWIND REJOIN" : "STRAIGHT-IN");
+    const config = dirty
+      ? "HOOK · GEAR · ELEVONS DOWN"
+      : "HOOK DOWN · GEAR UP · ELEVONS UP";
+    const speed = targetKtas !== null ? `${Math.round(targetKtas)} KT` : "";
+    return Object.freeze({
+      halfM,
+      faceX: finiteNumber(state.recovery_gate_face_x) ?? 0,
+      faceY: finiteNumber(state.recovery_gate_face_y) ?? 0,
+      faceZ: finiteNumber(state.recovery_gate_face_z) ?? 1,
+      inVolume,
+      energyOk,
+      configOk,
+      status,
+      accent,
+      boxLabel: `${label} · ${status}`,
+      configLine: speed ? `${config} · ${speed}` : config,
+      worldX,
+      worldY,
+      worldZ,
+    });
+  }
+  return circuitGatePresentation(state);
 }
 
 /// Quiet mode line under the heading tape. Spec:
@@ -337,12 +397,16 @@ export function rapierGuidancePresentation(state) {
     detail: "",
     level,
     circuitLeg: leg,
-    boxLabel: patternOnly
-      ? (circuitGatePresentation(state)?.boxLabel || legLabel || "")
-      : (phase === PHASE_RECOVERY && gate > 0 ? `GATE ${gate}/4`
-        : (!patternOnly && (phase === 6 || phase === 7)
-          ? (noseErr !== null && noseErr <= 8 ? "ON V" : "NOSE→V")
-          : "")),
+    boxLabel: (() => {
+      const recovery = recoveryGatePresentation(state);
+      if (recovery?.boxLabel) return recovery.boxLabel;
+      return patternOnly
+        ? (circuitGatePresentation(state)?.boxLabel || legLabel || "")
+        : (phase === PHASE_RECOVERY && gate > 0 ? `GATE ${gate}/4`
+          : (!patternOnly && (phase === 6 || phase === 7)
+            ? (noseErr !== null && noseErr <= 8 ? "ON V" : "NOSE→V")
+            : ""));
+    })(),
     skinC: thermal?.skinC ?? null,
     recoveryC: thermal?.recoveryC ?? null,
     stagnationC: thermal?.stagnationC ?? null,
