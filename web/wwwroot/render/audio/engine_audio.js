@@ -912,7 +912,6 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     : 0;
   const targetRpm = clamp01(
     (finiteNumber(state?.engine_rpm_pct) ?? (deliveredPower * 100)) / 100);
-  const mach = Math.max(0, finiteNumber(state?.mach) ?? 0);
   const now = audioContext.currentTime;
   const elapsed = Math.min(MAX_CONTROL_STEP_SECONDS,
     Math.max(0, now - voiceGraph.lastControlTime));
