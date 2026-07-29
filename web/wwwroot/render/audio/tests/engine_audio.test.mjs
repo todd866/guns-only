@@ -2161,3 +2161,102 @@ test("ram-only thrust remains audible at zero turbine RPM and owns the stream mi
     globalThis.AudioContext = previous;
   }
 });
+
+test("Rapier Mach-fallback handover uses published ram-light and full-ram thresholds", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      createEngineVoices,
+      updateEngineVoices,
+      rapierHandoverMachFallback,
+    } = await freshModule("../engine_audio.js", "handover-thresholds");
+
+    // Exported pure helper — same numbers briefing uses when thrust-kn are absent.
+    assert.equal(
+      rapierHandoverMachFallback({
+        mach: 2.0,
+        rapier_ram_light_mach: 2.0,
+        rapier_full_ram_mach: 2.8,
+      }),
+      0,
+      "at ram-light the fallback handover fraction is 0",
+    );
+    assert.ok(
+      Math.abs(rapierHandoverMachFallback({
+        mach: 2.4,
+        rapier_ram_light_mach: 2.0,
+        rapier_full_ram_mach: 2.8,
+      }) - 0.5) < 1e-6,
+      "mid-band fallback is 0.5 with map 2.0–2.8",
+    );
+    assert.equal(
+      rapierHandoverMachFallback({
+        mach: 2.8,
+        rapier_ram_light_mach: 2.0,
+        rapier_full_ram_mach: 2.8,
+      }),
+      1,
+      "at full-ram the fallback handover fraction is 1",
+    );
+
+    // Shifted published thresholds must move the fallback (proves no 1.9/2.8 literals win).
+    const shiftedMid = rapierHandoverMachFallback({
+      mach: 2.5,
+      rapier_ram_light_mach: 2.2,
+      rapier_full_ram_mach: 3.0,
+    });
+    assert.ok(
+      Math.abs(shiftedMid - 0.375) < 1e-6,
+      "fallback follows published 2.2–3.0, not module constants",
+    );
+
+    // Voices path: without thrust-kn, ram howl must stay quiet below published ram-light
+    // even if mach is above the old 1.9 literal.
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const base = {
+      applied_throttle: 1.55,
+      engine_rpm_pct: 100,
+      true_airspeed_kts: 900,
+      air_density_kg_m3: 0.35,
+      player_aircraft_id: "aircraft.rapier.public-data-surrogate.v1",
+      rapier_ram_light_mach: 2.4,
+      rapier_full_ram_mach: 3.0,
+      // omit thrust-kn → force Mach fallback
+    };
+    for (let step = 1; step <= 16; step++) {
+      audio.currentTime = step * 0.25;
+      updateEngineVoices(voices, audio, { ...base, mach: 2.2 });
+    }
+    assert.ok(
+      latest(voices.ramHowlGain.gain) < 0.02,
+      "below published ram-light, fallback must not light ram howl",
+    );
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("rapierPropulsionThresholds and audio fallback agree on the same state", async () => {
+  const { rapierPropulsionThresholds } = await import(
+    "../../mission/rapier_guidance.js"
+  );
+  const { rapierHandoverMachFallback } = await freshModule(
+    "../engine_audio.js",
+    "handover-agree",
+  );
+  const state = {
+    mach: 2.4,
+    rapier_ram_light_mach: 2.0,
+    rapier_full_ram_mach: 2.8,
+  };
+  const t = rapierPropulsionThresholds(state);
+  const expected = (state.mach - t.ramLightMach)
+    / (t.fullRamMach - t.ramLightMach);
+  assert.ok(
+    Math.abs(rapierHandoverMachFallback(state) - expected) < 1e-9,
+    "audio fallback fraction must match briefing threshold helper arithmetic",
+  );
+});
