@@ -51,6 +51,8 @@ public class RapierMissionTests {
 
         bool sawAccelerate = false;
         bool sawRamClimb = false;
+        bool sawZoomPull = false;
+        var reasons = new HashSet<string>();
         double maximumMach = 0.0;
         double rangeAtMach4CorridorM = double.NaN;
         var phaseTimeline = new List<string>();
@@ -72,6 +74,9 @@ public class RapierMissionTests {
             }
             sawAccelerate |= session.RapierPhase == RapierMissionPhase.Accelerate;
             sawRamClimb |= session.RapierPhase == RapierMissionPhase.RamClimb;
+            sawZoomPull |= session.RapierPhase == RapierMissionPhase.ZoomPull;
+            if (!string.IsNullOrEmpty(session.RapierPhaseReason))
+                reasons.Add(session.RapierPhaseReason);
             // Dash speed is now what the structure allows, not Mach 4. The property this test
             // protects is that the aircraft ARRIVES at dash speed with fighting room ahead of it,
             // and that is independent of what the number happens to be.
@@ -91,7 +96,13 @@ public class RapierMissionTests {
                 + $"FL{session.Player.State.Position.Y / 30.48:F0}, "
                 + $"M{maximumMach:F2}, throttle {session.Controls.Throttle:F2}, "
                 + $"gamma {session.Player.State.Gamma * 180.0 / Math.PI:F1}°");
-        Assert.True(sawRamClimb, "automation never commanded the ram climb to FL700");
+        bool okReason = reasons.Contains("intercept_dash")
+            || reasons.Contains("direct_join")
+            || reasons.Contains("post_lob_intercept");
+        bool energyLadder = sawRamClimb || (sawZoomPull && okReason);
+        Assert.True(energyLadder,
+            "automation never climbed toward intercept (RamClimb or ZoomLob→Intercept): "
+                + $"[{string.Join(", ", phaseTimeline)}]");
         Assert.True(maximumMach >= 2.7,
             $"automation only reached M{maximumMach:F2}");
         Assert.True(double.IsFinite(rangeAtMach4CorridorM),
