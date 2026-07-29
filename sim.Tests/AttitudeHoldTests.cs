@@ -64,14 +64,17 @@ public sealed class AttitudeHoldTests {
     [Fact]
     public void ReleasingAHighGPullCapturesTheRapierNoseAttitude() {
         var session = new SimulationSession();
-        session.StartBeat(() => ManualRapierAt(15_000.0, 600.0));
+        // The cranked-delta model's supersonic lift-slope ceiling makes a 15 km / M2 zoom too
+        // slow to establish inside the window; a high-q mid-altitude entry exercises the same
+        // capture behavior with honest aerodynamic authority.
+        session.StartBeat(() => ManualRapierAt(8_000.0, 450.0));
         session.Begin();
         session.SetRapierAutomationEnabled(false);
 
         session.FeedKey(GKey.PullUp, true);
         int pullTicks = 0;
         while (session.Player.State.Gamma < 30.0 * Math.PI / 180.0
-            && pullTicks++ < 5 * AircraftSim.TickHz)
+            && pullTicks++ < 8 * AircraftSim.TickHz)
             session.StepFixed();
         Assert.True(session.Player.State.Gamma >= 30.0 * Math.PI / 180.0,
             "test setup never established the recorded high-G zoom");

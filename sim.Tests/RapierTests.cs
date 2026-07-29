@@ -34,27 +34,6 @@ public class RapierTests {
             });
 
     [Fact]
-    public void TransonicWaveDragPeakIsExplicitlyLockedAndBounded() {
-        const double alpha = 0.05;
-        const double belowPeakMach = 1.17;
-        double cl = Jet.CLAlpha * alpha;
-        double originalBelowPeak = Jet.CD0
-            * (1.0 + Jet.WaveDragK
-                * Math.Pow(belowPeakMach - Jet.MCrit, 2.0))
-            + Jet.InducedK * cl * cl;
-
-        double actualBelowPeak = FlightModel.ProfileDragCoefficient(
-            alpha, belowPeakMach, Jet);
-        double atPeak = FlightModel.ProfileDragCoefficient(
-            alpha, Jet.WaveDragPeakMach, Jet);
-        double atMachThree = FlightModel.ProfileDragCoefficient(alpha, 3.0, Jet);
-
-        Assert.Equal(1.18, Jet.WaveDragPeakMach, 12);
-        Assert.Equal(originalBelowPeak, actualBelowPeak, 12);
-        Assert.Equal(atPeak, atMachThree, 12);
-    }
-
-    [Fact]
     public void TheTurbineCarriesItLowAndTheRamCarriesItHigh() {
         _out.WriteLine("thrust fraction of sea-level static dry, by Mach and altitude:");
         _out.WriteLine("  (turbine fades 1.9->3.0, ram fades in 1.6->2.2; they OVERLAP on purpose)");

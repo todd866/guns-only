@@ -7,8 +7,7 @@ namespace GunsOnly.Sim.Tests;
 public class MissionFeaturePackContractTests {
     [Fact]
     public void HeroCellSelectsTheByteStableUnassessedClinicPack() {
-        string repositoryRoot = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string repositoryRoot = TestRepository.Root;
         string relativePack = Path.Combine(
             "packs", "ukraine-modern", "environment", "hero-cells",
             "soniachne-clinic-a.feature-pack.json");
@@ -48,8 +47,7 @@ public class MissionFeaturePackContractTests {
 
     [Fact]
     public void BrowserPublishesTheSameMissionFeatureSchema() {
-        string repositoryRoot = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string repositoryRoot = TestRepository.Root;
         string canonicalPath = Path.Combine(
             repositoryRoot, "content", "schemas", "mission-feature-pack.schema.json");
         string webPath = Path.Combine(
