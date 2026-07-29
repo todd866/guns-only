@@ -106,6 +106,10 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   assert.equal(centreArcRail.count, 12);
   assert.ok(sideArcRails?.isInstancedMesh);
   assert.equal(sideArcRails.count, 24);
+  assert.ok(strip.getObjectByName("LAUNCH_GALLERY_VAULT"), "arched vault must present");
+  assert.ok(strip.getObjectByName("LAUNCH_PORTAL"), "portal headwall must present");
+  assert.ok(strip.getObjectByName("LAUNCH_FX"), "catshot FX group must present");
+  assert.ok(strip.userData.launchFx?.update, "strip must expose launchFx.update");
   const lastRailMatrix = new THREE.Matrix4();
   centreArcRail.getMatrixAt(centreArcRail.count - 1, lastRailMatrix);
   const halfChord = centreArcRail.geometry.parameters.depth / 2;

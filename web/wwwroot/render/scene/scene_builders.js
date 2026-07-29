@@ -3,8 +3,9 @@ import {
   TERRAIN_CURVATURE_START_M,
   TERRAIN_EARTH_RADIUS_M,
 } from "../environment/korea_terrain.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=182";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=183";
 import rapierV1Definition from "../../airframes/rapier_v1.embedded.js";
+import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
 
 // Pure Three.js scene/model builders extracted verbatim from app.js. Runtime-derived configuration
 // is owned by app.js and injected once via configureSceneBuilders() before any builder runs, so
@@ -1118,52 +1119,78 @@ export function createRapierDispersedStrip(context = {}) {
   // COVERED ACCELERATION GALLERY. Ukrainian steppe is flat, so nothing hides a launcher and
   // nothing supplies a launch angle. Roofing the flat run answers the first — a dispersed launcher
   // survives by not being visible or crater-able — and the ski jump beyond answers the second.
-  // The gallery covers the live 433.86 m flat run only; the aircraft bursts into daylight at the
-  // foot of the ramp and rides the final 86.14 m arc in the open.
+  // The gallery covers the live flat run only; the aircraft bursts into daylight at the foot of
+  // the ramp and rides the final arc in the open.
   //
-  // It occupies the -Z third of the strip; the arresting wires sit at +240 m, so the recovery
-  // runway stays clear. The bore is generously sized on purpose — a close-fitting tube would have
-  // to accelerate a share of the air ahead of it, which is the real loss here. Evacuating it is
-  // not: the air costs 1.32 MJ of an 88.3 MJ launch, against the 10-15% a linear motor already
-  // loses to itself. Vents relieve it for almost nothing.
+  // Presentation (2026-07-29): arched bore + grassed berm + articulated portal — physics-honest
+  // big bore and vents, defensive burial fiction, Ghibli-adjacent earth/light (ADR-0003). Spec:
+  // docs/superpowers/specs/2026-07-29-rapier-launch-gallery-ghibli-wwiii-design.md
   const galleryHalfWidth = 7;
   const galleryHeight = 8;
-  const bermCrest = 10;
+  const bermCrest = 11;
   const galleryEndZ = railStartZ - flatLengthM;
   const gallery = new THREE.Group();
   gallery.name = "LAUNCH_GALLERY";
   const galleryMidZ = railStartZ - flatLengthM / 2;
-  for (const side of [-1, 1]) {
-    box(gallery, { x: 1.6, y: galleryHeight, z: flatLengthM },
-      new THREE.Vector3(catapultX + side * galleryHalfWidth, galleryHeight / 2, galleryMidZ),
-      concrete);
-    // Earth berm battered over the walls: spoil from the site's own earthworks, and the reason the
-    // whole thing reads as a low mound rather than a building.
-    box(gallery, { x: 9, y: bermCrest, z: flatLengthM },
-      new THREE.Vector3(catapultX + side * (galleryHalfWidth + 5), bermCrest / 2, galleryMidZ),
-      shoulder);
-  }
-  box(gallery, { x: galleryHalfWidth * 2 + 3.2, y: 1.4, z: flatLengthM },
-    new THREE.Vector3(catapultX, galleryHeight + 0.7, galleryMidZ), concrete);
-  box(gallery, { x: galleryHalfWidth * 2 + 12, y: 2.2, z: flatLengthM },
-    new THREE.Vector3(catapultX, galleryHeight + 2.4, galleryMidZ), shoulder);
+  const earth = makeMaterial(0x5c6848, 0.96, 0.01, 0x010100,
+    { grain: 0.18, grainScale: 0.28 });
+  const dampConcrete = makeMaterial(0x3f4441, 0.9, 0.02, 0x010101,
+    { grain: 0.16, grainScale: 0.4 });
+  const portalConcrete = makeMaterial(0x555a56, 0.82, 0.03, 0x010101,
+    { grain: 0.1, grainScale: 0.55 });
 
-  // Interior ribs every 10 m. At 110 m/s these strobe rather than blur, and they are the only
-  // speed cue in an enclosed run - without them the acceleration reads as motionless.
+  // Floor slab — generous bore (14×8 m class) so the jet is not a pneumatic piston.
+  box(gallery, { x: galleryHalfWidth * 2 + 1.2, y: 0.45, z: flatLengthM },
+    new THREE.Vector3(catapultX, 0.12, galleryMidZ), dampConcrete);
+
+  for (const side of [-1, 1]) {
+    // Springing walls under the vault.
+    box(gallery, { x: 1.35, y: galleryHeight * 0.72, z: flatLengthM },
+      new THREE.Vector3(catapultX + side * galleryHalfWidth, galleryHeight * 0.36, galleryMidZ),
+      dampConcrete);
+    // Spoil berm: wide, soft mound — reads as earthworks, not a building.
+    box(gallery, { x: 11, y: bermCrest * 0.55, z: flatLengthM + 8 },
+      new THREE.Vector3(catapultX + side * (galleryHalfWidth + 7), bermCrest * 0.28, galleryMidZ),
+      earth);
+    box(gallery, { x: 7, y: bermCrest * 0.75, z: flatLengthM + 4 },
+      new THREE.Vector3(catapultX + side * (galleryHalfWidth + 4.5), bermCrest * 0.42, galleryMidZ),
+      earth);
+  }
+
+  // Barrel vault roof (half-cylinder along launch -Z). OpenEnded so the portal mouth is a hole.
+  const vaultRadius = galleryHalfWidth + 0.55;
+  const vault = new THREE.Mesh(
+    new THREE.CylinderGeometry(
+      vaultRadius, vaultRadius, flatLengthM, 28, 1, true, 0, Math.PI),
+    dampConcrete,
+  );
+  vault.name = "LAUNCH_GALLERY_VAULT";
+  vault.rotation.z = Math.PI / 2;
+  vault.rotation.y = Math.PI / 2;
+  vault.position.set(catapultX, vaultRadius * 0.15 + 1.1, galleryMidZ);
+  gallery.add(vault);
+  // Thin earth cap over the vault so the mound reads continuous from the air.
+  box(gallery, { x: galleryHalfWidth * 2 + 6, y: 2.4, z: flatLengthM + 6 },
+    new THREE.Vector3(catapultX, galleryHeight + 1.6, galleryMidZ), earth)
+    .name = "LAUNCH_GALLERY_BERM_CAP";
+
+  // Interior ribs every 10 m — speed strobe at 110 m/s; only speed cue in the bore.
   const ribLampPositions = [];
   const ribPositions = [];
   for (let z = railStartZ - 10; z > galleryEndZ; z -= 10) {
-    ribPositions.push(new THREE.Vector3(catapultX, galleryHeight - 0.4, z));
-    ribLampPositions.push(new THREE.Vector3(catapultX, galleryHeight - 1.0, z));
+    ribPositions.push(new THREE.Vector3(catapultX, galleryHeight - 0.55, z));
+    ribLampPositions.push(new THREE.Vector3(catapultX, galleryHeight - 1.15, z));
   }
   const ribs = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(galleryHalfWidth * 2, 0.5, 0.5),
-    concrete,
+    new THREE.BoxGeometry(galleryHalfWidth * 2 - 0.6, 0.42, 0.42),
+    dampConcrete,
     ribPositions.length,
   );
   ribs.name = "LAUNCH_GALLERY_RIBS";
+  const ribLampMaterial = lamp.clone();
+  ribLampMaterial.color.set(0xf0d38d);
   const ribLamps = new THREE.InstancedMesh(
-    new THREE.SphereGeometry(0.16, 6, 4), lamp, ribLampPositions.length,
+    new THREE.SphereGeometry(0.18, 8, 6), ribLampMaterial, ribLampPositions.length,
   );
   ribLamps.name = "LAUNCH_GALLERY_RIB_LAMPS";
   const lampTransform = new THREE.Object3D();
@@ -1178,21 +1205,55 @@ export function createRapierDispersedStrip(context = {}) {
   ribs.userData.noShadow = true;
   ribLamps.userData.noShadow = true;
   gallery.add(ribs, ribLamps);
-  // Vent apertures relieve the air the aircraft displaces ahead of it.
+
+  // Vent ducts — air relief for the displaced column (not decoration).
   for (let z = railStartZ - 40; z > galleryEndZ; z -= 40) {
     for (const side of [-1, 1]) {
-      box(gallery, { x: 2.0, y: 1.8, z: 3.0 },
-        new THREE.Vector3(catapultX + side * (galleryHalfWidth + 0.9), galleryHeight - 1.6, z),
+      const lip = box(gallery, { x: 2.4, y: 1.5, z: 3.4 },
+        new THREE.Vector3(catapultX + side * (galleryHalfWidth + 1.1), galleryHeight - 1.5, z),
+        portalConcrete);
+      lip.name = "LAUNCH_GALLERY_VENT";
+      lip.userData.noShadow = true;
+      box(gallery, { x: 1.6, y: 1.1, z: 2.6 },
+        new THREE.Vector3(catapultX + side * (galleryHalfWidth + 0.55), galleryHeight - 1.5, z),
         rail).userData.noShadow = true;
     }
   }
-  // Portal headwall at the foot of the ramp, where the cover ends and the jump begins.
+
+  // Portal headwall — concrete wound in the berm where cover ends and the jump begins.
+  const portal = new THREE.Group();
+  portal.name = "LAUNCH_PORTAL";
   for (const side of [-1, 1]) {
-    box(gallery, { x: 5, y: bermCrest + 2.6, z: 3 },
-      new THREE.Vector3(catapultX + side * (galleryHalfWidth + 2), (bermCrest + 2.6) / 2,
-        galleryEndZ - 1.5), concrete);
+    box(portal, { x: 6.5, y: bermCrest + 3.2, z: 4.2 },
+      new THREE.Vector3(catapultX + side * (galleryHalfWidth + 2.4), (bermCrest + 3.2) / 2,
+        galleryEndZ - 2.1), portalConcrete);
   }
+  box(portal, { x: galleryHalfWidth * 2 + 5, y: 2.8, z: 3.6 },
+    new THREE.Vector3(catapultX, galleryHeight + 1.5, galleryEndZ - 2.0), portalConcrete);
+  // Arch ring reads the mouth as a built portal, not a cut box.
+  const arch = new THREE.Mesh(
+    new THREE.TorusGeometry(galleryHalfWidth + 0.2, 0.55, 10, 28, Math.PI),
+    portalConcrete,
+  );
+  arch.name = "LAUNCH_PORTAL_ARCH";
+  arch.rotation.y = Math.PI / 2;
+  arch.position.set(catapultX, galleryHalfWidth * 0.35 + 0.8, galleryEndZ - 0.4);
+  portal.add(arch);
+  gallery.add(portal);
   group.add(gallery);
+
+  const launchFx = createRapierLaunchFx({
+    catapultX,
+    railStartZ,
+    flatLengthM,
+    galleryEndZ,
+    galleryHalfWidth,
+    galleryHeight,
+    ribLamps,
+    particleMultiplier: VISUAL_QUALITY?.particleMultiplier ?? 1,
+  });
+  gallery.add(launchFx.group);
+  group.userData.launchFx = launchFx;
 
   // Dispersed revetments and chunky value blocks establish the illustrative 2030s silhouette
   // without implying a real airfield plan.
