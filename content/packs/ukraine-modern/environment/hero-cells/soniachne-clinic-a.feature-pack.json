@@ -2,7 +2,7 @@
   "$schema": "../../../../schemas/mission-feature-pack.schema.json",
   "schemaVersion": "1.0.0",
   "featurePackId": "mission-feature-pack.ukraine-modern.soniachne-clinic-a.v1",
-  "packVersion": "1.0.0",
+  "packVersion": "1.1.0",
   "displayName": "Soniachne Clinic Meadow — Hero Cell A",
   "status": "preview",
   "theatre": {
@@ -57,21 +57,21 @@
   },
   "renderBudgets": {
     "mobile": {
-      "maxDrawCalls": 6,
-      "maxInstances": 256,
-      "maxTriangles": 35000,
+      "maxDrawCalls": 8,
+      "maxInstances": 384,
+      "maxTriangles": 45000,
       "maxSurfacePatchTriangles": 0
     },
     "balanced": {
-      "maxDrawCalls": 7,
-      "maxInstances": 512,
-      "maxTriangles": 60000,
+      "maxDrawCalls": 9,
+      "maxInstances": 640,
+      "maxTriangles": 75000,
       "maxSurfacePatchTriangles": 0
     },
     "desktop": {
-      "maxDrawCalls": 10,
-      "maxInstances": 768,
-      "maxTriangles": 100000,
+      "maxDrawCalls": 12,
+      "maxInstances": 896,
+      "maxTriangles": 120000,
       "maxSurfacePatchTriangles": 0
     }
   },
@@ -138,6 +138,20 @@
         "procedural_debris"
       ],
       "purpose": "Keeps the visual landing-zone marker legible. This renderer exclusion is not a surface, obstacle, or safe-approach clearance claim.",
+      "presentationOnly": true,
+      "establishesOperationalClearance": false
+    },
+    {
+      "id": "ambient-exclusion.soniachne-clinic-a.village-edge.v1",
+      "shape": "circle",
+      "centerLocalM": [240, -3, 0],
+      "radiusM": 140,
+      "excludedAmbientKinds": [
+        "procedural_buildings",
+        "procedural_utilities",
+        "procedural_debris"
+      ],
+      "purpose": "Keeps procedural settlement noise off the authored village-edge cottages along the east road.",
       "presentationOnly": true,
       "establishesOperationalClearance": false
     }
@@ -799,6 +813,176 @@
         "essential": false
       },
       "notes": "Batched presentation mass only; individual trunks and crowns are not obstacle or clearance truth."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.village-cottage-a.v1",
+      "kind": "building",
+      "role": "village_edge_dwelling",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [168, -0.9, 28],
+        "yawDeg": 22
+      },
+      "dimensionsM": {
+        "width": 11,
+        "height": 4.4,
+        "depth": 8
+      },
+      "presentation": {
+        "primitive": "gable_building",
+        "batch": "village_buildings",
+        "color": "#D2C4A8",
+        "secondaryColor": "#6A5850",
+        "essential": false
+      },
+      "notes": "Fictional cottage on the village-edge approach road; ambient presentation only."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.village-cottage-b.v1",
+      "kind": "building",
+      "role": "village_edge_dwelling",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [214, -2.4, 8],
+        "yawDeg": -12
+      },
+      "dimensionsM": {
+        "width": 9,
+        "height": 3.8,
+        "depth": 7
+      },
+      "presentation": {
+        "primitive": "gable_building",
+        "batch": "village_buildings",
+        "color": "#C8D0B1",
+        "secondaryColor": "#8A4E3C",
+        "essential": false
+      },
+      "notes": "Second fictional cottage; soft steppe settlement silhouette without a full village campus."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.village-shed.v1",
+      "kind": "building",
+      "role": "village_edge_outbuilding",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [246, -3.4, -6],
+        "yawDeg": 8
+      },
+      "dimensionsM": {
+        "width": 7,
+        "height": 3.2,
+        "depth": 5
+      },
+      "presentation": {
+        "primitive": "gable_building",
+        "batch": "village_buildings",
+        "color": "#A88B68",
+        "secondaryColor": "#5A6468",
+        "essential": false
+      },
+      "notes": "Small weathered outbuilding along the east road ribbon."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.village-cottage-c.v1",
+      "kind": "building",
+      "role": "village_edge_dwelling",
+      "status": "present",
+      "affiliation": "civilian_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [302, -5.1, -18],
+        "yawDeg": 16
+      },
+      "dimensionsM": {
+        "width": 10,
+        "height": 4.1,
+        "depth": 7.5
+      },
+      "presentation": {
+        "primitive": "gable_building",
+        "batch": "village_buildings",
+        "color": "#B8C0A8",
+        "secondaryColor": "#4A6A78",
+        "essential": false
+      },
+      "notes": "Farther village-edge house; keeps the road reading as a lived approach to the clinic meadow."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.shelterbelt-south.v1",
+      "kind": "vegetation",
+      "role": "shelterbelt_visual",
+      "status": "present",
+      "affiliation": "neutral_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [40, -1.2, -110],
+        "yawDeg": 3
+      },
+      "pathLocalM": [
+        [-160, 0.2, -100],
+        [-80, -0.4, -108],
+        [0, -0.9, -112],
+        [80, -1.4, -108],
+        [160, -2.0, -100],
+        [220, -2.6, -92]
+      ],
+      "dimensionsM": {
+        "width": 380,
+        "height": 14,
+        "depth": 24
+      },
+      "presentation": {
+        "primitive": "shelterbelt_canopy",
+        "batch": "hero_vegetation",
+        "color": "#2E5531",
+        "secondaryColor": "#5A4838",
+        "essential": false
+      },
+      "notes": "Southern windbreak completing the pastoral island; presentation mass only."
+    },
+    {
+      "id": "feature.soniachne-clinic-a.culvert-east.v1",
+      "kind": "culvert",
+      "role": "drainage_crossing_visual",
+      "status": "present",
+      "affiliation": "neutral_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "pose": {
+        "positionLocalM": [188, -1.6, 18],
+        "yawDeg": 18
+      },
+      "dimensionsM": {
+        "width": 4.5,
+        "height": 1.1,
+        "depth": 3.2
+      },
+      "presentation": {
+        "primitive": "gable_building",
+        "batch": "village_structures",
+        "color": "#6A6658",
+        "secondaryColor": "#5A5F5B",
+        "essential": false
+      },
+      "notes": "Small fictional culvert headwall on the village road; not an obstacle or clearance claim."
     }
   ],
   "fictionDisclaimer": "This is an original fictional 2030s Ukraine-inspired training landmark. It does not depict or locate a real clinic, landing zone, utility route, or settlement and is not for real navigation, targeting, medical capability, or landing-safety claims."

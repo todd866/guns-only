@@ -1041,6 +1041,7 @@ test("passes atlas-root mission exclusions into page workers without duplicating
   const expectedZones = [
     { eastM: -4_222, northM: 4_100, radiusM: 76 },
     { eastM: -4_173, northM: 4_076, radiusM: 48 },
+    { eastM: -3_968, northM: 4_096, radiusM: 140 },
   ];
   const pagePresentation = terrain.pages.get("hero").presentation;
   assert.ok(pagePresentation);
@@ -1571,7 +1572,7 @@ test("attaches one mission feature pack at the terrain root and reports its hash
       + "soniachne-clinic-a.feature-pack.json",
     import.meta.url,
   ), "utf8"));
-  const sha256 = "f61cf6e4480644bfd2ec51e6405260bae7b48a227b07316f9818eafca0046a00";
+  const sha256 = "1c2bf3cae753df11b93551a9caaee534b634e1d536a9423f5947b368a98c363d";
   const values = new Int16Array([
     100, 100, 100,
     100, 100, 100,

@@ -8,19 +8,19 @@ import {
 
 export const MISSION_FEATURE_RENDER_BUDGETS = Object.freeze({
   mobile: Object.freeze({
-    maxDrawCalls: 6,
-    maxInstances: 256,
-    maxTriangles: 35_000,
+    maxDrawCalls: 8,
+    maxInstances: 384,
+    maxTriangles: 45_000,
   }),
   balanced: Object.freeze({
-    maxDrawCalls: 7,
-    maxInstances: 512,
-    maxTriangles: 60_000,
+    maxDrawCalls: 9,
+    maxInstances: 640,
+    maxTriangles: 75_000,
   }),
   desktop: Object.freeze({
-    maxDrawCalls: 10,
-    maxInstances: 768,
-    maxTriangles: 100_000,
+    maxDrawCalls: 12,
+    maxInstances: 896,
+    maxTriangles: 120_000,
   }),
 });
 

@@ -209,7 +209,11 @@ public static class Ukraine2030sTheatre {
     public const string HeroFeaturePackId =
         "mission-feature-pack.ukraine-modern.soniachne-clinic-a.v1";
     public const string HeroFeaturePackSha256 =
-        "f61cf6e4480644bfd2ec51e6405260bae7b48a227b07316f9818eafca0046a00";
+        "1c2bf3cae753df11b93551a9caaee534b634e1d536a9423f5947b368a98c363d";
+    public const string RapierStripFeaturePackId =
+        "mission-feature-pack.ukraine-modern.rapier-eastern-strip.v1";
+    public const string RapierStripFeaturePackSha256 =
+        "f2613c28064cd3b9a7b835449bf9cfbbc5add64b9c7f4d753a1058e505189752";
 
     // The physical theatre is shared by every mission, but current multiplayer sectors can extend
     // beyond this finite regional product and the v2 presence protocol carries no frame/instance
@@ -252,7 +256,10 @@ public static class Ukraine2030sTheatre {
         // 40 km disc left a sky hole between the last chunk and the apron, which read as flicker
         // when the nose swept across that ring. ~145 km covers the theatre with margin while
         // staying far below the old 420 km "stream the horizon" cost.
-        PreferredTerrainStreamingRadiusM = 145_000.0
+        PreferredTerrainStreamingRadiusM = 145_000.0,
+        MissionFeaturePackId = RapierStripFeaturePackId,
+        MissionFeaturePackSha256 = RapierStripFeaturePackSha256,
+        MissionFeaturePackRequired = true
     };
 }
 

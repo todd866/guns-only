@@ -1,0 +1,204 @@
+{
+  "$schema": "../../../../schemas/mission-feature-pack.schema.json",
+  "schemaVersion": "1.0.0",
+  "featurePackId": "mission-feature-pack.ukraine-modern.rapier-eastern-strip.v1",
+  "packVersion": "1.0.0",
+  "displayName": "Rapier Eastern Dispersed Strip — Vicinity Exclusion",
+  "status": "preview",
+  "theatre": {
+    "theatreId": "theatre.ukraine.soniachne-2030s.v1",
+    "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+    "heroCellId": "hero-cell.rapier-eastern-strip.v1",
+    "eraSetting": "2030s"
+  },
+  "coordinateFrame": {
+    "frameId": "frame.ukraine.rapier-range.local.v1",
+    "units": "metres",
+    "axisOrder": ["east", "up", "north"],
+    "anchorSourceM": {
+      "eastM": 0,
+      "northM": 0,
+      "upM": 192
+    },
+    "groundDatum": {
+      "kind": "atlas_lod0_sample",
+      "heightSourceId": "terrain.ukraine.rapier-range.atlas.v1",
+      "requestedSourceM": { "eastM": 0, "northM": 0 },
+      "sampledSourceM": { "eastM": 0, "northM": 0, "upM": 192 },
+      "sampleSpacingM": 32,
+      "featureGroundOffsets": "authored_from_neighbouring_lod0_samples"
+    },
+    "verticalPlacement": "anchor_source_up_plus_local_up"
+  },
+  "boundsSourceM": {
+    "minEastM": -800,
+    "maxEastM": 800,
+    "minNorthM": -900,
+    "maxNorthM": 900
+  },
+  "authority": {
+    "mode": "presentation_only",
+    "targetableByDefault": false,
+    "collisionAuthority": "none",
+    "damageAuthority": "none",
+    "navigationAuthority": "none",
+    "landingZoneAuthority": "none"
+  },
+  "renderBudgets": {
+    "mobile": {
+      "maxDrawCalls": 4,
+      "maxInstances": 128,
+      "maxTriangles": 20000,
+      "maxSurfacePatchTriangles": 0
+    },
+    "balanced": {
+      "maxDrawCalls": 5,
+      "maxInstances": 256,
+      "maxTriangles": 35000,
+      "maxSurfacePatchTriangles": 0
+    },
+    "desktop": {
+      "maxDrawCalls": 6,
+      "maxInstances": 384,
+      "maxTriangles": 50000,
+      "maxSurfacePatchTriangles": 0
+    }
+  },
+  "semanticCaps": {
+    "maxStableFeatures": 32,
+    "maxCollisionOrClearancePrimitives": 16,
+    "maxPoles": 8,
+    "maxWireSpans": 4,
+    "maxCorridorOrClearanceVolumes": 4,
+    "maxLandingZoneCandidates": 0
+  },
+  "landingZones": [],
+  "ambientExclusionZones": [
+    {
+      "id": "ambient-exclusion.rapier-eastern-strip.pad.v1",
+      "shape": "circle",
+      "centerLocalM": [-40, 0, -80],
+      "radiusM": 220,
+      "excludedAmbientKinds": [
+        "procedural_buildings",
+        "procedural_vegetation",
+        "procedural_utilities",
+        "procedural_debris"
+      ],
+      "purpose": "Keeps procedural ambient props off the authored strip, gallery berm, and vicinity kit so the defensive compound stays legible.",
+      "presentationOnly": true,
+      "establishesOperationalClearance": false
+    },
+    {
+      "id": "ambient-exclusion.rapier-eastern-strip.compound.v1",
+      "shape": "circle",
+      "centerLocalM": [0, 0, 0],
+      "radiusM": 520,
+      "excludedAmbientKinds": [
+        "procedural_buildings",
+        "procedural_utilities",
+        "procedural_debris"
+      ],
+      "purpose": "Prevents procedural settlement islands from advertising the launcher as a village campus; pastoral grass/fields may remain.",
+      "presentationOnly": true,
+      "establishesOperationalClearance": false
+    }
+  ],
+  "features": [
+    {
+      "id": "feature.rapier-eastern-strip.access-track.v1",
+      "kind": "road",
+      "role": "service_track_visual",
+      "status": "present",
+      "affiliation": "neutral_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "thin_visual",
+      "fromLocalM": [80, 0.05, 40],
+      "toLocalM": [280, 0.05, 120],
+      "pathLocalM": [
+        [80, 0.05, 40],
+        [140, 0.05, 55],
+        [200, 0.05, 85],
+        [280, 0.05, 120]
+      ],
+      "widthM": 4.5,
+      "presentation": {
+        "primitive": "road_ribbon",
+        "batch": "strip_roads",
+        "color": "#7A7364",
+        "essential": false
+      },
+      "notes": "Fictional gravel service approach only; not a taxiway or navigation claim."
+    },
+    {
+      "id": "feature.rapier-eastern-strip.shelterbelt-north.v1",
+      "kind": "vegetation",
+      "role": "shelterbelt_visual",
+      "status": "present",
+      "affiliation": "neutral_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [120, 0.5, 420],
+        "yawDeg": 6
+      },
+      "pathLocalM": [
+        [-40, 0.5, 400],
+        [40, 0.5, 410],
+        [120, 0.5, 420],
+        [200, 0.5, 415],
+        [280, 0.5, 405]
+      ],
+      "dimensionsM": {
+        "width": 320,
+        "height": 14,
+        "depth": 22
+      },
+      "presentation": {
+        "primitive": "shelterbelt_canopy",
+        "batch": "strip_vegetation",
+        "color": "#355F38",
+        "secondaryColor": "#5E4A38",
+        "essential": false
+      },
+      "notes": "Soft windbreak north of the recovery end; presentation mass only."
+    },
+    {
+      "id": "feature.rapier-eastern-strip.shelterbelt-south.v1",
+      "kind": "vegetation",
+      "role": "shelterbelt_visual",
+      "status": "present",
+      "affiliation": "neutral_fictional",
+      "targetable": false,
+      "presentationOnly": true,
+      "occlusionClass": "solid_visual",
+      "pose": {
+        "positionLocalM": [100, 0.5, -520],
+        "yawDeg": -4
+      },
+      "pathLocalM": [
+        [-60, 0.5, -500],
+        [20, 0.5, -510],
+        [100, 0.5, -520],
+        [180, 0.5, -515],
+        [260, 0.5, -505]
+      ],
+      "dimensionsM": {
+        "width": 320,
+        "height": 14,
+        "depth": 22
+      },
+      "presentation": {
+        "primitive": "shelterbelt_canopy",
+        "batch": "strip_vegetation",
+        "color": "#2F5532",
+        "secondaryColor": "#5A4838",
+        "essential": false
+      },
+      "notes": "Soft windbreak beyond the portal/ramp; presentation mass only."
+    }
+  ],
+  "fictionDisclaimer": "This is an original fictional 2030s dispersed EM-launch installation landmark. It does not depict a real base, airfield, or unit and is not for real navigation, targeting, or operational clearance claims."
+}

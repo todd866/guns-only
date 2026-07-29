@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=188";
+import { createHud } from "./hud.js?v=189";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=188";
+} from "./render/debrief/sortie_result.js?v=189";
 import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -47,7 +47,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=188";
+} from "./render/release/release_identity.js?v=189";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -60,7 +60,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=188";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=189";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -135,13 +135,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=188";
+} from "./render/telemetry/ai_frame_pressure.js?v=189";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=188";
+} from "./render/telemetry/telemetry_batch.js?v=189";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -150,7 +150,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=188";
+} from "./render/settings/player_settings.js?v=189";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -191,11 +191,11 @@ import {
   createRapierDispersedStrip,
   createRapierGunDrone,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=188";
+} from "./render/scene/scene_builders.js?v=189";
 import {
   setFlightAudioEnabled,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=188";
+} from "./render/audio/flight_audio.js?v=189";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -241,6 +241,13 @@ const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL = new URL(
     + "soniachne-clinic-a.feature-pack.json",
   import.meta.url,
 ).href;
+const UKRAINE_RAPIER_STRIP_MISSION_FEATURE_PACK_ID =
+  "mission-feature-pack.ukraine-modern.rapier-eastern-strip.v1";
+const UKRAINE_RAPIER_STRIP_MISSION_FEATURE_PACK_URL = new URL(
+  "./content/packs/ukraine-modern/environment/hero-cells/"
+    + "rapier-eastern-strip.feature-pack.json",
+  import.meta.url,
+).href;
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
 
 function normalizedContractText(value) {
@@ -261,13 +268,19 @@ function missionFeaturePackCacheIdentity(state = null) {
 function missionFeaturePackRequest(state = null) {
   const featurePackId = normalizedContractText(state?.mission_feature_pack_id);
   const sha256 = normalizedSha256(state?.mission_feature_pack_sha256);
+  const ukraineTheatre = state?.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID;
+  let url = "";
+  if (featurePackId === UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID) {
+    url = UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL;
+  } else if (featurePackId === UKRAINE_RAPIER_STRIP_MISSION_FEATURE_PACK_ID) {
+    url = UKRAINE_RAPIER_STRIP_MISSION_FEATURE_PACK_URL;
+  }
   return Object.freeze({
     featurePackId,
     sha256,
     required: state?.mission_feature_pack_required === true,
-    supported: featurePackId === UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID
-      && state?.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID,
-    url: UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL,
+    supported: ukraineTheatre && url.length > 0,
+    url,
   });
 }
 
@@ -9749,7 +9762,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=188")
+    navigator.serviceWorker.register("service-worker.js?v=189")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);
