@@ -3,7 +3,7 @@ import {
   TERRAIN_CURVATURE_START_M,
   TERRAIN_EARTH_RADIUS_M,
 } from "../environment/korea_terrain.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=190";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=191";
 import rapierV1Definition from "../../airframes/rapier_v1.embedded.js";
 import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
 
