@@ -48,6 +48,13 @@ const VIEWS = Object.freeze([
     position: Object.freeze([-34_000, 7_800, 34_000]),
     target: Object.freeze([-4_000, 180, 10_000]),
   }),
+  Object.freeze({
+    // The owner's quilt complaint aspect: zoom-apex altitude looking steeply down-range,
+    // where hero cells read as naked rectangles over the regional base (2026-07-29).
+    name: "zoom-apex",
+    position: Object.freeze([-8_000, 15_000, 20_000]),
+    target: Object.freeze([-30_000, 0, -20_000]),
+  }),
 ]);
 
 function assertTerrain(diagnostics, label, { requireLocalScenery = false } = {}) {
