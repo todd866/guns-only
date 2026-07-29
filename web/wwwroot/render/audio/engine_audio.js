@@ -923,13 +923,23 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     ? SPOOL_UP_PER_SECOND : SPOOL_DOWN_PER_SECOND;
   voiceGraph.spoolRpm = moveTowards(voiceGraph.spoolRpm, targetRpm, spoolRate * elapsed);
 
-  // Rapier: M1.9–M2.8 turbo→ram. F-22 / generic jet: stay turbine (no duct light-off).
-  const handover = isRapier
+  // Prefer the actual two-stream operating point. Mach is only a compatibility fallback for old
+  // snapshots; it must not make a dead ram duct loud or mute a live ramjet because turbine RPM is
+  // correctly zero.
+  const streams = isRapier ? rapierThrustStreams(state) : null;
+  const fallbackHandover = isRapier
     ? smoothstep(clamp01(
       (mach - HANDOVER_MACH_START) / (HANDOVER_MACH_END - HANDOVER_MACH_START)))
     : 0;
-  const turbineShare = Math.cos(handover * Math.PI / 2);
-  const ramShare = Math.sin(handover * Math.PI / 2);
+  const handover = streams?.hasThrust
+    ? streams.ramShare
+    : fallbackHandover;
+  const turbineShare = streams?.hasThrust
+    ? streams.turbineShare
+    : Math.cos(handover * Math.PI / 2);
+  const ramShare = streams?.hasThrust
+    ? streams.ramShare
+    : Math.sin(handover * Math.PI / 2);
   const q01 = dynamicPressureFraction(state);
   if (voiceGraph.augmentationKick == null) voiceGraph.augmentationKick = 0;
   if (voiceGraph.lastAugmentation == null) voiceGraph.lastAugmentation = augmentation;
@@ -1024,10 +1034,10 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   // Thin air still carries ram + rush; turbine beds collapse harder than duct voice.
   const thinAir = 1 - densityScale;
   const rushPresence = Math.max(coastGate, 0.12 + 0.88 * densityScale);
-  const powerTarget = Math.pow(
-    Math.max(1e-6, deliveredPower * (0.25 + rpm * 0.75)),
-    0.9,
-  );
+  const powerTarget = Math.pow(Math.max(1e-6,
+    isRapier && streams?.available
+      ? thrustFrac
+      : deliveredPower * (0.25 + rpm * 0.75)), 0.9);
   if (voiceGraph.powerSlew == null) voiceGraph.powerSlew = 0;
   if (voiceGraph.throttleAccent == null) voiceGraph.throttleAccent = 0;
   const prevPower = voiceGraph.powerSlew;
@@ -1319,7 +1329,7 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   nowRamp(voiceGraph.ramFilter.frequency, 520 + handover * 1600 + throttle * 280 + thinAir * 200, 0.18);
   nowRamp(voiceGraph.ramFilter.Q, 0.45 + handover * 0.35, 0.18);
   nowRamp(voiceGraph.ramGain.gain,
-    ramShare * (0.12 + throttle * 0.42 + power * 0.18) * (0.25 + rpm * 0.75)
+    ramShare * (0.12 + throttle * 0.42 + power * 0.18)
       * propulsionPresence * ramPresence, 0.14);
 
   nowRamp(voiceGraph.ramHowlFilter.frequency, 1400 + handover * 2200 + power * 400, 0.16);
@@ -1376,12 +1386,33 @@ export function updateEngineAudio(state, { muted = false } = {}) {
 }
 
 function thrustFraction(state, throttle, rpm) {
-  const turbineKn = finiteNumber(state?.rapier_turbine_thrust_kn);
-  const ramKn = finiteNumber(state?.rapier_ramjet_thrust_kn);
-  if (turbineKn != null || ramKn != null) {
-    return clamp01(((turbineKn ?? 0) + (ramKn ?? 0)) / THRUST_REF_KN);
-  }
+  const streams = rapierThrustStreams(state);
+  if (streams.available) return clamp01(streams.totalKn / THRUST_REF_KN);
   return clamp01(throttle * (0.35 + rpm * 0.65));
+}
+
+function rapierThrustStreams(state) {
+  const turbineLbf = finiteNumber(state?.rapier_turbine_thrust_lbf);
+  const ramLbf = finiteNumber(state?.rapier_ramjet_thrust_lbf);
+  const turbineKn = turbineLbf != null
+    ? turbineLbf * 4.4482216153 / 1000
+    : finiteNumber(state?.rapier_turbine_thrust_kn);
+  const ramKn = ramLbf != null
+    ? ramLbf * 4.4482216153 / 1000
+    : finiteNumber(state?.rapier_ramjet_thrust_kn);
+  const available = turbineLbf != null || ramLbf != null
+    || turbineKn != null || ramKn != null;
+  const turbine = Math.max(0, turbineKn ?? 0);
+  const ram = Math.max(0, ramKn ?? 0);
+  const totalKn = turbine + ram;
+  const hasThrust = totalKn > 1e-6;
+  return {
+    available,
+    hasThrust,
+    totalKn,
+    turbineShare: hasThrust ? turbine / totalKn : 0,
+    ramShare: hasThrust ? ram / totalKn : 0,
+  };
 }
 
 function atmosphereDensity(state) {

@@ -155,8 +155,8 @@ function circuitsConfigFragment(leg, state) {
   const dirty = leg === "DOWNWIND" || leg === "BASE"
     || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
   const config = dirty
-    ? "HOOK DOWN · GEAR DOWN · FLAPS DOWN"
-    : "HOOK DOWN · GEAR UP · FLAPS UP";
+    ? "HOOK DOWN · GEAR DOWN · ELEVONS DOWN"
+    : "HOOK DOWN · GEAR UP · ELEVONS UP";
   const speed = targetKtas !== null ? ` · ${Math.round(targetKtas)} KT` : "";
   const alt = targetAltFt !== null && targetAltFt > 0
     ? ` · ${Math.round(targetAltFt)} FT`
@@ -166,7 +166,7 @@ function circuitsConfigFragment(leg, state) {
   else if (leg === "WIRE_FINAL") action = " · ACCEPT WIRE";
   else if (leg === "INITIAL") action = " · BREAK LEFT ABM";
   else if (leg === "BREAK") action = " · ~60° TO DOWNWIND";
-  else if (leg === "DOWNWIND") action = " · GEAR FLAPS · ABEAM";
+  else if (leg === "DOWNWIND") action = " · GEAR ELEVONS · ABEAM";
   else if (leg === "BASE") action = " · ~45° TO FINAL";
   else if (leg === "DEPART") action = " · CLIMB TO PATTERN";
   return `${config}${speed}${alt}${action}`;
@@ -228,8 +228,8 @@ export function circuitGatePresentation(state) {
   const dirty = leg === "DOWNWIND" || leg === "BASE"
     || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
   const config = dirty
-    ? "HOOK · GEAR · FLAPS DOWN"
-    : "HOOK DOWN · GEAR UP · FLAPS UP";
+    ? "HOOK · GEAR · ELEVONS DOWN"
+    : "HOOK DOWN · GEAR UP · ELEVONS UP";
   const speed = targetKtas !== null ? `${Math.round(targetKtas)} KT` : "";
   return Object.freeze({
     halfM,
@@ -456,6 +456,15 @@ function cycleExplainer(mode, thresholds) {
   }
 }
 
+const NEWTONS_PER_POUND_FORCE = 4.4482216153;
+
+function streamThrustLbf(state, lbfField, knField) {
+  const direct = finiteNumber(state?.[lbfField]);
+  if (direct !== null) return Math.max(0, direct);
+  const legacyKn = finiteNumber(state?.[knField]);
+  return legacyKn === null ? 0 : Math.max(0, legacyKn * 1000 / NEWTONS_PER_POUND_FORCE);
+}
+
 /// Always-on teaching presentation for the combined-cycle motor + skin limit.
 /// Circuits is pattern school — hide Intercept TBCC/skin chrome there.
 export function rapierCycleTeachPresentation(state) {
@@ -465,9 +474,11 @@ export function rapierCycleTeachPresentation(state) {
       && state.rapier_mission_cue.startsWith("CIRCUITS"));
   if (patternOnly) return null;
   const mach = Math.max(0, finiteNumber(state.mach) ?? 0);
-  const turbineKn = Math.max(0, finiteNumber(state.rapier_turbine_thrust_kn) ?? 0);
-  const ramKn = Math.max(0, finiteNumber(state.rapier_ramjet_thrust_kn) ?? 0);
-  const totalKn = Math.max(turbineKn + ramKn, 0.01);
+  const turbineLbf = streamThrustLbf(
+    state, "rapier_turbine_thrust_lbf", "rapier_turbine_thrust_kn");
+  const ramLbf = streamThrustLbf(
+    state, "rapier_ramjet_thrust_lbf", "rapier_ramjet_thrust_kn");
+  const totalLbf = Math.max(turbineLbf + ramLbf, 0.01);
   const thermal = thermalChannels(state);
   const {
     skinC,
@@ -492,10 +503,15 @@ export function rapierCycleTeachPresentation(state) {
     mode,
     explainer: cycleExplainer(mode, thresholds),
     mach,
-    turbineKn,
-    ramKn,
-    turbineShare: turbineKn / totalKn,
-    ramShare: ramKn / totalKn,
+    turbineLbf,
+    ramLbf,
+    totalLbf,
+    // Legacy engineering values remain available to non-rendering tests/consumers, but every
+    // player-facing string below is pounds-force.
+    turbineKn: turbineLbf * NEWTONS_PER_POUND_FORCE / 1000,
+    ramKn: ramLbf * NEWTONS_PER_POUND_FORCE / 1000,
+    turbineShare: turbineLbf / totalLbf,
+    ramShare: ramLbf / totalLbf,
     skinC,
     recoveryC,
     stagnationC,
@@ -520,8 +536,7 @@ export function rapierEnginePresentation(state) {
   });
   if (!teach) return null;
   const trueAirspeedKts = Math.max(0, Number(state.true_airspeed_kts) || 0);
-  const thrustKn = Math.max(0,
-    (Number(state.engine_net_thrust_lbf) || 0) * 4.4482216153 / 1000);
+  const thrustLbf = Math.max(0, Number(state.engine_net_thrust_lbf) || teach.totalLbf);
   const lever = Math.max(0, Number(state.throttle) || 0);
   const turbineFuelPpm = Math.max(0, Number(state.rapier_turbine_fuel_ppm) || 0);
   const ramjetFuelPpm = Math.max(0, Number(state.rapier_ramjet_fuel_ppm) || 0);
@@ -532,18 +547,20 @@ export function rapierEnginePresentation(state) {
     ? ` · T0 ${Math.round(teach.stagnationC)}°C`
     : "";
   return Object.freeze({
-    text: `PROPULSION ${teach.mode} · ${thrustKn.toFixed(0)} KN · LEVER ${lever.toFixed(2)} · M${teach.mach.toFixed(2)} · ${Math.round(trueAirspeedKts).toLocaleString("en-US")} KTAS${skinText}${stagnationText}`,
+    text: `PROPULSION ${teach.mode} · ${Math.round(thrustLbf).toLocaleString("en-US")} LBF · LEVER ${lever.toFixed(2)} · M${teach.mach.toFixed(2)} · ${Math.round(trueAirspeedKts).toLocaleString("en-US")} KTAS${skinText}${stagnationText}`,
     explainer: teach.explainer,
     level: teach.mode === "TURBINE" ? "turbine"
       : teach.mode === "HANDOVER" ? "transition" : "ram",
     channels: Object.freeze([
       Object.freeze({
         label: "TURBINE / A-B",
+        thrustLbf: teach.turbineLbf,
         thrustKn: teach.turbineKn,
         fuelPpm: turbineFuelPpm,
       }),
       Object.freeze({
         label: "RAMJET",
+        thrustLbf: teach.ramLbf,
         thrustKn: teach.ramKn,
         fuelPpm: ramjetFuelPpm,
       }),

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "catalog_version": 2,
+  "model": "gpt-4o-mini-tts",
+  "disclosure": "Radio speech may use AI-generated training voices.",
+  "clips": {}
+}

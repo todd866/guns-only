@@ -350,6 +350,29 @@ test("systems readout preserves command, three independent gear indications, and
   assert.deepEqual(readout.warnings.map((warning) => warning.text), ["GEAR UNSAFE", "FLAP SPLIT"]);
 });
 
+test("Rapier systems identify elevons and installed-inlet recovery", () => {
+  const readout = systemsReadout({
+    rapier_mission_available: true,
+    rapier_inlet_recovery: 0.61,
+    flap_lever: "HOLD",
+    flap_left_deg: 18,
+    flap_right_deg: 12,
+    primary_bus_powered: true,
+    utility_hydraulic_pressure_psi: 4000,
+    engine_running: true,
+    rapier_turbine_thrust_lbf: 0,
+    rapier_ramjet_thrust_lbf: 4200,
+  });
+
+  assert.equal(readout.flapLabel, "ELEV");
+  assert.equal(readout.inletRecovery, 0.61);
+  assert.match(readout.propulsionText, /RAM 4,200 LBF/);
+  assert.deepEqual(readout.warnings.map((warning) => warning.text), [
+    "INLET DISTORTION",
+    "ELEV SPLIT",
+  ]);
+});
+
 test("unpowered striped gear indications remain unknown without inventing physical transit", () => {
   const readout = systemsReadout({
     gear_handle: "DOWN",
@@ -468,6 +491,18 @@ test("normal systems stay latent while recovery, transitions, and failures surfa
   assert.equal(hydraulicFailure.relevant, true);
   assert.deepEqual(hydraulicFailure.warnings,
     [{ text: "UTILITY HYD LOW", level: "warning" }]);
+});
+
+test("Rapier systems line reports the live propulsion stream in pounds instead of turbine RPM", () => {
+  const readout = systemsReadout({
+    rapier_mission_available: true,
+    has_engine: true,
+    engine_running: true,
+    engine_rpm_pct: 0,
+    rapier_turbine_thrust_lbf: 0,
+    rapier_ramjet_thrust_lbf: 18_000,
+  });
+  assert.equal(readout.propulsionText, "RAM 18,000 LBF");
 });
 
 test("dirty free-flight configuration surfaces until physically clean without flagging approach config", () => {

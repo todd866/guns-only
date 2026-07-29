@@ -63,16 +63,20 @@ test("createRapier thin loader matches definition-built silhouette", () => {
   assert.equal(viaLoader.name, viaDef.name);
   assert.deepEqual(viaLoader.userData.dimensionsM, viaDef.userData.dimensionsM);
   assert.equal(viaLoader.userData.airframeId, "rapier.public-data-surrogate.v1");
-  assert.equal(viaLoader.userData.definitionRevision, "1.3.0");
+  assert.equal(viaLoader.userData.definitionRevision, "1.4.0");
 });
 
-test("rapier revision 1.3.0 publishes design bay mass inside FlightModel card", () => {
+test("rapier revision 1.4.0 publishes design bay mass and aerodynamic contract", () => {
   const def = JSON.parse(readFileSync(join(root, "rapier.v1.json"), "utf8"));
-  assert.equal(def.revision, "1.3.0");
+  assert.equal(def.revision, "1.4.0");
   assert.equal(def.sockets.droneBay.length, 4);
   assert.equal(def.sockets.droneBay[0].cellClearM.length, 1.1);
   assert.equal(def.performanceClaims.stowedDroneMassKg.value, 1440);
   assert.equal(def.performanceClaims.stowedDroneMassKg.epistemic, "closed");
+  assert.equal(def.wing.renderedSolidPlanformAreaM2, 24.3173);
+  assert.equal(def.aerodynamics.normalLawAlphaMachKnots.at(-2), 3.5);
+  assert.equal(def.aerodynamics.normalLawAlphaRadKnots.at(-2), 0.13);
+  assert.equal(def.aerodynamics.landingElevonDroop.rollAuthorityFraction, 0.55);
 });
 
 test("gun-drone definition builds through the jet kit without a bespoke loft path", () => {

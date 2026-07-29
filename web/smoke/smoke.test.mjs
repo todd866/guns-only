@@ -1323,7 +1323,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           () => globalThis.__gunsMobile?.active === true
             && globalThis.__gunsState?.session_phase === "ACTIVE"
             && globalThis.__gunsState?.player_terminal_state === "FLYING"
-            && document.querySelector("#touch-fire")?.hidden === false
+            && getComputedStyle(document.querySelector("#target-stick")).display !== "none"
             && document.querySelector("#touch-limit-override")?.hidden === false
             && document.querySelector('[data-pulse-key="KeyV"]')?.hidden === false
             && !document.documentElement.classList.contains("run-paused"),
@@ -1349,6 +1349,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           document.querySelector("#test-flight-console").hidden = false;
           document.querySelector("#test-flight-console").open = false;
           const stick = rect("#fallback-stick");
+          const targetStick = rect("#target-stick");
           const throttle = rect("#touch-throttle-controls");
           const throttleRocker = rect("#touch-throttle-rocker");
           const actions = rect(".touch-right");
@@ -1376,6 +1377,13 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             stickVisible: visible(document.querySelector("#fallback-stick")),
             stickTouchAction: getComputedStyle(document.querySelector("#fallback-stick")).touchAction,
             stickKnob: rect("#fallback-stick-knob"),
+            targetStick,
+            targetStickVisible: visible(document.querySelector("#target-stick")),
+            targetStickTouchAction: getComputedStyle(
+              document.querySelector("#target-stick"),
+            ).touchAction,
+            targetStickLabel: document.querySelector("#target-stick").getAttribute("aria-label"),
+            targetStickKnob: rect("#target-stick-knob"),
             fallbackDirectionButtons: document.querySelectorAll(
               '#fallback-stick [data-hold-key^="Arrow"]',
             ).length,
@@ -1391,6 +1399,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             stickOverlapsThrottle: overlaps(stick, throttle),
             stickOverlapsThrottleWithWaveOff: overlaps(stick, throttleWithWaveOff),
             stickOverlapsActions: overlaps(stick, actions),
+            targetStickOverlapsActions: overlaps(targetStick, actions),
             pause: rect("#pause-button"),
             tilt: rect("#tilt-status"),
             console: rect("#test-flight-console"),
@@ -1404,7 +1413,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         });
 
         assert.deepEqual(phoneState.direct,
-          ["touch-throttle-rocker", "touch-limit-override", "pulse:KeyV", "touch-fire"],
+          ["touch-throttle-rocker", "touch-limit-override", "pulse:KeyV"],
           `${viewport.width}x${viewport.height}: ${JSON.stringify(phoneState.controlState)}`);
         assert.match(phoneState.tiltText, /TILT|STICK/);
         assert.equal(phoneState.gearHidden, true);
@@ -1414,15 +1423,25 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         assert.equal(phoneState.hasLiveRestart, false);
         assert.equal(phoneState.stickVisible, true);
         assert.equal(phoneState.stickTouchAction, "none");
+        assert.equal(phoneState.targetStickVisible, true);
+        assert.equal(phoneState.targetStickTouchAction, "none");
+        assert.equal(phoneState.targetStickLabel, "Right look and fire stick");
         assert.equal(phoneState.fallbackDirectionButtons, 0);
         assert.equal(phoneState.ordinaryPowerButtons, 0);
         assert.equal(phoneState.throttleRockerTouchAction, "none");
         assert.equal(phoneState.stickOverlapsThrottle, false);
         assert.equal(phoneState.stickOverlapsThrottleWithWaveOff, false);
         assert.equal(phoneState.stickOverlapsActions, false);
+        assert.equal(phoneState.targetStickOverlapsActions, false);
         assert.equal(Math.round(phoneState.stick.width), viewport.width <= 700 ? 104 : 112);
         assert.equal(Math.round(phoneState.stick.height), viewport.width <= 700 ? 104 : 112);
         assert.ok(phoneState.stickKnob.width >= 44 && phoneState.stickKnob.height >= 44);
+        assert.equal(Math.round(phoneState.targetStick.width),
+          viewport.width <= 700 ? 104 : 112);
+        assert.equal(Math.round(phoneState.targetStick.height),
+          viewport.width <= 700 ? 104 : 112);
+        assert.ok(phoneState.targetStickKnob.width >= 44
+          && phoneState.targetStickKnob.height >= 44);
         assert.equal(Math.round(phoneState.throttleRocker.width), viewport.width <= 700 ? 48 : 52);
         assert.equal(Math.round(phoneState.throttleRocker.height), viewport.width <= 700 ? 104 : 112);
         assert.ok(phoneState.throttleRocker.width >= 44);
@@ -1431,8 +1450,10 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           && phoneState.throttleRocker.right <= phoneState.viewport.width);
         assert.ok(Math.abs(phoneState.throttleRocker.bottom - phoneState.stick.bottom) < 1);
         assert.ok(phoneState.throttleRockerKnob.height >= 44);
-        assert.ok(Math.abs((phoneState.stick.left + phoneState.stick.width / 2)
-          / phoneState.viewport.width - 0.43) < 0.015);
+        assert.ok(phoneState.stick.left >= 0
+          && phoneState.stick.right < phoneState.viewport.width * 0.25);
+        assert.ok(phoneState.targetStick.right <= phoneState.viewport.width
+          && phoneState.targetStick.left > phoneState.viewport.width * 0.75);
         for (const target of [phoneState.pause, phoneState.tilt]) {
           assert.ok(target.width >= 44 && target.height >= 44,
             `${viewport.width}x${viewport.height}: phone chrome target is below 44px`);

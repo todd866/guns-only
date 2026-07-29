@@ -35,6 +35,19 @@ function roundedText(value, suffix = "") {
 export function projectTestFlightState(state = {}) {
   const engineRpmPct = finiteNumber(state.engine_rpm_pct);
   const engineRunning = typeof state.engine_running === "boolean" ? state.engine_running : null;
+  const rapierPropulsion = state.rapier_mission_available === true;
+  const flapLabel = rapierPropulsion ? "ELEV" : "FLAP";
+  const inletRecovery = finiteNumber(state.rapier_inlet_recovery);
+  const turbineThrustLbf = finiteNumber(state.rapier_turbine_thrust_lbf)
+    ?? ((finiteNumber(state.rapier_turbine_thrust_kn) ?? 0) * 224.80894387);
+  const ramjetThrustLbf = finiteNumber(state.rapier_ramjet_thrust_lbf)
+    ?? ((finiteNumber(state.rapier_ramjet_thrust_kn) ?? 0) * 224.80894387);
+  const totalStreamThrustLbf = Math.max(0,
+    (turbineThrustLbf ?? 0) + (ramjetThrustLbf ?? 0));
+  const propulsionMode = !rapierPropulsion ? null
+    : ramjetThrustLbf > 10 && turbineThrustLbf <= 10 ? "RAM ONLY"
+      : ramjetThrustLbf > 10 && turbineThrustLbf > 10 ? "HANDOVER"
+        : turbineThrustLbf > 10 ? "TURBINE" : "COAST";
   const primaryBusPowered = typeof state.primary_bus_powered === "boolean"
     ? state.primary_bus_powered
     : null;
@@ -110,17 +123,25 @@ export function projectTestFlightState(state = {}) {
       && !(configurationTransition && automaticGear)) {
     warnings.push({ text: "GEAR UNSAFE", level: "caution" });
   }
-  if (hasFlaps && state.flap_limit_exceeded === true) {
-    warnings.push({ text: "FLAP OVERSPEED", level: "warning" });
+  if (rapierPropulsion && inletRecovery !== null && inletRecovery < 0.65) {
+    warnings.push({ text: "INLET DISTORTION", level: "warning" });
+  } else if (rapierPropulsion && inletRecovery !== null && inletRecovery < 0.90) {
+    warnings.push({ text: "INLET RECOVERY LOW", level: "caution" });
   }
-  if (hasFlaps && flapSplit) warnings.push({ text: "FLAP SPLIT", level: "warning" });
+  if (hasFlaps && state.flap_limit_exceeded === true) {
+    warnings.push({ text: `${flapLabel} OVERSPEED`, level: "warning" });
+  }
+  if (hasFlaps && flapSplit) warnings.push({ text: `${flapLabel} SPLIT`, level: "warning" });
   if (configurationActionable && gearNeedsCleanup
       && !warnings.some((warning) => warning.text.startsWith("GEAR "))) {
     warnings.push({ text: "CLEAN UP GEAR", level: "caution" });
   }
   if (configurationActionable && flapNeedsCleanup
-      && !warnings.some((warning) => warning.text.startsWith("FLAP "))) {
-    warnings.push({ text: "CLEAN UP FLAPS", level: "caution" });
+      && !warnings.some((warning) => warning.text.startsWith(`${flapLabel} `))) {
+    warnings.push({
+      text: rapierPropulsion ? "CLEAN UP ELEVONS" : "CLEAN UP FLAPS",
+      level: "caution",
+    });
   }
 
   const maintenanceActive = state.maintenance_scenario === true;
@@ -134,10 +155,16 @@ export function projectTestFlightState(state = {}) {
 
   return {
     engine: {
-      rpmText: hasEngine ? roundedText(engineRpmPct, "%") : UNKNOWN,
+      rpmText: !hasEngine
+        ? UNKNOWN
+        : rapierPropulsion
+          ? `${Math.round(totalStreamThrustLbf).toLocaleString("en-US")} LBF`
+          : roundedText(engineRpmPct, "%"),
       runningText: !hasEngine
         ? UNKNOWN
-        : engineRunning === true ? "RUNNING" : engineRunning === false ? "OUT" : UNKNOWN,
+        : rapierPropulsion
+          ? propulsionMode
+          : engineRunning === true ? "RUNNING" : engineRunning === false ? "OUT" : UNKNOWN,
       state: !hasEngine
         ? "unavailable"
         : engineRunning === false ? "warning" : engineRunning === true ? "nominal" : "unknown",
@@ -164,12 +191,21 @@ export function projectTestFlightState(state = {}) {
       inTransit: hasRetractableGear && state.gear_unsafe === true,
     },
     flaps: {
+      label: flapLabel,
       leverText: flapLever,
       leftText: roundedText(flapLeftDeg, "°"),
       rightText: roundedText(flapRightDeg, "°"),
       split: flapSplit,
       overspeed: state.flap_limit_exceeded === true,
       inTransit: hasFlaps && flapLever !== UNKNOWN && flapLever !== "HOLD",
+    },
+    inlet: {
+      recoveryText: rapierPropulsion && inletRecovery !== null
+        ? `${Math.round(inletRecovery * 100)}%`
+        : UNKNOWN,
+      state: !rapierPropulsion || inletRecovery === null
+        ? "unavailable"
+        : inletRecovery < 0.65 ? "warning" : inletRecovery < 0.90 ? "caution" : "nominal",
     },
     configuration: {
       actionable: configurationActionable,

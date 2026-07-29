@@ -12,6 +12,8 @@ sustained turning fight, sized around a duct-dominated body rather than a fat fi
 | Length | **13 m** | Fuselage loft `z ∈ [-6.5, 6.5]`; sensor fuselage name |
 | Span | **7.35 m** | `WingSpanM = sqrt(AR 3.0 × 18 m²)`; planform tip ±3.675 m |
 | Wing area | **18.0 m²** | High wing loading by choice |
+| Rendered solid planform | **24.3173 m²** | Mesh polygon including body carry-through / overlap |
+| Non-reference residual | **6.3173 m²** | Named body-overlap geometry; not lift area |
 | Aspect ratio | **~3.0** | Low-AR supersonic wing; `CLAlpha` 3.60 |
 | Wing loading @ cat mass | **~436 kg/m²** | Cruise / dash beats low-speed sustained turn |
 | Frontal / duct | ~duct-dominated | `RamCaptureAreaM2 = 1.2` — aircraft is substantially inlet, D-21-like |
@@ -54,6 +56,10 @@ Thickness / camber params match `createPlanformGeometry(..., 0.16, 0.044)`. Fuse
 stations copy `createRapier` exactly in Phase 1 — geometry first principles are already encoded
 there; the capture kit freezes them, it does not re-derive them.
 
+The solid polygon and aerodynamic S are deliberately different. See
+[12 — Aerodynamics and control allocation](12-aerodynamics-and-controls.md) for the force/moment
+contract and why the 6.3173 m² residual must never silently become additional wing reference area.
+
 ## Gallery clearance check (basing ↔ geometry)
 
 Span 7.35 m in a 14×8 m bore ⇒ **~2.7% blockage** — deliberate: bore size beats vacuum (see
@@ -66,4 +72,3 @@ All dimensions above are **closed**, tied to concrete repo constants (`FlightMod
 `createRapier` in `scene_builders.js`, `TurboRamjetPerformanceMap.RamCaptureAreaM2`). This chapter is
 readable without the JSON Airframe Definition — the definition is a 1:1 migration of these same
 numbers, not a separate source of truth.
-

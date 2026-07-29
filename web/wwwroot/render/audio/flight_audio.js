@@ -26,6 +26,7 @@ import {
 } from "./event_audio.js";
 import { createWarningVoices, updateWarningVoices } from "./warning_audio.js";
 import { createSharedFlightAudioFacade } from "./flight_audio_singleton.js";
+import { createRadioVoice, updateRadioVoice } from "./radio_audio.js";
 
 let context = null;
 let master = null;
@@ -36,6 +37,7 @@ let contactVoices = null;
 let formationContactVoices = [];
 let formationContactTracks = [];
 let warningVoices = null;
+let radioVoice = null;
 let disabled = false;
 let enabled = true;
 let sampleLoad = null;
@@ -279,6 +281,9 @@ function build() {
     at: null,
   }));
   warningVoices = createWarningVoices(context, bus);
+  radioVoice = createRadioVoice(context, bus, {
+    engineMaster: engineVoices.master,
+  });
   installFlightAudioLifecycle();
   publishFlightAudioRuntimeState();
   return true;
@@ -766,6 +771,7 @@ function isFlightAudioEnabledLocal() {
 function updateFlightAudioLocal(state, {
   muted = false,
   triggerHeld = false,
+  radioVoiceEnabled = true,
   nowSeconds = 0,
 } = {}) {
   if (disabled) return;
@@ -812,6 +818,9 @@ function updateFlightAudioLocal(state, {
     updateWarningVoices(warningVoices, context, audioState, {
       enabled: live,
       nowSeconds,
+    });
+    updateRadioVoice(radioVoice, context, state, {
+      enabled: live && radioVoiceEnabled,
     });
     setMasterOutput(live && !silentQa ? 0.55 : 0, {
       timeConstant: live && !silentQa ? 0.18 : 0.02,

@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   mobileRollCommand,
+  shouldTransmitAnalogAxis,
   shouldTransmitAnalogRoll,
   smoothTilt,
   StableTiltCalibration,
@@ -36,27 +37,35 @@ test("phone roll curve is odd, monotonic, and rejects invalid sensor data", () =
 
 test("bridge suppression never swallows the transition to exact neutral", () => {
   // Sub-noise deltas stay suppressed so sensor jitter cannot spam the WASM bridge...
-  assert.equal(shouldTransmitAnalogRoll(0.00121, 0), false);
-  assert.equal(shouldTransmitAnalogRoll(0.5015, 0.5), false);
-  assert.equal(shouldTransmitAnalogRoll(0.504, 0.5), true);
+  assert.equal(shouldTransmitAnalogAxis(0.00121, 0), false);
+  assert.equal(shouldTransmitAnalogAxis(0.5015, 0.5), false);
+  assert.equal(shouldTransmitAnalogAxis(0.504, 0.5), true);
   // ...but the return to EXACTLY zero always transmits while a nonzero command is latched.
   // A 4.5-degree tilt sends about 0.00121; entering the 4-degree neutral zone then yields 0,
   // which the old deadband suppressed — the simulation kept RollControl = 0.00121 forever and
   // the G-LOC interlock (|roll| <= 1e-9) never released.
-  assert.equal(shouldTransmitAnalogRoll(0, 0.00121), true);
-  assert.equal(shouldTransmitAnalogRoll(0, -0.00121), true);
-  assert.equal(shouldTransmitAnalogRoll(0, 0.5), true);
+  assert.equal(shouldTransmitAnalogAxis(0, 0.00121), true);
+  assert.equal(shouldTransmitAnalogAxis(0, -0.00121), true);
+  assert.equal(shouldTransmitAnalogAxis(0, 0.5), true);
   // Zero-to-zero stays quiet, and invalid values never cross the bridge.
-  assert.equal(shouldTransmitAnalogRoll(0, 0), false);
-  assert.equal(shouldTransmitAnalogRoll(Number.NaN, 0.5), false);
+  assert.equal(shouldTransmitAnalogAxis(0, 0), false);
+  assert.equal(shouldTransmitAnalogAxis(Number.NaN, 0.5), false);
+  assert.equal(shouldTransmitAnalogRoll, shouldTransmitAnalogAxis,
+    "the original roll export remains source-compatible");
 });
 
-test("production analog roll wires the zero-transition-safe suppression", async () => {
+test("production direct-input arbiter preserves exact neutral on roll and pitch", async () => {
   const source = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
-  assert.match(source, /if \(shouldTransmitAnalogRoll\(command, lastAnalogRollCommand\)\) \{/,
-    "setAnalogRollCommand must gate the bridge through shouldTransmitAnalogRoll");
-  assert.doesNotMatch(source, /Math\.abs\(command - lastAnalogRollCommand\) >= 0\.002/,
+  assert.match(source,
+    /shouldTransmitAnalogAxis\(nextRoll, directRollCommand\)/,
+    "roll must use the exact-neutral-safe bridge gate");
+  assert.match(source,
+    /shouldTransmitAnalogAxis\(nextPitch, directPitchCommand\)/,
+    "pitch must transmit exact neutral so baseline demand and approach trim resume");
+  assert.doesNotMatch(source, /Math\.abs\(nextRoll - directRollCommand\) >= 0\.002/,
     "the raw deadband that suppressed the final zero transition must not return");
+  assert.doesNotMatch(source, /Math\.abs\(nextPitch - directPitchCommand\) > 0\.002/,
+    "pitch must not regress to a raw deadband that swallows the final zero");
 });
 
 function sample(roll, pitch = 42, angle = 0) {
@@ -204,7 +213,9 @@ test("production mobile input wires stable calibration, time-based filtering, an
   assert.match(source, /const centre = tiltCalibration\.add\(sample, timestampMs\)/);
   assert.match(source, /filteredRoll = smoothTilt\(filteredRoll, roll, deltaSeconds\)/);
   assert.match(source, /if \(suspended \|\| frozen \|\| document\.hidden/);
-  assert.match(source, /handleOrientationStale[\s\S]*?awaitFreshCentre\("TILT SIGNAL LOST/);
+  assert.match(source,
+    /handleOrientationStale[\s\S]*?useThumbStick\("TILT TRIM LOST · TOUCH ACTIVE"\)/,
+    "lost tilt must disable optional trim without blocking the touch sticks");
   assert.match(source, /window\.addEventListener\("blur", \(\) => \{[\s\S]*?releaseTiltAxes\(\)/);
   const resetBody = source.match(/resetMobileInput = \(\) => \{([\s\S]*?)\n  \};/)?.[1] ?? "";
   assert.doesNotMatch(resetBody, /tiltWatchdog\.stop\(\)/,

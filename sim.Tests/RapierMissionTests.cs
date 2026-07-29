@@ -156,6 +156,7 @@ public class RapierMissionTests {
         bool sawRecoveryGate = false;
         string finalEntry = "never";
         var phaseTimeline = new List<string>();
+        var flightTrace = new List<string>();
         RapierMissionPhase lastPhase = RapierMissionPhase.Unavailable;
         double maximumAltitudeM = double.NegativeInfinity;
         double maximumAbsVerticalSpeedMps = 0.0;
@@ -185,6 +186,20 @@ public class RapierMissionTests {
             if (session.RapierPhase != lastPhase) {
                 lastPhase = session.RapierPhase;
                 phaseTimeline.Add($"{session.TimeSeconds:F0}s {lastPhase}");
+            }
+            if (tick % checked((int)(120 * AircraftSim.TickHz)) == 0) {
+                flightTrace.Add(
+                    $"{session.TimeSeconds:F0}s {session.RapierPhase} "
+                    + $"M{session.Player.AirspeedMps
+                        / Math.Max(1.0, session.Player.AtmosphericState.SpeedOfSoundMps):F2} "
+                    + $"alt {session.Player.State.Position.Y:F0}m "
+                    + $"gamma {session.Player.State.Gamma * 180.0 / Math.PI:F1}° "
+                    + $"alpha {session.Player.AngleOfAttackRad * 180.0 / Math.PI:F1}° "
+                    + $"Nz {session.Player.LastNz:F2} "
+                    + $"q {session.Player.DynamicPressurePa / 1000.0:F1}kPa "
+                    + $"fuel {session.PlayerFuel.FuelLb:F0}lb "
+                    + $"lever {session.Player.LastAppliedCommand.Throttle:F2} "
+                    + $"thrust {session.Player.LastEngineOperatingPoint.NetThrustLbf:F0}lbf");
             }
             if (releasedSwarm) session.FeedKey(GKey.Trigger, false);
             sawPursuit |= session.RapierPursuitActive;
@@ -223,7 +238,8 @@ public class RapierMissionTests {
                 + $"({session.Player.State.Position.X:F0},"
                 + $"{session.Player.State.Position.Y:F0},"
                 + $"{session.Player.State.Position.Z:F0}); "
-                + $"closest initial {closestInitial}");
+                + $"closest initial {closestInitial}; "
+                + $"trace [{string.Join(", ", flightTrace)}]");
         Assert.True(session.Lifecycle == SimulationSession.LifecycleState.Finished,
             $"sortie remained {session.Lifecycle}/{session.RapierPhase} with "
                 + $"{session.PlayerFuel.FuelLb:F0} lb at "

@@ -151,6 +151,9 @@ public static partial class WebBridge {
     public static void SetAnalogRollControl(double value) => Session.SetAnalogRollControl(value);
 
     [JSExport]
+    public static void SetAnalogPitchControl(double value) => Session.SetAnalogPitchControl(value);
+
+    [JSExport]
     public static void SetBanditPadlockRollAssist(bool selected) =>
         Session.SetBanditPadlockRollAssist(selected);
 

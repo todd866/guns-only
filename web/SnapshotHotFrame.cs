@@ -5,6 +5,7 @@ using GunsOnly.Sim;
 using GunsOnly.Sim.Casevac;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Sim.Propulsion;
 using GunsOnly.Sim.Turbulence;
 using GunsOnly.Sim.Vehicles;
 
@@ -136,6 +137,16 @@ internal static class SnapshotHotFrame {
         Num("rapier_guidance_z", 3);
         Num("rapier_recovery_gate", RawInteger);
         Num("rapier_circuit_leg_code", RawInteger);
+        Bool("radio_active");
+        Num("radio_sequence", RawInteger);
+        Num("radio_priority", RawInteger);
+        Num("radio_started_s", 3);
+        Num("radio_ends_s", 3);
+        Bool("rapier_radio_active");
+        Num("rapier_radio_sequence", RawInteger);
+        Num("rapier_radio_priority", RawInteger);
+        Num("rapier_radio_started_s", 3);
+        Num("rapier_radio_ends_s", 3);
         Num("rapier_fd_bank_deg", 1);
         Num("rapier_fd_target_ktas", 0);
         Num("rapier_gate_half_m", 1);
@@ -151,11 +162,16 @@ internal static class SnapshotHotFrame {
         Num("rapier_rcs_authority", 3);
         Num("rapier_rcs_moment_nm", 1);
         Num("rapier_rcs_firing_frac", 3);
+        Num("rapier_inlet_recovery", 3);
+        Bool("rapier_inlet_distorted");
+        Num("rapier_normal_alpha_limit_deg", 2);
         Bool("rapier_zoom_lob");
         Num("rapier_commanded_mach", 2);
         Num("rapier_skin_mach_limit", 2);
         Nul("rapier_material_mach_ceiling", 2);
         Num("rapier_authored_target_mach", 2);
+        Num("rapier_turbine_thrust_lbf", 0);
+        Num("rapier_ramjet_thrust_lbf", 0);
         Num("rapier_turbine_thrust_kn", 2);
         Num("rapier_ramjet_thrust_kn", 2);
         Num("rapier_turbine_fuel_ppm", 2);
@@ -336,6 +352,7 @@ internal static class SnapshotHotFrame {
         Num("g_maxperform", 3);
         Num("g_hardmax", 3);
         Num("g_override_max", 3);
+        Num("dynamic_pressure_kpa", 2);
         Num("sustained", 3);
         Num("sticky", 2);
         Num("tier", RawInteger);
@@ -897,6 +914,16 @@ internal static class SnapshotHotFrame {
         w.Num("rapier_guidance_z", session.RapierGuidanceWaypoint.Z, 3);
         w.Num("rapier_recovery_gate", session.RapierRecoveryGate, RawInteger);
         w.Num("rapier_circuit_leg_code", CircuitLegCode(session.RapierCircuitLeg), RawInteger);
+        w.Bool("radio_active", session.MissionRadio.Active);
+        w.Num("radio_sequence", session.MissionRadio.Sequence, RawInteger);
+        w.Num("radio_priority", (int)session.MissionRadio.Priority, RawInteger);
+        w.Num("radio_started_s", session.MissionRadio.StartedAtSeconds, 3);
+        w.Num("radio_ends_s", session.MissionRadio.EndsAtSeconds, 3);
+        w.Bool("rapier_radio_active", session.MissionRadio.Active);
+        w.Num("rapier_radio_sequence", session.MissionRadio.Sequence, RawInteger);
+        w.Num("rapier_radio_priority", (int)session.MissionRadio.Priority, RawInteger);
+        w.Num("rapier_radio_started_s", session.MissionRadio.StartedAtSeconds, 3);
+        w.Num("rapier_radio_ends_s", session.MissionRadio.EndsAtSeconds, 3);
         w.Num("rapier_fd_bank_deg", session.RapierFdBankDeg, 1);
         w.Num("rapier_fd_target_ktas", session.RapierFdTargetKtas, 0);
         w.Num("rapier_gate_half_m", session.RapierGateHalfM, 1);
@@ -912,6 +939,10 @@ internal static class SnapshotHotFrame {
         w.Num("rapier_rcs_authority", session.RapierRcsAuthority, 3);
         w.Num("rapier_rcs_moment_nm", session.RapierRcsMomentMagnitudeNm, 1);
         w.Num("rapier_rcs_firing_frac", session.RapierRcsFiringFraction, 3);
+        w.Num("rapier_inlet_recovery", player.InletFlowRecovery, 3);
+        w.Bool("rapier_inlet_distorted", player.InletDistorted);
+        w.Num("rapier_normal_alpha_limit_deg",
+            RapierAerodynamics.NormalLawAlphaLimitRad(mach) * 57.29577951308232, 2);
         w.Bool("rapier_zoom_lob", session.Beat.ScriptedIntercept?.ZoomLobProfile == true);
         w.Num("rapier_commanded_mach", session.RapierCommandedMach, 2);
         w.Num("rapier_skin_mach_limit",
@@ -920,6 +951,10 @@ internal static class SnapshotHotFrame {
             session.RapierMissionAvailable && double.IsFinite(session.RapierSkinMachLimit)
                 ? session.RapierSkinMachLimit : null, 2);
         w.Num("rapier_authored_target_mach", session.RapierAuthoredTargetMach, 2);
+        w.Num("rapier_turbine_thrust_lbf",
+            session.RapierTurbineThrustN / J47PerformanceMap.NewtonsPerPoundForce, 0);
+        w.Num("rapier_ramjet_thrust_lbf",
+            session.RapierRamjetThrustN / J47PerformanceMap.NewtonsPerPoundForce, 0);
         w.Num("rapier_turbine_thrust_kn", session.RapierTurbineThrustN / 1000.0, 2);
         w.Num("rapier_ramjet_thrust_kn", session.RapierRamjetThrustN / 1000.0, 2);
         w.Num("rapier_turbine_fuel_ppm", session.RapierTurbineFuelFlowLbPerMinute, 2);
@@ -1136,6 +1171,7 @@ internal static class SnapshotHotFrame {
         w.Num("g_maxperform", Protection.MaxPerformG(s, beat.PlayerAir, trueAirspeedMps, atmosphere), 3);
         w.Num("g_hardmax", Protection.HardMaxG(s, beat.PlayerAir, trueAirspeedMps, atmosphere), 3);
         w.Num("g_override_max", Protection.OverrideMaxG(s, beat.PlayerAir, trueAirspeedMps, atmosphere), 3);
+        w.Num("dynamic_pressure_kpa", player.DynamicPressurePa / 1000.0, 2);
         w.Num("sustained", sustainedG, 3);
         w.Num("sticky", detents.StickyOffsetG, 2);
         w.Num("tier", (int)detents.Tier, RawInteger);
@@ -2151,6 +2187,8 @@ internal static class SnapshotHotFrame {
         int PassSignature,
         ArrestmentModel.ArrestmentPhase ArrestPhase,
         int DifficultySignature,
+        bool CircuitRadioActive,
+        long CircuitRadioSequence,
         string Mode,
         string? LsoCall,
         LsoSeverity? LsoSeverity,
@@ -2270,6 +2308,8 @@ internal static class SnapshotHotFrame {
                 session.Arrestment.Phase,
                 System.HashCode.Combine(difficulty.Level, difficulty.AttemptIndex,
                     difficulty.Variation, difficulty.IsEased, difficulty.IsSpike),
+                session.MissionRadio.Active,
+                session.MissionRadio.Sequence,
                 mode,
                 lsoCall,
                 lsoSeverity,

@@ -70,6 +70,10 @@ import {
 import { createCasevacCollisionScenery } from "./render/casevac/casevac_collision_scenery.js";
 import { createCasevacRouteBriefing } from "./render/casevac/casevac_route_briefing.js";
 import { createCasevacRouteLandmarks } from "./render/casevac/casevac_route_landmarks.js";
+import {
+  gamepadLookDelta,
+  standardGamepadState,
+} from "./render/input/dual_stick_input.js";
 import { mobileControlProfile } from "./render/input/mobile_control_profile.js";
 import {
   syncPlayerGunTargetSelection,
@@ -78,7 +82,7 @@ import {
 import { mobileThrottleRockerState } from "./render/input/mobile_throttle_rocker.js";
 import {
   mobileRollCommand,
-  shouldTransmitAnalogRoll,
+  shouldTransmitAnalogAxis,
   smoothTilt,
   StableTiltCalibration,
   TiltSensorWatchdog,
@@ -383,6 +387,8 @@ const fallbackStick = touchControls?.querySelector('[data-mobile-action="virtual
 const fallbackStickKnob = document.querySelector("#fallback-stick-knob");
 const fallbackStickLabel = fallbackStick?.querySelector(".fallback-stick-label") ?? null;
 const fallbackStickHelp = document.querySelector("#fallback-stick-help");
+const targetStick = touchControls?.querySelector('[data-mobile-action="target-stick"]') ?? null;
+const targetStickKnob = document.querySelector("#target-stick-knob");
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
 const readyScreen = document.querySelector("#ready-screen");
@@ -441,6 +447,7 @@ const settingsScreen = document.querySelector("#settings-screen");
 const settingsClose = document.querySelector("#settings-close");
 const settingsCloseBottom = document.querySelector("#settings-close-bottom");
 const settingsAudio = document.querySelector("#setting-audio");
+const settingsRadioVoice = document.querySelector("#setting-radio-voice");
 const settingsAutoGcas = document.querySelector("#setting-autogcas");
 const settingsHighContrast = document.querySelector("#setting-high-contrast");
 const settingsReducedMotion = document.querySelector("#setting-reduced-motion");
@@ -450,6 +457,12 @@ const settingsTiltSensitivityValue = document.querySelector("#setting-tilt-sensi
 const settingsKeyboardBindings = document.querySelector("#settings-keyboard-bindings");
 const settingsBindings = document.querySelector("#settings-bindings");
 const settingsResetBindings = document.querySelector("#settings-reset-bindings");
+const rapierRadio = document.querySelector("#rapier-radio");
+const rapierRadioNet = document.querySelector("#rapier-radio-net");
+const rapierRadioRoute = document.querySelector("#rapier-radio-route");
+const rapierRadioText = document.querySelector("#rapier-radio-text");
+const rapierRadioHistory = document.querySelector("#rapier-radio-history");
+const rapierRadioDisclosure = document.querySelector("#rapier-radio-disclosure");
 const navConsole = document.querySelector("#nav-console");
 const navUi = navConsole ? Object.freeze({
   destination: document.querySelector("#nav-destination"),
@@ -475,6 +488,76 @@ const navUi = navConsole ? Object.freeze({
   contactRange: document.querySelector("#nav-contact-range"),
   contactEti: document.querySelector("#nav-contact-eti"),
 }) : null;
+
+let lastRapierRadioSequence = 0;
+let rapierRadioCalls = [];
+
+function radioValue(state, field) {
+  return state?.[`radio_${field}`] ?? state?.[`rapier_radio_${field}`];
+}
+
+function updateMissionRadio(state) {
+  if (!rapierRadio) return;
+  if (!state) {
+    rapierRadio.hidden = true;
+    lastRapierRadioSequence = 0;
+    rapierRadioCalls = [];
+    rapierRadioHistory?.replaceChildren();
+    return;
+  }
+
+  const sequence = Math.max(0, Math.floor(Number(radioValue(state, "sequence")) || 0));
+  if (sequence === 0 && lastRapierRadioSequence > 0) {
+    lastRapierRadioSequence = 0;
+    rapierRadioCalls = [];
+    rapierRadioHistory?.replaceChildren();
+  }
+  const rawText = radioValue(state, "text");
+  const rawSpeaker = radioValue(state, "speaker");
+  const rawCallsign = radioValue(state, "callsign");
+  const rawChannel = radioValue(state, "channel");
+  const rawFrequency = radioValue(state, "frequency");
+  const text = typeof rawText === "string" ? rawText.trim() : "";
+  const speaker = typeof rawSpeaker === "string" ? rawSpeaker.trim() : "";
+  const callsign = typeof rawCallsign === "string" ? rawCallsign.trim() : "";
+  const channel = typeof rawChannel === "string" ? rawChannel.trim() : "";
+  const frequency = typeof rawFrequency === "string" ? rawFrequency.trim() : "";
+  const priority = Math.max(0, Math.min(2,
+    Math.floor(Number(radioValue(state, "priority")) || 0)));
+
+  if (sequence > 0 && sequence !== lastRapierRadioSequence && text) {
+    lastRapierRadioSequence = sequence;
+    rapierRadioCalls = [
+      { sequence, channel, frequency, speaker, callsign, text, priority },
+      ...rapierRadioCalls.filter((call) => call.sequence !== sequence),
+    ].slice(0, 4);
+    if (rapierRadioNet)
+      rapierRadioNet.textContent = `${channel || "TACTICAL"}${frequency ? ` · ${frequency}` : ""}`;
+    if (rapierRadioText)
+      rapierRadioText.textContent = `${speaker}${callsign ? ` TO ${callsign}` : ""} · ${text}`;
+    if (rapierRadioRoute)
+      rapierRadioRoute.textContent = `${speaker || "PATTERN"} → ${callsign || "ALL STATIONS"}`;
+    if (rapierRadioHistory) {
+      const rows = rapierRadioCalls.slice(1).map((call) => {
+        const row = document.createElement("li");
+        row.textContent = `${call.channel || "NET"} · ${call.speaker} · ${call.text}`;
+        return row;
+      });
+      rapierRadioHistory.replaceChildren(...rows);
+    }
+  }
+
+  if (rapierRadioDisclosure)
+    rapierRadioDisclosure.hidden = radioValue(state, "ai_generated") !== true;
+  const active = radioValue(state, "active") === true;
+  const timeSeconds = Number(state?.t);
+  const endsAtSeconds = Number(radioValue(state, "ends_s"));
+  const recent = Number.isFinite(timeSeconds) && Number.isFinite(endsAtSeconds)
+    && timeSeconds <= endsAtSeconds + 2.5;
+  rapierRadio.hidden = rapierRadioCalls.length === 0 || (!active && !recent);
+  rapierRadio.dataset.active = active ? "true" : "false";
+  rapierRadio.dataset.priority = String(priority);
+}
 
 /// Populate the navigation console. Every figure here already existed somewhere in the snapshot;
 /// what was missing was one place to read them together, and the fuel comparison that turns them
@@ -870,10 +953,12 @@ const testFlightUi = testFlightConsole ? Object.freeze({
   engineRunning: document.querySelector("#tf-engine-running"),
   primaryBus: document.querySelector("#tf-primary-bus"),
   hydraulicPressure: document.querySelector("#tf-hydraulic-pressure"),
+  inletRecovery: document.querySelector("#tf-inlet-recovery"),
   gearHandle: document.querySelector("#tf-gear-handle"),
   gearNose: document.querySelector("#tf-gear-nose"),
   gearLeft: document.querySelector("#tf-gear-left"),
   gearRight: document.querySelector("#tf-gear-right"),
+  flapLabel: document.querySelector("#tf-flap-label"),
   flapLever: document.querySelector("#tf-flap-lever"),
   flapLeft: document.querySelector("#tf-flap-left"),
   flapRight: document.querySelector("#tf-flap-right"),
@@ -889,15 +974,21 @@ const smallViewport = Math.min(
   window.screen?.width || window.innerWidth,
   window.screen?.height || window.innerHeight,
 ) <= 900 || Math.min(window.innerWidth, window.innerHeight) <= 600;
-const mobileControls = coarsePointer || (touchCapable && smallViewport);
+// Local-only responsive QA seam. Browser automation cannot change pointer capabilities in the
+// in-app browser, so an explicit localhost query can exercise the real touch layout without
+// weakening production's coarse-pointer eligibility contract.
+const localTouchPreview = ["localhost", "127.0.0.1"].includes(location.hostname)
+  && new URL(location.href).searchParams.get("input") === "touch";
+const mobileControls = localTouchPreview || coarsePointer || (touchCapable && smallViewport);
 document.documentElement.classList.toggle("touch-mode", mobileControls);
-// Portrait + touch = assisted flight: tilt flies, throttle holds corner velocity, guns fire
-// while the solution is qualified. Landscape keeps the full manual control set.
+document.documentElement.classList.toggle("touch-primary", mobileControls);
+// Portrait + touch = assisted support around the two-stick primary controls: throttle holds
+// corner velocity and qualified gun solutions may fire automatically. Tilt remains roll trim only.
 const portraitMedia = window.matchMedia?.("(orientation: portrait)");
 // Assisted flight requires a genuinely coarse touch pointer. mobileControls alone also admits
 // small desktop windows (tall narrow window == "portrait"), which put the autopilot on a
 // keyboard pilot — reported from the desktop within minutes.
-const assistedEligible = coarsePointer && touchCapable;
+const assistedEligible = localTouchPreview || (coarsePointer && touchCapable);
 function syncAssistedFlight() {
   const assisted = assistedEligible && portraitMedia?.matches === true;
   document.documentElement.classList.toggle("portrait-assist", assisted);
@@ -974,16 +1065,39 @@ if (mobileControls) {
       font-size: 11px;
     }
 
-    .touch-mode #fallback-stick {
+    .touch-mode #fallback-stick,
+    .touch-mode #target-stick {
       bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+    }
+
+    /* A phone fight is one view plus two sticks. Desktop diagnostics and network presence remain
+       available elsewhere, but they do not get to occupy a third of a small display. */
+    .touch-mode #test-flight-console,
+    .touch-mode #nav-console,
+    .touch-mode #multiplayer-status {
+      display: none !important;
+    }
+
+    .touch-mode.touch-primary .touch-left {
+      left: calc(env(safe-area-inset-left, 0px) + 136px);
+    }
+
+    .touch-mode.touch-primary .touch-right {
+      right: calc(env(safe-area-inset-right, 0px) + 136px);
+    }
+
+    .touch-mode.touch-primary #touch-fire {
+      display: none !important;
     }
 
     .touch-mode.run-frozen .touch-left,
     .touch-mode.run-frozen .touch-right,
     .touch-mode.run-frozen #fallback-stick,
+    .touch-mode.run-frozen #target-stick,
     .touch-mode.run-paused .touch-left,
     .touch-mode.run-paused .touch-right,
     .touch-mode.run-paused #fallback-stick,
+    .touch-mode.run-paused #target-stick,
     .touch-mode.run-paused #tilt-status,
     .touch-mode.run-frozen #tilt-status,
     .touch-mode.run-frozen #tilt-prompt,
@@ -1897,6 +2011,10 @@ window.addEventListener("focus", () => void resolveBuildIdentity());
 let bridge = null;
 let snapshotSource = null;
 const keyOwners = new Map();
+let directFlightOwner = null;
+let directRollCommand = 0;
+let directPitchCommand = 0;
+let pollContinuousInput = () => {};
 let padlock = false;
 let padlockTarget = "bandit";
 let padlockEntityId = "";
@@ -1935,12 +2053,46 @@ let activePointer = null;
 let lastPointerX = 0;
 let lastPointerY = 0;
 let trackpadLookActive = false;
+let touchStickLookActive = false;
+let gamepadLookActive = false;
 let trackpadLookReleaseTimer = 0;
 let gimbalReturnFast = false;
 let sensorYaw = 0;
 let sensorPitch = 0;
 let resetMobileInput = () => {};
 let releaseHiddenMobileControls = () => {};
+
+function setDirectFlightAxes(source, roll, pitch) {
+  if (!bridge || !source) return false;
+  // A finger already on the phone must win immediately; the connected controller resumes as
+  // soon as that touch releases. Gamepad sources are namespaced so telemetry can distinguish the
+  // mapping without weakening this ownership rule.
+  if (source.startsWith("gamepad")
+    && directFlightOwner && directFlightOwner !== source) return false;
+  const nextRoll = clamp(Number(roll) || 0, -1, 1);
+  const nextPitch = clamp(Number(pitch) || 0, -1, 1);
+  directFlightOwner = source;
+  if (typeof bridge.SetAnalogRollControl === "function"
+    && shouldTransmitAnalogAxis(nextRoll, directRollCommand)) {
+    bridge.SetAnalogRollControl(nextRoll);
+    directRollCommand = nextRoll;
+  }
+  if (typeof bridge.SetAnalogPitchControl === "function"
+    && shouldTransmitAnalogAxis(nextPitch, directPitchCommand)) {
+    bridge.SetAnalogPitchControl(nextPitch);
+    directPitchCommand = nextPitch;
+  }
+  return typeof bridge.SetAnalogRollControl === "function";
+}
+
+function releaseDirectFlightAxes(source) {
+  if (directFlightOwner !== source) return;
+  bridge?.SetAnalogRollControl?.(0);
+  bridge?.SetAnalogPitchControl?.(0);
+  directRollCommand = 0;
+  directPitchCommand = 0;
+  directFlightOwner = null;
+}
 let setMobileFrozen = () => {};
 let activeView = null;
 let latestState = null;
@@ -2009,6 +2161,10 @@ function applyPlayerSettings() {
   activeView?.hud.setAudioEnabled(playerSettings.audio);
   activeView?.hud.setControlBindings?.(playerSettings.bindings);
   if (settingsAudio) settingsAudio.checked = playerSettings.audio;
+  if (settingsRadioVoice) {
+    settingsRadioVoice.checked = playerSettings.radioVoice !== false;
+    settingsRadioVoice.disabled = !playerSettings.audio;
+  }
   if (settingsAutoGcas) settingsAutoGcas.checked = playerSettings.autoGcas !== false;
   activeView && bridge?.SetAutoGcasEnabled?.(playerSettings.autoGcas !== false);
   if (settingsHighContrast) settingsHighContrast.checked = playerSettings.highContrast;
@@ -2026,6 +2182,7 @@ function commitPlayerSettings(next) {
   applyPlayerSettings();
   recorder.context("player_settings", {
     audio: playerSettings.audio,
+    radioVoice: playerSettings.radioVoice,
     highContrast: playerSettings.highContrast,
     reducedMotion: playerSettings.reducedMotion,
     largeText: playerSettings.largeText,
@@ -2135,6 +2292,9 @@ settingsAutoGcas?.addEventListener("change", () => commitPlayerSettings({
 settingsAudio?.addEventListener("change", () => {
   commitAudioPreferenceFromGesture(settingsAudio.checked);
 });
+settingsRadioVoice?.addEventListener("change", () => commitPlayerSettings({
+  ...playerSettings, radioVoice: settingsRadioVoice.checked,
+}));
 settingsHighContrast?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, highContrast: settingsHighContrast.checked,
 }));
@@ -2404,14 +2564,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Rapier Circuits",
     sortie: "Ski-jump · overhead pattern · touch-and-go · trap",
     configuration: "Attritable Rapier brick · full fuel · hook down · no contact",
-    brief: "Military overhead · 2,500 ft AGL · 250 KT initial/downwind · break ~60° (max 75°) · base ~45° (max 60°) · 3 NM finals · gear and flaps on downwind · fly the boxes · trap the wire. P = DEMO; touch stick = DIRECT; P off = MONITOR. No Mach dash.",
+    brief: "Military overhead · 2,500 ft AGL · 250 KT initial/downwind · break ~60° (max 75°) · base ~45° (max 60°) · 3 NM finals · gear down and symmetric elevon droop on downwind · fly the boxes · trap the wire. P = DEMO; touch stick = DIRECT; P off = MONITOR. No Mach dash.",
     controls: "P DEMO ↔ MONITOR · stick takeover = DIRECT · arrows/W/S · T time · V threshold · Tab traffic\nFly the boxes · trap the wire",
-    preflightCue: "2,500 FT · 250 KT · BREAK 60° · BASE 45° · 3 NM FINAL · GEAR/FLAPS DOWNWIND",
+    preflightCue: "2,500 FT · 250 KT · BREAK 60° · BASE 45° · 3 NM FINAL · GEAR/ELEVONS DOWNWIND",
     preflightLegs: Object.freeze([
       Object.freeze({ id: "DEPART", label: "DEPART", intent: "Ski-jump → climb → join INITIAL", cue: "Pattern alt 2,500 ft AGL · clean" }),
-      Object.freeze({ id: "INITIAL", label: "INITIAL", intent: "Runway heading, midfield", cue: "~250 KT · gear/flaps up · hook down" }),
+      Object.freeze({ id: "INITIAL", label: "INITIAL", intent: "Runway heading, midfield", cue: "~250 KT · gear/elevons up · hook down" }),
       Object.freeze({ id: "BREAK", label: "BREAK", intent: "~180° to downwind", cue: "Prefer 60° bank · max 75°" }),
-      Object.freeze({ id: "DOWNWIND", label: "DOWNWIND", intent: "Opposite parallel, abeam", cue: "~1.4 NM offset · ~250 KT · gear/flaps DOWN" }),
+      Object.freeze({ id: "DOWNWIND", label: "DOWNWIND", intent: "Opposite parallel, abeam", cue: "~1.4 NM offset · ~250 KT · gear/elevons DOWN" }),
       Object.freeze({ id: "BASE", label: "BASE", intent: "Continuous turn to 3 NM final", cue: "Prefer 45° bank · max 60° · ~200 KT" }),
       Object.freeze({ id: "SHORT_FINAL", label: "SHORT FINAL", intent: "3 NM final · T&G or continue", cue: "~170 KT · configured" }),
       Object.freeze({ id: "WIRE_FINAL", label: "WIRE", intent: "Accept trap; aerobrake → wire", cue: "~165 KT · four boxes" }),
@@ -2590,6 +2750,7 @@ function renderTestFlightConsole(state) {
   // gear state. CASEVAC publishes its own bounded power/contact facts and must not inherit that
   // incompatible systems panel.
   const airborneSortie = state.ready !== true && state.paused !== true && state.finished !== true;
+  updateMissionRadio(state?.ready !== true && state?.paused !== true ? state : null);
   updateNavConsole(airborneSortie ? state : null);
   // AVAILABLE vs RELEVANT. The console reads engine, bus, hydraulics and gear, and a pilot may
   // want any of those at any moment — so the collapsed tab is present for the whole sortie and the
@@ -2616,6 +2777,8 @@ function renderTestFlightConsole(state) {
     projected.electrical.primaryBusText, projected.electrical.state);
   setTestFlightValue(testFlightUi.hydraulicPressure,
     projected.hydraulic.pressureText, projected.hydraulic.state);
+  setTestFlightValue(testFlightUi.inletRecovery,
+    projected.inlet.recoveryText, projected.inlet.state);
   setTestFlightValue(testFlightUi.gearHandle, projected.gear.handleText);
   setTestFlightValue(testFlightUi.gearNose,
     projected.gear.nose.text, projected.gear.nose.state);
@@ -2623,6 +2786,7 @@ function renderTestFlightConsole(state) {
     projected.gear.left.text, projected.gear.left.state);
   setTestFlightValue(testFlightUi.gearRight,
     projected.gear.right.text, projected.gear.right.state);
+  setTestFlightValue(testFlightUi.flapLabel, `${projected.flaps.label} lever`);
   setTestFlightValue(testFlightUi.flapLever, projected.flaps.leverText,
     projected.flaps.overspeed ? "warning" : "nominal");
   const flapState = projected.flaps.overspeed || projected.flaps.split ? "warning" : "nominal";
@@ -2771,7 +2935,7 @@ function clearFlightInput(reason = "presentation-reset") {
 }
 
 function manualLookActive() {
-  return dragging || trackpadLookActive;
+  return dragging || trackpadLookActive || touchStickLookActive || gamepadLookActive;
 }
 
 // Padlock selection remains a presentation decision, but the resulting low-authority hold is a
@@ -3409,8 +3573,13 @@ function renderPauseUi(state = latestState) {
       : selectedBeat === 6
         ? "Maintenance profile · axial deck"
         : brief.configuration || "Guns hot · air start";
-    if (readyControls) readyControls.textContent = brief.controls
-      || "Arrows fly · W/S power · F guns · V padlock · Tab target\nH opens controls · R restarts";
+    if (readyControls) {
+      const keyboardControls = brief.controls
+        || "Arrows fly · W/S power · F guns · V padlock · Tab target\nH opens controls · R restarts";
+      readyControls.textContent = mobileControls
+        ? "LEFT STICK fly · RIGHT STICK look + fire · tap TILT TRIM to opt in\nController: LS fly · RS look · RT fire · A padlock · LB/RB power"
+        : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`;
+    }
     readyStart.textContent = `Fly ${brief.title}`;
     readyHint.textContent = background ? "Return to the game to fly" : "Press Enter to fly";
   } else {
@@ -7638,6 +7807,7 @@ class FlightView {
         || pauseReasons.size > 0
         || state?.paused === true,
       triggerHeld: !casevac && isGkeyHeld(8),
+      radioVoiceEnabled: playerSettings.radioVoice !== false,
       nowSeconds,
     });
     updateCasevacAudio(state, {
@@ -7883,6 +8053,98 @@ class FlightView {
   }
 }
 
+function installGamepadInput(view) {
+  if (typeof navigator.getGamepads !== "function") return;
+
+  const source = "gamepad:standard";
+  const held = new Map();
+  let previous = {};
+  let connectedIndex = null;
+
+  function setHeld(code, active, gkey, directThrottleIncrease = undefined) {
+    if (held.get(code) === active) return;
+    held.set(code, active);
+    if (active) {
+      pressMappedKey(code, source, gkey, directThrottleIncrease);
+      if (gkey === 8) view.hud.armAudio();
+    } else {
+      releaseMappedKey(code, source);
+    }
+  }
+
+  function releaseGamepad() {
+    for (const [code, active] of held) {
+      if (active) releaseMappedKey(code, source);
+    }
+    held.clear();
+    releaseDirectFlightAxes(source);
+    gamepadLookActive = false;
+    previous = {};
+  }
+
+  pollContinuousInput = (dt) => {
+    const raw = [...(navigator.getGamepads?.() ?? [])]
+      .find((candidate) => candidate?.connected !== false
+        && candidate?.mapping === "standard");
+    const state = standardGamepadState(raw, previous);
+    if (!state.connected) {
+      if (connectedIndex !== null) {
+        recorder.event("mobile_control", "gamepad_disconnected", {
+          profile: "dual_stick",
+          index: connectedIndex,
+        });
+        connectedIndex = null;
+        releaseGamepad();
+      }
+      return;
+    }
+    if (connectedIndex !== state.index) {
+      releaseGamepad();
+      connectedIndex = state.index;
+      recorder.event("mobile_control", "gamepad_connected", {
+        profile: "dual_stick",
+        mapping: "standard",
+        index: state.index,
+      });
+    }
+
+    if (document.hidden || pauseReasons.size > 0) {
+      releaseGamepad();
+      return;
+    }
+
+    setDirectFlightAxes(source, state.roll, state.pitch);
+    setHeld("Gamepad:RT", state.fire, 8);
+    setHeld("Gamepad:LB", state.throttleDown, 7, false);
+    setHeld("Gamepad:RB", state.throttleUp, 6, true);
+    if (state.padlockPressed) {
+      togglePadlock();
+      recorder.event("mobile_control", "gamepad_padlock", {
+        profile: "dual_stick",
+      });
+    }
+
+    gamepadLookActive = !touchStickLookActive
+      && Math.abs(state.lookX) + Math.abs(state.lookY) > 0.001;
+    if (gamepadLookActive) {
+      ({ yawRad: sensorYaw, pitchRad: sensorPitch } = applyLookDelta(
+        { yawRad: sensorYaw, pitchRad: sensorPitch },
+        gamepadLookDelta(state, dt),
+        { yawRad: MAX_GIMBAL_YAW, pitchRad: MAX_GIMBAL_PITCH },
+      ));
+      padlockTrackEstablished = false;
+      syncBanditPadlockRollAssist();
+      gimbalReturnFast = false;
+    } else if (previous.lookActive) {
+      gimbalReturnFast = true;
+    }
+    previous = { padlock: state.padlock, lookActive: gamepadLookActive };
+  };
+
+  window.addEventListener("gamepaddisconnected", releaseGamepad);
+  window.addEventListener("pagehide", releaseGamepad);
+}
+
 function installMobileInput(view) {
   if (!mobileControls || !touchControls) return;
 
@@ -7891,6 +8153,7 @@ function installMobileInput(view) {
   const TILT_RELEASE = 3;
   const PITCH_GAIN = 1.15;
   const ROLL_GAIN = 1;
+  const TILT_TRIM_AUTHORITY = 0.15;
   const activeControls = new Map();
   const tiltKeys = { pitch: null, roll: null };
   const tiltTitle = tiltPrompt?.querySelector("strong");
@@ -7904,11 +8167,19 @@ function installMobileInput(view) {
   let filteredPitch = 0;
   let filteredRoll = 0;
   let lastOrientationSampleMs = null;
-  let lastAnalogRollCommand = 0;
+  let primaryRollCommand = 0;
+  let primaryPitchCommand = 0;
+  let tiltRollTrim = 0;
   let throttleRockerPointerId = null;
   let throttleRockerControl = null;
   const virtualStickAxes = { roll: null, pitch: null };
   let virtualStickPointerId = null;
+  let targetStickPointerId = null;
+  let targetStickX = 0;
+  let targetStickY = 0;
+  let targetStickFireSource = null;
+  let flightGesture = null;
+  let targetGesture = null;
   let suspended = false;
   let frozen = false;
   let frozenRestartSent = false;
@@ -7925,6 +8196,30 @@ function installMobileInput(view) {
 
   function status(message) {
     if (tiltStatus) tiltStatus.textContent = message;
+  }
+
+  function controlContext() {
+    const narrowEdge = Math.min(window.innerWidth, window.innerHeight);
+    return {
+      profile: "dual_stick",
+      orientation: portraitMedia?.matches ? "portrait" : "landscape",
+      viewport: narrowEdge <= 420 ? "compact" : narrowEdge <= 700 ? "phone" : "tablet",
+      assisted: document.documentElement.classList.contains("portrait-assist"),
+      tilt_supported: orientationSupported,
+      tilt_authority: TILT_TRIM_AUTHORITY,
+      standalone: window.matchMedia?.("(display-mode: standalone)").matches === true
+        || navigator.standalone === true,
+    };
+  }
+
+  function emitControlContext() {
+    recorder.context("mobile_control", controlContext());
+  }
+
+  function syncMobileHudProfile() {
+    view.hud.setPresentationProfile?.(
+      portraitMedia?.matches ? "portrait_dual_stick" : "touch_dual_stick",
+    );
   }
 
   function screenAngle() {
@@ -7954,7 +8249,8 @@ function installMobileInput(view) {
       if (code) releaseMappedKey(code, `tilt:${axis}`);
       tiltKeys[axis] = null;
     }
-    forceAnalogRollNeutral();
+    tiltRollTrim = 0;
+    applyFlightStick();
   }
 
   function updateTiltAxis(axis, value, negativeCode, positiveCode) {
@@ -7971,28 +8267,33 @@ function installMobileInput(view) {
   }
 
   function setAnalogRollCommand(value) {
-    if (typeof bridge?.SetAnalogRollControl !== "function") return false;
-    const command = clamp(Number(value) || 0, -1, 1);
-    // Phone sensors and pointer moves can report sub-noise changes faster than the fixed clock.
-    // Keep the latest command without needlessly crossing the WASM bridge for the same value —
-    // but ALWAYS transmit the transition to exact neutral: suppressing it latched a stale
-    // sub-noise roll command, and the simulation's G-LOC interlock releases only at exactly zero.
-    if (shouldTransmitAnalogRoll(command, lastAnalogRollCommand)) {
-      bridge.SetAnalogRollControl(command);
-      lastAnalogRollCommand = command;
-    }
-    return true;
+    primaryRollCommand = clamp(Number(value) || 0, -1, 1);
+    return applyFlightStick();
   }
 
   function forceAnalogRollNeutral() {
-    if (typeof bridge?.SetAnalogRollControl !== "function") return false;
-    bridge.SetAnalogRollControl(0);
-    lastAnalogRollCommand = 0;
-    return true;
+    primaryRollCommand = 0;
+    return applyFlightStick();
   }
 
   function updateAnalogRoll(value) {
-    return setAnalogRollCommand(mobileRollCommand(value));
+    tiltRollTrim = mobileRollCommand(value) * TILT_TRIM_AUTHORITY;
+    return applyFlightStick();
+  }
+
+  function setAnalogPitchCommand(value) {
+    primaryPitchCommand = clamp(Number(value) || 0, -1, 1);
+    return applyFlightStick();
+  }
+
+  function applyFlightStick() {
+    if (virtualStickPointerId === null) {
+      releaseDirectFlightAxes("touch");
+      return false;
+    }
+    return setDirectFlightAxes("touch",
+      clamp(primaryRollCommand + tiltRollTrim, -1, 1),
+      primaryPitchCommand);
   }
 
   function releaseThrottleRockerCommand(control) {
@@ -8154,7 +8455,9 @@ function installMobileInput(view) {
       if (active) releaseMappedKey(active.code, active.source);
       virtualStickAxes[axis] = null;
     }
-    forceAnalogRollNeutral();
+    primaryRollCommand = 0;
+    primaryPitchCommand = 0;
+    releaseDirectFlightAxes("touch");
     renderVirtualStick();
     if (pointerId !== null && fallbackStick?.hasPointerCapture?.(pointerId)) {
       try { fallbackStick.releasePointerCapture(pointerId); } catch { /* already released */ }
@@ -8173,7 +8476,21 @@ function installMobileInput(view) {
     } else {
       setVirtualStickAxis("roll", state.rollCode, `${source}:roll`);
     }
-    setVirtualStickAxis("pitch", state.pitchCode, `${source}:pitch`);
+    if (typeof bridge?.SetAnalogPitchControl === "function") {
+      setAnalogPitchCommand(state.y);
+      setVirtualStickAxis("pitch", null, `${source}:pitch`);
+    } else {
+      setVirtualStickAxis("pitch", state.pitchCode, `${source}:pitch`);
+    }
+    if (flightGesture) {
+      flightGesture.samples += 1;
+      flightGesture.maxRoll = Math.max(flightGesture.maxRoll, Math.abs(state.x));
+      flightGesture.maxPitch = Math.max(flightGesture.maxPitch, Math.abs(state.y));
+      flightGesture.maxTrim = Math.max(flightGesture.maxTrim, Math.abs(tiltRollTrim));
+      const authority = Math.hypot(state.x, state.y);
+      if (authority < 0.01) flightGesture.neutralSamples += 1;
+      if (authority >= 0.95) flightGesture.saturatedSamples += 1;
+    }
     renderVirtualStick(state.x, state.y);
   }
 
@@ -8184,8 +8501,103 @@ function installMobileInput(view) {
       pitch === "ArrowUp" ? -0.72 : pitch === "ArrowDown" ? 0.72 : 0);
   }
 
+  function renderTargetStick(x = 0, y = 0) {
+    if (!targetStick) return;
+    const active = targetStickPointerId !== null;
+    const diameter = Math.min(targetStick.clientWidth, targetStick.clientHeight);
+    const knobDiameter = Math.max(targetStickKnob?.offsetWidth ?? 0,
+      targetStickKnob?.offsetHeight ?? 0);
+    const travel = Math.max(0, (diameter - knobDiameter) / 2 - 4);
+    targetStick.style.setProperty("--stick-x", `${x * travel}px`);
+    targetStick.style.setProperty("--stick-y", `${y * travel}px`);
+    targetStick.dataset.active = String(active);
+  }
+
+  function updateTargetStickPointer(event) {
+    if (!targetStick || event.pointerId !== targetStickPointerId) return;
+    const state = mobileVirtualStickState(event, targetStick.getBoundingClientRect());
+    targetStickX = state.x;
+    targetStickY = state.y;
+    if (targetGesture) {
+      targetGesture.samples += 1;
+      targetGesture.maxLook = Math.max(targetGesture.maxLook,
+        Math.hypot(targetStickX, targetStickY));
+    }
+    touchStickLookActive = Math.abs(targetStickX) + Math.abs(targetStickY) > 0.001;
+    renderTargetStick(targetStickX, targetStickY);
+  }
+
+  function releaseTargetStick() {
+    const pointerId = targetStickPointerId;
+    targetStickPointerId = null;
+    targetStickX = 0;
+    targetStickY = 0;
+    touchStickLookActive = false;
+    gimbalReturnFast = true;
+    if (targetStickFireSource) {
+      releaseMappedKey("Touch:TargetStickFire", targetStickFireSource);
+      targetStickFireSource = null;
+    }
+    renderTargetStick();
+    if (pointerId !== null && targetStick?.hasPointerCapture?.(pointerId)) {
+      try { targetStick.releasePointerCapture(pointerId); } catch { /* already released */ }
+    }
+  }
+
+  function beginTargetStick(event) {
+    if (!targetStick || frozen || suspended || document.hidden || pauseReasons.size > 0) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (targetStickPointerId !== null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    releaseTargetStick();
+    targetStickPointerId = event.pointerId;
+    targetGesture = {
+      startedAt: performance.now(),
+      samples: 0,
+      maxLook: 0,
+    };
+    targetStickFireSource = `touch:target-stick:${event.pointerId}`;
+    pressMappedKey("Touch:TargetStickFire", targetStickFireSource, 8);
+    view.hud.armAudio();
+    targetStick.focus({ preventScroll: true });
+    try { targetStick.setPointerCapture(event.pointerId); } catch { /* pointer may be gone */ }
+    updateTargetStickPointer(event);
+    recorder.event("mobile_control", "right_stick_started", {
+      profile: "dual_stick",
+      fire: true,
+    });
+  }
+
+  function moveTargetStick(event) {
+    if (event.pointerId !== targetStickPointerId) return;
+    if (frozen || suspended || document.hidden || pauseReasons.size > 0) {
+      releaseTargetStick();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    updateTargetStickPointer(event);
+  }
+
+  function endTargetStick(event) {
+    if (event.pointerId !== targetStickPointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const gesture = targetGesture;
+    targetGesture = null;
+    releaseTargetStick();
+    recorder.event("mobile_control", event.type === "pointercancel"
+      ? "right_stick_cancelled" : "right_stick_completed", {
+      profile: "dual_stick",
+      duration_ms: gesture ? Math.round(performance.now() - gesture.startedAt) : 0,
+      samples: gesture?.samples ?? 0,
+      max_look: Number((gesture?.maxLook ?? 0).toFixed(3)),
+    });
+  }
+
   function beginVirtualStick(event) {
-    if (!fallbackStick || tiltState !== "fallback" || frozen || suspended
+    if (!fallbackStick || frozen || suspended
       || document.hidden || pauseReasons.size > 0) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     if (virtualStickPointerId !== null && event.pointerId !== virtualStickPointerId) return;
@@ -8193,6 +8605,15 @@ function installMobileInput(view) {
     event.stopPropagation();
     releaseVirtualStick();
     virtualStickPointerId = event.pointerId;
+    flightGesture = {
+      startedAt: performance.now(),
+      samples: 0,
+      neutralSamples: 0,
+      saturatedSamples: 0,
+      maxRoll: 0,
+      maxPitch: 0,
+      maxTrim: 0,
+    };
     fallbackStick.focus({ preventScroll: true });
     try { fallbackStick.setPointerCapture(event.pointerId); } catch { /* pointer may be gone */ }
     updateVirtualStickPointer(event);
@@ -8200,7 +8621,7 @@ function installMobileInput(view) {
 
   function moveVirtualStick(event) {
     if (event.pointerId !== virtualStickPointerId) return;
-    if (tiltState !== "fallback" || frozen || suspended
+    if (frozen || suspended
       || document.hidden || pauseReasons.size > 0) {
       releaseVirtualStick();
       return;
@@ -8214,12 +8635,28 @@ function installMobileInput(view) {
     if (event.pointerId !== virtualStickPointerId) return;
     event.preventDefault();
     event.stopPropagation();
+    const gesture = flightGesture;
+    flightGesture = null;
     releaseVirtualStick();
+    if (gesture) {
+      const samples = Math.max(1, gesture.samples);
+      recorder.event("mobile_control", "gesture_summary", {
+        profile: "dual_stick",
+        hand: "left",
+        duration_ms: Math.round(performance.now() - gesture.startedAt),
+        samples: gesture.samples,
+        max_roll: Number(gesture.maxRoll.toFixed(3)),
+        max_pitch: Number(gesture.maxPitch.toFixed(3)),
+        max_tilt_trim: Number(gesture.maxTrim.toFixed(3)),
+        neutral_share: Number((gesture.neutralSamples / samples).toFixed(3)),
+        saturation_share: Number((gesture.saturatedSamples / samples).toFixed(3)),
+        cancelled: event.type === "pointercancel",
+      });
+    }
   }
 
   function virtualStickKeyboardEvent(event, pressed) {
-    if (tiltState !== "fallback"
-      || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)) return;
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)) return;
     event.preventDefault();
     event.stopPropagation();
     const axis = ["ArrowLeft", "ArrowRight"].includes(event.code) ? "roll" : "pitch";
@@ -8232,7 +8669,6 @@ function installMobileInput(view) {
 
   function captureCentre(sample, message = "TILT CENTRED", timestampMs = performance.now()) {
     tiltWatchdog.recovered();
-    releaseVirtualStick();
     calibration = { roll: sample.roll, pitch: sample.pitch };
     calibrationAngle = sample.angle;
     tiltCalibration.reset();
@@ -8241,14 +8677,18 @@ function installMobileInput(view) {
     lastOrientationSampleMs = timestampMs;
     releaseTiltAxes();
     document.documentElement.classList.remove("tilt-pending");
-    tiltStatus?.setAttribute("aria-label", "Recenter tilt controls");
+    tiltStatus?.setAttribute("aria-label", "Recenter optional tilt trim");
     status(message);
+    recorder.event("mobile_control", "tilt_trim_centred", {
+      profile: "dual_stick",
+      authority: TILT_TRIM_AUTHORITY,
+    });
     setPauseReason("calibration", false);
   }
 
-  function awaitFreshCentre(message = "TILT RECENTRING…") {
+  function awaitFreshCentre(message = "TILT TRIM CENTRING…") {
     tiltWatchdog.beginRecovery();
-    setPauseReason("calibration", true);
+    setPauseReason("calibration", false);
     tiltState = "waiting";
     calibration = null;
     calibrationAngle = null;
@@ -8257,16 +8697,14 @@ function installMobileInput(view) {
     filteredRoll = 0;
     lastOrientationSampleMs = null;
     releaseTiltAxes();
-    if (tiltTitle) tiltTitle.textContent = "HOLD LEVEL — RECENTRING";
-    if (tiltCopy) tiltCopy.textContent = "Hold your flying angle while the controls find a fresh centre.";
-    document.documentElement.classList.add("tilt-pending");
+    document.documentElement.classList.remove("tilt-pending");
     status(message);
   }
 
   function handleOrientationStale() {
     if (suspended || frozen || document.hidden
         || (tiltState !== "waiting" && tiltState !== "enabled")) return;
-    awaitFreshCentre("TILT SIGNAL LOST · HOLD LEVEL");
+    useThumbStick("TILT TRIM LOST · TOUCH ACTIVE");
   }
 
   function stopOrientationListener() {
@@ -8280,12 +8718,15 @@ function installMobileInput(view) {
   function useThumbStick(message) {
     stopOrientationListener();
     releaseTiltAxes();
-    releaseVirtualStick();
     tiltState = "fallback";
     document.documentElement.classList.remove("tilt-pending", "tilt-enabled");
     document.documentElement.classList.add("tilt-fallback");
-    tiltStatus?.setAttribute("aria-label", "Switch to tilt controls");
-    status(message || "THUMB STICK");
+    tiltStatus?.setAttribute("aria-label", "Enable optional tilt trim");
+    status(message || "TILT TRIM OFF");
+    recorder.event("mobile_control", "tilt_trim_off", {
+      profile: "dual_stick",
+      reason: String(message || "pilot_choice").slice(0, 80),
+    });
     setPauseReason("calibration", false);
   }
 
@@ -8328,22 +8769,17 @@ function installMobileInput(view) {
     lastOrientationSampleMs = timestampMs;
     filteredPitch = smoothTilt(filteredPitch, pitch, deltaSeconds);
     filteredRoll = smoothTilt(filteredRoll, roll, deltaSeconds);
-    // Rung-1 assisted flight: tilt owns ROLL ONLY. Fore/aft phone wobble is not a pitch
-    // intention — it kicked the about-right auto-pull off constantly ("very pitch-sensitive",
-    // first portrait flight). Pitch bias belongs to the PULL/EASE chips alone.
-    if (document.documentElement.classList.contains("portrait-assist")) {
-      updateTiltAxis("pitch", 0, "ArrowUp", "ArrowDown");
-    } else {
-      updateTiltAxis("pitch", filteredPitch, "ArrowUp", "ArrowDown");
-    }
+    // Tilt is deliberately a small additive roll trim. The left thumb always owns flight and
+    // fore/aft phone wobble can never become a pitch command.
+    updateTiltAxis("pitch", 0, "ArrowUp", "ArrowDown");
     if (!updateAnalogRoll(filteredRoll)) {
-      updateTiltAxis("roll", filteredRoll, "ArrowLeft", "ArrowRight");
+      updateTiltAxis("roll", filteredRoll * TILT_TRIM_AUTHORITY,
+        "ArrowLeft", "ArrowRight");
     }
   }
 
   function startOrientationListener() {
-    releaseVirtualStick();
-    setPauseReason("calibration", true);
+    setPauseReason("calibration", false);
     if (!orientationListening) {
       window.addEventListener("deviceorientation", handleOrientation, { passive: true });
       orientationListening = true;
@@ -8353,9 +8789,7 @@ function installMobileInput(view) {
     calibrationAngle = null;
     tiltCalibration.reset();
     lastOrientationSampleMs = null;
-    status("WAITING FOR TILT…");
-    if (tiltTitle) tiltTitle.textContent = "HOLD LEVEL — CALIBRATING";
-    if (tiltCopy) tiltCopy.textContent = "Hold the device at your comfortable flying angle while the sensor centres.";
+    status("TILT TRIM CENTRING…");
     tiltWatchdog.beginRecovery();
   }
 
@@ -8370,14 +8804,19 @@ function installMobileInput(view) {
       return;
     }
 
-    setPauseReason("calibration", true);
     tiltState = "requesting";
-    status("REQUESTING TILT…");
+    status("REQUESTING TRIM…");
+    recorder.event("mobile_control", "tilt_permission_requested", {
+      profile: "dual_stick",
+    });
     try {
       const requestPermission = globalThis.DeviceOrientationEvent?.requestPermission;
       if (typeof requestPermission === "function") {
         const permission = await requestPermission.call(globalThis.DeviceOrientationEvent);
         if (permission !== "granted") {
+          recorder.event("mobile_control", "tilt_permission_denied", {
+            profile: "dual_stick",
+          });
           useThumbStick("TILT DENIED · STICK");
           return;
         }
@@ -8390,23 +8829,15 @@ function installMobileInput(view) {
   }
 
   function recenterTilt() {
-    releaseVirtualStick();
-    setPauseReason("calibration", true);
     if (tiltState === "enabled" && latestOrientation) {
-      awaitFreshCentre();
+      captureCentre(latestOrientation, "TILT TRIM CENTRED");
       return;
     }
     if (!orientationSupported) {
       useThumbStick("TILT UNAVAILABLE · STICK");
       return;
     }
-    if (tiltTitle) tiltTitle.textContent = "TAP TO ENABLE TILT";
-    if (tiltCopy) tiltCopy.textContent = "Hold your flying angle; this becomes centre. Then tilt forward to push, back to pull, and left/right to roll.";
-    document.documentElement.classList.remove("tilt-fallback");
-    document.documentElement.classList.add("tilt-pending");
-    tiltState = "off";
-    tiltStatus?.setAttribute("aria-label", "Choose tilt or thumb-stick controls");
-    status("TILT OFF");
+    void enableTilt();
   }
 
   function setControlActive(button) {
@@ -8528,6 +8959,15 @@ function installMobileInput(view) {
     event.preventDefault();
     event.stopPropagation();
   });
+  targetStick?.addEventListener("pointerdown", beginTargetStick, { passive: false });
+  targetStick?.addEventListener("pointermove", moveTargetStick, { passive: false });
+  targetStick?.addEventListener("pointerup", endTargetStick, { passive: false });
+  targetStick?.addEventListener("pointercancel", endTargetStick, { passive: false });
+  targetStick?.addEventListener("lostpointercapture", endTargetStick, { passive: false });
+  targetStick?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
 
   touchControls.querySelector('[data-mobile-action="enable-tilt"]')?.addEventListener("click", enableTilt);
   touchControls.querySelector('[data-mobile-action="buttons-only"]')?.addEventListener("click", () => {
@@ -8546,6 +8986,8 @@ function installMobileInput(view) {
   window.addEventListener("pointercancel", endThrottleRocker);
   window.addEventListener("pointerup", endVirtualStick);
   window.addEventListener("pointercancel", endVirtualStick);
+  window.addEventListener("pointerup", endTargetStick);
+  window.addEventListener("pointercancel", endTargetStick);
 
   const preventGesture = (event) => {
     if (event.type === "touchmove" && event.target.closest?.(
@@ -8562,7 +9004,10 @@ function installMobileInput(view) {
   function orientationChanged() {
     releaseThrottleRocker();
     releaseVirtualStick();
+    releaseTargetStick();
     if (tiltState === "enabled" || tiltState === "waiting") awaitFreshCentre();
+    syncMobileHudProfile();
+    emitControlContext();
   }
 
   window.addEventListener("orientationchange", orientationChanged, { passive: true });
@@ -8572,12 +9017,14 @@ function installMobileInput(view) {
     tiltWatchdog.stop();
     releaseThrottleRocker();
     releaseVirtualStick();
+    releaseTargetStick();
     releaseTiltAxes();
   });
   window.addEventListener("pagehide", () => {
     tiltWatchdog.stop();
     releaseThrottleRocker();
     releaseVirtualStick();
+    releaseTargetStick();
     releaseTiltAxes();
   });
   window.addEventListener("focus", () => {
@@ -8602,7 +9049,10 @@ function installMobileInput(view) {
     activeControls.clear();
     for (const button of buttons) setControlActive(button);
     releaseThrottleRocker();
+    flightGesture = null;
+    targetGesture = null;
     releaseVirtualStick();
+    releaseTargetStick();
     releaseTiltAxes();
     filteredPitch = 0;
     filteredRoll = 0;
@@ -8623,19 +9073,31 @@ function installMobileInput(view) {
     }
   };
 
-  if (orientationSupported) {
-    setPauseReason("calibration", true);
-    document.documentElement.classList.add("tilt-pending");
-    status("TILT OFF");
-  } else {
-    useThumbStick("TILT UNAVAILABLE · STICK");
-  }
+  useThumbStick(orientationSupported
+    ? "TILT TRIM OFF" : "TILT UNAVAILABLE · TOUCH ACTIVE");
+  syncMobileHudProfile();
+  emitControlContext();
+  recorder.event("mobile_control", "touch_ready", controlContext());
 
   globalThis.__gunsMobile = {
     active: true,
     get tiltState() { return tiltState; },
     get calibration() { return calibration ? { ...calibration } : null; },
     recenter: recenterTilt,
+  };
+
+  const pollOtherContinuousInput = pollContinuousInput;
+  pollContinuousInput = (dt) => {
+    pollOtherContinuousInput(dt);
+    if (targetStickPointerId === null || pauseReasons.size > 0 || document.hidden) return;
+    ({ yawRad: sensorYaw, pitchRad: sensorPitch } = applyLookDelta(
+      { yawRad: sensorYaw, pitchRad: sensorPitch },
+      gamepadLookDelta({ lookX: targetStickX, lookY: targetStickY }, dt),
+      { yawRad: MAX_GIMBAL_YAW, pitchRad: MAX_GIMBAL_PITCH },
+    ));
+    padlockTrackEstablished = false;
+    syncBanditPadlockRollAssist();
+    gimbalReturnFast = false;
   };
 }
 
@@ -8926,6 +9388,7 @@ function installInput(view) {
   window.addEventListener("orientationchange", scheduleResize, { passive: true });
   window.visualViewport?.addEventListener("resize", scheduleResize, { passive: true });
   window.visualViewport?.addEventListener("scroll", scheduleResize, { passive: true });
+  installGamepadInput(view);
   installMobileInput(view);
 }
 
@@ -9094,6 +9557,7 @@ async function boot() {
         renderDeltaMs, SIM_CATCHUP_CAP_SECONDS,
       );
       previous = now;
+      pollContinuousInput(dt);
       // Phase probes. A frame delta proves a stall happened; only these say where. Each is a pair
       // of performance.now() reads around a block that could plausibly own a hundred milliseconds.
       const phaseStart = performance.now();
@@ -9183,13 +9647,56 @@ async function boot() {
   requestAnimationFrame(tick);
 }
 
+async function primeOfflineRuntime(registration) {
+  const worker = registration?.active ?? registration?.waiting ?? registration?.installing;
+  if (!worker) return null;
+  const urls = new Set([
+    new URL("./", document.baseURI).href,
+    new URL("index.html", document.baseURI).href,
+    new URL("manifest.webmanifest", document.baseURI).href,
+  ]);
+  for (const entry of performance.getEntriesByType?.("resource") ?? []) {
+    try {
+      const url = new URL(entry.name);
+      if (url.origin === location.origin) urls.add(url.href);
+    } catch { /* a non-URL performance entry cannot be cached */ }
+  }
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = window.setTimeout(() => resolve(null), 20_000);
+    channel.port1.onmessage = (event) => {
+      window.clearTimeout(timer);
+      resolve(event.data ?? null);
+    };
+    worker.postMessage({
+      type: "prime-runtime",
+      urls: [...urls],
+    }, [channel.port2]);
+  });
+}
+
 // Offline support for an installed copy. Registered AFTER boot so a worker problem can never
-// prevent the game from starting: the sortie is the product, offline is an enhancement.
+// prevent the game from starting; once active, it explicitly caches resources already consumed
+// during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=176").catch((error) => {
-      console.warn("Offline support unavailable.", error);
-    });
+    navigator.serviceWorker.register("service-worker.js?v=176")
+      .then(async (registration) => {
+        await navigator.serviceWorker.ready;
+        const result = await primeOfflineRuntime(registration);
+        recorder.context("offline_runtime", result
+          ? {
+            state: result.failed === 0 ? "ready" : "partial",
+            cached: result.cached,
+            requested: result.requested,
+            build: result.build,
+          }
+          : { state: "unknown" });
+      })
+      .catch((error) => {
+        recorder.context("offline_runtime", { state: "unavailable" });
+        console.warn("Offline support unavailable.", error);
+      });
   });
 }
 

@@ -215,6 +215,7 @@ public class SnapshotHotFrameTests {
     [InlineData(9, false)]  // modern ace duel capstone
     [InlineData(10, false)] // Rapier fixed strip: recovery present, maritime carrier false
     [InlineData(13, false)] // flight-first CASEVAC: separate commander-safe hot block
+    [InlineData(11, false)] // Rapier Circuits: traffic and event-driven radio
     [InlineData(7, true)]   // terrain surface drives radar_alt/below_ground paths
     public void HotFrameAgreesWithJsonAcrossBeatsAndSteps(int beatIndex, bool withTerrain) {
         SimulationSession session = StartSession(beatIndex,
@@ -347,6 +348,39 @@ public class SnapshotHotFrameTests {
                 activeRoot.GetProperty(
                     "casevac_destination_reserve_kwh").ValueKind);
             AssertHotFrameMatchesJson(activeRoot, activeBuffer);
+        }
+    }
+
+    [Fact]
+    public void CircuitsRadioTransitionBumpsColdStringsAndMatchesHotState() {
+        SimulationSession session = StartSession(11, null);
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double settled = buffer[SnapshotHotFrame.ColdVersionIndex];
+
+        session.StepFixed();
+        var (root, after, document) = Project(session);
+        using (document) {
+            Assert.True(after[SnapshotHotFrame.ColdVersionIndex] > settled);
+            Assert.True(root.GetProperty("radio_active").GetBoolean());
+            Assert.Equal("launch-cleared",
+                root.GetProperty("radio_id").GetString());
+            Assert.Equal("RAPIER TOWER",
+                root.GetProperty("radio_channel").GetString());
+            Assert.Equal("305.500 UHF",
+                root.GetProperty("radio_frequency").GetString());
+            Assert.Equal("RAPIER 1-1",
+                root.GetProperty("radio_callsign").GetString());
+            Assert.True(root.GetProperty("radio_ai_generated").GetBoolean());
+            // First-generation Circuits field names remain aliases for older browser bundles.
+            Assert.True(root.GetProperty("rapier_radio_active").GetBoolean());
+            Assert.Equal("launch-cleared",
+                root.GetProperty("rapier_radio_id").GetString());
+            Assert.Equal("LAUNCH",
+                root.GetProperty("rapier_radio_speaker").GetString());
+            Assert.True(root.GetProperty("rapier_radio_ai_generated").GetBoolean());
+            AssertHotFrameMatchesJson(root, after);
         }
     }
 

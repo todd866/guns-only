@@ -70,6 +70,7 @@ public class SnapshotProjectionTests {
     [InlineData(8, 12)]   // fictional Ukraine low-level drone intercept
     [InlineData(9, 12)]   // single Ace duel in the same theatre
     [InlineData(10, 12)]  // Rapier fixed-strip sortie
+    [InlineData(11, 12)]  // Rapier Circuits with traffic and structured R/T
     [InlineData(5, 30)]   // carrier recovery beat
     [InlineData(1, 8)]    // grammar/physics slice beat
     public void BuildStateEmitsParseableFiniteJson(int beatIndex, int ticks) {
@@ -156,7 +157,7 @@ public class SnapshotProjectionTests {
         Assert.True(root.TryGetProperty("fuel_joker", out _));
         Assert.True(root.TryGetProperty("fuel_minimum", out _));
         Assert.True(root.TryGetProperty("fuel_emergency", out _));
-        bool recoveryPointKnown = beatIndex is 5 or 7 or 9 or 10;
+        bool recoveryPointKnown = beatIndex is 5 or 7 or 9 or 10 or 11;
         Assert.Equal(recoveryPointKnown,
             root.GetProperty("recovery_point_known").GetBoolean());
         bool runwayAvailable = beatIndex is 7 or 9;
@@ -243,6 +244,10 @@ public class SnapshotProjectionTests {
             Assert.Equal(1200.0, emergencyThreshold.GetDouble());
         } else if (beatIndex == 10) {
             Assert.Equal(1200.0, jokerThreshold.GetDouble());
+            Assert.Equal(600.0, minimumThreshold.GetDouble());
+            Assert.Equal(300.0, emergencyThreshold.GetDouble());
+        } else if (beatIndex == 11) {
+            Assert.Equal(1400.0, jokerThreshold.GetDouble());
             Assert.Equal(600.0, minimumThreshold.GetDouble());
             Assert.Equal(300.0, emergencyThreshold.GetDouble());
         } else {

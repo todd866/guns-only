@@ -83,12 +83,37 @@ public class RapierCircuitOftTests {
                 ["ktas"] = Math.Round(tas * 1.94384, 1),
                 ["alt_ft"] = Math.Round(s.Position.Y / 0.3048, 0),
                 ["fuel_lb"] = Math.Round(session.PlayerFuel.FuelLb, 1),
+                ["mass_kg"] = Math.Round(s.Mass, 1),
                 ["bank_deg"] = Math.Round(s.Bank * 180.0 / Math.PI, 2),
                 ["gamma_deg"] = Math.Round(s.Gamma * 180.0 / Math.PI, 2),
+                ["alpha_deg"] = Math.Round(
+                    session.Player.AngleOfAttackRad * 180.0 / Math.PI, 2),
+                ["nz"] = Math.Round(session.Player.LastNz, 3),
+                ["dynamic_pressure_kpa"] = Math.Round(
+                    session.Player.DynamicPressurePa / 1000.0, 3),
+                ["thrust_lbf"] = Math.Round(
+                    session.Player.LastEngineOperatingPoint.NetThrustLbf, 1),
                 ["automation"] = session.RapierAutomationActive,
                 ["lifecycle"] = session.Lifecycle.ToString(),
                 ["arrestment"] = session.Arrestment.Phase.ToString(),
                 ["terminal"] = session.PlayerTerminalState.ToString(),
+                ["gear_down_locked"] = session.PlayerSystems.AllGearDownAndLocked,
+                ["gear_fraction"] = Math.Round(
+                    session.PlayerSystems.EffectiveGearFraction, 3),
+                ["flap_deg"] = Math.Round(
+                    (session.PlayerSystems.LeftFlapDegrees
+                        + session.PlayerSystems.RightFlapDegrees) * 0.5, 2),
+                ["touchdown_recovery"] = session.Touchdown.Recovery.ToString(),
+                ["touchdown_quality"] = session.Touchdown.Quality.ToString(),
+                ["touchdown_hook"] = session.Touchdown.Hook.ToString(),
+                ["touchdown_sink_mps"] = Math.Round(
+                    session.Touchdown.SinkRateMps, 3),
+                ["touchdown_ias_kt"] = Math.Round(
+                    session.Touchdown.IndicatedAirspeedMps * 1.94384, 1),
+                ["touchdown_wheel_along_m"] = Math.Round(
+                    session.Touchdown.WheelAlongM, 2),
+                ["touchdown_hook_along_m"] = Math.Round(
+                    session.Touchdown.HookAlongM, 2),
             };
             _ticks.WriteLine(JsonSerializer.Serialize(row));
 
@@ -149,9 +174,10 @@ public class RapierCircuitOftTests {
         session.Begin();
         Assert.True(session.RapierMissionAvailable);
         Assert.True(session.RapierAutomationEnabled);
+        Assert.True(session.CircuitsCleanMode);
     }
 
-    [Fact(Skip = "Retune after Circuits overhead geometry; trap from groove is follow-up")]
+    [Fact]
     public void OftWireCard_AutomationTrapsFromMarshalWithTelemetry() {
         BeatSetup baseline = Beats.RapierCircuits();
         Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
@@ -201,15 +227,76 @@ public class RapierCircuitOftTests {
                 + $"{session.Player.State.Position.Z:F0}) · "
                 + $"{session.Player.AirspeedMps * 1.94384:F0} KTAS · "
                 + $"telemetry {telemetry.DirectoryPath}";
-        bool patternProgress = phases.Contains(RapierMissionPhase.Recovery)
-            && !string.IsNullOrEmpty(session.RapierCircuitLeg);
-        bool ok = trapped || patternProgress;
+        bool ok = trapped;
         telemetry.Finish(ok ? "PASS" : "ABORT", detail);
 
         Assert.True(ok, detail);
         Assert.True(File.Exists(Path.Combine(telemetry.DirectoryPath, "ticks.jsonl")));
         Assert.True(File.Exists(Path.Combine(telemetry.DirectoryPath, "gates.jsonl")));
         Assert.Contains(RapierMissionPhase.Recovery, phases);
+    }
+
+    [Fact]
+    public void OftFullCircuit_LaunchesFliesEveryLegAndTraps() {
+        using var telemetry = new CircuitOftTelemetry("full-circuit");
+        var session = new SimulationSession(11,
+            weather: KoreaWeatherPresets.ForBeat(11));
+        session.DecisionCaptureEnabled = true;
+        session.Begin();
+
+        string[] expectedLegs = [
+            "DEPART", "INITIAL", "BREAK", "DOWNWIND",
+            "BASE", "SHORT_FINAL", "WIRE_FINAL"
+        ];
+        var seenLegs = new List<string>();
+        bool leftCatapult = false;
+        int maximumTicks = checked((int)(24 * 60 * AircraftSim.TickHz));
+        for (int tick = 0; tick < maximumTicks; tick++) {
+            session.StepFixed();
+            telemetry.Observe(session, tick);
+            if (!session.Catapult.IsActive) leftCatapult = true;
+
+            string leg = session.RapierCircuitLeg;
+            if (!string.IsNullOrEmpty(leg)
+                && (seenLegs.Count == 0 || seenLegs[^1] != leg)) {
+                seenLegs.Add(leg);
+            }
+
+            if (session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped)
+                break;
+            if (session.PlayerTerminalState != AircraftTerminalState.Flying)
+                break;
+        }
+
+        bool trapped = session.Arrestment.Phase
+                == ArrestmentModel.ArrestmentPhase.Stopped
+            && session.Touchdown.Wire is >= 1 and <= 4;
+        int expectedIndex = 0;
+        foreach (string leg in seenLegs) {
+            if (expectedIndex < expectedLegs.Length
+                && leg == expectedLegs[expectedIndex]) {
+                expectedIndex++;
+            }
+        }
+        bool flewInOrder = expectedIndex == expectedLegs.Length;
+        bool ok = leftCatapult && flewInOrder && trapped;
+        string detail = $"leftCat={leftCatapult} legs={string.Join('>', seenLegs)} "
+            + $"wire={session.Touchdown.Wire} arrest={session.Arrestment.Phase} "
+            + $"touchdown={session.Touchdown.Recovery}/{session.Touchdown.Quality}/"
+            + $"{session.Touchdown.Hook} sink={session.Touchdown.SinkRateMps:F2}mps "
+            + $"IAS={session.Touchdown.IndicatedAirspeedMps * 1.94384:F0}kt "
+            + $"wheel={session.Touchdown.WheelAlongM:F1}m "
+            + $"hook={session.Touchdown.HookAlongM:F1}m "
+            + $"mass={session.Player.State.Mass:F0}kg "
+            + $"gear={session.PlayerSystems.EffectiveGearFraction:F2}/"
+            + $"{session.PlayerSystems.AllGearDownAndLocked} "
+            + $"terminal={session.PlayerTerminalState} cue={session.RapierMissionCue} "
+            + $"telemetry={telemetry.DirectoryPath}";
+        telemetry.Finish(ok ? "PASS" : "ABORT", detail);
+
+        Assert.True(leftCatapult, detail);
+        Assert.True(flewInOrder, detail);
+        Assert.True(trapped, detail);
     }
 
     [Fact]
@@ -343,7 +430,7 @@ public class RapierCircuitOftTests {
         Assert.Equal("pattern_recovery", reason);
     }
 
-    [Fact(Skip = "Retune after Circuits overhead geometry")]
+    [Fact]
     public void OftLineup_EarnsInboundHeadingAfterMarshal() {
         BeatSetup baseline = Beats.RapierCircuits();
         Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
@@ -386,7 +473,7 @@ public class RapierCircuitOftTests {
         Assert.True(sawBaseOrLineupCue, session.RapierMissionCue);
     }
 
-    [Fact(Skip = "Retune after Circuits overhead geometry")]
+    [Fact]
     public void OftFinal2_OnSpeedInsideGateTwoBand() {
         BeatSetup baseline = Beats.RapierCircuits();
         Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);
@@ -433,7 +520,7 @@ public class RapierCircuitOftTests {
         Assert.True(sawFinalBand, detail);
     }
 
-    [Fact(Skip = "Retune after Circuits overhead geometry")]
+    [Fact]
     public void OftBolterRearm_ClimbAfterFinalReopensPattern() {
         BeatSetup baseline = Beats.RapierCircuits();
         Carrier strip = Assert.IsType<Carrier>(baseline.Carrier);

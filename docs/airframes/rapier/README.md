@@ -71,6 +71,7 @@ mass; systems follow)
 | --- | --- | --- |
 | [00](00-mission-and-ops.md) | Mission and flight regime | closed regime boxes; surrogate dash claim |
 | [10](10-geometry.md) | Geometry | closed envelope |
+| [12](12-aerodynamics-and-controls.md) | Aerodynamics and control allocation | closed architecture; provisional schedules |
 | [15](15-structure-and-build.md) | Structure and build | provisional gauges; OML closed |
 | [20](20-thermal-and-materials.md) | Thermal and materials | closed CMC freeze; surrogate zones |
 | [30](30-propulsion-and-inlet.md) | Propulsion and inlet | closed map constants + per-stream fuel |

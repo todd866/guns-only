@@ -17,11 +17,19 @@ same object.
 ## Structural limit and the reclined thesis
 
 `PositiveStructuralLimitG: 12.0`, `PositiveOverrideLimitG: 15.0` (**closed**, `FlightModel.RapierPublicDataSurrogate`).
-Structure binds before an upright, hydrostatic-limited pilot would. `PilotPhysiologyProfile.RapierReclinedInterceptor`
-carries the reclined-occupant physiology assumption — **this bible does not re-derive that
-physiology model**, it only asserts that the airframe's structural ceiling must not be silently
-capped back down to an upright pilot's limit. Keep that dependency visible: if the physiology model
-changes, this chapter's assumption should be re-checked, not assumed unaffected.
+Those numbers are structural/control ceilings, not promised load factor everywhere in the envelope:
+dynamic pressure and the Mach-scheduled lift curve bind first in the FL700 dash. Where sufficient
+aerodynamic authority exists, structure binds before an upright, hydrostatic-limited pilot would.
+`PilotPhysiologyProfile.RapierReclinedInterceptor` carries the reclined-occupant physiology
+assumption — **this bible does not re-derive that physiology model**, it only asserts that the
+airframe's structural ceiling must not be silently capped back down to an upright pilot's limit.
+Keep that dependency visible: if the physiology model changes, this chapter's assumption should be
+re-checked, not assumed unaffected.
+
+At FL720/M3.5 and design gross, the current provisional wing has only about **2.6 G at its physical
+attached-flow break**; ordinary normal-law incidence is lower. The +12/+15 placards therefore do
+not describe an upper-atmosphere turn. See
+[12 — Aerodynamics and control allocation](12-aerodynamics-and-controls.md).
 
 ## FBW: keyboard flyability is fiction of the same thesis
 
@@ -30,6 +38,10 @@ narrow gunnery aim assist together make a keyboard-and-mouse interface plausible
 interceptor: the occupant issues coarse intent, the machine holds attitude and helps aim. FBW and aim
 assist do not create lift, thrust, or hits by themselves — they remove the human-interface burden
 that a reclined, non-stick-and-rudder occupant could not otherwise clear.
+
+The controller now allocates Rapier moments against `q·S·length·coefficient` capacity. Bank hold
+cannot apply a fixed 1.2 MN·m gain through zero q; cold-gas RCS supplies the residual demand in the
+lob and consumes gas on all three axes. Symmetric landing elevon droop consumes pitch/roll travel.
 
 ## Escape pod jettison — provisional
 
@@ -52,4 +64,3 @@ Structural ceiling and FBW gain constants referenced here are **closed**/**surro
 from `FlightModel.cs`. Escape jettison, physiology model internals, and power watts are explicit
 **provisional** / not-yet-started items — see `icds/fbw-crew.md` for the interface boundary this
 chapter shares with the physiology and control-law model.
-

@@ -206,8 +206,10 @@ public static class AirData {
         double massKg, AircraftParams parameters) {
         ArgumentNullException.ThrowIfNull(parameters);
         ValidatePositiveFinite(massKg, nameof(massKg));
+        AtmosphericState air = Sample(null, altitudeM);
+        double mach = trueAirspeedMps / Math.Max(air.SpeedOfSoundMps, 1e-9);
         return TrueDynamicPressurePa(trueAirspeedMps, altitudeM)
-            * parameters.WingAreaM2 * parameters.CLMax
+            * parameters.WingAreaM2 * FlightModel.EffectiveClMax(parameters, mach)
             / (massKg * FlightModel.G0);
     }
 

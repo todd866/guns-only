@@ -213,7 +213,12 @@ public sealed class SimulationSession {
     RapierMissionGuidance _rapierMissionGuidance;
     CircuitTrafficShip[] _circuitTraffic = System.Array.Empty<CircuitTrafficShip>();
     string _circuitComms = "";
-    bool _circuitsCleanMode;
+    readonly MissionRadioDirector _missionRadioDirector = new();
+    MissionRadioTransmission _missionRadio = MissionRadioTransmission.Silent;
+    // Pattern school starts with a serviceable aircraft. Attrition faults remain available from
+    // the systems panel, but silently failing the utility hydraulics 90 seconds into every first
+    // circuit left the gear at 91% and made the taught wire pass unrecoverable.
+    bool _circuitsCleanMode = true;
     bool _circuitsFaultArmed = true;
     double _circuitsNextFaultAtMs = double.PositiveInfinity;
     bool _rapierAutomationEnabled;
@@ -407,6 +412,9 @@ public sealed class SimulationSession {
     public bool RapierGateEnergyOk => _rapierMissionGuidance.GateEnergyOk;
     public System.Collections.Generic.IReadOnlyList<CircuitTrafficShip> CircuitTraffic => _circuitTraffic;
     public string CircuitComms => _circuitComms;
+    public MissionRadioTransmission MissionRadio => _missionRadio;
+    // Compatibility seam for shells built against the first Circuits-only snapshot.
+    public MissionRadioTransmission CircuitRadio => _missionRadio;
     public bool CircuitsCleanMode => _circuitsCleanMode;
     public bool CircuitsFaultArmed => _circuitsFaultArmed;
     public double RapierNoseOnVelocityErrorDeg =>
@@ -1427,6 +1435,23 @@ public sealed class SimulationSession {
         _detents.SetAnalogRollControl(value);
     }
 
+    /// <summary>Set the latest continuous longitudinal-stick command from a direct-input host.</summary>
+    public void SetAnalogPitchControl(double value) {
+        if (!double.IsFinite(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        if (Lifecycle != LifecycleState.Active
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _pilotControlInterlocked) {
+            _detents.ClearAnalogPitchControl();
+            return;
+        }
+        if (Math.Abs(value) > 0.02) {
+            DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
+            ClaimRapierControl();
+        }
+        _detents.SetAnalogPitchControl(value);
+    }
+
     /// <summary>
     /// Select which concurrent opponent owns the player's lead solution. This changes sighting
     /// only: the physical gun, heat, cadence, magazine, and every round in flight remain one
@@ -2004,13 +2029,54 @@ public sealed class SimulationSession {
         if (patternOnly) {
             _circuitTraffic = CircuitPatternTraffic.Evaluate(
                 TimeSeconds, home, recoveryInitial, count: 3);
-            _circuitComms = CircuitPatternTraffic.CommsLine(
-                _circuitTraffic, RapierCircuitLeg, TimeSeconds);
             MaybeInjectCircuitsFault();
         } else {
             _circuitTraffic = System.Array.Empty<CircuitTrafficShip>();
             _circuitComms = "";
         }
+    }
+
+    void UpdateMissionRadio() {
+        LsoAdvice? radioLso = null;
+        if (_carrier?.IsMaritime == true && !_arrestment.IsActive && !_catapult.IsActive) {
+            radioLso = Lso.AdviseForMode(
+                _carrier,
+                _player.State,
+                _player.AngleOfAttackRad,
+                _carrier.ApproachDirectorPitchOffsetRad,
+                _detents.ApproachMode,
+                WaveOffActive);
+        }
+        _missionRadio = _missionRadioDirector.Step(new MissionRadioState(
+            TimeSeconds,
+            Lifecycle is LifecycleState.Active or LifecycleState.Finished,
+            RapierMissionAvailable,
+            _beat.ScriptedIntercept?.PatternOnly == true,
+            RapierPhase,
+            _catapult.IsActive,
+            RapierCircuitLeg,
+            _circuitTraffic,
+            _systems.AllGearDownAndLocked,
+            _carrier is not null && _detents.ApproachMode,
+            _carrier?.IsMaritime == true,
+            _recovery,
+            _arrestment.Phase,
+            _arrestment.CaughtWire,
+            radioLso?.Call ?? "",
+            radioLso?.Severity,
+            _gunKill.RoundsFired,
+            _gunKill.AmmoRemaining,
+            _rapierMissilesRemaining,
+            _rapierMissileInFlight,
+            _rapierDogfightingDronesRemaining,
+            _fuel.IsJoker,
+            _fuel.IsBingo,
+            _recentEvents));
+        _circuitComms = _beat.ScriptedIntercept?.PatternOnly == true
+            && _missionRadio.Active
+                ? $"{_missionRadio.Speaker} · {_missionRadio.Callsign} · "
+                    + _missionRadio.Text.ToUpperInvariant()
+                : "";
     }
 
     public void SetCircuitsCleanMode(bool clean) {
@@ -2147,6 +2213,7 @@ public sealed class SimulationSession {
             MaybeInjectRapierComputerFailure();
         }
         StepCore();
+        UpdateMissionRadio();
         if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
         StepPendingTerminalDecision();
         _tick++;
@@ -2695,6 +2762,10 @@ public sealed class SimulationSession {
             ? null : new RapierMissionDirector();
         _rapierMissionGuidance = default;
         _rapierComputerFailureActive = RapierComputerFailure.None;
+        _circuitTraffic = System.Array.Empty<CircuitTrafficShip>();
+        _circuitComms = "";
+        _missionRadioDirector.Reset();
+        _missionRadio = MissionRadioTransmission.Silent;
         _rapierAutomationEnabled =
             _beat.ScriptedIntercept?.AutomationDefaultEnabled ?? false;
         _rapierManualOverrideUntilMs = double.NegativeInfinity;
@@ -5179,7 +5250,9 @@ public sealed class SimulationSession {
             _systems.Step(FixedDeltaSeconds, new AirframeSystemsInput(
                 _player.LastEngineOperatingPoint.RpmPercent,
                 iasKts,
-                weightOnWheels));
+                weightOnWheels,
+                LandingConfigurationExpected:
+                    _configurationTarget == FlightConfigurationTarget.Recovery));
             ObserveAutomaticConfiguration();
         }
         // Session time advances at the end of StepCore. Keep every scenario record in that same
@@ -5197,7 +5270,9 @@ public sealed class SimulationSession {
             _player.State.Position.Y, _player.AtmosphereModel) * AirData.MpsToKnots;
         if (PlayerSystemsSimulated)
             _systems.Step(FixedDeltaSeconds, new AirframeSystemsInput(
-                _player.LastEngineOperatingPoint.RpmPercent, iasKts, weightOnWheels));
+                _player.LastEngineOperatingPoint.RpmPercent, iasKts, weightOnWheels,
+                LandingConfigurationExpected:
+                    _configurationTarget == FlightConfigurationTarget.Recovery));
         _maintenanceScenario?.Step(TimeSeconds);
     }
 

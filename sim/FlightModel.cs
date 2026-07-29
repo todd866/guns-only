@@ -21,6 +21,11 @@ public enum HighAlphaModelKind {
     F22PublicDataSurrogate
 }
 
+public enum AerodynamicModelKind {
+    Generic,
+    RapierCrankedDeltaPublicDataSurrogate
+}
+
 public enum PullLimitReason {
     None,
     AerodynamicClMax,
@@ -201,7 +206,14 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     /// preserve the long-standing positional AircraftParams constructor contract.
     /// </summary>
     AerothermalLimitReferenceKind AerothermalLimitReference =
-        AerothermalLimitReferenceKind.RecoveryTemperature);
+        AerothermalLimitReferenceKind.RecoveryTemperature,
+    /// <summary>
+    /// Apply the linearized thin-airfoil supersonic lift-slope ceiling 4/sqrt(M²-1). This is an
+    /// intentionally visible public-theory surrogate for aircraft that operate far beyond
+    /// transonic speed; false preserves every legacy airframe bit-for-bit.
+    /// </summary>
+    bool SupersonicLiftSlopeSchedule = false,
+    AerodynamicModelKind AerodynamicModel = AerodynamicModelKind.Generic);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -610,9 +622,10 @@ public static class FlightModel {
         // old 1 G, while attitude feedback prevents speed/AoA changes wandering the nose. Signed
         // bank compensation also gives the correct negative-G trim inverted.
         NeutralFlightPathHold: FlightPathHoldConfig.Rapier,
-        // Structure binds, not the pilot — the reclined occupant can use all of it. 12 G is the
-        // qualified limit against an 18 G article; Space releases to 15 G, which is knowingly eating
-        // margin on the SAME structure rather than pretending a stronger aircraft exists.
+        // These are structural/control ceilings, not promised lift. At sufficient q the reclined
+        // occupant may command all 12 G; Space releases the control law to 15 G while knowingly
+        // eating margin on the same article. In the FL700/M3.5 dash, Mach-scheduled lift slope and
+        // the small wing bind first, leaving only a few G of aerodynamic authority.
         PositiveStructuralLimitG: 12.0, MaxPerformFraction: 1.0,
         NormalPullUsesMaxPerformance: true,
         PositiveOverrideLimitG: 15.0,
@@ -672,7 +685,9 @@ public static class FlightModel {
         // transparent surrogate until a component engine deck replaces the whole map.
         GenericIdleFuelFlowLbPerMinute: 6.0,
         GenericMilitaryFuelFlowLbPerMinute: 86.0,
-        GenericAfterburnerFuelFlowLbPerMinute: 270.0);
+        GenericAfterburnerFuelFlowLbPerMinute: 270.0,
+        SupersonicLiftSlopeSchedule: true,
+        AerodynamicModel: AerodynamicModelKind.RapierCrankedDeltaPublicDataSurrogate);
 
     public static readonly AircraftParams F22APublicDataSurrogate = new(
         MassKg: 27700.0,
@@ -920,8 +935,10 @@ public static class FlightModel {
         IAtmosphereModel atmosphere) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         double speed = ResolveAirspeed(s, airspeedMps);
-        double q = 0.5 * atmosphere.Sample(s.Position.Y).DensityKgM3 * speed * speed;
-        return q * p.WingAreaM2 * p.CLMax / (s.Mass * G0);
+        AtmosphericState air = atmosphere.Sample(s.Position.Y);
+        double q = 0.5 * air.DensityKgM3 * speed * speed;
+        double mach = speed / System.Math.Max(air.SpeedOfSoundMps, 1e-9);
+        return q * p.WingAreaM2 * EffectiveClMax(p, mach) / (s.Mass * G0);
     }
     /// Negative-G aerodynamic bound (a negative number).
     public static double NzAeroMin(in AircraftState s, in AircraftParams p) {
@@ -934,8 +951,10 @@ public static class FlightModel {
         IAtmosphereModel atmosphere) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         double speed = ResolveAirspeed(s, airspeedMps);
-        double q = 0.5 * atmosphere.Sample(s.Position.Y).DensityKgM3 * speed * speed;
-        return q * p.WingAreaM2 * p.CLMin / (s.Mass * G0);
+        AtmosphericState air = atmosphere.Sample(s.Position.Y);
+        double q = 0.5 * air.DensityKgM3 * speed * speed;
+        double mach = speed / System.Math.Max(air.SpeedOfSoundMps, 1e-9);
+        return q * p.WingAreaM2 * EffectiveClMin(p, mach) / (s.Mass * G0);
     }
 
     static double ResolveAirspeed(in AircraftState s, double airspeedMps) =>
@@ -967,6 +986,31 @@ public static class FlightModel {
     internal static double FightRollRate(in AircraftParams p) =>
         p.FightRollRateMaxRad > 0.0 ? p.FightRollRateMaxRad : p.RollRateMaxRad;
 
+    /// <summary>
+    /// Linearized supersonic thin-airfoil theory gives dCL/dα = 4/sqrt(M²-1). The schedule is
+    /// clamped to the configured low-speed slope, so it turns on continuously near M1.5 for the
+    /// Rapier instead of manufacturing a transonic lift spike. Scaling CLmax with the same ratio
+    /// preserves the explicitly modelled stall incidence while removing the impossible assumption
+    /// that a Mach-0 lift coefficient is unchanged at Mach 3–4.
+    /// </summary>
+    internal static double SupersonicLiftScale(double mach, in AircraftParams p) {
+        if (!p.SupersonicLiftSlopeSchedule || !double.IsFinite(mach) || mach <= 1.0
+            || p.CLAlpha <= 1e-9) return 1.0;
+        double linearizedSlope = 4.0
+            / System.Math.Sqrt(System.Math.Max(mach * mach - 1.0, 1e-9));
+        return System.Math.Clamp(linearizedSlope / p.CLAlpha, 0.0, 1.0);
+    }
+
+    internal static double EffectiveClAlpha(in AircraftParams p, double mach) =>
+        p.CLAlpha * SupersonicLiftScale(mach, p);
+    internal static double EffectiveClMax(in AircraftParams p, double mach) =>
+        p.CLMax * SupersonicLiftScale(mach, p);
+    internal static double EffectiveClMin(in AircraftParams p, double mach) =>
+        p.CLMin * SupersonicLiftScale(mach, p);
+
+    internal static bool UsesRapierAerodynamics(in AircraftParams p) =>
+        p.AerodynamicModel == AerodynamicModelKind.RapierCrankedDeltaPublicDataSurrogate;
+
     internal static double AlphaAeroMax(in AircraftParams p) => p.CLMax / p.CLAlpha;
     internal static double AlphaAeroMin(in AircraftParams p) => p.CLMin / p.CLAlpha;
     internal static double AlphaAeroMax(in AircraftParams p,
@@ -975,6 +1019,36 @@ public static class FlightModel {
     internal static double PositiveLiftCoefficientIncrement(
         in AirframeAerodynamicState configuration) =>
         configuration.PositiveLiftCoefficientIncrement;
+
+    /// <summary>
+    /// Maximum incidence the ordinary Rapier normal law will command. It is intentionally distinct
+    /// from the physical whole-wing lift break: envelope override may ask beyond it, at which point
+    /// the real force curve, drag, inlet recovery, and available control moments still decide what
+    /// the aircraft achieves.
+    /// </summary>
+    internal static double PositiveNormalLawAlphaMax(in AircraftParams p, double mach,
+        in AirframeAerodynamicState configuration) {
+        double physical = AlphaAeroMax(p, configuration);
+        return UsesRapierAerodynamics(p)
+            ? System.Math.Min(physical, RapierAerodynamics.NormalLawAlphaLimitRad(mach))
+            : physical;
+    }
+
+    internal static double EffectiveControllableClMax(in AircraftParams p, double mach,
+        in AirframeAerodynamicState configuration) {
+        // Preserve the established generic/F-22 path exactly. Its limit increment changes the
+        // physical CL break, whereas the Rapier has a separate normal-law alpha ceiling below
+        // that break. Reconstructing every airframe's limit from alpha would otherwise count
+        // legacy configuration increments twice.
+        if (!UsesRapierAerodynamics(p)) {
+            return EffectiveClMax(p, mach)
+                + configuration.PositiveLiftCoefficientIncrement;
+        }
+        double alpha = PositiveNormalLawAlphaMax(p, mach, configuration);
+        return EffectiveClAlpha(p, mach) * alpha
+            + configuration.PositiveLiftCoefficientIncrement;
+    }
+
     internal static double PositiveControlLimitG(in AircraftParams p) =>
         double.IsFinite(p.PositiveOverrideLimitG) && p.PositiveOverrideLimitG > 0.0
             ? System.Math.Max(p.PositiveStructuralLimitG, p.PositiveOverrideLimitG)
@@ -1007,6 +1081,9 @@ public static class FlightModel {
             / System.Math.Max(System.Math.Cos(stallAlpha), 1e-6);
         return sign * separated;
     }
+
+    internal static double LiftCoefficient(double alpha, in AircraftParams p, double mach) =>
+        LiftCoefficient(alpha, p) * SupersonicLiftScale(mach, p);
 
     internal static double LiftCoefficient(double alpha, in AircraftParams p,
         in AirframeAerodynamicState configuration) {
@@ -1128,9 +1205,9 @@ public static class FlightModel {
             return System.Math.Max(0.0, bodyAxisCd) * MachDragFactor(mach, p);
         }
 
-        double cl = LiftCoefficient(alpha, p);
+        double cl = LiftCoefficient(alpha, p, mach);
         double attached = p.CD0 * MachDragFactor(mach, p) + p.InducedK * cl * cl;
-        double peak = alpha >= 0.0 ? p.CLMax : -p.CLMin;
+        double peak = alpha >= 0.0 ? EffectiveClMax(p, mach) : -EffectiveClMin(p, mach);
         double highLiftFraction = System.Math.Abs(cl) / System.Math.Max(peak, 1e-6);
         double highLiftExcess = System.Math.Max(0.0,
             highLiftFraction - p.HighLiftDragOnsetFraction);
@@ -1139,9 +1216,12 @@ public static class FlightModel {
 
         // Preserve the calibrated drag exactly at the stall break, then grow monotonically toward
         // the broadside separated-flow value. This keeps corner/sustained-G tuning untouched.
-        double clAtBreak = alpha >= 0.0 ? p.CLMax : p.CLMin;
+        double clAtBreak = alpha >= 0.0
+            ? EffectiveClMax(p, mach) : EffectiveClMin(p, mach);
         double breakFraction = System.Math.Abs(clAtBreak)
-            / System.Math.Max(alpha >= 0.0 ? System.Math.Abs(p.CLMax) : System.Math.Abs(p.CLMin), 1e-6);
+            / System.Math.Max(alpha >= 0.0
+                ? System.Math.Abs(EffectiveClMax(p, mach))
+                : System.Math.Abs(EffectiveClMin(p, mach)), 1e-6);
         double breakExcess = System.Math.Max(0.0,
             breakFraction - p.HighLiftDragOnsetFraction);
         double breakCd = p.CD0 * MachDragFactor(mach, p) + p.InducedK * clAtBreak * clAtBreak
@@ -1261,6 +1341,7 @@ public static class FlightModel {
 
         double rho = atmosphericState.DensityKgM3;
         double q = 0.5 * rho * speed * speed;
+        double mach = speed / atmosphericState.SpeedOfSoundMps;
         bool scheduledLiftLimit = p.HighAlphaModel
                 == HighAlphaModelKind.F22PublicDataSurrogate
             && configuration.LiftLimitCoefficientIncrement > 0.0;
@@ -1269,9 +1350,8 @@ public static class FlightModel {
             : SeparationFraction(alpha, p));
         double cl = (scheduledLiftLimit
                 ? LiftCoefficient(alpha, p, configuration)
-                : LiftCoefficient(alpha, p))
+                : LiftCoefficient(alpha, p, mach))
             + configuration.LiftCoefficientIncrement * attachedConfiguration;
-        double mach = speed / atmosphericState.SpeedOfSoundMps;
         double effectiveRudderCommand = p.HighAlphaModel
             == HighAlphaModelKind.F22PublicDataSurrogate
                 ? F22EffectiveRudderCommand(alpha, c) : c.Rudder;
@@ -1478,9 +1558,11 @@ public static class FlightModel {
             : vAir * (1.0 / speed);
         double dynamicPressure = 0.5 * atmosphere.Sample(r.Pos.Y).DensityKgM3
             * speed * speed;
+        double mach = speed
+            / System.Math.Max(atmosphere.Sample(r.Pos.Y).SpeedOfSoundMps, 1e-9);
         if (!double.IsFinite(c.CommandedAlphaRad) && c.GDemand > 0.0) {
             double aeroLimit = dynamicPressure * p.WingAreaM2
-                * (p.CLMax + PositiveLiftCoefficientIncrement(configuration))
+                * EffectiveControllableClMax(p, mach, configuration)
                 / (r.Mass * G0);
             double structuralLimit = c.GDemand <= p.PositiveStructuralLimitG + 1e-6
                 ? p.PositiveStructuralLimitG : PositiveControlLimitG(p);
@@ -1516,7 +1598,10 @@ public static class FlightModel {
         in AtmosphericState atmosphericState,
         double pitchThrustVectorAngleRad, double coldGasRemainingKg = 0.0) {
         var attitude = r.Attitude.Normalized();
-        var target = TargetAttitude(r, c, p, liftRef, vhat, dynamicPressure, configuration);
+        double mach = speed
+            / System.Math.Max(atmosphericState.SpeedOfSoundMps, 1e-9);
+        var target = TargetAttitude(r, c, p, liftRef, vhat, dynamicPressure, configuration,
+            mach);
         var error = attitude.Conjugate() * target;
         if (error.W < 0) error = -error;   // shortest rotation
         double vn = System.Math.Sqrt(error.X * error.X + error.Y * error.Y + error.Z * error.Z);
@@ -1548,8 +1633,8 @@ public static class FlightModel {
             var targetUp = target.Rotate(new Vec3D(0, 1, 0));
             var liftPlane = targetUp - vhat * targetUp.Dot(vhat);
             var targetLift = liftPlane.Length < 1e-9 ? targetUp : liftPlane.Normalized();
-            double nz = TargetNz(r, c, p, dynamicPressure, configuration);
-            alphaTarget = TargetAlpha(r, c, p, dynamicPressure, configuration);
+            double nz = TargetNz(r, c, p, dynamicPressure, configuration, mach);
+            alphaTarget = TargetAlpha(r, c, p, dynamicPressure, configuration, mach);
             // Exact normal-plane curvature feed-forward. At 90 deg AOB targetLift.Y is zero,
             // so a 7 G pull commands about 20 deg/s at 375 kt in the CURRENT bank plane. There is
             // no doctrine attitude or wings-level term in this pitch law.
@@ -1578,13 +1663,17 @@ public static class FlightModel {
         // finite-pitch attitude tracker unchanged.
         double pitchError = directPitch ? errQ : alphaTarget - alpha;
         double pitchControlBlend = 1.0 - 0.15 * separation;
-        double pitchMoment = System.Math.Clamp(pitchStiffness * pitchError
+        double pitchControlDemand = System.Math.Clamp(pitchStiffness * pitchError
             - p.PitchDampingNms * (rates.Q - qCommand),
             -pitchMomentMax, pitchMomentMax) * pitchControlBlend;
+        double pitchMoment = pitchControlDemand;
+        bool rapierAerodynamics = UsesRapierAerodynamics(p);
         double stallAlpha = alpha >= 0.0
             ? AlphaAeroMax(p, configuration) : -AlphaAeroMin(p);
         double pitchBreak = -System.Math.Sign(alpha) * p.StallPitchBreakNm * separation
             * System.Math.Clamp((System.Math.Abs(alpha) - stallAlpha) / 0.25, 0.0, 1.0);
+        if (rapierAerodynamics)
+            pitchBreak *= ColdGasRcs.AeroControlAuthority(dynamicPressure);
         pitchMoment += pitchBreak;
         double beta = System.Math.Asin(System.Math.Clamp(vhat.Dot(bodyRight), -1.0, 1.0));
         bool f22HighAlpha = p.HighAlphaModel == HighAlphaModelKind.F22PublicDataSurrogate;
@@ -1617,8 +1706,8 @@ public static class FlightModel {
         double wingSeparation = 0.75 * separation + 0.25 * localWingSeparation;
         double momentScale = dynamicPressure * p.WingAreaM2 * span * 0.25;
         double stalledRollMoment = p.StallRollCoupling * momentScale
-            * (LiftCoefficient(leftAlpha, p) - LiftCoefficient(rightAlpha, p)) * wingSeparation;
-        double mach = speed / atmosphericState.SpeedOfSoundMps;
+            * (LiftCoefficient(leftAlpha, p, mach) - LiftCoefficient(rightAlpha, p, mach))
+            * wingSeparation;
         double stalledYawMoment = p.StallYawCoupling * momentScale
             * (ProfileDragCoefficient(rightAlpha, mach, p)
                 - ProfileDragCoefficient(leftAlpha, mach, p)) * wingSeparation;
@@ -1648,11 +1737,17 @@ public static class FlightModel {
                     * rollEffectiveness
                 + p.ClDeltaR * rudderDeflection * rudderEffectiveness;
         } else {
+            double rapierControlEffectiveness = rapierAerodynamics
+                ? RapierAerodynamics.SupersonicControlEffectiveness(mach)
+                : 1.0;
             attachedRollCoefficient = p.ClBeta * beta
                 + p.ClP * nondimensionalP + p.ClR * nondimensionalR
                 + p.ClDeltaA * System.Math.Clamp(pilotAileron + sasAileron,
                     -p.MaxAileronDeflectionRad, p.MaxAileronDeflectionRad)
-                + p.ClDeltaR * rudderDeflection;
+                    * rapierControlEffectiveness
+                    * configuration.RollControlAuthorityFraction
+                + p.ClDeltaR * rudderDeflection * rapierControlEffectiveness
+                    * configuration.YawControlAuthorityFraction;
         }
         double attachedRollMoment = dynamicPressure * p.WingAreaM2 * span
             * attachedRollCoefficient;
@@ -1674,6 +1769,7 @@ public static class FlightModel {
         // separation that fades the aileron (so it cannot fight an autorotating departure), and is
         // clamped to the aileron authority. rates.P == 0 contributes exactly zero, so the neutral-
         // stick zero-moment invariant and every zero-gain (non-FBW) airframe are unchanged.
+        double bankHoldDemand = 0.0;
         if (c.DirectLateralControl && p.RollHoldRateGainNms > 0.0) {
             // Stand down whenever EITHER the pilot aileron OR an active stability-augmentation roll
             // (e.g. an Auto-GCAS roll-to-upright, which drives SasRollControl) is commanding roll,
@@ -1685,11 +1781,18 @@ public static class FlightModel {
             double holdEngage = 1.0 - System.Math.Clamp(
                 lateralCommand / System.Math.Max(p.RollHoldDeadband, 1e-6), 0.0, 1.0);
             if (holdEngage > 0.0) {
-                double holdMoment = System.Math.Clamp(
+                bankHoldDemand = System.Math.Clamp(
                     p.RollHoldAttitudeGainNmRad * errP
                         - p.RollHoldRateGainNms * rates.P,
                     -p.RollMomentMaxNm, p.RollMomentMaxNm);
+                double holdCapacity = rapierAerodynamics
+                    ? RapierAerodynamics.RollControlMomentCapacityNm(dynamicPressure,
+                        configuration.RollControlAuthorityFraction, mach)
+                    : p.RollMomentMaxNm;
+                double holdMoment = System.Math.Clamp(
+                    bankHoldDemand, -holdCapacity, holdCapacity);
                 rollMoment += holdMoment * holdEngage * (1.0 - wingSeparation);
+                bankHoldDemand *= holdEngage;
             }
         }
         double meanChord = p.WingAreaM2 / System.Math.Max(span, 1e-6);
@@ -1711,6 +1814,12 @@ public static class FlightModel {
                 : allocation.TargetNozzleAngleRad;
             pitchMoment = allocation.AeroMomentNm + PitchThrustVectorMoment(
                 actualNozzleAngle, System.Math.Max(0.0, netThrustN), p);
+        } else if (rapierAerodynamics) {
+            double pitchCapacity = RapierAerodynamics.PitchControlMomentCapacityNm(
+                dynamicPressure, configuration.PitchControlAuthorityFraction, mach);
+            pitchMoment = System.Math.Clamp(
+                pitchControlDemand, -pitchCapacity, pitchCapacity)
+                + pitchBreak + configurationPitchMoment;
         } else {
             double pitchThrustVectorAngle = LegacyPitchThrustVectorAngle(r, c, p, vhat,
                 dynamicPressure, configuration);
@@ -1736,7 +1845,13 @@ public static class FlightModel {
             ? System.Math.Clamp(yawDemand,
                 -F22YawAeroMomentAvailableNm(alpha, dynamicPressure, p),
                 F22YawAeroMomentAvailableNm(alpha, dynamicPressure, p))
-            : System.Math.Clamp(yawDemand, -p.YawMomentMaxNm, p.YawMomentMaxNm);
+            : rapierAerodynamics
+                ? System.Math.Clamp(yawDemand,
+                    -RapierAerodynamics.YawControlMomentCapacityNm(dynamicPressure,
+                        configuration.YawControlAuthorityFraction, mach),
+                    RapierAerodynamics.YawControlMomentCapacityNm(dynamicPressure,
+                        configuration.YawControlAuthorityFraction, mach))
+                : System.Math.Clamp(yawDemand, -p.YawMomentMaxNm, p.YawMomentMaxNm);
 
         // Cold-gas RCS: fade non-q FCS moments when dynamic pressure dies, and fill with thrusters
         // while gas remains. Attached aileron moments already scale with q and are left alone.
@@ -1744,25 +1859,51 @@ public static class FlightModel {
         if (p.ColdGasRcsMaxMomentNm > 0.0) {
             double aeroAuth = ColdGasRcs.AeroControlAuthority(dynamicPressure);
             double rcsAuth = ColdGasRcs.RcsAuthority(dynamicPressure, coldGasRemainingKg);
-            double demandPitch = pitchMoment;
-            double demandYaw = yawMoment;
-            double demandLegacyRoll = legacyRollMoment;
-            pitchMoment = ColdGasRcs.ScaleControlMoment(demandPitch, aeroAuth)
-                + ColdGasRcs.RcsMomentForDemand(demandPitch, rcsAuth, p.ColdGasRcsMaxMomentNm);
-            yawMoment = ColdGasRcs.ScaleControlMoment(demandYaw, aeroAuth)
-                + ColdGasRcs.RcsMomentForDemand(demandYaw, rcsAuth, p.ColdGasRcsMaxMomentNm);
-            if (!c.DirectLateralControl) {
+            if (rapierAerodynamics) {
+                // Rapier aero moments already derive from q*S*length*coefficient, so do not apply
+                // the old second q fade. RCS supplies the remaining controller demand in thin air;
+                // all three axes consume the same finite gas store.
+                double desiredRoll = c.DirectLateralControl
+                    ? System.Math.Clamp(
+                        (c.RollControl + c.SasRollControl) * p.RollMomentMaxNm
+                            + bankHoldDemand,
+                        -p.RollMomentMaxNm, p.RollMomentMaxNm)
+                    : legacyRollMoment;
+                double rcsPitch = ColdGasRcs.RcsMomentForDemand(
+                    pitchControlDemand - pitchMoment, rcsAuth, p.ColdGasRcsMaxMomentNm);
+                double rcsYaw = ColdGasRcs.RcsMomentForDemand(
+                    yawDemand - yawMoment, rcsAuth, p.ColdGasRcsMaxMomentNm);
                 double rcsRoll = ColdGasRcs.RcsMomentForDemand(
-                    demandLegacyRoll, rcsAuth, p.ColdGasRcsMaxMomentNm);
-                rollMoment = rollMoment - demandLegacyRoll
-                    + ColdGasRcs.ScaleControlMoment(demandLegacyRoll, aeroAuth)
-                    + rcsRoll;
+                    desiredRoll - rollMoment, rcsAuth, p.ColdGasRcsMaxMomentNm);
+                pitchMoment += rcsPitch;
+                yawMoment += rcsYaw;
+                rollMoment += rcsRoll;
+                rcsMomentMagnitude =
+                    System.Math.Abs(rcsPitch) + System.Math.Abs(rcsYaw)
+                    + System.Math.Abs(rcsRoll);
+            } else {
+                double demandPitch = pitchMoment;
+                double demandYaw = yawMoment;
+                double demandLegacyRoll = legacyRollMoment;
+                pitchMoment = ColdGasRcs.ScaleControlMoment(demandPitch, aeroAuth)
+                    + ColdGasRcs.RcsMomentForDemand(
+                        demandPitch, rcsAuth, p.ColdGasRcsMaxMomentNm);
+                yawMoment = ColdGasRcs.ScaleControlMoment(demandYaw, aeroAuth)
+                    + ColdGasRcs.RcsMomentForDemand(
+                        demandYaw, rcsAuth, p.ColdGasRcsMaxMomentNm);
+                if (!c.DirectLateralControl) {
+                    double rcsRoll = ColdGasRcs.RcsMomentForDemand(
+                        demandLegacyRoll, rcsAuth, p.ColdGasRcsMaxMomentNm);
+                    rollMoment = rollMoment - demandLegacyRoll
+                        + ColdGasRcs.ScaleControlMoment(demandLegacyRoll, aeroAuth)
+                        + rcsRoll;
+                }
+                rcsMomentMagnitude =
+                    System.Math.Abs(ColdGasRcs.RcsMomentForDemand(
+                        demandPitch, rcsAuth, p.ColdGasRcsMaxMomentNm))
+                    + System.Math.Abs(ColdGasRcs.RcsMomentForDemand(
+                        demandYaw, rcsAuth, p.ColdGasRcsMaxMomentNm));
             }
-            rcsMomentMagnitude =
-                System.Math.Abs(ColdGasRcs.RcsMomentForDemand(
-                    demandPitch, rcsAuth, p.ColdGasRcsMaxMomentNm))
-                + System.Math.Abs(ColdGasRcs.RcsMomentForDemand(
-                    demandYaw, rcsAuth, p.ColdGasRcsMaxMomentNm));
         }
 
         double pDot = (rollMoment + (p.IyyKgM2 - p.IzzKgM2) * rates.Q * rates.R) / p.IxxKgM2;
@@ -1775,7 +1916,7 @@ public static class FlightModel {
 
     static QuaternionD TargetAttitude(in RawState r, in PilotCommand c, in AircraftParams p,
         in Vec3D liftRef, in Vec3D vhat, double dynamicPressure,
-        in AirframeAerodynamicState configuration) {
+        in AirframeAerodynamicState configuration, double mach = 0.0) {
         if (double.IsFinite(c.CommandedPitchRad)) {
             double chi = System.Math.Atan2(vhat.X, vhat.Z);
             double cp = System.Math.Cos(c.CommandedPitchRad);
@@ -1791,19 +1932,21 @@ public static class FlightModel {
         var upRef = lr0.Length < 1e-6 ? new Vec3D(0, 1, 0) : lr0.Normalized();
         var rightRef = upRef.Cross(vhat).Normalized();
         var lift = (upRef * System.Math.Cos(c.BankTarget) + rightRef * System.Math.Sin(c.BankTarget)).Normalized();
-        double alpha = TargetAlpha(r, c, p, dynamicPressure, configuration);
+        double alpha = TargetAlpha(r, c, p, dynamicPressure, configuration, mach);
         var forward = (vhat * System.Math.Cos(alpha) + lift * System.Math.Sin(alpha)).Normalized();
         var up = (lift * System.Math.Cos(alpha) - vhat * System.Math.Sin(alpha)).Normalized();
         return QuaternionD.FromFrame(up.Cross(forward).Normalized(), up, forward);
     }
 
     static double TargetAlpha(in RawState r, in PilotCommand c, in AircraftParams p,
-        double dynamicPressure, in AirframeAerodynamicState configuration) {
-        double nz = TargetNz(r, c, p, dynamicPressure, configuration);
+        double dynamicPressure, in AirframeAerodynamicState configuration,
+        double mach = 0.0) {
+        double nz = TargetNz(r, c, p, dynamicPressure, configuration, mach);
         double cl = nz * r.Mass * G0 / System.Math.Max(dynamicPressure * p.WingAreaM2, 1e-6);
         double protectedAlpha = System.Math.Clamp(
-            (cl - configuration.LiftCoefficientIncrement) / p.CLAlpha,
-            AlphaAeroMin(p), AlphaAeroMax(p, configuration));
+            (cl - configuration.LiftCoefficientIncrement)
+                / System.Math.Max(EffectiveClAlpha(p, mach), 1e-9),
+            AlphaAeroMin(p), PositiveNormalLawAlphaMax(p, mach, configuration));
         if (!double.IsFinite(c.CommandedAlphaRad)) return protectedAlpha;
 
         // The protection/control layer may deliberately demand incidence beyond the lift break.
@@ -1814,13 +1957,15 @@ public static class FlightModel {
     }
 
     static double TargetNz(in RawState r, in PilotCommand c, in AircraftParams p,
-        double dynamicPressure, in AirframeAerodynamicState configuration) {
+        double dynamicPressure, in AirframeAerodynamicState configuration,
+        double mach = 0.0) {
         double nzMax = System.Math.Min(dynamicPressure * p.WingAreaM2
-            * (p.CLMax + PositiveLiftCoefficientIncrement(configuration))
+            * EffectiveControllableClMax(p, mach, configuration)
                 / (r.Mass * G0),
             PositiveControlLimitG(p));
         double nzMin = System.Math.Max(dynamicPressure * p.WingAreaM2
-            * (p.CLMin + configuration.LiftCoefficientIncrement) / (r.Mass * G0), -1.5);
+            * (EffectiveClMin(p, mach) + configuration.LiftCoefficientIncrement)
+                / (r.Mass * G0), -1.5);
         return System.Math.Clamp(c.GDemand, nzMin, nzMax);
     }
 
@@ -1843,13 +1988,16 @@ public static class FlightModel {
         in AirframeAerodynamicState configuration, IAtmosphereModel atmosphere) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         double speed = ResolveAirspeed(s, airspeedMps);
-        double q = 0.5 * atmosphere.Sample(s.Position.Y).DensityKgM3 * speed * speed;
+        AtmosphericState air = atmosphere.Sample(s.Position.Y);
+        double q = 0.5 * air.DensityKgM3 * speed * speed;
+        double mach = speed / System.Math.Max(air.SpeedOfSoundMps, 1e-9);
         double nzMax = System.Math.Min(q * p.WingAreaM2
-            * (p.CLMax + PositiveLiftCoefficientIncrement(configuration))
+            * EffectiveControllableClMax(p, mach, configuration)
                 / (s.Mass * G0),
             PositiveControlLimitG(p));
         double nzMin = System.Math.Max(q * p.WingAreaM2
-            * (p.CLMin + configuration.LiftCoefficientIncrement) / (s.Mass * G0), -1.5);
+            * (EffectiveClMin(p, mach) + configuration.LiftCoefficientIncrement)
+                / (s.Mass * G0), -1.5);
         return (System.Math.Clamp(c.GDemand, nzMin, nzMax), nzMax, nzMin);
     }
 }

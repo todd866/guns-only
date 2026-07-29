@@ -12,9 +12,11 @@ import {
 test("settings normalisation is bounded and produces one unique key per action", () => {
   const settings = normalisePlayerSettings({
     tiltSensitivity: 99,
+    radioVoice: false,
     bindings: { pull: "KeyZ", push: "KeyZ", fire: "Escape" },
   });
   assert.equal(settings.tiltSensitivity, 1.6);
+  assert.equal(settings.radioVoice, false);
   assert.equal(settings.bindings.pull, "KeyZ");
   assert.equal(settings.bindings.push, "ArrowUp");
   assert.equal(settings.bindings.fire, "KeyF");

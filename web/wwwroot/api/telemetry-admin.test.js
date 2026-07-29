@@ -255,6 +255,12 @@ test("summary returns bounded, non-identifying session, sortie, and combat aggre
       uploadedAt: "2026-07-22T13:47:00.000Z",
       rows: [
         { k: "hdr", session: "web-private-a", build: "65", ua: "private agent" },
+        { k: "in", type: "mobile_control", code: "touch_ready", profile: "dual_stick" },
+        { k: "in", type: "mobile_control", code: "gesture_summary",
+          profile: "dual_stick", duration_ms: 800, max_tilt_trim: 0.08,
+          saturation_share: 0.3, cancelled: false },
+        { k: "in", type: "mobile_control", code: "gamepad_connected",
+          profile: "dual_stick" },
         { k: "in", type: "lifecycle", code: "sortie_started", sortie: "sortie-private-a" },
         { k: "st", q: 0, s: { telemetry_sortie_id: "sortie-private-a", t: 0, rounds_fired: 0,
           hits: 0, kill_count: 0, shots_total: 0, shots_in_window: 0, player_alive: true,
@@ -274,6 +280,10 @@ test("summary returns bounded, non-identifying session, sortie, and combat aggre
       uploadedAt: "2026-07-22T13:48:00.000Z",
       rows: [
         { k: "hdr", session: "web-private-b", build: "65", ua: "another private agent" },
+        { k: "in", type: "mobile_control", code: "touch_ready", profile: "dual_stick" },
+        { k: "in", type: "mobile_control", code: "gesture_summary",
+          profile: "dual_stick", duration_ms: 1200, max_tilt_trim: 0,
+          saturation_share: 0.1, cancelled: true },
         { k: "in", type: "lifecycle", code: "sortie_started", sortie: "sortie-private-b" },
         { k: "st", q: 0, s: { telemetry_sortie_id: "sortie-private-b", t: 0, rounds_fired: 0,
           hits: 0, kill_count: 0, shots_total: 0, shots_in_window: 0, player_alive: true,
@@ -348,6 +358,13 @@ test("summary returns bounded, non-identifying session, sortie, and combat aggre
     assert.equal(payload.combat.opponent_deaths, 1);
     assert.equal(payload.combat.gun_window_share, 0.6);
     assert.equal(payload.combat.median_time_to_first_shot_seconds, 10.25);
+    assert.deepEqual(payload.mobile_controls.profile_sessions, { dual_stick: 2 });
+    assert.equal(payload.mobile_controls.gamepad_sessions, 1);
+    assert.equal(payload.mobile_controls.left_stick_gestures, 2);
+    assert.equal(payload.mobile_controls.gesture_cancel_rate, 0.5);
+    assert.equal(payload.mobile_controls.tilt_trim_use_rate, 0.5);
+    assert.equal(payload.mobile_controls.saturation_heavy_rate, 0.5);
+    assert.equal(payload.mobile_controls.median_gesture_duration_ms, 1000);
     assert.equal(payload.privacy.raw_rows_returned, false);
     const serialized = JSON.stringify(payload);
     assert.doesNotMatch(serialized, /web-private|sortie-private|private agent/);

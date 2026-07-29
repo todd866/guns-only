@@ -366,10 +366,12 @@ test("phone settings remain scrollable and collapse desktop-only binding density
     "touchmove protection must exempt every scrollable modal surface");
 });
 
-test("fallback flight control is one spring-loaded virtual stick", () => {
+test("touch flight uses distinct spring-loaded flight and look/fire sticks", () => {
   const buttons = htmlButtons(indexSource);
   const stick = buttons.filter((button) =>
     button.attributes["data-mobile-action"] === "virtual-stick");
+  const targetStick = buttons.filter((button) =>
+    button.attributes["data-mobile-action"] === "target-stick");
   // The ban protects against the old four-button directional pad returning as the PRIMARY
   // flight control. Portrait assisted flight (Build 75) deliberately carries exactly two
   // marked pitch-bias chips (PULL/EASE) on top of tilt; lateral buttons stay banned outright.
@@ -380,7 +382,10 @@ test("fallback flight control is one spring-loaded virtual stick", () => {
 
   assert.equal(stick.length, 1, "fallback mode needs one visible thumb target");
   assert.equal(stick[0].attributes.id, "fallback-stick");
-  assert.equal(stick[0].attributes["aria-label"], "Flight stick");
+  assert.equal(stick[0].attributes["aria-label"], "Left flight stick");
+  assert.equal(targetStick.length, 1, "touch mode needs one separate look/fire target");
+  assert.equal(targetStick[0].attributes.id, "target-stick");
+  assert.equal(targetStick[0].attributes["aria-label"], "Right look and fire stick");
   assert.equal(lateralButtons.length, 0,
     "lateral directional buttons must not return");
   assert.equal(pitchButtons.length, 2, "exactly the two assisted pitch-bias chips");
@@ -390,17 +395,23 @@ test("fallback flight control is one spring-loaded virtual stick", () => {
   }
   assert.match(appSource, /data-assist-nudge/,
     "assisted speed nudges must be wired in app.js");
-  // First portrait flight reports, pinned: phone wobble must not fight the auto-pull, and a
-  // fighter must always show a trigger.
+  // Phone wobble must not add a second pitch command on top of the left stick.
   assert.match(appSource,
-    /portrait-assist[\s\S]{0,200}updateTiltAxis\("pitch", 0/,
-    "assisted flight must gate the tilt pitch axis to roll-only");
+    /updateTiltAxis\("pitch", 0, "ArrowUp", "ArrowDown"\)/,
+    "touch flight must gate the tilt pitch axis to roll-only");
   assert.doesNotMatch(indexSource, /#touch-fire[^{]*\{[^}]*display:\s*none/,
     "the FIRE button must stay visible in every touch layout");
   assert.match(indexSource, /id="fallback-stick-knob"/);
   assert.match(indexSource,
-    /#fallback-stick\s*\{[\s\S]*?width:\s*112px[\s\S]*?height:\s*112px[\s\S]*?touch-action:\s*none/);
-  assert.match(indexSource, /USE THUMB STICK/);
+    /#fallback-stick,\s*#target-stick\s*\{[\s\S]*?width:\s*112px[\s\S]*?height:\s*112px[\s\S]*?touch-action:\s*none/);
+  assert.match(indexSource, /The two sticks always fly/,
+    "touch prompt must teach that both primary sticks remain available");
+  assert.match(appSource,
+    /\.touch-mode #test-flight-console,[\s\S]*?\.touch-mode #nav-console,[\s\S]*?\.touch-mode #multiplayer-status[\s\S]*?display: none !important/,
+    "phone flight must remove diagnostic and network panels from the two-thumb view");
+  assert.match(appSource,
+    /\.touch-mode\.touch-primary #touch-fire[\s\S]*?display: none !important/,
+    "the right stick owns firing, so the redundant phone FIRE button must not consume space");
 
   assert.match(appSource,
     /fallbackStick\?\.addEventListener\("pointerdown", beginVirtualStick[\s\S]*?pointermove", moveVirtualStick[\s\S]*?pointerup", endVirtualStick[\s\S]*?pointercancel", endVirtualStick[\s\S]*?lostpointercapture", endVirtualStick/,
@@ -409,8 +420,11 @@ test("fallback flight control is one spring-loaded virtual stick", () => {
     /function beginVirtualStick[\s\S]*?virtualStickPointerId !== null[\s\S]*?setPointerCapture/,
     "a second finger must not steal the active stick pointer");
   assert.match(appSource,
-    /function releaseVirtualStick[\s\S]*?virtualStickPointerId = null[\s\S]*?releaseMappedKey[\s\S]*?forceAnalogRollNeutral\(\)[\s\S]*?renderVirtualStick\(\)/,
+    /function releaseVirtualStick[\s\S]*?virtualStickPointerId = null[\s\S]*?releaseMappedKey[\s\S]*?primaryRollCommand = 0[\s\S]*?primaryPitchCommand = 0[\s\S]*?releaseDirectFlightAxes\("touch"\)[\s\S]*?renderVirtualStick\(\)/,
     "one idempotent release path must neutralise pitch, roll, and the visual knob");
+  assert.match(appSource,
+    /source\.startsWith\("gamepad"\)[\s\S]*?directFlightOwner !== source[\s\S]*?return false/,
+    "a connected controller must not steal the flight axes while a thumb owns the phone stick");
   assert.match(appSource,
     /resetMobileInput = \(\) => \{[\s\S]*?releaseVirtualStick\(\)[\s\S]*?releaseTiltAxes\(\)/,
     "pause, freeze, visibility, and mission resets must centre the virtual stick");

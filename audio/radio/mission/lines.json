@@ -1,0 +1,91 @@
+{
+  "version": 2,
+  "model": "gpt-4o-mini-tts",
+  "response_format": "wav",
+  "disclosure": "Radio speech may use AI-generated training voices.",
+  "roles": {
+    "tower": {
+      "voice": "cedar",
+      "instructions": "Calm military tower controller. Clipped, unhurried radio cadence. Neutral accent. No theatrical emotion. Use natural aviation pronunciation and make the callsign unmistakable."
+    },
+    "launch": {
+      "voice": "onyx",
+      "instructions": "Military launch controller over a noisy flight line. Firm, concise, calm, and professional. Slightly compressed radio cadence. No dramatic acting."
+    },
+    "controller": {
+      "voice": "ash",
+      "instructions": "Airborne military command-and-control controller. Concise, composed, authoritative, and matter-of-fact. Read brevity words cleanly without theatrical emphasis."
+    },
+    "lso": {
+      "voice": "onyx",
+      "instructions": "Carrier landing signal officer on the flight-deck radio. Very short, urgent when required, clipped, authoritative, and professional. Never add words to the supplied call."
+    },
+    "pilot": {
+      "voice": "marin",
+      "instructions": "Military fast-jet pilot on radio. Concise, controlled breathing, professional, and matter-of-fact. Preserve callsign and brevity-word clarity. No dramatic acting."
+    },
+    "traffic": {
+      "voice": "verse",
+      "instructions": "Military fast-jet pilot making a short traffic-pattern report. Crisp, calm, professional, and distinct from the lead pilot."
+    }
+  },
+  "lines": [
+    { "id": "launch-cleared", "role": "launch", "text": "Rapier One One, cleared for launch." },
+    { "id": "pilot-launch-readback", "role": "pilot", "text": "Cleared for launch, Rapier One One." },
+    { "id": "pilot-airborne", "role": "pilot", "text": "Rapier Tower, Rapier One One, airborne, joining initial." },
+    { "id": "tower-join-initial", "role": "tower", "text": "Rapier One One, pattern altitude two thousand five hundred, report initial. Traffic in the pattern." },
+    { "id": "pilot-initial", "role": "pilot", "text": "Rapier Tower, Rapier One One, initial, full stop." },
+    { "id": "tower-report-break", "role": "tower", "text": "Rapier One One, report break." },
+    { "id": "pilot-break", "role": "pilot", "text": "Rapier One One, breaking." },
+    { "id": "pilot-downwind", "role": "pilot", "text": "Rapier Tower, Rapier One One, downwind, gear down." },
+    { "id": "tower-report-base", "role": "tower", "text": "Rapier One One, report base." },
+    { "id": "pilot-report-base-readback", "role": "pilot", "text": "Wilco, Rapier One One." },
+    { "id": "pilot-base", "role": "pilot", "text": "Rapier Tower, Rapier One One, base, gear down and locked." },
+    { "id": "tower-cleared-arrested-landing", "role": "tower", "text": "Rapier One One, cleared to land. Arresting gear rigged." },
+    { "id": "pilot-landing-readback", "role": "pilot", "text": "Cleared to land, Rapier One One." },
+    { "id": "tower-waveoff-gear", "role": "tower", "text": "Wave off, wave off. Rapier One One, gear unsafe." },
+    { "id": "tower-bolter", "role": "tower", "text": "Rapier One One, bolter. Go around." },
+    { "id": "traffic-rapier-2-base", "role": "traffic", "text": "Rapier Tower, Rapier One Two, base." },
+    { "id": "traffic-rapier-2-final", "role": "traffic", "text": "Rapier Tower, Rapier One Two, final." },
+    { "id": "traffic-rapier-3-base", "role": "traffic", "text": "Rapier Tower, Rapier One Three, base." },
+    { "id": "traffic-rapier-3-final", "role": "traffic", "text": "Rapier Tower, Rapier One Three, final." },
+    { "id": "traffic-rapier-4-base", "role": "traffic", "text": "Rapier Tower, Rapier One Four, base." },
+    { "id": "traffic-rapier-4-final", "role": "traffic", "text": "Rapier Tower, Rapier One Four, final." },
+    { "id": "tower-trap-wire-1", "role": "tower", "text": "Rapier One One, wire one, hold position." },
+    { "id": "tower-trap-wire-2", "role": "tower", "text": "Rapier One One, wire two, hold position." },
+    { "id": "tower-trap-wire-3", "role": "tower", "text": "Rapier One One, wire three, hold position." },
+    { "id": "tower-trap-wire-4", "role": "tower", "text": "Rapier One One, wire four, hold position." },
+    { "id": "lso-bolter", "role": "lso", "text": "Bolter, bolter." },
+    { "id": "lso-wire-1", "role": "lso", "text": "Wire one." },
+    { "id": "lso-wire-2", "role": "lso", "text": "Wire two." },
+    { "id": "lso-wire-3", "role": "lso", "text": "Wire three." },
+    { "id": "lso-wire-4", "role": "lso", "text": "Wire four." },
+    { "id": "lso-waveoff", "role": "lso", "text": "Wave off, wave off." },
+    { "id": "lso-add-power", "role": "lso", "text": "Add power." },
+    { "id": "lso-power", "role": "lso", "text": "Power." },
+    { "id": "lso-low", "role": "lso", "text": "You're low." },
+    { "id": "lso-high", "role": "lso", "text": "You're high." },
+    { "id": "lso-fast", "role": "lso", "text": "Fast." },
+    { "id": "lso-come-left", "role": "lso", "text": "Come left." },
+    { "id": "lso-come-right", "role": "lso", "text": "Come right." },
+    { "id": "pilot-departure-airborne", "role": "pilot", "text": "Rapier Tower, Rapier One One, airborne." },
+    { "id": "tower-continue-departure", "role": "tower", "text": "Rapier One One, continue departure." },
+    { "id": "control-commit", "role": "controller", "text": "Rapier One One, commit." },
+    { "id": "pilot-commit-readback", "role": "pilot", "text": "Commit, Rapier One One." },
+    { "id": "pilot-separating", "role": "pilot", "text": "Rapier One One, separating." },
+    { "id": "pilot-rtb", "role": "pilot", "text": "Control, Rapier One One, returning home plate." },
+    { "id": "control-rtb-roger", "role": "controller", "text": "Rapier One One, roger." },
+    { "id": "pilot-recovery-request", "role": "pilot", "text": "Rapier Approach, Rapier One One, recovery." },
+    { "id": "approach-recovery-continue", "role": "controller", "text": "Rapier One One, continue." },
+    { "id": "pilot-guns", "role": "pilot", "text": "Rapier One One, guns." },
+    { "id": "pilot-fox-two", "role": "pilot", "text": "Rapier One One, Fox Two." },
+    { "id": "pilot-drone-away", "role": "pilot", "text": "Rapier One One, drone away." },
+    { "id": "pilot-remington", "role": "pilot", "text": "Rapier One One, Remington." },
+    { "id": "pilot-winchester", "role": "pilot", "text": "Rapier One One, Winchester." },
+    { "id": "pilot-joker", "role": "pilot", "text": "Rapier One One, Joker." },
+    { "id": "pilot-bingo", "role": "pilot", "text": "Rapier One One, Bingo." },
+    { "id": "control-bingo-rtb", "role": "controller", "text": "Rapier One One, return home plate." },
+    { "id": "pilot-splash", "role": "pilot", "text": "Rapier One One, splash one." },
+    { "id": "control-mission-complete", "role": "controller", "text": "Rapier One One, mission complete." }
+  ]
+}

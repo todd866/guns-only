@@ -592,6 +592,36 @@ function assertRapierMission(data) {
   }
 }
 
+function rectanglesOverlap(a, b) {
+  if (!a || !b) return false;
+  return a.x < b.x + b.width && a.x + a.width > b.x
+    && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function assertRapierPanelLayout(data) {
+  if (!data.name.endsWith("rapier-ram-only-systems-layout")) return;
+  const {
+    rapierCycleTeach: cycle,
+    gTape,
+    systemsPanel: systems,
+    limitsPanel: limits,
+  } = data.geometry;
+  for (const [label, panel] of Object.entries({ cycle, gTape, systems, limits })) {
+    check(data.name, `${label} panel is recorded`, Boolean(panel),
+      panel ? `box=${panel.x},${panel.y} ${panel.width}x${panel.height}` : "missing");
+  }
+  if (cycle && gTape) {
+    check(data.name, "combined-cycle lesson clears the G tape",
+      !rectanglesOverlap(cycle, gTape),
+      `cycle bottom=${cycle.y + cycle.height}; G top=${gTape.y}`);
+  }
+  if (systems && limits) {
+    check(data.name, "gear/systems panel clears fuel and limits",
+      !rectanglesOverlap(systems, limits),
+      `systems bottom=${systems.y + systems.height}; limits top=${limits.y}`);
+  }
+}
+
 // The portrait assisted mode is a first-class experience, so a phone-portrait pass runs the
 // core scenarios through the SAME geometry contract at 430x860. The full battery stays on the
 // landscape pass to bound gate time.
@@ -603,6 +633,7 @@ const PORTRAIT_SCENARIOS = new Set([
   "padlock-aft-right-high",
   "idle-speed-brake-out", "idle-speed-brake-transit",
   "rapier-attack-authorize", "rapier-escape-fuel-triad",
+  "rapier-ram-only-systems-layout",
 ]);
 
 async function runViewport(site, browser, { label, width, height, subset }) {
@@ -642,6 +673,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     assertGunHeat(data);
     assertSpeedBrake(data);
     assertRapierMission(data);
+    assertRapierPanelLayout(data);
     assertFunnelContainsTarget(data);
     assertWarningLine(data);
   }
