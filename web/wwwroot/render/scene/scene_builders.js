@@ -3,7 +3,7 @@ import {
   TERRAIN_CURVATURE_START_M,
   TERRAIN_EARTH_RADIUS_M,
 } from "../environment/korea_terrain.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=177";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=178";
 import rapierV1Definition from "../../airframes/rapier_v1.embedded.js";
 
 // Pure Three.js scene/model builders extracted verbatim from app.js. Runtime-derived configuration
