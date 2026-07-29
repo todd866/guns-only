@@ -3958,7 +3958,12 @@ function prepareMissionTerrain(index, stagedState) {
   terrainLaunchWarmupOwner = owner;
   const work = Promise.resolve(warmupView.ensureTerrainPresentation(stagedState))
     .then((terrain) => warmTerrainAroundReadyAircraft(terrain, stagedState, warmupView))
-    .catch(() => false);
+    .catch((error) => {
+      // A silent false here interlocks the sortie with no forensic trail — the one wedge
+      // class we could not diagnose in the field (2026-07-29). Failures must speak.
+      console.error("terrain launch warmup failed", error);
+      return false;
+    });
   const deadline = new Promise((resolve) => {
     owner.deadlineTimer = window.setTimeout(() => {
       warmupView.cancelTerrainPresentationRequest(terrainKey);

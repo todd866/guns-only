@@ -1175,7 +1175,14 @@ class TerrainMeshWorkerPool {
     this.disposed = false;
     this.nextRequestId = 1;
     this.pending = new Map();
+    this.queue = [];
     this.workers = [];
+    this.startupTimer = null;
+    /// Structural counters: the SwiftShader gate asserts on these, since it cannot assert fps.
+    this.stats = Object.seal({
+      workersCreated: 0, workersReady: 0, startupTimeouts: 0,
+      workerBuilds: 0, workerFailures: 0, queuedCoalesced: 0, queuedPeak: 0,
+    });
     const createWorker = options.createTerrainMeshWorker ?? defaultTerrainMeshWorkerFactory();
     if (!createWorker) return;
     // Leave the render thread and the WASM sim their own cores. Terrain meshing is bursty, so two
@@ -1189,10 +1196,24 @@ class TerrainMeshWorkerPool {
         worker.onmessage = (event) => this.receive(worker, event.data);
         worker.onerror = () => this.retire(worker);
         worker.onmessageerror = () => this.retire(worker);
-        this.workers.push({ worker, inFlight: 0 });
+        this.workers.push({ worker, ready: false, dispatchedId: null });
+        this.stats.workersCreated += 1;
       } catch {
         break;
       }
+    }
+    // A worker whose module graph never loads must not hold jobs hostage: jobs queue until the
+    // worker posts "ready", and a startup deadline retires silent workers back to the sync path.
+    const startupMs = finite(options.terrainMeshWorkerStartupTimeoutMs, 4_000);
+    if (this.workers.length > 0 && startupMs > 0) {
+      this.startupTimer = setTimeout(() => {
+        this.startupTimer = null;
+        for (const slot of [...this.workers]) {
+          if (slot.ready) continue;
+          this.stats.startupTimeouts += 1;
+          this.retire(slot.worker);
+        }
+      }, startupMs);
     }
   }
 
@@ -1201,79 +1222,140 @@ class TerrainMeshWorkerPool {
   }
 
   get inFlight() {
-    let total = 0;
-    for (const slot of this.workers) total += slot.inFlight;
-    return total;
+    let dispatched = 0;
+    for (const slot of this.workers) if (slot.dispatchedId !== null) dispatched += 1;
+    return dispatched + this.queue.length;
+  }
+
+  diagnostics() {
+    return {
+      ...this.stats,
+      workers: this.workers.length,
+      ready: this.workers.filter((slot) => slot.ready).length,
+      queued: this.queue.length,
+    };
   }
 
   /// Mesh one chunk off-thread. Resolves with the built arrays, or with `null` if the pool cannot
-  /// service the request — in which case the caller must build it synchronously.
-  build(boundsLocalM, decoded, sceneryPlanRequest = null) {
+  /// service the request — in which case the caller must build it synchronously. Jobs queue
+  /// centrally and each worker holds at most ONE dispatched build; a `coalesceKey` lets a newer
+  /// request for the same chunk/LOD supersede a stale one the workers have not started.
+  build(boundsLocalM, decoded, sceneryPlanRequest = null, coalesceKey = null) {
     if (!this.available) return Promise.resolve(null);
-    let chosen = this.workers[0];
-    for (const slot of this.workers) if (slot.inFlight < chosen.inFlight) chosen = slot;
     const id = this.nextRequestId++;
     return new Promise((resolve) => {
-      this.pending.set(id, { resolve, slot: chosen });
-      chosen.inFlight++;
-      try {
-        // heights/water go as clones, not transfers: the caller keeps using them for scenery, and
-        // a detached array would leave the fallback path with nothing to rebuild from.
-        chosen.worker.postMessage({
-          type: "build",
-          id,
-          boundsLocalM,
-        heights: decoded.heights,
-        water: decoded.water,
-        sampleCount: decoded.sampleCount,
-        includeLandcover: decoded.includeLandcover,
-        sceneryPlanRequest,
-      });
-      } catch {
-        this.settle(id, null);
-        this.retire(chosen.worker);
+      if (coalesceKey !== null) {
+        const staleIndex = this.queue.findIndex((job) => job.coalesceKey === coalesceKey);
+        if (staleIndex >= 0) {
+          const [stale] = this.queue.splice(staleIndex, 1);
+          this.pending.delete(stale.id);
+          stale.resolve(null);
+          this.stats.queuedCoalesced += 1;
+        }
       }
+      const job = { id, resolve, boundsLocalM, decoded, sceneryPlanRequest, coalesceKey,
+        slot: null };
+      this.pending.set(id, job);
+      this.queue.push(job);
+      this.stats.queuedPeak = Math.max(this.stats.queuedPeak, this.queue.length);
+      this.pump();
     });
   }
 
+  pump() {
+    for (const slot of this.workers) {
+      if (!slot.ready || slot.dispatchedId !== null) continue;
+      const job = this.queue.shift();
+      if (!job) return;
+      job.slot = slot;
+      slot.dispatchedId = job.id;
+      try {
+        // heights/water go as clones, not transfers: the caller keeps using them for scenery, and
+        // a detached array would leave the fallback path with nothing to rebuild from.
+        slot.worker.postMessage({
+          type: "build",
+          id: job.id,
+          boundsLocalM: job.boundsLocalM,
+          heights: job.decoded.heights,
+          water: job.decoded.water,
+          sampleCount: job.decoded.sampleCount,
+          includeLandcover: job.decoded.includeLandcover,
+          sceneryPlanRequest: job.sceneryPlanRequest,
+        });
+      } catch {
+        this.settle(job.id, null);
+        this.retire(slot.worker);
+        return;
+      }
+    }
+  }
+
   receive(worker, message) {
-    if (message?.type === "ready") return;
+    if (message?.type === "ready") {
+      const slot = this.workers.find((entry) => entry.worker === worker);
+      if (slot && !slot.ready) {
+        slot.ready = true;
+        this.stats.workersReady += 1;
+      }
+      if (this.startupTimer !== null && this.workers.every((entry) => entry.ready)) {
+        clearTimeout(this.startupTimer);
+        this.startupTimer = null;
+      }
+      this.pump();
+      return;
+    }
     if (!message || typeof message.id !== "number") return;
+    if (message.type === "built") this.stats.workerBuilds += 1;
     this.settle(message.id, message.type === "built" ? message.built : null);
-    if (message.type === "failed") this.retire(worker);
+    if (message.type === "failed") {
+      this.stats.workerFailures += 1;
+      this.retire(worker);
+    }
   }
 
   settle(id, built) {
-    const request = this.pending.get(id);
-    if (!request) return;
+    const job = this.pending.get(id);
+    if (!job) return;
     this.pending.delete(id);
-    request.slot.inFlight = Math.max(0, request.slot.inFlight - 1);
-    request.resolve(built);
+    if (job.slot) job.slot.dispatchedId = null;
+    else {
+      const queued = this.queue.indexOf(job);
+      if (queued >= 0) this.queue.splice(queued, 1);
+    }
+    job.resolve(built);
+    this.pump();
   }
 
-  /// Drop a worker that has proved unusable and release everything queued on it to the synchronous
-  /// path. A pool that shrinks to zero simply reports itself unavailable from then on.
+  /// Drop a worker that has proved unusable. Its dispatched job (if any) falls back to the
+  /// synchronous path; a pool that shrinks to zero drains the whole queue there too.
   retire(worker) {
     const index = this.workers.findIndex((slot) => slot.worker === worker);
     if (index < 0) return;
     const [slot] = this.workers.splice(index, 1);
-    for (const [id, request] of [...this.pending]) {
-      if (request.slot !== slot) continue;
-      this.pending.delete(id);
-      request.resolve(null);
-    }
+    if (slot.dispatchedId !== null) this.settle(slot.dispatchedId, null);
     try {
       slot.worker.terminate();
     } catch {
       // A worker that cannot be terminated is already gone.
+    }
+    if (this.workers.length === 0) {
+      for (const job of this.queue.splice(0)) {
+        this.pending.delete(job.id);
+        job.resolve(null);
+      }
+    } else {
+      this.pump();
     }
   }
 
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    for (const [, request] of this.pending) request.resolve(null);
+    if (this.startupTimer !== null) clearTimeout(this.startupTimer);
+    this.startupTimer = null;
+    for (const [, job] of this.pending) job.resolve(null);
     this.pending.clear();
+    this.queue.length = 0;
     for (const slot of this.workers.splice(0)) {
       try {
         slot.worker.terminate();

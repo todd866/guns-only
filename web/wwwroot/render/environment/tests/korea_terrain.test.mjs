@@ -1513,6 +1513,10 @@ function stubMeshWorkers(behaviour = "build") {
       onmessageerror: null,
       terminated: false,
       requests: [],
+      // The real module worker announces itself; the hardened pool holds dispatch until it does.
+      announceReady() {
+        queueMicrotask(() => worker.onmessage?.({ data: { type: "ready" } }));
+      },
       postMessage(request) {
         if (request?.type !== "build") return;
         worker.requests.push(request);
