@@ -67,9 +67,60 @@ public sealed class InvertedNeutralStickTests {
             + $"final bank {BodyBankDeg(session.Player.State):F0} deg, "
             + $"gamma {session.Player.State.Gamma * 180.0 / Math.PI:F1} deg");
 
-        Assert.True(maxCommandedG <= 1.5,
+        Assert.True(maxCommandedG <= 1.0,
             $"neutral stick inverted commanded a {maxCommandedG:F2} G pull");
-        Assert.True(maxLoadG <= 2.5,
+        Assert.True(maxLoadG <= 2.0,
             $"neutral stick inverted flew a {maxLoadG:F2} G pull through the horizon");
+    }
+
+    [Fact]
+    public void HandsOffInvertedDoesNotSplitEssThroughTheHorizon() {
+        var session = new SimulationSession();
+        session.StartBeat(() => ManualRapierAt(8_000.0, 450.0));
+        session.Begin();
+        session.SetRapierAutomationEnabled(false);
+
+        session.FeedKey(GKey.RollRight, true);
+        int rollTicks = 0;
+        while (Math.Abs(Math.Abs(BodyBankDeg(session.Player.State)) - 180.0) > 25.0
+            && rollTicks++ < 6 * AircraftSim.TickHz)
+            session.StepFixed();
+        session.FeedKey(GKey.RollRight, false);
+
+        double minGammaDeg = double.PositiveInfinity;
+        for (int tick = 0; tick < AircraftSim.TickHz * 5; tick++) {
+            session.StepFixed();
+            minGammaDeg = Math.Min(minGammaDeg,
+                session.Player.State.Gamma * 180.0 / Math.PI);
+        }
+        // Pre-fix the divergent pull drove gamma to -48 deg inside 5 s. An honest inverted
+        // hold may sag, not dive: the nose must stay well clear of a split-S.
+        _out.WriteLine($"minimum gamma over 5 s hands-off inverted: {minGammaDeg:F1} deg");
+        Assert.True(minGammaDeg > -25.0,
+            $"hands-off inverted dove to gamma {minGammaDeg:F1} deg — split-S through the horizon");
+    }
+
+    [Fact]
+    public void UprightHandsOffStaysANearOneGHold() {
+        var session = new SimulationSession();
+        session.StartBeat(() => ManualRapierAt(8_000.0, 450.0));
+        session.Begin();
+        session.SetRapierAutomationEnabled(false);
+
+        // Shallow bank, hands off: the corrected law must be indistinguishable from the old
+        // one at small bank (denominator -> ~1) and hold roughly wings-level 1 G flight.
+        session.FeedKey(GKey.RollRight, true);
+        for (int tick = 0; tick < AircraftSim.TickHz / 5; tick++) session.StepFixed();
+        session.FeedKey(GKey.RollRight, false);
+
+        double maxAbsCommandDelta = 0.0;
+        for (int tick = 0; tick < AircraftSim.TickHz * 5; tick++) {
+            session.StepFixed();
+            maxAbsCommandDelta = Math.Max(maxAbsCommandDelta,
+                Math.Abs(session.Controls.Command.GDemand - 1.0));
+        }
+        _out.WriteLine($"upright hands-off max |G - 1| = {maxAbsCommandDelta:F2}");
+        Assert.True(maxAbsCommandDelta <= 1.5,
+            $"upright neutral hold wandered {maxAbsCommandDelta:F2} G from level");
     }
 }

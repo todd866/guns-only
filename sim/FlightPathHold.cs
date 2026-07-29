@@ -50,24 +50,22 @@ public static class FlightPathHold {
                 - config.PitchRateDamping * measuredBodyPitchRateRadPerSecond,
             -config.MaxCommandedPitchRateRadPerSecond,
             config.MaxCommandedPitchRateRadPerSecond);
-        double numerator = System.Math.Cos(currentFlightPathRad)
-            + pitchRate * trueAirspeedMps / FlightModel.G0;
         double cosBank = System.Math.Cos(bodyBankRad);
         double denominator = System.Math.CopySign(
             System.Math.Max(System.Math.Abs(cosBank), config.BankCosineFloor),
             cosBank);
-        if (!double.IsFinite(numerator) || !double.IsFinite(denominator))
+        // Only the GRAVITY feed-forward is bank-compensated: n·cosBank balances cos(gamma) in
+        // a coordinated hold. The attitude/rate correction is a BODY-lift-axis demand and must
+        // never be divided by the signed cosine — past 90 degrees of bank that division flips
+        // the correction's sign, and a hands-off inverted aircraft split-esses at saturated
+        // positive G while its own error feeds the pull (owner flight report 2026-07-29,
+        // reproduced at commanded 8.0 G / flown 8.8 G; sign analysis triangulated with Codex).
+        // At wings-level the two forms are identical (denominator -> 1).
+        double load = System.Math.Cos(currentFlightPathRad) / denominator
+            + pitchRate * trueAirspeedMps / FlightModel.G0;
+        if (!double.IsFinite(load))
             return double.NaN;
 
-        double load = numerator / denominator;
-        // Past 90 degrees of bank the signed division can compose a nose-down attitude error
-        // with the negative denominator into a saturated POSITIVE pull — a hands-off inverted
-        // aircraft then split-esses at MaxG while the error feeds itself (owner flight report
-        // 2026-07-29: "inverted it pulls 6g uncommanded"; reproduced at commanded 8.0 G).
-        // The documented contract is the opposite: inverted asks for negative G instead of
-        // pulling through the horizon. Enforce it — inverted-side holds may push to MinG but
-        // never demand more than a 1 G pull.
-        if (cosBank < 0.0) load = System.Math.Min(load, 1.0);
         return System.Math.Clamp(load, config.MinG, config.MaxG);
     }
 
