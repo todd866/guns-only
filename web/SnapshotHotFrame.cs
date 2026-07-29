@@ -42,7 +42,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 16;
+    public const int LayoutVersion = 17;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -147,6 +147,10 @@ internal static class SnapshotHotFrame {
         Num("rapier_radio_priority", RawInteger);
         Num("rapier_radio_started_s", 3);
         Num("rapier_radio_ends_s", 3);
+        Bool("checklist_active");
+        Num("checklist_id", RawInteger);
+        Num("checklist_done", RawInteger);
+        Num("checklist_total", RawInteger);
         Num("rapier_fd_bank_deg", 1);
         Num("rapier_fd_target_ktas", 0);
         Num("rapier_gate_half_m", 1);
@@ -457,6 +461,23 @@ internal static class SnapshotHotFrame {
         Nul("fuel_on_arrival_estimate_lb", 2);
         Nul("fuel_reserve_target_lb", 2);
         Nul("fuel_reserve_margin_lb", 2);
+        Num("mesh_transit_mode_code", RawInteger);
+        Bool("mesh_active_known");
+        Bool("mesh_active_is_place");
+        Nul("mesh_active_east_m", 2);
+        Nul("mesh_active_north_m", 2);
+        Nul("mesh_home_east_m", 2);
+        Nul("mesh_home_north_m", 2);
+        Nul("mesh_dest_bearing_deg", 2);
+        Nul("mesh_dest_turn_deg", 2);
+        Nul("mesh_dest_range_nm", 2);
+        Nul("mesh_dest_closure_kts", 2);
+        Nul("mesh_dest_eta_min", 2);
+        Nul("mesh_fuel_to_dest_lb", 2);
+        Nul("mesh_fuel_on_arrival_dest_lb", 2);
+        Nul("mesh_fuel_dest_to_home_lb", 2);
+        Nul("mesh_fuel_on_arrival_home_via_dest_lb", 2);
+        Nul("mesh_reserve_margin_via_dest_lb", 2);
         Num("gear_nose", 4); Num("gear_left", 4); Num("gear_right", 4);
         Bool("gear_unsafe");
         Bool("gear_warning_horn");
@@ -924,6 +945,10 @@ internal static class SnapshotHotFrame {
         w.Num("rapier_radio_priority", (int)session.MissionRadio.Priority, RawInteger);
         w.Num("rapier_radio_started_s", session.MissionRadio.StartedAtSeconds, 3);
         w.Num("rapier_radio_ends_s", session.MissionRadio.EndsAtSeconds, 3);
+        w.Bool("checklist_active", session.MissionChecklist.Active);
+        w.Num("checklist_id", (int)session.MissionChecklist.Id, RawInteger);
+        w.Num("checklist_done", session.MissionChecklist.Done, RawInteger);
+        w.Num("checklist_total", session.MissionChecklist.Total, RawInteger);
         w.Num("rapier_fd_bank_deg", session.RapierFdBankDeg, 1);
         w.Num("rapier_fd_target_ktas", session.RapierFdTargetKtas, 0);
         w.Num("rapier_gate_half_m", session.RapierGateHalfM, 1);
@@ -1292,6 +1317,33 @@ internal static class SnapshotHotFrame {
             recoveryNavigation.FuelOnArrivalEstimateLb, 2);
         w.Nul("fuel_reserve_target_lb", recoveryNavigation.ReserveTargetLb, 2);
         w.Nul("fuel_reserve_margin_lb", recoveryNavigation.ReserveMarginLb, 2);
+        MeshNavSolution meshSolution = MeshSnapshot.Project(
+            session, simulationPosition, groundVelocity, displayHeadingRad);
+        MeshActiveDest? meshActive = session.MeshNav.Active;
+        MeshPlace? meshHome = session.MeshNav.HomePlate;
+        w.Num("mesh_transit_mode_code", (int)session.MeshNav.Mode, RawInteger);
+        w.Bool("mesh_active_known", meshActive is not null);
+        w.Bool("mesh_active_is_place", meshActive?.IsPlace == true);
+        w.Nul("mesh_active_east_m", meshActive?.EastM, 2);
+        w.Nul("mesh_active_north_m", meshActive?.NorthM, 2);
+        w.Nul("mesh_home_east_m", meshHome?.EastM, 2);
+        w.Nul("mesh_home_north_m", meshHome?.NorthM, 2);
+        RtbGuidance meshGuidance = meshSolution.DestLeg.Guidance;
+        w.Nul("mesh_dest_bearing_deg",
+            meshActive is null ? null : meshGuidance.BearingRad * 57.29577951308232, 2);
+        w.Nul("mesh_dest_turn_deg",
+            meshActive is null ? null : meshGuidance.TurnRad * 57.29577951308232, 2);
+        w.Nul("mesh_dest_range_nm",
+            meshActive is null ? null : meshGuidance.RangeM / 1852.0, 2);
+        w.Nul("mesh_dest_closure_kts", meshSolution.DestLeg.ClosureKts, 2);
+        w.Nul("mesh_dest_eta_min", meshSolution.DestLeg.EtaMinutes, 2);
+        w.Nul("mesh_fuel_to_dest_lb", meshSolution.DestLeg.FuelToHomeEstimateLb, 2);
+        w.Nul("mesh_fuel_on_arrival_dest_lb",
+            meshSolution.DestLeg.FuelOnArrivalEstimateLb, 2);
+        w.Nul("mesh_fuel_dest_to_home_lb", meshSolution.FuelDestToHomeLb, 2);
+        w.Nul("mesh_fuel_on_arrival_home_via_dest_lb",
+            meshSolution.FuelOnArrivalHomeViaDestLb, 2);
+        w.Nul("mesh_reserve_margin_via_dest_lb", meshSolution.ReserveMarginViaDestLb, 2);
         w.Num("gear_nose", systems.NoseGearPosition, 4);
         w.Num("gear_left", systems.LeftMainGearPosition, 4);
         w.Num("gear_right", systems.RightMainGearPosition, 4);
@@ -2194,7 +2246,8 @@ internal static class SnapshotHotFrame {
         LsoSeverity? LsoSeverity,
         double WorldOriginEastM,
         double WorldOriginNorthM,
-        bool WorldOriginConfigured) {
+        bool WorldOriginConfigured,
+        string MeshActiveKey) {
 
         public static ColdFingerprint Capture(SimulationSession session,
             double worldOriginEastM, double worldOriginNorthM, bool worldOriginConfigured) {
@@ -2315,7 +2368,16 @@ internal static class SnapshotHotFrame {
                 lsoSeverity,
                 worldOriginEastM,
                 worldOriginNorthM,
-                worldOriginConfigured);
+                worldOriginConfigured,
+                FormatMeshActiveKey(session.MeshNav));
+        }
+
+        static string FormatMeshActiveKey(MeshNavDirector mesh) {
+            MeshActiveDest? active = mesh.Active;
+            if (active is null) return $"{(int)mesh.Mode}|none|{mesh.Catalog.Count}";
+            if (active.Value.IsPlace)
+                return $"{(int)mesh.Mode}|place|{active.Value.PlaceId}|{mesh.Catalog.Count}";
+            return $"{(int)mesh.Mode}|fix|{active.Value.EastM:F0}|{active.Value.NorthM:F0}|{mesh.Catalog.Count}";
         }
     }
 }

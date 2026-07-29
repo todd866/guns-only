@@ -230,6 +230,17 @@ public static partial class WebBridge {
     /// for three.js. All aliases below are read-only projection handles from SimulationSession.
 
     [JSExport]
+    public static bool SetMeshActivePlace(string placeId) =>
+        Session.TrySelectMeshPlace(placeId);
+
+    [JSExport]
+    public static bool SetMeshFreeFix(double eastM, double northM, string? label) =>
+        Session.TrySetMeshFreeFix(eastM, northM, label);
+
+    [JSExport]
+    public static void ClearMeshActiveDest() => Session.ClearMeshActiveDest();
+
+    [JSExport]
     public static void SetCircuitsCleanMode(bool clean) =>
         Session.SetCircuitsCleanMode(clean);
 

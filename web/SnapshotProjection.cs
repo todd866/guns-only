@@ -31,7 +31,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.21.0";
+    const string SnapshotSchemaVersion = "1.22.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -455,6 +455,12 @@ internal static class SnapshotProjection {
             + $"\"rapier_radio_started_s\":{Session.MissionRadio.StartedAtSeconds:F3},"
             + $"\"rapier_radio_ends_s\":{Session.MissionRadio.EndsAtSeconds:F3},"
             + $"\"rapier_radio_ai_generated\":{(Session.MissionRadio.AiGenerated ? "true" : "false")},"
+            + $"\"checklist_active\":{(Session.MissionChecklist.Active ? "true" : "false")},"
+            + $"\"checklist_id\":{(int)Session.MissionChecklist.Id},"
+            + $"\"checklist_done\":{Session.MissionChecklist.Done},"
+            + $"\"checklist_total\":{Session.MissionChecklist.Total},"
+            + $"\"checklist_name\":{JsonString(Session.MissionChecklist.Name)},"
+            + $"\"checklist_next\":{JsonString(Session.MissionChecklist.NextItem)},"
             + $"\"rapier_fd_bank_deg\":{Session.RapierFdBankDeg:F1},"
             + $"\"rapier_fd_target_ktas\":{Session.RapierFdTargetKtas:F0},"
             + $"\"rapier_gate_half_m\":{Session.RapierGateHalfM:F1},"
@@ -807,6 +813,7 @@ internal static class SnapshotProjection {
             + $"\"fuel_on_arrival_estimate_lb\":{NullableNumberJson(recoveryNavigation.FuelOnArrivalEstimateLb)},"
             + $"\"fuel_reserve_target_lb\":{NullableNumberJson(recoveryNavigation.ReserveTargetLb)},"
             + $"\"fuel_reserve_margin_lb\":{NullableNumberJson(recoveryNavigation.ReserveMarginLb)},"
+            + MeshNavJson(simulationPosition, groundVelocity, displayHeadingRad)
             + $"\"gear_handle\":\"{GearHandleToken(_systems.GearHandle)}\","
             + $"\"gear_nose\":{_systems.NoseGearPosition:F4},\"gear_left\":{_systems.LeftMainGearPosition:F4},\"gear_right\":{_systems.RightMainGearPosition:F4},"
             + $"\"gear_nose_indication\":\"{GearIndicationToken(_systems.NoseGearIndication)}\","
@@ -839,6 +846,40 @@ internal static class SnapshotProjection {
     // (sim.Tests links and exercises it). These thin delegates keep every existing call site
     // unchanged while removing the duplicate implementation.
     static string NullableNumberJson(double? value) => SnapshotJson.NullableNumberJson(value);
+
+    static string MeshNavJson(
+        in Vec3D simulationPosition,
+        in Vec3D groundVelocity,
+        double displayHeadingRad) {
+        MeshNavSolution meshSolution = MeshSnapshot.Project(
+            Session, simulationPosition, groundVelocity, displayHeadingRad);
+        MeshActiveDest? meshActive = Session.MeshNav.Active;
+        MeshPlace? meshHome = Session.MeshNav.HomePlate;
+        RtbGuidance meshGuidance = meshSolution.DestLeg.Guidance;
+        return $"\"mesh_transit_mode\":{JsonString(MeshSnapshot.TransitModeToken(Session.MeshNav.Mode))},"
+            + $"\"mesh_transit_mode_code\":{(int)Session.MeshNav.Mode},"
+            + $"\"mesh_home_place_id\":{JsonString(meshHome?.PlaceId)},"
+            + $"\"mesh_home_display_name\":{JsonString(meshHome?.DisplayName)},"
+            + $"\"mesh_home_east_m\":{NullableNumberJson(meshHome?.EastM)},"
+            + $"\"mesh_home_north_m\":{NullableNumberJson(meshHome?.NorthM)},"
+            + $"\"mesh_active_known\":{(meshActive is not null ? "true" : "false")},"
+            + $"\"mesh_active_is_place\":{(meshActive?.IsPlace == true ? "true" : "false")},"
+            + $"\"mesh_active_place_id\":{JsonString(meshActive?.PlaceId)},"
+            + $"\"mesh_active_display_name\":{JsonString(meshActive?.DisplayName)},"
+            + $"\"mesh_active_east_m\":{NullableNumberJson(meshActive?.EastM)},"
+            + $"\"mesh_active_north_m\":{NullableNumberJson(meshActive?.NorthM)},"
+            + $"\"mesh_dest_bearing_deg\":{NullableNumberJson(meshActive is null ? null : meshGuidance.BearingRad * 57.29577951308232)},"
+            + $"\"mesh_dest_turn_deg\":{NullableNumberJson(meshActive is null ? null : meshGuidance.TurnRad * 57.29577951308232)},"
+            + $"\"mesh_dest_range_nm\":{NullableNumberJson(meshActive is null ? null : meshGuidance.RangeM / 1852.0)},"
+            + $"\"mesh_dest_closure_kts\":{NullableNumberJson(meshSolution.DestLeg.ClosureKts)},"
+            + $"\"mesh_dest_eta_min\":{NullableNumberJson(meshSolution.DestLeg.EtaMinutes)},"
+            + $"\"mesh_fuel_to_dest_lb\":{NullableNumberJson(meshSolution.DestLeg.FuelToHomeEstimateLb)},"
+            + $"\"mesh_fuel_on_arrival_dest_lb\":{NullableNumberJson(meshSolution.DestLeg.FuelOnArrivalEstimateLb)},"
+            + $"\"mesh_fuel_dest_to_home_lb\":{NullableNumberJson(meshSolution.FuelDestToHomeLb)},"
+            + $"\"mesh_fuel_on_arrival_home_via_dest_lb\":{NullableNumberJson(meshSolution.FuelOnArrivalHomeViaDestLb)},"
+            + $"\"mesh_reserve_margin_via_dest_lb\":{NullableNumberJson(meshSolution.ReserveMarginViaDestLb)},"
+            + $"\"mesh_place_catalog_json\":{SnapshotJson.JsonString(MeshSnapshot.CatalogJson(Session))},";
+    }
 
     static string FiniteNumberJson(double value) => SnapshotJson.FiniteNumberJson(value);
 
