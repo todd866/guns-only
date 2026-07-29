@@ -92,7 +92,7 @@ test("canonical starter content passes strict validation", async () => {
   const report = await validateRepository({ root: REPOSITORY_ROOT, packs: [STARTER_PACK], strict: true });
   assert.equal(report.ok, true, stableStringify({ errors: report.errors, warnings: report.warnings }));
   assert.deepEqual(report.summary, {
-    schemas: 4,
+    schemas: 5,
     manifests: 4,
     packs: 1,
     profiles: 1,
