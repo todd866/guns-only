@@ -14,6 +14,13 @@ import { chromium } from "playwright";
 
 const WWWROOT = process.env.SMOKE_WWWROOT;
 
+// Shared-workstation CI: this suite runs beside other agents' builds and browsers, and under
+// that contention SwiftShader waits stretch far past their quiet-machine budgets. The scale
+// multiplies only wait budgets — condition checks return the moment they hold — so a loaded
+// gate slows instead of failing falsely. Quiet machines are unaffected (scale 1).
+const TIMEOUT_SCALE = Math.max(1, Number(process.env.SMOKE_TIMEOUT_SCALE) || 1);
+const scaled = (ms) => ms * TIMEOUT_SCALE;
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -78,7 +85,7 @@ test("the published Indoor route boots its Three.js facility and transitions opt
     await page.waitForFunction(
       () => globalThis.__gunsIndoor?.ready === true,
       undefined,
-      { timeout: 15000 },
+      { timeout: scaled(15000) },
     );
 
     const ready = await page.evaluate(() => ({
@@ -122,21 +129,21 @@ test("the published Indoor route boots its Three.js facility and transitions opt
     await page.waitForFunction(
       (startZ) => globalThis.__gunsIndoor.state.drone.position.z < startZ - 0.1,
       controlsBefore.z,
-      { timeout: 10000 },
+      { timeout: scaled(10000) },
     );
     await page.keyboard.up("w");
     await page.keyboard.down("d");
     await page.waitForFunction(
       (startX) => globalThis.__gunsIndoor.state.drone.position.x > startX + 0.1,
       controlsBefore.x,
-      { timeout: 10000 },
+      { timeout: scaled(10000) },
     );
     await page.keyboard.up("d");
     await page.keyboard.down("ArrowRight");
     await page.waitForFunction(
       (startYaw) => globalThis.__gunsIndoor.state.drone.yaw > startYaw + 0.1,
       controlsBefore.yaw,
-      { timeout: 10000 },
+      { timeout: scaled(10000) },
     );
     await page.keyboard.up("ArrowRight");
     const controlsAfter = await page.evaluate(() => ({
@@ -158,7 +165,7 @@ test("the published Indoor route boots its Three.js facility and transitions opt
     await page.waitForFunction(
       (startY) => globalThis.__gunsIndoor.state.drone.position.y > startY + 0.1,
       verticalBefore,
-      { timeout: 10000 },
+      { timeout: scaled(10000) },
     );
     await page.keyboard.up("Space");
     const verticalHigh = await page.evaluate(
@@ -168,7 +175,7 @@ test("the published Indoor route boots its Three.js facility and transitions opt
     await page.waitForFunction(
       (highY) => globalThis.__gunsIndoor.state.drone.position.y < highY - 0.1,
       verticalHigh,
-      { timeout: 10000 },
+      { timeout: scaled(10000) },
     );
     await page.keyboard.up("Shift");
 
@@ -176,7 +183,7 @@ test("the published Indoor route boots its Three.js facility and transitions opt
     await page.waitForFunction(
       () => globalThis.__gunsIndoor.state?.link?.mode === "rf",
       undefined,
-      { timeout: 3000 },
+      { timeout: scaled(3000) },
     );
     const handoff = await page.evaluate(() => ({
       phase: document.body.dataset.phase,
@@ -214,7 +221,7 @@ test("the published Medevac route resolves route hold, selective relay, and dive
       await page.waitForFunction(
         () => globalThis.__gunsMedevac?.ready === true,
         undefined,
-        { timeout: 20000 },
+        { timeout: scaled(20000) },
       );
       return { page, errors };
     }
@@ -587,7 +594,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
     await page.waitForFunction(
       () => document.querySelector("#boot")?.classList.contains("ready") === true,
       undefined,
-      { timeout: 45000 },
+      { timeout: scaled(45000) },
     );
 
     const fatalVisible = await page.evaluate(
@@ -619,7 +626,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
       const resumable = document.querySelector("#ready-screen")?.classList.contains("visible")
         && start?.disabled === false;
       return active || resumable;
-    }, undefined, { timeout: 45000 });
+    }, undefined, { timeout: scaled(45000) });
     const alreadyActive = await page.evaluate(() =>
       globalThis.__gunsState?.session_phase === "ACTIVE"
         && !document.documentElement.classList.contains("run-paused"));
@@ -628,7 +635,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
       globalThis.__gunsState?.session_phase === "ACTIVE"
         && globalThis.__gunsState?.player_terminal_state === "FLYING"
         && !document.documentElement.classList.contains("run-paused"),
-    undefined, { timeout: 45000 });
+    undefined, { timeout: scaled(45000) });
     await page.evaluate(() => globalThis.__gunsBridge.ReleaseWeaponsHold());
     await page.waitForFunction(() => globalThis.__gunsState?.weapons_inhibited === false);
     const roundsBeforeTrigger = await page.evaluate(
@@ -639,7 +646,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
       await page.waitForFunction((roundsBefore) =>
         globalThis.__gunsState?.gun_firing === true
           && Number(globalThis.__gunsState?.rounds_fired) > roundsBefore,
-      roundsBeforeTrigger, { timeout: 5000 });
+      roundsBeforeTrigger, { timeout: scaled(5000) });
     } finally {
       await page.keyboard.up("f");
     }
@@ -648,7 +655,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
       const root = document.documentElement;
       return root.dataset.audioContextState === "running"
         && root.dataset.audioSignalActive === "true";
-    }, undefined, { timeout: 5000 });
+    }, undefined, { timeout: scaled(5000) });
     const audioRuntime = await page.evaluate(() => {
       const root = document.documentElement;
       return {
@@ -710,7 +717,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
       () => document.documentElement.dataset.audioContextState === "suspended"
         && document.documentElement.dataset.audioStopReason === "smoke-complete",
       undefined,
-      { timeout: 5000 },
+      { timeout: scaled(5000) },
     );
   } finally {
     await browser.close();
@@ -762,7 +769,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
       await page.waitForFunction(
         () => document.querySelector("#boot")?.classList.contains("ready") === true,
         undefined,
-        { timeout: 45000 },
+        { timeout: scaled(45000) },
       );
     } catch (error) {
       const boot = await page.evaluate(() => ({
@@ -795,17 +802,17 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
         && globalThis.__gunsState?.casevac_mission !== true
         && globalThis.__gunsState?.session_phase === "READY",
       undefined,
-      { timeout: 15000 },
+      { timeout: scaled(15000) },
     );
     await page.waitForFunction(
       () => globalThis.__gunsLifecycle?.reasons?.includes("terrain"),
       undefined,
-      { timeout: 15000 },
+      { timeout: scaled(15000) },
     );
     await page.waitForFunction(
       () => globalThis.__gunsTerrainWarmupGate?.requestCount === 1,
       undefined,
-      { timeout: 15000 },
+      { timeout: scaled(15000) },
     );
 
     // Exercise the normal mission catalogue, not a Medevac deep link. Selection must stage
@@ -851,7 +858,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
         && globalThis.__gunsState?.session_phase === "READY"
         && routeCard?.hidden === false
         && routeCard.querySelectorAll(".cvr-option").length === 4;
-    }, undefined, { timeout: 15000 });
+    }, undefined, { timeout: scaled(15000) });
     await page.waitForTimeout(300);
     assert.equal(
       await page.evaluate(() => globalThis.__gunsState?.session_phase),
@@ -905,7 +912,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
         // 2026-07-29: the Ships A-D Ukraine content (Soniachne village edge, scenery density,
         // exclusion pack) grew low-level-drone ingress warmup past the old 15s SwiftShader
         // budget (measured 50-75s on a loaded machine; real GPUs are unaffected).
-        { timeout: 90000 },
+        { timeout: scaled(90000) },
       );
     } catch (error) {
       const diag = await page.evaluate(() => {
@@ -944,7 +951,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           Number(globalThis.__gunsState?.py) > startY + 0.2
             && Number(globalThis.__gunsState?.tick) > startTick,
         { startY: before.py, startTick: before.tick },
-        { timeout: 30000 },
+        { timeout: scaled(30000) },
       );
     } finally {
       await page.keyboard.up("w");
@@ -966,7 +973,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           pickupZ: before.pickupZ,
           startRange: pickupRangeBefore,
         },
-        { timeout: 30000 },
+        { timeout: scaled(30000) },
       );
     } finally {
       await page.keyboard.up("ArrowUp");
@@ -1101,7 +1108,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
         && globalThis.__gunsAssets?.diagnostics()?.casevac
           ?.visibleEscapeCueCount === 1,
       undefined,
-      { timeout: 15000 },
+      { timeout: scaled(15000) },
     );
     const abortPresentation = await page.evaluate(() => ({
       targetSiteId: globalThis.__gunsState?.casevac_target_site_id,
@@ -1136,7 +1143,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
         () => document.querySelector("#boot")?.classList.contains("ready") === true
           && globalThis.__gunsMobile?.active === true,
         undefined,
-        { timeout: 45000 },
+        { timeout: scaled(45000) },
       );
 
       if (await touchPage.evaluate(() => globalThis.__gunsMobile?.tiltState === "off")) {
@@ -1153,7 +1160,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           && document.querySelector("#ready-screen")?.classList.contains("visible")
           && start?.disabled === false;
         return active || resumable;
-      }, undefined, { timeout: 45000 });
+      }, undefined, { timeout: scaled(45000) });
       const touchAlreadyActive = await touchPage.evaluate(() =>
         globalThis.__gunsState?.session_phase === "ACTIVE"
           && !document.documentElement.classList.contains("run-paused"));
@@ -1166,7 +1173,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           && getComputedStyle(document.querySelector("#fallback-stick")).display !== "none"
           && !document.documentElement.classList.contains("run-paused"),
         undefined,
-        { timeout: 45000 },
+        { timeout: scaled(45000) },
       );
 
       const portraitTouch = await touchPage.evaluate(() => {
@@ -1287,14 +1294,14 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         await page.waitForFunction(
           () => document.querySelector("#boot")?.classList.contains("ready") === true,
           undefined,
-          { timeout: 45000 },
+          { timeout: scaled(45000) },
         );
 
         const buttonsOnly = page.locator('[data-mobile-action="buttons-only"]');
         await page.waitForFunction(
           () => globalThis.__gunsMobile?.active === true,
           undefined,
-          { timeout: 10000 },
+          { timeout: scaled(10000) },
         );
         if (await page.evaluate(() => globalThis.__gunsMobile?.tiltState === "off")) {
           await buttonsOnly.waitFor({ state: "visible", timeout: 10000 });
@@ -1309,7 +1316,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             const resumable = document.querySelector("#ready-screen")?.classList.contains("visible")
               && start?.disabled === false;
             return active || resumable;
-          }, undefined, { timeout: 45000 });
+          }, undefined, { timeout: scaled(45000) });
         } catch (error) {
           const snapshot = await page.evaluate(() => ({
             viewport: [innerWidth, innerHeight],
@@ -1348,7 +1355,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             && document.querySelector('[data-pulse-key="KeyV"]')?.hidden === false
             && !document.documentElement.classList.contains("run-paused"),
           undefined,
-          { timeout: 45000 },
+          { timeout: scaled(45000) },
         );
 
         const phoneState = await page.evaluate(() => {
@@ -1523,7 +1530,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         await page.waitForFunction((initialG) =>
           Number(globalThis.__gunsState?.requested_roll_control) > 0.2
             && Number(globalThis.__gunsState?.requested_g_cmd) > initialG + 0.2,
-        baselineG, { timeout: 5000 });
+        baselineG, { timeout: scaled(5000) });
         const engagedStick = await page.evaluate(() => {
           const element = document.querySelector("#fallback-stick");
           return {
@@ -1552,7 +1559,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           return element?.dataset.active === "false"
             && Math.abs(Number(globalThis.__gunsState?.requested_roll_control)) < 0.05
             && Number(globalThis.__gunsState?.requested_g_cmd) < initialG + 0.2;
-        }, baselineG, { timeout: 5000 });
+        }, baselineG, { timeout: scaled(5000) });
         const releasedStick = await page.evaluate(() => {
           const element = document.querySelector("#fallback-stick");
           return {
@@ -1621,7 +1628,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         });
         await page.waitForFunction((initialThrottle) =>
           Number(globalThis.__gunsState?.requested_throttle) < initialThrottle - 0.025,
-        baselineThrottle, { timeout: 5000 });
+        baselineThrottle, { timeout: scaled(5000) });
         const decreasedThrottle = await page.evaluate(() => {
           const element = document.querySelector("#touch-throttle-rocker");
           return {
@@ -1674,7 +1681,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             direction: element.dataset.direction,
             y: Number.parseFloat(element.style.getPropertyValue("--throttle-y")),
           };
-        }, steadyThrottle, { timeout: 5000 });
+        }, steadyThrottle, { timeout: scaled(5000) });
         // Capture the exact animation frame which satisfied the motion predicate. A separate
         // evaluate() can race the flight automation on slower CI runners and observe a later
         // throttle value even though the rocker already proved it moved upward.
@@ -1781,7 +1788,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     await page.waitForFunction(
       () => document.querySelector("#boot")?.classList.contains("ready") === true,
       undefined,
-      { timeout: 45000 },
+      { timeout: scaled(45000) },
     );
     await page.waitForFunction(() => {
       const active = globalThis.__gunsState?.session_phase === "ACTIVE"
@@ -1790,7 +1797,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
       const resumable = document.querySelector("#ready-screen")?.classList.contains("visible")
         && start?.disabled === false;
       return active || resumable;
-    }, undefined, { timeout: 45000 });
+    }, undefined, { timeout: scaled(45000) });
     const alreadyActive = await page.evaluate(() =>
       globalThis.__gunsState?.session_phase === "ACTIVE"
         && !document.documentElement.classList.contains("run-paused"));
@@ -1799,7 +1806,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
       globalThis.__gunsState?.session_phase === "ACTIVE"
       && globalThis.__gunsState?.player_terminal_state === "FLYING"
       && !document.documentElement.classList.contains("run-paused"),
-    undefined, { timeout: 45000 });
+    undefined, { timeout: scaled(45000) });
     // Once flying, the full portrait touch contract must hold (assist engages at sortie start,
     // not at boot, so these are asserted here).
     const modeClasses = await page.evaluate(() => [...document.documentElement.classList]);
@@ -1847,12 +1854,12 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
       await page.waitForFunction(
         () => Number(globalThis.__gunsState?.requested_roll_control) <= -0.5,
         undefined,
-        { timeout: 5000 },
+        { timeout: scaled(5000) },
       );
       await page.waitForFunction(
         () => Math.abs(Number(globalThis.__gunsState?.bank_deg)) >= 8,
         undefined,
-        { timeout: 6000 },
+        { timeout: scaled(6000) },
       );
     } finally {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
@@ -1860,7 +1867,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     await page.waitForFunction(
       () => Number(globalThis.__gunsState?.requested_roll_control) === 0,
       undefined,
-      { timeout: 5000 },
+      { timeout: scaled(5000) },
     );
 
     // The right stick must arm the look gesture rather than falling through to the scene.
@@ -1880,7 +1887,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
       await page.waitForFunction(
         () => document.querySelector("#target-stick")?.dataset.active === "true",
         undefined,
-        { timeout: 5000 },
+        { timeout: scaled(5000) },
       );
     } finally {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
