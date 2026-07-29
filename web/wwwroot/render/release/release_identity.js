@@ -1,5 +1,9 @@
-export const RELEASE_BUILD = "183";
-export const CANONICAL_PRODUCTION_ORIGIN = "https://guns-only.vercel.app";
+export const RELEASE_BUILD = "184";
+export const CANONICAL_PRODUCTION_ORIGIN = "https://guns-only.com";
+
+// Custom domains the guns-only Vercel project serves in production. guns-only.com is the
+// canonical advertised door; guns-only.cohort.md is the school-filter-safe alternate.
+const PRODUCTION_HOSTNAMES = new Set(["guns-only.com", "guns-only.cohort.md"]);
 export const BUILD_INFO_PATH = "/api/build-info";
 
 function cleanToken(value, maximumLength) {
@@ -133,7 +137,7 @@ export function buildInfoUrl(locationLike = globalThis.location) {
   if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || !hostname) {
     return null;
   }
-  if (hostname === "guns-only.vercel.app") return BUILD_INFO_PATH;
+  if (PRODUCTION_HOSTNAMES.has(hostname)) return BUILD_INFO_PATH;
   if (hostname.endsWith(".vercel.app")) {
     return `${CANONICAL_PRODUCTION_ORIGIN}${BUILD_INFO_PATH}`;
   }
@@ -150,5 +154,7 @@ export function runningBuildInfoUrl(locationLike = globalThis.location) {
   if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || !hostname) {
     return null;
   }
-  return hostname.endsWith(".vercel.app") ? BUILD_INFO_PATH : null;
+  return PRODUCTION_HOSTNAMES.has(hostname) || hostname.endsWith(".vercel.app")
+    ? BUILD_INFO_PATH
+    : null;
 }
