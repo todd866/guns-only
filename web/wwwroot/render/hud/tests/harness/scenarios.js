@@ -667,6 +667,9 @@ export const SCENARIOS = [
       rapier_adiabatic_wall_temp_c: 416,
       rapier_thermal_limit_c: 1200,
       rapier_thermal_margin_c: 739,
+      // Beat 10 projects a known recovery point whenever RTB navigation is live; the landed
+      // Limits panel keys its nav profile off this field.
+      recovery_point_known: true,
       rtb_range_nm: 136,
       rtb_bearing_deg: 180,
       rtb_turn_deg: 94,
