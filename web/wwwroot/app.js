@@ -207,7 +207,7 @@ const MAX_GIMBAL_YAW = PADLOCK_LIMITS.yawRad;
 const MAX_GIMBAL_PITCH = PADLOCK_LIMITS.pitchRad;
 const TRACKPAD_LOOK_RELEASE_MS = 110;
 const MAX_TRACERS = 48;
-const SUN_DIRECTION = new THREE.Vector3(0.32, 0.78, -0.53).normalize();
+const SUN_DIRECTION = new THREE.Vector3(0.50, 0.28, -0.82).normalize();
 const CLEAR_AIR_VISIBILITY_M = 100_000;
 const CASEVAC_PICKUP_SITE_ID = "location.ukraine.casevac-pickup-a.v1";
 const CASEVAC_RECEIVER_SITE_ID = "location.ukraine.casevac-handoff-a.v1";
@@ -6396,11 +6396,18 @@ class FlightView {
         this.fogHigh.set(0x7f9093);
         this.cloudFogColor.set(0xd7deda);
       } else {
-        this.fogLow.set(0xd2c4a8);
+        this.fogLow.set(0xa8814b);
         // Stay in the warm dusty family at altitude — cool fogHigh read as blue ocean past the
         // streamed disc (ADR-0003 soft world, not Korea poster blue).
         this.fogHigh.set(0x8a8470);
-        this.cloudFogColor.set(0xd2c4a8);
+        this.cloudFogColor.set(0xa8814b);
+        // Warm fill + golden key — painterly daylight; without this Ukraine stays flat/SNES.
+        this.ambient.color.set(0xe8d8b8);
+        this.ambient.groundColor.set(0x3a3428);
+        this.ambient.intensity = 0.9;
+        this.sun.color.set(0xffe2b4);
+        this.sun.intensity = 2.95;
+        this.renderer.toneMappingExposure = 1.1;
       }
       if (this.sea?.mesh) this.sea.mesh.visible = false;
     } else {

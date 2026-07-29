@@ -280,7 +280,7 @@ export function createKoreaEnvironment(THREE, options) {
   const group = new THREE.Group();
   group.name = "KOREA_ENVIRONMENT_ROOT";
 
-  const sunDirection = new THREE.Vector3(0.32, 0.74, -0.59).normalize();
+  const sunDirection = new THREE.Vector3(0.50, 0.28, -0.82).normalize();
   const oceanTier = tierSettings(ocean, tier);
   const wave = (index) => {
     const item = ocean.waves[index];

@@ -363,6 +363,23 @@ uniform float uModernScenery;
 uniform float uParcelTint;
 uniform float uShadowFloor;
 uniform vec2 uOcclusionRange;
+uniform float uCloudShadowStrength;
+uniform vec2 uCloudShadowOffset;
+
+// Value noise for wind-scrolled cloud shadows: the cumulus deck darkening the steppe is the
+// value structure this flat plain cannot get from relief alone.
+float terrainCloudHash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float terrainCloudNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(terrainCloudHash(i), terrainCloudHash(i + vec2(1.0, 0.0)), u.x),
+    mix(terrainCloudHash(i + vec2(0.0, 1.0)), terrainCloudHash(i + vec2(1.0, 1.0)), u.x),
+    u.y);
+}
 uniform float uHazeBands;
 uniform float uHazeBandBlend;
 uniform float uSnowCover01;
@@ -507,7 +524,7 @@ void main() {
   #ifdef UKRAINE_SCENERY
   // Continuous soft lighting — painterly value without the hard two-step toon posterization.
   float toneRamp = uShadowFloor
-    + (1.0 - uShadowFloor) * mix(0.62, 1.0, halfLambert);
+    + (1.0 - uShadowFloor) * mix(0.34, 1.0, halfLambert);
   vec3 rimTint = vec3(0.18, 0.14, 0.07);
   #else
   float toneRamp = uShadowFloor
@@ -525,8 +542,8 @@ void main() {
   vec2 regionalSunDirection = normalize(uSunDirection.xz + vec2(0.0001));
   float regionalReliefLight = clamp(
     0.96 + dot(normal.xz, regionalSunDirection) * 7.5,
-    0.86,
-    1.04);
+    0.70,
+    1.12);
   stylizedLit *= regionalReliefLight;
   #endif
 
@@ -567,6 +584,13 @@ void main() {
   terrainOcclusion = clamp(0.5 + (terrainOcclusion - 0.5) * 4.0, 0.0, 1.0);
   #endif
   lit *= mix(uOcclusionRange.x, uOcclusionRange.y, terrainOcclusion);
+
+  // Wind-scrolled cloud shadows, applied after baked occlusion and before water compositing so
+  // open water keeps its own analytic shading. Two octaves; strength 0 disables entirely.
+  vec2 cloudShadowUv = vTerrainWorldPosition.xz * (1.0 / 2600.0) + uCloudShadowOffset;
+  float cloudShadowNoise = terrainCloudNoise(cloudShadowUv) * 0.65
+    + terrainCloudNoise(cloudShadowUv * 2.7 + vec2(13.7, 41.3)) * 0.35;
+  lit *= 1.0 - uCloudShadowStrength * smoothstep(0.50, 0.80, cloudShadowNoise);
 
   // Inland source-water samples share the same analytic language as the shipped ocean: cool
   // blue-green body colour, grazing-angle sky reflection, restrained sun glint and metre-scale
@@ -618,13 +642,13 @@ void main() {
   float aerial = 1.0 - exp(-fogDensity * fogDensity
     * distanceToCamera * distanceToCamera);
   #ifdef UKRAINE_SCENERY
-  // Painterly mid-field haze is intentionally thin (0.42×). That same thinning leaves the
+  // Painterly mid-field haze is intentionally thin (0.34×). That same thinning leaves the
   // streamed disc readable as a render-square against sky / cool void. Force warm haze opaque
   // approaching the visual world edge so distance stays Ghibli atmosphere, not a tile boundary.
   if (uWorldEdgeM > 1.0) {
     // Start the bury early: at altitude the disc silhouette still reads square if haze only
     // thickens in the last 15% of the stream radius.
-    float edgeHide = smoothstep(uWorldEdgeM * 0.40, uWorldEdgeM * 0.72, distanceToCamera);
+    float edgeHide = smoothstep(uWorldEdgeM * 0.36, uWorldEdgeM * 0.72, distanceToCamera);
     aerial = max(aerial, edgeHide);
   }
   #endif
@@ -921,10 +945,10 @@ export function createTerrainMaterial(THREE, options = {}) {
       uEarthRadiusM: { value: TERRAIN_EARTH_RADIUS_M },
       uCurvatureStartM: { value: TERRAIN_CURVATURE_START_M },
       uSunDirection: {
-        value: (options.sunDirection ?? new THREE.Vector3(0.32, 0.78, -0.53)).clone().normalize(),
+        value: (options.sunDirection ?? new THREE.Vector3(0.50, 0.28, -0.82)).clone().normalize(),
       },
       uFogColor: {
-        value: new THREE.Color(options.fogColor ?? (ukraine ? 0xd2c4a8 : 0x6f8790)),
+        value: new THREE.Color(options.fogColor ?? (ukraine ? 0xa8814b : 0x6f8790)),
       },
       uFogDensity: { value: finite(options.fogDensity, ukraine ? 0.000052 : 0.000055) },
       uAtmosphereDensityScale: {
@@ -953,12 +977,15 @@ export function createTerrainMaterial(THREE, options = {}) {
       // Baked-occlusion multiplier at fully concave (x) and fully convex (y).
       uOcclusionRange: {
         value: new THREE.Vector2(
-          finite(options.occlusionMin, ukraine ? 0.70 : 0.55),
+          finite(options.occlusionMin, 0.55),
           finite(options.occlusionMax, 1.10),
         ),
       },
       // Discrete aerial-perspective planes. Korea-modern keeps stronger banding; Ukraine softens
       // the posterization so distance reads as continuous atmosphere (ADR-0003).
+      // Wind-scrolled cloud-shadow field. Strength 0 = clear sky; weather drives it.
+      uCloudShadowStrength: { value: finite(options.cloudShadowStrength, 0.34) },
+      uCloudShadowOffset: { value: new THREE.Vector2(0, 0) },
       uHazeBands: { value: finite(options.hazeBands, ukraine ? 3 : 6) },
       uHazeBandBlend: { value: finite(options.hazeBandBlend, ukraine ? 0.18 : 0.65) },
       // Surface truth is opt-in and defaults to the existing snow-free presentation.
@@ -1785,6 +1812,13 @@ class KoreaTerrainPresentation {
       this.material.uniforms.uWorldEdgeM.value = this.visibleWorldRadiusM;
     }
     if (sunDirection) this.material.uniforms.uSunDirection.value.copy(sunDirection).normalize();
+    if (Number.isFinite(elapsedSeconds)) {
+      const cloudDriftX = Number.isFinite(windX) ? windX : 6.0;
+      const cloudDriftZ = Number.isFinite(windZ) ? windZ : 2.5;
+      this.material.uniforms.uCloudShadowOffset.value.set(
+        cloudDriftX * elapsedSeconds / 2600.0,
+        cloudDriftZ * elapsedSeconds / 2600.0);
+    }
     setTerrainWinterSurface(this.material, snowCover01, snowWetness01, glazeIce01);
     setApronWinterSurface(this.horizonApron, snowCover01, snowWetness01, glazeIce01);
     if (!cameraPosition) return;
@@ -2305,6 +2339,13 @@ class KoreaTerrainAtlasPresentation {
       this.material.uniforms.uWorldEdgeM.value = this.visibleWorldRadiusM;
     }
     if (sunDirection) this.material.uniforms.uSunDirection.value.copy(sunDirection).normalize();
+    if (Number.isFinite(elapsedSeconds)) {
+      const cloudDriftX = Number.isFinite(windX) ? windX : 6.0;
+      const cloudDriftZ = Number.isFinite(windZ) ? windZ : 2.5;
+      this.material.uniforms.uCloudShadowOffset.value.set(
+        cloudDriftX * elapsedSeconds / 2600.0,
+        cloudDriftZ * elapsedSeconds / 2600.0);
+    }
     setTerrainWinterSurface(this.material, snowCover01, snowWetness01, glazeIce01);
     if (!cameraPosition) return;
 

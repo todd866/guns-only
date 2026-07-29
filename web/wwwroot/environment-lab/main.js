@@ -25,7 +25,7 @@ const requestedClouds = (() => {
   return null;
 })();
 const TERRAIN_LOOK_STREAM_RADIUS_M = 28_000;
-const PRODUCTION_SUN_DIRECTION = new THREE.Vector3(0.32, 0.78, -0.53).normalize();
+const PRODUCTION_SUN_DIRECTION = new THREE.Vector3(0.50, 0.28, -0.82).normalize();
 const VISUAL_PROFILE_URL = "../content/packs/korea-1950s/visual-profile.json";
 const UKRAINE_2030S_TERRAIN_ID = "terrain.ukraine.rapier-range.atlas.v1";
 const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID =
@@ -137,7 +137,7 @@ let visualProfile = null;
 let normalizedVisualProfile = null;
 let adaptiveResolution = null;
 let adaptiveResolutionStatus = null;
-const terrainFogColor = new THREE.Color(0xd2c4a8);
+const terrainFogColor = new THREE.Color(0xa8814b);
 let terrainFogDensity = 1 / 48_000;
 let elapsed = 0;
 let previous = null;
@@ -476,7 +476,7 @@ function applyProductionProfile(profile) {
   // Ukraine soft-world wants warm dusty distance; the Korea visual profile's cool fog would
   // wash ADR-0003 back into poster blue.
   if (site.value === "ukraine") {
-    terrainFogColor.set("#D2C4A8");
+    terrainFogColor.set("#A8814B");
     terrainFogDensity = 1 / Math.max(1, Number(fog.farMetres) || 48_000);
     renderer.toneMappingExposure = Math.max(renderer.toneMappingExposure, 1.08);
     ambient.intensity = Math.max(ambient.intensity, 1.45);
@@ -575,7 +575,7 @@ async function rebuild() {
     loadKoreaEnvironment(THREE, {
       qualityTier: quality.value,
       ...(siteConfig.atmosphereUrl ? { atmosphereUrl: siteConfig.atmosphereUrl } : {}),
-      fogColor: site.value === "ukraine" ? "#D2C4A8" : undefined,
+      fogColor: site.value === "ukraine" ? "#A8814B" : undefined,
       fogNear: site.value === "ukraine" ? 7_500 : undefined,
       fogFar: site.value === "ukraine" ? 48_000 : undefined,
     }),
@@ -709,7 +709,7 @@ function animate(now) {
   if (tacticalClouds) {
     tacticalClouds.group.visible = tacticalCloudsVisible();
     const cloudFog = site.value === "ukraine"
-      ? new THREE.Color(0xd2c4a8)
+      ? new THREE.Color(0xa8814b)
       : new THREE.Color(0x7898a0);
     tacticalClouds.update(camera.position, elapsed, cloudFog,
       site.value === "ukraine" ? 0.000048 : 0.000055, sunDirection());

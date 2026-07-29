@@ -1428,7 +1428,7 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.doesNotMatch(ukraine.fragmentShader, /sin\(rewild/,
     "land-cover structure belongs in the worker, not nested fragment sine calls");
   assert.match(ukraine.fragmentShader,
-    /mix\(0\.62, 1\.0, halfLambert\)/,
+    /mix\(0\.34, 1\.0, halfLambert\)/,
     "Ukraine soft-world lighting must be continuous, not a hard two-step toon ramp");
   assert.match(ukraine.fragmentShader,
     /dot\(normal\.xz, regionalSunDirection\) \* 7\.5/,
@@ -1443,10 +1443,10 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(ukraine.fragmentShader,
     /mix\(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix\)/,
     "terrain and scenery must share one warm haze contract");
-  assert.equal(ukraine.uniforms.uAtmosphereDensityScale.value, 0.42);
+  assert.equal(ukraine.uniforms.uAtmosphereDensityScale.value, 0.34);
   assert.deepEqual(ukraine.uniforms.uAtmosphereHazeColor.value.toArray(),
-    [0.78, 0.72, 0.58]);
-  assert.equal(ukraine.uniforms.uAtmosphereHazeMix.value, 0.62);
+    [0.66, 0.51, 0.30]);
+  assert.equal(ukraine.uniforms.uAtmosphereHazeMix.value, 0.58);
   assert.ok(ukraine.uniforms.uWorldEdgeM, "stream-edge bury uniform must exist");
   assert.equal(ukraine.uniforms.uSnowCover01.value, 0,
     "winter surface shading must preserve the current green-world default");
@@ -1457,7 +1457,7 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(ukraine.fragmentShader, /float snowRetention =/,
     "snow cover must follow terrain slope rather than behave as a flat colour filter");
   assert.match(ukraine.fragmentShader,
-    /smoothstep\(uWorldEdgeM \* 0\.40, uWorldEdgeM \* 0\.72, distanceToCamera\)/,
+    /smoothstep\(uWorldEdgeM \* 0\.36, uWorldEdgeM \* 0\.72, distanceToCamera\)/,
     "Ukraine soft-world must haze out the streamed disc so it never reads as a render-square");
   assert.ok(
     modern.fragmentShader.indexOf("lit *= mix(uOcclusionRange.x")

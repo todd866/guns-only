@@ -2,9 +2,13 @@
 // ordinary scene-fog materials. Keep these values in one dependency-free module so the custom
 // terrain shader and Three's built-in material path cannot silently drift apart again.
 
-export const UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE = 0.42;
-export const UKRAINE_SOFT_WORLD_HAZE_MIX = 0.62;
-export const UKRAINE_SOFT_WORLD_HAZE_RGB = Object.freeze([0.78, 0.72, 0.58]);
+// Clearer near/mid field so Ukraine desktop reads meadow structure, not cream SNES mush.
+// World-edge bury (terrain shader) still closes the streamed disc.
+export const UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE = 0.34;
+export const UKRAINE_SOFT_WORLD_HAZE_MIX = 0.58;
+export const UKRAINE_SOFT_WORLD_HAZE_RGB = Object.freeze([0.66, 0.51, 0.30]);
+export const UKRAINE_SOFT_WORLD_EDGE_HIDE_START = 0.36;
+export const UKRAINE_SOFT_WORLD_EDGE_HIDE_END = 0.72;
 
 export const UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES = Object.freeze([
   "uFogColor",
@@ -66,7 +70,7 @@ export function addUkraineSoftWorldFog(material, atmosphereUniforms) {
           );
           if (uWorldEdgeM > 1.0) {
             float softWorldEdgeHide = smoothstep(
-              uWorldEdgeM * 0.40,
+              uWorldEdgeM * 0.36,
               uWorldEdgeM * 0.72,
               vSoftWorldFogDistance
             );

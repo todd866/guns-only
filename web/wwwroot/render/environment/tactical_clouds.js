@@ -680,7 +680,7 @@ export function createTacticalCloudField(THREE, options = {}) {
   const uniforms = {
     uTime: { value: 0 },
     uOpticalScale: { value: tier === "desktop" ? 0.0018 : 0.00155 },
-    uSunDirection: { value: new THREE.Vector3(0.32, 0.78, -0.53).normalize() },
+    uSunDirection: { value: new THREE.Vector3(0.50, 0.28, -0.82).normalize() },
     uLightColor: { value: new THREE.Color(0xf8f3e8) },
     uShadowColor: { value: new THREE.Color(0x71838e) },
     uFogColor: { value: new THREE.Color(0x7898a0) },

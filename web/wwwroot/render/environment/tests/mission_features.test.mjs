@@ -22,11 +22,11 @@ async function canonicalPack() {
 
 function atmosphereUniforms() {
   return {
-    uFogColor: { value: new THREE.Color(0xd2c4a8) },
+    uFogColor: { value: new THREE.Color(0xa8814b) },
     uFogDensity: { value: 0.000052 },
-    uAtmosphereDensityScale: { value: 0.42 },
-    uAtmosphereHazeColor: { value: new THREE.Color(0.78, 0.72, 0.58) },
-    uAtmosphereHazeMix: { value: 0.62 },
+    uAtmosphereDensityScale: { value: 0.34 },
+    uAtmosphereHazeColor: { value: new THREE.Color(0.66, 0.51, 0.30) },
+    uAtmosphereHazeMix: { value: 0.58 },
     uWorldEdgeM: { value: 24_000 },
     uHazeBands: { value: 3 },
     uHazeBandBlend: { value: 0.18 },
