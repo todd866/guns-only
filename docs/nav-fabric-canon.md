@@ -1,7 +1,7 @@
 # Nav-fabric canon: the Routing Mesh
 
 Date: 2026-07-29  
-Status: draft pending owner review (design companion)  
+Status: accepted fiction (design companion)  
 Setting: late 2030s → ANCA2040 curriculum horizon  
 Related: [no-man's-land canon](no-mans-land-canon.md),
 [shared geography design](superpowers/specs/2026-07-29-shared-geography-nav-fabric-design.md),

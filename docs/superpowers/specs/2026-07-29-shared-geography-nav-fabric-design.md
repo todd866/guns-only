@@ -1,7 +1,7 @@
 # Shared geography + Routing Mesh — design
 
 Date: 2026-07-29  
-Status: draft pending owner review (brainstormed with owner)  
+Status: accepted design (brainstormed with owner; implementation plan in progress)  
 Canon: [nav-fabric-canon.md](../../nav-fabric-canon.md)  
 Related: [no-man's-land canon](../../no-mans-land-canon.md),
 [ukraine-low-level-scenery.md](../../ukraine-low-level-scenery.md),
