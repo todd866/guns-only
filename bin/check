@@ -67,6 +67,13 @@ mkdir -p "$ukraine_env_stage"
 if [ -f "$ukraine_env_dir/atmosphere.material.json" ]; then
   cp "$ukraine_env_dir/atmosphere.material.json" "$ukraine_env_stage/"
 fi
+# Free-fly Mesh place catalog (authored destinations / landmarks for Open Segment).
+ukraine_mesh_source="content/packs/ukraine-modern/environment/mesh"
+ukraine_mesh_stage="$staged_content_dir/packs/ukraine-modern/environment/mesh"
+if [ -d "$ukraine_mesh_source" ]; then
+  mkdir -p "$ukraine_mesh_stage"
+  cp -R "$ukraine_mesh_source/." "$ukraine_mesh_stage/"
+fi
 # Rapier-range atlas (eastern corridor). Source of truth under content/; wwwroot is a staged copy.
 ukraine_atlas_source="content/packs/ukraine-modern/environment/terrain-atlas"
 ukraine_atlas_stage="$staged_content_dir/packs/ukraine-modern/environment/terrain-atlas"
