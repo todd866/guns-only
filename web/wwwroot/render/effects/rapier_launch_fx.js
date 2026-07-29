@@ -1,6 +1,6 @@
-/// Rapier buried-gallery catshot FX — vent breath, portal sheet, rail shimmer.
-/// Spec: docs/superpowers/specs/2026-07-29-rapier-launch-gallery-ghibli-wwiii-design.md
-/// Stroke-gated: only while catapult_active; clears at handoff.
+/// Rapier buried-gallery catshot FX — vent breath, portal daylight sheet, rail shimmer.
+/// Specs: launch gallery + Ship C catshot light story.
+/// Stroke-gated while catapult_active; soft post-handoff fade (~1.2 s), then clear.
 
 import * as THREE from "../../vendor/three.module.js";
 
@@ -37,6 +37,8 @@ function makeDustPoints(count, color, size) {
   return points;
 }
 
+const POST_HANDOFF_FADE_S = 1.2;
+
 /**
  * @param {object} layout metre datums from createRapierDispersedStrip
  */
@@ -53,14 +55,15 @@ export function createRapierLaunchFx(layout = {}) {
   group.name = "LAUNCH_FX";
 
   const ventCount = Math.max(24, Math.round(48 * particleMultiplier));
-  const portalCount = Math.max(32, Math.round(64 * particleMultiplier));
+  const portalCount = Math.max(40, Math.round(80 * particleMultiplier));
   const railCount = Math.max(16, Math.round(28 * particleMultiplier));
 
+  // Warm dusty vents; soft daylight portal sheet; amber rail cue (not cyber blue).
   const vents = makeDustPoints(ventCount, 0xc4b896, 1.8);
   vents.name = "LAUNCH_FX_VENT_DUST";
-  const portal = makeDustPoints(portalCount, 0xe8dcc0, 2.4);
+  const portal = makeDustPoints(portalCount, 0xfff0d0, 3.2);
   portal.name = "LAUNCH_FX_PORTAL_SHEET";
-  const rail = makeDustPoints(railCount, 0x7ec8ff, 1.1);
+  const rail = makeDustPoints(railCount, 0xffd090, 1.2);
   rail.name = "LAUNCH_FX_RAIL_SHIMMER";
   group.add(vents, portal, rail);
 
@@ -69,8 +72,12 @@ export function createRapierLaunchFx(layout = {}) {
   const hotLampColor = new THREE.Color(0xffe6a8);
   const lampColor = new THREE.Color();
 
-  let active = false;
+  let strokeActive = false;
+  let fadeRemainingS = 0;
   let timeS = 0;
+  let lastVentOpacity = 0;
+  let lastPortalOpacity = 0;
+  let lastRailOpacity = 0;
 
   function seedVentPositions(attr, progress) {
     const arr = attr.array;
@@ -79,7 +86,6 @@ export function createRapierLaunchFx(layout = {}) {
       const side = i % 2 === 0 ? -1 : 1;
       const along = (i / ventCount) * flatLengthM;
       const z = railStartZ - along;
-      // Prefer vents near the aircraft (progress along flat run).
       const weight = 1 - Math.min(1, Math.abs(z - midZ) / 80);
       arr[i * 3] = catapultX + side * (galleryHalfWidth + 0.6 + Math.random() * 1.2);
       arr[i * 3 + 1] = galleryHeight - 1.2 + Math.random() * 1.4 + weight * 0.4;
@@ -92,9 +98,10 @@ export function createRapierLaunchFx(layout = {}) {
     const arr = attr.array;
     for (let i = 0; i < portalCount; i += 1) {
       const t = i / portalCount;
-      arr[i * 3] = catapultX + (Math.random() - 0.5) * galleryHalfWidth * 1.6;
-      arr[i * 3 + 1] = 0.4 + Math.random() * (galleryHeight - 0.8);
-      arr[i * 3 + 2] = galleryEndZ - 2 - Math.random() * 8 - t * 6;
+      // Soft daylight sheet just outside the portal mouth — reads as sky pouring in.
+      arr[i * 3] = catapultX + (Math.random() - 0.5) * galleryHalfWidth * 2.1;
+      arr[i * 3 + 1] = 0.2 + Math.random() * (galleryHeight + 2.5);
+      arr[i * 3 + 2] = galleryEndZ - 1 - Math.random() * 14 - t * 10;
     }
     attr.needsUpdate = true;
   }
@@ -112,39 +119,85 @@ export function createRapierLaunchFx(layout = {}) {
     attr.needsUpdate = true;
   }
 
-  function setActive(next) {
-    active = next === true;
-    vents.visible = active;
-    portal.visible = active;
-    rail.visible = active;
-    if (!active) {
-      vents.material.opacity = 0;
-      portal.material.opacity = 0;
-      rail.material.opacity = 0;
-      if (ribLamps?.material?.color) ribLamps.material.color.copy(baseLampColor);
+  function clearFx() {
+    strokeActive = false;
+    fadeRemainingS = 0;
+    vents.visible = false;
+    portal.visible = false;
+    rail.visible = false;
+    vents.material.opacity = 0;
+    portal.material.opacity = 0;
+    rail.material.opacity = 0;
+    lastVentOpacity = 0;
+    lastPortalOpacity = 0;
+    lastRailOpacity = 0;
+    if (ribLamps?.material?.color) ribLamps.material.color.copy(baseLampColor);
+  }
+
+  function setStrokeActive(next) {
+    if (next) {
+      strokeActive = true;
+      fadeRemainingS = 0;
+      vents.visible = true;
+      portal.visible = true;
+      rail.visible = true;
+      return;
     }
+    if (!strokeActive && fadeRemainingS <= 0) return;
+    // Soft quiet after airborne — fade the sheet rather than hard-cut.
+    strokeActive = false;
+    fadeRemainingS = POST_HANDOFF_FADE_S;
   }
 
   function update(state = {}, dtSeconds = 1 / 60) {
     const on = state?.catapult_active === true;
-    if (on !== active) setActive(on);
-    if (!active) return;
+    const dt = Math.max(0, Number(dtSeconds) || 0);
+    if (on) {
+      if (!strokeActive) setStrokeActive(true);
+    } else if (strokeActive) {
+      setStrokeActive(false);
+    }
 
-    timeS += Math.max(0, Number(dtSeconds) || 0);
+    if (!strokeActive && fadeRemainingS <= 0) {
+      if (vents.visible) clearFx();
+      return;
+    }
+
+    timeS += dt;
     const progress = clamp01(state?.catapult_progress);
-    // Stronger dust in the second half of the enclosed run; portal sheet peels open near exit.
-    const ventOpacity = 0.12 + progress * 0.28;
-    const portalOpacity = progress > 0.72 ? (progress - 0.72) / 0.28 * 0.45 : 0;
-    const railOpacity = 0.08 + progress * 0.22;
+    let ventOpacity;
+    let portalOpacity;
+    let railOpacity;
 
-    seedVentPositions(vents.geometry.attributes.position, progress);
-    seedPortalPositions(portal.geometry.attributes.position);
-    seedRailPositions(rail.geometry.attributes.position, progress);
+    if (strokeActive) {
+      ventOpacity = 0.12 + progress * 0.28;
+      // Sheet peels open earlier so the portal daylight story reads before the lip.
+      portalOpacity = progress > 0.58
+        ? Math.min(0.62, ((progress - 0.58) / 0.42) * 0.62)
+        : 0;
+      railOpacity = 0.06 + progress * 0.18;
+      lastVentOpacity = ventOpacity;
+      lastPortalOpacity = portalOpacity;
+      lastRailOpacity = railOpacity;
 
-    // Soft drift along -Z (launch direction).
+      seedVentPositions(vents.geometry.attributes.position, progress);
+      seedPortalPositions(portal.geometry.attributes.position);
+      seedRailPositions(rail.geometry.attributes.position, progress);
+    } else {
+      fadeRemainingS = Math.max(0, fadeRemainingS - dt);
+      const fade = fadeRemainingS / POST_HANDOFF_FADE_S;
+      ventOpacity = lastVentOpacity * fade * 0.45;
+      portalOpacity = lastPortalOpacity * fade;
+      railOpacity = lastRailOpacity * fade * 0.3;
+      if (fadeRemainingS <= 0) {
+        clearFx();
+        return;
+      }
+    }
+
     const drift = timeS * (4 + progress * 18);
     vents.position.z = -((drift * 0.15) % 3);
-    portal.position.y = Math.sin(timeS * 2.2) * 0.15;
+    portal.position.y = Math.sin(timeS * 2.2) * 0.18;
     rail.position.x = Math.sin(timeS * 14) * 0.04;
 
     vents.material.opacity = ventOpacity;
@@ -152,16 +205,24 @@ export function createRapierLaunchFx(layout = {}) {
     rail.material.opacity = railOpacity;
 
     if (ribLamps?.material?.color) {
-      lampColor.copy(baseLampColor).lerp(hotLampColor, 0.25 + progress * 0.55);
-      const pulse = 0.85 + 0.15 * Math.sin(timeS * (6 + progress * 10));
-      ribLamps.material.color.copy(lampColor).multiplyScalar(pulse);
+      if (strokeActive) {
+        lampColor.copy(baseLampColor).lerp(hotLampColor, 0.25 + progress * 0.55);
+        const pulse = 0.85 + 0.15 * Math.sin(timeS * (6 + progress * 10));
+        ribLamps.material.color.copy(lampColor).multiplyScalar(pulse);
+      } else {
+        const fade = fadeRemainingS / POST_HANDOFF_FADE_S;
+        ribLamps.material.color.copy(baseLampColor).lerp(hotLampColor, 0.15 * fade);
+      }
     }
   }
 
   return Object.freeze({
     group,
     update,
-    setActive,
+    setActive(next) {
+      if (next === true) setStrokeActive(true);
+      else clearFx();
+    },
     dispose() {
       for (const child of [vents, portal, rail]) {
         child.geometry.dispose();

@@ -241,6 +241,13 @@ const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL = new URL(
     + "soniachne-clinic-a.feature-pack.json",
   import.meta.url,
 ).href;
+const UKRAINE_RAPIER_STRIP_MISSION_FEATURE_PACK_ID =
+  "mission-feature-pack.ukraine-modern.rapier-eastern-strip.v1";
+const UKRAINE_RAPIER_STRIP_MISSION_FEATURE_PACK_URL = new URL(
+  "./content/packs/ukraine-modern/environment/hero-cells/"
+    + "rapier-eastern-strip.feature-pack.json",
+  import.meta.url,
+).href;
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
 
 function normalizedContractText(value) {
@@ -261,13 +268,19 @@ function missionFeaturePackCacheIdentity(state = null) {
 function missionFeaturePackRequest(state = null) {
   const featurePackId = normalizedContractText(state?.mission_feature_pack_id);
   const sha256 = normalizedSha256(state?.mission_feature_pack_sha256);
+  const ukraineTheatre = state?.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID;
+  let url = "";
+  if (featurePackId === UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID) {
+    url = UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL;
+  } else if (featurePackId === UKRAINE_RAPIER_STRIP_MISSION_FEATURE_PACK_ID) {
+    url = UKRAINE_RAPIER_STRIP_MISSION_FEATURE_PACK_URL;
+  }
   return Object.freeze({
     featurePackId,
     sha256,
     required: state?.mission_feature_pack_required === true,
-    supported: featurePackId === UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID
-      && state?.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID,
-    url: UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL,
+    supported: ukraineTheatre && url.length > 0,
+    url,
   });
 }
 

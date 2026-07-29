@@ -148,6 +148,9 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source,
     /const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_ID =[\s\S]*?mission-feature-pack\.ukraine-modern\.soniachne-clinic-a\.v1/);
   assert.match(source,
+    /const UKRAINE_RAPIER_STRIP_MISSION_FEATURE_PACK_ID =[\s\S]*?mission-feature-pack\.ukraine-modern\.rapier-eastern-strip\.v1/,
+    "Rapier corridor must publish a strip ambient-exclusion feature pack");
+  assert.match(source,
     /const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL = new URL\([\s\S]*?hero-cells\/[\s\S]*?soniachne-clinic-a\.feature-pack\.json/);
   assert.match(source,
     /const terrainKey = ukraineTheatre[\s\S]*?UKRAINE_2030S_TERRAIN_ID/,

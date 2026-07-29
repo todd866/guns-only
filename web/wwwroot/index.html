@@ -464,6 +464,10 @@
     #target-stick {
       appearance: none;
       position: absolute;
+      /* The #touch-controls overlay is pointer-events:none; every interactive child must opt
+         back in. The sticks aren't .touch-control buttons, so they must do it here — without
+         this, drags fall through to the scene canvas and the sticks are dead. */
+      pointer-events: auto;
       left: 43%;
       bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
       display: none;

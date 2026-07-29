@@ -248,6 +248,10 @@ test("plans a distinct Ukraine rewild grammar with sparse ambient compounds", ()
   assert.match(KOREA_SCENERY_PROFILES["ukraine-modern"].period, /rewild/i);
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].buildingDensityPerKm2 < 3);
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].treeDensityPerKm2 > 40);
+  assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].shelterbeltBands >= 2,
+    "Ship B Place scenery needs at least two shelterbelt bands for steppe navigation cues");
+  assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].settlementClusters >= 6,
+    "Ship B densifies rare settlement islands without becoming a village carpet");
   assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].crownShape, "soft-canopy");
   assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].softLit, true);
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].grassPatchDensityPerKm2 > 100);

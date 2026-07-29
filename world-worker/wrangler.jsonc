@@ -8,7 +8,7 @@
     "enabled": true
   },
   "vars": {
-    "GUNS_ALLOWED_ORIGINS": "https://guns-only.vercel.app,http://127.0.0.1:8877,http://localhost:8877,http://[::1]:8877"
+    "GUNS_ALLOWED_ORIGINS": "https://guns-only.com,https://guns-only.cohort.md,https://guns-only.vercel.app,http://127.0.0.1:8877,http://localhost:8877,http://[::1]:8877"
   },
   "durable_objects": {
     "bindings": [

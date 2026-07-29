@@ -50,9 +50,9 @@ function renderedDigest(group) {
 test("builds the canonical clinic as one deterministic, tier-bounded static child group", async () => {
   const pack = await canonicalPack();
   assert.deepEqual(MISSION_FEATURE_RENDER_BUDGETS, {
-    mobile: { maxDrawCalls: 6, maxInstances: 256, maxTriangles: 35_000 },
-    balanced: { maxDrawCalls: 7, maxInstances: 512, maxTriangles: 60_000 },
-    desktop: { maxDrawCalls: 10, maxInstances: 768, maxTriangles: 100_000 },
+    mobile: { maxDrawCalls: 8, maxInstances: 384, maxTriangles: 45_000 },
+    balanced: { maxDrawCalls: 9, maxInstances: 640, maxTriangles: 75_000 },
+    desktop: { maxDrawCalls: 12, maxInstances: 896, maxTriangles: 120_000 },
   });
 
   for (const [qualityTier, expectedMarkingDashes] of [
@@ -65,22 +65,22 @@ test("builds the canonical clinic as one deterministic, tier-bounded static chil
     const diagnostics = first.diagnostics();
     const expectedMetrics = {
       mobile: {
-        instances: 199,
-        mainPassTriangles: 4_300,
+        instances: 284,
+        mainPassTriangles: 7_160,
         shadowTriangles: 0,
-        triangles: 4_300,
+        triangles: 7_160,
       },
       balanced: {
-        instances: 233,
-        mainPassTriangles: 5_068,
+        instances: 331,
+        mainPassTriangles: 8_436,
         shadowTriangles: 0,
-        triangles: 5_068,
+        triangles: 8_436,
       },
       desktop: {
-        instances: 279,
-        mainPassTriangles: 5_980,
-        shadowTriangles: 3_100,
-        triangles: 9_080,
+        instances: 390,
+        mainPassTriangles: 9_856,
+        shadowTriangles: 4_288,
+        triangles: 14_144,
       },
     }[qualityTier];
 
@@ -133,9 +133,9 @@ test("builds the canonical clinic as one deterministic, tier-bounded static chil
         `${qualityTier} must not duplicate authored batches into the shadow pass`);
     }
     if (qualityTier === "mobile") {
-      assert.ok(diagnostics.instances <= 210,
-        "the facade pass must not turn the mobile hero cell into a dense prop island");
-      assert.ok(diagnostics.triangles < 7_000,
+      assert.ok(diagnostics.instances <= 320,
+        "village-edge cottages may densify the mobile hero cell without becoming a prop carpet");
+      assert.ok(diagnostics.triangles < 8_000,
         "mobile architectural character must stay geometry-cheap");
     }
     assert.equal(diagnostics.landingZones, 1);
@@ -206,7 +206,9 @@ test("builds the canonical clinic as one deterministic, tier-bounded static chil
     const columnBatch = first.group.getObjectByName("MISSION_FEATURE_BATCH_COLUMNS");
     const trunkInstances = columnBatch.userData.missionFeatureBatch.semanticInstances
       .map((entry, instanceId) => ({ ...entry, instanceId }))
-      .filter((entry) => entry.primitiveRole === "shelterbelt_trunk");
+      .filter((entry) =>
+        entry.primitiveRole === "shelterbelt_trunk"
+        && entry.featureId === "feature.soniachne-clinic-a.shelterbelt-north.v1");
     assert.equal(trunkInstances.length, expectedShelterbeltStands);
     const shelterbelt = pack.features.find((feature) =>
       feature.id === "feature.soniachne-clinic-a.shelterbelt-north.v1");

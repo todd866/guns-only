@@ -56,4 +56,50 @@ public class MissionFeaturePackContractTests {
 
         Assert.Equal(File.ReadAllBytes(canonicalPath), File.ReadAllBytes(webPath));
     }
+
+    [Fact]
+    public void RapierCorridorSelectsTheByteStableStripExclusionPack() {
+        string repositoryRoot = TestRepository.Root;
+        string relativePack = Path.Combine(
+            "packs", "ukraine-modern", "environment", "hero-cells",
+            "rapier-eastern-strip.feature-pack.json");
+        string canonicalPath = Path.Combine(repositoryRoot, "content", relativePack);
+        string webPath = Path.Combine(repositoryRoot, "web", "wwwroot", "content", relativePack);
+        byte[] canonical = File.ReadAllBytes(canonicalPath);
+        byte[] web = File.ReadAllBytes(webPath);
+
+        Assert.Equal(canonical, web);
+        string digest = Convert.ToHexString(SHA256.HashData(canonical)).ToLowerInvariant();
+        Assert.Equal(Ukraine2030sTheatre.RapierStripFeaturePackSha256, digest);
+        Assert.Equal(Ukraine2030sTheatre.RapierStripFeaturePackId,
+            Ukraine2030sTheatre.RapierCorridor.MissionFeaturePackId);
+        Assert.True(Ukraine2030sTheatre.RapierCorridor.MissionFeaturePackRequired);
+
+        using JsonDocument document = JsonDocument.Parse(canonical);
+        JsonElement root = document.RootElement;
+        Assert.Equal(Ukraine2030sTheatre.RapierStripFeaturePackId,
+            root.GetProperty("featurePackId").GetString());
+        Assert.Equal("presentation_only",
+            root.GetProperty("authority").GetProperty("mode").GetString());
+        Assert.NotEmpty(root.GetProperty("ambientExclusionZones").EnumerateArray());
+        foreach (JsonElement feature in root.GetProperty("features").EnumerateArray()) {
+            Assert.False(feature.GetProperty("targetable").GetBoolean());
+            Assert.True(feature.GetProperty("presentationOnly").GetBoolean());
+        }
+    }
+
+    [Fact]
+    public void SoniachneHeroPackIncludesVillageEdgeSilhouettes() {
+        string repositoryRoot = TestRepository.Root;
+        string path = Path.Combine(
+            repositoryRoot, "content", "packs", "ukraine-modern", "environment",
+            "hero-cells", "soniachne-clinic-a.feature-pack.json");
+        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
+        int villageEdge = document.RootElement.GetProperty("features").EnumerateArray()
+            .Count(feature => feature.GetProperty("role").GetString()
+                ?.StartsWith("village_edge", StringComparison.Ordinal) == true);
+        Assert.True(villageEdge >= 4,
+            "Ship follow-on: clinic meadow must include village-edge cottages along the east road");
+        Assert.Equal("1.1.0", document.RootElement.GetProperty("packVersion").GetString());
+    }
 }
