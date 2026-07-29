@@ -95,7 +95,7 @@ public sealed class PadlockRollAssist {
         double deltaSeconds) {
         double dt = System.Math.Clamp(
             double.IsFinite(deltaSeconds) ? deltaSeconds : 0.0, 0.0, 0.05);
-        if (!selected || !eligible || dt <= 0.0
+        if (!selected || dt <= 0.0
             || !aircraft.BodyAttitude.IsFinite
             || aircraft.BodyAttitude.LengthSquared < 1e-12
             || !aircraft.BodyRates.IsFinite
@@ -127,6 +127,24 @@ public sealed class PadlockRollAssist {
         // valid any-plane pull presentation, but it must never create an arbitrary automatic roll.
         if (planeMagnitude < SingularPlaneMagnitude) {
             bool anyPlane = targetForward < 0.0;
+            if (!eligible) {
+                ClearAssistLatches();
+                State = new PadlockRollAssistState(
+                    Selected: true,
+                    GeometryValid: anyPlane,
+                    Captured: false,
+                    Active: false,
+                    AnyPlane: anyPlane,
+                    TargetSpawnSequence: targetSpawnSequence,
+                    PlaneMagnitude: planeMagnitude,
+                    RollErrorRad: 0.0,
+                    DesiredRollRateRadPerSecond: 0.0,
+                    MeasuredRollRateRadPerSecond: aircraft.BodyRates.P,
+                    EstimatedTargetPlaneRateRadPerSecond: 0.0,
+                    SasRollControl: 0.0);
+                return new PadlockRollAssistResult(command, State);
+            }
+
             Reset();
             State = new PadlockRollAssistState(
                 Selected: true,
@@ -147,6 +165,24 @@ public sealed class PadlockRollAssist {
         double rollError = System.Math.Atan2(
             targetRight / planeMagnitude,
             targetUp / planeMagnitude);
+
+        if (!eligible) {
+            ClearAssistLatches();
+            State = new PadlockRollAssistState(
+                Selected: true,
+                GeometryValid: true,
+                Captured: false,
+                Active: false,
+                AnyPlane: false,
+                TargetSpawnSequence: targetSpawnSequence,
+                PlaneMagnitude: planeMagnitude,
+                RollErrorRad: rollError,
+                DesiredRollRateRadPerSecond: 0.0,
+                MeasuredRollRateRadPerSecond: aircraft.BodyRates.P,
+                EstimatedTargetPlaneRateRadPerSecond: 0.0,
+                SasRollControl: 0.0);
+            return new PadlockRollAssistResult(command, State);
+        }
         double absoluteError = System.Math.Abs(rollError);
         if (_captured && absoluteError > CaptureReleaseRad) {
             _captured = false;
@@ -253,6 +289,15 @@ public sealed class PadlockRollAssist {
                 _estimatedTargetPlaneRateRadPerSecond,
             SasRollControl: contribution);
         return new PadlockRollAssistResult(assisted, State);
+    }
+
+    void ClearAssistLatches() {
+        _captured = false;
+        _captureCandidateSeconds = 0.0;
+        _hasPreviousError = false;
+        _previousErrorRad = 0.0;
+        _estimatedTargetPlaneRateRadPerSecond = 0.0;
+        _sasRollControl = 0.0;
     }
 
     static double MoveToward(double current, double target, double maximumDelta) {

@@ -335,6 +335,32 @@ public class PadlockRollAssistTests {
     }
 
     [Fact]
+    public void IneligibleStillPublishesGeometryAndZerosSas() {
+        AircraftState aircraft = State();
+        Vec3D target = TargetPosition(aircraft, 25.0);
+        var assist = new PadlockRollAssist();
+        Capture(assist, aircraft, TargetPosition(aircraft, 7.0));
+        PilotCommand command = NeutralCommand(0.12) with {
+            SasRollControl = -0.04,
+            Rudder = 0.2,
+            GDemand = 4.0
+        };
+
+        PadlockRollAssistResult result = Step(assist, aircraft, target,
+            rawPilotRoll: 0.12, command: command, eligible: false);
+
+        Assert.Equal(command, result.Command);
+        Assert.True(result.State.Selected);
+        Assert.True(result.State.GeometryValid);
+        Assert.False(result.State.AnyPlane);
+        Assert.False(result.State.Captured);
+        Assert.False(result.State.Active);
+        Assert.Equal(0.0, result.State.SasRollControl, 12);
+        Assert.InRange(result.State.RollErrorRad,
+            20.0 * DegreesToRadians, 30.0 * DegreesToRadians);
+    }
+
+    [Fact]
     public void IneligiblePathIsBitForBitTransparentAndResetsCapture() {
         AircraftState aircraft = State();
         Vec3D target = TargetPosition(aircraft, 7.0);
@@ -350,6 +376,8 @@ public class PadlockRollAssistTests {
             rawPilotRoll: 0.12, command: command, eligible: false);
 
         Assert.Equal(command, result.Command);
+        Assert.True(result.State.GeometryValid);
+        Assert.True(double.IsFinite(result.State.RollErrorRad));
         Assert.False(result.State.Captured);
         Assert.False(result.State.Active);
         Assert.Equal(0.0, result.State.SasRollControl, 12);
