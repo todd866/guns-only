@@ -53,3 +53,7 @@ no live token spend.
   RapierMissionDirector; a future pattern edit can desync flown gates from spoken legs.
 - **LSO advisor dedup**: UpdateMissionRadio re-runs Lso.AdviseForMode in parallel with the HUD
   path; drift risk.
+
+**Not a chore**: R/T is ambient by design. The game keys the mic for the player; airspace and
+radio happen in the background as atmosphere and curriculum. No forced readbacks, no comms
+minigame — the player's job stays aviate first.
