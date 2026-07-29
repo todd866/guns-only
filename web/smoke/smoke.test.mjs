@@ -1734,3 +1734,141 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
     await site.close();
   }
 });
+
+test("portrait touch: both virtual sticks reach the flight kernel through real touch events", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  try {
+    // A real phone: portrait, touch-capable. 127.0.0.1 + input=touch engages the production touch
+    // layout through the localTouchPreview QA seam without weakening the coarse-pointer contract.
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const page = await context.newPage();
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+    await page.goto(`${site.url}?input=touch&audioQa=silent`, {
+      waitUntil: "load",
+      timeout: 60000,
+    });
+    await page.waitForFunction(
+      () => document.querySelector("#boot")?.classList.contains("ready") === true,
+      undefined,
+      { timeout: 45000 },
+    );
+    await page.waitForFunction(() => {
+      const active = globalThis.__gunsState?.session_phase === "ACTIVE"
+        && !document.documentElement.classList.contains("run-paused");
+      const start = document.querySelector("#ready-start");
+      const resumable = document.querySelector("#ready-screen")?.classList.contains("visible")
+        && start?.disabled === false;
+      return active || resumable;
+    }, undefined, { timeout: 45000 });
+    const alreadyActive = await page.evaluate(() =>
+      globalThis.__gunsState?.session_phase === "ACTIVE"
+        && !document.documentElement.classList.contains("run-paused"));
+    if (!alreadyActive) await page.locator("#ready-start").tap();
+    await page.waitForFunction(() =>
+      globalThis.__gunsState?.session_phase === "ACTIVE"
+      && globalThis.__gunsState?.player_terminal_state === "FLYING"
+      && !document.documentElement.classList.contains("run-paused"),
+    undefined, { timeout: 45000 });
+    // Once flying, the full portrait touch contract must hold (assist engages at sortie start,
+    // not at boot, so these are asserted here).
+    const modeClasses = await page.evaluate(() => [...document.documentElement.classList]);
+    for (const required of ["touch-mode", "touch-primary", "portrait-assist"]) {
+      assert.ok(
+        modeClasses.includes(required),
+        `expected ${required} on <html>, got: ${modeClasses.join(" ")}`,
+      );
+    }
+
+    // The regression this guards: the sticks sat inside the pointer-events:none touch overlay
+    // without their own pointer-events, so every drag fell through to the scene canvas and the
+    // fallback-to-primary promotion shipped dead controls. Assert reachability explicitly so the
+    // failure names the element that swallowed the touch.
+    const reach = await page.evaluate(() => {
+      const reachOf = (selector) => {
+        const el = document.querySelector(selector);
+        const r = el.getBoundingClientRect();
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return { hit: el === top || el.contains(top), top: top?.id || top?.tagName || null };
+      };
+      return { left: reachOf("#fallback-stick"), right: reachOf("#target-stick") };
+    });
+    assert.ok(reach.left.hit, `left stick unreachable — touches land on "${reach.left.top}"`);
+    assert.ok(reach.right.hit, `right stick unreachable — touches land on "${reach.right.top}"`);
+
+    // Full-left roll through the platform touch pipeline (CDP synthesises real touch events).
+    const [sx, sy] = await page.evaluate(() => {
+      const r = document.querySelector("#fallback-stick").getBoundingClientRect();
+      return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
+    });
+    const cdp = await context.newCDPSession(page);
+    const touchPoint = (x, y, id = 1) => ({ x, y, radiusX: 8, radiusY: 8, force: 1, id });
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [touchPoint(sx, sy)],
+    });
+    try {
+      for (let step = 1; step <= 5; step += 1) {
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [touchPoint(sx - step * 11, sy)],
+        });
+      }
+      await page.waitForFunction(
+        () => Number(globalThis.__gunsState?.requested_roll_control) <= -0.5,
+        undefined,
+        { timeout: 5000 },
+      );
+      await page.waitForFunction(
+        () => Math.abs(Number(globalThis.__gunsState?.bank_deg)) >= 8,
+        undefined,
+        { timeout: 6000 },
+      );
+    } finally {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    }
+    await page.waitForFunction(
+      () => Number(globalThis.__gunsState?.requested_roll_control) === 0,
+      undefined,
+      { timeout: 5000 },
+    );
+
+    // The right stick must arm the look gesture rather than falling through to the scene.
+    const [tx, ty] = await page.evaluate(() => {
+      const r = document.querySelector("#target-stick").getBoundingClientRect();
+      return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
+    });
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [touchPoint(tx, ty, 2)],
+    });
+    try {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [touchPoint(tx + 30, ty - 20, 2)],
+      });
+      await page.waitForFunction(
+        () => document.querySelector("#target-stick")?.dataset.active === "true",
+        undefined,
+        { timeout: 5000 },
+      );
+    } finally {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    }
+
+    assert.deepEqual(pageErrors, [], `uncaught page errors:\n${pageErrors.join("\n")}`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
