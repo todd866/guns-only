@@ -187,23 +187,24 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     // Stage C rewild remains canopy-led, but low-level missions need authored structure rather
     // than uniform tree noise: woodland masses, shelterbelts, former fields and rare settlement
     // islands create navigation cues while leaving most of the terrain quiet.
-    treeDensityPerKm2: 56,
-    buildingDensityPerKm2: 1.4,
+    // Ship B (2026-07-29): denser Place-scale structure — still sparse vs a village carpet.
+    treeDensityPerKm2: 72,
+    buildingDensityPerKm2: 2.1,
     // Large former-field planes now live in the seam-safe terrain byte. Per-tile mean-height
     // boxes intersected rolling ground and cost one extra draw for a worse result.
     fieldDensityPerKm2: 0,
-    treeLimitScale: 0.55,
-    buildingLimitScale: 0.5,
+    treeLimitScale: 0.62,
+    buildingLimitScale: 0.58,
     fieldLimitScale: 0,
-    settlementClusters: 4,
-    settlementSpread01: 0.042,
-    woodlandClusters: 5,
-    woodlandSpread01: 0.16,
-    woodlandClusterShare: 0.78,
-    shelterbeltBands: 1,
-    shelterbeltRowChance: 0.55,
-    shelterbeltColumnChance: 0.40,
-    shelterbeltSpacingM: 110,
+    settlementClusters: 6,
+    settlementSpread01: 0.038,
+    woodlandClusters: 7,
+    woodlandSpread01: 0.15,
+    woodlandClusterShare: 0.80,
+    shelterbeltBands: 2,
+    shelterbeltRowChance: 0.62,
+    shelterbeltColumnChance: 0.48,
+    shelterbeltSpacingM: 95,
     maximumTreeSlope: 0.48,
     maximumBuildingSlope: 0.08,
     maximumFieldSlope: 0.055,
@@ -223,8 +224,8 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     fieldRowWidthM: 0,
     roadWidthM: [4.5, 8.5],
     roadSegmentM: 64,
-    roadRowChance: 0.28,
-    roadColumnChance: 0.22,
+    roadRowChance: 0.34,
+    roadColumnChance: 0.26,
     railSegmentM: 160,
     railRowChance: 0.10,
     railColumnChance: 0.08,
@@ -245,23 +246,23 @@ export const KOREA_SCENERY_PROFILES = Object.freeze({
     crownColors: Object.freeze([0x2a5230, 0x3a6b3c, 0x4e7a48, 0x244828, 0x5a824c, 0x6a8a52]),
     trunkColor: 0x6a5340,
     buildingColor: 0xc4b8a0,
-    buildingColors: Object.freeze([0xc9b89a, 0xd8ccb0, 0xaeb4a6, 0xd0c0aa]),
+    buildingColors: Object.freeze([0xc9b89a, 0xd8ccb0, 0xaeb4a6, 0xd0c0aa, 0xb8c0a8]),
     roofColor: 0x7a4a3c,
     // Quiet weathered roofs — readable at low AGL without tourist kitsch.
-    roofColors: Object.freeze([0x8a4e3c, 0x5a6468, 0x725848, 0x6a5850]),
+    roofColors: Object.freeze([0x8a4e3c, 0x5a6468, 0x725848, 0x6a5850, 0x4a6a78]),
     fieldColor: 0x6a8a48,
     // Soft meadow / scrub scars — not ripe wheat parcels.
     fieldColors: Object.freeze([0x8fa866, 0x78955d, 0xa3ad72, 0xaaa06a, 0x6f9258]),
     fieldRowColor: 0x5a6840,
     // The close rewild layer is not a terrain texture. Deterministic clumps give the low-level
     // aircraft real parallax and let one authoritative wind field visibly travel across the land.
-    grassPatchDensityPerKm2: 180,
+    grassPatchDensityPerKm2: 220,
     grassPatchLimitScale: 1,
     grassHeightM: [0.45, 1.15],
     grassRadiusM: [4, 9],
-    localGrassRadiusM: 270,
+    localGrassRadiusM: 300,
     localGrassSnapM: 42,
-    localGrassUpdatesPerFrame: 160,
+    localGrassUpdatesPerFrame: 180,
     // Individual blades are a hover/nap-of-earth cue. Above 120 m AGL the terrain's painted
     // former-field structure carries the picture and the sub-pixel blade batch stays unsubmitted.
     localGrassMaximumCameraAltitudeM: 120,

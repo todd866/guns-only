@@ -248,6 +248,10 @@ test("plans a distinct Ukraine rewild grammar with sparse ambient compounds", ()
   assert.match(KOREA_SCENERY_PROFILES["ukraine-modern"].period, /rewild/i);
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].buildingDensityPerKm2 < 3);
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].treeDensityPerKm2 > 40);
+  assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].shelterbeltBands >= 2,
+    "Ship B Place scenery needs at least two shelterbelt bands for steppe navigation cues");
+  assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].settlementClusters >= 6,
+    "Ship B densifies rare settlement islands without becoming a village carpet");
   assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].crownShape, "soft-canopy");
   assert.equal(KOREA_SCENERY_PROFILES["ukraine-modern"].softLit, true);
   assert.ok(KOREA_SCENERY_PROFILES["ukraine-modern"].grassPatchDensityPerKm2 > 100);
@@ -268,8 +272,10 @@ test("Ukraine shelterbelt stands align and stretch along their continuous route"
   });
   const shelterbelt = plan.trees.filter((tree) => tree.kind === "shelterbelt");
   assert.ok(shelterbelt.length > 10);
-  assert.ok(shelterbelt.every((tree) => Math.abs(tree.yaw) < 1e-12),
-    "this deterministic row route must align every stand east-west");
+  assert.ok(shelterbelt.every((tree) => {
+    const yaw = Math.abs(tree.yaw);
+    return yaw < 1e-12 || Math.abs(yaw - Math.PI / 2) < 1e-12;
+  }), "shelterbelt routes must stay axis-aligned (row or column windbreaks)");
   assert.ok(shelterbelt.every((tree) => tree.widthScale >= 1.5),
     "existing instances must overlap into a windbreak instead of isolated crown dots");
   assert.ok(plan.trees.some((tree) => tree.kind === "woodland"),
