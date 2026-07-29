@@ -59,6 +59,11 @@ import {
 } from "./render/hud/carrier_sa.js";
 import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=179";
 import {
+  meshNavPresentation,
+  parseMeshPlaceCatalog,
+} from "./render/nav/mesh_nav_presentation.js";
+import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
+import {
   applyLookDelta,
   trackpadLookDelta,
 } from "./render/input/look_gesture.js";
@@ -70,6 +75,7 @@ import {
 import { createCasevacCollisionScenery } from "./render/casevac/casevac_collision_scenery.js";
 import { createCasevacRouteBriefing } from "./render/casevac/casevac_route_briefing.js";
 import { createCasevacRouteLandmarks } from "./render/casevac/casevac_route_landmarks.js";
+import { createAncaPanelPresentation } from "./render/anca/anca_panel.js";
 import {
   gamepadLookDelta,
   standardGamepadState,
@@ -464,6 +470,7 @@ const rapierRadioText = document.querySelector("#rapier-radio-text");
 const rapierRadioHistory = document.querySelector("#rapier-radio-history");
 const rapierRadioDisclosure = document.querySelector("#rapier-radio-disclosure");
 const navConsole = document.querySelector("#nav-console");
+const navMeshMapCanvas = document.querySelector("#nav-mesh-map");
 const navUi = navConsole ? Object.freeze({
   destination: document.querySelector("#nav-destination"),
   bearing: document.querySelector("#nav-bearing"),
@@ -488,6 +495,20 @@ const navUi = navConsole ? Object.freeze({
   contactRange: document.querySelector("#nav-contact-range"),
   contactEti: document.querySelector("#nav-contact-eti"),
 }) : null;
+
+let meshNavMap = null;
+function ensureMeshNavMap(bridgeRef) {
+  if (meshNavMap || !navMeshMapCanvas) return meshNavMap;
+  meshNavMap = createMeshNavMap(navMeshMapCanvas, {
+    onSelectPlace(placeId) {
+      bridgeRef?.SetMeshActivePlace?.(placeId);
+    },
+    onFreeFix(eastM, northM) {
+      bridgeRef?.SetMeshFreeFix?.(eastM, northM, null);
+    },
+  });
+  return meshNavMap;
+}
 
 let lastRapierRadioSequence = 0;
 let rapierRadioCalls = [];
@@ -559,13 +580,13 @@ function updateMissionRadio(state) {
   rapierRadio.dataset.priority = String(priority);
 }
 
-/// Populate the navigation console. Every figure here already existed somewhere in the snapshot;
-/// what was missing was one place to read them together, and the fuel comparison that turns them
-/// into a decision rather than trivia.
+/// Populate the navigation console. Mesh ActiveDest fields win when present; otherwise HomePlate
+/// recovery projection. Fuel aboard is always `fuel_lb`.
 function updateNavConsole(state) {
   if (!navConsole || !navUi) return;
+  const mesh = meshNavPresentation(state);
   const navigation = recoveryNavigationPresentation(state);
-  const relevant = navigation.recoveryPointKnown;
+  const relevant = mesh !== null || navigation.recoveryPointKnown;
   navConsole.hidden = !relevant;
   if (!relevant) {
     if (navConsole.open) navConsole.open = false;
@@ -589,100 +610,123 @@ function updateNavConsole(state) {
   const patternOnly = state?.rapier_pattern_only === true;
   const legRaw = typeof state?.rapier_circuit_leg === "string" ? state.rapier_circuit_leg : "";
   const legLabel = legRaw ? legRaw.replaceAll("_", " ") : "";
-  const patternAltFt = num("rapier_target_altitude_ft");
-  const patternSpeedKt = num("rapier_fd_target_ktas");
   const gate = Math.max(0, Math.floor(Number(state?.rapier_recovery_gate) || 0));
   const recoveryName = typeof state?.recovery_display_name === "string"
     && state.recovery_display_name.trim()
     ? state.recovery_display_name.trim().toUpperCase()
     : state?.rapier_mission_available === true
       ? "DISPERSED STRIP · HOME" : "RECOVERY POINT · HOME";
-  set(navUi.destination,
-    patternOnly
-      ? (legLabel
-        ? (gate > 0 ? `CIRCUITS · ${legLabel} · BOX ${gate}/4` : `CIRCUITS · ${legLabel}`)
-        : "CIRCUITS · PATTERN")
-      : recoveryName,
-    "nominal");
-  set(navUi.bearing, navigation.bearingDeg !== null
-    ? `${String(Math.round((navigation.bearingDeg % 360 + 360) % 360)).padStart(3, "0")}°`
+  const destinationName = patternOnly
+    ? (legLabel
+      ? (gate > 0 ? `CIRCUITS · ${legLabel} · BOX ${gate}/4` : `CIRCUITS · ${legLabel}`)
+      : "CIRCUITS · PATTERN")
+    : (mesh ? mesh.displayName.toUpperCase() : recoveryName);
+  set(navUi.destination, destinationName, "nominal");
+
+  const bearingDeg = mesh?.bearingDeg ?? navigation.bearingDeg;
+  const rangeNm = mesh?.rangeNm ?? navigation.rangeNm;
+  const turnDeg = mesh?.turnDeg ?? navigation.turnDeg;
+  const closureKts = mesh?.closureKts ?? navigation.closureKts;
+  const etaMinutes = mesh?.etaMinutes ?? navigation.etaMinutes;
+  const travelState = mesh?.travelState ?? navigation.travelState;
+  const fuelNeedLb = mesh?.fuelToDestLb ?? navigation.fuelToHomeLb;
+  const fuelArrivalLb = mesh?.fuelOnArrivalDestLb ?? navigation.fuelOnArrivalLb;
+  const reserveTargetLb = mesh?.reserveTargetLb ?? navigation.reserveTargetLb;
+  const reserveMarginLb = mesh?.reserveMarginViaDestLb ?? navigation.reserveMarginLb;
+  const nmPerMin = mesh?.nmPerMin ?? navigation.nmPerMin;
+  const lbPerMin = mesh?.lbPerMin ?? navigation.lbPerMin;
+  const lbPerNm = mesh?.lbPerNm ?? navigation.lbPerNm;
+
+  set(navUi.bearing, bearingDeg !== null
+    ? `${String(Math.round((bearingDeg % 360 + 360) % 360)).padStart(3, "0")}°`
     : "—",
-  navigation.bearingDeg !== null ? "nominal" : "unknown");
-  set(navUi.range, navigation.rangeNm !== null
-    ? `${navigation.rangeNm < 10 ? navigation.rangeNm.toFixed(1) : Math.round(navigation.rangeNm)} NM`
+  bearingDeg !== null ? "nominal" : "unknown");
+  set(navUi.range, rangeNm !== null
+    ? `${rangeNm < 10 ? rangeNm.toFixed(1) : Math.round(rangeNm)} NM`
     : "—",
-  navigation.rangeNm !== null ? "nominal" : "unknown");
+  rangeNm !== null ? "nominal" : "unknown");
 
   let etaText = "—";
   let progressState = "unknown";
-  if (navigation.travelState === "arrived") {
+  if (travelState === "arrived") {
     etaText = "ARRIVED";
     progressState = "nominal";
-  } else if (navigation.travelState === "outbound") {
+  } else if (travelState === "outbound") {
     etaText = "AWAY";
     progressState = "caution";
-  } else if (navigation.travelState === "abeam") {
+  } else if (travelState === "abeam") {
     etaText = "ABEAM";
     progressState = "caution";
-  } else if (navigation.travelState === "inbound"
-    && navigation.etaMinutes !== null) {
-    etaText = `${Math.max(0, Math.round(navigation.etaMinutes))} MIN`;
+  } else if (travelState === "inbound" && etaMinutes !== null) {
+    etaText = `${Math.max(0, Math.round(etaMinutes))} MIN`;
     progressState = "nominal";
   }
   set(navUi.eta, etaText, progressState);
 
   let closureText = "—";
-  if (navigation.travelState === "arrived") closureText = "AT HOME";
-  else if (navigation.closureKts !== null && navigation.closureKts > 1)
-    closureText = `${Math.round(navigation.closureKts)} KT HOME`;
-  else if (navigation.closureKts !== null && navigation.closureKts < -1)
-    closureText = `AWAY ${Math.round(-navigation.closureKts)} KT`;
-  else if (navigation.closureKts !== null) closureText = "ABEAM";
+  if (travelState === "arrived") closureText = "AT DEST";
+  else if (closureKts !== null && closureKts > 1)
+    closureText = `${Math.round(closureKts)} KT DEST`;
+  else if (closureKts !== null && closureKts < -1)
+    closureText = `AWAY ${Math.round(-closureKts)} KT`;
+  else if (closureKts !== null) closureText = "ABEAM";
   set(navUi.closure, closureText, progressState);
 
-  set(navUi.turn, navigation.turnDeg !== null
-    ? (Math.abs(navigation.turnDeg) < 3 ? "STEADY"
-      : `${navigation.turnDeg < 0 ? "LEFT" : "RIGHT"} ${Math.round(Math.abs(navigation.turnDeg))}°`)
+  set(navUi.turn, turnDeg !== null
+    ? (Math.abs(turnDeg) < 3 ? "STEADY"
+      : `${turnDeg < 0 ? "LEFT" : "RIGHT"} ${Math.round(Math.abs(turnDeg))}°`)
     : "—",
-  navigation.turnDeg !== null ? "nominal" : "unknown");
+  turnDeg !== null ? "nominal" : "unknown");
 
-  // These five numbers are an authoritative set. In particular, AWAY/ABEAM withholds time and
-  // fuel-to-home; the browser must not manufacture a plausible-looking answer from TAS.
   const fuelLb = num("fuel_lb");
-  set(navUi.fuelNeed, wholeLb(navigation.fuelToHomeLb),
-    navigation.fuelToHomeLb !== null ? "nominal" : "unknown");
+  set(navUi.fuelNeed, wholeLb(fuelNeedLb),
+    fuelNeedLb !== null ? "nominal" : "unknown");
   set(navUi.fuelHave, wholeLb(fuelLb), fuelLb !== null ? "nominal" : "unknown");
-  set(navUi.fuelArrival, wholeLb(navigation.fuelOnArrivalLb),
-    navigation.fuelOnArrivalLb !== null
-      ? navigation.fuelOnArrivalLb < 0 ? "warning" : "nominal"
+  set(navUi.fuelArrival, wholeLb(fuelArrivalLb),
+    fuelArrivalLb !== null
+      ? fuelArrivalLb < 0 ? "warning" : "nominal"
       : "unknown");
-  set(navUi.fuelReserve, wholeLb(navigation.reserveTargetLb),
-    navigation.reserveTargetLb !== null ? "nominal" : "unknown");
-  const reserveCautionThreshold = navigation.reserveTargetLb !== null
-    ? navigation.reserveTargetLb * 0.10 : 0;
+  set(navUi.fuelReserve, wholeLb(reserveTargetLb),
+    reserveTargetLb !== null ? "nominal" : "unknown");
+  const reserveCautionThreshold = reserveTargetLb !== null
+    ? reserveTargetLb * 0.10 : 0;
+  const marginLabel = mesh && mesh.reserveMarginViaDestLb !== null ? "VIA HOME" : "RES";
   set(navUi.fuelMargin,
-    navigation.reserveMarginLb === null
+    reserveMarginLb === null
       ? "—"
-      : navigation.reserveMarginLb < 0
-        ? `BELOW RES ${Math.round(-navigation.reserveMarginLb)} LB`
-        : `ABOVE RES ${Math.round(navigation.reserveMarginLb)} LB`,
-    navigation.reserveMarginLb === null ? "unknown"
-      : navigation.reserveMarginLb < 0 ? "warning"
-        : navigation.reserveMarginLb < reserveCautionThreshold ? "caution" : "nominal");
+      : reserveMarginLb < 0
+        ? `BELOW ${marginLabel} ${Math.round(-reserveMarginLb)} LB`
+        : `ABOVE ${marginLabel} ${Math.round(reserveMarginLb)} LB`,
+    reserveMarginLb === null ? "unknown"
+      : reserveMarginLb < 0 ? "warning"
+        : reserveMarginLb < reserveCautionThreshold ? "caution" : "nominal");
 
-  // THE NAV TRIAD, and it leads the console because it is how the pilot actually thinks:
-  // miles per minute, pounds per minute, pounds per mile. Everything else on this panel is
-  // derived from these three, and lb/nm is the one that decides whether a speed is affordable —
-  // it is the only figure that improves when you slow down.
-  set(navUi.nmPerMin, navigation.nmPerMin !== null
-    ? `${navigation.nmPerMin.toFixed(1)} NM/MIN` : "—",
-  navigation.nmPerMin !== null ? "nominal" : "unknown");
-  set(navUi.lbPerMin, navigation.lbPerMin !== null
-    ? `${Math.round(navigation.lbPerMin)} LB/MIN` : "—",
-  navigation.lbPerMin !== null ? "nominal" : "unknown");
-  set(navUi.lbPerNm, navigation.lbPerNm !== null
-    ? `${navigation.lbPerNm.toFixed(2)} LB/NM` : "—",
-  navigation.lbPerNm !== null ? "nominal" : "unknown");
+  set(navUi.nmPerMin, nmPerMin !== null
+    ? `${nmPerMin.toFixed(1)} NM/MIN` : "—",
+  nmPerMin !== null ? "nominal" : "unknown");
+  set(navUi.lbPerMin, lbPerMin !== null
+    ? `${Math.round(lbPerMin)} LB/MIN` : "—",
+  lbPerMin !== null ? "nominal" : "unknown");
+  set(navUi.lbPerNm, lbPerNm !== null
+    ? `${lbPerNm.toFixed(2)} LB/NM` : "—",
+  lbPerNm !== null ? "nominal" : "unknown");
+
+  const map = ensureMeshNavMap(typeof bridge !== "undefined" ? bridge : null);
+  if (map) {
+    const headingRad = num("heading") ?? ((num("hdg_deg") ?? 0) * Math.PI / 180);
+    map.draw({
+      ownshipEastM: num("px") ?? 0,
+      ownshipNorthM: num("pz") ?? 0,
+      headingRad,
+      places: parseMeshPlaceCatalog(state),
+      activePlaceId: mesh?.placeId ?? null,
+      activeEastM: num("mesh_active_east_m"),
+      activeNorthM: num("mesh_active_north_m"),
+      transitMode: mesh?.transitMode
+        ?? (typeof state?.mesh_transit_mode === "string" ? state.mesh_transit_mode : "mission_gated"),
+    });
+  }
+
   set(navUi.groundspeed, navigation.groundKts !== null
     ? `${Math.round(navigation.groundKts).toLocaleString("en-US")} KT`
     : "—", navigation.groundKts !== null ? "nominal" : "unknown");
@@ -6095,6 +6139,7 @@ class FlightView {
     this.casevacRouteLandmarks = null;
     this.casevacMissionUi = null;
     this.casevacFlightFacts = null;
+    this.ancaPanel = createAncaPanelPresentation(document);
     this.casevacPresentationKey = "";
     this.environmentTarget = createLitEnvironment(this.renderer);
     this.scene.environment = this.environmentTarget.texture;
@@ -7510,6 +7555,11 @@ class FlightView {
     this.externalCameraActive = replayExternal && replayCamera !== "COCKPIT";
     this.presentationAssets.sync(state);
     const casevacPresentationActive = this.syncCasevacPresentation(state);
+    if (casevacPresentationActive) {
+      this.ancaPanel?.update(null);
+    } else {
+      this.ancaPanel?.update(state);
+    }
     this.ensureVisualRuntime();
     const cockpitRoot = this.presentationAssets.cockpitSlot.root;
     const playerExteriorRoot = this.presentationAssets.playerExteriorSlot.root;
