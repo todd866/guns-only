@@ -95,7 +95,7 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.24.0",
+        Assert.Equal("1.25.0",
             root.GetProperty("snapshot_schema_version").GetString());
         Assert.Contains("\"rapier_intention\"", json);
         Assert.Contains("\"rapier_strategy\"", json);

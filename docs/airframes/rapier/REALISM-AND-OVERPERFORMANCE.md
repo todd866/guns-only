@@ -162,7 +162,7 @@ Pass 0 exit: every row above has a disposition; CI or unit tests cover the cheap
 
 | Pass | Status | What landed |
 | ---: | --- | --- |
-| **1** | **exited** | `MeasuredDashMach=3.55`; Intercept/Escape retuned; `rapier_design_dash_mach` on schema 1.24.0; briefing tokens; OFT cue asserts measured dash |
+| **1** | **exited** | `MeasuredDashMach=3.55`; Intercept/Escape retuned; `rapier_design_dash_mach` on schema 1.25.0; briefing tokens; OFT cue asserts measured dash |
 | **2** | **exited** | Inertias ×11090/7850; mass/q normal-law floor (~1.05 g holdable at FL720/M3.5); Protection path wired |
 | **3** | **exited** | Sticky inlet-unstart seed + recovery floor; `rapier_inlet_unstart` / `rapier_over_q` (80 kPa placard); unit + integration pins |
 | **4** | **deferred** | No residual evidenced wrong-feel gate after 1–3; full aero tables / distinct reentry rush remain optional |
