@@ -11,8 +11,11 @@ import { serveStatic } from "/Users/iantodd/Projects/guns-only/web/wwwroot/rende
 const require = createRequire("file:///Users/iantodd/Projects/guns-only/web/smoke/package.json");
 const { chromium } = require("playwright");
 
-const WWWROOT = "/Users/iantodd/Projects/guns-only/web/wwwroot";
-const OUT = process.env.SHOT_DIR ?? "/private/tmp/claude-501/-Users-iantodd-Projects-guns-only/cbe47f49-54b2-490e-8805-0e2f9bd0a51b/scratchpad/shots";
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const WWWROOT = process.env.WWWROOT ?? resolve(REPO_ROOT, "web/wwwroot");
+const OUT = process.env.SHOT_DIR
+  ?? resolve(REPO_ROOT, "analysis/launch-complex-shots");
+
 const MIME = { ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".mjs": "text/javascript", ".png": "image/png" };
 
 const VIEWS = [
