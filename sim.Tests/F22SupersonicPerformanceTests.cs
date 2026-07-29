@@ -38,6 +38,9 @@ public sealed class F22SupersonicPerformanceTests {
     [InlineData(50_000.0, 1.50, 1.00, 10.0, true)]
     [InlineData(50_000.0, 2.00, 1.35, 10.0, true)]
     [InlineData(50_000.0, 2.30, 1.35, 0.0, false)]
+    // M2.5 is outside the USAF "Mach two class" claim — lock negative Ps so the dash
+    // ceiling is a named contract rather than a playtest mystery.
+    [InlineData(50_000.0, 2.50, 1.35, 0.0, false)]
     public void LevelFlightExcessPowerMatchesBroadPublicCorridor(
         double altitudeFt, double mach, double power,
         double boundaryPsMps, bool shouldExceedBoundary) {
