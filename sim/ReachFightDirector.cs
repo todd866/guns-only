@@ -32,6 +32,9 @@ public sealed class ReachFightDirector {
     public const double CruiseAltitudeM = 70_000.0 * 0.3048;
     public const double AttackRangeM = 30_000.0;
     public const double AccelMach = 2.2;
+    public const double LevelDashMinAltM = ClimbTopM;
+    public const double LevelDashMinMach = 2.2;
+    public const double DirectJoinMinMach = 2.0;
     public const double SoftEmployMach = 0.9;
 
     public ReachFightDecision Decide(
@@ -46,31 +49,33 @@ public sealed class ReachFightDirector {
         bool zoomLobPreferred,
         int lobSkip,
         bool inZoomPhases) {
-        if (contactRangeM <= AttackRangeM
-            && (!zoomLobPreferred
-                || (int)currentPhase >= (int)RapierMissionPhase.DipRelight)) {
+        bool employHandoff = contactRangeM <= AttackRangeM
+            && mach >= SoftEmployMach;
+        if (employHandoff) {
             return new(MissionIntention.Employ, ReachFightStrategy.None,
                 RapierMissionPhase.Attack, "contact_leq_30km");
         }
 
-        if (altitudeM < ClimbTopM - 40.0
-            && (int)currentPhase <= (int)RapierMissionPhase.Climb) {
+        bool needsClimbTop = altitudeM < ClimbTopM - 40.0
+            && (int)currentPhase <= (int)RapierMissionPhase.Climb;
+        if (needsClimbTop) {
             return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,
                 RapierMissionPhase.Climb, "climb_to_fl560");
         }
 
-        if (mach < AccelMach
-            && (int)currentPhase <= (int)RapierMissionPhase.Accelerate) {
+        bool needsAccel = mach < AccelMach
+            && (int)currentPhase <= (int)RapierMissionPhase.Accelerate;
+        if (needsAccel) {
             return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,
                 RapierMissionPhase.Accelerate, "accel_to_m2.2");
         }
 
-        if (altitudeM < CruiseAltitudeM - 200.0
-            && (int)currentPhase <= (int)RapierMissionPhase.RamClimb
-            && !inZoomPhases) {
-            return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,
-                RapierMissionPhase.RamClimb, "ram_climb_to_fl700");
-        }
+        bool levelDashEligible = mach >= LevelDashMinMach
+            && altitudeM >= LevelDashMinAltM - 40.0;
+        bool directJoinEligible = levelDashEligible
+            || currentPhase is RapierMissionPhase.Intercept
+                or RapierMissionPhase.Attack
+            || inZoomPhases && currentPhase >= RapierMissionPhase.DipRelight;
 
         if (zoomLobPreferred || inZoomPhases) {
             return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ZoomLob,
@@ -78,8 +83,18 @@ public sealed class ReachFightDirector {
                 inZoomPhases ? "" : "zoom_pull_entry");
         }
 
-        return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.LevelDash,
-            RapierMissionPhase.Intercept, "intercept_dash");
+        if (directJoinEligible && contactRangeM <= 100_000.0) {
+            return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.DirectJoin,
+                RapierMissionPhase.Intercept, "direct_join");
+        }
+
+        if (levelDashEligible) {
+            return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.LevelDash,
+                RapierMissionPhase.Intercept, "intercept_dash");
+        }
+
+        return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,
+            RapierMissionPhase.RamClimb, "ram_climb_to_fl700");
     }
 
     public static string Token(MissionIntention intention) => intention switch {
