@@ -40,9 +40,10 @@ public class PadlockRollAssistTests {
 
     static PadlockRollAssistResult Step(PadlockRollAssist assist,
         in AircraftState aircraft, in Vec3D target, double rawPilotRoll = 0.0,
-        PilotCommand? command = null, bool selected = true, bool eligible = true) =>
+        PilotCommand? command = null, bool selected = true, bool eligible = true,
+        PadlockRollAssistEnergy? energy = null) =>
         assist.Step(command ?? NeutralCommand(rawPilotRoll), aircraft, target,
-            TargetSequence, selected, eligible, rawPilotRoll, Dt);
+            TargetSequence, selected, eligible, rawPilotRoll, Dt, energy);
 
     static PadlockRollAssistResult Capture(PadlockRollAssist assist,
         in AircraftState aircraft, in Vec3D target) {
@@ -110,27 +111,48 @@ public class PadlockRollAssistTests {
     [InlineData(0.0, false)]
     [InlineData(180.0, true)]
     public void LongitudinalAxisNeverInventsAutomaticRoll(
-        double angleOffDegrees, bool anyPlane) {
+        double angleOffDegrees, bool preferredPlane) {
         AircraftState aircraft = State();
         var assist = new PadlockRollAssist();
         Vec3D target = TargetPosition(aircraft, 90.0, angleOffDegrees);
 
         PadlockRollAssistResult result = CaptureAxisSample(
-            assist, aircraft, target);
+            assist, aircraft, target, energy: new PadlockRollAssistEnergy(
+                TrueAirspeedMps: 250.0,
+                CornerSpeedMps: 250.0,
+                RadarAltitudeM: 5_000.0,
+                GcasWarningOrActive: false));
 
-        Assert.Equal(anyPlane, result.State.AnyPlane);
-        Assert.Equal(anyPlane, result.State.Captured);
+        Assert.Equal(preferredPlane, result.State.PreferredPlaneValid);
+        Assert.Equal(!preferredPlane && angleOffDegrees == 180.0, result.State.AnyPlane);
+        Assert.False(result.State.Captured);
         Assert.False(result.State.Active);
         Assert.Equal(0.0, result.State.SasRollControl, 12);
         Assert.Equal(0.0, result.Command.SasRollControl, 12);
     }
 
     static PadlockRollAssistResult CaptureAxisSample(PadlockRollAssist assist,
-        in AircraftState aircraft, in Vec3D target) {
+        in AircraftState aircraft, in Vec3D target,
+        PadlockRollAssistEnergy? energy = null) {
         PadlockRollAssistResult result = default;
         for (int tick = 0; tick < 30; tick++)
-            result = Step(assist, aircraft, target);
+            result = Step(assist, aircraft, target, energy: energy);
         return result;
+    }
+
+    [Fact]
+    public void DeadSixWithoutEnergyKeepsLegacyAnyPlanePresentation() {
+        AircraftState aircraft = State();
+        var assist = new PadlockRollAssist();
+        Vec3D target = TargetPosition(aircraft, 90.0, 180.0);
+
+        PadlockRollAssistResult result = CaptureAxisSample(assist, aircraft, target);
+
+        Assert.True(result.State.AnyPlane);
+        Assert.False(result.State.PreferredPlaneValid);
+        Assert.True(result.State.Captured);
+        Assert.False(result.State.Active);
+        Assert.Equal(0.0, result.State.SasRollControl, 12);
     }
 
     [Fact]

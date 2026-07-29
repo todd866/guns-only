@@ -5257,6 +5257,16 @@ public sealed class SimulationSession {
             && !double.IsFinite(effectiveCommand.CommandedAlphaRad)
             && !_autoGcasState.Warning
             && !_autoGcasState.Active;
+        double radarAltitudeM = _player.State.Position.Y;
+        if (_terrainSurface is not null && _terrainSurface.TrySample(
+            _player.State.Position.X, _player.State.Position.Z, out TerrainSample terrain))
+            radarAltitudeM -= terrain.HeightM;
+        var energy = new PadlockRollAssistEnergy(
+            TrueAirspeedMps: _player.AirspeedMps,
+            CornerSpeedMps: BeatSetup.CornerTrueAirspeedMps(
+                _beat.PlayerAir, _player.State.Position.Y),
+            RadarAltitudeM: radarAltitudeM,
+            GcasWarningOrActive: _autoGcasState.Warning || _autoGcasState.Active);
         PadlockRollAssistResult result = _padlockRollAssist.Step(
             effectiveCommand,
             _player.State,
@@ -5265,7 +5275,8 @@ public sealed class SimulationSession {
             selected: _banditPadlockRollAssistSelected,
             eligible,
             rawPilotRollControl,
-            FixedDeltaSeconds);
+            FixedDeltaSeconds,
+            energy);
         return result.Command;
     }
 

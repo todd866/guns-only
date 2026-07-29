@@ -11,6 +11,8 @@ public readonly record struct PadlockRollAssistState(
     bool Captured,
     bool Active,
     bool AnyPlane,
+    bool PreferredPlaneValid,
+    double PreferredPlaneRad,
     long TargetSpawnSequence,
     double PlaneMagnitude,
     double RollErrorRad,
@@ -26,6 +28,8 @@ public readonly record struct PadlockRollAssistState(
             Captured: false,
             Active: false,
             AnyPlane: false,
+            PreferredPlaneValid: false,
+            PreferredPlaneRad: 0.0,
             TargetSpawnSequence: targetSpawnSequence,
             PlaneMagnitude: 0.0,
             RollErrorRad: 0.0,
@@ -38,6 +42,12 @@ public readonly record struct PadlockRollAssistState(
 public readonly record struct PadlockRollAssistResult(
     PilotCommand Command,
     PadlockRollAssistState State);
+
+public readonly record struct PadlockRollAssistEnergy(
+    double TrueAirspeedMps,
+    double CornerSpeedMps,
+    double RadarAltitudeM,
+    bool GcasWarningOrActive);
 
 /// <summary>
 /// A low-authority target-plane trim for bandit padlock. The pilot must first put lift within the
@@ -70,6 +80,9 @@ public sealed class PadlockRollAssist {
     double _previousErrorRad;
     double _estimatedTargetPlaneRateRadPerSecond;
     double _sasRollControl;
+    bool _hasPreferredPlane;
+    double _previousPreferredPlaneRad;
+    double _preferredPlaneDwellSeconds;
 
     public PadlockRollAssistState State { get; private set; } =
         PadlockRollAssistState.Inactive();
@@ -81,6 +94,9 @@ public sealed class PadlockRollAssist {
         _previousErrorRad = 0.0;
         _estimatedTargetPlaneRateRadPerSecond = 0.0;
         _sasRollControl = 0.0;
+        _hasPreferredPlane = false;
+        _previousPreferredPlaneRad = 0.0;
+        _preferredPlaneDwellSeconds = 0.0;
         State = PadlockRollAssistState.Inactive();
     }
 
@@ -92,7 +108,8 @@ public sealed class PadlockRollAssist {
         bool selected,
         bool eligible,
         double rawPilotRollControl,
-        double deltaSeconds) {
+        double deltaSeconds,
+        PadlockRollAssistEnergy? energy = null) {
         double dt = System.Math.Clamp(
             double.IsFinite(deltaSeconds) ? deltaSeconds : 0.0, 0.0, 0.05);
         if (!selected || dt <= 0.0
@@ -127,6 +144,68 @@ public sealed class PadlockRollAssist {
         // valid any-plane pull presentation, but it must never create an arbitrary automatic roll.
         if (planeMagnitude < SingularPlaneMagnitude) {
             bool anyPlane = targetForward < 0.0;
+            if (anyPlane && energy is { } preferredPlaneEnergy) {
+                PadlockPreferredPlaneResult preferred = PadlockPreferredPlane.Select(
+                    aircraft.BodyAttitude,
+                    preferredPlaneEnergy.TrueAirspeedMps,
+                    preferredPlaneEnergy.CornerSpeedMps,
+                    preferredPlaneEnergy.RadarAltitudeM,
+                    preferredPlaneEnergy.GcasWarningOrActive,
+                    planeMagnitude,
+                    targetForward,
+                    _previousPreferredPlaneRad,
+                    _hasPreferredPlane,
+                    dt,
+                    _preferredPlaneDwellSeconds);
+                if (preferred.Valid) {
+                    bool holdsPrevious = _hasPreferredPlane
+                        && System.Math.Abs(WrapAngle(
+                            preferred.GateRadFromLift - _previousPreferredPlaneRad))
+                            <= PadlockPreferredPlane.HysteresisHoldRad
+                        && _preferredPlaneDwellSeconds
+                            < PadlockPreferredPlane.HysteresisSeconds;
+                    double nextPreferredPlaneDwellSeconds = holdsPrevious
+                        ? _preferredPlaneDwellSeconds + dt : 0.0;
+                    ClearAssistLatches();
+                    _hasPreferredPlane = true;
+                    _previousPreferredPlaneRad = preferred.GateRadFromLift;
+                    _preferredPlaneDwellSeconds = nextPreferredPlaneDwellSeconds;
+                    State = new PadlockRollAssistState(
+                        Selected: true,
+                        GeometryValid: true,
+                        Captured: false,
+                        Active: false,
+                        AnyPlane: false,
+                        PreferredPlaneValid: true,
+                        PreferredPlaneRad: preferred.GateRadFromLift,
+                        TargetSpawnSequence: targetSpawnSequence,
+                        PlaneMagnitude: planeMagnitude,
+                        RollErrorRad: preferred.GateRadFromLift,
+                        DesiredRollRateRadPerSecond: 0.0,
+                        MeasuredRollRateRadPerSecond: aircraft.BodyRates.P,
+                        EstimatedTargetPlaneRateRadPerSecond: 0.0,
+                        SasRollControl: 0.0);
+                    return new PadlockRollAssistResult(command, State);
+                }
+
+                ClearAssistLatches();
+                State = new PadlockRollAssistState(
+                    Selected: true,
+                    GeometryValid: true,
+                    Captured: false,
+                    Active: false,
+                    AnyPlane: true,
+                    PreferredPlaneValid: false,
+                    PreferredPlaneRad: 0.0,
+                    TargetSpawnSequence: targetSpawnSequence,
+                    PlaneMagnitude: planeMagnitude,
+                    RollErrorRad: 0.0,
+                    DesiredRollRateRadPerSecond: 0.0,
+                    MeasuredRollRateRadPerSecond: aircraft.BodyRates.P,
+                    EstimatedTargetPlaneRateRadPerSecond: 0.0,
+                    SasRollControl: 0.0);
+                return new PadlockRollAssistResult(command, State);
+            }
             if (!eligible) {
                 ClearAssistLatches();
                 State = new PadlockRollAssistState(
@@ -135,6 +214,8 @@ public sealed class PadlockRollAssist {
                     Captured: false,
                     Active: false,
                     AnyPlane: anyPlane,
+                    PreferredPlaneValid: false,
+                    PreferredPlaneRad: 0.0,
                     TargetSpawnSequence: targetSpawnSequence,
                     PlaneMagnitude: planeMagnitude,
                     RollErrorRad: 0.0,
@@ -152,6 +233,8 @@ public sealed class PadlockRollAssist {
                 Captured: anyPlane,
                 Active: false,
                 AnyPlane: anyPlane,
+                PreferredPlaneValid: false,
+                PreferredPlaneRad: 0.0,
                 TargetSpawnSequence: targetSpawnSequence,
                 PlaneMagnitude: planeMagnitude,
                 RollErrorRad: 0.0,
@@ -174,6 +257,8 @@ public sealed class PadlockRollAssist {
                 Captured: false,
                 Active: false,
                 AnyPlane: false,
+                PreferredPlaneValid: false,
+                PreferredPlaneRad: 0.0,
                 TargetSpawnSequence: targetSpawnSequence,
                 PlaneMagnitude: planeMagnitude,
                 RollErrorRad: rollError,
@@ -280,6 +365,8 @@ public sealed class PadlockRollAssist {
             Captured: _captured,
             Active: active,
             AnyPlane: false,
+            PreferredPlaneValid: false,
+            PreferredPlaneRad: 0.0,
             TargetSpawnSequence: targetSpawnSequence,
             PlaneMagnitude: planeMagnitude,
             RollErrorRad: rollError,
@@ -298,6 +385,9 @@ public sealed class PadlockRollAssist {
         _previousErrorRad = 0.0;
         _estimatedTargetPlaneRateRadPerSecond = 0.0;
         _sasRollControl = 0.0;
+        _hasPreferredPlane = false;
+        _previousPreferredPlaneRad = 0.0;
+        _preferredPlaneDwellSeconds = 0.0;
     }
 
     static double MoveToward(double current, double target, double maximumDelta) {
