@@ -35,7 +35,7 @@ const originOnly = (value) => {
 export function isAllowedOrigin(requestOrigin, configuredOrigins) {
   const requested = originOnly(requestOrigin);
   if (!requested) return false;
-  return String(configuredOrigins || "https://guns-only.vercel.app")
+  return String(configuredOrigins || "https://guns-only.com")
     .split(",")
     .map(originOnly)
     .filter(Boolean)

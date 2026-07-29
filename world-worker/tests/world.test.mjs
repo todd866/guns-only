@@ -237,6 +237,14 @@ test("origin policy accepts only configured complete origins", () => {
   assert.equal(isAllowedOrigin("https://guns-only.vercel.app.evil.test", configured), false);
   assert.equal(isAllowedOrigin("https://guns-only.vercel.app/path", configured), false);
   assert.equal(isAllowedOrigin("null", configured), false);
+  // The canonical production domain (2026-07-29 domain move): the unset-config fallback must
+  // admit guns-only.com, and a config carrying both custom domains must admit each exactly.
+  assert.equal(isAllowedOrigin("https://guns-only.com", undefined), true);
+  assert.equal(isAllowedOrigin("https://guns-only.vercel.app", undefined), false);
+  const domains = "https://guns-only.com,https://guns-only.cohort.md";
+  assert.equal(isAllowedOrigin("https://guns-only.com", domains), true);
+  assert.equal(isAllowedOrigin("https://guns-only.cohort.md", domains), true);
+  assert.equal(isAllowedOrigin("https://guns-only.com.evil.test", domains), false);
 });
 
 test("message budget permits network jitter but bounds sustained flooding", () => {
