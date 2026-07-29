@@ -256,6 +256,26 @@ export const SCENARIOS = [
     },
   },
   {
+    name: "padlock-presentation-capture-retain-release",
+    about: "The presentation director enters capture at 11°, retains it through 18°, then releases outside that band while kernel assist capture stays false.",
+    player: { headingDeg: 45, pitchDeg: 0, bankDeg: 0, altFt: 10000 },
+    bandit: { azimuthDeg: 180, elevationDeg: 0, rangeM: 720 },
+    lead: null,
+    view: { padlock: true, padlockPhase: "TRACK", sensor: "auto" },
+    state: {
+      range_m: 720, closure_kts: -100,
+      padlock_roll_assist_selected: true, padlock_roll_assist_geometry_valid: true,
+      padlock_roll_assist_captured: false, padlock_roll_assist_active: false,
+      padlock_roll_assist_any_plane: false, padlock_roll_error_deg: 19,
+      padlock_preferred_plane_valid: true, padlock_preferred_plane_deg: 19,
+    },
+    presentationCaptureStates: [
+      { padlock_roll_error_deg: 11, padlock_preferred_plane_deg: 11 },
+      { padlock_roll_error_deg: 15, padlock_preferred_plane_deg: 15 },
+      { padlock_roll_error_deg: 19, padlock_preferred_plane_deg: 19 },
+    ],
+  },
+  {
     name: "padlock-roll-servo-lag",
     about: "After first acquisition, ordinary camera-servo lag during a roll says CAMERA SETTLING while the physical director remains live.",
     player: { headingDeg: 40, pitchDeg: 4, bankDeg: 45, altFt: 9500 },

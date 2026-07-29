@@ -281,6 +281,25 @@ function assertPadlockDirector(data) {
   }
 }
 
+function assertPresentationCaptureSequence(data) {
+  const steps = data.presentationCaptureSequence;
+  if (!Array.isArray(steps)) return;
+  const expected = [
+    { errorDeg: 11, captured: true, label: "enters at 11 degrees" },
+    { errorDeg: 15, captured: true, label: "retains through the 18-degree band" },
+    { errorDeg: 19, captured: false, label: "releases outside 18 degrees" },
+  ];
+  check(data.name, "presentation capture sequence has three frames",
+    steps.length === expected.length, `${steps.length} frames`);
+  for (let index = 0; index < Math.min(steps.length, expected.length); index += 1) {
+    const actual = steps[index];
+    const want = expected[index];
+    check(data.name, `presentation capture ${want.label}`,
+      actual.errorDeg === want.errorDeg && actual.captured === want.captured,
+      `error=${actual.errorDeg}; captured=${actual.captured}`);
+  }
+}
+
 function assertFunnelContainsTarget(data) {
   const { name, geometry, probes, state } = data;
   if (!data.banditOnTrajectory || !Array.isArray(geometry.funnel)) return;
@@ -690,6 +709,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     assertFunnel(data);
     assertBandit(data);
     if (data.padlock) assertPadlockDirector(data);
+    assertPresentationCaptureSequence(data);
     assertPadlockInsetAndLocator(data);
     assertBasicJobs(data);
     assertGunHeat(data);
