@@ -215,6 +215,10 @@ public sealed class SimulationSession {
     string _circuitComms = "";
     readonly MissionRadioDirector _missionRadioDirector = new();
     MissionRadioTransmission _missionRadio = MissionRadioTransmission.Silent;
+    readonly MissionChecklistDirector _missionChecklistDirector = new();
+    MissionChecklistStatus _missionChecklist = MissionChecklistStatus.None;
+    readonly MeshNavDirector _meshNav = new();
+    MeshNavSolution _meshNavSolution = default;
     // Pattern school starts with a serviceable aircraft. Attrition faults remain available from
     // the systems panel, but silently failing the utility hydraulics 90 seconds into every first
     // circuit left the gear at 91% and made the taught wire pass unrecoverable.
@@ -415,6 +419,9 @@ public sealed class SimulationSession {
     public MissionRadioTransmission MissionRadio => _missionRadio;
     // Compatibility seam for shells built against the first Circuits-only snapshot.
     public MissionRadioTransmission CircuitRadio => _missionRadio;
+    public MissionChecklistStatus MissionChecklist => _missionChecklist;
+    public MeshNavDirector MeshNav => _meshNav;
+    public MeshNavSolution MeshNavSolution => _meshNavSolution;
     public bool CircuitsCleanMode => _circuitsCleanMode;
     public bool CircuitsFaultArmed => _circuitsFaultArmed;
     public double RapierNoseOnVelocityErrorDeg =>
@@ -2036,6 +2043,25 @@ public sealed class SimulationSession {
         }
     }
 
+    void UpdateMissionChecklists() {
+        AirframeSystems systems = _systems;
+        bool simulated = PlayerSystemsSimulated;
+        _missionChecklist = _missionChecklistDirector.Step(new MissionChecklistState(
+            TimeSeconds,
+            Lifecycle is LifecycleState.Active or LifecycleState.Finished,
+            RapierMissionAvailable,
+            RapierPhase,
+            _catapult.IsActive,
+            simulated,
+            systems.AllGearUpAndLocked,
+            systems.AllGearDownAndLocked,
+            Math.Max(systems.LeftFlapDegrees, systems.RightFlapDegrees)
+                <= FlapTargetToleranceDeg,
+            Math.Min(systems.LeftFlapDegrees, systems.RightFlapDegrees)
+                >= systems.FullFlapDegrees - FlapTargetToleranceDeg,
+            PlayerWeaponsAuthorized));
+    }
+
     void UpdateMissionRadio() {
         LsoAdvice? radioLso = null;
         if (_carrier?.IsMaritime == true && !_arrestment.IsActive && !_catapult.IsActive) {
@@ -2071,7 +2097,9 @@ public sealed class SimulationSession {
             _rapierDogfightingDronesRemaining,
             _fuel.IsJoker,
             _fuel.IsBingo,
-            _recentEvents));
+            _recentEvents,
+            _missionChecklist.Name,
+            _missionChecklist.CompletedCall));
         _circuitComms = _beat.ScriptedIntercept?.PatternOnly == true
             && _missionRadio.Active
                 ? $"{_missionRadio.Speaker} · {_missionRadio.Callsign} · "
@@ -2213,6 +2241,7 @@ public sealed class SimulationSession {
             MaybeInjectRapierComputerFailure();
         }
         StepCore();
+        UpdateMissionChecklists();
         UpdateMissionRadio();
         if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
         StepPendingTerminalDecision();
@@ -2766,6 +2795,9 @@ public sealed class SimulationSession {
         _circuitComms = "";
         _missionRadioDirector.Reset();
         _missionRadio = MissionRadioTransmission.Silent;
+        _missionChecklistDirector.Reset();
+        _missionChecklist = MissionChecklistStatus.None;
+        ConfigureMeshNavFromBeat();
         _rapierAutomationEnabled =
             _beat.ScriptedIntercept?.AutomationDefaultEnabled ?? false;
         _rapierManualOverrideUntilMs = double.NegativeInfinity;
@@ -2900,8 +2932,46 @@ public sealed class SimulationSession {
         _transitionCue = "";
         _transitionCueUntilMs = double.NegativeInfinity;
         _splashCueUntilMs = double.NegativeInfinity;
+        // The casevac beat has its own presentation stack; the panel must not show a
+        // stale prior-sortie checklist under it.
+        _missionChecklistDirector.Reset();
+        _missionChecklist = MissionChecklistStatus.None;
+        _meshNav.Reset();
+        _meshNavSolution = default;
         Lifecycle = LifecycleState.Ready;
     }
+
+    void ConfigureMeshNavFromBeat() {
+        MeshPlace? home = null;
+        if (_beat.RecoveryPlan is { } plan) {
+            home = new MeshPlace(
+                plan.Id,
+                plan.DisplayName,
+                plan.Position.X,
+                plan.Position.Z,
+                plan.Position.Y,
+                MeshPlaceRole.Home);
+        }
+
+        MeshNavTransitMode mode = _beat.OpenSegmentNav
+            ? MeshNavTransitMode.OpenSegment
+            : MeshNavTransitMode.MissionGated;
+        IReadOnlyList<MeshPlace> catalog = mode == MeshNavTransitMode.OpenSegment
+            ? MeshPlaceCatalog.FreeFlyPlaces
+            : Array.Empty<MeshPlace>();
+        _meshNav.Configure(mode, home, catalog);
+        _meshNavSolution = default;
+    }
+
+    public bool TrySelectMeshPlace(string placeId) =>
+        _meshNav.TrySelectPlace(placeId, phaseAllows: Lifecycle == LifecycleState.Active
+            || Lifecycle == LifecycleState.Ready
+            || Lifecycle == LifecycleState.Paused);
+
+    public bool TrySetMeshFreeFix(double eastM, double northM, string? label) =>
+        _meshNav.TrySetFreeFix(eastM, northM, label);
+
+    public void ClearMeshActiveDest() => _meshNav.ClearActiveDestToHome();
 
     AircraftSim CreatePlayer(in AircraftState state) {
         var player = new AircraftSim(WithCurrentFuelMass(state), _beat.PlayerAir,
@@ -3031,10 +3101,13 @@ public sealed class SimulationSession {
     bool GearAtTarget => _configurationTarget == FlightConfigurationTarget.Recovery
         ? _systems.AllGearDownAndLocked : _systems.AllGearUpAndLocked;
 
+    const double FlapTargetToleranceDeg = 0.25;
+
     bool FlapsAtTarget => _configurationTarget == FlightConfigurationTarget.Recovery
         ? Math.Min(_systems.LeftFlapDegrees, _systems.RightFlapDegrees)
-            >= _systems.FullFlapDegrees - 0.25
-        : Math.Max(_systems.LeftFlapDegrees, _systems.RightFlapDegrees) <= 0.25;
+            >= _systems.FullFlapDegrees - FlapTargetToleranceDeg
+        : Math.Max(_systems.LeftFlapDegrees, _systems.RightFlapDegrees)
+            <= FlapTargetToleranceDeg;
 
     bool ConfigurationReady => GearAtTarget && FlapsAtTarget;
 

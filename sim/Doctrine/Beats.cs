@@ -375,6 +375,11 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     MissionEnvironmentContract? Environment = null,
     ScriptedInterceptConfig? ScriptedIntercept = null,
     RecoveryPlan? RecoveryPlan = null,
+    /// <summary>
+    /// When true, Mesh nav uses Open Segment: curated free-fly Places plus Free Fix clicks.
+    /// Mission-gated beats expose only the places configured for that sortie (usually HomePlate).
+    /// </summary>
+    bool OpenSegmentNav = false,
     OpponentPresence OpponentPresence = OpponentPresence.Present,
     AircraftState? OpponentInitialState = null,
     GunsOnly.Sim.Casevac.CasevacScenarioDefinition? Casevac = null) {
@@ -962,6 +967,7 @@ public static class Beats {
             },
             // A bolter or a go-around must NOT end the session — that is the whole exercise.
             RecoveryCompletesSortie = false,
+            OpenSegmentNav = true,
             Mission = new MissionContract(
                 "mission.modern.rapier-circuits.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,
@@ -1039,7 +1045,8 @@ public static class Beats {
                 MissionContentFamily.ModernPublicDataSurrogate,
                 PublicDataSurrogate: true,
                 RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE",
-                Era: "MODERN_PUBLIC_DATA_EXERCISE")
+                Era: "MODERN_PUBLIC_DATA_EXERCISE"),
+            OpenSegmentNav = true
         };
     }
 

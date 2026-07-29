@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0.0",
+  "catalogId": "mesh-catalog.ukraine-modern.free-fly.v1",
+  "places": [
+    {
+      "placeId": "place.ukraine.crimea-coast-survey.v1",
+      "displayName": "Crimea coast survey",
+      "eastM": -320000,
+      "northM": -390000,
+      "role": "destination"
+    },
+    {
+      "placeId": "place.ukraine.soniachne-clinic-a.v1",
+      "displayName": "Soniachne clinic A",
+      "eastM": -4208,
+      "northM": 4096,
+      "upM": 212.5,
+      "role": "destination"
+    },
+    {
+      "placeId": "place.ukraine.dnipro-bend-survey.v1",
+      "displayName": "Dnipro bend survey",
+      "eastM": -180000,
+      "northM": 40000,
+      "role": "destination"
+    },
+    {
+      "placeId": "place.ukraine.quiet-ridge-label.v1",
+      "displayName": "Quiet ridge",
+      "eastM": 25000,
+      "northM": -15000,
+      "role": "landmark"
+    }
+  ]
+}
