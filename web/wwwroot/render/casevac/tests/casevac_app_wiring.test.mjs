@@ -181,7 +181,7 @@ test("portrait touch Medevac keeps combat chips closed and clears the movement s
   );
   assert.match(
     flightFactsSource,
-    /@media \(max-width: 760px\) and \(orientation: portrait\)[\s\S]*\.touch-mode\.tilt-fallback \[data-casevac-flight-facts\][\s\S]*bottom: max\(136px, calc\(env\(safe-area-inset-bottom\) \+ 136px\)\)/,
+    /@media \(max-width: 760px\) and \(orientation: portrait\)[\s\S]*\.touch-mode\.tilt-fallback \[data-casevac-flight-facts\][\s\S]*bottom: max\(162px, calc\(env\(safe-area-inset-bottom\) \+ min\(36vw, 156px\) \+ 22px\)\)/,
   );
 });
 
