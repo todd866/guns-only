@@ -256,7 +256,9 @@ verify_candidate "$deployment_url" "$expected_revision"
 
 if [ "$target" = "--prod" ]; then
     "$vercel_cli" promote "$deployment_url" --yes
-    verify_public "https://guns-only.vercel.app" "$release_revision"
+    # Verify the canonical production door, not the retired vercel.app alias (which only
+    # worked via its 308 redirect after the Build 184 canonicalization).
+    verify_public "https://guns-only.com" "$release_revision"
 fi
 
 echo "deploy-web: verified $deployment_url"
