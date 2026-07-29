@@ -569,15 +569,16 @@ function assertRapierMission(data) {
 
   const panel = geometry.limitsPanel;
   check(name, "Rapier Limits Panel is drawn (nav to strip)",
-    panel?.profile === "nav" && Array.isArray(panel.rows) && panel.rows.length === 4,
+    panel?.profile === "nav" && Array.isArray(panel.rows) && panel.rows.length === 5,
     panel ? `${panel.profile} rows=${panel.rows?.length}` : "missing");
   if (!panel || panel.profile !== "nav") return;
 
-  check(name, "Limits nav slots are NM/MIN · LB/MIN · LB/NM · RESERVE",
-    panel.rows[0].label === "NM/MIN"
-      && panel.rows[1].label === "LB/MIN"
-      && panel.rows[2].label === "LB/NM"
-      && panel.rows[3].label === "RESERVE",
+  check(name, "Limits nav slots are FUEL · NM/MIN · LB/MIN · LB/NM · ARR",
+    panel.rows[0].label === "FUEL"
+      && panel.rows[1].label === "NM/MIN"
+      && panel.rows[2].label === "LB/MIN"
+      && panel.rows[3].label === "LB/NM"
+      && /^ARR/.test(panel.rows[4].label),
     panel.rows.map((row) => row.label).join(" · "));
   check(name, "Limits panel stays inside the canvas",
     panel.x >= 0 && panel.y >= 0
@@ -586,9 +587,10 @@ function assertRapierMission(data) {
     `box=${panel.x},${panel.y} ${panel.width}x${panel.height}`);
 
   if (name.includes("rapier-escape-fuel-triad")) {
-    check(name, "escape reserve is fault when closure starves the ETA",
-      panel.accent === "fault" && Number(panel.rows[3].value) < 0,
-      `accent=${panel.accent}; reserve=${panel.rows[3].value}`);
+    check(name, "escape arrival fuel is fault when closure starves the ETA",
+      panel.accent === "fault"
+        && (panel.rows[4].label === "ARR DRY" || Number(panel.rows[4].value) < 0),
+      `accent=${panel.accent}; arr=${panel.rows[4].label} ${panel.rows[4].value}`);
   }
 }
 
@@ -606,19 +608,19 @@ function assertRapierPanelLayout(data) {
     systemsPanel: systems,
     limitsPanel: limits,
   } = data.geometry;
-  for (const [label, panel] of Object.entries({ cycle, gTape, systems, limits })) {
-    check(data.name, `${label} panel is recorded`, Boolean(panel),
-      panel ? `box=${panel.x},${panel.y} ${panel.width}x${panel.height}` : "missing");
-  }
-  if (cycle && gTape) {
-    check(data.name, "combined-cycle lesson clears the G tape",
-      !rectanglesOverlap(cycle, gTape),
-      `cycle bottom=${cycle.y + cycle.height}; G top=${gTape.y}`);
-  }
-  if (systems && limits) {
-    check(data.name, "gear/systems panel clears fuel and limits",
-      !rectanglesOverlap(systems, limits),
-      `systems bottom=${systems.y + systems.height}; limits top=${limits.y}`);
+  // Attack phase: phase-aware HUD hides cycle teach and gear/systems; Limits + G remain.
+  check(data.name, "limits panel is recorded", Boolean(limits),
+    limits ? `box=${limits.x},${limits.y} ${limits.width}x${limits.height}` : "missing");
+  check(data.name, "G tape is recorded", Boolean(gTape),
+    gTape ? `box=${gTape.x},${gTape.y} ${gTape.width}x${gTape.height}` : "missing");
+  check(data.name, "combined-cycle lesson stays off outside ascent",
+    !cycle, cycle ? `unexpected box=${cycle.x},${cycle.y}` : "absent");
+  check(data.name, "gear/systems panel stays off outside recovery",
+    !systems, systems ? `unexpected box=${systems.x},${systems.y}` : "absent");
+  if (limits && gTape) {
+    check(data.name, "limits clears the G tape",
+      !rectanglesOverlap(limits, gTape),
+      `limits=${limits.y}; G=${gTape.y}`);
   }
 }
 

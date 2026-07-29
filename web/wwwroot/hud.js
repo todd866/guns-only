@@ -46,6 +46,7 @@ import {
   rapierGuidancePresentation,
 } from "./render/mission/rapier_guidance.js";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
+import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
@@ -2495,8 +2496,11 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawSystemsPanel(systems) {
+  drawSystemsPanel(systems, state = null) {
     if (!systems?.available || !systems.relevant) return;
+    // Rapier Intercept: gear/systems chrome only in recovery — warnings still annunciate.
+    const phaseHud = hudPhasePresentation(state ?? {});
+    if (phaseHud.mission === "rapier_intercept" && !phaseHud.surfaces.systemsGear) return;
     const ctx = this.ctx;
     const warning = systems.warnings.some((item) => item.level === "warning");
     const caution = systems.warnings.length > 0;
@@ -3774,7 +3778,8 @@ class CombatHud {
     }
 
     const fd = rapierFlightDirectorPresentation(frame.state);
-    if (fd) {
+    // Intercept v1: no center FD essays/carets. Circuits keeps the director.
+    if (fd?.centerFdCommands) {
       const cx = this.width * 0.5;
       const cy = this.height * 0.52;
       const bankClamp = Math.max(-35, Math.min(35, fd.bankErrorDeg));
@@ -4063,7 +4068,7 @@ class CombatHud {
     }
     this.drawWarnings(frame, systems);
     if (!portraitDualStick && !carrierPadlock) {
-      this.drawSystemsPanel(systems);
+      this.drawSystemsPanel(systems, frame.state);
       this.drawAoAIndexer(frame.state, frame.dt);
     }
     this.drawPadlockSa(frame, systems, noseAnchor);

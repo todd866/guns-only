@@ -591,7 +591,7 @@ export const SCENARIOS = [
   },
   {
     name: "rapier-escape-fuel-triad",
-    about: "Egress after kill: steep climb with high TAS but weak home closure — Limits RESERVE must follow closure (fault), not optimistic TAS. Quiet line is EGRESS · HOME.",
+    about: "Egress after kill: steep climb with high TAS but weak home closure — Limits ARR→next must follow closure (fault), not optimistic TAS. Quiet line is EGRESS · HOME.",
     player: { headingDeg: 0, pitchDeg: 35, bankDeg: 0, altFt: 72000 },
     bandit: { azimuthDeg: 160, elevationDeg: -5, rangeM: 40000 },
     lead: null,
@@ -632,7 +632,7 @@ export const SCENARIOS = [
   },
   {
     name: "rapier-ram-only-systems-layout",
-    about: "The observed build-171 state: ram-only propulsion with a surfaced gear/system warning, thermal lesson, G rail, and fuel/limits card. All four panels must remain disjoint.",
+    about: "Attack phase: phase-aware HUD hides cycle teach and gear/systems; Limits + G remain disjoint. Warnings still annunciate gear/hyd failure.",
     player: { headingDeg: 274, pitchDeg: -12, bankDeg: 178, altFt: 72000 },
     bandit: { azimuthDeg: 150, elevationDeg: -4, rangeM: 240000 },
     lead: null,

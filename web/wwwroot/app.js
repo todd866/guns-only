@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=180";
+import { createHud } from "./hud.js?v=181";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -57,7 +57,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=180";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=181";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -9740,7 +9740,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=180")
+    navigator.serviceWorker.register("service-worker.js?v=181")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);

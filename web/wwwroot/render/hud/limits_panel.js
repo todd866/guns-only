@@ -1,8 +1,6 @@
 /// Always-on Limits Panel presentation.
-/// Spec: docs/superpowers/specs/2026-07-27-hud-limits-panel-design.md
-///
-/// Four slots. Profile switches between nav teaching numbers (destination = strip) and dogfight
-/// fuel thresholds. Patient profile is a typed future socket — not invented here.
+/// Spec: docs/superpowers/specs/2026-07-29-rapier-phase-hud-design.md
+/// (Rapier nav rows) and docs/superpowers/specs/2026-07-27-hud-limits-panel-design.md (dogfight).
 
 function finiteNumber(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -92,46 +90,103 @@ function thermalAccent(state, base) {
   return base;
 }
 
+/**
+ * On-arrival minutes until the next physical fuel state: MIN → EMER → DRY.
+ * Joker/Bingo stay out of this cell (radio/warning callouts when crossed).
+ */
+export function arrivalFuelStatePresentation({
+  fuelOnArrivalLb,
+  lbPerMin,
+  minimumLb,
+  emergencyLb,
+} = {}) {
+  if (fuelOnArrivalLb === null || lbPerMin === null || lbPerMin <= 0.01) {
+    return null;
+  }
+  const minLb = finiteNumber(minimumLb);
+  const emerLb = finiteNumber(emergencyLb) ?? 0;
+
+  if (minLb !== null && fuelOnArrivalLb > minLb) {
+    return Object.freeze({
+      label: "ARR MIN",
+      minutes: (fuelOnArrivalLb - minLb) / lbPerMin,
+      nextState: "min",
+    });
+  }
+  if (fuelOnArrivalLb > emerLb) {
+    return Object.freeze({
+      label: "ARR EMER",
+      minutes: (fuelOnArrivalLb - emerLb) / lbPerMin,
+      nextState: "emer",
+    });
+  }
+  return Object.freeze({
+    label: "ARR DRY",
+    minutes: fuelOnArrivalLb / lbPerMin,
+    nextState: "dry",
+  });
+}
+
+function formatSignedMinutes(minutes) {
+  if (minutes === null || !Number.isFinite(minutes)) return "--";
+  if (minutes < 0) return String(Math.round(minutes));
+  return String(Math.max(0, Math.round(minutes)));
+}
+
+function resolveArrivalFuelLb(navigation, fuelLb) {
+  if (navigation.fuelOnArrivalLb !== null) return navigation.fuelOnArrivalLb;
+  if (navigation.fuelToHomeLb !== null && fuelLb !== null) {
+    return fuelLb - navigation.fuelToHomeLb;
+  }
+  return null;
+}
+
 function navPresentation(state, fuelLb, flowPph, capacityLb, bingoThresholdLb) {
   const navigation = recoveryNavigationPresentation(state);
   const nmPerMin = navigation.nmPerMin;
   const lbPerMin = navigation.lbPerMin;
   const lbPerNm = navigation.lbPerNm;
-  const reserveMin = navigation.reserveMinutes;
-  const reserveMarginLb = navigation.reserveMarginLb;
-  const reserveTargetLb = navigation.reserveTargetLb;
+  const arrivalLb = resolveArrivalFuelLb(navigation, fuelLb);
+  const arrival = arrivalFuelStatePresentation({
+    fuelOnArrivalLb: arrivalLb,
+    lbPerMin,
+    minimumLb: finiteNumber(state.fuel_minimum_lb) ?? bingoThresholdLb,
+    emergencyLb: finiteNumber(state.fuel_emergency_lb),
+  });
 
   let accent = "normal";
-  if (reserveMarginLb !== null) {
-    if (reserveMarginLb < 0) accent = "fault";
-    else if (reserveTargetLb !== null && reserveTargetLb > 0
-      && reserveMarginLb < reserveTargetLb * 0.10) accent = "caution";
+  if (arrival) {
+    if (arrival.nextState === "dry" || arrival.minutes < 0) accent = "fault";
+    else if (arrival.nextState === "emer" || arrival.minutes < 5) accent = "caution";
+  } else if (navigation.reserveMarginLb !== null && navigation.reserveMarginLb < 0) {
+    accent = "fault";
   }
   accent = thermalAccent(state, accent);
-
-  const reserveValue = reserveMin === null
-    ? "--"
-    : (reserveMin < 0
-      ? String(Math.round(reserveMin))
-      : String(Math.max(0, Math.round(reserveMin))));
 
   return Object.freeze({
     profile: "nav",
     rows: Object.freeze([
+      row("FUEL", String(Math.round(fuelLb)), "LB"),
       row("NM/MIN", nmPerMin !== null && nmPerMin > 0.01 ? nmPerMin.toFixed(1) : "--", ""),
       row("LB/MIN", lbPerMin !== null ? String(Math.round(lbPerMin)) : "--", ""),
       row("LB/NM", lbPerNm !== null ? lbPerNm.toFixed(2) : "--", ""),
-      row("RESERVE", reserveValue, "MIN"),
+      row(
+        arrival?.label ?? "ARR",
+        arrival ? formatSignedMinutes(arrival.minutes) : "--",
+        "MIN",
+      ),
     ]),
     accent,
-    heroIndex: 3,
+    heroIndex: 4,
     fuelRatio: capacityLb > 0 ? Math.min(1, Math.max(0, fuelLb / capacityLb)) : 0,
     bingoRatio: capacityLb > 0
       ? Math.min(1, Math.max(0, bingoThresholdLb / capacityLb)) : 0,
-    reserveMin,
-    reserveMarginLb,
+    reserveMin: arrival?.minutes ?? null,
+    reserveMarginLb: navigation.reserveMarginLb,
     etaMinutes: navigation.etaMinutes,
     fuelRequiredLb: navigation.fuelToHomeLb,
+    fuelOnArrivalLb: arrivalLb,
+    arrivalNextState: arrival?.nextState ?? null,
   });
 }
 

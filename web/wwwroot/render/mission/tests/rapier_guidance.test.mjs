@@ -61,11 +61,8 @@ test("Rapier guidance is a quiet mode line with authority and takeover", () => {
     rapier_cmc_capability_c: 1200,
     rapier_cmc_margin_c: 1090,
   });
-  assert.match(cue.text, /AUTO · LEVEL ACCEL · M2\.20/);
-  assert.match(cue.text, /SKIN 90°C/);
-  assert.match(cue.text, /T0 110°C/);
-  assert.doesNotMatch(cue.text, /MARGIN|TO LIMIT|\+1090/);
-  assert.match(cue.text, /P TOGGLE AUTO/);
+  assert.match(cue.text, /^AUTO · ACCEL$/);
+  assert.doesNotMatch(cue.text, /SKIN|T0|P TOGGLE|LEVEL ACCEL|M2\.20/);
   assert.equal(cue.detail, "");
   assert.equal(cue.level, "active");
 });
@@ -82,7 +79,7 @@ test("attack guidance exposes swarm release without owning the centre", () => {
   });
   assert.match(cue.text, /ATTACK/);
   assert.match(cue.text, /F RELEASES SWARM · 3/);
-  assert.match(cue.text, /SKIN 400°C/);
+  assert.doesNotMatch(cue.text, /SKIN|P TOGGLE/);
   assert.equal(cue.detail, "");
   assert.equal(cue.level, "attack");
 });
@@ -100,8 +97,8 @@ test("manual takeover stays explicit without a triad essay", () => {
     rapier_stagnation_temp_c: 200,
     rapier_thermal_margin_c: 1000,
   });
-  assert.match(cue.text, /PILOT · RETURN · HOME/);
-  assert.match(cue.text, /SKIN 200°C/);
+  assert.match(cue.text, /^PILOT · RETURN · HOME$/);
+  assert.doesNotMatch(cue.text, /SKIN|P TOGGLE/);
   assert.equal(cue.detail, "");
   assert.equal(cue.level, "manual");
 });
@@ -141,7 +138,7 @@ test("stagnation over names the CMC channel instead of calling T0 skin", () => {
   assert.equal(cue.level, "attack");
 });
 
-test("skin-clamped dash surfaces commanded Mach on the quiet line", () => {
+test("skin-clamped dash stays off the quiet line (tapes / Limits own Mach)", () => {
   const cue = rapierGuidancePresentation({
     rapier_mission_available: true,
     rapier_automation_enabled: true,
@@ -152,15 +149,16 @@ test("skin-clamped dash surfaces commanded Mach on the quiet line", () => {
     rapier_skin_mach_limit: 3.14,
     rapier_material_mach_ceiling: 3.14,
     rapier_stagnation_temp_c: 320,
-    rapier_thermal_margin_c: 0,
+    rapier_thermal_margin_c: 800,
   });
-  assert.match(cue.text, /CMD M3\.1/);
-  assert.match(cue.text, /INTERCEPT/);
+  assert.match(cue.text, /^AUTO · INTERCEPT$/);
+  assert.doesNotMatch(cue.text, /CMD M/);
 });
 
 test("cycle teach explains turbine-to-ram handoff with live shares and skin", () => {
   const teach = rapierCycleTeachPresentation({
     rapier_mission_available: true,
+    rapier_mission_phase: 4,
     mach: 1.88,
     rapier_turbine_thrust_kn: 23,
     rapier_ramjet_thrust_kn: 0,
@@ -181,6 +179,7 @@ test("cycle teach explains turbine-to-ram handoff with live shares and skin", ()
 
   const handover = rapierCycleTeachPresentation({
     rapier_mission_available: true,
+    rapier_mission_phase: 3,
     mach: 2.3,
     rapier_turbine_thrust_kn: 10,
     rapier_ramjet_thrust_kn: 40,
@@ -194,6 +193,7 @@ test("cycle teach explains turbine-to-ram handoff with live shares and skin", ()
 test("cycle teach uses pounds-force with the CMC thermal channels", () => {
   const teach = rapierCycleTeachPresentation({
     rapier_mission_available: true,
+    rapier_mission_phase: 4,
     mach: 3.5,
     rapier_turbine_thrust_lbf: 0,
     rapier_ramjet_thrust_lbf: 18_000,
@@ -211,9 +211,10 @@ test("cycle teach uses pounds-force with the CMC thermal channels", () => {
   assert.match(teach.skinText, /SKIN 461/);
 });
 
-test("flight director exposes bank/altitude/speed bugs from snapshot targets", () => {
-  const fd = rapierFlightDirectorPresentation({
+test("flight director essays stay on Circuits; Intercept suppresses them", () => {
+  const circuits = rapierFlightDirectorPresentation({
     rapier_mission_available: true,
+    rapier_pattern_only: true,
     rapier_fd_bank_deg: 20,
     bank_deg: 5,
     rapier_target_altitude_ft: 56000,
@@ -221,15 +222,31 @@ test("flight director exposes bank/altitude/speed bugs from snapshot targets", (
     rapier_fd_target_ktas: 450,
     true_airspeed_kts: 500,
   });
-  assert.equal(fd.bankErrorDeg, 15);
-  assert.equal(fd.altErrorFt, 6000);
-  assert.equal(fd.speedCall, "SLOW");
-  assert.equal(fd.targetKtas, 450);
+  assert.equal(circuits.bankErrorDeg, 15);
+  assert.equal(circuits.altErrorFt, 6000);
+  assert.equal(circuits.speedCall, "SLOW");
+  assert.equal(circuits.targetKtas, 450);
+  assert.equal(circuits.centerFdCommands, true);
+
+  const intercept = rapierFlightDirectorPresentation({
+    rapier_mission_available: true,
+    rapier_mission_phase: 9,
+    rapier_fd_bank_deg: 20,
+    bank_deg: 5,
+    rapier_target_altitude_ft: 56000,
+    alt_ft: 50000,
+    rapier_fd_target_ktas: 450,
+    true_airspeed_kts: 500,
+  });
+  assert.equal(intercept.speedCall, "");
+  assert.equal(intercept.targetKtas, 0);
+  assert.equal(intercept.centerFdCommands, false);
 });
 
-test("RAM climb director predicts FL700 capture before a high-rate overshoot", () => {
+test("Circuits RAM climb director predicts FL700 capture before a high-rate overshoot", () => {
   const fd = rapierFlightDirectorPresentation({
     rapier_mission_available: true,
+    rapier_pattern_only: true,
     rapier_mission_phase: 4,
     rapier_target_altitude_ft: 70000,
     alt_ft: 69380,
@@ -242,7 +259,7 @@ test("RAM climb director predicts FL700 capture before a high-rate overshoot", (
   assert.ok(fd.timeToAltitudeS > 0.9 && fd.timeToAltitudeS < 1.0);
 });
 
-test("intercept director calls a continuing climb above FL700", () => {
+test("Intercept director drops LEVEL NOW essays", () => {
   const fd = rapierFlightDirectorPresentation({
     rapier_mission_available: true,
     rapier_mission_phase: 9,
@@ -252,12 +269,11 @@ test("intercept director calls a continuing climb above FL700", () => {
     rapier_fd_bank_deg: 0,
     bank_deg: 0,
   });
-  assert.equal(fd.altitudeCall, "LEVEL NOW · DESCEND FL700");
-  assert.equal(fd.altitudeSeverity, "danger");
-  assert.equal(fd.timeToAltitudeS, null);
+  assert.equal(fd.altitudeCall, "");
+  assert.equal(fd.centerFdCommands, false);
 });
 
-test("high-G pull above target produces an unmistakable energy warning", () => {
+test("Intercept high-G pull does not mint a center energy essay", () => {
   const fd = rapierFlightDirectorPresentation({
     rapier_mission_available: true,
     rapier_mission_phase: 9,
@@ -267,8 +283,7 @@ test("high-G pull above target produces an unmistakable energy warning", () => {
     requested_g_cmd: 8.5,
     rapier_automation_active: false,
   });
-  assert.equal(fd.altitudeCall, "UNLOAD NOW · ENERGY HIGH");
-  assert.equal(fd.altitudeSeverity, "danger");
+  assert.equal(fd.altitudeCall, "");
 });
 
 test("mission brief formats thresholds published by the kernel", () => {
@@ -433,17 +448,37 @@ test("circuit gate presents world half-size and energy/config status", () => {
   assert.equal(energy.accent, "fault");
 });
 
-test("cycle teach stays available for Intercept but Circuits HUD gates it off", () => {
-  const intercept = rapierCycleTeachPresentation({
+test("cycle teach is ascent-only on Intercept; Circuits stays gated; OVER resurfaces it", () => {
+  const ascent = rapierCycleTeachPresentation({
     rapier_mission_available: true,
-    rapier_pattern_only: false,
+    rapier_mission_phase: 4,
     mach: 1.88,
     rapier_turbine_thrust_kn: 23,
     rapier_ramjet_thrust_kn: 0,
     rapier_stagnation_temp_c: 90,
     rapier_thermal_margin_c: 1110,
   });
-  assert.ok(intercept);
+  assert.ok(ascent);
+
+  const intercept = rapierCycleTeachPresentation({
+    rapier_mission_available: true,
+    rapier_mission_phase: 9,
+    mach: 3.2,
+    rapier_turbine_thrust_kn: 0,
+    rapier_ramjet_thrust_kn: 40,
+    rapier_stagnation_temp_c: 400,
+    rapier_thermal_margin_c: 800,
+  });
+  assert.equal(intercept, null);
+
+  const over = rapierCycleTeachPresentation({
+    rapier_mission_available: true,
+    rapier_mission_phase: 9,
+    mach: 3.2,
+    rapier_cmc_margin_c: -40,
+    rapier_stagnation_temp_c: 1240,
+  });
+  assert.ok(over);
 
   const circuits = rapierCycleTeachPresentation({
     rapier_mission_available: true,

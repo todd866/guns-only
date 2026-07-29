@@ -1,13 +1,15 @@
+/// Short quiet-line phase tokens (≤ ~4 tokens with authority). Full schedule copy left the
+/// heading strip; FL/Mach targets belong on tapes / Limits, not the mode line.
 const PHASE = Object.freeze({
   1: "LAUNCH",
-  2: "CLIMB · FL560",
-  3: "LEVEL ACCEL · M2.20",
-  4: "RAM CLIMB · FL700",
+  2: "CLIMB",
+  3: "ACCEL",
+  4: "RAM CLIMB",
   5: "ZOOM PULL",
   6: "ZOOM COAST",
-  7: "REENTER · NOSE→V",
+  7: "REENTER",
   8: "DIP RELIGHT",
-  9: "INTERCEPT · FL700",
+  9: "INTERCEPT",
   10: "ATTACK",
   11: "EGRESS · HOME",
   12: "RETURN · HOME",
@@ -310,29 +312,20 @@ export function rapierGuidancePresentation(state) {
     : (active ? "AUTO" : enabled ? "AUTO STBY" : "PILOT");
   const skin = patternOnly ? null : skinFragment(state);
   const thermal = patternOnly ? null : thermalChannels(state);
-  const commanded = finiteNumber(state.rapier_commanded_mach);
-  const authored = finiteNumber(state.rapier_authored_target_mach);
-  const skinLimit = finiteNumber(state.rapier_material_mach_ceiling)
-    ?? finiteNumber(state.rapier_skin_mach_limit);
-  const machClampNote = !patternOnly
-    && commanded !== null && authored !== null && skinLimit !== null
-    && authored - commanded > 0.05
-    ? ` · CMD M${commanded.toFixed(1)}`
-    : "";
 
   let text;
   let level;
   if (patternOnly) {
     const config = circuitsConfigFragment(leg, state);
-    text = `${authority} · ${phaseText} · ${config} · P DEMO/DIRECT/MONITOR`;
+    text = `${authority} · ${phaseText} · ${config}`;
     level = active ? "active" : "manual";
   } else if (skin?.level === "attack") {
-    text = `${authority} · ${skin.text} · P TOGGLE AUTO`;
+    // Urgency owns the quiet line; Controls still documents P for auto toggle.
+    text = `${authority} · ${skin.text}`;
     level = "attack";
   } else {
-    text = skin
-      ? `${authority} · ${phaseText}${coastAlign}${weapon}${machClampNote} · ${skin.text} · P TOGGLE AUTO`
-      : `${authority} · ${phaseText}${coastAlign}${weapon}${machClampNote} · P TOGGLE AUTO`;
+    // Normal/caution skin temps stay off the strip — Limits accent + cycle teach carry them.
+    text = `${authority} · ${phaseText}${coastAlign}${weapon}`;
     level = skin?.level === "caution"
       ? "active"
       : phase === PHASE_ATTACK || phase === PHASE_EGRESS ? "attack"
@@ -361,10 +354,15 @@ export function rapierGuidancePresentation(state) {
 }
 
 /// Circuits / recovery / zoom-coast flight-director bugs from kernel-published targets.
+/// Intercept v1 suppresses center FD command essays (LEVEL NOW / ADD POWER); those answers
+/// belong on tapes + quiet line. Circuits keeps the full director.
 export function rapierFlightDirectorPresentation(state) {
   if (state?.rapier_mission_available !== true) return null;
   if (state.rapier_mission_computer_available === false
     || state.rapier_flight_control_computers_available === false) return null;
+  const patternOnly = state.rapier_pattern_only === true
+    || (typeof state.rapier_mission_cue === "string"
+      && state.rapier_mission_cue.startsWith("CIRCUITS"));
   const targetKtas = finiteNumber(state.rapier_fd_target_ktas) ?? 0;
   const targetAltFt = finiteNumber(state.rapier_target_altitude_ft) ?? 0;
   const noseErr = finiteNumber(state.rapier_nose_on_v_err_deg);
@@ -382,7 +380,7 @@ export function rapierFlightDirectorPresentation(state) {
   const verticalSpeedFpm = finiteNumber(state.vertical_speed_fpm);
   const currentKtas = finiteNumber(state.true_airspeed_kts) ?? 0;
   let speedCall = "";
-  if (targetKtas > 0) {
+  if (patternOnly && targetKtas > 0) {
     speedCall = currentKtas > targetKtas + 25.0 ? "SLOW"
       : currentKtas < targetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
   }
@@ -407,7 +405,8 @@ export function rapierFlightDirectorPresentation(state) {
   const manualHighGPull = state.rapier_automation_active !== true
     && requestedG !== null
     && requestedG >= 4.0;
-  if (altitudeCapturePhase && targetAltFt > 0 && verticalSpeedFpm !== null) {
+  // Intercept: no center altitude essays. Circuits keeps capture coaching.
+  if (patternOnly && altitudeCapturePhase && targetAltFt > 0 && verticalSpeedFpm !== null) {
     if (altitudeErrorFt < 0 && verticalSpeedFpm > 1000) {
       altitudeCall = manualHighGPull
         ? "UNLOAD NOW · ENERGY HIGH"
@@ -426,9 +425,10 @@ export function rapierFlightDirectorPresentation(state) {
     altitudeSeverity,
     timeToAltitudeS,
     speedCall,
-    targetKtas,
+    targetKtas: patternOnly ? targetKtas : 0,
     noseOnVErrorDeg: noseErr,
     noseCall,
+    centerFdCommands: patternOnly,
     boxLabel: circuitLegLabel(circuitLegFromState(state))
       || (noseCall === "ON V" ? "ON V" : noseCall === "ALIGN NOSE→V" ? "NOSE→V" : ""),
   });
@@ -465,14 +465,7 @@ function streamThrustLbf(state, lbfField, knField) {
   return legacyKn === null ? 0 : Math.max(0, legacyKn * 1000 / NEWTONS_PER_POUND_FORCE);
 }
 
-/// Always-on teaching presentation for the combined-cycle motor + skin limit.
-/// Circuits is pattern school — hide Intercept TBCC/skin chrome there.
-export function rapierCycleTeachPresentation(state) {
-  if (state?.rapier_mission_available !== true) return null;
-  const patternOnly = state.rapier_pattern_only === true
-    || (typeof state.rapier_mission_cue === "string"
-      && state.rapier_mission_cue.startsWith("CIRCUITS"));
-  if (patternOnly) return null;
+function buildCycleTeach(state) {
   const mach = Math.max(0, finiteNumber(state.mach) ?? 0);
   const turbineLbf = streamThrustLbf(
     state, "rapier_turbine_thrust_lbf", "rapier_turbine_thrust_kn");
@@ -526,14 +519,28 @@ export function rapierCycleTeachPresentation(state) {
   });
 }
 
+/// Combined-cycle + skin teach card. Intercept: ascent band only, or thermal OVER anywhere.
+/// Circuits is pattern school — hide Intercept TBCC/skin chrome there.
+export function rapierCycleTeachPresentation(state) {
+  if (state?.rapier_mission_available !== true) return null;
+  const patternOnly = state.rapier_pattern_only === true
+    || (typeof state.rapier_mission_cue === "string"
+      && state.rapier_mission_cue.startsWith("CIRCUITS"));
+  if (patternOnly) return null;
+  const phase = Math.floor(Number(state.rapier_mission_phase) || 0);
+  const ascent = phase >= 1 && phase <= 4;
+  const marginC = finiteNumber(state.rapier_cmc_margin_c)
+    ?? finiteNumber(state.rapier_thermal_margin_c);
+  const thermalOver = marginC !== null && marginC < 0;
+  if (!ascent && !thermalOver) return null;
+  return buildCycleTeach(state);
+}
+
 /// Diagnostic engine state for the Aircraft Systems console / tests — not drawn on the HUD ladder.
 export function rapierEnginePresentation(state) {
   if (state?.rapier_mission_available !== true) return null;
-  // Systems console still wants cycle truth on Circuits even when the HUD teach panel is gated.
-  const teach = rapierCycleTeachPresentation({
-    ...state,
-    rapier_pattern_only: false,
-  });
+  // Systems console still wants cycle truth when the HUD teach panel is phase-gated.
+  const teach = buildCycleTeach(state);
   if (!teach) return null;
   const trueAirspeedKts = Math.max(0, Number(state.true_airspeed_kts) || 0);
   const thrustLbf = Math.max(0, Number(state.engine_net_thrust_lbf) || teach.totalLbf);
