@@ -57,7 +57,7 @@ public class RapierMissionDirectorTests {
         RapierMissionGuidance guidance = default;
         for (int i = 0; i < 8; i++) {
             guidance = StepDash(director, SteelLimitedRapier,
-                altitudeM: 70_000.0 * 0.3048, mach: 3.0, contactRangeM: 120_000.0);
+                altitudeM: 70_000.0 * 0.3048, mach: 3.0, contactRangeM: 80_000.0);
         }
 
         Assert.Equal(RapierMissionPhase.Intercept, guidance.Phase);
@@ -217,7 +217,7 @@ public class RapierMissionDirectorTests {
         RapierMissionGuidance g = default;
         for (int i = 0; i < 6; i++) {
             g = StepDash(director, FlightModel.RapierPublicDataSurrogate,
-                altitudeM: 65_000.0 * 0.3048, mach: 2.5, contactRangeM: 120_000.0);
+                altitudeM: 65_000.0 * 0.3048, mach: 2.5, contactRangeM: 80_000.0);
         }
         Assert.Equal(RapierMissionPhase.Intercept, g.Phase);
         Assert.NotEqual("ram_climb_to_fl700", g.PhaseReason);

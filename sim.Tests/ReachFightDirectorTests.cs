@@ -10,7 +10,7 @@ public class ReachFightDirectorTests {
             mach: 2.5,
             qPa: 5_000.0,
             gammaRad: 0.05,
-            contactRangeM: 120_000.0,
+            contactRangeM: 80_000.0,
             fuelLb: 2_400.0,
             reserveFuelLb: 1_200.0,
             zoomLobPreferred: false,
@@ -22,12 +22,32 @@ public class ReachFightDirectorTests {
     }
 
     [Fact]
-    public void AirborneAttachMidDash_DirectJoinIntercept() {
+    public void AirborneAttachMidDash_LevelDashIntercept() {
         var d = new ReachFightDirector();
         ReachFightDecision dec = d.Decide(
             RapierMissionPhase.Launch,
             altitudeM: 70_000.0 * 0.3048,
             mach: 2.8,
+            qPa: 4_000.0,
+            gammaRad: 0.0,
+            contactRangeM: 80_000.0,
+            fuelLb: 2_200.0,
+            reserveFuelLb: 1_200.0,
+            zoomLobPreferred: false,
+            lobSkip: 0,
+            inZoomPhases: false);
+        Assert.Equal(ReachFightStrategy.LevelDash, dec.Strategy);
+        Assert.Equal(RapierMissionPhase.Intercept, dec.SuggestedPhase);
+        Assert.Equal("intercept_dash", dec.PhaseReason);
+    }
+
+    [Fact]
+    public void DirectJoin_WhenNotLevelDashEligible() {
+        var d = new ReachFightDirector();
+        ReachFightDecision dec = d.Decide(
+            RapierMissionPhase.Intercept,
+            altitudeM: 70_000.0 * 0.3048,
+            mach: 2.0,
             qPa: 4_000.0,
             gammaRad: 0.0,
             contactRangeM: 80_000.0,
@@ -69,7 +89,7 @@ public class ReachFightDirectorTests {
             mach: 3.0,
             qPa: 4_000.0,
             gammaRad: 0.0,
-            contactRangeM: 120_000.0,
+            contactRangeM: 80_000.0,
             fuelLb: 2_400.0,
             reserveFuelLb: 1_200.0,
             zoomLobPreferred: false,
@@ -98,6 +118,73 @@ public class ReachFightDirectorTests {
         Assert.Equal(MissionIntention.Employ, dec.Intention);
         Assert.Equal(RapierMissionPhase.Attack, dec.SuggestedPhase);
         Assert.Equal("contact_leq_30km", dec.PhaseReason);
+    }
+
+    [Fact]
+    public void LongRangeHighEnergy_DefaultInterceptMayPickZoomLob() {
+        var d = new ReachFightDirector();
+        ReachFightDecision dec = d.Decide(
+            RapierMissionPhase.RamClimb,
+            altitudeM: 21_500.0,
+            mach: 3.5,
+            qPa: 4_000.0,
+            gammaRad: 0.05,
+            contactRangeM: 200_000.0,
+            fuelLb: 2_400.0,
+            reserveFuelLb: 1_200.0,
+            zoomLobPreferred: false,
+            lobSkip: 0,
+            inZoomPhases: false);
+        Assert.Equal(ReachFightStrategy.ZoomLob, dec.Strategy);
+        Assert.Equal(RapierMissionPhase.ZoomPull, dec.SuggestedPhase);
+    }
+
+    [Fact]
+    public void Hysteresis_PreventsFlipFlopOnTinyScoreDelta() {
+        var d = new ReachFightDirector();
+        _ = d.Decide(
+            RapierMissionPhase.RamClimb,
+            altitudeM: 21_500.0,
+            mach: 3.5,
+            qPa: 4_000.0,
+            gammaRad: 0.05,
+            contactRangeM: 200_000.0,
+            fuelLb: 2_400.0,
+            reserveFuelLb: 1_200.0,
+            zoomLobPreferred: false,
+            lobSkip: 0,
+            inZoomPhases: false);
+        ReachFightDecision second = d.Decide(
+            RapierMissionPhase.RamClimb,
+            altitudeM: 21_500.0,
+            mach: 3.5,
+            qPa: 4_000.0,
+            gammaRad: 0.05,
+            contactRangeM: 95_000.0,
+            fuelLb: 2_400.0,
+            reserveFuelLb: 1_200.0,
+            zoomLobPreferred: false,
+            lobSkip: 0,
+            inZoomPhases: false);
+        Assert.Equal(ReachFightStrategy.ZoomLob, second.Strategy);
+    }
+
+    [Fact]
+    public void ZoomLobPreferred_StillForced() {
+        var d = new ReachFightDirector();
+        ReachFightDecision dec = d.Decide(
+            RapierMissionPhase.RamClimb,
+            altitudeM: 21_500.0,
+            mach: 3.5,
+            qPa: 4_000.0,
+            gammaRad: 0.05,
+            contactRangeM: 80_000.0,
+            fuelLb: 2_400.0,
+            reserveFuelLb: 1_200.0,
+            zoomLobPreferred: true,
+            lobSkip: 0,
+            inZoomPhases: false);
+        Assert.Equal(ReachFightStrategy.ZoomLob, dec.Strategy);
     }
 
     [Fact]

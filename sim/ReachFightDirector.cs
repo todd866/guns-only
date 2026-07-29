@@ -36,6 +36,9 @@ public sealed class ReachFightDirector {
     public const double LevelDashMinMach = 2.2;
     public const double DirectJoinMinMach = 2.0;
     public const double SoftEmployMach = 0.9;
+    public const double StrategySwitchMargin = 15.0;
+
+    ReachFightStrategy? _incumbentStrategy;
 
     public ReachFightDecision Decide(
         RapierMissionPhase currentPhase,
@@ -52,6 +55,7 @@ public sealed class ReachFightDirector {
         bool employHandoff = contactRangeM <= AttackRangeM
             && mach >= SoftEmployMach;
         if (employHandoff) {
+            _incumbentStrategy = null;
             return new(MissionIntention.Employ, ReachFightStrategy.None,
                 RapierMissionPhase.Attack, "contact_leq_30km");
         }
@@ -59,6 +63,7 @@ public sealed class ReachFightDirector {
         bool needsClimbTop = altitudeM < ClimbTopM - 40.0
             && (int)currentPhase <= (int)RapierMissionPhase.Climb;
         if (needsClimbTop) {
+            _incumbentStrategy = null;
             return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,
                 RapierMissionPhase.Climb, "climb_to_fl560");
         }
@@ -66,6 +71,7 @@ public sealed class ReachFightDirector {
         bool needsAccel = mach < AccelMach
             && (int)currentPhase <= (int)RapierMissionPhase.Accelerate;
         if (needsAccel) {
+            _incumbentStrategy = null;
             return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,
                 RapierMissionPhase.Accelerate, "accel_to_m2.2");
         }
@@ -78,24 +84,106 @@ public sealed class ReachFightDirector {
             || inZoomPhases && currentPhase >= RapierMissionPhase.DipRelight;
 
         if (zoomLobPreferred || inZoomPhases) {
+            _incumbentStrategy = ReachFightStrategy.ZoomLob;
             return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ZoomLob,
                 inZoomPhases ? currentPhase : RapierMissionPhase.ZoomPull,
                 inZoomPhases ? "" : "zoom_pull_entry");
         }
 
-        if (directJoinEligible && contactRangeM <= 100_000.0) {
+        ReachFightStrategy bestStrategy = ReachFightStrategy.ClimbBuild;
+        double bestScore = double.NegativeInfinity;
+        if (levelDashEligible) {
+            double score = ScoreLevelDash(contactRangeM, mach, fuelLb, reserveFuelLb);
+            if (score > bestScore) {
+                bestScore = score;
+                bestStrategy = ReachFightStrategy.LevelDash;
+            }
+        }
+
+        {
+            double score = ScoreZoomLob(contactRangeM, mach, fuelLb, reserveFuelLb, lobSkip);
+            if (score > bestScore) {
+                bestScore = score;
+                bestStrategy = ReachFightStrategy.ZoomLob;
+            }
+        }
+
+        if (directJoinEligible) {
+            double score = ScoreDirectJoin(contactRangeM, mach, fuelLb, reserveFuelLb);
+            if (score > bestScore) {
+                bestScore = score;
+                bestStrategy = ReachFightStrategy.DirectJoin;
+            }
+        }
+
+        ReachFightStrategy chosen = bestStrategy;
+        if (_incumbentStrategy is ReachFightStrategy incumbent) {
+            double incumbentScore = ScoreForStrategy(
+                incumbent, contactRangeM, mach, fuelLb, reserveFuelLb, lobSkip,
+                levelDashEligible, directJoinEligible);
+            if (incumbentScore > double.NegativeInfinity
+                && bestScore < incumbentScore + StrategySwitchMargin) {
+                chosen = incumbent;
+            }
+        }
+
+        _incumbentStrategy = chosen;
+
+        if (chosen == ReachFightStrategy.LevelDash) {
+            return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.LevelDash,
+                RapierMissionPhase.Intercept, "intercept_dash");
+        }
+
+        if (chosen == ReachFightStrategy.DirectJoin) {
             return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.DirectJoin,
                 RapierMissionPhase.Intercept, "direct_join");
         }
 
-        if (levelDashEligible) {
-            return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.LevelDash,
-                RapierMissionPhase.Intercept, "intercept_dash");
+        if (chosen == ReachFightStrategy.ZoomLob) {
+            return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ZoomLob,
+                RapierMissionPhase.ZoomPull, "zoom_pull_entry");
         }
 
         return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,
             RapierMissionPhase.RamClimb, "ram_climb_to_fl700");
     }
+
+    static double ScoreLevelDash(
+        double contactRangeM, double mach, double fuelLb, double reserveFuelLb) =>
+        (200_000.0 - contactRangeM) / 1_000.0
+        + (mach - 2.2) * 10.0
+        + (fuelLb > reserveFuelLb ? 20.0 : -50.0);
+
+    static double ScoreZoomLob(
+        double contactRangeM, double mach, double fuelLb, double reserveFuelLb, int lobSkip) =>
+        (contactRangeM > 90_000.0 ? 80.0 : -40.0)
+        + (mach >= 2.2 ? 30.0 : -100.0)
+        + (fuelLb > reserveFuelLb + 200.0 ? 25.0 : -80.0)
+        + (lobSkip >= 3 ? -100.0 : 0.0);
+
+    static double ScoreDirectJoin(
+        double contactRangeM, double mach, double fuelLb, double reserveFuelLb) =>
+        contactRangeM <= 100_000.0 && mach >= DirectJoinMinMach
+            ? 60.0 + (100_000.0 - contactRangeM) / 2_000.0
+            : -100.0;
+
+    static double ScoreForStrategy(
+        ReachFightStrategy strategy,
+        double contactRangeM,
+        double mach,
+        double fuelLb,
+        double reserveFuelLb,
+        int lobSkip,
+        bool levelDashEligible,
+        bool directJoinEligible) => strategy switch {
+        ReachFightStrategy.LevelDash when levelDashEligible =>
+            ScoreLevelDash(contactRangeM, mach, fuelLb, reserveFuelLb),
+        ReachFightStrategy.ZoomLob =>
+            ScoreZoomLob(contactRangeM, mach, fuelLb, reserveFuelLb, lobSkip),
+        ReachFightStrategy.DirectJoin when directJoinEligible =>
+            ScoreDirectJoin(contactRangeM, mach, fuelLb, reserveFuelLb),
+        _ => double.NegativeInfinity,
+    };
 
     public static string Token(MissionIntention intention) => intention switch {
         MissionIntention.ReachFightGeometry => "reach_fight",
