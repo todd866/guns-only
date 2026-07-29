@@ -1,9 +1,12 @@
 # Rapier realism and overperformance
 
-Status: living audit · 2026-07-28 · Epistemic: mixed (measured telemetry + surrogate params)
+Status: living audit · 2026-07-29 · Epistemic: mixed (measured telemetry + surrogate params)
 
 Companion to the SE bible chapters. **Do not treat Mach-4 / CMC as closed engineering** until
 the issues below are closed or deliberately accepted as fiction.
+
+**Program design:** `docs/superpowers/specs/2026-07-29-rapier-flight-sound-realism-design.md`
+(Approach 1 — this file is the dynamics↔sound epistemic map; passes are sequential).
 
 ## Aerothermal telemetry: channel mismatch (FIXED in snapshot/HUD)
 
@@ -85,3 +88,70 @@ transparent first-order surrogate, not claimed Rapier wind-tunnel data.
    already improbably fast; engine/inlet binds before the CMC screen.
 4. Prefer correcting **propulsion / dash** toward measured ~M3.7 before spending more art on M4
    branding.
+
+---
+
+## Dynamics ↔ sound regime map
+
+Hard rule: Mach / density / thrust thresholds appear once (`TurboRamjetPerformanceMap` or
+`RapierAerodynamics`). Briefing, HUD, and `engine_audio.js` consume that source — they do not
+invent parallel schedules. Presentation may stylize levels; it may not invent physics.
+
+Map constants (owner): `RamFadeStartMach` 2.0 · `FullRamMach` 2.8 · `TurbineFadeStartMach` 1.9 ·
+`TurbineGoneMach` 3.0 · `RamSpillStartMach` 3.3 · `RamSpillCompleteMach` 3.8 ·
+`DesignMach` 2.6 (normaliser only).
+
+| Regime | Physics truth | Ear cue | Evidence | Tag | Pass | Shared fields |
+| --- | --- | --- | --- | --- | ---: | --- |
+| Catapult / launch | Maglev gallery → 12° ramp; ~110 m/s end | Present (EM climb / rail / portal) | Surrogate launcher geometry | surrogate | 4 | `catapult_*` |
+| Subsonic climb → FL560 | Turbine; ~M0.90; clean config | Present (turbine + core beds) | OFT / reconstruction | surrogate | — | `engine_rpm_pct`, thrust kn, mach |
+| Transonic push | Wave-drag peak ~M1.18; push through | Present (power + q rush) | Polar knots | surrogate | — | mach, q, throttle |
+| Turbine→ram bucket | Map M2.0→2.8 overlap; real thrust hole | **Drifted** — audio still has parallel handover knots (historically 1.6–2.7 / 1.9–2.8 literals) | Map + Build 172 | open finding | **0→1** | map thresholds, `rapier_*_thrust_kn`, mach |
+| Ram climb / dash | Climb targets M3.15 (below spill); OFT peak ~M3.69; briefing still sells M4 | **Drifted** if ear sells M4 as closed | Reconstruction M3.69 | provisional / fiction | **1** | dash claim, commanded mach, spill |
+| FL700 capture | Geometric gate; predictive unload cues shipped post-Build 173 | Soft (rush + cue), not capture-specific bed | Reconstruction zoom error | surrogate | 2 | phase, alt error, G |
+| Thin-air authority | ~0.90 G ordinary law / ~2.59 G physical @ FL720/M3.5 design gross | Missing bind-by-ear (buffet ≠ authority ceiling) | Aero chapter calc | open finding | **2** | alpha limit, q, load |
+| Zoom coast / exo | q→0; RCS residual; turbine density fade | Present (coast silence + descending whine) | Audio tests | surrogate | — | thrust kn, q, `rapier_rcs_*` |
+| RCS | Finite 40 kg cold-gas | Present (ticks / hiss) | Zoom-lob design | provisional | — | `rapier_rcs_*` |
+| High-q dive / pull | Structural 12/15 demand; no V-q damage persistence | Missing over-q / aeroelastic ear | Open finding | open finding | **3** | q, G, structural limit |
+| Inlet off-design | Scalar α/β recovery above M2; no unstart state | Distortion cue soft; no unstart gulp | NASA mixed-compression refs | provisional | **3** | inlet recovery, alpha, beta |
+| Trap / pattern | Hook recovery | Present (snatch / stretch) | Better-sound Phase 2 | surrogate | — | `arrest_*` |
+| Reentry rush | Rising q after coast | Deferred distinct character | Better-sound Phase 2 open | provisional | **4** | q, density |
+
+### Remaining overperformance flags → pass assignment
+
+| Issue | Pass | Disposition |
+| --- | ---: | --- |
+| Sustained air-breathing M4 / mission copy drift | 1 | Fiction accept **or** retune; stop dual story |
+| Engine buff history (prefer guidance) | 1 | Keep `DesignMach=2.6` normaliser; no silent ratio buffs |
+| Normal-law too tight @ FL720 | 2 | Mass/q/inlet-aware law |
+| Inertias ~7.85 t on 11 t gross | 2 | Re-derive |
+| 12/15 G structural ceilings | 2–3 | Keep demand≠lift; ledger later |
+| Scalar inlet only | 3 | Unstart/buzz seed |
+| No aeroelastic / V-q damage | 3 | Envelope awareness before full aeroelastics |
+| Full aero tables | 4 | Only if 1–3 leave evidenced wrong-feel |
+| CMC 1200 °C vs dash claim | 1 | Keep CMC materials; pair with honest dash |
+
+---
+
+## Pass 0 — Drift checklist (coherence inventory)
+
+Status: **skeleton — fill during Pass 0 implementation**; no physics retune in this pass.
+
+Disposition per row: **own** (already single-sourced) · **fix** (must consume owner) · **accept**
+(documented fiction / provisional with tag).
+
+| Surface | Claimed number / schedule | Owner should be | Observed (fill in Pass 0) | Disposition |
+| --- | --- | --- | --- | --- |
+| `TurboRamjetPerformanceMap` | M2.0 / 2.8 / 1.9 / 3.0 / spill 3.3–3.8 | (owner) | closed map constants | own |
+| Runtime transition banners | Formatted from map | map | verify still derived | own / fix |
+| Intercept briefing prose | Historically M1.6/M2.2; kernel-publish path shipped | map | verify no hard-coded leftovers | own / fix |
+| Mission director climb/dash Mach | M3.15 climb; intercept cues | mission + skin clamp | inventory commanded vs fiction M4 | fix / accept |
+| Identity / campaign brief | “design dash M4 (fiction)” | audit dash claim | inventory copy vs OFT ~M3.69 | fix / accept |
+| `engine_audio.js` `HANDOVER_MACH_*` | literals (e.g. 1.9–2.8) | map via published snapshot or shared config | inventory exact literals | fix |
+| Better-sound spec regime table | Still mentions 1.6–2.7 in places | map | align prose to map | fix |
+| HUD combined-cycle lesson | Thresholds | map | verify | own / fix |
+| Audio profile IDs | `audio.rapier.turbo-ram.v1` | character only — not Mach schedule | confirm no Mach copies | own |
+| Thermal ceiling cues | T0 vs CMC capability | aerothermal snapshot | closed this branch | own |
+
+Pass 0 exit: every row above has a disposition; CI or unit tests cover the cheap **fix** rows
+(briefing / audio / banner numeric claims vs map). Then Pass 1 may retune dash story.

@@ -88,7 +88,7 @@ mass; systems follow)
 | [icds/basing-arrest](icds/basing-arrest.md) | Basing ↔ arrest ICD | provisional |
 | [blueprints/](blueprints/README.md) | Plates **00–20** construction package | `rapier.v1.json` @ **1.2.0** |
 | [present/](present/index.html) | Teaching deck (MD `/present` grammar) | serve via `web/wwwroot/present/rapier-design/` |
-| [REALISM](REALISM-AND-OVERPERFORMANCE.md) | Telemetry / overperformance audit | **read with chapter 00** |
+| [REALISM](REALISM-AND-OVERPERFORMANCE.md) | Telemetry / overperformance audit + dynamics↔sound map | **read with chapter 00**; program: [flight+sound realism design](../../superpowers/specs/2026-07-29-rapier-flight-sound-realism-design.md) |
 
 Chapters 00–40 (§§1–5 of the design spec) are the closed engineering spine and must be readable on
 their own, without the JSON Airframe Definition or its schema. Chapters 50–95 and the ICDs (§6 of
