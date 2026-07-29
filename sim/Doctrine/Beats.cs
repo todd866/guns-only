@@ -1183,11 +1183,13 @@ public static class Beats {
                 "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,
                 PublicDataSurrogate: true,
-                RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE",
+                RulesOfEngagement: "GUNS_ONLY_GUNS_FREE",
                 Era: "MODERN_PUBLIC_DATA_EXERCISE"),
             PlayerCapability: AircraftCapability.F22AConventionalRecoverySurrogate,
             BanditCapability: AircraftCapability.Su27SSurrogate,
-            VisualMergeEvaluation: new VisualMergeEvaluationConfig(),
+            // The 2v1 front door opens guns free: the first-pass safety made sense for one
+            // choreographed merge, but against a pair the opening pass is already a fight.
+            VisualMergeEvaluation: new VisualMergeEvaluationConfig(HoldFireThroughFirstPass: false),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
             ContinuousCombat: new ContinuousCombatConfig(),
             // Fictional runway inside the shared theatre, roughly 44 NM southwest of the merge.
@@ -1234,6 +1236,8 @@ public static class Beats {
         // one merge against one opponent, and force the Ace tier rather than the escalation curve.
         ContinuousCombat = null,
         BanditSkill = PilotSkill.Ace,
+        // The classical duel keeps the safe first pass the front door gave up.
+        VisualMergeEvaluation = new VisualMergeEvaluationConfig(),
         Mission = new MissionContract(
             "mission.modern.ace-duel.f22a-vs-su27s.public-data-surrogate.v1",
             MissionContentFamily.ModernPublicDataSurrogate,

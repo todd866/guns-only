@@ -48,7 +48,7 @@ public class ModernVisualMergeTests {
             "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
             beat.MissionIdentity.Id);
         Assert.True(beat.MissionIdentity.PublicDataSurrogate);
-        Assert.Equal("GUNS_ONLY_FIRST_PASS_SAFE", beat.MissionIdentity.RulesOfEngagement);
+        Assert.Equal("GUNS_ONLY_GUNS_FREE", beat.MissionIdentity.RulesOfEngagement);
         Assert.Equal("aircraft.f22a.public-data-surrogate.v1", beat.PlayerAircraft.Id);
         Assert.Equal("aircraft.su27s.public-data-surrogate.v1", beat.BanditAircraft.Id);
         Assert.True(beat.PlayerAircraft.SystemsSimulated);
@@ -74,17 +74,26 @@ public class ModernVisualMergeTests {
         Assert.Equal(2100.0, session.PlayerFuel.MinimumFuelThresholdLb);
         Assert.Equal(1200.0, session.PlayerFuel.EmergencyFuelThresholdLb);
         Assert.NotNull(session.VisualMergeEvaluation);
-        Assert.True(session.WeaponsInhibited);
-        Assert.Equal("GUNS SAFE · FIRST PASS",
-            session.VisualMergeEvaluation!.WeaponsStateCue);
+        // Guns free from the catapult (pilot request 2026-07-29): the 2v1 front door does not
+        // hold fire through the first pass, and no hand release is recorded because none happened.
+        // (Session-level authority still gates on opponent presence; doctrine is the evaluation's.)
+        Assert.False(session.VisualMergeEvaluation!.WeaponsInhibited);
+        Assert.True(session.VisualMergeEvaluation.PlayerWeaponsAuthorized);
+        Assert.False(session.VisualMergeEvaluation.FirstPassHoldReleasedByPilot);
+        Assert.Equal("", session.VisualMergeEvaluation.WeaponsStateCue);
+        // No merge points are banked merely for spawning armed: the merge component requires an
+        // observed pass, which has not happened at spawn.
+        Assert.False(session.VisualMergeEvaluation.FirstPassObserved);
     }
 
+    // The classical first-pass discipline lives on the ace duel (beat 9) since the 2v1 front
+    // door went guns free (2026-07-29).
     // Pilot request (2026-07-23): "I should be able to click 'guns safe' and arm the gun."
     // Tapping the annunciation releases the first-pass hold immediately, the release is recorded
     // for the debrief, and the ownership boundaries still hold (no arming a destroyed ownship).
     [Fact]
     public void PilotCanReleaseTheFirstPassWeaponsHoldByHand() {
-        var session = new SimulationSession(7);
+        var session = new SimulationSession(9);
         session.Begin();
         Assert.True(session.WeaponsInhibited);
 
@@ -96,7 +105,7 @@ public class ModernVisualMergeTests {
 
     [Fact]
     public void HeldTriggerCannotPreFireTheFirstPassOrAutoFireWhenTheSafetyReleases() {
-        var session = new SimulationSession(7);
+        var session = new SimulationSession(9);
         session.Begin();
         session.FeedKey(GKey.Trigger, true);
 
@@ -111,7 +120,7 @@ public class ModernVisualMergeTests {
 
     [Fact]
     public void HeldFirstPassTriggerMustBeReleasedThenAFreshPressFires() {
-        var session = new SimulationSession(7);
+        var session = new SimulationSession(9);
         session.Begin();
         session.FeedKey(GKey.Trigger, true);
 
@@ -369,12 +378,14 @@ public class ModernVisualMergeTests {
         var session = new SimulationSession(7);
         session.Begin();
 
+        // Guns are free from spawn on this beat, so the classical pass is detected by its
+        // observed geometry, not by the weapons state changing.
         for (int tick = 0; tick < 20 * AircraftSim.TickHz
-            && session.WeaponsInhibited; tick++)
+            && !session.VisualMergeEvaluation!.FirstPassObserved; tick++)
             session.StepFixed();
 
         Assert.False(session.WeaponsInhibited);
-        Assert.True(session.VisualMergeEvaluation!.FirstPassComplete);
+        Assert.True(session.VisualMergeEvaluation!.FirstPassObserved);
         Assert.InRange(session.VisualMergeEvaluation.MinimumMergeRangeM, 100.0, 900.0);
         Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
         Assert.Equal(AircraftTerminalState.Flying, session.OpponentTerminalState);
@@ -408,12 +419,12 @@ public class ModernVisualMergeTests {
         session.Begin();
 
         for (int tick = 0; tick < 20 * AircraftSim.TickHz
-            && session.WeaponsInhibited; tick++)
+            && !session.VisualMergeEvaluation!.FirstPassObserved; tick++)
             session.StepFixed();
         for (int tick = 0; tick < AircraftSim.TickHz; tick++) session.StepFixed();
 
         VisualMergeEvaluation evaluation = session.VisualMergeEvaluation!;
-        Assert.True(evaluation.FirstPassComplete);
+        Assert.True(evaluation.FirstPassObserved);
         Assert.True(evaluation.MinimumMergeRangeM < 900.0);
         Assert.Equal(0.0, evaluation.PeakClosureKts, 12);
         Assert.Equal(0, evaluation.Overshoots);
