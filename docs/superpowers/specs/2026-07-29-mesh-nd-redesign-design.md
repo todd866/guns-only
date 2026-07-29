@@ -1,7 +1,7 @@
 # Mesh ND redesign — map-first nav + recovery procedures
 
 Date: 2026-07-29  
-Status: draft pending owner review (brainstormed with owner)  
+Status: accepted design (brainstormed with owner; implementation next)  
 Related: [Routing Mesh canon](../../nav-fabric-canon.md),
 [shared geography](2026-07-29-shared-geography-nav-fabric-design.md),
 [circuits FD boxes](2026-07-27-circuits-fd-boxes-design.md),
