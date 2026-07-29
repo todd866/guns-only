@@ -5,7 +5,13 @@ import { link, mkdir, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const DEFAULT_ENDPOINT = "https://guns-only.vercel.app/telemetry-admin";
+const DEFAULT_ENDPOINT = "https://guns-only.com/telemetry-admin";
+// Canonical production doors only — the retired vercel.app host now 308-redirects, and this
+// client refuses redirects by design, so it must talk to the canonical origin directly.
+const ALLOWED_REMOTE_ORIGINS = new Set([
+  "https://guns-only.com",
+  "https://guns-only.vercel.app",
+]);
 const MAX_LIST_ITEMS = 100;
 const MAX_SUMMARY_ITEMS = 20;
 const MAX_LIST_BYTES = 1024 * 1024;
@@ -87,9 +93,9 @@ function validateEndpoint(raw) {
   if ((!local && url.protocol !== "https:") || (local && !new Set(["http:", "https:"]).has(url.protocol))) {
     throw new AdminRetrievalError("endpoint must use HTTPS except on localhost");
   }
-  if (!local && url.origin !== "https://guns-only.vercel.app") {
+  if (!local && !ALLOWED_REMOTE_ORIGINS.has(url.origin)) {
     throw new AdminRetrievalError(
-      "remote endpoint must be https://guns-only.vercel.app so the operator token cannot leave the project",
+      "remote endpoint must be a canonical production origin so the operator token cannot leave the project",
     );
   }
   if (url.pathname !== "/telemetry-admin") {

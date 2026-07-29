@@ -22,7 +22,7 @@ test("operator bearer can only be sent to the canonical project or loopback", as
         "list",
         "--endpoint", "https://example.com/telemetry-admin",
       ], ENVIRONMENT),
-      /remote endpoint must be https:\/\/guns-only\.vercel\.app/,
+      /remote endpoint must be a canonical production origin/,
     );
     await assert.rejects(
       () => main([
