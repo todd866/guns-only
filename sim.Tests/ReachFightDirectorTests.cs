@@ -121,6 +121,25 @@ public class ReachFightDirectorTests {
     }
 
     [Fact]
+    public void FormationCardRange_SelectsLevelDashNotZoomLob() {
+        var d = new ReachFightDirector();
+        ReachFightDecision dec = d.Decide(
+            RapierMissionPhase.Accelerate,
+            altitudeM: 65_000.0 * 0.3048,
+            mach: 2.5,
+            qPa: 5_000.0,
+            gammaRad: 0.05,
+            contactRangeM: 680_000.0,
+            fuelLb: 2_400.0,
+            reserveFuelLb: 1_200.0,
+            zoomLobPreferred: false,
+            lobSkip: 0,
+            inZoomPhases: false);
+        Assert.Equal(ReachFightStrategy.LevelDash, dec.Strategy);
+        Assert.Equal("intercept_dash", dec.PhaseReason);
+    }
+
+    [Fact]
     public void LongRangeHighEnergy_DefaultInterceptMayPickZoomLob() {
         var d = new ReachFightDirector();
         ReachFightDecision dec = d.Decide(

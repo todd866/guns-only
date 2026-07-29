@@ -37,8 +37,16 @@ public sealed class ReachFightDirector {
     public const double DirectJoinMinMach = 2.0;
     public const double SoftEmployMach = 0.9;
     public const double StrategySwitchMargin = 15.0;
+    public const double ScoredZoomLobMinRangeM = 90_000.0;
+    public const double ScoredZoomLobMaxRangeM = 250_000.0;
+    public const double LevelDashScoreRangeCapM = 200_000.0;
 
     ReachFightStrategy? _incumbentStrategy;
+
+    static bool ScoredZoomLobEligible(double contactRangeM, double mach) =>
+        mach >= LevelDashMinMach
+        && contactRangeM > ScoredZoomLobMinRangeM
+        && contactRangeM <= ScoredZoomLobMaxRangeM;
 
     public ReachFightDecision Decide(
         RapierMissionPhase currentPhase,
@@ -78,7 +86,7 @@ public sealed class ReachFightDirector {
 
         bool levelDashEligible = mach >= LevelDashMinMach
             && altitudeM >= LevelDashMinAltM - 40.0;
-        bool zoomLobEligible = mach >= LevelDashMinMach;
+        bool zoomLobEligible = ScoredZoomLobEligible(contactRangeM, mach);
         bool directJoinEligible = levelDashEligible
             || currentPhase is RapierMissionPhase.Intercept
                 or RapierMissionPhase.Attack
@@ -158,13 +166,13 @@ public sealed class ReachFightDirector {
 
     static double ScoreLevelDash(
         double contactRangeM, double mach, double fuelLb, double reserveFuelLb) =>
-        (200_000.0 - contactRangeM) / 1_000.0
+        (LevelDashScoreRangeCapM - Math.Min(contactRangeM, LevelDashScoreRangeCapM)) / 1_000.0
         + (mach - 2.2) * 10.0
         + (fuelLb > reserveFuelLb ? 20.0 : -50.0);
 
     static double ScoreZoomLob(
         double contactRangeM, double mach, double fuelLb, double reserveFuelLb, int lobSkip) =>
-        (contactRangeM > 90_000.0 ? 80.0 : -40.0)
+        (ScoredZoomLobEligible(contactRangeM, mach) ? 80.0 : -40.0)
         + (mach >= 2.2 ? 30.0 : -100.0)
         + (fuelLb > reserveFuelLb + 200.0 ? 25.0 : -80.0)
         + (lobSkip >= 3 ? -100.0 : 0.0);

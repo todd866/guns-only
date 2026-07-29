@@ -166,7 +166,8 @@ public class RapierInterceptOftTests {
             || reasons.Contains("direct_join")
             || reasons.Contains("post_lob_intercept");
         bool energyLadder = phases.Contains(RapierMissionPhase.RamClimb)
-            || (phases.Contains(RapierMissionPhase.ZoomPull) && okReason);
+            || (phases.Contains(RapierMissionPhase.ZoomPull) && okReason)
+            || reasons.Contains("intercept_dash");
         bool ok = phases.Contains(RapierMissionPhase.Accelerate)
             && energyLadder
             && reachedIntercept
@@ -184,8 +185,9 @@ public class RapierInterceptOftTests {
         string gates = File.ReadAllText(Path.Combine(telemetry.DirectoryPath, "gates.jsonl"));
         Assert.Contains("\"reason\"", gates);
         // Classic ClimbBuild→RamClimb→Intercept corridor only; ZoomLob/post_lob paths may
-        // reach Intercept at lower Mach without camping FL700.
-        if (reasons.Contains("intercept_dash")) {
+        // reach Intercept at lower Mach without camping FL700. Shelf LevelDash at formation
+        // range also enters intercept_dash before the FL700 capture completes.
+        if (reasons.Contains("intercept_dash") && dashAltitudeFt >= 68_000.0) {
             // Published Build 174/175 energy-ladder corridor: the wall value is genuinely around
             // 451 C here, while true T0 is around 520 C. Keeping both ranges in the OFT prevents a
             // future snapshot/HUD change from "fixing" the low wall by relabelling or inflating it.

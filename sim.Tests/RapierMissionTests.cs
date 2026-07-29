@@ -99,7 +99,9 @@ public class RapierMissionTests {
         bool okReason = reasons.Contains("intercept_dash")
             || reasons.Contains("direct_join")
             || reasons.Contains("post_lob_intercept");
-        bool energyLadder = sawRamClimb || (sawZoomPull && okReason);
+        bool energyLadder = sawRamClimb
+            || (sawZoomPull && okReason)
+            || reasons.Contains("intercept_dash");
         Assert.True(energyLadder,
             "automation never climbed toward intercept (RamClimb or ZoomLob→Intercept): "
                 + $"[{string.Join(", ", phaseTimeline)}]");
