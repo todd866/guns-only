@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="Guns Only">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="theme-color" content="#030913">
-  <title>Guns Only — Air Combat Lab</title>
+  <title>Guns Only — ANCA2040 Flight Curriculum</title>
   <base href="/">
   <link rel="icon" type="image/png" href="./favicon.png">
   <style>
@@ -1221,6 +1221,16 @@
       font-weight: 850;
       letter-spacing: .2em;
       text-transform: uppercase;
+    }
+
+    .ready-menu-program {
+      display: block;
+      margin-top: 2px;
+      color: #9fb8a8;
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      opacity: .75;
     }
 
     #ready-menu-title {
@@ -2580,7 +2590,7 @@
   <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="program">
     <div class="ready-card">
       <header class="ready-menu-header">
-        <div class="ready-menu-brand">Guns Only</div>
+        <div class="ready-menu-brand">Guns Only<span class="ready-menu-program">ANCA2040 · AVIATE NAVIGATE COMMUNICATE ADMINISTRATE</span></div>
         <div>
           <h1 id="ready-menu-title">Pick a mission</h1>
           <p id="ready-menu-help">Every experience is available. Fly whichever you feel like.</p>
@@ -2592,7 +2602,7 @@
           <div class="ready-group-heading ready-program-heading">
             <div>
               <h2>Missions</h2>
-              <p>Five flight experiences in one fictional 2030s theatre, from low-level medical transport to the stratosphere.</p>
+              <p>Five flight experiences on the road to the 2040 battlespace, from low-level medical transport to the stratosphere.</p>
             </div>
             <output id="ready-program-progress"></output>
           </div>
@@ -2729,7 +2739,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
 
   <div id="boot" role="status" aria-live="polite">
     <div class="boot-card">
-      <div class="boot-kicker">Air Combat Lab</div>
+      <div class="boot-kicker">ANCA2040 Flight Curriculum</div>
       <h1 class="boot-title">GUNS ONLY</h1>
       <p class="boot-subtitle">Loading deterministic flight kernel</p>
       <div class="boot-track"></div>
