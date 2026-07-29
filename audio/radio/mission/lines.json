@@ -1,91 +1,467 @@
 {
-  "version": 2,
-  "model": "gpt-4o-mini-tts",
+  "version": 3,
+  "model": "gpt-4o-mini-tts-2025-03-20",
   "response_format": "wav",
   "disclosure": "Radio speech may use AI-generated training voices.",
+  "quality_note": "Pinned to the 2025-03-20 snapshot for character/emotion instruction-following (marin/cedar stock voices). Re-ear after any model bump; do not silently float to the alias.",
   "roles": {
     "tower": {
       "voice": "cedar",
-      "instructions": "Calm military tower controller. Clipped, unhurried radio cadence. Neutral accent. No theatrical emotion. Use natural aviation pronunciation and make the callsign unmistakable."
+      "instructions": "You are Rapier Tower: a senior tower controller in his late forties, twenty years of fast-jet patterns behind him. You always follow the exact rulebook \u2014 complete clearances, correct order, nothing abbreviated for cool. Clipped, level, quietly authoritative military radio cadence over a bandwidth-limited channel. No theatrical emotion. Natural aviation pronunciation; the callsign must be unmistakable."
     },
     "launch": {
       "voice": "onyx",
-      "instructions": "Military launch controller over a noisy flight line. Firm, concise, calm, and professional. Slightly compressed radio cadence. No dramatic acting."
+      "instructions": "You are Rapier Launch: the launch controller in the buried catapult's control bunker, speaking over flight-line noise. Firm, brisk, compressed delivery with the ritual cadence of a shot crew. Professional anticipation, never drama."
     },
     "controller": {
       "voice": "ash",
-      "instructions": "Airborne military command-and-control controller. Concise, composed, authoritative, and matter-of-fact. Read brevity words cleanly without theatrical emphasis."
+      "instructions": "You are CONTROL: an airborne command-and-control officer. Measured, detached, precise. Brevity words are read cleanly and without emphasis; the calm gets flatter as the stakes rise. Nothing leaks except compression."
     },
     "lso": {
       "voice": "onyx",
-      "instructions": "Carrier landing signal officer on the flight-deck radio. Very short, urgent when required, clipped, authoritative, and professional. Never add words to the supplied call."
+      "instructions": "You are the landing signal officer on the flight-deck radio, eyes on the ball: coiled, intense, ultra-short transmissions timed to the half-second. Calm by default, instant explosive command the moment a pass decays. Never add words to the supplied call."
     },
     "pilot": {
       "voice": "marin",
-      "instructions": "Military fast-jet pilot on radio. Concise, controlled breathing, professional, and matter-of-fact. Preserve callsign and brevity-word clarity. No dramatic acting."
+      "instructions": "You are Rapier One One \u2014 the mission pilot, and you sound like a specific person: a chill, economical fast-jet pilot who trends toward brevity and sounding cool. Never recite the rulebook; ATC does that. Natural speech, military-clean, minimum syllables \u2014 '3 greens', 'gear to come', 'Land Rapier One One' \u2014 not 'three down and locked'. Slightly dry, understated, breath audible when the body is working, never theatrical. Standard calls are bored-precise and easy. Under G or employment the same chill gets clipped. Bad news (bingo, gear to come, emergency) is slightly concerned trying to stay chill \u2014 tighter and flatter, composure held on purpose. Preserve callsign and brevity-word clarity over a bandwidth-limited channel."
     },
-    "traffic": {
+    "traffic-two": {
       "voice": "verse",
-      "instructions": "Military fast-jet pilot making a short traffic-pattern report. Crisp, calm, professional, and distinct from the lead pilot."
+      "instructions": "You are Rapier One Two: the junior wingman in the pattern, crisp and slightly eager, still proving himself on the radio. Short, correct, a touch quick."
+    },
+    "traffic-three": {
+      "voice": "echo",
+      "instructions": "You are Rapier One Three: mid-tour, flat, utterly bored competence, flying the hundredth lap of this pattern. Minimum energy, perfect precision."
+    },
+    "traffic-four": {
+      "voice": "ballad",
+      "instructions": "You are Rapier One Four: the old head of the flight. Relaxed, unhurried, minimum syllables, a hint of drawl. Nothing on this radio has ever surprised him."
     }
   },
   "lines": [
-    { "id": "launch-cleared", "role": "launch", "text": "Rapier One One, cleared for launch." },
-    { "id": "pilot-launch-readback", "role": "pilot", "text": "Cleared for launch, Rapier One One." },
-    { "id": "pilot-airborne", "role": "pilot", "text": "Rapier Tower, Rapier One One, airborne, joining initial." },
-    { "id": "tower-join-initial", "role": "tower", "text": "Rapier One One, pattern altitude two thousand five hundred, report initial. Traffic in the pattern." },
-    { "id": "pilot-initial", "role": "pilot", "text": "Rapier Tower, Rapier One One, initial, full stop." },
-    { "id": "tower-report-break", "role": "tower", "text": "Rapier One One, report break." },
-    { "id": "pilot-break", "role": "pilot", "text": "Rapier One One, breaking." },
-    { "id": "pilot-downwind", "role": "pilot", "text": "Rapier Tower, Rapier One One, downwind, gear down." },
-    { "id": "tower-report-base", "role": "tower", "text": "Rapier One One, report base." },
-    { "id": "pilot-report-base-readback", "role": "pilot", "text": "Wilco, Rapier One One." },
-    { "id": "pilot-base", "role": "pilot", "text": "Rapier Tower, Rapier One One, base, gear down and locked." },
-    { "id": "tower-cleared-arrested-landing", "role": "tower", "text": "Rapier One One, cleared to land. Arresting gear rigged." },
-    { "id": "pilot-landing-readback", "role": "pilot", "text": "Cleared to land, Rapier One One." },
-    { "id": "tower-waveoff-gear", "role": "tower", "text": "Wave off, wave off. Rapier One One, gear unsafe." },
-    { "id": "tower-bolter", "role": "tower", "text": "Rapier One One, bolter. Go around." },
-    { "id": "traffic-rapier-2-base", "role": "traffic", "text": "Rapier Tower, Rapier One Two, base." },
-    { "id": "traffic-rapier-2-final", "role": "traffic", "text": "Rapier Tower, Rapier One Two, final." },
-    { "id": "traffic-rapier-3-base", "role": "traffic", "text": "Rapier Tower, Rapier One Three, base." },
-    { "id": "traffic-rapier-3-final", "role": "traffic", "text": "Rapier Tower, Rapier One Three, final." },
-    { "id": "traffic-rapier-4-base", "role": "traffic", "text": "Rapier Tower, Rapier One Four, base." },
-    { "id": "traffic-rapier-4-final", "role": "traffic", "text": "Rapier Tower, Rapier One Four, final." },
-    { "id": "tower-trap-wire-1", "role": "tower", "text": "Rapier One One, wire one, hold position." },
-    { "id": "tower-trap-wire-2", "role": "tower", "text": "Rapier One One, wire two, hold position." },
-    { "id": "tower-trap-wire-3", "role": "tower", "text": "Rapier One One, wire three, hold position." },
-    { "id": "tower-trap-wire-4", "role": "tower", "text": "Rapier One One, wire four, hold position." },
-    { "id": "lso-bolter", "role": "lso", "text": "Bolter, bolter." },
-    { "id": "lso-wire-1", "role": "lso", "text": "Wire one." },
-    { "id": "lso-wire-2", "role": "lso", "text": "Wire two." },
-    { "id": "lso-wire-3", "role": "lso", "text": "Wire three." },
-    { "id": "lso-wire-4", "role": "lso", "text": "Wire four." },
-    { "id": "lso-waveoff", "role": "lso", "text": "Wave off, wave off." },
-    { "id": "lso-add-power", "role": "lso", "text": "Add power." },
-    { "id": "lso-power", "role": "lso", "text": "Power." },
-    { "id": "lso-low", "role": "lso", "text": "You're low." },
-    { "id": "lso-high", "role": "lso", "text": "You're high." },
-    { "id": "lso-fast", "role": "lso", "text": "Fast." },
-    { "id": "lso-come-left", "role": "lso", "text": "Come left." },
-    { "id": "lso-come-right", "role": "lso", "text": "Come right." },
-    { "id": "pilot-departure-airborne", "role": "pilot", "text": "Rapier Tower, Rapier One One, airborne." },
-    { "id": "tower-continue-departure", "role": "tower", "text": "Rapier One One, continue departure." },
-    { "id": "control-commit", "role": "controller", "text": "Rapier One One, commit." },
-    { "id": "pilot-commit-readback", "role": "pilot", "text": "Commit, Rapier One One." },
-    { "id": "pilot-separating", "role": "pilot", "text": "Rapier One One, separating." },
-    { "id": "pilot-rtb", "role": "pilot", "text": "Control, Rapier One One, returning home plate." },
-    { "id": "control-rtb-roger", "role": "controller", "text": "Rapier One One, roger." },
-    { "id": "pilot-recovery-request", "role": "pilot", "text": "Rapier Approach, Rapier One One, recovery." },
-    { "id": "approach-recovery-continue", "role": "controller", "text": "Rapier One One, continue." },
-    { "id": "pilot-guns", "role": "pilot", "text": "Rapier One One, guns." },
-    { "id": "pilot-fox-two", "role": "pilot", "text": "Rapier One One, Fox Two." },
-    { "id": "pilot-drone-away", "role": "pilot", "text": "Rapier One One, drone away." },
-    { "id": "pilot-remington", "role": "pilot", "text": "Rapier One One, Remington." },
-    { "id": "pilot-winchester", "role": "pilot", "text": "Rapier One One, Winchester." },
-    { "id": "pilot-joker", "role": "pilot", "text": "Rapier One One, Joker." },
-    { "id": "pilot-bingo", "role": "pilot", "text": "Rapier One One, Bingo." },
-    { "id": "control-bingo-rtb", "role": "controller", "text": "Rapier One One, return home plate." },
-    { "id": "pilot-splash", "role": "pilot", "text": "Rapier One One, splash one." },
-    { "id": "control-mission-complete", "role": "controller", "text": "Rapier One One, mission complete." }
+    {
+      "id": "launch-cleared",
+      "role": "launch",
+      "text": "Rapier One One, cleared for launch.",
+      "direction": "Routine catapult shot, the tenth today: brisk, positive, the ritual cadence of a launch crew."
+    },
+    {
+      "id": "pilot-airborne",
+      "role": "pilot",
+      "text": "Rapier Tower, Rapier One One, airborne.",
+      "direction": "Chill pilot, just off the shot: easy station call, one fact, still settling."
+    },
+    {
+      "id": "tower-join-initial",
+      "role": "tower",
+      "text": "Rapier One One, pattern altitude two thousand five hundred. Traffic in the pattern.",
+      "direction": "Altitude clearance and traffic SA \u2014 no 'report initial'; the gate announces itself."
+    },
+    {
+      "id": "pilot-initial",
+      "role": "pilot",
+      "text": "Rapier One One, initial, full stop.",
+      "direction": "Chill pilot, routine gate: bored-precise, easy breath."
+    },
+    {
+      "id": "pilot-break",
+      "role": "pilot",
+      "text": "Rapier One One, breaking.",
+      "direction": "Working chill: mid-turn under G, clipped, body in the voice, not loud."
+    },
+    {
+      "id": "pilot-downwind",
+      "role": "pilot",
+      "text": "Rapier One One, downwind, 3 greens.",
+      "direction": "Chill pilot, pattern working: brief and cool, almost bored."
+    },
+    {
+      "id": "pilot-downwind-gear-unsafe",
+      "role": "pilot",
+      "text": "Rapier One One, downwind.",
+      "direction": "Chill pilot, a hair distracted \u2014 level, unaware the gear call is missing."
+    },
+    {
+      "id": "tower-check-gear-downwind",
+      "role": "tower",
+      "text": "Rapier One One, check gear down.",
+      "direction": "Rulebook tower: caught the omission. Sharpened and deliberate, pointed but not alarmed."
+    },
+    {
+      "id": "pilot-base",
+      "role": "pilot",
+      "text": "Rapier One One, base, 3 greens.",
+      "direction": "Chill pilot: position plus status, minimum syllables, easy breath."
+    },
+    {
+      "id": "pilot-base-gear-unsafe",
+      "role": "pilot",
+      "text": "Rapier One One, base, gear to come.",
+      "direction": "Slightly concerned trying to give chill: honest and brief, tighter, no drama."
+    },
+    {
+      "id": "tower-cleared-arrested-landing",
+      "role": "tower",
+      "text": "Rapier One One, cleared to land. Arresting gear rigged.",
+      "direction": "Rulebook clearance with the arrestment addendum: steady, complete, nothing abbreviated."
+    },
+    {
+      "id": "pilot-land",
+      "role": "pilot",
+      "text": "Land Rapier One One.",
+      "direction": "Chill pilot clearance take: two words and a callsign, almost thrown away."
+    },
+    {
+      "id": "pilot-checklist-gear-up",
+      "role": "pilot",
+      "text": "Gear up.",
+      "direction": "Chill pilot, package brevity: one soft fact, almost thrown away."
+    },
+    {
+      "id": "pilot-checklist-recovery-config",
+      "role": "pilot",
+      "text": "Rapier One One, 3 greens.",
+      "direction": "Chill pilot on approach: brief config call, still easy."
+    },
+    {
+      "id": "tower-waveoff-gear",
+      "role": "tower",
+      "text": "Wave off, wave off. Rapier One One, gear unsafe.",
+      "direction": "Immediate command punched out fast and loud. Absolute authority, zero panic. This transmission prevents a crash."
+    },
+    {
+      "id": "tower-bolter",
+      "role": "tower",
+      "text": "Rapier One One, bolter. Go around.",
+      "direction": "Quick and matter-of-fact, already moving the jet around the pattern."
+    },
+    {
+      "id": "traffic-rapier-2-base",
+      "role": "traffic-two",
+      "text": "Rapier Tower, Rapier One Two, base.",
+      "direction": "Crisp junior-wingman position report, a touch quick.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-2-base-alt",
+      "role": "traffic-two",
+      "text": "Tower, Rapier One Two, base, 3 greens.",
+      "direction": "Same report later in the session, abbreviated station call, still crisp.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-2-final",
+      "role": "traffic-two",
+      "text": "Rapier Tower, Rapier One Two, final.",
+      "direction": "Short final report, concentration audible.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-2-final-alt",
+      "role": "traffic-two",
+      "text": "Tower, One Two, final.",
+      "direction": "Abbreviated final report, later lap, comfortable now.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-3-base",
+      "role": "traffic-three",
+      "text": "Rapier Tower, Rapier One Three, base.",
+      "direction": "Flat, bored, perfectly precise.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-3-base-alt",
+      "role": "traffic-three",
+      "text": "Tower, Rapier One Three, base, 3 greens.",
+      "direction": "Same bored precision, abbreviated station call.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-3-final",
+      "role": "traffic-three",
+      "text": "Rapier Tower, Rapier One Three, final.",
+      "direction": "Minimum-energy final call.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-3-final-alt",
+      "role": "traffic-three",
+      "text": "Tower, One Three, final.",
+      "direction": "Even fewer syllables. Landing anyway.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-4-base",
+      "role": "traffic-four",
+      "text": "Rapier Tower, Rapier One Four, base.",
+      "direction": "Unhurried drawl, old-head economy.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-4-base-alt",
+      "role": "traffic-four",
+      "text": "Tower, Rapier One Four, base, 3 greens.",
+      "direction": "Same drawl, abbreviated, entirely at home.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-4-final",
+      "role": "traffic-four",
+      "text": "Rapier Tower, Rapier One Four, final.",
+      "direction": "Relaxed final report.",
+      "takes": 2
+    },
+    {
+      "id": "traffic-rapier-4-final-alt",
+      "role": "traffic-four",
+      "text": "Tower, One Four, final.",
+      "direction": "Two words shorter than anyone else's. Lands the same.",
+      "takes": 2
+    },
+    {
+      "id": "tower-trap-wire-1",
+      "role": "tower",
+      "text": "Rapier One One, wire one, hold position.",
+      "direction": "Post-trap: brisk and conclusive, the cable crew is moving."
+    },
+    {
+      "id": "tower-trap-wire-2",
+      "role": "tower",
+      "text": "Rapier One One, wire two, hold position.",
+      "direction": "Post-trap: brisk and conclusive, the cable crew is moving."
+    },
+    {
+      "id": "tower-trap-wire-3",
+      "role": "tower",
+      "text": "Rapier One One, wire three, hold position.",
+      "direction": "Post-trap: brisk and conclusive, the cable crew is moving."
+    },
+    {
+      "id": "tower-trap-wire-4",
+      "role": "tower",
+      "text": "Rapier One One, wire four, hold position.",
+      "direction": "Post-trap: brisk and conclusive, the cable crew is moving."
+    },
+    {
+      "id": "tower-continue-check-gear",
+      "role": "tower",
+      "text": "Rapier One One, continue, check gear down.",
+      "direction": "The gear is still unsafe on base: firmer now, the second challenge, watching the jet the whole time."
+    },
+    {
+      "id": "tower-trap-wire-1-relaunch",
+      "role": "tower",
+      "text": "Rapier One One, wire one.",
+      "direction": "Trap into immediate relaunch: quick wire confirmation, the catapult cycle is already running."
+    },
+    {
+      "id": "tower-trap-wire-2-relaunch",
+      "role": "tower",
+      "text": "Rapier One One, wire two.",
+      "direction": "Trap into immediate relaunch: quick wire confirmation, the catapult cycle is already running."
+    },
+    {
+      "id": "tower-trap-wire-3-relaunch",
+      "role": "tower",
+      "text": "Rapier One One, wire three.",
+      "direction": "Trap into immediate relaunch: quick wire confirmation, the catapult cycle is already running."
+    },
+    {
+      "id": "tower-trap-wire-4-relaunch",
+      "role": "tower",
+      "text": "Rapier One One, wire four.",
+      "direction": "Trap into immediate relaunch: quick wire confirmation, the catapult cycle is already running."
+    },
+    {
+      "id": "lso-bolter",
+      "role": "lso",
+      "text": "Bolter, bolter.",
+      "direction": "Loud and instant, a command not commentary: the hook missed, fly the jet.",
+      "takes": 2
+    },
+    {
+      "id": "lso-wire-1",
+      "role": "lso",
+      "text": "Wire one.",
+      "direction": "Quick, conclusive, faint disapproval: an early wire is a low pass.",
+      "takes": 2
+    },
+    {
+      "id": "lso-wire-2",
+      "role": "lso",
+      "text": "Wire two.",
+      "direction": "Quick, conclusive, satisfied enough.",
+      "takes": 2
+    },
+    {
+      "id": "lso-wire-3",
+      "role": "lso",
+      "text": "Wire three.",
+      "direction": "Quick, conclusive, that is the target wire: quiet approval.",
+      "takes": 2
+    },
+    {
+      "id": "lso-wire-4",
+      "role": "lso",
+      "text": "Wire four.",
+      "direction": "Quick, conclusive, a shade late on the pass.",
+      "takes": 2
+    },
+    {
+      "id": "lso-waveoff",
+      "role": "lso",
+      "text": "Wave off, wave off.",
+      "direction": "Explosive command, both words, no ambiguity. The pass is dead.",
+      "takes": 2
+    },
+    {
+      "id": "lso-add-power",
+      "role": "lso",
+      "text": "Add power.",
+      "direction": "Urgent rising command: the jet is settling.",
+      "takes": 2
+    },
+    {
+      "id": "lso-power",
+      "role": "lso",
+      "text": "Power.",
+      "direction": "A sharp bark. Half a second late is a crash.",
+      "takes": 2
+    },
+    {
+      "id": "lso-low",
+      "role": "lso",
+      "text": "You're low.",
+      "direction": "Instant corrective, calm but immediate.",
+      "takes": 2
+    },
+    {
+      "id": "lso-high",
+      "role": "lso",
+      "text": "You're high.",
+      "direction": "Instant corrective, calm but immediate.",
+      "takes": 2
+    },
+    {
+      "id": "lso-fast",
+      "role": "lso",
+      "text": "Fast.",
+      "direction": "One-word corrective, clipped.",
+      "takes": 2
+    },
+    {
+      "id": "lso-come-left",
+      "role": "lso",
+      "text": "Come left.",
+      "direction": "Instant lineup corrective, calm, immediate.",
+      "takes": 2
+    },
+    {
+      "id": "lso-come-right",
+      "role": "lso",
+      "text": "Come right.",
+      "direction": "Instant lineup corrective, calm, immediate.",
+      "takes": 2
+    },
+    {
+      "id": "pilot-departure-airborne",
+      "role": "pilot",
+      "text": "Rapier Tower, Rapier One One, airborne.",
+      "direction": "Chill pilot, mission ahead: focused but unhurried."
+    },
+    {
+      "id": "control-commit",
+      "role": "controller",
+      "text": "Rapier One One, commit.",
+      "direction": "Cold and flat. The fight starts on this word."
+    },
+    {
+      "id": "pilot-separating",
+      "role": "pilot",
+      "text": "Rapier One One, separating.",
+      "direction": "Working chill under G: terse, breath held, no heat in the voice."
+    },
+    {
+      "id": "pilot-rtb",
+      "role": "pilot",
+      "text": "Control, Rapier One One, RTB home plate.",
+      "direction": "Chill pilot coming off the fight: flat, fatigue at the edges, still dry."
+    },
+    {
+      "id": "pilot-recovery-request",
+      "role": "pilot",
+      "text": "Rapier Approach, Rapier One One, inbound, request recovery.",
+      "direction": "Chill pilot coming home: steady, slightly tired, intent clean."
+    },
+    {
+      "id": "approach-recovery-continue",
+      "role": "controller",
+      "text": "Rapier One One, continue.",
+      "direction": "Approach control economy: one word of permission."
+    },
+    {
+      "id": "pilot-guns",
+      "role": "pilot",
+      "text": "Guns.",
+      "direction": "Working chill at first employment: one brevity word, tight, no ceremony.",
+      "takes": 2
+    },
+    {
+      "id": "pilot-fox-two",
+      "role": "pilot",
+      "text": "Fox Two.",
+      "direction": "Working chill: clean brevity, no punch-up.",
+      "takes": 2
+    },
+    {
+      "id": "pilot-drone-away",
+      "role": "pilot",
+      "text": "Drone away.",
+      "direction": "Chill pilot: soft brevity, almost casual."
+    },
+    {
+      "id": "pilot-remington",
+      "role": "pilot",
+      "text": "Remington.",
+      "direction": "Slightly concerned trying to give chill: matter-of-fact, tighter."
+    },
+    {
+      "id": "pilot-winchester",
+      "role": "pilot",
+      "text": "Winchester.",
+      "direction": "Slightly concerned trying to give chill: flat, non-negotiable, still dry."
+    },
+    {
+      "id": "pilot-joker",
+      "role": "pilot",
+      "text": "Rapier One One, Joker.",
+      "direction": "Slightly concerned trying to give chill: fuel clock just entered the voice."
+    },
+    {
+      "id": "pilot-bingo",
+      "role": "pilot",
+      "text": "Rapier One One, Bingo.",
+      "direction": "Slightly concerned trying to give chill: flat, non-negotiable, composure held on purpose."
+    },
+    {
+      "id": "control-bingo-rtb",
+      "role": "controller",
+      "text": "Rapier One One, RTB home plate.",
+      "direction": "Cold, final, administrative. There is no argument with fuel."
+    },
+    {
+      "id": "pilot-splash",
+      "role": "pilot",
+      "text": "Splash one.",
+      "direction": "Chill pilot: dry brevity, no celebration.",
+      "takes": 2
+    },
+    {
+      "id": "control-mission-complete",
+      "role": "controller",
+      "text": "Rapier One One, mission complete.",
+      "direction": "Dry, conclusive, one single degree of warmth permitted."
+    }
   ]
 }

@@ -102,5 +102,32 @@ class RadioVoiceTests(unittest.TestCase):
             self.assertNotIn("secret-test-key", manifest.read_text(encoding="utf-8"))
 
 
+    def test_inspect_wav_handles_openai_unknown_chunk_sizes(self):
+        # OpenAI speech returns RIFF/data sizes of 0xFFFFFFFF; duration must come from bytes.
+        pcm = b"\0\0" * 24_000  # 1.0 s mono 16-bit @ 24 kHz
+        header = bytearray()
+        header += b"RIFF"
+        header += (0xFFFFFFFF).to_bytes(4, "little")
+        header += b"WAVE"
+        header += b"fmt "
+        header += (16).to_bytes(4, "little")
+        header += (1).to_bytes(2, "little")  # PCM
+        header += (1).to_bytes(2, "little")  # mono
+        header += (24_000).to_bytes(4, "little")
+        header += (48_000).to_bytes(4, "little")  # byte rate
+        header += (2).to_bytes(2, "little")  # block align
+        header += (16).to_bytes(2, "little")  # bits
+        header += b"data"
+        header += (0xFFFFFFFF).to_bytes(4, "little")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "openai.wav"
+            path.write_bytes(bytes(header) + pcm)
+            details = radio_voice.inspect_wav(path)
+            self.assertEqual(1.0, details["duration_s"])
+            radio_voice.normalize_wav(path)
+            with wave.open(str(path), "rb") as audio:
+                self.assertEqual(24_000, audio.getnframes())
+
+
 if __name__ == "__main__":
     unittest.main()

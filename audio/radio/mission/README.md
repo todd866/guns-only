@@ -7,7 +7,7 @@ the browser never invents dialogue.
 The wording follows two public baselines:
 
 - FAA AIM 4-2 for clear addressing, complete initial callsigns, number pronunciation, and
-  acknowledgements/readbacks.
+  acknowledgements/readbacks — **form**, when addressing ATC.
 - AFTTP 3-2.5 for tactical brevity. Brevity is used only for its defined event: `GUNS` means the
   gun is firing, `FOX TWO` means an IR air-to-air missile was launched, `SPLASH` follows a
   destruction event, `JOKER`/`BINGO` follow configured fuel thresholds, `REMINGTON` means no
@@ -30,30 +30,167 @@ The generated WAV files are intentionally untracked. The tracked manifest can re
 a clip is absent, the browser uses device speech and still applies the same radio band-pass,
 compression, squelch, and engine ducking.
 
-## Comms doctrine (2026-07-29)
+## Comms doctrine
 
-Every radio call is an update to a shared mental model: **who am I, where am I, what do I think
-I'm cleared to do, what do I want to be cleared to do.** Calls that carry none of those four
-fields are noise; calls that do are curriculum ("aviate, navigate, communicate, administrate" —
-comms must be present and realistic even when automated). Voice bar: emotion and feeling in a
-military register — controlled urgency, not flat TTS. Clips are pre-generated and re-used;
-no live token spend.
+### AI-first airspace (why this radio exists)
+
+Guns Only / ANCA2040 asks: **how would we redesign the world for an AI-first system?** In that
+battlespace the shared mental model still matters — who / where / cleared / want — but it is
+mostly held and updated by machines. Tower, CONTROL, traffic, and the jet itself are agents.
+Speech is how a human stays on the loop, not how two humans negotiate every gate by hand.
+
+So R/T is **AI-generated a lot of the time**, diegetically: the automation keys the mic, picks
+the brevity word, and speaks in a military register. Catalog clips and device-speech fallback
+are not a production shortcut pretending to be pilots — they are the fiction of machine voices
+on a bandwidth-limited channel. The player's job is judgment (commit, refuse, RTB, waveoff
+override), not performing the phraseology.
+
+That splits the Communicate channel cleanly:
+
+| Surface | Job |
+|---------|-----|
+| **ANCA panel** | Continuous machine truth — glanceable who/where/cleared/want |
+| **Radio** | Sparse spoken *deltas* when a human ear (yours or someone else's) needs the update now |
+
+If the panel already shows it and no other human-in-the-fiction needs to hear it, silence is
+correct. Talking because "radios talk in sims" fails the redesign.
+
+### The shared mental model
+
+Every radio call is an update to a shared mental model:
+
+> **Who am I · where am I · what do I think I'm cleared to do · what do I want to be cleared to do.**
+
+Calls that carry none of those four fields are noise. Calls that do are curriculum
+(aviate, navigate, communicate, administrate — present and realistic even when automated).
+
+### The authoring gate
+
+**Correct R/T = the shortest utterance that updates at least one of the four fields for someone who needs it.**
+
+| Field | Question the call answers | If nobody needed that answer… |
+|-------|---------------------------|-------------------------------|
+| Who | Who is talking / who is addressed | drop the callsign ceremony |
+| Where | Position in the world or the pattern | drop the geography |
+| Cleared | What authority currently holds | drop the ritual ack |
+| Want | What authority is being requested | drop the request |
+
+Apply four filters, in order. Fail any filter → the line does not ship.
+
+1. **Audience.** Who is the shared model *for*? Another agent, a human on the loop, tower,
+   package — or only the player's ears as narration? Classic guns-only has no package. A
+   trigger call fails here. Pattern traffic has an audience. `GUNS` once on Rapier Intercept
+   has an audience. "The player already sees the gun firing" is not an audience.
+2. **Delta.** Does this change a field that was already known — including known to the
+   machines? Echo readbacks fail. "Report base" / "report break" fail. Second-burst `GUNS`
+   fails. Restating ANCA fails.
+3. **Workload.** Would a human key the mic *right now*, or would the automation speak only
+   if a human ear needs it? Short final, mid-guns, waveoff: fly first. Silence is correct R/T
+   when speech steals the scan.
+4. **Ambient curriculum, not substitute judgment.** The radio teaches the AI-first model by
+   exposure. It must never become a chore, a score, or a narration track for what the panel
+   or the eyes already show. Judgment stays with the player; phraseology stays with the
+   machines.
+
+AIM shapes **ATC form**. AFTTP shapes **whether anyone speaks** and how pilots speak when they
+do. Full callsign on first contact with tower; brevity on package; machine silence when the
+only listener is yourself watching the pipper.
+
+### Two characters on the net
+
+| Who | Register | Sounds like |
+|-----|----------|-------------|
+| **ATC** (Tower / Approach / Launch / CONTROL) | Exact rulebook | Autistically accurate AIM — complete clearance, correct order, nothing missing |
+| **Pilots** (ownship + traffic) | Brevity, cool | Short position + status; never recite the checklist out loud |
+
+Pilots do **not** say "three down and locked" or "gear down and locked." They say what a working
+jet actually keys: `base, 3 greens` / `base, gear to come` / `Land Rapier One One.` Tower still
+clears with the full rulebook string; the pilot's acknowledgement is the brief clearance take —
+not an echo of the whole transmission.
+
+One-breath test: *which field, for whom (human or agent), what's the delta, and would this be
+keyed in an AI-first cockpit?*
+
+### Sequencing — ANCA before the mic
+
+Priority is always **Aviate → Navigate → Communicate → Administrate**. The radio is Communicate;
+it must not jump the queue the instant an event fires. Pilots fly the airplane, then talk.
+
+| After… | Hold before keying | Why |
+|--------|--------------------|-----|
+| Pilot / package / CONTROL event | ~2.8 s | Finish aviate (and a beat of navigate) |
+| Tower / traffic after an event | ~1.5 s | Don't leapfrog the pilot on the same beat |
+| LSO | ~0.45 s | Flying the pass *with* the pilot |
+| Urgent (waveoff, bingo) | ~0.25 s | Safety still nearly immediate |
+| Pre-stroke launch clearance | 0 s | Talk, *then* aviate the shot |
+
+Between calls, dead air is ~1.7–3.2 s (deterministic jitter) — not a 0.3 s metronome. Tower
+replies share the pilot's earliest-air time so they cannot speak before the call they answer.
+
+### Voice bar — characters, not robots
+
+AI-generated snippets are the delivery path; **character** is the product. Every role is a
+person with peculiarities of talk, feeling, and intonation — not a neutral TTS reader and not
+a sci-fi robot. Standing register lives in `roles.*.instructions`; the moment's feeling lives
+in each line's `direction`. The generator composes both (`tools/audio/radio_voice.py`).
+
+**ATC** always follows the rulebook. Complete clearances, correct order, no cool-guy
+abbreviation. That precision is the character.
+
+**Pilot (Rapier One One)** is the owner's voice in the fiction: how *you* talk on the radio —
+chill, economical, sounding cool without trying. Trend toward brevity; never AIM-complete
+when a status word will do. The emotional ladder stays inside that character:
+
+| Stakes | Reads as |
+|--------|----------|
+| Standard R/T | Chill pilot — bored-precise, easy breath, minimum syllables |
+| Working (G, pattern, employment) | Same chill, body in the voice — clipped, not loud |
+| Bad news (bingo, gear to come, emergency) | Slightly concerned pilot *trying to give chill pilot* — tighter, flatter, never theatrical |
+
+Traffic pilots share the brevity register (junior crisp, bored One Three, old-head One Four).
+Alternate `takes` are the same character with natural micro-timing drift — not a different
+person.
+
+Clips are pre-generated and re-used; no live token spend in the sortie loop. `AiGenerated` is
+playback/disclosure about the voice path, consistent with machine-keyed mics speaking in a
+human register. Owner ear is the acceptance gate: if it sounds like a robot, regenerate.
+
+**Generator pin:** `lines.json` locks `gpt-4o-mini-tts-2025-03-20` (character/emotion
+instruction-following) with OpenAI's recommended stock voices (`marin` pilot, `cedar` tower).
+Do not float to the unversioned `gpt-4o-mini-tts` alias — newer snapshots have been flatter
+and worse at directions. Regenerate the whole catalog after any model or role change.
+
+### Binding consequences (current catalog)
+
+- Machines key the mic; the game does not make the player perform echo readbacks.
+- Pattern legs speak once. No "report X" prompts for gates that self-announce.
+- Package weapons brevity carries no callsign ceremony (`Guns.`, `Fox Two.`, `Splash one.`).
+- `GUNS` / `SPLASH` are package calls on Rapier tactical only — never classic guns-only trigger FX.
+- CONTROL / Tower / Approach keep callsign when *who* matters to the addressee — and keep
+  rulebook wording (full clearances, gear challenges, waveoffs).
+- Pilots: `3 greens` / `gear to come` / `Land Rapier One One.` — never "three down and locked."
+- LSO stays ultra-short. Wire final stays silent.
+- ANCA holds the continuous model; radio only speaks deltas.
+- **ANCA sequencing:** aviate hold before routine speech (~2.8 s pilot/package); longer dead air
+  between calls; urgent stays nearly immediate.
+
+**Not a chore.** Airspace and radio happen in the background as atmosphere and curriculum.
+No forced readbacks, no comms minigame — the player's job stays aviate and decide.
 
 ## Open work
 
-- **Chatter everywhere**: the doctrine wants realistic traffic across every part of the game —
-  the guns-only dogfight, the Rapier intercept, Medevac — not just the Circuits pattern. Tactical
-  phases currently react to Intercept/Escape/RTB/Recovery only.
-- **Clip catalog**: `manifest.json` ships empty; device-speech fallback carries the feature.
-  Authored WAV generation (mil-register, emotional) needs a voice pipeline and the user's ear.
+- **Chatter where it teaches**: Circuits and Rapier recovery keep ambient tower/approach traffic.
+  Classic guns-only dogfight stays quiet on the trigger; fuel / sortie-complete remain the sparse
+  layer there.
+- **Clip catalog**: `manifest.json` ships empty; device-speech fallback carries the feature until
+  authored WAVs land. Generation must pass the owner-ear character bar (chill pilot ladder),
+  not merely validate JSON.
 - **Captions beyond Circuits**: tactical/approach calls have no caption surface yet.
 - **Traffic is heard, not seen**: CircuitPatternTraffic ships render no hulls.
-- **AiGenerated labeling**: decide at playback (catalog clip vs device speech), not at authoring.
+- **AiGenerated labeling**: playback/disclosure for the voice path; in-world it is consistent
+  with machine speakers. Prefer deciding at playback (catalog clip vs device speech), not at
+  authoring.
 - **Geometry unification**: CircuitPatternTraffic re-states Circuits shelf/final constants beside
   RapierMissionDirector; a future pattern edit can desync flown gates from spoken legs.
 - **LSO advisor dedup**: UpdateMissionRadio re-runs Lso.AdviseForMode in parallel with the HUD
   path; drift risk.
-
-**Not a chore**: R/T is ambient by design. The game keys the mic for the player; airspace and
-radio happen in the background as atmosphere and curriculum. No forced readbacks, no comms
-minigame — the player's job stays aviate first.

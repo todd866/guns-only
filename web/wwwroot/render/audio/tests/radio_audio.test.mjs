@@ -26,6 +26,7 @@ class Filter extends Node {
     this.type = "lowpass";
     this.frequency = new Param();
     this.Q = new Param();
+    this.gain = new Param();
   }
 }
 class Compressor extends Node {
@@ -39,7 +40,15 @@ class Compressor extends Node {
   }
 }
 class Source extends Node {
-  constructor() { super(); this.started = 0; this.stopped = 0; this.buffer = null; }
+  constructor() {
+    super();
+    this.started = 0;
+    this.stopped = 0;
+    this.buffer = null;
+    this.loop = false;
+    this.playbackRate = new Param(1);
+    this.onended = null;
+  }
   start() { this.started += 1; }
   stop() { this.stopped += 1; }
 }

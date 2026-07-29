@@ -65,15 +65,38 @@ def validate_catalog(catalog: dict) -> None:
             raise ValueError(f"line {line_id!r} references unknown role")
         if not str(line.get("text", "")).strip():
             raise ValueError(f"line {line_id!r} has no text")
+        if "direction" in line and not str(line["direction"]).strip():
+            raise ValueError(f"line {line_id!r} has an empty direction")
+        takes = line.get("takes", 1)
+        if not isinstance(takes, int) or not 1 <= takes <= 4:
+            raise ValueError(f"line {line_id!r} takes must be an integer from 1 to 4")
 
 
-def source_hash(catalog: dict, line: dict) -> str:
+def line_instructions(catalog: dict, line: dict, take: int = 1) -> str:
+    """The character's standing register plus the moment's emotional direction."""
+    role = catalog["roles"][line["role"]]
+    parts = [str(role["instructions"]).strip()]
+    direction = str(line.get("direction", "")).strip()
+    if direction:
+        parts.append(f"This moment: {direction}")
+    if take > 1:
+        parts.append(
+            "Alternate take: same character, same register, naturally different "
+            "micro-timing and emphasis.")
+    return "\n\n".join(parts)
+
+
+def take_filename(line_id: str, take: int) -> str:
+    return f"{line_id}.wav" if take == 1 else f"{line_id}--t{take}.wav"
+
+
+def source_hash(catalog: dict, line: dict, take: int = 1) -> str:
     role = catalog["roles"][line["role"]]
     source = {
         "model": catalog["model"],
         "response_format": catalog["response_format"],
         "voice": role["voice"],
-        "instructions": role["instructions"],
+        "instructions": line_instructions(catalog, line, take),
         "text": line["text"],
     }
     canonical = json.dumps(source, sort_keys=True, separators=(",", ":"))
@@ -85,6 +108,7 @@ def speech_request(
     line: dict,
     api_key: str,
     *,
+    take: int = 1,
     api_url: str = DEFAULT_API_URL,
     urlopen=urllib.request.urlopen,
 ) -> bytes:
@@ -93,7 +117,7 @@ def speech_request(
         "model": catalog["model"],
         "input": line["text"],
         "voice": role["voice"],
-        "instructions": role["instructions"],
+        "instructions": line_instructions(catalog, line, take),
         "response_format": catalog["response_format"],
     }).encode("utf-8")
     request = urllib.request.Request(
@@ -116,12 +140,41 @@ def speech_request(
 
 
 def inspect_wav(path: Path) -> dict:
-    with wave.open(str(path), "rb") as audio:
-        frames = audio.getnframes()
-        rate = audio.getframerate()
-        channels = audio.getnchannels()
-        width = audio.getsampwidth()
-    if frames <= 0 or rate <= 0 or channels <= 0 or width <= 0:
+    """Measure a PCM WAV. OpenAI speech often writes 0xFFFFFFFF RIFF/data sizes; fall back to bytes."""
+    raw = path.read_bytes()
+    if len(raw) < 44 or raw[0:4] != b"RIFF" or raw[8:12] != b"WAVE":
+        raise ValueError(f"invalid WAV data in {path}")
+    # Walk chunks so nonstandard sizes still yield rate/width/channels.
+    offset = 12
+    rate = channels = width = 0
+    data_offset = data_declared = None
+    while offset + 8 <= len(raw):
+        chunk_id = raw[offset:offset + 4]
+        chunk_size = int.from_bytes(raw[offset + 4:offset + 8], "little")
+        payload = offset + 8
+        if chunk_id == b"fmt " and chunk_size >= 16 and payload + 16 <= len(raw):
+            channels = int.from_bytes(raw[payload + 2:payload + 4], "little")
+            rate = int.from_bytes(raw[payload + 4:payload + 8], "little")
+            bits = int.from_bytes(raw[payload + 14:payload + 16], "little")
+            width = max(bits // 8, 1)
+        elif chunk_id == b"data":
+            data_offset = payload
+            data_declared = chunk_size
+            break
+        # 0xFFFFFFFF means "until EOF" — stop walking.
+        if chunk_size == 0xFFFFFFFF:
+            break
+        offset = payload + chunk_size + (chunk_size & 1)
+    if not rate or not channels or not width or data_offset is None:
+        raise ValueError(f"invalid WAV data in {path}")
+    payload_bytes = (
+        len(raw) - data_offset
+        if data_declared in (None, 0xFFFFFFFF)
+        else min(data_declared, len(raw) - data_offset)
+    )
+    frame_bytes = channels * width
+    frames = payload_bytes // frame_bytes
+    if frames <= 0:
         raise ValueError(f"invalid WAV data in {path}")
     return {
         "duration_s": round(frames / rate, 3),
@@ -129,6 +182,24 @@ def inspect_wav(path: Path) -> dict:
         "channels": channels,
         "sample_width_bytes": width,
     }
+
+
+def normalize_wav(path: Path) -> None:
+    """Rewrite OpenAI's unknown-size WAV headers to ordinary PCM so tools and browsers agree."""
+    info = inspect_wav(path)
+    raw = path.read_bytes()
+    data_at = raw.find(b"data")
+    if data_at < 0:
+        raise ValueError(f"WAV missing data chunk: {path}")
+    pcm = raw[data_at + 8:]
+    # Trim to whole frames.
+    frame_bytes = info["channels"] * info["sample_width_bytes"]
+    pcm = pcm[: len(pcm) - (len(pcm) % frame_bytes)]
+    with wave.open(str(path), "wb") as audio:
+        audio.setnchannels(info["channels"])
+        audio.setsampwidth(info["sample_width_bytes"])
+        audio.setframerate(info["sample_rate_hz"])
+        audio.writeframes(pcm)
 
 
 def write_atomic(path: Path, data: bytes) -> None:
@@ -148,21 +219,30 @@ def write_atomic(path: Path, data: bytes) -> None:
 def build_manifest(catalog: dict, output_dir: Path) -> dict:
     clips: dict[str, dict] = {}
     for line in catalog["lines"]:
-        wav_path = output_dir / f"{line['id']}.wav"
-        if not wav_path.exists():
+        takes = []
+        for take in range(1, line.get("takes", 1) + 1):
+            wav_path = output_dir / take_filename(line["id"], take)
+            if not wav_path.exists():
+                continue
+            wav = inspect_wav(wav_path)
+            takes.append({
+                "url": f"./{wav_path.name}",
+                "source_sha256": source_hash(catalog, line, take),
+                "file_sha256": hashlib.sha256(wav_path.read_bytes()).hexdigest(),
+                **wav,
+            })
+        if not takes:
             continue
-        wav = inspect_wav(wav_path)
         role = catalog["roles"][line["role"]]
         clips[line["id"]] = {
-            "url": f"./render/audio/samples/radio/{wav_path.name}",
+            "url": takes[0]["url"],
             "role": line["role"],
             "voice": role["voice"],
-            "source_sha256": source_hash(catalog, line),
-            "file_sha256": hashlib.sha256(wav_path.read_bytes()).hexdigest(),
-            **wav,
+            "duration_s": max(take["duration_s"] for take in takes),
+            "takes": takes,
         }
     return {
-        "version": 1,
+        "version": 2,
         "catalog_version": catalog["version"],
         "model": catalog["model"],
         "disclosure": catalog.get(
@@ -170,6 +250,43 @@ def build_manifest(catalog: dict, output_dir: Path) -> dict:
         ),
         "clips": clips,
     }
+
+
+DURATIONS_HEADER = """\
+// Generated by tools/audio/radio_voice.py --write-durations from measured mission-radio WAVs.
+// Empty until clips are generated; MissionRadioDirector falls back to its word-count estimate.
+// Do not edit by hand — regenerate after any clip generation run.
+
+namespace GunsOnly.Sim;
+
+public static class MissionRadioClipDurations {
+    static readonly Dictionary<string, double> Seconds = new() {
+"""
+
+DURATIONS_FOOTER = """\
+    };
+
+    /// <summary>Longest measured take for the catalog id, in seconds.</summary>
+    public static bool TryGet(string id, out double seconds) =>
+        Seconds.TryGetValue(id, out seconds);
+
+    public static int Count => Seconds.Count;
+}
+"""
+
+
+def write_durations(manifest: dict, durations_path: Path) -> int:
+    """Bake measured clip durations into the deterministic kernel's lookup table."""
+    entries = sorted(
+        (line_id, clip["duration_s"]) for line_id, clip in manifest["clips"].items()
+    )
+    body = "".join(
+        f'        ["{line_id}"] = {duration:.3f},\n' for line_id, duration in entries
+    )
+    write_atomic(
+        durations_path, (DURATIONS_HEADER + body + DURATIONS_FOOTER).encode("utf-8")
+    )
+    return len(entries)
 
 
 def write_manifest(catalog: dict, output_dir: Path, manifest_path: Path) -> None:
@@ -195,22 +312,24 @@ def generate(
     for line in catalog["lines"]:
         if selected and line["id"] not in selected:
             continue
-        wav_path = output_dir / f"{line['id']}.wav"
-        if wav_path.exists() and not force:
-            inspect_wav(wav_path)
-            continue
-        if dry_run:
-            print(f"would generate {line['id']} -> {wav_path}")
-            continue
-        audio = speech_request(catalog, line, api_key, api_url=api_url)
-        write_atomic(wav_path, audio)
-        try:
-            inspect_wav(wav_path)
-        except Exception:
-            wav_path.unlink(missing_ok=True)
-            raise
-        made += 1
-        print(f"generated {line['id']}")
+        for take in range(1, line.get("takes", 1) + 1):
+            wav_path = output_dir / take_filename(line["id"], take)
+            if wav_path.exists() and not force:
+                inspect_wav(wav_path)
+                continue
+            if dry_run:
+                print(f"would generate {line['id']} take {take} -> {wav_path}")
+                continue
+            audio = speech_request(catalog, line, api_key, take=take, api_url=api_url)
+            write_atomic(wav_path, audio)
+            try:
+                normalize_wav(wav_path)
+                inspect_wav(wav_path)
+            except Exception:
+                wav_path.unlink(missing_ok=True)
+                raise
+            made += 1
+            print(f"generated {line['id']} take {take}")
     if not dry_run:
         write_manifest(catalog, output_dir, manifest_path)
     return made
@@ -224,9 +343,12 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--catalog", type=Path, default=default_catalog)
     result.add_argument("--output", type=Path, default=default_output)
     result.add_argument("--manifest", type=Path, default=default_output / "manifest.json")
+    result.add_argument(
+        "--durations", type=Path, default=root / "sim/MissionRadioClipDurations.g.cs")
     commands = result.add_subparsers(dest="command", required=True)
     commands.add_parser("validate")
     commands.add_parser("manifest")
+    commands.add_parser("durations")
     generate_command = commands.add_parser("generate")
     generate_command.add_argument("--only", action="append", default=[])
     generate_command.add_argument("--force", action="store_true")
@@ -244,6 +366,10 @@ def main() -> int:
     if args.command == "manifest":
         write_manifest(catalog, args.output, args.manifest)
         print(f"wrote {args.manifest}")
+        return 0
+    if args.command == "durations":
+        count = write_durations(build_manifest(catalog, args.output), args.durations)
+        print(f"wrote {count} durations to {args.durations}")
         return 0
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key and not args.dry_run:
@@ -265,6 +391,9 @@ def main() -> int:
         api_url=args.api_url,
     )
     print(f"{made} clip(s) generated")
+    if not args.dry_run:
+        count = write_durations(build_manifest(catalog, args.output), args.durations)
+        print(f"wrote {count} durations to {args.durations}")
     return 0
 
 

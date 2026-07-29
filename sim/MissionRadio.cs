@@ -55,7 +55,9 @@ public readonly record struct MissionRadioState(
     int DronesRemaining,
     bool Joker,
     bool Bingo,
-    IReadOnlyList<SessionEvent> Events);
+    IReadOnlyList<SessionEvent> Events,
+    string ChecklistName = "",
+    string ChecklistCompletedCall = "");
 
 /// <summary>Formatting shared by authored calls and tests, following ICAO/military pronunciation.</summary>
 public static class RadioPhraseology {
@@ -137,6 +139,7 @@ public sealed class MissionRadioDirector {
 
     readonly List<PendingCall> _queue = [];
     readonly Dictionary<string, string> _trafficLegs = [];
+    readonly Dictionary<string, int> _trafficLaps = [];
     MissionRadioTransmission _current = MissionRadioTransmission.Silent;
     string _playerLeg = "";
     bool _initialized;
@@ -145,6 +148,7 @@ public sealed class MissionRadioDirector {
     bool _joker;
     bool _bingo;
     bool _gunBurstActive;
+    bool _gunsCalledThisEngagement;
     bool _missionFinished;
     bool _recoveryApproach;
     Carrier.Recovery _recovery = Carrier.Recovery.Flying;
@@ -170,11 +174,13 @@ public sealed class MissionRadioDirector {
         string Callsign,
         string Text,
         string Voice,
-        MissionRadioPriority Priority);
+        MissionRadioPriority Priority,
+        double EarliestAtSeconds);
 
     public void Reset() {
         _queue.Clear();
         _trafficLegs.Clear();
+        _trafficLaps.Clear();
         _current = MissionRadioTransmission.Silent;
         _playerLeg = "";
         _initialized = false;
@@ -183,6 +189,7 @@ public sealed class MissionRadioDirector {
         _joker = false;
         _bingo = false;
         _gunBurstActive = false;
+        _gunsCalledThisEngagement = false;
         _missionFinished = false;
         _recoveryApproach = false;
         _recovery = Carrier.Recovery.Flying;
@@ -206,15 +213,27 @@ public sealed class MissionRadioDirector {
         if (_current.Active && state.TimeSeconds < _current.EndsAtSeconds)
             return _current;
         if (_current.Active) {
-            _notBeforeSeconds = Math.Max(_notBeforeSeconds, _current.EndsAtSeconds + 0.28);
+            // ANCA: after Communicate, leave dead air before the next call — not a metronome.
+            // Jitter is a pure function of sequence so replays stay deterministic.
+            double gap = 1.70 + 1.50 * GapFraction(_sequence);
+            _notBeforeSeconds = Math.Max(_notBeforeSeconds, _current.EndsAtSeconds + gap);
             _current = _current with { Active = false };
         }
-        if (_queue.Count == 0 || state.TimeSeconds < _notBeforeSeconds)
+        if (_queue.Count == 0)
             return _current;
 
         PendingCall next = _queue[0];
+        // Aviate hold + inter-call gap: do not key the mic until both are satisfied.
+        if (state.TimeSeconds < _notBeforeSeconds
+            || state.TimeSeconds < next.EarliestAtSeconds)
+            return _current;
+
         _queue.RemoveAt(0);
-        double duration = EstimateDurationSeconds(next.Text);
+        // Measured clip length wins over the word-count estimate: the browser hard-stops any
+        // playing clip when the next sequence starts, so an underestimate truncates speech.
+        double duration = MissionRadioClipDurations.TryGet(next.Id, out double measured)
+            ? measured + 0.12
+            : EstimateDurationSeconds(next.Text);
         _sequence++;
         _current = new MissionRadioTransmission(
             true,
@@ -254,14 +273,12 @@ public sealed class MissionRadioDirector {
             foreach (CircuitTrafficShip ship in state.Traffic)
                 _trafficLegs[ship.Callsign] = ship.Leg;
             if (state.MissionActive && state.RapierMissionAvailable && state.CatapultActive)
-                QueueLaunch();
+                QueueLaunch(state);
             if (state.MissionActive && !state.PatternOnly && state.RecoveryApproach)
-                QueueRecoveryCheckIn();
+                QueueRecoveryCheckIn(state);
+            // Gun employment before the director existed is not a package call — see
+            // ObserveWeaponsAndFuel. Classic dogfight / mid-burst attach stays silent.
             if (state.GunRoundsFired > 0) {
-                Enqueue(Tactical(
-                    "pilot-guns", Player, "PACKAGE",
-                    $"{PlayerSpoken}, guns.",
-                    "pilot", MissionRadioPriority.Advisory));
                 _gunBurstActive = true;
                 _lastGunEmploymentAtSeconds = state.TimeSeconds;
             }
@@ -274,6 +291,7 @@ public sealed class MissionRadioDirector {
             ObserveRecovery(state);
             ObserveLso(state);
             ObserveWeaponsAndFuel(state);
+            ObserveChecklists(state);
             ObserveEvents(state);
         }
 
@@ -293,28 +311,26 @@ public sealed class MissionRadioDirector {
         _dronesRemaining = state.DronesRemaining;
     }
 
-    void QueueLaunch() {
-        Enqueue(Tower(
+    void QueueLaunch(in MissionRadioState state) {
+        // Clearance only — ambient R/T keys the mic for the player; echoing the same
+        // clearance back as a "readback" doubles airtime for no new fact.
+        // Pre-stroke clearance: talk first, then aviate the shot (hold 0).
+        Enqueue(state, Tower(
             "launch-cleared", "LAUNCH", Player,
             $"{PlayerSpoken}, cleared for launch.",
             "launch", MissionRadioPriority.Advisory));
-        Enqueue(Tower(
-            "pilot-launch-readback", Player, "LAUNCH",
-            $"Cleared for launch, {PlayerSpoken}.",
-            "pilot", MissionRadioPriority.Routine));
     }
 
     void ObservePattern(in MissionRadioState state, string playerLeg) {
         if (_catapultActive && !state.CatapultActive) {
-            Enqueue(Tower(
+            Enqueue(state, Tower(
                 "pilot-airborne", Player, "RAPIER TOWER",
-                $"Rapier Tower, {PlayerSpoken}, airborne, joining initial.",
+                $"Rapier Tower, {PlayerSpoken}, airborne.",
                 "pilot", MissionRadioPriority.Routine));
-            Enqueue(Tower(
+            Enqueue(state, Tower(
                 "tower-join-initial", "RAPIER TOWER", Player,
                 $"{PlayerSpoken}, pattern altitude "
-                    + $"{RadioPhraseology.AltitudeFeet(2_500)}, report initial. "
-                    + "Traffic in the pattern.",
+                    + $"{RadioPhraseology.AltitudeFeet(2_500)}. Traffic in the pattern.",
                 "tower", MissionRadioPriority.Advisory));
         }
         if (playerLeg.Length > 0 && playerLeg != _playerLeg)
@@ -323,12 +339,28 @@ public sealed class MissionRadioDirector {
         foreach (CircuitTrafficShip ship in state.Traffic) {
             _trafficLegs.TryGetValue(ship.Callsign, out string? previousLeg);
             if (previousLeg != ship.Leg && ship.Leg is "BASE" or "SHORT_FINAL") {
+                // Alternate phrasings lap to lap: full station call on the first circuit,
+                // abbreviated on the next, like a real pattern settling into its rhythm.
+                // The lap parity picks the catalog ID, so every text stays a recorded clip.
+                if (ship.Leg == "BASE")
+                    _trafficLaps[ship.Callsign] =
+                        _trafficLaps.GetValueOrDefault(ship.Callsign) + 1;
+                bool abbreviated = _trafficLaps.GetValueOrDefault(ship.Callsign) % 2 == 0;
                 string spokenLeg = ship.Leg == "SHORT_FINAL" ? "final" : "base";
-                Enqueue(Tower(
-                    $"traffic-{CallsignSlug(ship.Callsign)}-{spokenLeg}",
-                    NormalizedTrafficCallsign(ship.Callsign), "RAPIER TOWER",
-                    $"Rapier Tower, {SpokenTrafficCallsign(ship.Callsign)}, {spokenLeg}.",
-                    "traffic", MissionRadioPriority.Routine));
+                string id = $"traffic-{CallsignSlug(ship.Callsign)}-{spokenLeg}"
+                    + (abbreviated ? "-alt" : "");
+                string text = (spokenLeg, abbreviated) switch {
+                    ("base", false) =>
+                        $"Rapier Tower, {SpokenTrafficCallsign(ship.Callsign)}, base.",
+                    ("base", true) =>
+                        $"Tower, {SpokenTrafficCallsign(ship.Callsign)}, base, 3 greens.",
+                    ("final", false) =>
+                        $"Rapier Tower, {SpokenTrafficCallsign(ship.Callsign)}, final.",
+                    _ => $"Tower, {ShortTrafficCallsign(ship.Callsign)}, final.",
+                };
+                Enqueue(state, Tower(
+                    id, NormalizedTrafficCallsign(ship.Callsign), "RAPIER TOWER",
+                    text, TrafficVoice(ship.Callsign), MissionRadioPriority.Routine));
             }
             _trafficLegs[ship.Callsign] = ship.Leg;
         }
@@ -336,7 +368,7 @@ public sealed class MissionRadioDirector {
         bool final = playerLeg is "SHORT_FINAL" or "WIRE_FINAL";
         bool gearUnsafe = final && !state.GearDownAndLocked;
         if (gearUnsafe && !_gearUnsafeOnFinal) {
-            Enqueue(Tower(
+            Enqueue(state, Tower(
                 "tower-waveoff-gear", "RAPIER TOWER", Player,
                 $"Wave off, wave off. {PlayerSpoken}, gear unsafe.",
                 "tower", MissionRadioPriority.Urgent), preempt: true);
@@ -346,125 +378,108 @@ public sealed class MissionRadioDirector {
     void QueuePlayerLeg(string leg, in MissionRadioState state) {
         switch (leg) {
             case "DEPART":
-                Enqueue(Tower(
-                    "pilot-depart", Player, "RAPIER TOWER",
-                    $"Rapier Tower, {PlayerSpoken}, airborne, climbing pattern altitude.",
-                    "pilot", MissionRadioPriority.Routine));
+                // Airborne + tower join already covered the climb-out; DEPART is silent.
                 break;
             case "INITIAL":
-                Enqueue(Tower(
+                // Initial announces itself; no "report break" prompt — BREAK will speak.
+                Enqueue(state, Tower(
                     "pilot-initial", Player, "RAPIER TOWER",
-                    $"Rapier Tower, {PlayerSpoken}, initial, full stop.",
+                    $"{PlayerSpoken}, initial, full stop.",
                     "pilot", MissionRadioPriority.Routine));
-                Enqueue(Tower(
-                    "tower-report-break", "RAPIER TOWER", Player,
-                    $"{PlayerSpoken}, report break.",
-                    "tower", MissionRadioPriority.Advisory));
                 break;
             case "BREAK":
-                Enqueue(Tower(
+                Enqueue(state, Tower(
                     "pilot-break", Player, "RAPIER TOWER",
                     $"{PlayerSpoken}, breaking.",
                     "pilot", MissionRadioPriority.Routine));
                 break;
             case "DOWNWIND":
-                // The call reports the aircraft, not the checklist: an unsafe gear on downwind
-                // is spoken honestly and draws the tower's challenge.
-                Enqueue(Tower(
-                    "pilot-downwind", Player, "RAPIER TOWER",
+                // One pilot call. No "report base" / wilco pair — base announces itself.
+                // Unsafe gear draws the tower challenge; safe gear stays quiet after.
+                Enqueue(state, Tower(
+                    state.GearDownAndLocked ? "pilot-downwind" : "pilot-downwind-gear-unsafe",
+                    Player, "RAPIER TOWER",
                     state.GearDownAndLocked
-                        ? $"Rapier Tower, {PlayerSpoken}, downwind, gear down."
-                        : $"Rapier Tower, {PlayerSpoken}, downwind.",
+                        ? $"{PlayerSpoken}, downwind, 3 greens."
+                        : $"{PlayerSpoken}, downwind.",
                     "pilot", MissionRadioPriority.Routine));
                 if (!state.GearDownAndLocked) {
-                    Enqueue(Tower(
+                    Enqueue(state, Tower(
                         "tower-check-gear-downwind", "RAPIER TOWER", Player,
                         $"{PlayerSpoken}, check gear down.",
                         "tower", MissionRadioPriority.Advisory));
                 }
-                Enqueue(Tower(
-                    "tower-report-base", "RAPIER TOWER", Player,
-                    $"{PlayerSpoken}, report base.",
-                    "tower", MissionRadioPriority.Advisory));
-                Enqueue(Tower(
-                    "pilot-report-base-readback", Player, "RAPIER TOWER",
-                    $"Wilco, {PlayerSpoken}.",
-                    "pilot", MissionRadioPriority.Routine));
                 break;
             case "BASE":
-                Enqueue(Tower(
-                    "pilot-base", Player, "RAPIER TOWER",
+                Enqueue(state, Tower(
+                    state.GearDownAndLocked ? "pilot-base" : "pilot-base-gear-unsafe",
+                    Player, "RAPIER TOWER",
                     state.GearDownAndLocked
-                        ? $"Rapier Tower, {PlayerSpoken}, base, gear down and locked."
-                        : $"Rapier Tower, {PlayerSpoken}, base, gear unsafe.",
+                        ? $"{PlayerSpoken}, base, 3 greens."
+                        : $"{PlayerSpoken}, base, gear to come.",
                     "pilot", MissionRadioPriority.Routine));
-                Enqueue(Tower(
-                    "tower-cleared-arrested-landing", "RAPIER TOWER", Player,
-                    $"{PlayerSpoken}, cleared to land. Arresting gear rigged.",
-                    "tower", MissionRadioPriority.Advisory));
-                Enqueue(Tower(
-                    "pilot-landing-readback", Player, "RAPIER TOWER",
-                    $"Cleared to land, {PlayerSpoken}.",
-                    "pilot", MissionRadioPriority.Routine));
+                // Tower keeps the rulebook clearance. Pilot takes it brief — not an echo.
+                if (state.GearDownAndLocked) {
+                    Enqueue(state, Tower(
+                        "tower-cleared-arrested-landing", "RAPIER TOWER", Player,
+                        $"{PlayerSpoken}, cleared to land. Arresting gear rigged.",
+                        "tower", MissionRadioPriority.Advisory));
+                    Enqueue(state, Tower(
+                        "pilot-land", Player, "RAPIER TOWER",
+                        $"Land {PlayerSpoken}.",
+                        "pilot", MissionRadioPriority.Routine));
+                } else {
+                    Enqueue(state, Tower(
+                        "tower-continue-check-gear", "RAPIER TOWER", Player,
+                        $"{PlayerSpoken}, continue, check gear down.",
+                        "tower", MissionRadioPriority.Advisory));
+                }
                 break;
-            case "SHORT_FINAL":
-                Enqueue(Tower(
-                    "pilot-short-final", Player, "RAPIER TOWER",
-                    $"{PlayerSpoken}, short final.",
-                    "pilot", MissionRadioPriority.Routine));
-                break;
-            // WIRE_FINAL is deliberately silent: seconds from the wire the pilot flies, not talks.
+            // SHORT_FINAL and WIRE_FINAL stay silent: seconds from the wire the pilot flies.
         }
     }
 
     void ObserveTacticalMission(in MissionRadioState state) {
         if (state.RapierMissionAvailable && _catapultActive && !state.CatapultActive) {
-            Enqueue(Tower(
+            // Airborne is the delta. "Continue departure" adds no new clearance.
+            Enqueue(state, Tower(
                 "pilot-departure-airborne", Player, "RAPIER TOWER",
                 $"Rapier Tower, {PlayerSpoken}, airborne.",
                 "pilot", MissionRadioPriority.Routine));
-            Enqueue(Tower(
-                "tower-continue-departure", "RAPIER TOWER", Player,
-                $"{PlayerSpoken}, continue departure.",
-                "tower", MissionRadioPriority.Advisory));
         }
         if (state.RapierPhase == _rapierPhase) return;
+        // A fresh Intercept engagement may voice one GUNS; later bursts stay silent.
+        if (state.RapierPhase == RapierMissionPhase.Intercept)
+            _gunsCalledThisEngagement = false;
         switch (state.RapierPhase) {
             case RapierMissionPhase.Intercept:
-                Enqueue(Tactical(
+                Enqueue(state, Tactical(
                     "control-commit", "CONTROL", Player,
                     $"{PlayerSpoken}, commit.",
                     "controller", MissionRadioPriority.Advisory));
-                Enqueue(Tactical(
-                    "pilot-commit-readback", Player, "CONTROL",
-                    $"Commit, {PlayerSpoken}.",
-                    "pilot", MissionRadioPriority.Routine));
                 break;
             case RapierMissionPhase.Escape:
-                Enqueue(Tactical(
+                Enqueue(state, Tactical(
                     "pilot-separating", Player, "CONTROL",
                     $"{PlayerSpoken}, separating.",
                     "pilot", MissionRadioPriority.Advisory));
                 break;
             case RapierMissionPhase.ReturnToBase:
-                Enqueue(Tactical(
+                // Pilot states the want. CONTROL's roger is pure echo — omit it.
+                Enqueue(state, Tactical(
                     "pilot-rtb", Player, "CONTROL",
-                    $"Control, {PlayerSpoken}, returning home plate.",
+                    $"Control, {PlayerSpoken}, RTB home plate.",
                     "pilot", MissionRadioPriority.Advisory));
-                Enqueue(Tactical(
-                    "control-rtb-roger", "CONTROL", Player,
-                    $"{PlayerSpoken}, roger.",
-                    "controller", MissionRadioPriority.Routine));
                 break;
             case RapierMissionPhase.Recovery:
-                QueueRecoveryCheckIn();
+                QueueRecoveryCheckIn(state);
                 break;
         }
     }
 
     void ObserveRecovery(in MissionRadioState state) {
         if (!_recoveryApproach && state.RecoveryApproach && !state.PatternOnly)
-            QueueRecoveryCheckIn();
+            QueueRecoveryCheckIn(state);
         if (state.Recovery == Carrier.Recovery.Bolter
             && _recovery != Carrier.Recovery.Bolter) {
             PendingCall bolter = !state.MaritimeRecovery
@@ -476,21 +491,28 @@ public sealed class MissionRadioDirector {
                     "lso-bolter", "PADDLES", Player,
                     "Bolter, bolter.",
                     "lso", MissionRadioPriority.Urgent);
-            Enqueue(bolter, preempt: true);
+            Enqueue(state, bolter, preempt: true);
         }
         if (state.ArrestmentPhase == ArrestmentModel.ArrestmentPhase.Stopped
             && _arrestmentPhase != ArrestmentModel.ArrestmentPhase.Stopped) {
             int wire = Math.Clamp(state.CaughtWire, 1, 4);
+            // "Hold position" is only honest when the jet is actually holding: a circuit trap
+            // that rolls straight into the relaunch catapult gets the wire call alone.
             PendingCall wireCall = !state.MaritimeRecovery
-                ? Tower(
-                    $"tower-trap-wire-{wire}", "RAPIER TOWER", Player,
-                    $"{PlayerSpoken}, wire {RadioPhraseology.DigitGroup(wire.ToString())}, hold position.",
-                    "tower", MissionRadioPriority.Advisory)
+                ? state.CatapultActive
+                    ? Tower(
+                        $"tower-trap-wire-{wire}-relaunch", "RAPIER TOWER", Player,
+                        $"{PlayerSpoken}, wire {RadioPhraseology.DigitGroup(wire.ToString())}.",
+                        "tower", MissionRadioPriority.Advisory)
+                    : Tower(
+                        $"tower-trap-wire-{wire}", "RAPIER TOWER", Player,
+                        $"{PlayerSpoken}, wire {RadioPhraseology.DigitGroup(wire.ToString())}, hold position.",
+                        "tower", MissionRadioPriority.Advisory)
                 : Approach(
                     $"lso-wire-{wire}", "PADDLES", Player,
                     $"Wire {RadioPhraseology.DigitGroup(wire.ToString())}.",
                     "lso", MissionRadioPriority.Advisory);
-            Enqueue(wireCall);
+            Enqueue(state, wireCall);
         }
     }
 
@@ -534,15 +556,15 @@ public sealed class MissionRadioDirector {
         };
         if (transmission is not { } selected) return;
         _lastLsoCallAtSeconds = state.TimeSeconds;
-        Enqueue(selected, preempt: waveOff);
+        Enqueue(state, selected, preempt: waveOff);
     }
 
-    void QueueRecoveryCheckIn() {
-        Enqueue(Approach(
+    void QueueRecoveryCheckIn(in MissionRadioState state) {
+        Enqueue(state, Approach(
             "pilot-recovery-request", Player, "RAPIER APPROACH",
-            $"Rapier Approach, {PlayerSpoken}, recovery.",
+            $"Rapier Approach, {PlayerSpoken}, inbound, request recovery.",
             "pilot", MissionRadioPriority.Routine));
-        Enqueue(Approach(
+        Enqueue(state, Approach(
             "approach-recovery-continue", "RAPIER APPROACH", Player,
             $"{PlayerSpoken}, continue.",
             "controller", MissionRadioPriority.Advisory));
@@ -551,10 +573,14 @@ public sealed class MissionRadioDirector {
     void ObserveWeaponsAndFuel(in MissionRadioState state) {
         int firedDelta = state.GunRoundsFired - _gunRoundsFired;
         if (firedDelta > 0) {
-            if (!_gunBurstActive) {
-                Enqueue(Tactical(
+            // GUNS is package deconfliction, not a trigger FX. Classic guns-only dogfight has
+            // no package — every squeeze would just narrate the game. On Rapier Intercept,
+            // voice it once per engagement so wing SA exists without machine-gunning the clip.
+            if (PackageGunsContext(state) && !_gunsCalledThisEngagement && !_gunBurstActive) {
+                _gunsCalledThisEngagement = true;
+                Enqueue(state, Tactical(
                     "pilot-guns", Player, "PACKAGE",
-                    $"{PlayerSpoken}, guns.",
+                    "Guns.",
                     "pilot", MissionRadioPriority.Advisory));
             }
             _gunBurstActive = true;
@@ -565,15 +591,15 @@ public sealed class MissionRadioDirector {
         }
 
         if (state.MissilesRemaining < _missilesRemaining && state.MissileInFlight) {
-            Enqueue(Tactical(
+            Enqueue(state, Tactical(
                 "pilot-fox-two", Player, "PACKAGE",
-                $"{PlayerSpoken}, Fox Two.",
+                "Fox Two.",
                 "pilot", MissionRadioPriority.Advisory));
         }
         if (state.DronesRemaining < _dronesRemaining) {
-            Enqueue(Tactical(
+            Enqueue(state, Tactical(
                 "pilot-drone-away", Player, "PACKAGE",
-                $"{PlayerSpoken}, drone away.",
+                "Drone away.",
                 "pilot", MissionRadioPriority.Advisory));
         }
 
@@ -582,35 +608,49 @@ public sealed class MissionRadioDirector {
         bool hadAnyOrdnance = hadAirToAirOrdnance || _gunAmmoRemaining > 0;
         bool hasAnyOrdnance = hasAirToAirOrdnance || state.GunAmmoRemaining > 0;
         if (hadAirToAirOrdnance && !hasAirToAirOrdnance && state.GunAmmoRemaining > 0) {
-            Enqueue(Tactical(
+            Enqueue(state, Tactical(
                 "pilot-remington", Player, "PACKAGE",
-                $"{PlayerSpoken}, Remington.",
+                "Remington.",
                 "pilot", MissionRadioPriority.Advisory));
         }
         if (hadAnyOrdnance && !hasAnyOrdnance) {
-            Enqueue(Tactical(
+            Enqueue(state, Tactical(
                 "pilot-winchester", Player, "PACKAGE",
-                $"{PlayerSpoken}, Winchester.",
+                "Winchester.",
                 "pilot", MissionRadioPriority.Advisory));
         }
 
         if (!_joker && state.Joker && !state.Bingo) {
-            Enqueue(Tactical(
+            Enqueue(state, Tactical(
                 "pilot-joker", Player, "CONTROL",
                 $"{PlayerSpoken}, Joker.",
                 "pilot", MissionRadioPriority.Advisory));
         }
         if (!_bingo && state.Bingo) {
-            Enqueue(Tactical(
+            Enqueue(state, Tactical(
                 "pilot-bingo", Player, "CONTROL",
                 $"{PlayerSpoken}, Bingo.",
                 "pilot", MissionRadioPriority.Urgent), preempt: true);
-            Enqueue(Tactical(
+            Enqueue(state, Tactical(
                 "control-bingo-rtb", "CONTROL", Player,
-                $"{PlayerSpoken}, return home plate.",
+                $"{PlayerSpoken}, RTB home plate.",
                 "controller", MissionRadioPriority.Urgent));
         }
     }
+
+    /// <summary>
+    /// Package GUNS only when a Rapier tactical Intercept is live. Pattern school and the
+    /// classic guns-only dogfight stay silent on the trigger.
+    /// </summary>
+    static bool PackageGunsContext(in MissionRadioState state) =>
+        PackageAudience(state) && state.RapierPhase == RapierMissionPhase.Intercept;
+
+    /// <summary>
+    /// Someone in the fiction needs the shared model (Rapier package / tactical net).
+    /// Classic guns-only has no package — trigger and splash stay off the air.
+    /// </summary>
+    static bool PackageAudience(in MissionRadioState state) =>
+        state.RapierMissionAvailable && !state.PatternOnly;
 
     void ObserveEvents(in MissionRadioState state) {
         foreach (SessionEvent sessionEvent in state.Events) {
@@ -618,25 +658,57 @@ public sealed class MissionRadioDirector {
             _lastEventSequence = sessionEvent.Sequence;
             if (sessionEvent.Type == SessionEventType.Destroyed
                 && sessionEvent.Source == CombatRole.Player
-                && sessionEvent.Target == CombatRole.Opponent) {
-                Enqueue(Tactical(
+                && sessionEvent.Target == CombatRole.Opponent
+                && PackageAudience(state)) {
+                Enqueue(state, Tactical(
                     "pilot-splash", Player, "PACKAGE",
-                    $"{PlayerSpoken}, splash one.",
+                    "Splash one.",
                     "pilot", MissionRadioPriority.Advisory));
             } else if (sessionEvent.Type == SessionEventType.SortieFinished
                 && !_missionFinished) {
                 _missionFinished = true;
-                Enqueue(Tactical(
-                    "control-mission-complete", "CONTROL", Player,
-                    $"{PlayerSpoken}, mission complete.",
-                    "controller", MissionRadioPriority.Advisory));
+                // Victory only — CONTROL congratulating a shoot-down fails audience and delta.
+                if (sessionEvent.Outcome == SortieOutcome.Victory) {
+                    Enqueue(state, Tactical(
+                        "control-mission-complete", "CONTROL", Player,
+                        $"{PlayerSpoken}, mission complete.",
+                        "controller", MissionRadioPriority.Advisory));
+                }
             }
         }
     }
 
-    void Enqueue(PendingCall call, bool preempt = false) {
+    /// Checklist milestones arrive as one-tick tokens from MissionChecklistDirector via the
+    /// session; the pilot voices the two that matter on the air. Same automatic-but-present
+    /// doctrine as every other call — the jet did the work, the R/T reports it.
+    void ObserveChecklists(in MissionRadioState state) {
+        string text = state.ChecklistCompletedCall switch {
+            "LAUNCH_GEAR_UP" => "Gear up.",
+            "RECOVERY_GEAR_DOWN" => $"{PlayerSpoken}, 3 greens.",
+            _ => "",
+        };
+        if (text.Length == 0) return;
+        if (state.ChecklistCompletedCall == "LAUNCH_GEAR_UP") {
+            Enqueue(state, Tactical("pilot-checklist-gear-up", Player, "PACKAGE", text,
+                "pilot", MissionRadioPriority.Routine));
+        } else {
+            Enqueue(state, Approach("pilot-checklist-recovery-config", Player, "RAPIER APPROACH",
+                text, "pilot", MissionRadioPriority.Routine));
+        }
+    }
+
+    void Enqueue(in MissionRadioState state, PendingCall call, bool preempt = false) {
         if (_queue.Any(item => item.Id == call.Id)
             || _current.Active && _current.Id == call.Id) return;
+
+        // ANCA sequencing: Aviate before Communicate. Routine speech waits after the event;
+        // urgent stays nearly immediate. FIFO chaining keeps a tower reply from leapfrogging
+        // the pilot call that shares the same beat.
+        double earliest = state.TimeSeconds + AviateHoldSeconds(call);
+        if (!preempt && _queue.Count > 0)
+            earliest = Math.Max(earliest, _queue[^1].EarliestAtSeconds);
+        call = call with { EarliestAtSeconds = earliest };
+
         if (preempt) {
             _queue.RemoveAll(item => item.Priority != MissionRadioPriority.Urgent);
             _queue.Insert(0, call);
@@ -651,6 +723,24 @@ public sealed class MissionRadioDirector {
         }
     }
 
+    /// <summary>
+    /// Seconds to wait after the triggering event before this call may key the mic.
+    /// Urgent and pre-stroke clearance are near-immediate; pilot/package waits for aviate.
+    /// </summary>
+    static double AviateHoldSeconds(in PendingCall call) {
+        if (call.Priority == MissionRadioPriority.Urgent) return 0.25;
+        // Clearance before the catapult stroke: talk, then aviate the shot.
+        if (call.Id == "launch-cleared") return 0.0;
+        // LSO is flying the pass with the pilot — short, not chatty.
+        if (call.Voice == "lso") return 0.45;
+        // Pilot, package, CONTROL: finish flying/navigating the beat, then speak.
+        if (call.Voice is "pilot" or "controller"
+            || call.Channel == MissionRadioChannel.Tactical)
+            return 2.80;
+        // Tower / traffic / launch crew after an event.
+        return 1.50;
+    }
+
     /// Routine calls discarded because the queue was saturated. A busy pattern losing calls is a
     /// tuning signal (queue depth, call volume), never a silent event.
     public int DroppedRoutineCalls { get; private set; }
@@ -659,23 +749,31 @@ public sealed class MissionRadioDirector {
         string id, string speaker, string callsign, string text, string voice,
         MissionRadioPriority priority) => new(
             id, MissionRadioChannel.Tactical, "PACKAGE", TacticalFrequency,
-            speaker, callsign, text, voice, priority);
+            speaker, callsign, text, voice, priority, 0.0);
 
     static PendingCall Tower(
         string id, string speaker, string callsign, string text, string voice,
         MissionRadioPriority priority) => new(
             id, MissionRadioChannel.Tower, "RAPIER TOWER", TowerFrequency,
-            speaker, callsign, text, voice, priority);
+            speaker, callsign, text, voice, priority, 0.0);
 
     static PendingCall Approach(
         string id, string speaker, string callsign, string text, string voice,
         MissionRadioPriority priority) => new(
             id, MissionRadioChannel.Approach, "RAPIER APPROACH", ApproachFrequency,
-            speaker, callsign, text, voice, priority);
+            speaker, callsign, text, voice, priority, 0.0);
 
     static double EstimateDurationSeconds(string text) {
         int words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         return Math.Clamp(0.70 + words / 2.65, 1.35, 6.0);
+    }
+
+    static double GapFraction(long sequence) {
+        unchecked {
+            ulong hash = (ulong)sequence * 0x9E3779B97F4A7C15ul;
+            hash ^= hash >> 29;
+            return (hash & 0xFFFFFF) / (double)0x1000000;
+        }
     }
 
     static string CallsignSlug(string callsign) =>
@@ -693,5 +791,19 @@ public sealed class MissionRadioDirector {
         "RAPIER 3" or "RAPIER 1-3" => "Rapier One Three",
         "RAPIER 4" or "RAPIER 1-4" => "Rapier One Four",
         _ => callsign,
+    };
+
+    static string ShortTrafficCallsign(string callsign) => callsign switch {
+        "RAPIER 2" or "RAPIER 1-2" => "One Two",
+        "RAPIER 3" or "RAPIER 1-3" => "One Three",
+        "RAPIER 4" or "RAPIER 1-4" => "One Four",
+        _ => callsign,
+    };
+
+    static string TrafficVoice(string callsign) => callsign switch {
+        "RAPIER 2" or "RAPIER 1-2" => "traffic-two",
+        "RAPIER 3" or "RAPIER 1-3" => "traffic-three",
+        "RAPIER 4" or "RAPIER 1-4" => "traffic-four",
+        _ => "traffic",
     };
 }

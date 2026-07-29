@@ -1,10 +1,23 @@
 // Shared mission-radio presentation. Captions remain authoritative; generated WAV assets are
-// preferred, with device speech used only when a catalog clip has not been built.
+// preferred, with device speech used only when a catalog clip has not been built. The clip path
+// runs a military-UHF voice chain: steep band-pass with a presence bark, limiter-grade
+// compression, a carrier-noise floor under the voice, and key/unkey squelch artifacts — all
+// jittered per transmission (deterministically, from the kernel sequence) so no two calls are
+// bit-identical even when they reuse one recorded take.
 
 const MANIFEST_URL = new URL("./samples/radio/manifest.json", import.meta.url);
 
 function target(param, value, now, timeConstant = 0.02) {
   param.setTargetAtTime(value, now, timeConstant);
+}
+
+/// Deterministic per-transmission variation: same sequence, same jitter, every replay.
+function hash01(sequence, salt = 0) {
+  let hash = (BigInt(Math.max(0, Math.floor(sequence))) + BigInt(salt) * 7919n)
+    * 0x9E3779B97F4A7C15n;
+  hash &= 0xFFFFFFFFFFFFFFFFn;
+  hash ^= hash >> 29n;
+  return Number(hash & 0xFFFFFFn) / 0x1000000;
 }
 
 function noiseBuffer(context, seconds = 0.055) {
@@ -21,6 +34,34 @@ function noiseBuffer(context, seconds = 0.055) {
   return buffer;
 }
 
+function carrierNoiseBuffer(context, seconds = 1.5) {
+  const frames = Math.max(256, Math.floor(context.sampleRate * seconds));
+  const buffer = context.createBuffer(1, frames, context.sampleRate);
+  const data = buffer.getChannelData(0);
+  let seed = 0x2545f491;
+  for (let i = 0; i < frames; i++) {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    data[i] = (seed >>> 0) / 0x80000000 - 1;
+  }
+  return buffer;
+}
+
+/// Per-station color: output trim and how much carrier hiss sits under the voice. Airborne and
+/// deck stations read noisier than the tower's ground installation.
+const ROLE_PRESETS = {
+  tower: { level: 0.90, noise: 0.015 },
+  controller: { level: 0.85, noise: 0.020 },
+  launch: { level: 0.95, noise: 0.030 },
+  lso: { level: 0.95, noise: 0.030 },
+  pilot: { level: 0.80, noise: 0.035 },
+  "traffic-two": { level: 0.78, noise: 0.040 },
+  "traffic-three": { level: 0.76, noise: 0.045 },
+  "traffic-four": { level: 0.77, noise: 0.042 },
+  traffic: { level: 0.78, noise: 0.040 },
+};
+
 export async function loadRadioManifest(fetchImpl = globalThis.fetch) {
   if (typeof fetchImpl !== "function") return { clips: {} };
   const response = await fetchImpl(MANIFEST_URL);
@@ -33,30 +74,53 @@ export function createRadioVoice(context, destination, {
   engineMaster = null,
   fetchImpl = globalThis.fetch,
 } = {}) {
+  // Two cascaded biquads per band edge give radio-steep 4th-order skirts; the peaking stage
+  // between them is the 2 kHz presence bark that makes a channel read as "radio".
   const highpass = context.createBiquadFilter();
   highpass.type = "highpass";
-  highpass.frequency.value = 300;
-  highpass.Q.value = 0.72;
+  highpass.frequency.value = 320;
+  highpass.Q.value = 0.54;
+
+  const highpass2 = context.createBiquadFilter();
+  highpass2.type = "highpass";
+  highpass2.frequency.value = 320;
+  highpass2.Q.value = 1.31;
+
+  const presence = context.createBiquadFilter();
+  presence.type = "peaking";
+  presence.frequency.value = 2_000;
+  presence.Q.value = 1.2;
+  presence.gain.value = 5;
 
   const lowpass = context.createBiquadFilter();
   lowpass.type = "lowpass";
-  lowpass.frequency.value = 3_250;
-  lowpass.Q.value = 0.68;
+  lowpass.frequency.value = 3_100;
+  lowpass.Q.value = 0.54;
 
+  const lowpass2 = context.createBiquadFilter();
+  lowpass2.type = "lowpass";
+  lowpass2.frequency.value = 3_100;
+  lowpass2.Q.value = 1.31;
+
+  // Limiter territory, not bus glue: hard knee, high ratio, audible AGC pumping on release.
   const compressor = context.createDynamicsCompressor();
-  compressor.threshold.value = -27;
-  compressor.knee.value = 4;
-  compressor.ratio.value = 7;
-  compressor.attack.value = 0.002;
-  compressor.release.value = 0.09;
+  compressor.threshold.value = -24;
+  compressor.knee.value = 2;
+  compressor.ratio.value = 12;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.25;
 
   const output = context.createGain();
   output.gain.value = 0.82;
-  highpass.connect(lowpass).connect(compressor).connect(output).connect(destination);
+  highpass.connect(highpass2).connect(presence).connect(lowpass)
+    .connect(lowpass2).connect(compressor).connect(output).connect(destination);
 
   return {
     highpass,
     lowpass,
+    highpass2,
+    lowpass2,
+    presence,
     compressor,
     output,
     engineMaster,
@@ -66,9 +130,12 @@ export function createRadioVoice(context, destination, {
     decoded: new Map(),
     lastSequence: 0,
     source: null,
+    carrier: null,
+    carrierGain: null,
     enabled: false,
     generation: 0,
     squelchCount: 0,
+    unkeyCount: 0,
   };
 }
 
@@ -88,31 +155,78 @@ function ensureManifest(voice) {
   return voice.manifestPromise;
 }
 
-function playSquelch(voice, context) {
+function playSquelch(voice, context, sequence) {
   const source = context.createBufferSource();
   const gain = context.createGain();
-  source.buffer = noiseBuffer(context);
-  gain.gain.setValueAtTime(0.22, context.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.06);
+  const seconds = 0.040 + 0.030 * hash01(sequence, 1);
+  const level = 0.16 + 0.10 * hash01(sequence, 2);
+  source.buffer = noiseBuffer(context, seconds);
+  gain.gain.setValueAtTime(level, context.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + seconds + 0.01);
   source.connect(gain).connect(voice.highpass);
   source.start(context.currentTime);
-  source.stop?.(context.currentTime + 0.065);
+  source.stop?.(context.currentTime + seconds + 0.015);
   voice.squelchCount += 1;
 }
 
-function stopSource(voice) {
+/// Real RF produces its loudest noise burst when the transmitter unkeys.
+function playUnkey(voice, context, sequence) {
+  const source = context.createBufferSource();
+  const gain = context.createGain();
+  const seconds = 0.055 + 0.030 * hash01(sequence, 3);
+  const level = 0.22 + 0.10 * hash01(sequence, 4);
+  source.buffer = noiseBuffer(context, seconds);
+  gain.gain.setValueAtTime(level, context.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + seconds + 0.01);
+  source.connect(gain).connect(voice.highpass);
+  source.start(context.currentTime);
+  source.stop?.(context.currentTime + seconds + 0.015);
+  voice.unkeyCount += 1;
+}
+
+function startCarrier(voice, context, role) {
+  stopCarrier(voice);
+  const preset = ROLE_PRESETS[role] ?? ROLE_PRESETS.traffic;
+  const source = context.createBufferSource();
+  const gain = context.createGain();
+  source.buffer = carrierNoiseBuffer(context);
+  source.loop = true;
+  gain.gain.value = preset.noise;
+  source.connect(gain).connect(voice.highpass);
+  source.start(context.currentTime);
+  voice.carrier = source;
+  voice.carrierGain = gain;
+}
+
+function stopCarrier(voice) {
+  try {
+    voice.carrier?.stop?.();
+  } catch {
+    // An already-ended source throws in some engines.
+  }
+  voice.carrier = null;
+  voice.carrierGain = null;
+}
+
+function stopSource(voice, context = null, { unkey = false } = {}) {
   try {
     voice.source?.stop?.();
   } catch {
     // An already-ended AudioBufferSource throws in some engines.
   }
+  if (voice.source) voice.source.onended = null;
   voice.source = null;
+  stopCarrier(voice);
+  if (unkey && context) playUnkey(voice, context, voice.lastSequence);
 }
 
 function radioValue(state, field) {
   return state?.[`radio_${field}`] ?? state?.[`rapier_radio_${field}`];
 }
 
+// speechSynthesis renders straight to the device output: it CANNOT be routed through the
+// WebAudio chain above, so the fallback voice is intentionally unprocessed. Real clips are the
+// production path; this exists so a missing clip degrades to speech rather than silence.
 function deviceSpeech(voice, state, generation) {
   const synth = globalThis.speechSynthesis;
   const Utterance = globalThis.SpeechSynthesisUtterance;
@@ -131,28 +245,53 @@ function deviceSpeech(voice, state, generation) {
   synth.speak(utterance);
 }
 
-async function playTransmission(voice, context, state, generation) {
+function clipUrl(clip, sequence) {
+  const takes = Array.isArray(clip?.takes) && clip.takes.length > 0
+    ? clip.takes
+    : clip?.url ? [clip.url] : [];
+  if (takes.length === 0) return null;
+  const pick = Math.min(takes.length - 1, Math.floor(hash01(sequence, 5) * takes.length));
+  const take = takes[pick];
+  return typeof take === "string" ? take : take?.url ?? null;
+}
+
+async function playTransmission(voice, context, state, generation, sequence) {
   const manifest = await ensureManifest(voice);
   if (!voice.enabled || generation !== voice.generation) return;
   const clip = manifest.clips?.[radioValue(state, "id")];
-  if (!clip?.url) {
+  const url = clipUrl(clip, sequence);
+  if (!url) {
     deviceSpeech(voice, state, generation);
     return;
   }
 
   try {
-    let decoded = voice.decoded.get(clip.url);
+    let decoded = voice.decoded.get(url);
     if (!decoded) {
-      const response = await voice.fetchImpl(clip.url);
+      const response = await voice.fetchImpl(new URL(url, MANIFEST_URL));
       if (!response?.ok) throw new Error("radio clip unavailable");
       decoded = await context.decodeAudioData(await response.arrayBuffer());
-      voice.decoded.set(clip.url, decoded);
+      voice.decoded.set(url, decoded);
     }
     if (!voice.enabled || generation !== voice.generation) return;
     stopSource(voice);
+    const role = radioValue(state, "voice");
+    const preset = ROLE_PRESETS[role] ?? ROLE_PRESETS.traffic;
+    // ±1 dB level and ±1.5% rate jitter: inaudible as such, but no replay is sample-identical.
+    const level = preset.level * (0.891 + 0.218 * hash01(sequence, 6));
+    target(voice.output.gain, level, context.currentTime, 0.015);
     const source = context.createBufferSource();
     source.buffer = decoded;
+    source.playbackRate.value = 0.985 + 0.030 * hash01(sequence, 7);
     source.connect(voice.highpass);
+    source.onended = () => {
+      if (voice.source !== source) return;
+      voice.source = null;
+      stopCarrier(voice);
+      if (voice.enabled && generation === voice.generation)
+        playUnkey(voice, context, sequence);
+    };
+    startCarrier(voice, context, role);
     source.start(context.currentTime);
     voice.source = source;
   } catch {
@@ -188,11 +327,12 @@ export function updateRadioVoice(voice, context, state, { enabled = true } = {})
     target(voice.engineMaster.gain, 0.16, context.currentTime, 0.025);
   if (sequence <= 0 || sequence === voice.lastSequence) return;
 
+  const preempted = voice.source != null;
   voice.lastSequence = sequence;
   voice.generation += 1;
   const generation = voice.generation;
-  stopSource(voice);
+  stopSource(voice, context, { unkey: preempted });
   globalThis.speechSynthesis?.cancel?.();
-  playSquelch(voice, context);
-  void playTransmission(voice, context, state, generation);
+  playSquelch(voice, context, sequence);
+  void playTransmission(voice, context, state, generation, sequence);
 }
