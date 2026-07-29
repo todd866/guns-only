@@ -12,6 +12,7 @@
 
 import { resolvePropulsionCharacter } from "./audio_character.js";
 import { standardAtmosphereDensity } from "./atmosphere_audio.js";
+import { rapierPropulsionThresholds } from "../mission/rapier_guidance.js";
 
 const FAN_ORDER_RATIOS = Object.freeze([
   1.0, 1.97, 2.99, 4.03, 4.96, 6.02, 7.05, 8.11,
@@ -23,9 +24,6 @@ const SPOOL_UP_PER_SECOND = 0.22;
 const SPOOL_DOWN_PER_SECOND = 0.34;
 const RAPIER_TURBINE_COAST_UP_PER_SECOND = 0.7;
 const RAPIER_TURBINE_COAST_DOWN_PER_SECOND = 0.12;
-// Matches Rapier map overlap (turbine fade / ram light) — teach handover by ear.
-const HANDOVER_MACH_START = 1.9;
-const HANDOVER_MACH_END = 2.8;
 const POWER_UP_PER_SECOND = 1.8;
 const POWER_DOWN_PER_SECOND = 2.6;
 const ACCENT_DECAY_PER_SECOND = 3.2;
@@ -928,8 +926,7 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   // correctly zero.
   const streams = isRapier ? rapierThrustStreams(state) : null;
   const fallbackHandover = isRapier
-    ? smoothstep(clamp01(
-      (mach - HANDOVER_MACH_START) / (HANDOVER_MACH_END - HANDOVER_MACH_START)))
+    ? rapierHandoverMachFallback(state)
     : 0;
   const handover = streams?.hasThrust
     ? streams.ramShare
@@ -1455,4 +1452,13 @@ function smoothstep(value) {
 
 function clamp01(value) {
   return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+/// Mach-only handover fraction for old snapshots without thrust-kn streams.
+/// Uses the same published thresholds as briefing / teaching copy.
+export function rapierHandoverMachFallback(state) {
+  const { ramLightMach, fullRamMach } = rapierPropulsionThresholds(state);
+  const mach = Math.max(0, finiteNumber(state?.mach) ?? 0);
+  const span = Math.max(1e-6, fullRamMach - ramLightMach);
+  return smoothstep(clamp01((mach - ramLightMach) / span));
 }
