@@ -104,6 +104,34 @@ public sealed class F22SupersonicPerformanceTests {
         }
     }
 
+    [Fact]
+    public void CorridorPsBallparkForAuditDocumentation() {
+        // Living numbers for docs/f22-performance-audit.md. Signed gates above remain authoritative.
+        LevelPoint dry40 = EvaluateLevelPoint(40_000.0 * FeetToMetres, 1.50, 1.00,
+            FlightModel.F22APublicDataSurrogate.MassKg);
+        LevelPoint dry50 = EvaluateLevelPoint(50_000.0 * FeetToMetres, 1.50, 1.00,
+            FlightModel.F22APublicDataSurrogate.MassKg);
+        LevelPoint ab20 = EvaluateLevelPoint(50_000.0 * FeetToMetres, 2.00, 1.35,
+            FlightModel.F22APublicDataSurrogate.MassKg);
+        LevelPoint ab23 = EvaluateLevelPoint(50_000.0 * FeetToMetres, 2.30, 1.35,
+            FlightModel.F22APublicDataSurrogate.MassKg);
+        LevelPoint ab25 = EvaluateLevelPoint(50_000.0 * FeetToMetres, 2.50, 1.35,
+            FlightModel.F22APublicDataSurrogate.MassKg);
+
+        Assert.True(dry40.SpecificExcessPowerMps > 10.0,
+            $"40k M1.5 dry Ps {dry40.SpecificExcessPowerMps:F1} m/s "
+            + $"(T {dry40.AxialThrustN / 1000.0:F1} kN / D {dry40.DragN / 1000.0:F1} kN)");
+        Assert.True(dry50.SpecificExcessPowerMps > 10.0,
+            $"50k M1.5 dry Ps {dry50.SpecificExcessPowerMps:F1} m/s");
+        Assert.True(ab20.SpecificExcessPowerMps > 10.0,
+            $"50k M2.0 AB Ps {ab20.SpecificExcessPowerMps:F1} m/s");
+        Assert.True(ab23.SpecificExcessPowerMps < 0.0,
+            $"50k M2.3 AB Ps {ab23.SpecificExcessPowerMps:F1} m/s");
+        Assert.True(ab25.SpecificExcessPowerMps < ab23.SpecificExcessPowerMps,
+            $"50k M2.5 AB Ps {ab25.SpecificExcessPowerMps:F1} m/s should sit below M2.3 "
+            + $"{ab23.SpecificExcessPowerMps:F1}");
+    }
+
     static LevelPoint EvaluateLevelPoint(
         double altitudeM, double mach, double power, double massKg) {
         AircraftParams f22 = FlightModel.F22APublicDataSurrogate;

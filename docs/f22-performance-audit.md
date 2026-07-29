@@ -1,6 +1,6 @@
 # F-22 public-data surrogate performance audit
 
-Date: 2026-07-28
+Date: 2026-07-28 · Re-pass: 2026-07-29 (`docs/superpowers/specs/2026-07-29-f22-flight-realism-repass-design.md`)
 
 ## Scope and claim boundary
 
@@ -24,33 +24,49 @@ Primary sources:
 - <https://www.af.mil/News/Article-Display/Article/130068/raptor-meets-new-challenges-expands-capabilities/>
 - <https://ntrs.nasa.gov/api/citations/20180003207/downloads/20180003207.pdf?attachment=true>
 
+## M2.5 out of claim
+
+Playtesting often asks why the jet “won’t make M2.5.” That is expected under this surrogate.
+
+USAF public language is **Mach two class**, not a published M2.5 sustained dash. The executable
+ledger therefore requires:
+
+- **positive** level-flight specific excess power at FL500 / **M2.0** full augmentation;
+- **negative** excess power at FL500 / **M2.3** and **M2.5** full augmentation;
+- FL450 dynamic full-AB accel only into about **M1.9–2.15**.
+
+So M2.5 is a named **negative-Ps** contract (`F22SupersonicPerformanceTests`), not a bug to
+retune wave drag for. Re-pass 2026-07-29 did not open the dash ceiling.
+
 ## Findings
 
 | Area | Result | Evidence / disposition |
 | --- | --- | --- |
-| Supersonic drag | **Broken** | The F-22 omitted `WaveDragPeakMach`, so the transonic quadratic grew forever. At M1.2 it multiplied zero-lift drag by 5.375; at M1.5 by 22.175. Force-balance reproduction puts the resulting augmented ceiling near M1.25 at FL500, matching the reported symptom. The rise now holds at M1.11. |
-| Drag-peak calibration | **Surrogate, not published data** | No cited source selects M1.11. It is a corridor calibration within a checked M1.10–M1.12 sensitivity band; all three retain positive full-mass Ps at 40,000 ft / M1.5 dry and 50,000 ft / M2.0 augmented. The held plateau is intentionally coarser than a real post-peak drag reduction. |
-| High-altitude thrust | **Broken outside the normal fight band** | The shared afterburning-turbofan surrogate clamped lapse to at least 30%, so thrust stopped falling in very thin air. The lower clamp is now zero for the F-22, F-35C, Su-27-family, and Cheap Rapier users; sibling regressions assert continued lapse from 70,000 to 100,000 ft. The existing density/Mach surrogate remains explicit and bounded above. |
-| Atmosphere and Mach | Pass | The 1976 standard-atmosphere implementation includes the isothermal lower stratosphere and computes Mach from local speed of sound. No hidden sea-level Mach conversion or TAS/IAS mix caused the wall. |
-| Automatic surfaces | Pass | Leading-edge flaps retract by 300 KCAS and add lift-limit only; the speed brake deploys only near idle. Full-power supersonic runs remain clean. |
-| Speed-hold feed-forward | **Known mismatch; not a dash limiter** | `DetentLayer.ThrottleForRequiredThrust` estimates every non-J47 engine with linear density lapse, while the F-22 force kernel uses the square-root-density turbofan surrogate. Full-power flight bypasses this estimate, so it did not cause the M1.2 wall. Correcting it belongs with a propulsion-map API rather than another duplicated formula in this patch. |
-| Mass and fuel | Pass as a rounded public-data surrogate | The 19,535 kg fuel-free mass is about 43,067 lb, 273 lb (0.6%) below the fact sheet's 43,340 lb weight anchor. Adding about 18,000 lb internal fuel closes to the 27,700 kg full-fuel reference mass. Mission 7 stages a lighter combat fuel load and updates mass through the fuel chain. |
-| Installed thrust class | Pass as a surrogate | 233.6 kN military plus the 1.35 lever stop gives 315.4 kN maximum, close to the public two-by-35,000-lbf class. The altitude/Mach curve and fuel flows remain labelled surrogates, not an F119 deck. |
-| Subsonic turn / high alpha | Covered elsewhere | +9 G protected flight, the labelled override, q-limited controls, body-axis high-alpha forces, thrust-vector allocation, and automatic leading-edge flaps already have dedicated corridor tests. This change does not retune them. |
-| Thermal / inlet / exact ceiling | **Not represented well enough for a hard claim** | The F-22 declares no thermal limit and the generic turbofan has no validated inlet/installation deck. Tests therefore bind only 40–50 kft public corridors and a Mach-two-class bracket, not an exact top speed or service ceiling. |
-| Range / endurance | **Unvalidated surrogate** | Fuel-flow anchors are transparent gameplay values. They should not be used to claim F-22 range or endurance until a separate public-data fuel audit is authored. |
+| Supersonic drag | **Fixed (2026-07-28)** | The F-22 omitted `WaveDragPeakMach`, so the transonic quadratic grew forever. The rise now holds at M1.11. |
+| Drag-peak calibration | **Surrogate, not published data** | No cited source selects M1.11. Corridor calibration within M1.10–M1.12; retains positive full-mass Ps at 40k / M1.5 dry and 50k / M2.0 AB. |
+| High-altitude thrust | **Fixed (2026-07-28)** | Former 30% lapse floor removed for shared turbofan users; regressions assert continued lapse 70k→100k ft. |
+| Atmosphere and Mach | Pass | 1976 standard atmosphere; Mach from local speed of sound. |
+| Automatic surfaces | Pass | LEF / speed-brake behaviour leaves full-power supersonic runs clean. |
+| Speed-hold feed-forward | **Fixed (2026-07-29)** | `DetentLayer.ThrottleForRequiredThrust` now uses `TurbofanPublicDataSurrogate` (√density × Mach-ram), matching `AircraftSim`. Lever invert is against unit-military available thrust, then clamped to `MaxThrustFraction`. Covered by `TurbofanThrustEstimateTests`. |
+| Mass and fuel | Pass as a rounded public-data surrogate | ~43,067 lb fuel-free vs 43,340 lb fact-sheet anchor (~0.6%). |
+| Installed thrust class | Pass as a surrogate | 233.6 kN military × 1.35 stop ≈ public two-by-35,000-lbf class. |
+| Subsonic turn / high alpha | Covered elsewhere | See `docs/f22-high-alpha-review.md` and high-alpha corridor tests. |
+| Thermal / inlet / exact ceiling | **Not represented well enough for a hard claim** | No thermal limit; no validated inlet deck. Bind only 40–50 kft public corridors + Mach-two-class bracket. |
+| Range / endurance | **Unvalidated surrogate** | Fuel-flow anchors are gameplay-transparent; do not claim F-22 range/endurance from them. |
 
 ## Executable gates
 
-`F22SupersonicPerformanceTests` now checks:
+`F22SupersonicPerformanceTests` checks:
 
-1. the original transonic calibration is unchanged below M1.11 and no longer grows beyond it;
-2. positive level-flight specific excess power at 40,000 ft / M1.5 in military power;
-3. positive level-flight specific excess power at 50,000 ft / M1.5 in military power;
-4. positive level-flight specific excess power at 50,000 ft / M2.0 in full augmentation;
-5. negative excess power by 50,000 ft / M2.3, bounding the surrogate to Mach-two class;
-6. dynamic acceleration from M1.05 through the former wall and into the dry-supercruise corridor,
-   plus an augmented Mach-two run at FL450;
-7. continued thrust lapse above the former 30% floor for every airframe sharing that engine model.
+1. transonic calibration unchanged below M1.11 and held above the peak;
+2. positive level-flight Ps at 40,000 ft / M1.5 military;
+3. positive level-flight Ps at 50,000 ft / M1.5 military;
+4. positive level-flight Ps at 50,000 ft / M2.0 full augmentation;
+5. negative excess power at 50,000 ft / M2.3 full augmentation (Mach-two-class upper bound);
+6. negative excess power at 50,000 ft / M2.5 full augmentation (explicit out-of-claim lock);
+7. dynamic accel at FL450: military through the former wall into dry supercruise; full AB into
+   Mach-two class (~M1.9–2.15);
+8. continued turbofan thrust lapse above the former 30% floor for shared engine users;
+9. audit ballpark fact confirming M2.5 Ps sits below M2.3 Ps.
 
 These are capability corridors, not curve fitting to unpublished point performance.
