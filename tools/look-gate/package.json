@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Ukraine soft-world look gate — palette + structure vs fiction-tagged art-refs.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "compare": "node compare.mjs"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  }
+}

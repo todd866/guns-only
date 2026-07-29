@@ -1,0 +1,30 @@
+{
+  "mode": "warn",
+  "notes": "Palette ceilings calibrated from 2026-07-29 terrain-look stills vs no-mans-land-mood-v1 (engine ≠ painted ref). Structure/edge catch SNES flats. Flip mode to fail when Ukraine desktop look is intentionally closer to corpus.",
+  "expectedProfile": {
+    "qualityTier": "desktop",
+    "maxGovernorLevel": 0
+  },
+  "captures": {
+    "steppe-low": {
+      "maxPaletteDistance": 3.6,
+      "maxStructureDistance": 2.8,
+      "minGroundEdgeEnergy": 2.5
+    },
+    "corridor-mid": {
+      "maxPaletteDistance": 2.1,
+      "maxStructureDistance": 3.2,
+      "minGroundEdgeEnergy": 1.2
+    },
+    "high-oblique": {
+      "maxPaletteDistance": 1.7,
+      "maxStructureDistance": 4.0,
+      "minGroundEdgeEnergy": 0.4
+    },
+    "*": {
+      "maxPaletteDistance": 3.6,
+      "maxStructureDistance": 3.5,
+      "minGroundEdgeEnergy": 1.0
+    }
+  }
+}

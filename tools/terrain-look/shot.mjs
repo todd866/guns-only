@@ -185,7 +185,14 @@ async function main() {
       if (size < MIN_PNG_BYTES) {
         throw new Error(`${view.name}: PNG is only ${size} bytes (blank render?)`);
       }
-      captures.push({ ...view, filePath, size, diagnostics });
+      // Look-gate provenance: never score governor-shed / wrong-tier frames as desktop Ukraine.
+      const provenance = Object.freeze({
+        qualityTier: diagnostics?.qualityTier ?? "desktop",
+        governorLevel: Number(diagnostics?.governorLevel) || 0,
+        softWorld: true,
+        terrainId: diagnostics?.terrainId ?? EXPECTED_TERRAIN_ID,
+      });
+      captures.push({ ...view, filePath, size, diagnostics, provenance });
       console.log(`ok  ${filePath} (${size} bytes)`);
     }
 
@@ -196,7 +203,11 @@ async function main() {
       throw new Error(`failed requests:\n${requestFailures.join("\n")}`);
     }
     await writeFile(join(OUT_DIR, "views.json"),
-      `${JSON.stringify({ viewport: [1440, 900], captures }, null, 2)}\n`);
+      `${JSON.stringify({
+        viewport: [1440, 900],
+        lookGate: { theatre: "ukraine", softWorld: true },
+        captures,
+      }, null, 2)}\n`);
   } finally {
     await browser.close();
     await site.close();

@@ -38,6 +38,12 @@
         "networkBytes": 3948198,
         "errors": 0,
         "disposed": false
+      },
+      "provenance": {
+        "qualityTier": "desktop",
+        "governorLevel": 0,
+        "softWorld": true,
+        "terrainId": "terrain.ukraine.rapier-range.atlas.v1"
       }
     },
     {
@@ -74,6 +80,12 @@
         "networkBytes": 5437648,
         "errors": 0,
         "disposed": false
+      },
+      "provenance": {
+        "qualityTier": "desktop",
+        "governorLevel": 0,
+        "softWorld": true,
+        "terrainId": "terrain.ukraine.rapier-range.atlas.v1"
       }
     },
     {
@@ -110,7 +122,17 @@
         "networkBytes": 6336262,
         "errors": 0,
         "disposed": false
+      },
+      "provenance": {
+        "qualityTier": "desktop",
+        "governorLevel": 0,
+        "softWorld": true,
+        "terrainId": "terrain.ukraine.rapier-range.atlas.v1"
       }
     }
-  ]
+  ],
+  "lookGate": {
+    "theatre": "ukraine",
+    "softWorld": true
+  }
 }
