@@ -120,6 +120,8 @@ static class Scenarios {
             Sample("joker"),
             WaitUntilRadio("pilot-bingo", timeoutSeconds: 180),
             Sample("bingo"),
+            WaitUntilRadio("control-bingo-rtb", timeoutSeconds: 30),
+            Sample("bingo-rtb"),
         ], BeatFactory: LowFuelInterceptCard,
             RequireRadioIds: ["pilot-joker", "pilot-bingo", "control-bingo-rtb"]),
         new("rapier-circuits", "Rapier circuits — ambient pattern through recovery", 11, [
@@ -223,18 +225,17 @@ static class Scenarios {
         Math.Max(1, (int)Math.Round(seconds * AircraftSim.TickHz));
 
     /// <summary>
-    /// Near-cruise Intercept setup: start just below FL700 so the director initializes in
-    /// RamClimb (radio captures that), then the climb-through edge into Intercept fires
-    /// CONTROL commit. Flat FL700/M2.8 on tick 0 would init already in Intercept and miss
-    /// the rising-edge call.
+    /// Airborne attach in the fight box: FL650 / M2.5 so ReachFight LevelDash or DirectJoin
+    /// reaches Intercept without camping FL700. Contact ~85 km keeps Attack at bay while
+    /// outscoring ZoomLob at this energy; MissionRadio init-commit covers airborne attach.
     /// </summary>
     static BeatSetup AirborneInterceptCard() {
         BeatSetup baseline = Beats.RapierIntercept();
-        const double altitudeM = 70_000.0 * 0.3048 - 500.0;
+        const double altitudeM = 65_000.0 * 0.3048;
         const double startNorthM = 300_000.0;
-        // Far enough that RamClimb→Intercept happens before contact ≤ 30 km (Attack).
-        const double contactRangeM = 120_000.0;
-        double speedMps = 2.8 * StandardAtmosphere1976.Instance.Sample(altitudeM).SpeedOfSoundMps;
+        // ~85 km: LevelDash beats ZoomLob at FL650/M2.5; still well outside 30 km Attack.
+        const double contactRangeM = 85_000.0;
+        double speedMps = 2.5 * StandardAtmosphere1976.Instance.Sample(altitudeM).SpeedOfSoundMps;
         return baseline with {
             Player = baseline.Player with {
                 Position = new Vec3D(0.0, altitudeM, startNorthM),

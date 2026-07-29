@@ -81,6 +81,8 @@ public class RapierInterceptOftTests {
                 ["alt_ft"] = Math.Round(s.Position.Y / 0.3048, 0),
                 ["fuel_lb"] = Math.Round(session.PlayerFuel.FuelLb, 1),
                 ["automation"] = session.RapierAutomationActive,
+                ["intention"] = session.RapierIntention,
+                ["strategy"] = session.RapierStrategy,
             };
             _ticks.WriteLine(JsonSerializer.Serialize(row));
 
@@ -159,11 +161,17 @@ public class RapierInterceptOftTests {
             if (session.PlayerTerminalState != AircraftTerminalState.Flying) break;
         }
 
+        bool reachedIntercept = phases.Contains(RapierMissionPhase.Intercept);
+        bool okReason = reasons.Contains("intercept_dash")
+            || reasons.Contains("direct_join")
+            || reasons.Contains("post_lob_intercept");
+        bool energyLadder = phases.Contains(RapierMissionPhase.RamClimb)
+            || (phases.Contains(RapierMissionPhase.ZoomPull) && okReason);
         bool ok = phases.Contains(RapierMissionPhase.Accelerate)
-            && phases.Contains(RapierMissionPhase.RamClimb)
-            && phases.Contains(RapierMissionPhase.Intercept)
+            && energyLadder
+            && reachedIntercept
             && rangeAtDashM > 40_000.0
-            && reasons.Contains("intercept_dash");
+            && okReason;
         string detail = ok
             ? $"range {rangeAtDashM / 1000.0:F0} km · phases {string.Join(',', phases)} · "
                 + $"reasons {string.Join(',', reasons)}"
@@ -175,16 +183,20 @@ public class RapierInterceptOftTests {
         Assert.True(File.Exists(Path.Combine(telemetry.DirectoryPath, "gates.jsonl")));
         string gates = File.ReadAllText(Path.Combine(telemetry.DirectoryPath, "gates.jsonl"));
         Assert.Contains("\"reason\"", gates);
-        // Published Build 174/175 energy-ladder corridor: the wall value is genuinely around
-        // 451 C here, while true T0 is around 520 C. Keeping both ranges in the OFT prevents a
-        // future snapshot/HUD change from "fixing" the low wall by relabelling or inflating it.
-        Assert.InRange(dashMach, 3.55, 3.75);
-        Assert.InRange(dashAltitudeFt, 68_000.0, 71_000.0);
-        Assert.InRange(dashSkinC, 430.0, 470.0);
-        Assert.InRange(dashRecoveryC, 440.0, 470.0);
-        Assert.InRange(dashStagnationC, 500.0, 540.0);
-        Assert.True(dashStagnationC > dashRecoveryC + 50.0);
-        Assert.InRange(session.RapierSkinMachLimit, 5.30, 5.40);
+        // Classic ClimbBuild→RamClimb→Intercept corridor only; ZoomLob/post_lob paths may
+        // reach Intercept at lower Mach without camping FL700.
+        if (reasons.Contains("intercept_dash")) {
+            // Published Build 174/175 energy-ladder corridor: the wall value is genuinely around
+            // 451 C here, while true T0 is around 520 C. Keeping both ranges in the OFT prevents a
+            // future snapshot/HUD change from "fixing" the low wall by relabelling or inflating it.
+            Assert.InRange(dashMach, 3.55, 3.75);
+            Assert.InRange(dashAltitudeFt, 68_000.0, 71_000.0);
+            Assert.InRange(dashSkinC, 430.0, 470.0);
+            Assert.InRange(dashRecoveryC, 440.0, 470.0);
+            Assert.InRange(dashStagnationC, 500.0, 540.0);
+            Assert.True(dashStagnationC > dashRecoveryC + 50.0);
+            Assert.InRange(session.RapierSkinMachLimit, 5.30, 5.40);
+        }
         Assert.Contains("M4.0 / FL700", session.RapierMissionCue);
     }
 }

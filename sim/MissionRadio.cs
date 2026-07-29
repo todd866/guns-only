@@ -276,6 +276,16 @@ public sealed class MissionRadioDirector {
                 QueueLaunch(state);
             if (state.MissionActive && !state.PatternOnly && state.RecoveryApproach)
                 QueueRecoveryCheckIn(state);
+            // Airborne attach may init already in Intercept (DirectJoin / LevelDash). The rising
+            // edge in ObserveTacticalMission never fires on tick 0, so voice COMMIT once here.
+            if (state.MissionActive && state.RapierMissionAvailable && !state.CatapultActive
+                && !state.PatternOnly
+                && state.RapierPhase == RapierMissionPhase.Intercept) {
+                Enqueue(state, Tactical(
+                    "control-commit", "CONTROL", Player,
+                    $"{PlayerSpoken}, commit.",
+                    "controller", MissionRadioPriority.Advisory));
+            }
             // Gun employment before the director existed is not a package call — see
             // ObserveWeaponsAndFuel. Classic dogfight / mid-burst attach stays silent.
             if (state.GunRoundsFired > 0) {

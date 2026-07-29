@@ -25,6 +25,7 @@ static class WireState {
         "checklist_active", "checklist_id", "checklist_done", "checklist_total",
         "checklist_name", "checklist_next",
         "rapier_mission_phase_name", "rapier_circuit_leg", "rapier_mission_cue",
+        "rapier_intention", "rapier_strategy",
         "player_weapons_authorized", "gun_ammo", "lifecycle",
     ];
 
@@ -152,6 +153,10 @@ static class WireState {
             .Append(SnapshotJson.JsonString(session.RapierCircuitLeg)).Append(',');
         json.Append("\"rapier_mission_cue\":")
             .Append(SnapshotJson.JsonString(session.RapierMissionCue)).Append(',');
+        json.Append("\"rapier_intention\":")
+            .Append(SnapshotJson.JsonString(session.RapierIntention)).Append(',');
+        json.Append("\"rapier_strategy\":")
+            .Append(SnapshotJson.JsonString(session.RapierStrategy)).Append(',');
         AppendBool(json, "player_weapons_authorized", session.PlayerWeaponsAuthorized);
         json.Append("\"gun_ammo\":").Append(session.PlayerGun.AmmoRemaining);
         json.Append('}');
