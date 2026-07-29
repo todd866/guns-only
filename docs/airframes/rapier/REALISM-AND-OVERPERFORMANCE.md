@@ -16,7 +16,7 @@ the issues below are closed or deliberately accepted as fiction.
 | **Root cause** | The field name, value, and comparator described different things. It carried **lagged wall skin**, not stagnation `T0`; the lag target was turbulent flat-skin recovery `Taw`; 1200 °C is an authored CMC material capability, not a qualified whole-aircraft operating limit. |
 | **Evidence** | Build 174 Intercept OFT at M3.635 / FL69344: ambient −55.4 °C, perfect-gas `T0` 519.9 °C, recovery 450.8 °C, lagged wall 450.6 °C, CMC card 1200 °C. The low wall reading is physically consistent; the label and “margin” were not. |
 | **Fix** | Snapshot 1.19 publishes `rapier_skin_temp_c`, `rapier_recovery_temp_c`, true `rapier_stagnation_temp_c`, `rapier_cmc_capability_c`, and conservative `rapier_cmc_margin_c`. Normal HUD copy shows `SKIN` and `T0`, suppresses the giant pseudo-margin, and states `ENGINE/INLET LIMITING`. |
-| **Ceiling** | Rapier screens the raw CMC capability against inlet/leading-edge `T0`, not flat-skin recovery: ~M5.37 rather than ~M5.72 at FL700. The Intercept cue advertises commanded M4.0, not that material screening ceiling. |
+| **Ceiling** | Rapier screens the raw CMC capability against inlet/leading-edge `T0`, not flat-skin recovery: ~M5.37 rather than ~M5.72 at FL700. The Intercept cue advertises measured design dash **M3.55**, not that material screening ceiling; Mach 4 remains SE-bible fiction only. |
 | **Epistemic** | No 650 °C limit was invented. The 12 s / 180 s wall lags remain **provisional surrogates**; inlet, bondline, areal heat capacity, heat transfer, emissivity, and qualification data are open. |
 
 Primary basis: [NASA stagnation temperature](https://www.grc.nasa.gov/WWW/BGH/stagtmp.html),
@@ -106,14 +106,14 @@ Map constants (owner): `RamFadeStartMach` 2.0 · `FullRamMach` 2.8 · `TurbineFa
 | Catapult / launch | Maglev gallery → 12° ramp; ~110 m/s end | Present (EM climb / rail / portal) | Surrogate launcher geometry | surrogate | 4 | `catapult_*` |
 | Subsonic climb → FL560 | Turbine; ~M0.90; clean config | Present (turbine + core beds) | OFT / reconstruction | surrogate | — | `engine_rpm_pct`, thrust kn, mach |
 | Transonic push | Wave-drag peak ~M1.18; push through | Present (power + q rush) | Polar knots | surrogate | — | mach, q, throttle |
-| Turbine→ram bucket | Map M2.0→2.8 overlap; real thrust hole | **Drifted** — audio still has parallel handover knots (historically 1.6–2.7 / 1.9–2.8 literals) | Map + Build 172 | open finding | **0→1** | map thresholds, `rapier_*_thrust_kn`, mach |
-| Ram climb / dash | Climb targets M3.15 (below spill); OFT peak ~M3.69; briefing still sells M4 | **Drifted** if ear sells M4 as closed | Reconstruction M3.69 | provisional / fiction | **1** | dash claim, commanded mach, spill |
+| Turbine→ram bucket | Map M2.0→2.8 overlap; real thrust hole | Thrust-kn live mix; Mach-fallback owns map thresholds | Map + Build 172 | surrogate | — | map thresholds, `rapier_*_thrust_kn`, mach |
+| Ram climb / dash | Climb targets M3.15 (below spill); OFT peak ~M3.69; mission commands **MeasuredDashMach 3.55** | Cue matches measured dash; M4 fiction not commanded | Reconstruction M3.69 | provisional | **1 ✓** | `rapier_design_dash_mach`, commanded mach, spill |
 | FL700 capture | Geometric gate; predictive unload cues shipped post-Build 173 | Soft (rush + cue), not capture-specific bed | Reconstruction zoom error | surrogate | 2 | phase, alt error, G |
-| Thin-air authority | ~0.90 G ordinary law / ~2.59 G physical @ FL720/M3.5 design gross | Missing bind-by-ear (buffet ≠ authority ceiling) | Aero chapter calc | open finding | **2** | alpha limit, q, load |
+| Thin-air authority | Mass/q normal-law floor ≥ ~1.05 g; physical still ~few g @ FL720/M3.5; inertias scaled to 11 t | Missing bind-by-ear (buffet ≠ authority ceiling) | Aero unit + ClampNz | provisional | **2 ✓** | alpha limit, q, mass, load |
 | Zoom coast / exo | q→0; RCS residual; turbine density fade | Present (coast silence + descending whine) | Audio tests | surrogate | — | thrust kn, q, `rapier_rcs_*` |
 | RCS | Finite 40 kg cold-gas | Present (ticks / hiss) | Zoom-lob design | provisional | — | `rapier_rcs_*` |
-| High-q dive / pull | Structural 12/15 demand; no V-q damage persistence | Missing over-q / aeroelastic ear | Open finding | open finding | **3** | q, G, structural limit |
-| Inlet off-design | Scalar α/β recovery above M2; no unstart state | Distortion cue soft; no unstart gulp | NASA mixed-compression refs | provisional | **3** | inlet recovery, alpha, beta |
+| High-q dive / pull | Soft `rapier_over_q` above 80 kPa placard; no structural damage model | Soft over-q awareness (hot HUD cue deferred) | Authored placard | provisional | **3 ✓** | `rapier_over_q`, q |
+| Inlet off-design | Sticky unstart seed above ram + α/β recovery floor | Distortion cue soft; unstart gulp still thin | NASA-inspired surrogate | provisional | **3 ✓** | `rapier_inlet_unstart`, recovery, alpha, beta |
 | Trap / pattern | Hook recovery | Present (snatch / stretch) | Better-sound Phase 2 | surrogate | — | `arrest_*` |
 | Reentry rush | Rising q after coast | Deferred distinct character | Better-sound Phase 2 open | provisional | **4** | q, density |
 
@@ -121,14 +121,14 @@ Map constants (owner): `RamFadeStartMach` 2.0 · `FullRamMach` 2.8 · `TurbineFa
 
 | Issue | Pass | Disposition |
 | --- | ---: | --- |
-| Sustained air-breathing M4 / mission copy drift | 1 | Fiction accept **or** retune; stop dual story |
+| Sustained air-breathing M4 / mission copy drift | 1 | **Closed** — MeasuredDashMach 3.55; M4 fiction only |
 | Engine buff history (prefer guidance) | 1 | Keep `DesignMach=2.6` normaliser; no silent ratio buffs |
-| Normal-law too tight @ FL720 | 2 | Mass/q/inlet-aware law |
-| Inertias ~7.85 t on 11 t gross | 2 | Re-derive |
+| Normal-law too tight @ FL720 | 2 | **Closed** — mass/q floor under physical/Mach schedule |
+| Inertias ~7.85 t on 11 t gross | 2 | **Closed** — ×11090/7850 |
 | 12/15 G structural ceilings | 2–3 | Keep demand≠lift; ledger later |
-| Scalar inlet only | 3 | Unstart/buzz seed |
-| No aeroelastic / V-q damage | 3 | Envelope awareness before full aeroelastics |
-| Full aero tables | 4 | Only if 1–3 leave evidenced wrong-feel |
+| Scalar inlet only | 3 | **Closed seed** — sticky unstart + recovery floor (still provisional) |
+| No aeroelastic / V-q damage | 3 | **Closed awareness** — `rapier_over_q` placard; full aeroelastics deferred |
+| Full aero tables | 4 | **Deferred** — Passes 1–3 closed without evidenced wrong-feel gate |
 | CMC 1200 °C vs dash claim | 1 | Keep CMC materials; pair with honest dash |
 
 ---
@@ -147,8 +147,8 @@ Disposition per row: **own** (already single-sourced) · **fix** (must consume o
 | Runtime transition banners | Formatted from map | map | `SimulationSession` emits `RAM LIGHT · M{RamFadeStartMach}` / `FULL RAM · M{FullRamMach}` from map constants | own |
 | Intercept briefing prose | Historically M1.6/M2.2; kernel-publish path shipped | map | `app.js` brief uses `{RAM_LIGHT_MACH}` / `{FULL_RAM_MACH}`; `rapierBriefingText` substitutes from `rapier_*_mach` snapshot fields | own |
 | Mission director climb / Accelerate M2.2 | M3.15 climb; `accel_to_m2.2` gate M2.20 | mission | `RapierMission.cs`: RamClimb `targetMach=3.15`; Accelerate gate `accel_to_m2.2` / M2.20 — profile gates, not map thresholds | own |
-| Intercept M4.0 cue / design-dash fiction | Authored M4.0 intercept; skin-clamped | mission + audit | `RapierMission.cs`: Intercept authored M4.0 skin-clamped; OFT peaks ~M3.7; M4 remains aspirational fiction — not closed in Pass 0 | accept → Pass 1 dash story |
-| Identity / campaign brief | “design dash M4 (fiction)” | audit dash claim | `app.js` configuration labels “design dash M4 (fiction) · OFT peak ~M3.7”; brief prose says Mach 4 aspirational | accept |
+| Intercept M4.0 cue / design-dash fiction | Authored M4.0 intercept; skin-clamped | mission + audit | **Pass 1 closed:** `MeasuredDashMach=3.55`; Intercept/Escape command it; `rapier_design_dash_mach` published; M4 fiction only | own |
+| Identity / campaign brief | “design dash M4 (fiction)” | audit dash claim | Briefing uses `{DESIGN_DASH_MACH}`; copy states Mach 4 is bible fiction, never commanded | own |
 | `engine_audio.js` Mach-fallback | `rapierPropulsionThresholds` | map via published snapshot | `rapierHandoverMachFallback` reads `rapier_ram_light_mach` / `rapier_full_ram_mach`; live mix prefers thrust-kn share | own |
 | Better-sound spec regime table | M2.0–M2.8 map bands; thrust-kn live mix | map | `2026-07-28-better-sound-design.md` regime table aligned with published thresholds (Pass 0 exit) | own |
 | HUD combined-cycle lesson | Thresholds | map | `rapierCycleTeachPresentation` → `rapierPropulsionThresholds(state)` reads published `rapier_ram_light_mach` / `rapier_full_ram_mach` / `rapier_turbine_gone_mach` | own |
@@ -157,3 +157,12 @@ Disposition per row: **own** (already single-sourced) · **fix** (must consume o
 
 Pass 0 exit: every row above has a disposition; CI or unit tests cover the cheap **fix** rows
 (briefing / audio / banner numeric claims vs map). Then Pass 1 may retune dash story.
+
+## Passes 1–3 — exit status (2026-07-29)
+
+| Pass | Status | What landed |
+| ---: | --- | --- |
+| **1** | **exited** | `MeasuredDashMach=3.55`; Intercept/Escape retuned; `rapier_design_dash_mach` on schema 1.24.0; briefing tokens; OFT cue asserts measured dash |
+| **2** | **exited** | Inertias ×11090/7850; mass/q normal-law floor (~1.05 g holdable at FL720/M3.5); Protection path wired |
+| **3** | **exited** | Sticky inlet-unstart seed + recovery floor; `rapier_inlet_unstart` / `rapier_over_q` (80 kPa placard); unit + integration pins |
+| **4** | **deferred** | No residual evidenced wrong-feel gate after 1–3; full aero tables / distinct reentry rush remain optional |

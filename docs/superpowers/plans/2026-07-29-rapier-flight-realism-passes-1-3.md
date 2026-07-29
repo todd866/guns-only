@@ -44,35 +44,35 @@
 
 **Files:** `sim/RapierMission.cs`, tests under `sim.Tests/RapierMissionTests.cs` / intercept OFT as needed, `web/SnapshotProjection.cs` (+ hot frame if required), briefing `app.js`, living audit
 
-- [ ] Add `public const double MeasuredDashMach = 3.55;`
-- [ ] Intercept/Escape use it; cue strings use the constant not `4.0`
-- [ ] Publish `rapier_design_dash_mach`
-- [ ] Briefing/config copy: measured dash, M4 fiction not commanded
-- [ ] Tests: intercept authored/commanded ≤ MeasuredDashMach + epsilon (skin aside)
-- [ ] Commit
+- [x] Add `public const double MeasuredDashMach = 3.55;`
+- [x] Intercept/Escape use it; cue strings use the constant not `4.0`
+- [x] Publish `rapier_design_dash_mach`
+- [x] Briefing/config copy: measured dash, M4 fiction not commanded
+- [x] Tests: intercept authored/commanded ≤ MeasuredDashMach + epsilon (skin aside)
+- [x] Commit
 
 ### Task 2: Pass 2 — Inertias + mass/q normal law
 
 **Files:** `sim/FlightModel.cs` (Rapier params), `sim/RapierAerodynamics.cs`, `sim/FlightModel.cs` PositiveNormalLawAlphaMax, `sim.Tests/RapierAerodynamicsTests.cs`
 
-- [ ] Rescale inertias; comment cites 11 090 kg design gross
-- [ ] Normal-law API takes mass + q; floor for level flight
-- [ ] Tests: FL720/M3.5 design gross ordinary law ≥ ~1.0 g available; physical still binds ~few g
-- [ ] Commit
+- [x] Rescale inertias; comment cites 11 090 kg design gross
+- [x] Normal-law API takes mass + q; floor for level flight
+- [x] Tests: FL720/M3.5 design gross ordinary law ≥ ~1.0 g available; physical still binds ~few g
+- [x] Commit
 
 ### Task 3: Pass 3 — Unstart seed + V-q cue
 
 **Files:** `sim/RapierAerodynamics.cs` or inlet helper, propulsion install path, snapshot fields, minimal HUD/audio cue hook, tests
 
-- [ ] Unstart state machine (start/clear) with unit tests
-- [ ] Wire into installed thrust recovery
-- [ ] Over-q flag from authored q placard
-- [ ] Commit + update REALISM audit Pass 1–3 exited
+- [x] Unstart state machine (start/clear) with unit tests
+- [x] Wire into installed thrust recovery
+- [x] Over-q flag from authored q placard
+- [x] Commit + update REALISM audit Pass 1–3 exited
 
 ### Task 4: Docs exit + Pass 4 gate
 
-- [ ] Update REALISM-AND-OVERPERFORMANCE + program design pass table
-- [ ] Pass 4: only schedule if OFT/feel still wrong; otherwise mark deferred
+- [x] Update REALISM-AND-OVERPERFORMANCE + program design pass table
+- [x] Pass 4: only schedule if OFT/feel still wrong; otherwise mark deferred
 
 ---
 
