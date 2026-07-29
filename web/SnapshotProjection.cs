@@ -31,7 +31,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.23.0";
+    const string SnapshotSchemaVersion = "1.24.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -414,6 +414,8 @@ internal static class SnapshotProjection {
             + $"\"rapier_skin_mach_limit\":{(double.IsFinite(Session.RapierSkinMachLimit) ? Session.RapierSkinMachLimit.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
             + $"\"rapier_material_mach_ceiling\":{(Session.RapierMissionAvailable && double.IsFinite(Session.RapierSkinMachLimit) ? Session.RapierSkinMachLimit.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
             + $"\"rapier_phase_reason\":{JsonString(Session.RapierPhaseReason)},"
+            + $"\"rapier_intention\":{JsonString(Session.RapierIntention)},"
+            + $"\"rapier_strategy\":{JsonString(Session.RapierStrategy)},"
             + $"\"rapier_target_altitude_ft\":{Session.RapierTargetAltitudeFt:F0},"
             + $"\"rapier_missiles_remaining\":{Session.RapierMissilesRemaining},"
             + $"\"rapier_gun_drones_remaining\":{Session.RapierDogfightingDronesRemaining},"

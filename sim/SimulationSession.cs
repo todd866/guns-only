@@ -444,6 +444,8 @@ public sealed class SimulationSession {
     public double RapierAuthoredTargetMach => _rapierMissionGuidance.AuthoredTargetMach;
     public double RapierSkinMachLimit => _rapierMissionGuidance.SkinMachLimit;
     public string RapierPhaseReason => _rapierMissionGuidance.PhaseReason ?? "";
+    public string RapierIntention => _rapierMissionGuidance.Intention ?? "";
+    public string RapierStrategy => _rapierMissionGuidance.Strategy ?? "";
     public RapierGunDrone? ActiveRapierGunDrone =>
         _rapierGunDrone is { StillActive: true } ? _rapierGunDrone : null;
     public bool RapierGunDroneEgress => _rapierGunDroneEgress;
