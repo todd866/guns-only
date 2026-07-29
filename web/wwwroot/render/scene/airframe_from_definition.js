@@ -6,7 +6,7 @@ import {
   createLoftGeometry,
   createPlanformGeometry,
   makeMaterial,
-} from "./scene_builders.js?v=176";
+} from "./scene_builders.js?v=177";
 
 function parseColor(value, fallback = 0x808080) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
