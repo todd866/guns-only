@@ -5,6 +5,27 @@ repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$repo_dir"
 . "$repo_dir/bin/dotnet-env"
 
+# Serialize whole-repo gates across agents. Several agents share this workstation; parallel
+# gates (dotnet suites + six SwiftShader Chromiums each) starve one another's browser smoke
+# into false timeouts (2026-07-29: five deploy gates died at load average 70-85). One gate at
+# a time, queued quietly; a lock whose holder has exited is reclaimed.
+gate_lock="/tmp/guns-only-gate.lock"
+gate_lock_announced=""
+while ! mkdir "$gate_lock" 2>/dev/null; do
+    holder=$(cat "$gate_lock/pid" 2>/dev/null || true)
+    if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then
+        rm -rf "$gate_lock"
+        continue
+    fi
+    if [ -z "$gate_lock_announced" ]; then
+        echo "check: waiting for the gate lock (held by pid ${holder:-unknown})"
+        gate_lock_announced=1
+    fi
+    sleep 15
+done
+printf '%s' "$$" > "$gate_lock/pid"
+trap 'rm -rf "$gate_lock"' EXIT HUP INT TERM
+
 sh -n bin/dotnet-env
 sh -n bin/test-in-process
 sh -n bin/deploy-web
@@ -40,7 +61,7 @@ scratch_dir=$(mktemp -d)
 publish_dir="$scratch_dir/publish"
 staged_content_dir="$scratch_dir/content"
 dotnet_artifacts_dir="$scratch_dir/dotnet-artifacts"
-trap 'rm -rf "$scratch_dir"' EXIT HUP INT TERM
+trap 'rm -rf "$scratch_dir" "$gate_lock"' EXIT HUP INT TERM
 
 node tools/assets/build-assets.mjs stage \
   --pack content/packs/korea-1950s/pack.json \
