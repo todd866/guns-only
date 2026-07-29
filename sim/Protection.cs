@@ -106,8 +106,9 @@ public static class Protection {
         if (qS <= 1e-9 || s.Mass <= 0.0 || p.CLAlpha <= 0.0) return 0.0;
 
         double mach = speed / System.Math.Max(atmosphericState.SpeedOfSoundMps, 1e-9);
+        double q = qS / p.WingAreaM2;
         double configuredClMax =
-            FlightModel.EffectiveControllableClMax(p, mach, configuration);
+            FlightModel.EffectiveControllableClMax(p, mach, configuration, s.Mass, q);
         double configuredAeroMax = qS * configuredClMax / (s.Mass * FlightModel.G0);
         double hardMax = System.Math.Min(configuredAeroMax, p.PositiveStructuralLimitG);
         double maxPerform = System.Math.Min(
@@ -163,7 +164,7 @@ public static class Protection {
         double q = 0.5 * air.DensityKgM3 * speed * speed;
         double mach = speed / System.Math.Max(air.SpeedOfSoundMps, 1e-9);
         return q * p.WingAreaM2
-            * FlightModel.EffectiveControllableClMax(p, mach, configuration)
+            * FlightModel.EffectiveControllableClMax(p, mach, configuration, s.Mass, q)
             / (s.Mass * FlightModel.G0);
     }
 

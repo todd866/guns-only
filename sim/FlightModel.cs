@@ -596,8 +596,9 @@ public static class FlightModel {
         YawModeFreq: 1.7, YawModeDamp: 0.26,
         RollModeFreq: 4.4, RollModeDamp: 0.70,
         BuffetGain: 0.45,
-        // Geometry-derived for a ~13 m long, 7.3 m span, ~11 t design-gross article.
-        IxxKgM2: 9_500.0, IyyKgM2: 62_000.0, IzzKgM2: 68_000.0,
+        // Rescaled from a ~7.85 t geometry seed to design gross 11,090 kg (×11090/7850).
+        // Pass 2 realism: prior inertias left roll/pitch response too light for the mass card.
+        IxxKgM2: 13_423.0, IyyKgM2: 87_592.0, IzzKgM2: 96_071.0,
         RollStiffnessNmRad: 320_000.0, PitchStiffnessNmRad: 900_000.0,
         YawStiffnessNmRad: 260_000.0,
         RollDampingNms: 105_000.0, PitchDampingNms: 380_000.0, YawDampingNms: 160_000.0,
@@ -1027,15 +1028,19 @@ public static class FlightModel {
     /// the aircraft achieves.
     /// </summary>
     internal static double PositiveNormalLawAlphaMax(in AircraftParams p, double mach,
-        in AirframeAerodynamicState configuration) {
+        in AirframeAerodynamicState configuration,
+        double massKg = double.NaN, double dynamicPressurePa = double.NaN) {
         double physical = AlphaAeroMax(p, configuration);
-        return UsesRapierAerodynamics(p)
-            ? System.Math.Min(physical, RapierAerodynamics.NormalLawAlphaLimitRad(mach))
-            : physical;
+        if (!UsesRapierAerodynamics(p)) return physical;
+        double schedule = RapierAerodynamics.NormalLawAlphaLimitRad(mach);
+        double levelFloor = RapierAerodynamics.LevelFlightAlphaFloorRad(
+            massKg, dynamicPressurePa, EffectiveClAlpha(p, mach), loadFactor: 1.05);
+        return System.Math.Min(physical, System.Math.Max(schedule, levelFloor));
     }
 
     internal static double EffectiveControllableClMax(in AircraftParams p, double mach,
-        in AirframeAerodynamicState configuration) {
+        in AirframeAerodynamicState configuration,
+        double massKg = double.NaN, double dynamicPressurePa = double.NaN) {
         // Preserve the established generic/F-22 path exactly. Its limit increment changes the
         // physical CL break, whereas the Rapier has a separate normal-law alpha ceiling below
         // that break. Reconstructing every airframe's limit from alpha would otherwise count
@@ -1044,7 +1049,7 @@ public static class FlightModel {
             return EffectiveClMax(p, mach)
                 + configuration.PositiveLiftCoefficientIncrement;
         }
-        double alpha = PositiveNormalLawAlphaMax(p, mach, configuration);
+        double alpha = PositiveNormalLawAlphaMax(p, mach, configuration, massKg, dynamicPressurePa);
         return EffectiveClAlpha(p, mach) * alpha
             + configuration.PositiveLiftCoefficientIncrement;
     }
@@ -1562,7 +1567,7 @@ public static class FlightModel {
             / System.Math.Max(atmosphere.Sample(r.Pos.Y).SpeedOfSoundMps, 1e-9);
         if (!double.IsFinite(c.CommandedAlphaRad) && c.GDemand > 0.0) {
             double aeroLimit = dynamicPressure * p.WingAreaM2
-                * EffectiveControllableClMax(p, mach, configuration)
+                * EffectiveControllableClMax(p, mach, configuration, r.Mass, dynamicPressure)
                 / (r.Mass * G0);
             double structuralLimit = c.GDemand <= p.PositiveStructuralLimitG + 1e-6
                 ? p.PositiveStructuralLimitG : PositiveControlLimitG(p);
@@ -1946,7 +1951,7 @@ public static class FlightModel {
         double protectedAlpha = System.Math.Clamp(
             (cl - configuration.LiftCoefficientIncrement)
                 / System.Math.Max(EffectiveClAlpha(p, mach), 1e-9),
-            AlphaAeroMin(p), PositiveNormalLawAlphaMax(p, mach, configuration));
+            AlphaAeroMin(p), PositiveNormalLawAlphaMax(p, mach, configuration, r.Mass, dynamicPressure));
         if (!double.IsFinite(c.CommandedAlphaRad)) return protectedAlpha;
 
         // The protection/control layer may deliberately demand incidence beyond the lift break.
@@ -1960,7 +1965,7 @@ public static class FlightModel {
         double dynamicPressure, in AirframeAerodynamicState configuration,
         double mach = 0.0) {
         double nzMax = System.Math.Min(dynamicPressure * p.WingAreaM2
-            * EffectiveControllableClMax(p, mach, configuration)
+            * EffectiveControllableClMax(p, mach, configuration, r.Mass, dynamicPressure)
                 / (r.Mass * G0),
             PositiveControlLimitG(p));
         double nzMin = System.Math.Max(dynamicPressure * p.WingAreaM2
@@ -1992,7 +1997,7 @@ public static class FlightModel {
         double q = 0.5 * air.DensityKgM3 * speed * speed;
         double mach = speed / System.Math.Max(air.SpeedOfSoundMps, 1e-9);
         double nzMax = System.Math.Min(q * p.WingAreaM2
-            * EffectiveControllableClMax(p, mach, configuration)
+            * EffectiveControllableClMax(p, mach, configuration, s.Mass, q)
                 / (s.Mass * G0),
             PositiveControlLimitG(p));
         double nzMin = System.Math.Max(q * p.WingAreaM2

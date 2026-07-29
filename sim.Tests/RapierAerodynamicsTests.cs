@@ -216,4 +216,54 @@ public class RapierAerodynamicsTests {
         Assert.Equal(1.0, atOnset, 9);
         Assert.InRange(Math.Abs(justAbove - atOnset), 0.0, 1e-8);
     }
+
+    [Fact]
+    public void LevelFlightAlphaFloorSupportsDesignGrossAtFl720Mach35() {
+        AircraftParams p = FlightModel.RapierPublicDataSurrogate;
+        const double fl720M = 21_945.6;
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(fl720M);
+        double mach = 3.5;
+        double speedMps = air.SpeedOfSoundMps * mach;
+        double q = 0.5 * air.DensityKgM3 * speedMps * speedMps;
+        double clAlpha = FlightModel.EffectiveClAlpha(p, mach);
+        double floor = RapierAerodynamics.LevelFlightAlphaFloorRad(
+            p.MassKg, q, clAlpha, loadFactor: 1.05);
+        double schedule = RapierAerodynamics.NormalLawAlphaLimitRad(mach);
+        Assert.True(floor > schedule,
+            $"Pass 2 floor {floor:F4} rad should exceed Mach schedule {schedule:F4} at FL720/M3.5");
+        double cl = clAlpha * floor;
+        double nz = q * RapierAerodynamics.ReferenceAreaM2 * cl / (p.MassKg * 9.80665);
+        Assert.InRange(nz, 1.04, 1.06);
+    }
+
+    [Fact]
+    public void InletUnstartIsStickyAboveRamAndClearsWhenFlowAngleUnloads() {
+        const double mach = 2.6;
+        Assert.False(RapierAerodynamics.NextInletUnstartState(mach, 0.0, 0.0, false));
+        Assert.False(RapierAerodynamics.NextInletUnstartState(
+            RapierAerodynamics.RamRegimeStartMach, 0.5, 0.0, false));
+
+        Assert.True(RapierAerodynamics.NextInletUnstartState(
+            mach, RapierAerodynamics.InletUnstartTripFlowAngleRad, 0.0, false));
+        Assert.True(RapierAerodynamics.NextInletUnstartState(
+            mach, 0.08, 0.0, previouslyUnstarted: true),
+            "sticky unstart holds until clear angle");
+        Assert.False(RapierAerodynamics.NextInletUnstartState(
+            mach, RapierAerodynamics.InletUnstartClearFlowAngleRad, 0.0,
+            previouslyUnstarted: true));
+
+        double continuous = RapierAerodynamics.InletFlowRecovery(mach, 0.08, 0.0);
+        double collapsed = RapierAerodynamics.InletFlowRecovery(
+            mach, 0.08, 0.0, inletUnstarted: true);
+        Assert.True(collapsed <= RapierAerodynamics.InletUnstartRecoveryFloor + 1e-9);
+        Assert.True(collapsed <= continuous);
+    }
+
+    [Fact]
+    public void HighDynamicPressurePlacardIsAuthoredSoftCue() {
+        Assert.False(RapierAerodynamics.IsOverDynamicPressure(
+            RapierAerodynamics.HighDynamicPressurePlacardPa));
+        Assert.True(RapierAerodynamics.IsOverDynamicPressure(
+            RapierAerodynamics.HighDynamicPressurePlacardPa + 1.0));
+    }
 }
