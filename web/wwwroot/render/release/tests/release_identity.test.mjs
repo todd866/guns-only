@@ -73,7 +73,7 @@ test("release identity detects mixed shell and superseded production builds", ()
     running: { build: RELEASE_BUILD, revision: "aaaaaaaa11111111" },
     current: { build: RELEASE_BUILD, revision: "bbbbbbbb22222222" },
     lookup: "complete",
-    locationLike: { hostname: "guns-only.vercel.app" },
+    locationLike: { hostname: "guns-only.com" },
   });
   assert.equal(redeployed.stale, true);
   assert.match(redeployed.label,
@@ -137,11 +137,18 @@ test("release identity detects mixed shell and superseded production builds", ()
 });
 
 test("build lookup uses canonical production from Vercel deployments but stays offline locally", () => {
-  assert.equal(buildInfoUrl({ hostname: "guns-only.vercel.app" }), "/api/build-info");
-  assert.equal(runningBuildInfoUrl({ hostname: "guns-only.vercel.app" }), "/api/build-info");
+  assert.equal(buildInfoUrl({ hostname: "guns-only.com" }), "/api/build-info");
+  assert.equal(runningBuildInfoUrl({ hostname: "guns-only.com" }), "/api/build-info");
+  assert.equal(buildInfoUrl({ hostname: "guns-only.cohort.md" }), "/api/build-info");
+  assert.equal(runningBuildInfoUrl({ hostname: "guns-only.cohort.md" }), "/api/build-info");
+  assert.equal(
+    buildInfoUrl({ hostname: "guns-only.vercel.app" }),
+    "https://guns-only.com/api/build-info",
+    "the retired vercel.app alias compares against canonical production like any preview",
+  );
   assert.equal(
     buildInfoUrl({ hostname: "guns-only-git-old.vercel.app" }),
-    "https://guns-only.vercel.app/api/build-info",
+    "https://guns-only.com/api/build-info",
   );
   assert.equal(
     runningBuildInfoUrl({ hostname: "guns-only-git-old.vercel.app" }),

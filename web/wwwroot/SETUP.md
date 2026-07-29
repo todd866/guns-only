@@ -83,8 +83,8 @@ bounds both streamed and Vercel-preparsed request envelopes, including requests 
 `Content-Length`.
 
 ```sh
-curl -i -X POST 'https://guns-only.vercel.app/telemetry' \
-  -H 'Origin: https://guns-only.vercel.app' \
+curl -i -X POST 'https://guns-only.com/telemetry' \
+  -H 'Origin: https://guns-only.com' \
   -H 'Content-Type: application/json' \
   --data '{"session":"smoke-test","batchId":"batch-smoke-000001","rows":[{"k":"hdr","build":"smoke"}]}'
 ```
