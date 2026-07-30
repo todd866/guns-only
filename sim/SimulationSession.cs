@@ -3157,10 +3157,12 @@ public sealed class SimulationSession {
 
     void UpdateRecoveryProcedure() {
         if (_recoveryProcedure.Kind == RecoveryProcedureKind.None) return;
-        double ktas = Player.IndicatedAirspeedMps * AirData.MpsToKnots;
+        // RecoveryGate.TargetKtas is TRUE airspeed. IndicatedAirspeedMps is not, and by the top of
+        // a recovery the difference is most of the energy band being measured against.
+        double trueAirspeedKnots = Player.State.Speed * AirData.MpsToKnots;
         _recoveryProcedure.Step(
             Player.State.Position,
-            ktas,
+            trueAirspeedKnots,
             PlayerSystems.AllGearDownAndLocked,
             Math.Max(PlayerSystems.LeftFlapDegrees, PlayerSystems.RightFlapDegrees) > 1.0);
     }

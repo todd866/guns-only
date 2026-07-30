@@ -23,6 +23,7 @@ import { createTacticalCloudField } from "./render/environment/tactical_clouds.j
 import { loadKoreaTerrain } from "./render/environment/korea_terrain.js";
 import { attachSoftWorldGroundHaze } from "./render/environment/soft_world_atmosphere.js";
 import { createWinterPrecipitation } from "./render/environment/winter_precipitation.js";
+import { createGuidancePath } from "./render/scene/guidance_path.js";
 import {
   PresentationEventStreams,
   presentationVector,
@@ -6369,11 +6370,17 @@ class FlightView {
       qualityTier: VISUAL_QUALITY.tier,
       name: "AUTHORITATIVE_WINTER_PRECIPITATION",
     });
+    // The golden path: where the good approaches live, drawn into the world. A remote pilot has
+    // lost peripheral vision, depth perception and seat-of-the-pants, and is judging a landing
+    // through a narrow screen -- so the assistance is not a crutch, it replaces cues the airframe
+    // removed by being uninhabited.
+    this.guidancePath = createGuidancePath(THREE);
     this.scene.add(
       this.sky.mesh,
       this.sea.mesh,
       this.tacticalClouds.group,
       this.winterPrecipitation.points,
+      this.guidancePath.object3d,
     );
     this.cloudFogColor = new THREE.Color(0xb8c6c8);
     this.cloudBreakActive = false;
@@ -7616,6 +7623,7 @@ class FlightView {
         surfaceContact: state?.casevac_surface_contact === true,
       }
       : { intensity01: 0, radiusM: 1 };
+    this.guidancePath?.update(state);
     this.casevacScenery?.update({
       elapsedSeconds: projectedFinite(state, "t") ?? 0,
       windX: projectedFinite(state, "casevac_wind_x_mps") ?? 0,
