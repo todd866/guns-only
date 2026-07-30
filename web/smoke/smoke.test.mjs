@@ -563,7 +563,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
     await page.waitForFunction(
       () => document.querySelector("#boot")?.classList.contains("ready") === true,
       undefined,
-      { timeout: scaled(45000) },
+      { polling: scaled(100), timeout: scaled(45000) },
     );
 
     const fatalVisible = await page.evaluate(
@@ -595,7 +595,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
       const resumable = document.querySelector("#ready-screen")?.classList.contains("visible")
         && start?.disabled === false;
       return active || resumable;
-    }, undefined, { timeout: scaled(45000) });
+    }, undefined, { polling: scaled(100), timeout: scaled(45000) });
     const alreadyActive = await page.evaluate(() =>
       globalThis.__gunsState?.session_phase === "ACTIVE"
         && !document.documentElement.classList.contains("run-paused"));
@@ -604,9 +604,13 @@ test("the published web app boots to a running flight kernel (no fatal render er
       globalThis.__gunsState?.session_phase === "ACTIVE"
         && globalThis.__gunsState?.player_terminal_state === "FLYING"
         && !document.documentElement.classList.contains("run-paused"),
-    undefined, { timeout: scaled(45000) });
+    undefined, { polling: scaled(100), timeout: scaled(45000) });
     await page.evaluate(() => globalThis.__gunsBridge.ReleaseWeaponsHold());
-    await page.waitForFunction(() => globalThis.__gunsState?.weapons_inhibited === false);
+    await page.waitForFunction(
+      () => globalThis.__gunsState?.weapons_inhibited === false,
+      undefined,
+      { polling: scaled(100), timeout: scaled(5000) },
+    );
     const roundsBeforeTrigger = await page.evaluate(
       () => Number(globalThis.__gunsState?.rounds_fired) || 0,
     );
@@ -615,17 +619,12 @@ test("the published web app boots to a running flight kernel (no fatal render er
       await page.waitForFunction((roundsBefore) =>
         globalThis.__gunsState?.gun_firing === true
           && Number(globalThis.__gunsState?.rounds_fired) > roundsBefore,
-      roundsBeforeTrigger, { timeout: scaled(5000) });
+      roundsBeforeTrigger, { polling: scaled(100), timeout: scaled(5000) });
     } finally {
       await page.keyboard.up("f");
     }
 
-    await page.waitForFunction(() => {
-      const root = document.documentElement;
-      return root.dataset.audioContextState === "running"
-        && root.dataset.audioSignalActive === "true";
-    }, undefined, { timeout: scaled(5000) });
-    const audioRuntime = await page.evaluate(() => {
+    const readAudioRuntime = () => page.evaluate(() => {
       const root = document.documentElement;
       return {
         controller: root.dataset.audioController,
@@ -638,6 +637,13 @@ test("the published web app boots to a running flight kernel (no fatal render er
         sessionId: root.dataset.audioSessionId,
       };
     });
+    let audioRuntime = null;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      audioRuntime = await readAudioRuntime();
+      if (audioRuntime.contextState === "running"
+        && audioRuntime.signalActive === "true") break;
+      await new Promise((resolve) => setTimeout(resolve, scaled(250)));
+    }
     assert.deepEqual(
       {
         controller: audioRuntime.controller,
@@ -743,15 +749,31 @@ test("the published web app boots to a running flight kernel (no fatal render er
         + `cold-version delta ${coldVersionDelta})`,
     );
 
-    await page.evaluate(async () => {
+    const audioStop = await page.evaluate(async () => {
       const { suspendFlightAudio } = await import("/render/audio/flight_audio.js");
-      suspendFlightAudio("smoke-complete");
+      const hadContext = suspendFlightAudio("smoke-complete");
+      const root = document.documentElement;
+      return {
+        hadContext,
+        contextState: root.dataset.audioContextState,
+        stopReason: root.dataset.audioStopReason,
+        outputGain: root.dataset.audioOutputGain,
+        audible: root.dataset.audioAudible,
+      };
     });
-    await page.waitForFunction(
-      () => document.documentElement.dataset.audioContextState === "suspended"
-        && document.documentElement.dataset.audioStopReason === "smoke-complete",
-      undefined,
-      { timeout: scaled(5000) },
+    assert.equal(audioStop.hadContext, true, "audio cleanup must own a live context");
+    assert.deepEqual(
+      {
+        stopReason: audioStop.stopReason,
+        outputGain: audioStop.outputGain,
+        audible: audioStop.audible,
+      },
+      {
+        stopReason: "smoke-complete",
+        outputGain: "0",
+        audible: "false",
+      },
+      `audio cleanup did not synchronously cut the destination: ${JSON.stringify(audioStop)}`,
     );
   } finally {
     await browser.close();
