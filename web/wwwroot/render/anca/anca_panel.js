@@ -1,13 +1,13 @@
 import { deriveAncaView } from "./anca_view_model.js";
 
-/// Stowable ANCA auxiliary panel. One quiet control is present during a sortie; the four-channel
-/// automation readout opens only when the player asks for it. It remains view-only — stowing or
-/// opening the panel never changes what the automation does.
+/// Stowable ANCA auxiliary panel. One quiet control is present during a sortie; the four-layer
+/// priority cross-check opens only when the player asks for it. It remains view-only — stowing or
+/// opening the panel never changes aircraft or mission state.
 
 export function createAncaPanelPresentation(documentLike, mount = documentLike.body) {
   const root = documentLike.createElement("aside");
   root.setAttribute("data-anca-panel", "");
-  root.setAttribute("aria-label", "ANCA auxiliary automation status");
+  root.setAttribute("aria-label", "ANCA four-layer priority cross-check");
   root.hidden = true;
   root.dataset.open = "false";
   root.innerHTML = `
@@ -149,14 +149,14 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
     </style>
     <button class="anca-toggle" data-anca-toggle type="button"
       aria-expanded="false" aria-controls="anca-auxiliary-drawer"
-      aria-label="Show ANCA automation status">ANCA</button>
+      aria-label="Show ANCA priority cross-check">ANCA</button>
     <div class="anca-drawer" data-anca-drawer id="anca-auxiliary-drawer" hidden>
       <div class="anca-title">
         <strong>ANCA</strong>
-        <span>ACTIVE AUTOMATION · CROSS-CHECKS</span>
+        <span>NOW · NEXT · WHO · VERIFY</span>
       </div>
       <div class="anca-empty" data-anca-empty>
-        ROUTINE STATE · NOTHING TO CROSS-CHECK
+        NO CURRENT PRIORITY IN THESE LAYERS
       </div>
       ${[
         ["aviate", "Aviate"],
@@ -188,7 +188,7 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
     drawer.hidden = !open;
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
     toggle.setAttribute("aria-label",
-      open ? "Hide ANCA automation status" : "Show ANCA automation status");
+      open ? "Hide ANCA priority cross-check" : "Show ANCA priority cross-check");
   };
   toggle.addEventListener("click", () => setOpen(!open));
   mount.appendChild(root);

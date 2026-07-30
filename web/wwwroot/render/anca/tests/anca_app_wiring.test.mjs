@@ -30,5 +30,7 @@ test("ANCA is a closed-by-default auxiliary drawer", () => {
   assert.match(panelSource, /if \(root\.hidden\) \{\s+setOpen\(false\);\s+return;\s+\}/);
   assert.match(panelSource, /empty\.hidden = view\.shownRows\.length > 0/);
   assert.match(panelSource, /node\.hidden = !rowView\.shown/);
+  assert.match(panelSource, /NOW · NEXT · WHO · VERIFY/);
+  assert.match(panelSource, /ANCA four-layer priority cross-check/);
   assert.doesNotMatch(panelSource, /html:not\(\.touch-mode\).*anca-line.*display: block/s);
 });
