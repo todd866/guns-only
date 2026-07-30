@@ -561,12 +561,15 @@ SAME structure rather than pretending a different aircraft exists:
 | 15.65 G | the 1.15 point; too precise and too close to uncertainty for a control law |
 | 20 G | needs 23-24 G ultimate — 28-33% MORE structure, not a reinterpretation |
 
-So `PositiveOverrideLimitG: 15.0` is the Space-bar number, `PositiveStructuralLimitG` stays 12.0, and
-20 G is off the table for this airframe at this price.
+The original proposal made `PositiveOverrideLimitG: 15.0` the Space-bar number while
+`PositiveStructuralLimitG` stayed 12.0, with 20 G off the table for this airframe at this price.
 
 **Implementation order matters and is easy to get wrong:** setting the override to 15 G BEFORE the
 residual-strength/fatigue model exists yields free, repeatable 15 G. The codebase today has an
 override cap and no failure mechanic. Build the fatigue model first, then enable the override.
+
+**Resolved 2026-07-30:** until that residual-strength/fatigue mechanic exists, both limits are
+12 G. Space retains the low-q incidence release but does not create free, repeatable over-limit G.
 
 ### Adjudicated: the ramjet is a separate aircraft
 

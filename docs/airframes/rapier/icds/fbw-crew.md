@@ -7,7 +7,7 @@ Interface control between the fly-by-wire control law and the occupant/escape-po
 
 | Interface | Value | Owner chapter |
 | --- | --- | --- |
-| Structural G ceiling FBW must not silently exceed for the pilot's benefit | 12 G qualified / 15 G override | [50](../50-crew-escape-fbw.md) |
+| Structural G ceiling FBW must not silently exceed for the pilot's benefit | 12 G, including deliberate override | [50](../50-crew-escape-fbw.md) |
 | Bank-hold rate gain | `RollHoldRateGainNms` 1.2e6 (surrogate) | [50](../50-crew-escape-fbw.md) |
 | Pod is sealed, opaque, no windscreen | — | [20](../20-thermal-and-materials.md), [50](../50-crew-escape-fbw.md) |
 
@@ -27,4 +27,3 @@ adding lift, thrust, or guaranteed hits.
 
 G-ceiling and control-gain values are **closed**/**surrogate**. Escape jettison and power draw are
 **provisional**.
-

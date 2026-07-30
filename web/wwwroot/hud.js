@@ -66,6 +66,7 @@ const DEG = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
 const MODE_CUE_SECONDS = 1.5;
 const GUN_HEAT_AMBER_THRESHOLD = 0.7;
+const GUN_HEAT_DISPLAY_THRESHOLD = 0.05;
 const GUN_OVERHEAT_FLASH_HZ = 2;
 
 function clamp(value, min, max) {
@@ -662,6 +663,21 @@ class CombatHud {
     const ctx = this.ctx;
     const heat = clamp(Number(state.gun_heat) || 0, 0, 1);
     const overheated = state.gun_overheat === true;
+    const present = overheated
+      || state.gun_firing === true
+      || heat >= GUN_HEAT_DISPLAY_THRESHOLD;
+    if (!present) {
+      if (this._debug) {
+        this._debug.gunHeat = {
+          present: false,
+          heat,
+          fillFraction: 0,
+          caution: false,
+          overheated: false,
+        };
+      }
+      return;
+    }
     const caution = heat >= GUN_HEAT_AMBER_THRESHOLD;
     const color = caution ? AMBER : GREEN;
     const width = 76;
@@ -1920,6 +1936,15 @@ class CombatHud {
   }
 
   drawGTape(state) {
+    const actualG = Number(state.g_actual) || 0;
+    const overrideSelected = state.requested_envelope_override === true;
+    const visible = overrideSelected
+      || state.tier === 3
+      || Math.abs(actualG) >= 3.0;
+    if (!visible) {
+      if (this._debug) this._debug.gTape = null;
+      return;
+    }
     const ctx = this.ctx;
     const layout = this.getLayout();
     const x = this.safeInsets.left + 24;
@@ -1927,8 +1952,6 @@ class CombatHud {
     const width = Math.min(166, Math.max(112, this.width * 0.18));
     const hardG = Math.max(0, Number(state.g_hardmax) || 0);
     const overrideG = Math.max(hardG, Number(state.g_override_max) || hardG);
-    const overrideSelected = state.requested_envelope_override === true;
-    const actualG = Number(state.g_actual) || 0;
     const maxG = Math.max(10, hardG,
       overrideSelected ? overrideG : 0,
       Math.abs(actualG));
@@ -2379,10 +2402,20 @@ class CombatHud {
       : panel.accent === "caution" ? AMBER : GREEN;
     const ctx = this.ctx;
     const layout = this.getLayout();
+    const phase = Math.floor(Number(state.rapier_mission_phase) || 0);
+    const compact = state.rapier_mission_available === true
+      && state.rapier_pattern_only !== true
+      && panel.accent === "normal"
+      && phase >= 1
+      && phase < 11;
+    const rows = compact && panel.rows.length > 1
+      ? [panel.rows[0], panel.rows[panel.heroIndex]]
+      : panel.rows;
+    const heroIndex = compact ? rows.length - 1 : panel.heroIndex;
     const width = Math.min(168,
       this.width - this.safeInsets.left - this.safeInsets.right - 36);
     const rowPitch = 13;
-    const height = 10 + panel.rows.length * rowPitch + 8;
+    const height = 10 + rows.length * rowPitch + 8;
     const x = this.width - this.safeInsets.right - width - 18;
     // Keep clear of the persistent H · CONTROLS chip in the same corner.
     const legendReserve = (!this.legendVisible && !this.touchMode) ? 28 : 0;
@@ -2393,8 +2426,9 @@ class CombatHud {
       this._debug.limitsPanel = {
         profile: panel.profile,
         accent: panel.accent,
-        heroIndex: panel.heroIndex,
-        rows: panel.rows.map((entry) => ({
+        compact,
+        heroIndex,
+        rows: rows.map((entry) => ({
           label: entry.label,
           value: entry.value,
           unit: entry.unit,
@@ -2418,10 +2452,10 @@ class CombatHud {
     ctx.stroke();
 
     ctx.textBaseline = "middle";
-    for (let i = 0; i < panel.rows.length; i += 1) {
-      const entry = panel.rows[i];
+    for (let i = 0; i < rows.length; i += 1) {
+      const entry = rows[i];
       const rowY = y + 10 + i * rowPitch;
-      const hero = i === panel.heroIndex;
+      const hero = i === heroIndex;
       ctx.fillStyle = hero ? accent : (panel.accent === "normal" ? GREEN_DIM : accent);
       ctx.font = hero
         ? "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
@@ -3631,7 +3665,7 @@ class CombatHud {
   // theory that the lesson had landed; in practice the binding is exactly the one a pilot forgets
   // between sessions, and a dim 20 px chip is cheap. It stays.
   drawLegendHint() {
-    if (this.legendVisible || this.touchMode) return;
+    if (this.showLegendHint !== true || this.legendVisible || this.touchMode) return;
     const ctx = this.ctx;
     ctx.save();
     const text = "H \u00B7 CONTROLS";

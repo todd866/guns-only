@@ -361,10 +361,8 @@ test("production shell installs, updates, and safely labels the test-flight cons
   assert.match(appSource, /document\.addEventListener\("visibilitychange"/);
   assert.match(indexSource, /id="test-flight-console" hidden data-relevance="none"/);
   assert.match(indexSource, /#test-flight-console\[hidden\] \{ display: none; \}/);
-  // Visibility follows AVAILABILITY (are we flying), not RELEVANCE (is something wrong). The pilot
-  // asked for the tab to be there so they can read engine, bus, hydraulics and gear whenever they
-  // want; relevance still drives data-relevance, which is what makes it shout when it matters.
-  assert.match(appSource, /testFlightConsole\.hidden = !airborneSortie/);
+  // The action console is flight chrome only while it can change a decision.
+  assert.match(appSource, /testFlightConsole\.hidden = !relevant/);
   assert.match(appSource,
     /const airborneSortie = state\.ready !== true && state\.paused !== true && state\.finished !== true/);
   assert.match(appSource,

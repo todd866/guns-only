@@ -837,23 +837,14 @@ public static class Beats {
                 FlightModel.RapierPublicDataSurrogate.MassKg),
             // A contact high and slow west of home: the thing this aircraft was built to kill is an
             // enabler, not a fighter. Eastbound closing toward the eastern strip.
-            // 680 km out. This is deliberately BEYOND the 262 km regional truth, and that is the
-            // call: a realistic deep intercept matters more than staying inside the authored cell.
-            // The aircraft exists because basing sits far enough back that cratering the field is
-            // impractical, and at 90 or even 118 km the pilot never spends the climb or the ram
-            // acceleration that justify any of it. With the contact closing at 210 m/s the merge
-            // still falls near 190 km. 420 km was too far the other way: the pilot ran out of fuel
-            // at the attack point, because the transit plus a fight plus a 420 km egress does not
-            // fit 5,950 lb. 240 km still forces the full climb and the ram acceleration — the ram
-            // corridor alone needs about 90 km at altitude — while leaving fuel for the fight and
-            // the trap. Reach is what this aircraft is FOR, so this is the number to revisit once
-            // per-stream fuel stops charging military flow for a turbine that is contributing
-            // nothing above M2.7.
+            // 240 km out. The ram corridor alone needs about 90 km at altitude, so this still
+            // forces the full climb and acceleration schedule without turning the mission into a
+            // 680 km wait. It also stays inside the 262 km regional truth and leaves enough gas for
+            // the fight and trap under the current per-stream fuel approximation.
             //
-            // The far half of the route is over presentation apron rather than authored terrain.
-            // At 21 km cruise that is invisible; it would matter if the fight went low, and it is
-            // the reason the parked ukraine-theatre branch wanted a bigger cell.
-            Bandit: new AircraftState(new Vec3D(-680_000, 18_000, 18_000), 210, 0, Math.PI / 2, 0,
+            // Keeping the contact inside the authored regional cell also means an early low fight
+            // no longer drops onto the presentation apron.
+            Bandit: new AircraftState(new Vec3D(-240_000, 18_000, 18_000), 210, 0, Math.PI / 2, 0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() { (0.0, new PilotCommand(1.0, 0.0, 0.55, 0.0)) },

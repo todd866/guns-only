@@ -70,13 +70,13 @@ public class TimeCompressionTests {
 
         int selected = session.Advance(SimulationSession.FixedDeltaSeconds, 8);
 
-        Assert.True(selected == 8,
-            $"expected 8x, got {selected}x: {session.TimeCompressionInhibitReason}");
-        Assert.True(session.TimeCompressionFactor == 8,
+        Assert.True(selected == 4,
+            $"expected 4x, got {selected}x: {session.TimeCompressionInhibitReason}");
+        Assert.True(session.TimeCompressionFactor == 4,
             $"compression handed back during quiet transit: "
                 + session.TimeCompressionInhibitReason);
         Assert.True(session.TimeCompressionEligible);
-        Assert.Equal(8, session.Tick);
+        Assert.Equal(4, session.Tick);
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class TimeCompressionTests {
     [Fact]
     public void ControlInputDisengagesBeforeAnotherTick() {
         var session = EstablishedRapierCruise();
-        Assert.Equal(8,
+        Assert.Equal(4,
             session.Advance(SimulationSession.FixedDeltaSeconds, 8));
 
         long tickAtInput = session.Tick;

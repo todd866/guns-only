@@ -55,7 +55,7 @@ of heading-coordinate movement without producing a coordinated flat 180° revers
 | **Pitch/yaw/bank hold were fixed torque** | Controller constants could deliver moment without `q·S·length` authority; direct roll RCS was incomplete. | Rapier pitch/yaw/roll/bank-hold are q-, Mach-, and configuration-capped; RCS supplies residual on all axes and burns gas. |
 | **“Flaps” contradicted one-elevon-per-side drawing** | Shared F-86 mechanical interconnect and flap UI implied separate conventional flaps. | Rapier uses independently actuated symmetric elevon droop, nose-down configuration moment, reduced remaining pitch/roll travel, and `ELEV` cockpit language. |
 | **High-speed pull did not affect engine** | TBCC thrust remained on-design at arbitrary alpha/beta. | Installed thrust now follows smooth combined-flow-angle inlet recovery above M2; pilot gets low-recovery/distortion cues. |
-| **12/15 G read as available performance** | Structural demand caps and physical lift were not separately visible. | Normal-law alpha, q, inlet recovery, and physical lift are separate. At FL720/M3.5/design gross: ~0.90 G ordinary provisional law; ~2.59 G physical break; 12/15 G unavailable. |
+| **12 G read as available performance** | Structural demand caps and physical lift were not separately visible. | Normal-law alpha, q, inlet recovery, and physical lift are separate. At FL720/M3.5/design gross: ~0.90 G ordinary provisional law; ~2.59 G physical break; 12 G unavailable. |
 
 The 0.90 G ordinary-law value is itself an open calibration result: a Mach-only alpha schedule is
 too restrictive for level FL720 at design gross. Do not “fix” it by restoring constant CLmax.
@@ -73,7 +73,7 @@ transparent first-order surrogate, not claimed Rapier wind-tunnel data.
 | --- | --- | --- | --- |
 | **Sustained air-breathing M4** | Nothing flown sustains M4 air-breathing (`TurboRamjetPerformanceMap` comments). Intercept OFT energy-ladder peaks ~**M3.69**. Mission copy still says Mach 4. | Treat M4 dash as **aspirational fiction**; design dash around measured ~M3.5–3.7 or honest cycle ~M2.9 until retuned. | provisional / fiction |
 | **Engine buff history** | Open findings: ramjet was buffed (DesignMach, burner, ratios) rather than fixing guidance. | Prefer guidance / profile; keep `DesignMach=2.6` as normaliser only. | open finding |
-| **12 / 15 G structural ceilings** | Params; reclined thesis. Extreme for a crewed interceptor, though now aerodynamically unreachable in the thin-air dash. | Cost/fatigue ledger or lower qualified G; retain the distinction between command ceiling and available lift. | provisional |
+| **12 G structural ceiling** | Params; reclined thesis. Extreme for a crewed interceptor, though now aerodynamically unreachable in the thin-air dash. | Keep command ceiling distinct from available lift; do not restore an over-limit tier without residual-strength/fatigue consequences. | provisional |
 | **CMC 1200 °C** | Credible 2030s materials trajectory; does **not** make M4 historical. | Keep CMC as materials claim; pair with honest dash Mach. | surrogate |
 | **Inertias still ~7.85 t class** | `Ixx`/`Iyy`/`Izz` not rescaled for 11 t design gross. | Re-derive with updated mass. | provisional |
 | **No aeroelastic / V-q damage model** | q scales moments, but structural twist, hinge loads, flutter, reversal, and persistent over-q damage are absent. | Add an explicit V-n/V-q envelope and aeroelastic/control-load model before qualifying low-altitude supersonic pulls. | open finding |
@@ -125,7 +125,7 @@ Map constants (owner): `RamFadeStartMach` 2.0 · `FullRamMach` 2.8 · `TurbineFa
 | Engine buff history (prefer guidance) | 1 | Keep `DesignMach=2.6` normaliser; no silent ratio buffs |
 | Normal-law too tight @ FL720 | 2 | **Closed** — mass/q floor under physical/Mach schedule |
 | Inertias ~7.85 t on 11 t gross | 2 | **Closed** — ×11090/7850 |
-| 12/15 G structural ceilings | 2–3 | Keep demand≠lift; ledger later |
+| 12 G structural/control ceiling | 2–3 | Keep demand≠lift; incidence override stays low-q only |
 | Scalar inlet only | 3 | **Closed seed** — sticky unstart + recovery floor (still provisional) |
 | No aeroelastic / V-q damage | 3 | **Closed awareness** — `rapier_over_q` placard; full aeroelastics deferred |
 | Full aero tables | 4 | **Deferred** — Passes 1–3 closed without evidenced wrong-feel gate |

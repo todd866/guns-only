@@ -39,7 +39,7 @@
   <text x="370" y="350" font-size="10" font-weight="700" fill="#3d9b7a">CLOSED CONSTRAINTS</text>
   <text x="370" y="368" font-size="9">OML length 13 m · span 7.35 m</text>
   <text x="370" y="384" font-size="9">Ixx/Iyy/Izz class from FlightModel</text>
-  <text x="370" y="400" font-size="9">12 G qual / 15 G override structure</text>
+  <text x="370" y="400" font-size="9">12 G structural/control ceiling</text>
   <text x="370" y="416" font-size="9">Fuel-free mass budget 5150 kg (BOM 00)</text>
   <text x="370" y="432" font-size="9">Gallery clearance fixes max span</text>
 

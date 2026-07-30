@@ -627,6 +627,10 @@ test("production HUD consumes stabilized KIAS plus physical corner and limits pa
   assert.match(source, /fuelReadout\(state\)/);
   assert.match(source, /limitsPanelPresentation/);
   assert.match(source, /this\.drawLimitsPanel\(frame\.state\)/);
+  assert.match(source, /const compact = state\.rapier_mission_available === true/);
+  assert.match(source, /GUN_HEAT_DISPLAY_THRESHOLD/);
+  assert.match(source, /Math\.abs\(actualG\) >= 3\.0/);
+  assert.match(source, /this\.showLegendHint !== true/);
   assert.match(source, /systemsReadout\(frame\.state\)/);
   assert.match(source, /speedBrakeReadout\(state\)/,
     "the idle-commanded speed brake annunciates on the unconditionally drawn PWR rail");

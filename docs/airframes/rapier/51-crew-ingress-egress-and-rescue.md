@@ -43,7 +43,7 @@ safe.
   forward vision.
 - **CLOSED:** the aircraft remains 13 m long and 7.35 m in span at the current definition stage,
   with a cranked delta, one ventral inlet, one propulsion tunnel, and one aft nozzle.
-- **CLOSED:** flight-structure ceilings are 12 G qualified and 15 G override. They are not proof
+- **CLOSED:** flight-structure and override demand are capped at 12 G. They are not proof
   that an occupant, couch, hatch, capsule, or escape trajectory is qualified to those loads.
 - **CLOSED:** the old raised `escapePodSpine` is a superseded assumption. It is not a volume claim
   or a boarding solution for the buried capsule.

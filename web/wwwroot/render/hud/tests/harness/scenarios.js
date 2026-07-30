@@ -712,7 +712,7 @@ export const SCENARIOS = [
       mach: 3.52,
       g_actual: 11.8,
       g_hardmax: 12,
-      g_override_max: 15,
+      g_override_max: 12,
       requested_envelope_override: true,
       fuel_lb: 2965,
       fuel_capacity_lb: 9920,

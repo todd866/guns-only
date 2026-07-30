@@ -22,7 +22,7 @@ cockpit—pressure vessel and escape capsule are the same object.
 
 ## Structural limit and the reclined thesis
 
-`PositiveStructuralLimitG: 12.0`, `PositiveOverrideLimitG: 15.0` (**closed**, `FlightModel.RapierPublicDataSurrogate`).
+`PositiveStructuralLimitG: 12.0`, `PositiveOverrideLimitG: 12.0` (**closed**, `FlightModel.RapierPublicDataSurrogate`).
 Those numbers are structural/control ceilings, not promised load factor everywhere in the envelope:
 dynamic pressure and the Mach-scheduled lift curve bind first in the FL700 dash. Where sufficient
 aerodynamic authority exists, structure binds before an upright, hydrostatic-limited pilot would.
@@ -33,7 +33,7 @@ Keep that dependency visible: if the physiology model changes, this chapter's as
 re-checked, not assumed unaffected.
 
 At FL720/M3.5 and design gross, the current provisional wing has only about **2.6 G at its physical
-attached-flow break**; ordinary normal-law incidence is lower. The +12/+15 placards therefore do
+attached-flow break**; ordinary normal-law incidence is lower. The +12 G placard therefore does
 not describe an upper-atmosphere turn. See
 [12 — Aerodynamics and control allocation](12-aerodynamics-and-controls.md).
 

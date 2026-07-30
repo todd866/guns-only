@@ -1219,6 +1219,12 @@ const TELEMETRY_MAX_BACKOFF_MS = 5 * 60_000;
 const TELEMETRY_BUFFER_LIMIT = 1_500;
 const TELEMETRY_SCHEMA_VERSION = "2.0.0";
 const TELEMETRY_SESSION_STARTED_AT = Date.now();
+// State/context/event rows use performance.now(), so their epoch origin must be
+// performance.timeOrigin. Using the later Date.now() session stamp here shifted every decoded row
+// by however long the app spent booting before this module initialized.
+const TELEMETRY_TIME_ORIGIN_EPOCH_MS = Number.isFinite(performance.timeOrigin)
+  ? Math.round(performance.timeOrigin)
+  : Math.round(Date.now() - performance.now());
 
 function newTelemetryBatchId() {
   const unique = globalThis.crypto?.randomUUID?.()
@@ -1621,7 +1627,8 @@ const recorder = {
       build: this.build,
       session: this.session,
       ua: navigator.userAgent,
-      t0: TELEMETRY_SESSION_STARTED_AT,
+      t0: TELEMETRY_TIME_ORIGIN_EPOCH_MS,
+      clock_basis: "performance_time_origin_plus_monotonic_ms",
       state_encoding: TELEMETRY_STATE_ENCODING,
       keyframe_interval_samples: DEFAULT_KEYFRAME_INTERVAL_SAMPLES,
       authority_tick_hz: AUTHORITY_TICK_HZ,
@@ -2828,18 +2835,17 @@ function renderTestFlightConsole(state) {
   const airborneSortie = state.ready !== true && state.paused !== true && state.finished !== true;
   updateMissionRadio(state?.ready !== true && state?.paused !== true ? state : null);
   updateNavConsole(airborneSortie ? state : null);
-  // AVAILABLE vs RELEVANT. The console reads engine, bus, hydraulics and gear, and a pilot may
-  // want any of those at any moment — so the collapsed tab is present for the whole sortie and the
-  // pilot opens it when they choose. Relevance still drives data-relevance, which is what makes it
-  // shout during a maintenance beat or an abnormal indication rather than sitting there as decor.
+  // The action console is exception-driven flight chrome. Routine engine/configuration truth
+  // remains available in the snapshot and diagnostic views, but the in-flight tab only appears
+  // when it can change a live decision.
   const relevant = airborneSortie && testFlightConsoleRelevant(projected);
   if (testFlightConsole) {
     const wasHidden = testFlightConsole.hidden;
-    testFlightConsole.hidden = !airborneSortie;
+    testFlightConsole.hidden = !relevant;
     testFlightConsole.dataset.relevance = projected.maintenance.active
       ? "maintenance"
       : projected.warnings.length ? "abnormal" : relevant ? "transition" : "none";
-    if (!airborneSortie && !wasHidden) {
+    if (!relevant && !wasHidden) {
       testFlightConsole.open = false;
       testFlightActionController?.releaseAll();
     }

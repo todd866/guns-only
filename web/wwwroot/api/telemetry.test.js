@@ -437,6 +437,12 @@ test("recorder losslessly encodes retained 20 Hz samples and batches uploads eve
   assert.match(app, /buildTelemetryBatch\(/);
   assert.match(app, /TelemetryStateEncoder/);
   assert.match(app, /_stateEncoder\.forceKeyframe\(\)/);
+  assert.match(app,
+    /TELEMETRY_TIME_ORIGIN_EPOCH_MS = Number\.isFinite\(performance\.timeOrigin\)/);
+  assert.match(app, /t0: TELEMETRY_TIME_ORIGIN_EPOCH_MS/);
+  assert.match(app, /clock_basis: "performance_time_origin_plus_monotonic_ms"/);
+  assert.doesNotMatch(app, /t0: TELEMETRY_SESSION_STARTED_AT/,
+    "monotonic performance.now rows cannot be added to the later module-start Date.now stamp");
   assert.match(app, /releaseTelemetryMaterializedStates\(batch\.rows\)/);
   assert.match(app, /this\.droppedRows \+= overflow/);
   assert.match(app, /ensureTelemetryChunkHeader\(this\.buf, this\.chunkHeader\(batchId\)\)/);

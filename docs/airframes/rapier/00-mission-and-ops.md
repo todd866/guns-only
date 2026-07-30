@@ -49,7 +49,7 @@ ram ownership by ~M2.2–2.8 in the map; four square gates into wire three.
 | CMC material capability | 1473 K (1200 °C) — closed repo card, **not** integrated-airframe qualification | Conservative T0 screening only |
 | Inlet / bondline operating limit | **unknown / open** | No defensible pilot temperature margin yet |
 | Ram cycle / spill | useful dash ~M4; spill band M3.3–3.8; dead by ~M4.5–5 | **Thrust** |
-| Structure | 12 G qualified / 15 G override — **closed ceilings**, `PositiveStructuralLimitG` / `PositiveOverrideLimitG` | Dense-air dive pull only after aerodynamic authority reaches them |
+| Structure | 12 G qualified and commanded ceiling — **closed**, `PositiveStructuralLimitG` / `PositiveOverrideLimitG`; Space releases low-q incidence, not structure | Dense-air dive pull only after aerodynamic authority reaches it |
 
 **Decision locked:** keep **CMC** hot structure; **do not** revert to stainless. Keep map
 `DesignMach = 2.6` as a normaliser only (see [30 — Propulsion and inlet](30-propulsion-and-inlet.md)).

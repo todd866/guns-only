@@ -2,9 +2,9 @@
 /// heading strip; FL/Mach targets belong on tapes / Limits, not the mode line.
 const PHASE = Object.freeze({
   1: "LAUNCH",
-  2: "CLIMB",
-  3: "ACCEL",
-  4: "RAM CLIMB",
+  2: "CLIMB · FL560",
+  3: "ACCEL · M2.2",
+  4: "RAM CLIMB · FL700",
   5: "ZOOM PULL",
   6: "ZOOM COAST",
   7: "REENTER",
@@ -349,6 +349,13 @@ export function rapierGuidancePresentation(state) {
   let phaseText = patternOnly
     ? (legLabel ? `CIRCUITS · ${legLabel}` : (CIRCUITS_PHASE[phase] ?? "CIRCUITS"))
     : (PHASE[phase] ?? "MISSION");
+  if (!patternOnly && phase === PHASE_INTERCEPT) {
+    const strategy = typeof state.rapier_strategy === "string"
+      ? state.rapier_strategy.toLowerCase()
+      : "";
+    if (strategy === "level_dash") phaseText = "INTERCEPT · DASH";
+    else if (strategy === "direct_join") phaseText = "INTERCEPT · DIRECT";
+  }
   const enabled = state.rapier_automation_enabled === true;
   const active = state.rapier_automation_active === true;
   const drones = Math.max(0,

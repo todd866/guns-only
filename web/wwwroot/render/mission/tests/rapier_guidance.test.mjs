@@ -62,7 +62,7 @@ test("Rapier guidance is a quiet mode line with authority and takeover", () => {
     rapier_cmc_capability_c: 1200,
     rapier_cmc_margin_c: 1090,
   });
-  assert.match(cue.text, /^AUTO · ACCEL$/);
+  assert.match(cue.text, /^AUTO · ACCEL · M2\.2$/);
   assert.doesNotMatch(cue.text, /SKIN|T0|P TOGGLE|LEVEL ACCEL|M2\.20/);
   assert.equal(cue.detail, "");
   assert.equal(cue.level, "active");
@@ -154,6 +154,26 @@ test("skin-clamped dash stays off the quiet line (tapes / Limits own Mach)", () 
   });
   assert.match(cue.text, /^AUTO · INTERCEPT$/);
   assert.doesNotMatch(cue.text, /CMD M/);
+});
+
+test("intercept mode line explains a goal-complete phase jump without an essay", () => {
+  const dash = rapierGuidancePresentation({
+    rapier_mission_available: true,
+    rapier_automation_enabled: true,
+    rapier_automation_active: true,
+    rapier_mission_phase: 9,
+    rapier_strategy: "level_dash",
+  });
+  const direct = rapierGuidancePresentation({
+    rapier_mission_available: true,
+    rapier_automation_enabled: false,
+    rapier_automation_active: false,
+    rapier_mission_phase: 9,
+    rapier_strategy: "direct_join",
+  });
+
+  assert.equal(dash.text, "AUTO · INTERCEPT · DASH");
+  assert.equal(direct.text, "PILOT · INTERCEPT · DIRECT");
 });
 
 test("cycle teach explains turbine-to-ram handoff with live shares and skin", () => {

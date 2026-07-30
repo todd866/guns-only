@@ -11,28 +11,28 @@ const appUrl = new URL("../../../app.js", import.meta.url);
 test("measured sim cost raises the existing catch-up cap only as far as the frame can pay", () => {
   const budget = new MeasuredTimeCompressionBudget({
     tickHz: 120,
-    budgetMs: 8,
-    maximumFactor: 16,
+    budgetMs: 4,
+    maximumFactor: TIME_COMPRESSION_MAX_FACTOR,
     initialTickCostMs: 1,
   });
 
   const expensive = budget.plan(1000 / 60, 10 / 120);
   assert.equal(expensive.baseTicks, 2);
-  assert.equal(expensive.maximumFactor, 4);
-  assert.equal(expensive.scheduledTicks, 8);
-  assert.equal(expensive.requestedTicks, 32);
-  assert.equal(expensive.droppedTicks, 24);
+  assert.equal(expensive.maximumFactor, 2);
+  assert.equal(expensive.scheduledTicks, 4);
+  assert.equal(expensive.requestedTicks, 8);
+  assert.equal(expensive.droppedTicks, 4);
   assert.equal(expensive.catchupCapSeconds, 10 / 120,
-    "the ordinary ten-tick recovery cap already covers an eight-tick cost budget");
+    "the ordinary ten-tick recovery cap already covers the measured cost budget");
 
   for (let frame = 0; frame < 12; frame += 1)
-    budget.observeSimPhase(1.6, 8); // repeated measured 0.2 ms/tick
+    budget.observeSimPhase(0.8, 4); // repeated measured 0.2 ms/tick
   const cheap = budget.plan(1000 / 60, 10 / 120);
   assert.ok(cheap.maximumFactor > expensive.maximumFactor);
   assert.ok(cheap.maximumFactor <= TIME_COMPRESSION_MAX_FACTOR);
-  assert.equal(cheap.catchupCapSeconds, cheap.scheduledTicks / 120);
+  assert.equal(cheap.maximumFactor, 4);
 
-  budget.observeSimPhase(24, 8); // 3 ms/tick takes effect immediately
+  budget.observeSimPhase(12, 4); // 3 ms/tick takes effect immediately
   const overloaded = budget.plan(1000 / 60, 10 / 120);
   assert.equal(overloaded.maximumFactor, 1);
   assert.equal(overloaded.scheduledTicks, overloaded.baseTicks);

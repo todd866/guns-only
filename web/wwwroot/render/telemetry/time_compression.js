@@ -1,4 +1,7 @@
-export const TIME_COMPRESSION_MAX_FACTOR = 16;
+// Four ordinary fixed ticks per wall-clock tick is the highest offer that kept the presentation
+// hand-back inside one 60 Hz frame in recorded Rapier sorties. Higher factors saved little on the
+// now-shorter intercept while producing large terrain/view invalidations at the ×N → ×1 boundary.
+export const TIME_COMPRESSION_MAX_FACTOR = 4;
 export const TIME_COMPRESSION_SIM_BUDGET_MS = 8;
 export const TIME_COMPRESSION_INITIAL_TICK_COST_MS = 1;
 

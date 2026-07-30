@@ -609,18 +609,27 @@ function assertRapierMission(data) {
   }
 
   const panel = geometry.limitsPanel;
+  const compact = panel?.compact === true;
+  const expectedRows = compact ? 2 : 5;
   check(name, "Rapier Limits Panel is drawn (nav to strip)",
-    panel?.profile === "nav" && Array.isArray(panel.rows) && panel.rows.length === 5,
+    panel?.profile === "nav" && Array.isArray(panel.rows)
+      && panel.rows.length === expectedRows,
     panel ? `${panel.profile} rows=${panel.rows?.length}` : "missing");
   if (!panel || panel.profile !== "nav") return;
 
-  check(name, "Limits nav slots are FUEL · NM/MIN · LB/MIN · LB/NM · ARR",
-    panel.rows[0].label === "FUEL"
-      && panel.rows[1].label === "NM/MIN"
-      && panel.rows[2].label === "LB/MIN"
-      && panel.rows[3].label === "LB/NM"
-      && /^ARR/.test(panel.rows[4].label),
-    panel.rows.map((row) => row.label).join(" · "));
+  if (compact) {
+    check(name, "normal outbound Limits collapses to fuel plus arrival reserve",
+      panel.rows[0].label === "FUEL" && /^ARR/.test(panel.rows[1].label),
+      panel.rows.map((row) => row.label).join(" · "));
+  } else {
+    check(name, "expanded Limits slots are FUEL · NM/MIN · LB/MIN · LB/NM · ARR",
+      panel.rows[0].label === "FUEL"
+        && panel.rows[1].label === "NM/MIN"
+        && panel.rows[2].label === "LB/MIN"
+        && panel.rows[3].label === "LB/NM"
+        && /^ARR/.test(panel.rows[4].label),
+      panel.rows.map((row) => row.label).join(" · "));
+  }
   check(name, "Limits panel stays inside the canvas",
     panel.x >= 0 && panel.y >= 0
       && panel.x + panel.width <= viewport.width

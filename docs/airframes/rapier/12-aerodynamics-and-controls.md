@@ -40,9 +40,10 @@ The kernel now keeps these independent:
    break by the same ratio.
 2. **Ordinary normal-law incidence.** A continuous Mach schedule caps commanded alpha below the
    physical break. It is inlet/stability protection, not a second definition of stall.
-3. **Structure/control policy.** +12 G normal and +15 G deliberate override are demand ceilings.
-   They do not manufacture lift. Explicit incidence override may request the physical wing beyond
-   the ordinary law, while drag, inlet recovery, separation, q, and moment authority remain live.
+3. **Structure/control policy.** +12 G is both the normal and deliberate-override demand ceiling.
+   It does not manufacture lift. Explicit override may still request physical incidence beyond the
+   ordinary law at low q, while drag, inlet recovery, separation, q, and moment authority remain
+   live.
 
 The resulting bound is:
 
@@ -56,7 +57,7 @@ At the design-gross **11,090 kg**, FL720 standard atmosphere, and M3.5, this bra
 | Ordinary normal law | 7.45° / 0.155 | **0.90 G** |
 | Physical attached-flow break | 21.5° / 0.447 | **2.59 G** |
 | Structural placard | — | 12 G demand ceiling, **not available here** |
-| Override placard | — | 15 G demand ceiling, **not available here** |
+| Override placard | — | 12 G demand ceiling; incidence release remains, **not available here** |
 
 That 0.90 G result is an intentionally visible calibration finding: the provisional Mach-only
 normal-law schedule is slightly too restrictive to hold FL720 at design gross. The mission is

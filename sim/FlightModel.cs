@@ -624,12 +624,13 @@ public static class FlightModel {
         // bank compensation also gives the correct negative-G trim inverted.
         NeutralFlightPathHold: FlightPathHoldConfig.Rapier,
         // These are structural/control ceilings, not promised lift. At sufficient q the reclined
-        // occupant may command all 12 G; Space releases the control law to 15 G while knowingly
-        // eating margin on the same article. In the FL700/M3.5 dash, Mach-scheduled lift slope and
-        // the small wing bind first, leaving only a few G of aerodynamic authority.
+        // occupant may command all 12 G. Space still releases the normal-law incidence boundary
+        // for low-q post-stall manoeuvring, but it cannot command through the aircraft's declared
+        // structural limit. In the FL700/M3.5 dash, Mach-scheduled lift slope and the small wing
+        // bind first, leaving only a few G of aerodynamic authority.
         PositiveStructuralLimitG: 12.0, MaxPerformFraction: 1.0,
         NormalPullUsesMaxPerformance: true,
-        PositiveOverrideLimitG: 15.0,
+        PositiveOverrideLimitG: 12.0,
         DynamicPressureScheduledPostStallOverride: true,
         MaxThrustFraction: 1.55,              // augmentor lever stop
         // 1200 C CMC MATERIAL-CAPABILITY SURROGATE. Additively manufactured SiC/SiC ceramic matrix

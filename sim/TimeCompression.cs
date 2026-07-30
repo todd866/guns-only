@@ -43,7 +43,10 @@ internal readonly record struct TimeCompressionSafetyState(
 internal static class TimeCompressionPolicy {
     // This is the kernel's transit request, not a renderer performance cap. The host may offer a
     // lower measured-cost ceiling on every frame; the accepted factor is projected authoritatively.
-    public const int PreferredFactor = 16;
+    // The 240 km Rapier intercept no longer needs a 16× transit. Four times real time keeps the
+    // fixed-step hand-back small enough that presentation work does not hitch when the pilot takes
+    // control, while still removing the quiet climb/cruise wait.
+    public const int PreferredFactor = 4;
     public const double ThreatRangeM = 35_000.0;
     public const double BoundaryLeadSeconds = 12.0;
     public const double RamBoundaryLeadMach = 0.06;
