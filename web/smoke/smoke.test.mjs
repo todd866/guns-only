@@ -33,7 +33,135 @@ test("the smoke server preserves production terrain byte-range semantics", async
     assert.match(response.headers.get("content-range") ?? "", /^bytes 0-1\/\d+$/);
     assert.equal(response.headers.get("content-length"), "2");
     assert.equal((await response.arrayBuffer()).byteLength, 2);
+    assert.deepEqual(site.diagnostics(), {
+      fullFileBytesRead: 0,
+      rangeBytesRead: 2,
+      rangeRequests: 1,
+      largestReadAllocation: 2,
+    }, "a ranged terrain request must never read or allocate the whole backing page");
   } finally {
+    await site.close();
+  }
+});
+
+test("the mobile loading shell fills the viewport and names the selected sortie honestly", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const cases = [
+      {
+        viewport: { width: 390, height: 844 },
+        search: "?input=touch&audioQa=silent",
+        expectedSortie: /F-22A SURROGATE \/ ENDLESS MERGE/,
+        expectedDeck: /Fight the merge.*Manage the energy.*Make the shot/,
+      },
+      {
+        viewport: { width: 844, height: 390 },
+        search: "?program=rapier-intercept&input=touch&audioQa=silent",
+        expectedSortie: /RAPIER \/ INTERCEPT/,
+        expectedDeck: /Launch fast.*Climb beyond the weather.*Make one pass count/,
+      },
+      {
+        viewport: { width: 667, height: 375 },
+        search: "?input=touch&audioQa=silent",
+        expectedSortie: /F-22A SURROGATE \/ ENDLESS MERGE/,
+        expectedDeck: /Fight the merge.*Manage the energy.*Make the shot/,
+        safeSides: 44,
+      },
+      {
+        viewport: { width: 390, height: 500 },
+        search: "?program=medevac&input=touch&audioQa=silent",
+        expectedSortie: /AIR AMBULANCE \/ MEDEVAC/,
+        expectedDeck: /Fly the route.*Hold the hover.*Bring them home/,
+      },
+    ];
+    for (const entry of cases) {
+      const context = await browser.newContext({
+        viewport: entry.viewport,
+        screen: entry.viewport,
+        isMobile: true,
+        hasTouch: true,
+      });
+      const page = await context.newPage();
+      await page.route("**/app.js*", (route) => route.abort());
+      await page.route("**/_framework/**", (route) => route.abort());
+      await page.goto(`${site.url}${entry.search}`, {
+        waitUntil: "domcontentloaded",
+        timeout: scaled(30000),
+      });
+      if (entry.safeSides) {
+        await page.addStyleTag({
+          content: `:root { --safe-left: ${entry.safeSides}px; --safe-right: ${entry.safeSides}px; }`,
+        });
+        await page.evaluate(() => new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      }
+      const layout = await page.evaluate(() => {
+        const box = (selector) => {
+          const rect = document.querySelector(selector).getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height,
+          };
+        };
+        return {
+          boot: box("#boot"),
+          card: box(".boot-card"),
+          hero: box(".boot-hero"),
+          sortie: box(".boot-sortie"),
+          load: box(".boot-load"),
+          title: document.querySelector("#boot-title").textContent.trim(),
+          deck: document.querySelector("#boot-deck").textContent.replace(/\s+/g, " ").trim(),
+          sortieTitle: document.querySelector("#boot-sortie-title").textContent.trim(),
+          status: document.querySelector("#boot-status").textContent.replace(/\s+/g, " ").trim(),
+          busy: document.querySelector("#boot").getAttribute("aria-busy"),
+          scrollWidth: document.documentElement.scrollWidth,
+          scrollHeight: document.documentElement.scrollHeight,
+          viewport: { width: innerWidth, height: innerHeight },
+        };
+      });
+      const { width, height } = layout.viewport;
+      for (const [name, rect] of Object.entries({
+        card: layout.card,
+        hero: layout.hero,
+        sortie: layout.sortie,
+        load: layout.load,
+      })) {
+        assert.ok(rect.left >= 0 && rect.top >= 0
+          && rect.right <= width && rect.bottom <= height,
+        `${width}x${height}: boot ${name} escaped viewport: ${JSON.stringify(rect)}`);
+      }
+      assert.equal(layout.title, "GUNS ONLY");
+      assert.match(layout.deck, entry.expectedDeck);
+      assert.match(layout.sortieTitle, entry.expectedSortie);
+      assert.equal(layout.status, "LOADING SIMULATION FILES…");
+      assert.doesNotMatch(`${layout.deck} ${layout.status}`, /\.NET|deterministic flight kernel/i);
+      assert.equal(layout.busy, "true");
+      assert.ok(layout.card.height >= height * 0.72,
+        `${width}x${height}: loading composition collapsed into a small floating card`);
+      if (height > width) {
+        assert.ok(layout.hero.top <= height * 0.22,
+          `${width}x${height}: hero leaves the same giant dead zone as production`);
+      }
+      assert.ok(layout.load.bottom >= height * 0.75,
+        `${width}x${height}: loading truth is stranded in the middle of the screen`);
+      assert.ok(layout.scrollWidth <= width && layout.scrollHeight <= height,
+        `${width}x${height}: loading shell scrolls or clips`);
+      if (entry.safeSides) {
+        assert.ok(layout.card.left >= entry.safeSides
+          && layout.card.right <= width - entry.safeSides,
+        `${width}x${height}: loading card invades the simulated notch-safe region`);
+      }
+      await context.close();
+    }
+  } finally {
+    await browser.close();
     await site.close();
   }
 });
@@ -1346,7 +1474,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         const page = await context.newPage();
         const pageErrors = [];
         page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-        await page.goto(site.url, { waitUntil: "load", timeout: scaled(60000) });
+        await page.goto(`${site.url}?audioQa=silent`,
+          { waitUntil: "load", timeout: scaled(60000) });
         await page.waitForFunction(
           () => document.querySelector("#boot")?.classList.contains("ready") === true,
           undefined,
@@ -1370,7 +1499,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
               && !document.documentElement.classList.contains("run-paused");
             const start = document.querySelector("#ready-start");
             const resumable = document.querySelector("#ready-screen")?.classList.contains("visible")
-              && start?.disabled === false;
+              && start?.disabled === false
+              && document.activeElement === start;
             return active || resumable;
           }, undefined, { timeout: scaled(45000) });
         } catch (error) {
@@ -1401,7 +1531,34 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         const alreadyActive = await page.evaluate(() =>
           globalThis.__gunsState?.session_phase === "ACTIVE"
             && !document.documentElement.classList.contains("run-paused"));
-        if (!alreadyActive) await readyStart.click();
+        assert.equal(alreadyActive, false,
+          `${viewport.width}x${viewport.height}: touch boot skipped the required Fly gesture`);
+        const readyLayout = await page.evaluate(() => {
+          const start = document.querySelector("#ready-start").getBoundingClientRect();
+          const description = document.querySelector(
+            ".sortie-choice > span:not(.sortie-number)",
+          );
+          return {
+            startTop: start.top,
+            startBottom: start.bottom,
+            descriptionDisplay: getComputedStyle(description).display,
+            selectorTouchAction: getComputedStyle(
+              document.querySelector(".ready-selector"),
+            ).touchAction,
+            briefingTouchAction: getComputedStyle(
+              document.querySelector(".ready-briefing"),
+            ).touchAction,
+          };
+        });
+        assert.ok(readyLayout.startTop >= 0 && readyLayout.startBottom <= viewport.height,
+          `${viewport.width}x${viewport.height}: Fly is outside the initial viewport`);
+        assert.equal(readyLayout.descriptionDisplay, "none",
+          `${viewport.width}x${viewport.height}: verbose cards still dominate the phone menu`);
+        assert.equal(readyLayout.selectorTouchAction, "pan-y pinch-zoom",
+          `${viewport.width}x${viewport.height}: mission selection blocks pinch zoom`);
+        assert.equal(readyLayout.briefingTouchAction, "pan-y pinch-zoom",
+          `${viewport.width}x${viewport.height}: mission briefing blocks pinch zoom`);
+        await readyStart.click();
         await page.waitForFunction(
           () => globalThis.__gunsMobile?.active === true
             && globalThis.__gunsState?.session_phase === "ACTIVE"
@@ -1412,6 +1569,13 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             && !document.documentElement.classList.contains("run-paused"),
           undefined,
           { timeout: scaled(45000) },
+        );
+        await page.evaluate(() => { globalThis.__HUD_DEBUG__ = true; });
+        await page.waitForFunction(
+          () => globalThis.__HUD_GEOMETRY?.presentationProfile === "touch_dual_stick"
+            && globalThis.__HUD_GEOMETRY?.mobileTactical,
+          undefined,
+          { timeout: scaled(10000) },
         );
 
         const phoneState = await page.evaluate(() => {
@@ -1436,10 +1600,13 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           const throttle = rect("#touch-throttle-controls");
           const throttleRocker = rect("#touch-throttle-rocker");
           const actions = rect(".touch-right");
+          const anca = rect("[data-anca-panel]");
           const waveOff = document.querySelector("#touch-wave-off");
           waveOff.hidden = false;
           const throttleWithWaveOff = rect("#touch-throttle-controls");
           waveOff.hidden = true;
+          const tiltVisible = visible(document.querySelector("#tilt-status"));
+          const ancaVisible = visible(document.querySelector("[data-anca-panel]"));
           return {
             direct,
             controlState: {
@@ -1467,6 +1634,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             ).touchAction,
             targetStickLabel: document.querySelector("#target-stick").getAttribute("aria-label"),
             targetStickKnob: rect("#target-stick-knob"),
+            anca,
+            ancaVisible,
             fallbackDirectionButtons: document.querySelectorAll(
               '#fallback-stick [data-hold-key^="Arrow"]',
             ).length,
@@ -1485,12 +1654,18 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             targetStickOverlapsActions: overlaps(targetStick, actions),
             pause: rect("#pause-button"),
             tilt: rect("#tilt-status"),
+            tiltVisible,
             console: rect("#test-flight-console"),
             pauseOverlapsTilt: overlaps(rect("#pause-button"), rect("#tilt-status")),
             pauseOverlapsConsole:
               overlaps(rect("#pause-button"), rect("#test-flight-console")),
             tiltOverlapsConsole:
               overlaps(rect("#tilt-status"), rect("#test-flight-console")),
+            hud: globalThis.__HUD_GEOMETRY,
+            resolution: (() => {
+              const diagnostics = globalThis.__gunsAssets?.diagnostics?.();
+              return diagnostics?.visualRuntime?.resolution ?? diagnostics?.directResolution ?? null;
+            })(),
             viewport: { width: innerWidth, height: innerHeight },
           };
         });
@@ -1499,6 +1674,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           ["touch-throttle-rocker", "touch-limit-override", "pulse:KeyV"],
           `${viewport.width}x${viewport.height}: ${JSON.stringify(phoneState.controlState)}`);
         assert.match(phoneState.tiltText, /TILT|STICK/);
+        assert.equal(phoneState.ancaVisible, false,
+          `${viewport.width}x${viewport.height}: quiet ANCA chip still clutters touch flight`);
         assert.equal(phoneState.gearHidden, true);
         assert.equal(phoneState.flapUpHidden, true);
         assert.equal(phoneState.flapDownHidden, true);
@@ -1508,7 +1685,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         assert.equal(phoneState.stickTouchAction, "none");
         assert.equal(phoneState.targetStickVisible, true);
         assert.equal(phoneState.targetStickTouchAction, "none");
-        assert.equal(phoneState.targetStickLabel, "Right look and fire stick");
+        assert.equal(phoneState.targetStickLabel, "Right look stick; hold centre to fire");
         assert.equal(phoneState.fallbackDirectionButtons, 0);
         assert.equal(phoneState.ordinaryPowerButtons, 0);
         assert.equal(phoneState.throttleRockerTouchAction, "none");
@@ -1537,7 +1714,9 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           && phoneState.stick.right < phoneState.viewport.width * 0.25);
         assert.ok(phoneState.targetStick.right <= phoneState.viewport.width
           && phoneState.targetStick.left > phoneState.viewport.width * 0.75);
-        for (const target of [phoneState.pause, phoneState.tilt]) {
+        const chromeTargets = [phoneState.pause];
+        if (phoneState.tiltVisible) chromeTargets.push(phoneState.tilt);
+        for (const target of chromeTargets) {
           assert.ok(target.width >= 44 && target.height >= 44,
             `${viewport.width}x${viewport.height}: phone chrome target is below 44px`);
           assert.ok(target.left >= 0 && target.right <= phoneState.viewport.width);
@@ -1553,6 +1732,25 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           `${viewport.width}x${viewport.height}: pause overlaps the action console`);
         assert.equal(phoneState.tiltOverlapsConsole, false,
           `${viewport.width}x${viewport.height}: tilt recenter overlaps the action console`);
+        assert.ok(phoneState.resolution?.pixelRatio >= 1,
+          `${viewport.width}x${viewport.height}: renderer fell below native CSS-pixel density`);
+        assert.equal(phoneState.hud.presentationProfile, "touch_dual_stick");
+        assert.ok(phoneState.hud.mobileTactical,
+          `${viewport.width}x${viewport.height}: compact tactical rail was not drawn`);
+        assert.equal(phoneState.hud.desktopFlightChrome, false);
+        assert.equal(phoneState.hud.limitsPanel, null);
+        assert.equal(phoneState.hud.systemsPanel, null);
+        const mobileRows = Object.fromEntries(
+          phoneState.hud.mobileTactical.drawnRows.map((row) => [row.key, row.text]),
+        );
+        assert.match(mobileRows.actual,
+          /M.*(?:KCAS|KIAS).*(?:COR|H\d{3}).*(?:\d(?:\.\d)?K|FL).*?(?:V\/S|↑|↓)/);
+        assert.match(mobileRows.context, /GUN\d+/);
+        assert.ok(phoneState.hud.mobileTactical.drawnRows.every(
+          (row) => !row.text.includes("…"),
+        ), `${viewport.width}x${viewport.height}: tactical truth was ellipsized`);
+        assert.ok(phoneState.hud.ladderRungs.every((rung) => rung.deg % 10 === 0),
+          `${viewport.width}x${viewport.height}: minor pitch ladder clutter survived`);
 
         const stick = page.locator("#fallback-stick");
         const stickBox = await stick.boundingBox();
@@ -1624,6 +1822,84 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           };
         });
         assert.deepEqual(releasedStick, { x: 0, y: 0 });
+
+        const targetStick = page.locator("#target-stick");
+        const targetStickBox = await targetStick.boundingBox();
+        assert.ok(targetStickBox,
+          `${viewport.width}x${viewport.height}: target stick has no box`);
+        const targetCentre = {
+          x: targetStickBox.x + targetStickBox.width / 2,
+          y: targetStickBox.y + targetStickBox.height / 2,
+        };
+        const baselineAmmo = await page.evaluate(() => Number(globalThis.__gunsState?.ammo));
+        const lookPointerId = 52;
+        await targetStick.dispatchEvent("pointerdown", {
+          pointerId: lookPointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          buttons: 1,
+          clientX: targetCentre.x,
+          clientY: targetCentre.y,
+        });
+        await targetStick.dispatchEvent("pointermove", {
+          pointerId: lookPointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: -1,
+          buttons: 1,
+          clientX: targetCentre.x + targetStickBox.width * 0.34,
+          clientY: targetCentre.y - targetStickBox.height * 0.28,
+        });
+        await page.waitForTimeout(350);
+        const lookOnlyState = await page.evaluate(() => ({
+          ammo: Number(globalThis.__gunsState?.ammo),
+          firing: globalThis.__gunsState?.gun_firing === true,
+          fireHeld: globalThis.__gunsMobile?.targetFireHeld === true,
+          active: document.querySelector("#target-stick")?.dataset.active,
+        }));
+        assert.deepEqual(lookOnlyState, {
+          ammo: baselineAmmo,
+          firing: false,
+          fireHeld: false,
+          active: "true",
+        }, `${viewport.width}x${viewport.height}: drag-to-look fired the gun`);
+        await targetStick.dispatchEvent("pointerup", {
+          pointerId: lookPointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          buttons: 0,
+          clientX: targetCentre.x + targetStickBox.width * 0.34,
+          clientY: targetCentre.y - targetStickBox.height * 0.28,
+        });
+
+        const firePointerId = 53;
+        await targetStick.dispatchEvent("pointerdown", {
+          pointerId: firePointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          buttons: 1,
+          clientX: targetCentre.x,
+          clientY: targetCentre.y,
+        });
+        await page.waitForFunction(() =>
+          globalThis.__gunsMobile?.targetFireHeld === true,
+        undefined, { timeout: scaled(5000) });
+        await targetStick.dispatchEvent("pointerup", {
+          pointerId: firePointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          buttons: 0,
+          clientX: targetCentre.x,
+          clientY: targetCentre.y,
+        });
+        await page.waitForFunction(() =>
+          globalThis.__gunsMobile?.targetFireHeld !== true
+            && globalThis.__gunsState?.gun_firing !== true,
+          undefined, { timeout: scaled(5000) });
 
         const throttleRocker = page.locator("#touch-throttle-rocker");
         const throttleBox = await throttleRocker.boundingBox();
@@ -1801,7 +2077,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         });
         assert.deepEqual(settingsState, {
           scrollable: true,
-          touchAction: "pan-y",
+          touchAction: "pan-y pinch-zoom",
           keyboardOpen: false,
           settingsTouchAllowed: true,
           sceneTouchBlocked: true,
@@ -1857,7 +2133,18 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     const alreadyActive = await page.evaluate(() =>
       globalThis.__gunsState?.session_phase === "ACTIVE"
         && !document.documentElement.classList.contains("run-paused"));
-    if (!alreadyActive) await page.locator("#ready-start").tap();
+    assert.equal(alreadyActive, false, "portrait touch boot skipped the required Fly gesture");
+    const portraitReady = await page.evaluate(() => {
+      const start = document.querySelector("#ready-start").getBoundingClientRect();
+      return {
+        top: start.top,
+        bottom: start.bottom,
+        viewportHeight: innerHeight,
+      };
+    });
+    assert.ok(portraitReady.top >= 0 && portraitReady.bottom <= portraitReady.viewportHeight,
+      `portrait Fly is outside the initial viewport: ${JSON.stringify(portraitReady)}`);
+    await page.locator("#ready-start").tap();
     await page.waitForFunction(() =>
       globalThis.__gunsState?.session_phase === "ACTIVE"
       && globalThis.__gunsState?.player_terminal_state === "FLYING"
@@ -1872,6 +2159,37 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
         `expected ${required} on <html>, got: ${modeClasses.join(" ")}`,
       );
     }
+    await page.evaluate(() => { globalThis.__HUD_DEBUG__ = true; });
+    await page.waitForFunction(
+      () => globalThis.__HUD_GEOMETRY?.presentationProfile === "portrait_dual_stick"
+        && globalThis.__HUD_GEOMETRY?.mobileTactical,
+      undefined,
+      { timeout: scaled(10000) },
+    );
+    const portraitHud = await page.evaluate(() => ({
+      ...globalThis.__HUD_GEOMETRY,
+      ancaVisible: (() => {
+        const panel = document.querySelector("[data-anca-panel]");
+        return panel && !panel.hidden && getComputedStyle(panel).display !== "none";
+      })(),
+    }));
+    assert.equal(portraitHud.presentationProfile, "portrait_dual_stick");
+    assert.ok(portraitHud.mobileTactical, "portrait tactical rail was not drawn");
+    assert.equal(portraitHud.desktopFlightChrome, false);
+    assert.equal(portraitHud.limitsPanel, null);
+    assert.equal(portraitHud.systemsPanel, null);
+    const portraitRows = Object.fromEntries(
+      portraitHud.mobileTactical.drawnRows.map((row) => [row.key, row.text]),
+    );
+    assert.match(portraitRows.actual,
+      /AUTO COR.*M.*(?:KCAS|KIAS).*(?:\d(?:\.\d)?K|FL).*?(?:V\/S|↑|↓)|M.*(?:KCAS|KIAS).*AUTO COR.*(?:\d(?:\.\d)?K|FL).*?(?:V\/S|↑|↓)/);
+    assert.match(portraitRows.context, /GUN\d+/);
+    assert.ok(portraitHud.mobileTactical.drawnRows.every(
+      (row) => !row.text.includes("…"),
+    ), "portrait tactical truth was ellipsized");
+    assert.ok(portraitHud.ladderRungs.every((rung) => rung.deg % 10 === 0));
+    assert.equal(portraitHud.ancaVisible, false,
+      "quiet ANCA chip still clutters portrait touch flight");
 
     // The regression this guards: the sticks sat inside the pointer-events:none touch overlay
     // without their own pointer-events, so every drag fell through to the scene canvas and the
@@ -1931,6 +2249,8 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
       const r = document.querySelector("#target-stick").getBoundingClientRect();
       return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
     });
+    const portraitBaselineAmmo = await page.evaluate(() =>
+      Number(globalThis.__gunsState?.ammo));
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [touchPoint(tx, ty, 2)],
@@ -1941,13 +2261,44 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
         touchPoints: [touchPoint(tx + 30, ty - 20, 2)],
       });
       await page.waitForFunction(
-        () => document.querySelector("#target-stick")?.dataset.active === "true",
+        () => {
+          const stick = document.querySelector("#target-stick");
+          return stick?.dataset.active === "true"
+            && Math.abs(Number.parseFloat(
+              stick.style.getPropertyValue("--stick-x"),
+            )) >= 4;
+        },
         undefined,
         { timeout: scaled(5000) },
       );
+      await page.waitForTimeout(350);
+      const lookOnly = await page.evaluate(() => ({
+        ammo: Number(globalThis.__gunsState?.ammo),
+        firing: globalThis.__gunsState?.gun_firing === true,
+        fireHeld: globalThis.__gunsMobile?.targetFireHeld === true,
+      }));
+      assert.deepEqual(lookOnly,
+        { ammo: portraitBaselineAmmo, firing: false, fireHeld: false },
+        "portrait drag-to-look fired the gun");
     } finally {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     }
+
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [touchPoint(tx, ty, 3)],
+    });
+    try {
+      await page.waitForFunction(() =>
+        globalThis.__gunsMobile?.targetFireHeld === true,
+      undefined, { timeout: scaled(5000) });
+    } finally {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    }
+    await page.waitForFunction(() =>
+      globalThis.__gunsMobile?.targetFireHeld !== true
+        && globalThis.__gunsState?.gun_firing !== true,
+      undefined, { timeout: scaled(5000) });
 
     assert.deepEqual(pageErrors, [], `uncaught page errors:\n${pageErrors.join("\n")}`);
   } finally {

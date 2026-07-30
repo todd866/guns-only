@@ -1118,26 +1118,45 @@ if (mobileControls) {
 // Centralised, deliberately conservative quality knobs. The shader work stays identical across
 // tiers; mobile saves fill-rate and vertex cost while desktop keeps the silhouette and deck edges
 // crisp. These are evaluated once and never branch inside the render loop.
-const detectedDeviceMemoryGiB = Number(navigator.deviceMemory) || 8;
-const detectedLogicalCores = Number(navigator.hardwareConcurrency) || 8;
+const reportedDeviceMemoryGiB = Number(navigator.deviceMemory);
+const reportedLogicalCores = Number(navigator.hardwareConcurrency);
+const detectedDeviceMemoryGiB = Number.isFinite(reportedDeviceMemoryGiB)
+    && reportedDeviceMemoryGiB > 0
+  ? reportedDeviceMemoryGiB : null;
+const detectedLogicalCores = Number.isFinite(reportedLogicalCores) && reportedLogicalCores > 0
+  ? reportedLogicalCores : null;
+const constrainedVisualDevice = (detectedDeviceMemoryGiB !== null
+    && detectedDeviceMemoryGiB <= 4)
+  || (detectedLogicalCores !== null && detectedLogicalCores <= 4);
+// Safari does not publish deviceMemory. Missing data is not evidence that a phone can safely pay
+// the balanced tier's clouds, particles, scenery and streaming concurrency. Touch gets that tier
+// only when both explicit signals show real headroom; native CSS-pixel density still protects
+// readability on the conservative mobile tier.
+const touchBalancedVisualDevice = detectedDeviceMemoryGiB !== null
+  && detectedDeviceMemoryGiB >= 8
+  && detectedLogicalCores !== null
+  && detectedLogicalCores >= 8;
 const detectedVisualTier = mobileControls
-  ? "mobile"
-  : detectedDeviceMemoryGiB <= 4 || detectedLogicalCores <= 4
-    ? "balanced"
-    : "desktop";
+  ? touchBalancedVisualDevice ? "balanced" : "mobile"
+  : constrainedVisualDevice ? "balanced" : "desktop";
 const VISUAL_QUALITY = Object.freeze({
   tier: detectedVisualTier,
   pixelRatioCap: detectedVisualTier === "mobile"
     ? 1.4 : detectedVisualTier === "balanced" ? 1.6 : 2,
-  oceanRadialSegments: mobileControls ? 112 : 145,
-  oceanAngularSegments: mobileControls ? 144 : 192,
-  oceanDetailOctaves: detectedVisualTier === "mobile"
-    ? 4 : detectedVisualTier === "balanced" ? 5 : 7,
+  oceanRadialSegments: detectedVisualTier === "mobile"
+    ? 112 : detectedVisualTier === "balanced" ? 132 : 145,
+  oceanAngularSegments: detectedVisualTier === "mobile"
+    ? 144 : detectedVisualTier === "balanced" ? 168 : 192,
   shadowMapSize: detectedVisualTier === "mobile"
     ? 512 : detectedVisualTier === "balanced" ? 1024 : 2048,
-  cloudOctaves: mobileControls ? 2 : 3,
-  carrierSprayCount: mobileControls ? 28 : 44,
+  carrierSprayCount: detectedVisualTier === "mobile"
+    ? 28 : detectedVisualTier === "balanced" ? 36 : 44,
 });
+
+// On touch layouts the primary action is visually ahead of the long briefing. Move that same
+// control in the accessibility tree as well, so keyboard and switch traversal follows what the
+// pilot sees instead of visiting hidden detail first.
+if (mobileControls && readyTitle && readyStart) readyTitle.after(readyStart);
 
 // Modern public-data missions intentionally have no downloadable content pack, but pixel cost
 // does not disappear with the pack. Give the direct renderer the same bounded, tier-normalized
@@ -2209,7 +2228,7 @@ const pauseReasons = new Set(["ready"]);
 // The combat front door still launches immediately once its world is warm. Medevac is different:
 // its route card is decision-support, so an explicit deep link must remain at the briefing until
 // the commander chooses to depart.
-let autoLaunchPending = requestedProgramNode?.id !== "medevac";
+let autoLaunchPending = !mobileControls && requestedProgramNode?.id !== "medevac";
 let terrainLaunchWarmupPromise = null;
 let terrainLaunchWarmupOwner = null;
 let terrainLaunchWarmupGeneration = 0;
@@ -2239,7 +2258,12 @@ function renderSettingsBindings() {
 
 function applyPlayerSettings() {
   // See-through symbology: the pilot must be able to read the bandit THROUGH the HUD.
-  if (hudCanvas) hudCanvas.style.opacity = String(playerSettings.hudBrightness);
+  if (hudCanvas) {
+    hudCanvas.style.opacity = String(Math.max(
+      playerSettings.hudBrightness,
+      mobileControls ? 0.96 : 0,
+    ));
+  }
   if (activeView?.hud) activeView.hud.showLegendHint = !playerSettings.legendSeen;
   document.documentElement.classList.toggle("high-contrast", playerSettings.highContrast);
   document.documentElement.classList.toggle("forced-reduced-motion", playerSettings.reducedMotion);
@@ -3471,6 +3495,10 @@ function focusReadyScreen() {
   const selectedMission = readyScreen.querySelector(
     `[data-program-node="${selectedProgramNodeId}"]`,
   );
+  selectedMission?.closest(".sortie-option")?.scrollIntoView({
+    block: "nearest",
+    inline: "center",
+  });
   // Keep Enter-to-fly honest: when the primary action is available it owns initial focus. During
   // release verification the selected card is the safe focusable fallback, never a disabled button.
   const target = !readyStart.disabled ? readyStart : selectedMission;
@@ -3733,8 +3761,10 @@ function renderPauseUi(state = latestState) {
     readyHint.textContent = background
       ? "Return to the game to restage"
       : ledger?.clearance === "GROUNDED"
-        ? "Allocation exception recorded — Press Enter to fly the next contract"
-        : "Press Enter to fly again";
+        ? `Allocation exception recorded — ${mobileControls
+          ? "Tap Fly to fly the next contract"
+          : "Press Enter to fly the next contract"}`
+        : mobileControls ? "Tap Fly to launch again" : "Press Enter to fly again";
   } else if (ready) {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = "Configuration";
@@ -3756,7 +3786,9 @@ function renderPauseUi(state = latestState) {
         : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`;
     }
     readyStart.textContent = `Fly ${brief.title}`;
-    readyHint.textContent = background ? "Return to the game to fly" : "Press Enter to fly";
+    readyHint.textContent = background
+      ? "Return to the game to fly"
+      : mobileControls ? "Tap Fly to launch" : "Press Enter to fly";
   } else {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = "Status";
@@ -3772,7 +3804,7 @@ function renderPauseUi(state = latestState) {
       ? `Press Enter to resume · ${controlCodeLabel(playerSettings.bindings.knockItOff)} hands off and resumes RTB · R restages`
       : "Press Enter to resume · R restages the selected sortie";
     readyStart.textContent = "Resume flight";
-    readyHint.textContent = "Press Enter to resume";
+    readyHint.textContent = mobileControls ? "Tap Resume" : "Press Enter to resume";
   }
 
   renderBuildIdentity();
@@ -3794,6 +3826,8 @@ function renderPauseUi(state = latestState) {
 
   if (showScreen && !settingsPaused && !wasScreenVisible) queueMicrotask(focusReadyScreen);
   else if (showScreen && !settingsPaused && startWasDisabled && !readyStart.disabled)
+    queueMicrotask(focusReadyScreen);
+  else if (showScreen && !settingsPaused && !readyScreen.contains(document.activeElement))
     queueMicrotask(focusReadyScreen);
 }
 
@@ -4205,6 +4239,18 @@ function toggleDeckAndReady() {
   selectDeckConfiguration(selectedDeckConfiguration === 1 ? 0 : 1);
 }
 
+function requestMobileFullscreenFromGesture() {
+  if (!mobileControls || document.fullscreenElement
+      || typeof document.documentElement.requestFullscreen !== "function") return false;
+  try {
+    const request = document.documentElement.requestFullscreen({ navigationUI: "hide" });
+    request?.catch?.(() => {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function beginFlight() {
   if (buildIdentityBlocksSortie() || !bridge || !pauseReasons.has("ready")) return false;
   const blockers = [...pauseReasons].filter((reason) => reason !== "ready");
@@ -4220,11 +4266,9 @@ function beginFlight() {
   syncAssistedFlight();
   // Fullscreen where the platform allows it (Android Chrome). iOS has no element fullscreen;
   // the Add-to-Home-Screen standalone app is the fullscreen path there (see ready-screen hint).
-  if (mobileControls && !document.fullscreenElement
-      && document.documentElement.requestFullscreen) {
-    document.documentElement.requestFullscreen({ navigationUI: "hide" })
-      .catch(() => {});
-  }
+  // The ready button requests synchronously while its user activation is live. This fallback
+  // covers missions with no asynchronous terrain warmup and hosts which preserve activation.
+  requestMobileFullscreenFromGesture();
   bridge.Begin();
   // Ready/warmup frames are deliberately excluded from the performance sample, and every sortie
   // starts from its mission-authored terrain radius and restored shadow/scenery policy.
@@ -4288,6 +4332,9 @@ function reconcileBridgeLifecycle(state) {
 
 readyStart.addEventListener("click", () => {
   primeSelectedMissionAudio();
+  // Do this before terrain warmup or any awaited module work consumes the browser's one-shot
+  // activation. Android otherwise rejects fullscreen after the game finally reaches beginFlight.
+  requestMobileFullscreenFromGesture();
   activateReadyAction();
 });
 
@@ -4361,8 +4408,9 @@ incidentReplayCamera?.addEventListener("change", () => {
   incidentReplay?.setCamera(incidentReplayCamera.value);
 });
 
-function setBootStatus(message) {
+function setBootStatus(message, phase = "") {
   bootStatus.textContent = message;
+  if (phase) bootScreen.dataset.phase = phase;
 }
 
 function waitForGlobal(getter, timeoutMs = 15000) {
@@ -6359,6 +6407,7 @@ class FlightView {
     this.directAdaptiveResolution = new AdaptiveResolutionController({
       ...DIRECT_ADAPTIVE_RESOLUTION_CONFIG,
       pixelRatioCap: VISUAL_QUALITY.pixelRatioCap,
+      minimumPixelRatio: mobileControls ? 1 : 0.5,
       mode: "combat",
       onChange: (pixelRatio) => this.applyDirectRenderPixelRatio(pixelRatio),
     });
@@ -6912,10 +6961,12 @@ class FlightView {
           manageFog: Boolean(environmentFactory),
           postStackFactory: createDecisionSupportPostStack,
           manageRendererSize: false,
+          minimumPixelRatio: mobileControls ? 1 : 0.5,
           // The production cockpit and normal-flight ownship exterior are hidden, while terrain
           // does not consume the directional shadow map. Preserve the pass where it has visible
           // receivers (carrier work and desktop external replay) instead of paying for it in combat.
-          shadowModes: mobileControls ? ["carrier"] : ["carrier", "replay"],
+          shadowModes: detectedVisualTier === "mobile"
+            ? ["carrier"] : ["carrier", "replay"],
           shadowHalfExtents: { combat: 44, carrier: 190, replay: 160 },
           onResolutionChange: (pixelRatio) => {
             this.applyRendererSurfacePixelRatio(pixelRatio);
@@ -8454,6 +8505,8 @@ function installMobileInput(view) {
   const PITCH_GAIN = 1.15;
   const ROLL_GAIN = 1;
   const TILT_TRIM_AUTHORITY = 0.15;
+  const TARGET_STICK_FIRE_HOLD_MS = 180;
+  const TARGET_STICK_FIRE_CANCEL_RADIUS = 0.2;
   const activeControls = new Map();
   const tiltKeys = { pitch: null, roll: null };
   const tiltTitle = tiltPrompt?.querySelector("strong");
@@ -8477,6 +8530,8 @@ function installMobileInput(view) {
   let targetStickPointerId = null;
   let targetStickX = 0;
   let targetStickY = 0;
+  let targetStickFireSource = null;
+  let targetStickFireTimer = null;
   let flightGesture = null;
   let targetGesture = null;
   let suspended = false;
@@ -8494,7 +8549,26 @@ function installMobileInput(view) {
   });
 
   function status(message) {
-    if (tiltStatus) tiltStatus.textContent = message;
+    if (!tiltStatus) return;
+    const full = String(message || "TILT TRIM OFF");
+    const compact = /REQUEST/i.test(full) ? "TILT…"
+      : /CENTRING|HOLD LEVEL/i.test(full) ? "TILT SET"
+        : /CENTRED|RECENTRED/i.test(full) ? "TILT ON"
+          : /LOST/i.test(full) ? "TILT LOST"
+            : /DENIED/i.test(full) ? "TILT NO"
+              : /UNAVAILABLE/i.test(full) ? "NO TILT"
+                : /STICK/i.test(full) ? "STICK"
+                  : /OFF/i.test(full) ? "TILT OFF"
+                    : "TILT";
+    tiltStatus.textContent = compact;
+    tiltStatus.title = full;
+    tiltStatus.hidden = /^TILT TRIM OFF$/i.test(full);
+    tiltStatus.dataset.state = tiltStatus.hidden ? "off"
+      : /CENTRED|RECENTRED/i.test(full) ? "enabled"
+        : /REQUEST|CENTRING|HOLD LEVEL/i.test(full) ? "waiting"
+          : /LOST|DENIED|UNAVAILABLE/i.test(full) ? "fault" : "available";
+    tiltStatus.setAttribute("aria-label",
+      `Optional tilt trim · ${full}`);
   }
 
   function controlContext() {
@@ -8826,8 +8900,34 @@ function installMobileInput(view) {
     renderTargetStick(targetStickX, targetStickY);
   }
 
+  function clearTargetStickFireTimer() {
+    if (targetStickFireTimer === null) return;
+    window.clearTimeout(targetStickFireTimer);
+    targetStickFireTimer = null;
+  }
+
+  function armTargetStickFire(pointerId) {
+    clearTargetStickFireTimer();
+    if (Math.hypot(targetStickX, targetStickY) > TARGET_STICK_FIRE_CANCEL_RADIUS) return;
+    targetStickFireTimer = window.setTimeout(() => {
+      targetStickFireTimer = null;
+      if (targetStickPointerId !== pointerId || targetStickFireSource
+          || frozen || suspended || document.hidden || pauseReasons.size > 0
+          || Math.hypot(targetStickX, targetStickY) > TARGET_STICK_FIRE_CANCEL_RADIUS) return;
+      const source = `touch:target-stick:${pointerId}`;
+      if (!pressMappedKey("Touch:TargetStickFire", source, 8)) return;
+      targetStickFireSource = source;
+      if (targetGesture) targetGesture.fired = true;
+      recorder.event("mobile_control", "right_stick_fire_started", {
+        profile: "dual_stick",
+        hold_ms: TARGET_STICK_FIRE_HOLD_MS,
+      });
+    }, TARGET_STICK_FIRE_HOLD_MS);
+  }
+
   function releaseTargetStick() {
     const pointerId = targetStickPointerId;
+    clearTargetStickFireTimer();
     targetStickPointerId = null;
     targetStickX = 0;
     targetStickY = 0;
@@ -8851,14 +8951,17 @@ function installMobileInput(view) {
       startedAt: performance.now(),
       samples: 0,
       maxLook: 0,
+      fired: false,
     };
+    view.hud.armAudio();
     targetStick.focus({ preventScroll: true });
     try { targetStick.setPointerCapture(event.pointerId); } catch { /* pointer may be gone */ }
     updateTargetStickPointer(event);
+    armTargetStickFire(event.pointerId);
     recorder.event("mobile_control", "right_stick_started", {
       profile: "dual_stick",
       look: true,
-      fire: false,
+      fire: "hold-centre",
     });
   }
 
@@ -8871,6 +8974,22 @@ function installMobileInput(view) {
     event.preventDefault();
     event.stopPropagation();
     updateTargetStickPointer(event);
+    if (Math.hypot(targetStickX, targetStickY) > TARGET_STICK_FIRE_CANCEL_RADIUS) {
+      clearTargetStickFireTimer();
+      // Firing belongs only to a deliberate centre hold. If a saturated frame lets the timer run
+      // before this move is delivered, revoke that edge immediately; moving outside the centre
+      // zone always means LOOK, regardless of how long the pilot held before slewing.
+      if (targetStickFireSource) {
+        releaseMappedKey("Touch:TargetStickFire", targetStickFireSource);
+        targetStickFireSource = null;
+        recorder.event("mobile_control", "right_stick_fire_cancelled_by_drag", {
+          profile: "dual_stick",
+          gesture_age_ms: targetGesture
+            ? Math.max(0, Math.round(performance.now() - targetGesture.startedAt))
+            : 0,
+        });
+      }
+    }
   }
 
   function endTargetStick(event) {
@@ -8886,6 +9005,7 @@ function installMobileInput(view) {
       duration_ms: gesture ? Math.round(performance.now() - gesture.startedAt) : 0,
       samples: gesture?.samples ?? 0,
       max_look: Number((gesture?.maxLook ?? 0).toFixed(3)),
+      fired: gesture?.fired === true,
     });
   }
 
@@ -9293,7 +9413,7 @@ function installMobileInput(view) {
   window.addEventListener("pointercancel", endTargetStick);
 
   const preventGesture = (event) => {
-    if (event.type === "touchmove" && event.target.closest?.(
+    if (event.target.closest?.(
       "#ready-screen, #settings-screen, #incident-replay-overlay, #test-flight-console",
     )) return;
     event.preventDefault();
@@ -9386,6 +9506,7 @@ function installMobileInput(view) {
     active: true,
     get tiltState() { return tiltState; },
     get calibration() { return calibration ? { ...calibration } : null; },
+    get targetFireHeld() { return targetStickFireSource !== null; },
     recenter: recenterTilt,
   };
 
@@ -9701,11 +9822,11 @@ async function boot() {
   // manifest. Direct release-mutated imports above are independently query-busted because ESM
   // linking necessarily happens before this top-level boot body can await the gate.
   await (globalThis.__gunsPrebootReady ?? Promise.resolve());
-  setBootStatus("STARTING .NET RUNTIME…");
+  setBootStatus("STARTING LOCAL RUNTIME…", "runtime");
   const blazor = await waitForGlobal(() => globalThis.Blazor);
   await blazor.start();
 
-  setBootStatus("LINKING FLIGHT KERNEL…");
+  setBootStatus("LINKING FLIGHT MODEL…", "model");
   const runtimeAccessor = await waitForGlobal(() => globalThis.getDotnetRuntime);
   const { getAssemblyExports, getConfig } = await runtimeAccessor(0);
   await getConfig();
@@ -9745,7 +9866,7 @@ async function boot() {
   syncPlayerGunTarget();
   bridgePauseApplied = true;
 
-  setBootStatus("CALIBRATING SENSOR…");
+  setBootStatus("BUILDING FIRST FRAME…", "scene");
   const view = new FlightView();
   activeView = view;
   applyPlayerSettings();
@@ -9773,7 +9894,6 @@ async function boot() {
   syncPadlockUi();
   installTestFlightConsole();
   renderPauseUi();
-  queueMicrotask(tryAutoLaunch);
   let firstFrame = true;
 
   globalThis.__gunsLifecycle = {
@@ -9959,7 +10079,12 @@ async function boot() {
       recorder.observeFramePhase("ui", performance.now() - afterView);
       if (firstFrame) {
         firstFrame = false;
+        bootScreen.setAttribute("aria-busy", "false");
         bootScreen.classList.add("ready");
+        // Desktop deep links may depart automatically, but never let terrain warmup or a loaded
+        // SwiftShader context get ahead of the first presented frame. The landing surface must
+        // become visible and responsive before optional world streaming begins.
+        queueMicrotask(tryAutoLaunch);
       }
       requestAnimationFrame(tick);
     } catch (error) {

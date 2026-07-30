@@ -262,7 +262,8 @@ test("padlock retains stabilized primary flight data instead of swapping to a du
     /drawAirdataLabels\(frame\.state, tapeInset, this\.width - tapeInset, display\)/,
     "secondary G/S and V/S must use the same bounded display filter");
   assert.match(draw, /value:\s*display\.altitudeFt[\s\S]*?displayValue:\s*display\.altitudeDigits/);
-  assert.match(draw, /drawHeadingTape\(frame\.state,[^\n]*display/,
+  assert.match(draw,
+    /drawHeadingTape\(frame\.state,\s*\{[\s\S]*?headingDeg:\s*display\.headingDeg[\s\S]*?headingDigits:\s*display\.headingDigits/,
     "heading scale/digits must receive stabilized presentation truth");
   assert.doesNotMatch(draw, /if \(!frame\.padlock\)\s*\{\s*const tapeInset/,
     "IAS, altitude, G, power and fuel are primary data and must remain present in padlock");

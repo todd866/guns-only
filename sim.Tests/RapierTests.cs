@@ -717,7 +717,7 @@ public class RapierTests {
     }
 
     [Fact]
-    public void FixedLauncherStagesInHoldThenStrokesWithoutWaitingOnRadio() {
+    public void FixedLauncherUsesTheVisualShotCrewHandoffBeforeTheStroke() {
         var session = new SimulationSession(10);
         session.SetTerrainSurface(Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load()));
@@ -732,9 +732,12 @@ public class RapierTests {
 
         // Ambient R/T is not a gameplay interlock. Catalog v8 carries no launch clearance or
         // readback line at all, and the launcher still goes on the first active tick: missing,
-        // muted, delayed or expired speech cannot hold the jet on the rail.
+        // muted, delayed or expired speech cannot hold the jet on the rail. The shot crew owns
+        // the handoff visually, so the release tick must not move the aircraft either.
         session.StepFixed();
+
         Assert.Equal(CatapultLaunchModel.LaunchPhase.Stroke, session.Catapult.Phase);
+        Assert.Equal(staged.Position, session.Player.State.Position);
         Assert.False(session.MissionRadio.Active);
     }
 

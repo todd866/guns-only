@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   airdataReadout,
   fuelReadout,
+  mobileTacticalReadout,
   speedBrakeReadout,
   speedTapeMarkers,
   stallAwareness,
@@ -155,6 +156,170 @@ test("fighter target range uses nautical miles with gun-range precision", () => 
   assert.equal(targetRangeReadout(18_520).text, "10 NM");
   assert.equal(targetRangeReadout(undefined).text, "---");
   assert.equal(targetRangeReadout(-1).text, "---");
+});
+
+test("mobile tactical rail carries actual energy, vertical state, heading, and active fast time", () => {
+  const readout = mobileTacticalReadout({
+    calibrated_airspeed_kts: 478.6,
+    alt_ft: 4236,
+    vertical_speed_fpm: 5034,
+    heading_deg: 269.4,
+    mach: 0.774,
+    time_compression_available: true,
+    time_compression_factor: 4,
+    fuel_lb: 3523,
+  });
+
+  assert.equal(readout.actualText,
+    "×4 · M.77 · 479 KCAS · H269 · 4.2K ↑5K");
+  assert.equal(readout.contextText, "F3.5K");
+  assert.deepEqual(readout.actual, {
+    mach: 0.774,
+    indicatedKts: 478.6,
+    speedUnit: "KCAS",
+    headingDeg: 269.4,
+    altitudeFt: 4236,
+    verticalFpm: 5034,
+    compressionFactor: 4,
+    condensed: false,
+  });
+  assert.deepEqual(readout.energy, {
+    cornerKts: null,
+    cornerDeltaKts: null,
+    actualG: null,
+    assistedFlight: false,
+    assistedSpeedBiasKts: 0,
+    token: null,
+  });
+});
+
+test("mobile tactical rail makes BVR target, ammunition, closure, and fuel explicit", () => {
+  const readout = mobileTacticalReadout({
+    indicated_airspeed_kts: 481,
+    alt_ft: 4928,
+    vertical_speed_fpm: -620,
+    heading_deg: 270,
+    mach: 0.77,
+    ammo: 480,
+    gun_heat: 0,
+    fuel_lb: 3523,
+    range_m: 158 * 1852,
+    closure_kts: 914,
+  }, {}, { fightActive: true, targetNumber: 1 });
+
+  assert.equal(readout.contextText,
+    "GUN480 · T1 158NM · CLOS914 · F3.5K");
+  assert.equal(readout.target.bvrContact, true);
+  assert.equal(readout.target.rangeNm, 158);
+  assert.equal(readout.target.closureTrend, "closing");
+  assert.equal(readout.weapon.level, "normal");
+});
+
+test("small-phone tactical rail preserves Rapier truth without ellipsis-prone spacing", () => {
+  const readout = mobileTacticalReadout({
+    calibrated_airspeed_kts: 478.6,
+    alt_ft: 4236,
+    vertical_speed_fpm: 5034,
+    heading_deg: 269.4,
+    mach: 0.774,
+    time_compression_available: true,
+    time_compression_factor: 4,
+    rapier_mission_available: true,
+    ammo: 480,
+    fuel_lb: 3523,
+    range_m: 160 * 1852,
+    closure_kts: 916,
+  }, {}, {
+    fightActive: true,
+    targetNumber: 1,
+    condensed: true,
+  });
+
+  assert.equal(readout.actualText, "×4·M.77·479KCAS·4.2K·↑5K");
+  assert.equal(readout.contextText, "GUN480·T1 160NM·CLOS916·F3.5K");
+  assert.doesNotMatch(readout.actualText, /H269/,
+    "heading yields to vertical state only at the narrowest supported width");
+});
+
+test("mobile tactical rail leaves WVR numbers on the physical target and qualifies weapon limits", () => {
+  const readout = mobileTacticalReadout({
+    speed_kts: 310,
+    alt_ft: 12_500,
+    vertical_speed_fpm: 0,
+    heading_deg: 7,
+    mach: 0.81,
+    ammo: 72,
+    gun_heat: 0.78,
+    fuel_lb: 3900,
+    fuel_bingo_lb: 4000,
+    range_m: 900,
+    closure_kts: -18,
+  }, {}, { fightActive: true, targetNumber: 2 });
+
+  assert.equal(readout.contextText, "GUN72 · T78% · BINGO3.9K");
+  assert.equal(readout.target.bvrContact, false,
+    "the WVR bracket owns its selected-target range and closure");
+  assert.equal(readout.weapon.level, "caution");
+
+  const overheat = mobileTacticalReadout({
+    ammo: 0,
+    gun_heat: 1,
+    gun_overheat: true,
+    range_m: 30_000,
+  }, {}, { fightActive: true });
+  assert.match(overheat.contextText, /^GUN0 · OVERHEAT · T1/);
+  assert.equal(overheat.weapon.level, "warning");
+
+  const empty = mobileTacticalReadout({
+    ammo: 0,
+    gun_heat: 0,
+  }, {}, { fightActive: true });
+  assert.equal(empty.contextText, "GUN0");
+  assert.equal(empty.weapon.level, "warning");
+
+  const nonCombat = mobileTacticalReadout({
+    ammo: 0,
+    gun_heat: 1,
+    gun_overheat: true,
+    fuel_lb: 3500,
+  }, {}, { fightActive: false });
+  assert.equal(nonCombat.contextText, "F3.5K");
+  assert.equal(nonCombat.weapon.level, "normal",
+    "hidden combat state must not tint an unrelated normal fuel value red");
+});
+
+test("mobile tactical rail replaces low-value heading with corner, G, and assist state", () => {
+  const manoeuvring = mobileTacticalReadout({
+    speed_kts: 350,
+    corner_speed_kias: 315,
+    alt_ft: 8300,
+    vertical_speed_fpm: -450,
+    heading_deg: 190,
+    mach: 0.72,
+    g_actual: 4.86,
+    ammo: 480,
+  }, {}, { fightActive: true });
+
+  assert.equal(manoeuvring.actualText,
+    "M.72 · 350 KIAS · COR+35 · 4.9G · 8.3K ↓450");
+  assert.equal(manoeuvring.energy.token, "COR+35");
+  assert.equal(manoeuvring.energy.actualG, 4.86);
+  assert.doesNotMatch(manoeuvring.actualText, /H190/);
+
+  const assisted = mobileTacticalReadout({
+    speed_kts: 315,
+    corner_speed_kias: 315,
+    alt_ft: 8000,
+    vertical_speed_fpm: 0,
+    heading_deg: 5,
+    mach: 0.66,
+    assisted_flight: true,
+    assisted_speed_bias_kts: 30,
+    ammo: 480,
+  }, {}, { fightActive: true });
+  assert.equal(assisted.energy.token, "AUTO COR+30");
+  assert.match(assisted.actualText, /AUTO COR\+30/);
+  assert.doesNotMatch(assisted.actualText, /H005/);
 });
 
 test("visual merge weapon safety stays visible only while it changes a pilot decision", () => {

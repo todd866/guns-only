@@ -2,6 +2,7 @@ import * as THREE from "./vendor/three.module.js";
 import {
   airdataReadout,
   fuelReadout,
+  mobileTacticalReadout,
   speedBrakeReadout,
   speedTapeMarkers,
   stallAwareness,
@@ -348,6 +349,11 @@ class CombatHud {
     if (this.presentationProfile !== "standard") this.legendVisible = false;
   }
 
+  usesMobileTacticalProfile() {
+    return this.presentationProfile === "portrait_dual_stick"
+      || this.presentationProfile === "touch_dual_stick";
+  }
+
   setControlBindings(bindings) {
     this.controlBindings = bindings && typeof bindings === "object" ? { ...bindings } : null;
   }
@@ -472,11 +478,12 @@ class CombatHud {
       width: this.width,
       height: this.height,
       touchMode: this.touchMode,
+      compactMobile: this.usesMobileTacticalProfile(),
       safeInsets: this.safeInsets,
     });
   }
 
-  drawPitchLadder(state, camera, boresightAnchor = null) {
+  drawPitchLadder(state, camera, boresightAnchor = null, compactMobile = false) {
     const ctx = this.ctx;
     const bank = -(Number(state.bank_deg) || 0) * DEG;
     const pitch = Number(state.pitch_deg) || 0;
@@ -529,13 +536,18 @@ class CombatHud {
     ctx.arc(projectionCenterX, projectionCenterY, exclusionRadius, 0, Math.PI * 2);
     ctx.clip("evenodd");
 
-    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = `${compactMobile ? "700 8px" : "600 10px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const firstRung = Math.max(-90, Math.ceil((pitch - 25) / 5) * 5);
-    const lastRung = Math.min(90, Math.floor((pitch + 25) / 5) * 5);
+    const rungStep = compactMobile ? 10 : 5;
+    const pitchWindow = compactMobile ? 20 : 25;
+    const firstRung = Math.max(-90,
+      Math.ceil((pitch - pitchWindow) / rungStep) * rungStep);
+    const lastRung = Math.min(90,
+      Math.floor((pitch + pitchWindow) / rungStep) * rungStep);
+    if (compactMobile) ctx.globalAlpha *= 0.64;
 
-    for (let rung = firstRung; rung <= lastRung; rung += 5) {
+    for (let rung = firstRung; rung <= lastRung; rung += rungStep) {
       // Perspective projection, not a fixed pixels-per-degree approximation. At level attitude the
       // In the forward view the 0 rung is exactly on camera centre; +10/-10 are equal and opposite
       // about it. Pitching up moves the true-horizontal 0 rung down by the same projection used by
@@ -552,8 +564,10 @@ class CombatHud {
       const major = rung % 10 === 0;
       // Long continuous bars (F-16 style): the horizon is the dominant rung, majors are long
       // enough to read as one line under bank, minors stay short so the ladder does not bar-code.
-      const halfWidth = rung === 0 ? 188 : major ? 96 : 50;
-      const centerGap = rung === 0 ? 30 : 22;
+      const halfWidth = compactMobile
+        ? (rung === 0 ? Math.min(132, this.width * 0.33) : Math.min(68, this.width * 0.18))
+        : rung === 0 ? 188 : major ? 96 : 50;
+      const centerGap = compactMobile ? 18 : rung === 0 ? 30 : 22;
 
       if (this._debug) {
         const a = rotatePoint(-halfWidth, localY);
@@ -598,7 +612,8 @@ class CombatHud {
         // Numbers on BOTH ends, counter-rotated so they always read upright under any bank.
         ctx.setLineDash([]);
         const text = String(Math.abs(rung));
-        for (const end of [-1, 1]) {
+        const labelEnds = compactMobile ? [1] : [-1, 1];
+        for (const end of labelEnds) {
           const label = rotatePoint(end * (halfWidth + 15), localY);
           ctx.fillText(text, label.x, label.y + 0.5);
         }
@@ -681,6 +696,22 @@ class CombatHud {
       return;
     }
     const caution = heat >= GUN_HEAT_AMBER_THRESHOLD;
+    // Mobile folds qualified temperature into the persistent GUN line. A second top-right bar
+    // consumed the exact pixels needed for target and energy state, while OVERHEAT still owns its
+    // urgent centre annunciation.
+    if (this.usesMobileTacticalProfile()) {
+      if (this._debug) {
+        this._debug.gunHeat = {
+          present: true,
+          heat,
+          fillFraction: heat,
+          caution,
+          overheated,
+          integrated: true,
+        };
+      }
+      return;
+    }
     const color = caution ? AMBER : GREEN;
     const width = 76;
     const height = 7;
@@ -1019,16 +1050,17 @@ class CombatHud {
   drawTargetDataLine(projection, size, state, color) {
     const ctx = this.ctx;
     const safe = this.getLayout().targetSafe;
+    const mobileTactical = this.usesMobileTacticalProfile();
     const closure = targetClosureReadout(state.closure_kts);
     const dataLine = `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`;
-    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = `${mobileTactical ? "800 10px" : "600 9px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     const textWidth = ctx.measureText(dataLine).width;
-    const textHeight = 14;
+    const textHeight = mobileTactical ? 17 : 14;
     const rightX = projection.x + size + 8;
     const useRight = rightX + textWidth + 8 <= safe.right;
     const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
     const textY = clamp(projection.y - textHeight / 2, safe.top, safe.bottom - textHeight);
-    ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
+    ctx.fillStyle = mobileTactical ? "rgba(1, 8, 12, 0.78)" : "rgba(1, 8, 12, 0.68)";
     ctx.fillRect(textX - 4, textY, textWidth + 8, textHeight);
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -1228,7 +1260,10 @@ class CombatHud {
     const padlockedBandit = frame.padlock && frame.padlockTarget === "bandit";
     const color = padlockedBandit || selectedPrimary || solution ? AMBER : GREEN;
     const ctx = this.ctx;
-    const size = solution ? 32 : padlockedBandit || selectedPrimary ? 30 : 27;
+    const mobileTactical = this.usesMobileTacticalProfile();
+    const size = solution ? 32
+      : padlockedBandit || selectedPrimary ? (mobileTactical ? 32 : 30)
+        : mobileTactical ? 29 : 27;
     const markerEntityId = String(state.bandit_entity_id ?? "legacy");
     if (markerEntityId !== this._banditMarkerEntityId) {
       this._banditMarkerEntityId = markerEntityId;
@@ -1243,7 +1278,11 @@ class CombatHud {
     );
     this._banditMarkerInside = inside;
     if (this._debug) {
-      this._debug.banditLocator = { markerInside: inside, arrowDrawn: false };
+      this._debug.banditLocator = {
+        markerInside: inside && !bvrContact,
+        arrowDrawn: false,
+        bvrContact,
+      };
     }
 
     if (inside && !bvrContact) {
@@ -1372,11 +1411,14 @@ class CombatHud {
     ctx.fillStyle = frame.padlock ? "rgba(255, 176, 32, 0.28)" : "rgba(255, 176, 32, 0.16)";
     ctx.shadowColor = frame.padlock ? "rgba(255, 176, 32, 0.68)" : "transparent";
     ctx.shadowBlur = frame.padlock ? 8 : 0;
+    const locatorTip = mobileTactical ? 17 : 12;
+    const locatorTail = mobileTactical ? -10 : -8;
+    const locatorHalfHeight = mobileTactical ? 10 : 8;
     ctx.beginPath();
-    ctx.moveTo(12, 0);
-    ctx.lineTo(-8, -8);
-    ctx.lineTo(-3, 0);
-    ctx.lineTo(-8, 8);
+    ctx.moveTo(locatorTip, 0);
+    ctx.lineTo(locatorTail, -locatorHalfHeight);
+    ctx.lineTo(mobileTactical ? -3 : -3, 0);
+    ctx.lineTo(locatorTail, locatorHalfHeight);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -1389,16 +1431,20 @@ class CombatHud {
     // must not be captioned with the selected wingman's range.
     const numbersHere = targetDataLineOwner(state) === "primary";
     const closure = targetClosureReadout(state.closure_kts);
-    const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${numbersHere
-      ? `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`
-      : "TARGET 1"}`;
-    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const fullLabel = mobileTactical
+      ? `${Math.abs(azimuth) > 150 ? "6 · " : ""}TGT 1`
+      : `${Math.abs(azimuth) > 150 ? "6 · " : ""}${numbersHere
+        ? `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`
+        : "TARGET 1"}`;
+    ctx.font = `${mobileTactical ? "800 10px" : "600 9px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
     const labelX = clamp(x - (dx / length) * 34, locatorLeft + labelWidth * 0.5 + 5, locatorRight - labelWidth * 0.5 - 5);
     const labelY = clamp(y - (dy / length) * 30, locatorTop + 8, locatorBottom - 8);
     ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
-    ctx.fillRect(labelX - labelWidth * 0.5 - 4, labelY - 7, labelWidth + 8, 14);
+    const labelHeight = mobileTactical ? 17 : 14;
+    ctx.fillRect(labelX - labelWidth * 0.5 - 4,
+      labelY - labelHeight * 0.5, labelWidth + 8, labelHeight);
     ctx.fillStyle = AMBER;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -2073,6 +2119,128 @@ class CombatHud {
     ctx.restore();
   }
 
+  drawMobileTacticalState(frame, display = {}) {
+    const state = frame.state;
+    const fightActive = isFightHudActive(state);
+    const targetNumber = targetDataLineOwner(state) === "wingman" ? 2 : 1;
+    const condensed = this.width < 360;
+    const tactical = mobileTacticalReadout(state, display, {
+      fightActive,
+      targetNumber,
+      tallyRangeM: BANDIT_TALLY_RANGE_M,
+      condensed,
+    });
+    const guidance = rapierGuidancePresentation(state);
+    const cycle = rapierCycleTeachPresentation(state);
+    let directiveText = guidance?.text ?? "";
+    let directiveLevel = guidance?.level ?? "manual";
+
+    // Outbound Rapier automation has two distinct truths: what the aircraft is doing now and the
+    // command it is chasing. The desktop tapes/limits used to carry the latter; the mobile rail
+    // must not reduce that to the unexplained "PILOT · CLIMB · FL560" seen in the field capture.
+    const phase = Math.floor(Number(state.rapier_mission_phase) || 0);
+    const targetMach = finiteHudNumber(state.rapier_target_mach);
+    const targetAltitudeFt = finiteHudNumber(state.rapier_target_altitude_ft);
+    const patternOnly = state.rapier_pattern_only === true;
+    if (guidance && !patternOnly && phase >= 1 && phase < 10
+        && (targetMach !== null || targetAltitudeFt !== null)) {
+      const tokens = guidance.text.split(" · ");
+      const command = [];
+      if (targetMach !== null && targetMach > 0)
+        command.push(`M${targetMach.toFixed(2)}`);
+      if (targetAltitudeFt !== null && targetAltitudeFt > 0) {
+        command.push(targetAltitudeFt >= 18_000
+          ? `FL${String(Math.round(targetAltitudeFt / 100)).padStart(3, "0")}`
+          : `${Math.round(targetAltitudeFt)} FT`);
+      }
+      directiveText = `${tokens.slice(0, 2).join(" · ")}`
+        + `${command.length ? ` · CMD ${command.join(" · ")}` : ""}`;
+    }
+    // Normal cycle/skin chatter stays out of a phone fight. A qualified thermal condition
+    // displaces the ordinary directive in the same bounded row instead of opening another card.
+    if (cycle?.thermalLevel === "caution" || cycle?.thermalLevel === "fault") {
+      directiveText = cycle.skinText;
+      directiveLevel = cycle.thermalLevel === "fault" ? "attack" : "active";
+    }
+    if (condensed) directiveText = directiveText.replaceAll(" · ", "·");
+
+    const rows = [
+      { key: "actual", text: tactical.actualText, color: GREEN },
+    ];
+    if (tactical.contextText) {
+      rows.push({
+        key: "context",
+        text: tactical.contextText,
+        color: tactical.weapon.level === "warning" ? RED
+          : tactical.weapon.level === "caution" ? AMBER
+            : GREEN_DIM,
+      });
+    }
+    if (directiveText) {
+      rows.push({
+        key: "directive",
+        text: directiveText,
+        color: directiveLevel === "attack" ? RED
+          : directiveLevel === "active" ? AMBER : GREEN_DIM,
+      });
+    }
+
+    const ctx = this.ctx;
+    const largeText = document.documentElement.classList.contains("large-interface-text");
+    const fontSize = largeText ? 11 : 10;
+    const rowPitch = fontSize + 7;
+    const height = 10 + rows.length * rowPitch;
+    const phone = this.width < 520;
+    const leftReserve = phone ? 70 : 14;
+    const availableWidth = Math.max(150,
+      this.width - this.safeInsets.left - this.safeInsets.right - leftReserve - 14);
+    ctx.save();
+    ctx.font = `800 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    const measuredWidth = rows.reduce((maximum, row) =>
+      Math.max(maximum, ctx.measureText(row.text).width), 0) + 22;
+    const width = Math.min(availableWidth, Math.max(176, measuredWidth));
+    const x = phone
+      ? this.width - this.safeInsets.right - width - 10
+      : (this.width - width) / 2;
+    const y = this.safeInsets.top + 7;
+    roundedRect(ctx, x, y, width, height, 5);
+    ctx.fillStyle = "rgba(1, 8, 13, 0.58)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.16)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const drawnRows = [];
+    rows.forEach((row, index) => {
+      ctx.fillStyle = row.color;
+      ctx.font = `${row.key === "actual" ? "800" : "750"} ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      const drawnText = this.fitText(row.text, width - 16);
+      drawnRows.push({ key: row.key, text: drawnText });
+      ctx.fillText(drawnText,
+        x + width / 2, y + 8 + index * rowPitch);
+    });
+    ctx.restore();
+
+    if (this._debug) {
+      this._debug.mobileTactical = {
+        profile: this.presentationProfile,
+        x,
+        y,
+        width,
+        height,
+        fontSize,
+        condensed,
+        actualText: tactical.actualText,
+        contextText: tactical.contextText,
+        directiveText,
+        drawnRows,
+        target: tactical.target,
+        weapon: tactical.weapon,
+      };
+    }
+  }
+
   drawGTape(state) {
     const actualG = Number(state.g_actual) || 0;
     const overrideSelected = state.requested_envelope_override === true;
@@ -2337,8 +2505,15 @@ class CombatHud {
     const ready = title.includes("READY TO FIGHT") || title.includes("CONFIGURED");
     const accent = respawn ? RED : trapped || ready ? GREEN : AMBER;
     ctx.save();
-    const w = Math.min(360, this.width - 34);
-    const h = CombatHud.ANNUNCIATION_ROW;
+    const mobileTactical = this.usesMobileTacticalProfile();
+    const titleSize = mobileTactical
+      ? title.length > 32 ? 9 : title.length > 24 ? 10 : 12
+      : title.length > 32 ? 12 : title.length > 24 ? 15 : 18;
+    ctx.font = `800 ${titleSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    const w = mobileTactical
+      ? Math.min(270, this.width - 34, Math.max(124, ctx.measureText(title).width + 28))
+      : Math.min(360, this.width - 34);
+    const h = mobileTactical ? 27 : CombatHud.ANNUNCIATION_ROW;
     const x = (this.width - w) / 2;
     // Stacks UNDER the splash banner when both are up, which they routinely are: a kill raises
     // SPLASH and the promotion that follows raises WINGMAN ENGAGED a beat later.
@@ -2351,7 +2526,6 @@ class CombatHud {
     ctx.fillStyle = accent;
     ctx.shadowColor = trapped ? "rgba(77, 255, 136, 0.50)" : "transparent";
     ctx.shadowBlur = trapped ? 9 : 0;
-    ctx.font = `800 ${title.length > 32 ? 12 : title.length > 24 ? 15 : 18}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     ctx.fillText(this.fitText(title, w - 24), this.width / 2, y + h / 2);
     ctx.shadowBlur = 0;
     ctx.restore();
@@ -4032,7 +4206,7 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawRapierGuidance(frame) {
+  drawRapierGuidance(frame, { showModeLine = true } = {}) {
     const presentation = rapierGuidancePresentation(frame.state);
     if (!presentation) return;
     const ctx = this.ctx;
@@ -4075,9 +4249,17 @@ class CombatHud {
     // close and reads as an energy/config gate, not fixed-pixel HUD chrome.
     {
       const gateInfo = recoveryGatePresentation(frame.state);
-      const gateX = gateInfo?.worldX ?? frame.state.rapier_guidance_x;
-      const gateY = gateInfo?.worldY ?? frame.state.rapier_guidance_y;
-      const gateZ = gateInfo?.worldZ ?? frame.state.rapier_guidance_z;
+      // `rapier_guidance_*` is also the outbound mission waypoint. In CLIMB that waypoint is the
+      // BVR contact, so the old unconditional fallback drew a giant recovery box around a jet
+      // 158 NM away while the target layer correctly refused to claim visual tally. Only an
+      // authored Circuit/Mesh gate—or an old recovery recording already on gate 1+—may use it.
+      const legacyRecoveryGate = !gateInfo && missionPhase >= 11 && gate > 0;
+      const gateX = gateInfo?.worldX
+        ?? (gateInfo || legacyRecoveryGate ? frame.state.rapier_guidance_x : null);
+      const gateY = gateInfo?.worldY
+        ?? (gateInfo || legacyRecoveryGate ? frame.state.rapier_guidance_y : null);
+      const gateZ = gateInfo?.worldZ
+        ?? (gateInfo || legacyRecoveryGate ? frame.state.rapier_guidance_z : null);
       if (Number.isFinite(gateX)
         && Number.isFinite(gateY)
         && Number.isFinite(gateZ)) {
@@ -4085,6 +4267,17 @@ class CombatHud {
       const halfM = gateInfo?.halfM ?? 0;
       const projectedGate = this.project(this.worldPoint, frame.camera, this.projectionA);
       if (!projectedGate.behind) {
+        if (this._debug) {
+          this._debug.recoveryGate = {
+            drawn: true,
+            phase: missionPhase,
+            gate,
+            source: gateInfo ? "procedure" : "legacy-recovery",
+            x: projectedGate.x,
+            y: projectedGate.y,
+            halfM,
+          };
+        }
         let stroke = AMBER;
         if (gateInfo?.accent === "open") stroke = GREEN;
         else if (gateInfo?.accent === "fault") stroke = RED;
@@ -4266,6 +4459,11 @@ class CombatHud {
       }
     }
 
+    if (!showModeLine) {
+      ctx.restore();
+      return;
+    }
+
     // Quiet mode line — one short row under the heading tape. Engine bars and triad essays are gone.
     ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const width = Math.min(
@@ -4411,6 +4609,14 @@ class CombatHud {
         banditPx: null,
         gunHeat: null,
         gunOverheatAnnunciation: null,
+        presentationProfile: this.presentationProfile,
+        mobileTactical: null,
+        desktopFlightChrome: false,
+        limitsPanel: null,
+        systemsPanel: null,
+        rapierCycleTeach: null,
+        rapierModeLine: null,
+        recoveryGate: null,
       }
       : null;
 
@@ -4448,14 +4654,23 @@ class CombatHud {
       : null;
     const systems = systemsReadout(frame.state);
     const carrierPadlock = frame.padlock && frame.padlockTarget === "carrier";
+    const mobileTactical = this.usesMobileTacticalProfile();
 
-    if (!frame.padlock) this.drawPitchLadder(frame.state, frame.camera, noseAnchor);
+    if (!frame.padlock) {
+      this.drawPitchLadder(frame.state, frame.camera, noseAnchor, mobileTactical);
+    }
     this.drawAirframeSymbols(noseAnchor, frame.state, fpvAnchor);
     this.drawGunSight(frame, noseAnchor);
     this.drawAimPoint(frame, noseAnchor, directorAnchor);
     this.drawBandit(frame);
     this.drawWingman(frame);
-    this.drawHeadingTape(frame.state, { headingDeg: display.headingDeg, headingDigits: display.headingDigits, padlock: frame.padlock });
+    if (!mobileTactical) {
+      this.drawHeadingTape(frame.state, {
+        headingDeg: display.headingDeg,
+        headingDigits: display.headingDigits,
+        padlock: frame.padlock,
+      });
+    }
     this.drawRtbCue(frame.state);
 
     // Speed trend: a windowed presentation estimate projected ~6 s ahead. The rate estimator
@@ -4463,10 +4678,10 @@ class CombatHud {
     const spd = display.indicatedKts;
     const speedTrend = clamp(display.indicatedRateKtsPerSecond * 6, -60, 60);
 
-    const portraitDualStick = this.presentationProfile === "portrait_dual_stick";
-    if (portraitDualStick) {
-      this.drawPortraitFlightState(frame.state, display);
+    if (mobileTactical) {
+      this.drawMobileTacticalState(frame, display);
     } else {
+      if (this._debug) this._debug.desktopFlightChrome = true;
       const tapeInset = this.getLayout().tapeInset;
       this.drawVerticalTape({
         value: spd,
@@ -4494,23 +4709,21 @@ class CombatHud {
       this.drawRapierCycleTeach(frame.state);
     }
     this.drawWarnings(frame, systems);
-    if (!portraitDualStick && !carrierPadlock) {
-      this.drawSystemsPanel(systems, frame.state);
+    if (!carrierPadlock) {
+      if (!mobileTactical) this.drawSystemsPanel(systems, frame.state);
       this.drawAoAIndexer(frame.state, frame.dt);
     }
     this.drawPadlockSa(frame, systems, noseAnchor);
-    if (!portraitDualStick) this.drawSortieStatus(frame);
+    if (!mobileTactical) this.drawSortieStatus(frame);
     this.drawVisualMergeWeaponsCue(frame);
-    if (!portraitDualStick) {
-      this.drawFooter(frame);
-      this.drawTimeCompression(frame);
-    }
-    this.drawRapierGuidance(frame);
-    if (!portraitDualStick) {
+    this.drawFooter(frame);
+    if (!mobileTactical) this.drawTimeCompression(frame);
+    this.drawRapierGuidance(frame, { showModeLine: !mobileTactical });
+    if (!mobileTactical) {
       this.drawLegendHint();
       this.drawLegend(frame);
-      this.drawModeCue(frame);
     }
+    this.drawModeCue(frame);
     this.drawOutcomeCues(frame);
     this.drawDamageFeedback(frame);
     this.drawFlightTestSyncMarker(frame);

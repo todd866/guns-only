@@ -126,3 +126,34 @@ test("disabled adaptation still enforces the render-pixel budget", () => {
   assert.equal(controller.pixelRatio, 0.79);
   assert.ok(controller.pixelRatio ** 2 * 1920 * 1080 <= 1_300_000);
 });
+
+test("phone rendering never falls below native CSS-pixel density", () => {
+  const controller = new AdaptiveResolutionController({
+    pixelRatioCap: 1.4,
+    minimumPixelRatio: 1,
+    maxRenderPixels: 1_300_000,
+    minScale: 0.55,
+  });
+  controller.setViewport(390, 844, 3);
+  controller.reset(0.55);
+
+  assert.equal(controller.maximumPixelRatio, 1.4);
+  assert.equal(controller.pixelRatio, 1);
+  assert.equal(controller.status().minimumPixelRatio, 1);
+});
+
+test("the hard render-pixel budget still wins over the readability floor", () => {
+  const controller = new AdaptiveResolutionController({
+    pixelRatioCap: 2,
+    minimumPixelRatio: 1,
+    maxRenderPixels: 1_300_000,
+    minScale: 0.55,
+  });
+  controller.setViewport(1920, 1080, 3);
+  controller.reset(0.55);
+
+  const budgetRatio = Math.sqrt(1_300_000 / (1920 * 1080));
+  assert.equal(controller.maximumPixelRatio, budgetRatio);
+  assert.equal(controller.pixelRatio, budgetRatio);
+  assert.ok(controller.pixelRatio ** 2 * 1920 * 1080 <= 1_300_001);
+});

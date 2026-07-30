@@ -113,6 +113,7 @@ export class VisualRuntime {
       ...adaptive,
       enabled: adaptive.enabled && this.options.adaptiveResolution !== false,
       pixelRatioCap: this.config.renderer.pixelRatioCap,
+      minimumPixelRatio: this.options.minimumPixelRatio,
       mode: this.mode,
       onChange: (pixelRatio, metadata) => {
         this._setRendererSize(pixelRatio);
@@ -222,6 +223,7 @@ export class VisualRuntime {
       ...this.config.adaptiveResolution,
       enabled: this.config.adaptiveResolution.enabled && this.options.adaptiveResolution !== false,
       pixelRatioCap: this.config.renderer.pixelRatioCap,
+      minimumPixelRatio: this.options.minimumPixelRatio,
     });
     this.adaptiveResolution.setViewport(
       this.viewport.width,

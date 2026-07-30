@@ -2772,8 +2772,8 @@ export function createDecisionSupportSea() {
   });
   const mesh = new THREE.Mesh(createOceanGeometry(
     650000,
-    mobileControls ? 84 : 104,
-    mobileControls ? 120 : 156,
+    VISUAL_QUALITY.oceanRadialSegments,
+    VISUAL_QUALITY.oceanAngularSegments,
   ), material);
   mesh.name = "DECISION_SUPPORT_SEA";
   mesh.frustumCulled = false;

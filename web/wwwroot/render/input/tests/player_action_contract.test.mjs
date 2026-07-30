@@ -365,9 +365,14 @@ test("touch pilots retain system commands but the live surface makes them contex
     "a paused or rejected keyboard V press must not change presentation state");
 });
 
-test("phone settings remain scrollable and collapse desktop-only binding density", () => {
+test("phone settings remain scrollable, zoomable, and collapse desktop-only binding density", () => {
   assert.match(indexSource,
-    /\.settings-card\s*\{[\s\S]*?overflow:\s*auto[\s\S]*?touch-action:\s*pan-y/);
+    /\.settings-card\s*\{[\s\S]*?overflow:\s*auto[\s\S]*?touch-action:\s*pan-y pinch-zoom/);
+  assert.doesNotMatch(indexSource, /user-scalable=no|maximum-scale=1/,
+    "mobile pilots must be able to zoom dense briefing and settings text");
+  assert.match(hudSource,
+    /const largeText = document\.documentElement\.classList\.contains\("large-interface-text"\)[\s\S]*?const fontSize = largeText \? 11 : 10/,
+    "the larger-interface setting must scale the canvas tactical rail, not only DOM menus");
   assert.match(indexSource,
     /<details id="settings-keyboard-bindings" class="settings-disclosure" open>/);
   assert.match(appSource, /settingsKeyboardBindings\?\.removeAttribute\("open"\)/,
@@ -399,11 +404,11 @@ test("touch flight separates spring-loaded flight, look, target selection, and f
   assert.equal(stick[0].attributes["aria-label"], "Left flight stick");
   assert.equal(targetStick.length, 1, "touch mode needs one separate look target");
   assert.equal(targetStick[0].attributes.id, "target-stick");
-  assert.equal(targetStick[0].attributes["aria-label"], "Right look stick");
-  assert.equal(targetCycle.length, 1, "touch mode needs an explicit target selector");
-  assert.equal(targetCycle[0].attributes.id, "touch-target-cycle");
-  assert.equal(fire.length, 1, "touch mode needs a dedicated fire control");
-  assert.equal(fire[0].attributes["data-hold-key"], "KeyF");
+  assert.equal(targetStick[0].attributes["aria-label"],
+    "Right look stick; hold centre to fire");
+  assert.match(indexSource,
+    /Hold the centre briefly to fire; moving outside the centre stops firing and looks\./,
+    "the accessible help must describe the same centre-hold contract as the input state machine");
   assert.equal(lateralButtons.length, 0,
     "lateral directional buttons must not return");
   assert.equal(pitchButtons.length, 2, "exactly the two assisted pitch-bias chips");
@@ -429,39 +434,26 @@ test("touch flight separates spring-loaded flight, look, target selection, and f
     "phone flight must remove diagnostic and network panels from the two-thumb view");
   assert.doesNotMatch(appSource,
     /\.touch-mode\.touch-primary #touch-fire[\s\S]*?display: none !important/,
-    "the primary phone profile must expose the dedicated FIRE button");
-  assert.match(indexSource,
-    /\.portrait-assist \.touch-right\s*\{\s*display:\s*flex/,
-    "portrait flight must keep TARGET, PADLOCK, and FIRE reachable");
+    "the right stick owns firing, so the redundant phone FIRE button must not consume space");
   assert.match(appSource,
-    /@media \(orientation: portrait\)[\s\S]*?\.touch-mode\.touch-primary \.touch-right[\s\S]*?min\(36vw, 156px\)/,
-    "the live mobile override must park actions above, not underneath, the right stick");
-  assert.match(appSource,
-    /touchTargetCycleButton\?\.addEventListener\("click"[\s\S]*?cyclePadlockTarget\(\)/,
-    "the touch target control must use the same persistent selection path as Tab");
-  assert.match(appSource,
-    /touchTargetNumber\.textContent = patternOnly \? "NEXT" : String\(selectedNumber\)/,
-    "the selected contact number must remain visible on the control");
-  assert.match(appSource,
-    /patternOnly \? circuitsPadlockTargets\(latestState\)[\s\S]*?touchTargetLabel\.textContent = patternOnly \? "TRAFFIC" : "TARGET"[\s\S]*?patternOnly \? "NEXT"/,
-    "the same touch control must expose circuit-traffic cycling instead of disappearing");
-  const beginLook = appSource.match(
+    /tiltStatus\.hidden = \/\^TILT TRIM OFF\$\/i\.test\(full\)/,
+    "an ordinary disabled tilt trim must not occupy permanent flight chrome");
+  assert.match(indexSource, /#tilt-status\[hidden\]\s*\{\s*display:\s*none/,
+    "hidden tilt status must leave no invisible tap target over the HUD");
+  const targetStickStart = appSource.match(
     /function beginTargetStick\(event\)\s*\{([\s\S]*?)\n\s*function moveTargetStick/,
   )?.[1] ?? "";
-  assert.ok(beginLook, "look-stick pointerdown path must remain inspectable");
-  assert.doesNotMatch(beginLook, /pressMappedKey|Touch:TargetStickFire|armAudio/,
-    "touching the look stick must never fire or arm weapon audio");
-  assert.match(beginLook, /fire:\s*false/,
-    "look-stick telemetry must explicitly record that it did not fire");
-  const releaseLook = appSource.match(
-    /function releaseTargetStick\(\)\s*\{([\s\S]*?)\n\s*function beginTargetStick/,
-  )?.[1] ?? "";
-  assert.ok(releaseLook, "look-stick release path must remain inspectable");
-  assert.doesNotMatch(releaseLook, /KeyF|TargetStickFire|releaseMappedKey/,
-    "releasing the look stick must not own or disturb the gun trigger");
+  assert.doesNotMatch(targetStickStart, /pressMappedKey/,
+    "touching the look stick must not spend ammunition");
   assert.match(appSource,
-    /querySelectorAll\("\[data-hold-key\]"\)[\s\S]*?physicalCode === "KeyF"[\s\S]*?view\.hud\.armAudio\(\)/,
-    "the dedicated FIRE control must retain the ordinary held-gun and audio-arm path");
+    /function armTargetStickFire[\s\S]*?setTimeout[\s\S]*?pressMappedKey\("Touch:TargetStickFire"[\s\S]*?TARGET_STICK_FIRE_HOLD_MS/,
+    "only a deliberate centre hold may begin firing");
+  assert.match(appSource,
+    /function moveTargetStick[\s\S]*?TARGET_STICK_FIRE_CANCEL_RADIUS[\s\S]*?clearTargetStickFireTimer/,
+    "dragging to look must cancel the pending centre-hold shot");
+  assert.match(appSource,
+    /function moveTargetStick[\s\S]*?TARGET_STICK_FIRE_CANCEL_RADIUS[\s\S]*?if \(targetStickFireSource\)[\s\S]*?releaseMappedKey\("Touch:TargetStickFire"/,
+    "moving to look must revoke a centre hold even when its timer won a saturated-frame race");
 
   assert.match(appSource,
     /fallbackStick\?\.addEventListener\("pointerdown", beginVirtualStick[\s\S]*?pointermove", moveVirtualStick[\s\S]*?pointerup", endVirtualStick[\s\S]*?pointercancel", endVirtualStick[\s\S]*?lostpointercapture", endVirtualStick/,
@@ -576,7 +568,7 @@ test("screen chrome never covers a flight instrument or another tap target", () 
     "the always-available systems console must clear the GUN TEMP instrument");
 });
 
-test("fresh players launch directly into the first F-22 merge", () => {
+test("desktop auto-launches while touch pilots retain a real Fly gesture", () => {
   assert.match(appSource,
     /initialProgramNode = requestedProgramNode[\s\S]*?recommendedCampaignNode\(campaignProfile\)/);
   // Build 78 front door: INFINITE ENEMIES — every platform boots the continuous-combat
@@ -586,10 +578,16 @@ test("fresh players launch directly into the first F-22 merge", () => {
   assert.match(bridgeSource, /static readonly SimulationSession Session = new\(7,/,
     "the bridge fallback and browser must agree on the F-22 first experience");
   assert.match(appSource,
-    /let autoLaunchPending = requestedProgramNode\?\.id !== "medevac"/,
-    "the combat front door auto-launches, but Medevac holds for its route briefing");
+    /let autoLaunchPending = !mobileControls && requestedProgramNode\?\.id !== "medevac"/,
+    "desktop keeps the combat front door while touch holds for a deliberate Fly tap");
   assert.match(appSource,
     /function tryAutoLaunch\([\s\S]*?pauseReasons\.has\("ready"\)[\s\S]*?return launchMission\(selectedBeat\)/);
+  assert.match(appSource,
+    /if \(firstFrame\) \{[\s\S]*?bootScreen\.classList\.add\("ready"\);[\s\S]*?queueMicrotask\(tryAutoLaunch\);[\s\S]*?\}/,
+    "desktop auto-launch must wait until the landing surface has presented its first frame");
+  assert.match(appSource,
+    /readyStart\.addEventListener\("click"[\s\S]*?requestMobileFullscreenFromGesture\(\)[\s\S]*?activateReadyAction\(\)/,
+    "fullscreen must be requested synchronously from the Fly gesture before terrain warmup");
 
   const buttons = htmlButtons(indexSource);
   const nodeIds = buttons.filter((button) => button.attributes["data-program-node"] !== undefined)
@@ -598,8 +596,22 @@ test("fresh players launch directly into the first F-22 merge", () => {
     ["first-merge", "low-level-drone", "medevac", "rapier-circuits", "rapier-intercept"]);
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
-  assert.match(indexSource, /\.ready-selector,[\s\S]*?touch-action:\s*pan-y/);
+  assert.match(indexSource, /\.ready-selector,[\s\S]*?touch-action:\s*pan-y pinch-zoom/);
+  assert.match(appSource,
+    /if \(mobileControls && readyTitle && readyStart\) readyTitle\.after\(readyStart\)/,
+    "touch DOM order must put Fly where the phone layout shows it");
+  assert.match(appSource,
+    /function focusReadyScreen\(\)[\s\S]*?scrollIntoView\(\{[\s\S]*?inline: "center"[\s\S]*?const target = !readyStart\.disabled \? readyStart : selectedMission/,
+    "deep-linked missions must scroll into view while the available primary action owns focus");
+  assert.match(appSource, /mobileControls \? "Tap Fly to launch" : "Press Enter to fly"/,
+    "the touch briefing must name its real launch gesture");
   assert.match(indexSource, /\.sortie-choice\s*\{[\s\S]*?min-height:\s*78px/);
+  assert.match(indexSource,
+    /@media \(max-width: 760px\)[\s\S]*?\.ready-mission-groups\s*\{[\s\S]*?grid-auto-flow:\s*column[\s\S]*?overflow-x:\s*auto/,
+    "portrait mission cards must become one compact horizontal chooser");
+  assert.match(indexSource,
+    /@media \(max-height: 500px\) and \(orientation: landscape\)[\s\S]*?#ready-screen\[data-mode="program"\] \.ready-layout\s*\{[\s\S]*?grid-template-columns:/,
+    "short landscape screens need independent mission and briefing columns");
 });
 
 test("nothing in the menu is gated behind anything else", () => {
@@ -628,8 +640,8 @@ test("program modal behavior cannot leak into flight shortcuts", () => {
     "raw beat-number shortcuts must not bypass progression");
 
   assert.match(appSource,
-    /const target = !readyStart\.disabled \? readyStart : selectedMission/,
-    "initial modal focus must keep the advertised Enter-to-fly action honest");
+    /selectedMission\?\.closest\("\.sortie-option"\)\?\.scrollIntoView[\s\S]*?const target = !readyStart\.disabled \? readyStart : selectedMission/,
+    "focus must expose a deep-linked mission and then follow the visible primary action");
   assert.match(appSource,
     /sceneCanvas\.inert = showScreen[\s\S]*?readyScreen\.contains\(document\.activeElement\)[\s\S]*?focusOwner\?\.focus[\s\S]*?readyScreen\.setAttribute\(\s*"aria-hidden"/,
     "focus must leave the dialog before it becomes aria-hidden");

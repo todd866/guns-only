@@ -1,8 +1,9 @@
 import { deriveAncaView } from "./anca_view_model.js";
 
-/// Stowable ANCA auxiliary panel. One quiet control is present during a sortie; the four-layer
-/// priority cross-check opens only when the player asks for it. It remains view-only — stowing or
-/// opening the panel never changes aircraft or mission state.
+/// Stowable ANCA auxiliary panel. Desktop keeps one quiet control; touch flight omits that control
+/// until ANCA owns an exclusive attention condition, leaving the bounded tactical rail as the
+/// ordinary phone surface. It remains view-only — stowing or opening the panel never changes
+/// aircraft or mission state.
 
 export function createAncaPanelPresentation(documentLike, mount = documentLike.body) {
   const root = documentLike.createElement("aside");
@@ -139,11 +140,25 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
       [data-anca-panel] .anca-row[data-tone="active"] .anca-line {
         color: #6fc3ff;
       }
-      /* Portrait touch: hold the optional drawer above the movement stick reservation. */
+      /* If an ANCA-exclusive attention condition makes the touch control visible, keep it above
+         the lower-right stick and away from the tactical rail. */
       @media (orientation: portrait) {
         .touch-mode [data-anca-panel] {
-          top: auto;
-          bottom: max(184px, calc(env(safe-area-inset-bottom) + min(36vw, 156px) + 28px));
+          top: max(116px, calc(env(safe-area-inset-top) + 116px));
+          bottom: auto;
+        }
+      }
+      @media (orientation: landscape) {
+        .touch-mode [data-anca-panel] {
+          top: max(116px, calc(env(safe-area-inset-top) + 116px));
+        }
+      }
+      @media (orientation: landscape) and (max-height: 430px) {
+        /* The closed toggle owns the top-right rail. When opened, shift only the wide read-only
+           drawer clear of the right look/fire stick instead of letting it cover a flight input. */
+        .touch-mode [data-anca-panel] .anca-drawer {
+          width: min(320px, calc(100vw - 156px));
+          transform: translateX(-124px);
         }
       }
     </style>
@@ -182,6 +197,12 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
       .map((node) => [node.dataset.ancaLine, node]),
   );
   let open = false;
+  let currentView = null;
+  const syncVisibility = () => {
+    const touchMode = documentLike.documentElement?.classList?.contains("touch-mode") === true;
+    root.hidden = !currentView?.visible
+      || (touchMode && currentView.tone === "quiet" && !open);
+  };
   const setOpen = (nextOpen) => {
     open = nextOpen === true;
     root.dataset.open = open ? "true" : "false";
@@ -189,6 +210,7 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
     toggle.setAttribute("aria-label",
       open ? "Hide ANCA priority cross-check" : "Show ANCA priority cross-check");
+    syncVisibility();
   };
   toggle.addEventListener("click", () => setOpen(!open));
   mount.appendChild(root);
@@ -197,11 +219,12 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
   const update = (state) => {
     if (disposed) return;
     const view = deriveAncaView(state);
-    root.hidden = !view.visible;
-    if (root.hidden) {
+    currentView = view;
+    if (!view.visible) {
       setOpen(false);
       return;
     }
+    syncVisibility();
     root.dataset.tone = view.tone;
     empty.hidden = view.shownRows.length > 0;
     for (const rowView of view.rows) {
