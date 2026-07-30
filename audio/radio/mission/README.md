@@ -28,6 +28,13 @@ OPENAI_API_KEY=... python3 tools/audio/radio_voice.py generate
 ELEVENLABS_API_KEY=... python3 tools/audio/radio_voice.py generate
 ```
 
+The generator also supports Hume Octave 2 and Cartesia Sonic 3.5. Provider credentials may be
+supplied through the environment or stored in macOS Keychain under service
+`guns-only-voice-providers`, using the environment-variable name (`ELEVENLABS_API_KEY`,
+`HUME_API_KEY`, or `CARTESIA_API_KEY`) as the account. Environment variables take precedence.
+Production catalogs pin the provider model or snapshot; gameplay always consumes authored WAVs
+and never contacts a speech provider.
+
 Production WAVs and their manifest are tracked assets. A missing clip fails silent and increments
 the presentation QA counter; it never falls through to browser/device speech synthesis. Radio is
 atmosphere, not a gameplay dependency, so silence is safer than changing a character mid-sortie.

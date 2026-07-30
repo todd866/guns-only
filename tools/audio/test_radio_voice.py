@@ -1,9 +1,13 @@
+import base64
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 import wave
 
 
@@ -44,6 +48,9 @@ def wav_bytes():
 
 
 class FakeResponse:
+    def __init__(self, data=None):
+        self.data = wav_bytes() if data is None else data
+
     def __enter__(self):
         return self
 
@@ -51,7 +58,7 @@ class FakeResponse:
         return False
 
     def read(self):
-        return wav_bytes()
+        return self.data
 
 
 class RadioVoiceTests(unittest.TestCase):
@@ -181,6 +188,107 @@ class RadioVoiceTests(unittest.TestCase):
         self.assertEqual("[calm] Continue.", payload["text"])
         self.assertEqual("eleven-secret", request.get_header("Xi-api-key"))
         self.assertTrue(result.startswith(b"RIFF"))
+
+    def test_hume_request_decodes_octave_wav(self):
+        hume = {
+            "version": 1,
+            "provider": "hume",
+            "model": "2",
+            "response_format": "wav",
+            "roles": {
+                "tower": {
+                    "voice_id": "hume-tower-id",
+                    "speed": 1.05,
+                    "instructions": "Calm controller.",
+                }
+            },
+            "lines": [{"id": "tower-test", "role": "tower", "text": "Continue."}],
+        }
+        radio_voice.validate_catalog(hume)
+        captured = {}
+        encoded = base64.b64encode(wav_bytes()).decode("ascii")
+
+        def urlopen(request, timeout):
+            captured["request"] = request
+            return FakeResponse(json.dumps({
+                "generations": [{"audio": encoded}],
+            }).encode("utf-8"))
+
+        result = radio_voice.speech_request(
+            hume, hume["lines"][0], "hume-secret", urlopen=urlopen
+        )
+        payload = json.loads(captured["request"].data)
+        self.assertEqual("2", payload["version"])
+        self.assertEqual("hume-tower-id", payload["utterances"][0]["voice"]["id"])
+        self.assertEqual(1.05, payload["utterances"][0]["speed"])
+        self.assertEqual("hume-secret", captured["request"].get_header("X-hume-api-key"))
+        self.assertEqual(wav_bytes(), result)
+
+    def test_cartesia_request_pins_snapshot_api_version_and_wav(self):
+        cartesia = {
+            "version": 1,
+            "provider": "cartesia",
+            "model": "sonic-3.5-2026-05-04",
+            "api_version": "2026-03-01",
+            "response_format": "wav",
+            "pcm_sample_rate_hz": 48_000,
+            "roles": {
+                "tower": {
+                    "voice_id": "cartesia-tower-id",
+                    "instructions": "Calm controller.",
+                }
+            },
+            "lines": [{"id": "tower-test", "role": "tower", "text": "Continue."}],
+        }
+        radio_voice.validate_catalog(cartesia)
+        captured = {}
+
+        def urlopen(request, timeout):
+            captured["request"] = request
+            return FakeResponse()
+
+        result = radio_voice.speech_request(
+            cartesia, cartesia["lines"][0], "cartesia-secret", urlopen=urlopen
+        )
+        request = captured["request"]
+        payload = json.loads(request.data)
+        self.assertEqual("sonic-3.5-2026-05-04", payload["model_id"])
+        self.assertEqual("cartesia-tower-id", payload["voice"]["id"])
+        self.assertEqual(48_000, payload["output_format"]["sample_rate"])
+        self.assertEqual("2026-03-01", request.get_header("Cartesia-version"))
+        self.assertEqual("Bearer cartesia-secret", request.get_header("Authorization"))
+        self.assertEqual(wav_bytes(), result)
+
+    def test_provider_key_prefers_environment_then_uses_keychain(self):
+        with mock.patch.dict(
+            os.environ, {"HUME_API_KEY": "environment-key"}
+        ), mock.patch.object(radio_voice.subprocess, "run") as run:
+            self.assertEqual("environment-key", radio_voice.key_for_provider("hume"))
+            run.assert_not_called()
+
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="keychain-key\n"
+        )
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
+            radio_voice.subprocess, "run", return_value=completed
+        ) as run:
+            self.assertEqual("keychain-key", radio_voice.key_for_provider("hume"))
+            self.assertEqual(
+                [
+                    "security",
+                    "find-generic-password",
+                    "-a",
+                    "HUME_API_KEY",
+                    "-s",
+                    radio_voice.KEYCHAIN_SERVICE,
+                    "-w",
+                ],
+                run.call_args.args[0],
+            )
+            self.assertIs(
+                radio_voice.subprocess.DEVNULL,
+                run.call_args.kwargs["stderr"],
+            )
 
 
 if __name__ == "__main__":

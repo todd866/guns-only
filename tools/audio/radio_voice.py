@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import io
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import urllib.error
 import urllib.parse
@@ -18,11 +20,17 @@ import wave
 DEFAULT_API_URLS = {
     "openai": "https://api.openai.com/v1/audio/speech",
     "elevenlabs": "https://api.elevenlabs.io/v1/text-to-speech",
+    "hume": "https://api.hume.ai/v0/tts",
+    "cartesia": "https://api.cartesia.ai/tts/bytes",
 }
 API_KEY_ENVIRONMENTS = {
     "openai": "OPENAI_API_KEY",
     "elevenlabs": "ELEVENLABS_API_KEY",
+    "hume": "HUME_API_KEY",
+    "cartesia": "CARTESIA_API_KEY",
 }
+KEYCHAIN_SERVICE = "guns-only-voice-providers"
+USER_AGENT = "guns-only-radio-voice/2.0"
 VALID_FORMATS = {"mp3", "opus", "aac", "flac", "wav", "pcm"}
 VALID_VOICES = {
     "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx",
@@ -69,11 +77,17 @@ def validate_catalog(catalog: dict) -> None:
             if not isinstance(speed, (int, float)) or not 0.25 <= speed <= 4.0:
                 raise ValueError(f"role {role!r} speed must be from 0.25 to 4.0")
         elif not str(spec.get("voice_id", "")).strip():
-            raise ValueError(f"role {role!r} needs an ElevenLabs voice_id")
+            raise ValueError(f"role {role!r} needs a {provider} voice_id")
+        if provider == "hume":
+            speed = spec.get("speed", 1.0)
+            if not isinstance(speed, (int, float)) or not 0.5 <= speed <= 2.0:
+                raise ValueError(f"role {role!r} speed must be from 0.5 to 2.0")
         if not str(spec.get("instructions", "")).strip():
             raise ValueError(f"role {role!r} has no instructions")
         if "voice_settings" in spec and not isinstance(spec["voice_settings"], dict):
             raise ValueError(f"role {role!r} voice_settings must be an object")
+    if provider == "cartesia" and not str(catalog.get("api_version", "")).strip():
+        raise ValueError("Cartesia catalog requires api_version")
     seen: set[str] = set()
     for line in lines:
         if not isinstance(line, dict):
@@ -118,6 +132,7 @@ def source_hash(catalog: dict, line: dict, take: int = 1) -> str:
     source = {
         "provider": catalog.get("provider", "openai"),
         "model": catalog["model"],
+        "api_version": catalog.get("api_version"),
         "response_format": catalog["response_format"],
         "voice": role.get("voice"),
         "voice_id": role.get("voice_id"),
@@ -144,6 +159,14 @@ def speech_request(
     resolved_url = api_url or DEFAULT_API_URLS[provider]
     if provider == "elevenlabs":
         return elevenlabs_speech_request(
+            catalog, line, api_key, take=take, api_url=resolved_url, urlopen=urlopen
+        )
+    if provider == "hume":
+        return hume_speech_request(
+            catalog, line, api_key, take=take, api_url=resolved_url, urlopen=urlopen
+        )
+    if provider == "cartesia":
+        return cartesia_speech_request(
             catalog, line, api_key, take=take, api_url=resolved_url, urlopen=urlopen
         )
     return openai_speech_request(
@@ -178,6 +201,7 @@ def openai_speech_request(
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
         },
     )
     return perform_request(request, urlopen)
@@ -216,10 +240,119 @@ def elevenlabs_speech_request(
         headers={
             "xi-api-key": api_key,
             "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
         },
     )
     pcm = perform_request(request, urlopen)
     return pcm16_mono_wav(pcm, sample_rate)
+
+
+def hume_speech_request(
+    catalog: dict,
+    line: dict,
+    api_key: str,
+    *,
+    take: int,
+    api_url: str,
+    urlopen,
+) -> bytes:
+    role = catalog["roles"][line["role"]]
+    request_body = {
+        "version": catalog["model"],
+        "utterances": [{
+            "text": line["text"],
+            "voice": {"id": role["voice_id"]},
+            "speed": role.get("speed", 1.0),
+            "trailing_silence": 0.08,
+        }],
+        "format": {"type": "wav"},
+        "num_generations": 1,
+    }
+    request = urllib.request.Request(
+        api_url,
+        data=json.dumps(request_body).encode("utf-8"),
+        method="POST",
+        headers={
+            "X-Hume-Api-Key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
+        },
+    )
+    payload = json.loads(perform_request(request, urlopen))
+    generations = payload.get("generations", [])
+    if not generations or not generations[0].get("audio"):
+        raise RuntimeError("Hume speech response contains no generation audio")
+    try:
+        return base64.b64decode(generations[0]["audio"], validate=True)
+    except (ValueError, TypeError) as error:
+        raise RuntimeError("Hume speech response contains invalid audio") from error
+
+
+def cartesia_speech_request(
+    catalog: dict,
+    line: dict,
+    api_key: str,
+    *,
+    take: int,
+    api_url: str,
+    urlopen,
+) -> bytes:
+    role = catalog["roles"][line["role"]]
+    request_body = {
+        "model_id": catalog["model"],
+        "transcript": line["text"],
+        "voice": {"id": role["voice_id"]},
+        "language": str(catalog.get("language_code", "en")),
+        "output_format": {
+            "container": "wav",
+            "encoding": "pcm_s16le",
+            "sample_rate": int(catalog.get("pcm_sample_rate_hz", 48_000)),
+        },
+    }
+    request = urllib.request.Request(
+        api_url,
+        data=json.dumps(request_body).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Cartesia-Version": str(catalog["api_version"]),
+            "Content-Type": "application/json",
+            "Accept": "audio/wav",
+            "User-Agent": USER_AGENT,
+        },
+    )
+    return perform_request(request, urlopen)
+
+
+def key_for_provider(provider: str) -> str:
+    environment = API_KEY_ENVIRONMENTS[provider]
+    key = os.environ.get(environment, "").strip()
+    if key:
+        return key
+    try:
+        result = subprocess.run(
+            [
+                "security",
+                "find-generic-password",
+                "-a",
+                environment,
+                "-s",
+                KEYCHAIN_SERVICE,
+                "-w",
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        result = None
+    if result is not None and result.stdout.strip():
+        return result.stdout.strip()
+    raise RuntimeError(
+        f"{environment} is not set and no matching macOS Keychain item exists"
+    )
 
 
 def perform_request(request: urllib.request.Request, urlopen) -> bytes:
@@ -485,9 +618,10 @@ def main() -> int:
         return 0
     provider = str(catalog.get("provider", "openai")).strip().lower()
     key_environment = API_KEY_ENVIRONMENTS[provider]
-    api_key = os.environ.get(key_environment, "")
-    if not api_key and not args.dry_run:
-        raise SystemExit(f"{key_environment} is required for generate (or use --dry-run)")
+    try:
+        api_key = "" if args.dry_run else key_for_provider(provider)
+    except RuntimeError as error:
+        raise SystemExit(f"{error} (or use --dry-run)") from error
     selected = set(args.only) or None
     if selected:
         known = {line["id"] for line in catalog["lines"]}
