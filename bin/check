@@ -47,6 +47,12 @@ content_tests=$(find tools/content -type f -name '*.test.mjs' -print | sort)
 node --test $content_tests
 node --test tools/telemetry/test/*.test.mjs
 node --test tools/perf/*.test.mjs
+# Authored narrative sequences are a content contract with a schema and a validator; run it here
+# or the contract only holds for as long as someone remembers to run it by hand.
+narrative_tests=$(find docs/art-direction -type f -name '*.test.mjs' -print | sort)
+if [ -n "$narrative_tests" ]; then
+  node --test $narrative_tests
+fi
 python3 tools/audio/cockpit_palette.py self-test
 python3 -m unittest tools/audio/test_cockpit_palette.py tools/audio/test_jet_library.py
 node --test tools/audio/*.test.mjs
@@ -87,6 +93,14 @@ ukraine_env_stage="$staged_content_dir/packs/ukraine-modern/environment"
 mkdir -p "$ukraine_env_stage"
 if [ -f "$ukraine_env_dir/atmosphere.material.json" ]; then
   cp "$ukraine_env_dir/atmosphere.material.json" "$ukraine_env_stage/"
+fi
+# Painterly presentation textures are authored source assets just like the atmosphere material.
+# Stage the complete family so generated art cannot exist only in wwwroot or disappear at publish.
+ukraine_texture_source="$ukraine_env_dir/textures"
+ukraine_texture_stage="$ukraine_env_stage/textures"
+if [ -d "$ukraine_texture_source" ]; then
+  mkdir -p "$ukraine_texture_stage"
+  cp -R "$ukraine_texture_source/." "$ukraine_texture_stage/"
 fi
 # Free-fly Mesh place catalog (authored destinations / landmarks for Open Segment).
 ukraine_mesh_source="content/packs/ukraine-modern/environment/mesh"

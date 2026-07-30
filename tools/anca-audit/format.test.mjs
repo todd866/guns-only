@@ -23,26 +23,51 @@ test("fixture samples drive deriveAncaView into real A/N/C/A rows", () => {
 
   assert.equal(views[0].view.visible, true);
   assert.deepEqual(
-    views[0].view.rows.map((row) => row.line),
-    ["—", "—", "—", "—"],
-    "routine launch configuration must not manufacture a priority",
+    views[0].view.rows.map((row) => row.tone),
+    ["steady", "quiet", "steady", "quiet"],
+    "routine launch configuration carries steady context but must not manufacture a priority",
   );
+
+  // The wire subset has to resolve a mission kind, or deriveAncaView falls through to "other"
+  // and reports an empty panel for every scenario -- an audit that cannot fail.
+  assert.ok(
+    views.every((entry) => entry.record.state.rapier_mission_available === true),
+    "Rapier scenarios must expose the mission-kind discriminator",
+  );
+  assert.equal(views[0].view.rows[2].line, "CONTROL · DEPARTING");
 
   const airborne = views.find((entry) => entry.record.sample === "t+2s");
   assert.ok(airborne, "t+2s sample present");
-  assert.equal(airborne.view.rows[2].tone, "active");
-  assert.equal(airborne.view.rows[2].line, "RAPIER TOWER · AUTO TX");
-  assert.doesNotMatch(airborne.view.rows[2].line, /cleared for launch/i);
+  assert.equal(airborne.view.rows[2].tone, "steady");
+  assert.equal(airborne.view.rows[2].line, "CONTROL · DEPARTING");
   assert.equal(
     airborne.view.rows[3].line,
     "LAUNCH · VERIFY 1/4 → AIRBORNE",
   );
 
+  // A live transmission is background traffic, not a priority: it neither promotes the
+  // Communicate row nor leaks its script into the panel.
+  const transmitting = views.find((entry) => entry.record.state.radio_active === true);
+  assert.ok(transmitting, "a sample transmits");
+  assert.equal(transmitting.view.rows[2].tone, "steady");
+  assert.doesNotMatch(transmitting.view.rows[2].line, /AUTO TX/);
+  for (const entry of views) {
+    const spoken = String(entry.record.state.radio_text ?? "");
+    for (const row of entry.view.rows) {
+      if (spoken.length > 0) assert.notEqual(row.line, spoken);
+      assert.doesNotMatch(row.line, /Ghost One One|cleared for launch/i);
+    }
+  }
+
   const climb = views.find((entry) => entry.record.sample === "t+30s");
   assert.ok(climb, "t+30s sample present");
-  assert.deepEqual(
-    climb.view.rows.map((row) => row.line),
-    ["—", "—", "—", "—"],
+  assert.equal(
+    climb.view.rows[3].line,
+    "—",
     "completed checks and stale radio state must clear instead of lingering",
+  );
+  assert.ok(
+    climb.view.rows.every((row) => row.tone !== "active"),
+    "a settled climb holds no priority",
   );
 });
