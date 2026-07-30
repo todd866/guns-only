@@ -573,7 +573,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             skill: skill,
             terrain: terrain,
             profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
-            doctrineIndex: spec?.DoctrineIndex);
+            doctrineIndex: spec?.DoctrineIndex,
+            presenting: spec?.Sparring == true);
     }
 }
 

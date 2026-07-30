@@ -27,7 +27,7 @@ public enum BanditMount {
 public readonly record struct SpawnSpec(
     PilotSkill Skill, int DoctrineIndex, bool Boss, string Reason,
     bool Machine = false, BanditMount Mount = BanditMount.Baseline,
-    int FormationSize = 1);
+    int FormationSize = 1, bool Sparring = false);
 
 /// Session-scale pacing for infinite-spawn continuous combat: CALM → BUILD → BOSS → RELEASE.
 /// Owns a LearnerModel and turns its banded estimate into the next spawn's tier/doctrine, with
@@ -132,8 +132,17 @@ public sealed class FightDirector {
 
     public SpawnSpec NextSpawn(int engagementNumber) {
         if (!_anyObserved && _phase == DirectorPhase.Calm)
+            // The very first fight a cold visitor ever sees is a 1v2 that OPENS co-operative.
+            // Tier is untouched — it is still the hardest opening in the game, and now they are
+            // outnumbered as well. The scaffolding is entirely behavioural: both ships fly
+            // BanditTactic.Present until the player holds a gun position, then they turn together.
+            //
+            // This is a spawn-boundary decision reading only _anyObserved and _phase, which the
+            // director already commits at exactly this point, so nothing counter-picks mid-fight.
+            // A returning player has _anyObserved true and never sees it.
             return WithDoctrine(BanditSkillProfile.ForEngagement(engagementNumber),
-                engagementNumber, boss: false, "warm-up ladder");
+                engagementNumber, boss: false, "warm-up ladder")
+                with { Sparring = engagementNumber <= 1, FormationSize = engagementNumber <= 1 ? 2 : 1 };
 
         if (_phase == DirectorPhase.Release)
             return WithDoctrine(_releaseTier, engagementNumber, boss: false,
