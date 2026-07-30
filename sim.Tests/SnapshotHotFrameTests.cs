@@ -359,7 +359,7 @@ public class SnapshotHotFrameTests {
     }
 
     [Fact]
-    public void CircuitsRadioTransitionBumpsColdStringsAndMatchesHotState() {
+    public void CircuitsLaunchStaysRadioSilentAndMatchesHotState() {
         SimulationSession session = StartSession(11, null);
         var buffer = new double[SnapshotHotFrame.SlotCount];
         SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
@@ -369,24 +369,12 @@ public class SnapshotHotFrameTests {
         session.StepFixed();
         var (root, after, document) = Project(session);
         using (document) {
-            Assert.True(after[SnapshotHotFrame.ColdVersionIndex] > settled);
-            Assert.True(root.GetProperty("radio_active").GetBoolean());
-            Assert.Equal("launch-cleared",
-                root.GetProperty("radio_id").GetString());
-            Assert.Equal("RAPIER TOWER",
-                root.GetProperty("radio_channel").GetString());
-            Assert.Equal("305.500 UHF",
-                root.GetProperty("radio_frequency").GetString());
-            Assert.Equal("GHOST 11",
-                root.GetProperty("radio_callsign").GetString());
-            Assert.True(root.GetProperty("radio_ai_generated").GetBoolean());
+            Assert.True(after[SnapshotHotFrame.ColdVersionIndex] >= settled);
+            Assert.False(root.GetProperty("radio_active").GetBoolean());
+            Assert.Equal("", root.GetProperty("radio_id").GetString());
             // First-generation Circuits field names remain aliases for older browser bundles.
-            Assert.True(root.GetProperty("rapier_radio_active").GetBoolean());
-            Assert.Equal("launch-cleared",
-                root.GetProperty("rapier_radio_id").GetString());
-            Assert.Equal("LAUNCH",
-                root.GetProperty("rapier_radio_speaker").GetString());
-            Assert.True(root.GetProperty("rapier_radio_ai_generated").GetBoolean());
+            Assert.False(root.GetProperty("rapier_radio_active").GetBoolean());
+            Assert.Equal("", root.GetProperty("rapier_radio_id").GetString());
             AssertHotFrameMatchesJson(root, after);
         }
     }

@@ -135,8 +135,8 @@ test("mission reset lets sequence one play again", async () => {
   const call = {
     radio_active: true,
     radio_sequence: 1,
-    radio_id: "launch-cleared",
-    radio_text: "Ghost One One, cleared for launch.",
+    radio_id: "pilot-initial",
+    radio_text: "Ghost One One, initial.",
   };
 
   updateRadioVoice(voice, context, call);
@@ -157,9 +157,9 @@ test("tactical radio is not restricted to the Circuits mission", async () => {
     rapier_pattern_only: false,
     radio_active: true,
     radio_sequence: 8,
-    radio_id: "pilot-guns",
-    radio_text: "Ghost One One, guns.",
-    radio_voice: "pilot",
+    radio_id: "control-commit-short",
+    radio_text: "Ghost, commit.",
+    radio_voice: "controller",
   });
 
   assert.equal(voice.squelchCount, 1);

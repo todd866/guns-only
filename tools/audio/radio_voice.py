@@ -4,13 +4,16 @@
 from __future__ import annotations
 
 import argparse
+from array import array
 import base64
 import hashlib
 import io
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import urllib.error
 import urllib.parse
@@ -82,6 +85,16 @@ def validate_catalog(catalog: dict) -> None:
             speed = spec.get("speed", 1.0)
             if not isinstance(speed, (int, float)) or not 0.5 <= speed <= 2.0:
                 raise ValueError(f"role {role!r} speed must be from 0.5 to 2.0")
+            if str(catalog["model"]) == "1":
+                description = str(spec.get("description", "")).strip()
+                if not description:
+                    raise ValueError(
+                        f"role {role!r} needs a concise Hume Octave 1 description"
+                    )
+                if len(description) > 100:
+                    raise ValueError(
+                        f"role {role!r} Hume description exceeds 100 characters"
+                    )
         if not str(spec.get("instructions", "")).strip():
             raise ValueError(f"role {role!r} has no instructions")
         if "voice_settings" in spec and not isinstance(spec["voice_settings"], dict):
@@ -104,23 +117,73 @@ def validate_catalog(catalog: dict) -> None:
             raise ValueError(f"line {line_id!r} has no text")
         if "direction" in line and not str(line["direction"]).strip():
             raise ValueError(f"line {line_id!r} has an empty direction")
+        target_duration = line.get("target_duration_s")
+        if catalog["version"] >= 5 or target_duration is not None:
+            if (
+                not isinstance(target_duration, list)
+                or len(target_duration) != 2
+                or not all(isinstance(value, (int, float)) for value in target_duration)
+                or not 0 < target_duration[0] <= target_duration[1]
+            ):
+                raise ValueError(
+                    f"line {line_id!r} target_duration_s must be a positive "
+                    "[minimum, maximum]"
+                )
+        if provider == "hume" and "description" in line:
+            description = str(line["description"]).strip()
+            if not description:
+                raise ValueError(f"line {line_id!r} has an empty Hume description")
+            if len(description) > 100:
+                raise ValueError(
+                    f"line {line_id!r} Hume description exceeds 100 characters"
+                )
+        if "speed" in line:
+            speed = line["speed"]
+            if provider == "hume":
+                valid_speed = isinstance(speed, (int, float)) and 0.5 <= speed <= 2.0
+            elif provider == "openai":
+                valid_speed = isinstance(speed, (int, float)) and 0.25 <= speed <= 4.0
+            else:
+                raise ValueError(
+                    f"line {line_id!r} speed override is unsupported for {provider}"
+                )
+            if not valid_speed:
+                raise ValueError(f"line {line_id!r} has invalid {provider} speed")
         takes = line.get("takes", 1)
         if not isinstance(takes, int) or not 1 <= takes <= 4:
             raise ValueError(f"line {line_id!r} takes must be an integer from 1 to 4")
 
 
 def line_instructions(catalog: dict, line: dict, take: int = 1) -> str:
-    """The character's standing register plus the moment's emotional direction."""
+    """The role's standing speech behavior plus the transmission-specific direction."""
     role = catalog["roles"][line["role"]]
     parts = [str(role["instructions"]).strip()]
     direction = str(line.get("direction", "")).strip()
     if direction:
         parts.append(f"This moment: {direction}")
+    if "target_duration_s" in line:
+        minimum, maximum = line["target_duration_s"]
+        parts.append(
+            f"Target audible speech duration: {minimum:g} to {maximum:g} seconds; "
+            "do not pad a short packet to sound important."
+        )
     if take > 1:
         parts.append(
             "Alternate take: same character, same register, naturally different "
             "micro-timing and emphasis.")
     return "\n\n".join(parts)
+
+
+def hume_description(catalog: dict, line: dict) -> str:
+    """Return the short Octave acting cue; long prose can leak into generated speech."""
+    role = catalog["roles"][line["role"]]
+    return str(line.get("description", role["description"])).strip()
+
+
+def line_speed(catalog: dict, line: dict) -> float:
+    """Use a speech-act-specific rate when supplied, otherwise retain role continuity."""
+    role = catalog["roles"][line["role"]]
+    return float(line.get("speed", role.get("speed", 1.0)))
 
 
 def take_filename(line_id: str, take: int) -> str:
@@ -137,9 +200,16 @@ def source_hash(catalog: dict, line: dict, take: int = 1) -> str:
         "voice": role.get("voice"),
         "voice_id": role.get("voice_id"),
         "voice_settings": role.get("voice_settings"),
-        "speed": role.get("speed"),
+        "speed": line_speed(catalog, line),
         "instructions": line_instructions(catalog, line, take),
+        "description": (
+            hume_description(catalog, line)
+            if str(catalog.get("provider", "openai")).lower() == "hume"
+            and str(catalog["model"]) == "1"
+            else None
+        ),
         "audio_tags": line.get("audio_tags"),
+        "target_duration_s": line.get("target_duration_s"),
         "text": line["text"],
     }
     canonical = json.dumps(source, sort_keys=True, separators=(",", ":"))
@@ -191,8 +261,8 @@ def openai_speech_request(
         "instructions": line_instructions(catalog, line, take),
         "response_format": catalog["response_format"],
     }
-    if "speed" in role:
-        request_body["speed"] = role["speed"]
+    if "speed" in role or "speed" in line:
+        request_body["speed"] = line_speed(catalog, line)
     payload = json.dumps(request_body).encode("utf-8")
     request = urllib.request.Request(
         api_url,
@@ -257,14 +327,20 @@ def hume_speech_request(
     urlopen,
 ) -> bytes:
     role = catalog["roles"][line["role"]]
+    utterance = {
+        "text": line["text"],
+        "voice": {"id": role["voice_id"]},
+        "speed": line_speed(catalog, line),
+        "trailing_silence": 0.08,
+    }
+    # The live Hume API currently rejects utterance descriptions on Octave 2 even though
+    # descriptions remain part of the general Utterance schema. Directed performance therefore
+    # uses Octave 1; Octave 2 is retained only for explicitly undirected stock-voice catalogs.
+    if str(catalog["model"]) == "1":
+        utterance["description"] = hume_description(catalog, line)
     request_body = {
         "version": catalog["model"],
-        "utterances": [{
-            "text": line["text"],
-            "voice": {"id": role["voice_id"]},
-            "speed": role.get("speed", 1.0),
-            "trailing_silence": 0.08,
-        }],
+        "utterances": [utterance],
         "format": {"type": "wav"},
         "num_generations": 1,
     }
@@ -443,6 +519,72 @@ def normalize_wav(path: Path) -> None:
         audio.writeframes(pcm)
 
 
+def trim_wav_silence(
+    path: Path,
+    *,
+    threshold_dbfs: float = -48.0,
+    pre_roll_s: float = 0.02,
+    post_roll_s: float = 0.08,
+) -> None:
+    """Remove provider padding while preserving a short natural key-up/key-down margin."""
+    with wave.open(str(path), "rb") as audio:
+        channels = audio.getnchannels()
+        width = audio.getsampwidth()
+        rate = audio.getframerate()
+        frames = audio.readframes(audio.getnframes())
+    if channels != 1 or width != 2 or rate <= 0 or not frames:
+        return
+
+    samples = array("h")
+    samples.frombytes(frames)
+    if sys.byteorder != "little":
+        samples.byteswap()
+    threshold = max(1, int(32767.0 * math.pow(10.0, threshold_dbfs / 20.0)))
+    audible = [index for index, sample in enumerate(samples) if abs(sample) >= threshold]
+    if not audible:
+        return
+    pre_roll = max(0, round(pre_roll_s * rate))
+    post_roll = max(0, round(post_roll_s * rate))
+    start = max(0, audible[0] - pre_roll)
+    end = min(len(samples), audible[-1] + post_roll + 1)
+    trimmed = samples[start:end]
+    if sys.byteorder != "little":
+        trimmed.byteswap()
+    with wave.open(str(path), "wb") as audio:
+        audio.setnchannels(channels)
+        audio.setsampwidth(width)
+        audio.setframerate(rate)
+        audio.writeframes(trimmed.tobytes())
+
+
+def wav_silence_padding(path: Path, *, threshold_dbfs: float = -48.0) -> dict:
+    """Measure leading and trailing below-threshold padding on mono 16-bit PCM."""
+    with wave.open(str(path), "rb") as audio:
+        channels = audio.getnchannels()
+        width = audio.getsampwidth()
+        rate = audio.getframerate()
+        frames = audio.readframes(audio.getnframes())
+    if channels != 1 or width != 2 or rate <= 0 or not frames:
+        return {}
+
+    samples = array("h")
+    samples.frombytes(frames)
+    if sys.byteorder != "little":
+        samples.byteswap()
+    threshold = max(1, int(32767.0 * math.pow(10.0, threshold_dbfs / 20.0)))
+    audible = [index for index, sample in enumerate(samples) if abs(sample) >= threshold]
+    if not audible:
+        duration = len(samples) / rate
+        return {
+            "leading_silence_s": round(duration, 3),
+            "trailing_silence_s": round(duration, 3),
+        }
+    return {
+        "leading_silence_s": round(audible[0] / rate, 3),
+        "trailing_silence_s": round((len(samples) - audible[-1] - 1) / rate, 3),
+    }
+
+
 def write_atomic(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as temp:
@@ -466,11 +608,26 @@ def build_manifest(catalog: dict, output_dir: Path) -> dict:
             if not wav_path.exists():
                 continue
             wav = inspect_wav(wav_path)
+            padding = wav_silence_padding(wav_path)
+            audible_duration = round(
+                wav["duration_s"]
+                - padding.get("leading_silence_s", 0.0)
+                - padding.get("trailing_silence_s", 0.0),
+                3,
+            )
+            target_duration = line.get("target_duration_s")
             takes.append({
                 "url": f"./{wav_path.name}",
                 "source_sha256": source_hash(catalog, line, take),
                 "file_sha256": hashlib.sha256(wav_path.read_bytes()).hexdigest(),
                 **wav,
+                **padding,
+                "audible_duration_s": audible_duration,
+                "target_duration_s": target_duration,
+                "duration_within_target": (
+                    target_duration is None
+                    or target_duration[0] <= audible_duration <= target_duration[1]
+                ),
             })
         if not takes:
             continue
@@ -566,7 +723,25 @@ def generate(
             write_atomic(wav_path, audio)
             try:
                 normalize_wav(wav_path)
-                inspect_wav(wav_path)
+                trim_wav_silence(wav_path)
+                wav = inspect_wav(wav_path)
+                padding = wav_silence_padding(wav_path)
+                if padding.get("trailing_silence_s", 0.0) > 0.12:
+                    raise ValueError(
+                        f"WAV has excessive trailing silence after trim: {wav_path}"
+                    )
+                if "target_duration_s" in line:
+                    audible_duration = (
+                        wav["duration_s"]
+                        - padding.get("leading_silence_s", 0.0)
+                        - padding.get("trailing_silence_s", 0.0)
+                    )
+                    minimum, maximum = line["target_duration_s"]
+                    if not minimum <= audible_duration <= maximum:
+                        raise ValueError(
+                            f"WAV audible duration {audible_duration:.3f}s is outside "
+                            f"{minimum:g}-{maximum:g}s target: {wav_path}"
+                        )
             except Exception:
                 wav_path.unlink(missing_ok=True)
                 raise

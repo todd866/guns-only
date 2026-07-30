@@ -1,4 +1,5 @@
 import base64
+from array import array
 import importlib.util
 import io
 import json
@@ -43,7 +44,7 @@ def wav_bytes():
         audio.setnchannels(1)
         audio.setsampwidth(2)
         audio.setframerate(24_000)
-        audio.writeframes(b"\0\0" * 2_400)
+        audio.writeframes(b"\xa0\x0f" * 2_400)
     return output.getvalue()
 
 
@@ -67,6 +68,12 @@ class RadioVoiceTests(unittest.TestCase):
         duplicate["lines"].append(dict(duplicate["lines"][0]))
         with self.assertRaisesRegex(ValueError, "duplicate"):
             radio_voice.validate_catalog(duplicate)
+
+    def test_version_five_catalog_requires_line_duration_targets(self):
+        missing_target = catalog()
+        missing_target["version"] = 5
+        with self.assertRaisesRegex(ValueError, "target_duration_s"):
+            radio_voice.validate_catalog(missing_target)
 
     def test_request_uses_official_speech_shape_without_leaking_key(self):
         captured = {}
@@ -111,6 +118,25 @@ class RadioVoiceTests(unittest.TestCase):
             self.assertIn("tower-test", data["clips"])
             self.assertNotIn("secret-test-key", manifest.read_text(encoding="utf-8"))
 
+    def test_generate_rejects_audio_outside_authored_duration(self):
+        authored = catalog()
+        authored["version"] = 5
+        authored["lines"][0]["target_duration_s"] = [1.0, 2.0]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "clips"
+            manifest = output / "manifest.json"
+            original = radio_voice.speech_request
+            radio_voice.speech_request = lambda *_args, **_kwargs: wav_bytes()
+            try:
+                with self.assertRaisesRegex(ValueError, "outside 1-2s target"):
+                    radio_voice.generate(
+                        authored, output, manifest, "secret-test-key"
+                    )
+            finally:
+                radio_voice.speech_request = original
+            self.assertFalse((output / "tower-test.wav").exists())
+
 
     def test_inspect_wav_handles_openai_unknown_chunk_sizes(self):
         # OpenAI speech returns RIFF/data sizes of 0xFFFFFFFF; duration must come from bytes.
@@ -137,6 +163,39 @@ class RadioVoiceTests(unittest.TestCase):
             radio_voice.normalize_wav(path)
             with wave.open(str(path), "rb") as audio:
                 self.assertEqual(24_000, audio.getnframes())
+
+    def test_trim_wav_silence_preserves_short_keying_margins(self):
+        rate = 1_000
+        samples = array(
+            "h",
+            ([0] * 300)
+            + ([4_000] * 200)
+            + ([0] * 500),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "padded.wav"
+            with wave.open(str(path), "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(rate)
+                audio.writeframes(samples.tobytes())
+
+            radio_voice.trim_wav_silence(path)
+
+            with wave.open(str(path), "rb") as audio:
+                self.assertEqual(300, audio.getnframes())
+                trimmed = array("h")
+                trimmed.frombytes(audio.readframes(audio.getnframes()))
+            self.assertEqual([0] * 20, list(trimmed[:20]))
+            self.assertEqual([4_000] * 200, list(trimmed[20:220]))
+            self.assertEqual([0] * 80, list(trimmed[220:]))
+            self.assertEqual(
+                {
+                    "leading_silence_s": 0.02,
+                    "trailing_silence_s": 0.08,
+                },
+                radio_voice.wav_silence_padding(path),
+            )
 
     def test_elevenlabs_request_uses_voice_id_and_wraps_pcm_as_wav(self):
         eleven = {
@@ -193,16 +252,23 @@ class RadioVoiceTests(unittest.TestCase):
         hume = {
             "version": 1,
             "provider": "hume",
-            "model": "2",
+            "model": "1",
             "response_format": "wav",
             "roles": {
                 "tower": {
                     "voice_id": "hume-tower-id",
                     "speed": 1.05,
                     "instructions": "Calm controller.",
+                    "description": "professional, clipped, matter-of-fact",
                 }
             },
-            "lines": [{"id": "tower-test", "role": "tower", "text": "Continue."}],
+            "lines": [{
+                "id": "tower-test",
+                "role": "tower",
+                "text": "Continue.",
+                "speed": 1.25,
+                "direction": "One connected packet.",
+            }],
         }
         radio_voice.validate_catalog(hume)
         captured = {}
@@ -218,11 +284,68 @@ class RadioVoiceTests(unittest.TestCase):
             hume, hume["lines"][0], "hume-secret", urlopen=urlopen
         )
         payload = json.loads(captured["request"].data)
-        self.assertEqual("2", payload["version"])
+        self.assertEqual("1", payload["version"])
         self.assertEqual("hume-tower-id", payload["utterances"][0]["voice"]["id"])
-        self.assertEqual(1.05, payload["utterances"][0]["speed"])
+        self.assertEqual(1.25, payload["utterances"][0]["speed"])
+        self.assertEqual(
+            "professional, clipped, matter-of-fact",
+            payload["utterances"][0]["description"],
+        )
         self.assertEqual("hume-secret", captured["request"].get_header("X-hume-api-key"))
         self.assertEqual(wav_bytes(), result)
+
+    def test_hume_octave_two_omits_unsupported_description(self):
+        hume = {
+            "version": 1,
+            "provider": "hume",
+            "model": "2",
+            "response_format": "wav",
+            "roles": {
+                "tower": {
+                    "voice_id": "hume-tower-id",
+                    "speed": 1.05,
+                    "instructions": "Calm controller.",
+                }
+            },
+            "lines": [{
+                "id": "tower-test",
+                "role": "tower",
+                "text": "Continue.",
+                "direction": "One connected packet.",
+            }],
+        }
+        captured = {}
+        encoded = base64.b64encode(wav_bytes()).decode("ascii")
+
+        def urlopen(request, timeout):
+            captured["request"] = request
+            return FakeResponse(json.dumps({
+                "generations": [{"audio": encoded}],
+            }).encode("utf-8"))
+
+        radio_voice.speech_request(
+            hume, hume["lines"][0], "hume-secret", urlopen=urlopen
+        )
+        utterance = json.loads(captured["request"].data)["utterances"][0]
+        self.assertNotIn("description", utterance)
+
+    def test_hume_octave_one_rejects_long_acting_descriptions(self):
+        hume = {
+            "version": 1,
+            "provider": "hume",
+            "model": "1",
+            "response_format": "wav",
+            "roles": {
+                "tower": {
+                    "voice_id": "hume-tower-id",
+                    "instructions": "Calm controller.",
+                    "description": "x" * 101,
+                }
+            },
+            "lines": [{"id": "tower-test", "role": "tower", "text": "Continue."}],
+        }
+        with self.assertRaisesRegex(ValueError, "exceeds 100 characters"):
+            radio_voice.validate_catalog(hume)
 
     def test_cartesia_request_pins_snapshot_api_version_and_wav(self):
         cartesia = {

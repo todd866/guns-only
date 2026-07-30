@@ -101,14 +101,40 @@ public class MissionRadioCatalogContractTests {
         new(Present: true, Callsign: callsign, Leg: leg, X: 0.0, Y: 0.0, Z: 0.0, Chi: 0.0);
 
     [Fact]
+    public void ExchangeContractsCloseRequiredUncertaintyAndDeclareAcknowledgments() {
+        Dictionary<string, CatalogLine> catalog = LoadCatalog();
+
+        foreach (MissionRadioExchangeContract exchange in MissionRadioExchangeContracts.All) {
+            Assert.False(string.IsNullOrWhiteSpace(exchange.ContextBasis));
+            Assert.False(string.IsNullOrWhiteSpace(exchange.AcknowledgmentBasis));
+            Assert.Equal(
+                MissionRadioKnowledge.None,
+                exchange.RequiredByClose & ~exchange.KnowledgeAtClose);
+
+            foreach (MissionRadioTurnContract turn in exchange.Turns)
+                Assert.True(catalog.ContainsKey(turn.TransmissionId),
+                    $"{exchange.Id} references missing catalog line {turn.TransmissionId}");
+
+            int explicitAcknowledgments =
+                exchange.Turns.Count(turn => turn.AcknowledgesPriorAuthority);
+            if (exchange.Acknowledgment
+                is MissionRadioAcknowledgment.Callsign
+                or MissionRadioAcknowledgment.FullReadback) {
+                Assert.Equal(1, explicitAcknowledgments);
+            } else {
+                Assert.Equal(0, explicitAcknowledgments);
+            }
+        }
+    }
+
+    [Fact]
     public void EveryTransmissionTheDirectorEmitsExistsVerbatimInTheCatalog() {
         Dictionary<string, CatalogLine> catalog = LoadCatalog();
         var director = new MissionRadioDirector();
         var heard = new List<MissionRadioTransmission>();
         double clock = 0.0;
 
-        // Launch and the full clean pattern. The first Step both initializes the director and
-        // airs the launch clearance, so its transmission is collected explicitly.
+        // Visual shot-crew launch and the full clean pattern. Launch itself is radio-silent.
         MissionRadioTransmission first = director.Step(State(clock, catapult: true, leg: ""));
         if (first.Active) heard.Add(first);
         Drain(director, heard, ref clock, t => State(t, leg: "DEPART"));
@@ -121,7 +147,7 @@ public class MissionRadioCatalogContractTests {
             t, leg: "ROLLOUT",
             arrestment: ArrestmentModel.ArrestmentPhase.Stopped, wire: 3));
 
-        // Both traffic phrasing parities for every ship: two full laps each.
+        // Several traffic laps exercise the sparse formation-member gear calls.
         foreach (string traffic_leg in new[] { "BASE", "SHORT_FINAL", "DEPART", "BASE", "SHORT_FINAL" }) {
             Drain(director, heard, ref clock, t => State(t, leg: "DOWNWIND", traffic: [
                 Ship("RAPIER 2", traffic_leg),
@@ -271,19 +297,33 @@ public class MissionRadioCatalogContractTests {
         // everything the director can emit has an exact recorded line.
         var heardIds = heard.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
         string[] required = [
-            "launch-cleared",
-            "pilot-launch-readback",
             "pilot-initial",
             "tower-break-approved",
             "tower-cleared-arrested-landing",
+            "pilot-landing-ack",
             "tower-waveoff-gear",
             "lso-waveoff",
-            "control-commit",
-            "pilot-guns",
+            "control-commit-short",
+            "pilot-commit-ack",
             "pilot-bingo",
         ];
         Assert.True(required.All(heardIds.Contains),
             "Representative radio coverage collapsed. Missing: "
             + string.Join(", ", required.Where(id => !heardIds.Contains(id))));
+        Assert.DoesNotContain("launch-cleared", heardIds);
+        Assert.DoesNotContain("pilot-launch-readback", heardIds);
+
+        // Content contracts are also runtime contracts: the director must emit each turn in
+        // exchange order, not merely retain semantically valid lines in the catalog.
+        foreach (MissionRadioExchangeContract exchange in MissionRadioExchangeContracts.All) {
+            int cursor = -1;
+            foreach (MissionRadioTurnContract turn in exchange.Turns) {
+                cursor = heard.FindIndex(
+                    cursor + 1,
+                    transmission => transmission.Id == turn.TransmissionId);
+                Assert.True(cursor >= 0,
+                    $"{exchange.Id} never emitted ordered turn {turn.TransmissionId}");
+            }
+        }
     }
 }

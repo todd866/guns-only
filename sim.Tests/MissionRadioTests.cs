@@ -79,33 +79,25 @@ public class MissionRadioTests {
     }
 
     [Fact]
-    public void LaunchClearanceAndReadbackCompleteBeforeThePatternStarts() {
+    public void VisualShotCrewReleasesTheLauncherWithoutRadio() {
         var director = new MissionRadioDirector();
         double clock = 0.0;
 
-        MissionRadioTransmission clearance =
+        MissionRadioTransmission launch =
             director.Step(State(0.0, catapult: true));
-        Assert.Equal("launch-cleared", clearance.Id);
-        Assert.False(director.LaunchClearanceComplete);
-
-        MissionRadioTransmission readback = WaitFor(
-            director, ref clock, "pilot-launch-readback",
-            t => State(t, catapult: true));
-        clock = readback.EndsAtSeconds + 0.01;
-        director.Step(State(clock, catapult: true));
+        Assert.False(launch.Active);
         Assert.True(director.LaunchClearanceComplete);
 
-        // Once airborne, the machine-held pattern needs no departure narration.
+        // Once airborne, pattern R/T begins at the first reportable gate.
         clock += 1.0;
         director.Step(State(clock, catapult: false, leg: "INITIAL"));
         MissionRadioTransmission initial = WaitFor(
             director, ref clock, "pilot-initial",
             t => State(t, catapult: false, leg: "INITIAL"));
 
-        Assert.Equal("Launch Ghost One One.", readback.Text);
         Assert.Equal("pilot-initial", initial.Id);
-        Assert.Equal("GHOST 11", clearance.Callsign);
-        Assert.Equal(MissionRadioChannel.Tower, clearance.Channel);
+        Assert.Equal("GHOST 11", initial.Speaker);
+        Assert.Equal(MissionRadioChannel.Tower, initial.Channel);
     }
 
     [Fact]
@@ -133,11 +125,11 @@ public class MissionRadioTests {
         director.Step(State(1.0, traffic: [onBase]));
         clock = 1.0;
         MissionRadioTransmission call = WaitFor(
-            director, ref clock, "traffic-rapier-2-base",
+            director, ref clock, "traffic-rapier-2-gear",
             t => State(t, traffic: [onBase]));
 
         Assert.Equal("GHOST 12", call.Speaker);
-        Assert.Equal("Rapier Tower, Ghost One Two, base.", call.Text);
+        Assert.Equal("Ghost One Two, gear.", call.Text);
         Assert.True(call.StartedAtSeconds >= 1.25);
     }
 
@@ -200,7 +192,7 @@ public class MissionRadioTests {
     }
 
     [Fact]
-    public void RapierInterceptVoicesGunsOncePerEngagement() {
+    public void RapierInterceptTriggerRemainsSilentWithoutAnOperationalRecipient() {
         var director = new MissionRadioDirector();
         double clock = 0.0;
         director.Step(State(
@@ -208,45 +200,19 @@ public class MissionRadioTests {
         director.Step(State(
             1.0, pattern: false, phase: RapierMissionPhase.Intercept));
         clock = 1.0;
-        WaitFor(director, ref clock, "control-commit",
+        WaitFor(director, ref clock, "control-commit-short",
+            t => State(t, pattern: false, phase: RapierMissionPhase.Intercept));
+        WaitFor(director, ref clock, "pilot-commit-ack",
             t => State(t, pattern: false, phase: RapierMissionPhase.Intercept));
 
-        double gunTriggeredAt = clock + 1.0;
-        director.Step(State(
-            gunTriggeredAt, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 4));
-        clock = gunTriggeredAt;
-        MissionRadioTransmission first = WaitFor(
-            director, ref clock, "pilot-guns",
-            t => State(t, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 4));
-
-        MissionRadioTransmission steady = director.Step(State(
-            clock + 2.0, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 8));
-        director.Step(State(
-            clock + 12.0, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 8));
-        MissionRadioTransmission secondBurst = director.Step(State(
-            clock + 13.0, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 12));
-
-        Assert.Equal("Guns.", first.Text);
-        Assert.Equal(first.Sequence, steady.Sequence);
-        Assert.Equal(first.Sequence, secondBurst.Sequence);
-        Assert.True(first.StartedAtSeconds <= gunTriggeredAt + 1.25,
-            "machine-keyed GUNS must land on the employment beat");
-
-        director.Step(State(
-            clock + 20.0, pattern: false, phase: RapierMissionPhase.Escape, gunRounds: 12));
-        director.Step(State(
-            clock + 30.0, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 12));
-        clock += 30.0;
-        WaitFor(director, ref clock, "control-commit",
-            t => State(t, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 12));
-        director.Step(State(
-            clock + 1.0, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 16));
-        clock += 1.0;
-        MissionRadioTransmission nextEngagement = WaitFor(
-            director, ref clock, "pilot-guns",
-            t => State(t, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 16));
-
-        Assert.True(nextEngagement.Sequence > first.Sequence);
+        for (int step = 1; step <= 40; step++) {
+            MissionRadioTransmission transmission = director.Step(State(
+                clock + step * 0.25,
+                pattern: false,
+                phase: RapierMissionPhase.Intercept,
+                gunRounds: step * 4));
+            Assert.NotEqual("pilot-guns", transmission.Id);
+        }
     }
 
     [Fact]
@@ -408,7 +374,7 @@ public class MissionRadioTests {
             1.2, pattern: false, phase: RapierMissionPhase.Intercept));
         double clock = 1.2;
         MissionRadioTransmission commit = WaitFor(
-            director, ref clock, "control-commit",
+            director, ref clock, "control-commit-short",
             t => State(t, pattern: false, phase: RapierMissionPhase.Intercept),
             step: 0.1);
 

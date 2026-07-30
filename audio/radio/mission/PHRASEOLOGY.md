@@ -44,6 +44,14 @@ After initial contact, the station name and "Over" may be omitted when the reply
 identification after initial contact when conducting the final portion of a radar approach"
 (JO 7110.65 2-4-8) — the official license for the LSO's callsign-free rapid calls.
 
+**Exchange-level rule.** The operational contract is not that every sentence recites the
+initial-call format. By exchange close, inherited context plus new turns must resolve the
+relevant aircraft identity, position, current authority, and request or intent. Established
+frequency, visual track, pattern membership, and correlated datalink may carry fields forward
+explicitly. New authority receives the acknowledgment the procedure requires: callsign, full
+readback, or observable compliance. `MissionRadioExchangeContracts` encodes those decisions
+and tests uncertainty closure independently of exact prose.
+
 **[OBSERVED]** Real fighters compress hard once the net is established. From the NTSB
 transcript of the 2015 Moncks Corner F-16 midair:
 
@@ -132,19 +140,19 @@ minimum-syllable register is mandated behavior, not just cool.
 
 ### 3.1 Launch and departure
 
-**The real script.** **[HOUSE]** There is no real-world land-based catapult launch; the
-launch character's entire register ("Rapier One One, cleared for launch.") is fiction and is
-declared as such. The nearest grounded analogs: arresting-system status appended to a takeoff
-clearance — "(Identification), BARRIER/CABLE INDICATES UP/DOWN. CLEARED FOR TAKEOFF/TO LAND."
-(JO 7110.65 3-3-6) **[OFFICIAL]** — and the departure check-in:
+**The real script.** There is no real-world land-based catapult launch. The closest operational
+analogue is the carrier shot, where **[OFFICIAL]** NATOPS hand signals and the pilot's readiness
+salute transfer control to the shot crew. It is not a pilot/controller radio-clearance exchange.
+The prior house call ("Rapier One One, cleared for launch") is therefore cut rather than polished.
+The first grounded spoken analogue is the departure check-in:
 
 > "Pensacola Departure, Shooter 010, passing 1500" — VT-6 Contact Supplemental **[OFFICIAL]**
 
 The catalog's "Rapier Tower, Rapier One One, airborne" follows the official callup shape
 (facility, full callsign, one fact).
 
-**Delivery.** Pre-stroke clearance is the one call that precedes aviate (README sequencing
-table). Post-shot pilot call: settling, one fact, easy.
+**Delivery.** The shot is silent on the radio. Any post-shot check-in follows the aircraft
+becoming airborne and stable; it cannot hold or sequence the launcher.
 
 **Anti-patterns.** Ceremony on departure ("with you," "be advised") — AFMAN 11-248 bans
 filler by name.
@@ -415,7 +423,7 @@ All from ATP 1-02.1 / AFTTP 3-2.5 (07 Mar 2023), Table 2, unless noted. **[OFFIC
 
 | Word | Definition (verbatim) | Catalog usage |
 |------|----------------------|---------------|
-| GUNS | "[A/A] [A/S] Aircraft gun is being employed." | ✅ used for its defined event |
+| GUNS | "[A/A] [A/S] Aircraft gun is being employed." | Valid word, not currently emitted: no mission exchange proves an operational recipient needs the trigger delta |
 | FOX [number] | "[A/A] Simulated or actual launch of air-to-air weapons. (ONE): Semi-active radar-guided missile. (TWO): IR-guided missile. (THREE): Active radar-guided missile." | ✅ "Fox Two" = IR, correct |
 | SPLASH(ED) | "1. [A/A] [A/S] [S/A] Hit observed with valid DWE against a target." | ✅ shooter-called result |
 | JOKER | "\*Fuel state above BINGO at which separation, BUGOUT, or event termination should begin." | ✅ |
@@ -499,14 +507,14 @@ as strong-secondary for the FCLP-identity quote).
    practice is improvised plain language ("Cable coming down." — Kingsley AIB).
 5. **Doubled/tripled urgent LSO delivery** ("Wave off, wave off", "Bolter, bolter") — Figure
    9-1 lists single forms; the repetition convention is plausible-but-unproven (tertiary only).
-6. **LSO cadence timing** — the 0.45 s hold rests on secondary description; no measured
-   PLAT-tape or timed transcript of a real pass was obtainable. "Paddles Monthly" could not
-   be found; treat any quotation from it as unverifiable.
+6. **LSO cadence timing** — operational recordings are now measured in
+   `PERFORMANCE-CORPUS.md`. Exact transmitter key boundaries remain approximate because receiver
+   squelch and overlapping traffic obscure them.
 7. **"3 greens", "gear to come", "Land (callsign)", "Drone away", "mission complete"** — no
    primary source shows any of them keyed; declared house style ([HOUSE]), never to be
    documented as AIM/AFTTP-grounded.
-8. **Land-based catapult launch phraseology** — no real-world analog exists; the launch
-   character is fiction by declaration.
+8. **Land-based catapult launch phraseology** — no real-world analog exists; the catalog now
+   uses the carrier visual-control analogue and remains silent.
 9. **Tactical fuel-state queries** ("say state" / "state 5.2") — no verbatim primary example
    found; the exchange shape is unsourced.
 10. **Modern USN A/A employment R/T** — 2017 Su-22 tapes remain classified; the 1989 Sidra
@@ -550,13 +558,13 @@ sites, QueuePlayerLeg interpolation, caption/clip regeneration) are recorded at 
 | `traffic-*-base-alt` (×3) | "…3 greens." → "…gear down." | Same gear-token finding |
 | `tower-trap-wire-1` | "wire one, hold position" → "Rapier One One, hold position." | Wire never rides the radio (6JG circuit); hold/rollout is real tower content. Collapse wires 1–4 |
 | `lso-bolter` | "Bolter, bolter." → "Bolter." | Figure 9-1 single form; doubling unproven. If kept for audibility, document as deviation |
-| `lso-waveoff` | "Wave off, wave off." → "Waveoff." | Same Figure 9-1 finding |
+| `lso-waveoff` | "Wave off, wave off." → "Wave off." | Same Figure 9-1 finding |
 | `tower-waveoff-gear` | → "Rapier One One, go around. Gear unsafe." | "Waveoff" is LSO-only vocabulary; alternative: move the emission to the LSO voice |
 | `tower-bolter` | → "Rapier One One, go around." | "Bolter" is in no FAA/USAF pub as a tower call; or route to `lso-bolter` |
 | `lso-add-power` | "Add power." → "A little power." | "Add power" is the pilot response column, never a transmission; completes the ladder with `lso-power` + new `lso-burner` |
 | `lso-fast` | "Fast." → "You're fast." | Figure 9-1 informative framing |
 | `lso-come-right` | "Come right." → "Right for lineup." | The official asymmetry; no "Come right." exists |
-| `control-commit` | "…commit." → "Rapier One One, hostile. You are ordered to engage." | COMMIT is the fighters' act; directed engagement is a formal order (HUNTRESS shape). Alt: keep "commit" in the pilot's mouth |
+| `control-commit-short` | prior cinematic engage order → "Ghost, commit." | Current ACC controller-authority example ends `[flight] COMMIT`; the fighter gives a callsign-only acknowledgment. Correlated geometry is already on datalink |
 | `control-mission-complete` | → "Rapier One One, confirm weapons safe." | "Mission complete" has no tactical-net analog; real close is the weapons-safe roll call. Pairs with new `pilot-switch-safe` |
 | `pilot-rtb` | "RTB home plate" → "Control, Rapier One One, RTB." | "RTB home plate" doubles one meaning (Table 3 + Table 2) |
 | `control-bingo-rtb` | "RTB home plate" → "Rapier One One, RTB." | Same; keep the cold administrative delivery |
@@ -565,6 +573,7 @@ sites, QueuePlayerLeg interpolation, caption/clip regeneration) are recorded at 
 
 | Line | Basis |
 |------|-------|
+| `launch-cleared` / `pilot-launch-readback` | A catapult shot is visually controlled by the shot crew; there is no radio transaction to script |
 | `pilot-break` ("Rapier One One, breaking.") | No script contains a self-announced break; replaced by tower approval (below) |
 | `tower-trap-wire-*-relaunch` (×4) | Once wire leaves the radio, the relaunch variant has no content; post-trap silence is grounded |
 | `lso-wire-1..4` | Figure 9-1 has no post-landing call; README's "Wire final stays silent" already half-commits |
@@ -581,6 +590,7 @@ sites, QueuePlayerLeg interpolation, caption/clip regeneration) are recorded at 
 | `lso-burner` | "Burner." — top of the ladder, in extremis, still on the card | Figure 9-1; Rapier has burner, so the top rung is free and grounded |
 | `pilot-check-in` | "Control, Rapier One One, up as fragged." — administrative, one breath | P-1290 sec 601; the most recognizable GCI shape, absent from the catalog |
 | `control-radar-contact` | "Rapier One One, radar contact." — measured, flat, done | P-1290 sec 601 reply; establishes CONTROL in two words |
+| `pilot-commit-ack` | "Ghost One One." — immediate, level | Current ACC requires two-way communication for a directed COMMIT and shows a callsign-only fighter acknowledgment |
 | `control-picture-clean` | "Control, picture clean." — flat; nothing left on sensors is the whole message | P-1290 sec 611; colder than praise, and the natural RTB trigger |
 | `pilot-switch-safe` | "Rapier One One, switch is safe." — adrenaline draining, flat compliance | Verbatim shooter reply from the balloon-shootdown roll call |
 
@@ -588,7 +598,7 @@ sites, QueuePlayerLeg interpolation, caption/clip regeneration) are recorded at 
 
 | Line | Rule |
 |------|------|
-| `pilot-fox-two` (also `pilot-guns`, `pilot-splash` takes) | Existing takes stay micro-timing variants only. A high-stress variant must be a NEW line id with text "Fox Two, Fox Two." — stress doubles the word, never adds vocabulary; captions mirror clips |
+| `pilot-fox-two` (also `pilot-splash` takes) | Existing takes stay micro-timing variants only. A high-stress variant must be a NEW line id with text "Fox Two, Fox Two." — stress doubles the word, never adds vocabulary; captions mirror clips |
 
 ### Director / implementation notes (from gap analysis, condensed)
 
@@ -597,8 +607,8 @@ sites, QueuePlayerLeg interpolation, caption/clip regeneration) are recorded at 
   switch, and the HUD path (`Lso.AdviseForMode` re-run in `UpdateMissionRadio`) must move in
   one commit or the radio silently stops firing. New `lso-burner` needs an advisor severity
   between POWER and WAVE OFF.
-- `control-commit` is emitted from two sites (tick-0 attach branch in `Observe()` and the
-  phase-transition case in `ObserveTacticalMission()`); update both.
+- `control-commit-short` and `pilot-commit-ack` are queued by one `QueueCommit()` path for both
+  tick-0 airborne attach and the normal phase transition.
 - Cutting `pilot-break` empties the BREAK case in `QueuePlayerLeg`; `tower-break-approved`
   fires on the INITIAL leg (approval precedes the maneuver), with the 1.5 s tower hold.
 - Moving "full stop" to base changes two interpolated strings in `QueuePlayerLeg`; texts,
