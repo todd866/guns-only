@@ -28,7 +28,6 @@ public class SparringPartnerTests {
     public void TheSparringPartnerOpensCooperative() {
         var bandit = SparringPartner();
         Assert.True(bandit.Presenting);
-        Assert.Equal(BanditTactic.Present, bandit.Tactic);
     }
 
     [Fact]
@@ -45,7 +44,6 @@ public class SparringPartnerTests {
         var player = PlayerAstern(500.0);           // inside the 900 m funnel, nose on
         for (int i = 0; i < (int)(3.0 * AircraftSim.TickHz); i++) bandit.Step(player, Dt);
         Assert.False(bandit.Presenting);
-        Assert.NotEqual(BanditTactic.Present, bandit.Tactic);
     }
 
     [Fact]

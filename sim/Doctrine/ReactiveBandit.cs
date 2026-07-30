@@ -884,17 +884,13 @@ public sealed class ReactiveBandit :
         // The co-operative opening. Short-circuits BOTH the lookahead and simple paths: a
         // presenting bandit does not acquire, does not defend, does not commit as a boss, and does
         // not fire. Withdrawal is evaluated first so the graduating tick already fights.
-        if (Presenting) {
-            UpdatePresentWithdrawal(player, dt);
-            if (Presenting) {
-                Tactic = BanditTactic.Present;
-                LastCommand = PresentCommand();
-                RecordSingleCandidateDecision(LastCommand);
-                _sim.Step(LastCommand, dt);
-                T += dt;
-                return;
-            }
-        }
+        // A presenting bandit THINKS exactly as it would in a fight — same planner cadence, same
+        // lanes, same per-tick frame cost — and only FLIES differently. Suppressing the planner
+        // instead breaks the measured pair budget (AiPlannerWorkloadBudgetTests exists to catch
+        // planning silently stopping) and would make graduation a cost cliff, with two Aces
+        // beginning to plan inside a single frame at the most demanding moment of a first sortie.
+        // Only the pilot's decision is withheld, never the thinking behind it.
+        if (Presenting) UpdatePresentWithdrawal(player, dt);
 
         if (_profile.IsBoss && !BossCommitted) UpdateBossCommitment(player, dt);
 
@@ -908,7 +904,7 @@ public sealed class ReactiveBandit :
                     player, hasLowAttackPlan, lowAttackPlan);
                 Tactic = BanditTactic.Acquire;
                 RecordSingleCandidateDecision(LastCommand);
-                _sim.Step(LastCommand, dt);
+                _sim.Step(CommandForFlight(), dt);
                 T += dt;
                 return;
             }
@@ -923,7 +919,7 @@ public sealed class ReactiveBandit :
                     CancelPendingLookaheadPlan();
                     LastCommand = EnergyCommand(player);
                     RecordSingleCandidateDecision(LastCommand);
-                    _sim.Step(LastCommand, dt);
+                    _sim.Step(CommandForFlight(), dt);
                     T += dt;
                     return;
                 }
@@ -951,7 +947,7 @@ public sealed class ReactiveBandit :
                     ? BanditTactic.Defend
                     : BanditTactic.Acquire;
             }
-            _sim.Step(LastCommand, dt);
+            _sim.Step(CommandForFlight(), dt);
             T += dt;
             return;
         }
@@ -967,7 +963,7 @@ public sealed class ReactiveBandit :
             _ => AcquireCommand(player)
         };
         RecordSingleCandidateDecision(LastCommand);
-        _sim.Step(LastCommand, dt);
+        _sim.Step(CommandForFlight(), dt);
         T += dt;
     }
 
@@ -982,7 +978,7 @@ public sealed class ReactiveBandit :
             _maximumThrottle, 0.0);
         Tactic = BanditTactic.Return; // never firing while recovering from the dirt
         RecordSingleCandidateDecision(LastCommand);
-        _sim.Step(LastCommand, dt);
+        _sim.Step(CommandForFlight(), dt);
         T += dt;
     }
 
@@ -1437,6 +1433,10 @@ public sealed class ReactiveBandit :
     /// player at all — that is exactly what makes it presenting rather than defending. The task it
     /// sets is closure and station-keeping: formation flying, which is the same motor skill as gun
     /// tracking, learned without anyone being told they are being taught.
+    /// What the aircraft actually flies. The planned command is computed and recorded normally;
+    /// while presenting it is simply not the one that reaches the airframe.
+    PilotCommand CommandForFlight() => Presenting ? PresentCommand() : LastCommand;
+
     PilotCommand PresentCommand() {
         const double bank = 0.26;                                  // 15 deg: readable, under 2 G
         double g = 1.0 / System.Math.Cos(bank);                    // sustains the turn level
