@@ -43,7 +43,8 @@ test("a window closes after the interval and summarizes exactly its own deltas",
     ["frame_ms_p50", "frame_ms_p95", "frame_ms_p99", "frame_ms_max", "long_frames", "frames",
       "window_ms", "delivered_fps", "frame_budget_ms", "frame_budget_misses",
       "frame_budget_miss_rate", "longest_frame_budget_miss_streak",
-      "frames_over_18_5ms", "frames_over_22ms", "contract_pass"]);
+      "frames_over_18_5ms", "frames_over_22ms", "suspension_frames", "suspended_ms",
+      "contract_pass"]);
 
   // The next window starts empty: its summary must not inherit the previous stall.
   let next = null;
@@ -219,7 +220,8 @@ test("no sampler leaves the row exactly as it was before instrumentation", () =>
     ["delivered_fps", "frame_budget_miss_rate", "frame_budget_misses", "frame_budget_ms",
       "frame_ms_max", "frame_ms_p50", "frame_ms_p95", "frame_ms_p99", "frames",
       "frames_over_18_5ms", "frames_over_22ms", "long_frames",
-      "longest_frame_budget_miss_streak", "window_ms", "contract_pass"].sort());
+      "longest_frame_budget_miss_streak", "window_ms", "contract_pass",
+      "suspension_frames", "suspended_ms"].sort());
 });
 
 test("budget miss streaks expose sustained 30 fps runs instead of only a total", () => {
@@ -264,4 +266,21 @@ test("reset discards an ineligible partial window and all phase ownership", () =
   assert.equal(summary.frame_ms_max, 16);
   assert.equal(summary.view_ms_max, 4);
   assert.equal(summary.contract_pass, 1);
+});
+
+test("a backgrounded tab's resume gap is counted as suspension, not as a stall", () => {
+  const aggregator = createFramePerfAggregator({ intervalMs: 100 });
+  aggregator.observe(16, 0);
+  // 87 minutes: the tab was not presenting. Tapes really do contain this.
+  assert.equal(aggregator.observe(5_197_405, 50), null,
+    "a suspension must not close a window on its own");
+  aggregator.observe(16, 60);
+  const summary = aggregator.observe(16, 200);
+  assert.equal(summary.suspension_frames, 1);
+  assert.equal(summary.suspended_ms, 5_197_405);
+  assert.ok(summary.frame_ms_max <= 22,
+    `suspension leaked into frame_ms_max: ${summary.frame_ms_max}`);
+  assert.ok(summary.frame_ms_p95 <= 22,
+    `suspension leaked into p95: ${summary.frame_ms_p95}`);
+  assert.equal(summary.long_frames, 0);
 });

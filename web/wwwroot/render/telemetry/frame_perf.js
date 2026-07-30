@@ -21,6 +21,13 @@ export const FRAME_PERF_LONG_FRAME_MS = 22;
 // 800 Hz, so the bound — not the display refresh rate — owns worst-case memory. frames,
 // long_frames / frames_over_22ms, and frame_ms_max stay exact even past the bound.
 export const FRAME_PERF_MAX_WINDOW_SAMPLES = 4_096;
+// A backgrounded or throttled tab stops presenting and then delivers one enormous
+// requestAnimationFrame delta on resume. Recorded tapes hold "frames" of 5,197,405 ms and
+// 2,295,966 ms — 87 and 38 minutes — which no renderer can be held to. Left in the sample they
+// own frame_ms_max outright and drag p95, so every percentile on this row reported suspensions
+// as render performance. Past this ceiling a delta is counted as a suspension and excluded from
+// the timing statistics — reported, never silently dropped.
+export const FRAME_PERF_SUSPENSION_MS = 2_000;
 
 function nearestRank(sortedDeltas, quantile) {
   const rank = Math.ceil(quantile * sortedDeltas.length);
@@ -46,6 +53,7 @@ export function createFramePerfAggregator({
   budgetFrameMs = FRAME_PERF_BUDGET_MS,
   longFrameMs = FRAME_PERF_LONG_FRAME_MS,
   maxWindowSamples = FRAME_PERF_MAX_WINDOW_SAMPLES,
+  suspensionMs = FRAME_PERF_SUSPENSION_MS,
   // Optional () => ({name: number}) of renderer/scene counters, sampled ONCE per closed window
   // rather than per frame, so a scene traversal costs 0.2 Hz and never enters the frame budget.
   //
@@ -64,6 +72,8 @@ export function createFramePerfAggregator({
   let longestBudgetMissStreak = 0;
   let observedMilliseconds = 0;
   let maxDelta = 0;
+  let suspensionFrames = 0;
+  let suspendedMilliseconds = 0;
   // name -> { sum, count, max } of main-thread milliseconds. See observePhase.
   let phases = new Map();
   let compressionRequestedTicks = 0;
@@ -127,6 +137,14 @@ export function createFramePerfAggregator({
       const now = Number(nowMs);
       if (!Number.isFinite(delta) || delta <= 0 || !Number.isFinite(now)) return null;
       if (windowStartedAt === null) windowStartedAt = now;
+      if (delta > suspensionMs) {
+        // Not a frame the renderer produced. Record the gap, then restart the window so the
+        // suspension is billed neither as window time nor as a stall.
+        suspensionFrames += 1;
+        suspendedMilliseconds += delta;
+        windowStartedAt = now;
+        return null;
+      }
       frames += 1;
       observedMilliseconds += delta;
       if (delta > budgetFrameMs) {
@@ -165,6 +183,8 @@ export function createFramePerfAggregator({
         // Alias of long_frames under the 22 ms contract so agent tapes and harness gates share one
         // name with the closed-loop governor without breaking older consumers of long_frames.
         frames_over_22ms: longFrames,
+        suspension_frames: suspensionFrames,
+        suspended_ms: rounded(suspendedMilliseconds),
         contract_pass: evaluateForegroundFrameContract({
           fps: deliveredFps,
           p95Ms: p95,
@@ -206,6 +226,8 @@ export function createFramePerfAggregator({
       longestBudgetMissStreak = 0;
       observedMilliseconds = 0;
       maxDelta = 0;
+      suspensionFrames = 0;
+      suspendedMilliseconds = 0;
       compressionRequestedTicks = 0;
       compressionExecutedTicks = 0;
       compressionCostDroppedTicks = 0;
@@ -224,6 +246,8 @@ export function createFramePerfAggregator({
       longestBudgetMissStreak = 0;
       observedMilliseconds = 0;
       maxDelta = 0;
+      suspensionFrames = 0;
+      suspendedMilliseconds = 0;
       compressionRequestedTicks = 0;
       compressionExecutedTicks = 0;
       compressionCostDroppedTicks = 0;

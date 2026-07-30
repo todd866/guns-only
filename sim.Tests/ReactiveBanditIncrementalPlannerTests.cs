@@ -666,4 +666,31 @@ public sealed class ReactiveBanditIncrementalPlannerTests {
         Assert.Equal(1, merge.AiWorkload.CandidateEvaluations);
         Assert.Equal(25, merge.AiWorkload.ForecastSteps);
     }
+
+    [Fact]
+    public void DegradedComputeThinsRoutineReplansButNotEventResponse() {
+        static ReactiveBandit Bandit(AiComputeLevel level) {
+            (AircraftState own, AircraftState player) = FightGeometry();
+            var bandit = new ReactiveBandit(
+                own, FlightModel.Su35SPublicDataSurrogate, PilotSkill.Ace, new FlatTerrain());
+            bandit.ConfigureLookaheadCadencePhase(0);
+            bandit.ConfigureAiPlanning(level, incremental: false);
+            for (long tick = 0; tick <= 240; tick++) {
+                bandit.Step(ActorObservation.Capture(player, sourceTick: tick, contactIdentity: 7), Dt);
+            }
+            return bandit;
+        }
+
+        long full = Bandit(AiComputeLevel.Full).AiWorkload.PlansStarted;
+        long emergency = Bandit(AiComputeLevel.Emergency).AiWorkload.PlansStarted;
+
+        // The governor must actually buy something. Before this, every level replanned at the
+        // same fixed cadence, so demoting bought almost nothing: across 41 recorded demotions
+        // the median frame p95 went 18.0 ms to 18.4 ms and 73% of them improved nothing at all.
+        Assert.True(emergency < full,
+            $"Emergency must replan less often than Full: {emergency} vs {full}");
+        // ...and it must buy it from routine cadence, not from reacting to the world.
+        Assert.True(emergency > 0, "a degraded jet must still plan");
+    }
+
 }

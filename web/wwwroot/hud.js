@@ -3254,6 +3254,18 @@ class CombatHud {
         statusDirective(`${targetLabel} · STEERING UNAVAILABLE`, AMBER);
       }
 
+      // The pitch ladder is suppressed in padlock (a body-fixed ladder lies once the camera is
+      // slewed off boresight), which left the pilot with no attitude reference at all at the
+      // exact moment they are pulling across the horizon on someone else's tail. The round ADI
+      // is that reference: attitude read from the jet, never from the camera. The action strip
+      // keeps the steering directive; the dial answers "which way is up".
+      this.drawPadlockLocatorInset(frame, {
+        centreX, top, bottom, left, right,
+        steering, groundDanger, centralPullUp, blink,
+        pitchDeg, radarAltFt, sinkFpm,
+        targetPosition: padlockTargetPosition,
+      });
+
       this.drawPadlockActionStrip(frame, {
         centreX, top, bottom, left, right,
         steering, groundDanger, centralPullUp, blink,
@@ -3524,8 +3536,10 @@ class CombatHud {
     }
   }
 
-  // Legacy reference implementation retained temporarily for geometry archaeology. It is no
-  // longer called by the live HUD; drawPadlockActionStrip owns combat steering presentation.
+  // The live padlock attitude reference, drawn alongside drawPadlockActionStrip: the strip owns
+  // the steering directive, this owns attitude. Restored after it was retired to "geometry
+  // archaeology" — with the pitch ladder already suppressed in padlock, retiring it left no
+  // attitude reference on screen at all.
   // One body-fixed ownship instrument for padlock: a true ADI (attitude from the jet, never
   // the camera), a fixed waterline, the physical roll gate at the signed body-frame roll error,
   // radar altitude and vertical trend. Chevrons always mean keyboard roll direction; nothing in
