@@ -14,6 +14,7 @@ export function fighterHudLayout({
   width,
   height,
   touchMode = false,
+  compactMobile = false,
   safeInsets = {},
 } = {}) {
   const viewportWidth = Math.max(1, Number(width) || 1);
@@ -72,14 +73,18 @@ export function fighterHudLayout({
     ),
     secondaryBottom,
     targetSafe: {
-      left: tapeInset + tapeHalfWidth + 20,
-      right: viewportWidth - tapeInset - tapeHalfWidth - 20,
+      left: compactMobile ? safe.left + 24 : tapeInset + tapeHalfWidth + 20,
+      right: compactMobile
+        ? viewportWidth - safe.right - 24
+        : viewportWidth - tapeInset - tapeHalfWidth - 20,
       top: targetTop,
       bottom: viewportHeight - safe.bottom - (touchMode ? 138 : 112),
     },
     ladderSafe: {
-      left: tapeInset + tapeHalfWidth + 10,
-      right: viewportWidth - tapeInset - tapeHalfWidth - 10,
+      left: compactMobile ? safe.left + 22 : tapeInset + tapeHalfWidth + 10,
+      right: compactMobile
+        ? viewportWidth - safe.right - 22
+        : viewportWidth - tapeInset - tapeHalfWidth - 10,
       top: headingY + 72,
       bottom: viewportHeight - safe.bottom - (touchMode ? 128 : 106),
     },

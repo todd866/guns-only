@@ -717,25 +717,21 @@ public class RapierTests {
     }
 
     [Fact]
-    public void FixedLauncherWaitsForClearanceAndReadbackBeforeTheStroke() {
+    public void FixedLauncherUsesTheVisualShotCrewHandoffBeforeTheStroke() {
         var session = new SimulationSession(10);
         session.SetTerrainSurface(Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load()));
         AircraftState staged = session.Player.State;
 
         session.Begin();
-        for (int tick = 0; tick < AircraftSim.TickHz; tick++) session.StepFixed();
-
         Assert.Equal(CatapultLaunchModel.LaunchPhase.Hold, session.Catapult.Phase);
         Assert.Equal(staged.Position, session.Player.State.Position);
 
-        int waitTicks = 0;
-        while (session.Catapult.Phase == CatapultLaunchModel.LaunchPhase.Hold
-            && waitTicks++ < AircraftSim.TickHz * 10)
-            session.StepFixed();
+        session.StepFixed();
 
         Assert.Equal(CatapultLaunchModel.LaunchPhase.Stroke, session.Catapult.Phase);
-        Assert.InRange(session.TimeSeconds, 3.5, 7.0);
+        Assert.Equal(staged.Position, session.Player.State.Position);
+        Assert.False(session.MissionRadio.Active);
     }
 
     [Fact]

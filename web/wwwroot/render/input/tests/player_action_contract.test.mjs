@@ -365,9 +365,14 @@ test("touch pilots retain system commands but the live surface makes them contex
     "a paused or rejected keyboard V press must not change presentation state");
 });
 
-test("phone settings remain scrollable and collapse desktop-only binding density", () => {
+test("phone settings remain scrollable, zoomable, and collapse desktop-only binding density", () => {
   assert.match(indexSource,
-    /\.settings-card\s*\{[\s\S]*?overflow:\s*auto[\s\S]*?touch-action:\s*pan-y/);
+    /\.settings-card\s*\{[\s\S]*?overflow:\s*auto[\s\S]*?touch-action:\s*pan-y pinch-zoom/);
+  assert.doesNotMatch(indexSource, /user-scalable=no|maximum-scale=1/,
+    "mobile pilots must be able to zoom dense briefing and settings text");
+  assert.match(hudSource,
+    /const largeText = document\.documentElement\.classList\.contains\("large-interface-text"\)[\s\S]*?const fontSize = largeText \? 11 : 10/,
+    "the larger-interface setting must scale the canvas tactical rail, not only DOM menus");
   assert.match(indexSource,
     /<details id="settings-keyboard-bindings" class="settings-disclosure" open>/);
   assert.match(appSource, /settingsKeyboardBindings\?\.removeAttribute\("open"\)/,
@@ -396,7 +401,11 @@ test("touch flight uses distinct spring-loaded flight and look/fire sticks", () 
   assert.equal(stick[0].attributes["aria-label"], "Left flight stick");
   assert.equal(targetStick.length, 1, "touch mode needs one separate look/fire target");
   assert.equal(targetStick[0].attributes.id, "target-stick");
-  assert.equal(targetStick[0].attributes["aria-label"], "Right look and fire stick");
+  assert.equal(targetStick[0].attributes["aria-label"],
+    "Right look stick; hold centre to fire");
+  assert.match(indexSource,
+    /Hold the centre briefly to fire; moving outside the centre stops firing and looks\./,
+    "the accessible help must describe the same centre-hold contract as the input state machine");
   assert.equal(lateralButtons.length, 0,
     "lateral directional buttons must not return");
   assert.equal(pitchButtons.length, 2, "exactly the two assisted pitch-bias chips");
@@ -423,6 +432,25 @@ test("touch flight uses distinct spring-loaded flight and look/fire sticks", () 
   assert.match(appSource,
     /\.touch-mode\.touch-primary #touch-fire[\s\S]*?display: none !important/,
     "the right stick owns firing, so the redundant phone FIRE button must not consume space");
+  assert.match(appSource,
+    /tiltStatus\.hidden = \/\^TILT TRIM OFF\$\/i\.test\(full\)/,
+    "an ordinary disabled tilt trim must not occupy permanent flight chrome");
+  assert.match(indexSource, /#tilt-status\[hidden\]\s*\{\s*display:\s*none/,
+    "hidden tilt status must leave no invisible tap target over the HUD");
+  const targetStickStart = appSource.match(
+    /function beginTargetStick\(event\)\s*\{([\s\S]*?)\n\s*function moveTargetStick/,
+  )?.[1] ?? "";
+  assert.doesNotMatch(targetStickStart, /pressMappedKey/,
+    "touching the look stick must not spend ammunition");
+  assert.match(appSource,
+    /function armTargetStickFire[\s\S]*?setTimeout[\s\S]*?pressMappedKey\("Touch:TargetStickFire"[\s\S]*?TARGET_STICK_FIRE_HOLD_MS/,
+    "only a deliberate centre hold may begin firing");
+  assert.match(appSource,
+    /function moveTargetStick[\s\S]*?TARGET_STICK_FIRE_CANCEL_RADIUS[\s\S]*?clearTargetStickFireTimer/,
+    "dragging to look must cancel the pending centre-hold shot");
+  assert.match(appSource,
+    /function moveTargetStick[\s\S]*?TARGET_STICK_FIRE_CANCEL_RADIUS[\s\S]*?if \(targetStickFireSource\)[\s\S]*?releaseMappedKey\("Touch:TargetStickFire"/,
+    "moving to look must revoke a centre hold even when its timer won a saturated-frame race");
 
   assert.match(appSource,
     /fallbackStick\?\.addEventListener\("pointerdown", beginVirtualStick[\s\S]*?pointermove", moveVirtualStick[\s\S]*?pointerup", endVirtualStick[\s\S]*?pointercancel", endVirtualStick[\s\S]*?lostpointercapture", endVirtualStick/,
@@ -537,7 +565,7 @@ test("screen chrome never covers a flight instrument or another tap target", () 
     "the always-available systems console must clear the GUN TEMP instrument");
 });
 
-test("fresh players launch directly into the first F-22 merge", () => {
+test("desktop auto-launches while touch pilots retain a real Fly gesture", () => {
   assert.match(appSource,
     /initialProgramNode = requestedProgramNode[\s\S]*?recommendedCampaignNode\(campaignProfile\)/);
   // Build 78 front door: INFINITE ENEMIES — every platform boots the continuous-combat
@@ -547,10 +575,13 @@ test("fresh players launch directly into the first F-22 merge", () => {
   assert.match(bridgeSource, /static readonly SimulationSession Session = new\(7,/,
     "the bridge fallback and browser must agree on the F-22 first experience");
   assert.match(appSource,
-    /let autoLaunchPending = requestedProgramNode\?\.id !== "medevac"/,
-    "the combat front door auto-launches, but Medevac holds for its route briefing");
+    /let autoLaunchPending = !mobileControls && requestedProgramNode\?\.id !== "medevac"/,
+    "desktop keeps the combat front door while touch holds for a deliberate Fly tap");
   assert.match(appSource,
     /function tryAutoLaunch\([\s\S]*?pauseReasons\.has\("ready"\)[\s\S]*?return launchMission\(selectedBeat\)/);
+  assert.match(appSource,
+    /readyStart\.addEventListener\("click"[\s\S]*?requestMobileFullscreenFromGesture\(\)[\s\S]*?activateReadyAction\(\)/,
+    "fullscreen must be requested synchronously from the Fly gesture before terrain warmup");
 
   const buttons = htmlButtons(indexSource);
   const nodeIds = buttons.filter((button) => button.attributes["data-program-node"] !== undefined)
@@ -559,8 +590,22 @@ test("fresh players launch directly into the first F-22 merge", () => {
     ["first-merge", "low-level-drone", "medevac", "rapier-circuits", "rapier-intercept"]);
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
-  assert.match(indexSource, /\.ready-selector,[\s\S]*?touch-action:\s*pan-y/);
+  assert.match(indexSource, /\.ready-selector,[\s\S]*?touch-action:\s*pan-y pinch-zoom/);
+  assert.match(appSource,
+    /if \(mobileControls && readyTitle && readyStart\) readyTitle\.after\(readyStart\)/,
+    "touch DOM order must put Fly where the phone layout shows it");
+  assert.match(appSource,
+    /function focusReadyScreen\(\)[\s\S]*?scrollIntoView\(\{[\s\S]*?inline: "center"[\s\S]*?const target = !readyStart\.disabled \? readyStart : selectedMission/,
+    "deep-linked missions must scroll into view while the available primary action owns focus");
+  assert.match(appSource, /mobileControls \? "Tap Fly to launch" : "Press Enter to fly"/,
+    "the touch briefing must name its real launch gesture");
   assert.match(indexSource, /\.sortie-choice\s*\{[\s\S]*?min-height:\s*78px/);
+  assert.match(indexSource,
+    /@media \(max-width: 760px\)[\s\S]*?\.ready-mission-groups\s*\{[\s\S]*?grid-auto-flow:\s*column[\s\S]*?overflow-x:\s*auto/,
+    "portrait mission cards must become one compact horizontal chooser");
+  assert.match(indexSource,
+    /@media \(max-height: 500px\) and \(orientation: landscape\)[\s\S]*?#ready-screen\[data-mode="program"\] \.ready-layout\s*\{[\s\S]*?grid-template-columns:/,
+    "short landscape screens need independent mission and briefing columns");
 });
 
 test("nothing in the menu is gated behind anything else", () => {
@@ -589,8 +634,8 @@ test("program modal behavior cannot leak into flight shortcuts", () => {
     "raw beat-number shortcuts must not bypass progression");
 
   assert.match(appSource,
-    /const target = !readyStart\.disabled \? readyStart : selectedMission/,
-    "initial modal focus must keep the advertised Enter-to-fly action honest");
+    /selectedMission\?\.closest\("\.sortie-option"\)\?\.scrollIntoView[\s\S]*?const target = !readyStart\.disabled \? readyStart : selectedMission/,
+    "focus must expose a deep-linked mission and then follow the visible primary action");
   assert.match(appSource,
     /sceneCanvas\.inert = showScreen[\s\S]*?readyScreen\.contains\(document\.activeElement\)[\s\S]*?focusOwner\?\.focus[\s\S]*?readyScreen\.setAttribute\(\s*"aria-hidden"/,
     "focus must leave the dialog before it becomes aria-hidden");

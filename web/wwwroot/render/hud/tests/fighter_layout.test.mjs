@@ -67,3 +67,24 @@ test("small-phone landscape keeps a positive touch targeting aperture", () => {
   assert.ok(stickTop - layout.targetSafe.bottom >= 16);
   assert.ok(stickTop - layout.ladderSafe.bottom >= 8);
 });
+
+test("compact mobile layout gives target and ladder the space vacated by desktop tapes", () => {
+  const standard = fighterHudLayout({
+    width: 390,
+    height: 844,
+    touchMode: true,
+  });
+  const compact = fighterHudLayout({
+    width: 390,
+    height: 844,
+    touchMode: true,
+    compactMobile: true,
+  });
+
+  assert.ok(compact.targetSafe.left < standard.targetSafe.left);
+  assert.ok(compact.targetSafe.right > standard.targetSafe.right);
+  assert.equal(compact.targetSafe.left, 24);
+  assert.equal(compact.targetSafe.right, 366);
+  assert.equal(compact.ladderSafe.left, 22);
+  assert.equal(compact.ladderSafe.right, 368);
+});

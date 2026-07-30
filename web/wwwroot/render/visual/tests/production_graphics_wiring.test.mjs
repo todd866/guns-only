@@ -60,7 +60,7 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /manageFog: Boolean\(environmentFactory\)/);
   assert.match(source, /postStackFactory: createDecisionSupportPostStack/);
   assert.match(source,
-    /shadowModes: mobileControls \? \["carrier"\] : \["carrier", "replay"\]/,
+    /shadowModes: detectedVisualTier === "mobile"\s*\?\s*\["carrier"\]\s*:\s*\["carrier", "replay"\]/,
     "combat must not pay for a shadow pass without a visible ownship or shadow-receiving terrain");
   assert.doesNotMatch(source, /shadowModes:[^\n]*"combat"/);
   assert.match(source, /fogDensityForVisibility\(reportedVisibilityM\)/,
@@ -482,7 +482,7 @@ test("decision-support ocean and warnings carry truth without presentation flick
   assert.match(hudSource, /this\._aoaIndexerCue\.update/);
   assert.match(hudSource, /this\._lsoDisplayCue\.update/);
   assert.match(hudSource,
-    /if \(!frame\.padlock\) this\.drawPitchLadder[\s\S]*this\.drawAirframeSymbols/,
+    /if \(!frame\.padlock\) \{[\s\S]*?this\.drawPitchLadder[\s\S]*?this\.drawAirframeSymbols/,
     "the 2D horizon and flight-path vector must remain independent of scenery quality");
   assert.doesNotMatch(hudSource, /frameGovernor.*drawPitchLadder|governor_level.*drawPitchLadder/,
     "maximum scenery shedding must never suppress the attitude reference");
@@ -523,13 +523,33 @@ test("hidden replay exterior is preloaded and obsolete pack runtimes are dispose
 });
 
 test("packless modern flight owns adaptive 3D resolution and raw foreground frame timing", async () => {
-  const source = await readFile(appUrl, "utf8");
+  const [source, sceneBuilders] = await Promise.all([
+    readFile(appUrl, "utf8"),
+    readFile(sceneBuildersUrl, "utf8"),
+  ]);
+  assert.match(source,
+    /const constrainedVisualDevice = detectedDeviceMemoryGiB <= 4 \|\| detectedLogicalCores <= 4[\s\S]*?const detectedVisualTier = mobileControls[\s\S]*?"mobile" : "balanced"/,
+    "touch input must not automatically demote capable phones to the lowest visual tier");
+  assert.doesNotMatch(source, /oceanRadialSegments: mobileControls|oceanAngularSegments: mobileControls|carrierSprayCount: mobileControls/,
+    "touch input must not independently demote effects after hardware selected the visual tier");
+  assert.match(source,
+    /oceanRadialSegments: detectedVisualTier[\s\S]*?oceanAngularSegments: detectedVisualTier[\s\S]*?carrierSprayCount: detectedVisualTier/,
+    "geometry and event-bearing effect budgets must follow the hardware visual tier");
+  assert.match(sceneBuilders,
+    /createOceanGeometry\(\s*650000,\s*VISUAL_QUALITY\.oceanRadialSegments,\s*VISUAL_QUALITY\.oceanAngularSegments,/,
+    "the production sea geometry must consume the selected hardware tier, not dead config");
+  assert.doesNotMatch(sceneBuilders,
+    /createOceanGeometry\(\s*650000,\s*mobileControls\s*\?/,
+    "touch modality must not bypass the selected sea quality tier");
   assert.match(source,
     /DIRECT_ADAPTIVE_RESOLUTION_CONFIG = normalizeVisualProfile\([\s\S]*?pixelRatioCap: VISUAL_QUALITY\.pixelRatioCap[\s\S]*?\)\.adaptiveResolution/,
     "packless missions must use the same tier-normalized pixel budgets as pack flight");
   assert.match(source,
-    /this\.directAdaptiveResolution = new AdaptiveResolutionController\([\s\S]*?applyDirectRenderPixelRatio/,
-    "FlightView must own a direct-path adaptive controller");
+    /this\.directAdaptiveResolution = new AdaptiveResolutionController\([\s\S]*?minimumPixelRatio: mobileControls \? 1 : 0\.5[\s\S]*?applyDirectRenderPixelRatio/,
+    "FlightView must own a direct-path adaptive controller with a phone readability floor");
+  assert.match(source,
+    /createVisualRuntime\(\{[\s\S]*?minimumPixelRatio: mobileControls \? 1 : 0\.5/,
+    "pack flight must receive the same phone readability floor as direct rendering");
   assert.match(source,
     /if \(this\.visualRuntime\?\.initialized\)[\s\S]*?this\.visualRuntime\.resize[\s\S]*?else \{[\s\S]*?this\.directAdaptiveResolution\.setViewport/,
     "pack and direct resolution controllers must never own the renderer simultaneously");

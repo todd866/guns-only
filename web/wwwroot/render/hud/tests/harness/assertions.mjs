@@ -485,7 +485,8 @@ function assertBasicJobs(data) {
       check(name, "locator arrow points along the camera-space target direction",
         dot >= 0.995, `dot ${dot.toFixed(5)} (tol 0.995)`);
     }
-    if (geometry.banditPx && !geometry.banditPx.behind
+    if (!locator.bvrContact
+        && geometry.banditPx && !geometry.banditPx.behind
         && geometry.banditPx.x >= 20 && geometry.banditPx.x <= viewport.width - 20
         && geometry.banditPx.y >= 20 && geometry.banditPx.y <= viewport.height - 20) {
       check(name, "visible bandit gets the marker, not the arrow",
@@ -601,6 +602,7 @@ function assertSpeedBrake(data) {
 function assertRapierMission(data) {
   const { name, geometry, state, viewport } = data;
   if (state.rapier_mission_available !== true) return;
+  if (data.profile !== "standard") return;
   rapierMissionObservations += 1;
 
   const line = geometry.rapierModeLine;
@@ -705,6 +707,92 @@ function assertRapierPanelLayout(data) {
   }
 }
 
+function assertMobileTacticalHierarchy(data) {
+  if (data.profile === "standard") return;
+  const { geometry, name, viewport } = data;
+  const rail = geometry.mobileTactical;
+  check(name, "production mobile presentation profile reaches the HUD",
+    geometry.presentationProfile === data.profile,
+    `geometry=${geometry.presentationProfile}; requested=${data.profile}`);
+  check(name, "mobile tactical rail is drawn", Boolean(rail),
+    rail ? `${rail.actualText} / ${rail.contextText}` : "missing");
+  if (!rail) return;
+  const drawnRows = Object.fromEntries(
+    (rail.drawnRows ?? []).map((row) => [row.key, row.text]),
+  );
+  const actualDrawn = drawnRows.actual ?? "";
+  const contextDrawn = drawnRows.context ?? "";
+  const directiveDrawn = drawnRows.directive ?? "";
+  check(name, "mobile rail paints every critical row without ellipsis",
+    rail.drawnRows?.length > 0
+      && rail.drawnRows.every((row) => !row.text.includes("…")),
+    JSON.stringify(rail.drawnRows));
+  check(name, "mobile rail carries actual speed and vertical state",
+    /KCAS|KIAS/.test(actualDrawn)
+      && /(?:\d(?:\.\d)?K|FL\d{3})/.test(actualDrawn)
+      && /(?:V\/S|↑|↓)/.test(actualDrawn),
+    actualDrawn);
+  check(name, "mobile rail carries authoritative ammunition in combat",
+    !/forward-level|gun-overheat|padlock-ground-warning|rapier-mobile-climb-bvr/.test(name)
+      || /GUN\d+/.test(contextDrawn),
+    contextDrawn);
+  check(name, "mobile rail stays wholly on canvas",
+    rail.x >= 0 && rail.y >= 0
+      && rail.x + rail.width <= viewport.width
+      && rail.y + rail.height <= viewport.height,
+    `box=${rail.x},${rail.y} ${rail.width}x${rail.height}; viewport=${viewport.width}x${viewport.height}`);
+  check(name, "desktop tapes and normal secondary cards stay off mobile",
+    geometry.desktopFlightChrome === false
+      && !geometry.limitsPanel
+      && !geometry.systemsPanel
+      && !geometry.rapierCycleTeach
+      && !geometry.rapierModeLine,
+    `desktop=${geometry.desktopFlightChrome}; limits=${Boolean(geometry.limitsPanel)}; `
+      + `systems=${Boolean(geometry.systemsPanel)}; cycle=${Boolean(geometry.rapierCycleTeach)}; `
+      + `mode=${Boolean(geometry.rapierModeLine)}`);
+  check(name, "mobile ladder contains 10-degree majors only",
+    geometry.ladderRungs.every((rung) => rung.deg % 10 === 0),
+    geometry.ladderRungs.map((rung) => rung.deg).join(","));
+
+  if (name.endsWith(":gun-overheat-latched")) {
+    check(name, "mobile weapon line retains the qualified overheat state",
+      /GUN\d+/.test(contextDrawn)
+        && /OVERHEAT/.test(contextDrawn)
+        && geometry.gunHeat?.integrated === true,
+      `${contextDrawn}; gunHeat=${JSON.stringify(geometry.gunHeat)}`);
+  }
+  if (name.endsWith(":assisted-corner-hold")) {
+    check(name, "portrait assistance mode remains explicit after tape removal",
+      /AUTO COR\+30/.test(actualDrawn),
+      actualDrawn);
+  }
+  if (name.endsWith(":rapier-mobile-climb-bvr")) {
+    check(name, "BVR target identity, range, closure, fuel, and fast time are explicit",
+      actualDrawn.includes("×4")
+        && /T1 160NM/.test(contextDrawn)
+        && /CLOS916/.test(contextDrawn)
+        && /F3\.5K/.test(contextDrawn),
+      `${actualDrawn} / ${contextDrawn}`);
+    check(name, "Rapier climb shows commanded Mach and flight level",
+      /CMD M0\.90/.test(directiveDrawn)
+        && /FL560/.test(directiveDrawn),
+      directiveDrawn);
+    check(name, "outbound BVR waypoint never becomes a recovery box",
+      !geometry.recoveryGate,
+      JSON.stringify(geometry.recoveryGate));
+    check(name, "BVR contact gets a bearing locator, never a false visual bracket",
+      geometry.banditLocator?.bvrContact === true
+        && geometry.banditLocator?.markerInside === false
+        && geometry.banditLocator?.arrowDrawn === true,
+      JSON.stringify(geometry.banditLocator));
+  }
+  if (name.endsWith(":rapier-recovery-gate-2")) {
+    check(name, "real recovery geometry survives mobile declutter",
+      geometry.recoveryGate?.drawn === true,
+      JSON.stringify(geometry.recoveryGate));
+  }
+}
+
 // The portrait assisted mode is a first-class experience, so a phone-portrait pass runs the
 // core scenarios through the SAME geometry contract at 430x860. The full battery stays on the
 // landscape pass to bound gate time.
@@ -720,12 +808,23 @@ const PORTRAIT_SCENARIOS = new Set([
   "rapier-ram-only-systems-layout",
 ]);
 
-async function runViewport(site, browser, { label, width, height, subset }) {
+const MOBILE_SCENARIOS = new Set([
+  "assisted-corner-hold",
+  "forward-level",
+  "gun-overheat-latched",
+  "padlock-ground-warning",
+  "rapier-mobile-climb-bvr",
+  "rapier-recovery-gate-2",
+]);
+
+async function runViewport(site, browser, {
+  label, width, height, subset, profile = "standard",
+}) {
   const page = await browser.newPage({ viewport: { width, height } });
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
   await page.goto(
-    `${site.url}render/hud/tests/harness/harness.html?all=1&w=${width}&h=${height}`,
+    `${site.url}render/hud/tests/harness/harness.html?all=1&w=${width}&h=${height}&profile=${profile}`,
     { waitUntil: "load", timeout: 30000 },
   );
   await page.waitForFunction(() => window.__hudReady === "harness", { timeout: 15000 });
@@ -762,6 +861,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     assertRapierPanelLayout(data);
     assertFunnelContainsTarget(data);
     assertWarningLine(data);
+    assertMobileTacticalHierarchy(data);
   }
   if (pageErrors.length > 0) {
     failures.push(`[${label}] uncaught page errors:\n${pageErrors.join("\n")}`);
@@ -777,6 +877,20 @@ async function main() {
       { label: "landscape", width: 1400, height: 1020, subset: null });
     await runViewport(site, browser,
       { label: "portrait", width: 430, height: 860, subset: PORTRAIT_SCENARIOS });
+    await runViewport(site, browser, {
+      label: "mobile-portrait",
+      width: 430,
+      height: 860,
+      subset: MOBILE_SCENARIOS,
+      profile: "portrait_dual_stick",
+    });
+    await runViewport(site, browser, {
+      label: "mobile-landscape",
+      width: 844,
+      height: 390,
+      subset: MOBILE_SCENARIOS,
+      profile: "touch_dual_stick",
+    });
   } finally {
     await browser.close();
     await site.close();
