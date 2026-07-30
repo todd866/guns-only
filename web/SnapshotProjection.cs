@@ -1325,6 +1325,7 @@ internal static class SnapshotProjection {
             + $"\"bandit_entity_id\":\"entity.bandit.{Session.BanditSpawnSequence}\","
             + $"\"bandit_presentation_id\":{JsonString(bandit.PresentationId)},"
             + $"\"bandit_skill\":{banditSkillJson},"
+            + $"\"bandit_presenting\":{(Session.Bandit?.Presenting == true ? "true" : "false")},"
             // Director decision, so a production tape can PROVE what was staged instead of
             // leaving it to be inferred. bandit_mount is the airframe rung; the walkover
             // streak is the evidence that drove both the tier and the mount.

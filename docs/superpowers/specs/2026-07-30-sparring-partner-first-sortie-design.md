@@ -3,6 +3,27 @@
 Date: 2026-07-30
 Status: accepted design, not yet implemented
 
+> **2026-07-30 correction, before implementation: the opening tier does NOT change, and the first
+> fight is a 1v2.**
+>
+> This design originally proposed dropping the opening rung to Novice. That was wrong. The
+> always-Ace opening is not a bug — it is documented doctrine on the pilot-owner's explicit
+> instruction, quoted in `sim.Tests/FightDirectorTests.cs:113`: *"the first bad guy should always
+> default to really hard and then once he guns your brains out we can make things easier."* It is
+> pinned by tests across at least two files, including one named
+> `ForEngagementOpensAtTheCeilingRatherThanRampingUp`. `BanditSkillProfile.ForEngagement` is
+> therefore left exactly as it is.
+>
+> What the tapes actually show is that the doctrine's second half never runs. Easing requires a
+> completed engagement and only 4 of 86 visitor sorties reach `sortie_finished` — he never guns
+> their brains out, they close the tab first.
+>
+> So the scaffolding is **purely behavioural**, and the first fight is a **1v2**: two Aces who
+> outnumber the newcomer and deliberately set them up, both opening in `BanditTactic.Present`,
+> until the player demonstrates competence — at which point the pair turns on them together. The
+> opening fight becomes *harder* than the doctrine asked for, not easier, and every existing
+> assertion keeps passing.
+
 Related: [complexity ladder](../../complexity-ladder.md),
 [adaptive-teacher design](../../adaptive-teacher-design.md),
 [ADR-0001](../../adr-0001-f22-first-arcade-pivot.md),

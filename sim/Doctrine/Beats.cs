@@ -494,7 +494,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             return new NeutralMergeBandit(
                 mergeInitial, mergeAir, mergeSkill, terrain,
                 profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
-                doctrineIndex: spec?.DoctrineIndex);
+                doctrineIndex: spec?.DoctrineIndex,
+                presenting: spec?.Sparring == true);
         }
         if (!UsesReactiveBandit)
             return new RailBandit(authoredBandit, BanditAir, BanditTimeline);
@@ -573,7 +574,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             skill: skill,
             terrain: terrain,
             profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
-            doctrineIndex: spec?.DoctrineIndex);
+            doctrineIndex: spec?.DoctrineIndex,
+            presenting: spec?.Sparring == true);
     }
 }
 
