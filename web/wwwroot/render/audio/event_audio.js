@@ -7,8 +7,26 @@ import { pinkNoiseBuffer, whiteNoiseBuffer } from "./engine_audio.js";
 import { isAgedF22, resolvePropulsionCharacter } from "./audio_character.js";
 
 const GUN_REPORT_NOISE_POOL_SIZE = 12;
+
+// The gun is the entire game and its beds were authored well under the shared -18 dBFS bus
+// compressor, so firing read thin against the engine. Lift the whole family by one trim rather
+// than re-authoring each level: every gun keeps its character ratios (the M3's slow mechanical
+// clatter, the GSh-30-1's heavy single report), and the shared compressor now ducks the
+// propulsion bed under fire instead of burying the guns in it. Tuning knob — raise or lower here.
+const GUN_LOUDNESS_TRIM = 1.8;
+
+function gunSoundProfile(profile) {
+  return Object.freeze({
+    ...profile,
+    bodyLevel: profile.bodyLevel * GUN_LOUDNESS_TRIM,
+    gasLevel: profile.gasLevel * GUN_LOUDNESS_TRIM,
+    mechanismLevel: profile.mechanismLevel * GUN_LOUDNESS_TRIM,
+    reportLevel: profile.reportLevel * GUN_LOUDNESS_TRIM,
+  });
+}
+
 const GUN_SOUND_PROFILES = Object.freeze({
-  m61: Object.freeze({
+  m61: gunSoundProfile({
     roundsPerSecond: 100,
     reportRate: 25,
     bodyHz: 100,
@@ -17,7 +35,7 @@ const GUN_SOUND_PROFILES = Object.freeze({
     mechanismLevel: 0.028,
     reportLevel: 0.085,
   }),
-  gsh301: Object.freeze({
+  gsh301: gunSoundProfile({
     roundsPerSecond: 25,
     reportRate: 25,
     bodyHz: 25,
@@ -26,7 +44,7 @@ const GUN_SOUND_PROFILES = Object.freeze({
     mechanismLevel: 0.024,
     reportLevel: 0.15,
   }),
-  sixM3: Object.freeze({
+  sixM3: gunSoundProfile({
     roundsPerSecond: 15,
     reportRate: 15,
     bodyHz: 15,
