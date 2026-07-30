@@ -1,0 +1,40 @@
+#!/bin/sh
+# Who is playing Guns Only, and how far do they get?
+#
+# Resolves the operator credential from the macOS keychain so no token is ever
+# typed, exported by hand, or left in shell history. Everything else is cached
+# under tmp/telemetry-cache/, so repeat runs cost almost nothing.
+#
+#   bin/telemetry-report                 last 7 days, who is playing
+#   bin/telemetry-report --days 30       wider window
+#   bin/telemetry-report --deep          also replay sorties (billed Blob reads)
+#   bin/telemetry-report --refresh       ignore the cache
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$repo_dir"
+
+keychain_service=${GUNS_TELEMETRY_KEYCHAIN:-com.gunsonly.telemetry-admin}
+
+command -v security >/dev/null 2>&1 || {
+    echo "telemetry-report: macOS keychain is unavailable" >&2
+    exit 1
+}
+command -v node >/dev/null 2>&1 || {
+    echo "telemetry-report: Node.js is unavailable" >&2
+    exit 1
+}
+command -v python3 >/dev/null 2>&1 || {
+    echo "telemetry-report: Python 3 is unavailable" >&2
+    exit 1
+}
+
+TELEMETRY_ADMIN_TOKEN=$(security find-generic-password -s "$keychain_service" -w 2>/dev/null) || {
+    echo "telemetry-report: no credential in the keychain under '$keychain_service'" >&2
+    echo "store one with:" >&2
+    echo "  security add-generic-password -U -s $keychain_service -a \"\$USER\" -w" >&2
+    exit 1
+}
+export TELEMETRY_ADMIN_TOKEN
+
+exec python3 tools/telemetry/report.py "$@"
