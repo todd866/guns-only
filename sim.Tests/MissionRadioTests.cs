@@ -134,6 +134,180 @@ public class MissionRadioTests {
     }
 
     [Fact]
+    public void TrafficReportsConfigurationOnlyAfterTheGearIsActuallySafe() {
+        var director = new MissionRadioDirector();
+        CircuitTrafficShip downwind = Ship(
+            "RAPIER 2", "DOWNWIND", gearDownAndLocked: false);
+        CircuitTrafficShip configuring = Ship(
+            "RAPIER 2", "BASE", gearDownAndLocked: false);
+        CircuitTrafficShip configured = Ship(
+            "RAPIER 2", "BASE", gearDownAndLocked: true);
+        double clock = 0.0;
+
+        director.Step(State(clock, traffic: [downwind]));
+        for (int step = 1; step <= 20; step++) {
+            clock = step * 0.1;
+            MissionRadioTransmission silent =
+                director.Step(State(clock, traffic: [configuring]));
+            Assert.NotEqual("traffic-rapier-2-gear", silent.Id);
+        }
+
+        MissionRadioTransmission call = WaitFor(
+            director, ref clock, "traffic-rapier-2-gear",
+            t => State(t, traffic: [configured]),
+            step: 0.1);
+
+        Assert.Equal("Ghost One Two, gear.", call.Text);
+    }
+
+    [Fact]
+    public void IndependentTrafficCallsCanCreateShortFrequencySaturation() {
+        var director = new MissionRadioDirector();
+        CircuitTrafficShip[] downwind = [
+            Ship("RAPIER 2", "DOWNWIND", reactionSeconds: 0.55),
+            Ship("RAPIER 3", "DOWNWIND", reactionSeconds: 0.24),
+            Ship("RAPIER 4", "DOWNWIND", reactionSeconds: 0.32),
+        ];
+        CircuitTrafficShip[] onBase = [
+            Ship("RAPIER 2", "BASE", reactionSeconds: 0.55),
+            Ship("RAPIER 3", "BASE", reactionSeconds: 0.24),
+            Ship("RAPIER 4", "BASE", reactionSeconds: 0.32),
+        ];
+        director.Step(State(0.0, traffic: downwind));
+        director.Step(State(1.0, traffic: onBase));
+
+        double clock = 1.0;
+        long seenSequence = 0;
+        var heard = new List<MissionRadioTransmission>();
+        for (int step = 0; step < 160 && heard.Count < 3; step++) {
+            clock += 0.1;
+            MissionRadioTransmission current =
+                director.Step(State(clock, traffic: onBase));
+            if (current.Active && current.Sequence != seenSequence) {
+                seenSequence = current.Sequence;
+                heard.Add(current);
+            }
+        }
+
+        Assert.Equal(
+            [
+                "traffic-rapier-3-gear",
+                "traffic-rapier-4-gear",
+                "traffic-rapier-2-gear",
+            ],
+            heard.Select(call => call.Id));
+        Assert.True(heard[^1].StartedAtSeconds - heard[0].StartedAtSeconds < 10.0);
+        for (int index = 1; index < heard.Count; index++)
+            Assert.True(heard[index].StartedAtSeconds >= heard[index - 1].EndsAtSeconds);
+    }
+
+    [Fact]
+    public void TrafficIntentExpiresWhenTheAircraftLeavesBaseBeforeKeying() {
+        var director = new MissionRadioDirector();
+        CircuitTrafficShip downwind = Ship(
+            "RAPIER 2", "DOWNWIND", reactionSeconds: 0.0);
+        CircuitTrafficShip onBase = Ship(
+            "RAPIER 2", "BASE", reactionSeconds: 0.0);
+        CircuitTrafficShip onFinal = Ship(
+            "RAPIER 2", "SHORT_FINAL", reactionSeconds: 0.0);
+
+        director.Step(State(0.0, traffic: [downwind]));
+        director.Step(State(1.0, traffic: [onBase]));
+        Assert.Contains(
+            director.Decisions,
+            decision => decision.Kind == MissionRadioDecisionKind.Queued
+                && decision.TransmissionId == "traffic-rapier-2-gear");
+        for (int step = 1; step <= 80; step++) {
+            double clock = 1.0 + step * 0.1;
+            MissionRadioTransmission current =
+                director.Step(State(clock, traffic: [onFinal]));
+            Assert.NotEqual("traffic-rapier-2-gear", current.Id);
+        }
+        Assert.Contains(
+            director.Decisions,
+            decision => decision.Kind == MissionRadioDecisionKind.Expired
+                && decision.TransmissionId == "traffic-rapier-2-gear"
+                && decision.Reason.Contains("left the reportable"));
+    }
+
+    [Fact]
+    public void UrgentSafetyCallTakesTheFrequencyFromQueuedTraffic() {
+        var director = new MissionRadioDirector();
+        CircuitTrafficShip downwind = Ship(
+            "RAPIER 2", "DOWNWIND", reactionSeconds: 0.0);
+        CircuitTrafficShip onBase = Ship(
+            "RAPIER 2", "BASE", reactionSeconds: 0.0);
+
+        director.Step(State(0.0, leg: "DOWNWIND", traffic: [downwind]));
+        director.Step(State(1.0, leg: "DOWNWIND", traffic: [onBase]));
+        double clock = 1.1;
+        MissionRadioTransmission urgent = director.Step(State(
+            clock,
+            leg: "SHORT_FINAL",
+            traffic: [onBase],
+            gearDownAndLocked: false));
+        if (!urgent.Active) {
+            urgent = WaitFor(
+                director, ref clock, "tower-waveoff-gear",
+                t => State(
+                    t,
+                    leg: "SHORT_FINAL",
+                    traffic: [onBase],
+                    gearDownAndLocked: false),
+                step: 0.1);
+        }
+
+        Assert.Equal("tower-waveoff-gear", urgent.Id);
+        Assert.Equal(MissionRadioPriority.Urgent, urgent.Priority);
+        Assert.Contains(
+            director.Decisions,
+            decision => decision.Kind == MissionRadioDecisionKind.Preempted
+                && decision.TransmissionId == "traffic-rapier-2-gear");
+    }
+
+    [Fact]
+    public void GeneratedTrafficMakesAtMostOneRelevantGearCallPerAircraftPerCircuit() {
+        var director = new MissionRadioDirector();
+        var home = new Vec3D(1_000.0, 40.0, 2_000.0);
+        var initial = new Vec3D(1_000.0, 1_040.0, -14_000.0);
+        CircuitTrafficShip[] traffic =
+            CircuitPatternTraffic.Evaluate(0.0, home, initial);
+        director.Step(State(0.0, traffic: traffic));
+
+        long seenSequence = 0;
+        var heardCircuits = new HashSet<(string Callsign, long Circuit)>();
+        for (int tick = 1; tick <= 12_000; tick++) {
+            double clock = tick * 0.1;
+            traffic = CircuitPatternTraffic.Evaluate(clock, home, initial);
+            MissionRadioTransmission current =
+                director.Step(State(clock, traffic: traffic));
+            if (!current.Active
+                || current.Sequence == seenSequence
+                || !current.Id.StartsWith("traffic-", StringComparison.Ordinal))
+                continue;
+
+            seenSequence = current.Sequence;
+            CircuitTrafficShip ship = Assert.Single(
+                traffic,
+                candidate => candidate.Callsign switch {
+                    "RAPIER 2" => current.Id == "traffic-rapier-2-gear",
+                    "RAPIER 3" => current.Id == "traffic-rapier-3-gear",
+                    "RAPIER 4" => current.Id == "traffic-rapier-4-gear",
+                    _ => false,
+                });
+            Assert.Equal("BASE", ship.Leg);
+            Assert.True(ship.GearDownAndLocked);
+            Assert.True(
+                heardCircuits.Add((ship.Callsign, ship.CircuitNumber)),
+                $"{ship.Callsign} reported gear twice on circuit {ship.CircuitNumber}");
+        }
+
+        Assert.Contains(heardCircuits, report => report.Callsign == "RAPIER 2");
+        Assert.Contains(heardCircuits, report => report.Callsign == "RAPIER 3");
+        Assert.Contains(heardCircuits, report => report.Callsign == "RAPIER 4");
+    }
+
+    [Fact]
     public void UnsafeGearOnFinalPreemptsRoutineCalls() {
         var director = new MissionRadioDirector();
         director.Step(State(0.0, leg: "DOWNWIND"));
@@ -204,6 +378,13 @@ public class MissionRadioTests {
             t => State(t, pattern: false, phase: RapierMissionPhase.Intercept));
         WaitFor(director, ref clock, "pilot-commit-ack",
             t => State(t, pattern: false, phase: RapierMissionPhase.Intercept));
+
+        MissionRadioExchangeSnapshot commit = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "tactical-commit");
+        Assert.Equal(MissionRadioExchangeStatus.Complete, commit.Status);
+        Assert.True(commit.KnowledgeClosed);
+        Assert.True(commit.AuthorityAcknowledged);
 
         for (int step = 1; step <= 40; step++) {
             MissionRadioTransmission transmission = director.Step(State(
@@ -384,6 +565,295 @@ public class MissionRadioTests {
     }
 
     [Fact]
+    public void TacticalCheckInUsesRadarCorrelationToCloseTheSharedPosition() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+        director.Step(State(
+            clock,
+            pattern: false,
+            phase: RapierMissionPhase.Launch,
+            catapult: true));
+        director.Step(State(
+            1.0,
+            pattern: false,
+            phase: RapierMissionPhase.Climb,
+            catapult: false));
+        clock = 1.0;
+
+        WaitFor(
+            director, ref clock, "pilot-check-in",
+            t => State(
+                t,
+                pattern: false,
+                phase: RapierMissionPhase.Climb,
+                catapult: false),
+            step: 0.1);
+        MissionRadioKnowledge pilotCall =
+            director.SharedKnowledge(MissionRadioChannel.Tactical);
+        Assert.True(pilotCall.HasFlag(MissionRadioKnowledge.Identity));
+        Assert.True(pilotCall.HasFlag(MissionRadioKnowledge.RequestOrIntent));
+        Assert.False(pilotCall.HasFlag(MissionRadioKnowledge.Position));
+
+        WaitFor(
+            director, ref clock, "control-radar-contact",
+            t => State(
+                t,
+                pattern: false,
+                phase: RapierMissionPhase.Climb,
+                catapult: false),
+            step: 0.1);
+        MissionRadioExchangeSnapshot checkIn = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "tactical-check-in");
+        Assert.Equal(MissionRadioExchangeStatus.Complete, checkIn.Status);
+        Assert.True(checkIn.KnowledgeClosed);
+        Assert.Equal(
+            MissionRadioKnowledge.All,
+            director.SharedKnowledge(MissionRadioChannel.Tactical));
+    }
+
+    [Fact]
+    public void PatternExchangeBuildsSharedKnowledgeOnlyAsCallsActuallyTransmit() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+        director.Step(State(clock, leg: "DEPART"));
+
+        clock = 1.0;
+        director.Step(State(clock, leg: "INITIAL"));
+        MissionRadioExchangeSnapshot queued = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "pattern-entry");
+        Assert.Equal(MissionRadioExchangeStatus.Queued, queued.Status);
+        Assert.Equal(
+            MissionRadioKnowledge.None,
+            director.SharedKnowledge(MissionRadioChannel.Tower));
+
+        WaitFor(
+            director, ref clock, "pilot-initial",
+            t => State(t, leg: "INITIAL"),
+            step: 0.1);
+        MissionRadioKnowledge afterInitial =
+            director.SharedKnowledge(MissionRadioChannel.Tower);
+        Assert.Equal(
+            MissionRadioKnowledge.Identity
+            | MissionRadioKnowledge.Position
+            | MissionRadioKnowledge.RequestOrIntent,
+            afterInitial);
+        Assert.False(afterInitial.HasFlag(MissionRadioKnowledge.CurrentAuthority));
+
+        WaitFor(
+            director, ref clock, "tower-break-approved",
+            t => State(t, leg: "INITIAL"),
+            step: 0.1);
+        MissionRadioExchangeSnapshot awaitingAction = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "pattern-entry");
+        Assert.Equal(
+            MissionRadioExchangeStatus.AwaitingAcknowledgment,
+            awaitingAction.Status);
+        Assert.True(awaitingAction.KnowledgeClosed);
+        Assert.False(awaitingAction.AuthorityAcknowledged);
+
+        clock += 0.1;
+        director.Step(State(clock, leg: "BREAK"));
+        MissionRadioExchangeSnapshot complete = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "pattern-entry");
+        Assert.Equal(MissionRadioExchangeStatus.Complete, complete.Status);
+        Assert.True(complete.AuthorityAcknowledged);
+        Assert.Contains(
+            director.Decisions,
+            decision => decision.Kind
+                == MissionRadioDecisionKind.ImplicitAcknowledgment
+                && decision.ExchangeId == complete.Id);
+    }
+
+    [Fact]
+    public void LandingClearanceIsSuppressedWithoutAnEstablishedTowerPicture() {
+        var director = new MissionRadioDirector();
+        director.Step(State(0.0, leg: "DEPART"));
+
+        director.Step(State(1.0, leg: "BASE"));
+        MissionRadioTransmission result = director.Step(State(1.5, leg: "BASE"));
+
+        Assert.False(result.Active);
+        MissionRadioExchangeSnapshot landing = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "landing-clearance");
+        Assert.Equal(MissionRadioExchangeStatus.Suppressed, landing.Status);
+        Assert.Equal(MissionRadioKnowledge.None, landing.Knowledge);
+        Assert.Contains(
+            director.Decisions,
+            decision => decision.Kind
+                == MissionRadioDecisionKind.SuppressedMissingContext
+                && decision.TransmissionId == "tower-cleared-arrested-landing");
+        Assert.DoesNotContain(
+            director.Decisions,
+            decision => decision.Kind == MissionRadioDecisionKind.Transmitted
+                && decision.TransmissionId == "pilot-landing-ack");
+    }
+
+    [Fact]
+    public void ExpiredAuthorityExchangeNeverPlaysItsOrphanedAcknowledgment() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+        director.Step(State(
+            clock, pattern: false, phase: RapierMissionPhase.Launch));
+        director.Step(State(
+            1.0, pattern: false, phase: RapierMissionPhase.Intercept));
+        clock = 1.0;
+        WaitFor(
+            director, ref clock, "control-commit-short",
+            t => State(t, pattern: false, phase: RapierMissionPhase.Intercept),
+            step: 0.1);
+
+        clock += 20.0;
+        MissionRadioTransmission late = director.Step(State(
+            clock, pattern: false, phase: RapierMissionPhase.Intercept));
+
+        Assert.False(late.Active);
+        MissionRadioExchangeSnapshot commit = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "tactical-commit");
+        Assert.Equal(MissionRadioExchangeStatus.Expired, commit.Status);
+        Assert.True(commit.KnowledgeClosed);
+        Assert.False(commit.AuthorityAcknowledged);
+        Assert.Contains(
+            director.Decisions,
+            decision => decision.Kind == MissionRadioDecisionKind.Expired
+                && decision.TransmissionId == "pilot-commit-ack");
+        Assert.DoesNotContain(
+            director.Decisions,
+            decision => decision.Kind == MissionRadioDecisionKind.Transmitted
+                && decision.TransmissionId == "pilot-commit-ack");
+    }
+
+    [Fact]
+    public void UrgentSafetyCallPreemptsAnUnspokenExchangeAndItsReadback() {
+        var director = new MissionRadioDirector();
+        director.Step(State(
+            0.0, pattern: false, phase: RapierMissionPhase.Launch));
+        director.Step(State(
+            1.0, pattern: false, phase: RapierMissionPhase.Intercept));
+
+        double clock = 1.05;
+        director.Step(State(
+            clock,
+            pattern: false,
+            phase: RapierMissionPhase.Intercept,
+            lsoCall: "WAVE OFF, WAVE OFF",
+            lsoSeverity: LsoSeverity.WaveOff));
+        WaitFor(
+            director, ref clock, "lso-waveoff",
+            t => State(
+                t,
+                pattern: false,
+                phase: RapierMissionPhase.Intercept,
+                lsoCall: "WAVE OFF, WAVE OFF",
+                lsoSeverity: LsoSeverity.WaveOff),
+            step: 0.1);
+
+        MissionRadioExchangeSnapshot commit = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "tactical-commit");
+        Assert.Equal(MissionRadioExchangeStatus.Preempted, commit.Status);
+        Assert.False(commit.Knowledge.HasFlag(MissionRadioKnowledge.CurrentAuthority));
+        Assert.False(commit.AuthorityAcknowledged);
+        Assert.DoesNotContain(
+            director.Decisions,
+            decision => decision.Kind == MissionRadioDecisionKind.Transmitted
+                && decision.TransmissionId is
+                    "control-commit-short" or "pilot-commit-ack");
+        Assert.Contains(
+            director.Decisions,
+            decision => decision.Kind == MissionRadioDecisionKind.Preempted
+                && decision.TransmissionId == "pilot-commit-ack");
+    }
+
+    [Fact]
+    public void UrgentSafetyCallRetractsClosureWhenItCutsOffTheReadback() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+        director.Step(State(
+            clock, pattern: false, phase: RapierMissionPhase.Launch));
+        director.Step(State(
+            1.0, pattern: false, phase: RapierMissionPhase.Intercept));
+        clock = 1.0;
+        WaitFor(
+            director, ref clock, "control-commit-short",
+            t => State(t, pattern: false, phase: RapierMissionPhase.Intercept),
+            step: 0.1);
+        WaitFor(
+            director, ref clock, "pilot-commit-ack",
+            t => State(t, pattern: false, phase: RapierMissionPhase.Intercept),
+            step: 0.1);
+
+        clock += 0.05;
+        director.Step(State(
+            clock,
+            pattern: false,
+            phase: RapierMissionPhase.Intercept,
+            lsoCall: "WAVE OFF, WAVE OFF",
+            lsoSeverity: LsoSeverity.WaveOff));
+
+        MissionRadioExchangeSnapshot commit = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "tactical-commit");
+        Assert.Equal(MissionRadioExchangeStatus.Preempted, commit.Status);
+        Assert.False(commit.AuthorityAcknowledged);
+        Assert.DoesNotContain(
+            director.Decisions,
+            decision => decision.Kind == MissionRadioDecisionKind.ExchangeCompleted
+                && decision.ExchangeId == commit.Id);
+        Assert.Contains(
+            director.Decisions,
+            decision => decision.Kind == MissionRadioDecisionKind.Preempted
+                && decision.TransmissionId == "pilot-commit-ack");
+    }
+
+    [Fact]
+    public void BingoDirectiveClosesOnlyWhenTheAircraftActuallyStartsHome() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+        director.Step(State(
+            clock, pattern: false, phase: RapierMissionPhase.Launch));
+        director.Step(State(
+            1.0, pattern: false, phase: RapierMissionPhase.Intercept, bingo: true));
+        clock = 1.0;
+        WaitFor(
+            director, ref clock, "pilot-bingo",
+            t => State(
+                t, pattern: false, phase: RapierMissionPhase.Intercept, bingo: true),
+            step: 0.1);
+        WaitFor(
+            director, ref clock, "control-bingo-rtb",
+            t => State(
+                t, pattern: false, phase: RapierMissionPhase.Intercept, bingo: true),
+            step: 0.1);
+
+        MissionRadioExchangeSnapshot awaitingTurn = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "bingo-return");
+        Assert.Equal(
+            MissionRadioExchangeStatus.AwaitingAcknowledgment,
+            awaitingTurn.Status);
+        Assert.True(awaitingTurn.KnowledgeClosed);
+        Assert.False(awaitingTurn.AuthorityAcknowledged);
+
+        clock += 0.1;
+        director.Step(State(
+            clock,
+            pattern: false,
+            phase: RapierMissionPhase.ReturnToBase,
+            bingo: true));
+        MissionRadioExchangeSnapshot returning = Assert.Single(
+            director.ExchangeHistory,
+            exchange => exchange.ContractId == "bingo-return");
+        Assert.Equal(MissionRadioExchangeStatus.Complete, returning.Status);
+        Assert.True(returning.AuthorityAcknowledged);
+    }
+
+    [Fact]
     public void StalePatternCallsExpireInsteadOfNarratingAnOldLeg() {
         var director = new MissionRadioDirector();
         director.Step(State(0.0, leg: "DEPART"));
@@ -410,6 +880,19 @@ public class MissionRadioTests {
             RadioPhraseology.SpokenCallsign(1, 1));
     }
 
-    static CircuitTrafficShip Ship(string callsign, string leg) =>
-        new(true, callsign, leg, 0.0, 800.0, 0.0, 0.0);
+    static CircuitTrafficShip Ship(
+        string callsign,
+        string leg,
+        bool gearDownAndLocked = true,
+        double reactionSeconds = 0.0) =>
+        new(
+            true,
+            callsign,
+            leg,
+            0.0,
+            800.0,
+            0.0,
+            0.0,
+            GearDownAndLocked: gearDownAndLocked,
+            RadioReactionSeconds: reactionSeconds);
 }

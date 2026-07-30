@@ -420,6 +420,10 @@ public sealed class SimulationSession {
     public System.Collections.Generic.IReadOnlyList<CircuitTrafficShip> CircuitTraffic => _circuitTraffic;
     public string CircuitComms => _circuitComms;
     public MissionRadioTransmission MissionRadio => _missionRadio;
+    public IReadOnlyList<MissionRadioDecision> MissionRadioDecisions =>
+        _missionRadioDirector.Decisions;
+    public IReadOnlyList<MissionRadioExchangeSnapshot> MissionRadioExchanges =>
+        _missionRadioDirector.ExchangeHistory;
     // Compatibility seam for shells built against the first Circuits-only snapshot.
     public MissionRadioTransmission CircuitRadio => _missionRadio;
     public MissionChecklistStatus MissionChecklist => _missionChecklist;

@@ -121,8 +121,19 @@ public class MissionRadioCatalogContractTests {
                 is MissionRadioAcknowledgment.Callsign
                 or MissionRadioAcknowledgment.FullReadback) {
                 Assert.Equal(1, explicitAcknowledgments);
+                Assert.Equal(
+                    MissionRadioImplicitAcknowledgment.None,
+                    exchange.ImplicitAcknowledgment);
             } else {
                 Assert.Equal(0, explicitAcknowledgments);
+            }
+            if (exchange.Acknowledgment == MissionRadioAcknowledgment.ImplicitByAction) {
+                Assert.NotEqual(
+                    MissionRadioImplicitAcknowledgment.None,
+                    exchange.ImplicitAcknowledgment);
+            }
+            if (exchange.ContextSource == MissionRadioContextSource.None) {
+                Assert.Equal(MissionRadioKnowledge.None, exchange.Inherits);
             }
         }
     }

@@ -79,6 +79,68 @@ public class CircuitTrafficTests {
         Assert.InRange(maximumAltitude - Home.Y, 750.0, 770.0);
     }
 
+    [Fact]
+    public void TrafficUsesStableTrainingRolesAndBehavioralTiming() {
+        CircuitTrafficShip[] traffic = CircuitPatternTraffic.Evaluate(
+            42.0, Home, Initial, count: 3);
+
+        Assert.Collection(
+            traffic,
+            ship => {
+                Assert.Equal(CircuitTrafficRole.EarlyStudent, ship.Role);
+                Assert.InRange(ship.RadioReactionSeconds, 0.5, 0.6);
+            },
+            ship => {
+                Assert.Equal(CircuitTrafficRole.AdvancedStudent, ship.Role);
+                Assert.InRange(ship.RadioReactionSeconds, 0.2, 0.3);
+            },
+            ship => {
+                Assert.Equal(CircuitTrafficRole.Instructor, ship.Role);
+                Assert.InRange(ship.RadioReactionSeconds, 0.3, 0.4);
+            });
+    }
+
+    [Fact]
+    public void StudentCanFinishGearLateButNeverCarriesUnsafeGearOntoFinal() {
+        bool foundStudentConfiguringOnBase = false;
+        bool foundStudentRecoveredOnBase = false;
+        bool foundAdvancedStudentConfiguringOnBase = false;
+        var lockedStudentCircuits = new HashSet<long>();
+
+        for (int sample = 0; sample <= 12_000; sample++) {
+            CircuitTrafficShip[] traffic = CircuitPatternTraffic.Evaluate(
+                sample * 0.1, Home, Initial, count: 3);
+            CircuitTrafficShip student = traffic[0];
+            CircuitTrafficShip advancedStudent = traffic[1];
+            CircuitTrafficShip instructor = traffic[2];
+
+            if (student.Leg == "BASE") {
+                if (lockedStudentCircuits.Contains(student.CircuitNumber))
+                    Assert.True(student.GearDownAndLocked,
+                        "gear must remain locked through every later segment of the base pass");
+                if (!student.GearDownAndLocked) {
+                    foundStudentConfiguringOnBase = true;
+                    Assert.Equal(CircuitTrafficIntent.Configure, student.Intent);
+                } else {
+                    lockedStudentCircuits.Add(student.CircuitNumber);
+                    foundStudentRecoveredOnBase = true;
+                    Assert.Equal(CircuitTrafficIntent.Recover, student.Intent);
+                }
+            }
+            if (student.Leg is "SHORT_FINAL" or "WIRE_FINAL")
+                Assert.True(student.GearDownAndLocked);
+            if (advancedStudent.Leg == "BASE"
+                && !advancedStudent.GearDownAndLocked)
+                foundAdvancedStudentConfiguringOnBase = true;
+            if (instructor.Leg is "BASE" or "SHORT_FINAL" or "WIRE_FINAL")
+                Assert.True(instructor.GearDownAndLocked);
+        }
+
+        Assert.True(foundStudentConfiguringOnBase);
+        Assert.True(foundStudentRecoveredOnBase);
+        Assert.True(foundAdvancedStudentConfiguringOnBase);
+    }
+
     static double HorizontalDistance(in CircuitTrafficShip a, in CircuitTrafficShip b) {
         double dx = b.X - a.X;
         double dz = b.Z - a.Z;

@@ -1,8 +1,21 @@
 namespace GunsOnly.Sim;
 
+public enum CircuitTrafficRole {
+    EarlyStudent = 0,
+    AdvancedStudent = 1,
+    Instructor = 2,
+}
+
+public enum CircuitTrafficIntent {
+    FlyPattern = 0,
+    Configure = 1,
+    Recover = 2,
+}
+
 /// <summary>
-/// Scripted kinematic pattern traffic for Rapier Circuits. These are not dogfight actors: they
-/// are deterministic, phase-offset training traffic on the same overhead pattern as the player.
+/// One observable training-pattern aircraft. Position remains kinematic, but operational state
+/// belongs to a stable pilot profile so radio and sequencing can react to what that pilot is
+/// actually doing instead of treating every hull as interchangeable scenery.
 /// </summary>
 public readonly record struct CircuitTrafficShip(
     bool Present,
@@ -11,7 +24,12 @@ public readonly record struct CircuitTrafficShip(
     double X,
     double Y,
     double Z,
-    double Chi);
+    double Chi,
+    CircuitTrafficRole Role = CircuitTrafficRole.AdvancedStudent,
+    CircuitTrafficIntent Intent = CircuitTrafficIntent.FlyPattern,
+    bool GearDownAndLocked = true,
+    long CircuitNumber = 0,
+    double RadioReactionSeconds = 0.0);
 
 public static class CircuitPatternTraffic {
     /// <summary>Match RapierMission Circuits shelf — 2,500 ft AGL.</summary>
@@ -20,6 +38,27 @@ public static class CircuitPatternTraffic {
     const double FinalAlongM = 3.00 * 1852.0;
 
     readonly record struct PatternNode(Vec3D Position, string OutboundLeg, double SpeedMps);
+
+    readonly record struct AgentProfile(
+        CircuitTrafficRole Role,
+        double RadioReactionSeconds,
+        int LateGearEveryCircuits,
+        int LateGearCircuitOffset,
+        double LateGearBaseProgress) {
+        public bool DelaysGear(long circuitNumber) =>
+            LateGearEveryCircuits > 0
+            && PositiveModulo(circuitNumber - LateGearCircuitOffset,
+                LateGearEveryCircuits) == 0;
+    }
+
+    // Character lives in judgment and timing, not extra words. Twelve is still learning and
+    // occasionally finishes the gear cycle late on base; Thirteen is a qualified student with a
+    // much smaller deterministic lapse; Fourteen is the quiet airborne reference.
+    static readonly AgentProfile[] Profiles = [
+        new(CircuitTrafficRole.EarlyStudent, 0.55, 3, 0, 0.34),
+        new(CircuitTrafficRole.AdvancedStudent, 0.24, 7, 1, 0.12),
+        new(CircuitTrafficRole.Instructor, 0.32, 0, 0, 0.0),
+    ];
 
     public static CircuitTrafficShip[] Evaluate(
         double timeSeconds,
@@ -80,8 +119,11 @@ public static class CircuitPatternTraffic {
         int n = Math.Clamp(count, 0, 3);
         var ships = new CircuitTrafficShip[n];
         for (int i = 0; i < n; i++) {
-            double phaseSeconds = PositiveModulo(
-                timeSeconds + lapSeconds * (i + 1) / (n + 1.0), lapSeconds);
+            AgentProfile profile = Profiles[i];
+            double unwrappedPhaseSeconds =
+                timeSeconds + lapSeconds * (i + 1) / (n + 1.0);
+            long circuitNumber = (long)Math.Floor(unwrappedPhaseSeconds / lapSeconds);
+            double phaseSeconds = PositiveModulo(unwrappedPhaseSeconds, lapSeconds);
             int segment = 0;
             while (segment < durations.Length - 1
                 && phaseSeconds >= durations[segment]) {
@@ -97,14 +139,34 @@ public static class CircuitPatternTraffic {
                 tangent = nodes[next].Position - nodes[segment].Position;
             }
 
+            string leg = nodes[segment].OutboundLeg;
+            bool onBase = leg == "BASE";
+            bool onFinal = leg is "SHORT_FINAL" or "WIRE_FINAL";
+            double baseProgress = onBase
+                ? ContiguousLegProgress(nodes, durations, segment, phaseSeconds, "BASE")
+                : 0.0;
+            bool gearDownAndLocked = onFinal
+                || onBase && (!profile.DelaysGear(circuitNumber)
+                    || baseProgress >= profile.LateGearBaseProgress);
+            CircuitTrafficIntent intent = onBase && !gearDownAndLocked
+                ? CircuitTrafficIntent.Configure
+                : onBase || onFinal
+                    ? CircuitTrafficIntent.Recover
+                    : CircuitTrafficIntent.FlyPattern;
+
             ships[i] = new CircuitTrafficShip(
                 Present: true,
                 Callsign: $"RAPIER {i + 2}",
-                Leg: nodes[segment].OutboundLeg,
+                Leg: leg,
                 X: position.X,
                 Y: position.Y,
                 Z: position.Z,
-                Chi: Math.Atan2(tangent.X, tangent.Z));
+                Chi: Math.Atan2(tangent.X, tangent.Z),
+                Role: profile.Role,
+                Intent: intent,
+                GearDownAndLocked: gearDownAndLocked,
+                CircuitNumber: circuitNumber,
+                RadioReactionSeconds: profile.RadioReactionSeconds);
         }
         return ships;
     }
@@ -171,8 +233,35 @@ public static class CircuitPatternTraffic {
         return Math.Sqrt(dx * dx + dz * dz);
     }
 
+    static double ContiguousLegProgress(
+        PatternNode[] nodes,
+        double[] durations,
+        int segment,
+        double secondsIntoSegment,
+        string leg) {
+        int first = segment;
+        while (first > 0 && nodes[first - 1].OutboundLeg == leg)
+            first--;
+        int afterLast = segment + 1;
+        while (afterLast < nodes.Length && nodes[afterLast].OutboundLeg == leg)
+            afterLast++;
+
+        double elapsed = Math.Clamp(secondsIntoSegment, 0.0, durations[segment]);
+        for (int index = first; index < segment; index++)
+            elapsed += durations[index];
+        double total = 0.0;
+        for (int index = first; index < afterLast; index++)
+            total += durations[index];
+        return total > 1e-6 ? Math.Clamp(elapsed / total, 0.0, 1.0) : 1.0;
+    }
+
     static double PositiveModulo(double value, double modulus) {
         double result = value % modulus;
         return result < 0.0 ? result + modulus : result;
+    }
+
+    static long PositiveModulo(long value, int modulus) {
+        long result = value % modulus;
+        return result < 0 ? result + modulus : result;
     }
 }

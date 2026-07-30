@@ -83,6 +83,15 @@ known when the exchange closes; and whether new authority requires a callsign ac
 full readback, or observable compliance. Tests fail when inherited context plus the exchange
 leave a required field uncertain.
 
+Those contracts are enforced at runtime, not just linted as documentation. The director keeps a
+per-channel communications picture and an exchange ledger. A field becomes shared only when its
+turn actually keys the mic. A dependent clearance, response, or readback cannot transmit until
+the preceding turn established its prerequisites; expiry or urgent preemption abandons the rest
+of that exchange. Observable acknowledgments close only after the aircraft performs the declared
+action (for example flying the approved break or beginning the return). A bounded decision trail
+records queued, transmitted, duplicate, missing-context, expired, preempted, and completed
+outcomes so tests and telemetry can explain both speech and intelligent silence.
+
 ### The authoring gate
 
 **Correct R/T = the shortest utterance that updates at least one of the four fields for someone who needs it.**
@@ -148,6 +157,14 @@ Reply gaps are ~0.18–0.35 s (deterministic jitter). Natural dead air comes fro
 calls, not inserting seconds between every line. Pending calls expire when their operational
 moment has passed instead of narrating an old leg.
 
+Pattern traffic uses the same occupied frequency rather than an ambient-chatter timer. Each
+aircraft has a stable training role, configuration state, and reaction delay. It creates a compact
+`GEAR` intention only after the gear is actually down and locked; that intention waits behind an
+occupied frequency, expires if the aircraft leaves base, and yields to urgent safety traffic.
+Several legitimate intentions may therefore make the frequency briefly busy, while an
+uneventful circuit remains quiet. Character comes from flying/configuration judgment and key-down
+timing, not longer dialogue.
+
 ### Voice bar — behavior, not acting
 
 AI-generated snippets are the delivery path, but acting adjectives are not the route to
@@ -189,7 +206,8 @@ gate before replacing production clips.
 - Launch is a visual shot-crew sequence. It has no radio clearance and audio cannot hold the catapult.
 - Circuits establishes initial/break once, then keeps only each required landing transaction and
   safety calls. Routine downwind/base/final narration is silent.
-- Ambient traffic is one formation-member `GEAR` call at most every 90 seconds.
+- Each formation member independently reports achieved `GEAR`; the shared frequency arbitrates
+  simultaneous calls and discards stale ones instead of applying a global chatter throttle.
 - Tactical COMMIT is `Ghost, commit` followed by the required callsign acknowledgment; no
   cinematic engage order.
 - Package weapons brevity carries no callsign ceremony (`Fox Two.`, `Splash one.`).
