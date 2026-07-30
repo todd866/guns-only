@@ -36,7 +36,7 @@ public class RapierMissionTests {
         BeatSetup beat = Beats.RapierIntercept();
         double initialRangeM = (beat.Bandit.Position - beat.Player.Position).Length;
 
-        Assert.InRange(initialRangeM, 670_000.0, 690_000.0);
+        Assert.InRange(initialRangeM, 310_000.0, 330_000.0);
         Assert.Equal(4, beat.ScriptedIntercept?.FormationSize);
         Assert.Same(PilotPhysiologyProfile.RapierReclinedInterceptor,
             beat.PlayerPilotPhysiology);
@@ -301,7 +301,7 @@ public class RapierMissionTests {
                 + $"hook {session.Touchdown.HookAlongM:F1} m; "
                 + $"mass {session.Player.State.Mass:F0} kg / "
                 + $"fuel {session.PlayerFuel.FuelLb:F0} lb");
-        Assert.InRange(session.PlayerFuel.FuelLb, 100.0, 1_600.0);
+        Assert.InRange(session.PlayerFuel.FuelLb, 100.0, 2_200.0);
         Assert.True(maximumAltitudeM <= 75_000.0 * 0.3048,
             $"profile climbed to {maximumAltitudeM / 0.3048:F0} ft");
         Assert.True(maximumAbsVerticalSpeedMps <= 60_000.0 * 0.00508,

@@ -11,7 +11,7 @@ public class RapierEasternBasingTests {
         Assert.True(strip.Fwd.X < -0.99);
         Assert.True(Math.Abs(strip.Fwd.Z) < 1e-9);
 
-        Assert.True(beat.Bandit.Position.X < -600_000);
+        Assert.InRange(beat.Bandit.Position.X, -330_000.0, -310_000.0);
         Assert.True(beat.Bandit.Position.X < strip.Position.X);
         Assert.Equal(Math.PI / 2, beat.Bandit.Chi, precision: 10);
     }

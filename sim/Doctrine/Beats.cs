@@ -837,14 +837,15 @@ public static class Beats {
                 FlightModel.RapierPublicDataSurrogate.MassKg),
             // A contact high and slow west of home: the thing this aircraft was built to kill is an
             // enabler, not a fighter. Eastbound closing toward the eastern strip.
-            // 240 km out. The ram corridor alone needs about 90 km at altitude, so this still
-            // forces the full climb and acceleration schedule without turning the mission into a
-            // 680 km wait. It also stays inside the 262 km regional truth and leaves enough gas for
-            // the fight and trap under the current per-stream fuel approximation.
+            // 320 km out. At 240 km the full climb consumed nearly the whole intercept and handed
+            // the fight over at only M1.6. This distance still cuts the old 680 km wait by more
+            // than half, but leaves about 73 km after the M2.2 shelf so the article reaches its
+            // M3.6-class dash before attack. It remains inside the regional atlas and leaves enough
+            // gas for the fight and trap under the current per-stream fuel approximation.
             //
             // Keeping the contact inside the authored regional cell also means an early low fight
             // no longer drops onto the presentation apron.
-            Bandit: new AircraftState(new Vec3D(-240_000, 18_000, 18_000), 210, 0, Math.PI / 2, 0,
+            Bandit: new AircraftState(new Vec3D(-320_000, 18_000, 18_000), 210, 0, Math.PI / 2, 0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() { (0.0, new PilotCommand(1.0, 0.0, 0.55, 0.0)) },
@@ -928,7 +929,7 @@ public static class Beats {
     /// RAPIER CIRCUITS — the same aircraft, the same launcher, the same strip, and nothing else.
     ///
     /// The trap is the hardest thing this aircraft asks of a pilot and the intercept gives exactly
-    /// one attempt at it, 240 km from home and low on fuel. That is the wrong place to learn.
+    /// one attempt at it, 320 km from home and low on fuel. That is the wrong place to learn.
     /// Circuits removes the transit, the contact and the fuel pressure so the launch, the ram
     /// handover, the pattern and the hook can be flown over and over.
     ///

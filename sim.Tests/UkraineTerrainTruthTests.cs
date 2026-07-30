@@ -58,7 +58,7 @@ public class UkraineTerrainTruthTests {
     }
 
     [Fact]
-    public void RegionalAtlasAndProductionApronCoverTheRapierInterceptRoute() {
+    public void RegionalAtlasCoversTheRapierInterceptRouteWithoutTheProductionApron() {
         ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
         BeatSetup beat = Beats.RapierIntercept();
@@ -76,10 +76,10 @@ public class UkraineTerrainTruthTests {
                 $"missing atlas terrain at {alongM / 1000.0:F0} km outbound");
             Assert.True(beat.Bandit.Position.Y - ground.HeightM > 11_000.0);
         }
-        Assert.False(terrain.TrySample(
+        Assert.True(terrain.TrySample(
             beat.Bandit.Position.X,
             beat.Bandit.Position.Z,
-            out _));
+            out TerrainSample authoredContactGround));
 
         var productionTerrain = new TrainingTerrainApronSurface(
             terrain,
@@ -90,8 +90,7 @@ public class UkraineTerrainTruthTests {
             beat.Bandit.Position.X,
             beat.Bandit.Position.Z,
             out TerrainSample contactGround));
-        Assert.Equal(TerrainSurfaceKind.Land, contactGround.Kind);
-        Assert.Equal(78.0, contactGround.HeightM, precision: 8);
+        Assert.Equal(authoredContactGround, contactGround);
     }
 
     [Fact]

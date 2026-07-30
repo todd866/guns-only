@@ -40,9 +40,14 @@ public class RapierTests {
         double horizontalRangeM = Math.Sqrt(
             separation.X * separation.X + separation.Z * separation.Z);
 
-        Assert.Equal(-240_000.0, beat.Bandit.Position.X);
-        Assert.InRange(horizontalRangeM, 240_000.0, 242_000.0);
-        Assert.True(horizontalRangeM < 262_000.0,
+        Assert.Equal(-320_000.0, beat.Bandit.Position.X);
+        Assert.InRange(horizontalRangeM, 320_000.0, 322_000.0);
+        ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
+            UkraineTerrainTruth.Load());
+        Assert.True(terrain.TrySample(
+            beat.Bandit.Position.X,
+            beat.Bandit.Position.Z,
+            out _),
             "the opening intercept must stay inside the authored regional truth");
     }
 
