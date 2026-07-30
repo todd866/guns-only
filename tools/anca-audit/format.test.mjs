@@ -22,17 +22,27 @@ test("fixture samples drive deriveAncaView into real A/N/C/A rows", () => {
   });
 
   assert.equal(views[0].view.visible, true);
-  assert.match(views[0].view.rows[0].line, /GEAR/);
+  assert.deepEqual(
+    views[0].view.rows.map((row) => row.line),
+    ["—", "—", "—", "—"],
+    "routine launch configuration must not manufacture a priority",
+  );
 
   const airborne = views.find((entry) => entry.record.sample === "t+2s");
   assert.ok(airborne, "t+2s sample present");
   assert.equal(airborne.view.rows[2].tone, "active");
-  assert.match(airborne.view.rows[2].line, /cleared for launch/i);
-  assert.match(airborne.view.rows[3].line, /LAUNCH/);
+  assert.equal(airborne.view.rows[2].line, "RAPIER TOWER · AUTO TX");
+  assert.doesNotMatch(airborne.view.rows[2].line, /cleared for launch/i);
+  assert.equal(
+    airborne.view.rows[3].line,
+    "LAUNCH · VERIFY 1/4 → AIRBORNE",
+  );
 
   const climb = views.find((entry) => entry.record.sample === "t+30s");
   assert.ok(climb, "t+30s sample present");
-  assert.match(climb.view.rows[0].line, /GEAR UP/);
-  assert.match(climb.view.rows[2].line, /PACKAGE|UHF/);
-  assert.match(climb.view.rows[3].line, /LAUNCH 4\/4/);
+  assert.deepEqual(
+    climb.view.rows.map((row) => row.line),
+    ["—", "—", "—", "—"],
+    "completed checks and stale radio state must clear instead of lingering",
+  );
 });
