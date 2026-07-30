@@ -145,6 +145,36 @@ the horizontal, altitude on the vertical:
 Both views are pure consumers of `ApproachSolution`. Neither recomputes geometry, and either can be
 absent without affecting the other or the solver.
 
+### Benchmark
+
+Measured against a modern transport ND + VSD, which solved this problem long ago. Current state
+against the target:
+
+| | today | target |
+| --- | --- | --- |
+| Orientation | north-up only | track-up ARC, compass rose, heading + track bugs; north-up retained |
+| Scale | 15–400 NM | adds 1 / 2 / 5 / 10 / 20 NM approach bands |
+| Turn prediction | none | predicted track curve from current bank |
+| Energy vs distance | none | altitude range arc |
+| Vertical | none | VSD |
+| Wind | none | wind vector and drift |
+| Path | flat polyline | sequenced legs, active leg emphasis, profile-start marker |
+
+Two elements carry most of the value:
+
+**Altitude range arc.** The arc marking where own-ship reaches a chosen altitude at current descent
+and deceleration. This is the plan-view expression of track miles required: if the arc falls beyond
+the threshold, the approach needs more track, and the extension the solver synthesises can be read
+directly against it. Highest-value single element in this design.
+
+**Predicted track curve.** Where the current bank actually leads. This is what makes arriving from
+any direction legible — intercepting the solved path becomes a visual task instead of mental dead
+reckoning.
+
+Fighter-side energy cues (E-bracket, AOA indexer) are deliberately not the model: they are terminal
+cues for the last mile and say nothing at 40 NM about whether the approach can be made, which is
+the actual complaint.
+
 ## Verification
 
 - **Unit:** `ApproachSolver` against hand-computed energy cases; assert monotonicity (more excess
